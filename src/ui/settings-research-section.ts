@@ -95,6 +95,33 @@ export async function renderDeepResearchSettingsSection(mount: HTMLElement): Pro
   overrideField.append(overrideLabel, overrideSelect);
   searchOverrideGroup.appendChild(overrideField);
 
+  const scopeField = el('div', 'settings-field');
+  const scopeLabel = el('label', 'settings-field-label', 'Default search scope');
+  scopeLabel.htmlFor = 'settingsResearchSearchScope';
+  const scopeSelect = document.createElement('select');
+  scopeSelect.id = 'settingsResearchSearchScope';
+  scopeSelect.className = 'settings-select';
+  for (const opt of [
+    { value: 'web', label: 'Web only' },
+    { value: 'codebase', label: 'Codebase only' },
+    { value: 'both', label: 'Web + codebase' },
+  ]) {
+    const option = document.createElement('option');
+    option.value = opt.value;
+    option.textContent = opt.label;
+    scopeSelect.appendChild(option);
+  }
+  scopeField.append(
+    scopeLabel,
+    scopeSelect,
+    el(
+      'p',
+      'settings-field-hint',
+      'Default for new research runs. Super Plan and explicit API requests can override per run.',
+    ),
+  );
+  searchOverrideGroup.appendChild(scopeField);
+
   const loopGroup = appendSettingsGroup(
     mount,
     'Research loop',
@@ -214,6 +241,7 @@ export async function renderDeepResearchSettingsSection(mount: HTMLElement): Pro
     providerSelect.value = config.model.providerId || '';
     modelSelect.value = config.model.model || '';
     overrideSelect.value = config.searchProvider || '';
+    scopeSelect.value = config.searchScope || 'web';
     maxRounds.value = String(config.maxRounds);
     minRounds.value = String(config.minRounds);
     maxTime.value = String(config.maxTimeSeconds);
@@ -234,6 +262,7 @@ export async function renderDeepResearchSettingsSection(mount: HTMLElement): Pro
       model: modelSelect.value.trim(),
     },
     searchProvider: (overrideSelect.value || '') as ResearchConfig['searchProvider'],
+    searchScope: (scopeSelect.value || 'web') as ResearchConfig['searchScope'],
     maxRounds: Number(maxRounds.value),
     minRounds: Number(minRounds.value),
     maxTimeSeconds: Number(maxTime.value),

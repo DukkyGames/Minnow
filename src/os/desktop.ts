@@ -6,8 +6,9 @@ import { renderMiniPreviews } from './mini-previews';
 import { renderWallpaper, type WallpaperRenderOptions } from './wallpaper';
 import { getAppearanceAssetObjectUrl } from '../appearance/asset-store';
 import { wireDesktopChatRail } from '../ui/desktop-chat-rail';
-import { isDesktopExpertsActive, isDesktopResearchActive, subscribeDesktopState } from './desktop-state';
+import { isDesktopExpertsActive, isDesktopResearchActive, isDesktopSuperPlanActive, subscribeDesktopState } from './desktop-state';
 import { wireDesktopResearchControls } from './research-desktop';
+import { wireDesktopSuperPlanControls } from './superplan-desktop';
 import { windowManager } from './window-manager';
 import { createOsIcon } from './icons';
 import { ICON_CHEVRON_LEFT } from '../constants';
@@ -206,13 +207,64 @@ export function renderDesktop(root: HTMLElement): () => void {
 
   desktopResearch.append(researchProgress, researchResult);
 
+  const desktopSuperPlan = document.createElement('div');
+  desktopSuperPlan.className = 'mn-os-desktop-superplan sp';
+  desktopSuperPlan.setAttribute('aria-label', 'Super Plan');
+
+  const superPlanProgress = document.createElement('div');
+  superPlanProgress.id = 'desktopSuperPlanProgressMount';
+  superPlanProgress.className = 'mn-os-superplan-card mn-os-superplan-progress';
+  superPlanProgress.setAttribute('aria-live', 'polite');
+
+  const superPlanProgressChrome = document.createElement('div');
+  superPlanProgressChrome.className = 'mn-os-superplan-progress-chrome';
+
+  const superPlanCancel = document.createElement('button');
+  superPlanCancel.type = 'button';
+  superPlanCancel.id = 'btnDesktopSuperPlanCancel';
+  superPlanCancel.className = 'mn-os-superplan-cancel';
+  superPlanCancel.textContent = 'Cancel';
+  superPlanCancel.hidden = true;
+
+  superPlanProgressChrome.appendChild(superPlanCancel);
+
+  const superPlanProgressBody = document.createElement('div');
+  superPlanProgressBody.id = 'desktopSuperPlanProgressBody';
+  superPlanProgressBody.className = 'mn-os-superplan-progress-body';
+
+  superPlanProgress.append(superPlanProgressChrome, superPlanProgressBody);
+
+  const superPlanResult = document.createElement('div');
+  superPlanResult.id = 'desktopSuperPlanResultMount';
+  superPlanResult.className = 'mn-os-superplan-card mn-os-superplan-result';
+
+  const superPlanResultChrome = document.createElement('div');
+  superPlanResultChrome.className = 'mn-os-superplan-result-chrome';
+
+  const superPlanClose = document.createElement('button');
+  superPlanClose.type = 'button';
+  superPlanClose.id = 'btnDesktopSuperPlanClose';
+  superPlanClose.className = 'mn-os-superplan-cancel';
+  superPlanClose.textContent = 'Close';
+  superPlanClose.hidden = true;
+
+  superPlanResultChrome.appendChild(superPlanClose);
+
+  const superPlanResultBody = document.createElement('div');
+  superPlanResultBody.id = 'desktopSuperPlanResultBody';
+  superPlanResultBody.className = 'mn-os-superplan-result-body';
+
+  superPlanResult.append(superPlanResultChrome, superPlanResultBody);
+
+  desktopSuperPlan.append(superPlanProgress, superPlanResult);
+
   const desktopExperts = document.createElement('div');
   desktopExperts.id = 'desktopExpertsMount';
   desktopExperts.className = 'mn-os-desktop-experts';
   desktopExperts.setAttribute('aria-label', "Experts' Lab");
 
   desktopChat.append(transcript);
-  stage.append(hero, desktopChat, desktopResearch, desktopExperts);
+  stage.append(hero, desktopChat, desktopResearch, desktopSuperPlan, desktopExperts);
   root.append(rail);
   root.appendChild(stage);
 
@@ -234,6 +286,7 @@ export function renderDesktop(root: HTMLElement): () => void {
 
   wireDesktopChatRail();
   wireDesktopResearchControls();
+  wireDesktopSuperPlanControls();
 
   const previewsMount = document.createElement('div');
   previewsMount.className = 'mn-os-desktop-previews';
@@ -262,7 +315,7 @@ export function renderDesktop(root: HTMLElement): () => void {
     const formatted = formatDateTime(d);
     greetTime.textContent = `${formatted.time} · ${formatted.date}`;
     // Research/experts mode uses fixed hero copy; only refresh the time-of-day greeting when idle/chat.
-    if (!isDesktopResearchActive() && !isDesktopExpertsActive()) {
+    if (!isDesktopResearchActive() && !isDesktopSuperPlanActive() && !isDesktopExpertsActive()) {
       greet.textContent = `${greetingFor(d)}.`;
     }
   }

@@ -2284,6 +2284,28 @@ export async function sendMessageWithTools(
     return;
   }
 
+  const { isCodeSuperPlanActive, isCodeSuperPlanAwaitingPrompt, trySubmitCodeSuperPlanFromComposer } =
+    await import('../os/superplan-code');
+  if (isCodeSuperPlanActive()) {
+    if (trySubmitCodeSuperPlanFromComposer(rawText)) {
+      if (input) {
+        input.value = '';
+        input.dispatchEvent(new window.Event('input', { bubbles: true }));
+      }
+      return;
+    }
+    if (!isCodeSuperPlanAwaitingPrompt()) {
+      setStatus('err', 'Finish or cancel Super Plan first');
+      return;
+    }
+  }
+
+  const { tryStartPlanGrillMeBeforeSend } = await import('../superplan/plan-intake');
+  if (tryStartPlanGrillMeBeforeSend(chat, rawText)) {
+    setStatus('ok', 'Complete Grill Me intake to start planning');
+    return;
+  }
+
   const slashInput = resolveOrchestrateSlashInput(
     chat.modeId,
     chat.orchestratePlanPath,
@@ -2302,6 +2324,16 @@ export async function sendMessageWithTools(
   chat.pinnedSkill = turnSkill.nextPinned;
   const skillId = turnSkill.skillId;
   let userText = normalizeCavemanUserText(skillId, slashSkillId, slashUserText);
+  const isFirstPlanUserSend =
+    normalizeModeId(chat.modeId) === 'plan' &&
+    !chat.history.some((m) => m.role === 'user');
+  if (isFirstPlanUserSend && chat.planIntake?.completed && chat.planIntake.answers) {
+    const { formatPlanIntakeForPrompt } = await import('../superplan/plan-intake');
+    const intakeBlock = formatPlanIntakeForPrompt(chat.planIntake.answers);
+    userText = userText.trim()
+      ? `${intakeBlock}\n\n## User request\n\n${userText.trim()}`
+      : intakeBlock;
+  }
   const hasUserText = Boolean(userText.trim());
   if (!rawText && pendingWithoutErrors.length === 0 && !slashInput.trim()) return;
   if (!skillId && !hasUserText && pendingWithoutErrors.length === 0) return;

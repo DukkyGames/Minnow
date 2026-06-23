@@ -209,9 +209,15 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
       } else if (
         isDefaultWorkspace() &&
         !welcome.isWelcomeDismissedForSession() &&
-        !options?.workspacePath?.trim()
+        !options?.workspacePath?.trim() &&
+        !options?.superPlan
       ) {
         welcome.openWelcome({ skipHash: true });
+      }
+      if (options?.superPlan) {
+        const { openCodeSuperPlan } = await import('./superplan-code');
+        await openCodeSuperPlan(options.seed);
+        break;
       }
       if (options?.chatId?.trim()) {
         const { switchToCodeChat } = await import('./chat-launch');
@@ -395,6 +401,10 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
           step: options?.step,
           expertId: options?.expertId,
         }),
+      );
+    } else if (options?.superPlan) {
+      void import('./superplan-desktop').then((m) =>
+        m.openSuperPlan(options?.seed),
       );
     }
     lastForegroundApp = null;

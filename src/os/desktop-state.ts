@@ -4,12 +4,14 @@
 
 import { runComposerDockTransition } from './composer-motion';
 
-/** Desktop surface mode: hero concierge vs docked chat vs research vs experts. */
+/** Desktop surface mode: hero concierge vs docked chat vs research vs super plan vs experts. */
 export type DesktopState =
   | 'idle'
   | 'chatActive'
   | 'researchIdle'
   | 'researchActive'
+  | 'superPlanIdle'
+  | 'superPlanActive'
   | 'expertsIdle'
   | 'expertsActive';
 
@@ -21,6 +23,10 @@ export interface DesktopChatActivateOptions {
 export interface DesktopResearchActivateOptions {
   seed?: string;
   autoRun?: boolean;
+}
+
+export interface DesktopSuperPlanActivateOptions {
+  seed?: string;
 }
 
 export interface DesktopExpertsActivateOptions {
@@ -43,6 +49,10 @@ let chatActivationQueued = false;
 let pendingResearchOptions: DesktopResearchActivateOptions | undefined;
 /** Whether a research activation was queued (options may still be undefined). */
 let researchActivationQueued = false;
+/** Pending Super Plan activation consumed on the next desktop route apply. */
+let pendingSuperPlanOptions: DesktopSuperPlanActivateOptions | undefined;
+/** Whether a Super Plan activation was queued (options may still be undefined). */
+let superPlanActivationQueued = false;
 /** Pending experts activation consumed on the next desktop route apply. */
 let pendingExpertsOptions: DesktopExpertsActivateOptions | undefined;
 /** Whether an experts activation was queued (options may still be undefined). */
@@ -50,6 +60,7 @@ let expertsActivationQueued = false;
 
 const COMPOSER_PLACEHOLDER_IDLE = 'What would you like to do today?';
 const COMPOSER_PLACEHOLDER_RESEARCH = 'What would you like to research?';
+const COMPOSER_PLACEHOLDER_SUPER_PLAN = 'Describe what you want to plan…';
 const COMPOSER_PLACEHOLDER_EXPERTS = 'Message an expert…';
 
 const HERO_SUB_IDLE =
@@ -57,6 +68,9 @@ const HERO_SUB_IDLE =
 const HERO_GREET_RESEARCH = 'Deep research.';
 const HERO_SUB_RESEARCH =
   "What would you like to research? I'll gather sources and synthesize a report.";
+const HERO_GREET_SUPER_PLAN = 'Super Plan.';
+const HERO_SUB_SUPER_PLAN =
+  'Describe your goal below — we will intake, research, draft, and finalize a plan.';
 const HERO_GREET_EXPERTS = "Experts' Lab.";
 const HERO_SUB_EXPERTS =
   'Choose a specialist below, or open the lab to compose and tune experts.';
@@ -86,6 +100,8 @@ function syncComposerPlaceholder(): void {
   }
   if (state === 'researchIdle' || state === 'researchActive') {
     input.placeholder = COMPOSER_PLACEHOLDER_RESEARCH;
+  } else if (state === 'superPlanIdle' || state === 'superPlanActive') {
+    input.placeholder = COMPOSER_PLACEHOLDER_SUPER_PLAN;
   } else if (state === 'expertsIdle' || state === 'expertsActive') {
     input.placeholder = COMPOSER_PLACEHOLDER_EXPERTS;
   } else {
@@ -103,6 +119,11 @@ function syncHeroCopy(): void {
   if (state === 'researchIdle' || state === 'researchActive') {
     greet.textContent = `${HERO_GREET_RESEARCH}`;
     greetSub.textContent = HERO_SUB_RESEARCH;
+    return;
+  }
+  if (state === 'superPlanIdle' || state === 'superPlanActive') {
+    greet.textContent = `${HERO_GREET_SUPER_PLAN}`;
+    greetSub.textContent = HERO_SUB_SUPER_PLAN;
     return;
   }
   if (state === 'expertsIdle' || state === 'expertsActive') {
@@ -168,13 +189,22 @@ function applyLayerClasses(): void {
   layer.classList.toggle('is-chat-active', state === 'chatActive');
   layer.classList.toggle(
     'is-composer-docked',
-    state === 'chatActive' || isDesktopResearchActive() || isDesktopExpertsActive(),
+    state === 'chatActive' ||
+      isDesktopResearchActive() ||
+      isDesktopSuperPlanActive() ||
+      isDesktopExpertsActive(),
   );
   layer.classList.toggle('is-research-idle', state === 'researchIdle');
   layer.classList.toggle('is-research-active', state === 'researchActive');
   layer.classList.toggle(
     'is-research-mode',
     state === 'researchIdle' || state === 'researchActive',
+  );
+  layer.classList.toggle('is-superplan-idle', state === 'superPlanIdle');
+  layer.classList.toggle('is-superplan-active', state === 'superPlanActive');
+  layer.classList.toggle(
+    'is-superplan-mode',
+    state === 'superPlanIdle' || state === 'superPlanActive',
   );
   layer.classList.toggle('is-experts-idle', state === 'expertsIdle');
   layer.classList.toggle('is-experts-active', state === 'expertsActive');
@@ -204,6 +234,16 @@ export function isDesktopResearchActive(): boolean {
 /** True when a research run is showing progress/result cards. */
 export function isDesktopResearchRunActive(): boolean {
   return state === 'researchActive';
+}
+
+/** True when desktop Super Plan mode is active (idle or running). */
+export function isDesktopSuperPlanActive(): boolean {
+  return state === 'superPlanIdle' || state === 'superPlanActive';
+}
+
+/** True when a Super Plan run is showing progress/result cards. */
+export function isDesktopSuperPlanRunActive(): boolean {
+  return state === 'superPlanActive';
 }
 
 /** True when desktop experts mode is active (idle or hub visible). */
@@ -271,6 +311,12 @@ export function queueDesktopResearchActivation(options?: DesktopResearchActivate
   pendingResearchOptions = options;
 }
 
+/** Queue Super Plan activation for the next desktop navigation. */
+export function queueDesktopSuperPlanActivation(options?: DesktopSuperPlanActivateOptions): void {
+  superPlanActivationQueued = true;
+  pendingSuperPlanOptions = options;
+}
+
 /** Consume queued chat activation; returns null when nothing was queued. */
 export function consumePendingDesktopChatActivation(): DesktopChatActivateOptions | undefined | null {
   if (!chatActivationQueued) {
@@ -308,6 +354,20 @@ export function takePendingDesktopResearchOptions(): DesktopResearchActivateOpti
   return pending === null ? undefined : pending;
 }
 
+/** Consume queued Super Plan activation; returns null when nothing was queued. */
+export function consumePendingDesktopSuperPlanActivation():
+  | DesktopSuperPlanActivateOptions
+  | undefined
+  | null {
+  if (!superPlanActivationQueued) {
+    return null;
+  }
+  superPlanActivationQueued = false;
+  const opts = pendingSuperPlanOptions;
+  pendingSuperPlanOptions = undefined;
+  return opts;
+}
+
 /**
  * Transition to desktop chat: dock composer, show rail + transcript, ensure session.
  * Does not launch the legacy Chat app layer.
@@ -315,6 +375,9 @@ export function takePendingDesktopResearchOptions(): DesktopResearchActivateOpti
 export async function activateDesktopChat(options?: DesktopChatActivateOptions): Promise<void> {
   if (isDesktopResearchActive()) {
     deactivateDesktopResearch();
+  }
+  if (isDesktopSuperPlanActive()) {
+    deactivateDesktopSuperPlan();
   }
   if (isDesktopExpertsActive()) {
     deactivateDesktopExperts();
@@ -345,6 +408,9 @@ export async function activateDesktopResearch(
 ): Promise<void> {
   if (state === 'chatActive') {
     deactivateDesktopChat();
+  }
+  if (isDesktopSuperPlanActive()) {
+    deactivateDesktopSuperPlan();
   }
   if (isDesktopExpertsActive()) {
     deactivateDesktopExperts();
@@ -380,6 +446,48 @@ export function deactivateDesktopResearch(): void {
 }
 
 /**
+ * Enter desktop Super Plan mode — composer placeholder changes; optional seed prompt.
+ */
+export async function activateDesktopSuperPlan(
+  options?: DesktopSuperPlanActivateOptions,
+): Promise<void> {
+  if (state === 'chatActive') {
+    deactivateDesktopChat();
+  }
+  if (isDesktopResearchActive()) {
+    deactivateDesktopResearch();
+  }
+  if (isDesktopExpertsActive()) {
+    deactivateDesktopExperts();
+  }
+  setState('superPlanIdle');
+  await ensureDesktopComposerDocked();
+}
+
+/** Mark Super Plan as actively running (progress/result cards visible). */
+export function setDesktopSuperPlanRunActive(active: boolean): void {
+  if (!isDesktopSuperPlanActive() && active) {
+    setState('superPlanActive');
+    return;
+  }
+  if (active) {
+    setState('superPlanActive');
+  } else if (state === 'superPlanActive') {
+    setState('superPlanIdle');
+  }
+}
+
+/** Leave desktop Super Plan mode. */
+export function deactivateDesktopSuperPlan(): void {
+  if (!isDesktopSuperPlanActive()) {
+    return;
+  }
+  void import('./superplan-desktop').then((m) => m.teardownDesktopSuperPlan());
+  setState('idle');
+  returnDesktopComposerToHero();
+}
+
+/**
  * Enter desktop experts mode — composer placeholder changes; hub mounts on desktop overlay.
  */
 export async function activateDesktopExperts(
@@ -390,6 +498,9 @@ export async function activateDesktopExperts(
   }
   if (isDesktopResearchActive()) {
     deactivateDesktopResearch();
+  }
+  if (isDesktopSuperPlanActive()) {
+    deactivateDesktopSuperPlan();
   }
   setState('expertsIdle');
   await ensureDesktopComposerDocked();
@@ -426,9 +537,11 @@ export function resetDesktopStateForTests(): void {
   state = 'idle';
   pendingChatOptions = undefined;
   pendingResearchOptions = undefined;
+  pendingSuperPlanOptions = undefined;
   pendingExpertsOptions = undefined;
   chatActivationQueued = false;
   researchActivationQueued = false;
+  superPlanActivationQueued = false;
   expertsActivationQueued = false;
   listeners.clear();
   applyLayerClasses();

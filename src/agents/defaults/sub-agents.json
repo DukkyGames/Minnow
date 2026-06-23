@@ -221,6 +221,67 @@
         "topK": 20
       }
     },
+    "plan-planner": {
+      "label": "Plan planner",
+      "enabled": true,
+      "providerId": "",
+      "modelId": "",
+      "maxConcurrent": 1,
+      "timeoutMs": 420000,
+      "workAgentId": "planner",
+      "allowedTools": null,
+      "deniedTools": [
+        "spawn_sub_agent",
+        "cancel_sub_agent",
+        "execute_command",
+        "git_commit"
+      ],
+      "systemPromptPath": null,
+      "summarySchema": "minnow.sub-agent.v1",
+      "sampler": {
+        "temperature": 0.5,
+        "topP": 0.9,
+        "topK": 20
+      }
+    },
+    "plan-reviewer": {
+      "label": "Plan reviewer",
+      "enabled": true,
+      "providerId": "",
+      "modelId": "",
+      "maxConcurrent": 1,
+      "timeoutMs": 300000,
+      "workAgentId": "reviewer",
+      "allowedTools": [
+        "read_file",
+        "read_file_range",
+        "find_files",
+        "grep",
+        "list_directory",
+        "get_file_metadata"
+      ],
+      "deniedTools": [
+        "spawn_sub_agent",
+        "cancel_sub_agent",
+        "save_file",
+        "append_file",
+        "insert_at_line",
+        "replace_text_in_file",
+        "delete_path",
+        "move_file",
+        "execute_command",
+        "git_commit",
+        "git_add",
+        "git_push"
+      ],
+      "systemPromptPath": null,
+      "summarySchema": "minnow.sub-agent.v1",
+      "sampler": {
+        "temperature": 0.5,
+        "topP": 0.9,
+        "topK": 20
+      }
+    },
     "bug-planner": {
       "label": "Bug planner",
       "enabled": true,
@@ -239,6 +300,43 @@
       "sampler": {
         "temperature": 0.6,
         "topP": 0.95,
+        "topK": 20
+      }
+    },
+    "ui-designer": {
+      "label": "UI Designer",
+      "enabled": true,
+      "providerId": "",
+      "modelId": "",
+      "maxConcurrent": 1,
+      "timeoutMs": 300000,
+      "workAgentId": "ui-designer",
+      "allowedTools": [
+        "browser_list",
+        "browser_navigate",
+        "browser_snapshot",
+        "browser_screenshot",
+        "read_file",
+        "read_file_range",
+        "search_in_file",
+        "list_directory",
+        "load_impeccable_context",
+        "run_impeccable"
+      ],
+      "deniedTools": [
+        "spawn_sub_agent",
+        "cancel_sub_agent",
+        "save_file",
+        "replace_text_in_file",
+        "browser_click",
+        "browser_fill",
+        "execute_command"
+      ],
+      "systemPromptPath": null,
+      "summarySchema": "minnow.sub-agent.v1",
+      "sampler": {
+        "temperature": 0.5,
+        "topP": 0.9,
         "topK": 20
       }
     },

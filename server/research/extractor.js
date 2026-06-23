@@ -2,11 +2,15 @@
  * Per-page goal-based extraction for Deep Research (Odysseus `_fetch_and_extract`).
  */
 
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import {
   DEFAULT_FETCH_USER_AGENT,
   stripHtmlToPlainText,
   validateHttpUrl,
 } from '../../src/lib/fetch-web-content.mjs';
+import { getWorkspaceRoot } from '../workspace/root.js';
+import { isResolvedPathUnderRoot } from '../workspace/safe-path.js';
 import { getPage, setPage } from './cache.js';
 import { prepareResearchFetchUrl } from './fetch-prep.js';
 import { llmCall as defaultLlmCall } from './llm.js';
@@ -40,6 +44,84 @@ export function truncateAtParagraph(content, maxChars) {
     return truncated.slice(0, lastPara);
   }
   return truncated;
+}
+
+/**
+ * True when a research URL refers to a workspace file rather than HTTP.
+ * @param {string} urlString
+ */
+export function isLocalResearchUrl(urlString) {
+  const trimmed = String(urlString ?? '').trim();
+  if (!trimmed) {
+    return false;
+  }
+  if (trimmed.startsWith('file://')) {
+    return true;
+  }
+  return !/^https?:\/\//i.test(trimmed) && !trimmed.startsWith('//');
+}
+
+/**
+ * Resolve a local research URL to an absolute path under the workspace.
+ * @param {string} urlString
+ * @param {string} [workspaceRoot]
+ * @returns {{ absPath: string; relPath: string } | null}
+ */
+export function resolveLocalResearchPath(urlString, workspaceRoot) {
+  let raw = String(urlString ?? '').trim();
+  if (raw.startsWith('file://')) {
+    raw = raw.slice('file://'.length);
+  }
+  const hashIdx = raw.indexOf('#');
+  if (hashIdx >= 0) {
+    raw = raw.slice(0, hashIdx);
+  }
+  raw = raw.replace(/\\/g, '/').trim();
+  if (!raw) {
+    return null;
+  }
+
+  const root = workspaceRoot && String(workspaceRoot).trim()
+    ? path.resolve(String(workspaceRoot).trim())
+    : getWorkspaceRoot();
+  const absPath = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(root, raw);
+  if (!isResolvedPathUnderRoot(absPath, root)) {
+    return null;
+  }
+
+  const relPath = path.relative(root, absPath).replace(/\\/g, '/');
+  if (!relPath || relPath.startsWith('..')) {
+    return null;
+  }
+
+  return { absPath, relPath };
+}
+
+/**
+ * Read workspace file text for codebase research extraction.
+ * @param {string} urlString
+ * @param {number} maxContentChars
+ * @param {string} [workspaceRoot]
+ * @returns {Promise<{ success: boolean; content: string; title: string }>}
+ */
+export async function fetchLocalFileText(urlString, maxContentChars, workspaceRoot) {
+  const resolved = resolveLocalResearchPath(urlString, workspaceRoot);
+  if (!resolved) {
+    return { success: false, content: '', title: '' };
+  }
+
+  let content = '';
+  try {
+    content = await fs.readFile(resolved.absPath, 'utf8');
+  } catch {
+    return { success: false, content: '', title: '' };
+  }
+
+  return {
+    success: true,
+    content: truncateAtParagraph(content, maxContentChars),
+    title: path.basename(resolved.relPath),
+  };
 }
 
 /**
@@ -124,6 +206,7 @@ export async function fetchResearchPageText(urlString, maxContentChars) {
  * @param {string} params.model
  * @param {number} params.maxContentChars
  * @param {number} params.extractionTimeoutSeconds
+ * @param {string} [params.workspaceRoot]
  * @param {AbortSignal} [params.signal]
  * @returns {Promise<ResearchFinding | null>}
  */
@@ -135,15 +218,20 @@ export async function fetchAndExtract({
   model,
   maxContentChars,
   extractionTimeoutSeconds,
+  workspaceRoot,
   signal,
 }) {
-  const page = await fetchResearchPageText(url, maxContentChars);
+  const page = isLocalResearchUrl(url)
+    ? await fetchLocalFileText(url, maxContentChars, workspaceRoot)
+    : await fetchResearchPageText(url, maxContentChars);
   if (!page.success || !page.content) {
     return null;
   }
 
   const prompt = formatPrompt(EXTRACTOR_PROMPT, {
-    webpage_content: wrapUntrusted(page.content, { source: `research-page:${url}` }),
+    webpage_content: wrapUntrusted(page.content, {
+      source: isLocalResearchUrl(url) ? `research-file:${url}` : `research-page:${url}`,
+    }),
     goal: question,
   });
 

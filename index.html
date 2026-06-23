@@ -1076,6 +1076,16 @@
               </div>
             </label>
             <label class="dr-field">
+              <span class="dr-flabel research-mono">SCOPE</span>
+              <div class="dr-select">
+                <select id="researchSearchScope" class="research-select">
+                  <option value="web">Web only</option>
+                  <option value="codebase">Codebase only</option>
+                  <option value="both">Web + codebase</option>
+                </select>
+              </div>
+            </label>
+            <label class="dr-field">
               <span class="dr-flabel research-mono">SEARCH</span>
               <div class="dr-select">
                 <select id="researchSearchProvider" class="research-select">
@@ -1985,6 +1995,9 @@
 
     <!-- Ask question: structured Q&A strip (below tool approval, above composer) -->
     <div id="questionHost" class="question-host" aria-live="polite" hidden></div>
+
+    <!-- Plan mode Grill Me intake questionnaire (fresh Plan chats) -->
+    <div id="planGrillMeMount" class="plan-grill-me-mount hidden" aria-hidden="true"></div>
 
     <div class="code-change-strip-wrap">
       <div id="codeChangePanel" class="code-change-panel" hidden aria-label="Files changed in this chat">

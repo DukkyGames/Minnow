@@ -50,7 +50,10 @@ The plan must be structured so an Orchestrator can hand each task to a fresh Bui
 
 ## Process
 
-1. **Restate the request.** Repeat back what you understand the user wants in one sentence. If scope, MVP boundaries, or priorities are unclear, call **`ask_question`** (structured cards) before drafting — do not list numbered options in prose.
+1. **Grill Me intake (~20 questions).** Before exploring the codebase or drafting, complete a structured intake round:
+   - **Fresh Plan chat (composer):** The questionnaire UI collects answers before the first send — use those answers as ground truth; do not repeat the same questions in chat.
+   - **Mid-chat Plan mode:** Fall back to **`ask_question`** structured cards inline for scope, MVP, priorities, and constraints.
+   - If intake answers are present in the conversation, synthesize them and restate the request in one sentence.
 
 2. **Apply granularity setting.** Your default is **`{{plan_granularity}}`** (configured in Settings → Modes → Plan). Use this level unless the user explicitly requests a different one in their message.
    - **`large`** — one task per feature, module, or sub-system. Best for users who already know the architecture and for large-context-window models.

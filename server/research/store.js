@@ -9,7 +9,8 @@ import { getMinnowHome } from '../config/home.js';
 import { readResource } from '../config/store.js';
 import { getActiveProviderId } from '../providers/store.js';
 import { validateProviderId } from '../providers/validate.js';
-import { DeepResearcher } from './engine.js';
+import { getWorkspaceRoot, validateWorkspacePath } from '../workspace/root.js';
+import { DeepResearcher, normalizeSearchScope } from './engine.js';
 import { stripThinking, isLowQuality } from './strip-thinking.js';
 
 /** Composite #modelSelect value separator (see src/lib/model-select-key.ts). */
@@ -602,6 +603,14 @@ function mergeEngineConfig(config, overrides) {
   if (typeof overrides.category === 'string' && overrides.category.trim()) {
     merged.category = overrides.category.trim();
   }
+  if (typeof overrides.searchScope === 'string' && overrides.searchScope.trim()) {
+    merged.searchScope = normalizeSearchScope(overrides.searchScope.trim());
+  } else if (typeof config.searchScope === 'string' && config.searchScope.trim()) {
+    merged.searchScope = normalizeSearchScope(config.searchScope.trim());
+  }
+  if (typeof overrides.workspaceRoot === 'string' && overrides.workspaceRoot.trim()) {
+    merged.workspaceRoot = overrides.workspaceRoot.trim();
+  }
   return merged;
 }
 
@@ -620,6 +629,18 @@ async function runResearchTask(state, opts) {
 
   const cfg = opts.engineConfig;
   const runTimeoutSeconds = Number(cfg.runTimeoutSeconds ?? 1800);
+  const searchScope = normalizeSearchScope(
+    typeof cfg.searchScope === 'string' ? cfg.searchScope : 'web',
+    cfg.includeCodebase === true,
+  );
+  let workspaceRoot = getWorkspaceRoot();
+  if (typeof cfg.workspaceRoot === 'string' && cfg.workspaceRoot.trim()) {
+    try {
+      workspaceRoot = await validateWorkspacePath(cfg.workspaceRoot.trim());
+    } catch {
+      workspaceRoot = getWorkspaceRoot();
+    }
+  }
 
   /** @type {DeepResearcher} */
   const researcher = new DeepResearcher({
@@ -637,6 +658,8 @@ async function runResearchTask(state, opts) {
     maxEmptyRounds: Number(cfg.maxEmptyRounds ?? 2),
     searchProvider: typeof cfg.searchProvider === 'string' ? cfg.searchProvider : '',
     category: state.category || (typeof cfg.category === 'string' ? cfg.category : ''),
+    searchScope,
+    workspaceRoot,
     progressCallback: (event) => appendProgress(state, event),
   });
 
@@ -741,6 +764,9 @@ async function runResearchTask(state, opts) {
  * @param {number} [opts.maxContentChars]
  * @param {number} [opts.synthesisWindow]
  * @param {number} [opts.maxEmptyRounds]
+ * @param {'web' | 'codebase' | 'both'} [opts.searchScope]
+ * @param {string} [opts.workspaceRoot]
+ * @param {boolean} [opts.includeCodebase]
  * @returns {Promise<{ researchId: string }>}
  */
 export async function startResearch(opts) {

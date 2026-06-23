@@ -2,6 +2,7 @@ import {
   activateDesktopChat,
   isDesktopChatActive,
   isDesktopResearchActive,
+  isDesktopSuperPlanActive,
 } from './desktop-state';
 import {
   autoResizeDesktopComposer,
@@ -129,6 +130,24 @@ export function renderConcierge(container: HTMLElement): void {
       field.value = q;
       field.dispatchEvent(new window.Event('input', { bubbles: true }));
       await handleDesktopResearchSubmit();
+      syncUi();
+      return;
+    }
+
+    if (isDesktopSuperPlanActive()) {
+      const { trySubmitDesktopSuperPlanFromComposer } = await import('./superplan-desktop');
+      if (trySubmitDesktopSuperPlanFromComposer(q)) {
+        field.value = '';
+        autoResizeDesktopComposer(field);
+        syncUi();
+        return;
+      }
+      const { openSuperPlan } = await import('./superplan-desktop');
+      field.value = q;
+      field.dispatchEvent(new window.Event('input', { bubbles: true }));
+      await openSuperPlan(q);
+      field.value = '';
+      autoResizeDesktopComposer(field);
       syncUi();
       return;
     }

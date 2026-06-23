@@ -17,6 +17,43 @@ import {
   setResearchArchived,
   startResearch,
 } from './store.js';
+import { normalizeSearchScope } from './engine.js';
+
+/** @typedef {'web' | 'codebase' | 'both'} ResearchSearchScope */
+
+/**
+ * Validate searchScope from API body; throws on invalid values.
+ * @param {unknown} value
+ * @returns {ResearchSearchScope | undefined}
+ */
+function parseSearchScopeParam(value) {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+  if (value === 'web' || value === 'codebase' || value === 'both') {
+    return value;
+  }
+  throw new Error('Invalid searchScope — expected web, codebase, or both');
+}
+
+/**
+ * Normalize POST /api/research/start body before store handoff.
+ * @param {Record<string, unknown>} payload
+ * @returns {Record<string, unknown>}
+ */
+function normalizeStartPayload(payload) {
+  const out = { ...payload };
+  const scope = parseSearchScopeParam(payload.searchScope);
+  if (scope) {
+    out.searchScope = scope;
+  } else if (payload.includeCodebase === true) {
+    out.searchScope = normalizeSearchScope(undefined, true);
+  }
+  if (typeof payload.workspaceRoot === 'string' && payload.workspaceRoot.trim()) {
+    out.workspaceRoot = payload.workspaceRoot.trim();
+  }
+  return out;
+}
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -81,7 +118,7 @@ export async function handleResearchRequest(req, res, pathname) {
 
   try {
     if (pathname === '/api/research/start' && req.method === 'POST') {
-      const payload = await readJsonBody(req);
+      const payload = normalizeStartPayload(await readJsonBody(req));
       const started = await startResearch(payload);
       sendJson(res, 201, started);
       return true;
@@ -288,6 +325,10 @@ export async function handleResearchRequest(req, res, pathname) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (message === 'Invalid JSON body' || message === 'Invalid provider id') {
+      sendJson(res, 400, { error: message });
+      return true;
+    }
+    if (message.startsWith('Invalid searchScope')) {
       sendJson(res, 400, { error: message });
       return true;
     }

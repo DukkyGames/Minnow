@@ -4,6 +4,8 @@
 
 import type { SearchProvider } from './search-config';
 
+export type ResearchSearchScope = 'web' | 'codebase' | 'both';
+
 export interface ResearchModelBinding {
   providerId: string;
   model: string;
@@ -13,6 +15,8 @@ export interface ResearchConfig {
   model: ResearchModelBinding;
   /** Optional override of search.json primary provider (empty = use search.json). */
   searchProvider: SearchProvider | '';
+  /** Default source scope for research runs (web-only by default). */
+  searchScope: ResearchSearchScope;
   maxRounds: number;
   minRounds: number;
   maxTimeSeconds: number;
@@ -29,6 +33,7 @@ export interface ResearchConfig {
 export const DEFAULT_RESEARCH_CONFIG: ResearchConfig = {
   model: { providerId: '', model: '' },
   searchProvider: '',
+  searchScope: 'web',
   maxRounds: 0,
   minRounds: 3,
   maxTimeSeconds: 300,

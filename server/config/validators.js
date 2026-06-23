@@ -3136,6 +3136,7 @@ export function defaultResearchConfig() {
   return {
     model: { providerId: '', model: '' },
     searchProvider: '',
+    searchScope: 'web',
     maxRounds: 0,
     minRounds: 3,
     maxTimeSeconds: 300,
@@ -3176,6 +3177,10 @@ export function normalizeResearchConfig(raw) {
     if (!trimmed || SEARCH_PROVIDERS.has(trimmed)) {
       config.searchProvider = trimmed;
     }
+  }
+
+  if (stored.searchScope === 'web' || stored.searchScope === 'codebase' || stored.searchScope === 'both') {
+    config.searchScope = stored.searchScope;
   }
 
   config.maxRounds = clampInt(stored.maxRounds, 0, 20, config.maxRounds);

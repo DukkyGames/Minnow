@@ -6,6 +6,7 @@ import '../styles/minnowos-apps.css';
 import '../styles/scheduler-side-panel.css';
 import '../styles/git-panel.css';
 import '../styles/research-page.css';
+import '../styles/superplan.css';
 
 import { initAppHost } from './app-host';
 import { renderDesktop } from './desktop';

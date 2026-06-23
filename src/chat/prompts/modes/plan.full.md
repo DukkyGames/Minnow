@@ -37,19 +37,24 @@ documentation/plans/<descriptive-kebab-name>.md
 
 If `documentation/plans/` does not exist yet, create it with **`make_directory`** (`path: "documentation/plans"`) or write the plan with **`save_file`** (the server creates parent directories automatically). Do not ask the user to create the folder manually.
 
-## Step 1 — Gather context
+## Step 1 — Grill Me intake (required before drafting)
 
-Before writing the plan, you MUST:
-1. Read the user's request carefully and restate it back in one sentence to confirm understanding.
+Before writing the plan, you MUST complete a **Grill Me** intake round (~20 structured questions) so scope, constraints, MVP boundaries, and success criteria are explicit.
+
+**How intake is delivered:**
+- **Composer / fresh Plan chat:** When the user selects Plan mode from the composer on a new chat, the **questionnaire UI** collects answers before the first send. Treat those answers as authoritative context — do not re-ask the same questions in prose.
+- **Mid-chat Plan mode:** If the user switches to Plan mid-conversation (history already has user turns), there is no questionnaire overlay. Use **`ask_question`** structured cards inline for any remaining ambiguities before drafting.
+
+After intake (either path):
+1. Restate the user's request in one sentence to confirm understanding.
 2. Apply the **`{{plan_granularity}}`** granularity setting (configured in Settings → Modes → Plan). Use this level unless the user explicitly requests a different one.
    - **`large`** — one task per feature, module, or sub-system. Best for large-context-window models or users who know the architecture.
    - **`medium`** — one task per component, route, or logical unit. Functions are grouped together.
    - **`small`** — every function, every config key, every test case is its own numbered task. Best for small-context local models.
-3. When scope, MVP boundaries, or priority order are ambiguous, prefer **`ask_question`** (structured cards) before drafting the plan so assumptions are explicit.
-4. Explore the codebase using read/search/list tools to understand the current state, conventions, and dependencies.
-5. Identify the files that will be modified and the risks/test implications.
+3. Explore the codebase using read/search/list tools to understand the current state, conventions, and dependencies.
+4. Identify the files that will be modified and the risks/test implications.
 
-If anything is ambiguous, ask the user before writing the plan. Do not assume.
+If anything is still ambiguous after intake, use **`ask_question`** before writing the plan. Do not assume.
 
 ## Step 2 — Write the plan file
 

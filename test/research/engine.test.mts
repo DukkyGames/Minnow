@@ -146,7 +146,7 @@ describe('DeepResearcher', () => {
     assert.match(result, /Search unavailable/);
     const errorEvents = events.filter((e) => e.phase === 'error');
     assert.equal(errorEvents.length, 1);
-    assert.match(String(errorEvents[0].message), /Search engine unavailable/);
+    assert.match(String(errorEvents[0].message), /search unavailable/i);
   });
 
   test('returns fallback report when synthesis stays empty but findings exist', async () => {

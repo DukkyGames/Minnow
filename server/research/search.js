@@ -1,7 +1,12 @@
 /**
  * Structured web search for Deep Research — provider chain with fallback and disk cache.
+ * Workspace codebase search via ripgrep (MIN-235 / MIN-175).
  */
 
+import { execFile } from 'node:child_process';
+import path from 'node:path';
+import { promisify } from 'node:util';
+import { rgPath } from '@vscode/ripgrep';
 import { readConfigJson } from '../config/store.js';
 import { normalizeToolConfig } from '../config/validators.js';
 import { getManagedSearxngUrl } from '../servers/manager.js';
@@ -9,7 +14,20 @@ import { searchBraveStructured } from '../tools/web-search-brave.js';
 import { searchDdgStructured } from '../tools/web-search-ddg.js';
 import { searchSearxngStructured } from '../tools/web-search-searxng.js';
 import { searchTavilyStructured } from '../tools/web-search-tavily.js';
+import { normalizeSearchResults } from '../tools/search-result.js';
+import { getWorkspaceRoot } from '../workspace/root.js';
+import { isResolvedPathUnderRoot } from '../workspace/safe-path.js';
 import { getSearch, setSearch } from './cache.js';
+
+const execFileAsync = promisify(execFile);
+
+/** Default max structured hits from workspace search. */
+export const CODEBASE_SEARCH_DEFAULT_LIMIT = 20;
+
+/** Injectable ripgrep runner for unit tests. */
+export const codebaseSearchDeps = {
+  execFile: execFile,
+};
 
 /** @typedef {'searxng' | 'tavily' | 'brave' | 'duckduckgo' | 'disabled'} SearchProviderId */
 
@@ -251,4 +269,130 @@ export async function searchStructured(query, opts = {}) {
   }
 
   return [];
+}
+
+/**
+ * Parse a ripgrep content line into relative path, line number, and snippet.
+ * @param {string} line
+ * @param {string} workspaceRoot
+ * @returns {{ relPath: string; lineNum: number; snippet: string } | null}
+ */
+export function parseCodebaseRipgrepLine(line, workspaceRoot) {
+  const trimmed = String(line ?? '').trim();
+  if (!trimmed || trimmed === '--') {
+    return null;
+  }
+
+  const match = trimmed.match(/^(.+?):(\d+):(.*)$/);
+  if (!match) {
+    return null;
+  }
+
+  const rawPath = match[1].replace(/\\/g, '/');
+  const lineNum = Number(match[2]);
+  const snippet = String(match[3] ?? '').trim();
+  if (!Number.isFinite(lineNum) || lineNum < 1) {
+    return null;
+  }
+
+  const absPath = path.isAbsolute(rawPath)
+    ? path.resolve(rawPath)
+    : path.resolve(workspaceRoot, rawPath);
+  const normalizedRoot = path.resolve(workspaceRoot);
+  if (!isResolvedPathUnderRoot(absPath, normalizedRoot)) {
+    return null;
+  }
+
+  const relPath = path.relative(normalizedRoot, absPath).replace(/\\/g, '/');
+  if (!relPath || relPath.startsWith('..')) {
+    return null;
+  }
+
+  return { relPath, lineNum, snippet };
+}
+
+/**
+ * Search the local workspace via ripgrep (honors .gitignore).
+ * Returns the same shape as web search: `{ url, title, snippet }`.
+ * @param {string} query
+ * @param {string} [workspaceRoot]
+ * @param {{ limit?: number }} [options]
+ * @returns {Promise<import('../tools/search-result.js').SearchResult[]>}
+ */
+export async function searchCodebaseStructured(query, workspaceRoot, options = {}) {
+  const trimmed = String(query ?? '').trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const root = workspaceRoot && String(workspaceRoot).trim()
+    ? path.resolve(String(workspaceRoot).trim())
+    : getWorkspaceRoot();
+  const limit = Math.min(
+    Math.max(Number(options.limit ?? CODEBASE_SEARCH_DEFAULT_LIMIT), 1),
+    30,
+  );
+
+  const rgArgs = [
+    '--max-filesize',
+    '2M',
+    '-n',
+    '--no-heading',
+    '-F',
+    '-i',
+    '--max-count',
+    String(limit * 3),
+    trimmed,
+    root,
+  ];
+
+  let stdout = '';
+  try {
+    const result = await promisify(codebaseSearchDeps.execFile)(rgPath, rgArgs, {
+      cwd: root,
+      encoding: 'utf8',
+      maxBuffer: 8 * 1024 * 1024,
+      windowsHide: true,
+    });
+    stdout = result.stdout ?? '';
+  } catch (err) {
+    const code = err && typeof err === 'object' && 'code' in err ? err.code : undefined;
+    const partial = err && typeof err === 'object' && 'stdout' in err ? String(err.stdout) : '';
+    if (code === 1) {
+      return [];
+    }
+    if (code === 2 && partial.trim()) {
+      stdout = partial;
+    } else {
+      return [];
+    }
+  }
+
+  /** @type {Map<string, import('../tools/search-result.js').SearchResult>} */
+  const byFile = new Map();
+
+  for (const line of stdout.split(/\r?\n/)) {
+    const parsed = parseCodebaseRipgrepLine(line, root);
+    if (!parsed) {
+      continue;
+    }
+
+    const { relPath, lineNum, snippet } = parsed;
+    if (byFile.has(relPath)) {
+      continue;
+    }
+
+    const baseName = path.basename(relPath);
+    byFile.set(relPath, {
+      url: `file://${relPath}#L${lineNum}`,
+      title: `${baseName}:${lineNum}`,
+      snippet: snippet || `(match in ${relPath})`,
+    });
+
+    if (byFile.size >= limit) {
+      break;
+    }
+  }
+
+  return normalizeSearchResults([...byFile.values()]);
 }

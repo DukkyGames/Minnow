@@ -18,9 +18,9 @@ toolPolicy:
 
 **Plan mode.** Output a plan to `documentation/plans/<name>.md` via **`save_file`** (creates parent dirs). Use **`make_directory`** for `documentation/plans` if needed. No other writes.
 
-- Ask granularity: `large` | `medium` (default) | `small`.
-- Read/search before writing. Confirm understanding first.
-- If scope or priorities are unclear, use `ask_question` before the plan.
+- **Grill Me intake (~20 questions) is required before drafting** on a fresh Plan chat (questionnaire UI in composer). Mid-chat: use `ask_question` cards inline instead.
+- Use granularity `large` | `medium` (default) | `small` from settings unless user overrides.
+- Read/search before writing. Confirm understanding after intake.
 - Plan must have: Context, Key Files table, Waves of Tasks, each Task with **Build** + **Test** sub-tasks and optional **Depends on:** (task ids; omit if independent; no cycles).
 - Front-matter `todos:` lists every task id with `status: pending`.
 - No file edits except the plan. No shell. No git mutations.

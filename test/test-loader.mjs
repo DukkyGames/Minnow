@@ -5,6 +5,9 @@
 process.env.MINNOW_TEST = '1';
 
 import { register } from 'node:module';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const LOADER_URL = new URL('./test-loader.mjs', import.meta.url).href;
 
@@ -18,6 +21,11 @@ if (!globalThis.__MINNOW_TEST_LOADER_REGISTERED) {
 function isCssSpecifier(specifier) {
   const path = String(specifier).split('?')[0].split('#')[0];
   return path.endsWith('.css');
+}
+
+/** True for Vite `?raw` markdown imports in tests. */
+function isRawMarkdownSpecifier(specifier) {
+  return String(specifier).includes('.md?raw');
 }
 
 const XTERM_STUB = `
@@ -62,6 +70,16 @@ export async function resolve(specifier, context, nextResolve) {
     const isUrlImport = String(specifier).includes('?url');
     return { format: 'module', shortCircuit: true, url: cssStubUrl(isUrlImport) };
   }
+  if (isRawMarkdownSpecifier(specifier) && context.parentURL) {
+    const parentDir = dirname(fileURLToPath(context.parentURL));
+    const mdPath = join(parentDir, String(specifier).replace('?raw', ''));
+    const content = readFileSync(mdPath, 'utf8');
+    return {
+      format: 'module',
+      shortCircuit: true,
+      url: `data:text/javascript,${encodeURIComponent(`export default ${JSON.stringify(content)};`)}`,
+    };
+  }
   if (specifier === '@xterm/xterm') {
     return { format: 'module', shortCircuit: true, url: dataUrlForSource(XTERM_STUB) };
   }
@@ -81,6 +99,16 @@ export async function load(url, context, nextLoad) {
       format: 'module',
       shortCircuit: true,
       source: cssStubSource(isUrlImport),
+    };
+  }
+  const urlPath = String(url).split('?')[0];
+  if (urlPath.endsWith('.md')) {
+    const mdPath = fileURLToPath(urlPath);
+    const content = readFileSync(mdPath, 'utf8');
+    return {
+      format: 'module',
+      shortCircuit: true,
+      source: `export default ${JSON.stringify(content)};`,
     };
   }
   if (url.includes('@xterm/xterm')) {

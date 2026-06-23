@@ -11,13 +11,20 @@ import type {
   SubAgentStructuredOutcome,
 } from './agents/sub-agent-structured-outcome';
 import type { ThinkingResolvedMode, ThinkingTriState } from './agents/thinking-types';
+import type { SuperPlanQuestionnaireAnswers, SuperPlanRunState } from './superplan/types';
 
 /** Persisted session blob schema version (`minnow-sessions-v1` key; version inside JSON). */
 export const SESSION_SCHEMA_VERSION = 5 as const;
 
 export type SessionSchemaVersion = typeof SESSION_SCHEMA_VERSION;
 
-/** Roles stored in chat history (UI + localStorage). */
+/** Plan mode Grill Me intake answers persisted on the chat. */
+export interface PlanIntakeState {
+  completed: boolean;
+  answers?: SuperPlanQuestionnaireAnswers;
+  completedAt?: string;
+}
+
 export type ChatRole = 'user' | 'assistant' | 'tool';
 
 /** Roles sent to LM Studio chat completions (includes ephemeral system prompt). */
@@ -607,6 +614,12 @@ export interface Chat {
   providerId?: string;
   /** Operating mode for prompt + tool policy (Step 05); default build. */
   modeId?: ModeId;
+  /** Plan mode Grill Me intake completed before first plan draft (MIN-235). */
+  planIntake?: PlanIntakeState;
+  /** Super Plan multi-stage pipeline state when attached to this chat. */
+  superPlan?: SuperPlanRunState;
+  /** Board category icon in grouped sidebar rows (Orchestrate planner chats). */
+  category?: BoardCategory;
   /** Sidebar group membership (optional). */
   groupId?: string;
   /** Workspace-relative plan path for Orchestrate mode (documentation/plans/*.md). */

@@ -84,10 +84,14 @@ async function resolveResearchBinding(): Promise<{ providerId: string; model: st
   return { providerId, model };
 }
 
-function readDefaultStartOptions(): Omit<ResearchStartRequest, 'query' | 'continueFrom'> {
+async function readDefaultStartOptions(): Promise<
+  Omit<ResearchStartRequest, 'query' | 'continueFrom'>
+> {
+  const config = await loadResearchConfig();
   return {
     maxRounds: 0,
     category: '',
+    searchScope: config.searchScope ?? 'web',
   };
 }
 
@@ -255,7 +259,7 @@ export async function startDesktopResearchRun(
     const binding = await resolveResearchBinding();
     const body: ResearchStartRequest = {
       query,
-      ...readDefaultStartOptions(),
+      ...(await readDefaultStartOptions()),
       providerId: binding.providerId || undefined,
       model: binding.model || undefined,
       ...extra,

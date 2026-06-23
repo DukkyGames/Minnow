@@ -20,10 +20,12 @@ import { renderChatFromHistory } from './messages';
 import { setStatus } from './status';
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
+import { isOsShellEnabled } from '../os/page-bridge';
 
 const MODE_STATUS_MS = 2200;
 
 let modeSelectorRoot: HTMLElement | null = null;
+let launcherRoot: HTMLElement | null = null;
 let statusHideTimer: ReturnType<typeof setTimeout> | null = null;
 
 function getModeSelectorEl(): HTMLElement | null {
@@ -31,6 +33,30 @@ function getModeSelectorEl(): HTMLElement | null {
     modeSelectorRoot = document.getElementById('modeSelector');
   }
   return modeSelectorRoot;
+}
+
+function getLauncherEl(): HTMLElement | null {
+  if (!launcherRoot) {
+    launcherRoot = document.getElementById('modeLauncher');
+  }
+  return launcherRoot;
+}
+
+async function launchSuperPlan(): Promise<void> {
+  const { getActiveComposerSurface } = await import('./composer-surface');
+  const seed =
+    getActiveComposerSurface().inputEl?.value.trim() ||
+    (document.getElementById('desktopInput') as HTMLTextAreaElement | null)?.value.trim() ||
+    undefined;
+
+  if (isOsShellEnabled()) {
+    const { launchApp } = await import('../os/router');
+    launchApp('code', { superPlan: true, seed });
+    return;
+  }
+
+  const { openCodeSuperPlan } = await import('../os/superplan-code');
+  await openCodeSuperPlan(seed);
 }
 
 /** Apply active chat mode to segment buttons. */
@@ -63,6 +89,29 @@ export function syncModeSelectorFromActiveChat(): void {
   );
 
   refreshModeSelectorDisabled();
+  refreshModeLauncherDisabled();
+  syncModeLauncherVisibility();
+}
+
+/** Show Super Plan launcher when Plan mode is active. */
+function syncModeLauncherVisibility(): void {
+  const launcher = getLauncherEl();
+  if (!launcher) {
+    return;
+  }
+  const show = normalizeModeId(getActiveChat().modeId) === 'plan';
+  launcher.hidden = !show;
+  launcher.toggleAttribute('hidden', !show);
+}
+
+/** Disable panel launchers while the model is streaming. */
+export function refreshModeLauncherDisabled(): void {
+  const root = getLauncherEl();
+  if (!root) return;
+  const disabled = isActiveChatStreaming() || isComposerRecoveryBlocked();
+  root.querySelectorAll<HTMLButtonElement>('[data-mode-launcher]').forEach((btn) => {
+    btn.disabled = disabled;
+  });
 }
 
 /** Disable segments while the model is streaming. */
@@ -124,10 +173,15 @@ export function setChatMode(modeId: ModeId): SetChatModeResult {
   unmountReefWidgetsInChat();
   renderChatFromHistory(getActiveChat());
   syncModeSelectorFromActiveChat();
+  refreshModeLauncherDisabled();
   void syncOrchestratePlanStripFromActiveChat();
   syncViewModeToggleFromActiveChat();
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
+
+  if (normalized === 'plan') {
+    void import('../superplan/plan-intake').then((m) => m.onPlanModeActivated(chat));
+  }
 
   const mode = listModes().find((m) => m.id === normalized);
   if (mode) showModeStatusPill(mode.label);
@@ -196,5 +250,42 @@ export function initModeSelector(): void {
   }
 
   root.dataset.initialized = 'true';
-  syncModeSelectorFromActiveChat();
+  initModeLauncher();
+  syncModeLauncherVisibility();
+}
+
+/** Panel launchers beside mode segments (not ModeIds). */
+function initModeLauncher(): void {
+  const toolbar = document.getElementById('composerControls');
+  if (!toolbar || document.getElementById('modeLauncher')) {
+    return;
+  }
+
+  const launcher = document.createElement('div');
+  launcher.id = 'modeLauncher';
+  launcher.className = 'mode-launcher';
+  launcher.setAttribute('role', 'group');
+  launcher.setAttribute('aria-label', 'Plan tools');
+
+  const superPlanBtn = document.createElement('button');
+  superPlanBtn.type = 'button';
+  superPlanBtn.className = 'mode-launcher-btn';
+  superPlanBtn.dataset.modeLauncher = 'superplan';
+  superPlanBtn.textContent = 'Super Plan';
+  superPlanBtn.title = 'Open Super Plan — intake, research, and multi-draft planning';
+  superPlanBtn.addEventListener('click', () => {
+    void launchSuperPlan();
+  });
+
+  launcher.appendChild(superPlanBtn);
+  launcher.hidden = true;
+
+  const thinkingWrap = document.getElementById('composerThinkingWrap');
+  if (thinkingWrap) {
+    toolbar.insertBefore(launcher, thinkingWrap);
+  } else {
+    toolbar.appendChild(launcher);
+  }
+
+  refreshModeLauncherDisabled();
 }

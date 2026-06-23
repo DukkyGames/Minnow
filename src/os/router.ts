@@ -2,16 +2,20 @@ import {
   activateDesktopChat,
   activateDesktopExperts,
   activateDesktopResearch,
+  activateDesktopSuperPlan,
   consumePendingDesktopChatActivation,
   consumePendingDesktopExpertsActivation,
   consumePendingDesktopResearchActivation,
+  consumePendingDesktopSuperPlanActivation,
   deactivateDesktopExperts,
   deactivateDesktopResearch,
   isDesktopExpertsActive,
   isDesktopResearchActive,
+  isDesktopSuperPlanActive,
   queueDesktopChatActivation,
   queueDesktopExpertsActivation,
   queueDesktopResearchActivation,
+  queueDesktopSuperPlanActivation,
 } from './desktop-state';
 import { isAppId } from './app-registry';
 import {
@@ -58,6 +62,7 @@ export function resolveLegacyHash(hash: string): {
   desktopChat?: boolean;
   desktopResearch?: boolean;
   desktopExperts?: boolean;
+  desktopSuperPlan?: boolean;
 } {
   const trimmed = hash || '#/';
   if (trimmed.startsWith('#/settings')) {
@@ -184,6 +189,13 @@ function applyRoute(route: OsRoute, options?: LaunchOptions): void {
     const pendingExperts = consumePendingDesktopExpertsActivation();
     if (pendingExperts !== null) {
       void activateDesktopExperts(pendingExperts);
+      return;
+    }
+    const pendingSuperPlan = consumePendingDesktopSuperPlanActivation();
+    if (pendingSuperPlan !== null) {
+      void activateDesktopSuperPlan(pendingSuperPlan).then(() =>
+        import('./superplan-desktop').then((m) => m.openSuperPlan(pendingSuperPlan.seed)),
+      );
       return;
     }
     const pendingChat = consumePendingDesktopChatActivation();

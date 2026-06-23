@@ -16,16 +16,35 @@ import {
   currentDateContext,
   formatPrompt,
 } from './prompts.js';
-import { getLastSearchError, getLastSearchProvider, searchStructured as defaultSearchStructured } from './search.js';
+import { getLastSearchError, getLastSearchProvider, searchCodebaseStructured as defaultSearchCodebaseStructured, searchStructured as defaultSearchStructured } from './search.js';
 import { parseStopDecision } from './strip-thinking.js';
 
 /** Default round cap when research.json `maxRounds` is 0 ("Auto"). */
 const AUTO_MAX_ROUNDS = 8;
 
+/** @typedef {'web' | 'codebase' | 'both'} ResearchSearchScope */
+
+/**
+ * Normalize search scope from explicit value or legacy includeCodebase flag.
+ * @param {unknown} value
+ * @param {boolean} [includeCodebase]
+ * @returns {ResearchSearchScope}
+ */
+export function normalizeSearchScope(value, includeCodebase = false) {
+  if (value === 'web' || value === 'codebase' || value === 'both') {
+    return value;
+  }
+  if (includeCodebase) {
+    return 'both';
+  }
+  return 'web';
+}
+
 /** Injectable deps for unit tests. */
 export const engineDeps = {
   llmCall: defaultLlmCall,
   searchStructured: defaultSearchStructured,
+  searchCodebaseStructured: defaultSearchCodebaseStructured,
   fetchAndExtract: defaultFetchAndExtract,
 };
 
@@ -94,6 +113,9 @@ export function pLimit(concurrency) {
  * @property {(event: Record<string, unknown>) => void} [progressCallback]
  * @property {string} [searchProvider]
  * @property {string} [category]
+ * @property {'web' | 'codebase' | 'both'} [searchScope]
+ * @property {boolean} [includeCodebase]
+ * @property {string} [workspaceRoot]
  */
 
 export class DeepResearcher {
@@ -105,6 +127,14 @@ export class DeepResearcher {
     this.model = options.model;
     this.searchProviderOverride = options.searchProvider?.trim() ?? '';
     this.category = normalizeResearchCategory(options.category?.trim() ?? '');
+    this.searchScope = normalizeSearchScope(
+      options.searchScope,
+      options.includeCodebase === true,
+    );
+    this.workspaceRoot =
+      typeof options.workspaceRoot === 'string' && options.workspaceRoot.trim()
+        ? options.workspaceRoot.trim()
+        : '';
     this.maxRounds =
       options.maxRounds && options.maxRounds > 0 ? options.maxRounds : AUTO_MAX_ROUNDS;
     this.maxTime = options.maxTimeSeconds ?? 300;
@@ -193,6 +223,9 @@ export class DeepResearcher {
     }
     if (kwargs.message !== undefined) {
       event.message = kwargs.message;
+    }
+    if (kwargs.source !== undefined) {
+      event.source = kwargs.source;
     }
     this.emitProgress(event);
   }
@@ -310,15 +343,23 @@ export class DeepResearcher {
         consecutiveEmptyRounds += 1;
         if (consecutiveEmptyRounds >= this.maxEmptyRounds) {
           const errDetail = this._lastSearchError || getLastSearchError() || 'unknown error';
+          const scopeLabel =
+            this.searchScope === 'codebase'
+              ? 'Codebase search'
+              : this.searchScope === 'both'
+                ? 'Search'
+                : 'Web search';
           this._emit({
             phase: 'error',
-            message: `Search engine unavailable: ${errDetail}`,
+            message: `${scopeLabel} unavailable: ${errDetail}`,
           });
           if (!findings.length) {
             return (
-              `**Search unavailable** — Web search failed after ` +
+              `**Search unavailable** — ${scopeLabel} failed after ` +
               `${roundNum} rounds. Error: ${errDetail}\n\n` +
-              'Please check your search provider settings and ensure the service is running.'
+              (this.searchScope === 'codebase'
+                ? 'Please check that the workspace path is valid and contains matching files.'
+                : 'Please check your search provider settings and ensure the service is running.')
             );
           }
           break;
@@ -497,6 +538,22 @@ export class DeepResearcher {
   }
 
   /**
+   * Workspace ripgrep search for one query.
+   * @param {string} query
+   * @returns {Promise<import('../tools/search-result.js').SearchResult[]>}
+   */
+  async searchCodebase(query) {
+    const results = await engineDeps.searchCodebaseStructured(query, this.workspaceRoot);
+    if (results.length && !this.providersUsed.includes('codebase')) {
+      this.providersUsed.push('codebase');
+    }
+    if (!results.length && !this._lastSearchError) {
+      this._lastSearchError = 'No codebase matches found.';
+    }
+    return results;
+  }
+
+  /**
    * @param {string[]} queries
    * @param {string} question
    * @param {AbortSignal} [signal]
@@ -506,14 +563,40 @@ export class DeepResearcher {
     /** @type {ResearchFinding[]} */
     const allFindings = [];
 
-    const searchResults = await Promise.all(
-      queries.map((q) =>
-        this.search(q).catch((err) => {
-          this._lastSearchError = err instanceof Error ? err.message : String(err);
-          return [];
-        }),
-      ),
-    );
+    /** @type {Promise<import('../tools/search-result.js').SearchResult[]>[]>} */
+    const searchTasks = [];
+
+    if (this.searchScope === 'web' || this.searchScope === 'both') {
+      searchTasks.push(
+        ...queries.map((q) =>
+          this.search(q).catch((err) => {
+            this._lastSearchError = err instanceof Error ? err.message : String(err);
+            return [];
+          }),
+        ),
+      );
+    }
+
+    if (this.searchScope === 'codebase' || this.searchScope === 'both') {
+      this._emit({
+        phase: 'searching',
+        source: 'codebase',
+        round: this.roundCount,
+        queries: queries.length,
+        query_preview: queries[0] ?? '',
+        total_sources: this.urlsFetched.size,
+      });
+      searchTasks.push(
+        ...queries.map((q) =>
+          this.searchCodebase(q).catch((err) => {
+            this._lastSearchError = err instanceof Error ? err.message : String(err);
+            return [];
+          }),
+        ),
+      );
+    }
+
+    const searchResults = await Promise.all(searchTasks);
 
     /** @type {import('../tools/search-result.js').SearchResult[]} */
     const urlsToFetch = [];
@@ -556,6 +639,7 @@ export class DeepResearcher {
             model: this.model,
             maxContentChars: this.maxContentChars,
             extractionTimeoutSeconds: this.extractionTimeout,
+            workspaceRoot: this.workspaceRoot,
             signal,
           });
         }),
@@ -744,6 +828,10 @@ export class DeepResearcher {
     if (this.category) {
       const label = this.category.charAt(0).toUpperCase() + this.category.slice(1);
       stats.Category = label;
+    }
+    if (this.searchScope !== 'web') {
+      stats.Scope =
+        this.searchScope === 'both' ? 'Web + codebase' : 'Codebase';
     }
     return stats;
   }

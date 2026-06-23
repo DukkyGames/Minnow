@@ -20,7 +20,7 @@ import {
 import { renderResearchLibrary } from './library';
 import { ResearchProgressPanel } from './progress-panel';
 import { renderResearchResultFromMarkdown } from './report-view';
-import type { ResearchCategory, ResearchStartRequest } from './types';
+import type { ResearchCategory, ResearchSearchScope, ResearchStartRequest } from './types';
 import { closeBenchmark } from '../ui/benchmark-page';
 import { closeCompare } from '../ui/compare-page';
 import { closeGlobalBugs } from '../ui/global-bugs-page';
@@ -215,9 +215,13 @@ function readStartOptions(): Omit<ResearchStartRequest, 'query' | 'continueFrom'
   const searchProvider = (
     document.getElementById('researchSearchProvider') as HTMLSelectElement | null
   )?.value?.trim();
+  const searchScope = (
+    (document.getElementById('researchSearchScope') as HTMLSelectElement | null)?.value ?? 'web'
+  ) as ResearchSearchScope;
   return {
     maxRounds: Number.isFinite(maxRounds) ? maxRounds : 0,
     category,
+    searchScope,
     ...(searchProvider ? { searchProvider } : {}),
   };
 }
@@ -573,6 +577,12 @@ function bindStaticControls(): void {
   );
   document.getElementById('btnResearchSettingsLink')?.addEventListener('click', () => {
     void import('../ui/settings-page').then((m) => m.openSettings('deep-research'));
+  });
+  void loadResearchConfig().then((config) => {
+    const scopeSelect = document.getElementById('researchSearchScope') as HTMLSelectElement | null;
+    if (scopeSelect && config.searchScope) {
+      scopeSelect.value = config.searchScope;
+    }
   });
 }
 

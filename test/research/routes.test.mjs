@@ -16,6 +16,8 @@ import { setTestHome, rmTestHome, httpRequest } from '../config/test-helpers.js'
 let originalLlmCall;
 /** @type {typeof engineDeps.searchStructured} */
 let originalSearch;
+/** @type {typeof engineDeps.searchCodebaseStructured} */
+let originalCodebaseSearch;
 /** @type {typeof engineDeps.fetchAndExtract} */
 let originalExtract;
 
@@ -68,6 +70,7 @@ function mockExtract() {
 function installFastResearchMocks() {
   originalLlmCall = engineDeps.llmCall;
   originalSearch = engineDeps.searchStructured;
+  originalCodebaseSearch = engineDeps.searchCodebaseStructured;
   originalExtract = engineDeps.fetchAndExtract;
 
   engineDeps.llmCall = mockLlmCall({
@@ -78,12 +81,20 @@ function installFastResearchMocks() {
     'long, detailed, comprehensive': '# Final Report\n\nCompleted research output.',
   });
   engineDeps.searchStructured = mockSearch();
+  engineDeps.searchCodebaseStructured = async (query) => [
+    {
+      title: `Code hit for ${query}`,
+      url: `file://src/example.ts#L1`,
+      snippet: 'code snippet',
+    },
+  ];
   engineDeps.fetchAndExtract = mockExtract();
 }
 
 function restoreResearchMocks() {
   engineDeps.llmCall = originalLlmCall;
   engineDeps.searchStructured = originalSearch;
+  engineDeps.searchCodebaseStructured = originalCodebaseSearch;
   engineDeps.fetchAndExtract = originalExtract;
 }
 
@@ -244,6 +255,38 @@ describe('POST /api/research/start lifecycle', () => {
   it('rejects invalid research id format', async () => {
     const bad = await httpRequest(baseUrl, 'GET', '/api/research/status/not-an-id');
     assert.equal(bad.status, 400);
+  });
+
+  it('accepts searchScope and runs with codebase scope', async () => {
+    const start = await httpRequest(baseUrl, 'POST', '/api/research/start', {
+      query: 'Where is the routing test hook?',
+      providerId: 'mock-provider',
+      model: 'mock-model',
+      minRounds: 1,
+      searchScope: 'codebase',
+    });
+    assert.equal(start.status, 201, start.text);
+    const researchId = start.json.researchId;
+    await waitForResearchStatus(baseUrl, researchId, 'done');
+
+    const streamBuf = await collectSseStream(baseUrl, `/api/research/stream/${researchId}`);
+    const streamText = streamBuf.toString('utf8');
+    assert.match(streamText, /"source":"codebase"/);
+
+    const result = await httpRequest(baseUrl, 'GET', `/api/research/result/${researchId}`);
+    assert.equal(result.status, 200, result.text);
+    assert.match(String(result.json?.result), /Final Report/);
+  });
+
+  it('rejects invalid searchScope values', async () => {
+    const bad = await httpRequest(baseUrl, 'POST', '/api/research/start', {
+      query: 'Invalid scope test',
+      providerId: 'mock-provider',
+      model: 'mock-model',
+      searchScope: 'internet',
+    });
+    assert.equal(bad.status, 400);
+    assert.match(String(bad.json?.error), /searchScope/i);
   });
 
   it('continueFrom loads prior research context', async () => {

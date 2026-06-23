@@ -67,6 +67,8 @@ export interface LaunchOptions {
   expertId?: string;
   /** Desktop experts: open the full lab panel on entry. */
   openLab?: boolean;
+  /** Desktop Super Plan: open the intake overlay (MIN-235). */
+  superPlan?: boolean;
 }
 
 /** Parsed hash route consumed by the OS shell and page bridge. */

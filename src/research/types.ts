@@ -14,6 +14,9 @@ export type ResearchCategory =
   | 'market'
   | 'general';
 
+/** Where Deep Research gathers sources. */
+export type ResearchSearchScope = 'web' | 'codebase' | 'both';
+
 /** SSE progress events from `server/research/engine.js` `_emit`. */
 export type ResearchProgress =
   | { phase: 'probing'; model: string }
@@ -21,6 +24,7 @@ export type ResearchProgress =
   | {
       phase: 'searching';
       round: number;
+      source?: 'codebase' | 'web';
       queries?: number;
       queryPreview?: string;
       totalSources: number;
@@ -65,6 +69,10 @@ export interface ResearchStartRequest {
   providerId?: string;
   model?: string;
   continueFrom?: string;
+  searchScope?: ResearchSearchScope;
+  workspaceRoot?: string;
+  /** Legacy alias — treated as searchScope `both` when true. */
+  includeCodebase?: boolean;
 }
 
 /** POST /api/research/start response. */
