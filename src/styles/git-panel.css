@@ -1,0 +1,537 @@
+/**
+ * Git source control view — embedded in the file sidebar (#gitPanelRoot).
+ */
+
+.git-panel-root {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.git-panel-root[hidden] {
+  display: none !important;
+}
+
+.git-panel-root__inner {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.git-panel-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 10px 8px;
+  border-bottom: 1px solid var(--mn-border);
+  flex-shrink: 0;
+}
+
+.git-panel-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.git-panel-cwd-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.git-panel-cwd-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--mn-fg-muted);
+}
+
+.git-panel-cwd-select {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+}
+
+.git-panel-branch-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.git-panel-branch-select {
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+}
+
+.git-panel-ahead-behind {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--mn-fg-muted);
+  white-space: nowrap;
+}
+
+.git-panel-action-btn {
+  font-size: 11px;
+  padding: 5px 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .git-panel-action-btn:hover {
+    background: var(--mn-accent-soft);
+  }
+}
+
+.git-panel-action-btn--primary {
+  background: var(--mn-accent);
+  border-color: var(--mn-accent);
+  color: var(--mn-accent-fg, #fff);
+}
+
+.git-panel-status {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
+.git-panel-status.is-err {
+  color: var(--mn-danger);
+}
+
+.git-panel-commit-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.git-panel-commit-input {
+  width: 100%;
+  min-height: 56px;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+}
+
+.git-panel-commit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.git-panel-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.git-panel-section {
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.git-panel-section--history {
+  margin-top: 2px;
+}
+
+.git-panel-section__hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  background: var(--mn-surface-1);
+  color: var(--mn-fg);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-align: left;
+}
+
+.git-panel-section__bulk {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--mn-accent);
+  cursor: pointer;
+}
+
+.git-panel-section__body {
+  border-top: 1px solid var(--mn-border);
+}
+
+.git-panel-section__body--history {
+  padding: 4px 0 6px;
+}
+
+.git-panel-file-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.git-panel-file-row:last-child {
+  border-bottom: none;
+}
+
+.git-panel-file-badge {
+  flex: none;
+  width: 18px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 3px;
+  padding: 1px 0;
+}
+
+.git-panel-file-badge--modified {
+  color: var(--mn-warning);
+  background: oklch(from var(--mn-warning) l c h / 0.15);
+}
+
+.git-panel-file-badge--untracked {
+  color: var(--mn-success);
+  background: oklch(from var(--mn-success) l c h / 0.15);
+}
+
+.git-panel-file-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--mn-fg);
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .git-panel-file-path:hover {
+    color: var(--mn-accent);
+    text-decoration: underline;
+  }
+}
+
+.git-panel-file-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.git-panel-file-btn {
+  font-size: 11px;
+  padding: 2px 5px;
+  border: 1px solid var(--mn-border);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .git-panel-file-btn--danger:hover {
+    color: var(--mn-danger);
+    border-color: var(--mn-danger);
+  }
+}
+
+.git-panel-diff-host {
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  overflow: auto;
+  max-height: min(280px, 40vh);
+  flex-shrink: 0;
+}
+
+.git-panel-diff-label {
+  margin: 0;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  background: var(--mn-surface-1);
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.git-panel-graph-mount {
+  overflow: visible;
+}
+
+/* Commit history graph (MIN-198 P2) */
+.git-graph {
+  --git-lane-0: var(--mn-accent);
+  --git-lane-1: var(--mn-success);
+  --git-lane-2: var(--mn-warning);
+  --git-lane-3: var(--mn-danger);
+  --git-lane-4: var(--mn-folder);
+  --git-lane-5: var(--mn-accent-ink);
+  --git-lane-6: var(--mn-fg-muted);
+  --git-lane-7: var(--mn-success-ink);
+}
+
+.git-graph__list {
+  display: flex;
+  flex-direction: column;
+}
+
+.git-graph__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.git-graph__row--compact {
+  align-items: flex-start;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .git-graph__row:hover {
+    background: var(--mn-accent-soft);
+  }
+}
+
+.git-graph__row:focus-visible {
+  outline: 2px solid var(--mn-focus-ring);
+  outline-offset: 1px;
+}
+
+.git-graph__lanes {
+  position: relative;
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(var(--lane-count, 1), 12px);
+  width: calc(var(--lane-count, 1) * 12px);
+  min-height: 24px;
+  overflow: hidden;
+}
+
+.git-graph__lane {
+  position: relative;
+  overflow: hidden;
+}
+
+.git-graph__lane--above::before,
+.git-graph__lane--below::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--lane-color);
+}
+
+.git-graph__lane--above::before {
+  top: 0;
+  height: 50%;
+}
+
+.git-graph__lane--below::after {
+  bottom: 0;
+  height: 50%;
+}
+
+.git-graph__lane--merge::before {
+  top: 50%;
+  left: 50%;
+  width: calc(100% + 6px);
+  height: 2px;
+  margin-top: -1px;
+  margin-left: 0;
+  background: var(--lane-color);
+  transform: translateX(-50%);
+}
+
+.git-graph__lane--branch::after {
+  top: 50%;
+  left: 50%;
+  width: calc(100% + 6px);
+  height: 2px;
+  margin-top: -1px;
+  margin-left: 0;
+  background: var(--lane-color);
+  transform: translateX(-50%);
+}
+
+.git-graph__dot {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--dot-lane, 0) * 12px + 6px);
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--lane-color);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.git-graph__dot--head {
+  background: transparent;
+  border: 2px solid var(--lane-color);
+  box-sizing: border-box;
+}
+
+.git-graph__content {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  gap: 2px 8px;
+  align-items: baseline;
+  font-size: 12px;
+}
+
+.git-graph--compact .git-graph__content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: stretch;
+}
+
+.git-graph__meta {
+  display: contents;
+}
+
+.git-graph--compact .git-graph__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 10px;
+  color: var(--mn-fg-muted);
+}
+
+.git-graph__lanes--compact {
+  position: relative;
+  flex: none;
+  width: 12px;
+  min-height: 20px;
+  margin-top: 3px;
+}
+
+.git-graph__lanes--compact .git-graph__dot {
+  position: static;
+  margin: 0;
+  left: auto;
+  top: auto;
+}
+
+.git-graph__subject {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--mn-fg);
+}
+
+.git-graph--compact .git-graph__subject {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  line-height: 1.35;
+  font-size: 12px;
+}
+
+.git-graph__author {
+  grid-column: 2;
+  grid-row: 1;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+  white-space: nowrap;
+}
+
+.git-graph__refs {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.git-graph__ref-chip {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--mn-accent-border);
+  background: var(--mn-accent-soft);
+  color: var(--mn-accent-ink);
+  white-space: nowrap;
+}
+
+.git-graph__time {
+  grid-column: 2;
+  grid-row: 2;
+  font-size: 10px;
+  color: var(--mn-fg-subtle);
+  white-space: nowrap;
+}
+
+.git-graph__empty {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+  text-align: center;
+}
+
+.git-panel-empty {
+  margin: 0;
+  padding: 10px 0;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+  text-align: center;
+}

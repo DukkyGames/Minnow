@@ -8,10 +8,21 @@
 import { isLocalServerAvailable } from '../tools/config.ts';
 import { reportBackgroundError } from '../boot/report-background-error.ts';
 
+/** One git worktree entry parsed from `git worktree list --porcelain`. */
+export interface WorktreeListEntry {
+  path: string;
+  head: string;
+  branch?: string;
+  detached: boolean;
+  bare?: boolean;
+}
+
 export interface WorktreeOpResult {
   ok: boolean;
   path?: string;
   branch?: string;
+  /** Parsed worktrees when `op` is `list`. */
+  worktrees?: WorktreeListEntry[];
   created?: boolean;
   committed?: boolean;
   dirty?: boolean;
@@ -189,4 +200,9 @@ export function openIntegrationPr(input: {
   body?: string;
 }): Promise<WorktreeOpResult> {
   return postWorktree('open_pr', input);
+}
+
+/** List all git worktrees for the active repo (`git worktree list --porcelain`). */
+export function listWorktrees(): Promise<WorktreeOpResult> {
+  return postWorktree('list', {});
 }

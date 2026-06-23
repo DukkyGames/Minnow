@@ -42,6 +42,64 @@ export {
 const listingCache = new Map<string, ParsedListing>();
 const loadingDirs = new Set<string>();
 
+/** Git status letters keyed by repo-relative path (MIN-198 file tree badges). */
+let gitStatusMap = new Map<string, string>();
+let gitStatusPollTimer: number | undefined;
+let gitStatusPollCwd: string | undefined;
+
+/** Update git badge map and re-render visible file rows. */
+export function setFileTreeGitStatus(map: Map<string, string>): void {
+  gitStatusMap = map;
+  renderFileTree();
+}
+
+/** Poll git status every 5s and refresh file tree badges. */
+export function startFileTreeGitStatusPoll(cwd?: string): void {
+  gitStatusPollCwd = cwd?.trim() || undefined;
+  if (gitStatusPollTimer) {
+    clearInterval(gitStatusPollTimer);
+  }
+  void pollFileTreeGitStatus();
+  gitStatusPollTimer = window.setInterval(() => {
+    void pollFileTreeGitStatus();
+  }, 5000);
+}
+
+async function pollFileTreeGitStatus(): Promise<void> {
+  const { gitStatus } = await import('../state/git-api');
+  const { getWorkspacePath } = await import('../state/workspace');
+  const ws = getWorkspacePath().trim();
+  const cwdArg =
+    gitStatusPollCwd && ws && gitStatusPollCwd.replace(/\\/g, '/') !== ws.replace(/\\/g, '/')
+      ? gitStatusPollCwd
+      : undefined;
+
+  const result = await gitStatus(cwdArg);
+  if (!result.ok) {
+    setFileTreeGitStatus(new Map());
+    return;
+  }
+
+  const map = new Map<string, string>();
+  for (const bucket of [result.staged, result.unstaged, result.untracked]) {
+    for (const entry of bucket ?? []) {
+      map.set(entry.path.replace(/\\/g, '/'), entry.status);
+    }
+  }
+  setFileTreeGitStatus(map);
+}
+
+function appendGitBadge(row: HTMLElement, fullPath: string): void {
+  const status = gitStatusMap.get(fullPath.replace(/\\/g, '/'));
+  if (!status) return;
+
+  const badge = document.createElement('span');
+  badge.className = `file-tree-git-badge file-tree-git-badge--${status === '?' ? 'untracked' : 'changed'}`;
+  badge.textContent = status === '?' ? '?' : status.slice(0, 1).toUpperCase();
+  badge.title = `Git: ${status}`;
+  row.appendChild(badge);
+}
+
 let crudBound = false;
 let focusedTreePath: string | null = null;
 let focusedTreeKind: FileTreeEntryKind | null = null;
@@ -291,6 +349,7 @@ function appendFileRow(
   });
 
   wireRowContextMenu(row, fullPath, 'file');
+  appendGitBadge(row, fullPath);
   host.appendChild(row);
 }
 
@@ -339,6 +398,7 @@ function appendFlatFileRow(host: HTMLElement, fullPath: string): void {
   });
 
   wireRowContextMenu(row, fullPath, 'file');
+  appendGitBadge(row, fullPath);
   host.appendChild(row);
 }
 

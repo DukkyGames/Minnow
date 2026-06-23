@@ -1,0 +1,1518 @@
+/**
+
+ * Git source control view inside the file sidebar (MIN-198 P1/P3).
+
+ */
+
+
+
+import {
+
+  formatWorktreeOptionLabel,
+
+  parseWorktreeListPorcelain,
+
+  type ParsedWorktree,
+
+} from '../lib/worktree-list-parse';
+
+import { subscribeAllBoardChanges } from '../state/orchestrate-board-events';
+
+import {
+
+  gitBranches,
+
+  gitCheckout,
+
+  gitCommit,
+
+  gitDiff,
+
+  gitDiscard,
+
+  gitPull,
+
+  gitPush,
+
+  gitStage,
+
+  gitStageAll,
+
+  gitStatus,
+
+  gitUnstage,
+
+  gitShow,
+
+  type GitFileEntry,
+
+  type GitOpResult,
+
+} from '../state/git-api';
+
+import { getFilePanelState, patchFilePanelState } from '../state/file-panel';
+
+import { renderGitGraph } from './git-graph';
+
+import { applyFileSidebarVisuals } from './file-layout';
+
+import { getActiveChat, sessionState } from '../state/sessions';
+
+import { resolveChatWorktreeRoot } from '../state/worktree-isolation';
+
+import { listWorktrees } from '../state/worktree-service';
+
+import { getWorkspacePath } from '../state/workspace';
+
+import { parseUnifiedPatchToDiffLines } from './git-patch-parse';
+
+import { renderUnifiedPromptDiff } from './prompt-diff-unified';
+
+
+
+const POLL_MS = 5000;
+
+
+
+let panelRoot: HTMLElement | null = null;
+
+let scrollMount: HTMLElement | null = null;
+
+let bodyMount: HTMLElement | null = null;
+
+let branchSelect: HTMLSelectElement | null = null;
+
+let cwdSelect: HTMLSelectElement | null = null;
+
+let cwdWrap: HTMLElement | null = null;
+
+let aheadBehindEl: HTMLElement | null = null;
+
+let commitInput: HTMLTextAreaElement | null = null;
+
+let statusEl: HTMLElement | null = null;
+
+let diffHost: HTMLElement | null = null;
+
+let graphMount: HTMLElement | null = null;
+
+let historySection: HTMLElement | null = null;
+
+let historyBody: HTMLElement | null = null;
+
+
+
+let pollTimer: number | undefined;
+
+let bound = false;
+
+let panelOpen = false;
+
+let refreshing = false;
+
+
+
+/** Effective cwd for git ops; undefined means server workspace root. */
+
+let panelCwd: string | undefined;
+
+let knownWorktrees: ParsedWorktree[] = [];
+
+
+
+let expandedDiffPath: string | null = null;
+
+let expandedDiffStaged = false;
+
+let selectedCommitSha: string | null = null;
+
+
+
+let graphHandle: ReturnType<typeof renderGitGraph> | null = null;
+
+const graphOptions: { cwd?: string; onSelectCommit?: (sha: string) => void; compact?: boolean } = {
+  compact: true,
+};
+
+
+
+function getFileSidebar(): HTMLElement | null {
+
+  return document.getElementById('fileSidebar');
+
+}
+
+
+
+function getGitMount(): HTMLElement | null {
+
+  return document.getElementById('gitPanelRoot');
+
+}
+
+
+
+/** Current cwd passed to git API calls (undefined → server default). */
+
+export function getGitPanelCwd(): string | undefined {
+
+  return panelCwd;
+
+}
+
+
+
+function normalizePath(p: string): string {
+
+  return p.replace(/\\/g, '/').replace(/\/+$/, '');
+
+}
+
+
+
+function pathsEqual(a: string, b: string): boolean {
+
+  return normalizePath(a) === normalizePath(b);
+
+}
+
+
+
+function setStatus(message: string, isError = false): void {
+
+  if (!statusEl) return;
+
+  statusEl.textContent = message;
+
+  statusEl.classList.toggle('is-err', isError);
+
+  statusEl.hidden = !message;
+
+}
+
+
+
+function getEffectiveCwdArg(): string | undefined {
+
+  const ws = getWorkspacePath().trim();
+
+  if (!panelCwd?.trim()) return undefined;
+
+  if (ws && pathsEqual(panelCwd, ws)) return undefined;
+
+  return panelCwd;
+
+}
+
+
+
+function syncSidebarChrome(): void {
+  const sidebar = getFileSidebar();
+  const filesView = document.getElementById('fileSidebarFilesView');
+  const gitMount = getGitMount();
+  const title = document.getElementById('fileSidebarTitle');
+  const open = isGitSidePanelOpen();
+
+  sidebar?.classList.toggle('file-sidebar--git', open);
+  sidebar?.setAttribute('aria-label', open ? 'Source control' : 'Project files');
+
+  if (filesView) {
+    filesView.toggleAttribute('hidden', open);
+  }
+  if (gitMount) {
+    gitMount.toggleAttribute('hidden', !open);
+  }
+  if (title) title.textContent = open ? 'Source Control' : 'Files';
+
+  syncToggleButtonState();
+}
+
+
+
+function ensurePanelDom(): HTMLElement {
+
+  const mount = getGitMount();
+
+  if (panelRoot?.isConnected && mount?.contains(panelRoot)) return panelRoot;
+
+
+
+  panelRoot = document.createElement('div');
+
+  panelRoot.id = 'gitSidePanel';
+
+  panelRoot.className = 'git-panel-root__inner';
+
+  panelRoot.setAttribute('role', 'region');
+
+  panelRoot.setAttribute('aria-label', 'Source control');
+
+
+
+  const toolbar = document.createElement('div');
+
+  toolbar.className = 'git-panel-toolbar';
+
+
+
+  cwdWrap = document.createElement('div');
+
+  cwdWrap.className = 'git-panel-cwd-wrap';
+
+  cwdWrap.hidden = true;
+
+  const cwdLabel = document.createElement('label');
+
+  cwdLabel.className = 'git-panel-cwd-label';
+
+  cwdLabel.textContent = 'Worktree';
+
+  cwdLabel.htmlFor = 'gitPanelCwdSelect';
+
+  cwdSelect = document.createElement('select');
+
+  cwdSelect.id = 'gitPanelCwdSelect';
+
+  cwdSelect.className = 'git-panel-cwd-select';
+
+  cwdSelect.title = 'Git worktree root';
+
+  cwdSelect.addEventListener('change', () => {
+
+    const value = cwdSelect?.value ?? '';
+
+    panelCwd = value || undefined;
+
+    void refreshGitPanel();
+
+    void syncFileTreeGitPollCwd();
+
+  });
+
+  cwdWrap.append(cwdLabel, cwdSelect);
+
+
+
+  const branchRow = document.createElement('div');
+
+  branchRow.className = 'git-panel-branch-row';
+
+  branchSelect = document.createElement('select');
+
+  branchSelect.className = 'git-panel-branch-select';
+
+  branchSelect.title = 'Current branch';
+
+  branchSelect.addEventListener('change', () => void handleBranchChange());
+
+
+
+  aheadBehindEl = document.createElement('span');
+
+  aheadBehindEl.className = 'git-panel-ahead-behind';
+
+
+
+  const pullBtn = document.createElement('button');
+
+  pullBtn.type = 'button';
+
+  pullBtn.className = 'git-panel-action-btn';
+
+  pullBtn.textContent = 'Pull';
+
+  pullBtn.addEventListener('click', () => void runGitOp(() => gitPull(getEffectiveCwdArg())));
+
+
+
+  const pushBtn = document.createElement('button');
+
+  pushBtn.type = 'button';
+
+  pushBtn.className = 'git-panel-action-btn';
+
+  pushBtn.textContent = 'Push';
+
+  pushBtn.addEventListener('click', () => void runGitOp(() => gitPush({ cwd: getEffectiveCwdArg() })));
+
+
+
+  branchRow.append(branchSelect, aheadBehindEl, pullBtn, pushBtn);
+
+  toolbar.append(cwdWrap, branchRow);
+
+
+
+  scrollMount = document.createElement('div');
+
+  scrollMount.className = 'git-panel-scroll';
+
+
+
+  statusEl = document.createElement('p');
+
+  statusEl.className = 'git-panel-status';
+
+  statusEl.setAttribute('role', 'status');
+
+  statusEl.setAttribute('aria-live', 'polite');
+
+  statusEl.hidden = true;
+
+
+
+  const commitBox = document.createElement('div');
+
+  commitBox.className = 'git-panel-commit-box';
+
+  commitInput = document.createElement('textarea');
+
+  commitInput.className = 'git-panel-commit-input';
+
+  commitInput.placeholder = 'Commit message';
+
+  commitInput.rows = 3;
+
+  commitInput.addEventListener('keydown', (e) => {
+
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+
+      e.preventDefault();
+
+      void handleCommit(false);
+
+    }
+
+  });
+
+
+
+  const commitActions = document.createElement('div');
+
+  commitActions.className = 'git-panel-commit-actions';
+
+  const commitBtn = document.createElement('button');
+
+  commitBtn.type = 'button';
+
+  commitBtn.className = 'git-panel-action-btn git-panel-action-btn--primary';
+
+  commitBtn.textContent = 'Commit';
+
+  commitBtn.addEventListener('click', () => void handleCommit(false));
+
+
+
+  const commitPushBtn = document.createElement('button');
+
+  commitPushBtn.type = 'button';
+
+  commitPushBtn.className = 'git-panel-action-btn';
+
+  commitPushBtn.textContent = 'Commit & Push';
+
+  commitPushBtn.addEventListener('click', () => void handleCommit(true));
+
+
+
+  commitActions.append(commitBtn, commitPushBtn);
+
+  commitBox.append(commitInput, commitActions);
+
+
+
+  bodyMount = document.createElement('div');
+
+  bodyMount.className = 'git-panel-sections';
+
+
+
+  diffHost = document.createElement('div');
+
+  diffHost.className = 'git-panel-diff-host';
+
+  diffHost.hidden = true;
+
+
+
+  historySection = document.createElement('section');
+
+  historySection.className = 'git-panel-section git-panel-section--history';
+
+
+
+  const historyHdr = document.createElement('button');
+
+  historyHdr.type = 'button';
+
+  historyHdr.className = 'git-panel-section__hdr';
+
+  historyHdr.setAttribute('aria-expanded', 'true');
+
+  const historyTitle = document.createElement('span');
+
+  historyTitle.textContent = 'History';
+
+  historyHdr.appendChild(historyTitle);
+
+
+
+  historyBody = document.createElement('div');
+
+  historyBody.className = 'git-panel-section__body git-panel-section__body--history';
+
+
+
+  graphMount = document.createElement('div');
+
+  graphMount.id = 'gitGraphMount';
+
+  graphMount.className = 'git-panel-graph-mount';
+
+  historyBody.appendChild(graphMount);
+
+
+
+  historyHdr.addEventListener('click', () => {
+
+    const open = historyHdr.getAttribute('aria-expanded') === 'true';
+
+    historyHdr.setAttribute('aria-expanded', open ? 'false' : 'true');
+
+    historyBody!.hidden = open;
+
+  });
+
+
+
+  historySection.append(historyHdr, historyBody);
+
+
+
+  scrollMount.append(statusEl, commitBox, bodyMount, diffHost, historySection);
+
+  panelRoot.append(toolbar, scrollMount);
+
+
+
+  mount?.replaceChildren(panelRoot);
+
+  return panelRoot;
+
+}
+
+
+
+async function syncFileTreeGitPollCwd(): Promise<void> {
+
+  const { startFileTreeGitStatusPoll } = await import('./file-tree');
+
+  startFileTreeGitStatusPoll(getEffectiveCwdArg() ?? getWorkspacePath());
+
+}
+
+
+
+async function handleBranchChange(): Promise<void> {
+
+  if (!branchSelect) return;
+
+  const value = branchSelect.value;
+
+  if (value === '__new__') {
+
+    const name = window.prompt('New branch name');
+
+    if (!name?.trim()) {
+
+      await refreshBranchSelect();
+
+      return;
+
+    }
+
+    await runGitOp(() =>
+
+      gitCheckout({ branch: name.trim(), create: true, cwd: getEffectiveCwdArg() }),
+
+    );
+
+    return;
+
+  }
+
+  if (!value) return;
+
+  await runGitOp(() => gitCheckout({ branch: value, cwd: getEffectiveCwdArg() }));
+
+}
+
+
+
+async function handleCommit(andPush: boolean): Promise<void> {
+
+  const message = commitInput?.value.trim() ?? '';
+
+  if (!message) {
+
+    setStatus('Enter a commit message', true);
+
+    return;
+
+  }
+
+  const cwd = getEffectiveCwdArg();
+
+  const ok = await runGitOp(() => gitCommit({ message, cwd }));
+
+  if (!ok) return;
+
+  if (commitInput) commitInput.value = '';
+
+  if (andPush) {
+
+    await runGitOp(() => gitPush({ cwd }));
+
+  }
+
+}
+
+
+
+async function runGitOp(fn: () => Promise<GitOpResult>): Promise<boolean> {
+
+  const result = await fn();
+
+  if (!result.ok) {
+
+    setStatus(result.error ?? 'Git operation failed', true);
+
+    return false;
+
+  }
+
+  setStatus('');
+
+  await refreshGitPanel();
+
+  void syncFileTreeGitPollCwd();
+
+  return true;
+
+}
+
+
+
+function statusBadgeLetter(status: string): string {
+
+  if (status === '?') return '?';
+
+  if (status === 'A' || status === 'M' || status === 'D' || status === 'R' || status === 'C') {
+
+    return status;
+
+  }
+
+  return status.slice(0, 1).toUpperCase() || 'M';
+
+}
+
+
+
+function buildFileRow(entry: GitFileEntry, staged: boolean): HTMLElement {
+
+  const row = document.createElement('div');
+
+  row.className = 'git-panel-file-row';
+
+
+
+  const badge = document.createElement('span');
+
+  badge.className = `git-panel-file-badge git-panel-file-badge--${entry.status === '?' ? 'untracked' : 'modified'}`;
+
+  badge.textContent = statusBadgeLetter(entry.status);
+
+
+
+  const path = document.createElement('button');
+
+  path.type = 'button';
+
+  path.className = 'git-panel-file-path';
+
+  path.textContent = entry.path;
+
+  path.title = entry.path;
+
+  path.addEventListener('click', () => void showFileDiff(entry.path, staged));
+
+
+
+  const actions = document.createElement('div');
+
+  actions.className = 'git-panel-file-actions';
+
+
+
+  const diffBtn = document.createElement('button');
+
+  diffBtn.type = 'button';
+
+  diffBtn.className = 'git-panel-file-btn';
+
+  diffBtn.textContent = '↔';
+
+  diffBtn.title = 'Open diff';
+
+  diffBtn.addEventListener('click', () => void showFileDiff(entry.path, staged));
+
+
+
+  const stageBtn = document.createElement('button');
+
+  stageBtn.type = 'button';
+
+  stageBtn.className = 'git-panel-file-btn';
+
+  stageBtn.textContent = staged ? '−' : '+';
+
+  stageBtn.title = staged ? 'Unstage' : 'Stage';
+
+  stageBtn.addEventListener('click', () => {
+
+    void runGitOp(() =>
+
+      staged
+
+        ? gitUnstage({ paths: [entry.path], cwd: getEffectiveCwdArg() })
+
+        : gitStage({ paths: [entry.path], cwd: getEffectiveCwdArg() }),
+
+    );
+
+  });
+
+
+
+  const discardBtn = document.createElement('button');
+
+  discardBtn.type = 'button';
+
+  discardBtn.className = 'git-panel-file-btn git-panel-file-btn--danger';
+
+  discardBtn.textContent = '↩';
+
+  discardBtn.title = 'Discard changes';
+
+  discardBtn.addEventListener('click', () => {
+
+    if (!window.confirm(`Discard changes to ${entry.path}?`)) return;
+
+    void runGitOp(() => gitDiscard({ paths: [entry.path], cwd: getEffectiveCwdArg() }));
+
+  });
+
+
+
+  actions.append(diffBtn, stageBtn, discardBtn);
+
+  row.append(badge, path, actions);
+
+  return row;
+
+}
+
+
+
+function buildSection(
+
+  title: string,
+
+  files: GitFileEntry[],
+
+  staged: boolean,
+
+  bulkAction?: { label: string; fn: () => Promise<GitOpResult> },
+
+): HTMLElement {
+
+  const section = document.createElement('section');
+
+  section.className = 'git-panel-section';
+
+
+
+  const hdr = document.createElement('button');
+
+  hdr.type = 'button';
+
+  hdr.className = 'git-panel-section__hdr';
+
+  hdr.setAttribute('aria-expanded', 'true');
+
+
+
+  const hdrTitle = document.createElement('span');
+
+  hdrTitle.textContent = `${title} (${files.length})`;
+
+  hdr.appendChild(hdrTitle);
+
+
+
+  if (bulkAction && files.length > 0) {
+
+    const bulk = document.createElement('span');
+
+    bulk.className = 'git-panel-section__bulk';
+
+    bulk.textContent = bulkAction.label;
+
+    bulk.addEventListener('click', (e) => {
+
+      e.stopPropagation();
+
+      void runGitOp(bulkAction.fn);
+
+    });
+
+    hdr.appendChild(bulk);
+
+  }
+
+
+
+  const body = document.createElement('div');
+
+  body.className = 'git-panel-section__body';
+
+  for (const file of files) {
+
+    body.appendChild(buildFileRow(file, staged));
+
+  }
+
+
+
+  hdr.addEventListener('click', () => {
+
+    const open = hdr.getAttribute('aria-expanded') === 'true';
+
+    hdr.setAttribute('aria-expanded', open ? 'false' : 'true');
+
+    body.hidden = open;
+
+  });
+
+
+
+  section.append(hdr, body);
+
+  return section;
+
+}
+
+
+
+function ensureGitGraph(): void {
+
+  if (!graphMount || graphHandle) return;
+
+  graphOptions.onSelectCommit = (sha) => void showCommitDiff(sha);
+
+  graphHandle = renderGitGraph(graphMount, graphOptions);
+
+}
+
+
+
+async function showCommitDiff(sha: string): Promise<void> {
+
+  if (!diffHost) return;
+
+  if (selectedCommitSha === sha) {
+
+    selectedCommitSha = null;
+
+    diffHost.hidden = true;
+
+    diffHost.replaceChildren();
+
+    return;
+
+  }
+
+
+
+  const result = await gitShow({ sha, cwd: getEffectiveCwdArg() });
+
+  if (!result.ok) {
+
+    setStatus(result.error ?? 'Could not load commit', true);
+
+    return;
+
+  }
+
+
+
+  expandedDiffPath = null;
+
+  selectedCommitSha = sha;
+
+  diffHost.hidden = false;
+
+  diffHost.replaceChildren();
+
+
+
+  const label = document.createElement('p');
+
+  label.className = 'git-panel-diff-label';
+
+  const shortSha = sha.slice(0, 7);
+
+  const statLine = result.stat?.trim().split('\n').pop()?.trim();
+
+  label.textContent = statLine ? `Commit ${shortSha} — ${statLine}` : `Commit ${shortSha}`;
+
+
+
+  diffHost.appendChild(label);
+
+  if (result.patch) {
+
+    const mount = document.createElement('div');
+
+    diffHost.appendChild(mount);
+
+    renderUnifiedPromptDiff(mount, parseUnifiedPatchToDiffLines(result.patch));
+
+  }
+
+
+
+  diffHost.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+
+}
+
+
+
+async function showFileDiff(path: string, staged: boolean): Promise<void> {
+
+  if (!diffHost) return;
+
+  if (expandedDiffPath === path && expandedDiffStaged === staged) {
+
+    expandedDiffPath = null;
+
+    diffHost.hidden = true;
+
+    diffHost.replaceChildren();
+
+    return;
+
+  }
+
+
+
+  selectedCommitSha = null;
+
+
+
+  const result = await gitDiff({ path, cached: staged, cwd: getEffectiveCwdArg() });
+
+  if (!result.ok || !result.patch) {
+
+    setStatus(result.error ?? 'Could not load diff', true);
+
+    return;
+
+  }
+
+
+
+  expandedDiffPath = path;
+
+  expandedDiffStaged = staged;
+
+  diffHost.hidden = false;
+
+  diffHost.replaceChildren();
+
+
+
+  const label = document.createElement('p');
+
+  label.className = 'git-panel-diff-label';
+
+  label.textContent = `${staged ? 'Staged' : 'Unstaged'}: ${path}`;
+
+  diffHost.appendChild(label);
+
+  const mount = document.createElement('div');
+
+  diffHost.appendChild(mount);
+
+  renderUnifiedPromptDiff(mount, parseUnifiedPatchToDiffLines(result.patch));
+
+  diffHost.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+
+}
+
+
+
+function renderSections(status: GitOpResult): void {
+
+  if (!bodyMount) return;
+
+  bodyMount.replaceChildren();
+
+
+
+  const staged = status.staged ?? [];
+
+  const unstaged = status.unstaged ?? [];
+
+  const untracked = status.untracked ?? [];
+
+
+
+  if (staged.length === 0 && unstaged.length === 0 && untracked.length === 0) {
+
+    const empty = document.createElement('p');
+
+    empty.className = 'git-panel-empty';
+
+    empty.textContent = 'No changes';
+
+    bodyMount.appendChild(empty);
+
+    return;
+
+  }
+
+
+
+  if (staged.length > 0) {
+
+    bodyMount.appendChild(
+
+      buildSection('Staged Changes', staged, true, {
+
+        label: 'Unstage All',
+
+        fn: () => gitUnstage({ paths: staged.map((f) => f.path), cwd: getEffectiveCwdArg() }),
+
+      }),
+
+    );
+
+  }
+
+  if (unstaged.length > 0) {
+
+    bodyMount.appendChild(
+
+      buildSection('Changes', unstaged, false, {
+
+        label: 'Stage All',
+
+        fn: () => gitStageAll(getEffectiveCwdArg()),
+
+      }),
+
+    );
+
+  }
+
+  if (untracked.length > 0) {
+
+    bodyMount.appendChild(buildSection('Untracked', untracked, false));
+
+  }
+
+}
+
+
+
+function renderAheadBehind(status: GitOpResult): void {
+
+  if (!aheadBehindEl) return;
+
+  const ahead = status.ahead ?? 0;
+
+  const behind = status.behind ?? 0;
+
+  if (ahead === 0 && behind === 0) {
+
+    aheadBehindEl.textContent = '';
+
+    return;
+
+  }
+
+  const parts: string[] = [];
+
+  if (ahead > 0) parts.push(`↑${ahead}`);
+
+  if (behind > 0) parts.push(`↓${behind}`);
+
+  aheadBehindEl.textContent = parts.join(' ');
+
+}
+
+
+
+async function refreshBranchSelect(): Promise<void> {
+
+  if (!branchSelect) return;
+
+  const result = await gitBranches(getEffectiveCwdArg());
+
+  branchSelect.replaceChildren();
+
+
+
+  if (!result.ok) return;
+
+
+
+  for (const branch of result.local ?? []) {
+
+    const opt = document.createElement('option');
+
+    opt.value = branch;
+
+    opt.textContent = branch;
+
+    if (branch === result.current) opt.selected = true;
+
+    branchSelect.appendChild(opt);
+
+  }
+
+
+
+  const newOpt = document.createElement('option');
+
+  newOpt.value = '__new__';
+
+  newOpt.textContent = 'New branch…';
+
+  branchSelect.appendChild(newOpt);
+
+}
+
+
+
+async function refreshWorktreeDropdown(): Promise<void> {
+
+  if (!cwdSelect || !cwdWrap) return;
+
+
+
+  const ws = getWorkspacePath().trim();
+
+  const listResult = await listWorktrees();
+
+  if (!listResult.ok || !listResult.output) {
+
+    knownWorktrees = ws ? [{ path: ws, head: '', branch: undefined, detached: false }] : [];
+
+    cwdWrap.hidden = true;
+
+    return;
+
+  }
+
+
+
+  knownWorktrees = parseWorktreeListPorcelain(listResult.output);
+
+  if (knownWorktrees.length <= 1) {
+
+    cwdWrap.hidden = true;
+
+    return;
+
+  }
+
+
+
+  cwdWrap.hidden = false;
+
+  const selected = panelCwd ?? ws;
+
+  cwdSelect.replaceChildren();
+
+
+
+  for (const wt of knownWorktrees) {
+
+    const opt = document.createElement('option');
+
+    opt.value = wt.path;
+
+    opt.textContent = formatWorktreeOptionLabel(wt, ws);
+
+    if (selected && pathsEqual(wt.path, selected)) {
+
+      opt.selected = true;
+
+    }
+
+    cwdSelect.appendChild(opt);
+
+  }
+
+}
+
+
+
+export async function refreshGitPanel(): Promise<void> {
+
+  if (!panelOpen || refreshing) return;
+
+  refreshing = true;
+
+  try {
+
+    await refreshWorktreeDropdown();
+
+    const status = await gitStatus(getEffectiveCwdArg());
+
+    if (!status.ok) {
+
+      setStatus(status.error ?? 'Could not read git status', true);
+
+      if (bodyMount) {
+
+        bodyMount.replaceChildren();
+
+        const err = document.createElement('p');
+
+        err.className = 'git-panel-empty';
+
+        err.textContent = status.error ?? 'Not a git repository';
+
+        bodyMount.appendChild(err);
+
+      }
+
+      return;
+
+    }
+
+
+
+    setStatus('');
+
+    renderAheadBehind(status);
+
+    renderSections(status);
+
+    await refreshBranchSelect();
+
+
+
+    ensureGitGraph();
+
+    graphOptions.cwd = getEffectiveCwdArg();
+
+    await graphHandle?.refresh();
+
+  } finally {
+
+    refreshing = false;
+
+  }
+
+}
+
+
+
+function startPolling(): void {
+
+  stopPolling();
+
+  pollTimer = window.setInterval(() => {
+
+    void refreshGitPanel();
+
+  }, POLL_MS);
+
+}
+
+
+
+function stopPolling(): void {
+
+  if (pollTimer) {
+
+    clearInterval(pollTimer);
+
+    pollTimer = undefined;
+
+  }
+
+}
+
+
+
+function syncToggleButtonState(): void {
+
+  const toggleBtn = document.getElementById('btnGitPanelToggle');
+
+  if (!toggleBtn) return;
+
+  const open = isGitSidePanelOpen();
+
+  toggleBtn.classList.toggle('is-active', open);
+
+  toggleBtn.setAttribute('aria-pressed', open ? 'true' : 'false');
+
+}
+
+
+
+function ensureSidebarExpandedForGit(): void {
+
+  const state = getFilePanelState();
+
+  if (!state.fileSidebarCollapsed) return;
+
+  patchFilePanelState({ fileSidebarCollapsed: false });
+
+  applyFileSidebarVisuals();
+
+}
+
+
+
+/** Whether the git view is visible in the file sidebar. */
+
+export function isGitSidePanelOpen(): boolean {
+
+  return panelOpen;
+
+}
+
+
+
+/** Open the git view in the file sidebar. */
+
+export async function openGitSidePanel(): Promise<void> {
+
+  ensurePanelDom();
+
+  ensureSidebarExpandedForGit();
+
+  panelOpen = true;
+
+  syncSidebarChrome();
+
+  await refreshGitPanel();
+
+  startPolling();
+
+  void syncFileTreeGitPollCwd();
+
+}
+
+
+
+/** Hide the git view and return to the file tree. */
+
+export function closeGitSidePanel(): void {
+
+  panelOpen = false;
+
+  syncSidebarChrome();
+
+  stopPolling();
+
+}
+
+
+
+/** Toggle git view visibility in the file sidebar. */
+
+export function toggleGitSidePanel(): void {
+
+  if (isGitSidePanelOpen()) closeGitSidePanel();
+
+  else void openGitSidePanel();
+
+}
+
+
+
+/**
+
+ * When an orchestrator board task chat is active, point the panel at that task's
+
+ * worktree cwd (falls back to workspace root for non-board chats).
+
+ */
+
+export function syncGitPanelFromOrchestrator(): void {
+
+  const chat = getActiveChat();
+
+  const groups = sessionState?.groups;
+
+  const worktreeRoot = resolveChatWorktreeRoot(chat, groups);
+
+
+
+  if (worktreeRoot) {
+
+    panelCwd = worktreeRoot;
+
+  } else {
+
+    const ws = getWorkspacePath().trim();
+
+    panelCwd = ws || undefined;
+
+  }
+
+
+
+  if (cwdSelect) {
+
+    const target = panelCwd ?? getWorkspacePath();
+
+    for (const opt of cwdSelect.options) {
+
+      if (pathsEqual(opt.value, target)) {
+
+        cwdSelect.value = opt.value;
+
+        break;
+
+      }
+
+    }
+
+  }
+
+
+
+  if (panelOpen) {
+
+    void refreshGitPanel();
+
+  }
+
+  void syncFileTreeGitPollCwd();
+
+}
+
+
+
+/** Wire toggle button, polling, orchestrator subscriptions. */
+
+export function initGitPanel(): void {
+
+  if (bound) return;
+
+  bound = true;
+
+
+
+  ensurePanelDom();
+
+  syncSidebarChrome();
+
+
+
+  const toggleBtn = document.getElementById('btnGitPanelToggle');
+
+  toggleBtn?.addEventListener('click', () => toggleGitSidePanel());
+
+
+
+  window.addEventListener('focus', () => {
+
+    if (panelOpen) void refreshGitPanel();
+
+  });
+
+
+
+  subscribeAllBoardChanges(() => {
+
+    syncGitPanelFromOrchestrator();
+
+  });
+
+
+
+  syncGitPanelFromOrchestrator();
+
+}
+
+
+
+/** Reset module state (tests). */
+
+export function resetGitPanelForTests(): void {
+
+  bound = false;
+
+  panelOpen = false;
+
+  panelCwd = undefined;
+
+  knownWorktrees = [];
+
+  stopPolling();
+
+  panelRoot?.remove();
+
+  panelRoot = null;
+
+  scrollMount = null;
+
+  bodyMount = null;
+
+  branchSelect = null;
+
+  cwdSelect = null;
+
+  cwdWrap = null;
+
+  aheadBehindEl = null;
+
+  commitInput = null;
+
+  statusEl = null;
+
+  diffHost = null;
+
+  graphMount = null;
+
+  historySection = null;
+
+  historyBody = null;
+
+  graphHandle?.destroy();
+
+  graphHandle = null;
+
+  selectedCommitSha = null;
+
+  getFileSidebar()?.classList.remove('file-sidebar--git');
+
+  document.getElementById('fileSidebarFilesView')?.removeAttribute('hidden');
+
+  getGitMount()?.setAttribute('hidden', '');
+
+  const titleEl = document.getElementById('fileSidebarTitle');
+  if (titleEl) titleEl.textContent = 'Files';
+
+  syncToggleButtonState();
+}

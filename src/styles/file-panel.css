@@ -652,6 +652,34 @@
   flex-shrink: 0;
 }
 
+.file-sidebar-files-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.file-sidebar.file-sidebar--git .file-sidebar-files-view {
+  display: none !important;
+}
+
+.file-sidebar.file-sidebar--git .git-panel-root:not([hidden]) {
+  display: flex;
+}
+
+.file-sidebar.collapsed .file-sidebar-files-view {
+  display: none;
+}
+
+.file-sidebar.file-sidebar--git .file-tree-refresh {
+  display: none;
+}
+
+.file-sidebar.file-sidebar--git .file-sidebar-preview-toggle {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
 .file-sidebar-title {
   font-size: 11px;
   font-weight: 600;
@@ -665,14 +693,21 @@
 }
 
 .file-sidebar.collapsed .file-sidebar-title,
+.file-sidebar.collapsed .file-sidebar-files-view,
 .file-sidebar.collapsed .file-tree-host,
 .file-sidebar.collapsed .file-tree-search-wrap,
 .file-sidebar.collapsed .file-tree-move-confirm,
-.file-sidebar.collapsed .file-tree-refresh {
+.file-sidebar.collapsed .file-tree-refresh,
+.file-sidebar.collapsed .git-panel-root {
   display: none;
 }
 
 .file-sidebar-preview-toggle.is-active {
+  color: var(--mn-accent);
+  background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
+}
+
+.git-panel-toggle.is-active {
   color: var(--mn-accent);
   background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
 }
@@ -941,6 +976,30 @@
   font-size: 12px;
 }
 
+.file-tree-git-badge {
+  flex: none;
+  min-width: 16px;
+  padding: 0 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+  border-radius: 3px;
+  color: var(--mn-fg-muted);
+  background: var(--mn-surface-2, var(--mn-surface-1));
+}
+
+.file-tree-git-badge--changed {
+  color: var(--mn-warning);
+  background: oklch(from var(--mn-warning) l c h / 0.12);
+}
+
+.file-tree-git-badge--untracked {
+  color: var(--mn-success);
+  background: oklch(from var(--mn-success) l c h / 0.12);
+}
+
 .file-tree-rename-input {
   flex: 1;
   min-width: 0;
@@ -1034,9 +1093,19 @@
   }
 
   .file-sidebar.collapsed.mobile-open .file-sidebar-title,
+  .file-sidebar.collapsed.mobile-open .file-sidebar-files-view,
   .file-sidebar.collapsed.mobile-open .file-tree-host,
+  .file-sidebar.collapsed.mobile-open .git-panel-root,
   .file-sidebar.collapsed.mobile-open .file-tree-refresh {
     display: block;
+  }
+
+  .file-sidebar.collapsed.mobile-open.file-sidebar--git .file-sidebar-files-view {
+    display: none;
+  }
+
+  .file-sidebar.collapsed.mobile-open.file-sidebar--git .git-panel-root {
+    display: flex;
   }
 
   .file-sidebar.collapsed.mobile-open .file-tree-search-wrap {
