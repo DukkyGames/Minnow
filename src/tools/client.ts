@@ -66,7 +66,7 @@ import {
 } from './web-search-routing';
 
 /** Ping timeout for local dev server detection (ms). */
-const PING_TIMEOUT_MS = 800;
+const PING_TIMEOUT_MS = 2500;
 
 /** Cached MCP tool definitions from GET /api/mcp/tools. */
 let cachedMcpToolDefinitions: OpenAIFunctionDefinition[] = [];
