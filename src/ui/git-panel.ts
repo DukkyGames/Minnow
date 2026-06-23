@@ -76,6 +76,11 @@ import { fetchGitCommitMessage } from './git-commit-message-client';
 
 import { showToast } from './toast';
 
+import {
+  closeGitPanelNamePopover,
+  openGitPanelNamePopover,
+} from './git-panel-name-popover';
+
 
 
 const POLL_MS = 5000;
@@ -218,14 +223,19 @@ function syncWorktreeDeleteButton(): void {
   worktreeDeleteBtn.disabled = !canDelete;
 }
 
-async function handleAddBranch(): Promise<void> {
-  const name = window.prompt('New branch name');
-  if (!name?.trim()) return;
-  const branch = name.trim();
-  await runGitOp(
-    () => gitCheckout({ branch, create: true, cwd: getEffectiveCwdArg() }),
-    { successMessage: `Created branch ${branch}` },
-  );
+function openAddBranchPopover(anchor: HTMLButtonElement): void {
+  openGitPanelNamePopover({
+    anchor,
+    title: 'New branch',
+    label: 'Branch name',
+    placeholder: 'feature/my-branch',
+    onSubmit: async (branch) => {
+      await runGitOp(
+        () => gitCheckout({ branch, create: true, cwd: getEffectiveCwdArg() }),
+        { successMessage: `Created branch ${branch}` },
+      );
+    },
+  });
 }
 
 async function handleDeleteBranch(): Promise<void> {
@@ -246,26 +256,31 @@ async function handleDeleteBranch(): Promise<void> {
   });
 }
 
-async function handleAddWorktree(): Promise<void> {
-  const branch = window.prompt('New worktree branch name');
-  if (!branch?.trim()) return;
+function openAddWorktreePopover(anchor: HTMLButtonElement): void {
+  openGitPanelNamePopover({
+    anchor,
+    title: 'Add worktree',
+    label: 'Branch name',
+    placeholder: 'feature/my-worktree',
+    onSubmit: async (branch) => {
+      const cwd = getEffectiveCwdArg();
+      const addResult = await gitWorktreeAdd({ branch, cwd });
+      if (!addResult.ok) {
+        const error = addResult.error ?? 'Could not add worktree';
+        setStatus(error, true);
+        showToast(error, 'error');
+        return;
+      }
 
-  const cwd = getEffectiveCwdArg();
-  const addResult = await gitWorktreeAdd({ branch: branch.trim(), cwd });
-  if (!addResult.ok) {
-    const error = addResult.error ?? 'Could not add worktree';
-    setStatus(error, true);
-    showToast(error, 'error');
-    return;
-  }
-
-  setStatus('');
-  showToast('Worktree added', 'success');
-  if (addResult.path) {
-    panelCwd = addResult.path;
-  }
-  await refreshGitPanel();
-  void syncFileTreeGitPollCwd();
+      setStatus('');
+      showToast('Worktree added', 'success');
+      if (addResult.path) {
+        panelCwd = addResult.path;
+      }
+      await refreshGitPanel();
+      void syncFileTreeGitPollCwd();
+    },
+  });
 }
 
 async function handleDeleteWorktree(): Promise<void> {
@@ -416,7 +431,7 @@ function ensurePanelDom(): HTMLElement {
 
   const worktreeAddBtn = createToolbarIconBtn('+', 'Add worktree');
 
-  worktreeAddBtn.addEventListener('click', () => void handleAddWorktree());
+  worktreeAddBtn.addEventListener('click', () => openAddWorktreePopover(worktreeAddBtn));
 
   worktreeDeleteBtn = createToolbarIconBtn('−', 'Remove worktree');
 
@@ -464,7 +479,7 @@ function ensurePanelDom(): HTMLElement {
 
   const branchAddBtn = createToolbarIconBtn('+', 'New branch');
 
-  branchAddBtn.addEventListener('click', () => void handleAddBranch());
+  branchAddBtn.addEventListener('click', () => openAddBranchPopover(branchAddBtn));
 
   branchDeleteBtn = createToolbarIconBtn('−', 'Delete branch');
 
@@ -1809,6 +1824,8 @@ export function resetGitPanelForTests(): void {
   currentBranchName = '';
 
   stopPolling();
+
+  closeGitPanelNamePopover();
 
   panelRoot?.remove();
 

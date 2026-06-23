@@ -98,6 +98,63 @@
   cursor: not-allowed;
 }
 
+/* Anchored name popover for branch/worktree create (Electron-safe; no window.prompt). */
+.git-panel-name-popover {
+  position: fixed;
+  z-index: 60;
+  width: min(240px, calc(100vw - 1rem));
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-popover-soft);
+  color: var(--mn-fg);
+}
+
+.git-panel-name-popover__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mn-fg);
+}
+
+.git-panel-name-popover__label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--mn-fg-muted);
+}
+
+.git-panel-name-popover__input {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+}
+
+.git-panel-name-popover__input:focus {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -1px;
+}
+
+.git-panel-name-popover__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .git-panel-sync-row {
   display: flex;
   flex-wrap: wrap;
