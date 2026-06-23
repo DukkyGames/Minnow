@@ -274,6 +274,15 @@ async function renderGeneralSection(): Promise<void> {
   );
   renderNotificationsSettingsSection(notifications);
 
+  const network = appendSettingsGroup(
+    mount,
+    'Network access',
+    'Let other devices on your Wi‑Fi open Minnow in a browser while this PC runs npm start.',
+    'general.network',
+  );
+  network.id = 'settingsNetworkAccess';
+  await renderNetworkAccessSettings(network);
+
   const crossAppearance = el('div', 'settings-crosslinks');
   crossAppearance.appendChild(el('span', 'settings-crosslinks__label', 'Related'));
   crossAppearance.append(linkToSettingsSection('Appearance', 'appearance'));
@@ -315,14 +324,6 @@ async function renderGeneralSection(): Promise<void> {
     linkToSettingsSection('Tools', 'tools'),
   );
   connection.appendChild(cross);
-
-  const network = appendSettingsGroup(
-    mount,
-    'Network access',
-    'Let other devices on your Wi‑Fi open Minnow in a browser while this PC runs npm start.',
-    'general.network',
-  );
-  await renderNetworkAccessSettings(network);
 
   const drawerHint = appendSettingsGroup(
     mount,

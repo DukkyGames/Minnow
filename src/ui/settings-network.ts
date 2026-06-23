@@ -2,7 +2,7 @@
  * Settings → General: network access toggle (local vs LAN).
  */
 
-import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
+import { detectConfigServer } from '../config/storage-mode';
 import {
   fetchNetworkStatus,
   loadConfigNetworkAccess,
@@ -90,17 +90,12 @@ function renderLanUrls(mount: HTMLElement, urls: string[]): void {
 
 /** Render network access controls into the General settings mount. */
 export async function renderNetworkAccessSettings(mount: HTMLElement): Promise<void> {
-  if (!isServerStorageMode()) {
-    mount.appendChild(
-      serverBanner('Network access settings require <code>npm start</code> (config.json on disk).'),
-    );
-    return;
-  }
-
   const serverUp = await detectConfigServer();
   if (serverUp !== 'server') {
     mount.appendChild(
-      serverBanner('Connect with <code>npm start</code> to configure network access.'),
+      serverBanner(
+        'Network access settings require <code>npm start</code> (config.json on disk). Start the full dev server, then reopen Settings.',
+      ),
     );
     return;
   }
