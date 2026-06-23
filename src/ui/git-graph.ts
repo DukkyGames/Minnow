@@ -22,6 +22,9 @@ export interface GitGraphHandle {
   destroy: () => void;
 }
 
+/** Vertical line segment for main or branch connectors. */
+export type LineSegment = 'none' | 'up' | 'down' | 'both' | 'through';
+
 /** Visual metadata attached to each commit row. */
 export interface CommitVisual {
   commit: GitCommitEntry;
@@ -30,8 +33,14 @@ export interface CommitVisual {
   indentPx: number;
   colorIndex: number;
   isHead: boolean;
-  /** Vertical main-trunk line segment drawn in the left gutter. */
-  trunkSegment: 'none' | 'up' | 'down' | 'both' | 'through';
+  /** Vertical mainline connector behind main dots. */
+  mainLine: LineSegment;
+  /** Vertical branch connector behind branch dots (same branch color + indent). */
+  branchLine?: {
+    segment: LineSegment;
+    colorIndex: number;
+    indentPx: number;
+  };
 }
 
 function commitIsHead(refs: string[]): boolean {
@@ -116,14 +125,15 @@ export function assignCommitVisuals(
   for (let i = 0; i < commits.length; i++) {
     const commit = commits[i];
 
-    if (mainline.has(commit.hash)) {
-      assigned.set(commit.hash, trunkBranch);
+    // Decorator refs beat mainline — merged branches still show on their lane.
+    const namedRefs = extractBranchRefs(commit.refs).filter((name) => name !== trunkBranch);
+    if (namedRefs.length > 0) {
+      assigned.set(commit.hash, namedRefs[0]);
       continue;
     }
 
-    const refs = extractBranchRefs(commit.refs).filter((name) => name !== trunkBranch);
-    if (refs.length > 0) {
-      assigned.set(commit.hash, refs[0]);
+    if (mainline.has(commit.hash)) {
+      assigned.set(commit.hash, trunkBranch);
       continue;
     }
 
@@ -143,7 +153,7 @@ export function assignCommitVisuals(
       continue;
     }
 
-    assigned.set(commit.hash, 'branch');
+    assigned.set(commit.hash, `detached:${commit.hash.slice(0, 7)}`);
   }
 
   return commits.map((commit) => {
@@ -161,14 +171,14 @@ export function assignCommitVisuals(
       indentPx: isMain ? 0 : BRANCH_INDENT_PX,
       colorIndex: isMain ? 0 : (branchColor.get(branchKey) ?? 1),
       isHead: commitIsHead(commit.refs),
-      trunkSegment: 'none' as const,
+      mainLine: 'none' as const,
     };
   });
 }
 
-type TrunkSegment = CommitVisual['trunkSegment'];
+type LineSegmentMut = LineSegment;
 
-function mergeTrunkSegment(current: TrunkSegment, add: 'up' | 'down'): TrunkSegment {
+function mergeLineSegment(current: LineSegmentMut, add: 'up' | 'down'): LineSegmentMut {
   if (current === 'through') return 'through';
   if (add === 'up') {
     if (current === 'down') return 'both';
@@ -178,31 +188,93 @@ function mergeTrunkSegment(current: TrunkSegment, add: 'up' | 'down'): TrunkSegm
   return current === 'none' ? 'down' : current;
 }
 
-/** Mark rows that sit on the vertical line between consecutive main commits. */
-export function annotateMainTrunkSegments(visuals: CommitVisual[]): CommitVisual[] {
-  const mainIndices = visuals
-    .map((visual, index) => (visual.isMain ? index : -1))
-    .filter((index) => index >= 0);
+/** Build line segments for consecutive member rows in display order. */
+export function computeLineSegments(memberIndices: number[], rowCount: number): LineSegment[] {
+  const segments: LineSegment[] = Array.from({ length: rowCount }, () => 'none');
 
-  const segments: TrunkSegment[] = visuals.map(() => 'none');
+  for (let k = 0; k < memberIndices.length - 1; k++) {
+    const start = memberIndices[k];
+    const end = memberIndices[k + 1];
 
-  for (let k = 0; k < mainIndices.length - 1; k++) {
-    const start = mainIndices[k];
-    const end = mainIndices[k + 1];
-
-    segments[start] = mergeTrunkSegment(segments[start], 'down');
+    segments[start] = mergeLineSegment(segments[start], 'down');
 
     for (let i = start + 1; i < end; i++) {
       segments[i] = 'through';
     }
 
-    segments[end] = mergeTrunkSegment(segments[end], 'up');
+    segments[end] = mergeLineSegment(segments[end], 'up');
   }
 
+  return segments;
+}
+
+function applyMainLines(visuals: CommitVisual[], segments: LineSegment[]): CommitVisual[] {
   return visuals.map((visual, index) => ({
     ...visual,
-    trunkSegment: segments[index],
+    mainLine: segments[index],
   }));
+}
+
+/** Mark rows on the vertical line between consecutive main commits. */
+export function annotateMainTrunkSegments(visuals: CommitVisual[]): CommitVisual[] {
+  const mainIndices = visuals
+    .map((visual, index) => (visual.isMain ? index : -1))
+    .filter((index) => index >= 0);
+
+  return applyMainLines(visuals, computeLineSegments(mainIndices, visuals.length));
+}
+
+/** Whether this branch key can share a connector with other commits. */
+export function isConnectableBranchKey(branchKey: string, trunkBranch: string): boolean {
+  if (branchKey === trunkBranch) return false;
+  if (branchKey.startsWith('detached:')) return false;
+  return true;
+}
+
+/** Add branch-colored connectors for each named branch (skips detached one-offs). */
+export function annotateBranchLineSegments(visuals: CommitVisual[]): CommitVisual[] {
+  const trunkBranch = visuals.find((visual) => visual.isMain)?.branchKey ?? 'main';
+  const branchKeys = [
+    ...new Set(
+      visuals
+        .map((visual) => visual.branchKey)
+        .filter((key) => isConnectableBranchKey(key, trunkBranch)),
+    ),
+  ];
+
+  let result = visuals.map((visual) => ({ ...visual, branchLine: undefined as CommitVisual['branchLine'] }));
+
+  for (const branchKey of branchKeys) {
+    const sample = result.find((visual) => visual.branchKey === branchKey);
+    if (!sample) continue;
+
+    const memberIndices = result
+      .map((visual, index) => (visual.branchKey === branchKey ? index : -1))
+      .filter((index) => index >= 0);
+
+    if (memberIndices.length < 2) continue;
+
+    const segments = computeLineSegments(memberIndices, result.length);
+    result = result.map((visual, index) => {
+      const segment = segments[index];
+      if (segment === 'none') return visual;
+      return {
+        ...visual,
+        branchLine: {
+          segment,
+          colorIndex: sample.colorIndex,
+          indentPx: sample.indentPx,
+        },
+      };
+    });
+  }
+
+  return result;
+}
+
+/** Annotate main and branch vertical connectors for every row. */
+export function annotateCommitLines(visuals: CommitVisual[]): CommitVisual[] {
+  return annotateBranchLineSegments(annotateMainTrunkSegments(visuals));
 }
 
 function branchColorVar(colorIndex: number): string {
@@ -216,6 +288,26 @@ function renderRefChip(ref: string): HTMLElement {
   chip.textContent = ref.replace(/^HEAD -> /, '');
   chip.title = ref;
   return chip;
+}
+
+function appendConnectorLine(
+  row: HTMLElement,
+  kind: 'main' | 'branch',
+  segment: LineSegment,
+  colorIndex?: number,
+  indentPx?: number,
+): void {
+  const line = document.createElement('span');
+  line.className =
+    kind === 'main'
+      ? `git-graph__trunk-line git-graph__trunk-line--${segment}`
+      : `git-graph__branch-line git-graph__branch-line--${segment}`;
+  line.setAttribute('aria-hidden', 'true');
+  if (kind === 'branch' && colorIndex !== undefined) {
+    line.style.setProperty('--branch-color', branchColorVar(colorIndex));
+    line.style.setProperty('--git-branch-line-indent', `${indentPx ?? 0}px`);
+  }
+  row.appendChild(line);
 }
 
 function renderRow(visual: CommitVisual, onSelect?: (sha: string) => void): HTMLElement {
@@ -245,19 +337,28 @@ function renderRow(visual: CommitVisual, onSelect?: (sha: string) => void): HTML
   if (visual.isHead) dot.classList.add('git-graph__dot--head');
   dot.style.setProperty('--branch-color', branchColorVar(visual.colorIndex));
 
-  const marker = document.createElement('div');
-  marker.className = 'git-graph__marker';
-  marker.appendChild(dot);
-
-  if (visual.trunkSegment !== 'none') {
-    const line = document.createElement('span');
-    line.className = `git-graph__trunk-line git-graph__trunk-line--${visual.trunkSegment}`;
-    line.setAttribute('aria-hidden', 'true');
-    row.appendChild(line);
-  }
-
   const body = document.createElement('div');
   body.className = 'git-graph__body';
+
+  const marker = document.createElement('div');
+  marker.className = 'git-graph__marker';
+
+  // Lines live in the marker column but span the full row height (anchored to body).
+  if (visual.mainLine !== 'none') {
+    appendConnectorLine(marker, 'main', visual.mainLine);
+  }
+
+  if (visual.branchLine) {
+    appendConnectorLine(
+      marker,
+      'branch',
+      visual.branchLine.segment,
+      visual.branchLine.colorIndex,
+      visual.branchLine.indentPx,
+    );
+  }
+
+  marker.appendChild(dot);
 
   const content = document.createElement('div');
   content.className = 'git-graph__content';
@@ -349,7 +450,7 @@ export function renderGitGraph(
       return;
     }
 
-    const visuals = annotateMainTrunkSegments(assignCommitVisuals(commits));
+    const visuals = annotateCommitLines(assignCommitVisuals(commits));
     renderGraph(host, visuals, options.onSelectCommit);
   };
 

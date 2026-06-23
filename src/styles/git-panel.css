@@ -434,7 +434,6 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
 
 .git-graph__body {
   position: relative;
-  z-index: 1;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -444,17 +443,24 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
   padding-left: calc(var(--git-branch-indent, 0px));
 }
 
-.git-graph__trunk-line {
+/* Connector lines are in the marker column; top/bottom anchor to the row via body. */
+.git-graph__trunk-line,
+.git-graph__branch-line {
   position: absolute;
-  left: calc(var(--git-marker-w) / 2 - 0.75px);
+  top: 0;
+  bottom: 0;
   width: 1.5px;
-  background: var(--mn-accent);
   pointer-events: none;
   z-index: 0;
 }
 
+.git-graph__trunk-line {
+  left: calc(var(--git-marker-w) / 2 - 0.75px);
+  background: var(--mn-accent);
+}
+
 .git-graph__trunk-line--up {
-  top: 0;
+  bottom: auto;
   height: calc(50% + 4px);
 }
 
@@ -463,15 +469,25 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
   bottom: 0;
 }
 
-.git-graph__trunk-line--through,
-.git-graph__trunk-line--both {
-  top: 0;
+.git-graph__branch-line {
+  left: calc(
+    var(--git-branch-line-indent, var(--git-branch-indent, 0px)) + var(--git-marker-w) / 2 - 0.75px
+  );
+  background: var(--branch-color);
+}
+
+.git-graph__branch-line--up {
+  bottom: auto;
+  height: calc(50% + 4px);
+}
+
+.git-graph__branch-line--down {
+  top: calc(50% - 4px);
   bottom: 0;
 }
 
 .git-graph__marker {
-  position: relative;
-  z-index: 1;
+  position: static;
   flex: none;
   width: var(--git-marker-w);
   min-height: 18px;
