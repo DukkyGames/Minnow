@@ -28,6 +28,10 @@ import { getServerLogPath, getServersRoot } from './paths.js';
  * @property {ServerRuntimePhase} phase
  */
 
+/** @type {Map<string, Promise<void>>} */
+const serverLogWriteQueues = new Map();
+
+
 /** @type {Map<string, ManagedProcessState>} */
 const processes = new Map();
 
@@ -136,8 +140,17 @@ async function appendServerLog(serverId, chunk) {
   logRingBuffers.set(serverId, lines);
 
   const logPath = getServerLogPath(serverId);
-  await fsp.mkdir(path.dirname(logPath), { recursive: true });
-  await fsp.appendFile(logPath, text, 'utf8');
+  const prev = serverLogWriteQueues.get(logPath) ?? Promise.resolve();
+  const next = prev.then(async () => {
+    await fsp.mkdir(path.dirname(logPath), { recursive: true });
+    await fsp.appendFile(logPath, text, 'utf8');
+  }).catch(() => {}).finally(() => {
+    if (serverLogWriteQueues.get(logPath) === next) {
+      serverLogWriteQueues.delete(logPath);
+    }
+  });
+  serverLogWriteQueues.set(logPath, next);
+  return next;
 }
 
 /**
