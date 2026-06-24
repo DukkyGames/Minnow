@@ -46,6 +46,8 @@ const loadingDirs = new Set<string>();
 let gitStatusMap = new Map<string, string>();
 let gitStatusPollTimer: number | undefined;
 let gitStatusPollCwd: string | undefined;
+let gitStatusPollDebounce: number | undefined;
+let gitStatusPollInFlight = false;
 
 /** Update git badge map and re-render visible file rows. */
 export function setFileTreeGitStatus(map: Map<string, string>): void {
@@ -55,38 +57,62 @@ export function setFileTreeGitStatus(map: Map<string, string>): void {
 
 /** Poll git status every 5s and refresh file tree badges. */
 export function startFileTreeGitStatusPoll(cwd?: string): void {
-  gitStatusPollCwd = cwd?.trim() || undefined;
-  if (gitStatusPollTimer) {
+  const normalizedCwd = cwd?.trim() || undefined;
+  // Board-change storm guard: skip if cwd is unchanged and the interval is already running.
+  if (normalizedCwd === gitStatusPollCwd && gitStatusPollTimer !== undefined) {
+    return;
+  }
+  gitStatusPollCwd = normalizedCwd;
+  if (gitStatusPollTimer !== undefined) {
     clearInterval(gitStatusPollTimer);
   }
-  void pollFileTreeGitStatus();
+  // Debounce the immediate poll so a burst of distinct-cwd calls collapses to one fetch.
+  if (gitStatusPollDebounce !== undefined) {
+    clearTimeout(gitStatusPollDebounce);
+  }
+  gitStatusPollDebounce = window.setTimeout(() => {
+    gitStatusPollDebounce = undefined;
+    void pollFileTreeGitStatus();
+  }, 200);
   gitStatusPollTimer = window.setInterval(() => {
     void pollFileTreeGitStatus();
   }, 5000);
 }
 
 async function pollFileTreeGitStatus(): Promise<void> {
-  const { gitStatus } = await import('../state/git-api');
-  const { getWorkspacePath } = await import('../state/workspace');
-  const ws = getWorkspacePath().trim();
-  const cwdArg =
-    gitStatusPollCwd && ws && gitStatusPollCwd.replace(/\\/g, '/') !== ws.replace(/\\/g, '/')
-      ? gitStatusPollCwd
-      : undefined;
+  if (gitStatusPollInFlight) return;
+  gitStatusPollInFlight = true;
+  try {
+    const { gitStatus } = await import('../state/git-api');
+    const { getWorkspacePath } = await import('../state/workspace');
+    const ws = getWorkspacePath().trim();
+    const cwdArg =
+      gitStatusPollCwd && ws && gitStatusPollCwd.replace(/\\/g, '/') !== ws.replace(/\\/g, '/')
+        ? gitStatusPollCwd
+        : undefined;
 
-  const result = await gitStatus(cwdArg);
-  if (!result.ok) {
-    setFileTreeGitStatus(new Map());
-    return;
-  }
-
-  const map = new Map<string, string>();
-  for (const bucket of [result.staged, result.unstaged, result.untracked]) {
-    for (const entry of bucket ?? []) {
-      map.set(entry.path.replace(/\\/g, '/'), entry.status);
+    const result = await gitStatus(cwdArg);
+    if (!result.ok) {
+      setFileTreeGitStatus(new Map());
+      // Stop the interval when the server is down; onFilePanelServerAvailabilityChanged
+      // restarts polling once the server comes back up.
+      if (!isFileTreeServerAvailable() && gitStatusPollTimer !== undefined) {
+        clearInterval(gitStatusPollTimer);
+        gitStatusPollTimer = undefined;
+      }
+      return;
     }
+
+    const map = new Map<string, string>();
+    for (const bucket of [result.staged, result.unstaged, result.untracked]) {
+      for (const entry of bucket ?? []) {
+        map.set(entry.path.replace(/\\/g, '/'), entry.status);
+      }
+    }
+    setFileTreeGitStatus(map);
+  } finally {
+    gitStatusPollInFlight = false;
   }
-  setFileTreeGitStatus(map);
 }
 
 function appendGitBadge(row: HTMLElement, fullPath: string): void {
