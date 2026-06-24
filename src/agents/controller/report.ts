@@ -8,7 +8,7 @@ import {
   subscribeChatStreamEnd,
 } from '../../chat/streaming-state';
 import { getPlannerChatForGroup } from '../../state/chat-groups';
-import { isBoardAutoMode } from '../../state/orchestrate-board-store';
+import { isBoardAutoMode, isBoardRunning } from '../../state/orchestrate-board-store';
 import { findChatById, sessionState } from '../../state/sessions';
 import type { BoardTask, BoardTaskStatus, Chat, ChatGroup } from '../../types';
 
@@ -176,14 +176,14 @@ function mapStatusToReportKind(
   return null;
 }
 
-/** Deliver a task lifecycle report to the planner when auto-pilot is on. */
+/** Deliver a task lifecycle report to the planner when auto-pilot is on and running. */
 export async function deliverOrchestratorTaskReport(
   group: ChatGroup,
   plannerChat: Chat,
   task: BoardTask,
   status: BoardTaskStatus,
 ): Promise<void> {
-  if (!isBoardAutoMode(group)) return;
+  if (!isBoardRunning(group)) return;
   const kind = mapStatusToReportKind(status);
   if (!kind) return;
   const key = reportKey(task.id, kind);
@@ -224,19 +224,25 @@ export function initOrchestratorAutoReports(): void {
     const ctx = resolveBoardContextFromTaskChat(endedChatId);
     if (ctx) {
       const { group, planner, task } = ctx;
-      if (task.status === 'complete' || task.status === 'failed' || task.status === 'blocked') {
+      if (isBoardRunning(group) && (task.status === 'complete' || task.status === 'failed' || task.status === 'blocked')) {
         void deliverOrchestratorTaskReport(group, planner, task, task.status);
       }
     }
 
     if (!sessionState) return;
     for (const group of sessionState.groups ?? []) {
-      if (!isBoardAutoMode(group)) continue;
+      if (!isBoardRunning(group)) continue;
       const planner = getPlannerChatForGroup(group);
       if (!planner || planner.id !== endedChatId) continue;
       void drainPendingReports(planner);
     }
   });
+}
+
+/** Drop queued reports for a chat (e.g. on Stop) so a stopped planner stream doesn't trigger a new turn. */
+export function clearPendingReportsForChat(chatId: string): void {
+  pendingReportsByChat.delete(chatId);
+  resumeInFlightByChat.delete(chatId);
 }
 
 /** Test reset. */

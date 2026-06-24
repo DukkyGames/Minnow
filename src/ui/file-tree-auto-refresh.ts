@@ -18,8 +18,17 @@ export const FILE_TREE_MUTATING_TOOLS = new Set<string>([
   'delete_path',
 ]);
 
-/** Debounce window so rapid multi-file agent edits coalesce into one tree reload. */
-export const FILE_TREE_AUTO_REFRESH_DEBOUNCE_MS = 300;
+/**
+ * Debounce window — resets on every tool call; coalesces a burst of rapid agent
+ * writes into one tree reload when the burst pauses for this long.
+ */
+export const FILE_TREE_AUTO_REFRESH_DEBOUNCE_MS = 1500;
+
+/**
+ * Hard ceiling on how long we wait before forcing a refresh even under continuous
+ * agent load (pure debounce would never fire if agents write faster than the window).
+ */
+export const FILE_TREE_AUTO_REFRESH_MAX_DELAY_MS = 10_000;
 
 import { scheduleChatAppOutputsRefreshAfterTool } from './chat-app-outputs';
 import { refreshFileTreeViaBridge } from './file-tree-refresh-bridge';
@@ -32,6 +41,7 @@ const defaultRefreshRunner = async (): Promise<void> => {
 let refreshRunner: () => Promise<void> = defaultRefreshRunner;
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+let maxDelayTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * True when a successful mutating tool result should trigger a debounced file tree refresh.
@@ -54,7 +64,14 @@ export function shouldScheduleFileTreeRefresh(
 }
 
 function flushDebouncedRefresh(): void {
-  debounceTimer = null;
+  if (debounceTimer != null) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
+  if (maxDelayTimer != null) {
+    clearTimeout(maxDelayTimer);
+    maxDelayTimer = null;
+  }
   void refreshRunner().catch(() => {
     /* refreshFileTree already surfaces errors via UI; avoid unhandled rejection */
   });
@@ -62,6 +79,10 @@ function flushDebouncedRefresh(): void {
 
 /**
  * Schedules a debounced full file tree refresh after a successful mutating tool call.
+ * Uses a debounce+throttle pattern: the debounce resets on every call, but the
+ * max-delay timer ensures a refresh fires within FILE_TREE_AUTO_REFRESH_MAX_DELAY_MS
+ * even when agents write continuously (which would otherwise prevent the debounce
+ * from ever firing).
  */
 export function scheduleFileTreeRefreshAfterTool(
   toolName: string,
@@ -70,10 +91,16 @@ export function scheduleFileTreeRefreshAfterTool(
   if (!shouldScheduleFileTreeRefresh(toolName, result)) {
     return;
   }
+  // Debounce: reset the short timer on every write.
   if (debounceTimer != null) {
     clearTimeout(debounceTimer);
   }
   debounceTimer = setTimeout(flushDebouncedRefresh, FILE_TREE_AUTO_REFRESH_DEBOUNCE_MS);
+
+  // Throttle ceiling: start the hard-limit timer only on the first write of a burst.
+  if (maxDelayTimer == null) {
+    maxDelayTimer = setTimeout(flushDebouncedRefresh, FILE_TREE_AUTO_REFRESH_MAX_DELAY_MS);
+  }
 }
 
 /**
@@ -89,12 +116,16 @@ export async function runWithFileTreeAutoRefresh<T extends ToolExecutionResult>(
   return result;
 }
 
-/** Test helper: restore default refresh runner and cancel any pending debounce. */
+/** Test helper: restore default refresh runner and cancel any pending timers. */
 export function resetFileTreeAutoRefreshForTests(): void {
   refreshRunner = defaultRefreshRunner;
   if (debounceTimer != null) {
     clearTimeout(debounceTimer);
     debounceTimer = null;
+  }
+  if (maxDelayTimer != null) {
+    clearTimeout(maxDelayTimer);
+    maxDelayTimer = null;
   }
 }
 
