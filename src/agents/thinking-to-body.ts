@@ -73,11 +73,13 @@ export function thinkingToCompletionBody(
   // OpenAI-compatible APIs reject `reasoning_effort: "none"`. DeepSeek V3/V4 needs an
   // explicit thinking disable flag or it streams only to `reasoning_content`.
   // Kimi/Moonshot reject `enable_thinking` — use nested `thinking.type` instead.
+  // MiniMax rejects `thinking.type: "enabled"` — only allows "adaptive" or "disabled".
   if (apiKind === 'openai-v1') {
     if (resolved === 'off') {
       return { body: { thinking: { type: 'disabled' } } };
     }
-    return { body: { thinking: { type: 'enabled' } } };
+    const enabledValue = modelCapabilities?.reasoningThinkingEnabledValue ?? 'enabled';
+    return { body: { thinking: { type: enabledValue } } };
   }
 
   const effort = effortForResolved(resolved);

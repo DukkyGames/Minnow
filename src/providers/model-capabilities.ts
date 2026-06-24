@@ -88,6 +88,7 @@ export function catalogCapabilitiesFromRow(row: LmModelRecord): ModelCapabilitie
   const contextLength = contextLengthFromModelRow(row) ?? null;
   const vision = catalogRowHasVision(row);
   const reasoningCaps = reasoningCatalogFromRow(row);
+  const isMiniMax = /minimax/i.test(row.id);
   return {
     vision,
     tools: null,
@@ -96,6 +97,7 @@ export function catalogCapabilitiesFromRow(row: LmModelRecord): ModelCapabilitie
     reasoning: reasoningCaps.reasoning ?? null,
     reasoningAllowedOptions: reasoningCaps.reasoningAllowedOptions,
     reasoningDefault: reasoningCaps.reasoningDefault,
+    ...(isMiniMax ? { reasoningThinkingEnabledValue: 'adaptive' as const } : {}),
     contextLength,
     loadState: row.state?.trim() || null,
     sources: {
@@ -151,6 +153,11 @@ export function mergeModelCapabilities(
     merged.reasoningDefault = fromFile.reasoningDefault;
   } else if (catalog.reasoningDefault) {
     merged.reasoningDefault = catalog.reasoningDefault;
+  }
+  if (fromFile.reasoningThinkingEnabledValue) {
+    merged.reasoningThinkingEnabledValue = fromFile.reasoningThinkingEnabledValue;
+  } else if (catalog.reasoningThinkingEnabledValue) {
+    merged.reasoningThinkingEnabledValue = catalog.reasoningThinkingEnabledValue;
   }
   preferProbe('contextLength', catalog.contextLength);
   if (fromFile.loadState) {
