@@ -203,12 +203,13 @@ async function main() {
   console.log(`Scheduler API: ${localUrl.replace(/\/$/, '')}/api/scheduler/ping`);
   console.log(`Calendar API: ${localUrl.replace(/\/$/, '')}/api/calendar/ping`);
   console.log(`Email API: ${localUrl.replace(/\/$/, '')}/api/email/ping`);
-  const schedulerBaseUrl =
+  const schedulerBaseUrl = localUrl.replace(/\/$/, '');
+  const oauthRedirectBase =
     networkAccess === 'lan' && networkUrls.length > 0
       ? networkUrls[0].replace(/\/$/, '')
       : localUrl.replace(/\/$/, '');
   setSchedulerServerBaseUrl(schedulerBaseUrl);
-  setOAuthRedirectBase(schedulerBaseUrl);
+  setOAuthRedirectBase(oauthRedirectBase);
   await startSchedulerTickLoop({ baseUrl: schedulerBaseUrl });
   startCalendarReminderLoop();
   startEmailPollLoop();

@@ -526,7 +526,7 @@ function formatDependencyCycleError(cycle: string[]): string {
   return `dependency cycle: ${path}`;
 }
 
-/** Planned task whose deps (and wave barrier when no deps) are satisfied. */
+/** Planned task whose deps and wave barrier are both satisfied. */
 export function isTaskReadyForAuto(
   board: OrchestrateBoardState,
   task: BoardTask,
@@ -534,9 +534,6 @@ export function isTaskReadyForAuto(
   if (task.status !== 'planned') return false;
   if (isTaskInDependencyCycle(board, task.id)) return false;
   if (!isDepsComplete(board, task)) return false;
-  // DAG-first: explicit edges satisfied → ready now. Wave barrier only when the
-  // task declares no dependsOn (keeps legacy wave-only plans working).
-  if (task.dependsOn?.length) return true;
   return isPriorWavesComplete(board, task.wave);
 }
 

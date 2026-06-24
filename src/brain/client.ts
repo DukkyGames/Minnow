@@ -2,7 +2,7 @@
  * Browser client for /api/brain/* when npm start is running.
  */
 
-import { detectLocalServer } from '../tools/client';
+import { isLocalServerAvailable } from '../tools/config';
 import type {
   BrainCodeCallsOfResult,
   BrainCodeConfig,
@@ -28,8 +28,7 @@ async function brainFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T | null> {
-  const ok = await detectLocalServer();
-  if (!ok) return null;
+  if (!isLocalServerAvailable()) return null;
   try {
     const res = await fetch(`${API_BASE}${path}`, {
       ...init,
@@ -158,8 +157,7 @@ export async function fetchBrainCodeConfig(): Promise<BrainCodeConfig | null> {
 export async function saveBrainCodeConfig(
   partial: Partial<BrainCodeConfig>,
 ): Promise<BrainCodeConfig | null> {
-  const ok = await detectLocalServer();
-  if (!ok) return null;
+  if (!isLocalServerAvailable()) return null;
   try {
     const res = await fetch(`${API_BASE}/api/brain/code/config`, {
       method: 'PUT',
@@ -184,8 +182,7 @@ export async function reindexBrainCode(): Promise<BrainCodeReindexResult | null>
 
 /** Install the optional git post-commit cascade hook in the active workspace. */
 export async function installBrainGitHook(): Promise<BrainCodeGitHookInstallResult | null> {
-  const ok = await detectLocalServer();
-  if (!ok) return null;
+  if (!isLocalServerAvailable()) return null;
   try {
     const res = await fetch(`${API_BASE}/api/brain/code/git-hook/install`, {
       method: 'POST',
