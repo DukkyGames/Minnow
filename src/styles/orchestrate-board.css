@@ -2027,6 +2027,10 @@ button.board-header__activity {
   gap: 24px;
 }
 
+.board-wave-block {
+  flex-shrink: 0;
+}
+
 .board-wave-block__header {
   display: flex;
   align-items: center;

@@ -2623,13 +2623,20 @@ function ensureAutoDriveSubscription(): void {
   });
 }
 
-/** Toggle kanban visibility for a wave section in board view. */
+/** Toggle kanban visibility for a wave section in board view.
+ *  Expanding a wave collapses all other waves (accordion). */
 export function toggleWaveCollapsed(group: ChatGroup, waveId: number | string): void {
   const board = group.orchestrateBoard;
   if (!board) return;
   const wave = board.waves.find((w) => String(w.id) === String(waveId));
   if (!wave) return;
-  wave.collapsed = !wave.collapsed;
+  const expanding = wave.collapsed !== false;
+  wave.collapsed = !expanding;
+  if (expanding) {
+    for (const other of board.waves) {
+      if (String(other.id) !== String(waveId)) other.collapsed = true;
+    }
+  }
   board.lastUpdatedAt = Date.now();
   scheduleSaveSessions();
   emitBoardChange(group.id);

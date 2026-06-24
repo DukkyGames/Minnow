@@ -2,7 +2,7 @@
  * Browser client for memory/skill synthesis proposal APIs.
  */
 
-import { detectLocalServer } from '../tools/client';
+import { isLocalServerAvailable } from '../tools/config';
 
 const API_BASE = '';
 
@@ -66,8 +66,7 @@ async function synthesisFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T | null> {
-  const ok = await detectLocalServer();
-  if (!ok) return null;
+  if (!isLocalServerAvailable()) return null;
   try {
     const res = await fetch(`${API_BASE}${path}`, {
       ...init,
@@ -95,8 +94,7 @@ export async function fetchSynthesisConfig(): Promise<SynthesisConfig | null> {
 export async function saveSynthesisConfig(
   partial: Partial<SynthesisConfig>,
 ): Promise<SynthesisConfig | null> {
-  const ok = await detectLocalServer();
-  if (!ok) return null;
+  if (!isLocalServerAvailable()) return null;
   try {
     const res = await fetch(`${API_BASE}/api/memory/synthesis/config`, {
       method: 'PUT',
@@ -141,8 +139,7 @@ export async function acceptMemoryProposal(
   id: string,
   edits?: { title?: string; body?: string; tags?: string[] },
 ): Promise<boolean> {
-  const ok = await detectLocalServer();
-  if (!ok) return false;
+  if (!isLocalServerAvailable()) return false;
   try {
     const res = await fetch(
       `${API_BASE}/api/memory/proposals/${encodeURIComponent(id)}/accept`,
@@ -159,8 +156,7 @@ export async function acceptMemoryProposal(
 
 /** Reject a memory proposal. */
 export async function rejectMemoryProposal(id: string): Promise<boolean> {
-  const ok = await detectLocalServer();
-  if (!ok) return false;
+  if (!isLocalServerAvailable()) return false;
   try {
     const res = await fetch(
       `${API_BASE}/api/memory/proposals/${encodeURIComponent(id)}/reject`,
@@ -177,8 +173,7 @@ export async function acceptSkillProposal(
   id: string,
   edits?: { skillMdDraft?: string },
 ): Promise<boolean> {
-  const ok = await detectLocalServer();
-  if (!ok) return false;
+  if (!isLocalServerAvailable()) return false;
   try {
     const res = await fetch(
       `${API_BASE}/api/skills/proposals/${encodeURIComponent(id)}/accept`,
@@ -195,8 +190,7 @@ export async function acceptSkillProposal(
 
 /** Reject a skill proposal. */
 export async function rejectSkillProposal(id: string): Promise<boolean> {
-  const ok = await detectLocalServer();
-  if (!ok) return false;
+  if (!isLocalServerAvailable()) return false;
   try {
     const res = await fetch(
       `${API_BASE}/api/skills/proposals/${encodeURIComponent(id)}/reject`,
@@ -235,8 +229,7 @@ export function schedulePostTurnSynthesis(input: SynthesisRunInput): void {
   if (!input.assistantText?.trim()) return;
 
   void (async () => {
-    const ok = await detectLocalServer();
-    if (!ok) return;
+    if (!isLocalServerAvailable()) return;
 
     try {
       const res = await fetch(`${API_BASE}/api/memory/synthesis/run`, {

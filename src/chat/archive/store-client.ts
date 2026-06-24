@@ -2,7 +2,7 @@
  * Browser client for Brain archive API endpoints (MIN-139).
  */
 
-import { detectLocalServer } from '../../tools/client';
+import { isLocalServerAvailable } from '../../tools/config';
 import type { ApiMessage } from '../../types';
 import type {
   ArchiveBundleRequest,
@@ -34,8 +34,7 @@ export interface ArchiveRetrieveOptions {
 }
 
 async function archiveFetch<T>(path: string, init?: RequestInit): Promise<T | null> {
-  const ok = await detectLocalServer();
-  if (!ok) return null;
+  if (!isLocalServerAvailable()) return null;
   try {
     const res = await fetch(path, {
       ...init,

@@ -3,7 +3,7 @@
  * Gracefully no-ops when the server route is unavailable.
  */
 
-import { detectLocalServer } from '../tools/client';
+import { isLocalServerAvailable } from '../tools/config';
 import type { LspHoverResult } from './completion-client';
 import { hoverContentsToPlainText } from './hover-contents';
 
@@ -15,8 +15,7 @@ export async function fetchLspHover(
   line: number,
   character: number,
 ): Promise<string | null> {
-  const ok = await detectLocalServer();
-  if (!ok) return null;
+  if (!isLocalServerAvailable()) return null;
   try {
     const res = await fetch('/api/lsp/hover', {
       method: 'POST',

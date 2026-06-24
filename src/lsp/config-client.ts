@@ -2,7 +2,7 @@
  * Browser client for LSP config and status (npm start required).
  */
 
-import { detectLocalServer } from '../tools/client';
+import { isLocalServerAvailable } from '../tools/config';
 
 /** Install requirements from defaults (display-only; not probed on disk). */
 export interface LspServerRequirements {
@@ -50,8 +50,7 @@ export interface LspConfigPatch {
 }
 
 async function lspFetch<T>(path: string, init?: RequestInit): Promise<T | null> {
-  const ok = await detectLocalServer();
-  if (!ok) return null;
+  if (!isLocalServerAvailable()) return null;
   try {
     const res = await fetch(path, {
       ...init,
@@ -74,8 +73,7 @@ export async function fetchLspConfig(): Promise<LspConfigResponse | null> {
 
 /** Persist partial user overrides to ~/.minnow/lsp.json */
 export async function saveLspConfig(patch: LspConfigPatch): Promise<boolean> {
-  const ok = await detectLocalServer();
-  if (!ok) return false;
+  if (!isLocalServerAvailable()) return false;
   try {
     const res = await fetch('/api/config/lsp', {
       method: 'PUT',
@@ -151,8 +149,7 @@ export async function fetchLspBundleProgress(
 export async function installLspBundle(
   bundleId: string,
 ): Promise<{ ok: boolean; error?: string; alreadyInstalled?: boolean }> {
-  const ok = await detectLocalServer();
-  if (!ok) return { ok: false, error: 'Server offline' };
+  if (!isLocalServerAvailable()) return { ok: false, error: 'Server offline' };
   try {
     const res = await fetch('/api/lsp/bundles/install', {
       method: 'POST',
@@ -174,8 +171,7 @@ export async function installLspBundle(
 
 /** Remove a managed bundle from ~/.minnow/lsp-servers. */
 export async function uninstallLspBundle(bundleId: string): Promise<boolean> {
-  const ok = await detectLocalServer();
-  if (!ok) return false;
+  if (!isLocalServerAvailable()) return false;
   try {
     const res = await fetch('/api/lsp/bundles/uninstall', {
       method: 'POST',

@@ -42,7 +42,10 @@ export interface UpdateProviderPayload {
 const PROVIDERS_TIMEOUT_MS = 800;
 
 let cachedList: ProviderListResponse | null = null;
+let cachedAt: number | null = null;
 let providersAvailable = false;
+
+const PROVIDERS_CACHE_TTL_MS = 30_000;
 
 /** Whether /api/providers was reachable (npm start). */
 export function isProvidersApiAvailable(): boolean {
@@ -79,6 +82,7 @@ async function fetchProvidersList(): Promise<ProviderListResponse> {
     providersAvailable = true;
     const data = (await res.json()) as ProviderListResponse;
     cachedList = data;
+    cachedAt = Date.now();
     return data;
   } finally {
     clearTimeout(timer);
@@ -92,9 +96,14 @@ export async function listProviders(): Promise<ProviderListResponse> {
     return { providers: [provider], activeProviderId: provider.id };
   }
 
+  if (cachedList && cachedAt !== null && Date.now() - cachedAt < PROVIDERS_CACHE_TTL_MS) {
+    return cachedList;
+  }
+
   try {
     return await fetchProvidersList();
   } catch {
+    if (cachedList) return cachedList;
     providersAvailable = false;
     const provider = getViteOnlyFallbackProvider();
     return { providers: [provider], activeProviderId: provider.id };
@@ -247,6 +256,7 @@ export async function updateProviderSecrets(
 /** Clear cached list after external changes. */
 export function invalidateProviderCache(): void {
   cachedList = null;
+  cachedAt = null;
 }
 
 /** Last cached list (if any). */

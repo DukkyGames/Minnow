@@ -2,7 +2,7 @@
  * Browser client for /api/memory/* when npm start is running.
  */
 
-import { detectLocalServer } from '../tools/client';
+import { isLocalServerAvailable } from '../tools/config';
 import { brainWorkspaceKeyFromPath } from '../lib/brain-workspace-key';
 import { getWorkspacePath } from '../state/workspace';
 import type {
@@ -23,8 +23,7 @@ async function memoryFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T | null> {
-  const ok = await detectLocalServer();
-  if (!ok) return null;
+  if (!isLocalServerAvailable()) return null;
   try {
     const res = await fetch(`${API_BASE}${path}`, {
       ...init,
@@ -53,8 +52,7 @@ async function memoryEmbeddingsFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<MemoryEmbeddingsOpResult<T>> {
-  const ok = await detectLocalServer();
-  if (!ok) {
+  if (!isLocalServerAvailable()) {
     return { kind: 'err', error: 'Start with npm start to use memory embeddings.' };
   }
   try {
@@ -101,8 +99,7 @@ export async function fetchMemoryEntries(
 
 /** Delete one memory entry by id. */
 export async function deleteMemoryEntry(id: string): Promise<boolean> {
-  const ok = await detectLocalServer();
-  if (!ok) return false;
+  if (!isLocalServerAvailable()) return false;
   try {
     const res = await fetch(
       `${API_BASE}/api/memory/entries/${encodeURIComponent(id)}`,

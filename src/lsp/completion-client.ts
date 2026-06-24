@@ -2,7 +2,7 @@
  * Browser client for LSP document sync, completion, hover, diagnostics, and navigation.
  */
 
-import { detectLocalServer } from '../tools/client';
+import { isLocalServerAvailable } from '../tools/config';
 
 /** Completion item returned by POST /api/lsp/completion */
 export interface LspCompletionItem {
@@ -66,8 +66,7 @@ export interface LspSignatureHelp {
 }
 
 async function postLspJson<T>(pathname: string, body: Record<string, unknown>): Promise<T | null> {
-  const ok = await detectLocalServer();
-  if (!ok) return null;
+  if (!isLocalServerAvailable()) return null;
   try {
     const res = await fetch(pathname, {
       method: 'POST',
@@ -87,8 +86,7 @@ export async function notifyLspDocument(
   event: 'open' | 'change' | 'close',
   text?: string,
 ): Promise<void> {
-  const ok = await detectLocalServer();
-  if (!ok) return;
+  if (!isLocalServerAvailable()) return;
   try {
     await fetch('/api/lsp/notify', {
       method: 'POST',

@@ -3,6 +3,7 @@
  */
 
 import { detectLocalServer } from '../tools/client';
+import { isLocalServerAvailable } from '../tools/config';
 import {
   ackSchedulerNotification,
   fetchSchedulerNotifications,
@@ -42,14 +43,18 @@ async function deliverNotification(
 
 /** Single poll pass for unacked scheduler reminders. */
 export async function pollSchedulerNotifications(): Promise<void> {
-  const ok = await detectLocalServer();
-  if (!ok) {
-    return;
+  if (!isLocalServerAvailable()) {
+    await detectLocalServer(); // recovery probe — only fires when already marked down
+    if (!isLocalServerAvailable()) return;
   }
 
-  const rows = await fetchSchedulerNotifications();
-  for (const row of rows) {
-    await deliverNotification(row);
+  try {
+    const rows = await fetchSchedulerNotifications();
+    for (const row of rows) {
+      await deliverNotification(row);
+    }
+  } catch {
+    /* server unavailable — skip silently */
   }
 }
 

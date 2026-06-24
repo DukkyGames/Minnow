@@ -2,7 +2,7 @@
  * Compare vote history: server API primary, localStorage fallback.
  */
 
-import { detectLocalServer } from '../tools/client';
+import { isLocalServerAvailable } from '../tools/config';
 import { normalizeCompareVote } from './win-rates';
 import type { CompareVote, CompareVoteReveal, CompareWinner } from './types';
 
@@ -43,8 +43,7 @@ export function mergeCompareVotes(server: CompareVote[], local: CompareVote[]): 
 /** List revealed compare votes. */
 export async function listCompareHistory(limit = LIST_CAP): Promise<CompareVote[]> {
   const localVotes = readLocalVotes();
-  const serverUp = await detectLocalServer();
-  if (serverUp) {
+  if (isLocalServerAvailable()) {
     try {
       const res = await fetch(`/api/compare/history?limit=${limit}`, { cache: 'no-store' });
       if (res.ok) {

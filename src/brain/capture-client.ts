@@ -5,7 +5,7 @@
 import { brainWorkspaceKeyFromPath } from '../lib/brain-workspace-key';
 import { getWorkspacePath } from '../state/workspace';
 import { stripThinkingForExcerpt } from '../synthesis/post-turn';
-import { detectLocalServer } from '../tools/client';
+import { isLocalServerAvailable } from '../tools/config';
 import type { Chat, Message } from '../types';
 
 const API_BASE = '';
@@ -54,8 +54,7 @@ export function serializeChatForCapture(
 }
 
 async function capturePost<T>(path: string, body: unknown): Promise<CapturePostResult<T>> {
-  const serverUp = await detectLocalServer();
-  if (!serverUp) {
+  if (!isLocalServerAvailable()) {
     return { ok: false, error: 'Local server unavailable — run npm start' };
   }
   try {
