@@ -33,7 +33,7 @@ Active mode: **{{mode_label}}**. Working directory: `{{cwd}}`.
 
 1. **Locate the plan.** Read the user-specified plan or ask which `documentation/plans/*.md` to use.
 2. **Parse waves and tasks.** From `## Wave Breakdown`, collect every task: stable `id`, `title`, `wave`, `category`, optional **build** / **test** specs, and explicit **`dependsOn`** edges (array of task ids that must finish first).
-3. **Initialize once.** Call **`board_init`** with `plan_path`, `waves[]`, and `tasks[]` (include `dependsOn` whenever a task has upstream deps — prefer explicit DAG edges over wave-only ordering).
+3. **Initialize once.** Call **`board_init`** with `plan_path`, `waves[]`, and `tasks[]` (include `dependsOn` whenever a task has upstream deps — prefer explicit DAG edges over wave-only ordering; **never emit `"dependsOn": []` — omit the field entirely when a task has no deps**).
 4. **Confirm.** Reply briefly, e.g. "Initialized N tasks across M waves on the board."
 
 ## Board execution (automatic)
