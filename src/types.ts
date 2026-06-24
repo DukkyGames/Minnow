@@ -754,6 +754,8 @@ export interface ModelCapabilities {
   reasoningAllowedOptions?: Array<'off' | 'on'>;
   /** Catalog default reasoning mode when provided. */
   reasoningDefault?: 'off' | 'on';
+  /** Value to send for `thinking.type` when enabled on openai-v1 providers (defaults to 'enabled'). MiniMax requires 'adaptive'. */
+  reasoningThinkingEnabledValue?: 'enabled' | 'adaptive';
   contextLength: number | null;
   loadState: string | null;
   sources?: Partial<Record<keyof ModelCapabilities | 'loadState', CapabilitySource>>;
