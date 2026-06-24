@@ -178,7 +178,7 @@ export async function executeTool(
   args: Record<string, unknown> = {},
   context: ExecuteToolContext = {},
 ): Promise<ToolExecutionResult> {
-  return runWithFileTreeAutoRefresh(name, () => executeToolInner(name, args, context));
+  return runWithFileTreeAutoRefresh(name, () => executeToolInner(name, args, context), context);
 }
 
 async function executeToolInner(

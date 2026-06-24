@@ -45,12 +45,19 @@ let maxDelayTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * True when a successful mutating tool result should trigger a debounced file tree refresh.
+ * Skipped when the tool ran in a worktree/sandbox (workspaceRoot is set) because the file
+ * tree always shows the main workspace — refreshing it for worktree writes is unnecessary
+ * and causes UI freezes when many board agents are running concurrently.
  */
 export function shouldScheduleFileTreeRefresh(
   toolName: string,
   result: ToolExecutionResult,
+  workspaceRoot?: string,
 ): boolean {
   if (!isFileTreeServerAvailable()) {
+    return false;
+  }
+  if (workspaceRoot) {
     return false;
   }
   if (!FILE_TREE_MUTATING_TOOLS.has(toolName)) {
@@ -87,8 +94,9 @@ function flushDebouncedRefresh(): void {
 export function scheduleFileTreeRefreshAfterTool(
   toolName: string,
   result: ToolExecutionResult,
+  workspaceRoot?: string,
 ): void {
-  if (!shouldScheduleFileTreeRefresh(toolName, result)) {
+  if (!shouldScheduleFileTreeRefresh(toolName, result, workspaceRoot)) {
     return;
   }
   // Debounce: reset the short timer on every write.
@@ -105,13 +113,15 @@ export function scheduleFileTreeRefreshAfterTool(
 
 /**
  * Runs a tool executor, then applies file-tree auto-refresh rules to the result.
+ * Pass the tool context so worktree-scoped calls skip the main workspace file tree refresh.
  */
 export async function runWithFileTreeAutoRefresh<T extends ToolExecutionResult>(
   toolName: string,
   fn: () => Promise<T>,
+  context?: { workspaceRoot?: string },
 ): Promise<T> {
   const result = await fn();
-  scheduleFileTreeRefreshAfterTool(toolName, result);
+  scheduleFileTreeRefreshAfterTool(toolName, result, context?.workspaceRoot);
   scheduleChatAppOutputsRefreshAfterTool(toolName, result);
   return result;
 }
