@@ -2324,7 +2324,7 @@ export function moveTaskStatus(
     const planner = plannerChat ?? getPlannerChatForGroup(group);
     if (planner) tryTriggerFinalIntegrationTest(group, planner);
   }
-  if (board && isBoardAutoMode(group) && plannerChat) {
+  if (board && isBoardRunning(group) && plannerChat) {
     const reportable =
       status === 'complete' || status === 'failed' || status === 'blocked';
     if (reportable) {
@@ -2563,6 +2563,11 @@ export function stopBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
       .then((mod) => mod.cancelAllForParentTurn(board.activeParentTurnId!))
       .catch((err) => reportBackgroundError('stop-board-cancel-runs', err));
   }
+  // Flush pending planner reports so the planner stream-end event (caused by
+  // stopGeneration above) does not drain the queue and start a new planner turn.
+  void import('../agents/controller/report.ts')
+    .then((mod) => mod.clearPendingReportsForChat(plannerChat.id))
+    .catch((err) => reportBackgroundError('stop-board-clear-reports', err));
   // Flush stop state immediately so reload cannot resurrect auto execution.
   saveSessionsNow();
   emitBoardChange(group.id);
