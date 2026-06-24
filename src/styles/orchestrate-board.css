@@ -1269,6 +1269,16 @@ button.board-header__activity {
   overflow: hidden;
 }
 
+.board-task-card__deps {
+  margin: 3px 0 0;
+  padding: 0 9px;
+  font-size: 0.625rem;
+  color: var(--mn-fg-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .board-task-card__activity {
   margin: 4px 0 0;
   padding: 0 9px;

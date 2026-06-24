@@ -1937,12 +1937,14 @@ function taskShowsRecoveryActions(
   task: BoardTask,
   taskActive: boolean,
   testActive: boolean,
+  fixerActive: boolean,
 ): boolean {
-  if (taskActive || testActive) return false;
+  if (taskActive || testActive || fixerActive) return false;
   if (task.status === 'failed' || task.status === 'blocked') return true;
   if (task.status === 'in_progress' || task.status === 'testing') {
     return Boolean(task.chatId?.trim() || task.testChatId?.trim());
   }
+  if (task.status === 'merging') return true;
   return false;
 }
 
@@ -2107,6 +2109,7 @@ function buildTaskCard(
   const testStreaming = Boolean(task.testChatId && isChatStreaming(task.testChatId));
   const taskActive = Boolean(task.chatId && isTaskChatActive(task.chatId));
   const testActive = Boolean(task.testChatId && isTaskChatActive(task.testChatId));
+  const fixerActive = Boolean(task.fixerChatId && isTaskChatActive(task.fixerChatId));
   const primaryRunId = getBoardTaskPrimaryRunId(task);
   const runStatus = primaryRunId
     ? resolveRunStatusForTask(plannerChat, primaryRunId)
@@ -2115,14 +2118,14 @@ function buildTaskCard(
   const board = group.orchestrateBoard!;
   const cap = board.maxConcurrentTasks ?? 3;
   const atCap =
-    countRunningTaskChats(board) >= cap && !taskActive && !testActive;
+    countRunningTaskChats(board) >= cap && !taskActive && !testActive && !fixerActive;
 
   const card = document.createElement('article');
   card.className = 'board-task-card';
   if (task.status === 'failed' || task.status === 'blocked') {
     card.classList.add('board-task-card--alert');
   }
-  if (taskActive || testActive) {
+  if (taskActive || testActive || fixerActive) {
     card.classList.add('board-task-card--running');
   }
 
@@ -2192,7 +2195,7 @@ function buildTaskCard(
   if (agentBadge) {
     trail.appendChild(buildTaskAgentBadge(agentBadge));
   }
-  const supervision = resolveTaskSupervision(task, plannerChat, taskActive || testActive);
+  const supervision = resolveTaskSupervision(task, plannerChat, taskActive || testActive || fixerActive);
   if (supervision) {
     appendTaskHeartbeatBadge(trail, supervision);
   }
@@ -2210,6 +2213,32 @@ function buildTaskCard(
   title.textContent = task.title;
   title.title = task.title;
   card.appendChild(title);
+
+  const depIds = task.dependsOn;
+  if (depIds?.length) {
+    const byWave = new Map<string, string[]>();
+    for (const id of depIds) {
+      const depTask = board.tasks.find((t) => t.id === id);
+      const wKey = depTask ? String(depTask.wave) : '?';
+      const bucket = byWave.get(wKey) ?? [];
+      bucket.push(id);
+      byWave.set(wKey, bucket);
+    }
+    const waveKeys = [...byWave.keys()].sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true }),
+    );
+    if (waveKeys.length) {
+      const deps = document.createElement('p');
+      deps.className = 'board-task-card__deps';
+      deps.textContent =
+        'Needs: ' +
+        waveKeys
+          .map((w) => `Wave ${w} (${byWave.get(w)!.join(', ')})`)
+          .join(', ');
+      deps.title = `Depends on tasks: ${depIds.join(', ')}`;
+      card.appendChild(deps);
+    }
+  }
 
   const taskChat = task.chatId ? findChatById(task.chatId) : undefined;
   const activity = deriveTaskCardActivity(task, plannerChat, {
@@ -2231,7 +2260,7 @@ function buildTaskCard(
 
   const toolbar = document.createElement('div');
   toolbar.className = 'board-task-card__toolbar';
-  if (taskActive || testActive) {
+  if (taskActive || testActive || fixerActive) {
     const stopBtn = document.createElement('button');
     stopBtn.type = 'button';
     stopBtn.className = 'board-btn board-btn--compact board-btn--mn-danger board-task-card__btn--stop';
@@ -2277,7 +2306,7 @@ function buildTaskCard(
     footer.appendChild(advanceRow);
   }
 
-  if (taskShowsRecoveryActions(task, taskActive, testActive)) {
+  if (taskShowsRecoveryActions(task, taskActive, testActive, fixerActive)) {
     const recoveryRow = document.createElement('div');
     recoveryRow.className = 'board-task-card__advance board-task-card__advance--recovery';
     buildTaskRecoveryActions(task, group, plannerChat, recoveryRow);

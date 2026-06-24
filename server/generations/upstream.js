@@ -25,6 +25,26 @@ import {
 import { upstreamFetch } from './upstream-fetch.js';
 
 /**
+ * Kimi (Moonshot AI) thinking/code models only accept temperature=1.
+ * @param {Buffer} requestBody
+ * @param {string} apiKind
+ * @returns {Buffer}
+ */
+function fixModelTemperature(requestBody, apiKind) {
+  if (apiKind !== 'openai-v1') return requestBody;
+  try {
+    const parsed = JSON.parse(requestBody.toString('utf8'));
+    if (!parsed || typeof parsed !== 'object') return requestBody;
+    const modelId = typeof parsed.model === 'string' ? parsed.model : '';
+    if (!/kimi/i.test(modelId)) return requestBody;
+    if (typeof parsed.temperature !== 'number' || parsed.temperature === 1) return requestBody;
+    return Buffer.from(JSON.stringify({ ...parsed, temperature: 1 }), 'utf8');
+  } catch {
+    return requestBody;
+  }
+}
+
+/**
  * Start pumping an upstream chat/completions response into state chunks.
  * Not awaited by route handlers — errors are handled inside the promise chain.
  *
@@ -89,7 +109,8 @@ async function pumpUpstreamAsync({ state }) {
       return;
     }
 
-    const requestBody = buildCandidateRequestBody(state.requestBody, candidate.modelId);
+    const rawBody = buildCandidateRequestBody(state.requestBody, candidate.modelId);
+    const requestBody = fixModelTemperature(rawBody, runtime.profile.apiKind);
     const result = await attemptCandidateStream({
       state,
       candidate,

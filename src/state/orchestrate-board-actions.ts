@@ -979,6 +979,12 @@ export function clearTaskFailureState(
     patch.testAttempts = undefined;
     patch.buildAttempts = undefined;
   }
+  if (task.status === 'merging') {
+    patch.status = 'in_progress';
+    patch.fixerChatId = undefined;
+    patch.mergePreSha = undefined;
+    patch.fixerAttempts = undefined;
+  }
   return updateTask(group, task.id, patch, plannerChat);
 }
 
@@ -2303,6 +2309,10 @@ export async function stopTask(
     stopTaskChatSupervision(task.testChatId);
     stopGeneration(task.testChatId);
   }
+  if (task.fixerChatId) {
+    stopTaskChatSupervision(task.fixerChatId);
+    stopGeneration(task.fixerChatId);
+  }
   await drainTaskQueue(group, plannerChat);
 }
 
@@ -2542,6 +2552,10 @@ export function stopBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
     if (task.testChatId) {
       stopTaskChatSupervision(task.testChatId);
       stopGeneration(task.testChatId);
+    }
+    if (task.fixerChatId) {
+      stopTaskChatSupervision(task.fixerChatId);
+      stopGeneration(task.fixerChatId);
     }
   }
   if (board.finalTest?.chatId) {

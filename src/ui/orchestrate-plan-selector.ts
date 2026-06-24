@@ -1,5 +1,5 @@
 /**
- * Orchestrate mode: plan picker in the composer input row (replaces #msgInput while visible).
+ * Orchestrate mode: plan picker in the composer toolbar (plan strip hidden in chat view).
  */
 
 import { isActiveChatStreaming } from '../chat/streaming-state';
@@ -15,7 +15,7 @@ import {
 } from '../state/sessions';
 import type { Chat } from '../types';
 import { isComposerRecoveryBlocked } from './composer-send';
-import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
+import { isBoardViewActive, syncViewModeToggleFromActiveChat } from './view-mode-toggle';
 import {
   populateOrchestratePlanSelect,
   persistOrchestratePlanPathFromSelectValue,
@@ -28,10 +28,9 @@ let planHintEl: HTMLElement | null = null;
 
 const INPUT_BAR_ORCHESTRATE_CLASS = 'input-bar--orchestrate-plan';
 
-/** True when the plan strip should replace the message textarea in the input row. */
-export function shouldMountOrchestratePlanInInputRow(chat: Chat): boolean {
-  if (normalizeModeId(chat.modeId) !== 'orchestrate') return false;
-  return !shouldHideComposerPlanStripForOrchestrateBoardOnboarding(chat);
+/** Plan strip never replaces the textarea — orchestrator chats allow direct chatting. */
+export function shouldMountOrchestratePlanInInputRow(_chat: Chat): boolean {
+  return false;
 }
 
 function getInputBar(): HTMLElement | null {
@@ -130,7 +129,7 @@ export async function syncOrchestratePlanStripFromActiveChat(): Promise<void> {
   const chat = getActiveChat();
   const mode = normalizeModeId(chat.modeId);
 
-  if (mode !== 'orchestrate') {
+  if (mode !== 'orchestrate' || !isBoardViewActive()) {
     strip.classList.add('hidden');
     sel.disabled = true;
     hint.classList.add('hidden');
