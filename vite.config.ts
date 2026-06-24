@@ -40,6 +40,9 @@ function cssBeforeEntryScriptPlugin(): Plugin {
 export default defineConfig({
   base: './',
   plugins: [cssBeforeEntryScriptPlugin()],
+  server: {
+    hmr: false,      // ← disables hot reload
+  },
   build: {
     outDir: 'dist',
   },
