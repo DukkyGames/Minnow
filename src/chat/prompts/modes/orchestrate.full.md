@@ -101,7 +101,7 @@ You may raise or lower autonomy (`manual` / `sequential` / `auto`) yourself via 
 ```
 
 - `tasks[].id` — stable id from plan headings (e.g. `W1-A`)
-- `tasks[].dependsOn` — omit when empty; only reference earlier task ids; no cycles allowed
+- `tasks[].dependsOn` — **omit the field entirely when a task has no dependencies; never emit `"dependsOn": []`**; only reference earlier task ids; no cycles allowed
 - `board_update_task` uses **`"task_id"`**, not `id` — e.g. `{"task_id": "W1-A", "status": "complete"}`
 - `board_init` requires non-empty `tasks` (`plan_path` alone is not enough)
 - Task chats are linked via `board_task_id` on `spawn_sub_agent` (set automatically — do not call `spawn_sub_agent`; the category field determines agent type)
