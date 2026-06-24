@@ -45,5 +45,10 @@ export function sanitizeCompletionBodyForProvider(
     delete next.max_tokens;
   }
 
+  // Kimi (Moonshot AI) thinking/code models only accept temperature=1.
+  if (/kimi/i.test(modelId) && typeof next.temperature === 'number' && next.temperature !== 1) {
+    next.temperature = 1;
+  }
+
   return next;
 }

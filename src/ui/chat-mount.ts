@@ -19,6 +19,18 @@ export function isChatAppForeground(): boolean {
 
 let mountOverride: HTMLElement | null = null;
 
+/**
+ * Mount pinned at the start of the active chat's async turn.
+ * Only the active-chat turn (useActiveChatDom) sets this. Prevents mid-turn
+ * navigation (e.g. launch_minnow_app routing to Code) from re-routing stream output.
+ */
+let turnMount: HTMLElement | null = null;
+
+/** Pin the stream mount for the active chat's turn. Pass null to release. */
+export function setTurnChatMount(mount: HTMLElement | null): void {
+  turnMount = mount;
+}
+
 /** Resolve a mount selector or element; falls back to orchestrate / #chatArea. */
 export function resolveChatMount(mount?: string | HTMLElement): HTMLElement {
   if (mount instanceof HTMLElement) return mount;
@@ -44,6 +56,7 @@ function getChatAppMessageCol(): HTMLElement | null {
 /** Active transcript root: override, desktop column, Chat app column, or Code orchestrate mount. */
 export function getActiveChatMountElement(): HTMLElement {
   if (mountOverride) return mountOverride;
+  if (turnMount) return turnMount;
   const codeForeground = getForegroundAppId() === 'code';
   if (!codeForeground && isDesktopChatActive()) {
     const desktopCol = document.getElementById('desktopChatCol');

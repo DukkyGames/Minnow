@@ -73,4 +73,28 @@ describe('sanitizeCompletionBodyForProvider', () => {
     const out = sanitizeCompletionBodyForProvider(body, LM_STUDIO);
     assert.deepEqual(out, body);
   });
+
+  test('forces temperature=1 for Kimi models on openai-v1', () => {
+    const out = sanitizeCompletionBodyForProvider(
+      { model: 'kimi-k2', temperature: 0.7 },
+      OPENAI,
+    );
+    assert.equal(out.temperature, 1);
+  });
+
+  test('leaves temperature unchanged for Kimi models on lm-studio-v0', () => {
+    const out = sanitizeCompletionBodyForProvider(
+      { model: 'moonshotai/Kimi-K2-Instruct', temperature: 0.7 },
+      LM_STUDIO,
+    );
+    assert.equal(out.temperature, 0.7);
+  });
+
+  test('does not alter temperature=1 for Kimi models', () => {
+    const out = sanitizeCompletionBodyForProvider(
+      { model: 'kimi-k2', temperature: 1 },
+      OPENAI,
+    );
+    assert.equal(out.temperature, 1);
+  });
 });

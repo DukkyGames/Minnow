@@ -10,7 +10,7 @@ describe('shouldMountOrchestratePlanInInputRow', () => {
     );
   });
 
-  test('false when board onboarding owns plan pick', () => {
+  test('false in Orchestrate board view (plan strip lives in toolbar, not input row)', () => {
     assert.equal(
       shouldMountOrchestratePlanInInputRow({
         modeId: 'orchestrate',
@@ -21,14 +21,14 @@ describe('shouldMountOrchestratePlanInInputRow', () => {
     );
   });
 
-  test('true for Orchestrate chat view with composer plan strip', () => {
+  test('false in Orchestrate chat view (textarea stays visible for direct chatting)', () => {
     assert.equal(
       shouldMountOrchestratePlanInInputRow({
         modeId: 'orchestrate',
         viewMode: 'chat',
         orchestrateBoard: { columns: [] },
       }),
-      true,
+      false,
     );
   });
 });

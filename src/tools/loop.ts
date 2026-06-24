@@ -129,7 +129,7 @@ import {
 } from '../ui/composer-surface';
 
 export type { ComposerSurface } from '../ui/composer-surface';
-import { getActiveChatMountElement } from '../ui/chat-mount';
+import { getActiveChatMountElement, setTurnChatMount } from '../ui/chat-mount';
 import { registerStreamDomRemount } from './stream-chat-dom';
 import { refreshModeSelectorDisabled } from '../ui/mode-selector';
 import { refreshThinkingControlDisabled } from '../ui/composer-thinking';
@@ -903,9 +903,16 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
   let turnRunId: TurnRunId | undefined;
   let turnRunStatus: 'completed' | 'stopped' | 'failed' = 'completed';
+  let turnMountPinned = false;
 
   try {
   const useActiveChatDom = chat.id === getActiveChat().id;
+  // Capture the correct DOM mount now so mid-turn navigation (e.g. launch_minnow_app
+  // routing to the Code app) cannot re-route stream output to the wrong surface.
+  if (useActiveChatDom) {
+    setTurnChatMount(getActiveChatMountElement());
+    turnMountPinned = true;
+  }
   const domRaw =
     (document.getElementById('modelSelect') as HTMLSelectElement | null)?.value?.trim() ??
     '';
@@ -2181,6 +2188,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     }
   }
   } finally {
+    if (turnMountPinned) {
+      setTurnChatMount(null);
+    }
     endChatTurnSetup(chat.id);
   }
 }
