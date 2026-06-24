@@ -2,7 +2,7 @@
  * Client wrappers for /api/git server ops (MIN-198 Git Support).
  */
 
-import { isLocalServerAvailable } from '../tools/config.ts';
+import { isLocalServerAvailable, setLocalServerAvailable } from '../tools/config.ts';
 import { reportBackgroundError } from '../boot/report-background-error.ts';
 
 export interface GitFileEntry {
@@ -57,6 +57,9 @@ async function postGit(
     }
     return (await res.json()) as GitOpResult;
   } catch (err) {
+    // Network failure → server is unreachable; close the stale-true window so subsequent
+    // calls short-circuit on the isLocalServerAvailable() guard instead of keep fetching.
+    setLocalServerAvailable(false);
     reportBackgroundError('git-op', err);
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

@@ -10,9 +10,13 @@
  * from low-level modules and from node test environments where `window` is
  * undefined.
  */
-export function reportBackgroundError(kind: string, err: unknown): void {
-  const message = err instanceof Error ? err.message : String(err);
-  const stack = err instanceof Error ? err.stack : undefined;
+
+const DEDUPE_WINDOW_MS = 5_000;
+
+/** kind+message → { count of suppressed repeats, pending flush timer }. */
+const recentErrors = new Map<string, { count: number; flushTimer: ReturnType<typeof setTimeout> }>();
+
+function emitError(kind: string, message: string, stack: string | undefined): void {
   // eslint-disable-next-line no-console
   console.error(`[${kind}] ${message}`, stack ?? '');
   try {
@@ -22,4 +26,30 @@ export function reportBackgroundError(kind: string, err: unknown): void {
   } catch {
     /* logging must never throw */
   }
+}
+
+export function reportBackgroundError(kind: string, err: unknown): void {
+  const message = err instanceof Error ? err.message : String(err);
+  const stack = err instanceof Error ? err.stack : undefined;
+  const key = `${kind}\x00${message}`;
+
+  const existing = recentErrors.get(key);
+  if (existing) {
+    existing.count++;
+    return;
+  }
+
+  emitError(kind, message, stack);
+
+  // Register a dedupe window; identical errors within it are counted, then
+  // a single summary line is emitted when the window closes.
+  let entry!: { count: number; flushTimer: ReturnType<typeof setTimeout> };
+  const flushTimer = setTimeout(() => {
+    recentErrors.delete(key);
+    if (entry.count > 0) {
+      emitError(kind, `${message} (×${entry.count} suppressed)`, undefined);
+    }
+  }, DEDUPE_WINDOW_MS);
+  entry = { count: 0, flushTimer };
+  recentErrors.set(key, entry);
 }

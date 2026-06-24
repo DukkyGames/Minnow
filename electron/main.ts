@@ -209,6 +209,7 @@ async function createMainWindow(): Promise<BrowserWindow> {
       kind: 'unresponsive',
       message: 'Renderer became unresponsive',
     });
+    crashLog.flushCrashLogSync();
   });
 
   win.webContents.on('responsive', () => {
@@ -280,6 +281,7 @@ if (!gotSingleInstanceLock) {
       message: err?.message ?? String(err),
       stack: err?.stack,
     });
+    crashLog.flushCrashLogSync();
     console.error('[electron] uncaughtException:', err);
   });
 

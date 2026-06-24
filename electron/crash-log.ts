@@ -39,6 +39,39 @@ const LAST_CRASH_FILE = 'last-crash.json';
 
 let cachedLogDir: string | null = null;
 
+/** Lines queued for the next async flush. */
+let crashBuffer: string[] = [];
+let crashFlushTimer: ReturnType<typeof setTimeout> | undefined;
+const CRASH_FLUSH_DELAY_MS = 50;
+
+function scheduleCrashFlush(): void {
+  if (crashFlushTimer !== undefined) return;
+  crashFlushTimer = setTimeout(() => {
+    crashFlushTimer = undefined;
+    const lines = crashBuffer.splice(0);
+    if (!lines.length) return;
+    fs.appendFile(crashLogPath(), lines.join(''), 'utf8', () => {/* best-effort */});
+  }, CRASH_FLUSH_DELAY_MS);
+}
+
+/**
+ * Drain any buffered crash lines synchronously. Call from process-death handlers
+ * (uncaughtException, unresponsive) to ensure queued records are not lost before exit.
+ */
+export function flushCrashLogSync(): void {
+  if (crashFlushTimer !== undefined) {
+    clearTimeout(crashFlushTimer);
+    crashFlushTimer = undefined;
+  }
+  const lines = crashBuffer.splice(0);
+  if (!lines.length) return;
+  try {
+    fs.appendFileSync(crashLogPath(), lines.join(''), 'utf8');
+  } catch {
+    /* last resort */
+  }
+}
+
 /** Reset cached log dir (tests only). */
 export function resetCrashLogDirCache(): void {
   cachedLogDir = null;
@@ -111,8 +144,9 @@ function lastCrashPath(): string {
 }
 
 /**
- * Append one crash line to crash.jsonl synchronously.
+ * Queue one crash line for async flush to crash.jsonl.
  * Never throws — crash handlers may run while the process is dying.
+ * Call flushCrashLogSync() before process exit to drain the buffer.
  */
 export function logCrash(entry: CrashEntry): void {
   try {
@@ -121,7 +155,8 @@ export function logCrash(entry: CrashEntry): void {
       pid: process.pid,
       ...entry,
     };
-    fs.appendFileSync(crashLogPath(), `${JSON.stringify(line)}\n`, 'utf8');
+    crashBuffer.push(`${JSON.stringify(line)}\n`);
+    scheduleCrashFlush();
   } catch {
     /* last resort — cannot recover if disk is full or path invalid */
   }
