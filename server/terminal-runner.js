@@ -103,10 +103,25 @@ function emit(state, event) {
   }
 }
 
+/** @type {Map<string, Promise<void>>} */
+const logWriteQueues = new Map();
+
+
 async function appendLogFile(logPath, text) {
   if (!text) return;
-  await fs.mkdir(path.dirname(logPath), { recursive: true });
-  await fs.appendFile(logPath, text, 'utf8');
+  const prev = logWriteQueues.get(logPath) ?? Promise.resolve();
+  const next = prev.then(async () => {
+    await fs.mkdir(path.dirname(logPath), { recursive: true });
+    await fs.appendFile(logPath, text, 'utf8');
+  }).catch(() => {
+    /* A failed write shouldn't poison the queue for this file. */
+  }).finally(() => {
+    if (logWriteQueues.get(logPath) === next) {
+      logWriteQueues.delete(logPath);
+    }
+  });
+  logWriteQueues.set(logPath, next);
+  return next;
 }
 
 /**

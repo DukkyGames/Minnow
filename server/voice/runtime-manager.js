@@ -151,16 +151,26 @@ async function waitForWorkerHealth(port) {
 /**
  * @param {string} chunk
  */
+/** @type {Promise<void> | null} */
+let voiceLogWriteChain = null;
+
+
 async function appendWorkerLog(chunk) {
   const text = String(chunk);
   if (!text) return;
   const logPath = getVoiceLogPath();
-  await fsp.mkdir(path.dirname(logPath), { recursive: true }).catch(() => {});
-  try {
-    await fsp.appendFile(logPath, text, 'utf8');
-  } catch {
-    /* ignore log write failures */
-  }
+  const prev = voiceLogWriteChain ?? Promise.resolve();
+  const next = prev.then(async () => {
+    await fsp.mkdir(path.dirname(logPath), { recursive: true }).catch(() => {});
+    try {
+      await fsp.appendFile(logPath, text, 'utf8');
+    } catch {
+      /* ignore log write failures */
+    }
+  }).catch(() => {}).finally(() => {
+    if (voiceLogWriteChain === next) voiceLogWriteChain = null;
+  });
+  voiceLogWriteChain = next;
 }
 
 /**
