@@ -56,6 +56,8 @@ const RUN_EVICTION_MS = 60_000;
  * @property {number} bufferBytes
  * @property {boolean} truncated
  * @property {boolean} timedOut
+ * @property {boolean} stoppedByUser
+ * @property {number | undefined} timeoutMs
  * @property {number | null} exitCode
  * @property {boolean} finished
  * @property {string} logPath
@@ -167,6 +169,7 @@ async function persistTerminalHistory(chatId, record) {
  * @param {TerminalSource} [params.source]
  * @param {string} [params.chatId]
  * @param {string} [params.toolCallId]
+ * @param {number} [params.timeoutMs] custom timeout in ms (clamped 1000–600000; default COMMAND_TIMEOUT_MS)
  * @param {Record<string, string>} [params.env] merged over process.env for the child
  * @returns {Promise<{ runId: string, startedAt: number }>}
  */
@@ -178,6 +181,7 @@ export async function createRun({
   source = 'agent',
   chatId,
   toolCallId,
+  timeoutMs,
   env: envOverrides,
 }) {
   const runId = crypto.randomUUID();
@@ -190,6 +194,11 @@ export async function createRun({
   const completion = new Promise((resolve) => {
     resolveCompletion = resolve;
   });
+
+  const clampedTimeout =
+    timeoutMs != null
+      ? Math.max(1000, Math.min(600_000, timeoutMs))
+      : COMMAND_TIMEOUT_MS;
 
   /** @type {RunState} */
   const state = {
@@ -206,6 +215,8 @@ export async function createRun({
     bufferBytes: 0,
     truncated: false,
     timedOut: false,
+    stoppedByUser: false,
+    timeoutMs: clampedTimeout,
     exitCode: null,
     finished: false,
     logPath,
@@ -228,8 +239,9 @@ export async function createRun({
 
       const result = await runProcess(execCommand, execArgs, {
         cwd,
-        timeout: COMMAND_TIMEOUT_MS,
+        timeout: clampedTimeout,
         shell: useShell,
+        killTree: killProcessTree,
         env:
           envOverrides && typeof envOverrides === 'object'
             ? { ...process.env, ...envOverrides }
@@ -408,6 +420,7 @@ export async function finishRun(runId) {
     type: 'exit',
     code: state.exitCode,
     timedOut: state.timedOut,
+    stopped: state.stoppedByUser,
   });
 
   const formatted = formatProcessOutput(state.command, {
@@ -415,6 +428,8 @@ export async function finishRun(runId) {
     stdout: state.stdout,
     stderr: state.stderr,
     timedOut: state.timedOut,
+    stopped: state.stoppedByUser,
+    timeoutSecs: state.timeoutMs ? state.timeoutMs / 1000 : undefined,
   });
   state.resolveCompletion(formatted);
 
@@ -491,6 +506,7 @@ export function subscribeRun(runId, listener) {
       type: 'exit',
       code: state.exitCode,
       timedOut: state.timedOut,
+      stopped: state.stoppedByUser,
     });
   }
 
@@ -505,6 +521,7 @@ export function subscribeRun(runId, listener) {
 export function cancelRun(runId) {
   const state = activeRuns.get(runId);
   if (!state || state.finished || !state.child) return false;
+  state.stoppedByUser = true;
   killProcessTree(state.child);
   return true;
 }
@@ -522,6 +539,7 @@ export function stopActiveRun(runId) {
   if (state.finished) {
     return { ok: true, runId, alreadyStopped: true };
   }
+  state.stoppedByUser = true;
   if (state.child) {
     killProcessTree(state.child);
   } else {
@@ -809,6 +827,7 @@ export async function readRunLogTail(runId, maxBytes = 64 * 1024) {
  * @param {string} params.cwd
  * @param {string} [params.chatId]
  * @param {string} [params.toolCallId]
+ * @param {number} [params.timeoutMs]
  * @param {Record<string, string>} [params.env] merged over process.env for the child
  */
 export async function executeCommandBlocking({
@@ -818,6 +837,7 @@ export async function executeCommandBlocking({
   shell,
   chatId,
   toolCallId,
+  timeoutMs,
   env,
 }) {
   const { runId } = await createRun({
@@ -828,6 +848,7 @@ export async function executeCommandBlocking({
     source: 'agent',
     chatId,
     toolCallId,
+    timeoutMs,
     env,
   });
   return waitForRun(runId);

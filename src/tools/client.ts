@@ -635,6 +635,10 @@ async function executeStreamingCodeTool(
     name === 'execute_command' && typeof args.cwd === 'string'
       ? args.cwd.trim()
       : undefined;
+  const rawTimeoutMs =
+    name === 'execute_command' && typeof args.timeout_ms === 'number'
+      ? args.timeout_ms
+      : undefined;
 
   try {
     const { getChatAbort } = await import('../app-state');
@@ -647,6 +651,7 @@ async function executeStreamingCodeTool(
       shell: mapped.shell,
       workspaceRoot,
       cwd: relativeCwd || undefined,
+      timeoutMs: rawTimeoutMs,
       abortSignal: context.chatId
         ? getChatAbort(context.chatId)?.signal
         : undefined,
