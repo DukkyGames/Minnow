@@ -277,7 +277,8 @@ export type BoardTaskStatus =
   | 'merging'
   | 'complete'
   | 'failed'
-  | 'blocked';
+  | 'blocked'
+  | 'quarantined';
 
 /** Sub-agent category for board agent grid styling. */
 export type BoardCategory = 'build' | 'fix' | 'test' | 'research';
@@ -330,6 +331,20 @@ export interface BoardTask {
     testVerdict?: 'pass' | 'fail';
     at: number;
   };
+  /** Quarantine payload — set when task is moved to `quarantined`. */
+  quarantine?: {
+    category: 'infra' | 'code' | 'merge' | 'stall' | 'unknown';
+    summary: string;
+    resolutionSteps: string[];
+    at: number;
+    logRef?: string;
+  };
+  /** Phase-2 placeholder: self-heal iteration counter. */
+  selfHealRound?: number;
+  /** Phase-2 placeholder: category of the last self-heal attempt. */
+  lastHealCategory?: string;
+  /** Phase-2 placeholder: outcome of the last build attempt. */
+  buildOutcome?: 'success' | 'failure' | 'skipped' | string;
   /**
    * Pending Builder seed (failure-aware retry/reopen prompt) to use on the next
    * build start instead of the default task seed. Persisted on the task so it
@@ -413,6 +428,12 @@ export interface OrchestrateBoardState {
   };
   /** Chronological diagnostic log, capped ring buffer (oldest dropped). */
   log?: BoardLogEvent[];
+  /** Phase-2 placeholder: provisioning lifecycle for AFK workspace setup. */
+  provisionState?: 'idle' | 'provisioning' | 'ready' | 'failed';
+  /** Phase-2 placeholder: content-hash signatures of provisioned artefacts. */
+  provisionedSignatures?: string[];
+  /** Phase-2 placeholder: unresolved issue ids blocking the board. */
+  unresolvedIssues?: string[];
 }
 
 export type BoardLogLevel = 'info' | 'warn' | 'error';

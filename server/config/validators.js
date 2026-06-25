@@ -91,6 +91,7 @@ const BOARD_TASK_STATUSES = new Set([
   'complete',
   'failed',
   'blocked',
+  'quarantined',
 ]);
 const BOARD_CATEGORIES = new Set(['build', 'fix', 'test', 'research']);
 
@@ -287,6 +288,39 @@ function ensureBoardTask(raw) {
   if (typeof r.apiPort === 'number' && Number.isFinite(r.apiPort)) {
     out.apiPort = r.apiPort;
   }
+  // quarantine payload
+  if (r.quarantine && typeof r.quarantine === 'object') {
+    const q = /** @type {Record<string, unknown>} */ (r.quarantine);
+    const QUARANTINE_CATEGORIES = new Set(['infra', 'code', 'merge', 'stall', 'unknown']);
+    const category = typeof q.category === 'string' && QUARANTINE_CATEGORIES.has(q.category) ? q.category : null;
+    const summary = typeof q.summary === 'string' ? q.summary : null;
+    const at = typeof q.at === 'number' && Number.isFinite(q.at) ? q.at : null;
+    if (category && summary !== null && at !== null) {
+      const quarantine = { category, summary, at };
+      if (Array.isArray(q.resolutionSteps)) {
+        const steps = [];
+        for (const s of q.resolutionSteps) {
+          if (typeof s === 'string') steps.push(s);
+        }
+        quarantine.resolutionSteps = steps;
+      } else {
+        quarantine.resolutionSteps = [];
+      }
+      if (typeof q.logRef === 'string' && q.logRef.trim()) {
+        quarantine.logRef = q.logRef.trim();
+      }
+      out.quarantine = quarantine;
+    }
+  }
+  if (typeof r.selfHealRound === 'number' && Number.isFinite(r.selfHealRound)) {
+    out.selfHealRound = r.selfHealRound;
+  }
+  if (typeof r.lastHealCategory === 'string' && r.lastHealCategory.trim()) {
+    out.lastHealCategory = r.lastHealCategory.trim();
+  }
+  if (typeof r.buildOutcome === 'string' && r.buildOutcome.trim()) {
+    out.buildOutcome = r.buildOutcome.trim();
+  }
   return out;
 }
 
@@ -400,6 +434,24 @@ function ensureOrchestrateBoard(raw) {
   if (r.userStopped === true) out.userStopped = true;
   if (typeof r.isolationBaseRef === 'string' && r.isolationBaseRef.trim()) {
     out.isolationBaseRef = r.isolationBaseRef.trim();
+  }
+  const PROVISION_STATES = new Set(['idle', 'provisioning', 'ready', 'failed']);
+  if (typeof r.provisionState === 'string' && PROVISION_STATES.has(r.provisionState)) {
+    out.provisionState = r.provisionState;
+  }
+  if (Array.isArray(r.provisionedSignatures)) {
+    const sigs = [];
+    for (const s of r.provisionedSignatures) {
+      if (typeof s === 'string' && s.trim()) sigs.push(s.trim());
+    }
+    if (sigs.length) out.provisionedSignatures = sigs;
+  }
+  if (Array.isArray(r.unresolvedIssues)) {
+    const issues = [];
+    for (const s of r.unresolvedIssues) {
+      if (typeof s === 'string' && s.trim()) issues.push(s.trim());
+    }
+    if (issues.length) out.unresolvedIssues = issues;
   }
   if (Array.isArray(r.log)) {
     const log = [];

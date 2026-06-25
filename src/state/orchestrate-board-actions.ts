@@ -2028,13 +2028,19 @@ export async function finalizeTaskTestingOnStreamEnd(
   }
 }
 
+/** True when the board is terminal and has at least one `complete` task (gates final test). */
+function isBoardReadyForFinalTest(board: OrchestrateBoardState): boolean {
+  if (!isOrchestratePlanComplete(board)) return false;
+  return board.tasks.some((t) => t.status === 'complete');
+}
+
 /** Start full-board final integration test (Tester with browser). */
 export async function startFinalIntegrationTest(
   group: ChatGroup,
   plannerChat: Chat,
 ): Promise<void> {
   const board = group.orchestrateBoard;
-  if (!board || !isOrchestratePlanComplete(board)) return;
+  if (!board || !isBoardReadyForFinalTest(board)) return;
   if (board.finalTest?.status === 'in_progress') return;
   if (board.finalTest?.status === 'passed') return;
 
@@ -2149,13 +2155,14 @@ function postPlannerBoardMessage(plannerChat: Chat, text: string): void {
   scheduleSaveSessions();
 }
 
-/** When every task is complete, start or surface the final integration test. */
+/** When every task is terminal and ≥1 is complete, start or surface the final integration test. */
 export function tryTriggerFinalIntegrationTest(
   group: ChatGroup,
   plannerChat: Chat,
 ): void {
   const board = group.orchestrateBoard;
-  if (!board || !isOrchestratePlanComplete(board)) return;
+  // All-quarantined boards skip the final test but still reach plan-complete/report path.
+  if (!board || !isBoardReadyForFinalTest(board)) return;
   if (board.finalTest?.status === 'passed') {
     void maybeEmitOrchestratePlanComplete(group.id);
     return;
@@ -2336,7 +2343,7 @@ export function moveTaskStatus(
   }
   if (board && isBoardRunning(group) && plannerChat) {
     const reportable =
-      status === 'complete' || status === 'failed' || status === 'blocked';
+      status === 'complete' || status === 'failed' || status === 'blocked' || status === 'quarantined';
     if (reportable) {
       void import('../agents/controller/report.ts')
         .then((mod) => {
@@ -2346,6 +2353,26 @@ export function moveTaskStatus(
         })
         .catch((err) => reportBackgroundError('deliver-task-report', err));
     }
+  }
+}
+
+/**
+ * Reset a quarantined task to `planned`, clear its quarantine payload,
+ * and re-drive the board if it is running.
+ */
+export async function requeueBoardTask(
+  group: ChatGroup,
+  taskId: string,
+  plannerChat: Chat,
+): Promise<void> {
+  const board = group.orchestrateBoard;
+  if (!board) return;
+  const task = board.tasks.find((t) => t.id === taskId);
+  if (!task || task.status !== 'quarantined') return;
+  logTaskStatus(group, taskId, task.status, 'planned');
+  updateTask(group, taskId, { status: 'planned', quarantine: undefined }, plannerChat);
+  if (isBoardRunning(group)) {
+    await autoDelegateNext(group, plannerChat);
   }
 }
 

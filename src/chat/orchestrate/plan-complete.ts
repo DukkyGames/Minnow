@@ -4,20 +4,29 @@
 
 import type { Chat, OrchestrateBoardState } from '../../types.ts';
 
-/** True when the board has at least one task and every task is `complete`. */
-export function isOrchestratePlanComplete(board: OrchestrateBoardState): boolean {
-  const tasks = board.tasks;
-  return tasks.length > 0 && tasks.every((t) => t.status === 'complete');
+function isTerminalStatus(status: string): boolean {
+  return status === 'complete' || status === 'quarantined';
 }
 
-/** True when all tasks are complete and the final integration test passed. */
+/**
+ * True when the board has at least one task and every task has reached a terminal
+ * state (`complete` or `quarantined`). A total cascade where every task is
+ * quarantined (zero complete) still counts as done so end-of-run report and
+ * notification fire (GAP-1).
+ */
+export function isOrchestratePlanComplete(board: OrchestrateBoardState): boolean {
+  const tasks = board.tasks;
+  return tasks.length > 0 && tasks.every((t) => isTerminalStatus(t.status));
+}
+
+/** True when all tasks are terminal and the final integration test passed. */
 export function isOrchestrateBoardFinished(board: OrchestrateBoardState): boolean {
   return isOrchestratePlanComplete(board) && board.finalTest?.status === 'passed';
 }
 
-/** True when orchestration still has incomplete tasks. */
+/** True when orchestration still has non-terminal tasks. */
 export function hasIncompleteOrchestrateWork(board: OrchestrateBoardState): boolean {
-  return board.tasks.some((t) => t.status !== 'complete');
+  return board.tasks.some((t) => !isTerminalStatus(t.status));
 }
 
 function shortPlanLabel(planPath: string): string {

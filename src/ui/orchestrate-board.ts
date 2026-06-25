@@ -56,6 +56,7 @@ import {
   listRunningBoardTaskSlots,
   moveTaskStatus,
   moveTaskToNewChat,
+  requeueBoardTask,
   restartBoardTask,
   setBoardExecutionMode,
   setBoardIsolationMode,
@@ -299,6 +300,14 @@ function appendTaskLifecycleBadge(
     badge.className = 'board-task-card__lifecycle board-task-card__lifecycle--blocked';
     badge.textContent = 'Blocked';
     badge.title = 'Watchdog tier-2 — needs human approval';
+    trail.appendChild(badge);
+    return;
+  }
+  if (taskStatus === 'quarantined') {
+    const badge = document.createElement('span');
+    badge.className = 'board-task-card__lifecycle board-task-card__lifecycle--quarantined';
+    badge.textContent = 'Quarantined';
+    badge.title = 'Task parked — use Requeue to retry or wait for Phase 2 self-heal';
     trail.appendChild(badge);
     return;
   }
@@ -715,7 +724,8 @@ export type BoardHeaderStatusVariant =
   | 'complete'
   | 'failed'
   | 'blocked'
-  | 'stopped';
+  | 'stopped'
+  | 'quarantined';
 
 export interface BoardHeaderStatus {
   variant: BoardHeaderStatusVariant;
@@ -732,7 +742,9 @@ export function deriveBoardHeaderStatus(
   const tasks = board.tasks;
   const total = tasks.length;
   const completeCount = tasks.filter((t) => t.status === 'complete').length;
-  const incomplete = total > 0 && completeCount < total;
+  const quarantinedCount = tasks.filter((t) => t.status === 'quarantined').length;
+  const terminalCount = completeCount + quarantinedCount;
+  const incomplete = total > 0 && terminalCount < total;
   const hasFailed = tasks.some((t) => t.status === 'failed');
   const hasBlocked = tasks.some((t) => t.status === 'blocked');
   const hasInFlight = tasks.some(
@@ -754,6 +766,13 @@ export function deriveBoardHeaderStatus(
       return { variant: 'paused', label: 'Awaiting final test' };
     }
     return { variant: 'complete', label: 'Complete' };
+  }
+  // All tasks are terminal but some are quarantined — board is done.
+  if (total > 0 && terminalCount === total && quarantinedCount > 0) {
+    const label = quarantinedCount === total
+      ? `All ${quarantinedCount} quarantined`
+      : `${quarantinedCount} quarantined`;
+    return { variant: 'quarantined', label };
   }
   if (userStopped && incomplete && !isStreaming && activeRunCount === 0) {
     return { variant: 'stopped', label: 'Stopped' };
@@ -1949,6 +1968,23 @@ function buildStatusActionButtons(
   if (task.status === 'complete' || task.status === 'failed') {
     addBtn('Reopen', 'planned', 'recycle');
   }
+  if (task.status === 'quarantined') {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'board-task-card__advance-btn';
+    btn.appendChild(createBoardAdvanceIcon('recycle'));
+    const text = document.createElement('span');
+    text.className = 'board-task-card__advance-label';
+    text.textContent = 'Requeue';
+    btn.appendChild(text);
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      void requeueBoardTask(group, task.id, plannerChat).then(() => {
+        refreshActiveBoardIfMounted();
+      });
+    });
+    row.appendChild(btn);
+  }
 }
 
 /** True when a stopped/failed/blocked task can use recovery controls. */
@@ -2359,6 +2395,8 @@ function compactTaskChipVariant(task: BoardTask, taskStreaming: boolean): string
     case 'failed':
     case 'blocked':
       return 'failed';
+    case 'quarantined':
+      return 'quarantined';
     case 'in_progress':
     case 'testing':
     case 'merging':
@@ -2386,6 +2424,8 @@ function compactTaskStatusLabel(task: BoardTask, taskStreaming: boolean): string
       return 'Complete';
     case 'failed':
       return 'Failed';
+    case 'quarantined':
+      return 'Quarantined';
     default:
       return task.status;
   }
@@ -2410,7 +2450,7 @@ function buildWaveCompactSummary(
     { label: 'Plan', statuses: ['planned', 'blocked'] },
     { label: 'Run', statuses: ['in_progress', 'merging'] },
     { label: 'Test', statuses: ['testing'] },
-    { label: 'Done', statuses: ['complete', 'failed'] },
+    { label: 'Done', statuses: ['complete', 'failed', 'quarantined'] },
   ];
   for (const lane of lanes) {
     const count = waveTasks.filter((t) => lane.statuses.includes(t.status)).length;
@@ -2481,7 +2521,7 @@ function renderKanbanColumns(
     { label: 'Planned', statuses: ['planned', 'blocked'] },
     { label: 'In Progress', statuses: ['in_progress', 'merging'] },
     { label: 'Testing', statuses: ['testing'] },
-    { label: 'Complete', statuses: ['complete', 'failed'] },
+    { label: 'Complete', statuses: ['complete', 'failed', 'quarantined'] },
   ];
   for (const col of columns) {
     const column = document.createElement('section');
