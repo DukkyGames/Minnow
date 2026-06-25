@@ -93,14 +93,14 @@ const EXPECTED_INIT_BOARD_JSON = `{
   "executionMode": "manual",
   "log": [
     {
-      "id": "1710000001000-0",
-      "ts": 1710000001000,
       "type": "board_init",
       "level": "info",
       "message": "Board initialized (1 tasks, 1 waves)",
       "detail": {
         "summary": "1 tasks, 1 waves"
-      }
+      },
+      "ts": 1710000001000,
+      "id": "1710000001000-0"
     }
   ]
 }`;

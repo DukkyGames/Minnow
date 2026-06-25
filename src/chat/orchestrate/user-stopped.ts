@@ -11,7 +11,7 @@ import type { Chat } from '../../types.ts';
  * Manual board Resume is allowed; supervisor auto-resume must not run.
  */
 export function isUserStoppedChat(chat: Chat): boolean {
-  const board = getBoardGroupForChat(chat)?.orchestrateBoard;
+  const board = getBoardGroupForChat(chat)?.orchestrateBoard ?? chat.orchestrateBoard;
   if (!board || !hasIncompleteOrchestrateWork(board)) {
     return false;
   }

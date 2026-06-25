@@ -218,6 +218,7 @@ describe('orchestrator auto reports', () => {
 
   test('deliverOrchestratorTaskReport dedupes by task and kind', async () => {
     const { planner, group } = seedBoard('auto');
+    group.orchestrateBoard!.autoRunning = true;
     const task = group.orchestrateBoard!.tasks[0]!;
     task.status = 'failed';
     const deliveries: string[] = [];
@@ -233,6 +234,7 @@ describe('orchestrator auto reports', () => {
   test('queues concurrent failure reports while planner is streaming and drains on idle', async () => {
     initOrchestratorAutoReports();
     const { planner, group } = seedBoard('auto');
+    group.orchestrateBoard!.autoRunning = true;
     const taskA = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
     const taskB = group.orchestrateBoard!.tasks.find((t) => t.id === 'W2-A')!;
     taskA.status = 'failed';

@@ -1712,6 +1712,10 @@ export function toggleGitSidePanel(): void {
 
 export function syncGitPanelFromOrchestrator(): void {
 
+  // No-op without session state: this can run from a deferred dynamic import
+  // (sidebar switchChat) after teardown, where getActiveChat() would throw.
+  if (!sessionState) return;
+
   const chat = getActiveChat();
 
   const groups = sessionState?.groups;

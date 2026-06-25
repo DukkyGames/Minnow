@@ -742,7 +742,6 @@ export function initBoard(
     }
   }
   scheduleSaveSessions();
-  emitBoardChange(group.id);
   return board;
 }
 

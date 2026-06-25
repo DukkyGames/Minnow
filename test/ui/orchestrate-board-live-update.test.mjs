@@ -300,6 +300,9 @@ describe('orchestrate board live updates', () => {
       tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
       waves: [{ id: 'W1' }],
     });
+    // Idle waves auto-collapse on open; an in-progress task keeps the wave
+    // expanded so the caret-collapse interaction below has something to collapse.
+    updateTask(group, 'W1-A', { status: 'in_progress' });
     setSessionStateForTests(sessionStateForBoard(chat, group));
 
     renderBoardView(group);
@@ -313,7 +316,7 @@ describe('orchestrate board live updates', () => {
     caret().click();
     await waitForKanban();
     assert.equal(body().hidden, true);
-    assert.equal(chat.orchestrateBoard.waves[0].collapsed, true);
+    assert.equal(group.orchestrateBoard.waves[0].collapsed, true);
     assert.equal(caret().getAttribute('aria-expanded'), 'false');
     assert.ok(document.querySelector('.board-wave-compact'));
     assert.equal(document.querySelectorAll('.board-wave-compact__chip').length, 1);
@@ -393,6 +396,11 @@ describe('orchestrate board live updates', () => {
 
     updateTask(group, 'W1-A', { status: 'complete' });
     updateTask(group, 'W1-B', { status: 'complete' });
+    // "Complete" is gated behind a passing final integration test; without it the
+    // board sits at "Awaiting final test". dashboardDismissed keeps the kanban
+    // mounted (the finish dashboard isn't exercised here).
+    group.orchestrateBoard.finalTest = { status: 'passed' };
+    group.orchestrateBoard.dashboardDismissed = true;
     refreshActiveBoardIfMounted();
     assert.equal(badge()?.textContent, 'Complete');
   });
@@ -688,9 +696,11 @@ describe('orchestrate board live updates', () => {
     const headerControls = document.querySelector('.board-header__controls');
     assert.ok(toolbar?.contains(headerControls));
 
-    const actions = [...headerControls.children].map((el) =>
-      el.getAttribute('data-board-action'),
-    );
+    // Run controls (exec-mode, concurrency, isolation, Start/Stop) carry no
+    // data-board-action; open-plan must remain the only action button.
+    const actions = [...headerControls.children]
+      .map((el) => el.getAttribute('data-board-action'))
+      .filter(Boolean);
     assert.deepEqual(actions, ['open-plan']);
     assert.equal(document.getElementById('btnViewModeToggleChat'), null);
   });
