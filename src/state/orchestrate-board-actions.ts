@@ -14,10 +14,16 @@ import {
 import { isChatTurnSetupPending } from '../chat/chat-turn-guard.ts';
 import {
   getAutopilotMetaSync,
+  resolveAutoProvisionInfra,
+  resolveInfraProvisionTimeoutMs,
   resolveMaxFinalTestAttempts,
   resolveMaxTaskBuildAttempts,
   resolveMaxTaskTestAttempts,
+  resolveSelfHealMaxRounds,
 } from '../config/autopilot-meta.ts';
+import { classifyTaskFailure, resolveTaskChatStreamFailure } from './orchestrate-failure-classify.ts';
+import { runSelfHeal, type SelfHealDeps } from './orchestrate-self-heal.ts';
+import { isLocalServerAvailable } from '../tools/config.ts';
 import {
   bindRunSupervision,
   bumpProgress,
@@ -40,7 +46,7 @@ import {
   getPlannerChatForGroup,
 } from './chat-groups.ts';
 import { emitBoardChange } from './orchestrate-board-events.ts';
-import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, syncOrchestrateBoardTimer, updateTask, logTaskStatus, logBuildVerdict, logTestVerdict, logMergeResult, logWorktreeAllocated, logTaskRetry, logModeChange, logAutoStart, logAutoStop, logFinalTestStarted, logFinalTestVerdict } from './orchestrate-board-store.ts';
+import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, syncOrchestrateBoardTimer, updateTask, logTaskStatus, logBuildVerdict, logTestVerdict, logMergeResult, logWorktreeAllocated, logTaskRetry, logModeChange, logAutoStart, logAutoStop, logFinalTestStarted, logFinalTestVerdict, quarantineTaskAndDependents } from './orchestrate-board-store.ts';
 import {
   isIsolationActive,
   resolveIsolationMode,
@@ -68,6 +74,94 @@ import {
 const MAX_MERGE_FIXER_ATTEMPTS = 2;
 
 export { getBoardExecutionMode, isBoardAutoMode, isBoardRunning };
+
+/**
+ * Provision infra for a task's worktree (MIN-285 Phase 2, §3).
+ *
+ * GAP-4: shared services (docker compose) use a content-hash signature stored
+ * in board.provisionedSignatures and are only provisioned once across concurrent
+ * tasks. Per-task deps (node_modules, venv) are provisioned per worktree.
+ *
+ * Returns { wasAlreadyProvisioned } so runSelfHeal can implement the GAP-2 guard.
+ */
+export async function ensureBoardInfraProvisioned(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+): Promise<{ wasAlreadyProvisioned: boolean; signatures: string[]; ok: boolean }> {
+  if (!resolveAutoProvisionInfra()) {
+    return { wasAlreadyProvisioned: false, signatures: [], ok: true };
+  }
+  const worktreeRoot = task.worktreePath?.trim() || undefined;
+  const board = group.orchestrateBoard;
+
+  // GAP-4: use the worktree path as a cheap per-worktree key.
+  const taskSig = `worktree:${worktreeRoot ?? task.id}`;
+  const existing = board?.provisionedSignatures ?? [];
+  if (existing.includes(taskSig)) {
+    return { wasAlreadyProvisioned: true, signatures: [], ok: true };
+  }
+
+  if (!isLocalServerAvailable() || !worktreeRoot) {
+    return { wasAlreadyProvisioned: false, signatures: [], ok: false };
+  }
+
+  // Set provisioning state for UI feedback.
+  if (board) {
+    board.provisionState = 'provisioning';
+    scheduleSaveSessions();
+    emitBoardChange(group.id);
+  }
+
+  try {
+    const body: Record<string, unknown> = {
+      name: 'board_provision_infra',
+      args: {
+        services: task.testSpec
+          ? extractServiceNames(task.testSpec)
+          : [],
+        timeoutMs: resolveInfraProvisionTimeoutMs(),
+      },
+      workspaceRoot: worktreeRoot,
+    };
+    const res = await fetch('/api/tools', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      if (board) { board.provisionState = 'failed'; scheduleSaveSessions(); emitBoardChange(group.id); }
+      return { wasAlreadyProvisioned: false, signatures: [], ok: false };
+    }
+    const json = await res.json() as { result?: string };
+    const result = json.result ? (JSON.parse(json.result) as { ok: boolean; signatures?: string[] }) : { ok: false };
+    const serverSigs: string[] = result.signatures ?? [];
+    const allSigs = [taskSig, ...serverSigs.map((s) => `shared:${s}`)];
+
+    // Deduplicate and add new signatures to board.
+    if (board) {
+      const merged = [...new Set([...existing, ...allSigs])];
+      board.provisionedSignatures = merged;
+      board.provisionState = result.ok ? 'ready' : 'failed';
+      scheduleSaveSessions();
+      emitBoardChange(group.id);
+    }
+
+    updateTask(group, task.id, { lastHealCategory: undefined }, plannerChat);
+    return { wasAlreadyProvisioned: false, signatures: allSigs, ok: result.ok };
+  } catch (err) {
+    reportBackgroundError('ensure-board-infra-provisioned', err);
+    if (board) { board.provisionState = 'failed'; scheduleSaveSessions(); emitBoardChange(group.id); }
+    return { wasAlreadyProvisioned: false, signatures: [], ok: false };
+  }
+}
+
+/** Cheap heuristic: extract docker service names mentioned in testSpec text. */
+function extractServiceNames(testSpec: string): string[] {
+  const matches = testSpec.match(/(?:service|container|docker)[:\s]+([a-z0-9_-]+)/gi);
+  if (!matches) return [];
+  return [...new Set(matches.map((m) => m.split(/[:\s]+/).pop()!.toLowerCase()))];
+}
 import {
   createEmptyChatObject,
   findChatById,
@@ -317,6 +411,25 @@ export function resolveTaskChatStreamOutcome(chat: Chat): TaskChatStreamOutcome 
   return 'failed';
 }
 
+/** Build a SelfHealDeps bag wiring all board-action callbacks. Lazy-built per call. */
+function makeSelfHealDeps(): SelfHealDeps {
+  return {
+    ensureBoardInfraProvisioned,
+    applyTaskBuildFailureState,
+    applyTaskTestFailureState,
+    buildBuildRetrySeedMessage,
+    buildRetryBuilderSeedMessage,
+    startTask,
+    startTaskTesting,
+    startMergeConflictFixer,
+    runTaskChatNudge,
+    autoDelegateNext,
+    quarantineTaskAndDependents,
+    resolveSelfHealMaxRounds,
+    resolveMaxMergeFixerAttempts: () => MAX_MERGE_FIXER_ATTEMPTS,
+  };
+}
+
 /**
  * Advance board task status when its linked **Builder** chat finishes streaming.
  * Successful builds move to testing; auto-pilot launches the Tester.
@@ -343,24 +456,20 @@ export function finalizeBoardTaskOnStreamEnd(
 
   if (outcome === 'failed') {
     const errorSummary = 'Task chat ended without completing successfully';
-    if (isBoardRunning(group)) {
-      const route = applyTaskBuildFailureState(group, task, plannerChat, errorSummary);
-      if (route === 'retry') {
-        const updated =
-          group.orchestrateBoard!.tasks.find((t) => t.id === task.id) ?? task;
-        logBuildVerdict(group, task.id, 'fail', {
-          attempt: updated.buildAttempts ?? 1,
-          attemptKind: 'build',
-          summary: errorSummary,
-        });
-        updateTask(group, task.id, { endedAt: Date.now() }, plannerChat);
-        void runTaskChatNudge(group, task.id, plannerChat, errorSummary).catch((err) =>
-          reportBackgroundError('task-chat-build-retry', err),
-        );
-        return;
-      }
-    }
     logBuildVerdict(group, task.id, 'fail', { summary: errorSummary });
+    updateTask(group, task.id, { endedAt: Date.now() }, plannerChat);
+    if (isBoardRunning(group)) {
+      const freshTask = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
+      const { category } = resolveTaskChatStreamFailure(chat);
+      void runSelfHeal(
+        group,
+        freshTask,
+        plannerChat,
+        { phase: 'build', category, summary: errorSummary },
+        makeSelfHealDeps(),
+      ).catch((err) => reportBackgroundError('self-heal-build', err));
+      return;
+    }
     moveTaskStatus(group, task.id, 'failed', plannerChat);
     void finalizeTerminalBuildFailure(group, task, plannerChat, chat, errorSummary);
     return;
@@ -728,6 +837,8 @@ export function buildTaskSeedMessage(
     test,
     '',
     'Read the plan file for full context if needed. Report what you changed.',
+    `When done, call board_report_build_result({ task_id: "${task.id}", status: "ok"|"env_blocked"|"failed", summary: "..." }).`,
+    'Use env_blocked (with blockers) if services/commands were missing; never report ok unless verification actually ran.',
   ].join('\n');
 }
 
@@ -766,6 +877,8 @@ export function buildBuildRetrySeedMessage(
     `Previous build attempt failed (${attempt}/${resolveMaxTaskBuildAttempts()}): ${errorSummary}`,
     '',
     'Fix the issues and report what you changed.',
+    `Call board_report_build_result({ task_id: "${task.id}", status: "ok"|"env_blocked"|"failed", summary: "..." }) when done.`,
+    'Use env_blocked (with blockers) if services were unavailable; never report ok unless verification actually ran.',
   ].join('\n');
 }
 
@@ -795,6 +908,7 @@ export function buildTaskTestSeedMessage(
     test,
     '',
     'Verify with git_diff, static integration review, and project scripts (typecheck → lint → unit → build).',
+    'If setup/services fail (DB connection refused, missing binary, port unavailable), report fail with the service name — do not blame the code for an env problem.',
     `Report exactly once via board_report_test_result({ task_id: "${task.id}", verdict: "pass" | "fail", summary: "..." }).`,
   ].join('\n');
 }
@@ -989,7 +1103,7 @@ export function clearTaskFailureState(
 }
 
 /** Run a continue nudge on the existing build chat (no original-prompt reseed). */
-async function runTaskChatNudge(
+export async function runTaskChatNudge(
   group: ChatGroup,
   taskId: string,
   plannerChat: Chat,
@@ -1424,7 +1538,7 @@ function buildMergeFixerSeedMessage(
 }
 
 /** Spawn a fixer chat to resolve an integration merge conflict. */
-async function startMergeConflictFixer(
+export async function startMergeConflictFixer(
   group: ChatGroup,
   task: BoardTask,
   plannerChat: Chat,
@@ -1590,7 +1704,7 @@ async function finalizeMergeFixerOnStreamEnd(
       return;
     }
 
-    const summary =
+    const fixerSummary =
       fresh.error?.trim() ||
       verified?.reasons?.join('; ') ||
       'Merge fixer could not produce a valid integration merge after 2 attempts';
@@ -1599,13 +1713,20 @@ async function finalizeMergeFixerOnStreamEnd(
       fresh.id,
       {
         fixerChatId: undefined,
-        error: summary,
+        error: fixerSummary,
         fixerAttempts: undefined,
         mergePreSha: undefined,
       },
       plannerChat,
     );
-    moveTaskStatus(group, fresh.id, 'blocked', plannerChat);
+    // Terminal fixer exhaustion → route through self-heal (will quarantine).
+    void runSelfHeal(
+      group,
+      fresh,
+      plannerChat,
+      { phase: 'merge', category: 'merge', summary: fixerSummary },
+      makeSelfHealDeps(),
+    ).catch((err) => reportBackgroundError('self-heal-fixer-terminal', err));
   } catch (err) {
     reportBackgroundError('finalize-merge-fixer', err);
     moveTaskStatus(group, fresh.id, 'blocked', plannerChat);
@@ -1795,6 +1916,12 @@ export async function startTaskTesting(
       scheduleSaveSessions();
     }
 
+    // Preflight: bring up declared services before the Tester runs (§3 happy-path).
+    // Guard: only if the task or its worktree signature is not already provisioned.
+    await ensureBoardInfraProvisioned(group, freshTask, plannerChat).catch((err) =>
+      reportBackgroundError('preflight-infra-provision', err),
+    );
+
     const seed = buildTaskTestSeedMessage(group, plannerChat, task);
 
     refreshHeartbeatThresholds();
@@ -1979,13 +2106,17 @@ export async function finalizeTaskTestingOnStreamEnd(
         mergeResult.integrationSha,
       );
     } else {
-      moveTaskStatus(group, fresh.id, 'blocked', plannerChat);
-      updateTask(
+      // Merge-failed (non-conflict error) → self-heal merge path.
+      const mergeSummary = mergeResult.message || 'Integration merge failed';
+      updateTask(group, fresh.id, { error: mergeSummary }, plannerChat);
+      void runSelfHeal(
         group,
-        fresh.id,
-        { error: mergeResult.message || 'Integration merge failed' },
+        fresh,
         plannerChat,
-      );
+        { phase: 'merge', category: 'merge', summary: mergeSummary },
+        makeSelfHealDeps(),
+      ).catch((err) => reportBackgroundError('self-heal-merge', err));
+      return;
     }
 
     const testChatId = fresh.testChatId?.trim();
@@ -2011,21 +2142,16 @@ export async function finalizeTaskTestingOnStreamEnd(
     return;
   }
 
-  const route = applyTaskTestFailureState(group, fresh, plannerChat, summary);
-  if (route === 'retry') {
-    const updated = group.orchestrateBoard!.tasks.find((t) => t.id === fresh.id) ?? fresh;
-    const seed = buildRetryBuilderSeedMessage(
-      updated,
-      updated.testAttempts ?? 1,
-      summary,
-    );
-    // Persist the failure-aware seed so it survives a concurrency-slot queue
-    // (the just-ended Tester chat is still counted as running here).
-    updateTask(group, fresh.id, { pendingBuildSeed: seed }, plannerChat);
-    void startTask(group, fresh.id, plannerChat).catch((err) =>
-      reportBackgroundError('start-task-retry', err),
-    );
-  }
+  // Test failed: route through self-heal with the Tester chat for classification.
+  const testerChatObj = fresh.testChatId ? findChatById(fresh.testChatId) : null;
+  const category = testerChatObj ? classifyTaskFailure(testerChatObj) : 'code';
+  void runSelfHeal(
+    group,
+    fresh,
+    plannerChat,
+    { phase: 'test', category, summary },
+    makeSelfHealDeps(),
+  ).catch((err) => reportBackgroundError('self-heal-test', err));
 }
 
 /** True when the board is terminal and has at least one `complete` task (gates final test). */

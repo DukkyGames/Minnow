@@ -47,6 +47,7 @@ import {
 } from '../tools/code-tools.js';
 import { toolSaveMemory } from '../tools/memory-tools.js';
 import { toolReadDocument } from '../tools/read-document.js';
+import { toolBoardProvisionInfra } from '../workspace/board-infra-provision.js';
 import {
   toolFetchWebContent,
   toolRagWebContent,
@@ -947,6 +948,7 @@ const SERVER_TOOL_HANDLERS = {
   brain_append_log: toolBrainAppendLog,
   brain_ingest_source: toolBrainIngestSource,
   save_memory: toolSaveMemory,
+  board_provision_infra: toolBoardProvisionInfra,
   repo_map: toolRepoMap,
   find_symbol: toolFindSymbol,
   who_calls: toolWhoCalls,

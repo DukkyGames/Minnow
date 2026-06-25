@@ -171,7 +171,7 @@ describe('task stream end finalization', () => {
     assert.ok(updated.endedAt);
   });
 
-  test('failed outcome marks task failed in auto mode at build retry cap', () => {
+  test('failed outcome quarantines task in auto mode at build retry cap (Phase 2)', () => {
     setAutopilotMetaForTests({ maxBuildAttempts: 1 });
     const group = makeGroup('auto');
     const planner = makePlanner();
@@ -183,9 +183,12 @@ describe('task stream end finalization', () => {
         { role: 'user', content: 'Execute task' },
         {
           role: 'assistant',
-          content: 'Maximum tool turns reached.',
+          // Non-stall failure so Phase 2 classifies as 'code' → applyTaskBuildFailureState → at cap → quarantine.
+          content: 'Build failed: TypeError: cannot read properties of undefined',
         },
       ],
+      // Failed run so resolveTaskChatStreamOutcome returns 'failed' (prose alone returns 'completed').
+      runs: [{ runId: 'run_1', branchId: 'b1', forkHistoryIndex: 0, status: 'failed', createdAt: 10, snapshot: null } as any],
     };
     setSessionStateForTests({
       chats: [planner, failedChat],
@@ -194,8 +197,9 @@ describe('task stream end finalization', () => {
     });
     finalizeBoardTaskOnStreamEnd(group, task, planner);
     const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
-    assert.equal(updated.status, 'failed');
-    assert.match(updated.error ?? '', /without completing/i);
+    // Phase 2: exhausted build attempts are quarantined via self-heal (not left as failed).
+    assert.equal(updated.status, 'quarantined');
+    assert.match(updated.quarantine?.summary ?? updated.error ?? '', /without completing/i);
   });
 
   test('markBoardTaskInProgressFromChat sets in_progress when stream starts', () => {

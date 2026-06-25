@@ -263,7 +263,7 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
     assert.match(updated.pendingBuildSeed!, /typecheck failed in foo\.ts/);
   });
 
-  test('third fail marks blocked', async () => {
+  test('third fail quarantines via self-heal (Phase 2)', async () => {
     const group = makeGroup({ 'W1-A': 'testing' });
     const planner = makePlanner();
     updateTask(
@@ -275,8 +275,9 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
     const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
     await finalizeTaskTestingOnStreamEnd(group, task, planner);
     const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
-    assert.equal(updated!.status, 'blocked');
-    assert.match(updated!.error ?? '', /still broken/);
+    // Phase 2: exhausted test attempts are quarantined by self-heal (not left as blocked).
+    assert.equal(updated!.status, 'quarantined');
+    assert.match(updated!.error ?? updated!.quarantine?.summary ?? '', /still broken/);
   });
 
   test('afk mode third fail blocks and delivers stalled report', async () => {

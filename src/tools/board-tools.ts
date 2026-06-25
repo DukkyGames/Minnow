@@ -402,6 +402,59 @@ export function validateBoardUpdateTaskArgs(
   };
 }
 
+export type BoardReportBuildResultArgs = {
+  task_id: string;
+  status: 'ok' | 'env_blocked' | 'failed';
+  summary: string;
+  blockers?: string[];
+};
+
+export type ValidateBoardReportBuildResultResult =
+  | { ok: true; args: BoardReportBuildResultArgs }
+  | { ok: false; error: string };
+
+/** Validate board_report_build_result arguments (exported for tests). */
+export function validateBoardReportBuildResultArgs(
+  args: Record<string, unknown>,
+): ValidateBoardReportBuildResultResult {
+  const task_id = typeof args.task_id === 'string' ? args.task_id.trim() : '';
+  if (!task_id) {
+    return { ok: false, error: 'Error: board_report_build_result requires "task_id"' };
+  }
+  const rawStatus = typeof args.status === 'string' ? args.status.trim().toLowerCase() : '';
+  if (rawStatus !== 'ok' && rawStatus !== 'env_blocked' && rawStatus !== 'failed') {
+    return {
+      ok: false,
+      error: 'Error: board_report_build_result requires status "ok", "env_blocked", or "failed"',
+    };
+  }
+  const status = rawStatus as 'ok' | 'env_blocked' | 'failed';
+  const summary = typeof args.summary === 'string' ? args.summary.trim() : '';
+  if (!summary) {
+    return { ok: false, error: 'Error: board_report_build_result requires non-empty "summary"' };
+  }
+  const blockersRaw = args.blockers;
+  let blockers: string[] | undefined;
+  if (blockersRaw !== undefined) {
+    if (!Array.isArray(blockersRaw)) {
+      return { ok: false, error: 'Error: blockers must be an array of strings' };
+    }
+    blockers = [];
+    for (const item of blockersRaw) {
+      if (typeof item === 'string' && item.trim()) blockers.push(item.trim());
+    }
+  }
+  return {
+    ok: true,
+    args: {
+      task_id,
+      status,
+      summary,
+      ...(blockers?.length ? { blockers } : {}),
+    },
+  };
+}
+
 export type BoardReportTestResultArgs = {
   task_id: string;
   verdict: 'pass' | 'fail';
@@ -564,6 +617,10 @@ export async function executeBoardTool(
 
   if (name === 'board_report_test_result') {
     return executeBoardReportTestResult(args, options?.chatId);
+  }
+
+  if (name === 'board_report_build_result') {
+    return executeBoardReportBuildResult(args, options?.chatId);
   }
 
   return `Error: unknown board tool "${name}"`;
@@ -819,4 +876,27 @@ async function executeBoardReportTestResult(
     null,
     2,
   );
+}
+
+async function executeBoardReportBuildResult(
+  args: Record<string, unknown>,
+  overrideChatId?: string,
+): Promise<string> {
+  const validated = validateBoardReportBuildResultArgs(args);
+  if (validated.ok === false) return validated.error;
+
+  const ctx = resolveBoardGroupFromChat(overrideChatId);
+  if (!ctx) {
+    return 'Error: board_report_build_result requires a chat linked to an orchestrate board';
+  }
+  const { group, board } = ctx;
+  const { task_id, status, summary, blockers } = validated.args;
+
+  const taskCheck = validateBoardTaskIds(board, [resolveLooseTaskId(board, task_id)]);
+  if (taskCheck.ok === false) return taskCheck.error;
+  const taskId = taskCheck.ids[0]!;
+  const planner = getPlannerChatForGroup(group) ?? undefined;
+  const patch: Record<string, unknown> = { buildOutcome: status, ...(blockers?.length ? { buildBlockers: blockers } : {}) };
+  const task = updateTask(group, taskId, patch, planner);
+  return JSON.stringify({ task_id: taskId, status, summary, task }, null, 2);
 }

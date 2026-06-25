@@ -230,6 +230,21 @@ export function resolveMaxFinalTestAttempts(): number {
   return getAutopilotMetaSync().maxFinalTestAttempts ?? FALLBACK_MAX_FINAL_TEST_ATTEMPTS;
 }
 
+/** Max self-heal infra rounds before unconditional quarantine (Phase 2). */
+export function resolveSelfHealMaxRounds(): number {
+  return 2;
+}
+
+/** Whether infra auto-provisioning is enabled (Phase 2). */
+export function resolveAutoProvisionInfra(): boolean {
+  return true;
+}
+
+/** Timeout (ms) for infra provisioning commands — longer than the standard tool timeout. */
+export function resolveInfraProvisionTimeoutMs(): number {
+  return 180_000;
+}
+
 /** Persist partial global autopilot via PUT /api/config/meta and mirror locally. */
 export async function saveAutopilotMeta(
   patch: Partial<AutopilotMeta>,

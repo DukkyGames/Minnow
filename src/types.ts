@@ -345,6 +345,8 @@ export interface BoardTask {
   lastHealCategory?: string;
   /** Phase-2 placeholder: outcome of the last build attempt. */
   buildOutcome?: 'success' | 'failure' | 'skipped' | string;
+  /** Phase-2: structured blockers reported by board_report_build_result. */
+  buildBlockers?: string[];
   /**
    * Pending Builder seed (failure-aware retry/reopen prompt) to use on the next
    * build start instead of the default task seed. Persisted on the task so it

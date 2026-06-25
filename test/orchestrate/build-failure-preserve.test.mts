@@ -197,13 +197,14 @@ describe('finalizeBoardTaskOnStreamEnd in-place auto retry', () => {
     setSessionStateForTests(null);
   });
 
-  test('auto retry keeps the same chat id and does not set pendingBuildSeed', () => {
+  test('auto retry keeps the same chat id and seeds next build with error context', () => {
     const group = makeGroup('auto');
     const planner = makePlanner();
     const taskChat = makePartialBoardTaskChat();
     taskChat.history = [
       { role: 'user', content: 'Execute task' },
-      { role: 'assistant', content: 'Maximum tool turns reached.' },
+      // Non-stall failure so Phase 2 classifies as 'code' → applyTaskBuildFailureState path.
+      { role: 'assistant', content: 'Build failed: TypeError: cannot read properties of undefined' },
     ];
     taskChat.runs = [failedRunRecord()];
     setSessionStateForTests({
@@ -218,7 +219,8 @@ describe('finalizeBoardTaskOnStreamEnd in-place auto retry', () => {
 
     const updated = group.orchestrateBoard!.tasks[0]!;
     assert.equal(updated.chatId, chatIdBefore);
-    assert.equal(updated.pendingBuildSeed, undefined);
+    // Phase 2: runSelfHeal sets pendingBuildSeed with the build-retry prompt.
+    assert.match(updated.pendingBuildSeed ?? '', /failed build attempt/i);
     assert.equal(updated.status, 'in_progress');
     assert.equal(updated.buildAttempts, 1);
   });

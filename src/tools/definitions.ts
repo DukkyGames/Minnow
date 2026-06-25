@@ -1110,6 +1110,39 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'board_report_build_result',
+    label: 'Board report build result',
+    description:
+      'Structured Builder verdict for per-task build (does not move columns). Call with ok only when verification actually ran.',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'board_report_build_result',
+      'Record build outcome for stream-end routing. Call env_blocked when verification could not run due to missing services/commands.',
+      {
+        task_id: {
+          type: 'string',
+          description: 'Board task id (e.g. W1-A)',
+        },
+        status: {
+          type: 'string',
+          enum: ['ok', 'env_blocked', 'failed'],
+          description: 'ok = verification passed; env_blocked = env prevented verification; failed = code error',
+        },
+        summary: {
+          type: 'string',
+          description: 'Concise evidence summary',
+        },
+        blockers: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'env_blocked only: list of blocking services or missing commands',
+        },
+      },
+      ['task_id', 'status', 'summary'],
+    ),
+  },
+  {
     id: 'delegate_tasks',
     label: 'Delegate tasks',
     description:

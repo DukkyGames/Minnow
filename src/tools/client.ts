@@ -319,6 +319,7 @@ async function executeToolInner(
     name === 'board_set_autonomy' ||
     name === 'board_get_state' ||
     name === 'board_report_test_result' ||
+    name === 'board_report_build_result' ||
     name === 'delegate_tasks'
   ) {
     const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
