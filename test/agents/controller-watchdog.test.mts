@@ -28,6 +28,7 @@ import {
   resetSubAgentRunnerFactory,
   setSubAgentRunnerFactory,
 } from '../../src/agents/sub-agent-runner.ts';
+import { setSessionStateForTests } from '../../src/state/sessions.ts';
 import {
   createMockSubAgentRunner,
   FIXED_RUN_ID,
@@ -35,8 +36,57 @@ import {
   resetRunIdCounter,
 } from '../sub-agents/test-helpers.mts';
 import type { SubAgentRunner } from '../../src/agents/types.ts';
+import type { Chat, ChatGroup } from '../../src/types.ts';
 
 const PARENT_CHAT = '11111111-1111-1111-1111-111111111111';
+const AFK_TASK_CHAT = '22222222-2222-2222-2222-222222222222';
+const AFK_GROUP_ID = 'grp_afk_test';
+
+function makeAfkSessionState() {
+  const planner: Chat = {
+    id: PARENT_CHAT,
+    name: 'Planner',
+    workspacePath: '/ws',
+    modeId: 'orchestrate',
+    modelId: 'm1',
+    history: [],
+    lastStats: null,
+    modelInfo: {},
+    updatedAt: 1,
+    boardGroupId: AFK_GROUP_ID,
+  };
+  const taskChat: Chat = {
+    id: AFK_TASK_CHAT,
+    name: 'Task',
+    workspacePath: '/ws',
+    modeId: 'build',
+    modelId: 'm1',
+    history: [],
+    lastStats: null,
+    modelInfo: {},
+    updatedAt: 1,
+    boardGroupId: AFK_GROUP_ID,
+  };
+  const group: ChatGroup = {
+    id: AFK_GROUP_ID,
+    name: 'Board',
+    workspacePath: '/ws',
+    collapsed: false,
+    order: 0,
+    createdAt: 1,
+    plannerChatId: PARENT_CHAT,
+    orchestrateBoard: {
+      planPath: 'plan.md',
+      startedAt: 1,
+      lastUpdatedAt: 2,
+      waves: [{ id: 'W1', status: 'in_progress' }],
+      tasks: [],
+      executionMode: 'afk',
+      autoRunning: true,
+    },
+  };
+  return { version: 5 as const, activeId: PARENT_CHAT, sidebarCollapsed: false, chats: [planner, taskChat], groups: [group] };
+}
 
 function hangingRunner(): SubAgentRunner {
   return {
@@ -99,6 +149,7 @@ describe('controller watchdog', () => {
     resetRunIdCounter();
     resetWatchdogState();
     stopWatchdog();
+    setSessionStateForTests({ version: 5, activeId: null, sidebarCollapsed: false, chats: [], groups: [] });
 
     now = 0;
     originalNow = performance.now;
@@ -251,6 +302,81 @@ describe('controller watchdog', () => {
     const run = getSubAgentRun(FIXED_RUN_ID);
     assert.equal(run?.lifecycle, 'failed');
     assert.match(run?.error ?? '', /mock reject/);
+  });
+
+  test('AFK board: mutating run stall uses tier2AutoRecover (watchdog_tier2_autorecover: error)', async () => {
+    setSubAgentRunnerFactory(() => hangingRunner());
+    setSessionStateForTests(makeAfkSessionState());
+
+    await spawnSubAgent({
+      type: 'shell',
+      task: 'AFK stall test',
+      wait: false,
+      parentChatId: AFK_TASK_CHAT,
+      parentTurnId: 'turn-afk-1',
+      category: 'build',
+    });
+
+    await waitForRunActive(FIXED_RUN_ID);
+
+    setHeartbeatConfig({
+      heartbeatIntervalMs: 100,
+      progressStallMs: 1_000,
+      heartbeatDeadMs: 10_000,
+    });
+
+    now = 2_000;
+    recordHeartbeat(FIXED_RUN_ID);
+    tickWatchdog();
+    await flushAsync();
+
+    const run = getSubAgentRun(FIXED_RUN_ID);
+    assert.equal(run?.status, 'cancelled');
+    assert.match(
+      run?.error ?? '',
+      /^watchdog_tier2_autorecover:/,
+      'AFK-supervised run should use auto-recover path, not surface',
+    );
+  });
+
+  test('non-AFK mutating run stall uses tier2Surface (watchdog_tier2: error)', async () => {
+    setSubAgentRunnerFactory(() => hangingRunner());
+    // No AFK session state → isRunAfkSupervised returns false
+
+    await spawnSubAgent({
+      type: 'shell',
+      task: 'Non-AFK stall test',
+      wait: false,
+      parentChatId: PARENT_CHAT,
+      parentTurnId: 'turn-nonafk-1',
+      category: 'build',
+    });
+
+    await waitForRunActive(FIXED_RUN_ID);
+
+    setHeartbeatConfig({
+      heartbeatIntervalMs: 100,
+      progressStallMs: 1_000,
+      heartbeatDeadMs: 10_000,
+    });
+
+    now = 2_000;
+    recordHeartbeat(FIXED_RUN_ID);
+    tickWatchdog();
+    await flushAsync();
+
+    const run = getSubAgentRun(FIXED_RUN_ID);
+    assert.equal(run?.status, 'cancelled');
+    assert.match(
+      run?.error ?? '',
+      /^watchdog_tier2:/,
+      'Non-AFK run should use surface path',
+    );
+    assert.doesNotMatch(
+      run?.error ?? '',
+      /^watchdog_tier2_autorecover:/,
+      'Non-AFK run must NOT use auto-recover path',
+    );
   });
 
   test('repetition detection triggers tier-2 for mutating runs', async () => {

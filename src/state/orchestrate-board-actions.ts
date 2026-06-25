@@ -29,6 +29,7 @@ import {
   bumpProgress,
   chatTaskRunId,
   createRunSupervision,
+  getRunSupervision,
   setHeartbeatConfig,
   startHeartbeat,
   stopHeartbeat,
@@ -308,6 +309,14 @@ let streamEndSubscribed = false;
 let streamActivitySubscribed = false;
 let autoDriveSubscribed = false;
 
+/** Generous multiplier over progressStallMs before killing a stuck task-chat turn. */
+const TASK_CHAT_STALL_MULTIPLIER = 3;
+/** Max bounded restarts per task-chat before giving up. */
+const TASK_CHAT_STALL_RESTART_CAP = 2;
+
+/** Per-chatId count of stall-triggered restarts this session. Cleared on stream end. */
+const taskChatStallRestarts = new Map<string, number>();
+
 function refreshHeartbeatThresholds(): void {
   const meta = getAutopilotMetaSync();
   setHeartbeatConfig({
@@ -315,10 +324,6 @@ function refreshHeartbeatThresholds(): void {
     progressStallMs: meta.progressStallMs,
     heartbeatDeadMs: meta.heartbeatDeadMs,
   });
-}
-
-function stopTaskChatSupervision(chatId: string): void {
-  stopHeartbeat(chatTaskRunId(chatId));
 }
 
 /** How a linked task chat ended its latest assistant turn. */
@@ -520,7 +525,55 @@ function startTaskChatSupervision(chatId: string): void {
     const chat = findChatById(chatId);
     if (!chat?.boardGroupId) return;
     emitBoardChange(chat.boardGroupId);
+
+    const group = getBoardGroupForChat(chat);
+    if (!group?.orchestrateBoard) return;
+
+    const mode = getBoardExecutionMode(group.orchestrateBoard);
+    if (mode !== 'afk' && mode !== 'auto') return;
+    if (!isBoardRunning(group)) return;
+
+    const sup = getRunSupervision(runId);
+    if (!sup) return;
+    const meta = getAutopilotMetaSync();
+    const stallMs = meta.progressStallMs * TASK_CHAT_STALL_MULTIPLIER;
+    if (sup.lastProgressAt == null) return;
+    const progressAge = performance.now() - sup.lastProgressAt;
+    if (progressAge < stallMs) return;
+
+    const restarts = taskChatStallRestarts.get(chatId) ?? 0;
+    if (restarts >= TASK_CHAT_STALL_RESTART_CAP) return;
+
+    const taskId = chat.boardTaskId;
+    if (!taskId) return;
+
+    taskChatStallRestarts.set(chatId, restarts + 1);
+    // Stop the heartbeat timer only — do NOT call stopTaskChatSupervision here, as that
+    // would delete the counter we just set. The counter is cleared on stream end.
+    stopHeartbeat(chatTaskRunId(chatId));
+    stopGeneration(chatId);
+
+    const planner = getPlannerChatForGroup(group);
+    if (!planner) return;
+
+    const stallReason = `task-chat-stall (${progressAge}ms no output)`;
+    if (restarts === 0) {
+      void runTaskChatNudge(group, taskId, planner, stallReason).catch((err) =>
+        reportBackgroundError('task-chat-stall-nudge', err),
+      );
+    } else {
+      const stallTask = group.orchestrateBoard.tasks.find((t) => t.id === taskId);
+      if (stallTask) {
+        void runSelfHeal(group, stallTask, planner, { phase: 'build', category: 'stall', summary: stallReason }, makeSelfHealDeps())
+          .catch((err) => reportBackgroundError('task-chat-stall-selfheal', err));
+      }
+    }
   });
+}
+
+function stopTaskChatSupervision(chatId: string): void {
+  taskChatStallRestarts.delete(chatId);
+  stopHeartbeat(chatTaskRunId(chatId));
 }
 
 function isTaskChatStreaming(chatId: string): boolean {
@@ -823,7 +876,7 @@ export function buildTaskSeedMessage(
     board.planPath;
   const build = task.buildSpec?.trim() || '(see plan)';
   const test = task.testSpec?.trim() || '(see plan)';
-  return [
+  const lines = [
     'Execute this orchestrate task.',
     '',
     `Plan: ${planPath}`,
@@ -839,13 +892,17 @@ export function buildTaskSeedMessage(
     'Read the plan file for full context if needed. Report what you changed.',
     `When done, call board_report_build_result({ task_id: "${task.id}", status: "ok"|"env_blocked"|"failed", summary: "..." }).`,
     'Use env_blocked (with blockers) if services/commands were missing; never report ok unless verification actually ran.',
-  ].join('\n');
+  ];
+  if (task.worktreePath?.trim()) {
+    lines.push('', `Working directory: ${task.worktreePath.trim()}. Keep all file/terminal ops inside it; don't cd to the original repo or any absolute path — use relative paths.`);
+  }
+  return lines.join('\n');
 }
 
 /** Compact Builder seed after a per-task test failure (fresh chat, no history bloat). */
 export function buildRetryBuilderSeedMessage(task: BoardTask, attempt: number, testSummary: string): string {
   const build = task.buildSpec?.trim() || '(see plan)';
-  return [
+  const lines = [
     'Fix this orchestrate task after a failed test.',
     '',
     `Task: ${task.id} — ${task.title}`,
@@ -856,7 +913,11 @@ export function buildRetryBuilderSeedMessage(task: BoardTask, attempt: number, t
     `Previous attempt failed testing (${attempt}/${resolveMaxTaskTestAttempts()}): ${testSummary}`,
     '',
     'Fix the issues and report what you changed.',
-  ].join('\n');
+  ];
+  if (task.worktreePath?.trim()) {
+    lines.push('', `Working directory: ${task.worktreePath.trim()}. Keep all file/terminal ops inside it; don't cd to the original repo or any absolute path — use relative paths.`);
+  }
+  return lines.join('\n');
 }
 
 /** Compact Builder seed after a failed build chat (auto/afk retry). */
@@ -866,7 +927,7 @@ export function buildBuildRetrySeedMessage(
   errorSummary: string,
 ): string {
   const build = task.buildSpec?.trim() || '(see plan)';
-  return [
+  const lines = [
     'Fix this orchestrate task after a failed build attempt.',
     '',
     `Task: ${task.id} — ${task.title}`,
@@ -879,7 +940,11 @@ export function buildBuildRetrySeedMessage(
     'Fix the issues and report what you changed.',
     `Call board_report_build_result({ task_id: "${task.id}", status: "ok"|"env_blocked"|"failed", summary: "..." }) when done.`,
     'Use env_blocked (with blockers) if services were unavailable; never report ok unless verification actually ran.',
-  ].join('\n');
+  ];
+  if (task.worktreePath?.trim()) {
+    lines.push('', `Working directory: ${task.worktreePath.trim()}. Keep all file/terminal ops inside it; don't cd to the original repo or any absolute path — use relative paths.`);
+  }
+  return lines.join('\n');
 }
 
 /** Seed for per-task Tester (headless — no browser). */
@@ -2865,4 +2930,12 @@ export async function drainTaskQueueForTests(
   plannerChat: Chat,
 ): Promise<void> {
   return drainTaskQueue(group, plannerChat);
+}
+
+export function startTaskChatSupervisionForTests(chatId: string): void {
+  startTaskChatSupervision(chatId);
+}
+
+export function clearTaskChatStallRestartsForTests(): void {
+  taskChatStallRestarts.clear();
 }

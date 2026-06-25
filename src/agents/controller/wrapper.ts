@@ -232,6 +232,11 @@ export function formatHeartbeatBadge(
   return heart;
 }
 
+/** Fire the stored heartbeat onTick for a run (tests only). */
+export function tickHeartbeatForTests(runId: string): void {
+  entries.get(runId)?.onTick?.();
+}
+
 /** Clear all supervision state (tests). */
 export function resetWrapperState(): void {
   for (const entry of entries.values()) {

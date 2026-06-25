@@ -105,6 +105,9 @@ import {
   toolStopBackgroundCommand,
   toolStopCommand,
 } from '../dev-server/manager.js';
+import { resolveChatContext } from '../workspace/chat-cwd.js';
+import { appendBoardLogLine } from '../orchestrate/board-log-sink.js';
+import { guardCdOutsideWorktree as _guardCdRaw } from '../tools/cwd-guard.js';
 
 const execFileAsync = promisify(execFile);
 const FIND_FILES_MAX = 500;
@@ -648,6 +651,43 @@ function resolveCommandCwd(args) {
   return resolveSafePath(cwdUser, { write: false });
 }
 
+/**
+ * Resolve the default working directory for a command: the chat's worktree when available,
+ * otherwise the global workspace root. Used when args.cwd is absent.
+ * Does NOT route through resolveSafePath so worktree paths are not constrained to global root.
+ * @param {string | undefined} chatId
+ * @returns {Promise<string>}
+ */
+async function resolveDefaultCwd(chatId) {
+  if (chatId) {
+    const { worktreeRoot } = await resolveChatContext(chatId);
+    if (worktreeRoot) return worktreeRoot;
+  }
+  return getEffectiveWorkspaceRoot();
+}
+
+/**
+ * Wrapper around guardCdOutsideWorktree that also fires a board-log warning.
+ * @param {string} command
+ * @param {string} worktreeRoot
+ * @param {{ chatId?: string; groupId?: string }} meta
+ * @returns {{ command: string; redirected: boolean }}
+ */
+function guardCdOutsideWorktree(command, worktreeRoot, meta) {
+  const result = _guardCdRaw(command, worktreeRoot);
+  if (result.redirected && meta.groupId) {
+    void appendBoardLogLine(meta.groupId, {
+      type: 'cwd_redirect',
+      chatId: meta.chatId,
+      from: /** @type {any} */ (result).originalTarget ?? '(unknown)',
+      to: worktreeRoot,
+      reason: 'worktree_isolation',
+      ts: Date.now(),
+    });
+  }
+  return result;
+}
+
 async function resolveBoardSpawnEnv(args, cwd, chatId) {
   try {
     const { resolveBoardTaskSpawnEnvForCommand } = await import(
@@ -673,15 +713,19 @@ async function toolExecuteCommand(args) {
     const command = typeof args?.command === 'string' ? args.command.trim() : '';
     if (!command) return 'Error: command is required';
 
-    let cwd;
-    try {
-      cwd = resolveCommandCwd(args);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return `Error: ${message}`;
-    }
-
     const chatId = typeof args?.chatId === 'string' ? args.chatId : undefined;
+
+    let cwd;
+    if (typeof args?.cwd === 'string' && args.cwd.trim()) {
+      try {
+        cwd = resolveCommandCwd(args);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return `Error: ${message}`;
+      }
+    } else {
+      cwd = await resolveDefaultCwd(chatId);
+    }
     const toolCallId =
       typeof args?.toolCallId === 'string' ? args.toolCallId : undefined;
     const spawnEnv = await resolveBoardSpawnEnv(args, cwd, chatId);
@@ -721,12 +765,16 @@ async function toolExecuteCommand(args) {
     }
   }
 
-  const command = args?.command;
-  if (!command || typeof command !== 'string') {
+  const rawCommand = args?.command;
+  if (!rawCommand || typeof rawCommand !== 'string') {
     return 'Error: command is required';
   }
 
-  let cwd = getEffectiveWorkspaceRoot();
+  const chatId = typeof args?.chatId === 'string' ? args.chatId : undefined;
+  const toolCallId = typeof args?.toolCallId === 'string' ? args.toolCallId : undefined;
+
+  let command = rawCommand;
+  let cwd;
   if (typeof args?.cwd === 'string' && args.cwd.trim()) {
     try {
       cwd = resolveCommandCwd(args);
@@ -734,10 +782,14 @@ async function toolExecuteCommand(args) {
       const message = err instanceof Error ? err.message : String(err);
       return `Error: ${message}`;
     }
+  } else {
+    const { worktreeRoot, groupId } = await resolveChatContext(chatId ?? '');
+    cwd = worktreeRoot ?? getEffectiveWorkspaceRoot();
+    if (worktreeRoot) {
+      const guarded = guardCdOutsideWorktree(rawCommand, worktreeRoot, { chatId, groupId });
+      if (guarded.redirected) command = guarded.command;
+    }
   }
-
-  const chatId = typeof args?.chatId === 'string' ? args.chatId : undefined;
-  const toolCallId = typeof args?.toolCallId === 'string' ? args.toolCallId : undefined;
   const spawnEnv = await resolveBoardSpawnEnv(args, cwd, chatId);
 
   const workspaceRoot = getEffectiveWorkspaceRoot();

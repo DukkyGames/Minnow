@@ -33,6 +33,8 @@ let tickTimer: ReturnType<typeof setInterval> | null = null;
 export interface WatchdogHandlers {
   tier1Restart: (runId: string, reason: string) => Promise<void>;
   tier2Surface: (runId: string, reason: string) => void;
+  tier2AutoRecover: (runId: string, reason: string) => void;
+  isRunAfkSupervised: (run: SubAgentRun) => boolean;
   finalizeDoneUnacked: (runId: string) => void;
   onLifecycleChange: (run: SubAgentRun) => void;
 }
@@ -40,6 +42,8 @@ export interface WatchdogHandlers {
 const noopHandlers: WatchdogHandlers = {
   tier1Restart: async () => {},
   tier2Surface: () => {},
+  tier2AutoRecover: () => {},
+  isRunAfkSupervised: () => false,
   finalizeDoneUnacked: () => {},
   onLifecycleChange: () => {},
 };
@@ -176,7 +180,11 @@ async function enterSuspect(run: SubAgentRun, reason: string): Promise<void> {
       return;
     }
 
-    handlers.tier2Surface(run.runId, reason);
+    if (handlers.isRunAfkSupervised(run)) {
+      handlers.tier2AutoRecover(run.runId, reason);
+    } else {
+      handlers.tier2Surface(run.runId, reason);
+    }
   } finally {
     state.handlingSuspect = false;
   }
@@ -235,6 +243,11 @@ export function observeSubAgentToolCall(
 export function resetWatchdogState(): void {
   runState.clear();
   monotonicNow = () => performance.now();
+}
+
+/** Reset handlers to noop defaults (tests + controller reset). */
+export function resetWatchdogHandlers(): void {
+  handlers = { ...noopHandlers };
 }
 
 /** @deprecated Use resetWatchdogState — kept for self-healing shim compatibility. */
