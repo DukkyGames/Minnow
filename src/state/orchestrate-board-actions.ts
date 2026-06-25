@@ -459,6 +459,11 @@ export function finalizeBoardTaskOnStreamEnd(
   if (outcome === 'stopped') {
     logBuildVerdict(group, task.id, 'stopped');
     updateTask(group, task.id, { endedAt: Date.now() }, plannerChat);
+    if (isBoardRunning(group)) {
+      void autoDelegateNext(group, plannerChat).catch((err) =>
+        reportBackgroundError('auto-delegate-after-stop', err),
+      );
+    }
     return;
   }
 
