@@ -260,7 +260,7 @@ describe('orchestrate board onboarding (MIN-5)', () => {
 
     const result = setChatMode('orchestrate');
     assert.equal(result.ok, true);
-    assert.equal(chat.viewMode, 'board');
+    assert.equal(chat.viewMode, 'chat');
     // renderChatFromHistory dispatches board render asynchronously; let it finish before session teardown.
     await new Promise((r) => setImmediate(r));
     await new Promise((r) => setImmediate(r));

@@ -57,6 +57,9 @@ export function setFileTreeGitStatus(map: Map<string, string>): void {
 
 /** Poll git status every 5s and refresh file tree badges. */
 export function startFileTreeGitStatusPoll(cwd?: string): void {
+  // Browser-only: the poll relies on window timers and fetch. No-op in non-DOM
+  // environments (node UI tests) where `window` is undefined.
+  if (typeof window === 'undefined') return;
   const normalizedCwd = cwd?.trim() || undefined;
   // Board-change storm guard: skip if cwd is unchanged and the interval is already running.
   if (normalizedCwd === gitStatusPollCwd && gitStatusPollTimer !== undefined) {
@@ -110,6 +113,9 @@ async function pollFileTreeGitStatus(): Promise<void> {
       }
     }
     setFileTreeGitStatus(map);
+  } catch {
+    // Best-effort background poll: swallow errors (e.g. workspace/session state
+    // torn down between ticks) so it never surfaces as an unhandled rejection.
   } finally {
     gitStatusPollInFlight = false;
   }

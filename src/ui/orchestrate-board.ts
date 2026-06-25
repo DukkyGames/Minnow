@@ -646,12 +646,31 @@ function syncBoardDashboardToggle(root: HTMLElement, board: BoardState): void {
   );
 }
 
-/** Refresh board UI when store or sub-agents change (stable handler per folder). */
+let boardUiRefreshFrame: number | undefined;
+
+/**
+ * Refresh board UI when store or sub-agents change (stable handler per folder).
+ *
+ * Coalesces bursts into a single refresh per animation frame. High-frequency
+ * sources — notably per-token `subscribeChatStreamActivity` during a board run —
+ * would otherwise drive a synchronous O(tasks × chats) `buildKanbanRefreshKey`
+ * pass hundreds of times a second, saturating the main thread (blank, frozen,
+ * non-recovering UI on large boards). `refreshActiveBoardIfMounted` reads live
+ * state when the frame fires, so dropped intermediate events lose no data.
+ */
 function scheduleBoardUiRefresh(groupId: string): void {
   if (isOrchestrateHubMounted()) return;
   if (!isOrchestrateBoardViewActive() && !isOrchestrateInitSplitChromeActive()) return;
   if (getActiveBoardGroup()?.id !== groupId) return;
-  refreshActiveBoardIfMounted();
+  if (boardUiRefreshFrame !== undefined) return;
+  if (typeof requestAnimationFrame !== 'function') {
+    refreshActiveBoardIfMounted();
+    return;
+  }
+  boardUiRefreshFrame = requestAnimationFrame(() => {
+    boardUiRefreshFrame = undefined;
+    refreshActiveBoardIfMounted();
+  });
 }
 
 /** Wire board + sub-agent listeners once per folder (idempotent). */

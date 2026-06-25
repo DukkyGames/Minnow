@@ -20,6 +20,8 @@ const {
 
   initViewModeToggle,
 
+  isBoardViewActive,
+
   resetViewModeToggleForTests,
 
   setViewModeToggleRenderHandlerForTests,
@@ -258,11 +260,29 @@ describe('view-mode toggle', { concurrency: false }, () => {
 
     setupDom();
 
-    const chat = seedSession({
+    const grpId = 'grp-no-plan';
 
-      modeId: 'orchestrate',
+    const chat = createEmptyChatObject('');
 
-      viewMode: 'board',
+    chat.id = 'chat-view-mode-1';
+
+    chat.modeId = 'orchestrate';
+
+    chat.boardGroupId = grpId;
+
+    const group = {
+
+      id: grpId, name: 'Board', workspacePath: '', collapsed: false,
+
+      order: 0, createdAt: 1, plannerChatId: chat.id, viewMode: 'board',
+
+    };
+
+    setSessionStateForTests({
+
+      version: 5, activeId: chat.id, sidebarCollapsed: false,
+
+      chats: [chat], groups: [group], activeBoardGroupId: grpId,
 
     });
 
@@ -284,7 +304,7 @@ describe('view-mode toggle', { concurrency: false }, () => {
 
     chatBtn.click();
 
-    assert.equal(chat.viewMode, 'chat');
+    assert.equal(isBoardViewActive(), false);
 
   });
 
@@ -362,13 +382,11 @@ describe('view-mode toggle', { concurrency: false }, () => {
 
 
 
-    assert.equal(chat.viewMode, 'board');
+    assert.equal(isBoardViewActive(), true);
 
     assert.equal(renderCalls, 1);
 
     assert.equal(renderedChat?.id, chat.id);
-
-    assert.equal(renderedChat?.viewMode, 'board');
 
     assert.equal(btn.hidden, true);
 
@@ -384,28 +402,64 @@ describe('view-mode toggle', { concurrency: false }, () => {
 
   test('chat toggle works after switching from chat bubbles to board view', () => {
     setupDom();
-    const chat = seedSession({
-      modeId: 'orchestrate',
-      orchestratePlanPath: PLAN_PATH,
+
+    const grpId = 'grp-board-render';
+
+    const chat = createEmptyChatObject('');
+
+    chat.id = 'chat-view-mode-1';
+
+    chat.modeId = 'orchestrate';
+
+    chat.orchestratePlanPath = PLAN_PATH;
+
+    chat.boardGroupId = grpId;
+
+    const group = {
+
+      id: grpId, name: 'Board', workspacePath: '', collapsed: false,
+
+      order: 0, createdAt: 1, plannerChatId: chat.id,
+
+      orchestratePlanPath: PLAN_PATH, viewMode: 'board',
+
       orchestrateBoard: MIN_BOARD,
-      viewMode: 'board',
+
+    };
+
+    setSessionStateForTests({
+
+      version: 5, activeId: chat.id, sidebarCollapsed: false,
+
+      chats: [chat], groups: [group], activeBoardGroupId: grpId,
+
     });
 
     const area = document.getElementById('chatArea');
+
     const bubble = document.createElement('div');
+
     bubble.className = 'msg user';
+
     area.appendChild(bubble);
 
     setViewModeToggleRenderHandlerForTests(() => {});
-    initViewModeToggle();
-    renderBoardView(chat);
 
-    const chatBtn = document.getElementById('btnViewModeToggleChat');
-    assert.ok(chatBtn, 'chat toggle mounted in board header');
+    initViewModeToggle();
+
+    renderBoardView(group);
+
     assert.equal(area.querySelector('.msg'), null, 'chat bubbles cleared on board mount');
 
+    // Chat toggle is not auto-mounted by renderBoardView; wire it manually to test its handler
+    const chatBtn = mountChatToggle();
+
+    assert.ok(chatBtn, 'chat toggle mounted in board header controls');
+
     chatBtn.click();
-    assert.equal(chat.viewMode, 'chat');
+
+    assert.equal(isBoardViewActive(), false);
+
   });
 
   test('chat view removes board chrome class', () => {

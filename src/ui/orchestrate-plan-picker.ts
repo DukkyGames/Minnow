@@ -136,7 +136,8 @@ export function shouldHideComposerPlanStripForOrchestrateBoardOnboarding(
   chat: Chat,
 ): boolean {
   if (normalizeModeId(chat.modeId) !== 'orchestrate') return false;
-  if (!isBoardViewActive()) return false;
+  const boardViewActive = isBoardViewActive() || chat.viewMode === 'board';
+  if (!boardViewActive) return false;
   const group = getActiveBoardGroup() ?? getBoardGroupForChat(chat);
-  return !group?.orchestrateBoard;
+  return !(group?.orchestrateBoard ?? chat.orchestrateBoard);
 }
