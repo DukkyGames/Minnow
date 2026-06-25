@@ -27,6 +27,7 @@ export interface WorktreeOpResult {
   committed?: boolean;
   dirty?: boolean;
   files?: string[];
+  inProgress?: boolean;
   merged?: boolean;
   conflict?: boolean;
   conflictedFiles?: string[];
@@ -127,6 +128,11 @@ export function checkMerged(input: {
 /** Abort an in-progress merge in the integration worktree. */
 export function abortMerge(input: { boardId: string }): Promise<WorktreeOpResult> {
   return postWorktree('abort_merge', input);
+}
+
+/** True when MERGE_HEAD is set in the integration worktree (merge in progress). */
+export function checkMergeInProgress(input: { boardId: string }): Promise<WorktreeOpResult> {
+  return postWorktree('merge_in_progress', input);
 }
 
 /** Reset integration worktree to a pre-merge tip (abort merge + hard reset + clean). */

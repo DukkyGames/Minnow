@@ -188,6 +188,22 @@ export async function mergeIntoIntegration({ boardId, fromBranch, message }) {
 }
 
 /**
+ * True when a merge is actively in progress in the integration worktree
+ * (MERGE_HEAD is set). Returns { ok: true, inProgress: boolean }.
+ * @param {{ boardId: string }} input
+ */
+export async function mergeInProgress({ boardId }) {
+  const intPath = getWorktreeSlotPath(boardId, 'integration');
+  try {
+    await fs.access(intPath);
+  } catch {
+    return { ok: false, error: 'integration worktree missing' };
+  }
+  const r = await git(['rev-parse', '--verify', 'MERGE_HEAD'], intPath);
+  return { ok: true, inProgress: r.code === 0 };
+}
+
+/**
  * Stage all changes and commit in a task/wave worktree. No empty commits.
  * @param {{ boardId: string, slotId: string, message?: string }} input
  */

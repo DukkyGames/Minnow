@@ -67,6 +67,7 @@ import {
   commitWorktree as commitTaskWorktree,
   checkWorktreeDirty as checkTaskWorktreeDirty,
   checkMerged as checkTaskBranchMerged,
+  checkMergeInProgress as checkMergeInProgressOp,
   restoreIntegration as restoreIntegrationWorktree,
   verifyIntegrationMerge as verifyIntegrationMergeOp,
   refreshIntegrationDeps as refreshIntegrationDepsOp,
@@ -538,16 +539,33 @@ function startTaskChatSupervision(chatId: string): void {
     const sup = getRunSupervision(runId);
     if (!sup) return;
     const meta = getAutopilotMetaSync();
-    const stallMs = meta.progressStallMs * TASK_CHAT_STALL_MULTIPLIER;
     if (sup.lastProgressAt == null) return;
     const progressAge = performance.now() - sup.lastProgressAt;
+
+    const taskId = chat.boardTaskId;
+    if (!taskId) return;
+
+    const planner = getPlannerChatForGroup(group);
+    if (!planner) return;
+
+    const stallTask = group.orchestrateBoard.tasks.find((t) => t.id === taskId);
+
+    // Fixer chats use a tighter threshold and reconcile directly via finalizeMergeFixerOnStreamEnd.
+    if (stallTask?.fixerChatId?.trim() === chatId && stallTask.status === 'merging') {
+      if (progressAge < meta.progressStallMs) return;
+      stopHeartbeat(chatTaskRunId(chatId));
+      stopGeneration(chatId);
+      void finalizeMergeFixerOnStreamEnd(group, stallTask, planner).catch((err) =>
+        reportBackgroundError('merge-fixer-stall-reconcile', err),
+      );
+      return;
+    }
+
+    const stallMs = meta.progressStallMs * TASK_CHAT_STALL_MULTIPLIER;
     if (progressAge < stallMs) return;
 
     const restarts = taskChatStallRestarts.get(chatId) ?? 0;
     if (restarts >= TASK_CHAT_STALL_RESTART_CAP) return;
-
-    const taskId = chat.boardTaskId;
-    if (!taskId) return;
 
     taskChatStallRestarts.set(chatId, restarts + 1);
     // Stop the heartbeat timer only — do NOT call stopTaskChatSupervision here, as that
@@ -555,16 +573,12 @@ function startTaskChatSupervision(chatId: string): void {
     stopHeartbeat(chatTaskRunId(chatId));
     stopGeneration(chatId);
 
-    const planner = getPlannerChatForGroup(group);
-    if (!planner) return;
-
     const stallReason = `task-chat-stall (${progressAge}ms no output)`;
     if (restarts === 0) {
       void runTaskChatNudge(group, taskId, planner, stallReason).catch((err) =>
         reportBackgroundError('task-chat-stall-nudge', err),
       );
     } else {
-      const stallTask = group.orchestrateBoard.tasks.find((t) => t.id === taskId);
       if (stallTask) {
         void runSelfHeal(group, stallTask, planner, { phase: 'build', category: 'stall', summary: stallReason }, makeSelfHealDeps())
           .catch((err) => reportBackgroundError('task-chat-stall-selfheal', err));
@@ -1615,8 +1629,10 @@ export async function startMergeConflictFixer(
   const board = group.orchestrateBoard;
   if (!board?.integrationBranch) return;
 
+  const boardId = group.id;
+
   const ensured = await ensureIntegrationWorktree({
-    boardId: group.id,
+    boardId,
     branch: board.integrationBranch,
   });
   const integrationPath = ensured.path?.trim();
@@ -1631,9 +1647,64 @@ export async function startMergeConflictFixer(
     return;
   }
 
+  // Part 3: Guard against launching a fixer when MERGE_HEAD has already vanished.
+  const branch = task.worktreeBranch?.trim();
+  let effectiveConflictedFiles = conflictedFiles;
+  let effectiveIntegrationSha = integrationSha;
+  if (isLocalServerAvailable() && branch) {
+    const inProg = await checkMergeInProgressOp({ boardId });
+    if (inProg.ok && !inProg.inProgress) {
+      const alreadyMerged = await checkTaskBranchMerged({ boardId, fromBranch: branch });
+      if (alreadyMerged.ok && alreadyMerged.merged) {
+        // Merge already committed — skip fixer and finalize directly.
+        moveTaskStatus(group, task.id, 'merging', plannerChat);
+        const freshMerged = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
+        await finalizeMergeFixerOnStreamEnd(group, freshMerged, plannerChat).catch((err) =>
+          reportBackgroundError('merge-fixer-already-merged', err),
+        );
+        return;
+      }
+      // Re-establish authoritative merge state.
+      const remerge = await mergeTaskIntoIntegration({
+        boardId,
+        fromBranch: branch,
+        message: `Merge ${task.id} (${task.title}) into integration`,
+      });
+      if (!remerge.ok && remerge.conflict) {
+        // Fresh conflict — continue spawning fixer with updated state.
+        effectiveConflictedFiles = remerge.conflictedFiles ?? conflictedFiles;
+        effectiveIntegrationSha = remerge.integrationSha ?? integrationSha;
+      } else if (remerge.ok) {
+        // Merged cleanly — finalize and complete.
+        moveTaskStatus(group, task.id, 'merging', plannerChat);
+        const freshClean = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
+        await finalizeMergeFixerOnStreamEnd(group, freshClean, plannerChat).catch((err) =>
+          reportBackgroundError('merge-fixer-clean-remerge', err),
+        );
+        return;
+      } else {
+        // Error re-establishing merge state — self-heal.
+        moveTaskStatus(group, task.id, 'merging', plannerChat);
+        const freshForHeal = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
+        void runSelfHeal(
+          group,
+          freshForHeal,
+          plannerChat,
+          {
+            phase: 'merge',
+            category: 'stall',
+            summary: remerge.output ?? 'Failed to re-establish merge state for fixer',
+          },
+          makeSelfHealDeps(),
+        ).catch((err) => reportBackgroundError('merge-fixer-remerge-error', err));
+        return;
+      }
+    }
+  }
+
   moveTaskStatus(group, task.id, 'merging', plannerChat);
 
-  const preSha = integrationSha?.trim() || task.mergePreSha?.trim();
+  const preSha = effectiveIntegrationSha?.trim() || task.mergePreSha?.trim();
   if (preSha) {
     updateTask(group, task.id, { mergePreSha: preSha }, plannerChat);
   }
@@ -1656,7 +1727,10 @@ export async function startMergeConflictFixer(
   ensureStreamEndSubscription();
   reserveLaunchSlot(fixerChat.id);
   try {
-    const seed = buildMergeFixerSeedMessage(task, conflictedFiles);
+    const seed = buildMergeFixerSeedMessage(task, effectiveConflictedFiles);
+    // Part 1: Supervise the fixer chat like every other board chat starter.
+    refreshHeartbeatThresholds();
+    startTaskChatSupervision(fixerChat.id);
     void runChatTurn({
       chat: fixerChat,
       pushUser: true,
@@ -2943,4 +3017,15 @@ export function startTaskChatSupervisionForTests(chatId: string): void {
 
 export function clearTaskChatStallRestartsForTests(): void {
   taskChatStallRestarts.clear();
+}
+
+/** Test-only: directly invoke the fixer stall reconciler for a task. */
+export async function triggerFixerStallReconcileForTests(
+  group: ChatGroup,
+  plannerChat: Chat,
+  taskId: string,
+): Promise<void> {
+  const task = group.orchestrateBoard?.tasks.find((t) => t.id === taskId);
+  if (!task) return;
+  return finalizeMergeFixerOnStreamEnd(group, task, plannerChat);
 }
