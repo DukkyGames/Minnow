@@ -18,7 +18,7 @@
  * keep being driven.
  */
 
-import type { BoardTask, Chat, ChatGroup } from '../types.ts';
+import type { BoardTask, Chat, ChatGroup, UnresolvedIssue } from '../types.ts';
 import { type FailureCategory } from './orchestrate-failure-classify.ts';
 import { updateTask } from './orchestrate-board-store.ts';
 import { scheduleSaveSessions } from './sessions.ts';
@@ -94,6 +94,8 @@ export interface SelfHealDeps {
 
   resolveSelfHealMaxRounds(): number;
 
+  resolveAfkAutoRestartStalls(): boolean;
+
   resolveMaxMergeFixerAttempts(): number;
 }
 
@@ -106,6 +108,25 @@ export interface SelfHealOptions {
   integrationSha?: string;
 }
 
+/** Per-category resolution steps for quarantine reports and task payloads. */
+export function resolutionStepsForCategory(
+  category: FailureCategory | UnresolvedIssue['category'],
+  service?: string,
+): string[] {
+  switch (category) {
+    case 'infra':
+      return [
+        `ensure \`${service ?? '<service>'}\` running, e.g. \`docker compose up -d ${service ?? '<svc>'}\`, then Requeue`,
+      ];
+    case 'merge':
+      return ['resolve conflicts manually on the task branch, then Requeue'];
+    case 'stall':
+      return ['agent stalled repeatedly; inspect the task chat, then Requeue'];
+    default:
+      return ['review the failure summary; fix and Requeue'];
+  }
+}
+
 function quarantineWithIssue(
   group: ChatGroup,
   task: BoardTask,
@@ -115,20 +136,32 @@ function quarantineWithIssue(
   deps: SelfHealDeps,
 ): void {
   const board = group.orchestrateBoard;
+  const resolvedCategory: UnresolvedIssue['category'] =
+    category === 'unknown' ? 'code' : category;
+  const resolutionSteps = resolutionStepsForCategory(resolvedCategory);
   const issue: BoardTask['quarantine'] = {
     category: category === 'unknown' ? 'unknown' : category,
     summary,
-    resolutionSteps:
-      category === 'infra'
-        ? ['Check required services are available', 'Run provisioning manually', 'Re-queue the task']
-        : category === 'merge'
-          ? ['Resolve merge conflicts manually', 'Re-run the merge fixer']
-          : ['Review the error output', 'Fix the code issue', 'Re-queue the task'],
+    resolutionSteps,
     at: Date.now(),
   };
   deps.quarantineTaskAndDependents(group, task.id, issue, plannerChat);
   if (board) {
-    board.unresolvedIssues = [...(board.unresolvedIssues ?? []), task.id];
+    const record: UnresolvedIssue = {
+      taskId: task.id,
+      title: task.title,
+      category: resolvedCategory,
+      summary,
+      resolutionSteps,
+      ...(issue.logRef ? { logRef: issue.logRef } : {}),
+      createdAt: Date.now(),
+      attempts: task.selfHealRound ?? task.buildAttempts,
+    };
+    const prev = board.unresolvedIssues ?? [];
+    board.unresolvedIssues = [
+      ...prev.filter((u) => u.taskId !== task.id),
+      record,
+    ];
     scheduleSaveSessions();
   }
 }
@@ -196,6 +229,11 @@ export async function runSelfHeal(
         { ...options, category: 'code' },
         deps,
       );
+    }
+    if (!deps.resolveAfkAutoRestartStalls()) {
+      quarantineWithIssue(group, freshTask, plannerChat, 'stall', summary, deps);
+      await deps.autoDelegateNext(group, plannerChat);
+      return;
     }
     updateTask(group, freshTask.id, { lastHealCategory: 'stall' }, plannerChat);
     await deps.runTaskChatNudge(group, freshTask.id, plannerChat, summary);

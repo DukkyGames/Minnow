@@ -146,6 +146,7 @@ function makeDeps(): {
       s.quarantineCalls.push({ taskId, category: issue?.category ?? 'unknown' });
     },
     resolveSelfHealMaxRounds: () => 2,
+    resolveAfkAutoRestartStalls: () => true,
     resolveMaxMergeFixerAttempts: () => 2,
   };
 
@@ -242,7 +243,12 @@ describe('runSelfHeal — selfHealRound cap', () => {
     const { deps } = makeDeps();
     await runSelfHeal(group, t, planner, opts('build', { category: 'code' }), deps);
 
-    assert.ok(group.orchestrateBoard?.unresolvedIssues?.includes('W1-A'));
+    const issues = group.orchestrateBoard?.unresolvedIssues ?? [];
+    assert.ok(issues.length > 0, 'unresolvedIssues should be non-empty');
+    const issue = issues.find((u) => u.taskId === 'W1-A');
+    assert.ok(issue, 'should have an UnresolvedIssue for W1-A');
+    assert.equal(issue.category, 'code');
+    assert.ok(Array.isArray(issue.resolutionSteps) && issue.resolutionSteps.length > 0);
   });
 });
 

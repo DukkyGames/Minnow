@@ -15,6 +15,7 @@ import { isChatTurnSetupPending } from '../chat/chat-turn-guard.ts';
 import {
   getAutopilotMetaSync,
   resolveAutoProvisionInfra,
+  resolveAfkAutoRestartStalls,
   resolveInfraProvisionTimeoutMs,
   resolveMaxFinalTestAttempts,
   resolveMaxTaskBuildAttempts,
@@ -431,6 +432,7 @@ function makeSelfHealDeps(): SelfHealDeps {
     autoDelegateNext,
     quarantineTaskAndDependents,
     resolveSelfHealMaxRounds,
+    resolveAfkAutoRestartStalls,
     resolveMaxMergeFixerAttempts: () => MAX_MERGE_FIXER_ATTEMPTS,
   };
 }
@@ -2531,6 +2533,9 @@ export function moveTaskStatus(
   if (board && status === 'complete') {
     const planner = plannerChat ?? getPlannerChatForGroup(group);
     if (planner) tryTriggerFinalIntegrationTest(group, planner);
+  }
+  if (board && status === 'quarantined' && isOrchestratePlanComplete(board) && !isBoardReadyForFinalTest(board)) {
+    void maybeEmitOrchestratePlanComplete(group.id);
   }
   if (board && isBoardRunning(group) && plannerChat) {
     const reportable =

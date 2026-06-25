@@ -108,9 +108,25 @@ import {
 import { resolveChatContext } from '../workspace/chat-cwd.js';
 import { appendBoardLogLine } from '../orchestrate/board-log-sink.js';
 import { guardCdOutsideWorktree as _guardCdRaw } from '../tools/cwd-guard.js';
+import { readConfigJson } from '../config/store.js';
 
 const execFileAsync = promisify(execFile);
 const FIND_FILES_MAX = 500;
+
+/** Read the autopilot.guardCdOutsideWorktree toggle from config.json (defaults true). */
+async function isGuardCdEnabled() {
+  try {
+    const meta = await readConfigJson('config.json');
+    const autopilot = meta && typeof meta === 'object' ? /** @type {Record<string, unknown>} */ (meta).autopilot : null;
+    if (autopilot && typeof autopilot === 'object') {
+      const flag = /** @type {Record<string, unknown>} */ (autopilot).guardCdOutsideWorktree;
+      if (typeof flag === 'boolean') return flag;
+    }
+  } catch {
+    // ignore — default true
+  }
+  return true;
+}
 
 /** Path relative to workspace root for display in tool output. */
 function toRelativePath(absPath) {
@@ -785,7 +801,7 @@ async function toolExecuteCommand(args) {
   } else {
     const { worktreeRoot, groupId } = await resolveChatContext(chatId ?? '');
     cwd = worktreeRoot ?? getEffectiveWorkspaceRoot();
-    if (worktreeRoot) {
+    if (worktreeRoot && await isGuardCdEnabled()) {
       const guarded = guardCdOutsideWorktree(rawCommand, worktreeRoot, { chatId, groupId });
       if (guarded.redirected) command = guarded.command;
     }

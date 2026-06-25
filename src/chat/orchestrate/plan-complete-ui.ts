@@ -40,7 +40,9 @@ export async function maybeEmitOrchestratePlanComplete(groupId: string): Promise
   const board = group?.orchestrateBoard;
   const planner = group ? getPlannerChatForGroup(group) : undefined;
   if (!group || !board || !planner || !isOrchestratePlanComplete(board)) return;
-  if (board.finalTest?.status !== 'passed') return;
+  // Emit when the final test passed, or when no task completed (all-quarantined, final test not applicable).
+  const hasAnyComplete = board.tasks.some((t) => t.status === 'complete');
+  if (hasAnyComplete && board.finalTest?.status !== 'passed') return;
 
   if (board.completionShownAt != null) return;
   board.completionShownAt = Date.now();

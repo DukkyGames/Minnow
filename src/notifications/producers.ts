@@ -3,21 +3,22 @@
  * Chat turn alerts are pushed from {@link notifyChatTurnEnded} in `loop.ts` after finalizeRun.
  */
 
-import { isSubAgentRunTerminal } from '../agents/sub-agent-outcome';
-import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
-import type { SubAgentRun } from '../agents/types';
-import { findGroupById } from '../state/chat-groups';
-import { subscribeAllBoardChanges } from '../state/orchestrate-board-events';
-import { findChatById, sessionState } from '../state/sessions';
-import type { BoardTask, BoardTaskStatus } from '../types';
-import { truncatePreview } from './preview';
-import { pushNotification } from './push';
+import { isSubAgentRunTerminal } from '../agents/sub-agent-outcome.ts';
+import { subscribeSubAgentRuns } from '../agents/sub-agent-events.ts';
+import type { SubAgentRun } from '../agents/types.ts';
+import { isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete.ts';
+import { subscribeAllBoardChanges } from '../state/orchestrate-board-events.ts';
+import { findChatById, sessionState } from '../state/sessions.ts';
+import type { BoardTask, BoardTaskStatus } from '../types.ts';
+import { truncatePreview } from './preview.ts';
+import { pushNotification } from './push.ts';
 
 let initialized = false;
 
 /** Previous board task status for transition detection. */
 const taskStatusById = new Map<string, BoardTaskStatus>();
 const notifiedSubAgentRuns = new Set<string>();
+const notifiedBoardComplete = new Set<string>();
 
 function chatTitle(chat: { name?: string }): string {
   return chat.name?.trim() || 'Chat';
@@ -28,7 +29,7 @@ function waveLabel(wave: BoardTask['wave']): string {
 }
 
 function handleBoardChange(groupId: string): void {
-  const group = findGroupById(groupId);
+  const group = (sessionState?.groups ?? []).find((g) => g.id === groupId);
   const board = group?.orchestrateBoard;
   if (!board) return;
 
@@ -70,6 +71,18 @@ function handleBoardChange(groupId: string): void {
       continue;
     }
 
+    if (task.status === 'quarantined' && prev !== 'quarantined') {
+      pushNotification({
+        kind: 'task_quarantined',
+        title,
+        preview: `${wave} — quarantined`,
+        chatId: targetChatId,
+        appId: 'code',
+        dedupeKey: dedupeBase,
+      });
+      continue;
+    }
+
     if (
       (task.status === 'failed' || task.status === 'blocked') &&
       prev !== task.status
@@ -84,6 +97,19 @@ function handleBoardChange(groupId: string): void {
         dedupeKey: dedupeBase,
       });
     }
+  }
+
+  if (isOrchestratePlanComplete(board) && !notifiedBoardComplete.has(groupId)) {
+    notifiedBoardComplete.add(groupId);
+    const unresolvedCount = board.unresolvedIssues?.length ?? 0;
+    pushNotification({
+      kind: 'board_complete',
+      title: 'Orchestrate board',
+      preview: `Complete — ${unresolvedCount} unresolved issue${unresolvedCount === 1 ? '' : 's'}`,
+      chatId: defaultChatId,
+      appId: 'code',
+      dedupeKey: `board_complete:${groupId}`,
+    });
   }
 }
 
@@ -124,8 +150,12 @@ function handleSubAgentRun(run: SubAgentRun): void {
 /** Seed task status map so first poll does not fire spurious started events. */
 function seedBoardTaskStatuses(): void {
   for (const group of sessionState?.groups ?? []) {
-    for (const task of group.orchestrateBoard?.tasks ?? []) {
+    const board = group.orchestrateBoard;
+    for (const task of board?.tasks ?? []) {
       taskStatusById.set(task.id, task.status);
+    }
+    if (board && isOrchestratePlanComplete(board)) {
+      notifiedBoardComplete.add(group.id);
     }
   }
 }
@@ -145,6 +175,7 @@ export function resetNotificationProducersForTests(): void {
   initialized = false;
   taskStatusById.clear();
   notifiedSubAgentRuns.clear();
+  notifiedBoardComplete.clear();
 }
 
 /** Exported for unit tests. */

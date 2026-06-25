@@ -379,7 +379,10 @@ describe('validateSessionState orchestrate board', () => {
             lastUpdatedAt: 2,
             provisionState: 'ready',
             provisionedSignatures: ['sha256:abc', 'sha256:def'],
-            unresolvedIssues: ['ISSUE-1', 'ISSUE-2'],
+            unresolvedIssues: [
+              { taskId: 'ISSUE-1', title: 'Task A', category: 'code', summary: 'Build failed', resolutionSteps: ['fix and requeue'], createdAt: 1000 },
+              { taskId: 'ISSUE-2', title: 'Task B', category: 'infra', summary: 'DB down', resolutionSteps: ['start db'], createdAt: 2000 },
+            ],
             tasks: [
               { id: 'W1-A', title: 'Task', wave: 'W1', category: 'build', status: 'planned' },
             ],
@@ -392,7 +395,11 @@ describe('validateSessionState orchestrate board', () => {
     const board = out.groups[0].orchestrateBoard;
     assert.equal(board.provisionState, 'ready');
     assert.deepEqual(board.provisionedSignatures, ['sha256:abc', 'sha256:def']);
-    assert.deepEqual(board.unresolvedIssues, ['ISSUE-1', 'ISSUE-2']);
+    assert.equal(board.unresolvedIssues.length, 2);
+    assert.equal(board.unresolvedIssues[0].taskId, 'ISSUE-1');
+    assert.equal(board.unresolvedIssues[0].category, 'code');
+    assert.equal(board.unresolvedIssues[1].taskId, 'ISSUE-2');
+    assert.equal(board.unresolvedIssues[1].category, 'infra');
   });
 });
 

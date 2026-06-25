@@ -106,15 +106,16 @@ export function buildDeterministicFinishReport(
       ? `${usage.total_tokens.toLocaleString()} tokens across planner and task chats`
       : 'Token usage unavailable';
 
+  const completeCount = board.tasks.filter((t) => t.status === 'complete').length;
   const completedTasks = board.tasks
     .filter((t) => t.status === 'complete')
     .map((t) => `- **${t.id}** — ${t.title}`)
     .join('\n');
 
-  return [
+  const lines = [
     `## Summary`,
     '',
-    `**${planName}** finished with ${total}/${total} tasks across ${waves} wave${waves === 1 ? '' : 's'} in **${elapsed}**.`,
+    `**${planName}** finished with ${completeCount}/${total} tasks across ${waves} wave${waves === 1 ? '' : 's'} in **${elapsed}**.`,
     '',
     `- Integration branch: \`${branch}\``,
     `- ${tokenLine}`,
@@ -128,6 +129,20 @@ export function buildDeterministicFinishReport(
     `## Recommended next tasks`,
     '',
     completedTasks || '_All planned tasks are complete._',
+  ];
+
+  const issues = board.unresolvedIssues;
+  if (issues && issues.length > 0) {
+    lines.push('', `## Unresolved / quarantined (${issues.length})`, '');
+    for (const issue of issues) {
+      lines.push(`- **${issue.title}** (${issue.category}) — ${issue.summary}`);
+      for (const step of issue.resolutionSteps) {
+        lines.push(`  - ${step}`);
+      }
+    }
+  }
+
+  lines.push(
     '',
     `## How to run`,
     '',
@@ -141,7 +156,9 @@ export function buildDeterministicFinishReport(
     planPath
       ? `_Plan reference: \`${planPath}\`_`
       : '_Set a plan path on the board for project-specific run instructions._',
-  ].join('\n');
+  );
+
+  return lines.join('\n');
 }
 
 /** Synchronous stats (elapsed + tokens) for immediate dashboard render. */

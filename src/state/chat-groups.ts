@@ -3,7 +3,7 @@
  * Orchestrate boards are owned by folders ({@link ChatGroup.orchestrateBoard}).
  */
 
-import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title';
+import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title.ts';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Chat, ChatGroup } from '../types';
 import { getChatLastMessageAt } from './session-workspace-scope';

@@ -59,16 +59,32 @@ export function buildOrchestrateCompletionMessage(
   const planPath = chat.orchestratePlanPath?.trim() || board.planPath?.trim() || '';
   const planName = shortPlanLabel(planPath);
   const total = board.tasks.length;
+  const completeCount = board.tasks.filter((t) => t.status === 'complete').length;
+  const quarantinedCount = board.tasks.filter((t) => t.status === 'quarantined').length;
   const elapsed = formatElapsedMs(board.startedAt, endedAtMs);
 
-  return [
+  const lines = [
     `**Orchestrate plan complete** — ${planName}`,
     '',
-    `- **Tasks:** ${total}/${total} complete`,
+    `- **Tasks:** ${completeCount}/${total} complete`,
+    ...(quarantinedCount > 0 ? [`- **Quarantined:** ${quarantinedCount}`] : []),
     `- **Elapsed:** ${elapsed}`,
     '',
     'All board tasks are finished. Move any remaining cards or start a new chat when ready.',
     '',
     '**Next steps:** review results in the board, open task chats, or export/share the plan if needed.',
-  ].join('\n');
+  ];
+
+  const issues = board.unresolvedIssues;
+  if (issues && issues.length > 0) {
+    lines.push('', `**Unresolved / quarantined (${issues.length})**`, '');
+    for (const issue of issues) {
+      lines.push(`- **${issue.title}** (${issue.category}) — ${issue.summary}`);
+      for (const step of issue.resolutionSteps) {
+        lines.push(`  - ${step}`);
+      }
+    }
+  }
+
+  return lines.join('\n');
 }

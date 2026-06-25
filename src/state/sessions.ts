@@ -762,6 +762,36 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
       ? { isolationBaseRef: r.isolationBaseRef.trim() }
       : {}),
     ...(log ? { log } : {}),
+    ...(() => {
+      if (!Array.isArray(r.unresolvedIssues)) return {};
+      const UNRESOLVED_ISSUES_MAX = 200;
+      const issues = [];
+      for (const item of r.unresolvedIssues) {
+        if (!item || typeof item !== 'object') continue;
+        const u = item as Record<string, unknown>;
+        if (
+          typeof u.taskId === 'string' && u.taskId.trim() &&
+          typeof u.title === 'string' &&
+          typeof u.category === 'string' &&
+          typeof u.summary === 'string' &&
+          Array.isArray(u.resolutionSteps) &&
+          typeof u.createdAt === 'number'
+        ) {
+          issues.push({
+            taskId: u.taskId.trim(),
+            title: typeof u.title === 'string' ? u.title : '',
+            category: u.category as 'infra' | 'code' | 'merge' | 'stall',
+            summary: typeof u.summary === 'string' ? u.summary : '',
+            resolutionSteps: (u.resolutionSteps as unknown[]).filter((s): s is string => typeof s === 'string'),
+            ...(typeof u.logRef === 'string' && u.logRef.trim() ? { logRef: u.logRef.trim() } : {}),
+            createdAt: u.createdAt as number,
+            ...(typeof u.attempts === 'number' ? { attempts: u.attempts } : {}),
+          });
+        }
+      }
+      if (!issues.length) return {};
+      return { unresolvedIssues: issues.slice(-UNRESOLVED_ISSUES_MAX) };
+    })(),
   };
 }
 

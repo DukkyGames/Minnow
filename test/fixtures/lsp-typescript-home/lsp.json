@@ -1,0 +1,47 @@
+{
+  "enabled": true,
+  "lsp": {
+    "typescript": {
+      "disabled": false
+    },
+    "pyright": {
+      "disabled": false
+    },
+    "html": {
+      "disabled": false
+    },
+    "css": {
+      "disabled": false
+    },
+    "graphql": {
+      "disabled": false
+    },
+    "yaml-ls": {
+      "disabled": false
+    },
+    "bash": {
+      "disabled": false
+    },
+    "dockerfile": {
+      "disabled": false
+    },
+    "rust": {
+      "disabled": true
+    },
+    "gopls": {
+      "disabled": true
+    },
+    "clangd": {
+      "disabled": true
+    },
+    "lua-ls": {
+      "disabled": true
+    },
+    "terraform": {
+      "disabled": true
+    },
+    "zls": {
+      "disabled": true
+    }
+  }
+}

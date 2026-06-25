@@ -447,11 +447,32 @@ function ensureOrchestrateBoard(raw) {
     if (sigs.length) out.provisionedSignatures = sigs;
   }
   if (Array.isArray(r.unresolvedIssues)) {
+    const UNRESOLVED_ISSUES_MAX = 200;
     const issues = [];
-    for (const s of r.unresolvedIssues) {
-      if (typeof s === 'string' && s.trim()) issues.push(s.trim());
+    for (const item of r.unresolvedIssues) {
+      if (!item || typeof item !== 'object') continue;
+      const u = /** @type {Record<string, unknown>} */ (item);
+      if (
+        typeof u.taskId === 'string' && u.taskId.trim() &&
+        typeof u.title === 'string' &&
+        typeof u.category === 'string' &&
+        typeof u.summary === 'string' &&
+        Array.isArray(u.resolutionSteps) &&
+        typeof u.createdAt === 'number'
+      ) {
+        issues.push({
+          taskId: u.taskId.trim(),
+          title: u.title,
+          category: u.category,
+          summary: u.summary,
+          resolutionSteps: u.resolutionSteps.filter((s) => typeof s === 'string'),
+          ...(typeof u.logRef === 'string' && u.logRef.trim() ? { logRef: u.logRef.trim() } : {}),
+          createdAt: u.createdAt,
+          ...(typeof u.attempts === 'number' ? { attempts: u.attempts } : {}),
+        });
+      }
     }
-    if (issues.length) out.unresolvedIssues = issues;
+    if (issues.length) out.unresolvedIssues = issues.slice(-UNRESOLVED_ISSUES_MAX);
   }
   if (Array.isArray(r.log)) {
     const log = [];
@@ -1394,37 +1415,44 @@ export function mergeConfigMeta(existing, patch) {
       return Math.min(300_000, Math.max(5_000, Math.round(n)));
     };
 
+    const clampSelfHealRounds = (value, fallback) => {
+      const n = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.min(6, Math.max(0, Math.round(n)));
+    };
+    const clampInfraTimeoutMs = (value, fallback) => {
+      const n = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.min(600_000, Math.max(30_000, Math.round(n)));
+    };
+    const parseBool = (value, fallback) => (typeof value === 'boolean' ? value : fallback);
+    const AUTOPILOT_DEFAULTS = {
+      defaultExecutionMode: 'manual',
+      maxConcurrentTasks: 3,
+      isolationMode: 'auto',
+      maxTestAttempts: 3,
+      maxBuildAttempts: 2,
+      maxFinalTestAttempts: 3,
+      continueSmartRoute: 'conservative',
+      heartbeatIntervalMs: 7000,
+      progressStallMs: 90000,
+      heartbeatDeadMs: 30000,
+      plannerProviderId: '',
+      plannerModelId: '',
+      selfHealMaxRounds: 2,
+      autoProvisionInfra: true,
+      infraProvisionTimeoutMs: 180000,
+      afkAutoRestartStalls: true,
+      guardCdOutsideWorktree: true,
+    };
+
     if (p.autopilot === null) {
-      base.autopilot = {
-        defaultExecutionMode: 'manual',
-        maxConcurrentTasks: 3,
-        isolationMode: 'auto',
-        maxTestAttempts: 3,
-        maxBuildAttempts: 2,
-        maxFinalTestAttempts: 3,
-        heartbeatIntervalMs: 7000,
-        progressStallMs: 90000,
-        heartbeatDeadMs: 30000,
-        plannerProviderId: '',
-        plannerModelId: '',
-      };
+      base.autopilot = { ...AUTOPILOT_DEFAULTS };
     } else if (typeof p.autopilot === 'object') {
       const existingAutopilot =
         base.autopilot && typeof base.autopilot === 'object'
           ? { .../** @type {Record<string, unknown>} */ (base.autopilot) }
-          : {
-              defaultExecutionMode: 'manual',
-              maxConcurrentTasks: 3,
-              isolationMode: 'auto',
-              maxTestAttempts: 3,
-              maxBuildAttempts: 2,
-              maxFinalTestAttempts: 3,
-              heartbeatIntervalMs: 7000,
-              progressStallMs: 90000,
-              heartbeatDeadMs: 30000,
-              plannerProviderId: '',
-              plannerModelId: '',
-            };
+          : { ...AUTOPILOT_DEFAULTS };
       const a = /** @type {Record<string, unknown>} */ (p.autopilot);
       if (typeof a.defaultExecutionMode === 'string') {
         const mode = a.defaultExecutionMode.trim();
@@ -1485,6 +1513,31 @@ export function mergeConfigMeta(existing, patch) {
       }
       if (typeof a.plannerModelId === 'string') {
         existingAutopilot.plannerModelId = a.plannerModelId.trim();
+      }
+      const CONTINUE_SMART_ROUTE_MODES = new Set(['off', 'conservative', 'aggressive']);
+      if (typeof a.continueSmartRoute === 'string' && CONTINUE_SMART_ROUTE_MODES.has(a.continueSmartRoute)) {
+        existingAutopilot.continueSmartRoute = a.continueSmartRoute;
+      }
+      if (a.selfHealMaxRounds !== undefined) {
+        existingAutopilot.selfHealMaxRounds = clampSelfHealRounds(
+          a.selfHealMaxRounds,
+          existingAutopilot.selfHealMaxRounds ?? 2,
+        );
+      }
+      if (a.autoProvisionInfra !== undefined) {
+        existingAutopilot.autoProvisionInfra = parseBool(a.autoProvisionInfra, true);
+      }
+      if (a.infraProvisionTimeoutMs !== undefined) {
+        existingAutopilot.infraProvisionTimeoutMs = clampInfraTimeoutMs(
+          a.infraProvisionTimeoutMs,
+          existingAutopilot.infraProvisionTimeoutMs ?? 180000,
+        );
+      }
+      if (a.afkAutoRestartStalls !== undefined) {
+        existingAutopilot.afkAutoRestartStalls = parseBool(a.afkAutoRestartStalls, true);
+      }
+      if (a.guardCdOutsideWorktree !== undefined) {
+        existingAutopilot.guardCdOutsideWorktree = parseBool(a.guardCdOutsideWorktree, true);
       }
       base.autopilot = existingAutopilot;
     }

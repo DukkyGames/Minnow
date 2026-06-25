@@ -377,6 +377,18 @@ export interface BoardWave {
   collapsed?: boolean;
 }
 
+/** A task that could not be resolved by the self-heal loop — feeds the MIN-208 finish dashboard. */
+export interface UnresolvedIssue {
+  taskId: string;
+  title: string;
+  category: 'infra' | 'code' | 'merge' | 'stall';
+  summary: string;
+  resolutionSteps: string[];
+  logRef?: string;
+  createdAt: number;
+  attempts?: number;
+}
+
 /** Structured Orchestrate plan execution state (persisted on chat). */
 export interface OrchestrateBoardState {
   planPath: string;
@@ -434,8 +446,8 @@ export interface OrchestrateBoardState {
   provisionState?: 'idle' | 'provisioning' | 'ready' | 'failed';
   /** Phase-2 placeholder: content-hash signatures of provisioned artefacts. */
   provisionedSignatures?: string[];
-  /** Phase-2 placeholder: unresolved issue ids blocking the board. */
-  unresolvedIssues?: string[];
+  /** Structured per-task unresolved issues — data source for the MIN-208 finish dashboard. */
+  unresolvedIssues?: UnresolvedIssue[];
 }
 
 export type BoardLogLevel = 'info' | 'warn' | 'error';
