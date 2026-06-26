@@ -41,6 +41,7 @@ import {
   bumpProgress,
   chatTaskRunId,
   createRunSupervision,
+  getProgressAgeMs,
   getRunSupervision,
   setHeartbeatConfig,
   startHeartbeat,
@@ -736,8 +737,8 @@ function startTaskChatSupervision(chatId: string): void {
     const sup = getRunSupervision(runId);
     if (!sup) return;
     const meta = getAutopilotMetaSync();
-    if (sup.lastProgressAt == null) return;
-    const progressAge = performance.now() - sup.lastProgressAt;
+    const progressAge = getProgressAgeMs(runId);
+    if (progressAge == null) return;
 
     const taskId = chat.boardTaskId;
     if (!taskId) return;

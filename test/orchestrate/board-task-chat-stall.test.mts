@@ -14,12 +14,14 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import { setAutopilotMetaForTests, resetAutopilotMetaCache } from '../../src/config/autopilot-meta.ts';
 import {
   clearTaskChatStallRestartsForTests,
+  getTaskChatStallRestartCountForTests,
   startTaskChatSupervisionForTests,
 } from '../../src/state/orchestrate-board-actions.ts';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
 import {
   bumpProgress,
   chatTaskRunId,
+  resetHeartbeatBaselines,
   resetWrapperState,
   tickHeartbeatForTests,
 } from '../../src/agents/controller/wrapper.ts';
@@ -231,6 +233,33 @@ describe('board task-chat stall detection', () => {
 
     tickHeartbeatForTests(runId);
     // Sequential should not restart — no assertion needed beyond not throwing
+  });
+
+  test('visibility baseline reset does not false-stall after fresh progress bump', () => {
+    const planner = makePlanner();
+    const taskChat = makeTaskChat();
+    const group = makeGroup('afk');
+
+    setSessionStateForTests({
+      version: 5,
+      activeId: PLANNER_ID,
+      chats: [planner, taskChat],
+      groups: [group],
+    });
+
+    startTaskChatSupervisionForTests(TASK_CHAT_ID);
+    const runId = chatTaskRunId(TASK_CHAT_ID);
+
+    // Simulate a long-lived session, then a tab-focus baseline reset.
+    now = 4_000_000;
+    resetHeartbeatBaselines();
+    bumpProgress(runId);
+
+    // One heartbeat interval later — progress is fresh, not hours stale.
+    now = 4_000_000 + 7_000;
+    tickHeartbeatForTests(runId);
+
+    assert.equal(getTaskChatStallRestartCountForTests(TASK_CHAT_ID), 0);
   });
 
   test('stall with null lastProgressAt does not restart', () => {
