@@ -95,27 +95,23 @@ const CONTINUE_SMART_ROUTE_MODES = new Set<AutopilotContinueSmartRoute>([
 let cachedAutopilot: AutopilotMeta | null = null;
 
 function clampConcurrency(value: unknown, fallback: number): number {
-  const n = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(20, Math.max(1, Math.round(n)));
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(20, Math.max(1, Math.round(value)));
 }
 
 function clampAttempts(value: unknown, fallback: number): number {
-  const n = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(10, Math.max(1, Math.round(n)));
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(10, Math.max(1, Math.round(value)));
 }
 
 function clampSelfHealRounds(value: unknown, fallback: number): number {
-  const n = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(6, Math.max(0, Math.round(n)));
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(6, Math.max(0, Math.round(value)));
 }
 
 function clampInfraTimeoutMs(value: unknown, fallback: number): number {
-  const n = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(600_000, Math.max(30_000, Math.round(n)));
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(600_000, Math.max(30_000, Math.round(value)));
 }
 
 function parseBool(value: unknown, fallback: boolean): boolean {

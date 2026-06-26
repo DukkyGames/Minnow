@@ -1390,14 +1390,12 @@ export function mergeConfigMeta(existing, patch) {
     const AUTOPILOT_EXECUTION_MODES = new Set(['manual', 'sequential', 'auto', 'afk']);
     const AUTOPILOT_ISOLATION_MODES = new Set(['auto', 'off', 'per-task', 'per-wave']);
     const clampAutopilotConcurrency = (value, fallback) => {
-      const n = typeof value === 'number' ? value : Number(value);
-      if (!Number.isFinite(n)) return fallback;
-      return Math.min(20, Math.max(1, Math.round(n)));
+      if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+      return Math.min(20, Math.max(1, Math.round(value)));
     };
     const clampAutopilotAttempts = (value, fallback) => {
-      const n = typeof value === 'number' ? value : Number(value);
-      if (!Number.isFinite(n)) return fallback;
-      return Math.min(10, Math.max(1, Math.round(n)));
+      if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+      return Math.min(10, Math.max(1, Math.round(value)));
     };
     const clampHeartbeatIntervalMs = (value, fallback) => {
       const n = typeof value === 'number' ? value : Number(value);
@@ -1416,9 +1414,8 @@ export function mergeConfigMeta(existing, patch) {
     };
 
     const clampSelfHealRounds = (value, fallback) => {
-      const n = typeof value === 'number' ? value : Number(value);
-      if (!Number.isFinite(n)) return fallback;
-      return Math.min(6, Math.max(0, Math.round(n)));
+      if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+      return Math.min(6, Math.max(0, Math.round(value)));
     };
     const clampInfraTimeoutMs = (value, fallback) => {
       const n = typeof value === 'number' ? value : Number(value);
@@ -1518,7 +1515,7 @@ export function mergeConfigMeta(existing, patch) {
       if (typeof a.continueSmartRoute === 'string' && CONTINUE_SMART_ROUTE_MODES.has(a.continueSmartRoute)) {
         existingAutopilot.continueSmartRoute = a.continueSmartRoute;
       }
-      if (a.selfHealMaxRounds !== undefined) {
+      if (typeof a.selfHealMaxRounds === 'number') {
         existingAutopilot.selfHealMaxRounds = clampSelfHealRounds(
           a.selfHealMaxRounds,
           existingAutopilot.selfHealMaxRounds ?? 2,
