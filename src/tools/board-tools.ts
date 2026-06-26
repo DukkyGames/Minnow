@@ -55,6 +55,7 @@ const BOARD_TASK_STATUSES = new Set<BoardTaskStatus>([
   'complete',
   'failed',
   'blocked',
+  'quarantined',
 ]);
 
 const BOARD_CATEGORIES = new Set<BoardCategory>(['build', 'fix', 'test', 'research']);

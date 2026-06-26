@@ -391,6 +391,7 @@ const BOARD_TASK_STATUSES = new Set<BoardTaskStatus>([
   'complete',
   'failed',
   'blocked',
+  'quarantined',
 ]);
 
 const BOARD_CATEGORIES = new Set<BoardCategory>(['build', 'fix', 'test', 'research']);
@@ -629,6 +630,36 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     typeof r.devPort === 'number' && Number.isFinite(r.devPort) ? r.devPort : undefined;
   const apiPort =
     typeof r.apiPort === 'number' && Number.isFinite(r.apiPort) ? r.apiPort : undefined;
+  const stopRetries =
+    typeof r.stopRetries === 'number' && Number.isFinite(r.stopRetries)
+      ? r.stopRetries
+      : undefined;
+  let quarantine: BoardTask['quarantine'];
+  if (r.quarantine && typeof r.quarantine === 'object') {
+    const q = r.quarantine as Record<string, unknown>;
+    const QUARANTINE_CATEGORIES = new Set(['infra', 'code', 'merge', 'stall', 'unknown']);
+    const qCategory =
+      typeof q.category === 'string' && QUARANTINE_CATEGORIES.has(q.category)
+        ? (q.category as NonNullable<BoardTask['quarantine']>['category'])
+        : null;
+    const summary = typeof q.summary === 'string' ? q.summary : null;
+    const at = typeof q.at === 'number' && Number.isFinite(q.at) ? q.at : null;
+    if (qCategory && summary !== null && at !== null) {
+      const resolutionSteps: string[] = [];
+      if (Array.isArray(q.resolutionSteps)) {
+        for (const step of q.resolutionSteps) {
+          if (typeof step === 'string') resolutionSteps.push(step);
+        }
+      }
+      quarantine = {
+        category: qCategory,
+        summary,
+        resolutionSteps,
+        at,
+        ...(typeof q.logRef === 'string' && q.logRef.trim() ? { logRef: q.logRef.trim() } : {}),
+      };
+    }
+  }
   return {
     id,
     title,
@@ -661,6 +692,8 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     ...(worktreeBranch ? { worktreeBranch } : {}),
     ...(devPort !== undefined ? { devPort } : {}),
     ...(apiPort !== undefined ? { apiPort } : {}),
+    ...(stopRetries !== undefined ? { stopRetries } : {}),
+    ...(quarantine ? { quarantine } : {}),
   };
 }
 
