@@ -185,6 +185,6 @@ Manual: AFK board, merge conflict, fixer commits + prose → task completes with
 - [x] C: env-fixer watchdog branch (`fixerChatId === chatId`, split merge vs env)
 - [x] D: `systemPaused` + `stopBoardAutoRun` reason param
 - [x] E: raise `selfHealMaxRounds` default
-- [ ] F: (optional) fixer stall multiplier — deferred
+- [x] F: fixer stall multiplier (`FIXER_STALL_MULTIPLIER` 1.5× on merge-fixer heartbeat stall branch)
 - [x] G: header badge (`merging` in `hasInFlight` + Merging label)
 - [x] Tests + docs (`context.md`; architecture doc follow-up recommended)

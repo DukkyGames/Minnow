@@ -15,14 +15,20 @@ import { resetAutopilotMetaCache, setAutopilotMetaForTests } from '../../src/con
 import {
   autoDelegateNext,
   clearTaskChatStallRestartsForTests,
+  continueBoardTask,
+  enqueueMergeCompletedTaskWorktreeForTests,
   finalizeBoardTaskOnStreamEnd,
   getTaskChatStallRestartCountForTests,
+  recoverMergingBoardTask,
   reconcileMergingTasks,
   releaseLaunchSlotForTests,
   reserveLaunchSlotForTests,
+  restartBoardTask,
+  setMaxFixerWaitMsForTests,
   startBoardAutoRun,
   startTaskChatSupervisionForTests,
   stopBoardAutoRun,
+  trackReconcileMergingTasksCallsForTests,
   trackTaskChatStallRecoveryCallsForTests,
 } from '../../src/state/orchestrate-board-actions.ts';
 import { initBoard, isTaskStalledForRestart, updateTask } from '../../src/state/orchestrate-board-store.ts';
@@ -38,6 +44,8 @@ const TASK_ID = 'W1-A';
 const PROGRESS_STALL_MS = 1_000;
 /** Env-fixer uses the tighter 1× progressStallMs threshold (not 3× build chats). */
 const FIXER_STALL_THRESHOLD_MS = PROGRESS_STALL_MS;
+/** Merge-fixer stall reconcile uses FIXER_STALL_MULTIPLIER (1.5×). */
+const MERGE_FIXER_STALL_THRESHOLD_MS = PROGRESS_STALL_MS * 1.5;
 
 // Fix A fixtures (merge-fixer heartbeat reconcile)
 const FIX_A_PLANNER_ID = '22222222-2222-2222-2222-222222222222';
@@ -370,13 +378,48 @@ describe('Fix A — merge-fixer heartbeat reconcile', () => {
     const runId = chatTaskRunId(MERGE_FIXER_CHAT_ID);
     bumpProgress(runId);
 
-    now = FIXER_STALL_THRESHOLD_MS + 100;
+    now = MERGE_FIXER_STALL_THRESHOLD_MS + 100;
     tickHeartbeatForTests(runId);
     await waitForAsyncReconcile();
 
     const task = group.orchestrateBoard!.tasks.find((t) => t.id === MERGE_TASK_ID)!;
     assert.equal(task.status, 'complete', 'stall should reconcile to complete');
     assert.equal(task.fixerChatId, undefined);
+  });
+
+  test('stall reconcile waits until FIXER_STALL_MULTIPLIER before firing', async () => {
+    const group = makeMergeGroup();
+    const fixerChat = makeMergeFixerChat();
+    seedMergingTask(group, fixerChat);
+
+    restoreFetch = mockWorktreeOps({
+      check_merged: { ok: true, merged: false },
+      verify_integration: { ok: true, verified: false },
+    });
+
+    startTaskChatSupervisionForTests(MERGE_FIXER_CHAT_ID);
+    const runId = chatTaskRunId(MERGE_FIXER_CHAT_ID);
+    bumpProgress(runId);
+
+    now = FIXER_STALL_THRESHOLD_MS + 100;
+    tickHeartbeatForTests(runId);
+    await waitForAsyncReconcile();
+
+    let task = group.orchestrateBoard!.tasks.find((t) => t.id === MERGE_TASK_ID)!;
+    assert.equal(task.status, 'merging', '1.0× progressStallMs should not trigger stall reconcile');
+
+    restoreFetch = mockWorktreeOps({
+      check_merged: { ok: true, merged: true },
+      verify_integration: { ok: true, verified: true },
+      refresh_integration_deps: { ok: true },
+    });
+
+    now = MERGE_FIXER_STALL_THRESHOLD_MS + 100;
+    tickHeartbeatForTests(runId);
+    await waitForAsyncReconcile();
+
+    task = group.orchestrateBoard!.tasks.find((t) => t.id === MERGE_TASK_ID)!;
+    assert.equal(task.status, 'complete', '1.5× progressStallMs should trigger stall reconcile');
   });
 
   test('reconcile bails when task left merging before finalize', async () => {
@@ -791,5 +834,246 @@ describe('Fix D — systemPaused vs user Stop', () => {
     assert.equal(board.autoRunning, true);
     assert.equal(board.userStopped, false);
     assert.equal(board.systemPaused, false);
+  });
+});
+
+describe('Manual recovery — recoverMergingBoardTask', () => {
+  let restoreFetch: (() => void) | undefined;
+  const prevMinnowTest = process.env.MINNOW_TEST;
+
+  beforeEach(() => {
+    process.env.MINNOW_TEST = '1';
+    setupDom();
+    setLocalServerAvailableForTests(true);
+    setSessionStateForTests(null);
+  });
+
+  afterEach(() => {
+    restoreFetch?.();
+    restoreFetch = undefined;
+    teardownDom();
+    setLocalServerAvailableForTests(false);
+    if (prevMinnowTest === undefined) {
+      delete process.env.MINNOW_TEST;
+    } else {
+      process.env.MINNOW_TEST = prevMinnowTest;
+    }
+    setSessionStateForTests(null);
+  });
+
+  test('recoverMergingBoardTask with dead fixer and verified merge completes task', async () => {
+    const group = makeMergeGroup();
+    const fixerChat = makeMergeFixerChat();
+    const { planner } = seedMergingTask(group, fixerChat);
+
+    restoreFetch = mockWorktreeOps({
+      check_merged: { ok: true, merged: true },
+      verify_integration: { ok: true, verified: true },
+      refresh_integration_deps: { ok: true },
+    });
+
+    await recoverMergingBoardTask(group, MERGE_TASK_ID, planner);
+
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === MERGE_TASK_ID)!;
+    assert.equal(task.status, 'complete');
+    assert.equal(task.fixerChatId, undefined);
+    assert.equal(task.mergePreSha, undefined);
+  });
+
+  test('continueBoardTask on merging delegates to reconcile without resetting to in_progress', async () => {
+    const group = makeMergeGroup();
+    const fixerChat = makeMergeFixerChat();
+    const { planner } = seedMergingTask(group, fixerChat);
+
+    restoreFetch = mockWorktreeOps({
+      check_merged: { ok: true, merged: false },
+      verify_integration: { ok: true, verified: false },
+    });
+
+    trackReconcileMergingTasksCallsForTests(true);
+    await continueBoardTask(group, MERGE_TASK_ID, planner);
+    const reconcileCalls = trackReconcileMergingTasksCallsForTests(false);
+
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === MERGE_TASK_ID)!;
+    assert.ok(reconcileCalls >= 1, 'continue on merging should invoke reconcileMergingTasks');
+    assert.notEqual(task.status, 'in_progress', 'must not reset merging via builder recovery');
+  });
+
+  test('restartBoardTask on merging stops fixer supervision then reconciles', async () => {
+    const group = makeMergeGroup();
+    const fixerChat = makeMergeFixerChat();
+    const { planner } = seedMergingTask(group, fixerChat);
+    reserveLaunchSlotForTests(MERGE_FIXER_CHAT_ID);
+
+    restoreFetch = mockWorktreeOps({
+      check_merged: { ok: true, merged: true },
+      verify_integration: { ok: true, verified: true },
+      refresh_integration_deps: { ok: true },
+    });
+
+    await restartBoardTask(group, MERGE_TASK_ID, planner);
+    releaseLaunchSlotForTests(MERGE_FIXER_CHAT_ID);
+
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === MERGE_TASK_ID)!;
+    assert.equal(task.status, 'complete');
+    assert.equal(task.fixerChatId, undefined);
+  });
+});
+
+describe('waitForNoActiveFixer timeout', () => {
+  let restoreFetch: (() => void) | undefined;
+  const prevMinnowTest = process.env.MINNOW_TEST;
+
+  const TIMEOUT_GROUP_ID = 'grp_eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
+  const TIMEOUT_PLANNER_ID = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
+  const STALE_FIXER_CHAT_ID = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+  const SIBLING_BRANCH = 'minnow/board/W1-C';
+
+  beforeEach(() => {
+    process.env.MINNOW_TEST = '1';
+    setLocalServerAvailableForTests(true);
+    setSessionStateForTests(null);
+    setMaxFixerWaitMsForTests(null);
+    trackReconcileMergingTasksCallsForTests(false);
+    releaseLaunchSlotForTests(STALE_FIXER_CHAT_ID);
+  });
+
+  afterEach(() => {
+    restoreFetch?.();
+    restoreFetch = undefined;
+    setLocalServerAvailableForTests(false);
+    setMaxFixerWaitMsForTests(null);
+    trackReconcileMergingTasksCallsForTests(false);
+    releaseLaunchSlotForTests(STALE_FIXER_CHAT_ID);
+    if (prevMinnowTest === undefined) {
+      delete process.env.MINNOW_TEST;
+    } else {
+      process.env.MINNOW_TEST = prevMinnowTest;
+    }
+    setSessionStateForTests(null);
+  });
+
+  test('timeout reconciles and sibling merge proceeds despite falsely-active fixer', async () => {
+    const planner: Chat = {
+      id: TIMEOUT_PLANNER_ID,
+      name: 'Planner',
+      workspacePath: '/tmp/ws',
+      modeId: 'orchestrate',
+      modelId: 'm1',
+      history: [],
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: 1,
+      orchestratePlanPath: 'documentation/plans/test.md',
+      boardGroupId: TIMEOUT_GROUP_ID,
+    };
+    const group: ChatGroup = {
+      id: TIMEOUT_GROUP_ID,
+      name: 'Board',
+      workspacePath: '/tmp/ws',
+      collapsed: false,
+      order: 0,
+      plannerChatId: TIMEOUT_PLANNER_ID,
+      orchestratePlanPath: 'documentation/plans/test.md',
+      viewMode: 'board',
+    };
+    initBoard(group, planner, {
+      planPath: 'documentation/plans/test.md',
+      tasks: [
+        {
+          id: 'W1-B',
+          title: 'Feature B',
+          wave: 'W1',
+          category: 'build',
+          build: 'Add feature B',
+          test: 'Run tests',
+        },
+        {
+          id: 'W1-C',
+          title: 'Feature C',
+          wave: 'W1',
+          category: 'build',
+          build: 'Add feature C',
+          test: 'Run tests',
+        },
+      ],
+      waves: [{ id: 'W1', status: 'in_progress' }],
+    });
+    group.orchestrateBoard!.integrationBranch = INTEGRATION_BRANCH;
+
+    const staleFixerChat: Chat = {
+      id: STALE_FIXER_CHAT_ID,
+      name: 'Stale fixer',
+      workspacePath: '/tmp/ws',
+      modeId: 'build',
+      modelId: 'm1',
+      history: [{ role: 'assistant', content: 'Stalled mid-merge' }],
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: 1,
+      boardGroupId: TIMEOUT_GROUP_ID,
+      boardTaskId: 'W1-B',
+    };
+
+    updateTask(
+      group,
+      'W1-B',
+      {
+        status: 'merging',
+        fixerChatId: STALE_FIXER_CHAT_ID,
+        worktreeBranch: TASK_BRANCH,
+        mergePreSha: 'deadbeef',
+      },
+      planner,
+    );
+    updateTask(
+      group,
+      'W1-C',
+      {
+        status: 'testing',
+        worktreeBranch: SIBLING_BRANCH,
+        testVerdict: 'pass',
+        testSummary: 'ok',
+      },
+      planner,
+    );
+
+    setSessionStateForTests({
+      chats: [planner, staleFixerChat],
+      groups: [group],
+      activeChatId: TIMEOUT_PLANNER_ID,
+    });
+
+    // Stale launch reservation makes the fixer look active until timeout reconcile runs.
+    reserveLaunchSlotForTests(STALE_FIXER_CHAT_ID);
+    trackReconcileMergingTasksCallsForTests(true);
+    setMaxFixerWaitMsForTests(50);
+
+    restoreFetch = mockWorktreeOps({
+      merge: { ok: true, integrationSha: 'cafebabe' },
+      verify_integration: { ok: true, verified: true },
+      refresh_integration_deps: { ok: true },
+    });
+
+    const sibling = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-C')!;
+    const mergePromise = enqueueMergeCompletedTaskWorktreeForTests(group, sibling, planner);
+    const raced = await Promise.race([
+      mergePromise.then((result) => ({ kind: 'resolved' as const, result })),
+      new Promise<{ kind: 'timeout' }>((resolve) =>
+        setTimeout(() => resolve({ kind: 'timeout' }), 2_000),
+      ),
+    ]);
+
+    assert.equal(raced.kind, 'resolved', 'sibling merge should not hang on falsely-active fixer');
+    if (raced.kind === 'resolved') {
+      assert.equal(raced.result.outcome, 'merged');
+    }
+
+    const reconcileCalls = trackReconcileMergingTasksCallsForTests(false);
+    assert.ok(reconcileCalls >= 1, 'wait timeout should invoke reconcileMergingTasks');
+
+    // Known medium-risk: falsely-active fixer may remain merging while sibling merge proceeds.
+    const stuck = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-B')!;
+    assert.equal(stuck.status, 'merging');
   });
 });

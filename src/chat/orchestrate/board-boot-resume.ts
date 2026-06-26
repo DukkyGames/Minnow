@@ -23,6 +23,12 @@ export async function bootOrchestrateBoardResume(state: SessionState): Promise<v
 
   if (oomPause) {
     pauseAllRunningBoardsForShutdown();
+    for (const group of state.groups ?? []) {
+      if (!group.orchestrateBoard) continue;
+      const planner = getPlannerChatForGroup(group);
+      if (!planner) continue;
+      await recoverInterruptedMergesAfterReload(group, planner);
+    }
     return;
   }
 

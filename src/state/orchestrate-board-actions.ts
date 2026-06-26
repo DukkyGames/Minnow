@@ -261,6 +261,21 @@ const mergeQueueByGroupId = new Map<string, Promise<unknown>>();
 /** Cap wait when a stale fixer blocks the merge queue (dead fixer chat no longer counts as active). */
 const MAX_FIXER_WAIT_MS = 60_000;
 
+/** Test override for `waitForNoActiveFixer` timeout (null restores production cap). */
+let maxFixerWaitMsOverride: number | null = null;
+
+export function setMaxFixerWaitMsForTests(ms: number | null): void {
+  maxFixerWaitMsOverride = ms;
+}
+
+/** Test-only: invoke the merge-queue fixer wait (includes timeout reconcile path). */
+export async function waitForNoActiveFixerForTests(
+  group: ChatGroup,
+  plannerChat: Chat,
+): Promise<void> {
+  return waitForNoActiveFixer(group, plannerChat);
+}
+
 /** Boards with an in-flight drainTaskQueue (coalesce overlapping drains). */
 const drainInFlightByGroupId = new Set<string>();
 
@@ -285,7 +300,8 @@ async function waitForNoActiveFixer(group: ChatGroup, plannerChat: Chat): Promis
   if (!board) return;
   const start = Date.now();
   while (boardHasActiveFixer(board)) {
-    if (Date.now() - start > MAX_FIXER_WAIT_MS) {
+    const maxWaitMs = maxFixerWaitMsOverride ?? MAX_FIXER_WAIT_MS;
+    if (Date.now() - start > maxWaitMs) {
       reportBackgroundError(
         'wait-for-fixer-timeout',
         new Error('Fixer wait exceeded cap; proceeding with merge'),
@@ -344,6 +360,9 @@ let autoDriveSubscribed = false;
 
 /** Generous multiplier over progressStallMs before killing a stuck task-chat turn. */
 const TASK_CHAT_STALL_MULTIPLIER = 3;
+
+/** Merge fixers get extra headroom before stall reconcile (git poll is primary). */
+const FIXER_STALL_MULTIPLIER = 1.5;
 /** Max bounded restarts per task-chat before giving up. */
 const TASK_CHAT_STALL_RESTART_CAP = 2;
 
@@ -756,7 +775,7 @@ function startTaskChatSupervision(chatId: string): void {
         })();
       }
 
-      if (progressAge < meta.progressStallMs) return;
+      if (progressAge < meta.progressStallMs * FIXER_STALL_MULTIPLIER) return;
       void reconcileMergeFixerChat(group, planner, taskId, chatId).catch((err) =>
         reportBackgroundError('merge-fixer-stall-reconcile', err),
       );
@@ -1418,13 +1437,28 @@ export function clearTaskFailureState(
     patch.testAttempts = undefined;
     patch.buildAttempts = undefined;
   }
-  if (task.status === 'merging') {
-    patch.status = 'in_progress';
-    patch.fixerChatId = undefined;
-    patch.mergePreSha = undefined;
-    patch.fixerAttempts = undefined;
-  }
   return updateTask(group, task.id, patch, plannerChat);
+}
+
+/** Manual recovery for a task stuck in `merging` — stop fixer supervision then reconcile. */
+export async function recoverMergingBoardTask(
+  group: ChatGroup,
+  taskId: string,
+  plannerChat: Chat,
+): Promise<void> {
+  const board = group.orchestrateBoard;
+  const task = board?.tasks.find((t) => t.id === taskId);
+  if (!task || task.status !== 'merging') return;
+
+  const fixerId = task.fixerChatId?.trim();
+  if (fixerId) {
+    stopTaskChatSupervision(fixerId);
+    stopGeneration(fixerId);
+    releaseLaunchSlot(fixerId);
+  }
+
+  await reconcileMergingTasks(group, plannerChat);
+  emitBoardChange(group.id);
 }
 
 /** Run a continue nudge on the existing build chat (no original-prompt reseed). */
@@ -1523,6 +1557,10 @@ export async function continueBoardTask(
   const board = group.orchestrateBoard;
   const task = board?.tasks.find((t) => t.id === taskId);
   if (!task) return;
+  if (task.status === 'merging') {
+    await recoverMergingBoardTask(group, taskId, plannerChat);
+    return;
+  }
   if (task.status === 'testing') {
     await startTaskTesting(group, taskId, plannerChat);
     return;
@@ -1547,6 +1585,10 @@ export async function restartBoardTask(
   const board = group.orchestrateBoard;
   const task = board?.tasks.find((t) => t.id === taskId);
   if (!task) return;
+  if (task.status === 'merging') {
+    await recoverMergingBoardTask(group, taskId, plannerChat);
+    return;
+  }
   const buildId = task.chatId?.trim();
   const testId = task.testChatId?.trim();
   if (
@@ -1571,6 +1613,10 @@ export async function moveTaskToNewChat(
   const board = group.orchestrateBoard;
   const task = board?.tasks.find((t) => t.id === taskId);
   if (!task) return;
+  if (task.status === 'merging') {
+    await recoverMergingBoardTask(group, taskId, plannerChat);
+    return;
+  }
   clearTaskFailureState(group, task, plannerChat, { resetAttempts: false });
   const fresh = board!.tasks.find((t) => t.id === taskId)!;
   const chat = fresh.chatId?.trim() ? findChatById(fresh.chatId.trim()) : undefined;
@@ -3240,6 +3286,9 @@ export async function reconcileMergingTasks(
   plannerChat: Chat,
   options?: { isFixerChatActive?: (fixerChatId: string) => boolean },
 ): Promise<void> {
+  if (reconcileMergingTasksCallsForTests !== null) {
+    reconcileMergingTasksCallsForTests += 1;
+  }
   const board = group.orchestrateBoard;
   if (!board) return;
   const isFixerActive = options?.isFixerChatActive ?? isTaskChatActive;
@@ -3490,6 +3539,19 @@ export function clearTaskQueuesForTests(): void {
 
 /** When set, records task ids passed to resumeBoardTask from drainTaskQueue. */
 let drainResumeCallsForTests: string[] | null = null;
+
+/** When non-null, counts reconcileMergingTasks invocations (test spy). */
+let reconcileMergingTasksCallsForTests: number | null = null;
+
+export function trackReconcileMergingTasksCallsForTests(enabled: boolean): number {
+  if (enabled) {
+    reconcileMergingTasksCallsForTests = 0;
+    return 0;
+  }
+  const count = reconcileMergingTasksCallsForTests ?? 0;
+  reconcileMergingTasksCallsForTests = null;
+  return count;
+}
 
 export function trackDrainResumeCallsForTests(enabled: boolean): string[] {
   if (enabled) {

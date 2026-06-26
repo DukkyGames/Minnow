@@ -127,6 +127,7 @@ Chat (task)
 | `executionMode` | `manual` \| `sequential` \| `auto` \| `afk` |
 | `autoRunning` | User pressed **Start** (auto/sequential/afk) |
 | `userStopped` | User pressed **Stop** — freezes timer, shows Stopped badge |
+| `systemPaused` | Shutdown/OOM pause (`stopBoardAutoRun` reason `system`) — stream-end parks as `planned` + `stopRetries`, not quarantine |
 | `maxConcurrentTasks` | Parallel slot cap (sequential forces 1) |
 | `isolationMode` | `off` \| `per-task` \| `per-wave` |
 | `integrationBranch` | `minnow/board/<groupId>/integration` |
@@ -395,7 +396,9 @@ flowchart TD
 
 - Runs in **integration worktree** with merge already in progress (`MERGE_HEAD` set).
 - Must **not** run `git merge` / `git merge --abort` — only resolve markers + `git commit --no-edit`.
-- Heartbeat may **early-stop** fixer when `checkMerged` + `verifyIntegrationMerge` succeed.
+- Heartbeat may **early-finalize** via `reconcileMergeFixerChat` when `checkMerged` + `verifyIntegrationMerge` succeed (git poll each tick).
+- Merge-fixer **stall** watchdog uses `FIXER_STALL_MULTIPLIER` (1.5× `progressStallMs`) before calling `reconcileMergeFixerChat`; env-fixer stalls remain stop-only (1×).
+- **`reconcileMergingTasks`** — live safety net: supervise active fixer (`isTaskChatActive`) or `finalizeMergeFixerOnStreamEnd` + `drainTaskQueue` when board is running. Called from `autoDelegateNext` (before `isBoardRunning` gate), `waitForNoActiveFixer` timeout (60s cap), boot `recoverInterruptedMergesAfterReload`, and manual **`recoverMergingBoardTask`**.
 - Serialized via `mergeQueueByGroupId` + `enqueueBoardMerge`.
 
 **Env fixer** (`startEnvFixer`, `fixerKind: 'env'`):
@@ -489,6 +492,7 @@ User can toggle **Dashboard** ↔ **Board** via `dashboardDismissed`.
 
 | Action | Behavior |
 |--------|----------|
+| **Reconcile merge** | `merging` only → `recoverMergingBoardTask` (stop fixer supervision + `reconcileMergingTasks`). **Restart / Continue / Move** do not apply to `merging`. |
 | **Restart** | Stop active chats, `clearTaskFailureState(resetAttempts)`, fresh seed → `startTask` (new chat if `pendingBuildSeed`) |
 | **Continue** | Nudge existing chat; or **smart-route** to new chat when transcript oversized (`continueSmartRoute` setting) |
 | **Move to new chat** | Progress summary seed → fresh Builder chat |
@@ -521,7 +525,10 @@ sequenceDiagram
 
   Boot->>OOM: probeOomPauseFromElectron
   alt OOM pause active
-    OOM->>Boot: pauseAllRunningBoardsForShutdown
+    OOM->>Boot: pauseAllRunningBoardsForShutdown (reason system)
+    loop each board group
+      Boot->>Merge: recoverInterruptedMergesAfterReload
+    end
   else normal
     loop each board group
       Boot->>Merge: recoverInterruptedMergesAfterReload
@@ -532,11 +539,11 @@ sequenceDiagram
 
 **`bootOrchestrateBoardResume` order:**
 
-1. OOM probe → optional global pause.
-2. **`recoverInterruptedMergesAfterReload`** for every board (even manual).
-3. For boards with `autoRunning`: rehydrate worktrees, re-attach heartbeat supervision, `autoDelegateNext`.
+1. OOM probe → optional global pause (`systemPaused`, `autoRunning` cleared).
+2. **OOM branch:** after pause, **`recoverInterruptedMergesAfterReload`** for every board (reconcile dead fixers without resuming auto-run).
+3. **Normal branch:** **`recoverInterruptedMergesAfterReload`** for every board, then for boards with `autoRunning`: rehydrate worktrees, re-attach heartbeat supervision, `autoDelegateNext`.
 
-**`pagehide`:** `pauseAllRunningBoardsForShutdown` — same as pressing **Stop** on each running board (prevents zombie auto-run on next boot).
+**`pagehide`:** `pauseAllRunningBoardsForShutdown` → `stopBoardAutoRun` with `{ reason: 'system' }` (sets `systemPaused`, not `userStopped`).
 
 **Generation resume** (`generation-resume.ts`) re-subscribes in-flight **chat** streams separately; board resume handles **delegation** logic.
 
@@ -586,11 +593,12 @@ AND all prior waves settled (complete or quarantined)
 |-----------|-------------|------|
 | Builder | success | `testing` + start Tester |
 | Builder | user stop | quarantine (+ dependents) |
-| Builder | system stop | retry ≤2 → `planned`; else quarantine |
+| Builder | system stop (`systemPaused`) | `planned` + `stopRetries` (not quarantine) |
 | Builder | fail | self-heal (auto) / `failed` (manual) |
 | Tester | pass | merge → `complete` or merge fixer |
 | Tester | fail | self-heal / test retry / `blocked` |
-| Merge fixer | merged | `complete` |
+| Merge fixer | merged (stream-end or heartbeat reconcile) | `complete` |
+| Merge fixer | stall (≥ 1.5× `progressStallMs`) | `reconcileMergeFixerChat` → finalize |
 | Merge fixer | not merged | retry merge ≤2 → `blocked` |
 | Final Tester | pass | finish dashboard |
 | Final Tester | fail | reopen tasks + rebuild |
@@ -619,7 +627,8 @@ AND all prior waves settled (complete or quarantined)
 
 - `test/orchestrate/board-flow-e2e.test.mts` — full lifecycle harness (`driveBoardToConvergence`)
 - `test/orchestrate/board-store.test.mts` — pure store logic
-- `test/chat/orchestrate/board-boot-resume.test.mts` — reload resume
+- `test/orchestrate/fixer-recovery.test.mts` — merge-fixer reconcile, `systemPaused`, manual merge recovery, fixer wait timeout
+- `test/chat/orchestrate/board-boot-resume.test.mts` — reload resume + OOM merge reconcile
 - `test/ui/orchestrate-board-*.test.mjs` — UI header, streaming, live update
 
 ---

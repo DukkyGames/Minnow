@@ -51,6 +51,7 @@ import {
   cancelPendingAfk,
   continueBoardTask,
   countRunningTaskChats,
+  recoverMergingBoardTask,
   getBoardExecutionMode,
   isBoardRunning,
   isTaskChatActive,
@@ -1850,20 +1851,23 @@ function buildRunningTaskChip(
       );
     }),
   );
-  controls.appendChild(
-    createRunningTaskControlButton('restart', `Restart ${slot.taskId}`, () => {
-      if (slot.isFinalTest) {
-        void stopRunningBoardSlot(group, slot, plannerChat)
-          .then(() => startFinalIntegrationTestForPlannerChat(plannerChat))
-          .then(() => refreshActiveBoardIfMounted());
-        return;
-      }
-      void restartBoardTask(group, slot.taskId, plannerChat).then(() =>
-        refreshActiveBoardIfMounted(),
-      );
-    }),
-  );
-  if (runningSlotShowsContinue(board, slot)) {
+  const mergingSlot = !slot.isFinalTest && slot.task.status === 'merging';
+  if (!mergingSlot) {
+    controls.appendChild(
+      createRunningTaskControlButton('restart', `Restart ${slot.taskId}`, () => {
+        if (slot.isFinalTest) {
+          void stopRunningBoardSlot(group, slot, plannerChat)
+            .then(() => startFinalIntegrationTestForPlannerChat(plannerChat))
+            .then(() => refreshActiveBoardIfMounted());
+          return;
+        }
+        void restartBoardTask(group, slot.taskId, plannerChat).then(() =>
+          refreshActiveBoardIfMounted(),
+        );
+      }),
+    );
+  }
+  if (!mergingSlot && runningSlotShowsContinue(board, slot)) {
     controls.appendChild(
       createRunningTaskControlButton('continue', `Continue ${slot.taskId}`, () => {
         void continueBoardTask(group, slot.taskId, plannerChat).then(() =>
@@ -1872,7 +1876,7 @@ function buildRunningTaskChip(
       }),
     );
   }
-  if (!slot.isFinalTest) {
+  if (!slot.isFinalTest && !mergingSlot) {
     controls.appendChild(
       createRunningTaskControlButton('move', `Move ${slot.taskId} to new chat`, () => {
         void moveTaskToNewChat(group, slot.taskId, plannerChat).then(() =>
@@ -2125,6 +2129,13 @@ function buildTaskRecoveryActions(
     });
     row.appendChild(btn);
   };
+
+  if (task.status === 'merging') {
+    addRecoveryBtn('Reconcile merge', 'forward', () => {
+      void recoverMergingBoardTask(group, task.id, plannerChat);
+    });
+    return;
+  }
 
   addRecoveryBtn('Restart', 'recycle', () => {
     void restartBoardTask(group, task.id, plannerChat);
