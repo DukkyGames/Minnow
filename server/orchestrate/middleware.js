@@ -21,6 +21,12 @@ function schedulePruneOnce() {
 export async function handleOrchestrateRequest(req, res, pathname) {
   schedulePruneOnce();
 
+  if (pathname === '/api/orchestrate/board-log' && req.method === 'GET') {
+    res.statusCode = 204;
+    res.end();
+    return true;
+  }
+
   if (pathname === '/api/orchestrate/board-log' && req.method === 'POST') {
     let body = '';
     for await (const chunk of req) {

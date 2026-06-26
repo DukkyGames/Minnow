@@ -100,6 +100,12 @@ function registerIpcHandlers(): void {
     crashLog.clearLastCrashMarker();
     return marker;
   });
+
+  ipcMain.handle(channels.DIAGNOSTICS_OOM_PAUSE, () => crashLog.readOomPauseMarker());
+
+  ipcMain.handle(channels.DIAGNOSTICS_CLEAR_OOM_PAUSE, () => {
+    crashLog.clearOomPauseMarker();
+  });
 }
 
 /** Tear down PTY sessions, generations, and in-process HTTP server. */
@@ -199,6 +205,10 @@ async function createMainWindow(): Promise<BrowserWindow> {
       exitCode: details.exitCode,
       message: `Renderer process gone: ${details.reason}`,
     });
+    if (details.reason === 'oom') {
+      crashLog.writeOomPauseMarker();
+    }
+    crashLog.flushCrashLogSync();
     if (details.reason === 'clean-exit' || win.isDestroyed()) return;
     recoverRenderer(win);
   });

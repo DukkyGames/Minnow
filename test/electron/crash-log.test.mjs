@@ -5,11 +5,15 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import {
   clearLastCrashMarker,
+  clearOomPauseMarker,
+  flushCrashLogSync,
   logCrash,
   readLastCrashMarker,
+  readOomPauseMarker,
   resetCrashLogDirCache,
   resolveCrashLogDir,
   writeLastCrashMarker,
+  writeOomPauseMarker,
 } from '../../electron/dist/crash-log.js';
 
 function tempLogDir() {
@@ -58,6 +62,7 @@ describe('crash-log', () => {
 
   test('logCrash appends JSONL lines with ts and pid', () => {
     logCrash({ kind: 'test', message: 'boom', source: 'main' });
+    flushCrashLogSync();
     const logPath = path.join(resolveCrashLogDir(), 'crash.jsonl');
     const raw = fs.readFileSync(logPath, 'utf8').trim();
     const line = JSON.parse(raw);
@@ -100,5 +105,21 @@ describe('crash-log', () => {
 
   test('clearLastCrashMarker ignores ENOENT', () => {
     assert.doesNotThrow(() => clearLastCrashMarker());
+  });
+
+  test('OOM pause marker round-trip and expiry', () => {
+    const recent = new Date().toISOString();
+    writeOomPauseMarker({ ts: recent });
+    const marker = readOomPauseMarker();
+    assert.ok(marker);
+    assert.equal(marker.reason, 'oom');
+
+    const stale = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    writeOomPauseMarker({ ts: stale });
+    assert.equal(readOomPauseMarker(), null);
+
+    writeOomPauseMarker({ ts: recent });
+    clearOomPauseMarker();
+    assert.equal(readOomPauseMarker(), null);
   });
 });

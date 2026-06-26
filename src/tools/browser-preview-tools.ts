@@ -197,13 +197,17 @@ export async function browserPreviewEval(expression: string): Promise<string> {
   const disabled = await assertBrowserAutomationEnabled();
   if (disabled) return disabled;
 
-  try {
-    const val = await previewApi().execJs(expression);
-    return formatEvalResult(val);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+  const info = await previewApi().getInfo();
+  if (info.loading) {
+    return 'Error: preview guest is still loading — wait for navigation to finish';
+  }
+
+  const val = await previewApi().execJs(expression);
+  if (val && typeof val === 'object' && val !== null && '__execError' in val) {
+    const message = String((val as { __execError: unknown }).__execError ?? 'Script failed');
     return `Error: ${message}`;
   }
+  return formatEvalResult(val);
 }
 
 export async function browserPreviewScreenshot(): Promise<ToolExecutionResult> {

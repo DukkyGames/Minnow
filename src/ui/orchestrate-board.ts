@@ -45,6 +45,7 @@ import {
   getActiveBoardGroup,
   getPlannerChatForGroup,
 } from '../state/chat-groups.ts';
+import { isOomPauseActive } from '../chat/orchestrate/oom-recovery.ts';
 import {
   activateAfk,
   cancelPendingAfk,
@@ -57,6 +58,7 @@ import {
   moveTaskStatus,
   moveTaskToNewChat,
   requeueBoardTask,
+  resolveEffectiveMaxConcurrent,
   restartBoardTask,
   setBoardExecutionMode,
   setBoardIsolationMode,
@@ -518,7 +520,7 @@ export function buildKanbanRefreshKey(
   group?: ChatGroup,
 ): string {
   const folder = resolveKanbanGroup(board, plannerChat, group);
-  const cap = board.maxConcurrentTasks ?? 3;
+  const cap = resolveEffectiveMaxConcurrent(board);
   const running = countRunningTaskChats(board);
   const parts: string[] = [
     `run:${running}/${cap}`,
@@ -1239,7 +1241,9 @@ function wireBoardHeaderControls(
   // Max concurrent stepper (editable in Auto and AFK modes)
   const concWrapper = document.createElement('label');
   concWrapper.className = 'board-header__concurrency';
-  concWrapper.title = 'Max concurrent tasks (Auto and AFK modes)';
+  concWrapper.title = isOomPauseActive()
+    ? `Max concurrent tasks (throttled to ${resolveEffectiveMaxConcurrent(board)} after OOM crash)`
+    : 'Max concurrent tasks (Auto and AFK modes)';
   const concInput = document.createElement('input');
   concInput.type = 'number';
   concInput.className = 'board-header__concurrency-input';
@@ -1258,6 +1262,14 @@ function wireBoardHeaderControls(
     }
   });
   concWrapper.appendChild(concInput);
+  if (isOomPauseActive()) {
+    const oomHint = document.createElement('span');
+    oomHint.className = 'board-header__oom-hint';
+    oomHint.textContent = 'OOM recovery: concurrency capped';
+    oomHint.title =
+      'Renderer ran out of memory recently — concurrency is limited until you press Start again';
+    concWrapper.appendChild(oomHint);
+  }
   controls.appendChild(concWrapper);
 
   // Isolation mode override (Auto = global default or derive from execution mode)
@@ -1578,7 +1590,7 @@ function buildBoardHeaderBench(
   bench.className = 'board-header__bench';
   bench.setAttribute('role', 'group');
   bench.setAttribute('aria-label', 'Board metrics');
-  const cap = board.maxConcurrentTasks ?? 3;
+  const cap = resolveEffectiveMaxConcurrent(board);
   const running = countRunningTaskChats(board);
   bench.appendChild(
     createBoardBenchCell(
@@ -1608,7 +1620,7 @@ function syncBoardHeaderBench(
   metrics: BoardHeaderMetrics,
   board: BoardState,
 ): void {
-  const cap = board.maxConcurrentTasks ?? 3;
+  const cap = resolveEffectiveMaxConcurrent(board);
   const running = countRunningTaskChats(board);
   const values: Record<string, string> = {
     tasks: `${metrics.done}/${metrics.totalTasks}`,
@@ -2246,7 +2258,7 @@ function buildTaskCard(
     : null;
   const agentBadge = deriveTaskAgentBadge(task, runStatus, taskStreaming, testStreaming);
   const board = group.orchestrateBoard!;
-  const cap = board.maxConcurrentTasks ?? 3;
+  const cap = resolveEffectiveMaxConcurrent(board);
   const atCap =
     countRunningTaskChats(board) >= cap && !taskActive && !testActive && !fixerActive;
 

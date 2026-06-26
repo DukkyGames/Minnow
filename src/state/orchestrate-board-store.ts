@@ -35,8 +35,8 @@ export function setBoardNowForTests(fn: (() => number) | null): void {
   boardNowMs = fn ?? (() => Date.now());
 }
 
-export const BOARD_LOG_MAX = 500;
-const BOARD_LOG_PREVIEW_MAX = 500;
+export const BOARD_LOG_MAX = 100;
+const BOARD_LOG_PREVIEW_MAX = 200;
 
 let boardLogSeq = 0;
 

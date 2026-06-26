@@ -396,7 +396,7 @@ const BOARD_TASK_STATUSES = new Set<BoardTaskStatus>([
 const BOARD_CATEGORIES = new Set<BoardCategory>(['build', 'fix', 'test', 'research']);
 
 /** Keep in sync with {@link BOARD_LOG_MAX} in orchestrate-board-store and server validators. */
-const BOARD_LOG_MAX = 500;
+const BOARD_LOG_MAX = 100;
 const BOARD_LOG_LEVELS = new Set<BoardLogLevel>(['info', 'warn', 'error']);
 const BOARD_LOG_TYPES = new Set<BoardLogEventType>([
   'board_init',

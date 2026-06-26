@@ -7,6 +7,15 @@ import { decodeModelSelectKey } from '../lib/model-select-key.ts';
 import { isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete.ts';
 import { maybeEmitOrchestratePlanComplete } from '../chat/orchestrate/plan-complete-ui.ts';
 import {
+  isOomPauseActive,
+  OOM_SAFE_MAX_CONCURRENT,
+  clearOomPauseFromElectron,
+} from '../chat/orchestrate/oom-recovery.ts';
+import {
+  isTerminalBoardTaskStatus,
+  trimTaskRelatedChats,
+} from '../chat/orchestrate/task-history-trim.ts';
+import {
   isChatStreaming,
   notifyChatStreamEnded,
   subscribeChatStreamActivity,
@@ -939,8 +948,17 @@ export function resolveBoardMaxConcurrent(
   return getAutopilotMetaSync().maxConcurrentTasks ?? DEFAULT_MAX_CONCURRENT;
 }
 
+/** Apply OOM recovery cap on top of board/global concurrency settings. */
+export function resolveEffectiveMaxConcurrent(
+  board: NonNullable<ChatGroup['orchestrateBoard']>,
+): number {
+  const base = resolveBoardMaxConcurrent(board);
+  if (!isOomPauseActive()) return base;
+  return Math.min(base, OOM_SAFE_MAX_CONCURRENT);
+}
+
 function maxConcurrent(board: NonNullable<ChatGroup['orchestrateBoard']>): number {
-  return resolveBoardMaxConcurrent(board);
+  return resolveEffectiveMaxConcurrent(board);
 }
 
 /** Skip launching background chat turns under node:test (avoids open handles). */
@@ -2981,6 +2999,12 @@ export function moveTaskStatus(
         .catch((err) => reportBackgroundError('deliver-task-report', err));
     }
   }
+  if (isTerminalBoardTaskStatus(status)) {
+    const task = group.orchestrateBoard?.tasks.find((t) => t.id === taskId);
+    if (task) {
+      trimTaskRelatedChats(task, sessionState?.activeId ?? null, findChatById);
+    }
+  }
 }
 
 /**
@@ -3187,6 +3211,7 @@ export async function recoverInterruptedMergesAfterReload(
 export function startBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
   const board = group.orchestrateBoard;
   if (!board || !isBoardAutoMode(group)) return;
+  void clearOomPauseFromElectron();
   board.autoRunning = true;
   // Clear any prior Stop so the timer resumes and the Stopped badge clears.
   board.userStopped = false;
