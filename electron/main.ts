@@ -22,11 +22,12 @@ import {
 import { getProjectRoot, importServerModule } from './server-import.js';
 import { startInProcessServer, type InProcessServerHandle } from './server-host.js';
 import { loadWindowState, trackWindowState } from './window-state.js';
+import { resolveMinnowPort } from '../server/constants/minnow-port.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const isDev = process.env.MINNOW_ELECTRON_DEV === '1';
-const devPort = Number(process.env.PORT) || 5173;
+const devPort = resolveMinnowPort();
 const devUrl = `http://localhost:${devPort}/`;
 
 let mainWindow: BrowserWindow | null = null;

@@ -6,13 +6,14 @@
 
 import { spawnElectronShell } from './spawn-electron.mjs';
 import { waitForVite } from './wait-for-vite.mjs';
+import { resolveMinnowPort } from '../server/constants/minnow-port.js';
 
 function readPortArg() {
   const idx = process.argv.indexOf('--port');
   if (idx !== -1 && process.argv[idx + 1]) {
     return process.argv[idx + 1];
   }
-  return process.env.PORT || '5173';
+  return String(resolveMinnowPort());
 }
 
 const port = readPortArg();

@@ -2,6 +2,7 @@
  * System probes — VRAM and related machine metrics.
  */
 
+import { resolveMinnowPort } from '../constants/minnow-port.js';
 import { probeVram } from './vram.js';
 import { detectHardware } from './hardware.js';
 import { listDeadHosts } from '../generations/host-cooldown.js';
@@ -55,7 +56,7 @@ export async function handleSystemRequest(req, res, pathname) {
 
   if (pathname === '/api/system/network' && req.method === 'GET') {
     const parsed = new URL(req.url ?? '/', 'http://127.0.0.1');
-    const port = Number(parsed.searchParams.get('port')) || Number(process.env.PORT) || 5173;
+    const port = Number(parsed.searchParams.get('port')) || resolveMinnowPort();
     const localUrl = parsed.searchParams.get('localUrl') ?? undefined;
     const payload = await getNetworkStatus({ port, localUrl: localUrl ?? undefined });
     sendJson(res, 200, payload);

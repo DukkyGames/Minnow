@@ -24,7 +24,7 @@ Usage:
 Examples:
   minnow run --prompt "Summarize README.md" --workspace .
   BROWSER=none npm start &
-  minnow run --base-url http://127.0.0.1:5173 --prompt "Reply OK" --json
+  minnow run --base-url http://127.0.0.1:9473 --prompt "Reply OK" --json
 `);
   process.exit(0);
 }

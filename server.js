@@ -41,7 +41,9 @@ import {
   resolveViteHost,
 } from './server/network/access.js';
 
-const PORT = Number(process.env.PORT) || 5173;
+import { resolveMinnowPort } from './server/constants/minnow-port.js';
+
+const PORT = resolveMinnowPort();
 
 /**
  * Append one crash record to ~/.minnow/logs/crash.jsonl. Never throws.

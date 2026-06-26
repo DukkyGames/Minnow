@@ -22,6 +22,7 @@ import {
   resolveModeIdFromToolsBody,
 } from '../tools/plan-write-guard.js';
 import { assessHostKillCommand } from '../tools/host-kill-guard.js';
+import { assessHostPortBindCommand } from '../tools/host-port-bind-guard.js';
 import { toolManageCalendar } from '../calendar/tool-handler.js';
 import {
   toolDraftReply,
@@ -723,6 +724,8 @@ async function toolExecuteCommand(args) {
   if (typeof args?.command === 'string') {
     const hostKill = assessHostKillCommand(args.command);
     if (hostKill) return hostKill;
+    const portBind = assessHostPortBindCommand(args.command);
+    if (portBind) return portBind;
   }
 
   if (args?.background === true) {

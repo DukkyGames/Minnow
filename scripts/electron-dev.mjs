@@ -6,8 +6,9 @@
 
 import { spawnElectronShell } from './spawn-electron.mjs';
 import { waitForVite } from './wait-for-vite.mjs';
+import { resolveMinnowPort } from '../server/constants/minnow-port.js';
 
-const port = process.env.PORT || '5173';
+const port = String(resolveMinnowPort());
 const devUrl = `http://localhost:${port}/`;
 
 async function main() {

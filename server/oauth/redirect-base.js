@@ -2,10 +2,12 @@
  * OAuth redirect base URL (dev server origin or MINNOW_OAUTH_REDIRECT_BASE).
  */
 
+import { defaultMinnowLocalOrigin } from '../constants/minnow-port.js';
+
 /** @type {string} */
 let oauthRedirectBase = (
   process.env.MINNOW_OAUTH_REDIRECT_BASE ||
-  `http://localhost:${process.env.PORT || 5173}`
+  defaultMinnowLocalOrigin()
 ).replace(/\/$/, '');
 
 /** Record the URL Vite resolved at startup. */

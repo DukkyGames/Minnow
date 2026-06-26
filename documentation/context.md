@@ -294,7 +294,7 @@ Unified **Benchmarking** app at `#/benchmark` / `#/app/bench` (OS **Benchmarking
 | History browse | `#benchmarkHistorySelect` loads a saved run into the main panel (summary + suite cards). While a run is **in progress**, browsing history does not overwrite `lastRun` or `liveRunDrawerMeta`; progress keeps updating in memory and the **Current run** button (`#btnBenchmarkBackToCurrent`) plus a **Current run (in progress)** history option restore the live panel. |
 | Background + reload | Leaving `#/benchmark` (`closeBenchmark`) **does not** call `stopRun()` — the run keeps going and `openBenchmark()` / `syncBenchmarkPageOnOpen()` restores the live panel. **`sessionStorage`** (`minnow.benchmark.activeRun` via `active-run-session.ts`) checkpoints after each suite/test; on app init `tryResumeBenchmarkFromSession()` continues remaining suites (suite-level skip via `RunBenchmarkOptions.resume`). **Stop** or run completion clears the session. Mid-suite reload may re-run the interrupted suite. |
 | Transcript drill-down (POLISH-005) | Click any test card (finished, **running**, or **stopped**) → `benchmark-transcript-drawer.ts` (read-only messages/tools; reuses `transcript-view.ts`). Works **during** a live run and after **Stop** (not only on completed runs): `liveTestResults` accumulates each `test-done` payload; cancelled runs commit a partial `lastRun` for summary + lookup. **Academic** cards (`data-cell-id`, `liveStandardCells`) open the same drawer with pack label + one-shot transcript from `standard/runner.ts` (`BenchmarkCellResult.transcript`). Running/stopped probes without a transcript show a targeted empty state. User multimodal turns render full prompt text plus inline images via `api/message-content.ts`; assistant rows use the same text normalizer (string or structured `content` parts). `TestResult.transcript` / `transcriptMeta` captured via `buildTestResult` in suites; `prepareBenchmarkRunForPersistence` trims oversized JSON before POST. Old runs without `transcript` show empty-state + `details`. |
-| Headless smoke | `node scripts/benchmark-headless.mjs http://localhost:5173` |
+| Headless smoke | `node scripts/benchmark-headless.mjs http://localhost:9473` |
 | Tests | `npm run test:benchmark` |
 | Cancel / Stop | Campaign cancel may persist partial results when `persistPartialOnCancel` is set. Legacy single-run cancel: `run-cancelled`, partial UI commit on Stop. Combined **Run** → **Stop** while active. |
 
@@ -1357,7 +1357,7 @@ On the **first user message** while the chat is still named **`New chat`**, an a
 Use **`npm start`** for the full stack. **`npm run dev`** is Vite-only (no tool API).
 
 ```text
-Browser (same origin :5173)
+Browser (same origin as Minnow host, default :9473)
     │
     ├─§ GET  /api/config/ping    → { ok: true, homeResolved: true }
     ├─§ GET/PUT /api/config/*    → ~/.minnow JSON files
@@ -1376,7 +1376,7 @@ Browser (same origin :5173)
     └─§ Vite SPA (index.html, /src/*, hashed assets)
 ```
 
-`node server.js` uses Vite™s programmatic API (`createServer` + [`vite.config.ts`](../vite.config.ts)), registers **`configureServer`** middleware **before** the SPA handler via [`server/runtime/middlewares.js`](../server/runtime/middlewares.js) (`applyMinnowMiddlewares`), runs [`server/runtime/bootstrap.js`](../server/runtime/bootstrap.js) (`bootstrapMinnowRuntime`) before listen, listens on **`PORT`** (default **5173**), logs the URL, and opens the default browser (`start` / `open` / `xdg-open`) unless `BROWSER=none`, `MINNOW_HEADLESS=1`, or `MINNOW_ELECTRON=1`. Path guard and tools dispatch: [`server/runtime/path-access.js`](../server/runtime/path-access.js), [`server/runtime/tools-middleware.js`](../server/runtime/tools-middleware.js). App install root: `getAppRoot()` / `setAppRoot()` in [`server/workspace/root.js`](../server/workspace/root.js).
+`node server.js` uses Vite™s programmatic API (`createServer` + [`vite.config.ts`](../vite.config.ts)), registers **`configureServer`** middleware **before** the SPA handler via [`server/runtime/middlewares.js`](../server/runtime/middlewares.js) (`applyMinnowMiddlewares`), runs [`server/runtime/bootstrap.js`](../server/runtime/bootstrap.js) (`bootstrapMinnowRuntime`) before listen, listens on **`PORT`** (default **9473** via [`server/constants/minnow-port.js`](../server/constants/minnow-port.js) — intentionally not Vite's 5173 so workspace agents can use 5173), logs the URL, and opens the default browser (`start` / `open` / `xdg-open`) unless `BROWSER=none`, `MINNOW_HEADLESS=1`, or `MINNOW_ELECTRON=1`. Path guard and tools dispatch: [`server/runtime/path-access.js`](../server/runtime/path-access.js), [`server/runtime/tools-middleware.js`](../server/runtime/tools-middleware.js). App install root: `getAppRoot()` / `setAppRoot()` in [`server/workspace/root.js`](../server/workspace/root.js).
 
 **Network access (LAN):** Default bind is **loopback only** (`server.networkAccess: 'local'` in `config.json`). Opt in via **Settings → General → Network access** (`local` | `lan`) or `MINNOW_NETWORK=lan`; **restart required** after changing the setting. LAN mode binds Vite to all interfaces (`0.0.0.0`), logs `resolvedUrls.network`, sets OAuth/scheduler redirect base to the first LAN URL, and relaxes PTY/STT/TTS WebSocket guards to **private-network** clients ([`server/network/access.js`](../server/network/access.js), [`isPrivateIpAddress`](../server/webhooks/ssrf.js)). `GET /api/system/network` returns `localUrl`, `lanUrls`, and `restartRequired`. Remote browsers get the full SPA + `/api/*`; `browser_*` tools remain Electron-only on the host. Voice may fail on `http://192.168.x.x` (secure context). Plan: [`documentation/plans/lan-network-access.md`](plans/lan-network-access.md).
 
@@ -1400,6 +1400,7 @@ Browser (same origin :5173)
 - **Path guard:** `resolveSafePath()` — paths under the workspace root after `realpath` canonicalization (`server/workspace/safe-path.js`) unless `toolSecurity.filesystemAccess` is `full` in `config.json` or `TOOLS_ALLOW_ALL_PATHS=1`. Client approval UX uses string prefix rules in `src/tools/workspace-path-guard.ts` (server remains authoritative).
 - **Errors:** Handlers return **strings**; failures use `Error: …` prefix (not thrown to the client).
 - **Browser-only tools on POST:** Names not in `SERVER_TOOL_HANDLERS` (e.g. `get_datetime`, `calculate`, `web_search`) return `Not implemented: {name}`. Expected — the client runs them via [`executeBrowserTool`](../src/tools/browser-executor.ts); only mistaken direct POSTs hit the stub.
+- **Agent shell guards:** [`server/tools/host-kill-guard.js`](../server/tools/host-kill-guard.js) blocks commands that would kill the Minnow host (electron/Minnow image, live `PORT`, host PIDs). [`server/tools/host-port-bind-guard.js`](../server/tools/host-port-bind-guard.js) blocks binding a dev server to Minnow's live port (default **9473** via [`server/constants/minnow-port.js`](../server/constants/minnow-port.js), not Vite's 5173). Applied to agent `execute_command` and `start_background_command` only.
 - **Timeouts:** Blocking `execute_command`, `run_javascript`, `run_python` — **30s**. `execute_command` with **`background: true`** has no timeout (detached via `createBackgroundRun`).
 - **Background shell tools:** `read_command_log`, `list_running_commands`, `stop_command`; `execute_command` also accepts `stop: true` + `run_id`. Plan: [`documentation/plans/execute-command-background.md`](plans/execute-command-background.md).
 - **Terminal streaming (Step 10):** [`server/terminal-runner.js`](../server/terminal-runner.js) + [`server/terminal/middleware.js`](../server/terminal/middleware.js). Client panel: [`src/ui/terminal-panel.ts`](../src/ui/terminal-panel.ts), API [`src/api/terminal.ts`](../src/api/terminal.ts). Blocking chat `execute_command` uses SSE (`runCommandWithTerminalStream`); **`background: true` skips SSE** and uses `POST /api/tools`. Blocking tools middleware path uses `executeCommandBlocking()` (no SSE).
@@ -1734,7 +1735,7 @@ Cursor-style **⋮ menu** on each history-backed user/assistant row (not on in-f
 | **`npm run dev`** | `vite` only | No | UI/HMR without Node tool handlers; server tools stay disabled in Settings |
 | **`npm run build`** | `tsc` + `vite build` → `dist/` | N/A (static deploy; no `server.js` in production unless you host it separately) |
 | **`npm run preview`** | `vite preview` | No | Smoke-test production bundle |
-| **`npm run electron:dev`** | `vite` + Electron (`MINNOW_ELECTRON=1`, `MINNOW_ELECTRON_DEV=1`) | Yes (via Vite on :5173) | Desktop shell with HMR; does not auto-open a system browser tab |
+| **`npm run electron:dev`** | `vite` + Electron (`MINNOW_ELECTRON=1`, `MINNOW_ELECTRON_DEV=1`) | Yes (via Vite on :9473 default) | Desktop shell with HMR; does not auto-open a system browser tab |
 | **`npm run electron:prod`** | `electron/dist/main.js` + in-process Connect/`sirv` server ([`electron/server-host.ts`](../electron/server-host.ts), MIN-111) | Yes (in-process) | Packaged-style run after `npm run build` |
 | **`npm run electron:build`** | `tsc -p electron/tsconfig.json` → `electron/dist/` | N/A | Compile main/preload only |
 | **`npm run package`** | `npm run build` + `electron:build` + `electron-builder` (Windows NSIS) | Yes (in-process, packaged) | Installer under `release/pkg/` (e.g. `Minnow-Setup-1.0.0.exe`); `package.json` `"main"` → `electron/dist/main.js` |
@@ -1767,7 +1768,7 @@ With **`npm start`** running, automated API/browser-unit smoke:
 npx tsx scripts/sa16-smoke.mjs http://localhost:<port>
 ```
 
-Use the port printed by `server.js` (default **5173**; another port if busy).
+Use the port printed by `server.js` (default **9473**; another port if `PORT` is set or the port is busy).
 
 ### App bootstrap (`initApp`)
 

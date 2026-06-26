@@ -3,10 +3,12 @@
  * Vite on Windows often binds to localhost (IPv6) only, so avoid 127.0.0.1 defaults.
  */
 
-/** @type {string} */
-let serverBaseUrl = `http://localhost:${process.env.PORT || 5173}`;
+import { defaultMinnowLocalOrigin } from '../constants/minnow-port.js';
 
-/** Record the URL Vite resolved at startup (e.g. http://localhost:5173). */
+/** @type {string} */
+let serverBaseUrl = defaultMinnowLocalOrigin();
+
+/** Record the URL Vite resolved at startup (e.g. http://localhost:9473). */
 export function setSchedulerServerBaseUrl(url) {
   const trimmed = String(url ?? '').trim().replace(/\/$/, '');
   if (trimmed) {

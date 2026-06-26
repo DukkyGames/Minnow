@@ -4,6 +4,9 @@
 
 import { parseArgs } from 'node:util';
 import { MAX_CHAT_MAX_TOOL_TURNS } from '../config/chat-meta';
+import { defaultMinnowLocalOrigin } from '../config/minnow-port.ts';
+
+const DEFAULT_BASE_URL = defaultMinnowLocalOrigin();
 
 export interface HeadlessRunCliOptions {
   prompt: string;
@@ -37,7 +40,7 @@ Required:
   --prompt <text>       User task (or --stdin to read from stdin)
 
 Server:
-  --base-url <url>      Dev server origin (default http://localhost:5173)
+  --base-url <url>      Dev server origin (default ${DEFAULT_BASE_URL})
   --start-server        Spawn "node server.js" with BROWSER=none if ping fails
   --server-timeout <s>  Preflight wait in seconds (default 30)
 
@@ -92,7 +95,7 @@ Usage:
 Examples:
   minnow run --prompt "Summarize README.md" --workspace .
   BROWSER=none npm start &
-  minnow run --base-url http://localhost:5173 --prompt "Reply OK" --json
+  minnow run --base-url ${DEFAULT_BASE_URL} --prompt "Reply OK" --json
 `);
 }
 
@@ -108,7 +111,7 @@ export function parseRunArgs(argv: string[]): { ok: true; options: HeadlessRunCl
     options: {
       prompt: { type: 'string' },
       stdin: { type: 'boolean', default: false },
-      'base-url': { type: 'string', default: 'http://localhost:5173' },
+      'base-url': { type: 'string', default: DEFAULT_BASE_URL },
       'start-server': { type: 'boolean', default: false },
       'server-timeout': { type: 'string', default: '30' },
       agent: { type: 'string' },
@@ -195,7 +198,7 @@ export function parseRunArgs(argv: string[]): { ok: true; options: HeadlessRunCl
     options: {
       prompt,
       stdin: Boolean(values.stdin),
-      baseUrl: String(values['base-url'] ?? 'http://localhost:5173').trim(),
+      baseUrl: String(values['base-url'] ?? DEFAULT_BASE_URL).trim(),
       startServer: Boolean(values['start-server']),
       serverTimeoutSec,
       agentId: values.agent ? String(values.agent).trim() : null,
