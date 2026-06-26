@@ -11,6 +11,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import {
+  enqueueMergeCompletedTaskWorktreeForTests,
   releaseLaunchSlotForTests,
   startMergeConflictFixer,
   triggerFixerStallReconcileForTests,
@@ -23,7 +24,9 @@ import type { Chat, ChatGroup } from '../../src/types.ts';
 const PLANNER_ID = '22222222-2222-2222-2222-222222222222';
 const GROUP_ID = 'grp_22222222-2222-2222-2222-222222222222';
 const FIXER_CHAT_ID = '66666666-6666-6666-6666-666666666666';
+const STALE_FIXER_CHAT_ID = '77777777-7777-7777-7777-777777777777';
 const TASK_BRANCH = 'minnow/board/W1-B';
+const SIBLING_BRANCH = 'minnow/board/W1-C';
 
 function makePlanner(): Chat {
   return {
@@ -287,5 +290,130 @@ describe('vanished-merge-state guard — Failure B (Part 3)', () => {
     const taskAfter = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-B')!;
     assert.equal(taskAfter.status, 'complete', 'task should complete without spawning a fixer chat');
     assert.equal(taskAfter.fixerChatId, undefined, 'no fixer chat should be created');
+  });
+});
+
+describe('dead fixer does not block sibling merge (Fix 1)', () => {
+  let restoreFetch: (() => void) | undefined;
+  const prevMinnowTest = process.env.MINNOW_TEST;
+
+  beforeEach(() => {
+    process.env.MINNOW_TEST = '1';
+    setLocalServerAvailableForTests(true);
+    setSessionStateForTests(null);
+    releaseLaunchSlotForTests(STALE_FIXER_CHAT_ID);
+  });
+
+  afterEach(() => {
+    restoreFetch?.();
+    restoreFetch = undefined;
+    setLocalServerAvailableForTests(false);
+    releaseLaunchSlotForTests(STALE_FIXER_CHAT_ID);
+    if (prevMinnowTest === undefined) {
+      delete process.env.MINNOW_TEST;
+    } else {
+      process.env.MINNOW_TEST = prevMinnowTest;
+    }
+    setSessionStateForTests(null);
+  });
+
+  test('stale non-streaming fixer does not block enqueueMergeCompletedTaskWorktree', async () => {
+    const planner = makePlanner();
+    const group: ChatGroup = {
+      id: GROUP_ID,
+      name: 'Board',
+      workspacePath: '/tmp/ws',
+      collapsed: false,
+      order: 0,
+      plannerChatId: PLANNER_ID,
+      orchestratePlanPath: 'documentation/plans/test.md',
+      viewMode: 'board',
+    };
+    initBoard(group, planner, {
+      planPath: 'documentation/plans/test.md',
+      tasks: [
+        {
+          id: 'W1-B',
+          title: 'Feature B',
+          wave: 'W1',
+          category: 'build',
+          build: 'Add feature B',
+          test: 'Run tests',
+        },
+        {
+          id: 'W1-C',
+          title: 'Feature C',
+          wave: 'W1',
+          category: 'build',
+          build: 'Add feature C',
+          test: 'Run tests',
+        },
+      ],
+      waves: [{ id: 'W1', status: 'in_progress' }],
+    });
+    group.orchestrateBoard!.integrationBranch = INTEGRATION_BRANCH;
+
+    const staleFixerChat: Chat = {
+      id: STALE_FIXER_CHAT_ID,
+      name: 'Stale fixer',
+      workspacePath: '/tmp/ws',
+      modeId: 'build',
+      modelId: 'm1',
+      history: [{ role: 'assistant', content: 'Stalled mid-merge' }],
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: 1,
+      boardGroupId: GROUP_ID,
+      boardTaskId: 'W1-B',
+    };
+
+    updateTask(
+      group,
+      'W1-B',
+      {
+        status: 'merging',
+        fixerChatId: STALE_FIXER_CHAT_ID,
+        worktreeBranch: TASK_BRANCH,
+        mergePreSha: 'deadbeef',
+      },
+      planner,
+    );
+    updateTask(
+      group,
+      'W1-C',
+      {
+        status: 'testing',
+        worktreeBranch: SIBLING_BRANCH,
+        testVerdict: 'pass',
+        testSummary: 'ok',
+      },
+      planner,
+    );
+
+    setSessionStateForTests({
+      chats: [planner, staleFixerChat],
+      groups: [group],
+      activeChatId: PLANNER_ID,
+    });
+
+    restoreFetch = mockWorktreeOps({
+      merge: { ok: true, integrationSha: 'cafebabe' },
+      verify_integration: { ok: true, verified: true },
+      refresh_integration_deps: { ok: true },
+    });
+
+    const sibling = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-C')!;
+    const mergePromise = enqueueMergeCompletedTaskWorktreeForTests(group, sibling, planner);
+    const raced = await Promise.race([
+      mergePromise.then((result) => ({ kind: 'resolved' as const, result })),
+      new Promise<{ kind: 'timeout' }>((resolve) =>
+        setTimeout(() => resolve({ kind: 'timeout' }), 2_000),
+      ),
+    ]);
+
+    assert.equal(raced.kind, 'resolved', 'sibling merge should not hang on stale fixer');
+    if (raced.kind === 'resolved') {
+      assert.equal(raced.result.outcome, 'merged');
+    }
   });
 });

@@ -248,6 +248,12 @@ const taskQueueByGroupId = new Map<string, string[]>();
 /** Per-board serialized integration merges (keyed by group id). */
 const mergeQueueByGroupId = new Map<string, Promise<unknown>>();
 
+/** Cap wait when a stale fixer blocks the merge queue (dead fixer chat no longer counts as active). */
+const MAX_FIXER_WAIT_MS = 60_000;
+
+/** Boards with an in-flight drainTaskQueue (coalesce overlapping drains). */
+const drainInFlightByGroupId = new Set<string>();
+
 export type MergeTaskWorktreeResult =
   | { outcome: 'merged' }
   | { outcome: 'conflict'; conflictedFiles: string[]; integrationSha?: string }
@@ -256,7 +262,10 @@ export type MergeTaskWorktreeResult =
 
 function boardHasActiveFixer(board: OrchestrateBoardState): boolean {
   return board.tasks.some(
-    (t) => t.status === 'merging' && Boolean(t.fixerChatId?.trim()),
+    (t) =>
+      t.status === 'merging' &&
+      Boolean(t.fixerChatId?.trim()) &&
+      isTaskChatActive(t.fixerChatId!.trim()),
   );
 }
 
@@ -264,7 +273,15 @@ function boardHasActiveFixer(board: OrchestrateBoardState): boolean {
 async function waitForNoActiveFixer(group: ChatGroup): Promise<void> {
   const board = group.orchestrateBoard;
   if (!board) return;
+  const start = Date.now();
   while (boardHasActiveFixer(board)) {
+    if (Date.now() - start > MAX_FIXER_WAIT_MS) {
+      reportBackgroundError(
+        'wait-for-fixer-timeout',
+        new Error('Fixer wait exceeded cap; proceeding with merge'),
+      );
+      return;
+    }
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }
@@ -592,7 +609,13 @@ export function finalizeBoardTaskOnStreamEnd(
   updateTask(
     group,
     task.id,
-    { endedAt: Date.now(), error: undefined, testVerdict: undefined, testSummary: undefined },
+    {
+      endedAt: Date.now(),
+      error: undefined,
+      testVerdict: undefined,
+      testSummary: undefined,
+      stopRetries: undefined,
+    },
     plannerChat,
   );
   teardownBoardTaskChatResources(chat, sessionState?.groups);
@@ -1497,26 +1520,33 @@ export async function stopRunningBoardSlot(
 async function drainTaskQueue(group: ChatGroup, plannerChat: Chat): Promise<void> {
   const board = group.orchestrateBoard;
   if (!board) return;
-  const queue = taskQueueByGroupId.get(group.id);
-  if (!queue?.length) return;
-  // Promote tasks already in testing ahead of queued builds so each task keeps
-  // its single slot across build→test→complete. Needed because
-  // notifyChatStreamEnded fires before setStreaming(false), causing
-  // startTaskTesting to enqueue at the back while the build chat still appears
-  // active; the deferred microtask drain then needs the correct order.
-  if (queue.length > 1) {
-    queue.sort((a, b) => {
-      const sa = board.tasks.find((t) => t.id === a)?.status;
-      const sb = board.tasks.find((t) => t.id === b)?.status;
-      return (sa === 'testing' ? 0 : 1) - (sb === 'testing' ? 0 : 1);
-    });
-  }
-  while (queue.length > 0 && countRunningTaskChats(board) < maxConcurrent(board)) {
-    const nextId = queue.shift()!;
-    await resumeBoardTask(group, nextId, plannerChat);
-  }
-  if (!queue.length) {
-    taskQueueByGroupId.delete(group.id);
+  if (drainInFlightByGroupId.has(group.id)) return;
+  drainInFlightByGroupId.add(group.id);
+  try {
+    const queue = taskQueueByGroupId.get(group.id);
+    if (!queue?.length) return;
+    // Promote tasks already in testing ahead of queued builds so each task keeps
+    // its single slot across build→test→complete. Needed because
+    // notifyChatStreamEnded fires before setStreaming(false), causing
+    // startTaskTesting to enqueue at the back while the build chat still appears
+    // active; the deferred microtask drain then needs the correct order.
+    if (queue.length > 1) {
+      queue.sort((a, b) => {
+        const sa = board.tasks.find((t) => t.id === a)?.status;
+        const sb = board.tasks.find((t) => t.id === b)?.status;
+        return (sa === 'testing' ? 0 : 1) - (sb === 'testing' ? 0 : 1);
+      });
+    }
+    while (queue.length > 0 && countRunningTaskChats(board) < maxConcurrent(board)) {
+      const nextId = queue.shift()!;
+      if (drainResumeCallsForTests) drainResumeCallsForTests.push(nextId);
+      await resumeBoardTask(group, nextId, plannerChat);
+    }
+    if (!queue.length) {
+      taskQueueByGroupId.delete(group.id);
+    }
+  } finally {
+    drainInFlightByGroupId.delete(group.id);
   }
 }
 
@@ -2327,10 +2357,10 @@ export function applyTaskBuildFailureState(
 
 /**
  * Fallback verdict parsed from the Tester chat transcript when the structured
- * `board_report_test_result` call never landed. Requires an explicit
- * `VERDICT: pass|fail` marker in the latest assistant message — prose alone is
- * not trusted, so an offhand "tests pass" mid-explanation is not read as the
- * final verdict. Returns null when no marker is present.
+ * `board_report_test_result` call never landed (primary signal). Scans backward
+ * for the most recent assistant message that contains an explicit
+ * `VERDICT: pass|fail` marker — prose alone is not trusted. Returns null when
+ * no marker is present.
  */
 function parseTesterVerdictMarker(chatId: string | undefined): {
   verdict: 'pass' | 'fail';
@@ -2345,10 +2375,9 @@ function parseTesterVerdictMarker(chatId: string | undefined): {
     if (!msg || msg.role !== 'assistant') continue;
     const content = typeof msg.content === 'string' ? msg.content : '';
     if (!content.trim()) continue;
-    // Only inspect the most recent non-empty assistant message.
     const match = content.match(/^[ \t>*_-]*verdict\s*[:=]\s*([a-z]+)/im);
     const verdict = match ? normalizeVerdict(match[1]) : null;
-    if (!verdict) return null;
+    if (!verdict) continue;
     const line = content
       .split(/\r?\n/)
       .find((l) => /verdict\s*[:=]/i.test(l))
@@ -2810,6 +2839,18 @@ export async function requeueBoardTask(
   if (!task || task.status !== 'quarantined') return;
   logTaskStatus(group, taskId, task.status, 'planned');
   updateTask(group, taskId, { status: 'planned', quarantine: undefined, stopRetries: undefined }, plannerChat);
+  const blockedByRootSummary = `blocked by quarantined ${taskId}`;
+  for (const dependent of board.tasks) {
+    if (dependent.id === taskId || dependent.status !== 'quarantined') continue;
+    if (dependent.quarantine?.summary !== blockedByRootSummary) continue;
+    logTaskStatus(group, dependent.id, dependent.status, 'planned');
+    updateTask(
+      group,
+      dependent.id,
+      { status: 'planned', quarantine: undefined, stopRetries: undefined },
+      plannerChat,
+    );
+  }
   if (isBoardRunning(group)) {
     await autoDelegateNext(group, plannerChat);
   }
@@ -3171,6 +3212,29 @@ export function getTaskQueueForTests(groupId: string): string[] {
 
 export function clearTaskQueuesForTests(): void {
   taskQueueByGroupId.clear();
+  drainInFlightByGroupId.clear();
+}
+
+/** When set, records task ids passed to resumeBoardTask from drainTaskQueue. */
+let drainResumeCallsForTests: string[] | null = null;
+
+export function trackDrainResumeCallsForTests(enabled: boolean): string[] {
+  if (enabled) {
+    drainResumeCallsForTests = [];
+    return drainResumeCallsForTests;
+  }
+  const captured = drainResumeCallsForTests ?? [];
+  drainResumeCallsForTests = null;
+  return captured;
+}
+
+/** Test-only: run integration merge on the per-board queue (waits for fixers). */
+export async function enqueueMergeCompletedTaskWorktreeForTests(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+): Promise<MergeTaskWorktreeResult> {
+  return enqueueMergeCompletedTaskWorktree(group, task, plannerChat);
 }
 
 export async function drainTaskQueueForTests(

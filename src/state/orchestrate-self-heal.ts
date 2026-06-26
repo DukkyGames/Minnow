@@ -181,7 +181,7 @@ export async function runSelfHeal(
   const board = group.orchestrateBoard;
   const freshTask = board?.tasks.find((t) => t.id === task.id) ?? task;
 
-  // ── 1. Unconditional round cap (GAP-2) ────────────────────────────────────
+  // ── 1. Global self-heal ceiling above per-category attempt caps (GAP-2) ───
   const maxRounds = deps.resolveSelfHealMaxRounds();
   if ((freshTask.selfHealRound ?? 0) >= maxRounds) {
     quarantineWithIssue(group, freshTask, plannerChat, category, summary, deps);
@@ -235,7 +235,13 @@ export async function runSelfHeal(
       await deps.autoDelegateNext(group, plannerChat);
       return;
     }
-    updateTask(group, freshTask.id, { lastHealCategory: 'stall' }, plannerChat);
+    const stallRound = (freshTask.selfHealRound ?? 0) + 1;
+    updateTask(
+      group,
+      freshTask.id,
+      { selfHealRound: stallRound, lastHealCategory: 'stall' },
+      plannerChat,
+    );
     await deps.runTaskChatNudge(group, freshTask.id, plannerChat, summary);
     await deps.autoDelegateNext(group, plannerChat);
     return;
@@ -248,7 +254,13 @@ export async function runSelfHeal(
       if (route === 'retry') {
         const after = board?.tasks.find((t) => t.id === freshTask.id) ?? freshTask;
         const seed = deps.buildBuildRetrySeedMessage(after, after.buildAttempts ?? 1, summary);
-        updateTask(group, freshTask.id, { pendingBuildSeed: seed, lastHealCategory: 'code' }, plannerChat);
+        const codeRound = (freshTask.selfHealRound ?? 0) + 1;
+        updateTask(
+          group,
+          freshTask.id,
+          { pendingBuildSeed: seed, selfHealRound: codeRound, lastHealCategory: 'code' },
+          plannerChat,
+        );
         await deps.startTask(group, freshTask.id, plannerChat);
       } else {
         // 'failed' — attempts exhausted, escalate to quarantine.
@@ -259,7 +271,13 @@ export async function runSelfHeal(
       if (route === 'retry') {
         const after = board?.tasks.find((t) => t.id === freshTask.id) ?? freshTask;
         const seed = deps.buildRetryBuilderSeedMessage(after, after.testAttempts ?? 1, summary);
-        updateTask(group, freshTask.id, { pendingBuildSeed: seed, lastHealCategory: 'code' }, plannerChat);
+        const codeRound = (freshTask.selfHealRound ?? 0) + 1;
+        updateTask(
+          group,
+          freshTask.id,
+          { pendingBuildSeed: seed, selfHealRound: codeRound, lastHealCategory: 'code' },
+          plannerChat,
+        );
         await deps.startTask(group, freshTask.id, plannerChat);
       } else {
         // 'blocked' — attempts exhausted, escalate to quarantine.
@@ -281,7 +299,13 @@ export async function runSelfHeal(
       await deps.autoDelegateNext(group, plannerChat);
       return;
     }
-    updateTask(group, freshTask.id, { lastHealCategory: 'merge' }, plannerChat);
+    const mergeRound = (freshTask.selfHealRound ?? 0) + 1;
+    updateTask(
+      group,
+      freshTask.id,
+      { selfHealRound: mergeRound, lastHealCategory: 'merge' },
+      plannerChat,
+    );
     await deps.startMergeConflictFixer(
       group,
       freshTask,

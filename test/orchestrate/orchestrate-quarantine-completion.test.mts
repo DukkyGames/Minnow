@@ -15,6 +15,7 @@ import {
   isOrchestratePlanComplete,
   hasIncompleteOrchestrateWork,
 } from '../../src/chat/orchestrate/plan-complete.ts';
+import { requeueBoardTask } from '../../src/state/orchestrate-board-actions.ts';
 import {
   initBoard,
   isPriorWavesComplete,
@@ -246,6 +247,74 @@ describe('quarantineTaskAndDependents', () => {
     const sibling = group.orchestrateBoard!.tasks.find((t) => t.id === 'SIBLING')!;
     assert.equal(sibling.status, 'planned');
     assert.equal(sibling.quarantine, undefined);
+  });
+});
+
+// ── requeueBoardTask cascade ───────────────────────────────────────────────
+
+describe('requeueBoardTask', () => {
+  function seedGroup() {
+    const planner = makePlanner();
+    const group = makeGroup();
+    initBoard(group, planner, {
+      planPath: PLAN_PATH,
+      waves: [{ id: 'W1' }],
+      tasks: [
+        { id: 'ROOT', title: 'Root', wave: 'W1', category: 'build', build: 'do root' },
+        { id: 'DEP1', title: 'Dep1', wave: 'W1', category: 'build', build: 'do dep1', dependsOn: ['ROOT'] },
+        { id: 'SIBLING', title: 'Sibling', wave: 'W1', category: 'build', build: 'do sibling' },
+      ],
+    });
+    group.orchestrateBoard!.executionMode = 'auto';
+    group.orchestrateBoard!.autoRunning = true;
+    setSessionStateForTests({
+      version: 5,
+      activeId: PLANNER_ID,
+      chats: [planner],
+      groups: [group],
+    });
+    return { group, planner };
+  }
+
+  test('requeue root releases cascade-quarantined dependents but not independent quarantines', async () => {
+    const { group, planner } = seedGroup();
+    quarantineTaskAndDependents(
+      group,
+      'ROOT',
+      {
+        category: 'stall',
+        summary: 'Stopped by user — requeue to resume',
+        resolutionSteps: ['inspect if needed, then Requeue'],
+        at: 1000,
+      },
+      planner,
+    );
+    updateTask(
+      group,
+      'SIBLING',
+      {
+        status: 'quarantined',
+        quarantine: {
+          category: 'code',
+          summary: 'own failure',
+          resolutionSteps: [],
+          at: 1001,
+        },
+      },
+      planner,
+    );
+
+    await requeueBoardTask(group, 'ROOT', planner);
+
+    const root = group.orchestrateBoard!.tasks.find((t) => t.id === 'ROOT')!;
+    const dep1 = group.orchestrateBoard!.tasks.find((t) => t.id === 'DEP1')!;
+    const sibling = group.orchestrateBoard!.tasks.find((t) => t.id === 'SIBLING')!;
+    assert.equal(root.status, 'planned');
+    assert.equal(root.quarantine, undefined);
+    assert.equal(dep1.status, 'planned');
+    assert.equal(dep1.quarantine, undefined);
+    assert.equal(sibling.status, 'quarantined');
+    assert.equal(sibling.quarantine?.summary, 'own failure');
   });
 });
 

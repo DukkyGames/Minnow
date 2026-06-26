@@ -267,6 +267,8 @@ describe('runSelfHeal — code', () => {
     assert.equal(s.startTaskCalls[0], 'W1-A');
     assert.equal(s.quarantineCalls.length, 0);
     assert.equal(s.autoDelegateCalls, 1);
+    const fresh = group.orchestrateBoard!.tasks.find((x) => x.id === 'W1-A')!;
+    assert.equal(fresh.selfHealRound, 1);
   });
 
   test('code build exhausted → quarantine', async () => {
@@ -309,6 +311,8 @@ describe('runSelfHeal — stall', () => {
     assert.equal(s.nudgeCalls[0], 'W1-A');
     assert.equal(s.startTaskCalls.length, 0);
     assert.equal(s.autoDelegateCalls, 1);
+    const fresh = group.orchestrateBoard!.tasks.find((x) => x.id === 'W1-A')!;
+    assert.equal(fresh.selfHealRound, 1);
   });
 
   test('recurring stall (lastHealCategory=stall) → treat as code', async () => {
@@ -337,6 +341,8 @@ describe('runSelfHeal — merge', () => {
 
     assert.equal(s.fixerCalled, true);
     assert.equal(s.quarantineCalls.length, 0);
+    const fresh = group.orchestrateBoard!.tasks.find((x) => x.id === 'W1-A')!;
+    assert.equal(fresh.selfHealRound, 1);
   });
 
   test('merge attempts exhausted → quarantine with merge category', async () => {
@@ -394,5 +400,29 @@ describe('runSelfHeal — test phase routing', () => {
     assert.equal(s.startTaskCalls.length, 1);
     // startTask (builder), not test:W1-A — test failures re-seed the Builder
     assert.equal(s.startTaskCalls[0], 'W1-A');
+  });
+});
+
+// ── Cross-category global ceiling ────────────────────────────────────────────
+
+describe('runSelfHeal — cross-category global ceiling', () => {
+  test('mixed stall → code → merge quarantines when selfHealRound reaches max', async () => {
+    const t = task('W1-A', { status: 'merging', selfHealRound: 0 });
+    const { group, planner } = makeSetup([t]);
+
+    const { deps, s } = makeDeps();
+    s.buildFailureRoute = 'retry';
+
+    await runSelfHeal(group, t, planner, opts('build', { category: 'stall' }), deps);
+    let fresh = group.orchestrateBoard!.tasks.find((x) => x.id === 'W1-A')!;
+    assert.equal(fresh.selfHealRound, 1);
+
+    await runSelfHeal(group, fresh, planner, opts('build', { category: 'code' }), deps);
+    fresh = group.orchestrateBoard!.tasks.find((x) => x.id === 'W1-A')!;
+    assert.equal(fresh.selfHealRound, 2);
+
+    await runSelfHeal(group, fresh, planner, opts('merge', { category: 'merge' }), deps);
+    assert.equal(s.quarantineCalls.length, 1);
+    assert.equal(s.fixerCalled, false);
   });
 });

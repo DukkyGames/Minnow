@@ -20,6 +20,7 @@ import {
   reserveLaunchSlotForTests,
   resolveTaskChatStopReason,
   resolveTaskChatStreamOutcome,
+  trackDrainResumeCallsForTests,
 } from '../../src/state/orchestrate-board-actions.ts';
 import { initBoard, isTaskStalledForRestart, markBoardTaskInProgressFromChat, updateTask } from '../../src/state/orchestrate-board-store.ts';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
@@ -219,6 +220,23 @@ describe('task stream end finalization', () => {
     assert.equal(updated.stopRetries, 1);
     assert.equal(updated.chatId, undefined);
     assert.ok(updated.endedAt);
+  });
+
+  test('stopRetries cleared after successful build completion', () => {
+    const group = makeGroup('auto');
+    const planner = makePlanner();
+    updateTask(group, 'W1-A', { stopRetries: 1 }, planner);
+    const task = group.orchestrateBoard!.tasks[0]!;
+    const taskChat = makeTaskChat(false);
+    setSessionStateForTests({
+      chats: [planner, taskChat],
+      groups: [group],
+      activeChatId: PLANNER_ID,
+    });
+    finalizeBoardTaskOnStreamEnd(group, task, planner);
+    const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    assert.equal(updated.status, 'testing');
+    assert.equal(updated.stopRetries, undefined);
   });
 
   test('system stop at cap quarantines with repeated-stop note', () => {
@@ -499,5 +517,30 @@ describe('build→test handoff slot accounting', () => {
 
     await drainTaskQueueForTests(group, planner);
     assert.deepEqual(getTaskQueueForTests(GROUP_ID), ['W1-A', 'W1-C']);
+  });
+
+  test('concurrent drainTaskQueue coalesces and does not double-resume queued tasks', async () => {
+    const group = makeGroup('auto');
+    const planner = makePlanner();
+    const board = group.orchestrateBoard!;
+    board.maxConcurrentTasks = 1;
+    board.tasks.push({
+      id: 'W1-B',
+      title: 'Queued B',
+      wave: 'W1',
+      category: 'build',
+      status: 'planned',
+    });
+    trackDrainResumeCallsForTests(true);
+    enqueueTaskForTests(GROUP_ID, 'W1-B');
+
+    await Promise.all([
+      drainTaskQueueForTests(group, planner),
+      drainTaskQueueForTests(group, planner),
+    ]);
+
+    const resumed = trackDrainResumeCallsForTests(false);
+    assert.deepEqual(resumed, ['W1-B']);
+    assert.deepEqual(getTaskQueueForTests(GROUP_ID), []);
   });
 });

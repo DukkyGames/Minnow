@@ -217,6 +217,33 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
     assert.equal(group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!.status, 'complete');
   });
 
+  test('uses most recent assistant message that contains VERDICT marker', async () => {
+    const group = makeGroup({ 'W1-A': 'testing' });
+    const planner = makePlanner();
+    const testChat: Chat = {
+      id: TEST_CHAT_ID,
+      name: 'Test',
+      workspacePath: '/tmp/ws',
+      modeId: 'build',
+      modelId: 'm1',
+      workAgentId: 'tester',
+      history: [
+        { role: 'assistant', content: 'VERDICT: pass' },
+        { role: 'assistant', content: 'all good!' },
+      ],
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: 1,
+      boardGroupId: GROUP_ID,
+      boardTaskId: 'W1-A',
+    };
+    updateTask(group, 'W1-A', { testChatId: TEST_CHAT_ID }, planner);
+    setSessionStateForTests({ chats: [planner, testChat], groups: [group], activeChatId: PLANNER_ID });
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    await finalizeTaskTestingOnStreamEnd(group, task, planner);
+    assert.equal(group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!.status, 'complete');
+  });
+
   test('no marker and no verdict still fails', async () => {
     const group = makeGroup({ 'W1-A': 'testing' });
     const planner = makePlanner();
