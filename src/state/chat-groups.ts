@@ -1,13 +1,22 @@
 /**
- * Sidebar chat groups: create, rename, collapse, assign chats (never delete chats on group delete).
- * Orchestrate boards are owned by folders ({@link ChatGroup.orchestrateBoard}).
+ * Sidebar chat groups: create, rename, collapse, assign chats.
+ * Orchestrate board folders delete member chats on group delete; plain groups only ungroup.
+ * Boards are owned by folders ({@link ChatGroup.orchestrateBoard}).
  */
 
+import { getChatAbort, setChatStopReason } from '../app-state.ts';
 import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title.ts';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Chat, ChatGroup } from '../types';
 import { getChatLastMessageAt } from './session-workspace-scope';
-import { newChatId, scheduleSaveSessions, sessionState, touchChat } from './sessions';
+import {
+  newChatId,
+  removeChatById,
+  scheduleSaveSessions,
+  sessionState,
+  touchChat,
+  type RemoveChatResult,
+} from './sessions';
 
 function newGroupId(): string {
   return `grp_${newChatId().slice(5)}`;
@@ -125,12 +134,87 @@ export function renameGroup(id: string, name: string): void {
   scheduleSaveSessions();
 }
 
-/** Remove group and ungroup member chats (chats are never deleted). */
-export function deleteGroup(id: string): void {
+export interface DeleteGroupResult {
+  ok: boolean;
+  /** True when deleting a board folder removed the active chat. */
+  activeChanged: boolean;
+  /** Last chat removal result when a board folder and its chats were deleted. */
+  chatRemoval?: RemoveChatResult;
+}
+
+/** Chat ids belonging to a board folder (membership + task-linked chats). */
+export function listBoardGroupChatIds(group: ChatGroup, chats: readonly Chat[]): string[] {
+  const ids = new Set<string>();
+  const groupId = group.id;
+  for (const chat of chats) {
+    if (chat.groupId === groupId || chat.boardGroupId === groupId) {
+      ids.add(chat.id);
+    }
+  }
+  const board = group.orchestrateBoard;
+  if (board) {
+    const plannerId = group.plannerChatId?.trim();
+    if (plannerId) ids.add(plannerId);
+    for (const task of board.tasks) {
+      if (task.chatId?.trim()) ids.add(task.chatId.trim());
+      if (task.testChatId?.trim()) ids.add(task.testChatId.trim());
+      if (task.fixerChatId?.trim()) ids.add(task.fixerChatId.trim());
+    }
+    if (board.finalTest?.chatId?.trim()) ids.add(board.finalTest.chatId.trim());
+  }
+  return [...ids];
+}
+
+function teardownBoardGroup(group: ChatGroup, chatIds: readonly string[]): void {
+  for (const chatId of chatIds) {
+    setChatStopReason(chatId, 'system');
+    getChatAbort(chatId)?.abort();
+  }
+  if (group.orchestrateBoard?.integrationBranch) {
+    void fetch('/api/worktree', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ op: 'cleanup', boardId: group.id }),
+    }).catch(() => {
+      /* best-effort on folder delete */
+    });
+  }
+}
+
+/** Remove a plain group (ungroup chats) or a board folder (delete all member chats). */
+export function deleteGroup(
+  id: string,
+  options: { fallbackModelId?: string } = {},
+): DeleteGroupResult {
   const state = requireSession();
   const groups = ensureGroupsArray();
   const idx = groups.findIndex((g) => g.id === id);
-  if (idx < 0) return;
+  if (idx < 0) return { ok: false, activeChanged: false };
+
+  const group = groups[idx]!;
+  const fallbackModelId = options.fallbackModelId ?? '';
+
+  if (group.orchestrateBoard) {
+    if (state.activeBoardGroupId === id) {
+      dismissActiveBoardView();
+    }
+    const chatIds = listBoardGroupChatIds(group, state.chats);
+    teardownBoardGroup(group, chatIds);
+    groups.splice(idx, 1);
+
+    let lastRemoval: RemoveChatResult | undefined;
+    let activeChanged = false;
+    for (const chatId of chatIds) {
+      const result = removeChatById(chatId, fallbackModelId);
+      if (result.ok) {
+        lastRemoval = result;
+        if (result.activeChanged) activeChanged = true;
+      }
+    }
+    scheduleSaveSessions();
+    return { ok: true, activeChanged, chatRemoval: lastRemoval };
+  }
+
   groups.splice(idx, 1);
   if (state.activeBoardGroupId === id) {
     delete state.activeBoardGroupId;
@@ -144,6 +228,7 @@ export function deleteGroup(id: string): void {
     }
   }
   scheduleSaveSessions();
+  return { ok: true, activeChanged: false };
 }
 
 export function assignChatToGroup(chatId: string, groupId: string | null): void {
