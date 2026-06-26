@@ -828,6 +828,7 @@ async function toolExecuteCommand(args) {
       shell: process.platform === 'win32',
       chatId,
       toolCallId,
+      timeoutMs: typeof args?.timeout_ms === 'number' ? args.timeout_ms : undefined,
       ...(spawnEnv ? { env: spawnEnv } : {}),
     });
     if (String(output).trimStart().startsWith('Error')) {

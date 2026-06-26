@@ -335,6 +335,8 @@ export async function createBackgroundRun({
     bufferBytes: 0,
     truncated: false,
     timedOut: false,
+    stoppedByUser: false,
+    timeoutMs: undefined,
     exitCode: null,
     finished: false,
     logPath,
