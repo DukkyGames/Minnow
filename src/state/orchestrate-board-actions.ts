@@ -319,6 +319,12 @@ const TASK_CHAT_STALL_RESTART_CAP = 2;
 /** Per-chatId count of stall-triggered restarts this session. Cleared on stream end. */
 const taskChatStallRestarts = new Map<string, number>();
 
+/**
+ * Fixer chat ids with an in-flight proactive merge-completion probe. Prevents
+ * overlapping git checks when multiple heartbeats fire while a probe is pending.
+ */
+const fixerEarlyFinalizeInFlight = new Set<string>();
+
 function refreshHeartbeatThresholds(): void {
   const meta = getAutopilotMetaSync();
   setHeartbeatConfig({
@@ -557,6 +563,34 @@ function startTaskChatSupervision(chatId: string): void {
 
     // Fixer chats use a tighter threshold and reconcile directly via finalizeMergeFixerOnStreamEnd.
     if (stallTask?.fixerChatId?.trim() === chatId && stallTask.status === 'merging') {
+      // Proactive completion: a fixer often keeps emitting prose/diagnostics after a
+      // successful `git commit --no-edit`, so it never trips the stall watchdog and
+      // its stream-end may lag. Poll git state each tick; as soon as the branch is
+      // merged and verified, stop the chat and finalize → complete.
+      const branch = stallTask.worktreeBranch?.trim();
+      if (branch && isLocalServerAvailable() && !fixerEarlyFinalizeInFlight.has(chatId)) {
+        const boardId = group.id;
+        fixerEarlyFinalizeInFlight.add(chatId);
+        void (async () => {
+          try {
+            const merged = await checkTaskBranchMerged({ boardId, fromBranch: branch });
+            if (!merged.ok || !merged.merged) return;
+            const verified = await verifyIntegrationMergeOp({ boardId, fromBranch: branch });
+            if (!verified.ok || !verified.verified) return;
+            const fresh =
+              group.orchestrateBoard?.tasks.find((t) => t.id === taskId) ?? stallTask;
+            if (fresh.fixerChatId?.trim() !== chatId || fresh.status !== 'merging') return;
+            stopHeartbeat(chatTaskRunId(chatId));
+            stopGeneration(chatId);
+            await finalizeMergeFixerOnStreamEnd(group, fresh, planner);
+          } catch (err) {
+            reportBackgroundError('merge-fixer-early-finalize', err);
+          } finally {
+            fixerEarlyFinalizeInFlight.delete(chatId);
+          }
+        })();
+      }
+
       if (progressAge < meta.progressStallMs) return;
       stopHeartbeat(chatTaskRunId(chatId));
       stopGeneration(chatId);
@@ -594,6 +628,7 @@ function startTaskChatSupervision(chatId: string): void {
 
 function stopTaskChatSupervision(chatId: string): void {
   taskChatStallRestarts.delete(chatId);
+  fixerEarlyFinalizeInFlight.delete(chatId);
   stopHeartbeat(chatTaskRunId(chatId));
 }
 
@@ -1825,6 +1860,28 @@ async function finalizeMergeFixerOnStreamEnd(
       );
 
       const mergeResult = await enqueueMergeCompletedTaskWorktree(group, fresh, plannerChat);
+      if (mergeResult.outcome === 'merged' || mergeResult.outcome === 'skipped') {
+        // Re-merge succeeded (conflict resolved or already integrated) → complete.
+        const mergePreSha = fresh.mergePreSha?.trim();
+        try {
+          await refreshIntegrationDepsOp({ boardId, sinceSha: mergePreSha });
+        } catch (err) {
+          reportBackgroundError('worktree-refresh-deps', err);
+        }
+        updateTask(
+          group,
+          fresh.id,
+          {
+            fixerChatId: undefined,
+            error: undefined,
+            fixerAttempts: undefined,
+            mergePreSha: undefined,
+          },
+          plannerChat,
+        );
+        moveTaskStatus(group, fresh.id, 'complete', plannerChat);
+        return;
+      }
       if (mergeResult.outcome === 'conflict') {
         await startMergeConflictFixer(
           group,

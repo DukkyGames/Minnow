@@ -210,6 +210,29 @@ describe('merge-fixer stall recovery (Part 2)', () => {
     assert.equal(task.status, 'merging', 'task should remain merging while retry is queued');
     assert.equal(task.fixerAttempts, 1, 'fixerAttempts should be incremented to 1');
   });
+
+  test('stall reconciler completes task when re-merge succeeds on retry', async () => {
+    const group = makeGroup();
+    const fixerChat = makeFixerChat();
+    const { planner } = seedMergingTask(group, fixerChat, { fixerAttempts: 0 });
+
+    restoreFetch = mockWorktreeOps({
+      // Initial check says not merged → enters retry path.
+      check_merged: { ok: true, merged: false },
+      restore_integration: { ok: true },
+      // Re-merge succeeds cleanly (conflict resolved / integration advanced).
+      merge: { ok: true, integrationSha: 'feedface' },
+      verify_integration: { ok: true, verified: true },
+      refresh_integration_deps: { ok: true },
+    });
+
+    await triggerFixerStallReconcileForTests(group, planner, 'W1-B');
+
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-B')!;
+    assert.equal(task.status, 'complete', 'successful re-merge should complete the task, not block it');
+    assert.equal(task.fixerChatId, undefined, 'fixerChatId cleared on complete');
+    assert.equal(task.fixerAttempts, undefined, 'fixerAttempts cleared on complete');
+  });
 });
 
 describe('vanished-merge-state guard — Failure B (Part 3)', () => {
