@@ -596,6 +596,10 @@ export function isTaskStalledForRestart(
   isChatActive: (chatId: string) => boolean,
 ): boolean {
   if (task.status !== 'in_progress' && task.status !== 'testing') return false;
+  // An active fixer (env-fixer runs under in_progress) owns the task — the
+  // builder/tester chat is intentionally idle, so this is not a stuck slot.
+  const fixerId = task.fixerChatId?.trim();
+  if (fixerId && isChatActive(fixerId)) return false;
   const chatId =
     task.status === 'testing'
       ? task.testChatId?.trim() || task.chatId?.trim()
@@ -811,6 +815,9 @@ export type UpdateTaskPatch = Partial<
     | 'testSpec'
     | 'testChatId'
     | 'fixerChatId'
+    | 'fixerKind'
+    | 'envFixAttempts'
+    | 'envFixPhase'
     | 'testAttempts'
     | 'buildAttempts'
     | 'fixerAttempts'
@@ -885,6 +892,12 @@ export function updateTask(
   }
   if ('fixerChatId' in patch && patch.fixerChatId === undefined) {
     delete task.fixerChatId;
+  }
+  if ('fixerKind' in patch && patch.fixerKind === undefined) {
+    delete task.fixerKind;
+  }
+  if ('envFixPhase' in patch && patch.envFixPhase === undefined) {
+    delete task.envFixPhase;
   }
   if ('mergePreSha' in patch && patch.mergePreSha === undefined) {
     delete task.mergePreSha;

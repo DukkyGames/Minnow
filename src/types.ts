@@ -310,8 +310,20 @@ export interface BoardTask {
   dependsOn?: string[];
   /** Linked Tester chat session id (per-task testing). */
   testChatId?: string;
-  /** Linked merge-conflict fixer chat (integration worktree). */
+  /**
+   * Linked fixer chat. Two flavours, discriminated by {@link fixerKind}:
+   *  - 'merge' (default) — merge-conflict fixer, runs in the integration worktree.
+   *  - 'env'  — environment/setup fixer, runs in the task's own worktree to
+   *             repair infra failures (missing deps, unstarted services) so AFK
+   *             can self-heal instead of dead-ending at quarantine.
+   */
   fixerChatId?: string;
+  /** Which kind of fixer {@link fixerChatId} is. Absent ⇒ legacy merge fixer. */
+  fixerKind?: 'merge' | 'env';
+  /** Env-fixer attempts (0 = first try). Bounds the infra self-heal loop. */
+  envFixAttempts?: number;
+  /** Phase to re-run after an env-fixer finishes ('build' or 'test'). */
+  envFixPhase?: 'build' | 'test';
   /** Build↔test retry count (incremented on each test failure). */
   testAttempts?: number;
   /** Build-failure retry count (incremented on each failed build chat in auto/afk). */

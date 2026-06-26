@@ -85,35 +85,32 @@ function makeSetup(tasks: BoardTask[]): { group: ChatGroup; planner: Chat } {
 function makeDeps(): {
   deps: SelfHealDeps;
   s: {
-    provisioned: boolean[];
+    maxEnvFixAttempts: number;
     autoDelegateCalls: number;
     quarantineCalls: { taskId: string; category: string }[];
     startTaskCalls: string[];
     nudgeCalls: string[];
+    envFixerCalls: { taskId: string; phase: string }[];
     fixerCalled: boolean;
     buildFailureRoute: 'failed' | 'retry';
     testFailureRoute: 'blocked' | 'retry';
   };
 } {
   const s = {
-    provisioned: [false] as boolean[],
+    maxEnvFixAttempts: 2,
     autoDelegateCalls: 0,
     quarantineCalls: [] as { taskId: string; category: string }[],
     startTaskCalls: [] as string[],
     nudgeCalls: [] as string[],
+    envFixerCalls: [] as { taskId: string; phase: string }[],
     fixerCalled: false,
     buildFailureRoute: 'retry' as 'failed' | 'retry',
     testFailureRoute: 'retry' as 'blocked' | 'retry',
   };
 
   const deps: SelfHealDeps = {
-    async ensureBoardInfraProvisioned(_group, taskArg) {
-      const wasAlreadyProvisioned = s.provisioned.shift() ?? false;
-      return {
-        wasAlreadyProvisioned,
-        signatures: wasAlreadyProvisioned ? [] : [`sig:${taskArg.id}`],
-        ok: true,
-      };
+    async startEnvFixer(_group, taskArg, _planner, phase) {
+      s.envFixerCalls.push({ taskId: taskArg.id, phase });
     },
     applyTaskBuildFailureState() {
       return s.buildFailureRoute;
@@ -146,6 +143,7 @@ function makeDeps(): {
       s.quarantineCalls.push({ taskId, category: issue?.category ?? 'unknown' });
     },
     resolveSelfHealMaxRounds: () => 2,
+    resolveMaxEnvFixAttempts: () => s.maxEnvFixAttempts,
     resolveAfkAutoRestartStalls: () => true,
     resolveMaxMergeFixerAttempts: () => 2,
   };
@@ -162,50 +160,61 @@ function opts(
 
 // ── Infra path ─────────────────────────────────────────────────────────────
 
-describe('runSelfHeal — infra', () => {
-  test('infra not provisioned → provision + re-run build + no attempt burn', async () => {
+describe('runSelfHeal — infra (env-fixer)', () => {
+  test('infra under attempt cap → spawn env-fixer, no attempt burn, no quarantine', async () => {
     const t = task('W1-A', { status: 'in_progress', buildAttempts: 0 });
     const { group, planner } = makeSetup([t]);
 
     const { deps, s } = makeDeps();
-    s.provisioned = [false];
     await runSelfHeal(group, t, planner, opts('build', { category: 'infra' }), deps);
 
-    assert.equal(s.startTaskCalls.length, 1);
-    assert.equal(s.startTaskCalls[0], 'W1-A');
-    // no attempt burn: buildAttempts unchanged
+    assert.equal(s.envFixerCalls.length, 1);
+    assert.equal(s.envFixerCalls[0]!.taskId, 'W1-A');
+    assert.equal(s.envFixerCalls[0]!.phase, 'build');
     const fresh = group.orchestrateBoard!.tasks.find((x) => x.id === 'W1-A')!;
+    // env-fixer is not a build attempt; envFixAttempts + selfHealRound bumped.
     assert.equal(fresh.buildAttempts, 0);
-    // selfHealRound incremented to 1
+    assert.equal(fresh.envFixAttempts, 1);
     assert.equal(fresh.selfHealRound, 1);
-    assert.equal(s.autoDelegateCalls, 1);
     assert.equal(s.quarantineCalls.length, 0);
+    assert.equal(s.autoDelegateCalls, 1);
   });
 
-  test('infra already provisioned → quarantine (GAP-2: loop cannot spin)', async () => {
-    const t = task('W1-A');
+  test('infra env-fixer attempts exhausted → quarantine', async () => {
+    const t = task('W1-A', { envFixAttempts: 2 }); // max = 2
     const { group, planner } = makeSetup([t]);
 
     const { deps, s } = makeDeps();
-    s.provisioned = [true];
     await runSelfHeal(group, t, planner, opts('build', { category: 'infra' }), deps);
 
+    assert.equal(s.envFixerCalls.length, 0);
     assert.equal(s.quarantineCalls.length, 1);
     assert.equal(s.quarantineCalls[0]!.category, 'infra');
-    assert.equal(s.startTaskCalls.length, 0);
     assert.equal(s.autoDelegateCalls, 1);
   });
 
-  test('infra phase=test → provision + startTaskTesting', async () => {
+  test('infra phase=test → env-fixer spawned for the test phase', async () => {
     const t = task('W1-A', { status: 'testing' });
     const { group, planner } = makeSetup([t]);
 
     const { deps, s } = makeDeps();
-    s.provisioned = [false];
     await runSelfHeal(group, t, planner, opts('test', { category: 'infra' }), deps);
 
-    assert.ok(s.startTaskCalls.includes('test:W1-A'));
+    assert.equal(s.envFixerCalls.length, 1);
+    assert.equal(s.envFixerCalls[0]!.phase, 'test');
     assert.equal(s.quarantineCalls.length, 0);
+  });
+
+  test('infra during merge phase → quarantine (env fix cannot help a merge)', async () => {
+    const t = task('W1-A', { status: 'merging' });
+    const { group, planner } = makeSetup([t]);
+
+    const { deps, s } = makeDeps();
+    await runSelfHeal(group, t, planner, opts('merge', { category: 'infra' }), deps);
+
+    assert.equal(s.envFixerCalls.length, 0);
+    assert.equal(s.quarantineCalls.length, 1);
+    assert.equal(s.quarantineCalls[0]!.category, 'infra');
   });
 });
 
@@ -232,7 +241,8 @@ describe('runSelfHeal — selfHealRound cap', () => {
     await runSelfHeal(group, t, planner, opts('build', { category: 'infra' }), deps);
 
     assert.equal(s.quarantineCalls.length, 1);
-    // infra provision was NOT attempted (cap hit first)
+    // env-fixer was NOT spawned (global ceiling hit before the infra branch)
+    assert.equal(s.envFixerCalls.length, 0);
     assert.equal(s.startTaskCalls.length, 0);
   });
 

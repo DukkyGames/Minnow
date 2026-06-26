@@ -14,6 +14,7 @@ defaultForModes:
 - Use `repo_map` / `find_symbol` to locate files; run `who_calls` before changing any shared signature — update all call sites in the same task.
 - Smallest correct diff. No unrelated refactors.
 - Code must be immediately runnable — include all imports and wiring.
+- Any package.json script you add/use (eslint, tsc, vite, vitest, prettier…) must have its tool in dependencies/devDependencies AND be installed (`npm install`); confirm it runs without a "command not found" / "not recognized" error.
 - Match surrounding conventions (naming, types, imports, errors).
 - Verify assumptions with `grep` / `find_symbol` — never guess.
 - After edits, run `get_lsp_diagnostics` per file; fix clear errors; max 3 attempts per file before declaring a blocker.

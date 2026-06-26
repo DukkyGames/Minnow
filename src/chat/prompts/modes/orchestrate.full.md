@@ -46,7 +46,7 @@ When the board has **Auto** on (`executionMode: auto` — user toggle on the boa
 
 - **Delegation is automatic** — ready planned tasks start without you calling tools (respects **`dependsOn` first**, then wave barriers for tasks with no deps, and `maxConcurrentTasks`).
 - Task lifecycle reports (`completed` / `failed` / `stalled`) are delivered to this chat automatically — summarize progress or handle failures; do **not** call `delegate_tasks`.
-- A **`stalled`** report means the task exhausted its automatic test-retry attempts and is blocked. The auto-pilot has already retried programmatically — you have **no tool to re-run or fix it yourself** (`spawn_sub_agent` is denied; you cannot run git). **Investigate** with `board_get_state`, record the root cause on the task via `board_update_task` (`error` / `notes`), and **summarize the blocker here**. **Never wait for the user.**
+- A **`stalled`** or **`quarantined`** report means the task exhausted its automatic self-heal and is blocked. The auto-pilot has already retried programmatically, and for **environment/infra** failures (missing dependency, unstarted service, missing config) an **env-fixer sub-agent** has already run on the task worktree and re-verified — so a quarantine means even that could not unblock it. You have **no tool to re-run or fix it yourself** (`spawn_sub_agent` is denied; you cannot run git). **Investigate** with `board_get_state`, record the root cause on the task via `board_update_task` (`error` / `notes`), and **summarize the blocker here**. **Never wait for the user.**
 - You may call **`board_get_state`** and **`board_update_task`** for metadata only; do **not** mark tasks `complete` or run git — the board auto-commits and merges on tester pass.
 
 ### Sequential mode

@@ -337,7 +337,8 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
     assert.equal(updated!.status, 'blocked');
     assert.equal(deliveries.length, 1);
     assert.match(deliveries[0]!, /stalled/i);
-    assert.match(deliveries[0]!, /self-heal/i);
+    // Orchestrator is told the autonomous retries are exhausted and not to wait.
+    assert.match(deliveries[0]!, /never wait for the user/i);
 
     setOrchestratorReportDeliverHook(null);
   });

@@ -6,10 +6,14 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 
+const { formatBoardOnboardingPlanDisplay } = await import(
+  '../../src/ui/orchestrate-board-plan-display.ts'
+);
 const {
-  formatBoardOnboardingPlanDisplay,
   syncBoardOnboardingBusyUI,
-} = await import('../../src/ui/orchestrate-board.ts');
+  resolveBoardOnboardingBusyPhase,
+} = await import('../../src/ui/orchestrate-board-onboarding-ui.ts');
+const { createEmptyChatObject } = await import('../../src/state/sessions.ts');
 
 describe('formatBoardOnboardingPlanDisplay', () => {
   test('returns basename for posix paths', () => {
@@ -32,45 +36,60 @@ describe('formatBoardOnboardingPlanDisplay', () => {
 });
 
 describe('syncBoardOnboardingBusyUI init phase', () => {
-  test('hides setup and shows kanban skeleton during init', () => {
+  test('hides setup and shows centered loader during init', () => {
     const window = new Window();
     globalThis.document = window.document;
     globalThis.HTMLElement = window.HTMLElement;
 
+    const chat = createEmptyChatObject('');
     const wrap = document.createElement('div');
     wrap.className = 'board-onboarding';
     wrap.innerHTML = `
       <div class="board-onboarding__panel">
-        <div class="board-onboarding__init-lead hidden" data-board-onboarding-init-lead hidden>
-          <p class="board-onboarding__init-plan" data-board-onboarding-init-plan></p>
-        </div>
-        <div class="board-onboarding__status hidden" data-board-onboarding-status>
-          <span class="board-onboarding__status-dots"></span>
-          <span data-board-onboarding-status-label></span>
-        </div>
-        <div class="board-onboarding__preview hidden" data-board-onboarding-preview>
-          <div class="kanban-grid board-onboarding__kanban-skeleton"></div>
+        <div class="board-onboarding__loader hidden" data-board-onboarding-loader hidden>
+          <h2 data-board-onboarding-headline></h2>
+          <p data-board-onboarding-status-message></p>
+          <p class="hidden" data-board-onboarding-plan-name></p>
         </div>
         <div class="board-onboarding__setup" data-board-onboarding-setup>
           <h2 class="board-onboarding__title">Orchestrate a plan</h2>
         </div>
+        <div class="board-onboarding__footer hidden" data-board-onboarding-footer hidden></div>
         <select id="boardOnboardingPlanSelect">
           <option value="documentation/plans/fixture.md" selected>fixture</option>
         </select>
       </div>
     `;
 
-    syncBoardOnboardingBusyUI(wrap, 'init');
+    syncBoardOnboardingBusyUI(wrap, 'init', chat);
 
     const panel = wrap.querySelector('.board-onboarding__panel');
     const setup = wrap.querySelector('[data-board-onboarding-setup]');
-    const preview = wrap.querySelector('[data-board-onboarding-preview]');
-    const initPlan = wrap.querySelector('[data-board-onboarding-init-plan]');
+    const loader = wrap.querySelector('[data-board-onboarding-loader]');
+    const planName = wrap.querySelector('[data-board-onboarding-plan-name]');
 
-    assert.ok(panel.classList.contains('board-onboarding__panel--busy'));
+    assert.ok(panel?.classList.contains('board-onboarding__panel--busy'));
     assert.equal(setup.hidden, true);
-    assert.equal(preview.classList.contains('hidden'), false);
-    assert.equal(initPlan.textContent, 'fixture.md');
-    assert.ok(wrap.querySelector('.board-onboarding__kanban-skeleton'));
+    assert.equal(loader.hidden, false);
+    assert.equal(planName.textContent, 'fixture.md');
+    assert.match(
+      wrap.querySelector('[data-board-onboarding-headline]')?.textContent ?? '',
+      /Preparing your board/i,
+    );
+  });
+});
+
+describe('resolveBoardOnboardingBusyPhase git-prompt', () => {
+  test('prefers git prompt over streaming', async () => {
+    const { promptBoardGitSetup, resolveBoardGitSetupPrompt } = await import(
+      '../../src/ui/orchestrate-board-onboarding-state.ts'
+    );
+    const { setStreaming } = await import('../../src/app-state.ts');
+    setStreaming(true);
+    const pending = promptBoardGitSetup();
+    assert.equal(resolveBoardOnboardingBusyPhase(false), 'git-prompt');
+    resolveBoardGitSetupPrompt(false);
+    await pending;
+    setStreaming(false);
   });
 });

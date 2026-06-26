@@ -15,12 +15,15 @@ const { shouldHideComposerPlanStripForOrchestrateBoardOnboarding } = await impor
 const {
   mountBoardOnboardingPanel,
   disposeBoardViewForTests,
+} = await import('../../src/ui/orchestrate-board.ts');
+const {
   resolveBoardOnboardingBusyPhase,
   syncBoardOnboardingBusyUI,
-} = await import('../../src/ui/orchestrate-board.ts');
+} = await import('../../src/ui/orchestrate-board-onboarding-ui.ts');
 const {
   setBoardOnboardingGitSetupActive,
   setBoardKickoffInProgress,
+  resetBoardOnboardingTransientState,
 } = await import('../../src/ui/orchestrate-board-onboarding-state.ts');
 const { setStreaming } = await import('../../src/app-state.ts');
 
@@ -29,8 +32,7 @@ describe('orchestrate board onboarding (MIN-5)', () => {
     disposeBoardViewForTests();
     setSessionStateForTests(null);
     setStreaming(false);
-    setBoardOnboardingGitSetupActive(false);
-    setBoardKickoffInProgress(false);
+    resetBoardOnboardingTransientState();
   });
 
   test('shouldHideComposerPlanStripForOrchestrateBoardOnboarding is true only for board shell without store', () => {
@@ -82,6 +84,10 @@ describe('orchestrate board onboarding (MIN-5)', () => {
     assert.ok(sel && sel.nodeName === 'SELECT');
     assert.ok(sel.options.length >= 2);
     assert.equal(chat.orchestratePlanPath, planPath);
+    assert.ok(wrap.querySelector('[data-board-onboarding-loader]'));
+    assert.ok(wrap.querySelector('[data-board-onboarding-git-prompt]'));
+    assert.ok(wrap.querySelector('[data-board-onboarding-jump-chat]'));
+    assert.ok(wrap.querySelector('[data-board-onboarding-cancel]'));
   });
 
   test('resolveBoardOnboardingBusyPhase prefers plan load over stream', () => {
@@ -104,31 +110,31 @@ describe('orchestrate board onboarding (MIN-5)', () => {
     setBoardOnboardingGitSetupActive(false);
   });
 
-  test('syncBoardOnboardingBusyUI shows git-setup status without kanban preview', () => {
+  test('syncBoardOnboardingBusyUI shows git-setup loader without kanban preview', () => {
     const window = new Window();
     globalThis.document = window.document;
     globalThis.HTMLElement = window.HTMLElement;
 
+    const chat = createEmptyChatObject('');
     const wrap = document.createElement('div');
     wrap.className = 'board-onboarding';
     wrap.innerHTML = `
       <div class="board-onboarding__panel">
-        <div class="board-onboarding__status hidden" data-board-onboarding-status role="status">
-          <span class="board-onboarding__status-dots"><span class="board-onboarding__status-dot"></span></span>
-          <span class="board-onboarding__status-label" data-board-onboarding-status-label"></span>
+        <div class="board-onboarding__loader hidden" data-board-onboarding-loader hidden>
+          <p data-board-onboarding-status-message></p>
         </div>
-        <div class="board-onboarding__preview hidden" data-board-onboarding-preview aria-hidden="true"></div>
         <div data-board-onboarding-setup></div>
+        <div class="hidden" data-board-onboarding-footer hidden></div>
       </div>`;
     document.body.appendChild(wrap);
 
-    syncBoardOnboardingBusyUI(wrap, 'git-setup');
+    syncBoardOnboardingBusyUI(wrap, 'git-setup', chat);
     assert.equal(wrap.dataset.boardOnboardingBusy, 'git-setup');
-    const preview = wrap.querySelector('[data-board-onboarding-preview]');
-    assert.ok(preview && preview.classList.contains('hidden'));
+    const loader = wrap.querySelector('[data-board-onboarding-loader]');
+    assert.ok(loader && !loader.classList.contains('hidden'));
     assert.match(
-      wrap.querySelector('[data-board-onboarding-status-label]')?.textContent ?? '',
-      /Setting up git/i,
+      wrap.querySelector('[data-board-onboarding-status-message]')?.textContent ?? '',
+      /git/i,
     );
   });
 
@@ -163,19 +169,15 @@ describe('orchestrate board onboarding (MIN-5)', () => {
 
     await new Promise((r) => setImmediate(r));
     assert.equal(wrap.dataset.boardOnboardingBusy, 'plans');
-    const status = wrap.querySelector('[data-board-onboarding-status]');
-    assert.ok(status && !status.classList.contains('hidden'));
-    assert.match(
-      wrap.querySelector('[data-board-onboarding-status-label]')?.textContent ?? '',
-      /Loading plans/i,
-    );
+    const loader = wrap.querySelector('[data-board-onboarding-loader]');
+    assert.ok(loader && !loader.classList.contains('hidden'));
 
     release();
     await mountPromise;
     assert.equal(wrap.dataset.boardOnboardingBusy, '');
   });
 
-  test('syncBoardOnboardingBusyUI shows init preview when streaming', () => {
+  test('syncBoardOnboardingBusyUI shows init loader when streaming', () => {
     const window = new Window();
     globalThis.document = window.document;
     globalThis.HTMLElement = window.HTMLElement;
@@ -194,21 +196,20 @@ describe('orchestrate board onboarding (MIN-5)', () => {
     wrap.className = 'board-onboarding';
     wrap.innerHTML = `
       <div class="board-onboarding__panel">
-        <div class="board-onboarding__status hidden" data-board-onboarding-status role="status">
-          <span class="board-onboarding__status-dots"><span class="board-onboarding__status-dot"></span></span>
-          <span class="board-onboarding__status-label" data-board-onboarding-status-label></span>
+        <div class="board-onboarding__loader hidden" data-board-onboarding-loader hidden>
+          <h2 data-board-onboarding-headline></h2>
+          <p data-board-onboarding-status-message></p>
         </div>
-        <div class="board-onboarding__preview hidden" data-board-onboarding-preview aria-hidden="true"></div>
       </div>`;
     document.body.appendChild(wrap);
 
-    syncBoardOnboardingBusyUI(wrap, 'init');
+    syncBoardOnboardingBusyUI(wrap, 'init', chat);
     assert.equal(wrap.dataset.boardOnboardingBusy, 'init');
-    const preview = wrap.querySelector('[data-board-onboarding-preview]');
-    assert.ok(preview && !preview.classList.contains('hidden'));
+    const loader = wrap.querySelector('[data-board-onboarding-loader]');
+    assert.ok(loader && !loader.classList.contains('hidden'));
     assert.match(
-      wrap.querySelector('[data-board-onboarding-status-label]')?.textContent ?? '',
-      /Initializing board/i,
+      wrap.querySelector('[data-board-onboarding-headline]')?.textContent ?? '',
+      /Preparing your board/i,
     );
   });
 
@@ -261,7 +262,6 @@ describe('orchestrate board onboarding (MIN-5)', () => {
     const result = setChatMode('orchestrate');
     assert.equal(result.ok, true);
     assert.equal(chat.viewMode, 'chat');
-    // renderChatFromHistory dispatches board render asynchronously; let it finish before session teardown.
     await new Promise((r) => setImmediate(r));
     await new Promise((r) => setImmediate(r));
   });

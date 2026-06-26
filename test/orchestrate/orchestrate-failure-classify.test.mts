@@ -99,8 +99,43 @@ describe('classifyTaskFailure — text markers', () => {
     assert.equal(classifyTaskFailure(chatWithText('listen EADDRINUSE :::3000')), 'infra');
   });
 
-  test('command not found → infra', () => {
+  test('service-client command not found (psql) → infra', () => {
     assert.equal(classifyTaskFailure(chatWithText('bash: psql: command not found')), 'infra');
+  });
+
+  test('missing project toolchain bin (eslint, Windows phrasing) → code', () => {
+    // Regression: eslint missing from devDependencies must route to the builder,
+    // not be quarantined as infra. See MIN-285 follow-up.
+    assert.equal(
+      classifyTaskFailure(
+        chatWithText(
+          "> eslint .\n'eslint' is not recognized as an internal or external command,\noperable program or batch file.",
+        ),
+      ),
+      'code',
+    );
+  });
+
+  test('missing project toolchain bin (vite, posix phrasing) → code', () => {
+    assert.equal(classifyTaskFailure(chatWithText('sh: vite: command not found')), 'code');
+  });
+
+  test('missing bin in npm-script context → code', () => {
+    assert.equal(
+      classifyTaskFailure(chatWithText('npm error Missing script binary\nnpm run build failed')),
+      'code',
+    );
+  });
+
+  test('unrecognised missing bin → infra (conservative)', () => {
+    assert.equal(classifyTaskFailure(chatWithText('bash: somedaemon: command not found')), 'infra');
+  });
+
+  test("code error containing 'does not exist' no longer misclassified as infra", () => {
+    assert.equal(
+      classifyTaskFailure(chatWithText("Property 'foo' does not exist on type 'Bar'.")),
+      'code',
+    );
   });
 
   test('Cannot connect to the Docker daemon → infra', () => {

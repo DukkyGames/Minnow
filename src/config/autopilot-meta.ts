@@ -35,6 +35,8 @@ export interface AutopilotMeta {
   plannerModelId: string;
   /** Max self-heal infra rounds before unconditional quarantine. */
   selfHealMaxRounds: number;
+  /** Max env-fixer sub-agent attempts on an infra failure before quarantine. */
+  maxEnvFixAttempts: number;
   /** When true, infra provisioning is attempted automatically on infra failures. */
   autoProvisionInfra: boolean;
   /** Timeout (ms) for infra provisioning commands. */
@@ -64,6 +66,7 @@ export const DEFAULT_AUTOPILOT_META: AutopilotMeta = {
   plannerProviderId: '',
   plannerModelId: '',
   selfHealMaxRounds: 2,
+  maxEnvFixAttempts: 2,
   autoProvisionInfra: true,
   infraProvisionTimeoutMs: 180_000,
   afkAutoRestartStalls: true,
@@ -191,6 +194,10 @@ export function parseAutopilotMeta(raw: unknown): AutopilotMeta {
       block.selfHealMaxRounds,
       DEFAULT_AUTOPILOT_META.selfHealMaxRounds,
     ),
+    maxEnvFixAttempts: clampAttempts(
+      block.maxEnvFixAttempts,
+      DEFAULT_AUTOPILOT_META.maxEnvFixAttempts,
+    ),
     autoProvisionInfra: parseBool(block.autoProvisionInfra, DEFAULT_AUTOPILOT_META.autoProvisionInfra),
     infraProvisionTimeoutMs: clampInfraTimeoutMs(
       block.infraProvisionTimeoutMs,
@@ -272,6 +279,11 @@ export function resolveMaxFinalTestAttempts(): number {
 /** Max self-heal infra rounds before unconditional quarantine. */
 export function resolveSelfHealMaxRounds(): number {
   return getAutopilotMetaSync().selfHealMaxRounds;
+}
+
+/** Max env-fixer sub-agent attempts on an infra failure before quarantine. */
+export function resolveMaxEnvFixAttempts(): number {
+  return getAutopilotMetaSync().maxEnvFixAttempts ?? DEFAULT_AUTOPILOT_META.maxEnvFixAttempts;
 }
 
 /** Whether infra auto-provisioning is enabled. */

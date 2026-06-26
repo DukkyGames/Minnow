@@ -22,6 +22,7 @@ import {
   resolveMaxTaskBuildAttempts,
   resolveMaxTaskTestAttempts,
   resolveSelfHealMaxRounds,
+  resolveMaxEnvFixAttempts,
 } from '../config/autopilot-meta.ts';
 import { classifyTaskFailure, resolveTaskChatStreamFailure } from './orchestrate-failure-classify.ts';
 import { runSelfHeal, type SelfHealDeps } from './orchestrate-self-heal.ts';
@@ -469,7 +470,7 @@ export function resolveTaskChatStopReason(
 /** Build a SelfHealDeps bag wiring all board-action callbacks. Lazy-built per call. */
 function makeSelfHealDeps(): SelfHealDeps {
   return {
-    ensureBoardInfraProvisioned,
+    startEnvFixer,
     applyTaskBuildFailureState,
     applyTaskTestFailureState,
     buildBuildRetrySeedMessage,
@@ -481,6 +482,7 @@ function makeSelfHealDeps(): SelfHealDeps {
     autoDelegateNext,
     quarantineTaskAndDependents,
     resolveSelfHealMaxRounds,
+    resolveMaxEnvFixAttempts,
     resolveAfkAutoRestartStalls,
     resolveMaxMergeFixerAttempts: () => MAX_MERGE_FIXER_ATTEMPTS,
   };
@@ -897,9 +899,18 @@ function ensureStreamEndSubscription(): void {
         const taskByFixer = board.tasks.find((t) => t.fixerChatId === endedChatId);
         if (taskByFixer) {
           streamEndMatched = true;
-          void finalizeMergeFixerOnStreamEnd(group, taskByFixer, planner)
+          const finalize =
+            taskByFixer.fixerKind === 'env'
+              ? finalizeEnvFixerOnStreamEnd(group, taskByFixer, planner)
+              : finalizeMergeFixerOnStreamEnd(group, taskByFixer, planner);
+          void finalize
             .then(() => safeDrain(group, planner))
-            .catch((err) => reportBackgroundError('finalize-merge-fixer', err));
+            .catch((err) =>
+              reportBackgroundError(
+                taskByFixer.fixerKind === 'env' ? 'finalize-env-fixer' : 'finalize-merge-fixer',
+                err,
+              ),
+            );
         } else if (!streamEndMatched && isBoardRunning(group)) {
           // fixerChatId may have been cleared before stream-end delivery — still drain.
           safeDrain(group, planner);
@@ -2068,6 +2079,154 @@ async function finalizeMergeFixerOnStreamEnd(
       reportBackgroundError('finalize-merge-fixer', err);
       moveTaskStatus(group, fresh.id, 'blocked', plannerChat);
     }
+  } finally {
+    fixerFinalizeInFlight.delete(task.id);
+  }
+}
+
+/** Seed for an environment/setup fixer chat (runs in the task's own worktree). */
+function buildEnvFixerSeedMessage(
+  task: BoardTask,
+  phase: 'build' | 'test',
+  summary: string,
+): string {
+  const verifyCmd = (phase === 'test' ? task.testSpec : task.buildSpec)?.trim();
+  return [
+    `The environment for task \`${task.id}\` (${task.title}) is broken and ${phase} verification cannot run.`,
+    '',
+    'Failure summary:',
+    summary || '(no summary provided)',
+    '',
+    "You are an environment fixer working in this task's worktree. Repair the",
+    '**environment/setup only** — do not change feature code or expand scope.',
+    '',
+    'Common fixes:',
+    '- Missing project tool (eslint, tsc, vite, prettier, jest, …): add it to the',
+    '  correct section of package.json and install (`npm install`).',
+    '- Required local service (Postgres, Redis, …): start it',
+    '  (e.g. `docker compose up -d <service>`); only add a compose/config file if',
+    '  one is clearly missing.',
+    '- Missing config/env file: create it from the committed example',
+    '  (e.g. copy `.env.example` → `.env`).',
+    '',
+    'Steps:',
+    `1. Reproduce the failure${verifyCmd ? ` (e.g. \`${verifyCmd}\`)` : ''} to confirm the root cause.`,
+    '2. Apply the minimal fix.',
+    '3. Re-run the failing command and confirm it now succeeds.',
+    '',
+    'You do not need to run git — the board commits this worktree automatically',
+    'when the task passes. Keep the change minimal and scoped to unblocking the build.',
+  ].join('\n');
+}
+
+/**
+ * Spawn an environment fixer sub-agent on the task's own worktree to repair an
+ * infra failure (missing deps, unstarted services, missing config). Mirrors
+ * {@link startMergeConflictFixer} but stays on the task worktree; on stream-end
+ * {@link finalizeEnvFixerOnStreamEnd} re-runs the failed phase to verify.
+ */
+export async function startEnvFixer(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+  phase: 'build' | 'test',
+  summary: string,
+): Promise<void> {
+  const worktreeRoot = task.worktreePath?.trim() || plannerChat.workspacePath?.trim();
+  if (!worktreeRoot) {
+    // Nothing to fix in → cannot self-heal here; quarantine for human follow-up.
+    quarantineTaskAndDependents(
+      group,
+      task.id,
+      {
+        category: 'infra',
+        summary: summary || 'Environment fix required but task has no worktree',
+        resolutionSteps: ['fix the environment manually, then Requeue'],
+        at: Date.now(),
+      },
+      plannerChat,
+    );
+    return;
+  }
+
+  // Stay in_progress while the fixer works — the fixer-active guard in
+  // isTaskStalledForRestart prevents a spurious builder restart.
+  moveTaskStatus(group, task.id, 'in_progress', plannerChat);
+
+  const fixerChat = getOrCreateBoardChat({
+    group,
+    plannerChat,
+    existingId: task.fixerChatId?.trim(),
+    role: 'fixer',
+    name: `Fix env ${task.id}: ${task.title}`,
+    taskId: task.id,
+    taskChatField: 'fixerChatId',
+  });
+  updateTask(group, task.id, { fixerKind: 'env', envFixPhase: phase }, plannerChat);
+
+  fixerChat.worktreeRoot = worktreeRoot;
+  scheduleSaveSessions();
+
+  if (skipBackgroundBoardChatLaunch()) return;
+
+  ensureStreamEndSubscription();
+  reserveLaunchSlot(fixerChat.id);
+  try {
+    const seed = buildEnvFixerSeedMessage(task, phase, summary);
+    refreshHeartbeatThresholds();
+    startTaskChatSupervision(fixerChat.id);
+    void runChatTurn({
+      chat: fixerChat,
+      pushUser: true,
+      rawText: seed,
+      userText: seed,
+      displayText: seed,
+      historyContent: seed,
+      skillId: null,
+      validAttachments: [],
+      titleSeed: `Fix env ${task.id}`,
+      ownsGlobalStreaming: true,
+    }).catch((err) => {
+      const message = err instanceof Error ? err.message : 'Env fixer chat failed to start';
+      updateTask(group, task.id, { error: message }, plannerChat);
+    }).finally(() => releaseLaunchSlotAndDrive(group, plannerChat, fixerChat.id));
+  } catch (err) {
+    releaseLaunchSlotAndDrive(group, plannerChat, fixerChat.id);
+    throw err;
+  }
+}
+
+/**
+ * Route env-fixer stream-end: clear the fixer linkage and re-run the failed
+ * phase. The re-run's own finalizer decides pass (→ testing/complete) or fail
+ * (→ self-heal; env-fixer attempts are bounded before quarantine).
+ */
+async function finalizeEnvFixerOnStreamEnd(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+): Promise<void> {
+  if (task.fixerKind !== 'env') return;
+  if (fixerFinalizeInFlight.has(task.id)) return;
+  fixerFinalizeInFlight.add(task.id);
+  try {
+    const fresh = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
+    if (fresh.fixerKind !== 'env') return;
+    const phase = fresh.envFixPhase ?? 'test';
+    updateTask(
+      group,
+      fresh.id,
+      { fixerChatId: undefined, fixerKind: undefined, envFixPhase: undefined },
+      plannerChat,
+    );
+    if (!isBoardRunning(group)) return;
+    if (phase === 'build') {
+      await startTask(group, fresh.id, plannerChat);
+    } else {
+      await startTaskTesting(group, fresh.id, plannerChat);
+    }
+  } catch (err) {
+    reportBackgroundError('finalize-env-fixer', err);
   } finally {
     fixerFinalizeInFlight.delete(task.id);
   }

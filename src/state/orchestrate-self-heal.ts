@@ -7,8 +7,10 @@
  *
  * Decision table (checked in order):
  *  1. selfHealRound >= max → quarantine (unconditional cap, GAP-2)
- *  2. infra & sig NOT in provisionedSignatures → provision + re-run (no attempt burn)
- *  3. infra & sig ALREADY provisioned → quarantine (env still broken, loop cannot spin)
+ *  2. infra & envFixAttempts < max → spawn env-fixer sub-agent on the task
+ *     worktree (installs missing deps, starts services, …) then re-runs the
+ *     failed phase. AFK never dead-ends an env failure at the user.
+ *  3. infra & envFixAttempts exhausted → quarantine (env-fixer could not heal it)
  *  4. stall & lastHealCategory !== 'stall' → nudge + autoDelegateNext
  *  5. stall & lastHealCategory === 'stall' (recurrence) → treat as code
  *  6. code → existing reseed retry; if exhausted → quarantine
@@ -23,20 +25,19 @@ import { type FailureCategory } from './orchestrate-failure-classify.ts';
 import { updateTask } from './orchestrate-board-store.ts';
 import { scheduleSaveSessions } from './sessions.ts';
 
-export interface ProvisionResult {
-  /** True when the signature was already in board.provisionedSignatures (GAP-2 guard). */
-  wasAlreadyProvisioned: boolean;
-  /** Content-hash signatures computed by the server; caller adds them to the board. */
-  signatures: string[];
-  ok: boolean;
-}
-
 export interface SelfHealDeps {
-  ensureBoardInfraProvisioned(
+  /**
+   * Spawn an environment/setup fixer sub-agent on the task's own worktree to
+   * repair an infra failure (missing deps, unstarted services, missing config),
+   * then re-run `phase` to verify. Mirrors {@link startMergeConflictFixer}.
+   */
+  startEnvFixer(
     group: ChatGroup,
     task: BoardTask,
     plannerChat: Chat,
-  ): Promise<ProvisionResult>;
+    phase: 'build' | 'test',
+    summary: string,
+  ): Promise<void>;
 
   applyTaskBuildFailureState(
     group: ChatGroup,
@@ -93,6 +94,8 @@ export interface SelfHealDeps {
   ): void;
 
   resolveSelfHealMaxRounds(): number;
+
+  resolveMaxEnvFixAttempts(): number;
 
   resolveAfkAutoRestartStalls(): boolean;
 
@@ -189,31 +192,38 @@ export async function runSelfHeal(
     return;
   }
 
-  // ── 2 & 3. Infra path ─────────────────────────────────────────────────────
+  // ── 2 & 3. Infra path → env-fixer sub-agent (AFK never dead-ends here) ──────
   if (category === 'infra') {
-    const provision = await deps.ensureBoardInfraProvisioned(group, freshTask, plannerChat);
-    if (provision.wasAlreadyProvisioned) {
-      // Already provisioned but env is still broken → cannot spin further.
+    // Merge-phase infra is anomalous: a worktree env fix can't help an
+    // integration merge → quarantine to avoid corrupting merge state.
+    if (phase === 'merge') {
       quarantineWithIssue(group, freshTask, plannerChat, 'infra', summary, deps);
       await deps.autoDelegateNext(group, plannerChat);
       return;
     }
-    // Fresh provision — bump selfHealRound (no attempt burn) and re-run the phase.
+
+    const envFixAttempts = freshTask.envFixAttempts ?? 0;
+    if (envFixAttempts >= deps.resolveMaxEnvFixAttempts()) {
+      // Env-fixer exhausted its attempts and the environment is still broken.
+      quarantineWithIssue(group, freshTask, plannerChat, 'infra', summary, deps);
+      await deps.autoDelegateNext(group, plannerChat);
+      return;
+    }
+
+    // Spawn an env-fixer on the task worktree. Bumps envFixAttempts and
+    // selfHealRound (the global ceiling still bounds total heal work).
     const newRound = (freshTask.selfHealRound ?? 0) + 1;
     updateTask(
       group,
       freshTask.id,
-      { selfHealRound: newRound, lastHealCategory: 'infra' },
+      {
+        envFixAttempts: envFixAttempts + 1,
+        selfHealRound: newRound,
+        lastHealCategory: 'infra',
+      },
       plannerChat,
     );
-    if (phase === 'build') {
-      await deps.startTask(group, freshTask.id, plannerChat);
-    } else if (phase === 'test') {
-      await deps.startTaskTesting(group, freshTask.id, plannerChat);
-    } else {
-      // Merge phase + infra → unusual; quarantine to avoid state corruption.
-      quarantineWithIssue(group, freshTask, plannerChat, 'infra', summary, deps);
-    }
+    await deps.startEnvFixer(group, freshTask, plannerChat, phase, summary);
     await deps.autoDelegateNext(group, plannerChat);
     return;
   }

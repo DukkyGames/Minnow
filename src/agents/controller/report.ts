@@ -89,13 +89,15 @@ export function buildOrchestratorTaskReportMessage(
     lines.push(
       '',
       'Use `board_get_state` for the full board. This task is quarantined; its transitive dependents are also quarantined.',
-      'Independent siblings continue running. Phase 2 self-heal callers will address this task.',
+      'The autonomous self-heal loop is exhausted — for infra failures an env-fixer sub-agent already attempted a repair and could not unblock it.',
+      'Record the root cause and the resolution steps on the task via `board_update_task` (`error` / `notes`) and summarize the blocker here. Do not ask the user — they will Requeue after addressing it.',
+      'Independent siblings continue running.',
     );
   } else if (kind === 'stalled') {
     lines.push(
       '',
-      'Use `board_get_state` for the full board. This task is blocked after repeated test failures.',
-      'Investigate and self-heal autonomously — spawn a fixer sub-agent or retry the build with a refined seed. Do not ask the user.',
+      'Use `board_get_state` for the full board. This task is blocked after exhausting its automatic retries.',
+      'The auto-pilot already retried programmatically (and, for env failures, ran an env-fixer). You have no tool to re-run it yourself — record the root cause via `board_update_task` and summarize the blocker here. Never wait for the user.',
       'Auto-pilot continues starting other ready tasks where possible.',
     );
   } else {

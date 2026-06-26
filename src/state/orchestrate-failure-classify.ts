@@ -8,8 +8,18 @@
  * Precedence for classifyTaskFailure:
  *  1. Structured buildOutcome signal — env_blocked ⇒ infra regardless of prose
  *  2. Stall markers in transcript (max-tool-turns, reply-could-not-complete)
- *  3. Infra markers in transcript (ECONNREFUSED, port-in-use, missing binary …)
- *  4. Falls through to 'code'
+ *  3. Service-infra markers in transcript (ECONNREFUSED, port-in-use, docker daemon …)
+ *  4. Missing-binary markers — disambiguated by *which* binary is missing:
+ *       - a project/npm toolchain bin (eslint, tsc, vite …) or an npm-script
+ *         context ⇒ 'code' (the builder can `npm install` / add the devDep)
+ *       - a host service client (psql, docker, redis-cli …) ⇒ 'infra'
+ *       - an unrecognised bin ⇒ 'infra' (conservative; routes to the env-fixer)
+ *  5. Falls through to 'code'
+ *
+ * Rationale: a missing *project-local* binary (eslint not in devDependencies)
+ * is a fixable code/setup defect, not a broken host environment. Treating it as
+ * 'infra' sent it down the provision-or-quarantine path and blocked the task
+ * without ever re-seeding the builder. See MIN-285 follow-up.
  */
 
 import type { BoardTask, Chat } from '../types.ts';
@@ -19,24 +29,85 @@ export type FailureCategory = 'infra' | 'code' | 'stall' | 'merge' | 'unknown';
 /** Mirror of the frozen type from orchestrate-board-actions. */
 export type TaskChatStreamOutcome = 'completed' | 'stopped' | 'failed';
 
-const INFRA_MARKERS: string[] = [
+/**
+ * Unambiguous host/network/service failures — always infra. These never fire on
+ * a plain code error, so they take precedence before the missing-binary scan.
+ */
+const SERVICE_INFRA_MARKERS: string[] = [
   'ECONNREFUSED',
   'Connection refused',
   'EADDRINUSE',
   'address already in use',
   'port in use',
   'port-in-use',
-  'command not found',
-  'is not recognized as an internal',
-  'No such file or directory',
   'Cannot connect to the Docker daemon',
   'docker daemon',
-  'does not exist',
   'psql: error',
   'timed out after',
   'ETIMEDOUT',
   'getaddrinfo',
   'socket hang up',
+];
+
+/**
+ * "X is not installed / not found" phrasings. Ambiguous on their own — the
+ * binary name (below) decides whether it is a fixable project dep or real infra.
+ * Note: 'No such file or directory' / 'does not exist' are intentionally NOT
+ * here — they fire on ordinary code errors ("Property 'x' does not exist…").
+ */
+const MISSING_BIN_MARKERS: string[] = [
+  'command not found',
+  'is not recognized as an internal',
+];
+
+/**
+ * Project/npm toolchain binaries the Builder can install (devDependency) — a
+ * missing one is a 'code'/setup defect, routed back to the builder, not infra.
+ */
+const PROJECT_TOOLCHAIN_BINS: string[] = [
+  'eslint',
+  'tsc',
+  'typescript',
+  'vite',
+  'vitest',
+  'jest',
+  'mocha',
+  'prettier',
+  'tsx',
+  'ts-node',
+  'webpack',
+  'rollup',
+  'esbuild',
+  'next',
+  'nuxt',
+  'svelte',
+  'babel',
+  'playwright',
+  'cypress',
+  'nodemon',
+  'concurrently',
+  'rimraf',
+  'cross-env',
+];
+
+/** npm-script execution context — a missing bin here is project-local. */
+const NPM_SCRIPT_MARKERS: string[] = ['npm run', 'npm error', 'npx ', 'node_modules/.bin'];
+
+/**
+ * Host service clients/daemons — a missing one is a genuine environment problem
+ * (the host needs the service), routed to the env-fixer / provisioning path.
+ */
+const SERVICE_BINS: string[] = [
+  'psql',
+  'pg_ctl',
+  'createdb',
+  'docker',
+  'docker-compose',
+  'redis-cli',
+  'redis-server',
+  'mysql',
+  'mongo',
+  'mongod',
 ];
 
 const STALL_MARKERS: string[] = [
@@ -116,7 +187,19 @@ export function classifyTaskFailure(chat: Chat, signal?: string): FailureCategor
   // 2. Transcript text scan (covers both prose and embedded tool output).
   const text = extractChatText(chat);
   if (matchesAny(text, STALL_MARKERS)) return 'stall';
-  if (matchesAny(text, INFRA_MARKERS)) return 'infra';
+  if (matchesAny(text, SERVICE_INFRA_MARKERS)) return 'infra';
+
+  // 3. Missing-binary: disambiguate by which binary / context is named.
+  if (matchesAny(text, MISSING_BIN_MARKERS)) {
+    // A project toolchain bin or an npm-script context ⇒ the builder can fix it.
+    if (matchesAny(text, PROJECT_TOOLCHAIN_BINS) || matchesAny(text, NPM_SCRIPT_MARKERS)) {
+      return 'code';
+    }
+    // A host service client ⇒ genuine infra.
+    if (matchesAny(text, SERVICE_BINS)) return 'infra';
+    // Unrecognised missing bin ⇒ conservative infra (env-fixer can investigate).
+    return 'infra';
+  }
 
   return 'code';
 }
