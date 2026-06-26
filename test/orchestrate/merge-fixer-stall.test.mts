@@ -2,8 +2,8 @@
  * Regression tests for the merge-fixer stall fix (Part 2) and vanished-merge-state
  * guard (Part 3 / Failure B).
  *
- * Part 2: when a fixer chat stalls, finalizeMergeFixerOnStreamEnd is called directly
- * (tested via triggerFixerStallReconcileForTests), not the build nudge/self-heal.
+ * Part 2: when a fixer chat stalls, stopGeneration fires stream-end which finalizes
+ * + drains (tested via triggerFixerStallReconcileForTests), not the build nudge/self-heal.
  * Part 3 / Failure B: startMergeConflictFixer skips spawning a fixer when MERGE_HEAD
  * is already gone and the branch is already merged.
  */

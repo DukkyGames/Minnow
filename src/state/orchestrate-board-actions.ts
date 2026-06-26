@@ -8,6 +8,7 @@ import { isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete.ts'
 import { maybeEmitOrchestratePlanComplete } from '../chat/orchestrate/plan-complete-ui.ts';
 import {
   isChatStreaming,
+  notifyChatStreamEnded,
   subscribeChatStreamActivity,
   subscribeChatStreamEnd,
 } from '../chat/streaming-state.ts';
@@ -326,6 +327,9 @@ const taskChatStallRestarts = new Map<string, number>();
  * overlapping git checks when multiple heartbeats fire while a probe is pending.
  */
 const fixerEarlyFinalizeInFlight = new Set<string>();
+
+/** Per-task guard: only one merge-fixer finalize may run at a time (stream-end races). */
+const fixerFinalizeInFlight = new Set<string>();
 
 function refreshHeartbeatThresholds(): void {
   const meta = getAutopilotMetaSync();
@@ -652,12 +656,12 @@ function startTaskChatSupervision(chatId: string): void {
 
     const stallTask = group.orchestrateBoard.tasks.find((t) => t.id === taskId);
 
-    // Fixer chats use a tighter threshold and reconcile directly via finalizeMergeFixerOnStreamEnd.
+    // Fixer chats use a tighter threshold; stop-only — stream-end owns finalize + drain.
     if (stallTask?.fixerChatId?.trim() === chatId && stallTask.status === 'merging') {
       // Proactive completion: a fixer often keeps emitting prose/diagnostics after a
       // successful `git commit --no-edit`, so it never trips the stall watchdog and
       // its stream-end may lag. Poll git state each tick; as soon as the branch is
-      // merged and verified, stop the chat and finalize → complete.
+      // merged and verified, stop the chat — stream-end subscription finalizes + drains.
       const branch = stallTask.worktreeBranch?.trim();
       if (branch && isLocalServerAvailable() && !fixerEarlyFinalizeInFlight.has(chatId)) {
         const boardId = group.id;
@@ -673,7 +677,6 @@ function startTaskChatSupervision(chatId: string): void {
             if (fresh.fixerChatId?.trim() !== chatId || fresh.status !== 'merging') return;
             stopHeartbeat(chatTaskRunId(chatId));
             stopGeneration(chatId);
-            await finalizeMergeFixerOnStreamEnd(group, fresh, planner);
           } catch (err) {
             reportBackgroundError('merge-fixer-early-finalize', err);
           } finally {
@@ -685,9 +688,6 @@ function startTaskChatSupervision(chatId: string): void {
       if (progressAge < meta.progressStallMs) return;
       stopHeartbeat(chatTaskRunId(chatId));
       stopGeneration(chatId);
-      void finalizeMergeFixerOnStreamEnd(group, stallTask, planner).catch((err) =>
-        reportBackgroundError('merge-fixer-stall-reconcile', err),
-      );
       return;
     }
 
@@ -840,8 +840,11 @@ function ensureStreamEndSubscription(): void {
         const planner = getPlannerChatForGroup(group);
         if (!planner) continue;
 
+        let streamEndMatched = false;
+
         const finalChatId = board.finalTest?.chatId?.trim();
         if (finalChatId && endedChatId === finalChatId) {
+          streamEndMatched = true;
           finalizeFinalTestOnStreamEnd(group, planner);
           safeDrain(group, planner);
           continue;
@@ -849,6 +852,7 @@ function ensureStreamEndSubscription(): void {
 
         const taskByBuild = board.tasks.find((t) => t.chatId === endedChatId);
         if (taskByBuild) {
+          streamEndMatched = true;
           finalizeBoardTaskOnStreamEnd(group, taskByBuild, planner);
           safeDrain(group, planner);
           continue;
@@ -856,6 +860,7 @@ function ensureStreamEndSubscription(): void {
 
         const taskByTest = board.tasks.find((t) => t.testChatId === endedChatId);
         if (taskByTest) {
+          streamEndMatched = true;
           const testChat = findChatById(endedChatId);
           if (testChat) {
             teardownBoardTaskChatResources(testChat, sessionState?.groups);
@@ -868,9 +873,13 @@ function ensureStreamEndSubscription(): void {
 
         const taskByFixer = board.tasks.find((t) => t.fixerChatId === endedChatId);
         if (taskByFixer) {
+          streamEndMatched = true;
           void finalizeMergeFixerOnStreamEnd(group, taskByFixer, planner)
             .then(() => safeDrain(group, planner))
             .catch((err) => reportBackgroundError('finalize-merge-fixer', err));
+        } else if (!streamEndMatched && isBoardRunning(group)) {
+          // fixerChatId may have been cleared before stream-end delivery — still drain.
+          safeDrain(group, planner);
         }
       }
     });
@@ -1890,17 +1899,21 @@ async function finalizeMergeFixerOnStreamEnd(
   plannerChat: Chat,
 ): Promise<void> {
   if (task.status !== 'merging') return;
-  const fresh = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
-  const branch = fresh.worktreeBranch?.trim();
-  if (!branch) {
-    moveTaskStatus(group, fresh.id, 'blocked', plannerChat);
-    return;
-  }
-
-  const boardId = group.id;
-  const attempts = fresh.fixerAttempts ?? 0;
-
+  if (fixerFinalizeInFlight.has(task.id)) return;
+  fixerFinalizeInFlight.add(task.id);
   try {
+    const fresh = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
+    if (fresh.status !== 'merging') return;
+    const branch = fresh.worktreeBranch?.trim();
+    if (!branch) {
+      moveTaskStatus(group, fresh.id, 'blocked', plannerChat);
+      return;
+    }
+
+    const boardId = group.id;
+    const attempts = fresh.fixerAttempts ?? 0;
+
+    try {
     const merged = await checkTaskBranchMerged({ boardId, fromBranch: branch });
     const verified =
       merged.ok && merged.merged
@@ -2021,9 +2034,12 @@ async function finalizeMergeFixerOnStreamEnd(
       { phase: 'merge', category: 'merge', summary: fixerSummary },
       makeSelfHealDeps(),
     ).catch((err) => reportBackgroundError('self-heal-fixer-terminal', err));
-  } catch (err) {
-    reportBackgroundError('finalize-merge-fixer', err);
-    moveTaskStatus(group, fresh.id, 'blocked', plannerChat);
+    } catch (err) {
+      reportBackgroundError('finalize-merge-fixer', err);
+      moveTaskStatus(group, fresh.id, 'blocked', plannerChat);
+    }
+  } finally {
+    fixerFinalizeInFlight.delete(task.id);
   }
 }
 
@@ -3172,13 +3188,37 @@ export function clearTaskChatStallRestartsForTests(): void {
   taskChatStallRestarts.clear();
 }
 
-/** Test-only: directly invoke the fixer stall reconciler for a task. */
+/** Test-only: simulate fixer stall reconcile (stream-end finalizes + drains). */
 export async function triggerFixerStallReconcileForTests(
   group: ChatGroup,
   plannerChat: Chat,
   taskId: string,
 ): Promise<void> {
+  ensureStreamEndSubscription();
   const task = group.orchestrateBoard?.tasks.find((t) => t.id === taskId);
   if (!task) return;
+  const chatId = task.fixerChatId?.trim();
+  if (!chatId) return;
+  notifyChatStreamEnded(chatId);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+}
+
+/** Test-only: invoke merge-fixer finalize directly (re-entrancy / idempotency tests). */
+export async function finalizeMergeFixerOnStreamEndForTests(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+): Promise<void> {
   return finalizeMergeFixerOnStreamEnd(group, task, plannerChat);
+}
+
+/** Test-only: simulate stream-end when fixerChatId was already cleared before delivery. */
+export async function simulateUnmatchedFixerStreamEndForTests(
+  group: ChatGroup,
+  plannerChat: Chat,
+  endedChatId: string,
+): Promise<void> {
+  ensureStreamEndSubscription();
+  notifyChatStreamEnded(endedChatId);
+  await new Promise((resolve) => setTimeout(resolve, 50));
 }
