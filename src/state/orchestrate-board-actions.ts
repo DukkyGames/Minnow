@@ -40,7 +40,7 @@ import { reportBackgroundError } from '../boot/report-background-error.ts';
 import { normalizeVerdict } from '../tools/board-tools.ts';
 import { schedulePostTurnSynthesis } from '../synthesis/client.ts';
 import { buildSynthesisMessages, buildSynthesisExcerpt } from '../synthesis/post-turn.ts';
-import type { BoardTask, BoardTaskStatus, Chat, ChatGroup, OrchestrateBoardState, SessionState } from '../types.ts';
+import type { BoardTask, BoardTaskStatus, Chat, ChatGroup, ChatStopReason, OrchestrateBoardState, SessionState } from '../types.ts';
 import {
   assignChatToGroup,
   getBoardGroupForChat,
@@ -75,6 +75,8 @@ import {
 } from './worktree-service.ts';
 
 const MAX_MERGE_FIXER_ATTEMPTS = 2;
+/** Max bounded retries when a build chat ends stopped (timeout/system) before quarantine. */
+export const MAX_STOP_RETRY_ATTEMPTS = 2;
 
 export { getBoardExecutionMode, isBoardAutoMode, isBoardRunning };
 
@@ -424,6 +426,25 @@ export function resolveTaskChatStreamOutcome(chat: Chat): TaskChatStreamOutcome 
   return 'failed';
 }
 
+/** Resolve why a task build chat ended stopped (run record wins; history marker falls back). */
+export function resolveTaskChatStopReason(
+  chat: Chat,
+  board?: OrchestrateBoardState | null,
+): ChatStopReason {
+  const runs = chat.runs ?? [];
+  if (runs.length > 0) {
+    let latest = runs[0]!;
+    for (const run of runs) {
+      if (run.createdAt > latest.createdAt) latest = run;
+    }
+    if (latest.status === 'stopped' && latest.stopReason) {
+      return latest.stopReason;
+    }
+  }
+  if (board?.userStopped) return 'user';
+  return 'system';
+}
+
 /** Build a SelfHealDeps bag wiring all board-action callbacks. Lazy-built per call. */
 function makeSelfHealDeps(): SelfHealDeps {
   return {
@@ -463,8 +484,78 @@ export function finalizeBoardTaskOnStreamEnd(
   const outcome = resolveTaskChatStreamOutcome(chat);
 
   if (outcome === 'stopped') {
+    const board = group.orchestrateBoard;
+    const stopReason = resolveTaskChatStopReason(chat, board);
     logBuildVerdict(group, task.id, 'stopped');
-    updateTask(group, task.id, { endedAt: Date.now() }, plannerChat);
+    teardownBoardTaskChatResources(chat, sessionState?.groups);
+
+    const parkUserStop = stopReason === 'user' || board?.userStopped === true;
+    if (parkUserStop) {
+      quarantineTaskAndDependents(
+        group,
+        task.id,
+        {
+          category: 'stall',
+          summary: 'Stopped by user — requeue to resume',
+          resolutionSteps: ['inspect if needed, then Requeue'],
+          at: Date.now(),
+        },
+        plannerChat,
+      );
+      updateTask(
+        group,
+        task.id,
+        { endedAt: Date.now(), chatId: undefined },
+        plannerChat,
+      );
+      if (isBoardRunning(group)) {
+        void autoDelegateNext(group, plannerChat).catch((err) =>
+          reportBackgroundError('auto-delegate-after-stop', err),
+        );
+      }
+      return;
+    }
+
+    const freshTask = board?.tasks.find((t) => t.id === task.id) ?? task;
+    const stopRetries = (freshTask.stopRetries ?? 0) + 1;
+    if (stopRetries <= MAX_STOP_RETRY_ATTEMPTS) {
+      logTaskStatus(group, task.id, freshTask.status, 'planned');
+      updateTask(
+        group,
+        task.id,
+        {
+          status: 'planned',
+          endedAt: Date.now(),
+          stopRetries,
+          chatId: undefined,
+        },
+        plannerChat,
+      );
+      if (isBoardRunning(group)) {
+        void autoDelegateNext(group, plannerChat).catch((err) =>
+          reportBackgroundError('auto-delegate-after-stop', err),
+        );
+      }
+      return;
+    }
+
+    quarantineTaskAndDependents(
+      group,
+      task.id,
+      {
+        category: 'stall',
+        summary: `Stopped repeatedly — ${stopRetries} stop(s)`,
+        resolutionSteps: ['agent stalled repeatedly; inspect the task chat, then Requeue'],
+        at: Date.now(),
+      },
+      plannerChat,
+    );
+    updateTask(
+      group,
+      task.id,
+      { endedAt: Date.now(), stopRetries, chatId: undefined },
+      plannerChat,
+    );
     if (isBoardRunning(group)) {
       void autoDelegateNext(group, plannerChat).catch((err) =>
         reportBackgroundError('auto-delegate-after-stop', err),
@@ -610,7 +701,7 @@ function startTaskChatSupervision(chatId: string): void {
     // Stop the heartbeat timer only — do NOT call stopTaskChatSupervision here, as that
     // would delete the counter we just set. The counter is cleared on stream end.
     stopHeartbeat(chatTaskRunId(chatId));
-    stopGeneration(chatId);
+    stopGeneration(chatId, 'system');
 
     const stallReason = `task-chat-stall (${progressAge}ms no output)`;
     if (restarts === 0) {
@@ -2702,7 +2793,7 @@ export async function requeueBoardTask(
   const task = board.tasks.find((t) => t.id === taskId);
   if (!task || task.status !== 'quarantined') return;
   logTaskStatus(group, taskId, task.status, 'planned');
-  updateTask(group, taskId, { status: 'planned', quarantine: undefined }, plannerChat);
+  updateTask(group, taskId, { status: 'planned', quarantine: undefined, stopRetries: undefined }, plannerChat);
   if (isBoardRunning(group)) {
     await autoDelegateNext(group, plannerChat);
   }

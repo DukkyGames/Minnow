@@ -814,6 +814,7 @@ export type UpdateTaskPatch = Partial<
     | 'testAttempts'
     | 'buildAttempts'
     | 'fixerAttempts'
+    | 'stopRetries'
     | 'mergePreSha'
     | 'testVerdict'
     | 'testSummary'
@@ -890,6 +891,9 @@ export function updateTask(
   }
   if ('fixerAttempts' in patch && patch.fixerAttempts === undefined) {
     delete task.fixerAttempts;
+  }
+  if ('stopRetries' in patch && patch.stopRetries === undefined) {
+    delete task.stopRetries;
   }
   if ('quarantine' in patch && patch.quarantine === undefined) {
     delete task.quarantine;

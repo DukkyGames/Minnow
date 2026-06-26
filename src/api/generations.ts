@@ -56,6 +56,18 @@ export function formatGenerationErrorMessage(message: string): string {
   return trimmed;
 }
 
+/** True when a generation `event: end` error payload is a server idle/max timeout. */
+export function isGenerationTimeoutError(message: string | undefined): boolean {
+  const trimmed = message?.trim();
+  if (!trimmed) return false;
+  const lower = trimmed.toLowerCase();
+  return (
+    lower.includes('stopped sending data') ||
+    lower.includes('server limit') ||
+    lower.includes('connection timed out')
+  );
+}
+
 export interface CreateGenerationOptions {
   /** When true, generation state survives 5 minutes after terminal (main chat). */
   persist?: boolean;

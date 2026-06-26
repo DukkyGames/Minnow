@@ -4,6 +4,7 @@
 
 import type {
   Chat,
+  ChatStopReason,
   Message,
   TurnRunId,
   TurnRunRecord,
@@ -182,6 +183,7 @@ export interface FinalizeRunOptions {
   outputHistoryEnd?: number;
   outputMessages?: Message[];
   endedAt?: number;
+  stopReason?: ChatStopReason;
 }
 
 export function finalizeRun(
@@ -201,6 +203,9 @@ export function finalizeRun(
   }
   if (options.outputMessages?.length) {
     run.outputMessages = options.outputMessages.map((m) => ({ ...m }));
+  }
+  if (run.status === 'stopped' && options.stopReason) {
+    run.stopReason = options.stopReason;
   }
   if (run.status === 'completed' || run.status === 'stopped') {
     setActiveBranch(chat, run.forkHistoryIndex, run.branchId);

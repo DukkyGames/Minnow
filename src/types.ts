@@ -318,6 +318,8 @@ export interface BoardTask {
   buildAttempts?: number;
   /** Merge-conflict fixer attempts (0 = first try, 1 = one retry used). */
   fixerAttempts?: number;
+  /** Bounded retry counter when a build chat ends stopped (timeout/system). */
+  stopRetries?: number;
   /** Pre-merge integration tip SHA for restore on fixer failure. */
   mergePreSha?: string;
   /** Structured verdict from board_report_test_result (stream-end routing). */
@@ -604,6 +606,9 @@ export type TurnRunStatus =
   | 'failed'
   | 'superseded';
 
+/** Why a turn run ended with status `stopped` (user Stop vs timeout vs supervision). */
+export type ChatStopReason = 'user' | 'timeout' | 'system';
+
 /** One turn execution from a user-message fork point. */
 export interface TurnRunRecord {
   runId: TurnRunId;
@@ -623,6 +628,8 @@ export interface TurnRunRecord {
   generationIds?: string[];
   /** Sub-agent correlation id for this main turn. */
   parentTurnId?: string;
+  /** Set when {@link status} is `stopped` — who/what aborted the turn. */
+  stopReason?: ChatStopReason;
 }
 
 /** Expert thread or legacy Expert Lab session (hidden from main sidebar). */
