@@ -286,6 +286,53 @@ function appendTaskHeartbeatBadge(
   trail.appendChild(badge);
 }
 
+/**
+ * Patch heartbeat badge text in place — avoids rebuilding the kanban every tick.
+ * Heartbeat age is time-derived; including it in `buildKanbanRefreshKey` replaced
+ * the whole board surface and made cards unclickable during runs.
+ */
+function syncKanbanHeartbeatBadges(
+  kanban: HTMLElement,
+  board: BoardState,
+  plannerChat: Chat,
+): void {
+  for (const task of board.tasks) {
+    const card = kanban.querySelector(
+      `[data-board-task-id="${task.id.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"]`,
+    );
+    if (!(card instanceof HTMLElement)) continue;
+
+    const supervision = resolveTaskSupervision(
+      task,
+      plannerChat,
+      Boolean(task.chatId && isChatStreaming(task.chatId)),
+    );
+    const trail = card.querySelector('.board-task-card__trail');
+    if (!(trail instanceof HTMLElement)) continue;
+
+    let badge = trail.querySelector<HTMLElement>('.board-task-card__heartbeat');
+    const label = supervision
+      ? formatHeartbeatBadge(supervision, getHeartbeatConfig())
+      : null;
+
+    if (!label) {
+      badge?.remove();
+      continue;
+    }
+
+    if (!(badge instanceof HTMLElement)) {
+      badge = document.createElement('span');
+      badge.className = 'board-task-card__heartbeat';
+      badge.title = 'Run heartbeat age';
+      trail.appendChild(badge);
+    }
+
+    if (badge.textContent !== label) {
+      badge.textContent = label;
+    }
+  }
+}
+
 const LIFECYCLE_BADGE_LABELS: Partial<Record<RunLifecycle, string>> = {
   suspect: 'Suspect',
   recovering: 'Recovering',
@@ -496,14 +543,16 @@ export function buildKanbanRefreshKey(
       subAgentHint: resolveTaskCardSubAgentHint(task, plannerChat),
     });
     const relatedChats = listTaskRelatedChats(task, folder, allChats);
+    // Heartbeat age is time-derived and synced in place; only progressSeq affects rebuild.
     const supervision = resolveTaskSupervision(
       task,
       plannerChat,
       Boolean(task.chatId && isChatStreaming(task.chatId)),
     );
-    const heartbeatKey = supervision
-      ? `${supervision.lastHeartbeatAt ?? ''}:${supervision.progressSeq}`
-      : '';
+    const progressSeqKey =
+      supervision && supervision.progressSeq > 0
+        ? String(supervision.progressSeq)
+        : '';
     const runLifecycle = resolveTaskRunLifecycle(task, plannerChat) ?? '';
     parts.push(
       [
@@ -519,13 +568,26 @@ export function buildKanbanRefreshKey(
         deriveTaskCategoryBadge(task).cssVariant,
         activity ? `${activity.kind}:${activity.text}` : '',
         relatedChats.map((c) => `${c.chatId}:${c.streaming ? 1 : 0}`).join(','),
-        heartbeatKey,
+        progressSeqKey,
         runLifecycle,
         `d${(task.dependsOn ?? []).join('.')}`,
       ].join('|'),
     );
   }
   return parts.join(';');
+}
+
+/** After a full mount, record the kanban fingerprint so live ticks do not rebuild immediately. */
+function seedKanbanRefreshKey(
+  board: BoardState,
+  plannerChat: Chat,
+  group: ChatGroup,
+): void {
+  if (shouldShowFinishDashboard(board)) {
+    lastKanbanRefreshKey = 'dashboard';
+    return;
+  }
+  lastKanbanRefreshKey = `kanban:${buildKanbanRefreshKey(board, plannerChat, group)}`;
 }
 
 /** After agent select blur, apply a deferred kanban refresh if board state changed underneath. */
@@ -2822,6 +2884,10 @@ function refreshBoardDom(
         lastKanbanRefreshKey = surfaceKey;
         pendingKanbanRefresh = false;
       }
+      const kanban = main.querySelector('.board-kanban-waves');
+      if (kanban instanceof HTMLElement) {
+        syncKanbanHeartbeatBadges(kanban, board, plannerChat);
+      }
       syncBoardDashboardToggle(root, board);
     }
   }
@@ -3234,6 +3300,7 @@ export function renderBoardView(group: ChatGroup): void {
   const main = document.createElement('div');
   main.className = 'board-main';
   mountBoardMainSurface(main, board, group, plannerChat);
+  seedKanbanRefreshKey(board, plannerChat, group);
 
   root.appendChild(header);
   root.appendChild(main);
