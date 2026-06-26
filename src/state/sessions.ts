@@ -758,6 +758,7 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
       ? { integrationBranch: r.integrationBranch.trim() }
       : {}),
     ...(r.userStopped === true ? { userStopped: true } : {}),
+    ...(r.systemPaused === true ? { systemPaused: true } : {}),
     ...(typeof r.isolationBaseRef === 'string' && r.isolationBaseRef.trim()
       ? { isolationBaseRef: r.isolationBaseRef.trim() }
       : {}),

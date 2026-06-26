@@ -280,7 +280,7 @@ function boardHasActiveFixer(board: OrchestrateBoardState): boolean {
 }
 
 /** Block new merges while a fixer chat is resolving a conflict in integration. */
-async function waitForNoActiveFixer(group: ChatGroup): Promise<void> {
+async function waitForNoActiveFixer(group: ChatGroup, plannerChat: Chat): Promise<void> {
   const board = group.orchestrateBoard;
   if (!board) return;
   const start = Date.now();
@@ -290,6 +290,7 @@ async function waitForNoActiveFixer(group: ChatGroup): Promise<void> {
         'wait-for-fixer-timeout',
         new Error('Fixer wait exceeded cap; proceeding with merge'),
       );
+      await reconcileMergingTasks(group, plannerChat);
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -354,6 +355,18 @@ const taskChatStallRestarts = new Map<string, number>();
  * overlapping git checks when multiple heartbeats fire while a probe is pending.
  */
 const fixerEarlyFinalizeInFlight = new Set<string>();
+
+/** Test-only: capture stall-path nudge/self-heal calls from heartbeat supervision. */
+let taskChatNudgeCallsForTests: string[] | null = null;
+let stallSelfHealCallsForTests: string[] | null = null;
+
+function recordTaskChatNudgeCallForTests(taskId: string): void {
+  taskChatNudgeCallsForTests?.push(taskId);
+}
+
+function recordStallSelfHealCallForTests(taskId: string): void {
+  stallSelfHealCallsForTests?.push(taskId);
+}
 
 /** Per-task guard: only one merge-fixer finalize may run at a time (stream-end races). */
 const fixerFinalizeInFlight = new Set<string>();
@@ -521,7 +534,9 @@ export function finalizeBoardTaskOnStreamEnd(
     logBuildVerdict(group, task.id, 'stopped');
     teardownBoardTaskChatResources(chat, sessionState?.groups);
 
-    const parkUserStop = stopReason === 'user' || board?.userStopped === true;
+    const parkUserStop =
+      board?.systemPaused !== true &&
+      (stopReason === 'user' || board?.userStopped === true);
     if (parkUserStop) {
       quarantineTaskAndDependents(
         group,
@@ -660,6 +675,29 @@ export function finalizeBoardTaskOnStreamEnd(
   }
 }
 
+/**
+ * Stop a merge-fixer chat and finalize directly when stream-end may never arrive
+ * (heartbeat git poll success or stall watchdog).
+ */
+async function reconcileMergeFixerChat(
+  group: ChatGroup,
+  planner: Chat,
+  taskId: string,
+  chatId: string,
+): Promise<void> {
+  stopTaskChatSupervision(chatId);
+  stopGeneration(chatId);
+
+  const task = group.orchestrateBoard?.tasks.find((t) => t.id === taskId);
+  if (!task || task.status !== 'merging' || task.fixerChatId?.trim() !== chatId) return;
+
+  await finalizeMergeFixerOnStreamEnd(group, task, planner);
+
+  if (isBoardRunning(group)) {
+    await drainTaskQueue(group, planner);
+  }
+}
+
 function startTaskChatSupervision(chatId: string): void {
   const runId = chatTaskRunId(chatId);
   const supervision = createRunSupervision();
@@ -690,12 +728,12 @@ function startTaskChatSupervision(chatId: string): void {
 
     const stallTask = group.orchestrateBoard.tasks.find((t) => t.id === taskId);
 
-    // Fixer chats use a tighter threshold; stop-only — stream-end owns finalize + drain.
+    // Merge fixer chats: git poll or stall → direct reconcile (stream-end may never arrive).
     if (stallTask?.fixerChatId?.trim() === chatId && stallTask.status === 'merging') {
       // Proactive completion: a fixer often keeps emitting prose/diagnostics after a
       // successful `git commit --no-edit`, so it never trips the stall watchdog and
       // its stream-end may lag. Poll git state each tick; as soon as the branch is
-      // merged and verified, stop the chat — stream-end subscription finalizes + drains.
+      // merged and verified, reconcile directly.
       const branch = stallTask.worktreeBranch?.trim();
       if (branch && isLocalServerAvailable() && !fixerEarlyFinalizeInFlight.has(chatId)) {
         const boardId = group.id;
@@ -709,8 +747,7 @@ function startTaskChatSupervision(chatId: string): void {
             const fresh =
               group.orchestrateBoard?.tasks.find((t) => t.id === taskId) ?? stallTask;
             if (fresh.fixerChatId?.trim() !== chatId || fresh.status !== 'merging') return;
-            stopHeartbeat(chatTaskRunId(chatId));
-            stopGeneration(chatId);
+            await reconcileMergeFixerChat(group, planner, taskId, chatId);
           } catch (err) {
             reportBackgroundError('merge-fixer-early-finalize', err);
           } finally {
@@ -719,6 +756,19 @@ function startTaskChatSupervision(chatId: string): void {
         })();
       }
 
+      if (progressAge < meta.progressStallMs) return;
+      void reconcileMergeFixerChat(group, planner, taskId, chatId).catch((err) =>
+        reportBackgroundError('merge-fixer-stall-reconcile', err),
+      );
+      return;
+    }
+
+    // Env-fixer chats: stop-only on stall — stream-end owns finalize; never nudge/self-heal.
+    if (
+      stallTask?.fixerChatId?.trim() === chatId &&
+      stallTask.status === 'in_progress' &&
+      stallTask.fixerKind === 'env'
+    ) {
       if (progressAge < meta.progressStallMs) return;
       stopHeartbeat(chatTaskRunId(chatId));
       stopGeneration(chatId);
@@ -739,11 +789,13 @@ function startTaskChatSupervision(chatId: string): void {
 
     const stallReason = `task-chat-stall (${progressAge}ms no output)`;
     if (restarts === 0) {
+      recordTaskChatNudgeCallForTests(taskId);
       void runTaskChatNudge(group, taskId, planner, stallReason).catch((err) =>
         reportBackgroundError('task-chat-stall-nudge', err),
       );
     } else {
       if (stallTask) {
+        recordStallSelfHealCallForTests(stallTask.id);
         void runSelfHeal(group, stallTask, planner, { phase: 'build', category: 'stall', summary: stallReason }, makeSelfHealDeps())
           .catch((err) => reportBackgroundError('task-chat-stall-selfheal', err));
       }
@@ -1783,7 +1835,7 @@ function enqueueMergeCompletedTaskWorktree(
   plannerChat: Chat,
 ): Promise<MergeTaskWorktreeResult> {
   return enqueueBoardMerge(group.id, async () => {
-    await waitForNoActiveFixer(group);
+    await waitForNoActiveFixer(group, plannerChat);
     return mergeCompletedTaskWorktree(group, task, plannerChat);
   });
 }
@@ -3180,6 +3232,38 @@ export async function resumeBoardExecutionAfterReload(
 }
 
 /**
+ * Live safety net for tasks stuck in `merging`: supervise an active fixer chat
+ * or re-run finalize when the fixer died without stream-end.
+ */
+export async function reconcileMergingTasks(
+  group: ChatGroup,
+  plannerChat: Chat,
+  options?: { isFixerChatActive?: (fixerChatId: string) => boolean },
+): Promise<void> {
+  const board = group.orchestrateBoard;
+  if (!board) return;
+  const isFixerActive = options?.isFixerChatActive ?? isTaskChatActive;
+  const pending: Promise<void>[] = [];
+  for (const task of board.tasks) {
+    if (task.status !== 'merging') continue;
+    const fixerId = task.fixerChatId?.trim();
+    if (fixerId && isFixerActive(fixerId)) {
+      startTaskChatSupervision(fixerId);
+      continue;
+    }
+    pending.push(
+      finalizeMergeFixerOnStreamEnd(group, task, plannerChat).catch((err) => {
+        reportBackgroundError('reconcile-merging-task', err);
+      }),
+    );
+  }
+  await Promise.all(pending);
+  if (isBoardRunning(group)) {
+    await drainTaskQueue(group, plannerChat);
+  }
+}
+
+/**
  * Reconcile tasks stuck in `merging` after reload — supervise a live fixer or
  * re-run finalize when its stream-end handler never fired.
  */
@@ -3188,23 +3272,9 @@ export async function recoverInterruptedMergesAfterReload(
   plannerChat: Chat,
 ): Promise<void> {
   ensureStreamEndSubscription();
-  const board = group.orchestrateBoard;
-  if (!board) return;
-  const pending: Promise<void>[] = [];
-  for (const task of board.tasks) {
-    if (task.status !== 'merging') continue;
-    const fixerId = task.fixerChatId?.trim();
-    if (fixerId && shouldSuperviseBoardChatOnReload(fixerId)) {
-      startTaskChatSupervision(fixerId);
-      continue;
-    }
-    pending.push(
-      finalizeMergeFixerOnStreamEnd(group, task, plannerChat).catch((err) => {
-        reportBackgroundError('recover-interrupted-merge', err);
-      }),
-    );
-  }
-  await Promise.all(pending);
+  await reconcileMergingTasks(group, plannerChat, {
+    isFixerChatActive: (id) => shouldSuperviseBoardChatOnReload(id),
+  });
 }
 
 /** Begin auto/sequential execution — set running flag then kick off delegation. */
@@ -3213,8 +3283,9 @@ export function startBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
   if (!board || !isBoardAutoMode(group)) return;
   void clearOomPauseFromElectron();
   board.autoRunning = true;
-  // Clear any prior Stop so the timer resumes and the Stopped badge clears.
+  // Clear any prior Stop or system pause so the timer resumes and badges clear.
   board.userStopped = false;
+  board.systemPaused = false;
   board.lastUpdatedAt = Date.now();
   logAutoStart(group);
   scheduleSaveSessions();
@@ -3224,14 +3295,31 @@ export function startBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
   );
 }
 
+export type StopBoardAutoRunOptions = {
+  /** User Stop (default) vs shutdown/OOM system pause. */
+  reason?: 'user' | 'system';
+};
+
 /** Stop all active task chats and clear the task queue. */
-export function stopBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
+export function stopBoardAutoRun(
+  group: ChatGroup,
+  plannerChat: Chat,
+  options: StopBoardAutoRunOptions = {},
+): void {
   const board = group.orchestrateBoard;
   if (!board) return;
+  const reason = options.reason ?? 'user';
   board.autoRunning = false;
-  // Freeze the header timer and surface the Stopped badge immediately, even if
-  // task statuses lag behind the aborted streams (MIN-248).
-  board.userStopped = true;
+  if (reason === 'system') {
+    // Shutdown/OOM: pause without user-stop quarantine on stream-end.
+    board.systemPaused = true;
+    board.userStopped = false;
+  } else {
+    // Freeze the header timer and surface the Stopped badge immediately, even if
+    // task statuses lag behind the aborted streams (MIN-248).
+    board.userStopped = true;
+    board.systemPaused = false;
+  }
   board.lastUpdatedAt = Date.now();
   logAutoStop(group);
   taskQueueByGroupId.delete(group.id);
@@ -3259,7 +3347,7 @@ export function stopBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
   syncOrchestrateBoardTimer(group, plannerChat, {
     isStreaming: false,
     activeRunCount: 0,
-    userStopped: true,
+    userStopped: reason === 'user',
   });
   // Cancel any sub-agent runs still attributed to the planner's active parent
   // turn so background runs/heartbeats do not linger after Stop (MIN-246).
@@ -3288,7 +3376,7 @@ export function pauseAllRunningBoardsForShutdown(): void {
     if (!plannerId) continue;
     const planner = state.chats.find((c) => c.id === plannerId);
     if (!planner) continue;
-    stopBoardAutoRun(group, planner);
+    stopBoardAutoRun(group, planner, { reason: 'system' });
   }
 }
 
@@ -3299,6 +3387,7 @@ export async function autoDelegateNext(
 ): Promise<void> {
   ensureStreamEndSubscription();
   ensureAutoDriveSubscription();
+  await reconcileMergingTasks(group, plannerChat);
   const board = group.orchestrateBoard;
   if (!board || !isBoardRunning(group)) return;
 
@@ -3436,6 +3525,30 @@ export function clearTaskChatStallRestartsForTests(): void {
   taskChatStallRestarts.clear();
 }
 
+export function getTaskChatStallRestartCountForTests(chatId: string): number {
+  return taskChatStallRestarts.get(chatId) ?? 0;
+}
+
+/** Enable/disable capture of stall-path nudge and self-heal calls from heartbeat ticks. */
+export function trackTaskChatStallRecoveryCallsForTests(enabled: boolean): {
+  nudges: string[];
+  selfHeals: string[];
+} {
+  if (enabled) {
+    taskChatNudgeCallsForTests = [];
+    stallSelfHealCallsForTests = [];
+    return {
+      nudges: taskChatNudgeCallsForTests,
+      selfHeals: stallSelfHealCallsForTests,
+    };
+  }
+  const nudges = taskChatNudgeCallsForTests ?? [];
+  const selfHeals = stallSelfHealCallsForTests ?? [];
+  taskChatNudgeCallsForTests = null;
+  stallSelfHealCallsForTests = null;
+  return { nudges, selfHeals };
+}
+
 /** Test-only: simulate fixer stall reconcile (stream-end finalizes + drains). */
 export async function triggerFixerStallReconcileForTests(
   group: ChatGroup,
@@ -3458,6 +3571,16 @@ export async function finalizeMergeFixerOnStreamEndForTests(
   plannerChat: Chat,
 ): Promise<void> {
   return finalizeMergeFixerOnStreamEnd(group, task, plannerChat);
+}
+
+/** Test-only: heartbeat merge-fixer reconcile (git poll / stall path). */
+export async function reconcileMergeFixerChatForTests(
+  group: ChatGroup,
+  planner: Chat,
+  taskId: string,
+  chatId: string,
+): Promise<void> {
+  return reconcileMergeFixerChat(group, planner, taskId, chatId);
 }
 
 /** Test-only: simulate stream-end when fixerChatId was already cleared before delivery. */

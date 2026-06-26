@@ -825,7 +825,10 @@ export function deriveBoardHeaderStatus(
   const hasFailed = tasks.some((t) => t.status === 'failed');
   const hasBlocked = tasks.some((t) => t.status === 'blocked');
   const hasInFlight = tasks.some(
-    (t) => t.status === 'in_progress' || t.status === 'testing',
+    (t) =>
+      t.status === 'in_progress' ||
+      t.status === 'testing' ||
+      t.status === 'merging',
   );
 
   if (isStreaming && board.activeParentTurnId) {
@@ -861,7 +864,13 @@ export function deriveBoardHeaderStatus(
     return { variant: 'blocked', label: 'Blocked' };
   }
   const runningTasks = countRunningTaskChats(board);
-  if (runningTasks > 0 || activeRunCount > 0 || hasInFlight) {
+  if (runningTasks > 0 || activeRunCount > 0) {
+    return { variant: 'active', label: 'Active' };
+  }
+  if (tasks.some((t) => t.status === 'merging')) {
+    return { variant: 'active', label: 'Merging' };
+  }
+  if (hasInFlight) {
     return { variant: 'active', label: 'Active' };
   }
   if (completeCount > 0) {

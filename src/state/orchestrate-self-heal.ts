@@ -185,6 +185,8 @@ export async function runSelfHeal(
   const freshTask = board?.tasks.find((t) => t.id === task.id) ?? task;
 
   // ── 1. Global self-heal ceiling above per-category attempt caps (GAP-2) ───
+  // Per-category caps (buildAttempts, fixerAttempts, envFixAttempts, …) are the
+  // primary bounds; selfHealRound is a secondary safety ceiling on total heal work.
   const maxRounds = deps.resolveSelfHealMaxRounds();
   if ((freshTask.selfHealRound ?? 0) >= maxRounds) {
     quarantineWithIssue(group, freshTask, plannerChat, category, summary, deps);

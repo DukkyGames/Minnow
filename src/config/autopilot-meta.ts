@@ -65,7 +65,7 @@ export const DEFAULT_AUTOPILOT_META: AutopilotMeta = {
   heartbeatDeadMs: 30_000,
   plannerProviderId: '',
   plannerModelId: '',
-  selfHealMaxRounds: 2,
+  selfHealMaxRounds: 4,
   maxEnvFixAttempts: 2,
   autoProvisionInfra: true,
   infraProvisionTimeoutMs: 180_000,

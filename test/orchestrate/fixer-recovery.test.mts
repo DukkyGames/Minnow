@@ -1,0 +1,795 @@
+/**
+ * Fixer recovery regression tests (documentation/plans/fixer-recovery-merged-plan.md).
+ */
+
+import assert from 'node:assert/strict';
+import { Window } from 'happy-dom';
+import { afterEach, beforeEach, describe, test } from 'node:test';
+import {
+  bumpProgress,
+  chatTaskRunId,
+  resetWrapperState,
+  tickHeartbeatForTests,
+} from '../../src/agents/controller/wrapper.ts';
+import { resetAutopilotMetaCache, setAutopilotMetaForTests } from '../../src/config/autopilot-meta.ts';
+import {
+  autoDelegateNext,
+  clearTaskChatStallRestartsForTests,
+  finalizeBoardTaskOnStreamEnd,
+  getTaskChatStallRestartCountForTests,
+  reconcileMergingTasks,
+  releaseLaunchSlotForTests,
+  reserveLaunchSlotForTests,
+  startBoardAutoRun,
+  startTaskChatSupervisionForTests,
+  stopBoardAutoRun,
+  trackTaskChatStallRecoveryCallsForTests,
+} from '../../src/state/orchestrate-board-actions.ts';
+import { initBoard, isTaskStalledForRestart, updateTask } from '../../src/state/orchestrate-board-store.ts';
+import { setSessionStateForTests } from '../../src/state/sessions.ts';
+import { setLocalServerAvailableForTests } from '../../src/tools/config.ts';
+import type { Chat, ChatGroup } from '../../src/types.ts';
+
+const PLANNER_ID = 'aaaa-aaaa-planner';
+const BUILDER_CHAT_ID = 'bbbb-bbbb-builder';
+const FIXER_CHAT_ID = 'cccc-cccc-fixer';
+const GROUP_ID = 'grp_aaaa-aaaa';
+const TASK_ID = 'W1-A';
+const PROGRESS_STALL_MS = 1_000;
+/** Env-fixer uses the tighter 1× progressStallMs threshold (not 3× build chats). */
+const FIXER_STALL_THRESHOLD_MS = PROGRESS_STALL_MS;
+
+// Fix A fixtures (merge-fixer heartbeat reconcile)
+const FIX_A_PLANNER_ID = '22222222-2222-2222-2222-222222222222';
+const FIX_A_GROUP_ID = 'grp_22222222-2222-2222-2222-222222222222';
+const MERGE_FIXER_CHAT_ID = '66666666-6666-6666-6666-666666666666';
+const MERGE_TASK_ID = 'W1-B';
+const TASK_BRANCH = 'minnow/board/W1-B';
+const INTEGRATION_BRANCH = 'minnow/integration/grp_22222222';
+
+let now = 0;
+let originalNow: typeof performance.now;
+let domWindow: Window | undefined;
+
+function setupDom(): void {
+  domWindow = new Window();
+  globalThis.document = domWindow.document;
+  globalThis.window = domWindow as unknown as Window & typeof globalThis.window;
+}
+
+function teardownDom(): void {
+  domWindow?.close();
+  domWindow = undefined;
+  // @ts-expect-error test cleanup
+  delete globalThis.document;
+  // @ts-expect-error test cleanup
+  delete globalThis.window;
+}
+
+function mockWorktreeOps(responses: Record<string, unknown>): () => void {
+  const saved = globalThis.fetch;
+  // @ts-ignore — test-only replacement
+  globalThis.fetch = async (_url: unknown, opts?: { body?: unknown }) => {
+    let op = '';
+    try {
+      op = (JSON.parse(opts?.body as string) as { op?: string }).op ?? '';
+    } catch {
+      /* ignore */
+    }
+    const payload = op in responses ? responses[op] : { ok: false, error: 'not_mocked' };
+    return { ok: true, json: async () => payload };
+  };
+  return () => {
+    globalThis.fetch = saved;
+  };
+}
+
+async function waitForAsyncReconcile(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 50));
+}
+
+function makeFixAPlanner(): Chat {
+  return {
+    id: FIX_A_PLANNER_ID,
+    name: 'Planner',
+    workspacePath: '/tmp/ws',
+    modeId: 'orchestrate',
+    modelId: 'm1',
+    history: [],
+    lastStats: null,
+    modelInfo: {},
+    updatedAt: 1,
+    orchestratePlanPath: 'documentation/plans/test.md',
+    boardGroupId: FIX_A_GROUP_ID,
+  };
+}
+
+function makeMergeFixerChat(): Chat {
+  return {
+    id: MERGE_FIXER_CHAT_ID,
+    name: 'Fix merge W1-B',
+    workspacePath: '/tmp/ws',
+    modeId: 'build',
+    modelId: 'm1',
+    history: [
+      { role: 'user', content: 'Resolve merge conflict' },
+      { role: 'assistant', content: 'Resolved and committed with git commit --no-edit.' },
+    ],
+    lastStats: null,
+    modelInfo: {},
+    updatedAt: 1,
+    boardGroupId: FIX_A_GROUP_ID,
+    boardTaskId: MERGE_TASK_ID,
+    currentGenerationId: 'gen-still-running',
+  };
+}
+
+function makeMergeGroup(): ChatGroup {
+  const group: ChatGroup = {
+    id: FIX_A_GROUP_ID,
+    name: 'Board',
+    workspacePath: '/tmp/ws',
+    collapsed: false,
+    order: 0,
+    plannerChatId: FIX_A_PLANNER_ID,
+    orchestratePlanPath: 'documentation/plans/test.md',
+    viewMode: 'board',
+  };
+  const planner = makeFixAPlanner();
+  initBoard(group, planner, {
+    planPath: 'documentation/plans/test.md',
+    tasks: [
+      {
+        id: MERGE_TASK_ID,
+        title: 'Feature B',
+        wave: 'W1',
+        category: 'build',
+        build: 'Add feature B',
+        test: 'Run tests',
+      },
+    ],
+    waves: [{ id: 'W1', status: 'in_progress' }],
+  });
+  group.orchestrateBoard!.integrationBranch = INTEGRATION_BRANCH;
+  group.orchestrateBoard!.executionMode = 'afk';
+  group.orchestrateBoard!.autoRunning = true;
+  return group;
+}
+
+function seedMergingTask(
+  group: ChatGroup,
+  fixerChat: Chat,
+): { group: ChatGroup; planner: Chat; fixerChat: Chat } {
+  const planner = makeFixAPlanner();
+  updateTask(
+    group,
+    MERGE_TASK_ID,
+    {
+      status: 'merging',
+      fixerChatId: MERGE_FIXER_CHAT_ID,
+      worktreeBranch: TASK_BRANCH,
+      mergePreSha: 'deadbeef',
+    },
+    planner,
+  );
+  setSessionStateForTests({
+    chats: [planner, fixerChat],
+    groups: [group],
+    activeChatId: FIX_A_PLANNER_ID,
+  });
+  return { group, planner, fixerChat };
+}
+
+function makePlanner(): Chat {
+  return {
+    id: PLANNER_ID,
+    name: 'Planner',
+    workspacePath: '/ws',
+    modeId: 'orchestrate',
+    modelId: 'm1',
+    history: [],
+    lastStats: null,
+    modelInfo: {},
+    updatedAt: 1,
+    boardGroupId: GROUP_ID,
+  };
+}
+
+function makeBuilderChat(): Chat {
+  return {
+    id: BUILDER_CHAT_ID,
+    name: 'Build W1-A',
+    workspacePath: '/ws',
+    modeId: 'build',
+    modelId: 'm1',
+    history: [],
+    lastStats: null,
+    modelInfo: {},
+    updatedAt: 1,
+    boardGroupId: GROUP_ID,
+    boardTaskId: TASK_ID,
+  };
+}
+
+function makeEnvFixerChat(): Chat {
+  return {
+    id: FIXER_CHAT_ID,
+    name: 'Fix env W1-A',
+    workspacePath: '/ws',
+    modeId: 'build',
+    modelId: 'm1',
+    history: [{ role: 'user', content: 'Fix missing deps' }],
+    lastStats: null,
+    modelInfo: {},
+    updatedAt: 1,
+    boardGroupId: GROUP_ID,
+    boardTaskId: TASK_ID,
+  };
+}
+
+function makeGroup(): ChatGroup {
+  const group: ChatGroup = {
+    id: GROUP_ID,
+    name: 'Board',
+    workspacePath: '/ws',
+    collapsed: false,
+    order: 0,
+    createdAt: 1,
+    plannerChatId: PLANNER_ID,
+    orchestratePlanPath: 'documentation/plans/test.md',
+    viewMode: 'board',
+  };
+  const planner = makePlanner();
+  initBoard(group, planner, {
+    planPath: 'documentation/plans/test.md',
+    tasks: [
+      {
+        id: TASK_ID,
+        title: 'Task A',
+        wave: 'W1',
+        category: 'build',
+        build: 'Build feature',
+        test: 'Run tests',
+      },
+    ],
+    waves: [{ id: 'W1', status: 'in_progress' }],
+  });
+  group.orchestrateBoard!.executionMode = 'afk';
+  group.orchestrateBoard!.autoRunning = true;
+  return group;
+}
+
+function seedEnvFixerTask(group: ChatGroup): { planner: Chat; fixerChat: Chat } {
+  const planner = makePlanner();
+  const fixerChat = makeEnvFixerChat();
+  updateTask(
+    group,
+    TASK_ID,
+    {
+      status: 'in_progress',
+      chatId: BUILDER_CHAT_ID,
+      fixerChatId: FIXER_CHAT_ID,
+      fixerKind: 'env',
+      envFixPhase: 'build',
+      worktreePath: '/ws',
+    },
+    planner,
+  );
+  setSessionStateForTests({
+    version: 5,
+    activeId: PLANNER_ID,
+    chats: [planner, makeBuilderChat(), fixerChat],
+    groups: [group],
+  });
+  return { planner, fixerChat };
+}
+
+beforeEach(() => {
+  now = 0;
+  originalNow = performance.now;
+  performance.now = () => now;
+
+  resetWrapperState();
+  clearTaskChatStallRestartsForTests();
+  trackTaskChatStallRecoveryCallsForTests(false);
+
+  setAutopilotMetaForTests({
+    progressStallMs: PROGRESS_STALL_MS,
+    heartbeatIntervalMs: 100,
+    heartbeatDeadMs: 10_000,
+  });
+});
+
+afterEach(() => {
+  performance.now = originalNow;
+  resetWrapperState();
+  resetAutopilotMetaCache();
+  clearTaskChatStallRestartsForTests();
+  trackTaskChatStallRecoveryCallsForTests(false);
+});
+
+describe('Fix A — merge-fixer heartbeat reconcile', () => {
+  let restoreFetch: (() => void) | undefined;
+  const prevMinnowTest = process.env.MINNOW_TEST;
+
+  beforeEach(() => {
+    process.env.MINNOW_TEST = '1';
+    setupDom();
+    setLocalServerAvailableForTests(true);
+    setSessionStateForTests(null);
+  });
+
+  afterEach(() => {
+    restoreFetch?.();
+    restoreFetch = undefined;
+    teardownDom();
+    setLocalServerAvailableForTests(false);
+    if (prevMinnowTest === undefined) {
+      delete process.env.MINNOW_TEST;
+    } else {
+      process.env.MINNOW_TEST = prevMinnowTest;
+    }
+    setSessionStateForTests(null);
+  });
+
+  test('git poll reconcile completes task without stream-end', async () => {
+    const group = makeMergeGroup();
+    const fixerChat = makeMergeFixerChat();
+    seedMergingTask(group, fixerChat);
+
+    restoreFetch = mockWorktreeOps({
+      check_merged: { ok: true, merged: true },
+      verify_integration: { ok: true, verified: true },
+      refresh_integration_deps: { ok: true },
+    });
+
+    startTaskChatSupervisionForTests(MERGE_FIXER_CHAT_ID);
+    const runId = chatTaskRunId(MERGE_FIXER_CHAT_ID);
+    bumpProgress(runId);
+
+    tickHeartbeatForTests(runId);
+    await waitForAsyncReconcile();
+
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === MERGE_TASK_ID)!;
+    assert.equal(task.status, 'complete', 'git poll should reconcile to complete');
+    assert.equal(task.fixerChatId, undefined, 'fixerChatId cleared on complete');
+  });
+
+  test('stall reconcile completes task without stream-end', async () => {
+    const group = makeMergeGroup();
+    const fixerChat = makeMergeFixerChat();
+    seedMergingTask(group, fixerChat);
+
+    restoreFetch = mockWorktreeOps({
+      check_merged: { ok: true, merged: true },
+      verify_integration: { ok: true, verified: true },
+      refresh_integration_deps: { ok: true },
+    });
+
+    startTaskChatSupervisionForTests(MERGE_FIXER_CHAT_ID);
+    const runId = chatTaskRunId(MERGE_FIXER_CHAT_ID);
+    bumpProgress(runId);
+
+    now = FIXER_STALL_THRESHOLD_MS + 100;
+    tickHeartbeatForTests(runId);
+    await waitForAsyncReconcile();
+
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === MERGE_TASK_ID)!;
+    assert.equal(task.status, 'complete', 'stall should reconcile to complete');
+    assert.equal(task.fixerChatId, undefined);
+  });
+
+  test('reconcile bails when task left merging before finalize', async () => {
+    const group = makeMergeGroup();
+    const fixerChat = makeMergeFixerChat();
+    const { planner } = seedMergingTask(group, fixerChat);
+
+    let checkMergedCalls = 0;
+    const saved = globalThis.fetch;
+    // @ts-ignore — test-only replacement
+    globalThis.fetch = async (_url: unknown, opts?: { body?: unknown }) => {
+      let op = '';
+      try {
+        op = (JSON.parse(opts?.body as string) as { op?: string }).op ?? '';
+      } catch {
+        /* ignore */
+      }
+      if (op === 'check_merged') {
+        checkMergedCalls += 1;
+        updateTask(group, MERGE_TASK_ID, { status: 'complete', fixerChatId: undefined }, planner);
+        return { ok: true, json: async () => ({ ok: true, merged: true }) };
+      }
+      if (op === 'verify_integration') {
+        return { ok: true, json: async () => ({ ok: true, verified: true }) };
+      }
+      return { ok: true, json: async () => ({ ok: false, error: 'not_mocked' }) };
+    };
+    restoreFetch = () => {
+      globalThis.fetch = saved;
+    };
+
+    startTaskChatSupervisionForTests(MERGE_FIXER_CHAT_ID);
+    const runId = chatTaskRunId(MERGE_FIXER_CHAT_ID);
+    bumpProgress(runId);
+    tickHeartbeatForTests(runId);
+    await waitForAsyncReconcile();
+
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === MERGE_TASK_ID)!;
+    assert.equal(task.status, 'complete');
+    assert.ok(checkMergedCalls >= 1);
+  });
+});
+
+describe('Fix B — reconcileMergingTasks safety net', () => {
+  const FIX_B_PLANNER_ID = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  const FIX_B_GROUP_ID = 'grp_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  const FIX_B_FIXER_CHAT_ID = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
+  const FIX_B_TASK_BRANCH = 'minnow/board/W1-A';
+  const prevMinnowTest = process.env.MINNOW_TEST;
+
+  function makeFixBPlanner(): Chat {
+    return {
+      id: FIX_B_PLANNER_ID,
+      name: 'Planner',
+      workspacePath: '/tmp/ws',
+      modeId: 'orchestrate',
+      modelId: 'm1',
+      history: [],
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: 1,
+      orchestratePlanPath: 'documentation/plans/test.md',
+      boardGroupId: FIX_B_GROUP_ID,
+    };
+  }
+
+  function makeFixBFixerChat(): Chat {
+    return {
+      id: FIX_B_FIXER_CHAT_ID,
+      name: 'Merge fixer W1-A',
+      workspacePath: '/tmp/ws',
+      modeId: 'build',
+      modelId: 'm1',
+      history: [
+        { role: 'user', content: 'Resolve merge conflict' },
+        { role: 'assistant', content: 'Conflict resolved and committed.' },
+      ],
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: 1,
+      boardGroupId: FIX_B_GROUP_ID,
+      boardTaskId: 'W1-A',
+    };
+  }
+
+  function makeFixBGroup(): ChatGroup {
+    const planner = makeFixBPlanner();
+    const group: ChatGroup = {
+      id: FIX_B_GROUP_ID,
+      name: 'Board',
+      workspacePath: '/tmp/ws',
+      collapsed: false,
+      order: 0,
+      plannerChatId: FIX_B_PLANNER_ID,
+      orchestratePlanPath: 'documentation/plans/test.md',
+      viewMode: 'board',
+    };
+    initBoard(group, planner, {
+      planPath: 'documentation/plans/test.md',
+      tasks: [
+        {
+          id: 'W1-A',
+          title: 'Init',
+          wave: 'W1',
+          category: 'build',
+          build: 'Add feature X',
+          test: 'Run unit tests',
+        },
+      ],
+      waves: [{ id: 'W1', status: 'in_progress' }],
+    });
+    return group;
+  }
+
+  function seedMergingWithDeadFixer(group: ChatGroup): { planner: Chat; fixerChat: Chat } {
+    const planner = makeFixBPlanner();
+    const fixerChat = makeFixBFixerChat();
+    updateTask(
+      group,
+      'W1-A',
+      {
+        status: 'merging',
+        fixerChatId: FIX_B_FIXER_CHAT_ID,
+        worktreeBranch: FIX_B_TASK_BRANCH,
+        mergePreSha: 'abc123',
+      },
+      planner,
+    );
+    setSessionStateForTests({
+      chats: [planner, fixerChat],
+      groups: [group],
+      activeChatId: FIX_B_PLANNER_ID,
+    });
+    return { planner, fixerChat };
+  }
+
+  beforeEach(() => {
+    process.env.MINNOW_TEST = '1';
+    setSessionStateForTests(null);
+    releaseLaunchSlotForTests(FIX_B_FIXER_CHAT_ID);
+  });
+
+  afterEach(() => {
+    releaseLaunchSlotForTests(FIX_B_FIXER_CHAT_ID);
+    if (prevMinnowTest === undefined) {
+      delete process.env.MINNOW_TEST;
+    } else {
+      process.env.MINNOW_TEST = prevMinnowTest;
+    }
+    setSessionStateForTests(null);
+  });
+
+  test('reconcileMergingTasks routes inactive fixer out of merging', async () => {
+    const group = makeFixBGroup();
+    const { planner } = seedMergingWithDeadFixer(group);
+
+    await reconcileMergingTasks(group, planner);
+
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    assert.notEqual(task.status, 'merging');
+  });
+
+  test('autoDelegateNext reconciles dead fixer before isBoardRunning gate', async () => {
+    const group = makeFixBGroup();
+    const { planner } = seedMergingWithDeadFixer(group);
+    // Board not auto-running — reconcile should still run at top of autoDelegateNext.
+    group.orchestrateBoard!.autoRunning = false;
+
+    await autoDelegateNext(group, planner);
+
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    assert.notEqual(task.status, 'merging');
+  });
+
+  test('reconcileMergingTasks leaves live fixer in merging', async () => {
+    const group = makeFixBGroup();
+    const { planner } = seedMergingWithDeadFixer(group);
+    reserveLaunchSlotForTests(FIX_B_FIXER_CHAT_ID);
+
+    await reconcileMergingTasks(group, planner);
+
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    assert.equal(task.status, 'merging');
+  });
+});
+
+describe('Fix C — env-fixer watchdog', () => {
+  test('env-fixer stall stops fixer chat only — no nudge or build self-heal', () => {
+    const group = makeGroup();
+    seedEnvFixerTask(group);
+    const board = group.orchestrateBoard!;
+    const task = board.tasks.find((t) => t.id === TASK_ID)!;
+
+    const isFixerActive = (chatId: string) => chatId === FIXER_CHAT_ID;
+    assert.equal(
+      isTaskStalledForRestart(board, task, isFixerActive),
+      false,
+      'active env-fixer should not mark the task slot as stalled for restart',
+    );
+
+    trackTaskChatStallRecoveryCallsForTests(true);
+    startTaskChatSupervisionForTests(FIXER_CHAT_ID);
+
+    const runId = chatTaskRunId(FIXER_CHAT_ID);
+    bumpProgress(runId);
+
+    // Past env-fixer threshold (1×) but before build threshold (3×).
+    now = FIXER_STALL_THRESHOLD_MS + 100;
+    tickHeartbeatForTests(runId);
+
+    const { nudges, selfHeals } = trackTaskChatStallRecoveryCallsForTests(false);
+    assert.equal(nudges.length, 0, 'env-fixer stall must not call runTaskChatNudge');
+    assert.equal(selfHeals.length, 0, 'env-fixer stall must not call build self-heal');
+    assert.equal(
+      getTaskChatStallRestartCountForTests(FIXER_CHAT_ID),
+      0,
+      'env-fixer stall must not increment the build stall-restart counter',
+    );
+  });
+});
+
+const FIX_D_PLANNER_ID = '11111111-1111-1111-1111-111111111111';
+const FIX_D_GROUP_ID = 'grp_11111111-1111-1111-1111-111111111111';
+const FIX_D_TASK_CHAT_ID = '33333333-3333-3333-3333-333333333333';
+
+function makeFixDPlanner(): Chat {
+  return {
+    id: FIX_D_PLANNER_ID,
+    name: 'Planner',
+    workspacePath: '/tmp/ws',
+    modeId: 'orchestrate',
+    modelId: 'm1',
+    history: [],
+    lastStats: null,
+    modelInfo: {},
+    updatedAt: 1,
+    orchestratePlanPath: 'documentation/plans/test.md',
+    boardGroupId: FIX_D_GROUP_ID,
+  };
+}
+
+function makeFixDStoppedTaskChat(runStopReason?: 'user' | 'system'): Chat {
+  const chat: Chat = {
+    id: FIX_D_TASK_CHAT_ID,
+    name: 'Task W1-A',
+    workspacePath: '/tmp/ws',
+    modeId: 'build',
+    modelId: 'm1',
+    history: [
+      { role: 'user', content: 'Execute task' },
+      { role: 'assistant', content: 'Partial work…', stopped: true },
+    ],
+    lastStats: null,
+    modelInfo: {},
+    updatedAt: 1,
+    boardGroupId: FIX_D_GROUP_ID,
+    boardTaskId: 'W1-A',
+  };
+  if (runStopReason) {
+    chat.runs = [
+      {
+        runId: 'run_stop_1',
+        branchId: 'b1',
+        forkHistoryIndex: 0,
+        status: 'stopped',
+        stopReason: runStopReason,
+        createdAt: 10,
+        snapshot: null as any,
+      },
+    ];
+  }
+  return chat;
+}
+
+function makeFixDRunningGroup(): { group: ChatGroup; planner: Chat } {
+  const planner = makeFixDPlanner();
+  const group: ChatGroup = {
+    id: FIX_D_GROUP_ID,
+    name: 'Board',
+    workspacePath: '/tmp/ws',
+    collapsed: false,
+    order: 0,
+    plannerChatId: FIX_D_PLANNER_ID,
+    orchestratePlanPath: 'documentation/plans/test.md',
+    viewMode: 'board',
+  };
+  initBoard(
+    group,
+    planner,
+    {
+      planPath: 'documentation/plans/test.md',
+      tasks: [{ id: 'W1-A', title: 'Init', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1', status: 'in_progress' }],
+    },
+  );
+  updateTask(
+    group,
+    'W1-A',
+    { status: 'in_progress', chatId: FIX_D_TASK_CHAT_ID, startedAt: 1 },
+    planner,
+  );
+  group.orchestrateBoard!.executionMode = 'auto';
+  group.orchestrateBoard!.autoRunning = true;
+  setSessionStateForTests({
+    chats: [planner, makeFixDStoppedTaskChat()],
+    groups: [group],
+    activeChatId: FIX_D_PLANNER_ID,
+  });
+  return { group, planner };
+}
+
+describe('Fix D — systemPaused vs user Stop', () => {
+  beforeEach(async () => {
+    setSessionStateForTests(null);
+    const { Window } = await import('happy-dom');
+    const window = new Window();
+    const g = globalThis as typeof globalThis & {
+      localStorage: Storage;
+      document: Document;
+      HTMLElement: typeof HTMLElement;
+    };
+    g.localStorage = window.localStorage;
+    g.document = window.document;
+    g.HTMLElement = window.HTMLElement;
+  });
+
+  test('systemPaused finalizes to planned with stopRetries, not quarantine', () => {
+    const { group, planner } = makeFixDRunningGroup();
+    const board = group.orchestrateBoard!;
+    board.systemPaused = true;
+    board.userStopped = false;
+
+    const task = board.tasks[0]!;
+    finalizeBoardTaskOnStreamEnd(group, task, planner);
+
+    const updated = board.tasks.find((t) => t.id === 'W1-A')!;
+    assert.equal(updated.status, 'planned');
+    assert.equal(updated.stopRetries, 1);
+    assert.equal(updated.quarantine, undefined);
+    assert.equal(updated.chatId, undefined);
+  });
+
+  test('userStopped without systemPaused quarantines on stream-end', () => {
+    const { group, planner } = makeFixDRunningGroup();
+    const board = group.orchestrateBoard!;
+    board.userStopped = true;
+    board.systemPaused = false;
+
+    const task = board.tasks[0]!;
+    const taskChat = makeFixDStoppedTaskChat('user');
+    setSessionStateForTests({
+      chats: [planner, taskChat],
+      groups: [group],
+      activeChatId: FIX_D_PLANNER_ID,
+    });
+    finalizeBoardTaskOnStreamEnd(group, task, planner);
+
+    const updated = board.tasks.find((t) => t.id === 'W1-A')!;
+    assert.equal(updated.status, 'quarantined');
+    assert.equal(updated.chatId, undefined);
+    assert.match(updated.quarantine?.summary ?? '', /stopped by user/i);
+    assert.equal(
+      isTaskStalledForRestart(board, updated, () => false),
+      false,
+    );
+  });
+
+  test('systemPaused takes precedence when both flags are set', () => {
+    const { group, planner } = makeFixDRunningGroup();
+    const board = group.orchestrateBoard!;
+    board.systemPaused = true;
+    board.userStopped = true;
+
+    const task = board.tasks[0]!;
+    finalizeBoardTaskOnStreamEnd(group, task, planner);
+
+    const updated = board.tasks.find((t) => t.id === 'W1-A')!;
+    assert.equal(updated.status, 'planned');
+    assert.equal(updated.stopRetries, 1);
+    assert.equal(updated.quarantine, undefined);
+  });
+
+  test('stopBoardAutoRun reason system sets systemPaused only', () => {
+    const { group, planner } = makeFixDRunningGroup();
+    stopBoardAutoRun(group, planner, { reason: 'system' });
+
+    const board = group.orchestrateBoard!;
+    assert.equal(board.autoRunning, false);
+    assert.equal(board.systemPaused, true);
+    assert.equal(board.userStopped, false);
+  });
+
+  test('stopBoardAutoRun default reason sets userStopped only', () => {
+    const { group, planner } = makeFixDRunningGroup();
+    stopBoardAutoRun(group, planner);
+
+    const board = group.orchestrateBoard!;
+    assert.equal(board.autoRunning, false);
+    assert.equal(board.userStopped, true);
+    assert.equal(board.systemPaused, false);
+  });
+
+  test('startBoardAutoRun clears userStopped and systemPaused', () => {
+    const { group, planner } = makeFixDRunningGroup();
+    const board = group.orchestrateBoard!;
+    board.userStopped = true;
+    board.systemPaused = true;
+    board.autoRunning = false;
+
+    startBoardAutoRun(group, planner);
+
+    assert.equal(board.autoRunning, true);
+    assert.equal(board.userStopped, false);
+    assert.equal(board.systemPaused, false);
+  });
+});

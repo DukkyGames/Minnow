@@ -431,6 +431,12 @@ export interface OrchestrateBoardState {
    */
   userStopped?: boolean;
   /**
+   * True when auto-run was paused by shutdown or OOM recovery (not user Stop).
+   * Stream-end finalization treats this as a system stop (planned + stopRetries),
+   * not quarantine. Cleared when the user starts execution again.
+   */
+  systemPaused?: boolean;
+  /**
    * Filesystem/process isolation for parallel tasks (MIN-275). When unset it is
    * resolved from {@link executionMode} (sequential/manual → off, auto/afk → per-task).
    */
