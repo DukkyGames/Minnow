@@ -8,6 +8,7 @@ import { enqueuePendingMode } from '../chat/pending-mode';
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
 import { getActiveChat } from '../state/sessions';
+import { launchBoardFromPlan } from '../ui/orchestrate-launch';
 import { createChatWithMode } from '../ui/sidebar';
 import { setChatMode } from '../ui/mode-selector';
 import { enqueueAskQuestion } from './ask-question-queue';
@@ -15,6 +16,8 @@ import {
   validateAskQuestionArgs,
   stringifyAskQuestionResult,
   type AskQuestionArgs,
+  type AskQuestionAnswerEntry,
+  type AskQuestionToolResult,
 } from './ask-question-types';
 
 const HANDOFF_MODES = new Set<ModeId>([
@@ -49,7 +52,7 @@ function buildProposeModeSwitchQuestions(
             {
               id: 'orchestrate_new',
               label: 'New Orchestrate chat',
-              description: 'Create a chat in Orchestrate mode linked to this plan.',
+              description: 'Open the orchestrator board for this plan (same as Open in orchestrator).',
             },
             {
               id: 'stay_plan',
@@ -170,6 +173,41 @@ export function executeSetChatMode(args: Record<string, unknown>): string {
   return JSON.stringify({ ok: true, modeId, label: result.label ?? modeId });
 }
 
+/** Whether plan_complete handoff picked the orchestrator board launch option. */
+export function isPlanCompleteOrchestrateNewChoice(
+  answers: AskQuestionAnswerEntry[],
+): boolean {
+  const entry = answers.find((answer) => answer.questionId === 'next_step');
+  return entry?.selectedIds.includes('orchestrate_new') === true;
+}
+
+function parseAskQuestionToolContent(content: string): AskQuestionToolResult | null {
+  try {
+    return JSON.parse(content) as AskQuestionToolResult;
+  } catch {
+    return null;
+  }
+}
+
+/** Launch the orchestrator board when plan_complete handoff chose orchestrate_new. */
+function applyPlanCompleteOrchestrateHandoff(
+  situation: HandoffSituation,
+  planPath: string | undefined,
+  content: string,
+): void {
+  if (situation !== 'plan_complete') return;
+  const normalizedPlan = planPath?.trim()
+    ? normalizeOrchestratePlanPath(planPath.trim())
+    : undefined;
+  if (!normalizedPlan) return;
+
+  const parsed = parseAskQuestionToolContent(content);
+  if (!parsed || parsed.status !== 'answered') return;
+  if (!isPlanCompleteOrchestrateNewChoice(parsed.answers)) return;
+
+  launchBoardFromPlan(normalizedPlan);
+}
+
 /** Create a new chat with a given mode and optional plan path (browser). */
 export function executeCreateChatWithMode(args: Record<string, unknown>): string {
   const modeRaw = typeof args.mode_id === 'string' ? args.mode_id : typeof args.modeId === 'string' ? args.modeId : '';
@@ -192,6 +230,19 @@ export function executeCreateChatWithMode(args: Record<string, unknown>): string
       : typeof args.initialUserMessage === 'string'
         ? args.initialUserMessage.trim()
         : '';
+
+  // Orchestrate + plan uses the shared board launch path (hub, file tree, plan screen).
+  if (modeId === 'orchestrate' && normalizedPlan) {
+    launchBoardFromPlan(normalizedPlan);
+    const chat = getActiveChat();
+    return JSON.stringify({
+      ok: true,
+      chatId: chat.id,
+      modeId: 'orchestrate',
+      orchestratePlanPath: normalizedPlan,
+      boardLaunched: true,
+    });
+  }
 
   const result = createChatWithMode({
     modeId,
@@ -247,5 +298,10 @@ export async function executeProposeModeSwitch(
   const content = await enqueueAskQuestion(parsed.args, {
     subAgentType: context.subAgentType,
   });
+  applyPlanCompleteOrchestrateHandoff(
+    situationRaw as HandoffSituation,
+    planPath,
+    content,
+  );
   return content;
 }

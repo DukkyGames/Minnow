@@ -128,7 +128,7 @@ Tasks in this wave can run concurrently.
 After writing the plan:
 1. Tell the user the exact path of the plan file you wrote.
 2. Give a one-paragraph summary of waves and task count.
-3. Call **`propose_mode_switch`** with `situation: plan_complete` and `plan_path` set to the plan file (or **`ask_question`** with the same options). On **New Orchestrate chat**, call **`create_chat_with_mode`** (`mode_id: orchestrate`, `plan_path`, optional `initial_user_message`). On **Implement in Build**, call **`set_chat_mode`** with `build`.
+3. Call **`propose_mode_switch`** with `situation: plan_complete` and `plan_path` set to the plan file (or **`ask_question`** with the same options). On **New Orchestrate chat**, call **`create_chat_with_mode`** (`mode_id: orchestrate`, `plan_path`) — the client opens the orchestrator board (same as **Open in orchestrator**). On **Implement in Build**, call **`set_chat_mode`** with `build`.
 
 ## Hard restrictions
 
