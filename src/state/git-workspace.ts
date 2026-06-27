@@ -7,6 +7,35 @@ import { getWorkspacePath } from './workspace';
 export interface WorkspaceGitStatus {
   ok: boolean;
   isGitRepo: boolean;
+  hasRemote: boolean;
+}
+
+const EMPTY_GIT_STATUS: WorkspaceGitStatus = {
+  ok: false,
+  isGitRepo: false,
+  hasRemote: false,
+};
+
+/**
+ * Fetch git repo + origin remote flags for the workspace root.
+ * When the tool server is unreachable, returns a failed status (preflight may still prompt).
+ */
+export async function getWorkspaceGitStatus(workspaceRoot?: string): Promise<WorkspaceGitStatus> {
+  const root = workspaceRoot?.trim() || getWorkspacePath().trim();
+  const params = root ? `?workspaceRoot=${encodeURIComponent(root)}` : '';
+  try {
+    const response = await fetch(`/api/workspace/git-status${params}`);
+    if (!response.ok) return EMPTY_GIT_STATUS;
+    const payload = (await response.json()) as WorkspaceGitStatus;
+    if (!payload.ok) return EMPTY_GIT_STATUS;
+    return {
+      ok: true,
+      isGitRepo: Boolean(payload.isGitRepo),
+      hasRemote: Boolean(payload.hasRemote),
+    };
+  } catch {
+    return EMPTY_GIT_STATUS;
+  }
 }
 
 /**
@@ -14,14 +43,6 @@ export interface WorkspaceGitStatus {
  * When the tool server is unreachable, returns false (preflight may still prompt).
  */
 export async function isWorkspaceGitRepo(workspaceRoot?: string): Promise<boolean> {
-  const root = workspaceRoot?.trim() || getWorkspacePath().trim();
-  const params = root ? `?workspaceRoot=${encodeURIComponent(root)}` : '';
-  try {
-    const response = await fetch(`/api/workspace/git-status${params}`);
-    if (!response.ok) return false;
-    const payload = (await response.json()) as WorkspaceGitStatus;
-    return Boolean(payload.ok && payload.isGitRepo);
-  } catch {
-    return false;
-  }
+  const status = await getWorkspaceGitStatus(workspaceRoot);
+  return status.isGitRepo;
 }

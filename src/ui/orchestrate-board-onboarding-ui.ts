@@ -9,12 +9,14 @@ import type { Chat } from '../types';
 import { getActiveChat } from '../state/sessions';
 import { formatBoardOnboardingPlanDisplay } from './orchestrate-board-plan-display';
 import {
+  getBoardGitSetupPromptKind,
   isBoardGitSetupPromptActive,
   isBoardKickoffInProgress,
   isBoardOnboardingGitSetupActive,
   resetBoardOnboardingTransientState,
   resolveBoardGitSetupPrompt,
   subscribeBoardOnboardingState,
+  type BoardGitPromptKind,
 } from './orchestrate-board-onboarding-state';
 
 /** Kanban board icon rects (matches #btnViewModeToggleBoard). */
@@ -39,6 +41,28 @@ const PHASE_HEADLINE: Record<Exclude<BoardOnboardingBusyPhase, 'idle'>, string> 
 };
 
 /** Rotating fallback lines when no tool activity is visible yet. */
+const GIT_PROMPT_COPY: Record<
+  BoardGitPromptKind,
+  { title: string; desc: string; yes: string; no: string; status: string }
+> = {
+  init: {
+    title: 'Git repository',
+    desc:
+      'Orchestrate uses git for task isolation and merges. Initialize git in this workspace before building the board?',
+    yes: 'Yes, initialize git',
+    no: 'Continue without git',
+    status: 'This workspace is not a git repository. Initialize git before building the board?',
+  },
+  remote: {
+    title: 'GitHub remote',
+    desc:
+      'Connect a GitHub remote so you can push changes and open pull requests when the plan completes.',
+    yes: 'Yes, connect remote',
+    no: 'Continue without remote',
+    status: 'No GitHub remote is configured. Connect a remote before building the board?',
+  },
+};
+
 const PHASE_STATUS_POOL: Record<Exclude<BoardOnboardingBusyPhase, 'idle' | 'git-prompt'>, string[]> = {
   plans: [
     'Discovering plan files in your workspace…',
@@ -118,7 +142,7 @@ function poolForPhase(phase: BoardOnboardingBusyPhase): string[] {
 function currentRotatingMessage(phase: BoardOnboardingBusyPhase): string {
   if (phase === 'idle') return '';
   if (phase === 'git-prompt') {
-    return 'This workspace is not a git repository. Set up git before building the board?';
+    return GIT_PROMPT_COPY[getBoardGitSetupPromptKind()].status;
   }
   const pool = poolForPhase(phase);
   if (!pool.length) return '';
@@ -184,27 +208,24 @@ export function createBoardGitSetupPrompt(): HTMLElement {
 
   const title = document.createElement('h3');
   title.className = 'board-onboarding__git-prompt-title';
-  title.textContent = 'Git repository';
+  title.dataset.boardOnboardingGitPromptTitle = '';
 
   const desc = document.createElement('p');
   desc.className = 'board-onboarding__git-prompt-desc';
-  desc.textContent =
-    'Orchestrate uses git for task isolation and merges. Initialize git and connect a GitHub remote before building the board?';
+  desc.dataset.boardOnboardingGitPromptDesc = '';
 
   const actions = document.createElement('div');
   actions.className = 'board-onboarding__git-prompt-actions';
 
   const yesBtn = document.createElement('button');
   yesBtn.type = 'button';
-  yesBtn.className = 'board-btn board-btn--primary';
+  yesBtn.className = 'board-btn board-btn--primary board-onboarding__git-prompt-yes';
   yesBtn.dataset.boardOnboardingGitYes = '';
-  yesBtn.textContent = 'Yes, set up git';
 
   const noBtn = document.createElement('button');
   noBtn.type = 'button';
-  noBtn.className = 'board-btn';
+  noBtn.className = 'board-btn board-onboarding__git-prompt-no';
   noBtn.dataset.boardOnboardingGitNo = '';
-  noBtn.textContent = 'Continue without git';
 
   actions.appendChild(yesBtn);
   actions.appendChild(noBtn);
@@ -214,9 +235,22 @@ export function createBoardGitSetupPrompt(): HTMLElement {
   return panel;
 }
 
+/** Sync git prompt title, body, and button labels for init vs remote questions. */
+export function syncBoardGitPromptCopy(panel: HTMLElement, kind: BoardGitPromptKind): void {
+  const copy = GIT_PROMPT_COPY[kind];
+  const title = panel.querySelector('.board-onboarding__git-prompt-title');
+  const desc = panel.querySelector('.board-onboarding__git-prompt-desc');
+  const yesBtn = panel.querySelector('.board-onboarding__git-prompt-yes');
+  const noBtn = panel.querySelector('.board-onboarding__git-prompt-no');
+  if (title instanceof HTMLElement) title.textContent = copy.title;
+  if (desc instanceof HTMLElement) desc.textContent = copy.desc;
+  if (yesBtn instanceof HTMLElement) yesBtn.textContent = copy.yes;
+  if (noBtn instanceof HTMLElement) noBtn.textContent = copy.no;
+}
+
 function wireGitPromptButtons(wrap: HTMLElement): void {
-  const yesBtn = wrap.querySelector('[data-board-onboarding-git-yes]');
-  const noBtn = wrap.querySelector('[data-board-onboarding-git-no]');
+  const yesBtn = wrap.querySelector('.board-onboarding__git-prompt-yes');
+  const noBtn = wrap.querySelector('.board-onboarding__git-prompt-no');
   yesBtn?.addEventListener('click', () => resolveBoardGitSetupPrompt(true));
   noBtn?.addEventListener('click', () => resolveBoardGitSetupPrompt(false));
 }
@@ -301,6 +335,9 @@ export function syncBoardOnboardingBusyUI(
   if (gitPrompt instanceof HTMLElement) {
     gitPrompt.classList.toggle('hidden', !showGitPrompt);
     gitPrompt.hidden = !showGitPrompt;
+    if (showGitPrompt) {
+      syncBoardGitPromptCopy(gitPrompt, getBoardGitSetupPromptKind());
+    }
   }
   if (footer instanceof HTMLElement) {
     footer.classList.toggle('hidden', !busy && !showGitPrompt);

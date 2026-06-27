@@ -79,6 +79,30 @@ describe('syncBoardOnboardingBusyUI init phase', () => {
   });
 });
 
+describe('syncBoardGitPromptCopy', () => {
+  test('updates prompt labels for remote setup', async () => {
+    const window = new Window();
+    globalThis.document = window.document;
+    globalThis.HTMLElement = window.HTMLElement;
+
+    const { createBoardGitSetupPrompt, syncBoardGitPromptCopy } = await import(
+      '../../src/ui/orchestrate-board-onboarding-ui.ts'
+    );
+
+    const panel = createBoardGitSetupPrompt();
+    syncBoardGitPromptCopy(panel, 'remote');
+
+    assert.equal(
+      panel.querySelector('.board-onboarding__git-prompt-title')?.textContent,
+      'GitHub remote',
+    );
+    assert.match(
+      panel.querySelector('.board-onboarding__git-prompt-yes')?.textContent ?? '',
+      /connect remote/i,
+    );
+  });
+});
+
 describe('resolveBoardOnboardingBusyPhase git-prompt', () => {
   test('prefers git prompt over streaming', async () => {
     const { promptBoardGitSetup, resolveBoardGitSetupPrompt } = await import(
@@ -86,7 +110,7 @@ describe('resolveBoardOnboardingBusyPhase git-prompt', () => {
     );
     const { setStreaming } = await import('../../src/app-state.ts');
     setStreaming(true);
-    const pending = promptBoardGitSetup();
+    const pending = promptBoardGitSetup('init');
     assert.equal(resolveBoardOnboardingBusyPhase(false), 'git-prompt');
     resolveBoardGitSetupPrompt(false);
     await pending;

@@ -12,7 +12,8 @@ disable-model-invocation: true
 ## When to use
 
 - User invokes `/git-setup` or asks to initialize git / connect GitHub
-- Orchestrator board preflight requested git setup for a non-repo workspace
+- Orchestrator board preflight requested git setup for a non-repo workspace (init only — no remote)
+- Orchestrator board preflight requested GitHub remote setup for a repo without `origin`
 
 ## Steps
 
