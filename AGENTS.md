@@ -6,7 +6,7 @@ Guidance for AI coding agents (Cursor, Claude Code, etc.) working in the Minnow 
 
 Minnow is a **Vite + TypeScript SPA** plus a **Node tool server** (`server.js`) and an **Electron desktop shell** (the "MinnowOS" window). It is a local-first AI workspace for LM Studio and other OpenAI-compatible providers.
 
-- **Six composer modes:** General, Build, Plan (no-destructive guard), Orchestrate, Reef, Debug. Modes are defined in [`src/chat/modes/registry.ts`](src/chat/modes/registry.ts); prompts in [`src/chat/prompts/modes/`](src/chat/prompts/modes/).
+- **Six operating modes** (four in the Code composer strip): General, Build, Plan (no-destructive guard), Orchestrate, Reef, Debug. Orchestrate and Reef are not in the composer picker — Orchestrate opens from the sidebar hub; Reef remains available via mode handoff and sub-agents. Modes are defined in [`src/chat/modes/registry.ts`](src/chat/modes/registry.ts); prompts in [`src/chat/prompts/modes/`](src/chat/prompts/modes/).
 - **~88 built-in tools** across web / utility / files / git / code / agents / browser / lsp ([`src/tools/definitions.ts`](src/tools/definitions.ts)).
 - **MinnowOS apps:** Chat (desktop), Code, Models, Compare, Bench, Research, Experts, Brain, Calendar, Email, Scheduler, Settings ([`src/os/`](src/os/)).
 - **Persistence** lives under `~/.minnow` when the tool server runs.
