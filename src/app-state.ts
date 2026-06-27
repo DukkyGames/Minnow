@@ -1,4 +1,4 @@
-import type { LmModelRecord } from './types';
+import type { ChatStopReason, LmModelRecord } from './types';
 
 /** Shared mutable app flags (streaming, abort controllers, debounce timers). */
 
@@ -7,6 +7,24 @@ export const streamingChatIds = new Set<string>();
 
 /** Per-chat fetch abort for SSE / tool-loop turns. */
 export const abortByChatId = new Map<string, AbortController>();
+
+/** Per-chat stop reason recorded before abort; consumed when the turn finalizes. */
+const stopReasonByChatId = new Map<string, ChatStopReason>();
+
+export function setChatStopReason(chatId: string, reason: ChatStopReason): void {
+  const id = chatId.trim();
+  if (!id) return;
+  stopReasonByChatId.set(id, reason);
+}
+
+/** Read and clear the stop reason for a chat (defaults to `user` when unset). */
+export function takeChatStopReason(chatId: string): ChatStopReason {
+  const id = chatId.trim();
+  if (!id) return 'user';
+  const reason = stopReasonByChatId.get(id);
+  stopReasonByChatId.delete(id);
+  return reason ?? 'user';
+}
 
 /**
  * Legacy boolean: true when any chat is streaming.

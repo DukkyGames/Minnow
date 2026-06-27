@@ -7,6 +7,7 @@ import {
   isOrchestratePlanComplete,
 } from './plan-complete.ts';
 import { buildDeterministicFinishReport } from './finish-stats.ts';
+import { enrichFinishReportWithRecommendations } from './finish-recommendations.ts';
 import { emitBoardChange } from '../../state/orchestrate-board-events.ts';
 import {
   findGroupById,
@@ -40,13 +41,18 @@ export async function maybeEmitOrchestratePlanComplete(groupId: string): Promise
   const board = group?.orchestrateBoard;
   const planner = group ? getPlannerChatForGroup(group) : undefined;
   if (!group || !board || !planner || !isOrchestratePlanComplete(board)) return;
-  if (board.finalTest?.status !== 'passed') return;
+  // Emit when the final test passed, or when no task completed (all-quarantined, final test not applicable).
+  const hasAnyComplete = board.tasks.some((t) => t.status === 'complete');
+  if (hasAnyComplete && board.finalTest?.status !== 'passed') return;
 
   if (board.completionShownAt != null) return;
   board.completionShownAt = Date.now();
   if (!board.finishReport?.trim()) {
     board.finishReport = buildDeterministicFinishReport(planner, board);
+  } else if (!board.finishReport.includes('## Completed tasks')) {
+    board.finishReport = buildDeterministicFinishReport(planner, board);
   }
+  void enrichFinishReportWithRecommendations(groupId, planner, board);
   emitBoardChange(groupId);
 
   const text = buildOrchestrateCompletionMessage(planner, board, board.completionShownAt);

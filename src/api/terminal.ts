@@ -11,7 +11,7 @@ export type TerminalStreamEvent =
   | { type: 'meta'; runId: string; command: string; cwd: string }
   | { type: 'stdout'; text: string }
   | { type: 'stderr'; text: string }
-  | { type: 'exit'; code: number | null; timedOut: boolean }
+  | { type: 'exit'; code: number | null; timedOut: boolean; stopped?: boolean }
   | { type: 'error'; message: string };
 
 /** Parse SSE `data:` JSON lines from a text chunk. */
@@ -44,6 +44,8 @@ export async function startTerminalRun(body: {
   workspaceRoot?: string;
   /** Working directory relative to workspaceRoot (or server base when omitted). */
   cwd?: string;
+  /** Custom timeout in ms (1000–600000). Defaults to server COMMAND_TIMEOUT_MS (30s). */
+  timeoutMs?: number;
 }): Promise<TerminalRunStart> {
   const res = await fetch('/api/terminal/run', {
     method: 'POST',

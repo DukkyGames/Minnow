@@ -2,7 +2,9 @@
  * Injectable base URL for headless CLI — rewrites relative /api/* fetch calls.
  */
 
-let headlessBaseUrl = 'http://localhost:5173';
+import { defaultMinnowLocalOrigin } from '../config/minnow-port.ts';
+
+let headlessBaseUrl = defaultMinnowLocalOrigin();
 let restoreFetch: (() => void) | null = null;
 
 /** Normalize base URL (no trailing slash). */

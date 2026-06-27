@@ -1,10 +1,12 @@
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { test } from 'node:test';
 
+import { MINNOW_DEFAULT_PORT } from '../../server/constants/minnow-port.js';
 import { assessHostKillCommand } from '../../server/tools/host-kill-guard.js';
 
-// The scheduler base URL defaults to http://localhost:${PORT || 5173}, so the
-// guard treats 5173 as the live dev port in tests.
+const port = String(MINNOW_DEFAULT_PORT);
+
+// The scheduler base URL defaults to the live Minnow port, so the guard treats it in tests.
 
 test('blocks image-name kills of the Minnow host', () => {
   for (const cmd of [
@@ -22,10 +24,10 @@ test('blocks image-name kills of the Minnow host', () => {
 
 test('blocks freeing the live dev port via common tools', () => {
   for (const cmd of [
-    'Get-NetTCPConnection -LocalPort 5173 | Stop-Process -Id { $_.OwningProcess }',
-    'lsof -ti:5173 | xargs kill -9',
-    'fuser -k 5173/tcp',
-    'kill $(lsof -ti:5173)',
+    `Get-NetTCPConnection -LocalPort ${port} | Stop-Process -Id { $_.OwningProcess }`,
+    `lsof -ti:${port} | xargs kill -9`,
+    `fuser -k ${port}/tcp`,
+    `kill $(lsof -ti:${port})`,
   ]) {
     const result = assessHostKillCommand(cmd);
     assert.ok(result, `expected block for: ${cmd}`);
@@ -48,6 +50,8 @@ test('allows legitimate commands', () => {
     'kill 999999', // a stale PID that is not the host
     'lsof -ti:4321 | xargs kill', // a different (auto-incremented) port
     'node scripts/step15-smoke.mjs',
+    'npx vite --port 5173',
+    'npm run dev',
   ]) {
     assert.equal(assessHostKillCommand(cmd), null, `expected allow for: ${cmd}`);
   }

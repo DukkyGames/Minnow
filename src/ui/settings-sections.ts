@@ -1353,6 +1353,92 @@ async function renderAutopilotSection(): Promise<void> {
       plannerModelId: modelSelect.value,
     });
   });
+
+  const selfHealBody = appendSettingsGroup(
+    mount,
+    'Self-heal & provisioning',
+    'Controls how the AFK orchestrator handles task failures and worktree isolation.',
+  );
+
+  const healRoundsInput = appendMsField(
+    selfHealBody,
+    'settingsAutopilotSelfHealRounds',
+    'Max self-heal rounds',
+    meta.selfHealMaxRounds,
+    'Max self-heal infra rounds before unconditional quarantine (0–6).',
+  );
+  healRoundsInput.min = '0';
+  healRoundsInput.max = '6';
+  healRoundsInput.step = '1';
+  healRoundsInput.removeAttribute('step');
+
+  const infraTimeoutInput = appendMsField(
+    selfHealBody,
+    'settingsAutopilotInfraTimeout',
+    'Infra provision timeout',
+    meta.infraProvisionTimeoutMs,
+    'Timeout for docker/infra provisioning commands (30 000–600 000 ms).',
+  );
+
+  const appendBoolToggle = (
+    container: HTMLElement,
+    id: string,
+    label: string,
+    value: boolean,
+    hint: string,
+  ): HTMLInputElement => {
+    const field = el('div', 'settings-field');
+    const row = el('label', 'settings-toggle-row');
+    const labelEl = el('span', '', label);
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.id = id;
+    input.checked = value;
+    row.append(labelEl, input);
+    field.append(row, el('p', 'settings-field-hint', hint));
+    container.appendChild(field);
+    return input;
+  };
+
+  const autoProvisionToggle = appendBoolToggle(
+    selfHealBody,
+    'settingsAutopilotAutoProvision',
+    'Auto-provision infra',
+    meta.autoProvisionInfra,
+    'Automatically attempt docker/infra provisioning when an infra failure is detected.',
+  );
+  const afkRestartStallsToggle = appendBoolToggle(
+    selfHealBody,
+    'settingsAutopilotAfkRestartStalls',
+    'Auto-restart stalled tasks',
+    meta.afkAutoRestartStalls,
+    'When off, stalling tasks are quarantined immediately instead of receiving a nudge.',
+  );
+  const guardCdToggle = appendBoolToggle(
+    selfHealBody,
+    'settingsAutopilotGuardCd',
+    'Guard cd outside worktree',
+    meta.guardCdOutsideWorktree,
+    'Rewrite leading absolute cd commands that escape the task worktree boundary.',
+  );
+
+  healRoundsInput.addEventListener('change', () => {
+    const value = Math.min(6, Math.max(0, Math.floor(Number(healRoundsInput.value) || 0)));
+    healRoundsInput.value = String(value);
+    void persist({ selfHealMaxRounds: value });
+  });
+  infraTimeoutInput.addEventListener('change', () => {
+    void persist({ infraProvisionTimeoutMs: Number(infraTimeoutInput.value) });
+  });
+  autoProvisionToggle.addEventListener('change', () => {
+    void persist({ autoProvisionInfra: autoProvisionToggle.checked });
+  });
+  afkRestartStallsToggle.addEventListener('change', () => {
+    void persist({ afkAutoRestartStalls: afkRestartStallsToggle.checked });
+  });
+  guardCdToggle.addEventListener('change', () => {
+    void persist({ guardCdOutsideWorktree: guardCdToggle.checked });
+  });
 }
 
 /** Main and sub-agent tool-loop caps (Settings → Tools). */
@@ -1688,7 +1774,7 @@ async function renderToolsSection(): Promise<void> {
 
   allFullBtn.addEventListener('click', () => {
     const ok = window.confirm(
-      'Grant full permission to all tools?\n\nEvery built-in tool will run without the approval prompt. Paths outside the workspace still prompt when filesystem access is workspace-only.\n\nThis does not change “Filesystem access” below (workspace vs full disk). Only use this if you accept that risk.',
+      'Grant full permission to all tools?\n\nEvery built-in tool will run without the approval prompt. Paths outside the workspace are blocked when filesystem access is workspace-only.\n\nThis does not change “Filesystem access” below (workspace vs full disk). Only use this if you accept that risk.',
     );
     if (!ok) return;
     void (async () => {

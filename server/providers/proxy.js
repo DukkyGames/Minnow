@@ -4,6 +4,10 @@
 
 import { getProviderRuntime } from './store.js';
 import { normalizeModelsResponse } from './paths.js';
+import {
+  enrichOpenCodeModelsFromModelsDev,
+  isOpenCodeProviderBaseUrl,
+} from './models-dev-context.js';
 import { validateProviderId } from './validate.js';
 
 const MODELS_TIMEOUT_MS = 15_000;
@@ -34,7 +38,11 @@ export async function proxyModels(id) {
       throw new Error(`Upstream models HTTP ${res.status}: ${text.slice(0, 200)}`);
     }
     const json = await res.json();
-    return normalizeModelsResponse(profile.apiKind, json);
+    let normalized = normalizeModelsResponse(profile.apiKind, json);
+    if (isOpenCodeProviderBaseUrl(profile.baseUrl)) {
+      normalized = await enrichOpenCodeModelsFromModelsDev(normalized);
+    }
+    return normalized;
   } finally {
     clearTimeout(timer);
   }

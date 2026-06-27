@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { toolInvocationWouldPrompt } from '../../src/tools/permission-gate.ts';
+import { outsideWorkspaceBlockMessage, toolInvocationWouldPrompt } from '../../src/tools/permission-gate.ts';
 
 describe('toolInvocationWouldPrompt', () => {
   test('ask mode prompts even when paths are inside workspace', () => {
@@ -33,7 +33,7 @@ describe('toolInvocationWouldPrompt', () => {
     );
   });
 
-  test('full permission still prompts when path escapes workspace in workspace FS mode', () => {
+  test('full permission blocks without modal when path escapes workspace in workspace FS mode', () => {
     assert.equal(
       toolInvocationWouldPrompt(
         'read_file',
@@ -42,7 +42,7 @@ describe('toolInvocationWouldPrompt', () => {
         'workspace',
         'C:/proj',
       ),
-      true,
+      false,
     );
   });
 
@@ -56,6 +56,13 @@ describe('toolInvocationWouldPrompt', () => {
         'C:/proj',
       ),
       false,
+    );
+  });
+
+  test('outsideWorkspaceBlockMessage matches server copy', () => {
+    assert.equal(
+      outsideWorkspaceBlockMessage('/'),
+      'Error: Path "/" resolves outside the workspace directory. Enable full filesystem access in Settings (dangerous) or set TOOLS_ALLOW_ALL_PATHS=1 for automation.',
     );
   });
 });

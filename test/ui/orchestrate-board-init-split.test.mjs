@@ -1,5 +1,5 @@
 /**
- * Board init split: top Kanban/onboarding + bottom streaming chat during board_init.
+ * Board init: full-screen onboarding loader during board_init (no chat split).
  */
 
 import assert from 'node:assert/strict';
@@ -20,6 +20,7 @@ const { appendBubble } = await import('../../src/ui/messages.ts');
 const {
   getOrchestrateChatMountElement,
   isOrchestrateBoardInitSplitActive,
+  isOrchestrateInitSplitChromeActive,
   syncOrchestrateInitSplitChrome,
   resetOrchestrateInitSplitForTests,
 } = await import('../../src/ui/orchestrate-board-init-split.ts');
@@ -36,24 +37,6 @@ function setupDom() {
   const main = document.createElement('div');
   main.id = 'mainColumn';
   document.body.appendChild(main);
-}
-
-/** Mount split panes without async board render (appendBubble tests). */
-function mountSplitDomOnly() {
-  const area = document.getElementById('chatArea');
-  area.replaceChildren();
-  const split = document.createElement('div');
-  split.className = 'board-init-split';
-  const boardPane = document.createElement('div');
-  boardPane.className = 'board-init-split__board';
-  boardPane.dataset.testid = 'boardInitSplitBoard';
-  const chatPane = document.createElement('div');
-  chatPane.className = 'board-init-split__chat';
-  chatPane.dataset.testid = 'boardInitSplitChat';
-  split.appendChild(boardPane);
-  split.appendChild(chatPane);
-  area.appendChild(split);
-  document.getElementById('mainColumn')?.classList.add('main-column--orchestrate-init-split');
 }
 
 function seedBoardInitSession({ kickoffInHistory = false } = {}) {
@@ -87,7 +70,7 @@ function seedBoardInitSession({ kickoffInHistory = false } = {}) {
   return { chat, group };
 }
 
-describe('orchestrate board init split', () => {
+describe('orchestrate board init loader', () => {
   afterEach(() => {
     setStreaming(false);
     disposeBoardViewForTests();
@@ -95,56 +78,41 @@ describe('orchestrate board init split', () => {
     setSessionStateForTests(null);
   });
 
-  test('split host mounts when init stream starts on empty board', async () => {
+  test('init stream does not mount legacy chat split', async () => {
     setupDom();
     const { chat } = seedBoardInitSession({ kickoffInHistory: true });
     setStreaming(true, chat.id);
     syncOrchestrateInitSplitChrome(chat);
     await new Promise((resolve) => setTimeout(resolve, 30));
 
-    assert.ok(document.querySelector('[data-testid="boardInitSplitBoard"]'));
-    assert.ok(document.querySelector('[data-testid="boardInitSplitChat"]'));
-    assert.ok(
-      document.getElementById('mainColumn')?.classList.contains(
-        'main-column--orchestrate-init-split',
-      ),
-    );
+    assert.equal(document.querySelector('[data-testid="boardInitSplitChat"]'), null);
+    assert.equal(document.querySelector('.board-init-split'), null);
+    assert.equal(isOrchestrateInitSplitChromeActive(), false);
     assert.equal(isOrchestrateBoardInitSplitActive(chat), true);
-    assert.equal(isStreamDomVisible(chat.id), true);
+    assert.equal(isStreamDomVisible(chat.id), false);
     disposeBoardViewForTests();
   });
 
-  test('appendBubble targets chat pane during init split', () => {
+  test('appendBubble stays hidden during board init without split', () => {
     setupDom();
     const { chat } = seedBoardInitSession({ kickoffInHistory: true });
     setStreaming(true, chat.id);
-    mountSplitDomOnly();
 
     appendBubble('user', 'Kickoff echoed in split pane');
-    const chatPane = document.querySelector('[data-testid="boardInitSplitChat"]');
-    assert.ok(chatPane?.querySelector('.msg.user'));
+    assert.equal(document.getElementById('chatArea').querySelectorAll('.msg').length, 0);
     assert.equal(
       getOrchestrateChatMountElement().querySelectorAll('.msg').length,
-      1,
+      0,
     );
-  });
-
-  test('appendBubble stubs when full board view without split', () => {
-    setupDom();
-    seedBoardInitSession();
-    const chatPaneBefore = document.getElementById('chatArea').childElementCount;
-    appendBubble('assistant', 'Hidden');
-    assert.equal(document.getElementById('chatArea').childElementCount, chatPaneBefore);
     assert.equal(isStreamDomVisible(FIXED_CHAT_ID), false);
   });
 
-  test('split ends as soon as board exists while stream still runs', async () => {
+  test('init ends when board exists while stream still runs', async () => {
     setupDom();
     const { chat, group } = seedBoardInitSession({ kickoffInHistory: true });
     setStreaming(true, chat.id);
     syncOrchestrateInitSplitChrome(chat);
     await new Promise((resolve) => setTimeout(resolve, 30));
-    assert.ok(document.querySelector('.board-init-split'));
 
     group.orchestrateBoard = {
       planPath: PLAN_PATH,
@@ -158,22 +126,15 @@ describe('orchestrate board init split', () => {
     disposeBoardViewForTests();
 
     assert.equal(isOrchestrateBoardInitSplitActive(chat), false);
-    assert.equal(document.querySelector('.board-init-split'), null);
-    assert.equal(
-      document.getElementById('mainColumn')?.classList.contains(
-        'main-column--orchestrate-init-split',
-      ),
-      false,
-    );
+    assert.ok(document.querySelector('.board-root'));
   });
 
-  test('split tears down after stream end and leaves full board shell', async () => {
+  test('stream end leaves full board shell', async () => {
     setupDom();
     const { chat } = seedBoardInitSession({ kickoffInHistory: true });
     setStreaming(true, chat.id);
     syncOrchestrateInitSplitChrome(chat);
     await new Promise((resolve) => setTimeout(resolve, 30));
-    assert.ok(document.querySelector('.board-init-split'));
 
     setStreaming(false, chat.id);
     syncOrchestrateInitSplitChrome(chat);
@@ -181,12 +142,6 @@ describe('orchestrate board init split', () => {
     disposeBoardViewForTests();
 
     assert.equal(document.querySelector('.board-init-split'), null);
-    assert.equal(
-      document.getElementById('mainColumn')?.classList.contains(
-        'main-column--orchestrate-init-split',
-      ),
-      false,
-    );
     assert.ok(document.querySelector('.board-root'));
   });
 });

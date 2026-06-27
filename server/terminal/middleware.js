@@ -106,6 +106,12 @@ export async function handleTerminalRequest(req, res, pathname, projectRoot) {
         : [];
       const shell = body?.shell === true;
 
+      const rawTimeout = body?.timeoutMs;
+      const timeoutMs =
+        typeof rawTimeout === 'number' && isFinite(rawTimeout)
+          ? Math.max(1000, Math.min(600_000, rawTimeout))
+          : undefined;
+
       const started = await createRun({
         command: command.trim(),
         args: argv,
@@ -114,6 +120,7 @@ export async function handleTerminalRequest(req, res, pathname, projectRoot) {
         source,
         chatId,
         toolCallId,
+        timeoutMs,
       });
 
       sendJson(res, 200, { runId: started.runId, startedAt: started.startedAt });

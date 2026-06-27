@@ -6,10 +6,11 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { resolveMinnowPort } from '../server/constants/minnow-port.js';
 
 const execFileAsync = promisify(execFile);
 
-const port = Number(process.env.MINNOW_PORT ?? process.env.PORT ?? 5173);
+const port = resolveMinnowPort();
 const baseUrl = process.env.MINNOW_URL ?? `http://127.0.0.1:${port}`;
 
 async function listChangedFiles() {

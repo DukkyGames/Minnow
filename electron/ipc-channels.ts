@@ -33,3 +33,7 @@ export const APP_OPEN_EXTERNAL = 'minnow:app:open-external';
 export const DIAGNOSTICS_REPORT_ERROR = 'minnow:diagnostics:report-error';
 /** Renderer → main: read and clear last renderer crash marker at boot. */
 export const DIAGNOSTICS_LAST_CRASH = 'minnow:diagnostics:last-crash';
+/** Renderer → main: read OOM pause marker (does not clear). */
+export const DIAGNOSTICS_OOM_PAUSE = 'minnow:diagnostics:oom-pause';
+/** Renderer → main: clear OOM pause marker after user resumes the board. */
+export const DIAGNOSTICS_CLEAR_OOM_PAUSE = 'minnow:diagnostics:clear-oom-pause';

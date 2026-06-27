@@ -710,6 +710,14 @@ button.board-header__activity {
   cursor: not-allowed;
 }
 
+.board-header__oom-hint {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--mn-warn, #c9a227);
+  white-space: nowrap;
+}
+
 .board-header__isolation {
   display: inline-flex;
   align-items: center;
@@ -1551,22 +1559,36 @@ button.board-header__activity {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  padding: 24px 16px;
+  justify-content: center;
+  padding: 32px 20px 40px;
   flex: 1 1 auto;
   min-height: 0;
 }
 
 .board-onboarding__panel {
   width: 100%;
-  max-width: min(42rem, 100%);
+  max-width: min(28rem, 100%);
   padding: 20px 22px;
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-md);
   background: var(--mn-surface-1);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
+}
+
+.board-onboarding__panel--centered {
+  max-width: min(26rem, 100%);
+  text-align: center;
+  align-items: center;
+  border: none;
+  background: transparent;
+  padding: 12px 16px 20px;
+  gap: 20px;
+}
+
+.board-onboarding__panel--busy {
+  max-width: min(26rem, 100%);
 }
 
 .board-onboarding__title {
@@ -1585,196 +1607,210 @@ button.board-header__activity {
   max-width: 42ch;
 }
 
-/* board_init: plan basename + indeterminate lane (hidden until init streams). */
-.board-onboarding__init-lead {
+/* Centered loader: animated board icon + headline + status copy */
+.board-onboarding__loader {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
-
-.board-onboarding__init-plan {
-  margin: 0;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.75rem;
-  font-weight: 500;
-  line-height: 1.35;
-  color: var(--mn-fg);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.board-onboarding__init-progress {
-  height: 3px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--mn-border) 70%, transparent);
-  overflow: hidden;
-}
-
-.board-onboarding__init-progress-fill {
-  width: 38%;
-  height: 100%;
-  border-radius: 999px;
-  background: var(--mn-accent);
-  animation: board-onboarding-init-progress 1.35s var(--ease-out, ease-out) infinite;
-}
-
-@keyframes board-onboarding-init-progress {
-  0% {
-    transform: translateX(-120%);
-  }
-  100% {
-    transform: translateX(320%);
-  }
-}
-
-/* Plan fetch + board_init: instrumentation strip (not a nested card). */
-.board-onboarding__status {
-  display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 1.75rem;
-  padding: 0;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--mn-fg-muted);
+  gap: 14px;
+  width: 100%;
 }
 
-.board-onboarding__status-dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
+.board-onboarding__hero {
+  position: relative;
+  width: 5.5rem;
+  height: 5.5rem;
+  display: grid;
+  place-items: center;
   flex-shrink: 0;
 }
 
-.board-onboarding__status-dot {
-  width: 4px;
-  height: 4px;
+.board-onboarding__icon-ring {
+  position: absolute;
   border-radius: 50%;
-  background: var(--mn-accent);
+  border: 1px solid color-mix(in srgb, var(--mn-border) 80%, transparent);
+  pointer-events: none;
+}
+
+.board-onboarding__icon-ring--outer {
+  inset: 0;
   opacity: 0.45;
-  animation: board-onboarding-dot-pulse 1.1s var(--ease-out, ease-out) infinite;
 }
 
-.board-onboarding__status-dot:nth-child(2) {
-  animation-delay: 0.2s;
+.board-onboarding__icon-ring--progress {
+  inset: 6px;
+  border-color: transparent;
+  border-bottom-color: var(--mn-accent);
+  border-right-color: color-mix(in srgb, var(--mn-accent) 35%, transparent);
+  animation: board-onboarding-ring-spin 1.4s var(--ease-out, ease-out) infinite;
 }
 
-.board-onboarding__status-dot:nth-child(3) {
-  animation-delay: 0.4s;
+@keyframes board-onboarding-ring-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
-@keyframes board-onboarding-dot-pulse {
+.board-onboarding__icon-mark {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--mn-success, oklch(0.72 0.14 155)) 18%, var(--mn-surface-1));
+  border: 1px solid color-mix(in srgb, var(--mn-success, oklch(0.72 0.14 155)) 28%, var(--mn-border));
+}
+
+.board-onboarding__icon-svg {
+  width: 1.65rem;
+  height: 1.65rem;
+  fill: var(--mn-accent);
+}
+
+.board-onboarding__icon-col {
+  opacity: 0;
+  transform-origin: center bottom;
+  animation: board-onboarding-col-build 2.4s var(--ease-out, ease-out) infinite;
+}
+
+@keyframes board-onboarding-col-build {
   0%,
+  8% {
+    opacity: 0;
+    transform: scaleY(0.2);
+  }
+  22%,
+  72% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+  88%,
   100% {
     opacity: 0.35;
-    transform: scale(0.85);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1);
+    transform: scaleY(0.85);
   }
 }
 
-/* Kanban skeleton: reuses live lane chrome; opacity pulse on tiles only. */
-.board-onboarding__preview {
-  margin: 4px 0 0;
-  min-width: 0;
+.board-onboarding__headline {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--mn-fg);
+  line-height: 1.25;
 }
 
-.board-onboarding__kanban-skeleton .kanban-column__count {
-  opacity: 0.35;
+.board-onboarding__status-message {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--mn-fg-muted);
+  max-width: 34ch;
+  min-height: 2.75rem;
 }
 
-.board-onboarding__skeleton-card {
+.board-onboarding__plan-name {
+  margin: -4px 0 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--mn-fg-muted);
+  letter-spacing: 0.02em;
+}
+
+/* Inline git setup question (no ask_question modal) */
+.board-onboarding__git-prompt {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  min-height: 52px;
-  padding: 10px 10px 12px;
-  border: 1px solid var(--mn-border);
-  border-radius: var(--radius-sm);
-  background: var(--mn-bg);
-  animation: board-onboarding-skeleton-pulse 1.4s var(--ease-out, ease-out) infinite;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 36ch;
+  text-align: center;
 }
 
-.board-onboarding__skeleton-line {
-  display: block;
-  height: 6px;
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--mn-fg-muted) 22%, var(--mn-border));
+.board-onboarding__git-prompt-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--mn-fg);
 }
 
-.board-onboarding__skeleton-line--id {
-  width: 28%;
-  max-width: 3.5rem;
+.board-onboarding__git-prompt-desc {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--mn-fg-muted);
 }
 
-.board-onboarding__skeleton-line--title {
-  width: 78%;
-}
-
-.kanban-column:nth-child(2) .board-onboarding__skeleton-card {
-  animation-delay: 0.12s;
-}
-
-.kanban-column:nth-child(3) .board-onboarding__skeleton-card {
-  animation-delay: 0.24s;
-}
-
-@keyframes board-onboarding-skeleton-pulse {
-  0%,
-  100% {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
-/* Init phase: bench layout, not a nested setup card over a dimmed form. */
-.board-onboarding__panel--busy {
-  max-width: none;
-  padding: 10px 12px 14px;
+.board-onboarding__git-prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 10px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.board-onboarding__footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px 16px;
+  width: 100%;
+  padding-top: 4px;
+}
+
+.board-onboarding__jump-chat,
+.board-onboarding__cancel {
+  min-height: var(--touch-min, 44px);
+  padding: 8px 12px;
   border: none;
-  border-radius: 0;
   background: transparent;
+  font-size: 0.8125rem;
+  cursor: pointer;
 }
 
-.board-onboarding__panel--busy .board-onboarding__status {
-  order: -2;
+.board-onboarding__jump-chat {
+  color: var(--mn-fg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
-.board-onboarding__panel--busy .board-onboarding__init-lead {
-  order: -1;
+.board-onboarding__cancel {
+  color: var(--mn-danger, oklch(0.62 0.18 15));
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .board-onboarding__jump-chat:hover {
+    color: var(--mn-accent);
+  }
+
+  .board-onboarding__cancel:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
 }
 
 .board-onboarding__setup {
   display: flex;
   flex-direction: column;
   gap: 14px;
-}
-
-.board-init-split__board .board-onboarding {
-  align-items: stretch;
-  padding: 8px 10px 10px;
-}
-
-.board-init-split__board .board-onboarding__panel--busy {
   width: 100%;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .board-onboarding__status-dot,
-  .board-onboarding__skeleton-card,
-  .board-onboarding__init-progress-fill {
+  .board-onboarding__icon-col,
+  .board-onboarding__icon-ring--progress {
     animation: none;
-    opacity: 0.65;
+    opacity: 1;
+    transform: none;
   }
 }
 
@@ -1825,23 +1861,6 @@ button.board-header__activity {
   flex-wrap: wrap;
   align-items: center;
   gap: 10px 12px;
-}
-
-.board-onboarding__chat-link {
-  padding: 8px 4px;
-  min-height: var(--touch-min, 44px);
-  border: none;
-  background: transparent;
-  color: var(--mn-fg-muted);
-  text-decoration: underline;
-  cursor: pointer;
-  font-size: 0.8125rem;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .board-onboarding__chat-link:hover {
-    color: var(--mn-accent);
-  }
 }
 
 /* Board view: onboarding fills the chat column above the composer rail. */

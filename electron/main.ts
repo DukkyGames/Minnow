@@ -22,12 +22,14 @@ import {
 import { getProjectRoot, importServerModule } from './server-import.js';
 import { startInProcessServer, type InProcessServerHandle } from './server-host.js';
 import { loadWindowState, trackWindowState } from './window-state.js';
+import { resolveMinnowPort } from './minnow-port.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const isDev = process.env.MINNOW_ELECTRON_DEV === '1';
-const devPort = Number(process.env.PORT) || 5173;
-const devUrl = `http://localhost:${devPort}/`;
+const devUrl = (
+  process.env.MINNOW_DEV_URL?.trim() || `http://localhost:${resolveMinnowPort()}/`
+).replace(/\/?$/, '/');
 
 let mainWindow: BrowserWindow | null = null;
 let inProcessServer: InProcessServerHandle | null = null;
@@ -99,6 +101,12 @@ function registerIpcHandlers(): void {
     const marker = crashLog.readLastCrashMarker();
     crashLog.clearLastCrashMarker();
     return marker;
+  });
+
+  ipcMain.handle(channels.DIAGNOSTICS_OOM_PAUSE, () => crashLog.readOomPauseMarker());
+
+  ipcMain.handle(channels.DIAGNOSTICS_CLEAR_OOM_PAUSE, () => {
+    crashLog.clearOomPauseMarker();
   });
 }
 
@@ -199,6 +207,10 @@ async function createMainWindow(): Promise<BrowserWindow> {
       exitCode: details.exitCode,
       message: `Renderer process gone: ${details.reason}`,
     });
+    if (details.reason === 'oom') {
+      crashLog.writeOomPauseMarker();
+    }
+    crashLog.flushCrashLogSync();
     if (details.reason === 'clean-exit' || win.isDestroyed()) return;
     recoverRenderer(win);
   });

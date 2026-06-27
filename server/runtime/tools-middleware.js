@@ -22,6 +22,7 @@ import {
   resolveModeIdFromToolsBody,
 } from '../tools/plan-write-guard.js';
 import { assessHostKillCommand } from '../tools/host-kill-guard.js';
+import { assessHostPortBindCommand } from '../tools/host-port-bind-guard.js';
 import { toolManageCalendar } from '../calendar/tool-handler.js';
 import {
   toolDraftReply,
@@ -47,6 +48,7 @@ import {
 } from '../tools/code-tools.js';
 import { toolSaveMemory } from '../tools/memory-tools.js';
 import { toolReadDocument } from '../tools/read-document.js';
+import { toolBoardProvisionInfra } from '../workspace/board-infra-provision.js';
 import {
   toolFetchWebContent,
   toolRagWebContent,
@@ -104,9 +106,28 @@ import {
   toolStopBackgroundCommand,
   toolStopCommand,
 } from '../dev-server/manager.js';
+import { resolveChatContext } from '../workspace/chat-cwd.js';
+import { appendBoardLogLine } from '../orchestrate/board-log-sink.js';
+import { guardCdOutsideWorktree as _guardCdRaw } from '../tools/cwd-guard.js';
+import { readConfigJson } from '../config/store.js';
 
 const execFileAsync = promisify(execFile);
 const FIND_FILES_MAX = 500;
+
+/** Read the autopilot.guardCdOutsideWorktree toggle from config.json (defaults true). */
+async function isGuardCdEnabled() {
+  try {
+    const meta = await readConfigJson('config.json');
+    const autopilot = meta && typeof meta === 'object' ? /** @type {Record<string, unknown>} */ (meta).autopilot : null;
+    if (autopilot && typeof autopilot === 'object') {
+      const flag = /** @type {Record<string, unknown>} */ (autopilot).guardCdOutsideWorktree;
+      if (typeof flag === 'boolean') return flag;
+    }
+  } catch {
+    // ignore — default true
+  }
+  return true;
+}
 
 /** Path relative to workspace root for display in tool output. */
 function toRelativePath(absPath) {
@@ -647,6 +668,43 @@ function resolveCommandCwd(args) {
   return resolveSafePath(cwdUser, { write: false });
 }
 
+/**
+ * Resolve the default working directory for a command: the chat's worktree when available,
+ * otherwise the global workspace root. Used when args.cwd is absent.
+ * Does NOT route through resolveSafePath so worktree paths are not constrained to global root.
+ * @param {string | undefined} chatId
+ * @returns {Promise<string>}
+ */
+async function resolveDefaultCwd(chatId) {
+  if (chatId) {
+    const { worktreeRoot } = await resolveChatContext(chatId);
+    if (worktreeRoot) return worktreeRoot;
+  }
+  return getEffectiveWorkspaceRoot();
+}
+
+/**
+ * Wrapper around guardCdOutsideWorktree that also fires a board-log warning.
+ * @param {string} command
+ * @param {string} worktreeRoot
+ * @param {{ chatId?: string; groupId?: string }} meta
+ * @returns {{ command: string; redirected: boolean }}
+ */
+function guardCdOutsideWorktree(command, worktreeRoot, meta) {
+  const result = _guardCdRaw(command, worktreeRoot);
+  if (result.redirected && meta.groupId) {
+    void appendBoardLogLine(meta.groupId, {
+      type: 'cwd_redirect',
+      chatId: meta.chatId,
+      from: /** @type {any} */ (result).originalTarget ?? '(unknown)',
+      to: worktreeRoot,
+      reason: 'worktree_isolation',
+      ts: Date.now(),
+    });
+  }
+  return result;
+}
+
 async function resolveBoardSpawnEnv(args, cwd, chatId) {
   try {
     const { resolveBoardTaskSpawnEnvForCommand } = await import(
@@ -666,21 +724,27 @@ async function toolExecuteCommand(args) {
   if (typeof args?.command === 'string') {
     const hostKill = assessHostKillCommand(args.command);
     if (hostKill) return hostKill;
+    const portBind = assessHostPortBindCommand(args.command);
+    if (portBind) return portBind;
   }
 
   if (args?.background === true) {
     const command = typeof args?.command === 'string' ? args.command.trim() : '';
     if (!command) return 'Error: command is required';
 
-    let cwd;
-    try {
-      cwd = resolveCommandCwd(args);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return `Error: ${message}`;
-    }
-
     const chatId = typeof args?.chatId === 'string' ? args.chatId : undefined;
+
+    let cwd;
+    if (typeof args?.cwd === 'string' && args.cwd.trim()) {
+      try {
+        cwd = resolveCommandCwd(args);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return `Error: ${message}`;
+      }
+    } else {
+      cwd = await resolveDefaultCwd(chatId);
+    }
     const toolCallId =
       typeof args?.toolCallId === 'string' ? args.toolCallId : undefined;
     const spawnEnv = await resolveBoardSpawnEnv(args, cwd, chatId);
@@ -720,12 +784,16 @@ async function toolExecuteCommand(args) {
     }
   }
 
-  const command = args?.command;
-  if (!command || typeof command !== 'string') {
+  const rawCommand = args?.command;
+  if (!rawCommand || typeof rawCommand !== 'string') {
     return 'Error: command is required';
   }
 
-  let cwd = getEffectiveWorkspaceRoot();
+  const chatId = typeof args?.chatId === 'string' ? args.chatId : undefined;
+  const toolCallId = typeof args?.toolCallId === 'string' ? args.toolCallId : undefined;
+
+  let command = rawCommand;
+  let cwd;
   if (typeof args?.cwd === 'string' && args.cwd.trim()) {
     try {
       cwd = resolveCommandCwd(args);
@@ -733,10 +801,14 @@ async function toolExecuteCommand(args) {
       const message = err instanceof Error ? err.message : String(err);
       return `Error: ${message}`;
     }
+  } else {
+    const { worktreeRoot, groupId } = await resolveChatContext(chatId ?? '');
+    cwd = worktreeRoot ?? getEffectiveWorkspaceRoot();
+    if (worktreeRoot && await isGuardCdEnabled()) {
+      const guarded = guardCdOutsideWorktree(rawCommand, worktreeRoot, { chatId, groupId });
+      if (guarded.redirected) command = guarded.command;
+    }
   }
-
-  const chatId = typeof args?.chatId === 'string' ? args.chatId : undefined;
-  const toolCallId = typeof args?.toolCallId === 'string' ? args.toolCallId : undefined;
   const spawnEnv = await resolveBoardSpawnEnv(args, cwd, chatId);
 
   const workspaceRoot = getEffectiveWorkspaceRoot();
@@ -759,6 +831,7 @@ async function toolExecuteCommand(args) {
       shell: process.platform === 'win32',
       chatId,
       toolCallId,
+      timeoutMs: typeof args?.timeout_ms === 'number' ? args.timeout_ms : undefined,
       ...(spawnEnv ? { env: spawnEnv } : {}),
     });
     if (String(output).trimStart().startsWith('Error')) {
@@ -947,6 +1020,7 @@ const SERVER_TOOL_HANDLERS = {
   brain_append_log: toolBrainAppendLog,
   brain_ingest_source: toolBrainIngestSource,
   save_memory: toolSaveMemory,
+  board_provision_infra: toolBoardProvisionInfra,
   repo_map: toolRepoMap,
   find_symbol: toolFindSymbol,
   who_calls: toolWhoCalls,

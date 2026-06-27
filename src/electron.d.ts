@@ -74,6 +74,8 @@ export interface MinnowLastCrashMarker {
 export interface MinnowDiagnosticsApi {
   reportError(payload: { kind: string; message: string; stack?: string }): void;
   getLastCrash(): Promise<MinnowLastCrashMarker | null>;
+  getOomPause(): Promise<MinnowLastCrashMarker | null>;
+  clearOomPause(): Promise<void>;
 }
 
 export interface MinnowElectronBridge {

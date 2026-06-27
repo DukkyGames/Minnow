@@ -40,15 +40,25 @@ const {
   emitMainTurnActivity,
   resetMainTurnActivity,
 } = await import('../../src/chat/main-turn-activity.ts');
-const { clearBoardListenersForTests } = await import(
-  '../../src/state/orchestrate-board-events.ts'
-);
+const {
+  clearBoardListenersForTests,
+  emitBoardChange,
+} = await import('../../src/state/orchestrate-board-events.ts');
+const {
+  bindRunSupervision,
+  bumpProgress,
+  chatTaskRunId,
+  createRunSupervision,
+  recordHeartbeat,
+  resetWrapperState,
+} = await import('../../src/agents/controller/wrapper.ts');
 const { loadSubAgentConfig, resetSubAgentConfigCache } = await import(
   '../../src/agents/sub-agent-config.ts'
 );
 
 function setupDom() {
   const window = new Window();
+  globalThis.window = window;
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
   globalThis.HTMLSelectElement = window.HTMLSelectElement;
@@ -181,6 +191,7 @@ describe('orchestrate board live updates', () => {
     clearBoardListenersForTests();
     resetSubAgentConfigCache();
     resetMainTurnActivity();
+    resetWrapperState();
     setBoardNowForTests(null);
     setSessionStateForTests(null);
   });
@@ -705,6 +716,40 @@ describe('orchestrate board live updates', () => {
     assert.equal(document.getElementById('btnViewModeToggleChat'), null);
   });
 
+  test('isolation select still works after switching to AFK', async () => {
+    setupDom();
+    setBoardNowForTests(() => 1_700_000_000_000);
+    const chat = makeOrchestrateChat();
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
+
+    renderBoardView(group);
+
+    const afkBtn = document.querySelector('[data-exec-mode="afk"]');
+    const isoSelect = document.querySelector('.board-header__isolation-select');
+    assert.ok(afkBtn);
+    assert.ok(isoSelect instanceof HTMLSelectElement);
+
+    const confirmStub = () => true;
+    const priorConfirm = globalThis.window.confirm;
+    globalThis.window.confirm = confirmStub;
+    try {
+      afkBtn.click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      assert.equal(group.orchestrateBoard?.executionMode, 'afk');
+
+      isoSelect.value = 'per-wave';
+      isoSelect.dispatchEvent(new globalThis.window.Event('change', { bubbles: true }));
+      assert.equal(group.orchestrateBoard?.isolationMode, 'per-wave');
+    } finally {
+      globalThis.window.confirm = priorConfirm;
+    }
+  });
+
   test('header badge shows Stopped with danger styling after user stop', () => {
     setupDom();
     setBoardNowForTests(() => 1_700_000_000_000);
@@ -1075,6 +1120,119 @@ describe('orchestrate board live updates', () => {
     setStreaming(false, FIXED_TASK_CHAT_ID);
     refreshActiveBoardIfMounted();
     assert.equal(document.querySelector('.board-running-tasks'), null);
+  });
+
+  test('heartbeat ticks update badges in place without rebuilding kanban', async () => {
+    setupDom();
+    await primeSubAgentConfig();
+    setBoardNowForTests(() => 1_700_000_000_000);
+
+    let now = 1_000;
+    const originalNow = performance.now;
+    performance.now = () => now;
+
+    const chat = makeOrchestrateChat();
+    const taskChat = createEmptyChatObject('');
+    taskChat.id = FIXED_TASK_CHAT_ID;
+    taskChat.boardGroupId = FIXED_GROUP_ID;
+    taskChat.groupId = FIXED_GROUP_ID;
+    taskChat.boardTaskId = 'W1-A';
+
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [
+        {
+          id: 'W1-A',
+          title: 'Heartbeat task',
+          wave: 'W1',
+          category: 'build',
+        },
+      ],
+      waves: [{ id: 'W1' }],
+    });
+    updateTask(group, 'W1-A', { chatId: FIXED_TASK_CHAT_ID, status: 'in_progress' });
+    setSessionStateForTests(
+      sessionStateForBoard(chat, group, { chats: [chat, taskChat] }),
+    );
+    setStreaming(true, FIXED_TASK_CHAT_ID);
+
+    const runId = chatTaskRunId(FIXED_TASK_CHAT_ID);
+    const supervision = createRunSupervision();
+    bindRunSupervision(runId, supervision);
+    recordHeartbeat(runId);
+
+    renderBoardView(group);
+    await waitForKanban();
+
+    const kanbanBefore = document.querySelector('.board-kanban-waves');
+    const badgeBefore = document.querySelector('.board-task-card__heartbeat');
+    assert.ok(kanbanBefore, 'kanban mounted');
+    assert.ok(badgeBefore, 'heartbeat badge visible while task streams');
+    assert.match(badgeBefore.textContent ?? '', /♥ 0s/);
+
+    const keyBefore = buildKanbanRefreshKey(group.orchestrateBoard, chat, group);
+
+    now = 5_500;
+    emitBoardChange(group.id);
+    refreshActiveBoardIfMounted();
+
+    const kanbanAfter = document.querySelector('.board-kanban-waves');
+    const badgeAfter = document.querySelector('.board-task-card__heartbeat');
+    const keyAfter = buildKanbanRefreshKey(group.orchestrateBoard, chat, group);
+
+    assert.equal(kanbanAfter, kanbanBefore, 'kanban DOM is not replaced on heartbeat age tick');
+    assert.equal(keyAfter, keyBefore, 'refresh key ignores heartbeat timestamp');
+    assert.ok(badgeAfter, 'heartbeat badge still present');
+    assert.match(badgeAfter.textContent ?? '', /♥ 5s/, 'badge age updates in place');
+
+    performance.now = originalNow;
+    setStreaming(false, FIXED_TASK_CHAT_ID);
+    disposeBoardViewForTests();
+  });
+
+  test('progress bumps do not change kanban refresh key during streaming', async () => {
+    setupDom();
+    await primeSubAgentConfig();
+    setBoardNowForTests(() => 1_700_000_000_000);
+
+    const chat = makeOrchestrateChat();
+    const taskChat = createEmptyChatObject('');
+    taskChat.id = FIXED_TASK_CHAT_ID;
+    taskChat.boardGroupId = FIXED_GROUP_ID;
+    taskChat.groupId = FIXED_GROUP_ID;
+    taskChat.boardTaskId = 'W1-A';
+
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [
+        {
+          id: 'W1-A',
+          title: 'Progress bump task',
+          wave: 'W1',
+          category: 'build',
+        },
+      ],
+      waves: [{ id: 'W1' }],
+    });
+    updateTask(group, 'W1-A', { chatId: FIXED_TASK_CHAT_ID, status: 'in_progress' });
+    setSessionStateForTests(
+      sessionStateForBoard(chat, group, { chats: [chat, taskChat] }),
+    );
+    setStreaming(true, FIXED_TASK_CHAT_ID);
+
+    const runId = chatTaskRunId(FIXED_TASK_CHAT_ID);
+    bindRunSupervision(runId, createRunSupervision({ progressSeq: 1 }));
+
+    const keyBefore = buildKanbanRefreshKey(group.orchestrateBoard, chat, group);
+    bumpProgress(runId);
+    bumpProgress(runId);
+    const keyAfter = buildKanbanRefreshKey(group.orchestrateBoard, chat, group);
+
+    assert.equal(keyAfter, keyBefore, 'refresh key ignores progressSeq bumps');
+
+    setStreaming(false, FIXED_TASK_CHAT_ID);
+    resetWrapperState();
+    disposeBoardViewForTests();
   });
 
 });

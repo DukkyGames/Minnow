@@ -165,10 +165,10 @@ export function installRendererDiagnostics(): void {
 
   void window.minnow?.diagnostics?.getLastCrash?.().then((marker) => {
     if (!marker) return;
-    report(
-      'render-process-gone-recovered',
-      `Recovered from crash: ${marker.reason ?? marker.kind} (exit ${marker.exitCode ?? '?'})`,
-      marker.message,
-    );
+    const isOom = marker.reason === 'oom';
+    const message = isOom
+      ? 'Board auto-pilot paused after out-of-memory crash — press Start when ready.'
+      : `Recovered from crash: ${marker.reason ?? marker.kind} (exit ${marker.exitCode ?? '?'})`;
+    report('render-process-gone-recovered', message, marker.message);
   });
 }

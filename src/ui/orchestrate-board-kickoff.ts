@@ -6,13 +6,11 @@ import { formatHistoryWithSkillTag } from '../skills/parse-slash';
 import { isWorkspaceGitRepo } from '../state/git-workspace';
 import { getActiveChat } from '../state/sessions';
 import { getWorkspacePath } from '../state/workspace';
-import { enqueueAskQuestion } from '../tools/ask-question-queue';
-import type { AskQuestionToolResult } from '../tools/ask-question-types';
 import { detectLocalServer } from '../tools/client';
 import { buildHistoryUserContent, runChatTurn } from '../tools/loop';
 import {
-  isBoardKickoffInProgress,
-  isBoardOnboardingGitSetupActive,
+  getBoardKickoffAbortSignal,
+  promptBoardGitSetup,
   setBoardKickoffInProgress,
   setBoardOnboardingGitSetupActive,
 } from './orchestrate-board-onboarding-state';
@@ -39,16 +37,8 @@ function sendBoardMessage(text: string): void {
   void import('../chat/messaging').then((m) => m.sendMessage());
 }
 
-/** Parse ask_question JSON for a single-choice yes/no on git_setup. */
-function userAcceptedGitSetup(raw: string): boolean {
-  try {
-    const parsed = JSON.parse(raw) as AskQuestionToolResult;
-    if (parsed.status !== 'answered') return false;
-    const entry = parsed.answers.find((a) => a.questionId === 'git_setup');
-    return Boolean(entry?.selectedIds.includes('yes'));
-  } catch {
-    return false;
-  }
+function kickoffAborted(): boolean {
+  return getBoardKickoffAbortSignal()?.aborted ?? false;
 }
 
 /** Run /git-setup in the planner chat and wait for the turn to finish. */
@@ -92,34 +82,20 @@ export async function kickoffOrchestrateBoardBuild(): Promise<void> {
   try {
     const chat = getActiveChat();
     const isGitRepo = await isWorkspaceGitRepo(getWorkspacePath());
+    if (kickoffAborted()) return;
 
     if (!isGitRepo) {
-      const raw = await enqueueAskQuestion(
-        {
-          title: 'Git setup',
-          questions: [
-            {
-              id: 'git_setup',
-              prompt:
-                'This workspace is not a git repository. Set up git and GitHub before building the board?',
-              options: [
-                { id: 'yes', label: 'Yes, set up git and GitHub' },
-                { id: 'no', label: 'No, continue without git' },
-              ],
-            },
-          ],
-        },
-        {},
-        chat.id,
-      );
+      const accepted = await promptBoardGitSetup();
+      if (kickoffAborted()) return;
 
-      if (userAcceptedGitSetup(raw)) {
+      if (accepted) {
         const serverUp = await detectLocalServer();
         if (!serverUp) {
           setStatus('err', 'Tool server required for git setup — run npm start');
           return;
         }
         await runGitSetupSkillTurn(chat);
+        if (kickoffAborted()) return;
       }
     }
 

@@ -8,15 +8,23 @@ import {
   cleanupBoardWorktrees,
   checkMerged,
   checkWorktreeDirty,
+  commitIntegration,
   commitWorktree,
   createWorktree,
   ensureIntegration,
+  integrationStats,
   listWorktrees,
+  mergeInProgress,
+  mergeIntegrationIntoWorkspace,
   mergeIntoIntegration,
+  openPr,
+  openWorkspacePr,
+  pushIntegration,
   refreshIntegrationDeps,
   removeWorktree,
   restoreIntegration,
   verifyIntegrationMerge,
+  workspaceLandingStats,
 } from './worktree-ops.js';
 
 function setCorsHeaders(res) {
@@ -55,6 +63,7 @@ const OPS = {
   check_dirty: (a) => checkWorktreeDirty(a),
   check_merged: (a) => checkMerged(a),
   abort_merge: (a) => abortMerge(a),
+  merge_in_progress: (a) => mergeInProgress(a),
   restore_integration: (a) => restoreIntegration(a),
   verify_integration: (a) => verifyIntegrationMerge(a),
   refresh_integration_deps: (a) => refreshIntegrationDeps(a),
@@ -62,9 +71,12 @@ const OPS = {
   cleanup: (a) => cleanupBoardWorktrees(a),
   list: () => listWorktrees(),
   integration_stats: (a) => integrationStats(a),
+  workspace_landing_stats: (a) => workspaceLandingStats(a),
+  merge_integration_into_workspace: (a) => mergeIntegrationIntoWorkspace(a),
   commit_integration: (a) => commitIntegration(a),
   push_integration: (a) => pushIntegration(a),
   open_pr: (a) => openPr(a),
+  open_workspace_pr: (a) => openWorkspacePr(a),
 };
 
 export async function handleWorktreeRequest(req, res, pathname) {

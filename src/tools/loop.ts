@@ -3,7 +3,7 @@
  * and persists assistant / tool messages in session history.
  */
 
-import { getChatAbort, setChatAbort, setStreaming } from '../app-state';
+import { getChatAbort, setChatAbort, setChatStopReason, setStreaming, takeChatStopReason } from '../app-state';
 import {
   beginChatTurnSetup,
   endChatTurnSetup,
@@ -106,6 +106,7 @@ import type {
   AssistantToolCallMessage,
   Chat,
   ChatCompletionChunk,
+  ChatStopReason,
   ContentPart,
   Message,
   ToolCall,
@@ -185,6 +186,7 @@ import {
   GenerationNotFoundError,
   formatGenerationErrorMessage,
   GENERATION_LOST_ON_RESTART_MESSAGE,
+  isGenerationTimeoutError,
   subscribeToGeneration,
 } from '../api/generations';
 import { readProviderCapabilities } from '../providers/capability-probe';
@@ -718,6 +720,12 @@ async function streamCompletionTurn(
         onChunk: handleChunk,
         onEnd: (event) => {
           if (event?.status === 'error') {
+            const message = event.errorMessage ?? '';
+            if (isGenerationTimeoutError(message)) {
+              setChatStopReason(chat.id, 'timeout');
+              finish(() => reject(new DOMException('Aborted', 'AbortError')));
+              return;
+            }
             finish(() =>
               reject(new Error(event.errorMessage ?? 'Generation failed')),
             );
@@ -903,6 +911,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
   let turnRunId: TurnRunId | undefined;
   let turnRunStatus: 'completed' | 'stopped' | 'failed' = 'completed';
+  let turnStopReason: ChatStopReason | undefined;
   let turnMountPinned = false;
 
   try {
@@ -1978,6 +1987,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     const e = err as { name?: string; message?: string };
     if (e && e.name === 'AbortError') {
       clearPendingSteer(chat);
+      turnStopReason = takeChatStopReason(chat.id);
       turnRunStatus = 'stopped';
       cancelAllForParentTurn(parentTurnId);
       thinkingTracker?.abort();
@@ -2178,6 +2188,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         outputHistoryStart: persistOutput ? start : undefined,
         outputHistoryEnd: persistOutput ? end : undefined,
         outputMessages,
+        stopReason: turnRunStatus === 'stopped' ? (turnStopReason ?? 'user') : undefined,
       });
       scheduleSaveSessions();
       if (ownsGlobalStreaming) {

@@ -137,6 +137,58 @@ describe('orchestrate board hydration', () => {
     assert.equal(isBoardRunning(group), true);
   });
 
+  test('restores quarantined tasks and quarantine payload after reload', () => {
+    const [group] = hydrateSessionGroupsForTests([
+      {
+        ...PERSISTED_GROUP,
+        orchestrateBoard: {
+          ...PERSISTED_GROUP.orchestrateBoard,
+          autoRunning: false,
+          executionMode: 'manual',
+          tasks: [
+            {
+              id: 'W1-A',
+              title: 'Stalled build',
+              wave: 'W1',
+              category: 'build',
+              status: 'quarantined',
+              quarantine: {
+                category: 'stall',
+                summary: 'Generation stopped',
+                resolutionSteps: ['Requeue the task'],
+                at: 1710000002000,
+              },
+            },
+            {
+              id: 'W1-B',
+              title: 'Dependent task',
+              wave: 'W1',
+              category: 'test',
+              status: 'quarantined',
+              dependsOn: ['W1-A'],
+              quarantine: {
+                category: 'stall',
+                summary: 'blocked by quarantined W1-A',
+                resolutionSteps: [],
+                at: 1710000002001,
+              },
+            },
+          ],
+        },
+      },
+    ]);
+    assert.ok(group.orchestrateBoard);
+    assert.equal(group.orchestrateBoard?.tasks.length, 2);
+    const root = group.orchestrateBoard?.tasks.find((t) => t.id === 'W1-A');
+    const dependent = group.orchestrateBoard?.tasks.find((t) => t.id === 'W1-B');
+    assert.equal(root?.status, 'quarantined');
+    assert.equal(root?.quarantine?.category, 'stall');
+    assert.equal(root?.quarantine?.summary, 'Generation stopped');
+    assert.deepEqual(root?.quarantine?.resolutionSteps, ['Requeue the task']);
+    assert.equal(dependent?.status, 'quarantined');
+    assert.equal(dependent?.quarantine?.summary, 'blocked by quarantined W1-A');
+  });
+
   test('restores afk executionMode and autoRunning', () => {
     const [group] = hydrateSessionGroupsForTests([
       {

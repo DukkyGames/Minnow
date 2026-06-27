@@ -55,6 +55,15 @@ describe('preview guest actions', () => {
     assert.equal(val, 42);
     assert.equal(wc._state.execCalls.length, 1);
     assert.equal(wc._state.execCalls[0].userGesture, true);
+    assert.match(wc._state.execCalls[0].code, /try \{ return \(1 \+ 1\)/);
+  });
+
+  test('previewExecJs returns guest JS errors instead of throwing', async () => {
+    const wc = createMockWebContents({
+      execReturn: { __execError: 'boom' },
+    });
+    const val = await previewExecJs(wc, 'throw new Error("boom")');
+    assert.deepEqual(val, { __execError: 'boom' });
   });
 
   test('previewCapturePageBase64 returns base64 PNG', async () => {

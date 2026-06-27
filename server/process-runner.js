@@ -19,6 +19,9 @@ export const COMMAND_TIMEOUT_MS = 30_000;
  * @param {(text: string) => void} [options.onStdout]
  * @param {(text: string) => void} [options.onStderr]
  * @param {(child: import('node:child_process').ChildProcess) => void} [options.onSpawn]
+ * @param {(child: import('node:child_process').ChildProcess) => void} [options.killTree]
+ *   Platform-aware tree killer injected by callers (avoids circular imports).
+ *   Falls back to child.kill('SIGTERM') when omitted.
  * @returns {Promise<{ code: number, stdout: string, stderr: string, timedOut: boolean }>}
  */
 export function runProcess(command, args, options = {}) {
@@ -30,6 +33,7 @@ export function runProcess(command, args, options = {}) {
     onStdout,
     onStderr,
     onSpawn,
+    killTree,
   } = options;
 
   return new Promise((resolve, reject) => {
@@ -45,10 +49,33 @@ export function runProcess(command, args, options = {}) {
     let stdout = '';
     let stderr = '';
     let timedOut = false;
+    let settled = false;
+
+    let graceTimer = null;
+
+    const settle = (fn) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      clearTimeout(graceTimer);
+      fn();
+    };
 
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill('SIGTERM');
+      // Use injected tree-killer so Windows grandchild processes are also killed.
+      // On Windows, child.kill('SIGTERM') only kills cmd.exe, leaving node grandchildren
+      // alive and holding stdout/stderr pipes open, so 'close' never fires.
+      if (killTree) {
+        killTree(child);
+      } else {
+        child.kill('SIGTERM');
+      }
+      // Grace period: if 'close' still hasn't fired after the kill, settle anyway so
+      // the promise never hangs indefinitely.
+      graceTimer = setTimeout(() => {
+        settle(() => reject(new Error(`Command timed out after ${timeout / 1000}s`)));
+      }, 3000);
     }, timeout);
 
     child.stdout?.on('data', (chunk) => {
@@ -69,17 +96,15 @@ export function runProcess(command, args, options = {}) {
     child.stderr?.on('error', () => {});
 
     child.on('error', (err) => {
-      clearTimeout(timer);
-      reject(err);
+      settle(() => reject(err));
     });
 
     child.on('close', (code) => {
-      clearTimeout(timer);
       if (timedOut) {
-        reject(new Error(`Command timed out after ${timeout / 1000}s`));
+        settle(() => reject(new Error(`Command timed out after ${timeout / 1000}s`)));
         return;
       }
-      resolve({ code: code ?? 1, stdout, stderr, timedOut: false });
+      settle(() => resolve({ code: code ?? 1, stdout, stderr, timedOut: false }));
     });
   });
 }
@@ -87,11 +112,15 @@ export function runProcess(command, args, options = {}) {
 /**
  * Format process output for tool results (blocking /api/tools path).
  * @param {string} label
- * @param {{ code: number, stdout: string, stderr: string, timedOut?: boolean }} result
+ * @param {{ code: number, stdout: string, stderr: string, timedOut?: boolean, stopped?: boolean, timeoutSecs?: number }} result
  */
-export function formatProcessOutput(label, { code, stdout, stderr, timedOut = false }) {
+export function formatProcessOutput(label, { code, stdout, stderr, timedOut = false, stopped = false, timeoutSecs }) {
   const parts = [
-    timedOut ? `${label} (timed out after ${COMMAND_TIMEOUT_MS / 1000}s)` : `${label} (exit ${code})`,
+    stopped
+      ? `${label} (stopped by user — process terminated, not a failure)`
+      : timedOut
+        ? `${label} (timed out after ${timeoutSecs ?? COMMAND_TIMEOUT_MS / 1000}s)`
+        : `${label} (exit ${code})`,
   ];
   if (stdout.trim()) {
     parts.push(`stdout:\n${stdout.trimEnd()}`);

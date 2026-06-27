@@ -2,6 +2,7 @@
  * LAN address discovery for Settings and GET /api/system/network.
  */
 
+import { resolveMinnowPort } from '../constants/minnow-port.js';
 import os from 'node:os';
 import {
   getConfigNetworkAccess,
@@ -56,7 +57,7 @@ export function buildNetworkUrls(port) {
  * }>}
  */
 export async function getNetworkStatus(opts) {
-  const port = Number(opts.port) || 5173;
+  const port = Number(opts.port) || resolveMinnowPort();
   const localUrl = opts.localUrl?.trim() || `http://localhost:${port}/`;
   const meta = (await readConfigJson('config.json')) ?? {};
   const persisted = resolveConfigNetworkAccess(meta);

@@ -230,6 +230,25 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   field('agents.autopilot.isolation', 'Default isolation mode', 'agents', 'autopilot'),
   field('agents.autopilot.concurrency', 'Max concurrent tasks', 'agents', 'autopilot'),
   field('agents.autopilot.plannerModel', 'Default planner model', 'agents', 'autopilot'),
+  field('agents.autopilot.selfHeal', 'Self-heal & provisioning', 'agents', 'autopilot', {
+    keywords: ['self-heal', 'provision', 'quarantine', 'infra', 'worktree', 'stall'],
+    description: 'Configure AFK self-heal rounds, infra provisioning, and worktree cd-guard.',
+  }),
+  field('agents.autopilot.selfHealMaxRounds', 'Max self-heal rounds', 'agents', 'autopilot', {
+    keywords: ['self-heal', 'rounds', 'quarantine'],
+  }),
+  field('agents.autopilot.infraProvisionTimeout', 'Infra provision timeout', 'agents', 'autopilot', {
+    keywords: ['infra', 'provision', 'timeout'],
+  }),
+  field('agents.autopilot.autoProvisionInfra', 'Auto-provision infra', 'agents', 'autopilot', {
+    keywords: ['provision', 'infra', 'docker'],
+  }),
+  field('agents.autopilot.afkAutoRestartStalls', 'Auto-restart stalled tasks', 'agents', 'autopilot', {
+    keywords: ['stall', 'restart', 'quarantine', 'afk'],
+  }),
+  field('agents.autopilot.guardCdOutsideWorktree', 'Guard cd outside worktree', 'agents', 'autopilot', {
+    keywords: ['worktree', 'cd', 'guard', 'isolation'],
+  }),
 
   // —— Knowledge ——
   field('knowledge.prompting', 'Prompt profiles', 'knowledge', 'prompting', {

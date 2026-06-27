@@ -22,6 +22,8 @@ import {
   resolveEffectiveGuide,
 } from './effective-guide.js';
 import { readDevServerSettings } from './settings.js';
+import { assessHostKillCommand } from '../tools/host-kill-guard.js';
+import { assessHostPortBindCommand } from '../tools/host-port-bind-guard.js';
 
 /** @typedef {'no_guide' | 'stopped' | 'starting' | 'running' | 'stopping' | 'error'} DevServerStatus */
 
@@ -445,6 +447,11 @@ export async function stopDevServer(workspaceRoot = getWorkspaceRoot()) {
 export async function toolStartBackgroundCommand(args) {
   const command = typeof args?.command === 'string' ? args.command.trim() : '';
   if (!command) return 'Error: command is required';
+
+  const hostKill = assessHostKillCommand(command);
+  if (hostKill) return hostKill;
+  const portBind = assessHostPortBindCommand(command);
+  if (portBind) return portBind;
 
   const cwdUser = typeof args?.cwd === 'string' && args.cwd.trim() ? args.cwd.trim() : '.';
   let cwd;

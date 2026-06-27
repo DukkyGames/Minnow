@@ -41,7 +41,6 @@ import {
   resolveChatMount,
   runWithChatMount,
 } from './chat-mount';
-import { isOrchestrateBoardInitSplitActive, isOrchestrateInitSplitChromeActive } from './orchestrate-board-init-split';
 import { isBoardViewActive } from './view-mode-toggle';
 import { closeDrawer } from './settings';
 import { setStatus } from './status';
@@ -338,17 +337,9 @@ export interface AppendUserBubbleOptions extends UserBubbleRenderOptions {
   renderFromHistory?: boolean;
 }
 
-/** True when board view should suppress chat bubbles (full board, no init split). */
-function shouldStubOrchestrateBoardStreamDom(chat: Chat): boolean {
-  const splitChrome = isOrchestrateInitSplitChromeActive();
-  if (!isBoardViewActive() && !splitChrome) return false;
-  if (
-    normalizeModeId(chat.modeId) === 'orchestrate' &&
-    (isOrchestrateBoardInitSplitActive(chat) || splitChrome)
-  ) {
-    return false;
-  }
-  return true;
+/** True when board view should suppress chat bubbles (user can jump to Chat view). */
+function shouldStubOrchestrateBoardStreamDom(_chat: Chat): boolean {
+  return isBoardViewActive();
 }
 
 /** True when plan authoring screen suppresses chat bubble DOM. */

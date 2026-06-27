@@ -41,7 +41,13 @@ import {
   resolveViteHost,
 } from './server/network/access.js';
 
-const PORT = Number(process.env.PORT) || 5173;
+import { resolveMinnowPort } from './server/constants/minnow-port.js';
+import {
+  clearDevHostState,
+  writeDevHostState,
+} from './server/runtime/dev-host-state.js';
+
+const PORT = resolveMinnowPort();
 
 /**
  * Append one crash record to ~/.minnow/logs/crash.jsonl. Never throws.
@@ -171,6 +177,8 @@ async function main() {
   await vite.listen();
   const urls = vite.resolvedUrls?.local ?? [`http://localhost:${PORT}/`];
   const localUrl = urls[0];
+  const boundPort = Number(new URL(localUrl).port) || PORT;
+  writeDevHostState({ localUrl, port: boundPort });
   const networkUrls = vite.resolvedUrls?.network ?? [];
   console.log(`Minnow dev server: ${localUrl}`);
   if (networkAccess === 'lan') {
@@ -214,6 +222,7 @@ async function main() {
   startCalendarReminderLoop();
   startEmailPollLoop();
   const onShutdown = () => {
+    clearDevHostState();
     stopSchedulerTickLoop();
     stopCalendarReminderLoop();
     stopEmailPollLoop();

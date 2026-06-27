@@ -12,16 +12,19 @@ import { after, before, describe, test } from 'node:test';
 import {
   checkMerged,
   checkWorktreeDirty,
+  cleanupBoardWorktrees,
   commitIntegration,
   commitWorktree,
   createWorktree,
   ensureIntegration,
   integrationStats,
+  mergeIntegrationIntoWorkspace,
   mergeIntoIntegration,
   pushIntegration,
   refreshIntegrationDeps,
   restoreIntegration,
   verifyIntegrationMerge,
+  workspaceLandingStats,
 } from '../../server/worktree/worktree-ops.js';
 import { getWorktreeSlotPath } from '../../server/worktree/paths.js';
 import { setWorkspaceRoot } from '../../server/workspace/root.js';
@@ -226,6 +229,30 @@ describe('worktree commit and merge checks', () => {
     assert.equal(push.pushed, false);
     assert.equal(push.error, 'no_remote');
   });
+
+  test('workspaceLandingStats reports incoming integration diff before landing', async () => {
+    const stats = await workspaceLandingStats({ branch: integrationBranch });
+    assert.equal(stats.ok, true);
+    assert.equal(stats.alreadyLanded, false);
+    assert.ok((stats.fileCount ?? 0) >= 1);
+  });
+
+  test('mergeIntegrationIntoWorkspace lands integration into workspace checkout', async () => {
+    const merged = await mergeIntegrationIntoWorkspace({
+      branch: integrationBranch,
+      message: 'land board',
+    });
+    assert.equal(merged.ok, true);
+    assert.equal(merged.merged, true);
+
+    const stats = await workspaceLandingStats({ branch: integrationBranch });
+    assert.equal(stats.ok, true);
+    assert.equal(stats.alreadyLanded, true);
+
+    const again = await mergeIntegrationIntoWorkspace({ branch: integrationBranch });
+    assert.equal(again.ok, true);
+    assert.equal(again.alreadyUpToDate, true);
+  });
 });
 
 describe('worktree conflict merge and verification', () => {
@@ -421,5 +448,24 @@ describe('worktree conflict merge and verification', () => {
     assert.equal((await git(['rev-parse', 'HEAD'], intPath)).stdout.trim(), integrationSha);
     assert.equal((await git(['status', '--porcelain'], intPath)).stdout.trim(), '');
     assert.equal(await mergeHeadExists(intPath), false);
+  });
+
+  test('cleanupBoardWorktrees keeps integration by default and removes all when includeIntegration', async () => {
+    const partial = await cleanupBoardWorktrees({ boardId: BOARD_ID });
+    assert.equal(partial.ok, true);
+    assert.equal(partial.keptIntegration, true);
+
+    const intPath = getWorktreeSlotPath(BOARD_ID, 'integration', repoDir);
+    await fs.access(intPath);
+
+    const full = await cleanupBoardWorktrees({
+      boardId: BOARD_ID,
+      includeIntegration: true,
+    });
+    assert.equal(full.ok, true);
+    assert.ok(full.removed >= 1);
+    assert.equal(full.keptIntegration, false);
+
+    await assert.rejects(() => fs.access(intPath));
   });
 });

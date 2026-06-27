@@ -216,6 +216,13 @@ export function getHeartbeatAgeMs(runId: string): number | null {
   return monotonicDelta() - entry.target.lastHeartbeatAt;
 }
 
+/** Ms since the last progress bump; null when no bump yet. */
+export function getProgressAgeMs(runId: string): number | null {
+  const entry = entries.get(runId);
+  if (!entry || entry.target.lastProgressAt == null) return null;
+  return monotonicDelta() - entry.target.lastProgressAt;
+}
+
 /** Human-readable heartbeat badge for task cards (observe-only). */
 export function formatHeartbeatBadge(
   supervision: RunSupervision,
@@ -230,6 +237,11 @@ export function formatHeartbeatBadge(
     return `${heart} · #${supervision.progressSeq}`;
   }
   return heart;
+}
+
+/** Fire the stored heartbeat onTick for a run (tests only). */
+export function tickHeartbeatForTests(runId: string): void {
+  entries.get(runId)?.onTick?.();
 }
 
 /** Clear all supervision state (tests). */

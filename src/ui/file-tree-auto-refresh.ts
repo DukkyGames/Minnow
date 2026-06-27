@@ -4,6 +4,9 @@
  */
 
 import type { ToolExecutionResult } from '../types';
+import { getWorkspacePath } from '../state/workspace';
+import { panelPathsEqual } from './panel-worktree-cwd';
+import { getFileTreeListingWorkspaceRoot } from './file-tree-listing-root';
 import { isFileTreeServerAvailable } from './file-tree-server';
 
 /** Built-in tools that mutate workspace files or directories (aligned with path-args writes). */
@@ -43,11 +46,25 @@ let refreshRunner: () => Promise<void> = defaultRefreshRunner;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let maxDelayTimer: ReturnType<typeof setTimeout> | null = null;
 
+/** True when a mutating tool's workspaceRoot matches the file tree listing root. */
+function toolWorkspaceMatchesFileTreeListing(workspaceRoot?: string): boolean {
+  const treeRoot = getFileTreeListingWorkspaceRoot();
+  const main = getWorkspacePath().trim();
+  const toolRoot = workspaceRoot?.trim() || undefined;
+
+  if (!treeRoot) {
+    if (!toolRoot) return true;
+    return Boolean(main && panelPathsEqual(toolRoot, main));
+  }
+
+  if (!toolRoot) return false;
+  return panelPathsEqual(treeRoot, toolRoot);
+}
+
 /**
  * True when a successful mutating tool result should trigger a debounced file tree refresh.
- * Skipped when the tool ran in a worktree/sandbox (workspaceRoot is set) because the file
- * tree always shows the main workspace — refreshing it for worktree writes is unnecessary
- * and causes UI freezes when many board agents are running concurrently.
+ * Skipped when the tool ran in a different root than the visible file tree (e.g. isolated
+ * worktree writes while the tree shows the main workspace).
  */
 export function shouldScheduleFileTreeRefresh(
   toolName: string,
@@ -57,7 +74,7 @@ export function shouldScheduleFileTreeRefresh(
   if (!isFileTreeServerAvailable()) {
     return false;
   }
-  if (workspaceRoot) {
+  if (!toolWorkspaceMatchesFileTreeListing(workspaceRoot)) {
     return false;
   }
   if (!FILE_TREE_MUTATING_TOOLS.has(toolName)) {

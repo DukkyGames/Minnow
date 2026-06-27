@@ -15,9 +15,12 @@ import {
   enqueueTaskForTests,
   finalizeBoardTaskOnStreamEnd,
   getTaskQueueForTests,
+  MAX_STOP_RETRY_ATTEMPTS,
   releaseLaunchSlotForTests,
   reserveLaunchSlotForTests,
+  resolveTaskChatStopReason,
   resolveTaskChatStreamOutcome,
+  trackDrainResumeCallsForTests,
 } from '../../src/state/orchestrate-board-actions.ts';
 import { initBoard, isTaskStalledForRestart, markBoardTaskInProgressFromChat, updateTask } from '../../src/state/orchestrate-board-store.ts';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
@@ -45,8 +48,8 @@ function makePlanner(): Chat {
   };
 }
 
-function makeTaskChat(stopped = false): Chat {
-  return {
+function makeTaskChat(stopped = false, runStopReason?: 'user' | 'timeout' | 'system'): Chat {
+  const chat: Chat = {
     id: TASK_CHAT_ID,
     name: 'Task W1-A',
     workspacePath: '/tmp/ws',
@@ -66,6 +69,20 @@ function makeTaskChat(stopped = false): Chat {
     boardGroupId: GROUP_ID,
     boardTaskId: 'W1-A',
   };
+  if (runStopReason) {
+    chat.runs = [
+      {
+        runId: 'run_stop_1',
+        branchId: 'b1',
+        forkHistoryIndex: 0,
+        status: 'stopped',
+        stopReason: runStopReason,
+        createdAt: 10,
+        snapshot: null as any,
+      },
+    ];
+  }
+  return chat;
 }
 
 function makeGroup(executionMode: 'manual' | 'auto' = 'manual'): ChatGroup {
@@ -135,6 +152,15 @@ describe('task stream end finalization', () => {
     assert.equal(resolveTaskChatStreamOutcome(makeTaskChat(true)), 'stopped');
   });
 
+  test('resolveTaskChatStopReason: run stopReason wins; history marker uses userStopped', () => {
+    const group = makeGroup('auto');
+    const board = group.orchestrateBoard!;
+    assert.equal(resolveTaskChatStopReason(makeTaskChat(true, 'timeout'), board), 'timeout');
+    assert.equal(resolveTaskChatStopReason(makeTaskChat(true), board), 'system');
+    board.userStopped = true;
+    assert.equal(resolveTaskChatStopReason(makeTaskChat(true), board), 'user');
+  });
+
   test('auto mode moves successful build to testing (Tester launched separately)', () => {
     const group = makeGroup('auto');
     const planner = makePlanner();
@@ -155,11 +181,12 @@ describe('task stream end finalization', () => {
     assert.ok(updated.endedAt);
   });
 
-  test('stopped task stays in_progress', () => {
+  test('user stop parks task as quarantined and clears chatId', () => {
     const group = makeGroup('auto');
     const planner = makePlanner();
+    group.orchestrateBoard!.userStopped = true;
     const task = group.orchestrateBoard!.tasks[0]!;
-    const taskChat = makeTaskChat(true);
+    const taskChat = makeTaskChat(true, 'user');
     setSessionStateForTests({
       chats: [planner, taskChat],
       groups: [group],
@@ -167,11 +194,91 @@ describe('task stream end finalization', () => {
     });
     finalizeBoardTaskOnStreamEnd(group, task, planner);
     const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
-    assert.equal(updated.status, 'in_progress');
+    assert.equal(updated.status, 'quarantined');
+    assert.equal(updated.chatId, undefined);
+    assert.ok(updated.endedAt);
+    assert.match(updated.quarantine?.summary ?? '', /stopped by user/i);
+    assert.equal(
+      isTaskStalledForRestart(group.orchestrateBoard!, updated, () => false),
+      false,
+    );
+  });
+
+  test('system/timeout stop under cap moves task to planned for bounded retry', () => {
+    const group = makeGroup('auto');
+    const planner = makePlanner();
+    const task = group.orchestrateBoard!.tasks[0]!;
+    const taskChat = makeTaskChat(true, 'system');
+    setSessionStateForTests({
+      chats: [planner, taskChat],
+      groups: [group],
+      activeChatId: PLANNER_ID,
+    });
+    finalizeBoardTaskOnStreamEnd(group, task, planner);
+    const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    assert.equal(updated.status, 'planned');
+    assert.equal(updated.stopRetries, 1);
+    assert.equal(updated.chatId, undefined);
     assert.ok(updated.endedAt);
   });
 
-  test('failed outcome marks task failed in auto mode at build retry cap', () => {
+  test('stopRetries cleared after successful build completion', () => {
+    const group = makeGroup('auto');
+    const planner = makePlanner();
+    updateTask(group, 'W1-A', { stopRetries: 1 }, planner);
+    const task = group.orchestrateBoard!.tasks[0]!;
+    const taskChat = makeTaskChat(false);
+    setSessionStateForTests({
+      chats: [planner, taskChat],
+      groups: [group],
+      activeChatId: PLANNER_ID,
+    });
+    finalizeBoardTaskOnStreamEnd(group, task, planner);
+    const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    assert.equal(updated.status, 'testing');
+    assert.equal(updated.stopRetries, undefined);
+  });
+
+  test('system stop at cap quarantines with repeated-stop note', () => {
+    const group = makeGroup('auto');
+    const planner = makePlanner();
+    updateTask(group, 'W1-A', { stopRetries: MAX_STOP_RETRY_ATTEMPTS }, planner);
+    const task = group.orchestrateBoard!.tasks[0]!;
+    const taskChat = makeTaskChat(true, 'timeout');
+    setSessionStateForTests({
+      chats: [planner, taskChat],
+      groups: [group],
+      activeChatId: PLANNER_ID,
+    });
+    finalizeBoardTaskOnStreamEnd(group, task, planner);
+    const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    assert.equal(updated.status, 'quarantined');
+    assert.equal(updated.stopRetries, MAX_STOP_RETRY_ATTEMPTS + 1);
+    assert.match(updated.quarantine?.summary ?? '', /stopped repeatedly/i);
+    assert.equal(updated.chatId, undefined);
+  });
+
+  test('stopped task does not re-enter finalize once quarantined', () => {
+    const group = makeGroup('auto');
+    const planner = makePlanner();
+    updateTask(group, 'W1-A', { stopRetries: MAX_STOP_RETRY_ATTEMPTS }, planner);
+    const task = group.orchestrateBoard!.tasks[0]!;
+    const taskChat = makeTaskChat(true, 'system');
+    setSessionStateForTests({
+      chats: [planner, taskChat],
+      groups: [group],
+      activeChatId: PLANNER_ID,
+    });
+    finalizeBoardTaskOnStreamEnd(group, task, planner);
+    const afterFirst = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    assert.equal(afterFirst.status, 'quarantined');
+    finalizeBoardTaskOnStreamEnd(group, afterFirst, planner);
+    const afterSecond = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    assert.equal(afterSecond.status, 'quarantined');
+    assert.equal(afterSecond.stopRetries, afterFirst.stopRetries);
+  });
+
+  test('failed outcome quarantines task in auto mode at build retry cap (Phase 2)', () => {
     setAutopilotMetaForTests({ maxBuildAttempts: 1 });
     const group = makeGroup('auto');
     const planner = makePlanner();
@@ -183,9 +290,12 @@ describe('task stream end finalization', () => {
         { role: 'user', content: 'Execute task' },
         {
           role: 'assistant',
-          content: 'Maximum tool turns reached.',
+          // Non-stall failure so Phase 2 classifies as 'code' → applyTaskBuildFailureState → at cap → quarantine.
+          content: 'Build failed: TypeError: cannot read properties of undefined',
         },
       ],
+      // Failed run so resolveTaskChatStreamOutcome returns 'failed' (prose alone returns 'completed').
+      runs: [{ runId: 'run_1', branchId: 'b1', forkHistoryIndex: 0, status: 'failed', createdAt: 10, snapshot: null } as any],
     };
     setSessionStateForTests({
       chats: [planner, failedChat],
@@ -194,8 +304,9 @@ describe('task stream end finalization', () => {
     });
     finalizeBoardTaskOnStreamEnd(group, task, planner);
     const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
-    assert.equal(updated.status, 'failed');
-    assert.match(updated.error ?? '', /without completing/i);
+    // Phase 2: exhausted build attempts are quarantined via self-heal (not left as failed).
+    assert.equal(updated.status, 'quarantined');
+    assert.match(updated.quarantine?.summary ?? updated.error ?? '', /without completing/i);
   });
 
   test('markBoardTaskInProgressFromChat sets in_progress when stream starts', () => {
@@ -406,5 +517,30 @@ describe('build→test handoff slot accounting', () => {
 
     await drainTaskQueueForTests(group, planner);
     assert.deepEqual(getTaskQueueForTests(GROUP_ID), ['W1-A', 'W1-C']);
+  });
+
+  test('concurrent drainTaskQueue coalesces and does not double-resume queued tasks', async () => {
+    const group = makeGroup('auto');
+    const planner = makePlanner();
+    const board = group.orchestrateBoard!;
+    board.maxConcurrentTasks = 1;
+    board.tasks.push({
+      id: 'W1-B',
+      title: 'Queued B',
+      wave: 'W1',
+      category: 'build',
+      status: 'planned',
+    });
+    trackDrainResumeCallsForTests(true);
+    enqueueTaskForTests(GROUP_ID, 'W1-B');
+
+    await Promise.all([
+      drainTaskQueueForTests(group, planner),
+      drainTaskQueueForTests(group, planner),
+    ]);
+
+    const resumed = trackDrainResumeCallsForTests(false);
+    assert.deepEqual(resumed, ['W1-B']);
+    assert.deepEqual(getTaskQueueForTests(GROUP_ID), []);
   });
 });

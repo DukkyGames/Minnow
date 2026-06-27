@@ -33,6 +33,18 @@ export interface AutopilotMeta {
   heartbeatDeadMs: number;
   plannerProviderId: string;
   plannerModelId: string;
+  /** Max self-heal infra rounds before unconditional quarantine. */
+  selfHealMaxRounds: number;
+  /** Max env-fixer sub-agent attempts on an infra failure before quarantine. */
+  maxEnvFixAttempts: number;
+  /** When true, infra provisioning is attempted automatically on infra failures. */
+  autoProvisionInfra: boolean;
+  /** Timeout (ms) for infra provisioning commands. */
+  infraProvisionTimeoutMs: number;
+  /** When false, stalling tasks are quarantined immediately instead of nudged. */
+  afkAutoRestartStalls: boolean;
+  /** When false, the worktree cd-guard rewrite is skipped. */
+  guardCdOutsideWorktree: boolean;
 }
 
 const FALLBACK_MAX_CONCURRENT = 3;
@@ -53,6 +65,12 @@ export const DEFAULT_AUTOPILOT_META: AutopilotMeta = {
   heartbeatDeadMs: 30_000,
   plannerProviderId: '',
   plannerModelId: '',
+  selfHealMaxRounds: 4,
+  maxEnvFixAttempts: 2,
+  autoProvisionInfra: true,
+  infraProvisionTimeoutMs: 180_000,
+  afkAutoRestartStalls: true,
+  guardCdOutsideWorktree: true,
 };
 
 const AUTOPILOT_META_STORAGE_KEY = 'minnow.autopilotMeta';
@@ -80,15 +98,28 @@ const CONTINUE_SMART_ROUTE_MODES = new Set<AutopilotContinueSmartRoute>([
 let cachedAutopilot: AutopilotMeta | null = null;
 
 function clampConcurrency(value: unknown, fallback: number): number {
-  const n = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(20, Math.max(1, Math.round(n)));
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(20, Math.max(1, Math.round(value)));
 }
 
 function clampAttempts(value: unknown, fallback: number): number {
-  const n = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(10, Math.max(1, Math.round(n)));
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(10, Math.max(1, Math.round(value)));
+}
+
+function clampSelfHealRounds(value: unknown, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(6, Math.max(0, Math.round(value)));
+}
+
+function clampInfraTimeoutMs(value: unknown, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(600_000, Math.max(30_000, Math.round(value)));
+}
+
+function parseBool(value: unknown, fallback: boolean): boolean {
+  if (typeof value === 'boolean') return value;
+  return fallback;
 }
 
 function parseExecutionMode(value: unknown): AutopilotExecutionMode {
@@ -159,6 +190,21 @@ export function parseAutopilotMeta(raw: unknown): AutopilotMeta {
     ),
     plannerProviderId: parseStringField(block.plannerProviderId),
     plannerModelId: parseStringField(block.plannerModelId),
+    selfHealMaxRounds: clampSelfHealRounds(
+      block.selfHealMaxRounds,
+      DEFAULT_AUTOPILOT_META.selfHealMaxRounds,
+    ),
+    maxEnvFixAttempts: clampAttempts(
+      block.maxEnvFixAttempts,
+      DEFAULT_AUTOPILOT_META.maxEnvFixAttempts,
+    ),
+    autoProvisionInfra: parseBool(block.autoProvisionInfra, DEFAULT_AUTOPILOT_META.autoProvisionInfra),
+    infraProvisionTimeoutMs: clampInfraTimeoutMs(
+      block.infraProvisionTimeoutMs,
+      DEFAULT_AUTOPILOT_META.infraProvisionTimeoutMs,
+    ),
+    afkAutoRestartStalls: parseBool(block.afkAutoRestartStalls, DEFAULT_AUTOPILOT_META.afkAutoRestartStalls),
+    guardCdOutsideWorktree: parseBool(block.guardCdOutsideWorktree, DEFAULT_AUTOPILOT_META.guardCdOutsideWorktree),
   };
 }
 
@@ -228,6 +274,36 @@ export function resolveMaxTaskBuildAttempts(): number {
 /** Global final integration test threshold (no per-board override). */
 export function resolveMaxFinalTestAttempts(): number {
   return getAutopilotMetaSync().maxFinalTestAttempts ?? FALLBACK_MAX_FINAL_TEST_ATTEMPTS;
+}
+
+/** Max self-heal infra rounds before unconditional quarantine. */
+export function resolveSelfHealMaxRounds(): number {
+  return getAutopilotMetaSync().selfHealMaxRounds;
+}
+
+/** Max env-fixer sub-agent attempts on an infra failure before quarantine. */
+export function resolveMaxEnvFixAttempts(): number {
+  return getAutopilotMetaSync().maxEnvFixAttempts ?? DEFAULT_AUTOPILOT_META.maxEnvFixAttempts;
+}
+
+/** Whether infra auto-provisioning is enabled. */
+export function resolveAutoProvisionInfra(): boolean {
+  return getAutopilotMetaSync().autoProvisionInfra;
+}
+
+/** Timeout (ms) for infra provisioning commands. */
+export function resolveInfraProvisionTimeoutMs(): number {
+  return getAutopilotMetaSync().infraProvisionTimeoutMs;
+}
+
+/** Whether stalling tasks should be auto-nudged (true) or quarantined immediately (false). */
+export function resolveAfkAutoRestartStalls(): boolean {
+  return getAutopilotMetaSync().afkAutoRestartStalls;
+}
+
+/** Whether the worktree cd-guard rewrite is active (client-side resolver for parity). */
+export function resolveGuardCdOutsideWorktree(): boolean {
+  return getAutopilotMetaSync().guardCdOutsideWorktree;
 }
 
 /** Persist partial global autopilot via PUT /api/config/meta and mirror locally. */

@@ -34,23 +34,6 @@ function setupDom() {
   document.body.appendChild(main);
 }
 
-function mountSplitDomOnly() {
-  const area = document.getElementById('chatArea');
-  area.replaceChildren();
-  const split = document.createElement('div');
-  split.className = 'board-init-split';
-  const boardPane = document.createElement('div');
-  boardPane.className = 'board-init-split__board';
-  boardPane.dataset.testid = 'boardInitSplitBoard';
-  const chatPane = document.createElement('div');
-  chatPane.className = 'board-init-split__chat';
-  chatPane.dataset.testid = 'boardInitSplitChat';
-  split.appendChild(boardPane);
-  split.appendChild(chatPane);
-  area.appendChild(split);
-  document.getElementById('mainColumn')?.classList.add('main-column--orchestrate-init-split');
-}
-
 function seedBoardViewSession({ kickoffInHistory = false } = {}) {
   const chat = createEmptyChatObject('');
   chat.id = FIXED_CHAT_ID;
@@ -137,15 +120,16 @@ describe('orchestrate board streaming guards', () => {
     assert.equal(after, before);
   });
 
-  test('appendBubble appends to split chat pane during board init stream', () => {
+  test('appendBubble does not append during board init stream in board view', () => {
     setupDom();
     const chat = seedBoardViewSession({ kickoffInHistory: true });
     setStreaming(true, chat.id);
-    mountSplitDomOnly();
 
+    const before = document.getElementById('chatArea').childElementCount;
     appendBubble('user', 'board_init running');
-    const chatPane = document.querySelector('[data-testid="boardInitSplitChat"]');
-    assert.ok(chatPane?.querySelector('.msg.user'));
+    const after = document.getElementById('chatArea').childElementCount;
+    assert.equal(after, before);
+    assert.equal(document.querySelector('.msg.user'), null);
   });
 
   test('appendBubble does not echo background task seed into a different active chat', () => {
