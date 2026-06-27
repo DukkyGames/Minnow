@@ -1029,6 +1029,26 @@ function boardExecutionModeToIndex(mode: string): number {
 const BOARD_AFK_CONFIRM_MESSAGE =
   'Enable AFK mode? The orchestrator will run fully hands-off and will not prompt you until you press Stop or the board finishes.';
 
+/**
+ * Blur a focused header control so native `<select>` menus (isolation mode, etc.)
+ * open on the first click. `window.confirm` and segment buttons keep focus until
+ * the user clicks elsewhere — which made the worktree dropdown appear broken after AFK.
+ * Deferred one frame so blur runs after the browser restores click focus on the segment.
+ */
+function releaseBoardHeaderFocus(): void {
+  const run = (): void => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active.closest('.board-header__controls')) {
+      active.blur();
+    }
+  };
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(run);
+  } else {
+    setTimeout(run, 0);
+  }
+}
+
 /** User-selected execution mode — AFK goes through the shared confirm + activate path. */
 function selectBoardExecutionModeFromUi(
   group: ChatGroup,
@@ -1108,11 +1128,14 @@ function showBoardAfkHint(hint: HTMLElement): void {
   hint.setAttribute('aria-hidden', 'false');
   hint.classList.remove('is-visible');
   // Two frames so the browser paints opacity 0 before transitioning to 1.
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      hint.classList.add('is-visible');
-    });
-  });
+  const revealHint = (): void => {
+    hint.classList.add('is-visible');
+  };
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => requestAnimationFrame(revealHint));
+  } else {
+    setTimeout(revealHint, 0);
+  }
 
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const visibleMs = reducedMotion ? 1200 : BOARD_AFK_HINT_VISIBLE_MS;
@@ -1146,6 +1169,7 @@ function syncBoardExecModeUi(root: ParentNode, currentMode: string): void {
   if (enteredAfk || !boardAfkHintShownForSession) {
     boardAfkHintShownForSession = true;
     showBoardAfkHint(hint);
+    if (enteredAfk) releaseBoardHeaderFocus();
   }
 }
 
@@ -1173,6 +1197,7 @@ function onBoardExecModeSegmentKeydown(
   const nextMode = segments[nextIndex] ?? 'manual';
   selectBoardExecutionModeFromUi(group, nextMode, plannerChat);
   refreshActiveBoardIfMounted();
+  releaseBoardHeaderFocus();
   const root = document.querySelector('.board-root');
   const nextBtn = root?.querySelector<HTMLButtonElement>(
     `.board-header__exec-mode-segment[data-exec-mode="${nextMode}"]`,
@@ -1219,6 +1244,7 @@ function wireBoardHeaderControls(
     segment.addEventListener('click', () => {
       selectBoardExecutionModeFromUi(group, meta.id, plannerChat);
       refreshActiveBoardIfMounted();
+      releaseBoardHeaderFocus();
     });
     segment.addEventListener('keydown', (event) => {
       onBoardExecModeSegmentKeydown(event, meta.id, group, plannerChat);
@@ -1409,6 +1435,7 @@ function buildPendingAfkBanner(
   enableBtn.addEventListener('click', () => {
     activateAfk(group, plannerChat);
     refreshActiveBoardIfMounted();
+    releaseBoardHeaderFocus();
   });
   wrap.appendChild(enableBtn);
 

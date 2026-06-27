@@ -58,6 +58,7 @@ const { loadSubAgentConfig, resetSubAgentConfigCache } = await import(
 
 function setupDom() {
   const window = new Window();
+  globalThis.window = window;
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
   globalThis.HTMLSelectElement = window.HTMLSelectElement;
@@ -713,6 +714,40 @@ describe('orchestrate board live updates', () => {
       .filter(Boolean);
     assert.deepEqual(actions, ['open-plan']);
     assert.equal(document.getElementById('btnViewModeToggleChat'), null);
+  });
+
+  test('isolation select still works after switching to AFK', async () => {
+    setupDom();
+    setBoardNowForTests(() => 1_700_000_000_000);
+    const chat = makeOrchestrateChat();
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
+
+    renderBoardView(group);
+
+    const afkBtn = document.querySelector('[data-exec-mode="afk"]');
+    const isoSelect = document.querySelector('.board-header__isolation-select');
+    assert.ok(afkBtn);
+    assert.ok(isoSelect instanceof HTMLSelectElement);
+
+    const confirmStub = () => true;
+    const priorConfirm = globalThis.window.confirm;
+    globalThis.window.confirm = confirmStub;
+    try {
+      afkBtn.click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      assert.equal(group.orchestrateBoard?.executionMode, 'afk');
+
+      isoSelect.value = 'per-wave';
+      isoSelect.dispatchEvent(new globalThis.window.Event('change', { bubbles: true }));
+      assert.equal(group.orchestrateBoard?.isolationMode, 'per-wave');
+    } finally {
+      globalThis.window.confirm = priorConfirm;
+    }
   });
 
   test('header badge shows Stopped with danger styling after user stop', () => {
