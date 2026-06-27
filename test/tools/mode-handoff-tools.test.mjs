@@ -4,6 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import { isPlanCompleteOrchestrateNewChoice } from '../../src/tools/mode-handoff-tools.ts';
 import { validateAskQuestionArgs } from '../../src/tools/ask-question-types.ts';
 
 /** Mirror preset builder from mode-handoff-tools for unit tests. */
@@ -35,6 +36,22 @@ describe('mode-handoff propose presets', () => {
       assert.equal(parsed.args.questions.length, 1);
       assert.ok(parsed.args.questions[0].options.length >= 2);
     }
+  });
+
+  test('plan_complete orchestrate_new choice is detected', () => {
+    assert.equal(
+      isPlanCompleteOrchestrateNewChoice([
+        { questionId: 'next_step', selectedIds: ['orchestrate_new'], otherText: null },
+      ]),
+      true,
+    );
+    assert.equal(
+      isPlanCompleteOrchestrateNewChoice([
+        { questionId: 'next_step', selectedIds: ['stay_plan'], otherText: null },
+      ]),
+      false,
+    );
+    assert.equal(isPlanCompleteOrchestrateNewChoice([]), false);
   });
 
   test('reef_visualization preset has two options', () => {
