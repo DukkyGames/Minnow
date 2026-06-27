@@ -825,6 +825,8 @@ export type UpdateTaskPatch = Partial<
     | 'mergePreSha'
     | 'testVerdict'
     | 'testSummary'
+    | 'boardReport'
+    | 'buildBlockers'
     | 'prevFailure'
     | 'pendingBuildSeed'
     | 'worktreePath'
@@ -883,6 +885,15 @@ export function updateTask(
   }
   if ('testSummary' in patch && patch.testSummary === undefined) {
     delete task.testSummary;
+  }
+  if ('boardReport' in patch && patch.boardReport === undefined) {
+    delete task.boardReport;
+  }
+  if ('buildOutcome' in patch && patch.buildOutcome === undefined) {
+    delete task.buildOutcome;
+  }
+  if ('buildBlockers' in patch && patch.buildBlockers === undefined) {
+    delete task.buildBlockers;
   }
   if ('testAttempts' in patch && patch.testAttempts === undefined) {
     delete task.testAttempts;

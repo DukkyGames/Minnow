@@ -40,7 +40,7 @@ Orchestrate mode turns an execution plan (`documentation/plans/*.md`) into a **K
 - **Manual:** the user starts/stops tasks from the board, or
 - **Auto-pilot:** the board drives Builder → Tester → merge → next task automatically when **Start** is pressed (`autoRunning === true`).
 
-The LLM does **not** move cards to `complete` in normal flow — builders report `READY FOR VERIFICATION`, testers call `board_report_test_result`, and the board advances status programmatically.
+The LLM does **not** move cards to `complete` in normal flow — board member chats (Builder, Tester, fixers) call **`board_report`** once when done, and the board advances status programmatically from structured outcomes at stream-end.
 
 ---
 
@@ -50,7 +50,7 @@ The LLM does **not** move cards to `complete` in normal flow — builders report
 |-------|------|----------------|
 | **State (pure)** | `src/state/orchestrate-board-store.ts` | `initBoard`, `updateTask`, wave rollup, `isTaskReadyForAuto`, cycle detection, quarantine cascade, timer, diagnostic log |
 | **State (actions)** | `src/state/orchestrate-board-actions.ts` | `startTask`, `startTaskTesting`, merge queue, `autoDelegateNext`, stream-end finalizers, self-heal deps, Start/Stop |
-| **Tools** | `src/tools/board-tools.ts` | `board_init`, `board_update_task`, `board_get_state`, `board_report_test_result`, `delegate_tasks`, `board_set_autonomy` |
+| **Tools** | `src/tools/board-tools.ts` | `board_init`, `board_update_task`, `board_get_state`, `board_report`, `delegate_tasks`, `board_set_autonomy` |
 | **UI** | `src/ui/orchestrate-board.ts` | Kanban render, header controls, running-task strip, onboarding, live refresh |
 | **Kickoff** | `src/ui/orchestrate-board-kickoff.ts` | Git preflight → optional `/git-setup` → `board_init` user message |
 | **Launch** | `src/ui/orchestrate-launch.ts` | `launchBoardFromPlan` — hub/plan screen entry |
@@ -244,7 +244,7 @@ stateDiagram-v2
 6. `runChatTurn` in background (`ownsGlobalStreaming: true`).
 7. On first stream chunk → `markBoardTaskInProgressFromChat` sets card to `in_progress`.
 
-Builder reports completion via prose **`READY FOR VERIFICATION`** (not `board_update_task`).
+Builder calls **`board_report`** with `outcome: pass` when the build phase is complete (not `board_update_task`).
 
 ### 2. Testing (`startTaskTesting`)
 
@@ -252,7 +252,7 @@ Triggered automatically when build succeeds in auto mode, or manually via **Run 
 
 1. Create/reuse **Tester** chat (`workAgentId: 'tester'`).
 2. `ensureBoardInfraProvisioned` (docker compose, deps) before Tester runs.
-3. Tester calls **`board_report_test_result`** → sets `testVerdict` / `testSummary` on task.
+3. Tester calls **`board_report`** → sets `task.boardReport` (and legacy `testVerdict` / `testSummary` mirrors).
 
 ### 3. Merge (on test pass)
 
@@ -344,7 +344,7 @@ A **slot** is held from build start through test pass + merge for one task.
 
 | Outcome | Detection | Auto-running behavior | Manual behavior |
 |---------|-----------|----------------------|-----------------|
-| **Success** | `resolveTaskChatStreamOutcome === 'completed'` | → `testing`, `startTaskTesting` | → `testing` (user runs tests) |
+| **Success** | `resolveBoardReport` → `outcome: pass` | → `testing`, `startTaskTesting` | → `testing` (user runs tests) |
 | **Stopped (user)** | stop reason `user` or `board.userStopped` | Quarantine task + dependents | Same |
 | **Stopped (system/timeout)** | stop reason not user | Increment `stopRetries`; if ≤2 → back to `planned` + delegate; else quarantine | Stays `in_progress` / quarantine per path |
 | **Failed** | failed turn / no success | `runSelfHeal` (build phase) | `moveTaskStatus('failed')` + preserve dirty worktree commit |
@@ -372,8 +372,9 @@ A **slot** is held from build start through test pass + merge for one task.
 
 **Verdict sources (priority):**
 
-1. `board_report_test_result` → `task.testVerdict`
-2. Fallback: backward scan for `VERDICT: pass|fail` in Tester transcript
+1. **`board_report`** → `task.boardReport` via `resolveBoardReport`
+2. Legacy hydration: `testVerdict` / `buildOutcome` on reloaded sessions
+3. Fallback: backward scan for `VERDICT: pass|fail` in Tester transcript (recovery marker only)
 
 ---
 
@@ -387,7 +388,8 @@ flowchart TD
   MG -->|clean + verified| OK[complete]
   MG -->|conflict| FX[startMergeConflictFixer]
   FX --> FC[Fixer chat in integration worktree]
-  FC --> FE[finalizeMergeFixerOnStreamEnd]
+  FC --> BR[board_report pass/fail]
+  BR --> FE[finalizeMergeFixerOnStreamEnd]
   FE -->|verified| OK
   FE -->|fail| R[restore integration @ mergePreSha]
   R --> RT{fixerAttempts < 2?}
@@ -395,19 +397,34 @@ flowchart TD
   RT -->|no| BL[blocked]
 ```
 
+**Unified completion model (`board_report`):**
+
+- All board member chats report via **`board_report({ task_id, outcome, summary })`** once when done.
+- Stream-end finalizers read **`resolveBoardReport(task)`** (primary: `task.boardReport`; legacy field hydration for reloaded sessions).
+- No heartbeat git polling — merge success is verified in **`finalizeMergeFixerOnStreamEnd`** when the fixer reports `pass`.
+
 **Merge fixer rules:**
 
 - Runs in **integration worktree** with merge already in progress (`MERGE_HEAD` set).
-- Must **not** run `git merge` / `git merge --abort` — only resolve markers + `git commit --no-edit`.
-- Heartbeat may **early-finalize** via `reconcileMergeFixerChat` when `checkMerged` + `verifyIntegrationMerge` succeed (git poll each tick).
-- Merge-fixer **stall** watchdog uses `FIXER_STALL_MULTIPLIER` (1.5× `progressStallMs`) before calling `reconcileMergeFixerChat`; env-fixer stalls remain stop-only (1×).
-- **`reconcileMergingTasks`** — live safety net: supervise active fixer (`isTaskChatActive`) or `finalizeMergeFixerOnStreamEnd` + `drainTaskQueue` when board is running. Called from `autoDelegateNext` (before `isBoardRunning` gate), `waitForNoActiveFixer` timeout (60s cap), boot `recoverInterruptedMergesAfterReload`, and manual **`recoverMergingBoardTask`**.
+- Must **not** run `git merge` / `git merge --abort` — only resolve markers + `git commit --no-edit`, then `board_report`.
+- **MERGE_HEAD preflight** in `startMergeConflictFixer`: if merge already committed or clean re-merge succeeds, injects synthetic `boardReport: pass` and calls `finalizeMergeFixerOnStreamEnd` without spawning a fixer chat.
+- **`reconcileMergingTasks`** — live safety net: supervise active fixer (`isTaskChatActive`) or report-driven **`finalizeMergeFixerOnStreamEnd`** when the fixer died without stream-end. Called from `autoDelegateNext` (before `isBoardRunning` gate), `waitForNoActiveFixer` timeout (60s cap), boot `recoverInterruptedMergesAfterReload`, and manual **`recoverMergingBoardTask`**.
 - Serialized via `mergeQueueByGroupId` + `enqueueBoardMerge`.
 
 **Env fixer** (`startEnvFixer`, `fixerKind: 'env'`):
 
 - Spawned by self-heal for **infra** failures on the **task worktree**.
-- Re-runs build or test phase after fixer completes.
+- Reports via `board_report`; **`finalizeEnvFixerOnStreamEnd`** re-runs build or test phase on `pass`.
+
+**Unified stall recovery (AFK/auto):**
+
+All board-linked chats (builder, tester, merge fixer, env fixer, final test) share **`startTaskChatSupervision`**:
+
+| Step | Threshold | Action |
+|------|-----------|--------|
+| Stall | `progressStallMs × 3` (`TASK_CHAT_STALL_MULTIPLIER`) | `stopGeneration` on stalled chat |
+| First restart | cap 2 per chat | `runTaskChatNudge(..., { chatId })` with role-specific `board_report` reminder |
+| Recurrence | — | `runSelfHeal` via **`resolveStallHealPhase`** (`build` / `test` / `merge`) |
 
 ---
 
@@ -462,7 +479,7 @@ Gated by `isBoardReadyForFinalTest`:
 | **Auto / AFK / Sequential** | `startFinalIntegrationTest` automatically |
 | **Manual** | Banner **Run final integration test**; `finalTest.status = 'pending'` |
 
-Tester runs in **integration worktree** with browser smoke tools. Verdict via `board_report_test_result` on final chat.
+Tester runs in **integration worktree** with browser smoke tools. Verdict via **`board_report`** (`task_id: FULL_BOARD`) on final chat.
 
 **On pass:** `maybeEmitOrchestratePlanComplete` → finish dashboard.
 
@@ -559,8 +576,7 @@ sequenceDiagram
 | `board_init` | Orchestrate planner | Create/replace board on folder |
 | `board_get_state` | Any board-linked chat | Read JSON state |
 | `board_update_task` | Planner only | Metadata, notes; **not** for builders marking `complete` |
-| `board_report_test_result` | Tester chats | Sets verdict fields (routing on stream end) |
-| `board_report_build_result` | Builder (optional) | Structured blockers for self-heal |
+| `board_report` | Builder / Tester / fixer chats | Sets `task.boardReport` (routing on stream end; legacy field mirrors) |
 | `board_set_autonomy` | Planner | Set mode; `afk` → `pendingAfk` |
 | `delegate_tasks` | Headless/programmatic | Hidden from planner tool list; starts specific task ids |
 
@@ -594,15 +610,15 @@ AND all prior waves settled (complete or quarantined)
 
 | Chat type | End outcome | Next |
 |-----------|-------------|------|
-| Builder | success | `testing` + start Tester |
+| Builder | `board_report` pass | `testing` + start Tester |
 | Builder | user stop | quarantine (+ dependents) |
 | Builder | system stop (`systemPaused`) | `planned` + `stopRetries` (not quarantine) |
 | Builder | fail | self-heal (auto) / `failed` (manual) |
 | Tester | pass | merge → `complete` or merge fixer |
 | Tester | fail | self-heal / test retry / `blocked` |
-| Merge fixer | merged (stream-end or heartbeat reconcile) | `complete` |
-| Merge fixer | stall (≥ 1.5× `progressStallMs`) | `reconcileMergeFixerChat` → finalize |
-| Merge fixer | not merged | retry merge ≤2 → `blocked` |
+| Merge fixer | `board_report` pass + verified merge | `complete` |
+| Merge fixer | stall (≥ 3× `progressStallMs`) | nudge fixer chat → self-heal on recurrence |
+| Merge fixer | `board_report` fail / unverified | retry merge ≤2 → `blocked` / self-heal |
 | Final Tester | pass | finish dashboard |
 | Final Tester | fail | reopen tasks + rebuild |
 
@@ -639,6 +655,7 @@ AND all prior waves settled (complete or quarantined)
 ## Related docs
 
 - [`documentation/context.md`](../context.md) — Orchestrate board section (module table)
+- [`documentation/plans/unified-board-report.md`](./unified-board-report.md) — unified `board_report` completion model (shipped)
 - [`documentation/plans/Orchestrator Plan.md`](Orchestrator%20Plan.md) — product plan (MIN-140+)
 - [`documentation/specs/MIN-275-worktree-isolation.md`](../specs/MIN-275-worktree-isolation.md) — isolation spec
 - [`documentation/guides/MIN-275-worktree-isolation-testing.md`](../guides/MIN-275-worktree-isolation-testing.md) — manual QA guide

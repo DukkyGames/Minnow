@@ -28,7 +28,7 @@ const BOARD_TOOLS = [
   'board_update_task',
   'delegate_tasks',
   'board_get_state',
-  'board_report_test_result',
+  'board_report',
   'read_file',
 ];
 
@@ -43,7 +43,7 @@ describe('applyBoardMemberToolFilter', () => {
   test('strips planner-only board tools for board task chats', () => {
     const filtered = applyBoardMemberToolFilter(defsFor(BOARD_TOOLS), BUILD_TASK_CHAT);
     const names = filtered.map((d) => d.function.name);
-    assert.deepEqual(names, ['board_get_state', 'board_report_test_result', 'read_file']);
+    assert.deepEqual(names, ['board_get_state', 'board_report', 'read_file']);
   });
 
   test('leaves all tools for chats without boardTaskId', () => {

@@ -52,7 +52,7 @@ import { reportBackgroundError } from '../boot/report-background-error.ts';
 import { normalizeVerdict } from '../tools/board-tools.ts';
 import { schedulePostTurnSynthesis } from '../synthesis/client.ts';
 import { buildSynthesisMessages, buildSynthesisExcerpt } from '../synthesis/post-turn.ts';
-import type { BoardTask, BoardTaskStatus, Chat, ChatGroup, ChatStopReason, OrchestrateBoardState, SessionState } from '../types.ts';
+import type { BoardReport, BoardTask, BoardTaskStatus, Chat, ChatGroup, ChatStopReason, OrchestrateBoardState, SessionState } from '../types.ts';
 import {
   assignChatToGroup,
   getBoardGroupForChat,
@@ -362,26 +362,20 @@ let autoDriveSubscribed = false;
 /** Generous multiplier over progressStallMs before killing a stuck task-chat turn. */
 const TASK_CHAT_STALL_MULTIPLIER = 3;
 
-/** Merge fixers get extra headroom before stall reconcile (git poll is primary). */
-const FIXER_STALL_MULTIPLIER = 1.5;
 /** Max bounded restarts per task-chat before giving up. */
 const TASK_CHAT_STALL_RESTART_CAP = 2;
 
 /** Per-chatId count of stall-triggered restarts this session. Cleared on stream end. */
 const taskChatStallRestarts = new Map<string, number>();
 
-/**
- * Fixer chat ids with an in-flight proactive merge-completion probe. Prevents
- * overlapping git checks when multiple heartbeats fire while a probe is pending.
- */
-const fixerEarlyFinalizeInFlight = new Set<string>();
-
 /** Test-only: capture stall-path nudge/self-heal calls from heartbeat supervision. */
 let taskChatNudgeCallsForTests: string[] | null = null;
+let taskChatNudgeChatIdsForTests: string[] | null = null;
 let stallSelfHealCallsForTests: string[] | null = null;
 
-function recordTaskChatNudgeCallForTests(taskId: string): void {
+function recordTaskChatNudgeCallForTests(taskId: string, chatId: string): void {
   taskChatNudgeCallsForTests?.push(taskId);
+  taskChatNudgeChatIdsForTests?.push(chatId);
 }
 
 function recordStallSelfHealCallForTests(taskId: string): void {
@@ -509,6 +503,65 @@ export function resolveTaskChatStopReason(
   return 'system';
 }
 
+/** Clear stale structured report fields when a new phase chat starts. */
+const BOARD_REPORT_RESET_PATCH = {
+  boardReport: undefined,
+  testVerdict: undefined,
+  testSummary: undefined,
+  buildOutcome: undefined,
+  buildBlockers: undefined,
+} as const;
+
+function buildOutcomeToReportOutcome(
+  buildOutcome: string,
+): 'pass' | 'fail' | 'env_blocked' | null {
+  if (buildOutcome === 'ok') return 'pass';
+  if (buildOutcome === 'env_blocked') return 'env_blocked';
+  if (buildOutcome === 'failed' || buildOutcome === 'failure') return 'fail';
+  return null;
+}
+
+/** Primary structured report with legacy field fallback for hydrated sessions. */
+function resolveBoardReport(task: BoardTask): BoardReport | null {
+  if (task.boardReport?.outcome && task.boardReport.summary?.trim()) {
+    return task.boardReport;
+  }
+  if (task.testVerdict) {
+    return {
+      outcome: task.testVerdict,
+      summary: task.testSummary?.trim() || `Tester verdict: ${task.testVerdict}`,
+    };
+  }
+  const buildOutcome = task.buildOutcome?.trim();
+  if (buildOutcome) {
+    const outcome = buildOutcomeToReportOutcome(buildOutcome);
+    if (outcome) {
+      return {
+        outcome,
+        summary:
+          task.testSummary?.trim() ||
+          task.error?.trim() ||
+          `Build outcome: ${buildOutcome}`,
+        ...(task.buildBlockers?.length ? { blockers: task.buildBlockers } : {}),
+      };
+    }
+  }
+  return null;
+}
+
+/** Final integration test report (FULL_BOARD) with legacy recordedVerdict fallback. */
+function resolveFinalBoardReport(board: OrchestrateBoardState): BoardReport | null {
+  const ft = board.finalTest;
+  if (!ft) return null;
+  if (ft.recordedVerdict === 'pass' || ft.recordedVerdict === 'fail') {
+    return {
+      outcome: ft.recordedVerdict,
+      summary: ft.summary?.trim() || `Final integration test: ${ft.recordedVerdict}`,
+    };
+  }
+  return null;
+}
+
 /** Build a SelfHealDeps bag wiring all board-action callbacks. Lazy-built per call. */
 function makeSelfHealDeps(): SelfHealDeps {
   return {
@@ -631,91 +684,108 @@ export function finalizeBoardTaskOnStreamEnd(
     return;
   }
 
-  if (outcome === 'failed') {
-    const errorSummary = 'Task chat ended without completing successfully';
-    logBuildVerdict(group, task.id, 'fail', { summary: errorSummary });
-    updateTask(group, task.id, { endedAt: Date.now() }, plannerChat);
-    if (isBoardRunning(group)) {
-      const freshTask = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
-      const { category } = resolveTaskChatStreamFailure(chat);
-      void runSelfHeal(
-        group,
-        freshTask,
-        plannerChat,
-        { phase: 'build', category, summary: errorSummary },
-        makeSelfHealDeps(),
-      ).catch((err) => reportBackgroundError('self-heal-build', err));
-      return;
+  const freshTask = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
+  const report = resolveBoardReport(freshTask);
+
+  if (report?.outcome === 'pass') {
+    updateTask(
+      group,
+      task.id,
+      {
+        endedAt: Date.now(),
+        error: undefined,
+        testVerdict: undefined,
+        testSummary: undefined,
+        stopRetries: undefined,
+      },
+      plannerChat,
+    );
+    teardownBoardTaskChatResources(chat, sessionState?.groups);
+    logBuildVerdict(group, task.id, 'pass');
+    moveTaskStatus(group, task.id, 'testing', plannerChat);
+
+    const builderChat = findChatById(chatId);
+    if (builderChat) {
+      const { providerId, modelId } = resolvePlannerModelBinding(plannerChat);
+      const lastAssistant = [...builderChat.history].reverse().find((m) => m.role === 'assistant');
+      const assistantText = lastAssistant && typeof lastAssistant.content === 'string'
+        ? lastAssistant.content
+        : '';
+      schedulePostTurnSynthesis({
+        chatId: builderChat.id,
+        messages: buildSynthesisMessages(builderChat),
+        roundCount: builderChat.history.filter((m) => m.role === 'assistant').length,
+        toolCount: 0,
+        sourceExcerpt: buildSynthesisExcerpt(builderChat),
+        assistantText,
+        force: true,
+        providerId: providerId || undefined,
+        modelId: modelId || undefined,
+      });
     }
-    moveTaskStatus(group, task.id, 'failed', plannerChat);
-    void finalizeTerminalBuildFailure(group, task, plannerChat, chat, errorSummary);
+
+    if (isBoardRunning(group)) {
+      void startTaskTesting(group, task.id, plannerChat).catch((err) =>
+        reportBackgroundError('start-task-testing', err),
+      );
+    }
     return;
   }
 
-  updateTask(
-    group,
-    task.id,
-    {
-      endedAt: Date.now(),
-      error: undefined,
-      testVerdict: undefined,
-      testSummary: undefined,
-      stopRetries: undefined,
-    },
-    plannerChat,
-  );
-  teardownBoardTaskChatResources(chat, sessionState?.groups);
-  logBuildVerdict(group, task.id, 'pass');
-  moveTaskStatus(group, task.id, 'testing', plannerChat);
-
-  const builderChat = findChatById(chatId);
-  if (builderChat) {
-    const { providerId, modelId } = resolvePlannerModelBinding(plannerChat);
-    const lastAssistant = [...builderChat.history].reverse().find((m) => m.role === 'assistant');
-    const assistantText = lastAssistant && typeof lastAssistant.content === 'string'
-      ? lastAssistant.content
-      : '';
-    schedulePostTurnSynthesis({
-      chatId: builderChat.id,
-      messages: buildSynthesisMessages(builderChat),
-      roundCount: builderChat.history.filter((m) => m.role === 'assistant').length,
-      toolCount: 0,
-      sourceExcerpt: buildSynthesisExcerpt(builderChat),
-      assistantText,
-      force: true,
-      providerId: providerId || undefined,
-      modelId: modelId || undefined,
-    });
+  if (report?.outcome === 'env_blocked') {
+    const summary = report.summary || 'Environment blocked build verification';
+    logBuildVerdict(group, task.id, 'fail', { summary });
+    updateTask(group, task.id, { endedAt: Date.now() }, plannerChat);
+    teardownBoardTaskChatResources(chat, sessionState?.groups);
+    if (isBoardRunning(group)) {
+      void startEnvFixer(group, freshTask, plannerChat, 'build', summary).catch((err) =>
+        reportBackgroundError('start-env-fixer-build', err),
+      );
+    } else {
+      moveTaskStatus(group, task.id, 'blocked', plannerChat);
+      updateTask(group, task.id, { error: summary }, plannerChat);
+    }
+    return;
   }
 
+  const errorSummary =
+    report?.outcome === 'fail'
+      ? report.summary || 'Build reported failure'
+      : 'Task chat ended without board_report';
+  logBuildVerdict(group, task.id, 'fail', { summary: errorSummary });
+  updateTask(group, task.id, { endedAt: Date.now() }, plannerChat);
   if (isBoardRunning(group)) {
-    void startTaskTesting(group, task.id, plannerChat).catch((err) =>
-      reportBackgroundError('start-task-testing', err),
-    );
+    const { category } = resolveTaskChatStreamFailure(chat);
+    const signal = report?.outcome ?? freshTask.buildOutcome;
+    const healCategory = signal === 'env_blocked' ? 'infra' : category;
+    void runSelfHeal(
+      group,
+      freshTask,
+      plannerChat,
+      { phase: 'build', category: healCategory, summary: errorSummary },
+      makeSelfHealDeps(),
+    ).catch((err) => reportBackgroundError('self-heal-build', err));
+    return;
   }
+  moveTaskStatus(group, task.id, 'failed', plannerChat);
+  void finalizeTerminalBuildFailure(group, task, plannerChat, chat, errorSummary);
 }
 
-/**
- * Stop a merge-fixer chat and finalize directly when stream-end may never arrive
- * (heartbeat git poll success or stall watchdog).
- */
-async function reconcileMergeFixerChat(
-  group: ChatGroup,
-  planner: Chat,
-  taskId: string,
-  chatId: string,
-): Promise<void> {
-  stopTaskChatSupervision(chatId);
-  stopGeneration(chatId);
-
-  const task = group.orchestrateBoard?.tasks.find((t) => t.id === taskId);
-  if (!task || task.status !== 'merging' || task.fixerChatId?.trim() !== chatId) return;
-
-  await finalizeMergeFixerOnStreamEnd(group, task, planner);
-
-  if (isBoardRunning(group)) {
-    await drainTaskQueue(group, planner);
+/** Map a stalled supervised chat to the self-heal phase for stall recovery. */
+function resolveStallHealPhase(
+  task: BoardTask,
+  stalledChatId: string,
+  board?: OrchestrateBoardState,
+): 'build' | 'test' | 'merge' {
+  const stalled = stalledChatId.trim();
+  if (stalled === task.chatId?.trim()) return 'build';
+  if (stalled === task.testChatId?.trim()) return 'test';
+  if (stalled === task.fixerChatId?.trim()) {
+    if (task.fixerKind === 'env') return task.envFixPhase ?? 'build';
+    if (task.status === 'merging') return 'merge';
   }
+  if (board?.finalTest?.chatId?.trim() === stalled) return 'test';
+  return 'build';
 }
 
 function startTaskChatSupervision(chatId: string): void {
@@ -747,53 +817,6 @@ function startTaskChatSupervision(chatId: string): void {
 
     const stallTask = group.orchestrateBoard.tasks.find((t) => t.id === taskId);
 
-    // Merge fixer chats: git poll or stall → direct reconcile (stream-end may never arrive).
-    if (stallTask?.fixerChatId?.trim() === chatId && stallTask.status === 'merging') {
-      // Proactive completion: a fixer often keeps emitting prose/diagnostics after a
-      // successful `git commit --no-edit`, so it never trips the stall watchdog and
-      // its stream-end may lag. Poll git state each tick; as soon as the branch is
-      // merged and verified, reconcile directly.
-      const branch = stallTask.worktreeBranch?.trim();
-      if (branch && isLocalServerAvailable() && !fixerEarlyFinalizeInFlight.has(chatId)) {
-        const boardId = group.id;
-        fixerEarlyFinalizeInFlight.add(chatId);
-        void (async () => {
-          try {
-            const merged = await checkTaskBranchMerged({ boardId, fromBranch: branch });
-            if (!merged.ok || !merged.merged) return;
-            const verified = await verifyIntegrationMergeOp({ boardId, fromBranch: branch });
-            if (!verified.ok || !verified.verified) return;
-            const fresh =
-              group.orchestrateBoard?.tasks.find((t) => t.id === taskId) ?? stallTask;
-            if (fresh.fixerChatId?.trim() !== chatId || fresh.status !== 'merging') return;
-            await reconcileMergeFixerChat(group, planner, taskId, chatId);
-          } catch (err) {
-            reportBackgroundError('merge-fixer-early-finalize', err);
-          } finally {
-            fixerEarlyFinalizeInFlight.delete(chatId);
-          }
-        })();
-      }
-
-      if (progressAge < meta.progressStallMs * FIXER_STALL_MULTIPLIER) return;
-      void reconcileMergeFixerChat(group, planner, taskId, chatId).catch((err) =>
-        reportBackgroundError('merge-fixer-stall-reconcile', err),
-      );
-      return;
-    }
-
-    // Env-fixer chats: stop-only on stall — stream-end owns finalize; never nudge/self-heal.
-    if (
-      stallTask?.fixerChatId?.trim() === chatId &&
-      stallTask.status === 'in_progress' &&
-      stallTask.fixerKind === 'env'
-    ) {
-      if (progressAge < meta.progressStallMs) return;
-      stopHeartbeat(chatTaskRunId(chatId));
-      stopGeneration(chatId);
-      return;
-    }
-
     const stallMs = meta.progressStallMs * TASK_CHAT_STALL_MULTIPLIER;
     if (progressAge < stallMs) return;
 
@@ -808,23 +831,26 @@ function startTaskChatSupervision(chatId: string): void {
 
     const stallReason = `task-chat-stall (${progressAge}ms no output)`;
     if (restarts === 0) {
-      recordTaskChatNudgeCallForTests(taskId);
-      void runTaskChatNudge(group, taskId, planner, stallReason).catch((err) =>
+      recordTaskChatNudgeCallForTests(taskId, chatId);
+      void runTaskChatNudge(group, taskId, planner, stallReason, { chatId }).catch((err) =>
         reportBackgroundError('task-chat-stall-nudge', err),
       );
-    } else {
-      if (stallTask) {
-        recordStallSelfHealCallForTests(stallTask.id);
-        void runSelfHeal(group, stallTask, planner, { phase: 'build', category: 'stall', summary: stallReason }, makeSelfHealDeps())
-          .catch((err) => reportBackgroundError('task-chat-stall-selfheal', err));
-      }
+    } else if (stallTask) {
+      recordStallSelfHealCallForTests(stallTask.id);
+      const phase = resolveStallHealPhase(stallTask, chatId, group.orchestrateBoard);
+      void runSelfHeal(
+        group,
+        stallTask,
+        planner,
+        { phase, category: 'stall', summary: stallReason },
+        makeSelfHealDeps(),
+      ).catch((err) => reportBackgroundError('task-chat-stall-selfheal', err));
     }
   });
 }
 
 function stopTaskChatSupervision(chatId: string): void {
   taskChatStallRestarts.delete(chatId);
-  fixerEarlyFinalizeInFlight.delete(chatId);
   stopHeartbeat(chatTaskRunId(chatId));
 }
 
@@ -1169,8 +1195,8 @@ export function buildTaskSeedMessage(
     test,
     '',
     'Read the plan file for full context if needed. Report what you changed.',
-    `When done, call board_report_build_result({ task_id: "${task.id}", status: "ok"|"env_blocked"|"failed", summary: "..." }).`,
-    'Use env_blocked (with blockers) if services/commands were missing; never report ok unless verification actually ran.',
+    `When done, call board_report({ task_id: "${task.id}", outcome: "pass"|"env_blocked"|"fail", summary: "..." }).`,
+    'Use env_blocked (with blockers) if services/commands were missing; never report pass unless verification actually ran.',
   ];
   if (task.worktreePath?.trim()) {
     lines.push('', `Working directory: ${task.worktreePath.trim()}. Keep all file/terminal ops inside it; don't cd to the original repo or any absolute path — use relative paths.`);
@@ -1217,8 +1243,8 @@ export function buildBuildRetrySeedMessage(
     `Previous build attempt failed (${attempt}/${resolveMaxTaskBuildAttempts()}): ${errorSummary}`,
     '',
     'Fix the issues and report what you changed.',
-    `Call board_report_build_result({ task_id: "${task.id}", status: "ok"|"env_blocked"|"failed", summary: "..." }) when done.`,
-    'Use env_blocked (with blockers) if services were unavailable; never report ok unless verification actually ran.',
+    `Call board_report({ task_id: "${task.id}", outcome: "pass"|"env_blocked"|"fail", summary: "..." }) when done.`,
+    'Use env_blocked (with blockers) if services were unavailable; never report pass unless verification actually ran.',
   ];
   if (task.worktreePath?.trim()) {
     lines.push('', `Working directory: ${task.worktreePath.trim()}. Keep all file/terminal ops inside it; don't cd to the original repo or any absolute path — use relative paths.`);
@@ -1253,7 +1279,7 @@ export function buildTaskTestSeedMessage(
     '',
     'Verify with git_diff, static integration review, and project scripts (typecheck → lint → unit → build).',
     'If setup/services fail (DB connection refused, missing binary, port unavailable), report fail with the service name — do not blame the code for an env problem.',
-    `Report exactly once via board_report_test_result({ task_id: "${task.id}", verdict: "pass" | "fail", summary: "..." }).`,
+    `Report exactly once via board_report({ task_id: "${task.id}", outcome: "pass" | "fail", summary: "..." }).`,
   ].join('\n');
 }
 
@@ -1279,7 +1305,7 @@ export function buildFinalIntegrationTestSeedMessage(
     taskList,
     '',
     'Exercise the whole app end-to-end. On failure, identify responsible task ids via board_get_state.',
-    `Report exactly once via board_report_test_result({ task_id: "${FULL_BOARD_TEST_ID}", verdict: "pass" | "fail", summary: "...", failing_tasks: [...] }).`,
+    `Report exactly once via board_report({ task_id: "${FULL_BOARD_TEST_ID}", outcome: "pass" | "fail", summary: "...", failing_tasks: [...] }).`,
   ].join('\n');
 }
 
@@ -1344,8 +1370,39 @@ export function shouldRouteContinueToNewChat(chat: Chat, task: BoardTask): boole
   );
 }
 
-/** Short nudge appended to an existing build chat — no full task reseed. */
-export function buildContinueNudgeMessage(task: BoardTask, priorError?: string): string {
+/** Role-specific board_report reminder for stall nudges. */
+function boardReportNudgeLine(
+  task: BoardTask,
+  stalledChatId?: string,
+): string {
+  const stalled = stalledChatId?.trim();
+  if (stalled === task.testChatId?.trim()) {
+    return (
+      'Continue verification where you left off and call board_report with pass or fail when done.'
+    );
+  }
+  if (stalled === task.fixerChatId?.trim()) {
+    if (task.status === 'merging') {
+      return (
+        'Continue resolving the merge conflict, run `git commit --no-edit` when ready, ' +
+        'then call board_report with pass or fail.'
+      );
+    }
+    return (
+      'Continue environment repair and call board_report with pass, fail, or env_blocked when done.'
+    );
+  }
+  return (
+    'Continue where you left off and call board_report with pass, fail, or env_blocked when the build phase is complete.'
+  );
+}
+
+/** Short nudge appended to an existing task chat — no full task reseed. */
+export function buildContinueNudgeMessage(
+  task: BoardTask,
+  priorError?: string,
+  options?: { stalledChatId?: string },
+): string {
   const lines = [
     `Continue the orchestrate task ${task.id} — ${task.title} where you left off.`,
     "Pick up from your last step; don't restart from scratch.",
@@ -1354,7 +1411,7 @@ export function buildContinueNudgeMessage(task: BoardTask, priorError?: string):
   if (err) {
     lines.push(`The prior attempt errored mid-way: ${err}`);
   }
-  lines.push('Report what you changed.');
+  lines.push(boardReportNudgeLine(task, options?.stalledChatId));
   return lines.join(' ');
 }
 
@@ -1461,24 +1518,80 @@ export async function recoverMergingBoardTask(
   emitBoardChange(group.id);
 }
 
-/** Run a continue nudge on the existing build chat (no original-prompt reseed). */
+/** Re-spawn the correct phase chat when a stall nudge target chat is missing. */
+async function restartStallNudgeFallback(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+  priorError?: string,
+  stalledChatId?: string,
+): Promise<void> {
+  const stalled = stalledChatId?.trim();
+  if (!stalled || stalled === task.chatId?.trim()) {
+    await startTask(group, task.id, plannerChat);
+    return;
+  }
+  if (
+    stalled === task.testChatId?.trim() ||
+    group.orchestrateBoard?.finalTest?.chatId?.trim() === stalled
+  ) {
+    await startTaskTesting(group, task.id, plannerChat);
+    return;
+  }
+  if (stalled === task.fixerChatId?.trim()) {
+    if (task.status === 'merging') {
+      const branch = task.worktreeBranch?.trim();
+      const board = group.orchestrateBoard;
+      if (branch && board?.integrationBranch) {
+        await startMergeConflictFixer(group, task, plannerChat, [], task.mergePreSha);
+        return;
+      }
+      quarantineTaskAndDependents(
+        group,
+        task.id,
+        {
+          category: 'merge',
+          summary: priorError || 'Merge fixer chat missing and merge context invalid',
+          resolutionSteps: ['inspect merge state, then Requeue'],
+          at: Date.now(),
+        },
+        plannerChat,
+      );
+      return;
+    }
+    if (task.fixerKind === 'env') {
+      await startEnvFixer(
+        group,
+        task,
+        plannerChat,
+        task.envFixPhase ?? 'build',
+        priorError || 'Environment fixer stalled',
+      );
+      return;
+    }
+  }
+  await startTask(group, task.id, plannerChat);
+}
+
+/** Run a continue nudge on an existing task chat (no original-prompt reseed). */
 export async function runTaskChatNudge(
   group: ChatGroup,
   taskId: string,
   plannerChat: Chat,
   priorError?: string,
+  options?: { chatId?: string },
 ): Promise<void> {
   const board = group.orchestrateBoard;
   if (!board) return;
-  const task = board.tasks.find((t) => t.id === taskId);
+  let task = board.tasks.find((t) => t.id === taskId);
   if (!task) return;
 
-  const existingChatId = task.chatId?.trim();
-  if (!existingChatId) {
-    await startTask(group, taskId, plannerChat);
+  const targetChatId = options?.chatId?.trim() || task.chatId?.trim();
+  if (!targetChatId) {
+    await restartStallNudgeFallback(group, task, plannerChat, priorError, options?.chatId);
     return;
   }
-  if (isTaskChatActive(existingChatId)) return;
+  if (isTaskChatActive(targetChatId)) return;
 
   if (countRunningTaskChats(board) >= maxConcurrent(board)) {
     enqueueTask(group.id, taskId);
@@ -1500,24 +1613,28 @@ export async function runTaskChatNudge(
     return;
   }
 
-  const taskChat = findChatById(existingChatId);
+  const taskChat = findChatById(targetChatId);
   if (!taskChat) {
-    await startTask(group, taskId, plannerChat);
+    await restartStallNudgeFallback(group, task, plannerChat, priorError, targetChatId);
     return;
   }
+
+  task = board.tasks.find((t) => t.id === taskId) ?? task;
 
   reserveLaunchSlot(taskChat.id);
   try {
     const { renderSidebar } = await import('../ui/sidebar.ts');
     renderSidebar();
 
-    const worktreeRoot = await ensureTaskWorktree(group, task, plannerChat);
-    if (worktreeRoot) {
-      taskChat.worktreeRoot = worktreeRoot;
-      scheduleSaveSessions();
+    if (targetChatId === task.chatId?.trim()) {
+      const worktreeRoot = await ensureTaskWorktree(group, task, plannerChat);
+      if (worktreeRoot) {
+        taskChat.worktreeRoot = worktreeRoot;
+        scheduleSaveSessions();
+      }
     }
 
-    const nudge = buildContinueNudgeMessage(task, priorError);
+    const nudge = buildContinueNudgeMessage(task, priorError, { stalledChatId: targetChatId });
     refreshHeartbeatThresholds();
     startTaskChatSupervision(taskChat.id);
 
@@ -1912,6 +2029,8 @@ function buildMergeFixerSeedMessage(
     '3. Finish with `git commit --no-edit` (uses the prepared merge message and records both parents).',
     '',
     'Touch only conflicted regions. Do not run git push.',
+    '',
+    `When the merge is committed, call board_report({ task_id: "${task.id}", outcome: "pass" | "fail", summary: "..." }) exactly once.`,
   ].join('\n');
 }
 
@@ -1953,8 +2072,19 @@ export async function startMergeConflictFixer(
     if (inProg.ok && !inProg.inProgress) {
       const alreadyMerged = await checkTaskBranchMerged({ boardId, fromBranch: branch });
       if (alreadyMerged.ok && alreadyMerged.merged) {
-        // Merge already committed — skip fixer and finalize directly.
+        // Merge already committed — skip fixer; synthetic pass report for report-driven finalize.
         moveTaskStatus(group, task.id, 'merging', plannerChat);
+        updateTask(
+          group,
+          task.id,
+          {
+            boardReport: {
+              outcome: 'pass',
+              summary: 'Merge already committed (MERGE_HEAD absent on preflight)',
+            },
+          },
+          plannerChat,
+        );
         const freshMerged = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
         await finalizeMergeFixerOnStreamEnd(group, freshMerged, plannerChat).catch((err) =>
           reportBackgroundError('merge-fixer-already-merged', err),
@@ -1972,8 +2102,19 @@ export async function startMergeConflictFixer(
         effectiveConflictedFiles = remerge.conflictedFiles ?? conflictedFiles;
         effectiveIntegrationSha = remerge.integrationSha ?? integrationSha;
       } else if (remerge.ok) {
-        // Merged cleanly — finalize and complete.
+        // Merged cleanly — synthetic pass report then report-driven finalize.
         moveTaskStatus(group, task.id, 'merging', plannerChat);
+        updateTask(
+          group,
+          task.id,
+          {
+            boardReport: {
+              outcome: 'pass',
+              summary: 'Merge completed cleanly on preflight re-merge',
+            },
+          },
+          plannerChat,
+        );
         const freshClean = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
         await finalizeMergeFixerOnStreamEnd(group, freshClean, plannerChat).catch((err) =>
           reportBackgroundError('merge-fixer-clean-remerge', err),
@@ -2000,6 +2141,7 @@ export async function startMergeConflictFixer(
   }
 
   moveTaskStatus(group, task.id, 'merging', plannerChat);
+  updateTask(group, task.id, { ...BOARD_REPORT_RESET_PATCH }, plannerChat);
 
   const preSha = effectiveIntegrationSha?.trim() || task.mergePreSha?.trim();
   if (preSha) {
@@ -2049,7 +2191,7 @@ export async function startMergeConflictFixer(
   }
 }
 
-/** Route merge fixer stream-end: confirm merge or block the task. */
+/** Route merge fixer stream-end: report-driven verify, then complete or retry. */
 async function finalizeMergeFixerOnStreamEnd(
   group: ChatGroup,
   task: BoardTask,
@@ -2069,15 +2211,17 @@ async function finalizeMergeFixerOnStreamEnd(
 
     const boardId = group.id;
     const attempts = fresh.fixerAttempts ?? 0;
+    const report = resolveBoardReport(fresh);
 
-    try {
-    const merged = await checkTaskBranchMerged({ boardId, fromBranch: branch });
-    const verified =
-      merged.ok && merged.merged
-        ? await verifyIntegrationMergeOp({ boardId, fromBranch: branch })
-        : null;
-
-    if (merged.ok && merged.merged && verified?.ok && verified.verified) {
+    const tryCompleteVerifiedMerge = async (): Promise<boolean> => {
+      const merged = await checkTaskBranchMerged({ boardId, fromBranch: branch });
+      const verified =
+        merged.ok && merged.merged
+          ? await verifyIntegrationMergeOp({ boardId, fromBranch: branch })
+          : null;
+      if (!(merged.ok && merged.merged && verified?.ok && verified.verified)) {
+        return false;
+      }
       const mergePreSha = fresh.mergePreSha?.trim();
       try {
         await refreshIntegrationDepsOp({ boardId, sinceSha: mergePreSha });
@@ -2096,8 +2240,25 @@ async function finalizeMergeFixerOnStreamEnd(
         plannerChat,
       );
       moveTaskStatus(group, fresh.id, 'complete', plannerChat);
-      return;
+      return true;
+    };
+
+    if (report?.outcome === 'pass') {
+      try {
+        if (await tryCompleteVerifiedMerge()) return;
+      } catch (err) {
+        reportBackgroundError('finalize-merge-fixer', err);
+        moveTaskStatus(group, fresh.id, 'blocked', plannerChat);
+        return;
+      }
     }
+
+    const fixerSummary =
+      report?.outcome === 'fail'
+        ? report.summary || 'Merge fixer reported failure'
+        : report?.outcome === 'pass'
+          ? 'Merge fixer reported pass but integration merge could not be verified'
+          : 'Merge fixer did not report board_report';
 
     const preSha = fresh.mergePreSha?.trim();
     if (preSha) {
@@ -2122,7 +2283,6 @@ async function finalizeMergeFixerOnStreamEnd(
 
       const mergeResult = await enqueueMergeCompletedTaskWorktree(group, fresh, plannerChat);
       if (mergeResult.outcome === 'merged' || mergeResult.outcome === 'skipped') {
-        // Re-merge succeeded (conflict resolved or already integrated) → complete.
         const mergePreSha = fresh.mergePreSha?.trim();
         try {
           await refreshIntegrationDepsOp({ boardId, sinceSha: mergePreSha });
@@ -2168,10 +2328,6 @@ async function finalizeMergeFixerOnStreamEnd(
       return;
     }
 
-    const fixerSummary =
-      fresh.error?.trim() ||
-      verified?.reasons?.join('; ') ||
-      'Merge fixer could not produce a valid integration merge after 2 attempts';
     updateTask(
       group,
       fresh.id,
@@ -2183,7 +2339,6 @@ async function finalizeMergeFixerOnStreamEnd(
       },
       plannerChat,
     );
-    // Terminal fixer exhaustion → route through self-heal (will quarantine).
     void runSelfHeal(
       group,
       fresh,
@@ -2191,10 +2346,6 @@ async function finalizeMergeFixerOnStreamEnd(
       { phase: 'merge', category: 'merge', summary: fixerSummary },
       makeSelfHealDeps(),
     ).catch((err) => reportBackgroundError('self-heal-fixer-terminal', err));
-    } catch (err) {
-      reportBackgroundError('finalize-merge-fixer', err);
-      moveTaskStatus(group, fresh.id, 'blocked', plannerChat);
-    }
   } finally {
     fixerFinalizeInFlight.delete(task.id);
   }
@@ -2232,6 +2383,8 @@ function buildEnvFixerSeedMessage(
     '',
     'You do not need to run git — the board commits this worktree automatically',
     'when the task passes. Keep the change minimal and scoped to unblocking the build.',
+    '',
+    `When verification succeeds, call board_report({ task_id: "${task.id}", outcome: "pass" | "fail" | "env_blocked", summary: "..." }) exactly once.`,
   ].join('\n');
 }
 
@@ -2278,7 +2431,12 @@ export async function startEnvFixer(
     taskId: task.id,
     taskChatField: 'fixerChatId',
   });
-  updateTask(group, task.id, { fixerKind: 'env', envFixPhase: phase }, plannerChat);
+  updateTask(
+    group,
+    task.id,
+    { fixerKind: 'env', envFixPhase: phase, ...BOARD_REPORT_RESET_PATCH },
+    plannerChat,
+  );
 
   fixerChat.worktreeRoot = worktreeRoot;
   scheduleSaveSessions();
@@ -2329,18 +2487,37 @@ async function finalizeEnvFixerOnStreamEnd(
     const fresh = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
     if (fresh.fixerKind !== 'env') return;
     const phase = fresh.envFixPhase ?? 'test';
+    const report = resolveBoardReport(fresh);
     updateTask(
       group,
       fresh.id,
       { fixerChatId: undefined, fixerKind: undefined, envFixPhase: undefined },
       plannerChat,
     );
-    if (!isBoardRunning(group)) return;
-    if (phase === 'build') {
-      await startTask(group, fresh.id, plannerChat);
-    } else {
-      await startTaskTesting(group, fresh.id, plannerChat);
+
+    if (report?.outcome === 'pass') {
+      if (!isBoardRunning(group)) return;
+      if (phase === 'build') {
+        await startTask(group, fresh.id, plannerChat);
+      } else {
+        await startTaskTesting(group, fresh.id, plannerChat);
+      }
+      return;
     }
+
+    const summary =
+      report?.summary ||
+      (report?.outcome === 'env_blocked'
+        ? 'Environment still blocked after env fixer'
+        : 'Env fixer did not report board_report pass');
+    const category = report?.outcome === 'env_blocked' ? 'infra' : 'infra';
+    void runSelfHeal(
+      group,
+      fresh,
+      plannerChat,
+      { phase, category, summary },
+      makeSelfHealDeps(),
+    ).catch((err) => reportBackgroundError('self-heal-env-fixer', err));
   } catch (err) {
     reportBackgroundError('finalize-env-fixer', err);
   } finally {
@@ -2436,6 +2613,7 @@ export async function startTask(
   if (skipBackgroundBoardChatLaunch()) return;
 
   ensureStreamEndSubscription();
+  updateTask(group, taskId, { ...BOARD_REPORT_RESET_PATCH }, plannerChat);
 
   const { providerId, modelId } = resolvePlannerModelBinding(plannerChat);
   if (!modelId) {
@@ -2561,7 +2739,7 @@ export async function startTaskTesting(
   updateTask(
     group,
     taskId,
-    { testVerdict: undefined, testSummary: undefined },
+    { ...BOARD_REPORT_RESET_PATCH },
     plannerChat,
   );
 
@@ -2722,16 +2900,12 @@ export async function finalizeTaskTestingOnStreamEnd(
 ): Promise<void> {
   if (task.status !== 'testing') return;
   const fresh = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
-  let verdict = fresh.testVerdict;
-  let summary = fresh.testSummary?.trim() || 'Tester did not report a verdict';
+  let report = resolveBoardReport(fresh);
 
-  // No structured verdict recorded: fall back to an explicit transcript marker
-  // before treating the run as a failure. Do not override an explicit 'fail'.
-  if (!verdict) {
+  if (!report) {
     const parsed = parseTesterVerdictMarker(fresh.testChatId);
     if (parsed) {
-      verdict = parsed.verdict;
-      summary = parsed.summary;
+      report = { outcome: parsed.verdict, summary: parsed.summary };
       updateTask(
         group,
         fresh.id,
@@ -2741,16 +2915,18 @@ export async function finalizeTaskTestingOnStreamEnd(
     }
   }
 
+  const outcome = report?.outcome;
+  const summary = report?.summary?.trim() || 'Tester did not report a verdict';
   const attemptNum = fresh.testAttempts ?? 0;
   logTestVerdict(
     group,
     fresh.id,
-    verdict === 'pass' ? 'pass' : 'fail',
+    outcome === 'pass' ? 'pass' : 'fail',
     summary,
-    verdict === 'fail' ? attemptNum || undefined : undefined,
+    outcome !== 'pass' ? attemptNum || undefined : undefined,
   );
 
-  if (verdict === 'pass') {
+  if (outcome === 'pass') {
     updateTask(group, fresh.id, { error: undefined }, plannerChat);
     const mergeResult = await enqueueMergeCompletedTaskWorktree(group, fresh, plannerChat);
     if (mergeResult.outcome === 'merged' || mergeResult.outcome === 'skipped') {
@@ -2808,9 +2984,14 @@ export async function finalizeTaskTestingOnStreamEnd(
     return;
   }
 
-  // Test failed: route through self-heal with the Tester chat for classification.
+  // Test failed or env_blocked: route through self-heal with the Tester chat for classification.
   const testerChatObj = fresh.testChatId ? findChatById(fresh.testChatId) : null;
-  const category = testerChatObj ? classifyTaskFailure(testerChatObj) : 'code';
+  const category =
+    outcome === 'env_blocked'
+      ? 'infra'
+      : testerChatObj
+        ? classifyTaskFailure(testerChatObj, outcome, fresh)
+        : 'code';
   void runSelfHeal(
     group,
     fresh,
@@ -3005,11 +3186,12 @@ export function finalizeFinalTestOnStreamEnd(
   const board = group.orchestrateBoard;
   if (!board?.finalTest) return;
 
-  const verdict = board.finalTest.recordedVerdict;
-  const summary = board.finalTest.summary?.trim() || 'Final integration test did not report a verdict';
+  const report = resolveFinalBoardReport(board);
+  const outcome = report?.outcome;
+  const summary = report?.summary?.trim() || 'Final integration test did not report a verdict';
   const failingIds = board.finalTest.failingTaskIds ?? [];
 
-  if (verdict === 'pass') {
+  if (outcome === 'pass') {
     logFinalTestVerdict(group, 'pass', summary);
     board.finalTest = { ...board.finalTest, status: 'passed' };
     board.lastUpdatedAt = Date.now();
@@ -3646,34 +3828,43 @@ export function getTaskChatStallRestartCountForTests(chatId: string): number {
 /** Enable/disable capture of stall-path nudge and self-heal calls from heartbeat ticks. */
 export function trackTaskChatStallRecoveryCallsForTests(enabled: boolean): {
   nudges: string[];
+  nudgeChatIds: string[];
   selfHeals: string[];
 } {
   if (enabled) {
     taskChatNudgeCallsForTests = [];
+    taskChatNudgeChatIdsForTests = [];
     stallSelfHealCallsForTests = [];
     return {
       nudges: taskChatNudgeCallsForTests,
+      nudgeChatIds: taskChatNudgeChatIdsForTests,
       selfHeals: stallSelfHealCallsForTests,
     };
   }
   const nudges = taskChatNudgeCallsForTests ?? [];
+  const nudgeChatIds = taskChatNudgeChatIdsForTests ?? [];
   const selfHeals = stallSelfHealCallsForTests ?? [];
   taskChatNudgeCallsForTests = null;
+  taskChatNudgeChatIdsForTests = null;
   stallSelfHealCallsForTests = null;
-  return { nudges, selfHeals };
+  return { nudges, nudgeChatIds, selfHeals };
 }
 
-/** Test-only: simulate fixer stall reconcile (stream-end finalizes + drains). */
+/** Test-only: simulate fixer stream-end (optionally inject board_report first). */
 export async function triggerFixerStallReconcileForTests(
   group: ChatGroup,
   plannerChat: Chat,
   taskId: string,
+  options?: { boardReport?: BoardReport },
 ): Promise<void> {
   ensureStreamEndSubscription();
   const task = group.orchestrateBoard?.tasks.find((t) => t.id === taskId);
   if (!task) return;
   const chatId = task.fixerChatId?.trim();
   if (!chatId) return;
+  if (options?.boardReport) {
+    updateTask(group, taskId, { boardReport: options.boardReport }, plannerChat);
+  }
   notifyChatStreamEnded(chatId);
   await new Promise((resolve) => setTimeout(resolve, 50));
 }
@@ -3685,16 +3876,6 @@ export async function finalizeMergeFixerOnStreamEndForTests(
   plannerChat: Chat,
 ): Promise<void> {
   return finalizeMergeFixerOnStreamEnd(group, task, plannerChat);
-}
-
-/** Test-only: heartbeat merge-fixer reconcile (git poll / stall path). */
-export async function reconcileMergeFixerChatForTests(
-  group: ChatGroup,
-  planner: Chat,
-  taskId: string,
-  chatId: string,
-): Promise<void> {
-  return reconcileMergeFixerChat(group, planner, taskId, chatId);
 }
 
 /** Test-only: simulate stream-end when fixerChatId was already cleared before delivery. */

@@ -40,8 +40,8 @@ Active mode: **{{mode_label}}**. Working directory: `{{cwd}}`.
 
 The board auto-pilot handles the lifecycle:
 
-- **Builders** implement tasks in isolated worktrees; report via `READY FOR VERIFICATION` (not `board_update_task`).
-- **Testers** verify and call `board_report_test_result`.
+- **Builders** implement tasks in isolated worktrees; report via `board_report` when done.
+- **Testers** verify and call `board_report`.
 - On tester **pass**, the board **auto-commits** the task worktree and **merges** into the global integration branch, then marks the task `complete`.
 - **Downstream tasks** branch from integration only after their `dependsOn` tasks are merged.
 

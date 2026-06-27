@@ -164,6 +164,7 @@ describe('task stream end finalization', () => {
   test('auto mode moves successful build to testing (Tester launched separately)', () => {
     const group = makeGroup('auto');
     const planner = makePlanner();
+    updateTask(group, 'W1-A', { boardReport: { outcome: 'pass', summary: 'Build verified' } }, planner);
     const task = group.orchestrateBoard!.tasks[0]!;
     finalizeBoardTaskOnStreamEnd(group, task, planner);
     const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
@@ -174,6 +175,7 @@ describe('task stream end finalization', () => {
   test('manual mode moves successful task to testing', () => {
     const group = makeGroup('manual');
     const planner = makePlanner();
+    updateTask(group, 'W1-A', { boardReport: { outcome: 'pass', summary: 'Build verified' } }, planner);
     const task = group.orchestrateBoard!.tasks[0]!;
     finalizeBoardTaskOnStreamEnd(group, task, planner);
     const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
@@ -225,7 +227,7 @@ describe('task stream end finalization', () => {
   test('stopRetries cleared after successful build completion', () => {
     const group = makeGroup('auto');
     const planner = makePlanner();
-    updateTask(group, 'W1-A', { stopRetries: 1 }, planner);
+    updateTask(group, 'W1-A', { stopRetries: 1, boardReport: { outcome: 'pass', summary: 'Build verified' } }, planner);
     const task = group.orchestrateBoard!.tasks[0]!;
     const taskChat = makeTaskChat(false);
     setSessionStateForTests({
@@ -306,7 +308,7 @@ describe('task stream end finalization', () => {
     const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
     // Phase 2: exhausted build attempts are quarantined via self-heal (not left as failed).
     assert.equal(updated.status, 'quarantined');
-    assert.match(updated.quarantine?.summary ?? updated.error ?? '', /without completing/i);
+    assert.match(updated.quarantine?.summary ?? updated.error ?? '', /board_report/i);
   });
 
   test('markBoardTaskInProgressFromChat sets in_progress when stream starts', () => {

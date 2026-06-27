@@ -15,7 +15,7 @@ import { isOrchestratePlanComplete } from '../../src/chat/orchestrate/plan-compl
 import {
   executeBoardTool,
   setBoardExecutorContext,
-  validateBoardReportTestResultArgs,
+  validateBoardReportArgs,
 } from '../../src/tools/board-tools.ts';
 import { initBoard, updateTask } from '../../src/state/orchestrate-board-store.ts';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
@@ -72,17 +72,17 @@ function makeGroup(taskStatuses: Record<string, 'complete' | 'testing' | 'in_pro
   return group;
 }
 
-describe('board_report_test_result validation', () => {
-  test('requires task_id, verdict, summary', () => {
-    assert.equal(validateBoardReportTestResultArgs({}).ok, false);
-    const ok = validateBoardReportTestResultArgs({
+describe('board_report validation', () => {
+  test('requires task_id, outcome, summary', () => {
+    assert.equal(validateBoardReportArgs({}).ok, false);
+    const ok = validateBoardReportArgs({
       task_id: 'W1-A',
-      verdict: 'pass',
+      outcome: 'pass',
       summary: 'all good',
     });
     assert.equal(ok.ok, true);
     if (ok.ok) {
-      assert.equal(ok.args.verdict, 'pass');
+      assert.equal(ok.args.outcome, 'pass');
     }
   });
 
@@ -109,24 +109,25 @@ describe('board_report_test_result validation', () => {
       activeChatId: TEST_CHAT_ID,
     });
     setBoardExecutorContext({ chatId: TEST_CHAT_ID, groupId: GROUP_ID });
-    const out = await executeBoardTool('board_report_test_result', {
+    const out = await executeBoardTool('board_report', {
       task_id: 'W1-A',
-      verdict: 'pass',
+      outcome: 'pass',
       summary: 'typecheck and tests passed',
     });
     assert.doesNotMatch(out, /^Error:/);
     const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
     assert.equal(task.testVerdict, 'pass');
     assert.equal(task.testSummary, 'typecheck and tests passed');
+    assert.equal(task.boardReport?.outcome, 'pass');
   });
 
   test('rejects unknown task id', async () => {
     const group = makeGroup({ 'W1-A': 'testing' });
     const planner = makePlanner();
     setBoardExecutorContext({ chatId: PLANNER_ID, groupId: GROUP_ID });
-    const out = await executeBoardTool('board_report_test_result', {
+    const out = await executeBoardTool('board_report', {
       task_id: 'NOPE',
-      verdict: 'fail',
+      outcome: 'fail',
       summary: 'bad id',
     });
     assert.match(out, /unknown board task/i);
@@ -135,30 +136,45 @@ describe('board_report_test_result validation', () => {
   });
 });
 
-describe('board_report_test_result tolerant inputs', () => {
-  test('accepts non-canonical verdict casing/synonyms', () => {
+describe('board_report tolerant inputs', () => {
+  test('accepts non-canonical outcome casing/synonyms', () => {
     for (const v of ['PASS', 'Passed', 'success', ' ok ']) {
-      const r = validateBoardReportTestResultArgs({ task_id: 'W1-A', verdict: v, summary: 's' });
+      const r = validateBoardReportArgs({ task_id: 'W1-A', outcome: v, summary: 's' });
       assert.equal(r.ok, true, `expected ${v} to validate`);
-      if (r.ok) assert.equal(r.args.verdict, 'pass');
+      if (r.ok) assert.equal(r.args.outcome, 'pass');
     }
-    const f = validateBoardReportTestResultArgs({ task_id: 'W1-A', verdict: 'FAILED', summary: 's' });
+    const f = validateBoardReportArgs({ task_id: 'W1-A', outcome: 'FAILED', summary: 's' });
     assert.equal(f.ok, true);
-    if (f.ok) assert.equal(f.args.verdict, 'fail');
+    if (f.ok) assert.equal(f.args.outcome, 'fail');
   });
 
   test('records verdict when task_id carries a title suffix', async () => {
     const group = makeGroup({ 'W1-A': 'testing' });
     const planner = makePlanner();
-    setSessionStateForTests({ chats: [planner], groups: [group], activeChatId: PLANNER_ID });
-    setBoardExecutorContext({ chatId: PLANNER_ID, groupId: GROUP_ID });
-    const out = await executeBoardTool('board_report_test_result', {
+    const testChat: Chat = {
+      id: TEST_CHAT_ID,
+      name: 'Test',
+      workspacePath: '/tmp/ws',
+      modeId: 'build',
+      modelId: 'm1',
+      workAgentId: 'tester',
+      history: [],
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: 1,
+      boardGroupId: GROUP_ID,
+      boardTaskId: 'W1-A',
+    };
+    setSessionStateForTests({ chats: [planner, testChat], groups: [group], activeChatId: TEST_CHAT_ID });
+    setBoardExecutorContext({ chatId: TEST_CHAT_ID, groupId: GROUP_ID });
+    const out = await executeBoardTool('board_report', {
       task_id: 'W1-A — A',
-      verdict: 'pass',
+      outcome: 'pass',
       summary: 'ok',
     });
     assert.doesNotMatch(out, /^Error:/);
     const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    assert.equal(task.boardReport?.outcome, 'pass');
     assert.equal(task.testVerdict, 'pass');
   });
 });

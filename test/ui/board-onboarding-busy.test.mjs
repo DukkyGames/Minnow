@@ -18,11 +18,24 @@ const { createEmptyChatObject } = await import('../../src/state/sessions.ts');
 const { resetBoardOnboardingTransientState } = await import(
   '../../src/ui/orchestrate-board-onboarding-state.ts'
 );
+const { setStreaming } = await import('../../src/app-state.ts');
+
+/** happy-dom windows keep the event loop alive unless closed. */
+let testWindow = null;
 
 afterEach(() => {
   disposeBoardOnboardingUiTimers();
   resetBoardOnboardingTransientState();
+  setStreaming(false);
+  testWindow?.close();
+  testWindow = null;
 });
+
+function mountTestDom() {
+  testWindow = new Window();
+  globalThis.document = testWindow.document;
+  globalThis.HTMLElement = testWindow.HTMLElement;
+}
 
 describe('formatBoardOnboardingPlanDisplay', () => {
   test('returns basename for posix paths', () => {
@@ -46,9 +59,7 @@ describe('formatBoardOnboardingPlanDisplay', () => {
 
 describe('syncBoardOnboardingBusyUI init phase', () => {
   test('hides setup and shows centered loader during init', () => {
-    const window = new Window();
-    globalThis.document = window.document;
-    globalThis.HTMLElement = window.HTMLElement;
+    mountTestDom();
 
     const chat = createEmptyChatObject('');
     const wrap = document.createElement('div');
@@ -90,9 +101,7 @@ describe('syncBoardOnboardingBusyUI init phase', () => {
 
 describe('syncBoardGitPromptCopy', () => {
   test('updates prompt labels for remote setup', async () => {
-    const window = new Window();
-    globalThis.document = window.document;
-    globalThis.HTMLElement = window.HTMLElement;
+    mountTestDom();
 
     const { createBoardGitSetupPrompt, syncBoardGitPromptCopy } = await import(
       '../../src/ui/orchestrate-board-onboarding-ui.ts'

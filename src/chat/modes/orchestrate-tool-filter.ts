@@ -41,7 +41,7 @@ export function applyOrchestrateAutoToolFilter(
 
 /**
  * Board task/tester chats must not mutate the board or delegate — the auto-pilot
- * advances cards programmatically. Keeps board_get_state and board_report_test_result.
+ * advances cards programmatically. Keeps board_get_state and board_report.
  *
  * Under Auto/AFK these sub-agents are also denied `ask_question`: only the orchestrator
  * may pause for the user (and only in Auto), so builders/testers/fixers can't block a

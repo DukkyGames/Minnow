@@ -28,7 +28,7 @@ import {
 } from '../state/orchestrate-board-actions.ts';
 import { emitBoardChange } from '../state/orchestrate-board-events.ts';
 import { findChatById, scheduleSaveSessions } from '../state/sessions.ts';
-import type { BoardCategory, BoardTaskStatus, Chat, OrchestrateBoardState } from '../types.ts';
+import type { BoardCategory, BoardTask, BoardTaskStatus, Chat, OrchestrateBoardState } from '../types.ts';
 
 export interface BoardExecutorContext {
   chatId: string;
@@ -403,36 +403,56 @@ export function validateBoardUpdateTaskArgs(
   };
 }
 
-export type BoardReportBuildResultArgs = {
+export type BoardReportArgs = {
   task_id: string;
-  status: 'ok' | 'env_blocked' | 'failed';
+  outcome: 'pass' | 'fail' | 'env_blocked';
   summary: string;
   blockers?: string[];
+  failing_tasks?: string[];
 };
 
-export type ValidateBoardReportBuildResultResult =
-  | { ok: true; args: BoardReportBuildResultArgs }
+export type ValidateBoardReportResult =
+  | { ok: true; args: BoardReportArgs }
   | { ok: false; error: string };
 
-/** Validate board_report_build_result arguments (exported for tests). */
-export function validateBoardReportBuildResultArgs(
+/**
+ * Coerce a model-supplied outcome to pass | fail | env_blocked.
+ * Tolerant of casing and common synonyms from smaller models.
+ */
+export function normalizeOutcome(raw: unknown): 'pass' | 'fail' | 'env_blocked' | null {
+  if (typeof raw !== 'string') return null;
+  const v = raw.trim().toLowerCase().replace(/[.!]+$/, '');
+  if (!v) return null;
+  if (/^(pass|passed|passing|passes|success|succeeded|succeeds|ok|green)$/.test(v)) {
+    return 'pass';
+  }
+  if (/^(fail|failed|failing|fails|failure|error|errored|broken|red)$/.test(v)) {
+    return 'fail';
+  }
+  if (/^(env_blocked|env blocked|env-blocked|blocked_env|infra_blocked|infra)$/.test(v)) {
+    return 'env_blocked';
+  }
+  return null;
+}
+
+/** Validate board_report arguments (exported for tests). */
+export function validateBoardReportArgs(
   args: Record<string, unknown>,
-): ValidateBoardReportBuildResultResult {
+): ValidateBoardReportResult {
   const task_id = typeof args.task_id === 'string' ? args.task_id.trim() : '';
   if (!task_id) {
-    return { ok: false, error: 'Error: board_report_build_result requires "task_id"' };
+    return { ok: false, error: 'Error: board_report requires "task_id"' };
   }
-  const rawStatus = typeof args.status === 'string' ? args.status.trim().toLowerCase() : '';
-  if (rawStatus !== 'ok' && rawStatus !== 'env_blocked' && rawStatus !== 'failed') {
+  const outcomeRaw = normalizeOutcome(args.outcome);
+  if (!outcomeRaw) {
     return {
       ok: false,
-      error: 'Error: board_report_build_result requires status "ok", "env_blocked", or "failed"',
+      error: 'Error: board_report requires outcome "pass", "fail", or "env_blocked"',
     };
   }
-  const status = rawStatus as 'ok' | 'env_blocked' | 'failed';
   const summary = typeof args.summary === 'string' ? args.summary.trim() : '';
   if (!summary) {
-    return { ok: false, error: 'Error: board_report_build_result requires non-empty "summary"' };
+    return { ok: false, error: 'Error: board_report requires non-empty "summary"' };
   }
   const blockersRaw = args.blockers;
   let blockers: string[] | undefined;
@@ -444,65 +464,6 @@ export function validateBoardReportBuildResultArgs(
     for (const item of blockersRaw) {
       if (typeof item === 'string' && item.trim()) blockers.push(item.trim());
     }
-  }
-  return {
-    ok: true,
-    args: {
-      task_id,
-      status,
-      summary,
-      ...(blockers?.length ? { blockers } : {}),
-    },
-  };
-}
-
-export type BoardReportTestResultArgs = {
-  task_id: string;
-  verdict: 'pass' | 'fail';
-  summary: string;
-  failing_tasks?: string[];
-};
-
-export type ValidateBoardReportTestResultResult =
-  | { ok: true; args: BoardReportTestResultArgs }
-  | { ok: false; error: string };
-
-/**
- * Coerce a model-supplied verdict to the canonical 'pass' | 'fail'.
- * Tolerant of casing, trailing punctuation, and common synonyms because
- * smaller models rarely emit the exact literal. Returns null when unclear.
- */
-export function normalizeVerdict(raw: unknown): 'pass' | 'fail' | null {
-  if (typeof raw !== 'string') return null;
-  const v = raw.trim().toLowerCase().replace(/[.!]+$/, '');
-  if (!v) return null;
-  if (/^(pass|passed|passing|passes|success|succeeded|succeeds|ok|green)$/.test(v)) {
-    return 'pass';
-  }
-  if (/^(fail|failed|failing|fails|failure|error|errored|broken|red)$/.test(v)) {
-    return 'fail';
-  }
-  return null;
-}
-
-/** Validate board_report_test_result arguments (exported for tests). */
-export function validateBoardReportTestResultArgs(
-  args: Record<string, unknown>,
-): ValidateBoardReportTestResultResult {
-  const task_id = typeof args.task_id === 'string' ? args.task_id.trim() : '';
-  if (!task_id) {
-    return { ok: false, error: 'Error: board_report_test_result requires "task_id"' };
-  }
-  const verdictRaw = normalizeVerdict(args.verdict);
-  if (verdictRaw !== 'pass' && verdictRaw !== 'fail') {
-    return {
-      ok: false,
-      error: 'Error: board_report_test_result requires verdict "pass" or "fail"',
-    };
-  }
-  const summary = typeof args.summary === 'string' ? args.summary.trim() : '';
-  if (!summary) {
-    return { ok: false, error: 'Error: board_report_test_result requires non-empty "summary"' };
   }
   const failingRaw = args.failing_tasks ?? args.failingTasks;
   let failing_tasks: string[] | undefined;
@@ -523,11 +484,30 @@ export function validateBoardReportTestResultArgs(
     ok: true,
     args: {
       task_id,
-      verdict: verdictRaw,
+      outcome: outcomeRaw,
       summary,
+      ...(blockers?.length ? { blockers } : {}),
       ...(failing_tasks?.length ? { failing_tasks } : {}),
     },
   };
+}
+
+/**
+ * Coerce a model-supplied verdict to the canonical 'pass' | 'fail'.
+ * Tolerant of casing, trailing punctuation, and common synonyms because
+ * smaller models rarely emit the exact literal. Returns null when unclear.
+ */
+export function normalizeVerdict(raw: unknown): 'pass' | 'fail' | null {
+  if (typeof raw !== 'string') return null;
+  const v = raw.trim().toLowerCase().replace(/[.!]+$/, '');
+  if (!v) return null;
+  if (/^(pass|passed|passing|passes|success|succeeded|succeeds|ok|green)$/.test(v)) {
+    return 'pass';
+  }
+  if (/^(fail|failed|failing|fails|failure|error|errored|broken|red)$/.test(v)) {
+    return 'fail';
+  }
+  return null;
 }
 
 const BOARD_AUTONOMY_LEVELS = new Set(['manual', 'sequential', 'auto', 'afk']);
@@ -616,12 +596,8 @@ export async function executeBoardTool(
     return executeDelegateTasks(chat, args);
   }
 
-  if (name === 'board_report_test_result') {
-    return executeBoardReportTestResult(args, options?.chatId);
-  }
-
-  if (name === 'board_report_build_result') {
-    return executeBoardReportBuildResult(args, options?.chatId);
+  if (name === 'board_report') {
+    return executeBoardReport(args, options?.chatId);
   }
 
   return `Error: unknown board tool "${name}"`;
@@ -817,19 +793,53 @@ async function executeDelegateTasks(
   return JSON.stringify({ started, skipped }, null, 2);
 }
 
-async function executeBoardReportTestResult(
+function outcomeToBuildOutcome(outcome: 'pass' | 'fail' | 'env_blocked'): string {
+  if (outcome === 'pass') return 'ok';
+  if (outcome === 'env_blocked') return 'env_blocked';
+  return 'failed';
+}
+
+function outcomeToTestVerdict(outcome: 'pass' | 'fail' | 'env_blocked'): 'pass' | 'fail' {
+  return outcome === 'pass' ? 'pass' : 'fail';
+}
+
+/** Resolve whether to mirror legacy builder or tester fields for this caller chat. */
+function resolveBoardReportMirrorRole(
+  callerChat: Chat | null,
+  task: BoardTask,
+  isFullBoard: boolean,
+): 'test' | 'build' | 'fixer' {
+  if (isFullBoard) return 'test';
+  if (!callerChat) return 'build';
+  const chatId = callerChat.id;
+  if (task.testChatId?.trim() === chatId) return 'test';
+  if (task.fixerChatId?.trim() === chatId) return 'fixer';
+  if (task.chatId?.trim() === chatId) return 'build';
+  if (callerChat.workAgentId === 'tester') return 'test';
+  return 'build';
+}
+
+async function executeBoardReport(
   args: Record<string, unknown>,
   overrideChatId?: string,
 ): Promise<string> {
-  const validated = validateBoardReportTestResultArgs(args);
+  const validated = validateBoardReportArgs(args);
   if (validated.ok === false) return validated.error;
 
   const ctx = resolveBoardGroupFromChat(overrideChatId);
   if (!ctx) {
-    return 'Error: board_report_test_result requires a chat linked to an orchestrate board';
+    return 'Error: board_report requires a chat linked to an orchestrate board';
   }
   const { group, board } = ctx;
-  const { task_id, verdict, summary, failing_tasks } = validated.args;
+  const { task_id, outcome, summary, blockers, failing_tasks } = validated.args;
+  const callerChatId = resolveActiveChatId(overrideChatId);
+  const callerChat = callerChatId ? findChatById(callerChatId) : null;
+
+  const boardReport = {
+    outcome,
+    summary,
+    ...(blockers?.length ? { blockers } : {}),
+  };
 
   if (task_id === 'FULL_BOARD') {
     let validatedFailing: string[] = [];
@@ -843,7 +853,7 @@ async function executeBoardReportTestResult(
       status: priorFinal?.status ?? 'in_progress',
       chatId: priorFinal?.chatId,
       attempts: priorFinal?.attempts,
-      recordedVerdict: verdict,
+      recordedVerdict: outcomeToTestVerdict(outcome),
       summary,
       failingTaskIds: validatedFailing,
     };
@@ -853,7 +863,7 @@ async function executeBoardReportTestResult(
     return JSON.stringify(
       {
         task_id: 'FULL_BOARD',
-        verdict,
+        outcome,
         summary,
         failingTaskIds: validatedFailing,
       },
@@ -865,39 +875,26 @@ async function executeBoardReportTestResult(
   const taskCheck = validateBoardTaskIds(board, [resolveLooseTaskId(board, task_id)]);
   if (taskCheck.ok === false) return taskCheck.error;
   const taskId = taskCheck.ids[0]!;
+  const task = board.tasks.find((t) => t.id === taskId);
+  if (!task) {
+    return `Error: unknown board task "${taskId}"`;
+  }
   const planner = getPlannerChatForGroup(group) ?? undefined;
-  const task = updateTask(
-    group,
-    taskId,
-    { testVerdict: verdict, testSummary: summary },
-    planner,
-  );
+  const mirrorRole = resolveBoardReportMirrorRole(callerChat, task, false);
+  const patch: Record<string, unknown> = { boardReport };
+
+  if (mirrorRole === 'test') {
+    patch.testVerdict = outcomeToTestVerdict(outcome);
+    patch.testSummary = summary;
+  } else if (mirrorRole === 'build') {
+    patch.buildOutcome = outcomeToBuildOutcome(outcome);
+    if (blockers?.length) patch.buildBlockers = blockers;
+  }
+
+  const updated = updateTask(group, taskId, patch, planner);
   return JSON.stringify(
-    { task_id: taskId, verdict, summary, task },
+    { task_id: taskId, outcome, summary, task: updated },
     null,
     2,
   );
-}
-
-async function executeBoardReportBuildResult(
-  args: Record<string, unknown>,
-  overrideChatId?: string,
-): Promise<string> {
-  const validated = validateBoardReportBuildResultArgs(args);
-  if (validated.ok === false) return validated.error;
-
-  const ctx = resolveBoardGroupFromChat(overrideChatId);
-  if (!ctx) {
-    return 'Error: board_report_build_result requires a chat linked to an orchestrate board';
-  }
-  const { group, board } = ctx;
-  const { task_id, status, summary, blockers } = validated.args;
-
-  const taskCheck = validateBoardTaskIds(board, [resolveLooseTaskId(board, task_id)]);
-  if (taskCheck.ok === false) return taskCheck.error;
-  const taskId = taskCheck.ids[0]!;
-  const planner = getPlannerChatForGroup(group) ?? undefined;
-  const patch: Record<string, unknown> = { buildOutcome: status, ...(blockers?.length ? { buildBlockers: blockers } : {}) };
-  const task = updateTask(group, taskId, patch, planner);
-  return JSON.stringify({ task_id: taskId, status, summary, task }, null, 2);
 }

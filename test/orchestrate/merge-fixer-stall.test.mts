@@ -1,9 +1,8 @@
 /**
- * Regression tests for the merge-fixer stall fix (Part 2) and vanished-merge-state
- * guard (Part 3 / Failure B).
+ * Regression tests for merge-fixer stream-end finalize and vanished-merge-state guard.
  *
- * Part 2: when a fixer chat stalls, stopGeneration fires stream-end which finalizes
- * + drains (tested via triggerFixerStallReconcileForTests), not the build nudge/self-heal.
+ * Part 2: fixer completion is report-driven on stream-end (triggerFixerStallReconcileForTests
+ * injects board_report then simulates stream-end).
  * Part 3 / Failure B: startMergeConflictFixer skips spawning a fixer when MERGE_HEAD
  * is already gone and the branch is already merged.
  */
@@ -168,7 +167,7 @@ describe('merge-fixer stall recovery (Part 2)', () => {
     setSessionStateForTests(null);
   });
 
-  test('stall reconciler advances task to complete when merge is already committed', async () => {
+  test('stream-end with pass report advances task to complete when merge is verified', async () => {
     const group = makeGroup();
     const fixerChat = makeFixerChat();
     const { planner } = seedMergingTask(group, fixerChat);
@@ -179,14 +178,16 @@ describe('merge-fixer stall recovery (Part 2)', () => {
       refresh_integration_deps: { ok: true },
     });
 
-    await triggerFixerStallReconcileForTests(group, planner, 'W1-B');
+    await triggerFixerStallReconcileForTests(group, planner, 'W1-B', {
+      boardReport: { outcome: 'pass', summary: 'Merge committed' },
+    });
 
     const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-B')!;
-    assert.equal(task.status, 'complete', 'task should advance to complete without a stream-end event');
+    assert.equal(task.status, 'complete', 'task should advance to complete on stream-end');
     assert.equal(task.fixerChatId, undefined, 'fixerChatId cleared on complete');
   });
 
-  test('stall reconciler increments fixerAttempts and re-queues fixer when branch not merged', async () => {
+  test('stream-end without report increments fixerAttempts and re-queues fixer when branch not merged', async () => {
     const group = makeGroup();
     const fixerChat = makeFixerChat();
     const { planner } = seedMergingTask(group, fixerChat, { fixerAttempts: 0 });
@@ -214,7 +215,7 @@ describe('merge-fixer stall recovery (Part 2)', () => {
     assert.equal(task.fixerAttempts, 1, 'fixerAttempts should be incremented to 1');
   });
 
-  test('stall reconciler completes task when re-merge succeeds on retry', async () => {
+  test('stream-end without report completes task when re-merge succeeds on retry', async () => {
     const group = makeGroup();
     const fixerChat = makeFixerChat();
     const { planner } = seedMergingTask(group, fixerChat, { fixerAttempts: 0 });

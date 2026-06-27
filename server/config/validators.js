@@ -273,6 +273,25 @@ function ensureBoardTask(raw) {
   if (typeof r.testSummary === 'string' && r.testSummary.trim()) {
     out.testSummary = r.testSummary.trim();
   }
+  if (r.boardReport && typeof r.boardReport === 'object') {
+    const br = /** @type {Record<string, unknown>} */ (r.boardReport);
+    const outcome = typeof br.outcome === 'string' ? br.outcome.trim() : '';
+    const summary = typeof br.summary === 'string' ? br.summary.trim() : '';
+    if (
+      (outcome === 'pass' || outcome === 'fail' || outcome === 'env_blocked') &&
+      summary
+    ) {
+      const boardReport = { outcome, summary };
+      if (Array.isArray(br.blockers)) {
+        const blockers = [];
+        for (const item of br.blockers) {
+          if (typeof item === 'string' && item.trim()) blockers.push(item.trim());
+        }
+        if (blockers.length) boardReport.blockers = blockers;
+      }
+      out.boardReport = boardReport;
+    }
+  }
   if (typeof r.pendingBuildSeed === 'string' && r.pendingBuildSeed.trim()) {
     out.pendingBuildSeed = r.pendingBuildSeed.trim();
   }
@@ -320,6 +339,13 @@ function ensureBoardTask(raw) {
   }
   if (typeof r.buildOutcome === 'string' && r.buildOutcome.trim()) {
     out.buildOutcome = r.buildOutcome.trim();
+  }
+  if (Array.isArray(r.buildBlockers)) {
+    const buildBlockers = [];
+    for (const item of r.buildBlockers) {
+      if (typeof item === 'string' && item.trim()) buildBlockers.push(item.trim());
+    }
+    if (buildBlockers.length) out.buildBlockers = buildBlockers;
   }
   return out;
 }
