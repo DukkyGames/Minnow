@@ -9,6 +9,7 @@ Task-oriented documentation. For the authoritative, exhaustive architecture refe
 | [apps.md](apps.md) | A tour of the MinnowOS apps (Chat, Code, Models, Compare, Bench, Research, Experts, Brain, Calendar, Email, Scheduler). |
 | [architecture.md](architecture.md) | High-level system map: SPA, tool server, Electron shell, agent layer, storage. |
 | [configuration.md](configuration.md) | `~/.minnow` layout, `config.json`, providers, encrypted secrets, env vars. |
+| [settings-reference.md](settings-reference.md) | Full inventory of every setting (UI, config keys, tools, env vars). |
 | [troubleshooting.md](troubleshooting.md) | Common problems and fixes. |
 | [oauth-google.md](oauth-google.md) | Google OAuth for Email + Calendar. |
 | [oauth-microsoft.md](oauth-microsoft.md) | Microsoft OAuth for Email + Calendar. |
