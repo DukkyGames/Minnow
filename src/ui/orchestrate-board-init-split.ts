@@ -1,6 +1,6 @@
 /**
- * Transient Orchestrate board-init split layout: Kanban (or onboarding) on top,
- * streaming chat + tool calls below. Active only during board_init kickoff streams.
+ * Transient Orchestrate board-init layout: full board onboarding loader (no chat split).
+ * Chat still streams in the background; bubbles stay hidden until the user jumps to Chat view.
  */
 
 import { normalizeModeId } from '../chat/modes/types';
@@ -16,13 +16,7 @@ import {
   BOARD_BUILD_KICKOFF_MESSAGE,
   BOARD_ONBOARDING_KICKOFF_MESSAGE,
 } from './orchestrate-board-kickoff';
-import { bindBoardInitSplitChatScroll } from './chat-scroll';
 import { isOrchestrateBoardViewActive, syncBoardViewChrome } from './view-mode-toggle';
-
-const SPLIT_CLASS = 'main-column--orchestrate-init-split';
-const SPLIT_ROOT_CLASS = 'board-init-split';
-const BOARD_PANE_TESTID = 'boardInitSplitBoard';
-const CHAT_PANE_TESTID = 'boardInitSplitChat';
 
 /** True when the last user history row is a board parse/init kickoff. */
 export function lastUserMessageMatchesBoardKickoff(chat: Chat): boolean {
@@ -43,70 +37,35 @@ export function lastUserMessageMatchesBoardKickoff(chat: Chat): boolean {
 }
 
 /**
- * True while the parent orchestrator stream is initializing or re-parsing the board
- * and the user should see the split layout (board top, chat bottom).
+ * True while the parent orchestrator stream is initializing the board
+ * (no orchestrateBoard store yet, kickoff message in history).
  */
 export function isOrchestrateBoardInitSplitActive(chat: Chat): boolean {
   if (normalizeModeId(chat.modeId) !== 'orchestrate') return false;
   if (!isChatStreaming(chat.id)) return false;
-  if (!isOrchestrateBoardViewActive() && !isOrchestrateInitSplitChromeActive()) {
-    return false;
-  }
+  if (!isOrchestrateBoardViewActive()) return false;
   const group = getBoardGroupForChat(chat);
   const board = group?.orchestrateBoard;
   if (board) return false;
   return lastUserMessageMatchesBoardKickoff(chat);
 }
 
-/** Whether split chrome is mounted on #mainColumn / #chatArea. */
+/** @deprecated Split chrome is no longer mounted; kept for loop.ts guards. */
 export function isOrchestrateInitSplitChromeActive(): boolean {
-  return (
-    document.getElementById('mainColumn')?.classList.contains(SPLIT_CLASS) ?? false
-  );
+  return false;
 }
 
-/** Chat transcript mount: split bottom pane or full #chatArea. */
+/** Chat transcript mount: always full #chatArea (init split removed). */
 export function getOrchestrateChatMountElement(): HTMLElement {
-  const pane = document.querySelector(
-    `[data-testid="${CHAT_PANE_TESTID}"]`,
-  ) as HTMLElement | null;
-  if (pane) return pane;
   return document.getElementById('chatArea')!;
 }
 
-/** Board shell mount: split top pane or full #chatArea. */
+/** Board shell mount: always full #chatArea. */
 export function getOrchestrateBoardMountElement(): HTMLElement {
-  const pane = document.querySelector(
-    `[data-testid="${BOARD_PANE_TESTID}"]`,
-  ) as HTMLElement | null;
-  if (pane) return pane;
   return document.getElementById('chatArea')!;
 }
 
-function ensureSplitHost(area: HTMLElement): void {
-  if (area.querySelector(`:scope > .${SPLIT_ROOT_CLASS}`)) return;
-  area.replaceChildren();
-  const split = document.createElement('div');
-  split.className = SPLIT_ROOT_CLASS;
-  const boardPane = document.createElement('div');
-  boardPane.className = 'board-init-split__board';
-  boardPane.dataset.testid = BOARD_PANE_TESTID;
-  const chatPane = document.createElement('div');
-  chatPane.className = 'board-init-split__chat';
-  chatPane.dataset.testid = CHAT_PANE_TESTID;
-  split.appendChild(boardPane);
-  split.appendChild(chatPane);
-  area.appendChild(split);
-  bindBoardInitSplitChatScroll();
-}
-
-function teardownSplitHost(area: HTMLElement): void {
-  const split = area.querySelector(`:scope > .${SPLIT_ROOT_CLASS}`);
-  if (!split) return;
-  area.replaceChildren();
-}
-
-function openBoardGroupForInitSplit(chat: Chat): void {
+function openBoardGroupForInit(chat: Chat): void {
   const group =
     getActiveBoardGroup() ?? getBoardGroupForChat(chat) ?? getOrCreateBoardGroup(chat);
   group.viewMode = 'board';
@@ -116,47 +75,46 @@ function openBoardGroupForInitSplit(chat: Chat): void {
 }
 
 /**
- * Mount or tear down init-split DOM and sync main-column classes.
- * Call on stream start/end and when board view enters init streaming.
+ * Refresh board onboarding during init streams; tear down legacy split DOM if present.
  */
 export function syncOrchestrateInitSplitChrome(chat?: Chat): void {
   const active = chat ?? getActiveChat();
-  const shouldSplit = isOrchestrateBoardInitSplitActive(active);
-  const mainColumn = document.getElementById('mainColumn');
-  mainColumn?.classList.toggle(SPLIT_CLASS, shouldSplit);
+  const initActive = isOrchestrateBoardInitSplitActive(active);
 
   const area = document.getElementById('chatArea');
-  if (!area) return;
+  const legacySplit = area?.querySelector(':scope > .board-init-split');
+  if (legacySplit && area) {
+    area.replaceChildren();
+  }
+  document.getElementById('mainColumn')?.classList.remove('main-column--orchestrate-init-split');
 
-  if (shouldSplit) {
-    openBoardGroupForInitSplit(active);
-    ensureSplitHost(area);
-    syncBoardViewChrome();
-    void import('./orchestrate-board').then((m) => {
-      const group =
-        getActiveBoardGroup() ??
-        getBoardGroupForChat(active) ??
-        getOrCreateBoardGroup(active);
-      m.renderBoardView(group);
-      m.refreshBoardOnboardingIfMounted();
-    });
-    return;
+  if (initActive) {
+    openBoardGroupForInit(active);
   }
 
-  const hadSplit = Boolean(area.querySelector(`:scope > .${SPLIT_ROOT_CLASS}`));
-  teardownSplitHost(area);
   syncBoardViewChrome();
-  if (hadSplit && isOrchestrateBoardViewActive()) {
-    const group = getActiveBoardGroup();
-    if (group) {
-      void import('./orchestrate-board').then((m) => m.renderBoardView(group));
+
+  if (!isOrchestrateBoardViewActive() && !initActive) return;
+
+  void import('./orchestrate-board').then((m) => {
+    const group =
+      getActiveBoardGroup() ??
+      getBoardGroupForChat(active) ??
+      getOrCreateBoardGroup(active);
+    m.renderBoardView(group);
+    m.refreshBoardOnboardingIfMounted();
+    if (group.orchestrateBoard) {
+      m.refreshActiveBoardIfMounted();
     }
-  }
+  });
 }
 
-/** Clear split chrome between happy-dom test runs. */
+/** Clear legacy split chrome between happy-dom test runs. */
 export function resetOrchestrateInitSplitForTests(): void {
-  document.getElementById('mainColumn')?.classList.remove(SPLIT_CLASS);
+  document.getElementById('mainColumn')?.classList.remove('main-column--orchestrate-init-split');
   const area = document.getElementById('chatArea');
-  if (area) teardownSplitHost(area);
+  const split = area?.querySelector(':scope > .board-init-split');
+  if (split && area) {
+    area.replaceChildren();
+  }
 }

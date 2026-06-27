@@ -391,12 +391,13 @@ const BOARD_TASK_STATUSES = new Set<BoardTaskStatus>([
   'complete',
   'failed',
   'blocked',
+  'quarantined',
 ]);
 
 const BOARD_CATEGORIES = new Set<BoardCategory>(['build', 'fix', 'test', 'research']);
 
 /** Keep in sync with {@link BOARD_LOG_MAX} in orchestrate-board-store and server validators. */
-const BOARD_LOG_MAX = 500;
+const BOARD_LOG_MAX = 100;
 const BOARD_LOG_LEVELS = new Set<BoardLogLevel>(['info', 'warn', 'error']);
 const BOARD_LOG_TYPES = new Set<BoardLogEventType>([
   'board_init',
@@ -629,6 +630,36 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     typeof r.devPort === 'number' && Number.isFinite(r.devPort) ? r.devPort : undefined;
   const apiPort =
     typeof r.apiPort === 'number' && Number.isFinite(r.apiPort) ? r.apiPort : undefined;
+  const stopRetries =
+    typeof r.stopRetries === 'number' && Number.isFinite(r.stopRetries)
+      ? r.stopRetries
+      : undefined;
+  let quarantine: BoardTask['quarantine'];
+  if (r.quarantine && typeof r.quarantine === 'object') {
+    const q = r.quarantine as Record<string, unknown>;
+    const QUARANTINE_CATEGORIES = new Set(['infra', 'code', 'merge', 'stall', 'unknown']);
+    const qCategory =
+      typeof q.category === 'string' && QUARANTINE_CATEGORIES.has(q.category)
+        ? (q.category as NonNullable<BoardTask['quarantine']>['category'])
+        : null;
+    const summary = typeof q.summary === 'string' ? q.summary : null;
+    const at = typeof q.at === 'number' && Number.isFinite(q.at) ? q.at : null;
+    if (qCategory && summary !== null && at !== null) {
+      const resolutionSteps: string[] = [];
+      if (Array.isArray(q.resolutionSteps)) {
+        for (const step of q.resolutionSteps) {
+          if (typeof step === 'string') resolutionSteps.push(step);
+        }
+      }
+      quarantine = {
+        category: qCategory,
+        summary,
+        resolutionSteps,
+        at,
+        ...(typeof q.logRef === 'string' && q.logRef.trim() ? { logRef: q.logRef.trim() } : {}),
+      };
+    }
+  }
   return {
     id,
     title,
@@ -661,6 +692,8 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     ...(worktreeBranch ? { worktreeBranch } : {}),
     ...(devPort !== undefined ? { devPort } : {}),
     ...(apiPort !== undefined ? { apiPort } : {}),
+    ...(stopRetries !== undefined ? { stopRetries } : {}),
+    ...(quarantine ? { quarantine } : {}),
   };
 }
 
@@ -744,6 +777,8 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
     ...(maxConcurrentTasks !== undefined ? { maxConcurrentTasks } : {}),
     ...(completionShownAt !== undefined ? { completionShownAt } : {}),
     ...(r.dashboardDismissed === true ? { dashboardDismissed: true } : {}),
+    ...(typeof r.integrationLandedAt === 'number' ? { integrationLandedAt: r.integrationLandedAt } : {}),
+    ...(typeof r.worktreesClearedAt === 'number' ? { worktreesClearedAt: r.worktreesClearedAt } : {}),
     ...(typeof r.finishReport === 'string' && r.finishReport.trim()
       ? { finishReport: r.finishReport.trim() }
       : {}),
@@ -758,10 +793,41 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
       ? { integrationBranch: r.integrationBranch.trim() }
       : {}),
     ...(r.userStopped === true ? { userStopped: true } : {}),
+    ...(r.systemPaused === true ? { systemPaused: true } : {}),
     ...(typeof r.isolationBaseRef === 'string' && r.isolationBaseRef.trim()
       ? { isolationBaseRef: r.isolationBaseRef.trim() }
       : {}),
     ...(log ? { log } : {}),
+    ...(() => {
+      if (!Array.isArray(r.unresolvedIssues)) return {};
+      const UNRESOLVED_ISSUES_MAX = 200;
+      const issues = [];
+      for (const item of r.unresolvedIssues) {
+        if (!item || typeof item !== 'object') continue;
+        const u = item as Record<string, unknown>;
+        if (
+          typeof u.taskId === 'string' && u.taskId.trim() &&
+          typeof u.title === 'string' &&
+          typeof u.category === 'string' &&
+          typeof u.summary === 'string' &&
+          Array.isArray(u.resolutionSteps) &&
+          typeof u.createdAt === 'number'
+        ) {
+          issues.push({
+            taskId: u.taskId.trim(),
+            title: typeof u.title === 'string' ? u.title : '',
+            category: u.category as 'infra' | 'code' | 'merge' | 'stall',
+            summary: typeof u.summary === 'string' ? u.summary : '',
+            resolutionSteps: (u.resolutionSteps as unknown[]).filter((s): s is string => typeof s === 'string'),
+            ...(typeof u.logRef === 'string' && u.logRef.trim() ? { logRef: u.logRef.trim() } : {}),
+            createdAt: u.createdAt as number,
+            ...(typeof u.attempts === 'number' ? { attempts: u.attempts } : {}),
+          });
+        }
+      }
+      if (!issues.length) return {};
+      return { unresolvedIssues: issues.slice(-UNRESOLVED_ISSUES_MAX) };
+    })(),
   };
 }
 

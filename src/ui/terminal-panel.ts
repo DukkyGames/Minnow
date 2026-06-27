@@ -631,6 +631,8 @@ export async function runCommandWithTerminalStream(
     workspaceRoot?: string;
     /** Working directory relative to workspaceRoot. */
     cwd?: string;
+    /** Custom timeout in ms forwarded to the server (1000–600000; default 30s). */
+    timeoutMs?: number;
   },
 ): Promise<string> {
   const panelWasClosed = !isTerminalPanelOpen();
@@ -653,6 +655,7 @@ export async function runCommandWithTerminalStream(
     toolCallId: options.toolCallId,
     workspaceRoot: options.workspaceRoot,
     cwd: options.cwd,
+    timeoutMs: options.timeoutMs,
   });
 
   activeRunId = runId;
@@ -669,6 +672,7 @@ export async function runCommandWithTerminalStream(
 
   let exitCode: number | null = 0;
   let timedOut = false;
+  let stopped = false;
   let stdoutAcc = '';
   let stderrAcc = '';
   let aborted = false;
@@ -694,6 +698,7 @@ export async function runCommandWithTerminalStream(
         } else if (ev.type === 'exit') {
           exitCode = ev.code;
           timedOut = ev.timedOut;
+          stopped = ev.stopped ?? false;
         } else if (ev.type === 'error') {
           appendOutputText(`\nError: ${ev.message}\n`, 'stderr');
         }
@@ -733,12 +738,15 @@ export async function runCommandWithTerminalStream(
     scheduleSaveSessions();
   }
 
+  const timeoutSecs = options.timeoutMs ? options.timeoutMs / 1000 : 30;
   const parts = [
     aborted
       ? `${label} (cancelled)`
-      : timedOut
-        ? `${label} (timed out after 30s)`
-        : `${label} (exit ${exitCode ?? 1})`,
+      : stopped
+        ? `${label} (stopped by user — process terminated, not a failure)`
+        : timedOut
+          ? `${label} (timed out after ${timeoutSecs}s)`
+          : `${label} (exit ${exitCode ?? 1})`,
   ];
   if (stdoutAcc.trim()) {
     parts.push(`stdout:\n${stdoutAcc.trimEnd()}`);

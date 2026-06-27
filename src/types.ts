@@ -277,7 +277,8 @@ export type BoardTaskStatus =
   | 'merging'
   | 'complete'
   | 'failed'
-  | 'blocked';
+  | 'blocked'
+  | 'quarantined';
 
 /** Sub-agent category for board agent grid styling. */
 export type BoardCategory = 'build' | 'fix' | 'test' | 'research';
@@ -309,14 +310,28 @@ export interface BoardTask {
   dependsOn?: string[];
   /** Linked Tester chat session id (per-task testing). */
   testChatId?: string;
-  /** Linked merge-conflict fixer chat (integration worktree). */
+  /**
+   * Linked fixer chat. Two flavours, discriminated by {@link fixerKind}:
+   *  - 'merge' (default) — merge-conflict fixer, runs in the integration worktree.
+   *  - 'env'  — environment/setup fixer, runs in the task's own worktree to
+   *             repair infra failures (missing deps, unstarted services) so AFK
+   *             can self-heal instead of dead-ending at quarantine.
+   */
   fixerChatId?: string;
+  /** Which kind of fixer {@link fixerChatId} is. Absent ⇒ legacy merge fixer. */
+  fixerKind?: 'merge' | 'env';
+  /** Env-fixer attempts (0 = first try). Bounds the infra self-heal loop. */
+  envFixAttempts?: number;
+  /** Phase to re-run after an env-fixer finishes ('build' or 'test'). */
+  envFixPhase?: 'build' | 'test';
   /** Build↔test retry count (incremented on each test failure). */
   testAttempts?: number;
   /** Build-failure retry count (incremented on each failed build chat in auto/afk). */
   buildAttempts?: number;
   /** Merge-conflict fixer attempts (0 = first try, 1 = one retry used). */
   fixerAttempts?: number;
+  /** Bounded retry counter when a build chat ends stopped (timeout/system). */
+  stopRetries?: number;
   /** Pre-merge integration tip SHA for restore on fixer failure. */
   mergePreSha?: string;
   /** Structured verdict from board_report_test_result (stream-end routing). */
@@ -330,6 +345,22 @@ export interface BoardTask {
     testVerdict?: 'pass' | 'fail';
     at: number;
   };
+  /** Quarantine payload — set when task is moved to `quarantined`. */
+  quarantine?: {
+    category: 'infra' | 'code' | 'merge' | 'stall' | 'unknown';
+    summary: string;
+    resolutionSteps: string[];
+    at: number;
+    logRef?: string;
+  };
+  /** Phase-2 placeholder: self-heal iteration counter. */
+  selfHealRound?: number;
+  /** Phase-2 placeholder: category of the last self-heal attempt. */
+  lastHealCategory?: string;
+  /** Phase-2 placeholder: outcome of the last build attempt. */
+  buildOutcome?: 'success' | 'failure' | 'skipped' | string;
+  /** Phase-2: structured blockers reported by board_report_build_result. */
+  buildBlockers?: string[];
   /**
    * Pending Builder seed (failure-aware retry/reopen prompt) to use on the next
    * build start instead of the default task seed. Persisted on the task so it
@@ -360,6 +391,18 @@ export interface BoardWave {
   collapsed?: boolean;
 }
 
+/** A task that could not be resolved by the self-heal loop — feeds the MIN-208 finish dashboard. */
+export interface UnresolvedIssue {
+  taskId: string;
+  title: string;
+  category: 'infra' | 'code' | 'merge' | 'stall';
+  summary: string;
+  resolutionSteps: string[];
+  logRef?: string;
+  createdAt: number;
+  attempts?: number;
+}
+
 /** Structured Orchestrate plan execution state (persisted on chat). */
 export interface OrchestrateBoardState {
   planPath: string;
@@ -388,6 +431,12 @@ export interface OrchestrateBoardState {
    */
   userStopped?: boolean;
   /**
+   * True when auto-run was paused by shutdown or OOM recovery (not user Stop).
+   * Stream-end finalization treats this as a system stop (planned + stopRetries),
+   * not quarantine. Cleared when the user starts execution again.
+   */
+  systemPaused?: boolean;
+  /**
    * Filesystem/process isolation for parallel tasks (MIN-275). When unset it is
    * resolved from {@link executionMode} (sequential/manual → off, auto/afk → per-task).
    */
@@ -400,6 +449,10 @@ export interface OrchestrateBoardState {
   completionShownAt?: number;
   /** User dismissed the finish dashboard to view the kanban again. */
   dashboardDismissed?: boolean;
+  /** Epoch ms when integration was merged into the workspace and committed (finish dashboard). */
+  integrationLandedAt?: number;
+  /** Epoch ms when the user cleared all board git worktrees from the finish dashboard. */
+  worktreesClearedAt?: number;
   /** Cached markdown finish report (summary, next steps, how-to-run). */
   finishReport?: string;
   /** Full-board integration test after all tasks complete. */
@@ -413,6 +466,12 @@ export interface OrchestrateBoardState {
   };
   /** Chronological diagnostic log, capped ring buffer (oldest dropped). */
   log?: BoardLogEvent[];
+  /** Phase-2 placeholder: provisioning lifecycle for AFK workspace setup. */
+  provisionState?: 'idle' | 'provisioning' | 'ready' | 'failed';
+  /** Phase-2 placeholder: content-hash signatures of provisioned artefacts. */
+  provisionedSignatures?: string[];
+  /** Structured per-task unresolved issues — data source for the MIN-208 finish dashboard. */
+  unresolvedIssues?: UnresolvedIssue[];
 }
 
 export type BoardLogLevel = 'info' | 'warn' | 'error';
@@ -569,6 +628,9 @@ export type TurnRunStatus =
   | 'failed'
   | 'superseded';
 
+/** Why a turn run ended with status `stopped` (user Stop vs timeout vs supervision). */
+export type ChatStopReason = 'user' | 'timeout' | 'system';
+
 /** One turn execution from a user-message fork point. */
 export interface TurnRunRecord {
   runId: TurnRunId;
@@ -588,6 +650,8 @@ export interface TurnRunRecord {
   generationIds?: string[];
   /** Sub-agent correlation id for this main turn. */
   parentTurnId?: string;
+  /** Set when {@link status} is `stopped` — who/what aborted the turn. */
+  stopReason?: ChatStopReason;
 }
 
 /** Expert thread or legacy Expert Lab session (hidden from main sidebar). */

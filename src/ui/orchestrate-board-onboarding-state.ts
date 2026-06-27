@@ -5,8 +5,14 @@
 /** True while /git-setup skill turn runs before board_init. */
 let boardOnboardingGitSetupActive = false;
 
-/** True while kickoff preflight (ask_question / git setup) is in flight. */
+/** True while kickoff preflight (git prompt / git setup) is in flight. */
 let boardKickoffInProgress = false;
+
+/** AbortController for the active kickoff sequence (git prompt, git skill, pre-send). */
+let kickoffAbort: AbortController | null = null;
+
+type GitSetupPromptResolver = (accepted: boolean) => void;
+let gitSetupPromptResolver: GitSetupPromptResolver | null = null;
 
 type OnboardingStateListener = () => void;
 const listeners = new Set<OnboardingStateListener>();
@@ -21,7 +27,7 @@ function notifyOnboardingStateListeners(): void {
   }
 }
 
-/** Subscribe to git-setup / kickoff flag changes (onboarding busy UI). */
+/** Subscribe to onboarding flag changes (busy UI, git prompt). */
 export function subscribeBoardOnboardingState(listener: OnboardingStateListener): () => void {
   listeners.add(listener);
   return () => {
@@ -47,6 +53,57 @@ export function isBoardKickoffInProgress(): boolean {
 export function setBoardKickoffInProgress(active: boolean): boolean {
   if (active && boardKickoffInProgress) return true;
   boardKickoffInProgress = active;
+  if (active) {
+    kickoffAbort = new AbortController();
+  } else {
+    kickoffAbort = null;
+  }
   notifyOnboardingStateListeners();
   return false;
+}
+
+/** Signal for kickoff cancellation (user Cancel or navigation). */
+export function getBoardKickoffAbortSignal(): AbortSignal | undefined {
+  return kickoffAbort?.signal;
+}
+
+export function isBoardGitSetupPromptActive(): boolean {
+  return gitSetupPromptResolver !== null;
+}
+
+/**
+ * Show the inline git setup question in board onboarding and wait for the user's choice.
+ * Resolves false when cancelled or when kickoff aborts.
+ */
+export function promptBoardGitSetup(): Promise<boolean> {
+  return new Promise((resolve) => {
+    gitSetupPromptResolver = (accepted) => {
+      gitSetupPromptResolver = null;
+      notifyOnboardingStateListeners();
+      resolve(accepted);
+    };
+    notifyOnboardingStateListeners();
+  });
+}
+
+/** Resolve the pending git setup prompt (yes / no / cancel). */
+export function resolveBoardGitSetupPrompt(accepted: boolean): void {
+  const resolver = gitSetupPromptResolver;
+  if (!resolver) return;
+  gitSetupPromptResolver = null;
+  notifyOnboardingStateListeners();
+  resolver(accepted);
+}
+
+/** Clear transient onboarding flags (tests and cancel). */
+export function resetBoardOnboardingTransientState(): void {
+  kickoffAbort?.abort();
+  boardOnboardingGitSetupActive = false;
+  boardKickoffInProgress = false;
+  kickoffAbort = null;
+  if (gitSetupPromptResolver) {
+    gitSetupPromptResolver(false);
+  } else {
+    gitSetupPromptResolver = null;
+  }
 }

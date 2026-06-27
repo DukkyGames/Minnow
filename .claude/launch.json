@@ -5,7 +5,7 @@
       "name": "Minnow Full-Stack",
       "runtimeExecutable": "node",
       "runtimeArgs": ["server.js"],
-      "port": 5173
+      "port": 9473
     },
     {
       "name": "Vite Dev (frontend only)",

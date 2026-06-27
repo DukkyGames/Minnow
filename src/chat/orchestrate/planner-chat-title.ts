@@ -2,7 +2,7 @@
  * Deterministic sidebar title for orchestrate-mode planner (parse) chats.
  */
 
-import { normalizeModeId } from '../modes/types';
+import { normalizeModeId } from '../modes/types.ts';
 import { isPlaceholderChatName } from '../titles/placeholder';
 import type { Chat } from '../../types';
 

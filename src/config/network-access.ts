@@ -2,6 +2,11 @@
  * Client helpers for GET /api/system/network and config.json server.networkAccess.
  */
 
+import {
+  MINNOW_DEFAULT_PORT,
+  defaultMinnowLocalOrigin,
+} from './minnow-port.ts';
+
 export type NetworkAccess = 'local' | 'lan';
 
 export interface NetworkStatus {
@@ -16,8 +21,8 @@ export interface NetworkStatus {
 const DEFAULT_NETWORK_STATUS: NetworkStatus = {
   networkAccess: 'local',
   configNetworkAccess: 'local',
-  port: 5173,
-  localUrl: 'http://localhost:5173/',
+  port: MINNOW_DEFAULT_PORT,
+  localUrl: `${defaultMinnowLocalOrigin()}/`,
   lanUrls: [],
   restartRequired: false,
 };

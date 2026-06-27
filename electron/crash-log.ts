@@ -36,6 +36,10 @@ export type LastCrashMarker = {
 
 const CRASH_LOG_FILE = 'crash.jsonl';
 const LAST_CRASH_FILE = 'last-crash.json';
+const OOM_PAUSE_FILE = 'oom-pause.json';
+
+/** How long OOM throttling / pause-on-resume stays active after a renderer OOM kill. */
+export const OOM_PAUSE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 let cachedLogDir: string | null = null;
 
@@ -143,6 +147,10 @@ function lastCrashPath(): string {
   return path.join(resolveCrashLogDir(), LAST_CRASH_FILE);
 }
 
+function oomPausePath(): string {
+  return path.join(resolveCrashLogDir(), OOM_PAUSE_FILE);
+}
+
 /**
  * Queue one crash line for async flush to crash.jsonl.
  * Never throws — crash handlers may run while the process is dying.
@@ -200,6 +208,47 @@ export function clearLastCrashMarker(): void {
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
       /* ignore other errors during cleanup */
+    }
+  }
+}
+
+/** Persist OOM marker so the renderer can pause AFK boards on next boot. */
+export function writeOomPauseMarker(entry?: { ts?: string }): void {
+  try {
+    const marker: LastCrashMarker = {
+      ts: entry?.ts ?? new Date().toISOString(),
+      kind: 'render-process-gone',
+      reason: 'oom',
+      message: 'Renderer process ran out of memory',
+    };
+    fs.writeFileSync(oomPausePath(), JSON.stringify(marker), 'utf8');
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Read OOM pause marker when still inside the retention window. */
+export function readOomPauseMarker(nowMs = Date.now()): LastCrashMarker | null {
+  try {
+    const raw = fs.readFileSync(oomPausePath(), 'utf8');
+    const parsed = JSON.parse(raw) as LastCrashMarker;
+    if (!parsed || typeof parsed !== 'object' || parsed.reason !== 'oom') return null;
+    const ts = Date.parse(parsed.ts);
+    if (!Number.isFinite(ts) || nowMs - ts > OOM_PAUSE_WINDOW_MS) return null;
+    return parsed;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    return null;
+  }
+}
+
+/** Clear OOM pause marker after the user explicitly resumes the board. */
+export function clearOomPauseMarker(): void {
+  try {
+    fs.unlinkSync(oomPausePath());
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      /* ignore */
     }
   }
 }

@@ -12,7 +12,7 @@ import { isBoardAutoMode, isBoardRunning } from '../../state/orchestrate-board-s
 import { findChatById, sessionState } from '../../state/sessions';
 import type { BoardTask, BoardTaskStatus, Chat, ChatGroup } from '../../types';
 
-export type OrchestratorTaskReportKind = 'completed' | 'stalled' | 'failed';
+export type OrchestratorTaskReportKind = 'completed' | 'stalled' | 'failed' | 'quarantined';
 
 type DeliverFn = (chatId: string, message: string, reportKey: string) => Promise<void>;
 
@@ -63,7 +63,9 @@ export function buildOrchestratorTaskReportMessage(
       ? `[Orchestrate task completed] \`${task.id}\` — ${task.title}`
       : kind === 'failed'
         ? `[Orchestrate task failed] \`${task.id}\` — ${task.title}`
-        : `[Orchestrate task stalled] \`${task.id}\` — ${task.title}`;
+        : kind === 'quarantined'
+          ? `[Orchestrate task quarantined] \`${task.id}\` — ${task.title}`
+          : `[Orchestrate task stalled] \`${task.id}\` — ${task.title}`;
 
   const lines = [
     header,
@@ -76,11 +78,26 @@ export function buildOrchestratorTaskReportMessage(
   if (task.error?.trim()) {
     lines.push('', 'Error:', task.error.trim());
   }
-  if (kind === 'stalled') {
+  if (kind === 'quarantined') {
+    const q = task.quarantine;
+    if (q) {
+      lines.push('', `Quarantine category: ${q.category}`, `Reason: ${q.summary}`);
+      if (q.resolutionSteps.length > 0) {
+        lines.push('', 'Resolution steps:', ...q.resolutionSteps.map((s) => `  - ${s}`));
+      }
+    }
     lines.push(
       '',
-      'Use `board_get_state` for the full board. This task is blocked after repeated test failures.',
-      'Investigate and self-heal autonomously — spawn a fixer sub-agent or retry the build with a refined seed. Do not ask the user.',
+      'Use `board_get_state` for the full board. This task is quarantined; its transitive dependents are also quarantined.',
+      'The autonomous self-heal loop is exhausted — for infra failures an env-fixer sub-agent already attempted a repair and could not unblock it.',
+      'Record the root cause and the resolution steps on the task via `board_update_task` (`error` / `notes`) and summarize the blocker here. Do not ask the user — they will Requeue after addressing it.',
+      'Independent siblings continue running.',
+    );
+  } else if (kind === 'stalled') {
+    lines.push(
+      '',
+      'Use `board_get_state` for the full board. This task is blocked after exhausting its automatic retries.',
+      'The auto-pilot already retried programmatically (and, for env failures, ran an env-fixer). You have no tool to re-run it yourself — record the root cause via `board_update_task` and summarize the blocker here. Never wait for the user.',
       'Auto-pilot continues starting other ready tasks where possible.',
     );
   } else {
@@ -173,6 +190,7 @@ function mapStatusToReportKind(
   if (status === 'complete') return 'completed';
   if (status === 'failed') return 'failed';
   if (status === 'blocked') return 'stalled';
+  if (status === 'quarantined') return 'quarantined';
   return null;
 }
 
@@ -186,16 +204,16 @@ export async function deliverOrchestratorTaskReport(
   if (!isBoardRunning(group)) return;
   const kind = mapStatusToReportKind(status);
   if (!kind) return;
-  const key = reportKey(task.id, kind);
-  if (deliveredReportKeys.has(key)) return;
 
+  // Deliver the report copy (deduped internally by deliveredReportKeys).
+  const key = reportKey(task.id, kind);
   const message = buildOrchestratorTaskReportMessage(task, kind, status);
   await deliverReport(plannerChat, message, key);
 
-  if (kind === 'completed') {
-    const { autoDelegateNext } = await import('../../state/orchestrate-board-actions');
-    await autoDelegateNext(group, plannerChat);
-  }
+  // Re-drive on every settled outcome, even when the message copy was already deduped.
+  // autoDelegateNext is idempotent — no-op when nothing is ready.
+  const { autoDelegateNext } = await import('../../state/orchestrate-board-actions');
+  await autoDelegateNext(group, plannerChat);
 }
 
 function resolveBoardContextFromTaskChat(
@@ -224,7 +242,7 @@ export function initOrchestratorAutoReports(): void {
     const ctx = resolveBoardContextFromTaskChat(endedChatId);
     if (ctx) {
       const { group, planner, task } = ctx;
-      if (isBoardRunning(group) && (task.status === 'complete' || task.status === 'failed' || task.status === 'blocked')) {
+      if (isBoardRunning(group) && (task.status === 'complete' || task.status === 'failed' || task.status === 'blocked' || task.status === 'quarantined')) {
         void deliverOrchestratorTaskReport(group, planner, task, task.status);
       }
     }

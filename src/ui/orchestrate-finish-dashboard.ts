@@ -8,13 +8,18 @@ import {
   fetchGitFinishStats,
   type FinishBoardStats,
 } from '../chat/orchestrate/finish-stats.ts';
+import { enrichFinishReportWithRecommendations } from '../chat/orchestrate/finish-recommendations.ts';
 import { setAssistantBubbleContent } from '../markdown/renderer.ts';
 import { emitBoardChange } from '../state/orchestrate-board-events.ts';
 import {
-  commitIntegration,
-  openIntegrationPr,
-  pushIntegration,
+  clearBoardWorktreesAfterLanding,
+  markBoardIntegrationLanded,
+} from '../state/orchestrate-board-actions.ts';
+import {
+  mergeIntegrationIntoWorkspace,
+  openWorkspacePr,
 } from '../state/worktree-service.ts';
+import { gitCommit, gitPush } from '../state/git-api.ts';
 import {
   findChatById,
   scheduleSaveSessions,
@@ -51,13 +56,24 @@ function formatTokenCount(n: number | null): string {
   return String(n);
 }
 
-function ensureFinishReport(plannerChat: Chat, board: OrchestrateBoardState): string {
-  if (board.finishReport?.trim()) return board.finishReport.trim();
-  const report = buildDeterministicFinishReport(plannerChat, board);
-  board.finishReport = report;
-  touchChat(plannerChat);
-  scheduleSaveSessions();
-  return report;
+function ensureFinishReport(
+  groupId: string,
+  plannerChat: Chat,
+  board: OrchestrateBoardState,
+): string {
+  const existing = board.finishReport?.trim();
+  // Rebuild reports cached before the Completed tasks / LLM recommendations split.
+  if (existing && !existing.includes('## Completed tasks')) {
+    board.finishReport = buildDeterministicFinishReport(plannerChat, board);
+    touchChat(plannerChat);
+    scheduleSaveSessions();
+  } else if (!existing) {
+    board.finishReport = buildDeterministicFinishReport(plannerChat, board);
+    touchChat(plannerChat);
+    scheduleSaveSessions();
+  }
+  void enrichFinishReportWithRecommendations(groupId, plannerChat, board);
+  return board.finishReport!.trim();
 }
 
 function collectBoardIssues(
@@ -128,9 +144,92 @@ function closeSplitMenu(menu: HTMLElement | null): void {
   menu?.remove();
 }
 
+/** Mark integration landed and swap the primary git action to "Clear worktrees". */
+function swapToClearWorktreesButton(
+  wrap: HTMLElement,
+  group: ChatGroup,
+  board: OrchestrateBoardState,
+  plannerChat: Chat,
+  statusEl: HTMLElement,
+): void {
+  markBoardIntegrationLanded(group, plannerChat);
+  const next = buildFinishGitAction(group, board, plannerChat, null, statusEl);
+  wrap.replaceWith(next);
+}
+
+function buildClearWorktreesButton(
+  group: ChatGroup,
+  board: OrchestrateBoardState,
+  plannerChat: Chat,
+  statusEl: HTMLElement,
+): HTMLElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'board-btn board-btn--primary board-finish-dashboard__commit-primary';
+  btn.textContent = 'Clear worktrees';
+  btn.title = 'Remove all git worktrees created for this board';
+
+  let busy = false;
+
+  btn.addEventListener('click', () => {
+    if (busy || board.worktreesClearedAt) return;
+    busy = true;
+    btn.disabled = true;
+    statusEl.textContent = 'Removing board worktrees…';
+    statusEl.dataset.kind = 'info';
+    statusEl.hidden = false;
+
+    void clearBoardWorktreesAfterLanding(group, plannerChat).then((res) => {
+      busy = false;
+      if (!res.ok) {
+        btn.disabled = false;
+        statusEl.textContent = res.error || 'Failed to clear worktrees';
+        statusEl.dataset.kind = 'err';
+        return;
+      }
+      btn.textContent = 'Worktrees cleared';
+      btn.disabled = true;
+      btn.title = 'All board worktrees have been removed';
+      const removed = res.removed ?? 0;
+      statusEl.textContent =
+        removed > 0
+          ? `Removed ${removed} worktree${removed === 1 ? '' : 's'}.`
+          : 'Board worktrees cleared.';
+      statusEl.dataset.kind = 'ok';
+    });
+  });
+
+  return btn;
+}
+
+function buildWorktreesClearedLabel(): HTMLElement {
+  const el = document.createElement('span');
+  el.className = 'board-finish-dashboard__worktrees-cleared';
+  el.textContent = 'Worktrees cleared';
+  return el;
+}
+
+/** Primary git action on the finish dashboard: commit, clear worktrees, or cleared label. */
+function buildFinishGitAction(
+  group: ChatGroup,
+  board: OrchestrateBoardState,
+  plannerChat: Chat,
+  git: FinishBoardStats | null,
+  statusEl: HTMLElement,
+): HTMLElement {
+  if (board.worktreesClearedAt) {
+    return buildWorktreesClearedLabel();
+  }
+  if (board.integrationLandedAt) {
+    return buildClearWorktreesButton(group, board, plannerChat, statusEl);
+  }
+  return buildCommitSplitButton(group, board, plannerChat, git, statusEl);
+}
+
 function buildCommitSplitButton(
   group: ChatGroup,
   board: OrchestrateBoardState,
+  plannerChat: Chat,
   git: FinishBoardStats | null,
   statusEl: HTMLElement,
 ): HTMLElement {
@@ -149,6 +248,11 @@ function buildCommitSplitButton(
     statusEl.hidden = !text;
   };
 
+  /** After merge + commit succeeds, persist landed state and show clear-worktrees action. */
+  const finishLanding = (): void => {
+    swapToClearWorktreesButton(wrap, group, board, plannerChat, statusEl);
+  };
+
   const runChain = async (action: CommitAction): Promise<void> => {
     if (busy) return;
     const branch = board.integrationBranch?.trim();
@@ -159,92 +263,113 @@ function buildCommitSplitButton(
     busy = true;
     primary.disabled = true;
     caret.disabled = true;
-    setStatus('Committing…', 'info');
 
     const planName =
       board.planPath?.split('/').pop()?.replace(/\.md$/i, '') || 'Orchestrate board';
     const commitMsg = `feat: ${planName} (orchestrate board ${group.id})`;
+    const mergeMsg = `Merge ${branch}`;
 
-    const commitRes = await commitIntegration({
-      boardId: group.id,
-      message: commitMsg,
+    setStatus('Merging integration branch into workspace…', 'info');
+    const mergeRes = await mergeIntegrationIntoWorkspace({
+      branch,
+      message: mergeMsg,
     });
-    if (!commitRes.ok) {
-      setStatus(commitRes.output || commitRes.error || 'Commit failed', 'err');
+    if (!mergeRes.ok) {
+      const detail = mergeRes.output || mergeRes.error || 'Merge failed';
+      if (mergeRes.error === 'merge_conflict' || mergeRes.conflict) {
+        setStatus(
+          `Merge conflict — resolve in your workspace, then try again. ${detail}`,
+          'err',
+        );
+      } else {
+        setStatus(detail, 'err');
+      }
       busy = false;
       primary.disabled = false;
       caret.disabled = false;
       return;
     }
-    if (!commitRes.committed) {
-      setStatus('Working tree clean — nothing to commit.', 'info');
+
+    setStatus('Committing…', 'info');
+    const commitRes = await gitCommit({ message: commitMsg });
+    const commitClean =
+      !commitRes.ok &&
+      typeof commitRes.error === 'string' &&
+      commitRes.error.includes('nothing to commit');
+    if (!commitRes.ok && !commitClean) {
+      setStatus(commitRes.error || 'Commit failed', 'err');
       busy = false;
       primary.disabled = false;
       caret.disabled = false;
       return;
     }
+
+    const hadNewCommit = commitRes.ok === true;
 
     if (action === 'commit-only') {
-      setStatus('Committed to integration branch.', 'ok');
+      if (hadNewCommit) {
+        setStatus('Merged and committed to your current branch.', 'ok');
+      } else if (mergeRes.merged) {
+        setStatus('Merged integration branch into your current branch.', 'ok');
+      } else {
+        setStatus('Integration branch already merged; workspace is clean.', 'info');
+      }
+      finishLanding();
       busy = false;
-      primary.disabled = false;
-      caret.disabled = false;
       return;
     }
 
     if (!hasRemote) {
-      setStatus('Committed locally. No origin remote — push skipped.', 'ok');
+      setStatus(
+        hadNewCommit || mergeRes.merged
+          ? 'Merged locally. No origin remote — push skipped.'
+          : 'No origin remote — push skipped.',
+        'ok',
+      );
+      finishLanding();
       busy = false;
-      primary.disabled = false;
-      caret.disabled = false;
       return;
     }
 
-    setStatus('Pushing to origin…', 'info');
-    const pushRes = await pushIntegration({ boardId: group.id, branch });
-    if (!pushRes.ok || !pushRes.pushed) {
-      setStatus(pushRes.output || pushRes.error || 'Push failed', 'err');
+    setStatus('Pushing current branch…', 'info');
+    const pushRes = await gitPush({});
+    if (!pushRes.ok) {
+      setStatus(pushRes.error || pushRes.stdout || 'Push failed', 'err');
+      finishLanding();
       busy = false;
-      primary.disabled = false;
-      caret.disabled = false;
       return;
     }
 
     if (action === 'commit-push') {
-      setStatus(`Pushed \`${branch}\` to origin.`, 'ok');
+      setStatus('Merged and pushed your current branch.', 'ok');
+      finishLanding();
       busy = false;
-      primary.disabled = false;
-      caret.disabled = false;
       return;
     }
 
     if (!hasGh) {
-      setStatus(`Pushed \`${branch}\`. GitHub CLI not available — PR skipped.`, 'ok');
+      setStatus('Merged and pushed. GitHub CLI not available — PR skipped.', 'ok');
+      finishLanding();
       busy = false;
-      primary.disabled = false;
-      caret.disabled = false;
       return;
     }
 
     setStatus('Opening pull request…', 'info');
-    const prRes = await openIntegrationPr({
-      boardId: group.id,
-      branch,
+    const prRes = await openWorkspacePr({
       title: commitMsg,
       body: board.finishReport?.slice(0, 4000) || `Orchestrate board ${group.id}`,
     });
     if (!prRes.ok) {
       setStatus(
-        `Pushed \`${branch}\`. PR failed: ${prRes.output || prRes.error || 'unknown'}`,
+        `Merged and pushed. PR failed: ${prRes.output || prRes.error || 'unknown'}`,
         'err',
       );
     } else {
       const url = prRes.url ? ` ${prRes.url}` : '';
-      setStatus(`Pushed and opened PR.${url}`, 'ok');
+      setStatus(`Merged, pushed, and opened PR.${url}`, 'ok');
     }
+    finishLanding();
     busy = false;
-    primary.disabled = false;
-    caret.disabled = false;
   };
 
   const primary = document.createElement('button');
@@ -252,11 +377,11 @@ function buildCommitSplitButton(
   primary.className = 'board-btn board-btn--primary board-finish-dashboard__commit-primary';
   primary.textContent = 'Commit & push';
   if (!hasRemote) {
-    primary.title = 'Will commit locally (no origin remote for push)';
+    primary.title = 'Merge into current branch and commit locally (no origin remote for push)';
   } else if (!hasGh) {
-    primary.title = 'Commit and push (GitHub CLI not available for PR)';
+    primary.title = 'Merge into current branch, commit, and push';
   } else {
-    primary.title = 'Commit, push, and open a pull request';
+    primary.title = 'Merge into current branch, commit, push, and open a pull request';
   }
   primary.addEventListener('click', () => {
     void runChain(hasRemote && hasGh ? 'commit-push-pr' : hasRemote ? 'commit-push' : 'commit-only');
@@ -423,7 +548,7 @@ function loadGitStats(
 
   if (state.stats) renderStatsGrid(state.stats, grid);
   if (state.loading) {
-    void fetchGitFinishStats(group.id, board.isolationBaseRef).then((gitPart) => {
+    void fetchGitFinishStats(board.integrationBranch ?? '').then((gitPart) => {
       const local = computeLocalFinishStats(plannerChat, board);
       const merged: FinishBoardStats = {
         ...local,
@@ -432,13 +557,14 @@ function loadGitStats(
       };
       gitStateByGroup.set(group.id, { loading: false, stats: merged });
       renderStatsGrid(merged, grid);
-      const newCommit = buildCommitSplitButton(group, board, merged, statusEl);
+      if (board.integrationLandedAt || board.worktreesClearedAt) return;
+      const newCommit = buildCommitSplitButton(group, board, plannerChat, merged, statusEl);
       commitWrap.replaceWith(newCommit);
     });
   }
 }
 
-/** Update elapsed (and other live fields) without rebuilding the whole dashboard. */
+/** Update elapsed (stats) and report markdown without rebuilding the whole dashboard. */
 export function syncFinishDashboard(
   root: HTMLElement,
   group: ChatGroup,
@@ -467,6 +593,15 @@ export function syncFinishDashboard(
     state.stats.completionTokens = local.completionTokens;
   }
   renderStatsGrid(merged, grid);
+
+  const reportBody = root.querySelector('.board-finish-dashboard__report');
+  const reportMarkdown = board.finishReport?.trim();
+  if (reportBody instanceof HTMLElement && reportMarkdown) {
+    if (reportBody.dataset.finishReport !== reportMarkdown) {
+      reportBody.dataset.finishReport = reportMarkdown;
+      setAssistantBubbleContent(reportBody, reportMarkdown, { modeId: plannerChat.modeId });
+    }
+  }
 }
 
 /** Build the finish dashboard root element. */
@@ -496,7 +631,7 @@ export function renderFinishDashboard(
   const subtitle = document.createElement('p');
   subtitle.className = 'board-finish-dashboard__subtitle';
   subtitle.textContent =
-    'All tasks passed the final integration test. Review the summary below, then land the work or start a follow-up chat.';
+    'All tasks passed the final integration test. Review the summary below, merge into your branch, or start a follow-up chat.';
   heroCopy.appendChild(title);
   heroCopy.appendChild(subtitle);
   hero.appendChild(badge);
@@ -560,7 +695,7 @@ export function renderFinishDashboard(
   reportHeading.textContent = 'Report';
   const reportBody = document.createElement('div');
   reportBody.className = 'board-finish-dashboard__report msg-bubble msg-bubble--md';
-  const reportMarkdown = ensureFinishReport(plannerChat, board);
+  const reportMarkdown = ensureFinishReport(group.id, plannerChat, board);
   setAssistantBubbleContent(reportBody, reportMarkdown, { modeId: plannerChat.modeId });
   reportSection.appendChild(reportHeading);
   reportSection.appendChild(reportBody);
@@ -610,7 +745,7 @@ export function renderFinishDashboard(
   gitStatus.hidden = true;
   gitStatus.setAttribute('role', 'status');
 
-  const commitWrap = buildCommitSplitButton(group, board, null, gitStatus);
+  const commitWrap = buildFinishGitAction(group, board, plannerChat, null, gitStatus);
 
   actions.appendChild(backBtn);
   actions.appendChild(followUpBtn);

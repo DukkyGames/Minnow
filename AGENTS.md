@@ -6,7 +6,7 @@ Guidance for AI coding agents (Cursor, Claude Code, etc.) working in the Minnow 
 
 Minnow is a **Vite + TypeScript SPA** plus a **Node tool server** (`server.js`) and an **Electron desktop shell** (the "MinnowOS" window). It is a local-first AI workspace for LM Studio and other OpenAI-compatible providers.
 
-- **Six composer modes:** General, Build, Plan (no-destructive guard), Orchestrate, Reef, Debug. Modes are defined in [`src/chat/modes/registry.ts`](src/chat/modes/registry.ts); prompts in [`src/chat/prompts/modes/`](src/chat/prompts/modes/).
+- **Six operating modes** (four in the Code composer strip): General, Build, Plan (no-destructive guard), Orchestrate, Reef, Debug. Orchestrate and Reef are not in the composer picker — Orchestrate opens from the sidebar hub; Reef remains available via mode handoff and sub-agents. Modes are defined in [`src/chat/modes/registry.ts`](src/chat/modes/registry.ts); prompts in [`src/chat/prompts/modes/`](src/chat/prompts/modes/).
 - **~88 built-in tools** across web / utility / files / git / code / agents / browser / lsp ([`src/tools/definitions.ts`](src/tools/definitions.ts)).
 - **MinnowOS apps:** Chat (desktop), Code, Models, Compare, Bench, Research, Experts, Brain, Calendar, Email, Scheduler, Settings ([`src/os/`](src/os/)).
 - **Persistence** lives under `~/.minnow` when the tool server runs.
@@ -15,10 +15,10 @@ The **authoritative reference** is [`documentation/context.md`](documentation/co
 
 ## Running the app
 
-- **`npm start`** is the recommended dev command — Vite + the Node tool server on port 5173 (or next free port) and **launches the Electron desktop shell by default**. `MINNOW_BROWSER=1` opens the system browser instead; `BROWSER=none` or `MINNOW_HEADLESS=1` suppresses auto-open. `npm run desktop` / `npm run electron:dev` are HMR-friendly Electron aliases.
+- **`npm start`** is the recommended dev command — Vite + the Node tool server on port **9473** (or next free port if `PORT` is set) and **launches the Electron desktop shell by default**. `MINNOW_BROWSER=1` opens the system browser instead; `BROWSER=none` or `MINNOW_HEADLESS=1` suppresses auto-open. `npm run desktop` / `npm run electron:dev` are HMR-friendly Electron aliases.
 - **`npm run dev`** is Vite-only (no tool server) — fine for pure UI work, but most tool-dependent features won't function.
 - **Headless CLI:** `minnow run --prompt "…"` (or `npm run minnow:run -- --prompt "…"`) drives the same generations + server tools without the SPA. Requires `npm start` (or `--start-server`). See `minnow run --help`.
-- Health checks: `curl http://localhost:5173/api/tools/ping`, `/api/config/ping`, `/api/memory/ping`, `/api/brain/ping`.
+- Health checks: `curl http://localhost:9473/api/tools/ping`, `/api/config/ping`, `/api/memory/ping`, `/api/brain/ping` (substitute your `PORT` if overridden).
 - **LM Studio headless daemon** (`llmster`): install with `curl -fsSL https://lmstudio.ai/install.sh | bash`; `lms daemon up && lms server start`; `lms get <model> -y`; `lms load <model> -y`. CLI at `~/.lmstudio/bin/lms`.
 
 ## Testing

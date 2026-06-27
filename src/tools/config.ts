@@ -403,6 +403,11 @@ export function isLocalServerAvailable(): boolean {
   return localServerAvailable;
 }
 
+/** Test-only: override the local server availability flag. */
+export function setLocalServerAvailableForTests(available: boolean): void {
+  localServerAvailable = available;
+}
+
 /** True when a tool id is enabled in config (defaults applied). */
 export function isToolEnabled(id: string): boolean {
   return getToolPermissionForId(loadToolConfig(), id) !== 'off';

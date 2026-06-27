@@ -2,14 +2,17 @@
 import { isDesktopChatActive } from '../os/desktop-state';
 import { decodeModelSelectKey, encodeModelSelectKey } from '../lib/model-select-key';
 import { isChatStreaming } from '../chat/streaming-state';
+import { stopGeneration } from '../chat/stop-generation';
 import {
   createGroup,
   deleteGroup,
   findBoardGroupForPlanner,
+  findGroupById,
   getActiveBoardGroup,
   getBoardGroupForChat,
   buildSortedWorkspaceSidebarEntries,
   getGroupsForWorkspace,
+  listBoardGroupChatIds,
   openBoardGroup,
   renameGroup,
   toggleGroupCollapsed,
@@ -629,9 +632,39 @@ function showGroupContextMenu(
   deleteItem.textContent = 'Delete group';
   deleteItem.addEventListener('click', () => {
     menu.remove();
-    if (!confirm('Delete this group? Chats will stay in the list, ungrouped.')) return;
-    deleteGroup(groupId);
-    renderSidebar();
+    const group = findGroupById(groupId);
+    const isBoardGroup = Boolean(group?.orchestrateBoard);
+    if (isBoardGroup) {
+      const chatCount = group ? listBoardGroupChatIds(group, sessionState?.chats ?? []).length : 0;
+      const chatLabel = chatCount === 1 ? '1 chat' : `${chatCount} chats`;
+      if (
+        !confirm(
+          `Delete this board and ${chatLabel} inside it? This cannot be undone.`,
+        )
+      ) {
+        return;
+      }
+      if (sessionState?.activeBoardGroupId === groupId) {
+        exitBoardViewForNavigation();
+      }
+      for (const chatId of listBoardGroupChatIds(group, sessionState?.chats ?? [])) {
+        if (isChatStreaming(chatId)) {
+          stopGeneration(chatId, 'system');
+        }
+      }
+    } else if (!confirm('Delete this group? Chats will stay in the list, ungrouped.')) {
+      return;
+    }
+    const { modelId } = readTopBarModelBinding();
+    const result = deleteGroup(groupId, { fallbackModelId: modelId });
+    if (result.chatRemoval) {
+      onChatRemoved({ ...result.chatRemoval, activeChanged: result.activeChanged });
+    } else {
+      renderSidebar();
+      if (isOrchestrateHubMounted()) {
+        refreshOrchestrateHubBoardList();
+      }
+    }
   });
 
   menu.appendChild(renameItem);

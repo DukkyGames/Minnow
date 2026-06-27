@@ -7,22 +7,42 @@ import { decodeModelSelectKey } from '../lib/model-select-key.ts';
 import { isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete.ts';
 import { maybeEmitOrchestratePlanComplete } from '../chat/orchestrate/plan-complete-ui.ts';
 import {
+  isOomPauseActive,
+  OOM_SAFE_MAX_CONCURRENT,
+  clearOomPauseFromElectron,
+} from '../chat/orchestrate/oom-recovery.ts';
+import {
+  isTerminalBoardTaskStatus,
+  trimTaskRelatedChats,
+} from '../chat/orchestrate/task-history-trim.ts';
+import {
   isChatStreaming,
+  notifyChatStreamEnded,
   subscribeChatStreamActivity,
   subscribeChatStreamEnd,
 } from '../chat/streaming-state.ts';
 import { isChatTurnSetupPending } from '../chat/chat-turn-guard.ts';
 import {
   getAutopilotMetaSync,
+  resolveAutoProvisionInfra,
+  resolveAfkAutoRestartStalls,
+  resolveInfraProvisionTimeoutMs,
   resolveMaxFinalTestAttempts,
   resolveMaxTaskBuildAttempts,
   resolveMaxTaskTestAttempts,
+  resolveSelfHealMaxRounds,
+  resolveMaxEnvFixAttempts,
 } from '../config/autopilot-meta.ts';
+import { classifyTaskFailure, resolveTaskChatStreamFailure } from './orchestrate-failure-classify.ts';
+import { runSelfHeal, type SelfHealDeps } from './orchestrate-self-heal.ts';
+import { isLocalServerAvailable } from '../tools/config.ts';
 import {
   bindRunSupervision,
   bumpProgress,
   chatTaskRunId,
   createRunSupervision,
+  getProgressAgeMs,
+  getRunSupervision,
   setHeartbeatConfig,
   startHeartbeat,
   stopHeartbeat,
@@ -32,7 +52,7 @@ import { reportBackgroundError } from '../boot/report-background-error.ts';
 import { normalizeVerdict } from '../tools/board-tools.ts';
 import { schedulePostTurnSynthesis } from '../synthesis/client.ts';
 import { buildSynthesisMessages, buildSynthesisExcerpt } from '../synthesis/post-turn.ts';
-import type { BoardTask, BoardTaskStatus, Chat, ChatGroup, OrchestrateBoardState, SessionState } from '../types.ts';
+import type { BoardTask, BoardTaskStatus, Chat, ChatGroup, ChatStopReason, OrchestrateBoardState, SessionState } from '../types.ts';
 import {
   assignChatToGroup,
   getBoardGroupForChat,
@@ -40,7 +60,7 @@ import {
   getPlannerChatForGroup,
 } from './chat-groups.ts';
 import { emitBoardChange } from './orchestrate-board-events.ts';
-import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, syncOrchestrateBoardTimer, updateTask, logTaskStatus, logBuildVerdict, logTestVerdict, logMergeResult, logWorktreeAllocated, logTaskRetry, logModeChange, logAutoStart, logAutoStop, logFinalTestStarted, logFinalTestVerdict } from './orchestrate-board-store.ts';
+import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, syncOrchestrateBoardTimer, updateTask, logTaskStatus, logBuildVerdict, logTestVerdict, logMergeResult, logWorktreeAllocated, logTaskRetry, logModeChange, logAutoStart, logAutoStop, logFinalTestStarted, logFinalTestVerdict, quarantineTaskAndDependents } from './orchestrate-board-store.ts';
 import {
   isIsolationActive,
   resolveIsolationMode,
@@ -59,6 +79,7 @@ import {
   commitWorktree as commitTaskWorktree,
   checkWorktreeDirty as checkTaskWorktreeDirty,
   checkMerged as checkTaskBranchMerged,
+  checkMergeInProgress as checkMergeInProgressOp,
   restoreIntegration as restoreIntegrationWorktree,
   verifyIntegrationMerge as verifyIntegrationMergeOp,
   refreshIntegrationDeps as refreshIntegrationDepsOp,
@@ -66,8 +87,98 @@ import {
 } from './worktree-service.ts';
 
 const MAX_MERGE_FIXER_ATTEMPTS = 2;
+/** Max bounded retries when a build chat ends stopped (timeout/system) before quarantine. */
+export const MAX_STOP_RETRY_ATTEMPTS = 2;
 
 export { getBoardExecutionMode, isBoardAutoMode, isBoardRunning };
+
+/**
+ * Provision infra for a task's worktree (MIN-285 Phase 2, §3).
+ *
+ * GAP-4: shared services (docker compose) use a content-hash signature stored
+ * in board.provisionedSignatures and are only provisioned once across concurrent
+ * tasks. Per-task deps (node_modules, venv) are provisioned per worktree.
+ *
+ * Returns { wasAlreadyProvisioned } so runSelfHeal can implement the GAP-2 guard.
+ */
+export async function ensureBoardInfraProvisioned(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+): Promise<{ wasAlreadyProvisioned: boolean; signatures: string[]; ok: boolean }> {
+  if (!resolveAutoProvisionInfra()) {
+    return { wasAlreadyProvisioned: false, signatures: [], ok: true };
+  }
+  const worktreeRoot = task.worktreePath?.trim() || undefined;
+  const board = group.orchestrateBoard;
+
+  // GAP-4: use the worktree path as a cheap per-worktree key.
+  const taskSig = `worktree:${worktreeRoot ?? task.id}`;
+  const existing = board?.provisionedSignatures ?? [];
+  if (existing.includes(taskSig)) {
+    return { wasAlreadyProvisioned: true, signatures: [], ok: true };
+  }
+
+  if (!isLocalServerAvailable() || !worktreeRoot) {
+    return { wasAlreadyProvisioned: false, signatures: [], ok: false };
+  }
+
+  // Set provisioning state for UI feedback.
+  if (board) {
+    board.provisionState = 'provisioning';
+    scheduleSaveSessions();
+    emitBoardChange(group.id);
+  }
+
+  try {
+    const body: Record<string, unknown> = {
+      name: 'board_provision_infra',
+      args: {
+        services: task.testSpec
+          ? extractServiceNames(task.testSpec)
+          : [],
+        timeoutMs: resolveInfraProvisionTimeoutMs(),
+      },
+      workspaceRoot: worktreeRoot,
+    };
+    const res = await fetch('/api/tools', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      if (board) { board.provisionState = 'failed'; scheduleSaveSessions(); emitBoardChange(group.id); }
+      return { wasAlreadyProvisioned: false, signatures: [], ok: false };
+    }
+    const json = await res.json() as { result?: string };
+    const result = json.result ? (JSON.parse(json.result) as { ok: boolean; signatures?: string[] }) : { ok: false };
+    const serverSigs: string[] = result.signatures ?? [];
+    const allSigs = [taskSig, ...serverSigs.map((s) => `shared:${s}`)];
+
+    // Deduplicate and add new signatures to board.
+    if (board) {
+      const merged = [...new Set([...existing, ...allSigs])];
+      board.provisionedSignatures = merged;
+      board.provisionState = result.ok ? 'ready' : 'failed';
+      scheduleSaveSessions();
+      emitBoardChange(group.id);
+    }
+
+    updateTask(group, task.id, { lastHealCategory: undefined }, plannerChat);
+    return { wasAlreadyProvisioned: false, signatures: allSigs, ok: result.ok };
+  } catch (err) {
+    reportBackgroundError('ensure-board-infra-provisioned', err);
+    if (board) { board.provisionState = 'failed'; scheduleSaveSessions(); emitBoardChange(group.id); }
+    return { wasAlreadyProvisioned: false, signatures: [], ok: false };
+  }
+}
+
+/** Cheap heuristic: extract docker service names mentioned in testSpec text. */
+function extractServiceNames(testSpec: string): string[] {
+  const matches = testSpec.match(/(?:service|container|docker)[:\s]+([a-z0-9_-]+)/gi);
+  if (!matches) return [];
+  return [...new Set(matches.map((m) => m.split(/[:\s]+/).pop()!.toLowerCase()))];
+}
 import {
   createEmptyChatObject,
   findChatById,
@@ -148,6 +259,27 @@ const taskQueueByGroupId = new Map<string, string[]>();
 /** Per-board serialized integration merges (keyed by group id). */
 const mergeQueueByGroupId = new Map<string, Promise<unknown>>();
 
+/** Cap wait when a stale fixer blocks the merge queue (dead fixer chat no longer counts as active). */
+const MAX_FIXER_WAIT_MS = 60_000;
+
+/** Test override for `waitForNoActiveFixer` timeout (null restores production cap). */
+let maxFixerWaitMsOverride: number | null = null;
+
+export function setMaxFixerWaitMsForTests(ms: number | null): void {
+  maxFixerWaitMsOverride = ms;
+}
+
+/** Test-only: invoke the merge-queue fixer wait (includes timeout reconcile path). */
+export async function waitForNoActiveFixerForTests(
+  group: ChatGroup,
+  plannerChat: Chat,
+): Promise<void> {
+  return waitForNoActiveFixer(group, plannerChat);
+}
+
+/** Boards with an in-flight drainTaskQueue (coalesce overlapping drains). */
+const drainInFlightByGroupId = new Set<string>();
+
 export type MergeTaskWorktreeResult =
   | { outcome: 'merged' }
   | { outcome: 'conflict'; conflictedFiles: string[]; integrationSha?: string }
@@ -156,15 +288,28 @@ export type MergeTaskWorktreeResult =
 
 function boardHasActiveFixer(board: OrchestrateBoardState): boolean {
   return board.tasks.some(
-    (t) => t.status === 'merging' && Boolean(t.fixerChatId?.trim()),
+    (t) =>
+      t.status === 'merging' &&
+      Boolean(t.fixerChatId?.trim()) &&
+      isTaskChatActive(t.fixerChatId!.trim()),
   );
 }
 
 /** Block new merges while a fixer chat is resolving a conflict in integration. */
-async function waitForNoActiveFixer(group: ChatGroup): Promise<void> {
+async function waitForNoActiveFixer(group: ChatGroup, plannerChat: Chat): Promise<void> {
   const board = group.orchestrateBoard;
   if (!board) return;
+  const start = Date.now();
   while (boardHasActiveFixer(board)) {
+    const maxWaitMs = maxFixerWaitMsOverride ?? MAX_FIXER_WAIT_MS;
+    if (Date.now() - start > maxWaitMs) {
+      reportBackgroundError(
+        'wait-for-fixer-timeout',
+        new Error('Fixer wait exceeded cap; proceeding with merge'),
+      );
+      await reconcileMergingTasks(group, plannerChat);
+      return;
+    }
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }
@@ -214,6 +359,38 @@ let streamEndSubscribed = false;
 let streamActivitySubscribed = false;
 let autoDriveSubscribed = false;
 
+/** Generous multiplier over progressStallMs before killing a stuck task-chat turn. */
+const TASK_CHAT_STALL_MULTIPLIER = 3;
+
+/** Merge fixers get extra headroom before stall reconcile (git poll is primary). */
+const FIXER_STALL_MULTIPLIER = 1.5;
+/** Max bounded restarts per task-chat before giving up. */
+const TASK_CHAT_STALL_RESTART_CAP = 2;
+
+/** Per-chatId count of stall-triggered restarts this session. Cleared on stream end. */
+const taskChatStallRestarts = new Map<string, number>();
+
+/**
+ * Fixer chat ids with an in-flight proactive merge-completion probe. Prevents
+ * overlapping git checks when multiple heartbeats fire while a probe is pending.
+ */
+const fixerEarlyFinalizeInFlight = new Set<string>();
+
+/** Test-only: capture stall-path nudge/self-heal calls from heartbeat supervision. */
+let taskChatNudgeCallsForTests: string[] | null = null;
+let stallSelfHealCallsForTests: string[] | null = null;
+
+function recordTaskChatNudgeCallForTests(taskId: string): void {
+  taskChatNudgeCallsForTests?.push(taskId);
+}
+
+function recordStallSelfHealCallForTests(taskId: string): void {
+  stallSelfHealCallsForTests?.push(taskId);
+}
+
+/** Per-task guard: only one merge-fixer finalize may run at a time (stream-end races). */
+const fixerFinalizeInFlight = new Set<string>();
+
 function refreshHeartbeatThresholds(): void {
   const meta = getAutopilotMetaSync();
   setHeartbeatConfig({
@@ -221,10 +398,6 @@ function refreshHeartbeatThresholds(): void {
     progressStallMs: meta.progressStallMs,
     heartbeatDeadMs: meta.heartbeatDeadMs,
   });
-}
-
-function stopTaskChatSupervision(chatId: string): void {
-  stopHeartbeat(chatTaskRunId(chatId));
 }
 
 /** How a linked task chat ended its latest assistant turn. */
@@ -317,6 +490,46 @@ export function resolveTaskChatStreamOutcome(chat: Chat): TaskChatStreamOutcome 
   return 'failed';
 }
 
+/** Resolve why a task build chat ended stopped (run record wins; history marker falls back). */
+export function resolveTaskChatStopReason(
+  chat: Chat,
+  board?: OrchestrateBoardState | null,
+): ChatStopReason {
+  const runs = chat.runs ?? [];
+  if (runs.length > 0) {
+    let latest = runs[0]!;
+    for (const run of runs) {
+      if (run.createdAt > latest.createdAt) latest = run;
+    }
+    if (latest.status === 'stopped' && latest.stopReason) {
+      return latest.stopReason;
+    }
+  }
+  if (board?.userStopped) return 'user';
+  return 'system';
+}
+
+/** Build a SelfHealDeps bag wiring all board-action callbacks. Lazy-built per call. */
+function makeSelfHealDeps(): SelfHealDeps {
+  return {
+    startEnvFixer,
+    applyTaskBuildFailureState,
+    applyTaskTestFailureState,
+    buildBuildRetrySeedMessage,
+    buildRetryBuilderSeedMessage,
+    startTask,
+    startTaskTesting,
+    startMergeConflictFixer,
+    runTaskChatNudge,
+    autoDelegateNext,
+    quarantineTaskAndDependents,
+    resolveSelfHealMaxRounds,
+    resolveMaxEnvFixAttempts,
+    resolveAfkAutoRestartStalls,
+    resolveMaxMergeFixerAttempts: () => MAX_MERGE_FIXER_ATTEMPTS,
+  };
+}
+
 /**
  * Advance board task status when its linked **Builder** chat finishes streaming.
  * Successful builds move to testing; auto-pilot launches the Tester.
@@ -336,31 +549,104 @@ export function finalizeBoardTaskOnStreamEnd(
   const outcome = resolveTaskChatStreamOutcome(chat);
 
   if (outcome === 'stopped') {
+    const board = group.orchestrateBoard;
+    const stopReason = resolveTaskChatStopReason(chat, board);
     logBuildVerdict(group, task.id, 'stopped');
-    updateTask(group, task.id, { endedAt: Date.now() }, plannerChat);
+    teardownBoardTaskChatResources(chat, sessionState?.groups);
+
+    const parkUserStop =
+      board?.systemPaused !== true &&
+      (stopReason === 'user' || board?.userStopped === true);
+    if (parkUserStop) {
+      quarantineTaskAndDependents(
+        group,
+        task.id,
+        {
+          category: 'stall',
+          summary: 'Stopped by user — requeue to resume',
+          resolutionSteps: ['inspect if needed, then Requeue'],
+          at: Date.now(),
+        },
+        plannerChat,
+      );
+      updateTask(
+        group,
+        task.id,
+        { endedAt: Date.now(), chatId: undefined },
+        plannerChat,
+      );
+      if (isBoardRunning(group)) {
+        void autoDelegateNext(group, plannerChat).catch((err) =>
+          reportBackgroundError('auto-delegate-after-stop', err),
+        );
+      }
+      return;
+    }
+
+    const freshTask = board?.tasks.find((t) => t.id === task.id) ?? task;
+    const stopRetries = (freshTask.stopRetries ?? 0) + 1;
+    if (stopRetries <= MAX_STOP_RETRY_ATTEMPTS) {
+      logTaskStatus(group, task.id, freshTask.status, 'planned');
+      updateTask(
+        group,
+        task.id,
+        {
+          status: 'planned',
+          endedAt: Date.now(),
+          stopRetries,
+          chatId: undefined,
+        },
+        plannerChat,
+      );
+      if (isBoardRunning(group)) {
+        void autoDelegateNext(group, plannerChat).catch((err) =>
+          reportBackgroundError('auto-delegate-after-stop', err),
+        );
+      }
+      return;
+    }
+
+    quarantineTaskAndDependents(
+      group,
+      task.id,
+      {
+        category: 'stall',
+        summary: `Stopped repeatedly — ${stopRetries} stop(s)`,
+        resolutionSteps: ['agent stalled repeatedly; inspect the task chat, then Requeue'],
+        at: Date.now(),
+      },
+      plannerChat,
+    );
+    updateTask(
+      group,
+      task.id,
+      { endedAt: Date.now(), stopRetries, chatId: undefined },
+      plannerChat,
+    );
+    if (isBoardRunning(group)) {
+      void autoDelegateNext(group, plannerChat).catch((err) =>
+        reportBackgroundError('auto-delegate-after-stop', err),
+      );
+    }
     return;
   }
 
   if (outcome === 'failed') {
     const errorSummary = 'Task chat ended without completing successfully';
-    if (isBoardRunning(group)) {
-      const route = applyTaskBuildFailureState(group, task, plannerChat, errorSummary);
-      if (route === 'retry') {
-        const updated =
-          group.orchestrateBoard!.tasks.find((t) => t.id === task.id) ?? task;
-        logBuildVerdict(group, task.id, 'fail', {
-          attempt: updated.buildAttempts ?? 1,
-          attemptKind: 'build',
-          summary: errorSummary,
-        });
-        updateTask(group, task.id, { endedAt: Date.now() }, plannerChat);
-        void runTaskChatNudge(group, task.id, plannerChat, errorSummary).catch((err) =>
-          reportBackgroundError('task-chat-build-retry', err),
-        );
-        return;
-      }
-    }
     logBuildVerdict(group, task.id, 'fail', { summary: errorSummary });
+    updateTask(group, task.id, { endedAt: Date.now() }, plannerChat);
+    if (isBoardRunning(group)) {
+      const freshTask = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
+      const { category } = resolveTaskChatStreamFailure(chat);
+      void runSelfHeal(
+        group,
+        freshTask,
+        plannerChat,
+        { phase: 'build', category, summary: errorSummary },
+        makeSelfHealDeps(),
+      ).catch((err) => reportBackgroundError('self-heal-build', err));
+      return;
+    }
     moveTaskStatus(group, task.id, 'failed', plannerChat);
     void finalizeTerminalBuildFailure(group, task, plannerChat, chat, errorSummary);
     return;
@@ -369,7 +655,13 @@ export function finalizeBoardTaskOnStreamEnd(
   updateTask(
     group,
     task.id,
-    { endedAt: Date.now(), error: undefined, testVerdict: undefined, testSummary: undefined },
+    {
+      endedAt: Date.now(),
+      error: undefined,
+      testVerdict: undefined,
+      testSummary: undefined,
+      stopRetries: undefined,
+    },
     plannerChat,
   );
   teardownBoardTaskChatResources(chat, sessionState?.groups);
@@ -403,6 +695,29 @@ export function finalizeBoardTaskOnStreamEnd(
   }
 }
 
+/**
+ * Stop a merge-fixer chat and finalize directly when stream-end may never arrive
+ * (heartbeat git poll success or stall watchdog).
+ */
+async function reconcileMergeFixerChat(
+  group: ChatGroup,
+  planner: Chat,
+  taskId: string,
+  chatId: string,
+): Promise<void> {
+  stopTaskChatSupervision(chatId);
+  stopGeneration(chatId);
+
+  const task = group.orchestrateBoard?.tasks.find((t) => t.id === taskId);
+  if (!task || task.status !== 'merging' || task.fixerChatId?.trim() !== chatId) return;
+
+  await finalizeMergeFixerOnStreamEnd(group, task, planner);
+
+  if (isBoardRunning(group)) {
+    await drainTaskQueue(group, planner);
+  }
+}
+
 function startTaskChatSupervision(chatId: string): void {
   const runId = chatTaskRunId(chatId);
   const supervision = createRunSupervision();
@@ -410,8 +725,107 @@ function startTaskChatSupervision(chatId: string): void {
   startHeartbeat(runId, () => {
     const chat = findChatById(chatId);
     if (!chat?.boardGroupId) return;
-    emitBoardChange(chat.boardGroupId);
+
+    const group = getBoardGroupForChat(chat);
+    if (!group?.orchestrateBoard) return;
+
+    const mode = getBoardExecutionMode(group.orchestrateBoard);
+    if (mode !== 'afk' && mode !== 'auto') return;
+    if (!isBoardRunning(group)) return;
+
+    const sup = getRunSupervision(runId);
+    if (!sup) return;
+    const meta = getAutopilotMetaSync();
+    const progressAge = getProgressAgeMs(runId);
+    if (progressAge == null) return;
+
+    const taskId = chat.boardTaskId;
+    if (!taskId) return;
+
+    const planner = getPlannerChatForGroup(group);
+    if (!planner) return;
+
+    const stallTask = group.orchestrateBoard.tasks.find((t) => t.id === taskId);
+
+    // Merge fixer chats: git poll or stall → direct reconcile (stream-end may never arrive).
+    if (stallTask?.fixerChatId?.trim() === chatId && stallTask.status === 'merging') {
+      // Proactive completion: a fixer often keeps emitting prose/diagnostics after a
+      // successful `git commit --no-edit`, so it never trips the stall watchdog and
+      // its stream-end may lag. Poll git state each tick; as soon as the branch is
+      // merged and verified, reconcile directly.
+      const branch = stallTask.worktreeBranch?.trim();
+      if (branch && isLocalServerAvailable() && !fixerEarlyFinalizeInFlight.has(chatId)) {
+        const boardId = group.id;
+        fixerEarlyFinalizeInFlight.add(chatId);
+        void (async () => {
+          try {
+            const merged = await checkTaskBranchMerged({ boardId, fromBranch: branch });
+            if (!merged.ok || !merged.merged) return;
+            const verified = await verifyIntegrationMergeOp({ boardId, fromBranch: branch });
+            if (!verified.ok || !verified.verified) return;
+            const fresh =
+              group.orchestrateBoard?.tasks.find((t) => t.id === taskId) ?? stallTask;
+            if (fresh.fixerChatId?.trim() !== chatId || fresh.status !== 'merging') return;
+            await reconcileMergeFixerChat(group, planner, taskId, chatId);
+          } catch (err) {
+            reportBackgroundError('merge-fixer-early-finalize', err);
+          } finally {
+            fixerEarlyFinalizeInFlight.delete(chatId);
+          }
+        })();
+      }
+
+      if (progressAge < meta.progressStallMs * FIXER_STALL_MULTIPLIER) return;
+      void reconcileMergeFixerChat(group, planner, taskId, chatId).catch((err) =>
+        reportBackgroundError('merge-fixer-stall-reconcile', err),
+      );
+      return;
+    }
+
+    // Env-fixer chats: stop-only on stall — stream-end owns finalize; never nudge/self-heal.
+    if (
+      stallTask?.fixerChatId?.trim() === chatId &&
+      stallTask.status === 'in_progress' &&
+      stallTask.fixerKind === 'env'
+    ) {
+      if (progressAge < meta.progressStallMs) return;
+      stopHeartbeat(chatTaskRunId(chatId));
+      stopGeneration(chatId);
+      return;
+    }
+
+    const stallMs = meta.progressStallMs * TASK_CHAT_STALL_MULTIPLIER;
+    if (progressAge < stallMs) return;
+
+    const restarts = taskChatStallRestarts.get(chatId) ?? 0;
+    if (restarts >= TASK_CHAT_STALL_RESTART_CAP) return;
+
+    taskChatStallRestarts.set(chatId, restarts + 1);
+    // Stop the heartbeat timer only — do NOT call stopTaskChatSupervision here, as that
+    // would delete the counter we just set. The counter is cleared on stream end.
+    stopHeartbeat(chatTaskRunId(chatId));
+    stopGeneration(chatId, 'system');
+
+    const stallReason = `task-chat-stall (${progressAge}ms no output)`;
+    if (restarts === 0) {
+      recordTaskChatNudgeCallForTests(taskId);
+      void runTaskChatNudge(group, taskId, planner, stallReason).catch((err) =>
+        reportBackgroundError('task-chat-stall-nudge', err),
+      );
+    } else {
+      if (stallTask) {
+        recordStallSelfHealCallForTests(stallTask.id);
+        void runSelfHeal(group, stallTask, planner, { phase: 'build', category: 'stall', summary: stallReason }, makeSelfHealDeps())
+          .catch((err) => reportBackgroundError('task-chat-stall-selfheal', err));
+      }
+    }
   });
+}
+
+function stopTaskChatSupervision(chatId: string): void {
+  taskChatStallRestarts.delete(chatId);
+  fixerEarlyFinalizeInFlight.delete(chatId);
+  stopHeartbeat(chatTaskRunId(chatId));
 }
 
 function isTaskChatStreaming(chatId: string): boolean {
@@ -531,8 +945,11 @@ function ensureStreamEndSubscription(): void {
         const planner = getPlannerChatForGroup(group);
         if (!planner) continue;
 
+        let streamEndMatched = false;
+
         const finalChatId = board.finalTest?.chatId?.trim();
         if (finalChatId && endedChatId === finalChatId) {
+          streamEndMatched = true;
           finalizeFinalTestOnStreamEnd(group, planner);
           safeDrain(group, planner);
           continue;
@@ -540,6 +957,7 @@ function ensureStreamEndSubscription(): void {
 
         const taskByBuild = board.tasks.find((t) => t.chatId === endedChatId);
         if (taskByBuild) {
+          streamEndMatched = true;
           finalizeBoardTaskOnStreamEnd(group, taskByBuild, planner);
           safeDrain(group, planner);
           continue;
@@ -547,6 +965,7 @@ function ensureStreamEndSubscription(): void {
 
         const taskByTest = board.tasks.find((t) => t.testChatId === endedChatId);
         if (taskByTest) {
+          streamEndMatched = true;
           const testChat = findChatById(endedChatId);
           if (testChat) {
             teardownBoardTaskChatResources(testChat, sessionState?.groups);
@@ -559,9 +978,22 @@ function ensureStreamEndSubscription(): void {
 
         const taskByFixer = board.tasks.find((t) => t.fixerChatId === endedChatId);
         if (taskByFixer) {
-          void finalizeMergeFixerOnStreamEnd(group, taskByFixer, planner)
+          streamEndMatched = true;
+          const finalize =
+            taskByFixer.fixerKind === 'env'
+              ? finalizeEnvFixerOnStreamEnd(group, taskByFixer, planner)
+              : finalizeMergeFixerOnStreamEnd(group, taskByFixer, planner);
+          void finalize
             .then(() => safeDrain(group, planner))
-            .catch((err) => reportBackgroundError('finalize-merge-fixer', err));
+            .catch((err) =>
+              reportBackgroundError(
+                taskByFixer.fixerKind === 'env' ? 'finalize-env-fixer' : 'finalize-merge-fixer',
+                err,
+              ),
+            );
+        } else if (!streamEndMatched && isBoardRunning(group)) {
+          // fixerChatId may have been cleared before stream-end delivery — still drain.
+          safeDrain(group, planner);
         }
       }
     });
@@ -587,8 +1019,17 @@ export function resolveBoardMaxConcurrent(
   return getAutopilotMetaSync().maxConcurrentTasks ?? DEFAULT_MAX_CONCURRENT;
 }
 
+/** Apply OOM recovery cap on top of board/global concurrency settings. */
+export function resolveEffectiveMaxConcurrent(
+  board: NonNullable<ChatGroup['orchestrateBoard']>,
+): number {
+  const base = resolveBoardMaxConcurrent(board);
+  if (!isOomPauseActive()) return base;
+  return Math.min(base, OOM_SAFE_MAX_CONCURRENT);
+}
+
 function maxConcurrent(board: NonNullable<ChatGroup['orchestrateBoard']>): number {
-  return resolveBoardMaxConcurrent(board);
+  return resolveEffectiveMaxConcurrent(board);
 }
 
 /** Skip launching background chat turns under node:test (avoids open handles). */
@@ -714,7 +1155,7 @@ export function buildTaskSeedMessage(
     board.planPath;
   const build = task.buildSpec?.trim() || '(see plan)';
   const test = task.testSpec?.trim() || '(see plan)';
-  return [
+  const lines = [
     'Execute this orchestrate task.',
     '',
     `Plan: ${planPath}`,
@@ -728,13 +1169,19 @@ export function buildTaskSeedMessage(
     test,
     '',
     'Read the plan file for full context if needed. Report what you changed.',
-  ].join('\n');
+    `When done, call board_report_build_result({ task_id: "${task.id}", status: "ok"|"env_blocked"|"failed", summary: "..." }).`,
+    'Use env_blocked (with blockers) if services/commands were missing; never report ok unless verification actually ran.',
+  ];
+  if (task.worktreePath?.trim()) {
+    lines.push('', `Working directory: ${task.worktreePath.trim()}. Keep all file/terminal ops inside it; don't cd to the original repo or any absolute path — use relative paths.`);
+  }
+  return lines.join('\n');
 }
 
 /** Compact Builder seed after a per-task test failure (fresh chat, no history bloat). */
 export function buildRetryBuilderSeedMessage(task: BoardTask, attempt: number, testSummary: string): string {
   const build = task.buildSpec?.trim() || '(see plan)';
-  return [
+  const lines = [
     'Fix this orchestrate task after a failed test.',
     '',
     `Task: ${task.id} — ${task.title}`,
@@ -745,7 +1192,11 @@ export function buildRetryBuilderSeedMessage(task: BoardTask, attempt: number, t
     `Previous attempt failed testing (${attempt}/${resolveMaxTaskTestAttempts()}): ${testSummary}`,
     '',
     'Fix the issues and report what you changed.',
-  ].join('\n');
+  ];
+  if (task.worktreePath?.trim()) {
+    lines.push('', `Working directory: ${task.worktreePath.trim()}. Keep all file/terminal ops inside it; don't cd to the original repo or any absolute path — use relative paths.`);
+  }
+  return lines.join('\n');
 }
 
 /** Compact Builder seed after a failed build chat (auto/afk retry). */
@@ -755,7 +1206,7 @@ export function buildBuildRetrySeedMessage(
   errorSummary: string,
 ): string {
   const build = task.buildSpec?.trim() || '(see plan)';
-  return [
+  const lines = [
     'Fix this orchestrate task after a failed build attempt.',
     '',
     `Task: ${task.id} — ${task.title}`,
@@ -766,7 +1217,13 @@ export function buildBuildRetrySeedMessage(
     `Previous build attempt failed (${attempt}/${resolveMaxTaskBuildAttempts()}): ${errorSummary}`,
     '',
     'Fix the issues and report what you changed.',
-  ].join('\n');
+    `Call board_report_build_result({ task_id: "${task.id}", status: "ok"|"env_blocked"|"failed", summary: "..." }) when done.`,
+    'Use env_blocked (with blockers) if services were unavailable; never report ok unless verification actually ran.',
+  ];
+  if (task.worktreePath?.trim()) {
+    lines.push('', `Working directory: ${task.worktreePath.trim()}. Keep all file/terminal ops inside it; don't cd to the original repo or any absolute path — use relative paths.`);
+  }
+  return lines.join('\n');
 }
 
 /** Seed for per-task Tester (headless — no browser). */
@@ -795,6 +1252,7 @@ export function buildTaskTestSeedMessage(
     test,
     '',
     'Verify with git_diff, static integration review, and project scripts (typecheck → lint → unit → build).',
+    'If setup/services fail (DB connection refused, missing binary, port unavailable), report fail with the service name — do not blame the code for an env problem.',
     `Report exactly once via board_report_test_result({ task_id: "${task.id}", verdict: "pass" | "fail", summary: "..." }).`,
   ].join('\n');
 }
@@ -979,17 +1437,32 @@ export function clearTaskFailureState(
     patch.testAttempts = undefined;
     patch.buildAttempts = undefined;
   }
-  if (task.status === 'merging') {
-    patch.status = 'in_progress';
-    patch.fixerChatId = undefined;
-    patch.mergePreSha = undefined;
-    patch.fixerAttempts = undefined;
-  }
   return updateTask(group, task.id, patch, plannerChat);
 }
 
+/** Manual recovery for a task stuck in `merging` — stop fixer supervision then reconcile. */
+export async function recoverMergingBoardTask(
+  group: ChatGroup,
+  taskId: string,
+  plannerChat: Chat,
+): Promise<void> {
+  const board = group.orchestrateBoard;
+  const task = board?.tasks.find((t) => t.id === taskId);
+  if (!task || task.status !== 'merging') return;
+
+  const fixerId = task.fixerChatId?.trim();
+  if (fixerId) {
+    stopTaskChatSupervision(fixerId);
+    stopGeneration(fixerId);
+    releaseLaunchSlot(fixerId);
+  }
+
+  await reconcileMergingTasks(group, plannerChat);
+  emitBoardChange(group.id);
+}
+
 /** Run a continue nudge on the existing build chat (no original-prompt reseed). */
-async function runTaskChatNudge(
+export async function runTaskChatNudge(
   group: ChatGroup,
   taskId: string,
   plannerChat: Chat,
@@ -1084,6 +1557,10 @@ export async function continueBoardTask(
   const board = group.orchestrateBoard;
   const task = board?.tasks.find((t) => t.id === taskId);
   if (!task) return;
+  if (task.status === 'merging') {
+    await recoverMergingBoardTask(group, taskId, plannerChat);
+    return;
+  }
   if (task.status === 'testing') {
     await startTaskTesting(group, taskId, plannerChat);
     return;
@@ -1108,6 +1585,10 @@ export async function restartBoardTask(
   const board = group.orchestrateBoard;
   const task = board?.tasks.find((t) => t.id === taskId);
   if (!task) return;
+  if (task.status === 'merging') {
+    await recoverMergingBoardTask(group, taskId, plannerChat);
+    return;
+  }
   const buildId = task.chatId?.trim();
   const testId = task.testChatId?.trim();
   if (
@@ -1132,6 +1613,10 @@ export async function moveTaskToNewChat(
   const board = group.orchestrateBoard;
   const task = board?.tasks.find((t) => t.id === taskId);
   if (!task) return;
+  if (task.status === 'merging') {
+    await recoverMergingBoardTask(group, taskId, plannerChat);
+    return;
+  }
   clearTaskFailureState(group, task, plannerChat, { resetAttempts: false });
   const fresh = board!.tasks.find((t) => t.id === taskId)!;
   const chat = fresh.chatId?.trim() ? findChatById(fresh.chatId.trim()) : undefined;
@@ -1162,26 +1647,33 @@ export async function stopRunningBoardSlot(
 async function drainTaskQueue(group: ChatGroup, plannerChat: Chat): Promise<void> {
   const board = group.orchestrateBoard;
   if (!board) return;
-  const queue = taskQueueByGroupId.get(group.id);
-  if (!queue?.length) return;
-  // Promote tasks already in testing ahead of queued builds so each task keeps
-  // its single slot across build→test→complete. Needed because
-  // notifyChatStreamEnded fires before setStreaming(false), causing
-  // startTaskTesting to enqueue at the back while the build chat still appears
-  // active; the deferred microtask drain then needs the correct order.
-  if (queue.length > 1) {
-    queue.sort((a, b) => {
-      const sa = board.tasks.find((t) => t.id === a)?.status;
-      const sb = board.tasks.find((t) => t.id === b)?.status;
-      return (sa === 'testing' ? 0 : 1) - (sb === 'testing' ? 0 : 1);
-    });
-  }
-  while (queue.length > 0 && countRunningTaskChats(board) < maxConcurrent(board)) {
-    const nextId = queue.shift()!;
-    await resumeBoardTask(group, nextId, plannerChat);
-  }
-  if (!queue.length) {
-    taskQueueByGroupId.delete(group.id);
+  if (drainInFlightByGroupId.has(group.id)) return;
+  drainInFlightByGroupId.add(group.id);
+  try {
+    const queue = taskQueueByGroupId.get(group.id);
+    if (!queue?.length) return;
+    // Promote tasks already in testing ahead of queued builds so each task keeps
+    // its single slot across build→test→complete. Needed because
+    // notifyChatStreamEnded fires before setStreaming(false), causing
+    // startTaskTesting to enqueue at the back while the build chat still appears
+    // active; the deferred microtask drain then needs the correct order.
+    if (queue.length > 1) {
+      queue.sort((a, b) => {
+        const sa = board.tasks.find((t) => t.id === a)?.status;
+        const sb = board.tasks.find((t) => t.id === b)?.status;
+        return (sa === 'testing' ? 0 : 1) - (sb === 'testing' ? 0 : 1);
+      });
+    }
+    while (queue.length > 0 && countRunningTaskChats(board) < maxConcurrent(board)) {
+      const nextId = queue.shift()!;
+      if (drainResumeCallsForTests) drainResumeCallsForTests.push(nextId);
+      await resumeBoardTask(group, nextId, plannerChat);
+    }
+    if (!queue.length) {
+      taskQueueByGroupId.delete(group.id);
+    }
+  } finally {
+    drainInFlightByGroupId.delete(group.id);
   }
 }
 
@@ -1389,7 +1881,7 @@ function enqueueMergeCompletedTaskWorktree(
   plannerChat: Chat,
 ): Promise<MergeTaskWorktreeResult> {
   return enqueueBoardMerge(group.id, async () => {
-    await waitForNoActiveFixer(group);
+    await waitForNoActiveFixer(group, plannerChat);
     return mergeCompletedTaskWorktree(group, task, plannerChat);
   });
 }
@@ -1424,7 +1916,7 @@ function buildMergeFixerSeedMessage(
 }
 
 /** Spawn a fixer chat to resolve an integration merge conflict. */
-async function startMergeConflictFixer(
+export async function startMergeConflictFixer(
   group: ChatGroup,
   task: BoardTask,
   plannerChat: Chat,
@@ -1434,8 +1926,10 @@ async function startMergeConflictFixer(
   const board = group.orchestrateBoard;
   if (!board?.integrationBranch) return;
 
+  const boardId = group.id;
+
   const ensured = await ensureIntegrationWorktree({
-    boardId: group.id,
+    boardId,
     branch: board.integrationBranch,
   });
   const integrationPath = ensured.path?.trim();
@@ -1450,9 +1944,64 @@ async function startMergeConflictFixer(
     return;
   }
 
+  // Part 3: Guard against launching a fixer when MERGE_HEAD has already vanished.
+  const branch = task.worktreeBranch?.trim();
+  let effectiveConflictedFiles = conflictedFiles;
+  let effectiveIntegrationSha = integrationSha;
+  if (isLocalServerAvailable() && branch) {
+    const inProg = await checkMergeInProgressOp({ boardId });
+    if (inProg.ok && !inProg.inProgress) {
+      const alreadyMerged = await checkTaskBranchMerged({ boardId, fromBranch: branch });
+      if (alreadyMerged.ok && alreadyMerged.merged) {
+        // Merge already committed — skip fixer and finalize directly.
+        moveTaskStatus(group, task.id, 'merging', plannerChat);
+        const freshMerged = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
+        await finalizeMergeFixerOnStreamEnd(group, freshMerged, plannerChat).catch((err) =>
+          reportBackgroundError('merge-fixer-already-merged', err),
+        );
+        return;
+      }
+      // Re-establish authoritative merge state.
+      const remerge = await mergeTaskIntoIntegration({
+        boardId,
+        fromBranch: branch,
+        message: `Merge ${task.id} (${task.title}) into integration`,
+      });
+      if (!remerge.ok && remerge.conflict) {
+        // Fresh conflict — continue spawning fixer with updated state.
+        effectiveConflictedFiles = remerge.conflictedFiles ?? conflictedFiles;
+        effectiveIntegrationSha = remerge.integrationSha ?? integrationSha;
+      } else if (remerge.ok) {
+        // Merged cleanly — finalize and complete.
+        moveTaskStatus(group, task.id, 'merging', plannerChat);
+        const freshClean = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
+        await finalizeMergeFixerOnStreamEnd(group, freshClean, plannerChat).catch((err) =>
+          reportBackgroundError('merge-fixer-clean-remerge', err),
+        );
+        return;
+      } else {
+        // Error re-establishing merge state — self-heal.
+        moveTaskStatus(group, task.id, 'merging', plannerChat);
+        const freshForHeal = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
+        void runSelfHeal(
+          group,
+          freshForHeal,
+          plannerChat,
+          {
+            phase: 'merge',
+            category: 'stall',
+            summary: remerge.output ?? 'Failed to re-establish merge state for fixer',
+          },
+          makeSelfHealDeps(),
+        ).catch((err) => reportBackgroundError('merge-fixer-remerge-error', err));
+        return;
+      }
+    }
+  }
+
   moveTaskStatus(group, task.id, 'merging', plannerChat);
 
-  const preSha = integrationSha?.trim() || task.mergePreSha?.trim();
+  const preSha = effectiveIntegrationSha?.trim() || task.mergePreSha?.trim();
   if (preSha) {
     updateTask(group, task.id, { mergePreSha: preSha }, plannerChat);
   }
@@ -1475,7 +2024,10 @@ async function startMergeConflictFixer(
   ensureStreamEndSubscription();
   reserveLaunchSlot(fixerChat.id);
   try {
-    const seed = buildMergeFixerSeedMessage(task, conflictedFiles);
+    const seed = buildMergeFixerSeedMessage(task, effectiveConflictedFiles);
+    // Part 1: Supervise the fixer chat like every other board chat starter.
+    refreshHeartbeatThresholds();
+    startTaskChatSupervision(fixerChat.id);
     void runChatTurn({
       chat: fixerChat,
       pushUser: true,
@@ -1504,17 +2056,21 @@ async function finalizeMergeFixerOnStreamEnd(
   plannerChat: Chat,
 ): Promise<void> {
   if (task.status !== 'merging') return;
-  const fresh = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
-  const branch = fresh.worktreeBranch?.trim();
-  if (!branch) {
-    moveTaskStatus(group, fresh.id, 'blocked', plannerChat);
-    return;
-  }
-
-  const boardId = group.id;
-  const attempts = fresh.fixerAttempts ?? 0;
-
+  if (fixerFinalizeInFlight.has(task.id)) return;
+  fixerFinalizeInFlight.add(task.id);
   try {
+    const fresh = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
+    if (fresh.status !== 'merging') return;
+    const branch = fresh.worktreeBranch?.trim();
+    if (!branch) {
+      moveTaskStatus(group, fresh.id, 'blocked', plannerChat);
+      return;
+    }
+
+    const boardId = group.id;
+    const attempts = fresh.fixerAttempts ?? 0;
+
+    try {
     const merged = await checkTaskBranchMerged({ boardId, fromBranch: branch });
     const verified =
       merged.ok && merged.merged
@@ -1565,6 +2121,28 @@ async function finalizeMergeFixerOnStreamEnd(
       );
 
       const mergeResult = await enqueueMergeCompletedTaskWorktree(group, fresh, plannerChat);
+      if (mergeResult.outcome === 'merged' || mergeResult.outcome === 'skipped') {
+        // Re-merge succeeded (conflict resolved or already integrated) → complete.
+        const mergePreSha = fresh.mergePreSha?.trim();
+        try {
+          await refreshIntegrationDepsOp({ boardId, sinceSha: mergePreSha });
+        } catch (err) {
+          reportBackgroundError('worktree-refresh-deps', err);
+        }
+        updateTask(
+          group,
+          fresh.id,
+          {
+            fixerChatId: undefined,
+            error: undefined,
+            fixerAttempts: undefined,
+            mergePreSha: undefined,
+          },
+          plannerChat,
+        );
+        moveTaskStatus(group, fresh.id, 'complete', plannerChat);
+        return;
+      }
       if (mergeResult.outcome === 'conflict') {
         await startMergeConflictFixer(
           group,
@@ -1590,7 +2168,7 @@ async function finalizeMergeFixerOnStreamEnd(
       return;
     }
 
-    const summary =
+    const fixerSummary =
       fresh.error?.trim() ||
       verified?.reasons?.join('; ') ||
       'Merge fixer could not produce a valid integration merge after 2 attempts';
@@ -1599,16 +2177,174 @@ async function finalizeMergeFixerOnStreamEnd(
       fresh.id,
       {
         fixerChatId: undefined,
-        error: summary,
+        error: fixerSummary,
         fixerAttempts: undefined,
         mergePreSha: undefined,
       },
       plannerChat,
     );
-    moveTaskStatus(group, fresh.id, 'blocked', plannerChat);
+    // Terminal fixer exhaustion → route through self-heal (will quarantine).
+    void runSelfHeal(
+      group,
+      fresh,
+      plannerChat,
+      { phase: 'merge', category: 'merge', summary: fixerSummary },
+      makeSelfHealDeps(),
+    ).catch((err) => reportBackgroundError('self-heal-fixer-terminal', err));
+    } catch (err) {
+      reportBackgroundError('finalize-merge-fixer', err);
+      moveTaskStatus(group, fresh.id, 'blocked', plannerChat);
+    }
+  } finally {
+    fixerFinalizeInFlight.delete(task.id);
+  }
+}
+
+/** Seed for an environment/setup fixer chat (runs in the task's own worktree). */
+function buildEnvFixerSeedMessage(
+  task: BoardTask,
+  phase: 'build' | 'test',
+  summary: string,
+): string {
+  const verifyCmd = (phase === 'test' ? task.testSpec : task.buildSpec)?.trim();
+  return [
+    `The environment for task \`${task.id}\` (${task.title}) is broken and ${phase} verification cannot run.`,
+    '',
+    'Failure summary:',
+    summary || '(no summary provided)',
+    '',
+    "You are an environment fixer working in this task's worktree. Repair the",
+    '**environment/setup only** — do not change feature code or expand scope.',
+    '',
+    'Common fixes:',
+    '- Missing project tool (eslint, tsc, vite, prettier, jest, …): add it to the',
+    '  correct section of package.json and install (`npm install`).',
+    '- Required local service (Postgres, Redis, …): start it',
+    '  (e.g. `docker compose up -d <service>`); only add a compose/config file if',
+    '  one is clearly missing.',
+    '- Missing config/env file: create it from the committed example',
+    '  (e.g. copy `.env.example` → `.env`).',
+    '',
+    'Steps:',
+    `1. Reproduce the failure${verifyCmd ? ` (e.g. \`${verifyCmd}\`)` : ''} to confirm the root cause.`,
+    '2. Apply the minimal fix.',
+    '3. Re-run the failing command and confirm it now succeeds.',
+    '',
+    'You do not need to run git — the board commits this worktree automatically',
+    'when the task passes. Keep the change minimal and scoped to unblocking the build.',
+  ].join('\n');
+}
+
+/**
+ * Spawn an environment fixer sub-agent on the task's own worktree to repair an
+ * infra failure (missing deps, unstarted services, missing config). Mirrors
+ * {@link startMergeConflictFixer} but stays on the task worktree; on stream-end
+ * {@link finalizeEnvFixerOnStreamEnd} re-runs the failed phase to verify.
+ */
+export async function startEnvFixer(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+  phase: 'build' | 'test',
+  summary: string,
+): Promise<void> {
+  const worktreeRoot = task.worktreePath?.trim() || plannerChat.workspacePath?.trim();
+  if (!worktreeRoot) {
+    // Nothing to fix in → cannot self-heal here; quarantine for human follow-up.
+    quarantineTaskAndDependents(
+      group,
+      task.id,
+      {
+        category: 'infra',
+        summary: summary || 'Environment fix required but task has no worktree',
+        resolutionSteps: ['fix the environment manually, then Requeue'],
+        at: Date.now(),
+      },
+      plannerChat,
+    );
+    return;
+  }
+
+  // Stay in_progress while the fixer works — the fixer-active guard in
+  // isTaskStalledForRestart prevents a spurious builder restart.
+  moveTaskStatus(group, task.id, 'in_progress', plannerChat);
+
+  const fixerChat = getOrCreateBoardChat({
+    group,
+    plannerChat,
+    existingId: task.fixerChatId?.trim(),
+    role: 'fixer',
+    name: `Fix env ${task.id}: ${task.title}`,
+    taskId: task.id,
+    taskChatField: 'fixerChatId',
+  });
+  updateTask(group, task.id, { fixerKind: 'env', envFixPhase: phase }, plannerChat);
+
+  fixerChat.worktreeRoot = worktreeRoot;
+  scheduleSaveSessions();
+
+  if (skipBackgroundBoardChatLaunch()) return;
+
+  ensureStreamEndSubscription();
+  reserveLaunchSlot(fixerChat.id);
+  try {
+    const seed = buildEnvFixerSeedMessage(task, phase, summary);
+    refreshHeartbeatThresholds();
+    startTaskChatSupervision(fixerChat.id);
+    void runChatTurn({
+      chat: fixerChat,
+      pushUser: true,
+      rawText: seed,
+      userText: seed,
+      displayText: seed,
+      historyContent: seed,
+      skillId: null,
+      validAttachments: [],
+      titleSeed: `Fix env ${task.id}`,
+      ownsGlobalStreaming: true,
+    }).catch((err) => {
+      const message = err instanceof Error ? err.message : 'Env fixer chat failed to start';
+      updateTask(group, task.id, { error: message }, plannerChat);
+    }).finally(() => releaseLaunchSlotAndDrive(group, plannerChat, fixerChat.id));
   } catch (err) {
-    reportBackgroundError('finalize-merge-fixer', err);
-    moveTaskStatus(group, fresh.id, 'blocked', plannerChat);
+    releaseLaunchSlotAndDrive(group, plannerChat, fixerChat.id);
+    throw err;
+  }
+}
+
+/**
+ * Route env-fixer stream-end: clear the fixer linkage and re-run the failed
+ * phase. The re-run's own finalizer decides pass (→ testing/complete) or fail
+ * (→ self-heal; env-fixer attempts are bounded before quarantine).
+ */
+async function finalizeEnvFixerOnStreamEnd(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+): Promise<void> {
+  if (task.fixerKind !== 'env') return;
+  if (fixerFinalizeInFlight.has(task.id)) return;
+  fixerFinalizeInFlight.add(task.id);
+  try {
+    const fresh = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
+    if (fresh.fixerKind !== 'env') return;
+    const phase = fresh.envFixPhase ?? 'test';
+    updateTask(
+      group,
+      fresh.id,
+      { fixerChatId: undefined, fixerKind: undefined, envFixPhase: undefined },
+      plannerChat,
+    );
+    if (!isBoardRunning(group)) return;
+    if (phase === 'build') {
+      await startTask(group, fresh.id, plannerChat);
+    } else {
+      await startTaskTesting(group, fresh.id, plannerChat);
+    }
+  } catch (err) {
+    reportBackgroundError('finalize-env-fixer', err);
+  } finally {
+    fixerFinalizeInFlight.delete(task.id);
   }
 }
 
@@ -1622,6 +2358,58 @@ export function cleanupBoardIsolation(group: ChatGroup): void {
   void cleanupBoardWorktreesOp({ boardId: group.id }).catch((err) =>
     reportBackgroundError('worktree-cleanup', err),
   );
+}
+
+/** Record that integration work was merged into the workspace and committed. */
+export function markBoardIntegrationLanded(group: ChatGroup, plannerChat: Chat): void {
+  const board = group.orchestrateBoard;
+  if (!board || board.integrationLandedAt) return;
+  board.integrationLandedAt = Date.now();
+  touchChat(plannerChat);
+  scheduleSaveSessions();
+  emitBoardChange(group.id);
+}
+
+/** Clear every git worktree for a board after landing integration in the workspace. */
+export async function clearBoardWorktreesAfterLanding(
+  group: ChatGroup,
+  plannerChat: Chat,
+): Promise<{ ok: boolean; removed?: number; error?: string }> {
+  const board = group.orchestrateBoard;
+  if (!board) return { ok: false, error: 'no_board' };
+  if (board.worktreesClearedAt) return { ok: true, removed: 0 };
+
+  const res = await cleanupBoardWorktreesOp({
+    boardId: group.id,
+    includeIntegration: true,
+  });
+  if (!res.ok) {
+    return { ok: false, error: res.error || res.output || 'cleanup_failed' };
+  }
+
+  for (const task of board.tasks) {
+    task.worktreePath = undefined;
+    task.devPort = undefined;
+    task.apiPort = undefined;
+    for (const chatId of [task.chatId, task.testChatId, task.fixerChatId]) {
+      const id = chatId?.trim();
+      if (!id) continue;
+      const chat = findChatById(id);
+      if (chat?.worktreeRoot) delete chat.worktreeRoot;
+    }
+  }
+
+  const finalChatId = board.finalTest?.chatId?.trim();
+  if (finalChatId) {
+    const finalChat = findChatById(finalChatId);
+    if (finalChat?.worktreeRoot) delete finalChat.worktreeRoot;
+  }
+
+  board.worktreesClearedAt = Date.now();
+  touchChat(plannerChat);
+  scheduleSaveSessions();
+  emitBoardChange(group.id);
+  return { ok: true, removed: typeof res.removed === 'number' ? res.removed : undefined };
 }
 
 /** Start a linked task chat (background stream; does not switch active chat). */
@@ -1795,6 +2583,12 @@ export async function startTaskTesting(
       scheduleSaveSessions();
     }
 
+    // Preflight: bring up declared services before the Tester runs (§3 happy-path).
+    // Guard: only if the task or its worktree signature is not already provisioned.
+    await ensureBoardInfraProvisioned(group, freshTask, plannerChat).catch((err) =>
+      reportBackgroundError('preflight-infra-provision', err),
+    );
+
     const seed = buildTaskTestSeedMessage(group, plannerChat, task);
 
     refreshHeartbeatThresholds();
@@ -1890,10 +2684,10 @@ export function applyTaskBuildFailureState(
 
 /**
  * Fallback verdict parsed from the Tester chat transcript when the structured
- * `board_report_test_result` call never landed. Requires an explicit
- * `VERDICT: pass|fail` marker in the latest assistant message — prose alone is
- * not trusted, so an offhand "tests pass" mid-explanation is not read as the
- * final verdict. Returns null when no marker is present.
+ * `board_report_test_result` call never landed (primary signal). Scans backward
+ * for the most recent assistant message that contains an explicit
+ * `VERDICT: pass|fail` marker — prose alone is not trusted. Returns null when
+ * no marker is present.
  */
 function parseTesterVerdictMarker(chatId: string | undefined): {
   verdict: 'pass' | 'fail';
@@ -1908,10 +2702,9 @@ function parseTesterVerdictMarker(chatId: string | undefined): {
     if (!msg || msg.role !== 'assistant') continue;
     const content = typeof msg.content === 'string' ? msg.content : '';
     if (!content.trim()) continue;
-    // Only inspect the most recent non-empty assistant message.
     const match = content.match(/^[ \t>*_-]*verdict\s*[:=]\s*([a-z]+)/im);
     const verdict = match ? normalizeVerdict(match[1]) : null;
-    if (!verdict) return null;
+    if (!verdict) continue;
     const line = content
       .split(/\r?\n/)
       .find((l) => /verdict\s*[:=]/i.test(l))
@@ -1979,13 +2772,17 @@ export async function finalizeTaskTestingOnStreamEnd(
         mergeResult.integrationSha,
       );
     } else {
-      moveTaskStatus(group, fresh.id, 'blocked', plannerChat);
-      updateTask(
+      // Merge-failed (non-conflict error) → self-heal merge path.
+      const mergeSummary = mergeResult.message || 'Integration merge failed';
+      updateTask(group, fresh.id, { error: mergeSummary }, plannerChat);
+      void runSelfHeal(
         group,
-        fresh.id,
-        { error: mergeResult.message || 'Integration merge failed' },
+        fresh,
         plannerChat,
-      );
+        { phase: 'merge', category: 'merge', summary: mergeSummary },
+        makeSelfHealDeps(),
+      ).catch((err) => reportBackgroundError('self-heal-merge', err));
+      return;
     }
 
     const testChatId = fresh.testChatId?.trim();
@@ -2011,21 +2808,22 @@ export async function finalizeTaskTestingOnStreamEnd(
     return;
   }
 
-  const route = applyTaskTestFailureState(group, fresh, plannerChat, summary);
-  if (route === 'retry') {
-    const updated = group.orchestrateBoard!.tasks.find((t) => t.id === fresh.id) ?? fresh;
-    const seed = buildRetryBuilderSeedMessage(
-      updated,
-      updated.testAttempts ?? 1,
-      summary,
-    );
-    // Persist the failure-aware seed so it survives a concurrency-slot queue
-    // (the just-ended Tester chat is still counted as running here).
-    updateTask(group, fresh.id, { pendingBuildSeed: seed }, plannerChat);
-    void startTask(group, fresh.id, plannerChat).catch((err) =>
-      reportBackgroundError('start-task-retry', err),
-    );
-  }
+  // Test failed: route through self-heal with the Tester chat for classification.
+  const testerChatObj = fresh.testChatId ? findChatById(fresh.testChatId) : null;
+  const category = testerChatObj ? classifyTaskFailure(testerChatObj) : 'code';
+  void runSelfHeal(
+    group,
+    fresh,
+    plannerChat,
+    { phase: 'test', category, summary },
+    makeSelfHealDeps(),
+  ).catch((err) => reportBackgroundError('self-heal-test', err));
+}
+
+/** True when the board is terminal and has at least one `complete` task (gates final test). */
+function isBoardReadyForFinalTest(board: OrchestrateBoardState): boolean {
+  if (!isOrchestratePlanComplete(board)) return false;
+  return board.tasks.some((t) => t.status === 'complete');
 }
 
 /** Start full-board final integration test (Tester with browser). */
@@ -2034,7 +2832,7 @@ export async function startFinalIntegrationTest(
   plannerChat: Chat,
 ): Promise<void> {
   const board = group.orchestrateBoard;
-  if (!board || !isOrchestratePlanComplete(board)) return;
+  if (!board || !isBoardReadyForFinalTest(board)) return;
   if (board.finalTest?.status === 'in_progress') return;
   if (board.finalTest?.status === 'passed') return;
 
@@ -2149,13 +2947,14 @@ function postPlannerBoardMessage(plannerChat: Chat, text: string): void {
   scheduleSaveSessions();
 }
 
-/** When every task is complete, start or surface the final integration test. */
+/** When every task is terminal and ≥1 is complete, start or surface the final integration test. */
 export function tryTriggerFinalIntegrationTest(
   group: ChatGroup,
   plannerChat: Chat,
 ): void {
   const board = group.orchestrateBoard;
-  if (!board || !isOrchestratePlanComplete(board)) return;
+  // All-quarantined boards skip the final test but still reach plan-complete/report path.
+  if (!board || !isBoardReadyForFinalTest(board)) return;
   if (board.finalTest?.status === 'passed') {
     void maybeEmitOrchestratePlanComplete(group.id);
     return;
@@ -2334,9 +3133,12 @@ export function moveTaskStatus(
     const planner = plannerChat ?? getPlannerChatForGroup(group);
     if (planner) tryTriggerFinalIntegrationTest(group, planner);
   }
+  if (board && status === 'quarantined' && isOrchestratePlanComplete(board) && !isBoardReadyForFinalTest(board)) {
+    void maybeEmitOrchestratePlanComplete(group.id);
+  }
   if (board && isBoardRunning(group) && plannerChat) {
     const reportable =
-      status === 'complete' || status === 'failed' || status === 'blocked';
+      status === 'complete' || status === 'failed' || status === 'blocked' || status === 'quarantined';
     if (reportable) {
       void import('../agents/controller/report.ts')
         .then((mod) => {
@@ -2346,6 +3148,44 @@ export function moveTaskStatus(
         })
         .catch((err) => reportBackgroundError('deliver-task-report', err));
     }
+  }
+  if (isTerminalBoardTaskStatus(status)) {
+    const task = group.orchestrateBoard?.tasks.find((t) => t.id === taskId);
+    if (task) {
+      trimTaskRelatedChats(task, sessionState?.activeId ?? null, findChatById);
+    }
+  }
+}
+
+/**
+ * Reset a quarantined task to `planned`, clear its quarantine payload,
+ * and re-drive the board if it is running.
+ */
+export async function requeueBoardTask(
+  group: ChatGroup,
+  taskId: string,
+  plannerChat: Chat,
+): Promise<void> {
+  const board = group.orchestrateBoard;
+  if (!board) return;
+  const task = board.tasks.find((t) => t.id === taskId);
+  if (!task || task.status !== 'quarantined') return;
+  logTaskStatus(group, taskId, task.status, 'planned');
+  updateTask(group, taskId, { status: 'planned', quarantine: undefined, stopRetries: undefined }, plannerChat);
+  const blockedByRootSummary = `blocked by quarantined ${taskId}`;
+  for (const dependent of board.tasks) {
+    if (dependent.id === taskId || dependent.status !== 'quarantined') continue;
+    if (dependent.quarantine?.summary !== blockedByRootSummary) continue;
+    logTaskStatus(group, dependent.id, dependent.status, 'planned');
+    updateTask(
+      group,
+      dependent.id,
+      { status: 'planned', quarantine: undefined, stopRetries: undefined },
+      plannerChat,
+    );
+  }
+  if (isBoardRunning(group)) {
+    await autoDelegateNext(group, plannerChat);
   }
 }
 
@@ -2490,6 +3330,41 @@ export async function resumeBoardExecutionAfterReload(
 }
 
 /**
+ * Live safety net for tasks stuck in `merging`: supervise an active fixer chat
+ * or re-run finalize when the fixer died without stream-end.
+ */
+export async function reconcileMergingTasks(
+  group: ChatGroup,
+  plannerChat: Chat,
+  options?: { isFixerChatActive?: (fixerChatId: string) => boolean },
+): Promise<void> {
+  if (reconcileMergingTasksCallsForTests !== null) {
+    reconcileMergingTasksCallsForTests += 1;
+  }
+  const board = group.orchestrateBoard;
+  if (!board) return;
+  const isFixerActive = options?.isFixerChatActive ?? isTaskChatActive;
+  const pending: Promise<void>[] = [];
+  for (const task of board.tasks) {
+    if (task.status !== 'merging') continue;
+    const fixerId = task.fixerChatId?.trim();
+    if (fixerId && isFixerActive(fixerId)) {
+      startTaskChatSupervision(fixerId);
+      continue;
+    }
+    pending.push(
+      finalizeMergeFixerOnStreamEnd(group, task, plannerChat).catch((err) => {
+        reportBackgroundError('reconcile-merging-task', err);
+      }),
+    );
+  }
+  await Promise.all(pending);
+  if (isBoardRunning(group)) {
+    await drainTaskQueue(group, plannerChat);
+  }
+}
+
+/**
  * Reconcile tasks stuck in `merging` after reload — supervise a live fixer or
  * re-run finalize when its stream-end handler never fired.
  */
@@ -2498,32 +3373,20 @@ export async function recoverInterruptedMergesAfterReload(
   plannerChat: Chat,
 ): Promise<void> {
   ensureStreamEndSubscription();
-  const board = group.orchestrateBoard;
-  if (!board) return;
-  const pending: Promise<void>[] = [];
-  for (const task of board.tasks) {
-    if (task.status !== 'merging') continue;
-    const fixerId = task.fixerChatId?.trim();
-    if (fixerId && shouldSuperviseBoardChatOnReload(fixerId)) {
-      startTaskChatSupervision(fixerId);
-      continue;
-    }
-    pending.push(
-      finalizeMergeFixerOnStreamEnd(group, task, plannerChat).catch((err) => {
-        reportBackgroundError('recover-interrupted-merge', err);
-      }),
-    );
-  }
-  await Promise.all(pending);
+  await reconcileMergingTasks(group, plannerChat, {
+    isFixerChatActive: (id) => shouldSuperviseBoardChatOnReload(id),
+  });
 }
 
 /** Begin auto/sequential execution — set running flag then kick off delegation. */
 export function startBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
   const board = group.orchestrateBoard;
   if (!board || !isBoardAutoMode(group)) return;
+  void clearOomPauseFromElectron();
   board.autoRunning = true;
-  // Clear any prior Stop so the timer resumes and the Stopped badge clears.
+  // Clear any prior Stop or system pause so the timer resumes and badges clear.
   board.userStopped = false;
+  board.systemPaused = false;
   board.lastUpdatedAt = Date.now();
   logAutoStart(group);
   scheduleSaveSessions();
@@ -2533,14 +3396,31 @@ export function startBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
   );
 }
 
+export type StopBoardAutoRunOptions = {
+  /** User Stop (default) vs shutdown/OOM system pause. */
+  reason?: 'user' | 'system';
+};
+
 /** Stop all active task chats and clear the task queue. */
-export function stopBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
+export function stopBoardAutoRun(
+  group: ChatGroup,
+  plannerChat: Chat,
+  options: StopBoardAutoRunOptions = {},
+): void {
   const board = group.orchestrateBoard;
   if (!board) return;
+  const reason = options.reason ?? 'user';
   board.autoRunning = false;
-  // Freeze the header timer and surface the Stopped badge immediately, even if
-  // task statuses lag behind the aborted streams (MIN-248).
-  board.userStopped = true;
+  if (reason === 'system') {
+    // Shutdown/OOM: pause without user-stop quarantine on stream-end.
+    board.systemPaused = true;
+    board.userStopped = false;
+  } else {
+    // Freeze the header timer and surface the Stopped badge immediately, even if
+    // task statuses lag behind the aborted streams (MIN-248).
+    board.userStopped = true;
+    board.systemPaused = false;
+  }
   board.lastUpdatedAt = Date.now();
   logAutoStop(group);
   taskQueueByGroupId.delete(group.id);
@@ -2568,7 +3448,7 @@ export function stopBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
   syncOrchestrateBoardTimer(group, plannerChat, {
     isStreaming: false,
     activeRunCount: 0,
-    userStopped: true,
+    userStopped: reason === 'user',
   });
   // Cancel any sub-agent runs still attributed to the planner's active parent
   // turn so background runs/heartbeats do not linger after Stop (MIN-246).
@@ -2597,7 +3477,7 @@ export function pauseAllRunningBoardsForShutdown(): void {
     if (!plannerId) continue;
     const planner = state.chats.find((c) => c.id === plannerId);
     if (!planner) continue;
-    stopBoardAutoRun(group, planner);
+    stopBoardAutoRun(group, planner, { reason: 'system' });
   }
 }
 
@@ -2608,6 +3488,7 @@ export async function autoDelegateNext(
 ): Promise<void> {
   ensureStreamEndSubscription();
   ensureAutoDriveSubscription();
+  await reconcileMergingTasks(group, plannerChat);
   const board = group.orchestrateBoard;
   if (!board || !isBoardRunning(group)) return;
 
@@ -2705,6 +3586,42 @@ export function getTaskQueueForTests(groupId: string): string[] {
 
 export function clearTaskQueuesForTests(): void {
   taskQueueByGroupId.clear();
+  drainInFlightByGroupId.clear();
+}
+
+/** When set, records task ids passed to resumeBoardTask from drainTaskQueue. */
+let drainResumeCallsForTests: string[] | null = null;
+
+/** When non-null, counts reconcileMergingTasks invocations (test spy). */
+let reconcileMergingTasksCallsForTests: number | null = null;
+
+export function trackReconcileMergingTasksCallsForTests(enabled: boolean): number {
+  if (enabled) {
+    reconcileMergingTasksCallsForTests = 0;
+    return 0;
+  }
+  const count = reconcileMergingTasksCallsForTests ?? 0;
+  reconcileMergingTasksCallsForTests = null;
+  return count;
+}
+
+export function trackDrainResumeCallsForTests(enabled: boolean): string[] {
+  if (enabled) {
+    drainResumeCallsForTests = [];
+    return drainResumeCallsForTests;
+  }
+  const captured = drainResumeCallsForTests ?? [];
+  drainResumeCallsForTests = null;
+  return captured;
+}
+
+/** Test-only: run integration merge on the per-board queue (waits for fixers). */
+export async function enqueueMergeCompletedTaskWorktreeForTests(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+): Promise<MergeTaskWorktreeResult> {
+  return enqueueMergeCompletedTaskWorktree(group, task, plannerChat);
 }
 
 export async function drainTaskQueueForTests(
@@ -2712,4 +3629,81 @@ export async function drainTaskQueueForTests(
   plannerChat: Chat,
 ): Promise<void> {
   return drainTaskQueue(group, plannerChat);
+}
+
+export function startTaskChatSupervisionForTests(chatId: string): void {
+  startTaskChatSupervision(chatId);
+}
+
+export function clearTaskChatStallRestartsForTests(): void {
+  taskChatStallRestarts.clear();
+}
+
+export function getTaskChatStallRestartCountForTests(chatId: string): number {
+  return taskChatStallRestarts.get(chatId) ?? 0;
+}
+
+/** Enable/disable capture of stall-path nudge and self-heal calls from heartbeat ticks. */
+export function trackTaskChatStallRecoveryCallsForTests(enabled: boolean): {
+  nudges: string[];
+  selfHeals: string[];
+} {
+  if (enabled) {
+    taskChatNudgeCallsForTests = [];
+    stallSelfHealCallsForTests = [];
+    return {
+      nudges: taskChatNudgeCallsForTests,
+      selfHeals: stallSelfHealCallsForTests,
+    };
+  }
+  const nudges = taskChatNudgeCallsForTests ?? [];
+  const selfHeals = stallSelfHealCallsForTests ?? [];
+  taskChatNudgeCallsForTests = null;
+  stallSelfHealCallsForTests = null;
+  return { nudges, selfHeals };
+}
+
+/** Test-only: simulate fixer stall reconcile (stream-end finalizes + drains). */
+export async function triggerFixerStallReconcileForTests(
+  group: ChatGroup,
+  plannerChat: Chat,
+  taskId: string,
+): Promise<void> {
+  ensureStreamEndSubscription();
+  const task = group.orchestrateBoard?.tasks.find((t) => t.id === taskId);
+  if (!task) return;
+  const chatId = task.fixerChatId?.trim();
+  if (!chatId) return;
+  notifyChatStreamEnded(chatId);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+}
+
+/** Test-only: invoke merge-fixer finalize directly (re-entrancy / idempotency tests). */
+export async function finalizeMergeFixerOnStreamEndForTests(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+): Promise<void> {
+  return finalizeMergeFixerOnStreamEnd(group, task, plannerChat);
+}
+
+/** Test-only: heartbeat merge-fixer reconcile (git poll / stall path). */
+export async function reconcileMergeFixerChatForTests(
+  group: ChatGroup,
+  planner: Chat,
+  taskId: string,
+  chatId: string,
+): Promise<void> {
+  return reconcileMergeFixerChat(group, planner, taskId, chatId);
+}
+
+/** Test-only: simulate stream-end when fixerChatId was already cleared before delivery. */
+export async function simulateUnmatchedFixerStreamEndForTests(
+  group: ChatGroup,
+  plannerChat: Chat,
+  endedChatId: string,
+): Promise<void> {
+  ensureStreamEndSubscription();
+  notifyChatStreamEnded(endedChatId);
+  await new Promise((resolve) => setTimeout(resolve, 50));
 }

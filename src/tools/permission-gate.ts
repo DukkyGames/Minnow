@@ -19,6 +19,11 @@ import { resolveEffectivePermission } from './permission-resolve';
 
 export type { ToolApprovalContext };
 
+/** Matches server `resolveSafePath` rejection copy (`server/runtime/path-access.js`). */
+export function outsideWorkspaceBlockMessage(userPath: string): string {
+  return `Error: Path "${userPath}" resolves outside the workspace directory. Enable full filesystem access in Settings (dangerous) or set TOOLS_ALLOW_ALL_PATHS=1 for automation.`;
+}
+
 function isPathInAllowedRoots(
   userPath: string,
   workspaceRoot: string,
@@ -78,6 +83,11 @@ export async function maybeBlockToolForUserApproval(
     return null;
   }
 
+  // Server rejects out-of-workspace paths unless full filesystem access is on — do not modal.
+  if (needsPathAck) {
+    return { content: outsideWorkspaceBlockMessage(pathsOutsideWorkspace[0]!) };
+  }
+
   const summary = describeToolInvocation(execName, args);
   const workspace: ToolApprovalRequest['workspace'] = workspaceRoot
     ? { label: getWorkspaceLabel() || workspaceRoot, path: workspaceRoot }
@@ -85,20 +95,12 @@ export async function maybeBlockToolForUserApproval(
         hint: 'Not loaded — start with npm start and choose a workspace folder.',
       };
 
-  const pathWarning =
-    needsPathAck && fsMeta.filesystemAccess === 'workspace'
-      ? `${
-          perm === 'full' ? 'Tool permission is Full, but these paths are outside the workspace:\n' : 'Paths outside the workspace:\n'
-        }${pathsOutsideWorkspace.map((p) => `• ${p}`).join('\n')}\n\nBoard worktrees under ~/.minnow/worktrees are allowed by the server. Other paths may be rejected unless you enable full filesystem access in Settings.`
-      : '';
-
   const decision = await enqueueToolApproval({
     toolName: execName,
     title: summary.title,
     description: summary.description,
     argsJson: summary.argsJson,
     workspace,
-    pathWarning: pathWarning || undefined,
     subAgentType: context.subAgentType,
     workAgentId: context.workAgentId,
   });
@@ -126,10 +128,13 @@ export function toolInvocationWouldPrompt(
 ): boolean {
   if (perm === 'off') return false;
   const pathStrings = extractPathLikeArgs(toolName, args);
-  const needsPathAck =
-    filesystemAccess === 'workspace' &&
-    workspaceRoot.trim().length > 0 &&
-    pathStrings.some((p) => !isPathInAllowedRoots(p, workspaceRoot, extraPathRoots));
+  const pathsOutsideWorkspace =
+    filesystemAccess === 'workspace' && workspaceRoot.trim().length > 0
+      ? pathStrings.filter(
+          (p) => !isPathInAllowedRoots(p, workspaceRoot, extraPathRoots),
+        )
+      : [];
   const needsPermissionAck = perm === 'ask';
-  return needsPathAck || needsPermissionAck;
+  // Out-of-workspace paths are blocked before the modal when FS access is workspace-only.
+  return needsPermissionAck && pathsOutsideWorkspace.length === 0;
 }

@@ -5,23 +5,25 @@
  */
 
 import { spawnElectronShell } from './spawn-electron.mjs';
-import { waitForVite } from './wait-for-vite.mjs';
+import { waitForMinnowDev } from './wait-for-minnow-dev.mjs';
+import { resolveMinnowPort } from '../server/constants/minnow-port.js';
 
 function readPortArg() {
   const idx = process.argv.indexOf('--port');
   if (idx !== -1 && process.argv[idx + 1]) {
-    return process.argv[idx + 1];
+    return Number(process.argv[idx + 1]);
   }
-  return process.env.PORT || '5173';
+  return resolveMinnowPort();
 }
 
-const port = readPortArg();
+const preferredPort = readPortArg();
 
 try {
-  console.log(`[electron] Waiting for Vite on port ${port}…`);
-  await waitForVite(port);
-  await spawnElectronShell({ port, dev: true, foreground: false });
-  console.log('Minnow desktop: Electron shell launched (Chromium in-app browser).');
+  console.log(`[electron] Waiting for Minnow dev server near port ${preferredPort}…`);
+  const { origin, port } = await waitForMinnowDev({ preferredPort });
+  const devUrl = `${origin}/`;
+  await spawnElectronShell({ port, devUrl, dev: true, foreground: false });
+  console.log(`Minnow desktop: Electron shell launched (${devUrl}).`);
   console.log('Use MINNOW_BROWSER=1 to open the system browser instead.');
 } catch (err) {
   const message = err instanceof Error ? err.message : String(err);

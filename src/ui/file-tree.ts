@@ -4,8 +4,20 @@
 
 import { WORKSPACE_FILE_MIME } from '../attachments/workspace-ref';
 import { parseListDirectoryResult, type ParsedListing } from '../lib/list-directory-parse';
-import { invalidateCachedDirectoryListingsForCurrentWorkspace } from '../tools/result-cache';
+import {
+  invalidateCachedDirectoryListings,
+  invalidateCachedDirectoryListingsForCurrentWorkspace,
+} from '../tools/result-cache';
 import { getFilePanelState, patchFilePanelState } from '../state/file-panel';
+import { getWorkspacePath } from '../state/workspace';
+import {
+  buildFileTreeToolContext,
+  fileTreeListingRootsEqual,
+  getFileTreeListingWorkspaceRoot,
+  getFileTreeSidebarTitleSuffix,
+  resolveFileTreeListingRoot,
+  setFileTreeListingWorkspaceRoot,
+} from './file-tree-listing-root';
 import { isFileTreeServerAvailable } from './file-tree-server';
 import {
   basenameOf,
@@ -140,12 +152,20 @@ function isExpanded(path: string): boolean {
   return getFilePanelState().expandedDirs.includes(path);
 }
 
+export {
+  buildFileTreeToolContext,
+  getFileTreeListingWorkspaceRoot,
+  getFileTreeSidebarTitleSuffix,
+} from './file-tree-listing-root';
+
 async function fetchListing(relativePath: string): Promise<ParsedListing | { error: string }> {
   const cached = listingCache.get(relativePath);
   if (cached) return cached;
 
   const { executeTool } = await import('../tools/client');
-  const raw = (await executeTool('list_directory', { path: relativePath })).content;
+  const raw = (
+    await executeTool('list_directory', { path: relativePath }, buildFileTreeToolContext())
+  ).content;
   const parsed = parseListDirectoryResult(raw);
   if ('error' in parsed) {
     return parsed;
@@ -165,11 +185,63 @@ function setExpanded(path: string, open: boolean): void {
   patchFilePanelState({ expandedDirs: next });
 }
 
+function invalidateListingCacheScopes(...roots: (string | undefined)[]): void {
+  const main = getWorkspacePath().trim();
+  const seen = new Set<string>();
+  for (const root of roots) {
+    const scope = root?.trim() || main;
+    if (!scope || seen.has(scope)) continue;
+    seen.add(scope);
+    invalidateCachedDirectoryListings(scope);
+  }
+}
+
 export function invalidateFileTreeCache(): void {
   listingCache.clear();
   invalidateFileTreeIndex();
-  // File tree uses executeTool without chatId; bust listing cache in every scope.
-  invalidateCachedDirectoryListingsForCurrentWorkspace();
+  invalidateListingCacheScopes(
+    getFileTreeListingWorkspaceRoot(),
+    getWorkspacePath().trim() || undefined,
+  );
+  if (!getFileTreeListingWorkspaceRoot()) {
+    invalidateCachedDirectoryListingsForCurrentWorkspace();
+  }
+}
+
+/** Sync file tree listing root with git panel worktree cwd; reload when root changes. */
+export async function syncFileTreeToPanelWorktree(panelCwd?: string): Promise<void> {
+  const nextRoot = resolveFileTreeListingRoot(panelCwd);
+  const prevRoot = getFileTreeListingWorkspaceRoot();
+
+  if (!fileTreeListingRootsEqual(prevRoot, nextRoot)) {
+    invalidateListingCacheScopes(prevRoot, nextRoot, getWorkspacePath().trim() || undefined);
+    setFileTreeListingWorkspaceRoot(nextRoot);
+
+    patchFilePanelState({
+      expandedDirs: [],
+      selectedPath: null,
+      openViewerTabs: [],
+      activeViewerTab: null,
+    });
+
+    const { closeFileViewerForce } = await import('./file-viewer');
+    closeFileViewerForce();
+
+    listingCache.clear();
+    invalidateFileTreeIndex();
+
+    await refreshFileTree();
+  }
+
+  startFileTreeGitStatusPoll(nextRoot ?? getWorkspacePath());
+  syncFileSidebarTitleFromFileTree();
+}
+
+/** Update #fileSidebarTitle when the files view is visible. */
+export function syncFileSidebarTitleFromFileTree(): void {
+  const title = document.getElementById('fileSidebarTitle');
+  if (!title || title.textContent === 'Source Control') return;
+  title.textContent = `Files${getFileTreeSidebarTitleSuffix()}`;
 }
 
 let filterRenderGeneration = 0;

@@ -217,6 +217,33 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
     assert.equal(group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!.status, 'complete');
   });
 
+  test('uses most recent assistant message that contains VERDICT marker', async () => {
+    const group = makeGroup({ 'W1-A': 'testing' });
+    const planner = makePlanner();
+    const testChat: Chat = {
+      id: TEST_CHAT_ID,
+      name: 'Test',
+      workspacePath: '/tmp/ws',
+      modeId: 'build',
+      modelId: 'm1',
+      workAgentId: 'tester',
+      history: [
+        { role: 'assistant', content: 'VERDICT: pass' },
+        { role: 'assistant', content: 'all good!' },
+      ],
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: 1,
+      boardGroupId: GROUP_ID,
+      boardTaskId: 'W1-A',
+    };
+    updateTask(group, 'W1-A', { testChatId: TEST_CHAT_ID }, planner);
+    setSessionStateForTests({ chats: [planner, testChat], groups: [group], activeChatId: PLANNER_ID });
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    await finalizeTaskTestingOnStreamEnd(group, task, planner);
+    assert.equal(group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!.status, 'complete');
+  });
+
   test('no marker and no verdict still fails', async () => {
     const group = makeGroup({ 'W1-A': 'testing' });
     const planner = makePlanner();
@@ -263,7 +290,7 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
     assert.match(updated.pendingBuildSeed!, /typecheck failed in foo\.ts/);
   });
 
-  test('third fail marks blocked', async () => {
+  test('third fail quarantines via self-heal (Phase 2)', async () => {
     const group = makeGroup({ 'W1-A': 'testing' });
     const planner = makePlanner();
     updateTask(
@@ -275,8 +302,9 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
     const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
     await finalizeTaskTestingOnStreamEnd(group, task, planner);
     const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
-    assert.equal(updated!.status, 'blocked');
-    assert.match(updated!.error ?? '', /still broken/);
+    // Phase 2: exhausted test attempts are quarantined by self-heal (not left as blocked).
+    assert.equal(updated!.status, 'quarantined');
+    assert.match(updated!.error ?? updated!.quarantine?.summary ?? '', /still broken/);
   });
 
   test('afk mode third fail blocks and delivers stalled report', async () => {
@@ -309,7 +337,8 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
     assert.equal(updated!.status, 'blocked');
     assert.equal(deliveries.length, 1);
     assert.match(deliveries[0]!, /stalled/i);
-    assert.match(deliveries[0]!, /self-heal/i);
+    // Orchestrator is told the autonomous retries are exhausted and not to wait.
+    assert.match(deliveries[0]!, /never wait for the user/i);
 
     setOrchestratorReportDeliverHook(null);
   });

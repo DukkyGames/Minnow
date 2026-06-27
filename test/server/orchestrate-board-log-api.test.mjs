@@ -72,4 +72,9 @@ describe('orchestrate board-log API', () => {
     assert.equal(res.status, 400);
     assert.match(String(res.json?.error ?? ''), /groupId and event required/);
   });
+
+  test('GET board-log ping returns 204', async () => {
+    const res = await httpRequest(baseUrl, 'GET', '/api/orchestrate/board-log');
+    assert.equal(res.status, 204);
+  });
 });

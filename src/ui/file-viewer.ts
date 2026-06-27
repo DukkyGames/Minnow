@@ -613,18 +613,24 @@ interface LoadedFileContent {
 }
 
 async function loadFileContent(path: string): Promise<LoadedFileContent> {
-  const raw = (await executeTool('read_file', { path })).content;
+  const { buildFileTreeToolContext } = await import('./file-tree-listing-root');
+  const toolContext = buildFileTreeToolContext();
+  const raw = (await executeTool('read_file', { path }, toolContext)).content;
   if (raw.startsWith('Error:')) {
     throw new Error(raw.replace(/^Error:\s*/i, '').trim());
   }
 
   if (raw.length > LARGE_FILE_BYTES) {
     const rangeRaw = (
-      await executeTool('read_file_range', {
-        path,
-        start_line: 1,
-        end_line: RANGE_LINE_COUNT,
-      })
+      await executeTool(
+        'read_file_range',
+        {
+          path,
+          start_line: 1,
+          end_line: RANGE_LINE_COUNT,
+        },
+        toolContext,
+      )
     ).content;
     if (rangeRaw.startsWith('Error:')) {
       throw new Error(rangeRaw.replace(/^Error:\s*/i, '').trim());
@@ -773,7 +779,10 @@ export async function saveCurrentFile(): Promise<boolean> {
   updateViewerChrome();
 
   try {
-    const raw = (await executeTool('save_file', { path: tab.path, content })).content;
+    const { buildFileTreeToolContext } = await import('./file-tree-listing-root');
+    const raw = (
+      await executeTool('save_file', { path: tab.path, content }, buildFileTreeToolContext())
+    ).content;
     if (raw.startsWith('Error:')) {
       throw new Error(raw.replace(/^Error:\s*/i, '').trim());
     }

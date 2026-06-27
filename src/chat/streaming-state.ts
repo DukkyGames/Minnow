@@ -3,9 +3,7 @@
  */
 
 import { expertsPageOpen, streamingChatIds } from '../app-state';
-import { normalizeModeId } from '../chat/modes/types';
 import { getActiveChat } from '../state/sessions';
-import { isOrchestrateBoardInitSplitActive } from '../ui/orchestrate-board-init-split';
 import { isOrchestratePlanScreenSuppressingChatDom } from '../ui/orchestrate-plan-screen';
 import { isChatAppForeground } from '../ui/chat-mount';
 import { isBoardViewActive } from '../ui/view-mode-toggle';
@@ -92,14 +90,6 @@ export function isStreamDomVisible(chatId: string): boolean {
   if (isOrchestratePlanScreenSuppressingChatDom(chatId)) return false;
   if (active.kind === 'expert-lab' && expertsPageOpen) return false;
   if (isChatAppForeground()) return true;
-  if (isBoardViewActive()) {
-    if (
-      normalizeModeId(active.modeId) === 'orchestrate' &&
-      isOrchestrateBoardInitSplitActive(active)
-    ) {
-      return true;
-    }
-    return false;
-  }
+  if (isBoardViewActive()) return false;
   return true;
 }

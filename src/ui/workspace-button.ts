@@ -73,6 +73,8 @@ export async function applyWorkspaceSwitch(info: WorkspaceInfo): Promise<void> {
     openViewerTabs: [],
     activeViewerTab: null,
   });
+  const { syncFileTreeToPanelWorktree } = await import('./file-tree');
+  await syncFileTreeToPanelWorktree(undefined);
   await refreshFileTreeViaBridge();
 
   setStatus('ok', `Workspace: ${info.label}`);

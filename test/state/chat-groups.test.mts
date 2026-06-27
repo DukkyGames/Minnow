@@ -15,12 +15,14 @@ import {
   getGroupActivityAt,
   getGroupsForWorkspace,
   getOrCreateBoardGroup,
+  listBoardGroupChatIds,
   renameGroup,
   toggleGroupCollapsed,
 } from '../../src/state/chat-groups.ts';
 import { initBoard } from '../../src/state/orchestrate-board-store.ts';
 import {
   createEmptyChatObject,
+  flushScheduledSessionSaveForTests,
   removeChatById,
   sessionState,
   setSessionStateForTests,
@@ -31,6 +33,7 @@ const PLANNER_ID = '11111111-1111-1111-1111-111111111111';
 const PLAN_PATH = 'documentation/plans/demo-plan.md';
 
 afterEach(() => {
+  flushScheduledSessionSaveForTests();
   setSessionStateForTests(null);
 });
 
@@ -85,6 +88,43 @@ describe('chat groups', () => {
     sessionState.activeBoardGroupId = group.id;
     assert.equal(group.viewMode, 'board');
     assert.equal(sessionState.activeBoardGroupId, group.id);
+  });
+
+  test('delete board group removes folder and all member chats', () => {
+    const planner = createEmptyChatObject('', WS);
+    planner.id = PLANNER_ID;
+    planner.modeId = 'orchestrate';
+    planner.orchestratePlanPath = PLAN_PATH;
+    const taskChat = createEmptyChatObject('', WS);
+    taskChat.id = '22222222-2222-2222-2222-222222222222';
+    const other = createEmptyChatObject('', WS);
+    other.id = '33333333-3333-3333-3333-333333333333';
+    setSessionStateForTests({
+      version: 5,
+      activeId: planner.id,
+      sidebarCollapsed: false,
+      groups: [],
+      chats: [planner, taskChat, other],
+    });
+    const group = getOrCreateBoardGroup(planner);
+    initBoard(group, planner, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'A', wave: 'W1', category: 'build', chatId: taskChat.id }],
+      waves: [{ id: 'W1' }],
+    });
+    taskChat.groupId = group.id;
+    taskChat.boardGroupId = group.id;
+    taskChat.boardTaskId = 'W1-A';
+    assert.equal(listBoardGroupChatIds(group, sessionState!.chats).length, 2);
+
+    const result = deleteGroup(group.id, { fallbackModelId: '' });
+    assert.equal(result.ok, true);
+    assert.equal(result.activeChanged, true);
+    assert.equal(result.chatRemoval?.activeChat?.id, other.id);
+    assert.equal(getGroupsForWorkspace(WS).length, 0);
+    assert.equal(sessionState!.chats.length, 1);
+    assert.equal(sessionState!.chats[0]?.id, other.id);
+    assert.equal(sessionState!.activeId, other.id);
   });
 
   test('removeChatById preserves board group when planner chat deleted', () => {

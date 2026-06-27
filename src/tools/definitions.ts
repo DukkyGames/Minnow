@@ -757,12 +757,12 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'execute_command',
     label: 'Run command',
     description:
-      'Runs a shell command in the project directory. Blocking runs time out after 30s; use background for dev servers and long-running processes.',
+      'Runs a shell command in the project directory. Blocking runs time out after 30s by default; pass timeout_ms for long suites. Use background for dev servers and long-running processes.',
     category: 'code',
     serverRequired: true,
     definition: toolSchema(
       'execute_command',
-      'Execute a shell command and return stdout and stderr. Default: blocking (30s timeout). Set background: true for servers, watchers, and processes that may not exit; poll with read_command_log; stop with stop_command or stop: true + run_id.',
+      'Execute a shell command and return stdout and stderr. Default: blocking (30s timeout). Set timeout_ms (1000–600000) for long-running suites. Set background: true for servers, watchers, and processes that may not exit; poll with read_command_log; stop with stop_command or stop: true + run_id. Always pass --test-force-exit when running node --test directly to prevent the process hanging after tests pass.',
       {
         command: { type: 'string', description: 'Shell command to run (omit when stop: true)' },
         background: {
@@ -774,6 +774,11 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
           type: 'number',
           description:
             'With background: true, wait up to this many ms for initial output (0–120000) before returning.',
+        },
+        timeout_ms: {
+          type: 'number',
+          description:
+            'Blocking run timeout in milliseconds (1000–600000). Default 30000. Use for test suites or builds that legitimately take longer than 30s.',
         },
         cwd: {
           type: 'string',
@@ -1107,6 +1112,39 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         },
       },
       ['task_id', 'verdict', 'summary'],
+    ),
+  },
+  {
+    id: 'board_report_build_result',
+    label: 'Board report build result',
+    description:
+      'Structured Builder verdict for per-task build (does not move columns). Call with ok only when verification actually ran.',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'board_report_build_result',
+      'Record build outcome for stream-end routing. Call env_blocked when verification could not run due to missing services/commands.',
+      {
+        task_id: {
+          type: 'string',
+          description: 'Board task id (e.g. W1-A)',
+        },
+        status: {
+          type: 'string',
+          enum: ['ok', 'env_blocked', 'failed'],
+          description: 'ok = verification passed; env_blocked = env prevented verification; failed = code error',
+        },
+        summary: {
+          type: 'string',
+          description: 'Concise evidence summary',
+        },
+        blockers: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'env_blocked only: list of blocking services or missing commands',
+        },
+      },
+      ['task_id', 'status', 'summary'],
     ),
   },
   {

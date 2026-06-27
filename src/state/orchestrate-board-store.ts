@@ -35,8 +35,8 @@ export function setBoardNowForTests(fn: (() => number) | null): void {
   boardNowMs = fn ?? (() => Date.now());
 }
 
-export const BOARD_LOG_MAX = 500;
-const BOARD_LOG_PREVIEW_MAX = 500;
+export const BOARD_LOG_MAX = 100;
+const BOARD_LOG_PREVIEW_MAX = 200;
 
 let boardLogSeq = 0;
 
@@ -422,6 +422,8 @@ export function rollupWaveStatus(
   const waveTasks = tasks.filter((t) => t.wave === waveId);
   if (!waveTasks.length) return 'planned';
   if (waveTasks.every((t) => t.status === 'complete')) return 'complete';
+  // All terminal (complete or quarantined) — treat as complete for wave gating.
+  if (waveTasks.every((t) => t.status === 'complete' || t.status === 'quarantined')) return 'complete';
   if (waveTasks.some((t) => ACTIVE_WAVE_STATUSES.has(t.status))) return 'in_progress';
   return 'planned';
 }
@@ -439,7 +441,8 @@ export function isPriorWavesComplete(
       (t) => String(t.wave) === String(priorWaveId),
     );
     if (!priorTasks.length) continue;
-    if (!priorTasks.every((t) => t.status === 'complete')) return false;
+    // Quarantined counts as settled — a quarantined prior wave must not stall later waves.
+    if (!priorTasks.every((t) => t.status === 'complete' || t.status === 'quarantined')) return false;
   }
   return true;
 }
@@ -520,6 +523,52 @@ function isTaskInDependencyCycle(
   return detectCycleTaskIds(board).has(taskId);
 }
 
+/**
+ * Quarantine a task and all of its transitive dependents (BFS over reverse dep edges).
+ * Independent siblings are left untouched.
+ */
+export function quarantineTaskAndDependents(
+  group: ChatGroup,
+  taskId: string,
+  issue: BoardTask['quarantine'],
+  plannerChat?: Chat,
+): void {
+  const board = group.orchestrateBoard;
+  if (!board || !issue) return;
+
+  // Build reverse adjacency: task id → ids whose dependsOn includes it.
+  const taskIds = new Set(board.tasks.map((t) => t.id));
+  const reverseAdj = new Map<string, string[]>();
+  for (const task of board.tasks) {
+    for (const depId of task.dependsOn ?? []) {
+      if (depId === task.id || !taskIds.has(depId)) continue;
+      const list = reverseAdj.get(depId) ?? [];
+      list.push(task.id);
+      reverseAdj.set(depId, list);
+    }
+  }
+
+  // BFS from the root task, quarantining each node.
+  const visited = new Set<string>();
+  const queue: string[] = [taskId];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (visited.has(current)) continue;
+    visited.add(current);
+
+    const isRoot = current === taskId;
+    const payload: BoardTask['quarantine'] = isRoot
+      ? issue
+      : { category: 'stall', summary: `blocked by quarantined ${taskId}`, resolutionSteps: [], at: issue.at };
+
+    updateTask(group, current, { status: 'quarantined', quarantine: payload }, plannerChat);
+
+    for (const dependentId of reverseAdj.get(current) ?? []) {
+      if (!visited.has(dependentId)) queue.push(dependentId);
+    }
+  }
+}
+
 function formatDependencyCycleError(cycle: string[]): string {
   if (cycle.length < 2) return 'dependency cycle detected';
   const path = cycle.join(' → ');
@@ -547,6 +596,10 @@ export function isTaskStalledForRestart(
   isChatActive: (chatId: string) => boolean,
 ): boolean {
   if (task.status !== 'in_progress' && task.status !== 'testing') return false;
+  // An active fixer (env-fixer runs under in_progress) owns the task — the
+  // builder/tester chat is intentionally idle, so this is not a stuck slot.
+  const fixerId = task.fixerChatId?.trim();
+  if (fixerId && isChatActive(fixerId)) return false;
   const chatId =
     task.status === 'testing'
       ? task.testChatId?.trim() || task.chatId?.trim()
@@ -762,9 +815,13 @@ export type UpdateTaskPatch = Partial<
     | 'testSpec'
     | 'testChatId'
     | 'fixerChatId'
+    | 'fixerKind'
+    | 'envFixAttempts'
+    | 'envFixPhase'
     | 'testAttempts'
     | 'buildAttempts'
     | 'fixerAttempts'
+    | 'stopRetries'
     | 'mergePreSha'
     | 'testVerdict'
     | 'testSummary'
@@ -774,6 +831,10 @@ export type UpdateTaskPatch = Partial<
     | 'worktreeBranch'
     | 'devPort'
     | 'apiPort'
+    | 'quarantine'
+    | 'selfHealRound'
+    | 'lastHealCategory'
+    | 'buildOutcome'
   >
 >;
 
@@ -832,11 +893,23 @@ export function updateTask(
   if ('fixerChatId' in patch && patch.fixerChatId === undefined) {
     delete task.fixerChatId;
   }
+  if ('fixerKind' in patch && patch.fixerKind === undefined) {
+    delete task.fixerKind;
+  }
+  if ('envFixPhase' in patch && patch.envFixPhase === undefined) {
+    delete task.envFixPhase;
+  }
   if ('mergePreSha' in patch && patch.mergePreSha === undefined) {
     delete task.mergePreSha;
   }
   if ('fixerAttempts' in patch && patch.fixerAttempts === undefined) {
     delete task.fixerAttempts;
+  }
+  if ('stopRetries' in patch && patch.stopRetries === undefined) {
+    delete task.stopRetries;
+  }
+  if ('quarantine' in patch && patch.quarantine === undefined) {
+    delete task.quarantine;
   }
   board.tasks[idx] = task;
   board.lastUpdatedAt = boardNowMs();

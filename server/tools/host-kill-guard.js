@@ -8,6 +8,7 @@
  * manual terminal is unaffected).
  */
 
+import { resolveMinnowPort } from '../constants/minnow-port.js';
 import { getSchedulerServerBaseUrl } from '../scheduler/server-base-url.js';
 
 /** Process kill verbs across PowerShell / cmd / POSIX shells. */
@@ -27,13 +28,13 @@ function liveDevPort() {
   } catch {
     /* fall through to env/default */
   }
-  return String(process.env.PORT || 5173);
+  return String(resolveMinnowPort());
 }
 
 /** True when the command references the live dev port in a port position. */
 function mentionsPort(command, port) {
   if (!port) return false;
-  // :5173 | LocalPort 5173 | lsof -ti:5173 | port 5173 | 5173/tcp
+  // :9473 | LocalPort 9473 | lsof -ti:9473 | port 9473 | 9473/tcp
   const re = new RegExp(
     `(?::|\\bport\\s+|-localport\\s+|-ti:)${port}\\b|\\b${port}/(?:tcp|udp)\\b`,
     'i',
@@ -88,8 +89,8 @@ export function assessHostKillCommand(command) {
     return hostKillError(port);
   }
 
-  // Port-owner kills: Get-NetTCPConnection -LocalPort 5173 | Stop-Process,
-  // lsof -ti:5173 | xargs kill, fuser -k 5173/tcp. A stale prior run lives on a
+  // Port-owner kills: Get-NetTCPConnection -LocalPort <livePort> | Stop-Process,
+  // lsof -ti:<livePort> | xargs kill, fuser -k <livePort>/tcp. A stale prior run lives on a
   // *different* (auto-incremented) port, so matching only the live port is safe.
   if ((hasKillVerb || PORT_TOOL.test(text)) && mentionsPort(text, port)) {
     return hostKillError(port);

@@ -20,7 +20,8 @@ export interface PreviewGuestInfo {
 
 /** Run JavaScript in the preview guest page context. */
 export async function previewExecJs(wc: WebContents, code: string): Promise<unknown> {
-  return wc.executeJavaScript(code, true);
+  const wrapped = `(function(){ try { return (${code}); } catch(e) { return { __execError: e && e.message ? e.message : String(e) }; } })()`;
+  return wc.executeJavaScript(wrapped, true);
 }
 
 /** Capture the preview guest as a base64-encoded PNG. */

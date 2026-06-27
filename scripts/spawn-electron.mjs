@@ -9,6 +9,7 @@ import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveMinnowPort } from '../server/constants/minnow-port.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -134,11 +135,12 @@ async function ensureElectronBuild() {
 }
 
 /**
- * @param {{ port?: number | string, dev?: boolean, foreground?: boolean }} options
+ * @param {{ port?: number | string, devUrl?: string, dev?: boolean, foreground?: boolean }} options
  * @returns {import('node:child_process').ChildProcess | null}
  */
 export async function spawnElectronShell(options = {}) {
-  const port = String(options.port ?? process.env.PORT ?? '5173');
+  const port = String(options.port ?? resolveMinnowPort());
+  const devUrl = (options.devUrl ?? `http://localhost:${port}/`).replace(/\/?$/, '/');
   const dev = options.dev !== false;
   const foreground = options.foreground === true;
 
@@ -154,6 +156,7 @@ export async function spawnElectronShell(options = {}) {
   const env = {
     ...process.env,
     PORT: port,
+    MINNOW_DEV_URL: devUrl,
     MINNOW_ELECTRON: '1',
     MINNOW_ELECTRON_DEV: dev ? '1' : '0',
   };

@@ -5,7 +5,8 @@
 
 import { normalizeModeId } from '../../chat/modes/types';
 import { getBoardGroupForChat } from '../../state/chat-groups';
-import { appendTaskRunHistory, updateTask } from '../../state/orchestrate-board-store';
+import { appendTaskRunHistory, getBoardExecutionMode, isBoardRunning, updateTask } from '../../state/orchestrate-board-store';
+import { resolveSelfHealMaxRounds } from '../../config/autopilot-meta';
 import { findChatById } from '../../state/sessions';
 import { executeTool, getEnabledToolDefinitionsForMode } from '../../tools/client';
 import { loadSubAgentConfig } from '../sub-agent-config';
@@ -74,6 +75,7 @@ import {
 import {
   observeSubAgentToolCall,
   registerWatchdogHandlers,
+  resetWatchdogHandlers,
   resetWatchdogState,
   setRunLifecycle,
   startWatchdog,
@@ -1000,6 +1002,7 @@ export function assertSubAgentRunReadableByParent(
 export function resetSubAgentOrchestrator(): void {
   stopWatchdog();
   resetWatchdogState();
+  resetWatchdogHandlers();
   clearSubAgentRunListeners();
   resetWrapperState();
   controllerInitPromise = null;
@@ -1016,6 +1019,7 @@ export function resetSubAgentOrchestrator(): void {
   setQueueFail((internals, message) => {
     settleRun(internals, 'failed', '', message);
   });
+  registerControllerWatchdogHandlers();
 }
 
 async function tier1RestartSubAgent(runId: string, reason: string): Promise<void> {
@@ -1069,6 +1073,70 @@ function tier2SurfaceSubAgent(runId: string, reason: string): void {
   const message = `watchdog_tier2:${reason}`;
   syncBoardTaskOnLifecycle(internals.run, 'blocked', message);
   cancelSubAgent(runId, message);
+}
+
+/** True when the sub-agent belongs to an actively-running AFK/auto board. */
+function isRunAfkSupervised(run: SubAgentRun): boolean {
+  if (!run.parentChatId) return false;
+  const chat = findChatById(run.parentChatId);
+  if (!chat) return false;
+  const group = getBoardGroupForChat(chat);
+  if (!group) return false;
+  const mode = getBoardExecutionMode(group.orchestrateBoard);
+  if (mode !== 'afk' && mode !== 'auto') return false;
+  return isBoardRunning(group);
+}
+
+/** Bounded re-dispatch for mutating runs in AFK/auto boards instead of surfacing. */
+async function tier2AutoRecover(runId: string, reason: string): Promise<void> {
+  const internals = getRunInternals(runId);
+  if (!internals) return;
+
+  const old = internals.run;
+  const {
+    type,
+    task,
+    parentTurnId,
+    parentChatId,
+    parentToolCallId,
+    boardTaskId,
+    category,
+    idempotencyKey,
+    attempt,
+  } = old;
+
+  const cap = resolveSelfHealMaxRounds();
+  if ((attempt ?? 1) >= cap) {
+    tier2SurfaceSubAgent(runId, reason);
+    return;
+  }
+
+  cancelSubAgent(runId, `watchdog_tier2_autorecover:${reason}`);
+
+  const note = `Watchdog AFK auto-recovery (${reason})`;
+  const nextTask = `${note}\n\n${task}`;
+
+  const result = await spawnSubAgentInternal({
+    type,
+    task: nextTask,
+    wait: false,
+    parentTurnId,
+    parentChatId: parentChatId ?? undefined,
+    parentToolCallId: parentToolCallId ?? undefined,
+    boardTaskId: boardTaskId ?? undefined,
+    category,
+  });
+
+  const next = getRunInternals(result.runId);
+  if (!next) return;
+
+  applySupervisionToRun(next.run, {
+    attempt: (attempt ?? 1) + 1,
+    idempotencyKey: idempotencyKey ?? undefined,
+  });
+  bindRunSupervision(next.run.runId, next.run);
+  setRunLifecycle(next.run, 'dispatching');
+  syncBoardTaskOnLifecycle(next.run, 'recovering', reason);
 }
 
 function finalizeDoneUnackedSubAgent(runId: string): void {
@@ -1223,18 +1291,24 @@ export async function ensureControllerReady(): Promise<void> {
   await initControllerPersistence();
 }
 
-registerWatchdogHandlers({
-  tier1Restart: tier1RestartSubAgent,
-  tier2Surface: tier2SurfaceSubAgent,
-  finalizeDoneUnacked: finalizeDoneUnackedSubAgent,
-  onLifecycleChange: (run) => {
-    mirrorRegistryEntry(run);
-    if (run.lifecycle === 'suspect' || run.lifecycle === 'recovering') {
-      syncBoardTaskOnLifecycle(run, run.lifecycle, run.error);
-    }
-    emitSubAgentRunUpdated(run);
-  },
-});
+function registerControllerWatchdogHandlers(): void {
+  registerWatchdogHandlers({
+    tier1Restart: tier1RestartSubAgent,
+    tier2Surface: tier2SurfaceSubAgent,
+    tier2AutoRecover,
+    isRunAfkSupervised,
+    finalizeDoneUnacked: finalizeDoneUnackedSubAgent,
+    onLifecycleChange: (run) => {
+      mirrorRegistryEntry(run);
+      if (run.lifecycle === 'suspect' || run.lifecycle === 'recovering') {
+        syncBoardTaskOnLifecycle(run, run.lifecycle, run.error);
+      }
+      emitSubAgentRunUpdated(run);
+    },
+  });
+}
+
+registerControllerWatchdogHandlers();
 
 void initControllerPersistence().then(() => {
   startWatchdog();

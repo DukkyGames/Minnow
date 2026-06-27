@@ -47,8 +47,11 @@ function makeFailedTaskChat(): Chat {
     modelId: 'm1',
     history: [
       { role: 'user', content: 'Execute task' },
-      { role: 'assistant', content: 'Maximum tool turns reached.' },
+      // Non-stall failure: Phase 2 classifies as 'code' → applyTaskBuildFailureState path.
+      { role: 'assistant', content: 'Build failed: TypeError: undefined is not a function in main.ts' },
     ],
+    // Failed run so resolveTaskChatStreamOutcome returns 'failed' (prose alone returns 'completed').
+    runs: [{ runId: 'run_1', branchId: 'b1', forkHistoryIndex: 0, status: 'failed', createdAt: 100, snapshot: null } as any],
     lastStats: null,
     modelInfo: {},
     updatedAt: 1,
@@ -184,7 +187,8 @@ describe('finalizeBoardTaskOnStreamEnd build retry', () => {
     assert.equal(updated.status, 'in_progress');
     assert.equal(updated.buildAttempts, 1);
     assert.equal(updated.chatId, chatIdBefore);
-    assert.equal(updated.pendingBuildSeed, undefined);
+    // Phase 2: runSelfHeal sets pendingBuildSeed with the build-retry prompt before re-starting.
+    assert.match(updated.pendingBuildSeed ?? '', /failed build attempt/i);
   });
 
   test('manual mode marks failed without retry', () => {

@@ -115,6 +115,10 @@ const minnowBridge = {
     },
     getLastCrash: (): Promise<unknown> =>
       ipcRenderer.invoke(channels.DIAGNOSTICS_LAST_CRASH),
+    getOomPause: (): Promise<unknown> =>
+      ipcRenderer.invoke(channels.DIAGNOSTICS_OOM_PAUSE),
+    clearOomPause: (): Promise<void> =>
+      ipcRenderer.invoke(channels.DIAGNOSTICS_CLEAR_OOM_PAUSE),
   },
 };
 

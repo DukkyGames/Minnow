@@ -27,6 +27,7 @@ export interface WorktreeOpResult {
   committed?: boolean;
   dirty?: boolean;
   files?: string[];
+  inProgress?: boolean;
   merged?: boolean;
   conflict?: boolean;
   conflictedFiles?: string[];
@@ -41,11 +42,16 @@ export interface WorktreeOpResult {
   skipped?: string;
   url?: string;
   pushed?: boolean;
+  /** Worktrees removed by cleanup op. */
+  removed?: number;
+  keptIntegration?: boolean;
   additions?: number;
   deletions?: number;
   fileCount?: number;
   hasRemote?: boolean;
   hasGh?: boolean;
+  alreadyLanded?: boolean;
+  currentBranch?: string | null;
 }
 
 async function postWorktree(
@@ -129,6 +135,11 @@ export function abortMerge(input: { boardId: string }): Promise<WorktreeOpResult
   return postWorktree('abort_merge', input);
 }
 
+/** True when MERGE_HEAD is set in the integration worktree (merge in progress). */
+export function checkMergeInProgress(input: { boardId: string }): Promise<WorktreeOpResult> {
+  return postWorktree('merge_in_progress', input);
+}
+
 /** Reset integration worktree to a pre-merge tip (abort merge + hard reset + clean). */
 export function restoreIntegration(input: {
   boardId: string;
@@ -164,6 +175,8 @@ export function removeWorktree(input: {
 /** Remove all worktrees for a board (on completion / delete). */
 export function cleanupBoardWorktrees(input: {
   boardId: string;
+  /** When true, also removes the integration worktree (after landing in workspace). */
+  includeIntegration?: boolean;
 }): Promise<WorktreeOpResult> {
   return postWorktree('cleanup', input);
 }
@@ -174,6 +187,29 @@ export function integrationStats(input: {
   baseRef?: string;
 }): Promise<WorktreeOpResult> {
   return postWorktree('integration_stats', input);
+}
+
+/** Numstat diff for landing integration work into the workspace checkout. */
+export function workspaceLandingStats(input: {
+  branch: string;
+}): Promise<WorktreeOpResult> {
+  return postWorktree('workspace_landing_stats', input);
+}
+
+/** Merge the integration branch into the workspace's current branch. */
+export function mergeIntegrationIntoWorkspace(input: {
+  branch: string;
+  message?: string;
+}): Promise<WorktreeOpResult> {
+  return postWorktree('merge_integration_into_workspace', input);
+}
+
+/** Open a GitHub PR for the workspace's current branch via gh. */
+export function openWorkspacePr(input: {
+  title?: string;
+  body?: string;
+}): Promise<WorktreeOpResult> {
+  return postWorktree('open_workspace_pr', input);
 }
 
 /** Stage and commit all changes in the integration worktree. */
