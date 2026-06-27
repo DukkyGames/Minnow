@@ -1464,7 +1464,7 @@ Requires the **Minnow desktop shell** (Electron `WebContentsView` preview panel)
 | `browser_list` | Active preview URL/title |
 | `browser_navigate` | Navigate shared preview; opens the right-hand preview split + Electron guest (`revealPreviewPanelForAgentNavigation`); origin allowlist) |
 | `request_browser_origin_access` | Ask user to allow an origin before/at navigate (client) |
-| `browser_snapshot` | DOM tree + `data-mn-uid` markers |
+| `browser_snapshot` | DOM tree + `data-mn-uid` markers on interactive elements (`a`, `button`, `input`, `[role]`, etc.); non-interactive wrapper divs (uid `0`) are omitted from output but their children are included |
 | `browser_click` / `browser_fill` | Act on snapshot uid |
 | `browser_eval` | JS in preview page context |
 | `browser_screenshot` | PNG + `attachments` for chat UI |

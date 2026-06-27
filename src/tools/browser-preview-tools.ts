@@ -113,22 +113,24 @@ export async function browserPreviewNavigate(url: string): Promise<string> {
   return `Navigated to: ${result.url}\nTitle: ${title}`;
 }
 
+const EMPTY_SNAPSHOT_HINT =
+  'Snapshot found no interactive elements. Try browser_eval or browser_screenshot.';
+
 export async function browserPreviewSnapshot(): Promise<string> {
   if (!isElectronPreviewAvailable()) return DESKTOP_SHELL_MESSAGE;
   const disabled = await assertBrowserAutomationEnabled();
   if (disabled) return disabled;
 
   const raw = await previewApi().execJs(PREVIEW_DOM_SNAPSHOT_SCRIPT);
-  const payload = raw as { text?: string; nodes?: PreviewSnapshotNode[] };
-  if (payload?.text && payload.text !== '(empty page)') {
-    return payload.text;
-  }
+  const payload = raw as {
+    text?: string;
+    nodes?: PreviewSnapshotNode[];
+    __execError?: unknown;
+  };
 
-  const fallback = await previewApi().execJs(
-    'document.body ? document.body.innerText.slice(0, 3000) : ""',
-  );
-  if (typeof fallback === 'string' && fallback.trim()) {
-    return fallback;
+  if (payload && typeof payload === 'object' && '__execError' in payload) {
+    const message = String(payload.__execError ?? 'Script failed');
+    return `Error: ${message}`;
   }
 
   if (payload?.nodes?.length) {
@@ -136,7 +138,11 @@ export async function browserPreviewSnapshot(): Promise<string> {
     if (rendered) return rendered;
   }
 
-  return payload?.text ?? '(empty page)';
+  if (payload?.text && payload.text !== '(empty page)') {
+    return payload.text;
+  }
+
+  return EMPTY_SNAPSHOT_HINT;
 }
 
 export async function browserPreviewClick(uid: number): Promise<string> {

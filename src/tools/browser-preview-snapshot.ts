@@ -15,6 +15,13 @@ export interface PreviewSnapshotNode {
 export function renderPreviewSnapshotTree(nodes: PreviewSnapshotNode[], indent = 0): string {
   const lines: string[] = [];
   for (const node of nodes) {
+    // uid 0 marks non-interactive wrapper nodes — recurse without emitting a line.
+    if (!node.uid) {
+      if (node.children?.length) {
+        lines.push(renderPreviewSnapshotTree(node.children, indent));
+      }
+      continue;
+    }
     const pad = ' '.repeat(indent);
     const parts = [`[${node.uid}]`, node.role];
     if (node.name) parts.push(`"${node.name}"`);
@@ -134,7 +141,12 @@ export const PREVIEW_DOM_SNAPSHOT_SCRIPT = `(() => {
   function render(nodes, indent) {
     const lines = [];
     for (const node of nodes) {
-      if (!node.uid) continue;
+      if (!node.uid) {
+        if (node.children && node.children.length) {
+          lines.push(render(node.children, indent));
+        }
+        continue;
+      }
       const pad = ' '.repeat(indent);
       const parts = ['[' + node.uid + ']', node.role];
       if (node.name) parts.push('"' + node.name.replace(/"/g, '\\\\"') + '"');
