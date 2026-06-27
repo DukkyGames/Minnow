@@ -27,8 +27,9 @@ import { resolveMinnowPort } from './minnow-port.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const isDev = process.env.MINNOW_ELECTRON_DEV === '1';
-const devPort = resolveMinnowPort();
-const devUrl = `http://localhost:${devPort}/`;
+const devUrl = (
+  process.env.MINNOW_DEV_URL?.trim() || `http://localhost:${resolveMinnowPort()}/`
+).replace(/\/?$/, '/');
 
 let mainWindow: BrowserWindow | null = null;
 let inProcessServer: InProcessServerHandle | null = null;

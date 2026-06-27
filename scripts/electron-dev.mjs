@@ -5,18 +5,20 @@
  */
 
 import { spawnElectronShell } from './spawn-electron.mjs';
-import { waitForVite } from './wait-for-vite.mjs';
-import { resolveMinnowPort } from '../server/constants/minnow-port.js';
-
-const port = String(resolveMinnowPort());
-const devUrl = `http://localhost:${port}/`;
+import { waitForMinnowDev } from './wait-for-minnow-dev.mjs';
 
 async function main() {
-  console.log(`[electron:dev] Waiting for ${devUrl}…`);
-  await waitForVite(port);
+  const { origin, port } = await waitForMinnowDev();
+  const devUrl = `${origin}/`;
+  console.log(`[electron:dev] Minnow dev server ready at ${devUrl}`);
 
   console.log('[electron:dev] Launching Electron…');
-  const child = await spawnElectronShell({ port, dev: true, foreground: true });
+  const child = await spawnElectronShell({
+    port,
+    devUrl,
+    dev: true,
+    foreground: true,
+  });
   if (!child) {
     throw new Error('Electron did not start');
   }

@@ -10,4 +10,12 @@ describe('minnow port constants', () => {
     assert.equal(electronPort, MINNOW_DEFAULT_PORT);
     assert.notEqual(MINNOW_DEFAULT_PORT, 5173, 'must not use Vite default 5173');
   });
+
+  test('ignores legacy PORT=5173 so workspace Vite can keep it', async () => {
+    const { resolveMinnowPort, MINNOW_DEFAULT_PORT } = await import(
+      '../../server/constants/minnow-port.js'
+    );
+    assert.equal(resolveMinnowPort({ PORT: '5173' }), MINNOW_DEFAULT_PORT);
+    assert.equal(resolveMinnowPort({ MINNOW_PORT: '9480' }), 9480);
+  });
 });
