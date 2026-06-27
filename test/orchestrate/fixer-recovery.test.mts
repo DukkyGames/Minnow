@@ -30,6 +30,10 @@ import {
   stopBoardAutoRun,
   trackReconcileMergingTasksCallsForTests,
   trackTaskChatStallRecoveryCallsForTests,
+  triggerFixerStallReconcileForTests,
+  trackDrainResumeCallsForTests,
+  enqueueTaskForTests,
+  getTaskQueueForTests,
 } from '../../src/state/orchestrate-board-actions.ts';
 import { initBoard, isTaskStalledForRestart, updateTask } from '../../src/state/orchestrate-board-store.ts';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
@@ -593,6 +597,129 @@ describe('Fix C — env-fixer unified stall recovery', () => {
       1,
       'env-fixer stall should increment the unified stall-restart counter',
     );
+  });
+});
+
+describe('Env-fixer pass board_report routing', () => {
+  const prevMinnowTest = process.env.MINNOW_TEST;
+
+  beforeEach(() => {
+    process.env.MINNOW_TEST = '1';
+    setupDom();
+    setSessionStateForTests(null);
+    releaseLaunchSlotForTests(FIXER_CHAT_ID);
+  });
+
+  afterEach(() => {
+    teardownDom();
+    releaseLaunchSlotForTests(FIXER_CHAT_ID);
+    if (prevMinnowTest === undefined) {
+      delete process.env.MINNOW_TEST;
+    } else {
+      process.env.MINNOW_TEST = prevMinnowTest;
+    }
+    setSessionStateForTests(null);
+  });
+
+  test('test-phase pass moves task to testing and clears fixer linkage', async () => {
+    const group = makeGroup();
+    const { planner } = seedEnvFixerTask(group);
+    updateTask(
+      group,
+      TASK_ID,
+      {
+        envFixPhase: 'test',
+        boardReport: { outcome: 'pass', summary: 'Deps installed' },
+      },
+      planner,
+    );
+
+    await triggerFixerStallReconcileForTests(group, planner, TASK_ID);
+
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === TASK_ID)!;
+    assert.equal(task.status, 'testing');
+    assert.equal(task.fixerChatId, undefined);
+    assert.equal(task.fixerKind, undefined);
+    assert.equal(task.envFixPhase, undefined);
+  });
+
+  test('test-phase pass resumes testing before a queued sibling at maxConcurrent 1', async () => {
+    const group = makeGroup();
+    const planner = makePlanner();
+    const fixerChat = makeEnvFixerChat();
+    initBoard(group, planner, {
+      planPath: 'documentation/plans/test.md',
+      tasks: [
+        {
+          id: TASK_ID,
+          title: 'Task A',
+          wave: 'W1',
+          category: 'build',
+          build: 'Build feature',
+          test: 'Run tests',
+        },
+        {
+          id: 'W1-B',
+          title: 'Task B',
+          wave: 'W1',
+          category: 'build',
+          build: 'Build B',
+          test: 'Run tests',
+        },
+      ],
+      waves: [{ id: 'W1', status: 'in_progress' }],
+    });
+    group.orchestrateBoard!.executionMode = 'afk';
+    group.orchestrateBoard!.autoRunning = true;
+    group.orchestrateBoard!.maxConcurrentTasks = 1;
+
+    updateTask(
+      group,
+      TASK_ID,
+      {
+        status: 'in_progress',
+        chatId: BUILDER_CHAT_ID,
+        fixerChatId: FIXER_CHAT_ID,
+        fixerKind: 'env',
+        envFixPhase: 'test',
+        worktreePath: '/ws',
+        boardReport: { outcome: 'pass', summary: 'Services up' },
+      },
+      planner,
+    );
+    updateTask(group, 'W1-B', { status: 'planned' }, planner);
+    setSessionStateForTests({
+      version: 5,
+      activeId: PLANNER_ID,
+      chats: [planner, makeBuilderChat(), fixerChat],
+      groups: [group],
+    });
+
+    reserveLaunchSlotForTests(FIXER_CHAT_ID);
+    enqueueTaskForTests(GROUP_ID, 'W1-B');
+    trackDrainResumeCallsForTests(true);
+
+    await triggerFixerStallReconcileForTests(group, planner, TASK_ID);
+    for (let i = 0; i < 20; i += 1) {
+      const taskA = group.orchestrateBoard!.tasks.find((t) => t.id === TASK_ID)!;
+      if (taskA.status === 'testing') break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+
+    const taskA = group.orchestrateBoard!.tasks.find((t) => t.id === TASK_ID)!;
+    const taskB = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-B')!;
+    const resumed = trackDrainResumeCallsForTests(false);
+
+    assert.equal(taskA.status, 'testing', 'env-fixed task should advance to testing');
+    assert.equal(taskB.status, 'planned', 'queued sibling must not start while A resumes testing');
+    if (resumed.length > 0) {
+      assert.equal(resumed[0], TASK_ID, 'drain should prefer the env-fixed task over the sibling');
+      assert.ok(!resumed.includes('W1-B'), 'sibling must not steal the concurrency slot');
+    }
+    const queue = getTaskQueueForTests(GROUP_ID);
+    if (queue.length > 0) {
+      assert.equal(queue[0], TASK_ID, 'front-insert keeps env-fixed task ahead of siblings');
+    }
   });
 });
 
