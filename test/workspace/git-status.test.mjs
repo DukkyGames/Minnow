@@ -72,11 +72,27 @@ describe('workspace git-status', () => {
   test('getWorkspaceGitStatus returns false for non-repo', async () => {
     const status = await getWorkspaceGitStatus(plainDir);
     assert.equal(status.isGitRepo, false);
+    assert.equal(status.hasRemote, false);
   });
 
-  test('getWorkspaceGitStatus returns true after git init', async () => {
+  test('getWorkspaceGitStatus returns true after git init without remote', async () => {
     const status = await getWorkspaceGitStatus(gitDir);
     assert.equal(status.isGitRepo, true);
+    assert.equal(status.hasRemote, false);
+  });
+
+  test('getWorkspaceGitStatus reports origin remote when configured', async () => {
+    const withRemote = path.join(path.dirname(gitDir), 'git-remote');
+    await fs.mkdir(withRemote, { recursive: true });
+    await execFileAsync('git', ['init'], { cwd: withRemote, windowsHide: true });
+    await execFileAsync(
+      'git',
+      ['remote', 'add', 'origin', 'https://github.com/example/minnow.git'],
+      { cwd: withRemote, windowsHide: true },
+    );
+    const status = await getWorkspaceGitStatus(withRemote);
+    assert.equal(status.isGitRepo, true);
+    assert.equal(status.hasRemote, true);
   });
 
   test('GET /api/workspace/git-status honors workspaceRoot query', async () => {
@@ -87,6 +103,7 @@ describe('workspace git-status', () => {
     assert.equal(plain.status, 200);
     assert.equal(plain.json.ok, true);
     assert.equal(plain.json.isGitRepo, false);
+    assert.equal(plain.json.hasRemote, false);
 
     const git = await httpGet(
       baseUrl,
@@ -95,5 +112,6 @@ describe('workspace git-status', () => {
     assert.equal(git.status, 200);
     assert.equal(git.json.ok, true);
     assert.equal(git.json.isGitRepo, true);
+    assert.equal(git.json.hasRemote, false);
   });
 });

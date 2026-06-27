@@ -14,6 +14,10 @@ let kickoffAbort: AbortController | null = null;
 type GitSetupPromptResolver = (accepted: boolean) => void;
 let gitSetupPromptResolver: GitSetupPromptResolver | null = null;
 
+/** Which inline git question is waiting for the user (init vs remote). */
+export type BoardGitPromptKind = 'init' | 'remote';
+let gitSetupPromptKind: BoardGitPromptKind = 'init';
+
 type OnboardingStateListener = () => void;
 const listeners = new Set<OnboardingStateListener>();
 
@@ -71,12 +75,17 @@ export function isBoardGitSetupPromptActive(): boolean {
   return gitSetupPromptResolver !== null;
 }
 
+export function getBoardGitSetupPromptKind(): BoardGitPromptKind {
+  return gitSetupPromptKind;
+}
+
 /**
  * Show the inline git setup question in board onboarding and wait for the user's choice.
  * Resolves false when cancelled or when kickoff aborts.
  */
-export function promptBoardGitSetup(): Promise<boolean> {
+export function promptBoardGitSetup(kind: BoardGitPromptKind): Promise<boolean> {
   return new Promise((resolve) => {
+    gitSetupPromptKind = kind;
     gitSetupPromptResolver = (accepted) => {
       gitSetupPromptResolver = null;
       notifyOnboardingStateListeners();
@@ -106,4 +115,5 @@ export function resetBoardOnboardingTransientState(): void {
   } else {
     gitSetupPromptResolver = null;
   }
+  gitSetupPromptKind = 'init';
 }

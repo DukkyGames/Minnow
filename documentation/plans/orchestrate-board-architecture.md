@@ -148,9 +148,12 @@ flowchart TD
   E --> F[Onboarding panel]
   F --> G[kickoffOrchestrateBoardBuild]
   G --> H{Git repo?}
-  H -->|No| I[Optional /git-setup skill]
-  H -->|Yes| J[Send board_init kickoff message]
-  I --> J
+  H -->|No| I[Optional local git init]
+  I --> I2{Has origin remote?}
+  H -->|Yes| I2
+  I2 -->|No| R[Optional GitHub remote setup]
+  I2 -->|Yes| J[Send board_init kickoff message]
+  R --> J
   J --> K[Orchestrator LLM calls board_init]
   K --> L[initBoard on ChatGroup]
   B -->|Yes| M[openBoardGroup → renderBoardView]

@@ -3,7 +3,7 @@
  */
 
 import { formatHistoryWithSkillTag } from '../skills/parse-slash';
-import { isWorkspaceGitRepo } from '../state/git-workspace';
+import { getWorkspaceGitStatus } from '../state/git-workspace';
 import { getActiveChat } from '../state/sessions';
 import { getWorkspacePath } from '../state/workspace';
 import { detectLocalServer } from '../tools/client';
@@ -13,6 +13,7 @@ import {
   promptBoardGitSetup,
   setBoardKickoffInProgress,
   setBoardOnboardingGitSetupActive,
+  type BoardGitPromptKind,
 } from './orchestrate-board-onboarding-state';
 import { setStatus } from './status';
 
@@ -25,8 +26,12 @@ export const BOARD_BUILD_KICKOFF_MESSAGE = BOARD_ONBOARDING_KICKOFF_MESSAGE;
 
 export const GIT_SETUP_SKILL_ID = 'git-setup';
 
-const GIT_SETUP_USER_TEXT =
-  'Initialize git in this workspace and connect a GitHub remote.';
+const GIT_SETUP_USER_TEXT: Record<BoardGitPromptKind, string> = {
+  init:
+    'Initialize git in this workspace (init, .gitignore, initial commit). Do not connect a GitHub remote.',
+  remote:
+    'Connect a GitHub remote for this workspace. Skip git init if the repository is already initialized.',
+};
 
 /** Posts a user message through the composer and triggers sendMessage. */
 function sendBoardMessage(text: string): void {
@@ -42,12 +47,15 @@ function kickoffAborted(): boolean {
 }
 
 /** Run /git-setup in the planner chat and wait for the turn to finish. */
-async function runGitSetupSkillTurn(chat: ReturnType<typeof getActiveChat>): Promise<void> {
+async function runGitSetupSkillTurn(
+  chat: ReturnType<typeof getActiveChat>,
+  kind: BoardGitPromptKind,
+): Promise<void> {
   const { refreshBoardOnboardingIfMounted } = await import('./orchestrate-board');
   setBoardOnboardingGitSetupActive(true);
   refreshBoardOnboardingIfMounted();
   try {
-    const userText = GIT_SETUP_USER_TEXT;
+    const userText = GIT_SETUP_USER_TEXT[kind];
     const displayText = formatHistoryWithSkillTag(userText, GIT_SETUP_SKILL_ID);
     const historyContent = buildHistoryUserContent(displayText, []);
     await runChatTurn({
@@ -70,6 +78,15 @@ async function runGitSetupSkillTurn(chat: ReturnType<typeof getActiveChat>): Pro
   }
 }
 
+/** Ensure the tool server is up before a git skill turn; surfaces status on failure. */
+async function ensureToolServerForGitSetup(): Promise<boolean> {
+  const serverUp = await detectLocalServer();
+  if (!serverUp) {
+    setStatus('err', 'Tool server required for git setup — run npm start');
+  }
+  return serverUp;
+}
+
 /**
  * Git preflight → optional skill turn → board_init kickoff.
  * Entry points: hub Open board, onboarding Start, plan screen Open board.
@@ -81,20 +98,28 @@ export async function kickoffOrchestrateBoardBuild(): Promise<void> {
 
   try {
     const chat = getActiveChat();
-    const isGitRepo = await isWorkspaceGitRepo(getWorkspacePath());
+    let gitStatus = await getWorkspaceGitStatus(getWorkspacePath());
     if (kickoffAborted()) return;
 
-    if (!isGitRepo) {
-      const accepted = await promptBoardGitSetup();
+    if (!gitStatus.isGitRepo) {
+      const initAccepted = await promptBoardGitSetup('init');
       if (kickoffAborted()) return;
 
-      if (accepted) {
-        const serverUp = await detectLocalServer();
-        if (!serverUp) {
-          setStatus('err', 'Tool server required for git setup — run npm start');
-          return;
-        }
-        await runGitSetupSkillTurn(chat);
+      if (initAccepted) {
+        if (!(await ensureToolServerForGitSetup())) return;
+        await runGitSetupSkillTurn(chat, 'init');
+        if (kickoffAborted()) return;
+        gitStatus = await getWorkspaceGitStatus(getWorkspacePath());
+      }
+    }
+
+    if (gitStatus.isGitRepo && !gitStatus.hasRemote) {
+      const remoteAccepted = await promptBoardGitSetup('remote');
+      if (kickoffAborted()) return;
+
+      if (remoteAccepted) {
+        if (!(await ensureToolServerForGitSetup())) return;
+        await runGitSetupSkillTurn(chat, 'remote');
         if (kickoffAborted()) return;
       }
     }
