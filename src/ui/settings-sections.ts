@@ -1774,7 +1774,7 @@ async function renderToolsSection(): Promise<void> {
 
   allFullBtn.addEventListener('click', () => {
     const ok = window.confirm(
-      'Grant full permission to all tools?\n\nEvery built-in tool will run without the approval prompt. Paths outside the workspace still prompt when filesystem access is workspace-only.\n\nThis does not change “Filesystem access” below (workspace vs full disk). Only use this if you accept that risk.',
+      'Grant full permission to all tools?\n\nEvery built-in tool will run without the approval prompt. Paths outside the workspace are blocked when filesystem access is workspace-only.\n\nThis does not change “Filesystem access” below (workspace vs full disk). Only use this if you accept that risk.',
     );
     if (!ok) return;
     void (async () => {
