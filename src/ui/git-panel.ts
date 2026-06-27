@@ -68,6 +68,13 @@ import { listWorktrees } from '../state/worktree-service';
 
 import { getWorkspacePath } from '../state/workspace';
 
+import {
+  panelPathsEqual,
+  resolvePanelWorktreeCwd,
+} from './panel-worktree-cwd';
+
+import { getFileTreeSidebarTitleSuffix } from './file-tree-listing-root';
+
 import { parseUnifiedPatchToDiffLines } from './git-patch-parse';
 
 import { renderUnifiedPromptDiff } from './prompt-diff-unified';
@@ -180,16 +187,8 @@ export function getGitPanelCwd(): string | undefined {
 
 
 
-function normalizePath(p: string): string {
-
-  return p.replace(/\\/g, '/').replace(/\/+$/, '');
-
-}
-
 function pathsEqual(a: string, b: string): boolean {
-
-  return normalizePath(a) === normalizePath(b);
-
+  return panelPathsEqual(a, b);
 }
 
 
@@ -327,15 +326,7 @@ function setStatus(message: string, isError = false): void {
 
 
 function getEffectiveCwdArg(): string | undefined {
-
-  const ws = getWorkspacePath().trim();
-
-  if (!panelCwd?.trim()) return undefined;
-
-  if (ws && pathsEqual(panelCwd, ws)) return undefined;
-
-  return panelCwd;
-
+  return resolvePanelWorktreeCwd(panelCwd);
 }
 
 
@@ -356,7 +347,9 @@ function syncSidebarChrome(): void {
   if (gitMount) {
     gitMount.toggleAttribute('hidden', !open);
   }
-  if (title) title.textContent = open ? 'Source Control' : 'Files';
+  if (title) {
+    title.textContent = open ? 'Source Control' : `Files${getFileTreeSidebarTitleSuffix()}`;
+  }
 
   syncToggleButtonState();
 }
@@ -728,11 +721,8 @@ function ensurePanelDom(): HTMLElement {
 
 
 async function syncFileTreeGitPollCwd(): Promise<void> {
-
-  const { startFileTreeGitStatusPoll } = await import('./file-tree');
-
-  startFileTreeGitStatusPoll(getEffectiveCwdArg() ?? getWorkspacePath());
-
+  const { syncFileTreeToPanelWorktree } = await import('./file-tree');
+  await syncFileTreeToPanelWorktree(panelCwd);
 }
 
 

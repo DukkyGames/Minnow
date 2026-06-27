@@ -46,8 +46,13 @@ export async function runFileTreeTool(
   }
   try {
     const { executeTool } = await import('../tools/client');
+    const { buildFileTreeToolContext } = await import('./file-tree-listing-root');
     const chatId = getActiveChat()?.id;
-    const { content } = await executeTool(name, args, chatId ? { chatId } : {});
+    const toolContext = {
+      ...buildFileTreeToolContext(),
+      ...(chatId ? { chatId } : {}),
+    };
+    const { content } = await executeTool(name, args, toolContext);
     if (chatId) scheduleSaveSessions();
     const parsed = parseToolResult(content);
     if (parsed.ok) {
