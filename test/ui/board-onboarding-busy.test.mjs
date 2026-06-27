@@ -3,7 +3,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 
 const { formatBoardOnboardingPlanDisplay } = await import(
@@ -12,8 +12,17 @@ const { formatBoardOnboardingPlanDisplay } = await import(
 const {
   syncBoardOnboardingBusyUI,
   resolveBoardOnboardingBusyPhase,
+  disposeBoardOnboardingUiTimers,
 } = await import('../../src/ui/orchestrate-board-onboarding-ui.ts');
 const { createEmptyChatObject } = await import('../../src/state/sessions.ts');
+const { resetBoardOnboardingTransientState } = await import(
+  '../../src/ui/orchestrate-board-onboarding-state.ts'
+);
+
+afterEach(() => {
+  disposeBoardOnboardingUiTimers();
+  resetBoardOnboardingTransientState();
+});
 
 describe('formatBoardOnboardingPlanDisplay', () => {
   test('returns basename for posix paths', () => {
