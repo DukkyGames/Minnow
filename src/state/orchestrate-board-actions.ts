@@ -920,6 +920,14 @@ function getOrCreateBoardChat(input: {
       if (input.role === 'tester') existing.workAgentId = 'tester';
       if (input.role === 'fixer') existing.workAgentId = null;
       syncTaskChatModelFromPlanner(existing, input.plannerChat);
+      if (input.taskId && input.taskChatField) {
+        updateTask(
+          input.group,
+          input.taskId,
+          { [input.taskChatField]: existing.id },
+          input.plannerChat,
+        );
+      }
       return existing;
     }
   }
@@ -1003,22 +1011,23 @@ function ensureStreamEndSubscription(): void {
         }
 
         const taskByFixer = board.tasks.find((t) => t.fixerChatId === endedChatId);
-        if (taskByFixer) {
+        const fixerTask =
+          taskByFixer ?? resolveFixerTaskForStreamEnd(board, endedChatId);
+        if (fixerTask) {
           streamEndMatched = true;
           const finalize =
-            taskByFixer.fixerKind === 'env'
-              ? finalizeEnvFixerOnStreamEnd(group, taskByFixer, planner)
-              : finalizeMergeFixerOnStreamEnd(group, taskByFixer, planner);
+            fixerTask.fixerKind === 'env'
+              ? finalizeEnvFixerOnStreamEnd(group, fixerTask, planner)
+              : finalizeMergeFixerOnStreamEnd(group, fixerTask, planner);
           void finalize
             .then(() => safeDrain(group, planner))
             .catch((err) =>
               reportBackgroundError(
-                taskByFixer.fixerKind === 'env' ? 'finalize-env-fixer' : 'finalize-merge-fixer',
+                fixerTask.fixerKind === 'env' ? 'finalize-env-fixer' : 'finalize-merge-fixer',
                 err,
               ),
             );
         } else if (!streamEndMatched && isBoardRunning(group)) {
-          // fixerChatId may have been cleared before stream-end delivery — still drain.
           safeDrain(group, planner);
         }
       }
@@ -1800,6 +1809,14 @@ function enqueueTask(groupId: string, taskId: string): void {
   taskQueueByGroupId.set(groupId, q);
 }
 
+/** Prepend a task to the board queue so it resumes before siblings after a fixer pass. */
+function enqueueTaskAtFront(groupId: string, taskId: string): void {
+  const q = taskQueueByGroupId.get(groupId) ?? [];
+  const without = q.filter((id) => id !== taskId);
+  without.unshift(taskId);
+  taskQueueByGroupId.set(groupId, without);
+}
+
 /**
  * Ensure an isolated git worktree for a task when board isolation is active, and
  * return its absolute path (also persisted on the task). Best-effort: returns null
@@ -2003,22 +2020,49 @@ function enqueueMergeCompletedTaskWorktree(
   });
 }
 
+type MergeFixerSeedOptions = {
+  verifyFailureSummary?: string;
+  attemptNumber?: number;
+  maxAttempts?: number;
+};
+
 /** Seed for a merge-conflict fixer chat (runs in the integration worktree). */
 function buildMergeFixerSeedMessage(
   task: BoardTask,
   conflictedFiles: string[],
+  seedOptions?: MergeFixerSeedOptions,
 ): string {
   const branch = task.worktreeBranch?.trim() || '(unknown branch)';
   const fileList =
     conflictedFiles.length > 0
       ? conflictedFiles.map((f) => `- ${f}`).join('\n')
       : '- (run git status to list conflicted files)';
-  return [
+  const lines = [
     `Resolve the in-progress git merge of \`${branch}\` into integration.`,
     '',
     'The merge is already in progress in this integration worktree (MERGE_HEAD is set).',
     'Do not run `git merge`, `git reset`, `git checkout`, or `git merge --abort` —',
     'those commands destroy the in-progress merge state.',
+  ];
+  if (
+    seedOptions?.attemptNumber !== undefined &&
+    seedOptions?.maxAttempts !== undefined
+  ) {
+    lines.push(
+      '',
+      `This is retry attempt ${seedOptions.attemptNumber} of ${seedOptions.maxAttempts}.`,
+    );
+  }
+  if (seedOptions?.verifyFailureSummary?.trim()) {
+    lines.push(
+      '',
+      'Previous board_report was pass but post-merge verification failed:',
+      seedOptions.verifyFailureSummary.trim(),
+      '',
+      'Re-commit the merge if needed, then call board_report again.',
+    );
+  }
+  lines.push(
     '',
     'Conflicted files:',
     fileList,
@@ -2031,7 +2075,8 @@ function buildMergeFixerSeedMessage(
     'Touch only conflicted regions. Do not run git push.',
     '',
     `When the merge is committed, call board_report({ task_id: "${task.id}", outcome: "pass" | "fail", summary: "..." }) exactly once.`,
-  ].join('\n');
+  );
+  return lines.join('\n');
 }
 
 /** Spawn a fixer chat to resolve an integration merge conflict. */
@@ -2041,6 +2086,7 @@ export async function startMergeConflictFixer(
   plannerChat: Chat,
   conflictedFiles: string[],
   integrationSha?: string,
+  seedOptions?: MergeFixerSeedOptions,
 ): Promise<void> {
   const board = group.orchestrateBoard;
   if (!board?.integrationBranch) return;
@@ -2166,7 +2212,7 @@ export async function startMergeConflictFixer(
   ensureStreamEndSubscription();
   reserveLaunchSlot(fixerChat.id);
   try {
-    const seed = buildMergeFixerSeedMessage(task, effectiveConflictedFiles);
+    const seed = buildMergeFixerSeedMessage(task, effectiveConflictedFiles, seedOptions);
     // Part 1: Supervise the fixer chat like every other board chat starter.
     refreshHeartbeatThresholds();
     startTaskChatSupervision(fixerChat.id);
@@ -2191,6 +2237,28 @@ export async function startMergeConflictFixer(
   }
 }
 
+/**
+ * When fixerChatId was cleared before stream-end delivery, resolve the task via
+ * the ended chat's boardTaskId and task state.
+ */
+function resolveFixerTaskForStreamEnd(
+  board: NonNullable<ChatGroup['orchestrateBoard']>,
+  endedChatId: string,
+): BoardTask | undefined {
+  const chat = findChatById(endedChatId);
+  const taskId = chat?.boardTaskId?.trim();
+  if (!taskId) return undefined;
+  const task = board.tasks.find((t) => t.id === taskId);
+  if (!task) return undefined;
+  if (task.status === 'merging' && resolveBoardReport(task)) {
+    return task;
+  }
+  if (task.fixerKind === 'env') {
+    return task;
+  }
+  return undefined;
+}
+
 /** Route merge fixer stream-end: report-driven verify, then complete or retry. */
 async function finalizeMergeFixerOnStreamEnd(
   group: ChatGroup,
@@ -2212,6 +2280,7 @@ async function finalizeMergeFixerOnStreamEnd(
     const boardId = group.id;
     const attempts = fresh.fixerAttempts ?? 0;
     const report = resolveBoardReport(fresh);
+    let passVerifyFailureSummary: string | undefined;
 
     const tryCompleteVerifiedMerge = async (): Promise<boolean> => {
       const merged = await checkTaskBranchMerged({ boardId, fromBranch: branch });
@@ -2220,6 +2289,16 @@ async function finalizeMergeFixerOnStreamEnd(
           ? await verifyIntegrationMergeOp({ boardId, fromBranch: branch })
           : null;
       if (!(merged.ok && merged.merged && verified?.ok && verified.verified)) {
+        if (!merged.ok || !merged.merged) {
+          passVerifyFailureSummary =
+            'board_report pass but branch not merged (check_merged)';
+        } else {
+          const detail =
+            verified?.error?.trim() ||
+            verified?.output?.trim() ||
+            'verify_integration did not pass';
+          passVerifyFailureSummary = `board_report pass but verify_integration failed: ${detail}`;
+        }
         return false;
       }
       const mergePreSha = fresh.mergePreSha?.trim();
@@ -2257,7 +2336,8 @@ async function finalizeMergeFixerOnStreamEnd(
       report?.outcome === 'fail'
         ? report.summary || 'Merge fixer reported failure'
         : report?.outcome === 'pass'
-          ? 'Merge fixer reported pass but integration merge could not be verified'
+          ? passVerifyFailureSummary ??
+            'Merge fixer reported pass but integration merge could not be verified'
           : 'Merge fixer did not report board_report';
 
     const preSha = fresh.mergePreSha?.trim();
@@ -2304,12 +2384,21 @@ async function finalizeMergeFixerOnStreamEnd(
         return;
       }
       if (mergeResult.outcome === 'conflict') {
+        const retrySeedOptions: MergeFixerSeedOptions | undefined =
+          report?.outcome === 'pass' && passVerifyFailureSummary
+            ? {
+                verifyFailureSummary: passVerifyFailureSummary,
+                attemptNumber: nextAttempts + 1,
+                maxAttempts: MAX_MERGE_FIXER_ATTEMPTS,
+              }
+            : undefined;
         await startMergeConflictFixer(
           group,
           fresh,
           plannerChat,
           mergeResult.conflictedFiles,
           mergeResult.integrationSha,
+          retrySeedOptions,
         );
         return;
       }
@@ -2488,22 +2577,49 @@ async function finalizeEnvFixerOnStreamEnd(
     if (fresh.fixerKind !== 'env') return;
     const phase = fresh.envFixPhase ?? 'test';
     const report = resolveBoardReport(fresh);
+
+    if (report?.outcome === 'pass') {
+      if (!isBoardRunning(group)) return;
+      if (phase === 'build') {
+        updateTask(
+          group,
+          fresh.id,
+          { fixerChatId: undefined, fixerKind: undefined, envFixPhase: undefined },
+          plannerChat,
+        );
+        await startTask(group, fresh.id, plannerChat);
+      } else {
+        moveTaskStatus(group, fresh.id, 'testing', plannerChat);
+        const testChat = getOrCreateBoardChat({
+          group,
+          plannerChat,
+          existingId: fresh.testChatId?.trim(),
+          role: 'tester',
+          name: `Test ${fresh.id}: ${fresh.title}`,
+          taskId: fresh.id,
+          taskChatField: 'testChatId',
+        });
+        reserveLaunchSlot(testChat.id);
+        updateTask(
+          group,
+          fresh.id,
+          { fixerChatId: undefined, fixerKind: undefined, envFixPhase: undefined },
+          plannerChat,
+        );
+        await startTaskTesting(group, fresh.id, plannerChat, {
+          enqueueAtFront: true,
+          allowPreReservedTestChat: true,
+        });
+      }
+      return;
+    }
+
     updateTask(
       group,
       fresh.id,
       { fixerChatId: undefined, fixerKind: undefined, envFixPhase: undefined },
       plannerChat,
     );
-
-    if (report?.outcome === 'pass') {
-      if (!isBoardRunning(group)) return;
-      if (phase === 'build') {
-        await startTask(group, fresh.id, plannerChat);
-      } else {
-        await startTaskTesting(group, fresh.id, plannerChat);
-      }
-      return;
-    }
 
     const summary =
       report?.summary ||
@@ -2697,6 +2813,7 @@ export async function startTaskTesting(
   group: ChatGroup,
   taskId: string,
   plannerChat: Chat,
+  options?: { enqueueAtFront?: boolean; allowPreReservedTestChat?: boolean },
 ): Promise<void> {
   const board = group.orchestrateBoard;
   if (!board) return;
@@ -2704,10 +2821,21 @@ export async function startTaskTesting(
   if (!task || task.status !== 'testing') return;
 
   const existingTestId = task.testChatId?.trim();
-  if (existingTestId && isTaskChatActive(existingTestId)) return;
+  if (existingTestId && isTaskChatActive(existingTestId)) {
+    const preReservedOnly =
+      options?.allowPreReservedTestChat &&
+      isLaunchReserved(existingTestId) &&
+      !isChatStreaming(existingTestId) &&
+      !isChatTurnSetupPending(existingTestId);
+    if (!preReservedOnly) return;
+  }
 
   if (countRunningTaskChats(board) >= maxConcurrent(board)) {
-    enqueueTask(group.id, taskId);
+    if (options?.enqueueAtFront) {
+      enqueueTaskAtFront(group.id, taskId);
+    } else {
+      enqueueTask(group.id, taskId);
+    }
     return;
   }
 
@@ -3762,6 +3890,10 @@ export function enqueueTaskForTests(groupId: string, taskId: string): void {
   enqueueTask(groupId, taskId);
 }
 
+export function enqueueTaskAtFrontForTests(groupId: string, taskId: string): void {
+  enqueueTaskAtFront(groupId, taskId);
+}
+
 export function getTaskQueueForTests(groupId: string): string[] {
   return [...(taskQueueByGroupId.get(groupId) ?? [])];
 }
@@ -3876,6 +4008,19 @@ export async function finalizeMergeFixerOnStreamEndForTests(
   plannerChat: Chat,
 ): Promise<void> {
   return finalizeMergeFixerOnStreamEnd(group, task, plannerChat);
+}
+
+/** Test-only: build merge-fixer seed with optional retry context. */
+export function buildMergeFixerSeedMessageForTests(
+  task: BoardTask,
+  conflictedFiles: string[],
+  seedOptions?: {
+    verifyFailureSummary?: string;
+    attemptNumber?: number;
+    maxAttempts?: number;
+  },
+): string {
+  return buildMergeFixerSeedMessage(task, conflictedFiles, seedOptions);
 }
 
 /** Test-only: simulate stream-end when fixerChatId was already cleared before delivery. */

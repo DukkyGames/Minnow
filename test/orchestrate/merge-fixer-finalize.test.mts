@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import {
+  buildMergeFixerSeedMessageForTests,
   clearTaskQueuesForTests,
   enqueueTaskForTests,
   finalizeMergeFixerOnStreamEndForTests,
@@ -244,6 +245,96 @@ describe('merge-fixer finalize idempotency', () => {
     const taskA = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
     assert.equal(taskA.status, 'complete');
     assert.equal(getTaskQueueForTests(GROUP_ID).length, 0, 'queue drained after fixer complete');
+  });
+
+  test('pass board_report with verify failure retries fixer with context', async () => {
+    const group = makeGroup([
+      {
+        id: 'W1-A',
+        title: 'Feature A',
+        wave: 'W1',
+        category: 'build',
+        build: 'Add feature A',
+        test: 'Run tests',
+      },
+    ]);
+    const fixerChat = makeFixerChat();
+    const { planner } = seedMergingTask(group, fixerChat, { fixerAttempts: 0 });
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    updateTask(
+      group,
+      'W1-A',
+      { boardReport: { outcome: 'pass', summary: 'Merge committed' } },
+      planner,
+    );
+
+    restoreFetch = mockWorktreeOps({
+      check_merged: { ok: true, merged: false },
+      restore_integration: { ok: true },
+      merge: {
+        ok: false,
+        conflict: true,
+        conflictedFiles: ['src/foo.ts'],
+        integrationSha: 'aabbccdd',
+      },
+      ensure_integration: { ok: true, path: '/tmp/fake-integration' },
+      merge_in_progress: { ok: true, inProgress: true },
+    });
+
+    await finalizeMergeFixerOnStreamEndForTests(group, task, planner);
+
+    const taskAfter = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    assert.equal(taskAfter.fixerAttempts, 1);
+    assert.equal(taskAfter.status, 'merging');
+    assert.notEqual(taskAfter.status, 'complete');
+    assert.ok(taskAfter.fixerChatId?.trim(), 'merge fixer should be re-spawned after verify failure');
+
+    const seed = buildMergeFixerSeedMessageForTests(
+      taskAfter,
+      ['src/foo.ts'],
+      {
+        verifyFailureSummary: 'board_report pass but branch not merged (check_merged)',
+        attemptNumber: 2,
+        maxAttempts: 2,
+      },
+    );
+    assert.match(seed, /branch not merged \(check_merged\)/);
+    assert.match(seed, /retry attempt 2 of 2/i);
+  });
+
+  test('unmatched stream-end finalizes merging task when fixerChatId was cleared early', async () => {
+    const group = makeGroup([
+      {
+        id: 'W1-A',
+        title: 'Feature A',
+        wave: 'W1',
+        category: 'build',
+        build: 'Add feature A',
+        test: 'Run tests',
+      },
+    ]);
+    const fixerChat = makeFixerChat();
+    const { planner } = seedMergingTask(group, fixerChat);
+    updateTask(
+      group,
+      'W1-A',
+      {
+        boardReport: { outcome: 'pass', summary: 'Merge committed' },
+        fixerChatId: undefined,
+      },
+      planner,
+    );
+
+    restoreFetch = mockWorktreeOps({
+      check_merged: { ok: true, merged: true },
+      verify_integration: { ok: true, verified: true },
+      refresh_integration_deps: { ok: true },
+    });
+
+    await simulateUnmatchedFixerStreamEndForTests(group, planner, FIXER_CHAT_ID);
+
+    const taskA = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    assert.equal(taskA.status, 'complete', 'fallback routing should run merge finalize');
   });
 
   test('unmatched stream-end drains queue when fixerChatId was cleared early', async () => {
