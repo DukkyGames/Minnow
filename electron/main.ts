@@ -22,7 +22,7 @@ import {
 import { getProjectRoot, importServerModule } from './server-import.js';
 import { startInProcessServer, type InProcessServerHandle } from './server-host.js';
 import { loadWindowState, trackWindowState } from './window-state.js';
-import { resolveMinnowPort } from '../server/constants/minnow-port.js';
+import { resolveMinnowPort } from './minnow-port.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
