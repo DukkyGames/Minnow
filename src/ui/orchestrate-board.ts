@@ -546,16 +546,8 @@ export function buildKanbanRefreshKey(
       subAgentHint: resolveTaskCardSubAgentHint(task, plannerChat),
     });
     const relatedChats = listTaskRelatedChats(task, folder, allChats);
-    // Heartbeat age is time-derived and synced in place; only progressSeq affects rebuild.
-    const supervision = resolveTaskSupervision(
-      task,
-      plannerChat,
-      Boolean(task.chatId && isChatStreaming(task.chatId)),
-    );
-    const progressSeqKey =
-      supervision && supervision.progressSeq > 0
-        ? String(supervision.progressSeq)
-        : '';
+    // Heartbeat age and progressSeq are time/stream-derived; synced in place via
+    // syncKanbanHeartbeatBadges so they must not force a kanban rebuild every tick.
     const runLifecycle = resolveTaskRunLifecycle(task, plannerChat) ?? '';
     parts.push(
       [
@@ -571,7 +563,6 @@ export function buildKanbanRefreshKey(
         deriveTaskCategoryBadge(task).cssVariant,
         activity ? `${activity.kind}:${activity.text}` : '',
         relatedChats.map((c) => `${c.chatId}:${c.streaming ? 1 : 0}`).join(','),
-        progressSeqKey,
         runLifecycle,
         `d${(task.dependsOn ?? []).join('.')}`,
       ].join('|'),

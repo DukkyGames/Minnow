@@ -725,7 +725,6 @@ function startTaskChatSupervision(chatId: string): void {
   startHeartbeat(runId, () => {
     const chat = findChatById(chatId);
     if (!chat?.boardGroupId) return;
-    emitBoardChange(chat.boardGroupId);
 
     const group = getBoardGroupForChat(chat);
     if (!group?.orchestrateBoard) return;

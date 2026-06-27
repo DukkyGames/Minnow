@@ -46,6 +46,7 @@ const {
 } = await import('../../src/state/orchestrate-board-events.ts');
 const {
   bindRunSupervision,
+  bumpProgress,
   chatTaskRunId,
   createRunSupervision,
   recordHeartbeat,
@@ -1151,6 +1152,51 @@ describe('orchestrate board live updates', () => {
 
     performance.now = originalNow;
     setStreaming(false, FIXED_TASK_CHAT_ID);
+    disposeBoardViewForTests();
+  });
+
+  test('progress bumps do not change kanban refresh key during streaming', async () => {
+    setupDom();
+    await primeSubAgentConfig();
+    setBoardNowForTests(() => 1_700_000_000_000);
+
+    const chat = makeOrchestrateChat();
+    const taskChat = createEmptyChatObject('');
+    taskChat.id = FIXED_TASK_CHAT_ID;
+    taskChat.boardGroupId = FIXED_GROUP_ID;
+    taskChat.groupId = FIXED_GROUP_ID;
+    taskChat.boardTaskId = 'W1-A';
+
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [
+        {
+          id: 'W1-A',
+          title: 'Progress bump task',
+          wave: 'W1',
+          category: 'build',
+        },
+      ],
+      waves: [{ id: 'W1' }],
+    });
+    updateTask(group, 'W1-A', { chatId: FIXED_TASK_CHAT_ID, status: 'in_progress' });
+    setSessionStateForTests(
+      sessionStateForBoard(chat, group, { chats: [chat, taskChat] }),
+    );
+    setStreaming(true, FIXED_TASK_CHAT_ID);
+
+    const runId = chatTaskRunId(FIXED_TASK_CHAT_ID);
+    bindRunSupervision(runId, createRunSupervision({ progressSeq: 1 }));
+
+    const keyBefore = buildKanbanRefreshKey(group.orchestrateBoard, chat, group);
+    bumpProgress(runId);
+    bumpProgress(runId);
+    const keyAfter = buildKanbanRefreshKey(group.orchestrateBoard, chat, group);
+
+    assert.equal(keyAfter, keyBefore, 'refresh key ignores progressSeq bumps');
+
+    setStreaming(false, FIXED_TASK_CHAT_ID);
+    resetWrapperState();
     disposeBoardViewForTests();
   });
 
