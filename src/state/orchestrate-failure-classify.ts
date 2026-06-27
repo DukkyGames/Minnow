@@ -176,9 +176,18 @@ export function inferStreamOutcome(chat: Chat): TaskChatStreamOutcome {
  * Classify the likely root cause of a task failure.
  *
  * @param chat    The builder/tester chat that just ended.
- * @param signal  Optional `buildOutcome` reported by board_report_build_result.
+ * @param signal  Optional outcome signal (`board_report` outcome or legacy `buildOutcome`).
+ * @param task    Optional board task for `boardReport` / `buildOutcome` fallback.
  */
-export function classifyTaskFailure(chat: Chat, signal?: string): FailureCategory {
+export function classifyTaskFailure(
+  chat: Chat,
+  signal?: string,
+  task?: BoardTask,
+): FailureCategory {
+  const reportOutcome = task?.boardReport?.outcome;
+  if (reportOutcome === 'env_blocked') return 'infra';
+  const buildOutcome = task?.buildOutcome?.trim();
+  if (buildOutcome === 'env_blocked') return 'infra';
   // 1. Structured signal takes highest precedence.
   if (signal === 'env_blocked') return 'infra';
   // 'ok' should not reach the failure path.
@@ -227,6 +236,7 @@ export function resolveTaskChatStreamFailure(chat: Chat): {
  * instead of advancing on prose alone.
  */
 export function isUnverifiedCompletion(task: BoardTask, chat: Chat): boolean {
+  if (task.boardReport?.outcome) return false;
   if (task.buildOutcome) return false;
   if (!task.testSpec?.trim()) return false;
   return inferStreamOutcome(chat) === 'completed';

@@ -1082,57 +1082,24 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     definition: toolSchema('board_get_state', 'Read orchestrateBoard snapshot.', {}, []),
   },
   {
-    id: 'board_report_test_result',
-    label: 'Board report test result',
+    id: 'board_report',
+    label: 'Board report',
     description:
-      'Structured Tester verdict for per-task or full-board integration test (does not move columns).',
+      'Unified structured report for builder, tester, and fixer chats (does not move columns).',
     category: 'agents',
     serverRequired: false,
     definition: toolSchema(
-      'board_report_test_result',
-      'Record pass/fail verdict for stream-end routing. Use task_id from board or FULL_BOARD for final integration.',
+      'board_report',
+      'Record pass/fail/env_blocked outcome for stream-end routing. Use task_id from board or FULL_BOARD for final integration.',
       {
         task_id: {
           type: 'string',
           description: 'Board task id (e.g. W1-A) or FULL_BOARD for final integration test',
         },
-        verdict: {
+        outcome: {
           type: 'string',
-          enum: ['pass', 'fail'],
-          description: 'Test outcome',
-        },
-        summary: {
-          type: 'string',
-          description: 'Concise evidence summary',
-        },
-        failing_tasks: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'FULL_BOARD fail only: board task ids responsible for the failure',
-        },
-      },
-      ['task_id', 'verdict', 'summary'],
-    ),
-  },
-  {
-    id: 'board_report_build_result',
-    label: 'Board report build result',
-    description:
-      'Structured Builder verdict for per-task build (does not move columns). Call with ok only when verification actually ran.',
-    category: 'agents',
-    serverRequired: false,
-    definition: toolSchema(
-      'board_report_build_result',
-      'Record build outcome for stream-end routing. Call env_blocked when verification could not run due to missing services/commands.',
-      {
-        task_id: {
-          type: 'string',
-          description: 'Board task id (e.g. W1-A)',
-        },
-        status: {
-          type: 'string',
-          enum: ['ok', 'env_blocked', 'failed'],
-          description: 'ok = verification passed; env_blocked = env prevented verification; failed = code error',
+          enum: ['pass', 'fail', 'env_blocked'],
+          description: 'pass = succeeded; fail = code/test error; env_blocked = environment prevented verification',
         },
         summary: {
           type: 'string',
@@ -1141,10 +1108,15 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         blockers: {
           type: 'array',
           items: { type: 'string' },
-          description: 'env_blocked only: list of blocking services or missing commands',
+          description: 'env_blocked only: blocking services or missing commands',
+        },
+        failing_tasks: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'FULL_BOARD fail only: board task ids responsible for the failure',
         },
       },
-      ['task_id', 'status', 'summary'],
+      ['task_id', 'outcome', 'summary'],
     ),
   },
   {

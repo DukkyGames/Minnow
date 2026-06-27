@@ -41,11 +41,9 @@ const BUILDER_CHAT_ID = 'bbbb-bbbb-builder';
 const FIXER_CHAT_ID = 'cccc-cccc-fixer';
 const GROUP_ID = 'grp_aaaa-aaaa';
 const TASK_ID = 'W1-A';
-const PROGRESS_STALL_MS = 1_000;
-/** Env-fixer uses the tighter 1× progressStallMs threshold (not 3× build chats). */
-const FIXER_STALL_THRESHOLD_MS = PROGRESS_STALL_MS;
-/** Merge-fixer stall reconcile uses FIXER_STALL_MULTIPLIER (1.5×). */
-const MERGE_FIXER_STALL_THRESHOLD_MS = PROGRESS_STALL_MS * 1.5;
+const PROGRESS_STALL_MS = 10_000;
+/** All supervised task chats use 3× progressStallMs before stall recovery. */
+const STALL_THRESHOLD_MS = PROGRESS_STALL_MS * 3;
 
 // Fix A fixtures (merge-fixer heartbeat reconcile)
 const FIX_A_PLANNER_ID = '22222222-2222-2222-2222-222222222222';
@@ -316,7 +314,7 @@ afterEach(() => {
   trackTaskChatStallRecoveryCallsForTests(false);
 });
 
-describe('Fix A — merge-fixer heartbeat reconcile', () => {
+describe('Fix A — merge-fixer unified stall recovery', () => {
   let restoreFetch: (() => void) | undefined;
   const prevMinnowTest = process.env.MINNOW_TEST;
 
@@ -325,6 +323,7 @@ describe('Fix A — merge-fixer heartbeat reconcile', () => {
     setupDom();
     setLocalServerAvailableForTests(true);
     setSessionStateForTests(null);
+    clearTaskChatStallRestartsForTests();
   });
 
   afterEach(() => {
@@ -332,6 +331,7 @@ describe('Fix A — merge-fixer heartbeat reconcile', () => {
     restoreFetch = undefined;
     teardownDom();
     setLocalServerAvailableForTests(false);
+    clearTaskChatStallRestartsForTests();
     if (prevMinnowTest === undefined) {
       delete process.env.MINNOW_TEST;
     } else {
@@ -340,112 +340,17 @@ describe('Fix A — merge-fixer heartbeat reconcile', () => {
     setSessionStateForTests(null);
   });
 
-  test('git poll reconcile completes task without stream-end', async () => {
+  test('heartbeat tick does not git-poll or change task status', async () => {
     const group = makeMergeGroup();
     const fixerChat = makeMergeFixerChat();
     seedMergingTask(group, fixerChat);
 
-    restoreFetch = mockWorktreeOps({
-      check_merged: { ok: true, merged: true },
-      verify_integration: { ok: true, verified: true },
-      refresh_integration_deps: { ok: true },
-    });
-
-    startTaskChatSupervisionForTests(MERGE_FIXER_CHAT_ID);
-    const runId = chatTaskRunId(MERGE_FIXER_CHAT_ID);
-    bumpProgress(runId);
-
-    tickHeartbeatForTests(runId);
-    await waitForAsyncReconcile();
-
-    const task = group.orchestrateBoard!.tasks.find((t) => t.id === MERGE_TASK_ID)!;
-    assert.equal(task.status, 'complete', 'git poll should reconcile to complete');
-    assert.equal(task.fixerChatId, undefined, 'fixerChatId cleared on complete');
-  });
-
-  test('stall reconcile completes task without stream-end', async () => {
-    const group = makeMergeGroup();
-    const fixerChat = makeMergeFixerChat();
-    seedMergingTask(group, fixerChat);
-
-    restoreFetch = mockWorktreeOps({
-      check_merged: { ok: true, merged: true },
-      verify_integration: { ok: true, verified: true },
-      refresh_integration_deps: { ok: true },
-    });
-
-    startTaskChatSupervisionForTests(MERGE_FIXER_CHAT_ID);
-    const runId = chatTaskRunId(MERGE_FIXER_CHAT_ID);
-    bumpProgress(runId);
-
-    now = MERGE_FIXER_STALL_THRESHOLD_MS + 100;
-    tickHeartbeatForTests(runId);
-    await waitForAsyncReconcile();
-
-    const task = group.orchestrateBoard!.tasks.find((t) => t.id === MERGE_TASK_ID)!;
-    assert.equal(task.status, 'complete', 'stall should reconcile to complete');
-    assert.equal(task.fixerChatId, undefined);
-  });
-
-  test('stall reconcile waits until FIXER_STALL_MULTIPLIER before firing', async () => {
-    const group = makeMergeGroup();
-    const fixerChat = makeMergeFixerChat();
-    seedMergingTask(group, fixerChat);
-
-    restoreFetch = mockWorktreeOps({
-      check_merged: { ok: true, merged: false },
-      verify_integration: { ok: true, verified: false },
-    });
-
-    startTaskChatSupervisionForTests(MERGE_FIXER_CHAT_ID);
-    const runId = chatTaskRunId(MERGE_FIXER_CHAT_ID);
-    bumpProgress(runId);
-
-    now = FIXER_STALL_THRESHOLD_MS + 100;
-    tickHeartbeatForTests(runId);
-    await waitForAsyncReconcile();
-
-    let task = group.orchestrateBoard!.tasks.find((t) => t.id === MERGE_TASK_ID)!;
-    assert.equal(task.status, 'merging', '1.0× progressStallMs should not trigger stall reconcile');
-
-    restoreFetch = mockWorktreeOps({
-      check_merged: { ok: true, merged: true },
-      verify_integration: { ok: true, verified: true },
-      refresh_integration_deps: { ok: true },
-    });
-
-    now = MERGE_FIXER_STALL_THRESHOLD_MS + 100;
-    tickHeartbeatForTests(runId);
-    await waitForAsyncReconcile();
-
-    task = group.orchestrateBoard!.tasks.find((t) => t.id === MERGE_TASK_ID)!;
-    assert.equal(task.status, 'complete', '1.5× progressStallMs should trigger stall reconcile');
-  });
-
-  test('reconcile bails when task left merging before finalize', async () => {
-    const group = makeMergeGroup();
-    const fixerChat = makeMergeFixerChat();
-    const { planner } = seedMergingTask(group, fixerChat);
-
-    let checkMergedCalls = 0;
+    let fetchCalls = 0;
     const saved = globalThis.fetch;
     // @ts-ignore — test-only replacement
-    globalThis.fetch = async (_url: unknown, opts?: { body?: unknown }) => {
-      let op = '';
-      try {
-        op = (JSON.parse(opts?.body as string) as { op?: string }).op ?? '';
-      } catch {
-        /* ignore */
-      }
-      if (op === 'check_merged') {
-        checkMergedCalls += 1;
-        updateTask(group, MERGE_TASK_ID, { status: 'complete', fixerChatId: undefined }, planner);
-        return { ok: true, json: async () => ({ ok: true, merged: true }) };
-      }
-      if (op === 'verify_integration') {
-        return { ok: true, json: async () => ({ ok: true, verified: true }) };
-      }
-      return { ok: true, json: async () => ({ ok: false, error: 'not_mocked' }) };
+    globalThis.fetch = async () => {
+      fetchCalls += 1;
+      return { ok: true, json: async () => ({ ok: false, error: 'unexpected' }) };
     };
     restoreFetch = () => {
       globalThis.fetch = saved;
@@ -455,11 +360,54 @@ describe('Fix A — merge-fixer heartbeat reconcile', () => {
     const runId = chatTaskRunId(MERGE_FIXER_CHAT_ID);
     bumpProgress(runId);
     tickHeartbeatForTests(runId);
-    await waitForAsyncReconcile();
 
     const task = group.orchestrateBoard!.tasks.find((t) => t.id === MERGE_TASK_ID)!;
-    assert.equal(task.status, 'complete');
-    assert.ok(checkMergedCalls >= 1);
+    assert.equal(task.status, 'merging', 'heartbeat must not advance status');
+    assert.equal(fetchCalls, 0, 'heartbeat must not call /api/worktree');
+  });
+
+  test('stall at 3x triggers nudge without finalizing', async () => {
+    const group = makeMergeGroup();
+    const fixerChat = makeMergeFixerChat();
+    seedMergingTask(group, fixerChat);
+
+    trackTaskChatStallRecoveryCallsForTests(true);
+    startTaskChatSupervisionForTests(MERGE_FIXER_CHAT_ID);
+    const runId = chatTaskRunId(MERGE_FIXER_CHAT_ID);
+    bumpProgress(runId);
+
+    now = STALL_THRESHOLD_MS + 100;
+    tickHeartbeatForTests(runId);
+
+    const { nudges, selfHeals } = trackTaskChatStallRecoveryCallsForTests(false);
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === MERGE_TASK_ID)!;
+    assert.deepEqual(nudges, [MERGE_TASK_ID], 'first stall should nudge the fixer task');
+    assert.equal(selfHeals.length, 0, 'first stall must not self-heal');
+    assert.equal(task.status, 'merging', 'nudge must not finalize');
+    assert.equal(getTaskChatStallRestartCountForTests(MERGE_FIXER_CHAT_ID), 1);
+  });
+
+  test('second stall triggers merge-phase self-heal', async () => {
+    const group = makeMergeGroup();
+    const fixerChat = makeMergeFixerChat();
+    seedMergingTask(group, fixerChat);
+
+    trackTaskChatStallRecoveryCallsForTests(true);
+    startTaskChatSupervisionForTests(MERGE_FIXER_CHAT_ID);
+    const runId = chatTaskRunId(MERGE_FIXER_CHAT_ID);
+    bumpProgress(runId);
+
+    now = STALL_THRESHOLD_MS + 100;
+    tickHeartbeatForTests(runId);
+
+    startTaskChatSupervisionForTests(MERGE_FIXER_CHAT_ID);
+    bumpProgress(runId);
+    now += STALL_THRESHOLD_MS + 100;
+    tickHeartbeatForTests(runId);
+
+    const { nudges, selfHeals } = trackTaskChatStallRecoveryCallsForTests(false);
+    assert.equal(nudges.length, 1, 'only the first stall should nudge');
+    assert.deepEqual(selfHeals, [MERGE_TASK_ID], 'second stall should self-heal merge phase');
   });
 });
 
@@ -606,8 +554,16 @@ describe('Fix B — reconcileMergingTasks safety net', () => {
   });
 });
 
-describe('Fix C — env-fixer watchdog', () => {
-  test('env-fixer stall stops fixer chat only — no nudge or build self-heal', () => {
+describe('Fix C — env-fixer unified stall recovery', () => {
+  beforeEach(() => {
+    setupDom();
+  });
+
+  afterEach(() => {
+    teardownDom();
+  });
+
+  test('env-fixer stall at 3x triggers nudge with stall counter', () => {
     const group = makeGroup();
     seedEnvFixerTask(group);
     const board = group.orchestrateBoard!;
@@ -626,17 +582,16 @@ describe('Fix C — env-fixer watchdog', () => {
     const runId = chatTaskRunId(FIXER_CHAT_ID);
     bumpProgress(runId);
 
-    // Past env-fixer threshold (1×) but before build threshold (3×).
-    now = FIXER_STALL_THRESHOLD_MS + 100;
+    now = STALL_THRESHOLD_MS + 100;
     tickHeartbeatForTests(runId);
 
     const { nudges, selfHeals } = trackTaskChatStallRecoveryCallsForTests(false);
-    assert.equal(nudges.length, 0, 'env-fixer stall must not call runTaskChatNudge');
-    assert.equal(selfHeals.length, 0, 'env-fixer stall must not call build self-heal');
+    assert.deepEqual(nudges, [TASK_ID], 'env-fixer stall should nudge the task');
+    assert.equal(selfHeals.length, 0, 'first env-fixer stall must not self-heal');
     assert.equal(
       getTaskChatStallRestartCountForTests(FIXER_CHAT_ID),
-      0,
-      'env-fixer stall must not increment the build stall-restart counter',
+      1,
+      'env-fixer stall should increment the unified stall-restart counter',
     );
   });
 });
@@ -872,6 +827,13 @@ describe('Manual recovery — recoverMergingBoardTask', () => {
       refresh_integration_deps: { ok: true },
     });
 
+    updateTask(
+      group,
+      MERGE_TASK_ID,
+      { boardReport: { outcome: 'pass', summary: 'Merge committed' } },
+      planner,
+    );
+
     await recoverMergingBoardTask(group, MERGE_TASK_ID, planner);
 
     const task = group.orchestrateBoard!.tasks.find((t) => t.id === MERGE_TASK_ID)!;
@@ -910,6 +872,13 @@ describe('Manual recovery — recoverMergingBoardTask', () => {
       verify_integration: { ok: true, verified: true },
       refresh_integration_deps: { ok: true },
     });
+
+    updateTask(
+      group,
+      MERGE_TASK_ID,
+      { boardReport: { outcome: 'pass', summary: 'Merge committed' } },
+      planner,
+    );
 
     await restartBoardTask(group, MERGE_TASK_ID, planner);
     releaseLaunchSlotForTests(MERGE_FIXER_CHAT_ID);

@@ -283,6 +283,13 @@ export type BoardTaskStatus =
 /** Sub-agent category for board agent grid styling. */
 export type BoardCategory = 'build' | 'fix' | 'test' | 'research';
 
+/** Structured agent→board report (board_report tool). */
+export interface BoardReport {
+  outcome: 'pass' | 'fail' | 'env_blocked';
+  summary: string;
+  blockers?: string[];
+}
+
 /** One task on the Orchestrate Kanban board. */
 export interface BoardTask {
   id: string;
@@ -334,6 +341,8 @@ export interface BoardTask {
   stopRetries?: number;
   /** Pre-merge integration tip SHA for restore on fixer failure. */
   mergePreSha?: string;
+  /** Unified structured report from board_report (stream-end routing). */
+  boardReport?: BoardReport;
   /** Structured verdict from board_report_test_result (stream-end routing). */
   testVerdict?: 'pass' | 'fail';
   /** Human summary from the Tester (shown on fail / blocked). */

@@ -10,12 +10,14 @@
  */
 
 import assert from 'node:assert/strict';
+import { Window } from 'happy-dom';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { setAutopilotMetaForTests, resetAutopilotMetaCache } from '../../src/config/autopilot-meta.ts';
 import {
   clearTaskChatStallRestartsForTests,
   getTaskChatStallRestartCountForTests,
   startTaskChatSupervisionForTests,
+  trackTaskChatStallRecoveryCallsForTests,
 } from '../../src/state/orchestrate-board-actions.ts';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
 import {
@@ -29,14 +31,31 @@ import type { Chat, ChatGroup, OrchestrateBoardState } from '../../src/types.ts'
 
 const PLANNER_ID = 'aaaa-aaaa-planner';
 const TASK_CHAT_ID = 'bbbb-bbbb-task';
+const TEST_CHAT_ID = 'cccc-cccc-test';
 const GROUP_ID = 'grp_aaaa-aaaa';
 const TASK_ID = 'W1-A';
-const PROGRESS_STALL_MS = 1_000;
+const PROGRESS_STALL_MS = 10_000;
 /** stall threshold used in startTaskChatSupervision = 3 × progressStallMs */
 const STALL_THRESHOLD_MS = 3 * PROGRESS_STALL_MS;
 
 let now = 0;
 let originalNow: typeof performance.now;
+let domWindow: Window | undefined;
+
+function setupDom(): void {
+  domWindow = new Window();
+  globalThis.document = domWindow.document;
+  globalThis.window = domWindow as unknown as Window & typeof globalThis.window;
+}
+
+function teardownDom(): void {
+  domWindow?.close();
+  domWindow = undefined;
+  // @ts-expect-error test cleanup
+  delete globalThis.document;
+  // @ts-expect-error test cleanup
+  delete globalThis.window;
+}
 
 function makePlanner(): Chat {
   return {
@@ -108,12 +127,15 @@ function makeGroup(executionMode: 'manual' | 'sequential' | 'auto' | 'afk' = 'af
 }
 
 beforeEach(() => {
+  process.env.MINNOW_TEST = '1';
+  setupDom();
   now = 0;
   originalNow = performance.now;
   performance.now = () => now;
 
-  resetWrapperState(); // sets visibilityBaseline = now = 0
+  resetWrapperState();
   clearTaskChatStallRestartsForTests();
+  trackTaskChatStallRecoveryCallsForTests(false);
 
   setAutopilotMetaForTests({
     progressStallMs: PROGRESS_STALL_MS,
@@ -127,6 +149,8 @@ afterEach(() => {
   resetWrapperState();
   resetAutopilotMetaCache();
   clearTaskChatStallRestartsForTests();
+  trackTaskChatStallRecoveryCallsForTests(false);
+  teardownDom();
 });
 
 describe('board task-chat stall detection', () => {
@@ -142,24 +166,20 @@ describe('board task-chat stall detection', () => {
       groups: [group],
     });
 
+    trackTaskChatStallRecoveryCallsForTests(true);
     startTaskChatSupervisionForTests(TASK_CHAT_ID);
 
-    // Set initial progress at time 0
     bumpProgress(chatTaskRunId(TASK_CHAT_ID));
-
-    // Advance time past stall threshold
     now = STALL_THRESHOLD_MS + 100;
-
-    // Manually tick the heartbeat
     tickHeartbeatForTests(chatTaskRunId(TASK_CHAT_ID));
 
-    // The stall restart counter should have been incremented from 0→1
-    // (verified indirectly: a second tick at the same time won't trigger again because
-    //  the heartbeat timer was stopped)
-    const runId = chatTaskRunId(TASK_CHAT_ID);
-    // After the stall tick, the supervision entry should be cleared (stopHeartbeat called)
-    // which means a subsequent tick returns immediately — regression check
-    tickHeartbeatForTests(runId); // should be a no-op now
+    const { nudges } = trackTaskChatStallRecoveryCallsForTests(false);
+    assert.deepEqual(
+      nudges,
+      [TASK_ID],
+      `nudges=${JSON.stringify(nudges)} counter=${getTaskChatStallRestartCountForTests(TASK_CHAT_ID)}`,
+    );
+    assert.equal(getTaskChatStallRestartCountForTests(TASK_CHAT_ID), 1);
   });
 
   test('recent bumpProgress prevents stall restart', () => {
@@ -260,6 +280,51 @@ describe('board task-chat stall detection', () => {
     tickHeartbeatForTests(runId);
 
     assert.equal(getTaskChatStallRestartCountForTests(TASK_CHAT_ID), 0);
+  });
+
+  test('stalled tester chat nudges the test chat, not the builder', () => {
+    const planner = makePlanner();
+    const taskChat = makeTaskChat();
+    const testChat: Chat = {
+      id: TEST_CHAT_ID,
+      name: 'Test W1-A',
+      workspacePath: '/ws',
+      modeId: 'build',
+      modelId: 'm1',
+      history: [],
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: 1,
+      boardGroupId: GROUP_ID,
+      boardTaskId: TASK_ID,
+    };
+    const group = makeGroup('afk');
+    const board = group.orchestrateBoard!;
+    board.tasks[0] = {
+      ...board.tasks[0]!,
+      status: 'testing',
+      testChatId: TEST_CHAT_ID,
+    };
+
+    setSessionStateForTests({
+      version: 5,
+      activeId: PLANNER_ID,
+      chats: [planner, taskChat, testChat],
+      groups: [group],
+    });
+
+    trackTaskChatStallRecoveryCallsForTests(true);
+    startTaskChatSupervisionForTests(TEST_CHAT_ID);
+
+    bumpProgress(chatTaskRunId(TEST_CHAT_ID));
+    now = STALL_THRESHOLD_MS + 100;
+    tickHeartbeatForTests(chatTaskRunId(TEST_CHAT_ID));
+
+    const { nudges, nudgeChatIds } = trackTaskChatStallRecoveryCallsForTests(false);
+    assert.deepEqual(nudges, [TASK_ID]);
+    assert.deepEqual(nudgeChatIds, [TEST_CHAT_ID], 'nudge must target the stalled tester chat');
+    assert.equal(getTaskChatStallRestartCountForTests(TEST_CHAT_ID), 1);
+    assert.equal(getTaskChatStallRestartCountForTests(TASK_CHAT_ID), 0, 'builder chat must not stall-restart');
   });
 
   test('stall with null lastProgressAt does not restart', () => {

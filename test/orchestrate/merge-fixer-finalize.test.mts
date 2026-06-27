@@ -224,6 +224,12 @@ describe('merge-fixer finalize idempotency', () => {
     ]);
     const fixerChat = makeFixerChat();
     const { planner } = seedMergingTask(group, fixerChat);
+    updateTask(
+      group,
+      'W1-A',
+      { boardReport: { outcome: 'pass', summary: 'Merge committed' } },
+      planner,
+    );
     enqueueTaskForTests(GROUP_ID, 'W1-B');
     assert.deepEqual(getTaskQueueForTests(GROUP_ID), ['W1-B']);
 

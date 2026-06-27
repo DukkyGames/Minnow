@@ -81,7 +81,7 @@ export const ALL_TOOL_IDS = [
   'board_update_task',
   'board_set_autonomy',
   'board_get_state',
-  'board_report_build_result',
+  'board_report',
   'board_provision_infra',
   'delegate_tasks',
   'bug_add',
