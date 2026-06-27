@@ -4,7 +4,7 @@
 
 import { getOrchestrateBoardElapsedMs } from '../../state/orchestrate-board-store.ts';
 import { findChatById } from '../../state/sessions.ts';
-import { integrationStats } from '../../state/worktree-service.ts';
+import { workspaceLandingStats } from '../../state/worktree-service.ts';
 import type { Chat, OrchestrateBoardState, Usage } from '../../types.ts';
 import { sumUsageSegments } from './stats-math.ts';
 
@@ -85,9 +85,25 @@ function shortPlanLabel(planPath: string): string {
   return base.replace(/\.md$/i, '') || trimmed;
 }
 
+/** Placeholder replaced asynchronously by {@link enrichFinishReportWithRecommendations}. */
+export const FINISH_REPORT_RECOMMENDATIONS_PLACEHOLDER =
+  '_Generating recommendations from the plan…_';
+
+/** Swap the recommendations placeholder for LLM output (or a fallback line). */
+export function mergeFinishReportRecommendations(
+  report: string,
+  recommendationsMarkdown: string,
+): string {
+  const body = recommendationsMarkdown.trim() || '_No follow-up recommendations._';
+  if (report.includes(FINISH_REPORT_RECOMMENDATIONS_PLACEHOLDER)) {
+    return report.replace(FINISH_REPORT_RECOMMENDATIONS_PLACEHOLDER, body);
+  }
+  return report;
+}
+
 /**
  * Deterministic finish report markdown (cached on {@link OrchestrateBoardState.finishReport}).
- * LLM generation can replace this later; the dashboard always has readable content.
+ * Recommendations are filled in asynchronously from the plan via the generations API.
  */
 export function buildDeterministicFinishReport(
   plannerChat: Chat,
@@ -123,12 +139,16 @@ export function buildDeterministicFinishReport(
     `## Next steps`,
     '',
     '1. Review the integration branch diff and run the project locally.',
-    '2. Use **Commit & push** when you are ready to land the work.',
+    '2. Use **Commit & push** to merge the integration branch into your current branch, then push.',
     '3. Start a follow-up chat if you want the assistant to continue from this board.',
+    '',
+    `## Completed tasks`,
+    '',
+    completedTasks || '_No tasks marked complete._',
     '',
     `## Recommended next tasks`,
     '',
-    completedTasks || '_All planned tasks are complete._',
+    FINISH_REPORT_RECOMMENDATIONS_PLACEHOLDER,
   ];
 
   const issues = board.unresolvedIssues;
@@ -178,10 +198,9 @@ export function computeLocalFinishStats(
   };
 }
 
-/** Fetch git diff stats and remote/gh capability flags from the tool server. */
+/** Fetch git diff stats and remote/gh capability flags for landing into workspace. */
 export async function fetchGitFinishStats(
-  boardId: string,
-  baseRef?: string,
+  integrationBranch: string,
 ): Promise<
   Pick<
     FinishBoardStats,
@@ -193,7 +212,18 @@ export async function fetchGitFinishStats(
     | 'gitStatsError'
   >
 > {
-  const res = await integrationStats({ boardId, baseRef });
+  const branch = integrationBranch.trim();
+  if (!branch) {
+    return {
+      filesTouched: null,
+      additions: null,
+      deletions: null,
+      hasRemote: false,
+      hasGh: false,
+      gitStatsError: 'No integration branch',
+    };
+  }
+  const res = await workspaceLandingStats({ branch });
   if (!res.ok) {
     return {
       filesTouched: null,

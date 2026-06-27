@@ -2360,6 +2360,58 @@ export function cleanupBoardIsolation(group: ChatGroup): void {
   );
 }
 
+/** Record that integration work was merged into the workspace and committed. */
+export function markBoardIntegrationLanded(group: ChatGroup, plannerChat: Chat): void {
+  const board = group.orchestrateBoard;
+  if (!board || board.integrationLandedAt) return;
+  board.integrationLandedAt = Date.now();
+  touchChat(plannerChat);
+  scheduleSaveSessions();
+  emitBoardChange(group.id);
+}
+
+/** Clear every git worktree for a board after landing integration in the workspace. */
+export async function clearBoardWorktreesAfterLanding(
+  group: ChatGroup,
+  plannerChat: Chat,
+): Promise<{ ok: boolean; removed?: number; error?: string }> {
+  const board = group.orchestrateBoard;
+  if (!board) return { ok: false, error: 'no_board' };
+  if (board.worktreesClearedAt) return { ok: true, removed: 0 };
+
+  const res = await cleanupBoardWorktreesOp({
+    boardId: group.id,
+    includeIntegration: true,
+  });
+  if (!res.ok) {
+    return { ok: false, error: res.error || res.output || 'cleanup_failed' };
+  }
+
+  for (const task of board.tasks) {
+    task.worktreePath = undefined;
+    task.devPort = undefined;
+    task.apiPort = undefined;
+    for (const chatId of [task.chatId, task.testChatId, task.fixerChatId]) {
+      const id = chatId?.trim();
+      if (!id) continue;
+      const chat = findChatById(id);
+      if (chat?.worktreeRoot) delete chat.worktreeRoot;
+    }
+  }
+
+  const finalChatId = board.finalTest?.chatId?.trim();
+  if (finalChatId) {
+    const finalChat = findChatById(finalChatId);
+    if (finalChat?.worktreeRoot) delete finalChat.worktreeRoot;
+  }
+
+  board.worktreesClearedAt = Date.now();
+  touchChat(plannerChat);
+  scheduleSaveSessions();
+  emitBoardChange(group.id);
+  return { ok: true, removed: typeof res.removed === 'number' ? res.removed : undefined };
+}
+
 /** Start a linked task chat (background stream; does not switch active chat). */
 export async function startTask(
   group: ChatGroup,

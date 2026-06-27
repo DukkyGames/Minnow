@@ -449,6 +449,10 @@ export interface OrchestrateBoardState {
   completionShownAt?: number;
   /** User dismissed the finish dashboard to view the kanban again. */
   dashboardDismissed?: boolean;
+  /** Epoch ms when integration was merged into the workspace and committed (finish dashboard). */
+  integrationLandedAt?: number;
+  /** Epoch ms when the user cleared all board git worktrees from the finish dashboard. */
+  worktreesClearedAt?: number;
   /** Cached markdown finish report (summary, next steps, how-to-run). */
   finishReport?: string;
   /** Full-board integration test after all tasks complete. */

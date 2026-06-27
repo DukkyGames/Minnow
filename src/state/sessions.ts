@@ -777,6 +777,8 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
     ...(maxConcurrentTasks !== undefined ? { maxConcurrentTasks } : {}),
     ...(completionShownAt !== undefined ? { completionShownAt } : {}),
     ...(r.dashboardDismissed === true ? { dashboardDismissed: true } : {}),
+    ...(typeof r.integrationLandedAt === 'number' ? { integrationLandedAt: r.integrationLandedAt } : {}),
+    ...(typeof r.worktreesClearedAt === 'number' ? { worktreesClearedAt: r.worktreesClearedAt } : {}),
     ...(typeof r.finishReport === 'string' && r.finishReport.trim()
       ? { finishReport: r.finishReport.trim() }
       : {}),

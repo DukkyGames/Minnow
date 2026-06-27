@@ -368,9 +368,9 @@ export async function removeWorktree({ boardId, slotId }) {
 
 /**
  * Remove all worktrees for a board (on completion / delete) and the board dir.
- * @param {{ boardId: string }} input
+ * @param {{ boardId: string, includeIntegration?: boolean }} input
  */
-export async function cleanupBoardWorktrees({ boardId }) {
+export async function cleanupBoardWorktrees({ boardId, includeIntegration = false }) {
   const dir = getBoardWorktreesDir(boardId);
   if (!isPathUnderWorktreesRoot(dir)) {
     return { ok: false, error: 'refusing to clean path outside the worktrees root' };
@@ -384,8 +384,8 @@ export async function cleanupBoardWorktrees({ boardId }) {
   let removed = 0;
   let keptIntegration = false;
   for (const slot of slots) {
-    // Keep the integration worktree so MIN-208 can commit/push from it.
-    if (slot === 'integration') {
+    // Keep integration until the user lands work in the workspace (MIN-208 finish dashboard).
+    if (!includeIntegration && slot === 'integration') {
       keptIntegration = true;
       continue;
     }
@@ -439,6 +439,131 @@ export async function integrationStats({ boardId, baseRef }) {
     hasRemote,
     hasGh,
   };
+}
+
+/**
+ * Diff stats for landing board work: integration branch vs the workspace checkout
+ * (`git diff --numstat HEAD...<branch>` when not yet merged).
+ * @param {{ branch: string }} input
+ */
+export async function workspaceLandingStats({ branch }) {
+  const workspace = getWorkspaceRoot();
+  const intBranch = (branch && branch.trim()) || '';
+  if (!intBranch) return { ok: false, error: 'branch required' };
+  if (!(await branchExists(intBranch))) {
+    return { ok: false, error: 'integration branch not found' };
+  }
+
+  const current = await git(['branch', '--show-current'], workspace);
+  const currentBranch = `${current.stdout ?? ''}`.trim() || null;
+
+  const ancestor = await git(['merge-base', '--is-ancestor', intBranch, 'HEAD'], workspace);
+  const alreadyLanded = ancestor.code === 0;
+
+  const diff = alreadyLanded
+    ? await git(['diff', '--numstat'], workspace)
+    : await git(['diff', '--numstat', `HEAD...${intBranch}`], workspace);
+  if (!ok(diff)) return { ok: false, output: out(diff) };
+  const parsed = parseGitNumstat(diff.stdout ?? '');
+
+  const remote = await git(['remote', 'get-url', 'origin'], workspace);
+  const hasRemote = ok(remote) && Boolean(`${remote.stdout ?? ''}`.trim());
+
+  let hasGh = false;
+  try {
+    const gh = await runProcess('gh', ['--version'], { cwd: workspace, timeout: 10_000 });
+    hasGh = gh.code === 0;
+  } catch {
+    hasGh = false;
+  }
+
+  return {
+    ok: true,
+    additions: parsed.additions,
+    deletions: parsed.deletions,
+    fileCount: parsed.paths.length,
+    hasRemote,
+    hasGh,
+    alreadyLanded,
+    currentBranch,
+  };
+}
+
+/**
+ * Merge the board integration branch into the user's workspace checkout (current branch).
+ * @param {{ branch: string, message?: string }} input
+ */
+export async function mergeIntegrationIntoWorkspace({ branch, message }) {
+  const workspace = getWorkspaceRoot();
+  const intBranch = (branch && branch.trim()) || '';
+  if (!intBranch) return { ok: false, error: 'branch required' };
+  if (!(await branchExists(intBranch))) {
+    return { ok: false, error: 'integration branch not found' };
+  }
+
+  const mergeHead = await git(['rev-parse', '--verify', 'MERGE_HEAD'], workspace);
+  if (mergeHead.code === 0) {
+    return {
+      ok: false,
+      error: 'workspace_merge_in_progress',
+      output: 'Resolve or abort the in-progress merge in your workspace first.',
+    };
+  }
+
+  const ancestor = await git(['merge-base', '--is-ancestor', intBranch, 'HEAD'], workspace);
+  if (ancestor.code === 0) {
+    return { ok: true, merged: false, alreadyUpToDate: true };
+  }
+
+  const mergeMsg = (message && message.trim()) || `Merge ${intBranch}`;
+  const merge = await git(['merge', '--no-edit', intBranch, '-m', mergeMsg], workspace);
+  if (!ok(merge)) {
+    const conflict = await git(['rev-parse', '--verify', 'MERGE_HEAD'], workspace);
+    return {
+      ok: false,
+      merged: false,
+      conflict: conflict.code === 0,
+      output: out(merge),
+      error: conflict.code === 0 ? 'merge_conflict' : 'merge_failed',
+    };
+  }
+  return { ok: true, merged: true, output: out(merge) };
+}
+
+/**
+ * Open a GitHub PR for the workspace's current branch via `gh pr create`.
+ * @param {{ title?: string, body?: string }} input
+ */
+export async function openWorkspacePr({ title, body }) {
+  const workspace = getWorkspaceRoot();
+  const branchResult = await git(['branch', '--show-current'], workspace);
+  const branch = `${branchResult.stdout ?? ''}`.trim();
+  if (!branch) {
+    return { ok: false, error: 'detached_head', output: 'Checkout a branch before opening a PR.' };
+  }
+
+  let ghAvailable = false;
+  try {
+    const gh = await runProcess('gh', ['--version'], { cwd: workspace, timeout: 10_000 });
+    ghAvailable = gh.code === 0;
+  } catch {
+    ghAvailable = false;
+  }
+  if (!ghAvailable) {
+    return { ok: false, error: 'gh_unavailable', output: 'GitHub CLI (gh) is not installed' };
+  }
+
+  const args = ['pr', 'create', '--head', branch];
+  const titleText = (title && title.trim()) || `Orchestrate: ${branch}`;
+  const bodyText = (body && body.trim()) || '';
+  args.push('--title', titleText);
+  if (bodyText) args.push('--body', bodyText);
+
+  const r = await runProcess('gh', args, { cwd: workspace, timeout: 120_000 });
+  const text = out(r);
+  const urlMatch = text.match(/https?:\/\/\S+/);
+  if (!ok(r)) return { ok: false, output: text, error: 'gh_failed' };
+  return { ok: true, url: urlMatch?.[0], output: text };
 }
 
 /**
