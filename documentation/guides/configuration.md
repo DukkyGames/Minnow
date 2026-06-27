@@ -2,6 +2,8 @@
 
 Minnow is local-first: all durable state lives under your **Minnow home** directory. Nothing leaves your machine except requests to the model providers you configure.
 
+For a complete list of every setting (UI sections, config keys, tools, and env vars), see **[settings-reference.md](settings-reference.md)**.
+
 ## Minnow home (`~/.minnow`)
 
 Default: `~/.minnow` (`%USERPROFILE%\.minnow` on Windows). The path is printed at startup as `Minnow data: <path>`. Override with `MINNOW_HOME=<dir>` (handy for tests and isolated profiles).
