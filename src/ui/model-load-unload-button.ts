@@ -17,18 +17,24 @@ export function getModelLoadUnloadPhase(): ModelLoadUnloadPhase | null {
   return phase;
 }
 
+function emitModelLoadUnloadChanged(): void {
+  if (typeof document === 'undefined') return;
+  const CustomEventCtor = (document.defaultView ?? globalThis).CustomEvent;
+  document.dispatchEvent(new CustomEventCtor('minnow:model-load-unload-changed'));
+}
+
 /** Mark the start of a load/unload action. */
 export function beginModelLoadUnload(nextPhase: ModelLoadUnloadPhase): void {
   inFlight = true;
   phase = nextPhase;
-  document.dispatchEvent(new CustomEvent('minnow:model-load-unload-changed'));
+  emitModelLoadUnloadChanged();
 }
 
 /** Mark the end of a load/unload action. */
 export function endModelLoadUnload(): void {
   inFlight = false;
   phase = null;
-  document.dispatchEvent(new CustomEvent('minnow:model-load-unload-changed'));
+  emitModelLoadUnloadChanged();
 }
 
 function busyLabel(nextPhase: ModelLoadUnloadPhase | null): string {
@@ -43,6 +49,7 @@ export function setModelLoadUnloadButtonBusy(
   const label = busyLabel(nextPhase);
   btn.disabled = true;
   btn.classList.add('is-busy');
+  btn.setAttribute('aria-busy', 'true');
   btn.innerHTML =
     '<span class="model-load-unload-spinner" aria-hidden="true"></span>' +
     `<span class="model-load-unload-label">${label}</span>`;
@@ -57,6 +64,7 @@ export function setModelLoadUnloadButtonIdle(
   hasSelection: boolean,
 ): void {
   btn.classList.remove('is-busy');
+  btn.removeAttribute('aria-busy');
   btn.textContent = loaded ? 'Unload' : 'Load';
   btn.setAttribute('aria-label', loaded ? 'Unload model' : 'Load model');
   btn.disabled = !hasSelection;
@@ -78,6 +86,7 @@ export function setModelLoadUnloadButtonUnsupported(
   btn.hidden = true;
   btn.disabled = true;
   btn.classList.remove('is-busy');
+  btn.removeAttribute('aria-busy');
   btn.textContent = 'Load';
   btn.setAttribute('aria-label', 'Load model');
   btn.title = serverMode
