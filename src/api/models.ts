@@ -23,6 +23,15 @@ import { isModelLoaded } from './model-loaded-state';
 import type { ModelInfo } from '../types';
 
 export { contextLengthFromModelRow } from '../lib/context-length';
+import {
+  beginModelLoadUnload,
+  endModelLoadUnload,
+  getModelLoadUnloadPhase,
+  isModelLoadUnloadBusy,
+  setModelLoadUnloadButtonBusy,
+  setModelLoadUnloadButtonIdle,
+  setModelLoadUnloadButtonUnsupported,
+} from '../ui/model-load-unload-button';
 import { updateModelStateDot } from '../ui/model-state-dot';
 import {
   catalogCapabilitiesFromRow,
@@ -37,8 +46,6 @@ import { updateStrip } from '../ui/stats';
 
 export { modelCache };
 export { isModelLoaded } from './model-loaded-state';
-
-let modelLoadUnloadInFlight = false;
 
 import type { LmModelRecord } from '../types';
 
@@ -98,35 +105,22 @@ export function updateModelLoadUnloadButtons(): void {
   const supportsUnload =
     serverMode && opt?.getAttribute('data-supports-load-unload') === '1';
 
-  btn.hidden = !supportsUnload;
   if (!supportsUnload) {
-    btn.disabled = true;
-    btn.textContent = 'Load';
-    btn.setAttribute('aria-label', 'Load model');
-    btn.title = serverMode
-      ? 'Model load/unload is not supported for this provider'
-      : 'Start with npm start to load or unload models';
+    setModelLoadUnloadButtonUnsupported(btn, serverMode);
     return;
   }
 
+  btn.hidden = false;
   const raw = sel.value.trim();
   const row = raw ? getModelRowForSelectOrCanonicalId(raw) : undefined;
   const loaded = row ? isModelLoaded(row.state) : false;
-  const busy = modelLoadUnloadInFlight;
 
-  btn.textContent = loaded ? 'Unload' : 'Load';
-  btn.setAttribute('aria-label', loaded ? 'Unload model' : 'Load model');
-  btn.disabled = busy || !raw;
-
-  if (busy) {
-    btn.title = 'Model action in progress…';
-  } else if (!raw) {
-    btn.title = 'Select a model to load or unload';
-  } else if (loaded) {
-    btn.title = 'Unload selected model from VRAM';
-  } else {
-    btn.title = 'Load selected model into VRAM';
+  if (isModelLoadUnloadBusy()) {
+    setModelLoadUnloadButtonBusy(btn, getModelLoadUnloadPhase());
+    return;
   }
+
+  setModelLoadUnloadButtonIdle(btn, loaded, Boolean(raw));
 }
 
 async function postModelAction(url: string, body: Record<string, string>): Promise<void> {
@@ -197,7 +191,7 @@ export async function unloadModel(modelId: string, providerId: string): Promise<
 
 /** Load the model currently selected in the topbar picker. */
 export async function loadSelectedModel(): Promise<void> {
-  if (modelLoadUnloadInFlight) return;
+  if (isModelLoadUnloadBusy()) return;
   const sel = document.getElementById('modelSelect') as HTMLSelectElement;
   const raw = sel.value.trim();
   if (!raw) return;
@@ -207,8 +201,10 @@ export async function loadSelectedModel(): Promise<void> {
   const providerId = decoded?.providerId ?? chat.providerId;
   if (!providerId) return;
 
-  modelLoadUnloadInFlight = true;
+  beginModelLoadUnload('load');
   updateModelLoadUnloadButtons();
+  updateModelStateDot(raw);
+  syncModelSelectPicker();
   setStatus('spin', 'Loading model…');
   try {
     await loadModel(modelId, providerId);
@@ -217,8 +213,10 @@ export async function loadSelectedModel(): Promise<void> {
     const message = err instanceof Error ? err.message : String(err);
     setStatus('err', message);
   } finally {
-    modelLoadUnloadInFlight = false;
+    endModelLoadUnload();
     updateModelLoadUnloadButtons();
+    updateModelStateDot(raw);
+    syncModelSelectPicker();
   }
 }
 
@@ -238,7 +236,7 @@ export async function toggleSelectedModelLoad(): Promise<void> {
 
 /** Unload the model currently selected in the topbar picker. */
 export async function unloadSelectedModel(): Promise<void> {
-  if (modelLoadUnloadInFlight) return;
+  if (isModelLoadUnloadBusy()) return;
   const sel = document.getElementById('modelSelect') as HTMLSelectElement;
   const raw = sel.value.trim();
   if (!raw) return;
@@ -248,8 +246,10 @@ export async function unloadSelectedModel(): Promise<void> {
   const providerId = decoded?.providerId ?? chat.providerId;
   if (!providerId) return;
 
-  modelLoadUnloadInFlight = true;
+  beginModelLoadUnload('unload');
   updateModelLoadUnloadButtons();
+  updateModelStateDot(raw);
+  syncModelSelectPicker();
   setStatus('spin', 'Unloading model…');
   try {
     await unloadModel(modelId, providerId);
@@ -258,8 +258,10 @@ export async function unloadSelectedModel(): Promise<void> {
     const message = err instanceof Error ? err.message : String(err);
     setStatus('err', message);
   } finally {
-    modelLoadUnloadInFlight = false;
+    endModelLoadUnload();
     updateModelLoadUnloadButtons();
+    updateModelStateDot(raw);
+    syncModelSelectPicker();
   }
 }
 

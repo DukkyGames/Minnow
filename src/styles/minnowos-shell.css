@@ -304,6 +304,14 @@
   background: color-mix(in srgb, var(--mn-accent) 18%, var(--mn-bg));
 }
 
+.mn-os-model-menu__action.is-busy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  opacity: 1;
+}
+
 .mn-os-mb-icon,
 .mn-os-mb-bell {
   position: relative;
