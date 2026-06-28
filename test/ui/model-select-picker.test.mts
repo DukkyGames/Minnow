@@ -210,6 +210,53 @@ describe('syncModelSelectPicker', () => {
     }
   });
 
+  test('shouldKeepModelMenuOpenAfterSelect stays open for unloadable local models', async () => {
+    const { Window } = await import('happy-dom');
+    const win = new Window();
+    const doc = win.document;
+    doc.body.innerHTML = `
+      <select id="modelSelect">
+        <option value="local/unloaded" data-supports-load-unload="1">Unloaded local</option>
+        <option value="local/loaded" data-supports-load-unload="1">Loaded local</option>
+        <option value="cloud/remote" data-provider-host="cloud">Cloud model</option>
+      </select>
+    `;
+
+    const prevDocument = globalThis.document;
+    const prevWindow = globalThis.window;
+    const prevFetch = globalThis.fetch;
+    (globalThis as { document: Document }).document = doc as unknown as Document;
+    (globalThis as { window: Window }).window = win as unknown as Window & typeof globalThis.window;
+    globalThis.fetch = async (input: RequestInfo | URL) => {
+      if (String(input).includes('/api/config/ping')) {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return prevFetch(input);
+    };
+
+    try {
+      const { detectConfigServer } = await import('../../src/config/storage-mode.ts');
+      await detectConfigServer();
+
+      const { modelCache } = await import('../../src/app-state.ts');
+      const { shouldKeepModelMenuOpenAfterSelect } = await import(
+        '../../src/ui/model-select-picker.ts'
+      );
+
+      modelCache.clear();
+      modelCache.set('local/unloaded', { id: 'local/unloaded', state: 'not loaded' });
+      modelCache.set('local/loaded', { id: 'local/loaded', state: 'loaded' });
+
+      assert.equal(shouldKeepModelMenuOpenAfterSelect('local/unloaded'), true);
+      assert.equal(shouldKeepModelMenuOpenAfterSelect('local/loaded'), false);
+      assert.equal(shouldKeepModelMenuOpenAfterSelect('cloud/remote'), false);
+    } finally {
+      (globalThis as { document: Document }).document = prevDocument;
+      (globalThis as { window: Window }).window = prevWindow;
+      globalThis.fetch = prevFetch;
+    }
+  });
+
   test('menu rows keep full optionText for long labels (BUG-017)', async () => {
     const longLabel =
       'Qwen3.6 35B A3b · Q4_K_M · extended context variant name';
