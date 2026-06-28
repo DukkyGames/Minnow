@@ -33,7 +33,6 @@ const SETTINGS_SECTION_IDS = [
   'editor',
   'skills',
   'webhooks',
-  'oauth',
   'features',
   'evals',
 ];
@@ -119,7 +118,7 @@ describe('settings page HTML', () => {
   });
 
   test('SETTINGS_SECTION_IDS matches canonical section count', () => {
-    assert.equal(SETTINGS_SECTION_IDS.length, 27);
+    assert.equal(SETTINGS_SECTION_IDS.length, 26);
   });
 
   test('prompts hub mount exists in index.html', () => {

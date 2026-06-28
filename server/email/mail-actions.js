@@ -1,29 +1,13 @@
 /**
- * Mail mutation router — IMAP vs Gmail API vs Microsoft Graph.
+ * Mail mutation router — IMAP flag, move, archive, and delete actions.
  */
 
-import { getEmailAccount } from './accounts.js';
 import {
   archiveImapMessage,
   deleteImapMessage,
   moveImapMessage,
   setImapMessageFlags,
 } from './imap-actions.js';
-import * as gmail from './gmail-api.js';
-import * as graphMail from './graph-mail.js';
-
-/**
- * @param {import('./accounts.js').EmailAccount} account
- */
-function resolveBackend(account) {
-  if (account.authType === 'oauth') {
-    if (account.provider === 'microsoft') {
-      return 'graph';
-    }
-    return 'gmail';
-  }
-  return 'imap';
-}
 
 /**
  * @param {string} accountId
@@ -31,17 +15,6 @@ function resolveBackend(account) {
  * @param {{ seen?: boolean, flagged?: boolean }} flags
  */
 export async function setMessageFlags(accountId, messageKey, flags) {
-  const account = await getEmailAccount(accountId);
-  if (!account) {
-    throw new Error('Email account not found');
-  }
-  const backend = resolveBackend(account);
-  if (backend === 'graph') {
-    return graphMail.setGraphMessageFlags(accountId, messageKey, flags);
-  }
-  if (backend === 'gmail') {
-    return gmail.setGmailMessageFlags(accountId, messageKey, flags);
-  }
   return setImapMessageFlags(accountId, messageKey, flags);
 }
 
@@ -51,17 +24,6 @@ export async function setMessageFlags(accountId, messageKey, flags) {
  * @param {string} destFolder
  */
 export async function moveMessage(accountId, messageKey, destFolder) {
-  const account = await getEmailAccount(accountId);
-  if (!account) {
-    throw new Error('Email account not found');
-  }
-  const backend = resolveBackend(account);
-  if (backend === 'graph') {
-    return graphMail.moveGraphMessage(accountId, messageKey, destFolder);
-  }
-  if (backend === 'gmail') {
-    return gmail.moveGmailMessage(accountId, messageKey, destFolder);
-  }
   return moveImapMessage(accountId, messageKey, destFolder);
 }
 
@@ -70,17 +32,6 @@ export async function moveMessage(accountId, messageKey, destFolder) {
  * @param {string} messageKey
  */
 export async function archiveMessage(accountId, messageKey) {
-  const account = await getEmailAccount(accountId);
-  if (!account) {
-    throw new Error('Email account not found');
-  }
-  const backend = resolveBackend(account);
-  if (backend === 'graph') {
-    return graphMail.archiveGraphMessage(accountId, messageKey);
-  }
-  if (backend === 'gmail') {
-    return gmail.archiveGmailMessage(accountId, messageKey);
-  }
   return archiveImapMessage(accountId, messageKey);
 }
 
@@ -90,17 +41,6 @@ export async function archiveMessage(accountId, messageKey) {
  * @param {{ permanent?: boolean }} [options]
  */
 export async function deleteMessage(accountId, messageKey, options = {}) {
-  const account = await getEmailAccount(accountId);
-  if (!account) {
-    throw new Error('Email account not found');
-  }
-  const backend = resolveBackend(account);
-  if (backend === 'graph') {
-    return graphMail.deleteGraphMessage(accountId, messageKey, options);
-  }
-  if (backend === 'gmail') {
-    return gmail.deleteGmailMessage(accountId, messageKey, options);
-  }
   return deleteImapMessage(accountId, messageKey, options);
 }
 

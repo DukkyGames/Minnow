@@ -25,7 +25,7 @@ The **authoritative reference** is [`documentation/context.md`](documentation/co
 
 - **`npm test`** runs the full suite (`node --test` + `tsx`, several hundred tests).
 - **`npx tsc --noEmit`** for type checking (no separate ESLint config).
-- Scoped suites: `npm run test:memory|brain|engine|lsp|mcp|browser|skills|attachments|research|benchmark|evals|calendar|email|oauth|webhooks|notifications|voice|servers|plugins|terminal-pty|ui-designer|scheduler`. See `package.json` for exact globs.
+- Scoped suites: `npm run test:memory|brain|engine|lsp|mcp|browser|skills|attachments|research|benchmark|evals|calendar|email|webhooks|notifications|voice|servers|plugins|terminal-pty|ui-designer|scheduler`. See `package.json` for exact globs.
 - Many TS/UI suites run under `tsx` with `--import ./test/test-loader.mjs` (the loader stubs `.css` and xterm). Some use `--experimental-test-module-mocks`.
 
 ## Building & packaging

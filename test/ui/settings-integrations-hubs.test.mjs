@@ -9,7 +9,7 @@ describe('settings integrations hubs', () => {
   test('hubForArea maps legacy integration areas', () => {
     assert.equal(hubForArea('search'), 'web-research');
     assert.equal(hubForArea('mcp'), 'dev-stack');
-    assert.equal(hubForArea('oauth'), 'external');
+    assert.equal(hubForArea('webhooks'), 'external');
     assert.equal(hubForArea('skills'), 'tools-skills');
   });
 
@@ -24,7 +24,6 @@ describe('settings integrations hubs', () => {
       'lsp',
       'editor',
       'webhooks',
-      'oauth',
     ];
     for (const area of integrationAreas) {
       assert.ok(hubForArea(area), `missing hub for ${area}`);

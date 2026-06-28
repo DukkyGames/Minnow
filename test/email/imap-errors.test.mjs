@@ -38,7 +38,7 @@ describe('formatImapError', () => {
     assert.match(message, /Invalid credentials/);
   });
 
-  test('maps Microsoft basic-auth failures to OAuth guidance', () => {
+  test('maps Microsoft basic-auth failures to actionable guidance', () => {
     const message = formatImapError(outlookAccount, {
       message: 'Command failed',
       responseText: 'Authentication unsuccessful',

@@ -5,8 +5,11 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
+  defaultComposerReasoningLevel,
+  getComposerReasoningLevelOptions,
   inferReasoningOptionsFromModelId,
   modelHasSelectableReasoningEffort,
+  modelShowsComposerBrainToggle,
   modelUsesComposerReasoningDropdown,
   modelUsesComposerThinkingToggle,
   normalizeReasoningAllowedOptions,
@@ -66,17 +69,36 @@ describe('composer reasoning control helpers', () => {
     const caps = { reasoningAllowedOptions: ['low', 'medium', 'high'] };
     assert.equal(modelUsesComposerReasoningDropdown(caps), true);
     assert.equal(modelUsesComposerThinkingToggle(caps), false);
+    assert.equal(modelShowsComposerBrainToggle(caps), true);
   });
 
   test('brain toggle when only off/on are allowed', () => {
     const caps = { reasoningAllowedOptions: ['off', 'on'] };
     assert.equal(modelUsesComposerReasoningDropdown(caps), false);
     assert.equal(modelUsesComposerThinkingToggle(caps), true);
+    assert.equal(modelShowsComposerBrainToggle(caps), true);
   });
 
   test('brain toggle when reasoning is advertised without explicit options', () => {
     assert.equal(modelUsesComposerThinkingToggle({ reasoning: true }), true);
     assert.equal(modelUsesComposerThinkingToggle({ reasoning: false }), false);
+  });
+
+  test('level options exclude off and on', () => {
+    assert.deepEqual(
+      getComposerReasoningLevelOptions(['off', 'low', 'medium', 'high', 'on']),
+      ['low', 'medium', 'high'],
+    );
+  });
+
+  test('defaultComposerReasoningLevel prefers catalog default', () => {
+    assert.equal(
+      defaultComposerReasoningLevel({
+        reasoningAllowedOptions: ['low', 'medium', 'high'],
+        reasoningDefault: 'high',
+      }),
+      'high',
+    );
   });
 });
 
@@ -139,6 +161,17 @@ describe('resolveEffectiveReasoningEffort', () => {
 
   test('falls back to catalog default when chat override is unset', () => {
     assert.equal(resolveEffectiveReasoningEffort({}, caps, 'off'), 'medium');
+  });
+
+  test('honors explicit off even when catalog omits off from allowed list', () => {
+    assert.equal(
+      resolveEffectiveReasoningEffort(
+        { reasoningEffort: 'off' },
+        { reasoningAllowedOptions: ['low', 'medium', 'high'] },
+        'on',
+      ),
+      'off',
+    );
   });
 
   test('ignores chat override that is not in allowed list', () => {

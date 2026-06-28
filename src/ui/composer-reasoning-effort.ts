@@ -1,12 +1,13 @@
 /**
- * Composer reasoning effort dropdown — shown when the model exposes level options
- * (low / medium / high). Binary off/on models use the brain toggle instead.
+ * Composer reasoning effort dropdown — level options (low / medium / high) beside the brain
+ * toggle. Hidden when reasoning is off or the model only supports binary off/on.
  */
 
 import { resolveThinkingMode } from '../agents/resolve-thinking';
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import {
   formatReasoningEffortLabel,
+  getComposerReasoningLevelOptions,
   modelUsesComposerReasoningDropdown,
   normalizeReasoningAllowedOptions,
   resolveEffectiveReasoningEffort,
@@ -33,26 +34,28 @@ function effectiveCapabilities(): ReturnType<typeof resolveSendCapabilities> {
   return resolveSendCapabilities(providerId, modelId);
 }
 
-function getAllowedOptions(): EffortOption[] {
+function getLevelOptions(): EffortOption[] {
   const caps = effectiveCapabilities();
-  return normalizeReasoningAllowedOptions(caps?.reasoningAllowedOptions ?? []);
+  const allowed = normalizeReasoningAllowedOptions(caps?.reasoningAllowedOptions ?? []);
+  return getComposerReasoningLevelOptions(allowed);
 }
 
-/** Drop saved effort when the active model no longer allows it. */
+/** Drop saved effort when the active model no longer allows it (except explicit off). */
 function validateAndClearInvalidEffort(): void {
   const chat = getActiveChat();
-  const allowed = getAllowedOptions();
+  if (chat.reasoningEffort === 'off') return;
+  const levels = getLevelOptions();
   if (!chat.reasoningEffort) return;
-  if (allowed.includes(chat.reasoningEffort)) return;
+  if (levels.includes(chat.reasoningEffort)) return;
   delete chat.reasoningEffort;
   touchChat(chat);
   scheduleSaveSessions();
 }
 
-function resolveDisplayEffort(allowed: EffortOption[]): EffortOption | undefined {
-  if (allowed.length === 0) return undefined;
+function resolveDisplayEffort(levels: EffortOption[]): EffortOption | undefined {
+  if (levels.length === 0) return undefined;
   const chat = getActiveChat();
-  if (chat.reasoningEffort && allowed.includes(chat.reasoningEffort)) {
+  if (chat.reasoningEffort && levels.includes(chat.reasoningEffort)) {
     return chat.reasoningEffort;
   }
   const caps = effectiveCapabilities();
@@ -62,14 +65,16 @@ function resolveDisplayEffort(allowed: EffortOption[]): EffortOption | undefined
     agentKey: agent?.id ?? null,
     chatThinkingMode: chat.thinkingMode,
   });
-  return resolveEffectiveReasoningEffort(chat, caps, resolved.mode);
+  const effort = resolveEffectiveReasoningEffort(chat, caps, resolved.mode);
+  if (effort && levels.includes(effort)) return effort;
+  return levels.includes('medium') ? 'medium' : levels[0];
 }
 
-function populateSelect(allowed: EffortOption[]): void {
+function populateSelect(levels: EffortOption[]): void {
   if (!selectEl) return;
-  const display = resolveDisplayEffort(allowed);
+  const display = resolveDisplayEffort(levels);
   selectEl.replaceChildren();
-  for (const option of allowed) {
+  for (const option of levels) {
     const el = document.createElement('option');
     el.value = option;
     el.textContent = formatReasoningEffortLabel(option);
@@ -80,14 +85,21 @@ function populateSelect(allowed: EffortOption[]): void {
 
 function onSelectChange(): void {
   if (!selectEl || selectEl.disabled) return;
-  const allowed = getAllowedOptions();
+  const levels = getLevelOptions();
   const value = selectEl.value as EffortOption;
-  if (!allowed.includes(value)) return;
+  if (!levels.includes(value)) return;
 
   const chat = getActiveChat();
   chat.reasoningEffort = value;
   touchChat(chat);
   scheduleSaveSessions();
+  syncThinkingControlFromActiveChat();
+}
+
+function isDropdownVisible(): boolean {
+  const caps = effectiveCapabilities();
+  if (!modelUsesComposerReasoningDropdown(caps)) return false;
+  return getActiveChat().reasoningEffort !== 'off';
 }
 
 /** Wire composer reasoning effort select. */
@@ -103,14 +115,15 @@ export function syncComposerReasoningEffortFromActiveChat(): void {
   validateAndClearInvalidEffort();
 
   const caps = effectiveCapabilities();
-  const visible = modelUsesComposerReasoningDropdown(caps);
+  const hasLevels = modelUsesComposerReasoningDropdown(caps);
+  const visible = hasLevels && isDropdownVisible();
   const disabled = isActiveChatStreaming() || isComposerRecoveryBlocked();
-  const allowed = getAllowedOptions();
+  const levels = getLevelOptions();
 
   if (wrapEl) wrapEl.classList.toggle('hidden', !visible);
   if (selectEl) {
     selectEl.disabled = !visible || disabled;
-    if (visible) populateSelect(allowed);
+    if (visible) populateSelect(levels);
   }
 
   syncThinkingControlFromActiveChat();

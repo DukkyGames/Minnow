@@ -26,7 +26,6 @@ import {
 } from './server/calendar/reminders.js';
 import { startEmailPollLoop, stopEmailPollLoop } from './server/email/poller.js';
 import { setSchedulerServerBaseUrl } from './server/scheduler/server-base-url.js';
-import { setOAuthRedirectBase } from './server/oauth/redirect-base.js';
 import { shutdownSchedulerRuns } from './server/scheduler/runner.js';
 import { shutdownAllServers } from './server/servers/index.js';
 import { shutdownAllModelServes } from './server/models/index.js';
@@ -212,12 +211,7 @@ async function main() {
   console.log(`Calendar API: ${localUrl.replace(/\/$/, '')}/api/calendar/ping`);
   console.log(`Email API: ${localUrl.replace(/\/$/, '')}/api/email/ping`);
   const schedulerBaseUrl = localUrl.replace(/\/$/, '');
-  const oauthRedirectBase =
-    networkAccess === 'lan' && networkUrls.length > 0
-      ? networkUrls[0].replace(/\/$/, '')
-      : localUrl.replace(/\/$/, '');
   setSchedulerServerBaseUrl(schedulerBaseUrl);
-  setOAuthRedirectBase(oauthRedirectBase);
   await startSchedulerTickLoop({ baseUrl: schedulerBaseUrl });
   startCalendarReminderLoop();
   startEmailPollLoop();

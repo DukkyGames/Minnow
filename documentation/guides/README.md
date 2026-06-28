@@ -11,7 +11,5 @@ Task-oriented documentation. For the authoritative, exhaustive architecture refe
 | [configuration.md](configuration.md) | `~/.minnow` layout, `config.json`, providers, encrypted secrets, env vars. |
 | [settings-reference.md](settings-reference.md) | Full inventory of every setting (UI, config keys, tools, env vars). |
 | [troubleshooting.md](troubleshooting.md) | Common problems and fixes. |
-| [oauth-google.md](oauth-google.md) | Google OAuth for Email + Calendar. |
-| [oauth-microsoft.md](oauth-microsoft.md) | Microsoft OAuth for Email + Calendar. |
 
 New to the project? Start with **setup.md**, then skim **apps.md**.

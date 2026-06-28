@@ -84,7 +84,7 @@ export function formatImapError(account, err) {
   if (isMicrosoftHost(host) && (authFailed || isMicrosoftBasicAuthFailure(detail))) {
     return (
       'Microsoft no longer accepts normal mailbox passwords for Outlook/Office 365 IMAP/SMTP in most accounts. ' +
-      'Minnow does not support Microsoft OAuth mail yet, so Outlook accounts cannot use this password form.'
+      'Use an app-specific password if your tenant still allows basic auth, or connect a provider that supports IMAP passwords (e.g. Fastmail).'
     );
   }
 

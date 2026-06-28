@@ -52,7 +52,6 @@ const SECTION_SEARCH_ALIASES: Partial<
   'work-agents': ['work agent', 'worker'],
   mcp: ['model context protocol'],
   webhooks: ['outgoing webhook', 'hmac', 'automation', 'signed events'],
-  oauth: ['google', 'microsoft', 'gmail', 'outlook', 'sign in', 'calendar oauth'],
   lsp: ['language server', 'typescript server'],
   audio: ['microphone', 'speaker', 'devices', 'dictation', 'echo', 'gain'],
 };

@@ -3,7 +3,6 @@
  */
 
 import '../styles/email.css';
-import '../styles/oauth-connect.css';
 
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
 import { navigateToDesktop } from '../os/router';

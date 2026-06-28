@@ -106,7 +106,7 @@ describe('syncComposerReasoningEffortFromActiveChat', () => {
     assert.ok(!thinkingControl?.classList.contains('hidden'));
   });
 
-  test('shows level dropdown and hides brain toggle when low/medium/high exist', () => {
+  test('shows brain and level dropdown when low/medium/high exist and reasoning is on', () => {
     const win = setupDom();
     const chat = seedChat();
 
@@ -132,15 +132,84 @@ describe('syncComposerReasoningEffortFromActiveChat', () => {
     const dropdownWrap = document.getElementById('composerReasoningEffortWrap');
     const select = document.getElementById('composerReasoningEffortSelect') as HTMLSelectElement;
     const thinkingControl = document.getElementById('composerThinkingControl');
+    const brainBtn = thinkingControl?.querySelector('.thinking-toggle-btn') as HTMLButtonElement;
 
     assert.ok(!dropdownWrap?.classList.contains('hidden'));
     assert.equal(select.options.length, 3);
     assert.equal(select.value, 'medium');
-    assert.ok(thinkingControl?.classList.contains('hidden'));
+    assert.ok(!thinkingControl?.classList.contains('hidden'));
+    assert.equal(brainBtn?.getAttribute('aria-pressed'), 'true');
 
     select.value = 'high';
     select.dispatchEvent(new win.Event('change', { bubbles: true }));
 
     assert.equal(chat.reasoningEffort, 'high');
+  });
+
+  test('brain off hides dropdown and sets reasoningEffort to off', () => {
+    setupDom();
+    const chat = seedChat({ reasoningEffort: 'medium' });
+
+    modelCache.set(encodeModelSelectKey('openai', 'gpt-5-preview'), {
+      id: 'gpt-5-preview',
+      capabilities: {
+        vision: false,
+        tools: null,
+        streaming: null,
+        grammar: null,
+        reasoning: true,
+        reasoningAllowedOptions: ['low', 'medium', 'high'],
+        reasoningDefault: 'medium',
+        contextLength: null,
+        loadState: null,
+      },
+    });
+
+    initThinkingControl();
+    initComposerReasoningEffort();
+    syncComposerReasoningEffortFromActiveChat();
+
+    const brainBtn = document.querySelector('.thinking-toggle-btn') as HTMLButtonElement;
+    brainBtn.click();
+
+    const dropdownWrap = document.getElementById('composerReasoningEffortWrap');
+    assert.equal(chat.reasoningEffort, 'off');
+    assert.ok(dropdownWrap?.classList.contains('hidden'));
+    assert.equal(brainBtn.getAttribute('aria-pressed'), 'false');
+  });
+
+  test('brain on restores default level and shows dropdown again', () => {
+    setupDom();
+    const chat = seedChat({ reasoningEffort: 'off' });
+
+    modelCache.set(encodeModelSelectKey('openai', 'gpt-5-preview'), {
+      id: 'gpt-5-preview',
+      capabilities: {
+        vision: false,
+        tools: null,
+        streaming: null,
+        grammar: null,
+        reasoning: true,
+        reasoningAllowedOptions: ['low', 'medium', 'high'],
+        reasoningDefault: 'medium',
+        contextLength: null,
+        loadState: null,
+      },
+    });
+
+    initThinkingControl();
+    initComposerReasoningEffort();
+    syncComposerReasoningEffortFromActiveChat();
+
+    const brainBtn = document.querySelector('.thinking-toggle-btn') as HTMLButtonElement;
+    brainBtn.click();
+
+    const dropdownWrap = document.getElementById('composerReasoningEffortWrap');
+    const select = document.getElementById('composerReasoningEffortSelect') as HTMLSelectElement;
+
+    assert.equal(chat.reasoningEffort, 'medium');
+    assert.ok(!dropdownWrap?.classList.contains('hidden'));
+    assert.equal(select.value, 'medium');
+    assert.equal(brainBtn.getAttribute('aria-pressed'), 'true');
   });
 });

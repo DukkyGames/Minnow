@@ -4,7 +4,6 @@
 
 import '../styles/calendar.css';
 import '../styles/calendar-window.css';
-import '../styles/oauth-connect.css';
 
 import { createAppIcon } from '../os/icons';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';

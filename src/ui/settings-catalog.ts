@@ -68,7 +68,6 @@ export const SETTINGS_CATEGORY_AREAS: Record<
     'editor',
     'skills',
     'webhooks',
-    'oauth',
   ],
   advanced: ['features', 'evals'],
 };
@@ -294,9 +293,6 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   }),
   field('integrations.webhooks', 'Webhooks', 'integrations', 'webhooks', {
     keywords: ['hmac', 'outgoing events'],
-  }),
-  field('integrations.oauth', 'OAuth credentials', 'integrations', 'oauth', {
-    keywords: ['google', 'microsoft', 'gmail', 'outlook'],
   }),
   field('integrations.browser', 'Browser allowlist', 'integrations', 'tools', {
     keywords: ['cdp', 'automation'],
