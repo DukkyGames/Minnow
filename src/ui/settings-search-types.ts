@@ -14,6 +14,7 @@ export type SettingsSearchEntryKind =
   | 'work-agent'
   | 'sub-agent'
   | 'models-section'
+  | 'brain-section'
   | 'field'
   | 'category';
 
@@ -26,6 +27,8 @@ export type SettingsSearchEntry = {
   kind: SettingsSearchEntryKind;
   /** When set, open Models app instead of settings (e.g. voice I/O). */
   modelsSection?: string;
+  /** When set, open Brain app instead of settings (e.g. memory store). */
+  brainSection?: string;
   /** DOM anchor via data-settings-search-key after navigation. */
   searchKey?: string;
   keywords?: string[];

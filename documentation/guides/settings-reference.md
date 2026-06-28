@@ -34,7 +34,7 @@ Open via **Settings** (`#/settings/<category>`) or legacy `#/settings/<area>`.
 | **Appearance** | Appearance |
 | **Models** | Providers, Routing, Sampler, Thinking, Usage & cost |
 | **Agents** | Modes, Experts, Work agents, Agent packs, Sub-agents, Autopilot |
-| **Knowledge** | Prompts, Rules, Memory |
+| **Knowledge** | Prompts, Rules |
 | **Integrations** | Search, Deep Research, Servers, Tools, Skills, MCP, LSP, Editor, Webhooks, OAuth |
 | **Advanced** | Orchestration, Evals |
 
@@ -231,36 +231,13 @@ Per type: enabled, max concurrent, timeout, max input tokens, context policy, su
 | Enable user rules | |
 | Rules text | Global standing instructions |
 
-### Memory
+### Memory (Brain app)
 
-**Store & retrieval:**
+Memory store, entry CRUD, semantic embeddings, and auto-learning cadence moved to the **Brain** app (`#/app/brain/memories` and `#/app/brain/settings`). Legacy `#/settings/memory` redirects automatically.
 
-| Setting | Key |
-|---------|-----|
-| Enable memory store | `memory.enabled` |
-| Inject memories on send | `features.memoryInjection` |
-| Max entries | `memory.maxEntries` (config; default 500) |
-| Inject char caps | `maxInjectCharsFull` / `maxInjectCharsLite` |
+**Memories section** — store enable (`memory.enabled`), inject on send (`features.memoryInjection`), entry list/add/delete, backup/clear.
 
-**Semantic embeddings:**
-
-| Setting | Key |
-|---------|-----|
-| Enabled | `memory.embeddings.enabled` |
-| Backend | `local` or provider |
-| Model | e.g. `Xenova/all-MiniLM-L6-v2` |
-| Provider | When using remote embeddings |
-| Blend weight | Vector vs keyword (0–1) |
-| Reindex | Manual action |
-
-**Auto-learning cadence** (`config.synthesis`):
-
-| UI field | Other config fields (not all in UI) |
-|----------|-------------------------------------|
-| Enabled | `requireConfirmation`, `confidenceThreshold`, `maxProposalsPerTurn`, `skillMinRounds`, `skillMinToolCalls`, utility model overrides, etc. |
-| Throttle (message pairs) | `throttleMessagePairs` |
-
-**CRUD:** add/edit/delete memories, backup, clear (archive), pending proposals panel.
+**Settings section** — semantic embeddings (`memory.embeddings.*`), synthesis cadence (`config.synthesis`), code index (`config.brain.code.*`).
 
 ---
 

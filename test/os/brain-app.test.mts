@@ -35,6 +35,12 @@ describe('brain router', () => {
     assert.equal(legacy.brainSection, 'edit');
   });
 
+  test('legacy #/settings/memory redirects to Brain memories', () => {
+    const legacy = resolveLegacyHash('#/settings/memory');
+    assert.equal(legacy.hash, '#/app/brain/memories');
+    assert.equal(legacy.brainSection, 'memories');
+  });
+
   test('parseOsHash resolves brain graph deep link (legacy wiki alias)', () => {
     const route = parseOsHash('#/app/brain/wiki');
     assert.equal(route.view, 'app');
@@ -67,6 +73,10 @@ describe('brain markup contract', () => {
     assert.match(html, /data-brain-nav="proposals"/);
     assert.match(html, /id="brainProposalsList"/);
     assert.match(html, /id="brainSection-settings"/);
+    assert.match(html, /id="brainSection-memories"/);
+    assert.match(html, /data-brain-nav="memories"/);
+    assert.match(html, /id="brainMemoryEnabled"/);
+    assert.match(html, /id="brainEmbeddingsDownload"/);
     assert.match(html, /id="brainSynthesisEnabled"/);
     assert.match(html, /data-brain-nav="code"/);
     assert.match(html, /id="brainSection-code"/);

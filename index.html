@@ -624,7 +624,6 @@
       <nav class="settings-category-subnav" aria-label="Knowledge sections">
         <a href="#settingsSection-prompting" class="settings-category-subnav__link" data-area-jump="prompting">Prompts</a>
         <a href="#settingsSection-rules" class="settings-category-subnav__link" data-area-jump="rules">Rules</a>
-        <a href="#settingsSection-memory" class="settings-category-subnav__link" data-area-jump="memory">Memory</a>
       </nav>
       <section id="settingsSection-prompting" class="settings-section settings-area settings-area--title-suppressed" data-area="prompting">
         <h2>Prompts</h2>
@@ -668,143 +667,6 @@
         </div>
         <div class="settings-rules-actions">
           <button type="button" id="settingsRulesSave" class="btn-primary">Save rules</button>
-        </div>
-      </section>
-      <section id="settingsSection-memory" class="settings-section settings-area settings-area--title-suppressed" data-area="memory">
-        <h2>Memory</h2>
-        <p class="settings-lead">Saved under <code>~/.minnow/memory/</code>. Relevant entries can be added to the prompt when you send a message.</p>
-        <section class="settings-group settings-group--flat" data-settings-search-key="knowledge.memory">
-          <h3 class="settings-group__title">Store &amp; retrieval</h3>
-          <div class="settings-group__body">
-        <label class="settings-toggle-row" data-settings-search-key="knowledge.memory.enabled">
-          <span>Enable memory store</span>
-          <input type="checkbox" id="settingsMemoryEnabled">
-        </label>
-        <label class="settings-toggle-row" data-settings-search-key="knowledge.memory.injection">
-          <span>Inject matching memories on send</span>
-          <input type="checkbox" id="settingsFeatureMemoryInjection" checked>
-        </label>
-        <p class="settings-field-hint">When injection is off, entries are still saved but not added to the prompt.</p>
-          </div>
-        </section>
-        <section class="settings-group settings-group--flat" id="settingsMemoryEmbeddingsPanel" data-settings-search-key="knowledge.memory.embeddings">
-          <h3 class="settings-group__title">
-            Semantic embeddings
-            <span id="settingsMemoryEmbeddingsReindexBadge" class="settings-memory-badge settings-memory-badge--pinned hidden">Reindex needed</span>
-          </h3>
-          <div class="settings-group__body settings-memory-embeddings">
-            <p id="settingsMemoryEmbeddingsStatus" class="settings-field-hint">Checking embeddings status…</p>
-            <p class="settings-field-hint">Hybrid retrieval blends keyword scoring with local vector similarity. The first local model use may download files into <code>~/.minnow/models/embeddings/</code>.</p>
-            <label class="settings-toggle-row">
-              <span>Enable semantic embeddings</span>
-              <input type="checkbox" id="settingsMemoryEmbeddingsEnabled">
-            </label>
-            <div class="field">
-              <label for="settingsMemoryEmbeddingsBackend">Backend</label>
-              <select id="settingsMemoryEmbeddingsBackend" class="settings-select">
-                <option value="local">Local (offline)</option>
-                <option value="provider">Provider /v1/embeddings</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="settingsMemoryEmbeddingsModel">Model id</label>
-              <input type="text" id="settingsMemoryEmbeddingsModel" class="settings-input"
-                placeholder="Xenova/all-MiniLM-L6-v2" autocomplete="off">
-            </div>
-            <div class="field hidden" id="settingsMemoryEmbeddingsProviderRow">
-              <label for="settingsMemoryEmbeddingsProvider">Provider</label>
-              <select id="settingsMemoryEmbeddingsProvider" class="settings-select">
-                <option value="">Select a provider</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="settingsMemoryEmbeddingsBlend">
-                Blend weight
-                <span id="settingsMemoryEmbeddingsBlendLabel" class="settings-field-hint">50% vector</span>
-              </label>
-              <input type="range" id="settingsMemoryEmbeddingsBlend" min="0" max="1" step="0.05" value="0.5">
-            </div>
-            <div class="settings-actions">
-              <button type="button" id="settingsMemoryEmbeddingsSave" class="settings-action-btn">Save embeddings settings</button>
-              <button type="button" id="settingsMemoryEmbeddingsDownload" class="settings-action-btn">Download model</button>
-              <button type="button" id="settingsMemoryEmbeddingsReindex" class="settings-action-btn">Reindex all</button>
-            </div>
-          </div>
-        </section>
-        <section class="settings-group settings-group--flat" id="settingsMemorySynthesisPanel" data-settings-search-key="knowledge.memory.synthesis">
-          <h3 class="settings-group__title">Auto-learning cadence</h3>
-          <div class="settings-group__body settings-memory-synthesis">
-            <p class="settings-field-hint">How often Minnow proposes new memories and skills after chat turns. Uses the <strong>Chat title jobs</strong> model (Settings → Models) unless you set overrides in config.</p>
-            <p id="settingsMemorySynthesisOffline" class="field-hint settings-memory-offline hidden">
-              Start with <code>npm start</code> to edit synthesis settings.
-            </p>
-            <label class="settings-toggle-row">
-              <span>Enable memory &amp; skill proposals</span>
-              <input type="checkbox" id="settingsMemorySynthesisEnabled" checked>
-            </label>
-            <div class="field">
-              <label for="settingsMemorySynthesisThrottle">Extraction throttle (message pairs)</label>
-              <input type="number" id="settingsMemorySynthesisThrottle" class="settings-input settings-input--narrow"
-                min="1" max="20" step="1" value="4" inputmode="numeric">
-              <p id="settingsMemorySynthesisThrottleHint" class="settings-field-hint">Runs after every 4 completed user+assistant turns.</p>
-            </div>
-            <div class="settings-actions">
-              <button type="button" id="settingsMemorySynthesisSave" class="settings-action-btn">Save synthesis settings</button>
-            </div>
-          </div>
-        </section>
-        <section class="settings-group settings-group--flat" id="settingsMemoryProposalsPanel">
-          <h3 class="settings-group__title">
-            Suggested memories &amp; skills
-            <span id="settingsMemoryProposalsBadge" class="settings-memory-badge settings-memory-badge--pinned hidden" aria-hidden="true"></span>
-          </h3>
-          <div class="settings-group__body settings-memory-proposals">
-            <p class="settings-field-hint">After chat turns, Minnow may propose durable facts or reusable skills. Nothing is saved until you accept.</p>
-            <p id="settingsMemoryProposalsCount" class="settings-memory-stat">Pending: —</p>
-            <p id="settingsMemoryProposalsOffline" class="field-hint settings-memory-offline hidden">
-              Start with <code>npm start</code> to review proposals.
-            </p>
-            <div id="settingsMemoryProposalsList" class="settings-proposals-list" role="list" aria-label="Pending synthesis proposals"></div>
-          </div>
-        </section>
-        <div id="settingsMemoryStats" class="settings-memory-stats" aria-live="polite">
-          <span class="settings-memory-stat" id="settingsMemoryEntryCount">Entries: —</span>
-          <span class="settings-memory-stat settings-memory-stat--muted" id="settingsMemoryServerHint">Checking server…</span>
-        </div>
-        <p id="settingsMemoryOffline" class="field-hint settings-memory-offline hidden">
-          Start with <code>npm start</code> to add and manage memories.
-        </p>
-        <details id="settingsMemoryAddPanel" class="settings-memory-add-panel hidden">
-          <summary class="settings-memory-add-summary">Add memory</summary>
-          <form id="settingsMemoryAddForm" class="settings-memory-form" novalidate>
-            <div class="field">
-              <label for="settingsMemoryAddTitle">Title</label>
-              <input type="text" id="settingsMemoryAddTitle" name="title" required maxlength="200"
-                autocomplete="off" placeholder="e.g. Preferred test command">
-            </div>
-            <div class="field">
-              <label for="settingsMemoryAddBody">Body</label>
-              <textarea id="settingsMemoryAddBody" name="body" required rows="6"
-                placeholder="What should be remembered across chats?"></textarea>
-              <p class="field-hint">Max 32 KB. Used for retrieval on send when memory injection is enabled.</p>
-            </div>
-            <div class="field">
-              <label for="settingsMemoryAddTags">Tags (optional)</label>
-              <input type="text" id="settingsMemoryAddTags" name="tags" autocomplete="off"
-                placeholder="testing, npm">
-              <p class="field-hint">Comma-separated. Max 64 characters per tag.</p>
-            </div>
-            <p id="settingsMemoryAddError" class="settings-memory-form-error hidden" role="alert"></p>
-            <div class="settings-memory-form-actions">
-              <button type="submit" class="settings-action-btn">Save memory</button>
-              <button type="button" id="settingsMemoryAddReset" class="settings-inline-btn">Clear form</button>
-            </div>
-          </form>
-        </details>
-        <div id="settingsMemoryList" class="settings-memory-list" role="list" aria-label="Memory entries"></div>
-        <div class="settings-actions">
-          <button type="button" id="settingsMemoryBackup" class="settings-action-btn">Backup memory</button>
-          <button type="button" id="settingsMemoryClear" class="settings-action-btn settings-action-btn--danger">Clear (archive)</button>
         </div>
       </section>
       </div>
@@ -1322,6 +1184,10 @@
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/></svg>
         <span class="brain-rail__label">Proposals</span>
       </button>
+      <button type="button" class="brain-rail__btn" data-brain-nav="memories" title="Memories">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg>
+        <span class="brain-rail__label">Memories</span>
+      </button>
       <button type="button" class="brain-rail__btn" data-brain-nav="ingest" title="Ingest">
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
         <span class="brain-rail__label">Ingest</span>
@@ -1456,6 +1322,65 @@
           </div>
         </div>
       </section>
+      <section id="brainSection-memories" class="brain-section brain-section--centered">
+        <div class="brain-card">
+          <p id="brainMemoriesStatus" class="brain-status" aria-live="polite"></p>
+          <p class="brain-muted">Saved under <code>~/.minnow/memory/</code>. Relevant entries can be added to the prompt when you send a message.</p>
+          <section class="settings-group settings-group--flat">
+            <h3 class="settings-group__title">Store &amp; retrieval</h3>
+            <div class="settings-group__body">
+              <label class="settings-toggle-row">
+                <span>Enable memory store</span>
+                <input type="checkbox" id="brainMemoryEnabled">
+              </label>
+              <label class="settings-toggle-row">
+                <span>Inject matching memories on send</span>
+                <input type="checkbox" id="brainFeatureMemoryInjection" checked>
+              </label>
+              <p class="settings-field-hint">When injection is off, entries are still saved but not added to the prompt.</p>
+            </div>
+          </section>
+          <div id="brainMemoryStats" class="settings-memory-stats" aria-live="polite">
+            <span class="settings-memory-stat" id="brainMemoryEntryCount">Entries: —</span>
+            <span class="settings-memory-stat settings-memory-stat--muted" id="brainMemoryServerHint">Checking server…</span>
+          </div>
+          <p id="brainMemoryOffline" class="field-hint settings-memory-offline hidden">
+            Start with <code>npm start</code> to add and manage memories.
+          </p>
+          <details id="brainMemoryAddPanel" class="settings-memory-add-panel hidden">
+            <summary class="settings-memory-add-summary">Add memory</summary>
+            <form id="brainMemoryAddForm" class="settings-memory-form" novalidate>
+              <div class="field">
+                <label for="brainMemoryAddTitle">Title</label>
+                <input type="text" id="brainMemoryAddTitle" name="title" required maxlength="200"
+                  autocomplete="off" placeholder="e.g. Preferred test command">
+              </div>
+              <div class="field">
+                <label for="brainMemoryAddBody">Body</label>
+                <textarea id="brainMemoryAddBody" name="body" required rows="6"
+                  placeholder="What should be remembered across chats?"></textarea>
+                <p class="field-hint">Max 32 KB. Used for retrieval on send when memory injection is enabled.</p>
+              </div>
+              <div class="field">
+                <label for="brainMemoryAddTags">Tags (optional)</label>
+                <input type="text" id="brainMemoryAddTags" name="tags" autocomplete="off"
+                  placeholder="testing, npm">
+                <p class="field-hint">Comma-separated. Max 64 characters per tag.</p>
+              </div>
+              <p id="brainMemoryAddError" class="settings-memory-form-error hidden" role="alert"></p>
+              <div class="settings-memory-form-actions">
+                <button type="submit" class="settings-action-btn">Save memory</button>
+                <button type="button" id="brainMemoryAddReset" class="settings-inline-btn">Clear form</button>
+              </div>
+            </form>
+          </details>
+          <div id="brainMemoryList" class="settings-memory-list" role="list" aria-label="Memory entries"></div>
+          <div class="settings-actions">
+            <button type="button" id="brainMemoryBackup" class="settings-action-btn">Backup memory</button>
+            <button type="button" id="brainMemoryClear" class="settings-action-btn settings-action-btn--danger">Clear (archive)</button>
+          </div>
+        </div>
+      </section>
       <section id="brainSection-ingest" class="brain-section brain-section--panel">
         <div class="brain-section__cols">
           <div class="brain-card brain-section__main">
@@ -1572,8 +1497,10 @@
                 <input type="text" id="brainEmbeddingsModel" autocomplete="off">
               </label>
               <div id="brainEmbeddingsProviderRow" class="hidden">
-                <label>Provider id
-                  <input type="text" id="brainEmbeddingsProvider" autocomplete="off">
+                <label>Provider
+                  <select id="brainEmbeddingsProvider">
+                    <option value="">Select a provider</option>
+                  </select>
                 </label>
               </div>
               <label>Vector blend
@@ -1582,6 +1509,7 @@
               </label>
               <div class="brain-field-row">
                 <button type="button" class="brain-action-btn" id="brainEmbeddingsSave">Save embeddings</button>
+                <button type="button" class="brain-action-btn" id="brainEmbeddingsDownload">Download model</button>
                 <button type="button" class="brain-action-btn" id="brainEmbeddingsReindex">Reindex all</button>
               </div>
             </div>

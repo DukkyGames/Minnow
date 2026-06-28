@@ -18,6 +18,7 @@ export type BrainSectionId =
   | 'log'
   | 'schema'
   | 'proposals'
+  | 'memories'
   | 'ingest'
   | 'lint'
   | 'code'
@@ -34,6 +35,7 @@ const SECTIONS: BrainSectionId[] = [
   'log',
   'schema',
   'proposals',
+  'memories',
   'ingest',
   'lint',
   'code',
@@ -46,6 +48,7 @@ const SECTION_LABELS: Record<BrainSectionId, string> = {
   log: 'Log',
   schema: 'Schema',
   proposals: 'Proposals',
+  memories: 'Memories',
   ingest: 'Ingest',
   lint: 'Lint',
   code: 'Code',
@@ -59,6 +62,7 @@ const SECTION_TITLES: Record<BrainSectionId, string> = {
   log: 'Log',
   schema: 'Schema',
   proposals: 'Proposals',
+  memories: 'Memories',
   ingest: 'Ingest',
   lint: 'Lint',
   code: 'Code',
@@ -72,6 +76,7 @@ const SECTION_LEADS: Record<BrainSectionId, string> = {
   log: 'Read-only changelog from log.md.',
   schema: 'View and edit the wiki taxonomy in schema.md.',
   proposals: 'Review AI-suggested memories before they enter the wiki.',
+  memories: 'Enable the memory store, manage entries, and control prompt injection.',
   ingest: 'Submit a raw source; the utility model synthesizes wiki pages.',
   lint: 'Health report: orphans, stale pages, broken links, contradictions.',
   code: 'Browse the indexed repo map, search symbols, and inspect call graphs.',
@@ -292,4 +297,4 @@ export function initBrainPage(): void {
   }
 }
 
-export { SECTION_LABELS, SECTION_TITLES, SECTION_LEADS };
+export { SECTION_LABELS, SECTION_TITLES, SECTION_LEADS, SECTIONS };

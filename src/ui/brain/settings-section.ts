@@ -20,11 +20,14 @@ import {
   fetchMemoryEmbeddingsStatus,
   reindexMemoryEmbeddings,
   saveMemoryEmbeddingsConfig,
+  warmupMemoryEmbeddings,
 } from '../../memory/client';
+import type { MemoryEmbeddingsConfig } from '../../memory/types';
 import {
   fetchSynthesisConfig,
   saveSynthesisConfig,
 } from '../../synthesis/client';
+import { fillProviderSelect } from '../settings-model-binding';
 
 type StatusFn = (kind: 'ok' | 'err' | 'spin', message: string) => void;
 
@@ -40,6 +43,71 @@ const setStatus: StatusFn = (kind, message) => {
 function formatThrottleHint(pairs: number): string {
   if (pairs <= 1) return 'Runs after every completed user+assistant turn.';
   return `Runs after every ${pairs} completed user+assistant turns.`;
+}
+
+function formatBlendWeight(value: number): string {
+  return `${Math.round(value * 100)}% vector`;
+}
+
+function readEmbeddingsForm(): Partial<MemoryEmbeddingsConfig> {
+  const enabledEl = document.getElementById(
+    'brainEmbeddingsEnabled',
+  ) as HTMLInputElement | null;
+  const backendEl = document.getElementById(
+    'brainEmbeddingsBackend',
+  ) as HTMLSelectElement | null;
+  const modelEl = document.getElementById('brainEmbeddingsModel') as HTMLInputElement | null;
+  const providerEl = document.getElementById(
+    'brainEmbeddingsProvider',
+  ) as HTMLSelectElement | null;
+  const blendEl = document.getElementById('brainEmbeddingsBlend') as HTMLInputElement | null;
+
+  return {
+    enabled: enabledEl?.checked === true,
+    backend: (backendEl?.value === 'provider' ? 'provider' : 'local') as 'local' | 'provider',
+    modelId: modelEl?.value.trim() ?? '',
+    providerId: providerEl?.value.trim() ?? '',
+    blendWeight: Number(blendEl?.value ?? 0.5),
+  };
+}
+
+function validateEmbeddingsForm(partial: Partial<MemoryEmbeddingsConfig>): string | null {
+  if (!partial.enabled) return null;
+  if (!partial.modelId?.trim()) {
+    return 'Model id is required when semantic embeddings are enabled.';
+  }
+  if (partial.backend === 'provider' && !partial.providerId?.trim()) {
+    return 'Select a provider when using provider embeddings.';
+  }
+  return null;
+}
+
+function validateDownloadForm(partial: Partial<MemoryEmbeddingsConfig>): string | null {
+  if (partial.backend === 'provider') {
+    if (!partial.enabled) {
+      return 'Enable semantic embeddings before probing a provider backend.';
+    }
+    if (!partial.providerId?.trim()) {
+      return 'Select a provider when using provider embeddings.';
+    }
+    if (!partial.modelId?.trim()) {
+      return 'Model id is required when using provider embeddings.';
+    }
+    return null;
+  }
+  if (!partial.modelId?.trim()) {
+    return 'Model id is required to download a local embedding model.';
+  }
+  return null;
+}
+
+function toggleDownloadButtonVisibility(): void {
+  const backendEl = document.getElementById(
+    'brainEmbeddingsBackend',
+  ) as HTMLSelectElement | null;
+  const downloadBtn = document.getElementById('brainEmbeddingsDownload');
+  if (!downloadBtn || !backendEl) return;
+  downloadBtn.classList.toggle('hidden', backendEl.value !== 'local');
 }
 
 function bindSettingsSection(): void {
@@ -87,55 +155,71 @@ function bindSettingsSection(): void {
 
   document.getElementById('brainEmbeddingsBackend')?.addEventListener('change', () => {
     toggleProviderRow();
+    toggleDownloadButtonVisibility();
   });
   document.getElementById('brainEmbeddingsEnabled')?.addEventListener('change', () => {
     toggleProviderRow();
+    toggleDownloadButtonVisibility();
   });
 
   document.getElementById('brainEmbeddingsSave')?.addEventListener('click', () => {
     void (async () => {
-      const enabledEl = document.getElementById(
-        'brainEmbeddingsEnabled',
-      ) as HTMLInputElement | null;
-      const backendEl = document.getElementById(
-        'brainEmbeddingsBackend',
-      ) as HTMLSelectElement | null;
-      const modelEl = document.getElementById('brainEmbeddingsModel') as HTMLInputElement | null;
-      const providerEl = document.getElementById(
-        'brainEmbeddingsProvider',
-      ) as HTMLInputElement | null;
-      const saved = await saveMemoryEmbeddingsConfig({
-        enabled: enabledEl?.checked === true,
-        backend: backendEl?.value === 'provider' ? 'provider' : 'local',
-        modelId: modelEl?.value.trim() ?? '',
-        providerId: providerEl?.value.trim() ?? '',
-        blendWeight: Number(blendEl?.value ?? 0.5),
-      });
+      const partial = readEmbeddingsForm();
+      const validationError = validateEmbeddingsForm(partial);
+      if (validationError) {
+        setStatus('err', validationError);
+        return;
+      }
+      const saved = await saveMemoryEmbeddingsConfig(partial);
       setStatus(saved.kind === 'ok' ? 'ok' : 'err', saved.kind === 'ok' ? 'Embeddings settings saved' : saved.error);
       if (saved.kind === 'ok') await refreshEmbeddingsFields();
+    })();
+  });
+
+  document.getElementById('brainEmbeddingsDownload')?.addEventListener('click', () => {
+    const downloadBtn = document.getElementById('brainEmbeddingsDownload') as HTMLButtonElement | null;
+    void (async () => {
+      downloadBtn?.setAttribute('disabled', 'true');
+      try {
+        const partial = readEmbeddingsForm();
+        const validationError = validateDownloadForm(partial);
+        if (validationError) {
+          setStatus('err', validationError);
+          return;
+        }
+
+        setStatus('spin', 'Saving settings…');
+        const saved = await saveMemoryEmbeddingsConfig(partial);
+        if (saved.kind === 'err') {
+          setStatus('err', saved.error);
+          return;
+        }
+
+        setStatus('spin', 'Downloading embedding model…');
+        const result = await warmupMemoryEmbeddings();
+        if (result.kind === 'err') {
+          setStatus('err', result.error);
+          return;
+        }
+        const readyMsg = `Model ready: ${result.value.model} (${result.value.dim} dims, ${result.value.durationMs} ms)`;
+        setStatus('ok', readyMsg);
+        await refreshEmbeddingsFields();
+      } finally {
+        downloadBtn?.removeAttribute('disabled');
+      }
     })();
   });
 
   document.getElementById('brainEmbeddingsReindex')?.addEventListener('click', () => {
     void (async () => {
       setStatus('spin', 'Reindexing vectors…');
-      const enabledEl = document.getElementById(
-        'brainEmbeddingsEnabled',
-      ) as HTMLInputElement | null;
-      const backendEl = document.getElementById(
-        'brainEmbeddingsBackend',
-      ) as HTMLSelectElement | null;
-      const modelEl = document.getElementById('brainEmbeddingsModel') as HTMLInputElement | null;
-      const providerEl = document.getElementById(
-        'brainEmbeddingsProvider',
-      ) as HTMLInputElement | null;
-      const saved = await saveMemoryEmbeddingsConfig({
-        enabled: enabledEl?.checked === true,
-        backend: backendEl?.value === 'provider' ? 'provider' : 'local',
-        modelId: modelEl?.value.trim() ?? '',
-        providerId: providerEl?.value.trim() ?? '',
-        blendWeight: Number(blendEl?.value ?? 0.5),
-      });
+      const partial = readEmbeddingsForm();
+      const validationError = validateEmbeddingsForm(partial);
+      if (validationError) {
+        setStatus('err', validationError);
+        return;
+      }
+      const saved = await saveMemoryEmbeddingsConfig(partial);
       if (saved.kind === 'err') {
         setStatus('err', saved.error);
         return;
@@ -383,7 +467,7 @@ async function refreshEmbeddingsFields(): Promise<void> {
   const enabledEl = document.getElementById('brainEmbeddingsEnabled') as HTMLInputElement | null;
   const backendEl = document.getElementById('brainEmbeddingsBackend') as HTMLSelectElement | null;
   const modelEl = document.getElementById('brainEmbeddingsModel') as HTMLInputElement | null;
-  const providerEl = document.getElementById('brainEmbeddingsProvider') as HTMLInputElement | null;
+  const providerEl = document.getElementById('brainEmbeddingsProvider') as HTMLSelectElement | null;
   const blendEl = document.getElementById('brainEmbeddingsBlend') as HTMLInputElement | null;
   const label = document.getElementById('brainEmbeddingsBlendLabel');
   const badge = document.getElementById('brainEmbeddingsReindexBadge');
@@ -392,13 +476,22 @@ async function refreshEmbeddingsFields(): Promise<void> {
   offlineEl?.classList.toggle('hidden', status !== null);
   if (!status) {
     if (statusEl) statusEl.textContent = 'Embeddings unavailable.';
+    if (modelEl && !modelEl.value.trim()) {
+      modelEl.value = 'Xenova/all-MiniLM-L6-v2';
+    }
     return;
   }
 
   if (statusEl) {
-    statusEl.textContent = status.enabled
-      ? `${status.vectorCount} vectors · model ${status.model || '—'} · ${status.healthy ? 'healthy' : 'reindex recommended'}`
-      : 'Semantic embeddings are disabled.';
+    if (!status.enabled) {
+      statusEl.textContent = 'Semantic retrieval off. Matching uses keywords only on send.';
+    } else {
+      const pageHint =
+        typeof status.pageCount === 'number' && status.pageCount > 0
+          ? ` · ${status.pageCount} wiki pages`
+          : '';
+      statusEl.textContent = `${status.vectorCount} vectors indexed${pageHint} · dim ${status.dim} · model ${status.model} · ${status.healthy ? 'healthy' : 'needs reindex'}`;
+    }
   }
   badge?.classList.toggle('hidden', !status.reindexNeeded);
 
@@ -407,12 +500,22 @@ async function refreshEmbeddingsFields(): Promise<void> {
     backendEl.value = status.backend === 'provider' ? 'provider' : 'local';
   }
   if (modelEl && !modelEl.matches(':focus')) modelEl.value = status.model ?? '';
-  if (providerEl && !providerEl.matches(':focus')) providerEl.value = status.providerId ?? '';
+  if (providerEl && !providerEl.matches(':focus')) {
+    await fillProviderSelect(providerEl, status.providerId ?? '');
+    if (status.providerId && providerEl.value !== status.providerId) {
+      const missing = document.createElement('option');
+      missing.value = status.providerId;
+      missing.textContent = `${status.providerId} (missing)`;
+      providerEl.appendChild(missing);
+      providerEl.value = status.providerId;
+    }
+  }
   if (blendEl && !blendEl.matches(':focus')) blendEl.value = String(status.blendWeight ?? 0.5);
   if (label && blendEl) {
-    label.textContent = `${Math.round(Number(blendEl.value) * 100)}% vector`;
+    label.textContent = formatBlendWeight(Number(blendEl.value));
   }
   toggleProviderRow();
+  toggleDownloadButtonVisibility();
 }
 
 function formatCodeSettingsLine(status: BrainCodeStatus): string {

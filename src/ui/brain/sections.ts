@@ -8,6 +8,7 @@ import { renderEditSection } from './edit-section';
 import { renderIngestSection } from './ingest-section';
 import { renderLintSection } from './lint-section';
 import { renderLogSection } from './log-section';
+import { renderMemoriesSection } from './memories-section';
 import { renderProposalsSection } from './proposals-section';
 import { renderSchemaSection } from './schema-section';
 import { renderSettingsSection } from './settings-section';
@@ -33,6 +34,9 @@ export async function renderBrainSection(
       break;
     case 'proposals':
       await renderProposalsSection();
+      break;
+    case 'memories':
+      await renderMemoriesSection();
       break;
     case 'ingest':
       renderIngestSection();
