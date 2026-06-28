@@ -4,7 +4,8 @@
  */
 
 import { modelCache } from '../app-state';
-import { decodeModelSelectKey } from '../lib/model-select-key';
+import { isServerStorageMode } from '../config/storage-mode';
+import { decodeModelSelectKey, encodeModelSelectKey } from '../lib/model-select-key';
 import {
   isKnownLocalProviderId,
 } from '../providers/provider-host';
@@ -19,7 +20,8 @@ import {
   producerSlugFromModelId,
   resolveModelProducer,
 } from '../providers/model-producer';
-import { resolveModelState } from './model-state-dot';
+import { isModelLoaded, resolveModelState } from './model-state-dot';
+import { isModelLoadUnloadBusy } from './model-load-unload-button';
 
 /** Flat list when catalog is small; larger catalogs get collapsible producer headers. */
 const BROWSE_ALL_LIMIT = 12;
@@ -207,11 +209,49 @@ function toggleModelSelectMenu(): void {
   else openModelSelectMenu();
 }
 
+function resolveSelectOption(
+  sel: HTMLSelectElement,
+  modelIdOrKey: string,
+): HTMLOptionElement | undefined {
+  const key = modelIdOrKey.trim();
+  if (!key) return sel.options[sel.selectedIndex];
+  return [...sel.options].find((o) => o.value === key) ?? sel.options[sel.selectedIndex];
+}
+
+/**
+ * Keep the model popover open after pick when the provider supports load/unload
+ * and the model is not loaded yet (Load is the expected next action).
+ */
+export function shouldKeepModelMenuOpenAfterSelect(modelIdOrKey: string): boolean {
+  if (!isServerStorageMode()) return false;
+  const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;
+  if (!sel) return false;
+
+  const key = modelIdOrKey.trim();
+  if (!key) return false;
+
+  const opt = resolveSelectOption(sel, key);
+  if (opt?.getAttribute('data-supports-load-unload') !== '1') return false;
+
+  const direct = modelCache.get(key);
+  if (direct) return !isModelLoaded(direct);
+
+  const decoded = decodeModelSelectKey(key);
+  if (decoded) {
+    const compositeKey = encodeModelSelectKey(decoded.providerId, decoded.modelId);
+    const row = modelCache.get(compositeKey);
+    if (row) return !isModelLoaded(row);
+  }
+
+  return true;
+}
+
 /** Select a model in the native picker and notify listeners (top bar or OS menubar). */
 export function selectModelInPicker(modelId: string): void {
   const { sel } = getElements();
   if (!sel || !modelId) return;
-  closeModelSelectMenu();
+  const keepOpen = shouldKeepModelMenuOpenAfterSelect(modelId);
+  if (!keepOpen) closeModelSelectMenu();
   if (sel.value === modelId) {
     syncModelSelectPicker();
     return;
@@ -393,7 +433,10 @@ function appendModelOptionRow(
   if (!id) return;
 
   const cached = modelCache.get(id);
-  const loadState = cached ? resolveModelState(cached) : 'unknown';
+  let loadState = cached ? resolveModelState(cached) : 'unknown';
+  if (isModelLoadUnloadBusy() && id === selectedValue) {
+    loadState = 'loading';
+  }
   const canonicalModelId = tooltipModelIdForOptionValue(id);
 
   const li = document.createElement('li');

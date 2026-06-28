@@ -16,6 +16,7 @@ import {
   closeModelSelectMenu,
   mountModelHostFilterBar,
   renderModelSelectMenuRows,
+  shouldKeepModelMenuOpenAfterSelect,
   syncModelSelectPicker,
 } from '../ui/model-select-picker';
 import { closeOsNotificationsMenu } from './notifications-menu';
@@ -183,6 +184,11 @@ function ensurePanel(): HTMLDivElement {
     if (chipDot) syncOsModelChipDot(chipDot);
     if (chipText) syncOsModelChipText(chipText);
     syncModelSelectPicker();
+    const sel = getModelSelect();
+    const raw = sel?.value.trim() ?? '';
+    if (raw && !shouldKeepModelMenuOpenAfterSelect(raw)) {
+      closeOsModelChipMenu();
+    }
   });
 
   refreshBtn = document.createElement('button');
@@ -255,7 +261,10 @@ export function initOsModelChipMenu(
     syncOsModelChipDot(dotEl);
     if (menuOpen) {
       rebuildMenuList();
-      closeOsModelChipMenu();
+      const raw = getModelSelect()?.value.trim() ?? '';
+      if (!raw || !shouldKeepModelMenuOpenAfterSelect(raw)) {
+        closeOsModelChipMenu();
+      }
     }
   };
   sel?.addEventListener('change', modelSelectListener);
