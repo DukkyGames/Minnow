@@ -57,13 +57,16 @@ describe('settings-search-index', () => {
     assert.equal(webSearch.searchKey, 'tools.item.web_search');
   });
 
-  test('includes catalog field entries', () => {
+  test('memory catalog fields route to Brain app', () => {
     const index = buildSettingsSearchIndex();
-    const memory = index.find((e) => e.id === 'field:knowledge.memory.enabled');
+    const memory = index.find((e) => e.id === 'brain:memories-enabled');
     assert.ok(memory);
-    assert.equal(memory.kind, 'field');
+    assert.equal(memory.kind, 'brain-section');
+    assert.equal(memory.brainSection, 'memories');
     assert.equal(memory.searchKey, 'knowledge.memory.enabled');
-    assert.equal(memory.sectionId, 'memory');
+    const embeddings = index.find((e) => e.id === 'brain:embeddings');
+    assert.ok(embeddings);
+    assert.equal(embeddings.brainSection, 'settings');
   });
 
   test('includes category entries', () => {

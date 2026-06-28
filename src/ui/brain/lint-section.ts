@@ -6,9 +6,7 @@ import { lintBrainWiki } from '../../brain/client';
 import type { BrainLintReport } from '../../brain/types';
 import { renderBrainEmptyState, renderBrainLoading } from './empty-state';
 import { navigateBrainGraphPage, setGraphOrphanPaths } from './graph-section';
-import { openBrain, setBrainHeaderActions } from '../brain-page';
-
-let bindingsDone = false;
+import { openBrain } from '../brain-page';
 
 function renderIssueList(
   mount: HTMLElement,
@@ -155,25 +153,6 @@ function renderLintReport(mount: HTMLElement, report: BrainLintReport): void {
   }
 }
 
-function bindLintSection(): void {
-  if (bindingsDone) return;
-  bindingsDone = true;
-  document.getElementById('brainLintRun')?.addEventListener('click', () => {
-    void runLint();
-  });
-}
-
-function mountLintHeaderActions(): void {
-  const runBtn = document.createElement('button');
-  runBtn.type = 'button';
-  runBtn.className = 'brain-action-btn is-primary';
-  runBtn.textContent = 'Run lint';
-  runBtn.addEventListener('click', () => {
-    void runLint();
-  });
-  setBrainHeaderActions(runBtn);
-}
-
 async function runLint(): Promise<void> {
   const mount = document.getElementById('brainLintBody');
   const offlineEl = document.getElementById('brainLintOffline');
@@ -221,10 +200,8 @@ async function runCleanup(): Promise<void> {
   mount.dataset.lintRan = '1';
 }
 
-/** Show lint intro; run button wired once. */
+/** Show lint intro; empty-state CTA runs the health check. */
 export async function renderLintSection(): Promise<void> {
-  bindLintSection();
-  mountLintHeaderActions();
   const mount = document.getElementById('brainLintBody');
   if (!mount || mount.dataset.lintRan === '1') return;
   renderBrainEmptyState(mount, {

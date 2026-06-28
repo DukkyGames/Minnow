@@ -13,6 +13,7 @@ import {
   whoCalls,
 } from './query.js';
 import { saveBrainConfig } from '../store.js';
+import { clearCodeIndex } from './schema.js';
 import {
   getGitHookStatus,
   installGitHook,
@@ -101,6 +102,20 @@ export async function handleCodeIndexRequest(req, res, pathname) {
         force: true,
       });
       sendJson(res, 200, { ok: true, ...result });
+      return true;
+    }
+
+    if (pathname === '/api/brain/code/clear' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      if (body.confirmed !== true) {
+        sendJson(res, 400, { error: 'confirmed: true is required' });
+        return true;
+      }
+      const result = clearCodeIndex({
+        workspaceKey: body.workspaceKey !== undefined ? String(body.workspaceKey) : undefined,
+        all: body.all === true,
+      });
+      sendJson(res, 200, result);
       return true;
     }
 

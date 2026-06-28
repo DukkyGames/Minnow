@@ -16,6 +16,7 @@ import type { ToolExecutionResult } from '../types';
 import { enqueueToolApproval, type ToolApprovalContext } from './approval-queue';
 import type { ToolApprovalRequest } from './tool-approval-types';
 import { resolveEffectivePermission } from './permission-resolve';
+import { applyDestructiveConfirmationAfterUserApproval } from './destructive-tool-confirm';
 
 export type { ToolApprovalContext };
 
@@ -113,6 +114,9 @@ export async function maybeBlockToolForUserApproval(
     config.permissions.default[permissionToolId] = 'full';
     await saveToolConfigAsync(config);
   }
+
+  // Ask-strip approval satisfies server confirmed gates (manage_brain, manage_calendar delete, …).
+  applyDestructiveConfirmationAfterUserApproval(permissionToolId, args);
 
   return null;
 }

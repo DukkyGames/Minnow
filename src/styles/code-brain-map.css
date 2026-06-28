@@ -1,0 +1,86 @@
+/**
+ * Code map overlay — Brain code section hosted in the Code app main column.
+ */
+
+.chat-area.chat-area--code-brain-map {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.main-column:has(.chat-area--code-brain-map) .stats-strip {
+  display: none;
+}
+
+.main-column:has(.chat-area--code-brain-map) .input-bar,
+.main-column:has(.chat-area--code-brain-map) .tool-approval-host,
+.main-column:has(.chat-area--code-brain-map) .question-host,
+.main-column:has(.chat-area--code-brain-map) .chat-jump-latest {
+  display: none;
+}
+
+.code-brain-map-root {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--mn-surface-0);
+}
+
+.code-brain-map-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-shrink: 0;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--mn-border);
+  background: var(--mn-surface-1);
+}
+
+.code-brain-map-header__text {
+  min-width: 0;
+}
+
+.code-brain-map-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--mn-fg);
+}
+
+.code-brain-map-lede {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+}
+
+.code-brain-map-mount {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 18px 20px;
+}
+
+.code-brain-map-mount .brain-section.is-active {
+  display: block;
+  animation: none;
+}
+
+.code-brain-map-mount .brain-code-layout {
+  min-height: min(70vh, 720px);
+}
+
+@media (max-width: 720px) {
+  .code-brain-map-header {
+    padding: 12px 14px 10px;
+  }
+
+  .code-brain-map-mount {
+    padding: 12px 14px 16px;
+  }
+}

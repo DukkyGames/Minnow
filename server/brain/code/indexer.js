@@ -31,7 +31,7 @@ import {
   personalizedPageRank,
 } from './rank.js';
 import { runGrepSearch } from '../../tools/grep.js';
-import { ensureBrainIndexProjectConfig } from './project-scaffold.js';
+import { ensureBrainLspProjectReady } from './project-scaffold.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -371,13 +371,9 @@ export async function reindexCode(opts = {}) {
   const codeConfig = opts.codeConfig ?? normalizeBrainCodeConfig(null);
   const db = getCodeDb(repo);
 
-  const scaffold = await ensureBrainIndexProjectConfig(root, {
+  const scaffold = await ensureBrainLspProjectReady(root, {
     enabled: codeConfig.autoScaffoldIndexConfig !== false,
   });
-  if (scaffold.created) {
-    const { shutdownLspServers } = await import('../../lsp/manager.js');
-    shutdownLspServers(['typescript']);
-  }
 
   let files = opts.files?.map((f) => normalizeIndexableRelPath(root, f)).filter(Boolean) ?? null;
   if (!files) {

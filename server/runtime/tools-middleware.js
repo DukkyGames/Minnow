@@ -38,6 +38,7 @@ import {
   toolBrainReadPage,
   toolBrainSearch,
   toolBrainWritePage,
+  toolManageBrain,
 } from '../tools/brain-tools.js';
 import {
   toolExplainSymbol,
@@ -1019,6 +1020,7 @@ const SERVER_TOOL_HANDLERS = {
   brain_write_page: toolBrainWritePage,
   brain_append_log: toolBrainAppendLog,
   brain_ingest_source: toolBrainIngestSource,
+  manage_brain: toolManageBrain,
   save_memory: toolSaveMemory,
   board_provision_infra: toolBoardProvisionInfra,
   repo_map: toolRepoMap,

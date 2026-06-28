@@ -27,7 +27,7 @@ export async function openNotificationTarget(record: NotificationRecord): Promis
   }
 
   if (record.kind === 'synthesis') {
-    launchApp('settings', { settingsSection: 'memory' });
+    launchApp('brain', { brainSection: 'proposals' });
     return;
   }
 

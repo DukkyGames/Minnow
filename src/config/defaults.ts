@@ -36,6 +36,7 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'brain_write_page',
   'brain_append_log',
   'brain_ingest_source',
+  'manage_brain',
   'repo_map',
   'find_symbol',
   'who_calls',

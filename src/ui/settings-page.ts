@@ -5,11 +5,6 @@
 import '../styles/settings-page.css';
 
 import { loadPromptMetaSettings, savePromptMetaSettings } from '../config/prompt-meta';
-import {
-  backupMemory,
-  clearMemory,
-  fetchMemoryEnabled,
-} from '../memory/client';
 import { detectLocalServer } from '../tools/client';
 import { refreshSettingsSection } from './settings-sections';
 import {
@@ -39,7 +34,8 @@ import { upgradeSettingsCheckboxes } from './settings-switch';
 import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
 import { requestCloseWindowApp, registerWindowTeardown } from '../os/window-mounted-apps';
 import { fieldByKey } from './settings-catalog';
-import { navigateToDesktop } from '../os/router';
+import { resolveBrainMemoryRoute } from './brain-memory-routing';
+import { launchApp, navigateToDesktop } from '../os/router';
 
 export type { SettingsSectionId, SettingsCategoryId } from './settings-page-types';
 export { categoryForArea } from './settings-page-types';
@@ -164,78 +160,9 @@ export function setActiveSection(section: SettingsSectionId): void {
   setActiveCategory(categoryForArea(section), { scrollArea: section });
 }
 
-async function saveFeatureToggle(
-  key: string,
-  enabled: boolean,
-): Promise<void> {
-  try {
-    const res = await fetch('/api/config/file?key=config.json');
-    if (!res.ok) return;
-    const config = (await res.json()) as Record<string, unknown>;
-    const features =
-      config.features && typeof config.features === 'object'
-        ? { ...(config.features as Record<string, boolean>) }
-        : {};
-    features[key] = enabled;
-    config.features = features;
-    await fetch('/api/config/file?key=config.json', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
-    });
-  } catch {
-    /* offline */
-  }
-}
-
 function bindStaticSections(): void {
   if (staticBindingsDone) return;
   staticBindingsDone = true;
-
-  const enableEl = document.getElementById(
-    'settingsMemoryEnabled',
-  ) as HTMLInputElement | null;
-  enableEl?.addEventListener('change', async () => {
-    try {
-      const res = await fetch('/api/config/file?key=config.json');
-      if (!res.ok) return;
-      const config = await res.json();
-      config.memory = {
-        ...(config.memory ?? {}),
-        enabled: enableEl.checked,
-      };
-      await fetch('/api/config/file?key=config.json', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-      });
-      setStatus('ok', enableEl.checked ? 'Memory enabled' : 'Memory disabled');
-    } catch {
-      setStatus('err', 'Memory settings require npm start');
-    }
-  });
-
-  document
-    .getElementById('settingsMemoryClear')
-    ?.addEventListener('click', async () => {
-      if (!confirm('Clear all memory entries?')) return;
-      const ok = await clearMemory(true);
-      setStatus(
-        ok ? 'ok' : 'err',
-        ok ? 'Memory cleared (archived)' : 'Clear failed. Use npm start.',
-      );
-      if (ok) void refreshSettingsSection('memory');
-    });
-
-  document
-    .getElementById('settingsMemoryBackup')
-    ?.addEventListener('click', async () => {
-      const id = await backupMemory();
-      setStatus(
-        id ? 'ok' : 'err',
-        id ? `Memory backup: ${id}` : 'Backup failed. Use npm start.',
-      );
-    });
 
   const tabs = document.querySelectorAll('[data-profile-tab]');
   tabs.forEach((tab) => {
@@ -253,13 +180,6 @@ function bindStaticSections(): void {
       await refreshSettingsSection('prompting');
       schedulePromptTokenEstimateRefresh();
     });
-  });
-
-  const memoryInj = document.getElementById(
-    'settingsFeatureMemoryInjection',
-  ) as HTMLInputElement | null;
-  memoryInj?.addEventListener('change', () => {
-    void saveFeatureToggle('memoryInjection', memoryInj.checked);
   });
 
   document.querySelectorAll('[data-area-jump]').forEach((link) => {
@@ -285,13 +205,6 @@ function bindStaticSections(): void {
 }
 
 async function hydrateStaticFields(): Promise<void> {
-  const enableEl = document.getElementById(
-    'settingsMemoryEnabled',
-  ) as HTMLInputElement | null;
-  if (enableEl) {
-    enableEl.checked = await fetchMemoryEnabled();
-  }
-
   const meta = await loadPromptMetaSettings();
   document.querySelectorAll('[data-profile-tab]').forEach((tab) => {
     const el = tab as HTMLButtonElement;
@@ -453,6 +366,11 @@ export function openSettingsFromTopbar(): void {
 
 /** Navigate to a catalog field key (chat deep-link). */
 export function navigateToSettingsField(searchKey: string, area?: SettingsSectionId): void {
+  const brainSection = resolveBrainMemoryRoute(searchKey, area);
+  if (brainSection) {
+    launchApp('brain', { brainSection });
+    return;
+  }
   const entry = fieldByKey(searchKey);
   const targetArea = area ?? entry?.area ?? 'general';
   openSettings(targetArea, { searchKey: entry?.key ?? searchKey });

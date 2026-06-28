@@ -21,16 +21,15 @@ import { estimateTokens } from './rank.js';
 export function renderRepoMap(symbols, tokenBudget, opts = {}) {
   const budget = Math.max(50, Math.floor(tokenBudget));
   const lines = [];
+  /** @type {Array<{ type: string, text: string, symbolId?: string, file?: string }>} */
+  const entries = [];
   let used = 0;
   const focus = opts.focus?.trim().toLowerCase();
 
-  if (focus) {
-    lines.push(`# Repo map (focus: ${opts.focus})`);
-    used += estimateTokens(lines[0]);
-  } else {
-    lines.push('# Repo map');
-    used += estimateTokens(lines[0]);
-  }
+  const title = focus ? `# Repo map (focus: ${opts.focus})` : '# Repo map';
+  lines.push(title);
+  entries.push({ type: 'title', text: title });
+  used += estimateTokens(title);
 
   let currentFile = null;
   let matched = 0;
@@ -48,6 +47,7 @@ export function renderRepoMap(symbols, tokenBudget, opts = {}) {
       const headerTokens = estimateTokens(header);
       if (used + headerTokens > budget) break;
       lines.push(header);
+      entries.push({ type: 'file', file: currentFile, text: `## ${currentFile}` });
       used += headerTokens;
     }
 
@@ -55,23 +55,35 @@ export function renderRepoMap(symbols, tokenBudget, opts = {}) {
     const line = `- ${sig}`;
     const lineTokens = estimateTokens(line);
     if (used + lineTokens > budget) {
-      lines.push('- … (truncated to token budget)');
-      return { text: lines.join('\n'), truncated: true, tokenEstimate: used };
+      const truncatedLine = '- … (truncated to token budget)';
+      lines.push(truncatedLine);
+      entries.push({ type: 'truncated', text: truncatedLine });
+      return {
+        text: lines.join('\n'),
+        truncated: true,
+        tokenEstimate: used,
+        entries,
+      };
     }
     lines.push(line);
+    entries.push({ type: 'symbol', symbolId: sym.id, file: sym.file, text: line });
     used += lineTokens;
   }
 
   if (matched === 0 && focus) {
-    lines.push('\n(no symbols matched focus — try grep or a broader term)');
-    return { text: lines.join('\n'), truncated: false, tokenEstimate: used };
+    const message = '(no symbols matched focus — try grep or a broader term)';
+    lines.push(`\n${message}`);
+    entries.push({ type: 'message', text: message });
+    return { text: lines.join('\n'), truncated: false, tokenEstimate: used, entries };
   }
 
   if (lines.length === 1) {
-    lines.push('\n(no indexed symbols — run reindex or use grep)');
+    const message = '(no indexed symbols — run reindex or use grep)';
+    lines.push(`\n${message}`);
+    entries.push({ type: 'message', text: message });
   }
 
-  return { text: lines.join('\n'), truncated: false, tokenEstimate: used };
+  return { text: lines.join('\n'), truncated: false, tokenEstimate: used, entries };
 }
 
 /**

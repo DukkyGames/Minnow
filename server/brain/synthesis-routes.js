@@ -18,6 +18,7 @@ import {
   applyMemoryProposalEdits,
   countPendingMemoryProposals,
 } from './proposals.js';
+import { clearSynthesisProposals } from './clear-synthesis-proposals.js';
 import {
   listSkillProposals,
   getSkillProposal,
@@ -193,6 +194,18 @@ export async function handleSynthesisRequest(req, res, pathname) {
         /** @type {'pending' | 'accepted' | 'rejected' | undefined} */ (status),
       );
       sendJson(res, 200, { proposals });
+      return true;
+    }
+
+    if (pathname === '/api/memory/proposals/clear' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      if (body.confirmed !== true) {
+        sendJson(res, 400, { error: 'confirmed: true is required' });
+        return true;
+      }
+      const scope = body.scope === 'all' ? 'all' : 'pending';
+      const result = await clearSynthesisProposals(scope);
+      sendJson(res, 200, result);
       return true;
     }
 

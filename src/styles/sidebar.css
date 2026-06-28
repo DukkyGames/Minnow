@@ -478,7 +478,7 @@
   background: var(--mn-surface-1);
 }
 
-/* Five footer tools share --sidebar-w (240px); equal flex beats fixed 40px .icon-btn width */
+/* Six footer tools share --sidebar-w (240px); equal flex beats fixed 40px .icon-btn width */
 .chat-sidebar:not(.collapsed) .chat-sidebar-footer .chat-sidebar-footer-btn {
   flex: 1 1 0;
   min-width: 0;

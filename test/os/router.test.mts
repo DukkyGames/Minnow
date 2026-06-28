@@ -65,6 +65,13 @@ describe('resolveLegacyHash', () => {
     });
   });
 
+  test('redirects legacy #/settings/memory to Brain app', () => {
+    assert.deepEqual(resolveLegacyHash('#/settings/memory'), {
+      hash: '#/app/brain/memories',
+      brainSection: 'memories',
+    });
+  });
+
   test('redirects legacy full-page routes to OS apps', () => {
     assert.deepEqual(resolveLegacyHash('#/benchmark'), { hash: '#/app/bench' });
     assert.deepEqual(resolveLegacyHash('#/research/run'), {

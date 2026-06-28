@@ -42,7 +42,6 @@ const SECTION_SEARCH_ALIASES: Partial<
   features: ['orchestration', 'orchestrate', 'orchestrator', 'hub', 'board'],
   prompting: ['prompts', 'prompt', 'profile', 'system prompt'],
   rules: ['user rules', 'cursor rules', 'rule'],
-  memory: ['memories', 'recall'],
   'model-routing': ['models', 'routing', 'bindings'],
   providers: ['api', 'lm studio', 'openai'],
   search: ['web search', 'brave', 'tavily', 'searxng', 'duckduckgo', 'ddg'],
@@ -80,6 +79,60 @@ const MODELS_VOICE_SEARCH: SettingsSearchEntry = {
   ],
   hint: 'Models app',
 };
+
+/** Memory settings moved to the Brain app. */
+const BRAIN_MEMORY_SEARCH: SettingsSearchEntry[] = [
+  {
+    id: 'brain:memories',
+    label: 'Memory store',
+    sectionId: 'prompting',
+    kind: 'brain-section',
+    brainSection: 'memories',
+    searchKey: 'knowledge.memory',
+    keywords: ['memory', 'memories', 'recall', 'memory store', 'memory enabled'],
+    hint: 'Brain app',
+  },
+  {
+    id: 'brain:memories-enabled',
+    label: 'Enable memory store',
+    sectionId: 'prompting',
+    kind: 'brain-section',
+    brainSection: 'memories',
+    searchKey: 'knowledge.memory.enabled',
+    keywords: ['enable memory', 'disable memory', 'turn off memory'],
+    hint: 'Brain app',
+  },
+  {
+    id: 'brain:memories-injection',
+    label: 'Inject memories on send',
+    sectionId: 'prompting',
+    kind: 'brain-section',
+    brainSection: 'memories',
+    searchKey: 'knowledge.memory.injection',
+    keywords: ['memory injection', 'inject memories'],
+    hint: 'Brain app',
+  },
+  {
+    id: 'brain:embeddings',
+    label: 'Semantic embeddings',
+    sectionId: 'prompting',
+    kind: 'brain-section',
+    brainSection: 'settings',
+    searchKey: 'knowledge.memory.embeddings',
+    keywords: ['embeddings', 'vector', 'semantic search', 'hybrid retrieval'],
+    hint: 'Brain app',
+  },
+  {
+    id: 'brain:synthesis',
+    label: 'Auto-learning cadence',
+    sectionId: 'prompting',
+    kind: 'brain-section',
+    brainSection: 'settings',
+    searchKey: 'knowledge.memory.synthesis',
+    keywords: ['synthesis', 'auto-learning', 'skill learning', 'proposals cadence'],
+    hint: 'Brain app',
+  },
+];
 
 function sectionEntry(sectionId: SettingsSectionId): SettingsSearchEntry {
   const label = SETTINGS_SECTION_LABELS[sectionId];
@@ -237,6 +290,7 @@ export function buildSettingsSearchIndex(): SettingsSearchEntry[] {
     ...sections,
     ...categoryEntries(),
     MODELS_VOICE_SEARCH,
+    ...BRAIN_MEMORY_SEARCH,
     ...navGroupEntries(),
     ...catalogFieldEntries(),
     ...toolCategoryEntries(),

@@ -2,12 +2,18 @@
  * Agent-facing Brain wiki tools — search, read, list, write, log, and ingest.
  */
 
-import { ingestSource } from '../brain/ingest.js';
+import { ingestSource, clearIngestSources } from '../brain/ingest.js';
 import { retrieveBrainBlockHybrid } from '../brain/retrieve.js';
+import { deleteChatArchive } from '../brain/archive.js';
+import { backupBrain } from '../brain/backup.js';
+import { clearCodeIndex } from '../brain/code/schema.js';
+import { clearSynthesisProposals } from '../brain/clear-synthesis-proposals.js';
+import { clearVectorStore } from '../brain/vector-store.js';
 import { brainWorkspaceKeyFromPath } from '../brain/paths.js';
 import {
   appendLog,
   createPage,
+  deletePage,
   getPageTree,
   listPages,
   loadBrainConfig,
@@ -216,4 +222,117 @@ export async function toolBrainIngestSource(args) {
     const message = err instanceof Error ? err.message : String(err);
     return `Error ingesting source: ${message}`;
   }
+}
+
+const MANAGE_BRAIN_DESTRUCTIVE = new Set([
+  'delete_page',
+  'clear_wiki',
+  'delete_archive',
+  'clear_proposals',
+  'clear_code_index',
+  'clear_sources',
+]);
+
+/**
+ * Destructive Brain data management (wiki, archives, proposals, code index, sources).
+ * @param {Record<string, unknown>} args
+ * @returns {Promise<string>}
+ */
+export async function toolManageBrain(args) {
+  const brain = await loadBrainConfig();
+  if (brain.enabled === false) {
+    return 'Error: Brain wiki is disabled in Settings → Memory.';
+  }
+
+  const action = String(args?.action ?? '').trim();
+  if (!action) {
+    return 'Error: action is required.';
+  }
+
+  const confirmed =
+    args?.confirmed === true ||
+    args?.confirm === true ||
+    args?.confirmed === 'true' ||
+    args?.confirm === 'true';
+  if (MANAGE_BRAIN_DESTRUCTIVE.has(action) && !confirmed) {
+    return 'Deletion requires confirmation. Re-run with confirmed: true after user approval.';
+  }
+
+  const workspaceKey = activeWorkspaceKey();
+
+  if (action === 'delete_page') {
+    const lookup = String(args?.path ?? '').trim();
+    if (!lookup) {
+      return 'Error: path is required for delete_page.';
+    }
+    const relPath = await resolvePageLookup(lookup);
+    let page;
+    try {
+      page = await readPage(relPath);
+    } catch {
+      return `Error: page not found at ${lookup}.`;
+    }
+    await deletePage(page.path);
+    return `Deleted wiki page "${page.meta.title}" at ${page.path}.`;
+  }
+
+  if (action === 'clear_wiki') {
+    let archivePath;
+    if (args?.archive === true) {
+      const backup = await backupBrain();
+      archivePath = backup.path;
+    }
+    const pages = await listPages();
+    for (const page of pages) {
+      try {
+        await deletePage(page.path);
+      } catch {
+        /* ignore per-page errors */
+      }
+    }
+    try {
+      await clearVectorStore();
+    } catch {
+      /* ignore vector cleanup */
+    }
+    const archiveNote = archivePath ? ` Backup: ${archivePath}.` : '';
+    return `Cleared ${pages.length} wiki page(s).${archiveNote}`;
+  }
+
+  if (action === 'delete_archive') {
+    const chatId = String(args?.chatId ?? '').trim();
+    if (!chatId) {
+      return 'Error: chatId is required for delete_archive.';
+    }
+    const key =
+      String(args?.workspaceKey ?? '').trim() || workspaceKey;
+    const result = await deleteChatArchive(chatId, key);
+    return `Deleted chat archive ${chatId} (${result.removed} page(s)).`;
+  }
+
+  if (action === 'clear_proposals') {
+    const scope = args?.scope === 'all' ? 'all' : 'pending';
+    const result = await clearSynthesisProposals(scope);
+    return `Cleared ${result.removed} proposal(s) (scope: ${scope}).`;
+  }
+
+  if (action === 'clear_code_index') {
+    const result = clearCodeIndex({
+      all: args?.all === true,
+      workspaceKey:
+        args?.workspaceKey !== undefined ? String(args.workspaceKey) : undefined,
+    });
+    const keys = result.workspaceKeys.length
+      ? result.workspaceKeys.join(', ')
+      : 'none';
+    return `Reset code index for ${result.removed} workspace(s): ${keys}.`;
+  }
+
+  if (action === 'clear_sources') {
+    const result = await clearIngestSources({ archive: args?.archive === true });
+    const archiveNote = result.archivePath ? ` Backup: ${result.archivePath}.` : '';
+    return `Cleared ${result.removed} ingest source file(s).${archiveNote}`;
+  }
+
+  return `Error: unknown action "${action}".`;
 }

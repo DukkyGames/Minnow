@@ -141,3 +141,35 @@ export async function ingestSource(input) {
     pages: touched,
   };
 }
+
+/**
+ * Delete all raw files under ~/.minnow/brain/sources/ (not synthesized wiki pages).
+ * @param {{ archive?: boolean }} [opts]
+ * @returns {Promise<{ removed: number, archivePath?: string }>}
+ */
+export async function clearIngestSources(opts = {}) {
+  const { backupBrain } = await import('./backup.js');
+  let archivePath;
+  if (opts.archive === true) {
+    const backup = await backupBrain();
+    archivePath = backup.path;
+  }
+
+  const sourcesDir = getBrainSourcesDir();
+  let removed = 0;
+  try {
+    const names = await fs.readdir(sourcesDir);
+    for (const name of names) {
+      const fp = path.join(sourcesDir, name);
+      const stat = await fs.stat(fp);
+      if (!stat.isFile()) continue;
+      await fs.unlink(fp);
+      removed += 1;
+    }
+  } catch (err) {
+    if (/** @type {NodeJS.ErrnoException} */ (err).code !== 'ENOENT') throw err;
+  }
+
+  await appendLog(`cleared ${removed} ingest source file(s)`);
+  return { removed, archivePath };
+}

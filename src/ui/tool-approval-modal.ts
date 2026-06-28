@@ -5,9 +5,13 @@
 
 import { streaming } from '../app-state';
 import type { ToolApprovalRequest } from '../tools/tool-approval-types';
-import { isChatAppForeground } from './chat-mount';
+import { getActiveComposerSurface } from './composer-surface';
 import { setComposerStreamingMode } from './composer-send';
 import { setSidebarInputPendingForActiveChat } from './chat-item-dot';
+import {
+  resolvePromptComposerShell,
+  resolveToolApprovalHost,
+} from './prompt-host-resolve';
 import {
   acquireUserPromptLock,
   isUserPromptLocked,
@@ -15,23 +19,6 @@ import {
 } from './user-prompt-lock';
 
 export type ToolApprovalModalResult = 'allow-once' | 'always-allow' | 'cancel';
-
-function getToolApprovalHost(): HTMLElement | null {
-  if (isChatAppForeground()) {
-    return (
-      document.getElementById('chatAppToolApprovalHost') ??
-      document.getElementById('toolApprovalHost')
-    );
-  }
-  return document.getElementById('toolApprovalHost');
-}
-
-function getPromptComposerShell(): HTMLElement | null {
-  if (isChatAppForeground()) {
-    return document.querySelector('.chat-app-composer');
-  }
-  return document.getElementById('mainColumn');
-}
 
 /**
  * Maps a key event to approval choice 1–3, or null if not a plain digit hotkey.
@@ -87,25 +74,15 @@ export function showToolApprovalModal(
   request: ToolApprovalRequest,
 ): Promise<ToolApprovalModalResult> {
   return new Promise((resolve) => {
-    const host = getToolApprovalHost();
+    const host = resolveToolApprovalHost();
     if (!host) {
       resolve('cancel');
       return;
     }
 
     /** Hides the composer row via CSS while the approval strip is visible (see `tool-approval.css`). */
-    const composerShell = getPromptComposerShell();
-
-    const msgInput = (
-      isChatAppForeground()
-        ? document.getElementById('chatAppInput')
-        : document.getElementById('msgInput')
-    ) as HTMLTextAreaElement | null;
-    const sendBtn = (
-      isChatAppForeground()
-        ? document.getElementById('chatAppSendBtn')
-        : document.getElementById('sendBtn')
-    ) as HTMLButtonElement | null;
+    const composerShell = resolvePromptComposerShell();
+    const { inputEl: msgInput, sendBtnEl: sendBtn } = getActiveComposerSurface();
     const prevInputDisabled = msgInput?.disabled ?? false;
     const prevSendDisabled = sendBtn?.disabled ?? false;
     acquireUserPromptLock();

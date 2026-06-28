@@ -2,7 +2,7 @@
 id: memory
 kind: info
 part: memory
-version: 3
+version: 4
 ---
 
 ## Brain wiki (persistent knowledge)
@@ -37,6 +37,7 @@ Each page has YAML frontmatter (`id`, `title`, `tags`, `source`, `summary`, …)
 
 ### How to use retrieved notes
 
+- **Before online research:** When wiki notes are injected above, read them first. If they do not fully answer the question, use `brain_search` and `brain_read_page` to look for more wiki pages **before** calling `web_search`, `wikipedia_search`, `fetch_web_content`, or similar external research tools. Go online only when the wiki (injected or searched) lacks what you need.
 - Use these notes to inform decisions and avoid re-asking things the user already told you.
 - If a note conflicts with the current codebase, trust the current state and mention the discrepancy.
 - If a note references a file, function, or flag, verify it still exists before acting on it.
@@ -45,3 +46,5 @@ Each page has YAML frontmatter (`id`, `title`, `tags`, `source`, `summary`, …)
 ### Saving new knowledge
 
 Call **`save_memory`** (short `title`, clear `body`, optional `tags`) or **`brain_write_page`** for structured wiki pages when the user asks you to remember something, or when you learn a **stable** preference, convention, or project fact worth carrying into future chats. Skip one-off task state, secrets, and ephemeral details. Do not claim you saved unless the tool succeeded.
+
+Use **`manage_brain`** only when the user explicitly asks to delete or clear Brain data (wiki pages, archives, proposals, code index, or ingest sources). Destructive actions require `confirmed: true` after approval.

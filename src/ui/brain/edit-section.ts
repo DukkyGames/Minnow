@@ -3,7 +3,6 @@
  */
 
 import { fetchBrainPage, saveBrainPage } from '../../brain/client';
-import { setBrainHeaderActions } from '../brain-page';
 import { getGraphSelectedPath, setGraphSelectedPath } from './graph-section';
 import { renderBrainMarkdown } from './wikilink-markdown';
 
@@ -35,17 +34,6 @@ function refreshEditPreview(): void {
   renderBrainMarkdown(previewEl, body, (path) => {
     void import('../brain-page').then((m) => m.openBrainEditForPath(path));
   });
-}
-
-function mountEditHeaderActions(): void {
-  const saveBtn = document.createElement('button');
-  saveBtn.type = 'button';
-  saveBtn.className = 'brain-action-btn is-primary';
-  saveBtn.textContent = 'Save';
-  saveBtn.addEventListener('click', () => {
-    void saveEditForm();
-  });
-  setBrainHeaderActions(saveBtn);
 }
 
 function bindEditSection(): void {
@@ -162,7 +150,6 @@ async function saveEditForm(): Promise<void> {
 export async function renderEditSection(prefillPath?: string): Promise<void> {
   bindEditSection();
   bindEditPreview();
-  mountEditHeaderActions();
 
   const pathEl = document.getElementById('brainEditPath') as HTMLInputElement | null;
   if (pathEl && prefillPath) {

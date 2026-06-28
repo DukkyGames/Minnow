@@ -42,6 +42,8 @@ The "Experts' Lab" — a roster of specialist sandbox chats. Pick a specialist f
 
 The knowledge surface backed by the **Brain wiki** (CORTEX) at `~/.minnow/brain/`: nested markdown pages with YAML frontmatter, hybrid keyword/vector retrieval, code-symbol indexing, ingest, and lint. Agent tools: `brain_search`, `brain_read_page`, `brain_list`, `brain_write_page`, `brain_append_log`, `brain_ingest_source`, plus code tools `repo_map`, `find_symbol`, `who_calls`, `read_symbol`, `explain_symbol`. `save_memory` writes facts here.
 
+**Sections:** Graph (home), Edit, Log, Schema, Proposals, **Memories** (store toggles + entry CRUD), Ingest, Lint, Code, Settings (embeddings, synthesis cadence, code index). Legacy `#/settings/memory` opens **Memories**.
+
 ## Calendar
 
 Local-first SQLite calendar (`~/.minnow/calendar/calendar.db`) in a window. Month/week views, `.ics` import/export, RRULE recurrence, and encrypted **CalDAV** + **Google OAuth** sync (`tsdav`). Agent tool `manage_calendar`; upcoming-event reminders flow through the scheduler notification queue. See [oauth-google.md](oauth-google.md) / [oauth-microsoft.md](oauth-microsoft.md).
@@ -56,7 +58,7 @@ Local recurring agent jobs (`~/.minnow/scheduler.json`) as a side panel. Each jo
 
 ## Settings
 
-Full-page sections at `#/app/settings` (and legacy `#/settings/<section>` redirects): General (appearance, notifications), Tools, Modes, Skills, Memory, MCP, LSP, Sub-agents, Work agents, Rules, Prompting (profiles + diffing), Providers/Models, Webhooks, OAuth, Evals, Audio, and more. A search box indexes settings.
+Full-page sections at `#/app/settings` (and legacy `#/settings/<section>` redirects): General (appearance, notifications), Tools, Modes, Skills, MCP, LSP, Sub-agents, Work agents, Rules, Prompting (profiles + diffing), Providers/Models, Webhooks, OAuth, Evals, Audio, and more. **Memory** settings live in the **Brain** app. A search box indexes settings (memory-related queries open Brain).
 
 ---
 
