@@ -208,6 +208,10 @@ function bindSettingsSection(): void {
         setStatus('err', 'Token budget must be at least 200');
         return;
       }
+      if (budget > 128_000) {
+        setStatus('err', 'Token budget cannot exceed 128000');
+        return;
+      }
       const parseLines = (raw: string) =>
         raw
           .split(/\r?\n/)

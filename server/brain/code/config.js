@@ -4,6 +4,11 @@
 
 /** @typedef {'on-demand' | 'on-switch' | 'git-hook'} CodeReindexCadence */
 
+/** Lower bound for repo_map token budget (settings + tool override). */
+export const REPO_MAP_TOKEN_BUDGET_MIN = 200;
+/** Upper bound for repo_map token budget (settings + tool override). */
+export const REPO_MAP_TOKEN_BUDGET_MAX = 128_000;
+
 export const DEFAULT_BRAIN_CODE_CONFIG = {
   enabled: true,
   includeGlobs: [
@@ -23,9 +28,22 @@ export const DEFAULT_BRAIN_CODE_CONFIG = {
   reindexCadence: /** @type {CodeReindexCadence} */ ('on-demand'),
   /** Reserved for MIN-B11 semantic code search. */
   codeEmbeddingsEnabled: false,
-  /** Write .minnow/brain-jsconfig.json when a JS/TS workspace has no ts/js config. */
+  /** Write .minnow/jsconfig.json when a JS/TS workspace has no ts/js config. */
   autoScaffoldIndexConfig: true,
 };
+
+/**
+ * Clamp repo_map token budget to the supported range.
+ * @param {unknown} budget
+ */
+export function clampRepoMapTokenBudget(budget) {
+  const n = Number(budget);
+  if (!Number.isFinite(n)) return DEFAULT_BRAIN_CODE_CONFIG.repoMapTokenBudget;
+  return Math.min(
+    REPO_MAP_TOKEN_BUDGET_MAX,
+    Math.max(REPO_MAP_TOKEN_BUDGET_MIN, Math.floor(n)),
+  );
+}
 
 /**
  * Merge partial code-index settings with defaults.
@@ -48,9 +66,7 @@ export function normalizeBrainCodeConfig(raw) {
     enabled: src.enabled !== false,
     includeGlobs,
     excludeGlobs,
-    repoMapTokenBudget: Number.isFinite(budget)
-      ? Math.min(8000, Math.max(200, Math.floor(budget)))
-      : DEFAULT_BRAIN_CODE_CONFIG.repoMapTokenBudget,
+    repoMapTokenBudget: clampRepoMapTokenBudget(budget),
     reindexCadence: validCadence,
     codeEmbeddingsEnabled: src.codeEmbeddingsEnabled === true,
     autoScaffoldIndexConfig: src.autoScaffoldIndexConfig !== false,

@@ -1590,7 +1590,7 @@
                 <textarea id="brainCodeExcludeGlobs" rows="3" spellcheck="false"></textarea>
               </label>
               <label>Repo map token budget
-                <input type="number" id="brainCodeTokenBudget" class="settings-input settings-input--narrow" min="200" max="8000" step="100" value="1500">
+                <input type="number" id="brainCodeTokenBudget" class="settings-input settings-input--narrow" min="200" max="128000" step="100" value="1500">
               </label>
               <label>Reindex cadence
                 <select id="brainCodeReindexCadence">
@@ -1600,7 +1600,7 @@
                 </select>
               </label>
               <label><input type="checkbox" id="brainCodeEmbeddingsEnabled"> Enable code embeddings (reserved)</label>
-              <label><input type="checkbox" id="brainCodeAutoScaffold" checked> Auto-create <code>.minnow/brain-jsconfig.json</code> when the workspace has JS/TS but no tsconfig/jsconfig</label>
+              <label><input type="checkbox" id="brainCodeAutoScaffold" checked> Auto-create <code>.minnow/jsconfig.json</code> when the workspace has JS/TS but no tsconfig/jsconfig</label>
               <p class="brain-muted">Indexing scaffold lives under <code>.minnow/</code> and is not written to the repo root. Disable if you manage project config yourself.</p>
               <p class="brain-muted">Semantic code search is not wired yet; this toggle is saved for a future release.</p>
               <div class="brain-settings-actions">

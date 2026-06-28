@@ -398,7 +398,7 @@ function isSkippableWorkspaceSymbolError(message) {
 function formatWorkspaceSymbolErrors(errors) {
   const joined = errors.join('; ');
   if (/No Project/i.test(joined)) {
-    return `${joined} — add tsconfig.json or jsconfig.json at the workspace root, then reindex.`;
+    return `${joined} — add tsconfig.json or jsconfig.json at the workspace root (or reindex so Minnow can create .minnow/jsconfig.json), then try again.`;
   }
   return joined;
 }

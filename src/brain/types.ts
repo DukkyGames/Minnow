@@ -84,7 +84,7 @@ export interface BrainCodeConfig {
   repoMapTokenBudget: number;
   reindexCadence: BrainCodeReindexCadence;
   codeEmbeddingsEnabled: boolean;
-  /** Write .minnow/brain-jsconfig.json when JS/TS sources lack ts/js config. */
+  /** Write .minnow/jsconfig.json when JS/TS sources lack ts/js config. */
   autoScaffoldIndexConfig: boolean;
 }
 

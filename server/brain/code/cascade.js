@@ -371,8 +371,15 @@ export async function ensureIndexFreshForQuery() {
     return lazyRefreshInFlight;
   }
 
+  const root = getEffectiveWorkspaceRoot();
+  const repo = brainWorkspaceKeyFromPath(root) || 'workspace';
+  const db = getCodeDb(repo);
+  const indexedCount =
+    db.prepare('SELECT COUNT(*) AS n FROM file_hashes WHERE repo = ?').get(repo)?.n ?? 0;
+  const discoverNewFiles = indexedCount === 0;
+
   lazyRefreshInFlight = (async () => {
-    const stale = await detectStaleFiles({ codeConfig: code, discoverNewFiles: false });
+    const stale = await detectStaleFiles({ codeConfig: code, discoverNewFiles });
     if (!stale.changedFiles.length) {
       if (stale.stale && stale.merkleRoot) {
         await persistMerkleRoot(stale.repo, stale.merkleRoot);

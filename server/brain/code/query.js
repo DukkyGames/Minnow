@@ -8,11 +8,12 @@ import { getLspWorkspaceSymbols } from '../../lsp/manager.js';
 import { getEffectiveWorkspaceRoot } from '../../runtime/path-access.js';
 import { brainWorkspaceKeyFromPath } from '../paths.js';
 import { loadBrainConfig } from '../store.js';
-import { normalizeBrainCodeConfig } from './config.js';
+import { clampRepoMapTokenBudget, normalizeBrainCodeConfig } from './config.js';
 import { getCodeDb, getIndexStats } from './schema.js';
 import { recomputePageRank } from './indexer.js';
 import { renderRepoMap } from './repo-map.js';
 import { ensureIndexFreshForQuery } from './cascade.js';
+import { ensureBrainLspProjectReady } from './project-scaffold.js';
 
 /** Load merged config.brain.code settings. */
 export async function loadBrainCodeConfig() {
@@ -70,6 +71,10 @@ export async function findSymbol(query, limit = 20) {
   const matches = ftsMatches.map((row) => ({ ...row, source: 'index' }));
 
   if (matches.length < max) {
+    const code = await loadBrainCodeConfig();
+    await ensureBrainLspProjectReady(getEffectiveWorkspaceRoot(), {
+      enabled: code.autoScaffoldIndexConfig !== false,
+    });
     const { symbols, error } = await getLspWorkspaceSymbols(q);
     const seen = new Set(matches.map((m) => m.id));
     for (const sym of symbols ?? []) {
@@ -207,7 +212,7 @@ export async function repoMap(opts = {}) {
     recomputePageRank(db, new Set(opts.focusFiles));
   }
 
-  const budget = opts.tokenBudget ?? code.repoMapTokenBudget;
+  const budget = clampRepoMapTokenBudget(opts.tokenBudget ?? code.repoMapTokenBudget);
   const rows = db
     .prepare(
       `SELECT id, file, signature, kind, pagerank, usage_count
