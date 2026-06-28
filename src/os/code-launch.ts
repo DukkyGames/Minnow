@@ -18,7 +18,7 @@ async function refreshCodeChatSurface(): Promise<void> {
   const { renderChatFromHistory, renderStatsForChat } = await import('../ui/messages');
   const { renderSidebar } = await import('../ui/sidebar');
   const { syncModeSelectorFromActiveChat } = await import('../ui/mode-selector');
-  const { syncThinkingControlFromActiveChat } = await import('../ui/composer-thinking');
+  const { syncComposerReasoningEffortFromActiveChat } = await import('../ui/composer-reasoning-effort');
   const { syncViewModeToggleFromActiveChat } = await import('../ui/view-mode-toggle');
   const { refreshChatJumpChipVisibility } = await import('../ui/chat-scroll');
 
@@ -26,7 +26,7 @@ async function refreshCodeChatSurface(): Promise<void> {
   renderChatFromHistory(chat);
   renderStatsForChat(chat);
   syncModeSelectorFromActiveChat();
-  syncThinkingControlFromActiveChat();
+  syncComposerReasoningEffortFromActiveChat();
   syncViewModeToggleFromActiveChat();
   syncComposerFromStreamingState();
   renderSidebar();

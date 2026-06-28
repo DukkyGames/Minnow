@@ -178,9 +178,8 @@
   color: var(--os-text-dim);
 }
 
-/* Shared pill metrics — model chip + reasoning effort select stay the same height */
-.mn-os-mb-chip,
-.mn-os-mb-reasoning-effort-select {
+/* Shared pill metrics — model chip */
+.mn-os-mb-chip {
   box-sizing: border-box;
   min-height: 34px;
   padding-block: 6px;
@@ -222,50 +221,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
-}
-
-/* Reasoning effort select — compact, matches menubar model chip height */
-.mn-os-mb-reasoning-effort-wrap {
-  flex-shrink: 0;
-}
-
-.mn-os-mb-reasoning-effort-select {
-  padding-inline: 11px 26px;
-  border: 1px solid var(--os-border);
-  background: var(--os-surface-2);
-  color: var(--os-text-dim);
-  font-family: var(--font-ui);
-  cursor: pointer;
-  outline: none;
-  appearance: none;
-  background-image: linear-gradient(45deg, transparent 50%, var(--os-text-dim) 50%),
-    linear-gradient(135deg, var(--os-text-dim) 50%, transparent 50%);
-  background-position:
-    calc(100% - 12px) calc(50% - 2px),
-    calc(100% - 8px) calc(50% - 2px);
-  background-size: 4px 4px, 4px 4px;
-  background-repeat: no-repeat;
-  transition:
-    background 0.14s var(--os-ease),
-    border-color 0.14s var(--os-ease),
-    color 0.14s var(--os-ease);
-}
-
-.mn-os-mb-reasoning-effort-select:hover:not(:disabled) {
-  background-color: var(--os-surface-3);
-  border-color: var(--os-border-strong);
-  color: var(--os-text);
-}
-
-.mn-os-mb-reasoning-effort-select:focus-visible {
-  border-color: var(--os-accent);
-  box-shadow: 0 0 0 2px var(--os-accent-glow);
-  color: var(--os-text);
-}
-
-.mn-os-mb-reasoning-effort-select:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
 }
 
 /* Operational status (Ready, loading models, errors) — mirrors legacy .status-pill */

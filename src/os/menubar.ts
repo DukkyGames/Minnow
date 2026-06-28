@@ -145,23 +145,6 @@ export function renderMenubar(root: HTMLElement): () => void {
   workspaceSlot.className = 'mn-os-mb-workspace-slot';
   workspaceSlot.hidden = true;
 
-  const reasoningEffortWrap = document.createElement('div');
-  reasoningEffortWrap.id = 'osReasoningEffortWrap';
-  reasoningEffortWrap.className = 'mn-os-mb-reasoning-effort-wrap hidden';
-
-  const reasoningEffortLabel = document.createElement('label');
-  reasoningEffortLabel.className = 'visually-hidden';
-  reasoningEffortLabel.htmlFor = 'osReasoningEffortSelect';
-  reasoningEffortLabel.textContent = 'Reasoning effort';
-
-  const reasoningEffortSelect = document.createElement('select');
-  reasoningEffortSelect.id = 'osReasoningEffortSelect';
-  reasoningEffortSelect.className = 'mn-os-mb-reasoning-effort-select';
-  reasoningEffortSelect.setAttribute('aria-label', 'Reasoning effort');
-  reasoningEffortSelect.disabled = true;
-
-  reasoningEffortWrap.append(reasoningEffortLabel, reasoningEffortSelect);
-
   const modelChip = document.createElement('button');
   modelChip.type = 'button';
   modelChip.className = 'mn-os-mb-chip';
@@ -201,7 +184,7 @@ export function renderMenubar(root: HTMLElement): () => void {
   timeEl.className = 'mn-os-mb-time mn-os-mono';
   timeEl.textContent = formatClock(new Date());
 
-  right.append(workspaceSlot, reasoningEffortWrap, modelChip, schedulerBtn, bell, settingsBtn, timeEl);
+  right.append(workspaceSlot, modelChip, schedulerBtn, bell, settingsBtn, timeEl);
   root.append(left, right);
 
   function syncMenubar(): void {

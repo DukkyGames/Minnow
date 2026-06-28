@@ -154,14 +154,11 @@ import {
   initOrchestrateHub,
   toggleOrchestrateHubFromTopbar,
 } from './ui/orchestrate-hub';
+import { initThinkingControl } from './ui/composer-thinking';
 import {
-  initThinkingControl,
-  syncThinkingControlFromActiveChat,
-} from './ui/composer-thinking';
-import {
-  initHeaderReasoningEffort,
-  syncHeaderReasoningEffortFromActiveChat,
-} from './ui/header-reasoning-effort';
+  initComposerReasoningEffort,
+  syncComposerReasoningEffortFromActiveChat,
+} from './ui/composer-reasoning-effort';
 import { loadThinkingMeta } from './config/thinking-meta';
 import { syncReefWidgetSettingsFromActiveChat } from './ui/reef-widget-settings';
 import { initWorkAgentDevUi, syncWorkAgentDevFromActiveChat } from './ui/work-agent-dev';
@@ -299,7 +296,7 @@ export async function initApp(): Promise<void> {
   const { initCodeBrainMap } = await import('./ui/code-brain-map');
   initCodeBrainMap();
   initThinkingControl();
-  initHeaderReasoningEffort();
+  initComposerReasoningEffort();
   initOrchestratePlanSelector();
   initViewModeToggle();
   initReefBridge();
@@ -391,8 +388,7 @@ export async function initApp(): Promise<void> {
   renderStatsForChat(getActiveChat());
   refreshContextUsageRing();
   syncModeSelectorFromActiveChat();
-  syncThinkingControlFromActiveChat();
-  syncHeaderReasoningEffortFromActiveChat();
+  syncComposerReasoningEffortFromActiveChat();
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
   void syncOrchestratePlanStripFromActiveChat();

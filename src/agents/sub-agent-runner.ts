@@ -81,7 +81,7 @@ import { resolveSamplerPreset } from './resolve-sampler';
 import { applySamplerToBody } from './sampler-types';
 import { findChatById } from '../state/sessions';
 import {
-  modelHasSelectableReasoningEffort,
+  modelUsesComposerReasoningDropdown,
   resolveEffectiveReasoningEffort,
 } from '../lib/reasoning-effort';
 import { resolveSendCapabilities } from '../providers/model-capabilities';
@@ -442,7 +442,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
     await loadToolCallsMeta();
     const provider = await resolveProvider(input.providerId);
     const sendCaps = resolveSendCapabilities(input.providerId, input.modelId, provider.apiKind);
-    const turnReasoningEffort = modelHasSelectableReasoningEffort(sendCaps)
+    const turnReasoningEffort = modelUsesComposerReasoningDropdown(sendCaps)
       ? resolveEffectiveReasoningEffort(parentChat ?? {}, sendCaps, resolvedThinking.mode)
       : undefined;
     const providerCapabilities = await readProviderCapabilities(input.providerId);

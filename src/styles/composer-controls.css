@@ -160,6 +160,50 @@
 .thinking-control-wrap {
   flex-shrink: 0;
   min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.composer-reasoning-effort-wrap {
+  flex-shrink: 0;
+}
+
+.composer-reasoning-effort-select {
+  min-height: 28px;
+  max-width: 7.5rem;
+  padding: 4px 24px 4px 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--mn-fg-muted) 50%),
+    linear-gradient(135deg, var(--mn-fg-muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 12px) calc(50% - 2px),
+    calc(100% - 8px) calc(50% - 2px);
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+  transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
+}
+
+.composer-reasoning-effort-select:hover:not(:disabled) {
+  border-color: var(--mn-border-strong);
+}
+
+.composer-reasoning-effort-select:focus-visible {
+  border-color: var(--mn-accent);
+  box-shadow: 0 0 0 2px var(--mn-accent-soft);
+}
+
+.composer-reasoning-effort-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .thinking-toggle-host {
