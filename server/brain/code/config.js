@@ -23,7 +23,7 @@ export const DEFAULT_BRAIN_CODE_CONFIG = {
     '**/.minnow/**',
   ],
   /** Approximate token budget for repo_map output. */
-  repoMapTokenBudget: 1500,
+  repoMapTokenBudget: 32000,
   /** When to trigger background reindex (MIN-B10 wires automation). */
   reindexCadence: /** @type {CodeReindexCadence} */ ('on-demand'),
   /** Reserved for MIN-B11 semantic code search. */
