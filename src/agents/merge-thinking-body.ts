@@ -2,11 +2,13 @@
  * Apply resolved thinking mode to a chat completion body and surface LM Studio hints.
  */
 
+import { modelHasSelectableReasoningEffort } from '../lib/reasoning-effort';
 import type { ProviderPublic } from '../providers/types';
-import type { ModelCapabilities } from '../types';
+import type { ModelCapabilities, ReasoningEffortOption } from '../types';
 import { setStatus } from '../ui/status';
 import {
   markLmStudioThinkingHintShown,
+  reasoningEffortToCompletionBody,
   thinkingToCompletionBody,
   wasLmStudioThinkingHintShown,
 } from './thinking-to-body';
@@ -18,8 +20,13 @@ export function mergeThinkingIntoCompletionBody<T extends Record<string, unknown
   resolved: ThinkingResolvedMode,
   provider: Pick<ProviderPublic, 'apiKind'>,
   modelCapabilities?: ModelCapabilities | null,
+  reasoningEffort?: ReasoningEffortOption | null,
 ): T {
-  const patch = thinkingToCompletionBody(resolved, provider.apiKind, modelCapabilities);
+  const useEffortDropdown = modelHasSelectableReasoningEffort(modelCapabilities);
+  const patch =
+    useEffortDropdown && reasoningEffort
+      ? reasoningEffortToCompletionBody(reasoningEffort, provider.apiKind, modelCapabilities)
+      : thinkingToCompletionBody(resolved, provider.apiKind, modelCapabilities);
   Object.assign(body, patch.body);
   if (
     patch.hint?.bestEffort &&

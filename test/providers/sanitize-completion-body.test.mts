@@ -52,11 +52,29 @@ describe('sanitizeCompletionBodyForProvider', () => {
       {
         model: 'gpt-4o-mini',
         thinking: { type: 'disabled' },
+        reasoning: { effort: 'medium' },
+        reasoning_effort: 'medium',
       },
       OPENAI,
       { reasoning: false },
     );
     assert.equal(out.thinking, undefined);
+    assert.equal(out.reasoning, undefined);
+    assert.equal(out.reasoning_effort, undefined);
+  });
+
+  test('preserves reasoning fields when model supports reasoning options', () => {
+    const out = sanitizeCompletionBodyForProvider(
+      {
+        model: 'o3-mini',
+        reasoning_effort: 'high',
+        reasoning: { effort: 'high' },
+      },
+      OPENAI,
+      { reasoning: true, reasoningAllowedOptions: ['low', 'medium', 'high'] },
+    );
+    assert.equal(out.reasoning_effort, 'high');
+    assert.deepEqual(out.reasoning, { effort: 'high' });
   });
 
   test('maps max_tokens to max_completion_tokens for o-series models', () => {

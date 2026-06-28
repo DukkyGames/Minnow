@@ -12,6 +12,9 @@ import type {
 } from './agents/sub-agent-structured-outcome';
 import type { ThinkingResolvedMode, ThinkingTriState } from './agents/thinking-types';
 
+/** Per-model / per-chat reasoning effort level for header dropdown and send path. */
+export type ReasoningEffortOption = 'off' | 'on' | 'low' | 'medium' | 'high';
+
 /** Persisted session blob schema version (`minnow-sessions-v1` key; version inside JSON). */
 export const SESSION_SCHEMA_VERSION = 5 as const;
 
@@ -614,6 +617,8 @@ export interface TurnSnapshot {
   maxTokens: number;
   /** Resolved thinking on/off frozen for replay. */
   thinkingMode: ThinkingResolvedMode;
+  /** Resolved reasoning effort frozen for replay (when dropdown applies). */
+  reasoningEffort?: ReasoningEffortOption;
   modeId: ModeId;
   workAgentId: string | null;
   workAgentAuto: boolean;
@@ -692,6 +697,8 @@ export interface Chat {
   expertSelection?: ExpertSelection;
   /** Tri-state thinking override for this chat (inherit uses work-agent / global stack). */
   thinkingMode?: ThinkingTriState;
+  /** Per-chat reasoning effort override; unset resolves from catalog default + inherit stack. */
+  reasoningEffort?: ReasoningEffortOption;
   /** Active Work Agent; null = default / auto from mode (Step 08). */
   workAgentId?: string | null;
   /** When true, mode switch picks defaultForModes agent (Step 08). */
@@ -823,10 +830,10 @@ export interface ModelCapabilities {
   streaming: boolean | null;
   grammar: boolean | null;
   reasoning: boolean | null;
-  /** Catalog `reasoning.allowed_options` when upstream exposes tri-state control. */
-  reasoningAllowedOptions?: Array<'off' | 'on'>;
-  /** Catalog default reasoning mode when provided. */
-  reasoningDefault?: 'off' | 'on';
+  /** Catalog `reasoning.allowed_options` when upstream exposes effort control. */
+  reasoningAllowedOptions?: ReasoningEffortOption[];
+  /** Catalog default reasoning effort when provided. */
+  reasoningDefault?: ReasoningEffortOption;
   /** Value to send for `thinking.type` when enabled on openai-v1 providers (defaults to 'enabled'). MiniMax requires 'adaptive'. */
   reasoningThinkingEnabledValue?: 'enabled' | 'adaptive';
   contextLength: number | null;

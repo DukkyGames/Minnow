@@ -80,9 +80,11 @@ import { resolveThinkingMode } from './resolve-thinking';
 import { resolveSamplerPreset } from './resolve-sampler';
 import { applySamplerToBody } from './sampler-types';
 import { findChatById } from '../state/sessions';
-import { modelCache } from '../app-state';
-import { encodeModelSelectKey } from '../lib/model-select-key';
-import { catalogCapabilitiesFromRow } from '../providers/model-capabilities';
+import {
+  modelHasSelectableReasoningEffort,
+  resolveEffectiveReasoningEffort,
+} from '../lib/reasoning-effort';
+import { resolveSendCapabilities } from '../providers/model-capabilities';
 import type { SubAgentRunner, SubAgentRunnerOutput } from './types';
 import type { ProviderPublic } from '../providers/types';
 
@@ -386,12 +388,6 @@ export const defaultSubAgentRunner: SubAgentRunner = {
       chatThinkingMode: parentChat?.thinkingMode,
       subAgentType: typeConfig,
     });
-    const modelRow = modelCache.get(
-      encodeModelSelectKey(input.providerId, input.modelId),
-    );
-    const sendCaps =
-      modelRow?.capabilities ??
-      (modelRow ? catalogCapabilitiesFromRow(modelRow) : undefined);
     const maxToolTurns = Math.max(1, Math.floor(input.maxToolTurns) || MAX_SUB_AGENT_TOOL_TURNS);
     const contextBudget = input.contextBudget ?? {
       maxInputTokens: null,
@@ -445,6 +441,10 @@ export const defaultSubAgentRunner: SubAgentRunner = {
 
     await loadToolCallsMeta();
     const provider = await resolveProvider(input.providerId);
+    const sendCaps = resolveSendCapabilities(input.providerId, input.modelId, provider.apiKind);
+    const turnReasoningEffort = modelHasSelectableReasoningEffort(sendCaps)
+      ? resolveEffectiveReasoningEffort(parentChat ?? {}, sendCaps, resolvedThinking.mode)
+      : undefined;
     const providerCapabilities = await readProviderCapabilities(input.providerId);
     const toolCallsMeta = getToolCallsMetaSync();
     const constrainedUserEnabled = isConstrainedDecodingEnabledForProvider(
@@ -509,6 +509,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         resolvedThinking.mode,
         provider,
         sendCaps,
+        turnReasoningEffort,
       );
 
       let usedOutcomeResponseFormat = false;
@@ -662,6 +663,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         resolvedThinking.mode,
         provider,
         sendCaps,
+        turnReasoningEffort,
       );
 
       if (input.tools.length > 0) {

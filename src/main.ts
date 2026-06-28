@@ -158,6 +158,10 @@ import {
   initThinkingControl,
   syncThinkingControlFromActiveChat,
 } from './ui/composer-thinking';
+import {
+  initHeaderReasoningEffort,
+  syncHeaderReasoningEffortFromActiveChat,
+} from './ui/header-reasoning-effort';
 import { loadThinkingMeta } from './config/thinking-meta';
 import { syncReefWidgetSettingsFromActiveChat } from './ui/reef-widget-settings';
 import { initWorkAgentDevUi, syncWorkAgentDevFromActiveChat } from './ui/work-agent-dev';
@@ -295,6 +299,7 @@ export async function initApp(): Promise<void> {
   const { initCodeBrainMap } = await import('./ui/code-brain-map');
   initCodeBrainMap();
   initThinkingControl();
+  initHeaderReasoningEffort();
   initOrchestratePlanSelector();
   initViewModeToggle();
   initReefBridge();
@@ -387,6 +392,7 @@ export async function initApp(): Promise<void> {
   refreshContextUsageRing();
   syncModeSelectorFromActiveChat();
   syncThinkingControlFromActiveChat();
+  syncHeaderReasoningEffortFromActiveChat();
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
   void syncOrchestratePlanStripFromActiveChat();

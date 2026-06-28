@@ -242,6 +242,10 @@
         </button>
         <ul class="model-select-menu hidden" id="modelSelectMenu" role="listbox" aria-labelledby="modelSelectLabel"></ul>
       </div>
+      <div id="reasoningEffortWrap" class="reasoning-effort-wrap hidden">
+        <label class="visually-hidden" for="reasoningEffortSelect">Reasoning effort</label>
+        <select id="reasoningEffortSelect" class="reasoning-effort-select" aria-label="Reasoning effort" disabled></select>
+      </div>
       <button type="button" id="btnModelLoadUnload" class="model-action-btn" hidden aria-label="Load model" title="Load selected model into VRAM" onclick="toggleSelectedModelLoad()">Load</button>
       <div class="status-pill" role="status" aria-live="polite">
         <div class="s-dot" id="sDot" aria-hidden="true"></div>

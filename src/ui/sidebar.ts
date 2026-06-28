@@ -63,6 +63,7 @@ import {
 import { getDefaultWorkAgentForMode } from '../agents/work-agent-registry';
 import { syncModeSelectorFromActiveChat } from './mode-selector';
 import { syncThinkingControlFromActiveChat } from './composer-thinking';
+import { syncHeaderReasoningEffortFromActiveChat } from './header-reasoning-effort';
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import { syncComposerPinnedSkillFromActiveChat } from './composer-pinned-skill';
 import { buildDefaultPinnedSkillForNewChat } from '../skills/config';
@@ -307,6 +308,8 @@ export function onModelSelectChange(): void {
   updateModelLoadUnloadButtons();
   syncModelSelectPicker();
   showCachedModelInfo();
+  syncHeaderReasoningEffortFromActiveChat();
+  syncThinkingControlFromActiveChat();
 }
 
 /** Refresh main column after workspace folder changes. */
@@ -319,6 +322,7 @@ export function applyWorkspaceScopedSession(newPath: string, previousPath?: stri
     renderChatFromHistory(activeChat);
     renderStatsForChat(activeChat);
     syncModeSelectorFromActiveChat();
+    syncHeaderReasoningEffortFromActiveChat();
     syncThinkingControlFromActiveChat();
     void syncOrchestratePlanStripFromActiveChat();
     syncComposerPinnedSkillFromActiveChat();
@@ -1114,6 +1118,7 @@ export function switchChat(id: string): void {
   void bootGenerationResumeForChat(chat);
   renderStatsForChat(chat);
   syncModeSelectorFromActiveChat();
+  syncHeaderReasoningEffortFromActiveChat();
   syncThinkingControlFromActiveChat();
   void syncOrchestratePlanStripFromActiveChat();
   syncComposerPinnedSkillFromActiveChat();
@@ -1214,6 +1219,7 @@ export function createChatWithMode(
   void bootGenerationResumeForChat(chat);
   renderStatsForChat(chat);
   syncModeSelectorFromActiveChat();
+  syncHeaderReasoningEffortFromActiveChat();
   syncThinkingControlFromActiveChat();
   void syncOrchestratePlanStripFromActiveChat();
   syncComposerPinnedSkillFromActiveChat();

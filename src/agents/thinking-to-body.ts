@@ -11,7 +11,7 @@
  */
 
 import type { ApiKind } from '../providers/types';
-import type { ModelCapabilities } from '../types';
+import type { ModelCapabilities, ReasoningEffortOption } from '../types';
 import type { ThinkingResolvedMode } from './thinking-types';
 
 export interface ThinkingBodyHint {
@@ -49,6 +49,89 @@ export function resetLmStudioThinkingHint(): void {
 
 function effortForResolved(mode: ThinkingResolvedMode): string {
   return mode === 'on' ? 'medium' : 'none';
+}
+
+function isLevelEffort(effort: ReasoningEffortOption): effort is 'low' | 'medium' | 'high' {
+  return effort === 'low' || effort === 'medium' || effort === 'high';
+}
+
+function reasoningBlocked(
+  effort: ReasoningEffortOption,
+  modelCapabilities?: ModelCapabilities | null,
+): boolean {
+  const allowed = modelCapabilities?.reasoningAllowedOptions;
+  if (allowed && allowed.length > 0 && !allowed.includes(effort)) {
+    return true;
+  }
+  if (modelCapabilities?.reasoning === false && effort !== 'off') {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Partial completion body for explicit reasoning effort (header dropdown send path).
+ */
+export function reasoningEffortToCompletionBody(
+  effort: ReasoningEffortOption,
+  apiKind: ApiKind,
+  modelCapabilities?: ModelCapabilities | null,
+): ThinkingCompletionPatch {
+  if (reasoningBlocked(effort, modelCapabilities)) {
+    return { body: {} };
+  }
+
+  const enabledValue = modelCapabilities?.reasoningThinkingEnabledValue ?? 'enabled';
+
+  if (apiKind === 'openai-v1') {
+    if (effort === 'off') {
+      return { body: { thinking: { type: 'disabled' } } };
+    }
+
+    if (isLevelEffort(effort)) {
+      const body: Record<string, unknown> = { reasoning_effort: effort };
+      const allowed = modelCapabilities?.reasoningAllowedOptions;
+      if (allowed?.some((option) => isLevelEffort(option))) {
+        body.reasoning = { effort };
+      }
+      if (enabledValue === 'adaptive') {
+        body.thinking = { type: 'adaptive' };
+      }
+      return { body };
+    }
+
+    return { body: { thinking: { type: enabledValue } } };
+  }
+
+  if (effort === 'off') {
+    return {
+      body: {
+        enable_thinking: false,
+        reasoning_effort: 'none',
+      },
+      hint: LM_STUDIO_BEST_EFFORT,
+    };
+  }
+
+  if (effort === 'on') {
+    return {
+      body: {
+        enable_thinking: true,
+        reasoning_effort: 'medium',
+        reasoning: { effort: 'medium' },
+      },
+      hint: LM_STUDIO_BEST_EFFORT,
+    };
+  }
+
+  return {
+    body: {
+      enable_thinking: true,
+      reasoning_effort: effort,
+      reasoning: { effort },
+    },
+    hint: LM_STUDIO_BEST_EFFORT,
+  };
 }
 
 /**

@@ -128,6 +128,13 @@ function ensureTurnSnapshot(raw: unknown): TurnSnapshot | null {
     maxTokens: typeof row.maxTokens === 'number' ? row.maxTokens : 4096,
     thinkingMode:
       row.thinkingMode === 'on' || row.thinkingMode === 'off' ? row.thinkingMode : 'on',
+    ...(row.reasoningEffort === 'off' ||
+    row.reasoningEffort === 'on' ||
+    row.reasoningEffort === 'low' ||
+    row.reasoningEffort === 'medium' ||
+    row.reasoningEffort === 'high'
+      ? { reasoningEffort: row.reasoningEffort }
+      : {}),
     modeId: normalizeModeId(row.modeId),
     workAgentId:
       typeof row.workAgentId === 'string' && row.workAgentId.trim()

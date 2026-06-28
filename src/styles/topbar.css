@@ -301,6 +301,47 @@ html[data-theme$='-dark'] .icon-btn .icon-img {
   }
 }
 
+/* Reasoning effort select — compact, aligned with .model-select-trigger */
+.reasoning-effort-wrap {
+  flex-shrink: 0;
+}
+
+.reasoning-effort-select {
+  min-height: 40px;
+  padding: 8px 28px 8px 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--mn-fg-muted) 50%),
+    linear-gradient(135deg, var(--mn-fg-muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) calc(50% - 2px),
+    calc(100% - 9px) calc(50% - 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
+}
+
+.reasoning-effort-select:hover:not(:disabled) {
+  border-color: var(--mn-border-strong);
+}
+
+.reasoning-effort-select:focus-visible {
+  border-color: var(--mn-accent);
+  box-shadow: 0 0 0 3px var(--mn-accent-soft);
+}
+
+.reasoning-effort-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .status-pill {
   display: flex;
   align-items: center;

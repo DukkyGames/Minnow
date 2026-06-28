@@ -216,8 +216,8 @@ Resolution order for effective effort sent on each turn:
 
 ## Implementation todos
 
-- [ ] **types-helpers** — `ReasoningEffortOption`, `Chat.reasoningEffort`, `src/lib/reasoning-effort.ts`
-- [ ] **catalog-widen** — Preserve full `allowed_options` in model-capabilities; optional v1 reasoning merge
-- [ ] **send-path** — `reasoningEffortToCompletionBody`, loop.ts + TurnSnapshot + sanitize
-- [ ] **header-ui** — `header-reasoning-effort.ts`, topbar + menubar HTML/CSS, brain-toggle hide/show, sync wiring
-- [ ] **tests-docs** — unit tests, context.md update
+- [x] **types-helpers** — `ReasoningEffortOption`, `Chat.reasoningEffort`, `src/lib/reasoning-effort.ts`
+- [x] **catalog-widen** — Preserve full `allowed_options` in model-capabilities; optional v1 reasoning merge
+- [x] **send-path** — `reasoningEffortToCompletionBody`, loop.ts + TurnSnapshot + sanitize
+- [x] **header-ui** — `header-reasoning-effort.ts`, topbar + menubar HTML/CSS, brain-toggle hide/show, sync wiring
+- [x] **tests-docs** — unit tests, context.md update

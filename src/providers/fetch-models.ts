@@ -6,18 +6,15 @@ import type { LmModelRecord } from '../types';
 import { resolveProviderEndpoints } from './resolve';
 import type { ProviderPublic } from './types';
 
-/** Normalize OpenAI v1 model list to LM Studio-shaped records. */
+/** Normalize provider model rows to LM Studio-shaped records for modelCache. */
 export function normalizeModelsForUi(
   apiKind: ProviderPublic['apiKind'],
   data: LmModelRecord[],
 ): LmModelRecord[] {
-  if (apiKind !== 'openai-v1') {
-    return data;
-  }
   return data.map((m) => ({
     id: m.id,
-    type: m.type || 'llm',
-    state: m.state || 'loaded',
+    type: m.type || (apiKind === 'openai-v1' ? 'llm' : m.type),
+    state: m.state || (apiKind === 'openai-v1' ? 'loaded' : m.state),
     arch: m.arch,
     quantization: m.quantization,
     max_context_length: m.max_context_length,

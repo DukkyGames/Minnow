@@ -3,7 +3,7 @@
  */
 
 import { getProviderRuntime } from './store.js';
-import { normalizeModelsResponse } from './paths.js';
+import { normalizeModelsResponse, enrichLmStudioModelsWithV1Reasoning } from './paths.js';
 import {
   enrichOpenCodeModelsFromModelsDev,
   isOpenCodeProviderBaseUrl,
@@ -39,6 +39,13 @@ export async function proxyModels(id) {
     }
     const json = await res.json();
     let normalized = normalizeModelsResponse(profile.apiKind, json);
+    if (profile.apiKind === 'lm-studio-v0') {
+      normalized = await enrichLmStudioModelsWithV1Reasoning(
+        profile.baseUrl,
+        headers,
+        normalized,
+      );
+    }
     if (isOpenCodeProviderBaseUrl(profile.baseUrl)) {
       normalized = await enrichOpenCodeModelsFromModelsDev(normalized);
     }

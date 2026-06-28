@@ -1,6 +1,21 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { thinkingToCompletionBody } from '../../src/agents/thinking-to-body.ts';
+import {
+  reasoningEffortToCompletionBody,
+  thinkingToCompletionBody,
+} from '../../src/agents/thinking-to-body.ts';
+import type { ModelCapabilities } from '../../src/types.ts';
+
+const reasoningCaps: ModelCapabilities = {
+  vision: false,
+  tools: null,
+  streaming: null,
+  grammar: null,
+  reasoning: true,
+  reasoningAllowedOptions: ['off', 'on', 'low', 'medium', 'high'],
+  contextLength: null,
+  loadState: null,
+};
 
 describe('thinkingToCompletionBody', () => {
   test('openai-v1 on enables thinking without enable_thinking (Kimi compat)', () => {
@@ -74,5 +89,69 @@ describe('thinkingToCompletionBody', () => {
       loadState: null,
     });
     assert.deepEqual(body, {});
+  });
+});
+
+describe('reasoningEffortToCompletionBody', () => {
+  test('openai-v1 off disables thinking without reasoning_effort none', () => {
+    const { body } = reasoningEffortToCompletionBody('off', 'openai-v1', reasoningCaps);
+    assert.deepEqual(body, { thinking: { type: 'disabled' } });
+  });
+
+  test('openai-v1 on enables thinking without enable_thinking', () => {
+    const { body } = reasoningEffortToCompletionBody('on', 'openai-v1', reasoningCaps);
+    assert.deepEqual(body, { thinking: { type: 'enabled' } });
+    assert.equal(body.enable_thinking, undefined);
+    assert.equal(body.reasoning_effort, undefined);
+  });
+
+  test('openai-v1 low uses top-level reasoning_effort and nested reasoning.effort', () => {
+    const { body } = reasoningEffortToCompletionBody('low', 'openai-v1', {
+      ...reasoningCaps,
+      reasoningAllowedOptions: ['low', 'medium', 'high'],
+    });
+    assert.equal(body.reasoning_effort, 'low');
+    assert.deepEqual(body.reasoning, { effort: 'low' });
+    assert.equal(body.thinking, undefined);
+  });
+
+  test('openai-v1 medium and high send nested reasoning.effort', () => {
+    for (const effort of ['medium', 'high'] as const) {
+      const { body } = reasoningEffortToCompletionBody(effort, 'openai-v1', reasoningCaps);
+      assert.deepEqual(body.reasoning, { effort });
+      assert.equal(body.enable_thinking, undefined);
+    }
+  });
+
+  test('openai-v1 on uses adaptive for MiniMax', () => {
+    const { body } = reasoningEffortToCompletionBody('on', 'openai-v1', {
+      ...reasoningCaps,
+      reasoningThinkingEnabledValue: 'adaptive',
+    });
+    assert.deepEqual(body, { thinking: { type: 'adaptive' } });
+  });
+
+  test('lm-studio-v0 off sets none effort and disables enable_thinking', () => {
+    const patch = reasoningEffortToCompletionBody('off', 'lm-studio-v0', reasoningCaps);
+    assert.equal(patch.body.reasoning_effort, 'none');
+    assert.equal(patch.body.enable_thinking, false);
+    assert.equal(patch.hint?.bestEffort, true);
+  });
+
+  test('lm-studio-v0 on uses medium effort with enable_thinking', () => {
+    const patch = reasoningEffortToCompletionBody('on', 'lm-studio-v0', reasoningCaps);
+    assert.equal(patch.body.reasoning_effort, 'medium');
+    assert.deepEqual(patch.body.reasoning, { effort: 'medium' });
+    assert.equal(patch.body.enable_thinking, true);
+    assert.equal(patch.hint?.bestEffort, true);
+  });
+
+  test('lm-studio-v0 low/medium/high map effort fields directly', () => {
+    for (const effort of ['low', 'medium', 'high'] as const) {
+      const patch = reasoningEffortToCompletionBody(effort, 'lm-studio-v0', reasoningCaps);
+      assert.equal(patch.body.reasoning_effort, effort);
+      assert.deepEqual(patch.body.reasoning, { effort });
+      assert.equal(patch.body.enable_thinking, true);
+    }
   });
 });

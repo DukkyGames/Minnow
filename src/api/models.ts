@@ -39,6 +39,7 @@ import {
   mergeCapabilitiesIntoModelCache,
 } from '../providers/model-capabilities';
 import { syncThinkingControlFromActiveChat } from '../ui/composer-thinking';
+import { syncHeaderReasoningEffortFromActiveChat } from '../ui/header-reasoning-effort';
 import { syncModelSelectPicker } from '../ui/model-select-picker';
 import { renderSidebar } from '../ui/sidebar';
 import { setReadyStatus, setStatus } from '../ui/status';
@@ -348,7 +349,7 @@ export async function populateMultiProviderModelSelect(
     for (const { provider, models } of results) {
       for (const m of models) {
         const key = encodeModelSelectKey(provider.id, m.id);
-        modelCache.set(key, { ...m, capabilities: catalogCapabilitiesFromRow(m) });
+        modelCache.set(key, { ...m, capabilities: catalogCapabilitiesFromRow(m, provider.apiKind) });
       }
     }
 
@@ -507,6 +508,7 @@ export async function fetchModels(): Promise<void> {
     showCachedModelInfo();
     syncModelSelectPicker();
     syncThinkingControlFromActiveChat();
+    syncHeaderReasoningEffortFromActiveChat();
     renderSidebar();
     scheduleSaveSessions();
     void import('../ui/context-usage-ring').then((m) => m.refreshContextUsageRing());
