@@ -5,7 +5,6 @@
 import nodemailer from 'nodemailer';
 import { getEmailAccount, readAccountPassword } from './accounts.js';
 import { getCachedMessage, listCachedThread } from './cache.js';
-import { sendOAuthEmail } from './transport.js';
 import { sanitizeEmailHtml } from './sanitize-html.js';
 import { wrapUntrusted } from '../security/untrusted.js';
 import { llmCall } from '../research/llm.js';
@@ -130,17 +129,6 @@ export async function sendEmail(input) {
   const bodyHtml = sanitizeEmailHtml(input.bodyHtml);
   if (!to || !subject) {
     throw new Error('to and subject are required');
-  }
-
-  if (account.authType === 'oauth') {
-    return sendOAuthEmail(account, {
-      to,
-      subject,
-      body,
-      bodyHtml,
-      inReplyTo: input.inReplyTo || undefined,
-      references: input.references || undefined,
-    });
   }
 
   if (!account.smtp?.host) {

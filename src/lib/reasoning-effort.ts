@@ -67,6 +67,32 @@ export function modelUsesComposerThinkingToggle(
   return allowed.length === 0 && caps?.reasoning !== false;
 }
 
+/** True when the composer brain icon should be shown (level dropdown and/or off/on models). */
+export function modelShowsComposerBrainToggle(
+  caps?: ModelCapabilities | null,
+): boolean {
+  return modelUsesComposerReasoningDropdown(caps) || modelUsesComposerThinkingToggle(caps);
+}
+
+/** Level options for the composer effort dropdown (excludes off/on). */
+export function getComposerReasoningLevelOptions(
+  allowed: ReasoningEffortOption[],
+): ReasoningEffortOption[] {
+  return allowed.filter((o) => o === 'low' || o === 'medium' || o === 'high');
+}
+
+/** Default level when turning reasoning back on from the composer brain toggle. */
+export function defaultComposerReasoningLevel(
+  caps?: ModelCapabilities | null,
+): ReasoningEffortOption | undefined {
+  const levels = getComposerReasoningLevelOptions(caps?.reasoningAllowedOptions ?? []);
+  if (levels.length === 0) return undefined;
+  const catalogDefault = caps?.reasoningDefault;
+  if (catalogDefault && levels.includes(catalogDefault)) return catalogDefault;
+  if (levels.includes('medium')) return 'medium';
+  return levels[0];
+}
+
 /** Human-readable label for composer `<select>` options. */
 export function formatReasoningEffortLabel(option: ReasoningEffortOption): string {
   switch (option) {
@@ -117,6 +143,11 @@ export function resolveEffectiveReasoningEffort(
 ): ReasoningEffortOption | undefined {
   const allowed = caps?.reasoningAllowedOptions ?? [];
   if (allowed.length === 0) return undefined;
+
+  // Honor explicit off from the composer brain even when catalog omits `off`.
+  if (chat.reasoningEffort === 'off') {
+    return 'off';
+  }
 
   if (chat.reasoningEffort && allowed.includes(chat.reasoningEffort)) {
     return chat.reasoningEffort;

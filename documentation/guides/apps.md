@@ -46,11 +46,11 @@ The knowledge surface backed by the **Brain wiki** (CORTEX) at `~/.minnow/brain/
 
 ## Calendar
 
-Local-first SQLite calendar (`~/.minnow/calendar/calendar.db`) in a window. Month/week views, `.ics` import/export, RRULE recurrence, and encrypted **CalDAV** + **Google OAuth** sync (`tsdav`). Agent tool `manage_calendar`; upcoming-event reminders flow through the scheduler notification queue. See [oauth-google.md](oauth-google.md) / [oauth-microsoft.md](oauth-microsoft.md).
+Local-first SQLite calendar (`~/.minnow/calendar/calendar.db`) in a window. Month/week views, `.ics` import/export, RRULE recurrence, and encrypted **CalDAV** sync (`tsdav`). Agent tool `manage_calendar`; upcoming-event reminders flow through the scheduler notification queue.
 
 ## Email
 
-Agent-first email triage. Read-only **IMAP / Gmail / Graph** sync first, then AI digests, tags, summaries, and draft replies. A dashboard surfaces an attention queue and quick-reply chips; a three-pane view handles full mail management (read/unread, flag, archive, move, delete, bulk). Compose includes alt-draft chips, a selection-revise bubble, and a rich-text toolbar. **Send always requires explicit user confirmation** — no auto-send. Account passwords are encrypted; bodies are wrapped in untrusted-data fences before LLM triage. Tools: `list_mail`, `draft_reply`, `summarize_inbox`, `generate_reply_variants`, `email_action`.
+Agent-first email triage. **IMAP** read sync (with optional SMTP send), then AI digests, tags, summaries, and draft replies. A dashboard surfaces an attention queue and quick-reply chips; a three-pane view handles full mail management (read/unread, flag, archive, move, delete, bulk). Compose includes alt-draft chips, a selection-revise bubble, and a rich-text toolbar. **Send always requires explicit user confirmation** — no auto-send. Account passwords are encrypted; bodies are wrapped in untrusted-data fences before LLM triage. Tools: `list_mail`, `draft_reply`, `summarize_inbox`, `generate_reply_variants`, `email_action`.
 
 ## Scheduler
 
@@ -58,7 +58,7 @@ Local recurring agent jobs (`~/.minnow/scheduler.json`) as a side panel. Each jo
 
 ## Settings
 
-Full-page sections at `#/app/settings` (and legacy `#/settings/<section>` redirects): General (appearance, notifications), Tools, Modes, Skills, MCP, LSP, Sub-agents, Work agents, Rules, Prompting (profiles + diffing), Providers/Models, Webhooks, OAuth, Evals, Audio, and more. **Memory** settings live in the **Brain** app. A search box indexes settings (memory-related queries open Brain).
+Full-page sections at `#/app/settings` (and legacy `#/settings/<section>` redirects): General (appearance, notifications), Tools, Modes, Skills, MCP, LSP, Sub-agents, Work agents, Rules, Prompting (profiles + diffing), Providers/Models, Webhooks, Evals, Audio, and more. **Memory** settings live in the **Brain** app. A search box indexes settings (memory-related queries open Brain).
 
 ---
 

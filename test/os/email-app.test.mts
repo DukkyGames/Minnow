@@ -34,24 +34,15 @@ describe('email router', () => {
   });
 });
 
-describe('email oauth UI', () => {
-  test('email panel includes OAuth connect actions', () => {
-    const source = fs.readFileSync(
-      new URL('../../src/ui/oauth-connect.ts', import.meta.url),
-      'utf8',
-    );
-    assert.match(source, /Sign in with Google/);
-    assert.match(source, /Sign in with Microsoft/);
-    assert.match(source, /Connect with IMAP/);
-  });
-
-  test('email panel wires IMAP alternative from oauth connect', () => {
+describe('email IMAP setup UI', () => {
+  test('email panel shows IMAP account form when no accounts exist', () => {
     const source = fs.readFileSync(
       new URL('../../src/ui/email/email-panel.ts', import.meta.url),
       'utf8',
     );
-    assert.match(source, /showImapAlternative:\s*true/);
-    assert.match(source, /onShowImap:/);
+    assert.match(source, /Connect an email account/);
+    assert.match(source, /imap\.gmail\.com/);
+    assert.doesNotMatch(source, /mountOAuthConnectPanel/);
   });
 });
 

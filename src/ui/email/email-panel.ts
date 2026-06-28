@@ -10,7 +10,6 @@ import {
   type EmailAccount,
 } from '../../email/client';
 import { subscribeEmailEvents } from '../../email/client-ext';
-import { mountOAuthConnectPanel } from '../oauth-connect';
 import { renderEmailDashboard } from './email-dashboard';
 import { renderEmailLayout } from './email-layout';
 import { renderEmailAutomations } from './email-automations';
@@ -33,8 +32,6 @@ function el<K extends keyof HTMLElementTagNameMap>(
 
 /** Human provider label for the active account chip in the chrome header. */
 function accountProviderLabel(account: EmailAccount): string {
-  if (account.provider === 'google') return 'Gmail';
-  if (account.provider === 'microsoft') return 'Outlook';
   const host = account.imap.host.toLowerCase();
   if (host.includes('gmail') || host.includes('google')) return 'Gmail';
   if (host.includes('outlook') || host.includes('office365')) return 'Outlook';
@@ -50,16 +47,6 @@ function chromeIconBtn(icon: string, label: string): HTMLButtonElement {
   btn.setAttribute('aria-label', label);
   btn.innerHTML = icon;
   return btn;
-}
-
-/** Expand the IMAP setup form and scroll it into view. */
-function revealImapSetup(manualMount: HTMLElement): void {
-  manualMount.classList.remove('email-manual-mount--hidden');
-  manualMount.classList.add('email-manual-mount--highlight');
-  manualMount.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  window.setTimeout(() => {
-    manualMount.classList.remove('email-manual-mount--highlight');
-  }, 1600);
 }
 
 interface AccountFormOptions extends EmailPanelOptions {
@@ -90,7 +77,7 @@ function renderAccountForm(mount: HTMLElement, options: AccountFormOptions): voi
       'email-setup-note',
       editing
         ? 'Update connection settings. Leave the password blank to keep the current one.'
-        : 'IMAP read-only triage first. Many Outlook tenants block basic auth — use Gmail app passwords or Fastmail. SMTP is optional for send.',
+        : 'Connect via IMAP (Gmail app passwords, Fastmail, iCloud, etc.). SMTP is optional for send.',
     ),
   );
 
@@ -243,25 +230,10 @@ export async function renderEmailPanel(
 
   if (accounts.length === 0) {
     const wrap = el('div', 'email-setup-shell');
-    const oauthMount = el('div', 'email-oauth-mount');
-    wrap.appendChild(oauthMount);
-    const manualMount = el('div', 'email-manual-mount email-manual-mount--hidden');
-    wrap.appendChild(manualMount);
     mount.replaceChildren(wrap);
-    await mountOAuthConnectPanel({
-      mount: oauthMount,
-      onStatus: options.onStatus,
-      showImapAlternative: true,
-      onShowImap: () => {
-        revealImapSetup(manualMount);
-      },
-      onChange: () => {
-        void renderEmailPanel(mount, options);
-      },
-    });
-    renderAccountForm(manualMount, {
+    renderAccountForm(wrap, {
       ...options,
-      title: 'Connect with IMAP',
+      title: 'Connect an email account',
       isFirstAccount: true,
       onSaved: () => {
         void renderEmailPanel(mount, options);
@@ -431,20 +403,9 @@ export async function renderEmailPanel(
     accountFormMode = mode;
     body.replaceChildren();
     if (mode === 'add') {
-      const oauthMount = el('div', 'email-oauth-mount');
-      body.appendChild(oauthMount);
-      const formMount = el('div', 'email-manual-mount email-manual-mount--hidden');
-      body.appendChild(formMount);
-      void mountOAuthConnectPanel({
-        mount: oauthMount,
-        onStatus: options.onStatus,
-        showImapAlternative: true,
-        onShowImap: () => revealImapSetup(formMount),
-        onChange: () => void renderEmailPanel(mount, options),
-      });
-      renderAccountForm(formMount, {
+      renderAccountForm(body, {
         ...options,
-        title: 'Connect with IMAP',
+        title: 'Add email account',
         isFirstAccount: false,
         onSaved: () => void renderEmailPanel(mount, options),
         onCancel: () => {

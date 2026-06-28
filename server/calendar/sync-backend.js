@@ -1,11 +1,9 @@
 /**
- * Calendar sync router — CalDAV password vs OAuth Google/Microsoft APIs.
+ * Calendar sync router — CalDAV password accounts only.
  */
 
 import { getCalDavAccountRow } from './store.js';
 import { syncCalDavAccount } from './caldav.js';
-import { syncGoogleCalendarAccount } from './google-api.js';
-import { syncGraphCalendarAccount } from './graph-calendar.js';
 
 /**
  * Sync a calendar account using its configured backend.
@@ -18,11 +16,8 @@ export async function syncCalendarAccount(accountId) {
   }
 
   const backend = row.syncBackend ?? 'caldav';
-  if (backend === 'google') {
-    return syncGoogleCalendarAccount(accountId);
-  }
-  if (backend === 'microsoft') {
-    return syncGraphCalendarAccount(accountId);
+  if (backend !== 'caldav') {
+    throw new Error(`Unsupported sync backend "${backend}" — reconnect with CalDAV`);
   }
   return syncCalDavAccount(accountId);
 }

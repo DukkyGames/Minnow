@@ -9,10 +9,6 @@ export interface EmailAccount {
   smtp?: { host: string; port: number; starttls: boolean };
   username: string;
   hasPassword?: boolean;
-  authType?: 'password' | 'oauth';
-  provider?: 'google' | 'microsoft';
-  oauthConnectionId?: string;
-  hasOAuth?: boolean;
   fromAddress?: string;
   isDefault: boolean;
   pollingEnabled: boolean;

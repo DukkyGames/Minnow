@@ -59,6 +59,7 @@ function reasoningBlocked(
   effort: ReasoningEffortOption,
   modelCapabilities?: ModelCapabilities | null,
 ): boolean {
+  if (effort === 'off') return false;
   const allowed = modelCapabilities?.reasoningAllowedOptions;
   if (allowed && allowed.length > 0 && !allowed.includes(effort)) {
     return true;

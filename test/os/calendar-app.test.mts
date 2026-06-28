@@ -93,13 +93,14 @@ describe('calendar router', () => {
   });
 });
 
-describe('calendar oauth UI', () => {
-  test('calendar panel mounts OAuth connect panel', () => {
+describe('calendar CalDAV UI', () => {
+  test('calendar panel exposes CalDAV account setup in the rail', () => {
     const source = fs.readFileSync(
       new URL('../../src/ui/calendar/calendar-panel.ts', import.meta.url),
       'utf8',
     );
-    assert.match(source, /mountOAuthConnectPanel/);
+    assert.match(source, /CalDAV accounts/);
+    assert.doesNotMatch(source, /mountOAuthConnectPanel/);
   });
 });
 
