@@ -309,7 +309,36 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
+  min-width: 6.5rem;
   opacity: 1;
+  cursor: wait;
+}
+
+.mn-os-model-menu__action.is-busy:disabled {
+  opacity: 1;
+}
+
+/* Shared spinner markup from model-load-unload-button.ts */
+.model-load-unload-spinner {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--mn-border-strong);
+  border-top-color: var(--mn-accent);
+  border-radius: 50%;
+  animation: model-load-unload-spin 0.65s linear infinite;
+}
+
+@keyframes model-load-unload-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .model-load-unload-spinner {
+    animation: none;
+    border-top-color: var(--mn-accent);
+    opacity: 0.85;
+  }
 }
 
 .mn-os-mb-icon,
