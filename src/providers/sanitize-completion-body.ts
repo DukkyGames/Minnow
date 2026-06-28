@@ -35,8 +35,10 @@ export function sanitizeCompletionBodyForProvider(
   const reasoningSupported =
     modelCapabilities?.reasoning === true ||
     (modelCapabilities?.reasoningAllowedOptions?.length ?? 0) > 0;
-  if (!reasoningSupported && next.thinking !== undefined) {
+  if (!reasoningSupported) {
     delete next.thinking;
+    delete next.reasoning;
+    delete next.reasoning_effort;
   }
 
   const modelId = typeof next.model === 'string' ? next.model : '';

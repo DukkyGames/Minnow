@@ -6,8 +6,15 @@ import { isModelLoaded } from '../api/model-loaded-state';
 import { modelCache } from '../app-state';
 import { isServerStorageMode } from '../config/storage-mode';
 import { contextLengthFromModelRow } from '../lib/context-length';
-import { decodeModelSelectKey, findFirstSelectKeyForCanonicalModelId } from '../lib/model-select-key';
+import {
+  inferReasoningOptionsFromModelId,
+  isReasoningEffortOption,
+  normalizeReasoningAllowedOptions,
+} from '../lib/reasoning-effort';
+import { decodeModelSelectKey, encodeModelSelectKey, findFirstSelectKeyForCanonicalModelId } from '../lib/model-select-key';
+import type { ApiKind } from './types';
 import type { LmModelRecord, ModelCapabilities } from '../types';
+import { getCachedProviderList } from './store';
 
 export type { CapabilitySource, ModelCapabilities } from '../types';
 
@@ -64,13 +71,12 @@ function reasoningCatalogFromRow(
   const allowedRaw = Array.isArray(block.allowed_options)
     ? block.allowed_options
     : [];
-  const allowed = allowedRaw.filter(
-    (v): v is 'off' | 'on' => v === 'off' || v === 'on',
-  );
-  const def =
-    block.default === 'off' || block.default === 'on' ? block.default : undefined;
+  const allowed = normalizeReasoningAllowedOptions(allowedRaw);
+  const def = isReasoningEffortOption(block.default) ? block.default : undefined;
+  const reasoningOnDefault =
+    def === 'on' || def === 'low' || def === 'medium' || def === 'high';
   const reasoning =
-    allowed.length > 0 ? true : def === 'on' ? true : def === 'off' ? false : null;
+    allowed.length > 0 ? true : reasoningOnDefault ? true : def === 'off' ? false : null;
   return {
     reasoning,
     ...(allowed.length > 0 ? { reasoningAllowedOptions: allowed } : {}),
@@ -84,19 +90,29 @@ export function catalogRowHasVision(row: LmModelRecord): boolean {
 }
 
 /** Build catalog-derived capabilities from a models-list row. */
-export function catalogCapabilitiesFromRow(row: LmModelRecord): ModelCapabilities {
+export function catalogCapabilitiesFromRow(
+  row: LmModelRecord,
+  apiKind?: ApiKind,
+): ModelCapabilities {
   const contextLength = contextLengthFromModelRow(row) ?? null;
   const vision = catalogRowHasVision(row);
   const reasoningCaps = reasoningCatalogFromRow(row);
+  let reasoningAllowedOptions = reasoningCaps.reasoningAllowedOptions;
+  if ((!reasoningAllowedOptions || reasoningAllowedOptions.length === 0) && apiKind) {
+    const inferred = inferReasoningOptionsFromModelId(row.id, apiKind);
+    if (inferred.length > 0) {
+      reasoningAllowedOptions = inferred;
+    }
+  }
   const isMiniMax = /minimax/i.test(row.id);
   return {
     vision,
     tools: null,
     streaming: null,
     grammar: null,
-    reasoning: reasoningCaps.reasoning ?? null,
-    reasoningAllowedOptions: reasoningCaps.reasoningAllowedOptions,
-    reasoningDefault: reasoningCaps.reasoningDefault,
+    reasoning: reasoningCaps.reasoning ?? (reasoningAllowedOptions?.length ? true : null),
+    reasoningAllowedOptions,
+    reasoningDefault: reasoningCaps.reasoningDefault ?? (reasoningAllowedOptions?.includes('medium') ? 'medium' : undefined),
     ...(isMiniMax ? { reasoningThinkingEnabledValue: 'adaptive' as const } : {}),
     contextLength,
     loadState: row.state?.trim() || null,
@@ -110,6 +126,43 @@ export function catalogCapabilitiesFromRow(row: LmModelRecord): ModelCapabilitie
     },
     probeErrors: {},
   };
+}
+
+/**
+ * Resolve send-time capabilities for a provider-bound model row.
+ * Re-applies openai-v1 inference when cached caps lack selectable reasoning options.
+ */
+export function resolveSendCapabilities(
+  providerId: string,
+  modelId: string,
+  apiKind?: ApiKind,
+): ModelCapabilities | undefined {
+  const pid = providerId.trim();
+  const mid = modelId.trim();
+  if (!pid || !mid) return undefined;
+
+  const row = modelCache.get(encodeModelSelectKey(pid, mid));
+  if (!row) return undefined;
+
+  const kind =
+    apiKind ?? getCachedProviderList()?.providers.find((p) => p.id === pid)?.apiKind;
+  const fromCatalog = catalogCapabilitiesFromRow(row, kind);
+  const cached = row.capabilities;
+
+  if (!cached) return fromCatalog;
+
+  const cachedAllowed = cached.reasoningAllowedOptions?.length ?? 0;
+  const catalogAllowed = fromCatalog.reasoningAllowedOptions?.length ?? 0;
+  if (catalogAllowed >= 2 && cachedAllowed < 2) {
+    return {
+      ...cached,
+      reasoning: fromCatalog.reasoning ?? cached.reasoning,
+      reasoningAllowedOptions: fromCatalog.reasoningAllowedOptions,
+      reasoningDefault: fromCatalog.reasoningDefault ?? cached.reasoningDefault,
+    };
+  }
+
+  return cached;
 }
 
 /**

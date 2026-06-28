@@ -134,6 +134,7 @@ import { getActiveChatMountElement, setTurnChatMount } from '../ui/chat-mount';
 import { registerStreamDomRemount } from './stream-chat-dom';
 import { refreshModeSelectorDisabled } from '../ui/mode-selector';
 import { refreshThinkingControlDisabled } from '../ui/composer-thinking';
+import { refreshHeaderReasoningEffortDisabled } from '../ui/header-reasoning-effort';
 import { refreshOrchestratePlanSelectorDisabled } from '../ui/orchestrate-plan-selector';
 import {
   refreshActiveBoardIfMounted,
@@ -244,12 +245,16 @@ import { WorkAgentConfigError } from '../agents/work-agent-types';
 import { getUserWorkAgentOverride } from '../agents/work-agent-registry';
 import { mergeThinkingIntoCompletionBody } from '../agents/merge-thinking-body';
 import { resolveThinkingMode } from '../agents/resolve-thinking';
+import {
+  modelHasSelectableReasoningEffort,
+  resolveEffectiveReasoningEffort,
+} from '../lib/reasoning-effort';
 import { resolveSamplerPreset } from '../agents/resolve-sampler';
 import { readGlobalSamplerForSend } from '../config/sampler-meta';
 import { applySamplerToBody } from '../agents/sampler-types';
 import { modelCache } from '../app-state';
 import { encodeModelSelectKey } from '../lib/model-select-key';
-import { catalogCapabilitiesFromRow } from '../providers/model-capabilities';
+import { resolveSendCapabilities } from '../providers/model-capabilities';
 import {
   cancelAllForParentTurn,
 } from '../agents/orchestrator';
@@ -1084,6 +1089,14 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
   chat.modelId = sendModelId;
   chat.providerId = sendProviderId;
+
+  const sendCaps = resolveSendCapabilities(sendProviderId, sendModelId, sendProvider.apiKind);
+  const turnReasoningEffort =
+    replaySnapshot?.reasoningEffort ??
+    (modelHasSelectableReasoningEffort(sendCaps)
+      ? resolveEffectiveReasoningEffort(chat, sendCaps, resolvedThinking.mode)
+      : undefined);
+
   if (shouldScheduleTitle) {
     scheduleChatTitleGeneration(chat.id, titleSeed, {
       modelId: sendModelId,
@@ -1150,6 +1163,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     if (isStreamDomVisible(chat.id)) {
       refreshModeSelectorDisabled();
       refreshThinkingControlDisabled();
+      refreshHeaderReasoningEffortDisabled();
       refreshOrchestratePlanSelectorDisabled();
       refreshBoardOnboardingIfMounted();
       refreshViewModeToggleDisabled();
@@ -1302,6 +1316,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           0.7,
         maxTokens: resolvedSampler.maxTokens,
         thinkingMode: resolvedThinking.mode,
+        reasoningEffort: turnReasoningEffort,
         skillId,
         userContent,
       });
@@ -1420,15 +1435,12 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         resolvedSampler.preset,
         resolvedSampler.maxTokens,
       ) as ChatCompletionBody;
-      const modelRow = modelCache.get(encodeModelSelectKey(sendProviderId, sendModelId));
-      const sendCaps =
-        modelRow?.capabilities ??
-        (modelRow ? catalogCapabilitiesFromRow(modelRow) : undefined);
       mergeThinkingIntoCompletionBody(
         body as unknown as Record<string, unknown>,
         replaySnapshot?.thinkingMode ?? resolvedThinking.mode,
         provider,
         sendCaps,
+        replaySnapshot?.reasoningEffort ?? turnReasoningEffort,
       );
       if (enabledTools.length > 0) {
         body.tools = enabledTools;
@@ -1785,6 +1797,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           replaySnapshot?.thinkingMode ?? resolvedThinking.mode,
           provider,
           sendCaps,
+          replaySnapshot?.reasoningEffort ?? turnReasoningEffort,
         );
         if (enabledTools.length > 0) {
           fallbackBody.tools = enabledTools;
@@ -2147,9 +2160,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       setSidebarStreamPhase(null, chat.id);
       syncChatItemDotsInDom();
       if (isStreamDomVisible(chat.id)) {
-        refreshModeSelectorDisabled();
-        refreshThinkingControlDisabled();
-        refreshOrchestratePlanSelectorDisabled();
+      refreshModeSelectorDisabled();
+      refreshThinkingControlDisabled();
+      refreshHeaderReasoningEffortDisabled();
+      refreshOrchestratePlanSelectorDisabled();
         refreshBoardOnboardingIfMounted();
         syncViewModeToggleFromActiveChat();
         refreshViewModeToggleDisabled();

@@ -202,3 +202,121 @@ export function normalizeModelsResponse(apiKind, json) {
 
   return { data };
 }
+
+const V1_MODELS_TIMEOUT_MS = 15_000;
+
+/**
+ * Read reasoning block from an LM Studio v1 models list row.
+ * @param {unknown} item
+ * @returns {{ allowed_options?: string[], default?: string } | undefined}
+ */
+function reasoningBlockFromV1ModelRow(item) {
+  if (!item || typeof item !== 'object') return undefined;
+  const src = /** @type {Record<string, unknown>} */ (item);
+  const direct =
+    src.reasoning && typeof src.reasoning === 'object'
+      ? /** @type {Record<string, unknown>} */ (src.reasoning)
+      : null;
+  const upstreamCaps =
+    src.capabilities && typeof src.capabilities === 'object'
+      ? /** @type {Record<string, unknown>} */ (src.capabilities)
+      : null;
+  const nested =
+    upstreamCaps?.reasoning && typeof upstreamCaps.reasoning === 'object'
+      ? /** @type {Record<string, unknown>} */ (upstreamCaps.reasoning)
+      : null;
+  const block = direct ?? nested;
+  if (!block) return undefined;
+
+  const allowed_options = Array.isArray(block.allowed_options)
+    ? block.allowed_options.filter((v) => typeof v === 'string')
+    : undefined;
+  const def = typeof block.default === 'string' ? block.default : undefined;
+  if (!allowed_options?.length && !def) return undefined;
+  return {
+    ...(allowed_options?.length ? { allowed_options } : {}),
+    ...(def ? { default: def } : {}),
+  };
+}
+
+/**
+ * @param {unknown} json
+ * @returns {unknown[]}
+ */
+function v1ModelsListFromJson(json) {
+  if (Array.isArray(json)) return json;
+  if (!json || typeof json !== 'object') return [];
+  const root = /** @type {Record<string, unknown>} */ (json);
+  if (Array.isArray(root.data)) return root.data;
+  if (Array.isArray(root.models)) return root.models;
+  return [];
+}
+
+/**
+ * Best-effort GET /api/v1/models to merge richer reasoning when v0 rows lack allowed_options.
+ * Non-fatal: returns the input payload unchanged on any failure.
+ *
+ * @param {string} baseUrl
+ * @param {Record<string, string>} headers
+ * @param {{ data: Array<Record<string, unknown>> }} normalized
+ */
+export async function enrichLmStudioModelsWithV1Reasoning(baseUrl, headers, normalized) {
+  if (!normalized?.data?.length) return normalized;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), V1_MODELS_TIMEOUT_MS);
+  try {
+    const root = baseUrl.replace(/\/$/, '');
+    const res = await fetch(`${root}/api/v1/models`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...headers,
+      },
+      signal: controller.signal,
+    });
+    if (!res.ok) return normalized;
+
+    const json = await res.json();
+    const v1Rows = v1ModelsListFromJson(json);
+    if (v1Rows.length === 0) return normalized;
+
+    /** @type {Map<string, { allowed_options?: string[], default?: string }>} */
+    const reasoningById = new Map();
+    for (const item of v1Rows) {
+      if (!item || typeof item !== 'object' || !('id' in item)) continue;
+      const id = String(/** @type {{ id: unknown }} */ (item).id);
+      const block = reasoningBlockFromV1ModelRow(item);
+      if (block) reasoningById.set(id, block);
+    }
+    if (reasoningById.size === 0) return normalized;
+
+    const data = normalized.data.map((row) => {
+      const existing =
+        row.reasoning && typeof row.reasoning === 'object'
+          ? /** @type {{ allowed_options?: unknown[] }} */ (row.reasoning)
+          : null;
+      const hasAllowed =
+        Array.isArray(existing?.allowed_options) && existing.allowed_options.length > 0;
+      if (hasAllowed) return row;
+
+      const id = typeof row.id === 'string' ? row.id : String(row.id ?? '');
+      const fromV1 = reasoningById.get(id);
+      if (!fromV1) return row;
+
+      return {
+        ...row,
+        reasoning: {
+          ...(existing && typeof existing === 'object' ? existing : {}),
+          ...fromV1,
+        },
+      };
+    });
+
+    return { data };
+  } catch {
+    return normalized;
+  } finally {
+    clearTimeout(timer);
+  }
+}

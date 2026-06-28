@@ -16,6 +16,7 @@ import {
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import { modelCache } from '../app-state';
 import { encodeModelSelectKey } from '../lib/model-select-key';
+import { modelHasSelectableReasoningEffort } from '../lib/reasoning-effort';
 import { catalogCapabilitiesFromRow } from '../providers/model-capabilities';
 import { resolveActiveWorkAgent } from '../agents/resolve-work-agent';
 import {
@@ -98,6 +99,14 @@ export function initThinkingControl(): void {
 /** Sync brain toggle from active chat, inheritance, and model capabilities. */
 export function syncThinkingControlFromActiveChat(): void {
   if (!toggleBtn) return;
+  const caps = effectiveCapabilities();
+  const thinkingWrap = document.getElementById('composerThinkingWrap');
+  const headerReasoningVisible = modelHasSelectableReasoningEffort(caps);
+  if (thinkingWrap) {
+    thinkingWrap.classList.toggle('hidden', headerReasoningVisible);
+  }
+  if (headerReasoningVisible) return;
+
   const chat = getActiveChat();
   const tri = normalizeThinkingTriState(chat.thinkingMode, 'inherit');
   const agent = resolveActiveWorkAgent(chat);
@@ -106,7 +115,6 @@ export function syncThinkingControlFromActiveChat(): void {
     agentKey: agent?.id ?? null,
     chatThinkingMode: chat.thinkingMode,
   });
-  const caps = effectiveCapabilities();
   const supports = modelSupportsThinkingControl(caps);
   const effectiveOn = resolved.mode === 'on';
   const allowed = supports && modelAllowsThinkingMode(caps, resolved.mode);
