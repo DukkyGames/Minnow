@@ -1,5 +1,5 @@
 /**
- * Reasoning effort resolution for header dropdown and completion send path.
+ * Reasoning effort resolution for composer controls and completion send path.
  */
 
 import type { ThinkingResolvedMode } from '../agents/thinking-types';
@@ -40,7 +40,34 @@ export function modelHasSelectableReasoningEffort(
   return (caps?.reasoningAllowedOptions?.length ?? 0) >= 2;
 }
 
-/** Human-readable label for header `<select>` options. */
+/** True when allowed options include low / medium / high effort levels. */
+export function modelHasReasoningEffortLevels(
+  caps?: ModelCapabilities | null,
+): boolean {
+  const allowed = caps?.reasoningAllowedOptions ?? [];
+  return allowed.some((o) => o === 'low' || o === 'medium' || o === 'high');
+}
+
+/**
+ * Composer shows a level dropdown (not the brain toggle) when effort levels are available.
+ */
+export function modelUsesComposerReasoningDropdown(
+  caps?: ModelCapabilities | null,
+): boolean {
+  return modelHasReasoningEffortLevels(caps);
+}
+
+/** Composer shows the brain on/off toggle when model offers off/on without level options. */
+export function modelUsesComposerThinkingToggle(
+  caps?: ModelCapabilities | null,
+): boolean {
+  if (modelUsesComposerReasoningDropdown(caps)) return false;
+  const allowed = caps?.reasoningAllowedOptions ?? [];
+  if (allowed.includes('off') && allowed.includes('on')) return true;
+  return allowed.length === 0 && caps?.reasoning !== false;
+}
+
+/** Human-readable label for composer `<select>` options. */
 export function formatReasoningEffortLabel(option: ReasoningEffortOption): string {
   switch (option) {
     case 'off':

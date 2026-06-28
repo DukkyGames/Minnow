@@ -38,8 +38,7 @@ import {
   fetchProviderCapabilities,
   mergeCapabilitiesIntoModelCache,
 } from '../providers/model-capabilities';
-import { syncThinkingControlFromActiveChat } from '../ui/composer-thinking';
-import { syncHeaderReasoningEffortFromActiveChat } from '../ui/header-reasoning-effort';
+import { syncComposerReasoningEffortFromActiveChat } from '../ui/composer-reasoning-effort';
 import { syncModelSelectPicker } from '../ui/model-select-picker';
 import { renderSidebar } from '../ui/sidebar';
 import { setReadyStatus, setStatus } from '../ui/status';
@@ -507,8 +506,7 @@ export async function fetchModels(): Promise<void> {
     updateModelStateDot(sel.value);
     showCachedModelInfo();
     syncModelSelectPicker();
-    syncThinkingControlFromActiveChat();
-    syncHeaderReasoningEffortFromActiveChat();
+    syncComposerReasoningEffortFromActiveChat();
     renderSidebar();
     scheduleSaveSessions();
     void import('../ui/context-usage-ring').then((m) => m.refreshContextUsageRing());

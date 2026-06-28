@@ -1,5 +1,6 @@
 /**
  * Composer thinking toggle — brain icon (on / off) with inherit default + user override.
+ * Hidden when the model uses the composer reasoning effort dropdown (level options).
  */
 
 import { resolveThinkingMode } from '../agents/resolve-thinking';
@@ -14,10 +15,11 @@ import {
   type ThinkingTriState,
 } from '../agents/thinking-types';
 import { isActiveChatStreaming } from '../chat/streaming-state';
-import { modelCache } from '../app-state';
-import { encodeModelSelectKey } from '../lib/model-select-key';
-import { modelHasSelectableReasoningEffort } from '../lib/reasoning-effort';
-import { catalogCapabilitiesFromRow } from '../providers/model-capabilities';
+import {
+  modelUsesComposerReasoningDropdown,
+  modelUsesComposerThinkingToggle,
+} from '../lib/reasoning-effort';
+import { resolveSendCapabilities } from '../providers/model-capabilities';
 import { resolveActiveWorkAgent } from '../agents/resolve-work-agent';
 import {
   getActiveChat,
@@ -39,13 +41,12 @@ export function nextThinkingTriStateOnClick(
   return 'inherit';
 }
 
-function effectiveCapabilities(): ReturnType<typeof catalogCapabilitiesFromRow> | undefined {
+function effectiveCapabilities(): ReturnType<typeof resolveSendCapabilities> {
   const chat = getActiveChat();
   const modelId = chat.modelId?.trim();
   const providerId = chat.providerId?.trim();
   if (!modelId || !providerId) return undefined;
-  const row = modelCache.get(encodeModelSelectKey(providerId, modelId));
-  return row?.capabilities ?? (row ? catalogCapabilitiesFromRow(row) : undefined);
+  return resolveSendCapabilities(providerId, modelId);
 }
 
 function applyChatThinkingMode(mode: ThinkingTriState): void {
@@ -98,14 +99,21 @@ export function initThinkingControl(): void {
 
 /** Sync brain toggle from active chat, inheritance, and model capabilities. */
 export function syncThinkingControlFromActiveChat(): void {
-  if (!toggleBtn) return;
   const caps = effectiveCapabilities();
   const thinkingWrap = document.getElementById('composerThinkingWrap');
-  const headerReasoningVisible = modelHasSelectableReasoningEffort(caps);
+  const dropdownMode = modelUsesComposerReasoningDropdown(caps);
+  const toggleMode = modelUsesComposerThinkingToggle(caps);
+  const showWrap = dropdownMode || toggleMode;
+
   if (thinkingWrap) {
-    thinkingWrap.classList.toggle('hidden', headerReasoningVisible);
+    thinkingWrap.classList.toggle('hidden', !showWrap);
   }
-  if (headerReasoningVisible) return;
+
+  if (rootEl) {
+    rootEl.classList.toggle('hidden', !toggleMode || dropdownMode);
+  }
+
+  if (!toggleBtn || dropdownMode || !toggleMode) return;
 
   const chat = getActiveChat();
   const tri = normalizeThinkingTriState(chat.thinkingMode, 'inherit');

@@ -7,6 +7,8 @@ import { describe, test } from 'node:test';
 import {
   inferReasoningOptionsFromModelId,
   modelHasSelectableReasoningEffort,
+  modelUsesComposerReasoningDropdown,
+  modelUsesComposerThinkingToggle,
   normalizeReasoningAllowedOptions,
   resolveEffectiveReasoningEffort,
 } from '../../src/lib/reasoning-effort.ts';
@@ -56,6 +58,25 @@ describe('modelHasSelectableReasoningEffort', () => {
       }),
       true,
     );
+  });
+});
+
+describe('composer reasoning control helpers', () => {
+  test('dropdown when low/medium/high are allowed', () => {
+    const caps = { reasoningAllowedOptions: ['low', 'medium', 'high'] };
+    assert.equal(modelUsesComposerReasoningDropdown(caps), true);
+    assert.equal(modelUsesComposerThinkingToggle(caps), false);
+  });
+
+  test('brain toggle when only off/on are allowed', () => {
+    const caps = { reasoningAllowedOptions: ['off', 'on'] };
+    assert.equal(modelUsesComposerReasoningDropdown(caps), false);
+    assert.equal(modelUsesComposerThinkingToggle(caps), true);
+  });
+
+  test('brain toggle when reasoning is advertised without explicit options', () => {
+    assert.equal(modelUsesComposerThinkingToggle({ reasoning: true }), true);
+    assert.equal(modelUsesComposerThinkingToggle({ reasoning: false }), false);
   });
 });
 

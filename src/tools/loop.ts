@@ -133,8 +133,7 @@ export type { ComposerSurface } from '../ui/composer-surface';
 import { getActiveChatMountElement, setTurnChatMount } from '../ui/chat-mount';
 import { registerStreamDomRemount } from './stream-chat-dom';
 import { refreshModeSelectorDisabled } from '../ui/mode-selector';
-import { refreshThinkingControlDisabled } from '../ui/composer-thinking';
-import { refreshHeaderReasoningEffortDisabled } from '../ui/header-reasoning-effort';
+import { refreshComposerReasoningEffortDisabled } from '../ui/composer-reasoning-effort';
 import { refreshOrchestratePlanSelectorDisabled } from '../ui/orchestrate-plan-selector';
 import {
   refreshActiveBoardIfMounted,
@@ -246,7 +245,7 @@ import { getUserWorkAgentOverride } from '../agents/work-agent-registry';
 import { mergeThinkingIntoCompletionBody } from '../agents/merge-thinking-body';
 import { resolveThinkingMode } from '../agents/resolve-thinking';
 import {
-  modelHasSelectableReasoningEffort,
+  modelUsesComposerReasoningDropdown,
   resolveEffectiveReasoningEffort,
 } from '../lib/reasoning-effort';
 import { resolveSamplerPreset } from '../agents/resolve-sampler';
@@ -1093,7 +1092,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   const sendCaps = resolveSendCapabilities(sendProviderId, sendModelId, sendProvider.apiKind);
   const turnReasoningEffort =
     replaySnapshot?.reasoningEffort ??
-    (modelHasSelectableReasoningEffort(sendCaps)
+    (modelUsesComposerReasoningDropdown(sendCaps)
       ? resolveEffectiveReasoningEffort(chat, sendCaps, resolvedThinking.mode)
       : undefined);
 
@@ -1162,8 +1161,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     }
     if (isStreamDomVisible(chat.id)) {
       refreshModeSelectorDisabled();
-      refreshThinkingControlDisabled();
-      refreshHeaderReasoningEffortDisabled();
+      refreshComposerReasoningEffortDisabled();
       refreshOrchestratePlanSelectorDisabled();
       refreshBoardOnboardingIfMounted();
       refreshViewModeToggleDisabled();
@@ -2161,8 +2159,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       syncChatItemDotsInDom();
       if (isStreamDomVisible(chat.id)) {
       refreshModeSelectorDisabled();
-      refreshThinkingControlDisabled();
-      refreshHeaderReasoningEffortDisabled();
+      refreshComposerReasoningEffortDisabled();
       refreshOrchestratePlanSelectorDisabled();
         refreshBoardOnboardingIfMounted();
         syncViewModeToggleFromActiveChat();
