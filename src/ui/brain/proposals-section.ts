@@ -15,10 +15,32 @@ const setProposalsStatus: StatusFn = (kind, message) => {
   el.dataset.kind = kind;
 };
 
+let clearPendingBound = false;
+
 /** Mount the proposals review list inside the Brain app. */
 export async function renderProposalsSection(): Promise<void> {
   const panel = document.getElementById('brainProposalsPanel');
   if (!panel) return;
+
+  if (!clearPendingBound) {
+    clearPendingBound = true;
+    document.getElementById('brainProposalsClearPending')?.addEventListener('click', () => {
+      void (async () => {
+        const ok = window.confirm('Clear all pending memory and skill proposals?');
+        if (!ok) return;
+        setProposalsStatus('spin', 'Clearing…');
+        const { clearBrainProposals } = await import('../../brain/client');
+        const result = await clearBrainProposals('pending');
+        if (!result.ok) {
+          setProposalsStatus('err', result.error ?? 'Clear failed');
+          return;
+        }
+        setProposalsStatus('ok', `Cleared ${result.removed ?? 0} proposal(s).`);
+        await renderProposalsSection();
+      })();
+    });
+  }
+
   await mountMemoryProposalsPanel(panel, setProposalsStatus, {
     onMemoryAccepted: () => {
       void import('./graph-section').then((m) => m.renderGraphSection());

@@ -45,3 +45,5 @@ Each page has YAML frontmatter (`id`, `title`, `tags`, `source`, `summary`, …)
 ### Saving new knowledge
 
 Call **`save_memory`** (short `title`, clear `body`, optional `tags`) or **`brain_write_page`** for structured wiki pages when the user asks you to remember something, or when you learn a **stable** preference, convention, or project fact worth carrying into future chats. Skip one-off task state, secrets, and ephemeral details. Do not claim you saved unless the tool succeeded.
+
+Use **`manage_brain`** only when the user explicitly asks to delete or clear Brain data (wiki pages, archives, proposals, code index, or ingest sources). Destructive actions require `confirmed: true` after approval.

@@ -157,6 +157,62 @@ export function closeCodeDbForTests() {
   dbCacheLru.length = 0;
 }
 
+/** Close the SQLite handle for one workspace key if it is cached. */
+function closeCodeDbForKey(workspaceKey) {
+  const key = String(workspaceKey ?? '').trim() || 'workspace';
+  const cacheKey = codeDbCacheKey(key);
+  const db = dbByWorkspaceKey.get(cacheKey);
+  if (db) {
+    db.close();
+    dbByWorkspaceKey.delete(cacheKey);
+    const idx = dbCacheLru.indexOf(cacheKey);
+    if (idx >= 0) dbCacheLru.splice(idx, 1);
+  }
+}
+
+/** Delete .db / -wal / -shm files for one workspace key. */
+function removeCodeDbFiles(workspaceKey) {
+  const base = codeDbPath(workspaceKey);
+  let removed = false;
+  for (const suffix of ['', '-wal', '-shm']) {
+    const fp = `${base}${suffix}`;
+    if (fs.existsSync(fp)) {
+      fs.unlinkSync(fp);
+      if (!suffix) removed = true;
+    }
+  }
+  return removed;
+}
+
+/**
+ * Remove code-index SQLite database(s) for one workspace or all workspaces.
+ * @param {{ workspaceKey?: string, all?: boolean }} [opts]
+ * @returns {{ removed: number, workspaceKeys: string[] }}
+ */
+export function clearCodeIndex(opts = {}) {
+  if (opts.all === true) {
+    closeCodeDbForTests();
+    const dir = getBrainCodeDir();
+    const keys = [];
+    if (fs.existsSync(dir)) {
+      for (const name of fs.readdirSync(dir)) {
+        if (!name.endsWith('.db')) continue;
+        const key = name.slice(0, -3);
+        if (removeCodeDbFiles(key)) keys.push(key);
+      }
+    }
+    return { removed: keys.length, workspaceKeys: keys };
+  }
+
+  const key =
+    opts.workspaceKey?.trim() ||
+    brainWorkspaceKeyFromPath(getEffectiveWorkspaceRoot()) ||
+    'workspace';
+  closeCodeDbForKey(key);
+  const removed = removeCodeDbFiles(key);
+  return { removed: removed ? 1 : 0, workspaceKeys: removed ? [key] : [] };
+}
+
 /** Test helper — count of open in-memory code-index handles. */
 export function openCodeDbCountForTests() {
   return dbByWorkspaceKey.size;

@@ -3,6 +3,7 @@
  */
 
 import {
+  clearBrainCodeIndex,
   fetchBrainCodeCallsOf,
   fetchBrainCodeExplain,
   fetchBrainCodeReadSymbol,
@@ -466,12 +467,34 @@ async function remapCodeRepo(): Promise<void> {
   await refreshRepoMap();
 }
 
+/** Drop the SQLite code index for the active workspace. */
+async function runResetIndex(): Promise<void> {
+  const btn = document.getElementById('brainCodeResetIndex') as HTMLButtonElement | null;
+  const ok = window.confirm('Reset the code index for this workspace? You can reindex afterward.');
+  if (!ok) return;
+  if (btn) btn.disabled = true;
+  setActionStatus('spin', 'Resetting code index…');
+  const result = await clearBrainCodeIndex();
+  if (btn) btn.disabled = false;
+  if (!result.ok) {
+    setActionStatus('err', result.error ?? 'Reset failed');
+    return;
+  }
+  setActionStatus('ok', `Code index reset (${result.removed ?? 0} database).`);
+  await refreshCodeStatus();
+  await refreshRepoMap();
+}
+
 function bindCodeSection(): void {
   if (bindingsDone) return;
   bindingsDone = true;
 
   document.getElementById('brainCodeReindex')?.addEventListener('click', () => {
     void runReindex();
+  });
+
+  document.getElementById('brainCodeResetIndex')?.addEventListener('click', () => {
+    void runResetIndex();
   });
 
   document.getElementById('brainCodeRemapRepo')?.addEventListener('click', () => {

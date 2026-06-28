@@ -2,13 +2,15 @@
  * Brain app — Edit section: frontmatter fields + body editor, save via PUT /page.
  */
 
-import { fetchBrainPage, saveBrainPage } from '../../brain/client';
+import { fetchBrainPage, saveBrainPage, deleteBrainPage } from '../../brain/client';
 import { setBrainHeaderActions } from '../brain-page';
 import { getGraphSelectedPath, setGraphSelectedPath } from './graph-section';
 import { renderBrainMarkdown } from './wikilink-markdown';
+import { openBrain } from '../brain-page';
 
 let bindingsDone = false;
 let previewBound = false;
+let editPageLoaded = false;
 
 function setEditStatus(kind: 'ok' | 'err' | 'spin', message: string): void {
   const el = document.getElementById('brainEditStatus');
@@ -38,6 +40,9 @@ function refreshEditPreview(): void {
 }
 
 function mountEditHeaderActions(): void {
+  const wrap = document.createElement('div');
+  wrap.className = 'brain-header-actions';
+
   const saveBtn = document.createElement('button');
   saveBtn.type = 'button';
   saveBtn.className = 'brain-action-btn is-primary';
@@ -45,7 +50,51 @@ function mountEditHeaderActions(): void {
   saveBtn.addEventListener('click', () => {
     void saveEditForm();
   });
-  setBrainHeaderActions(saveBtn);
+  wrap.append(saveBtn);
+
+  if (editPageLoaded) {
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'brain-action-btn brain-action-btn--danger';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.addEventListener('click', () => {
+      void deleteLoadedPage();
+    });
+    wrap.append(deleteBtn);
+  }
+
+  setBrainHeaderActions(wrap);
+}
+
+async function deleteLoadedPage(): Promise<void> {
+  const pathEl = document.getElementById('brainEditPath') as HTMLInputElement | null;
+  const titleEl = document.getElementById('brainEditTitle') as HTMLInputElement | null;
+  if (!pathEl) return;
+  const relPath = pathEl.value.trim().replace(/\\/g, '/');
+  if (!relPath || !editPageLoaded) return;
+  const title = titleEl?.value.trim() || relPath;
+  const ok = window.confirm(`Delete wiki page "${title}"?\n\nPath: ${relPath}`);
+  if (!ok) return;
+
+  setEditStatus('spin', 'Deleting…');
+  const result = await deleteBrainPage(relPath);
+  if (!result.ok) {
+    setEditStatus('err', result.error ?? 'Delete failed.');
+    return;
+  }
+
+  editPageLoaded = false;
+  pathEl.value = '';
+  const titleInput = document.getElementById('brainEditTitle') as HTMLInputElement | null;
+  const tagsEl = document.getElementById('brainEditTags') as HTMLInputElement | null;
+  const bodyEl = document.getElementById('brainEditBody') as HTMLTextAreaElement | null;
+  if (titleInput) titleInput.value = '';
+  if (tagsEl) tagsEl.value = '';
+  if (bodyEl) bodyEl.value = '';
+  refreshEditPreview();
+  setGraphSelectedPath(null);
+  setEditStatus('ok', `Deleted ${relPath}`);
+  openBrain('graph');
 }
 
 function bindEditSection(): void {
@@ -88,19 +137,23 @@ async function loadEditForm(): Promise<void> {
   setEditStatus('spin', 'Loading…');
   const page = await fetchBrainPage(relPath);
   if (!page) {
+    editPageLoaded = false;
     titleEl.value = '';
     tagsEl.value = '';
     bodyEl.value = '';
     refreshEditPreview();
     setEditStatus('ok', 'New page — fill in title and body, then save.');
+    mountEditHeaderActions();
     return;
   }
 
+  editPageLoaded = true;
   titleEl.value = page.meta.title;
   tagsEl.value = (page.meta.tags ?? []).join(', ');
   bodyEl.value = page.body;
   refreshEditPreview();
   setEditStatus('ok', `Loaded ${relPath}`);
+  mountEditHeaderActions();
 }
 
 /** Reset the form for manual page creation. */
@@ -112,11 +165,13 @@ async function prepareNewPage(): Promise<void> {
   if (!pathEl || !titleEl || !tagsEl || !bodyEl) return;
 
   pathEl.value = 'facts/';
+  editPageLoaded = false;
   titleEl.value = '';
   tagsEl.value = '';
   bodyEl.value = '';
   refreshEditPreview();
   setEditStatus('ok', 'New page — enter a path, title, and body, then save.');
+  mountEditHeaderActions();
   pathEl.focus();
 }
 

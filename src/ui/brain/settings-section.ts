@@ -3,6 +3,10 @@
  */
 
 import {
+  clearBrainCodeIndex,
+  clearBrainProposals,
+  clearBrainSources,
+  clearBrainWiki,
   fetchBrainCodeConfig,
   fetchBrainCodeStatus,
   fetchBrainGitHookStatus,
@@ -231,6 +235,116 @@ function bindSettingsSection(): void {
       });
       setStatus(saved ? 'ok' : 'err', saved ? 'Code index settings saved' : 'Save failed');
       if (saved) await refreshCodeSettingsFields();
+    })();
+  });
+
+  document.getElementById('brainDangerClearWiki')?.addEventListener('click', () => {
+    void (async () => {
+      const backupEl = document.getElementById(
+        'brainDangerWikiBackup',
+      ) as HTMLInputElement | null;
+      const archive = backupEl?.checked === true;
+      const ok = window.confirm(
+        `Clear every wiki page${archive ? ' (after backup)' : ''}? This cannot be undone.`,
+      );
+      if (!ok) return;
+      setStatus('spin', 'Clearing wiki…');
+      const result = await clearBrainWiki(archive);
+      if (!result.ok) {
+        setStatus('err', result.error ?? 'Clear failed');
+        return;
+      }
+      const backupNote = result.archivePath ? ` Backup: ${result.archivePath}` : '';
+      setStatus('ok', `Cleared ${result.removed ?? 0} page(s).${backupNote}`);
+      await Promise.all([refreshBrainStatusLine(), refreshCodeSettingsFields()]);
+    })();
+  });
+
+  document.getElementById('brainDangerClearProposals')?.addEventListener('click', () => {
+    void (async () => {
+      const ok = window.confirm('Clear all pending memory and skill proposals?');
+      if (!ok) return;
+      setStatus('spin', 'Clearing proposals…');
+      const result = await clearBrainProposals('pending');
+      setStatus(
+        result.ok ? 'ok' : 'err',
+        result.ok
+          ? `Cleared ${result.removed ?? 0} proposal(s).`
+          : (result.error ?? 'Clear failed'),
+      );
+    })();
+  });
+
+  document.getElementById('brainDangerClearSources')?.addEventListener('click', () => {
+    void (async () => {
+      const backupEl = document.getElementById(
+        'brainDangerSourcesBackup',
+      ) as HTMLInputElement | null;
+      const archive = backupEl?.checked === true;
+      const ok = window.confirm(
+        `Delete all raw ingest source files${archive ? ' (after backup)' : ''}? Wiki pages are kept.`,
+      );
+      if (!ok) return;
+      setStatus('spin', 'Clearing sources…');
+      const result = await clearBrainSources(archive);
+      if (!result.ok) {
+        setStatus('err', result.error ?? 'Clear failed');
+        return;
+      }
+      const backupNote = result.archivePath ? ` Backup: ${result.archivePath}` : '';
+      setStatus('ok', `Cleared ${result.removed ?? 0} source file(s).${backupNote}`);
+    })();
+  });
+
+  document.getElementById('brainDangerClearCode')?.addEventListener('click', () => {
+    void (async () => {
+      const ok = window.confirm('Reset the code index for this workspace?');
+      if (!ok) return;
+      setStatus('spin', 'Resetting code index…');
+      const result = await clearBrainCodeIndex();
+      setStatus(
+        result.ok ? 'ok' : 'err',
+        result.ok
+          ? `Reset code index (${result.removed ?? 0} database).`
+          : (result.error ?? 'Reset failed'),
+      );
+      if (result.ok) await refreshCodeSettingsFields();
+    })();
+  });
+
+  const clearAllConfirmEl = document.getElementById(
+    'brainDangerClearCodeAllConfirm',
+  ) as HTMLInputElement | null;
+  const clearAllBtn = document.getElementById(
+    'brainDangerClearCodeAll',
+  ) as HTMLButtonElement | null;
+  clearAllConfirmEl?.addEventListener('input', () => {
+    if (clearAllBtn) {
+      clearAllBtn.disabled = clearAllConfirmEl.value.trim() !== 'CLEAR';
+    }
+  });
+
+  document.getElementById('brainDangerClearCodeAll')?.addEventListener('click', () => {
+    void (async () => {
+      const confirmEl = document.getElementById(
+        'brainDangerClearCodeAllConfirm',
+      ) as HTMLInputElement | null;
+      if (confirmEl?.value.trim() !== 'CLEAR') {
+        setStatus('err', 'Type CLEAR in the confirmation field first.');
+        return;
+      }
+      const ok = window.confirm('Reset code indexes for every workspace?');
+      if (!ok) return;
+      setStatus('spin', 'Resetting all code indexes…');
+      const result = await clearBrainCodeIndex({ all: true });
+      if (!result.ok) {
+        setStatus('err', result.error ?? 'Reset failed');
+        return;
+      }
+      if (confirmEl) confirmEl.value = '';
+      if (clearAllBtn) clearAllBtn.disabled = true;
+      setStatus('ok', `Reset ${result.removed ?? 0} code index database(s).`);
+      await refreshCodeSettingsFields();
     })();
   });
 }

@@ -269,3 +269,124 @@ export async function fetchBrainCodeExplain(
   const qs = new URLSearchParams({ symbol });
   return brainFetch<BrainCodeExplainResult>(`/api/brain/code/explain?${qs}`);
 }
+
+export type BrainMutationResult = {
+  ok: boolean;
+  error?: string;
+  removed?: number;
+  archivePath?: string;
+  workspaceKeys?: string[];
+};
+
+/** POST helper for destructive Brain APIs — surfaces server errors instead of silent null. */
+async function brainMutate<T extends Record<string, unknown>>(
+  path: string,
+  body: Record<string, unknown>,
+): Promise<BrainMutationResult & T> {
+  if (!isLocalServerAvailable()) {
+    return { ok: false, error: 'Offline — start npm start.' } as BrainMutationResult & T;
+  }
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = (await res.json().catch(() => ({}))) as T & { error?: string };
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: typeof data.error === 'string' ? data.error : `Request failed (${res.status})`,
+      } as BrainMutationResult & T;
+    }
+    return { ok: true, ...data };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: message } as BrainMutationResult & T;
+  }
+}
+
+/** Delete one wiki page by relative path. */
+export async function deleteBrainPage(relPath: string): Promise<BrainMutationResult> {
+  if (!isLocalServerAvailable()) {
+    return { ok: false, error: 'Offline — start npm start.' };
+  }
+  try {
+    const qs = new URLSearchParams({ path: relPath });
+    const res = await fetch(`${API_BASE}/api/brain/page?${qs}`, { method: 'DELETE' });
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: typeof data.error === 'string' ? data.error : `Request failed (${res.status})`,
+      };
+    }
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: message };
+  }
+}
+
+/** Clear all wiki pages (optional backup first). */
+export async function clearBrainWiki(archive = false): Promise<BrainMutationResult> {
+  return brainMutate('/api/brain/clear', { archive, confirmed: true });
+}
+
+/** Delete an entire chat archive folder. */
+export async function deleteBrainArchive(
+  chatId: string,
+  workspaceKey?: string,
+): Promise<BrainMutationResult> {
+  if (!isLocalServerAvailable()) {
+    return { ok: false, error: 'Offline — start npm start.' };
+  }
+  try {
+    const qs = workspaceKey
+      ? `?workspaceKey=${encodeURIComponent(workspaceKey)}`
+      : '';
+    const res = await fetch(`${API_BASE}/api/brain/archive/chat/${encodeURIComponent(chatId)}${qs}`, {
+      method: 'DELETE',
+    });
+    const data = (await res.json().catch(() => ({}))) as { error?: string; removed?: number };
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: typeof data.error === 'string' ? data.error : `Request failed (${res.status})`,
+      };
+    }
+    return { ok: true, removed: data.removed };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: message };
+  }
+}
+
+/** Clear pending or all memory proposals. */
+export async function clearBrainProposals(
+  scope: 'pending' | 'all' = 'pending',
+): Promise<BrainMutationResult> {
+  return brainMutate('/api/brain/proposals/clear', { scope, confirmed: true });
+}
+
+/** Reset the code index for the current workspace or all workspaces. */
+export async function clearBrainCodeIndex(opts?: {
+  all?: boolean;
+}): Promise<BrainMutationResult> {
+  return brainMutate('/api/brain/code/clear', {
+    all: opts?.all === true,
+    confirmed: true,
+  });
+}
+
+/** Delete raw ingest source files (optional backup first). */
+export async function clearBrainSources(archive = false): Promise<BrainMutationResult> {
+  return brainMutate('/api/brain/sources/clear', { archive, confirmed: true });
+}
+
+/** Snapshot ~/.minnow/brain/ to ~/.minnow/backups/. */
+export async function backupBrain(): Promise<{ ok: boolean; path?: string; error?: string }> {
+  const data = await brainMutate<{ path?: string }>('/api/brain/backup', {});
+  if (!data.ok) return data;
+  return { ok: true, path: data.path };
+}

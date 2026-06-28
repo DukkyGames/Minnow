@@ -159,4 +159,11 @@ describe('brain archive API', () => {
     const abs = path.join(homeDir, 'brain', 'pages', ...rel.split('/'));
     await assert.rejects(() => fs.access(abs));
   });
+
+  test('delete rebuilds catalog so archive pages are not listed', async () => {
+    const { listPages } = await import('../../server/brain/store.js');
+    const archivePath = `workspaces/${WORKSPACE_KEY}/archive/${CHAT_ID}/turns-0000-0001.md`;
+    const pages = await listPages();
+    assert.ok(!pages.some((p) => p.path === archivePath));
+  });
 });

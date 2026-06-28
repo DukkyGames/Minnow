@@ -166,4 +166,67 @@ describe('brain API', () => {
     assert.ok(scopedGlobal.json.ids.includes(PAGE_ID));
     assert.ok(!scopedGlobal.json.ids.includes('33333333-3333-3333-3333-333333333333'));
   });
+
+  test('clear routes require confirmed', async () => {
+    const proposals = await httpRequest(baseUrl, 'POST', '/api/brain/proposals/clear', {
+      scope: 'pending',
+    });
+    assert.equal(proposals.status, 400);
+
+    const code = await httpRequest(baseUrl, 'POST', '/api/brain/code/clear', {});
+    assert.equal(code.status, 400);
+
+    const sources = await httpRequest(baseUrl, 'POST', '/api/brain/sources/clear', {});
+    assert.equal(sources.status, 400);
+  });
+
+  test('proposals and sources clear round-trip', async () => {
+    const { addMemoryProposal } = await import('../../server/brain/proposals.js');
+    await addMemoryProposal({
+      title: 'Pending fact',
+      body: 'Proposal body',
+      category: 'fact',
+    });
+
+    const clearedProposals = await httpRequest(baseUrl, 'POST', '/api/brain/proposals/clear', {
+      scope: 'pending',
+      confirmed: true,
+    });
+    assert.equal(clearedProposals.status, 200);
+    assert.ok(clearedProposals.json.removed >= 1);
+    assert.ok(clearedProposals.json.removedMemory >= 1);
+
+    const pendingAfter = await httpRequest(
+      baseUrl,
+      'GET',
+      '/api/brain/proposals?status=pending',
+    );
+    assert.equal(pendingAfter.json.proposals.length, 0);
+
+    const { addSkillProposal } = await import('../../server/skills/proposals.js');
+    await addSkillProposal({
+      title: 'Pending skill',
+      skillMdDraft: '# Skill draft',
+    });
+
+    const clearedSkills = await httpRequest(baseUrl, 'POST', '/api/brain/proposals/clear', {
+      scope: 'pending',
+      confirmed: true,
+    });
+    assert.equal(clearedSkills.status, 200);
+    assert.ok(clearedSkills.json.removed >= 1);
+    assert.ok(clearedSkills.json.removedSkill >= 1);
+
+    const sourcesDir = path.join(homeDir, 'brain', 'sources');
+    await fs.mkdir(sourcesDir, { recursive: true });
+    await fs.writeFile(path.join(sourcesDir, 'abc-test.txt'), 'raw source', 'utf8');
+
+    const clearedSources = await httpRequest(baseUrl, 'POST', '/api/brain/sources/clear', {
+      confirmed: true,
+    });
+    assert.equal(clearedSources.status, 200);
+    assert.ok(clearedSources.json.removed >= 1);
+    const remaining = await fs.readdir(sourcesDir).catch(() => []);
+    assert.equal(remaining.length, 0);
+  });
 });

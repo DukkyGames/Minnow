@@ -276,10 +276,29 @@
 .brain-inspector__actions {
   position: sticky;
   bottom: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
   margin-top: auto;
+  margin-left: -14px;
+  margin-right: -14px;
   padding: 12px 14px 16px;
   border-top: 1px solid var(--mn-border);
   background: color-mix(in srgb, var(--mn-surface-1) 94%, transparent);
+}
+
+.brain-inspector__actions .brain-action-btn {
+  min-width: 0;
+  min-height: var(--touch-min, 44px);
+  text-align: center;
+}
+
+.brain-inspector__actions .brain-action-btn:only-child {
+  grid-column: 1 / -1;
+}
+
+.brain-inspector__actions .brain-action-btn:nth-child(n + 3) {
+  grid-column: 1 / -1;
 }
 
 .brain-inspector__loading {

@@ -2,7 +2,7 @@
  * Brain graph inspector: title, tags, summary, backlinks, body preview, actions.
  */
 
-import { fetchBrainPage } from '../../brain/client';
+import { fetchBrainPage, deleteBrainPage, deleteBrainArchive } from '../../brain/client';
 import type { BrainPageMeta } from '../../brain/types';
 import { computeBrainBacklinks } from './tree-utils';
 import { renderBrainEmptyState, renderBrainLoading } from './empty-state';
@@ -10,6 +10,14 @@ import { renderBrainMarkdown } from './wikilink-markdown';
 
 export type InspectorNavigateFn = (relPath: string) => void;
 export type InspectorEditFn = (relPath: string) => void;
+export type InspectorDeletedFn = () => void | Promise<void>;
+
+/** Parse workspace/chat ids from an archive page path. */
+function parseArchiveFromPath(relPath: string): { workspaceKey: string; chatId: string } | null {
+  const match = relPath.match(/^workspaces\/([^/]+)\/archive\/([^/]+)(?:\/|$)/);
+  if (!match) return null;
+  return { workspaceKey: match[1], chatId: match[2] };
+}
 
 /** Content mount inside #brainInspector (resize handle stays as a sibling). */
 function getInspectorContent(mount: HTMLElement): HTMLElement {
@@ -29,6 +37,7 @@ export async function renderBrainInspector(
   catalogPages: BrainPageMeta[],
   navigate: InspectorNavigateFn,
   onEdit: InspectorEditFn,
+  onDeleted?: InspectorDeletedFn,
 ): Promise<void> {
   mount.classList.add('is-open');
   mount.setAttribute('aria-hidden', 'false');
@@ -138,6 +147,55 @@ export async function renderBrainInspector(
   editBtn.textContent = 'Edit page';
   editBtn.addEventListener('click', () => onEdit(page.path));
   actions.append(editBtn);
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.type = 'button';
+  deleteBtn.className = 'brain-action-btn brain-action-btn--danger';
+  deleteBtn.textContent = 'Delete page';
+  deleteBtn.addEventListener('click', () => {
+    const ok = window.confirm(
+      `Delete wiki page "${page.meta.title}"?\n\nPath: ${page.path}\n\nThis cannot be undone.`,
+    );
+    if (!ok) return;
+    void (async () => {
+      const result = await deleteBrainPage(page.path);
+      if (!result.ok) {
+        window.alert(result.error ?? 'Delete failed.');
+        return;
+      }
+      closeBrainInspector(mount);
+      await onDeleted?.();
+    })();
+  });
+  actions.append(deleteBtn);
+
+  const archiveInfo = parseArchiveFromPath(page.path);
+  if (archiveInfo) {
+    const archiveBtn = document.createElement('button');
+    archiveBtn.type = 'button';
+    archiveBtn.className = 'brain-action-btn brain-action-btn--danger';
+    archiveBtn.textContent = 'Delete entire chat archive';
+    archiveBtn.addEventListener('click', () => {
+      const ok = window.confirm(
+        `Delete the entire chat archive for "${archiveInfo.chatId}"?\n\nAll pages under this chat folder will be removed.`,
+      );
+      if (!ok) return;
+      void (async () => {
+        const result = await deleteBrainArchive(
+          archiveInfo.chatId,
+          archiveInfo.workspaceKey,
+        );
+        if (!result.ok) {
+          window.alert(result.error ?? 'Archive delete failed.');
+          return;
+        }
+        closeBrainInspector(mount);
+        await onDeleted?.();
+      })();
+    });
+    actions.append(archiveBtn);
+  }
+
   inner.append(actions);
 }
 

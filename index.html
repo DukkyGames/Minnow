@@ -1438,7 +1438,12 @@
       </section>
       <section id="brainSection-proposals" class="brain-section brain-section--centered">
         <div class="brain-card">
-          <p id="brainProposalsStatus" class="brain-status" aria-live="polite"></p>
+          <div class="brain-field-row brain-proposals-toolbar">
+            <p id="brainProposalsStatus" class="brain-status" aria-live="polite"></p>
+            <button type="button" class="brain-action-btn brain-action-btn--danger" id="brainProposalsClearPending">
+              Clear pending
+            </button>
+          </div>
           <div id="brainProposalsPanel" class="settings-group settings-group--flat">
             <p id="brainProposalsCount" class="settings-memory-stat">Pending: —</p>
             <p id="brainProposalsOffline" class="field-hint settings-memory-offline hidden">
@@ -1498,6 +1503,7 @@
           <p id="brainCodeStatusLine" class="brain-muted">Checking index…</p>
           <button type="button" class="brain-action-btn" id="brainCodeRemapRepo" title="Switch workspace folder for code index">Remap repo</button>
           <button type="button" class="brain-action-btn is-primary" id="brainCodeReindex">Reindex</button>
+          <button type="button" class="brain-action-btn brain-action-btn--danger" id="brainCodeResetIndex">Reset index</button>
         </div>
         <p id="brainCodeActionStatus" class="brain-status" aria-live="polite"></p>
         <div class="brain-code-layout">
@@ -1609,6 +1615,73 @@
                 <span id="brainCodeGitHookStatus" class="brain-muted" aria-live="polite"></span>
               </div>
               <button type="button" class="brain-action-btn is-primary" id="brainCodeSettingsSave">Save code index settings</button>
+            </div>
+          </div>
+          <div class="brain-settings-group brain-card brain-settings-group--danger">
+            <h3>Danger zone</h3>
+            <p class="brain-danger-lead">Destructive actions cannot be undone. Backup first when offered.</p>
+            <div class="brain-danger-blocks">
+              <section class="brain-danger-block" aria-labelledby="brainDangerWikiTitle">
+                <h4 class="brain-danger-block__title" id="brainDangerWikiTitle">Wiki</h4>
+                <p class="brain-danger-block__desc">Remove all wiki pages or pending memory and skill proposals.</p>
+                <label class="brain-danger-check">
+                  <input type="checkbox" id="brainDangerWikiBackup" checked>
+                  <span>Backup before clearing wiki</span>
+                </label>
+                <div class="brain-danger-block__actions">
+                  <button type="button" class="brain-action-btn brain-action-btn--danger" id="brainDangerClearWiki">
+                    Clear all wiki pages
+                  </button>
+                  <button type="button" class="brain-action-btn brain-action-btn--danger" id="brainDangerClearProposals">
+                    Clear pending proposals
+                  </button>
+                </div>
+              </section>
+              <section class="brain-danger-block" aria-labelledby="brainDangerSourcesTitle">
+                <h4 class="brain-danger-block__title" id="brainDangerSourcesTitle">Ingest sources</h4>
+                <p class="brain-danger-block__desc">Delete raw ingest files. Wiki pages are kept.</p>
+                <label class="brain-danger-check">
+                  <input type="checkbox" id="brainDangerSourcesBackup" checked>
+                  <span>Backup before clearing</span>
+                </label>
+                <div class="brain-danger-block__actions">
+                  <button type="button" class="brain-action-btn brain-action-btn--danger" id="brainDangerClearSources">
+                    Clear ingest sources
+                  </button>
+                </div>
+              </section>
+              <section class="brain-danger-block" aria-labelledby="brainDangerCodeTitle">
+                <h4 class="brain-danger-block__title" id="brainDangerCodeTitle">Code index</h4>
+                <p class="brain-danger-block__desc">Reset indexed symbols for this workspace or every workspace.</p>
+                <div class="brain-danger-block__actions">
+                  <button type="button" class="brain-action-btn brain-action-btn--danger" id="brainDangerClearCode">
+                    Reset code index (this workspace)
+                  </button>
+                </div>
+                <div class="brain-danger-confirm">
+                  <label class="brain-danger-confirm__field" for="brainDangerClearCodeAllConfirm">
+                    <span class="brain-danger-confirm__label">Type <kbd>CLEAR</kbd> to reset all workspaces</span>
+                    <input
+                      type="text"
+                      id="brainDangerClearCodeAllConfirm"
+                      class="settings-input settings-input--narrow brain-danger-confirm__input"
+                      autocomplete="off"
+                      spellcheck="false"
+                      placeholder="CLEAR"
+                      aria-describedby="brainDangerCodeAllHint"
+                    >
+                  </label>
+                  <p id="brainDangerCodeAllHint" class="brain-danger-confirm__hint">Applies to every workspace on this machine.</p>
+                  <button
+                    type="button"
+                    class="brain-action-btn brain-action-btn--danger brain-action-btn--danger-strong"
+                    id="brainDangerClearCodeAll"
+                    disabled
+                  >
+                    Reset all code indexes
+                  </button>
+                </div>
+              </section>
             </div>
           </div>
         </div>

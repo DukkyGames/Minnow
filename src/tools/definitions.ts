@@ -1593,6 +1593,62 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'manage_brain',
+    label: 'Manage brain',
+    description:
+      'Delete or clear Brain wiki data (pages, archives, proposals, code index, sources). Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'manage_brain',
+      'Destructive Brain data management. Use only after explicit user request to delete or clear Brain data. All destructive actions require confirmed: true after user approval.',
+      {
+        action: {
+          type: 'string',
+          enum: [
+            'delete_page',
+            'clear_wiki',
+            'delete_archive',
+            'clear_proposals',
+            'clear_code_index',
+            'clear_sources',
+          ],
+          description: 'Destructive Brain operation to perform',
+        },
+        path: {
+          type: 'string',
+          description: 'Wiki page path for delete_page (relative under pages/)',
+        },
+        chatId: {
+          type: 'string',
+          description: 'Chat id for delete_archive',
+        },
+        workspaceKey: {
+          type: 'string',
+          description: 'Workspace key for delete_archive or clear_code_index',
+        },
+        scope: {
+          type: 'string',
+          enum: ['pending', 'all'],
+          description: 'Proposal clear scope (default pending)',
+        },
+        all: {
+          type: 'boolean',
+          description: 'When true, clear_code_index resets every workspace index',
+        },
+        archive: {
+          type: 'boolean',
+          description: 'Backup Brain before clear_wiki or clear_sources',
+        },
+        confirmed: {
+          type: 'boolean',
+          description: 'Must be true for any destructive action after user approval',
+        },
+      },
+      ['action'],
+    ),
+  },
+  {
     id: 'save_memory',
     label: 'Save memory',
     description:

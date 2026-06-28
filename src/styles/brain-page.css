@@ -685,7 +685,37 @@
   font-weight: 500;
 }
 
-.brain-form-grid input,
+/* Checkbox labels: control beside text, not stacked above it */
+.brain-form-grid label:has(> input[type='checkbox']),
+.brain-danger-check {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+  font-weight: 400;
+  cursor: pointer;
+  user-select: none;
+}
+
+.brain-form-grid label:has(> input[type='checkbox']) {
+  display: flex;
+}
+
+.brain-danger-check {
+  display: inline-flex;
+  font-size: 13px;
+  color: var(--mn-fg);
+}
+
+.brain-form-grid label:has(> input[type='checkbox']) > input[type='checkbox'],
+.brain-danger-check input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  flex-shrink: 0;
+  accent-color: var(--mn-accent);
+}
+
+.brain-form-grid input:not([type='checkbox']):not([type='range']),
 .brain-form-grid textarea,
 .brain-form-grid select {
   padding: 8px 10px;
@@ -783,6 +813,147 @@
 .brain-settings-group .brain-action-btn.is-primary {
   width: auto;
   align-self: flex-start;
+}
+
+.brain-settings-group--danger {
+  border-color: var(--mn-danger-border, var(--mn-border-strong));
+  background: color-mix(in srgb, var(--mn-danger-soft, color-mix(in srgb, var(--mn-danger) 12%, transparent)) 35%, var(--mn-surface-1));
+}
+
+.brain-danger-lead {
+  margin: 0 0 4px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--mn-danger-ink, var(--mn-danger));
+}
+
+.brain-danger-blocks {
+  display: flex;
+  flex-direction: column;
+}
+
+.brain-danger-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px 0;
+  border-top: 1px solid color-mix(in srgb, var(--mn-danger-border, var(--mn-border)) 55%, var(--mn-border));
+}
+
+.brain-danger-block:first-child {
+  padding-top: 8px;
+}
+
+.brain-danger-block:last-child {
+  padding-bottom: 0;
+}
+
+.brain-danger-block__title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mn-fg);
+}
+
+.brain-danger-block__desc {
+  margin: -4px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+  max-width: 52ch;
+}
+
+.brain-danger-block__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.brain-danger-confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  max-width: 28rem;
+  margin-top: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--mn-danger-border, var(--mn-border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--mn-bg) 72%, var(--mn-surface-1));
+}
+
+.brain-danger-confirm__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.brain-danger-confirm__label {
+  color: var(--mn-fg);
+}
+
+.brain-danger-confirm__label kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  border: 1px solid var(--mn-border);
+  border-radius: 4px;
+  background: var(--mn-surface-2);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.brain-danger-confirm__input {
+  width: 100%;
+  max-width: 10rem;
+}
+
+.brain-danger-confirm__hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--mn-fg-muted);
+}
+
+.brain-action-btn--danger {
+  color: var(--mn-danger-ink, var(--mn-danger));
+  border-color: var(--mn-danger-border, var(--mn-danger));
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .brain-action-btn--danger:hover:not(:disabled) {
+    background: var(--mn-danger-soft, color-mix(in srgb, var(--mn-danger) 12%, transparent));
+  }
+}
+
+.brain-action-btn--danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.brain-action-btn--danger-strong:not(:disabled) {
+  border-color: color-mix(in srgb, var(--mn-danger) 65%, var(--mn-border));
+  background: color-mix(in srgb, var(--mn-danger-soft, color-mix(in srgb, var(--mn-danger) 12%, transparent)) 80%, var(--mn-surface-2));
+}
+
+.brain-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.brain-proposals-toolbar {
+  justify-content: space-between;
+  align-items: center;
 }
 
 /* ── Lint / ingest ────────────────────────────────────────────────────────── */

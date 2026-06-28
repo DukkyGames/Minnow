@@ -15,4 +15,5 @@ export const {
   updateMemoryProposalStatus,
   applyMemoryProposalEdits,
   countPendingMemoryProposals,
+  clearMemoryProposals,
 } = proposals;

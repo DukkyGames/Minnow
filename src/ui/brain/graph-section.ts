@@ -357,6 +357,9 @@ async function openInspector(relPath: string): Promise<void> {
     (path) => {
       void import('../brain-page').then((m) => m.openBrainEditForPath(path));
     },
+    async () => {
+      await renderGraphSection();
+    },
   );
 }
 

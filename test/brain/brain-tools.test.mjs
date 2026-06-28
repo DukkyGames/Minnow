@@ -106,4 +106,45 @@ describe('brain wiki tools', () => {
     });
     assert.match(out.result, /Appended to brain log/);
   });
+
+  it('manage_brain requires confirmed for destructive actions', async () => {
+    const gate = await executeServerTool('manage_brain', {
+      action: 'delete_page',
+      path: PAGE_PATH,
+    });
+    assert.match(gate.result, /requires confirmation/);
+
+    const del = await executeServerTool('manage_brain', {
+      action: 'delete_page',
+      path: PAGE_PATH,
+      confirmed: true,
+    });
+    assert.match(del.result, /Deleted wiki page/);
+
+    await assert.rejects(() => readPage(PAGE_PATH));
+  });
+
+  it('manage_brain clear_wiki removes pages after confirmation', async () => {
+    await executeServerTool('brain_write_page', {
+      path: 'facts/clear-wiki-test.md',
+      title: 'Clear wiki test',
+      body: 'Temporary page for clear_wiki.',
+      tags: ['testing'],
+    });
+
+    const gate = await executeServerTool('manage_brain', {
+      action: 'clear_wiki',
+    });
+    assert.match(gate.result, /requires confirmation/);
+
+    const cleared = await executeServerTool('manage_brain', {
+      action: 'clear_wiki',
+      confirmed: true,
+    });
+    assert.match(cleared.result, /Cleared \d+ wiki page/);
+
+    const listOut = await executeServerTool('brain_list', {});
+    const tree = JSON.parse(listOut.result);
+    assert.equal(Object.keys(tree).length, 0);
+  });
 });

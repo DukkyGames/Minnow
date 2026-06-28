@@ -13,6 +13,7 @@ import {
   listPages,
   loadBrainConfig,
   readPage,
+  rebuildCatalog,
   updatePage,
 } from './store.js';
 import { getBrainPagesDir } from './paths.js';
@@ -538,6 +539,7 @@ export async function deleteChatArchive(chatId, workspaceKey) {
   }
 
   await fs.rm(absDir, { recursive: true, force: true });
+  await rebuildCatalog();
   await appendLog(`deleted archive folder for chat ${chatId}`);
   return { ok: true, removed: victims.length };
 }
@@ -574,6 +576,10 @@ export async function reconcileOrphanArchives(liveChatIds) {
       await fs.rm(path.join(archiveDir, chat.name), { recursive: true, force: true });
       swept += 1;
     }
+  }
+
+  if (swept > 0) {
+    await rebuildCatalog();
   }
 
   return { swept };

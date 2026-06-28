@@ -235,6 +235,23 @@ export function createProposals(getPaths, deps) {
     return rows.length;
   }
 
+  /**
+   * Remove proposals by scope (`pending` keeps accepted/rejected; `all` wipes the queue).
+   * @param {'pending' | 'all'} [scope]
+   * @returns {Promise<{ removed: number }>}
+   */
+  async function clearMemoryProposals(scope = 'pending') {
+    const store = await loadStore();
+    const before = store.proposals.length;
+    if (scope === 'all') {
+      store.proposals = [];
+    } else {
+      store.proposals = store.proposals.filter((p) => p.status !== 'pending');
+    }
+    await saveStore(store);
+    return { removed: before - store.proposals.length };
+  }
+
   return {
     addMemoryProposal,
     listMemoryProposals,
@@ -242,5 +259,6 @@ export function createProposals(getPaths, deps) {
     updateMemoryProposalStatus,
     applyMemoryProposalEdits,
     countPendingMemoryProposals,
+    clearMemoryProposals,
   };
 }
