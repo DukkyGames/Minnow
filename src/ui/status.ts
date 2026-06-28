@@ -70,6 +70,9 @@ export function dismissOpenLayers(): void {
   closeModelSelectMenu();
   closeSubAgentDrawer();
   closeBoardTimelineDrawer();
+  void import('./code-brain-map').then((m) => {
+    if (m.isCodeBrainMapOpen()) m.closeCodeBrainMap();
+  });
   const drawer = document.getElementById('drawer');
   if (drawer && drawer.classList.contains('open')) {
     void import('./settings').then(({ closeDrawer }) => closeDrawer());

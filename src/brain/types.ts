@@ -116,11 +116,21 @@ export interface BrainCodeFindResult {
   error?: string;
 }
 
+/** One structured row in the repo map (UI navigation). */
+export type BrainCodeRepoMapEntry =
+  | { type: 'title'; text: string }
+  | { type: 'file'; file: string; text: string }
+  | { type: 'symbol'; symbolId: string; file: string; text: string }
+  | { type: 'truncated'; text: string }
+  | { type: 'message'; text: string };
+
 /** GET/POST /api/brain/code/repo-map. */
 export interface BrainCodeRepoMap {
   text: string;
   truncated: boolean;
   tokenEstimate: number;
+  /** Structured rows with symbol ids for clickable UI navigation. */
+  entries?: BrainCodeRepoMapEntry[];
 }
 
 /** Edge endpoint in who_calls / calls_of. */

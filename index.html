@@ -1419,19 +1419,18 @@
       <section id="brainSection-lint" class="brain-section brain-section--centered">
         <div class="brain-card">
           <p id="brainLintOffline" class="brain-muted hidden">Offline</p>
-          <div class="brain-field-row">
-            <button type="button" class="brain-action-btn is-primary" id="brainLintRun">Run lint</button>
-          </div>
           <div id="brainLintBody"></div>
         </div>
       </section>
       <section id="brainSection-code" class="brain-section">
         <p id="brainCodeOffline" class="brain-muted hidden">Start npm start to use the code index.</p>
-        <div class="brain-code-toolbar brain-field-row">
-          <p id="brainCodeStatusLine" class="brain-muted">Checking index…</p>
-          <button type="button" class="brain-action-btn" id="brainCodeRemapRepo" title="Switch workspace folder for code index">Remap repo</button>
-          <button type="button" class="brain-action-btn is-primary" id="brainCodeReindex">Reindex</button>
-          <button type="button" class="brain-action-btn brain-action-btn--danger" id="brainCodeResetIndex">Reset index</button>
+        <div class="brain-code-toolbar">
+          <p id="brainCodeStatusLine" class="brain-code-toolbar__status">Checking index…</p>
+          <div class="brain-code-toolbar__actions" role="group" aria-label="Code index actions">
+            <button type="button" class="brain-action-btn" id="brainCodeRemapRepo" title="Switch workspace folder for code index">Remap repo</button>
+            <button type="button" class="brain-action-btn is-primary" id="brainCodeReindex">Reindex</button>
+            <button type="button" class="brain-action-btn brain-action-btn--danger" id="brainCodeResetIndex">Reset index</button>
+          </div>
         </div>
         <p id="brainCodeActionStatus" class="brain-status" aria-live="polite"></p>
         <div class="brain-code-layout">
@@ -1442,7 +1441,7 @@
               </label>
               <span id="brainCodeMapBudget" class="brain-muted" aria-live="polite"></span>
             </div>
-            <pre id="brainCodeMap" class="brain-code-map" aria-label="Repo map"></pre>
+            <div id="brainCodeMap" class="brain-code-map" role="region" aria-label="Repo map"></div>
           </div>
           <div class="brain-code-search-panel brain-card">
             <label class="brain-code-search-label">Find symbol
@@ -1960,6 +1959,9 @@
       </button>
       <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnTerminal" aria-label="Terminal" aria-expanded="false" aria-controls="terminalPanel" title="Terminal (Ctrl+`)">
         <img class="icon-img" src="/icons/console.png" width="18" height="18" alt="" aria-hidden="true">
+      </button>
+      <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnCodeBrainMap" aria-label="Code map" title="Code map" aria-pressed="false" aria-expanded="false">
+        <img class="icon-img" src="/icons/code-brain-map.png" width="18" height="18" alt="" aria-hidden="true">
       </button>
       <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnOrchestrate" aria-label="Orchestrate boards" title="Orchestrate boards" aria-pressed="false" aria-expanded="false" onclick="toggleOrchestrateHubFromTopbar()">
         <img class="icon-img" src="/icons/orchestrate.png" width="18" height="18" alt="" aria-hidden="true">

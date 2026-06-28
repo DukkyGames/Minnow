@@ -19,6 +19,8 @@ type StatusFn = (kind: 'ok' | 'err' | 'spin', message: string) => void;
 let bindingsDone = false;
 let listBindingsDone = false;
 let addFormBound = false;
+/** Bumps on each list refresh so stale concurrent fetches cannot append twice. */
+let memoryListRefreshGen = 0;
 
 const MEMORY_BODY_MAX_BYTES = 32 * 1024;
 
@@ -309,10 +311,14 @@ async function refreshMemoryEntriesList(): Promise<void> {
   const addPanel = document.getElementById('brainMemoryAddPanel');
   if (!countEl || !hintEl || !listEl) return;
 
+  const refreshGen = ++memoryListRefreshGen;
+  const isStale = () => refreshGen !== memoryListRefreshGen;
+
   listEl.replaceChildren();
   bindMemoryListActions(listEl);
 
   const status = await fetchMemoryStatus();
+  if (isStale()) return;
   const online = !!status;
   offlineEl?.classList.toggle('hidden', online);
   addPanel?.classList.toggle('hidden', !online);
@@ -331,6 +337,7 @@ async function refreshMemoryEntriesList(): Promise<void> {
   hintEl.textContent = status.home ? `Store: ${status.home}` : 'Server connected';
 
   const entries = await fetchMemoryEntries(true);
+  if (isStale()) return;
   if (!entries) {
     const err = document.createElement('p');
     err.className = 'settings-section-note';

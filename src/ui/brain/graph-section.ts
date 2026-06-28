@@ -9,7 +9,6 @@ import { buildPageGraph, filterGraphByQuery } from './graph/graph-data';
 import { createForceGraph, type ForceGraphApi } from './graph/force-graph';
 import type { GraphNode } from './graph/types';
 import { closeBrainInspector, renderBrainInspector } from './inspector';
-import { setBrainHeaderActions } from '../brain-page';
 
 const SHOW_ARCHIVES_KEY = 'minnow.brain.showArchives';
 
@@ -336,16 +335,6 @@ function syncGraphLegend(nodes: GraphNode[]): void {
   syncGraphTreePanelSizing();
 }
 
-function mountGraphHeaderActions(): void {
-  const existing = document.getElementById('brainGraphNewPage');
-  if (!existing) return;
-  const clone = existing.cloneNode(true) as HTMLButtonElement;
-  clone.id = 'brainGraphNewPageHeader';
-  clone.addEventListener('click', () => {
-    void import('../brain-page').then((m) => m.openBrainNewPage());
-  });
-  setBrainHeaderActions(clone);
-}
 async function openInspector(relPath: string): Promise<void> {
   const inspector = document.getElementById('brainInspector');
   if (!inspector) return;
@@ -443,7 +432,6 @@ function showFirstRunHint(): void {
 /** Render graph home section. */
 export async function renderGraphSection(): Promise<void> {
   bindGraphToolbar();
-  mountGraphHeaderActions();
 
   const treeMount = document.getElementById('brainGraphTree');
   const treeOnlyMount = document.getElementById('brainGraphTreeOnly');

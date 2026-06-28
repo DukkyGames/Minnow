@@ -15,6 +15,8 @@ import {
 } from '../../brain/client';
 import type {
   BrainCodeStatus,
+  BrainCodeRepoMap,
+  BrainCodeRepoMapEntry,
   BrainCodeSymbolMatch,
   BrainCodeSymbolRef,
   BrainCodeExplainPage,
@@ -53,7 +55,59 @@ function formatStatusLine(status: BrainCodeStatus): string {
   return `${status.repo} · ${status.symbolCount} symbols · ${status.fileCount} files · last indexed ${when}`;
 }
 
-/** Render repo map text into the pre block. */
+/** Render repo map entries into the map panel (clickable symbols). */
+function renderRepoMapPanel(map: BrainCodeRepoMap): void {
+  const mapEl = document.getElementById('brainCodeMap');
+  if (!mapEl) return;
+
+  mapEl.replaceChildren();
+
+  const entries = map.entries;
+  if (!entries?.length) {
+    mapEl.textContent = map.text;
+    return;
+  }
+
+  for (const entry of entries) {
+    mapEl.append(renderRepoMapEntry(entry));
+  }
+
+  if (selectedSymbolId) highlightRepoMapSymbol(selectedSymbolId);
+}
+
+/** Build one repo-map row (file headers are static; symbols are buttons). */
+function renderRepoMapEntry(entry: BrainCodeRepoMapEntry): HTMLElement {
+  const line = document.createElement('div');
+  line.className = `brain-code-map-line brain-code-map-line--${entry.type}`;
+
+  if (entry.type === 'symbol') {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'brain-code-map-symbol-btn';
+    btn.dataset.symbolId = entry.symbolId;
+    btn.textContent = entry.text;
+    btn.addEventListener('click', () => {
+      void selectSymbol(entry.symbolId);
+    });
+    line.append(btn);
+    return line;
+  }
+
+  line.textContent = entry.text;
+  return line;
+}
+
+/** Mark the active symbol row in the repo map. */
+function highlightRepoMapSymbol(symbolId: string): void {
+  const mapEl = document.getElementById('brainCodeMap');
+  if (!mapEl) return;
+  for (const btn of mapEl.querySelectorAll<HTMLButtonElement>('.brain-code-map-symbol-btn')) {
+    const active = btn.dataset.symbolId === symbolId;
+    btn.setAttribute('aria-current', active ? 'true' : 'false');
+  }
+}
+
+/** Render repo map text into the map panel. */
 async function refreshRepoMap(): Promise<void> {
   const mapEl = document.getElementById('brainCodeMap');
   const budgetEl = document.getElementById('brainCodeMapBudget');
@@ -67,12 +121,13 @@ async function refreshRepoMap(): Promise<void> {
   });
 
   if (!map) {
+    mapEl.replaceChildren();
     mapEl.textContent = 'Repo map unavailable. Start npm start and reindex.';
     if (budgetEl) budgetEl.textContent = '';
     return;
   }
 
-  mapEl.textContent = map.text;
+  renderRepoMapPanel(map);
   if (budgetEl) {
     const budget = lastStatus?.repoMapTokenBudget ?? '—';
     const truncated = map.truncated ? ' · truncated' : '';
@@ -217,6 +272,7 @@ async function selectSymbol(symbolId: string): Promise<void> {
   void renderCallGraph(sym, callers?.callers ?? [], callees?.callees ?? [], def?.text);
   void refreshExplainPanel(symbolId);
   highlightSearchResult(symbolId);
+  highlightRepoMapSymbol(symbolId);
 }
 
 /** Render an expandable call graph for the active symbol. */

@@ -292,6 +292,8 @@ export async function initApp(): Promise<void> {
   initContextUsageRing();
   initModeSelector();
   initOrchestrateHub();
+  const { initCodeBrainMap } = await import('./ui/code-brain-map');
+  initCodeBrainMap();
   initThinkingControl();
   initOrchestratePlanSelector();
   initViewModeToggle();

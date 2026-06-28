@@ -2,7 +2,7 @@
 id: memory
 kind: info
 part: memory
-version: 3
+version: 4
 ---
 
 ## Brain wiki (persistent knowledge)
@@ -37,6 +37,7 @@ Each page has YAML frontmatter (`id`, `title`, `tags`, `source`, `summary`, …)
 
 ### How to use retrieved notes
 
+- **Before online research:** When wiki notes are injected above, read them first. If they do not fully answer the question, use `brain_search` and `brain_read_page` to look for more wiki pages **before** calling `web_search`, `wikipedia_search`, `fetch_web_content`, or similar external research tools. Go online only when the wiki (injected or searched) lacks what you need.
 - Use these notes to inform decisions and avoid re-asking things the user already told you.
 - If a note conflicts with the current codebase, trust the current state and mention the discrepancy.
 - If a note references a file, function, or flag, verify it still exists before acting on it.

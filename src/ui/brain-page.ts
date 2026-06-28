@@ -206,6 +206,7 @@ export function openBrain(section?: BrainSectionId, options?: { editPath?: strin
   if (!root || !shell) return;
 
   closeOtherFullPages();
+  void import('./code-brain-map').then((m) => m.closeCodeBrainMap());
 
   const wasAlreadyOpen = root.classList.contains('is-open');
   root.classList.add('is-open');
@@ -278,7 +279,12 @@ export function isBrainPageOpen(): boolean {
 function onHashChange(): void {
   const hash = window.location.hash;
   if (hash.startsWith('#/app/brain') || hash.startsWith('#/brain')) {
-    openBrain(parseHashSection());
+    const section = parseHashSection();
+    // setActiveSection already updated activeSection + rendered before syncing hash.
+    if (isBrainPageOpen() && section === activeSection) {
+      return;
+    }
+    openBrain(section);
     return;
   }
   if (isOsEmbedded() && isOsAppHash(hash)) return;

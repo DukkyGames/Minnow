@@ -26,15 +26,12 @@
   pointer-events: none;
 }
 
-.brain-page.is-graph-canvas-bg .brain-page-header,
-.brain-page.is-graph-canvas-bg .brain-rail,
+/* Floating chrome (header + rail) stays interactive over full-bleed graph canvas. */
+.brain-page-header,
+.brain-page .brain-rail,
 .brain-page.is-graph-canvas-bg .brain-inspector,
 .brain-page.is-graph-canvas-bg .brain-section--graph .brain-state-banner,
 .brain-page.is-graph-canvas-bg .brain-section--graph .brain-graph-overlays > * {
-  pointer-events: auto;
-}
-
-.brain-page:not(.is-graph-canvas-bg) .brain-page-chrome {
   pointer-events: auto;
 }
 
@@ -62,7 +59,7 @@
   box-shadow: var(--shadow-card);
 }
 
-.brain-page.is-graph-canvas-bg .brain-page-header.brain-overlay-surface {
+.brain-page-header.brain-overlay-surface {
   margin: 8px 10px 0;
   padding: 0 14px;
   min-height: calc(var(--topbar-h) - 4px);
@@ -73,7 +70,7 @@
 }
 
 @supports (backdrop-filter: blur(1px)) {
-  .brain-page.is-graph-canvas-bg .brain-page-header.brain-overlay-surface {
+  .brain-page-header.brain-overlay-surface {
     background: color-mix(in srgb, var(--mn-surface-1) 96%, transparent);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
@@ -119,6 +116,11 @@
   min-height: 0;
 }
 
+.brain-page:not(.is-graph-canvas-bg) .brain-page-body,
+.brain-page:not(.is-graph-canvas-bg) .brain-stage {
+  pointer-events: auto;
+}
+
 .brain-content {
   flex: 1;
   min-width: 0;
@@ -162,7 +164,6 @@
   margin: 0 auto;
 }
 
-.brain-page.is-graph-canvas-bg .brain-rail,
 .brain-page.is-graph-canvas-bg .brain-inspector {
   pointer-events: auto;
 }
@@ -203,7 +204,7 @@
 
 .brain-section__cols {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 600px);
   gap: 20px;
   align-items: start;
 }
@@ -976,9 +977,43 @@
 /* ── Code index section ───────────────────────────────────────────────────── */
 
 .brain-code-toolbar {
-  justify-content: space-between;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  margin-bottom: 4px;
+  justify-content: space-between;
+  gap: 10px 12px;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-surface-1);
+}
+
+.brain-code-toolbar__status {
+  margin: 0;
+  flex: 1 1 12rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--mn-fg-muted);
+}
+
+.brain-code-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.brain-code-toolbar__actions .brain-action-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  line-height: 1.3;
 }
 
 .brain-code-layout {
@@ -1037,8 +1072,56 @@
   line-height: 1.45;
   max-height: 70vh;
   overflow: auto;
-  white-space: pre-wrap;
   word-break: break-word;
+}
+
+.brain-code-map-line {
+  white-space: pre-wrap;
+}
+
+.brain-code-map-line--title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.brain-code-map-line--file {
+  margin-top: 8px;
+  font-weight: 600;
+  color: var(--mn-fg-muted, color-mix(in srgb, var(--mn-fg) 70%, transparent));
+}
+
+.brain-code-map-line--message,
+.brain-code-map-line--truncated {
+  color: var(--mn-fg-muted, color-mix(in srgb, var(--mn-fg) 65%, transparent));
+  font-style: italic;
+}
+
+.brain-code-map-symbol-btn {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 1px 4px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.brain-code-map-symbol-btn[aria-current='true'] {
+  background: color-mix(in srgb, var(--mn-accent) 12%, transparent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .brain-code-map-symbol-btn:hover {
+    background: color-mix(in srgb, var(--mn-fg) 6%, transparent);
+  }
+
+  .brain-code-map-symbol-btn[aria-current='true']:hover {
+    background: color-mix(in srgb, var(--mn-accent) 16%, transparent);
+  }
 }
 
 .brain-code-results {
