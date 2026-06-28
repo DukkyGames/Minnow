@@ -8,7 +8,7 @@ import { getMinnowHome } from '../config/home.js';
 import { getEmbedder, embedTexts, EMBEDDINGS_WARMUP_TIMEOUT_MS } from '../engine/embeddings.js';
 import { BrainPathError, getBrainDir, getBrainLogPath, getBrainSchemaPath } from './paths.js';
 import { backupBrain, restoreBrain } from './backup.js';
-import { ingestSource } from './ingest.js';
+import { ingestSource, clearIngestSources } from './ingest.js';
 import { lintBrainWiki } from './lint.js';
 import {
   listMemoryProposals,
@@ -16,6 +16,7 @@ import {
   updateMemoryProposalStatus,
   applyMemoryProposalEdits,
 } from './proposals.js';
+import { clearSynthesisProposals } from './clear-synthesis-proposals.js';
 import { retrieveBrainBlockHybrid, loadAllPagesWithBodies } from './retrieve.js';
 import {
   bundleArchiveRange,
@@ -299,6 +300,17 @@ export async function handleBrainRequest(req, res, pathname) {
       return true;
     }
 
+    if (pathname === '/api/brain/sources/clear' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      if (body.confirmed !== true) {
+        sendJson(res, 400, { error: 'confirmed: true is required' });
+        return true;
+      }
+      const result = await clearIngestSources({ archive: body.archive === true });
+      sendJson(res, 200, result);
+      return true;
+    }
+
     if (pathname === '/api/brain/lint' && req.method === 'POST') {
       const body = await readJsonBody(req);
       const report = await lintBrainWiki({
@@ -316,6 +328,18 @@ export async function handleBrainRequest(req, res, pathname) {
         /** @type {'pending' | 'accepted' | 'rejected' | undefined} */ (status),
       );
       sendJson(res, 200, { proposals });
+      return true;
+    }
+
+    if (pathname === '/api/brain/proposals/clear' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      if (body.confirmed !== true) {
+        sendJson(res, 400, { error: 'confirmed: true is required' });
+        return true;
+      }
+      const scope = body.scope === 'all' ? 'all' : 'pending';
+      const result = await clearSynthesisProposals(scope);
+      sendJson(res, 200, result);
       return true;
     }
 

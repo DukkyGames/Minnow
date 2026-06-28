@@ -26,6 +26,10 @@ export const BRAIN_FULL_PERMISSION_TOOL_IDS = [
   ...BRAIN_CODE_TOOL_IDS,
 ] as const;
 
+/** Destructive Brain tool — defaults to permission `ask`. */
+export const BRAIN_DESTRUCTIVE_TOOL_IDS = ['manage_brain'] as const;
+
 export const BRAIN_WIKI_TOOL_ID_SET = new Set<string>(BRAIN_WIKI_TOOL_IDS);
 export const BRAIN_CODE_TOOL_ID_SET = new Set<string>(BRAIN_CODE_TOOL_IDS);
 export const BRAIN_FULL_PERMISSION_TOOL_ID_SET = new Set<string>(BRAIN_FULL_PERMISSION_TOOL_IDS);
+export const BRAIN_DESTRUCTIVE_TOOL_ID_SET = new Set<string>(BRAIN_DESTRUCTIVE_TOOL_IDS);

@@ -556,6 +556,7 @@ function buildOrchestrateHubDom(): HTMLElement {
 export function renderOrchestrateHub(): void {
   teardownOrchestratePlanScreen();
   teardownHub();
+  void import('./code-brain-map').then((m) => m.closeCodeBrainMap());
   const area = document.getElementById('chatArea');
   if (!area) return;
   if (!hubReturnChatId && sessionState?.activeId) {

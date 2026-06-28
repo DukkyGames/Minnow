@@ -377,6 +377,7 @@
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-md);
   background: var(--mn-bg);
+  padding: 12px 14px 14px;
 }
 
 @media (max-width: 560px) {

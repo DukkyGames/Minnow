@@ -3,6 +3,7 @@
  */
 
 import { fieldByKey } from '../ui/settings-catalog';
+import { resolveBrainMemoryRoute } from '../ui/brain-memory-routing';
 import { categoryForArea, type SettingsSectionId } from '../ui/settings-page-types';
 import { buildSettingsSearchIndex } from '../ui/settings-search-index';
 import { rankSettingsSearch } from '../ui/settings-search-rank';
@@ -73,6 +74,21 @@ export function toolLaunchMinnowApp(
 
   if (appId === 'settings') {
     Object.assign(options, resolveSettingsDeepLink(args));
+    const brainSection = resolveBrainMemoryRoute(
+      options.settingsSearchKey,
+      options.settingsSection,
+    );
+    if (brainSection) {
+      launchApp('brain', { brainSection });
+      return JSON.stringify({
+        ok: true,
+        appId: 'brain',
+        hash: `#/app/brain/${brainSection}`,
+        ...(options.settingsSearchKey
+          ? { settingsSearchKey: options.settingsSearchKey }
+          : {}),
+      });
+    }
   }
 
   launchApp(appId, Object.keys(options).length > 0 ? options : undefined);

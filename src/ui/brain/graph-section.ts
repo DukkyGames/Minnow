@@ -4,12 +4,12 @@
 
 import { fetchBrainTree } from '../../brain/client';
 import type { BrainPageMeta } from '../../brain/types';
+import { scheduleAnimationFrame } from '../../lib/schedule-animation-frame';
 import { flattenBrainTree, filterBrainTreeForDisplay, isBrainArchivePagePath } from './tree-utils';
 import { buildPageGraph, filterGraphByQuery } from './graph/graph-data';
 import { createForceGraph, type ForceGraphApi } from './graph/force-graph';
 import type { GraphNode } from './graph/types';
 import { closeBrainInspector, renderBrainInspector } from './inspector';
-import { setBrainHeaderActions } from '../brain-page';
 
 const SHOW_ARCHIVES_KEY = 'minnow.brain.showArchives';
 
@@ -38,6 +38,11 @@ let bindingsDone = false;
 let firstRunHint = true;
 let overlayOffsetObserver: ResizeObserver | null = null;
 let treeLayoutObserver: ResizeObserver | null = null;
+
+/** Deferred layout sync for ResizeObserver callbacks (avoids observer feedback loops). */
+const scheduleGraphLayoutSync = scheduleAnimationFrame(() => {
+  syncGraphOverlayOffsets();
+});
 
 /** Keep inspector/state banners aligned below the graph toolbar when it wraps. */
 function syncGraphOverlayOffsets(): void {
@@ -96,7 +101,7 @@ function bindOverlayOffsetObserver(): void {
   if (overlayOffsetObserver) return;
   const toolbar = document.querySelector('.brain-graph-toolbar');
   if (!toolbar) return;
-  overlayOffsetObserver = new ResizeObserver(() => syncGraphOverlayOffsets());
+  overlayOffsetObserver = new ResizeObserver(scheduleGraphLayoutSync);
   overlayOffsetObserver.observe(toolbar);
 }
 
@@ -105,7 +110,7 @@ function bindTreeLayoutObserver(): void {
   const stageEl = document.getElementById('brainGraphStage');
   const legendEl = document.getElementById('brainGraphLegend');
   if (!stageEl || !legendEl) return;
-  treeLayoutObserver = new ResizeObserver(() => syncGraphTreePanelSizing());
+  treeLayoutObserver = new ResizeObserver(scheduleGraphLayoutSync);
   treeLayoutObserver.observe(stageEl);
   treeLayoutObserver.observe(legendEl);
 }
@@ -336,16 +341,6 @@ function syncGraphLegend(nodes: GraphNode[]): void {
   syncGraphTreePanelSizing();
 }
 
-function mountGraphHeaderActions(): void {
-  const existing = document.getElementById('brainGraphNewPage');
-  if (!existing) return;
-  const clone = existing.cloneNode(true) as HTMLButtonElement;
-  clone.id = 'brainGraphNewPageHeader';
-  clone.addEventListener('click', () => {
-    void import('../brain-page').then((m) => m.openBrainNewPage());
-  });
-  setBrainHeaderActions(clone);
-}
 async function openInspector(relPath: string): Promise<void> {
   const inspector = document.getElementById('brainInspector');
   if (!inspector) return;
@@ -356,6 +351,9 @@ async function openInspector(relPath: string): Promise<void> {
     navigateBrainGraphPage,
     (path) => {
       void import('../brain-page').then((m) => m.openBrainEditForPath(path));
+    },
+    async () => {
+      await renderGraphSection();
     },
   );
 }
@@ -440,7 +438,6 @@ function showFirstRunHint(): void {
 /** Render graph home section. */
 export async function renderGraphSection(): Promise<void> {
   bindGraphToolbar();
-  mountGraphHeaderActions();
 
   const treeMount = document.getElementById('brainGraphTree');
   const treeOnlyMount = document.getElementById('brainGraphTreeOnly');

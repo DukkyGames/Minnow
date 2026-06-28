@@ -35,7 +35,7 @@ describe('brain index project scaffold', () => {
     assert.equal(body.compilerOptions.noEmit, true);
   });
 
-  test('creates .minnow/brain-jsconfig.json when JS exists and no project config', async () => {
+  test('creates .minnow/jsconfig.json when JS exists and no project config', async () => {
     const root = path.join(tempRoot, 'plain-js');
     await fs.mkdir(root, { recursive: true });
     await fs.writeFile(path.join(root, 'app.js'), 'export function hello() {}\n', 'utf8');
@@ -73,13 +73,13 @@ describe('brain index project scaffold', () => {
     assert.equal(result.reason, 'disabled');
   });
 
-  test('does not overwrite custom .minnow/brain-jsconfig.json', async () => {
+  test('does not overwrite custom .minnow/jsconfig.json', async () => {
     const root = path.join(tempRoot, 'custom-scaffold');
     const minnowDir = path.join(root, '.minnow');
     await fs.mkdir(minnowDir, { recursive: true });
     await fs.writeFile(path.join(root, 'main.ts'), 'export const y = 2;\n', 'utf8');
     await fs.writeFile(
-      path.join(minnowDir, 'brain-jsconfig.json'),
+      path.join(minnowDir, 'jsconfig.json'),
       JSON.stringify({ compilerOptions: { strict: true } }, null, 2),
       'utf8',
     );
@@ -87,5 +87,27 @@ describe('brain index project scaffold', () => {
     const result = await ensureBrainIndexProjectConfig(root);
     assert.equal(result.created, false);
     assert.equal(result.reason, 'custom-file-present');
+  });
+
+  test('migrates legacy .minnow/brain-jsconfig.json to jsconfig.json', async () => {
+    const root = path.join(tempRoot, 'legacy-migrate');
+    const minnowDir = path.join(root, '.minnow');
+    await fs.mkdir(minnowDir, { recursive: true });
+    await fs.writeFile(path.join(root, 'app.js'), 'export function legacy() {}\n', 'utf8');
+    const legacyBody = buildBrainJsConfig();
+    await fs.writeFile(
+      path.join(minnowDir, 'brain-jsconfig.json'),
+      `${JSON.stringify(legacyBody, null, 2)}\n`,
+      'utf8',
+    );
+
+    const result = await ensureBrainIndexProjectConfig(root);
+    assert.equal(result.created, true);
+    assert.equal(result.migrated, true);
+    assert.equal(result.path, BRAIN_JS_CONFIG_REL);
+
+    await assert.rejects(() => fs.access(path.join(minnowDir, 'brain-jsconfig.json')));
+    const migrated = JSON.parse(await fs.readFile(path.join(root, BRAIN_JS_CONFIG_REL), 'utf8'));
+    assert.ok(BRAIN_JS_CONFIG_MARKER in migrated);
   });
 });

@@ -434,3 +434,9 @@ export function resetDesktopStateForTests(): void {
   applyLayerClasses();
 }
 
+/** Force desktop state without bootstrapping UI (tests). */
+export function setDesktopStateForTests(next: DesktopState): void {
+  state = next;
+  applyLayerClasses();
+}
+

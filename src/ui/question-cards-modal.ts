@@ -17,10 +17,11 @@ import {
   buildAnswerEntries,
   type AskQuestionAnswerDraft,
 } from './question-cards-state';
-import { isChatAppForeground } from './chat-mount';
+import { getActiveComposerSurface } from './composer-surface';
 import { setComposerStreamingMode } from './composer-send';
 import { setSidebarInputPendingForActiveChat } from './chat-item-dot';
 import { resolveOrchestratePlanScreenQuestionHost } from './orchestrate-plan-screen';
+import { resolvePromptComposerShell, resolveQuestionHost } from './prompt-host-resolve';
 import {
   acquireUserPromptLock,
   isUserPromptLocked,
@@ -50,20 +51,22 @@ export function forceCloseAskQuestionModal(): void {
 }
 
 function getQuestionHost(): HTMLElement | null {
-  if (isChatAppForeground()) {
-    return (
-      document.getElementById('chatAppQuestionHost') ??
-      document.getElementById('questionHost')
-    );
-  }
-  return document.getElementById('questionHost');
+  return resolveQuestionHost();
 }
 
 function getQuestionComposerShell(): HTMLElement | null {
-  if (isChatAppForeground()) {
-    return document.querySelector('.chat-app-composer');
+  return resolvePromptComposerShell();
+}
+
+/** Surface-specific panel class for dock / chat-app / code bench styling. */
+function resolveQuestionPanelSurfaceClass(host: HTMLElement): string {
+  if (host.id === 'desktopQuestionHost' || host.closest('.mn-os-composer-dock')) {
+    return 'question-cards-panel--os-dock';
   }
-  return document.getElementById('mainColumn');
+  if (host.id === 'chatAppQuestionHost' || host.closest('.chat-app-composer')) {
+    return 'question-cards-panel--chat-app';
+  }
+  return '';
 }
 
 function getOrCreateDraft(
@@ -105,16 +108,7 @@ export function showQuestionCardsModal(
     }
 
     const composerShell = getQuestionComposerShell();
-    const msgInput = (
-      isChatAppForeground()
-        ? document.getElementById('chatAppInput')
-        : document.getElementById('msgInput')
-    ) as HTMLTextAreaElement | null;
-    const sendBtn = (
-      isChatAppForeground()
-        ? document.getElementById('chatAppSendBtn')
-        : document.getElementById('sendBtn')
-    ) as HTMLButtonElement | null;
+    const { inputEl: msgInput, sendBtnEl: sendBtn } = getActiveComposerSurface();
     const prevInputDisabled = msgInput?.disabled ?? false;
     const prevSendDisabled = sendBtn?.disabled ?? false;
     const chatIdForAbort = options.chatId?.trim() || getActiveChat().id;
@@ -132,48 +126,35 @@ export function showQuestionCardsModal(
     let cardIndex = 0;
     const questions = args.questions;
 
+    const surfaceClass = resolveQuestionPanelSurfaceClass(host);
+    const panelClasses = ['question-cards-panel'];
+    if (embedded) panelClasses.push('question-cards-panel--embedded');
+    if (surfaceClass) panelClasses.push(surfaceClass);
+
     const panel = document.createElement('div');
-    panel.className = embedded
-      ? 'question-cards-panel question-cards-panel--embedded'
-      : 'question-cards-panel';
+    panel.className = panelClasses.join(' ');
     panel.setAttribute('role', 'region');
     panel.setAttribute('aria-label', 'Assistant questions');
 
     const header = document.createElement('div');
     header.className = 'question-cards-panel__header';
 
-    const titleRow = document.createElement('div');
-    titleRow.className = 'question-cards-panel__title-row';
+    const headerMain = document.createElement('div');
+    headerMain.className = 'question-cards-panel__header-main';
 
     if (args.title) {
-      const cat = document.createElement('p');
-      cat.className = 'question-cards-panel__category';
-      cat.textContent = args.title;
-      titleRow.appendChild(cat);
+      const eyebrow = document.createElement('p');
+      eyebrow.className = 'question-cards-panel__eyebrow';
+      eyebrow.textContent = args.title;
+      headerMain.appendChild(eyebrow);
     }
 
-    const headerRight = document.createElement('div');
-    headerRight.className = 'question-cards-panel__header-right';
-
-    if (context.subAgentType) {
-      const badge = document.createElement('span');
-      badge.className = 'question-cards-badge';
-      badge.textContent = `Sub-agent · ${context.subAgentType}`;
-      headerRight.appendChild(badge);
-    }
-
-    const btnClose = document.createElement('button');
-    btnClose.type = 'button';
-    btnClose.className = 'question-cards-icon-btn';
-    btnClose.setAttribute('aria-label', 'Close and cancel questions');
-    btnClose.textContent = '×';
-    headerRight.appendChild(btnClose);
-
-    titleRow.appendChild(headerRight);
-    header.appendChild(titleRow);
+    const headerActions = document.createElement('div');
+    headerActions.className = 'question-cards-panel__header-actions';
 
     const nav = document.createElement('div');
     nav.className = 'question-cards-nav';
+    nav.hidden = questions.length <= 1;
     const btnPrev = document.createElement('button');
     btnPrev.type = 'button';
     btnPrev.className = 'question-cards-nav-btn';
@@ -189,6 +170,24 @@ export function showQuestionCardsModal(
     btnNext.innerHTML =
       '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>';
     nav.append(btnPrev, indicator, btnNext);
+    headerActions.appendChild(nav);
+
+    if (context.subAgentType) {
+      const badge = document.createElement('span');
+      badge.className = 'question-cards-badge';
+      badge.textContent = `Sub-agent · ${context.subAgentType}`;
+      headerActions.appendChild(badge);
+    }
+
+    const btnClose = document.createElement('button');
+    btnClose.type = 'button';
+    btnClose.className = 'question-cards-icon-btn';
+    btnClose.setAttribute('aria-label', 'Close and cancel questions');
+    btnClose.innerHTML =
+      '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+    headerActions.appendChild(btnClose);
+
+    header.append(headerMain, headerActions);
 
     const cardBody = document.createElement('div');
     cardBody.className = 'question-cards-panel__body';
@@ -212,7 +211,7 @@ export function showQuestionCardsModal(
     hints.textContent = 'Esc to cancel · Arrow keys to change card';
 
     footer.append(validation, btnSubmit, hints);
-    panel.append(header, nav, cardBody, footer);
+    panel.append(header, cardBody, footer);
     host.appendChild(panel);
 
     let settled = false;
@@ -286,13 +285,15 @@ export function showQuestionCardsModal(
     function renderQuestion(q: AskQuestionItem): void {
       cardBody.replaceChildren();
 
-      const promptEl = document.createElement('p');
+      const promptEl = document.createElement('h2');
       promptEl.className = 'question-cards-prompt';
       promptEl.textContent = q.prompt;
       cardBody.appendChild(promptEl);
 
       const list = document.createElement('div');
       list.className = 'question-cards-options';
+      // +1 for the synthetic Other row; drives grid layout for short option sets.
+      list.dataset.optionCount = String(q.options.length + 1);
       list.setAttribute('role', q.allow_multiple ? 'group' : 'radiogroup');
       list.setAttribute(
         'aria-label',

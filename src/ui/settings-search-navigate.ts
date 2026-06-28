@@ -167,6 +167,12 @@ export async function navigateToSettingsSearchEntry(
     return;
   }
 
+  if (entry.brainSection) {
+    const { openBrain } = await import('./brain-page');
+    openBrain(entry.brainSection as import('./brain-page').BrainSectionId);
+    return;
+  }
+
   const category = categoryForArea(entry.sectionId);
   openSettings(entry.sectionId, { searchKey: entry.searchKey });
 

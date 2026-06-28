@@ -63,7 +63,14 @@ export async function applyWorkspaceSwitch(info: WorkspaceInfo): Promise<void> {
   clearCachesForWorkspace(previousPath);
   setWorkspaceFromServer(info);
   updateWorkspaceButtonLabel(info.label, info.path);
+  const { teardownCodeBrainMapBeforeChatPaint } = await import('./code-brain-map');
+  const closedCodeMap = teardownCodeBrainMapBeforeChatPaint();
   applyWorkspaceScopedSession(info.path, previousPath);
+  if (closedCodeMap) {
+    const { getActiveChat } = await import('../state/sessions');
+    const { renderChatFromHistory } = await import('./messages');
+    renderChatFromHistory(getActiveChat());
+  }
 
   const { closeFileViewerForce } = await import('./file-viewer');
   closeFileViewerForce();

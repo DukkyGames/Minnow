@@ -77,4 +77,15 @@ describe('code index rank', () => {
     assert.match(map.text, /^# Repo map/);
     assert.equal(map.truncated, true);
   });
+
+  it('renderRepoMap returns symbol ids for UI navigation', () => {
+    const symbols = [
+      { id: 'ws:main', file: 'src/app.ts', signature: 'function main()', kind: 'function', pagerank: 1 },
+    ];
+    const map = renderRepoMap(symbols, 200);
+    const symbolEntry = map.entries?.find((entry) => entry.type === 'symbol');
+    assert.ok(symbolEntry);
+    assert.equal(symbolEntry.symbolId, 'ws:main');
+    assert.equal(symbolEntry.file, 'src/app.ts');
+  });
 });

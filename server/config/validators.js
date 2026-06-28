@@ -2,7 +2,7 @@
  * Validate session, tool, and system-prompt payloads before writing to disk.
  */
 
-import { ALL_TOOL_IDS, ARCHIVE_RECALL_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_ID_SET } from './tool-ids.js';
+import { ALL_TOOL_IDS, ARCHIVE_RECALL_TOOL_IDS, BRAIN_DESTRUCTIVE_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_ID_SET } from './tool-ids.js';
 import { normalizeOrchestratePlanPath } from './orchestrate-plan-path.js';
 import { normalizeSamplerPreset } from '../agents/sampler.js';
 import {
@@ -909,6 +909,12 @@ function backfillBrainTools(config, raw) {
       config.enabled[id] = true;
     }
   }
+  for (const id of BRAIN_DESTRUCTIVE_TOOL_IDS) {
+    if (!toolIdWasStored(raw, id)) {
+      config.permissions.default[id] = 'ask';
+      config.enabled[id] = true;
+    }
+  }
 }
 
 /** Clamp archive policy numeric fields (MIN-139). */
@@ -962,6 +968,7 @@ export function normalizeToolConfig(raw) {
     'brain_write_page',
     'brain_append_log',
     'brain_ingest_source',
+    'manage_brain',
     'repo_map',
     'find_symbol',
     'who_calls',

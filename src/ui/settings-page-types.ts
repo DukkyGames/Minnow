@@ -37,7 +37,6 @@ export type SettingsSectionId =
   | 'thinking'
   | 'prompting'
   | 'rules'
-  | 'memory'
   | 'modes'
   | 'experts'
   | 'work-agents'
@@ -69,7 +68,6 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   thinking: 'Thinking',
   prompting: 'Prompts',
   rules: 'Rules',
-  memory: 'Memory',
   modes: 'Modes',
   experts: 'Experts',
   'work-agents': 'Work agents',
@@ -109,7 +107,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     id: 'prompting',
     label: 'Prompting & memory',
-    sections: ['prompting', 'rules', 'memory'],
+    sections: ['prompting', 'rules'],
   },
   {
     id: 'agents',

@@ -19,7 +19,6 @@ const SETTINGS_SECTION_IDS = [
   'thinking',
   'prompting',
   'rules',
-  'memory',
   'modes',
   'experts',
   'work-agents',
@@ -87,28 +86,12 @@ describe('settings page HTML', () => {
     assert.match(html, /id="settingsMcpAddCommand"/);
   });
 
-  test('memory entry list mount exists in index.html', () => {
-    assert.match(html, /id="settingsMemoryList"/);
-  });
-
-  test('memory add form exists in index.html', () => {
-    assert.match(html, /id="settingsMemoryAddForm"/);
-    assert.match(html, /id="settingsMemoryAddTitle"/);
-    assert.match(html, /id="settingsMemoryAddBody"/);
-    assert.match(html, /id="settingsMemoryAddTags"/);
-    assert.match(html, /id="settingsMemoryAddPanel"/);
-  });
-
-  test('memory synthesis proposals panel exists in index.html', () => {
-    assert.match(html, /id="settingsMemoryProposalsPanel"/);
-    assert.match(html, /id="settingsMemoryProposalsList"/);
-    assert.match(html, /id="settingsMemoryProposalsBadge"/);
-  });
-
-  test('memory synthesis settings panel exists in index.html', () => {
-    assert.match(html, /id="settingsMemorySynthesisPanel"/);
-    assert.match(html, /id="settingsMemorySynthesisThrottle"/);
-    assert.match(html, /id="settingsMemorySynthesisSave"/);
+  test('memory UI moved to Brain app (not in settings)', () => {
+    assert.doesNotMatch(html, /id="settingsSection-memory"/);
+    assert.doesNotMatch(html, /id="settingsMemoryList"/);
+    assert.match(html, /id="brainSection-memories"/);
+    assert.match(html, /id="brainMemoryList"/);
+    assert.match(html, /data-brain-nav="memories"/);
   });
 
   test('prompt token estimate elements exist in index.html', () => {
@@ -136,7 +119,7 @@ describe('settings page HTML', () => {
   });
 
   test('SETTINGS_SECTION_IDS matches canonical section count', () => {
-    assert.equal(SETTINGS_SECTION_IDS.length, 28);
+    assert.equal(SETTINGS_SECTION_IDS.length, 27);
   });
 
   test('prompts hub mount exists in index.html', () => {

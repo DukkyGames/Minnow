@@ -124,6 +124,15 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
 
   switch (appId) {
     case 'settings': {
+      const brainRoute = (await import('../ui/brain-memory-routing')).resolveBrainMemoryRoute(
+        options?.settingsSearchKey,
+        options?.settingsSection ?? route.settingsSection,
+      );
+      if (brainRoute) {
+        const { openBrain } = await import('../ui/brain-page');
+        openBrain(brainRoute);
+        break;
+      }
       const { openSettings, navigateToSettingsField } = await import('../ui/settings-page');
       const section = (options?.settingsSection ?? route.settingsSection ?? 'general') as SettingsSectionId;
       if (options?.settingsSearchKey) {

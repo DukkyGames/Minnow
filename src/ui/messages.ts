@@ -1,5 +1,6 @@
 import { isHubMounted, renderHub, refreshHubLiveData, teardownHub } from './hub';
 import { isOrchestrateHubMounted, teardownOrchestrateHub } from './orchestrate-hub';
+import { teardownCodeBrainMapBeforeChatPaint } from './code-brain-map';
 import {
   isOrchestratePlanScreenMounted,
   isOrchestratePlanScreenSessionActive,
@@ -138,6 +139,9 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   const codeMount = isCodeChatMount(mount);
 
   runWithChatMount(area, () => {
+  if (codeMount) {
+    teardownCodeBrainMapBeforeChatPaint();
+  }
   updateCodeChangeStrip(chat);
   if (codeMount && isOrchestrateHubMounted()) {
     teardownOrchestrateHub();

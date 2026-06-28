@@ -15,6 +15,7 @@ import {
 import { drag } from 'd3-drag';
 import { select } from 'd3-selection';
 import { zoom, zoomIdentity, type ZoomBehavior, type ZoomTransform } from 'd3-zoom';
+import { scheduleAnimationFrame } from '../../../lib/schedule-animation-frame';
 import type {
   ForceGraphCallbacks,
   ForceGraphOptions,
@@ -555,10 +556,11 @@ export function createForceGraph(
   });
 
   // Observe canvas layout changes and redraw without restarting the simulation.
-  const resizeObserver = new ResizeObserver(() => {
+  const scheduleCanvasResize = scheduleAnimationFrame(() => {
     resizeCanvas();
     draw();
   });
+  const resizeObserver = new ResizeObserver(scheduleCanvasResize);
   resizeObserver.observe(canvas);
 
   // Clear focus when Escape is pressed anywhere in the document.

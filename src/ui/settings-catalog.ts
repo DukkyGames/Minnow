@@ -57,7 +57,7 @@ export const SETTINGS_CATEGORY_AREAS: Record<
   appearance: ['appearance'],
   models: ['providers', 'model-routing', 'sampler', 'thinking', 'usage'],
   agents: ['modes', 'experts', 'work-agents', 'agent-packs', 'sub-agents', 'autopilot'],
-  knowledge: ['prompting', 'rules', 'memory'],
+  knowledge: ['prompting', 'rules'],
   integrations: [
     'search',
     'deep-research',
@@ -263,22 +263,6 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   }),
   field('knowledge.rules.enabled', 'Enable user rules', 'knowledge', 'rules'),
   field('knowledge.rules.text', 'Rules text', 'knowledge', 'rules'),
-  field('knowledge.memory', 'Memory store', 'knowledge', 'memory', {
-    keywords: ['recall', 'memories'],
-  }),
-  field('knowledge.memory.enabled', 'Enable memory store', 'knowledge', 'memory', {
-    keywords: ['turn off memory', 'disable memory'],
-  }),
-  field('knowledge.memory.injection', 'Inject memories on send', 'knowledge', 'memory', {
-    keywords: ['memory injection'],
-  }),
-  field('knowledge.memory.embeddings', 'Semantic embeddings', 'knowledge', 'memory', {
-    keywords: ['vector', 'semantic search'],
-  }),
-  field('knowledge.memory.synthesis', 'Auto-learning cadence', 'knowledge', 'memory', {
-    keywords: ['synthesis', 'proposals', 'skill learning'],
-    description: 'How often Minnow proposes new memories and skills after chat turns.',
-  }),
 
   // —— Integrations ——
   field('integrations.search', 'Web search provider', 'integrations', 'search', {

@@ -8,7 +8,7 @@ import { defaultToolConfig as buildDefaultToolConfig } from '../config/defaults'
 import { isServerStorageMode } from '../config/storage-mode';
 import { setStatus } from '../ui/status';
 import { BUILT_IN_TOOLS, type ToolCategory } from './definitions';
-import { BRAIN_FULL_PERMISSION_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_ID_SET } from './brain-tool-ids';
+import { BRAIN_DESTRUCTIVE_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_ID_SET } from './brain-tool-ids';
 import { isMinnowElectronShell } from './minnow-shell';
 import {
   createEmptyToolPermissionsConfig,
@@ -118,6 +118,12 @@ function backfillBrainTools(config: ToolConfig, raw: unknown): void {
   for (const id of BRAIN_FULL_PERMISSION_TOOL_IDS) {
     if (!toolIdWasStored(raw, id)) {
       config.permissions.default[id] = 'full';
+      config.enabled[id] = true;
+    }
+  }
+  for (const id of BRAIN_DESTRUCTIVE_TOOL_IDS) {
+    if (!toolIdWasStored(raw, id)) {
+      config.permissions.default[id] = 'ask';
       config.enabled[id] = true;
     }
   }

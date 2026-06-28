@@ -27,6 +27,7 @@ const PLAN_DENIED_TOOLS: string[] = [
   'git_commit',
   'git_add',
   'git_checkout',
+  'manage_brain',
 ];
 
 function denyListToolPolicy(denied: string[]): ModeToolPolicy {

@@ -1,6 +1,7 @@
 /**
  * Auto-scaffold TypeScript/JavaScript project config for Brain code indexing.
- * Writes workspace/.minnow/brain-jsconfig.json when no ts/js config exists.
+ * Writes workspace/.minnow/jsconfig.json when no ts/js config exists.
+ * Must use the standard jsconfig.json name so tsserver discovers the project.
  */
 
 import { execFile } from 'node:child_process';
@@ -12,7 +13,10 @@ import { rgPath } from '@vscode/ripgrep';
 const execFileAsync = promisify(execFile);
 
 /** Relative path of the Minnow-managed jsconfig inside a workspace. */
-export const BRAIN_JS_CONFIG_REL = '.minnow/brain-jsconfig.json';
+export const BRAIN_JS_CONFIG_REL = '.minnow/jsconfig.json';
+
+/** Legacy scaffold path (pre-2026-06); migrated to {@link BRAIN_JS_CONFIG_REL} on reindex. */
+export const BRAIN_JS_CONFIG_LEGACY_REL = '.minnow/brain-jsconfig.json';
 
 /** Marker key inside the scaffold file — used to detect Minnow-owned config. */
 export const BRAIN_JS_CONFIG_MARKER = '_minnow';
@@ -46,6 +50,35 @@ async function rgListFiles(root, includeGlobs) {
     if (code === 1) return [];
     throw err;
   }
+}
+
+/**
+ * Whether the workspace has a user- or tool-owned ts/js project config (excludes Minnow scaffold).
+ * @param {string} root
+ */
+export async function workspaceHasUserTypeScriptProjectConfig(root) {
+  const normalizedRoot = path.resolve(root);
+  const hits = await rgListFiles(normalizedRoot, [
+    'tsconfig.json',
+    'jsconfig.json',
+    'tsconfig.*.json',
+  ]);
+  for (const hit of hits) {
+    const rel = path.relative(normalizedRoot, hit).replace(/\\/g, '/');
+    if (rel === BRAIN_JS_CONFIG_REL) {
+      try {
+        const raw = await fs.readFile(path.join(normalizedRoot, rel), 'utf8');
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && BRAIN_JS_CONFIG_MARKER in parsed) {
+          continue;
+        }
+      } catch {
+        /* invalid JSON at scaffold path — treat as user-owned */
+      }
+    }
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -89,10 +122,39 @@ export function buildBrainJsConfig() {
 }
 
 /**
+ * Move a legacy brain-jsconfig.json scaffold to the tsserver-discoverable path.
+ * @param {string} root
+ */
+async function migrateLegacyBrainJsConfig(root) {
+  const legacyAbs = path.join(root, BRAIN_JS_CONFIG_LEGACY_REL);
+  const scaffoldAbs = path.join(root, BRAIN_JS_CONFIG_REL);
+  try {
+    const raw = await fs.readFile(legacyAbs, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || !(BRAIN_JS_CONFIG_MARKER in parsed)) {
+      return { migrated: false };
+    }
+    try {
+      await fs.access(scaffoldAbs);
+      await fs.unlink(legacyAbs);
+      return { migrated: false, removedLegacy: true };
+    } catch {
+      /* new path missing — migrate below */
+    }
+    await fs.mkdir(path.dirname(scaffoldAbs), { recursive: true });
+    await fs.writeFile(scaffoldAbs, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
+    await fs.unlink(legacyAbs);
+    return { migrated: true, path: BRAIN_JS_CONFIG_REL };
+  } catch {
+    return { migrated: false };
+  }
+}
+
+/**
  * Ensure a jsconfig exists for LSP indexing when the workspace has JS/TS but no project file.
  * @param {string} root
  * @param {{ enabled?: boolean }} [opts]
- * @returns {Promise<{ created: boolean, path?: string, skipped?: boolean, reason?: string }>}
+ * @returns {Promise<{ created: boolean, path?: string, skipped?: boolean, reason?: string, migrated?: boolean }>}
  */
 export async function ensureBrainIndexProjectConfig(root, opts = {}) {
   if (opts.enabled === false) {
@@ -102,12 +164,9 @@ export async function ensureBrainIndexProjectConfig(root, opts = {}) {
   const normalizedRoot = path.resolve(root);
   const scaffoldAbs = path.join(normalizedRoot, BRAIN_JS_CONFIG_REL);
 
-  if (await workspaceHasTypeScriptProjectConfig(normalizedRoot)) {
-    return { created: false, skipped: true, reason: 'project-config-exists' };
-  }
-
-  if (!(await workspaceHasJsTsSources(normalizedRoot))) {
-    return { created: false, skipped: true, reason: 'no-js-ts-sources' };
+  const legacy = await migrateLegacyBrainJsConfig(normalizedRoot);
+  if (legacy.migrated) {
+    return { created: true, migrated: true, path: BRAIN_JS_CONFIG_REL };
   }
 
   try {
@@ -130,8 +189,30 @@ export async function ensureBrainIndexProjectConfig(root, opts = {}) {
     /* scaffold missing — create below */
   }
 
+  if (await workspaceHasUserTypeScriptProjectConfig(normalizedRoot)) {
+    return { created: false, skipped: true, reason: 'project-config-exists' };
+  }
+
+  if (!(await workspaceHasJsTsSources(normalizedRoot))) {
+    return { created: false, skipped: true, reason: 'no-js-ts-sources' };
+  }
+
   await fs.mkdir(path.dirname(scaffoldAbs), { recursive: true });
   const body = buildBrainJsConfig();
   await fs.writeFile(scaffoldAbs, `${JSON.stringify(body, null, 2)}\n`, 'utf8');
   return { created: true, path: BRAIN_JS_CONFIG_REL };
+}
+
+/**
+ * Ensure scaffold exists and restart TypeScript LSP when a new config was written.
+ * @param {string} root
+ * @param {{ enabled?: boolean }} [opts]
+ */
+export async function ensureBrainLspProjectReady(root, opts = {}) {
+  const scaffold = await ensureBrainIndexProjectConfig(root, opts);
+  if (scaffold.created) {
+    const { shutdownLspServers } = await import('../../lsp/manager.js');
+    shutdownLspServers(['typescript']);
+  }
+  return scaffold;
 }

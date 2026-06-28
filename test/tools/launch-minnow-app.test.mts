@@ -57,7 +57,7 @@ describe('launch_minnow_app', () => {
     assert.equal(result, 'Error: "app_id" is required');
   });
 
-  test('settings_query resolves memory field for settings app', () => {
+  test('settings_query resolves memory field to Brain app', () => {
     const calls: Array<{ appId: AppId; options?: LaunchOptions }> = [];
     const launchApp = (appId: AppId, options?: LaunchOptions) => {
       calls.push({ appId, options });
@@ -69,14 +69,17 @@ describe('launch_minnow_app', () => {
     );
     const parsed = JSON.parse(raw) as {
       ok: boolean;
+      appId: string;
+      hash: string;
       settingsSearchKey?: string;
     };
 
     assert.equal(parsed.ok, true);
+    assert.equal(parsed.appId, 'brain');
+    assert.equal(parsed.hash, '#/app/brain/memories');
     assert.ok(parsed.settingsSearchKey);
-    assert.equal(calls[0]?.appId, 'settings');
-    assert.ok(calls[0]?.options?.settingsSearchKey);
-    assert.equal(calls[0]?.options?.settingsSection, 'memory');
+    assert.equal(calls[0]?.appId, 'brain');
+    assert.equal(calls[0]?.options?.brainSection, 'memories');
   });
 });
 
