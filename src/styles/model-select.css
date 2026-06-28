@@ -319,3 +319,41 @@
   background: var(--mn-success);
   border-color: var(--mn-success);
 }
+
+.model-load-dot[data-load-state='loading'] {
+  background: transparent;
+  border-color: transparent;
+  border-width: 0;
+  width: 10px;
+  height: 10px;
+  border-top: 2px solid var(--mn-accent);
+  border-right: 2px solid color-mix(in srgb, var(--mn-accent) 35%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--mn-accent) 35%, transparent);
+  border-left: 2px solid color-mix(in srgb, var(--mn-accent) 35%, transparent);
+  animation: model-load-dot-spin 0.65s linear infinite;
+}
+
+.model-wrap[data-model-state='loading'] .model-state-dot {
+  background: transparent;
+  border-color: transparent;
+  width: 10px;
+  height: 10px;
+  border-width: 0;
+  border-top: 2px solid var(--mn-accent);
+  border-right: 2px solid color-mix(in srgb, var(--mn-accent) 35%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--mn-accent) 35%, transparent);
+  border-left: 2px solid color-mix(in srgb, var(--mn-accent) 35%, transparent);
+  animation: model-load-dot-spin 0.65s linear infinite;
+}
+
+@keyframes model-load-dot-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .model-load-dot[data-load-state='loading'],
+  .model-wrap[data-model-state='loading'] .model-state-dot {
+    animation: none;
+    opacity: 0.85;
+  }
+}

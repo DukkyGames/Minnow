@@ -20,7 +20,7 @@ import {
   producerSlugFromModelId,
   resolveModelProducer,
 } from '../providers/model-producer';
-import { isModelLoaded, resolveModelState } from './model-state-dot';
+import { isModelLoaded, resolveModelState, type ModelLoadState } from './model-state-dot';
 import { isModelLoadUnloadBusy } from './model-load-unload-button';
 
 /** Flat list when catalog is small; larger catalogs get collapsible producer headers. */
@@ -433,7 +433,7 @@ function appendModelOptionRow(
   if (!id) return;
 
   const cached = modelCache.get(id);
-  let loadState = cached ? resolveModelState(cached) : 'unknown';
+  let loadState: ModelLoadState = cached ? resolveModelState(cached) : 'unknown';
   if (isModelLoadUnloadBusy() && id === selectedValue) {
     loadState = 'loading';
   }

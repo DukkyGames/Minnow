@@ -146,6 +146,40 @@
   outline-offset: 2px;
 }
 
+.model-action-btn.is-busy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  opacity: 1;
+}
+
+.model-load-unload-spinner {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--mn-border-strong);
+  border-top-color: var(--mn-accent);
+  border-radius: 50%;
+  animation: model-load-unload-spin 0.65s linear infinite;
+}
+
+.model-load-unload-label {
+  white-space: nowrap;
+}
+
+@keyframes model-load-unload-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .model-load-unload-spinner {
+    animation: none;
+    border-top-color: var(--mn-accent);
+    opacity: 0.85;
+  }
+}
+
 /* Refresh sits in the model row, immediately left of the model picker */
 .model-refresh-btn {
   flex-shrink: 0;
