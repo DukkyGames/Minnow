@@ -6,11 +6,11 @@
 import {
   fetchModels,
   getModelRowForSelectOrCanonicalId,
+  syncModelLoadUnloadButtonElement,
   toggleSelectedModelLoad,
-  updateModelLoadUnloadButtons,
 } from '../api/models';
-import { isServerStorageMode } from '../config/storage-mode';
-import { isModelLoaded, resolveModelState } from '../ui/model-state-dot';
+import { isModelLoadUnloadBusy } from '../ui/model-load-unload-button';
+import { resolveModelState } from '../ui/model-state-dot';
 import { modelCache } from '../app-state';
 import {
   closeModelSelectMenu,
@@ -36,6 +36,7 @@ let menuOpen = false;
 let outsideHandler: ((e: PointerEvent) => void) | null = null;
 let escapeHandler: ((e: KeyboardEvent) => void) | null = null;
 let modelSelectListener: (() => void) | null = null;
+let loadUnloadListener: (() => void) | null = null;
 
 function getModelSelect(): HTMLSelectElement | null {
   return document.getElementById('modelSelect') as HTMLSelectElement | null;
@@ -61,7 +62,9 @@ export function syncOsModelChipDot(dotEl: HTMLElement): void {
   const sel = getModelSelect();
   const id = sel?.value.trim() ?? '';
   let state = 'unknown';
-  if (id) {
+  if (isModelLoadUnloadBusy()) {
+    state = 'loading';
+  } else if (id) {
     const row = getModelRowForSelectOrCanonicalId(id);
     state = row ? resolveModelState(row) : modelCache.get(id) ? resolveModelState(modelCache.get(id)) : 'unknown';
   }
@@ -72,30 +75,7 @@ export function syncOsModelChipDot(dotEl: HTMLElement): void {
 
 function syncLoadUnloadButton(): void {
   if (!loadBtn) return;
-  updateModelLoadUnloadButtons();
-  const topBtn = document.getElementById('btnModelLoadUnload') as HTMLButtonElement | null;
-  const sel = getModelSelect();
-  const opt = sel?.options[sel.selectedIndex];
-  const supportsUnload =
-    isServerStorageMode() && opt?.getAttribute('data-supports-load-unload') === '1';
-
-  loadBtn.hidden = !supportsUnload;
-  if (!supportsUnload) {
-    loadBtn.disabled = true;
-    loadBtn.textContent = 'Load';
-    loadBtn.title = isServerStorageMode()
-      ? 'Model load/unload is not supported for this provider'
-      : 'Start with npm start to load or unload models';
-    return;
-  }
-
-  const raw = sel?.value.trim() ?? '';
-  const row = raw ? getModelRowForSelectOrCanonicalId(raw) : undefined;
-  const loaded = row ? isModelLoaded(row) : false;
-
-  loadBtn.textContent = topBtn?.textContent?.trim() || (loaded ? 'Unload' : 'Load');
-  loadBtn.disabled = topBtn?.disabled ?? !raw;
-  loadBtn.title = topBtn?.title ?? (loaded ? 'Unload model' : 'Load model');
+  syncModelLoadUnloadButtonElement(loadBtn);
 }
 
 function rebuildMenuList(): void {
@@ -255,6 +235,12 @@ export function initOsModelChipMenu(
   const onChipClick = () => toggleMenu();
   chip.addEventListener('click', onChipClick);
 
+  loadUnloadListener = () => {
+    syncOsModelChipDot(dotEl);
+    if (menuOpen) syncLoadUnloadButton();
+  };
+  document.addEventListener('minnow:model-load-unload-changed', loadUnloadListener);
+
   const sel = getModelSelect();
   modelSelectListener = () => {
     syncOsModelChipText(textEl);
@@ -293,6 +279,10 @@ export function initOsModelChipMenu(
 
   return () => {
     chip.removeEventListener('click', onChipClick);
+    if (loadUnloadListener) {
+      document.removeEventListener('minnow:model-load-unload-changed', loadUnloadListener);
+      loadUnloadListener = null;
+    }
     if (modelSelectListener) sel?.removeEventListener('change', modelSelectListener);
     modelObserver?.disconnect();
     if (modelPoll !== undefined) clearInterval(modelPoll);

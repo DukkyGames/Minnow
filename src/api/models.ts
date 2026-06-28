@@ -94,13 +94,18 @@ export function showCachedModelInfo(): void {
   updateStrip({}, {}, resolveModelInfo(modelIdOrKey));
 }
 
-/** Update the combined Load/Unload button from selection + provider. */
-export function updateModelLoadUnloadButtons(): void {
-  const btn = document.getElementById('btnModelLoadUnload') as HTMLButtonElement | null;
-  if (!btn) return;
+/** Sync one Load/Unload button from selection + in-flight state. */
+export function syncModelLoadUnloadButtonElement(btn: HTMLButtonElement): void {
+  if (isModelLoadUnloadBusy()) {
+    btn.hidden = false;
+    setModelLoadUnloadButtonBusy(btn, getModelLoadUnloadPhase());
+    return;
+  }
 
   const serverMode = isServerStorageMode();
-  const sel = document.getElementById('modelSelect') as HTMLSelectElement;
+  const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;
+  if (!sel) return;
+
   const opt = sel.options[sel.selectedIndex];
   const supportsUnload =
     serverMode && opt?.getAttribute('data-supports-load-unload') === '1';
@@ -114,13 +119,14 @@ export function updateModelLoadUnloadButtons(): void {
   const raw = sel.value.trim();
   const row = raw ? getModelRowForSelectOrCanonicalId(raw) : undefined;
   const loaded = row ? isModelLoaded(row.state) : false;
-
-  if (isModelLoadUnloadBusy()) {
-    setModelLoadUnloadButtonBusy(btn, getModelLoadUnloadPhase());
-    return;
-  }
-
   setModelLoadUnloadButtonIdle(btn, loaded, Boolean(raw));
+}
+
+/** Update the combined Load/Unload button from selection + provider. */
+export function updateModelLoadUnloadButtons(): void {
+  const btn = document.getElementById('btnModelLoadUnload') as HTMLButtonElement | null;
+  if (!btn) return;
+  syncModelLoadUnloadButtonElement(btn);
 }
 
 async function postModelAction(url: string, body: Record<string, string>): Promise<void> {
@@ -424,8 +430,13 @@ export async function fetchModels(): Promise<void> {
 
   sel.innerHTML = '<option value="">Loading models…</option>';
   syncModelSelectPicker();
-  setStatus('spin', 'Loading models…');
+  if (!isModelLoadUnloadBusy()) {
+    setStatus('spin', 'Loading models…');
+  }
   updateModelLoadUnloadButtons();
+  if (isModelLoadUnloadBusy()) {
+    updateModelStateDot();
+  }
 
   try {
     const { providers } = await listProviders();
@@ -489,7 +500,9 @@ export async function fetchModels(): Promise<void> {
       setStatus('ok', `${totalModels} models · ${okCount} provider${okCount === 1 ? '' : 's'}`);
     }
 
-    setReadyStatus();
+    if (!isModelLoadUnloadBusy()) {
+      setReadyStatus();
+    }
     updateModelStateDot(sel.value);
     showCachedModelInfo();
     syncModelSelectPicker();

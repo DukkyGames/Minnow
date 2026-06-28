@@ -1,8 +1,12 @@
-# Reasoning Effort Dropdown in Chat Composers
+# Reasoning Effort Dropdown in Header
 
 ## Overview
 
-Add a **reasoning effort dropdown** in the Code composer toolbar and Chat app input row. The control appears only when the active model exposes **2+ reasoning options** (e.g. `off` / `on`, or `low` / `medium` / `high`). Selection is **persisted per chat** and merged into completion request bodies for both **LM Studio** and **OpenAI-compatible (`openai-v1`)** providers.
+Add a **reasoning effort dropdown** in the **header**, immediately **next to the model select** — not in the chat composer. The control appears only when the active model exposes **2+ reasoning options** (e.g. `off` / `on`, or `low` / `medium` / `high`). Selection is **persisted per chat** and merged into completion request bodies for both **LM Studio** and **OpenAI-compatible (`openai-v1`)** providers.
+
+**Placement (user confirmed):**
+- **Top bar visible** (Code app, etc.): inside `.model-wrap` in [`index.html`](../../index.html), after `#modelSelectRoot`, before Load/Unload
+- **Top bar hidden** (Chat app, desktop, most MinnowOS apps): compact mirror in the **OS menubar** (`.mn-os-mb-right`), adjacent to the model chip — same pattern as model picker visibility handoff in [`page-bridge.ts`](../../src/os/page-bridge.ts)
 
 **Pivot from prior plan:** LM Studio **quantization variants** (`model@q4_k_m`) are **out of scope** — this plan covers **reasoning effort / thinking level** only.
 
@@ -27,8 +31,9 @@ Minnow already has a **brain toggle** ([`composer-thinking.ts`](../../src/ui/com
 
 - Show dropdown when **`reasoningAllowedOptions.length >= 2`**
 - **Persist per chat** (`chat.reasoningEffort`); no explicit load call
-- When dropdown is visible, **hide the brain toggle** for that model (avoid duplicate reasoning controls)
+- When dropdown is visible, **hide the composer brain toggle** (avoid duplicate reasoning controls in two places)
 - When dropdown is hidden (< 2 options), **keep existing brain toggle** behavior
+- **Single source of truth:** both top-bar and menubar selects read/write the same `chat.reasoningEffort`; only one is visible at a time
 
 ```mermaid
 flowchart LR
@@ -40,17 +45,20 @@ flowchart LR
     OAI --> Caps
     Probe --> Caps
   end
-  subgraph ui [Composer]
-    Drop["Reasoning effort select hidden unless 2+ options"]
-    Brain["Brain toggle hidden when dropdown shown"]
+  subgraph ui [Header chrome]
+    TopBar["#reasoningEffortSelect in .model-wrap"]
+    Menubar["#osReasoningEffortSelect in menubar"]
+    Brain["Composer brain toggle hidden when select visible"]
   end
   subgraph send [Inference]
     Effort["chat.reasoningEffort + inherit stack"]
     Body["reasoning_effort / reasoning.effort / thinking.type"]
     Effort --> Body
   end
-  Caps --> Drop
-  Drop --> Effort
+  Caps --> TopBar
+  Caps --> Menubar
+  TopBar --> Effort
+  Menubar --> Effort
 ```
 
 ---
@@ -125,31 +133,44 @@ flowchart LR
 
 ---
 
-## 4. Composer reasoning effort dropdown UI
+## 4. Header reasoning effort dropdown UI
 
-**New [`src/ui/composer-reasoning-effort.ts`](../../src/ui/composer-reasoning-effort.ts)** — pattern from [`composer-thinking.ts`](../../src/ui/composer-thinking.ts)
+**New [`src/ui/header-reasoning-effort.ts`](../../src/ui/header-reasoning-effort.ts)**
 
 | Export | Role |
 |--------|------|
-| `initComposerReasoningEffort()` | Mount Code + Chat app `<select>` elements |
-| `syncComposerReasoningEffortFromActiveChat()` | Populate options, show/hide wrapper, disable while streaming |
+| `initHeaderReasoningEffort()` | Wire top-bar + menubar `<select>` elements |
+| `syncHeaderReasoningEffortFromActiveChat()` | Populate options, show/hide wrappers, disable while streaming, keep both selects in sync |
 
-**HTML ([`index.html`](../../index.html))**
+### Top bar (when `header.topbar` visible)
 
-- **Code app:** `#composerReasoningEffortWrap` + `#composerReasoningEffortSelect` inside `#composerControls` (near thinking control)
-- **Chat app:** `#chatAppReasoningEffortWrap` + `#chatAppReasoningEffortSelect` inside `.chat-app-input`
+**HTML ([`index.html`](../../index.html))** — inside `.model-wrap`, after `#modelSelectRoot`:
 
-**Visibility / interaction**
+```html
+<div id="reasoningEffortWrap" class="reasoning-effort-wrap hidden">
+  <label class="visually-hidden" for="reasoningEffortSelect">Reasoning effort</label>
+  <select id="reasoningEffortSelect" class="reasoning-effort-select" aria-label="Reasoning effort" disabled></select>
+</div>
+```
 
-- Hidden when `!modelHasSelectableReasoningEffort(caps)`
-- When visible: add `.hidden` to `#composerThinkingWrap` (and Chat app equivalent if any)
+**Styles:** [`topbar.css`](../../src/styles/topbar.css) — compact select aligned with `.model-select-trigger` height; flex-shrink 0; hide on narrow breakpoints per [`responsive.css`](../../src/styles/responsive.css) if needed (label stays visually hidden)
+
+### OS menubar (when top bar hidden)
+
+**[`src/os/menubar.ts`](../../src/os/menubar.ts)** — insert `#osReasoningEffortWrap` + `#osReasoningEffortSelect` in `.mn-os-mb-right` immediately before the model chip (or between chip and scheduler icon)
+
+**Styles:** [`minnowos-shell.css`](../../src/styles/minnowos-shell.css) — compact menubar select matching chip height
+
+### Visibility / interaction
+
+- Both wrappers hidden when `!modelHasSelectableReasoningEffort(caps)` for the active model
+- When visible: hide `#composerThinkingWrap` via sync helper
 - When hidden: restore brain toggle sync
-- Disabled during streaming / composer recovery (same gates as thinking toggle)
-- On model or chat switch: rebuild options from cache; validate saved `chat.reasoningEffort` against allowed list
+- Disabled during active chat streaming (same gate as model select / thinking toggle)
+- On `#modelSelect` change or chat switch: rebuild options; validate `chat.reasoningEffort` against allowed list
+- `change` on either select updates `chat.reasoningEffort` + saves sessions; syncs the other select
 
-**Styles:** [`composer-controls.css`](../../src/styles/composer-controls.css), [`chat-app.css`](../../src/styles/chat-app.css) — match `#orchestratePlanSelect` compact select
-
-**Sync wiring:** [`sidebar.ts`](../../src/ui/sidebar.ts), [`api/models.ts`](../../src/api/models.ts), [`main.ts`](../../src/main.ts), [`code-launch.ts`](../../src/os/code-launch.ts)
+**Sync wiring:** [`sidebar.ts`](../../src/ui/sidebar.ts) (`onModelSelectChange`, chat switch), [`api/models.ts`](../../src/api/models.ts) (`fetchModels`), [`main.ts`](../../src/main.ts) (boot init), [`os/menubar.ts`](../../src/os/menubar.ts) (menubar mount)
 
 ---
 
@@ -176,18 +197,19 @@ Resolution order for effective effort sent on each turn:
 - OpenAI model-id inference for `o3-mini`, `gpt-5`
 - `reasoningEffortToCompletionBody` mappings per apiKind
 
-**UI test (optional):** [`test/ui/composer-reasoning-effort.test.mts`](../../test/ui/composer-reasoning-effort.test.mts)
+**UI test (optional):** [`test/ui/header-reasoning-effort.test.mts`](../../test/ui/header-reasoning-effort.test.mts) — hidden with 0–1 options, visible in `.model-wrap` with 2+, syncs chat state on change
 
-**Update [`documentation/context.md`](../../documentation/context.md)** — reasoning effort dropdown, capability widening, send-path fields, brain-toggle hide rule
+**Update [`documentation/context.md`](../../documentation/context.md)** — header reasoning effort select next to model picker, menubar mirror, capability widening, send-path fields
 
 ---
 
 ## Out of scope
 
 - LM Studio quantization variant picker (`model@q4_k_m`)
-- Reasoning effort in top-bar model picker / menubar chip
+- Reasoning effort inside chat composer / `#chatAppInput` row
+- Reasoning effort inside model picker popover (separate control beside picker, not inside menu)
 - Desktop launcher composer (`#desktopInput`)
-- Settings → Models hub per-role effort (composer + per-chat only for v1)
+- Settings → Models hub per-role effort (header + per-chat only for v1)
 - Explicit `POST /api/v1/models/load` on effort change
 
 ---
@@ -197,5 +219,5 @@ Resolution order for effective effort sent on each turn:
 - [ ] **types-helpers** — `ReasoningEffortOption`, `Chat.reasoningEffort`, `src/lib/reasoning-effort.ts`
 - [ ] **catalog-widen** — Preserve full `allowed_options` in model-capabilities; optional v1 reasoning merge
 - [ ] **send-path** — `reasoningEffortToCompletionBody`, loop.ts + TurnSnapshot + sanitize
-- [ ] **composer-ui** — `composer-reasoning-effort.ts`, HTML/CSS, brain-toggle hide/show, sync wiring
+- [ ] **header-ui** — `header-reasoning-effort.ts`, topbar + menubar HTML/CSS, brain-toggle hide/show, sync wiring
 - [ ] **tests-docs** — unit tests, context.md update

@@ -151,6 +151,12 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
+  min-width: 6.5rem;
+  opacity: 1;
+  cursor: wait;
+}
+
+.model-action-btn.is-busy:disabled {
   opacity: 1;
 }
 
