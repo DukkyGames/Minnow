@@ -124,6 +124,22 @@ describe('brain wiki tools', () => {
     await assert.rejects(() => readPage(PAGE_PATH));
   });
 
+  it('manage_brain accepts confirmed as string true', async () => {
+    await executeServerTool('brain_write_page', {
+      path: 'facts/string-confirm-test.md',
+      title: 'String confirm test',
+      body: 'Temporary page.',
+      tags: ['testing'],
+    });
+
+    const del = await executeServerTool('manage_brain', {
+      action: 'delete_page',
+      path: 'facts/string-confirm-test.md',
+      confirmed: 'true',
+    });
+    assert.match(del.result, /Deleted wiki page/);
+  });
+
   it('manage_brain clear_wiki removes pages after confirmation', async () => {
     await executeServerTool('brain_write_page', {
       path: 'facts/clear-wiki-test.md',

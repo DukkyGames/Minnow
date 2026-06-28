@@ -26,6 +26,18 @@ function buildDesktopComposer(): HTMLElement {
   attachPreview.setAttribute('aria-live', 'polite');
   attachPreview.setAttribute('aria-label', 'Attached files');
 
+  const toolApprovalHost = document.createElement('div');
+  toolApprovalHost.id = 'desktopToolApprovalHost';
+  toolApprovalHost.className = 'tool-approval-host';
+  toolApprovalHost.setAttribute('aria-live', 'polite');
+  toolApprovalHost.hidden = true;
+
+  const questionHost = document.createElement('div');
+  questionHost.id = 'desktopQuestionHost';
+  questionHost.className = 'question-host';
+  questionHost.setAttribute('aria-live', 'polite');
+  questionHost.hidden = true;
+
   const row = document.createElement('div');
   row.className = 'mn-os-desktop-input-row';
 
@@ -83,7 +95,7 @@ function buildDesktopComposer(): HTMLElement {
   sendBtn.innerHTML = MINNOW_GLYPH_HEADER_HTML;
 
   row.append(attachBtn, inputWrap, contextAnchor, sendBtn);
-  root.append(attachPreview, row);
+  root.append(attachPreview, toolApprovalHost, questionHost, row);
   return root;
 }
 

@@ -249,7 +249,11 @@ export async function toolManageBrain(args) {
     return 'Error: action is required.';
   }
 
-  const confirmed = args?.confirmed === true || args?.confirm === true;
+  const confirmed =
+    args?.confirmed === true ||
+    args?.confirm === true ||
+    args?.confirmed === 'true' ||
+    args?.confirm === 'true';
   if (MANAGE_BRAIN_DESTRUCTIVE.has(action) && !confirmed) {
     return 'Deletion requires confirmation. Re-run with confirmed: true after user approval.';
   }

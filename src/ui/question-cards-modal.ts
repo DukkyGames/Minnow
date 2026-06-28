@@ -17,10 +17,11 @@ import {
   buildAnswerEntries,
   type AskQuestionAnswerDraft,
 } from './question-cards-state';
-import { isChatAppForeground } from './chat-mount';
+import { getActiveComposerSurface } from './composer-surface';
 import { setComposerStreamingMode } from './composer-send';
 import { setSidebarInputPendingForActiveChat } from './chat-item-dot';
 import { resolveOrchestratePlanScreenQuestionHost } from './orchestrate-plan-screen';
+import { resolvePromptComposerShell, resolveQuestionHost } from './prompt-host-resolve';
 import {
   acquireUserPromptLock,
   isUserPromptLocked,
@@ -50,20 +51,11 @@ export function forceCloseAskQuestionModal(): void {
 }
 
 function getQuestionHost(): HTMLElement | null {
-  if (isChatAppForeground()) {
-    return (
-      document.getElementById('chatAppQuestionHost') ??
-      document.getElementById('questionHost')
-    );
-  }
-  return document.getElementById('questionHost');
+  return resolveQuestionHost();
 }
 
 function getQuestionComposerShell(): HTMLElement | null {
-  if (isChatAppForeground()) {
-    return document.querySelector('.chat-app-composer');
-  }
-  return document.getElementById('mainColumn');
+  return resolvePromptComposerShell();
 }
 
 function getOrCreateDraft(
@@ -105,16 +97,7 @@ export function showQuestionCardsModal(
     }
 
     const composerShell = getQuestionComposerShell();
-    const msgInput = (
-      isChatAppForeground()
-        ? document.getElementById('chatAppInput')
-        : document.getElementById('msgInput')
-    ) as HTMLTextAreaElement | null;
-    const sendBtn = (
-      isChatAppForeground()
-        ? document.getElementById('chatAppSendBtn')
-        : document.getElementById('sendBtn')
-    ) as HTMLButtonElement | null;
+    const { inputEl: msgInput, sendBtnEl: sendBtn } = getActiveComposerSurface();
     const prevInputDisabled = msgInput?.disabled ?? false;
     const prevSendDisabled = sendBtn?.disabled ?? false;
     const chatIdForAbort = options.chatId?.trim() || getActiveChat().id;

@@ -3,7 +3,9 @@
  */
 
 .main-column.main-column--question-pending .input-bar,
-.chat-app-composer.main-column--question-pending .chat-app-input {
+.chat-app-composer.main-column--question-pending .chat-app-input,
+.mn-os-composer-dock.main-column--question-pending .mn-os-desktop-input-row,
+#desktopComposerRoot.main-column--question-pending .mn-os-desktop-input-row {
   display: none;
 }
 
@@ -17,6 +19,19 @@
 
 .question-host[hidden] {
   display: none !important;
+}
+
+/* Fallback when Brain/Code shells are hidden behind another MinnowOS window */
+.question-host--global {
+  position: fixed;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 10050;
+  width: min(640px, calc(100vw - 24px));
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg, 0 12px 40px rgba(0, 0, 0, 0.35));
 }
 
 .question-cards-panel {
