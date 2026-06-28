@@ -4,6 +4,7 @@
 
 import { fetchBrainTree } from '../../brain/client';
 import type { BrainPageMeta } from '../../brain/types';
+import { scheduleAnimationFrame } from '../../lib/schedule-animation-frame';
 import { flattenBrainTree, filterBrainTreeForDisplay, isBrainArchivePagePath } from './tree-utils';
 import { buildPageGraph, filterGraphByQuery } from './graph/graph-data';
 import { createForceGraph, type ForceGraphApi } from './graph/force-graph';
@@ -37,6 +38,11 @@ let bindingsDone = false;
 let firstRunHint = true;
 let overlayOffsetObserver: ResizeObserver | null = null;
 let treeLayoutObserver: ResizeObserver | null = null;
+
+/** Deferred layout sync for ResizeObserver callbacks (avoids observer feedback loops). */
+const scheduleGraphLayoutSync = scheduleAnimationFrame(() => {
+  syncGraphOverlayOffsets();
+});
 
 /** Keep inspector/state banners aligned below the graph toolbar when it wraps. */
 function syncGraphOverlayOffsets(): void {
@@ -95,7 +101,7 @@ function bindOverlayOffsetObserver(): void {
   if (overlayOffsetObserver) return;
   const toolbar = document.querySelector('.brain-graph-toolbar');
   if (!toolbar) return;
-  overlayOffsetObserver = new ResizeObserver(() => syncGraphOverlayOffsets());
+  overlayOffsetObserver = new ResizeObserver(scheduleGraphLayoutSync);
   overlayOffsetObserver.observe(toolbar);
 }
 
@@ -104,7 +110,7 @@ function bindTreeLayoutObserver(): void {
   const stageEl = document.getElementById('brainGraphStage');
   const legendEl = document.getElementById('brainGraphLegend');
   if (!stageEl || !legendEl) return;
-  treeLayoutObserver = new ResizeObserver(() => syncGraphTreePanelSizing());
+  treeLayoutObserver = new ResizeObserver(scheduleGraphLayoutSync);
   treeLayoutObserver.observe(stageEl);
   treeLayoutObserver.observe(legendEl);
 }
