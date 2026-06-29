@@ -14,6 +14,7 @@ import {
   createMcpServer,
   deleteMcpServer,
 } from './registry.js';
+import { readMcpSecrets, updateMcpSecrets } from './secrets.js';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -69,6 +70,22 @@ export function createMcpMiddleware() {
 
       if (url === '/api/mcp/servers' && req.method === 'GET') {
         sendJson(res, 200, { servers: await listServers() });
+        return;
+      }
+
+      if (url === '/api/mcp/secrets' && req.method === 'GET') {
+        const secrets = await readMcpSecrets();
+        sendJson(res, 200, {
+          hasContext7ApiKey: secrets.context7ApiKey.trim().length > 0,
+        });
+        return;
+      }
+
+      if (url === '/api/mcp/secrets' && req.method === 'PUT') {
+        const body = await readJsonBody(req);
+        const flags = await updateMcpSecrets(body);
+        await reloadMcp();
+        sendJson(res, 200, flags);
         return;
       }
 

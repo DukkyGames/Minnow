@@ -14,6 +14,11 @@ export type McpServerSummary = {
   connected: boolean;
 };
 
+/** Public MCP secret flags from GET /api/mcp/secrets (values never returned). */
+export type McpSecretsFlags = {
+  hasContext7ApiKey: boolean;
+};
+
 /** Whether the local server exposes the MCP API. */
 export async function pingMcpApi(): Promise<boolean> {
   try {
@@ -51,6 +56,44 @@ export type CreateMcpServerPayload = {
     env?: Record<string, string>;
   };
 };
+
+/** Load MCP secret flags from ~/.minnow/mcp/secrets.json via the Node API. */
+export async function fetchMcpSecrets(): Promise<McpSecretsFlags | null> {
+  try {
+    const res = await fetch('/api/mcp/secrets', { cache: 'no-store' });
+    if (!res.ok) return null;
+    const body = (await res.json()) as McpSecretsFlags;
+    return {
+      hasContext7ApiKey: body.hasContext7ApiKey === true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Save MCP secrets (empty string clears a key). Reloads the MCP registry. */
+export async function updateMcpSecrets(
+  secrets: { context7ApiKey?: string },
+): Promise<{ ok: true; flags: McpSecretsFlags } | { ok: false; error: string }> {
+  try {
+    const res = await fetch('/api/mcp/secrets', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(secrets),
+    });
+    const body = (await res.json()) as McpSecretsFlags & { error?: string };
+    if (!res.ok) {
+      return { ok: false, error: body.error ?? 'Failed to save MCP secrets' };
+    }
+    await refreshMcpToolCache();
+    return {
+      ok: true,
+      flags: { hasContext7ApiKey: body.hasContext7ApiKey === true },
+    };
+  } catch {
+    return { ok: false, error: 'Network error — use npm start' };
+  }
+}
 
 /** Persist enable flag in mcp.json and reload the registry. */
 export async function setMcpServerEnabled(

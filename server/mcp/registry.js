@@ -19,6 +19,7 @@ import {
   validateCreateMcpServerBody,
   validateMcpServerId,
 } from './validate.js';
+import { getContext7ApiKey, resolveMcpTransportEnv } from './secrets.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
@@ -87,10 +88,11 @@ async function connectServer(serverId, config) {
   }
 
   const command = resolveTransportCommand(transportCfg);
+  const resolvedEnv = await resolveMcpTransportEnv(transportCfg.env);
   const transport = new StdioClientTransport({
     command: command[0],
     args: command.slice(1),
-    env: { ...process.env, ...(transportCfg.env ?? {}) },
+    env: { ...process.env, ...resolvedEnv },
     cwd: PROJECT_ROOT,
   });
 
@@ -131,7 +133,7 @@ export async function ensureMcpSeed() {
   const seeds = [
     { name: 'context7.json', data: CONTEXT7_SERVER },
     { name: 'fixture.json', data: FIXTURE_SERVER },
-    { name: 'README.md', data: null, text: '# MCP servers\n\nSet Context7 API key via provider secrets as context7ApiKey.\n' },
+    { name: 'README.md', data: null, text: '# MCP servers\n\nSet the Context7 API key in Settings → MCP or save it to mcp/secrets.json.\n' },
   ];
 
   for (const seed of seeds) {
@@ -217,9 +219,9 @@ export async function callMcpTool(namespacedName, args) {
 
   const config = await loadServerConfig(parsed.serverId);
   if (config.id === 'context7') {
-    const key = process.env.CONTEXT7_API_KEY ?? '';
+    const key = await getContext7ApiKey();
     if (!key) {
-      return 'Error: Context7 API key not configured. Set CONTEXT7_API_KEY or context7ApiKey in ~/.minnow provider secrets.';
+      return 'Error: Context7 API key not configured. Set it in Settings → MCP or export CONTEXT7_API_KEY.';
     }
   }
 

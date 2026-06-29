@@ -307,7 +307,7 @@ Per skill: enabled/disabled. Custom SKILL.md authoring. **Caveman** skill has in
 
 ### MCP servers (`~/.minnow/mcp/`)
 
-Per server: id, label, description, command, args, env, enabled. Built-in Context7 server.
+Per server: id, label, description, command, args, env, enabled. Built-in Context7 server. **Context7 API key** — Settings → MCP password field; encrypted in `~/.minnow/mcp/secrets.json` (or `CONTEXT7_API_KEY` env var).
 
 ### Language servers (`lsp.json`)
 
