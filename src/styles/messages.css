@@ -161,6 +161,14 @@
   margin-bottom: 4px;
 }
 
+.msg.user.msg--goal-achieved .msg-goal-achieved-chip {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mn-accent);
+  margin-bottom: 4px;
+}
+
 /* In-flight assistant reply: hide prose shell until the first streamed token */
 .msg.assistant.msg--awaiting-prose .msg-bubble.msg-bubble--awaiting {
   display: none;

@@ -7,6 +7,7 @@ import type { ThinkingTriState } from '../agents/thinking-types';
 import { saveSubAgentConfigToServer, loadSubAgentConfig } from '../agents/sub-agent-config';
 import { saveUiDesignerConfig } from '../agents/ui-designer/config';
 import { saveTitlesConfig } from '../config/titles-meta';
+import { saveGoalEvalConfig } from '../config/goal-eval-meta';
 import {
   getFallbackCandidatesForKey,
   getGlobalFallbackCandidates,
@@ -275,6 +276,15 @@ async function saveRow(controls: RowControls): Promise<void> {
         enabled: enabledCb?.checked !== false,
       });
       setStatus('ok', 'Title job binding saved');
+      void refreshModelRoutingSectionMount();
+      break;
+    }
+    case 'goal-eval': {
+      await saveGoalEvalConfig({
+        providerId,
+        modelId,
+      });
+      setStatus('ok', 'Goal evaluator binding saved');
       void refreshModelRoutingSectionMount();
       break;
     }
@@ -695,6 +705,7 @@ function renderGroup(
       controls,
       row.persistKind === 'reef-chat' ||
         row.persistKind === 'titles' ||
+        row.persistKind === 'goal-eval' ||
         row.persistKind === 'main-chat' ||
         row.persistKind === 'work-agent' ||
         row.persistKind === 'sub-agent',
