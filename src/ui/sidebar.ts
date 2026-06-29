@@ -49,6 +49,7 @@ import {
   closeMobileSidebar,
 } from './layout';
 import { bootGenerationResumeForChat } from '../chat/generation-resume';
+import { resumeIncompleteToolBatchOnChatSwitch } from '../chat/incomplete-tool-resume';
 import {
   renderChatFromHistory,
   renderStatsForChat,
@@ -96,6 +97,7 @@ import {
   syncChatItemDotsInDom,
 } from './chat-item-dot';
 import { acknowledgeChatViewed } from '../notifications/acknowledge';
+import { createModeMaskIcon, applyModeMaskIcon } from './mode-icons';
 
 /** True when every task in a wave is complete (sidebar auto-collapse). */
 function isWaveComplete(tasks: BoardTask[], waveId: number | string): boolean {
@@ -458,10 +460,9 @@ export function appendChatRow(
   const titleRow = document.createElement('div');
   titleRow.className = 'chat-item-title-row';
 
-  // Collapsed-rail chat bubble glyph (hidden in expanded sidebar via CSS).
-  const icon = document.createElement('span');
-  icon.className = 'chat-item-icon';
-  icon.setAttribute('aria-hidden', 'true');
+  // Mode glyph: collapsed rail icon + compact marker beside name when expanded.
+  const icon = createModeMaskIcon(chat.modeId, 'chat-item-icon mode-mask-icon');
+  applyModeMaskIcon(icon, chat.modeId);
   titleRow.appendChild(icon);
 
   const dotCtx = getChatItemDotContext(sessionState?.activeId ?? null);
@@ -1103,6 +1104,14 @@ export function switchChat(id: string): void {
     void import('../os/desktop-chat').then((m) => m.activateDesktopChatSession(id));
   } else if (isChatAppForeground()) {
     renderChatFromHistory(chat, '#chatAppMessageCol');
+  } else if (document.getElementById('codeOverviewRoot')) {
+    void import('./code-overview').then(({ closeCodeOverview }) => {
+      closeCodeOverview({ skipNavigate: true, restoreChat: false });
+      void import('../os/router').then(({ navigateToCodeChat }) => {
+        navigateToCodeChat();
+        renderChatFromHistory(chat);
+      });
+    });
   } else {
     renderChatFromHistory(chat);
   }
@@ -1113,6 +1122,7 @@ export function switchChat(id: string): void {
     }),
   );
   void bootGenerationResumeForChat(chat);
+  void resumeIncompleteToolBatchOnChatSwitch(chat);
   renderStatsForChat(chat);
   syncModeSelectorFromActiveChat();
   syncComposerReasoningEffortFromActiveChat();

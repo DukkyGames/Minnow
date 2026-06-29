@@ -745,7 +745,7 @@ button.board-header__activity {
   border-radius: var(--radius-sm);
   border: 1px solid var(--mn-accent);
   background: var(--mn-accent);
-  color: var(--mn-accent-fg);
+  color: var(--mn-fg-on-accent);
   cursor: pointer;
   white-space: nowrap;
   transition: opacity 0.12s;

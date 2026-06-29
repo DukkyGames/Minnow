@@ -44,11 +44,26 @@
   align-items: center;
 }
 
-/* Collapsed rail: center controls; 40px icon-btn + 20px padding overflows 48px width */
+/* Collapsed rail: center controls; stack overview + collapse vertically */
 .chat-sidebar.collapsed .chat-sidebar-header {
   padding: 8px 4px;
   justify-content: center;
   gap: 0;
+}
+
+.chat-sidebar.collapsed:not(.mobile-open) .chat-sidebar-header {
+  flex-direction: column;
+  align-items: center;
+}
+
+.chat-sidebar.collapsed:not(.mobile-open) .chat-sidebar-header-actions {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.chat-sidebar.collapsed:not(.mobile-open) .chat-sidebar-header-actions .icon-btn + .icon-btn {
+  border-left: none;
+  border-top: 1px solid var(--mn-border);
 }
 
 .chat-sidebar.collapsed .chat-sidebar-header .icon-btn {
@@ -73,6 +88,52 @@
   padding: 10px 10px 8px;
   border-bottom: 1px solid var(--mn-border);
   flex-shrink: 0;
+}
+
+.chat-sidebar-header .code-overview-nav-btn {
+  flex-shrink: 0;
+}
+
+/* Collapse + overview: one bordered cluster, not two separate icon buttons */
+.chat-sidebar-header-actions {
+  display: inline-flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--mn-surface-1);
+}
+
+.chat-sidebar-header-actions .icon-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--mn-fg-muted);
+}
+
+.chat-sidebar-header-actions .icon-btn + .icon-btn {
+  border-left: 1px solid var(--mn-border);
+}
+
+.chat-sidebar-header-actions .icon-btn[aria-current='page'] {
+  background: var(--mn-accent-soft);
+  color: var(--mn-accent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .chat-sidebar-header-actions .icon-btn:hover {
+    background: var(--mn-surface-elevated);
+    color: var(--mn-fg);
+    border-color: transparent;
+  }
+
+  .chat-sidebar-header-actions .icon-btn[aria-current='page']:hover {
+    background: var(--mn-accent-soft);
+    color: var(--mn-accent);
+  }
 }
 
 .chat-sidebar-title {
@@ -745,26 +806,18 @@
   justify-content: center;
 }
 
-/* Chat bubble glyph for collapsed rail (masked PNG, theme via currentColor). */
+/* Mode glyph — mask rules in mode-icons.css */
 .chat-item-icon {
   display: none;
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  background-color: currentColor;
-  opacity: 0.9;
-  mask-image: url('/icons/chat.png');
-  mask-size: contain;
-  mask-repeat: no-repeat;
-  mask-position: center;
-  -webkit-mask-image: url('/icons/chat.png');
-  -webkit-mask-size: contain;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
 }
 
-/* Collapsed rail: chat bubble icon (status dot overlays top-right, like board folders). */
-.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row:not(:has(.chat-item-agent-badge)) {
+/* Expanded sidebar + mobile overlay: compact mode marker beside chat name. */
+.chat-sidebar:not(.collapsed) .chat-item-icon,
+.chat-sidebar.collapsed.mobile-open .chat-item-icon {
+  display: block;
+}
+/* Collapsed rail: mode icon replaces name / agent abbrev. */
+.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row {
   position: relative;
   box-sizing: border-box;
   max-width: 40px;
@@ -774,26 +827,26 @@
   align-self: center;
 }
 
-.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row:not(:has(.chat-item-agent-badge)) .chat-item-icon {
+.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row .chat-item-icon {
   display: block;
 }
 
-.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row.active:not(:has(.chat-item-agent-badge)) .chat-item-icon,
-.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row:not(:has(.chat-item-agent-badge)):hover:not(.active) .chat-item-icon {
+.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row.active .chat-item-icon,
+.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row:hover:not(.active) .chat-item-icon {
   opacity: 1;
 }
 
-.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row:not(:has(.chat-item-agent-badge)) .chat-item-dot[data-dot-state='unread'],
-.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row:not(:has(.chat-item-agent-badge)) .chat-item-dot[data-dot-state='needs-input'],
-.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row:not(:has(.chat-item-agent-badge)) .chat-item-dot[data-dot-state='error'] {
+.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row .chat-item-dot[data-dot-state='unread'],
+.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row .chat-item-dot[data-dot-state='needs-input'],
+.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row .chat-item-dot[data-dot-state='error'] {
   position: absolute;
   top: 3px;
   right: 5px;
   z-index: 2;
 }
 
-/* Thinking: keep bubble upright; spin only an outer ring (matches agent-badge rail). */
-.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='thinking']:not(:has(.chat-item-agent-badge)) .chat-item-icon {
+/* Thinking: keep mode glyph upright; spin only an outer ring. */
+.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='thinking'] .chat-item-icon {
   position: relative;
   background: transparent;
   opacity: 1;
@@ -801,24 +854,24 @@
   -webkit-mask-image: none;
 }
 
-.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='thinking']:not(:has(.chat-item-agent-badge)) .chat-item-icon::before {
+.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='thinking'] .chat-item-icon::before {
   content: '';
   display: block;
   width: 14px;
   height: 14px;
   background-color: currentColor;
   opacity: 0.9;
-  mask-image: url('/icons/chat.png');
+  mask-image: var(--mode-icon-url, url('/icons/mode-build.png'));
   mask-size: contain;
   mask-repeat: no-repeat;
   mask-position: center;
-  -webkit-mask-image: url('/icons/chat.png');
+  -webkit-mask-image: var(--mode-icon-url, url('/icons/mode-build.png'));
   -webkit-mask-size: contain;
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center;
 }
 
-.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='thinking']:not(:has(.chat-item-agent-badge)) .chat-item-icon::after {
+.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='thinking'] .chat-item-icon::after {
   content: '';
   position: absolute;
   inset: -2px;
@@ -831,7 +884,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='thinking']:not(:has(.chat-item-agent-badge)) .chat-item-icon::after {
+  .chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='thinking'] .chat-item-icon::after {
     animation: none;
     opacity: 0.7;
   }
@@ -904,80 +957,9 @@
   justify-content: center;
 }
 
-/* Collapsed rail: work-agent badge replaces the status dot (desktop narrow rail only). */
-.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row:has(.chat-item-agent-badge) .chat-item-dot {
-  display: none;
-}
-
-.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row:has(.chat-item-agent-badge) .chat-item-head {
-  justify-content: center;
-  width: 100%;
-}
-
-.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row:has(.chat-item-agent-badge) .chat-item-agent-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  margin-left: 0;
-  width: auto;
-  max-width: 100%;
-  min-width: 0;
-  padding: 2px 6px;
-  line-height: 1.2;
-  text-align: center;
-  border: 1px solid transparent;
-}
-
-.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='idle'] .chat-item-agent-badge {
-  background: var(--mn-fg-muted);
-  color: var(--mn-fg-on-accent);
-  border-color: transparent;
-}
-
-.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='unread'] .chat-item-agent-badge {
-  background: var(--mn-success);
-  color: var(--mn-fg-on-accent);
-  border-color: transparent;
-}
-
-.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='needs-input'] .chat-item-agent-badge {
-  background: var(--mn-warning);
-  color: var(--mn-fg-on-accent);
-  border-color: transparent;
-}
-
-.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='error'] .chat-item-agent-badge {
-  background: var(--mn-danger);
-  color: var(--mn-fg-on-accent);
-  border-color: transparent;
-}
-
-.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='thinking'] .chat-item-agent-badge {
-  position: relative;
-  background: transparent;
-  color: var(--mn-accent);
-  border-color: transparent;
-}
-
-/* Outer ring only — label stays upright (matches .chat-item-dot__spinner). */
-.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='thinking'] .chat-item-agent-badge::after {
-  content: '';
-  position: absolute;
-  inset: -2px;
-  box-sizing: border-box;
-  border-radius: inherit;
-  border: 2px solid var(--mn-border);
-  border-top-color: var(--mn-accent);
-  animation: tool-call-spin 0.75s linear infinite;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='thinking'] .chat-item-agent-badge::after {
-    animation: none;
-    opacity: 0.7;
-  }
+/* Collapsed rail: mode icon replaces agent abbrev text. */
+.chat-sidebar.collapsed:not(.mobile-open) .chat-item-agent-badge {
+  display: none !important;
 }
 
 .chat-rename-input {

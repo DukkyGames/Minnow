@@ -33,13 +33,20 @@
   font-size: 0.75rem;
   font-weight: 500;
   line-height: 1.2;
-  padding: 4px 10px;
+  padding: 4px 8px;
   border-radius: calc(var(--radius-md) - 2px);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   transition:
     background 0.2s var(--ease-out),
     color 0.2s var(--ease-out),
     border-color 0.2s var(--ease-out);
+}
+
+.mode-segment__label {
+  line-height: 1.2;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -69,6 +76,7 @@
 @media (max-width: 600px) {
   .mode-segment {
     font-size: 0.7rem;
-    padding: 4px 8px;
+    padding: 4px 6px;
+    gap: 4px;
   }
 }

@@ -222,6 +222,19 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
       ) {
         welcome.openWelcome({ skipHash: true });
       }
+      const route = getCurrentRoute();
+      const wantsChat =
+        Boolean(options?.chatId?.trim()) ||
+        Boolean(options?.seed?.trim()) ||
+        Boolean(options?.modeId) ||
+        Boolean(options?.workspacePath?.trim()) ||
+        route.codeSection === 'chat';
+      const overview = await import('../ui/code-overview');
+      if (!wantsChat && (route.codeSection === 'overview' || !route.codeSection)) {
+        await overview.openCodeOverview();
+        break;
+      }
+      overview.closeCodeOverview({ skipNavigate: true });
       if (options?.chatId?.trim()) {
         const { switchToCodeChat } = await import('./chat-launch');
         await switchToCodeChat(options.chatId);

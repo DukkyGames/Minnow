@@ -23,7 +23,7 @@ import {
   showDesktop,
 } from './instances';
 import { osOnAppClose, osOnAppOpen } from './page-bridge';
-import type { AppId, LaunchOptions, OsRoute } from './types';
+import type { AppId, CodeSectionId, LaunchOptions, OsRoute } from './types';
 
 let initialized = false;
 let applyingRoute = false;
@@ -31,6 +31,7 @@ let lastForegroundApp: AppId | null = null;
 let pendingSettingsSection: string | undefined;
 let pendingModelsSection: string | undefined;
 let pendingBrainSection: string | undefined;
+let pendingCodeSection: CodeSectionId | undefined;
 /** Preserves launch options (e.g. concierge seed) across hash-only navigation. */
 let pendingLaunchOptions: LaunchOptions | undefined;
 
@@ -139,6 +140,13 @@ export function parseOsHash(hash: string): OsRoute {
     if (route.appId === 'brain') {
       route.brainSection = appMatch[2] ?? pendingBrainSection ?? 'graph';
     }
+    if (route.appId === 'code') {
+      const seg = appMatch[2];
+      route.codeSection =
+        seg === 'chat'
+          ? 'chat'
+          : (pendingCodeSection ?? 'overview');
+    }
     return route;
   }
   return { view: 'desktop' };
@@ -160,6 +168,10 @@ function hashForRoute(route: OsRoute): string {
   }
   if (route.appId === 'brain' && route.brainSection) {
     return `#/app/brain/${route.brainSection}`;
+  }
+  if (route.appId === 'code') {
+    const section = route.codeSection ?? 'overview';
+    return section === 'chat' ? '#/app/code/chat' : '#/app/code/overview';
   }
   if (route.appId) return `#/app/${route.appId}`;
   return '#/desktop';
@@ -214,6 +226,10 @@ function applyRoute(route: OsRoute, options?: LaunchOptions): void {
   if (route.brainSection) {
     launchOpts.brainSection = route.brainSection;
     pendingBrainSection = route.brainSection;
+  }
+  if (route.codeSection) {
+    launchOpts.codeSection = route.codeSection;
+    pendingCodeSection = route.codeSection;
   }
 
   launchInstance(route.appId, launchOpts);
@@ -316,12 +332,28 @@ export function launchApp(appId: AppId, options?: LaunchOptions): void {
   if (options?.brainSection) {
     pendingBrainSection = options.brainSection;
   }
+  if (options?.codeSection) {
+    pendingCodeSection = options.codeSection;
+  }
+  const codeSection: CodeSectionId | undefined =
+    appId === 'code'
+      ? options?.chatId?.trim() ||
+        options?.seed?.trim() ||
+        options?.modeId ||
+        options?.workspacePath?.trim()
+        ? 'chat'
+        : (options?.codeSection ?? 'overview')
+      : undefined;
   const next =
     appId === 'models' && options?.modelsSection
       ? `#/app/models/${options.modelsSection}`
       : appId === 'brain' && options?.brainSection
         ? `#/app/brain/${options.brainSection}`
-        : `#/app/${appId}`;
+        : appId === 'code'
+          ? codeSection === 'chat'
+            ? '#/app/code/chat'
+            : '#/app/code/overview'
+          : `#/app/${appId}`;
   if (window.location.hash !== next) {
     pendingLaunchOptions = options;
     window.location.hash = next;
@@ -334,6 +366,7 @@ export function launchApp(appId: AppId, options?: LaunchOptions): void {
       settingsSection: options?.settingsSection,
       modelsSection: options?.modelsSection,
       brainSection: options?.brainSection,
+      codeSection,
     },
     options,
   );
@@ -373,6 +406,7 @@ export function resetOsRouterForTests(): void {
   pendingSettingsSection = undefined;
   pendingModelsSection = undefined;
   pendingBrainSection = undefined;
+  pendingCodeSection = undefined;
   pendingLaunchOptions = undefined;
 }
 
@@ -387,6 +421,28 @@ export function getRouterStateForTests(): {
     foregroundAppId: getForegroundAppId(),
     snapshot: getInstanceSnapshot(),
   };
+}
+
+/** Navigate to the Code app overview dashboard. */
+export function navigateToCodeOverview(): void {
+  const next = '#/app/code/overview';
+  if (window.location.hash !== next) {
+    pendingCodeSection = 'overview';
+    window.location.hash = next;
+    return;
+  }
+  applyRoute({ view: 'app', appId: 'code', codeSection: 'overview' });
+}
+
+/** Navigate to the Code app chat workspace. */
+export function navigateToCodeChat(): void {
+  const next = '#/app/code/chat';
+  if (window.location.hash !== next) {
+    pendingCodeSection = 'chat';
+    window.location.hash = next;
+    return;
+  }
+  applyRoute({ view: 'app', appId: 'code', codeSection: 'chat' });
 }
 
 export { hashForRoute };

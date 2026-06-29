@@ -4,6 +4,7 @@
  */
 
 import { streamingChatIds } from '../app-state';
+import { chatAwaitingUserInputTool } from '../chat/incomplete-tool-batch';
 import { getActiveChat, sessionState } from '../state/sessions';
 import type { Chat } from '../types';
 
@@ -41,6 +42,9 @@ export function getChatItemDotContext(activeChatId: string | null): ChatItemDotC
  */
 export function resolveChatItemDotState(chat: Chat, ctx: ChatItemDotContext): ChatItemDotState {
   if (ctx.inputPendingChatId != null && chat.id === ctx.inputPendingChatId) {
+    return 'needs-input';
+  }
+  if (chatAwaitingUserInputTool(chat)) {
     return 'needs-input';
   }
   if (chat.id !== ctx.activeChatId && chat.turnError === true) {

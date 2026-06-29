@@ -5,6 +5,7 @@
 import { getExpert } from '../../chat/experts/registry';
 import type { ExpertAccent, ExpertMeta } from '../../chat/experts/types';
 import { bootGenerationResumeForChat } from '../../chat/generation-resume';
+import { resumeIncompleteToolBatchOnChatSwitch } from '../../chat/incomplete-tool-resume';
 import { setExpertsPageOpen } from '../../app-state';
 import { activateChatById, getExpertChats } from '../../state/sessions';
 import type { Chat } from '../../types';
@@ -126,6 +127,7 @@ export async function openExpertChatInShell(chat: Chat): Promise<void> {
   recordChatOpened(chat.id);
   syncModelSelectForActiveChat();
   void bootGenerationResumeForChat(chat);
+  void resumeIncompleteToolBatchOnChatSwitch(chat);
   renderStatsForChat(chat);
   syncModeSelectorFromActiveChat();
   syncComposerFromStreamingState();

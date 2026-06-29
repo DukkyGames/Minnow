@@ -148,13 +148,21 @@
   padding: 6px 8px 10px;
 }
 
-/* Collapsed rail: status dots only */
+/* Collapsed rail: status dots only (mode icon when expanded). */
 .chat-app-rail-list .chat-item-row {
   width: 34px;
   min-width: 34px;
   padding: 6px 4px;
   border-radius: var(--radius-sm);
   justify-content: center;
+}
+
+.chat-app-rail-list .chat-item-icon {
+  display: block;
+}
+
+.chat-app-rail-list .chat-item-dot {
+  display: none;
 }
 
 .chat-app-rail-list .chat-item-model,
@@ -170,12 +178,8 @@
   display: none;
 }
 
-.chat-app-rail-list .chat-item-dot {
-  margin: 0;
-}
-
-.chat-app-rail-list .chat-item-row.active {
-  border-color: var(--mn-accent);
+.chat-app-rail-list .chat-item-agent-badge {
+  display: none;
 }
 
 /* Expanded rail: full session rows (matches Code sidebar) */
@@ -197,6 +201,19 @@
 
 .chat-app-page.is-rail-expanded .chat-app-rail-list .chat-item-name {
   display: block;
+}
+
+.chat-app-rail-list .chat-item-row.active {
+  border-color: var(--mn-accent);
+}
+
+.chat-app-page.is-rail-expanded .chat-app-rail-list .chat-item-icon {
+  display: block;
+}
+
+.chat-app-page.is-rail-expanded .chat-app-rail-list .chat-item-dot {
+  display: block;
+  margin: 0;
 }
 
 /* ─── Main column ─── */
