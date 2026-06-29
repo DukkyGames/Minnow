@@ -69,8 +69,10 @@ import {
 import {
   createMcpServer,
   deleteMcpServer,
+  fetchMcpSecrets,
   fetchMcpServers,
   setMcpServerEnabled,
+  updateMcpSecrets,
   type McpServerSummary,
 } from '../mcp/client';
 import {
@@ -1826,7 +1828,10 @@ function sortMcpServersForDisplay(
     });
 }
 
-function createMcpSettingsRow(server: McpServerSummary): HTMLElement {
+function createMcpSettingsRow(
+  server: McpServerSummary,
+  options?: { hasContext7ApiKey?: boolean },
+): HTMLElement {
   const row = document.createElement('article');
   row.className = 'settings-mcp-row';
   row.setAttribute('role', 'listitem');
@@ -1896,11 +1901,69 @@ function createMcpSettingsRow(server: McpServerSummary): HTMLElement {
   detail.append(status);
 
   if (server.id === 'context7') {
+    const keyField = document.createElement('div');
+    keyField.className = 'settings-mcp-key-field';
+
+    const keyLabel = document.createElement('label');
+    keyLabel.className = 'settings-field-label';
+    keyLabel.htmlFor = 'settingsMcpContext7ApiKey';
+    keyLabel.textContent = 'Context7 API key';
+
+    const keyInput = document.createElement('input');
+    keyInput.type = 'password';
+    keyInput.id = 'settingsMcpContext7ApiKey';
+    keyInput.className = 'settings-input';
+    keyInput.autocomplete = 'off';
+    keyInput.placeholder = options?.hasContext7ApiKey
+      ? 'Leave blank to keep current key'
+      : 'Optional — get one at context7.com';
+
+    const keyActions = document.createElement('div');
+    keyActions.className = 'settings-mcp-key-actions';
+
+    const saveKeyBtn = document.createElement('button');
+    saveKeyBtn.type = 'button';
+    saveKeyBtn.className = 'settings-inline-btn';
+    saveKeyBtn.textContent = 'Save key';
+
     const keyHint = document.createElement('p');
     keyHint.className = 'settings-mcp-hint';
-    keyHint.textContent =
-      'Optional: set CONTEXT7_API_KEY or context7ApiKey in provider secrets for live docs.';
-    detail.append(keyHint);
+    keyHint.textContent = options?.hasContext7ApiKey
+      ? 'A key is saved on the server (not shown here). Encrypted at rest under ~/.minnow/mcp/secrets.json.'
+      : 'No API key saved yet. Required for live library docs from Context7.';
+
+    saveKeyBtn.addEventListener('click', () => {
+      void (async () => {
+        const value = keyInput.value.trim();
+        if (!value) {
+          if (!options?.hasContext7ApiKey) {
+            setStatus('err', 'Enter a Context7 API key');
+            return;
+          }
+          setStatus('ok', 'Context7 API key unchanged');
+          return;
+        }
+        const result = await updateMcpSecrets({ context7ApiKey: value });
+        if (result.ok === false) {
+          setStatus('err', result.error);
+          return;
+        }
+        const { flags } = result;
+        keyInput.value = '';
+        keyInput.placeholder = flags.hasContext7ApiKey
+          ? 'Leave blank to keep current key'
+          : 'Optional — get one at context7.com';
+        keyHint.textContent = flags.hasContext7ApiKey
+          ? 'A key is saved on the server (not shown here). Encrypted at rest under ~/.minnow/mcp/secrets.json.'
+          : 'No API key saved yet. Required for live library docs from Context7.';
+        setStatus('ok', 'Context7 API key saved');
+        await renderMcpSection();
+      })();
+    });
+
+    keyActions.append(saveKeyBtn);
+    keyField.append(keyLabel, keyInput, keyActions, keyHint);
+    detail.append(keyField);
   }
 
   row.append(detail);
@@ -2023,6 +2086,7 @@ async function renderMcpSection(): Promise<void> {
   }
 
   const servers = await fetchMcpServers();
+  const secretFlags = online ? await fetchMcpSecrets() : null;
   if (servers === null) {
     listEl.replaceChildren();
     listEl.appendChild(
@@ -2041,7 +2105,11 @@ async function renderMcpSection(): Promise<void> {
   }
 
   for (const server of visible) {
-    listEl.appendChild(createMcpSettingsRow(server));
+    listEl.appendChild(
+      createMcpSettingsRow(server, {
+        hasContext7ApiKey: secretFlags?.hasContext7ApiKey === true,
+      }),
+    );
   }
 
   if (!mcpToggleHandlerBound) {

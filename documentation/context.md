@@ -536,8 +536,10 @@ MCP tools are namespaced `mcp__<serverId>__<toolName>` and merged into `getEnabl
 | `POST /api/mcp/servers` | Add custom stdio server (writes `mcp/servers/<id>.json` + `mcp.json` index) |
 | `DELETE /api/mcp/servers/:id` | Remove user-added server (built-ins cannot be deleted) |
 | `PUT /api/mcp/servers/:id/enabled` | Toggle server in `mcp.json` |
+| `GET /api/mcp/secrets` | MCP secret flags (`hasContext7ApiKey`; values never returned) |
+| `PUT /api/mcp/secrets` | Update encrypted `mcp/secrets.json`; reloads registry |
 
-**Settings UI:** `#/settings/mcp` loads servers from `GET /api/mcp/servers` (requires `npm start`). Each server row (`createMcpSettingsRow` in `src/ui/settings-sections.ts`, styles in `src/styles/settings-page.css`) uses a title line (checkbox + name, built-in badge or remove), then a stacked block: muted description, mono status line with a small dot (green when connected), and optional Context7 API key hint. **Add MCP server** form (stdio: id, label, command, args, env). Custom servers can be removed; Context7 is built-in with enable toggle; test `fixture` server is hidden in UI.
+**Settings UI:** `#/settings/mcp` loads servers from `GET /api/mcp/servers` (requires `npm start`). Each server row (`createMcpSettingsRow` in `src/ui/settings-sections.ts`, styles in `src/styles/settings-page.css`) uses a title line (checkbox + name, built-in badge or remove), then a stacked block: muted description, mono status line with a small dot (green when connected). **Context7** row includes an API key field (`GET`/`PUT /api/mcp/secrets`) — encrypted at rest under `~/.minnow/mcp/secrets.json`; `${secret:context7ApiKey}` in server env is resolved at connect time. **Add MCP server** form (stdio: id, label, command, args, env). Custom servers can be removed; Context7 is built-in with enable toggle; test `fixture` server is hidden in UI.
 
 **Tests:** `npm run test:mcp` (in-process `fixture` server returns `pong`).
 

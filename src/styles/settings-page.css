@@ -2440,6 +2440,23 @@ label.settings-action-btn {
   color: var(--mn-fg-muted);
 }
 
+.settings-mcp-key-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.settings-mcp-key-field .settings-input {
+  max-width: 28rem;
+}
+
+.settings-mcp-key-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .settings-mcp-badge {
   padding: 2px 6px;
   border: 1px solid var(--mn-border);
