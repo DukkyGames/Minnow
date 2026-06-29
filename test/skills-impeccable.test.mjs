@@ -52,6 +52,10 @@ describe('Impeccable built-in (Step 14)', () => {
 
   it('synced reference and scripts directories exist', () => {
     assert.equal(
+      fs.existsSync(path.join(PROJECT_ROOT, 'src/skills/impeccable/reference/init.md')),
+      true,
+    );
+    assert.equal(
       fs.existsSync(path.join(PROJECT_ROOT, 'src/skills/impeccable/reference/audit.md')),
       true,
     );
@@ -133,11 +137,35 @@ describe('Impeccable built-in (Step 14)', () => {
     assert.equal(path.resolve(payload.workspaceRoot), PROJECT_ROOT);
   });
 
-  it('reference API serves teach.md', () => {
+  it('reference API resolves teach alias to init.md', () => {
     const payload = readImpeccableReference(PROJECT_ROOT, 'teach');
     assert.ok(payload);
-    assert.equal(payload.command, 'teach');
+    assert.equal(payload.command, 'init');
     assert.match(payload.content, /PRODUCT\.md/);
+    assert.match(payload.content, /# Init Flow/i);
+  });
+
+  it('harness reference files have no unpatched {{template}} tokens', () => {
+    const refDir = path.join(PROJECT_ROOT, 'src/skills/impeccable/reference');
+    const harnessNames = [
+      'init', 'craft', 'shape', 'document', 'extract', 'critique', 'audit',
+      'polish', 'bolder', 'quieter', 'distill', 'harden', 'onboard', 'live',
+      'animate', 'colorize', 'typeset', 'layout', 'delight', 'overdrive',
+      'clarify', 'adapt', 'optimize',
+    ];
+    const tokenRe = /\{\{[^}]+\}\}/;
+    for (const name of harnessNames) {
+      const filePath = path.join(refDir, `${name}.md`);
+      assert.equal(fs.existsSync(filePath), true, `${name}.md missing`);
+      const withoutJsxStyle = fs
+        .readFileSync(filePath, 'utf8')
+        .replace(/style=\{\{[^}]*\}\}/g, '');
+      assert.equal(
+        tokenRe.test(withoutJsxStyle),
+        false,
+        `${name}.md still has {{template}} tokens`,
+      );
+    }
   });
 
   it('reference API rejects unknown command', () => {

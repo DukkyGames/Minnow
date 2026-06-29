@@ -34,6 +34,13 @@ export {
 
   fetchImpeccableReference,
 
+  composeImpeccableSkillBody,
+
+  shouldComposeImpeccableBody,
+
+  impeccableComposerHint,
+
+  /** @deprecated Use composeImpeccableSkillBody */
   augmentImpeccableSkillBody,
 
   type ParsedImpeccableSubcommand,

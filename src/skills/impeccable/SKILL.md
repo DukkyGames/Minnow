@@ -22,12 +22,6 @@ Load product + design context in one JSON blob (no `head` / `grep` / `jq` on out
 node src/skills/impeccable/scripts/minnow-context.mjs
 ```
 
-Or upstream loader only:
-
-```bash
-node src/skills/impeccable/scripts/load-context.mjs
-```
-
 Set `IMPECCABLE_CONTEXT_DIR` to the workspace root or a monorepo sub-app path when invoking scripts manually.
 
 | File | Role |
@@ -44,11 +38,12 @@ When **`hasDesignJson`** is true, read **`designJson`** from the tool payload fo
 
 | Path | Use for | How in Minnow |
 |------|---------|----------------|
-| **Harness** | `teach`, `audit`, `shape`, `craft`, `polish`, `critique`, `document`, `extract`, … | `/impeccable <cmd>` — loads `reference/<cmd>.md` (auto-injected in chat; `/impeccable craft` also injects `shape.md`) |
+| **Harness** | `init`, `audit`, `shape`, `craft`, `polish`, `critique`, `document`, `extract`, … | `/impeccable <cmd>` — loads `reference/<cmd>.md` (auto-injected in chat; `/impeccable craft` also injects `shape.md`) |
+| **Harness alias** | `teach` → `init` | `/impeccable teach` or `/impeccable init` — both resolve to `reference/init.md` |
 | **CLI** | `detect` | `npm run impeccable:detect` or `run_impeccable` with `command: detect` |
 | **Scripts** | `live` | `run_impeccable` with `command: live` |
 
-Do **not** use `npx impeccable teach` (or other harness commands via CLI). Do **not** use `run_impeccable` for `teach`, `audit`, `shape`, `craft`, `polish`, etc. — use the harness row above.
+Do **not** use `npx impeccable init` (or other harness commands via CLI). Do **not** use `run_impeccable` for `init`, `audit`, `shape`, `craft`, `polish`, etc. — use the harness row above.
 
 ## Command routing
 
@@ -58,7 +53,7 @@ User may append a sub-command after `/impeccable` (e.g. `/impeccable polish side
 |-------------|-----------|
 | `audit`, `critique` | `reference/audit.md`, `reference/critique.md` |
 | `shape`, `craft`, `polish` | `reference/shape.md`, `reference/craft.md`, `reference/polish.md` |
-| `teach`, `document`, `extract` | `reference/teach.md`, `reference/document.md`, `reference/extract.md` |
+| `init`, `document`, `extract` | `reference/init.md`, `reference/document.md`, `reference/extract.md` |
 | `live` | `reference/live.md` (needs dev server + HMR; limited in static-only workflows) |
 
 Full upstream command list: see `SKILL.upstream.md` or https://impeccable.style/docs
@@ -80,7 +75,7 @@ npm run impeccable:detect
 ## Tools
 
 - **`load_impeccable_context`** — PRODUCT.md, DESIGN.md, optional `.impeccable/design.json` (required before UI edits).
-- **`run_impeccable`** — spawnable commands only: **`detect`** (CLI anti-pattern scan) and **`live`** (bundled HMR script). Harness commands (`teach`, `audit`, `shape`, `craft`, …) are **not** valid here; use `/impeccable <cmd>` so references are injected into this skill body.
+- **`run_impeccable`** — spawnable commands only: **`detect`** (CLI anti-pattern scan) and **`live`** (bundled HMR script). Harness commands (`init`, `audit`, `shape`, `craft`, …) are **not** valid here; use `/impeccable <cmd>` so references are injected into this skill body.
 - Read/write: `read_file`, `list_directory`, and other Minnow file tools for implementation.
 - Optional: Minnow browser CDP tools for visual QA (Step 12).
 

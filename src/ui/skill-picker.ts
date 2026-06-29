@@ -4,6 +4,7 @@
 
 import { streaming } from '../app-state';
 import { UI_DESIGNER_COMPOSER_HINT } from '../agents/ui-designer/runner';
+import { impeccableComposerHint } from '../skills/impeccable-client';
 import { getSkillCatalog } from '../skills/client';
 import type { SkillListItem } from '../skills/types';
 
@@ -157,7 +158,12 @@ function applySkill(skillId: string): void {
 
   const before = inputEl.value.slice(0, slashStart);
   const after = inputEl.value.slice(inputEl.selectionEnd);
-  const hint = skillId === 'ui-designer' ? `plan — ${UI_DESIGNER_COMPOSER_HINT} ` : '';
+  const hint =
+    skillId === 'ui-designer'
+      ? `plan — ${UI_DESIGNER_COMPOSER_HINT} `
+      : skillId === 'impeccable'
+        ? `${impeccableComposerHint()} `
+        : '';
   const insertion = `/${skillId} ${hint}`;
   inputEl.value = `${before}${insertion}${after.trimStart()}`;
   const caret = before.length + insertion.length;

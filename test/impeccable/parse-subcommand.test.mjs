@@ -3,12 +3,15 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { parseImpeccableSubcommand } from '../../server/impeccable/command-routing.js';
+import {
+  parseImpeccableSubcommand,
+  resolveHarnessCommand,
+} from '../../server/impeccable/command-routing.js';
 
 describe('parseImpeccableSubcommand', () => {
-  it('parses teach with empty target', () => {
-    assert.deepEqual(parseImpeccableSubcommand('teach'), {
-      command: 'teach',
+  it('parses init with empty target', () => {
+    assert.deepEqual(parseImpeccableSubcommand('init'), {
+      command: 'init',
       target: '',
     });
   });
@@ -28,8 +31,8 @@ describe('parseImpeccableSubcommand', () => {
   });
 
   it('strips /impeccable prefix', () => {
-    assert.deepEqual(parseImpeccableSubcommand('/impeccable teach'), {
-      command: 'teach',
+    assert.deepEqual(parseImpeccableSubcommand('/impeccable init'), {
+      command: 'init',
       target: '',
     });
   });
@@ -38,6 +41,14 @@ describe('parseImpeccableSubcommand', () => {
     assert.deepEqual(parseImpeccableSubcommand('unknown-cmd arg'), {
       command: 'unknown-cmd',
       target: 'arg',
+    });
+  });
+
+  it('teach alias resolves to init via resolveHarnessCommand', () => {
+    assert.equal(resolveHarnessCommand('teach'), 'init');
+    assert.deepEqual(parseImpeccableSubcommand('teach'), {
+      command: 'teach',
+      target: '',
     });
   });
 });

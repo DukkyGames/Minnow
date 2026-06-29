@@ -319,7 +319,7 @@ Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoke
 | Built-in | `src/skills/<id>/SKILL.md` | Shipped in repo |
 | User | `~/.minnow/skills/<id>/SKILL.md` | Same `name` replaces built-in |
 
-**Merge:** user wins on duplicate `name`; dirs starting with `_` are excluded from the picker (`_example` is author docs only). **Send path:** `parseSlashCommand()` → `resolveActiveSkill()` → `skillBody` in `composeSystemPrompt()` (`skill` part). For `/impeccable <command>`, `augmentImpeccableSkillBody()` in `src/skills/impeccable-client.ts` appends the matching `reference/<command>.md` from `GET /api/skills/impeccable/reference/:command` before UI Designer augmentation (`src/tools/loop.ts`). History stores user text without the raw slash line; footer `[skill: <id>]` when a skill was used.
+**Merge:** user wins on duplicate `name`; dirs starting with `_` are excluded from the picker (`_example` is author docs only). **Send path:** `parseSlashCommand()` → `resolveActiveSkill()` → `composeImpeccableSkillBody()` when `/impeccable` or `/ui-designer` + harness sub-command (Minnow addendum + upstream + refs/menu) → `composeSystemPrompt()` (`skill` part). For `/impeccable <command>`, references load from `GET /api/skills/impeccable/reference/:command` (`teach` → `init`); upstream routing from `GET /api/skills/impeccable/upstream`. Bare `/impeccable` appends a grouped command menu from `command-metadata.json`. History stores user text without the raw slash line; footer `[skill: <id>]` when a skill was used.
 
 | Concern | Location |
 |---------|----------|
@@ -338,7 +338,8 @@ Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoke
 | `GET /api/skills/ping` | `{ ok: true }` |
 | `GET /api/skills` | `{ skills: SkillListItem[] }` (no body) |
 | `GET /api/skills/:id` | `{ skill: SkillDetail }` or 404 (`raw` = full SKILL.md) |
-| `GET /api/skills/impeccable/reference/:command` | `{ content }` — vendored `reference/<command>.md` for client auto-injection |
+| `GET /api/skills/impeccable/reference/:command` | `{ command, content }` — vendored `reference/<command>.md` for client auto-injection (aliases resolve, e.g. `teach` → `init`) |
+| `GET /api/skills/impeccable/upstream` | `{ content }` — patched `SKILL.upstream.md` body (no frontmatter) for composed skill routing |
 | `POST /api/skills` | Create user skill from `_template/SKILL.md` (`{ id, label? }`) |
 | `PUT /api/skills/:id` | Save SKILL.md (`{ content }`; user override path) |
 | `GET/PUT /api/config/skills` | `{ enabled: Record<string, boolean>, caveman?: { pinByDefault, defaultIntensity } }` |
@@ -391,19 +392,23 @@ Ultra-compressed reply mode from [juliusbrussee/caveman](https://github.com/Juli
 | Built-in skill | `src/skills/impeccable/SKILL.md` (`name: impeccable` → `/impeccable`) |
 | Upstream snapshot | `src/skills/impeccable/SKILL.upstream.md` (auto-synced; do not edit) |
 | Command references | `src/skills/impeccable/reference/*.md` |
-| Harness routing | `server/impeccable/command-routing.js` (`HARNESS_COMMANDS`, `parseImpeccableSubcommand`, …) |
-| Reference API | `GET /api/skills/impeccable/reference/:command` → `server/impeccable/reference-handler.js` (64k cap) |
-| Client augment (slash) | `src/skills/impeccable-client.ts` — fetches reference into skill body in `loop.ts` |
-| Scripts | `src/skills/impeccable/scripts/` (`load-context.mjs`, `minnow-context.mjs`, …) |
+| Harness registry | `src/skills/impeccable/harness-registry.mjs` — `HARNESS_COMMANDS` parsed from `pin.mjs` `VALID_COMMANDS` (23 workflow commands) |
+| Harness aliases | `teach` → `init` (v3 upstream rename); resolved in `harness-registry.mjs` + `server/impeccable/command-aliases.js` |
+| Harness routing | `server/impeccable/command-routing.js` (`parseImpeccableSubcommand`, `resolveReferencePath`, …) |
+| Reference API | `GET /api/skills/impeccable/reference/:command` → `server/impeccable/reference-handler.js` (64k cap; aliases resolve before lookup) |
+| Upstream body API | `GET /api/skills/impeccable/upstream` → `server/impeccable/upstream-handler.js` (patched `SKILL.upstream.md` without frontmatter) |
+| Composed skill body | `composeImpeccableSkillBody()` in `src/skills/impeccable-client.ts` — Minnow addendum + upstream routing + injected refs (or command menu for bare `/impeccable`) |
+| Send path | `src/tools/loop.ts` calls `composeImpeccableSkillBody` when `shouldComposeImpeccableBody` is true |
+| Scripts | `src/skills/impeccable/scripts/` (`context.mjs`, `minnow-context.mjs`, …) |
 | Postinstall / sync | `scripts/sync-impeccable-skill.mjs` (vendors from `.agents/skills/impeccable` after `npx impeccable skills install -y`) |
 | npm scripts | `impeccable:sync`, `impeccable:update`, `impeccable:detect` |
 | Design context (read-only for skill) | `PRODUCT.md`, `DESIGN.md`, optional `.impeccable/design.json` (`load_impeccable_context` returns `hasDesignJson`; soft success when sidecar absent — [BUG-012 plan](plans/Bug%20Fixes/BUG-012-impeccable-design-json.md)) |
 
-**Harness vs CLI:** Sub-commands such as `teach`, `audit`, and `shape` are harness workflows — `/impeccable <cmd>` injects `reference/<cmd>.md` (see `## Active Impeccable command` in the augmented skill body). **`/impeccable craft`** also injects **`shape.md`** as `## Prerequisite workflow: shape` (`HARNESS_PREREQUISITE_COMMANDS` in `impeccable-client.ts`). The upstream npm CLI only exposes `detect` and `skills`; do not run `npx impeccable teach`. **`run_impeccable`** accepts only **`detect`** (CLI) and **`live`** (bundled script). Mistaken harness calls return guidance plus the full reference markdown (`harnessCommandGuidanceWithReference`).
+**Harness vs CLI:** Sub-commands such as `init`, `audit`, and `shape` are harness workflows — `/impeccable <cmd>` composes the skill body with `reference/<cmd>.md` (see `## Active Impeccable command` in the composed body). Legacy **`teach`** resolves to **`init`**. **`/impeccable craft`** also injects **`shape.md`** as `## Prerequisite workflow: shape` (`HARNESS_PREREQUISITE_COMMANDS` in `impeccable-client.ts`). The upstream npm CLI only exposes `detect` and `skills`; do not run `npx impeccable init`. **`run_impeccable`** accepts only **`detect`** (CLI) and **`live`** (bundled script). Mistaken harness calls return guidance plus the full reference markdown (`harnessCommandGuidanceWithReference`, alias-aware).
 
 `npm install` runs `postinstall`: Impeccable skill sync (non-strict by default; set `IMPECCABLE_SYNC_STRICT=1` in CI) then [`scripts/ensure-electron.mjs`](../scripts/ensure-electron.mjs) to download the Electron binary for the default desktop `npm start` shell. Set `MINNOW_SKIP_ELECTRON=1` (or `MINNOW_HEADLESS=1`) to skip the Electron download in CI/headless installs. Post-sync patches: `scripts/impeccable-preserves/apply-minnow-patches.mjs` (`{{command_prefix}}` → `/`, craft Step 1). Override built-in: `~/.minnow/skills/impeccable/SKILL.md` (user wins on duplicate `name`).
 
-**Tests:** `npm run test:skills-impeccable`, `npm run test:impeccable`. Plan: [`documentation/plans/fix-impeccable-harness-routing.md`](plans/fix-impeccable-harness-routing.md). Verification: [`documentation/plans/verification/step-14.md`](plans/verification/step-14.md).
+**Tests:** `npm run test:skills-impeccable`, `npm run test:impeccable` (includes `test/impeccable/harness-commands.test.mjs`). Plan: [`documentation/plans/fix-impeccable-harness-routing.md`](plans/fix-impeccable-harness-routing.md) (**implemented**). Verification: [`documentation/plans/verification/step-14.md`](plans/verification/step-14.md).
 
 ### UI Designer (Step 15)
 
