@@ -1043,10 +1043,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   }
 
   try {
-    const sendProvider = await getActiveProvider(chat.providerId);
+    const initialSendProvider = await getActiveProvider(chat.providerId);
     if (uiDesignerCtx.active) {
       const binding = await resolveUiDesignerBinding(chat, {
-        providerId: sendProvider.id,
+        providerId: initialSendProvider.id,
         modelId: sendModelId,
       });
       sendModelId = binding.modelId;
@@ -1055,7 +1055,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       const binding = await resolveWorkAgentBinding(
         activeWorkAgent,
         chat,
-        { providerId: sendProvider.id, modelId: sendModelId },
+        { providerId: initialSendProvider.id, modelId: sendModelId },
         {
           userOverride: activeWorkAgent
             ? getUserWorkAgentOverride(activeWorkAgent.id)
@@ -1089,6 +1089,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   chat.modelId = sendModelId;
   chat.providerId = sendProviderId;
 
+  const sendProvider = await getActiveProvider(sendProviderId);
   const sendCaps = resolveSendCapabilities(sendProviderId, sendModelId, sendProvider.apiKind);
   const turnReasoningEffort =
     replaySnapshot?.reasoningEffort ??
