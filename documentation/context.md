@@ -343,7 +343,29 @@ Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoke
 | `PUT /api/skills/:id` | Save SKILL.md (`{ content }`; user override path) |
 | `GET/PUT /api/config/skills` | `{ enabled: Record<string, boolean>, caveman?: { pinByDefault, defaultIntensity } }` |
 
-**Built-in ids (v1):** `git-commit`, `git-setup`, `code-review`, `write-tests`, `explain-code`, `debug-error`, `docs-update`, `refactor-safe`, `security-review`, `browser-automation`, `ask-user` (Feature 31), `impeccable` (Step 14), `ui-designer` (Step 15), `caveman`.
+**Built-in ids (v1):** `git-commit`, `git-setup`, `code-review`, `write-tests`, `explain-code`, `debug-error`, `docs-update`, `refactor-safe`, `security-review`, `browser-automation`, `ask-user` (Feature 31), `impeccable` (Step 14), `ui-designer` (Step 15), `caveman`, plus **19 Matt Pocock skills** (productivity + engineering — see below).
+
+### Skills → Matt Pocock (productivity + engineering)
+
+Vendored from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT). Sync: `npm run matt-pocock-skills:sync` (or `matt-pocock-skills:update`); pin upstream with `MATT_POCOCK_SKILLS_REF`. Lock file: `skills-lock.json` → `matt-pocock-skills` (commit SHA + per-file hashes). Patches: `scripts/matt-pocock-preserves/apply-minnow-patches.mjs` (renames, `/code-review`, Minnow `/compact` guidance).
+
+| Category | Skill ids |
+|----------|-----------|
+| Productivity (5) | `grill-me`, `grilling`, `handoff`, `teach`, `writing-great-skills` |
+| Engineering (14) | `ask-minnow`, `codebase-design`, `diagnosing-bugs`, `domain-modeling`, `grill-with-docs`, `implement`, `improve-codebase-architecture`, `prototype`, `resolving-merge-conflicts`, `setup-minnow-skills`, `tdd`, `to-issues`, `to-prd`, `triage` |
+
+**Minnow renames:** upstream `ask-matt` → `ask-minnow`; `setup-matt-pocock-skills` → `setup-minnow-skills`. **`/review`** in `implement` → **`/code-review`**. **`ask-minnow`** documents `/handoff` vs starting a new chat (no Cursor `/compact`).
+
+**Flow (router):** `/ask-minnow` — idea → `/grill-with-docs` or `/grill-me` → optional `/prototype` + `/handoff` → `/to-prd` → `/to-issues` → `/implement`; on-ramp `/triage` for incoming issues; precondition `/setup-minnow-skills` once per repo.
+
+| Concern | Location |
+|---------|----------|
+| Catalog | `scripts/matt-pocock-preserves/skill-catalog.json` |
+| Sync script | `scripts/sync-matt-pocock-skills.mjs` |
+| Vendored trees | `src/skills/<id>/` (+ `SKILL.upstream.md` per skill) |
+| Supplementary docs | e.g. `triage/AGENT-BRIEF.md`, `tdd/tests.md`, `setup-minnow-skills/domain.md` — read via `read_file` on skill paths |
+
+**Tests:** `test/skills-matt-pocock.test.mjs` (`npm run test:skills`, full `npm test`). Plan: [`documentation/plans/add-matt-pocock-skills.md`](plans/add-matt-pocock-skills.md).
 
 ### Skills → Caveman built-in
 

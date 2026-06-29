@@ -7,5 +7,93 @@
       "skillPath": "skill/SKILL.md",
       "computedHash": "e08cc9be673b6b5e66eb55cf77eb50a940fc603245b2f75d8370a2043aa926aa"
     }
+  },
+  "matt-pocock-skills": {
+    "source": "mattpocock/skills",
+    "ref": "5d78bd0903420f97c791f834201e550c765699f8",
+    "commitSha": "5d78bd0903420f97c791f834201e550c765699f8",
+    "syncedAt": "2026-06-29T00:44:23.567Z",
+    "skills": {
+      "grill-me": {
+        "SKILL.md": "ce27f759424698511ff4ac76fb6cf0a70b79d27a7abbe15eb8b4eae43ed1756c"
+      },
+      "grilling": {
+        "SKILL.md": "51090f82aefc948e466aa09f61afeaa34b78382d54b7bc69042e3eac786fba8f"
+      },
+      "handoff": {
+        "SKILL.md": "fb55071ec923b79d1d5ba583be81b6a89f22617a8343cbdb61b2fbb3f7a92f8f"
+      },
+      "teach": {
+        "GLOSSARY-FORMAT.md": "d177def491519d97873291f2e860d8f1d60ead78feecb82eee022177958069c6",
+        "LEARNING-RECORD-FORMAT.md": "855f81017625256584bbf62bd5edb9b0c86605c4cc1139c56acc36b802595d17",
+        "MISSION-FORMAT.md": "8da6d3ac84eb2eb19f17c260b6acf01c560d3ac7a4501c415eea0e985602f4d7",
+        "RESOURCES-FORMAT.md": "2bc634a64b0d0daa10904f9222e7aa0d361420dfacabbf092fbe3a72222edc08",
+        "SKILL.md": "d34957667ffb369c63f521166cc1ea7f023c5fbc89d291b2071ce3efe2c55bfb"
+      },
+      "writing-great-skills": {
+        "GLOSSARY.md": "eaab3564313cec3d35209bb42b05c797dcb350c075a079936c4dd173f9d8e8d8",
+        "SKILL.md": "5f45681fa6970732b87a0bde2222ae53944f7d9132dd152281083334f2f4307b"
+      },
+      "ask-minnow": {
+        "SKILL.md": "77abf81744ef2dd170cb1ad6747c2f7617f286fd31f4d13ba351ed76a9d57447"
+      },
+      "codebase-design": {
+        "DEEPENING.md": "125e6b77413ad2bc7cf7a772bc74336d580a50f9e797db2178ed133d62333d06",
+        "DESIGN-IT-TWICE.md": "21c3264953bd30ee87b181a3ccaf0e70649f461e5ffd7dc654acee4ba1788b31",
+        "SKILL.md": "2edf7c86c6e93ac1ee6837457a3e9d92472cd89821b417e7882dea08ed14562f"
+      },
+      "diagnosing-bugs": {
+        "scripts/hitl-loop.template.sh": "b2932630950e5210075bcd6f850e5accf30c101c5367b29eac3a29b4dd8084c8",
+        "SKILL.md": "20e9df877a7f41dcb8ba14acd30b8233dbd5c63e41528813b8829d211c748c71"
+      },
+      "domain-modeling": {
+        "ADR-FORMAT.md": "f1f36cd3f8d3b6474ddd5855da4e233bfc4ae1a1c5024909ccf11871819a41b2",
+        "CONTEXT-FORMAT.md": "b8cc318f2a4285b530e908b6bc43901c3c5cd11100362636bbc4216639bef597",
+        "SKILL.md": "5fe884916668035264c1aa313b7c0b7066d3f869710d045ba156b37281b1e486"
+      },
+      "grill-with-docs": {
+        "SKILL.md": "40deae8526d20fa58ea8009ac5fbec56d51a7b3840984e0716c76ec2c19c9641"
+      },
+      "implement": {
+        "SKILL.md": "5210fc77c903342a7b0d2ddabec100b954630af8148f1263b1b9b9edb8f606d1"
+      },
+      "improve-codebase-architecture": {
+        "HTML-REPORT.md": "0b0936104158abeef7246ff6cbabefa4dc055f17589f2833f2d93001421910a1",
+        "SKILL.md": "35c76d768206e225dd5e174627fae1295c66fc35ac80885b406aa8ff7e5ccbed"
+      },
+      "prototype": {
+        "LOGIC.md": "da91dc92195c00d5dc33863b8c1a030998025a0f8583ebf2babd770825b7f70c",
+        "SKILL.md": "344bc29671be86ffa1be73b38702da0b52e4662198c2fecdda5e3c206f7c8d53",
+        "UI.md": "d76d565149ee50456c5ddc5e29c27fec8737637874fe5c37d970db085a200b27"
+      },
+      "resolving-merge-conflicts": {
+        "SKILL.md": "e5d15745b5bb4db123bff92dae0855222c5c9ef18070c692015e86e962ea2a27"
+      },
+      "setup-minnow-skills": {
+        "domain.md": "25be404b58798b3cb2d51c93dba2ab052fc3a425632185726ac3f5fcff193b99",
+        "issue-tracker-github.md": "1e7ac76d3dd7f0ce41d6bf86912619a4bac164a70c6e246ae48f6825e222d56d",
+        "issue-tracker-gitlab.md": "6282954685bf55b7da7fad9f45dc4226d39e498ebaee1e06372708033fa40a09",
+        "issue-tracker-local.md": "9a052f4599525e581721ec24cb2ae3e0296b79053e39f684b540d34d3a4f6528",
+        "SKILL.md": "40c69689decd80872a53ee013e1a59920f7d665193d6ccade8831eca68072523",
+        "triage-labels.md": "4f53c9b40ce2651e3611aa090eaedbd6dbc9b71ef8c5f7e65eac0d8263190d0d"
+      },
+      "tdd": {
+        "mocking.md": "3ceb807fdf4a47d6a93d4d9a891e5ba6d362a6247bd08adc451feebfc17361ef",
+        "refactoring.md": "54fced22dd1911b7094c3fe7979b7c1a40d40be307482c4adf7dc0588f27d6cc",
+        "SKILL.md": "2c6481cefc35d9791066bd3b9877540f2719ac18e76c9af04bef33d517a5d4f3",
+        "tests.md": "e12182f5c4c6a844b7c6ab4b8d2623b642aaaae5460fe58ed087efd4f3d5fb8a"
+      },
+      "to-issues": {
+        "SKILL.md": "7732be7b1bd81c505d88cb2c9c74d29ba2c2b2316bf68211205b94e64f7fd99c"
+      },
+      "to-prd": {
+        "SKILL.md": "c60d79692729c04f64069d9d250e53cccdff2e1989b629c8cfda3fe0e1496fcf"
+      },
+      "triage": {
+        "AGENT-BRIEF.md": "5b78d347cc53f6bcf7b875106005ccf5315055fa4cf75eb28d41e96ee426d27b",
+        "OUT-OF-SCOPE.md": "2526f998fd7ca5e956d3f6f234bcc2431a5971ee769f1148ddc60b92f04d5914",
+        "SKILL.md": "33e36d264e6daa5aeed3e42a81602ea38016f69cdef381d6adcc8212defe13ba"
+      }
+    }
   }
 }

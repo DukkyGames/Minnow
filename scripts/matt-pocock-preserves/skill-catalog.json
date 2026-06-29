@@ -1,0 +1,86 @@
+{
+  "source": "mattpocock/skills",
+  "defaultRef": "main",
+  "skills": [
+    { "category": "productivity", "upstreamId": "grill-me", "id": "grill-me" },
+    { "category": "productivity", "upstreamId": "grilling", "id": "grilling" },
+    { "category": "productivity", "upstreamId": "handoff", "id": "handoff" },
+    {
+      "category": "productivity",
+      "upstreamId": "teach",
+      "id": "teach",
+      "extraFiles": [
+        "GLOSSARY-FORMAT.md",
+        "LEARNING-RECORD-FORMAT.md",
+        "MISSION-FORMAT.md",
+        "RESOURCES-FORMAT.md"
+      ]
+    },
+    {
+      "category": "productivity",
+      "upstreamId": "writing-great-skills",
+      "id": "writing-great-skills",
+      "extraFiles": ["GLOSSARY.md"]
+    },
+    { "category": "engineering", "upstreamId": "ask-matt", "id": "ask-minnow" },
+    {
+      "category": "engineering",
+      "upstreamId": "codebase-design",
+      "id": "codebase-design",
+      "extraFiles": ["DEEPENING.md", "DESIGN-IT-TWICE.md"]
+    },
+    {
+      "category": "engineering",
+      "upstreamId": "diagnosing-bugs",
+      "id": "diagnosing-bugs",
+      "extraFiles": ["scripts/hitl-loop.template.sh"]
+    },
+    {
+      "category": "engineering",
+      "upstreamId": "domain-modeling",
+      "id": "domain-modeling",
+      "extraFiles": ["ADR-FORMAT.md", "CONTEXT-FORMAT.md"]
+    },
+    { "category": "engineering", "upstreamId": "grill-with-docs", "id": "grill-with-docs" },
+    { "category": "engineering", "upstreamId": "implement", "id": "implement" },
+    {
+      "category": "engineering",
+      "upstreamId": "improve-codebase-architecture",
+      "id": "improve-codebase-architecture",
+      "extraFiles": ["HTML-REPORT.md"]
+    },
+    {
+      "category": "engineering",
+      "upstreamId": "prototype",
+      "id": "prototype",
+      "extraFiles": ["LOGIC.md", "UI.md"]
+    },
+    { "category": "engineering", "upstreamId": "resolving-merge-conflicts", "id": "resolving-merge-conflicts" },
+    {
+      "category": "engineering",
+      "upstreamId": "setup-matt-pocock-skills",
+      "id": "setup-minnow-skills",
+      "extraFiles": [
+        "domain.md",
+        "issue-tracker-github.md",
+        "issue-tracker-gitlab.md",
+        "issue-tracker-local.md",
+        "triage-labels.md"
+      ]
+    },
+    {
+      "category": "engineering",
+      "upstreamId": "tdd",
+      "id": "tdd",
+      "extraFiles": ["mocking.md", "refactoring.md", "tests.md"]
+    },
+    { "category": "engineering", "upstreamId": "to-issues", "id": "to-issues" },
+    { "category": "engineering", "upstreamId": "to-prd", "id": "to-prd" },
+    {
+      "category": "engineering",
+      "upstreamId": "triage",
+      "id": "triage",
+      "extraFiles": ["AGENT-BRIEF.md", "OUT-OF-SCOPE.md"]
+    }
+  ]
+}

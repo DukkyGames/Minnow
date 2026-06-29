@@ -1,6 +1,12 @@
 {
-  "generatedAt": "2026-06-23T03:00:42.374Z",
+  "generatedAt": "2026-06-29T00:44:23.624Z",
   "skills": [
+    {
+      "id": "ask-minnow",
+      "label": "Ask Minnow",
+      "description": "Ask which skill or flow fits your situation. A router over the user-invoked skills in this repo.",
+      "source": "builtin"
+    },
     {
       "id": "ask-user",
       "label": "Ask User",
@@ -26,15 +32,33 @@
       "source": "builtin"
     },
     {
+      "id": "codebase-design",
+      "label": "Codebase Design",
+      "description": "Shared vocabulary for designing deep modules. Use when the user wants to design or improve a module's interface, find deepening opportunities, decide where a seam goes, make code more testable or AI-navigable, or when another skill needs the deep-module vocabulary.",
+      "source": "builtin"
+    },
+    {
       "id": "debug-error",
       "label": "Debug Error",
       "description": "Trace tool failures and Error messages systematically. Use when tools fail or the user pastes a stack trace.",
       "source": "builtin"
     },
     {
+      "id": "diagnosing-bugs",
+      "label": "Diagnosing Bugs",
+      "description": "Diagnosis loop for hard bugs and performance regressions. Use when the user says \"diagnose\"/\"debug this\", or reports something broken/throwing/failing/slow.",
+      "source": "builtin"
+    },
+    {
       "id": "docs-update",
       "label": "Docs Update",
       "description": "Update README and documentation/context.md after code changes. Use when docs are stale or user asks to document.",
+      "source": "builtin"
+    },
+    {
+      "id": "domain-modeling",
+      "label": "Domain Modeling",
+      "description": "Build and sharpen a project's domain model. Use when the user wants to pin down domain terminology or a ubiquitous language, record an architectural decision, or when another skill needs to maintain the domain model.",
       "source": "builtin"
     },
     {
@@ -56,9 +80,51 @@
       "source": "builtin"
     },
     {
+      "id": "grill-me",
+      "label": "Grill Me",
+      "description": "A relentless interview to sharpen a plan or design.",
+      "source": "builtin"
+    },
+    {
+      "id": "grill-with-docs",
+      "label": "Grill With Docs",
+      "description": "A relentless interview to sharpen a plan or design, which also creates docs (ADR's and glossary) as we go.",
+      "source": "builtin"
+    },
+    {
+      "id": "grilling",
+      "label": "Grilling",
+      "description": "Interview the user relentlessly about a plan or design. Use when the user wants to stress-test a plan before building, or uses any 'grill' trigger phrases.",
+      "source": "builtin"
+    },
+    {
+      "id": "handoff",
+      "label": "Handoff",
+      "description": "Compact the current conversation into a handoff document for another agent to pick up.",
+      "source": "builtin"
+    },
+    {
       "id": "impeccable",
       "label": "Impeccable",
       "description": "Design, critique, audit, and refine Minnow UI using PRODUCT.md, DESIGN.md, and .impeccable/design.json. Not for backend-only tasks.",
+      "source": "builtin"
+    },
+    {
+      "id": "implement",
+      "label": "Implement",
+      "description": "Implement a piece of work based on a PRD or set of issues.",
+      "source": "builtin"
+    },
+    {
+      "id": "improve-codebase-architecture",
+      "label": "Improve Codebase Architecture",
+      "description": "Scan a codebase for deepening opportunities, present them as a visual HTML report, then grill through whichever one you pick.",
+      "source": "builtin"
+    },
+    {
+      "id": "prototype",
+      "label": "Prototype",
+      "description": "Build a throwaway prototype to flesh out a design — a runnable terminal app for state/business-logic questions, or several radically different UI variations toggleable from one route.",
       "source": "builtin"
     },
     {
@@ -68,9 +134,51 @@
       "source": "builtin"
     },
     {
+      "id": "resolving-merge-conflicts",
+      "label": "Resolving Merge Conflicts",
+      "description": "Use when you need to resolve an in-progress git merge/rebase conflict.",
+      "source": "builtin"
+    },
+    {
       "id": "security-review",
       "label": "Security Review",
       "description": "OWASP-style security pass on changes or files. Use before merge or for audit requests.",
+      "source": "builtin"
+    },
+    {
+      "id": "setup-minnow-skills",
+      "label": "Setup Minnow Skills",
+      "description": "Configure this repo for the engineering skills — set up its issue tracker, triage label vocabulary, and domain doc layout. Run once before first use of the other engineering skills.",
+      "source": "builtin"
+    },
+    {
+      "id": "tdd",
+      "label": "Tdd",
+      "description": "Test-driven development. Use when the user wants to build features or fix bugs test-first, mentions \"red-green-refactor\", or wants integration tests.",
+      "source": "builtin"
+    },
+    {
+      "id": "teach",
+      "label": "Teach",
+      "description": "Teach the user a new skill or concept, within this workspace.",
+      "source": "builtin"
+    },
+    {
+      "id": "to-issues",
+      "label": "To Issues",
+      "description": "Break a plan, spec, or PRD into independently-grabbable issues on the project issue tracker using tracer-bullet vertical slices.",
+      "source": "builtin"
+    },
+    {
+      "id": "to-prd",
+      "label": "To Prd",
+      "description": "Turn the current conversation into a PRD and publish it to the project issue tracker — no interview, just synthesis of what you've already discussed.",
+      "source": "builtin"
+    },
+    {
+      "id": "triage",
+      "label": "Triage",
+      "description": "Move issues and external PRs through a state machine of triage roles — categorise, verify, grill if needed, and write agent-ready briefs.",
       "source": "builtin"
     },
     {
@@ -83,6 +191,12 @@
       "id": "write-tests",
       "label": "Write Tests",
       "description": "Generate deterministic tests matching project style. Use when adding or fixing test coverage.",
+      "source": "builtin"
+    },
+    {
+      "id": "writing-great-skills",
+      "label": "Writing Great Skills",
+      "description": "Reference for writing and editing skills well — the vocabulary and principles that make a skill predictable.",
       "source": "builtin"
     }
   ]
