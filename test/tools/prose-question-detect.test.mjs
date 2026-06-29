@@ -46,4 +46,26 @@ This looks like a sprite sheet from a 2D pixel art game.`;
 
     assert.equal(looksLikeProseStructuredQuestion(text), false);
   });
+
+  test('ignores numbered repo tours with a trailing open follow-up', () => {
+    const text = `# Minnow repo tour
+
+1. \`src/chat/\` — messaging, modes, prompts
+2. \`src/tools/\` — tool definitions and loop
+3. \`server.js\` — HTTP API for file/git tools
+
+Want me to dive deeper into any of these?`;
+
+    assert.equal(looksLikeProseStructuredQuestion(text), false);
+  });
+
+  test('still detects decision questions before numbered choices', () => {
+    const text = `Which area should we explore first?
+
+1. **Frontend** — Vite SPA
+2. **Backend** — tool server
+3. **Electron** — desktop shell`;
+
+    assert.equal(looksLikeProseStructuredQuestion(text), true);
+  });
 });
