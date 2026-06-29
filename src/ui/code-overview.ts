@@ -1027,6 +1027,11 @@ function onHashChange(): void {
 
 function wireOverviewNavButtons(): void {
   const goOverview = (): void => {
+    // Toggle: close the dashboard when it is already open.
+    if (isCodeOverviewOpen()) {
+      void enterCodeChat();
+      return;
+    }
     navigateToCodeOverview();
   };
   document.getElementById('btnCodeOverviewSidebar')?.addEventListener('click', goOverview);
