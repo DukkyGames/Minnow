@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadContext } from './load-context.mjs';
+import { loadContext } from './context.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

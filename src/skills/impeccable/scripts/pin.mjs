@@ -27,7 +27,7 @@ const HARNESS_DIRS = [
 
 // Valid sub-command names
 const VALID_COMMANDS = [
-  'craft', 'teach', 'extract', 'document', 'shape',
+  'craft', 'init', 'extract', 'document', 'shape',
   'critique', 'audit',
   'polish', 'bolder', 'quieter', 'distill', 'harden', 'onboard', 'live',
   'animate', 'colorize', 'typeset', 'layout', 'delight', 'overdrive',
@@ -100,9 +100,9 @@ user-invocable: true
 
 ${PIN_MARKER}
 
-This is a pinned shortcut for \`{{command_prefix}}impeccable ${command}\`.
+This is a pinned shortcut for \`/impeccable ${command}\`.
 
-Invoke {{command_prefix}}impeccable ${command}, passing along any arguments provided here, and follow its instructions.
+Invoke /impeccable ${command}, passing along any arguments provided here, and follow its instructions.
 `;
 }
 

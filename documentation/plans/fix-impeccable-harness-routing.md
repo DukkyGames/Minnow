@@ -2,7 +2,7 @@
 
 Living plan for bringing Minnow `/impeccable <command>` harness commands to parity with [Impeccable getting started](https://impeccable.style/tutorials/getting-started/) (v3.x).
 
-**Status:** Planned (not yet implemented)
+**Status:** Implemented
 
 See also: [fix_impeccable_harness plan in Cursor](.cursor/plans/fix_impeccable_harness_ac96c59d.plan.md) for full implementation detail.
 

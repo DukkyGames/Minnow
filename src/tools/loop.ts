@@ -273,11 +273,11 @@ import {
 } from '../chat/history';
 import { indexOfLastUserMessage } from '../chat/history-truncate-core';
 import {
-  augmentImpeccableSkillBody,
+  composeImpeccableSkillBody,
+  shouldComposeImpeccableBody,
   augmentCavemanSkillBody,
   CAVEMAN_SKILL_ID,
   formatHistoryWithSkillTag,
-  IMPECCABLE_SKILL_ID,
   isSkillEnabled,
   normalizeCavemanUserText,
   parseSlashCommand,
@@ -1254,8 +1254,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       skillBody = skill.body;
     }
   }
-  if (skillBody && skillId === IMPECCABLE_SKILL_ID && !presetSkillBody) {
-    skillBody = await augmentImpeccableSkillBody(skillBody, userText);
+  if (skillBody && shouldComposeImpeccableBody(skillId, userText) && !presetSkillBody) {
+    skillBody = await composeImpeccableSkillBody(skillBody, userText);
   }
   if (skillBody && skillId === CAVEMAN_SKILL_ID && !presetSkillBody) {
     skillBody = augmentCavemanSkillBody(skillBody, {
@@ -2375,8 +2375,8 @@ export async function sendMessageWithTools(
       return;
     }
     skillBody = skill.body;
-    if (skillId === IMPECCABLE_SKILL_ID) {
-      skillBody = await augmentImpeccableSkillBody(skillBody, userText);
+    if (shouldComposeImpeccableBody(skillId, userText)) {
+      skillBody = await composeImpeccableSkillBody(skillBody, userText);
     }
     if (skillId === CAVEMAN_SKILL_ID) {
       skillBody = augmentCavemanSkillBody(skillBody, {

@@ -1,54 +1,137 @@
 /**
- * Client-side Impeccable reference augmentation.
+ * Client-side Impeccable composed skill body (v3 harness routing).
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
-  augmentImpeccableSkillBody,
   commandsForImpeccableAugment,
+  composeImpeccableSkillBody,
+  parseImpeccableSubcommand,
 } from '../../src/skills/impeccable-client.ts';
 
-describe('augmentImpeccableSkillBody', () => {
-  it('appends active command header when fetch returns content', async () => {
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () =>
-      ({
-        ok: true,
-        json: async () => ({ command: 'teach', content: '# Teach Flow\n\nStep 1.' }),
-      }) as Response;
+const MINNOW_ADDENDUM = '# Impeccable (Minnow addendum)';
+
+function mockFetch(handlers: Record<string, () => Response | Promise<Response>>) {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input: RequestInfo | URL) => {
+    const url = String(input);
+    for (const [needle, handler] of Object.entries(handlers)) {
+      if (url.includes(needle)) {
+        return handler();
+      }
+    }
+    return { ok: false } as Response;
+  };
+  return () => {
+    globalThis.fetch = originalFetch;
+  };
+}
+
+describe('composeImpeccableSkillBody', () => {
+  it('appends init active command when fetch returns init content', async () => {
+    const restore = mockFetch({
+      '/api/skills/impeccable/upstream': () =>
+        ({
+          ok: true,
+          json: async () => ({ content: '## Upstream routing rules' }),
+        }) as Response,
+      '/api/skills/impeccable/reference/init': () =>
+        ({
+          ok: true,
+          json: async () => ({
+            command: 'init',
+            content: '# Init Flow\n\nWrites PRODUCT.md.',
+          }),
+        }) as Response,
+    });
 
     try {
-      const body = await augmentImpeccableSkillBody('# Impeccable', 'teach');
-      assert.match(body, /## Active Impeccable command: teach/);
-      assert.match(body, /do not run `npx impeccable teach`/);
-      assert.match(body, /# Teach Flow/);
+      const body = await composeImpeccableSkillBody(MINNOW_ADDENDUM, 'init');
+      assert.match(body, /Impeccable \(Minnow addendum\)/);
+      assert.match(body, /Upstream routing rules/);
+      assert.match(body, /## Active Impeccable command: init/);
+      assert.match(body, /do not run `npx impeccable init`/);
+      assert.match(body, /# Init Flow/);
+      assert.match(body, /PRODUCT\.md/);
     } finally {
-      globalThis.fetch = originalFetch;
+      restore();
+    }
+  });
+
+  it('teach alias composes init workflow', async () => {
+    const restore = mockFetch({
+      '/api/skills/impeccable/upstream': () =>
+        ({ ok: false }) as Response,
+      '/api/skills/impeccable/reference/init': () =>
+        ({
+          ok: true,
+          json: async () => ({
+            command: 'init',
+            content: '# Init Flow\n\nStep 1.',
+          }),
+        }) as Response,
+    });
+
+    try {
+      assert.deepEqual(parseImpeccableSubcommand('teach'), {
+        command: 'init',
+        target: '',
+      });
+      const body = await composeImpeccableSkillBody(MINNOW_ADDENDUM, 'teach');
+      assert.match(body, /## Active Impeccable command: init/);
+      assert.match(body, /# Init Flow/);
+    } finally {
+      restore();
+    }
+  });
+
+  it('appends polish active command section', async () => {
+    const restore = mockFetch({
+      '/api/skills/impeccable/upstream': () =>
+        ({ ok: false }) as Response,
+      '/api/skills/impeccable/reference/polish': () =>
+        ({
+          ok: true,
+          json: async () => ({
+            command: 'polish',
+            content: '# Polish\n\n## Pre-Polish Assessment\n\nChecklist.',
+          }),
+        }) as Response,
+    });
+
+    try {
+      const body = await composeImpeccableSkillBody(
+        MINNOW_ADDENDUM,
+        'polish sidebar',
+      );
+      assert.match(body, /## Active Impeccable command: polish/);
+      assert.match(body, /Pre-Polish/);
+    } finally {
+      restore();
     }
   });
 
   it('injects shape prerequisite when command is craft', async () => {
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.includes('/reference/craft')) {
-        return {
+    const restore = mockFetch({
+      '/api/skills/impeccable/upstream': () =>
+        ({ ok: false }) as Response,
+      '/api/skills/impeccable/reference/craft': () =>
+        ({
           ok: true,
           json: async () => ({ content: '# Craft Flow\n\nStep 1 shape.' }),
-        } as Response;
-      }
-      if (url.includes('/reference/shape')) {
-        return {
+        }) as Response,
+      '/api/skills/impeccable/reference/shape': () =>
+        ({
           ok: true,
-          json: async () => ({ content: '# Shape Flow\n\nDiscovery Interview.' }),
-        } as Response;
-      }
-      return { ok: false } as Response;
-    };
+          json: async () => ({
+            content: '# Shape Flow\n\nDiscovery Interview.',
+          }),
+        }) as Response,
+    });
 
     try {
-      const body = await augmentImpeccableSkillBody(
-        '# Impeccable',
+      const body = await composeImpeccableSkillBody(
+        MINNOW_ADDENDUM,
         'craft landing page redesign',
       );
       assert.match(body, /## Active Impeccable command: craft/);
@@ -57,7 +140,7 @@ describe('augmentImpeccableSkillBody', () => {
       assert.match(body, /# Shape Flow/);
       assert.match(body, /Discovery Interview/);
     } finally {
-      globalThis.fetch = originalFetch;
+      restore();
     }
   });
 
@@ -65,16 +148,19 @@ describe('augmentImpeccableSkillBody', () => {
     assert.deepEqual(commandsForImpeccableAugment('craft'), ['craft', 'shape']);
   });
 
-  it('returns original body when fetch fails', async () => {
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () => ({ ok: false }) as Response;
+  it('returns addendum only when primary reference fetch fails', async () => {
+    const restore = mockFetch({
+      '/api/skills/impeccable/upstream': () =>
+        ({ ok: false }) as Response,
+      '/api/skills/impeccable/reference/init': () =>
+        ({ ok: false }) as Response,
+    });
 
     try {
-      const base = '# Impeccable base';
-      const body = await augmentImpeccableSkillBody(base, 'teach');
-      assert.equal(body, base);
+      const body = await composeImpeccableSkillBody(MINNOW_ADDENDUM, 'init');
+      assert.equal(body, MINNOW_ADDENDUM);
     } finally {
-      globalThis.fetch = originalFetch;
+      restore();
     }
   });
 });

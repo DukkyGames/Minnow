@@ -16,7 +16,7 @@ describe('toolRunImpeccable', () => {
     assert.deepEqual(listAcceptedRunImpeccableCommands(), ['detect', 'live']);
   });
 
-  it('returns harness guidance for teach without spawning CLI', async () => {
+  it('returns harness guidance for teach (init alias) without spawning CLI', async () => {
     const out = await toolRunImpeccable(
       { command: 'teach' },
       PROJECT_ROOT,
@@ -24,8 +24,8 @@ describe('toolRunImpeccable', () => {
     );
     const text = String(out.result ?? '');
     assert.match(text, /harness command/i);
-    assert.match(text, /reference\/teach\.md/);
-    assert.match(text, /# Teach Flow|Teach Flow|teach/i);
+    assert.match(text, /reference\/init\.md/);
+    assert.match(text, /# Init Flow|Init Flow|init/i);
     assert.doesNotMatch(text, /failed to spawn npx impeccable/i);
   });
 

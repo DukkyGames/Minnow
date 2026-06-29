@@ -11,9 +11,7 @@ Every other impeccable command reads these files before doing any work.
 
 Run the shared loader first so you know what already exists:
 
-```bash
-node {{scripts_path}}/load-context.mjs
-```
+Call the `load_impeccable_context` tool first to load PRODUCT.md, DESIGN.md, and optional `.impeccable/design.json`. Manual fallback from the Minnow repo root: `load_impeccable_context` tool (fallback: `node src/skills/impeccable/scripts/minnow-context.mjs`).
 
 The output tells you whether PRODUCT.md and/or DESIGN.md already exist. If `migrated: true`, legacy `.impeccable.md` was auto-renamed to `PRODUCT.md`. Mention this once to the user.
 
@@ -21,7 +19,7 @@ Decision tree:
 - **Neither file exists (empty project or no context yet)**: do Steps 2-4 (write PRODUCT.md), then decide on DESIGN.md based on whether there's code to analyze.
 - **PRODUCT.md exists, DESIGN.md missing**: skip to Step 5 and offer to run `/impeccable document` for DESIGN.md.
 - **PRODUCT.md exists but has no `## Register` section (legacy)**: add it. Infer a hypothesis from the codebase (see Step 2), confirm with the user, write the field.
-- **Both exist**: {{ask_instruction}} Ask which file to refresh. Skip the one the user doesn't want changed.
+- **Both exist**: Use the `ask_question` tool to Ask which file to refresh. Skip the one the user doesn't want changed.
 - **Just DESIGN.md exists (unusual)**: do Steps 2-4 to produce PRODUCT.md.
 
 Never silently overwrite an existing file. Always confirm first.
@@ -50,7 +48,7 @@ Note what you've learned and what remains unclear. This exploration feeds both P
 
 ## Step 3: Ask strategic questions (for PRODUCT.md)
 
-{{ask_instruction}} Ask only about what you couldn't infer from the codebase.
+Use the `ask_question` tool to Ask only about what you couldn't infer from the codebase.
 
 ### Interview mode, not confirmation mode
 
@@ -73,7 +71,7 @@ Every design task is either **brand** (marketing, landing, campaign, long-form c
 
 If Step 2 produced a clear hypothesis, lead with it: *"From the codebase, this looks like a [brand / product] surface. Does that match your intent, or should we treat it differently?"*
 
-If the signal is genuinely split (e.g. a product with a big marketing landing), {{ask_instruction}} Ask which register describes the **primary** surface. The register can be overridden per task later, but PRODUCT.md carries one default.
+If the signal is genuinely split (e.g. a product with a big marketing landing), Use the `ask_question` tool to Ask which register describes the **primary** surface. The register can be overridden per task later, but PRODUCT.md carries one default.
 
 ### Users & Purpose
 - Who uses this? What's their context when using it?
@@ -149,8 +147,8 @@ Summarize:
 - The 3-5 strategic principles from PRODUCT.md that will guide future work
 - If DESIGN.md is pending, remind the user how to generate it later
 
-**Critical: re-run the loader to refresh session context.** After writing PRODUCT.md, run `node {{scripts_path}}/load-context.mjs` one final time and let its full JSON output land in conversation. This ensures subsequent commands in this session use the freshly-written PRODUCT.md, not a stale earlier version.
+**Critical: re-run the loader to refresh session context.** After writing PRODUCT.md, call the `load_impeccable_context` tool one final time and let its full JSON output land in conversation. This ensures subsequent commands in this session use the freshly-written PRODUCT.md, not a stale earlier version.
 
 If teach was invoked as a blocker by another impeccable command (e.g. the user ran `/impeccable polish` with no PRODUCT.md), resume that original task now with the fresh context.
 
-Optionally {{ask_instruction}} Ask whether they'd like a brief summary of PRODUCT.md appended to {{config_file}} for easier agent reference. If yes, append a short **Design Context** pointer section there.
+Optionally Use the `ask_question` tool to Ask whether they'd like a brief summary of PRODUCT.md appended to AGENTS.md for easier agent reference. If yes, append a short **Design Context** pointer section there.

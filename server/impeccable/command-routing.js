@@ -4,33 +4,12 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import {
+  HARNESS_COMMANDS,
+  resolveHarnessCommand,
+} from './command-aliases.js';
 
-/** Harness commands from pin.mjs VALID_COMMANDS — reference/*.md workflows. */
-export const HARNESS_COMMANDS = new Set([
-  'craft',
-  'teach',
-  'extract',
-  'document',
-  'shape',
-  'critique',
-  'audit',
-  'polish',
-  'bolder',
-  'quieter',
-  'distill',
-  'harden',
-  'onboard',
-  'live',
-  'animate',
-  'colorize',
-  'typeset',
-  'layout',
-  'delight',
-  'overdrive',
-  'clarify',
-  'adapt',
-  'optimize',
-]);
+export { HARNESS_COMMANDS, resolveHarnessCommand };
 
 /** Top-level npx impeccable sub-commands supported by the upstream CLI. */
 export const CLI_COMMANDS = new Set(['detect']);
@@ -70,15 +49,15 @@ export function parseImpeccableSubcommand(userText) {
  * @returns {string | null} Absolute path to reference markdown when the file exists
  */
 export function resolveReferencePath(appRoot, command) {
-  const cmd = typeof command === 'string' ? command.trim().toLowerCase() : '';
-  if (!cmd) return null;
+  const resolved = resolveHarnessCommand(command);
+  if (!resolved) return null;
   const refPath = path.join(
     appRoot,
     'src',
     'skills',
     'impeccable',
     'reference',
-    `${cmd}.md`,
+    `${resolved}.md`,
   );
   return fs.existsSync(refPath) ? refPath : null;
 }
@@ -88,7 +67,7 @@ export function resolveReferencePath(appRoot, command) {
  * @returns {boolean}
  */
 export function isHarnessCommand(cmd) {
-  return HARNESS_COMMANDS.has(String(cmd ?? '').trim().toLowerCase());
+  return resolveHarnessCommand(cmd) !== null;
 }
 
 /**
@@ -122,7 +101,8 @@ export function listAcceptedRunImpeccableCommands() {
  * @returns {string}
  */
 export function harnessCommandGuidance(command) {
-  const cmd = String(command ?? '').trim().toLowerCase();
+  const resolved = resolveHarnessCommand(command);
+  const cmd = resolved ?? String(command ?? '').trim().toLowerCase();
   const spawnable = listAcceptedRunImpeccableCommands().join(', ');
   return `Impeccable harness command: ${cmd}
 
@@ -136,13 +116,14 @@ export function harnessCommandGuidance(command) {
  * @returns {string}
  */
 export function harnessCommandGuidanceWithReference(appRoot, command) {
-  const cmd = String(command ?? '').trim().toLowerCase();
-  let result = harnessCommandGuidance(cmd);
-  if (!isHarnessCommand(cmd)) {
+  const resolved = resolveHarnessCommand(command);
+  const cmd = resolved ?? String(command ?? '').trim().toLowerCase();
+  let result = harnessCommandGuidance(command);
+  if (!resolved) {
     return result;
   }
 
-  const refPath = resolveReferencePath(appRoot, cmd);
+  const refPath = resolveReferencePath(appRoot, command);
   if (!refPath) {
     return result;
   }
@@ -157,6 +138,6 @@ export function harnessCommandGuidanceWithReference(appRoot, command) {
   return `${result}
 
 ---
-## reference/${cmd}.md (follow this workflow in chat)
+## reference/${resolved}.md (follow this workflow in chat)
 ${content}`;
 }
