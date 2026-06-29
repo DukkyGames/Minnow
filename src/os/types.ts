@@ -61,6 +61,8 @@ export interface LaunchOptions {
   autoRun?: boolean;
   /** Code app: switch to this chat after launch (notification deep-link). */
   chatId?: string;
+  /** Code app section: overview dashboard vs chat workspace. */
+  codeSection?: CodeSectionId;
   /** Experts hub: initial step when opening on the desktop surface. */
   step?: 'browse' | 'create' | 'edit';
   /** Experts hub: pre-select an expert in the roster. */
@@ -69,6 +71,9 @@ export interface LaunchOptions {
   openLab?: boolean;
 }
 
+/** Code app sub-routes: instrumentation home vs chat workspace. */
+export type CodeSectionId = 'overview' | 'chat';
+
 /** Parsed hash route consumed by the OS shell and page bridge. */
 export interface OsRoute {
   view: OsView;
@@ -76,4 +81,5 @@ export interface OsRoute {
   settingsSection?: string;
   modelsSection?: string;
   brainSection?: string;
+  codeSection?: CodeSectionId;
 }

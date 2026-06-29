@@ -15,6 +15,8 @@ const BRANCH_INDENT_PX = 14;
 export interface GitGraphOptions {
   cwd?: string;
   onSelectCommit?: (sha: string) => void;
+  /** Max commits to fetch (default 200). */
+  logCount?: number;
 }
 
 export interface GitGraphHandle {
@@ -438,7 +440,8 @@ export function renderGitGraph(
   const refresh = async (): Promise<void> => {
     if (destroyed) return;
 
-    const result = await gitLog({ count: LOG_COUNT, cwd: options.cwd });
+    const count = options.logCount ?? LOG_COUNT;
+    const result = await gitLog({ count, cwd: options.cwd });
     if (!result.ok) {
       renderEmpty(host, result.error ?? 'Could not load history');
       return;

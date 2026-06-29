@@ -12,7 +12,7 @@ export async function launchCodeWithChat(chatId: string): Promise<void> {
     return;
   }
 
-  launchApp('code', { chatId: trimmed });
+  launchApp('code', { chatId: trimmed, codeSection: 'chat' });
   await switchToCodeChat(trimmed);
 }
 

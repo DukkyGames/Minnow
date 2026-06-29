@@ -251,6 +251,7 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
       for (const tc of msg.tool_calls) {
         const argsObj = parseToolArgsForDisplay(tc.function.arguments);
         const toolWrap = renderToolCall(tc.function.name, argsObj);
+        toolWrap.dataset.toolCallId = tc.id;
         toolWrap.dataset.historyIndex = String(i);
         toolWrap.dataset.turnKind = 'assistant-tools';
         area.appendChild(toolWrap);

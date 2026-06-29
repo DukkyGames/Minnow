@@ -20,6 +20,7 @@ import { renderChatFromHistory } from './messages';
 import { setStatus } from './status';
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
+import { createModeMaskIcon, syncModeIconInDom } from './mode-icons';
 
 const MODE_STATUS_MS = 2200;
 
@@ -131,6 +132,7 @@ export function setChatMode(modeId: ModeId): SetChatModeResult {
 
   const mode = listModes().find((m) => m.id === normalized);
   if (mode) showModeStatusPill(mode.label);
+  syncModeIconInDom(chat.id, normalized);
   return { ok: true, modeId: normalized, label: mode?.label };
 }
 
@@ -186,8 +188,14 @@ export function initModeSelector(): void {
     btn.dataset.modeId = mode.id;
     btn.setAttribute('role', 'radio');
     btn.setAttribute('aria-checked', 'false');
-    btn.textContent = mode.label;
     btn.title = mode.description;
+    btn.setAttribute('aria-label', mode.label);
+
+    const icon = createModeMaskIcon(mode.id, 'mode-segment__icon mode-mask-icon');
+    const label = document.createElement('span');
+    label.className = 'mode-segment__label';
+    label.textContent = mode.label;
+    btn.append(icon, label);
 
     btn.addEventListener('click', () => selectMode(mode.id));
     btn.addEventListener('keydown', (e) => onSegmentKeydown(e, mode.id));

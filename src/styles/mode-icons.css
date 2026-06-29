@@ -1,0 +1,105 @@
+/**
+ * Shared operating-mode glyphs (masked raster/SVG, tinted via currentColor).
+ * Matches sidebar folder / group icon treatment in sidebar.css.
+ */
+
+.mode-mask-icon {
+  flex-shrink: 0;
+  display: block;
+  background-color: currentColor;
+  mask-image: var(--mode-icon-url);
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-image: var(--mode-icon-url);
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+}
+
+/* Composer mode segments */
+.mode-segment__icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.72;
+}
+
+.mode-segment[aria-checked='true'] .mode-segment__icon {
+  opacity: 0.95;
+}
+
+@media (max-width: 600px) {
+  .mode-segment__icon {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+/* Sidebar / session rail chat rows */
+.chat-item-icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.9;
+}
+
+.chat-sidebar:not(.collapsed) .chat-item-icon,
+.chat-sidebar.collapsed.mobile-open .chat-item-icon {
+  width: 12px;
+  height: 12px;
+  opacity: 0.72;
+  color: var(--mn-fg-muted);
+}
+
+.chat-item-row.active .chat-item-icon,
+.chat-item-row:hover:not(.active) .chat-item-icon {
+  opacity: 1;
+  color: var(--mn-fg);
+}
+
+.chat-app-rail-list .chat-item-icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.88;
+  color: var(--mn-fg-muted);
+}
+
+.chat-app-page.is-rail-expanded .chat-app-rail-list .chat-item-icon {
+  width: 12px;
+  height: 12px;
+  opacity: 0.72;
+}
+
+.chat-app-page.is-rail-expanded .chat-app-rail-list .chat-item-row.active .chat-item-icon,
+.chat-app-page.is-rail-expanded .chat-app-rail-list .chat-item-row:hover .chat-item-icon {
+  opacity: 1;
+  color: var(--mn-fg);
+}
+
+/* Footer / hub raster slots using the same mask vocabulary at 18px */
+.mode-mask-icon--lg {
+  width: 18px;
+  height: 18px;
+  opacity: 0.88;
+}
+
+.icon-btn .mode-mask-icon--lg {
+  opacity: 0.88;
+}
+
+html[data-theme$='-dark'] .icon-btn .mode-mask-icon--lg {
+  opacity: 0.92;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .icon-btn:hover .mode-mask-icon--lg {
+    opacity: 1;
+  }
+}
+
+.hub-intent__icon .mode-mask-icon--lg {
+  opacity: 0.88;
+}
+
+html[data-theme$='-dark'] .hub-intent__icon .mode-mask-icon--lg {
+  opacity: 0.92;
+}

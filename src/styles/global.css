@@ -119,6 +119,7 @@ textarea,
 .experts-page { display: none; }
 .brain-page { display: none; }
 .brain-page.is-open { display: flex; }
+.code-overview-root { display: none; }
 .chat-app-page { display: none; }
 
 @media (prefers-reduced-motion: reduce) {

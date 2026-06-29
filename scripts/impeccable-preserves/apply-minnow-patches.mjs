@@ -6,10 +6,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  listHarnessCommandNames,
-  parseValidCommandsFromPin,
-} from '../../src/skills/impeccable/harness-registry.mjs';
+import { listHarnessCommandNames } from '../../src/skills/impeccable/harness-registry.mjs';
+import { parseValidCommandsFromPin } from '../../src/skills/impeccable/harness-registry-node.mjs';
 
 const MINNOW_SCRIPTS_PATH = 'src/skills/impeccable/scripts';
 
@@ -131,8 +129,24 @@ function patchMarkdownFile(filePath, text, metadata) {
  * @param {string} targetDir Absolute path to src/skills/impeccable (or override)
  */
 export function applyMinnowImpeccablePatches(targetDir) {
+  const pinPath = path.join(targetDir, 'scripts', 'pin.mjs');
+  let harnessNames = listHarnessCommandNames();
+  if (fs.existsSync(pinPath)) {
+    const pinSource = fs.readFileSync(pinPath, 'utf8');
+    if (pinSource.includes('{{command_prefix}}')) {
+      fs.writeFileSync(
+        pinPath,
+        pinSource.replaceAll('{{command_prefix}}', '/'),
+        'utf8',
+      );
+    }
+
+    harnessNames = parseValidCommandsFromPin(pinPath);
+    const commandsPath = path.join(targetDir, 'harness-commands.json');
+    fs.writeFileSync(commandsPath, `${JSON.stringify(harnessNames, null, 2)}\n`, 'utf8');
+  }
+
   const metadata = loadCommandMetadata(targetDir);
-  const harnessNames = listHarnessCommandNames();
   const referenceDir = path.join(targetDir, 'reference');
 
   if (fs.existsSync(referenceDir)) {
@@ -163,21 +177,6 @@ export function applyMinnowImpeccablePatches(targetDir) {
     );
     fs.writeFileSync(upstreamSkill, patched, 'utf8');
   }
-
-  const pinPath = path.join(targetDir, 'scripts', 'pin.mjs');
-  if (fs.existsSync(pinPath)) {
-    const pinSource = fs.readFileSync(pinPath, 'utf8');
-    if (pinSource.includes('{{command_prefix}}')) {
-      fs.writeFileSync(
-        pinPath,
-        pinSource.replaceAll('{{command_prefix}}', '/'),
-        'utf8',
-      );
-    }
-  }
-
-  // Sanity: pin.mjs VALID_COMMANDS should match harness registry parse.
-  parseValidCommandsFromPin(pinPath);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

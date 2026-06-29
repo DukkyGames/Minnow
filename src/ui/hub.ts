@@ -13,7 +13,9 @@ import { getChatsForWorkspace, getChatLastMessageAt } from '../state/session-wor
 import { sessionState } from '../state/sessions';
 import type { LastStats } from '../types';
 import type { Chat } from '../types';
+import type { ModeId } from '../chat/modes/types';
 import { setChatMode } from './mode-selector';
+import { createModeMaskIconLg } from './mode-icons';
 import { intentPrefill, mapIntentModeId, type HubIntentId } from './hub-intents';
 import { switchChat } from './sidebar';
 import { updateWorkspaceCodeChangeDisplay } from './workspace-code-change';
@@ -405,56 +407,57 @@ function buildHubDom(activeChat: Chat): HTMLElement {
 
   const intents = document.createElement('div');
   intents.className = 'hub-intents';
-  const intentDefs: { id: HubIntentId; title: string; sub: string; icon: string }[] = [
+  const intentDefs: { id: HubIntentId; title: string; sub: string; modeId: ModeId }[] = [
     {
       id: 'build',
       title: 'Build',
       sub: 'Scaffold and implement',
-      icon:
-        '<img class="icon-img hub-intent__icon-img" src="/icons/hub-build.png" width="18" height="18" alt="" aria-hidden="true">',
+      modeId: 'build',
     },
     {
       id: 'plan',
       title: 'Plan',
       sub: 'Map it before code',
-      icon:
-        '<img class="icon-img hub-intent__icon-img" src="/icons/hub-plan.png" width="18" height="18" alt="" aria-hidden="true">',
+      modeId: 'plan',
     },
     {
       id: 'debug',
       title: 'Debug',
       sub: 'Reproduce and fix',
-      icon:
-        '<img class="icon-img hub-intent__icon-img" src="/icons/benchmark.png" width="18" height="18" alt="" aria-hidden="true">',
+      modeId: 'debug',
     },
     {
       id: 'explain',
       title: 'Explain',
       sub: 'Get oriented fast',
-      icon:
-        '<img class="icon-img hub-intent__icon-img" src="/icons/expert-lab.png" width="18" height="18" alt="" aria-hidden="true">',
+      modeId: 'general',
     },
     {
       id: 'orchestrate',
       title: 'Orchestrate',
       sub: 'Run a plan as a board',
-      icon:
-        '<img class="icon-img hub-intent__icon-img" src="/icons/orchestrate.png" width="18" height="18" alt="" aria-hidden="true">',
+      modeId: 'orchestrate',
     },
   ];
   for (const def of intentDefs) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'hub-intent';
-    btn.innerHTML = `
-      <span class="hub-intent__icon">${def.icon}</span>
-      <span>
-        <div class="hub-intent__title"></div>
-        <div class="hub-intent__sub"></div>
-      </span>
-    `;
-    btn.querySelector('.hub-intent__title')!.textContent = def.title;
-    btn.querySelector('.hub-intent__sub')!.textContent = def.sub;
+
+    const iconWrap = document.createElement('span');
+    iconWrap.className = 'hub-intent__icon';
+    iconWrap.appendChild(createModeMaskIconLg(def.modeId));
+
+    const copy = document.createElement('span');
+    const titleEl = document.createElement('div');
+    titleEl.className = 'hub-intent__title';
+    titleEl.textContent = def.title;
+    const subEl = document.createElement('div');
+    subEl.className = 'hub-intent__sub';
+    subEl.textContent = def.sub;
+    copy.append(titleEl, subEl);
+
+    btn.append(iconWrap, copy);
     btn.addEventListener('click', () => {
       if (def.id === 'orchestrate') {
         teardownHub();

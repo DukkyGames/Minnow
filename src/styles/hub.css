@@ -531,18 +531,12 @@
   stroke-linejoin: round;
 }
 
-/* Intent chip raster icons (build, plan, explain) */
-.hub-intent__icon .hub-intent__icon-img {
-  width: 18px;
-  height: 18px;
-  display: block;
-  object-fit: contain;
-  filter: brightness(0);
-  opacity: 0.88;
-}
-
-html[data-theme$='-dark'] .hub-intent__icon .hub-intent__icon-img {
-  filter: brightness(0) invert(1);
+.hub-intent__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--mn-fg);
 }
 
 .hub-intent__title {

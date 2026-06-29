@@ -27,6 +27,7 @@ import './styles/stats.css';
 import './styles/agent-activity-panel.css';
 import './styles/responsive.css';
 import './styles/mode-selector.css';
+import './styles/mode-icons.css';
 import './styles/composer-controls.css';
 import './styles/file-panel.css';
 import './styles/editor-quick-edit.css';
@@ -48,6 +49,7 @@ import './styles/orchestrate-board.css';
 import './styles/toast.css';
 import './styles/bug-board.css';
 import './styles/hub.css';
+import './styles/code-overview.css';
 import './styles/orchestrate-hub.css';
 import './styles/orchestrate-plan-screen.css';
 import './styles/minnowos-shell.css';
@@ -95,6 +97,7 @@ import { initChatScroll } from './ui/chat-scroll';
 import { clearChat, renderChatFromHistory, renderStatsForChat } from './ui/messages';
 import { refreshHubLiveData } from './ui/hub';
 import { bootGenerationResumeForChats } from './chat/generation-resume';
+import { bootIncompleteToolResumeForChats } from './chat/incomplete-tool-resume';
 import { bootOrchestrateBoardResume } from './chat/orchestrate/board-boot-resume';
 import { initBoardLogDiskSink } from './state/board-log-disk.ts';
 import { registerOrchestrateBoardShutdownHandler } from './chat/orchestrate/board-shutdown';
@@ -150,6 +153,7 @@ import {
   syncViewModeToggleFromActiveChat,
 } from './ui/view-mode-toggle';
 import { initModeSelector, syncModeSelectorFromActiveChat } from './ui/mode-selector';
+import { initModeChromeIcons } from './ui/mode-icons';
 import {
   initOrchestrateHub,
   toggleOrchestrateHubFromTopbar,
@@ -292,9 +296,12 @@ export async function initApp(): Promise<void> {
   initAttachments();
   initContextUsageRing();
   initModeSelector();
+  initModeChromeIcons();
   initOrchestrateHub();
   const { initCodeBrainMap } = await import('./ui/code-brain-map');
   initCodeBrainMap();
+  const { initCodeOverview } = await import('./ui/code-overview');
+  initCodeOverview();
   initThinkingControl();
   initComposerReasoningEffort();
   initOrchestratePlanSelector();
@@ -383,6 +390,7 @@ export async function initApp(): Promise<void> {
   if (sessionState) {
     await rehydrateAllBoardWorktreeRoots(sessionState);
     await bootGenerationResumeForChats(sessionState.chats);
+    await bootIncompleteToolResumeForChats(sessionState.chats);
     await bootOrchestrateBoardResume(sessionState);
   }
   renderStatsForChat(getActiveChat());
