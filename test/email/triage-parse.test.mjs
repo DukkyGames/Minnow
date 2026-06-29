@@ -28,6 +28,14 @@ describe('parseTriageJson', () => {
     assert.equal(parsed.urgency, 'high');
   });
 
+  test('parses JSON after leading prose', () => {
+    const parsed = parseTriageJson(
+      `The user wants a one-line summary.\n\n${TRIAGE_JSON_FIXTURE}`,
+    );
+    assert.ok(parsed);
+    assert.equal(parsed.summary, 'Invoice due Friday for cloud hosting');
+  });
+
   test('returns null for invalid payload', () => {
     assert.equal(parseTriageJson('not json'), null);
   });

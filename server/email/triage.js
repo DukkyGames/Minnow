@@ -3,7 +3,8 @@
  */
 
 import { wrapUntrusted } from '../security/untrusted.js';
-import { llmCall } from '../research/llm.js';
+import { parseJsonObject } from '../research/json-parse.js';
+import { completeStructuredJson } from './llm-json.js';
 import {
   loadSynthesisConfig,
   resolveSynthesisModel,
@@ -50,7 +51,7 @@ export function parseTriageJson(raw) {
     }
   };
 
-  let parsed = tryParse(text);
+  let parsed = parseJsonObject(text) ?? tryParse(text);
   if (!parsed) {
     const start = text.indexOf('{');
     const end = text.lastIndexOf('}');
@@ -59,7 +60,7 @@ export function parseTriageJson(raw) {
     }
   }
 
-  if (!parsed || typeof parsed !== 'object') {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return null;
   }
 
@@ -122,28 +123,31 @@ export async function triageMessage(accountId, messageKey) {
   const attachmentSummary = await getAttachmentSummaryForMessage(accountId, messageKey);
   const userPrompt = buildTriagePrompt(message, attachmentSummary);
 
-  const completion = await llmCall({
-    providerId: model.providerId,
-    model: model.model,
-    messages: [
-      { role: 'system', content: TRIAGE_SYSTEM_PROMPT },
-      { role: 'user', content: userPrompt },
-    ],
-    temperature: 0.2,
-    maxTokens: 400,
-  });
+  try {
+    const parsed = await completeStructuredJson({
+      providerId: model.providerId,
+      model: model.model,
+      messages: [
+        { role: 'system', content: TRIAGE_SYSTEM_PROMPT },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: 0.2,
+      maxTokens: 400,
+      parse: parseTriageJson,
+    });
+    const triage = {
+      ...parsed,
+      bodyHash,
+      cachedAt: new Date().toISOString(),
+    };
 
-  const parsed = parseTriageJson(completion);
-  if (!parsed) {
-    throw new Error('Email triage returned invalid JSON');
+    await updateMessageTriage(accountId, messageKey, triage);
+    return triage;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    if (reason.includes('invalid JSON')) {
+      throw new Error('Email triage returned invalid JSON');
+    }
+    throw err;
   }
-
-  const triage = {
-    ...parsed,
-    bodyHash,
-    cachedAt: new Date().toISOString(),
-  };
-
-  await updateMessageTriage(accountId, messageKey, triage);
-  return triage;
 }

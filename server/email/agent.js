@@ -4,7 +4,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { wrapUntrusted } from '../security/untrusted.js';
-import { llmCall } from '../research/llm.js';
+import { completeStructuredJson } from './llm-json.js';
 import {
   loadSynthesisConfig,
   resolveSynthesisModel,
@@ -22,6 +22,13 @@ import {
 import { triageMessage } from './triage.js';
 import { emitEmailEvent } from './events.js';
 import { evaluateAutomationsForMessage } from './automations.js';
+
+/** Max messages triaged/varianted per folder sync (newest first). */
+export const MAX_AGENT_MESSAGES_PER_SYNC = 8;
+/** Cooldown before retrying triage after a parse/upstream failure. */
+export const TRIAGE_RETRY_COOLDOWN_MS = 30 * 60_000;
+/** Pause between agent LLM calls to avoid provider rate limits. */
+const AGENT_LLM_GAP_MS = 250;
 
 export const VARIANTS_SYSTEM_PROMPT = `You draft reply options for a local email assistant.
 Return ONLY valid JSON: an array of 2-3 objects with fields:
@@ -204,25 +211,85 @@ export async function generateReplyVariants(accountId, threadId, options = {}) {
     instructions ? `\nUser instructions for variants:\n${instructions}` : '',
   ].join('\n');
 
-  const completion = await llmCall({
-    providerId: model.providerId,
-    model: model.model,
-    messages: [
-      { role: 'system', content: VARIANTS_SYSTEM_PROMPT },
-      { role: 'user', content: userPrompt },
-    ],
-    temperature: 0.4,
-    maxTokens: 900,
-    stripProse: true,
-  });
+  try {
+    const variants = /** @type {NonNullable<ReturnType<typeof parseReplyVariantsJson>>} */ (
+      await completeStructuredJson({
+        providerId: model.providerId,
+        model: model.model,
+        messages: [
+          { role: 'system', content: VARIANTS_SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.4,
+        maxTokens: 900,
+        parse: parseReplyVariantsJson,
+      })
+    );
 
-  const variants = parseReplyVariantsJson(completion);
-  if (!variants) {
-    throw new Error('Reply variants returned invalid JSON');
+    await updateReplyVariants(accountId, messageKey, variants);
+    return { threadId, messageId: messageKey, variants };
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    if (reason.includes('invalid JSON')) {
+      throw new Error('Reply variants returned invalid JSON');
+    }
+    throw err;
   }
+}
 
-  await updateReplyVariants(accountId, messageKey, variants);
-  return { threadId, messageId: messageKey, variants };
+/**
+ * Whether a cached message should be skipped for triage backfill (recent failure).
+ * @param {Record<string, unknown> | null | undefined} cached
+ * @param {number} [nowMs]
+ */
+export function shouldSkipTriageRetry(cached, nowMs = Date.now()) {
+  if (!cached?.triage || typeof cached.triage !== 'object') {
+    return false;
+  }
+  if (cached.triage.summary) {
+    return true;
+  }
+  const failedAt = cached.triage.failedAt;
+  if (!failedAt) {
+    return false;
+  }
+  const ageMs = nowMs - new Date(String(failedAt)).getTime();
+  return Number.isFinite(ageMs) && ageMs >= 0 && ageMs < TRIAGE_RETRY_COOLDOWN_MS;
+}
+
+/**
+ * Cap agent work per sync — newest UIDs first so the dashboard highlights recent mail.
+ * @param {Array<Record<string, unknown>>} rows
+ * @param {number} [limit]
+ */
+export function prioritizeAgentBatch(rows, limit = MAX_AGENT_MESSAGES_PER_SYNC) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return [];
+  }
+  const sorted = rows.slice().sort((a, b) => Number(b.uid) - Number(a.uid));
+  return sorted.slice(0, Math.max(1, limit));
+}
+
+/**
+ * @param {number} ms
+ */
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+/**
+ * Record a triage failure so backfill does not hammer the LLM every sync.
+ * @param {string} accountId
+ * @param {string} messageKey
+ * @param {string} reason
+ */
+async function recordTriageFailure(accountId, messageKey, reason) {
+  await updateMessageTriage(accountId, messageKey, {
+    failedAt: new Date().toISOString(),
+    failureReason: reason.slice(0, 200),
+  });
 }
 
 /**
@@ -298,16 +365,19 @@ export async function runAgentHooksAfterFolderSync(
       continue;
     }
     const cached = await getCachedMessage(accountId, messageKey);
-    if (!cached?.triage?.summary) {
-      lacksTriage.add(messageKey);
+    if (cached?.triage?.summary || shouldSkipTriageRetry(cached)) {
+      continue;
     }
+    lacksTriage.add(messageKey);
   }
 
-  const toProcess = filterMessagesForAgentProcessing(
-    incoming,
-    folder,
-    prevHighestUid,
-    (messageKey) => lacksTriage.has(messageKey),
+  const toProcess = prioritizeAgentBatch(
+    filterMessagesForAgentProcessing(
+      incoming,
+      folder,
+      prevHighestUid,
+      (messageKey) => lacksTriage.has(messageKey),
+    ),
   );
 
   if (toProcess.length > 0) {
@@ -332,9 +402,10 @@ export async function onNewMessages(accountId, newMessages, account) {
 
   const autoTriage = account.autoTriage !== false;
   const variantsMode = String(account.variantsOnNewMail ?? 'high_only');
+  const batch = prioritizeAgentBatch(newMessages);
   let processed = 0;
 
-  for (const row of newMessages) {
+  for (const row of batch) {
     const messageKey = String(row.id ?? `${row.folder}:${row.uid}`);
     try {
       if (autoTriage) {
@@ -356,11 +427,24 @@ export async function onNewMessages(accountId, newMessages, account) {
       emitEmailEvent('message_new', { accountId, messageId: messageKey });
       processed += 1;
     } catch (err) {
-      console.warn(
-        `[email/agent] onNewMessages failed for ${messageKey}:`,
-        err instanceof Error ? err.message : err,
-      );
+      const reason = err instanceof Error ? err.message : String(err);
+      console.warn(`[email/agent] onNewMessages failed for ${messageKey}:`, reason);
+      if (
+        autoTriage &&
+        (reason.includes('invalid JSON') || reason.includes('Upstream HTTP'))
+      ) {
+        try {
+          await recordTriageFailure(accountId, messageKey, reason);
+        } catch (recordErr) {
+          console.warn(
+            `[email/agent] failed to record triage failure for ${messageKey}:`,
+            recordErr instanceof Error ? recordErr.message : recordErr,
+          );
+        }
+      }
     }
+
+    await sleep(AGENT_LLM_GAP_MS);
   }
 
   await buildInboxSummary(accountId);
