@@ -328,7 +328,7 @@ Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoke
 | Enable/disable + persistence | `src/skills/config.ts`, `~/.minnow/skills.json`, `GET/PUT /api/config/skills` |
 | Settings UI (toggles, editor, add custom) | `src/ui/settings-skills.ts`, `src/skills/skill-settings-api.ts` |
 | Custom skill template | `src/skills/_template/SKILL.md` (copied on `POST /api/skills`) |
-| Slash picker UI | `src/ui/skill-picker.ts`, `src/styles/skill-picker.css` — `initComposerSlashPicker()` on `#msgInput`, `#chatAppInput`, `#desktopInput` (desktop wired from `wireDesktopComposerControls()` when concierge mounts); shared picker re-anchors to the active composer wrap |
+| Slash picker UI | `src/ui/skill-picker.ts`, `src/styles/skill-picker.css` — `initComposerSlashPicker()` on `#msgInput`, `#chatAppInput`, `#desktopInput` (desktop wired from `wireDesktopComposerControls()` when concierge mounts); shared picker portals to `document.body` with `position: fixed` anchored to the active composer row via `getBoundingClientRect()` (avoids clipping inside hub `overflow-y: auto` and workspace split) |
 | Server scan + API | `server/skills/scan.js`, `server/skills/middleware.js`, `server/skills/user-skills.js` |
 
 **API** (same CORS as `/api/tools`; requires `npm start` for user skills):
