@@ -23,6 +23,7 @@ const DEFAULT_SUB_AGENT_MAX_TOOL_TURNS = 100;
 const PLACEHOLDER_CHAT_NAME = 'New chat';
 const MAX_CHATS = 50;
 const SESSION_SCHEMA_VERSION = 5;
+const MAX_GOAL_CONDITION_CHARS = 4000;
 
 /** Normalize workspace paths for stable keys (mirror src/lib/normalize-workspace-path.ts). */
 function normalizeWorkspacePath(fsPath) {
@@ -650,6 +651,34 @@ function ensureCurrentGenerationId(raw) {
   return GENERATION_ID_RE.test(id) ? id : undefined;
 }
 
+/** Coerce /goal loop state (mirror src/state/sessions.ts ensureActiveGoal). */
+function ensureActiveGoal(raw) {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const goal = /** @type {Record<string, unknown>} */ (raw);
+  const conditionText =
+    typeof goal.conditionText === 'string' ? goal.conditionText.trim() : '';
+  if (!conditionText) return undefined;
+  return {
+    conditionText: conditionText.slice(0, MAX_GOAL_CONDITION_CHARS),
+    startedAt:
+      typeof goal.startedAt === 'number' && Number.isFinite(goal.startedAt)
+        ? goal.startedAt
+        : Date.now(),
+    turnCount:
+      typeof goal.turnCount === 'number' && Number.isFinite(goal.turnCount)
+        ? Math.max(0, Math.floor(goal.turnCount))
+        : 0,
+    tokenBaseline:
+      typeof goal.tokenBaseline === 'number' && Number.isFinite(goal.tokenBaseline)
+        ? Math.max(0, Math.floor(goal.tokenBaseline))
+        : 0,
+    ...(typeof goal.lastReason === 'string' && goal.lastReason.trim()
+      ? { lastReason: goal.lastReason.trim() }
+      : {}),
+    ...(goal.achieved === true ? { achieved: true } : {}),
+  };
+}
+
 function ensureChatShape(raw) {
   if (!raw || typeof raw !== 'object') {
     return {
@@ -694,6 +723,7 @@ function ensureChatShape(raw) {
     row.activeBranchByFork && typeof row.activeBranchByFork === 'object'
       ? row.activeBranchByFork
       : undefined;
+  const activeGoal = ensureActiveGoal(row.activeGoal);
 
   return {
     id: typeof row.id === 'string' && row.id ? row.id : newChatId(),
@@ -733,6 +763,7 @@ function ensureChatShape(raw) {
     ...(activeBranchByFork ? { activeBranchByFork } : {}),
     ...(terminalHistory?.length ? { terminalHistory } : {}),
     ...(currentGenerationId ? { currentGenerationId } : {}),
+    ...(activeGoal ? { activeGoal } : {}),
     ...(row.unread === true ? { unread: true } : {}),
     ...(typeof row.lastAssistantAt === 'number' &&
     Number.isFinite(row.lastAssistantAt) &&

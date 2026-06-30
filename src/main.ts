@@ -144,6 +144,7 @@ import { initStatsStrip, toggleStatsPanel, updateStatsExpandPreview } from './ui
 import { bindExpertsSettingsCheckbox } from './ui/experts-settings';
 import { initReefBridge } from './chat/reef/index.ts';
 import { syncComposerPinnedSkillFromActiveChat } from './ui/composer-pinned-skill';
+import { syncGoalActiveHint } from './ui/goal-active-hint';
 import {
   initOrchestratePlanSelector,
   syncOrchestratePlanStripFromActiveChat,
@@ -402,6 +403,7 @@ export async function initApp(): Promise<void> {
   void syncOrchestratePlanStripFromActiveChat();
   syncComposerPinnedSkillFromActiveChat();
   syncViewModeToggleFromActiveChat();
+  syncGoalActiveHint();
   renderSidebar();
   bootstrapActiveChatOpenedTimestamp();
 

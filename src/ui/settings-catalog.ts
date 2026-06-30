@@ -191,7 +191,11 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   }),
   field('models.providers.add', 'Add provider', 'models', 'providers'),
   field('models.routing', 'Model routing', 'models', 'model-routing', {
-    keywords: ['bindings', 'roles', 'default model'],
+    keywords: ['bindings', 'roles', 'default model', 'goal evaluator', 'goal-eval'],
+  }),
+  field('models.routing.goalEval', 'Goal evaluator', 'models', 'model-routing', {
+    keywords: ['goal', '/goal', 'evaluator', 'completion judge'],
+    description: 'Model for /goal loop evaluation after each turn.',
   }),
   field('models.sampler', 'Sampler defaults', 'models', 'sampler', {
     keywords: ['temperature', 'top p', 'penalties'],

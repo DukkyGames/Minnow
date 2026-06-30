@@ -23,6 +23,9 @@ import {
   consumePendingSteer,
   enqueueSteerMessage,
 } from '../chat/steer-message';
+import { handleGoalCommand } from '../chat/goal/command';
+import { maybeContinueGoalAfterTurn } from '../chat/goal/evaluate';
+import { getActiveGoal } from '../state/sessions';
 import {
   clearAttachments,
   getPendingAttachments,
@@ -123,6 +126,7 @@ import {
   syncComposerFromStreamingState,
   syncSteerQueuedHint,
 } from '../ui/composer-send';
+import { syncGoalActiveHint } from '../ui/goal-active-hint';
 import {
   clearComposerInput,
   resolveComposerSurface,
@@ -212,6 +216,7 @@ import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
 import { resolveOutboundSystemMessages } from '../chat/prompts/compose-context';
 import { estimateTokensFromText } from '../chat/prompts/token-estimate';
 import {
+  DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
   agentContextBudgetFromWorkAgent,
   applyContextBudget,
   resolveContextBudget,
@@ -498,6 +503,8 @@ export interface RunChatTurnOptions {
   composedSystemPromptOverride?: string;
   /** Push user text to history without showing a user bubble (sub-agent completion resume). */
   suppressUserEcho?: boolean;
+  /** Turn started by /goal or goal auto-continuation (triggers post-turn evaluator). */
+  goalDriven?: boolean;
   /** Composer input/send override (defaults to foreground app surface). */
   composerSurface?: Partial<ComposerSurface>;
 }
@@ -906,6 +913,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     forkOverrides,
     composedSystemPromptOverride,
     suppressUserEcho = false,
+    goalDriven = false,
   } = options;
 
   if (!beginChatTurnSetup(chat.id)) {
@@ -1349,7 +1357,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     const maxToolTurns = getChatMetaSync().maxToolTurns;
     const workAgentBudget = activeWorkAgent
       ? agentContextBudgetFromWorkAgent(activeWorkAgent)
-      : { maxInputTokens: null, enforcementPolicy: 'slide' as const };
+      : { maxInputTokens: null, enforcementPolicy: DEFAULT_CONTEXT_ENFORCEMENT_POLICY };
 
     // Boot resume subscribes once; later tool-loop rounds must POST new generations (MIN-187).
     let activeResumeGenerationId = resumeGenerationId;
@@ -2152,6 +2160,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       } else {
         syncComposerFromStreamingState();
       }
+      if (completedNormally && goalDriven) {
+        void maybeContinueGoalAfterTurn(chat);
+      }
     }
     if (getChatAbort(chat.id)?.signal === chatSignal) {
       setChatAbort(chat.id, null);
@@ -2203,6 +2214,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
 export interface ResumeParentChatOptions {
   suppressUserEcho?: boolean;
+  goalDriven?: boolean;
 }
 
 /**
@@ -2229,6 +2241,7 @@ export async function resumeParentChatWithMessage(
     historyContent: message,
     validAttachments: [],
     ownsGlobalStreaming: chat.id === getActiveChat().id,
+    goalDriven: options.goalDriven ?? false,
   });
 }
 
@@ -2288,11 +2301,25 @@ export async function sendMessageWithTools(
   const pendingWithoutErrors = pending.filter((a) => a.kind !== 'error');
   const chat = getActiveChat();
 
+  const goalDispatch = handleGoalCommand(chat, rawText, setStatus);
+  if (goalDispatch === 'handled') {
+    clearComposerInput(input);
+    return;
+  }
+
+  let goalDriven = false;
+  let effectiveRawText = rawText;
+  if (goalDispatch === 'set') {
+    goalDriven = true;
+    effectiveRawText = getActiveGoal(chat)?.conditionText ?? rawText;
+    clearComposerInput(input);
+  }
+
   if (
     orchestrateRequiresPlanBlock(
       chat.modeId,
       chat.orchestratePlanPath,
-      rawText,
+      effectiveRawText,
       pendingWithoutErrors.length,
     ) === 'block'
   ) {
@@ -2303,9 +2330,9 @@ export async function sendMessageWithTools(
   const slashInput = resolveOrchestrateSlashInput(
     chat.modeId,
     chat.orchestratePlanPath,
-    rawText,
+    effectiveRawText,
   );
-  const pickerSkillId = getPickerAppliedSkillId(input);
+  const pickerSkillId = goalDriven ? null : getPickerAppliedSkillId(input);
   const { skillId: slashSkillId, userText: slashUserText } = pickerSkillId
     ? parseSlashCommand(slashInput)
     : { skillId: null, userText: slashInput.trim() };
@@ -2319,7 +2346,7 @@ export async function sendMessageWithTools(
   const skillId = turnSkill.skillId;
   let userText = normalizeCavemanUserText(skillId, slashSkillId, slashUserText);
   const hasUserText = Boolean(userText.trim());
-  if (!rawText && pendingWithoutErrors.length === 0 && !slashInput.trim()) return;
+  if (!effectiveRawText && pendingWithoutErrors.length === 0 && !slashInput.trim()) return;
   if (!skillId && !hasUserText && pendingWithoutErrors.length === 0) return;
 
   const rawModelSelect = (document.getElementById('modelSelect') as HTMLSelectElement).value;
@@ -2404,19 +2431,20 @@ export async function sendMessageWithTools(
 
   const displayText = skillId
     ? formatHistoryWithSkillTag(userText, skillId)
-    : userText || rawText;
+    : userText || effectiveRawText;
   const historyContent = buildHistoryUserContent(displayText, validAttachments);
-  const titleSeed = userText || rawText || validAttachments[0]?.name || 'Attachment';
+  const titleSeed = userText || effectiveRawText || validAttachments[0]?.name || 'Attachment';
   const firstUserPending = isFirstUserMessagePending(chat);
   const deferTitleUntilTurnEnd = firstUserPending && isExpertChat(chat);
 
   syncComposerPinnedSkillFromActiveChat();
   scheduleSaveSessions();
+  syncGoalActiveHint();
 
   await runChatTurn({
     chat,
     pushUser: true,
-    rawText,
+    rawText: effectiveRawText,
     userText,
     skillId,
     displayText,
@@ -2427,5 +2455,6 @@ export async function sendMessageWithTools(
     deferTitleUntilTurnEnd,
     skillBody,
     composerSurface: composer,
+    goalDriven,
   });
 }

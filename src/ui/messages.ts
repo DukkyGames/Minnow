@@ -18,6 +18,7 @@ import { isActiveChatStreaming, isStreamDomVisible } from '../chat/streaming-sta
 import { setAssistantBubbleContent } from '../markdown/renderer';
 import { getActiveBoardGroup } from '../state/chat-groups';
 import {
+  clearActiveGoal,
   getActiveChat,
   touchChat,
   scheduleSaveSessions,
@@ -59,6 +60,7 @@ import { renderToolCall, renderToolResult } from './tool-messages';
 import { attachShellKillUi } from './shell-run-ui';
 import { markMessageStopped } from './stopped-affordance';
 import { markMessageSteered } from './steer-affordance';
+import { restoreGoalAchievedAffordance } from './goal-affordance';
 import {
   clearSubAgentCardDomRegistry,
   renderPersistedSubAgentCardsForChat,
@@ -220,6 +222,9 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
       }, { renderFromHistory: true });
       if (userMsg.steer) {
         markMessageSteered(wrap);
+      }
+      if (userMsg.goalAchieved) {
+        restoreGoalAchievedAffordance(wrap, userMsg);
       }
       attachMessageActions(wrap, {
         chatId: chat.id,
@@ -651,6 +656,7 @@ export function clearChat(): void {
   }
   if (!confirm('Clear all messages in this chat? The chat stays in your sidebar.')) return;
   const chat = getActiveChat();
+  clearActiveGoal(chat);
   chat.history = [];
   resetTokenLedger(chat);
   resetCodeChangeTotals(chat);

@@ -12,6 +12,7 @@ import { isChatAppForeground } from './chat-mount';
 import { setStatus } from './status';
 import { refreshActiveBoardIfMounted } from './orchestrate-board';
 import { syncBackgroundStreamHint } from './composer-stream-hint';
+import { syncGoalActiveHint } from './goal-active-hint';
 
 export type ComposerStreamingMode = 'idle' | 'streaming';
 
@@ -150,6 +151,7 @@ export function syncComposerFromStreamingState(): void {
   syncDesktopComposerFishSwim();
   syncBackgroundStreamHint();
   syncSteerQueuedHint();
+  syncGoalActiveHint();
   refreshActiveBoardIfMounted();
 }
 

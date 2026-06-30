@@ -3,6 +3,7 @@
  */
 
 import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
+import { findChatById, isGoalLoopActive } from '../state/sessions';
 import { getToolSecurityMetaCached, loadToolSecurityMeta } from '../config/tool-security-meta';
 import {
   loadToolConfig,
@@ -82,6 +83,15 @@ export async function maybeBlockToolForUserApproval(
   const needsPermissionAck = perm === 'ask';
   if (!needsPathAck && !needsPermissionAck) {
     return null;
+  }
+
+  // Auto-approve while a /goal loop is active on this chat (hands-free until goal clears).
+  if (needsPermissionAck && context.chatId) {
+    const chat = findChatById(context.chatId);
+    if (chat && isGoalLoopActive(chat)) {
+      applyDestructiveConfirmationAfterUserApproval(permissionToolId, args);
+      return null;
+    }
   }
 
   // Server rejects out-of-workspace paths unless full filesystem access is on — do not modal.

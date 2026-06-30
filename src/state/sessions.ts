@@ -32,6 +32,7 @@ import { isChatAppForeground } from '../ui/chat-mount';
 import { setStatus } from '../ui/status';
 import { ensureTokenLedger } from '../usage/token-ledger';
 import { getWorkspacePath } from './workspace';
+import { MAX_GOAL_CONDITION_CHARS } from '../chat/goal/parse-command';
 import { ensurePinnedSkill } from '../skills/pinned-skill';
 import { resolveActiveWorkAgent } from '../agents/resolve-work-agent';
 import { cleanupChatArchiveOnDelete } from '../chat/archive/cleanup';
@@ -84,6 +85,7 @@ import type {
   BoardTask,
   BoardTaskStatus,
   BoardWave,
+  ActiveGoalState,
   Chat,
   ChatGroup,
   ExpertSelection,
@@ -98,6 +100,7 @@ import type {
   TurnRunRecord,
   TurnRunStatus,
   TurnSnapshot,
+  UserMessage,
 } from '../types';
 
 const TURN_RUN_STATUSES = new Set<TurnRunStatus>([
@@ -332,7 +335,13 @@ function ensureMessageEntry(m: Partial<Message> | null | undefined): Message | n
 
   if (m.role === 'user') {
     const content = m.content != null ? String(m.content) : '';
-    return { role: 'user', content };
+    const user = m as Partial<UserMessage>;
+    return {
+      role: 'user',
+      content,
+      ...(user.steer === true ? { steer: true } : {}),
+      ...(user.goalAchieved === true ? { goalAchieved: true } : {}),
+    };
   }
 
   if (m.role !== 'assistant') return null;
@@ -1040,6 +1049,33 @@ function ensurePersistedSubAgentRuns(
   return out.length ? out : undefined;
 }
 
+function ensureActiveGoal(raw: unknown): ActiveGoalState | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const goal = raw as Record<string, unknown>;
+  const conditionText =
+    typeof goal.conditionText === 'string' ? goal.conditionText.trim() : '';
+  if (!conditionText) return undefined;
+  return {
+    conditionText: conditionText.slice(0, MAX_GOAL_CONDITION_CHARS),
+    startedAt:
+      typeof goal.startedAt === 'number' && Number.isFinite(goal.startedAt)
+        ? goal.startedAt
+        : Date.now(),
+    turnCount:
+      typeof goal.turnCount === 'number' && Number.isFinite(goal.turnCount)
+        ? Math.max(0, Math.floor(goal.turnCount))
+        : 0,
+    tokenBaseline:
+      typeof goal.tokenBaseline === 'number' && Number.isFinite(goal.tokenBaseline)
+        ? Math.max(0, Math.floor(goal.tokenBaseline))
+        : 0,
+    ...(typeof goal.lastReason === 'string' && goal.lastReason.trim()
+      ? { lastReason: goal.lastReason.trim() }
+      : {}),
+    ...(goal.achieved === true ? { achieved: true } : {}),
+  };
+}
+
 export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
   if (!raw || typeof raw !== 'object') return createEmptyChatObject('');
   const history = Array.isArray(raw.history)
@@ -1060,6 +1096,7 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
     viewMode = 'chat';
   }
   const pinnedSkill = ensurePinnedSkill(raw.pinnedSkill);
+  const activeGoal = ensureActiveGoal(raw.activeGoal);
   const chat: Chat = {
     id: typeof raw.id === 'string' && raw.id ? raw.id : newChatId(),
     name:
@@ -1144,6 +1181,7 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
       ? { expertId: raw.expertId.trim() }
       : {}),
     ...(pinnedSkill ? { pinnedSkill } : {}),
+    ...(activeGoal ? { activeGoal } : {}),
   };
   ensureTokenLedger(chat);
   return chat;
@@ -1468,6 +1506,40 @@ export function getActiveChat(): Chat {
 
 export function touchChat(chat: Chat): void {
   chat.updatedAt = Date.now();
+}
+
+/** Store a new /goal completion condition on the chat. */
+export function setActiveGoal(chat: Chat, conditionText: string): void {
+  const trimmed = conditionText.trim().slice(0, MAX_GOAL_CONDITION_CHARS);
+  if (!trimmed) return;
+  ensureTokenLedger(chat);
+  chat.activeGoal = {
+    conditionText: trimmed,
+    startedAt: Date.now(),
+    turnCount: 0,
+    tokenBaseline: chat.tokenLedger?.totals.totalTokens ?? 0,
+  };
+  touchChat(chat);
+  scheduleSaveSessions();
+}
+
+/** Remove goal state from the chat (/goal clear, /clear, etc.). */
+export function clearActiveGoal(chat: Chat): void {
+  if (!chat.activeGoal) return;
+  chat.activeGoal = undefined;
+  touchChat(chat);
+  scheduleSaveSessions();
+}
+
+/** Read persisted goal state (may be achieved but still visible until cleared). */
+export function getActiveGoal(chat: Chat): ActiveGoalState | undefined {
+  return chat.activeGoal;
+}
+
+/** True while the evaluator loop should auto-continue and auto-approve tools. */
+export function isGoalLoopActive(chat: Chat): boolean {
+  const goal = chat.activeGoal;
+  return Boolean(goal && !goal.achieved);
 }
 
 /** Bump sidebar sort time when user or assistant history is committed. */

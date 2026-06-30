@@ -67,6 +67,23 @@ export interface UserMessage {
   content: string;
   /** True when the row was injected via steer consume (interrupt-and-steer). */
   steer?: boolean;
+  /** True when the row records a satisfied /goal completion condition. */
+  goalAchieved?: boolean;
+}
+
+/** Persistent /goal loop state on a chat (Claude Code–style completion condition). */
+export interface ActiveGoalState {
+  /** Completion condition text (max 4000 chars). */
+  conditionText: string;
+  startedAt: number;
+  /** Evaluator passes after each goal-driven turn (display only). */
+  turnCount: number;
+  /** Ledger total at goal start — for "tokens since goal" display. */
+  tokenBaseline: number;
+  /** Evaluator rationale from the most recent pass. */
+  lastReason?: string;
+  /** Set when the evaluator confirms the condition; cleared via /goal clear. */
+  achieved?: boolean;
 }
 
 /** Assistant history entry; may include per-bubble metric chips when restored. */
@@ -733,6 +750,8 @@ export interface Chat {
   currentGenerationId?: string;
   /** Queued steering correction for the in-flight turn (last write wins; cleared on consume or stop). */
   pendingSteerMessage?: string;
+  /** Active /goal completion loop; persists across reload until cleared. */
+  activeGoal?: ActiveGoalState;
   /** Queued mode switch from set_chat_mode during streaming (last write wins; flushed on stream end). */
   pendingModeId?: ModeId;
   /** Sidebar: green dot on inactive rows until the user opens this chat again. */

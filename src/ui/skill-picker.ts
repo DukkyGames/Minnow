@@ -1,13 +1,12 @@
 /**
- * Slash-command skill picker anchored above the active composer textarea.
- * Uses fixed positioning on document.body so overflow:hidden ancestors (hub, workspace split) do not clip it.
+ * Slash-command picker anchored above the active composer textarea.
+ * Lists SKILL.md skills and built-in slash commands (e.g. /goal).
  */
 
 import { streaming } from '../app-state';
 import { UI_DESIGNER_COMPOSER_HINT } from '../agents/ui-designer/runner';
+import { listSlashPickerRows, type SlashPickerRow } from '../chat/slash-commands/picker-catalog';
 import { impeccableComposerHint } from '../skills/impeccable-client';
-import { getSkillCatalog } from '../skills/client';
-import type { SkillListItem } from '../skills/types';
 
 let pickerEl: HTMLDivElement | null = null;
 let listEl: HTMLUListElement | null = null;
@@ -96,28 +95,24 @@ function bindActiveInput(el: HTMLTextAreaElement): void {
   inputEl = el;
 }
 
-function filteredSkills(): SkillListItem[] {
-  const catalog = [...getSkillCatalog()];
-  const q = filterQuery.toLowerCase();
-  if (!q) return catalog;
-  return catalog.filter(
-    (s) =>
-      s.id.toLowerCase().includes(q) ||
-      s.label.toLowerCase().includes(q) ||
-      s.description.toLowerCase().includes(q),
-  );
+function filteredPickerRows(): SlashPickerRow[] {
+  return listSlashPickerRows(filterQuery);
+}
+
+function pickerRowId(row: SlashPickerRow): string {
+  return row.kind === 'skill' ? row.skill.id : row.command.id;
 }
 
 function renderList(): void {
   if (!listEl || !pickerEl) return;
 
-  const items = filteredSkills();
+  const items = filteredPickerRows();
   listEl.innerHTML = '';
 
   if (items.length === 0) {
     const empty = document.createElement('li');
     empty.className = 'skill-picker__empty';
-    empty.textContent = 'No matching skills';
+    empty.textContent = 'No matching skills or commands';
     listEl.appendChild(empty);
     activeIndex = 0;
     if (open) positionPicker();
@@ -127,11 +122,12 @@ function renderList(): void {
   if (activeIndex >= items.length) activeIndex = items.length - 1;
   if (activeIndex < 0) activeIndex = 0;
 
-  items.forEach((skill, i) => {
+  items.forEach((row, i) => {
     const li = document.createElement('li');
     li.className = 'skill-picker__item';
     li.setAttribute('role', 'option');
-    li.id = `skill-opt-${skill.id}`;
+    const rowId = pickerRowId(row);
+    li.id = `skill-opt-${rowId}`;
     li.setAttribute('aria-selected', i === activeIndex ? 'true' : 'false');
     if (i === activeIndex) {
       li.classList.add('skill-picker__item--active');
@@ -139,20 +135,26 @@ function renderList(): void {
     }
 
     const badge = document.createElement('span');
-    badge.className = `skill-picker__badge skill-picker__badge--${skill.source}`;
-    badge.textContent = skill.source === 'user' ? 'Custom' : 'Built-In';
+    if (row.kind === 'command') {
+      badge.className = 'skill-picker__badge skill-picker__badge--command';
+      badge.textContent = 'Command';
+    } else {
+      badge.className = `skill-picker__badge skill-picker__badge--${row.skill.source}`;
+      badge.textContent = row.skill.source === 'user' ? 'Custom' : 'Built-In';
+    }
 
     const label = document.createElement('span');
     label.className = 'skill-picker__label';
-    label.textContent = skill.label;
+    label.textContent = row.kind === 'skill' ? row.skill.label : row.command.label;
 
     const id = document.createElement('code');
     id.className = 'skill-picker__id';
-    id.textContent = `/${skill.id}`;
+    id.textContent =
+      row.kind === 'skill' ? `/${row.skill.id}` : row.command.insertion.trim();
 
     const desc = document.createElement('span');
     desc.className = 'skill-picker__desc';
-    desc.textContent = skill.description;
+    desc.textContent = row.kind === 'skill' ? row.skill.description : row.command.description;
 
     li.appendChild(badge);
     li.appendChild(label);
@@ -161,7 +163,7 @@ function renderList(): void {
 
     li.addEventListener('mousedown', (e) => {
       e.preventDefault();
-      applySkill(skill.id);
+      applyPickerRow(row);
     });
 
     listEl.appendChild(li);
@@ -198,8 +200,8 @@ function openPickerAt(start: number, query: string): void {
   attachRepositionListeners();
 }
 
-/** Insert /skill-id and trailing space; close picker. */
-function applySkill(skillId: string): void {
+/** Insert a picker row into the composer and close the popover. */
+function applyPickerRow(row: SlashPickerRow): void {
   if (!inputEl || slashStart < 0) {
     closePicker();
     return;
@@ -207,17 +209,25 @@ function applySkill(skillId: string): void {
 
   const before = inputEl.value.slice(0, slashStart);
   const after = inputEl.value.slice(inputEl.selectionEnd);
-  const hint =
-    skillId === 'ui-designer'
-      ? `plan — ${UI_DESIGNER_COMPOSER_HINT} `
-      : skillId === 'impeccable'
-        ? `${impeccableComposerHint()} `
-        : '';
-  const insertion = `/${skillId} ${hint}`;
+
+  let insertion: string;
+  if (row.kind === 'command') {
+    insertion = row.command.insertion;
+  } else {
+    const skillId = row.skill.id;
+    const hint =
+      skillId === 'ui-designer'
+        ? `plan — ${UI_DESIGNER_COMPOSER_HINT} `
+        : skillId === 'impeccable'
+          ? `${impeccableComposerHint()} `
+          : '';
+    insertion = `/${skillId} ${hint}`;
+    pickerApplied.set(inputEl, skillId);
+  }
+
   inputEl.value = `${before}${insertion}${after.trimStart()}`;
   const caret = before.length + insertion.length;
   inputEl.setSelectionRange(caret, caret);
-  pickerApplied.set(inputEl, skillId);
   applyingSkill = true;
   inputEl.dispatchEvent(new Event('input', { bubbles: true }));
   applyingSkill = false;
@@ -260,7 +270,7 @@ export function getPickerAppliedSkillId(el: HTMLTextAreaElement): string | null 
 export function handleSkillPickerKeydown(e: KeyboardEvent): boolean {
   if (!open) return false;
 
-  const items = filteredSkills();
+  const items = filteredPickerRows();
   if (e.key === 'Escape') {
     e.preventDefault();
     closePicker();
@@ -281,7 +291,7 @@ export function handleSkillPickerKeydown(e: KeyboardEvent): boolean {
   if (e.key === 'Enter' || e.key === 'Tab') {
     if (items.length > 0) {
       e.preventDefault();
-      applySkill(items[activeIndex].id);
+      applyPickerRow(items[activeIndex]);
       return true;
     }
   }

@@ -47,5 +47,16 @@ export function computeEffectiveTitleBinding(
   return { providerId, modelId, usesChatDefault };
 }
 
+/** Pure goal evaluator model resolution (matches goal/evaluate.ts). */
+export function computeEffectiveGoalEvalBinding(
+  goalEval: { providerId: string; modelId: string },
+  chat: ChatBindingContext,
+): { providerId: string; modelId: string; usesChatDefault: boolean } {
+  const modelId = goalEval.modelId.trim() || chat.modelId.trim();
+  const providerId = goalEval.providerId.trim() || chat.providerId?.trim() || '';
+  const usesChatDefault = !goalEval.modelId.trim();
+  return { providerId, modelId, usesChatDefault };
+}
+
 export { resolveSubAgentModelBinding, resolveUiDesignerModel };
 export type { Chat };
