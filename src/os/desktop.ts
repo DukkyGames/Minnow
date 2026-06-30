@@ -144,6 +144,13 @@ export function renderDesktop(root: HTMLElement): () => void {
   railPanel.appendChild(railMain);
   rail.append(railTab, railPanel);
 
+  const railBackdrop = document.createElement('button');
+  railBackdrop.type = 'button';
+  railBackdrop.className = 'mn-os-chat-rail-backdrop';
+  railBackdrop.setAttribute('aria-label', 'Close chat sessions');
+  railBackdrop.setAttribute('aria-hidden', 'true');
+  railBackdrop.tabIndex = -1;
+
   const transcript = document.createElement('div');
   transcript.className = 'mn-os-chat-transcript';
   transcript.setAttribute('role', 'log');
@@ -213,7 +220,7 @@ export function renderDesktop(root: HTMLElement): () => void {
 
   desktopChat.append(transcript);
   stage.append(hero, desktopChat, desktopResearch, desktopExperts);
-  root.append(rail);
+  root.append(rail, railBackdrop);
   root.appendChild(stage);
 
   const composerDock = document.createElement('div');

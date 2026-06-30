@@ -20,14 +20,27 @@ import {
 import { appendChatRow } from './sidebar';
 import { syncChatItemDotsInDom } from './chat-item-dot';
 
-let railExpanded = false;
+const MOBILE_DESKTOP_MQ = '(max-width: 640px)';
 
-function getRailRoot(): HTMLElement | null {
-  return document.querySelector('.mn-os-chat-rail');
+let railExpanded = false;
+let mobileMq: MediaQueryList | null = null;
+let mobileMqListener: ((event: MediaQueryListEvent) => void) | null = null;
+
+function isMobileDesktopLayout(): boolean {
+  return window.matchMedia(MOBILE_DESKTOP_MQ).matches;
 }
 
-function getRailList(): HTMLElement | null {
-  return document.getElementById('desktopChatSessionList');
+function getRailBackdrop(): HTMLButtonElement | null {
+  return document.querySelector<HTMLButtonElement>('.mn-os-chat-rail-backdrop');
+}
+
+function syncRailBackdrop(): void {
+  const backdrop = getRailBackdrop();
+  if (!backdrop) return;
+  const show = isMobileDesktopLayout() && railExpanded;
+  backdrop.classList.toggle('is-open', show);
+  backdrop.setAttribute('aria-hidden', show ? 'false' : 'true');
+  backdrop.tabIndex = show ? 0 : -1;
 }
 
 function syncRailClasses(): void {
@@ -41,6 +54,8 @@ function syncRailClasses(): void {
     tab.setAttribute('aria-expanded', railExpanded ? 'true' : 'false');
     tab.setAttribute('aria-label', railExpanded ? 'Hide chat sessions' : 'Show chat sessions');
   }
+
+  syncRailBackdrop();
 }
 
 /** Expand the session rail (left-edge tab). */
@@ -56,6 +71,20 @@ export function collapseDesktopChatRail(): void {
   if (!railExpanded) return;
   railExpanded = false;
   syncRailClasses();
+}
+
+function maybeCollapseRailOnMobile(): void {
+  if (isMobileDesktopLayout()) {
+    collapseDesktopChatRail();
+  }
+}
+
+function getRailRoot(): HTMLElement | null {
+  return document.querySelector('.mn-os-chat-rail');
+}
+
+function getRailList(): HTMLElement | null {
+  return document.getElementById('desktopChatSessionList');
 }
 
 /** Toggle expanded vs collapsed rail. */
@@ -178,10 +207,12 @@ export function renderDesktopChatRail(chatsWorkspacePath?: string | null): void 
           const { isDesktopChatActive, activateDesktopChat } = await import('../os/desktop-state');
           if (!isDesktopChatActive()) {
             await activateDesktopChat({ chatId: item.id });
+            maybeCollapseRailOnMobile();
             return;
           }
           const desktopChat = await import('../os/desktop-chat');
           desktopChat.activateDesktopChatSession(item.id);
+          maybeCollapseRailOnMobile();
         })();
       },
     });
@@ -202,6 +233,24 @@ export function wireDesktopChatRail(): void {
   if (collapse && collapse.dataset.bound !== '1') {
     collapse.dataset.bound = '1';
     collapse.addEventListener('click', () => collapseDesktopChatRail());
+  }
+
+  const backdrop = getRailBackdrop();
+  if (backdrop && backdrop.dataset.bound !== '1') {
+    backdrop.dataset.bound = '1';
+    backdrop.addEventListener('click', () => collapseDesktopChatRail());
+  }
+
+  if (!mobileMq && typeof window.matchMedia === 'function') {
+    mobileMq = window.matchMedia(MOBILE_DESKTOP_MQ);
+    mobileMqListener = () => {
+      if (!isMobileDesktopLayout()) {
+        syncRailBackdrop();
+        return;
+      }
+      if (railExpanded) syncRailBackdrop();
+    };
+    mobileMq.addEventListener('change', mobileMqListener);
   }
 
   const newChat = document.getElementById('btnDesktopChatNew');
@@ -226,4 +275,9 @@ export function resetDesktopChatRailForTests(): void {
   railExpanded = false;
   mountExpertScopeInRail(false);
   syncRailClasses();
+  if (mobileMq && mobileMqListener) {
+    mobileMq.removeEventListener('change', mobileMqListener);
+    mobileMq = null;
+    mobileMqListener = null;
+  }
 }
