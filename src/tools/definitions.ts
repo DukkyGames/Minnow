@@ -462,13 +462,26 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'insert_at_line',
-      'Insert lines at a given line number in a file (1-based).',
+      'Insert lines in a file (1-based). Prefer after_text or before_text anchors over line_number — line numbers from an earlier read go stale after edits in the same turn.',
       {
         path: { type: 'string', description: 'Relative file path' },
-        line_number: { type: 'integer', description: 'Line index to insert before (1-based)' },
+        line_number: {
+          type: 'integer',
+          description: 'Line index to insert before (1-based). Fallback when no anchor is given.',
+        },
+        after_text: {
+          type: 'string',
+          description:
+            'Insert after the line containing this exact text (resolved at execution time). Prefer over line_number.',
+        },
+        before_text: {
+          type: 'string',
+          description:
+            'Insert before the line containing this exact text (resolved at execution time). Prefer over line_number.',
+        },
         content: { type: 'string', description: 'Text to insert (may include newlines)' },
       },
-      ['path', 'line_number', 'content'],
+      ['path', 'content'],
     ),
   },
   {
@@ -479,7 +492,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'replace_text_in_file',
-      'Replace all occurrences of search text with replacement text in a file.',
+      'Replace all occurrences of search text with replacement text in a file. Matching tolerates line-ending differences (CRLF vs LF) and trailing-whitespace drift on each line.',
       {
         path: { type: 'string', description: 'Relative file path' },
         search: { type: 'string', description: 'Text to find' },
@@ -549,9 +562,9 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         },
         output_mode: {
           type: 'string',
-          enum: ['content', 'count', 'files_with_matches'],
+          enum: ['content', 'count', 'files_with_matches', 'grouped'],
           description:
-            'Output format: content (path:line:snippet), count (path:match_count), or files_with_matches (paths only). Default content.',
+            'Output format: content (path:line:snippet), grouped (per-file blocks with indented lines), count (path:match_count), or files_with_matches (paths only). Default content.',
         },
       },
       ['pattern'],

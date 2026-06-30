@@ -26,7 +26,7 @@ export const GREP_MAX_LINE_CHARS = 400;
 /** Skip files larger than this when ripgrep scans (bytes). */
 const GREP_MAX_FILE_BYTES = '2M';
 
-const VALID_OUTPUT_MODES = new Set(['content', 'count', 'files_with_matches']);
+const VALID_OUTPUT_MODES = new Set(['content', 'count', 'files_with_matches', 'grouped']);
 
 /**
  * Clamp a numeric tool argument into [min, max].
@@ -150,6 +150,51 @@ export function truncateRipgrepOutput(stdout, maxMatchLines) {
 }
 
 /**
+ * Reformat path:line:snippet rows into per-file blocks for easier scanning.
+ * @param {string} cappedText Output from capGrepOutput (may include truncation footer).
+ */
+export function formatGroupedGrepOutput(cappedText) {
+  const rawLines = cappedText.split('\n');
+  const truncationFooter = rawLines.find((line) => line.startsWith('(truncated'));
+  const lines = rawLines.filter((line) => line && !line.startsWith('(truncated'));
+
+  /** @type {Map<string, Array<{ lineNum: string; snippet: string }>>} */
+  const groups = new Map();
+  let currentFile = '';
+
+  for (const line of lines) {
+    const withPath = line.match(/^(.+?):(\d+):(.*)$/);
+    if (withPath) {
+      const [, filePath, lineNum, snippet] = withPath;
+      if (!groups.has(filePath)) groups.set(filePath, []);
+      groups.get(filePath).push({ lineNum, snippet });
+      currentFile = filePath;
+      continue;
+    }
+    const lineOnly = line.match(/^(\d+):(.*)$/);
+    if (lineOnly && currentFile) {
+      const [, lineNum, snippet] = lineOnly;
+      groups.get(currentFile).push({ lineNum, snippet });
+    }
+  }
+
+  const blocks = [];
+  for (const [filePath, matches] of groups) {
+    blocks.push(filePath);
+    for (const { lineNum, snippet } of matches) {
+      blocks.push(`  ${lineNum}: ${snippet}`);
+    }
+    blocks.push('');
+  }
+
+  let text = blocks.join('\n').replace(/\n+$/, '');
+  if (truncationFooter) {
+    text = `${text}\n${truncationFooter}`;
+  }
+  return text;
+}
+
+/**
  * Build ripgrep CLI args for the requested output mode.
  * @param {{
  *   outputMode: string,
@@ -249,11 +294,12 @@ export async function runGrepSearch(args, deps) {
   const searchTarget = resolved;
   const rgPattern = literal ? escapeRegexLiteral(pattern) : pattern;
 
+  const ripgrepMode = outputMode === 'grouped' ? 'content' : outputMode;
   const rgArgs = buildRipgrepArgs({
-    outputMode,
+    outputMode: ripgrepMode,
     literal,
     caseInsensitive,
-    context: outputMode === 'content' ? context : 0,
+    context: ripgrepMode === 'content' ? context : 0,
     glob,
     maxCount: headLimit + offset,
   });
@@ -286,12 +332,16 @@ export async function runGrepSearch(args, deps) {
     return `No matches for "${pattern}" under ${displayRoot}`;
   }
 
-  const { text } = capGrepOutput(trimmed, {
+  let { text } = capGrepOutput(trimmed, {
     offset,
     headLimit,
     maxLineChars: GREP_MAX_LINE_CHARS,
     maxOutputChars: GREP_MAX_OUTPUT_CHARS,
   });
+
+  if (outputMode === 'grouped') {
+    text = formatGroupedGrepOutput(text);
+  }
 
   return text;
 }
