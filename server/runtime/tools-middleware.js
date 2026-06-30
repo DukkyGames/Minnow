@@ -23,6 +23,13 @@ import {
 } from '../tools/plan-write-guard.js';
 import { assessHostKillCommand } from '../tools/host-kill-guard.js';
 import { assessHostPortBindCommand } from '../tools/host-port-bind-guard.js';
+import { assessUnixPipeOnWindows } from '../tools/windows-pipe-guard.js';
+import {
+  detectDominantEol,
+  flexibleReplaceAll,
+  matchModeLabel,
+  resolveInsertLineFromAnchor,
+} from '../tools/flexible-match.js';
 import { toolManageCalendar } from '../calendar/tool-handler.js';
 import {
   toolDraftReply,
@@ -349,24 +356,58 @@ async function toolAppendFile(args) {
 
 async function toolInsertAtLine(args) {
   const filePath = resolveSafePath(args?.path, { write: true });
-  const lineNumber = Number(args?.line_number);
-  if (!Number.isInteger(lineNumber) || lineNumber < 1) {
-    return 'Error: line_number must be a positive integer (1-based)';
-  }
   if (args?.content === undefined) {
     return 'Error: content is required';
   }
+
+  const afterText =
+    args?.after_text !== undefined && args?.after_text !== null
+      ? String(args.after_text)
+      : undefined;
+  const beforeText =
+    args?.before_text !== undefined && args?.before_text !== null
+      ? String(args.before_text)
+      : undefined;
+  const hasLineNumber = args?.line_number !== undefined && args?.line_number !== null;
+  const lineNumber = hasLineNumber ? Number(args.line_number) : undefined;
+
+  if (!afterText && !beforeText && !hasLineNumber) {
+    return 'Error: provide line_number, after_text, or before_text';
+  }
+  if (hasLineNumber && (!Number.isInteger(lineNumber) || lineNumber < 1)) {
+    return 'Error: line_number must be a positive integer (1-based)';
+  }
+
   const rel = toRelativePath(filePath);
-  const content = String(args.content);
+  let content = String(args.content);
+  content = content.replace(/\r?\n$/, '');
   const insertStats = countAppendLineStats(content);
   const { lines: diffLines, truncated } = buildAddOnlyDiffLines(content);
   const existing = await fs.readFile(filePath, 'utf8');
+  const eol = detectDominantEol(existing);
   const lines = existing.split(/\r?\n/);
   const insertLines = content.split(/\r?\n/);
-  const index = Math.min(lineNumber - 1, lines.length);
+
+  let index;
+  let locationLabel;
+  if (afterText !== undefined) {
+    const resolved = resolveInsertLineFromAnchor(existing, afterText, 'after');
+    if ('error' in resolved) return `Error: ${resolved.error}`;
+    index = resolved.lineIndex;
+    locationLabel = `after "${afterText}"`;
+  } else if (beforeText !== undefined) {
+    const resolved = resolveInsertLineFromAnchor(existing, beforeText, 'before');
+    if ('error' in resolved) return `Error: ${resolved.error}`;
+    index = resolved.lineIndex;
+    locationLabel = `before "${beforeText}"`;
+  } else {
+    index = Math.min(lineNumber - 1, lines.length);
+    locationLabel = `line ${lineNumber}`;
+  }
+
   lines.splice(index, 0, ...insertLines);
-  await fs.writeFile(filePath, lines.join('\n'), 'utf8');
-  const message = `Inserted ${insertLines.length} line(s) at line ${lineNumber} in ${rel}`;
+  await fs.writeFile(filePath, lines.join(eol), 'utf8');
+  const message = `Inserted ${insertLines.length} line(s) at ${locationLabel} in ${rel}`;
   return withCodeChange(
     message,
     buildCodeChangePayload({
@@ -388,14 +429,17 @@ async function toolReplaceTextInFile(args) {
   }
   const rel = toRelativePath(filePath);
   const content = await fs.readFile(filePath, 'utf8');
-  const parts = content.split(String(search));
-  const count = parts.length - 1;
-  if (count === 0) {
-    return `No occurrences of search text in ${rel}`;
+  const result = flexibleReplaceAll(content, String(search), String(replace));
+  if (result.count === 0) {
+    const hint = result.hint ?? 'No occurrences of search text';
+    return `${hint} in ${rel}`;
   }
-  const after = parts.join(String(replace));
+  const after = result.output;
   await fs.writeFile(filePath, after, 'utf8');
-  const message = `Replaced ${count} occurrence(s) in ${rel}`;
+  const modeSuffix = matchModeLabel(result.mode);
+  const message = modeSuffix
+    ? `Replaced ${result.count} occurrence(s) in ${rel} (${modeSuffix})`
+    : `Replaced ${result.count} occurrence(s) in ${rel}`;
   return withCodeChange(message, codeChangeFromDiff(content, after, rel));
 }
 
@@ -727,6 +771,8 @@ async function toolExecuteCommand(args) {
     if (hostKill) return hostKill;
     const portBind = assessHostPortBindCommand(args.command);
     if (portBind) return portBind;
+    const unixPipe = assessUnixPipeOnWindows(args.command);
+    if (unixPipe) return unixPipe;
   }
 
   if (args?.background === true) {

@@ -11,6 +11,7 @@ import {
   GREP_MAX_LINE_CHARS,
   GREP_MAX_OUTPUT_CHARS,
   capGrepOutput,
+  formatGroupedGrepOutput,
   isRipgrepMatchLine,
   runGrepSearch,
   truncateRipgrepOutput,
@@ -96,6 +97,18 @@ describe('grep helpers', () => {
     assert.equal(lineCount, 1);
     assert.match(text, /1:alpha/);
     assert.doesNotMatch(text, /2-beta/);
+  });
+
+  it('formatGroupedGrepOutput groups path:line rows per file', () => {
+    const sample = [
+      'src/foo.ts:42: const x = 1',
+      'src/foo.ts:47: const y = 2',
+      'src/bar.ts:10: export default',
+    ].join('\n');
+    const grouped = formatGroupedGrepOutput(sample);
+    assert.match(grouped, /^src\/foo\.ts\n {2}42:/m);
+    assert.match(grouped, / {2}47:/);
+    assert.match(grouped, /^src\/bar\.ts\n {2}10:/m);
   });
 });
 
@@ -193,6 +206,17 @@ describe('runGrepSearch fixture workspace', () => {
     });
     assert.match(out, /:\d+$/m);
     assert.doesNotMatch(out, /export const/);
+  });
+
+  it('supports output_mode grouped', async () => {
+    const out = await grepInFixture({
+      pattern: 'grep-fixture',
+      path: 'src',
+      output_mode: 'grouped',
+    });
+    assert.match(out, /visible\.ts/m);
+    assert.match(out, / {2}\d+: /);
+    assert.doesNotMatch(out, /:\d+:.*:\d+:/);
   });
 
   it('supports offset pagination', async () => {

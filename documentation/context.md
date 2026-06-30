@@ -1577,7 +1577,9 @@ Requires the **Minnow desktop shell** (Electron `WebContentsView` preview panel)
 
 `list_directory`, `read_file`, `read_file_range`, `save_file`, `append_file`, `insert_at_line`, `replace_text_in_file`, `search_in_file`, `grep`, `make_directory`, `move_file`, `copy_file`, `delete_path`, `find_files`, `get_file_metadata`
 
-**`grep`** ([`server/tools/grep.js`](../server/tools/grep.js), MIN-196): ripgrep-backed workspace search with output caps — default **50** lines (`head_limit`, max **200**), **32 000** total chars, **400** chars/line; `output_mode` `content` | `count` | `files_with_matches`; `offset` pagination; passes `--max-count` to ripgrep.
+**`grep`** ([`server/tools/grep.js`](../server/tools/grep.js), MIN-196): ripgrep-backed workspace search with output caps — default **50** lines (`head_limit`, max **200**), **32 000** total chars, **400** chars/line; `output_mode` `content` | `grouped` | `count` | `files_with_matches`; `offset` pagination; passes `--max-count` to ripgrep.
+
+**Forgiving file edits** ([`server/tools/flexible-match.js`](../server/tools/flexible-match.js)): `replace_text_in_file` tries exact → EOL-normalized → whitespace-tolerant line-window matching (reports mode in the success message). `insert_at_line` accepts optional `after_text` / `before_text` anchors (resolved at execution time), strips a trailing newline from `content`, and preserves the file's dominant EOL. **Windows shell guard** ([`server/tools/windows-pipe-guard.js`](../server/tools/windows-pipe-guard.js)): blocks `execute_command` pipes to Unix-only binaries (`tail`, `head`, …) under cmd.exe.
 
 ### Git (6 server)
 
