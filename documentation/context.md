@@ -1729,7 +1729,7 @@ Claude Code–style **single-chat** finish line: `/goal <condition>` stores a co
 | `/goal` | Status (condition, elapsed, turns evaluated, token spend, last reason) |
 | `/goal clear` (+ `stop`/`off`/`reset`/`none`/`cancel`) | Clear goal state |
 
-While the loop is active (`activeGoal` and not `achieved`), **tool approvals auto-allow** (`permission-gate.ts`). Bounding is **condition-only** (e.g. “stop after 20 turns” in the condition text); `turnCount` and token baseline are display-only. Achieved goals keep status until `/goal clear` or **`clearChat`**.
+While the loop is active (`activeGoal` and not `achieved`), **tool approvals auto-allow** (`permission-gate.ts`). Bounding is **condition-only** (e.g. “stop after 20 turns” in the condition text); `turnCount` and token baseline are display-only. Achieved goals keep status until `/goal clear` or **`clearChat`**. **`Chat.activeGoal`** is persisted on the chat blob in `sessions/state.json` (client `ensureChatShape` + server `validateSessionState`); composer hint syncs on boot and chat switch via `syncGoalActiveHint`.
 
 | Concern | Location |
 |---------|----------|
@@ -1739,7 +1739,7 @@ While the loop is active (`activeGoal` and not `achieved`), **tool approvals aut
 | Composer hint | [`src/ui/goal-active-hint.ts`](../src/ui/goal-active-hint.ts) — `◎ goal active · N turns` |
 | Model routing | Settings → Models → **Goal evaluator** (`config.goalEval`) |
 
-**Tests:** `test/chat/goal-parse-response.test.mts`, `test/chat/goal-parse-command.test.mts`, `test/chat/goal-command.test.mts`, `test/chat/goal-evaluate.test.mts`, `test/chat/goal-completion-text.test.mts`.
+**Tests:** `test/chat/goal-parse-response.test.mts`, `test/chat/goal-parse-command.test.mts`, `test/chat/goal-command.test.mts`, `test/chat/goal-evaluate.test.mts`, `test/chat/goal-completion-text.test.mts`, `test/server/validate-sessions-v2.test.mjs` (activeGoal round-trip).
 
 ## Message actions (Epic C2 — features 15–17)
 
