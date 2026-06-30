@@ -167,7 +167,24 @@ See [`src/config/voice-meta.ts`](../../src/config/voice-meta.ts) and [`src/voice
 |----------|-------|
 | Tool policy | Default allow/deny (prompts in Prompts hub) |
 | Plan granularity | `large` / `medium` / `small` — `config.planning.granularity` |
+| Super Plan pipeline | Settings → Modes → Super Plan — `config.planning.superPlan` |
 | Reef widget LLM | Provider/model for active chat |
+
+#### Super Plan (`config.planning.superPlan`)
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Review rounds | `2` | Draft/review cycles before Impeccable |
+| Grill question budget | `20` | Target clarifying questions in grill stage |
+| Impeccable | `auto` | `auto` (when UI detected) / `always` / `never` |
+| Research scope | `both` | `web` / `codebase` / `both` for Deep Research stage |
+| Research rounds | `0` (auto) | Explicit cap; `0` uses depth preset or engine auto |
+| Research depth | `auto` | When rounds auto: `quick` (2) / `standard` (3) / `deep` (5) / engine default (8) |
+| Research model | chat default | Optional provider/model override for research stage |
+| Reviewer model | sub-agent default | Optional override for `plan-reviewer` sub-agent |
+| Planner model | chat default | Optional override for draft/finalize chat turns |
+
+Persistence: `config.json` → `planning.superPlan`; client mirror in `localStorage` key `minnow.superPlanMeta`. Loader: [`src/config/super-plan-meta.ts`](../../src/config/super-plan-meta.ts).
 
 ### Experts (6 built-in)
 
@@ -402,6 +419,7 @@ Not all exposed in Settings UI:
 | `titles` | Chat title generation model/settings |
 | `goalEval` | /goal loop evaluator model/settings |
 | `activePromptProfile`, `activePromptConfigId`, `activeSetupProfileId` | Prompt state |
+| `planning.granularity`, `planning.superPlan` | Plan / Super Plan mode settings |
 | `workspaceProfiles`, `workspaceProfileAutoApply` | Per-workspace setup profiles |
 
 ---

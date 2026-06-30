@@ -244,6 +244,7 @@ async function runReviewStage(
 
   const task = buildPlanReviewerTask({
     pass,
+    reviewRounds: config.reviewRounds,
     draftPlan: draftPlan || `(Plan not found at ${planPath} — read the file first.)`,
     spec,
     research,

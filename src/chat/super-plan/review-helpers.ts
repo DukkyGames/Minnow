@@ -18,6 +18,8 @@ export interface SuperPlanReviewContext {
 
 export interface PlanReviewerTaskInput extends SuperPlanReviewContext {
   pass: SuperPlanReviewPass;
+  /** Total review passes configured (defaults to SUPER_PLAN_REVIEW_PASSES.length). */
+  reviewRounds?: number;
   /** Structured summary or JSON from pass 1 — required for pass 2 when available. */
   priorCritique?: string;
 }
@@ -74,8 +76,9 @@ function section(title: string, body: string | undefined): string {
  * Pass 2 includes pass-1 critique so the reviewer can verify fixes and hunt for misses.
  */
 export function buildPlanReviewerTask(input: PlanReviewerTaskInput): string {
+  const totalPasses = input.reviewRounds ?? SUPER_PLAN_REVIEW_PASSES.length;
   const lines: string[] = [
-    `# Plan review — pass ${input.pass} of ${SUPER_PLAN_REVIEW_PASSES.length}`,
+    `# Plan review — pass ${input.pass} of ${totalPasses}`,
     '',
   ];
 

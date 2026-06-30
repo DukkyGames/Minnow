@@ -216,6 +216,14 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
 
   // —— Agents ——
   field('agents.modes', 'Composer modes', 'agents', 'modes'),
+  field('agents.modes.superPlan', 'Super Plan pipeline', 'agents', 'modes', {
+    keywords: ['super plan', 'grill', 'review rounds', 'impeccable', 'research scope'],
+    description:
+      'Review rounds, grill budget, research scope/rounds/depth, Impeccable toggle, per-stage models.',
+  }),
+  field('agents.modes.planGranularity', 'Plan granularity', 'agents', 'modes', {
+    keywords: ['large', 'medium', 'small', 'planner tasks'],
+  }),
   field('agents.experts', 'Experts', 'agents', 'experts', {
     keywords: ['persona', 'specialist'],
   }),
