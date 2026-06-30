@@ -85,10 +85,13 @@ async function resolveResearchBinding(): Promise<{ providerId: string; model: st
 }
 
 function readDefaultStartOptions(): Omit<ResearchStartRequest, 'query' | 'continueFrom'> {
+  const scope = (
+    (document.getElementById('desktopResearchScope') as HTMLSelectElement | null)?.value ?? 'web'
+  ) as ResearchScope;
   return {
     maxRounds: 0,
     category: '',
-    scope: 'web' satisfies ResearchScope,
+    scope,
   };
 }
 

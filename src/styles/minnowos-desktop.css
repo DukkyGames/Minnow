@@ -954,6 +954,8 @@
 .mn-os-composer-research-actions {
   display: none;
   justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
   pointer-events: auto;
 }
 
@@ -1362,6 +1364,28 @@
 .mn-os-research-toolbar-btn:hover {
   color: var(--os-text);
   background: var(--os-surface-3);
+}
+
+.mn-os-research-toolbar-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mn-os-research-toolbar-scope__label {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--os-text-dim);
+}
+
+.mn-os-research-toolbar-select {
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--os-border-strong);
+  background: color-mix(in srgb, var(--os-surface-2) 88%, transparent);
+  color: var(--os-text);
+  font-size: 12px;
 }
 
 .mn-os-research-card {
