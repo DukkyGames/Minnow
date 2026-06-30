@@ -216,6 +216,13 @@ function applyPreviewViewBounds(
   }
   entry.view.setBounds(rounded);
 }
+/** Hide and zero bounds so a stale guest cannot block renderer input after reload. */
+function hidePreviewHostEntry(entry: PreviewHostEntry): void {
+  entry.visible = false;
+  entry.view.setVisible(false);
+  entry.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+}
+
 function getOrCreateHost(win: BrowserWindow): PreviewHostEntry {
   const existing = hostsByWindowId.get(win.id);
   if (existing) return existing;
@@ -242,6 +249,11 @@ function getOrCreateHost(win: BrowserWindow): PreviewHostEntry {
 
   const entry: PreviewHostEntry = { view, visible: false };
   hostsByWindowId.set(win.id, entry);
+
+  // Renderer reload resets JS state while the native guest may still be visible.
+  win.webContents.on('did-finish-load', () => {
+    hidePreviewHostEntry(entry);
+  });
 
   win.once('closed', () => {
     destroyHostForWindow(win);
@@ -279,9 +291,7 @@ export function registerPreviewHostIpc(): void {
   ipcMain.handle(channels.PREVIEW_HIDE, (event) => {
     const entry = getHostFromInvoke(event);
     if (!entry) return;
-    entry.visible = false;
-    entry.view.setVisible(false);
-    entry.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+    hidePreviewHostEntry(entry);
   });
 
   ipcMain.handle(channels.PREVIEW_CLEAR, async (event) => {
