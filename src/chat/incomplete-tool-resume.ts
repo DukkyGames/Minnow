@@ -7,7 +7,6 @@ import { findIncompleteToolBatchAtTail } from './incomplete-tool-batch';
 import { isChatStreaming, isStreamDomVisible } from './streaming-state';
 import { createSubAgentRunId } from '../agents/sub-agent-run-id';
 import { normalizeModeId } from './modes/types';
-import { maybePromoteToolResultToArtifact } from './reef/artifact-promotion';
 import { getActiveChat, recordChatMessage, scheduleSaveSessions, sessionState } from '../state/sessions';
 import {
   boardWorktreesRootsFromState,
@@ -143,23 +142,7 @@ export async function resumeIncompleteToolBatch(
         ...(boardWorktreeRoots.length ? { extraPathRoots: boardWorktreeRoots } : {}),
       });
 
-      let toolContent = toolOut.content;
-      try {
-        const promoted = await maybePromoteToolResultToArtifact({
-          chatId: chat.id,
-          chat,
-          toolName: tc.function.name,
-          args,
-          content: toolContent,
-          toolCallId: tc.id,
-          modeId: toolLoopModeId,
-        });
-        if (promoted) {
-          toolContent = `${toolContent}${promoted.footer}`;
-        }
-      } catch {
-        /* Promotion is best-effort. */
-      }
+      const toolContent = toolOut.content;
 
       renderToolResult(
         toolWrap,

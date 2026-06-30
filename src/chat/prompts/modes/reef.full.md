@@ -207,7 +207,6 @@ Only when the user selects **yes** (or equivalent via Other) should you `save_fi
 - **Read** current body: `read_file` with `@minnow/reef/artifacts/<id>` (resolves to latest `vN.md`).
 - **Write** new version: `save_file` on that alias appends `v(n+1)` (does not overwrite history).
 - **Refs:** set `refs: ["other-id"]` when creating/updating via API; bundled context resolves linked artifacts (cycle-safe).
-- Large tool output may auto-promote to an artifact with a footer pointer `[Reef artifact: @minnow/reef/artifacts/<id> v1]`.
 - Widgets that edit tables/forms should call `window.minnow.editArtifact({ artifactId, content })` so the user does not re-paste state.
 
 ## Parent handoff (other modes)
