@@ -9,7 +9,7 @@
   "heartbeatDeadMs": 30000,
   "maxToolTurns": 100,
   "defaultMaxInputTokens": null,
-  "defaultContextEnforcementPolicy": "slide",
+  "defaultContextEnforcementPolicy": "summarize",
   "defaultSummarySchema": "minnow.sub-agent.v1",
   "types": {
     "generalPurpose": {

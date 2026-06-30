@@ -27,7 +27,7 @@ export function workAgentsFromPackManifest(manifest, packRoot) {
     const key = String(entry.key);
     const id = `${packId}.${key}`;
     const strategy = entry.contextStrategy ?? null;
-    let contextEnforcementPolicy = 'slide';
+    let contextEnforcementPolicy = 'summarize';
     let maxInputTokens = null;
     if (strategy && typeof strategy === 'object') {
       const policy = strategy.policy;

@@ -82,6 +82,17 @@
   display: none;
 }
 
+.composer-goal-active-hint {
+  font-size: 0.72rem;
+  color: var(--mn-accent);
+  margin: 0 0 6px;
+  padding: 0 2px;
+}
+
+.composer-goal-active-hint.hidden {
+  display: none;
+}
+
 .composer-background-stream-hint__link {
   border: none;
   background: none;

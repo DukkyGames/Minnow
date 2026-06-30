@@ -124,7 +124,7 @@ function parseWorkAgentMeta(raw, relativePath) {
     policy === 'truncate' ||
     policy === 'archive'
       ? policy
-      : 'slide';
+      : 'summarize';
 
   const archive = normalizeArchiveConfig(ext.archive);
 

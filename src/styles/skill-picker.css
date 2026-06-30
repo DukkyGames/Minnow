@@ -99,6 +99,12 @@
   color: var(--mn-fg);
 }
 
+.skill-picker__badge--command {
+  background: color-mix(in srgb, var(--mn-accent) 12%, var(--mn-bg));
+  border-color: color-mix(in srgb, var(--mn-accent) 45%, var(--mn-border-strong));
+  color: var(--mn-accent);
+}
+
 .skill-picker__label {
   font-weight: 600;
   font-size: 0.875rem;

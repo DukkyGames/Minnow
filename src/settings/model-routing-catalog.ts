@@ -6,6 +6,7 @@
  * - Sub-agent types: sub-agents.json → resolveSubAgentModelBinding
  * - UI Designer: config.json uiDesigner → resolveUiDesignerModel
  * - Chat titles: config.json titles → resolveTitleGenerationOptions (schedule.ts)
+ * - Goal evaluator: config.json goalEval → evaluateGoal (goal/evaluate.ts)
  * - Reef widget LLM: per-chat reefWidget* → run-widget-completion
  */
 
@@ -14,12 +15,14 @@ import { loadSubAgentConfig } from '../agents/sub-agent-config';
 import { loadUiDesignerConfig } from '../agents/ui-designer/config';
 import type { WorkAgentDefinition } from '../agents/work-agent-types';
 import {
+  computeEffectiveGoalEvalBinding,
   computeEffectiveTitleBinding,
   computeEffectiveWorkAgentBinding,
   resolveSubAgentModelBinding,
   resolveUiDesignerModel,
 } from './model-routing-effective';
 import { loadTitlesConfig } from '../config/titles-meta';
+import { loadGoalEvalConfig } from '../config/goal-eval-meta';
 import { loadSamplerMeta } from '../config/sampler-meta';
 import { detectConfigServer, isConfigServerMode } from '../config/storage-mode';
 import WORK_AGENT_THINKING_DEFAULTS from '../agents/defaults/work-agent-thinking.json';
@@ -44,6 +47,7 @@ export type ModelRoutingPersistKind =
   | 'sub-agent'
   | 'ui-designer'
   | 'titles'
+  | 'goal-eval'
   | 'reef-chat';
 
 /**
@@ -136,11 +140,12 @@ export async function loadModelRoutingCatalog(
     return { rows: [], offline: true, activeChat, activeChatName };
   }
 
-  const [workAgentsRes, subAgentConfig, titlesConfig, uiDesignerConfig, samplerMeta] =
+  const [workAgentsRes, subAgentConfig, titlesConfig, goalEvalConfig, uiDesignerConfig, samplerMeta] =
     await Promise.all([
       fetchWorkAgentsList(),
       loadSubAgentConfig(),
       loadTitlesConfig(),
+      loadGoalEvalConfig(),
       loadUiDesignerConfig(),
       loadSamplerMeta(),
     ]);
@@ -231,6 +236,21 @@ export async function loadModelRoutingCatalog(
     effectiveProviderId: titleEffective.providerId,
     effectiveModelId: titleEffective.modelId,
     titlesEnabled: titlesConfig.enabled,
+  });
+
+  const goalEvalEffective = computeEffectiveGoalEvalBinding(goalEvalConfig, chatCtx);
+  rows.push({
+    id: 'goal-eval',
+    group: 'background',
+    label: 'Goal evaluator',
+    description: '/goal loop judge — reads transcript only (no tools).',
+    providerId: goalEvalConfig.providerId,
+    modelId: goalEvalConfig.modelId,
+    usesChatDefault: goalEvalEffective.usesChatDefault,
+    persistKind: 'goal-eval',
+    advancedSettingsHash: '#/settings/model-routing',
+    effectiveProviderId: goalEvalEffective.providerId,
+    effectiveModelId: goalEvalEffective.modelId,
   });
 
   const reefProvider = activeChat.reefWidgetProviderId ?? '';

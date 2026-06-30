@@ -16,7 +16,7 @@ import type { ArchiveConfig } from './archive/types';
 export type ContextEnforcementPolicy = 'summarize' | 'slide' | 'truncate' | 'archive';
 
 /** Shipped default when a row omits policy. */
-export const DEFAULT_CONTEXT_ENFORCEMENT_POLICY: ContextEnforcementPolicy = 'slide';
+export const DEFAULT_CONTEXT_ENFORCEMENT_POLICY: ContextEnforcementPolicy = 'summarize';
 
 const SAFETY_MARGIN = 0.9;
 const TRUNCATION_MARKER = '[… truncated for context budget]';

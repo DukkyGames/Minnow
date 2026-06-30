@@ -86,7 +86,7 @@ async function applyArchiveEmbeddingsGate(sel: HTMLSelectElement): Promise<void>
     ? 'Offload stale turns to Brain wiki pages'
     : 'Requires Brain embeddings (local or provider). Configure in Brain settings.';
   if (!ok && sel.value === 'archive') {
-    sel.value = 'slide';
+    sel.value = 'summarize';
   }
 }
 

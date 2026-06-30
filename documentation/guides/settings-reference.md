@@ -119,6 +119,7 @@ Per routing row: **provider**, **model**, **sampler override**, **thinking mode*
 | Sub-agent types (see below) | `sub-agents.json` |
 | UI Designer (skill/runtime) | `config.uiDesigner` |
 | Chat title jobs | `config.titles` |
+| Goal evaluator | `config.goalEval` |
 | Reef widget LLM | Per active chat session |
 
 **Global fallback** (`config.fallbackChains`):
@@ -399,6 +400,7 @@ Not all exposed in Settings UI:
 | `filePanel` | Sidebar, viewer, split ratio, tabs, preview |
 | `terminal` | Open, height, auto-open on agent run |
 | `titles` | Chat title generation model/settings |
+| `goalEval` | /goal loop evaluator model/settings |
 | `activePromptProfile`, `activePromptConfigId`, `activeSetupProfileId` | Prompt state |
 | `workspaceProfiles`, `workspaceProfileAutoApply` | Per-workspace setup profiles |
 

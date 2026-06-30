@@ -130,6 +130,40 @@ describe('validateSessionState workspace schema', () => {
     assert.equal(board.tasks[0].devPort, 5200);
   });
 
+  it('preserves activeGoal on chats across validateSessionState round-trip', () => {
+    const out = validateSessionState({
+      version: 5,
+      activeId: 'chat-1',
+      sidebarCollapsed: false,
+      chats: [
+        {
+          id: 'chat-1',
+          name: 'Goal chat',
+          workspacePath: '',
+          modelId: 'test-model',
+          history: [],
+          updatedAt: 1,
+          activeGoal: {
+            conditionText: 'All tests pass',
+            startedAt: 1000,
+            turnCount: 3,
+            tokenBaseline: 500,
+            lastReason: 'Still failing lint',
+            achieved: false,
+          },
+        },
+      ],
+    });
+
+    assert.deepEqual(out.chats[0].activeGoal, {
+      conditionText: 'All tests pass',
+      startedAt: 1000,
+      turnCount: 3,
+      tokenBaseline: 500,
+      lastReason: 'Still failing lint',
+    });
+  });
+
   it('rejects unknown session versions', () => {
     assert.throws(
       () =>
