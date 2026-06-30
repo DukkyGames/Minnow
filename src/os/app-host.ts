@@ -17,6 +17,7 @@ import { shouldSuppressDesktopChrome } from './shell-chrome';
 import { windowManager } from './window-manager';
 import { syncSchedulerSidePanel } from './scheduler-side-panel';
 import { WINDOW_MOUNTED_APPS, runWindowTeardown } from './window-mounted-apps';
+import { mountOsMobileDrawerBackdrops } from '../ui/mobile-drawer-portal';
 
 const APP_LAYER_IDS: Record<AppId, string> = {
   code: 'osAppLayer-code',
@@ -64,6 +65,8 @@ function mountAppLayers(): void {
     if (welcome) codeWrap.appendChild(welcome);
     appsLayer.appendChild(codeWrap);
   }
+
+  mountOsMobileDrawerBackdrops();
 
   for (const [appId, elId] of Object.entries(APP_LAYER_IDS)) {
     if (appId === 'code') continue;

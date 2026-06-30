@@ -31,6 +31,21 @@
   display: none;
 }
 
+.input-bar--orchestrate-plan .input-inset-actions {
+  display: none;
+}
+
+.input-bar--orchestrate-plan .input-wrap--inset-actions {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.input-bar--orchestrate-plan .input-wrap--inset-actions:focus-within {
+  border: none;
+  box-shadow: none;
+}
+
 .input-bar--orchestrate-plan .input-wrap .orchestrate-plan-control {
   display: flex;
   align-items: center;

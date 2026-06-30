@@ -59,12 +59,14 @@ html.minnow-os-enabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   padding: 0 14px;
   background: color-mix(in srgb, var(--os-surface-1) 86%, transparent);
   backdrop-filter: blur(18px);
   border-bottom: 1px solid var(--os-border);
   position: relative;
   z-index: 40;
+  overflow: hidden;
 }
 
 .mn-os-mb-left,
@@ -72,6 +74,18 @@ html.minnow-os-enabled {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+}
+
+.mn-os-mb-left {
+  flex: 0 1 auto;
+  overflow: hidden;
+}
+
+.mn-os-mb-right {
+  flex: 1 1 0;
+  justify-content: flex-end;
+  overflow: hidden;
 }
 
 .mn-os-mb-workspace-slot {
@@ -127,6 +141,7 @@ html.minnow-os-enabled {
 }
 
 .mn-os-mb-logo {
+  flex-shrink: 0;
   width: 30px;
   height: 30px;
   border-radius: 8px;
@@ -154,6 +169,7 @@ html.minnow-os-enabled {
   display: flex;
   align-items: center;
   gap: 7px;
+  flex-shrink: 0;
   background: var(--os-surface-2);
   color: var(--os-text);
   border: 1px solid var(--os-border-strong);
@@ -194,6 +210,7 @@ html.minnow-os-enabled {
   display: flex;
   align-items: center;
   gap: 7px;
+  flex-shrink: 0;
   font-size: 13px;
   color: var(--os-text-dim);
 }
@@ -212,6 +229,8 @@ html.minnow-os-enabled {
   display: flex;
   align-items: center;
   gap: 7px;
+  flex-shrink: 1;
+  min-width: 0;
   max-width: min(22rem, 42vw);
   background: var(--os-surface-2);
   border: 1px solid var(--os-border);
@@ -372,6 +391,7 @@ html.minnow-os-enabled {
 .mn-os-mb-icon,
 .mn-os-mb-bell {
   position: relative;
+  flex-shrink: 0;
   width: 32px;
   height: 32px;
   display: grid;
@@ -773,6 +793,74 @@ html.minnow-os-enabled header.topbar.hidden {
   display: none;
 }
 
+/* Mobile Code drawers — html class toggled from mobile-drawer-portal.ts (no reparenting). */
+@media (max-width: 640px) {
+  html.minnow-os-enabled.mn-os-mobile-chat-drawer .mn-os-stage,
+  html.minnow-os-enabled.mn-os-mobile-chat-drawer .mn-os-apps-layer,
+  html.minnow-os-enabled.mn-os-mobile-file-drawer .mn-os-stage,
+  html.minnow-os-enabled.mn-os-mobile-file-drawer .mn-os-apps-layer {
+    overflow: visible;
+  }
+
+  html.minnow-os-enabled.mn-os-mobile-chat-drawer .mn-os-code-layer.is-active,
+  html.minnow-os-enabled.mn-os-mobile-file-drawer .mn-os-code-layer.is-active,
+  html.minnow-os-enabled.mn-os-mobile-chat-drawer .app-body,
+  html.minnow-os-enabled.mn-os-mobile-file-drawer .app-body {
+    overflow: visible;
+  }
+
+  /* Drop app-layer transform so fixed drawers use the viewport, not a nested box. */
+  html.minnow-os-enabled.mn-os-mobile-chat-drawer .mn-os-code-layer.is-active,
+  html.minnow-os-enabled.mn-os-mobile-file-drawer .mn-os-code-layer.is-active {
+    transform: none;
+    filter: none;
+    animation: none;
+  }
+
+  html.minnow-os-enabled.mn-os-mobile-chat-drawer #chatSidebar.mobile-open {
+    position: fixed;
+    top: calc(var(--os-menubar-h, 46px) + env(safe-area-inset-top, 0px));
+    left: 0;
+    bottom: env(safe-area-inset-bottom, 0px);
+    width: min(280px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 24px));
+    max-width: 100%;
+    height: auto;
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    transform: translateX(0);
+    box-shadow: var(--shadow-sidebar);
+    z-index: 50;
+    pointer-events: auto;
+  }
+
+  html.minnow-os-enabled.mn-os-mobile-chat-drawer #sidebarBackdrop.open {
+    z-index: 49;
+    top: calc(var(--os-menubar-h, 46px) + env(safe-area-inset-top, 0px));
+  }
+
+  html.minnow-os-enabled.mn-os-mobile-file-drawer #fileSidebar.mobile-open {
+    position: fixed;
+    top: calc(var(--os-menubar-h, 46px) + env(safe-area-inset-top, 0px));
+    right: 0;
+    left: auto;
+    bottom: env(safe-area-inset-bottom, 0px);
+    width: min(280px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 24px));
+    max-width: 100%;
+    height: auto;
+    padding-right: env(safe-area-inset-right, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    transform: translateX(0);
+    box-shadow: var(--shadow-sidebar-left);
+    z-index: 50;
+    pointer-events: auto;
+  }
+
+  html.minnow-os-enabled.mn-os-mobile-file-drawer #fileSidebarBackdrop.open {
+    z-index: 49;
+    top: calc(var(--os-menubar-h, 46px) + env(safe-area-inset-top, 0px));
+  }
+}
+
 @media (max-width: 640px) {
   .mn-os-mb-chat-toggle:not([hidden]) {
     display: grid;
@@ -782,27 +870,62 @@ html.minnow-os-enabled header.topbar.hidden {
   .mn-os-menubar {
     padding-inline: max(10px, env(safe-area-inset-left, 0px))
       max(10px, env(safe-area-inset-right, 0px));
-    gap: 6px;
+    gap: 4px;
   }
 
   .mn-os-mb-left,
   .mn-os-mb-right {
-    gap: 6px;
-    min-width: 0;
+    gap: 4px;
   }
 
   .mn-os-mb-brand {
     display: none;
   }
 
+  /* App view: keep logo + nav affordances; drop desktop status chrome */
+  .mn-os-menubar[data-view='app'] .mn-os-mb-status,
+  .mn-os-menubar[data-view='app'] .mn-os-mb-status-sep {
+    display: none !important;
+  }
+
+  /* Icon-only desktop + app labels — text nodes collapse via font-size: 0 */
+  .mn-os-mb-desktop {
+    flex-shrink: 0;
+    padding: 6px;
+    gap: 0;
+    font-size: 0;
+    line-height: 0;
+  }
+
+  .mn-os-mb-appname {
+    flex-shrink: 0;
+    gap: 0;
+    font-size: 0;
+    line-height: 0;
+  }
+
+  .mn-os-mb-app-sep {
+    display: none !important;
+  }
+
   .mn-os-mb-chip {
-    max-width: min(9.5rem, 34vw);
+    max-width: min(7.5rem, 30vw);
     padding-inline: 8px;
     font-size: 12px;
   }
 
+  /* Workspace path lives in the folder popover on narrow screens */
+  .mn-os-mb-right .mn-os-mb-workspace-slot .workspace-path-label {
+    display: none;
+  }
+
   .mn-os-mb-right .mn-os-mb-workspace-slot .workspace-control {
-    max-width: min(8rem, 26vw);
+    flex-shrink: 0;
+    max-width: none;
+  }
+
+  .mn-os-mb-workspace-slot {
+    flex-shrink: 0;
   }
 
   .mn-os-mb-status #osStatusText {
@@ -820,14 +943,20 @@ html.minnow-os-enabled header.topbar.hidden {
     height: var(--touch-min);
   }
 
-  .mn-os-mb-desktop {
-    padding: 6px 9px;
-    font-size: 12px;
-  }
-
   .mn-os-model-menu,
   .mn-os-notif-menu {
     max-width: calc(100vw - max(12px, env(safe-area-inset-left, 0px)) - max(12px, env(safe-area-inset-right, 0px)));
+  }
+}
+
+/* Ultra-narrow phones: drop scheduler to keep model chip + inbox reachable */
+@media (max-width: 400px) {
+  .mn-os-mb-scheduler {
+    display: none;
+  }
+
+  .mn-os-mb-chip {
+    max-width: min(6.5rem, 26vw);
   }
 }
 

@@ -648,6 +648,9 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
   background: var(--mn-accent-soft);
   color: var(--mn-accent-ink);
   white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .git-graph__time {

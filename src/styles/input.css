@@ -34,38 +34,95 @@
   min-width: 0;
 }
 
-/* Paperclip — opens hidden #fileInput */
-.attach-btn {
+/* Attach + mic live inside the message field on the right */
+.input-wrap--inset-actions {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-bg);
+  transition:
+    border-color 0.2s var(--ease-out),
+    box-shadow 0.2s var(--ease-out);
+}
+
+.input-wrap--inset-actions:focus-within {
+  border-color: var(--mn-accent);
+  box-shadow: 0 0 0 3px var(--mn-accent-soft);
+}
+
+.input-wrap--inset-actions #msgInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding-right: calc(14px + 2 * var(--input-inset-btn-size, 32px) + 6px);
+  border: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+.input-wrap--inset-actions #msgInput:focus,
+.input-wrap--inset-actions #msgInput:focus-visible {
+  border: none;
+  box-shadow: none;
+}
+
+.input-inset-actions {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.input-inset-actions > * {
+  pointer-events: auto;
+}
+
+.input-inset-btn {
+  --input-inset-btn-size: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: var(--input-inset-btn-size);
+  height: var(--input-inset-btn-size);
+  padding: 0;
   flex-shrink: 0;
-  background: var(--mn-bg);
-  border: 1px solid var(--mn-border);
-  border-radius: var(--radius-md);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--mn-fg-muted);
   cursor: pointer;
-  transition: border-color 0.2s var(--ease-out), color 0.2s var(--ease-out), background 0.2s var(--ease-out);
+  transition:
+    color 0.12s var(--ease-out),
+    background 0.12s var(--ease-out);
 }
 
-.attach-btn .icon-svg {
-  width: 20px;
-  height: 20px;
-}
-
-.attach-btn:active {
-  background: var(--mn-surface-1);
+.input-inset-btn .icon-svg {
+  width: 18px;
+  height: 18px;
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .attach-btn:hover {
-    border-color: var(--mn-border-strong);
+  .input-inset-btn:hover {
     color: var(--mn-fg);
+    background: var(--mn-surface-2);
   }
 }
 
+.input-inset-btn:active {
+  background: var(--mn-surface-elevated);
+}
+
+.input-inset-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Legacy attach class — inset buttons use .input-inset-btn; keep selector for drag targets */
 .attach-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -195,11 +252,13 @@
 /* File-tree drag target highlight */
 .input-bar.composer-drop-active,
 .input-bar-composer.composer-drop-active,
+.input-wrap--inset-actions.composer-drop-active,
 #msgInput.composer-drop-active {
   outline: 2px dashed var(--mn-accent);
   outline-offset: 2px;
 }
 
+.input-bar.composer-drop-active .input-wrap--inset-actions,
 .input-bar.composer-drop-active #msgInput {
   border-color: var(--mn-accent);
   box-shadow: 0 0 0 3px var(--mn-accent-soft);
