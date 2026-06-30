@@ -5,6 +5,7 @@
 import '../styles/code-brain-map.css';
 
 import { sessionState } from '../state/sessions';
+import { stripMainColumnOverlayClasses } from './main-column-overlay';
 
 const CODE_SECTION_ID = 'brainSection-code';
 const CODE_MAP_MOUNT_ID = 'codeBrainMapMount';
@@ -89,8 +90,7 @@ export function teardownCodeBrainMapBeforeChatPaint(): boolean {
   restoreCodeSectionIfMounted();
 
   document.getElementById('codeBrainMapRoot')?.remove();
-  document.getElementById('chatArea')?.classList.remove(CHAT_AREA_CODE_MAP_CLASS);
-  document.getElementById('mainColumn')?.classList.remove(MAIN_COLUMN_CODE_MAP_CLASS);
+  stripMainColumnOverlayClasses();
   returnChatId = null;
   syncFooterButton();
   return hadOverlay;
@@ -146,6 +146,10 @@ async function closeCompetingMainColumnViews(): Promise<void> {
   if (orchestrate.isOrchestrateHubMounted()) {
     orchestrate.closeOrchestrateHub();
   }
+  const overview = await import('./code-overview');
+  if (overview.isCodeOverviewOpen()) {
+    overview.closeCodeOverview({ skipNavigate: true, restoreChat: false });
+  }
 }
 
 /** Open the Brain code section inside the Code app main column. */
@@ -167,6 +171,7 @@ export async function openCodeBrainMap(): Promise<void> {
 
   area.replaceChildren();
   area.appendChild(buildOverlayDom());
+  stripMainColumnOverlayClasses();
   area.classList.add(CHAT_AREA_CODE_MAP_CLASS);
   document.getElementById('mainColumn')?.classList.add(MAIN_COLUMN_CODE_MAP_CLASS);
 

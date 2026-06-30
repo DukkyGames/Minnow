@@ -13,6 +13,7 @@ import { getActiveChat } from '../state/sessions';
 import { legacyOutcomeFromSummary } from '../agents/sub-agent-structured-outcome';
 import type { Chat, PersistedSubAgentRun } from '../types';
 import { getActiveChatMountElement } from './chat-mount';
+import { isMainColumnOverlaySuppressingChatDom } from './main-column-overlay';
 import { scrollBottom } from './input';
 import { initSubAgentDrawerLiveUpdates, openSubAgentDrawer } from './sub-agent-drawer';
 
@@ -117,6 +118,7 @@ export function upsertSubAgentCardForRun(
   ) {
     return null;
   }
+  if (isMainColumnOverlaySuppressingChatDom()) return null;
 
   const area = getActiveChatMountElement();
 
