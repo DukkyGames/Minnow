@@ -1,8 +1,18 @@
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 
-const { setComposerStreamingMode } = await import('../../src/ui/composer-send.ts');
+const appState = await import('../../src/app-state.ts');
+const { setSessionStateForTests, createEmptyChatObject } = await import(
+  '../../src/state/sessions.ts'
+);
+const { setDesktopStateForTests } = await import('../../src/os/desktop-state.ts');
+const {
+  setComposerStreamingMode,
+  shouldAllowComposerPrimaryAction,
+} = await import('../../src/ui/composer-send.ts');
+
+const FIXED_CHAT_ID = '11111111-1111-1111-1111-111111111111';
 
 function setupSendButton() {
   const window = new Window();
@@ -26,7 +36,63 @@ function setupSendButton() {
   return btn;
 }
 
+function setupDesktopSendButton() {
+  const window = new Window();
+  globalThis.document = window.document;
+  globalThis.HTMLElement = window.HTMLElement;
+
+  const btn = document.createElement('button');
+  btn.id = 'desktopSendBtn';
+  btn.type = 'button';
+  document.body.appendChild(btn);
+
+  const input = document.createElement('textarea');
+  input.id = 'desktopInput';
+  document.body.appendChild(input);
+
+  setDesktopStateForTests('chatActive');
+  return { btn, input };
+}
+
+describe('shouldAllowComposerPrimaryAction', () => {
+  afterEach(() => {
+    appState.setStreaming(false);
+    setSessionStateForTests(null);
+  });
+
+  test('empty input is blocked while idle', () => {
+    setSessionStateForTests({
+      version: 3,
+      activeId: FIXED_CHAT_ID,
+      sidebarCollapsed: false,
+      chats: [createEmptyChatObject(FIXED_CHAT_ID)],
+    });
+    assert.equal(shouldAllowComposerPrimaryAction(''), false);
+    assert.equal(shouldAllowComposerPrimaryAction('   '), false);
+  });
+
+  test('empty input is allowed while streaming (stop)', () => {
+    const chat = createEmptyChatObject(FIXED_CHAT_ID);
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+    appState.setStreaming(true, chat.id);
+    assert.equal(shouldAllowComposerPrimaryAction(''), true);
+  });
+});
+
 describe('setComposerStreamingMode', () => {
+  afterEach(() => {
+    appState.setStreaming(false);
+    setSessionStateForTests(null);
+    if (globalThis.document) {
+      setDesktopStateForTests('idle');
+    }
+  });
+
   test('streaming mode shows stop affordance and keeps button enabled', () => {
     const btn = setupSendButton();
     setComposerStreamingMode('streaming');
@@ -51,5 +117,24 @@ describe('setComposerStreamingMode', () => {
     assert.ok(!btn.classList.contains('send-btn--stop'));
     assert.ok(!document.getElementById('sendIcon').classList.contains('hidden'));
     assert.ok(document.getElementById('sendStopIcon').classList.contains('hidden'));
+  });
+
+  test('desktop idle mode disables send when composer is empty', () => {
+    const chat = createEmptyChatObject(FIXED_CHAT_ID);
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+    const { btn } = setupDesktopSendButton();
+    appState.setStreaming(true, chat.id);
+    setComposerStreamingMode('streaming');
+    assert.equal(btn.disabled, false);
+    assert.equal(btn.dataset.mode, 'stop');
+
+    appState.setStreaming(false);
+    setComposerStreamingMode('idle');
+    assert.equal(btn.disabled, true);
   });
 });

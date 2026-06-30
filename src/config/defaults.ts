@@ -3,6 +3,7 @@
  */
 
 import { SYSTEM_PROMPT_PRESETS } from '../constants';
+import { randomUUID } from '../lib/random-id.ts';
 import { BUILT_IN_TOOLS } from '../tools/definitions';
 import {
   createEmptyToolPermissionsConfig,
@@ -103,10 +104,7 @@ export function defaultSystemPromptSettings(): SystemPromptSettings {
 
 /** One empty chat session blob. */
 export function defaultSessionState(): SessionState {
-  const chatId =
-    typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : '00000000-0000-0000-0000-000000000001';
+  const chatId = randomUUID();
 
   return {
     version: 5,

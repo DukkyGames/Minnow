@@ -4,6 +4,7 @@ import { isPlaceholderChatName } from '../chat/titles/placeholder';
 import { setSaveTimer, saveTimer } from '../app-state';
 import { getSessions, putSessions } from '../config/api-client';
 import { defaultSessionState } from '../config/defaults';
+import { randomUUID } from '../lib/random-id.ts';
 import { isServerStorageMode } from '../config/storage-mode';
 import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
 import { normalizeThinkingTriState } from '../agents/thinking-types';
@@ -262,8 +263,7 @@ function requireSessionState(): SessionState {
 }
 
 export function newChatId(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-  return `c_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+  return randomUUID();
 }
 
 export function createEmptyChatObject(modelId: string, workspacePath?: string): Chat {

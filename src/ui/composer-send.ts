@@ -35,6 +35,11 @@ export function isComposerRecoveryBlocked(): boolean {
   return recoveryBlocked;
 }
 
+/** True when Send/Enter should run (send, steer, or stop) on the active composer. */
+export function shouldAllowComposerPrimaryAction(inputText: string): boolean {
+  return Boolean(inputText.trim()) || isActiveChatStreaming();
+}
+
 function composerInputHasText(): boolean {
   return Boolean(getActiveComposerSurface().inputEl?.value.trim());
 }
@@ -67,7 +72,7 @@ export function setComposerStreamingMode(mode: ComposerStreamingMode): void {
   if (!sendBtn) return;
 
   const isStreaming = mode === 'streaming';
-  const chatApp = isChatAppForeground();
+  const chatApp = isChatAppForeground() && !isDesktopChatActive();
 
   if (chatApp) {
     syncChatAppStopButton(isStreaming);
@@ -105,7 +110,9 @@ export function setComposerStreamingMode(mode: ComposerStreamingMode): void {
     input.disabled = recoveryBlocked;
   }
   if (sendBtn && !isStreaming) {
-    sendBtn.disabled = recoveryBlocked;
+    const emptyDesktop =
+      isDesktopChatActive() && !composerInputHasText();
+    sendBtn.disabled = recoveryBlocked || emptyDesktop;
   }
 
   syncDesktopComposerFishSwim();

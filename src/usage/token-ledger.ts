@@ -2,6 +2,7 @@
  * Per-chat token ledger: append entries, roll up totals, cap history length.
  */
 
+import { randomUUID } from '../lib/random-id.ts';
 import type { Chat } from '../types';
 import type { Stats, Usage } from '../types';
 import {
@@ -147,7 +148,7 @@ export function recordTokenUsage(chat: Chat, input: RecordTokenUsageInput): Toke
   const ledger = ensureTokenLedger(chat);
   const key = sourceKey(input.source);
   const entry: TokenLedgerEntry = {
-    id: input.id ?? crypto.randomUUID(),
+    id: input.id ?? randomUUID(),
     at: input.at ?? Date.now(),
     source: input.source,
     providerId: input.providerId,

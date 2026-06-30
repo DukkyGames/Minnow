@@ -2,6 +2,7 @@
  * Turn-run CRUD and branch helpers (pure, no DOM).
  */
 
+import { randomUUID } from '../lib/random-id.ts';
 import type {
   Chat,
   ChatStopReason,
@@ -20,17 +21,11 @@ function ensureRunsArray(chat: Chat): TurnRunRecord[] {
 }
 
 function newRunId(): TurnRunId {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return `run_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+  return randomUUID();
 }
 
 function newBranchId(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return `branch_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+  return randomUUID();
 }
 
 /** Runs at a fork index, newest first. */
