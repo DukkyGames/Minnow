@@ -64,7 +64,7 @@ function reasoningBlocked(
   if (allowed && allowed.length > 0 && !allowed.includes(effort)) {
     return true;
   }
-  if (modelCapabilities?.reasoning === false && effort !== 'off') {
+  if (modelCapabilities?.reasoning === false) {
     return true;
   }
   return false;

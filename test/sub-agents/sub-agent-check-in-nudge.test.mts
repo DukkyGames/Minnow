@@ -26,6 +26,7 @@ import {
   createMockSubAgentRunner,
   FIXED_RUN_ID,
   resetRunIdCounter,
+  waitForSubAgentRunTerminal,
 } from './test-helpers.mts';
 
 const CHAT_ID = '11111111-1111-1111-1111-111111111111';
@@ -101,7 +102,7 @@ describe('sub-agent check-in nudge', () => {
     assert.equal(messages.filter((m) => m.includes('check-in')).length, 1);
     fireSubAgentCheckInNudge(FIXED_RUN_ID);
     assert.equal(messages.filter((m) => m.includes('check-in')).length, 1);
-    await new Promise((r) => setTimeout(r, 200));
+    await waitForSubAgentRunTerminal(FIXED_RUN_ID);
     assert.equal(getSubAgentRun(FIXED_RUN_ID)?.status, 'completed');
   });
 });

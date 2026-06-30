@@ -27,6 +27,7 @@ import {
   createMockSubAgentRunner,
   FIXED_RUN_ID,
   resetRunIdCounter,
+  waitForSubAgentRunTerminal,
 } from './test-helpers.mts';
 
 const CHAT_ID = '11111111-1111-1111-1111-111111111111';
@@ -79,7 +80,7 @@ describe('sub-agent completion push', () => {
       parentTurnId: 'turn-1',
       modeId: 'build',
     });
-    await new Promise((r) => setTimeout(r, 30));
+    await waitForSubAgentRunTerminal(FIXED_RUN_ID);
     await flushSubAgentCompletionPushForChat(CHAT_ID);
 
     assert.equal(deliveries.length, 1);
@@ -99,7 +100,7 @@ describe('sub-agent completion push', () => {
       parentTurnId: 'turn-1',
       modeId: 'build',
     });
-    await new Promise((r) => setTimeout(r, 30));
+    await waitForSubAgentRunTerminal(FIXED_RUN_ID);
     const run = getSubAgentRun(FIXED_RUN_ID);
     assert.ok(run);
     emitSubAgentRunUpdated(run);

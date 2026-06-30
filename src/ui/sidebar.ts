@@ -44,7 +44,7 @@ import {
 import { getWorkspacePath } from '../state/workspace';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
-import type { BoardTask, Chat, ChatGroup } from '../types';
+import type { BoardCategory, BoardTask, Chat, ChatGroup } from '../types';
 import {
   applySidebarVisuals,
   closeMobileSidebar,
@@ -188,7 +188,12 @@ function appendBoardGroupWaveMembers(
       const waveMembersEl = document.createElement('div');
       waveMembersEl.className = 'chat-wave-members';
       for (const chat of waveChats) {
-        appendChatRow(waveMembersEl, chat, highlightChatId, { inGroup: true });
+        const taskId = chat.boardTaskId?.trim();
+        const task = taskId ? taskById.get(taskId) : undefined;
+        appendChatRow(waveMembersEl, chat, highlightChatId, {
+          inGroup: true,
+          boardCategory: task?.category,
+        });
       }
       membersEl.appendChild(waveMembersEl);
     }
@@ -343,6 +348,8 @@ interface AppendChatRowOptions {
   draggable?: boolean;
   /** Compact name-only row when listed under a sidebar group. */
   inGroup?: boolean;
+  /** Board task category icon for orchestrate wave member rows. */
+  boardCategory?: BoardCategory;
   /** Override default switchChat activation (e.g. Experts hub before shell opens). */
   onActivate?: (chat: Chat) => void;
   /** Override default deleteChat (e.g. Experts hub detail list refresh). */
@@ -482,8 +489,8 @@ export function appendChatRow(
   nameSpan.className = 'chat-item-name';
   nameSpan.textContent = chat.name;
 
-  if (inGroup && chat.category) {
-    const catIcon = createBoardCategoryIcon(chat.category, 'chat-item-board-cat-icon');
+  if (inGroup && options?.boardCategory) {
+    const catIcon = createBoardCategoryIcon(options.boardCategory, 'chat-item-board-cat-icon');
     if (catIcon) titleRow.appendChild(catIcon);
   }
   titleRow.appendChild(nameSpan);
