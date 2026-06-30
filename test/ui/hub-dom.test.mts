@@ -13,8 +13,11 @@ const { renderHub, teardownHub, isHubMounted, HUB_ROOT_ID } = await import(
   '../../src/ui/hub.ts'
 );
 
+let domWindow: Window | null = null;
+
 function setupDom(): void {
   const window = new Window();
+  domWindow = window;
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
   globalThis.Node = window.Node;
@@ -33,6 +36,8 @@ function setupDom(): void {
 afterEach(() => {
   teardownHub();
   setSessionStateForTests(null);
+  domWindow?.close();
+  domWindow = null;
 });
 
 describe('hub teardown', () => {
