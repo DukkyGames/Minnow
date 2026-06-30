@@ -264,6 +264,19 @@
   box-shadow: 0 0 0 3px var(--mn-accent-soft);
 }
 
+.mn-os-desktop-composer.composer-drop-active,
+.mn-os-desktop-input-row.composer-drop-active,
+#desktopInput.composer-drop-active {
+  outline: 2px dashed var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.chat-app-composer.composer-drop-active,
+#chatAppInput.composer-drop-active {
+  outline: 2px dashed var(--mn-accent);
+  outline-offset: 2px;
+}
+
 .attach-chip--workspace {
   border-style: dashed;
 }

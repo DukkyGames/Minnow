@@ -19,7 +19,7 @@ export function detectDominantEol(content) {
  * @param {string} text
  * @param {'\r\n' | '\n'} eol
  */
-function normalizeToEol(text, eol) {
+export function applyDominantEol(text, eol) {
   return String(text ?? '').replace(/\r\n|\n/g, eol);
 }
 
@@ -163,8 +163,8 @@ export function flexibleReplaceAll(content, search, replace) {
 
   // 2. EOL-normalized match
   const fileEol = detectDominantEol(file);
-  const eolNeedle = normalizeToEol(needle, fileEol);
-  const eolRepl = normalizeToEol(repl, fileEol);
+  const eolNeedle = applyDominantEol(needle, fileEol);
+  const eolRepl = applyDominantEol(repl, fileEol);
   if (eolNeedle !== needle || eolRepl !== repl) {
     const eolParts = file.split(eolNeedle);
     const eolCount = eolNeedle.length > 0 ? eolParts.length - 1 : 0;
@@ -231,7 +231,7 @@ function resolveUniqueAnchor(content, anchor) {
 
   let indices = findAllIndices(text, needle);
   if (indices.length === 0) {
-    const eolNeedle = normalizeToEol(needle, detectDominantEol(text));
+    const eolNeedle = applyDominantEol(needle, detectDominantEol(text));
     if (eolNeedle !== needle) {
       indices = findAllIndices(text, eolNeedle);
       if (indices.length === 1) {
@@ -278,4 +278,23 @@ export function resolveInsertLineFromAnchor(content, anchor, position) {
   }
   // Insert after the line containing the end of the anchor.
   return { lineIndex: anchorEndLine + 1 };
+}
+
+/**
+ * Align write content with an existing file's dominant line endings.
+ * New files pass empty `existingContent` and are left unchanged (typically LF from the agent).
+ * @param {string} content Proposed file body from the agent.
+ * @param {string} existingContent Current on-disk body ('' when creating a new file).
+ * @returns {{ content: string; converted: boolean; eol: '\r\n' | '\n' | null }}
+ */
+export function coerceContentToFileEol(content, existingContent) {
+  const next = String(content ?? '');
+  const existing = String(existingContent ?? '');
+  if (!existing) {
+    return { content: next, converted: false, eol: null };
+  }
+  const eol = detectDominantEol(existing);
+  const coerced = applyDominantEol(next, eol);
+  const converted = coerced !== next;
+  return { content: coerced, converted, eol };
 }

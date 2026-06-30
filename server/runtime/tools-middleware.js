@@ -25,6 +25,7 @@ import { assessHostKillCommand } from '../tools/host-kill-guard.js';
 import { assessHostPortBindCommand } from '../tools/host-port-bind-guard.js';
 import { assessUnixPipeOnWindows } from '../tools/windows-pipe-guard.js';
 import {
+  coerceContentToFileEol,
   detectDominantEol,
   flexibleReplaceAll,
   matchModeLabel,
@@ -324,10 +325,16 @@ async function toolSaveFile(args) {
     return withCodeChange(message, codeChangeFromDiff(before, nextContent, rel));
   }
   const before = await readUtf8OrEmpty(filePath);
+  const { content: normalizedContent, converted, eol } = coerceContentToFileEol(
+    nextContent,
+    before,
+  );
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, nextContent, 'utf8');
-  const message = `Saved ${rel} (${nextContent.length} bytes)`;
-  return withCodeChange(message, codeChangeFromDiff(before, nextContent, rel));
+  await fs.writeFile(filePath, normalizedContent, 'utf8');
+  const eolNote =
+    converted && eol ? `, preserved ${eol === '\r\n' ? 'CRLF' : 'LF'} line endings` : '';
+  const message = `Saved ${rel} (${normalizedContent.length} bytes${eolNote})`;
+  return withCodeChange(message, codeChangeFromDiff(before, normalizedContent, rel));
 }
 
 async function toolAppendFile(args) {
@@ -340,8 +347,15 @@ async function toolAppendFile(args) {
   const appendStats = countAppendLineStats(content);
   const { lines, truncated } = buildAddOnlyDiffLines(content);
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.appendFile(filePath, content, 'utf8');
-  const message = `Appended to ${rel}`;
+  const existing = await readUtf8OrEmpty(filePath);
+  const { content: normalizedContent, converted, eol } = coerceContentToFileEol(
+    content,
+    existing,
+  );
+  await fs.appendFile(filePath, normalizedContent, 'utf8');
+  const eolNote =
+    converted && eol ? ` (preserved ${eol === '\r\n' ? 'CRLF' : 'LF'} line endings)` : '';
+  const message = `Appended to ${rel}${eolNote}`;
   return withCodeChange(
     message,
     buildCodeChangePayload({
@@ -529,6 +543,36 @@ async function toolCopyFile(args) {
   return withCodeChange(message, codeChangeFromDiff(destBefore, sourceContent, destRel));
 }
 
+/** Max bytes for UI drag-import (matches client attachment cap). */
+const IMPORT_WORKSPACE_FILE_MAX_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Write binary file bytes from a base64 payload (OS drag-import into workspace).
+ * UI-only — not registered in the LLM tool catalog.
+ */
+async function toolImportWorkspaceFile(args) {
+  const filePath = resolveSafePath(args?.path, { write: true });
+  if (args?.content === undefined || args?.content === null) {
+    return 'Error: content (base64 file bytes) is required';
+  }
+  let buffer;
+  try {
+    buffer = Buffer.from(String(args.content), 'base64');
+  } catch {
+    return 'Error: content is not valid base64';
+  }
+  if (buffer.length > IMPORT_WORKSPACE_FILE_MAX_BYTES) {
+    return `Error: file exceeds ${IMPORT_WORKSPACE_FILE_MAX_BYTES / (1024 * 1024)}MB limit`;
+  }
+  const rel = toRelativePath(filePath);
+  const before = await readUtf8OrEmpty(filePath);
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, buffer);
+  const message = `Imported ${rel} (${buffer.length} bytes)`;
+  const afterText = buffer.toString('utf8');
+  return withCodeChange(message, codeChangeFromDiff(before, afterText, rel));
+}
+
 async function toolDeletePath(args) {
   const target = resolveSafePath(args?.path, { write: true });
   const rel = toRelativePath(target);
@@ -636,13 +680,32 @@ async function toolFindFiles(args) {
 async function toolGetFileMetadata(args) {
   const target = resolveSafePath(args?.path);
   const stat = await fs.stat(target);
-  return [
+  const lines = [
     `path: ${toRelativePath(target)}`,
     `type: ${stat.isDirectory() ? 'directory' : stat.isFile() ? 'file' : 'other'}`,
     `size: ${stat.size} bytes`,
     `modified: ${stat.mtime.toISOString()}`,
     `created: ${stat.birthtime.toISOString()}`,
-  ].join('\n');
+  ];
+  if (stat.isFile() && stat.size > 0) {
+    try {
+      const sample = await fs.readFile(target, 'utf8');
+      const crlf = (sample.match(/\r\n/g) || []).length;
+      const lf = (sample.match(/(?<!\r)\n/g) || []).length;
+      if (crlf === 0 && lf === 0) {
+        lines.push('line_ending: none');
+      } else if (crlf > 0 && lf === 0) {
+        lines.push('line_ending: CRLF');
+      } else if (lf > 0 && crlf === 0) {
+        lines.push('line_ending: LF');
+      } else {
+        lines.push('line_ending: mixed');
+      }
+    } catch {
+      /* skip line-ending hint for non-UTF-8 files */
+    }
+  }
+  return lines.join('\n');
 }
 
 // --- Git tools ---
@@ -1029,6 +1092,7 @@ const SERVER_TOOL_HANDLERS = {
   make_directory: toolMakeDirectory,
   move_file: toolMoveFile,
   copy_file: toolCopyFile,
+  import_workspace_file: toolImportWorkspaceFile,
   delete_path: toolDeletePath,
   find_files: toolFindFiles,
   get_file_metadata: toolGetFileMetadata,

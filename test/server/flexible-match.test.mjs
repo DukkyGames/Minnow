@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  coerceContentToFileEol,
   detectDominantEol,
   flexibleReplaceAll,
   resolveInsertLineFromAnchor,
@@ -59,6 +60,30 @@ describe('flexibleReplaceAll', () => {
     assert.equal(count, 0);
     assert.match(hint, /first search line was found at line 1/);
     assert.match(hint, /surrounding lines differ/);
+  });
+});
+describe('coerceContentToFileEol', () => {
+  it('leaves new-file content unchanged', () => {
+    const { content, converted, eol } = coerceContentToFileEol('a\nb\n', '');
+    assert.equal(content, 'a\nb\n');
+    assert.equal(converted, false);
+    assert.equal(eol, null);
+  });
+
+  it('converts LF write content to match existing CRLF file', () => {
+    const existing = 'old\r\nline\r\n';
+    const { content, converted, eol } = coerceContentToFileEol('new\nline\n', existing);
+    assert.equal(content, 'new\r\nline\r\n');
+    assert.equal(converted, true);
+    assert.equal(eol, '\r\n');
+  });
+
+  it('converts CRLF append chunk to match existing LF file', () => {
+    const existing = 'alpha\n';
+    const { content, converted, eol } = coerceContentToFileEol('beta\r\n', existing);
+    assert.equal(content, 'beta\n');
+    assert.equal(converted, true);
+    assert.equal(eol, '\n');
   });
 });
 
