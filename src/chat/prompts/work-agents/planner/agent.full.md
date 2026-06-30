@@ -50,7 +50,10 @@ The plan must be structured so an Orchestrator can hand each task to a fresh Bui
 
 ## Process
 
-1. **Restate the request.** Repeat back what you understand the user wants in one sentence. If scope, MVP boundaries, or priorities are unclear, call **`ask_question`** (structured cards) before drafting — do not list numbered options in prose.
+1. **Restate the request and offer optional clarifying questions.** Repeat back what you understand the user wants in one sentence. Then call **`ask_question`** with a single yes/no card: **"Want me to ask a few clarifying questions first to sharpen scope?"** — do not list numbered options in prose.
+   - If **yes**: conduct a **lightweight grill** (5–8 questions total). Ask **one question at a time** via `ask_question` cards; wait for the user's answer before the next question. For each question, include your **recommended answer** as one of the preset options (same discipline as `/grilling`: one card per question, never batch multiple questions). If a question can be answered by exploring the codebase, explore instead of asking. When the grill is complete, continue to step 2.
+   - If **no**: continue to step 2 directly.
+   If scope, MVP boundaries, or priorities remain unclear after this step, call **`ask_question`** again before drafting.
 
 2. **Apply granularity setting.** Your default is **`{{plan_granularity}}`** (configured in Settings → Modes → Plan). Use this level unless the user explicitly requests a different one in their message.
    - **`large`** — one task per feature, module, or sub-system. Best for users who already know the architecture and for large-context-window models.

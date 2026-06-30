@@ -672,6 +672,7 @@ Six primary modes per chat: **General**, **Build**, **Plan**, **Orchestrate**, *
 | Concern | Location |
 |---------|----------|
 | Registry + tool policy | `src/chat/modes/registry.ts`, `tool-policy.ts` — Plan allows **`save_file`** / **`make_directory`** only under `documentation/plans/` (`plan-write-guard.ts` in the browser; mirrored in `server/tools/plan-write-guard.js` on `POST /api/tools` when `modeId` is `plan` or `planMode: true`; prompts in `modes/plan.*.md`; `save_file` creates parent dirs on the server) |
+| Plan clarifying questions (Phase 1) | **Planner** work agent (`src/chat/prompts/work-agents/planner/agent.*.md`): after restating the request, **`ask_question`** yes/no — "Want me to ask a few clarifying questions first to sharpen scope?" On yes, a lightweight **grill** (5–8 questions, one card at a time, recommended answer per question — `/grilling` discipline) via [`question-cards-modal.ts`](../src/ui/question-cards-modal.ts); on no, proceed directly to exploration and drafting |
 | Prompt bodies | `src/chat/prompts/modes/{id}.full.md`, `{id}.lite.md` |
 | Template pack | `src/chat/prompts/modes/_template/` |
 | UI mode selector | `src/ui/mode-selector.ts` (in `#composerControls` in `index.html`; `listComposerModes()` shows General, Build, Plan, Debug only — Orchestrate via sidebar hub, Reef not in Code composer); masked mode glyphs from `src/ui/mode-icons.ts` + `src/styles/mode-icons.css` (`/icons/mode-*.png` + `mode-orchestrate.svg` / `mode-reef.svg`) beside segment labels |
