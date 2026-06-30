@@ -752,6 +752,57 @@ html.minnow-os-enabled header.topbar.hidden {
     display: grid;
     place-items: center;
   }
+
+  .mn-os-menubar {
+    padding-inline: max(10px, env(safe-area-inset-left, 0px))
+      max(10px, env(safe-area-inset-right, 0px));
+    gap: 6px;
+  }
+
+  .mn-os-mb-left,
+  .mn-os-mb-right {
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .mn-os-mb-brand {
+    display: none;
+  }
+
+  .mn-os-mb-chip {
+    max-width: min(9.5rem, 34vw);
+    padding-inline: 8px;
+    font-size: 12px;
+  }
+
+  .mn-os-mb-right .mn-os-mb-workspace-slot .workspace-control {
+    max-width: min(8rem, 26vw);
+  }
+
+  .mn-os-mb-status #osStatusText {
+    display: none;
+  }
+
+  .mn-os-mb-time {
+    display: none;
+  }
+
+  .mn-os-mb-icon,
+  .mn-os-mb-bell,
+  .mn-os-mb-workspace-slot .workspace-btn.icon-btn {
+    width: var(--touch-min);
+    height: var(--touch-min);
+  }
+
+  .mn-os-mb-desktop {
+    padding: 6px 9px;
+    font-size: 12px;
+  }
+
+  .mn-os-model-menu,
+  .mn-os-notif-menu {
+    max-width: calc(100vw - max(12px, env(safe-area-inset-left, 0px)) - max(12px, env(safe-area-inset-right, 0px)));
+  }
 }
 
 @keyframes mn-os-app-in {
