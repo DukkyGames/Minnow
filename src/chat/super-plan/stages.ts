@@ -4,6 +4,12 @@
 
 import type { AggregateResult } from '../../agents/types';
 import { spawnSubAgent } from '../../agents/orchestrator';
+import {
+  getSuperPlanConfigSync,
+  loadSuperPlanConfig,
+  resolveSuperPlanResearchMaxRounds,
+  type SuperPlanStageModelBinding,
+} from '../../config/super-plan-meta';
 import { fetchSkillById } from '../../skills/client';
 import { findLastPlanSavePath } from '../orchestrate/plan-from-history';
 import { isFirstUserMessagePending } from '../titles/schedule';
@@ -25,6 +31,11 @@ import {
   planInvolvesUi,
 } from './review-helpers';
 import {
+  shouldRunSuperPlanImpeccable,
+  superPlanDraftPassForStage,
+  superPlanReviewPassForStage,
+} from './pipeline';
+import {
   ensureSuperPlanState,
   markSuperPlanStageStatus,
   patchSuperPlanState,
@@ -42,23 +53,37 @@ async function runChatTurnForStage(
   userText: string,
   skillId: string | null,
   skillBody: string | null,
+  modelOverride?: SuperPlanStageModelBinding,
 ): Promise<void> {
-  await detectLocalServer();
-  const displayText = userText;
-  const historyContent = buildHistoryUserContent(displayText, []);
-  await runChatTurn({
-    chat,
-    pushUser: true,
-    rawText: userText,
-    userText,
-    skillId,
-    displayText,
-    historyContent,
-    validAttachments: [],
-    titleSeed: userText,
-    shouldScheduleTitle: isFirstUserMessagePending(chat),
-    skillBody,
-  });
+  const savedProvider = chat.providerId;
+  const savedModel = chat.modelId;
+  if (modelOverride?.providerId?.trim()) {
+    chat.providerId = modelOverride.providerId.trim();
+  }
+  if (modelOverride?.modelId?.trim()) {
+    chat.modelId = modelOverride.modelId.trim();
+  }
+  try {
+    await detectLocalServer();
+    const displayText = userText;
+    const historyContent = buildHistoryUserContent(displayText, []);
+    await runChatTurn({
+      chat,
+      pushUser: true,
+      rawText: userText,
+      userText,
+      skillId,
+      displayText,
+      historyContent,
+      validAttachments: [],
+      titleSeed: userText,
+      shouldScheduleTitle: isFirstUserMessagePending(chat),
+      skillBody,
+    });
+  } finally {
+    chat.providerId = savedProvider;
+    chat.modelId = savedModel;
+  }
 }
 
 async function fileExists(path: string): Promise<boolean> {
@@ -112,16 +137,17 @@ function isAggregateResult(value: unknown): value is AggregateResult {
 
 async function runGrillStage(chat: Chat): Promise<SuperPlanStageOutcome> {
   const state = ensureSuperPlanState(chat);
+  const config = getSuperPlanConfigSync();
   const skill = await fetchSkillById('grilling');
   const skillBody = skill?.body ?? null;
   const userText = [
     'Super Plan pipeline — **Grill stage**.',
-    'Interview me relentlessly (~20 questions) about this plan before we write anything.',
+    `Interview me relentlessly (~${config.grillQuestionBudget} questions) about this plan before we write anything.`,
     'Use `ask_question` one card at a time with a recommended answer each time.',
     '',
     state.prompt,
   ].join('\n');
-  await runChatTurnForStage(chat, userText, 'grilling', skillBody);
+  await runChatTurnForStage(chat, userText, 'grilling', skillBody, config.plannerModel);
   return { kind: 'await_stream' };
 }
 
@@ -136,12 +162,13 @@ async function runSpecConfirmStage(chat: Chat): Promise<SuperPlanStageOutcome> {
     '',
     `Original request: ${state.prompt}`,
   ].join('\n');
-  await runChatTurnForStage(chat, userText, null, null);
+  await runChatTurnForStage(chat, userText, null, null, getSuperPlanConfigSync().plannerModel);
   return { kind: 'await_stream' };
 }
 
 async function runResearchStage(chat: Chat): Promise<SuperPlanStageOutcome> {
   const state = ensureSuperPlanState(chat);
+  const config = getSuperPlanConfigSync();
   let specContent = '';
   if (state.specPath) {
     specContent = await readFileOrEmpty(state.specPath);
@@ -152,7 +179,17 @@ async function runResearchStage(chat: Chat): Promise<SuperPlanStageOutcome> {
   ]
     .join('')
     .trim();
-  const { researchId } = await startResearch({ query, scope: 'both' });
+  const { researchId } = await startResearch({
+    query,
+    scope: config.researchScope,
+    maxRounds: resolveSuperPlanResearchMaxRounds(config),
+    ...(config.researchModel.providerId?.trim()
+      ? { providerId: config.researchModel.providerId.trim() }
+      : {}),
+    ...(config.researchModel.modelId?.trim()
+      ? { model: config.researchModel.modelId.trim() }
+      : {}),
+  });
   const report = await waitForResearchDone(researchId);
   const body = report || `# Research report\n\nNo findings for: ${state.prompt}`;
   await executeTool('save_file', {
@@ -164,8 +201,13 @@ async function runResearchStage(chat: Chat): Promise<SuperPlanStageOutcome> {
   return { kind: 'done', artifactPath: state.researchPath };
 }
 
-async function runDraftStage(chat: Chat, pass: 1 | 2): Promise<SuperPlanStageOutcome> {
+async function runDraftStage(
+  chat: Chat,
+  stageId: 'draft1' | 'draft2',
+): Promise<SuperPlanStageOutcome> {
   const state = ensureSuperPlanState(chat);
+  const config = getSuperPlanConfigSync();
+  const pass = superPlanDraftPassForStage(stageId) ?? 1;
   const planPath = state.planPath ?? superPlanPlanPath(state.slug);
   const lines = [
     `Super Plan pipeline — **Draft ${pass}**.`,
@@ -181,12 +223,17 @@ async function runDraftStage(chat: Chat, pass: 1 | 2): Promise<SuperPlanStageOut
     );
   }
   lines.push('', `Original request: ${state.prompt}`);
-  await runChatTurnForStage(chat, lines.join('\n'), null, null);
+  await runChatTurnForStage(chat, lines.join('\n'), null, null, config.plannerModel);
   return { kind: 'await_stream' };
 }
 
-async function runReviewStage(chat: Chat, pass: 1 | 2): Promise<SuperPlanStageOutcome> {
+async function runReviewStage(
+  chat: Chat,
+  stageId: 'review1' | 'review2',
+): Promise<SuperPlanStageOutcome> {
   const state = ensureSuperPlanState(chat);
+  const config = getSuperPlanConfigSync();
+  const pass = superPlanReviewPassForStage(stageId) ?? 1;
   const planPath =
     findLastPlanSavePath(chat.history) ?? state.planPath ?? superPlanPlanPath(state.slug);
   const [spec, research, draftPlan] = await Promise.all([
@@ -212,6 +259,12 @@ async function runReviewStage(chat: Chat, pass: 1 | 2): Promise<SuperPlanStageOu
     wait: true,
     parentChatId: chat.id,
     modeId: 'super-plan',
+    ...(config.reviewerModel.providerId?.trim()
+      ? { providerId: config.reviewerModel.providerId.trim() }
+      : {}),
+    ...(config.reviewerModel.modelId?.trim()
+      ? { modelId: config.reviewerModel.modelId.trim() }
+      : {}),
   });
 
   if (isAggregateResult(result)) {
@@ -231,6 +284,7 @@ async function runReviewStage(chat: Chat, pass: 1 | 2): Promise<SuperPlanStageOu
 
 async function runImpeccableStage(chat: Chat): Promise<SuperPlanStageOutcome> {
   const state = ensureSuperPlanState(chat);
+  const config = getSuperPlanConfigSync();
   const planPath =
     findLastPlanSavePath(chat.history) ?? state.planPath ?? superPlanPlanPath(state.slug);
   const [spec, research, draftPlan] = await Promise.all([
@@ -251,7 +305,7 @@ async function runImpeccableStage(chat: Chat): Promise<SuperPlanStageOutcome> {
     });
   patchSuperPlanState(chat, { uiInvolved });
 
-  if (!uiInvolved) {
+  if (!shouldRunSuperPlanImpeccable(config, uiInvolved)) {
     return { kind: 'skipped' };
   }
 
@@ -284,12 +338,13 @@ async function runImpeccableStage(chat: Chat): Promise<SuperPlanStageOutcome> {
     `Refine UI-related sections of the plan at \`${planPath}\` using the injected Impeccable \`shape\` workflow.`,
     'Update the plan file in place with improved UX clarity — still no implementation code fences.',
   ].join('\n');
-  await runChatTurnForStage(chat, userText, 'impeccable', skillBody);
+  await runChatTurnForStage(chat, userText, 'impeccable', skillBody, config.plannerModel);
   return { kind: 'await_stream' };
 }
 
 async function runFinalizeStage(chat: Chat): Promise<SuperPlanStageOutcome> {
   const state = ensureSuperPlanState(chat);
+  const config = getSuperPlanConfigSync();
   const planPath =
     findLastPlanSavePath(chat.history) ?? state.planPath ?? superPlanPlanPath(state.slug);
   const userText = [
@@ -297,7 +352,7 @@ async function runFinalizeStage(chat: Chat): Promise<SuperPlanStageOutcome> {
     `Ensure \`${planPath}\` is complete: front-matter todos match tasks, verification checklist present.`,
     'Save the final plan if anything is missing. Reply briefly confirming the path.',
   ].join('\n');
-  await runChatTurnForStage(chat, userText, null, null);
+  await runChatTurnForStage(chat, userText, null, null, config.plannerModel);
   return { kind: 'await_stream' };
 }
 
@@ -317,6 +372,7 @@ export async function runSuperPlanStage(
   chat: Chat,
   stageId: import('./types').SuperPlanStageId,
 ): Promise<SuperPlanStageOutcome> {
+  await loadSuperPlanConfig();
   switch (stageId) {
     case 'grill':
       return runGrillStage(chat);
@@ -325,13 +381,13 @@ export async function runSuperPlanStage(
     case 'research':
       return runResearchStage(chat);
     case 'draft1':
-      return runDraftStage(chat, 1);
+      return runDraftStage(chat, 'draft1');
     case 'review1':
-      return runReviewStage(chat, 1);
+      return runReviewStage(chat, 'review1');
     case 'draft2':
-      return runDraftStage(chat, 2);
+      return runDraftStage(chat, 'draft2');
     case 'review2':
-      return runReviewStage(chat, 2);
+      return runReviewStage(chat, 'review2');
     case 'impeccable':
       return runImpeccableStage(chat);
     case 'finalize':

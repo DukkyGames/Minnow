@@ -57,6 +57,8 @@ export interface SuperPlanState {
   specPath?: string;
   /** Research report path under documentation/plans/references/<slug>-research.md */
   researchPath?: string;
+  /** Active Deep Research run id while the research stage is in flight. */
+  researchId?: string;
   /** Pass 1 plan-reviewer structured critique (for pass 2 and draft2). */
   review1Critique?: string;
   /** Pass 2 plan-reviewer structured critique (optional audit trail). */

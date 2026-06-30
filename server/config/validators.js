@@ -1284,6 +1284,88 @@ export function mergeSupervisorConfig(patch, base) {
 }
 
 /**
+ * Normalize Super Plan pipeline settings under config.json planning.superPlan.
+ * @param {unknown} raw
+ * @param {Record<string, unknown>} [existing]
+ * @returns {object}
+ */
+export function normalizeSuperPlanConfig(raw, existing = {}) {
+  const base = {
+    reviewRounds: 2,
+    grillQuestionBudget: 20,
+    impeccable: 'auto',
+    researchScope: 'both',
+    researchMaxRounds: 0,
+    researchDepth: 'auto',
+    models: {
+      research: { providerId: '', modelId: '' },
+      reviewer: { providerId: '', modelId: '' },
+      planner: { providerId: '', modelId: '' },
+    },
+    ...(existing && typeof existing === 'object' ? existing : {}),
+    models: {
+      research: { providerId: '', modelId: '' },
+      reviewer: { providerId: '', modelId: '' },
+      planner: { providerId: '', modelId: '' },
+      ...(existing?.models && typeof existing.models === 'object'
+        ? /** @type {Record<string, unknown>} */ (existing.models)
+        : {}),
+    },
+  };
+
+  if (!raw || typeof raw !== 'object') {
+    return base;
+  }
+
+  const patch = /** @type {Record<string, unknown>} */ (raw);
+  if (typeof patch.reviewRounds === 'number' && Number.isFinite(patch.reviewRounds)) {
+    base.reviewRounds = Math.min(4, Math.max(0, Math.round(patch.reviewRounds)));
+  }
+  if (typeof patch.grillQuestionBudget === 'number' && Number.isFinite(patch.grillQuestionBudget)) {
+    base.grillQuestionBudget = Math.min(40, Math.max(5, Math.round(patch.grillQuestionBudget)));
+  }
+  if (patch.impeccable === 'auto' || patch.impeccable === 'always' || patch.impeccable === 'never') {
+    base.impeccable = patch.impeccable;
+  }
+  if (
+    patch.researchScope === 'web' ||
+    patch.researchScope === 'codebase' ||
+    patch.researchScope === 'both'
+  ) {
+    base.researchScope = patch.researchScope;
+  }
+  if (typeof patch.researchMaxRounds === 'number' && Number.isFinite(patch.researchMaxRounds)) {
+    base.researchMaxRounds = Math.min(8, Math.max(0, Math.round(patch.researchMaxRounds)));
+  }
+  if (
+    patch.researchDepth === 'auto' ||
+    patch.researchDepth === 'quick' ||
+    patch.researchDepth === 'standard' ||
+    patch.researchDepth === 'deep'
+  ) {
+    base.researchDepth = patch.researchDepth;
+  }
+
+  const modelPatch =
+    patch.models && typeof patch.models === 'object'
+      ? /** @type {Record<string, unknown>} */ (patch.models)
+      : {};
+  for (const key of ['research', 'reviewer', 'planner']) {
+    const row = modelPatch[key];
+    if (!row || typeof row !== 'object') continue;
+    const m = /** @type {Record<string, unknown>} */ (row);
+    if (typeof m.providerId === 'string') {
+      base.models[key].providerId = m.providerId;
+    }
+    if (typeof m.modelId === 'string') {
+      base.models[key].modelId = m.modelId;
+    }
+  }
+
+  return base;
+}
+
+/**
  * Merge allowed fields into config.json meta.
  * @param {object} existing
  * @param {unknown} patch
@@ -1921,6 +2003,14 @@ export function mergeConfigMeta(existing, patch) {
     const pl = /** @type {Record<string, unknown>} */ (p.planning);
     if (pl.granularity === 'large' || pl.granularity === 'medium' || pl.granularity === 'small') {
       existingPlanning.granularity = pl.granularity;
+    }
+    if (pl.superPlan && typeof pl.superPlan === 'object') {
+      existingPlanning.superPlan = normalizeSuperPlanConfig(
+        pl.superPlan,
+        existingPlanning.superPlan && typeof existingPlanning.superPlan === 'object'
+          ? /** @type {Record<string, unknown>} */ (existingPlanning.superPlan)
+          : {},
+      );
     }
     base.planning = existingPlanning;
   }

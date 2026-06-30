@@ -225,6 +225,19 @@ const DEFAULT_META = {
   },
   planning: {
     granularity: 'medium',
+    superPlan: {
+      reviewRounds: 2,
+      grillQuestionBudget: 20,
+      impeccable: 'auto',
+      researchScope: 'both',
+      researchMaxRounds: 0,
+      researchDepth: 'auto',
+      models: {
+        research: { providerId: '', modelId: '' },
+        reviewer: { providerId: '', modelId: '' },
+        planner: { providerId: '', modelId: '' },
+      },
+    },
   },
   chat: {
     maxToolTurns: 100,

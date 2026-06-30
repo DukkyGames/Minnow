@@ -45,6 +45,13 @@ import { shortPlanLabel } from './orchestrate-plan-picker';
 import { launchBoardFromPlan } from './orchestrate-launch';
 import { createChatWithMode, switchChat } from './sidebar';
 import { renderChatFromHistory } from './messages';
+import {
+  PLAN_PROGRESS_MOUNT_ID,
+  PlanProgressPanel,
+  buildPlanPreviewPopoutDom,
+  prefersReducedMotion,
+  regularPlanWorkingStepFromChat,
+} from './plan-progress-screen';
 
 export const ORCHESTRATE_PLAN_SCREEN_ROOT_ID = 'orchestratePlanScreen';
 export const ORCHESTRATE_PLAN_SCREEN_PROMPT_ID = 'orchestratePlanScreenPrompt';
@@ -64,13 +71,13 @@ export const ORCHESTRATE_PLAN_SCREEN_STATUS_LINES = [
 /** @deprecated Use {@link ORCHESTRATE_PLAN_SCREEN_STATUS_LINES}. */
 export const ORCHESTRATE_PLAN_SCREEN_FISH_STATUS = ORCHESTRATE_PLAN_SCREEN_STATUS_LINES;
 
-const STATUS_ROTATE_MS = 3500;
 const CHAT_AREA_PLAN_SCREEN_CLASS = 'chat-area--plan-screen';
 const MAIN_COLUMN_PLAN_SCREEN_CLASS = 'main-column--plan-screen';
 
 export type OrchestratePlanScreenPhase =
   | 'prompt'
   | 'working'
+  | 'super-plan-working'
   | 'questions'
   | 'spec_confirm'
   | 'preview'
@@ -96,10 +103,10 @@ export interface RenderOrchestratePlanScreenOptions {
 }
 
 let planSession: OrchestratePlanScreenSession | null = null;
-let statusRotateTimer: ReturnType<typeof setInterval> | null = null;
 let streamEndUnsubscribe: (() => void) | null = null;
 let activityUnsubscribe: (() => void) | null = null;
 let superPlanUnsubscribe: (() => void) | null = null;
+let planProgressPanel: PlanProgressPanel | null = null;
 
 function ensureStreamEndListener(): void {
   if (streamEndUnsubscribe) return;
@@ -165,9 +172,10 @@ export function suspendOrchestratePlanScreenOnLeave(leavingChatId: string): void
 /** Remove overlay nodes only; session state is preserved. */
 export function teardownOrchestratePlanScreenDom(): void {
   if (typeof document === 'undefined') return;
-  stopStatusRotation();
   activityUnsubscribe?.();
   activityUnsubscribe = null;
+  planProgressPanel?.destroy();
+  planProgressPanel = null;
   document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID)?.remove();
   document.getElementById('chatArea')?.classList.remove(CHAT_AREA_PLAN_SCREEN_CLASS);
   document
@@ -201,7 +209,11 @@ export function isOrchestratePlanScreenOwningChat(chatId: string): boolean {
     return false;
   }
   if (!isOrchestratePlanScreenMounted()) return false;
-  return session.phase === 'working' || session.phase === 'questions';
+  return (
+    session.phase === 'working' ||
+    session.phase === 'super-plan-working' ||
+    session.phase === 'questions'
+  );
 }
 
 /**
@@ -217,12 +229,11 @@ export function resolveOrchestratePlanScreenQuestionHost(
   if (!isOrchestratePlanScreenMounted() || isOrchestratePlanScreenSuspended()) {
     return null;
   }
-  if (session.phase !== 'working' && session.phase !== 'questions') {
+  if (session.phase !== 'working' && session.phase !== 'super-plan-working' && session.phase !== 'questions') {
     return null;
   }
-  if (session.phase === 'working') {
+  if (session.phase === 'working' || session.phase === 'super-plan-working') {
     session.phase = 'questions';
-    syncPlanStatusFromSession();
   }
   let host = document.getElementById(ORCHESTRATE_PLAN_SCREEN_QUESTIONS_ID);
   if (!host) {
@@ -239,64 +250,49 @@ export function resolveOrchestratePlanScreenQuestionHost(
   return host;
 }
 
-function stopStatusRotation(): void {
-  if (statusRotateTimer != null) {
-    clearInterval(statusRotateTimer);
-    statusRotateTimer = null;
+function resolvePlanScreenWorkingPhase(chat: Chat): 'working' | 'super-plan-working' {
+  return normalizeModeId(chat.modeId) === 'super-plan' ? 'super-plan-working' : 'working';
+}
+
+function mountPlanProgressPanel(chat: Chat): void {
+  const mount = document.getElementById(PLAN_PROGRESS_MOUNT_ID);
+  if (!mount) return;
+
+  const variant =
+    normalizeModeId(chat.modeId) === 'super-plan' ? 'super-plan' : 'regular-plan';
+  planProgressPanel?.destroy();
+  planProgressPanel = new PlanProgressPanel(mount, {
+    variant,
+    reducedMotion: prefersReducedMotion(),
+  });
+  planProgressPanel.reset();
+
+  if (variant === 'super-plan' && chat.superPlan) {
+    planProgressPanel.applySuperPlanState(chat.superPlan);
+  } else {
+    const activity = getMainTurnActivity(chat.id);
+    const step = regularPlanWorkingStepFromChat(
+      chat,
+      activity?.phase ?? null,
+      activity?.currentTool,
+    );
+    planProgressPanel.applyRegularPlanStep(step);
   }
 }
 
-function prefersReducedMotion(): boolean {
-  if (typeof window === 'undefined' || !window.matchMedia) return false;
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
-function startStatusRotation(statusEl: HTMLElement): void {
-  stopStatusRotation();
-  let index = 0;
-  statusEl.textContent = ORCHESTRATE_PLAN_SCREEN_STATUS_LINES[0]!;
-  if (prefersReducedMotion()) return;
-  statusRotateTimer = setInterval(() => {
-    index = (index + 1) % ORCHESTRATE_PLAN_SCREEN_STATUS_LINES.length;
-    statusEl.textContent = ORCHESTRATE_PLAN_SCREEN_STATUS_LINES[index]!;
-  }, STATUS_ROTATE_MS);
-}
-
-function syncPlanStatusFromSession(): void {
-  const statusEl = document.querySelector(
-    '.orchestrate-plan-screen__status-text',
-  ) as HTMLElement | null;
-  if (!statusEl || !planSession) return;
-  if (planSession.phase === 'questions') {
-    stopStatusRotation();
-    statusEl.textContent = 'Waiting for your answers…';
+function syncPlanProgressFromChat(chat: Chat): void {
+  if (!planProgressPanel) return;
+  if (normalizeModeId(chat.modeId) === 'super-plan' && chat.superPlan) {
+    planProgressPanel.applySuperPlanState(chat.superPlan);
     return;
   }
-  if (planSession.phase === 'working') {
-    startStatusRotation(statusEl);
-  }
-}
-
-function formatMainTurnActivitySubline(chatId: string): string {
-  const activity = getMainTurnActivity(chatId);
-  if (!activity) return '';
-  if (activity.phase === 'tools' && activity.currentTool) {
-    return `Running ${activity.currentTool}…`;
-  }
-  if (activity.phase === 'thinking') return 'Thinking…';
-  if (activity.phase === 'generating') return 'Generating…';
-  return '';
-}
-
-function syncPlanScreenActivityLine(el: HTMLElement, chatId: string): void {
-  const line = formatMainTurnActivitySubline(chatId);
-  if (line) {
-    el.textContent = line;
-    el.hidden = false;
-  } else {
-    el.textContent = '';
-    el.hidden = true;
-  }
+  const activity = getMainTurnActivity(chat.id);
+  const step = regularPlanWorkingStepFromChat(
+    chat,
+    activity?.phase ?? null,
+    activity?.currentTool,
+  );
+  planProgressPanel.applyRegularPlanStep(step);
 }
 
 function wirePlanScreenActivityListener(chatId: string): void {
@@ -304,10 +300,9 @@ function wirePlanScreenActivityListener(chatId: string): void {
   activityUnsubscribe = subscribeMainTurnActivity(() => {
     if (!isOrchestratePlanScreenMounted() || !planSession) return;
     if (planSession.chatId !== chatId) return;
-    const el = document.querySelector(
-      '.orchestrate-plan-screen__activity',
-    ) as HTMLElement | null;
-    if (el) syncPlanScreenActivityLine(el, chatId);
+    const chat = findChatById(chatId);
+    if (!chat) return;
+    syncPlanProgressFromChat(chat);
   });
 }
 
@@ -415,13 +410,27 @@ async function syncPlanScreenFromSuperPlan(chat: Chat): Promise<void> {
         chat.superPlan?.stages[activeStage!]?.error ??
         'Super Plan stopped with an error. Open the chat to review.',
     });
+    return;
   }
+
+  if (planSession) {
+    planSession.phase = 'super-plan-working';
+  }
+  syncPlanProgressFromChat(chat);
 }
 
 function wireSuperPlanControllerListener(chat: Chat): void {
   superPlanUnsubscribe?.();
   superPlanUnsubscribe = subscribeSuperPlanController((updated) => {
     if (updated.id !== chat.id) return;
+    if (
+      planSession &&
+      (planSession.phase === 'working' ||
+        planSession.phase === 'super-plan-working' ||
+        planSession.phase === 'questions')
+    ) {
+      syncPlanProgressFromChat(updated);
+    }
     void syncPlanScreenFromSuperPlan(updated);
   });
 }
@@ -429,7 +438,9 @@ function wireSuperPlanControllerListener(chat: Chat): void {
 async function onPlanSessionStreamEnd(chatId: string): Promise<void> {
   const session = planSession;
   if (!session || session.chatId !== chatId) return;
-  if (session.phase !== 'working' && session.phase !== 'questions') return;
+  if (session.phase !== 'working' && session.phase !== 'super-plan-working' && session.phase !== 'questions') {
+    return;
+  }
 
   const chat = findChatById(chatId);
   if (!chat) return;
@@ -437,7 +448,8 @@ async function onPlanSessionStreamEnd(chatId: string): Promise<void> {
   if (normalizeModeId(chat.modeId) === 'super-plan' && chat.superPlan) {
     const { onSuperPlanStreamEnd } = await import('../chat/super-plan/controller');
     await onSuperPlanStreamEnd(chatId);
-    await syncPlanScreenFromSuperPlan(chat);
+    const refreshed = findChatById(chatId);
+    if (refreshed) await syncPlanScreenFromSuperPlan(refreshed);
     return;
   }
 
@@ -486,13 +498,13 @@ async function startPlanningFromPrompt(promptText: string): Promise<void> {
 
   planSession = {
     chatId: chat.id,
-    phase: 'working',
+    phase: resolvePlanScreenWorkingPhase(chat),
     savedPrompt: promptText,
     planScreenSuspended: false,
   };
 
   renderOrchestratePlanScreen({
-    phase: 'working',
+    phase: planSession.phase,
     chatId: chat.id,
     savedPrompt: promptText,
   });
@@ -540,6 +552,121 @@ function suspendToViewChat(chat: Chat): void {
   } else {
     renderChatFromHistory(chat);
   }
+}
+
+function buildPlanPreviewActionHandlers(
+  opts: RenderOrchestratePlanScreenOptions,
+  planPath: string,
+): import('./plan-progress-screen').PlanPreviewActionHandlers {
+  const chat = findChatById(opts.chatId);
+  const isSuperPlan = normalizeModeId(chat?.modeId) === 'super-plan';
+
+  return {
+    onRevise: () => {
+      if (!chat) return;
+      if (isSuperPlan) {
+        if (planSession) planSession.phase = 'super-plan-working';
+        renderOrchestratePlanScreen({
+          phase: 'super-plan-working',
+          chatId: opts.chatId,
+          savedPrompt: opts.savedPrompt,
+        });
+        void resumeSuperPlanAfterUser(chat, 'revise');
+        return;
+      }
+      const saved = opts.savedPrompt?.trim() ?? planSession?.savedPrompt?.trim();
+      if (saved) {
+        void startPlanningFromPrompt(saved);
+        return;
+      }
+      renderOrchestratePlanScreen({
+        phase: 'prompt',
+        chatId: opts.chatId,
+        savedPrompt: opts.savedPrompt,
+      });
+    },
+    onStartOrchestrator: () => {
+      if (planPath) openBoardWithPlan(planPath);
+    },
+    onBuild: () => {
+      if (!planPath) return;
+      teardownOrchestratePlanScreen();
+      createChatWithMode({
+        modeId: 'build',
+        orchestratePlanPath: planPath,
+        initialUserMessage: `Implement the plan at ${planPath}.`,
+      });
+    },
+    onClose: () => {
+      teardownOrchestratePlanScreen();
+    },
+  };
+}
+
+function appendWorkingPhaseContent(
+  inner: HTMLElement,
+  opts: RenderOrchestratePlanScreenOptions,
+  isSuperPlan: boolean,
+): void {
+  appendPlanScreenHeader(
+    inner,
+    isSuperPlan ? 'Super Plan' : 'Orchestrate',
+    'Planning in progress',
+    isSuperPlan
+      ? 'The Super Plan pipeline runs through interview, spec, research, draft, review, and polish. Answer questions below or open the chat to inspect tool calls.'
+      : 'Status updates here. Answer any questions below, or open the chat to inspect tool calls.',
+  );
+
+  const progressMount = document.createElement('div');
+  progressMount.id = PLAN_PROGRESS_MOUNT_ID;
+  progressMount.className = 'orchestrate-plan-screen__progress-mount';
+  progressMount.setAttribute('role', 'status');
+  progressMount.setAttribute('aria-live', 'polite');
+
+  const questionsHost = document.createElement('div');
+  questionsHost.id = ORCHESTRATE_PLAN_SCREEN_QUESTIONS_ID;
+  questionsHost.className = 'orchestrate-plan-screen__questions';
+  questionsHost.hidden = opts.phase !== 'questions';
+
+  const actions = document.createElement('div');
+  actions.className =
+    'orchestrate-plan-screen__actions orchestrate-plan-screen__actions--spread';
+
+  const actionsStart = document.createElement('div');
+  actionsStart.className = 'orchestrate-plan-screen__actions-start';
+
+  const viewChatBtn = document.createElement('button');
+  viewChatBtn.type = 'button';
+  viewChatBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--ghost';
+  viewChatBtn.textContent = 'View chat';
+  viewChatBtn.addEventListener('click', () => {
+    const chat = findChatById(opts.chatId);
+    if (chat) suspendToViewChat(chat);
+  });
+
+  const stopBtn = document.createElement('button');
+  stopBtn.type = 'button';
+  stopBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--danger';
+  stopBtn.textContent = 'Stop';
+  stopBtn.addEventListener('click', () => {
+    stopGeneration(opts.chatId);
+  });
+
+  actionsStart.appendChild(viewChatBtn);
+  actions.append(actionsStart, stopBtn);
+  inner.append(progressMount, questionsHost, actions);
+
+  const afterPaint =
+    typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame
+      : (fn: () => void) => {
+          fn();
+          return 0;
+        };
+  afterPaint(() => {
+    const chat = findChatById(opts.chatId);
+    if (chat) mountPlanProgressPanel(chat);
+  });
 }
 
 function appendPlanScreenHeader(
@@ -646,85 +773,16 @@ function buildPlanScreenDom(opts: RenderOrchestratePlanScreenOptions): HTMLEleme
     actionsStart.appendChild(backBtn);
     actions.append(actionsStart, startBtn);
     inner.append(form, actions);
-  } else if (opts.phase === 'working' || opts.phase === 'questions') {
-    appendPlanScreenHeader(
-      inner,
-      'Orchestrate',
-      'Planning in progress',
-      'Status updates here. Answer any questions below, or open the chat to inspect tool calls.',
-    );
-
-    const statusBlock = document.createElement('div');
-    statusBlock.className = 'orchestrate-plan-screen__status-block';
-
-    const statusRow = document.createElement('div');
-    statusRow.className = 'orchestrate-plan-screen__status-row';
-
-    const dot = document.createElement('span');
-    dot.className = 'orchestrate-plan-screen__status-dot pulse';
-    dot.setAttribute('aria-hidden', 'true');
-
-    const statusCopy = document.createElement('div');
-    statusCopy.className = 'orchestrate-plan-screen__status-copy';
-
-    const status = document.createElement('p');
-    status.className = 'orchestrate-plan-screen__status-text';
-    status.setAttribute('role', 'status');
-    status.setAttribute('aria-live', 'polite');
-    status.textContent = ORCHESTRATE_PLAN_SCREEN_STATUS_LINES[0]!;
-
-    const activity = document.createElement('p');
-    activity.className = 'orchestrate-plan-screen__activity';
-    activity.hidden = true;
-
-    statusCopy.append(status, activity);
-    statusRow.append(dot, statusCopy);
-    statusBlock.appendChild(statusRow);
-
-    const questionsHost = document.createElement('div');
-    questionsHost.id = ORCHESTRATE_PLAN_SCREEN_QUESTIONS_ID;
-    questionsHost.className = 'orchestrate-plan-screen__questions';
-    questionsHost.hidden = opts.phase !== 'questions';
-
-    const actions = document.createElement('div');
-    actions.className =
-      'orchestrate-plan-screen__actions orchestrate-plan-screen__actions--spread';
-
-    const actionsStart = document.createElement('div');
-    actionsStart.className = 'orchestrate-plan-screen__actions-start';
-
-    const viewChatBtn = document.createElement('button');
-    viewChatBtn.type = 'button';
-    viewChatBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--ghost';
-    viewChatBtn.textContent = 'View chat';
-    viewChatBtn.addEventListener('click', () => {
-      const chat = findChatById(opts.chatId);
-      if (chat) suspendToViewChat(chat);
-    });
-
-    const stopBtn = document.createElement('button');
-    stopBtn.type = 'button';
-    stopBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--danger';
-    stopBtn.textContent = 'Stop';
-    stopBtn.addEventListener('click', () => {
-      stopGeneration(opts.chatId);
-    });
-
-    actionsStart.appendChild(viewChatBtn);
-    actions.append(actionsStart, stopBtn);
-    inner.append(statusBlock, questionsHost, actions);
-
-    const afterPaint =
-      typeof requestAnimationFrame === 'function'
-        ? requestAnimationFrame
-        : (fn: () => void) => {
-            fn();
-            return 0;
-          };
-    afterPaint(() => {
-      syncPlanStatusFromSession();
-      syncPlanScreenActivityLine(activity, opts.chatId);
-    });
+  } else if (
+    opts.phase === 'working' ||
+    opts.phase === 'super-plan-working' ||
+    opts.phase === 'questions'
+  ) {
+    const chat = findChatById(opts.chatId);
+    const isSuperPlan =
+      opts.phase === 'super-plan-working' ||
+      normalizeModeId(chat?.modeId) === 'super-plan';
+    appendWorkingPhaseContent(inner, opts, isSuperPlan);
   } else if (opts.phase === 'spec_confirm') {
     const specPath = opts.planPath?.trim() ?? '';
     appendPlanScreenHeader(
@@ -775,9 +833,9 @@ function buildPlanScreenDom(opts: RenderOrchestratePlanScreenOptions): HTMLEleme
     reviseBtn.addEventListener('click', () => {
       const chat = findChatById(opts.chatId);
       if (!chat) return;
-      if (planSession) planSession.phase = 'working';
+      if (planSession) planSession.phase = 'super-plan-working';
       renderOrchestratePlanScreen({
-        phase: 'working',
+        phase: 'super-plan-working',
         chatId: opts.chatId,
         savedPrompt: opts.savedPrompt,
       });
@@ -791,9 +849,9 @@ function buildPlanScreenDom(opts: RenderOrchestratePlanScreenOptions): HTMLEleme
     confirmBtn.addEventListener('click', () => {
       const chat = findChatById(opts.chatId);
       if (!chat) return;
-      if (planSession) planSession.phase = 'working';
+      if (planSession) planSession.phase = 'super-plan-working';
       renderOrchestratePlanScreen({
-        phase: 'working',
+        phase: 'super-plan-working',
         chatId: opts.chatId,
         savedPrompt: opts.savedPrompt,
       });
@@ -805,11 +863,13 @@ function buildPlanScreenDom(opts: RenderOrchestratePlanScreenOptions): HTMLEleme
     inner.append(previewWrap, actions);
   } else if (opts.phase === 'preview') {
     const planPath = opts.planPath?.trim() ?? '';
+    const chat = findChatById(opts.chatId);
+    const isSuperPlan = normalizeModeId(chat?.modeId) === 'super-plan';
     appendPlanScreenHeader(
       inner,
-      'Orchestrate',
+      isSuperPlan ? 'Super Plan' : 'Orchestrate',
       'Plan ready',
-      'Review the draft below, then open the board to initialize waves from this plan.',
+      'Review the draft below, then choose how to continue.',
     );
 
     if (planPath) {
@@ -825,8 +885,17 @@ function buildPlanScreenDom(opts: RenderOrchestratePlanScreenOptions): HTMLEleme
 
     const previewMount = document.createElement('div');
     previewMount.className = 'orchestrate-plan-screen__preview';
-    mountPlanPreviewContent(previewMount, opts.previewMarkdown ?? '', { modeId: 'plan' });
+    mountPlanPreviewContent(previewMount, opts.previewMarkdown ?? '', {
+      modeId: isSuperPlan ? 'super-plan' : 'plan',
+    });
     previewWrap.appendChild(previewMount);
+
+    const popout = buildPlanPreviewPopoutDom(
+      buildPlanPreviewActionHandlers(opts, planPath),
+      {
+        orchestrateEnabled: Boolean(planPath && isExecutableOrchestratePlan(planPath)),
+      },
+    );
 
     const actions = document.createElement('div');
     actions.className =
@@ -844,27 +913,9 @@ function buildPlanScreenDom(opts: RenderOrchestratePlanScreenOptions): HTMLEleme
       if (chat) suspendToViewChat(chat);
     });
 
-    const hubBtn = document.createElement('button');
-    hubBtn.type = 'button';
-    hubBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--ghost';
-    hubBtn.textContent = 'Back to hub';
-    hubBtn.addEventListener('click', () => {
-      teardownOrchestratePlanScreen();
-      renderOrchestrateHub();
-    });
-
-    const openBoardBtn = document.createElement('button');
-    openBoardBtn.type = 'button';
-    openBoardBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--primary';
-    openBoardBtn.textContent = 'Open board';
-    openBoardBtn.disabled = !planPath || !isExecutableOrchestratePlan(planPath);
-    openBoardBtn.addEventListener('click', () => {
-      if (planPath) openBoardWithPlan(planPath);
-    });
-
-    actionsStart.append(viewChatBtn, hubBtn);
-    actions.append(actionsStart, openBoardBtn);
-    inner.append(previewWrap, actions);
+    actionsStart.appendChild(viewChatBtn);
+    actions.append(actionsStart);
+    inner.append(previewWrap, popout, actions);
   } else if (opts.phase === 'error') {
     appendPlanScreenHeader(
       inner,
@@ -952,8 +1003,12 @@ export function renderOrchestratePlanScreen(
   area.classList.add(CHAT_AREA_PLAN_SCREEN_CLASS);
   document.getElementById('mainColumn')?.classList.add(MAIN_COLUMN_PLAN_SCREEN_CLASS);
   document.getElementById('mainColumn')?.classList.remove('main-column--board-view');
-  if (opts.phase === 'working' || opts.phase === 'questions') {
+  if (opts.phase === 'working' || opts.phase === 'super-plan-working' || opts.phase === 'questions') {
     wirePlanScreenActivityListener(opts.chatId);
+    const chat = findChatById(opts.chatId);
+    if (chat && normalizeModeId(chat.modeId) === 'super-plan') {
+      wireSuperPlanControllerListener(chat);
+    }
   }
 }
 

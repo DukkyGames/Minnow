@@ -429,7 +429,9 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
     emitSubAgentRunUpdated(run);
 
     const parentChat = run.parentChatId ? findChatById(run.parentChatId) : undefined;
-    const { providerId, modelId } = resolveSubAgentModelBinding(typeConfig, parentChat);
+    const resolved = resolveSubAgentModelBinding(typeConfig, parentChat);
+    const providerId = run.providerId?.trim() || resolved.providerId;
+    const modelId = run.modelId?.trim() || resolved.modelId;
     if (
       !modelId.trim() &&
       getSubAgentRunner() === defaultSubAgentRunner
@@ -594,6 +596,8 @@ async function spawnSubAgentInternal(
     messages: [],
     ...(input.category ? { category: input.category } : {}),
     ...(input.boardTaskId ? { boardTaskId: input.boardTaskId } : {}),
+    ...(input.providerId?.trim() ? { providerId: input.providerId.trim() } : {}),
+    ...(input.modelId?.trim() ? { modelId: input.modelId.trim() } : {}),
   };
 
   applySupervisionToRun(run);

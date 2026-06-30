@@ -17,8 +17,12 @@ import {
   runSuperPlanStage,
   type SuperPlanStageOutcome,
 } from './stages';
+import { nextRunnableSuperPlanStage } from './pipeline';
 import {
-  nextSuperPlanStage,
+  getSuperPlanConfigSync,
+  loadSuperPlanConfig,
+} from '../../config/super-plan-meta';
+import {
   type SuperPlanCheckpointAction,
   type SuperPlanStageId,
 } from './types';
@@ -79,7 +83,8 @@ async function handleStageOutcome(
         artifactPath: outcome.artifactPath,
       });
     }
-    const next = nextSuperPlanStage(stageId);
+    const config = getSuperPlanConfigSync();
+    const next = nextRunnableSuperPlanStage(stageId, config);
     if (!next) {
       notifyListeners(chat);
       return;
@@ -95,6 +100,7 @@ async function handleStageOutcome(
 /** Start the Super Plan pipeline for a chat. */
 export async function startSuperPlan(chat: Chat, prompt: string): Promise<void> {
   ensureStreamEndHook();
+  await loadSuperPlanConfig();
   initSuperPlanState(chat, prompt);
   await advanceSuperPlan(chat);
 }
@@ -165,7 +171,8 @@ export async function resumeSuperPlanAfterUser(
     markSuperPlanStageStatus(chat, 'spec_confirm', 'done', {
       artifactPath: chat.superPlan.specPath,
     });
-    const next = nextSuperPlanStage('spec_confirm');
+    const config = getSuperPlanConfigSync();
+    const next = nextRunnableSuperPlanStage('spec_confirm', config);
     if (next) {
       setSuperPlanActiveStage(chat, next);
       await advanceSuperPlan(chat);
