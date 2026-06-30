@@ -1,20 +1,17 @@
 /**
- * Composer drag-and-drop: file-tree workspace paths → composer links / image chips.
+ * Composer drag-and-drop: workspace file-tree paths and OS files (Explorer) → composer.
  */
 
+import { addAttachments } from '../attachments/store';
+import {
+  classifyFileDrag,
+  filesFromDataTransfer,
+  hasWorkspaceFileDrag,
+} from '../attachments/external-file-drop';
 import { WORKSPACE_FILE_MIME } from '../attachments/workspace-ref';
 import { attachWorkspacePathToComposer } from './workspace-composer-link';
-const DROP_ACTIVE_CLASS = 'composer-drop-active';
 
-function hasWorkspaceDrag(dataTransfer: DataTransfer | null): boolean {
-  if (!dataTransfer) return false;
-  const types = dataTransfer.types;
-  if (types.includes(WORKSPACE_FILE_MIME)) return true;
-  if (types.includes('text/plain') && dataTransfer.effectAllowed !== 'none') {
-    return true;
-  }
-  return false;
-}
+const DROP_ACTIVE_CLASS = 'composer-drop-active';
 
 function pathFromDataTransfer(dataTransfer: DataTransfer): string | null {
   const typed = dataTransfer.getData(WORKSPACE_FILE_MIME).trim();
@@ -32,6 +29,10 @@ function setDropActive(targets: HTMLElement[], active: boolean): void {
   }
 }
 
+function hasComposerDrag(dataTransfer: DataTransfer | null): boolean {
+  return classifyFileDrag(dataTransfer) !== null;
+}
+
 function bindDropTarget(
   element: HTMLElement,
   dropTargets: HTMLElement[],
@@ -39,14 +40,14 @@ function bindDropTarget(
   let dragDepth = 0;
 
   element.addEventListener('dragenter', (event) => {
-    if (!hasWorkspaceDrag(event.dataTransfer)) return;
+    if (!hasComposerDrag(event.dataTransfer)) return;
     event.preventDefault();
     dragDepth += 1;
     setDropActive(dropTargets, true);
   });
 
   element.addEventListener('dragover', (event) => {
-    if (!hasWorkspaceDrag(event.dataTransfer)) return;
+    if (!hasComposerDrag(event.dataTransfer)) return;
     event.preventDefault();
     if (event.dataTransfer) {
       event.dataTransfer.dropEffect = 'copy';
@@ -55,7 +56,7 @@ function bindDropTarget(
   });
 
   element.addEventListener('dragleave', (event) => {
-    if (!hasWorkspaceDrag(event.dataTransfer)) return;
+    if (!hasComposerDrag(event.dataTransfer)) return;
     dragDepth = Math.max(0, dragDepth - 1);
     if (dragDepth === 0) {
       setDropActive(dropTargets, false);
@@ -63,31 +64,56 @@ function bindDropTarget(
   });
 
   element.addEventListener('drop', (event) => {
-    if (!hasWorkspaceDrag(event.dataTransfer)) return;
+    const kind = classifyFileDrag(event.dataTransfer);
+    if (!kind) return;
     event.preventDefault();
     dragDepth = 0;
     setDropActive(dropTargets, false);
 
-    const path = pathFromDataTransfer(event.dataTransfer!);
-    if (path) {
-      attachWorkspacePathToComposer(path);
+    if (kind === 'external' && event.dataTransfer) {
+      const files = filesFromDataTransfer(event.dataTransfer);
+      if (files.length) {
+        void addAttachments(files);
+      }
+      return;
+    }
+
+    if (event.dataTransfer && hasWorkspaceFileDrag(event.dataTransfer)) {
+      const path = pathFromDataTransfer(event.dataTransfer);
+      if (path) {
+        attachWorkspacePathToComposer(path);
+      }
     }
   });
 }
 
 /**
- * Wires dragover/drop on the composer textarea and input bar.
+ * Wires dragover/drop on Code, Chat app, and desktop composer surfaces.
  * Safe to call before markup exists (no-op when elements are missing).
  */
 export function initComposerDrop(): void {
-  const msgInput = document.getElementById('msgInput');
-  const inputBar = document.querySelector('.input-bar');
-  const inputBarComposer = document.querySelector('.input-bar-composer');
+  const selectors = [
+    '#msgInput',
+    '.input-bar',
+    '.input-bar-composer',
+    '#chatAppInput',
+    '.chat-app-composer',
+    '#desktopInput',
+    '.mn-os-desktop-composer',
+    '.mn-os-desktop-input-row',
+  ];
 
   const targets: HTMLElement[] = [];
-  if (msgInput instanceof HTMLElement) targets.push(msgInput);
-  if (inputBar instanceof HTMLElement) targets.push(inputBar);
-  if (inputBarComposer instanceof HTMLElement) targets.push(inputBarComposer);
+  const seen = new Set<HTMLElement>();
+
+  for (const selector of selectors) {
+    for (const el of document.querySelectorAll(selector)) {
+      if (el instanceof HTMLElement && !seen.has(el)) {
+        seen.add(el);
+        targets.push(el);
+      }
+    }
+  }
 
   if (targets.length === 0) return;
 

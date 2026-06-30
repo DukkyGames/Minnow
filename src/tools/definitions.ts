@@ -430,7 +430,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'save_file',
-      'Write content to a file (creates or overwrites).',
+      'Write content to a file (creates or overwrites). When overwriting an existing file, line endings are auto-adjusted to match the file (CRLF vs LF) — agents can use \\n safely.',
       {
         path: { type: 'string', description: 'Relative file path' },
         content: { type: 'string', description: 'Full file content' },
@@ -446,7 +446,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'append_file',
-      'Append text to the end of a file.',
+      'Append text to the end of a file. Line endings in the appended text are auto-adjusted to match an existing file.',
       {
         path: { type: 'string', description: 'Relative file path' },
         content: { type: 'string', description: 'Text to append' },
@@ -659,7 +659,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'get_file_metadata',
-      'Get file or directory metadata (size, mtime, is directory).',
+      'Get file or directory metadata (size, mtime, is directory). Text files include line_ending: CRLF | LF | mixed | none.',
       {
         path: { type: 'string', description: 'Relative path' },
       },
