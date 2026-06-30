@@ -1,5 +1,6 @@
 /**
  * Slash-command skill picker anchored above the active composer textarea.
+ * Uses fixed positioning on document.body so overflow:hidden ancestors (hub, workspace split) do not clip it.
  */
 
 import { streaming } from '../app-state';
@@ -15,6 +16,7 @@ let filterQuery = '';
 let activeIndex = 0;
 let open = false;
 let slashStart = -1;
+let repositionHandler: (() => void) | null = null;
 
 /** Skills confirmed via picker selection (not manual typing), keyed by element. */
 const pickerApplied = new WeakMap<HTMLTextAreaElement, string>();
@@ -34,27 +36,64 @@ function ensurePicker(): void {
   pickerEl.appendChild(listEl);
 }
 
-/** Anchor the shared picker popover to the active composer wrap. */
-function anchorPickerToInput(el: HTMLTextAreaElement): void {
+/** Composer row used for viewport anchoring (input-wrap, chat-app-input, desktop wrap). */
+function pickerAnchor(el: HTMLTextAreaElement): HTMLElement {
+  return el.parentElement ?? el;
+}
+
+/** Mount the shared picker on body so scroll/overflow containers cannot clip it. */
+function mountPickerPortal(): void {
   ensurePicker();
-  if (!pickerEl) return;
+  if (!pickerEl || pickerEl.parentElement === document.body) return;
+  document.body.appendChild(pickerEl);
+}
 
-  const wrap = el.parentElement;
-  if (wrap) {
-    if (pickerEl.parentElement !== wrap) {
-      wrap.appendChild(pickerEl);
-    }
-    return;
-  }
+function attachRepositionListeners(): void {
+  if (repositionHandler) return;
+  repositionHandler = () => {
+    if (open) positionPicker();
+  };
+  window.addEventListener('resize', repositionHandler);
+  window.addEventListener('scroll', repositionHandler, true);
+}
 
-  if (pickerEl.parentElement !== document.body) {
-    document.body.appendChild(pickerEl);
+function detachRepositionListeners(): void {
+  if (!repositionHandler) return;
+  window.removeEventListener('resize', repositionHandler);
+  window.removeEventListener('scroll', repositionHandler, true);
+  repositionHandler = null;
+}
+
+/** Place the picker above the active composer, flipping below when there is no room. */
+function positionPicker(): void {
+  if (!pickerEl || !inputEl || !open) return;
+
+  const anchor = pickerAnchor(inputEl);
+  const rect = anchor.getBoundingClientRect();
+  const margin = 8;
+  const gap = 4;
+  const viewportW = window.innerWidth > 0 ? window.innerWidth : 1024;
+  const viewportH = window.innerHeight > 0 ? window.innerHeight : 768;
+  const width = Math.min(Math.max(rect.width, 280), viewportW - margin * 2);
+
+  pickerEl.style.width = `${width}px`;
+
+  let left = rect.left;
+  left = Math.max(margin, Math.min(left, viewportW - width - margin));
+
+  const pickerHeight = pickerEl.offsetHeight;
+  let top = rect.top - pickerHeight - gap;
+  if (top < margin) {
+    top = rect.bottom + gap;
   }
+  top = Math.max(margin, Math.min(top, viewportH - pickerHeight - margin));
+
+  pickerEl.style.top = `${top}px`;
+  pickerEl.style.left = `${left}px`;
 }
 
 function bindActiveInput(el: HTMLTextAreaElement): void {
   inputEl = el;
-  anchorPickerToInput(el);
 }
 
 function filteredSkills(): SkillListItem[] {
@@ -81,6 +120,7 @@ function renderList(): void {
     empty.textContent = 'No matching skills';
     listEl.appendChild(empty);
     activeIndex = 0;
+    if (open) positionPicker();
     return;
   }
 
@@ -126,6 +166,8 @@ function renderList(): void {
 
     listEl.appendChild(li);
   });
+
+  if (open) positionPicker();
 }
 
 function closePicker(): void {
@@ -133,13 +175,19 @@ function closePicker(): void {
   slashStart = -1;
   filterQuery = '';
   activeIndex = 0;
-  if (pickerEl) pickerEl.classList.add('hidden');
+  detachRepositionListeners();
+  if (pickerEl) {
+    pickerEl.classList.add('hidden');
+    pickerEl.style.removeProperty('top');
+    pickerEl.style.removeProperty('left');
+    pickerEl.style.removeProperty('width');
+  }
   if (inputEl) inputEl.setAttribute('aria-expanded', 'false');
 }
 
 function openPickerAt(start: number, query: string): void {
-  if (inputEl) anchorPickerToInput(inputEl);
   ensurePicker();
+  mountPickerPortal();
   open = true;
   slashStart = start;
   filterQuery = query;
@@ -147,6 +195,7 @@ function openPickerAt(start: number, query: string): void {
   if (pickerEl) pickerEl.classList.remove('hidden');
   if (inputEl) inputEl.setAttribute('aria-expanded', 'true');
   renderList();
+  attachRepositionListeners();
 }
 
 /** Insert /skill-id and trailing space; close picker. */
