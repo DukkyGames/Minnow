@@ -27,6 +27,7 @@ import { acknowledgeChatViewed } from '../notifications/acknowledge';
 import {
   handleComposerPrimaryAction,
   initComposerSteerInputListener,
+  shouldAllowComposerPrimaryAction,
   syncComposerFromStreamingState,
 } from '../ui/composer-send';
 import { initComposerSlashPicker } from '../ui/skill-picker';
@@ -85,11 +86,7 @@ function syncDesktopComposerSendState(): void {
   const input = document.getElementById('desktopInput') as HTMLTextAreaElement | null;
   const sendBtn = document.getElementById('desktopSendBtn') as HTMLButtonElement | null;
   if (!sendBtn) return;
-  if (isActiveChatStreaming()) {
-    sendBtn.disabled = false;
-    return;
-  }
-  sendBtn.disabled = !input?.value.trim();
+  sendBtn.disabled = !shouldAllowComposerPrimaryAction(input?.value ?? '');
 }
 
 async function ensureChatsWorkspaceReady(): Promise<boolean> {

@@ -2,6 +2,7 @@
  * Session in-memory notification inbox with pub/sub.
  */
 
+import { randomUUID } from '../lib/random-id.ts';
 import type { NotificationRecord } from './types';
 
 const MAX_ITEMS = 100;
@@ -28,10 +29,7 @@ function emit(): void {
 }
 
 function newId(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return `notif_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  return randomUUID();
 }
 
 /** All inbox rows, newest first. */

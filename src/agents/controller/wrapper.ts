@@ -3,6 +3,7 @@
  */
 
 import type { SubAgentRun } from '../types';
+import { randomUUID } from '../../lib/random-id.ts';
 
 /** Supervision fields shared by SubAgentRun and chat-backed task tracking. */
 export interface RunSupervision {
@@ -92,10 +93,7 @@ export function getHeartbeatConfig(): HeartbeatConfig {
 }
 
 function mintIdempotencyKey(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return `idem_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  return randomUUID();
 }
 
 /** Create default supervision fields for a new dispatch. */
