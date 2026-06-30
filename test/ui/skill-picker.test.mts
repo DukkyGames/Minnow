@@ -7,6 +7,7 @@ import { describe, it } from 'node:test';
 import { Window } from 'happy-dom';
 
 const { refreshSkillCatalog } = await import('../../src/skills/client.ts');
+const { listSlashPickerRows } = await import('../../src/chat/slash-commands/picker-catalog.ts');
 const {
   initComposerSlashPicker,
   isSkillPickerOpen,
@@ -56,5 +57,26 @@ describe('skill-picker', () => {
       assert.equal(isSkillPickerOpen(), true, `picker open for ${id}`);
       assert.equal(picker?.parentElement?.className, wrapClass, `picker anchored to ${wrapClass}`);
     }
+  });
+
+  it('lists /goal in the picker when filtering by goal', async () => {
+    const window = new Window();
+    globalThis.document = window.document;
+    globalThis.HTMLElement = window.HTMLElement;
+    globalThis.Event = window.Event;
+
+    await refreshSkillCatalog();
+
+    const input = mountComposer('goalPickerInput', 'input-wrap');
+    initComposerSlashPicker(input);
+
+    input.focus();
+    input.value = '/goal';
+    input.setSelectionRange(5, 5);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+
+    assert.equal(isSkillPickerOpen(), true);
+    const rows = listSlashPickerRows('goal');
+    assert.ok(rows.some((row) => row.kind === 'command' && row.command.id === 'goal'));
   });
 });

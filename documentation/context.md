@@ -312,7 +312,7 @@ Completions use `postChatCompletions` with `persist: false` (no chat session pol
 
 ### Skills framework (Step 13)
 
-Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoked from the composer with **`/`** (slash picker) or by typing `/<skill-id>`.
+Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoked from the composer with **`/`** (slash picker) or by typing `/<skill-id>`. The slash picker also lists **built-in slash commands** (stateful commands that are not skills — e.g. `/goal`) from [`src/chat/slash-commands/registry.ts`](../src/chat/slash-commands/registry.ts), merged in [`picker-catalog.ts`](../src/chat/slash-commands/picker-catalog.ts) with a **Command** badge.
 
 | Root | Path | Override |
 |------|------|----------|
@@ -1313,7 +1313,7 @@ The app supports **multiple chat sessions** with a **collapsible left sidebar**.
 
 **Main chat (Phase 2b+):** In-flight completions are owned by the Node backend (`server/generations/`). The client persists **`chat.currentGenerationId`** immediately after `POST /api/generations`, then subscribes with replay-from-zero. Refresh re-subscribes via `bootGenerationResumeForChats` / `bootGenerationResumeForChat` (`src/chat/generation-resume.ts`) — no re-prompt. **Stop** calls `cancelGeneration` + aborts the local reader (`src/chat/stop-generation.ts`). Stream **404** clears the id and shows: *This reply was lost when the server restarted.* (no auto-retry). Headless callers (sub-agent, reef widget, titles) use `postChatCompletions` → generations with `persist: false`.
 
-**Model fallback chains (MIN-128):** Optional `fallbackRole` on `POST /api/generations` (routing row id, e.g. `main-chat`, sub-agent type id, `chat-titles`, `reef-widget`; legacy `default`/`utility` aliases still resolve) selects an ordered provider/model candidate list from `config.json` → `fallbackChains` (disabled by default). Resolution order: primary → per-role chain → **global chain** (`roles._global`). Global candidates apply when a role has no fallbacks configured and as a last resort after per-role candidates fail (dead host, connection error, etc.). `server/generations/upstream.js` tries candidates **sequentially only before the first upstream byte**; after streaming starts, failures surface as errors (no mid-response model switch). Retryable failures (connection errors, 502/503/504) mark the host origin dead for `cooldownSeconds` (`server/generations/host-cooldown.js`). Terminal SSE `event: end` may include `fallbackUsed`, `chosenProviderId`, `chosenModelId`. Wired call sites: main chat (`main-chat`), sub-agents (per type id), title jobs (`chat-titles`), Reef widget (`reef-widget`). Resolver: `server/generations/fallback.js`.
+**Model fallback chains (MIN-128):** Optional `fallbackRole` on `POST /api/generations` (routing row id, e.g. `main-chat`, sub-agent type id, `chat-titles`, `goal-eval`, `reef-widget`; legacy `default`/`utility` aliases still resolve) selects an ordered provider/model candidate list from `config.json` → `fallbackChains` (disabled by default). Resolution order: primary → per-role chain → **global chain** (`roles._global`). Global candidates apply when a role has no fallbacks configured and as a last resort after per-role candidates fail (dead host, connection error, etc.). `server/generations/upstream.js` tries candidates **sequentially only before the first upstream byte**; after streaming starts, failures surface as errors (no mid-response model switch). Retryable failures (connection errors, 502/503/504) mark the host origin dead for `cooldownSeconds` (`server/generations/host-cooldown.js`). Terminal SSE `event: end` may include `fallbackUsed`, `chosenProviderId`, `chosenModelId`. Wired call sites: main chat (`main-chat`), sub-agents (per type id), title jobs (`chat-titles`), Reef widget (`reef-widget`). Resolver: `server/generations/fallback.js`.
 
 | Concern | Location |
 |---------|----------|
@@ -1733,7 +1733,7 @@ While the loop is active (`activeGoal` and not `achieved`), **tool approvals aut
 
 | Concern | Location |
 |---------|----------|
-| Command dispatch | [`src/chat/goal/command.ts`](../src/chat/goal/command.ts) — intercepted in [`sendMessageWithTools`](../src/tools/loop.ts) before slash skills |
+| Command dispatch | [`src/chat/goal/command.ts`](../src/chat/goal/command.ts) — intercepted in [`sendMessageWithTools`](../src/tools/loop.ts) before slash skills; listed in slash picker (**Command** badge) |
 | Evaluator | [`src/chat/goal/evaluate.ts`](../src/chat/goal/evaluate.ts), `fallbackRole: goal-eval` |
 | State helpers | [`src/state/sessions.ts`](../src/state/sessions.ts) — `setActiveGoal`, `clearActiveGoal`, `getActiveGoal` |
 | Composer hint | [`src/ui/goal-active-hint.ts`](../src/ui/goal-active-hint.ts) — `◎ goal active · N turns` |
