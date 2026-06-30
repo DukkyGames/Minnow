@@ -20,7 +20,7 @@ import {
 } from '../research/library-window';
 import { ResearchProgressPanel } from '../research/progress-panel';
 import { renderResearchResultFromMarkdown } from '../research/report-view';
-import type { ResearchStartRequest } from '../research/types';
+import type { ResearchScope, ResearchStartRequest } from '../research/types';
 import { getActiveChat } from '../state/sessions';
 import { setStatus } from '../ui/status';
 import type { DesktopResearchActivateOptions } from './desktop-state';
@@ -88,6 +88,7 @@ function readDefaultStartOptions(): Omit<ResearchStartRequest, 'query' | 'contin
   return {
     maxRounds: 0,
     category: '',
+    scope: 'web' satisfies ResearchScope,
   };
 }
 

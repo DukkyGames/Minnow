@@ -62,6 +62,14 @@ const MODE_DEFINITIONS: ModeDefinition[] = [
     toolPolicy: denyListToolPolicy(PLAN_DENIED_TOOLS),
   },
   {
+    id: 'super-plan',
+    label: 'Super Plan',
+    description:
+      'Extended planning with sub-agent research; write plans and reference artifacts only.',
+    promptId: 'super-plan',
+    toolPolicy: denyListToolPolicy(PLAN_DENIED_TOOLS),
+  },
+  {
     id: 'orchestrate',
     label: 'Orchestrate',
     description: 'Coordinate multi-step work; delegate and structure tasks.',
@@ -96,9 +104,11 @@ export function listModes(): ModeDefinition[] {
   return [...MODE_DEFINITIONS];
 }
 
-/** Composer mode strip (excludes Orchestrate and Reef; not shown in Code chat). */
+/** Composer mode strip (excludes Orchestrate, Reef, and Super Plan — Super Plan is a Plan sub-item). */
 export function listComposerModes(): ModeDefinition[] {
-  return MODE_DEFINITIONS.filter((m) => m.id !== 'orchestrate' && m.id !== 'reef');
+  return MODE_DEFINITIONS.filter(
+    (m) => m.id !== 'orchestrate' && m.id !== 'reef' && m.id !== 'super-plan',
+  );
 }
 
 export function getMode(id: ModeId): ModeDefinition {

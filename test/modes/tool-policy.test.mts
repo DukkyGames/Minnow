@@ -19,6 +19,13 @@ describe('filterToolsByMode', () => {
     assert.ok(!filtered.some((t) => t.id === 'execute_command'));
   });
 
+  test('super-plan excludes execute_command but allows spawn_sub_agent', () => {
+    const filtered = filterToolsByMode(BUILT_IN_TOOLS, 'super-plan');
+    assert.ok(!filtered.some((t) => t.id === 'execute_command'));
+    assert.ok(filtered.some((t) => t.id === 'spawn_sub_agent'));
+    assert.ok(filtered.some((t) => t.id === 'get_sub_agent_status'));
+  });
+
   test('plan includes save_file for plan document writes', () => {
     const filtered = filterToolsByMode(BUILT_IN_TOOLS, 'plan');
     assert.ok(filtered.some((t) => t.id === 'save_file'));

@@ -32,6 +32,11 @@ describe('research progress panel', () => {
     assert.equal(inferSourceType('https://arxiv.org/abs/1234'), 'paper');
   });
 
+  test('inferSourceType labels local file paths as code', () => {
+    assert.equal(inferSourceType('server/research/engine.js'), 'code');
+    assert.equal(inferSourceType('file:///workspace/src/research/types.ts'), 'code');
+  });
+
   test('apply progress renders stepper and feed rows', () => {
     const mount = document.getElementById('progressMount') as HTMLElement;
     const panel = new ResearchProgressPanel(mount);

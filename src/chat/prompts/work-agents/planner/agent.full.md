@@ -8,6 +8,7 @@ providerId: null
 modelId: null
 defaultForModes:
   - plan
+  - super-plan
 allowedTools:
   - get_datetime
   - calculate

@@ -23,6 +23,28 @@ export function currentDateContext() {
   );
 }
 
+export const RESEARCH_PLAN_PROMPT_CODEBASE = `You are a research strategist analyzing a local codebase. Before searching files, create a research plan.
+
+**Question:** {question}
+
+Break this question down for codebase investigation:
+1. Which modules, directories, or file types are most likely to hold answers?
+2. What symbols, APIs, config keys, or patterns should we grep for?
+3. What would a complete, file-grounded answer include?
+
+Return a JSON object with:
+- "sub_questions": Array of 3-6 specific sub-questions to investigate in the repo
+- "key_topics": Array of directories, file patterns, or symbol names to search
+- "success_criteria": One sentence describing what a complete codebase-grounded answer looks like
+
+Example:
+{
+  "sub_questions": ["Where is auth middleware registered?", "How are tokens validated?"],
+  "key_topics": ["server/auth", "middleware", "JWT", "routes.js"],
+  "success_criteria": "A report citing specific files and functions that implement authentication."
+}
+`;
+
 export const RESEARCH_PLAN_PROMPT = `You are a research strategist. Before searching, analyze this question and create a research plan.
 
 **Question:** {question}
@@ -43,6 +65,26 @@ Example:
   "key_topics": ["economy", "healthcare", "safety", "culture"],
   "success_criteria": "A balanced comparison covering cost, quality of life, and practical considerations."
 }
+`;
+
+export const CODEBASE_QUERY_GEN_PROMPT = `You are a research assistant planning local codebase searches (ripgrep + file reads).
+
+**Original question:** {question}
+
+**Research plan:**
+{research_plan}
+
+**What we know so far:**
+{report}
+
+**Round:** {round_num}
+
+Generate {num_queries} focused codebase search queries — short keywords, symbol names, path fragments, or grep patterns that will locate relevant source files.
+{round_instruction}
+
+Prefer concrete identifiers (function names, config keys, error strings) over vague prose.
+Return ONLY a JSON array of query strings, nothing else.
+Example: ["DeepResearcher", "searchAndExtract", "server/research/engine"]
 `;
 
 export const QUERY_GEN_PROMPT = `You are a research assistant planning web searches.

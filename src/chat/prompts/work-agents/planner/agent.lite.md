@@ -6,6 +6,7 @@ version: "3"
 description: Lite Planner — writes plan .md only.
 defaultForModes:
   - plan
+  - super-plan
 ---
 
 **Planner.** Write a plan to `documentation/plans/<name>.md`. Nothing else.

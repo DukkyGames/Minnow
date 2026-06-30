@@ -2,14 +2,17 @@
  * IterResearch-style deep research engine (port of Odysseus `DeepResearcher`).
  */
 
+import { searchCodebase as defaultSearchCodebase, extractFromFile as defaultExtractFromFile } from './codebase-search.js';
 import { fetchAndExtract as defaultFetchAndExtract } from './extractor.js';
 import { parseJsonArray, parseJsonObject } from './json-parse.js';
 import { llmCall as defaultLlmCall } from './llm.js';
 import {
   CATEGORY_PROMPTS,
+  CODEBASE_QUERY_GEN_PROMPT,
   normalizeResearchCategory,
   QUERY_GEN_PROMPT,
   RESEARCH_PLAN_PROMPT,
+  RESEARCH_PLAN_PROMPT_CODEBASE,
   SYNTHESIZE_PROMPT,
   STOP_PROMPT,
   FINAL_REPORT_PROMPT,
@@ -27,6 +30,8 @@ export const engineDeps = {
   llmCall: defaultLlmCall,
   searchStructured: defaultSearchStructured,
   fetchAndExtract: defaultFetchAndExtract,
+  searchCodebase: defaultSearchCodebase,
+  extractFromFile: defaultExtractFromFile,
 };
 
 /**
@@ -76,9 +81,26 @@ export function pLimit(concurrency) {
  */
 
 /**
+ * @typedef {'web' | 'codebase' | 'both'} ResearchScope
+ */
+
+/**
+ * @param {unknown} value
+ * @returns {ResearchScope}
+ */
+export function normalizeResearchScope(value) {
+  const raw = String(value ?? 'web').trim().toLowerCase();
+  if (raw === 'codebase' || raw === 'both') {
+    return raw;
+  }
+  return 'web';
+}
+
+/**
  * @typedef {object} DeepResearcherOptions
  * @property {string} providerId
  * @property {string} model
+ * @property {ResearchScope} [scope]
  * @property {number} [maxRounds]
  * @property {number} [maxTimeSeconds]
  * @property {number} [maxUrlsPerRound]
@@ -105,6 +127,7 @@ export class DeepResearcher {
     this.model = options.model;
     this.searchProviderOverride = options.searchProvider?.trim() ?? '';
     this.category = normalizeResearchCategory(options.category?.trim() ?? '');
+    this.scope = normalizeResearchScope(options.scope);
     this.maxRounds =
       options.maxRounds && options.maxRounds > 0 ? options.maxRounds : AUTO_MAX_ROUNDS;
     this.maxTime = options.maxTimeSeconds ?? 300;
@@ -141,6 +164,18 @@ export class DeepResearcher {
     this.evolvingReport = '';
     this.researchPlan = '';
     this._lastSearchError = '';
+    /** @type {string[]} */
+    this._lastWebQueries = [];
+    /** @type {string[]} */
+    this._lastCodebaseQueries = [];
+  }
+
+  includesWebScope() {
+    return this.scope === 'web' || this.scope === 'both';
+  }
+
+  includesCodebaseScope() {
+    return this.scope === 'codebase' || this.scope === 'both';
   }
 
   cancel() {
@@ -310,18 +345,45 @@ export class DeepResearcher {
         consecutiveEmptyRounds += 1;
         if (consecutiveEmptyRounds >= this.maxEmptyRounds) {
           const errDetail = this._lastSearchError || getLastSearchError() || 'unknown error';
-          this._emit({
-            phase: 'error',
-            message: `Search engine unavailable: ${errDetail}`,
-          });
-          if (!findings.length) {
-            return (
-              `**Search unavailable** — Web search failed after ` +
-              `${roundNum} rounds. Error: ${errDetail}\n\n` +
-              'Please check your search provider settings and ensure the service is running.'
-            );
+          if (this.includesWebScope() && !this.includesCodebaseScope()) {
+            this._emit({
+              phase: 'error',
+              message: `Search engine unavailable: ${errDetail}`,
+            });
+            if (!findings.length) {
+              return (
+                `**Search unavailable** — Web search failed after ` +
+                `${roundNum} rounds. Error: ${errDetail}\n\n` +
+                'Please check your search provider settings and ensure the service is running.'
+              );
+            }
+            break;
           }
-          break;
+          if (this.includesCodebaseScope() && !this.includesWebScope()) {
+            this._emit({
+              phase: 'error',
+              message: `Codebase search found no relevant files after ${roundNum} rounds.`,
+            });
+            if (!findings.length) {
+              return (
+                `**Codebase search empty** — No relevant local files were found after ` +
+                `${roundNum} rounds.\n\n` +
+                'Try rephrasing the question or broadening the search terms.'
+              );
+            }
+            break;
+          }
+          this._emit({
+            phase: 'warning',
+            message: `No new sources this round (${errDetail}). Continuing with prior findings.`,
+          });
+          if (roundNum >= this.minRounds) {
+            const stop = await this.shouldStop(question, report, roundNum, signal);
+            if (stop) {
+              break;
+            }
+          }
+          continue;
         }
       }
 
@@ -366,7 +428,12 @@ export class DeepResearcher {
    * @returns {Promise<string>}
    */
   async createPlan(question, signal) {
-    const prompt = currentDateContext() + formatPrompt(RESEARCH_PLAN_PROMPT, { question });
+    const planPrompt = this.includesCodebaseScope() && !this.includesWebScope()
+      ? RESEARCH_PLAN_PROMPT_CODEBASE
+      : this.includesCodebaseScope()
+        ? `${RESEARCH_PLAN_PROMPT}\n\nAlso plan which local codebase areas to search alongside web sources.`
+        : RESEARCH_PLAN_PROMPT;
+    const prompt = currentDateContext() + formatPrompt(planPrompt, { question });
     try {
       const response = await this._llm([{ role: 'user', content: prompt }], {
         temperature: 0.3,
@@ -437,15 +504,92 @@ export class DeepResearcher {
    * @returns {Promise<string[]>}
    */
   async generateQueries(question, report, roundNum, signal) {
+    /** @type {string[]} */
+    const webQueries = [];
+    /** @type {string[]} */
+    const codebaseQueries = [];
+
+    if (this.includesWebScope()) {
+      webQueries.push(...(await this.generateWebQueries(question, report, roundNum, signal)));
+    }
+    if (this.includesCodebaseScope()) {
+      codebaseQueries.push(
+        ...(await this.generateCodebaseQueries(question, report, roundNum, signal)),
+      );
+    }
+
+    this._lastWebQueries = webQueries;
+    this._lastCodebaseQueries = codebaseQueries;
+    return [...webQueries, ...codebaseQueries];
+  }
+
+  /**
+   * @param {string} question
+   * @param {string} report
+   * @param {number} roundNum
+   * @param {AbortSignal} [signal]
+   * @returns {Promise<string[]>}
+   */
+  async generateWebQueries(question, report, roundNum, signal) {
+    return this.generateQueriesWithPrompt({
+      question,
+      report,
+      roundNum,
+      signal,
+      promptTemplate: QUERY_GEN_PROMPT,
+      roundInstructionWeb: true,
+    });
+  }
+
+  /**
+   * @param {string} question
+   * @param {string} report
+   * @param {number} roundNum
+   * @param {AbortSignal} [signal]
+   * @returns {Promise<string[]>}
+   */
+  async generateCodebaseQueries(question, report, roundNum, signal) {
+    return this.generateQueriesWithPrompt({
+      question,
+      report,
+      roundNum,
+      signal,
+      promptTemplate: CODEBASE_QUERY_GEN_PROMPT,
+      roundInstructionWeb: false,
+    });
+  }
+
+  /**
+   * @param {object} params
+   * @param {string} params.question
+   * @param {string} params.report
+   * @param {number} params.roundNum
+   * @param {AbortSignal} [params.signal]
+   * @param {string} params.promptTemplate
+   * @param {boolean} params.roundInstructionWeb
+   * @returns {Promise<string[]>}
+   */
+  async generateQueriesWithPrompt({
+    question,
+    report,
+    roundNum,
+    signal,
+    promptTemplate,
+    roundInstructionWeb,
+  }) {
     const numQueries = roundNum === 1 ? 4 : 3;
     const roundInstruction =
       roundNum === 1
-        ? 'This is the first round — generate broad, diverse queries that explore the key facets of the question.'
-        : 'We already have partial findings.  Generate targeted follow-up queries to fill gaps, verify claims, or explore specific aspects that the report does not yet cover well.';
+        ? roundInstructionWeb
+          ? 'This is the first round — generate broad, diverse queries that explore the key facets of the question.'
+          : 'This is the first round — generate broad, diverse codebase search terms covering modules, symbols, and file patterns.'
+        : roundInstructionWeb
+          ? 'We already have partial findings.  Generate targeted follow-up queries to fill gaps, verify claims, or explore specific aspects that the report does not yet cover well.'
+          : 'We already have partial findings. Generate targeted follow-up codebase queries to locate missing implementation details or verify claims in source files.';
 
     const prompt =
       currentDateContext() +
-      formatPrompt(QUERY_GEN_PROMPT, {
+      formatPrompt(promptTemplate, {
         question,
         research_plan: this.researchPlan || '(No plan — search broadly.)',
         report: report || '(No findings yet.)',
@@ -506,6 +650,42 @@ export class DeepResearcher {
     /** @type {ResearchFinding[]} */
     const allFindings = [];
 
+    const webQueries = this.includesWebScope()
+      ? this._lastWebQueries.length
+        ? this._lastWebQueries
+        : queries
+      : [];
+    const codebaseQueries = this.includesCodebaseScope()
+      ? this._lastCodebaseQueries.length
+        ? this._lastCodebaseQueries
+        : queries
+      : [];
+
+    if (this.includesWebScope()) {
+      allFindings.push(...(await this.searchWebAndExtract(webQueries, question, signal)));
+    }
+    if (this.includesCodebaseScope()) {
+      allFindings.push(
+        ...(await this.searchCodebaseAndExtract(codebaseQueries, question, signal)),
+      );
+    }
+
+    return allFindings;
+  }
+
+  /**
+   * @param {string[]} queries
+   * @param {string} question
+   * @param {AbortSignal} [signal]
+   * @returns {Promise<ResearchFinding[]>}
+   */
+  async searchWebAndExtract(queries, question, signal) {
+    /** @type {ResearchFinding[]} */
+    const allFindings = [];
+    if (!queries.length) {
+      return allFindings;
+    }
+
     const searchResults = await Promise.all(
       queries.map((q) =>
         this.search(q).catch((err) => {
@@ -550,6 +730,81 @@ export class DeepResearcher {
           });
           return engineDeps.fetchAndExtract({
             url: row.url,
+            question,
+            title: row.title,
+            providerId: this.providerId,
+            model: this.model,
+            maxContentChars: this.maxContentChars,
+            extractionTimeoutSeconds: this.extractionTimeout,
+            signal,
+          });
+        }),
+      ),
+    );
+
+    for (const result of extractResults) {
+      if (result) {
+        allFindings.push(result);
+      }
+    }
+
+    return allFindings;
+  }
+
+  /**
+   * @param {string[]} queries
+   * @param {string} question
+   * @param {AbortSignal} [signal]
+   * @returns {Promise<ResearchFinding[]>}
+   */
+  async searchCodebaseAndExtract(queries, question, signal) {
+    /** @type {ResearchFinding[]} */
+    const allFindings = [];
+    if (!queries.length) {
+      return allFindings;
+    }
+
+    const searchResults = await Promise.all(
+      queries.map((q) =>
+        engineDeps.searchCodebase(q, { maxFiles: this.maxUrlsPerRound }).catch(() => []),
+      ),
+    );
+
+    /** @type {import('./codebase-search.js').CodebaseSearchResult[]} */
+    const filesToRead = [];
+    for (const result of searchResults) {
+      if (!result?.length) {
+        continue;
+      }
+      for (const row of result) {
+        const filePath = row.path || '';
+        if (filePath && !this.urlsFetched.has(filePath)) {
+          filesToRead.push(row);
+          this.urlsFetched.add(filePath);
+        }
+        if (filesToRead.length >= this.maxUrlsPerRound * queries.length) {
+          break;
+        }
+      }
+    }
+
+    if (this._cancelled || this._timeExceeded()) {
+      return allFindings;
+    }
+
+    const limit = pLimit(this.extractionConcurrency);
+    const extractResults = await Promise.all(
+      filesToRead.map((row) =>
+        limit(async () => {
+          const display = row.title || row.path;
+          this._emit({
+            phase: 'reading',
+            url: row.path,
+            title: display,
+            total_sources: this.urlsFetched.size,
+          });
+          return engineDeps.extractFromFile({
+            path: row.path,
             question,
             title: row.title,
             providerId: this.providerId,
@@ -744,6 +999,9 @@ export class DeepResearcher {
     if (this.category) {
       const label = this.category.charAt(0).toUpperCase() + this.category.slice(1);
       stats.Category = label;
+    }
+    if (this.scope && this.scope !== 'web') {
+      stats.Scope = this.scope;
     }
     return stats;
   }
