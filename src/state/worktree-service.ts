@@ -242,3 +242,17 @@ export function openIntegrationPr(input: {
 export function listWorktrees(): Promise<WorktreeOpResult> {
   return postWorktree('list', {});
 }
+
+/** Create a managed per-chat worktree (MIN-276). */
+export function createChatWorktree(input: {
+  chatId: string;
+  branch: string;
+  baseRef?: string;
+}): Promise<WorktreeOpResult> {
+  return postWorktree('create_chat', input);
+}
+
+/** Remove a managed per-chat worktree slot. */
+export function removeChatWorktree(input: { chatId: string }): Promise<WorktreeOpResult> {
+  return postWorktree('remove_chat', input);
+}

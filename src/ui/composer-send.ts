@@ -153,6 +153,7 @@ export function syncComposerFromStreamingState(): void {
   syncSteerQueuedHint();
   syncGoalActiveHint();
   refreshActiveBoardIfMounted();
+  void import('./composer-run-target').then((m) => m.refreshComposerRunTargetDisabled());
 }
 
 function submitSteerFromComposer(): void {

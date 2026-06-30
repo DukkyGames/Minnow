@@ -753,6 +753,10 @@ function ensureChatShape(raw) {
     ...(typeof row.worktreeRoot === 'string' && row.worktreeRoot.trim()
       ? { worktreeRoot: row.worktreeRoot.trim() }
       : {}),
+    ...(typeof row.gitBranch === 'string' && row.gitBranch.trim()
+      ? { gitBranch: row.gitBranch.trim() }
+      : {}),
+    ...(row.chatWorktreeManaged === true ? { chatWorktreeManaged: true } : {}),
     ...(typeof row.workAgentId === 'string' && row.workAgentId.trim()
       ? { workAgentId: row.workAgentId.trim() }
       : {}),
