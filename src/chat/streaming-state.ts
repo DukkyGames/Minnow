@@ -6,6 +6,7 @@ import { expertsPageOpen, streamingChatIds } from '../app-state';
 import { getActiveChat } from '../state/sessions';
 import { isOrchestratePlanScreenSuppressingChatDom } from '../ui/orchestrate-plan-screen';
 import { isChatAppForeground } from '../ui/chat-mount';
+import { isMainColumnOverlaySuppressingChatDom } from '../ui/main-column-overlay';
 import { isBoardViewActive } from '../ui/view-mode-toggle';
 import { reportBackgroundError } from '../boot/report-background-error';
 
@@ -88,6 +89,7 @@ export function isStreamDomVisible(chatId: string): boolean {
   const active = getActiveChat();
   if (active.id !== chatId) return false;
   if (isOrchestratePlanScreenSuppressingChatDom(chatId)) return false;
+  if (isMainColumnOverlaySuppressingChatDom()) return false;
   if (active.kind === 'expert-lab' && expertsPageOpen) return false;
   if (isChatAppForeground()) return true;
   if (isBoardViewActive()) return false;

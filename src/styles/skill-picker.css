@@ -1,16 +1,13 @@
-/* Slash skill picker above composer — bench instrument register (DESIGN.md) */
+/* Slash skill picker above composer — fixed portal so hub/workspace overflow cannot clip it */
 .skill-picker {
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  right: 0;
-  margin-bottom: 0.35rem;
-  max-height: 16rem;
+  position: fixed;
+  max-height: min(16rem, 40vh);
   overflow-y: auto;
   background: var(--mn-surface-1);
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-md);
-  z-index: 30;
+  box-shadow: var(--shadow-popover-tall);
+  z-index: 60;
 }
 
 .skill-picker.hidden {
@@ -37,31 +34,6 @@
 .skill-picker__item--active {
   background: var(--mn-surface-elevated);
   color: var(--mn-fg);
-}
-
-.skill-picker__item--active .skill-picker__label,
-@media (hover: hover) and (pointer: fine) {
-  .skill-picker__item:hover .skill-picker__label {
-    color: var(--elevated-fg);
-  }
-}
-
-.skill-picker__item--active .skill-picker__id,
-.skill-picker__item--active .skill-picker__desc,
-@media (hover: hover) and (pointer: fine) {
-  .skill-picker__item:hover .skill-picker__id,
-  .skill-picker__item:hover .skill-picker__desc {
-    color: var(--elevated-fg);
-    opacity: 0.85;
-  }
-}
-
-.skill-picker__item--active .skill-picker__badge,
-@media (hover: hover) and (pointer: fine) {
-  .skill-picker__item:hover .skill-picker__badge {
-    color: var(--elevated-fg);
-    border-color: color-mix(in oklch, var(--elevated-fg) 35%, transparent);
-  }
 }
 
 .skill-picker__item--active .skill-picker__label {
@@ -158,8 +130,4 @@
   padding: 0.75rem;
   color: var(--mn-fg-muted);
   font-size: 0.875rem;
-}
-
-.input-wrap {
-  position: relative;
 }

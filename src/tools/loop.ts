@@ -172,7 +172,6 @@ import { scheduleContextUsageRefresh } from '../ui/context-usage-ring';
 import { renderToolCall, renderToolResult } from '../ui/tool-messages';
 import { attachShellKillUi } from '../ui/shell-run-ui';
 import { consumeReefArtifactEditsForPrompt } from '../chat/reef/artifact-context.ts';
-import { maybePromoteToolResultToArtifact } from '../chat/reef/artifact-promotion.ts';
 import {
   markChatTurnError,
   recordAssistantReplyOnChat,
@@ -1694,23 +1693,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
                 ...(scopedWorkspaceRoot ? { workspaceRoot: scopedWorkspaceRoot } : {}),
                 ...(boardWorktreeRoots.length ? { extraPathRoots: boardWorktreeRoots } : {}),
               });
-          let toolContent = toolOut.content;
-          try {
-            const promoted = await maybePromoteToolResultToArtifact({
-              chatId: chat.id,
-              chat,
-              toolName: tc.function.name,
-              args,
-              content: toolContent,
-              toolCallId: tc.id,
-              modeId: toolLoopModeId,
-            });
-            if (promoted) {
-              toolContent = `${toolContent}${promoted.footer}`;
-            }
-          } catch {
-            /* Promotion is best-effort; never block the tool loop. */
-          }
+          const toolContent = toolOut.content;
 
           renderToolResult(
             toolWrap,

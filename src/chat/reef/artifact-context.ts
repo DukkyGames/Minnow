@@ -3,7 +3,7 @@
  */
 
 import type { Chat, ReefArtifactEditEvent } from '../../types.ts';
-import { getReefArtifact, type ReefArtifactManifest } from './artifact-client.ts';
+import { getReefArtifact } from './artifact-client.ts';
 
 export type { ReefArtifactEditEvent };
 
@@ -95,19 +95,4 @@ export async function loadArtifactBundle(
 
   await visit(rootId, 0);
   return sections.join('\n\n');
-}
-
-/** Track artifact id on chat when created or promoted. */
-export function registerReefArtifactOnChat(chat: Chat, artifactId: string): void {
-  if (!chat.reefArtifactIds) {
-    chat.reefArtifactIds = [];
-  }
-  if (!chat.reefArtifactIds.includes(artifactId)) {
-    chat.reefArtifactIds.push(artifactId);
-  }
-}
-
-/** Format manifest refs for tool-result footers. */
-export function formatReefArtifactPointer(manifest: ReefArtifactManifest): string {
-  return `\n\n[Reef artifact: @minnow/reef/artifacts/${manifest.id} v${manifest.currentVersion}]`;
 }

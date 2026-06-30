@@ -55,7 +55,7 @@ describe('skill-picker', () => {
       assert.ok(picker, `picker element should exist for ${id}`);
       assert.equal(picker?.classList.contains('hidden'), false, `picker visible for ${id}`);
       assert.equal(isSkillPickerOpen(), true, `picker open for ${id}`);
-      assert.equal(picker?.parentElement?.className, wrapClass, `picker anchored to ${wrapClass}`);
+      assert.equal(picker?.parentElement, document.body, `picker mounted on body for ${id}`);
     }
   });
 
