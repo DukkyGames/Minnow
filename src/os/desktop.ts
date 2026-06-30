@@ -105,7 +105,7 @@ export function renderDesktop(root: HTMLElement): () => void {
   railTab.className = 'mn-os-chat-rail-tab';
   railTab.setAttribute('aria-label', 'Show chat sessions');
   railTab.setAttribute('aria-expanded', 'false');
-  railTab.appendChild(createOsIcon('chat', { size: 18 }));
+  railTab.appendChild(createOsIcon('chat', { size: 28 }));
 
   const railPanel = document.createElement('div');
   railPanel.className = 'mn-os-chat-rail-panel';

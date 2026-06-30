@@ -51,6 +51,10 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  overscroll-behavior-y: contain;
 }
 
 /* ─── Pulse band (instrumentation row) ─── */
@@ -629,6 +633,63 @@
   padding: 10px 12px 14px;
 }
 
+.code-overview__telemetry-expand {
+  display: none;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  margin: -10px -12px 0;
+  background: var(--mn-surface-1);
+  border: none;
+  border-bottom: 1px solid var(--mn-border);
+  color: var(--mn-fg);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  min-height: var(--touch-min, 44px);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .code-overview__telemetry-expand:hover {
+    background: var(--mn-surface-elevated);
+  }
+}
+
+.code-overview__telemetry-expand-label {
+  font-weight: 600;
+  color: var(--mn-fg-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.code-overview__telemetry-expand-preview {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--mn-fg);
+  flex: 1;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.code-overview__telemetry-expand-chevron {
+  width: 18px;
+  height: 18px;
+  color: var(--mn-fg-muted);
+  transition: transform var(--duration-normal) var(--ease-out);
+  flex-shrink: 0;
+}
+
+.code-overview__telemetry.is-expanded .code-overview__telemetry-expand-chevron {
+  transform: rotate(180deg);
+}
+
 .code-overview__telemetry-head {
   display: flex;
   align-items: center;
@@ -735,6 +796,8 @@
 }
 
 /* ─── Responsive ─── */
+
+/* Tablet: stack activity columns; reflow pulse + telemetry grids */
 @media (max-width: 899px) {
   .code-overview__activity {
     grid-template-columns: minmax(0, 1fr);
@@ -742,6 +805,17 @@
 
   .code-overview__primary {
     border-right: none;
+  }
+
+  /* Git should not consume the full viewport when the rail stacks below primary */
+  .code-overview__rail > .code-overview__section:first-child {
+    flex: none;
+    max-height: min(52vh, 480px);
+  }
+
+  /* Keep running + sessions reachable before the rail panels */
+  .code-overview__primary > .code-overview__section .code-overview__section-body {
+    max-height: min(36vh, 320px);
   }
 
   .code-overview__telemetry-grid {
@@ -761,13 +835,45 @@
   }
 }
 
-@media (max-width: 599px) {
-  .code-overview__pulse-expand {
+/* Tablet landscape: restore side-by-side activity (master + rail) */
+@media (min-width: 641px) and (max-width: 899px) and (orientation: landscape) {
+  .code-overview__activity {
+    grid-template-columns: minmax(0, 1.45fr) minmax(220px, 1fr);
+  }
+
+  .code-overview__primary {
+    border-right: 1px solid var(--mn-border);
+  }
+
+  .code-overview__primary > .code-overview__section .code-overview__section-body {
+    max-height: none;
+  }
+
+  .code-overview__rail > .code-overview__section:first-child {
+    max-height: none;
+    flex: 1;
+    min-height: 0;
+  }
+}
+
+/* Phone: progressive disclosure for pulse + telemetry; single-column tiles */
+@media (max-width: 600px) {
+  .code-overview__pulse-expand,
+  .code-overview__telemetry-expand {
     display: flex;
   }
 
-  .code-overview__pulse:not(.is-expanded) .code-overview__pulse-grid {
+  .code-overview__pulse:not(.is-expanded) .code-overview__pulse-grid,
+  .code-overview__telemetry:not(.is-expanded) .code-overview__telemetry-grid {
     display: none;
+  }
+
+  .code-overview__telemetry:not(.is-expanded) .code-overview__telemetry-head {
+    display: none;
+  }
+
+  .code-overview__telemetry.is-expanded .code-overview__telemetry-expand {
+    margin-bottom: 10px;
   }
 
   .code-overview__pulse-grid {
@@ -787,6 +893,82 @@
   }
 
   .code-overview__toolbar {
-    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
+  }
+
+  .code-overview__toolbar-actions {
+    justify-content: flex-end;
+  }
+
+  .code-overview__lede {
+    font-size: 13px;
+  }
+}
+
+/* Coarse pointer: 44px tap targets without changing desktop density */
+@media (pointer: coarse) {
+  .code-overview__btn-new,
+  .code-overview__btn-ghost {
+    min-height: var(--touch-min, 44px);
+    min-width: var(--touch-min, 44px);
+  }
+
+  .code-overview__row-list {
+    gap: 8px;
+  }
+
+  .code-overview__chip {
+    padding: 4px 8px;
+  }
+}
+
+/* Phone landscape: reclaim vertical space for scrollable panels */
+@media (max-height: 500px) and (orientation: landscape) {
+  .code-overview__toolbar {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .code-overview__section-head {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  .code-overview__pulse-value {
+    font-size: 15px;
+  }
+
+  .code-overview__primary > .code-overview__section .code-overview__section-body {
+    max-height: min(30vh, 220px);
+  }
+
+  .code-overview__rail > .code-overview__section:first-child {
+    max-height: min(40vh, 260px);
+  }
+
+  .code-overview__spark-tile {
+    min-height: 60px;
+    padding-top: 6px;
+    padding-bottom: 8px;
+  }
+}
+
+/* Ultrawide: cap metric cell width so values stay scannable */
+@media (min-width: 1400px) {
+  .code-overview__pulse-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    max-width: 1280px;
+    margin-inline: auto;
+    width: 100%;
+  }
+
+  .code-overview__telemetry-grid {
+    max-width: 1280px;
+    margin-inline: auto;
+    width: 100%;
   }
 }

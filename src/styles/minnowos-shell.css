@@ -20,7 +20,8 @@
    ============================================================ */
 
 .mn-os {
-  height: 100vh;
+  /* dvh tracks the visible viewport on iOS Safari (address bar / home indicator). */
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -29,6 +30,25 @@
   font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/* Shared OS safe-area + dock reveal metrics (chat app + desktop composer reserve). */
+html.minnow-os-enabled {
+  --os-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --os-dock-reveal-height: 22px;
+}
+
+@media (pointer: coarse) {
+  html.minnow-os-enabled {
+    --os-dock-reveal-height: var(--touch-min);
+  }
+}
+
+#osDockLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  pointer-events: none;
 }
 
 /* ---------- menubar ---------- */
@@ -733,9 +753,15 @@ html.minnow-os-enabled #osAppsLayer .chat-app-page.is-open {
   width: 100%;
 }
 
-/* In-app dock reveal tab (22px) sits over the stage bottom — lift the composer clear of it. */
+/* In-app dock reveal tab sits over the stage bottom — lift the composer clear of it. */
 html.minnow-os-enabled:has(.mn-os-dock-shell[data-shell-view='app']) .chat-app-composer {
-  padding-bottom: calc(max(18px, env(safe-area-inset-bottom, 0px)) + 26px);
+  padding-bottom: calc(max(18px, var(--os-safe-bottom)) + var(--os-dock-reveal-height) + 4px);
+}
+
+/* Keep the last transcript bubble above the composer + dock reveal on phones. */
+html.minnow-os-enabled:has(.mn-os-dock-shell[data-shell-view='app']) .chat-app-scroll {
+  padding-bottom: calc(20px + var(--os-dock-reveal-height) + var(--os-safe-bottom) + 4px);
+  scroll-padding-bottom: calc(12px + var(--os-dock-reveal-height) + var(--os-safe-bottom));
 }
 
 html.minnow-os-enabled header.topbar.hidden {
