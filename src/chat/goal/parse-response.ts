@@ -13,6 +13,35 @@ function extractReasonAfterVerdict(raw: string, verdictLen: number, fallback: st
   return tail || fallback;
 }
 
+function parseVerdictLine(
+  line: string,
+  met: boolean,
+  fallback: string,
+): ParsedGoalEvalResponse | null {
+  const pattern = met ? /^YES\b/i : /^NO\b/i;
+  const match = pattern.exec(line.trim());
+  if (!match) return null;
+  return {
+    met,
+    reason: extractReasonAfterVerdict(line.trim(), match[0].length, fallback),
+  };
+}
+
+/** Scan trailing non-empty lines — thinking models often put the verdict on the last line. */
+function parseVerdictFromTrailingLines(trimmed: string): ParsedGoalEvalResponse | null {
+  const lines = trimmed
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const yes = parseVerdictLine(lines[i], true, 'Goal condition satisfied.');
+    if (yes) return yes;
+    const no = parseVerdictLine(lines[i], false, 'Goal not yet complete.');
+    if (no) return no;
+  }
+  return null;
+}
+
 /**
  * Parse evaluator completion. Malformed output is treated as not met so the loop
  * can continue with guidance rather than falsely clearing the goal.
@@ -23,29 +52,14 @@ export function parseGoalEvalResponse(raw: string): ParsedGoalEvalResponse {
     return { met: false, reason: 'Evaluator returned an empty response.' };
   }
 
-  const yesMatch = /^YES\b/i.exec(trimmed);
-  if (yesMatch) {
-    return {
-      met: true,
-      reason: extractReasonAfterVerdict(
-        trimmed,
-        yesMatch[0].length,
-        'Goal condition satisfied.',
-      ),
-    };
-  }
+  const leadingYes = parseVerdictLine(trimmed, true, 'Goal condition satisfied.');
+  if (leadingYes) return leadingYes;
 
-  const noMatch = /^NO\b/i.exec(trimmed);
-  if (noMatch) {
-    return {
-      met: false,
-      reason: extractReasonAfterVerdict(
-        trimmed,
-        noMatch[0].length,
-        'Goal not yet complete.',
-      ),
-    };
-  }
+  const leadingNo = parseVerdictLine(trimmed, false, 'Goal not yet complete.');
+  if (leadingNo) return leadingNo;
+
+  const trailing = parseVerdictFromTrailingLines(trimmed);
+  if (trailing) return trailing;
 
   return {
     met: false,

@@ -16,7 +16,7 @@ const GOAL_EVAL_META_STORAGE_KEY = 'minnow.goalEvalMeta';
 export const DEFAULT_GOAL_EVAL_CONFIG: GoalEvalConfig = {
   modelId: '',
   providerId: '',
-  maxTokens: 256,
+  maxTokens: 512,
   temperature: 0.1,
 };
 
@@ -25,7 +25,7 @@ let cachedGoalEval: GoalEvalConfig | null = null;
 function clampMaxTokens(value: unknown): number {
   const n = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(n)) return DEFAULT_GOAL_EVAL_CONFIG.maxTokens;
-  return Math.min(512, Math.max(64, Math.round(n)));
+  return Math.min(2048, Math.max(64, Math.round(n)));
 }
 
 function clampTemperature(value: unknown): number {

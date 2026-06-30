@@ -17,6 +17,7 @@ import { getEnabledToolDefinitionsForMode } from '../../tools/client';
 import { pushOutboundSystemMessages } from '../../tools/api-system-messages';
 import {
   agentContextBudgetFromWorkAgent,
+  DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
   applyContextBudget,
   estimateApiMessagesTokens,
   resolveContextBudget,
@@ -133,7 +134,7 @@ function applyBudgetTrimToHistoryTokens(
   const workAgent = resolveActiveWorkAgent(chat);
   const agentConfig = workAgent
     ? agentContextBudgetFromWorkAgent(workAgent)
-    : { maxInputTokens: null, enforcementPolicy: 'slide' as const };
+    : { maxInputTokens: null, enforcementPolicy: DEFAULT_CONTEXT_ENFORCEMENT_POLICY };
   const budgetResolved = resolveContextBudget({
     agentConfig,
     modelLimit: resolveModelLimitForEstimate(modelId, chat),

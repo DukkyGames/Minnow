@@ -26,4 +26,12 @@ describe('parseGoalEvalResponse', () => {
     assert.equal(result.met, false);
     assert.match(result.reason, /empty/i);
   });
+
+  test('parses YES on trailing line after reasoning prose', () => {
+    const result = parseGoalEvalResponse(
+      'Reviewing the transcript...\nThe tests were run and passed.\nYES: all unit tests pass.',
+    );
+    assert.equal(result.met, true);
+    assert.equal(result.reason, 'all unit tests pass.');
+  });
 });

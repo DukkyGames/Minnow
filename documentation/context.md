@@ -1734,12 +1734,12 @@ While the loop is active (`activeGoal` and not `achieved`), **tool approvals aut
 | Concern | Location |
 |---------|----------|
 | Command dispatch | [`src/chat/goal/command.ts`](../src/chat/goal/command.ts) — intercepted in [`sendMessageWithTools`](../src/tools/loop.ts) before slash skills; listed in slash picker (**Command** badge) |
-| Evaluator | [`src/chat/goal/evaluate.ts`](../src/chat/goal/evaluate.ts), `fallbackRole: goal-eval` |
+| Evaluator | [`src/chat/goal/evaluate.ts`](../src/chat/goal/evaluate.ts), `fallbackRole: goal-eval` — resolves provider from `config.goalEval.providerId` then `chat.providerId`; reads `content` and reasoning/thinking channels for thinking models |
 | State helpers | [`src/state/sessions.ts`](../src/state/sessions.ts) — `setActiveGoal`, `clearActiveGoal`, `getActiveGoal` |
 | Composer hint | [`src/ui/goal-active-hint.ts`](../src/ui/goal-active-hint.ts) — `◎ goal active · N turns` |
 | Model routing | Settings → Models → **Goal evaluator** (`config.goalEval`) |
 
-**Tests:** `test/chat/goal-parse-response.test.mts`, `test/chat/goal-parse-command.test.mts`, `test/chat/goal-command.test.mts`.
+**Tests:** `test/chat/goal-parse-response.test.mts`, `test/chat/goal-parse-command.test.mts`, `test/chat/goal-command.test.mts`, `test/chat/goal-evaluate.test.mts`, `test/chat/goal-completion-text.test.mts`.
 
 ## Message actions (Epic C2 — features 15–17)
 

@@ -46,6 +46,7 @@ import { getModelRowForSelectOrCanonicalId } from '../api/models';
 import { resolveProvider } from '../providers/store';
 import { parseToolArguments } from '../tools/parse-tool-arguments';
 import {
+  DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
   applyContextBudget,
   estimateApiMessagesTokens,
   resolveContextBudget,
@@ -391,7 +392,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
     const maxToolTurns = Math.max(1, Math.floor(input.maxToolTurns) || MAX_SUB_AGENT_TOOL_TURNS);
     const contextBudget = input.contextBudget ?? {
       maxInputTokens: null,
-      enforcementPolicy: 'slide',
+      enforcementPolicy: DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
     };
     const modelContextLimit =
       input.modelContextLimit !== undefined

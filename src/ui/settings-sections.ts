@@ -887,7 +887,7 @@ async function renderWorkAgentsSection(): Promise<void> {
         initialModelId: agent.modelId,
         initialDisabled: agent.disabled === true,
         initialMaxInputTokens: agent.maxInputTokens ?? null,
-        initialContextPolicy: agent.contextEnforcementPolicy ?? 'slide',
+        initialContextPolicy: agent.contextEnforcementPolicy ?? 'summarize',
         initialArchive: agent.archive,
         onModelSaved: () => {
           void renderWorkAgentsSection();
@@ -1021,7 +1021,7 @@ async function renderSubAgentsSection(): Promise<void> {
           enabled: type.enabled !== false,
           maxConcurrent: type.maxConcurrent,
           maxInputTokens: type.maxInputTokens ?? null,
-          contextEnforcementPolicy: type.contextEnforcementPolicy ?? 'slide',
+          contextEnforcementPolicy: type.contextEnforcementPolicy ?? 'summarize',
           summarySchema: type.summarySchema ?? 'minnow.sub-agent.v1',
         },
         (patch) => saveTypePatch(id, patch),

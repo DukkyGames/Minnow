@@ -2,9 +2,9 @@
  * Per-turn goal evaluation and auto-continuation after goal-driven turns settle.
  */
 
-import { extractMessageText } from '../../api/chat';
+import { formatGenerationErrorMessage } from '../../api/generations';
+import { extractGoalEvalCompletionText } from './completion-text';
 import { loadGoalEvalConfig } from '../../config/goal-eval-meta';
-import { getActiveProvider } from '../../providers/store';
 import {
   getActiveGoal,
   isGoalLoopActive,
@@ -22,26 +22,49 @@ import { syncGoalActiveHint } from '../../ui/goal-active-hint';
 import { renderSidebar } from '../../ui/sidebar';
 import { buildGoalEvalMessages } from './prompt';
 import { parseGoalEvalResponse } from './parse-response';
-import { createGoalEvalProviderPort, type GoalEvalProviderPort } from './provider-port';
+import type { ChatCompletionBody } from '../../api/chat';
+import type { ChatCompletionChunk } from '../../types';
+import { createGoalEvalProviderPort } from './provider-port';
 
 export interface GoalEvaluationResult {
   met: boolean;
   reason: string;
 }
 
-let goalEvalPort = createGoalEvalProviderPort();
 let goalEvalImpl: typeof runGoalEvalRequest = runGoalEvalRequest;
 
-/** Replace evaluator port (unit tests). */
-export function setGoalEvalPortForTests(port: GoalEvalProviderPort | null): void {
-  goalEvalPort = port ?? createGoalEvalProviderPort();
+/** Replace evaluator port factory (unit tests). */
+export function setGoalEvalPortFactoryForTests(
+  factory: typeof createGoalEvalProviderPort | null,
+): void {
+  goalEvalPortFactory = factory ?? createGoalEvalProviderPort;
 }
+
+let goalEvalPortFactory: typeof createGoalEvalProviderPort = createGoalEvalProviderPort;
 
 /** Replace evaluator request impl (unit tests). */
 export function setGoalEvalImplForTests(
   impl: typeof runGoalEvalRequest | null,
 ): void {
   goalEvalImpl = impl ?? runGoalEvalRequest;
+}
+
+async function completeGoalEvalWithRetry(
+  port: ReturnType<typeof createGoalEvalProviderPort>,
+  body: ChatCompletionBody,
+  signal: AbortSignal,
+): Promise<ChatCompletionChunk> {
+  try {
+    return await port.complete(body, signal);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const transientFetch = err instanceof TypeError && message.includes('Failed to fetch');
+    if (!transientFetch) {
+      throw err;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    return port.complete(body, signal);
+  }
 }
 
 async function runGoalEvalRequest(
@@ -56,24 +79,24 @@ async function runGoalEvalRequest(
   }
 
   const providerId = config.providerId.trim() || chat.providerId?.trim() || undefined;
-  const provider = await getActiveProvider(providerId);
-  const port = goalEvalPort;
+  const port = goalEvalPortFactory(providerId);
+  const body = {
+    model: modelId,
+    messages: buildGoalEvalMessages(chat, conditionText),
+    temperature: config.temperature,
+    max_tokens: config.maxTokens,
+  };
 
   try {
-    const chunk = await port.complete(
-      {
-        model: modelId,
-        messages: buildGoalEvalMessages(chat, conditionText),
-        temperature: config.temperature,
-        max_tokens: config.maxTokens,
-      },
-      signal,
-    );
-    const raw = extractMessageText(chunk.choices?.[0]?.message).trim();
+    const chunk = await completeGoalEvalWithRetry(port, body, signal);
+    const raw = extractGoalEvalCompletionText(chunk.choices?.[0]?.message);
     return parseGoalEvalResponse(raw);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { met: false, reason: `Goal evaluator failed: ${message}` };
+    return {
+      met: false,
+      reason: `Goal evaluator failed: ${formatGenerationErrorMessage(message)}`,
+    };
   }
 }
 

@@ -217,6 +217,7 @@ import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
 import { resolveOutboundSystemMessages } from '../chat/prompts/compose-context';
 import { estimateTokensFromText } from '../chat/prompts/token-estimate';
 import {
+  DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
   agentContextBudgetFromWorkAgent,
   applyContextBudget,
   resolveContextBudget,
@@ -1357,7 +1358,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     const maxToolTurns = getChatMetaSync().maxToolTurns;
     const workAgentBudget = activeWorkAgent
       ? agentContextBudgetFromWorkAgent(activeWorkAgent)
-      : { maxInputTokens: null, enforcementPolicy: 'slide' as const };
+      : { maxInputTokens: null, enforcementPolicy: DEFAULT_CONTEXT_ENFORCEMENT_POLICY };
 
     // Boot resume subscribes once; later tool-loop rounds must POST new generations (MIN-187).
     let activeResumeGenerationId = resumeGenerationId;
