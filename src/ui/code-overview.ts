@@ -27,6 +27,7 @@ import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
 import type { Chat, ChatGroup } from '../types';
 import type { GitGraphHandle } from './git-graph';
 import { createChat, switchChat } from './sidebar';
+import { stripMainColumnOverlayClasses } from './main-column-overlay';
 
 const ROOT_ID = 'codeOverviewRoot';
 const CHAT_AREA_CLASS = 'chat-area--code-overview';
@@ -943,6 +944,7 @@ export async function openCodeOverview(): Promise<void> {
 
   area.replaceChildren();
   area.appendChild(buildShell());
+  stripMainColumnOverlayClasses();
   area.classList.add(CHAT_AREA_CLASS);
   document.getElementById('mainColumn')?.classList.add(MAIN_COLUMN_CLASS);
 
@@ -965,8 +967,7 @@ export function closeCodeOverview(options?: {
 
   const savedReturnChatId = returnChatId;
   document.getElementById(ROOT_ID)?.remove();
-  document.getElementById('chatArea')?.classList.remove(CHAT_AREA_CLASS);
-  document.getElementById('mainColumn')?.classList.remove(MAIN_COLUMN_CLASS);
+  stripMainColumnOverlayClasses();
   returnChatId = null;
   syncOverviewNavButtons();
 

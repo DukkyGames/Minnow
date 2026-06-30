@@ -26,6 +26,9 @@ import { setChatMode } from './mode-selector';
 import { launchBoardFromPlan } from './orchestrate-launch';
 import { switchChat } from './sidebar';
 import { renderChatFromHistory } from './messages';
+import { closeCodeOverview, isCodeOverviewOpen } from './code-overview';
+import { teardownCodeBrainMapBeforeChatPaint } from './code-brain-map';
+import { stripMainColumnOverlayClasses } from './main-column-overlay';
 import { teardownHub } from './hub';
 import {
   openOrchestratePlanScreen,
@@ -556,7 +559,10 @@ function buildOrchestrateHubDom(): HTMLElement {
 export function renderOrchestrateHub(): void {
   teardownOrchestratePlanScreen();
   teardownHub();
-  void import('./code-brain-map').then((m) => m.closeCodeBrainMap());
+  teardownCodeBrainMapBeforeChatPaint();
+  if (isCodeOverviewOpen()) {
+    closeCodeOverview({ skipNavigate: true, restoreChat: false });
+  }
   const area = document.getElementById('chatArea');
   if (!area) return;
   if (!hubReturnChatId && sessionState?.activeId) {
@@ -564,6 +570,7 @@ export function renderOrchestrateHub(): void {
   }
   area.replaceChildren();
   area.appendChild(buildOrchestrateHubDom());
+  stripMainColumnOverlayClasses();
   area.classList.add('chat-area--orchestrate-hub');
   // Board view stays in chat state; hide board chrome while the hub overlay is open.
   document.getElementById('mainColumn')?.classList.remove('main-column--board-view');
