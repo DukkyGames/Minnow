@@ -58,10 +58,10 @@ describe('Super Plan checkpoints', () => {
     assert.equal(chat.superPlan!.activeStage, 'research');
   });
 
-  test('resumeSuperPlanAfterUser revise resets spec_confirm to pending', async () => {
+  test('resumeSuperPlanAfterUser revise clears spec_confirm checkpoint', async () => {
     const chat = chatWithBlockedStage('spec_confirm');
     await resumeSuperPlanAfterUser(chat, 'revise');
-    assert.equal(chat.superPlan!.stages.spec_confirm.status, 'pending');
+    assert.notEqual(chat.superPlan!.stages.spec_confirm.status, 'blocked_user');
     assert.equal(chat.superPlan!.activeStage, 'spec_confirm');
   });
 

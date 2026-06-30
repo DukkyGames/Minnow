@@ -110,6 +110,23 @@ describe('super-plan references write guard', () => {
     );
   });
 
+  test('allows save_file for slug-based super-plan reference artifacts', () => {
+    assert.equal(
+      blockPlanModeWrite('super-plan', 'save_file', {
+        path: 'documentation/plans/references/feature-x-spec.md',
+        content: '# Build spec',
+      }),
+      null,
+    );
+    assert.equal(
+      blockPlanModeWrite('super-plan', 'save_file', {
+        path: 'documentation/plans/references/feature-x-research.md',
+        content: '# Research',
+      }),
+      null,
+    );
+  });
+
   test('allows save_file for super-plan reference artifacts', () => {
     assert.equal(
       blockPlanModeWrite('super-plan', 'save_file', {

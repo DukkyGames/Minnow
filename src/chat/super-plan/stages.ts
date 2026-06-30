@@ -83,7 +83,12 @@ async function readFileOrEmpty(path: string | undefined): Promise<string> {
 async function waitForResearchDone(researchId: string): Promise<string> {
   const maxAttempts = 120;
   for (let i = 0; i < maxAttempts; i += 1) {
-    const status = await fetchResearchStatus(researchId);
+    let status;
+    try {
+      status = await fetchResearchStatus(researchId);
+    } catch (err) {
+      throw err instanceof Error ? err : new Error(String(err));
+    }
     if (status.status === 'done') {
       const result = await fetchResearchResult(researchId);
       return result.result?.trim() ?? '';
