@@ -10,6 +10,7 @@ import {
 } from '../state/file-panel';
 import { syncStatsStripLayoutForViewer } from './stats';
 import { clearAllViewerTabs } from './file-viewer-tab-store';
+import { mountOsMobileDrawerBackdrops, syncOsMobileDrawerHtmlClass } from './mobile-drawer-portal';
 
 export function isMobileLayout(): boolean {
   return window.matchMedia('(max-width: 640px)').matches;
@@ -19,6 +20,7 @@ export function closeMobileFileSidebar(): void {
   const side = document.getElementById('fileSidebar');
   const bd = document.getElementById('fileSidebarBackdrop');
   if (side) side.classList.remove('mobile-open');
+  syncOsMobileDrawerHtmlClass('file', false);
   if (bd) {
     bd.classList.remove('open');
     bd.setAttribute('aria-hidden', 'true');
@@ -28,9 +30,11 @@ export function closeMobileFileSidebar(): void {
 
 export function openMobileFileSidebar(): void {
   if (!isMobileLayout()) return;
+  mountOsMobileDrawerBackdrops();
   const side = document.getElementById('fileSidebar');
   const bd = document.getElementById('fileSidebarBackdrop');
   if (side) side.classList.add('mobile-open');
+  syncOsMobileDrawerHtmlClass('file', true);
   if (bd) {
     bd.classList.add('open');
     bd.setAttribute('aria-hidden', 'false');
@@ -112,6 +116,13 @@ export function applyFileSidebarVisuals(): void {
   scheduleElectronPreviewHostLayoutAfterSplitChange();
 
   if (!side || !btn) return;
+
+  if (isMobileLayout()) {
+    mountOsMobileDrawerBackdrops();
+    syncOsMobileDrawerHtmlClass('file', side.classList.contains('mobile-open'));
+  } else {
+    syncOsMobileDrawerHtmlClass('file', false);
+  }
 
   if (!isMobileLayout()) {
     closeMobileFileSidebar();
