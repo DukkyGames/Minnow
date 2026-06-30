@@ -164,6 +164,12 @@ export class WindowFrame {
 
   focus(): void {
     this.root.classList.add('is-focused');
+    // Never steal DOM focus from an editable control inside the window body — doing so
+    // leaves keyboard input dead until the user clicks outside the app (MIN-179).
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && this.body.contains(active) && isInteractiveFocusTarget(active)) {
+      return;
+    }
     this.root.focus({ preventScroll: true });
   }
 
@@ -411,6 +417,15 @@ export class WindowFrame {
       document.addEventListener('mouseup', onUp);
     });
   }
+}
+
+/** True when the element (or an ancestor) should keep DOM focus during window raise. */
+function isInteractiveFocusTarget(el: HTMLElement): boolean {
+  if (el.isContentEditable) return true;
+  const tag = el.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (el.closest('.cm-editor, [contenteditable="true"]')) return true;
+  return false;
 }
 
 /** Create a window frame and append it to the windows layer. */
