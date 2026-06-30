@@ -259,7 +259,7 @@
 
 .mn-os-dock-reveal {
   position: absolute;
-  bottom: 0;
+  bottom: env(safe-area-inset-bottom, 0px);
   left: 50%;
   transform: translateX(-50%);
   border-bottom: none;
@@ -282,7 +282,7 @@
 
 .mn-os-dock-panel {
   position: absolute;
-  bottom: 22px;
+  bottom: calc(var(--os-dock-panel-inset, 22px) + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
   transition:
@@ -707,13 +707,14 @@
 
 #osDesktopLayer {
   --os-chat-stage-top: 10px;
-  /* Dock panel sits 22px above the viewport bottom; composer floats just above it */
-  --os-dock-panel-inset: 22px;
+  /* Dock reveal tab height; panel sits above it + home-indicator safe area */
+  --os-dock-panel-inset: var(--os-dock-reveal-height, 22px);
   --os-dock-block-height: 6.25rem;
   --os-composer-dock-gap: 10px;
   --os-composer-row-height: 4.75rem;
   --os-composer-dock-bottom: calc(
-    var(--os-dock-panel-inset) + var(--os-dock-block-height) + var(--os-composer-dock-gap)
+    var(--os-dock-panel-inset) + var(--os-dock-block-height) + var(--os-composer-dock-gap) +
+      var(--os-safe-bottom, env(safe-area-inset-bottom, 0px))
   );
   /* Stage + transcript clearance: composer offset + row height + breathing room */
   --os-chat-composer-reserve: calc(
@@ -792,31 +793,25 @@
   pointer-events: auto;
 }
 
-/* Collapsed: floating chat icon tab on the left window edge */
+/* Collapsed: chat icon tab on the left window edge (icon only) */
 .mn-os-chat-rail-tab {
   pointer-events: auto;
-  align-self: center;
+  align-self: flex-start;
   flex: none;
-  width: 40px;
-  height: 40px;
+  width: 56px;
+  height: 56px;
+  margin-top: var(--os-chat-stage-top, 10px);
   margin-left: max(10px, env(safe-area-inset-left, 0px));
   padding: 0;
   display: grid;
   place-items: center;
-  border: 1px solid var(--os-border-strong);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--os-surface-2) 85%, transparent);
-  backdrop-filter: blur(14px);
+  border: none;
+  border-radius: 0;
+  background: transparent;
   color: var(--os-text-dim);
   cursor: pointer;
-  box-shadow:
-    0 12px 32px -14px rgba(0, 0, 0, 0.55),
-    inset 0 1px 0 color-mix(in srgb, var(--os-text) 5%, transparent);
   transition:
     color 0.16s var(--os-ease),
-    border-color 0.16s var(--os-ease),
-    background 0.16s var(--os-ease),
-    box-shadow 0.16s var(--os-ease),
     opacity 0.2s var(--os-ease-out);
 }
 
@@ -826,8 +821,6 @@
 
 .mn-os-chat-rail-tab:hover {
   color: var(--os-text);
-  border-color: var(--os-accent-glow);
-  background: var(--os-surface-2);
 }
 
 .mn-os-chat-rail-tab:focus-visible {
@@ -1938,6 +1931,17 @@
     transform: none;
   }
 
+  /* Closed dock: slide down without conflicting X-centering from desktop rules */
+  .mn-os-dock-shell[data-shell-view='app'][data-dock-open='false'] .mn-os-dock-panel {
+    transform: translateY(calc(100% + 40px));
+  }
+
+  .mn-os-dock-reveal,
+  .mn-os-dock-hide {
+    min-height: var(--touch-min);
+    width: 56px;
+  }
+
   .mn-os-dock {
     max-width: 100%;
     overflow-x: auto;
@@ -1980,7 +1984,13 @@
 
   .mn-os-composer-dock {
     width: calc(100% - max(20px, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px)));
-    bottom: max(var(--os-composer-dock-bottom), env(safe-area-inset-bottom, 0px));
+    bottom: var(--os-composer-dock-bottom);
+  }
+
+  .mn-os-chat-transcript {
+    padding-inline: max(12px, env(safe-area-inset-left, 0px))
+      max(12px, env(safe-area-inset-right, 0px));
+    scroll-padding-bottom: calc(12px + var(--os-safe-bottom, env(safe-area-inset-bottom, 0px)));
   }
 
   .mn-os-desktop-input-row {
@@ -1988,11 +1998,6 @@
     margin-bottom: 10px;
     padding: 5px 6px;
     border-radius: 14px;
-  }
-
-  .mn-os-chat-transcript {
-    padding-inline: max(12px, env(safe-area-inset-left, 0px))
-      max(12px, env(safe-area-inset-right, 0px));
   }
 
   .mn-os-chat-empty {
@@ -2017,8 +2022,9 @@
   }
 
   .mn-os-chat-rail-tab {
-    width: var(--touch-min);
-    height: var(--touch-min);
+    width: 56px;
+    height: 56px;
+    margin-top: max(8px, env(safe-area-inset-top, 0px));
     margin-left: max(8px, env(safe-area-inset-left, 0px));
   }
 

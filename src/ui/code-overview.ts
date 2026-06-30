@@ -279,7 +279,18 @@ function buildShell(): HTMLElement {
         </div>
       </div>
 
-      <div class="code-overview__telemetry">
+      <div class="code-overview__telemetry" id="codeOverviewTelemetry">
+        <button
+          type="button"
+          class="code-overview__telemetry-expand"
+          id="codeOverviewTelemetryExpand"
+          aria-expanded="false"
+          aria-controls="codeOverviewTelemetryGrid"
+        >
+          <span class="code-overview__telemetry-expand-label">Telemetry</span>
+          <span class="code-overview__telemetry-expand-preview" id="codeOverviewTelemetryPreview">—</span>
+          <svg class="code-overview__telemetry-expand-chevron icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
         <div class="code-overview__telemetry-head">
           <h2 class="code-overview__section-title">Telemetry</h2>
         </div>
@@ -897,6 +908,12 @@ function refreshTelemetryBand(): void {
       detail: 'Cost estimation needs a pricing table.',
     }),
   );
+
+  const telemetryPreview = document.getElementById('codeOverviewTelemetryPreview');
+  if (telemetryPreview) {
+    const tpsLabel = tpsRaw === '—' ? '—' : `${tpsRaw} tok/s`;
+    telemetryPreview.textContent = `${formatCompactCount(tokens)} tok · ${tpsLabel}`;
+  }
 }
 
 async function refreshAllPanels(): Promise<void> {
@@ -1002,6 +1019,14 @@ function wireShellEvents(): void {
     const btn = document.getElementById('codeOverviewPulseExpand');
     if (!pulse || !btn) return;
     const expanded = pulse.classList.toggle('is-expanded');
+    btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  });
+
+  document.getElementById('codeOverviewTelemetryExpand')?.addEventListener('click', () => {
+    const band = document.getElementById('codeOverviewTelemetry');
+    const btn = document.getElementById('codeOverviewTelemetryExpand');
+    if (!band || !btn) return;
+    const expanded = band.classList.toggle('is-expanded');
     btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
   });
 }
