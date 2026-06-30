@@ -197,7 +197,7 @@ Enable/disable bundled agent definition packs.
 | Check-in nudge | ms (0 = off) |
 | Max tool turns | Per sub-agent run |
 
-**Types (8):** `generalPurpose`, `explore`, `researcher`, `shell`, `explorer`, `debugger`, `bug-planner`, `reef-widget`
+**Types (9):** `generalPurpose`, `explore`, `researcher`, `shell`, `explorer`, `debugger`, `bug-planner`, `plan-reviewer`, `reef-widget`
 
 Per type: enabled, max concurrent, timeout, max input tokens, context policy, summary schema, allowed/denied tools, sampler, thinking, provider/model.
 

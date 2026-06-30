@@ -4,6 +4,7 @@
  */
 
 import type { ModeId } from './chat/modes/types';
+import type { SuperPlanState } from './chat/super-plan/types';
 import type { PinnedSkillState } from './skills/types';
 import type { ChatTokenLedger } from './usage/types';
 import type {
@@ -752,6 +753,8 @@ export interface Chat {
   pendingSteerMessage?: string;
   /** Active /goal completion loop; persists across reload until cleared. */
   activeGoal?: ActiveGoalState;
+  /** Super Plan pipeline controller state (Plan mode overhaul Phase 3). */
+  superPlan?: SuperPlanState;
   /** Queued mode switch from set_chat_mode during streaming (last write wins; flushed on stream end). */
   pendingModeId?: ModeId;
   /** Sidebar: green dot on inactive rows until the user opens this chat again. */

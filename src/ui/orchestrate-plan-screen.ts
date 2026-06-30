@@ -9,6 +9,12 @@ import {
   isExecutableOrchestratePlan,
 } from '../chat/orchestrate/plan-path';
 import { normalizeModeId } from '../chat/modes/types';
+import {
+  getSuperPlanCheckpointKind,
+  resumeSuperPlanAfterUser,
+  startSuperPlan,
+  subscribeSuperPlanController,
+} from '../chat/super-plan/controller';
 import { isFirstUserMessagePending } from '../chat/titles/schedule';
 import {
   getMainTurnActivity,
@@ -66,6 +72,7 @@ export type OrchestratePlanScreenPhase =
   | 'prompt'
   | 'working'
   | 'questions'
+  | 'spec_confirm'
   | 'preview'
   | 'error';
 
@@ -92,6 +99,7 @@ let planSession: OrchestratePlanScreenSession | null = null;
 let statusRotateTimer: ReturnType<typeof setInterval> | null = null;
 let streamEndUnsubscribe: (() => void) | null = null;
 let activityUnsubscribe: (() => void) | null = null;
+let superPlanUnsubscribe: (() => void) | null = null;
 
 function ensureStreamEndListener(): void {
   if (streamEndUnsubscribe) return;
@@ -179,6 +187,8 @@ export function resetOrchestratePlanScreenForTests(): void {
     streamEndUnsubscribe();
     streamEndUnsubscribe = null;
   }
+  superPlanUnsubscribe?.();
+  superPlanUnsubscribe = null;
   teardownOrchestratePlanScreenDom();
 }
 
@@ -301,24 +311,26 @@ function wirePlanScreenActivityListener(chatId: string): void {
   });
 }
 
-function findReusableEmptyPlanChat(): Chat | null {
+function findReusableEmptyPlanChat(modeId: 'plan' | 'super-plan'): Chat | null {
   if (!sessionState) return null;
   const hit = sessionState.chats.find(
-    (c) => normalizeModeId(c.modeId) === 'plan' && c.history.length === 0,
+    (c) => normalizeModeId(c.modeId) === modeId && c.history.length === 0,
   );
   return hit ?? null;
 }
 
 function resolveOrCreatePlanChat(): Chat {
-  const reusable = findReusableEmptyPlanChat();
+  const targetMode =
+    normalizeModeId(getActiveChat().modeId) === 'super-plan' ? 'super-plan' : 'plan';
+  const reusable = findReusableEmptyPlanChat(targetMode);
   if (reusable) {
     if (sessionState && sessionState.activeId !== reusable.id) {
       switchChat(reusable.id);
     }
-    setChatMode('plan');
+    setChatMode(targetMode);
     return getActiveChat();
   }
-  const created = createChatWithMode({ modeId: 'plan' });
+  const created = createChatWithMode({ modeId: targetMode });
   if (created.ok && created.chatId && sessionState) {
     if (sessionState.activeId !== created.chatId) {
       switchChat(created.chatId);
@@ -328,6 +340,92 @@ function resolveOrCreatePlanChat(): Chat {
   return getActiveChat();
 }
 
+async function syncPlanScreenFromSuperPlan(chat: Chat): Promise<void> {
+  const session = planSession;
+  if (!session || session.chatId !== chat.id) return;
+
+  const checkpoint = getSuperPlanCheckpointKind(chat);
+  if (checkpoint === 'spec_confirm') {
+    const specPath = chat.superPlan?.specPath?.trim() ?? '';
+    let previewMarkdown = '';
+    if (specPath) {
+      try {
+        const result = await executeTool('read_file', { path: specPath });
+        previewMarkdown = result.content;
+      } catch {
+        previewMarkdown = '';
+      }
+    }
+    if (planSession) {
+      planSession.phase = 'spec_confirm';
+      planSession.planPath = specPath;
+    }
+    if (planSession?.planScreenSuspended && getActiveChat().id === chat.id) {
+      renderChatFromHistory(chat);
+      return;
+    }
+    renderOrchestratePlanScreen({
+      phase: 'spec_confirm',
+      chatId: chat.id,
+      planPath: specPath,
+      savedPrompt: session.savedPrompt,
+      previewMarkdown,
+    });
+    return;
+  }
+
+  if (checkpoint === 'present') {
+    const planPath =
+      chat.superPlan?.planPath?.trim() ?? findLastPlanSavePath(chat.history) ?? '';
+    let previewMarkdown = '';
+    if (planPath) {
+      try {
+        const result = await executeTool('read_file', { path: planPath });
+        previewMarkdown = result.content;
+      } catch {
+        previewMarkdown = '';
+      }
+    }
+    if (planSession) {
+      planSession.planPath = planPath;
+      planSession.phase = 'preview';
+    }
+    if (planSession?.planScreenSuspended && getActiveChat().id === chat.id) {
+      renderChatFromHistory(chat);
+      return;
+    }
+    renderOrchestratePlanScreen({
+      phase: 'preview',
+      chatId: chat.id,
+      planPath,
+      savedPrompt: session.savedPrompt,
+      previewMarkdown,
+    });
+    return;
+  }
+
+  const activeStage = chat.superPlan?.activeStage;
+  const stageStatus = activeStage ? chat.superPlan?.stages[activeStage]?.status : undefined;
+  if (stageStatus === 'error') {
+    renderOrchestratePlanScreen({
+      phase: 'error',
+      chatId: chat.id,
+      savedPrompt: session.savedPrompt,
+      errorMessage:
+        chat.superPlan?.stages[activeStage!]?.error ??
+        'Super Plan stopped with an error. Open the chat to review.',
+    });
+  }
+}
+
+function wireSuperPlanControllerListener(chat: Chat): void {
+  superPlanUnsubscribe?.();
+  superPlanUnsubscribe = subscribeSuperPlanController((updated) => {
+    if (updated.id !== chat.id) return;
+    void syncPlanScreenFromSuperPlan(updated);
+  });
+}
+
 async function onPlanSessionStreamEnd(chatId: string): Promise<void> {
   const session = planSession;
   if (!session || session.chatId !== chatId) return;
@@ -335,6 +433,13 @@ async function onPlanSessionStreamEnd(chatId: string): Promise<void> {
 
   const chat = findChatById(chatId);
   if (!chat) return;
+
+  if (normalizeModeId(chat.modeId) === 'super-plan' && chat.superPlan) {
+    const { onSuperPlanStreamEnd } = await import('../chat/super-plan/controller');
+    await onSuperPlanStreamEnd(chatId);
+    await syncPlanScreenFromSuperPlan(chat);
+    return;
+  }
 
   const planPath = findLastPlanSavePath(chat.history);
   if (planPath) {
@@ -391,6 +496,12 @@ async function startPlanningFromPrompt(promptText: string): Promise<void> {
     chatId: chat.id,
     savedPrompt: promptText,
   });
+
+  if (normalizeModeId(chat.modeId) === 'super-plan') {
+    wireSuperPlanControllerListener(chat);
+    await startSuperPlan(chat, promptText);
+    return;
+  }
 
   const rawText = promptText;
   const userText = rawText;
@@ -614,6 +725,84 @@ function buildPlanScreenDom(opts: RenderOrchestratePlanScreenOptions): HTMLEleme
       syncPlanStatusFromSession();
       syncPlanScreenActivityLine(activity, opts.chatId);
     });
+  } else if (opts.phase === 'spec_confirm') {
+    const specPath = opts.planPath?.trim() ?? '';
+    appendPlanScreenHeader(
+      inner,
+      'Super Plan',
+      'Confirm build spec',
+      'Review the build specification below. Confirm to continue with research and drafting, or revise to regenerate the spec.',
+    );
+
+    if (specPath) {
+      const pathChip = document.createElement('p');
+      pathChip.className = 'orchestrate-plan-screen__path';
+      pathChip.textContent = shortPlanLabel(specPath);
+      pathChip.title = specPath;
+      inner.appendChild(pathChip);
+    }
+
+    const previewWrap = document.createElement('div');
+    previewWrap.className = 'orchestrate-plan-screen__preview-wrap';
+
+    const previewMount = document.createElement('div');
+    previewMount.className = 'orchestrate-plan-screen__preview';
+    mountPlanPreviewContent(previewMount, opts.previewMarkdown ?? '', {
+      modeId: 'super-plan',
+    });
+    previewWrap.appendChild(previewMount);
+
+    const actions = document.createElement('div');
+    actions.className =
+      'orchestrate-plan-screen__actions orchestrate-plan-screen__actions--spread';
+
+    const actionsStart = document.createElement('div');
+    actionsStart.className = 'orchestrate-plan-screen__actions-start';
+
+    const viewChatBtn = document.createElement('button');
+    viewChatBtn.type = 'button';
+    viewChatBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--ghost';
+    viewChatBtn.textContent = 'View chat';
+    viewChatBtn.addEventListener('click', () => {
+      const chat = findChatById(opts.chatId);
+      if (chat) suspendToViewChat(chat);
+    });
+
+    const reviseBtn = document.createElement('button');
+    reviseBtn.type = 'button';
+    reviseBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--ghost';
+    reviseBtn.textContent = 'Revise spec';
+    reviseBtn.addEventListener('click', () => {
+      const chat = findChatById(opts.chatId);
+      if (!chat) return;
+      if (planSession) planSession.phase = 'working';
+      renderOrchestratePlanScreen({
+        phase: 'working',
+        chatId: opts.chatId,
+        savedPrompt: opts.savedPrompt,
+      });
+      void resumeSuperPlanAfterUser(chat, 'revise');
+    });
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.type = 'button';
+    confirmBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--primary';
+    confirmBtn.textContent = 'Confirm spec';
+    confirmBtn.addEventListener('click', () => {
+      const chat = findChatById(opts.chatId);
+      if (!chat) return;
+      if (planSession) planSession.phase = 'working';
+      renderOrchestratePlanScreen({
+        phase: 'working',
+        chatId: opts.chatId,
+        savedPrompt: opts.savedPrompt,
+      });
+      void resumeSuperPlanAfterUser(chat, 'confirm');
+    });
+
+    actionsStart.append(viewChatBtn, reviseBtn);
+    actions.append(actionsStart, confirmBtn);
+    inner.append(previewWrap, actions);
   } else if (opts.phase === 'preview') {
     const planPath = opts.planPath?.trim() ?? '';
     appendPlanScreenHeader(

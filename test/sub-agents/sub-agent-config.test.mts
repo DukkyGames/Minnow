@@ -82,6 +82,22 @@ describe('sub-agent config', () => {
     assert.ok(r.deniedTools.includes('spawn_sub_agent'));
   });
 
+  test('plan-reviewer type is registered with read-only allow list', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, null);
+    const r = merged.types['plan-reviewer'];
+    assert.ok(r);
+    assert.equal(r.label, 'Plan reviewer');
+    assert.equal(r.maxConcurrent, 2);
+    assert.equal(r.summarySchema, 'minnow.sub-agent.v1');
+    assert.ok(r.allowedTools?.includes('read_file'));
+    assert.ok(r.allowedTools?.includes('grep'));
+    assert.ok(r.allowedTools?.includes('git_log'));
+    assert.ok(r.allowedTools?.includes('web_search'));
+    assert.ok(!r.allowedTools?.includes('execute_command'));
+    assert.ok(r.deniedTools.includes('save_file'));
+    assert.ok(r.deniedTools.includes('spawn_sub_agent'));
+  });
+
   test('user override merges sampler fields on a type', () => {
     const merged = mergeSubAgentConfig(DEFAULTS as never, {
       types: {

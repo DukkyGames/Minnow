@@ -13,6 +13,8 @@ const SUPER_PLAN_REFERENCE_BASENAMES = new Set([
   'build-spec.md',
 ]);
 
+const SUPER_PLAN_REFERENCE_SUFFIX_RE = /-(?:spec|research)\.md$/i;
+
 const MODE_IDS = new Set(['build', 'plan', 'super-plan', 'orchestrate', 'reef']);
 
 const PLAN_SCOPED_WRITE_TOOLS = new Set(['save_file', 'make_directory']);
@@ -101,7 +103,8 @@ export function isSuperPlanReferenceArtifactPath(relativePath) {
   if (!trimmed) return false;
   if (!isUnderSuperPlanReferences(trimmed)) return false;
   const basename = trimmed.split('/').pop()?.toLowerCase() ?? '';
-  return SUPER_PLAN_REFERENCE_BASENAMES.has(basename);
+  if (SUPER_PLAN_REFERENCE_BASENAMES.has(basename)) return true;
+  return SUPER_PLAN_REFERENCE_SUFFIX_RE.test(basename);
 }
 
 /**
@@ -172,7 +175,7 @@ export function blockPlanModeWrite(modeId, toolName, args) {
       if (!isAllowedPlanFamilySavePath(normalized, p)) {
         const hint =
           normalized === 'super-plan'
-            ? `${ORCHESTRATE_PLANS_PREFIX}*.md or ${SUPER_PLAN_REFERENCES_PREFIX}research-artifact.md / build-spec.md`
+            ? `${ORCHESTRATE_PLANS_PREFIX}*.md or ${SUPER_PLAN_REFERENCES_PREFIX}*-spec.md / *-research.md`
             : `${ORCHESTRATE_PLANS_PREFIX}*.md`;
         return `Error: ${normalized === 'super-plan' ? 'Super Plan' : 'Plan'} mode may only save_file to ${hint} (got "${p}")`;
       }

@@ -12,6 +12,7 @@ import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-ch
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { notifySessionCreated } from '../webhooks/client';
 import { decodeModelSelectKey } from '../lib/model-select-key';
+import type { SuperPlanState } from '../chat/super-plan/types';
 import {
   CHAT_APP_ID,
   createAssistantChat,
@@ -1076,6 +1077,16 @@ function ensureActiveGoal(raw: unknown): ActiveGoalState | undefined {
   };
 }
 
+function ensureSuperPlanPersisted(raw: unknown): SuperPlanState | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const sp = raw as Partial<SuperPlanState>;
+  if (typeof sp.slug !== 'string' || !sp.slug.trim()) return undefined;
+  if (typeof sp.prompt !== 'string') return undefined;
+  if (typeof sp.activeStage !== 'string' || !sp.activeStage.trim()) return undefined;
+  if (!sp.stages || typeof sp.stages !== 'object') return undefined;
+  return sp as SuperPlanState;
+}
+
 export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
   if (!raw || typeof raw !== 'object') return createEmptyChatObject('');
   const history = Array.isArray(raw.history)
@@ -1097,6 +1108,7 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
   }
   const pinnedSkill = ensurePinnedSkill(raw.pinnedSkill);
   const activeGoal = ensureActiveGoal(raw.activeGoal);
+  const superPlan = ensureSuperPlanPersisted(raw.superPlan);
   const chat: Chat = {
     id: typeof raw.id === 'string' && raw.id ? raw.id : newChatId(),
     name:
@@ -1182,6 +1194,7 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
       : {}),
     ...(pinnedSkill ? { pinnedSkill } : {}),
     ...(activeGoal ? { activeGoal } : {}),
+    ...(superPlan ? { superPlan } : {}),
   };
   ensureTokenLedger(chat);
   return chat;
