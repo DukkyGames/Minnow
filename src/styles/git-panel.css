@@ -617,6 +617,15 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
   outline-offset: 1px;
 }
 
+.git-graph__row--selected {
+  background: var(--mn-accent-soft);
+}
+
+.git-graph__row--selected .git-graph__subject {
+  color: var(--mn-fg);
+  font-weight: 600;
+}
+
 .git-graph__dot {
   position: relative;
   z-index: 2;

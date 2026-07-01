@@ -30,6 +30,7 @@ import './styles/mode-selector.css';
 import './styles/mode-icons.css';
 import './styles/composer-controls.css';
 import './styles/file-panel.css';
+import './styles/git-commit-diff.css';
 import './styles/editor-quick-edit.css';
 import './styles/editor-intent-mode.css';
 import './styles/preview-panel.css';
