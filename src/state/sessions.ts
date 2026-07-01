@@ -1,5 +1,6 @@
 import { MAX_CHATS, PLACEHOLDER_CHAT_NAME, SAVE_DEBOUNCE_MS, STORAGE_KEY } from '../constants';
 import { abortChatTitleGeneration } from '../chat/titles/inflight';
+import { cleanupChatWorktreeOnDelete } from './chat-worktree';
 import { isPlaceholderChatName } from '../chat/titles/placeholder';
 import { setSaveTimer, saveTimer } from '../app-state';
 import { getSessions, putSessions } from '../config/api-client';
@@ -1133,6 +1134,10 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
     ...(typeof raw.worktreeRoot === 'string' && raw.worktreeRoot.trim()
       ? { worktreeRoot: raw.worktreeRoot.trim() }
       : {}),
+    ...(typeof raw.gitBranch === 'string' && raw.gitBranch.trim()
+      ? { gitBranch: raw.gitBranch.trim() }
+      : {}),
+    ...(raw.chatWorktreeManaged === true ? { chatWorktreeManaged: true } : {}),
     ...(orchestrateBoard ? { orchestrateBoard } : {}),
     ...(viewMode ? { viewMode } : {}),
     terminalHistory: ensureTerminalHistory(raw.terminalHistory),
@@ -1687,6 +1692,7 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
     victim.workspacePath ?? '',
     victimAgent?.contextEnforcementPolicy,
   );
+  void cleanupChatWorktreeOnDelete(victim);
   abortChatTitleGeneration(chatId);
   const wasActive = state.activeId === chatId;
 

@@ -16,6 +16,7 @@ import { refreshDependencies } from './dep-install.js';
 import { symlinkDependencyDirs } from './dep-symlinks.js';
 import {
   getBoardWorktreesDir,
+  getChatWorktreePath,
   getWorktreeSlotPath,
   isPathUnderWorktreesRoot,
 } from './paths.js';
@@ -643,6 +644,82 @@ export async function openPr({ boardId, branch, title, body }) {
 export async function listWorktrees() {
   const r = await git(['worktree', 'list', '--porcelain']);
   return { ok: ok(r), output: out(r) };
+}
+
+/**
+ * Create (or attach) a managed per-chat worktree under ~/.minnow/worktrees/.../chat/<chatId>.
+ * Idempotent when the slot already exists on the expected branch.
+ * @param {{ chatId: string, branch: string, baseRef?: string }} input
+ */
+export async function createChatWorktree({ chatId, branch, baseRef }) {
+  if (!chatId || typeof chatId !== 'string' || !chatId.trim()) {
+    return { ok: false, error: 'chatId is required' };
+  }
+  if (!branch || typeof branch !== 'string' || !branch.trim()) {
+    return { ok: false, error: 'branch is required' };
+  }
+
+  const wtPath = getChatWorktreePath(chatId.trim());
+  const branchName = branch.trim();
+  const base = (baseRef && baseRef.trim()) || 'HEAD';
+  const depSource = getWorkspaceRoot();
+
+  let exists = false;
+  try {
+    await fs.access(wtPath);
+    exists = true;
+  } catch {
+    /* create below */
+  }
+
+  if (exists) {
+    return { ok: true, path: wtPath, branch: branchName, created: false };
+  }
+
+  await fs.mkdir(path.dirname(wtPath), { recursive: true });
+  const baseSha = await resolveRef(base);
+  if (!baseSha) {
+    return { ok: false, error: `invalid baseRef: ${base}`, path: wtPath, branch: branchName };
+  }
+
+  if (await branchExists(branchName)) {
+    const w = await git(['worktree', 'add', wtPath, branchName]);
+    if (!ok(w)) return { ok: false, path: wtPath, branch: branchName, output: out(w) };
+    await symlinkDependencyDirs(depSource, wtPath);
+    return { ok: true, path: wtPath, branch: branchName, created: true };
+  }
+
+  const r = await git(['worktree', 'add', '-b', branchName, wtPath, baseSha]);
+  if (!ok(r)) return { ok: false, path: wtPath, branch: branchName, output: out(r) };
+  await symlinkDependencyDirs(depSource, wtPath);
+  return { ok: true, path: wtPath, branch: branchName, created: true };
+}
+
+/**
+ * Remove a managed per-chat worktree slot (MIN-276 chat delete / detach).
+ * @param {{ chatId: string }} input
+ */
+export async function removeChatWorktree({ chatId }) {
+  if (!chatId || typeof chatId !== 'string' || !chatId.trim()) {
+    return { ok: false, error: 'chatId is required' };
+  }
+  const wtPath = getChatWorktreePath(chatId.trim());
+  if (!isPathUnderWorktreesRoot(wtPath)) {
+    return { ok: false, error: 'refusing to remove path outside the worktrees root' };
+  }
+  try {
+    await fs.access(wtPath);
+  } catch {
+    return { ok: true, path: wtPath, removed: false };
+  }
+  const r = await git(['worktree', 'remove', '--force', wtPath]);
+  await git(['worktree', 'prune']);
+  try {
+    await fs.rm(wtPath, { recursive: true, force: true });
+  } catch {
+    /* best-effort — Windows may keep a handle */
+  }
+  return { ok: true, path: wtPath, removed: true, output: out(r) };
 }
 
 /**

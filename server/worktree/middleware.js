@@ -10,6 +10,7 @@ import {
   checkWorktreeDirty,
   commitIntegration,
   commitWorktree,
+  createChatWorktree,
   createWorktree,
   ensureIntegration,
   integrationStats,
@@ -21,6 +22,7 @@ import {
   openWorkspacePr,
   pushIntegration,
   refreshIntegrationDeps,
+  removeChatWorktree,
   removeWorktree,
   restoreIntegration,
   verifyIntegrationMerge,
@@ -77,6 +79,8 @@ const OPS = {
   push_integration: (a) => pushIntegration(a),
   open_pr: (a) => openPr(a),
   open_workspace_pr: (a) => openWorkspacePr(a),
+  create_chat: (a) => createChatWorktree(a),
+  remove_chat: (a) => removeChatWorktree(a),
 };
 
 export async function handleWorktreeRequest(req, res, pathname) {

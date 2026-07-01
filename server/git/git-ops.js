@@ -113,19 +113,66 @@ export function parseBranchList(text) {
     const line = rawLine.trimEnd();
     if (!line) continue;
     const isCurrent = line.startsWith('* ');
-    const name = (isCurrent ? line.slice(2) : line.slice(2)).trim();
+    // Git marks branches checked out in another worktree with "+ ".
+    const checkedOutElsewhere = line.startsWith('+ ');
+    const name = line.slice(2).trim();
     if (!name) continue;
     if (isCurrent) {
       current = name;
     }
     if (name.startsWith('remotes/')) {
       remote.push(name);
-    } else {
+    } else if (!checkedOutElsewhere) {
       local.push(name);
     }
   }
 
   return { current, local, remote };
+}
+
+/** Minnow orchestration branches (board worktrees) — not user checkout targets. */
+export function isMinnowBoardBranch(name) {
+  return typeof name === 'string' && name.startsWith('minnow/board/');
+}
+
+/**
+ * Branches checked out in worktrees other than `mainRepoRoot`.
+ * @param {string} porcelain `git worktree list --porcelain`
+ * @param {string} mainRepoRoot
+ */
+export function parseWorktreeLockedBranches(porcelain, mainRepoRoot) {
+  const locked = new Set();
+  const norm = (p) =>
+    String(p ?? '')
+      .replace(/\\/g, '/')
+      .replace(/\/+$/, '')
+      .toLowerCase();
+  const main = norm(mainRepoRoot);
+  let currentPath = '';
+
+  for (const rawLine of String(porcelain ?? '').split('\n')) {
+    const line = rawLine.trimEnd();
+    if (line.startsWith('worktree ')) {
+      currentPath = line.slice('worktree '.length);
+      continue;
+    }
+    if (!line.startsWith('branch ') || !currentPath) continue;
+    const branch = line.slice('branch '.length).replace(/^refs\/heads\//, '');
+    if (norm(currentPath) !== main) {
+      locked.add(branch);
+    }
+  }
+
+  return locked;
+}
+
+/**
+ * Local branches suitable for user-facing checkout pickers.
+ * @param {string[]} local
+ * @param {Set<string>} [lockedElsewhere]
+ */
+export function filterUserFacingBranches(local, lockedElsewhere = new Set()) {
+  return local.filter((b) => !isMinnowBoardBranch(b) && !lockedElsewhere.has(b));
 }
 
 /**
@@ -457,12 +504,24 @@ export async function branches({ cwd } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
 
-  const result = await git(['branch', '-a'], repo.cwd);
-  if (result.code !== 0) {
-    return { ok: false, error: processError(result) };
+  const rootResult = await git(['rev-parse', '--show-toplevel'], repo.cwd);
+  const repoRoot = (rootResult.stdout ?? '').trim();
+
+  const [branchResult, wtResult] = await Promise.all([
+    git(['branch', '-a'], repo.cwd),
+    git(['worktree', 'list', '--porcelain'], repo.cwd),
+  ]);
+  if (branchResult.code !== 0) {
+    return { ok: false, error: processError(branchResult) };
   }
 
-  const parsed = parseBranchList(result.stdout);
+  const parsed = parseBranchList(branchResult.stdout);
+  const lockedElsewhere =
+    repoRoot && wtResult.code === 0
+      ? parseWorktreeLockedBranches(wtResult.stdout ?? '', repoRoot)
+      : new Set();
+  parsed.local = filterUserFacingBranches(parsed.local, lockedElsewhere);
+
   return { ok: true, ...parsed };
 }
 

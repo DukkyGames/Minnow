@@ -20,6 +20,7 @@ import { renderChatFromHistory } from './messages';
 import { setStatus } from './status';
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
+import { refreshComposerRunTargetDisabled } from './composer-run-target';
 import { createModeMaskIcon, syncModeIconInDom } from './mode-icons';
 
 const MODE_STATUS_MS = 2200;
@@ -74,6 +75,7 @@ export function refreshModeSelectorDisabled(): void {
   root.querySelectorAll<HTMLButtonElement>('[data-mode-id]').forEach((btn) => {
     btn.disabled = disabled;
   });
+  refreshComposerRunTargetDisabled();
 }
 
 function showModeStatusPill(label: string): void {

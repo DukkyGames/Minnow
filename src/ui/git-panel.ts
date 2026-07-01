@@ -10,6 +10,8 @@ import {
 
   formatWorktreeOptionLabel,
 
+  filterUserFacingBranches,
+
   parseWorktreeListPorcelain,
 
   type ParsedWorktree,
@@ -1418,7 +1420,7 @@ async function refreshBranchSelect(): Promise<void> {
 
   currentBranchName = result.current ?? '';
 
-  for (const branch of result.local ?? []) {
+  for (const branch of filterUserFacingBranches(result.local ?? [])) {
 
     const opt = document.createElement('option');
 
