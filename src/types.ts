@@ -740,6 +740,17 @@ export interface Chat {
    * Code workspace, isolating concurrent board task chats. Unset = shared workspace.
    */
   worktreeRoot?: string;
+  /**
+   * Git branch this chat operates on (MIN-276 composer branch selector). When
+   * {@link worktreeRoot} is set, this is the worktree branch; otherwise the
+   * workspace checkout branch the chat targets.
+   */
+  gitBranch?: string;
+  /**
+   * True when Minnow created the chat worktree at the managed slot (cleanup on
+   * delete / detach to Local). False when attached to an existing worktree.
+   */
+  chatWorktreeManaged?: boolean;
   /** @deprecated Migrated to ~/.minnow/bugs/state.json — stripped on load. */
   bugBoard?: BugBoardState;
   /**

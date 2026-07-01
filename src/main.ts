@@ -307,6 +307,8 @@ export async function initApp(): Promise<void> {
   initThinkingControl();
   initComposerReasoningEffort();
   initOrchestratePlanSelector();
+  const { initComposerRunTarget } = await import('./ui/composer-run-target');
+  initComposerRunTarget();
   initViewModeToggle();
   initReefBridge();
   initWorkAgentDevUi();

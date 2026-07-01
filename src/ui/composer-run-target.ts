@@ -1,0 +1,512 @@
+/**
+ * Composer run-target + branch dropdowns (MIN-276).
+ * Sits beside the mode selector; persists per chat on worktreeRoot / gitBranch.
+ */
+
+import { isActiveChatStreaming } from '../chat/streaming-state.ts';
+import {
+  branchesLockedToOtherWorktrees,
+  filterUserFacingBranches,
+  parseWorktreeListPorcelain,
+} from '../lib/worktree-list-parse.ts';
+import {
+  attachChatToWorktree,
+  composerGitRepoRoot,
+  createManagedChatWorktree,
+  formatComposerBranchLabel,
+  formatComposerRunTargetLabel,
+  isChatWorktreeMode,
+  setChatRunTargetLocal,
+} from '../state/chat-worktree.ts';
+import { gitBranches, gitCheckout } from '../state/git-api.ts';
+import { getActiveChat, isExpertChat, scheduleSaveSessions, touchChat } from '../state/sessions.ts';
+import { isLocalServerAvailable } from '../tools/config.ts';
+import { listWorktrees } from '../state/worktree-service.ts';
+import type { Chat } from '../types.ts';
+import { isComposerRecoveryBlocked } from './composer-send.ts';
+import { createGitWorktreeIcon } from './git-worktree-icons.ts';
+import {
+  closeGitPanelNamePopover,
+  openGitPanelNamePopover,
+} from './git-panel-name-popover.ts';
+import { setStatus } from './status.ts';
+
+let wrapEl: HTMLDivElement | null = null;
+let runTargetBtn: HTMLButtonElement | null = null;
+let runTargetMenu: HTMLDivElement | null = null;
+let branchBtn: HTMLButtonElement | null = null;
+let branchMenu: HTMLDivElement | null = null;
+let runTargetOpen = false;
+let branchOpen = false;
+let outsideHandler: ((e: PointerEvent) => void) | null = null;
+let escapeHandler: ((e: KeyboardEvent) => void) | null = null;
+let busy = false;
+
+function controlsDisabled(): boolean {
+  return isActiveChatStreaming() || isComposerRecoveryBlocked() || busy;
+}
+
+function shouldShowForChat(chat: Chat): boolean {
+  if (isExpertChat(chat)) return false;
+  if (chat.boardTaskId?.trim()) return false;
+  return isLocalServerAvailable();
+}
+
+function detachGlobalListeners(): void {
+  if (outsideHandler) {
+    document.removeEventListener('pointerdown', outsideHandler, true);
+    outsideHandler = null;
+  }
+  if (escapeHandler) {
+    document.removeEventListener('keydown', escapeHandler, true);
+    escapeHandler = null;
+  }
+}
+
+function closeMenus(): void {
+  runTargetOpen = false;
+  branchOpen = false;
+  runTargetBtn?.setAttribute('aria-expanded', 'false');
+  branchBtn?.setAttribute('aria-expanded', 'false');
+  runTargetMenu?.classList.add('hidden');
+  branchMenu?.classList.add('hidden');
+  detachGlobalListeners();
+}
+
+function positionMenu(anchor: HTMLElement, menu: HTMLElement): void {
+  const rect = anchor.getBoundingClientRect();
+  const margin = 8;
+  const gap = 4;
+  const menuHeight = menu.offsetHeight || menu.getBoundingClientRect().height;
+  const menuWidth = menu.offsetWidth || menu.getBoundingClientRect().width;
+
+  let top = rect.bottom + gap;
+  if (top + menuHeight > window.innerHeight - margin) {
+    top = Math.max(margin, rect.top - menuHeight - gap);
+  }
+
+  let left = rect.left;
+  if (left + menuWidth > window.innerWidth - margin) {
+    left = Math.max(margin, window.innerWidth - menuWidth - margin);
+  }
+
+  menu.style.top = `${top}px`;
+  menu.style.left = `${left}px`;
+}
+
+function attachGlobalListeners(): void {
+  outsideHandler = (e: PointerEvent) => {
+    const target = e.target as Node | null;
+    if (
+      runTargetMenu?.contains(target) ||
+      branchMenu?.contains(target) ||
+      runTargetBtn?.contains(target) ||
+      branchBtn?.contains(target)
+    ) {
+      return;
+    }
+    closeMenus();
+  };
+  document.addEventListener('pointerdown', outsideHandler, true);
+
+  escapeHandler = (e: KeyboardEvent) => {
+    if (e.key !== 'Escape') return;
+    closeMenus();
+    closeGitPanelNamePopover();
+  };
+  document.addEventListener('keydown', escapeHandler, true);
+}
+
+function createMenuButton(
+  id: string,
+  className: string,
+  ariaLabel: string,
+  iconKind: 'local' | 'branch' | 'worktree',
+): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.id = id;
+  btn.className = className;
+  btn.setAttribute('aria-label', ariaLabel);
+  btn.setAttribute('aria-haspopup', 'true');
+  btn.setAttribute('aria-expanded', 'false');
+  const icon = createGitWorktreeIcon(iconKind, 'composer-run-target__icon');
+  const label = document.createElement('span');
+  label.className = 'composer-run-target__label';
+  btn.append(icon, label);
+  return btn;
+}
+
+function createMenuPanel(id: string): HTMLDivElement {
+  const menu = document.createElement('div');
+  menu.id = id;
+  menu.className = 'composer-run-target-menu hidden';
+  menu.setAttribute('role', 'menu');
+  return menu;
+}
+
+function menuSection(title: string): HTMLDivElement {
+  const section = document.createElement('div');
+  section.className = 'composer-run-target-menu__section';
+  const heading = document.createElement('div');
+  heading.className = 'composer-run-target-menu__heading';
+  heading.textContent = title;
+  section.appendChild(heading);
+  return section;
+}
+
+function menuItem(
+  label: string,
+  onClick: () => void,
+  options?: { icon?: 'local' | 'branch' | 'worktree'; disabled?: boolean },
+): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'composer-run-target-menu__item';
+  btn.setAttribute('role', 'menuitem');
+  btn.disabled = options?.disabled === true;
+  if (options?.icon) {
+    btn.appendChild(createGitWorktreeIcon(options.icon, 'composer-run-target-menu__item-icon'));
+  }
+  const text = document.createElement('span');
+  text.textContent = label;
+  btn.appendChild(text);
+  btn.addEventListener('click', () => {
+    closeMenus();
+    void onClick();
+  });
+  return btn;
+}
+
+function ensureControls(): HTMLDivElement {
+  if (wrapEl) return wrapEl;
+
+  wrapEl = document.createElement('div');
+  wrapEl.id = 'composerRunTargetWrap';
+  wrapEl.className = 'composer-control composer-run-target-wrap hidden';
+
+  runTargetBtn = createMenuButton(
+    'composerRunTargetBtn',
+    'composer-run-target-btn',
+    'Run target',
+    'local',
+  );
+  runTargetMenu = createMenuPanel('composerRunTargetMenu');
+
+  branchBtn = createMenuButton(
+    'composerBranchBtn',
+    'composer-run-target-btn composer-branch-btn',
+    'Git branch',
+    'branch',
+  );
+  branchMenu = createMenuPanel('composerBranchMenu');
+
+  runTargetBtn.addEventListener('click', () => {
+    if (controlsDisabled()) return;
+    if (runTargetOpen) {
+      closeMenus();
+      return;
+    }
+    closeMenus();
+    runTargetOpen = true;
+    runTargetBtn?.setAttribute('aria-expanded', 'true');
+    void rebuildRunTargetMenu().then(() => {
+      if (!runTargetMenu || !runTargetBtn) return;
+      runTargetMenu.classList.remove('hidden');
+      positionMenu(runTargetBtn, runTargetMenu);
+      attachGlobalListeners();
+    });
+  });
+
+  branchBtn.addEventListener('click', () => {
+    if (controlsDisabled()) return;
+    if (branchOpen) {
+      closeMenus();
+      return;
+    }
+    closeMenus();
+    branchOpen = true;
+    branchBtn?.setAttribute('aria-expanded', 'true');
+    void rebuildBranchMenu().then(() => {
+      if (!branchMenu || !branchBtn) return;
+      branchMenu.classList.remove('hidden');
+      positionMenu(branchBtn, branchMenu);
+      attachGlobalListeners();
+    });
+  });
+
+  wrapEl.append(runTargetBtn, runTargetMenu, branchBtn, branchMenu);
+
+  const host = document.getElementById('composerControls');
+  const anchor = document.getElementById('composerThinkingWrap');
+  if (host) {
+    if (anchor) {
+      host.insertBefore(wrapEl, anchor);
+    } else {
+      host.appendChild(wrapEl);
+    }
+  }
+
+  return wrapEl;
+}
+
+async function refreshGitPanel(): Promise<void> {
+  try {
+    const mod = await import('./git-panel.ts');
+    mod.syncGitPanelFromOrchestrator();
+  } catch {
+    /* optional */
+  }
+}
+
+async function applyLocalTarget(): Promise<void> {
+  const chat = getActiveChat();
+  busy = true;
+  refreshComposerRunTargetDisabled();
+  try {
+    await setChatRunTargetLocal(chat);
+    touchChat(chat);
+    scheduleSaveSessions();
+    syncComposerRunTargetFromActiveChat();
+    await refreshGitPanel();
+    setStatus('ok', 'Run target: Local');
+  } finally {
+    busy = false;
+    refreshComposerRunTargetDisabled();
+  }
+}
+
+async function applyNewWorktree(branchName: string): Promise<void> {
+  const chat = getActiveChat();
+  busy = true;
+  refreshComposerRunTargetDisabled();
+  try {
+    if (isChatWorktreeMode(chat)) {
+      await setChatRunTargetLocal(chat);
+    }
+    const res = await createManagedChatWorktree(chat, branchName);
+    if (!res.ok) {
+      setStatus('error', res.error ?? 'Could not create worktree');
+      return;
+    }
+    touchChat(chat);
+    scheduleSaveSessions();
+    syncComposerRunTargetFromActiveChat();
+    await refreshGitPanel();
+    setStatus('ok', `Worktree: ${chat.gitBranch ?? branchName}`);
+  } finally {
+    busy = false;
+    refreshComposerRunTargetDisabled();
+  }
+}
+
+async function applyAttachWorktree(path: string, branch?: string): Promise<void> {
+  const chat = getActiveChat();
+  busy = true;
+  refreshComposerRunTargetDisabled();
+  try {
+    if (chat.chatWorktreeManaged) {
+      await setChatRunTargetLocal(chat);
+    }
+    attachChatToWorktree(chat, path, branch);
+    touchChat(chat);
+    scheduleSaveSessions();
+    syncComposerRunTargetFromActiveChat();
+    await refreshGitPanel();
+    setStatus('ok', `Worktree: ${branch?.trim() || path.split(/[/\\]/).pop() || 'attached'}`);
+  } finally {
+    busy = false;
+    refreshComposerRunTargetDisabled();
+  }
+}
+
+async function applyBranchCheckout(branch: string): Promise<void> {
+  const chat = getActiveChat();
+  if (isChatWorktreeMode(chat)) return;
+  busy = true;
+  refreshComposerRunTargetDisabled();
+  try {
+    const res = await gitCheckout({ branch });
+    if (!res.ok) {
+      setStatus('error', res.error ?? `Could not checkout ${branch}`);
+      return;
+    }
+    chat.gitBranch = branch;
+    touchChat(chat);
+    scheduleSaveSessions();
+    syncComposerRunTargetFromActiveChat();
+    await refreshGitPanel();
+    setStatus('ok', `Branch: ${branch}`);
+  } finally {
+    busy = false;
+    refreshComposerRunTargetDisabled();
+  }
+}
+
+function promptNewWorktreeBranch(anchor: HTMLElement): void {
+  const chat = getActiveChat();
+  openGitPanelNamePopover({
+    anchor,
+    title: 'New worktree',
+    label: 'Branch name',
+    placeholder: 'feature/my-branch',
+    defaultValue: chat.gitBranch?.trim() || '',
+    submitLabel: 'Create',
+    onSubmit: async (name) => {
+      await applyNewWorktree(name);
+    },
+  });
+}
+
+async function rebuildRunTargetMenu(): Promise<void> {
+  if (!runTargetMenu) return;
+  runTargetMenu.replaceChildren();
+
+  const chat = getActiveChat();
+  const runOn = menuSection('Run on');
+  const localItem = menuItem('This PC', () => applyLocalTarget(), {
+    icon: 'local',
+    disabled: !isChatWorktreeMode(chat),
+  });
+  runOn.appendChild(localItem);
+  runTargetMenu.appendChild(runOn);
+
+  const wtSection = menuSection('Worktree');
+  const attachItem = menuItem('Worktree…', async () => {
+    const list = await listWorktrees();
+    if (!list.ok || !list.output) {
+      setStatus('error', list.error ?? 'Could not list worktrees');
+      return;
+    }
+    const repoRoot = composerGitRepoRoot().replace(/\\/g, '/').replace(/\/+$/, '');
+    const entries = parseWorktreeListPorcelain(list.output).filter((wt) => {
+      const norm = wt.path.replace(/\\/g, '/').replace(/\/+$/, '');
+      return norm !== repoRoot;
+    });
+    if (!entries.length) {
+      setStatus('error', 'No extra worktrees found');
+      return;
+    }
+    if (!runTargetMenu) return;
+    runTargetMenu.replaceChildren();
+    const back = menuItem('← Back', () => void rebuildRunTargetMenu());
+    runTargetMenu.appendChild(back);
+    for (const wt of entries) {
+      const label = wt.branch ? wt.branch : wt.path.split(/[/\\]/).pop() ?? wt.path;
+      runTargetMenu.appendChild(
+        menuItem(label, () => applyAttachWorktree(wt.path, wt.branch), { icon: 'worktree' }),
+      );
+    }
+    if (runTargetBtn) positionMenu(runTargetBtn, runTargetMenu);
+  }, { icon: 'worktree' });
+
+  const newItem = menuItem('New worktree', () => {
+    if (runTargetBtn) promptNewWorktreeBranch(runTargetBtn);
+  }, { icon: 'worktree' });
+
+  wtSection.append(attachItem, newItem);
+  runTargetMenu.appendChild(wtSection);
+}
+
+async function rebuildBranchMenu(): Promise<void> {
+  if (!branchMenu) return;
+  branchMenu.replaceChildren();
+  const chat = getActiveChat();
+  const inWorktree = isChatWorktreeMode(chat);
+
+  if (inWorktree) {
+    const note = document.createElement('p');
+    note.className = 'composer-run-target-menu__note';
+    note.textContent = chat.gitBranch?.trim()
+      ? `Branch: ${chat.gitBranch}`
+      : 'Branch follows the attached worktree.';
+    branchMenu.appendChild(note);
+    return;
+  }
+
+  const [res, list] = await Promise.all([gitBranches(), listWorktrees()]);
+  if (!res.ok) {
+    const err = document.createElement('p');
+    err.className = 'composer-run-target-menu__note';
+    err.textContent = res.error ?? 'Could not load branches';
+    branchMenu.appendChild(err);
+    return;
+  }
+
+  const repoRoot = composerGitRepoRoot();
+  const worktrees =
+    list.ok && list.output ? parseWorktreeListPorcelain(list.output) : [];
+  const locked = branchesLockedToOtherWorktrees(worktrees, repoRoot);
+  const current = res.current?.trim();
+  const names = filterUserFacingBranches(res.local ?? [], locked);
+  for (const name of names) {
+    const item = menuItem(name, () => applyBranchCheckout(name), {
+      icon: 'branch',
+      disabled: name === current,
+    });
+    if (name === current) {
+      item.setAttribute('aria-current', 'true');
+    }
+    branchMenu.appendChild(item);
+  }
+}
+
+function updateButtonLabels(chat: Chat): void {
+  const runLabel = runTargetBtn?.querySelector('.composer-run-target__label');
+  if (runLabel) {
+    runLabel.textContent = formatComposerRunTargetLabel(chat);
+  }
+  const branchLabel = branchBtn?.querySelector('.composer-run-target__label');
+  if (branchLabel) {
+    branchLabel.textContent = formatComposerBranchLabel(chat.gitBranch);
+  }
+  runTargetBtn?.setAttribute(
+    'title',
+    isChatWorktreeMode(chat)
+      ? `Worktree: ${chat.worktreeRoot ?? ''}`
+      : 'Run on this PC (main workspace)',
+  );
+  branchBtn?.setAttribute(
+    'title',
+    chat.gitBranch?.trim() ? `Branch: ${chat.gitBranch}` : 'Select git branch',
+  );
+}
+
+/** Disable controls while streaming or busy. */
+export function refreshComposerRunTargetDisabled(): void {
+  const disabled = controlsDisabled();
+  runTargetBtn?.toggleAttribute('disabled', disabled);
+  branchBtn?.toggleAttribute('disabled', disabled || isChatWorktreeMode(getActiveChat()));
+}
+
+/** Sync run-target + branch controls from the active chat. */
+export function syncComposerRunTargetFromActiveChat(): void {
+  const wrap = ensureControls();
+  const chat = getActiveChat();
+
+  if (!shouldShowForChat(chat)) {
+    wrap.classList.add('hidden');
+    closeMenus();
+    return;
+  }
+
+  wrap.classList.remove('hidden');
+  updateButtonLabels(chat);
+  refreshComposerRunTargetDisabled();
+
+  if (!chat.gitBranch?.trim()) {
+    void gitBranches().then((res) => {
+      if (!res.ok || !res.current?.trim()) return;
+      if (getActiveChat().id !== chat.id) return;
+      if (getActiveChat().gitBranch?.trim()) return;
+      chat.gitBranch = res.current.trim();
+      updateButtonLabels(chat);
+    });
+  }
+}
+
+/** Wire composer run-target controls (call once at boot). */
+export function initComposerRunTarget(): void {
+  ensureControls();
+  syncComposerRunTargetFromActiveChat();
+}

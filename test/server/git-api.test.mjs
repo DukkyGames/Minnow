@@ -15,7 +15,11 @@ import {
   commit,
   deleteBranch,
   diff,
+  filterUserFacingBranches,
+  isMinnowBoardBranch,
   log,
+  parseBranchList,
+  parseWorktreeLockedBranches,
   show,
   stage,
   status,
@@ -154,6 +158,43 @@ describe('git API', () => {
     assert.ok(listed.local?.includes(listed.current));
   });
 
+  test('parseBranchList omits branches checked out in other worktrees', () => {
+    const parsed = parseBranchList(
+      [
+        '  main',
+        '* develop',
+        '+ feature/other-worktree',
+        '  remotes/origin/main',
+      ].join('\n'),
+    );
+    assert.equal(parsed.current, 'develop');
+    assert.deepEqual(parsed.local, ['main', 'develop']);
+    assert.deepEqual(parsed.remote, ['remotes/origin/main']);
+  });
+
+  test('filterUserFacingBranches omits board and locked worktree branches', () => {
+    assert.equal(isMinnowBoardBranch('minnow/board/x/task/W1-A'), true);
+    assert.equal(isMinnowBoardBranch('feature/foo'), false);
+
+    const locked = parseWorktreeLockedBranches(
+      [
+        'worktree /repo/main',
+        'branch refs/heads/main',
+        '',
+        'worktree /repo/wt',
+        'branch refs/heads/feature/wt',
+      ].join('\n'),
+      '/repo/main',
+    );
+    assert.deepEqual([...locked], ['feature/wt']);
+
+    const filtered = filterUserFacingBranches(
+      ['main', 'feature/wt', 'minnow/board/x/integration', 'release'],
+      locked,
+    );
+    assert.deepEqual(filtered, ['main', 'release']);
+  });
+
   test('deleteBranch removes a non-current branch', async () => {
     const before = await branches({ cwd: repoDir });
     const original = before.current;
@@ -181,11 +222,19 @@ describe('git API', () => {
     assert.equal(added.ok, true);
     assert.equal(added.branch, 'wt-feature');
 
+    const listed = await branches({ cwd: repoDir });
+    assert.equal(listed.ok, true);
+    assert.ok(!listed.local?.includes('wt-feature'));
+
     const removed = await worktreeRemove({
       cwd: repoDir,
       path: path.join(repoDir, '.worktrees', 'wt-feature'),
     });
     assert.equal(removed.ok, true);
+
+    const afterRemove = await branches({ cwd: repoDir });
+    assert.equal(afterRemove.ok, true);
+    assert.ok(afterRemove.local?.includes('wt-feature'));
   });
 
   test('POST /api/git status honors cwd', async () => {
