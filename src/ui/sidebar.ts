@@ -56,12 +56,9 @@ import {
   renderStatsForChat,
   showCachedModelInfo,
 } from './messages';
-import { updateCodeChangeStrip } from './code-change-strip';
+import { appendCodeChangeTotalsSpans, updateCodeChangeStrip } from './code-change-strip';
 import { updateWorkspaceCodeChangeDisplay } from './workspace-code-change';
-import {
-  formatCodeChangeTotalsText,
-  hasCodeChangeTotals,
-} from '../usage/code-change-ledger';
+import { hasCodeChangeTotals } from '../usage/code-change-ledger';
 import { getDefaultWorkAgentForMode } from '../agents/work-agent-registry';
 import { syncModeSelectorFromActiveChat } from './mode-selector';
 import { syncComposerReasoningEffortFromActiveChat } from './composer-reasoning-effort';
@@ -519,11 +516,16 @@ export function appendChatRow(
 
     const statsEl = document.createElement('div');
     statsEl.className = 'chat-item-stats';
-    const statsParts = [formatSidebarStatsPreview(chat.lastStats)];
-    if (hasCodeChangeTotals(chat.codeChangeTotals)) {
-      statsParts.push(formatCodeChangeTotalsText(chat.codeChangeTotals!));
+    const statsPreview = formatSidebarStatsPreview(chat.lastStats);
+    const statsFrag = document.createDocumentFragment();
+    if (statsPreview) {
+      statsFrag.appendChild(document.createTextNode(statsPreview));
     }
-    statsEl.textContent = statsParts.filter(Boolean).join(' · ');
+    if (hasCodeChangeTotals(chat.codeChangeTotals)) {
+      if (statsPreview) statsFrag.appendChild(document.createTextNode(' · '));
+      appendCodeChangeTotalsSpans(statsFrag, chat.codeChangeTotals!);
+    }
+    statsEl.appendChild(statsFrag);
 
     row.appendChild(modelEl);
     row.appendChild(statsEl);
