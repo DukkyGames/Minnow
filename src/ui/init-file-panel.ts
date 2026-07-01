@@ -45,6 +45,7 @@ import { refreshWorkspaceUi } from './workspace-button';
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
 import { initGitPanel, syncGitPanelFromOrchestrator } from './git-panel';
+import { initGitCenterLightbox } from './git-center-lightbox';
 import { startFileTreeGitStatusPoll } from './file-tree';
 
 let resizerBound = false;
@@ -179,6 +180,7 @@ export async function initFilePanel(): Promise<void> {
   initFileTreeSearch();
 
   initGitPanel();
+  initGitCenterLightbox();
   if (getLocalServerAvailable()) {
     startFileTreeGitStatusPoll();
   }

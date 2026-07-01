@@ -29,6 +29,36 @@
   flex-shrink: 0;
 }
 
+.git-panel-center-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.git-panel-center-btn {
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in oklch, var(--mn-fg-muted) 40%, transparent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .git-panel-center-btn:hover {
+    color: var(--mn-fg);
+    text-decoration-color: var(--mn-accent);
+  }
+}
+
+.git-panel-center-btn.is-active {
+  color: var(--mn-fg);
+  text-decoration-color: var(--mn-accent);
+}
+
 .git-panel-scroll {
   flex: 1;
   min-height: 0;

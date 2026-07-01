@@ -37,6 +37,8 @@ export interface GitOpResult {
   remote?: string[];
   stat?: string;
   path?: string;
+  conflict?: boolean;
+  stashes?: string[];
 }
 
 async function postGit(
@@ -176,4 +178,64 @@ export function gitShow(input: {
   cwd?: string;
 }): Promise<GitOpResult> {
   return postGit('show', input);
+}
+
+export function gitMerge(input: {
+  branch?: string;
+  noFf?: boolean;
+  abort?: boolean;
+  cwd?: string;
+}): Promise<GitOpResult> {
+  return postGit('merge', input);
+}
+
+export function gitRebase(input: {
+  onto?: string;
+  abort?: boolean;
+  continue?: boolean;
+  cwd?: string;
+}): Promise<GitOpResult> {
+  return postGit('rebase', input);
+}
+
+export function gitStashList(cwd?: string): Promise<GitOpResult> {
+  return postGit('stashList', cwd ? { cwd } : {});
+}
+
+export function gitStashPush(input?: {
+  cwd?: string;
+  message?: string;
+  paths?: string[];
+}): Promise<GitOpResult> {
+  return postGit('stashPush', input ?? {});
+}
+
+export function gitStashPop(input?: {
+  cwd?: string;
+  index?: number;
+}): Promise<GitOpResult> {
+  return postGit('stashPop', input ?? {});
+}
+
+export function gitStashApply(input?: {
+  cwd?: string;
+  index?: number;
+}): Promise<GitOpResult> {
+  return postGit('stashApply', input ?? {});
+}
+
+export function gitStashDrop(input?: {
+  cwd?: string;
+  index?: number;
+}): Promise<GitOpResult> {
+  return postGit('stashDrop', input ?? {});
+}
+
+export function gitCherryPick(input: {
+  sha?: string;
+  abort?: boolean;
+  continue?: boolean;
+  cwd?: string;
+}): Promise<GitOpResult> {
+  return postGit('cherryPick', input);
 }
