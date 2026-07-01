@@ -1,7 +1,7 @@
 /* Unified diff inside expanded tool-call bodies (reuses prompt-diff tokens). */
 
 .tool-call-diff {
-  margin-top: 0.75rem;
+  margin-top: 0;
   border: 1px solid var(--mn-border);
   border-radius: var(--mn-radius-sm, 6px);
   overflow: hidden;
@@ -9,10 +9,25 @@
 }
 
 .tool-call-diff__header {
+  display: block;
+  width: 100%;
   padding: 0.35rem 0.65rem;
   font-size: 0.75rem;
   color: var(--mn-muted);
   border-bottom: 1px solid var(--mn-border);
+  text-align: left;
+}
+
+.tool-call-diff__header--link {
+  border: none;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tool-call-diff__header--link:hover {
+  color: var(--mn-accent, var(--mn-fg));
+  text-decoration: underline;
 }
 
 .tool-call-diff .prompt-diff__body {
