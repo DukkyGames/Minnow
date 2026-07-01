@@ -58,7 +58,7 @@ import { getFilePanelState, patchFilePanelState } from '../state/file-panel';
 
 import { renderGitGraph } from './git-graph';
 
-import { applyFileSidebarVisuals } from './file-layout';
+import { applyFileSidebarVisuals, isMobileLayout, openMobileFileSidebar } from './file-layout';
 
 import { getActiveChat, sessionState } from '../state/sessions';
 
@@ -1621,6 +1621,9 @@ function syncToggleButtonState(): void {
 
 
 function ensureSidebarExpandedForGit(): void {
+  if (isMobileLayout()) {
+    openMobileFileSidebar();
+  }
 
   const state = getFilePanelState();
 
@@ -1629,7 +1632,6 @@ function ensureSidebarExpandedForGit(): void {
   patchFilePanelState({ fileSidebarCollapsed: false });
 
   applyFileSidebarVisuals();
-
 }
 
 
@@ -1650,11 +1652,11 @@ export async function openGitSidePanel(): Promise<void> {
 
   ensurePanelDom();
 
-  ensureSidebarExpandedForGit();
-
   panelOpen = true;
 
   syncSidebarChrome();
+
+  ensureSidebarExpandedForGit();
 
   await refreshGitPanel();
 
@@ -1683,6 +1685,13 @@ export function closeGitSidePanel(): void {
 /** Toggle git view visibility in the file sidebar. */
 
 export function toggleGitSidePanel(): void {
+
+  const state = getFilePanelState();
+
+  if (state.fileSidebarCollapsed) {
+    void openGitSidePanel();
+    return;
+  }
 
   if (isGitSidePanelOpen()) closeGitSidePanel();
 

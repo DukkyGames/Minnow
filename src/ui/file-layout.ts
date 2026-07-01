@@ -11,12 +11,19 @@ import {
 import { syncStatsStripLayoutForViewer } from './stats';
 import { clearAllViewerTabs } from './file-viewer-tab-store';
 import { mountOsMobileDrawerBackdrops, syncOsMobileDrawerHtmlClass } from './mobile-drawer-portal';
+import { closeGitSidePanel, isGitSidePanelOpen } from './git-panel';
 
 export function isMobileLayout(): boolean {
   return window.matchMedia('(max-width: 640px)').matches;
 }
 
-export function closeMobileFileSidebar(): void {
+/** Close source control when the file sidebar is collapsed or dismissed. */
+function closeGitPanelIfOpen(): void {
+  if (isGitSidePanelOpen()) closeGitSidePanel();
+}
+
+/** Clear mobile drawer classes without closing source control (safe during layout refresh). */
+export function clearMobileFileSidebarOverlay(): void {
   const side = document.getElementById('fileSidebar');
   const bd = document.getElementById('fileSidebarBackdrop');
   if (side) side.classList.remove('mobile-open');
@@ -26,6 +33,11 @@ export function closeMobileFileSidebar(): void {
     bd.setAttribute('aria-hidden', 'true');
     (bd as HTMLButtonElement).tabIndex = -1;
   }
+}
+
+export function closeMobileFileSidebar(): void {
+  clearMobileFileSidebarOverlay();
+  closeGitPanelIfOpen();
 }
 
 export function openMobileFileSidebar(): void {
@@ -125,7 +137,7 @@ export function applyFileSidebarVisuals(): void {
   }
 
   if (!isMobileLayout()) {
-    closeMobileFileSidebar();
+    clearMobileFileSidebarOverlay();
     side.classList.toggle('collapsed', state.fileSidebarCollapsed);
     btn.innerHTML = state.fileSidebarCollapsed ? ICON_FILE_TREE : ICON_CHEVRON_RIGHT;
     btn.setAttribute(
@@ -165,7 +177,9 @@ export function toggleFileSidebarLayout(): void {
   }
 
   const state = getFilePanelState();
-  patchFilePanelState({ fileSidebarCollapsed: !state.fileSidebarCollapsed });
+  const nextCollapsed = !state.fileSidebarCollapsed;
+  patchFilePanelState({ fileSidebarCollapsed: nextCollapsed });
+  if (nextCollapsed) closeGitPanelIfOpen();
   applyFileSidebarVisuals();
 }
 
@@ -176,7 +190,9 @@ export function toggleFileSidebarCollapsed(): void {
     return;
   }
   const state = getFilePanelState();
-  patchFilePanelState({ fileSidebarCollapsed: !state.fileSidebarCollapsed });
+  const nextCollapsed = !state.fileSidebarCollapsed;
+  patchFilePanelState({ fileSidebarCollapsed: nextCollapsed });
+  if (nextCollapsed) closeGitPanelIfOpen();
   applyFileSidebarVisuals();
 }
 

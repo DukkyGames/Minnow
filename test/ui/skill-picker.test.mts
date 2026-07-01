@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { Window } from 'happy-dom';
 
+const { setStreaming } = await import('../../src/app-state.ts');
 const { refreshSkillCatalog } = await import('../../src/skills/client.ts');
 const { listSlashPickerRows } = await import('../../src/chat/slash-commands/picker-catalog.ts');
 const {
@@ -57,6 +58,29 @@ describe('skill-picker', () => {
       assert.equal(isSkillPickerOpen(), true, `picker open for ${id}`);
       assert.equal(picker?.parentElement, document.body, `picker mounted on body for ${id}`);
     }
+  });
+
+  it('opens picker while another chat is streaming', async () => {
+    const window = new Window();
+    globalThis.document = window.document;
+    globalThis.HTMLElement = window.HTMLElement;
+    globalThis.Event = window.Event;
+
+    await refreshSkillCatalog();
+
+    const input = mountComposer('streamPickerInput', 'input-wrap');
+    initComposerSlashPicker(input);
+
+    setStreaming(true, 'other-chat-id');
+
+    input.focus();
+    input.value = '/git';
+    input.setSelectionRange(4, 4);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+
+    assert.equal(isSkillPickerOpen(), true, 'picker should open during background stream');
+
+    setStreaming(false, 'other-chat-id');
   });
 
   it('lists /goal in the picker when filtering by goal', async () => {

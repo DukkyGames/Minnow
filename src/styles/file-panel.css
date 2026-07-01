@@ -702,6 +702,11 @@
   display: none;
 }
 
+/* Higher specificity than .file-sidebar--git so collapsed rail never shows git UI */
+.file-sidebar.collapsed:not(.mobile-open).file-sidebar--git .git-panel-root {
+  display: none !important;
+}
+
 .file-sidebar-preview-toggle.is-active {
   color: var(--mn-accent);
   background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
