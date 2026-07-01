@@ -21,7 +21,7 @@
     "caveman:sync": "node scripts/sync-caveman-skill.mjs",
     "matt-pocock-skills:sync": "node scripts/sync-matt-pocock-skills.mjs",
     "matt-pocock-skills:update": "node scripts/sync-matt-pocock-skills.mjs",
-    "test:skills": "tsx --test --test-force-exit test/skills-loader.test.ts test/skills/caveman-client.test.mts test/skills/pinned-skill.test.mts test/skills-matt-pocock.test.mjs",
+    "test:skills": "tsx --test --test-force-exit test/skills-loader.test.ts test/skills/caveman-client.test.mts test/skills/partymode-client.test.mts test/skills/pinned-skill.test.mts test/skills-matt-pocock.test.mjs",
     "test:attachments": "node --test --test-force-exit test/attachments/*.test.mjs test/server/read-document.test.mjs && node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --import ./test/test-loader.mjs --test --test-force-exit test/workspace-ref.test.ts test/workspace-path-composer.test.mts test/attachments/code-ref.test.mts test/attachments/image-path.test.ts test/attachments/reader-routing.test.mts",
     "test:skills-impeccable": "node --test --test-force-exit test/skills-impeccable.test.mjs",
     "test:impeccable": "node --test --test-force-exit test/impeccable/*.test.mjs && tsx --test --test-force-exit test/skills/impeccable-client.test.mts",
