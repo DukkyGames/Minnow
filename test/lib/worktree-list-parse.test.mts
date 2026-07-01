@@ -1,7 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  filterUserFacingBranches,
   formatWorktreeOptionLabel,
+  isMinnowBoardBranch,
   parseWorktreeListPorcelain,
 } from '../../src/lib/worktree-list-parse.ts';
 
@@ -29,6 +31,17 @@ describe('parseWorktreeListPorcelain', () => {
     assert.equal(parsed[1]?.branch, 'feature/task-1');
     assert.equal(parsed[2]?.detached, true);
     assert.equal(parsed[2]?.branch, undefined);
+  });
+});
+
+describe('filterUserFacingBranches', () => {
+  it('drops minnow board branches and worktree-locked names', () => {
+    assert.equal(isMinnowBoardBranch('minnow/board/g/task/W1-A'), true);
+    const out = filterUserFacingBranches(
+      ['main', 'minnow/board/g/integration', 'feature'],
+      new Set(['chat-branch']),
+    );
+    assert.deepEqual(out, ['main', 'feature']);
   });
 });
 

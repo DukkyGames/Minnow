@@ -4,7 +4,11 @@
  */
 
 import { isActiveChatStreaming } from '../chat/streaming-state.ts';
-import { parseWorktreeListPorcelain } from '../lib/worktree-list-parse.ts';
+import {
+  branchesLockedToOtherWorktrees,
+  filterUserFacingBranches,
+  parseWorktreeListPorcelain,
+} from '../lib/worktree-list-parse.ts';
 import {
   attachChatToWorktree,
   composerGitRepoRoot,
@@ -420,7 +424,7 @@ async function rebuildBranchMenu(): Promise<void> {
     return;
   }
 
-  const res = await gitBranches();
+  const [res, list] = await Promise.all([gitBranches(), listWorktrees()]);
   if (!res.ok) {
     const err = document.createElement('p');
     err.className = 'composer-run-target-menu__note';
@@ -429,8 +433,12 @@ async function rebuildBranchMenu(): Promise<void> {
     return;
   }
 
+  const repoRoot = composerGitRepoRoot();
+  const worktrees =
+    list.ok && list.output ? parseWorktreeListPorcelain(list.output) : [];
+  const locked = branchesLockedToOtherWorktrees(worktrees, repoRoot);
   const current = res.current?.trim();
-  const names = [...(res.local ?? [])];
+  const names = filterUserFacingBranches(res.local ?? [], locked);
   for (const name of names) {
     const item = menuItem(name, () => applyBranchCheckout(name), {
       icon: 'branch',

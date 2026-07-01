@@ -15,8 +15,11 @@ import {
   commit,
   deleteBranch,
   diff,
+  filterUserFacingBranches,
+  isMinnowBoardBranch,
   log,
   parseBranchList,
+  parseWorktreeLockedBranches,
   show,
   stage,
   status,
@@ -167,6 +170,29 @@ describe('git API', () => {
     assert.equal(parsed.current, 'develop');
     assert.deepEqual(parsed.local, ['main', 'develop']);
     assert.deepEqual(parsed.remote, ['remotes/origin/main']);
+  });
+
+  test('filterUserFacingBranches omits board and locked worktree branches', () => {
+    assert.equal(isMinnowBoardBranch('minnow/board/x/task/W1-A'), true);
+    assert.equal(isMinnowBoardBranch('feature/foo'), false);
+
+    const locked = parseWorktreeLockedBranches(
+      [
+        'worktree /repo/main',
+        'branch refs/heads/main',
+        '',
+        'worktree /repo/wt',
+        'branch refs/heads/feature/wt',
+      ].join('\n'),
+      '/repo/main',
+    );
+    assert.deepEqual([...locked], ['feature/wt']);
+
+    const filtered = filterUserFacingBranches(
+      ['main', 'feature/wt', 'minnow/board/x/integration', 'release'],
+      locked,
+    );
+    assert.deepEqual(filtered, ['main', 'release']);
   });
 
   test('deleteBranch removes a non-current branch', async () => {
