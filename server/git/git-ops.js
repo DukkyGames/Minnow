@@ -652,3 +652,183 @@ export async function show({ cwd, sha } = {}) {
   const { stat, patch } = splitShowOutput(result.stdout);
   return { ok: true, patch, stat };
 }
+
+/** Detect merge/rebase/cherry-pick conflict from git stderr/stdout. */
+function isGitConflictOutput(text) {
+  const lower = String(text ?? '').toLowerCase();
+  return (
+    lower.includes('conflict') ||
+    lower.includes('fix conflicts') ||
+    lower.includes('unmerged paths')
+  );
+}
+
+/** `git merge <branch> [--no-ff]` or `--abort` */
+export async function merge({ cwd, branch, noFf, abort } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  if (abort) {
+    const result = await git(['merge', '--abort'], repo.cwd);
+    if (result.code !== 0) {
+      return { ok: false, error: processError(result) };
+    }
+    return { ok: true, stdout: (result.stdout ?? '').trim() };
+  }
+
+  if (!branch || typeof branch !== 'string' || !branch.trim()) {
+    return { ok: false, error: 'branch is required' };
+  }
+
+  const args = ['merge', branch.trim()];
+  if (noFf) args.push('--no-ff');
+
+  const result = await git(args, repo.cwd);
+  if (result.code !== 0) {
+    const err = processError(result);
+    return { ok: false, error: err, conflict: isGitConflictOutput(err) };
+  }
+
+  return { ok: true, stdout: (result.stdout ?? '').trim() };
+}
+
+/** `git rebase <onto>` or `--abort` / `--continue` */
+export async function rebase({ cwd, onto, abort, continue: cont } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  const args = ['rebase'];
+  if (abort) {
+    args.push('--abort');
+  } else if (cont) {
+    args.push('--continue');
+  } else {
+    if (!onto || typeof onto !== 'string' || !onto.trim()) {
+      return { ok: false, error: 'onto is required' };
+    }
+    args.push(onto.trim());
+  }
+
+  const result = await git(args, repo.cwd);
+  if (result.code !== 0) {
+    const err = processError(result);
+    return { ok: false, error: err, conflict: isGitConflictOutput(err) };
+  }
+
+  return { ok: true, stdout: (result.stdout ?? '').trim() };
+}
+
+/** `git stash list` */
+export async function stashList({ cwd } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  const result = await git(['stash', 'list'], repo.cwd);
+  if (result.code !== 0) {
+    return { ok: false, error: processError(result) };
+  }
+
+  const entries = String(result.stdout ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return { ok: true, stashes: entries };
+}
+
+/** `git stash push [-m msg] [-- paths]` */
+export async function stashPush({ cwd, message, paths } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  const args = ['stash', 'push'];
+  if (message && String(message).trim()) {
+    args.push('-m', String(message).trim());
+  }
+  if (Array.isArray(paths) && paths.length > 0) {
+    args.push('--', ...paths.map((p) => String(p)));
+  }
+
+  const result = await git(args, repo.cwd);
+  if (result.code !== 0) {
+    return { ok: false, error: processError(result) };
+  }
+
+  return { ok: true, stdout: (result.stdout ?? '').trim() };
+}
+
+/** `git stash pop [stash@{n}]` */
+export async function stashPop({ cwd, index } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  const ref = typeof index === 'number' && index >= 0 ? `stash@{${index}}` : undefined;
+  const args = ref ? ['stash', 'pop', ref] : ['stash', 'pop'];
+
+  const result = await git(args, repo.cwd);
+  if (result.code !== 0) {
+    const err = processError(result);
+    return { ok: false, error: err, conflict: isGitConflictOutput(err) };
+  }
+
+  return { ok: true, stdout: (result.stdout ?? '').trim() };
+}
+
+/** `git stash apply [stash@{n}]` */
+export async function stashApply({ cwd, index } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  const ref = typeof index === 'number' && index >= 0 ? `stash@{${index}}` : undefined;
+  const args = ref ? ['stash', 'apply', ref] : ['stash', 'apply'];
+
+  const result = await git(args, repo.cwd);
+  if (result.code !== 0) {
+    const err = processError(result);
+    return { ok: false, error: err, conflict: isGitConflictOutput(err) };
+  }
+
+  return { ok: true, stdout: (result.stdout ?? '').trim() };
+}
+
+/** `git stash drop [stash@{n}]` */
+export async function stashDrop({ cwd, index } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  const ref = typeof index === 'number' && index >= 0 ? `stash@{${index}}` : undefined;
+  const args = ref ? ['stash', 'drop', ref] : ['stash', 'drop'];
+
+  const result = await git(args, repo.cwd);
+  if (result.code !== 0) {
+    return { ok: false, error: processError(result) };
+  }
+
+  return { ok: true };
+}
+
+/** `git cherry-pick <sha>` or `--abort` / `--continue` */
+export async function cherryPick({ cwd, sha, abort, continue: cont } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  const args = ['cherry-pick'];
+  if (abort) {
+    args.push('--abort');
+  } else if (cont) {
+    args.push('--continue');
+  } else {
+    if (!sha || typeof sha !== 'string' || !sha.trim()) {
+      return { ok: false, error: 'sha is required' };
+    }
+    args.push(sha.trim());
+  }
+
+  const result = await git(args, repo.cwd);
+  if (result.code !== 0) {
+    const err = processError(result);
+    return { ok: false, error: err, conflict: isGitConflictOutput(err) };
+  }
+
+  return { ok: true, stdout: (result.stdout ?? '').trim() };
+}

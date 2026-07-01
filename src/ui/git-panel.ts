@@ -198,6 +198,42 @@ export function getGitPanelCwd(): string | undefined {
 
 }
 
+/** Set panel cwd (Git Center lightbox sync). */
+
+export function setGitPanelCwd(cwd: string | undefined): void {
+
+  panelCwd = cwd;
+
+  if (cwdSelect) {
+
+    const target = cwd ?? getWorkspacePath();
+
+    for (const opt of cwdSelect.options) {
+
+      if (pathsEqual(opt.value, target)) {
+
+        cwdSelect.value = opt.value;
+
+        break;
+
+      }
+
+    }
+
+    syncWorktreeDeleteButton();
+
+  }
+
+  if (panelOpen) {
+
+    void refreshGitPanel();
+
+  }
+
+  void syncFileTreeGitPollCwd();
+
+}
+
 
 
 function pathsEqual(a: string, b: string): boolean {
@@ -476,6 +512,28 @@ function ensurePanelDom(): HTMLElement {
   const toolbar = document.createElement('div');
 
   toolbar.className = 'git-panel-toolbar';
+
+  const centerRow = document.createElement('div');
+
+  centerRow.className = 'git-panel-center-row';
+
+  const centerBtn = document.createElement('button');
+
+  centerBtn.type = 'button';
+
+  centerBtn.id = 'btnGitCenter';
+
+  centerBtn.className = 'git-panel-center-btn';
+
+  centerBtn.textContent = 'Control Center';
+
+  centerBtn.title = 'Open Source Control Center';
+
+  centerBtn.setAttribute('aria-label', 'Open Source Control Center');
+
+  centerRow.appendChild(centerBtn);
+
+  toolbar.appendChild(centerRow);
 
 
 
