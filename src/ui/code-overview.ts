@@ -503,8 +503,8 @@ function renderSessionRow(chat: Chat): HTMLButtonElement {
 
   btn.append(dot, main);
   btn.addEventListener('click', () => {
+    // switchChat closes the overview, updates the hash, and renders the target chat.
     switchChat(chat.id);
-    void enterCodeChat();
   });
   return btn;
 }
@@ -512,7 +512,6 @@ function renderSessionRow(chat: Chat): HTMLButtonElement {
 async function drillToRun(record: PersistedRunRecord): Promise<void> {
   if (record.parentChatId) {
     switchChat(record.parentChatId);
-    await enterCodeChat();
   }
   const { toggleAgentActivityPanel } = await import('./agent-activity-panel');
   const panel = document.getElementById('agentActivityPanel');
@@ -520,7 +519,7 @@ async function drillToRun(record: PersistedRunRecord): Promise<void> {
 }
 
 async function enterCodeChat(): Promise<void> {
-  closeCodeOverview({ skipNavigate: true });
+  closeCodeOverview({ skipNavigate: true, restoreChat: false });
   navigateToCodeChat();
   const { restoreCodeSessionOnForeground } = await import('../os/code-launch');
   await restoreCodeSessionOnForeground();
@@ -1093,7 +1092,7 @@ function onHashChange(): void {
   }
 
   if (isCodeOverviewOpen()) {
-    closeCodeOverview({ skipNavigate: true });
+    closeCodeOverview({ skipNavigate: true, restoreChat: false });
   }
   syncOverviewNavButtons();
 }
