@@ -2,6 +2,10 @@ import { ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT } from '../constants';
 import { sessionState } from '../state/sessions';
 import { scheduleSaveSessions } from '../state/sessions';
 import { mountOsMobileDrawerBackdrops, syncOsMobileDrawerHtmlClass } from './mobile-drawer-portal';
+import {
+  syncAppBodySidebarWidthVars,
+  syncChatSidebarResizer,
+} from './sidebar-resize';
 
 export function isMobileLayout(): boolean {
   return window.matchMedia('(max-width: 640px)').matches;
@@ -60,6 +64,8 @@ export function applySidebarVisuals(): void {
     );
   }
   scheduleElectronPreviewHostLayoutAfterChatSidebarChange();
+  syncAppBodySidebarWidthVars();
+  syncChatSidebarResizer();
 }
 
 /** Re-align the Electron preview guest when the chat rail width changes. */

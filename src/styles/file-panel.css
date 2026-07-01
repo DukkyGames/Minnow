@@ -613,6 +613,7 @@
 
 /* Right file sidebar */
 .file-sidebar {
+  position: relative;
   width: var(--file-sidebar-w);
   flex-shrink: 0;
   background: var(--mn-surface-1);

@@ -18,6 +18,8 @@ export const MAX_OPEN_VIEWER_TABS = 20;
 /** Persisted + in-memory file explorer / viewer preferences. */
 export interface FilePanelState {
   fileSidebarCollapsed: boolean;
+  /** Expanded file sidebar width in px (persisted). */
+  fileSidebarWidth?: number;
   /** @deprecated Use rightPaneMode; kept in sync for older persisted configs. */
   viewerOpen: boolean;
   rightPaneMode: RightPaneMode;
@@ -49,6 +51,14 @@ export const DEFAULT_FILE_PANEL_STATE: FilePanelState = {
 
 const SPLIT_MIN = 0.35;
 const SPLIT_MAX = 0.75;
+const FILE_SIDEBAR_MIN_W = 220;
+const FILE_SIDEBAR_MAX_W = 560;
+const DEFAULT_FILE_SIDEBAR_W = 350;
+
+function clampFileSidebarWidth(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_FILE_SIDEBAR_W;
+  return Math.min(FILE_SIDEBAR_MAX_W, Math.max(FILE_SIDEBAR_MIN_W, Math.round(value)));
+}
 
 let panelState: FilePanelState = { ...DEFAULT_FILE_PANEL_STATE };
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -151,6 +161,10 @@ function normalizeFilePanelBlock(raw: unknown): FilePanelState {
   const syncedSelected = activeViewerTab ?? selectedPath;
   return {
     fileSidebarCollapsed: row.fileSidebarCollapsed === true,
+    fileSidebarWidth:
+      typeof row.fileSidebarWidth === 'number'
+        ? clampFileSidebarWidth(row.fileSidebarWidth)
+        : undefined,
     viewerOpen,
     rightPaneMode,
     previewSource,
@@ -188,6 +202,10 @@ export function setFilePanelState(next: FilePanelState): void {
     rightPaneMode,
     viewerOpen: rightPaneMode !== null,
     splitRatio: clampSplitRatio(next.splitRatio),
+    fileSidebarWidth:
+      next.fileSidebarWidth !== undefined
+        ? clampFileSidebarWidth(next.fileSidebarWidth)
+        : next.fileSidebarWidth,
     expandedDirs: [...next.expandedDirs],
     openViewerTabs: [...next.openViewerTabs],
   };
@@ -202,6 +220,10 @@ export function patchFilePanelState(partial: Partial<FilePanelState>): FilePanel
       partial.splitRatio !== undefined
         ? clampSplitRatio(partial.splitRatio)
         : panelState.splitRatio,
+    fileSidebarWidth:
+      partial.fileSidebarWidth !== undefined
+        ? clampFileSidebarWidth(partial.fileSidebarWidth)
+        : panelState.fileSidebarWidth,
     expandedDirs:
       partial.expandedDirs !== undefined
         ? [...partial.expandedDirs]

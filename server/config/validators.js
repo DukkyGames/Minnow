@@ -838,6 +838,9 @@ export function validateSessionState(raw) {
     groups,
     chats: chats.length ? chats : [ensureChatShape(null)],
   };
+  if (typeof parsed.sidebarWidth === 'number' && Number.isFinite(parsed.sidebarWidth)) {
+    state.sidebarWidth = Math.min(520, Math.max(200, Math.round(parsed.sidebarWidth)));
+  }
   if (
     typeof parsed.activeBoardGroupId === 'string' &&
     parsed.activeBoardGroupId.trim()
@@ -1693,6 +1696,9 @@ export function mergeConfigMeta(existing, patch) {
     }
     if (typeof fp.splitRatio === 'number' && Number.isFinite(fp.splitRatio)) {
       existingPanel.splitRatio = Math.min(0.75, Math.max(0.35, fp.splitRatio));
+    }
+    if (typeof fp.fileSidebarWidth === 'number' && Number.isFinite(fp.fileSidebarWidth)) {
+      existingPanel.fileSidebarWidth = Math.min(560, Math.max(220, Math.round(fp.fileSidebarWidth)));
     }
     if (Array.isArray(fp.expandedDirs)) {
       existingPanel.expandedDirs = fp.expandedDirs.filter((d) => typeof d === 'string');

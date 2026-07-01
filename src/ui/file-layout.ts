@@ -12,6 +12,10 @@ import { syncStatsStripLayoutForViewer } from './stats';
 import { clearAllViewerTabs } from './file-viewer-tab-store';
 import { mountOsMobileDrawerBackdrops, syncOsMobileDrawerHtmlClass } from './mobile-drawer-portal';
 import { closeGitSidePanel, isGitSidePanelOpen } from './git-panel';
+import {
+  syncAppBodySidebarWidthVars,
+  syncFileSidebarResizer,
+} from './sidebar-resize';
 
 export function isMobileLayout(): boolean {
   return window.matchMedia('(max-width: 640px)').matches;
@@ -162,6 +166,9 @@ export function applyFileSidebarVisuals(): void {
     previewBtn.classList.toggle('is-active', previewOpen);
     previewBtn.setAttribute('aria-pressed', previewOpen ? 'true' : 'false');
   }
+
+  syncAppBodySidebarWidthVars();
+  syncFileSidebarResizer();
 }
 
 export function toggleFileSidebarLayout(): void {

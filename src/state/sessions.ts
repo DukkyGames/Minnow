@@ -1285,6 +1285,9 @@ function parseSessionStateFromJson(parsed: RawSessionJson | null): SessionState 
   if (!state.lastActiveChatIdByApp) {
     state.lastActiveChatIdByApp = {};
   }
+  if (typeof rawSession.sidebarWidth === 'number' && Number.isFinite(rawSession.sidebarWidth)) {
+    state.sidebarWidth = Math.min(520, Math.max(200, Math.round(rawSession.sidebarWidth)));
+  }
   return state;
 }
 

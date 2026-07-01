@@ -1979,6 +1979,18 @@
         <span class="mode-mask-icon mode-mask-icon--lg chat-sidebar-footer-btn__mode-icon" aria-hidden="true"></span>
       </button>
     </div>
+    <div
+      class="sidebar-resizer sidebar-resizer--chat"
+      id="chatSidebarResizer"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize chat sidebar"
+      aria-valuemin="200"
+      aria-valuemax="520"
+      aria-valuenow="300"
+      tabindex="0"
+      hidden
+    ></div>
   </aside>
 
   <div id="workspaceSplit" class="workspace-split">
@@ -2282,6 +2294,18 @@
   </div>
 
   <aside class="file-sidebar" id="fileSidebar" aria-label="Project files">
+    <div
+      class="sidebar-resizer sidebar-resizer--file"
+      id="fileSidebarResizer"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize files sidebar"
+      aria-valuemin="220"
+      aria-valuemax="560"
+      aria-valuenow="350"
+      tabindex="0"
+      hidden
+    ></div>
     <div class="file-sidebar-header">
       <span class="file-sidebar-title" id="fileSidebarTitle">Files</span>
       <button type="button" class="icon-btn file-sidebar-toggle" id="btnFileSidebarCollapse" aria-label="Project files" title="Project files" onclick="toggleFileSidebarLayout()">

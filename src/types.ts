@@ -824,6 +824,8 @@ export interface SessionState {
   version: SessionSchemaVersion;
   activeId: string | null;
   sidebarCollapsed: boolean;
+  /** Expanded chat sidebar width in px (persisted). */
+  sidebarWidth?: number;
   chats: Chat[];
   /** Collapsible chat folders per workspace. */
   groups?: ChatGroup[];

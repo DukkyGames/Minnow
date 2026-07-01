@@ -117,6 +117,7 @@ import {
   toggleSidebarCollapsed,
   toggleSidebarLayout,
 } from './ui/layout';
+import { initAppSidebarResizers } from './ui/sidebar-resize';
 import {
   closeDrawer,
   fillSystemPromptPresetSelect,
@@ -340,6 +341,7 @@ export async function initApp(): Promise<void> {
   const filePanel = await import('./ui/init-file-panel');
   await filePanel.initFilePanel();
   filePanel.onFilePanelServerAvailabilityChanged();
+  initAppSidebarResizers();
   await loadSkillConfigFromStorage();
   await loadToolSecurityMeta().catch(() => undefined);
   await loadBrowserMeta().catch(() => undefined);
