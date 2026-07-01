@@ -9,6 +9,7 @@ import {
   normalizeCavemanUserText,
   resolveTurnSkill,
 } from '../../src/skills/pinned-skill.ts';
+import { isPartyModeStopPhrase } from '../../src/skills/partymode-client.ts';
 
 const alwaysEnabled = () => true;
 const cavemanDisabled = (id: string) => id !== 'caveman';
@@ -18,6 +19,14 @@ describe('isCavemanStopPhrase', () => {
     assert.equal(isCavemanStopPhrase('stop caveman'), true);
     assert.equal(isCavemanStopPhrase('please use normal mode now'), true);
     assert.equal(isCavemanStopPhrase('explain hooks'), false);
+  });
+});
+
+describe('isPartyModeStopPhrase', () => {
+  it('detects party stop phrases', () => {
+    assert.equal(isPartyModeStopPhrase('stop party'), true);
+    assert.equal(isPartyModeStopPhrase("party's over"), true);
+    assert.equal(isPartyModeStopPhrase('explain hooks'), false);
   });
 });
 
@@ -33,6 +42,29 @@ describe('resolveTurnSkill', () => {
     assert.equal(out.nextPinned?.id, 'caveman');
     assert.equal(out.nextPinned?.intensity, 'ultra');
     assert.equal(out.fromPin, false);
+  });
+
+  it('pins partymode from slash', () => {
+    const out = resolveTurnSkill({
+      slashSkillId: 'partymode',
+      userText: 'lets go',
+      pinned: null,
+      isSkillEnabled: alwaysEnabled,
+    });
+    assert.equal(out.skillId, 'partymode');
+    assert.equal(out.nextPinned?.id, 'partymode');
+    assert.equal(out.fromPin, false);
+  });
+
+  it('clears partymode pin on stop phrase', () => {
+    const out = resolveTurnSkill({
+      slashSkillId: null,
+      userText: 'stop party',
+      pinned: { id: 'partymode' },
+      isSkillEnabled: alwaysEnabled,
+    });
+    assert.equal(out.skillId, null);
+    assert.equal(out.nextPinned, null);
   });
 
   it('uses pinned skill when no slash', () => {

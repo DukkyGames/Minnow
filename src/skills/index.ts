@@ -69,6 +69,18 @@ export {
 
 export {
 
+  PARTYMODE_SKILL_ID,
+
+  augmentPartyModeSkillBody,
+
+  isPartyModePinned,
+
+  isPartyModeStopPhrase,
+
+} from './partymode-client';
+
+export {
+
   ensurePinnedSkill,
 
   isCavemanStopPhrase,

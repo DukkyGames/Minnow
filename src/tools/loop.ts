@@ -280,8 +280,11 @@ import {
   composeImpeccableSkillBody,
   shouldComposeImpeccableBody,
   augmentCavemanSkillBody,
+  augmentPartyModeSkillBody,
   CAVEMAN_SKILL_ID,
+  PARTYMODE_SKILL_ID,
   formatHistoryWithSkillTag,
+  isPartyModePinned,
   isSkillEnabled,
   normalizeCavemanUserText,
   parseSlashCommand,
@@ -289,6 +292,7 @@ import {
   resolveTurnSkill,
 } from '../skills';
 import { syncComposerPinnedSkillFromActiveChat } from '../ui/composer-pinned-skill';
+import { burstPartyConfetti } from '../ui/party-confetti';
 import { getPickerAppliedSkillId } from '../ui/skill-picker';
 import {
   EMPTY_POST_TOOL_CONTINUE_INSTRUCTION,
@@ -1270,6 +1274,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       pinnedIntensity: chat.pinnedSkill?.intensity,
     });
   }
+  if (skillBody && skillId === PARTYMODE_SKILL_ID && !presetSkillBody) {
+    skillBody = augmentPartyModeSkillBody(skillBody);
+  }
   if (skillBody && uiDesignerCtx.active) {
     skillBody = augmentSkillBodyForUiDesigner(skillBody, uiDesignerCtx);
   }
@@ -2163,6 +2170,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       if (completedNormally && goalDriven) {
         void maybeContinueGoalAfterTurn(chat);
       }
+      if (completedNormally && isPartyModePinned(chat.pinnedSkill) && isStreamDomVisible(chat.id)) {
+        burstPartyConfetti();
+      }
     }
     if (getChatAbort(chat.id)?.signal === chatSignal) {
       setChatAbort(chat.id, null);
@@ -2393,6 +2403,9 @@ export async function sendMessageWithTools(
         userText,
         pinnedIntensity: chat.pinnedSkill?.intensity,
       });
+    }
+    if (skillId === PARTYMODE_SKILL_ID) {
+      skillBody = augmentPartyModeSkillBody(skillBody);
     }
   }
 

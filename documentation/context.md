@@ -344,7 +344,7 @@ Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoke
 | `PUT /api/skills/:id` | Save SKILL.md (`{ content }`; user override path) |
 | `GET/PUT /api/config/skills` | `{ enabled: Record<string, boolean>, caveman?: { pinByDefault, defaultIntensity } }` |
 
-**Built-in ids (v1):** `git-commit`, `git-setup`, `code-review`, `write-tests`, `explain-code`, `debug-error`, `docs-update`, `refactor-safe`, `security-review`, `browser-automation`, `ask-user` (Feature 31), `impeccable` (Step 14), `ui-designer` (Step 15), `caveman`, plus **19 Matt Pocock skills** (productivity + engineering — see below).
+**Built-in ids (v1):** `git-commit`, `git-setup`, `code-review`, `write-tests`, `explain-code`, `debug-error`, `docs-update`, `refactor-safe`, `security-review`, `browser-automation`, `ask-user` (Feature 31), `impeccable` (Step 14), `ui-designer` (Step 15), `caveman`, `partymode`, plus **19 Matt Pocock skills** (productivity + engineering — see below).
 
 ### Skills → Matt Pocock (productivity + engineering)
 
@@ -384,6 +384,20 @@ Ultra-compressed reply mode from [juliusbrussee/caveman](https://github.com/Juli
 | Sync script | `scripts/sync-caveman-skill.mjs` — `npm run caveman:sync` (manual; not postinstall) |
 
 **Tests:** `npm run test:skills` (includes `test/skills/caveman-client.test.mts`, `test/skills/pinned-skill.test.mts`). Benchmark probe: `caveman` in `src/benchmark/suites/skill-probes.ts`. Plan: [`documentation/plans/add-caveman-skill.md`](plans/add-caveman-skill.md).
+
+### Skills → Party mode built-in
+
+Fun slash skill: **`/partymode`** pins **Bird Man** — a cool-dude party-animal persona. Stays active per chat until dismiss (composer chip), **`stop party`** / **`party's over`**, or another pinned slash skill replaces it. Every assistant turn ends with **Do you guys like to party?** Confetti bursts from the top of the viewport after each completed agent turn while party mode is pinned (`src/ui/party-confetti.ts`, triggered from `src/tools/loop.ts`).
+
+| Concern | Location |
+|---------|----------|
+| Built-in skill | `src/skills/partymode/SKILL.md` (`name: partymode` → `/partymode`) |
+| Client augment | `src/skills/partymode-client.ts` — reinforces sign-off in `loop.ts` |
+| Sticky pin resolver | `src/skills/pinned-skill.ts` — shared with caveman pin machinery |
+| Composer chip | `src/ui/composer-pinned-skill.ts` — 🎉 Party Mode label + unpin |
+| Confetti | `src/ui/party-confetti.ts` — canvas burst after completed turns |
+
+**Tests:** `test/skills/partymode-client.test.mts`, `test/skills/pinned-skill.test.mts` (`npm run test:skills`).
 
 ### Skills → Impeccable built-in (Step 14)
 
