@@ -103,6 +103,30 @@ function pathBasename(p: string): string {
   return p.replace(/\\/g, '/').split('/').pop() ?? p;
 }
 
+/** Open a workspace-relative path in the Code editor. */
+function bindOpenFileLink(el: HTMLElement, workspacePath: string): void {
+  el.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    void import('./file-viewer').then((m) => m.openFileInViewer(workspacePath));
+  });
+}
+
+/** Resolve workspace path for a file-mutation tool bubble. */
+function resolveFileCardPath(
+  wrap: HTMLElement,
+  codeChange?: CodeChangeStats,
+  toolArgs?: Record<string, unknown> | unknown,
+): string | undefined {
+  if (codeChange?.path) return codeChange.path;
+  const args = toolArgs ?? tryParseArgsFromToolWrap(wrap);
+  if (args && typeof args === 'object' && !Array.isArray(args)) {
+    const path = (args as Record<string, unknown>).path;
+    return typeof path === 'string' ? path : undefined;
+  }
+  return undefined;
+}
+
 /** Max characters shown in expanded result <pre> blocks. */
 const RESULT_DISPLAY_CAP = 2048;
 
@@ -142,8 +166,12 @@ function appendCodeChangeBadge(summary: Element, codeChange?: CodeChangeStats): 
   summary.appendChild(badge);
 }
 
-/** Mount unified diff lines in the tool expando when present. */
-function appendCodeChangeDiffPanel(body: Element, codeChange?: CodeChangeStats): void {
+/** Mount changed-line diff (with line numbers) in the file tool card body. */
+function appendCodeChangeDiffPanel(
+  body: Element,
+  codeChange?: CodeChangeStats,
+  workspacePath?: string,
+): void {
   body.querySelector('.tool-call-diff')?.remove();
   const lines = codeChange?.diffLines;
   if (!lines?.length) return;
@@ -151,10 +179,9 @@ function appendCodeChangeDiffPanel(body: Element, codeChange?: CodeChangeStats):
   const panel = document.createElement('div');
   panel.className = 'tool-call-diff';
 
-  const header = document.createElement('div');
-  header.className = 'tool-call-diff__header';
   const pathLabel =
     codeChange.path ??
+    workspacePath ??
     (codeChange.paths?.length ? codeChange.paths.join(', ') : 'Changes');
   const sourceHint =
     codeChange.source === 'backfill'
@@ -162,11 +189,23 @@ function appendCodeChangeDiffPanel(body: Element, codeChange?: CodeChangeStats):
       : codeChange.source === 'command-heuristic'
         ? ' (estimated)'
         : '';
+
+  const header = document.createElement('button');
+  header.type = 'button';
+  header.className = 'tool-call-diff__header tool-call-diff__header--link';
   header.textContent = `${pathLabel}${sourceHint}`;
+  header.title = pathLabel;
+  header.setAttribute('aria-label', `Open ${pathLabel}`);
+  if (workspacePath ?? codeChange.path) {
+    bindOpenFileLink(header, workspacePath ?? codeChange.path!);
+  }
   panel.appendChild(header);
 
   const host = document.createElement('div');
-  renderUnifiedPromptDiff(host, lines as CodeChangeDiffLine[]);
+  renderUnifiedPromptDiff(host, lines as CodeChangeDiffLine[], {
+    changedOnly: true,
+    lineNumbers: true,
+  });
   panel.appendChild(host);
 
   if (codeChange.diffTruncated) {
@@ -176,12 +215,7 @@ function appendCodeChangeDiffPanel(body: Element, codeChange?: CodeChangeStats):
     panel.appendChild(note);
   }
 
-  const resultPre = body.querySelector('.tool-call-pre--result');
-  if (resultPre) {
-    body.insertBefore(panel, resultPre);
-  } else {
-    body.appendChild(panel);
-  }
+  body.appendChild(panel);
 }
 
 /** Truncate long tool output for the UI while keeping the full string in history. */
@@ -231,9 +265,6 @@ export function renderToolCall(
   spinner.setAttribute('aria-hidden', 'true');
   statusGlyph.appendChild(spinner);
 
-  const title = document.createElement('span');
-  title.className = 'tool-call-title';
-
   const argsRecord =
     argsObj && typeof argsObj === 'object' && !Array.isArray(argsObj)
       ? (argsObj as Record<string, unknown>)
@@ -241,11 +272,20 @@ export function renderToolCall(
   const pathArg = typeof argsRecord.path === 'string' ? argsRecord.path : undefined;
   const isFileCard = FILE_MUTATION_TOOLS.has(name) && pathArg !== undefined;
 
+  const title = document.createElement(isFileCard ? 'button' : 'span');
+  title.className = isFileCard
+    ? 'tool-call-title tool-call-title--file-link'
+    : 'tool-call-title';
   if (isFileCard) {
     wrap.classList.add('tool-call-msg--file');
     details.classList.add('tool-call-details--file');
     details.open = true;
+    (title as HTMLButtonElement).type = 'button';
     title.textContent = pathBasename(pathArg);
+    title.setAttribute('aria-label', `Open ${pathArg}`);
+    title.title = pathArg;
+    wrap.dataset.filePath = pathArg;
+    bindOpenFileLink(title, pathArg);
     summary.setAttribute('aria-label', toolSummaryAriaLabel(pathBasename(pathArg), 'running'));
   } else {
     title.textContent = humanizeToolName(name);
@@ -309,7 +349,7 @@ export function renderToolResult(
   const summary = wrap.querySelector('.tool-call-summary');
   const statusGlyph = wrap.querySelector('.tool-call-status');
   const statusLabel = wrap.querySelector('.tool-call-status-label');
-  const body = wrap.querySelector('.tool-call-body');
+  const body = wrap.querySelector('.tool-call-body') as HTMLElement | null;
   if (!details || !summary || !statusGlyph || !statusLabel || !body) return;
 
   const toolName =
@@ -350,26 +390,30 @@ export function renderToolResult(
     summary.querySelector('.tool-call-code-change')?.remove();
   }
 
-  if (wrap.classList.contains('tool-call-msg--file')) {
-    const titleEl = wrap.querySelector('.tool-call-title');
-    const displayPath =
-      codeChange?.path ??
-      (() => {
-        const args = toolArgs ?? tryParseArgsFromToolWrap(wrap);
-        if (args && typeof args === 'object' && !Array.isArray(args)) {
-          const path = (args as Record<string, unknown>).path;
-          return typeof path === 'string' ? path : undefined;
-        }
-        return undefined;
-      })();
-    if (titleEl && displayPath) {
+  const isFileCard = wrap.classList.contains('tool-call-msg--file');
+  const displayPath = isFileCard ? resolveFileCardPath(wrap, codeChange, toolArgs) : undefined;
+
+  if (isFileCard && displayPath) {
+    const titleEl = wrap.querySelector<HTMLElement>('.tool-call-title');
+    if (titleEl) {
       const basename = pathBasename(displayPath);
       titleEl.textContent = basename;
+      titleEl.setAttribute('aria-label', `Open ${displayPath}`);
+      titleEl.title = displayPath;
+      wrap.dataset.filePath = displayPath;
       summary.setAttribute(
         'aria-label',
         toolSummaryAriaLabel(basename, failed ? 'failed' : 'succeeded'),
       );
     }
+  }
+
+  if (isFileCard && !failed) {
+    if (body.dataset.fileResultRendered !== 'true') {
+      appendCodeChangeDiffPanel(body, codeChange, displayPath);
+      body.dataset.fileResultRendered = 'true';
+    }
+    return;
   }
 
   if (body.querySelector('.tool-call-pre--result')) return;
@@ -409,8 +453,8 @@ export function renderToolResult(
     body.appendChild(resultPre);
   }
 
-  if (!failed) {
-    appendCodeChangeDiffPanel(body, codeChange);
+  if (!failed && !isFileCard) {
+    appendCodeChangeDiffPanel(body, codeChange, codeChange?.path);
   }
 
   if (attachments?.length) {

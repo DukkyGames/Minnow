@@ -2,6 +2,7 @@
  * Push a notification into the inbox, respecting prefs, dedupe, sound, and bell ring.
  */
 
+import { randomUUID } from '../lib/random-id.ts';
 import { noteAgentMessage } from '../os/instances';
 import { isNotificationKindEnabled, loadNotificationPrefs } from './prefs';
 import { playNotificationSound, shouldPlayNotificationSound } from './sound';
@@ -17,10 +18,7 @@ type NewNotificationListener = (record: NotificationRecord) => void;
 const newListeners = new Set<NewNotificationListener>();
 
 function newId(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return `notif_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  return randomUUID();
 }
 
 /** Subscribe to newly pushed unread notifications (menubar bell ring). */

@@ -7,12 +7,10 @@ import { describe, test } from 'node:test';
 import {
   buildReefWidgetSrcdoc,
   getReefImportMapJsonForTests,
-  resetReefWidgetIdCounterForTests,
 } from '../../../src/chat/reef/widget-iframe.ts';
 
 describe('widget-iframe', () => {
   test('srcdoc contains CSP, importmap, and widget body', () => {
-    resetReefWidgetIdCounterForTests();
     const srcdoc = buildReefWidgetSrcdoc({
       widgetHtml: '<p id="tip">Tip calc</p>',
       widgetId: 'w-test-1',

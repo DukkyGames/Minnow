@@ -2074,31 +2074,35 @@
               Auto from mode
             </label>
           </div>
+          <div class="composer-controls__trail">
+            <div class="composer-tools-anchor">
+              <button type="button" class="composer-tools-btn composer-tools-btn--toolbar" id="btnComposerTools"
+                aria-label="Tools" aria-expanded="false" aria-haspopup="dialog"
+                aria-controls="composerToolsPopover">
+                <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M4 14h4M12 6h4M20 10h4"/></svg>
+              </button>
+              <div id="composerToolsPopover" class="composer-tools-popover hidden" role="dialog" aria-label="Tool permissions">
+                <p id="composerToolsServerBanner" class="tools-server-banner hidden" role="status">Server tools need npm start (not npm run dev).</p>
+                <p id="composerToolsPreviewBanner" class="tools-server-banner hidden" role="status">Browser tools need the Minnow desktop app window.</p>
+                <div id="composerToolsList" class="tools-list tools-list--composer"></div>
+                <footer class="composer-tools-popover__footer">
+                  <button type="button" class="composer-tools-popover__link" id="composerToolsOpenSettings">Settings → Tools</button>
+                </footer>
+              </div>
+            </div>
+          </div>
         </div>
         <div id="attachPreview" class="attach-preview hidden" aria-live="polite" aria-label="Attached files"></div>
         <div class="input-row">
-          <button class="attach-btn" id="attachBtn" type="button" aria-label="Attach files">
-            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-          </button>
-          <div class="composer-tools-anchor">
-            <button type="button" class="composer-tools-btn" id="btnComposerTools"
-              aria-label="Tools" aria-expanded="false" aria-haspopup="dialog"
-              aria-controls="composerToolsPopover">
-              <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M4 14h4M12 6h4M20 10h4"/></svg>
-            </button>
-            <div id="composerToolsPopover" class="composer-tools-popover hidden" role="dialog" aria-label="Tool permissions">
-              <p id="composerToolsServerBanner" class="tools-server-banner hidden" role="status">Server tools need npm start (not npm run dev).</p>
-              <p id="composerToolsPreviewBanner" class="tools-server-banner hidden" role="status">Browser tools need the Minnow desktop app window.</p>
-              <div id="composerToolsList" class="tools-list tools-list--composer"></div>
-              <footer class="composer-tools-popover__footer">
-                <button type="button" class="composer-tools-popover__link" id="composerToolsOpenSettings">Settings → Tools</button>
-              </footer>
-            </div>
-          </div>
-          <div class="input-wrap">
+          <div class="input-wrap input-wrap--inset-actions">
             <label for="msgInput" class="visually-hidden">Message</label>
             <textarea id="msgInput" placeholder="Type a message…" rows="1"
               onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+            <div class="input-inset-actions" id="composerInsetActions" aria-label="Message attachments and voice">
+              <button type="button" class="input-inset-btn attach-btn" id="attachBtn" aria-label="Attach files">
+                <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              </button>
+            </div>
           </div>
         </div>
       </div>

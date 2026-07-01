@@ -3,6 +3,7 @@
  */
 
 import { getLocalServerAvailable } from '../tools/client';
+import { randomUUID } from '../lib/random-id.ts';
 import { wrapUntrusted } from '../lib/untrusted.mjs';
 import { isOfficeExtension, OFFICE_EXTENSIONS } from './document-extensions.mjs';
 import type { Attachment } from './types';
@@ -94,10 +95,7 @@ const OFFICE_MIME_PREFIXES = [
 
 /** Creates a unique attachment id for the pending list. */
 function newAttachmentId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `att-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  return randomUUID();
 }
 
 /** Lowercase extension without the dot, or empty string. */

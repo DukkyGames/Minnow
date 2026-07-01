@@ -349,7 +349,7 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
 }
 
 .git-panel-section__body--history {
-  padding: 2px 0 6px;
+  padding: 2px 0 6px 12px;
   min-width: 0;
   overflow-x: hidden;
 }
@@ -462,6 +462,11 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
   min-width: 0;
   max-width: 100%;
   --git-marker-w: 14px;
+  --git-body-pad-top: 5px;
+  --git-marker-pad-top: 4px;
+  --git-dot-half: 4px;
+  /* Dot sits at the top of the row body — not at 50% height. */
+  --git-dot-center-y: calc(var(--git-body-pad-top) + var(--git-marker-pad-top) + var(--git-dot-half));
   --git-lane-1: var(--mn-success);
   --git-lane-2: var(--mn-warning);
   --git-lane-3: var(--mn-danger);
@@ -482,6 +487,7 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
   position: relative;
   display: flex;
   align-items: stretch;
+  flex-shrink: 0;
   min-width: 0;
   max-width: 100%;
   padding: 0 8px 0 0;
@@ -518,11 +524,11 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
 
 .git-graph__trunk-line--up {
   bottom: auto;
-  height: calc(50% + 4px);
+  height: var(--git-dot-center-y);
 }
 
 .git-graph__trunk-line--down {
-  top: calc(50% - 4px);
+  top: var(--git-dot-center-y);
   bottom: 0;
 }
 
@@ -535,11 +541,11 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
 
 .git-graph__branch-line--up {
   bottom: auto;
-  height: calc(50% + 4px);
+  height: var(--git-dot-center-y);
 }
 
 .git-graph__branch-line--down {
-  top: calc(50% - 4px);
+  top: var(--git-dot-center-y);
   bottom: 0;
 }
 
@@ -581,6 +587,10 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
 
 .git-graph__dot--branch {
   background: var(--branch-color);
+}
+
+.git-graph__row:has(.git-graph__dot--head) {
+  --git-dot-half: 5px;
 }
 
 .git-graph__dot--head {
@@ -648,6 +658,9 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
   background: var(--mn-accent-soft);
   color: var(--mn-accent-ink);
   white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .git-graph__time {

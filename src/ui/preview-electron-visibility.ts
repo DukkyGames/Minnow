@@ -64,9 +64,17 @@ export function isPreviewPaneDomVisible(): boolean {
   return true;
 }
 
+/** True when the Code workspace (where #previewBody lives) is the active shell surface. */
+function isCodeWorkspaceForeground(): boolean {
+  if (document.documentElement.dataset.osApp !== 'code') return false;
+  const appBody = document.getElementById('appBody');
+  return Boolean(appBody && !appBody.classList.contains('hidden'));
+}
+
 /** Whether the Chromium guest should be visible and receive bounds updates. */
 export function shouldShowElectronPreviewHost(): boolean {
   if (!usesElectronPreview()) return false;
+  if (!isCodeWorkspaceForeground()) return false;
   if (!isPreviewPaneDomVisible()) return false;
   if (isFullscreenOverlayObscuringWorkspace()) return false;
   if (isChromePopoverOpen()) return false;
@@ -156,6 +164,7 @@ async function runElectronPreviewHostLayoutSync(): Promise<void> {
   if (!api) return;
 
   if (!shouldShowElectronPreviewHost()) {
+    // Always invoke hide — main-process guest can outlive renderer reload (MIN-179).
     await api.hide();
     previewGuestVisible = false;
     return;

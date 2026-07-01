@@ -516,8 +516,11 @@ function onMicClick(): void {
 
 function upgradeMicButton(btn: HTMLButtonElement): void {
   if (btn.id === 'btnDesktopMic') {
-    btn.classList.remove('attach-btn');
+    btn.classList.remove('attach-btn', 'input-inset-btn');
     btn.classList.add('mn-os-desktop-comp-btn');
+  } else {
+    btn.classList.remove('attach-btn');
+    btn.classList.add('input-inset-btn');
   }
   if (!btn.querySelector('.composer-mic-btn__icon')) {
     btn.innerHTML = MIC_BUTTON_MARKUP;
@@ -543,7 +546,7 @@ function ensureMicButton(id: string, anchorId: string): void {
   btn.className =
     id === 'btnDesktopMic'
       ? 'mn-os-desktop-comp-btn composer-mic-btn'
-      : 'attach-btn composer-mic-btn';
+      : 'input-inset-btn composer-mic-btn';
   btn.setAttribute('aria-label', 'Dictate with microphone');
   btn.setAttribute('aria-busy', 'false');
   btn.title = 'Dictate';

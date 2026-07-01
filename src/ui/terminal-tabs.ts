@@ -3,6 +3,7 @@
  */
 
 import { fetchShellProfiles, type ShellProfile } from '../api/terminal-pty';
+import { randomUUID } from '../lib/random-id.ts';
 import {
   getTerminalMetaCached,
   loadTerminalMeta,
@@ -65,7 +66,7 @@ function notifyActiveTabChange(tabId: string): void {
 }
 
 function randomTabId(): string {
-  return crypto.randomUUID();
+  return randomUUID();
 }
 
 function metaToSession(meta: TerminalTabMeta): TerminalTabSession {

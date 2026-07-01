@@ -105,7 +105,7 @@ export function renderDesktop(root: HTMLElement): () => void {
   railTab.className = 'mn-os-chat-rail-tab';
   railTab.setAttribute('aria-label', 'Show chat sessions');
   railTab.setAttribute('aria-expanded', 'false');
-  railTab.appendChild(createOsIcon('chat', { size: 18 }));
+  railTab.appendChild(createOsIcon('chat', { size: 28 }));
 
   const railPanel = document.createElement('div');
   railPanel.className = 'mn-os-chat-rail-panel';
@@ -143,6 +143,13 @@ export function renderDesktop(root: HTMLElement): () => void {
   railMain.append(railHeader, railNewChat, railList);
   railPanel.appendChild(railMain);
   rail.append(railTab, railPanel);
+
+  const railBackdrop = document.createElement('button');
+  railBackdrop.type = 'button';
+  railBackdrop.className = 'mn-os-chat-rail-backdrop';
+  railBackdrop.setAttribute('aria-label', 'Close chat sessions');
+  railBackdrop.setAttribute('aria-hidden', 'true');
+  railBackdrop.tabIndex = -1;
 
   const transcript = document.createElement('div');
   transcript.className = 'mn-os-chat-transcript';
@@ -213,7 +220,7 @@ export function renderDesktop(root: HTMLElement): () => void {
 
   desktopChat.append(transcript);
   stage.append(hero, desktopChat, desktopResearch, desktopExperts);
-  root.append(rail);
+  root.append(rail, railBackdrop);
   root.appendChild(stage);
 
   const composerDock = document.createElement('div');

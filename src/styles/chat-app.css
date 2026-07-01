@@ -744,6 +744,10 @@
     position: relative;
   }
 
+  .chat-app-scroll {
+    scroll-padding-bottom: calc(12px + var(--os-safe-bottom, env(safe-area-inset-bottom, 0px)));
+  }
+
   .chat-app-page.is-rail-hidden .chat-app-rail {
     display: none;
   }

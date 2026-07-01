@@ -887,6 +887,10 @@ function applyPersistedPreviewGuest(
 /** Wire preview UI after file panel boot. */
 export function initPreviewPanel(): void {
   bindPreviewControls();
+  // Reconcile native guest after reload — main process may still show a stale overlay.
+  if (usesElectronPreview()) {
+    scheduleElectronPreviewHostVisibilitySync();
+  }
   const state = getFilePanelState();
   if (state.rightPaneMode === 'preview') {
     restorePreviewPanelFromPrefs(state.previewSource);

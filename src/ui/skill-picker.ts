@@ -3,7 +3,7 @@
  * Lists SKILL.md skills and built-in slash commands (e.g. /goal).
  */
 
-import { streaming } from '../app-state';
+import { isUserPromptLocked } from './user-prompt-lock';
 import { UI_DESIGNER_COMPOSER_HINT } from '../agents/ui-designer/runner';
 import { listSlashPickerRows, type SlashPickerRow } from '../chat/slash-commands/picker-catalog';
 import { impeccableComposerHint } from '../skills/impeccable-client';
@@ -236,7 +236,9 @@ function applyPickerRow(row: SlashPickerRow): void {
 }
 
 function detectSlashContext(): void {
-  if (!inputEl || streaming) {
+  // Allow slash picker while other chats/sub-agents stream; only block when the
+  // composer is locked for tool approval or ask_question UI.
+  if (!inputEl || isUserPromptLocked()) {
     closePicker();
     return;
   }

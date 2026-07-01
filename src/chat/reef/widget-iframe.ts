@@ -3,6 +3,7 @@
  */
 
 import { REEF_WIDGET_BASELINE_CSS } from './widget-baseline-styles.ts';
+import { randomUUID } from '../../lib/random-id.ts';
 import { buildThemeCssBlock, readThemeVarsFromHost } from './theme-forward.ts';
 import { REEF_JSX_CSS_VAR_GUARD_NOTE } from './widget-jsx-guard.ts';
 import { injectWidgetIdIntoPrelude, PRELUDE_SCRIPT } from './widget-prelude.ts';
@@ -107,19 +108,9 @@ if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded'
 })();`;
 }
 
-let widgetIdCounter = 0;
-
-/** Stable unique id per mounted widget (tests can reset via resetReefWidgetIdCounterForTests). */
+/** Stable unique id per mounted widget. */
 export function nextReefWidgetId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  widgetIdCounter += 1;
-  return `reef-widget-${widgetIdCounter}`;
-}
-
-export function resetReefWidgetIdCounterForTests(): void {
-  widgetIdCounter = 0;
+  return randomUUID();
 }
 
 export interface ReefWidgetIframeOptions {

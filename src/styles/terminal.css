@@ -1,5 +1,12 @@
 /* Bottom docked terminal — bench instrument (stats strip / input bar) */
 
+:root {
+  --terminal-font-size: 13px;
+  --terminal-line-height: 1.55;
+  --terminal-padding-y: 10px;
+  --terminal-padding-x: 12px;
+}
+
 .terminal-panel {
   display: flex;
   flex-direction: column;
@@ -296,11 +303,11 @@
   flex: 1;
   min-height: 0;
   margin: 0;
-  padding: 8px 12px;
+  padding: var(--terminal-padding-y) var(--terminal-padding-x);
   overflow: auto;
   font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: var(--terminal-font-size);
+  line-height: var(--terminal-line-height);
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--mn-fg);
@@ -319,7 +326,7 @@
 .terminal-xterm-host {
   flex: 1;
   min-height: 0;
-  padding: 6px 8px;
+  padding: var(--terminal-padding-y) var(--terminal-padding-x);
   background: var(--mn-bg);
 }
 

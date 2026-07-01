@@ -10,6 +10,7 @@ import {
   updateBug,
 } from '../state/bug-board-store.ts';
 import { getWorkspacePath } from '../state/workspace.ts';
+import { randomUUID } from '../lib/random-id.ts';
 import { isGlobalBugsPageOpen } from '../ui/global-bugs-page.ts';
 import type { BugCard } from '../types.ts';
 
@@ -38,10 +39,7 @@ export function setBugBoardExecutorContext(ctx: BugBoardExecutorContext | null):
 }
 
 function newBugId(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return `bug-${crypto.randomUUID().slice(0, 8)}`;
-  }
-  return `bug-${Date.now().toString(36)}`;
+  return `bug-${randomUUID().slice(0, 8)}`;
 }
 
 export type ValidateBugAddResult =
