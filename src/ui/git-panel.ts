@@ -114,6 +114,12 @@ let aheadBehindEl: HTMLElement | null = null;
 
 let commitInput: HTMLTextAreaElement | null = null;
 
+let commitBtn: HTMLButtonElement | null = null;
+
+let commitPushBtn: HTMLButtonElement | null = null;
+
+let commitBusy = false;
+
 let aiGenerateBtn: HTMLButtonElement | null = null;
 
 let generateMessageAbort: AbortController | null = null;
@@ -322,6 +328,90 @@ function setStatus(message: string, isError = false): void {
   statusEl.classList.toggle('is-err', isError);
 
   statusEl.hidden = !message;
+
+}
+
+
+
+type CommitActionKind = 'commit' | 'commit-push';
+
+
+
+function setCommitButtonBusy(btn: HTMLButtonElement, label: string): void {
+
+  btn.disabled = true;
+
+  btn.classList.add('is-busy');
+
+  btn.setAttribute('aria-busy', 'true');
+
+  btn.innerHTML =
+    '<span class="git-panel-action-spinner" aria-hidden="true"></span>' +
+    `<span class="git-panel-action-label">${label}</span>`;
+
+}
+
+
+
+function setCommitActionsBusy(active: CommitActionKind, progressLabel: string): void {
+
+  commitBusy = true;
+
+  setStatus(progressLabel);
+
+  if (commitInput) commitInput.disabled = true;
+
+  if (aiGenerateBtn) aiGenerateBtn.disabled = true;
+
+  const activeBtn = active === 'commit-push' ? commitPushBtn : commitBtn;
+
+  const idleBtn = active === 'commit-push' ? commitBtn : commitPushBtn;
+
+  if (activeBtn) setCommitButtonBusy(activeBtn, progressLabel);
+
+  if (idleBtn) idleBtn.disabled = true;
+
+}
+
+
+
+function clearCommitActionsBusy(): void {
+
+  commitBusy = false;
+
+  if (commitInput) commitInput.disabled = false;
+
+  if (aiGenerateBtn) {
+
+    aiGenerateBtn.disabled = false;
+
+    aiGenerateBtn.removeAttribute('aria-busy');
+
+  }
+
+  if (commitBtn) {
+
+    commitBtn.classList.remove('is-busy');
+
+    commitBtn.removeAttribute('aria-busy');
+
+    commitBtn.disabled = false;
+
+    commitBtn.textContent = 'Commit';
+
+  }
+
+  if (commitPushBtn) {
+
+    commitPushBtn.classList.remove('is-busy');
+
+    commitPushBtn.removeAttribute('aria-busy');
+
+    commitPushBtn.disabled = false;
+
+    commitPushBtn.textContent = 'Commit & Push';
+
+  }
 
 }
 
@@ -610,7 +700,7 @@ function ensurePanelDom(): HTMLElement {
 
   aiGenerateBtn.addEventListener('click', () => void handleGenerateCommitMessage());
 
-  const commitBtn = document.createElement('button');
+  commitBtn = document.createElement('button');
 
   commitBtn.type = 'button';
 
@@ -622,7 +712,7 @@ function ensurePanelDom(): HTMLElement {
 
 
 
-  const commitPushBtn = document.createElement('button');
+  commitPushBtn = document.createElement('button');
 
   commitPushBtn.type = 'button';
 
@@ -866,6 +956,8 @@ async function handleGenerateCommitMessage(): Promise<void> {
 
 async function handleCommit(andPush: boolean): Promise<void> {
 
+  if (commitBusy) return;
+
   const message = commitInput?.value.trim() ?? '';
 
   if (!message) {
@@ -878,17 +970,31 @@ async function handleCommit(andPush: boolean): Promise<void> {
 
   const cwd = getEffectiveCwdArg();
 
-  const ok = await runGitOp(() => gitCommit({ message, cwd }), {
-    successMessage: andPush ? undefined : 'Committed changes',
-  });
+  const action: CommitActionKind = andPush ? 'commit-push' : 'commit';
 
-  if (!ok) return;
+  setCommitActionsBusy(action, 'Committing…');
 
-  if (commitInput) commitInput.value = '';
+  try {
 
-  if (andPush) {
+    const ok = await runGitOp(() => gitCommit({ message, cwd }), {
+      successMessage: andPush ? undefined : 'Committed changes',
+    });
 
-    await runGitOp(() => gitPush({ cwd }), { successMessage: 'Committed and pushed' });
+    if (!ok) return;
+
+    if (commitInput) commitInput.value = '';
+
+    if (andPush) {
+
+      setCommitActionsBusy(action, 'Pushing…');
+
+      await runGitOp(() => gitPush({ cwd }), { successMessage: 'Committed and pushed' });
+
+    }
+
+  } finally {
+
+    clearCommitActionsBusy();
 
   }
 
@@ -1851,6 +1957,12 @@ export function resetGitPanelForTests(): void {
   aheadBehindEl = null;
 
   commitInput = null;
+
+  commitBtn = null;
+
+  commitPushBtn = null;
+
+  commitBusy = false;
 
   aiGenerateBtn = null;
 
