@@ -263,6 +263,52 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
   cursor: not-allowed;
 }
 
+.git-panel-action-btn.is-busy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  opacity: 1;
+  cursor: wait;
+}
+
+.git-panel-action-btn.is-busy:disabled {
+  opacity: 1;
+}
+
+.git-panel-action-spinner {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--mn-border-strong);
+  border-top-color: var(--mn-accent);
+  border-radius: 50%;
+  animation: git-panel-action-spin 0.65s linear infinite;
+}
+
+.git-panel-action-label {
+  white-space: nowrap;
+}
+
+@keyframes git-panel-action-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .git-panel-action-spinner {
+    animation: none;
+    border-top-color: var(--mn-accent);
+    opacity: 0.85;
+  }
+}
+
+.git-panel-commit-input:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
 .git-panel-status {
   margin: 0;
   font-size: 12px;
