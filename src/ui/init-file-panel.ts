@@ -9,6 +9,7 @@ import {
 } from '../state/file-panel';
 import {
   applyFileSidebarVisuals,
+  clearMobileFileSidebarOverlay,
   closeMobileFileSidebar,
   isMobileLayout,
   toggleFileSidebarCollapsed,
@@ -183,13 +184,14 @@ export async function initFilePanel(): Promise<void> {
   }
 
   window.addEventListener('resize', () => {
-    if (!isMobileLayout()) closeMobileFileSidebar();
+    if (!isMobileLayout()) clearMobileFileSidebarOverlay();
     applyFileSidebarVisuals();
   });
 }
 
 export {
   applyFileSidebarVisuals,
+  clearMobileFileSidebarOverlay,
   closeMobileFileSidebar,
   toggleFileSidebarCollapsed,
   toggleFileSidebarLayout,

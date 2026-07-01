@@ -179,6 +179,7 @@ import { initComposerVoice } from './ui/composer-voice';
 import { initVoiceStatus } from './ui/voice-controls';
 import { dismissOpenLayers } from './ui/status';
 import {
+  clearMobileFileSidebarOverlay,
   closeMobileFileSidebar,
   toggleFileSidebarCollapsed,
   toggleFileSidebarLayout,
@@ -410,7 +411,7 @@ export async function initApp(): Promise<void> {
   window.addEventListener('resize', () => {
     if (!isMobileLayout()) {
       closeMobileSidebar();
-      closeMobileFileSidebar();
+      clearMobileFileSidebarOverlay();
     }
     applySidebarVisuals();
   });

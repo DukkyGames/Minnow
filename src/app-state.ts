@@ -28,7 +28,7 @@ export function takeChatStopReason(chatId: string): ChatStopReason {
 
 /**
  * Legacy boolean: true when any chat is streaming.
- * Kept for call sites that gate on global activity (skill picker, tool approval).
+ * Kept for call sites that gate on global activity (tool approval, legacy UI).
  */
 export let streaming = false;
 
