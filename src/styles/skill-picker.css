@@ -131,3 +131,61 @@
   color: var(--mn-fg-muted);
   font-size: 0.875rem;
 }
+
+.skill-picker__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.5rem 0.35rem;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.skill-picker__header.hidden {
+  display: none;
+}
+
+.skill-picker__back {
+  border: 1px solid var(--mn-border-strong);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  padding: 0.2rem 0.45rem;
+  cursor: pointer;
+}
+
+.skill-picker__back:hover {
+  background: var(--mn-surface-elevated);
+}
+
+.skill-picker__header-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--mn-fg);
+}
+
+.skill-picker__item--has-options {
+  grid-template-columns: auto 1fr auto;
+}
+
+.skill-picker__chevron {
+  grid-row: span 2;
+  align-self: center;
+  color: var(--mn-fg-muted);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.skill-picker__group {
+  padding: 0.35rem 0.75rem 0.15rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.skill-picker__badge--option {
+  background: color-mix(in srgb, var(--mn-accent) 8%, var(--mn-bg));
+  border-color: var(--mn-border-strong);
+}

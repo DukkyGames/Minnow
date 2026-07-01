@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, test } from 'node:test';
 import { parseSkillFrontmatter } from '../../src/skills/parse-frontmatter.ts';
 import { formatImpeccablePreflightLine } from '../../src/agents/ui-designer/preflight.ts';
+import { listUiDesignerPickerOptions } from '../../src/agents/ui-designer/runner.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SKILL_PATH = path.join(
@@ -23,6 +24,13 @@ describe('ui-designer skill', () => {
     assert.equal(meta.label, 'UI Designer');
     assert.match(body, /impeccable/i);
     assert.match(body, /IMPECCABLE_PREFLIGHT/);
+  });
+
+  test('picker options include plan and implement modes', () => {
+    assert.deepEqual(
+      listUiDesignerPickerOptions().map((option) => option.id),
+      ['plan', 'implement'],
+    );
   });
 
   test('I4: slash inject builds system message containing IMPECCABLE_PREFLIGHT instruction', async () => {
