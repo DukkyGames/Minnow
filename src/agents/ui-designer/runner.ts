@@ -114,8 +114,24 @@ export function normalizeUiDesignerUserText(userText: string): string {
   return stripUiDesignerModePrefix(userText);
 }
 
-/** Composer hint when /ui-designer is typed. */
-export const UI_DESIGNER_COMPOSER_HINT =
-  'UI Designer: reply plan (default) or implement — uses Impeccable + optional screenshot.';
+/** Picker modes after /ui-designer is selected. */
+export function listUiDesignerPickerOptions(): Array<{
+  id: string;
+  label: string;
+  description?: string;
+}> {
+  return [
+    {
+      id: 'plan',
+      label: 'Plan',
+      description: 'Review and recommend — no file edits',
+    },
+    {
+      id: 'implement',
+      label: 'Implement',
+      description: 'Apply UI changes with restricted tools',
+    },
+  ];
+}
 
 export { parseUiDesignerMode, stripUiDesignerModePrefix };

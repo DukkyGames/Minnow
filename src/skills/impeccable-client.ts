@@ -154,20 +154,48 @@ export function commandsForImpeccableAugment(primaryCommand: string): string[] {
   return ordered;
 }
 
+/** Impeccable harness commands grouped for picker menus and bare `/impeccable` sends. */
+export const IMPECCABLE_COMMAND_GROUPS: Readonly<Record<string, readonly string[]>> = {
+  'Setup & context': ['init', 'document', 'extract'],
+  'Plan & build': ['shape', 'craft'],
+  'Review & refine': ['audit', 'critique', 'polish', 'clarify', 'distill'],
+  'Visual & motion': ['animate', 'colorize', 'typeset', 'layout', 'delight', 'bolder', 'quieter', 'overdrive'],
+  Production: ['harden', 'onboard', 'adapt', 'optimize', 'live'],
+};
+
+/** Sub-commands shown in the slash picker after /impeccable is selected. */
+export function listImpeccablePickerOptions(): SkillPickerOption[] {
+  const meta = commandMetadata as Record<string, { description?: string }>;
+  const options: SkillPickerOption[] = [];
+
+  for (const [group, commands] of Object.entries(IMPECCABLE_COMMAND_GROUPS)) {
+    for (const id of commands) {
+      const entry = meta[id];
+      if (!entry) continue;
+      options.push({
+        id,
+        label: id,
+        description: entry.description?.slice(0, 140),
+        group,
+      });
+    }
+  }
+
+  return options;
+}
+
+interface SkillPickerOption {
+  id: string;
+  label: string;
+  description?: string;
+  group?: string;
+}
 /** Grouped command menu for bare `/impeccable` sends. */
 function formatImpeccableCommandMenu(): string {
   const meta = commandMetadata as Record<
     string,
     { description?: string; argumentHint?: string }
   >;
-
-  const groups: Readonly<Record<string, readonly string[]>> = {
-    'Setup & context': ['init', 'document', 'extract'],
-    'Plan & build': ['shape', 'craft'],
-    'Review & refine': ['audit', 'critique', 'polish', 'clarify', 'distill'],
-    'Visual & motion': ['animate', 'colorize', 'typeset', 'layout', 'delight', 'bolder', 'quieter', 'overdrive'],
-    'Production': ['harden', 'onboard', 'adapt', 'optimize', 'live'],
-  };
 
   const lines = [
     '---',
@@ -176,7 +204,7 @@ function formatImpeccableCommandMenu(): string {
     '',
   ];
 
-  for (const [heading, commands] of Object.entries(groups)) {
+  for (const [heading, commands] of Object.entries(IMPECCABLE_COMMAND_GROUPS)) {
     lines.push(`### ${heading}`, '', '| Command | Usage | Summary |', '| --- | --- | --- |');
     for (const cmd of commands) {
       const entry = meta[cmd];
@@ -246,16 +274,12 @@ export function shouldComposeImpeccableBody(
   return false;
 }
 
-/** Top commands for composer hint after picking /impeccable in the skill picker. */
+/**
+ * @deprecated Composer hints are chosen via the slash picker options menu.
+ */
 export function impeccableComposerHint(): string {
-  const meta = commandMetadata as Record<string, { argumentHint?: string }>;
   const top = ['init', 'polish', 'audit', 'craft', 'shape', 'critique'];
-  return top
-    .map((cmd) => {
-      const hint = meta[cmd]?.argumentHint?.trim();
-      return hint ? `${cmd} ${hint}` : cmd;
-    })
-    .join(' | ');
+  return top.join(' | ');
 }
 
 /**
