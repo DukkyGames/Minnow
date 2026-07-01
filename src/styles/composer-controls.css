@@ -336,6 +336,7 @@
   width: 14px;
   height: 14px;
   flex-shrink: 0;
+  color: currentColor;
 }
 
 .composer-run-target-btn .composer-run-target__label {
@@ -422,6 +423,10 @@
   height: 14px;
   flex-shrink: 0;
   color: var(--mn-fg-muted);
+}
+
+.composer-run-target-menu__item-icon path {
+  fill: currentColor;
 }
 
 @media (hover: hover) and (pointer: fine) {

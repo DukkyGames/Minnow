@@ -34,6 +34,8 @@ export function createGitWorktreeIcon(
   svg.setAttribute('aria-hidden', 'true');
   const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   path.setAttribute('d', PATH_BY_KIND[kind]);
+  // Inherit button text color (same pattern as composer .icon-svg stroke icons).
+  path.setAttribute('fill', 'currentColor');
   svg.appendChild(path);
   return svg;
 }

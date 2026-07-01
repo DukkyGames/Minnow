@@ -16,6 +16,7 @@ import {
   deleteBranch,
   diff,
   log,
+  parseBranchList,
   show,
   stage,
   status,
@@ -154,6 +155,20 @@ describe('git API', () => {
     assert.ok(listed.local?.includes(listed.current));
   });
 
+  test('parseBranchList omits branches checked out in other worktrees', () => {
+    const parsed = parseBranchList(
+      [
+        '  main',
+        '* develop',
+        '+ feature/other-worktree',
+        '  remotes/origin/main',
+      ].join('\n'),
+    );
+    assert.equal(parsed.current, 'develop');
+    assert.deepEqual(parsed.local, ['main', 'develop']);
+    assert.deepEqual(parsed.remote, ['remotes/origin/main']);
+  });
+
   test('deleteBranch removes a non-current branch', async () => {
     const before = await branches({ cwd: repoDir });
     const original = before.current;
@@ -181,11 +196,19 @@ describe('git API', () => {
     assert.equal(added.ok, true);
     assert.equal(added.branch, 'wt-feature');
 
+    const listed = await branches({ cwd: repoDir });
+    assert.equal(listed.ok, true);
+    assert.ok(!listed.local?.includes('wt-feature'));
+
     const removed = await worktreeRemove({
       cwd: repoDir,
       path: path.join(repoDir, '.worktrees', 'wt-feature'),
     });
     assert.equal(removed.ok, true);
+
+    const afterRemove = await branches({ cwd: repoDir });
+    assert.equal(afterRemove.ok, true);
+    assert.ok(afterRemove.local?.includes('wt-feature'));
   });
 
   test('POST /api/git status honors cwd', async () => {

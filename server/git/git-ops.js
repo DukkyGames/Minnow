@@ -113,14 +113,16 @@ export function parseBranchList(text) {
     const line = rawLine.trimEnd();
     if (!line) continue;
     const isCurrent = line.startsWith('* ');
-    const name = (isCurrent ? line.slice(2) : line.slice(2)).trim();
+    // Git marks branches checked out in another worktree with "+ ".
+    const checkedOutElsewhere = line.startsWith('+ ');
+    const name = line.slice(2).trim();
     if (!name) continue;
     if (isCurrent) {
       current = name;
     }
     if (name.startsWith('remotes/')) {
       remote.push(name);
-    } else {
+    } else if (!checkedOutElsewhere) {
       local.push(name);
     }
   }

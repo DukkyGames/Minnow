@@ -72,13 +72,21 @@ function closeMenus(): void {
 function positionMenu(anchor: HTMLElement, menu: HTMLElement): void {
   const rect = anchor.getBoundingClientRect();
   const margin = 8;
-  menu.style.top = `${rect.bottom + 4}px`;
-  menu.style.left = `${rect.left}px`;
-  const menuRect = menu.getBoundingClientRect();
-  let left = rect.left;
-  if (left + menuRect.width > window.innerWidth - margin) {
-    left = Math.max(margin, window.innerWidth - menuRect.width - margin);
+  const gap = 4;
+  const menuHeight = menu.offsetHeight || menu.getBoundingClientRect().height;
+  const menuWidth = menu.offsetWidth || menu.getBoundingClientRect().width;
+
+  let top = rect.bottom + gap;
+  if (top + menuHeight > window.innerHeight - margin) {
+    top = Math.max(margin, rect.top - menuHeight - gap);
   }
+
+  let left = rect.left;
+  if (left + menuWidth > window.innerWidth - margin) {
+    left = Math.max(margin, window.innerWidth - menuWidth - margin);
+  }
+
+  menu.style.top = `${top}px`;
   menu.style.left = `${left}px`;
 }
 
