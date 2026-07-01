@@ -11,6 +11,7 @@ import {
   buildTorchPackage,
   isCudaHardware,
   patchQwenTtsCheckModelInputsInVenv,
+  patchQwenTtsPadTokenIdInVenv,
   resolveQwenTtsPackageDir,
 } from '../../server/voice/provision.js';
 import { getVoiceVenvDir } from '../../server/voice/paths.js';
@@ -57,7 +58,7 @@ describe('voice provision torch packages', () => {
     assert.ok(first >= 0);
   });
 
-  test('patchQwenTtsCheckModelInputsInVenv rewrites decorator call form (MIN-170)', async () => {
+  test('patchQwenTtsCheckModelInputsInVenv restores decorator call form for transformers 4.57.3', async () => {
     const venvDir = await mkdtemp(join(tmpdir(), 'minnow-voice-patch-'));
     const pkgDir = join(venvDir, 'Lib', 'site-packages', 'qwen_tts');
     const pyPath = join(pkgDir, 'sample.py');
@@ -66,7 +67,7 @@ describe('voice provision torch packages', () => {
       'from transformers.utils.generic import check_model_inputs',
       '',
       'class Demo:',
-      '    @check_model_inputs()',
+      '    @check_model_inputs',
       '    def forward(self):',
       '        pass',
       '',
@@ -77,8 +78,38 @@ describe('voice provision torch packages', () => {
       const patched = await patchQwenTtsCheckModelInputsInVenv(venvDir);
       assert.equal(patched, 1);
       const text = await readFile(pyPath, 'utf8');
-      assert.match(text, /@check_model_inputs\n/);
-      assert.doesNotMatch(text, /@check_model_inputs\(\)/);
+      assert.match(text, /@check_model_inputs\(\)/);
+      assert.doesNotMatch(text, /@check_model_inputs\n/);
+    } finally {
+      await rm(venvDir, { recursive: true, force: true });
+    }
+  });
+
+  test('patchQwenTtsPadTokenIdInVenv rewrites padding_idx access for transformers 5.x', async () => {
+    const venvDir = await mkdtemp(join(tmpdir(), 'minnow-voice-pad-patch-'));
+    const modelsDir = join(venvDir, 'Lib', 'site-packages', 'qwen_tts', 'core', 'models');
+    const pyPath = join(modelsDir, 'modeling_qwen3_tts.py');
+    await mkdir(modelsDir, { recursive: true });
+    const source = [
+      'class Demo:',
+      '    def __init__(self, config):',
+      '        self.padding_idx = config.pad_token_id',
+      '        self.padding_idx = config.pad_token_id',
+      '',
+    ].join('\n');
+    await writeFile(pyPath, source, 'utf8');
+
+    try {
+      const patched = await patchQwenTtsPadTokenIdInVenv(venvDir);
+      assert.equal(patched, 1);
+      const text = await readFile(pyPath, 'utf8');
+      assert.equal(
+        (text.match(/getattr\(config, "pad_token_id", None\)/g) ?? []).length,
+        2,
+      );
+      assert.doesNotMatch(text, /config\.pad_token_id/);
+      const second = await patchQwenTtsPadTokenIdInVenv(venvDir);
+      assert.equal(second, 0);
     } finally {
       await rm(venvDir, { recursive: true, force: true });
     }

@@ -15,11 +15,6 @@
   width: 100%;
 }
 
-/* Full-bleed dashboard — hide the collapsed file-tree rail (48px) on the right. */
-#appBody:has(.main-column--code-overview) .file-sidebar {
-  display: none;
-}
-
 .main-column.main-column--code-overview .input-bar,
 .main-column.main-column--code-overview .tool-approval-host,
 .main-column.main-column--code-overview .question-host,
@@ -381,6 +376,8 @@
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
+  /* Match git summary horizontal inset so the graph line is not flush to the rail edge. */
+  padding-left: 12px;
 }
 
 /* Long branch/ref names must not widen the dashboard on narrow viewports. */
