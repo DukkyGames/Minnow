@@ -22,6 +22,7 @@ import {
   generationTimeoutMessage,
   readGenerationUpstreamTimeouts,
 } from './timeouts.js';
+import { formatUpstreamHttpErrorMessage } from './upstream-error-detail.js';
 import { upstreamFetch } from './upstream-fetch.js';
 
 /**
@@ -205,20 +206,13 @@ async function attemptCandidateStream({
     });
 
     if (!upstream.ok) {
-      let detail = '';
+      let rawBody = '';
       try {
-        detail = (await upstream.text()).replace(/\s+/g, ' ').trim().slice(0, 240);
+        rawBody = await upstream.text();
       } catch {
         /* ignore */
       }
-      const html =
-        detail.toLowerCase().includes('<!doctype') || detail.toLowerCase().includes('<html');
-      const suffix = detail
-        ? html
-          ? ' (provider returned an HTML error page — check LM Studio / provider logs)'
-          : `: ${detail}`
-        : '';
-      const message = `Upstream HTTP ${upstream.status}${suffix}`;
+      const message = formatUpstreamHttpErrorMessage(upstream.status, rawBody);
       const classified = classifyUpstreamError(null, upstream);
       if (!bytesEmitted && classified.kind === 'retryable' && canFailover) {
         if (upstream.status >= 500 || [502, 503, 504].includes(upstream.status)) {
