@@ -68,6 +68,7 @@ describe('renderToolResult codeChange badge', () => {
       deletions: 1,
       path: 'a.ts',
       diffLines: [
+        { type: 'unchanged', text: 'keep' },
         { type: 'remove', text: 'old' },
         { type: 'add', text: 'new' },
       ],
@@ -76,6 +77,10 @@ describe('renderToolResult codeChange badge', () => {
     assert.ok(panel);
     assert.ok(panel.querySelector('.prompt-diff__line--remove'));
     assert.ok(panel.querySelector('.prompt-diff__line--add'));
+    assert.equal(panel.querySelector('.prompt-diff__line--unchanged'), null);
+    assert.equal(panel.querySelector('.prompt-diff__lineno')?.textContent, '2');
+    assert.equal(wrap.querySelector('.tool-call-pre--result'), null);
+    assert.equal(wrap.querySelector('.tool-call-section-label')?.textContent, 'Arguments');
   });
 });
 
@@ -116,6 +121,22 @@ describe('renderToolCall display labels', () => {
     assert.ok(wrap.classList.contains('tool-call-msg--file'));
     assert.ok(details?.classList.contains('tool-call-details--file'));
     assert.equal(details?.open, true);
+  });
+
+  test('file card title is a clickable open link', () => {
+    window = setupDom();
+    const wrap = renderToolCall('save_file', { path: 'src/wait-for-vite.mjs' });
+    const title = wrap.querySelector('.tool-call-title--file-link');
+    assert.ok(title);
+    assert.equal(title?.tagName, 'BUTTON');
+    assert.equal(wrap.dataset.filePath, 'src/wait-for-vite.mjs');
+    renderToolResult(wrap, 'Saved', undefined, undefined, {
+      additions: 1,
+      deletions: 0,
+      path: 'src/wait-for-vite.mjs',
+      diffLines: [{ type: 'add', text: 'new line' }],
+    });
+    assert.ok(wrap.querySelector('.tool-call-diff__header--link'));
   });
 
   test('file card shows diff on result', () => {

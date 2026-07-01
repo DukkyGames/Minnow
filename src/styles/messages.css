@@ -600,6 +600,21 @@
   word-break: break-word;
 }
 
+.tool-call-title--file-link {
+  pointer-events: auto;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+}
+
+.tool-call-title--file-link:hover {
+  color: var(--mn-accent, var(--mn-fg));
+  text-decoration: underline;
+}
+
 .tool-call-status-label {
   flex-shrink: 0;
   font-size: 10px;

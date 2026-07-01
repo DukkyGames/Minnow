@@ -213,6 +213,9 @@
 
 .tool-call-details--file > .tool-call-body {
   display: flex;
+  flex-direction: column;
+  padding-top: 0;
+  border-top: none;
 }
 
 .tool-call-details--file > summary {
@@ -225,7 +228,7 @@
   display: none;
 }
 
-.tool-call-details--file .tool-call-pre--result,
-.tool-call-details--file .tool-call-section-label:last-of-type {
+.tool-call-msg--file.tool-call-msg--ok .tool-call-pre--result,
+.tool-call-msg--file.tool-call-msg--ok .tool-call-section-label {
   display: none;
 }

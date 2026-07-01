@@ -11,6 +11,37 @@ export interface DiffLine {
   text: string;
 }
 
+/** Add/remove row with a 1-based line number in the post-edit file (add) or pre-edit file (remove). */
+export interface NumberedChangeLine {
+  type: 'add' | 'remove';
+  text: string;
+  lineNumber: number;
+}
+
+/**
+ * Keep only edited lines and attach line numbers by walking the full unified diff.
+ */
+export function toChangedLinesWithNumbers(lines: DiffLine[]): NumberedChangeLine[] {
+  const out: NumberedChangeLine[] = [];
+  let oldLine = 1;
+  let newLine = 1;
+  for (const line of lines) {
+    if (line.type === 'unchanged') {
+      oldLine += 1;
+      newLine += 1;
+      continue;
+    }
+    if (line.type === 'remove') {
+      out.push({ type: 'remove', text: line.text, lineNumber: oldLine });
+      oldLine += 1;
+      continue;
+    }
+    out.push({ type: 'add', text: line.text, lineNumber: newLine });
+    newLine += 1;
+  }
+  return out;
+}
+
 /** Normalize line endings and trailing whitespace before compare. */
 export function normalizePromptDiffText(text: string): string {
   return text
