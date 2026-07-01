@@ -15,6 +15,8 @@ const BRANCH_INDENT_PX = 14;
 export interface GitGraphOptions {
   cwd?: string;
   onSelectCommit?: (sha: string) => void;
+  /** Highlight the selected commit row (e.g. open in diff panel). */
+  selectedSha?: string | null;
   /** Max commits to fetch (default 200). */
   logCount?: number;
 }
@@ -312,10 +314,17 @@ function appendConnectorLine(
   row.appendChild(line);
 }
 
-function renderRow(visual: CommitVisual, onSelect?: (sha: string) => void): HTMLElement {
+function renderRow(
+  visual: CommitVisual,
+  onSelect?: (sha: string) => void,
+  selectedSha?: string | null,
+): HTMLElement {
   const row = document.createElement('div');
   row.className = 'git-graph__row';
   if (!visual.isMain) row.classList.add('git-graph__row--branch');
+  if (selectedSha && (visual.commit.hash === selectedSha || visual.commit.hash.startsWith(selectedSha))) {
+    row.classList.add('git-graph__row--selected');
+  }
   row.dataset.sha = visual.commit.hash;
   row.title = `${visual.commit.subject} (${visual.branchKey})`;
 
@@ -415,6 +424,7 @@ function renderGraph(
   host: HTMLElement,
   visuals: CommitVisual[],
   onSelect?: (sha: string) => void,
+  selectedSha?: string | null,
 ): void {
   host.className = 'git-graph git-panel-graph-mount';
   host.replaceChildren();
@@ -422,7 +432,7 @@ function renderGraph(
   const list = document.createElement('div');
   list.className = 'git-graph__list';
   for (const visual of visuals) {
-    list.appendChild(renderRow(visual, onSelect));
+    list.appendChild(renderRow(visual, onSelect, selectedSha));
   }
   host.appendChild(list);
 }
@@ -454,7 +464,7 @@ export function renderGitGraph(
     }
 
     const visuals = annotateCommitLines(assignCommitVisuals(commits));
-    renderGraph(host, visuals, options.onSelectCommit);
+    renderGraph(host, visuals, options.onSelectCommit, options.selectedSha);
   };
 
   const destroy = (): void => {

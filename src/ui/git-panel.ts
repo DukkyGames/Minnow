@@ -42,8 +42,6 @@ import {
 
   gitUnstage,
 
-  gitShow,
-
   gitDeleteBranch,
 
   gitWorktreeAdd,
@@ -58,7 +56,7 @@ import {
 
 import { getFilePanelState, patchFilePanelState } from '../state/file-panel';
 
-import { renderGitGraph } from './git-graph';
+import { renderGitGraph, type GitGraphOptions } from './git-graph';
 
 import { applyFileSidebarVisuals, isMobileLayout, openMobileFileSidebar } from './file-layout';
 
@@ -80,6 +78,13 @@ import { getFileTreeSidebarTitleSuffix } from './file-tree-listing-root';
 import { parseUnifiedPatchToDiffLines } from './git-patch-parse';
 
 import { renderUnifiedPromptDiff } from './prompt-diff-unified';
+
+import {
+  closeGitCommitDiffPanel,
+  getOpenGitCommitDiffSha,
+  GIT_COMMIT_DIFF_CLOSED_EVENT,
+  openGitCommitDiffPanel,
+} from './git-commit-diff-panel';
 
 import { fetchGitCommitMessage } from './git-commit-message-client';
 
@@ -165,7 +170,7 @@ let selectedCommitSha: string | null = null;
 
 let graphHandle: ReturnType<typeof renderGitGraph> | null = null;
 
-const graphOptions: { cwd?: string; onSelectCommit?: (sha: string) => void } = {};
+const graphOptions: GitGraphOptions = {};
 
 
 
@@ -1272,6 +1277,11 @@ function buildSection(
 
 
 
+function syncGraphSelectedCommit(): void {
+  graphOptions.selectedSha = selectedCommitSha;
+  void graphHandle?.refresh();
+}
+
 function ensureGitGraph(): void {
 
   if (!graphMount || graphHandle) return;
@@ -1286,15 +1296,13 @@ function ensureGitGraph(): void {
 
 async function showCommitDiff(sha: string): Promise<void> {
 
-  if (!diffHost) return;
-
-  if (selectedCommitSha === sha) {
+  if (selectedCommitSha === sha && getOpenGitCommitDiffSha() === sha) {
 
     selectedCommitSha = null;
 
-    diffHost.hidden = true;
+    closeGitCommitDiffPanel();
 
-    diffHost.replaceChildren();
+    syncGraphSelectedCommit();
 
     return;
 
@@ -1302,11 +1310,15 @@ async function showCommitDiff(sha: string): Promise<void> {
 
 
 
-  const result = await gitShow({ sha, cwd: getEffectiveCwdArg() });
+  const opened = await openGitCommitDiffPanel({ sha, cwd: getEffectiveCwdArg() });
 
-  if (!result.ok) {
+  if (!opened.ok) {
 
-    setStatus(result.error ?? 'Could not load commit', true);
+    if ('cancelled' in opened && opened.cancelled) return;
+
+    const message = 'error' in opened ? opened.error : 'Could not load commit';
+
+    setStatus(message ?? 'Could not load commit', true);
 
     return;
 
@@ -1318,39 +1330,15 @@ async function showCommitDiff(sha: string): Promise<void> {
 
   selectedCommitSha = sha;
 
-  diffHost.hidden = false;
+  if (diffHost) {
 
-  diffHost.replaceChildren();
+    diffHost.hidden = true;
 
-
-
-  const label = document.createElement('p');
-
-  label.className = 'git-panel-diff-label';
-
-  const shortSha = sha.slice(0, 7);
-
-  const statLine = result.stat?.trim().split('\n').pop()?.trim();
-
-  label.textContent = statLine ? `Commit ${shortSha} — ${statLine}` : `Commit ${shortSha}`;
-
-
-
-  diffHost.appendChild(label);
-
-  if (result.patch) {
-
-    const mount = document.createElement('div');
-
-    diffHost.appendChild(mount);
-
-    renderUnifiedPromptDiff(mount, parseUnifiedPatchToDiffLines(result.patch));
+    diffHost.replaceChildren();
 
   }
 
-
-
-  diffHost.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  syncGraphSelectedCommit();
 
 }
 
@@ -1375,6 +1363,10 @@ async function showFileDiff(path: string, staged: boolean): Promise<void> {
 
 
   selectedCommitSha = null;
+
+  closeGitCommitDiffPanel();
+
+  syncGraphSelectedCommit();
 
 
 
@@ -1910,6 +1902,16 @@ export function initGitPanel(): void {
   subscribeAllBoardChanges(() => {
 
     syncGitPanelFromOrchestrator();
+
+  });
+
+
+
+  window.addEventListener(GIT_COMMIT_DIFF_CLOSED_EVENT, () => {
+
+    selectedCommitSha = null;
+
+    syncGraphSelectedCommit();
 
   });
 
