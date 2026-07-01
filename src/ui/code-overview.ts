@@ -217,10 +217,6 @@ function buildShell(): HTMLElement {
             <div class="code-overview__pulse-value" id="pulseBoards">—</div>
           </div>
           <div class="code-overview__pulse-cell">
-            <div class="code-overview__pulse-label">Session tokens</div>
-            <div class="code-overview__pulse-value" id="pulseTokens">—</div>
-          </div>
-          <div class="code-overview__pulse-cell">
             <div class="code-overview__pulse-label">TPS</div>
             <div class="code-overview__pulse-value" id="pulseTps">—</div>
           </div>
@@ -361,7 +357,6 @@ async function refreshPulseBand(): Promise<void> {
     agentCount = 0;
   }
 
-  const tokens = sumWorkspaceTokens(workspacePath);
   const tps = readStripText('stripTPS');
   const ctx = readStripText('stripCtx');
   let vramText = '—';
@@ -392,18 +387,13 @@ async function refreshPulseBand(): Promise<void> {
 
   setPulseValue('pulseAgents', String(agentCount), agentCount > 0 ? 'accent' : undefined);
   setPulseValue('pulseBoards', String(boardsActive), boardsActive > 0 ? 'accent' : undefined);
-  setPulseValue(
-    'pulseTokens',
-    formatCompactCount(tokens),
-    tokens > 0 ? 'accent' : undefined,
-  );
   setPulseValue('pulseTps', tps === '—' ? '—' : tps, tps !== '—' ? 'success' : undefined);
   setPulseValue('pulseContext', ctx, ctx !== '—' ? 'warning' : undefined);
   setPulseValue('pulseVram', vramText, vramTone);
 
   const preview = document.getElementById('codeOverviewPulsePreview');
   if (preview) {
-    preview.textContent = `${agentCount} agents · ${formatCompactCount(tokens)} tok`;
+    preview.textContent = `${agentCount} agents · ${boardsActive} boards`;
   }
 
   const lede = document.getElementById('codeOverviewWorkspaceLede');

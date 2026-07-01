@@ -37,6 +37,22 @@ function getStripElements(): {
   };
 }
 
+/** Append green + / red − spans (shared by composer strip and sidebar stats). */
+export function appendCodeChangeTotalsSpans(
+  parent: Node,
+  totals: ChatCodeChangeTotals,
+): void {
+  const addSpan = document.createElement('span');
+  addSpan.className = 'code-change-strip__add';
+  addSpan.textContent = `+${totals.additions}`;
+  const delSpan = document.createElement('span');
+  delSpan.className = 'code-change-strip__del';
+  delSpan.textContent = `−${totals.deletions}`;
+  parent.appendChild(addSpan);
+  parent.appendChild(document.createTextNode(' '));
+  parent.appendChild(delSpan);
+}
+
 /** Build the strip stats row: file count plus +/− totals. */
 function renderStripStats(
   statsEl: HTMLElement,
@@ -53,15 +69,7 @@ function renderStripStats(
     frag.appendChild(document.createTextNode(' '));
   }
 
-  const addSpan = document.createElement('span');
-  addSpan.className = 'code-change-strip__add';
-  addSpan.textContent = `+${totals.additions}`;
-  const delSpan = document.createElement('span');
-  delSpan.className = 'code-change-strip__del';
-  delSpan.textContent = `−${totals.deletions}`;
-  frag.appendChild(addSpan);
-  frag.appendChild(document.createTextNode(' '));
-  frag.appendChild(delSpan);
+  appendCodeChangeTotalsSpans(frag, totals);
   statsEl.replaceChildren(frag);
 }
 

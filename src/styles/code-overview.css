@@ -58,8 +58,6 @@
   overscroll-behavior-y: contain;
   scroll-padding-top: env(safe-area-inset-top, 0px);
   scroll-padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-  max-width: 1440px;
-  margin-inline: auto;
   width: 100%;
 }
 
@@ -157,7 +155,7 @@
 
 .code-overview__pulse-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .code-overview__pulse-cell {
@@ -1119,18 +1117,3 @@
   }
 }
 
-/* Ultrawide: cap metric cell width so values stay scannable */
-@media (min-width: 1400px) {
-  .code-overview__pulse-grid {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    max-width: 1280px;
-    margin-inline: auto;
-    width: 100%;
-  }
-
-  .code-overview__telemetry-grid {
-    max-width: 1280px;
-    margin-inline: auto;
-    width: 100%;
-  }
-}
