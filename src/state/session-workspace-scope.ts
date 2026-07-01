@@ -29,6 +29,7 @@ export type RawSessionJson = {
   version?: number;
   activeId?: string | null;
   sidebarCollapsed?: boolean;
+  sidebarWidth?: number;
   chats?: unknown[];
   lastActiveChatIdByWorkspace?: Record<string, string>;
   lastActiveChatIdByApp?: Record<string, string>;

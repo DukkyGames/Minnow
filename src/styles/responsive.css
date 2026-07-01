@@ -116,13 +116,6 @@
   }
 }
 
-/* Tablet portrait: slightly narrower session panel */
-@media (min-width: 641px) and (max-width: 899px) {
-  .chat-sidebar:not(.collapsed) {
-    width: 200px;
-  }
-}
-
 /* Phone landscape: reclaim vertical space for messages */
 @media (max-height: 500px) and (orientation: landscape) {
   .chat-area,
