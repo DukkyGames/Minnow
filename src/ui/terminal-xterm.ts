@@ -86,6 +86,27 @@ function pushSubmittedLine(line: string): void {
   historyIndex = tabHistory.length;
 }
 
+function resolveTerminalTypography(): {
+  fontFamily: string;
+  fontSize: number;
+  /** xterm lineHeight is a multiplier on glyph height (not px). */
+  lineHeight: number;
+} {
+  const style = getComputedStyle(document.documentElement);
+  const fontFamily =
+    style.getPropertyValue('--font-mono').trim() ||
+    "'JetBrains Mono', ui-monospace, monospace";
+  const fontSize =
+    Number.parseFloat(style.getPropertyValue('--terminal-font-size')) || 13;
+  const lineHeight =
+    Number.parseFloat(style.getPropertyValue('--terminal-line-height')) || 1.55;
+  return {
+    fontFamily,
+    fontSize,
+    lineHeight,
+  };
+}
+
 function applyXtermTheme(): void {
   if (!term) return;
   const style = getComputedStyle(document.documentElement);
@@ -93,17 +114,22 @@ function applyXtermTheme(): void {
   const bg = style.getPropertyValue('--mn-bg').trim() || '#0f1216';
   const accent = style.getPropertyValue('--mn-accent').trim() || '#9ec5a7';
   const sel = style.getPropertyValue('--mn-surface-0').trim() || '#161a20';
+  const typography = resolveTerminalTypography();
   term.options.theme = {
     background: bg,
     foreground: fg,
     cursor: accent,
     selectionBackground: sel,
   };
+  term.options.fontFamily = typography.fontFamily;
+  term.options.fontSize = typography.fontSize;
+  term.options.lineHeight = typography.lineHeight;
 }
 
 /** Re-read CSS variables into xterm after theme change (no-op if terminal not mounted). */
 export function refreshXtermTheme(): void {
   applyXtermTheme();
+  fitAddon?.fit();
 }
 
 function disconnectWs(): void {
@@ -189,10 +215,12 @@ function ensureTerminal(): Terminal | null {
   if (!hostEl) return null;
   if (term) return term;
 
+  const typography = resolveTerminalTypography();
   term = new Terminal({
     cursorBlink: true,
-    fontFamily: 'var(--font-mono)',
-    fontSize: 13,
+    fontFamily: typography.fontFamily,
+    fontSize: typography.fontSize,
+    lineHeight: typography.lineHeight,
     scrollback: 5000,
     allowProposedApi: false,
   });
