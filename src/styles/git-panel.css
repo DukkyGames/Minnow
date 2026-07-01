@@ -349,7 +349,7 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
 }
 
 .git-panel-section__body--history {
-  padding: 2px 0 6px;
+  padding: 2px 0 6px 12px;
   min-width: 0;
   overflow-x: hidden;
 }

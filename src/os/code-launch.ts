@@ -5,6 +5,7 @@
 import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
 import { setWorkspacePath } from '../config/workspace-api';
 import { sendMessageWithTools } from '../tools/loop';
+import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { getWorkspacePath } from '../state/workspace';
 import { clearForegroundSeed } from './instances';
 import type { LaunchOptions } from './types';
@@ -53,6 +54,18 @@ export async function restoreCodeSessionOnForeground(): Promise<void> {
   const workspacePath = getWorkspacePath();
   const active = getActiveChat();
   const activeIsAssistant = isChatsWorkspacePath(active.workspacePath ?? '');
+  const workspaceKey = normalizeWorkspacePath(workspacePath);
+  const activeInCurrentWorkspace =
+    !activeIsAssistant &&
+    normalizeWorkspacePath(active.workspacePath ?? '') === workspaceKey;
+
+  // Honor an explicit workspace chat selection (e.g. overview session row) instead of
+  // reverting to lastActiveChatIdByWorkspace.
+  if (activeInCurrentWorkspace) {
+    await refreshCodeChatSurface();
+    return;
+  }
+
   const targetId = resolveActiveChatIdForWorkspace(
     workspacePath,
     sessionState,

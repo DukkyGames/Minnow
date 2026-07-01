@@ -228,4 +228,43 @@ describe('applyCodeLaunchOptions', () => {
     g.fetch = prevFetch;
     resetChatsWorkspacePathCache();
   });
+
+  test('restoreCodeSessionOnForeground keeps an explicit workspace chat selection', async () => {
+    setSessionStateForTests({
+      version: 5,
+      activeId: 'chat-other',
+      sidebarCollapsed: false,
+      lastActiveChatIdByWorkspace: { [CURRENT_WS]: 'chat-existing' },
+      lastActiveChatIdByApp: {},
+      chats: [
+        {
+          ...createEmptyChatObject('model-a'),
+          id: 'chat-existing',
+          name: 'Existing',
+          workspacePath: CURRENT_WS,
+          modeId: 'build',
+          history: [{ role: 'user', content: 'Old remembered thread' }],
+        },
+        {
+          ...createEmptyChatObject('model-a'),
+          id: 'chat-other',
+          name: 'Other',
+          workspacePath: CURRENT_WS,
+          modeId: 'build',
+          history: [{ role: 'user', content: 'Selected from overview' }],
+        },
+      ],
+    });
+
+    const { restoreCodeSessionOnForeground } = await import('../../src/os/code-launch.ts');
+    await restoreCodeSessionOnForeground();
+
+    const { getActiveChat } = await import('../../src/state/sessions.ts');
+    assert.equal(getActiveChat().id, 'chat-other');
+    assert.match(document.getElementById('chatArea')?.textContent ?? '', /Selected from overview/);
+    assert.doesNotMatch(
+      document.getElementById('chatArea')?.textContent ?? '',
+      /Old remembered thread/,
+    );
+  });
 });
