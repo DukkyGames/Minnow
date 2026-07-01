@@ -106,8 +106,42 @@ export function resolveQwenTtsPackageDir(venvDir) {
 }
 
 /**
- * qwen-tts uses `@check_model_inputs()` but transformers expects `@check_model_inputs`
- * (no call parens). Applies to transformers 4.57.x and 5.x — see MIN-170.
+ * transformers 5.x raises when `config.pad_token_id` is missing on Qwen3TTSTalkerConfig;
+ * 4.57.x returns None. Use getattr so TTS loads on both stacks.
+ * @param {string} venvDir
+ * @returns {Promise<number>} files patched (0 when qwen-tts is not installed)
+ */
+export async function patchQwenTtsPadTokenIdInVenv(venvDir) {
+  const root = resolveQwenTtsPackageDir(venvDir);
+  if (!root) return 0;
+
+  const modelingPath = path.join(root, 'core', 'models', 'modeling_qwen3_tts.py');
+  try {
+    const text = await fsp.readFile(modelingPath, 'utf8');
+    const needle = 'self.padding_idx = config.pad_token_id';
+    const replacement = 'self.padding_idx = getattr(config, "pad_token_id", None)';
+    if (!text.includes(needle)) return 0;
+    await fsp.writeFile(modelingPath, text.replaceAll(needle, replacement), 'utf8');
+    return 1;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * @param {string} venvPython
+ * @param {(message: string) => void} [onProgress]
+ * @returns {Promise<number>}
+ */
+export async function patchQwenTtsPadTokenId(venvPython, onProgress) {
+  onProgress?.('Patching qwen-tts pad_token_id compatibility');
+  const venvDir = path.resolve(venvPython, '..', '..');
+  return patchQwenTtsPadTokenIdInVenv(venvDir);
+}
+
+/**
+ * qwen-tts ships `@check_model_inputs()`; transformers 4.57.3 requires the call form.
+ * Older Minnow provisioners stripped `()` for transformers 5.x (MIN-170) — restore for 4.57.3.
  * @param {string} venvDir
  * @returns {Promise<number>} files patched (0 when qwen-tts is not installed)
  */
@@ -126,12 +160,10 @@ export async function patchQwenTtsCheckModelInputsInVenv(venvDir) {
       }
       if (!ent.isFile() || !ent.name.endsWith('.py')) continue;
       const text = await fsp.readFile(full, 'utf8');
-      if (!text.includes('@check_model_inputs()')) continue;
-      await fsp.writeFile(
-        full,
-        text.replaceAll('@check_model_inputs()', '@check_model_inputs'),
-        'utf8',
-      );
+      if (!text.includes('@check_model_inputs')) continue;
+      const next = text.replaceAll(/@check_model_inputs(?!\(\))/g, '@check_model_inputs()');
+      if (next === text) continue;
+      await fsp.writeFile(full, next, 'utf8');
       patched += 1;
     }
   }
@@ -145,7 +177,7 @@ export async function patchQwenTtsCheckModelInputsInVenv(venvDir) {
  * @returns {Promise<number>}
  */
 export async function patchQwenTtsCheckModelInputs(venvPython, onProgress) {
-  onProgress?.('Patching qwen-tts transformers decorator compatibility');
+  onProgress?.('Patching qwen-tts check_model_inputs decorator for transformers 4.57.3');
   const venvDir = path.resolve(venvPython, '..', '..');
   return patchQwenTtsCheckModelInputsInVenv(venvDir);
 }
@@ -177,7 +209,8 @@ function corePackagesFor(cudaAvailable) {
   const torchPkg = buildTorchPackage(cudaAvailable);
   return [
     { label: torchPkg.label, args: torchPkg.args },
-    { label: 'transformers', args: ['transformers'] },
+    // qwen-tts 0.1.1 targets transformers 4.57.3; 5.x breaks pad_token_id on talker config.
+    { label: 'transformers==4.57.3', args: ['transformers==4.57.3'] },
     { label: 'faster-whisper', args: ['faster-whisper'] },
     { label: 'accelerate', args: ['accelerate'] },
     { label: 'soundfile', args: ['soundfile'] },
@@ -339,8 +372,9 @@ export async function provision(onProgress) {
     else skippedPackages.push(pkg.label);
   }
 
-  // Always attempt — idempotent; covers repair when qwen-tts is already on disk (MIN-170).
+  // Always attempt — idempotent; restores decorator + pad_token_id for pinned transformers 4.57.3.
   await patchQwenTtsCheckModelInputs(venvPython, progress);
+  await patchQwenTtsPadTokenId(venvPython, progress);
 
   if (await maybeInstallFlashAttn(venvPython, cudaAvailable, progress)) {
     installedPackages.push('flash-attn');
