@@ -68,7 +68,7 @@ ${UNTRUSTED_CONTEXT_POLICY_LITE}`;
 const SUB_AGENT_ASK_QUESTION_RULES = `
 
 ### User choices (sub-agent)
-When you need the user to pick among options, priorities, or scope, call \`ask_question\` — do not list numbered or lettered choices in prose. Never use \`ask_question\` to ask permission to run catalog tools; call tools directly (Settings controls any approval strip).`;
+When you need the user to pick among options, priorities, or approvals, call \`ask_question\` — do not list numbered or lettered choices in prose.`;
 
 /** Append ask_question rules when the sub-agent has that tool enabled. */
 export function appendSubAgentAskQuestionRules(

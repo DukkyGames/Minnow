@@ -13,14 +13,7 @@ You have access to a set of tools. Use them when they help complete the user's r
 
 ### Available tools
 
-Tool definitions are provided in the outbound `tools` array — **call them directly** when they help complete the task.
-
-### Tool permissions (Settings)
-
-Per-tool permission in Settings is the **only** gate: **`full`** runs without the approval strip, **`ask`** shows the strip automatically before each run, **`off`** hides the tool.
-
-- **Do not** ask the user for permission to use a tool in chat or via `ask_question`. Call the tool; the host enforces Settings.
-- **`ask_question`** is for scope, priorities, mode handoff, browser allowlist, and Reef saves — **not** for "may I run `read_file`?" style tool permission.
+Tool definitions are provided in the tools array; call them directly.
 
 ### Core rules
 

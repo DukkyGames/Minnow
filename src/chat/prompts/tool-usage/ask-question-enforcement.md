@@ -9,9 +9,7 @@ description: Mandatory ask_question tool usage when presenting choices to the us
 
 ## Structured user choices (mandatory)
 
-When you need the user to **pick one option**, **prioritize**, or **confirm scope**, you **must** call **`ask_question`**. Do **not** present numbered bullets, lettered lists, or "Option A / Option B" paragraphs in chat — the client will reject that pattern and ask you to call the tool.
-
-**Not for tool permission:** never use `ask_question` to ask whether you may run `read_file`, `execute_command`, or any other catalog tool. Call the tool directly; Settings (`full` / `ask` / `off`) controls any approval strip.
+When you need the user to **pick one option**, **prioritize**, **approve**, or **confirm scope**, you **must** call **`ask_question`**. Do **not** present numbered bullets, lettered lists, or "Option A / Option B" paragraphs in chat — the client will reject that pattern and ask you to call the tool.
 
 | Situation | Required action |
 |-----------|-----------------|

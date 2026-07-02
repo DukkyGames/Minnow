@@ -51,7 +51,6 @@ describe('ask-question-enforcement prompts', () => {
     assert.ok(loaded?.body);
     assert.match(loaded.body, /must.*ask_question/i);
     assert.match(loaded.body, /numbered bullets/i);
-    assert.match(loaded.body, /Not for tool permission/i);
   });
 
   test('composeSystemPrompt appends enforcement when ask_question is enabled', async () => {
