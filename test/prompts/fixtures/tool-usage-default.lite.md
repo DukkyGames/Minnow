@@ -3,7 +3,7 @@ id: default
 kind: tool-usage
 label: Tools lite
 version: 1
-liteBody: TOOLS_LITE: {{enabled_tools}}
+liteBody: TOOLS_LITE: tool usage rules
 ---
 
-TOOLS_FULL: {{enabled_tools}}
+TOOLS_FULL: tool usage rules

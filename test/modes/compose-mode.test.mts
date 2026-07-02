@@ -117,7 +117,6 @@ describe('composeSystemPrompt mode part', () => {
       skillBody: null,
       memoryBlock: null,
       enabledToolIds: ['get_datetime'],
-      enabledToolSummaries: 'get_datetime',
       infoPresetId: null,
     });
     assert.match(out, /MINNOW_MODE_MARKER: build lite/);

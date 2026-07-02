@@ -71,7 +71,6 @@ describe('mode-handoff prompts', () => {
       skillBody: null,
       memoryBlock: null,
       enabledToolIds: ['ask_question', 'propose_mode_switch'],
-      enabledToolSummaries: 'ask_question: questions',
     });
     assert.match(out, /Mode handoff/);
     assert.match(out, /create_chat_with_mode/);
@@ -89,7 +88,6 @@ describe('mode-handoff prompts', () => {
       skillBody: null,
       memoryBlock: null,
       enabledToolIds: ['ask_question'],
-      enabledToolSummaries: '',
     });
     assert.doesNotMatch(out, /create_chat_with_mode/);
   });

@@ -62,7 +62,6 @@ describe('prompt-composer', () => {
       skillBody: null,
       memoryBlock: null,
       enabledToolIds: ['get_datetime'],
-      enabledToolSummaries: 'get_datetime: clock',
       infoPresetId: 'general-assistant',
     });
     const parts = out.split('\n\n---\n\n');
@@ -83,7 +82,6 @@ describe('prompt-composer', () => {
       skillBody: null,
       memoryBlock: null,
       enabledToolIds: ['a', 'b'],
-      enabledToolSummaries: 'a, b',
       infoPresetId: 'general-assistant',
     });
     assert.ok(out.includes('BASE_LITE_BODY'));

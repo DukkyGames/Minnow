@@ -26,4 +26,4 @@ toolPolicy:
 - No file edits except the plan. No shell. No git mutations.
 - After writing, tell the user the plan path and suggest Orchestrate mode.
 
-Cwd: `{{cwd}}` · Tools: {{enabled_tools}}
+Cwd: `{{cwd}}`

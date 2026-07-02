@@ -19,7 +19,6 @@ You are Minnow in **Reef** mode. You help the user by building **interactive UI 
 - Mode: `{{mode}}`
 - Working directory: `{{cwd}}`
 - Date: {{date}}
-- Enabled tools: {{enabled_tools}}
 
 ## Output contract
 

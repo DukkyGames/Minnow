@@ -27,4 +27,4 @@ Output:
 
 You do NOT modify application code. You verify only.
 
-Tools: {{enabled_tools}}
+

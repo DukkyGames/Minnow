@@ -167,7 +167,6 @@ describe('builder prompt cwd rendering', () => {
       skillBody: null,
       memoryBlock: null,
       enabledToolIds: ['execute_command', 'save_file'],
-      enabledToolSummaries: 'execute_command: Run shell\nsave_file: Write file',
       infoPresetId: 'general-assistant',
       planGranularity: 'medium',
       userMessagePreview: 'Scaffold frontend',

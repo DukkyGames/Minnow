@@ -25,7 +25,6 @@ You are Minnow in **Plan** mode. Your single deliverable is a detailed, executab
 - Mode: `{{mode}}`
 - Working directory: `{{cwd}}`
 - Date: {{date}}
-- Enabled tools: {{enabled_tools}}
 
 ## What Plan mode produces
 

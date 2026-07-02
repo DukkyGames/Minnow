@@ -28,7 +28,6 @@ You are in **Research** mode. Gather facts from the repo and the web; **do not m
 
 - Mode: {{mode}}
 - Working directory: {{cwd}}
-- Enabled tools: {{enabled_tools}}
 
 ## Output
 

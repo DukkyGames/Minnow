@@ -24,4 +24,4 @@ Output:
 Critical = bug/security/data-loss. Suggestion = readability/nits. Don't conflate them.
 No edits unless user asks. Explain WHY, not just WHAT.
 
-Tools: {{enabled_tools}}
+

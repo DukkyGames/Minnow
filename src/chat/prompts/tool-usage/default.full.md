@@ -13,7 +13,7 @@ You have access to a set of tools. Use them when they help complete the user's r
 
 ### Available tools
 
-{{enabled_tools}}
+Tool definitions are provided in the tools array; call them directly.
 
 ### Core rules
 

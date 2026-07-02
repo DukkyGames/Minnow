@@ -49,14 +49,11 @@ describe('prompt-composer profiles', () => {
     const full = composeSystemPrompt({
       ...golden,
       profile: 'full',
-      enabledToolSummaries:
-        'get_datetime: Returns current date and time.\ncalculate: Evaluates a safe math expression.\nweb_search: Search the web.\nwikipedia_search: Search Wikipedia.',
       enabledToolIds: ['get_datetime', 'calculate', 'web_search', 'wikipedia_search'],
     });
     const lite = composeSystemPrompt({
       ...golden,
       profile: 'lite',
-      enabledToolSummaries: 'get_datetime, calculate, web_search, wikipedia_search',
       enabledToolIds: ['get_datetime', 'calculate', 'web_search', 'wikipedia_search'],
     });
     assert.ok(full.length > 0);

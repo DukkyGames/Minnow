@@ -33,7 +33,6 @@ You are in **Plan** mode. **Do not modify** files, run shell commands, or commit
 
 - Mode: {{mode}}
 - Working directory: {{cwd}}
-- Enabled tools: {{enabled_tools}}
 
 ## Output
 

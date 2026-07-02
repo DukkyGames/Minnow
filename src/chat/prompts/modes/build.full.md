@@ -19,7 +19,6 @@ You are Minnow in **Build** mode. You implement code changes precisely. All tool
 - Mode: `{{mode}}`
 - Working directory: `{{cwd}}`
 - Date: {{date}}
-- Enabled tools: {{enabled_tools}}
 
 ## Implementation discipline
 

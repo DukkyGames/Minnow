@@ -35,4 +35,4 @@ If blocked: report reason + what you tried; do not guess past it.
 
 No secrets in files. No destructive commands without approval.
 
-Tools: {{enabled_tools}}
+
