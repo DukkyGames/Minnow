@@ -26,9 +26,18 @@ describe('provider paths', () => {
     assert.equal(paths.modelsUnloadPath, undefined);
   });
 
+  it('anthropic-v1 uses messages path and no load/unload paths', () => {
+    const paths = getDefaultPaths('anthropic-v1');
+    assert.equal(paths.modelsPath, '/v1/models');
+    assert.equal(paths.chatCompletionsPath, '/v1/messages');
+    assert.equal(paths.modelsLoadPath, undefined);
+    assert.equal(paths.modelsUnloadPath, undefined);
+  });
+
   it('getProviderCapabilities marks lm-studio-v0 as load-capable', () => {
     assert.equal(getProviderCapabilities('lm-studio-v0').supportsModelLoadUnload, true);
     assert.equal(getProviderCapabilities('openai-v1').supportsModelLoadUnload, false);
+    assert.equal(getProviderCapabilities('anthropic-v1').supportsModelLoadUnload, false);
   });
 
   it('lm-studio-v0 normalizes catalog vision and strips upstream capabilities', () => {

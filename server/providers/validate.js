@@ -3,7 +3,7 @@
  */
 
 const PROVIDER_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
-const API_KINDS = new Set(['lm-studio-v0', 'openai-v1']);
+const API_KINDS = new Set(['lm-studio-v0', 'openai-v1', 'anthropic-v1']);
 const AUTH_STYLES = new Set(['bearer', 'api-key', 'x-api-key']);
 
 /**
@@ -41,13 +41,13 @@ export function validateBaseUrl(raw) {
 
 /**
  * @param {string} apiKind
- * @returns {'lm-studio-v0' | 'openai-v1'}
+ * @returns {'lm-studio-v0' | 'openai-v1' | 'anthropic-v1'}
  */
 export function validateApiKind(apiKind) {
   if (!API_KINDS.has(apiKind)) {
     throw new Error('Invalid apiKind');
   }
-  return /** @type {'lm-studio-v0' | 'openai-v1'} */ (apiKind);
+  return /** @type {'lm-studio-v0' | 'openai-v1' | 'anthropic-v1'} */ (apiKind);
 }
 
 /**

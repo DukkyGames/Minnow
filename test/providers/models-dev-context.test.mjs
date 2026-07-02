@@ -84,4 +84,33 @@ describe('models-dev-context', () => {
       resetModelsDevContextCacheForTests();
     }
   });
+
+  it('enrichOpenCodeModelsFromModelsDev attaches claude-sonnet-4-5 context by exact id', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      assert.equal(String(url), 'https://models.dev/api.json');
+      return {
+        ok: true,
+        async json() {
+          return {
+            opencode: {
+              models: {
+                'claude-sonnet-4-5': { limit: { context: 200_000, output: 64_000 } },
+              },
+            },
+          };
+        },
+      };
+    };
+
+    try {
+      const out = await enrichOpenCodeModelsFromModelsDev({
+        data: [{ id: 'claude-sonnet-4-5', type: 'llm', state: 'loaded' }],
+      });
+      assert.equal(out.data[0].max_context_length, 200_000);
+    } finally {
+      globalThis.fetch = originalFetch;
+      resetModelsDevContextCacheForTests();
+    }
+  });
 });

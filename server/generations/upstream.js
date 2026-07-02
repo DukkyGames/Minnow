@@ -22,6 +22,7 @@ import {
   generationTimeoutMessage,
   readGenerationUpstreamTimeouts,
 } from './timeouts.js';
+import { pumpAnthropicUpstream } from './anthropic/pump.js';
 import { formatUpstreamHttpErrorMessage } from './upstream-error-detail.js';
 import { upstreamFetch } from './upstream-fetch.js';
 
@@ -99,7 +100,6 @@ async function pumpUpstreamAsync({ state }) {
       return;
     }
 
-    const url = `${runtime.profile.baseUrl}${runtime.paths.chatCompletionsPath}`;
     const origin = originFromUrl(runtime.profile.baseUrl);
     if (isHostDead(origin)) {
       lastError = `Host in cooldown: ${origin}`;
@@ -110,21 +110,35 @@ async function pumpUpstreamAsync({ state }) {
       return;
     }
 
-    const rawBody = buildCandidateRequestBody(state.requestBody, candidate.modelId);
-    const requestBody = fixModelTemperature(rawBody, runtime.profile.apiKind);
-    const result = await attemptCandidateStream({
-      state,
-      candidate,
-      index,
-      url,
-      headers: runtime.headers,
-      requestBody,
-      idleMs,
-      maxMs,
-      cooldownSeconds: fallbackConfig.cooldownSeconds,
-      origin,
-      canFailover: !state.failoverDisabled && index < state.candidates.length - 1,
-    });
+    const canFailover = !state.failoverDisabled && index < state.candidates.length - 1;
+    const result =
+      runtime.profile.apiKind === 'anthropic-v1'
+        ? await pumpAnthropicUpstream({
+            state,
+            runtime,
+            candidate,
+            index,
+            idleMs,
+            maxMs,
+            cooldownSeconds: fallbackConfig.cooldownSeconds,
+            canFailover,
+          })
+        : await attemptCandidateStream({
+            state,
+            candidate,
+            index,
+            url: `${runtime.profile.baseUrl}${runtime.paths.chatCompletionsPath}`,
+            headers: runtime.headers,
+            requestBody: fixModelTemperature(
+              buildCandidateRequestBody(state.requestBody, candidate.modelId),
+              runtime.profile.apiKind,
+            ),
+            idleMs,
+            maxMs,
+            cooldownSeconds: fallbackConfig.cooldownSeconds,
+            origin,
+            canFailover,
+          });
 
     if (result.outcome === 'complete') {
       return;

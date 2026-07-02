@@ -8,6 +8,8 @@
  * - `lm-studio-v0`: `reasoning_effort`, nested `reasoning.effort`, and `enable_thinking`.
  * - `openai-v1`: nested `thinking.type` (`enabled` / `disabled`); Kimi/Moonshot reject
  *   `enable_thinking` and non-standard `reasoning_effort` values.
+ * - `anthropic-v1`: `providerOptions.anthropic.thinking` (`enabled` + `budgetTokens`,
+ *   `adaptive` + `effort`, or `disabled`) per model family.
  */
 
 import type { ApiKind } from '../providers/types';
@@ -64,10 +66,31 @@ function reasoningBlocked(
   if (allowed && allowed.length > 0 && !allowed.includes(effort)) {
     return true;
   }
-  if (modelCapabilities?.reasoning === false && effort !== 'off') {
-    return true;
+  return modelCapabilities?.reasoning === false;
+}
+
+/** Default extended-thinking token budgets for Anthropic `enabled` mode. */
+const ANTHROPIC_BUDGET_BY_EFFORT: Record<'low' | 'medium' | 'high', number> = {
+  low: 2048,
+  medium: 10240,
+  high: 32768,
+};
+
+function anthropicUsesAdaptiveThinking(
+  modelCapabilities?: ModelCapabilities | null,
+): boolean {
+  return modelCapabilities?.reasoningThinkingEnabledValue === 'adaptive';
+}
+
+function anthropicThinkingPatch(
+  thinking: Record<string, unknown>,
+  effort?: 'low' | 'medium' | 'high',
+): ThinkingCompletionPatch {
+  const anthropic: Record<string, unknown> = { thinking };
+  if (effort && thinking.type === 'adaptive') {
+    anthropic.effort = effort;
   }
-  return false;
+  return { body: { providerOptions: { anthropic } } };
 }
 
 /**
@@ -83,6 +106,34 @@ export function reasoningEffortToCompletionBody(
   }
 
   const enabledValue = modelCapabilities?.reasoningThinkingEnabledValue ?? 'enabled';
+
+  if (apiKind === 'anthropic-v1') {
+    if (effort === 'off') {
+      return anthropicThinkingPatch({ type: 'disabled' });
+    }
+
+    if (anthropicUsesAdaptiveThinking(modelCapabilities)) {
+      if (effort === 'on') {
+        return anthropicThinkingPatch({ type: 'adaptive' });
+      }
+      if (isLevelEffort(effort)) {
+        return anthropicThinkingPatch({ type: 'adaptive' }, effort);
+      }
+      return anthropicThinkingPatch({ type: 'adaptive' });
+    }
+
+    if (isLevelEffort(effort)) {
+      return anthropicThinkingPatch({
+        type: 'enabled',
+        budgetTokens: ANTHROPIC_BUDGET_BY_EFFORT[effort],
+      });
+    }
+
+    return anthropicThinkingPatch({
+      type: 'enabled',
+      budgetTokens: ANTHROPIC_BUDGET_BY_EFFORT.medium,
+    });
+  }
 
   if (apiKind === 'openai-v1') {
     if (effort === 'off') {
@@ -158,6 +209,21 @@ export function thinkingToCompletionBody(
   // explicit thinking disable flag or it streams only to `reasoning_content`.
   // Kimi/Moonshot reject `enable_thinking` — use nested `thinking.type` instead.
   // MiniMax rejects `thinking.type: "enabled"` — only allows "adaptive" or "disabled".
+  if (apiKind === 'anthropic-v1') {
+    if (resolved === 'off') {
+      return anthropicThinkingPatch({ type: 'disabled' });
+    }
+
+    if (anthropicUsesAdaptiveThinking(modelCapabilities)) {
+      return anthropicThinkingPatch({ type: 'adaptive' });
+    }
+
+    return anthropicThinkingPatch({
+      type: 'enabled',
+      budgetTokens: ANTHROPIC_BUDGET_BY_EFFORT.medium,
+    });
+  }
+
   if (apiKind === 'openai-v1') {
     if (resolved === 'off') {
       return { body: { thinking: { type: 'disabled' } } };

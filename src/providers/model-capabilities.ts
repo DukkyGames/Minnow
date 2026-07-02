@@ -357,7 +357,7 @@ export async function runCapabilityProbeForProvider(
   options: {
     modelIds?: string[];
     selectedModelId?: string;
-    apiKind?: 'lm-studio-v0' | 'openai-v1';
+    apiKind?: ApiKind;
   } = {},
 ): Promise<void> {
   if (!isServerStorageMode()) return;
