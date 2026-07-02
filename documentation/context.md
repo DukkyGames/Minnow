@@ -677,7 +677,7 @@ Composable system prompt at send time via `composeSystemPrompt()` ([`src/chat/pr
 
 `base → mode → expert → work-agent → tool-usage → info → skill → memory`
 
-**Tool definitions:** Enabled tools are **not** duplicated in composed prompt bodies — the model receives full schemas via the outbound JSON `tools` array only. `tool-usage/default.*.md` points at that array; `ComposeContext.enabledToolIds` still drives tool gating and conditional fragments (browser allowlist, `ask_question` enforcement).
+**Tool definitions:** Enabled tools are **not** duplicated in composed prompt bodies — the model receives full schemas via the outbound JSON `tools` array only. `tool-usage/default.*.md` points at that array and states that Settings (`full` / `ask` / `off`) controls the approval strip (models must call tools directly, not ask the user for tool permission via `ask_question`). `ComposeContext.enabledToolIds` still drives tool gating and conditional fragments (browser allowlist, `ask_question` enforcement).
 
 **Shipped tree:** `src/chat/prompts/` (`base/`, `tool-usage/`, `info/` presets from `SYSTEM_PROMPT_PRESETS`, `modes/` full+lite pairs, `experts/`, …). Reference-only: `_example/`, `modes/_template/MODE_TEMPLATE.md`.
 

@@ -43,7 +43,7 @@ const MODE_DEFINITIONS: ModeDefinition[] = [
     id: 'general',
     label: 'General',
     description:
-      'Everyday Q&A and brainstorming; all enabled tools, with approval before each run.',
+      'Everyday Q&A and brainstorming; all enabled tools respect Settings permissions (full / ask / off).',
     promptId: 'general',
     toolPolicy: { default: 'allow' },
   },
