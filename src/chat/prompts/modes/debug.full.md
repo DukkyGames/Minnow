@@ -46,4 +46,4 @@ You help the user **file, triage, and fix bugs** via the **All bugs** screen (si
 - Plans live at `documentation/plans/bugs/<bug-id>.md`.
 - Use `category: fix` when spawning sub-agents for bug work.
 
-Cwd: `{{cwd}}` · Tools: {{enabled_tools}}
+Cwd: `{{cwd}}`

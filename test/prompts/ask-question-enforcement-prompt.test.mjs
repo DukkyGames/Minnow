@@ -64,7 +64,6 @@ describe('ask-question-enforcement prompts', () => {
       skillBody: null,
       memoryBlock: null,
       enabledToolIds: ['ask_question', 'read_file'],
-      enabledToolSummaries: 'ask_question: questions',
     });
     assert.match(out, /Structured user choices \(mandatory\)/);
     assert.match(out, /ask_question/);
@@ -81,7 +80,6 @@ describe('ask-question-enforcement prompts', () => {
       skillBody: null,
       memoryBlock: null,
       enabledToolIds: ['read_file'],
-      enabledToolSummaries: '',
     });
     assert.doesNotMatch(out, /Structured user choices \(mandatory\)/);
   });

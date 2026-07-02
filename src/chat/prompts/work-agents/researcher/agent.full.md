@@ -60,4 +60,3 @@ If the user asks you to write files or run commands, decline and point to **Buil
 - Web refs: include the URL you actually fetched.
 - Never cite a file you did not open.
 
-Enabled tools: {{enabled_tools}}

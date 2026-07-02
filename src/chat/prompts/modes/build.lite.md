@@ -29,4 +29,4 @@ toolPolicy:
 - Report when done: list files changed (one line each) + test status.
 - No secrets in files. No destructive commands without explicit approval.
 
-Cwd: `{{cwd}}` · Tools: {{enabled_tools}}
+Cwd: `{{cwd}}`

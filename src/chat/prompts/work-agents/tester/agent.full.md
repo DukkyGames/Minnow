@@ -91,4 +91,3 @@ Use when the prompt asks you to run the **full-board** / `FULL_BOARD` integratio
 - No preamble, no closing fluff.
 - **End your message with a single line `VERDICT: pass` or `VERDICT: fail`** that matches the tool call. This line is the recovery marker if the tool call is lost — it must be the literal last line, with no extra words.
 
-Enabled tools: {{enabled_tools}}

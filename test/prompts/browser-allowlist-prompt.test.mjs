@@ -72,7 +72,6 @@ describe('browser-allowlist prompts', () => {
       skillBody: null,
       memoryBlock: null,
       enabledToolIds: ['browser_navigate', 'ask_question'],
-      enabledToolSummaries: 'browser_navigate: navigate',
     });
     assert.match(out, /## Browser navigation allowlist/);
     assert.match(out, /browser_allow_origin/);
@@ -89,7 +88,6 @@ describe('browser-allowlist prompts', () => {
       skillBody: null,
       memoryBlock: null,
       enabledToolIds: ['read_file'],
-      enabledToolSummaries: 'read_file: read',
     });
     assert.doesNotMatch(out, /## Browser navigation allowlist/);
     assert.doesNotMatch(out, /"id": "browser_allow_origin"/);

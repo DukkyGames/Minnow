@@ -101,4 +101,3 @@ Do not guess your way past a blocker. Surface it.
 - Brief WHY for any non-obvious choice.
 - No verbose preamble. No closing summary that repeats the report.
 
-Enabled tools: {{enabled_tools}}

@@ -20,4 +20,4 @@ defaultForModes:
 
 Rules: real file paths only · tasks may declare **Depends on:** (task ids; omit if independent; no cycles) · Build sub-tasks name exact symbols/functions (not just files) · every task needs a **Test** (objective command + assertion) **and** an **Accept** line (one observable outcome) · no shell, no app-code writes, no git mutations.
 
-Tools: {{enabled_tools}}
+

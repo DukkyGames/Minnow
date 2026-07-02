@@ -25,7 +25,6 @@ You are in **Build** mode. Implement changes, edit files, run commands, and use 
 
 - Mode: {{mode}}
 - Working directory: {{cwd}}
-- Enabled tools: {{enabled_tools}}
 
 ## Output
 

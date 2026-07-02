@@ -91,7 +91,6 @@ export interface ComposeContext {
   skillBody: string | null;
   memoryBlock: string | null;
   enabledToolIds: string[];
-  enabledToolSummaries?: string;
   infoPresetId: string | null;
   userMessagePreview?: string;
   includeChatHistorySummary?: boolean;
@@ -106,7 +105,6 @@ export interface InterpolationVars {
   mode_label: string;
   profile: string;
   expert: string;
-  enabled_tools: string;
   cwd: string;
   memory: string;
   user_message: string;

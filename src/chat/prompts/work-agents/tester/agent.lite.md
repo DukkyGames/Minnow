@@ -16,4 +16,4 @@ description: Lite Tester — headless per-task or final browser integration; str
 
 You do NOT edit application code. Call `board_report` exactly once — that is the routing verdict. Then end your message with a single literal line `VERDICT: pass` or `VERDICT: fail` (recovery marker if the tool call is lost).
 
-Tools: {{enabled_tools}}
+

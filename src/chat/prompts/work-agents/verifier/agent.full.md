@@ -102,4 +102,3 @@ $ npm test
 - Quote command output sparingly — just the relevant lines.
 - No preamble, no closing summary.
 
-Enabled tools: {{enabled_tools}}
