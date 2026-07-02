@@ -9,77 +9,48 @@ import {
   MODE_IDS,
   type ModeDefinition,
   type ModeId,
-  type ModeToolPolicy,
 } from './types';
+import { MODE_ALLOWED_GROUPS, allowGroupsToolPolicy } from './tool-groups';
 
 export { DEFAULT_MODE_ID, MODE_IDS, isModeId, normalizeModeId } from './types';
-
-/** Tools denied in Plan mode (OpenCode Plan–style safety). */
-const PLAN_DENIED_TOOLS: string[] = [
-  'execute_command',
-  'run_javascript',
-  'run_python',
-  'append_file',
-  'insert_at_line',
-  'replace_text_in_file',
-  'delete_path',
-  'move_file',
-  'git_commit',
-  'git_add',
-  'git_checkout',
-  'manage_brain',
-];
-
-function denyListToolPolicy(denied: string[]): ModeToolPolicy {
-  const tools: Record<string, 'deny'> = {};
-  for (const id of denied) {
-    tools[id] = 'deny';
-  }
-  return { default: 'allow', tools };
-}
 
 const MODE_DEFINITIONS: ModeDefinition[] = [
   {
     id: 'general',
     label: 'General',
     description:
-      'Everyday Q&A and brainstorming; all enabled tools, with approval before each run.',
+      'Everyday Q&A and brainstorming; broad tool access with approval before each run.',
     promptId: 'general',
-    toolPolicy: { default: 'allow' },
+    toolPolicy: allowGroupsToolPolicy('general', MODE_ALLOWED_GROUPS.general),
   },
   {
     id: 'build',
     label: 'Build',
     description: 'Default development mode with broad tool access.',
     promptId: 'build',
-    toolPolicy: { default: 'allow' },
+    toolPolicy: allowGroupsToolPolicy('build', MODE_ALLOWED_GROUPS.build),
   },
   {
     id: 'plan',
     label: 'Plan',
-    description: 'Analyze and plan without destructive edits or shell execution.',
+    description:
+      'Analyze and plan; limited file writes (plan doc only) with shell and read tools.',
     promptId: 'plan',
-    toolPolicy: denyListToolPolicy(PLAN_DENIED_TOOLS),
+    toolPolicy: allowGroupsToolPolicy('plan', MODE_ALLOWED_GROUPS.plan),
   },
   {
     id: 'orchestrate',
     label: 'Orchestrate',
     description: 'Coordinate multi-step work; delegate and structure tasks.',
     promptId: 'orchestrate',
-    toolPolicy: {
-      default: 'allow',
-      tools: {
-        spawn_sub_agent: 'deny',
-        cancel_sub_agent: 'deny',
-      },
-    },
+    toolPolicy: allowGroupsToolPolicy('orchestrate', MODE_ALLOWED_GROUPS.orchestrate),
   },
   {
     id: 'reef',
     label: 'Reef',
     description: 'Build interactive widgets inline in chat.',
     promptId: 'reef',
-    toolPolicy: { default: 'allow' },
+    toolPolicy: allowGroupsToolPolicy('reef', MODE_ALLOWED_GROUPS.reef),
   },
   {
     id: 'debug',
@@ -87,7 +58,7 @@ const MODE_DEFINITIONS: ModeDefinition[] = [
     description:
       'Investigate bugs and root causes; file and triage via All bugs and bug_* tools.',
     promptId: 'debug',
-    toolPolicy: { default: 'allow' },
+    toolPolicy: allowGroupsToolPolicy('debug', MODE_ALLOWED_GROUPS.debug),
   },
 ];
 
@@ -124,4 +95,3 @@ export function loadModePromptBody(id: ModeId, profile: 'full' | 'lite'): string
   const loaded = loadPromptById('mode', id, loadProfile);
   return loaded?.body?.trim() ?? '';
 }
-

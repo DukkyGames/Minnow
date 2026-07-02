@@ -44,7 +44,7 @@ The **authoritative reference** is [`documentation/context.md`](documentation/co
 - **Secrets are encrypted** at rest with `~/.minnow/.key`. Deleting/rotating the key makes existing encrypted secrets unrecoverable.
 - **Path safety:** file/git tools resolve under the workspace root unless `TOOLS_ALLOW_ALL_PATHS=1`.
 - **LAN access** is opt-in (`Settings → General → Network access` or `MINNOW_NETWORK=lan`); default is loopback-only — restart after toggling.
-- **Plan mode** denies destructive tools (`execute_command`, write/delete/move file ops, git mutations) — see `PLAN_DENIED_TOOLS` in the mode registry.
+- **Plan mode** denies mutating file edits and git writes; allows `save_file`/`make_directory` under `documentation/plans/` only (see `tool-groups.ts` + `plan-write-guard.ts`). Shell/code-exec is allowed per the mode matrix (MIN-332).
 
 ## Conventions
 
