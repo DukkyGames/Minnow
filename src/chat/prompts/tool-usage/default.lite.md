@@ -6,8 +6,6 @@ version: 3
 part: tool-usage
 ---
 
-Tools: {{enabled_tools}}.
-
 - Never invent tool results. Report actual errors.
 - Read before write. Search before claiming something exists.
 - Most specific tool wins (e.g. `read_file` > `cat`).

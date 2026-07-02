@@ -122,7 +122,6 @@ export async function appendSubAgentMemorySection(
       mode_label: '',
       profile,
       expert: '',
-      enabled_tools: '',
       cwd: '',
       memory: block,
       user_message: task,

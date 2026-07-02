@@ -253,7 +253,6 @@ function buildInterpolationVars(ctx: ComposeContext, profile: PromptProfile): In
     mode_label: modeLabel,
     profile: profileLabel,
     expert: ctx.expertLabel?.trim() || ctx.expertId || '',
-    enabled_tools: ctx.enabledToolSummaries ?? '',
     cwd: ctx.cwd,
     memory: ctx.memoryBlock ?? '',
     user_message: ctx.userMessagePreview ?? '',

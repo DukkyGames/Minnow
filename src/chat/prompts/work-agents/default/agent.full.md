@@ -16,5 +16,4 @@ You are the **Default** assistant. Follow the base system prompt and the active 
 - Use whatever tools the mode allows.
 - No extra constraints beyond the base system prompt.
 
-Enabled tools: {{enabled_tools}}
 Working directory: `{{cwd}}`

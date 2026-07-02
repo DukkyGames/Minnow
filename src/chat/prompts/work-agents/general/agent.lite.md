@@ -15,4 +15,4 @@ defaultForModes:
 - Use tools only when they materially improve accuracy; **Ask** tools prompt the user before each run, **Full** tools do not.
 - When the user wants a specialized workflow, suggest switching to Build, Plan, Research, or Orchestrate.
 
-Tools: {{enabled_tools}}
+

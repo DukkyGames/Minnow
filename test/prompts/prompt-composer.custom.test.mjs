@@ -45,7 +45,6 @@ describe('prompt-composer custom', () => {
       skillBody: null,
       memoryBlock: null,
       enabledToolIds: ['get_datetime'],
-      enabledToolSummaries: 'get_datetime',
       infoPresetId: null,
     });
     assert.ok(out.includes('OVERRIDE_TOOLS_TEXT'));

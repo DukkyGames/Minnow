@@ -16,7 +16,6 @@ import {
 } from '../../config/user-rules';
 import { getExpertSelection, sessionState } from '../../state/sessions';
 import { resolveChatToolWorkspaceRoot } from '../../state/worktree-isolation';
-import { BUILT_IN_TOOLS } from '../../tools/definitions';
 import { getEnabledToolDefinitionsForMode } from '../../tools/client';
 import { loadToolConfig } from '../../tools/config';
 import type { Chat } from '../../types';
@@ -44,27 +43,6 @@ function getEnabledToolIdsForChat(chat: Chat): string[] {
   const modeId = normalizeModeId(chat.modeId);
   const defs = getEnabledToolDefinitionsForMode(modeId);
   return defs.map((d) => d.function.name);
-}
-
-/** Full-profile tool list with one-line descriptions for {{enabled_tools}}. */
-export function formatEnabledToolsFull(ids: string[]): string {
-  if (ids.length === 0) return '';
-  return ids
-    .map((id) => {
-      const tool = BUILT_IN_TOOLS.find((t) => t.id === id);
-      if (!tool) return id;
-      return `${tool.id}: ${tool.description}`;
-    })
-    .join('\n');
-}
-
-/** Lite-profile compact tool list (ids only, max 12). */
-export function formatEnabledToolsLite(ids: string[]): string {
-  if (ids.length === 0) return '';
-  const max = 12;
-  if (ids.length <= max) return ids.join(', ');
-  const shown = ids.slice(0, max).join(', ');
-  return `${shown} …(+${ids.length - max})`;
 }
 
 export interface BuildComposeContextOptions {
@@ -138,10 +116,6 @@ export async function buildComposeContext(
     skillBody: null,
     memoryBlock,
     enabledToolIds,
-    enabledToolSummaries:
-      profile === 'lite'
-        ? formatEnabledToolsLite(enabledToolIds)
-        : formatEnabledToolsFull(enabledToolIds),
     infoPresetId,
     planGranularity: meta.planGranularity ?? 'medium',
     userMessagePreview:

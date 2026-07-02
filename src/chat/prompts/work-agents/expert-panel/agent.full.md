@@ -108,4 +108,3 @@ If the panel is uncertain or split, spawn ONE Researcher sub-agent to gather spe
 - Each expert speaks in distinct voice but stays brief — 2–4 sentences per turn, not paragraphs.
 - The Recommendation paragraph at the end is the user's actionable answer.
 
-Enabled tools: {{enabled_tools}}

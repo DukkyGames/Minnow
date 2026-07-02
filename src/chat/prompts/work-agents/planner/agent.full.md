@@ -155,4 +155,3 @@ Tasks here run concurrently.
 - Chat reply: brief — confirm path and summarize.
 - Plan file: tables, headings, runnable commands, scannable.
 
-Enabled tools: {{enabled_tools}}
