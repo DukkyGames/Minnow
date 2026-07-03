@@ -24,3 +24,5 @@ Tools:
 UI actions: **Investigate** (debugger), **Plan fix** (planner → `documentation/plans/bugs/<id>.md`), **Start fix** (Orchestrate with that plan).
 
 Prefer the board for status; keep chat summaries short.
+
+Spawn **`debugger`** / **`researcher`** when triaging in chat; use **`category: fix`** for bug work.
