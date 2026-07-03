@@ -203,7 +203,7 @@ Wave 1's prompt trims and the shorter builder mode prompt, a builder turn goes ~
 
 ---
 
-## Wave 3 — gate `browser-allowlist` to first use (~700 tok)
+## Wave 3 — gate `browser-allowlist` to first use (~700 tok) ✅
 
 `browser-allowlist.md` (711 tok) currently renders on **every** Build turn (browser tools are
 enabled by default), even when nothing browses. `mode-handoff` fires similarly.
@@ -212,6 +212,8 @@ enabled by default), even when nothing browses. `mode-handoff` fires similarly.
 tool has actually been invoked in this chat (track a `chat` flag / scan history for a
 `browser_*` tool call), OR always use the ~120-tok lite fragment. Recommended: first-use gate,
 fall back to lite before first use.
+
+**Implemented (MIN-334):** `browser-allowlist-gate.ts` scans `chat.history`; `ComposeContext.browserActivated` drives lite vs full in `resolveBrowserAllowlistBody`.
 
 **Saves:** ~700 tok on the majority of turns. **Risk:** low — the rules are only needed the
 moment a browser tool runs; the tool descriptions themselves still explain the allowlist.
