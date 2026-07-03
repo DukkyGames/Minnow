@@ -264,6 +264,66 @@ export function allowGroupsToolPolicy(
   return { default: 'deny', tools };
 }
 
+/**
+ * Orchestrator board member roles (builder / tester / fixer). Tool allowlists are
+ * enforced in {@link applyBoardMemberToolFilter} — see MIN-333 matrix in
+ * documentation/plans/context-reduction.md.
+ */
+export type BoardMemberRole = 'build' | 'test' | 'fix';
+
+/** Board subset for all roles — mutating board tools stay stripped by the filter. */
+export const BOARD_ROLE_BOARD_SUBSET = ['board_get_state', 'board_report'] as const;
+
+/**
+ * Per-role group matrix for orchestrator board chats (MIN-333). Build and fix differ
+ * only by browser (build ●, fix ○). Tester omits files-write.
+ */
+export const BOARD_ROLE_ALLOWED_GROUPS: Record<BoardMemberRole, readonly ToolGroupId[]> = {
+  build: [
+    'util-basic',
+    'web',
+    'files-read',
+    'files-write',
+    'git-read',
+    'git-write',
+    'code-exec',
+    'code-intel',
+    'lsp',
+    'browser',
+  ],
+  test: [
+    'util-basic',
+    'web',
+    'files-read',
+    'git-read',
+    'git-write',
+    'code-exec',
+    'code-intel',
+    'lsp',
+    'browser',
+  ],
+  fix: [
+    'util-basic',
+    'web',
+    'files-read',
+    'files-write',
+    'git-read',
+    'git-write',
+    'code-exec',
+    'code-intel',
+    'lsp',
+  ],
+};
+
+/** Expand a board role matrix row to the allowed tool id set (incl. board subset). */
+export function expandBoardRoleAllowedTools(role: BoardMemberRole): Set<string> {
+  const allowed = new Set(expandToolGroups(BOARD_ROLE_ALLOWED_GROUPS[role]));
+  for (const id of BOARD_ROLE_BOARD_SUBSET) {
+    allowed.add(id);
+  }
+  return allowed;
+}
+
 /** Inverse map: tool id → groups that contain it (for matrix tests). */
 export function buildToolIdToGroupsMap(): Map<string, ToolGroupId[]> {
   const map = new Map<string, ToolGroupId[]>();
