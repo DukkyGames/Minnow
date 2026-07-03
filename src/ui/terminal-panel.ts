@@ -35,6 +35,7 @@ import {
   initTerminalXterm,
   isTerminalXtermReady,
 } from './terminal-xterm';
+import { appendConsoleOutputWithLinks } from './terminal-console-links';
 
 const MIN_HEIGHT_PX = 120;
 const MAX_HEIGHT_RATIO = 0.5;
@@ -174,14 +175,7 @@ function appendOutputText(text: string, stream: 'stdout' | 'stderr'): void {
   }
   displayBytes += addBytes;
 
-  if (stream === 'stderr') {
-    const span = document.createElement('span');
-    span.className = 'stderr-line';
-    span.textContent = plain;
-    outputEl.appendChild(span);
-  } else {
-    outputEl.appendChild(document.createTextNode(plain));
-  }
+  appendConsoleOutputWithLinks(outputEl, plain, { stderr: stream === 'stderr' });
   scrollOutputIfPinned();
 }
 
@@ -327,14 +321,7 @@ function appendDevServerOutputText(text: string, stream: 'stdout' | 'stderr'): v
   }
   devServerDisplayBytes += addBytes;
 
-  if (stream === 'stderr') {
-    const span = document.createElement('span');
-    span.className = 'stderr-line';
-    span.textContent = plain;
-    devServerOutputEl.appendChild(span);
-  } else {
-    devServerOutputEl.appendChild(document.createTextNode(plain));
-  }
+  appendConsoleOutputWithLinks(devServerOutputEl, plain, { stderr: stream === 'stderr' });
   scrollDevServerIfPinned();
 }
 

@@ -24,6 +24,7 @@ import {
   buildHistoryReplaceInput,
   resolveHistoryNavigation,
 } from './terminal-history-nav';
+import { handleTerminalWebLink } from './terminal-console-links';
 
 const HISTORY_STORAGE_PREFIX = 'minnow.terminal.history.';
 const MAX_TAB_HISTORY = 500;
@@ -226,7 +227,7 @@ function ensureTerminal(): Terminal | null {
   });
   fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
-  term.loadAddon(new WebLinksAddon());
+  term.loadAddon(new WebLinksAddon(handleTerminalWebLink));
   applyXtermTheme();
   term.open(hostEl);
 
