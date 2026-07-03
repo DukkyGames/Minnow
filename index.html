@@ -436,45 +436,142 @@
     >~…</span>
   </header>
   <div class="settings-page-body">
-    <nav class="settings-nav" aria-label="Settings categories">
-      <div class="settings-nav-group">
-        <button type="button" data-settings-category="general" aria-current="page">
-          General
-          <span class="settings-nav__count" hidden aria-hidden="true"></span>
-        </button>
-        <button type="button" data-settings-category="appearance">
-          Appearance
-          <span class="settings-nav__count" hidden aria-hidden="true"></span>
-        </button>
-        <button type="button" data-settings-category="models">
-          Models
-          <span class="settings-nav__count" hidden aria-hidden="true"></span>
-        </button>
-        <button type="button" data-settings-category="agents">
-          Agents
-          <span class="settings-nav__count" hidden aria-hidden="true"></span>
-        </button>
-        <button type="button" data-settings-category="knowledge">
-          Knowledge
-          <span class="settings-nav__count" hidden aria-hidden="true"></span>
-        </button>
-        <button type="button" data-settings-category="integrations">
-          Integrations
-          <span class="settings-nav__count" hidden aria-hidden="true"></span>
-        </button>
-        <button type="button" data-settings-category="advanced">
-          Advanced
-          <span class="settings-nav__count" hidden aria-hidden="true"></span>
-        </button>
-      </div>
+    <nav class="settings-nav" aria-label="Settings">
+    <div class="settings-nav-group" data-settings-nav-group="general">
+      <p class="settings-nav-group__label" data-settings-category="general">
+        General
+        <span class="settings-nav__count settings-nav-group__count" hidden aria-hidden="true"></span>
+      </p>
+      <button type="button" class="settings-nav__item" data-area-jump="general" data-settings-nav-area="general" aria-current="page">
+        <span class="settings-nav__item-label">General</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+      <button type="button" class="settings-nav__item" data-area-jump="audio" data-settings-nav-area="audio">
+        <span class="settings-nav__item-label">Audio</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+    </div>
+    <div class="settings-nav-group" data-settings-nav-group="appearance">
+      <p class="settings-nav-group__label" data-settings-category="appearance">
+        Appearance
+        <span class="settings-nav__count settings-nav-group__count" hidden aria-hidden="true"></span>
+      </p>
+      <button type="button" class="settings-nav__item" data-area-jump="appearance" data-settings-nav-area="appearance">
+        <span class="settings-nav__item-label">Appearance</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+    </div>
+    <div class="settings-nav-group" data-settings-nav-group="models">
+      <p class="settings-nav-group__label" data-settings-category="models">
+        Models
+        <span class="settings-nav__count settings-nav-group__count" hidden aria-hidden="true"></span>
+      </p>
+      <button type="button" class="settings-nav__item" data-area-jump="providers" data-settings-nav-area="providers">
+        <span class="settings-nav__item-label">Providers</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+      <button type="button" class="settings-nav__item" data-area-jump="model-routing" data-settings-nav-area="model-routing">
+        <span class="settings-nav__item-label">Routing</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+      <button type="button" class="settings-nav__item" data-area-jump="sampler" data-settings-nav-area="sampler">
+        <span class="settings-nav__item-label">Sampler</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+      <button type="button" class="settings-nav__item" data-area-jump="thinking" data-settings-nav-area="thinking">
+        <span class="settings-nav__item-label">Thinking</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+      <button type="button" class="settings-nav__item" data-area-jump="usage" data-settings-nav-area="usage">
+        <span class="settings-nav__item-label">Usage & cost</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+    </div>
+    <div class="settings-nav-group" data-settings-nav-group="agents">
+      <p class="settings-nav-group__label" data-settings-category="agents">
+        Agents
+        <span class="settings-nav__count settings-nav-group__count" hidden aria-hidden="true"></span>
+      </p>
+      <button type="button" class="settings-nav__item" data-area-jump="modes" data-settings-nav-area="modes">
+        <span class="settings-nav__item-label">Modes</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+      <button type="button" class="settings-nav__item" data-area-jump="experts" data-settings-nav-area="experts">
+        <span class="settings-nav__item-label">Experts</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+      <button type="button" class="settings-nav__item" data-area-jump="work-agents" data-settings-nav-area="work-agents">
+        <span class="settings-nav__item-label">Work agents</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+      <button type="button" class="settings-nav__item" data-area-jump="agent-packs" data-settings-nav-area="agent-packs">
+        <span class="settings-nav__item-label">Agent packs</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+      <button type="button" class="settings-nav__item" data-area-jump="sub-agents" data-settings-nav-area="sub-agents">
+        <span class="settings-nav__item-label">Sub-agents</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+      <button type="button" class="settings-nav__item" data-area-jump="autopilot" data-settings-nav-area="autopilot">
+        <span class="settings-nav__item-label">Autopilot</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+    </div>
+    <div class="settings-nav-group" data-settings-nav-group="knowledge">
+      <p class="settings-nav-group__label" data-settings-category="knowledge">
+        Knowledge
+        <span class="settings-nav__count settings-nav-group__count" hidden aria-hidden="true"></span>
+      </p>
+      <button type="button" class="settings-nav__item" data-area-jump="prompting" data-settings-nav-area="prompting">
+        <span class="settings-nav__item-label">Prompts</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+      <button type="button" class="settings-nav__item" data-area-jump="rules" data-settings-nav-area="rules">
+        <span class="settings-nav__item-label">Rules</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+    </div>
+    <div class="settings-nav-group" data-settings-nav-group="integrations">
+      <p class="settings-nav-group__label" data-settings-category="integrations">
+        Integrations
+        <span class="settings-nav__count settings-nav-group__count" hidden aria-hidden="true"></span>
+      </p>
+      <button type="button" class="settings-nav__item" data-hub-jump="web-research" data-settings-nav-hub="web-research" aria-current="page">
+        <span class="settings-nav__item-label">Web & research</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+      <button type="button" class="settings-nav__item" data-hub-jump="tools-skills" data-settings-nav-hub="tools-skills">
+        <span class="settings-nav__item-label">Tools & skills</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+      <button type="button" class="settings-nav__item" data-hub-jump="dev-stack" data-settings-nav-hub="dev-stack">
+        <span class="settings-nav__item-label">Dev stack</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+      <button type="button" class="settings-nav__item" data-hub-jump="external" data-settings-nav-hub="external">
+        <span class="settings-nav__item-label">External</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+    </div>
+    <div class="settings-nav-group" data-settings-nav-group="advanced">
+      <p class="settings-nav-group__label" data-settings-category="advanced">
+        Advanced
+        <span class="settings-nav__count settings-nav-group__count" hidden aria-hidden="true"></span>
+      </p>
+      <button type="button" class="settings-nav__item" data-area-jump="features" data-settings-nav-area="features">
+        <span class="settings-nav__item-label">Orchestration</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+      <button type="button" class="settings-nav__item" data-area-jump="evals" data-settings-nav-area="evals">
+        <span class="settings-nav__item-label">Evals</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+    </div>
     </nav>
     <div class="settings-content">
       <div class="settings-category is-active" data-category="general">
-      <nav class="settings-category-subnav" aria-label="General sections">
-        <a href="#settingsSection-general" class="settings-category-subnav__link is-active" data-area-jump="general" aria-current="page">General</a>
-        <a href="#settingsSection-audio" class="settings-category-subnav__link" data-area-jump="audio">Audio</a>
-      </nav>
-      <section id="settingsSection-general" class="settings-section settings-area settings-area--title-suppressed" data-area="general">
+
+      <section id="settingsSection-general" class="settings-section settings-area settings-area--title-suppressed is-active" data-area="general">
         <h2>General</h2>
         <p class="settings-lead">Notifications, terminals, LAN access, and where settings are saved. For theme and wallpaper, open <strong>Appearance</strong>.</p>
         <div id="settingsGeneralBody" class="settings-section-body"></div>
@@ -523,13 +620,7 @@
       </section>
       </div>
       <div class="settings-category" data-category="models">
-      <nav class="settings-category-subnav" aria-label="Models sections">
-        <a href="#settingsSection-providers" class="settings-category-subnav__link" data-area-jump="providers">Providers</a>
-        <a href="#settingsSection-model-routing" class="settings-category-subnav__link" data-area-jump="model-routing">Routing</a>
-        <a href="#settingsSection-sampler" class="settings-category-subnav__link" data-area-jump="sampler">Sampler</a>
-        <a href="#settingsSection-thinking" class="settings-category-subnav__link" data-area-jump="thinking">Thinking</a>
-        <a href="#settingsSection-usage" class="settings-category-subnav__link" data-area-jump="usage">Usage</a>
-      </nav>
+
       <section id="settingsSection-providers" class="settings-section settings-area settings-area--title-suppressed" data-area="providers">
         <h2>Providers</h2>
         <p class="settings-lead">OpenAI-compatible backends in <code>~/.minnow/providers/</code>. Enabled providers feed the top-bar model list.</p>
@@ -621,10 +712,7 @@
       </section>
       </div>
       <div class="settings-category" data-category="knowledge">
-      <nav class="settings-category-subnav" aria-label="Knowledge sections">
-        <a href="#settingsSection-prompting" class="settings-category-subnav__link" data-area-jump="prompting">Prompts</a>
-        <a href="#settingsSection-rules" class="settings-category-subnav__link" data-area-jump="rules">Rules</a>
-      </nav>
+
       <section id="settingsSection-prompting" class="settings-section settings-area settings-area--title-suppressed" data-area="prompting">
         <h2>Prompts</h2>
         <p class="settings-lead">Prompt profiles, setup bundles, and every role prompt in one searchable list.</p>
@@ -671,14 +759,7 @@
       </section>
       </div>
       <div class="settings-category" data-category="agents">
-      <nav class="settings-category-subnav" aria-label="Agents sections">
-        <a href="#settingsSection-modes" class="settings-category-subnav__link" data-area-jump="modes">Modes</a>
-        <a href="#settingsSection-experts" class="settings-category-subnav__link" data-area-jump="experts">Experts</a>
-        <a href="#settingsSection-work-agents" class="settings-category-subnav__link" data-area-jump="work-agents">Work agents</a>
-        <a href="#settingsSection-agent-packs" class="settings-category-subnav__link" data-area-jump="agent-packs">Agent packs</a>
-        <a href="#settingsSection-sub-agents" class="settings-category-subnav__link" data-area-jump="sub-agents">Sub-agents</a>
-        <a href="#settingsSection-autopilot" class="settings-category-subnav__link" data-area-jump="autopilot">Autopilot</a>
-      </nav>
+
       <section id="settingsSection-modes" class="settings-section settings-area settings-area--title-suppressed" data-area="modes">
         <h2>Modes</h2>
         <p class="settings-lead">General, Build, Plan, Orchestrate, Reef, and Debug: tool policy and mode options. Edit prompts in <strong>Prompts</strong>.</p>
@@ -711,12 +792,7 @@
       </section>
       </div>
       <div class="settings-category" data-category="integrations">
-      <nav class="settings-category-subnav" aria-label="Integrations hubs">
-        <a href="#settingsHub-web-research" class="settings-category-subnav__link is-active" data-hub-jump="web-research" aria-current="page">Web &amp; research</a>
-        <a href="#settingsHub-tools-skills" class="settings-category-subnav__link" data-hub-jump="tools-skills">Tools &amp; skills</a>
-        <a href="#settingsHub-dev-stack" class="settings-category-subnav__link" data-hub-jump="dev-stack">Dev stack</a>
-        <a href="#settingsHub-external" class="settings-category-subnav__link" data-hub-jump="external">External</a>
-      </nav>
+
       <div class="settings-hub is-active" id="settingsHub-web-research" data-hub="web-research">
         <p class="settings-hub__lead">Web search providers, Deep Research limits, and managed SearXNG.</p>
       <section id="settingsSection-search" class="settings-section settings-area settings-area--title-suppressed" data-area="search">
@@ -829,10 +905,7 @@
       </section>
       </div>
       <div class="settings-category" data-category="advanced">
-      <nav class="settings-category-subnav" aria-label="Advanced sections">
-        <a href="#settingsSection-features" class="settings-category-subnav__link" data-area-jump="features">Orchestration</a>
-        <a href="#settingsSection-evals" class="settings-category-subnav__link" data-area-jump="evals">Evals</a>
-      </nav>
+
       <section id="settingsSection-features" class="settings-section settings-area settings-area--title-suppressed" data-area="features">
         <h2>Orchestration</h2>
         <p class="settings-lead">How the Orchestrate supervisor recovers from stalls and repeated failures. Replaces older <code>selfHealing</code> settings.</p>
