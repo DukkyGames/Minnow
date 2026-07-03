@@ -10,8 +10,8 @@ import {
   touchChat,
 } from '../state/sessions';
 import { forceCloseAskQuestionModal } from '../ui/question-cards-modal';
+import { isChatTurnInProgress } from './chat-turn-guard';
 import { enqueueSteerMessage } from './steer-message';
-import { isChatStreaming } from './streaming-state';
 
 /** Return the chat queue array (empty when unset). */
 export function getPendingMessageQueue(chat: Chat): QueuedComposerMessage[] {
@@ -101,7 +101,7 @@ export function pushQueuedMessageNow(chat: Chat, id: string): boolean {
   scheduleSaveSessions();
   if (!item) return false;
 
-  if (isChatStreaming(chat.id)) {
+  if (isChatTurnInProgress(chat.id)) {
     return enqueueSteerMessage(chat, item.text);
   }
 

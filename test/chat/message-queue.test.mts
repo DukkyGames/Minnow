@@ -15,7 +15,8 @@ import {
   setSessionStateForTests,
   createEmptyChatObject,
 } from '../../src/state/sessions.ts';
-import { setStreaming } from '../../src/app-state.ts';
+import { setStreaming, setChatAbort } from '../../src/app-state.ts';
+import { beginChatTurnSetup, endChatTurnSetup } from '../../src/chat/chat-turn-guard.ts';
 
 const FIXED_CHAT_ID = '11111111-1111-1111-1111-111111111111';
 const FIXED_QUEUE_ID = '22222222-2222-2222-2222-222222222222';
@@ -44,6 +45,7 @@ describe('message-queue helpers', () => {
 
   afterEach(() => {
     setStreaming(false);
+    endChatTurnSetup(FIXED_CHAT_ID);
     flushScheduledSessionSaveForTests();
     setSessionStateForTests(null);
   });
@@ -93,6 +95,18 @@ describe('message-queue helpers', () => {
     const ok = pushQueuedMessageNow(chat, id);
     assert.equal(ok, true);
     assert.equal(getPendingMessageQueueCount(chat), 0);
+    assert.equal(chat.pendingSteerMessage, QUEUE_TEXT);
+  });
+
+  test('pushQueuedMessageNow promotes to steer during turn setup before streaming flag', () => {
+    const chat = seedChat();
+    enqueueComposerMessage(chat, QUEUE_TEXT);
+    const id = chat.pendingMessageQueue?.[0]?.id;
+    assert.ok(id);
+    assert.equal(beginChatTurnSetup(chat.id), true);
+    setChatAbort(chat.id, new AbortController());
+    const ok = pushQueuedMessageNow(chat, id);
+    assert.equal(ok, true);
     assert.equal(chat.pendingSteerMessage, QUEUE_TEXT);
   });
 });

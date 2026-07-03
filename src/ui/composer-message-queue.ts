@@ -8,6 +8,7 @@ import {
   pushQueuedMessageNow,
   removeQueuedMessage,
 } from '../chat/message-queue';
+import { isChatTurnInProgress } from '../chat/chat-turn-guard';
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import { getActiveChat } from '../state/sessions';
 import { getActiveComposerSurface } from './composer-surface';
@@ -147,7 +148,7 @@ function renderQueueItem(item: { id: string; text: string }): HTMLElement {
     iconButton('composer-message-queue__action', 'Push now', ICON_PUSH, () => {
       const chat = getActiveChat();
       if (!pushQueuedMessageNow(chat, item.id)) return;
-      setStatus('ok', isActiveChatStreaming() ? 'Steering at next step…' : 'Sending queued message…');
+      setStatus('ok', isChatTurnInProgress(chat.id) ? 'Steering at next step…' : 'Sending queued message…');
       refreshComposerStreamingAffordance();
       syncComposerMessageQueue();
     }),

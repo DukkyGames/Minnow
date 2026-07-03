@@ -21,6 +21,7 @@ import { flushPendingMode } from '../chat/pending-mode';
 import {
   clearPendingSteer,
   consumePendingSteer,
+  setSteerEnqueuedListener,
 } from '../chat/steer-message';
 import {
   enqueueComposerMessage,
@@ -708,6 +709,19 @@ async function streamCompletionTurn(
     }
   }
 
+  /** End the live generation early so push-now steer can run at the tool-loop boundary. */
+  let finishStreamEarly: (() => void) | null = null;
+
+  function maybeFinishForSteer(): void {
+    if (!chat.pendingSteerMessage?.trim()) return;
+    finishStreamEarly?.();
+  }
+
+  function handleChunkWithSteerCheck(chunk: ChatCompletionChunk): void {
+    handleChunk(chunk);
+    maybeFinishForSteer();
+  }
+
   try {
     await new Promise<void>((resolve, reject) => {
       let settled = false;
@@ -717,10 +731,24 @@ async function streamCompletionTurn(
         fn();
       };
 
-      const unsubscribe = subscribeToGeneration(generationId!, {
+      let unsubscribe = (): void => {};
+
+      finishStreamEarly = (): void => {
+        unsubscribe();
+        void cancelGeneration(generationId!);
+        finish(resolve);
+      };
+
+      setSteerEnqueuedListener((steerChatId) => {
+        if (steerChatId === chat.id) {
+          maybeFinishForSteer();
+        }
+      });
+
+      unsubscribe = subscribeToGeneration(generationId!, {
         signal,
         onStreamOpen: onStreamConnected,
-        onChunk: handleChunk,
+        onChunk: handleChunkWithSteerCheck,
         onEnd: (event) => {
           if (event?.status === 'error') {
             const message = event.errorMessage ?? '';
@@ -772,6 +800,9 @@ async function streamCompletionTurn(
       throw err;
     }
     throw err;
+  } finally {
+    finishStreamEarly = null;
+    setSteerEnqueuedListener(null);
   }
 
   flushContentRouters();
