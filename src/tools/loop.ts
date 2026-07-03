@@ -1684,7 +1684,69 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           turn,
           proseQuestionRetries,
         });
-        removeOrphanStreamingRow(wrap, streamStatus);
+
+        const thinkingNormForPersist =
+          thoughtController?.consumePersistedSegments() ?? [];
+        const { content: persistedContent } = resolveFinalAssistantContent(
+          fullText,
+          thinkingNormForPersist,
+        );
+        const proseRetryMeta = finalizeResponseMeta(
+          streamMeta,
+          turnResult.t0,
+          turnResult.tFirst ?? turnResult.tEnd,
+          turnResult.tEnd,
+        );
+        void recordMainChatTurnUsage(chat, {
+          providerId: sendProviderId,
+          modelId: sendModelId,
+          streamMeta,
+          t0: turnResult.t0,
+          tFirst: turnResult.tFirst,
+          tEnd: turnResult.tEnd,
+          workAgentId: activeWorkAgent?.id ?? null,
+        });
+
+        if (isStreamDomVisible(chat.id)) {
+          revealProse();
+          setAssistantBubbleContent(bubble, persistedContent, {
+            streaming: false,
+            modeId: chat.modeId,
+          });
+        }
+
+        const proseRetryAssistantMsg: AssistantMessage = {
+          role: 'assistant',
+          content: persistedContent,
+          stats: proseRetryMeta.stats,
+          usage: proseRetryMeta.usage,
+        };
+        if (thinkingNormForPersist.length > 0) {
+          proseRetryAssistantMsg.thinking = thinkingNormForPersist;
+        }
+        chat.history.push(proseRetryAssistantMsg);
+        trackRunHistoryPush(chat, turnRunId);
+        syncTurnContextUsage(chat.id, '', thoughtController);
+        recordAssistantReplyOnChat(chat);
+        recordChatMessage(chat);
+        scheduleSaveSessions();
+
+        if (isStreamDomVisible(chat.id)) {
+          appendStats(lastWrap, proseRetryMeta.stats, proseRetryMeta.usage);
+          if (thinkingNormForPersist.length > 0) {
+            renderThoughtsToggle(lastWrap, thinkingNormForPersist);
+          }
+          const histIdx = chat.history.length - 1;
+          const { attachMessageActions } = await import('../ui/message-actions');
+          const { attachVoicePlayButton } = await import('../ui/voice-controls');
+          attachMessageActions(lastWrap, {
+            chatId: chat.id,
+            historyIndex: histIdx,
+            turnKind: 'assistant',
+          });
+          attachVoicePlayButton(lastWrap, persistedContent);
+        }
+
         streamRow = appendStreamingAssistantRow(chat.id);
         ({ wrap, bubble, cursor, streamStatus } = streamRow);
         streamCtx.wrap = wrap;

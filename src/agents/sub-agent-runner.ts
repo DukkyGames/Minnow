@@ -806,6 +806,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         proseQuestionRetries < MAX_PROSE_QUESTION_RETRIES
       ) {
         proseQuestionRetries += 1;
+        messages.push({ role: 'assistant', content: prose });
         messages.push({ role: 'user', content: PROSE_QUESTION_RETRY_INSTRUCTION });
         emitProgress(undefined, true);
         continue;
