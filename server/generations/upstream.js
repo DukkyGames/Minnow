@@ -6,6 +6,13 @@
 import { readConfigJson } from '../config/store.js';
 import { getProviderRuntime } from '../providers/store.js';
 import {
+  prepareOpenCodeZenRequestBody,
+  resolveOpenCodeZenUpstreamUrl,
+  ResponsesToChatCompletionsStream,
+  convertResponsesJsonToChatCompletion,
+} from '../providers/opencode-zen.js';
+import { sanitizeCompletionBodyForProvider } from '../providers/sanitize-completion-body.js';
+import {
   buildCandidateRequestBody,
   classifyUpstreamError,
   readFallbackChainsConfig,
@@ -27,21 +34,45 @@ import { upstreamFetch } from './upstream-fetch.js';
 
 /**
  * Kimi (Moonshot AI) thinking/code models only accept temperature=1.
+ * OpenAI-v1 bodies are sanitized (sampler + reasoning fields) before upstream POST.
  * @param {Buffer} requestBody
- * @param {string} apiKind
+ * @param {{ apiKind?: string, baseUrl?: string }} profile
+ * @param {string} modelId
  * @returns {Buffer}
  */
-function fixModelTemperature(requestBody, apiKind) {
-  if (apiKind !== 'openai-v1') return requestBody;
+function prepareUpstreamRequestBody(requestBody, profile, modelId) {
+  const apiKind = profile.apiKind ?? 'openai-v1';
+  let body = requestBody;
+
   try {
     const parsed = JSON.parse(requestBody.toString('utf8'));
-    if (!parsed || typeof parsed !== 'object') return requestBody;
-    const modelId = typeof parsed.model === 'string' ? parsed.model : '';
-    if (!/kimi/i.test(modelId)) return requestBody;
-    if (typeof parsed.temperature !== 'number' || parsed.temperature === 1) return requestBody;
+    if (parsed && typeof parsed === 'object') {
+      const sanitized = sanitizeCompletionBodyForProvider(
+        /** @type {Record<string, unknown>} */ (parsed),
+        { apiKind },
+      );
+      body = Buffer.from(JSON.stringify(sanitized), 'utf8');
+    }
+  } catch {
+    /* keep raw body */
+  }
+
+  if (apiKind === 'openai-v1') {
+    const zenPrepared = prepareOpenCodeZenRequestBody(body, profile.baseUrl ?? '', modelId);
+    body = zenPrepared.body;
+  }
+
+  if (apiKind !== 'openai-v1') return body;
+
+  try {
+    const parsed = JSON.parse(body.toString('utf8'));
+    if (!parsed || typeof parsed !== 'object') return body;
+    const model = typeof parsed.model === 'string' ? parsed.model : modelId;
+    if (!/kimi/i.test(model)) return body;
+    if (typeof parsed.temperature !== 'number' || parsed.temperature === 1) return body;
     return Buffer.from(JSON.stringify({ ...parsed, temperature: 1 }), 'utf8');
   } catch {
-    return requestBody;
+    return body;
   }
 }
 
@@ -99,7 +130,11 @@ async function pumpUpstreamAsync({ state }) {
       return;
     }
 
-    const url = `${runtime.profile.baseUrl}${runtime.paths.chatCompletionsPath}`;
+    const url = resolveOpenCodeZenUpstreamUrl(
+      runtime.profile.baseUrl,
+      runtime.paths.chatCompletionsPath,
+      candidate.modelId,
+    );
     const origin = originFromUrl(runtime.profile.baseUrl);
     if (isHostDead(origin)) {
       lastError = `Host in cooldown: ${origin}`;
@@ -111,7 +146,8 @@ async function pumpUpstreamAsync({ state }) {
     }
 
     const rawBody = buildCandidateRequestBody(state.requestBody, candidate.modelId);
-    const requestBody = fixModelTemperature(rawBody, runtime.profile.apiKind);
+    const requestBody = prepareUpstreamRequestBody(rawBody, runtime.profile, candidate.modelId);
+    const usesResponsesApi = url.endsWith('/responses');
     const result = await attemptCandidateStream({
       state,
       candidate,
@@ -124,6 +160,7 @@ async function pumpUpstreamAsync({ state }) {
       cooldownSeconds: fallbackConfig.cooldownSeconds,
       origin,
       canFailover: !state.failoverDisabled && index < state.candidates.length - 1,
+      usesResponsesApi,
     });
 
     if (result.outcome === 'complete') {
@@ -152,6 +189,7 @@ async function pumpUpstreamAsync({ state }) {
  *   cooldownSeconds: number,
  *   origin: string,
  *   canFailover: boolean,
+ *   usesResponsesApi: boolean,
  * }} params
  * @returns {Promise<{ outcome: 'complete' | 'retry' | 'fatal', message?: string }>}
  */
@@ -167,6 +205,7 @@ async function attemptCandidateStream({
   cooldownSeconds,
   origin,
   canFailover,
+  usesResponsesApi,
 }) {
   const controller = new AbortController();
   state.upstreamController = controller;
@@ -212,6 +251,14 @@ async function attemptCandidateStream({
       } catch {
         /* ignore */
       }
+      if (usesResponsesApi && rawBody.trim().startsWith('{')) {
+        try {
+          const converted = convertResponsesJsonToChatCompletion(JSON.parse(rawBody));
+          rawBody = JSON.stringify(converted);
+        } catch {
+          /* keep raw body */
+        }
+      }
       const message = formatUpstreamHttpErrorMessage(upstream.status, rawBody);
       const classified = classifyUpstreamError(null, upstream);
       if (!bytesEmitted && classified.kind === 'retryable' && canFailover) {
@@ -224,8 +271,16 @@ async function attemptCandidateStream({
     }
 
     if (!upstream.body) {
-      const text = await upstream.text();
+      let text = await upstream.text();
       if (text) {
+        if (usesResponsesApi && text.trim().startsWith('{')) {
+          try {
+            const converted = convertResponsesJsonToChatCompletion(JSON.parse(text));
+            text = `data: ${JSON.stringify(converted)}\n\n`;
+          } catch {
+            /* keep raw text */
+          }
+        }
         bytesEmitted = true;
         noteGenerationCandidateChosen(state, {
           providerId: candidate.providerId,
@@ -241,6 +296,7 @@ async function attemptCandidateStream({
     }
 
     const reader = upstream.body.getReader();
+    const responsesTransform = usesResponsesApi ? new ResponsesToChatCompletionsStream() : null;
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -253,9 +309,19 @@ async function attemptCandidateStream({
           index,
         });
       }
-      appendChunk(state, Buffer.from(value));
+      const out = responsesTransform ? responsesTransform.transform(Buffer.from(value)) : Buffer.from(value);
+      if (out.length > 0) {
+        appendChunk(state, out);
+      }
       if (state.status === 'error' || state.status === 'cancelled') {
         return { outcome: 'complete' };
+      }
+    }
+
+    if (responsesTransform) {
+      const tail = responsesTransform.flush();
+      if (tail.length > 0) {
+        appendChunk(state, tail);
       }
     }
 
