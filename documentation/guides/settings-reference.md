@@ -55,7 +55,7 @@ Open via **Settings** (`#/settings/<category>`) or legacy `#/settings/<area>`.
 | Chat notifications | notification prefs | Background chat finish/error |
 | Task & sub-agent notifications | notification prefs | Orchestrate board + sub-agent events |
 | Background job notifications | notification prefs | Scheduler, research, memory/skill proposals |
-| Play notification sound | notification prefs | When Minnow is open but unfocused |
+| Play notification sound | notification prefs | When Minnow is unfocused (Electron: includes alt-tab / minimized) |
 | Notification sound | notification prefs | `none`, `chime`, `ping`, `soft`, `pop` |
 | Network access | `config.server.networkAccess` | `local` (loopback) vs `lan` (Wi‑Fi). Override: `MINNOW_NETWORK` |
 | Terminal behavior | — | Info only: commands run in background |
