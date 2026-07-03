@@ -102,6 +102,7 @@ export function renderNotificationsSettingsSection(mount: HTMLElement): void {
   resetBtn.addEventListener('click', () => {
     saveNotificationPrefs({
       enabled: true,
+      muted: false,
       soundEnabled: true,
       soundId: 'chime',
       chatEnabled: true,

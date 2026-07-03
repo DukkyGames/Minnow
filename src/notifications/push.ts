@@ -95,5 +95,6 @@ export function pushLegacyAgentNotification(
 
 /** Expose prefs gate for tests. */
 export function isPushEnabled(): boolean {
-  return loadNotificationPrefs().enabled;
+  const prefs = loadNotificationPrefs();
+  return prefs.enabled && !prefs.muted;
 }
