@@ -14,7 +14,7 @@ import {
 } from '../api/chat';
 import { postChatCompletions } from '../providers/fetch-chat';
 import { getActiveProvider } from '../providers/store';
-import { parseToolArguments } from '../tools/parse-tool-arguments';
+import { runHeadlessToolBatch } from '../tools/headless-tool-batch';
 import { sumUsageSegments } from '../chat/orchestrate/stats-math';
 import type { ApiMessage, ChatCompletionChunk, ToolCallAccumulator, Usage } from '../types';
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
@@ -166,27 +166,24 @@ export const defaultEvalRunner: EvalRunner = {
           tool_calls: turnResult.toolCalls,
         });
 
-        for (const tc of turnResult.toolCalls) {
-          const { args, parseError } = parseToolArguments(tc.function.arguments, {
-            constrained: false,
-          });
-          if (parseError) {
-            messages.push({
-              role: 'tool',
-              tool_call_id: tc.id,
-              content: parseError,
-            });
-            continue;
-          }
-          const toolOut = await input.executeTool(tc.function.name, args, {
-            chatId: 'eval-run',
-            subAgentType: 'eval',
-            toolCallId: tc.id,
-          });
+        const outcomes = await runHeadlessToolBatch({
+          toolCalls: turnResult.toolCalls,
+          constrained: false,
+          signal: input.signal,
+          execute: (name, args, ctx) =>
+            input.executeTool(name, args as Record<string, unknown>, {
+              chatId: 'eval-run',
+              subAgentType: 'eval',
+              toolCallId: ctx.toolCallId,
+            }),
+        });
+
+        for (const outcome of outcomes) {
+          const tc = outcome.toolCall;
           messages.push({
             role: 'tool',
             tool_call_id: tc.id,
-            content: toolOut.content,
+            content: outcome.parseError ?? outcome.result?.content ?? '',
           });
         }
         continue;

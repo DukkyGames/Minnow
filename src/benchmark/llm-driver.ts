@@ -28,6 +28,7 @@ import type { ApiMessage, ChatCompletionChunk, ToolCall, ToolCallAccumulator } f
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
 import type { ExecuteToolContext } from '../tools/client';
 import { executeTool } from '../tools/client';
+import { runHeadlessToolBatch } from '../tools/headless-tool-batch';
 import { assertNotAborted, raceWithAbort } from './abort.ts';
 import type { LlmTurnTiming } from './types.ts';
 
@@ -385,17 +386,22 @@ async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
         content: turn.fullText || null,
         tool_calls: turn.toolCalls,
       });
-      for (const tc of turn.toolCalls) {
-        assertNotAborted(input.signal);
-        const args = parseToolArguments(tc.function.arguments);
-        const out = await runExecute(tc.function.name, args, {
-          toolCallId: tc.id,
-          modeId: input.modeId,
-        });
+      const outcomes = await runHeadlessToolBatch({
+        toolCalls: turn.toolCalls,
+        signal: input.signal,
+        execute: (name, args, ctx) =>
+          runExecute(name, args as Record<string, unknown>, {
+            toolCallId: ctx.toolCallId,
+            modeId: input.modeId,
+          }),
+      });
+
+      for (const outcome of outcomes) {
+        const tc = outcome.toolCall;
         messages.push({
           role: 'tool',
           tool_call_id: tc.id,
-          content: out.content,
+          content: outcome.parseError ?? outcome.result?.content ?? '',
         });
       }
       continue;

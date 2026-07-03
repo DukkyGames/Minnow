@@ -3,8 +3,9 @@
  */
 
 import {
+  computePromptConfigTokenTotal,
   formatTokenEstimateLabel,
-  TOKEN_ESTIMATE_TOOLTIP,
+  SETTINGS_PROMPT_CONFIG_ESTIMATE_TOOLTIP,
   type OutboundPromptEstimate,
 } from '../chat/prompts/token-estimate-core';
 import { resolveOutboundPromptEstimate } from '../chat/prompts/token-estimate';
@@ -28,7 +29,7 @@ function setComputing(): void {
   if (header) {
     header.textContent = '~…';
     header.setAttribute('aria-busy', 'true');
-    header.title = TOKEN_ESTIMATE_TOOLTIP;
+    header.title = SETTINGS_PROMPT_CONFIG_ESTIMATE_TOOLTIP;
   }
   if (breakdown) {
     breakdown.textContent = 'Computing estimate…';
@@ -39,7 +40,6 @@ function setComputing(): void {
 function formatBreakdownLine(est: OutboundPromptEstimate): string {
   const parts = [
     `System ~${est.composedSystem.toLocaleString()}`,
-    `History ~${est.history.toLocaleString()}`,
     `Tools ~${est.tools.toLocaleString()}`,
     `Rules ~${est.userRules.toLocaleString()}`,
   ];
@@ -53,9 +53,9 @@ function paintEstimate(est: OutboundPromptEstimate): void {
   const header = getHeaderEl();
   const breakdown = getBreakdownEl();
   if (header) {
-    header.textContent = formatTokenEstimateLabel(est.total);
+    header.textContent = formatTokenEstimateLabel(computePromptConfigTokenTotal(est));
     header.removeAttribute('aria-busy');
-    header.title = TOKEN_ESTIMATE_TOOLTIP;
+    header.title = SETTINGS_PROMPT_CONFIG_ESTIMATE_TOOLTIP;
   }
   if (breakdown) {
     breakdown.textContent = formatBreakdownLine(est);
