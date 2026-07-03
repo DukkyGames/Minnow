@@ -21,8 +21,11 @@ import { flushPendingMode } from '../chat/pending-mode';
 import {
   clearPendingSteer,
   consumePendingSteer,
-  enqueueSteerMessage,
 } from '../chat/steer-message';
+import {
+  enqueueComposerMessage,
+  flushPendingMessageQueue,
+} from '../chat/message-queue';
 import { handleGoalCommand } from '../chat/goal/command';
 import { maybeContinueGoalAfterTurn } from '../chat/goal/evaluate';
 import { getActiveGoal } from '../state/sessions';
@@ -116,8 +119,8 @@ import {
   refreshComposerStreamingAffordance,
   setComposerStreamingMode,
   syncComposerFromStreamingState,
-  syncSteerQueuedHint,
 } from '../ui/composer-send';
+import { syncComposerMessageQueue } from '../ui/composer-message-queue';
 import { syncGoalActiveHint } from '../ui/goal-active-hint';
 import {
   clearComposerInput,
@@ -1310,7 +1313,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
       const steerConsumed = consumePendingSteer(chat);
       if (steerConsumed.consumed) {
-        syncSteerQueuedHint();
+        syncComposerMessageQueue();
       }
 
       let enabledTools = getEnabledToolDefinitionsForChat(chat);
@@ -2045,6 +2048,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       } else {
         syncComposerFromStreamingState();
       }
+      if (completedNormally && !goalDriven) {
+        void flushPendingMessageQueue(chat).then(() => {
+          syncComposerMessageQueue();
+        });
+      }
       if (completedNormally && goalDriven) {
         void maybeContinueGoalAfterTurn(chat);
       }
@@ -2148,21 +2156,15 @@ export async function sendMessageWithTools(
     const pendingSteer = getPendingAttachments();
     const pendingOk = pendingSteer.filter((a) => a.kind !== 'error');
     if (pendingOk.length > 0) {
-      setStatus('err', 'Steer is text only — wait for this turn to finish for attachments');
+      setStatus('err', 'Follow-ups are text only — wait for this turn to finish for attachments');
       return;
     }
     const chat = getActiveChat();
-    const hadPrior = Boolean(chat.pendingSteerMessage?.trim());
-    if (enqueueSteerMessage(chat, rawTextEarly)) {
+    if (enqueueComposerMessage(chat, rawTextEarly)) {
       clearComposerInput(input);
-      setStatus(
-        'ok',
-        hadPrior
-          ? 'Correction updated — applies after current step'
-          : 'Steering at next step…',
-      );
+      setStatus('ok', 'Follow-up queued');
       refreshComposerStreamingAffordance();
-      syncSteerQueuedHint();
+      syncComposerMessageQueue();
     }
     return;
   }
