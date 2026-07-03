@@ -296,9 +296,10 @@ Interactive Build ≈ **20.6K → ~11.7K (−43%)**; a scoped builder board agen
 Still to confirm during implementation:
 
 - **Registry ergonomics** — express allowlists as tool-id lists, or add a group→ids helper so
-  `registry.ts` stays readable (recommended: `src/chat/modes/tool-groups.ts`).
+  `registry.ts` stays readable (recommended: `src/chat/modes/tool-groups.ts`). ✅ Done (MIN-332).
 - **Tester source of truth** — keep tester's `allowedTools` front matter, or migrate all three
   board roles into one `BOARD_ROLE_ALLOWED_TOOLS` map (recommended).
+- **Plan code-exec** — kept per final matrix (MIN-332); shell runs allowed for planning probes.
 
 ## Linear
 
