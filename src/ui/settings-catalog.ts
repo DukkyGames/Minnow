@@ -42,8 +42,8 @@ export const SETTINGS_CATEGORY_DESCRIPTIONS: Record<SettingsCategoryId, string> 
   general: 'Notifications, terminal behavior, LAN access, audio devices, and where settings are saved.',
   appearance: 'Theme, wallpaper, fonts, and custom accent colors.',
   models: 'LLM backends, per-role model picks, sampling, reasoning, and usage.',
-  agents: 'Composer modes, personas, workers, and tool policies.',
-  knowledge: 'System prompts, standing rules, and persistent memory.',
+  agents: 'System prompts, composer modes, personas, workers, and tool policies.',
+  knowledge: 'Standing rules and persistent memory.',
   integrations: 'Web search, dev tools, permissions, skills, and external hooks.',
   advanced: 'Orchestrate supervisor tuning and local eval runs.',
 };
@@ -56,8 +56,8 @@ export const SETTINGS_CATEGORY_AREAS: Record<
   general: ['general', 'audio'],
   appearance: ['appearance'],
   models: ['providers', 'model-routing', 'sampler', 'thinking', 'usage'],
-  agents: ['modes', 'experts', 'work-agents', 'agent-packs', 'sub-agents', 'autopilot'],
-  knowledge: ['prompting', 'rules'],
+  agents: ['prompting', 'modes', 'experts', 'work-agents', 'agent-packs', 'sub-agents', 'autopilot'],
+  knowledge: ['rules'],
   integrations: [
     'search',
     'deep-research',
@@ -252,15 +252,15 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   field('agents.autopilot.guardCdOutsideWorktree', 'Guard cd outside worktree', 'agents', 'autopilot', {
     keywords: ['worktree', 'cd', 'guard', 'isolation'],
   }),
-
-  // —— Knowledge ——
-  field('knowledge.prompting', 'Prompt profiles', 'knowledge', 'prompting', {
+  field('agents.prompting', 'Prompt profiles', 'agents', 'prompting', {
     keywords: ['prompt', 'system prompt', 'full', 'lite', 'custom'],
   }),
-  field('knowledge.prompting.profiles', 'Setup profiles', 'knowledge', 'prompting', {
+  field('agents.prompting.profiles', 'Setup profiles', 'agents', 'prompting', {
     keywords: ['bundle', 'export', 'import'],
   }),
-  field('knowledge.prompting.hub', 'Prompt hub', 'knowledge', 'prompting'),
+  field('agents.prompting.hub', 'Prompt hub', 'agents', 'prompting'),
+
+  // —— Knowledge ——
   field('knowledge.rules', 'User rules', 'knowledge', 'rules', {
     keywords: ['cursor rules', 'instructions'],
   }),

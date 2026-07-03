@@ -33,8 +33,8 @@ Open via **Settings** (`#/settings/<category>`) or legacy `#/settings/<area>`.
 | **General** | General, Audio |
 | **Appearance** | Appearance |
 | **Models** | Providers, Routing, Sampler, Thinking, Usage & cost |
-| **Agents** | Modes, Experts, Work agents, Agent packs, Sub-agents, Autopilot |
-| **Knowledge** | Prompts, Rules |
+| **Agents** | Prompts, Modes, Experts, Work agents, Agent packs, Sub-agents, Autopilot |
+| **Knowledge** | Rules |
 | **Integrations** | Search, Deep Research, Servers, Tools, Skills, MCP, LSP, Editor, Webhooks, OAuth |
 | **Advanced** | Orchestration, Evals |
 
@@ -160,6 +160,16 @@ See [`src/config/voice-meta.ts`](../../src/config/voice-meta.ts) and [`src/voice
 
 ## 4. Agents
 
+### Prompts
+
+| Setting | Persistence |
+|---------|-------------|
+| Prompt profile | `activePromptProfile` (`full` / `lite` / `custom`) |
+| Info preset | `activeInfoPresetId` |
+| Setup profiles | `profiles/` bundles |
+| Custom prompt configs | Per-part editors (base, mode, expert, info, tool-usage, work-agent, memory, skills) |
+| Prompt hub | Browse/edit all prompt files |
+
 ### Modes (6)
 
 `general` · `build` · `plan` · `orchestrate` · `reef` · `debug`
@@ -215,16 +225,6 @@ Per type: enabled, max concurrent, timeout, max input tokens, context policy, su
 ---
 
 ## 5. Knowledge
-
-### Prompts
-
-| Setting | Persistence |
-|---------|-------------|
-| Prompt profile | `activePromptProfile` (`full` / `lite` / `custom`) |
-| Info preset | `activeInfoPresetId` |
-| Setup profiles | `profiles/` bundles |
-| Custom prompt configs | Per-part editors (base, mode, expert, info, tool-usage, work-agent, memory, skills) |
-| Prompt hub | Browse/edit all prompt files |
 
 ### Rules (`rules.json`)
 
