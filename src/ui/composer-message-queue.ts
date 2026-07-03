@@ -146,12 +146,10 @@ function renderQueueItem(item: { id: string; text: string }): HTMLElement {
   actions.appendChild(
     iconButton('composer-message-queue__action', 'Push now', ICON_PUSH, () => {
       const chat = getActiveChat();
-      void pushQueuedMessageNow(chat, item.id).then((ok) => {
-        if (!ok) return;
-        setStatus('ok', isActiveChatStreaming() ? 'Steering at next step…' : 'Sending queued message…');
-        refreshComposerStreamingAffordance();
-        syncComposerMessageQueue();
-      });
+      if (!pushQueuedMessageNow(chat, item.id)) return;
+      setStatus('ok', isActiveChatStreaming() ? 'Steering at next step…' : 'Sending queued message…');
+      refreshComposerStreamingAffordance();
+      syncComposerMessageQueue();
     }),
   );
 

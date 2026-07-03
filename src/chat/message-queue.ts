@@ -11,6 +11,7 @@ import {
 } from '../state/sessions';
 import { forceCloseAskQuestionModal } from '../ui/question-cards-modal';
 import { enqueueSteerMessage } from './steer-message';
+import { isChatStreaming } from './streaming-state';
 
 /** Return the chat queue array (empty when unset). */
 export function getPendingMessageQueue(chat: Chat): QueuedComposerMessage[] {
@@ -90,7 +91,7 @@ export function updateQueuedMessage(chat: Chat, id: string, text: string): boole
 }
 
 /** Promote a queued item to steer while streaming, or send immediately when idle. */
-export async function pushQueuedMessageNow(chat: Chat, id: string): Promise<boolean> {
+export function pushQueuedMessageNow(chat: Chat, id: string): boolean {
   const queue = getPendingMessageQueue(chat);
   const index = queue.findIndex((item) => item.id === id);
   if (index < 0) return false;
@@ -100,13 +101,13 @@ export async function pushQueuedMessageNow(chat: Chat, id: string): Promise<bool
   scheduleSaveSessions();
   if (!item) return false;
 
-  const { isChatStreaming } = await import('./streaming-state');
   if (isChatStreaming(chat.id)) {
     return enqueueSteerMessage(chat, item.text);
   }
 
-  const { resumeParentChatWithMessage } = await import('../tools/loop');
-  await resumeParentChatWithMessage(chat, item.text);
+  void import('../tools/loop').then(({ resumeParentChatWithMessage }) =>
+    resumeParentChatWithMessage(chat, item.text),
+  );
   return true;
 }
 

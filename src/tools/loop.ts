@@ -1306,6 +1306,25 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     let activeResumeGenerationId = resumeGenerationId;
     let archiveMemo: ArchivePreResult | null = null;
 
+    const prepareNextStreamRound = (statusHint: string): void => {
+      streamRow = appendStreamingAssistantRow(chat.id);
+      ({ wrap, bubble, cursor, streamStatus } = streamRow);
+      streamCtx.wrap = wrap;
+      streamCtx.streamStatus = streamStatus;
+      lastWrap = wrap;
+      resetToolStartIndicator();
+      revealProse = (): void => {
+        if (!isStreamDomVisible(chat.id)) return;
+        revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
+      };
+      thoughtController?.setAssistantWrap(wrap);
+      thoughtController?.resetStreamPhaseHints();
+      if (isStreamDomVisible(chat.id)) {
+        setStatus('spin', statusHint);
+      }
+      patchMainTurnActivity(chat.id, { phase: 'generating', currentTool: null });
+    };
+
     for (let turn = 0; turn < maxToolTurns; turn++) {
       if (chatSignal.aborted) {
         throw new DOMException('Aborted', 'AbortError');
@@ -1575,23 +1594,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           break;
         }
 
-        streamRow = appendStreamingAssistantRow(chat.id);
-        ({ wrap, bubble, cursor, streamStatus } = streamRow);
-        streamCtx.wrap = wrap;
-        streamCtx.streamStatus = streamStatus;
-        lastWrap = wrap;
-        resetToolStartIndicator();
-        revealProse = (): void => {
-          if (!isStreamDomVisible(chat.id)) return;
-          revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
-        };
-        thoughtController.setAssistantWrap(wrap);
-        thoughtController.resetStreamPhaseHints();
-
-        if (isStreamDomVisible(chat.id)) {
-          setStatus('spin', 'Generating reply…');
-        }
-        patchMainTurnActivity(chat.id, { phase: 'generating', currentTool: null });
+        prepareNextStreamRound('Generating reply…');
         ephemeralPostToolInstruction = undefined;
         continue;
       }
@@ -1864,6 +1867,12 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       renderSidebar();
       scheduleSaveSessions();
 
+      // Push-now during final prose: inject steer and run another model round in this turn.
+      if (chat.pendingSteerMessage?.trim()) {
+        prepareNextStreamRound('Steering…');
+        continue;
+      }
+
       synthesisRoundCount += 1;
       completedNormally = true;
       break;
@@ -2048,7 +2057,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       } else {
         syncComposerFromStreamingState();
       }
-      if (completedNormally && !goalDriven) {
+      if (completedNormally && !goalDriven && !chat.pendingSteerMessage?.trim()) {
         void flushPendingMessageQueue(chat).then(() => {
           syncComposerMessageQueue();
         });

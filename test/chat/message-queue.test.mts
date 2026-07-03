@@ -84,13 +84,13 @@ describe('message-queue helpers', () => {
     assert.equal(chat.pendingMessageQueue?.[0]?.text, 'updated text');
   });
 
-  test('pushQueuedMessageNow promotes to steer while streaming', async () => {
+  test('pushQueuedMessageNow promotes to steer while streaming', () => {
     const chat = seedChat();
     enqueueComposerMessage(chat, QUEUE_TEXT);
     const id = chat.pendingMessageQueue?.[0]?.id;
     assert.ok(id);
     setStreaming(true, chat.id);
-    const ok = await pushQueuedMessageNow(chat, id);
+    const ok = pushQueuedMessageNow(chat, id);
     assert.equal(ok, true);
     assert.equal(getPendingMessageQueueCount(chat), 0);
     assert.equal(chat.pendingSteerMessage, QUEUE_TEXT);
