@@ -238,6 +238,30 @@
   white-space: nowrap;
 }
 
+.git-source-control-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.git-source-control-btn__icon {
+  width: 12px;
+  height: 12px;
+  display: block;
+  object-fit: contain;
+  flex-shrink: 0;
+  filter: brightness(0);
+  opacity: 0.88;
+}
+
+html[data-theme$='-dark'] .git-source-control-btn__icon {
+  filter: brightness(0) invert(1);
+}
+
+.git-source-control-btn__label {
+  line-height: 1.2;
+}
+
 @media (hover: hover) and (pointer: fine) {
   .git-panel-action-btn:hover {
     background: var(--mn-accent-soft);
