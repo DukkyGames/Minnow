@@ -109,4 +109,14 @@ Or we can refine the plan first (e.g., add/remove features, adjust scope)`;
 
     assert.equal(looksLikeProseStructuredQuestion(text), true);
   });
+
+  test('detects em-dash menu options after which would you like to do next', () => {
+    const text = `Which would you like to do next?
+
+Switch to Build — Start implementing the plan immediately.
+Refine the plan — Address the minor gaps above before scaffolding.
+Create an Orchestrate chat — Open a board and hand off the full plan for systematic execution.`;
+
+    assert.equal(looksLikeProseStructuredQuestion(text), true);
+  });
 });
