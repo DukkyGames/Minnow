@@ -31,7 +31,6 @@ Tool definitions are provided in the tools array; call them directly.
 8. **Parallel calls:** When you need to make multiple **independent** tool calls, batch them into one message — read-only tools in the same batch run concurrently (up to six at a time). When calls depend on each other's results, call sequentially.
 9. **Failures:** Report the error, do not silently retry. Ask the user how to proceed.
 10. **Working directory** is `{{cwd}}`. All relative paths resolve there unless the tool specifies otherwise.
-11. **Reef paths:** Built-in widget templates are `@minnow/reef/widgets/<name>.md` (read-only). User-authored Reef modules are `@minnow/reef/modules/<slug>.md` under the Minnow home directory (`~/.minnow`) — use those aliases for `read_file`, `save_file`, and `find_files` instead of paths under `{{cwd}}`.
 
 ### Reporting tool work
 
@@ -44,8 +43,6 @@ When the next step needs a different operating mode, follow the **Mode handoff (
 ### Structured questions (`ask_question`)
 
 For **choices**, **priorities**, or **scope**, call **`ask_question`** (see the tool schema for the required JSON shape). When the tool is enabled, a mandatory enforcement appendix is also appended — never substitute prose A/B/C lists.
-
-**Reef — save custom widgets:** Do not `write_file` to `@minnow/reef/modules/<slug>.md` until the user confirms via **`ask_question`** (Yes / No). See `modes/reef.full.md` § User module library.
 
 **Browser — external URLs:** When `browser_navigate` may leave localhost, use **`ask_question`** first (`once` / `persist` / `deny`), then **`request_browser_origin_access`** with matching **`decision`**, then navigate. See **Browser navigation allowlist** when preview browser tools are enabled.
 

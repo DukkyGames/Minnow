@@ -14,9 +14,8 @@ When you need the user to **pick one option**, **prioritize**, **approve**, or *
 | Situation | Required action |
 |-----------|-----------------|
 | Scope, MVP, or priority | `ask_question` with 2–5 preset options |
-| Mode handoff (Plan / Build / Orchestrate / Reef) | `propose_mode_switch` or `ask_question` |
+| Mode handoff (Plan / Build / Orchestrate) | `propose_mode_switch` or `ask_question` |
 | Browser origin approval | `ask_question` (`once` / `persist` / `deny`) then `request_browser_origin_access` |
-| Reef module save | `ask_question` (Yes / No) before `write_file` to `@minnow/reef/modules/…` |
 
 **Allowed in prose:** a single clarifying sentence ("I need your preference on scope — use the cards below.") immediately before or after the tool call, not a substitute for it.
 

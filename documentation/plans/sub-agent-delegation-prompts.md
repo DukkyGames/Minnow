@@ -26,12 +26,12 @@ A shared **sub-agent-delegation** tool-usage fragment (mirroring `mode-handoff`)
 
 | Mode | Constraint |
 |------|------------|
-| Build | Delegate per shared fragment; Reef stays in mode handoff |
+| Build | Delegate per shared fragment |
 | General | Offer Build handoff first for sustained impl; sub-agents for parallel chunks |
 | Plan | **`researcher`** / **`explore` only** — no `generalPurpose` |
 | Debug | Pipeline + ad-hoc `debugger`/`researcher`/`explore`; `category: fix` |
 
-**Out of scope:** work-agent prompts, Orchestrate (spawn denied), Reef (no sub-agents group).
+**Out of scope:** work-agent prompts, Orchestrate (spawn denied).
 
 ### Tests
 

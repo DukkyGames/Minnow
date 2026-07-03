@@ -10,10 +10,6 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MODES_DIR = path.join(__dirname, '../../../src/chat/prompts/modes');
-const TOOL_USAGE = path.join(
-  __dirname,
-  '../../../src/chat/prompts/tool-usage/default.full.md',
-);
 
 function readPrompt(name) {
   return fs.readFileSync(path.join(MODES_DIR, name), 'utf8');
@@ -48,11 +44,5 @@ describe('reef optional save prompt', () => {
     assert.ok(content.includes('@minnow/reef/modules'));
     assert.match(content, /ask_question/i);
     assert.match(content, /write_file/i);
-  });
-
-  test('tool-usage default.full.md cross-links reef module save', () => {
-    const content = fs.readFileSync(TOOL_USAGE, 'utf8');
-    assert.ok(content.includes('@minnow/reef/modules'));
-    assert.match(content, /ask_question/i);
   });
 });

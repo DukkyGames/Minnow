@@ -112,7 +112,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: false,
     definition: toolSchema(
       'check_reef_widget',
-      'Validate reef-widget HTML before finishing a Reef reply. Pass the fence body (not markdown delimiters). Returns JSON with ok, errors, and warnings.',
+      'Validate reef-widget HTML before finishing. Pass the fence body (not markdown delimiters). Returns JSON with ok, errors, and warnings.',
       {
         html: {
           type: 'string',
@@ -253,7 +253,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'set_chat_mode',
     label: 'Set chat mode',
     description:
-      'Switch the active chat operating mode (General, Build, Plan, Orchestrate, Reef, Debug) after the user chooses a handoff option.',
+      'Switch the active chat operating mode (General, Build, Plan, Orchestrate, Debug) after the user chooses a handoff option.',
     category: 'utility',
     serverRequired: false,
     definition: toolSchema(
@@ -262,7 +262,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       {
         mode_id: {
           type: 'string',
-          enum: ['general', 'build', 'plan', 'orchestrate', 'reef', 'debug'],
+          enum: ['general', 'build', 'plan', 'orchestrate', 'debug'],
           description: 'Target operating mode for the active chat',
         },
       },
@@ -282,7 +282,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       {
         mode_id: {
           type: 'string',
-          enum: ['general', 'build', 'plan', 'orchestrate', 'reef', 'debug'],
+          enum: ['general', 'build', 'plan', 'orchestrate', 'debug'],
           description: 'Operating mode for the new chat',
         },
         plan_path: {
@@ -337,12 +337,12 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'propose_mode_switch',
     label: 'Propose mode switch',
     description:
-      'Show standard mode-handoff multiple-choice cards (plan complete, wrong mode, Reef widget offer).',
+      'Show standard mode-handoff multiple-choice cards (plan complete, wrong mode).',
     category: 'utility',
     serverRequired: false,
     definition: toolSchema(
       'propose_mode_switch',
-      'Ask the user a standard mode-handoff question via the ask_question UI. Situations: plan_complete, implement_in_wrong_mode, plan_in_build, reef_visualization.',
+      'Ask the user a standard mode-handoff question via the ask_question UI. Situations: plan_complete, implement_in_wrong_mode, plan_in_build.',
       {
         situation: {
           type: 'string',
@@ -350,7 +350,6 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
             'plan_complete',
             'implement_in_wrong_mode',
             'plan_in_build',
-            'reef_visualization',
           ],
           description: 'Which handoff preset to show',
         },
@@ -892,7 +891,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         type: {
           type: 'string',
           description:
-            'Sub-agent type id (e.g. researcher, explore, generalPurpose, shell, debugger, reef-widget)',
+            'Sub-agent type id (e.g. researcher, explore, generalPurpose, shell, debugger)',
         },
         task: { type: 'string', description: 'Task description for the sub-agent' },
         wait: {
