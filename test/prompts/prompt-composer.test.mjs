@@ -56,7 +56,7 @@ describe('prompt-composer', () => {
     const out = composeSystemPrompt({
       profile: 'full',
       cwd: '/test',
-      modeId: null,
+      modeId: 'general',
       expertId: null,
       workAgentId: null,
       skillBody: null,
@@ -66,9 +66,38 @@ describe('prompt-composer', () => {
     });
     const parts = out.split('\n\n---\n\n');
     assert.ok(parts[0].includes('BASE_FULL_BODY'));
-    assert.ok(parts[1].includes('TOOLS_FULL'));
-    assert.ok(parts[2].includes('INFO_GENERAL_BODY'));
-    assert.equal(parts.length, 3);
+    assert.ok(parts.some((p) => p.includes('TOOLS_FULL')));
+    assert.ok(parts.some((p) => p.includes('INFO_GENERAL_BODY')));
+    assert.ok(parts.length >= 3);
+  });
+
+  test('info part renders only in General mode', async () => {
+    registerPromptFilesFromRaw(await loadFixtureMap());
+    const generalOut = composeSystemPrompt({
+      profile: 'full',
+      cwd: '/test',
+      modeId: 'general',
+      expertId: null,
+      workAgentId: null,
+      skillBody: null,
+      memoryBlock: null,
+      enabledToolIds: ['get_datetime'],
+      infoPresetId: 'general-assistant',
+    });
+    assert.ok(generalOut.includes('INFO_GENERAL_BODY'));
+
+    const buildOut = composeSystemPrompt({
+      profile: 'full',
+      cwd: '/test',
+      modeId: 'build',
+      expertId: null,
+      workAgentId: null,
+      skillBody: null,
+      memoryBlock: null,
+      enabledToolIds: ['get_datetime'],
+      infoPresetId: 'general-assistant',
+    });
+    assert.ok(!buildOut.includes('INFO_GENERAL_BODY'));
   });
 
   test('disabled info in lite profile', async () => {

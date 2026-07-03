@@ -121,7 +121,9 @@ function isPartEnabled(
     return ctx.enabledToolIds.length > 0;
   }
   if (partId === 'info') {
-    return Boolean(ctx.infoPresetId);
+    if (!ctx.infoPresetId) return false;
+    // General-assistant context applies only in General mode (other modes have their own prompts).
+    return ctx.modeId === 'general';
   }
   return true;
 }
