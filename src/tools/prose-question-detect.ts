@@ -5,7 +5,7 @@
 
 /** Phrases that signal the model is asking the user to pick among options. */
 const CHOICE_PHRASE_RE =
-  /\b(which (one|option)|please (choose|pick|select)|would you (like|prefer)|pick one|select one|choose one|let me know (which|what)|your preference)\b/i;
+  /\b((?:what|which) would you like|which (one|option)|please (choose|pick|select)|would you (like|prefer)|pick one|select one|choose one|let me know (which|what)|your preference)\b/i;
 
 /** Decision-style questions that introduce a numbered choice list (not open follow-ups). */
 const CHOICE_QUESTION_RE =
@@ -26,18 +26,33 @@ const BOLD_OPTION_LINE_RE = /^\s*\*\*[^*]{2,48}\*\*\s*[:—–-]\s*\S/gm;
 /** "I can:" lead-in before plain-language action options (mode handoffs, next steps). */
 const I_CAN_COLON_RE = /\bI can:\s*(?:\n|$)/i;
 
+/** "Would you like to:" lead-in before a plain-language option block. */
+const WOULD_YOU_LIKE_TO_COLON_RE = /\bWould you like to:\s*(?:\n|$)/i;
+
 /**
- * Plain-language menu lines after a choice phrase — not numbered or bulleted.
- * Covers "Switch to …", "Or …", handoff verbs, and "Label — description" rows.
+ * Plain-language menu lines after a choice phrase — not numbered lists.
+ * Covers imperative starters, optional bullets, em-dash rows, and question options.
  */
 const PROSE_MENU_OPTION_LINE_RE =
-  /^\s*(?:Or\s+\S|Switch to\s+\S|Refine(?:\s+the)?\s+\S|Create an?\s+\S|[A-Z][^\n?!]{4,72}\s+[—–-]\s+\S)/gm;
+  /^\s*(?:[-*•]\s+)?(?:Or\b|Switch to\b|Refine(?:\s+the)?\b|Create (?:a |an )?\b|Open (?:a |an )?\b).+|^\s*(?:[-*•]\s+)?[A-Z][^\n]{4,100}\s+[—–-]\s+.+/gm;
 
 /** Index of the first regex match, or -1 when absent. */
 function firstMatchOffset(text: string, re: RegExp): number {
   re.lastIndex = 0;
   const match = re.exec(text);
   return match ? match.index : -1;
+}
+
+/** Index of the last global regex match, or -1 when absent. */
+function lastMatchOffset(text: string, re: RegExp): number {
+  const flags = re.flags.includes('g') ? re.flags : `${re.flags}g`;
+  const global = new RegExp(re.source, flags);
+  let last = -1;
+  let match: RegExpExecArray | null;
+  while ((match = global.exec(text)) !== null) {
+    last = match.index;
+  }
+  return last;
 }
 
 /** Index of the first numbered, bold-header, or dash bullet option line. */
@@ -59,6 +74,17 @@ function firstChoiceDirectiveOffset(text: string): number {
   return offsets.length > 0 ? Math.min(...offsets) : -1;
 }
 
+/** Start of the final option block (after the last explicit menu lead-in). */
+function proseMenuTailStart(text: string): number {
+  const candidates = [
+    lastMatchOffset(text, WOULD_YOU_LIKE_TO_COLON_RE),
+    lastMatchOffset(text, /\bWhat would you like to do next\?\s*/gi),
+    lastMatchOffset(text, I_CAN_COLON_RE),
+    firstChoiceDirectiveOffset(text),
+  ].filter((offset) => offset >= 0);
+  return candidates.length > 0 ? Math.max(...candidates) : -1;
+}
+
 /** End offset of the last structured option line (numbered or bold header). */
 function structuredOptionsEndOffset(text: string): number {
   let end = -1;
@@ -74,11 +100,9 @@ function structuredOptionsEndOffset(text: string): number {
   return end;
 }
 
-/** Count plain menu option lines that trail a choice phrase or "I can:". */
+/** Count plain menu option lines that trail the final choice lead-in. */
 function countProseMenuOptions(text: string): number {
-  const choiceOffset = firstChoiceDirectiveOffset(text);
-  const iCanOffset = firstMatchOffset(text, I_CAN_COLON_RE);
-  const startOffset = Math.max(choiceOffset, iCanOffset);
+  const startOffset = proseMenuTailStart(text);
   if (startOffset < 0) {
     return 0;
   }
@@ -99,12 +123,23 @@ export function looksLikeProseStructuredQuestion(text: string): boolean {
   const hasChoicePhrase = CHOICE_PHRASE_RE.test(trimmed);
   const hasChoiceQuestion = CHOICE_QUESTION_RE.test(trimmed);
   const hasICanLeadIn = I_CAN_COLON_RE.test(trimmed);
-  if (!hasQuestionMark && !hasChoicePhrase && !hasICanLeadIn) return false;
+  const hasWouldYouLikeToLeadIn = WOULD_YOU_LIKE_TO_COLON_RE.test(trimmed);
+  if (
+    !hasQuestionMark &&
+    !hasChoicePhrase &&
+    !hasICanLeadIn &&
+    !hasWouldYouLikeToLeadIn
+  ) {
+    return false;
+  }
 
   const proseMenuOptionCount = countProseMenuOptions(trimmed);
   if (
     proseMenuOptionCount >= 2 &&
-    (hasChoicePhrase || hasChoiceQuestion || hasICanLeadIn)
+    (hasChoicePhrase ||
+      hasChoiceQuestion ||
+      hasICanLeadIn ||
+      hasWouldYouLikeToLeadIn)
   ) {
     return true;
   }
