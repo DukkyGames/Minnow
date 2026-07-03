@@ -11,6 +11,7 @@ import {
   type NetworkStatus,
 } from '../config/network-access';
 import { setStatus } from './status';
+import { appendSettingsOfflineHint } from './settings-controls';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -21,13 +22,6 @@ function el<K extends keyof HTMLElementTagNameMap>(
   if (className) node.className = className;
   if (text != null) node.textContent = text;
   return node;
-}
-
-function serverBanner(message: string): HTMLElement {
-  const p = el('p', 'settings-server-banner');
-  p.setAttribute('role', 'status');
-  p.innerHTML = message;
-  return p;
 }
 
 function warningBanner(message: string): HTMLElement {
@@ -92,10 +86,9 @@ function renderLanUrls(mount: HTMLElement, urls: string[]): void {
 export async function renderNetworkAccessSettings(mount: HTMLElement): Promise<void> {
   const serverUp = await detectConfigServer();
   if (serverUp !== 'server') {
-    mount.appendChild(
-      serverBanner(
-        'Network access settings require <code>npm start</code> (config.json on disk). Start the full dev server, then reopen Settings.',
-      ),
+    appendSettingsOfflineHint(
+      mount,
+      'Network access settings require <code>npm start</code> (config.json on disk). Start the full dev server, then reopen Settings.',
     );
     return;
   }
