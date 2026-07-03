@@ -109,12 +109,13 @@ describe('settings page HTML', () => {
     assert.match(html, /id="settingsPromptTokenEstimate"/);
   });
 
-  test('settings category nav buttons exist', () => {
-    assert.match(html, /data-settings-category="general"/);
+  test('settings unified sidebar nav exists', () => {
+    assert.match(html, /class="settings-nav"/);
+    assert.match(html, /data-settings-nav-area="general"/);
+    assert.match(html, /data-settings-nav-hub="web-research"/);
     assert.match(html, /data-settings-category="models"/);
-    assert.match(html, /data-settings-category="integrations"/);
-    assert.match(html, /class="settings-category-subnav"/);
     assert.match(html, /data-category="knowledge"/);
+    assert.doesNotMatch(html, /class="settings-category-subnav"/);
   });
 
   test('SETTINGS_SECTION_IDS matches canonical section count', () => {
@@ -168,6 +169,7 @@ describe('settings page HTML', () => {
     assert.match(html, /class="settings-hub__lead"/);
     assert.doesNotMatch(html, /settings-hub__title/);
     assert.doesNotMatch(html, /data-area-jump="mcp"/);
+    assert.match(html, /data-settings-nav-hub="dev-stack"/);
   });
 
   test('general section suppresses duplicate section title', () => {

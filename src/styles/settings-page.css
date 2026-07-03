@@ -2,6 +2,8 @@
  * Full settings page layout — flat settings panels (DESIGN.md tokens).
  */
 
+@import './settings-controls.css';
+
 .settings-page {
   display: none;
   flex-direction: column;
@@ -164,11 +166,11 @@
 .settings-nav {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  width: 248px;
+  gap: 0;
+  width: 220px;
   flex-shrink: 0;
   border-right: 1px solid var(--mn-border);
-  padding: 20px 12px 24px;
+  padding: 16px 10px 24px;
   overflow-y: auto;
   background: color-mix(in srgb, var(--mn-fg) 3.5%, var(--mn-bg));
 }
@@ -176,12 +178,23 @@
 .settings-nav-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.settings-nav-group + .settings-nav-group {
+  padding-top: 12px;
+  margin-top: 8px;
+  border-top: 1px solid var(--mn-border);
 }
 
 .settings-nav-group__label {
-  margin: 0 0 8px;
-  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 6px;
+  padding: 0 10px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -189,19 +202,19 @@
   color: var(--mn-fg-muted);
 }
 
-.settings-nav button {
+.settings-nav__item {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
   text-align: left;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: 1px solid transparent;
   background: transparent;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font: inherit;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--mn-fg-muted);
   gap: 8px;
@@ -211,12 +224,19 @@
     border-color var(--duration-fast) var(--ease-out);
 }
 
+.settings-nav__item-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .settings-nav__count {
   flex-shrink: 0;
   min-width: 1.25rem;
   padding: 0 6px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   line-height: 1.4;
   text-align: center;
@@ -224,21 +244,15 @@
   color: var(--mn-fg-on-accent);
 }
 
-.settings-nav-group + .settings-nav-group {
-  padding-top: 12px;
-  margin-top: 4px;
-  border-top: 1px solid var(--mn-border);
-}
-
 @media (hover: hover) and (pointer: fine) {
-  .settings-nav button:hover {
+  .settings-nav__item:hover {
     background: color-mix(in srgb, var(--mn-bg) 88%, var(--mn-fg) 12%);
     color: var(--mn-fg);
     border-color: var(--mn-border);
   }
 }
 
-.settings-nav button[aria-current='page'] {
+.settings-nav__item[aria-current='page'] {
   background: var(--mn-bg);
   color: var(--mn-fg);
   border-color: var(--mn-border);
@@ -264,62 +278,42 @@
   display: block;
 }
 
-.settings-category-subnav {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 20px;
-  /* Bleed horizontally into content padding; top aligns with content edge (no top bleed). */
-  margin: 0 calc(-1 * var(--settings-content-pad-x)) 24px;
-  padding: var(--settings-content-pad-top) var(--settings-content-pad-x) 10px;
-  border-bottom: 1px solid var(--mn-border);
-  /* Opaque fill so section content does not show through while scrolling. */
-  background: color-mix(in srgb, var(--mn-fg) 2.5%, var(--mn-bg));
+/* Area-as-page: one section visible per category (except integrations hubs). */
+.settings-category:not([data-category='integrations']):not(.is-filtering) .settings-area {
+  display: none;
 }
 
-.settings-category-subnav__link {
-  position: relative;
-  padding: 6px 2px 10px;
-  border: none;
-  border-radius: 0;
-  font-size: 14px;
-  font-weight: 500;
-  text-decoration: none;
-  color: var(--mn-fg-muted);
-  background: transparent;
-  white-space: nowrap;
-  transition: color var(--duration-fast) var(--ease-out);
+.settings-category:not([data-category='integrations']):not(.is-filtering) .settings-area.is-active {
+  display: block;
+  padding-top: var(--settings-content-pad-top);
 }
 
-.settings-category-subnav__link::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 2px;
-  border-radius: 2px 2px 0 0;
-  background: var(--mn-accent);
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform var(--duration-fast) var(--ease-out);
+.settings-category:not([data-category='integrations']):not(.is-filtering) .settings-area.is-active + .settings-area {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
 }
 
-.settings-category-subnav__link:hover {
-  color: var(--mn-fg);
-}
-
-.settings-category-subnav__link.is-active,
-.settings-category-subnav__link[aria-current='page'] {
-  color: var(--mn-fg);
+.settings-category:not([data-category='integrations']) .settings-area.is-active.settings-area--title-suppressed > h2 {
+  display: block;
+  margin: 0 0 8px;
+  font-size: 18px;
   font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
-.settings-category-subnav__link.is-active::after,
-.settings-category-subnav__link[aria-current='page']::after {
-  transform: scaleX(1);
+.settings-category.is-filtering .settings-area {
+  display: block;
+}
+
+.settings-category.is-filtering .settings-area.is-filter-dim {
+  display: none;
+}
+
+.settings-category.is-filtering .settings-area + .settings-area {
+  margin-top: 32px;
+  padding-top: 28px;
+  border-top: 1px solid var(--mn-border);
 }
 
 .settings-hub {
@@ -327,14 +321,21 @@
   scroll-margin-top: calc(var(--settings-content-pad-top) + 48px);
 }
 
-.settings-category[data-category='integrations']:not(.is-integrations-filtering) .settings-hub {
+.settings-category[data-category='integrations']:not(.is-filtering):not(.is-integrations-filtering) .settings-hub {
   display: none;
 }
 
-.settings-category[data-category='integrations']:not(.is-integrations-filtering) .settings-hub.is-active {
+.settings-category[data-category='integrations']:not(.is-filtering):not(.is-integrations-filtering) .settings-hub.is-active {
+  display: block;
+  padding-top: var(--settings-content-pad-top);
+}
+
+.settings-category[data-category='integrations'].is-filtering .settings-hub,
+.settings-category[data-category='integrations'].is-integrations-filtering .settings-hub {
   display: block;
 }
 
+.settings-category[data-category='integrations'].is-filtering .settings-hub.is-filter-empty,
 .settings-category[data-category='integrations'].is-integrations-filtering .settings-hub.is-filter-empty {
   display: none;
 }
@@ -2854,7 +2855,7 @@ label.settings-action-btn {
     padding: 0 4px;
   }
 
-  .settings-nav button {
+  .settings-nav__item {
     width: auto;
     flex: 0 1 auto;
     padding: 8px 12px;

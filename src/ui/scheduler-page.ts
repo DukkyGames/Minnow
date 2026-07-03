@@ -4,7 +4,7 @@
 
 import '../styles/scheduler-page.css';
 import '../styles/scheduler-editor-window.css';
-import '../styles/settings-page.css';
+import '../styles/settings-controls.css';
 
 import { createAppIcon } from '../os/icons';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
