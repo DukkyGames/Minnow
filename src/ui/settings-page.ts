@@ -3,6 +3,7 @@
  */
 
 import '../styles/settings-page.css';
+import '../styles/settings-agent-center.css';
 
 import { loadPromptMetaSettings, savePromptMetaSettings } from '../config/prompt-meta';
 import { detectLocalServer } from '../tools/client';
@@ -45,6 +46,14 @@ export { categoryForArea } from './settings-page-types';
 export { isOsEmbedded };
 
 const CATEGORIES = SETTINGS_CATEGORIES;
+
+/** Legacy agent area hashes → unified Agents center. */
+const LEGACY_AGENT_AREA_ALIASES: Partial<Record<string, SettingsSectionId>> = {
+  prompting: 'agent-center',
+  modes: 'agent-center',
+  'work-agents': 'agent-center',
+  'sub-agents': 'agent-center',
+};
 
 let activeCategory: SettingsCategoryId = 'general';
 let activeArea: SettingsSectionId = 'general';
@@ -92,8 +101,15 @@ function parseHashRoute(): {
   if (!slug || slug === 'voice') {
     return { category: 'general' };
   }
+  if (slug === 'knowledge') {
+    return { category: 'agents', scrollArea: 'rules' };
+  }
   if (isSettingsCategoryId(slug)) {
     return { category: slug };
+  }
+  if (slug && LEGACY_AGENT_AREA_ALIASES[slug]) {
+    const area = LEGACY_AGENT_AREA_ALIASES[slug]!;
+    return { category: categoryForArea(area), scrollArea: area };
   }
   if (isSettingsSectionId(slug)) {
     return { category: categoryForArea(slug), scrollArea: slug };
@@ -248,7 +264,7 @@ function bindStaticSections(): void {
         ),
       );
       setStatus('ok', `Prompt profile: ${profile}`);
-      await refreshSettingsSection('prompting');
+      await refreshSettingsSection('agent-center');
       schedulePromptTokenEstimateRefresh();
     });
   });

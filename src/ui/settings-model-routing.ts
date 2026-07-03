@@ -65,6 +65,9 @@ const GROUP_ORDER: ModelRoutingGroup[] = [
   'reef',
 ];
 
+/** Routing groups shown on Models → Routing (agent roles live in Agents center). */
+const ROUTING_PAGE_GROUPS: ModelRoutingGroup[] = ['main-chat', 'background', 'reef'];
+
 interface RowControls {
   row: ModelRoutingRow;
   providerSelect: HTMLSelectElement;
@@ -792,7 +795,7 @@ export async function renderModelRoutingSection(mount: HTMLElement): Promise<voi
 
     await renderGlobalFallbackBar(mount);
 
-    for (const group of GROUP_ORDER) {
+    for (const group of ROUTING_PAGE_GROUPS) {
       const groupRows = catalog.rows.filter((r) => r.group === group);
       if (groupRows.length === 0) continue;
       renderGroup(mount, group, groupRows);
@@ -804,6 +807,113 @@ export async function renderModelRoutingSection(mount: HTMLElement): Promise<voi
       'Could not load bindings. Switch tabs and back, or refresh the page.',
     );
   }
+}
+
+/** Mount provider/model binding (+ advanced + fallback) for one routing row in a panel. */
+export async function mountStandaloneRoutingEditor(
+  container: HTMLElement,
+  rowId: string,
+): Promise<boolean> {
+  container.replaceChildren();
+  const panel = el('div', 'agent-center-routing-panel');
+  panel.dataset.settingsSearchKey = `models.routing.${rowId}`;
+  container.appendChild(panel);
+
+  const storageMode = await detectConfigServer();
+  if (!isConfigServerMode(storageMode)) {
+    appendSettingsOfflineHint(
+      panel,
+      'Model binding requires <code>npm start</code>.',
+    );
+    return false;
+  }
+
+  const fallbackConfig = await loadFallbackChainsConfig();
+  loadedFallbackConfig = fallbackConfig;
+
+  const { providers } = await listProviders();
+  const activeProvider =
+    providers.find((p) => p.enabled !== false)?.id ?? 'lm-studio-local';
+  const catalog = await loadModelRoutingCatalog({
+    providerId: activeProvider,
+    modelId: '',
+  });
+  const row = catalog.rows.find((r) => r.id === rowId);
+  if (!row) {
+    panel.appendChild(el('p', 'settings-field-hint', 'Routing row not found.'));
+    return false;
+  }
+
+  const ids = {
+    provider: `agentCenterRouting-${row.id}-provider`,
+    model: `agentCenterRouting-${row.id}-model`,
+  };
+  const bindingHost = el('div', 'settings-routing-row__selects');
+  const { providerSelect, modelSelect } = appendProviderModelFields(
+    bindingHost,
+    ids,
+    undefined,
+    'stacked',
+  );
+  const controls: RowControls = { row, providerSelect, modelSelect };
+  panel.appendChild(bindingHost);
+
+  const effective = el('p', 'settings-routing-effective');
+  effective.appendChild(el('span', 'settings-routing-effective__label', 'Effective'));
+  const value = el('span', 'settings-routing-effective__value', formatEffective(row));
+  effective.appendChild(document.createTextNode(' '));
+  effective.appendChild(value);
+  controls.effectiveEl = value;
+  panel.appendChild(effective);
+
+  if (supportsAdvancedPanel(row)) {
+    const advanced = document.createElement('details');
+    advanced.className = 'settings-routing-advanced';
+    const summary = document.createElement('summary');
+    summary.className = 'settings-routing-advanced__summary';
+    summary.textContent = 'Sampler and thinking';
+    advanced.appendChild(summary);
+
+    const advancedBody = el('div', 'settings-routing-advanced__body');
+    const samplerFields = buildSamplerFieldInputs(row.sampler ?? null, {
+      includeMaxTokens: row.persistKind === 'sub-agent',
+      emptyPlaceholder: 'Inherit',
+    });
+    samplerFields.setValues(row.sampler ?? null);
+    controls.samplerFields = samplerFields;
+    advancedBody.appendChild(samplerFields.root);
+
+    const thinkingSelect = buildThinkingSelect(row.thinkingMode ?? 'inherit');
+    controls.thinkingSelect = thinkingSelect;
+    const { row: thinkingSettingsRow } = createSettingsSelectRow('Thinking', {
+      select: thinkingSelect,
+      searchKey: `models.routing.${row.id}.thinking`,
+    });
+    advancedBody.appendChild(thinkingSettingsRow);
+    advanced.appendChild(advancedBody);
+    panel.appendChild(advanced);
+  }
+
+  appendRowFallbackEditor(panel, controls, fallbackConfig);
+
+  panel.appendChild(
+    createSettingsActionsRow([
+      {
+        label: 'Save model binding',
+        variant: 'primary',
+        onClick: () => {
+          void saveRow(controls);
+        },
+      },
+    ]),
+  );
+
+  await wireProviderModelSelects(
+    controls,
+    row.persistKind === 'work-agent' || row.persistKind === 'sub-agent',
+  );
+  setEffectiveText(controls);
+  return true;
 }
 
 /** Re-render when catalog may be stale (after save). */

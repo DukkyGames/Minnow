@@ -17,13 +17,11 @@ const SETTINGS_SECTION_IDS = [
   'model-routing',
   'sampler',
   'thinking',
-  'prompting',
+  'agent-center',
   'rules',
-  'modes',
   'experts',
-  'work-agents',
   'agent-packs',
-  'sub-agents',
+  'autopilot',
   'search',
   'deep-research',
   'servers',
@@ -42,11 +40,9 @@ const DYNAMIC_SECTION_BODY_IDS = [
   'settingsGeneralBody',
   'settingsModelRoutingBody',
   'settingsSamplerBody',
-  'settingsModesBody',
+  'settingsAgentCenterBody',
   'settingsExpertsBody',
-  'settingsWorkAgentsBody',
   'settingsAgentPacksBody',
-  'settingsSubAgentsBody',
   'settingsSearchBody',
   'settingsDeepResearchBody',
   'settingsServersBody',
@@ -114,17 +110,18 @@ describe('settings page HTML', () => {
     assert.match(html, /data-settings-nav-area="general"/);
     assert.match(html, /data-settings-nav-hub="web-research"/);
     assert.match(html, /data-settings-category="models"/);
-    assert.match(html, /data-category="knowledge"/);
+    assert.match(html, /data-settings-category="agents"/);
+    assert.doesNotMatch(html, /data-category="knowledge"/);
     assert.doesNotMatch(html, /class="settings-category-subnav"/);
   });
 
   test('SETTINGS_SECTION_IDS matches canonical section count', () => {
-    assert.equal(SETTINGS_SECTION_IDS.length, 26);
+    assert.equal(SETTINGS_SECTION_IDS.length, 24);
   });
 
-  test('prompts hub mount exists in index.html', () => {
-    assert.match(html, /id="settingsPromptsHubMount"/);
-    assert.match(html, /class="settings-prompts-hub-mount"/);
+  test('agents center mount exists in index.html', () => {
+    assert.match(html, /id="settingsAgentCenterBody"/);
+    assert.match(html, /data-settings-nav-area="agent-center"/);
   });
 
   test('user rules section controls exist in index.html', () => {
@@ -132,7 +129,7 @@ describe('settings page HTML', () => {
     assert.match(html, /id="settingsRulesEnabled"/);
     assert.match(html, /id="settingsRulesText"/);
     assert.match(html, /id="settingsRulesSave"/);
-    assert.match(html, /data-settings-search-key="knowledge\.rules\.enabled"/);
+    assert.match(html, /data-settings-search-key="agents\.rules\.enabled"/);
   });
 
   test('audio settings panel exists in index.html', () => {

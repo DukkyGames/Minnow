@@ -492,42 +492,24 @@
         Agents
         <span class="settings-nav__count settings-nav-group__count" hidden aria-hidden="true"></span>
       </p>
-      <button type="button" class="settings-nav__item" data-area-jump="prompting" data-settings-nav-area="prompting">
-        <span class="settings-nav__item-label">Prompts</span>
+      <button type="button" class="settings-nav__item" data-area-jump="agent-center" data-settings-nav-area="agent-center">
+        <span class="settings-nav__item-label">Agents</span>
         <span class="settings-nav__count" hidden aria-hidden="true"></span>
       </button>
-      <button type="button" class="settings-nav__item" data-area-jump="modes" data-settings-nav-area="modes">
-        <span class="settings-nav__item-label">Modes</span>
+      <button type="button" class="settings-nav__item" data-area-jump="rules" data-settings-nav-area="rules">
+        <span class="settings-nav__item-label">Rules</span>
         <span class="settings-nav__count" hidden aria-hidden="true"></span>
       </button>
       <button type="button" class="settings-nav__item" data-area-jump="experts" data-settings-nav-area="experts">
         <span class="settings-nav__item-label">Experts</span>
         <span class="settings-nav__count" hidden aria-hidden="true"></span>
       </button>
-      <button type="button" class="settings-nav__item" data-area-jump="work-agents" data-settings-nav-area="work-agents">
-        <span class="settings-nav__item-label">Work agents</span>
-        <span class="settings-nav__count" hidden aria-hidden="true"></span>
-      </button>
       <button type="button" class="settings-nav__item" data-area-jump="agent-packs" data-settings-nav-area="agent-packs">
         <span class="settings-nav__item-label">Agent packs</span>
         <span class="settings-nav__count" hidden aria-hidden="true"></span>
       </button>
-      <button type="button" class="settings-nav__item" data-area-jump="sub-agents" data-settings-nav-area="sub-agents">
-        <span class="settings-nav__item-label">Sub-agents</span>
-        <span class="settings-nav__count" hidden aria-hidden="true"></span>
-      </button>
       <button type="button" class="settings-nav__item" data-area-jump="autopilot" data-settings-nav-area="autopilot">
         <span class="settings-nav__item-label">Autopilot</span>
-        <span class="settings-nav__count" hidden aria-hidden="true"></span>
-      </button>
-    </div>
-    <div class="settings-nav-group" data-settings-nav-group="knowledge">
-      <p class="settings-nav-group__label" data-settings-category="knowledge">
-        Knowledge
-        <span class="settings-nav__count settings-nav-group__count" hidden aria-hidden="true"></span>
-      </p>
-      <button type="button" class="settings-nav__item" data-area-jump="rules" data-settings-nav-area="rules">
-        <span class="settings-nav__item-label">Rules</span>
         <span class="settings-nav__count" hidden aria-hidden="true"></span>
       </button>
     </div>
@@ -692,7 +674,7 @@
       </section>
       <section id="settingsSection-model-routing" class="settings-section settings-section--wide settings-area" data-area="model-routing">
         <h2>Routing</h2>
-        <p class="settings-lead">Pick provider and model per role. Main chat follows the top-bar picker; empty rows use the active chat model.</p>
+        <p class="settings-lead">Pick provider and model per role. Main chat follows the top-bar picker. Work agent and sub-agent bindings are in <strong>Agents</strong>.</p>
         <div id="settingsModelRoutingBody" class="settings-section-body settings-section-body--routing"></div>
       </section>
       <section id="settingsSection-sampler" class="settings-section settings-section--wide settings-area settings-area--title-suppressed" data-area="sampler">
@@ -711,19 +693,48 @@
         <div id="settingsUsageBody" class="settings-section-body"></div>
       </section>
       </div>
-      <div class="settings-category" data-category="knowledge">
+      <div class="settings-category" data-category="agents">
 
+      <section id="settingsSection-agent-center" class="settings-section settings-section--wide settings-area settings-area--title-suppressed" data-area="agent-center">
+        <h2>Agents</h2>
+        <p class="settings-lead">Modes, work agents, and sub-agents in one place. Click a card to edit its prompt, model, and options.</p>
+        <div id="settingsAgentCenterBody" class="settings-section-body settings-agent-center-body"></div>
+        <details class="settings-agent-base-prompt" id="settingsBasePromptPanel" data-settings-search-key="agents.prompting">
+          <summary class="settings-agent-base-prompt__summary">Base system prompt</summary>
+          <p class="settings-field-hint settings-agent-base-prompt__hint">Shared Full, Lite, and Custom prompt parts applied before mode and agent prompts.</p>
+          <p
+            id="settingsPromptTokenBreakdown"
+            class="settings-prompt-estimate-breakdown"
+            role="status"
+            aria-live="polite"
+          >Computing estimate…</p>
+          <div id="settingsSetupProfilesMount"></div>
+          <div class="settings-profile-tabs" role="group" aria-label="Prompt profile">
+            <button type="button" data-profile-tab="full" class="is-active">Full</button>
+            <button type="button" data-profile-tab="lite">Lite</button>
+            <button type="button" data-profile-tab="custom">Custom</button>
+          </div>
+          <div id="settingsCustomConfigBar" class="settings-custom-bar hidden">
+            <select id="settingsCustomConfigSelect" aria-label="Custom configuration"></select>
+            <button type="button" id="settingsCustomConfigNew">New</button>
+            <button type="button" id="settingsCustomConfigSave">Save</button>
+            <button type="button" id="settingsCustomConfigDuplicate">Duplicate</button>
+            <button type="button" id="settingsCustomConfigDelete">Delete</button>
+          </div>
+          <div id="settingsPromptParts" class="settings-parts-mount"></div>
+        </details>
+      </section>
       <section id="settingsSection-rules" class="settings-section settings-area settings-area--title-suppressed" data-area="rules">
         <h2>Rules</h2>
         <p class="settings-lead">Standing instructions added to every parent chat send, after the built-in system prompt. Does not apply to sub-agents.</p>
-        <label class="settings-toggle-row" data-settings-search-key="knowledge.rules.enabled">
+        <label class="settings-toggle-row" data-settings-search-key="agents.rules.enabled">
           <span>Enable user rules</span>
           <input type="checkbox" id="settingsRulesEnabled">
         </label>
         <p id="settingsRulesOffline" class="field-hint settings-rules-offline hidden">
           Start with <code>npm start</code> to persist rules to <code>~/.minnow/rules.json</code>. Edits are kept in this browser until then.
         </p>
-        <div class="field settings-rules-field" data-settings-search-key="knowledge.rules.text">
+        <div class="field settings-rules-field" data-settings-search-key="agents.rules.text">
           <label for="settingsRulesText">Instructions</label>
           <textarea id="settingsRulesText" class="settings-rules-textarea" rows="12" spellcheck="true"
             placeholder="e.g. Always use TypeScript strict mode. Prefer small diffs."></textarea>
@@ -732,58 +743,15 @@
           <button type="button" id="settingsRulesSave" class="btn-primary">Save rules</button>
         </div>
       </section>
-      </div>
-      <div class="settings-category" data-category="agents">
-
-      <section id="settingsSection-prompting" class="settings-section settings-area settings-area--title-suppressed" data-area="prompting">
-        <h2>Prompts</h2>
-        <p class="settings-lead">Prompt profiles, setup bundles, and every role prompt in one searchable list.</p>
-        <p
-          id="settingsPromptTokenBreakdown"
-          class="settings-prompt-estimate-breakdown"
-          role="status"
-          aria-live="polite"
-        >Computing estimate…</p>
-        <div id="settingsSetupProfilesMount"></div>
-        <div class="settings-profile-tabs" role="group" aria-label="Prompt profile">
-          <button type="button" data-profile-tab="full" class="is-active">Full</button>
-          <button type="button" data-profile-tab="lite">Lite</button>
-          <button type="button" data-profile-tab="custom">Custom</button>
-        </div>
-        <div id="settingsCustomConfigBar" class="settings-custom-bar hidden">
-          <select id="settingsCustomConfigSelect" aria-label="Custom configuration"></select>
-          <button type="button" id="settingsCustomConfigNew">New</button>
-          <button type="button" id="settingsCustomConfigSave">Save</button>
-          <button type="button" id="settingsCustomConfigDuplicate">Duplicate</button>
-          <button type="button" id="settingsCustomConfigDelete">Delete</button>
-        </div>
-        <div id="settingsPromptParts" class="settings-parts-mount"></div>
-        <div id="settingsPromptsHubMount" class="settings-prompts-hub-mount"></div>
-      </section>
-      <section id="settingsSection-modes" class="settings-section settings-area settings-area--title-suppressed" data-area="modes">
-        <h2>Modes</h2>
-        <p class="settings-lead">General, Build, Plan, Orchestrate, Reef, and Debug: tool policy and mode options. Edit prompts in <strong>Prompts</strong>.</p>
-        <div id="settingsModesBody" class="settings-section-body"></div>
-      </section>
       <section id="settingsSection-experts" class="settings-section settings-area settings-area--title-suppressed" data-area="experts">
         <h2>Experts</h2>
-        <p class="settings-lead">Personas you pick in the composer. Edit prompts in <strong>Prompts</strong>; try them in Expert Lab.</p>
+        <p class="settings-lead">Personas you pick in the composer. Edit prompts in <strong>Agents</strong>; try them in Expert Lab.</p>
         <div id="settingsExpertsBody" class="settings-section-body"></div>
-      </section>
-      <section id="settingsSection-work-agents" class="settings-section settings-area settings-area--title-suppressed" data-area="work-agents">
-        <h2>Work agents</h2>
-        <p class="settings-lead">Specialized agents (for example UI Designer): enable flags, context budget, and policies. Prompts and models live in <strong>Prompts</strong> and <strong>Models</strong>.</p>
-        <div id="settingsWorkAgentsBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-agent-packs" class="settings-section settings-area settings-area--title-suppressed" data-area="agent-packs">
         <h2>Agent packs</h2>
         <p class="settings-lead">Bundled agent definitions you can enable for a workspace or session.</p>
         <div id="settingsAgentPacksBody" class="settings-section-body"></div>
-      </section>
-      <section id="settingsSection-sub-agents" class="settings-section settings-area settings-area--title-suppressed" data-area="sub-agents">
-        <h2>Sub-agents</h2>
-        <p class="settings-lead">Background workers (explore, shell, research, and more): concurrency, timeouts, and tool policy. Prompts and models live in <strong>Prompts</strong> and <strong>Models</strong>.</p>
-        <div id="settingsSubAgentsBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-autopilot" class="settings-section settings-area settings-area--title-suppressed" data-area="autopilot">
         <h2>Autopilot</h2>
