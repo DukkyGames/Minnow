@@ -251,7 +251,7 @@ export const scheduleElectronPreviewHostLayoutSync = scheduleElectronPreviewHost
 export function resetPreviewGuestVisibilityForTests(): void {
   previewGuestVisible = false;
   layoutSyncChain = Promise.resolve();
-  if (layoutSyncRaf) {
+  if (layoutSyncRaf && typeof cancelAnimationFrame === 'function') {
     cancelAnimationFrame(layoutSyncRaf);
     layoutSyncRaf = 0;
   }

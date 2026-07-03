@@ -6,7 +6,6 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { launchInstance, resetInstancesForTests } from '../../src/os/instances.ts';
 import {
-  activateDesktopChat,
   resetDesktopStateForTests,
   setDesktopStateForTests,
 } from '../../src/os/desktop-state.ts';

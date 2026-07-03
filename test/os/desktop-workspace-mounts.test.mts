@@ -135,12 +135,12 @@ describe('syncDesktopWorkspaceMounts listing root', () => {
       writable: true,
     });
     Object.defineProperty(globalThis, 'requestAnimationFrame', {
-      value: originalRequestAnimationFrame,
+      value: originalRequestAnimationFrame ?? ((cb: FrameRequestCallback) => setTimeout(() => cb(0), 0) as unknown as number),
       configurable: true,
       writable: true,
     });
     Object.defineProperty(globalThis, 'cancelAnimationFrame', {
-      value: originalCancelAnimationFrame,
+      value: originalCancelAnimationFrame ?? (() => {}),
       configurable: true,
       writable: true,
     });

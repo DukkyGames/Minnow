@@ -183,9 +183,9 @@ export async function syncDesktopWorkspaceMounts(): Promise<void> {
         restoreToCode(record);
       }
       mountSurface = 'code';
-      const fileLayout = await import('../ui/file-layout');
-      fileLayout.reconcileRightSplitDomWithState();
       if (document.getElementById('btnFileSidebarCollapse')) {
+        const fileLayout = await import('../ui/file-layout');
+        fileLayout.reconcileRightSplitDomWithState();
         fileLayout.applyFileSidebarVisuals();
       }
     }
