@@ -7,7 +7,7 @@ import { isActiveChatStreaming, subscribeChatStreamEnd } from '../chat/streaming
 import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
 import {
   CHAT_APP_ID,
-  createAssistantChat,
+  createDesktopChat,
   ensureActiveDesktopAssistantChat,
 } from './desktop-chat-sessions';
 import { getWorkspacePath } from '../state/workspace';
@@ -147,7 +147,7 @@ function createFreshAssistantChat(
   workspacePath: string,
   state: NonNullable<typeof sessionState>,
 ): void {
-  const chat = createAssistantChat(workspacePath, newChatId());
+  const chat = createDesktopChat(workspacePath, newChatId());
   state.chats.unshift(chat);
   state.activeId = chat.id;
   rememberActiveChatForApp(CHAT_APP_ID, chat.id);

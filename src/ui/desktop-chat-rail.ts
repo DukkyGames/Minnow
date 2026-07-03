@@ -3,7 +3,7 @@
  */
 
 import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
-import { createAssistantChat, CHAT_APP_ID } from '../state/chat-app-sessions';
+import { CHAT_APP_ID, createDesktopChat } from '../state/session-workspace-scope';
 import {
   getAssistantChats,
   newChatId,
@@ -158,7 +158,7 @@ export async function createNewDesktopChat(): Promise<void> {
   const path = await getDesktopWorkspacePath();
   if (!path || !sessionState) return;
 
-  const chat = createAssistantChat(path, newChatId());
+  const chat = createDesktopChat(path, newChatId());
   sessionState.chats.unshift(chat);
   sessionState.activeId = chat.id;
   rememberActiveChatForApp(CHAT_APP_ID, chat.id);

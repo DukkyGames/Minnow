@@ -56,11 +56,20 @@ export function resetChromePopoverRegistryForTests(): void {
   chromePopoverOpenCount = 0;
 }
 
+/** True when the desktop workspace drawer is showing the browser mount. */
+function isDesktopBrowserMountActive(): boolean {
+  const mount = document.getElementById('desktopPreviewMount');
+  return Boolean(mount?.classList.contains('is-active'));
+}
+
 /** True when the preview split pane is the active right pane and not CSS-hidden. */
 export function isPreviewPaneDomVisible(): boolean {
   if (getFilePanelState().rightPaneMode !== 'preview') return false;
   const pane = document.getElementById('previewPane');
-  if (!pane || pane.classList.contains('hidden')) return false;
+  if (!pane) return false;
+  // Desktop drawer CSS keeps #previewPane flex-visible even when .hidden lingers briefly.
+  if (isDesktopBrowserMountActive()) return true;
+  if (pane.classList.contains('hidden')) return false;
   return true;
 }
 
@@ -71,11 +80,8 @@ function isPreviewSurfaceActive(): boolean {
 }
 
 function isDesktopBrowserSurfaceActive(): boolean {
-  if (document.documentElement.dataset.osApp !== 'chat') return false;
-  const mount = document.getElementById('desktopPreviewMount');
-  if (!mount?.classList.contains('is-active')) return false;
-  const pane = document.getElementById('previewPane');
-  return Boolean(pane && !pane.classList.contains('hidden'));
+  if (!isDesktopBrowserMountActive()) return false;
+  return isPreviewPaneDomVisible();
 }
 
 /** True when the Code workspace (where #previewBody lives) is the active shell surface. */

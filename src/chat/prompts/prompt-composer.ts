@@ -34,6 +34,7 @@ const PART_SEPARATOR = '\n\n---\n\n';
 /** Operating modes that receive the shared mode-handoff tool-usage fragment. */
 const MODE_HANDOFF_MODE_IDS = new Set<ModeId>([
   'general',
+  'desktop',
   'plan',
   'build',
   'orchestrate',
@@ -41,7 +42,7 @@ const MODE_HANDOFF_MODE_IDS = new Set<ModeId>([
 ]);
 
 /** Modes that receive the fact-verification tool-usage fragment. */
-const FACT_VERIFICATION_MODE_IDS = new Set<ModeId>(['general', 'plan', 'build']);
+const FACT_VERIFICATION_MODE_IDS = new Set<ModeId>(['general', 'desktop', 'plan', 'build']);
 
 function contextHasBrowserPreviewTools(ctx: ComposeContext): boolean {
   const ids = ctx.enabledToolIds ?? [];
@@ -110,8 +111,8 @@ function isPartEnabled(
   }
   if (partId === 'info') {
     if (!ctx.infoPresetId) return false;
-    // General-assistant context applies only in General mode (other modes have their own prompts).
-    return ctx.modeId === 'general';
+    // General-assistant context applies in General and Desktop modes.
+    return ctx.modeId === 'general' || ctx.modeId === 'desktop';
   }
   return true;
 }
@@ -250,7 +251,7 @@ function contextHasLaunchMinnowAppTool(ctx: ComposeContext): boolean {
 /** General-mode MinnowOS app routing when launch_minnow_app is enabled. */
 function resolveLaunchMinnowAppBody(ctx: ComposeContext, profile: PromptProfile): string {
   const modeId = ctx.modeId ?? '';
-  if (modeId !== 'general' || !contextHasLaunchMinnowAppTool(ctx)) {
+  if ((modeId !== 'general' && modeId !== 'desktop') || !contextHasLaunchMinnowAppTool(ctx)) {
     return '';
   }
   const loadProfile = profile === 'lite' ? 'lite' : 'full';

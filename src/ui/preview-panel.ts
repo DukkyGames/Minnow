@@ -212,7 +212,7 @@ function onPreviewNavigation(url: string): void {
     url &&
     HTTP_URL_RE.test(url)
   ) {
-    revealPreviewPanelForAgentNavigation(url);
+    void revealPreviewPanelForAgentNavigation(url);
   }
 
   syncAddressBarFromNavigation(url);
@@ -467,26 +467,24 @@ export function loadPreviewSource(source: PreviewSource, options?: { cacheBust?:
  * Show the preview split + Electron guest when browser_navigate runs.
  * Does not load the URL — caller uses navigateAndWait (avoids double fetch).
  */
-export function revealPreviewPanelForAgentNavigation(url: string): void {
+export async function revealPreviewPanelForAgentNavigation(url: string): Promise<void> {
   const trimmed = url.trim();
   if (!trimmed) return;
 
-  void (async () => {
-    const { isDesktopChatActive } = await import('../os/desktop-state');
-    const desktopChat = isDesktopChatActive();
-    if (desktopChat) {
-      const mounts = await import('../os/desktop-workspace-mounts');
-      await mounts.revealDesktopBrowserPanel();
-    } else if (!dismissFileViewerForPreview()) {
-      return;
-    }
+  const { isDesktopWorkspaceHostingActive } = await import('../os/desktop-workspace-mounts');
+  const desktopHosted = isDesktopWorkspaceHostingActive();
+  if (desktopHosted) {
+    const mounts = await import('../os/desktop-workspace-mounts');
+    await mounts.revealDesktopBrowserPanel();
+  } else if (!dismissFileViewerForPreview()) {
+    return;
+  }
 
-    applyAgentPreviewNavigation(trimmed, desktopChat);
-  })();
+  await applyAgentPreviewNavigation(trimmed, desktopHosted);
 }
 
-function applyAgentPreviewNavigation(url: string, desktopChat: boolean): void {
-  if (!desktopChat && !dismissFileViewerForPreview()) return;
+async function applyAgentPreviewNavigation(url: string, desktopHosted: boolean): Promise<void> {
+  if (!desktopHosted && !dismissFileViewerForPreview()) return;
 
   if (isFullscreenOverlayObscuringWorkspace()) {
     patchFilePanelState({ previewSource: { kind: 'url', url } });
@@ -500,7 +498,7 @@ function applyAgentPreviewNavigation(url: string, desktopChat: boolean): void {
     return;
   }
 
-  if (!desktopChat) {
+  if (!desktopHosted) {
     showPreviewSplit();
   }
   patchFilePanelState({ previewSource: { kind: 'url', url } });
@@ -511,7 +509,8 @@ function applyAgentPreviewNavigation(url: string, desktopChat: boolean): void {
   if (input) input.value = url;
 
   if (usesElectronPreview()) {
-    void showPreviewHost();
+    await showPreviewHost();
+    await syncElectronPreviewHostLayout();
   }
 }
 
@@ -529,8 +528,7 @@ export async function openUrlInPreviewPanel(url: string): Promise<void> {
     return;
   }
 
-  revealPreviewPanelForAgentNavigation(trimmed);
-  await api.show();
+  await revealPreviewPanelForAgentNavigation(trimmed);
   scheduleElectronPreviewHostVisibilitySync();
 
   if (api.navigateAndWait) {

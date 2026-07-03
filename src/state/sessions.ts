@@ -17,6 +17,7 @@ import { decodeModelSelectKey } from '../lib/model-select-key';
 import {
   CHAT_APP_ID,
   createAssistantChat,
+  createDesktopChat,
   getAssistantChats as filterAssistantChats,
   getChatsForChatsWorkspace as filterChatsForChatsWorkspace,
   getChatLastMessageAt,
@@ -1406,6 +1407,23 @@ export function activateAssistantChatForApp(chatsWorkspacePath: string): Chat {
   const state = requireSessionState();
   const nextId = resolveActiveAssistantChatId(chatsWorkspacePath, state, (workspaceKey) => {
     const fresh = createAssistantChat(workspaceKey, newChatId());
+    touchChat(fresh);
+    return fresh;
+  });
+  state.activeId = nextId;
+  rememberActiveChatForAppInState(state, CHAT_APP_ID, nextId);
+  scheduleSaveSessions();
+  return getActiveChat();
+}
+
+/**
+ * Activate the last desktop chat or create one (desktop mode).
+ * Requires the absolute desktop workspace path from `getDesktopWorkspacePath()`.
+ */
+export function activateDesktopAssistantChatForApp(desktopWorkspacePath: string): Chat {
+  const state = requireSessionState();
+  const nextId = resolveActiveAssistantChatId(desktopWorkspacePath, state, (workspaceKey) => {
+    const fresh = createDesktopChat(workspaceKey, newChatId());
     touchChat(fresh);
     return fresh;
   });

@@ -24,6 +24,14 @@ const MODE_DEFINITIONS: ModeDefinition[] = [
     toolPolicy: allowGroupsToolPolicy('general', MODE_ALLOWED_GROUPS.general),
   },
   {
+    id: 'desktop',
+    label: 'Desktop',
+    description:
+      'MinnowOS desktop assistant — full tool access for everyday tasks on the desktop surface.',
+    promptId: 'desktop',
+    toolPolicy: allowGroupsToolPolicy('desktop', MODE_ALLOWED_GROUPS.desktop),
+  },
+  {
     id: 'build',
     label: 'Build',
     description: 'Default development mode with broad tool access.',
@@ -67,9 +75,11 @@ export function listModes(): ModeDefinition[] {
   return [...MODE_DEFINITIONS];
 }
 
-/** Composer mode strip (excludes Orchestrate and Reef; not shown in Code chat). */
+/** Composer mode strip (excludes Orchestrate, Reef, and Desktop-only mode). */
 export function listComposerModes(): ModeDefinition[] {
-  return MODE_DEFINITIONS.filter((m) => m.id !== 'orchestrate' && m.id !== 'reef');
+  return MODE_DEFINITIONS.filter(
+    (m) => m.id !== 'orchestrate' && m.id !== 'reef' && m.id !== 'desktop',
+  );
 }
 
 export function getMode(id: ModeId): ModeDefinition {

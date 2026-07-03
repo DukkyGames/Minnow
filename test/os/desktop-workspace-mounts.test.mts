@@ -11,6 +11,10 @@ import {
   resetFileTreeListingRootForTests,
   setFileTreeListingWorkspaceRoot,
 } from '../../src/ui/file-tree-listing-root.ts';
+import {
+  resetChromePopoverRegistryForTests,
+  resetPreviewGuestVisibilityForTests,
+} from '../../src/ui/preview-electron-visibility.ts';
 import { resetInstancesForTests } from '../../src/os/instances.ts';
 import { resetDesktopStateForTests } from '../../src/os/desktop-state.ts';
 import {
@@ -41,8 +45,15 @@ function setupDom(win: Window): void {
 }
 
 describe('syncDesktopWorkspaceMounts listing root', () => {
+  const originalWindow = globalThis.window;
+  const originalDocument = globalThis.document;
+  const originalHTMLElement = globalThis.HTMLElement;
+  const originalFetch = globalThis.fetch;
+  let happyDomWindow: Window | null = null;
+
   beforeEach(() => {
     const win = new Window();
+    happyDomWindow = win;
     const g = globalThis as typeof globalThis & {
       window: Window;
       document: Document;
@@ -80,6 +91,30 @@ describe('syncDesktopWorkspaceMounts listing root', () => {
     resetDesktopWorkspacePathCache();
     resetInstancesForTests();
     resetDesktopStateForTests();
+    resetPreviewGuestVisibilityForTests();
+    resetChromePopoverRegistryForTests();
+    happyDomWindow?.close();
+    happyDomWindow = null;
+    Object.defineProperty(globalThis, 'window', {
+      value: originalWindow,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(globalThis, 'document', {
+      value: originalDocument,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(globalThis, 'HTMLElement', {
+      value: originalHTMLElement,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(globalThis, 'fetch', {
+      value: originalFetch,
+      configurable: true,
+      writable: true,
+    });
   });
 
   test('scopes file tree to desktop workspace when desktop is foreground', async () => {
