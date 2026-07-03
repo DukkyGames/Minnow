@@ -55,6 +55,8 @@ import {
 import { validateAskQuestionArgs, stringifyAskQuestionResult } from './ask-question-types';
 import { maybeBlockToolForUserApproval } from './permission-gate';
 import { getChatsWorkspacePath } from '../lib/chats-workspace';
+import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
+import { isDesktopChatActive } from '../os/desktop-state';
 import { isChatAppForeground } from '../ui/chat-mount';
 import { runWithFileTreeAutoRefresh } from '../ui/file-tree-auto-refresh';
 import { executeWithResultCache } from './result-cache';
@@ -662,7 +664,12 @@ async function executeStreamingCodeTool(
 }
 
 /** Chats sandbox root when the Chat app is foreground; otherwise server default workspace. */
+/** Desktop or chats sandbox root when chat UI is foreground; otherwise server default workspace. */
 async function resolveToolWorkspaceRoot(): Promise<string | undefined> {
+  if (isDesktopChatActive()) {
+    const path = await getDesktopWorkspacePath();
+    return path ?? undefined;
+  }
   if (!isChatAppForeground()) return undefined;
   const path = await getChatsWorkspacePath();
   return path ?? undefined;
