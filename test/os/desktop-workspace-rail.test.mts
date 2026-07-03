@@ -13,10 +13,12 @@ import {
 } from '../../src/os/desktop-workspace-state.ts';
 import {
   resetDesktopWorkspaceMountsForTests,
+  syncDesktopWorkspaceMounts,
 } from '../../src/os/desktop-workspace-mounts.ts';
 import {
   resetDesktopWorkspaceRailForTests,
 } from '../../src/os/desktop-workspace-rail.ts';
+import { resetDesktopWorkspaceRailResizeForTests } from '../../src/os/desktop-workspace-rail-resize.ts';
 import { initOsRouter, resetOsRouterForTests } from '../../src/os/router.ts';
 import { renderDesktop } from '../../src/os/desktop.ts';
 
@@ -90,6 +92,7 @@ describe('desktop workspace rail', () => {
     resetDesktopWorkspacePanelForTests();
     resetDesktopWorkspaceMountsForTests();
     resetDesktopWorkspaceRailForTests();
+    resetDesktopWorkspaceRailResizeForTests();
     resetOsRouterForTests();
     resetOsPageBridgeForTests();
     resetAppHostForTests();
@@ -104,6 +107,7 @@ describe('desktop workspace rail', () => {
     resetDesktopWorkspacePanelForTests();
     resetDesktopWorkspaceMountsForTests();
     resetDesktopWorkspaceRailForTests();
+    resetDesktopWorkspaceRailResizeForTests();
     resetOsRouterForTests();
     resetInstancesForTests();
     resetOsPageBridgeForTests();
@@ -117,8 +121,9 @@ describe('desktop workspace rail', () => {
     assert.ok(document.getElementById('desktopFileTreeMount'));
   });
 
-  test('openDesktopWorkspaceTab expands drawer with matching mount', () => {
+  test('openDesktopWorkspaceTab expands drawer with matching mount', async () => {
     openDesktopWorkspaceTab('files');
+    await syncDesktopWorkspaceMounts();
     const rail = document.querySelector('.mn-os-workspace-rail');
     assert.ok(rail?.classList.contains('is-expanded'));
     const filesMount = document.getElementById('desktopFileTreeMount');
@@ -131,5 +136,23 @@ describe('desktop workspace rail', () => {
     const rail = document.querySelector('.mn-os-workspace-rail');
     assert.ok(rail?.classList.contains('is-collapsed'));
     assert.equal(rail?.classList.contains('is-expanded'), false);
+  });
+
+  test('drawer header segments switch between workspace panels', async () => {
+    openDesktopWorkspaceTab('files');
+    await syncDesktopWorkspaceMounts();
+    const viewerSegment = document.querySelector<HTMLButtonElement>(
+      '.mn-os-workspace-rail-drawer-segment[data-workspace-tab="viewer"]',
+    );
+    assert.ok(viewerSegment);
+    viewerSegment.click();
+    await syncDesktopWorkspaceMounts();
+    const viewerMount = document.getElementById('desktopFileViewerMount');
+    assert.ok(viewerMount?.classList.contains('is-active'));
+    const filesMount = document.getElementById('desktopFileTreeMount');
+    assert.equal(filesMount?.classList.contains('is-active'), false);
+    assert.ok(viewerSegment.classList.contains('is-active'));
+    const rail = document.querySelector('.mn-os-workspace-rail');
+    assert.ok(rail?.classList.contains('is-expanded'));
   });
 });

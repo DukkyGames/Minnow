@@ -15,7 +15,11 @@ import {
   subscribeDesktopWorkspacePanel,
   type DesktopWorkspaceTab,
 } from './desktop-workspace-state';
-import { setFileTreeListingWorkspaceRoot } from '../ui/file-tree-listing-root';
+import {
+  fileTreeListingRootsEqual,
+  getFileTreeListingWorkspaceRoot,
+  setFileTreeListingWorkspaceRoot,
+} from '../ui/file-tree-listing-root';
 
 type MountSurface = 'code' | 'desktop' | null;
 
@@ -94,14 +98,17 @@ function restoreToCode(record: ReparentRecord): void {
   }
 }
 
-async function applyDesktopListingRoot(): Promise<void> {
-  const desktopPath = await getDesktopWorkspacePath();
-  setFileTreeListingWorkspaceRoot(desktopPath ?? undefined);
-}
-
-function applyCodeListingRoot(): void {
-  const main = getWorkspacePath().trim();
-  setFileTreeListingWorkspaceRoot(main || undefined);
+/** Point the file tree at the desktop sandbox or Code workspace; true when root changed. */
+async function applyListingRootForSurface(surface: MountSurface): Promise<boolean> {
+  const prev = getFileTreeListingWorkspaceRoot();
+  if (surface === 'desktop') {
+    const desktopPath = await getDesktopWorkspacePath();
+    setFileTreeListingWorkspaceRoot(desktopPath ?? undefined);
+  } else {
+    const main = getWorkspacePath().trim();
+    setFileTreeListingWorkspaceRoot(main || undefined);
+  }
+  return !fileTreeListingRootsEqual(prev, getFileTreeListingWorkspaceRoot());
 }
 
 function syncDrawerPaneVisibility(): void {
@@ -146,32 +153,37 @@ function bindResizeObserver(): void {
   });
   const previewBody = document.getElementById('previewBody');
   if (previewBody) resizeObserver.observe(previewBody);
+  const drawer = document.querySelector('.mn-os-workspace-rail-drawer');
+  if (drawer) resizeObserver.observe(drawer);
 }
 
 /** Move shared mounts to desktop drawer hosts or restore to Code layout. */
 export async function syncDesktopWorkspaceMounts(): Promise<void> {
   captureRecords();
   const nextSurface: MountSurface = shouldHostOnDesktop() ? 'desktop' : 'code';
+  const surfaceChanged = nextSurface !== mountSurface;
+  const listingRootChanged = await applyListingRootForSurface(nextSurface);
 
-  if (nextSurface !== mountSurface) {
+  if (surfaceChanged) {
     if (nextSurface === 'desktop') {
-      await applyDesktopListingRoot();
       for (const record of records) {
         mountToDesktop(record.desktopHostId, record.node);
       }
       mountSurface = 'desktop';
     } else {
-      applyCodeListingRoot();
       for (const record of records) {
         restoreToCode(record);
       }
       mountSurface = 'code';
-      void refreshFileTreeForSurface();
       void import('../ui/file-layout').then((m) => {
         m.reconcileRightSplitDomWithState();
         m.applyFileSidebarVisuals();
       });
     }
+  }
+
+  if (surfaceChanged || listingRootChanged) {
+    void refreshFileTreeForSurface();
   }
 
   syncDrawerPaneVisibility();

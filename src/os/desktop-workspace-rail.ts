@@ -19,8 +19,16 @@ import {
   initDesktopWorkspaceMountBridge,
   syncDesktopWorkspaceMounts,
 } from './desktop-workspace-mounts';
+import {
+  initDesktopWorkspaceRailResize,
+  restoreDesktopWorkspaceDrawerWidth,
+  syncDesktopWorkspaceRailResize,
+} from './desktop-workspace-rail-resize';
 
 const MOBILE_DESKTOP_MQ = '(max-width: 640px)';
+
+/** Collapsed tab glyphs — 75% of the left chat rail icon (28px). */
+const WORKSPACE_RAIL_TAB_ICON_SIZE = 21;
 
 let mobileMq: MediaQueryList | null = null;
 let mobileMqListener: ((event: MediaQueryListEvent) => void) | null = null;
@@ -65,12 +73,25 @@ function syncRailChrome(): void {
     btn.setAttribute('aria-label', active ? `Hide ${label}` : `Show ${label}`);
   }
 
-  const drawerTitle = document.getElementById('desktopWorkspaceDrawerTitle');
-  if (drawerTitle) {
-    drawerTitle.textContent = TAB_DEFS.find((t) => t.tab === state.tab)?.drawerTitle ?? 'Workspace';
+  for (const { tab, label } of TAB_DEFS) {
+    const segment = document.querySelector<HTMLButtonElement>(
+      `.mn-os-workspace-rail-drawer-segment[data-workspace-tab="${tab}"]`,
+    );
+    if (!segment) continue;
+    const selected = state.open && state.tab === tab;
+    segment.classList.toggle('is-active', selected);
+    segment.setAttribute('aria-selected', selected ? 'true' : 'false');
+    segment.tabIndex = selected ? 0 : -1;
+    segment.setAttribute('aria-label', label);
+  }
+
+  const metaRow = document.getElementById('desktopWorkspaceDrawerMeta');
+  if (metaRow) {
+    metaRow.hidden = !state.open || state.tab !== 'files';
   }
 
   syncRailBackdrop();
+  syncDesktopWorkspaceRailResize();
 }
 
 const TAB_DEFS: Array<{
@@ -104,6 +125,8 @@ const TAB_DEFS: Array<{
 ];
 
 async function onTabActivated(tab: DesktopWorkspaceTab): Promise<void> {
+  // Apply desktop listing root and reparent mounts before loading tree data.
+  await syncDesktopWorkspaceMounts();
   if (tab === 'browser') {
     const { showPreviewSplit } = await import('../ui/file-layout');
     showPreviewSplit();
@@ -112,10 +135,9 @@ async function onTabActivated(tab: DesktopWorkspaceTab): Promise<void> {
     showViewerSplit();
   } else if (tab === 'files') {
     const { initFileTreeIfNeeded, refreshFileTree } = await import('../ui/file-tree');
-    initFileTreeIfNeeded();
+    await initFileTreeIfNeeded();
     await refreshFileTree();
   }
-  await syncDesktopWorkspaceMounts();
 }
 
 function handleTabClick(tab: DesktopWorkspaceTab): void {
@@ -128,6 +150,53 @@ function handleTabClick(tab: DesktopWorkspaceTab): void {
   } else if (!nowOpen) {
     void syncDesktopWorkspaceMounts();
   }
+}
+
+/** Switch panel from the drawer header (never collapses on the active segment). */
+function handleHeaderSegmentClick(tab: DesktopWorkspaceTab): void {
+  const state = getDesktopWorkspacePanelState();
+  if (!state.open) {
+    openDesktopWorkspaceTab(tab);
+    void onTabActivated(tab);
+    return;
+  }
+  if (state.tab === tab) return;
+  openDesktopWorkspaceTab(tab);
+  void onTabActivated(tab);
+}
+
+function onHeaderSegmentKeydown(
+  event: KeyboardEvent,
+  tab: DesktopWorkspaceTab,
+  group: HTMLElement,
+): void {
+  const tabs = TAB_DEFS.map((def) => def.tab);
+  const currentIndex = tabs.indexOf(tab);
+  if (currentIndex < 0) return;
+
+  let nextIndex = currentIndex;
+  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+    event.preventDefault();
+    nextIndex = Math.min(currentIndex + 1, tabs.length - 1);
+  } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    nextIndex = Math.max(currentIndex - 1, 0);
+  } else if (event.key === 'Home') {
+    event.preventDefault();
+    nextIndex = 0;
+  } else if (event.key === 'End') {
+    event.preventDefault();
+    nextIndex = tabs.length - 1;
+  } else {
+    return;
+  }
+
+  const nextTab = tabs[nextIndex] ?? tab;
+  const nextBtn = group.querySelector<HTMLButtonElement>(
+    `.mn-os-workspace-rail-drawer-segment[data-workspace-tab="${nextTab}"]`,
+  );
+  nextBtn?.focus();
+  handleHeaderSegmentClick(nextTab);
 }
 
 /** Build right-edge workspace rail DOM and append to the desktop layer. */
@@ -147,34 +216,72 @@ export function renderDesktopWorkspaceRail(root: HTMLElement): void {
     tab.dataset.workspaceTab = def.tab;
     tab.setAttribute('aria-expanded', 'false');
     tab.setAttribute('aria-label', `Show ${def.label}`);
-    tab.appendChild(createOsIcon(def.icon, { size: 28 }));
+    tab.appendChild(createOsIcon(def.icon, { size: WORKSPACE_RAIL_TAB_ICON_SIZE }));
     tabStrip.appendChild(tab);
   }
 
   const drawer = document.createElement('div');
   drawer.className = 'mn-os-workspace-rail-drawer';
 
+  const resizeHandle = document.createElement('button');
+  resizeHandle.type = 'button';
+  resizeHandle.id = 'desktopWorkspaceDrawerResize';
+  resizeHandle.className = 'mn-os-workspace-rail-drawer-resize';
+  resizeHandle.setAttribute('aria-label', 'Resize workspace panel');
+  resizeHandle.setAttribute('aria-orientation', 'vertical');
+  resizeHandle.hidden = true;
+  resizeHandle.setAttribute('aria-hidden', 'true');
+  resizeHandle.tabIndex = -1;
+  drawer.appendChild(resizeHandle);
+
   const drawerHeader = document.createElement('header');
   drawerHeader.className = 'mn-os-workspace-rail-drawer-hdr';
 
-  const drawerTitle = document.createElement('span');
-  drawerTitle.id = 'desktopWorkspaceDrawerTitle';
-  drawerTitle.className = 'mn-os-workspace-rail-drawer-title';
-  drawerTitle.textContent = 'Desktop workspace';
+  const headerTop = document.createElement('div');
+  headerTop.className = 'mn-os-workspace-rail-drawer-hdr-top';
+
+  const segmentGroup = document.createElement('div');
+  segmentGroup.className = 'mn-os-workspace-rail-drawer-segments';
+  segmentGroup.setAttribute('role', 'tablist');
+  segmentGroup.setAttribute('aria-label', 'Workspace panels');
+
+  for (const def of TAB_DEFS) {
+    const segment = document.createElement('button');
+    segment.type = 'button';
+    segment.className = 'mn-os-workspace-rail-drawer-segment';
+    segment.dataset.workspaceTab = def.tab;
+    segment.setAttribute('role', 'tab');
+    segment.setAttribute('aria-selected', 'false');
+    segment.tabIndex = -1;
+    segment.appendChild(createOsIcon(def.icon, { size: 14 }));
+    const segmentLabel = document.createElement('span');
+    segmentLabel.className = 'mn-os-workspace-rail-drawer-segment-label';
+    segmentLabel.textContent = def.label;
+    segment.appendChild(segmentLabel);
+    segmentGroup.appendChild(segment);
+  }
+
+  const collapseBtn = document.createElement('button');
+  collapseBtn.type = 'button';
+  collapseBtn.id = 'btnDesktopWorkspaceCollapse';
+  collapseBtn.className = 'icon-btn mn-os-workspace-rail-drawer-collapse';
+  collapseBtn.setAttribute('aria-label', 'Collapse workspace panel');
+  collapseBtn.innerHTML = ICON_CHEVRON_LEFT;
+
+  headerTop.append(segmentGroup, collapseBtn);
+
+  const metaRow = document.createElement('div');
+  metaRow.id = 'desktopWorkspaceDrawerMeta';
+  metaRow.className = 'mn-os-workspace-rail-drawer-hdr-meta';
+  metaRow.hidden = true;
 
   const drawerPath = document.createElement('span');
   drawerPath.id = 'desktopWorkspaceDrawerPath';
   drawerPath.className = 'mn-os-workspace-rail-drawer-path';
   drawerPath.textContent = '~/.minnow/workspace';
 
-  const collapseBtn = document.createElement('button');
-  collapseBtn.type = 'button';
-  collapseBtn.id = 'btnDesktopWorkspaceCollapse';
-  collapseBtn.className = 'icon-btn';
-  collapseBtn.setAttribute('aria-label', 'Collapse workspace panel');
-  collapseBtn.innerHTML = ICON_CHEVRON_LEFT;
-
-  drawerHeader.append(drawerTitle, drawerPath, collapseBtn);
+  metaRow.appendChild(drawerPath);
+  drawerHeader.append(headerTop, metaRow);
 
   const drawerBody = document.createElement('div');
   drawerBody.className = 'mn-os-workspace-rail-drawer-body';
@@ -208,12 +315,29 @@ export function renderDesktopWorkspaceRail(root: HTMLElement): void {
 /** Wire workspace rail controls (call once from desktop render). */
 export function wireDesktopWorkspaceRail(): void {
   initDesktopWorkspaceMountBridge();
+  initDesktopWorkspaceRailResize();
+  restoreDesktopWorkspaceDrawerWidth();
 
   for (const def of TAB_DEFS) {
     const tab = document.getElementById(def.id);
     if (!tab || tab.dataset.bound === '1') continue;
     tab.dataset.bound = '1';
     tab.addEventListener('click', () => handleTabClick(def.tab));
+  }
+
+  const segmentGroup = document.querySelector('.mn-os-workspace-rail-drawer-segments');
+  if (segmentGroup && segmentGroup.dataset.bound !== '1') {
+    segmentGroup.dataset.bound = '1';
+    for (const def of TAB_DEFS) {
+      const segment = segmentGroup.querySelector<HTMLButtonElement>(
+        `[data-workspace-tab="${def.tab}"]`,
+      );
+      if (!segment) continue;
+      segment.addEventListener('click', () => handleHeaderSegmentClick(def.tab));
+      segment.addEventListener('keydown', (event) => {
+        onHeaderSegmentKeydown(event, def.tab, segmentGroup as HTMLElement);
+      });
+    }
   }
 
   const collapse = document.getElementById('btnDesktopWorkspaceCollapse');
