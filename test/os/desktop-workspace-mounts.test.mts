@@ -110,4 +110,16 @@ describe('syncDesktopWorkspaceMounts listing root', () => {
     launchInstance('code');
     assert.equal(isDesktopWorkspaceHostingActive(), false);
   });
+
+  test('syncFileTreeToPanelWorktree keeps desktop listing root on desktop', async () => {
+    openDesktopWorkspaceTab('files');
+    await syncDesktopWorkspaceMounts();
+    const desktopRoot = getFileTreeListingWorkspaceRoot();
+    assert.ok(desktopRoot);
+    assert.notEqual(desktopRoot, CODE_WS);
+
+    const { syncFileTreeToPanelWorktree } = await import('../../src/ui/file-tree.ts');
+    await syncFileTreeToPanelWorktree(CODE_WS);
+    assert.equal(getFileTreeListingWorkspaceRoot(), desktopRoot);
+  });
 });

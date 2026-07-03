@@ -10,6 +10,7 @@ import {
 } from '../tools/result-cache';
 import { getFilePanelState, patchFilePanelState } from '../state/file-panel';
 import { getWorkspacePath } from '../state/workspace';
+import { isDesktopWorkspaceHostingActive } from '../os/desktop-workspace-mounts';
 import {
   buildFileTreeToolContext,
   fileTreeListingRootsEqual,
@@ -210,6 +211,13 @@ export function invalidateFileTreeCache(): void {
 
 /** Sync file tree listing root with git panel worktree cwd; reload when root changes. */
 export async function syncFileTreeToPanelWorktree(panelCwd?: string): Promise<void> {
+  // Desktop drawer scopes the tree to ~/.minnow/workspace — ignore Code git-panel cwd.
+  if (isDesktopWorkspaceHostingActive()) {
+    startFileTreeGitStatusPoll(getFileTreeListingWorkspaceRoot());
+    syncFileSidebarTitleFromFileTree();
+    return;
+  }
+
   const nextRoot = resolveFileTreeListingRoot(panelCwd);
   const prevRoot = getFileTreeListingWorkspaceRoot();
 
