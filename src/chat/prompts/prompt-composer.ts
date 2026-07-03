@@ -43,18 +43,6 @@ const MODE_HANDOFF_MODE_IDS = new Set<ModeId>([
 /** Modes that receive the fact-verification tool-usage fragment. */
 const FACT_VERIFICATION_MODE_IDS = new Set<ModeId>(['general', 'plan', 'build']);
 
-/** Tool ids that imply built-in preview browser automation (navigation allowlist rules apply). */
-const BROWSER_PREVIEW_TOOL_IDS = new Set([
-  'browser_list',
-  'browser_navigate',
-  'browser_snapshot',
-  'browser_click',
-  'browser_fill',
-  'browser_eval',
-  'browser_screenshot',
-  'request_browser_origin_access',
-]);
-
 function contextHasBrowserPreviewTools(ctx: ComposeContext): boolean {
   const ids = ctx.enabledToolIds ?? [];
   return ids.some((id) => BROWSER_PREVIEW_TOOL_IDS.has(id));
