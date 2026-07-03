@@ -26,29 +26,52 @@ const DEFAULT_PLACEHOLDERS: Record<string, string> = {
 
 let queueCollapsed = false;
 
-function ensureQueueHost(): HTMLElement | null {
-  return (
-    document.querySelector('.chat-app-composer-inner') ??
-    document.querySelector('.input-bar-composer') ??
-    document.getElementById('desktopComposerRoot')
-  );
+interface QueueMountTarget {
+  host: HTMLElement;
+  before: ChildNode | null;
+}
+
+/** Resolve where the queue strip should mount for the active composer surface. */
+export function resolveComposerQueueMount(
+  inputEl: HTMLTextAreaElement | null = getActiveComposerSurface().inputEl,
+): QueueMountTarget | null {
+  if (!inputEl) return null;
+
+  const before =
+    inputEl.closest('.input-row') ??
+    inputEl.closest('.chat-app-input') ??
+    inputEl.closest('.mn-os-desktop-input-row') ??
+    inputEl;
+
+  const host = before.parentElement;
+  if (!host) return null;
+  return { host, before };
+}
+
+function mountQueueRoot(root: HTMLElement): void {
+  const mount = resolveComposerQueueMount();
+  if (!mount) {
+    if (root.parentElement !== document.body) {
+      document.body.appendChild(root);
+    }
+    return;
+  }
+
+  if (root.parentElement !== mount.host || root.nextSibling !== mount.before) {
+    mount.host.insertBefore(root, mount.before);
+  }
 }
 
 function ensureQueueRoot(): HTMLElement {
   let root = document.getElementById('composerMessageQueue');
-  if (root) return root;
-
-  root = document.createElement('section');
-  root.id = 'composerMessageQueue';
-  root.className = 'composer-message-queue hidden';
-  root.setAttribute('aria-label', 'Queued follow-up messages');
-
-  const host = ensureQueueHost();
-  if (host) {
-    host.insertBefore(root, host.firstChild);
-  } else {
-    document.body.appendChild(root);
+  if (!root) {
+    root = document.createElement('section');
+    root.id = 'composerMessageQueue';
+    root.className = 'composer-message-queue hidden';
+    root.setAttribute('aria-label', 'Queued follow-up messages');
   }
+
+  mountQueueRoot(root);
   return root;
 }
 
