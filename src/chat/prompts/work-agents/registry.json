@@ -2,6 +2,7 @@
   "ids": [
     "default",
     "general",
+    "desktop",
     "planner",
     "orchestrator",
     "builder",

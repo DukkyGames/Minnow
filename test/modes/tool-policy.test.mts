@@ -95,12 +95,16 @@ describe('filterToolsByMode', () => {
     assert.ok(filtered.some((t) => t.id === 'spawn_sub_agent'));
   });
 
-  test('general includes read_file and web_search when in catalog list', () => {
-    const filtered = filterToolsByMode(
-      [findTool('read_file'), findTool('web_search')],
-      'general',
-    );
-    assert.equal(filtered.length, 2);
+  test('desktop includes every built-in tool group', () => {
+    const filtered = filterToolsByMode(BUILT_IN_TOOLS, 'desktop');
+    for (const groupId of TOOL_GROUP_ID_LIST) {
+      for (const toolId of TOOL_GROUP_IDS[groupId]) {
+        assert.ok(
+          filtered.some((t) => t.id === toolId),
+          `desktop should allow ${toolId} (${groupId})`,
+        );
+      }
+    }
   });
 });
 
@@ -146,11 +150,11 @@ describe('cross-mode policy invariants', () => {
   const EMAIL_TOOLS = TOOL_GROUP_IDS.email;
   const CALENDAR_TOOLS = TOOL_GROUP_IDS.calendar;
 
-  test('bug-board tools allowed only in general and debug', () => {
+  test('bug-board tools allowed only in general, debug, and desktop', () => {
     for (const modeId of MODE_IDS) {
       for (const toolId of BUG_TOOLS) {
         const allowed = isToolAllowedForMode(modeId, toolId);
-        const expected = modeId === 'general' || modeId === 'debug';
+        const expected = modeId === 'general' || modeId === 'debug' || modeId === 'desktop';
         assert.equal(
           allowed,
           expected,
@@ -171,31 +175,33 @@ describe('cross-mode policy invariants', () => {
     }
   });
 
-  test('email and calendar denied in every mode', () => {
+  test('email and calendar denied except in desktop mode', () => {
     for (const modeId of MODE_IDS) {
       for (const toolId of [...EMAIL_TOOLS, ...CALENDAR_TOOLS]) {
+        const allowed = isToolAllowedForMode(modeId, toolId);
+        const expected = modeId === 'desktop';
         assert.ok(
-          !isToolAllowedForMode(modeId, toolId),
-          `${toolId} should be denied in ${modeId}`,
+          allowed === expected,
+          `${toolId} in ${modeId}: expected ${expected}`,
         );
       }
     }
   });
 
-  test('reef widget tool only in reef mode', () => {
+  test('reef widget tool only in reef and desktop modes', () => {
     for (const modeId of MODE_IDS) {
       const allowed = isToolAllowedForMode(modeId, 'check_reef_widget');
-      assert.equal(allowed, modeId === 'reef', `check_reef_widget in ${modeId}`);
+      assert.equal(allowed, modeId === 'reef' || modeId === 'desktop', `check_reef_widget in ${modeId}`);
     }
   });
 
-  test('board tools only in orchestrate mode', () => {
+  test('board tools only in orchestrate and desktop modes', () => {
     for (const modeId of MODE_IDS) {
       for (const toolId of TOOL_GROUP_IDS.board) {
         const allowed = isToolAllowedForMode(modeId, toolId);
         assert.equal(
           allowed,
-          modeId === 'orchestrate',
+          modeId === 'orchestrate' || modeId === 'desktop',
           `${toolId} in ${modeId}`,
         );
       }

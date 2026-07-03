@@ -59,6 +59,7 @@ export const resetSpeedChatHomeCache = resetMinnowHomeCache;
 
 const SCAFFOLD_DIRS = [
   'chats',
+  'workspace',
   'sessions',
   'bugs',
   'memory',

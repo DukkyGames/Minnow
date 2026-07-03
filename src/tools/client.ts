@@ -23,6 +23,7 @@ import {
 import {
   applyBoardMemberToolFilter,
   applyOrchestrateAutoToolFilter,
+  injectBoardMemberSubsetTools,
 } from '../chat/modes/orchestrate-tool-filter';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import type { Chat } from '../types';
@@ -55,6 +56,8 @@ import {
 import { validateAskQuestionArgs, stringifyAskQuestionResult } from './ask-question-types';
 import { maybeBlockToolForUserApproval } from './permission-gate';
 import { getChatsWorkspacePath } from '../lib/chats-workspace';
+import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
+import { isDesktopChatActive } from '../os/desktop-state';
 import { isChatAppForeground } from '../ui/chat-mount';
 import { runWithFileTreeAutoRefresh } from '../ui/file-tree-auto-refresh';
 import { executeWithResultCache } from './result-cache';
@@ -551,6 +554,9 @@ export function getEnabledToolDefinitionsForChat(
   const normalized = normalizeModeId(chat.modeId);
   let defs = getEnabledToolDefinitionsForMode(normalized);
   const executionMode = getBoardGroupForChat(chat)?.orchestrateBoard?.executionMode;
+  if (chat.boardTaskId?.trim()) {
+    defs = injectBoardMemberSubsetTools(defs);
+  }
   defs = applyBoardMemberToolFilter(defs, chat, executionMode);
   if (normalized !== 'orchestrate') return defs;
 
@@ -661,8 +667,13 @@ async function executeStreamingCodeTool(
   }
 }
 
-/** Chats sandbox root when the Chat app is foreground; otherwise server default workspace. */
+/** Chats sandbox root when legacy Chat app is foreground; desktop workspace when desktop chat is active. */
+/** Desktop or chats sandbox root when chat UI is foreground; otherwise server default workspace. */
 async function resolveToolWorkspaceRoot(): Promise<string | undefined> {
+  if (isDesktopChatActive()) {
+    const path = await getDesktopWorkspacePath();
+    return path ?? undefined;
+  }
   if (!isChatAppForeground()) return undefined;
   const path = await getChatsWorkspacePath();
   return path ?? undefined;

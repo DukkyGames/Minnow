@@ -100,7 +100,7 @@ export async function browserPreviewNavigate(url: string): Promise<string> {
     return 'Error: navigation is disabled in settings';
   }
 
-  revealPreviewPanelForAgentNavigation(url);
+  await revealPreviewPanelForAgentNavigation(url);
   const api = previewApi();
   const result = await api.navigateAndWait(url);
   if (!result.ok) {

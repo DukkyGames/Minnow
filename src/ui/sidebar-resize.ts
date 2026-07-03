@@ -46,6 +46,7 @@ export function syncAppBodySidebarWidthVars(): void {
 
 function schedulePreviewLayoutSyncIfNeeded(): void {
   if (getFilePanelState().rightPaneMode !== 'preview') return;
+  if (!window.minnow?.preview) return;
   void import('./preview-electron-visibility').then((m) => {
     m.scheduleElectronPreviewHostLayoutSync();
   });

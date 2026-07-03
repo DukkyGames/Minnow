@@ -89,6 +89,8 @@ export function syncLegacyChromeVisibility(): void {
 
   void import('./workspace-menubar').then((m) => m.syncWorkspaceMenubarPlacement());
 
+  void import('./desktop-workspace-mounts').then((m) => m.syncDesktopWorkspaceMounts());
+
   syncDesktopLayerSuppression();
 }
 
@@ -111,6 +113,7 @@ export function osOnAppOpen(appId: AppId): void {
     void import('../ui/preview-panel').then((m) => {
       m.resyncOpenPreviewPanelFromState();
     });
+    void import('./desktop-workspace-mounts').then((m) => m.syncDesktopWorkspaceMounts());
   }
   syncLegacyChromeVisibility();
 }

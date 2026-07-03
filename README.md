@@ -164,10 +164,12 @@ $env:PORT=3000; npm start
 | `npm start` | **Recommended** — Vite + tool server + `~/.minnow` APIs + Electron desktop shell. |
 | `npm run desktop` / `npm run electron:dev` | Vite HMR + Electron window (no full tool server bootstrap of `server.js`). |
 | `npm run dev` | Vite only (UI/HMR; most server features unavailable). |
-| `npm run build` | Typecheck + production build → `dist/` (`prebuild` regenerates the skills manifest). |
+| `npm run build` | Typecheck + production build → `dist/` (`prebuild` regenerates the skills manifest). **Does not produce a desktop installer** — use `package` below. |
 | `npm run preview` | Preview the production `dist/` build (no tool API). |
-| `npm run package` | Build + Electron build + **electron-builder** installer → `release/` (Windows NSIS by default). |
-| `npm run package:dir` | Same, but an unpacked directory (no installer). |
+| `npm run package` | Build + Electron build + **electron-builder** Windows NSIS installer → `release/pkg/Minnow-Setup-<version>.exe`. |
+| `npm run package:dir` | Same build steps, but an unpacked app folder (`release/pkg/win-unpacked/Minnow.exe`) — faster smoke test. |
+| `npm run package:win` | Explicit Windows NSIS build (same as `package` on Windows). |
+| `npm run package:mac` | macOS `.dmg` + `.zip` (must run on macOS). |
 | `npm run minnow:run -- --prompt "…"` | Headless CLI (see [below](#headless-cli)). |
 | `npm test` | Full suite (`node --test` + `tsx`; ~hundreds of tests). |
 | `npm run test:<area>` | Scoped suites — `memory`, `brain`, `engine`, `lsp`, `mcp`, `browser`, `skills`, `attachments`, `research`, `benchmark`, `evals`, `calendar`, `email`, `oauth`, `webhooks`, `notifications`, `voice`, `servers`, `plugins`, `terminal-pty`, `ui-designer`, `scheduler`. |
@@ -249,12 +251,23 @@ Useful environment variables (full list in [`commands.md`](documentation/guides/
 
 ## Packaging a desktop build
 
+`npm run build` only compiles the web app to `dist/` — it does **not** create a desktop installer or `.exe`. Use the `package*` scripts below.
+
+| Command | Platform | Output |
+|---------|----------|--------|
+| `npm run package` | Current OS (Windows → NSIS installer) | `release/pkg/Minnow-Setup-<version>.exe` |
+| `npm run package:dir` | Current OS | `release/pkg/win-unpacked/Minnow.exe` (Windows) |
+| `npm run package:win` | Windows | Same as `package` on Windows |
+| `npm run package:mac` | macOS only | `release/pkg/Minnow-<version>-<arch>.dmg` + `.zip` |
+
 ```bash
-npm run package        # installer (Windows NSIS → release/pkg)
-npm run package:dir    # unpacked app directory
+npm run package        # Windows installer → release/pkg/Minnow-Setup-1.0.0.exe
+npm run package:dir    # unpacked app (no installer) → release/pkg/win-unpacked/
 ```
 
-`package` runs `build` → `electron:build` → `electron-builder`. App id `org.grimmedia.minnow`; Windows target NSIS with `build/icon.ico`. `documentation/` is bundled as an extra resource and `@lydell/node-pty` is unpacked from the asar.
+`package` runs `build` → `electron:build` → `electron-builder`. App id `org.grimmedia.minnow`. Windows uses NSIS with `build/icon.ico`; macOS uses the 1024px logo PNG. `documentation/` is bundled as an extra resource and `@lydell/node-pty` is unpacked from the asar.
+
+**Note:** macOS builds must run on a Mac (`npm run package:mac`). Windows builds must run on Windows. `electron` belongs in `devDependencies` (required by electron-builder).
 
 ---
 

@@ -1051,6 +1051,13 @@ export async function openFileInViewer(
   }
 
   showViewerSplit();
+
+  const mounts = await import('../os/desktop-workspace-mounts');
+  if (mounts.isDesktopWorkspaceHostingActive()) {
+    mounts.openDesktopWorkspaceTab('viewer');
+    await mounts.syncDesktopWorkspaceMounts();
+  }
+
   renderFileTreeViaBridge();
 
   if (result.focusedExisting && result.tab.loadStatus === 'ready') {

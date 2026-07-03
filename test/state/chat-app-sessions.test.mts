@@ -10,6 +10,7 @@ import { normalizeWorkspacePath } from '../../src/lib/normalize-workspace-path.t
 import {
   CHAT_APP_ID,
   createAssistantChat,
+  createDesktopChat,
   getAssistantChats,
   getChatsForChatsWorkspace,
   getLastActiveChatIdForApp,
@@ -148,6 +149,17 @@ describe('lastActiveChatIdByApp', () => {
       createAssistantChat(path, 'unused'),
     );
     assert.equal(newest, ASSISTANT_A);
+  });
+});
+
+describe('createDesktopChat', () => {
+  test('defaults to desktop mode, workAgentAuto, and workspace path', () => {
+    const desktopWs = '/home/user/.minnow/workspace';
+    const chat = createDesktopChat(desktopWs, 'chat-desktop-1', 'model-x');
+    assert.equal(chat.modeId, 'desktop');
+    assert.equal(chat.workAgentAuto, true);
+    assert.equal(chat.modelId, 'model-x');
+    assert.equal(normalizeWorkspacePath(chat.workspacePath), normalizeWorkspacePath(desktopWs));
   });
 });
 
