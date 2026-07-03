@@ -3,6 +3,7 @@ import { createOsIcon, type SvgIconName } from './icons';
 import { getWindowStageUsableSize } from './window-stage-bounds';
 import {
   detectSnapPreview,
+  getSnapRectForMode,
   shouldReleaseSnap,
   type SnapMode,
   type SnapPreview,
@@ -165,6 +166,34 @@ export class WindowFrame {
     if (meta?.maximized !== undefined) this.maximized = meta.maximized;
     this.bounds = this.maximized ? { ...bounds } : this.clampBounds(bounds);
     this.applyBoundsToDom();
+  }
+
+  /** Re-fit bounds when the stage viewport shrinks or grows (e.g. Electron window resize). */
+  reclampToStage(): boolean {
+    const stage = this.getStageRect();
+    const prev = this.bounds;
+    let next: WindowBounds;
+
+    if (this.maximized || this.snapMode === 'maximize') {
+      next = { x: 0, y: 0, width: stage.width, height: stage.height };
+    } else if (this.snapMode === 'left' || this.snapMode === 'right') {
+      next = { ...getSnapRectForMode(this.snapMode, stage) };
+    } else {
+      next = this.clampBounds(this.bounds);
+    }
+
+    if (
+      prev.x === next.x &&
+      prev.y === next.y &&
+      prev.width === next.width &&
+      prev.height === next.height
+    ) {
+      return false;
+    }
+
+    this.bounds = next;
+    this.applyBoundsToDom();
+    return true;
   }
 
   focus(): void {

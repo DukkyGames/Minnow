@@ -112,6 +112,41 @@ describe('windowManager', () => {
     const parsed = JSON.parse(raw) as { settings?: { bounds: { x: number } } };
     assert.equal(parsed.settings?.bounds.x, 120);
   });
+
+  test('reclampWindowsToStage shrinks windows when the stage gets smaller', () => {
+    const stage = document.getElementById('osStage')!;
+    const id = windowManager.open('settings', {
+      instanceId: 'inst-1',
+      bounds: { x: 0, y: 0, width: 1100, height: 750 },
+    });
+    const before = windowManager.getFrame(id)!.getBounds();
+    assert.equal(before.width, 1100);
+    assert.equal(before.height, 750);
+
+    stage.style.width = '500px';
+    stage.style.height = '400px';
+    windowManager.reclampWindowsToStage();
+
+    const after = windowManager.getFrame(id)!.getBounds();
+    assert.ok(after.width <= 500, `expected width <= 500, got ${after.width}`);
+    assert.ok(after.height <= 400, `expected height <= 400, got ${after.height}`);
+    assert.ok(after.x + after.width <= 500);
+    assert.ok(after.y + after.height <= 400);
+  });
+
+  test('reclampWindowsToStage updates maximized windows to the new stage size', () => {
+    const stage = document.getElementById('osStage')!;
+    const id = windowManager.open('settings', { instanceId: 'inst-1' });
+    windowManager.toggleMaximize(id);
+    assert.equal(windowManager.getFrame(id)!.getBounds().height, 800);
+
+    stage.style.height = '500px';
+    windowManager.reclampWindowsToStage();
+
+    const after = windowManager.getFrame(id)!.getBounds();
+    assert.equal(after.height, 500);
+    assert.equal(after.width, 1200);
+  });
 });
 
 describe('window snap helpers', () => {
