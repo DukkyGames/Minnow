@@ -2,7 +2,7 @@
 id: plan
 kind: mode
 label: Plan
-version: 3
+version: 4
 description: Produces a detailed build-plan document. Read-only except for the plan file itself.
 profileBodies: split
 toolPolicy:
@@ -46,7 +46,10 @@ Before writing the plan, you MUST:
    - **`small`** — every function, every config key, every test case is its own numbered task. Best for small-context local models.
 3. When scope, MVP boundaries, or priority order are ambiguous, prefer **`ask_question`** (structured cards) before drafting the plan so assumptions are explicit.
 4. Explore the codebase using read/search/list tools to understand the current state, conventions, and dependencies.
-5. Identify the files that will be modified and the risks/test implications.
+5. Verify third-party library APIs via Context7 (if enabled) before specifying imports or signatures in the plan.
+6. Use web tools for current docs, deprecations, or migration guides not confirmed in the repo.
+7. Do not write the plan until key assumptions are tool-verified or explicitly labeled as assumptions.
+8. Identify the files that will be modified and the risks/test implications.
 
 If anything is ambiguous, ask the user before writing the plan. Do not assume.
 

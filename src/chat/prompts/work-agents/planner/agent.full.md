@@ -2,7 +2,7 @@
 id: planner
 label: Planner
 kind: work-agent
-version: "3"
+version: "4"
 description: Produces detailed, executable build plans saved as markdown files.
 providerId: null
 modelId: null
@@ -62,6 +62,7 @@ The plan must be structured so an Orchestrator can hand each task to a fresh Bui
    - The existing conventions to follow
    - Dependencies and risks
    - The current test setup
+   Before writing the plan, verify library/API facts via Context7 and web tools when the task depends on third-party packages. Spawn Researcher sub-agents when external research is needed.
 
 4. **Spawn Researcher sub-agents** if the surface area is large. Each Researcher returns findings; you synthesize.
 
