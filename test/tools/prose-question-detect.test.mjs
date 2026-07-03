@@ -91,4 +91,22 @@ Which would you prefer to tackle first?`;
 
     assert.equal(looksLikeProseStructuredQuestion(text), false);
   });
+
+  test('detects mode-handoff prose options after "Would you like" and I can', () => {
+    const text = `This is a solid plan for a real-time PC monitoring app with Three.js visualization. It's well-structured across 4 waves:
+
+Wave summary:
+
+Wave 1: Project scaffold + Node.js backend (Express/WS + systeminformation)
+Wave 2: Three.js scene + procedural models (case, components, GLTF infra)
+Wave 3: Data binding to components + live UI overlay
+Wave 4: Click interactions + polish
+
+Would you like to start building this? I can:
+
+Switch to Build mode to begin implementation
+Or we can refine the plan first (e.g., add/remove features, adjust scope)`;
+
+    assert.equal(looksLikeProseStructuredQuestion(text), true);
+  });
 });
