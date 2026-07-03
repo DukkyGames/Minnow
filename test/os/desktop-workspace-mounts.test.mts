@@ -11,6 +11,7 @@ import {
   resetFileTreeListingRootForTests,
   setFileTreeListingWorkspaceRoot,
 } from '../../src/ui/file-tree-listing-root.ts';
+import { stopFileTreeGitStatusPollForTests } from '../../src/ui/file-tree.ts';
 import {
   resetChromePopoverRegistryForTests,
   resetPreviewGuestVisibilityForTests,
@@ -49,6 +50,8 @@ describe('syncDesktopWorkspaceMounts listing root', () => {
   const originalDocument = globalThis.document;
   const originalHTMLElement = globalThis.HTMLElement;
   const originalFetch = globalThis.fetch;
+  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+  const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
   let happyDomWindow: Window | null = null;
 
   beforeEach(() => {
@@ -63,6 +66,11 @@ describe('syncDesktopWorkspaceMounts listing root', () => {
     g.window = win as unknown as Window & typeof globalThis.window;
     g.document = win.document;
     g.HTMLElement = win.HTMLElement;
+    g.requestAnimationFrame = (cb: FrameRequestCallback) =>
+      win.setTimeout(() => cb(win.performance.now()), 0) as unknown as number;
+    g.cancelAnimationFrame = (id: number) => {
+      win.clearTimeout(id);
+    };
     g.fetch = (async (input: string | URL) => {
       const url = String(input);
       if (url.includes('/api/desktop-workspace')) {
@@ -84,6 +92,7 @@ describe('syncDesktopWorkspaceMounts listing root', () => {
   });
 
   afterEach(() => {
+    stopFileTreeGitStatusPollForTests();
     resetWorkspaceStateForTests();
     resetFileTreeListingRootForTests();
     resetDesktopWorkspaceMountsForTests();
@@ -112,6 +121,16 @@ describe('syncDesktopWorkspaceMounts listing root', () => {
     });
     Object.defineProperty(globalThis, 'fetch', {
       value: originalFetch,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(globalThis, 'requestAnimationFrame', {
+      value: originalRequestAnimationFrame,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(globalThis, 'cancelAnimationFrame', {
+      value: originalCancelAnimationFrame,
       configurable: true,
       writable: true,
     });

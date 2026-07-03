@@ -95,6 +95,20 @@ export function startFileTreeGitStatusPoll(cwd?: string): void {
   }, 5000);
 }
 
+/** Stop git status polling (tests — open interval blocks node --test between files). */
+export function stopFileTreeGitStatusPollForTests(): void {
+  if (gitStatusPollDebounce !== undefined) {
+    clearTimeout(gitStatusPollDebounce);
+    gitStatusPollDebounce = undefined;
+  }
+  if (gitStatusPollTimer !== undefined) {
+    clearInterval(gitStatusPollTimer);
+    gitStatusPollTimer = undefined;
+  }
+  gitStatusPollCwd = undefined;
+  gitStatusPollInFlight = false;
+}
+
 async function pollFileTreeGitStatus(): Promise<void> {
   if (gitStatusPollInFlight) return;
   gitStatusPollInFlight = true;
