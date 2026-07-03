@@ -239,21 +239,22 @@ Same guidance repeated across parts that always ship together:
 
 ---
 
-## Wave 5 — trim verbose tool schema descriptions (~500–800 tok)
+## Wave 5 — trim verbose tool schema descriptions (~500–800 tok) — **shipped (MIN-336)**
 
-Param descriptions total 2,064 tok. Worst offenders and target trims:
+Param descriptions total 2,064 tok. Worst offenders trimmed:
 
-| Tool | now | target | note |
-|---|--:|--:|---|
-| ask_question | 655 | ~150 | JSON shape lives in prompt too; keep field names + 1-line example |
-| manage_calendar | 429 | ~180 | verbose enum prose → terse |
-| execute_command | 369 | ~220 | background/timeout guidance is also in tool-usage |
-| board_init | 359 | ~200 | |
-| grep | 337 | ~220 | |
-| manage_brain | 293 | ~180 | |
+| Tool | was | now | target | note |
+|---|--:|--:|--:|---|
+| ask_question | 655 | 108 | ~150 | Field names + compact example in description; nested `items: {type:'object'}` |
+| manage_calendar | 429 | 172 | ~180 | Terse main description; param types only |
+| execute_command | 369 | 122 | ~220 | Background/timeout guidance stays in tool-usage |
+| board_init | 359 | 181 | ~200 | |
+| grep | 337 | 133 | ~220 | |
+| manage_brain | 293 | 139 | ~180 | |
 
-**Saves:** ~500–800 tok. **Risk:** low, but validate the model still calls each tool with the
-right shape (there are prompt tests for `ask_question`).
+**Measured:** full tool payload 10,746 → 9,158 tok (−1,588). Tests:
+`test/prompts/ask-question-enforcement-prompt.test.mjs`, `test/tools/ask-question-validate.test.mts`,
+`test/tools/describe-invocation.test.mts`.
 
 ---
 
