@@ -780,13 +780,19 @@
   left: 0;
   top: 0;
   bottom: 0;
-  z-index: 18;
+  /* Below #osWindowsLayer (z-index 15); parent does not isolate stacking. */
+  z-index: 12;
   display: flex;
   flex-direction: row;
   align-items: stretch;
   pointer-events: none;
   opacity: 1;
   transition: opacity 280ms var(--os-ease-out);
+}
+
+/* Expanded session drawer should sit above floating windows. */
+.mn-os-chat-rail.is-expanded {
+  z-index: 20;
 }
 
 #osDesktopLayer.is-chat-active .mn-os-chat-rail {
