@@ -119,4 +119,32 @@ Create an Orchestrate chat — Open a board and hand off the full plan for syste
 
     assert.equal(looksLikeProseStructuredQuestion(text), true);
   });
+
+  test('detects question-style options after Would you like to colon lead-in', () => {
+    const text = `What would you like to do next? Would you like to:
+
+Switch to Build mode to start implementing this plan?
+Create a new Orchestrate chat with this plan file for board-based execution?
+Refine the plan or discuss any specific section?`;
+
+    assert.equal(looksLikeProseStructuredQuestion(text), true);
+  });
+
+  test('detects question-style options after long plan review preamble', () => {
+    const text = `What would you like to know about this plan? Here is my review.
+
+Wave 1 covers scaffold. Wave 2 covers Three.js.
+
+Key specs noted:
+Local-first — offline capable
+Temperature — color mapping for components
+
+What would you like to do next? Would you like to:
+
+Switch to Build mode to start implementing this plan?
+Create a new Orchestrate chat with this plan file for board-based execution?
+Refine the plan or discuss any specific section?`;
+
+    assert.equal(looksLikeProseStructuredQuestion(text), true);
+  });
 });
