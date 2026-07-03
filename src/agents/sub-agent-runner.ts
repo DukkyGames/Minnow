@@ -44,7 +44,7 @@ import {
 } from '../config/tool-calls-meta';
 import { getModelRowForSelectOrCanonicalId } from '../api/models';
 import { resolveProvider } from '../providers/store';
-import { parseToolArguments } from '../tools/parse-tool-arguments';
+import { runHeadlessToolBatch } from '../tools/headless-tool-batch';
 import {
   DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
   applyContextBudget,
@@ -743,32 +743,37 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         });
         emitProgress(undefined, true);
 
-        for (const tc of turnResult.toolCalls) {
-          const { args, parseError } = parseToolArguments(tc.function.arguments, {
-            constrained: usedConstrained,
-          });
-          if (parseError) {
+        const outcomes = await runHeadlessToolBatch({
+          toolCalls: turnResult.toolCalls,
+          constrained: usedConstrained,
+          signal: input.signal,
+          execute: (name, args, ctx) =>
+            input.executeTool(name, args as Record<string, unknown>, {
+              ...input.toolExecuteContext,
+              toolCallId: ctx.toolCallId,
+            }),
+        });
+
+        for (const outcome of outcomes) {
+          const tc = outcome.toolCall;
+          if (outcome.parseError) {
             messages.push({
               role: 'tool',
               tool_call_id: tc.id,
-              content: parseError,
+              content: outcome.parseError,
             });
-            emitProgress(undefined, true);
-            continue;
+          } else {
+            const toolOut = outcome.result ?? { content: '' };
+            messages.push({
+              role: 'tool',
+              tool_call_id: tc.id,
+              content: toolOut.content,
+              ...(toolOut.attachments?.length
+                ? { attachments: toolOut.attachments }
+                : {}),
+              ...(toolOut.codeChange ? { codeChange: toolOut.codeChange } : {}),
+            });
           }
-          const toolOut = await input.executeTool(tc.function.name, args, {
-            ...input.toolExecuteContext,
-            toolCallId: tc.id,
-          });
-          messages.push({
-            role: 'tool',
-            tool_call_id: tc.id,
-            content: toolOut.content,
-            ...(toolOut.attachments?.length
-              ? { attachments: toolOut.attachments }
-              : {}),
-            ...(toolOut.codeChange ? { codeChange: toolOut.codeChange } : {}),
-          });
           emitProgress(undefined, true);
         }
         continue;

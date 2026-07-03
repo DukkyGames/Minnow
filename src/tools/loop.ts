@@ -73,14 +73,6 @@ import {
 } from '../chat/main-turn-activity';
 import { getBoardGroupForChat } from '../state/chat-groups';
 import {
-  logBoardTerminalRun,
-  logBoardToolCall,
-} from '../state/orchestrate-board-store.ts';
-import {
-  boardWorktreesRootsFromState,
-  resolveChatToolWorkspaceRoot,
-} from '../state/worktree-isolation';
-import {
   getActiveChat,
   isExpertChat,
   scheduleSaveSessions,
@@ -140,7 +132,6 @@ import { refreshModeSelectorDisabled } from '../ui/mode-selector';
 import { refreshComposerReasoningEffortDisabled } from '../ui/composer-reasoning-effort';
 import { refreshOrchestratePlanSelectorDisabled } from '../ui/orchestrate-plan-selector';
 import {
-  refreshActiveBoardIfMounted,
   refreshBoardOnboardingIfMounted,
   renderBoardView,
 } from '../ui/orchestrate-board';
@@ -150,7 +141,6 @@ import {
   syncOrchestrateInitSplitChrome,
 } from '../ui/orchestrate-board-init-split';
 import {
-  isOrchestrateBoardViewActive,
   refreshViewModeToggleDisabled,
   syncViewModeToggleFromActiveChat,
 } from '../ui/view-mode-toggle';
@@ -169,8 +159,6 @@ import { setContextInFlightOverlay } from '../chat/context-in-flight';
 import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
 import { ThinkingDurationTracker } from '../ui/thinking-duration';
 import { scheduleContextUsageRefresh } from '../ui/context-usage-ring';
-import { renderToolCall, renderToolResult } from '../ui/tool-messages';
-import { attachShellKillUi } from '../ui/shell-run-ui';
 import { consumeReefArtifactEditsForPrompt } from '../chat/reef/artifact-context.ts';
 import {
   markChatTurnError,
@@ -209,7 +197,6 @@ import {
   isConstrainedDecodingEnabledForProvider,
   loadToolCallsMeta,
 } from '../config/tool-calls-meta';
-import { parseToolArguments } from './parse-tool-arguments';
 import { setStatus } from '../ui/status';
 import { applyOrchestrateAggregatedStatsToChat } from '../chat/orchestrate/stats-aggregate';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
@@ -243,7 +230,6 @@ import {
   augmentSkillBodyForUiDesigner,
   prepareUiDesignerTurn,
 } from '../agents/ui-designer/runner';
-import { assertUiDesignerToolAllowed } from '../agents/ui-designer/tools';
 import { WorkAgentConfigError } from '../agents/work-agent-types';
 import { getUserWorkAgentOverride } from '../agents/work-agent-registry';
 import { mergeThinkingIntoCompletionBody } from '../agents/merge-thinking-body';
@@ -264,7 +250,6 @@ import {
 import { createSubAgentRunId } from '../agents/sub-agent-run-id';
 import {
   detectLocalServer,
-  executeTool,
   getEnabledToolDefinitionsForChat,
 } from './client';
 import { setBoardExecutorContext } from './board-tools';
@@ -305,6 +290,7 @@ import {
 } from './turn-continuation';
 import { looksLikeProseStructuredQuestion } from './prose-question-detect';
 import { isToolEnabled } from './config';
+import { runChatToolBatch } from './chat-tool-batch';
 import {
   DEFAULT_CHAT_MAX_TOOL_TURNS,
   getChatMetaSync,
@@ -842,59 +828,6 @@ function syncTurnContextUsage(
       : null,
   );
   scheduleContextUsageRefresh();
-}
-
-/** Parse exit code from execute_command formatted output. */
-function parseTerminalExitCode(content: string): number | undefined {
-  const match = content.match(/\(exit (-?\d+)\)/);
-  if (!match) return undefined;
-  const code = Number(match[1]);
-  return Number.isFinite(code) ? code : undefined;
-}
-
-/** Log board-task tool/terminal activity when the chat is linked to a board task. */
-function maybeLogBoardToolExecution(
-  chat: Chat,
-  toolName: string,
-  args: unknown,
-  content: string,
-): void {
-  const boardTaskId = chat.boardTaskId?.trim();
-  const boardGroupId = chat.boardGroupId?.trim();
-  if (!boardTaskId || !boardGroupId || !sessionState) return;
-  const group = sessionState.groups?.find((g) => g.id === boardGroupId);
-  if (!group?.orchestrateBoard) return;
-
-  const argsPreview =
-    args && typeof args === 'object' ? JSON.stringify(args) : String(args ?? '');
-  const errored = content.trimStart().startsWith('Error');
-
-  if (toolName === 'execute_command') {
-    const command =
-      args && typeof args === 'object' && !Array.isArray(args)
-        ? String((args as Record<string, unknown>).command ?? '')
-        : '';
-    logBoardTerminalRun(
-      group,
-      boardTaskId,
-      command || toolName,
-      parseTerminalExitCode(content),
-      content,
-      errored,
-      chat.id,
-    );
-    return;
-  }
-
-  logBoardToolCall(
-    group,
-    boardTaskId,
-    toolName,
-    argsPreview,
-    content,
-    errored,
-    chat.id,
-  );
 }
 
 export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
@@ -1610,146 +1543,29 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         synthesisRoundCount += 1;
         synthesisToolCount += turnResult.toolCalls.length;
 
-        const area = getActiveChatMountElement();
         const paintToolCallsInChat = isStreamDomVisible(chat.id);
-        const STOPPED_TOOL_MSG = 'Stopped by user.';
-        for (let ti = 0; ti < turnResult.toolCalls.length; ti++) {
-          if (chatSignal.aborted) {
-            for (let sj = ti; sj < turnResult.toolCalls.length; sj++) {
-              const skipped = turnResult.toolCalls[sj]!;
-              const { args: skipArgs } = parseToolArguments(skipped.function.arguments, {
-                constrained: usedConstrained,
-              });
-              const skipWrap = renderToolCall(skipped.function.name, skipArgs);
-              skipWrap.dataset.toolCallId = skipped.id;
-              if (paintToolCallsInChat) {
-                area.appendChild(skipWrap);
-              }
-              renderToolResult(skipWrap, STOPPED_TOOL_MSG);
-              chat.history.push({
-                role: 'tool',
-                tool_call_id: skipped.id,
-                content: STOPPED_TOOL_MSG,
-              });
-              trackRunHistoryPush(chat, turnRunId);
-              syncTurnContextUsage(chat.id, livePartialText, thoughtController);
-            }
-            recordChatMessage(chat);
-            scheduleSaveSessions();
-            throw new DOMException('Aborted', 'AbortError');
-          }
 
-          const tc = turnResult.toolCalls[ti]!;
-          const { args, parseError } = parseToolArguments(tc.function.arguments, {
-            constrained: usedConstrained,
-          });
-          patchMainTurnActivity(chat.id, {
-            phase: 'tools',
-            currentTool: tc.function.name,
-          });
-          const toolWrap = renderToolCall(tc.function.name, args);
-          toolWrap.dataset.toolCallId = tc.id;
-          const toolArgsRecord =
-            args && typeof args === 'object' && !Array.isArray(args)
-              ? (args as Record<string, unknown>)
-              : undefined;
-          attachShellKillUi(toolWrap, tc.function.name, tc.id, toolArgsRecord, undefined, chat.id);
-          if (paintToolCallsInChat) {
-            area.appendChild(toolWrap);
-            scrollChatIfPinned();
-          }
-
-          if (parseError) {
-            renderToolResult(toolWrap, parseError);
-            chat.history.push({
-              role: 'tool',
-              tool_call_id: tc.id,
-              content: parseError,
-            });
-            trackRunHistoryPush(chat, turnRunId);
-            syncTurnContextUsage(chat.id, livePartialText, thoughtController);
-            recordChatMessage(chat);
-            scheduleSaveSessions();
-            continue;
-          }
-
-          const toolLoopModeId = normalizeModeId(chat.modeId);
-          setSubAgentExecutorContext({
-            parentTurnId,
-            modeId: toolLoopModeId,
-            parentChatId: chat.id,
-            parentToolCallId: tc.id,
-          });
-          setBoardExecutorContext({ chatId: chat.id });
-          setBugBoardExecutorContext({ chatId: chat.id });
-
-          const planBlock = uiDesignerCtx.active
-            ? assertUiDesignerToolAllowed(tc.function.name, uiDesignerCtx.mode)
-            : null;
-          const toolName = tc.function.name;
-          const scopedWorkspaceRoot = resolveChatToolWorkspaceRoot(chat, sessionState?.groups);
-          const boardWorktreeRoots = boardWorktreesRootsFromState(sessionState?.groups);
-          const toolOut = planBlock
-            ? { content: planBlock }
-            : await executeTool(toolName, args, {
-                chatId: chat.id,
-                toolCallId: tc.id,
-                modeId: toolLoopModeId,
-                workAgentId: chat.workAgentId ?? null,
-                // Isolated board task chats (MIN-275) scope tools to their worktree.
-                ...(scopedWorkspaceRoot ? { workspaceRoot: scopedWorkspaceRoot } : {}),
-                ...(boardWorktreeRoots.length ? { extraPathRoots: boardWorktreeRoots } : {}),
-              });
-          const toolContent = toolOut.content;
-
-          renderToolResult(
-            toolWrap,
-            toolContent,
-            toolOut.attachments,
-            args,
-            toolOut.codeChange,
-          );
-          attachShellKillUi(
-            toolWrap,
-            toolName,
-            tc.id,
-            toolArgsRecord,
-            toolContent,
-            chat.id,
-          );
-
-          chat.history.push({
-            role: 'tool',
-            tool_call_id: tc.id,
-            content: toolContent,
-            ...(toolOut.attachments?.length
-              ? { attachments: toolOut.attachments }
-              : {}),
-            ...(toolOut.codeChange ? { codeChange: toolOut.codeChange } : {}),
-          });
-          maybeLogBoardToolExecution(chat, toolName, args, toolContent);
-          trackRunHistoryPush(chat, turnRunId);
-          syncTurnContextUsage(chat.id, livePartialText, thoughtController);
-          if (paintToolCallsInChat) {
-            scrollChatIfPinned();
-          }
-
-          if (tc.function.name === 'board_init') {
-            syncOrchestrateInitSplitChrome(chat);
-          }
-        }
-
-        recordChatMessage(chat);
-        scheduleSaveSessions();
-        renderSidebar();
-
-        if (
-          isOrchestrateBoardViewActive() ||
-          isOrchestrateBoardInitSplitActive(chat) ||
-          isOrchestrateInitSplitChromeActive()
-        ) {
-          refreshActiveBoardIfMounted();
-        }
+        await runChatToolBatch({
+          chat,
+          toolCalls: turnResult.toolCalls,
+          signal: chatSignal,
+          constrained: usedConstrained,
+          paintInChat: paintToolCallsInChat,
+          parentTurnId,
+          turnRunId,
+          uiDesignerActive: uiDesignerCtx.active,
+          uiDesignerMode: uiDesignerCtx.mode,
+          livePartialText,
+          thoughtController,
+          syncContextUsage: (pendingToolCallsJson) =>
+            syncTurnContextUsage(
+              chat.id,
+              livePartialText,
+              thoughtController,
+              pendingToolCallsJson,
+            ),
+          trackHistoryPush: () => trackRunHistoryPush(chat, turnRunId),
+        });
 
         if (turn + 1 >= maxToolTurns) {
           setStatus('err', 'Maximum tool turns reached');

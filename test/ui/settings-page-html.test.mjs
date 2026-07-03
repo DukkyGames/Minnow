@@ -186,6 +186,6 @@ describe('settings page HTML', () => {
   });
 
   test('prompt token estimate has accessible label', () => {
-    assert.match(html, /id="settingsPromptTokenEstimate"[^>]*aria-label="Approximate prompt token estimate"/);
+    assert.match(html, /id="settingsPromptTokenEstimate"[^>]*aria-label="Approximate prompt config token estimate"/);
   });
 });
