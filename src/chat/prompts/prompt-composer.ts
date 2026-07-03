@@ -4,6 +4,7 @@
 
 import { getMode } from '../modes/registry';
 import { isModeId, type ModeId } from '../modes/types';
+import { BROWSER_PREVIEW_TOOL_IDS } from './browser-allowlist-gate';
 import { interpolatePromptBody } from './interpolate';
 import { loadPromptById } from './prompt-loader';
 import type {
@@ -37,18 +38,6 @@ const MODE_HANDOFF_MODE_IDS = new Set<ModeId>([
   'build',
   'orchestrate',
   'reef',
-]);
-
-/** Tool ids that imply built-in preview browser automation (navigation allowlist rules apply). */
-const BROWSER_PREVIEW_TOOL_IDS = new Set([
-  'browser_list',
-  'browser_navigate',
-  'browser_snapshot',
-  'browser_click',
-  'browser_fill',
-  'browser_eval',
-  'browser_screenshot',
-  'request_browser_origin_access',
 ]);
 
 function contextHasBrowserPreviewTools(ctx: ComposeContext): boolean {
@@ -203,7 +192,9 @@ function resolveBrowserAllowlistBody(ctx: ComposeContext, profile: PromptProfile
   if (!contextHasBrowserPreviewTools(ctx)) {
     return '';
   }
-  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const useFullAllowlist = ctx.browserActivated === true;
+  const loadProfile =
+    profile === 'lite' || !useFullAllowlist ? 'lite' : 'full';
   const loaded = loadPromptById('tool-usage', 'browser-allowlist', loadProfile);
   return loaded?.body?.trim() ?? '';
 }
