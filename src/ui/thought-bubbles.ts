@@ -204,6 +204,27 @@ export class ThoughtBubbleController {
   }
 
   /**
+   * Return reasoning segments for a completed assistant row, then reset so the next
+   * stream in the same user send does not duplicate thoughts on a later message.
+   */
+  consumePersistedSegments(): string[] {
+    const segments = this.getSegmentsNormalized();
+    this.finalizedSegments = [];
+    this.openBuffer = '';
+    this.stopTypewriter();
+    if (this.gapTimer != null) {
+      clearTimeout(this.gapTimer);
+      this.gapTimer = null;
+    }
+    this.gapSkipResolve = null;
+    this.tailWork = Promise.resolve();
+    this.teardownStage();
+    this.thinkingStartNotified = false;
+    this.displayedLen = 0;
+    return segments;
+  }
+
+  /**
    * Close one paragraph-delimited thought: persist it, show the full text briefly,
    * wait {@link THOUGHT_GAP_MS}, then fade out so the next thought can appear.
    */

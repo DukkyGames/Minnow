@@ -23,6 +23,32 @@ const LETTER_PAREN_OPTION_RE = /\b[A-D]\)\s+\S/g;
 /** Markdown-bold option headers such as "**MVP:** ship smallest slice". */
 const BOLD_OPTION_LINE_RE = /^\s*\*\*[^*]{2,48}\*\*\s*[:—–-]\s*\S/gm;
 
+/** Index of the first regex match, or -1 when absent. */
+function firstMatchOffset(text: string, re: RegExp): number {
+  re.lastIndex = 0;
+  const match = re.exec(text);
+  return match ? match.index : -1;
+}
+
+/** Index of the first numbered, bold-header, or dash bullet option line. */
+function firstStructuredOptionOffset(text: string, includeDashBullets: boolean): number {
+  const offsets = [
+    firstMatchOffset(text, NUMBERED_OPTION_LINE_RE),
+    firstMatchOffset(text, BOLD_OPTION_LINE_RE),
+    includeDashBullets ? firstMatchOffset(text, DASH_OPTION_LINE_RE) : -1,
+  ].filter((offset) => offset >= 0);
+  return offsets.length > 0 ? Math.min(...offsets) : -1;
+}
+
+/** Index of the earliest choice-directing phrase or decision-style question. */
+function firstChoiceDirectiveOffset(text: string): number {
+  const offsets = [
+    firstMatchOffset(text, CHOICE_PHRASE_RE),
+    firstMatchOffset(text, CHOICE_QUESTION_RE),
+  ].filter((offset) => offset >= 0);
+  return offsets.length > 0 ? Math.min(...offsets) : -1;
+}
+
 /** End offset of the last structured option line (numbered or bold header). */
 function structuredOptionsEndOffset(text: string): number {
   let end = -1;
@@ -58,6 +84,11 @@ export function looksLikeProseStructuredQuestion(text: string): boolean {
     ? (trimmed.match(DASH_OPTION_LINE_RE) ?? []).length
     : 0;
 
+  // Inline lettered options are always a multiple-choice card candidate.
+  if (letterParenCount >= 2 && (hasQuestionMark || hasChoicePhrase)) {
+    return true;
+  }
+
   const structuredOptionSignals =
     numberedOptionCount + letterParenCount + boldOptionCount;
   const optionSignals = structuredOptionSignals + dashOptionCount;
@@ -68,18 +99,28 @@ export function looksLikeProseStructuredQuestion(text: string): boolean {
     return false;
   }
 
-  // Repo tours and how-to lists often end with an open follow-up after numbered sections.
-  if (
-    hasQuestionMark &&
-    !hasChoicePhrase &&
-    !hasChoiceQuestion &&
-    structuredOptionSignals >= 2
-  ) {
+  const firstOptionOffset = firstStructuredOptionOffset(trimmed, hasChoicePhrase);
+  const choiceDirectiveOffset = firstChoiceDirectiveOffset(trimmed);
+
+  // Numbered/bold lists are informational unless a choice directive precedes them.
+  if (firstOptionOffset >= 0) {
+    if (choiceDirectiveOffset < 0 || choiceDirectiveOffset > firstOptionOffset) {
+      return false;
+    }
+  }
+
+  // Repo tours and info dumps often end with open follow-ups after numbered sections.
+  if (structuredOptionSignals >= 2) {
     const optionsEnd = structuredOptionsEndOffset(trimmed);
     const lastQuestionIdx = trimmed.lastIndexOf('?');
     if (optionsEnd >= 0 && lastQuestionIdx > optionsEnd) {
       return false;
     }
+  }
+
+  // Require an explicit choice signal when only dash bullets qualify as options.
+  if (structuredOptionSignals < 2 && dashOptionCount >= 2) {
+    return hasChoicePhrase || hasChoiceQuestion;
   }
 
   return true;

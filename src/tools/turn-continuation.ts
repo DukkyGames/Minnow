@@ -20,7 +20,7 @@ export const MAX_PROSE_QUESTION_RETRIES = 1;
 
 /** Ephemeral API-only correction when the model asked for choices in prose. */
 export const PROSE_QUESTION_RETRY_INSTRUCTION =
-  'You asked the user to choose among options in plain text. Do not list choices in prose. Call the ask_question tool now with a questions array (each item: id, prompt, options as {id, label} objects). Wait for the user to answer before continuing.';
+  'Your previous reply is already in the chat. You presented multiple-choice options in plain text. Do not repeat that list in prose. Call the ask_question tool now with a questions array (each item: id, prompt, options as {id, label} objects). Wait for the user to answer before continuing.';
 
 /**
  * Injected when the sub-agent has tools enabled but the first model reply did not call any

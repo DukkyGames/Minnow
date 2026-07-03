@@ -68,4 +68,27 @@ Want me to dive deeper into any of these?`;
 
     assert.equal(looksLikeProseStructuredQuestion(text), true);
   });
+
+  test('ignores informational numbered list with trailing open questions', () => {
+    const text = `Here is what I found in the codebase:
+
+1. \`src/chat/\` — messaging, modes, and prompts
+2. \`src/tools/\` — tool definitions and the agent loop
+3. \`server.js\` — HTTP API for file and git tools
+
+Do you want me to go deeper on any of these? Should I start implementing changes?`;
+
+    assert.equal(looksLikeProseStructuredQuestion(text), false);
+  });
+
+  test('ignores summary list when the choice question trails the bullets', () => {
+    const text = `Summary of the main areas:
+
+1. **Auth** — login and session handling
+2. **Dashboard** — primary user interface
+
+Which would you prefer to tackle first?`;
+
+    assert.equal(looksLikeProseStructuredQuestion(text), false);
+  });
 });
