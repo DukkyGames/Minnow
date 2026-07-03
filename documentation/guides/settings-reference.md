@@ -4,7 +4,7 @@ Complete inventory of Minnow settings: where they appear in the UI, what they co
 
 For storage layout and `config.json` overview, see [configuration.md](configuration.md). For the Settings page IA and search catalog, see [`src/ui/settings-catalog.ts`](../../src/ui/settings-catalog.ts) and [settings-page-rebuild-min-130.md](../plans/settings-page-rebuild-min-130.md).
 
-**Last updated:** 2026-06-27
+**Last updated:** 2026-07-03
 
 ---
 
@@ -12,7 +12,7 @@ For storage layout and `config.json` overview, see [configuration.md](configurat
 
 | Item | Count |
 |------|------:|
-| Settings sidebar categories | 7 |
+| Settings sidebar categories | 6 |
 | Settings sections (areas) | 27 |
 | Cataloged searchable fields | ~100 |
 | Built-in tools (per-tool permissions) | 89 |
@@ -33,8 +33,7 @@ Open via **Settings** (`#/settings/<category>`) or legacy `#/settings/<area>`.
 | **General** | General, Audio |
 | **Appearance** | Appearance |
 | **Models** | Providers, Routing, Sampler, Thinking, Usage & cost |
-| **Agents** | Prompts, Modes, Experts, Work agents, Agent packs, Sub-agents, Autopilot |
-| **Knowledge** | Rules |
+| **Agents** | Prompts, Rules, Modes, Experts, Work agents, Agent packs, Sub-agents, Autopilot |
 | **Integrations** | Search, Deep Research, Servers, Tools, Skills, MCP, LSP, Editor, Webhooks, OAuth |
 | **Advanced** | Orchestration, Evals |
 
@@ -170,6 +169,13 @@ See [`src/config/voice-meta.ts`](../../src/config/voice-meta.ts) and [`src/voice
 | Custom prompt configs | Per-part editors (base, mode, expert, info, tool-usage, work-agent, memory, skills) |
 | Prompt hub | Browse/edit all prompt files |
 
+### Rules (`rules.json`)
+
+| Setting | Description |
+|---------|-------------|
+| Enable user rules | |
+| Rules text | Global standing instructions |
+
 ### Modes (6)
 
 `general` · `build` · `plan` · `orchestrate` · `reef` · `debug`
@@ -224,26 +230,7 @@ Per type: enabled, max concurrent, timeout, max input tokens, context policy, su
 
 ---
 
-## 5. Knowledge
-
-### Rules (`rules.json`)
-
-| Setting | Description |
-|---------|-------------|
-| Enable user rules | |
-| Rules text | Global standing instructions |
-
-### Memory (Brain app)
-
-Memory store, entry CRUD, semantic embeddings, and auto-learning cadence moved to the **Brain** app (`#/app/brain/memories` and `#/app/brain/settings`). Legacy `#/settings/memory` redirects automatically.
-
-**Memories section** — store enable (`memory.enabled`), inject on send (`features.memoryInjection`), entry list/add/delete, backup/clear.
-
-**Settings section** — semantic embeddings (`memory.embeddings.*`), synthesis cadence (`config.synthesis`), code index (`config.brain.code.*`).
-
----
-
-## 6. Integrations
+## 5. Integrations
 
 ### Search (`search.json`)
 
@@ -337,7 +324,7 @@ Google and Microsoft: client ID, client secret (Microsoft: tenant ID). Tokens en
 
 ---
 
-## 7. Advanced
+## 6. Advanced
 
 ### Orchestration (`config.supervisor`)
 

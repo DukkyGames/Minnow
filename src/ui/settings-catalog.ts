@@ -5,13 +5,12 @@
 
 import type { SettingsSectionId } from './settings-page-types';
 
-/** Top-level sidebar categories (7 merged groups). */
+/** Top-level sidebar categories (6 merged groups). */
 export type SettingsCategoryId =
   | 'general'
   | 'appearance'
   | 'models'
   | 'agents'
-  | 'knowledge'
   | 'integrations'
   | 'advanced';
 
@@ -26,13 +25,12 @@ export interface SettingsFieldEntry {
   description?: string;
 }
 
-/** Sidebar labels for the seven categories. */
+/** Sidebar labels for the six categories. */
 export const SETTINGS_CATEGORY_LABELS: Record<SettingsCategoryId, string> = {
   general: 'General',
   appearance: 'Appearance',
   models: 'Models',
   agents: 'Agents',
-  knowledge: 'Knowledge',
   integrations: 'Integrations',
   advanced: 'Advanced',
 };
@@ -42,8 +40,7 @@ export const SETTINGS_CATEGORY_DESCRIPTIONS: Record<SettingsCategoryId, string> 
   general: 'Notifications, terminal behavior, LAN access, audio devices, and where settings are saved.',
   appearance: 'Theme, wallpaper, fonts, and custom accent colors.',
   models: 'LLM backends, per-role model picks, sampling, reasoning, and usage.',
-  agents: 'System prompts, composer modes, personas, workers, and tool policies.',
-  knowledge: 'Standing rules and persistent memory.',
+  agents: 'System prompts, standing rules, composer modes, personas, workers, and tool policies.',
   integrations: 'Web search, dev tools, permissions, skills, and external hooks.',
   advanced: 'Orchestrate supervisor tuning and local eval runs.',
 };
@@ -56,8 +53,7 @@ export const SETTINGS_CATEGORY_AREAS: Record<
   general: ['general', 'audio'],
   appearance: ['appearance'],
   models: ['providers', 'model-routing', 'sampler', 'thinking', 'usage'],
-  agents: ['prompting', 'modes', 'experts', 'work-agents', 'agent-packs', 'sub-agents', 'autopilot'],
-  knowledge: ['rules'],
+  agents: ['agent-center', 'rules', 'experts', 'agent-packs', 'autopilot'],
   integrations: [
     'search',
     'deep-research',
@@ -78,7 +74,6 @@ export const SETTINGS_CATEGORIES: SettingsCategoryId[] = [
   'appearance',
   'models',
   'agents',
-  'knowledge',
   'integrations',
   'advanced',
 ];
@@ -108,7 +103,6 @@ export const SETTINGS_CATEGORY_SUBNAV: ReadonlySet<SettingsCategoryId> = new Set
   'general',
   'models',
   'agents',
-  'knowledge',
   'integrations',
   'advanced',
 ]);
@@ -215,16 +209,19 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   }),
 
   // —— Agents ——
-  field('agents.modes', 'Composer modes', 'agents', 'modes'),
+  field('agents.center', 'Agents center', 'agents', 'agent-center', {
+    keywords: ['modes', 'work agents', 'sub-agents', 'prompts', 'routing'],
+  }),
+  field('agents.modes', 'Composer modes', 'agents', 'agent-center'),
   field('agents.experts', 'Experts', 'agents', 'experts', {
     keywords: ['persona', 'specialist'],
   }),
-  field('agents.workAgents', 'Work agents', 'agents', 'work-agents'),
+  field('agents.workAgents', 'Work agents', 'agents', 'agent-center'),
   field('agents.agentPacks', 'Agent packs', 'agents', 'agent-packs'),
-  field('agents.subAgents', 'Sub-agents', 'agents', 'sub-agents', {
+  field('agents.subAgents', 'Sub-agents', 'agents', 'agent-center', {
     keywords: ['spawn', 'subagent'],
   }),
-  field('agents.subAgents.maxTurns', 'Sub-agent max tool turns', 'agents', 'sub-agents'),
+  field('agents.subAgents.maxTurns', 'Sub-agent max tool turns', 'agents', 'agent-center'),
   field('agents.autopilot', 'Orchestrator autopilot', 'agents', 'autopilot', {
     keywords: ['orchestrate', 'board', 'autopilot', 'concurrency', 'isolation'],
     description: 'Global defaults for orchestrate board execution, testing, and heartbeat.',
@@ -252,20 +249,18 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   field('agents.autopilot.guardCdOutsideWorktree', 'Guard cd outside worktree', 'agents', 'autopilot', {
     keywords: ['worktree', 'cd', 'guard', 'isolation'],
   }),
-  field('agents.prompting', 'Prompt profiles', 'agents', 'prompting', {
+  field('agents.prompting', 'Prompt profiles', 'agents', 'agent-center', {
     keywords: ['prompt', 'system prompt', 'full', 'lite', 'custom'],
   }),
-  field('agents.prompting.profiles', 'Setup profiles', 'agents', 'prompting', {
+  field('agents.prompting.profiles', 'Setup profiles', 'agents', 'agent-center', {
     keywords: ['bundle', 'export', 'import'],
   }),
-  field('agents.prompting.hub', 'Prompt hub', 'agents', 'prompting'),
-
-  // —— Knowledge ——
-  field('knowledge.rules', 'User rules', 'knowledge', 'rules', {
+  field('agents.prompting.hub', 'Agent cards', 'agents', 'agent-center'),
+  field('agents.rules', 'User rules', 'agents', 'rules', {
     keywords: ['cursor rules', 'instructions'],
   }),
-  field('knowledge.rules.enabled', 'Enable user rules', 'knowledge', 'rules'),
-  field('knowledge.rules.text', 'Rules text', 'knowledge', 'rules'),
+  field('agents.rules.enabled', 'Enable user rules', 'agents', 'rules'),
+  field('agents.rules.text', 'Rules text', 'agents', 'rules'),
 
   // —— Integrations ——
   field('integrations.search', 'Web search provider', 'integrations', 'search', {

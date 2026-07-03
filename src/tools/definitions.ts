@@ -322,7 +322,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         settings_section: {
           type: 'string',
           description:
-            'When app_id is settings: legacy area slug (e.g. memory, tools) or category slug (e.g. knowledge)',
+            'When app_id is settings: legacy area slug (e.g. memory, tools) or category slug (e.g. agents)',
         },
         settings_query: {
           type: 'string',

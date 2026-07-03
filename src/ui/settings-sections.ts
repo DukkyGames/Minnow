@@ -108,7 +108,7 @@ import {
   createSettingsSelectRow,
 } from './settings-controls';
 import { renderAppearanceSettingsSection } from './settings-appearance';
-import { renderPromptsHubPanel } from './settings-prompts-hub';
+import { renderAgentCenterPanel } from './settings-agent-center';
 import {
   createSettingsSwitch,
   createSettingsToggleRow,
@@ -664,7 +664,7 @@ async function bindPromptingToolbar(): Promise<void> {
   await syncCustomBarVisibility();
 }
 
-async function renderPromptingSection(): Promise<void> {
+async function renderAgentCenterBasePrompts(): Promise<void> {
   const profilesMount = document.getElementById('settingsSetupProfilesMount');
   if (profilesMount) {
     mountSetupProfilesPanel(profilesMount, setStatus);
@@ -674,13 +674,39 @@ async function renderPromptingSection(): Promise<void> {
   const meta = await loadPromptMetaSettings();
   await renderPromptPartsPanel(meta.activePromptProfile, meta.activePromptConfigId);
   schedulePromptTokenEstimateRefresh();
+}
 
-  const hubMount = document.getElementById('settingsPromptsHubMount');
-  if (hubMount) {
-    const hubGen = beginAsyncSectionRender('prompting');
-    await renderPromptsHubPanel(hubMount);
-    if (isAsyncSectionRenderStale('prompting', hubGen)) return;
+async function renderAgentCenterSection(): Promise<void> {
+  const generation = beginAsyncSectionRender('agent-center');
+  await renderAgentCenterPanel(document.getElementById('settingsAgentCenterBody'));
+  if (isAsyncSectionRenderStale('agent-center', generation)) return;
+
+  const basePromptPanel = document.getElementById('settingsBasePromptPanel');
+  if (basePromptPanel instanceof HTMLDetailsElement && basePromptPanel.open) {
+    await renderAgentCenterBasePrompts();
+    if (isAsyncSectionRenderStale('agent-center', generation)) return;
+  } else {
+    ensureBasePromptPanelLazyLoad();
   }
+}
+
+let basePromptLazyLoadBound = false;
+
+/** Load base prompt editors the first time the disclosure opens. */
+function ensureBasePromptPanelLazyLoad(): void {
+  if (basePromptLazyLoadBound) return;
+  const panel = document.getElementById('settingsBasePromptPanel');
+  if (!(panel instanceof HTMLDetailsElement)) return;
+  basePromptLazyLoadBound = true;
+  panel.addEventListener('toggle', () => {
+    if (!panel.open) return;
+    void renderAgentCenterBasePrompts();
+  });
+}
+
+/** @deprecated Use renderAgentCenterSection — kept for legacy hash aliases. */
+async function renderPromptingSection(): Promise<void> {
+  await renderAgentCenterSection();
 }
 
 /** Plan granularity control inside Modes → Plan expandable row. */
@@ -721,7 +747,7 @@ async function renderModesSection(): Promise<void> {
   const mount = clearMount('settingsModesBody');
   if (!mount) return;
 
-  appendSettingsCrosslinks(mount, [{ label: 'Edit prompts in Prompts', sectionId: 'prompting' }]);
+  appendSettingsCrosslinks(mount, [{ label: 'Edit prompts in Agents', sectionId: 'agent-center' }]);
 
   const listBody = appendSettingsGroup(
     mount,
@@ -752,7 +778,7 @@ async function renderExpertsSection(): Promise<void> {
   const mount = clearMount('settingsExpertsBody');
   if (!mount) return;
 
-  appendSettingsCrosslinks(mount, [{ label: 'Edit prompts in Prompts', sectionId: 'prompting' }]);
+  appendSettingsCrosslinks(mount, [{ label: 'Edit prompts in Agents', sectionId: 'agent-center' }]);
 
   const labBody = appendSettingsGroup(mount, 'Expert Lab', 'Try personas outside the main composer.');
   const labLink = document.createElement('button');
@@ -845,8 +871,8 @@ async function renderWorkAgentsSection(): Promise<void> {
   const agents = remote?.agents ?? [];
 
   appendSettingsCrosslinks(mount, [
-    { label: 'Edit prompts in Prompts', sectionId: 'prompting' },
-    { label: 'Set model in Models', sectionId: 'model-routing' },
+    { label: 'Edit prompts in Agents', sectionId: 'agent-center' },
+    { label: 'Set model in Agents', sectionId: 'agent-center' },
   ]);
 
   const listBody = appendSettingsGroup(
@@ -959,8 +985,8 @@ async function renderSubAgentsSection(): Promise<void> {
   globalBody.appendChild(summary);
 
   appendSettingsCrosslinks(mount, [
-    { label: 'Edit prompts in Prompts', sectionId: 'prompting' },
-    { label: 'Set model in Models', sectionId: 'model-routing' },
+    { label: 'Edit prompts in Agents', sectionId: 'agent-center' },
+    { label: 'Set model in Agents', sectionId: 'agent-center' },
   ]);
 
   const typesBody = appendSettingsGroup(
@@ -2201,26 +2227,23 @@ export async function refreshSettingsSection(
     case 'thinking':
       await renderThinkingSettingsSectionWrapper();
       break;
+    case 'agent-center':
+      await renderAgentCenterSection();
+      break;
     case 'prompting':
-      await renderPromptingSection();
+    case 'modes':
+    case 'work-agents':
+    case 'sub-agents':
+      await renderAgentCenterSection();
       break;
     case 'rules':
       await renderRulesSection();
       break;
-    case 'modes':
-      await renderModesSection();
-      break;
     case 'experts':
       await renderExpertsSection();
       break;
-    case 'work-agents':
-      await renderWorkAgentsSection();
-      break;
     case 'agent-packs':
       await renderAgentPacksSection();
-      break;
-    case 'sub-agents':
-      await renderSubAgentsSection();
       break;
     case 'autopilot':
       await renderAutopilotSection();

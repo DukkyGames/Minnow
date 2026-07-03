@@ -72,6 +72,13 @@ describe('resolveLegacyHash', () => {
     });
   });
 
+  test('redirects legacy #/settings/knowledge to Agents rules', () => {
+    assert.deepEqual(resolveLegacyHash('#/settings/knowledge'), {
+      hash: '#/app/settings',
+      settingsSection: 'rules',
+    });
+  });
+
   test('redirects legacy full-page routes to OS apps', () => {
     assert.deepEqual(resolveLegacyHash('#/benchmark'), { hash: '#/app/bench' });
     assert.deepEqual(resolveLegacyHash('#/research/run'), {

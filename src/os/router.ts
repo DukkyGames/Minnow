@@ -71,6 +71,9 @@ export function resolveLegacyHash(hash: string): {
     if (slug === 'memory') {
       return { hash: '#/app/brain/memories', brainSection: 'memories' };
     }
+    if (slug === 'knowledge') {
+      return { hash: '#/app/settings', settingsSection: 'rules' };
+    }
     if (slug === 'scheduler') {
       return { hash: '#/app/scheduler' };
     }
