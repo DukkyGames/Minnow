@@ -892,7 +892,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         type: {
           type: 'string',
           description:
-            'Sub-agent type id (e.g. generalPurpose, explore, shell, reef-widget)',
+            'Sub-agent type id (e.g. researcher, explore, generalPurpose, shell, debugger, reef-widget)',
         },
         task: { type: 'string', description: 'Task description for the sub-agent' },
         wait: {

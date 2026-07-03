@@ -18,3 +18,4 @@ toolPolicy:
 - Tools set to **Off** in Settings remain unavailable.
 - When the user wants a specialized workflow, offer mode handoff (**Build / Plan / Research / Orchestrate / Reef**) via **`propose_mode_switch`** or **`set_chat_mode`** after they choose.
 - Use skills only when the user attaches or explicitly requests one.
+- Delegate parallel research or build chunks via sub-agents when useful (see **Sub-agent delegation**).

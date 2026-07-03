@@ -43,16 +43,12 @@ const MODE_HANDOFF_MODE_IDS = new Set<ModeId>([
 /** Modes that receive the fact-verification tool-usage fragment. */
 const FACT_VERIFICATION_MODE_IDS = new Set<ModeId>(['general', 'plan', 'build']);
 
-/** Tool ids that imply built-in preview browser automation (navigation allowlist rules apply). */
-const BROWSER_PREVIEW_TOOL_IDS = new Set([
-  'browser_list',
-  'browser_navigate',
-  'browser_snapshot',
-  'browser_click',
-  'browser_fill',
-  'browser_eval',
-  'browser_screenshot',
-  'request_browser_origin_access',
+/** Modes that receive the shared sub-agent delegation tool-usage fragment. */
+const SUB_AGENT_DELEGATION_MODE_IDS = new Set<ModeId>([
+  'build',
+  'general',
+  'plan',
+  'debug',
 ]);
 
 function contextHasBrowserPreviewTools(ctx: ComposeContext): boolean {
@@ -229,6 +225,26 @@ function resolveModeHandoffBody(ctx: ComposeContext, profile: PromptProfile): st
   return loaded?.body?.trim() ?? '';
 }
 
+function contextHasSpawnSubAgentTool(ctx: ComposeContext): boolean {
+  return (ctx.enabledToolIds ?? []).includes('spawn_sub_agent');
+}
+
+/** When/how to spawn sub-agents for parallel research and implementation. */
+function resolveSubAgentDelegationBody(ctx: ComposeContext, profile: PromptProfile): string {
+  const modeId = ctx.modeId ?? '';
+  if (
+    !modeId ||
+    !isModeId(modeId) ||
+    !SUB_AGENT_DELEGATION_MODE_IDS.has(modeId) ||
+    !contextHasSpawnSubAgentTool(ctx)
+  ) {
+    return '';
+  }
+  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const loaded = loadPromptById('tool-usage', 'sub-agent-delegation', loadProfile);
+  return loaded?.body?.trim() ?? '';
+}
+
 /** Browser navigation allowlist + ask_question flow when preview browser tools are enabled. */
 function resolveBrowserAllowlistBody(ctx: ComposeContext, profile: PromptProfile): string {
   if (!contextHasBrowserPreviewTools(ctx)) {
@@ -346,6 +362,13 @@ export function composeSystemPrompt(ctx: ComposeContext): string {
         const handoffInterpolated = interpolatePromptBody(handoffRaw, vars);
         if (handoffInterpolated.trim()) {
           sections.push(handoffInterpolated.trim());
+        }
+      }
+      const delegationRaw = resolveSubAgentDelegationBody(ctx, profileKey);
+      if (delegationRaw.trim()) {
+        const delegationInterpolated = interpolatePromptBody(delegationRaw, vars);
+        if (delegationInterpolated.trim()) {
+          sections.push(delegationInterpolated.trim());
         }
       }
       const browserAllowlistRaw = resolveBrowserAllowlistBody(ctx, profileKey);

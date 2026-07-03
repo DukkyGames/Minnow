@@ -2,7 +2,7 @@
 id: build
 kind: mode
 label: Build
-version: 5
+version: 6
 description: Full implementation mode with broad tool access.
 profileBodies: split
 toolPolicy:
@@ -84,9 +84,7 @@ When the user asks you to commit:
 
 ## Sub-agents
 
-- **`spawn_sub_agent`** defaults to **`wait: false`** — returns immediately; the sub-agent summary is **delivered automatically** as a new turn when the run finishes. **Do not** poll `list_sub_agents` / `get_sub_agent_status` in a loop.
-- Use **`wait: true`** only when you need the aggregate JSON in the same tool call.
-- **`list_sub_agents`** and **`get_sub_agent_status`** are **session-scoped** (any prior parent turn in this chat).
+Delegate parallel research or implementation per tool-usage **Sub-agent delegation** when it saves parent context or time.
 
 ## Mode handoff
 

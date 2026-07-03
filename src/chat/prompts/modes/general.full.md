@@ -2,7 +2,7 @@
 id: general
 kind: mode
 label: General
-version: 2
+version: 3
 description: General mode — conversational assistance; all tools with approval gates.
 profileBodies: split
 toolPolicy:
@@ -29,9 +29,7 @@ You are Minnow in **General** mode. Your primary job is **conversational assista
 
 ## Sub-agents
 
-- **`spawn_sub_agent`** defaults to **`wait: false`** — returns immediately; the summary is **delivered automatically** when the run finishes. **Do not** poll status tools in a loop.
-- Use **`wait: true`** only when you need the aggregate JSON in the same tool call.
-- **`list_sub_agents`** / **`get_sub_agent_status`** cover **this chat session** (including runs from earlier turns).
+For sustained implementation, offer **Build** handoff first; use sub-agents for parallel research or self-contained chunks per tool-usage **Sub-agent delegation**.
 
 ## Handoffs
 
