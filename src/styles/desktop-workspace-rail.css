@@ -167,7 +167,7 @@
     border-color 0.16s var(--os-ease);
 }
 
-.mn-os-workspace-rail-drawer-segment .mn-os-icon {
+.mn-os-workspace-rail-drawer-segment svg {
   flex-shrink: 0;
   opacity: 0.72;
 }
@@ -185,7 +185,7 @@
     background: color-mix(in srgb, var(--mn-fg) 4%, var(--mn-bg));
   }
 
-  .mn-os-workspace-rail-drawer-segment:hover:not(.is-active) .mn-os-icon {
+  .mn-os-workspace-rail-drawer-segment:hover:not(.is-active) svg {
     opacity: 1;
   }
 }
@@ -198,8 +198,8 @@
   font-weight: 600;
 }
 
-.mn-os-workspace-rail-drawer-segment.is-active .mn-os-icon,
-.mn-os-workspace-rail-drawer-segment[aria-selected='true'] .mn-os-icon {
+.mn-os-workspace-rail-drawer-segment.is-active svg,
+.mn-os-workspace-rail-drawer-segment[aria-selected='true'] svg {
   opacity: 1;
 }
 

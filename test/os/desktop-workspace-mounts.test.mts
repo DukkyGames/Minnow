@@ -18,6 +18,7 @@ import {
   resetDesktopWorkspacePanelForTests,
 } from '../../src/os/desktop-workspace-state.ts';
 import {
+  isDesktopWorkspaceHostingActive,
   resetDesktopWorkspaceMountsForTests,
   syncDesktopWorkspaceMounts,
 } from '../../src/os/desktop-workspace-mounts.ts';
@@ -96,5 +97,17 @@ describe('syncDesktopWorkspaceMounts listing root', () => {
     launchInstance('code');
     await syncDesktopWorkspaceMounts();
     assert.equal(getFileTreeListingWorkspaceRoot(), CODE_WS);
+  });
+
+  test('isDesktopWorkspaceHostingActive on desktop idle (not only chatActive)', async () => {
+    const { getDesktopState } = await import('../../src/os/desktop-state.ts');
+    assert.equal(getDesktopState(), 'idle');
+    assert.equal(isDesktopWorkspaceHostingActive(), true);
+  });
+
+  test('isDesktopWorkspaceHostingActive false when Code is foreground', async () => {
+    const { launchInstance } = await import('../../src/os/instances.ts');
+    launchInstance('code');
+    assert.equal(isDesktopWorkspaceHostingActive(), false);
   });
 });

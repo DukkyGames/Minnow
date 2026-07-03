@@ -66,6 +66,11 @@ function shouldHostOnDesktop(): boolean {
   return isDesktopChatActive() || getOsView() === 'desktop';
 }
 
+/** True when file-tree / preview / viewer mounts are hosted in the desktop drawer. */
+export function isDesktopWorkspaceHostingActive(): boolean {
+  return shouldHostOnDesktop();
+}
+
 function captureRecords(): void {
   if (records.length) return;
   for (const target of REPARENT_TARGETS) {
