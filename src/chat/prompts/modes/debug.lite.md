@@ -24,5 +24,3 @@ Tools:
 UI actions: **Investigate** (debugger), **Plan fix** (planner → `documentation/plans/bugs/<id>.md`), **Start fix** (Orchestrate with that plan).
 
 Prefer the board for status; keep chat summaries short.
-
-Cwd: `{{cwd}}`
