@@ -555,7 +555,7 @@ export function getEnabledToolDefinitionsForChat(
   let defs = getEnabledToolDefinitionsForMode(normalized);
   const executionMode = getBoardGroupForChat(chat)?.orchestrateBoard?.executionMode;
   if (chat.boardTaskId?.trim()) {
-    defs = injectBoardMemberSubsetTools(defs, getEnabledToolCatalogEntries());
+    defs = injectBoardMemberSubsetTools(defs);
   }
   defs = applyBoardMemberToolFilter(defs, chat, executionMode);
   if (normalized !== 'orchestrate') return defs;

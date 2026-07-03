@@ -2,7 +2,7 @@
  * Orchestrate auto-pilot tool gating (delegate_tasks) and board-member tool stripping.
  */
 
-import type { OpenAIFunctionDefinition, ToolDefinition } from '../../tools/definitions';
+import { BUILT_IN_TOOLS, type OpenAIFunctionDefinition } from '../../tools/definitions';
 import type { AutopilotExecutionMode } from '../../config/autopilot-meta';
 import { getBoardGroupForChat } from '../../state/chat-groups';
 import type { Chat } from '../../types';
@@ -69,16 +69,15 @@ export function resolveBoardMemberRole(chat: Chat): BoardMemberRole {
 
 /**
  * Board task chats run in build mode but need orchestrate-only board tools. Inject
- * `board_get_state` / `board_report` from the enabled catalog before role filtering.
+ * `board_get_state` / `board_report` before role filtering (not gated by Settings).
  */
 export function injectBoardMemberSubsetTools(
   defs: OpenAIFunctionDefinition[],
-  catalog: readonly ToolDefinition[],
 ): OpenAIFunctionDefinition[] {
   if (!defs.length) return defs;
   const existing = new Set(defs.map((d) => d.function.name));
   const extra: OpenAIFunctionDefinition[] = [];
-  for (const tool of catalog) {
+  for (const tool of BUILT_IN_TOOLS) {
     if (
       (BOARD_ROLE_BOARD_SUBSET as readonly string[]).includes(tool.id) &&
       !existing.has(tool.id)
