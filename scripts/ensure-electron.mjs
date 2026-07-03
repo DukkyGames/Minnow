@@ -63,6 +63,26 @@ function main() {
     process.exit(result.status ?? 1);
   }
 
+  if (process.platform === 'win32') {
+    const syncIcon = spawnSync(process.execPath, [path.join(__dirname, 'sync-app-icon.mjs')], {
+      cwd: PROJECT_ROOT,
+      stdio: 'inherit',
+      env: process.env,
+    });
+    if (syncIcon.status !== 0) {
+      warn('App icon sync failed; Windows taskbar may show the default Electron icon.');
+    }
+
+    const brand = spawnSync(process.execPath, [path.join(__dirname, 'brand-electron-win.mjs')], {
+      cwd: PROJECT_ROOT,
+      stdio: 'inherit',
+      env: process.env,
+    });
+    if (brand.status !== 0) {
+      warn('Electron taskbar branding failed; dev runs may show the default Electron icon.');
+    }
+  }
+
   log('Electron binary ready.');
 }
 
