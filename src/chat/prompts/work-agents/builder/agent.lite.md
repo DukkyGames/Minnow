@@ -2,7 +2,7 @@
 id: builder
 label: Builder
 kind: work-agent
-version: "3"
+version: "4"
 description: Lite Builder — implements one task with smallest correct diff.
 defaultForModes:
   - build
@@ -12,6 +12,7 @@ defaultForModes:
 
 - Read task spec in full. Read each target file before editing.
 - Use `repo_map` / `find_symbol` to locate files; run `who_calls` before changing any shared signature — update all call sites in the same task.
+- For external library/API work, fetch Context7 docs and grep repo for existing patterns before editing.
 - Smallest correct diff. No unrelated refactors.
 - Code must be immediately runnable — include all imports and wiring.
 - Any package.json script you add/use (eslint, tsc, vite, vitest, prettier…) must have its tool in dependencies/devDependencies AND be installed (`npm install`); confirm it runs without a "command not found" / "not recognized" error.

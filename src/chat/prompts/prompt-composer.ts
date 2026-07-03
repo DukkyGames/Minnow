@@ -40,6 +40,21 @@ const MODE_HANDOFF_MODE_IDS = new Set<ModeId>([
   'reef',
 ]);
 
+/** Modes that receive the fact-verification tool-usage fragment. */
+const FACT_VERIFICATION_MODE_IDS = new Set<ModeId>(['general', 'plan', 'build']);
+
+/** Tool ids that imply built-in preview browser automation (navigation allowlist rules apply). */
+const BROWSER_PREVIEW_TOOL_IDS = new Set([
+  'browser_list',
+  'browser_navigate',
+  'browser_snapshot',
+  'browser_click',
+  'browser_fill',
+  'browser_eval',
+  'browser_screenshot',
+  'request_browser_origin_access',
+]);
+
 function contextHasBrowserPreviewTools(ctx: ComposeContext): boolean {
   const ids = ctx.enabledToolIds ?? [];
   return ids.some((id) => BROWSER_PREVIEW_TOOL_IDS.has(id));
@@ -176,6 +191,31 @@ function resolvePartBody(
   return body;
 }
 
+function contextHasContext7Tools(ctx: ComposeContext): boolean {
+  return (ctx.enabledToolIds ?? []).some((id) => id.startsWith('mcp__context7__'));
+}
+
+/** Fact-verification ladder for plan/build/general before drafting or implementing. */
+function resolveFactVerificationBody(ctx: ComposeContext, profile: PromptProfile): string {
+  const modeId = ctx.modeId ?? '';
+  if (!modeId || !isModeId(modeId) || !FACT_VERIFICATION_MODE_IDS.has(modeId)) {
+    return '';
+  }
+  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const loaded = loadPromptById('tool-usage', 'fact-verification', loadProfile);
+  return loaded?.body?.trim() ?? '';
+}
+
+/** Context7 MCP workflow when Context7 tools are enabled for this chat. */
+function resolveContext7DocsBody(ctx: ComposeContext, profile: PromptProfile): string {
+  if (!contextHasContext7Tools(ctx)) {
+    return '';
+  }
+  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const loaded = loadPromptById('tool-usage', 'context7-docs', loadProfile);
+  return loaded?.body?.trim() ?? '';
+}
+
 /** Shared mode-switch / Reef handoff rules appended after default tool-usage. */
 function resolveModeHandoffBody(ctx: ComposeContext, profile: PromptProfile): string {
   const modeId = ctx.modeId ?? '';
@@ -285,6 +325,20 @@ export function composeSystemPrompt(ctx: ComposeContext): string {
 
     if (partId === 'tool-usage') {
       const profileKey = effectiveProfile === 'lite' ? 'lite' : 'full';
+      const factVerificationRaw = resolveFactVerificationBody(ctx, profileKey);
+      if (factVerificationRaw.trim()) {
+        const factInterpolated = interpolatePromptBody(factVerificationRaw, vars);
+        if (factInterpolated.trim()) {
+          sections.push(factInterpolated.trim());
+        }
+      }
+      const context7DocsRaw = resolveContext7DocsBody(ctx, profileKey);
+      if (context7DocsRaw.trim()) {
+        const context7Interpolated = interpolatePromptBody(context7DocsRaw, vars);
+        if (context7Interpolated.trim()) {
+          sections.push(context7Interpolated.trim());
+        }
+      }
       const handoffRaw = resolveModeHandoffBody(ctx, profileKey);
       if (handoffRaw.trim()) {
         const handoffInterpolated = interpolatePromptBody(handoffRaw, vars);

@@ -2,7 +2,7 @@
 id: memory
 kind: info
 part: memory
-version: 4
+version: 5
 ---
 
 ## Brain wiki (persistent knowledge)
@@ -26,6 +26,7 @@ Each page has YAML frontmatter (`id`, `title`, `tags`, `source`, `summary`, …)
 | **Why**, **decision**, **domain model**, **gotchas**, conventions | `brain_write_page` / `brain_read_page` / `brain_search` |
 | Fuzzy prose lookup across the wiki | `brain_search` (use the returned `path:` or `Matched page paths` with `brain_read_page`) |
 | Exact string or regex in repo files | `grep` |
+| Library/framework API docs, version-specific syntax | Context7 MCP (`mcp__context7__resolve-library-id` → `mcp__context7__get-library-docs`) |
 | Where is a symbol / what calls it / signature map | `repo_map` → `find_symbol` / `who_calls` / `read_symbol` |
 | What does this code mean / design intent for a symbol | `explain_symbol` → `read_symbol` |
 | List or browse wiki structure | `brain_list` |
