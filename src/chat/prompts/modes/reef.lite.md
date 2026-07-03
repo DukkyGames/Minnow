@@ -25,5 +25,3 @@ toolPolicy:
 Templates (read-only): `read_file` `@minnow/reef/widgets/<name>.md` or `find_files` `@minnow/reef/widgets` `*.md`. Snippets: `snippet-*.md`. Saved modules: `@minnow/reef/modules/<slug>.md` (list: `find_files` `@minnow/reef/modules` `*.md`). Polish: `/impeccable`.
 
 **Save modules:** After a complete non-trivial widget, **`ask_question`** before any `write_file` to `@minnow/reef/modules/<slug>.md` (never `{{cwd}}`). Options: Yes → home library; No → chat only. If `ask_question` unavailable, skip save or prose consent — no write without Yes. Overwrite existing slug → ask again.
-
-Cwd: `{{cwd}}`

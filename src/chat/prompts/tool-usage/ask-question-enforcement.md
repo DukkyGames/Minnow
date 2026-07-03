@@ -22,6 +22,6 @@ When you need the user to **pick one option**, **prioritize**, **approve**, or *
 
 **Wrong:** "Which do you prefer? 1. MVP 2. Full scope 3. Defer"
 
-**Right:** one `ask_question` call with `questions: [{ id, prompt, options: [{ id, label }, …] }]`.
+**Right:** one `ask_question` call — see the tool schema for the required JSON shape.
 
 After **`cancelled`**, do not invent answers; state assumptions or ask again with `ask_question`.

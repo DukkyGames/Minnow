@@ -220,7 +220,7 @@ moment a browser tool runs; the tool descriptions themselves still explain the a
 
 ---
 
-## Wave 4 — collapse cross-section overlap (~400 tok)
+## Wave 4 — collapse cross-section overlap (~400 tok) — **shipped (MIN-335)**
 
 Same guidance repeated across parts that always ship together:
 - "Read before write / never invent tool output / smallest correct change" appears in
@@ -232,11 +232,10 @@ Same guidance repeated across parts that always ship together:
   `ask-question-enforcement.md`, and the 655-tok tool schema). Keep the tool schema as
   authoritative; collapse the two prompt copies into one short pointer.
 - `mode-handoff` stated 2× (`tool-usage` §Mode handoff paragraph + appended handoff table).
+- `info/general-assistant` gated to **General mode only** in `prompt-composer.ts`.
 
-**Change:** edit the markdown parts to remove the echoes; leave one authoritative statement
-of each rule.
-
-**Saves:** ~400 tok. **Risk:** low (wording only; keep the strongest phrasing).
+**Implemented:** markdown trims + composer info gating. Measured Build composed prompt:
+~5652 → ~5085 tok (~567 saved). Tests: `test/prompts/prompt-overlap-collapse.test.mjs`.
 
 ---
 
