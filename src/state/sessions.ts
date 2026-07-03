@@ -12,6 +12,7 @@ import { normalizeThinkingTriState } from '../agents/thinking-types';
 import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
 import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
+import { ensurePendingMessageQueue } from '../chat/message-queue';
 import { notifySessionCreated } from '../webhooks/client';
 import { decodeModelSelectKey } from '../lib/model-select-key';
 import {
@@ -1098,6 +1099,11 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
   }
   const pinnedSkill = ensurePinnedSkill(raw.pinnedSkill);
   const activeGoal = ensureActiveGoal(raw.activeGoal);
+  const pendingMessageQueue = ensurePendingMessageQueue(raw.pendingMessageQueue);
+  const pendingSteerMessage =
+    typeof raw.pendingSteerMessage === 'string' && raw.pendingSteerMessage.trim()
+      ? raw.pendingSteerMessage.trim()
+      : undefined;
   const chat: Chat = {
     id: typeof raw.id === 'string' && raw.id ? raw.id : newChatId(),
     name:
@@ -1187,6 +1193,8 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
       : {}),
     ...(pinnedSkill ? { pinnedSkill } : {}),
     ...(activeGoal ? { activeGoal } : {}),
+    ...(pendingMessageQueue ? { pendingMessageQueue } : {}),
+    ...(pendingSteerMessage ? { pendingSteerMessage } : {}),
   };
   ensureTokenLedger(chat);
   return chat;

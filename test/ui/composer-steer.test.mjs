@@ -41,14 +41,14 @@ function seedStreamingChat() {
   return chat;
 }
 
-describe('composer steer vs stop', () => {
+describe('composer queue vs stop', () => {
   afterEach(() => {
     appState.setStreaming(false);
     setSessionStateForTests(null);
-    appState.setChatAbort(chat.id, null);
+    appState.setChatAbort(FIXED_CHAT_ID, null);
   });
 
-  test('streaming with text enqueues steer without abort', () => {
+  test('streaming with text enqueues follow-up without abort', () => {
     const chat = seedStreamingChat();
     const { input } = setupDom();
     input.value = STEER_TEXT;
@@ -63,12 +63,13 @@ describe('composer steer vs stop', () => {
     handleComposerPrimaryAction();
 
     assert.equal(aborted, false);
-    assert.equal(chat.pendingSteerMessage, STEER_TEXT);
+    assert.equal(chat.pendingMessageQueue?.length, 1);
+    assert.equal(chat.pendingMessageQueue?.[0]?.text, STEER_TEXT);
     assert.equal(input.value, '');
   });
 
   test('streaming with empty input aborts via stopGeneration', () => {
-    seedStreamingChat();
+    const chat = seedStreamingChat();
     setupDom();
 
     let aborted = false;

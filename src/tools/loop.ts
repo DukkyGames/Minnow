@@ -21,8 +21,12 @@ import { flushPendingMode } from '../chat/pending-mode';
 import {
   clearPendingSteer,
   consumePendingSteer,
-  enqueueSteerMessage,
+  setSteerEnqueuedListener,
 } from '../chat/steer-message';
+import {
+  enqueueComposerMessage,
+  flushPendingMessageQueue,
+} from '../chat/message-queue';
 import { handleGoalCommand } from '../chat/goal/command';
 import { maybeContinueGoalAfterTurn } from '../chat/goal/evaluate';
 import { getActiveGoal } from '../state/sessions';
@@ -116,8 +120,8 @@ import {
   refreshComposerStreamingAffordance,
   setComposerStreamingMode,
   syncComposerFromStreamingState,
-  syncSteerQueuedHint,
 } from '../ui/composer-send';
+import { syncComposerMessageQueue } from '../ui/composer-message-queue';
 import { syncGoalActiveHint } from '../ui/goal-active-hint';
 import {
   clearComposerInput,
@@ -705,6 +709,19 @@ async function streamCompletionTurn(
     }
   }
 
+  /** End the live generation early so push-now steer can run at the tool-loop boundary. */
+  let finishStreamEarly: (() => void) | null = null;
+
+  function maybeFinishForSteer(): void {
+    if (!chat.pendingSteerMessage?.trim()) return;
+    finishStreamEarly?.();
+  }
+
+  function handleChunkWithSteerCheck(chunk: ChatCompletionChunk): void {
+    handleChunk(chunk);
+    maybeFinishForSteer();
+  }
+
   try {
     await new Promise<void>((resolve, reject) => {
       let settled = false;
@@ -714,10 +731,24 @@ async function streamCompletionTurn(
         fn();
       };
 
-      const unsubscribe = subscribeToGeneration(generationId!, {
+      let unsubscribe = (): void => {};
+
+      finishStreamEarly = (): void => {
+        unsubscribe();
+        void cancelGeneration(generationId!);
+        finish(resolve);
+      };
+
+      setSteerEnqueuedListener((steerChatId) => {
+        if (steerChatId === chat.id) {
+          maybeFinishForSteer();
+        }
+      });
+
+      unsubscribe = subscribeToGeneration(generationId!, {
         signal,
         onStreamOpen: onStreamConnected,
-        onChunk: handleChunk,
+        onChunk: handleChunkWithSteerCheck,
         onEnd: (event) => {
           if (event?.status === 'error') {
             const message = event.errorMessage ?? '';
@@ -769,6 +800,9 @@ async function streamCompletionTurn(
       throw err;
     }
     throw err;
+  } finally {
+    finishStreamEarly = null;
+    setSteerEnqueuedListener(null);
   }
 
   flushContentRouters();
@@ -1303,6 +1337,25 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     let activeResumeGenerationId = resumeGenerationId;
     let archiveMemo: ArchivePreResult | null = null;
 
+    const prepareNextStreamRound = (statusHint: string): void => {
+      streamRow = appendStreamingAssistantRow(chat.id);
+      ({ wrap, bubble, cursor, streamStatus } = streamRow);
+      streamCtx.wrap = wrap;
+      streamCtx.streamStatus = streamStatus;
+      lastWrap = wrap;
+      resetToolStartIndicator();
+      revealProse = (): void => {
+        if (!isStreamDomVisible(chat.id)) return;
+        revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
+      };
+      thoughtController?.setAssistantWrap(wrap);
+      thoughtController?.resetStreamPhaseHints();
+      if (isStreamDomVisible(chat.id)) {
+        setStatus('spin', statusHint);
+      }
+      patchMainTurnActivity(chat.id, { phase: 'generating', currentTool: null });
+    };
+
     for (let turn = 0; turn < maxToolTurns; turn++) {
       if (chatSignal.aborted) {
         throw new DOMException('Aborted', 'AbortError');
@@ -1310,7 +1363,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
       const steerConsumed = consumePendingSteer(chat);
       if (steerConsumed.consumed) {
-        syncSteerQueuedHint();
+        syncComposerMessageQueue();
       }
 
       let enabledTools = getEnabledToolDefinitionsForChat(chat);
@@ -1572,23 +1625,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           break;
         }
 
-        streamRow = appendStreamingAssistantRow(chat.id);
-        ({ wrap, bubble, cursor, streamStatus } = streamRow);
-        streamCtx.wrap = wrap;
-        streamCtx.streamStatus = streamStatus;
-        lastWrap = wrap;
-        resetToolStartIndicator();
-        revealProse = (): void => {
-          if (!isStreamDomVisible(chat.id)) return;
-          revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
-        };
-        thoughtController.setAssistantWrap(wrap);
-        thoughtController.resetStreamPhaseHints();
-
-        if (isStreamDomVisible(chat.id)) {
-          setStatus('spin', 'Generating reply…');
-        }
-        patchMainTurnActivity(chat.id, { phase: 'generating', currentTool: null });
+        prepareNextStreamRound('Generating reply…');
         ephemeralPostToolInstruction = undefined;
         continue;
       }
@@ -1861,6 +1898,12 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       renderSidebar();
       scheduleSaveSessions();
 
+      // Push-now during final prose: inject steer and run another model round in this turn.
+      if (chat.pendingSteerMessage?.trim()) {
+        prepareNextStreamRound('Steering…');
+        continue;
+      }
+
       synthesisRoundCount += 1;
       completedNormally = true;
       break;
@@ -2045,6 +2088,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       } else {
         syncComposerFromStreamingState();
       }
+      if (completedNormally && !goalDriven && !chat.pendingSteerMessage?.trim()) {
+        void flushPendingMessageQueue(chat).then(() => {
+          syncComposerMessageQueue();
+        });
+      }
       if (completedNormally && goalDriven) {
         void maybeContinueGoalAfterTurn(chat);
       }
@@ -2148,21 +2196,15 @@ export async function sendMessageWithTools(
     const pendingSteer = getPendingAttachments();
     const pendingOk = pendingSteer.filter((a) => a.kind !== 'error');
     if (pendingOk.length > 0) {
-      setStatus('err', 'Steer is text only — wait for this turn to finish for attachments');
+      setStatus('err', 'Follow-ups are text only — wait for this turn to finish for attachments');
       return;
     }
     const chat = getActiveChat();
-    const hadPrior = Boolean(chat.pendingSteerMessage?.trim());
-    if (enqueueSteerMessage(chat, rawTextEarly)) {
+    if (enqueueComposerMessage(chat, rawTextEarly)) {
       clearComposerInput(input);
-      setStatus(
-        'ok',
-        hadPrior
-          ? 'Correction updated — applies after current step'
-          : 'Steering at next step…',
-      );
+      setStatus('ok', 'Follow-up queued');
       refreshComposerStreamingAffordance();
-      syncSteerQueuedHint();
+      syncComposerMessageQueue();
     }
     return;
   }
