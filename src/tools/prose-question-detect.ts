@@ -23,6 +23,12 @@ const LETTER_PAREN_OPTION_RE = /\b[A-D]\)\s+\S/g;
 /** Markdown-bold option headers such as "**MVP:** ship smallest slice". */
 const BOLD_OPTION_LINE_RE = /^\s*\*\*[^*]{2,48}\*\*\s*[:—–-]\s*\S/gm;
 
+/** "I can:" lead-in before plain-language action options (mode handoffs, next steps). */
+const I_CAN_COLON_RE = /\bI can:\s*(?:\n|$)/i;
+
+/** Imperative option lines after a choice phrase — not numbered or bulleted. */
+const PROSE_ACTION_OPTION_LINE_RE = /^\s*(?:Or\s+\S|Switch to\s+\S)/gm;
+
 /** Index of the first regex match, or -1 when absent. */
 function firstMatchOffset(text: string, re: RegExp): number {
   re.lastIndex = 0;
@@ -65,6 +71,21 @@ function structuredOptionsEndOffset(text: string): number {
 }
 
 /**
+ * Count plain "Switch to …" / "Or …" option lines that trail a choice phrase or "I can:".
+ */
+function countProseActionOptions(text: string): number {
+  const choiceOffset = firstChoiceDirectiveOffset(text);
+  const iCanOffset = firstMatchOffset(text, I_CAN_COLON_RE);
+  const startOffset = Math.max(choiceOffset, iCanOffset);
+  if (startOffset < 0) {
+    return 0;
+  }
+  const tail = text.slice(startOffset);
+  PROSE_ACTION_OPTION_LINE_RE.lastIndex = 0;
+  return (tail.match(PROSE_ACTION_OPTION_LINE_RE) ?? []).length;
+}
+
+/**
  * True when plain-language assistant text likely presents multiple-choice options
  * that belong in the `ask_question` card UI.
  */
@@ -75,7 +96,13 @@ export function looksLikeProseStructuredQuestion(text: string): boolean {
   const hasQuestionMark = trimmed.includes('?');
   const hasChoicePhrase = CHOICE_PHRASE_RE.test(trimmed);
   const hasChoiceQuestion = CHOICE_QUESTION_RE.test(trimmed);
-  if (!hasQuestionMark && !hasChoicePhrase) return false;
+  const hasICanLeadIn = I_CAN_COLON_RE.test(trimmed);
+  if (!hasQuestionMark && !hasChoicePhrase && !hasICanLeadIn) return false;
+
+  const proseActionOptionCount = countProseActionOptions(trimmed);
+  if (proseActionOptionCount >= 2 && (hasChoicePhrase || hasICanLeadIn)) {
+    return true;
+  }
 
   const numberedOptionCount = (trimmed.match(NUMBERED_OPTION_LINE_RE) ?? []).length;
   const letterParenCount = (trimmed.match(LETTER_PAREN_OPTION_RE) ?? []).length;
