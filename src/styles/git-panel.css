@@ -793,3 +793,63 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
   color: var(--mn-fg-muted);
   text-align: center;
 }
+
+/* ─── History graph commit context menu ─── */
+
+.git-graph-context-menu {
+  position: fixed;
+  z-index: 70;
+  min-width: 180px;
+  padding: 4px;
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--mn-shadow);
+}
+
+.git-graph-context-menu__submenu {
+  z-index: 71;
+}
+
+.git-graph-context-menu__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 6px 10px;
+  text-align: left;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--mn-fg);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.git-graph-context-menu__item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.git-graph-context-menu__item--submenu {
+  padding-right: 6px;
+}
+
+.git-graph-context-menu__submenu-arrow {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: var(--mn-fg-muted);
+}
+
+.git-graph-context-menu__sep {
+  margin: 4px 6px;
+  height: 1px;
+  background: var(--mn-border);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .git-graph-context-menu__item:hover:not(:disabled) {
+    background: var(--mn-surface-elevated);
+  }
+}

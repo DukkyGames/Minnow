@@ -615,8 +615,8 @@ export async function worktreeRemove({ cwd, path: worktreePath, force } = {}) {
   return { ok: true };
 }
 
-/** `git checkout [-b] <branch>` */
-export async function checkout({ cwd, branch, create } = {}) {
+/** `git checkout [-b] <branch> [<startPoint>]` or `git checkout --detach <sha>` */
+export async function checkout({ cwd, branch, create, startPoint } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
 
@@ -627,12 +627,70 @@ export async function checkout({ cwd, branch, create } = {}) {
   const args = create
     ? ['checkout', '-b', branch.trim()]
     : ['checkout', branch.trim()];
+  if (create && startPoint && typeof startPoint === 'string' && startPoint.trim()) {
+    args.push(startPoint.trim());
+  }
   const result = await git(args, repo.cwd);
   if (result.code !== 0) {
     return { ok: false, error: processError(result) };
   }
 
   return { ok: true };
+}
+
+/** `git checkout --detach <sha>` */
+export async function checkoutDetach({ cwd, sha } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  if (!sha || typeof sha !== 'string' || !sha.trim()) {
+    return { ok: false, error: 'sha is required' };
+  }
+
+  const result = await git(['checkout', '--detach', sha.trim()], repo.cwd);
+  if (result.code !== 0) {
+    return { ok: false, error: processError(result) };
+  }
+
+  return { ok: true };
+}
+
+/** `git tag <name> <sha>` */
+export async function createTag({ cwd, name, sha } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return { ok: false, error: 'name is required' };
+  }
+  if (!sha || typeof sha !== 'string' || !sha.trim()) {
+    return { ok: false, error: 'sha is required' };
+  }
+
+  const result = await git(['tag', name.trim(), sha.trim()], repo.cwd);
+  if (result.code !== 0) {
+    return { ok: false, error: processError(result) };
+  }
+
+  return { ok: true };
+}
+
+/** `git remote get-url origin` */
+export async function remoteUrl({ cwd } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  const result = await git(['remote', 'get-url', 'origin'], repo.cwd);
+  if (result.code !== 0) {
+    return { ok: false, error: processError(result) };
+  }
+
+  const url = (result.stdout ?? '').trim();
+  if (!url) {
+    return { ok: false, error: 'No origin remote configured' };
+  }
+
+  return { ok: true, url };
 }
 
 /** `git show --stat --patch <sha>` */

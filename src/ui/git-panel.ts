@@ -58,6 +58,11 @@ import { getFilePanelState, patchFilePanelState } from '../state/file-panel';
 
 import { renderGitGraph, type GitGraphOptions } from './git-graph';
 
+import {
+  showGitGraphCommitContextMenu,
+  type GitGraphContextMenuCtx,
+} from './git-graph-context-menu';
+
 import { applyFileSidebarVisuals, isMobileLayout, openMobileFileSidebar } from './file-layout';
 
 import { getActiveChat, sessionState } from '../state/sessions';
@@ -1347,8 +1352,22 @@ function ensureGitGraph(): void {
 
   graphOptions.onSelectCommit = (sha) => void showCommitDiff(sha);
 
+  graphOptions.onContextMenu = (visual, event) => {
+    void showGitGraphCommitContextMenu(visual, event, buildGraphContextMenuCtx());
+  };
+
   graphHandle = renderGitGraph(graphMount, graphOptions);
 
+}
+
+function buildGraphContextMenuCtx(): GitGraphContextMenuCtx {
+  return {
+    cwd: getEffectiveCwdArg(),
+    onOpenChanges: (sha) => void showCommitDiff(sha),
+    onRefresh: () => refreshGitPanel(),
+    getCurrentBranch: () => currentBranchName,
+    onConflict: (message) => showToast(message, 'error'),
+  };
 }
 
 
