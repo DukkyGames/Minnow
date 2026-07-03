@@ -1047,6 +1047,29 @@ function onChatRemoved(result: RemoveChatResult): void {
   closeMobileSidebar();
 }
 
+/** Render the active chat into the correct foreground shell (desktop / chat app / code). */
+function paintActiveChatInForegroundShell(chat: Chat): void {
+  if (isDesktopChatActive()) {
+    void import('../os/desktop-chat').then((m) => m.activateDesktopChatSession(chat.id));
+    return;
+  }
+  if (isChatAppForeground()) {
+    renderChatFromHistory(chat, '#chatAppMessageCol');
+    return;
+  }
+  if (document.getElementById('codeOverviewRoot')) {
+    void import('./code-overview').then(({ closeCodeOverview }) => {
+      closeCodeOverview({ skipNavigate: true, restoreChat: false });
+      void import('../os/router').then(({ navigateToCodeChat }) => {
+        navigateToCodeChat();
+        renderChatFromHistory(chat);
+      });
+    });
+    return;
+  }
+  renderChatFromHistory(chat);
+}
+
 export function deleteChat(chatId: string, evt?: Event): void {
   if (evt) evt.stopPropagation();
   if (isChatStreaming(chatId)) {
@@ -1105,21 +1128,7 @@ export function switchChat(id: string): void {
   sessionState.activeId = id;
   acknowledgeChatViewed(id);
   syncModelSelectForActiveChat();
-  if (isDesktopChatActive()) {
-    void import('../os/desktop-chat').then((m) => m.activateDesktopChatSession(id));
-  } else if (isChatAppForeground()) {
-    renderChatFromHistory(chat, '#chatAppMessageCol');
-  } else if (document.getElementById('codeOverviewRoot')) {
-    void import('./code-overview').then(({ closeCodeOverview }) => {
-      closeCodeOverview({ skipNavigate: true, restoreChat: false });
-      void import('../os/router').then(({ navigateToCodeChat }) => {
-        navigateToCodeChat();
-        renderChatFromHistory(chat);
-      });
-    });
-  } else {
-    renderChatFromHistory(chat);
-  }
+  paintActiveChatInForegroundShell(chat);
   void import('../usage/code-change-backfill').then((m) =>
     m.ensureChatCodeChangeBackfillOnSwitch(chat).then(() => {
       updateCodeChangeStrip(chat);
@@ -1228,7 +1237,7 @@ export function createChatWithMode(
   sessionState!.activeId = chat.id;
   if (!initial) touchChat(chat);
   recordChatOpened(chat.id);
-  renderChatFromHistory(chat);
+  paintActiveChatInForegroundShell(chat);
   void bootGenerationResumeForChat(chat);
   renderStatsForChat(chat);
   syncModeSelectorFromActiveChat();

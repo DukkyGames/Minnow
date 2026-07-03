@@ -8,6 +8,7 @@ import type {
   QuestionCardsModalOptions,
 } from '../ui/question-cards-modal';
 import { resolveOrchestratePlanScreenQuestionHost } from '../ui/orchestrate-plan-screen';
+import { applyBrowserAllowlistFromAskQuestion } from './browser-navigation-gate';
 import type { AskQuestionArgs } from './ask-question-types';
 import { stringifyAskQuestionResult } from './ask-question-types';
 
@@ -51,6 +52,7 @@ async function drainQueue(): Promise<void> {
       next.context,
       modalOptions,
     );
+    await applyBrowserAllowlistFromAskQuestion(next.args, result);
     next.resolve(stringifyAskQuestionResult(result));
   } catch {
     next.resolve(stringifyAskQuestionResult({ status: 'cancelled', answers: [] }));

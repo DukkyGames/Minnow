@@ -22,6 +22,7 @@ import type { Chat } from '../../types';
 import { retrieveMemoryBlock } from '../../memory/client';
 import { shouldInjectMemory } from '../../memory/config';
 import { loadPromptConfig } from './prompt-configs';
+import { chatHistoryHasBrowserToolUse } from './browser-allowlist-gate';
 import { getWorkspacePath } from '../../state/workspace';
 import type { ComposeContext, PromptProfile } from './types';
 import { normalizeOrchestratePlanPath } from '../orchestrate/plan-path';
@@ -127,6 +128,9 @@ export async function buildComposeContext(
         ?.content?.slice(0, 200) ??
       '',
     includeChatHistorySummary: false,
+    browserActivated:
+      options?.overrides?.browserActivated ??
+      chatHistoryHasBrowserToolUse(chat.history),
     ...options?.overrides,
   };
 

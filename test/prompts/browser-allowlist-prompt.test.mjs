@@ -61,7 +61,7 @@ describe('browser-allowlist prompts', () => {
     assert.match(loaded.body, /request_browser_origin_access/);
   });
 
-  test('composeSystemPrompt appends allowlist when browser_navigate enabled', async () => {
+  test('composeSystemPrompt uses lite allowlist before first browser tool use', async () => {
     registerPromptFilesFromRaw(await loadBrowserAllowlistPromptMap());
     const out = composeSystemPrompt({
       profile: 'full',
@@ -72,6 +72,25 @@ describe('browser-allowlist prompts', () => {
       skillBody: null,
       memoryBlock: null,
       enabledToolIds: ['browser_navigate', 'ask_question'],
+      browserActivated: false,
+    });
+    assert.match(out, /\*\*Browser allowlist:\*\*/);
+    assert.doesNotMatch(out, /## Browser navigation allowlist/);
+    assert.doesNotMatch(out, /"id": "browser_allow_origin"/);
+  });
+
+  test('composeSystemPrompt appends full allowlist after browser tool use', async () => {
+    registerPromptFilesFromRaw(await loadBrowserAllowlistPromptMap());
+    const out = composeSystemPrompt({
+      profile: 'full',
+      cwd: '/proj',
+      modeId: 'build',
+      expertId: null,
+      workAgentId: null,
+      skillBody: null,
+      memoryBlock: null,
+      enabledToolIds: ['browser_navigate', 'ask_question'],
+      browserActivated: true,
     });
     assert.match(out, /## Browser navigation allowlist/);
     assert.match(out, /browser_allow_origin/);

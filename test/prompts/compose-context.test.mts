@@ -145,6 +145,30 @@ describe('buildComposeContext cwd', () => {
     const ctx = await buildComposeContext(chat);
     assert.equal(ctx.cwd, MAIN_REPO);
   });
+
+  it('sets browserActivated from chat history browser tool calls', async () => {
+    const fresh = await buildComposeContext(baseChat());
+    assert.equal(fresh.browserActivated, false);
+
+    const activated = await buildComposeContext(
+      baseChat({
+        history: [
+          {
+            role: 'assistant',
+            content: null,
+            tool_calls: [
+              {
+                id: 'call_1',
+                type: 'function',
+                function: { name: 'browser_snapshot', arguments: '{}' },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    assert.equal(activated.browserActivated, true);
+  });
 });
 
 describe('builder prompt cwd rendering', () => {

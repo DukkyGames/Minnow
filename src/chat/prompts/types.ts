@@ -97,6 +97,8 @@ export interface ComposeContext {
   planGranularity?: string | null;
   /** Workspace-relative plan path when mode is orchestrate (for {{orchestrate_plan}}). */
   orchestratePlanPath?: string | null;
+  /** True once a preview browser tool has been invoked in this chat (gates allowlist fragment). */
+  browserActivated?: boolean;
 }
 
 /** Tokens replaced in composed bodies via interpolate.ts. */

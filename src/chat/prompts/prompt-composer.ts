@@ -4,6 +4,7 @@
 
 import { getMode } from '../modes/registry';
 import { isModeId, type ModeId } from '../modes/types';
+import { BROWSER_PREVIEW_TOOL_IDS } from './browser-allowlist-gate';
 import { interpolatePromptBody } from './interpolate';
 import { loadPromptById } from './prompt-loader';
 import type {
@@ -231,7 +232,9 @@ function resolveBrowserAllowlistBody(ctx: ComposeContext, profile: PromptProfile
   if (!contextHasBrowserPreviewTools(ctx)) {
     return '';
   }
-  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const useFullAllowlist = ctx.browserActivated === true;
+  const loadProfile =
+    profile === 'lite' || !useFullAllowlist ? 'lite' : 'full';
   const loaded = loadPromptById('tool-usage', 'browser-allowlist', loadProfile);
   return loaded?.body?.trim() ?? '';
 }
