@@ -175,9 +175,9 @@ Register section in [`src/ui/settings-search-index.ts`](src/ui/settings-search-i
 
 **Sound playback rules:**
 
-- Play only when `document.visibilityState === 'visible'` (avoid background-tab surprise) OR when window not focused — use `document.hasFocus()` check
-- Respect `soundEnabled` and `soundId === 'none'`
-- First user gesture: browsers may block autoplay — preview button satisfies unlock; document a one-time silent unlock on first menubar interaction if needed
+- Play when the window is unfocused; Electron also chimes when `visibilityState` is `hidden` (alt-tab / minimized). Browser tabs skip hidden background tabs.
+- Respect `soundEnabled`, `muted`, and `soundId === 'none'`
+- First user gesture: `initNotificationAudioUnlock()` on boot plus preview button / menubar bell unlock autoplay
 
 ### 6. Migrate existing producers
 
