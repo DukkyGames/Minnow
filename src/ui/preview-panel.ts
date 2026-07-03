@@ -212,7 +212,7 @@ function onPreviewNavigation(url: string): void {
     url &&
     HTTP_URL_RE.test(url)
   ) {
-    revealPreviewPanelForAgentNavigation(url);
+    void revealPreviewPanelForAgentNavigation(url);
   }
 
   syncAddressBarFromNavigation(url);
@@ -467,33 +467,50 @@ export function loadPreviewSource(source: PreviewSource, options?: { cacheBust?:
  * Show the preview split + Electron guest when browser_navigate runs.
  * Does not load the URL — caller uses navigateAndWait (avoids double fetch).
  */
-export function revealPreviewPanelForAgentNavigation(url: string): void {
+export async function revealPreviewPanelForAgentNavigation(url: string): Promise<void> {
   const trimmed = url.trim();
   if (!trimmed) return;
-  if (!dismissFileViewerForPreview()) return;
+
+  const { isDesktopWorkspaceHostingActive } = await import('../os/desktop-workspace-mounts');
+  const desktopHosted = isDesktopWorkspaceHostingActive();
+  if (desktopHosted) {
+    const mounts = await import('../os/desktop-workspace-mounts');
+    await mounts.revealDesktopBrowserPanel();
+  } else if (!dismissFileViewerForPreview()) {
+    return;
+  }
+
+  await applyAgentPreviewNavigation(trimmed, desktopHosted);
+}
+
+async function applyAgentPreviewNavigation(url: string, desktopHosted: boolean): Promise<void> {
+  if (!desktopHosted && !dismissFileViewerForPreview()) return;
 
   if (isFullscreenOverlayObscuringWorkspace()) {
-    patchFilePanelState({ previewSource: { kind: 'url', url: trimmed } });
+    patchFilePanelState({ previewSource: { kind: 'url', url } });
     hidePreviewStatus();
     setPreviewLoading(true);
     const input = getUrlInput();
-    if (input) input.value = trimmed;
+    if (input) input.value = url;
     if (usesElectronPreview()) {
-      void loadSourceInPreview({ kind: 'url', url: trimmed });
+      void loadSourceInPreview({ kind: 'url', url });
     }
     return;
   }
 
-  showPreviewSplit();
-  patchFilePanelState({ previewSource: { kind: 'url', url: trimmed } });
+  if (!desktopHosted) {
+    showPreviewSplit();
+  }
+  patchFilePanelState({ previewSource: { kind: 'url', url } });
   hidePreviewStatus();
   setPreviewLoading(true);
 
   const input = getUrlInput();
-  if (input) input.value = trimmed;
+  if (input) input.value = url;
 
   if (usesElectronPreview()) {
-    void showPreviewHost();
+    await showPreviewHost();
+    await syncElectronPreviewHostLayout();
   }
 }
 
@@ -511,8 +528,7 @@ export async function openUrlInPreviewPanel(url: string): Promise<void> {
     return;
   }
 
-  revealPreviewPanelForAgentNavigation(trimmed);
-  await api.show();
+  await revealPreviewPanelForAgentNavigation(trimmed);
   scheduleElectronPreviewHostVisibilitySync();
 
   if (api.navigateAndWait) {

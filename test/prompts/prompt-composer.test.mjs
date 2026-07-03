@@ -71,7 +71,7 @@ describe('prompt-composer', () => {
     assert.ok(parts.length >= 3);
   });
 
-  test('info part renders only in General mode', async () => {
+  test('info part renders in General and Desktop modes', async () => {
     registerPromptFilesFromRaw(await loadFixtureMap());
     const generalOut = composeSystemPrompt({
       profile: 'full',
@@ -85,6 +85,19 @@ describe('prompt-composer', () => {
       infoPresetId: 'general-assistant',
     });
     assert.ok(generalOut.includes('INFO_GENERAL_BODY'));
+
+    const desktopOut = composeSystemPrompt({
+      profile: 'full',
+      cwd: '/test',
+      modeId: 'desktop',
+      expertId: null,
+      workAgentId: null,
+      skillBody: null,
+      memoryBlock: null,
+      enabledToolIds: ['get_datetime'],
+      infoPresetId: 'general-assistant',
+    });
+    assert.ok(desktopOut.includes('INFO_GENERAL_BODY'));
 
     const buildOut = composeSystemPrompt({
       profile: 'full',

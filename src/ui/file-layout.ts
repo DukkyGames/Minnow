@@ -101,6 +101,7 @@ export function reconcileRightSplitDomWithState(): void {
 /** Sync Electron preview guest bounds after workspace split geometry changes. */
 function scheduleElectronPreviewHostLayoutAfterSplitChange(): void {
   if (getFilePanelState().rightPaneMode !== 'preview') return;
+  if (!window.minnow?.preview) return;
   void import('./preview-electron-visibility').then((m) => {
     m.scheduleElectronPreviewHostLayoutSync();
   });
@@ -109,6 +110,7 @@ function scheduleElectronPreviewHostLayoutAfterSplitChange(): void {
 /** Re-show Chromium guest + reload source after reconcile unhides the preview pane. */
 function schedulePreviewGuestResyncAfterReconcile(): void {
   if (getFilePanelState().rightPaneMode !== 'preview') return;
+  if (!window.minnow?.preview) return;
   void import('./preview-panel').then((m) => {
     m.resyncOpenPreviewPanelFromState({ reload: true });
   });

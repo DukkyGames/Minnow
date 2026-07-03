@@ -8,6 +8,7 @@ import {
   app,
   BrowserWindow,
   crashReporter,
+  dialog,
   ipcMain,
   session,
   shell,
@@ -28,7 +29,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** Window/taskbar icon (dev and unpackaged runs; packaged builds use build/icon.ico via electron-builder). */
 function appIconPath(): string {
-  const root = getProjectRoot();
+  const root = app.isPackaged
+    ? app.getAppPath()
+    : getProjectRoot();
   if (process.platform === 'win32') {
     return path.join(root, 'build', 'icon.ico');
   }
@@ -302,6 +305,25 @@ async function bootstrap(): Promise<void> {
   await mainWindow.loadURL(loadUrl);
 }
 
+/** Surface fatal startup errors — packaged runs have no terminal for console.error. */
+function failBootstrap(err: unknown): void {
+  const message = err instanceof Error ? err.message : String(err);
+  const stack = err instanceof Error ? err.stack : undefined;
+  crashLog.logCrash({
+    source: 'main',
+    kind: 'bootstrap-failed',
+    message,
+    stack,
+  });
+  crashLog.flushCrashLogSync();
+  console.error('[electron] bootstrap failed:', err);
+  dialog.showErrorBox(
+    'Minnow failed to start',
+    `${message}\n\nDetails may be in ~/.minnow/logs/crash.jsonl`,
+  );
+  app.exit(1);
+}
+
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
@@ -353,10 +375,7 @@ if (!gotSingleInstanceLock) {
   });
 
   app.whenReady().then(() => {
-    bootstrap().catch((err) => {
-      console.error('[electron] bootstrap failed:', err);
-      app.exit(1);
-    });
+    bootstrap().catch(failBootstrap);
   });
 
   app.on('window-all-closed', () => {
@@ -367,10 +386,7 @@ if (!gotSingleInstanceLock) {
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      bootstrap().catch((err) => {
-        console.error('[electron] bootstrap failed:', err);
-        app.exit(1);
-      });
+      bootstrap().catch(failBootstrap);
     } else {
       focusMainWindow();
     }

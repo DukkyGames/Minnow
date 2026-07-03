@@ -160,7 +160,7 @@ function appendBoardGroupWaveMembers(
   if (plannerId) {
     const planner = members.find((c) => c.id === plannerId);
     if (planner) {
-      appendChatRow(membersEl, planner, highlightChatId, { inGroup: true });
+      appendChatRow(membersEl, planner, highlightChatId, { inGroup: true, group });
       rendered.add(planner.id);
     }
   }
@@ -186,7 +186,7 @@ function appendBoardGroupWaveMembers(
       const waveMembersEl = document.createElement('div');
       waveMembersEl.className = 'chat-wave-members';
       for (const chat of waveChats) {
-        appendChatRow(waveMembersEl, chat, highlightChatId, { inGroup: true });
+        appendChatRow(waveMembersEl, chat, highlightChatId, { inGroup: true, group });
       }
       membersEl.appendChild(waveMembersEl);
     }
@@ -196,7 +196,7 @@ function appendBoardGroupWaveMembers(
     if (rendered.has(chat.id)) continue;
     if (plannerId && chat.id === plannerId) continue;
     if (chat.boardTaskId?.trim()) continue;
-    appendChatRow(membersEl, chat, highlightChatId, { inGroup: true });
+    appendChatRow(membersEl, chat, highlightChatId, { inGroup: true, group });
   }
 }
 
@@ -342,10 +342,22 @@ interface AppendChatRowOptions {
   draggable?: boolean;
   /** Compact name-only row when listed under a sidebar group. */
   inGroup?: boolean;
+  /** Board folder for resolving task category icons on in-group rows. */
+  group?: import('../types').ChatGroup;
   /** Override default switchChat activation (e.g. Experts hub before shell opens). */
   onActivate?: (chat: Chat) => void;
   /** Override default deleteChat (e.g. Experts hub detail list refresh). */
   onDelete?: (chat: Chat) => void;
+}
+
+/** Board task category for a chat row (from group board state, not stored on Chat). */
+function boardCategoryForChat(
+  chat: Chat,
+  group?: import('../types').ChatGroup,
+): import('../types').BoardCategory | undefined {
+  const taskId = chat.boardTaskId?.trim();
+  if (!taskId || !group?.orchestrateBoard) return undefined;
+  return group.orchestrateBoard.tasks.find((t) => t.id === taskId)?.category;
 }
 
 /** Sidebar row highlight id; suppressed while a board folder owns the main column. */
@@ -481,8 +493,9 @@ export function appendChatRow(
   nameSpan.className = 'chat-item-name';
   nameSpan.textContent = chat.name;
 
-  if (inGroup && chat.category) {
-    const catIcon = createBoardCategoryIcon(chat.category, 'chat-item-board-cat-icon');
+  const boardCategory = inGroup ? boardCategoryForChat(chat, options?.group) : undefined;
+  if (boardCategory) {
+    const catIcon = createBoardCategoryIcon(boardCategory, 'chat-item-board-cat-icon');
     if (catIcon) titleRow.appendChild(catIcon);
   }
   titleRow.appendChild(nameSpan);

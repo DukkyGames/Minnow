@@ -2,8 +2,8 @@
  * Desktop session rail — assistant sandbox chats on the OS desktop.
  */
 
-import { getChatsWorkspacePath } from '../lib/chats-workspace';
-import { createAssistantChat, CHAT_APP_ID } from '../state/chat-app-sessions';
+import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
+import { CHAT_APP_ID, createDesktopChat } from '../state/session-workspace-scope';
 import {
   getAssistantChats,
   newChatId,
@@ -155,10 +155,10 @@ export function clearDesktopExpertScopeRail(): void {
 
 /** Create a new assistant chat on the desktop surface. */
 export async function createNewDesktopChat(): Promise<void> {
-  const path = await getChatsWorkspacePath();
+  const path = await getDesktopWorkspacePath();
   if (!path || !sessionState) return;
 
-  const chat = createAssistantChat(path, newChatId());
+  const chat = createDesktopChat(path, newChatId());
   sessionState.chats.unshift(chat);
   sessionState.activeId = chat.id;
   rememberActiveChatForApp(CHAT_APP_ID, chat.id);
@@ -178,8 +178,8 @@ export async function createNewDesktopChat(): Promise<void> {
   input?.focus();
 }
 
-/** Paint session rows for the chats workspace sandbox. */
-export function renderDesktopChatRail(chatsWorkspacePath?: string | null): void {
+/** Paint session rows for the desktop workspace sandbox. */
+export function renderDesktopChatRail(desktopWorkspacePath?: string | null): void {
   const list = getRailList();
   if (!list || !sessionState) return;
 
@@ -194,7 +194,7 @@ export function renderDesktopChatRail(chatsWorkspacePath?: string | null): void 
   mountExpertScopeInRail(false);
   list.replaceChildren();
 
-  const path = chatsWorkspacePath ?? null;
+  const path = desktopWorkspacePath ?? null;
   if (!path) return;
 
   const chats = getAssistantChats(path, sessionState);
@@ -266,7 +266,7 @@ export function wireDesktopChatRail(): void {
 
 /** Ensure workspace path is loaded before first rail paint. */
 export async function refreshDesktopChatRail(): Promise<void> {
-  const path = await getChatsWorkspacePath();
+  const path = await getDesktopWorkspacePath();
   renderDesktopChatRail(path);
 }
 

@@ -56,12 +56,32 @@ export function resetChromePopoverRegistryForTests(): void {
   chromePopoverOpenCount = 0;
 }
 
+/** True when the desktop workspace drawer is showing the browser mount. */
+function isDesktopBrowserMountActive(): boolean {
+  const mount = document.getElementById('desktopPreviewMount');
+  return Boolean(mount?.classList.contains('is-active'));
+}
+
 /** True when the preview split pane is the active right pane and not CSS-hidden. */
 export function isPreviewPaneDomVisible(): boolean {
   if (getFilePanelState().rightPaneMode !== 'preview') return false;
   const pane = document.getElementById('previewPane');
-  if (!pane || pane.classList.contains('hidden')) return false;
+  if (!pane) return false;
+  // Desktop drawer CSS keeps #previewPane flex-visible even when .hidden lingers briefly.
+  if (isDesktopBrowserMountActive()) return true;
+  if (pane.classList.contains('hidden')) return false;
   return true;
+}
+
+/** True when the Code workspace or desktop browser drawer hosts the preview guest. */
+function isPreviewSurfaceActive(): boolean {
+  if (isDesktopBrowserSurfaceActive()) return true;
+  return isCodeWorkspaceForeground();
+}
+
+function isDesktopBrowserSurfaceActive(): boolean {
+  if (!isDesktopBrowserMountActive()) return false;
+  return isPreviewPaneDomVisible();
 }
 
 /** True when the Code workspace (where #previewBody lives) is the active shell surface. */
@@ -74,7 +94,7 @@ function isCodeWorkspaceForeground(): boolean {
 /** Whether the Chromium guest should be visible and receive bounds updates. */
 export function shouldShowElectronPreviewHost(): boolean {
   if (!usesElectronPreview()) return false;
-  if (!isCodeWorkspaceForeground()) return false;
+  if (!isPreviewSurfaceActive()) return false;
   if (!isPreviewPaneDomVisible()) return false;
   if (isFullscreenOverlayObscuringWorkspace()) return false;
   if (isChromePopoverOpen()) return false;
@@ -231,4 +251,9 @@ export const scheduleElectronPreviewHostLayoutSync = scheduleElectronPreviewHost
 export function resetPreviewGuestVisibilityForTests(): void {
   previewGuestVisible = false;
   layoutSyncChain = Promise.resolve();
+  if (layoutSyncRaf && typeof cancelAnimationFrame === 'function') {
+    cancelAnimationFrame(layoutSyncRaf);
+    layoutSyncRaf = 0;
+  }
+  layoutRetryFrames = 0;
 }

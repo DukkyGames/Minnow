@@ -18,6 +18,7 @@ import { decodeModelSelectKey } from '../lib/model-select-key';
 import {
   CHAT_APP_ID,
   createAssistantChat,
+  createDesktopChat,
   getAssistantChats as filterAssistantChats,
   getChatsForChatsWorkspace as filterChatsForChatsWorkspace,
   getChatLastMessageAt,
@@ -242,9 +243,28 @@ function ensureExpertSelection(raw: unknown): ExpertSelection {
 /** In-memory session blob mirrored to ~/.minnow or localStorage fallback. */
 export let sessionState: SessionState | null = null;
 
+/** Resolves once `loadSessionsFromStorage()` has populated `sessionState`. */
+let resolveSessionsReady: () => void = () => undefined;
+export const sessionsReady: Promise<void> = new Promise((resolve) => {
+  resolveSessionsReady = resolve;
+});
+
+/** No-op when sessions are already loaded; otherwise waits for boot `initApp`. */
+export async function ensureSessionsReady(): Promise<void> {
+  if (sessionState) return;
+  await sessionsReady;
+}
+
+function markSessionsReady(): void {
+  resolveSessionsReady();
+}
+
 /** Replace in-memory session blob (unit tests). */
 export function setSessionStateForTests(state: SessionState | null): void {
   sessionState = state;
+  if (state) {
+    markSessionsReady();
+  }
 }
 
 export type SaveSessionsResult = 'ok' | 'quota_exceeded';
@@ -1424,6 +1444,23 @@ export function activateAssistantChatForApp(chatsWorkspacePath: string): Chat {
 }
 
 /**
+ * Activate the last desktop chat or create one (desktop mode).
+ * Requires the absolute desktop workspace path from `getDesktopWorkspacePath()`.
+ */
+export function activateDesktopAssistantChatForApp(desktopWorkspacePath: string): Chat {
+  const state = requireSessionState();
+  const nextId = resolveActiveAssistantChatId(desktopWorkspacePath, state, (workspaceKey) => {
+    const fresh = createDesktopChat(workspaceKey, newChatId());
+    touchChat(fresh);
+    return fresh;
+  });
+  state.activeId = nextId;
+  rememberActiveChatForAppInState(state, CHAT_APP_ID, nextId);
+  scheduleSaveSessions();
+  return getActiveChat();
+}
+
+/**
  * Pick the active chat id for a workspace: remembered id, else newest scoped chat,
  * else create a new empty chat bound to that workspace.
  */
@@ -1473,27 +1510,31 @@ export function onWorkspaceChanged(
 
 /** Load sessions from API or localStorage (after detectConfigServer). */
 export async function loadSessionsFromStorage(): Promise<void> {
-  if (isServerStorageMode()) {
-    try {
-      const remote = await getSessions();
-      sessionState = parseSessionStateFromJson(remote);
-      await runSessionCodeChangeBackfill(sessionState);
-      return;
-    } catch {
-      setStatus('err', 'Could not load sessions from ~/.minnow');
-    }
-  }
-
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      sessionState = defaultSessionState();
-      return;
+    if (isServerStorageMode()) {
+      try {
+        const remote = await getSessions();
+        sessionState = parseSessionStateFromJson(remote);
+        await runSessionCodeChangeBackfill(sessionState);
+        return;
+      } catch {
+        setStatus('err', 'Could not load sessions from ~/.minnow');
+      }
     }
-    sessionState = parseSessionStateFromJson(JSON.parse(raw) as Partial<SessionState>);
-    await runSessionCodeChangeBackfill(sessionState);
-  } catch {
-    sessionState = defaultSessionState();
+
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) {
+        sessionState = defaultSessionState();
+        return;
+      }
+      sessionState = parseSessionStateFromJson(JSON.parse(raw) as Partial<SessionState>);
+      await runSessionCodeChangeBackfill(sessionState);
+    } catch {
+      sessionState = defaultSessionState();
+    }
+  } finally {
+    markSessionsReady();
   }
 }
 
