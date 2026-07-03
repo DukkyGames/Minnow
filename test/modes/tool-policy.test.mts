@@ -40,6 +40,23 @@ function groupFullyDenied(modeId: ModeId, groupId: keyof typeof TOOL_GROUP_IDS):
   return TOOL_GROUP_IDS[groupId].every((id) => !isToolAllowedForMode(modeId, id));
 }
 
+describe('external dynamic tools (MCP / plugins)', () => {
+  test('mcp__ and plugin__ tools bypass per-mode deny-by-default matrix', () => {
+    const mcpTool = 'mcp__context7__resolve-library-id';
+    const pluginTool = 'plugin__my-plugin__run';
+    for (const modeId of MODE_IDS) {
+      assert.ok(
+        isToolAllowedForMode(modeId, mcpTool),
+        `${mcpTool} should be allowed in ${modeId}`,
+      );
+      assert.ok(
+        isToolAllowedForMode(modeId, pluginTool),
+        `${pluginTool} should be allowed in ${modeId}`,
+      );
+    }
+  });
+});
+
 describe('filterToolsByMode', () => {
   test('plan includes execute_command per final matrix (MIN-332)', () => {
     const filtered = filterToolsByMode(BUILT_IN_TOOLS, 'plan');

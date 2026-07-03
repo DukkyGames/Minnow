@@ -6,6 +6,11 @@ import type { ToolDefinition } from '../../tools/definitions';
 import { getMode } from './registry';
 import type { ModeId, ToolPolicyAction } from './types';
 
+/** MCP and native plugin tools are user-configured outside the built-in group matrix. */
+export function isExternalDynamicTool(toolName: string): boolean {
+  return toolName.startsWith('mcp__') || toolName.startsWith('plugin__');
+}
+
 /**
  * Resolve effective policy for a tool name (function name === tool id).
  * `ask` is treated as `deny` for API exposure in v1.
@@ -36,11 +41,12 @@ export function filterToolsByMode(
 
 /**
  * Whether a tool function name may be sent to the model for this mode.
- * MCP and plugin tools use the same policy map as built-ins.
+ * MCP/plugin tools bypass the built-in group matrix; user Settings gate them instead.
  */
 export function isToolAllowedForMode(
   modeId: ModeId,
   toolName: string,
 ): boolean {
+  if (isExternalDynamicTool(toolName)) return true;
   return effectiveAction(modeId, toolName) === 'allow';
 }

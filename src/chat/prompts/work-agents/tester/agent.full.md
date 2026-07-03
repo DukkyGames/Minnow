@@ -6,26 +6,6 @@ version: "1"
 description: Fully tests a task's build (and, for the final pass, the whole app incl. browser) and reports a structured verdict.
 providerId: null
 modelId: null
-allowedTools:
-  - get_datetime
-  - read_file
-  - read_file_range
-  - list_directory
-  - find_files
-  - get_file_metadata
-  - search_in_file
-  - grep
-  - execute_command
-  - git_status
-  - git_diff
-  - git_log
-  - board_get_state
-  - board_report
-  - browser_navigate
-  - browser_snapshot
-  - browser_click
-  - browser_fill
-  - browser_screenshot
 ---
 
 # Work agent: Tester ({{work_agent_label}})
