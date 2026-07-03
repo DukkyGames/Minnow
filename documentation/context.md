@@ -797,7 +797,7 @@ Task-specific agents with per-agent prompts, optional provider/model binding, an
 | Persistence | `Chat.workAgentId`, `Chat.workAgentAuto` in `sessions/state.json` |
 | User overrides | `~/.minnow/work-agents.json`, `~/.minnow/prompts/work-agents/<id>/` |
 
-**Built-in ids:** `default`, `general` → General mode, `build` → `builder`, `plan` → `planner`, plus `reviewer` and `researcher` (manual / sub-agent fan-out; no composer Research mode). Mode auto-map via `defaultForModes` when `workAgentAuto` is true (default).
+**Built-in ids:** `default`, `general` → General mode, `build` → `builder`, `plan` → `planner`, plus `reviewer` and `researcher` (manual / sub-agent fan-out; no composer Research mode). Mode auto-map via `defaultForModes` when `workAgentAuto` is true (default). **Planner** `allowedTools` includes Context7 MCP (`mcp__context7__resolve-library-id`, `mcp__context7__get-library-docs`) so Plan mode can verify library/API facts before writing plan files (mode policy already allows MCP tools; the work-agent whitelist was the gate).
 
 **Send path:** `resolveActiveWorkAgent()` → `resolveComposedSystemPrompt()` sets `workAgentId` / `workAgentLabel` → `resolveWorkAgentBinding()` picks provider + model **per turn** (does not overwrite `chat.modelId`). **`resolveSamplerPreset({ kind: 'work-agent' })`** merges persisted global `sampler` (+ live drawer overrides for temperature / max tokens) → shipped role defaults (`work-agent-samplers.json`) → `work-agents.json` partial `sampler` override, then `applySamplerToBody()` before `streamCompletionTurn`. Passthrough agent `default` skips role defaults. Optional `allowedTools` filters the tool list. Status pill: `Generating reply (Builder)…`.
 
