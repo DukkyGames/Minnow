@@ -86,6 +86,15 @@ describe('sanitizeCompletionBodyForProvider', () => {
     assert.equal(out.max_tokens, undefined);
   });
 
+  test('strips temperature and top_p for gpt-5 models on openai-v1', () => {
+    const out = sanitizeCompletionBodyForProvider(
+      { model: 'gpt-5.4', temperature: 0.7, top_p: 0.9 },
+      OPENAI,
+    );
+    assert.equal(out.temperature, undefined);
+    assert.equal(out.top_p, undefined);
+  });
+
   test('leaves body unchanged for lm-studio-v0', () => {
     const body = { model: 'local', top_k: 20, max_tokens: 512 };
     const out = sanitizeCompletionBodyForProvider(body, LM_STUDIO);

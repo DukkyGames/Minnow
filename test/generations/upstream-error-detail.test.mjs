@@ -62,4 +62,14 @@ describe('formatUpstreamHttpErrorMessage', () => {
   test('omits suffix when body is empty', () => {
     assert.equal(formatUpstreamHttpErrorMessage(500, ''), 'Upstream HTTP 500');
   });
+
+  test('explains empty OpenCode Zen chat.completion 400 bodies', () => {
+    const raw = JSON.stringify({
+      id: 'chatcmpl_h3qztd410w',
+      object: 'chat.completion',
+      choices: [{ index: 0, message: { role: 'assistant' }, finish_reason: null }],
+    });
+    const message = formatUpstreamHttpErrorMessage(400, raw);
+    assert.match(message, /empty completion/i);
+  });
 });

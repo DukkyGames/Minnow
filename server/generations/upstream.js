@@ -6,6 +6,10 @@
 import { readConfigJson } from '../config/store.js';
 import { getProviderRuntime } from '../providers/store.js';
 import {
+  resolveOpenCodeZenUpstreamUrl,
+} from '../providers/opencode-zen.js';
+import { sanitizeCompletionBodyForProvider } from '../providers/sanitize-completion-body.js';
+import {
   buildCandidateRequestBody,
   classifyUpstreamError,
   readFallbackChainsConfig,
@@ -27,21 +31,40 @@ import { upstreamFetch } from './upstream-fetch.js';
 
 /**
  * Kimi (Moonshot AI) thinking/code models only accept temperature=1.
+ * OpenAI-v1 bodies are sanitized (sampler + reasoning fields) before upstream POST.
  * @param {Buffer} requestBody
- * @param {string} apiKind
+ * @param {{ apiKind?: string, baseUrl?: string }} profile
+ * @param {string} modelId
  * @returns {Buffer}
  */
-function fixModelTemperature(requestBody, apiKind) {
-  if (apiKind !== 'openai-v1') return requestBody;
+function prepareUpstreamRequestBody(requestBody, profile, modelId) {
+  const apiKind = profile.apiKind ?? 'openai-v1';
+  let body = requestBody;
+
   try {
     const parsed = JSON.parse(requestBody.toString('utf8'));
-    if (!parsed || typeof parsed !== 'object') return requestBody;
-    const modelId = typeof parsed.model === 'string' ? parsed.model : '';
-    if (!/kimi/i.test(modelId)) return requestBody;
-    if (typeof parsed.temperature !== 'number' || parsed.temperature === 1) return requestBody;
+    if (parsed && typeof parsed === 'object') {
+      const sanitized = sanitizeCompletionBodyForProvider(
+        /** @type {Record<string, unknown>} */ (parsed),
+        { apiKind },
+      );
+      body = Buffer.from(JSON.stringify(sanitized), 'utf8');
+    }
+  } catch {
+    /* keep raw body */
+  }
+
+  if (apiKind !== 'openai-v1') return body;
+
+  try {
+    const parsed = JSON.parse(body.toString('utf8'));
+    if (!parsed || typeof parsed !== 'object') return body;
+    const model = typeof parsed.model === 'string' ? parsed.model : modelId;
+    if (!/kimi/i.test(model)) return body;
+    if (typeof parsed.temperature !== 'number' || parsed.temperature === 1) return body;
     return Buffer.from(JSON.stringify({ ...parsed, temperature: 1 }), 'utf8');
   } catch {
-    return requestBody;
+    return body;
   }
 }
 
@@ -99,7 +122,10 @@ async function pumpUpstreamAsync({ state }) {
       return;
     }
 
-    const url = `${runtime.profile.baseUrl}${runtime.paths.chatCompletionsPath}`;
+    const url = resolveOpenCodeZenUpstreamUrl(
+      runtime.profile.baseUrl,
+      runtime.paths.chatCompletionsPath,
+    );
     const origin = originFromUrl(runtime.profile.baseUrl);
     if (isHostDead(origin)) {
       lastError = `Host in cooldown: ${origin}`;
@@ -111,7 +137,7 @@ async function pumpUpstreamAsync({ state }) {
     }
 
     const rawBody = buildCandidateRequestBody(state.requestBody, candidate.modelId);
-    const requestBody = fixModelTemperature(rawBody, runtime.profile.apiKind);
+    const requestBody = prepareUpstreamRequestBody(rawBody, runtime.profile, candidate.modelId);
     const result = await attemptCandidateStream({
       state,
       candidate,

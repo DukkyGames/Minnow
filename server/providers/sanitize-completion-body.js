@@ -1,20 +1,24 @@
 /**
  * Strip provider-incompatible completion fields before upstream POST.
+ * Server mirror of src/providers/sanitize-completion-body.ts.
  */
 
-import type { ModelCapabilities } from '../types';
-import type { ProviderPublic } from './types';
-
-/** True when OpenAI o-series / gpt-5 models expect max_completion_tokens. */
-function modelUsesMaxCompletionTokens(modelId: string): boolean {
+/**
+ * True when OpenAI o-series / gpt-5 models expect max_completion_tokens.
+ * @param {string} modelId
+ */
+function modelUsesMaxCompletionTokens(modelId) {
   const id = modelId.trim().toLowerCase();
   if (!id) return false;
   if (/^o\d/.test(id)) return true;
   return id.includes('gpt-5');
 }
 
-/** GPT-5 / o-series on Responses API reject custom temperature. */
-function modelRejectsTemperature(modelId: string): boolean {
+/**
+ * GPT models on OpenCode Zen / OpenAI Responses API reject custom temperature.
+ * @param {string} modelId
+ */
+function modelRejectsTemperature(modelId) {
   const id = modelId.trim().toLowerCase();
   if (!id) return false;
   if (/^o\d/.test(id)) return true;
@@ -23,13 +27,12 @@ function modelRejectsTemperature(modelId: string): boolean {
 
 /**
  * Normalize a chat completion body for the target provider.
- * openai-v1: drop LM Studio sampler fields, optional thinking, map max_tokens when needed.
+ * @param {Record<string, unknown>} body
+ * @param {{ apiKind?: string }} provider
+ * @param {{ reasoning?: boolean, reasoningAllowedOptions?: string[] } | null | undefined} [modelCapabilities]
+ * @returns {Record<string, unknown>}
  */
-export function sanitizeCompletionBodyForProvider(
-  body: Record<string, unknown>,
-  provider: ProviderPublic,
-  modelCapabilities?: ModelCapabilities | null,
-): Record<string, unknown> {
+export function sanitizeCompletionBodyForProvider(body, provider, modelCapabilities) {
   if (provider.apiKind !== 'openai-v1') {
     return body;
   }
@@ -55,14 +58,13 @@ export function sanitizeCompletionBodyForProvider(
     delete next.max_tokens;
   }
 
+  if (/kimi/i.test(modelId) && typeof next.temperature === 'number' && next.temperature !== 1) {
+    next.temperature = 1;
+  }
+
   if (modelRejectsTemperature(modelId)) {
     delete next.temperature;
     delete next.top_p;
-  }
-
-  // Kimi (Moonshot AI) thinking/code models only accept temperature=1.
-  if (/kimi/i.test(modelId) && typeof next.temperature === 'number' && next.temperature !== 1) {
-    next.temperature = 1;
   }
 
   return next;
