@@ -987,6 +987,38 @@ describe('orchestrate board live updates', () => {
     assert.ok(document.getElementById('vibeHub'));
   });
 
+  test('createChat from code overview dismisses overview and shows new chat', async () => {
+    setupDom();
+    await primeSubAgentConfig();
+    const chat = createEmptyChatObject('');
+    chat.id = FIXED_CHAT_ID;
+    chat.modeId = 'general';
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+      groups: [],
+    });
+
+    const area = document.getElementById('chatArea');
+    area.classList.add('chat-area--code-overview');
+    document.getElementById('mainColumn')?.classList.add('main-column--code-overview');
+    const overviewRoot = document.createElement('div');
+    overviewRoot.id = 'codeOverviewRoot';
+    area.replaceChildren(overviewRoot);
+
+    createChat();
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(document.getElementById('codeOverviewRoot'), null);
+    assert.notEqual(getActiveChat().id, chat.id);
+    assert.ok(document.getElementById('vibeHub'));
+    assert.equal(area.classList.contains('chat-area--code-overview'), false);
+  });
+
   test('header activity chip shows last assistant message', () => {
     setupDom();
     setBoardNowForTests(() => 1_700_000_000_000);
