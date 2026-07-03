@@ -6,6 +6,7 @@ import type { OpenAIFunctionDefinition } from '../../tools/definitions';
 import type { AutopilotExecutionMode } from '../../config/autopilot-meta';
 import { getBoardGroupForChat } from '../../state/chat-groups';
 import type { Chat } from '../../types';
+import { isExternalDynamicTool } from './tool-policy';
 import {
   type BoardMemberRole,
   expandBoardRoleAllowedTools,
@@ -88,7 +89,8 @@ export function applyBoardMemberToolFilter(
   return defs.filter((def) => {
     const name = def.function.name;
     if (BOARD_MEMBER_STRIPPED_TOOLS.has(name)) return false;
-    if (!roleAllowed.has(name)) return false;
+    // MCP/plugin tools are gated in Settings, not the board role matrix (MIN-333).
+    if (!isExternalDynamicTool(name) && !roleAllowed.has(name)) return false;
     if (stripUserPrompts && USER_BLOCKING_TOOLS.has(name)) return false;
     return true;
   });

@@ -234,6 +234,16 @@ describe('applyBoardMemberToolFilter', () => {
     assert.ok(!names.has('browser_navigate'));
     assert.ok(!names.has('spawn_sub_agent'));
   });
+
+  test('MCP tools pass through board role matrix when enabled in Settings', () => {
+    seedBoardSession();
+    const mcpDefs = defsFor(['mcp__context7__resolve-library-id', 'read_file']);
+    const names = applyBoardMemberToolFilter(mcpDefs, builderChat).map(
+      (d) => d.function.name,
+    );
+    assert.ok(names.includes('mcp__context7__resolve-library-id'));
+    assert.ok(names.includes('read_file'));
+  });
 });
 
 describe('board role matrix groups', () => {
