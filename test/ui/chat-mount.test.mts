@@ -71,6 +71,12 @@ describe('chat-mount foreground', () => {
     const g = globalThis as typeof globalThis & { fetch: typeof fetch };
     g.fetch = (async (input: string | URL) => {
       const url = String(input);
+      if (url.includes('/api/desktop-workspace')) {
+        return {
+          ok: true,
+          json: async () => ({ ok: true, path: '/home/user/.minnow/workspace', fileCount: 0 }),
+        } as Response;
+      }
       if (url.includes('/api/chats-workspace')) {
         return {
           ok: true,
@@ -99,10 +105,13 @@ describe('chat-mount foreground', () => {
 
     await activateDesktopChat();
     const { isChatAppForeground } = await import('../../src/ui/chat-mount.ts');
+    const { getActiveComposerSurface } = await import('../../src/ui/composer-surface.ts');
     assert.equal(isChatAppForeground(), true);
+    assert.equal(getActiveComposerSurface().inputEl?.id, 'desktopInput');
 
     launchInstance('code');
     assert.equal(isChatAppForeground(), false);
+    assert.equal(getActiveComposerSurface().inputEl?.id, 'msgInput');
   });
 
   test('isChatAppForeground stays true for legacy chatView.is-open without OS foreground', async () => {

@@ -13,6 +13,7 @@ import {
 import { getWorkspacePath } from '../state/workspace';
 import type { DesktopChatActivateOptions } from './desktop-state';
 import {
+  ensureSessionsReady,
   getActiveChat,
   isExpertChat,
   newChatId,
@@ -188,6 +189,8 @@ function bindStreamEndOnce(): void {
 /** Activate assistant chat, render rail + transcript, optional seed auto-send. */
 export async function bootstrapDesktopChat(options?: DesktopChatActivateOptions): Promise<void> {
   bindStreamEndOnce();
+
+  await ensureSessionsReady();
 
   const ready = await ensureDesktopWorkspaceReady();
   if (ready && sessionState) {

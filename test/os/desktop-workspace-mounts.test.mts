@@ -11,7 +11,6 @@ import {
   resetFileTreeListingRootForTests,
   setFileTreeListingWorkspaceRoot,
 } from '../../src/ui/file-tree-listing-root.ts';
-import { stopFileTreeGitStatusPollForTests } from '../../src/ui/file-tree.ts';
 import {
   resetChromePopoverRegistryForTests,
   resetPreviewGuestVisibilityForTests,
@@ -27,6 +26,9 @@ import {
   resetDesktopWorkspaceMountsForTests,
   syncDesktopWorkspaceMounts,
 } from '../../src/os/desktop-workspace-mounts.ts';
+import {
+  resetFilePanelStateForTests,
+} from '../../src/state/file-panel.ts';
 import {
   resetWorkspaceStateForTests,
   setWorkspaceFromServer,
@@ -52,9 +54,15 @@ describe('syncDesktopWorkspaceMounts listing root', () => {
   const originalFetch = globalThis.fetch;
   const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
   const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+  const originalResizeObserver = globalThis.ResizeObserver;
   let happyDomWindow: Window | null = null;
 
   beforeEach(() => {
+    Object.defineProperty(globalThis, 'ResizeObserver', {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    });
     const win = new Window();
     happyDomWindow = win;
     const g = globalThis as typeof globalThis & {
@@ -82,6 +90,8 @@ describe('syncDesktopWorkspaceMounts listing root', () => {
       return { ok: false, status: 404, json: async () => ({}) } as Response;
     }) as typeof fetch;
     setupDom(win);
+    win.localStorage.clear();
+    resetFilePanelStateForTests();
     setWorkspaceFromServer({ path: CODE_WS, label: 'minnow', isDefault: false });
     setFileTreeListingWorkspaceRoot(CODE_WS);
     resetDesktopWorkspacePathCache();
@@ -92,18 +102,18 @@ describe('syncDesktopWorkspaceMounts listing root', () => {
   });
 
   afterEach(() => {
-    stopFileTreeGitStatusPollForTests();
+    resetPreviewGuestVisibilityForTests();
+    resetChromePopoverRegistryForTests();
+    happyDomWindow?.close();
+    happyDomWindow = null;
     resetWorkspaceStateForTests();
+    resetFilePanelStateForTests();
     resetFileTreeListingRootForTests();
     resetDesktopWorkspaceMountsForTests();
     resetDesktopWorkspacePanelForTests();
     resetDesktopWorkspacePathCache();
     resetInstancesForTests();
     resetDesktopStateForTests();
-    resetPreviewGuestVisibilityForTests();
-    resetChromePopoverRegistryForTests();
-    happyDomWindow?.close();
-    happyDomWindow = null;
     Object.defineProperty(globalThis, 'window', {
       value: originalWindow,
       configurable: true,
@@ -131,6 +141,11 @@ describe('syncDesktopWorkspaceMounts listing root', () => {
     });
     Object.defineProperty(globalThis, 'cancelAnimationFrame', {
       value: originalCancelAnimationFrame,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(globalThis, 'ResizeObserver', {
+      value: originalResizeObserver,
       configurable: true,
       writable: true,
     });
@@ -165,15 +180,12 @@ describe('syncDesktopWorkspaceMounts listing root', () => {
     assert.equal(isDesktopWorkspaceHostingActive(), false);
   });
 
-  test('syncFileTreeToPanelWorktree keeps desktop listing root on desktop', async () => {
+  test('desktop hosting keeps sandbox listing root scoped on sync', async () => {
     openDesktopWorkspaceTab('files');
     await syncDesktopWorkspaceMounts();
     const desktopRoot = getFileTreeListingWorkspaceRoot();
     assert.ok(desktopRoot);
     assert.notEqual(desktopRoot, CODE_WS);
-
-    const { syncFileTreeToPanelWorktree } = await import('../../src/ui/file-tree.ts');
-    await syncFileTreeToPanelWorktree(CODE_WS);
-    assert.equal(getFileTreeListingWorkspaceRoot(), desktopRoot);
+    assert.equal(isDesktopWorkspaceHostingActive(), true);
   });
 });

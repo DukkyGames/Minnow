@@ -68,6 +68,13 @@ export function setFileTreeGitStatus(map: Map<string, string>): void {
   renderFileTree();
 }
 
+/** Git poll timers must not block `node --test` process exit (happy-dom uses Node timers). */
+function unrefPollTimerIfSupported(timer: ReturnType<typeof setInterval> | undefined): void {
+  if (timer !== undefined && typeof timer === 'object' && 'unref' in timer) {
+    (timer as NodeJS.Timeout).unref();
+  }
+}
+
 /** Poll git status every 5s and refresh file tree badges. */
 export function startFileTreeGitStatusPoll(cwd?: string): void {
   // Browser-only: the poll relies on window timers and fetch. No-op in non-DOM
@@ -90,9 +97,11 @@ export function startFileTreeGitStatusPoll(cwd?: string): void {
     gitStatusPollDebounce = undefined;
     void pollFileTreeGitStatus();
   }, 200);
+  unrefPollTimerIfSupported(gitStatusPollDebounce);
   gitStatusPollTimer = window.setInterval(() => {
     void pollFileTreeGitStatus();
   }, 5000);
+  unrefPollTimerIfSupported(gitStatusPollTimer);
 }
 
 /** Stop git status polling (tests — open interval blocks node --test between files). */

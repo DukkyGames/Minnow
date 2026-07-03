@@ -383,6 +383,12 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
       usesFullscreenLayer(getPresentationMode(lastForegroundApp));
     if (hadFullscreenForeground) closeAllAppPages();
     lastForegroundApp = null;
+    void import('./desktop-state').then(async (m) => {
+      if (m.isDesktopChatActive()) {
+        const chat = await import('./desktop-chat');
+        chat.renderDesktopChatMessages();
+      }
+    });
     return;
   }
 

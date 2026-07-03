@@ -144,6 +144,9 @@ async function refreshFileTreeForSurface(): Promise<void> {
   if (mountSurface === 'desktop' && (!panel.open || panel.tab !== 'files')) {
     return;
   }
+  if (!document.getElementById('fileTreeHost')) {
+    return;
+  }
   const { initFileTreeIfNeeded, refreshFileTree } = await import('../ui/file-tree');
   initFileTreeIfNeeded();
   await refreshFileTree();
@@ -180,22 +183,24 @@ export async function syncDesktopWorkspaceMounts(): Promise<void> {
         restoreToCode(record);
       }
       mountSurface = 'code';
-      void import('../ui/file-layout').then((m) => {
-        m.reconcileRightSplitDomWithState();
-        m.applyFileSidebarVisuals();
-      });
+      const fileLayout = await import('../ui/file-layout');
+      fileLayout.reconcileRightSplitDomWithState();
+      if (document.getElementById('btnFileSidebarCollapse')) {
+        fileLayout.applyFileSidebarVisuals();
+      }
     }
   }
 
   if (surfaceChanged || listingRootChanged) {
-    void refreshFileTreeForSurface();
+    await refreshFileTreeForSurface();
   }
 
   syncDrawerPaneVisibility();
-  bindResizeObserver();
-  void import('../ui/preview-electron-visibility').then((m) =>
-    m.scheduleElectronPreviewHostLayoutSync(),
-  );
+  if (typeof window !== 'undefined' && window.minnow?.preview) {
+    bindResizeObserver();
+    const previewVisibility = await import('../ui/preview-electron-visibility');
+    await previewVisibility.syncElectronPreviewHostLayout();
+  }
 }
 
 /** Open the browser drawer and show preview chrome (agent navigation). */

@@ -242,9 +242,28 @@ function ensureExpertSelection(raw: unknown): ExpertSelection {
 /** In-memory session blob mirrored to ~/.minnow or localStorage fallback. */
 export let sessionState: SessionState | null = null;
 
+/** Resolves once `loadSessionsFromStorage()` has populated `sessionState`. */
+let resolveSessionsReady: () => void = () => undefined;
+export const sessionsReady: Promise<void> = new Promise((resolve) => {
+  resolveSessionsReady = resolve;
+});
+
+/** No-op when sessions are already loaded; otherwise waits for boot `initApp`. */
+export async function ensureSessionsReady(): Promise<void> {
+  if (sessionState) return;
+  await sessionsReady;
+}
+
+function markSessionsReady(): void {
+  resolveSessionsReady();
+}
+
 /** Replace in-memory session blob (unit tests). */
 export function setSessionStateForTests(state: SessionState | null): void {
   sessionState = state;
+  if (state) {
+    markSessionsReady();
+  }
 }
 
 export type SaveSessionsResult = 'ok' | 'quota_exceeded';
@@ -1483,27 +1502,31 @@ export function onWorkspaceChanged(
 
 /** Load sessions from API or localStorage (after detectConfigServer). */
 export async function loadSessionsFromStorage(): Promise<void> {
-  if (isServerStorageMode()) {
-    try {
-      const remote = await getSessions();
-      sessionState = parseSessionStateFromJson(remote);
-      await runSessionCodeChangeBackfill(sessionState);
-      return;
-    } catch {
-      setStatus('err', 'Could not load sessions from ~/.minnow');
-    }
-  }
-
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      sessionState = defaultSessionState();
-      return;
+    if (isServerStorageMode()) {
+      try {
+        const remote = await getSessions();
+        sessionState = parseSessionStateFromJson(remote);
+        await runSessionCodeChangeBackfill(sessionState);
+        return;
+      } catch {
+        setStatus('err', 'Could not load sessions from ~/.minnow');
+      }
     }
-    sessionState = parseSessionStateFromJson(JSON.parse(raw) as Partial<SessionState>);
-    await runSessionCodeChangeBackfill(sessionState);
-  } catch {
-    sessionState = defaultSessionState();
+
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) {
+        sessionState = defaultSessionState();
+        return;
+      }
+      sessionState = parseSessionStateFromJson(JSON.parse(raw) as Partial<SessionState>);
+      await runSessionCodeChangeBackfill(sessionState);
+    } catch {
+      sessionState = defaultSessionState();
+    }
+  } finally {
+    markSessionsReady();
   }
 }
 

@@ -3,6 +3,7 @@
  */
 
 import { isDesktopChatActive } from '../os/desktop-state';
+import { getForegroundAppId } from '../os/instances';
 import { isChatAppForeground } from './chat-mount';
 
 export interface ContextUsageSurface {
@@ -26,6 +27,8 @@ const SURFACES: Record<'code' | 'chat' | 'desktop', ContextUsageSurface> = {
 };
 
 function resolveSurfaceKey(): keyof typeof SURFACES {
+  const foregroundAppId = getForegroundAppId();
+  if (foregroundAppId === 'code') return 'code';
   if (isDesktopChatActive()) return 'desktop';
   if (isChatAppForeground()) return 'chat';
   return 'code';
