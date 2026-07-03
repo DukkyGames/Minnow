@@ -1,7 +1,10 @@
 import { isHubMounted, renderHub, refreshHubLiveData, teardownHub } from './hub';
 import { isOrchestrateHubMounted, teardownOrchestrateHub } from './orchestrate-hub';
 import { teardownCodeBrainMapBeforeChatPaint } from './code-brain-map';
-import { stripMainColumnOverlayClasses } from './main-column-overlay';
+import {
+  isMainColumnOverlaySuppressingChatDom,
+  stripMainColumnOverlayClasses,
+} from './main-column-overlay';
 import {
   isOrchestratePlanScreenMounted,
   isOrchestratePlanScreenSessionActive,
@@ -140,6 +143,11 @@ export function renderStatsForChat(chat: Chat): void {
 export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement): void {
   const area = resolveChatMount(mount);
   const codeMount = isCodeChatMount(mount);
+
+  // Code overview / code map own #chatArea — do not repaint chat or board underneath.
+  if (codeMount && isMainColumnOverlaySuppressingChatDom()) {
+    return;
+  }
 
   runWithChatMount(area, () => {
   if (codeMount) {

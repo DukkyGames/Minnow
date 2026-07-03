@@ -18,6 +18,21 @@ export interface SnapPreview {
   rect: SnapRect;
 }
 
+/** Bounds for a snapped window given the current stage viewport. */
+export function getSnapRectForMode(mode: SnapMode, stageRect: DOMRect): SnapRect {
+  const w = stageRect.width;
+  const insets = getWindowStageInsets();
+  const snappedHeight = Math.max(0, stageRect.height - insets.top - insets.bottom);
+
+  if (mode === 'maximize') {
+    return { x: 0, y: 0, width: w, height: stageRect.height };
+  }
+  if (mode === 'left') {
+    return { x: 0, y: insets.top, width: Math.round(w / 2), height: snappedHeight };
+  }
+  return { x: Math.round(w / 2), y: insets.top, width: Math.round(w / 2), height: snappedHeight };
+}
+
 /** Detect snap target from pointer position within the stage viewport. */
 export function detectSnapPreview(
   clientX: number,
@@ -27,26 +42,15 @@ export function detectSnapPreview(
   const relX = clientX - stageRect.left;
   const relY = clientY - stageRect.top;
   const w = stageRect.width;
-  const insets = getWindowStageInsets();
-  const snappedHeight = Math.max(0, stageRect.height - insets.top - insets.bottom);
 
   if (relY <= SNAP_EDGE_PX) {
-    return {
-      mode: 'maximize',
-      rect: { x: 0, y: 0, width: w, height: stageRect.height },
-    };
+    return { mode: 'maximize', rect: getSnapRectForMode('maximize', stageRect) };
   }
   if (relX <= SNAP_EDGE_PX) {
-    return {
-      mode: 'left',
-      rect: { x: 0, y: insets.top, width: Math.round(w / 2), height: snappedHeight },
-    };
+    return { mode: 'left', rect: getSnapRectForMode('left', stageRect) };
   }
   if (relX >= w - SNAP_EDGE_PX) {
-    return {
-      mode: 'right',
-      rect: { x: Math.round(w / 2), y: insets.top, width: Math.round(w / 2), height: snappedHeight },
-    };
+    return { mode: 'right', rect: getSnapRectForMode('right', stageRect) };
   }
   return null;
 }

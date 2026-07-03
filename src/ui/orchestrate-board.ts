@@ -137,6 +137,7 @@ import {
   isOrchestrateInitSplitChromeActive,
 } from './orchestrate-board-init-split';
 import { isOrchestrateHubMounted, teardownOrchestrateHub } from './orchestrate-hub';
+import { isMainColumnOverlaySuppressingChatDom } from './main-column-overlay';
 import { teardownHub } from './hub';
 import { kickoffOrchestrateBoardBuild } from './orchestrate-board-kickoff';
 import {
@@ -738,6 +739,7 @@ let boardUiRefreshFrame: number | undefined;
  */
 function scheduleBoardUiRefresh(groupId: string): void {
   if (isOrchestrateHubMounted()) return;
+  if (isMainColumnOverlaySuppressingChatDom()) return;
   if (!isOrchestrateBoardViewActive() && !isOrchestrateInitSplitChromeActive()) return;
   if (getActiveBoardGroup()?.id !== groupId) return;
   if (boardUiRefreshFrame !== undefined) return;
@@ -3240,6 +3242,7 @@ export async function mountBoardOnboardingPanel(
  */
 export function refreshActiveBoardIfMounted(): void {
   if (isOrchestrateHubMounted()) return;
+  if (isMainColumnOverlaySuppressingChatDom()) return;
   if (!isOrchestrateBoardViewActive() && !isOrchestrateInitSplitChromeActive()) return;
   const group = getActiveBoardGroup();
   if (!group) return;
@@ -3258,6 +3261,7 @@ export function refreshActiveBoardIfMounted(): void {
 
 /** Render Orchestrate board into the board mount (#chatArea or split top pane). */
 export function renderBoardView(group: ChatGroup): void {
+  if (isMainColumnOverlaySuppressingChatDom()) return;
   teardownOrchestrateHub();
   teardownHub();
   const area = document.getElementById('chatArea');

@@ -1235,4 +1235,37 @@ describe('orchestrate board live updates', () => {
     disposeBoardViewForTests();
   });
 
+  test('refreshActiveBoardIfMounted does not replace code overview overlay', async () => {
+    setupDom();
+    setBoardNowForTests(() => 1_700_000_000_000);
+    const chat = makeOrchestrateChat();
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
+
+    await primeSubAgentConfig();
+    renderBoardView(group);
+    await waitForKanban();
+    assert.ok(document.querySelector('.board-root'), 'board should mount first');
+
+    const overviewRoot = document.createElement('div');
+    overviewRoot.id = 'codeOverviewRoot';
+    document.getElementById('chatArea').replaceChildren(overviewRoot);
+
+    refreshActiveBoardIfMounted();
+
+    assert.ok(
+      document.getElementById('codeOverviewRoot'),
+      'code overview overlay should stay mounted',
+    );
+    assert.equal(
+      document.querySelector('.board-root'),
+      null,
+      'board should not repaint over the overlay',
+    );
+  });
+
 });
