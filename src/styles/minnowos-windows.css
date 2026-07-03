@@ -1,6 +1,6 @@
 /* ============================================================
    MinnowOS — floating window chrome, snap preview, shadows
-   Z-order: wallpaper < windows < side panels < dock < menubar
+   Z-order: wallpaper < collapsed chat rail < windows < expanded chat rail < side panels < dock < menubar
    ============================================================ */
 
 .mn-os-windows-layer {
