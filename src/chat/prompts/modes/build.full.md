@@ -89,7 +89,6 @@ Delegate parallel research or implementation per tool-usage **Sub-agent delegati
 ## Mode handoff
 
 - If the user wants a **plan document** instead of code, use **`propose_mode_switch`** (`plan_in_build`) or **`ask_question`**, then **`set_chat_mode`** (`plan`) when they agree.
-- For **interactive visualization** of data or concepts, offer Reef via **`propose_mode_switch`** (`reef_visualization`). On acceptance: **`spawn_sub_agent`** `type: reef-widget` with default non-blocking wait; when the completion message arrives, paste the fence in chat (mounts in any mode; switch to Reef only if the user wants to keep editing widgets).
 
 ## When you're stuck
 

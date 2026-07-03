@@ -53,22 +53,4 @@ describe('mode-handoff propose presets', () => {
     );
     assert.equal(isPlanCompleteOrchestrateNewChoice([]), false);
   });
-
-  test('reef_visualization preset has two options', () => {
-    const args = {
-      title: 'Reef widget',
-      questions: [
-        {
-          id: 'reef_offer',
-          prompt: 'Show this as an interactive Reef widget?',
-          options: [
-            { id: 'reef_yes', label: 'Yes — Reef widget' },
-            { id: 'reef_no', label: 'No — text only' },
-          ],
-        },
-      ],
-    };
-    const parsed = validateAskQuestionArgs(args);
-    assert.equal(parsed.ok, true);
-  });
 });

@@ -25,14 +25,12 @@ const HANDOFF_MODES = new Set<ModeId>([
   'plan',
   'build',
   'orchestrate',
-  'reef',
 ]);
 
 type HandoffSituation =
   | 'plan_complete'
   | 'implement_in_wrong_mode'
-  | 'plan_in_build'
-  | 'reef_visualization';
+  | 'plan_in_build';
 
 /** Preset ask_question payloads per situation. */
 function buildProposeModeSwitchQuestions(
@@ -118,27 +116,7 @@ function buildProposeModeSwitchQuestions(
     };
   }
 
-  return {
-    title: 'Reef widget',
-    questions: [
-      {
-        id: 'reef_offer',
-        prompt: 'Show this as an interactive Reef widget?',
-        options: [
-          {
-            id: 'reef_yes',
-            label: 'Yes — Reef widget',
-            description: 'Spawn a reef-widget sub-agent and switch to Reef to interact.',
-          },
-          {
-            id: 'reef_no',
-            label: 'No — text only',
-            description: 'Keep the answer as prose only.',
-          },
-        ],
-      },
-    ],
-  };
+  throw new Error(`Unknown handoff situation: ${String(situation)}`);
 }
 
 /** Change active chat operating mode (browser). */
@@ -273,7 +251,6 @@ export async function executeProposeModeSwitch(
     'plan_complete',
     'implement_in_wrong_mode',
     'plan_in_build',
-    'reef_visualization',
   ]);
   if (!validSituations.has(situationRaw as HandoffSituation)) {
     return `Error: situation must be one of: ${[...validSituations].join(', ')}`;

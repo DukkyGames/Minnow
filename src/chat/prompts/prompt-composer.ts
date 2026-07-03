@@ -37,7 +37,6 @@ const MODE_HANDOFF_MODE_IDS = new Set<ModeId>([
   'plan',
   'build',
   'orchestrate',
-  'reef',
 ]);
 
 /** Modes that receive the fact-verification tool-usage fragment. */
@@ -214,7 +213,7 @@ function resolveContext7DocsBody(ctx: ComposeContext, profile: PromptProfile): s
   return loaded?.body?.trim() ?? '';
 }
 
-/** Shared mode-switch / Reef handoff rules appended after default tool-usage. */
+/** Shared mode-switch handoff rules appended after default tool-usage. */
 function resolveModeHandoffBody(ctx: ComposeContext, profile: PromptProfile): string {
   const modeId = ctx.modeId ?? '';
   if (!modeId || !isModeId(modeId) || !MODE_HANDOFF_MODE_IDS.has(modeId)) {

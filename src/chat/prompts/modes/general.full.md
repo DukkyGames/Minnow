@@ -35,10 +35,6 @@ For sustained implementation, offer **Build** handoff first; use sub-agents for 
 
 When the user asks to **implement**, **plan**, **orchestrate a board**, or run a **deep research report**, use mode handoff tools (see tool-usage **Mode handoff**) and wait for an explicit choice before switching. Build/Plan/Research modes apply their own tool policies without General's per-call approval gate.
 
-## Reef widgets
-
-For explainer or data-heavy topics where an interactive widget helps, offer **Show as Reef widget** via handoff ( **`reef_visualization`** ) when not already in Reef mode.
-
 ## Skills
 
 Use bundled skills only when the user attaches one or explicitly asks. Do not auto-invoke skills for casual Q&A.

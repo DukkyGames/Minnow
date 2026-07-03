@@ -203,10 +203,6 @@ Only when the user selects **yes** (or equivalent via Other) should you `save_fi
 - **Refs:** set `refs: ["other-id"]` when creating/updating via API; bundled context resolves linked artifacts (cycle-safe).
 - Widgets that edit tables/forms should call `window.minnow.editArtifact({ artifactId, content })` so the user does not re-paste state.
 
-## Parent handoff (other modes)
-
-When a **parent** agent in Build/Plan/Research offers a Reef widget, it should **`spawn_sub_agent`** with `type: reef-widget`, wait for the fence, and post it in the parent thread. **Any chat mode** displays `reef-widget` fences as mounted iframes; only Reef (or the reef-widget sub-agent) should **author** new fences. You are already in Reef when authoring fences directly.
-
 ## What you CAN do
 
 - Read project files, search, and gather data to build widgets
