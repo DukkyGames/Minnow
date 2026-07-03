@@ -2,7 +2,7 @@
 id: build
 kind: mode
 label: Build
-version: 3
+version: 4
 description: Lite Build mode — implement with broad tool access.
 profileBodies: split
 toolPolicy:
@@ -15,6 +15,7 @@ toolPolicy:
 **Build mode.** Implement precisely. All tools available.
 
 - Read files before editing. Search before claiming something exists.
+- For external library/API work, confirm via Context7 and/or web tools before coding; grep repo for existing patterns.
 - Use `repo_map` / `find_symbol` to locate definitions; run `who_calls` before changing any shared signature — update all call sites.
 - Smallest correct diff. No unrelated refactors.
 - Code must be immediately runnable — include all imports and wiring.
