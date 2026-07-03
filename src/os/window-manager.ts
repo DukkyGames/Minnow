@@ -6,6 +6,7 @@ import {
   centeredCalendarBounds,
 } from './calendar-constants';
 import type { AppId } from './types';
+import { getStageDimensions } from './stage-metrics';
 import { mountWindowFrame, type WindowBounds, type WindowFrame } from './window-frame';
 import type { SnapMode } from './window-snap';
 
@@ -223,12 +224,12 @@ class WindowManager {
       record.bounds = restored;
       frame.setBounds(restored, { snapMode: null, maximized: false });
     } else {
-      const stage = document.getElementById('osStage');
-      const rect = (stage ?? document.body).getBoundingClientRect();
+      const stage = document.getElementById('osStage') ?? document.body;
+      const { width, height } = getStageDimensions(stage);
       record.preMaximizeBounds = { ...record.bounds };
       record.maximized = true;
       record.snapMode = 'maximize';
-      record.bounds = { x: 0, y: 0, width: rect.width, height: rect.height };
+      record.bounds = { x: 0, y: 0, width, height };
       frame.setBounds(record.bounds, { snapMode: 'maximize', maximized: true });
     }
     this.persistBounds(record);
