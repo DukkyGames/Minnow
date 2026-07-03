@@ -265,7 +265,7 @@ function appendPathFields(
     el(
       'p',
       'field-hint',
-      'Appended to base URL. OpenCode Zen: https://opencode.ai/zen/v1 (GPT models use /responses automatically). OpenCode Go: /zen/go/v1/models and /zen/go/v1/chat/completions.',
+      'Appended to base URL. OpenCode Zen: base https://opencode.ai with /zen/v1/models and /zen/v1/chat/completions. OpenCode Go: /zen/go/v1/models and /zen/go/v1/chat/completions.',
     ),
   );
 }
