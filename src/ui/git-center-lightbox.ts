@@ -41,6 +41,7 @@ import {
   openStashPushDialog,
 } from './git-advanced-actions';
 import { filterUserFacingBranches } from '../lib/worktree-list-parse';
+import { decorateGitSourceControlButton } from './git-source-control-icons';
 
 const OVERLAY_ID = 'gitCenterLightboxOverlay';
 const DIALOG_ID = 'gitCenterLightbox';
@@ -79,9 +80,9 @@ function createIconBtn(label: string, title: string): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'git-center-toolbar-btn';
-  btn.textContent = label;
   btn.title = title;
   btn.setAttribute('aria-label', title);
+  decorateGitSourceControlButton(btn, label);
   return btn;
 }
 
