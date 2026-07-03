@@ -413,6 +413,14 @@ html.minnow-os-enabled {
   color: var(--os-accent);
 }
 
+.mn-os-mb-bell.is-muted {
+  color: var(--mn-fg-muted);
+}
+
+.mn-os-mb-bell.is-muted.is-on {
+  color: var(--mn-fg-muted);
+}
+
 .mn-os-mb-bell.is-open {
   background: var(--os-surface-2);
   color: var(--os-text);
@@ -465,6 +473,41 @@ html.minnow-os-enabled {
   font-size: 13px;
   font-weight: 600;
   color: var(--mn-fg);
+}
+
+.mn-os-notif-menu__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mn-os-notif-menu__mute {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  transition: background 0.14s var(--ease-out), color 0.14s var(--ease-out);
+}
+
+.mn-os-notif-menu__mute:hover {
+  background: var(--mn-surface-0);
+  color: var(--mn-fg);
+}
+
+.mn-os-notif-menu__mute[aria-pressed='true'] {
+  color: var(--mn-accent);
+  background: var(--mn-accent-soft);
+}
+
+.mn-os-notif-menu.is-muted .mn-os-notif-menu__empty-icon {
+  color: var(--mn-fg-muted);
+  background: var(--mn-surface-0);
 }
 
 .mn-os-notif-menu__clear {
