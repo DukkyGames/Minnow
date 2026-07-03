@@ -26,8 +26,12 @@ const BOLD_OPTION_LINE_RE = /^\s*\*\*[^*]{2,48}\*\*\s*[:—–-]\s*\S/gm;
 /** "I can:" lead-in before plain-language action options (mode handoffs, next steps). */
 const I_CAN_COLON_RE = /\bI can:\s*(?:\n|$)/i;
 
-/** Imperative option lines after a choice phrase — not numbered or bulleted. */
-const PROSE_ACTION_OPTION_LINE_RE = /^\s*(?:Or\s+\S|Switch to\s+\S)/gm;
+/**
+ * Plain-language menu lines after a choice phrase — not numbered or bulleted.
+ * Covers "Switch to …", "Or …", handoff verbs, and "Label — description" rows.
+ */
+const PROSE_MENU_OPTION_LINE_RE =
+  /^\s*(?:Or\s+\S|Switch to\s+\S|Refine(?:\s+the)?\s+\S|Create an?\s+\S|[A-Z][^\n?!]{4,72}\s+[—–-]\s+\S)/gm;
 
 /** Index of the first regex match, or -1 when absent. */
 function firstMatchOffset(text: string, re: RegExp): number {
@@ -70,10 +74,8 @@ function structuredOptionsEndOffset(text: string): number {
   return end;
 }
 
-/**
- * Count plain "Switch to …" / "Or …" option lines that trail a choice phrase or "I can:".
- */
-function countProseActionOptions(text: string): number {
+/** Count plain menu option lines that trail a choice phrase or "I can:". */
+function countProseMenuOptions(text: string): number {
   const choiceOffset = firstChoiceDirectiveOffset(text);
   const iCanOffset = firstMatchOffset(text, I_CAN_COLON_RE);
   const startOffset = Math.max(choiceOffset, iCanOffset);
@@ -81,8 +83,8 @@ function countProseActionOptions(text: string): number {
     return 0;
   }
   const tail = text.slice(startOffset);
-  PROSE_ACTION_OPTION_LINE_RE.lastIndex = 0;
-  return (tail.match(PROSE_ACTION_OPTION_LINE_RE) ?? []).length;
+  PROSE_MENU_OPTION_LINE_RE.lastIndex = 0;
+  return (tail.match(PROSE_MENU_OPTION_LINE_RE) ?? []).length;
 }
 
 /**
@@ -99,8 +101,11 @@ export function looksLikeProseStructuredQuestion(text: string): boolean {
   const hasICanLeadIn = I_CAN_COLON_RE.test(trimmed);
   if (!hasQuestionMark && !hasChoicePhrase && !hasICanLeadIn) return false;
 
-  const proseActionOptionCount = countProseActionOptions(trimmed);
-  if (proseActionOptionCount >= 2 && (hasChoicePhrase || hasICanLeadIn)) {
+  const proseMenuOptionCount = countProseMenuOptions(trimmed);
+  if (
+    proseMenuOptionCount >= 2 &&
+    (hasChoicePhrase || hasChoiceQuestion || hasICanLeadIn)
+  ) {
     return true;
   }
 
