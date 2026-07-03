@@ -13,7 +13,7 @@ import { modelCache } from '../app-state';
 import { thinkingToCompletionBody } from '../agents/thinking-to-body';
 import { BenchmarkStreamReasoningAccumulator } from '../benchmark/stream-text';
 import { StreamingContentAccumulator } from '../api/message-content';
-import { loadEditorAiCompletionConfig } from '../config/editor-ai-completion';
+import { loadEditorAiCompletionConfig, type EditorAiCompletionConfig } from '../config/editor-ai-completion';
 import { encodeModelSelectKey } from '../lib/model-select-key';
 import { catalogCapabilitiesFromRow } from '../providers/model-capabilities';
 import { resolveProvider } from '../providers/store';
@@ -23,6 +23,7 @@ import {
   EDITOR_AI_REQUEST_FAILED_MESSAGE,
   resolveEditorAiBinding,
   validateEditorAiBinding,
+  type EditorAiBinding,
 } from './editor-ai-completion-client';
 
 const COMMIT_MSG_SYSTEM =
@@ -117,12 +118,25 @@ function createGenerationErrorMessage(err: unknown): string {
   return EDITOR_AI_REQUEST_FAILED_MESSAGE;
 }
 
+/**
+ * Git commit messages use the active chat model when editor AI is disabled
+ * or configured to follow chat; otherwise the pinned editor model.
+ */
+export async function resolveGitCommitMessageBinding(
+  config: EditorAiCompletionConfig,
+): Promise<EditorAiBinding> {
+  if (!config.enabled || config.useChatModel) {
+    return resolveEditorAiBinding({ ...config, useChatModel: true });
+  }
+  return resolveEditorAiBinding(config);
+}
+
 /** Stream a commit message from the active editor/chat model binding. */
 export async function fetchGitCommitMessage(
   input: GitCommitMessageRequest,
 ): Promise<GitCommitMessageResult> {
   const config = await loadEditorAiCompletionConfig();
-  const binding = await resolveEditorAiBinding(config);
+  const binding = await resolveGitCommitMessageBinding(config);
   const validation = validateEditorAiBinding(binding);
   if (validation.ok === false) {
     return { text: null, error: validation.message };
@@ -154,7 +168,10 @@ export async function fetchGitCommitMessage(
 
   let generationId: string;
   try {
-    ({ generationId } = await createGeneration(provider.id, body, { persist: false }));
+    ({ generationId } = await createGeneration(provider.id, body, {
+      persist: false,
+      fallbackRole: 'utility',
+    }));
   } catch (err) {
     return { text: null, error: createGenerationErrorMessage(err) };
   }
