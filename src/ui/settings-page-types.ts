@@ -103,14 +103,10 @@ export type SettingsNavGroup = {
 export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   { id: 'app', label: 'App', sections: ['general', 'appearance', 'audio'] },
   {
-    id: 'prompting',
-    label: 'Prompting & memory',
-    sections: ['prompting', 'rules'],
-  },
-  {
     id: 'agents',
     label: 'Agents',
     sections: [
+      'prompting',
       'modes',
       'experts',
       'work-agents',
@@ -118,6 +114,11 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
       'sub-agents',
       'autopilot',
     ],
+  },
+  {
+    id: 'prompting',
+    label: 'Knowledge',
+    sections: ['rules'],
   },
   {
     id: 'integrations',
