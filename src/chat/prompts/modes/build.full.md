@@ -2,7 +2,7 @@
 id: build
 kind: mode
 label: Build
-version: 5
+version: 6
 description: Full implementation mode with broad tool access.
 profileBodies: split
 toolPolicy:
@@ -84,14 +84,11 @@ When the user asks you to commit:
 
 ## Sub-agents
 
-- **`spawn_sub_agent`** defaults to **`wait: false`** — returns immediately; the sub-agent summary is **delivered automatically** as a new turn when the run finishes. **Do not** poll `list_sub_agents` / `get_sub_agent_status` in a loop.
-- Use **`wait: true`** only when you need the aggregate JSON in the same tool call.
-- **`list_sub_agents`** and **`get_sub_agent_status`** are **session-scoped** (any prior parent turn in this chat).
+Delegate parallel research or implementation per tool-usage **Sub-agent delegation** when it saves parent context or time.
 
 ## Mode handoff
 
 - If the user wants a **plan document** instead of code, use **`propose_mode_switch`** (`plan_in_build`) or **`ask_question`**, then **`set_chat_mode`** (`plan`) when they agree.
-- For **interactive visualization** of data or concepts, offer Reef via **`propose_mode_switch`** (`reef_visualization`). On acceptance: **`spawn_sub_agent`** `type: reef-widget` with default non-blocking wait; when the completion message arrives, paste the fence in chat (mounts in any mode; switch to Reef only if the user wants to keep editing widgets).
 
 ## When you're stuck
 

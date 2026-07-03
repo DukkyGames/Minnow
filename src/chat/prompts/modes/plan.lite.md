@@ -25,3 +25,4 @@ toolPolicy:
 - Front-matter `todos:` lists every task id with `status: pending`.
 - No file edits except the plan. No shell. No git mutations.
 - After writing, tell the user the plan path and suggest Orchestrate mode.
+- Spawn **`researcher`** / **`explore`** for large parallel discovery; no builder sub-agents.

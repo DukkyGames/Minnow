@@ -10,6 +10,7 @@ import {
   resetPromptRegistry,
 } from '../../src/chat/prompts/prompt-loader.ts';
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import { loadBuiltinModePromptMap, repoPath } from './test-helpers.mts';
 
 async function loadBaseAndModeFixtures(): Promise<Record<string, string>> {
@@ -19,6 +20,19 @@ async function loadBaseAndModeFixtures(): Promise<Record<string, string>> {
     'utf8',
   );
   map['./base/default.full.md'] = baseFull;
+  const toolDir = repoPath('src/chat/prompts/tool-usage');
+  map['./tool-usage/default.full.md'] = await fs.readFile(
+    path.join(toolDir, 'default.full.md'),
+    'utf8',
+  );
+  map['./tool-usage/sub-agent-delegation.full.md'] = await fs.readFile(
+    path.join(toolDir, 'sub-agent-delegation.md'),
+    'utf8',
+  );
+  map['./tool-usage/sub-agent-delegation.lite.md'] = await fs.readFile(
+    path.join(toolDir, 'sub-agent-delegation.lite.md'),
+    'utf8',
+  );
   return map;
 }
 
@@ -121,5 +135,38 @@ describe('composeSystemPrompt mode part', () => {
     });
     assert.match(out, /MINNOW_MODE_MARKER: build lite/);
     assert.match(out, /LITE/);
+  });
+
+  test('build full compose with spawn_sub_agent includes delegation fragment', async () => {
+    registerPromptFilesFromRaw(await loadBaseAndModeFixtures());
+    const out = composeSystemPrompt({
+      profile: 'full',
+      cwd: '/test',
+      modeId: 'build',
+      expertId: null,
+      workAgentId: null,
+      skillBody: null,
+      memoryBlock: null,
+      enabledToolIds: ['spawn_sub_agent', 'read_file'],
+      infoPresetId: null,
+    });
+    assert.match(out, /Sub-agent delegation/);
+    assert.match(out, /researcher/);
+  });
+
+  test('orchestrate compose omits sub-agent delegation fragment', async () => {
+    registerPromptFilesFromRaw(await loadBaseAndModeFixtures());
+    const out = composeSystemPrompt({
+      profile: 'full',
+      cwd: '/test',
+      modeId: 'orchestrate',
+      expertId: null,
+      workAgentId: null,
+      skillBody: null,
+      memoryBlock: null,
+      enabledToolIds: ['spawn_sub_agent', 'board_init'],
+      infoPresetId: null,
+    });
+    assert.doesNotMatch(out, /Sub-agent delegation/);
   });
 });

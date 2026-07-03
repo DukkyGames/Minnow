@@ -1,4 +1,3 @@
-import { sendMessage } from '../chat/messaging';
 import { scrollChatIfPinned } from './chat-scroll';
 import { handleSkillPickerKeydown, isSkillPickerOpen } from './skill-picker';
 
@@ -52,7 +51,7 @@ export function handleKey(e: KeyboardEvent): void {
   if (e.key === 'Enter' && !e.shiftKey) {
     if (isSkillPickerOpen()) return;
     e.preventDefault();
-    void sendMessage();
+    handleComposerPrimaryAction();
   }
 }
 

@@ -5,6 +5,11 @@
 import { formatRelativeTime, kindLabel } from '../notifications/preview';
 import { openNotificationTarget } from '../notifications/navigate';
 import {
+  loadNotificationPrefs,
+  saveNotificationPref,
+  subscribeNotificationPrefs,
+} from '../notifications/prefs';
+import {
   getNotifications,
   getUnreadNotificationCount,
   markAllNotificationsRead,
@@ -23,11 +28,34 @@ let panelEl: HTMLDivElement | null = null;
 let listEl: HTMLUListElement | null = null;
 let emptyEl: HTMLElement | null = null;
 let clearBtn: HTMLButtonElement | null = null;
+let muteBtn: HTMLButtonElement | null = null;
+let emptyTextEl: HTMLParagraphElement | null = null;
+let emptyHintEl: HTMLParagraphElement | null = null;
 let anchorBell: HTMLButtonElement | null = null;
 let menuOpen = false;
 let outsideHandler: ((e: PointerEvent) => void) | null = null;
 let escapeHandler: ((e: KeyboardEvent) => void) | null = null;
 let unsubNotifications: (() => void) | null = null;
+let unsubPrefs: (() => void) | null = null;
+
+function syncMutedUi(): void {
+  const muted = loadNotificationPrefs().muted;
+  panelEl?.classList.toggle('is-muted', muted);
+  anchorBell?.classList.toggle('is-muted', muted);
+  if (!muteBtn) return;
+  muteBtn.setAttribute('aria-pressed', muted ? 'true' : 'false');
+  muteBtn.setAttribute('aria-label', muted ? 'Unsilence notifications' : 'Silence notifications');
+  muteBtn.title = muted ? 'Unsilence notifications' : 'Silence notifications';
+  muteBtn.replaceChildren(createOsIcon(muted ? 'bellOff' : 'bell', { size: 14 }));
+  if (emptyTextEl) {
+    emptyTextEl.textContent = muted ? 'Notifications silenced' : 'No new notifications';
+  }
+  if (emptyHintEl) {
+    emptyHintEl.textContent = muted
+      ? 'New alerts are muted until you turn notifications back on.'
+      : 'Background chats, tasks, and jobs appear here when they finish.';
+  }
+}
 
 function unreadNotifications(): NotificationRecord[] {
   return getNotifications().filter((n) => !n.read);
@@ -165,6 +193,19 @@ function ensurePanel(): HTMLDivElement {
   title.textContent = 'Notifications';
   header.appendChild(title);
 
+  const headerActions = document.createElement('div');
+  headerActions.className = 'mn-os-notif-menu__actions';
+
+  muteBtn = document.createElement('button');
+  muteBtn.type = 'button';
+  muteBtn.className = 'mn-os-notif-menu__mute';
+  muteBtn.addEventListener('click', () => {
+    const nextMuted = !loadNotificationPrefs().muted;
+    saveNotificationPref('muted', nextMuted);
+    syncMutedUi();
+  });
+  headerActions.appendChild(muteBtn);
+
   clearBtn = document.createElement('button');
   clearBtn.type = 'button';
   clearBtn.className = 'mn-os-notif-menu__clear';
@@ -174,7 +215,9 @@ function ensurePanel(): HTMLDivElement {
     markAllNotificationsRead();
     rebuildList();
   });
-  header.appendChild(clearBtn);
+  headerActions.appendChild(clearBtn);
+
+  header.appendChild(headerActions);
 
   listEl = document.createElement('ul');
   listEl.className = 'mn-os-notif-menu__list';
@@ -192,13 +235,17 @@ function ensurePanel(): HTMLDivElement {
   const emptyText = document.createElement('p');
   emptyText.className = 'mn-os-notif-menu__empty-text';
   emptyText.textContent = 'No new notifications';
+  emptyTextEl = emptyText;
   emptyEl.appendChild(emptyText);
 
   const emptyHint = document.createElement('p');
   emptyHint.className = 'mn-os-notif-menu__empty-hint';
   emptyHint.textContent =
     'Background chats, tasks, and jobs appear here when they finish.';
+  emptyHintEl = emptyHint;
   emptyEl.appendChild(emptyHint);
+
+  syncMutedUi();
 
   panelEl.append(header, listEl, emptyEl);
   document.body.appendChild(panelEl);
@@ -210,6 +257,7 @@ function openMenu(): void {
   if (!bell) return;
   closeOsModelChipMenu();
   const panel = ensurePanel();
+  syncMutedUi();
   rebuildList();
   menuOpen = true;
   registerChromePopover();
@@ -228,6 +276,7 @@ function toggleMenu(): void {
 /** Wire the menubar bell to open the notifications popover. Returns cleanup. */
 export function initOsNotificationsMenu(bell: HTMLButtonElement): () => void {
   anchorBell = bell;
+  syncMutedUi();
 
   bell.setAttribute('aria-haspopup', 'dialog');
   bell.setAttribute('aria-expanded', 'false');
@@ -243,16 +292,26 @@ export function initOsNotificationsMenu(bell: HTMLButtonElement): () => void {
     if (menuOpen) rebuildList();
   });
 
+  unsubPrefs = subscribeNotificationPrefs(() => {
+    syncMutedUi();
+    if (menuOpen) rebuildList();
+  });
+
   return () => {
     bell.removeEventListener('click', onBellClick);
     unsubNotifications?.();
     unsubNotifications = null;
+    unsubPrefs?.();
+    unsubPrefs = null;
     closeOsNotificationsMenu();
     panelEl?.remove();
     panelEl = null;
     listEl = null;
     emptyEl = null;
+    emptyTextEl = null;
+    emptyHintEl = null;
     clearBtn = null;
+    muteBtn = null;
     anchorBell = null;
   };
 }

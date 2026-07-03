@@ -15,6 +15,18 @@ import { scrollChatIfPinned } from '../ui/chat-scroll';
 import { markMessageSteered } from '../ui/steer-affordance';
 import { forceCloseAskQuestionModal } from '../ui/question-cards-modal';
 
+type SteerEnqueuedListener = (chatId: string) => void;
+let steerEnqueuedListener: SteerEnqueuedListener | null = null;
+
+/** @internal Loop registers to end the live stream when push-now steer is queued. */
+export function setSteerEnqueuedListener(listener: SteerEnqueuedListener | null): void {
+  steerEnqueuedListener = listener;
+}
+
+function notifySteerEnqueued(chatId: string): void {
+  steerEnqueuedListener?.(chatId);
+}
+
 /** History/API content for a consumed steer row (plain user text in v1). */
 export function formatSteerHistoryContent(text: string): string {
   return text.trim();
@@ -28,6 +40,7 @@ export function enqueueSteerMessage(chat: Chat, text: string): boolean {
   chat.pendingSteerMessage = trimmed;
   touchChat(chat);
   scheduleSaveSessions();
+  notifySteerEnqueued(chat.id);
   return true;
 }
 

@@ -338,6 +338,19 @@
   color: var(--mn-danger);
 }
 
+.terminal-console-link {
+  color: var(--mn-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .terminal-console-link:hover {
+    color: var(--mn-fg);
+  }
+}
+
 @media (max-width: 768px) {
   .terminal-panel {
     max-height: 40vh;

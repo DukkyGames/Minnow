@@ -38,11 +38,18 @@ const MODE_HANDOFF_MODE_IDS = new Set<ModeId>([
   'plan',
   'build',
   'orchestrate',
-  'reef',
 ]);
 
 /** Modes that receive the fact-verification tool-usage fragment. */
 const FACT_VERIFICATION_MODE_IDS = new Set<ModeId>(['general', 'desktop', 'plan', 'build']);
+
+/** Modes that receive the shared sub-agent delegation tool-usage fragment. */
+const SUB_AGENT_DELEGATION_MODE_IDS = new Set<ModeId>([
+  'build',
+  'general',
+  'plan',
+  'debug',
+]);
 
 function contextHasBrowserPreviewTools(ctx: ComposeContext): boolean {
   const ids = ctx.enabledToolIds ?? [];
@@ -207,7 +214,7 @@ function resolveContext7DocsBody(ctx: ComposeContext, profile: PromptProfile): s
   return loaded?.body?.trim() ?? '';
 }
 
-/** Shared mode-switch / Reef handoff rules appended after default tool-usage. */
+/** Shared mode-switch handoff rules appended after default tool-usage. */
 function resolveModeHandoffBody(ctx: ComposeContext, profile: PromptProfile): string {
   const modeId = ctx.modeId ?? '';
   if (!modeId || !isModeId(modeId) || !MODE_HANDOFF_MODE_IDS.has(modeId)) {
@@ -215,6 +222,26 @@ function resolveModeHandoffBody(ctx: ComposeContext, profile: PromptProfile): st
   }
   const loadProfile = profile === 'lite' ? 'lite' : 'full';
   const loaded = loadPromptById('tool-usage', 'mode-handoff', loadProfile);
+  return loaded?.body?.trim() ?? '';
+}
+
+function contextHasSpawnSubAgentTool(ctx: ComposeContext): boolean {
+  return (ctx.enabledToolIds ?? []).includes('spawn_sub_agent');
+}
+
+/** When/how to spawn sub-agents for parallel research and implementation. */
+function resolveSubAgentDelegationBody(ctx: ComposeContext, profile: PromptProfile): string {
+  const modeId = ctx.modeId ?? '';
+  if (
+    !modeId ||
+    !isModeId(modeId) ||
+    !SUB_AGENT_DELEGATION_MODE_IDS.has(modeId) ||
+    !contextHasSpawnSubAgentTool(ctx)
+  ) {
+    return '';
+  }
+  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const loaded = loadPromptById('tool-usage', 'sub-agent-delegation', loadProfile);
   return loaded?.body?.trim() ?? '';
 }
 
@@ -335,6 +362,13 @@ export function composeSystemPrompt(ctx: ComposeContext): string {
         const handoffInterpolated = interpolatePromptBody(handoffRaw, vars);
         if (handoffInterpolated.trim()) {
           sections.push(handoffInterpolated.trim());
+        }
+      }
+      const delegationRaw = resolveSubAgentDelegationBody(ctx, profileKey);
+      if (delegationRaw.trim()) {
+        const delegationInterpolated = interpolatePromptBody(delegationRaw, vars);
+        if (delegationInterpolated.trim()) {
+          sections.push(delegationInterpolated.trim());
         }
       }
       const browserAllowlistRaw = resolveBrowserAllowlistBody(ctx, profileKey);

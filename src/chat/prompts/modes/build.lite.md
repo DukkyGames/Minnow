@@ -25,4 +25,5 @@ toolPolicy:
 - Don't yield mid-task unless genuinely blocked. Execute the plan.
 - When committing: feature branch, conventional message, no `--no-verify`.
 - Report when done: list files changed (one line each) + test status.
+- Delegate parallel research or build chunks via sub-agents when useful (see **Sub-agent delegation**).
 - No secrets in files. No destructive commands without explicit approval.

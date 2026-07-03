@@ -112,7 +112,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: false,
     definition: toolSchema(
       'check_reef_widget',
-      'Validate reef-widget HTML before finishing a Reef reply. Pass the fence body (not markdown delimiters). Returns JSON with ok, errors, and warnings.',
+      'Validate reef-widget HTML before finishing. Pass the fence body (not markdown delimiters). Returns JSON with ok, errors, and warnings.',
       {
         html: {
           type: 'string',
@@ -337,12 +337,12 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'propose_mode_switch',
     label: 'Propose mode switch',
     description:
-      'Show standard mode-handoff multiple-choice cards (plan complete, wrong mode, Reef widget offer).',
+      'Show standard mode-handoff multiple-choice cards (plan complete, wrong mode).',
     category: 'utility',
     serverRequired: false,
     definition: toolSchema(
       'propose_mode_switch',
-      'Ask the user a standard mode-handoff question via the ask_question UI. Situations: plan_complete, implement_in_wrong_mode, plan_in_build, reef_visualization.',
+      'Ask the user a standard mode-handoff question via the ask_question UI. Situations: plan_complete, implement_in_wrong_mode, plan_in_build.',
       {
         situation: {
           type: 'string',
@@ -350,7 +350,6 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
             'plan_complete',
             'implement_in_wrong_mode',
             'plan_in_build',
-            'reef_visualization',
           ],
           description: 'Which handoff preset to show',
         },
@@ -892,7 +891,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         type: {
           type: 'string',
           description:
-            'Sub-agent type id (e.g. generalPurpose, explore, shell, reef-widget)',
+            'Sub-agent type id (e.g. researcher, explore, generalPurpose, shell, debugger)',
         },
         task: { type: 'string', description: 'Task description for the sub-agent' },
         wait: {
