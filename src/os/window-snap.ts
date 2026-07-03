@@ -1,3 +1,5 @@
+import { getWindowStageInsets } from './window-stage-bounds';
+
 /** Edge proximity thresholds for window snap (px). */
 export const SNAP_EDGE_PX = 12;
 export const UNSNAP_DRAG_PX = 24;
@@ -25,24 +27,25 @@ export function detectSnapPreview(
   const relX = clientX - stageRect.left;
   const relY = clientY - stageRect.top;
   const w = stageRect.width;
-  const h = stageRect.height;
+  const insets = getWindowStageInsets();
+  const snappedHeight = Math.max(0, stageRect.height - insets.top - insets.bottom);
 
   if (relY <= SNAP_EDGE_PX) {
     return {
       mode: 'maximize',
-      rect: { x: 0, y: 0, width: w, height: h },
+      rect: { x: 0, y: 0, width: w, height: stageRect.height },
     };
   }
   if (relX <= SNAP_EDGE_PX) {
     return {
       mode: 'left',
-      rect: { x: 0, y: 0, width: Math.round(w / 2), height: h },
+      rect: { x: 0, y: insets.top, width: Math.round(w / 2), height: snappedHeight },
     };
   }
   if (relX >= w - SNAP_EDGE_PX) {
     return {
       mode: 'right',
-      rect: { x: Math.round(w / 2), y: 0, width: Math.round(w / 2), height: h },
+      rect: { x: Math.round(w / 2), y: insets.top, width: Math.round(w / 2), height: snappedHeight },
     };
   }
   return null;

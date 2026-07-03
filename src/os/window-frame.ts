@@ -1,4 +1,6 @@
+import { getStageRect } from './stage-metrics';
 import { createOsIcon, type SvgIconName } from './icons';
+import { getWindowStageUsableSize } from './window-stage-bounds';
 import {
   detectSnapPreview,
   shouldReleaseSnap,
@@ -78,6 +80,9 @@ export class WindowFrame {
     this.onMinimize = options.onMinimize;
     this.onMaximize = options.onMaximize;
     this.onBoundsChange = options.onBoundsChange;
+    if (!this.maximized) {
+      this.bounds = this.clampBounds(this.bounds);
+    }
 
     const root = document.createElement('div');
     root.className = 'mn-os-window';
@@ -156,9 +161,9 @@ export class WindowFrame {
   }
 
   setBounds(bounds: WindowBounds, meta?: { snapMode?: SnapMode | null; maximized?: boolean }): void {
-    this.bounds = { ...bounds };
     if (meta?.snapMode !== undefined) this.snapMode = meta.snapMode;
     if (meta?.maximized !== undefined) this.maximized = meta.maximized;
+    this.bounds = this.maximized ? { ...bounds } : this.clampBounds(bounds);
     this.applyBoundsToDom();
   }
 
@@ -197,8 +202,7 @@ export class WindowFrame {
   }
 
   private getStageRect(): DOMRect {
-    const stage = document.getElementById('osStage');
-    return (stage ?? document.body).getBoundingClientRect();
+    return getStageRect();
   }
 
   private applyBoundsToDom(): void {
@@ -270,13 +274,14 @@ export class WindowFrame {
 
   private clampBounds(bounds: WindowBounds): WindowBounds {
     const stage = this.getStageRect();
-    const width = Math.max(this.minWidth, Math.min(bounds.width, stage.width));
-    const height = Math.max(this.minHeight, Math.min(bounds.height, stage.height));
-    const maxX = Math.max(0, stage.width - width);
-    const maxY = Math.max(0, stage.height - height);
+    const { width: usableW, height: usableH, insets } = getWindowStageUsableSize(stage);
+    const width = Math.max(this.minWidth, Math.min(bounds.width, usableW));
+    const height = Math.max(this.minHeight, Math.min(bounds.height, usableH));
+    const maxX = Math.max(insets.left, usableW - width + insets.left);
+    const maxY = Math.max(insets.top, usableH - height + insets.top);
     return {
-      x: Math.min(Math.max(0, bounds.x), maxX),
-      y: Math.min(Math.max(0, bounds.y), maxY),
+      x: Math.min(Math.max(insets.left, bounds.x), maxX),
+      y: Math.min(Math.max(insets.top, bounds.y), maxY),
       width,
       height,
     };
