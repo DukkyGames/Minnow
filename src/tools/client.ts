@@ -23,6 +23,7 @@ import {
 import {
   applyBoardMemberToolFilter,
   applyOrchestrateAutoToolFilter,
+  injectBoardMemberSubsetTools,
 } from '../chat/modes/orchestrate-tool-filter';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import type { Chat } from '../types';
@@ -553,6 +554,9 @@ export function getEnabledToolDefinitionsForChat(
   const normalized = normalizeModeId(chat.modeId);
   let defs = getEnabledToolDefinitionsForMode(normalized);
   const executionMode = getBoardGroupForChat(chat)?.orchestrateBoard?.executionMode;
+  if (chat.boardTaskId?.trim()) {
+    defs = injectBoardMemberSubsetTools(defs, getEnabledToolCatalogEntries());
+  }
   defs = applyBoardMemberToolFilter(defs, chat, executionMode);
   if (normalized !== 'orchestrate') return defs;
 

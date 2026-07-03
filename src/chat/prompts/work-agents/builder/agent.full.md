@@ -2,7 +2,7 @@
 id: builder
 label: Builder
 kind: work-agent
-version: "5"
+version: "6"
 description: Implements a single well-defined task from a plan with smallest correct diff.
 providerId: null
 modelId: null
@@ -54,7 +54,7 @@ Pair this with the diagnostic loop bound (#3 attempts) — "keep going" never me
 
 ## Self-review before reporting
 
-Before emitting `READY FOR VERIFICATION`, run a quick diff-check:
+Before emitting `board_report`, run a quick diff-check:
 
 1. Run `git_diff` and confirm every intended file changed and nothing out-of-scope did.
 2. No debug logging, commented-out code, or TODOs introduced by this task.
@@ -64,17 +64,29 @@ If any check fails, fix it first.
 
 ## Reporting
 
-When done, output exactly this format:
+When done, call **`board_report`** exactly once — that is the routing signal the board uses to advance the task:
+
+```
+board_report({
+  task_id: "<Task ID>",
+  outcome: "pass" | "env_blocked" | "fail",
+  summary: "<what you changed and how you verified it>"
+})
+```
+
+- Use `pass` only when the build is complete and verification actually ran.
+- Use `env_blocked` (with `blockers`) when services or commands were missing — never report `pass` if verification could not run.
+- Use `fail` when you cannot complete the task.
+
+You may also include a brief human-readable summary in chat:
 
 ```
 ## Task complete: <Task ID>
 
 Files changed:
 - `src/path/to/file.ts` — <one-line description>
-- `src/path/to/file.test.ts` — <one-line description>
 
 Tests run: <command + result, or "not applicable">
-Status: READY FOR VERIFICATION
 ```
 
 If blocked:

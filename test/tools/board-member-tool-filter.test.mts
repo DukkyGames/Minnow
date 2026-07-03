@@ -17,6 +17,7 @@ import {
   expandBoardRoleAllowedTools,
   type BoardMemberRole,
 } from '../../src/chat/modes/tool-groups.ts';
+import { getEnabledToolDefinitionsForChat } from '../../src/tools/client.ts';
 import { getBoardGroupForChat } from '../../src/state/chat-groups.ts';
 import { initBoard, updateTask } from '../../src/state/orchestrate-board-store.ts';
 import {
@@ -147,6 +148,16 @@ describe('resolveBoardMemberRole', () => {
 });
 
 describe('applyBoardMemberToolFilter', () => {
+  test('build-mode board chats inject board_get_state and board_report from catalog', () => {
+    seedBoardSession();
+    const names = getEnabledToolDefinitionsForChat(builderChat).map((d) => d.function.name);
+    assert.ok(names.includes('board_get_state'), 'board_get_state should be injected for build-mode task chat');
+    assert.ok(names.includes('board_report'), 'board_report should be injected for build-mode task chat');
+    assert.ok(!names.includes('board_init'));
+    assert.ok(!names.includes('board_update_task'));
+    assert.ok(!names.includes('delegate_tasks'));
+  });
+
   test('strips planner-only board tools for board task chats', () => {
     seedBoardSession();
     const filtered = applyBoardMemberToolFilter(defsFor([
