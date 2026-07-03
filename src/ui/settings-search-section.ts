@@ -19,6 +19,7 @@ import {
   appendSettingsGroup,
   linkToSettingsSection,
 } from './settings-layout';
+import { createSettingsInputRow, createSettingsSelectRow } from './settings-controls';
 import { setStatus } from './status';
 import { isLocalServerAvailable } from '../tools/config';
 
@@ -57,9 +58,6 @@ export async function renderSearchSettingsSection(mount: HTMLElement): Promise<v
     'Preferred backend for web_search. No silent fallback when the selected provider cannot run.',
   );
 
-  const providerField = el('div', 'settings-field');
-  const providerLabel = el('label', 'settings-field-label', 'Search provider');
-  providerLabel.htmlFor = 'settingsSearchProvider';
   const providerSelect = document.createElement('select');
   providerSelect.id = 'settingsSearchProvider';
   providerSelect.className = 'settings-select';
@@ -69,8 +67,9 @@ export async function renderSearchSettingsSection(mount: HTMLElement): Promise<v
     option.textContent = opt.label;
     providerSelect.appendChild(option);
   }
-  providerField.append(providerLabel, providerSelect);
-  providerGroup.appendChild(providerField);
+  providerGroup.appendChild(
+    createSettingsSelectRow('Search provider', { select: providerSelect }).row,
+  );
 
   const searxngField = el('div', 'settings-field settings-search-url-field');
 
@@ -168,17 +167,15 @@ export async function renderSearchSettingsSection(mount: HTMLElement): Promise<v
     'Results',
     'Maximum structured results per query (1–50).',
   );
-  const countField = el('div', 'settings-field');
-  const countLabel = el('label', 'settings-field-label', 'Result count');
-  countLabel.htmlFor = 'settingsSearchResultCount';
   const countInput = document.createElement('input');
   countInput.type = 'number';
   countInput.id = 'settingsSearchResultCount';
   countInput.className = 'settings-input';
   countInput.min = '1';
   countInput.max = '50';
-  countField.append(countLabel, countInput);
-  limitsGroup.appendChild(countField);
+  limitsGroup.appendChild(
+    createSettingsInputRow('Result count', { input: countInput }).row,
+  );
 
   const saveBtn = el('button', 'settings-action-btn settings-action-btn--primary', 'Save search settings');
   saveBtn.type = 'button';

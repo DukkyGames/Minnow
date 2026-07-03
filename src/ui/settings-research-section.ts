@@ -15,6 +15,7 @@ import {
   fillProviderSelect,
 } from './settings-model-binding';
 import { appendSettingsCrosslinks, appendSettingsGroup } from './settings-layout';
+import { createSettingsInputRow, createSettingsSelectRow } from './settings-controls';
 import { setStatus } from './status';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -36,9 +37,6 @@ function appendNumberField(
   hint: string,
   options: { min: number; max: number; step?: number },
 ): HTMLInputElement {
-  const field = el('div', 'settings-field');
-  const labelEl = el('label', 'settings-field-label', label);
-  labelEl.htmlFor = id;
   const input = document.createElement('input');
   input.type = 'number';
   input.id = id;
@@ -46,8 +44,9 @@ function appendNumberField(
   input.min = String(options.min);
   input.max = String(options.max);
   if (options.step) input.step = String(options.step);
-  field.append(labelEl, input, el('p', 'settings-field-hint', hint));
-  container.appendChild(field);
+  container.appendChild(
+    createSettingsInputRow(label, { id: `label-${id}`, input, description: hint }).row,
+  );
   return input;
 }
 
@@ -80,9 +79,6 @@ export async function renderDeepResearchSettingsSection(mount: HTMLElement): Pro
     'Search override',
     'Optional primary provider override for research runs only.',
   );
-  const overrideField = el('div', 'settings-field');
-  const overrideLabel = el('label', 'settings-field-label', 'Research search provider');
-  overrideLabel.htmlFor = 'settingsResearchSearchProvider';
   const overrideSelect = document.createElement('select');
   overrideSelect.id = 'settingsResearchSearchProvider';
   overrideSelect.className = 'settings-select';
@@ -92,8 +88,9 @@ export async function renderDeepResearchSettingsSection(mount: HTMLElement): Pro
     option.textContent = opt.label;
     overrideSelect.appendChild(option);
   }
-  overrideField.append(overrideLabel, overrideSelect);
-  searchOverrideGroup.appendChild(overrideField);
+  searchOverrideGroup.appendChild(
+    createSettingsSelectRow('Research search provider', { select: overrideSelect }).row,
+  );
 
   const loopGroup = appendSettingsGroup(
     mount,

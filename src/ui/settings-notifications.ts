@@ -12,6 +12,7 @@ import {
   previewNotificationSound,
 } from '../notifications/sound';
 import { createSettingsToggleRow } from './settings-switch';
+import { createSettingsActionsRow } from './settings-controls';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -96,22 +97,23 @@ export function renderNotificationsSettingsSection(mount: HTMLElement): void {
   soundGroup.appendChild(pickerRow);
   mount.appendChild(soundGroup);
 
-  const resetActions = el('div', 'settings-actions');
-  const resetBtn = el('button', 'settings-action-btn', 'Reset to defaults') as HTMLButtonElement;
-  resetBtn.type = 'button';
-  resetBtn.addEventListener('click', () => {
-    saveNotificationPrefs({
-      enabled: true,
-      muted: false,
-      soundEnabled: true,
-      soundId: 'chime',
-      chatEnabled: true,
-      tasksEnabled: true,
-      backgroundEnabled: true,
-    });
-    mount.replaceChildren();
-    renderNotificationsSettingsSection(mount);
-  });
-  resetActions.appendChild(resetBtn);
+  const resetActions = createSettingsActionsRow([
+    {
+      label: 'Reset to defaults',
+      onClick: () => {
+        saveNotificationPrefs({
+          enabled: true,
+          muted: false,
+          soundEnabled: true,
+          soundId: 'chime',
+          chatEnabled: true,
+          tasksEnabled: true,
+          backgroundEnabled: true,
+        });
+        mount.replaceChildren();
+        renderNotificationsSettingsSection(mount);
+      },
+    },
+  ]);
   mount.appendChild(resetActions);
 }

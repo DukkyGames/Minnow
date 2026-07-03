@@ -35,6 +35,11 @@ import { fetchBrainEmbeddingsStatus } from '../brain/client';
 import { listSummarySchemaPresetIds } from '../agents/sub-agent-summary-schemas';
 import { listProviders } from '../providers/store';
 import { fillModelSelect } from './settings-model-binding';
+import {
+  createSettingsActionsRow,
+  createSettingsInputRow,
+  createSettingsSelectRow,
+} from './settings-controls';
 import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
 
@@ -538,44 +543,48 @@ export function mountWorkAgentConfigEditor(
   const { row: disabledRow, input: disabledCb } = createSettingsToggleRow('Disabled', {
     checked: !!options.initialDisabled,
   });
-  const budgetBlock = el('div', 'settings-model-row');
-  budgetBlock.appendChild(el('label', 'settings-field-label', 'Max input tokens'));
-  budgetBlock.appendChild(maxInputTokensInput);
-  budgetBlock.appendChild(el('label', 'settings-field-label', 'Context policy'));
-  budgetBlock.appendChild(contextPolicySel);
 
-  container.appendChild(budgetBlock);
+  container.appendChild(
+    createSettingsInputRow('Max input tokens', { input: maxInputTokensInput }).row,
+  );
+  container.appendChild(
+    createSettingsSelectRow('Context policy', { select: contextPolicySel }).row,
+  );
   container.appendChild(archiveBlock.root);
   container.appendChild(disabledRow);
 
-  const saveBtn = el('button', 'settings-action-btn', 'Save agent settings');
-  saveBtn.type = 'button';
-  saveBtn.addEventListener('click', () => {
-    void (async () => {
-      const rawCap = maxInputTokensInput.value.trim();
-      const maxInputTokens =
-        rawCap === '' ? null : Math.max(1, Math.floor(Number(rawCap) || 0));
-      const policy = contextPolicySel.value as ContextEnforcementPolicy;
-      const patch: Parameters<typeof patchWorkAgentOverride>[1] = {
-        disabled: !disabledCb.checked,
-        maxInputTokens,
-        contextEnforcementPolicy: policy,
-      };
-      if (policy === 'archive') {
-        patch.archive = archiveBlock.readConfig();
-      }
-      const agent = await patchWorkAgentOverride(options.agentId, patch);
-      if (!agent) {
-        setStatus('err', 'Could not save work agent settings');
-        return;
-      }
-      if (policy !== 'archive') clearArchiveDisabledReason();
-      refreshArchiveBanner();
-      setStatus('ok', 'Work agent settings saved');
-      options.onModelSaved?.();
-    })();
-  });
-  container.appendChild(saveBtn);
+  container.appendChild(
+    createSettingsActionsRow([
+      {
+        label: 'Save agent settings',
+        onClick: () => {
+          void (async () => {
+            const rawCap = maxInputTokensInput.value.trim();
+            const maxInputTokens =
+              rawCap === '' ? null : Math.max(1, Math.floor(Number(rawCap) || 0));
+            const policy = contextPolicySel.value as ContextEnforcementPolicy;
+            const patch: Parameters<typeof patchWorkAgentOverride>[1] = {
+              disabled: disabledCb.checked,
+              maxInputTokens,
+              contextEnforcementPolicy: policy,
+            };
+            if (policy === 'archive') {
+              patch.archive = archiveBlock.readConfig();
+            }
+            const agent = await patchWorkAgentOverride(options.agentId, patch);
+            if (!agent) {
+              setStatus('err', 'Could not save work agent settings');
+              return;
+            }
+            if (policy !== 'archive') clearArchiveDisabledReason();
+            refreshArchiveBanner();
+            setStatus('ok', 'Work agent settings saved');
+            options.onModelSaved?.();
+          })();
+        },
+      },
+    ]),
+  );
 }
 
 /** @deprecated Use mountWorkAgentPromptEditor + mountWorkAgentConfigEditor + Models hub. */
@@ -824,40 +833,40 @@ export function mountSubAgentTypeEditor(
     checked: initial.enabled,
   });
 
-  const maxRow = el('label', 'settings-toggle-row');
-  maxRow.appendChild(el('span', '', 'Max concurrent'));
-  maxRow.appendChild(maxInput);
-
   extra.appendChild(enabledRow);
-  extra.appendChild(maxRow);
-  const budgetRow = el('div', 'settings-model-row');
-  budgetRow.appendChild(el('label', 'settings-field-label', 'Max input tokens'));
-  budgetRow.appendChild(maxInputTokensInput);
-  budgetRow.appendChild(el('label', 'settings-field-label', 'Context policy'));
-  budgetRow.appendChild(contextPolicySel);
-  budgetRow.appendChild(el('label', 'settings-field-label', 'Summary schema'));
-  budgetRow.appendChild(summarySchemaSel);
+  extra.appendChild(createSettingsInputRow('Max concurrent', { input: maxInput }).row);
+  extra.appendChild(
+    createSettingsInputRow('Max input tokens', { input: maxInputTokensInput }).row,
+  );
+  extra.appendChild(
+    createSettingsSelectRow('Context policy', { select: contextPolicySel }).row,
+  );
+  extra.appendChild(
+    createSettingsSelectRow('Summary schema', { select: summarySchemaSel }).row,
+  );
 
-  extra.appendChild(budgetRow);
-
-  const saveCfgBtn = el('button', 'settings-action-btn', 'Save type settings');
-  saveCfgBtn.type = 'button';
-  saveCfgBtn.addEventListener('click', () => {
-    void (async () => {
-      const ok = await onSaveConfig({
-        enabled: enabledCb.checked,
-        maxConcurrent: Math.max(1, Number(maxInput.value) || 1),
-        maxInputTokens:
-          maxInputTokensInput.value.trim() === ''
-            ? null
-            : Math.max(1, Math.floor(Number(maxInputTokensInput.value) || 0)),
-        contextEnforcementPolicy: contextPolicySel.value as ContextEnforcementPolicy,
-        summarySchema: summarySchemaSel.value,
-      });
-      setStatus(ok ? 'ok' : 'err', ok ? `${label} settings saved` : 'Save failed');
-    })();
-  });
-  extra.appendChild(saveCfgBtn);
+  extra.appendChild(
+    createSettingsActionsRow([
+      {
+        label: 'Save type settings',
+        onClick: () => {
+          void (async () => {
+            const ok = await onSaveConfig({
+              enabled: enabledCb.checked,
+              maxConcurrent: Math.max(1, Number(maxInput.value) || 1),
+              maxInputTokens:
+                maxInputTokensInput.value.trim() === ''
+                  ? null
+                  : Math.max(1, Math.floor(Number(maxInputTokensInput.value) || 0)),
+              contextEnforcementPolicy: contextPolicySel.value as ContextEnforcementPolicy,
+              summarySchema: summarySchemaSel.value,
+            });
+            setStatus(ok ? 'ok' : 'err', ok ? `${label} settings saved` : 'Save failed');
+          })();
+        },
+      },
+    ]),
+  );
 
   container.appendChild(extra);
 }

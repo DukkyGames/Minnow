@@ -40,6 +40,12 @@ import {
   fillProviderSelect,
 } from './settings-model-binding';
 import { buildSamplerFieldInputs } from './settings-sampler-fields';
+import {
+  appendSettingsOfflineHint,
+  createSettingsActionsRow,
+  createSettingsInputRow,
+  createSettingsSelectRow,
+} from './settings-controls';
 import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
 
@@ -393,23 +399,28 @@ function appendRoutingRow(
     controls.samplerFields = samplerFields;
     panel.appendChild(samplerFields.root);
 
-    const thinkingRow = el('div', 'settings-field-row');
-    thinkingRow.appendChild(el('label', 'settings-field-label', 'Thinking'));
     const thinkingInitial =
       row.persistKind === 'main-chat'
         ? (row.chatThinkingMode ?? 'inherit')
         : (row.thinkingMode ?? 'inherit');
     const thinkingSelect = buildThinkingSelect(thinkingInitial);
     controls.thinkingSelect = thinkingSelect;
-    thinkingRow.appendChild(thinkingSelect);
-    panel.appendChild(thinkingRow);
-
-    const saveAdvancedBtn = el('button', 'settings-action-btn', 'Save advanced');
-    saveAdvancedBtn.type = 'button';
-    saveAdvancedBtn.addEventListener('click', () => {
-      void saveAdvanced(controls);
+    const { row: thinkingSettingsRow } = createSettingsSelectRow('Thinking', {
+      select: thinkingSelect,
+      searchKey: `models.routing.${row.id}.thinking`,
     });
-    panel.appendChild(saveAdvancedBtn);
+    panel.appendChild(thinkingSettingsRow);
+
+    panel.appendChild(
+      createSettingsActionsRow([
+        {
+          label: 'Save advanced',
+          onClick: () => {
+            void saveAdvanced(controls);
+          },
+        },
+      ]),
+    );
     advanced.appendChild(panel);
     bindingCell.appendChild(advanced);
   }
@@ -499,17 +510,20 @@ async function renderGlobalFallbackBar(mount: HTMLElement): Promise<void> {
   globalFallbackEnabledInput = enabledInput;
   section.appendChild(enabledRow);
 
-  const cooldownRow = el('div', 'settings-field-row');
-  cooldownRow.appendChild(el('label', 'settings-field-label', 'Cooldown after failure (seconds)'));
-  const cooldownInput = el('input', 'settings-input settings-input--narrow') as HTMLInputElement;
-  cooldownInput.type = 'number';
-  cooldownInput.min = '10';
-  cooldownInput.max = '3600';
-  cooldownInput.step = '1';
-  cooldownInput.value = String(config.cooldownSeconds);
+  const { row: cooldownSettingsRow, input: cooldownInput } = createSettingsInputRow(
+    'Cooldown after failure (seconds)',
+    {
+      type: 'number',
+      inputClassName: 'settings-input settings-input--narrow',
+      min: '10',
+      max: '3600',
+      step: '1',
+      value: String(config.cooldownSeconds),
+      searchKey: 'models.routing.fallback.cooldown',
+    },
+  );
   globalFallbackCooldownInput = cooldownInput;
-  cooldownRow.appendChild(cooldownInput);
-  section.appendChild(cooldownRow);
+  section.appendChild(cooldownSettingsRow);
 
   const globalChainSection = el('div', 'settings-fallback-global-chain');
   globalChainSection.appendChild(
@@ -544,33 +558,36 @@ async function renderGlobalFallbackBar(mount: HTMLElement): Promise<void> {
   section.appendChild(healthHost);
   void refreshHostHealthPanel(healthHost);
 
-  const saveBtn = el(
-    'button',
-    'settings-action-btn settings-action-btn--primary',
-    'Save fallback settings',
+  section.appendChild(
+    createSettingsActionsRow([
+      {
+        label: 'Save fallback settings',
+        variant: 'primary',
+        onClick: () => {
+          void (async () => {
+            const rolesPatch: Record<string, FallbackChainCandidate[]> = {};
+            if (globalFallbackEditor) {
+              rolesPatch[GLOBAL_FALLBACK_CHAIN_KEY] = globalFallbackEditor.candidates
+                .map((row) => ({
+                  providerId: row.providerId.trim(),
+                  modelId: row.modelId.trim(),
+                }))
+                .filter((row) => row.providerId);
+            }
+            await saveFallbackChainsConfig({
+              enabled: globalFallbackEnabledInput?.checked === true,
+              cooldownSeconds: Number(
+                globalFallbackCooldownInput?.value ?? config.cooldownSeconds,
+              ),
+              roles: rolesPatch,
+            });
+            setStatus('ok', 'Fallback settings saved');
+            void refreshHostHealthPanel(healthHost);
+          })();
+        },
+      },
+    ]),
   );
-  saveBtn.type = 'button';
-  saveBtn.addEventListener('click', () => {
-    void (async () => {
-      const rolesPatch: Record<string, FallbackChainCandidate[]> = {};
-      if (globalFallbackEditor) {
-        rolesPatch[GLOBAL_FALLBACK_CHAIN_KEY] = globalFallbackEditor.candidates
-          .map((row) => ({
-            providerId: row.providerId.trim(),
-            modelId: row.modelId.trim(),
-          }))
-          .filter((row) => row.providerId);
-      }
-      await saveFallbackChainsConfig({
-        enabled: globalFallbackEnabledInput?.checked === true,
-        cooldownSeconds: Number(globalFallbackCooldownInput?.value ?? config.cooldownSeconds),
-        roles: rolesPatch,
-      });
-      setStatus('ok', 'Fallback settings saved');
-      void refreshHostHealthPanel(healthHost);
-    })();
-  });
-  section.appendChild(saveBtn);
 
   mount.appendChild(section);
 }
@@ -750,12 +767,9 @@ export async function renderModelRoutingSection(mount: HTMLElement): Promise<voi
   refreshConfigStorageBanner();
 
   if (!isConfigServerMode(storageMode)) {
-    mount.appendChild(
-      el(
-        'p',
-        'settings-server-banner',
-        'Model routing needs npm start. Values below are read-only until the server is running.',
-      ),
+    appendSettingsOfflineHint(
+      mount,
+      'Model routing needs npm start. Values below are read-only until the server is running.',
     );
   }
 
@@ -772,13 +786,7 @@ export async function renderModelRoutingSection(mount: HTMLElement): Promise<voi
     lastCatalogChatId = catalog.activeChat.id;
 
     if (catalog.offline) {
-      mount.appendChild(
-        el(
-          'p',
-          'settings-server-banner',
-          'Run npm start to load bindings from ~/.minnow.',
-        ),
-      );
+      appendSettingsOfflineHint(mount, 'Run npm start to load bindings from ~/.minnow.');
       return;
     }
 
@@ -791,12 +799,9 @@ export async function renderModelRoutingSection(mount: HTMLElement): Promise<voi
     }
   } catch (err) {
     console.error('[model-routing] render failed', err);
-    mount.appendChild(
-      el(
-        'p',
-        'settings-server-banner',
-        'Could not load bindings. Switch tabs and back, or refresh the page.',
-      ),
+    appendSettingsOfflineHint(
+      mount,
+      'Could not load bindings. Switch tabs and back, or refresh the page.',
     );
   }
 }

@@ -407,6 +407,11 @@ function onHashChange(): void {
 
 /** Wire nav, back button, hash routing, and in-page filter hooks. */
 export function initSettingsPage(): void {
+  const root = getSettingsRoot();
+  if (root && isOsEmbedded()) {
+    root.classList.add('settings-page--os-embedded');
+  }
+
   registerWindowTeardown('settings', () => closeSettings({ skipNavigate: true }));
   upgradeSettingsCheckboxes();
   initSettingsSearchFinder({
