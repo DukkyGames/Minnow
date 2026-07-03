@@ -663,7 +663,7 @@ async function executeStreamingCodeTool(
   }
 }
 
-/** Chats sandbox root when the Chat app is foreground; otherwise server default workspace. */
+/** Chats sandbox root when legacy Chat app is foreground; desktop workspace when desktop chat is active. */
 /** Desktop or chats sandbox root when chat UI is foreground; otherwise server default workspace. */
 async function resolveToolWorkspaceRoot(): Promise<string | undefined> {
   if (isDesktopChatActive()) {

@@ -128,13 +128,17 @@ function syncDrawerPaneVisibility(): void {
 }
 
 async function refreshFileTreeForSurface(): Promise<void> {
+  const panel = getDesktopWorkspacePanelState();
+  if (mountSurface === 'desktop' && (!panel.open || panel.tab !== 'files')) {
+    return;
+  }
   const { initFileTreeIfNeeded, refreshFileTree } = await import('../ui/file-tree');
   initFileTreeIfNeeded();
   await refreshFileTree();
 }
 
 function bindResizeObserver(): void {
-  if (resizeObserver) return;
+  if (resizeObserver || typeof ResizeObserver === 'undefined') return;
   resizeObserver = new ResizeObserver(() => {
     void import('../ui/preview-electron-visibility').then((m) =>
       m.scheduleElectronPreviewHostLayoutSync(),
@@ -156,14 +160,13 @@ export async function syncDesktopWorkspaceMounts(): Promise<void> {
         mountToDesktop(record.desktopHostId, record.node);
       }
       mountSurface = 'desktop';
-      await refreshFileTreeForSurface();
     } else {
       applyCodeListingRoot();
       for (const record of records) {
         restoreToCode(record);
       }
       mountSurface = 'code';
-      await refreshFileTreeForSurface();
+      void refreshFileTreeForSurface();
       void import('../ui/file-layout').then((m) => {
         m.reconcileRightSplitDomWithState();
         m.applyFileSidebarVisuals();
@@ -212,7 +215,7 @@ export function initDesktopWorkspaceMountBridge(): void {
   subscribeDesktopWorkspacePanel(() => {
     void syncDesktopWorkspaceMounts();
     if (isDesktopWorkspacePanelOpen()) {
-      void import('./desktop-chat-rail').then((m) => m.collapseDesktopChatRail());
+      void import('../ui/desktop-chat-rail').then((m) => m.collapseDesktopChatRail());
     }
   });
 }

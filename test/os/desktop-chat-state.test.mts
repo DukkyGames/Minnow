@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { resetChatsWorkspacePathCache } from '../../src/lib/chats-workspace.ts';
+import { resetDesktopWorkspacePathCache } from '../../src/lib/desktop-workspace.ts';
 import { resetAppHostForTests } from '../../src/os/app-host.ts';
 import { resetInstancesForTests } from '../../src/os/instances.ts';
 import {
@@ -10,6 +11,9 @@ import {
   resetDesktopStateForTests,
 } from '../../src/os/desktop-state.ts';
 import { resetDesktopChatRailForTests } from '../../src/ui/desktop-chat-rail.ts';
+import { resetDesktopWorkspaceMountsForTests } from '../../src/os/desktop-workspace-mounts.ts';
+import { resetDesktopWorkspacePanelForTests } from '../../src/os/desktop-workspace-state.ts';
+import { resetDesktopWorkspaceRailForTests } from '../../src/os/desktop-workspace-rail.ts';
 import { resetOsPageBridgeForTests } from '../../src/os/page-bridge.ts';
 import {
   initOsRouter,
@@ -27,6 +31,11 @@ function setupDesktopDom(win: import('happy-dom').Window): void {
     <div id="osStage">
       <div id="osDesktopLayer" class="mn-os-desktop-layer"></div>
       <div id="osAppsLayer"></div>
+    </div>
+    <div id="workspaceSplit">
+      <aside id="fileSidebar"><div id="fileSidebarFilesView"></div></aside>
+      <section id="previewPane" class="hidden"></section>
+      <section id="fileViewerPane" class="hidden"></section>
     </div>
     <input type="file" id="fileInput" />
   `;
@@ -48,7 +57,11 @@ describe('desktop chat state', () => {
     g.window = win as unknown as Window & typeof globalThis.window;
     g.document = win.document;
     g.HTMLElement = win.HTMLElement;
+    g.HTMLButtonElement = win.HTMLButtonElement;
     g.localStorage = win.localStorage;
+    g.requestAnimationFrame = (cb: FrameRequestCallback) =>
+      win.setTimeout(() => cb(win.performance.now()), 0) as unknown as number;
+    g.getComputedStyle = win.getComputedStyle.bind(win);
     win.matchMedia = ((query: string) => ({
       matches: query.includes('prefers-reduced-motion'),
       media: query,
@@ -61,6 +74,12 @@ describe('desktop chat state', () => {
     })) as typeof window.matchMedia;
     g.fetch = (async (input: string | URL) => {
       const url = String(input);
+      if (url.includes('/api/desktop-workspace')) {
+        return {
+          ok: true,
+          json: async () => ({ ok: true, path: '/home/user/.minnow/workspace', fileCount: 0 }),
+        } as Response;
+      }
       if (url.includes('/api/chats-workspace')) {
         return {
           ok: true,
@@ -71,10 +90,14 @@ describe('desktop chat state', () => {
     }) as typeof fetch;
     setupDesktopDom(win);
     resetChatsWorkspacePathCache();
+    resetDesktopWorkspacePathCache();
     win.location.hash = '#/desktop';
     resetInstancesForTests();
     resetDesktopStateForTests();
     resetDesktopChatRailForTests();
+    resetDesktopWorkspacePanelForTests();
+    resetDesktopWorkspaceMountsForTests();
+    resetDesktopWorkspaceRailForTests();
     resetOsRouterForTests();
     resetOsPageBridgeForTests();
     resetAppHostForTests();
@@ -92,6 +115,9 @@ describe('desktop chat state', () => {
     cleanupDesktop = undefined;
     resetDesktopStateForTests();
     resetDesktopChatRailForTests();
+    resetDesktopWorkspacePanelForTests();
+    resetDesktopWorkspaceMountsForTests();
+    resetDesktopWorkspaceRailForTests();
     resetOsRouterForTests();
     resetInstancesForTests();
     resetOsPageBridgeForTests();
@@ -121,10 +147,10 @@ describe('desktop chat state', () => {
   });
 
   test('activateDesktopChat with seed creates a new thread instead of reusing history', async () => {
-    const CHATS_WS = '/home/user/.minnow/chats';
+    const DESKTOP_WS = '/home/user/.minnow/workspace';
     const { sessionState, getActiveChat } = await import('../../src/state/sessions.ts');
     const existing = sessionState!.chats[0]!;
-    existing.workspacePath = CHATS_WS;
+    existing.workspacePath = DESKTOP_WS;
     existing.history.push({ role: 'user', content: 'prior turn' });
     const priorId = existing.id;
     const priorCount = sessionState!.chats.length;
@@ -137,7 +163,7 @@ describe('desktop chat state', () => {
 
     assert.equal(sessionState!.chats.length, priorCount + 1);
     assert.notEqual(getActiveChat().id, priorId);
-    assert.equal(getActiveChat().workspacePath, CHATS_WS);
+    assert.equal(getActiveChat().workspacePath, DESKTOP_WS);
     assert.equal(getActiveChat().history.length, 0);
   });
 

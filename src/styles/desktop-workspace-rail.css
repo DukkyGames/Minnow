@@ -1,0 +1,223 @@
+/**
+ * Right-edge workspace rail — mirrors left chat rail on the desktop.
+ */
+
+.mn-os-workspace-rail {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 12;
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-end;
+  align-items: stretch;
+}
+
+.mn-os-workspace-rail.is-expanded {
+  z-index: 20;
+}
+
+.mn-os-workspace-rail-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-self: flex-start;
+  margin-top: var(--os-chat-stage-top, 10px);
+  margin-right: max(10px, env(safe-area-inset-right, 0px));
+  pointer-events: auto;
+}
+
+.mn-os-workspace-rail-tab {
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--os-text-dim);
+  cursor: pointer;
+  transition:
+    color 0.16s var(--os-ease),
+    opacity 0.2s var(--os-ease-out);
+}
+
+.mn-os-workspace-rail-tab:hover,
+.mn-os-workspace-rail-tab.is-active {
+  color: var(--os-text);
+}
+
+.mn-os-workspace-rail-tab:focus-visible {
+  outline: 2px solid var(--os-accent);
+  outline-offset: 2px;
+}
+
+.mn-os-workspace-rail.is-expanded .mn-os-workspace-rail-tab {
+  display: none;
+}
+
+.mn-os-workspace-rail-drawer {
+  flex: none;
+  width: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  border-left: 1px solid transparent;
+  background: var(--mn-surface-1);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  transition:
+    width 280ms var(--os-ease-out),
+    opacity 220ms var(--os-ease-out),
+    border-color 220ms var(--os-ease-out);
+}
+
+.mn-os-workspace-rail.is-expanded .mn-os-workspace-rail-drawer {
+  width: min(380px, calc(100vw - 80px));
+  opacity: 1;
+  pointer-events: auto;
+  border-left-color: var(--mn-border);
+  box-shadow: -8px 0 32px -16px rgba(0, 0, 0, 0.28);
+}
+
+.mn-os-workspace-rail-drawer-hdr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--mn-border);
+  flex: none;
+}
+
+.mn-os-workspace-rail-drawer-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--os-text);
+}
+
+.mn-os-workspace-rail-drawer-path {
+  flex: 1 1 100%;
+  font-size: 0.75rem;
+  color: var(--os-text-dim);
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mn-os-workspace-rail-drawer-hdr .icon-btn {
+  margin-left: auto;
+  transform: scaleX(-1);
+}
+
+.mn-os-workspace-rail-drawer-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+  position: relative;
+}
+
+.mn-os-workspace-mount {
+  display: none;
+  min-height: 0;
+  overflow: hidden;
+  flex-direction: column;
+}
+
+.mn-os-workspace-mount.is-active {
+  display: flex;
+  grid-area: 1 / 1;
+}
+
+.mn-os-workspace-mount--files #fileSidebarFilesView {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.mn-os-workspace-mount--browser #previewPane,
+.mn-os-workspace-mount--viewer #fileViewerPane {
+  flex: 1;
+  min-height: 0;
+  display: flex !important;
+  flex-direction: column;
+  height: 100%;
+}
+
+.mn-os-workspace-mount--browser #previewPane.hidden,
+.mn-os-workspace-mount--viewer #fileViewerPane.hidden {
+  display: flex !important;
+}
+
+.mn-os-workspace-rail-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 19;
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms var(--os-ease-out);
+}
+
+.mn-os-workspace-rail-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#osDesktopLayer.is-suppressed-by-fullscreen-app .mn-os-workspace-rail,
+#osDesktopLayer.is-suppressed-by-fullscreen-app .mn-os-workspace-rail-backdrop {
+  display: none !important;
+}
+
+#osDesktopLayer.is-chat-active .mn-os-desk-stage {
+  transition: padding-right 280ms var(--os-ease-out);
+}
+
+#osDesktopLayer.is-chat-active .mn-os-workspace-rail.is-expanded ~ .mn-os-desk-stage,
+#osDesktopLayer.is-chat-active:has(.mn-os-workspace-rail.is-expanded) .mn-os-desk-stage {
+  padding-right: min(380px, calc(100vw - 80px));
+}
+
+@media (max-width: 640px) {
+  .mn-os-workspace-rail-drawer {
+    position: fixed;
+    top: calc(var(--os-menubar-h) + env(safe-area-inset-top, 0px));
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    width: min(360px, calc(100vw - 20px)) !important;
+    max-width: 100%;
+    padding-right: env(safe-area-inset-right, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    transform: translateX(105%);
+    box-shadow: -8px 0 32px -12px rgba(0, 0, 0, 0.35);
+    transition:
+      transform 280ms var(--os-ease-out),
+      opacity 220ms var(--os-ease-out);
+  }
+
+  .mn-os-workspace-rail.is-expanded .mn-os-workspace-rail-drawer {
+    transform: translateX(0);
+  }
+
+  .mn-os-workspace-rail-tabs {
+    margin-top: max(8px, env(safe-area-inset-top, 0px));
+    margin-right: max(8px, env(safe-area-inset-right, 0px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mn-os-workspace-rail-drawer,
+  .mn-os-workspace-rail-backdrop,
+  #osDesktopLayer.is-chat-active .mn-os-desk-stage {
+    transition: none !important;
+  }
+}

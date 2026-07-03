@@ -4,7 +4,7 @@
 
 import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
 import type { Chat } from '../types';
-import { createAssistantChat, CHAT_APP_ID } from './session-workspace-scope';
+import { createAssistantChat, CHAT_APP_ID } from '../state/session-workspace-scope';
 
 export { CHAT_APP_ID, createAssistantChat };
 
@@ -16,6 +16,6 @@ export async function ensureActiveDesktopAssistantChat(): Promise<Chat> {
   if (!desktopWorkspacePath) {
     throw new Error('Desktop workspace is unavailable (start the tool server with npm start)');
   }
-  const { activateAssistantChatForApp } = await import('./sessions');
+  const { activateAssistantChatForApp } = await import('../state/sessions');
   return activateAssistantChatForApp(desktopWorkspacePath);
 }

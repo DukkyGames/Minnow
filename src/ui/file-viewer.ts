@@ -1051,6 +1051,15 @@ export async function openFileInViewer(
   }
 
   showViewerSplit();
+
+  void import('../os/desktop-state').then(({ isDesktopChatActive }) => {
+    if (!isDesktopChatActive()) return;
+    void import('../os/desktop-workspace-mounts').then(async (m) => {
+      m.openDesktopWorkspaceTab('viewer');
+      await m.syncDesktopWorkspaceMounts();
+    });
+  });
+
   renderFileTreeViaBridge();
 
   if (result.focusedExisting && result.tab.loadStatus === 'ready') {

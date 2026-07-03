@@ -10,6 +10,8 @@ import {
   createAssistantChat,
   ensureActiveDesktopAssistantChat,
 } from './desktop-chat-sessions';
+import { getWorkspacePath } from '../state/workspace';
+import type { DesktopChatActivateOptions } from './desktop-state';
 import {
   getActiveChat,
   isExpertChat,
@@ -220,7 +222,7 @@ export async function bootstrapDesktopChat(options?: DesktopChatActivateOptions)
       createFreshAssistantChat(desktopWorkspacePath, state);
     } else {
       try {
-        await ensureActiveAssistantChat();
+        await ensureActiveDesktopAssistantChat();
       } catch {
         /* server offline — still show shell */
       }

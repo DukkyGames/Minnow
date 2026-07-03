@@ -64,6 +64,20 @@ export function isPreviewPaneDomVisible(): boolean {
   return true;
 }
 
+/** True when the Code workspace or desktop browser drawer hosts the preview guest. */
+function isPreviewSurfaceActive(): boolean {
+  if (isDesktopBrowserSurfaceActive()) return true;
+  return isCodeWorkspaceForeground();
+}
+
+function isDesktopBrowserSurfaceActive(): boolean {
+  if (document.documentElement.dataset.osApp !== 'chat') return false;
+  const mount = document.getElementById('desktopPreviewMount');
+  if (!mount?.classList.contains('is-active')) return false;
+  const pane = document.getElementById('previewPane');
+  return Boolean(pane && !pane.classList.contains('hidden'));
+}
+
 /** True when the Code workspace (where #previewBody lives) is the active shell surface. */
 function isCodeWorkspaceForeground(): boolean {
   if (document.documentElement.dataset.osApp !== 'code') return false;
@@ -74,7 +88,7 @@ function isCodeWorkspaceForeground(): boolean {
 /** Whether the Chromium guest should be visible and receive bounds updates. */
 export function shouldShowElectronPreviewHost(): boolean {
   if (!usesElectronPreview()) return false;
-  if (!isCodeWorkspaceForeground()) return false;
+  if (!isPreviewSurfaceActive()) return false;
   if (!isPreviewPaneDomVisible()) return false;
   if (isFullscreenOverlayObscuringWorkspace()) return false;
   if (isChromePopoverOpen()) return false;

@@ -26,7 +26,10 @@ export type OsIconName =
   | 'minimize'
   | 'maximize'
   | 'bell'
-  | 'fish';
+  | 'fish'
+  | 'folder'
+  | 'globe'
+  | 'fileText';
 
 /** Launcher icons rendered from a PNG mask instead of inline SVG paths. */
 export type RasterIconName = 'compare' | 'brain';
@@ -60,6 +63,12 @@ const PATHS: Record<SvgIconName, string> = {
   maximize: '<rect x="5" y="5" width="14" height="14" rx="1"/>',
   bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',
   fish: '<path d="M16.5 12c-2 3-5.5 4.5-9 4.5 1-1.5 1-3 1-4.5s0-3-1-4.5c3.5 0 7 1.5 9 4.5Z"/><path d="M16.5 12 21 8.5v7L16.5 12Z"/><circle cx="9.5" cy="11" r=".6" fill="currentColor" stroke="none"/>',
+  folder:
+    '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"/>',
+  globe:
+    '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+  fileText:
+    '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>',
 };
 
 /** App launcher icons backed by a PNG mask instead of inline SVG paths. */

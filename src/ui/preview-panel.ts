@@ -470,27 +470,45 @@ export function loadPreviewSource(source: PreviewSource, options?: { cacheBust?:
 export function revealPreviewPanelForAgentNavigation(url: string): void {
   const trimmed = url.trim();
   if (!trimmed) return;
-  if (!dismissFileViewerForPreview()) return;
+
+  void (async () => {
+    const { isDesktopChatActive } = await import('../os/desktop-state');
+    const desktopChat = isDesktopChatActive();
+    if (desktopChat) {
+      const mounts = await import('../os/desktop-workspace-mounts');
+      await mounts.revealDesktopBrowserPanel();
+    } else if (!dismissFileViewerForPreview()) {
+      return;
+    }
+
+    applyAgentPreviewNavigation(trimmed, desktopChat);
+  })();
+}
+
+function applyAgentPreviewNavigation(url: string, desktopChat: boolean): void {
+  if (!desktopChat && !dismissFileViewerForPreview()) return;
 
   if (isFullscreenOverlayObscuringWorkspace()) {
-    patchFilePanelState({ previewSource: { kind: 'url', url: trimmed } });
+    patchFilePanelState({ previewSource: { kind: 'url', url } });
     hidePreviewStatus();
     setPreviewLoading(true);
     const input = getUrlInput();
-    if (input) input.value = trimmed;
+    if (input) input.value = url;
     if (usesElectronPreview()) {
-      void loadSourceInPreview({ kind: 'url', url: trimmed });
+      void loadSourceInPreview({ kind: 'url', url });
     }
     return;
   }
 
-  showPreviewSplit();
-  patchFilePanelState({ previewSource: { kind: 'url', url: trimmed } });
+  if (!desktopChat) {
+    showPreviewSplit();
+  }
+  patchFilePanelState({ previewSource: { kind: 'url', url } });
   hidePreviewStatus();
   setPreviewLoading(true);
 
   const input = getUrlInput();
-  if (input) input.value = trimmed;
+  if (input) input.value = url;
 
   if (usesElectronPreview()) {
     void showPreviewHost();
