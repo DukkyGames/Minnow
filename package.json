@@ -15,6 +15,7 @@
     "build:benchmark-packs": "node scripts/build-benchmark-packs.mjs",
     "build": "tsc && vite build",
     "postinstall": "node scripts/sync-impeccable-skill.mjs && node scripts/ensure-electron.mjs",
+    "app-icon:sync": "node scripts/sync-app-icon.mjs && node scripts/brand-electron-win.mjs",
     "impeccable:sync": "node scripts/sync-impeccable-skill.mjs",
     "impeccable:update": "npx impeccable skills update && node scripts/sync-impeccable-skill.mjs",
     "impeccable:detect": "npx impeccable detect src/ index.html",
@@ -143,6 +144,8 @@
     "happy-dom": "^20.9.0",
     "hyparquet": "^1.26.0",
     "impeccable": "^3.1.0",
+    "png-to-ico": "^3.0.1",
+    "rcedit": "^5.0.2",
     "tsx": "^4.19.2",
     "vite": "^6.2.5",
     "wait-on": "^8.0.1"

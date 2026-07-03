@@ -26,6 +26,23 @@ import { resolveMinnowPort } from './minnow-port.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+/** Window/taskbar icon (dev and unpackaged runs; packaged builds use build/icon.ico via electron-builder). */
+function appIconPath(): string {
+  const root = getProjectRoot();
+  if (process.platform === 'win32') {
+    return path.join(root, 'build', 'icon.ico');
+  }
+  return path.join(
+    root,
+    'public',
+    'logos',
+    'minnow-logo',
+    'minnow',
+    'png',
+    'minnow-1024.png',
+  );
+}
+
 const isDev = process.env.MINNOW_ELECTRON_DEV === '1';
 const devUrl = (
   process.env.MINNOW_DEV_URL?.trim() || `http://localhost:${resolveMinnowPort()}/`
@@ -149,6 +166,7 @@ async function createMainWindow(): Promise<BrowserWindow> {
     x: saved.x,
     y: saved.y,
     show: false,
+    icon: appIconPath(),
     backgroundColor: '#0e0e10',
     webPreferences: {
       preload: preloadPath,
@@ -272,6 +290,10 @@ async function resolveLoadUrl(): Promise<string> {
 
 async function bootstrap(): Promise<void> {
   app.setName('Minnow');
+  // Windows taskbar grouping / jump lists; pairs with branded electron.exe in dev (see brand-electron-win.mjs).
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('org.grimmedia.minnow');
+  }
   configurePreviewSession(session.fromPartition('persist:minnow-preview'));
   registerIpcHandlers();
 
