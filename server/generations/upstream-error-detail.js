@@ -49,6 +49,18 @@ function extractJsonErrorMessage(data) {
     if (parts.length > 0) return parts.join('; ');
   }
 
+  // OpenCode Zen may surface upstream failures as chat.completion with an empty assistant.
+  if (record.object === 'chat.completion' && Array.isArray(record.choices)) {
+    const choice = record.choices[0];
+    const message = choice?.message;
+    const hasContent =
+      (typeof message?.content === 'string' && message.content.trim().length > 0) ||
+      (Array.isArray(message?.tool_calls) && message.tool_calls.length > 0);
+    if (!hasContent) {
+      return 'Provider returned an empty completion (check model, API key, and OpenCode Zen billing)';
+    }
+  }
+
   return null;
 }
 

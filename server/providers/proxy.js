@@ -8,6 +8,7 @@ import {
   enrichOpenCodeModelsFromModelsDev,
   isOpenCodeProviderBaseUrl,
 } from './models-dev-context.js';
+import { normalizeOpenCodeZenRelativePath } from './opencode-zen.js';
 import { validateProviderId } from './validate.js';
 
 const MODELS_TIMEOUT_MS = 15_000;
@@ -20,7 +21,8 @@ const MODEL_UNLOAD_TIMEOUT_MS = 60_000;
 export async function proxyModels(id) {
   validateProviderId(id);
   const { profile, headers, paths } = await getProviderRuntime(id);
-  const url = `${profile.baseUrl}${paths.modelsPath}`;
+  const modelsPath = normalizeOpenCodeZenRelativePath(profile.baseUrl, paths.modelsPath);
+  const url = `${profile.baseUrl}${modelsPath}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), MODELS_TIMEOUT_MS);
 
