@@ -275,6 +275,21 @@ function contextHasLaunchMinnowAppTool(ctx: ComposeContext): boolean {
   return (ctx.enabledToolIds ?? []).includes('launch_minnow_app');
 }
 
+function contextHasSettingsTools(ctx: ComposeContext): boolean {
+  return (ctx.enabledToolIds ?? []).includes('update_settings');
+}
+
+/** Settings agent tools guidance when update_settings is enabled. */
+function resolveManageSettingsBody(ctx: ComposeContext, profile: PromptProfile): string {
+  const modeId = ctx.modeId ?? '';
+  if ((modeId !== 'general' && modeId !== 'desktop') || !contextHasSettingsTools(ctx)) {
+    return '';
+  }
+  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const loaded = loadPromptById('tool-usage', 'manage-settings', loadProfile);
+  return loaded?.body?.trim() ?? '';
+}
+
 /** General-mode MinnowOS app routing when launch_minnow_app is enabled. */
 function resolveLaunchMinnowAppBody(ctx: ComposeContext, profile: PromptProfile): string {
   const modeId = ctx.modeId ?? '';
@@ -390,6 +405,13 @@ export function composeSystemPrompt(ctx: ComposeContext): string {
         const launchInterpolated = interpolatePromptBody(launchAppRaw, vars);
         if (launchInterpolated.trim()) {
           sections.push(launchInterpolated.trim());
+        }
+      }
+      const manageSettingsRaw = resolveManageSettingsBody(ctx, profileKey);
+      if (manageSettingsRaw.trim()) {
+        const manageInterpolated = interpolatePromptBody(manageSettingsRaw, vars);
+        if (manageInterpolated.trim()) {
+          sections.push(manageInterpolated.trim());
         }
       }
     }

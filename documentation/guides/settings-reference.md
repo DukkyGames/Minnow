@@ -465,3 +465,25 @@ Most features require `npm start` for full persistence.
 | Config normalization | [`server/config/validators.js`](../../server/config/validators.js) |
 | Default meta scaffold | [`server/config/home.js`](../../server/config/home.js) |
 | Tool definitions | [`src/tools/definitions.ts`](../../src/tools/definitions.ts) |
+
+---
+
+## Agent settings tools
+
+Desktop and General modes include the **`settings`** tool group (`search_settings`, `get_settings`, `update_settings`).
+
+| Tool | Permission | Notes |
+|------|------------|-------|
+| `search_settings` | `full` | Returns catalog metadata (key, label, type, sensitivity) — never values |
+| `get_settings` | `full` | Server-backed fields from `~/.minnow`; secrets → `[redacted]`; browser fields enriched client-side |
+| `update_settings` | `ask` | Approval strip shows human diff; secret/dangerous fields require `confirmed: true` after approval |
+
+**Registry:** [`src/settings/field-registry.ts`](../../src/settings/field-registry.ts) maps catalog keys → `config.json`, `tools.json`, `search.json`, etc. Generated server mirror: `server/settings/registry-manifest.json` (`npm run settings-registry:generate` / `prebuild`).
+
+**HTTP API:** `GET /api/settings/catalog`, `POST /api/settings/read`, `POST /api/settings/update` ([`server/settings/middleware.js`](../../server/settings/middleware.js)).
+
+**Client sync:** [`src/settings/client-sync.ts`](../../src/settings/client-sync.ts) applies `clientPatches` (notifications, theme), refreshes settings sections, dispatches `minnow:settings-changed`.
+
+**Prompt:** [`src/chat/prompts/tool-usage/manage-settings.md`](../../src/chat/prompts/tool-usage/manage-settings.md) (gated when `update_settings` is enabled in General/Desktop).
+
+Plan: [`documentation/plans/settings-agent-tools.md`](../plans/settings-agent-tools.md).

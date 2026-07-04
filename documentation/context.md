@@ -475,6 +475,9 @@ Persistent notes are injected via composer `memory` part (`src/chat/prompts/memo
 | `brain_append_log` | Append changelog line to `log.md` |
 | `brain_ingest_source` | Ingest raw source → `sources/` + synthesized pages |
 | `manage_brain` | Delete/clear Brain data (`delete_page`, `clear_wiki`, `delete_archive`, `clear_proposals`, `clear_code_index`, `clear_sources`); permission **`ask`**; denied in Plan mode; destructive actions require `confirmed: true` |
+| `search_settings` | Search Settings catalog by label/keyword (metadata only; no secret values); permission **`full`** |
+| `get_settings` | Read settings by key or category/area filter; secrets redacted; permission **`full`** |
+| `update_settings` | Batch-write settings with approval strip; secret/dangerous fields need `confirmed: true`; permission **`ask`**; **denied in Plan mode** |
 | `repo_map` | Token-budgeted signature map of indexed codebase via [`server/tools/code-tools.js`](../server/tools/code-tools.js) |
 | `find_symbol` | FTS5 + LSP workspace symbol search |
 | `who_calls` | Incoming call graph edges for a symbol |
@@ -1597,6 +1600,9 @@ Requires the **Minnow desktop shell** (Electron `WebContentsView` preview panel)
 | `brain_append_log` | Append to `log.md` |
 | `brain_ingest_source` | Ingest non-code source into wiki |
 | `manage_brain` | Delete/clear wiki pages, archives, proposals, code index, or ingest sources (ask permission; Plan deny) |
+| `search_settings` | Search Settings field catalog (read-only; full permission) |
+| `get_settings` | Read settings values; secrets redacted (full permission) |
+| `update_settings` | Change settings with user approval; Plan deny |
 | `repo_map` | Token-budgeted code signature map |
 | `find_symbol` | Code index symbol search |
 | `who_calls` | Incoming call edges for a symbol |

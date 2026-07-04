@@ -324,6 +324,9 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'brain_append_log',
   'brain_ingest_source',
   'manage_brain',
+  'search_settings',
+  'get_settings',
+  'update_settings',
   'repo_map',
   'find_symbol',
   'who_calls',
@@ -334,6 +337,9 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
 ]);
 
 function defaultPermissionForTool(id, enabled) {
+  if (id === 'search_settings' || id === 'get_settings') {
+    return enabled ? 'full' : 'off';
+  }
   if (BRAIN_FULL_PERMISSION_TOOL_ID_SET.has(id)) {
     return enabled ? 'full' : 'off';
   }

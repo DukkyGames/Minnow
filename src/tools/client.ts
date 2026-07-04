@@ -67,6 +67,10 @@ import {
   hasBraveApiKey,
   resolveWebSearchExecution,
 } from './web-search-routing';
+import {
+  afterSettingsToolSuccess,
+  augmentGetSettingsResult,
+} from '../settings/client-sync';
 
 /** Ping timeout for local dev server detection (ms). */
 const PING_TIMEOUT_MS = 2500;
@@ -733,6 +737,14 @@ async function executeServerTool(
   }
 
   const content = String(responsePayload.result ?? '');
+  let finalContent = content;
+  if (!content.trimStart().startsWith('Error:')) {
+    if (name === 'get_settings') {
+      finalContent = augmentGetSettingsResult(content);
+    }
+    void afterSettingsToolSuccess(name, finalContent);
+  }
+
   const attachments = Array.isArray(responsePayload.attachments)
     ? responsePayload.attachments.filter(
         (a): a is NonNullable<ToolExecutionResult['attachments']>[number] =>
@@ -760,7 +772,7 @@ async function executeServerTool(
     }
   }
 
-  const base: ToolExecutionResult = { content };
+  const base: ToolExecutionResult = { content: finalContent };
   if (attachments?.length) base.attachments = attachments;
   if (codeChange) base.codeChange = codeChange;
   return base;
