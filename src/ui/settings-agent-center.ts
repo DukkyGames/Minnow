@@ -13,6 +13,7 @@ import {
 } from '../agents/sub-agent-config';
 import type { SubAgentTypeConfig } from '../agents/types';
 import { listModes } from '../chat/modes/registry';
+import { createModeMaskIcon } from './mode-icons';
 import { getActiveChat } from '../state/sessions';
 import { isServerStorageMode } from '../config/storage-mode';
 import { appendSettingsGroup } from './settings-layout';
@@ -61,17 +62,22 @@ function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 /** Collect cards for the agents center grid. */
-export async function loadAgentCenterCards(): Promise<AgentCenterCard[]> {
+export async function loadAgentCenterCards(
+  agents: WorkAgentDefinition[] = [],
+): Promise<AgentCenterCard[]> {
   const cards: AgentCenterCard[] = [];
 
   for (const mode of listModes()) {
     if (mode.id === 'desktop') continue;
+    const defaultAgent = findDefaultWorkAgentForMode(mode.id, agents);
     cards.push({
       id: `mode:${mode.id}`,
       kind: 'modes',
       title: mode.label,
       description: mode.description,
-      meta: `Tool policy: ${mode.toolPolicy.default}`,
+      meta: defaultAgent
+        ? `Default agent: ${defaultAgent.label}`
+        : undefined,
       searchKey: `modes.${mode.id}`,
     });
   }
@@ -277,22 +283,44 @@ function openSubAgentLightbox(
   });
 }
 
+function createCardChevron(): SVGSVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'icon-svg settings-agent-card__chevron');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', 'M9 6l6 6-6 6');
+  svg.appendChild(path);
+  return svg;
+}
+
 function renderCardButton(card: AgentCenterCard, agents: WorkAgentDefinition[]): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'settings-agent-card';
+  btn.className = `settings-agent-card settings-agent-card--${card.kind}`;
   btn.dataset.settingsSearchKey = card.searchKey;
 
-  const title = el('h3', 'settings-agent-card__title', card.title);
-  const desc = el('p', 'settings-agent-card__desc', card.description);
-  btn.append(title, desc);
+  const head = el('div', 'settings-agent-card__head');
+  if (card.kind === 'modes') {
+    const modeId = card.id.replace(/^mode:/, '');
+    const icon = createModeMaskIcon(modeId, 'mode-mask-icon settings-agent-card__icon');
+    head.appendChild(icon);
+  }
+  head.appendChild(el('h3', 'settings-agent-card__title', card.title));
+  head.appendChild(createCardChevron());
+  btn.appendChild(head);
 
+  const desc = el('p', 'settings-agent-card__desc', card.description);
+  btn.appendChild(desc);
+
+  const foot = el('div', 'settings-agent-card__foot');
   if (card.meta) {
-    btn.appendChild(el('p', 'settings-agent-card__meta', card.meta));
+    foot.appendChild(el('span', 'settings-agent-card__chip', card.meta));
   }
   if (card.disabled) {
-    btn.appendChild(el('span', 'settings-badge', 'disabled'));
+    foot.appendChild(el('span', 'settings-badge settings-agent-card__badge', 'disabled'));
   }
+  btn.appendChild(foot);
 
   btn.addEventListener('click', () => {
     if (card.kind === 'modes') {
@@ -321,8 +349,8 @@ function renderCardButton(card: AgentCenterCard, agents: WorkAgentDefinition[]):
   return btn;
 }
 
-function createAgentCenterGrid(): HTMLUListElement {
-  const grid = el('ul', 'settings-agent-center__grid');
+function createAgentCenterGrid(sectionId: AgentCenterSectionId): HTMLUListElement {
+  const grid = el('ul', `settings-agent-center__grid settings-agent-center__grid--${sectionId}`);
   return grid;
 }
 
@@ -364,8 +392,10 @@ async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
     mount,
     'Sub-agent limits',
     'Global concurrency, timeouts, and check-in nudges for all sub-agent types.',
+    'agents.subAgents.limits',
   );
-  groupBody.classList.add('settings-agent-center__global');
+  const group = groupBody.closest('.settings-group');
+  group?.classList.add('settings-agent-center__global');
 
   const persistGlobal = async (
     patch: Partial<
@@ -419,13 +449,33 @@ async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
   nudgeWrap.appendChild(nudgeInput);
   nudgeWrap.appendChild(el('span', 'settings-kv-suffix', 'ms'));
 
+  const maxTurns = document.createElement('input');
+  maxTurns.type = 'number';
+  maxTurns.className = 'settings-select settings-kv-input';
+  maxTurns.min = '1';
+  maxTurns.max = '64';
+  maxTurns.step = '1';
+  maxTurns.value = String(getSubAgentsMaxToolTurns(config));
+  maxTurns.setAttribute('aria-label', 'Sub-agent max tool turns');
+  maxTurns.addEventListener('change', () => {
+    const value = clampSubAgentMaxToolTurns(Number(maxTurns.value));
+    maxTurns.value = String(value);
+    void saveSubAgentConfigToServer({ maxToolTurns: value }).then((ok) => {
+      setStatus(ok ? 'ok' : 'err', ok ? 'Max tool turns saved' : 'Save failed');
+    });
+  });
+
   groupBody.appendChild(
-    createSettingsKvList([
-      { term: 'Enabled', value: enabledSwitch },
-      { term: 'Max concurrent', value: maxInput },
-      { term: 'Default timeout', value: timeoutWrap },
-      { term: 'Check-in nudge', value: nudgeWrap },
-    ]),
+    createSettingsKvList(
+      [
+        { term: 'Enabled', value: enabledSwitch },
+        { term: 'Max concurrent', value: maxInput },
+        { term: 'Default timeout', value: timeoutWrap },
+        { term: 'Check-in nudge', value: nudgeWrap },
+        { term: 'Max tool turns', value: maxTurns },
+      ],
+      { className: 'settings-kv settings-kv--row' },
+    ),
   );
 
   enabledCb.addEventListener('change', () => {
@@ -447,25 +497,6 @@ async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
     nudgeInput.value = String(value);
     void persistGlobal({ checkInNudgeMs: value });
   });
-
-  const maxTurns = document.createElement('input');
-  maxTurns.type = 'number';
-  maxTurns.className = 'settings-select settings-kv-input';
-  maxTurns.min = '1';
-  maxTurns.max = '64';
-  maxTurns.step = '1';
-  maxTurns.value = String(getSubAgentsMaxToolTurns(config));
-  maxTurns.setAttribute('aria-label', 'Sub-agent max tool turns');
-  maxTurns.addEventListener('change', () => {
-    const value = clampSubAgentMaxToolTurns(Number(maxTurns.value));
-    maxTurns.value = String(value);
-    void saveSubAgentConfigToServer({ maxToolTurns: value }).then((ok) => {
-      setStatus(ok ? 'ok' : 'err', ok ? 'Max tool turns saved' : 'Save failed');
-    });
-  });
-  groupBody.appendChild(
-    createSettingsKvList([{ term: 'Max tool turns', value: maxTurns }]),
-  );
 }
 
 /** Render the agents center card grid into the settings mount. */
@@ -488,7 +519,10 @@ export async function renderAgentCenterPanel(
   search.className = 'settings-select settings-agent-center__search';
   search.placeholder = 'Search modes and agents…';
   search.setAttribute('aria-label', 'Filter agents center');
-  toolbar.appendChild(search);
+  const filterCount = el('p', 'settings-agent-center__filter-count');
+  filterCount.setAttribute('aria-live', 'polite');
+  filterCount.hidden = true;
+  toolbar.append(search, filterCount);
   mount.appendChild(toolbar);
 
   const sectionsHost = el('div', 'settings-agent-center__sections');
@@ -496,46 +530,72 @@ export async function renderAgentCenterPanel(
 
   const remote = await fetchWorkAgentsList();
   const agents = remote?.agents ?? [];
-  const allCards = await loadAgentCenterCards();
+  const allCards = await loadAgentCenterCards(agents);
 
   const sectionGrids = new Map<AgentCenterSectionId, HTMLUListElement>();
   const sectionGroups = new Map<AgentCenterSectionId, HTMLElement>();
+  const sectionCountEls = new Map<AgentCenterSectionId, HTMLElement>();
 
   for (const def of AGENT_CENTER_SECTIONS) {
-    const groupBody = appendSettingsGroup(sectionsHost, def.title, def.hint, def.searchKey);
-    groupBody.classList.add('settings-agent-center__section');
+    const group = document.createElement('section');
+    group.className = 'settings-group settings-agent-center__section-group';
+    if (def.searchKey) {
+      group.dataset.settingsSearchKey = def.searchKey;
+    }
+
+    const headingRow = el('div', 'settings-agent-center__section-head');
+    const heading = el('h3', 'settings-group__title', def.title);
+    const count = el('span', 'settings-agent-center__section-count');
+    count.setAttribute('aria-hidden', 'true');
+    headingRow.append(heading, count);
+    group.appendChild(headingRow);
+
+    if (def.hint) {
+      group.appendChild(el('p', 'settings-group__lead', def.hint));
+    }
+
+    const groupBody = el('div', 'settings-group__body settings-agent-center__section');
+    group.appendChild(groupBody);
+    sectionsHost.appendChild(group);
 
     if (def.id === 'sub-agents') {
       await mountGlobalSubAgentLimits(groupBody);
     }
 
-    const grid = createAgentCenterGrid();
+    const grid = createAgentCenterGrid(def.id);
     groupBody.appendChild(grid);
     sectionGrids.set(def.id, grid);
-    sectionGroups.set(def.id, groupBody.closest('.settings-group') as HTMLElement);
+    sectionGroups.set(def.id, group);
+    sectionCountEls.set(def.id, count);
   }
 
   const applyFilter = (): void => {
     const query = search.value.trim().toLowerCase();
+    let visibleTotal = 0;
 
     for (const def of AGENT_CENTER_SECTIONS) {
       const grid = sectionGrids.get(def.id);
       const group = sectionGroups.get(def.id);
+      const countEl = sectionCountEls.get(def.id);
       if (!grid || !group) continue;
 
       grid.replaceChildren();
-      const filtered = allCards.filter(
-        (card) => card.kind === def.id && cardMatchesQuery(card, query),
-      );
+      const sectionCards = allCards.filter((card) => card.kind === def.id);
+      const filtered = sectionCards.filter((card) => cardMatchesQuery(card, query));
 
       const keepSectionVisible = def.id === 'sub-agents';
+
+      if (countEl) {
+        countEl.textContent = String(filtered.length);
+        countEl.hidden = !filtered.length && !keepSectionVisible;
+      }
 
       if (!filtered.length) {
         if (keepSectionVisible) {
           group.hidden = false;
           if (query) {
             grid.appendChild(
-              el('li', 'settings-field-hint', 'No sub-agent types match this search.'),
+              el('li', 'settings-agent-center__empty', 'No sub-agent types match this search.'),
             );
           }
         } else {
@@ -545,11 +605,20 @@ export async function renderAgentCenterPanel(
       }
 
       group.hidden = false;
+      visibleTotal += filtered.length;
       for (const card of filtered) {
         const item = document.createElement('li');
         item.appendChild(renderCardButton(card, agents));
         grid.appendChild(item);
       }
+    }
+
+    if (query) {
+      filterCount.hidden = false;
+      filterCount.textContent = `${visibleTotal} match${visibleTotal === 1 ? '' : 'es'}`;
+    } else {
+      filterCount.hidden = true;
+      filterCount.textContent = '';
     }
   };
 
