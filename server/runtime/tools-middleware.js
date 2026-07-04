@@ -49,6 +49,11 @@ import {
   toolManageBrain,
 } from '../tools/brain-tools.js';
 import {
+  toolGetSettings,
+  toolSearchSettings,
+  toolUpdateSettings,
+} from '../settings/tools.js';
+import {
   toolExplainSymbol,
   toolFindSymbol,
   toolReadSymbol,
@@ -1131,6 +1136,9 @@ const SERVER_TOOL_HANDLERS = {
   brain_append_log: toolBrainAppendLog,
   brain_ingest_source: toolBrainIngestSource,
   manage_brain: toolManageBrain,
+  search_settings: toolSearchSettings,
+  get_settings: toolGetSettings,
+  update_settings: toolUpdateSettings,
   save_memory: toolSaveMemory,
   board_provision_infra: toolBoardProvisionInfra,
   repo_map: toolRepoMap,
@@ -1278,6 +1286,16 @@ export function createToolsMiddleware() {
         if (planWriteBlock) {
           res.statusCode = 200;
           res.end(JSON.stringify({ result: planWriteBlock }));
+          return;
+        }
+
+        if (modeId === 'plan' && name === 'update_settings') {
+          res.statusCode = 200;
+          res.end(
+            JSON.stringify({
+              result: 'Error: Plan mode does not allow update_settings. Use launch_minnow_app to open Settings.',
+            }),
+          );
           return;
         }
 

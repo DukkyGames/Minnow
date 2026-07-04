@@ -54,6 +54,10 @@ export function blockPlanModeWrite(
   );
   if (normalized !== 'plan') return null;
 
+  if (toolName === 'update_settings') {
+    return 'Error: Plan mode does not allow update_settings. Use launch_minnow_app to open Settings.';
+  }
+
   if (PLAN_BLOCKED_WRITE_TOOLS.has(toolName)) {
     return `Error: Plan mode only allows writing markdown plans under ${ORCHESTRATE_PLANS_PREFIX}`;
   }

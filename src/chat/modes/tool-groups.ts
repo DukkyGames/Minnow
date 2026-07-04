@@ -91,6 +91,7 @@ export const TOOL_GROUP_IDS = {
     'save_memory',
   ],
   recall: ['recall_chat_context', 'recall_turn_full'],
+  settings: ['search_settings', 'get_settings', 'update_settings'],
   email: [
     'list_mail',
     'draft_reply',
@@ -140,6 +141,7 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'browser',
     'brain',
     'recall',
+    'settings',
     'impeccable',
   ],
   build: [
@@ -229,6 +231,7 @@ export const MODE_TOOL_DENY_OVERRIDES: Partial<Record<ModeId, readonly string[]>
     'move_file',
     'copy_file',
     'delete_path',
+    'update_settings',
   ],
   orchestrate: ['spawn_sub_agent', 'cancel_sub_agent'],
 };

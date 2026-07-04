@@ -1562,6 +1562,91 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'search_settings',
+    label: 'Search settings',
+    description:
+      'Search the Minnow Settings catalog by label or keyword. Returns field keys, types, and sensitivity — never secret values.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'search_settings',
+      'Find settings fields before reading or changing them. Use when the user mentions a setting but you are unsure of the canonical key.',
+      {
+        query: {
+          type: 'string',
+          description: 'Search text (matches label, key, keywords)',
+        },
+        category: {
+          type: 'string',
+          description: 'Optional filter: general, appearance, models, agents, integrations, advanced',
+        },
+        area: {
+          type: 'string',
+          description: 'Optional settings section id filter (e.g. search, tools, general)',
+        },
+      },
+      ['query'],
+    ),
+  },
+  {
+    id: 'get_settings',
+    label: 'Get settings',
+    description:
+      'Read current settings values by key or filter. Secret fields return [redacted] / configured flags only.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'get_settings',
+      'Read settings values. Provide keys OR category/area filters (mutually exclusive). Browser-only fields may require the Settings UI.',
+      {
+        keys: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Canonical settings keys from search_settings',
+        },
+        category: {
+          type: 'string',
+          description: 'Read all server-backed fields in a category',
+        },
+        area: {
+          type: 'string',
+          description: 'Read all server-backed fields in a settings section',
+        },
+      },
+    ),
+  },
+  {
+    id: 'update_settings',
+    label: 'Update settings',
+    description:
+      'Change Minnow Settings after user approval. Batch multiple keys in one call. Secret/dangerous fields require confirmed: true.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'update_settings',
+      'Apply settings changes. Always search_settings or get_settings first for unfamiliar keys. Summarize intended changes in chat before calling.',
+      {
+        changes: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              key: { type: 'string' },
+              value: {},
+            },
+            required: ['key', 'value'],
+          },
+          description: 'List of { key, value } patches',
+        },
+        confirmed: {
+          type: 'boolean',
+          description: 'Required true after approval for secret or dangerous fields',
+        },
+      },
+      ['changes'],
+    ),
+  },
+  {
     id: 'save_memory',
     label: 'Save memory',
     description:
