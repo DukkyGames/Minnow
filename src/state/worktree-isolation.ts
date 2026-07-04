@@ -7,6 +7,7 @@
 
 import { getAutopilotMetaSync } from '../config/autopilot-meta.ts';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path.ts';
+import { isMinnowSandboxWorkspacePath } from '../lib/workspace-sandbox.ts';
 import type { BoardTask, Chat, ChatGroup, OrchestrateBoardState } from '../types.ts';
 
 export type IsolationMode = 'off' | 'per-task' | 'per-wave';
@@ -176,7 +177,9 @@ export function resolveChatWorktreeRoot(
 
 /**
  * Tool workspace root for a chat: isolated worktree when present, otherwise the
- * board member chat's bound project workspace (never the live top-bar workspace).
+ * chat's bound sandbox (~/.minnow/workspace or ~/.minnow/chats) or board project
+ * workspace. Plain Code chats without a worktree return undefined so callers fall
+ * back to the live top-bar workspace.
  */
 export function resolveChatToolWorkspaceRoot(
   chat: Pick<Chat, 'worktreeRoot' | 'boardTaskId' | 'boardGroupId' | 'workspacePath'>,
@@ -184,9 +187,14 @@ export function resolveChatToolWorkspaceRoot(
 ): string | undefined {
   const worktree = resolveChatWorktreeRoot(chat, groups);
   if (worktree) return worktree;
-  if (!chat.boardGroupId?.trim()) return undefined;
+
   const ws = chat.workspacePath?.trim();
-  return ws ? normalizeWorkspacePath(ws) : undefined;
+  if (!ws) return undefined;
+  const normalized = normalizeWorkspacePath(ws);
+
+  if (chat.boardGroupId?.trim()) return normalized;
+  if (isMinnowSandboxWorkspacePath(normalized)) return normalized;
+  return undefined;
 }
 
 /**

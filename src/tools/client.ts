@@ -58,6 +58,7 @@ import { maybeBlockToolForUserApproval } from './permission-gate';
 import { getChatsWorkspacePath } from '../lib/chats-workspace';
 import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
 import { isDesktopChatActive } from '../os/desktop-state';
+import { resolveChatToolWorkspaceRoot } from '../state/worktree-isolation';
 import { isChatAppForeground } from '../ui/chat-mount';
 import { runWithFileTreeAutoRefresh } from '../ui/file-tree-auto-refresh';
 import { executeWithResultCache } from './result-cache';
@@ -639,7 +640,7 @@ async function executeStreamingCodeTool(
   }
 
   const workspaceRoot =
-    context.workspaceRoot?.trim() || (await resolveToolWorkspaceRoot());
+    context.workspaceRoot?.trim() || (await resolveToolWorkspaceRoot(context));
   const relativeCwd =
     name === 'execute_command' && typeof args.cwd === 'string'
       ? args.cwd.trim()
@@ -671,9 +672,18 @@ async function executeStreamingCodeTool(
   }
 }
 
-/** Chats sandbox root when legacy Chat app is foreground; desktop workspace when desktop chat is active. */
-/** Desktop or chats sandbox root when chat UI is foreground; otherwise server default workspace. */
-async function resolveToolWorkspaceRoot(): Promise<string | undefined> {
+/** Resolve tool workspace from chat binding, then desktop/chat UI foreground, else server default. */
+async function resolveToolWorkspaceRoot(
+  context?: ExecuteToolContext,
+): Promise<string | undefined> {
+  const chatId = context?.chatId?.trim();
+  if (chatId && sessionState) {
+    const chat = findChatById(chatId);
+    if (chat) {
+      const scoped = resolveChatToolWorkspaceRoot(chat, sessionState.groups);
+      if (scoped) return scoped;
+    }
+  }
   if (isDesktopChatActive()) {
     const path = await getDesktopWorkspacePath();
     return path ?? undefined;
@@ -692,7 +702,7 @@ async function executeServerTool(
 ): Promise<ToolExecutionResult> {
   let response: Response;
   const workspaceRoot =
-    context?.workspaceRoot?.trim() || (await resolveToolWorkspaceRoot());
+    context?.workspaceRoot?.trim() || (await resolveToolWorkspaceRoot(context));
   const payload: {
     name: string;
     args: Record<string, unknown>;
