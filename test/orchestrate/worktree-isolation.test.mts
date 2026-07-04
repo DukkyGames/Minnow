@@ -237,6 +237,26 @@ describe('resolveChatToolWorkspaceRoot', () => {
       undefined,
     );
   });
+
+  test('uses desktop sandbox workspace for desktop chats without board linkage', () => {
+    assert.equal(
+      resolveChatToolWorkspaceRoot(
+        { workspacePath: 'C:/Users/me/.minnow/workspace' },
+        [],
+      ),
+      'c:/users/me/.minnow/workspace',
+    );
+  });
+
+  test('uses chats sandbox workspace for legacy assistant chats', () => {
+    assert.equal(
+      resolveChatToolWorkspaceRoot(
+        { workspacePath: '/home/user/.minnow/chats' },
+        [],
+      ),
+      '/home/user/.minnow/chats',
+    );
+  });
 });
 
 describe('dev port allocation', () => {
