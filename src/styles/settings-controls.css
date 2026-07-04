@@ -372,6 +372,33 @@
   max-width: 140px;
 }
 
+.settings-kv--row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: auto auto;
+  grid-auto-columns: max-content;
+  width: max-content;
+  max-width: 100%;
+  gap: 6px 20px;
+  align-items: end;
+  justify-content: start;
+  justify-items: start;
+}
+
+.settings-kv--row .settings-kv__term {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.settings-kv--row .settings-kv__value {
+  min-width: 0;
+}
+
+.settings-kv--row .settings-kv__value .settings-kv-input {
+  width: auto;
+  max-width: 7.5rem;
+}
+
 .settings-kv-input-wrap {
   display: inline-flex;
   align-items: center;
@@ -919,6 +946,14 @@ label.settings-action-btn {
 
   .settings-kv {
     grid-template-columns: 1fr;
+  }
+
+  .settings-kv--row {
+    width: 100%;
+    grid-auto-flow: row;
+    grid-template-columns: minmax(9rem, 38%) 1fr;
+    grid-template-rows: unset;
+    gap: 10px 16px;
   }
 }
 
