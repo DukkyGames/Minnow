@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
+import { normalizeWorkspacePath } from '../../src/lib/normalize-workspace-path.ts';
 import {
   resetAutopilotMetaCache,
   setAutopilotMetaForTests,
@@ -239,12 +240,10 @@ describe('resolveChatToolWorkspaceRoot', () => {
   });
 
   test('uses desktop sandbox workspace for desktop chats without board linkage', () => {
+    const desktopWs = 'C:/Users/me/.minnow/workspace';
     assert.equal(
-      resolveChatToolWorkspaceRoot(
-        { workspacePath: 'C:/Users/me/.minnow/workspace' },
-        [],
-      ),
-      'c:/users/me/.minnow/workspace',
+      resolveChatToolWorkspaceRoot({ workspacePath: desktopWs }, []),
+      normalizeWorkspacePath(desktopWs),
     );
   });
 
