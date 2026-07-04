@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 
+import { normalizeWorkspacePath } from '../../src/lib/normalize-workspace-path.ts';
 import { buildComposeContext } from '../../src/chat/prompts/compose-context.ts';
 import {
   registerPromptFilesFromRaw,
@@ -150,7 +151,7 @@ describe('buildComposeContext cwd', () => {
     const desktopWs = 'C:/Users/me/.minnow/workspace';
     const chat = baseChat({ modeId: 'desktop', workspacePath: desktopWs });
     const ctx = await buildComposeContext(chat);
-    assert.equal(ctx.cwd, 'c:/users/me/.minnow/workspace');
+    assert.equal(ctx.cwd, normalizeWorkspacePath(desktopWs));
     assert.notEqual(ctx.cwd, MAIN_REPO);
   });
 
