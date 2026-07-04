@@ -263,6 +263,9 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
   test('no marker and no verdict still fails', async () => {
     const group = makeGroup({ 'W1-A': 'testing' });
     const planner = makePlanner();
+    // Fail-routing goes through runSelfHeal, which requires a running board.
+    group.orchestrateBoard!.executionMode = 'afk';
+    group.orchestrateBoard!.autoRunning = true;
     const testChat: Chat = {
       id: TEST_CHAT_ID,
       name: 'Test',
@@ -289,6 +292,8 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
   test('retry persists the failure-aware builder seed on the task', async () => {
     const group = makeGroup({ 'W1-A': 'testing' });
     const planner = makePlanner();
+    group.orchestrateBoard!.executionMode = 'afk';
+    group.orchestrateBoard!.autoRunning = true;
     updateTask(
       group,
       'W1-A',
@@ -307,20 +312,36 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
   });
 
   test('third fail quarantines via self-heal (Phase 2)', async () => {
-    const group = makeGroup({ 'W1-A': 'testing' });
-    const planner = makePlanner();
-    updateTask(
-      group,
-      'W1-A',
-      { testAttempts: 2, testVerdict: 'fail', testSummary: 'still broken' },
-      planner,
+    // Running board delivers a quarantined report async — stub the deliverer so
+    // the in-flight delivery settles before the next test installs its own hook.
+    const { setOrchestratorReportDeliverHook } = await import(
+      '../../src/agents/controller/report.ts'
     );
-    const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
-    await finalizeTaskTestingOnStreamEnd(group, task, planner);
-    const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
-    // Phase 2: exhausted test attempts are quarantined by self-heal (not left as blocked).
-    assert.equal(updated!.status, 'quarantined');
-    assert.match(updated!.error ?? updated!.quarantine?.summary ?? '', /still broken/);
+    setOrchestratorReportDeliverHook(async () => {});
+    try {
+      // Uses W1-B: the transit through `blocked` consumes the module-level
+      // `<task>:stalled` report dedup key, which the afk test below asserts
+      // on for W1-A.
+      const group = makeGroup({ 'W1-B': 'testing' });
+      const planner = makePlanner();
+      group.orchestrateBoard!.executionMode = 'afk';
+      group.orchestrateBoard!.autoRunning = true;
+      updateTask(
+        group,
+        'W1-B',
+        { testAttempts: 2, testVerdict: 'fail', testSummary: 'still broken' },
+        planner,
+      );
+      const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-B')!;
+      await finalizeTaskTestingOnStreamEnd(group, task, planner);
+      const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-B')!;
+      // Phase 2: exhausted test attempts are quarantined by self-heal (not left as blocked).
+      assert.equal(updated!.status, 'quarantined');
+      assert.match(updated!.error ?? updated!.quarantine?.summary ?? '', /still broken/);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    } finally {
+      setOrchestratorReportDeliverHook(null);
+    }
   });
 
   test('afk mode third fail blocks and delivers stalled report', async () => {

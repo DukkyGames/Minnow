@@ -14,8 +14,10 @@ import {
 import { resetAutopilotMetaCache, setAutopilotMetaForTests } from '../../src/config/autopilot-meta.ts';
 import {
   autoDelegateNext,
+  clearStallStoppedChatIdsForTests,
   clearTaskChatStallRestartsForTests,
   continueBoardTask,
+  isStallStoppedChatForTests,
   enqueueMergeCompletedTaskWorktreeForTests,
   finalizeBoardTaskOnStreamEnd,
   getTaskChatStallRestartCountForTests,
@@ -28,6 +30,7 @@ import {
   startBoardAutoRun,
   startTaskChatSupervisionForTests,
   stopBoardAutoRun,
+  trackFixerStallStopsForTests,
   trackReconcileMergingTasksCallsForTests,
   trackTaskChatStallRecoveryCallsForTests,
   triggerFixerStallReconcileForTests,
@@ -301,7 +304,9 @@ beforeEach(() => {
 
   resetWrapperState();
   clearTaskChatStallRestartsForTests();
+  clearStallStoppedChatIdsForTests();
   trackTaskChatStallRecoveryCallsForTests(false);
+  trackFixerStallStopsForTests(false);
 
   setAutopilotMetaForTests({
     progressStallMs: PROGRESS_STALL_MS,
@@ -315,7 +320,9 @@ afterEach(() => {
   resetWrapperState();
   resetAutopilotMetaCache();
   clearTaskChatStallRestartsForTests();
+  clearStallStoppedChatIdsForTests();
   trackTaskChatStallRecoveryCallsForTests(false);
+  trackFixerStallStopsForTests(false);
 });
 
 describe('Fix A — merge-fixer unified stall recovery', () => {
@@ -370,12 +377,13 @@ describe('Fix A — merge-fixer unified stall recovery', () => {
     assert.equal(fetchCalls, 0, 'heartbeat must not call /api/worktree');
   });
 
-  test('stall at 3x triggers nudge without finalizing', async () => {
+  test('fixer stall at 3x stops the turn only — no nudge, no direct self-heal', async () => {
     const group = makeMergeGroup();
     const fixerChat = makeMergeFixerChat();
     seedMergingTask(group, fixerChat);
 
     trackTaskChatStallRecoveryCallsForTests(true);
+    const stallStops = trackFixerStallStopsForTests(true);
     startTaskChatSupervisionForTests(MERGE_FIXER_CHAT_ID);
     const runId = chatTaskRunId(MERGE_FIXER_CHAT_ID);
     bumpProgress(runId);
@@ -385,33 +393,25 @@ describe('Fix A — merge-fixer unified stall recovery', () => {
 
     const { nudges, selfHeals } = trackTaskChatStallRecoveryCallsForTests(false);
     const task = group.orchestrateBoard!.tasks.find((t) => t.id === MERGE_TASK_ID)!;
-    assert.deepEqual(nudges, [MERGE_TASK_ID], 'first stall should nudge the fixer task');
-    assert.equal(selfHeals.length, 0, 'first stall must not self-heal');
-    assert.equal(task.status, 'merging', 'nudge must not finalize');
-    assert.equal(getTaskChatStallRestartCountForTests(MERGE_FIXER_CHAT_ID), 1);
-  });
-
-  test('second stall triggers merge-phase self-heal', async () => {
-    const group = makeMergeGroup();
-    const fixerChat = makeMergeFixerChat();
-    seedMergingTask(group, fixerChat);
-
-    trackTaskChatStallRecoveryCallsForTests(true);
-    startTaskChatSupervisionForTests(MERGE_FIXER_CHAT_ID);
-    const runId = chatTaskRunId(MERGE_FIXER_CHAT_ID);
-    bumpProgress(runId);
-
-    now = STALL_THRESHOLD_MS + 100;
-    tickHeartbeatForTests(runId);
-
-    startTaskChatSupervisionForTests(MERGE_FIXER_CHAT_ID);
-    bumpProgress(runId);
-    now += STALL_THRESHOLD_MS + 100;
-    tickHeartbeatForTests(runId);
-
-    const { nudges, selfHeals } = trackTaskChatStallRecoveryCallsForTests(false);
-    assert.equal(nudges.length, 1, 'only the first stall should nudge');
-    assert.deepEqual(selfHeals, [MERGE_TASK_ID], 'second stall should self-heal merge phase');
+    assert.deepEqual(
+      stallStops,
+      [{ taskId: MERGE_TASK_ID, chatId: MERGE_FIXER_CHAT_ID }],
+      'fixer stall must be recorded as a stall-stop',
+    );
+    assert.equal(nudges.length, 0, 'fixer stall must not nudge — the finalizer owns recovery');
+    assert.equal(selfHeals.length, 0, 'fixer stall must not self-heal directly');
+    assert.equal(task.status, 'merging', 'stall-stop must not finalize');
+    assert.equal(
+      getTaskChatStallRestartCountForTests(MERGE_FIXER_CHAT_ID),
+      0,
+      'fixer stall-stop must not consume a nudge-restart slot',
+    );
+    assert.equal(
+      isStallStoppedChatForTests(MERGE_FIXER_CHAT_ID),
+      true,
+      'chat must be marked so the stream-end preserves supervision state',
+    );
+    trackFixerStallStopsForTests(false);
   });
 });
 
@@ -567,7 +567,7 @@ describe('Fix C — env-fixer unified stall recovery', () => {
     teardownDom();
   });
 
-  test('env-fixer stall at 3x triggers nudge with stall counter', () => {
+  test('env-fixer stall at 3x stops the turn only — finalizer owns recovery', () => {
     const group = makeGroup();
     seedEnvFixerTask(group);
     const board = group.orchestrateBoard!;
@@ -581,6 +581,7 @@ describe('Fix C — env-fixer unified stall recovery', () => {
     );
 
     trackTaskChatStallRecoveryCallsForTests(true);
+    const stallStops = trackFixerStallStopsForTests(true);
     startTaskChatSupervisionForTests(FIXER_CHAT_ID);
 
     const runId = chatTaskRunId(FIXER_CHAT_ID);
@@ -590,13 +591,19 @@ describe('Fix C — env-fixer unified stall recovery', () => {
     tickHeartbeatForTests(runId);
 
     const { nudges, selfHeals } = trackTaskChatStallRecoveryCallsForTests(false);
-    assert.deepEqual(nudges, [TASK_ID], 'env-fixer stall should nudge the task');
-    assert.equal(selfHeals.length, 0, 'first env-fixer stall must not self-heal');
+    assert.deepEqual(
+      stallStops,
+      [{ taskId: TASK_ID, chatId: FIXER_CHAT_ID }],
+      'env-fixer stall must be recorded as a stall-stop',
+    );
+    assert.equal(nudges.length, 0, 'env-fixer stall must not nudge (double-dispatch race)');
+    assert.equal(selfHeals.length, 0, 'env-fixer stall must not self-heal directly');
     assert.equal(
       getTaskChatStallRestartCountForTests(FIXER_CHAT_ID),
-      1,
-      'env-fixer stall should increment the unified stall-restart counter',
+      0,
+      'env-fixer stall-stop must not consume a nudge-restart slot',
     );
+    trackFixerStallStopsForTests(false);
   });
 });
 
