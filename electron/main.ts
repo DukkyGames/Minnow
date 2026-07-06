@@ -179,6 +179,8 @@ async function createMainWindow(): Promise<BrowserWindow> {
       contextIsolation: true,
       nodeIntegration: false,
       webviewTag: false,
+      // Keep AFK board/chat timers + SSE delivery alive when the display sleeps.
+      backgroundThrottling: false,
     },
   });
 

@@ -30,6 +30,7 @@ import {
   chatTaskRunId,
   resetHeartbeatBaselines,
   resetWrapperState,
+  simulatePageVisibilityForTests,
   tickHeartbeatForTests,
 } from '../../src/agents/controller/wrapper.ts';
 import type { Chat, ChatGroup, OrchestrateBoardState } from '../../src/types.ts';
@@ -432,5 +433,31 @@ describe('board task-chat stall detection', () => {
 
     // Should not crash and should not trigger stall (null progress = guard returns early)
     tickHeartbeatForTests(runId);
+  });
+
+  test('hidden page past stall threshold does not nudge or stop', () => {
+    const planner = makePlanner();
+    const taskChat = makeTaskChat();
+    const group = makeGroup('afk');
+
+    setSessionStateForTests({
+      version: 5,
+      activeId: PLANNER_ID,
+      chats: [planner, taskChat],
+      groups: [group],
+    });
+
+    trackTaskChatStallRecoveryCallsForTests(true);
+    startTaskChatSupervisionForTests(TASK_CHAT_ID);
+    const runId = chatTaskRunId(TASK_CHAT_ID);
+
+    bumpProgress(runId);
+    simulatePageVisibilityForTests('hidden');
+    now = STALL_THRESHOLD_MS + 100;
+    tickHeartbeatForTests(runId);
+
+    const { nudges } = trackTaskChatStallRecoveryCallsForTests(false);
+    assert.deepEqual(nudges, [], 'stall watchdog must not fire while the page is hidden');
+    assert.equal(getTaskChatStallRestartCountForTests(TASK_CHAT_ID), 0);
   });
 });

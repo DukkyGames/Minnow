@@ -1,5 +1,6 @@
 /**
  * Auto-pilot orchestrator reports — task lifecycle messages to the planner chat (MIN-140 Phase 4).
+ * Reports append silently to planner history (no LLM turn); plan-complete fires one wrap-up turn.
  */
 
 import type { RunLifecycle } from '../types';
@@ -7,30 +8,50 @@ import {
   isChatStreaming,
   subscribeChatStreamEnd,
 } from '../../chat/streaming-state';
+import { reportBackgroundError } from '../../boot/report-background-error.ts';
+import { isDomAvailable } from '../../lib/dom-available.ts';
 import { getPlannerChatForGroup } from '../../state/chat-groups';
 import { isBoardAutoMode, isBoardRunning } from '../../state/orchestrate-board-store';
-import { findChatById, sessionState } from '../../state/sessions';
+import {
+  findChatById,
+  scheduleSaveSessions,
+  sessionState,
+  touchChat,
+} from '../../state/sessions';
 import type { BoardTask, BoardTaskStatus, Chat, ChatGroup } from '../../types';
 
-export type OrchestratorTaskReportKind = 'completed' | 'stalled' | 'failed' | 'quarantined';
+export type OrchestratorTaskReportKind = 'completed' | 'failed' | 'stalled' | 'quarantined';
 
 type DeliverFn = (chatId: string, message: string, reportKey: string) => Promise<void>;
 
 const deliveredReportKeys = new Set<string>();
-const resumeInFlightByChat = new Set<string>();
-const pendingReportsByChat = new Map<string, Array<{ message: string; key: string }>>();
+const pendingPlannerReports = new Map<string, Array<{ message: string; key: string }>>();
 
 let reportInitialized = false;
 let deliverHook: DeliverFn | null = null;
 let unsubscribeStreamEnd: (() => void) | null = null;
 
-/** Tests: capture delivery without running the full chat loop. */
+/** Tests: capture delivery without touching planner history. */
 export function setOrchestratorReportDeliverHook(fn: DeliverFn | null): void {
   deliverHook = fn;
 }
 
-function reportKey(taskId: string, kind: OrchestratorTaskReportKind): string {
-  return `${taskId}:${kind}`;
+/** Clear dedupe keys for a task so requeue can re-emit lifecycle reports. */
+export function clearOrchestratorReportDedupeForTask(taskId: string): void {
+  const prefix = `${taskId}:`;
+  for (const key of deliveredReportKeys) {
+    if (key.startsWith(prefix)) {
+      deliveredReportKeys.delete(key);
+    }
+  }
+}
+
+function reportKey(
+  taskId: string,
+  kind: OrchestratorTaskReportKind,
+  round: number,
+): string {
+  return `${taskId}:${kind}:${round}`;
 }
 
 function summarizeTaskChat(task: BoardTask): string {
@@ -88,49 +109,24 @@ export function buildOrchestratorTaskReportMessage(
     }
     lines.push(
       '',
-      'Use `board_get_state` for the full board. This task is quarantined; its transitive dependents are also quarantined.',
-      'The autonomous self-heal loop is exhausted — for infra failures an env-fixer sub-agent already attempted a repair and could not unblock it.',
-      'Record the root cause and the resolution steps on the task via `board_update_task` (`error` / `notes`) and summarize the blocker here. Do not ask the user — they will Requeue after addressing it.',
-      'Independent siblings continue running.',
+      'Self-heal is exhausted for this task; its transitive dependents are also quarantined.',
+      'For infra failures an env-fixer sub-agent already attempted a repair and could not unblock it.',
+      'Independent siblings continue running. Requeue from the board after addressing the resolution steps.',
     );
   } else if (kind === 'stalled') {
     lines.push(
       '',
-      'Use `board_get_state` for the full board. This task is blocked after exhausting its automatic retries.',
-      'The auto-pilot already retried programmatically (and, for env failures, ran an env-fixer). You have no tool to re-run it yourself — record the root cause via `board_update_task` and summarize the blocker here. Never wait for the user.',
+      'This task is blocked after exhausting its automatic retries.',
+      'The auto-pilot already retried programmatically (and, for env failures, ran an env-fixer).',
       'Auto-pilot continues starting other ready tasks where possible.',
     );
   } else {
     lines.push(
       '',
-      'Use `board_get_state` for the full board. Auto-pilot starts the next ready planned tasks automatically.',
+      'Auto-pilot starts the next ready planned tasks automatically.',
     );
   }
   return lines.join('\n');
-}
-
-function enqueuePendingReport(chatId: string, message: string, key: string): void {
-  const queue = pendingReportsByChat.get(chatId) ?? [];
-  if (queue.some((entry) => entry.key === key)) return;
-  queue.push({ message, key });
-  pendingReportsByChat.set(chatId, queue);
-}
-
-async function drainPendingReports(plannerChat: Chat): Promise<void> {
-  if (resumeInFlightByChat.has(plannerChat.id)) return;
-  if (isChatStreaming(plannerChat.id)) return;
-
-  const queue = pendingReportsByChat.get(plannerChat.id);
-  if (!queue?.length) return;
-
-  const next = queue.shift()!;
-  if (!queue.length) {
-    pendingReportsByChat.delete(plannerChat.id);
-  } else {
-    pendingReportsByChat.set(plannerChat.id, queue);
-  }
-
-  await deliverReport(plannerChat, next.message, next.key);
 }
 
 async function defaultDeliver(
@@ -140,8 +136,35 @@ async function defaultDeliver(
 ): Promise<void> {
   const chat = findChatById(chatId);
   if (!chat) return;
-  const { resumeParentChatWithMessage } = await import('../../tools/loop');
-  await resumeParentChatWithMessage(chat, message, { suppressUserEcho: true });
+  chat.history.push({ role: 'assistant', content: message });
+  touchChat(chat);
+  scheduleSaveSessions();
+
+  if (!isDomAvailable()) return;
+  const activeId = sessionState?.activeId;
+  const active = activeId ? findChatById(activeId) : undefined;
+  if (active && (active.id === chat.id || active.boardGroupId === chat.boardGroupId)) {
+    try {
+      const { renderChatFromHistory } = await import('../../ui/messages.ts');
+      renderChatFromHistory(active);
+    } catch (err) {
+      reportBackgroundError('orchestrator-report-render', err);
+    }
+  }
+}
+
+async function flushDeliverReport(
+  plannerChat: Chat,
+  message: string,
+  key: string,
+): Promise<void> {
+  if (deliveredReportKeys.has(key)) return;
+  const deliver = deliverHook ?? defaultDeliver;
+  try {
+    await deliver(plannerChat.id, message, key);
+  } finally {
+    deliveredReportKeys.add(key);
+  }
 }
 
 async function deliverReport(
@@ -150,38 +173,31 @@ async function deliverReport(
   key: string,
 ): Promise<void> {
   if (deliveredReportKeys.has(key)) return;
-  if (resumeInFlightByChat.has(plannerChat.id)) {
-    enqueuePendingReport(plannerChat.id, message, key);
-    return;
-  }
+
   if (isChatStreaming(plannerChat.id)) {
-    enqueuePendingReport(plannerChat.id, message, key);
+    let queue = pendingPlannerReports.get(plannerChat.id);
+    if (!queue) {
+      queue = [];
+      pendingPlannerReports.set(plannerChat.id, queue);
+    }
+    queue.push({ message, key });
     return;
   }
 
-  resumeInFlightByChat.add(plannerChat.id);
-  try {
-    const deliver = deliverHook ?? defaultDeliver;
-    await deliver(plannerChat.id, message, key);
-    deliveredReportKeys.add(key);
-  } catch (err) {
-    const messageText = err instanceof Error ? err.message : String(err);
-    const transient =
-      messageText.includes('Failed to fetch') || messageText.includes('NetworkError');
-    if (transient) {
-      await new Promise((r) => setTimeout(r, 1500));
-      try {
-        const deliver = deliverHook ?? defaultDeliver;
-        await deliver(plannerChat.id, message, key);
-        deliveredReportKeys.add(key);
-      } catch {
-        /* next event may retry */
-      }
+  await flushDeliverReport(plannerChat, message, key);
+}
+
+function flushPendingPlannerReports(plannerId: string): void {
+  const queue = pendingPlannerReports.get(plannerId);
+  if (!queue?.length) return;
+  pendingPlannerReports.delete(plannerId);
+  const planner = findChatById(plannerId);
+  if (!planner) return;
+  void (async () => {
+    for (const item of queue) {
+      await flushDeliverReport(planner, item.message, item.key);
     }
-  } finally {
-    resumeInFlightByChat.delete(plannerChat.id);
-    void drainPendingReports(plannerChat);
-  }
+  })();
 }
 
 function mapStatusToReportKind(
@@ -205,8 +221,7 @@ export async function deliverOrchestratorTaskReport(
   const kind = mapStatusToReportKind(status);
   if (!kind) return;
 
-  // Deliver the report copy (deduped internally by deliveredReportKeys).
-  const key = reportKey(task.id, kind);
+  const key = reportKey(task.id, kind, task.selfHealRound ?? 0);
   const message = buildOrchestratorTaskReportMessage(task, kind, status);
   await deliverReport(plannerChat, message, key);
 
@@ -232,13 +247,17 @@ function resolveBoardContextFromTaskChat(
   return null;
 }
 
-/** Subscribe once for stream-end flush hooks (planner idle reports). */
+/** Subscribe once for stream-end delivery when a task chat settles. */
 export function initOrchestratorAutoReports(): void {
   if (reportInitialized) return;
   reportInitialized = true;
 
   unsubscribeStreamEnd?.();
   unsubscribeStreamEnd = subscribeChatStreamEnd((endedChatId) => {
+    if (pendingPlannerReports.has(endedChatId)) {
+      flushPendingPlannerReports(endedChatId);
+    }
+
     const ctx = resolveBoardContextFromTaskChat(endedChatId);
     if (ctx) {
       const { group, planner, task } = ctx;
@@ -246,21 +265,7 @@ export function initOrchestratorAutoReports(): void {
         void deliverOrchestratorTaskReport(group, planner, task, task.status);
       }
     }
-
-    if (!sessionState) return;
-    for (const group of sessionState.groups ?? []) {
-      if (!isBoardRunning(group)) continue;
-      const planner = getPlannerChatForGroup(group);
-      if (!planner || planner.id !== endedChatId) continue;
-      void drainPendingReports(planner);
-    }
   });
-}
-
-/** Drop queued reports for a chat (e.g. on Stop) so a stopped planner stream doesn't trigger a new turn. */
-export function clearPendingReportsForChat(chatId: string): void {
-  pendingReportsByChat.delete(chatId);
-  resumeInFlightByChat.delete(chatId);
 }
 
 /** Test reset. */
@@ -270,6 +275,5 @@ export function resetOrchestratorAutoReportsForTests(): void {
   reportInitialized = false;
   deliverHook = null;
   deliveredReportKeys.clear();
-  resumeInFlightByChat.clear();
-  pendingReportsByChat.clear();
+  pendingPlannerReports.clear();
 }

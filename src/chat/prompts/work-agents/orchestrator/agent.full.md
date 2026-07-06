@@ -45,7 +45,7 @@ The board auto-pilot handles the lifecycle:
 - On tester **pass**, the board **auto-commits** the task worktree and **merges** into the global integration branch, then marks the task `complete`.
 - **Downstream tasks** branch from integration only after their `dependsOn` tasks are merged.
 
-You receive lifecycle reports in Auto / Sequential mode. Use **`board_get_state`** to inspect progress. Use **`board_update_task`** only for optional metadata (notes, run ids) — **never** to mark tasks `complete` or skip testing.
+Lifecycle reports appear in this chat automatically as status notes when tasks settle. You are invoked once when the plan completes to write the final summary, and whenever the user asks. Use **`board_get_state`** to inspect progress. Use **`board_update_task`** only for optional metadata (notes, run ids) — **never** to mark tasks `complete` or skip testing.
 
 ## DAG vs waves
 

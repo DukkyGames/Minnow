@@ -67,6 +67,8 @@ All board-linked chats (builder, tester, merge fixer, env fixer, final integrati
 - Active fixer → re-attach `startTaskChatSupervision`
 - Dead fixer (no live stream) → **`finalizeMergeFixerOnStreamEnd`** (reads `boardReport` / legacy fields; does not depend on heartbeat git success)
 
+**Git fallback in `finalizeMergeFixerOnStreamEnd`:** When the fixer dies without calling `board_report` (OOM/crash), stream-end still runs **`tryCompleteVerifiedMerge`** (`check_merged` + `verify_integration`) before retry/self-heal. Recovery-only — does not replace the normal `board_report` pass path.
+
 Call sites unchanged: top of `autoDelegateNext`, `waitForNoActiveFixer` timeout (60s), boot `recoverInterruptedMergesAfterReload`, manual **`recoverMergingBoardTask`**.
 
 A per-task **`fixerFinalizeInFlight`** set still prevents double-finalize races when stream-end and reconcile overlap.

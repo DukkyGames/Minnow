@@ -4,6 +4,7 @@
  */
 
 import { patchMainTurnActivity } from '../chat/main-turn-activity.ts';
+import { notifyChatStreamActivity } from '../chat/streaming-state.ts';
 import { normalizeModeId } from '../chat/modes/types.ts';
 import {
   logBoardTerminalRun,
@@ -235,6 +236,7 @@ export async function runChatToolBatch(
   const area = getActiveChatMountElement();
 
   patchMainTurnActivity(chat.id, { phase: 'tools' });
+  notifyChatStreamActivity(chat.id);
 
   for (const tc of toolCalls) {
     const { args } = parseToolArguments(tc.function.arguments, { constrained });
@@ -285,11 +287,13 @@ export async function runChatToolBatch(
           phase: 'tools',
           currentTool: parallelAggregateLabel,
         });
+        notifyChatStreamActivity(chat.id);
       } else {
         parallelAggregateLabel = null;
       }
     },
     onToolStart: (tc) => {
+      notifyChatStreamActivity(chat.id);
       if (!parallelAggregateLabel) {
         patchMainTurnActivity(chat.id, {
           phase: 'tools',
