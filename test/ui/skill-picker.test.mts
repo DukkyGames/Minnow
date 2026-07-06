@@ -11,7 +11,6 @@ const { refreshSkillCatalog } = await import('../../src/skills/client.ts');
 const { listSlashPickerRows } = await import('../../src/chat/slash-commands/picker-catalog.ts');
 const {
   __resetSkillPickerForTests,
-  handleSkillPickerKeydown,
   initComposerSlashPicker,
   isSkillPickerOpen,
 } = await import('../../src/ui/skill-picker.ts');
@@ -98,10 +97,6 @@ describe('skill-picker', () => {
 
     const input = mountComposer('arrowNavInput', 'input-wrap');
     initComposerSlashPicker(input);
-    // Code / Chat app / desktop composers call handleSkillPickerKeydown from their keydown handler.
-    input.addEventListener('keydown', (e) => {
-      handleSkillPickerKeydown(e);
-    });
 
     input.focus();
     input.value = '/';

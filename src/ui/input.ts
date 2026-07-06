@@ -1,5 +1,5 @@
 import { scrollChatIfPinned } from './chat-scroll';
-import { handleSkillPickerKeydown, isSkillPickerOpen } from './skill-picker';
+import { isSkillPickerOpen } from './skill-picker';
 
 import {
   handleComposerPrimaryAction,
@@ -47,7 +47,6 @@ export function initComposerInput(el: HTMLTextAreaElement): void {
 }
 
 export function handleKey(e: KeyboardEvent): void {
-  if (handleSkillPickerKeydown(e)) return;
   if (e.key === 'Enter' && !e.shiftKey) {
     if (isSkillPickerOpen()) return;
     e.preventDefault();

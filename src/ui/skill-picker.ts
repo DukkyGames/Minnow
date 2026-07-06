@@ -633,8 +633,19 @@ export function initComposerSlashPicker(composerInput: HTMLTextAreaElement): voi
     detectSlashContext();
   });
 
-  // Keydown is handled by each composer's outer handler (handleKey / chat-app / concierge)
-  // so ArrowDown/Up are not processed twice when the slash picker is open.
+  // Capture phase runs before inline onkeydown (e.g. handleKey on #msgInput) so picker keys
+  // are handled once; stopImmediatePropagation prevents a second handleSkillPickerKeydown
+  // pass that could skip two rows or send after Enter selection.
+  composerInput.addEventListener(
+    'keydown',
+    (e) => {
+      if (inputEl !== composerInput) bindActiveInput(composerInput);
+      if (handleSkillPickerKeydown(e)) {
+        e.stopImmediatePropagation();
+      }
+    },
+    true,
+  );
 
   composerInput.addEventListener('blur', () => {
     window.setTimeout(() => closePicker(), 150);
