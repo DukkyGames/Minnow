@@ -496,7 +496,7 @@ export async function sendMessage(): Promise<void> {
   };
 
   const thinkingTracker = new ThinkingDurationTracker((elapsedMs) => {
-    streamStatus.setThinkingElapsed(elapsedMs);
+    thoughtController.setThinkingElapsed(elapsedMs);
   });
 
   const thoughtController = new ThoughtBubbleController(wrap, {

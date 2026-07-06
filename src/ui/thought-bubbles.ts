@@ -1,18 +1,14 @@
 /**
- * Live thought bubbles during reasoning streams and a per-message "Thoughts" panel
- * after the assistant reply completes.
+ * Collapsible reasoning UI: collapsed "Thinking…" indicator while streaming,
+ * expand-to-read full prose; per-message toggle after the assistant reply completes.
  */
 
 import { scrollChatIfPinned } from './chat-scroll';
 import { splitThinkingSegments } from '../api/reasoning';
 import { formatThinkingDuration } from './thinking-duration';
 
-/** Milliseconds between typewriter steps when catching up long text. */
-const TYPEWRITER_STEP_MS = 28;
-/** Max characters to reveal per tick (keeps long thoughts responsive). */
-const TYPEWRITER_CHARS_PER_TICK = 4;
-/** How long a completed thought stays fully visible before fading into the next one. */
-const THOUGHT_GAP_MS = 1000;
+/** Label shown on the live collapsed thinking row. */
+const LIVE_THINKING_LABEL = 'Thinking…';
 
 /** Optional hooks so the parent row can sync stream-status labels with reasoning. */
 export interface ThoughtPhaseCallbacks {
@@ -21,8 +17,8 @@ export interface ThoughtPhaseCallbacks {
 }
 
 /**
- * Controller for one user send: one live bubble at a time, paragraph boundaries
- * finalize a thought; `endReasoningPhase` flushes the open segment when prose starts.
+ * Controller for one user send: accumulates reasoning internally, shows a compact
+ * collapsed indicator by default, and reveals prose only when the user expands.
  */
 export class ThoughtBubbleController {
   /** Segments finalized by `\n\n` or by `endReasoningPhase` / `flushOpen`. */
@@ -36,21 +32,19 @@ export class ThoughtBubbleController {
 
   private stageEl: HTMLDivElement | null = null;
 
-  private bubbleEl: HTMLDivElement | null = null;
+  private toggleBtn: HTMLButtonElement | null = null;
 
-  private textEl: HTMLSpanElement | null = null;
+  private caretEl: HTMLSpanElement | null = null;
 
-  private cursorEl: HTMLSpanElement | null = null;
+  private flowEl: HTMLDivElement | null = null;
 
-  private typeTimer: ReturnType<typeof setInterval> | null = null;
+  private flowTextEl: HTMLPreElement | null = null;
 
-  /** Holds the inter-thought pause; cleared on `abort`. */
-  private gapTimer: ReturnType<typeof setTimeout> | null = null;
+  /** User-expanded state for the live reasoning row (collapsed by default). */
+  private expanded = false;
 
-  /** Serializes “show full thought → gap → fade” so rapid `\n\n` splits stay ordered. */
-  private tailWork: Promise<void> = Promise.resolve();
-
-  private displayedLen = 0;
+  /** Wall-clock reasoning duration shown on the live toggle when available. */
+  private elapsedMs: number | null = null;
 
   private disposed = false;
 
@@ -63,25 +57,27 @@ export class ThoughtBubbleController {
     this.phaseCallbacks = phaseCallbacks;
   }
 
-  /**
-   * Point the controller at the active assistant row (e.g. after a tool round
-   * replaces the streaming bubble wrapper).
-   */
   /** Reset phase callbacks for a new streaming shell in the same user send (e.g. after tools). */
   resetStreamPhaseHints(): void {
     this.thinkingStartNotified = false;
   }
 
+  /**
+   * Point the controller at the active assistant row (e.g. after a tool round
+   * replaces the streaming bubble wrapper).
+   */
   setAssistantWrap(wrap: HTMLElement): void {
     this.assistantWrap = wrap;
     if (this.stageEl && !this.stageEl.isConnected) {
-      this.stageEl = null;
-      this.bubbleEl = null;
-      this.textEl = null;
-      this.cursorEl = null;
-      this.stopTypewriter();
-      this.displayedLen = 0;
+      this.teardownStage();
     }
+  }
+
+  /** Update the muted elapsed suffix on the live collapsed row. */
+  setThinkingElapsed(ms: number | null): void {
+    if (this.disposed) return;
+    this.elapsedMs = ms != null && ms > 0 ? ms : null;
+    this.updateToggleLabel();
   }
 
   /**
@@ -97,9 +93,6 @@ export class ThoughtBubbleController {
     }
   }
 
-  /** If a thought-gap timer is running, invoking this ends the hold early (fade + chain advance). */
-  private gapSkipResolve: (() => void) | null = null;
-
   /** Append streamed reasoning characters; splits on `\n\n` into discrete thoughts. */
   appendReasoningDelta(delta: string): void {
     if (this.disposed || !delta) return;
@@ -107,85 +100,43 @@ export class ThoughtBubbleController {
       this.thinkingStartNotified = true;
       this.phaseCallbacks.onThinkingStart?.();
     }
-    this.tailWork = this.tailWork
-      .then(() => this.applyReasoningDeltaInQueue(delta))
-      .catch(() => undefined);
-  }
 
-  /** Await all queued reasoning UI work (for tests). */
-  flushPendingWork(): Promise<void> {
-    return this.tailWork;
-  }
-
-  /**
-   * Applies one SSE reasoning fragment after any prior work (gaps, earlier deltas).
-   * Returned promise completes when carry typing may resume (after paragraph holds).
-   */
-  private applyReasoningDeltaInQueue(delta: string): Promise<void> {
-    if (this.disposed) return Promise.resolve();
     this.openBuffer += delta;
     const parts = this.openBuffer.split(/\n\n+/);
-    if (parts.length === 1) {
-      if (this.openBuffer) {
-        this.ensureLiveBubble();
-        this.scheduleTypewriter();
+    if (parts.length > 1) {
+      const carry = parts.pop() ?? '';
+      for (const part of parts) {
+        const seg = part.trim();
+        if (seg) {
+          this.finalizedSegments.push(seg);
+        }
       }
-      this.scrollChat();
-      return Promise.resolve();
+      this.openBuffer = carry;
     }
 
-    const carry = parts.pop() ?? '';
-    this.stopTypewriter();
-    let boundaryChain: Promise<void> = Promise.resolve();
-    for (let i = 0; i < parts.length; i += 1) {
-      const seg = parts[i]!.trim();
-      if (seg) {
-        boundaryChain = boundaryChain.then(() =>
-          this.finalizeSegmentFromBoundary(seg),
-        );
-      }
-    }
-    this.openBuffer = carry;
-    this.displayedLen = 0;
-    return boundaryChain.then(() => {
-      if (this.disposed) return;
-      if (this.openBuffer) {
-        this.ensureLiveBubble();
-        this.scheduleTypewriter();
-      }
-      this.scrollChat();
-    });
+    this.ensureThinkingPanel();
+    this.syncFlowContent();
+    this.scrollChat();
   }
 
   /**
    * Call when the model starts streaming normal `content` for this phase:
    * flushes any open reasoning, removes the live stage from the DOM.
-   * Ends any active inter-thought hold immediately so prose can replace reasoning.
    */
   endReasoningPhase(): void {
     if (this.disposed) return;
-    this.gapSkipResolve?.();
     const tail = this.openBuffer.trim();
     this.openBuffer = '';
     if (tail) {
       this.finalizedSegments.push(tail);
     }
-    this.stopTypewriter();
     this.teardownStage();
-    this.displayedLen = 0;
     this.phaseCallbacks.onReasoningEnded?.();
   }
 
   /** Drop timers and remove the live stage (abort / error / new send). */
   abort(): void {
     this.disposed = true;
-    this.gapSkipResolve?.();
-    this.gapSkipResolve = null;
-    if (this.gapTimer != null) {
-      clearTimeout(this.gapTimer);
-      this.gapTimer = null;
-    }
-    this.stopTypewriter();
     this.teardownStage();
   }
 
@@ -211,75 +162,74 @@ export class ThoughtBubbleController {
     const segments = this.getSegmentsNormalized();
     this.finalizedSegments = [];
     this.openBuffer = '';
-    this.stopTypewriter();
-    if (this.gapTimer != null) {
-      clearTimeout(this.gapTimer);
-      this.gapTimer = null;
-    }
-    this.gapSkipResolve = null;
-    this.tailWork = Promise.resolve();
     this.teardownStage();
     this.thinkingStartNotified = false;
-    this.displayedLen = 0;
+    this.expanded = false;
+    this.elapsedMs = null;
     return segments;
   }
 
-  /**
-   * Close one paragraph-delimited thought: persist it, show the full text briefly,
-   * wait {@link THOUGHT_GAP_MS}, then fade out so the next thought can appear.
-   */
-  private finalizeSegmentFromBoundary(text: string): Promise<void> {
-    const trimmed = text.trim();
-    if (!trimmed) return Promise.resolve();
-    this.finalizedSegments.push(trimmed);
-    return new Promise<void>((resolve) => {
-      if (this.disposed) {
-        resolve();
-        return;
-      }
-      this.stopTypewriter();
-      this.ensureLiveBubble();
-      if (this.textEl) {
-        this.textEl.textContent = trimmed;
-      }
-
-      const endGap = (): void => {
-        if (settled) return;
-        settled = true;
-        if (this.gapTimer != null) {
-          clearTimeout(this.gapTimer);
-          this.gapTimer = null;
-        }
-        this.gapSkipResolve = null;
-        if (!this.disposed) {
-          this.fadeOutAndRemoveBubble();
-          this.bubbleEl = null;
-          this.textEl = null;
-          this.cursorEl = null;
-          this.displayedLen = 0;
-        }
-        resolve();
-      };
-
-      let settled = false;
-      this.gapSkipResolve = endGap;
-      this.gapTimer = setTimeout(endGap, THOUGHT_GAP_MS);
-    });
+  /** Await hook retained for tests (no async queue in collapsed UI). */
+  flushPendingWork(): Promise<void> {
+    return Promise.resolve();
   }
 
-  private ensureLiveBubble(): void {
+  private getDisplayText(): string {
+    return this.getSegments().join('\n\n');
+  }
+
+  private ensureThinkingPanel(): void {
     if (this.disposed) return;
     if (this.stageEl && !this.stageEl.isConnected) {
       this.stageEl = null;
-      this.bubbleEl = null;
-      this.textEl = null;
-      this.cursorEl = null;
+      this.toggleBtn = null;
+      this.caretEl = null;
+      this.flowEl = null;
+      this.flowTextEl = null;
     }
+
     if (!this.stageEl) {
       const stage = document.createElement('div');
       stage.className = 'thought-stage';
-      stage.setAttribute('aria-live', 'polite');
-      stage.setAttribute('aria-label', 'Model reasoning');
+
+      const panelWrap = document.createElement('div');
+      panelWrap.className = 'thoughts-panel-wrap thoughts-panel-wrap--live';
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'thoughts-toggle thoughts-toggle--live';
+      btn.setAttribute('aria-expanded', 'false');
+
+      const labelSpan = document.createElement('span');
+      labelSpan.className = 'thoughts-toggle__label';
+      labelSpan.textContent = LIVE_THINKING_LABEL;
+
+      const caret = document.createElement('span');
+      caret.className = 'thoughts-caret thoughts-caret--pulse';
+      caret.setAttribute('aria-hidden', 'true');
+
+      btn.appendChild(labelSpan);
+      btn.appendChild(caret);
+
+      const flow = document.createElement('div');
+      flow.className = 'thoughts-flow';
+      flow.hidden = true;
+      flow.id = `thoughts-flow-live-${Math.random().toString(36).slice(2, 9)}`;
+      btn.setAttribute('aria-controls', flow.id);
+
+      const pre = document.createElement('pre');
+      pre.className = 'thoughts-segment';
+      flow.appendChild(pre);
+
+      btn.addEventListener('click', () => {
+        this.expanded = !this.expanded;
+        this.syncExpandedState();
+      });
+
+      panelWrap.appendChild(btn);
+      panelWrap.appendChild(flow);
+      stage.appendChild(panelWrap);
+
       const label = this.assistantWrap.querySelector('.msg-label');
       const firstBubble = this.assistantWrap.querySelector('.msg-bubble');
       if (firstBubble && firstBubble.parentElement === this.assistantWrap) {
@@ -289,75 +239,61 @@ export class ThoughtBubbleController {
       } else {
         this.assistantWrap.prepend(stage);
       }
-      this.stageEl = stage;
-    }
 
-    if (!this.bubbleEl && this.stageEl) {
-      const b = document.createElement('div');
-      b.className = 'thought-bubble';
-      const span = document.createElement('span');
-      span.className = 'thought-bubble-text';
-      const cur = document.createElement('span');
-      cur.className = 'thought-cursor';
-      cur.setAttribute('aria-hidden', 'true');
-      b.appendChild(span);
-      b.appendChild(cur);
-      this.stageEl.appendChild(b);
-      this.bubbleEl = b;
-      this.textEl = span;
-      this.cursorEl = cur;
+      this.stageEl = stage;
+      this.toggleBtn = btn;
+      this.caretEl = caret;
+      this.flowEl = flow;
+      this.flowTextEl = pre;
+
+      // Live thinking row owns the indicator; hide the generic stream-status row.
+      const streamStatus = this.assistantWrap.querySelector('.stream-status');
+      streamStatus?.classList.add('hidden');
+
+      this.updateToggleLabel();
+      this.syncExpandedState();
     }
   }
 
-  private fadeOutAndRemoveBubble(): void {
-    const b = this.bubbleEl;
-    if (!b) return;
-    b.classList.add('thought-fade-out');
-    const remove = (): void => {
-      b.removeEventListener('animationend', remove);
-      b.remove();
-    };
-    b.addEventListener('animationend', remove);
+  private syncExpandedState(): void {
+    if (!this.toggleBtn || !this.flowEl || !this.caretEl) return;
+    this.flowEl.hidden = !this.expanded;
+    this.toggleBtn.setAttribute('aria-expanded', this.expanded ? 'true' : 'false');
+    this.caretEl.classList.toggle('thoughts-caret--expanded', this.expanded);
+    this.caretEl.classList.toggle('thoughts-caret--pulse', !this.expanded);
+    if (this.expanded) {
+      this.syncFlowContent();
+    }
+  }
+
+  private syncFlowContent(): void {
+    if (!this.expanded || !this.flowTextEl) return;
+    this.flowTextEl.textContent = this.getDisplayText();
+  }
+
+  private updateToggleLabel(): void {
+    if (!this.toggleBtn) return;
+    const labelEl = this.toggleBtn.querySelector('.thoughts-toggle__label');
+    if (!labelEl) return;
+
+    let label = LIVE_THINKING_LABEL;
+    if (this.elapsedMs != null && this.elapsedMs > 0) {
+      label = `${LIVE_THINKING_LABEL} ${formatThinkingDuration(this.elapsedMs)}`;
+    }
+    labelEl.textContent = label;
+    this.toggleBtn.setAttribute('aria-label', this.expanded ? 'Hide reasoning' : 'Show reasoning');
   }
 
   private teardownStage(): void {
-    this.stopTypewriter();
     if (this.stageEl) {
       this.stageEl.remove();
       this.stageEl = null;
     }
-    this.bubbleEl = null;
-    this.textEl = null;
-    this.cursorEl = null;
-  }
-
-  private stopTypewriter(): void {
-    if (this.typeTimer != null) {
-      clearInterval(this.typeTimer);
-      this.typeTimer = null;
-    }
-  }
-
-  private scheduleTypewriter(): void {
-    if (this.disposed || !this.textEl) return;
-    if (this.typeTimer != null) return;
-    this.typeTimer = setInterval(() => {
-      if (this.disposed || !this.textEl) {
-        this.stopTypewriter();
-        return;
-      }
-      const t = this.openBuffer;
-      if (this.displayedLen >= t.length) {
-        this.stopTypewriter();
-        return;
-      }
-      this.displayedLen = Math.min(
-        t.length,
-        this.displayedLen + TYPEWRITER_CHARS_PER_TICK,
-      );
-      this.textEl.textContent = t.slice(0, this.displayedLen);
-      this.scrollChat();
-    }, TYPEWRITER_STEP_MS);
+    this.toggleBtn = null;
+    this.caretEl = null;
+    this.flowEl = null;
+    this.flowTextEl = null;
+    this.expanded = false;
   }
 
   private scrollChat(): void {
@@ -379,8 +315,7 @@ export function renderThoughtsToggle(
   segments: string[],
   opts: ThoughtsToggleOptions | boolean = {},
 ): void {
-  const resolved =
-    typeof opts === 'boolean' ? { expanded: opts } : opts;
+  const resolved = typeof opts === 'boolean' ? { expanded: opts } : opts;
   const expanded = resolved.expanded ?? false;
   const normalized = splitThinkingSegments(segments.join('\n\n'));
   const list = normalized.length > 0 ? normalized : segments.filter((s) => s.trim());
@@ -393,16 +328,32 @@ export function renderThoughtsToggle(
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'thoughts-toggle';
+  btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+
+  const labelSpan = document.createElement('span');
+  labelSpan.className = 'thoughts-toggle__label';
+
   const durationMs = resolved.durationMs;
   if (durationMs != null && durationMs > 0) {
     const label = `Thought for ${formatThinkingDuration(durationMs)}`;
-    btn.textContent = label;
-    btn.setAttribute('aria-label', label);
+    labelSpan.textContent = label;
+    btn.setAttribute('aria-label', expanded ? 'Hide reasoning' : label);
   } else {
-    btn.textContent = 'Thoughts';
-    btn.setAttribute('aria-label', 'Show model reasoning thoughts');
+    labelSpan.textContent = 'Thoughts';
+    btn.setAttribute('aria-label', expanded ? 'Hide reasoning' : 'Show model reasoning thoughts');
   }
-  btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+
+  const caret = document.createElement('span');
+  caret.className = 'thoughts-caret';
+  if (!expanded) {
+    caret.classList.add('thoughts-caret--pulse');
+  } else {
+    caret.classList.add('thoughts-caret--expanded');
+  }
+  caret.setAttribute('aria-hidden', 'true');
+
+  btn.appendChild(labelSpan);
+  btn.appendChild(caret);
 
   const flow = document.createElement('div');
   flow.className = 'thoughts-flow';
@@ -418,8 +369,16 @@ export function renderThoughtsToggle(
   }
 
   btn.addEventListener('click', () => {
-    flow.hidden = !flow.hidden;
-    btn.setAttribute('aria-expanded', flow.hidden ? 'false' : 'true');
+    const nowExpanded = flow.hidden;
+    flow.hidden = !nowExpanded;
+    btn.setAttribute('aria-expanded', nowExpanded ? 'true' : 'false');
+    caret.classList.toggle('thoughts-caret--expanded', nowExpanded);
+    caret.classList.toggle('thoughts-caret--pulse', !nowExpanded);
+    const currentLabel = labelSpan.textContent ?? 'Thoughts';
+    btn.setAttribute(
+      'aria-label',
+      nowExpanded ? 'Hide reasoning' : currentLabel,
+    );
   });
 
   panelWrap.appendChild(btn);
