@@ -601,6 +601,15 @@ export function handleSkillPickerKeydown(e: KeyboardEvent): boolean {
   return false;
 }
 
+/** @internal Reset module singleton between happy-dom document swaps in tests. */
+export function __resetSkillPickerForTests(): void {
+  closePicker();
+  pickerEl = null;
+  headerEl = null;
+  listEl = null;
+  inputEl = null;
+}
+
 /** Mount slash picker listeners on one composer textarea (idempotent). */
 export function initComposerSlashPicker(composerInput: HTMLTextAreaElement): void {
   if (composerInput.dataset.slashPickerBound === '1') return;
@@ -624,10 +633,8 @@ export function initComposerSlashPicker(composerInput: HTMLTextAreaElement): voi
     detectSlashContext();
   });
 
-  composerInput.addEventListener('keydown', (e) => {
-    if (inputEl !== composerInput) bindActiveInput(composerInput);
-    handleSkillPickerKeydown(e);
-  });
+  // Keydown is handled by each composer's outer handler (handleKey / chat-app / concierge)
+  // so ArrowDown/Up are not processed twice when the slash picker is open.
 
   composerInput.addEventListener('blur', () => {
     window.setTimeout(() => closePicker(), 150);
