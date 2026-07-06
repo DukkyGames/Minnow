@@ -111,6 +111,16 @@
   animation: composer-mic-spin 0.75s linear infinite;
 }
 
+.composer-mic-btn--error {
+  color: var(--mn-danger, oklch(0.62 0.18 15));
+  border-color: color-mix(in srgb, var(--mn-danger, oklch(0.62 0.18 15)) 55%, var(--mn-border));
+  background: color-mix(in srgb, var(--mn-danger, oklch(0.62 0.18 15)) 10%, var(--mn-bg));
+}
+
+.composer-mic-btn--error .composer-mic-btn__icon {
+  opacity: 0.85;
+}
+
 @keyframes composer-mic-ring-pulse {
   0%,
   100% {
