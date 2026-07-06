@@ -476,6 +476,8 @@ export interface OrchestrateBoardState {
   isolationBaseRef?: string;
   /** Epoch ms when plan-complete UI was shown (dedupe). */
   completionShownAt?: number;
+  /** Plan-complete wrap-up turn deferred until planner stream ends. */
+  wrapUpPending?: boolean;
   /** User dismissed the finish dashboard to view the kanban again. */
   dashboardDismissed?: boolean;
   /** Epoch ms when integration was merged into the workspace and committed (finish dashboard). */

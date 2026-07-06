@@ -12,6 +12,7 @@ import { StreamingContentAccumulator } from '../../api/message-content.ts';
 import { modelCache } from '../../app-state.ts';
 import { thinkingToCompletionBody } from '../../agents/thinking-to-body.ts';
 import { getAutopilotMetaSync } from '../../config/autopilot-meta.ts';
+import { isDomAvailable } from '../../lib/dom-available.ts';
 import { decodeModelSelectKey, encodeModelSelectKey } from '../../lib/model-select-key.ts';
 import { catalogCapabilitiesFromRow } from '../../providers/model-capabilities.ts';
 import { resolveProvider } from '../../providers/store.ts';
@@ -40,13 +41,13 @@ const MAX_RECOMMENDATION_TOKENS = 512;
 const enrichInFlight = new Map<string, Promise<void>>();
 
 /** Provider/model for finish recommendations — same binding as board task chats. */
-function resolvePlannerModelBinding(plannerChat: Chat): {
+export function resolvePlannerModelBinding(plannerChat: Chat): {
   providerId: string;
   modelId: string;
 } {
   let providerId = plannerChat.providerId?.trim() ?? '';
   let modelId = plannerChat.modelId?.trim() ?? '';
-  if (!modelId) {
+  if (!modelId && isDomAvailable()) {
     const domRaw =
       (document.getElementById('modelSelect') as HTMLSelectElement | null)?.value?.trim() ??
       '';

@@ -567,6 +567,12 @@ export function quarantineTaskAndDependents(
       if (!visited.has(dependentId)) queue.push(dependentId);
     }
   }
+
+  if (plannerChat && visited.size > 0) {
+    void import('./orchestrate-board-actions.ts')
+      .then((mod) => mod.onTasksQuarantined(group, [...visited], plannerChat))
+      .catch((err) => reportBackgroundError('quarantine-completion-hook', err));
+  }
 }
 
 function formatDependencyCycleError(cycle: string[]): string {

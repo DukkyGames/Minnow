@@ -13,6 +13,10 @@ import {
 } from '../../src/agents/controller/wrapper.ts';
 import { resetAutopilotMetaCache, setAutopilotMetaForTests } from '../../src/config/autopilot-meta.ts';
 import {
+  resetOrchestratorAutoReportsForTests,
+  setOrchestratorReportDeliverHook,
+} from '../../src/agents/controller/report.ts';
+import {
   autoDelegateNext,
   clearStallStoppedChatIdsForTests,
   clearTaskChatStallRestartsForTests,
@@ -21,6 +25,7 @@ import {
   enqueueMergeCompletedTaskWorktreeForTests,
   finalizeBoardTaskOnStreamEnd,
   getTaskChatStallRestartCountForTests,
+  finalizeMergeFixerOnStreamEndForTests,
   recoverMergingBoardTask,
   reconcileMergingTasks,
   releaseLaunchSlotForTests,
@@ -822,6 +827,8 @@ function makeFixDRunningGroup(): { group: ChatGroup; planner: Chat } {
 
 describe('Fix D — systemPaused vs user Stop', () => {
   beforeEach(async () => {
+    resetOrchestratorAutoReportsForTests();
+    setOrchestratorReportDeliverHook(async () => {});
     setSessionStateForTests(null);
     const { Window } = await import('happy-dom');
     const window = new Window();
@@ -829,10 +836,20 @@ describe('Fix D — systemPaused vs user Stop', () => {
       localStorage: Storage;
       document: Document;
       HTMLElement: typeof HTMLElement;
+      requestAnimationFrame: typeof requestAnimationFrame;
     };
     g.localStorage = window.localStorage;
     g.document = window.document;
     g.HTMLElement = window.HTMLElement;
+    g.requestAnimationFrame = (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    };
+  });
+
+  afterEach(() => {
+    resetOrchestratorAutoReportsForTests();
+    setOrchestratorReportDeliverHook(null);
   });
 
   test('systemPaused finalizes to planned with stopRetries, not quarantine', () => {
@@ -851,7 +868,7 @@ describe('Fix D — systemPaused vs user Stop', () => {
     assert.equal(updated.chatId, undefined);
   });
 
-  test('userStopped without systemPaused quarantines on stream-end', () => {
+  test('userStopped without systemPaused quarantines on stream-end', async () => {
     const { group, planner } = makeFixDRunningGroup();
     const board = group.orchestrateBoard!;
     board.userStopped = true;
@@ -865,6 +882,7 @@ describe('Fix D — systemPaused vs user Stop', () => {
       activeChatId: FIX_D_PLANNER_ID,
     });
     finalizeBoardTaskOnStreamEnd(group, task, planner);
+    await new Promise((resolve) => setImmediate(resolve));
 
     const updated = board.tasks.find((t) => t.id === 'W1-A')!;
     assert.equal(updated.status, 'quarantined');
@@ -948,6 +966,26 @@ describe('Manual recovery — recoverMergingBoardTask', () => {
       process.env.MINNOW_TEST = prevMinnowTest;
     }
     setSessionStateForTests(null);
+  });
+
+  test('finalizeMergeFixerOnStreamEnd git fallback completes when fixer dead without board_report', async () => {
+    const group = makeMergeGroup();
+    const fixerChat = makeMergeFixerChat();
+    const { planner } = seedMergingTask(group, fixerChat);
+
+    restoreFetch = mockWorktreeOps({
+      check_merged: { ok: true, merged: true },
+      verify_integration: { ok: true, verified: true },
+      refresh_integration_deps: { ok: true },
+    });
+
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === MERGE_TASK_ID)!;
+    await finalizeMergeFixerOnStreamEndForTests(group, task, planner, MERGE_FIXER_CHAT_ID);
+
+    const taskAfter = group.orchestrateBoard!.tasks.find((t) => t.id === MERGE_TASK_ID)!;
+    assert.equal(taskAfter.status, 'complete');
+    assert.equal(taskAfter.fixerChatId, undefined);
+    assert.equal(taskAfter.boardReport, undefined);
   });
 
   test('recoverMergingBoardTask with dead fixer and verified merge completes task', async () => {

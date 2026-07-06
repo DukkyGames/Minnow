@@ -49,24 +49,58 @@ interface SupervisionEntry {
 
 const entries = new Map<string, SupervisionEntry>();
 
-/** Monotonic baseline; reset when the document becomes visible again. */
+/** Monotonic baseline; advanced when the page was hidden so hidden time is excluded. */
 let visibilityBaseline = performance.now();
+
+/** Frozen monotonic clock while `document.hidden` (display off / background tab). */
+let pageHiddenAtMono: number | null = null;
 
 let heartbeatConfig: HeartbeatConfig = { ...DEFAULT_HEARTBEAT_CONFIG };
 
 let visibilityListenerBound = false;
 
+function effectiveMonoNow(): number {
+  if (pageHiddenAtMono !== null) return pageHiddenAtMono;
+  return performance.now();
+}
+
 function monotonicDelta(): number {
-  return performance.now() - visibilityBaseline;
+  return effectiveMonoNow() - visibilityBaseline;
+}
+
+function onPageHidden(): void {
+  pageHiddenAtMono = performance.now();
+}
+
+function onPageVisible(): void {
+  if (pageHiddenAtMono !== null) {
+    visibilityBaseline += performance.now() - pageHiddenAtMono;
+    pageHiddenAtMono = null;
+  }
+  resetHeartbeatBaselines();
 }
 
 function ensureVisibilityListener(): void {
   if (visibilityListenerBound || typeof document === 'undefined') return;
   visibilityListenerBound = true;
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible') return;
-    resetHeartbeatBaselines();
+    if (document.visibilityState === 'hidden') {
+      onPageHidden();
+      return;
+    }
+    if (document.visibilityState === 'visible') {
+      onPageVisible();
+    }
   });
+}
+
+/** Drive visibility freeze logic in tests without a real `visibilitychange` event. */
+export function simulatePageVisibilityForTests(state: 'visible' | 'hidden'): void {
+  if (state === 'hidden') {
+    onPageHidden();
+    return;
+  }
+  onPageVisible();
 }
 
 /** Reset heartbeat/progress age baselines after the tab becomes visible. */
@@ -250,4 +284,5 @@ export function resetWrapperState(): void {
   entries.clear();
   heartbeatConfig = { ...DEFAULT_HEARTBEAT_CONFIG };
   visibilityBaseline = performance.now();
+  pageHiddenAtMono = null;
 }

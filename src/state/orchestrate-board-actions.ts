@@ -2463,6 +2463,14 @@ async function finalizeMergeFixerOnStreamEnd(
       }
     }
 
+    if (!report?.outcome) {
+      try {
+        if (await tryCompleteVerifiedMerge()) return;
+      } catch (err) {
+        reportBackgroundError('finalize-merge-fixer-git-fallback', err);
+      }
+    }
+
     const fixerSummary =
       report?.outcome === 'fail'
         ? report.summary || 'Merge fixer reported failure'
@@ -3314,6 +3322,44 @@ function isBoardReadyForFinalTest(board: OrchestrateBoardState): boolean {
   return board.tasks.some((t) => t.status === 'complete');
 }
 
+/** When every task is terminal, start final test or surface all-quarantined plan-complete. */
+export function syncBoardRunCompletion(group: ChatGroup, plannerChat: Chat): void {
+  const board = group.orchestrateBoard;
+  if (!board || !isOrchestratePlanComplete(board)) return;
+  if (isBoardReadyForFinalTest(board)) {
+    tryTriggerFinalIntegrationTest(group, plannerChat);
+  } else {
+    void maybeEmitOrchestratePlanComplete(group.id);
+  }
+}
+
+/** Deliver quarantine reports and sync board completion after BFS quarantine. */
+export function onTasksQuarantined(
+  group: ChatGroup,
+  taskIds: string[],
+  plannerChat: Chat,
+): void {
+  const board = group.orchestrateBoard;
+  if (!board) return;
+  if (isBoardRunning(group)) {
+    for (const taskId of taskIds) {
+      const task = board.tasks.find((t) => t.id === taskId);
+      if (!task) continue;
+      const reportable =
+        task.status === 'complete' ||
+        task.status === 'failed' ||
+        task.status === 'blocked' ||
+        task.status === 'quarantined';
+      if (reportable) {
+        void import('../agents/controller/report.ts')
+          .then((mod) => mod.deliverOrchestratorTaskReport(group, plannerChat, task, task.status))
+          .catch((err) => reportBackgroundError('deliver-task-report', err));
+      }
+    }
+  }
+  syncBoardRunCompletion(group, plannerChat);
+}
+
 /** Start full-board final integration test (Tester with browser). */
 export async function startFinalIntegrationTest(
   group: ChatGroup,
@@ -3618,12 +3664,9 @@ export function moveTaskStatus(
   }
   updateTask(group, taskId, patch, plannerChat);
   const board = group.orchestrateBoard;
-  if (board && status === 'complete') {
+  if (board && (status === 'complete' || status === 'quarantined')) {
     const planner = plannerChat ?? getPlannerChatForGroup(group);
-    if (planner) tryTriggerFinalIntegrationTest(group, planner);
-  }
-  if (board && status === 'quarantined' && isOrchestratePlanComplete(board) && !isBoardReadyForFinalTest(board)) {
-    void maybeEmitOrchestratePlanComplete(group.id);
+    if (planner) syncBoardRunCompletion(group, planner);
   }
   if (board && isBoardRunning(group) && plannerChat) {
     const reportable =
@@ -3659,12 +3702,14 @@ export async function requeueBoardTask(
   if (!board) return;
   const task = board.tasks.find((t) => t.id === taskId);
   if (!task || task.status !== 'quarantined') return;
+  const requeuedIds = new Set<string>([taskId]);
   logTaskStatus(group, taskId, task.status, 'planned');
   updateTask(group, taskId, { status: 'planned', quarantine: undefined, stopRetries: undefined }, plannerChat);
   const blockedByRootSummary = `blocked by quarantined ${taskId}`;
   for (const dependent of board.tasks) {
     if (dependent.id === taskId || dependent.status !== 'quarantined') continue;
     if (dependent.quarantine?.summary !== blockedByRootSummary) continue;
+    requeuedIds.add(dependent.id);
     logTaskStatus(group, dependent.id, dependent.status, 'planned');
     updateTask(
       group,
@@ -3673,6 +3718,36 @@ export async function requeueBoardTask(
       plannerChat,
     );
   }
+
+  delete board.completionShownAt;
+  delete board.finishReport;
+  delete board.wrapUpPending;
+  if (board.unresolvedIssues?.length) {
+    board.unresolvedIssues = board.unresolvedIssues.filter((issue) => !requeuedIds.has(issue.taskId));
+  }
+
+  for (const id of requeuedIds) {
+    updateTask(
+      group,
+      id,
+      {
+        selfHealRound: undefined,
+        lastHealCategory: undefined,
+        stopRetries: undefined,
+        ...BOARD_REPORT_RESET_PATCH,
+      },
+      plannerChat,
+    );
+  }
+
+  void import('../agents/controller/report.ts')
+    .then((mod) => {
+      for (const id of requeuedIds) {
+        mod.clearOrchestratorReportDedupeForTask(id);
+      }
+    })
+    .catch((err) => reportBackgroundError('requeue-report-dedupe-clear', err));
+
   if (isBoardRunning(group)) {
     await autoDelegateNext(group, plannerChat);
   }
@@ -3946,11 +4021,6 @@ export function stopBoardAutoRun(
       .then((mod) => mod.cancelAllForParentTurn(board.activeParentTurnId!))
       .catch((err) => reportBackgroundError('stop-board-cancel-runs', err));
   }
-  // Flush pending planner reports so the planner stream-end event (caused by
-  // stopGeneration above) does not drain the queue and start a new planner turn.
-  void import('../agents/controller/report.ts')
-    .then((mod) => mod.clearPendingReportsForChat(plannerChat.id))
-    .catch((err) => reportBackgroundError('stop-board-clear-reports', err));
   // Flush stop state immediately so reload cannot resurrect auto execution.
   saveSessionsNow();
   emitBoardChange(group.id);
