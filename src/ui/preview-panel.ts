@@ -13,6 +13,7 @@ import {
 import { onFileSaved } from '../state/preview-events';
 import {
   hidePreviewSplit,
+  hidePreviewSplitKeepSource,
   showPreviewSplit,
 } from './file-layout';
 import { dismissFileViewerForPreview } from './file-viewer';
@@ -25,6 +26,7 @@ import {
   syncElectronPreviewHostLayout,
 } from './preview-electron-visibility';
 import { HTTP_URL_RE, parsePreviewAddress } from './preview-url';
+import { shouldAutoRestorePreviewPanel } from './preview-restore-policy';
 
 const BROWSER_PREVIEW_HINT =
   'Full Chromium preview (any website or local file) runs in the Minnow desktop shell. Run npm start — Electron opens by default — or npm run electron:dev.';
@@ -592,6 +594,31 @@ export function closePreviewPanel(): void {
   setPreviewLoading(false);
 }
 
+/**
+ * Collapse the preview split on Code app entry without discarding previewSource (MIN-342).
+ * Clears the Electron guest so a stale page cannot overlay the workspace.
+ */
+export function collapsePreviewPanelKeepingSource(): void {
+  const state = getFilePanelState();
+  if (state.rightPaneMode !== 'preview') {
+    if (usesElectronPreview()) {
+      void clearPreviewGuest().then(() => hidePreviewHost());
+    }
+    return;
+  }
+
+  cancelDeferredPreviewLoad();
+  if (usesElectronPreview()) {
+    void clearPreviewGuest().then(() => hidePreviewHost());
+  } else {
+    clearFrameBlockedTimer();
+    clearPreviewFrame();
+  }
+  hidePreviewStatus();
+  setPreviewLoading(false);
+  hidePreviewSplitKeepSource();
+}
+
 /** Toggle preview panel using last source or empty address bar. */
 export function togglePreviewPanel(): void {
   const state = getFilePanelState();
@@ -908,8 +935,12 @@ export function initPreviewPanel(): void {
     scheduleElectronPreviewHostVisibilitySync();
   }
   const state = getFilePanelState();
-  if (state.rightPaneMode === 'preview') {
+  if (shouldAutoRestorePreviewPanel()) {
     restorePreviewPanelFromPrefs(state.previewSource);
+    return;
+  }
+  if (state.rightPaneMode === 'preview') {
+    collapsePreviewPanelKeepingSource();
   }
 }
 

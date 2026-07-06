@@ -151,7 +151,7 @@ export async function initFilePanel(): Promise<void> {
 
   const state = getFilePanelState();
   if (state.rightPaneMode === 'preview') {
-    // Restored by initPreviewPanel from persisted previewSource.
+    // Restored by initPreviewPanel when desktop browser drawer is active (MIN-342).
   } else if (state.openViewerTabs.length > 0) {
     await restoreViewerTabsFromPrefs(state.openViewerTabs, state.activeViewerTab);
   } else if (state.viewerOpen && state.selectedPath) {
@@ -159,14 +159,6 @@ export async function initFilePanel(): Promise<void> {
   }
 
   applyFileSidebarVisuals();
-
-  if (state.rightPaneMode === 'preview') {
-    const { getForegroundAppId, getOsView } = await import('../os/instances');
-    if (getOsView() === 'app' && getForegroundAppId() === 'code') {
-      const { resyncOpenPreviewPanelFromState } = await import('./preview-panel');
-      resyncOpenPreviewPanelFromState();
-    }
-  }
 
   bindSplitResizer();
   bindFilePanelControls();

@@ -265,3 +265,16 @@ export function hidePreviewSplit(): void {
   patchFilePanelState({ rightPaneMode: null, viewerOpen: false, previewSource: null });
   applyFileSidebarVisuals();
 }
+
+/**
+ * Close the preview split without clearing previewSource (MIN-342).
+ * Used when Code becomes foreground so the user can reopen via #btnPreviewToggle.
+ */
+export function hidePreviewSplitKeepSource(): void {
+  hidePreviewPaneDom();
+  void window.minnow?.preview.hide();
+  const resizer = document.getElementById('splitResizer');
+  if (resizer) resizer.classList.add('hidden');
+  patchFilePanelState({ rightPaneMode: null, viewerOpen: false });
+  applyFileSidebarVisuals();
+}
