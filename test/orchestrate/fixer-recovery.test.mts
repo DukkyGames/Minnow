@@ -42,6 +42,8 @@ import {
   trackDrainResumeCallsForTests,
   enqueueTaskForTests,
   getTaskQueueForTests,
+  countRunningTaskChats,
+  isLaunchReservedForTests,
 } from '../../src/state/orchestrate-board-actions.ts';
 import { initBoard, isTaskStalledForRestart, updateTask } from '../../src/state/orchestrate-board-store.ts';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
@@ -720,18 +722,79 @@ describe('Env-fixer pass board_report routing', () => {
 
     const taskA = group.orchestrateBoard!.tasks.find((t) => t.id === TASK_ID)!;
     const taskB = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-B')!;
-    const resumed = trackDrainResumeCallsForTests(false);
+    const board = group.orchestrateBoard!;
+    trackDrainResumeCallsForTests(false);
 
     assert.equal(taskA.status, 'testing', 'env-fixed task should advance to testing');
     assert.equal(taskB.status, 'planned', 'queued sibling must not start while A resumes testing');
-    if (resumed.length > 0) {
-      assert.equal(resumed[0], TASK_ID, 'drain should prefer the env-fixed task over the sibling');
-      assert.ok(!resumed.includes('W1-B'), 'sibling must not steal the concurrency slot');
-    }
+    assert.ok(taskA.testChatId?.trim(), 'test-phase pass must create or bind a tester chat');
+    const testChatId = taskA.testChatId!.trim();
+    assert.equal(
+      isLaunchReservedForTests(testChatId),
+      false,
+      'tester launch reservation must not leak when testing cannot launch immediately',
+    );
     const queue = getTaskQueueForTests(GROUP_ID);
-    if (queue.length > 0) {
+    if (queue.includes(TASK_ID)) {
       assert.equal(queue[0], TASK_ID, 'front-insert keeps env-fixed task ahead of siblings');
     }
+
+    releaseLaunchSlotForTests(FIXER_CHAT_ID);
+    assert.equal(
+      countRunningTaskChats(board),
+      0,
+      'leaked tester reservation must not leave the board at max concurrency',
+    );
+  });
+
+  test('resumeBoardTask succeeds when a pre-reserved tester chat exists', async () => {
+    const group = makeGroup();
+    const planner = makePlanner();
+    const testChatId = 'eeee-eeee-tester';
+    updateTask(
+      group,
+      TASK_ID,
+      {
+        status: 'testing',
+        chatId: BUILDER_CHAT_ID,
+        testChatId,
+        worktreePath: '/ws',
+      },
+      planner,
+    );
+    setSessionStateForTests({
+      version: 5,
+      activeId: PLANNER_ID,
+      chats: [
+        planner,
+        makeBuilderChat(),
+        {
+          id: testChatId,
+          name: 'Test W1-A',
+          workspacePath: '/ws',
+          modeId: 'build',
+          modelId: 'm1',
+          history: [],
+          lastStats: null,
+          modelInfo: {},
+          updatedAt: 1,
+          boardGroupId: GROUP_ID,
+          boardTaskId: TASK_ID,
+        },
+      ],
+      groups: [group],
+    });
+
+    reserveLaunchSlotForTests(testChatId);
+    group.orchestrateBoard!.maxConcurrentTasks = 1;
+
+    await continueBoardTask(group, TASK_ID, planner);
+
+    assert.equal(
+      isLaunchReservedForTests(testChatId),
+      false,
+      'resume must not leave a leaked tester reservation',
+    );
   });
 });
 
