@@ -8,9 +8,18 @@ describe('terminal autoOpenOnAgentRun defaults', () => {
     assert.equal(DEFAULT_META.terminal?.autoOpenOnAgentRun, false);
   });
 
+  test('DEFAULT_META seeds autoFollowAgentTab false for new homes', () => {
+    assert.equal(DEFAULT_META.terminal?.autoFollowAgentTab, false);
+  });
+
   test('mergeConfigMeta defaults terminal.autoOpenOnAgentRun to false', () => {
     const merged = mergeConfigMeta({}, { terminal: {} });
     assert.equal(merged.terminal.autoOpenOnAgentRun, false);
+  });
+
+  test('mergeConfigMeta defaults terminal.autoFollowAgentTab to false', () => {
+    const merged = mergeConfigMeta({}, { terminal: {} });
+    assert.equal(merged.terminal.autoFollowAgentTab, false);
   });
 
   test('mergeConfigMeta preserves explicit true', () => {
@@ -19,5 +28,13 @@ describe('terminal autoOpenOnAgentRun defaults', () => {
       { terminal: { autoOpenOnAgentRun: true } },
     );
     assert.equal(merged.terminal.autoOpenOnAgentRun, true);
+  });
+
+  test('mergeConfigMeta preserves explicit autoFollowAgentTab true', () => {
+    const merged = mergeConfigMeta(
+      { terminal: { autoFollowAgentTab: false } },
+      { terminal: { autoFollowAgentTab: true } },
+    );
+    assert.equal(merged.terminal.autoFollowAgentTab, true);
   });
 });
