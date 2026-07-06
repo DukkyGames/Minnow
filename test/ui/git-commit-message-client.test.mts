@@ -6,8 +6,10 @@ import { DEFAULT_EDITOR_AI_COMPLETION } from '../../src/config/editor-ai-complet
 import { createEmptyChatObject, setSessionStateForTests } from '../../src/state/sessions.ts';
 import {
   buildGitCommitMessagePrompt,
+  resolveCommitMessageDisplayText,
   resolveGitCommitMessageBinding,
   sanitizeCommitMessage,
+  stripThinkingFromCommitOutput,
   truncateStagedPatch,
 } from '../../src/ui/git-commit-message-client.ts';
 
@@ -54,6 +56,49 @@ describe('sanitizeCommitMessage', () => {
   test('preserves multiline body', () => {
     const raw = 'feat: add panel\n\nExplain why this matters.';
     assert.equal(sanitizeCommitMessage(raw), raw);
+  });
+});
+
+describe('stripThinkingFromCommitOutput', () => {
+  test('returns reply after inline thinking tags', () => {
+    const raw = '<thinking>analyze diff</thinking>feat: add widget';
+    assert.equal(stripThinkingFromCommitOutput(raw), 'feat: add widget');
+  });
+});
+
+describe('resolveCommitMessageDisplayText', () => {
+  test('prefers content channel over reasoning', () => {
+    assert.equal(
+      resolveCommitMessageDisplayText('feat: from content', 'fix: from reasoning', {
+        reasoningFallback: true,
+      }),
+      'feat: from content',
+    );
+  });
+
+  test('falls back to reasoning when content is empty', () => {
+    assert.equal(
+      resolveCommitMessageDisplayText('', 'feat: ship panel', { reasoningFallback: true }),
+      'feat: ship panel',
+    );
+  });
+
+  test('extracts conventional commit line from reasoning analysis', () => {
+    const reasoning =
+      'The diff adds a new panel.\n\nfeat(ui): add git commit generator\n\nLooks good.';
+    assert.equal(
+      resolveCommitMessageDisplayText('', reasoning, { reasoningFallback: true }),
+      'feat(ui): add git commit generator\n\nLooks good.',
+    );
+  });
+
+  test('does not use reasoning while streaming', () => {
+    assert.equal(
+      resolveCommitMessageDisplayText('', 'feat: only in reasoning', {
+        reasoningFallback: false,
+      }),
+      '',
+    );
   });
 });
 

@@ -10,8 +10,11 @@ import {
   type GenerationEndEvent,
 } from '../api/generations';
 import { modelCache } from '../app-state';
+import { extractInlineThinkingFromContent } from '../api/inline-thinking';
 import { thinkingToCompletionBody } from '../agents/thinking-to-body';
-import { BenchmarkStreamReasoningAccumulator } from '../benchmark/stream-text';
+import {
+  BenchmarkStreamReasoningAccumulator,
+} from '../benchmark/stream-text';
 import { StreamingContentAccumulator } from '../api/message-content';
 import { loadEditorAiCompletionConfig, type EditorAiCompletionConfig } from '../config/editor-ai-completion';
 import { encodeModelSelectKey } from '../lib/model-select-key';
@@ -74,6 +77,44 @@ export function buildGitCommitMessagePrompt(
     { role: 'system', content: COMMIT_MSG_SYSTEM },
     { role: 'user', content: userBody },
   ];
+}
+
+const CONVENTIONAL_COMMIT_LINE_RE =
+  /^(feat|fix|docs|style|refactor|test|chore)(\([^)]+\))?:\s+\S/m;
+
+/** Drop inline thinking tags; prefer the reply segment when both exist. */
+export function stripThinkingFromCommitOutput(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  const split = extractInlineThinkingFromContent(trimmed);
+  if (split.reply.trim()) return split.reply.trim();
+  return trimmed
+    .replace(/<think(?:ing)?(?:\s+[^>]*)?>[\s\S]*?<\/think(?:ing)?>/gi, '')
+    .replace(/<think>[\s\S]*?<\/redacted_thinking>/gi, '')
+    .trim();
+}
+
+/**
+ * Prefer main `content`; at stream end fall back to reasoning when prose stayed empty
+ * (common on thinking-capable models).
+ */
+export function resolveCommitMessageDisplayText(
+  contentText: string,
+  reasoningText: string,
+  options?: { reasoningFallback?: boolean },
+): string {
+  const fromContent = sanitizeCommitMessage(stripThinkingFromCommitOutput(contentText));
+  if (fromContent) return fromContent;
+  if (!options?.reasoningFallback) return '';
+
+  const fromReasoning = sanitizeCommitMessage(stripThinkingFromCommitOutput(reasoningText));
+  if (!fromReasoning) return '';
+
+  const match = fromReasoning.match(CONVENTIONAL_COMMIT_LINE_RE);
+  if (match?.index !== undefined && match.index > 0) {
+    return fromReasoning.slice(match.index).trim();
+  }
+  return fromReasoning;
 }
 
 /** Normalize model output into a plain commit message string. */
@@ -179,7 +220,12 @@ export async function fetchGitCommitMessage(
   const contentAcc = new StreamingContentAccumulator();
   const reasoningAcc = new BenchmarkStreamReasoningAccumulator();
 
-  const emit = (): string => sanitizeCommitMessage(contentAcc.getText().trim());
+  const emit = (reasoningFallback = false): string =>
+    resolveCommitMessageDisplayText(
+      contentAcc.getText(),
+      reasoningAcc.getText(),
+      { reasoningFallback },
+    );
 
   return new Promise<GitCommitMessageResult>((resolve) => {
     let settled = false;
@@ -193,7 +239,7 @@ export async function fetchGitCommitMessage(
       signal: input.signal,
       onChunk: (chunk) => {
         ingestChunk(contentAcc, reasoningAcc, chunk);
-        const cleaned = emit();
+        const cleaned = emit(false);
         if (cleaned) input.onPartial?.(cleaned);
       },
       onEnd: (event?: GenerationEndEvent) => {
@@ -202,7 +248,11 @@ export async function fetchGitCommitMessage(
           finish(null, generationEndErrorMessage(event));
           return;
         }
-        const cleaned = emit();
+        if (event?.status === 'cancelled') {
+          finish(null);
+          return;
+        }
+        const cleaned = emit(true);
         finish(
           cleaned.length > 0 ? cleaned : null,
           cleaned.length > 0 ? undefined : EDITOR_AI_EMPTY_COMPLETION_MESSAGE,

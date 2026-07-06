@@ -302,16 +302,24 @@ export function createGitOperationsPanel(
   }
 
   async function handleGenerateCommitMessage(): Promise<void> {
-    generateMessageAbort?.abort();
+    if (generateMessageAbort) {
+      generateMessageAbort.abort();
+      generateMessageAbort = null;
+      setStatus('');
+      setAiGenerateButtonBusy(false);
+      return;
+    }
+
     const controller = new AbortController();
     generateMessageAbort = controller;
-    aiGenerateBtn.disabled = true;
-    aiGenerateBtn.setAttribute('aria-busy', 'true');
+    setAiGenerateButtonBusy(true);
     try {
       const cwd = getEffectiveCwd();
       const status = await gitStatus(cwd);
       if (!status.ok) {
-        setStatus(status.error ?? 'Could not read git status', true);
+        const message = status.error ?? 'Could not read git status';
+        setStatus(message, true);
+        showToast(message, 'error');
         return;
       }
       const staged = status.staged ?? [];
@@ -319,7 +327,9 @@ export function createGitOperationsPanel(
       const untracked = status.untracked ?? [];
       const allChanges = [...staged, ...unstaged, ...untracked];
       if (allChanges.length === 0) {
-        setStatus('No changes to commit', true);
+        const message = 'No changes to commit';
+        setStatus(message, true);
+        showToast(message, 'error');
         return;
       }
       const useStagedOnly = staged.length > 0;
@@ -327,7 +337,9 @@ export function createGitOperationsPanel(
         ? await gitDiff({ cached: true, cwd })
         : await gitDiff({ workingTree: true, cwd });
       if (!diffResult.ok || !diffResult.patch?.trim()) {
-        setStatus(diffResult.error ?? 'Could not read diff', true);
+        const message = diffResult.error ?? 'Could not read diff';
+        setStatus(message, true);
+        showToast(message, 'error');
         return;
       }
       setStatus('Generating commit message…');
@@ -341,9 +353,13 @@ export function createGitOperationsPanel(
           commitInput.value = text;
         },
       });
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) {
+        setStatus('');
+        return;
+      }
       if (result.error) {
         setStatus(result.error, true);
+        showToast(result.error, 'error');
         return;
       }
       if (result.text) {
@@ -353,12 +369,26 @@ export function createGitOperationsPanel(
         showToast('Commit message generated', 'success');
         return;
       }
-      setStatus('No commit message generated', true);
+      const message = 'No commit message generated';
+      setStatus(message, true);
+      showToast(message, 'error');
     } finally {
       if (generateMessageAbort === controller) generateMessageAbort = null;
-      aiGenerateBtn.disabled = false;
-      aiGenerateBtn.removeAttribute('aria-busy');
+      setAiGenerateButtonBusy(false);
     }
+  }
+
+  function setAiGenerateButtonBusy(busy: boolean): void {
+    aiGenerateBtn.classList.toggle('is-busy', busy);
+    if (busy) {
+      aiGenerateBtn.setAttribute('aria-busy', 'true');
+      aiGenerateBtn.title = 'Cancel commit message generation';
+      aiGenerateBtn.setAttribute('aria-label', 'Cancel commit message generation');
+      return;
+    }
+    aiGenerateBtn.removeAttribute('aria-busy');
+    aiGenerateBtn.title = 'Generate commit message with AI';
+    aiGenerateBtn.setAttribute('aria-label', 'Generate commit message with AI');
   }
 
   function buildFileRow(entry: GitFileEntry, staged: boolean): HTMLElement {
