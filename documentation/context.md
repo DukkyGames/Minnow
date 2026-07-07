@@ -913,7 +913,7 @@ Code and Chat apps share send + history render paths via parameterized DOM surfa
 | Concern | Location |
 |---------|----------|
 | Composer surface | [`src/ui/composer-surface.ts`](../src/ui/composer-surface.ts) — `getActiveComposerSurface()`, `resolveComposerSurface()`, `registerComposerSurface()`; Code foreground → `#msgInput` / `#sendBtn` even when desktop chat state is still `chatActive`; desktop chat → `#desktopInput` / `#desktopSendBtn`; legacy Chat → `#chatAppInput` / `#chatAppSendBtn` |
-| Scroll / jump chip | [`src/ui/chat-scroll.ts`](../src/ui/chat-scroll.ts) — Code `#chatArea`; Chat `#chatAppArea`; desktop chat `.mn-os-chat-transcript` when `chatActive` and Code is not foreground |
+| Scroll / jump chip | [`src/ui/chat-scroll.ts`](../src/ui/chat-scroll.ts) — Code `#chatArea`; Chat `#chatAppArea`; desktop chat `.mn-os-chat-transcript` when `chatActive` and Code is not foreground. **MIN-277:** `scrollChatIfPinned()` only auto-scrolls when within 80px of bottom; new stream shells (`appendStreamingAssistantRow`) respect pin state instead of forcing tail; jump chip (`#chatJumpLatest` / `#chatAppJumpLatest`) when scrolled up |
 | Chat mount | [`src/ui/chat-mount.ts`](../src/ui/chat-mount.ts) — `resolveChatMount()`, `getActiveChatMountElement()`, `runWithChatMount()`; Chat foreground → `#chatAppMessageCol` |
 | History render | [`src/ui/messages.ts`](../src/ui/messages.ts) — `renderChatFromHistory(chat, mount?)` (default `#chatArea`); non-Code mounts skip hub/board/plan Code-only branches |
 | Send loop | [`src/tools/loop.ts`](../src/tools/loop.ts) — `sendMessageWithTools(composer?)`, `RunChatTurnOptions.composerSurface`; tool-call paint uses `getActiveChatMountElement()` |
