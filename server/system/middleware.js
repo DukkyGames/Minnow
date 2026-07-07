@@ -8,12 +8,6 @@ import { detectHardware } from './hardware.js';
 import { listDeadHosts } from '../generations/host-cooldown.js';
 import { getNetworkStatus } from './network.js';
 
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
-
 function sendJson(res, status, payload) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
@@ -27,7 +21,6 @@ function sendJson(res, status, payload) {
  * @returns {Promise<boolean>}
  */
 export async function handleSystemRequest(req, res, pathname) {
-  setCorsHeaders(res);
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;

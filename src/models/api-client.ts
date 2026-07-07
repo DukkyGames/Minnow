@@ -2,6 +2,8 @@
  * Models app server API client.
  */
 
+import { withSessionToken } from '../api/session-token.ts';
+
 export interface DownloadJob {
   id: string;
   repoId: string;
@@ -167,7 +169,7 @@ export function subscribeDownloadProgress(
     error?: string | null;
   }) => void,
 ): () => void {
-  const source = new EventSource(`/api/models/download/${jobId}/stream`);
+  const source = new EventSource(withSessionToken(`/api/models/download/${jobId}/stream`));
   source.onmessage = (msg) => {
     try {
       onEvent(JSON.parse(msg.data));
@@ -283,7 +285,7 @@ export async function installLlamaRuntime(payload?: {
 export function subscribeLlamaInstallProgress(
   onEvent: (event: LlamaInstallJob) => void,
 ): () => void {
-  const source = new EventSource('/api/models/llama-runtime/install/stream');
+  const source = new EventSource(withSessionToken('/api/models/llama-runtime/install/stream'));
   source.onmessage = (msg) => {
     try {
       onEvent(JSON.parse(msg.data) as LlamaInstallJob);

@@ -32,12 +32,6 @@ import {
   uninstallBundle,
 } from './bundle-installer.js';
 
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
-
 function sendJson(res, status, payload) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
@@ -96,7 +90,6 @@ export function createLspMiddleware(resolveProjectRoot) {
 
     const projectRoot = getRoot();
 
-    setCorsHeaders(res);
     if (req.method === 'OPTIONS') {
       res.statusCode = 204;
       res.end();

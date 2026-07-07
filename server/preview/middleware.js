@@ -32,13 +32,6 @@ function isBlockedPreviewPath(relativePath) {
   return parts.some((segment) => BLOCKED_PATH_SEGMENTS.has(segment));
 }
 
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-}
-
 /**
  * Ensure relative asset URLs resolve under /api/preview/file/… (not Vite SPA routes).
  * @param {string} html
@@ -95,7 +88,6 @@ function decodePreviewRelativePath(pathname) {
  * @returns {Promise<boolean>}
  */
 export async function handlePreviewRequest(req, res, pathname, deps) {
-  setCorsHeaders(res);
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;
@@ -161,7 +153,6 @@ export async function handlePreviewRequest(req, res, pathname, deps) {
       let html = await fsp.readFile(absPath, 'utf8');
       html = injectPreviewBaseHref(html, relativePath, origin);
       res.statusCode = 200;
-      setCorsHeaders(res);
       res.setHeader('Content-Type', contentType);
       res.setHeader('Cache-Control', 'no-store');
       res.end(html);

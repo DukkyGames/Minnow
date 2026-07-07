@@ -15,6 +15,7 @@ import { deleteGenerationsForProviderShutdown } from './server/generations/store
 import { getAppRoot } from './server/workspace/root.js';
 import { getMinnowHome } from './server/config/home.js';
 import { applyMinnowMiddlewares } from './server/runtime/middlewares.js';
+import { getSessionToken, injectSessionTokenScript } from './server/runtime/session-token.js';
 import { bootstrapMinnowRuntime } from './server/runtime/bootstrap.js';
 import {
   startSchedulerTickLoop,
@@ -161,6 +162,9 @@ async function main() {
             resolveSafePath,
             runWithPathAccess,
           });
+        },
+        transformIndexHtml(html) {
+          return injectSessionTokenScript(html, getSessionToken());
         },
       },
     ],

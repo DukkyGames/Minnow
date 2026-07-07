@@ -2,6 +2,8 @@
  * Browser WebSocket client for live local STT — 16 kHz mono Int16 PCM over WS.
  */
 
+import { withSessionToken } from '../api/session-token.ts';
+
 const MAX_STT_WS_MESSAGE_CHARS = 64 * 1024;
 
 /** Parse a server STT WebSocket JSON event. */
@@ -56,7 +58,7 @@ export interface SttStreamClientOptions extends SttStreamClientCallbacks {
 /** Build same-origin WebSocket URL for STT streaming. */
 export function buildSttWsUrl(): string {
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${proto}//${window.location.host}/api/stt/ws`;
+  return withSessionToken(`${proto}//${window.location.host}/api/stt/ws`);
 }
 
 /** Convert float32 [-1,1] samples to little-endian Int16 PCM bytes. */

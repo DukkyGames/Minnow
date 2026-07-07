@@ -12,6 +12,7 @@ import type {
   ResearchStatusResponse,
   ResearchStreamEndEvent,
 } from './types';
+import { withSessionToken } from '../api/session-token.ts';
 
 export class ResearchNotFoundError extends Error {
   constructor() {
@@ -95,7 +96,9 @@ export async function fetchResearchDetail(researchId: string): Promise<ResearchD
 
 /** URL for the visual HTML report (open in preview or new tab). */
 export function researchReportUrl(researchId: string): string {
-  return `/api/research/report/${encodeURIComponent(researchId)}`;
+  // Opened via direct navigation (window.open/openExternal), not fetch — the
+  // token must ride the query string since no header can be attached.
+  return withSessionToken(`/api/research/report/${encodeURIComponent(researchId)}`);
 }
 
 export interface FetchResearchLibraryOptions {
