@@ -1886,7 +1886,7 @@ Cursor-style **⋮ menu** on each history-backed user/assistant row (not on in-f
 
 | Command | What runs | Tools API | Typical use |
 |---------|-----------|-------------|---------------|
-| **`npm start`** | `node server.js` — Vite + `/api/tools` + auto-launches Electron via detached [`scripts/launch-electron-after-vite.mjs`](../scripts/launch-electron-after-vite.mjs) (separate process waits for Vite HTTP 200, then spawns shell; compiles `electron/dist/` on first run) | Yes | Default dev: tools, git/file ops, PDF attachments, server tool toggles enabled after ping |
+| **`npm start`** | `node server.js` — Vite + `/api/tools` + auto-launches Electron via detached [`scripts/launch-electron-after-vite.mjs`](../scripts/launch-electron-after-vite.mjs) (separate process waits for Vite HTTP 200, then spawns shell; compiles `electron/dist/` on first run). On Electron failure only, the launcher opens the system browser — `server.js` does not treat the detached launcher’s exit code as a launch failure (MIN-264). | Yes | Default dev: tools, git/file ops, PDF attachments, server tool toggles enabled after ping |
 | **`npm run dev`** | `vite` only | No | UI/HMR without Node tool handlers; server tools stay disabled in Settings |
 | **`npm run build`** | `tsc` + `vite build` → `dist/` | N/A (static deploy; no `server.js` in production unless you host it separately) |
 | **`npm run preview`** | `vite preview` | No | Smoke-test production bundle |

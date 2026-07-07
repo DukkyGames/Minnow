@@ -6,7 +6,9 @@
 
 import { ensureElectronBuild, spawnElectronShell } from './spawn-electron.mjs';
 import { waitForMinnowDev } from './wait-for-minnow-dev.mjs';
+import { openBrowser } from './open-browser.mjs';
 import { resolveMinnowPort } from '../server/constants/minnow-port.js';
+import { readDevHostState } from '../server/runtime/dev-host-state.js';
 
 function readPortArg() {
   const idx = process.argv.indexOf('--port');
@@ -33,5 +35,9 @@ try {
 } catch (err) {
   const message = err instanceof Error ? err.message : String(err);
   console.error(`[electron] Launch failed: ${message}`);
+  const fallbackUrl =
+    readDevHostState()?.localUrl ?? `http://localhost:${preferredPort}/`;
+  console.warn(`[minnow] Opening system browser at ${fallbackUrl}`);
+  openBrowser(fallbackUrl);
   process.exit(1);
 }
