@@ -272,6 +272,8 @@ import {
   augmentPartyModeSkillBody,
   CAVEMAN_SKILL_ID,
   PARTYMODE_SKILL_ID,
+  GIT_SETUP_SKILL_ID,
+  prepareGitSetupTurn,
   formatHistoryWithSkillTag,
   isPartyModePinned,
   isSkillEnabled,
@@ -907,6 +909,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   let turnMountPinned = false;
 
   try {
+    if (skillId === GIT_SETUP_SKILL_ID && !resumeGenerationId) {
+      await prepareGitSetupTurn();
+    }
   const useActiveChatDom = chat.id === getActiveChat().id;
   // Capture the correct DOM mount now so mid-turn navigation (e.g. launch_minnow_app
   // routing to the Code app) cannot re-route stream output to the wrong surface.
