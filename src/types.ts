@@ -71,6 +71,12 @@ export interface UserMessage {
   goalAchieved?: boolean;
 }
 
+/** One build-agent progress item (todo_write). */
+export interface ChatTodo {
+  text: string;
+  status: 'pending' | 'in_progress' | 'completed';
+}
+
 /** Persistent /goal loop state on a chat (Claude Code–style completion condition). */
 export interface ActiveGoalState {
   /** Completion condition text (max 4000 chars). */
@@ -785,6 +791,10 @@ export interface Chat {
   pendingMessageQueue?: QueuedComposerMessage[];
   /** Active /goal completion loop; persists across reload until cleared. */
   activeGoal?: ActiveGoalState;
+  /** Build-agent progress checklist (todo_write); replace-all, cleared on /clear. */
+  todos?: ChatTodo[];
+  /** Epoch ms when todos were last written via todo_write. */
+  todosUpdatedAt?: number;
   /** Queued mode switch from set_chat_mode during streaming (last write wins; flushed on stream end). */
   pendingModeId?: ModeId;
   /** Sidebar: green dot on inactive rows until the user opens this chat again. */

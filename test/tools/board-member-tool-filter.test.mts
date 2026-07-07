@@ -156,6 +156,20 @@ describe('applyBoardMemberToolFilter', () => {
     assert.ok(!names.includes('board_init'));
     assert.ok(!names.includes('board_update_task'));
     assert.ok(!names.includes('delegate_tasks'));
+    assert.ok(!names.includes('todo_write'), 'todo_write should be stripped on board task chats');
+  });
+
+  test('todo_write is available for plain build chats but not orchestrate', () => {
+    seedBoardSession();
+    const plainBuild = createEmptyChatObject('', '');
+    plainBuild.modeId = 'build';
+    const buildNames = getEnabledToolDefinitionsForChat(plainBuild).map((d) => d.function.name);
+    assert.ok(buildNames.includes('todo_write'));
+
+    const planner = createEmptyChatObject('', '');
+    planner.modeId = 'orchestrate';
+    const orchestrateNames = getEnabledToolDefinitionsForChat(planner).map((d) => d.function.name);
+    assert.ok(!orchestrateNames.includes('todo_write'));
   });
 
   test('strips planner-only board tools for board task chats', () => {

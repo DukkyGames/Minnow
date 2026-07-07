@@ -1074,6 +1074,37 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'todo_write',
+    label: 'Updating todo list',
+    description:
+      'Replace the build progress checklist with an ordered list of steps (max 20). Keep exactly one item in_progress.',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'todo_write',
+      'Update the visible build progress checklist. Pass the full ordered list each call (replace-all). Use 3–8 concrete steps; mark completed items as you finish.',
+      {
+        todos: {
+          type: 'array',
+          description: 'Full replacement checklist (empty clears the list)',
+          items: {
+            type: 'object',
+            properties: {
+              text: { type: 'string', description: 'Step description (max 140 chars)' },
+              status: {
+                type: 'string',
+                enum: ['pending', 'in_progress', 'completed'],
+                description: 'Step status',
+              },
+            },
+            required: ['text', 'status'],
+          },
+        },
+      },
+      ['todos'],
+    ),
+  },
+  {
     id: 'bug_add',
     label: 'Bug add',
     description: 'Add a bug card to the Reported column (All bugs screen).',

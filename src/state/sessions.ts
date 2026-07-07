@@ -92,6 +92,7 @@ import type {
   ActiveGoalState,
   Chat,
   ChatGroup,
+  ChatTodo,
   ExpertSelection,
   Message,
   OrchestrateBoardState,
@@ -1071,6 +1072,32 @@ function ensurePersistedSubAgentRuns(
   return out.length ? out : undefined;
 }
 
+const MAX_CHAT_TODO_ITEMS = 20;
+const MAX_CHAT_TODO_TEXT_CHARS = 140;
+
+function normalizeChatTodoStatus(raw: unknown): ChatTodo['status'] {
+  if (raw === 'completed' || raw === 'in_progress' || raw === 'pending') return raw;
+  return 'pending';
+}
+
+/** Sanitize persisted todos — drop malformed rows and cap length. */
+function ensureChatTodos(raw: unknown): ChatTodo[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: ChatTodo[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as Record<string, unknown>;
+    const text = typeof row.text === 'string' ? row.text.trim().slice(0, MAX_CHAT_TODO_TEXT_CHARS) : '';
+    if (!text) continue;
+    out.push({
+      text,
+      status: normalizeChatTodoStatus(row.status),
+    });
+    if (out.length >= MAX_CHAT_TODO_ITEMS) break;
+  }
+  return out.length ? out : undefined;
+}
+
 function ensureActiveGoal(raw: unknown): ActiveGoalState | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const goal = raw as Record<string, unknown>;
@@ -1119,6 +1146,13 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
   }
   const pinnedSkill = ensurePinnedSkill(raw.pinnedSkill);
   const activeGoal = ensureActiveGoal(raw.activeGoal);
+  const todos = ensureChatTodos(raw.todos);
+  const todosUpdatedAt =
+    typeof raw.todosUpdatedAt === 'number' &&
+    Number.isFinite(raw.todosUpdatedAt) &&
+    raw.todosUpdatedAt > 0
+      ? raw.todosUpdatedAt
+      : undefined;
   const pendingMessageQueue = ensurePendingMessageQueue(raw.pendingMessageQueue);
   const pendingSteerMessage =
     typeof raw.pendingSteerMessage === 'string' && raw.pendingSteerMessage.trim()
@@ -1213,6 +1247,8 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
       : {}),
     ...(pinnedSkill ? { pinnedSkill } : {}),
     ...(activeGoal ? { activeGoal } : {}),
+    ...(todos ? { todos } : {}),
+    ...(todos && todosUpdatedAt ? { todosUpdatedAt } : {}),
     ...(pendingMessageQueue ? { pendingMessageQueue } : {}),
     ...(pendingSteerMessage ? { pendingSteerMessage } : {}),
   };
@@ -1586,6 +1622,31 @@ export function clearActiveGoal(chat: Chat): void {
   chat.activeGoal = undefined;
   touchChat(chat);
   scheduleSaveSessions();
+}
+
+/** Replace the build-agent progress checklist on a chat (todo_write). */
+export function setChatTodos(chat: Chat, todos: ChatTodo[]): void {
+  chat.todos = todos.slice(0, MAX_CHAT_TODO_ITEMS).map((item) => ({
+    text: item.text.trim().slice(0, MAX_CHAT_TODO_TEXT_CHARS),
+    status: normalizeChatTodoStatus(item.status),
+  }));
+  chat.todosUpdatedAt = Date.now();
+  touchChat(chat);
+  scheduleSaveSessions();
+}
+
+/** Clear build-agent todos (/clear or empty todo_write). */
+export function clearChatTodos(chat: Chat): void {
+  if (!chat.todos?.length && chat.todosUpdatedAt === undefined) return;
+  chat.todos = undefined;
+  chat.todosUpdatedAt = undefined;
+  touchChat(chat);
+  scheduleSaveSessions();
+}
+
+/** Read persisted build-agent todos. */
+export function getChatTodos(chat: Chat): ChatTodo[] | undefined {
+  return chat.todos?.length ? chat.todos : undefined;
 }
 
 /** Read persisted goal state (may be achieved but still visible until cleared). */

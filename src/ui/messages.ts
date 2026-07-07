@@ -22,6 +22,7 @@ import { setAssistantBubbleContent } from '../markdown/renderer';
 import { getActiveBoardGroup } from '../state/chat-groups';
 import {
   clearActiveGoal,
+  clearChatTodos,
   getActiveChat,
   touchChat,
   scheduleSaveSessions,
@@ -57,6 +58,7 @@ import { updateWorkspaceCodeChangeDisplay } from './workspace-code-change';
 import { resetTokenLedger } from '../usage/token-ledger';
 import { updateCodeChangeStrip } from './code-change-strip';
 import { renderSidebar } from './sidebar';
+import { syncTodoPanel } from './todo-panel';
 import { renderThoughtsToggle } from './thought-bubbles';
 import { renderToolCall, renderToolResult } from './tool-messages';
 import { attachShellKillUi } from './shell-run-ui';
@@ -666,6 +668,7 @@ export function clearChat(): void {
   if (!confirm('Clear all messages in this chat? The chat stays in your sidebar.')) return;
   const chat = getActiveChat();
   clearActiveGoal(chat);
+  clearChatTodos(chat);
   chat.history = [];
   resetTokenLedger(chat);
   resetCodeChangeTotals(chat);
@@ -682,5 +685,6 @@ export function clearChat(): void {
   renderStatsForChat(chat);
   renderSidebar();
   scheduleSaveSessions();
+  syncTodoPanel();
   closeDrawer();
 }

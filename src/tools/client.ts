@@ -5,6 +5,7 @@
 
 import { executeBrowserTool } from './browser-executor';
 import { executeBoardTool } from './board-tools';
+import { executeTodoWrite } from './todo-tools';
 import { executeBugBoardTool } from './bug-board-tools';
 import { executeSubAgentTool } from './sub-agent-executor';
 import { runCommandWithTerminalStream } from '../ui/terminal-panel';
@@ -334,6 +335,13 @@ async function executeToolInner(
     const text = await executeBoardTool(name, args, {
       chatId: context?.chatId,
     });
+    return { content: text };
+  }
+
+  if (name === 'todo_write') {
+    const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
+    if (blocked) return blocked;
+    const text = executeTodoWrite(args, { chatId: context?.chatId });
     return { content: text };
   }
 

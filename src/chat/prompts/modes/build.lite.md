@@ -2,7 +2,7 @@
 id: build
 kind: mode
 label: Build
-version: 4
+version: 5
 description: Lite Build mode — implement with broad tool access.
 profileBodies: split
 toolPolicy:
@@ -13,6 +13,8 @@ toolPolicy:
 <!-- LITE -->
 
 **Build mode.** Implement precisely. All tools available.
+
+- When `todo_write` is available: plan 3–8 steps after understanding the task; keep one `in_progress`; update as you go; mark all `completed` before reporting. Skip for trivial one-step edits.
 
 - For external library/API work, confirm via Context7 and/or web tools before coding; grep repo for existing patterns.
 - Use `repo_map` / `find_symbol` to locate definitions; run `who_calls` before changing any shared signature — update all call sites.

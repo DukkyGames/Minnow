@@ -1831,6 +1831,22 @@ While the loop is active (`activeGoal` and not `achieved`), **tool approvals aut
 
 **Tests:** `test/chat/goal-parse-response.test.mts`, `test/chat/goal-parse-command.test.mts`, `test/chat/goal-command.test.mts`, `test/chat/goal-evaluate.test.mts`, `test/chat/goal-completion-text.test.mts`, `test/server/validate-sessions-v2.test.mjs` (activeGoal round-trip).
 
+## Build progress checklist (`todo_write`, MIN-273)
+
+Claude Code–style **per-chat step tracking** for **regular Build-mode chats** (not Orchestrate board task chats). The agent calls client-side **`todo_write`** with replace-all semantics; the user sees a collapsible **Checklist** panel pinned above the composer.
+
+| Concern | Location |
+|---------|----------|
+| Tool + validation | [`src/tools/todo-tools.ts`](../src/tools/todo-tools.ts) — `validateTodoWriteArgs`, `executeTodoWrite` |
+| Catalog entry | [`src/tools/definitions.ts`](../src/tools/definitions.ts) — `todo_write` (agents group, label “Updating todo list”) |
+| Mode gating | [`src/chat/modes/tool-groups.ts`](../src/chat/modes/tool-groups.ts) — `todo` group on **build** + **debug** only; stripped on board via [`orchestrate-tool-filter.ts`](../src/chat/modes/orchestrate-tool-filter.ts) |
+| State | [`src/state/sessions.ts`](../src/state/sessions.ts) — `Chat.todos`, `setChatTodos`, `clearChatTodos`, `getChatTodos`; cleared on **`clearChat`** with `activeGoal` |
+| UI | [`src/ui/todo-panel.ts`](../src/ui/todo-panel.ts) — `syncTodoPanel`, `deriveTodoPanelView` |
+| Prompts | [`build.full.md`](../src/chat/prompts/modes/build.full.md) v7 — **Progress todos** section (conditional on tool availability) |
+| Headless | [`src/headless/execute-tool.ts`](../src/headless/execute-tool.ts) — build/debug only |
+
+**Tests:** `test/tools/todo-tools.test.mts`, `test/ui/todo-panel.test.mts`, `test/state/chat-todos.test.mts`, `test/tools/board-member-tool-filter.test.mts` (gating).
+
 ## Message actions (Epic C2 — features 15–17)
 
 Cursor-style **⋮ menu** on each history-backed user/assistant row (not on in-flight streaming shells).
