@@ -298,6 +298,24 @@
   border-color: var(--mn-accent);
 }
 
+/* Pulse dot when an agent command runs while the user is on another tab (MIN-242). */
+.terminal-tab.terminal-tab--agent-run {
+  position: relative;
+}
+
+.terminal-tab.terminal-tab--agent-run::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mn-accent);
+  box-shadow: 0 0 0 1px var(--mn-bg);
+  animation: terminal-agent-run-pulse 1.4s ease-in-out infinite;
+}
+
 .terminal-agent-output,
 .terminal-dev-server-output {
   flex: 1;

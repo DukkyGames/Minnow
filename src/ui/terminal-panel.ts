@@ -24,6 +24,7 @@ import {
   initTerminalTabs,
   isTerminalTabsInitialized,
   onTerminalPanelResize,
+  setAgentTabActivityBadge,
   setTerminalTabChangeHandler,
   switchToAgentTab,
   switchToDevServerTab,
@@ -36,6 +37,10 @@ import {
   isTerminalXtermReady,
 } from './terminal-xterm';
 import { appendConsoleOutputWithLinks } from './terminal-console-links';
+import {
+  shouldShowAgentTabActivityBadge,
+  shouldSwitchToAgentTab,
+} from './terminal-agent-follow-policy';
 
 const MIN_HEIGHT_PX = 120;
 const MAX_HEIGHT_RATIO = 0.5;
@@ -62,6 +67,8 @@ const MAX_DISPLAY_BYTES = 2 * 1024 * 1024;
 let activeTabKind: TerminalTabKind = 'pty';
 /** Depth of agent runs that requested the top-bar hint while the panel was closed. */
 let agentRunHintDepth = 0;
+/** Depth of agent runs that should badge the Agent tab while the user is on another tab. */
+let agentTabActivityDepth = 0;
 
 const TERMINAL_BTN_DEFAULT_TITLE = 'Terminal (Ctrl+`)';
 const TERMINAL_BTN_AGENT_RUN_TITLE =
@@ -118,6 +125,7 @@ function applyActiveTabView(kind: TerminalTabKind): void {
   }
 
   if (isAgent) {
+    setAgentTabActivityBadge(false);
     scrollOutputIfPinned();
     refreshShellKillUi();
     return;
@@ -141,10 +149,33 @@ function applyActiveTabView(kind: TerminalTabKind): void {
   });
 }
 
-function ensureAgentTabVisible(): void {
-  if (isTerminalPanelOpen()) {
+/** Switch to the Agent tab only when the user opted in or explicitly requested history. */
+function maybeFollowAgentTab(userInitiated = false): void {
+  const meta = getTerminalMetaCached();
+  if (
+    shouldSwitchToAgentTab({
+      panelOpen: isTerminalPanelOpen(),
+      userInitiated,
+      autoFollowAgentTab: meta.autoFollowAgentTab,
+    })
+  ) {
     void switchToAgentTab();
   }
+}
+
+function syncAgentTabActivityBadge(): void {
+  setAgentTabActivityBadge(
+    shouldShowAgentTabActivityBadge({
+      panelOpen: isTerminalPanelOpen(),
+      activeTabKind,
+      activityDepth: agentTabActivityDepth,
+    }),
+  );
+}
+
+function bumpAgentTabActivity(delta: number): void {
+  agentTabActivityDepth = Math.max(0, agentTabActivityDepth + delta);
+  syncAgentTabActivityBadge();
 }
 
 function updateOfflineBanner(): void {
@@ -191,7 +222,7 @@ function isTerminalPanelOpen(): boolean {
 }
 
 function beginCommandOutput(command: string, options: { clear?: boolean } = {}): void {
-  ensureAgentTabVisible();
+  maybeFollowAgentTab();
   if (options.clear) {
     clearOutput();
     appendOutputText(`$ ${command}\n`, 'stdout');
@@ -216,7 +247,6 @@ export function appendTerminalOutput(
   text: string,
 ): void {
   if (activeRunId && runId !== activeRunId) return;
-  ensureAgentTabVisible();
   appendOutputText(text, stream);
   externalHooks.onChunk?.(runId, stream, text);
 }
@@ -530,7 +560,7 @@ function wireAgentRunSelect(): void {
 }
 
 async function loadHistoryRun(runId: string): Promise<void> {
-  ensureAgentTabVisible();
+  maybeFollowAgentTab(true);
   clearOutput();
   setActiveHistoryRun(runId);
   const text = await fetchTerminalLog(runId);
@@ -622,11 +652,20 @@ export async function runCommandWithTerminalStream(
     timeoutMs?: number;
   },
 ): Promise<string> {
+  const isAgentRun = options.source === 'agent';
+  if (isAgentRun && getTerminalMetaCached().autoOpenOnAgentRun) {
+    openTerminalPanel();
+  }
+
   const panelWasClosed = !isTerminalPanelOpen();
-  // Agent/sub-agent shell tools never raise the panel; output streams in the background.
-  const showAgentRunHint = options.source === 'agent' && panelWasClosed;
+  // Agent/sub-agent shell tools never raise the panel unless the user opted in.
+  const showAgentRunHint = isAgentRun && panelWasClosed;
+  const showAgentTabBadge = isAgentRun && !panelWasClosed;
   if (showAgentRunHint) {
     bumpAgentRunHint(1);
+  }
+  if (showAgentTabBadge) {
+    bumpAgentTabActivity(1);
   }
 
   try {
@@ -748,6 +787,9 @@ export async function runCommandWithTerminalStream(
   } finally {
     if (showAgentRunHint) {
       bumpAgentRunHint(-1);
+    }
+    if (showAgentTabBadge) {
+      bumpAgentTabActivity(-1);
     }
   }
 }

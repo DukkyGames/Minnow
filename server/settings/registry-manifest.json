@@ -131,18 +131,43 @@
     ]
   },
   {
-    "key": "general.chat.terminal",
-    "label": "Terminal behavior",
+    "key": "general.chat.terminal.autoOpenOnAgentRun",
+    "label": "Open terminal on agent command",
+    "description": "Raise the console panel when an agent starts execute_command.",
     "keywords": [
       "shell",
-      "background command"
+      "background command",
+      "auto open",
+      "terminal"
     ],
     "category": "general",
     "area": "general",
-    "storage": "section",
-    "type": "string",
+    "storage": "meta",
+    "path": "terminal.autoOpenOnAgentRun",
+    "type": "boolean",
     "sensitivity": "normal",
-    "writable": false,
+    "writable": true,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
+    "key": "general.chat.terminal.autoFollowAgentTab",
+    "label": "Follow agent commands in terminal",
+    "description": "Switch to the Agent tab when an agent starts a shell command while the console is open.",
+    "keywords": [
+      "shell",
+      "auto follow",
+      "agent tab",
+      "terminal"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "meta",
+    "path": "terminal.autoFollowAgentTab",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
     "refreshAreas": [
       "general"
     ]

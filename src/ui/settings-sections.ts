@@ -132,6 +132,7 @@ import { renderSamplerSettingsSection } from './settings-sampler';
 import { renderThinkingSettingsSection } from './settings-thinking';
 import { renderWebhooksSettingsSection } from './settings-webhooks';
 import {
+  getTerminalMetaCached,
   loadTerminalMeta,
   saveTerminalMeta,
 } from '../config/terminal-meta';
@@ -186,16 +187,60 @@ function clearMount(id: string): HTMLElement | null {
   return mount;
 }
 
-/** Terminal panel note (agent runs do not auto-open the dock). */
+/** Terminal panel behavior when agents run shell commands (MIN-242). */
 async function appendTerminalControls(mount: HTMLElement): Promise<void> {
-  void (await loadTerminalMeta());
-  mount.appendChild(
-    el(
-      'p',
-      'settings-field-hint',
-      'Agent and sub-agent shell commands run in the background. Open the terminal panel yourself; the Terminal button pulses while a command is running.',
-    ),
+  await loadTerminalMeta();
+  const meta = getTerminalMetaCached();
+
+  const { row: autoOpenRow, input: autoOpenCb } = createSettingsToggleRow(
+    'Open terminal when agent runs a command',
+    {
+      checked: meta.autoOpenOnAgentRun,
+      ariaLabel: 'Open terminal when agent runs a command',
+      searchKey: 'general.chat.terminal.autoOpenOnAgentRun',
+      description:
+        'Raises the console panel when an agent starts execute_command. Off by default so your own shell session stays uninterrupted.',
+    },
   );
+  mount.appendChild(autoOpenRow);
+
+  const { row: autoFollowRow, input: autoFollowCb } = createSettingsToggleRow(
+    'Switch to Agent tab when agent runs a command',
+    {
+      checked: meta.autoFollowAgentTab,
+      ariaLabel: 'Switch to Agent tab when agent runs a command',
+      searchKey: 'general.chat.terminal.autoFollowAgentTab',
+      description:
+        'When the console is already open, jump to the Agent output tab at run start. Off by default — a pulse on the Terminal button (panel closed) or Agent tab (panel open) still signals activity.',
+    },
+  );
+  mount.appendChild(autoFollowRow);
+
+  const saveTerminalSetting = async (
+    patch: Parameters<typeof saveTerminalMeta>[0],
+    okMessage: string,
+  ): Promise<void> => {
+    try {
+      await saveTerminalMeta(patch);
+      setStatus('ok', okMessage);
+    } catch {
+      setStatus('err', 'Could not save terminal setting');
+    }
+  };
+
+  autoOpenCb.addEventListener('change', () => {
+    void saveTerminalSetting(
+      { autoOpenOnAgentRun: autoOpenCb.checked },
+      'Terminal auto-open setting updated',
+    );
+  });
+
+  autoFollowCb.addEventListener('change', () => {
+    void saveTerminalSetting(
+      { autoFollowAgentTab: autoFollowCb.checked },
+      'Terminal auto-follow setting updated',
+    );
+  });
 }
 
 /** Constrained decoding default (persisted in config.json `toolCalls`). */
