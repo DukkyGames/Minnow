@@ -64,6 +64,12 @@ export function createOpenAiSseEncoder() {
   /** @type {Map<string, number>} */
   const toolIdToIndex = new Map();
   let nextToolIndex = 0;
+  // AI SDK fullStream emits tool-input-start/-delta for incremental streaming, then a
+  // terminal tool-call part with the already-complete name + input. Once a call has been
+  // streamed incrementally, the terminal part must not be re-encoded as another delta or
+  // the client's mergeToolCallDelta concatenates the full name/arguments a second time.
+  /** @type {Set<string>} */
+  const streamedIncrementally = new Set();
 
   /**
    * @param {string} toolCallId
@@ -126,6 +132,7 @@ export function createOpenAiSseEncoder() {
       case 'tool-input-start': {
         const toolCallId = typeof part.id === 'string' ? part.id : '';
         if (!toolCallId) return null;
+        streamedIncrementally.add(toolCallId);
         return encodeToolDelta(
           {
             id: toolCallId,
@@ -162,6 +169,9 @@ export function createOpenAiSseEncoder() {
         const toolCallId = typeof part.toolCallId === 'string' ? part.toolCallId : '';
         const toolName = typeof part.toolName === 'string' ? part.toolName : '';
         if (!toolCallId || !toolName) return null;
+        // Already fully delivered via tool-input-start/-delta; this terminal part just
+        // carries the same complete name/input again for non-streaming consumers.
+        if (streamedIncrementally.has(toolCallId)) return null;
         const args =
           typeof part.input === 'string'
             ? part.input
