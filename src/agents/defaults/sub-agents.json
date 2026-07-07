@@ -66,7 +66,7 @@
         "git_commit"
       ],
       "systemPromptPath": null,
-      "maxInputTokens": 16000,
+      "maxInputTokens": null,
       "contextEnforcementPolicy": "slide",
       "summarySchema": "minnow.sub-agent.explore",
       "sampler": {
@@ -83,7 +83,7 @@
       "modelId": "",
       "maxConcurrent": 5,
       "timeoutMs": 420000,
-      "maxInputTokens": 12000,
+      "maxInputTokens": null,
       "contextEnforcementPolicy": "summarize",
       "summarySchema": "minnow.sub-agent.v1",
       "workAgentId": null,
@@ -146,7 +146,7 @@
         "cancel_sub_agent"
       ],
       "systemPromptPath": null,
-      "maxInputTokens": 8000,
+      "maxInputTokens": null,
       "contextEnforcementPolicy": "truncate",
       "summarySchema": "minnow.sub-agent.v1",
       "sampler": {

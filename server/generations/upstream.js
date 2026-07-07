@@ -3,6 +3,9 @@
  * Supports pre-first-token failover across configured provider/model candidates.
  */
 
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { readConfigJson } from '../config/store.js';
 import { getProviderRuntime } from '../providers/store.js';
 import {
@@ -29,6 +32,44 @@ import {
 import { pumpAnthropicUpstream } from './anthropic/pump.js';
 import { formatUpstreamHttpErrorMessage } from './upstream-error-detail.js';
 import { upstreamFetch } from './upstream-fetch.js';
+
+/**
+ * Best-effort diagnostic dump of the outbound body + upstream error body when an
+ * openai-v1 upstream POST fails, mirroring the anthropic gateway dump so opaque
+ * "Upstream request failed" 400s can be root-caused from the last occurrence.
+ * @param {{ status: number, url: string, providerId: string, modelId: string, requestBody: Buffer, responseText: string }} info
+ */
+function dumpUpstreamFailure(info) {
+  try {
+    const dir = join(homedir(), '.minnow', 'debug');
+    mkdirSync(dir, { recursive: true });
+    let parsedBody;
+    try {
+      parsedBody = JSON.parse(info.requestBody.toString('utf8'));
+    } catch {
+      parsedBody = info.requestBody.toString('utf8');
+    }
+    writeFileSync(
+      join(dir, 'openai-upstream-last-error.json'),
+      JSON.stringify(
+        {
+          at: new Date().toISOString(),
+          status: info.status,
+          url: info.url,
+          providerId: info.providerId,
+          modelId: info.modelId,
+          responseText: info.responseText,
+          requestBody: parsedBody,
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+  } catch {
+    // Best-effort diagnostic only.
+  }
+}
 
 /**
  * Kimi (Moonshot AI) thinking/code models only accept temperature=1.
@@ -255,6 +296,14 @@ async function attemptCandidateStream({
         /* ignore */
       }
       const message = formatUpstreamHttpErrorMessage(upstream.status, rawBody);
+      dumpUpstreamFailure({
+        status: upstream.status,
+        url,
+        providerId: candidate.providerId,
+        modelId: candidate.modelId,
+        requestBody,
+        responseText: rawBody,
+      });
       const classified = classifyUpstreamError(null, upstream);
       if (!bytesEmitted && classified.kind === 'retryable' && canFailover) {
         if (upstream.status >= 500 || [502, 503, 504].includes(upstream.status)) {
