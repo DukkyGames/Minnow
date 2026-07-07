@@ -11,6 +11,8 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildElectronMain } from './build-electron.mjs';
+import { isElectronBuildFresh } from './spawn-electron.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -84,6 +86,17 @@ function main() {
   }
 
   log('Electron binary ready.');
+
+  if (!isElectronBuildFresh()) {
+    log('Pre-compiling Electron main process for faster first launch…');
+    try {
+      buildElectronMain();
+      log('Electron main process compiled.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      warn(`Electron compile failed (${message}). First launch will compile on demand.`);
+    }
+  }
 }
 
 main();

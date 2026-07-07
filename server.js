@@ -182,6 +182,7 @@ async function main() {
   const localUrl = urls[0];
   const boundPort = Number(new URL(localUrl).port) || PORT;
   writeDevHostState({ localUrl, port: boundPort });
+  getSessionToken();
   const networkUrls = vite.resolvedUrls?.network ?? [];
   console.log(`Minnow dev server: ${localUrl}`);
   if (networkAccess === 'lan') {
