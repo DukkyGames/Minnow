@@ -24,12 +24,14 @@ export function getDefaultPaths(
   const defaults =
     apiKind === 'openai-v1'
       ? { modelsPath: '/v1/models', chatCompletionsPath: '/v1/chat/completions' }
-      : {
-          modelsPath: '/api/v0/models',
-          chatCompletionsPath: '/api/v0/chat/completions',
-          modelsLoadPath: '/api/v1/models/load',
-          modelsUnloadPath: '/api/v1/models/unload',
-        };
+      : apiKind === 'anthropic-v1'
+        ? { modelsPath: '/v1/models', chatCompletionsPath: '/v1/messages' }
+        : {
+            modelsPath: '/api/v0/models',
+            chatCompletionsPath: '/api/v0/chat/completions',
+            modelsLoadPath: '/api/v1/models/load',
+            modelsUnloadPath: '/api/v1/models/unload',
+          };
 
   const out = {
     modelsPath: overrides.modelsPath || defaults.modelsPath,

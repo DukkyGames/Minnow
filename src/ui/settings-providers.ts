@@ -41,8 +41,25 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+function apiKindFromValue(value: string | undefined | null): ApiKind {
+  if (value === 'openai-v1') return 'openai-v1';
+  if (value === 'anthropic-v1') return 'anthropic-v1';
+  return 'lm-studio-v0';
+}
+
 function parseApiKind(select: HTMLSelectElement | null): ApiKind {
-  return select?.value === 'openai-v1' ? 'openai-v1' : 'lm-studio-v0';
+  return apiKindFromValue(select?.value);
+}
+
+function chatPathLabel(apiKind: ApiKind): string {
+  return apiKind === 'anthropic-v1' ? 'Messages path' : 'Chat completions path';
+}
+
+function pathFieldsHint(apiKind: ApiKind): string {
+  if (apiKind === 'anthropic-v1') {
+    return 'Appended to base URL. OpenCode Zen: /zen/v1/models and /zen/v1/messages.';
+  }
+  return 'Appended to base URL. OpenCode Go: /zen/go/v1/models and /zen/go/v1/chat/completions.';
 }
 
 function parseAuthStyle(select: HTMLSelectElement | null): AuthStyle {
@@ -73,18 +90,37 @@ function setProviderEditFormError(providerId: string, message: string | null): v
 function parsePathFields(
   form: ParentNode,
 ): { modelsPath: string; chatCompletionsPath: string } | { error: string } {
+  const apiKind = parseApiKind(form.querySelector<HTMLSelectElement>('select[name="apiKind"]'));
+  const chatLabel = chatPathLabel(apiKind);
   const models =
     form.querySelector<HTMLInputElement>('input[name="modelsPath"]')?.value.trim() ?? '';
   const chat =
     form.querySelector<HTMLInputElement>('input[name="chatCompletionsPath"]')?.value.trim() ??
     '';
   if (!models || !chat) {
-    return { error: 'Models path and chat completions path are required.' };
+    return { error: `Models path and ${chatLabel.toLowerCase()} are required.` };
   }
   if (!models.startsWith('/') || !chat.startsWith('/')) {
     return { error: 'Paths must start with / (e.g. /v1/models).' };
   }
   return { modelsPath: models, chatCompletionsPath: chat };
+}
+
+/** Sync path field labels and hint text when API style changes. */
+function updatePathFieldLabels(form: ParentNode, apiKind: ApiKind): void {
+  const chatLabel = chatPathLabel(apiKind);
+  const chatLabelEl = form.querySelector<HTMLElement>('[data-provider-chat-path-label]');
+  if (chatLabelEl) chatLabelEl.textContent = chatLabel;
+
+  const hintEl = form.querySelector<HTMLElement>('[data-provider-paths-hint]');
+  if (hintEl) hintEl.textContent = pathFieldsHint(apiKind);
+}
+
+/** Default auth header when API style changes (Anthropic uses X-Api-Key). */
+function applyAuthStyleDefaultForApiKind(form: ParentNode, apiKind: ApiKind): void {
+  if (apiKind !== 'anthropic-v1') return;
+  const authSel = form.querySelector<HTMLSelectElement>('select[name="authStyle"]');
+  if (authSel) authSel.value = 'x-api-key';
 }
 
 /** Set models/chat path inputs from apiKind defaults. */
@@ -99,9 +135,10 @@ function fillPathInputs(form: ParentNode, apiKind: ApiKind): void {
 /** When API style changes, refresh paths if they still match the previous kind's defaults. */
 function wirePathSyncOnApiKindChange(form: HTMLElement, kindSel: HTMLSelectElement): void {
   kindSel.dataset.prevApiKind = kindSel.value;
+  updatePathFieldLabels(form, parseApiKind(kindSel));
   kindSel.addEventListener('change', () => {
-    const prevKind =
-      kindSel.dataset.prevApiKind === 'openai-v1' ? 'openai-v1' : 'lm-studio-v0';
+    const prevKind = apiKindFromValue(kindSel.dataset.prevApiKind);
+    const nextKind = parseApiKind(kindSel);
     const modelsInput = form.querySelector<HTMLInputElement>('input[name="modelsPath"]');
     const chatInput = form.querySelector<HTMLInputElement>('input[name="chatCompletionsPath"]');
     if (!modelsInput || !chatInput) return;
@@ -113,8 +150,10 @@ function wirePathSyncOnApiKindChange(form: HTMLElement, kindSel: HTMLSelectEleme
       models === prevDefaults.modelsPath && chat === prevDefaults.chatCompletionsPath;
 
     if (!models || !chat || matchesPrevDefaults) {
-      fillPathInputs(form, parseApiKind(kindSel));
+      fillPathInputs(form, nextKind);
     }
+    applyAuthStyleDefaultForApiKind(form, nextKind);
+    updatePathFieldLabels(form, nextKind);
     kindSel.dataset.prevApiKind = kindSel.value;
   });
 }
@@ -235,6 +274,7 @@ function appendPathFields(
   parent: HTMLElement,
   modelsPath: string,
   chatCompletionsPath: string,
+  apiKind: ApiKind,
 ): void {
   const row = el('div', 'field-row');
 
@@ -252,7 +292,9 @@ function appendPathFields(
   row.append(modelsField);
 
   const chatField = el('div', 'field');
-  chatField.append(el('label', undefined, 'Chat completions path'));
+  const chatLabel = el('label', undefined, chatPathLabel(apiKind));
+  chatLabel.dataset.providerChatPathLabel = '';
+  chatField.append(chatLabel);
   const chatInput = document.createElement('input');
   chatInput.type = 'text';
   chatInput.className = 'settings-input';
@@ -265,13 +307,9 @@ function appendPathFields(
   row.append(chatField);
 
   parent.append(row);
-  parent.append(
-    el(
-      'p',
-      'field-hint',
-      'Appended to base URL. OpenCode Zen: base https://opencode.ai with /zen/v1/models and /zen/v1/chat/completions. OpenCode Go: /zen/go/v1/models and /zen/go/v1/chat/completions.',
-    ),
-  );
+  const hint = el('p', 'field-hint', pathFieldsHint(apiKind));
+  hint.dataset.providerPathsHint = '';
+  parent.append(hint);
 }
 
 /** Append API kind + auth style selects; returns the kind select for path sync wiring. */
@@ -290,6 +328,7 @@ function appendApiFields(
   for (const opt of [
     { value: 'lm-studio-v0', label: 'LM Studio v0 (/api/v0/...)' },
     { value: 'openai-v1', label: 'OpenAI v1 (/v1/...)' },
+    { value: 'anthropic-v1', label: 'Anthropic Messages' },
   ]) {
     const o = document.createElement('option');
     o.value = opt.value;
@@ -378,7 +417,7 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
   form.append(urlField);
 
   const kindSel = appendApiFields(form, provider.apiKind, provider.authStyle ?? 'bearer');
-  appendPathFields(form, resolved.modelsPath, resolved.chatCompletionsPath);
+  appendPathFields(form, resolved.modelsPath, resolved.chatCompletionsPath, provider.apiKind);
   wirePathSyncOnApiKindChange(form, kindSel);
 
   const keyField = el('div', 'field');

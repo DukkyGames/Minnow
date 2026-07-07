@@ -4,7 +4,7 @@
 
 import type { ProviderPricing } from '../usage/types';
 
-export type ApiKind = 'lm-studio-v0' | 'openai-v1';
+export type ApiKind = 'lm-studio-v0' | 'openai-v1' | 'anthropic-v1';
 export type AuthStyle = 'bearer' | 'api-key' | 'x-api-key';
 export type ProviderId = string;
 
