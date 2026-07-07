@@ -38,6 +38,12 @@ export const PREVIEW_TAB_CLOSE = 'minnow:preview:tab-close';
 export const PREVIEW_TAB_ACTIVATE = 'minnow:preview:tab-activate';
 /** Renderer → main: list preview tab guests. */
 export const PREVIEW_TAB_LIST = 'minnow:preview:tab-list';
+/** Renderer → main: create (or no-op if it exists) a named preview instance. */
+export const PREVIEW_INSTANCE_CREATE = 'minnow:preview:instance-create';
+/** Renderer → main: destroy a named preview instance and all of its tabs/guests. */
+export const PREVIEW_INSTANCE_DESTROY = 'minnow:preview:instance-destroy';
+/** Renderer → main: list live preview instance ids for the window (most-recently-used first). */
+export const PREVIEW_INSTANCE_LIST = 'minnow:preview:instance-list';
 export const APP_OPEN_EXTERNAL = 'minnow:app:open-external';
 /** Renderer → main: forward renderer errors to crash.jsonl (fire-and-forget). */
 export const DIAGNOSTICS_REPORT_ERROR = 'minnow:diagnostics:report-error';
