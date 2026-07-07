@@ -192,14 +192,12 @@ async function runElectronPreviewHostLayoutSync(): Promise<void> {
 
   const bounds = await waitForStablePreviewBodyBounds();
   if (!bounds) return;
+  if (!shouldShowElectronPreviewHost()) return;
 
-  if (!previewGuestVisible) {
-    await api.show(bounds);
-    previewGuestVisible = true;
-    return;
-  }
-
-  await api.setBounds(bounds);
+  // Always use show(bounds) — tab activate / loadSource can attach the guest at 0×0
+  // before layout is ready; setBounds alone is skipped when the guest is not visible.
+  await api.show(bounds);
+  previewGuestVisible = true;
 }
 
 /**

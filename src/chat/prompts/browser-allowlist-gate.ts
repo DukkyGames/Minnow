@@ -8,6 +8,9 @@ import type { Message } from '../../types';
 export const BROWSER_PREVIEW_TOOL_IDS = new Set([
   'browser_list',
   'browser_navigate',
+  'browser_new_tab',
+  'browser_switch_tab',
+  'browser_close_tab',
   'browser_snapshot',
   'browser_click',
   'browser_fill',

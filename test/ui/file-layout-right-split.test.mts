@@ -14,8 +14,10 @@ function setupSplitDom(): void {
     <div id="workspaceSplit" class="workspace-split">
       <div class="main-column"></div>
       <div id="splitResizer" class="split-resizer"></div>
-      <section id="fileViewerPane" class="file-viewer-pane"></section>
-      <section id="previewPane" class="preview-pane"></section>
+      <div id="rightPaneColumn" class="right-pane-column">
+        <section id="fileViewerPane" class="file-viewer-pane"></section>
+        <section id="previewPane" class="preview-pane"></section>
+      </div>
     </div>
     <aside id="fileSidebar">
       <button id="btnFileSidebarCollapse" type="button"></button>
@@ -55,6 +57,7 @@ describe('file-layout right split reconcile (MIN-342)', () => {
   });
 
   test('hides both panes when rightPaneMode is null (desktop reparent bleed)', () => {
+    document.getElementById('rightPaneColumn')?.classList.remove('hidden');
     document.getElementById('fileViewerPane')?.classList.remove('hidden');
     document.getElementById('previewPane')?.classList.remove('hidden');
     document.getElementById('splitResizer')?.classList.remove('hidden');
@@ -62,6 +65,7 @@ describe('file-layout right split reconcile (MIN-342)', () => {
 
     reconcileRightSplitDomWithState();
 
+    assert.equal(document.getElementById('rightPaneColumn')?.classList.contains('hidden'), true);
     assert.equal(document.getElementById('fileViewerPane')?.classList.contains('hidden'), true);
     assert.equal(document.getElementById('previewPane')?.classList.contains('hidden'), true);
     assert.equal(document.getElementById('splitResizer')?.classList.contains('hidden'), true);
@@ -76,5 +80,19 @@ describe('file-layout right split reconcile (MIN-342)', () => {
 
     assert.equal(document.getElementById('previewPane')?.classList.contains('hidden'), true);
     assert.equal(document.getElementById('workspaceSplit')?.classList.contains('viewer-open'), false);
+  });
+
+  test('repairRightPaneDomStructure moves panes from workspaceSplit into rightPaneColumn', async () => {
+    const { repairRightPaneDomStructure } = await import('../../src/ui/file-layout.ts');
+    const split = document.getElementById('workspaceSplit')!;
+    const column = document.getElementById('rightPaneColumn')!;
+    const viewer = document.getElementById('fileViewerPane')!;
+    const preview = document.getElementById('previewPane')!;
+    split.appendChild(viewer);
+    split.appendChild(preview);
+
+    assert.equal(repairRightPaneDomStructure(), true);
+    assert.equal(viewer.parentElement, column);
+    assert.equal(preview.parentElement, column);
   });
 });

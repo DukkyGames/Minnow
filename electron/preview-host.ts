@@ -1,5 +1,5 @@
 /**
- * WebContentsView preview host (MIN-112): Chromium guest for any URL or workspace file.
+ * WebContentsView preview host (MIN-112 / MIN-224): multi-tab Chromium guests per window.
  */
 
 import {
@@ -11,6 +11,7 @@ import {
   type IpcMainInvokeEvent,
   type WebContents,
 } from 'electron';
+import { randomUUID } from 'node:crypto';
 import * as channels from './ipc-channels.js';
 import {
   previewCapturePageBase64,
@@ -41,10 +42,38 @@ interface PreviewHostEntry {
   visible: boolean;
 }
 
-const hostsByWindowId = new Map<number, PreviewHostEntry>();
+interface WindowPreviewState {
+  tabs: Map<string, PreviewHostEntry>;
+  activeTabId: string | null;
+}
+
+const hostsByWindowId = new Map<number, WindowPreviewState>();
+/** Last renderer-supplied bounds per window — reused when navigating without a fresh show(). */
+const lastBoundsByWindowId = new Map<number, PreviewBounds>();
+
+function rememberPreviewBounds(win: BrowserWindow, bounds: PreviewBounds): void {
+  if (isValidPreviewBounds(bounds)) {
+    lastBoundsByWindowId.set(win.id, bounds);
+  }
+}
 
 function ensurePreviewSession(): void {
   configurePreviewSession(session.fromPartition(PREVIEW_SESSION_PARTITION));
+}
+
+function windowState(win: BrowserWindow): WindowPreviewState {
+  let state = hostsByWindowId.get(win.id);
+  if (!state) {
+    state = { tabs: new Map(), activeTabId: null };
+    hostsByWindowId.set(win.id, state);
+    win.webContents.on('did-finish-load', () => {
+      detachAllTabViews(win);
+    });
+    win.once('closed', () => {
+      destroyHostForWindow(win);
+    });
+  }
+  return state;
 }
 
 /** Resolve the BrowserWindow that owns an IPC invoke from the renderer. */
@@ -58,6 +87,15 @@ function windowFromInvoke(event: IpcMainInvokeEvent): BrowserWindow | null {
 function sendToRenderer(win: BrowserWindow, channel: string, ...args: unknown[]): void {
   if (win.isDestroyed()) return;
   win.webContents.send(channel, ...args);
+}
+
+function resolveTabId(win: BrowserWindow, tabId?: string): string | null {
+  const state = windowState(win);
+  // Renderer tab ids exist before the main-process guest is created (address bar, loadSource).
+  if (typeof tabId === 'string' && tabId.trim()) return tabId.trim();
+  if (state.activeTabId && state.tabs.has(state.activeTabId)) return state.activeTabId;
+  const first = state.tabs.keys().next().value as string | undefined;
+  return first ?? null;
 }
 
 /** Deny sensitive permissions in the preview guest by default. */
@@ -75,21 +113,21 @@ function attachPermissionHandler(wc: WebContents): void {
 }
 
 /** Forward guest navigation / load lifecycle to the Minnow renderer. */
-function wirePreviewGuestEvents(win: BrowserWindow, wc: WebContents): void {
+function wirePreviewGuestEvents(win: BrowserWindow, tabId: string, wc: WebContents): void {
   let suppressNavigationUntilFailHandled = false;
 
   const emitNavigation = (url: string): void => {
     if (suppressNavigationUntilFailHandled) return;
-    sendToRenderer(win, channels.PREVIEW_NAVIGATION, url);
+    sendToRenderer(win, channels.PREVIEW_NAVIGATION, tabId, url);
   };
 
   wc.on('did-start-loading', () => {
     suppressNavigationUntilFailHandled = false;
-    sendToRenderer(win, channels.PREVIEW_LOADING, true);
+    sendToRenderer(win, channels.PREVIEW_LOADING, tabId, true);
   });
 
   wc.on('did-stop-loading', () => {
-    sendToRenderer(win, channels.PREVIEW_LOADING, false);
+    sendToRenderer(win, channels.PREVIEW_LOADING, tabId, false);
     if (!suppressNavigationUntilFailHandled) {
       emitNavigation(wc.getURL());
     }
@@ -104,17 +142,17 @@ function wirePreviewGuestEvents(win: BrowserWindow, wc: WebContents): void {
   });
 
   wc.on('page-title-updated', (_event, title) => {
-    sendToRenderer(win, channels.PREVIEW_PAGE_TITLE, title);
+    sendToRenderer(win, channels.PREVIEW_PAGE_TITLE, tabId, title);
   });
 
   wc.on(
     'did-fail-load',
     (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
       if (!isMainFrame) return;
-      if (errorCode === -3) return; // ERR_ABORTED — navigation superseded
+      if (errorCode === -3) return;
       suppressNavigationUntilFailHandled = true;
-      sendToRenderer(win, channels.PREVIEW_LOADING, false);
-      sendToRenderer(win, channels.PREVIEW_LOAD_FAILED, {
+      sendToRenderer(win, channels.PREVIEW_LOADING, tabId, false);
+      sendToRenderer(win, channels.PREVIEW_LOAD_FAILED, tabId, {
         errorCode,
         errorDescription,
         url: validatedURL,
@@ -128,17 +166,54 @@ function wirePreviewGuestEvents(win: BrowserWindow, wc: WebContents): void {
     }
     return { action: 'deny' };
   });
+
+  wc.on('render-process-gone', (_event, details) => {
+    handleTabGuestCrash(win, tabId, details.reason, details.exitCode);
+  });
 }
 
-function destroyHostForWindow(win: BrowserWindow): void {
-  const entry = hostsByWindowId.get(win.id);
+/** Tear down a crashed guest without switching the active tab or closing renderer tabs. */
+function handleTabGuestCrash(
+  win: BrowserWindow,
+  tabId: string,
+  reason: string,
+  exitCode: number,
+): void {
+  const state = windowState(win);
+  const entry = state.tabs.get(tabId);
   if (!entry) return;
-  hostsByWindowId.delete(win.id);
+
+  state.tabs.delete(tabId);
   if (!win.isDestroyed()) {
     try {
       win.contentView.removeChildView(entry.view);
     } catch {
-      /* view may already be detached */
+      /* already detached */
+    }
+  }
+  if (!entry.view.webContents.isDestroyed()) {
+    entry.view.webContents.close();
+  }
+
+  sendToRenderer(win, channels.PREVIEW_GUEST_CRASHED, tabId, {
+    reason,
+    exitCode,
+  });
+}
+
+function destroyTabGuest(win: BrowserWindow, tabId: string): void {
+  const state = windowState(win);
+  const entry = state.tabs.get(tabId);
+  if (!entry) return;
+  state.tabs.delete(tabId);
+  if (state.activeTabId === tabId) {
+    state.activeTabId = state.tabs.keys().next().value ?? null;
+  }
+  if (!win.isDestroyed()) {
+    try {
+      win.contentView.removeChildView(entry.view);
+    } catch {
+      /* already detached */
     }
   }
   if (!entry.view.webContents.isDestroyed()) {
@@ -146,13 +221,20 @@ function destroyHostForWindow(win: BrowserWindow): void {
   }
 }
 
+function destroyHostForWindow(win: BrowserWindow): void {
+  const state = hostsByWindowId.get(win.id);
+  if (!state) return;
+  for (const tabId of [...state.tabs.keys()]) {
+    destroyTabGuest(win, tabId);
+  }
+  hostsByWindowId.delete(win.id);
+  lastBoundsByWindowId.delete(win.id);
+}
+
 async function loadSourceInGuest(
   wc: WebContents,
   payload: PreviewLoadSourcePayload,
 ): Promise<void> {
-  // Workspace files are resolved by the renderer into a /api/preview/file/ URL so
-  // the server's workspaceRoot is the resolver; the Electron main process never
-  // knows the user's workspace path and would resolve against the wrong root.
   const url = payload.url?.trim();
   if (!url) return;
   await wc.loadURL(url);
@@ -182,13 +264,6 @@ function isValidPreviewBounds(bounds: PreviewBounds | undefined): bounds is Prev
   );
 }
 
-/**
- * Host window page-zoom factor (Ctrl +/- on the Minnow UI). Defaults to 1.
- * The renderer reports #previewBody bounds in CSS pixels, which live in the
- * zoomed coordinate space; WebContentsView.setBounds wants DIPs. OS display
- * scaling is already handled by Electron's DIP system, so we correct only for
- * page zoom: DIP = cssPx * zoomFactor.
- */
 function hostZoomFactor(win: BrowserWindow | null): number {
   if (!win || win.isDestroyed()) return 1;
   try {
@@ -199,12 +274,11 @@ function hostZoomFactor(win: BrowserWindow | null): number {
   }
 }
 
-/** Apply bounds to the guest view (main process only). */
 function applyPreviewViewBounds(
   entry: PreviewHostEntry,
   bounds: PreviewBounds,
   zoomFactor: number,
-): void {
+): boolean {
   const rounded = roundBounds({
     x: bounds.x * zoomFactor,
     y: bounds.y * zoomFactor,
@@ -212,91 +286,167 @@ function applyPreviewViewBounds(
     height: bounds.height * zoomFactor,
   });
   if (rounded.width <= 0 || rounded.height <= 0) {
+    entry.visible = false;
     entry.view.setVisible(false);
-    return;
+    return false;
   }
   entry.view.setBounds(rounded);
+  entry.visible = true;
+  entry.view.setVisible(true);
+  return true;
 }
-/** Hide and zero bounds so a stale guest cannot block renderer input after reload. */
+
 function hidePreviewHostEntry(entry: PreviewHostEntry): void {
   entry.visible = false;
   entry.view.setVisible(false);
   entry.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
 }
 
-function getOrCreateHost(win: BrowserWindow): PreviewHostEntry {
-  const existing = hostsByWindowId.get(win.id);
-  if (existing) return existing;
+function detachAllTabViews(win: BrowserWindow): void {
+  const state = windowState(win);
+  for (const entry of state.tabs.values()) {
+    hidePreviewHostEntry(entry);
+    try {
+      win.contentView.removeChildView(entry.view);
+    } catch {
+      /* not attached */
+    }
+  }
+}
 
+function createTabGuest(win: BrowserWindow, tabId: string): PreviewHostEntry {
   ensurePreviewSession();
-
   const view = new WebContentsView({
     webPreferences: {
       partition: PREVIEW_SESSION_PARTITION,
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
-      // Guest must load cross-origin subresources (CDNs, APIs) like a normal browser tab.
       webSecurity: false,
     },
   });
-
   view.setBackgroundColor('#ffffff');
   view.setVisible(false);
-  win.contentView.addChildView(view);
-
   attachPermissionHandler(view.webContents);
-  wirePreviewGuestEvents(win, view.webContents);
+  wirePreviewGuestEvents(win, tabId, view.webContents);
+  return { view, visible: false };
+}
 
-  const entry: PreviewHostEntry = { view, visible: false };
-  hostsByWindowId.set(win.id, entry);
-
-  // Renderer reload resets JS state while the native guest may still be visible.
-  win.webContents.on('did-finish-load', () => {
-    hidePreviewHostEntry(entry);
-  });
-
-  win.once('closed', () => {
-    destroyHostForWindow(win);
-  });
-
+function getOrCreateTab(win: BrowserWindow, tabId: string): PreviewHostEntry {
+  const state = windowState(win);
+  const existing = state.tabs.get(tabId);
+  if (existing) return existing;
+  const entry = createTabGuest(win, tabId);
+  state.tabs.set(tabId, entry);
   return entry;
 }
 
-function getHostFromInvoke(event: IpcMainInvokeEvent): PreviewHostEntry | null {
+function showActiveTab(win: BrowserWindow, bounds?: PreviewBounds): PreviewHostEntry | null {
+  const state = windowState(win);
+  const tabId = resolveTabId(win, state.activeTabId ?? undefined);
+  if (!tabId) return null;
+  const entry = getOrCreateTab(win, tabId);
+  detachAllTabViews(win);
+  const effectiveBounds = isValidPreviewBounds(bounds)
+    ? bounds
+    : lastBoundsByWindowId.get(win.id);
+  const hasBounds = isValidPreviewBounds(effectiveBounds);
+  if (hasBounds) {
+    applyPreviewViewBounds(entry, effectiveBounds!, hostZoomFactor(win));
+    rememberPreviewBounds(win, effectiveBounds!);
+  } else {
+    entry.visible = false;
+    entry.view.setVisible(false);
+  }
+  try {
+    win.contentView.addChildView(entry.view);
+  } catch {
+    /* already attached */
+  }
+  state.activeTabId = tabId;
+  return entry;
+}
+
+function getActiveEntry(event: IpcMainInvokeEvent, tabId?: string): PreviewHostEntry | null {
   const win = windowFromInvoke(event);
   if (!win) return null;
-  return getOrCreateHost(win);
+  if (typeof tabId === 'string' && tabId.trim()) {
+    return getOrCreateTab(win, tabId.trim());
+  }
+  const resolved = resolveTabId(win, undefined);
+  if (!resolved) return null;
+  return getOrCreateTab(win, resolved);
 }
 
 /** Register preview IPC handlers (replaces main.ts stubs). */
 export function registerPreviewHostIpc(): void {
-  ipcMain.handle(channels.PREVIEW_SHOW, (event, bounds?: PreviewBounds) => {
+  ipcMain.handle(channels.PREVIEW_TAB_CREATE, (event, tabId?: string) => {
     const win = windowFromInvoke(event);
-    const entry = getHostFromInvoke(event);
-    if (!entry || !win) return;
-    // Position before showing so the guest never flashes at a stale rect from the prior session.
-    if (isValidPreviewBounds(bounds)) {
-      applyPreviewViewBounds(entry, bounds, hostZoomFactor(win));
-    }
-    try {
-      win.contentView.removeChildView(entry.view);
-    } catch {
-      /* not attached yet */
-    }
-    win.contentView.addChildView(entry.view);
-    entry.visible = true;
-    entry.view.setVisible(true);
+    if (!win) return null;
+    const id = typeof tabId === 'string' && tabId.trim() ? tabId.trim() : randomUUID();
+    getOrCreateTab(win, id);
+    const state = windowState(win);
+    if (!state.activeTabId) state.activeTabId = id;
+    return id;
   });
 
-  ipcMain.handle(channels.PREVIEW_HIDE, (event) => {
-    const entry = getHostFromInvoke(event);
-    if (!entry) return;
-    hidePreviewHostEntry(entry);
+  ipcMain.handle(channels.PREVIEW_TAB_CLOSE, (event, tabId: string) => {
+    const win = windowFromInvoke(event);
+    if (!win || typeof tabId !== 'string') return;
+    destroyTabGuest(win, tabId);
   });
 
-  ipcMain.handle(channels.PREVIEW_CLEAR, async (event) => {
-    const entry = getHostFromInvoke(event);
+  ipcMain.handle(channels.PREVIEW_TAB_ACTIVATE, (event, tabId: string) => {
+    const win = windowFromInvoke(event);
+    if (!win || typeof tabId !== 'string') return;
+    const state = windowState(win);
+    if (!state.tabs.has(tabId)) getOrCreateTab(win, tabId);
+    state.activeTabId = tabId;
+    showActiveTab(win);
+  });
+
+  ipcMain.handle(channels.PREVIEW_TAB_LIST, (event) => {
+    const win = windowFromInvoke(event);
+    if (!win) return [];
+    const state = windowState(win);
+    return [...state.tabs.entries()].map(([id, entry]) => {
+      const info = previewGetGuestInfo(entry.view.webContents);
+      return {
+        id,
+        url: info.url,
+        title: info.title,
+        loading: info.loading,
+        active: id === state.activeTabId,
+      };
+    });
+  });
+
+  ipcMain.handle(channels.PREVIEW_SHOW, (event, bounds?: PreviewBounds, tabId?: string) => {
+    const win = windowFromInvoke(event);
+    if (!win) return;
+    const state = windowState(win);
+    if (tabId && typeof tabId === 'string') {
+      state.activeTabId = tabId;
+    }
+    if (bounds && isValidPreviewBounds(bounds)) {
+      rememberPreviewBounds(win, bounds);
+    }
+    showActiveTab(win, bounds);
+  });
+
+  ipcMain.handle(channels.PREVIEW_HIDE, (event, tabId?: string) => {
+    const win = windowFromInvoke(event);
+    if (!win) return;
+    if (tabId && typeof tabId === 'string') {
+      const entry = windowState(win).tabs.get(tabId);
+      if (entry) hidePreviewHostEntry(entry);
+      return;
+    }
+    detachAllTabViews(win);
+  });
+
+  ipcMain.handle(channels.PREVIEW_CLEAR, async (event, tabId?: string) => {
+    const entry = getActiveEntry(event, tabId);
     if (!entry) return;
     try {
       await previewClearGuest(entry.view.webContents);
@@ -305,98 +455,110 @@ export function registerPreviewHostIpc(): void {
     }
   });
 
-  ipcMain.handle(channels.PREVIEW_LOAD_SOURCE, (event, payload: PreviewLoadSourcePayload) => {
-    const entry = getHostFromInvoke(event);
-    if (!entry || !payload || typeof payload !== 'object') return;
-    void loadSourceInGuest(entry.view.webContents, payload).catch((err) => {
+  ipcMain.handle(
+    channels.PREVIEW_LOAD_SOURCE,
+    (event, payload: PreviewLoadSourcePayload, tabId?: string) => {
       const win = windowFromInvoke(event);
-      if (!win) return;
-      const message = err instanceof Error ? err.message : String(err);
-      sendToRenderer(win, channels.PREVIEW_LOAD_FAILED, {
-        errorCode: -2,
-        errorDescription: message,
-        url: payload.kind === 'url' ? payload.url : payload.path,
+      const entry = getActiveEntry(event, tabId);
+      if (!entry || !win || !payload || typeof payload !== 'object') return;
+      if (tabId && typeof tabId === 'string') {
+        windowState(win).activeTabId = tabId;
+      }
+      // Do not call showActiveTab here — it detaches the guest and clears bounds mid-navigation.
+      void loadSourceInGuest(entry.view.webContents, payload).catch((err) => {
+        if (!win) return;
+        const message = err instanceof Error ? err.message : String(err);
+        const id = resolveTabId(win, tabId) ?? 'unknown';
+        sendToRenderer(win, channels.PREVIEW_LOAD_FAILED, id, {
+          errorCode: -2,
+          errorDescription: message,
+          url: payload.kind === 'url' ? payload.url : payload.path,
+        });
       });
-    });
-  });
+    },
+  );
 
-  ipcMain.handle(channels.PREVIEW_LOAD_URL, (event, url: string) => {
-    const entry = getHostFromInvoke(event);
+  ipcMain.handle(channels.PREVIEW_LOAD_URL, (event, url: string, tabId?: string) => {
+    const win = windowFromInvoke(event);
+    const entry = getActiveEntry(event, tabId);
     if (!entry || typeof url !== 'string' || !url.trim()) return;
+    if (win && tabId && typeof tabId === 'string') {
+      windowState(win).activeTabId = tabId;
+    }
     void entry.view.webContents.loadURL(url);
   });
 
-  ipcMain.handle(channels.PREVIEW_RELOAD, (event) => {
-    const entry = getHostFromInvoke(event);
+  ipcMain.handle(channels.PREVIEW_RELOAD, (event, tabId?: string) => {
+    const entry = getActiveEntry(event, tabId);
     if (!entry) return;
     const wc = entry.view.webContents;
-    if (wc.isLoading()) {
-      wc.stop();
-    }
+    if (wc.isLoading()) wc.stop();
     wc.reload();
   });
 
-  ipcMain.handle(channels.PREVIEW_STOP, (event) => {
-    const entry = getHostFromInvoke(event);
+  ipcMain.handle(channels.PREVIEW_STOP, (event, tabId?: string) => {
+    const entry = getActiveEntry(event, tabId);
     if (!entry) return;
     entry.view.webContents.stop();
   });
 
-  ipcMain.handle(channels.PREVIEW_GO_BACK, (event) => {
-    const entry = getHostFromInvoke(event);
+  ipcMain.handle(channels.PREVIEW_GO_BACK, (event, tabId?: string) => {
+    const entry = getActiveEntry(event, tabId);
     const wc = entry?.view.webContents;
     if (!wc?.canGoBack()) return;
     wc.goBack();
   });
 
-  ipcMain.handle(channels.PREVIEW_GO_FORWARD, (event) => {
-    const entry = getHostFromInvoke(event);
+  ipcMain.handle(channels.PREVIEW_GO_FORWARD, (event, tabId?: string) => {
+    const entry = getActiveEntry(event, tabId);
     const wc = entry?.view.webContents;
     if (!wc?.canGoForward()) return;
     wc.goForward();
   });
 
-  ipcMain.handle(channels.PREVIEW_SET_BOUNDS, (event, bounds: PreviewBounds) => {
+  ipcMain.handle(channels.PREVIEW_SET_BOUNDS, (event, bounds: PreviewBounds, tabId?: string) => {
     const win = windowFromInvoke(event);
-    const entry = getHostFromInvoke(event);
-    if (!entry || !bounds) return;
-    if (!entry.visible) return;
+    const entry = getActiveEntry(event, tabId);
+    if (!entry || !bounds || !win) return;
     if (!isValidPreviewBounds(bounds)) {
       const { width, height } = bounds;
       if (Number.isFinite(width) && Number.isFinite(height) && (width <= 0 || height <= 0)) {
         entry.view.setVisible(false);
+        entry.visible = false;
       }
       return;
     }
     applyPreviewViewBounds(entry, bounds, hostZoomFactor(win));
+    rememberPreviewBounds(win, bounds);
   });
 
-  ipcMain.handle(channels.PREVIEW_EXEC_JS, async (event, code: string) => {
-    const entry = getHostFromInvoke(event);
+  ipcMain.handle(channels.PREVIEW_EXEC_JS, async (event, code: string, tabId?: string) => {
+    const entry = getActiveEntry(event, tabId);
     if (!entry || typeof code !== 'string') {
       throw new Error('Preview guest is not available');
     }
     return previewExecJs(entry.view.webContents, code);
   });
 
-  ipcMain.handle(channels.PREVIEW_CAPTURE_PAGE, async (event) => {
-    const entry = getHostFromInvoke(event);
+  ipcMain.handle(channels.PREVIEW_CAPTURE_PAGE, async (event, tabId?: string) => {
+    const entry = getActiveEntry(event, tabId);
     if (!entry) {
       throw new Error('Preview guest is not available');
     }
     return previewCapturePageBase64(entry.view.webContents);
   });
 
-  ipcMain.handle(channels.PREVIEW_GET_INFO, (event) => {
-    const entry = getHostFromInvoke(event);
+  ipcMain.handle(channels.PREVIEW_GET_INFO, (event, tabId?: string) => {
+    const entry = getActiveEntry(event, tabId);
     if (!entry) {
       return { url: '', title: '', loading: false };
     }
     return previewGetGuestInfo(entry.view.webContents);
   });
 
-  ipcMain.handle(channels.PREVIEW_NAVIGATE_AWAIT, async (event, url: string) => {
-    const entry = getHostFromInvoke(event);
+  ipcMain.handle(channels.PREVIEW_NAVIGATE_AWAIT, async (event, url: string, tabId?: string) => {
+    const win = windowFromInvoke(event);
+    const entry = getActiveEntry(event, tabId);
     if (!entry) {
       return {
         ok: false,
@@ -404,6 +566,10 @@ export function registerPreviewHostIpc(): void {
         title: '',
         errorDescription: 'Preview guest is not available',
       };
+    }
+    if (win && tabId && typeof tabId === 'string') {
+      windowState(win).activeTabId = tabId;
+      showActiveTab(win);
     }
     if (typeof url !== 'string') {
       return previewNavigateAwait(entry.view.webContents, '');
@@ -419,4 +585,3 @@ export function destroyAllPreviewHosts(): void {
   }
   hostsByWindowId.clear();
 }
-
