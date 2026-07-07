@@ -15,6 +15,10 @@ export interface PickedElement {
   outerHTMLPreview: string;
   boundingRect: { x: number; y: number; width: number; height: number };
   devicePixelRatio: number;
+  /** Condensed computed-styles digest: typography/color/spacing/layout mode. */
+  stylesDigest: string;
+  /** True when the pick click was shift-modified (multi-select accumulate). */
+  shiftKey: boolean;
 }
 
 export interface PickerTransport {
@@ -126,6 +130,16 @@ export const PICKER_ENABLE_SCRIPT = `(() => {
     return uid;
   }
 
+  function stylesDigestFor(el) {
+    const cs = getComputedStyle(el);
+    const family = (cs.fontFamily || '').split(',')[0].replace(/["']/g, '').trim();
+    const font = cs.fontSize + '/' + cs.lineHeight + ' ' + family + ' ' + cs.fontWeight;
+    let spacing = 'p:' + cs.padding + ' m:' + cs.margin;
+    if (cs.gap && cs.gap !== 'normal') spacing += ' gap:' + cs.gap;
+    const layout = cs.display + (cs.position && cs.position !== 'static' ? ' ' + cs.position : '');
+    return ('font:' + font + '; color:' + cs.color + '; bg:' + cs.backgroundColor + '; ' + spacing + '; layout:' + layout).slice(0, 300);
+  }
+
   function buildPayload(el, state) {
     const rect = el.getBoundingClientRect();
     const uid = stampUid(el, state);
@@ -144,6 +158,8 @@ export const PICKER_ENABLE_SCRIPT = `(() => {
         height: rect.height,
       },
       devicePixelRatio: window.devicePixelRatio || 1,
+      stylesDigest: stylesDigestFor(el),
+      shiftKey: false,
     };
   }
 
@@ -179,6 +195,7 @@ export const PICKER_ENABLE_SCRIPT = `(() => {
     ev.preventDefault();
     ev.stopPropagation();
     state.lastPick = buildPayload(t, state);
+    state.lastPick.shiftKey = !!ev.shiftKey;
   };
 
   document.addEventListener('mouseover', onOver, true);
@@ -318,6 +335,26 @@ export function uidFallbackSelector(uid: number): string {
   return `[data-mn-uid="${uid}"]`;
 }
 
+/**
+ * Condensed computed-styles digest: typography/color/spacing/layout mode.
+ * Pure DOM read (unit-tested with happy-dom); mirrors the in-guest
+ * `stylesDigestFor` computed in {@link PICKER_ENABLE_SCRIPT}.
+ */
+export function buildStylesDigestForElement(el: Element): string {
+  const view = el.ownerDocument.defaultView;
+  if (!view || typeof view.getComputedStyle !== 'function') return '';
+  const cs = view.getComputedStyle(el);
+  const family = (cs.fontFamily || '').split(',')[0]?.replace(/["']/g, '').trim() || '';
+  const font = `${cs.fontSize}/${cs.lineHeight} ${family} ${cs.fontWeight}`;
+  let spacing = `p:${cs.padding} m:${cs.margin}`;
+  if (cs.gap && cs.gap !== 'normal') spacing += ` gap:${cs.gap}`;
+  const layout = `${cs.display}${cs.position && cs.position !== 'static' ? ` ${cs.position}` : ''}`;
+  return `font:${font}; color:${cs.color}; bg:${cs.backgroundColor}; ${spacing}; layout:${layout}`.slice(
+    0,
+    300,
+  );
+}
+
 function unwrapExecJsResult(raw: unknown): unknown {
   if (raw && typeof raw === 'object' && '__execError' in (raw as Record<string, unknown>)) {
     const message = String((raw as { __execError?: unknown }).__execError ?? 'Script failed');
@@ -428,6 +465,8 @@ function normalizePickedElement(raw: unknown): PickedElement | null {
       typeof row.devicePixelRatio === 'number' && Number.isFinite(row.devicePixelRatio)
         ? row.devicePixelRatio
         : 1,
+    stylesDigest: typeof row.stylesDigest === 'string' ? row.stylesDigest : '',
+    shiftKey: row.shiftKey === true,
   };
 }
 
@@ -469,8 +508,12 @@ export function createElementPicker(options: ElementPickerOptions): ElementPicke
     if (!doc) return;
 
     iframeClickHandler = (ev: MouseEvent) => {
-      const target = ev.target;
-      if (!(target instanceof Element)) return;
+      // The target belongs to the guest iframe's realm, so a parent-realm
+      // `instanceof Element` check is always false (each same-origin frame has
+      // its own Element constructor). Duck-type on nodeType instead, which is
+      // realm-independent.
+      const target = ev.target as Element | null;
+      if (!target || target.nodeType !== 1) return;
       ev.preventDefault();
       ev.stopPropagation();
       const rect = target.getBoundingClientRect();
@@ -489,6 +532,8 @@ export function createElementPicker(options: ElementPickerOptions): ElementPicke
             height: rect.height,
           },
           devicePixelRatio: frame?.contentWindow?.devicePixelRatio ?? 1,
+          stylesDigest: buildStylesDigestForElement(target),
+          shiftKey: ev.shiftKey,
         }),
       );
     };

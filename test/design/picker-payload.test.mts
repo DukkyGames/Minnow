@@ -19,6 +19,8 @@ const cannedPick: PickedElement = {
   outerHTMLPreview: '<section id="hero" class="hero">',
   boundingRect: { x: 1, y: 2, width: 300, height: 200 },
   devicePixelRatio: 2,
+  stylesDigest: 'font:16px/1.5 Arial 400; color:rgb(0, 0, 0); bg:rgba(0, 0, 0, 0); p:0px m:0px; layout:block',
+  shiftKey: false,
 };
 
 function makeTransport(

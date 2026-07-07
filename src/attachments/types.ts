@@ -9,7 +9,8 @@ export type AttachmentKind =
   | 'pdf'
   | 'error'
   | 'workspace'
-  | 'codeRef';
+  | 'codeRef'
+  | 'elementRef';
 
 /** One pending file in the composer strip before send. */
 export interface Attachment {
@@ -36,4 +37,22 @@ export interface Attachment {
   lineStart?: number;
   /** 1-based end line for `codeRef` selections (inclusive). */
   lineEnd?: number;
+  /** CSS selector for a Design Mode element pick (`elementRef`). */
+  selector?: string;
+  /** `data-mn-uid` stamped on the picked element (`elementRef`). */
+  uid?: number;
+  /** Page the element was picked from: workspace path or preview URL (`elementRef`). */
+  pageUrl?: string;
+  /** Lowercase tag name of the picked element (`elementRef`). */
+  tagName?: string;
+  /** Class list of the picked element (`elementRef`). */
+  classList?: string[];
+  /** Capped outerHTML preview of the picked element (`elementRef`). */
+  outerHtmlPreview?: string;
+  /** Bounding rect (CSS px, guest coordinates) of the picked element at capture time (`elementRef`). */
+  rect?: { x: number; y: number; width: number; height: number };
+  /** Condensed computed-styles digest: typography/color/spacing/layout mode (`elementRef`). */
+  stylesDigest?: string;
+  /** DPR-correct cropped screenshot data URL of the picked element (`elementRef`). */
+  croppedDataUrl?: string;
 }

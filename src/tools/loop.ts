@@ -37,6 +37,7 @@ import {
 } from '../attachments/store';
 import type { Attachment } from '../attachments/types';
 import { codeRefHistoryBlock, isCodeRefAttachment } from '../attachments/code-ref';
+import { elementRefHistoryBlock, isElementRefAttachment } from '../attachments/element-ref';
 import { resolveWorkspaceReferences } from '../attachments/workspace-ref';
 import {
   extractMessageText,
@@ -348,7 +349,9 @@ function indexOfMultimodalUserMessage(
   history: Message[],
   pending: Attachment[],
 ): number {
-  const hasPendingImages = pending.some((a) => a.kind === 'image' && a.dataUrl);
+  const hasPendingImages = pending.some(
+    (a) => (a.kind === 'image' && a.dataUrl) || (a.kind === 'elementRef' && a.croppedDataUrl),
+  );
   if (!hasPendingImages) {
     return indexOfLastUserMessage(history);
   }
@@ -363,7 +366,13 @@ function indexOfMultimodalUserMessage(
 
 /** Skip ask_question prose retry when this turn includes image input. */
 function turnHasImageContext(chat: Chat, pending: Attachment[]): boolean {
-  if (pending.some((a) => a.kind === 'image' && a.dataUrl)) return true;
+  if (
+    pending.some(
+      (a) => (a.kind === 'image' && a.dataUrl) || (a.kind === 'elementRef' && a.croppedDataUrl),
+    )
+  ) {
+    return true;
+  }
   for (const m of chat.history) {
     if (m.role === 'user' && IMAGE_PLACEHOLDER_IN_HISTORY_RE.test(m.content)) {
       return true;
@@ -404,6 +413,23 @@ export function buildHistoryUserContent(
       );
       continue;
     }
+    if (isElementRefAttachment(att)) {
+      parts.push(
+        elementRefHistoryBlock({
+          selector: att.selector,
+          uid: att.uid ?? null,
+          pageUrl: att.pageUrl,
+          tagName: att.tagName,
+          classList: att.classList,
+          rect: att.rect,
+          stylesDigest: att.stylesDigest,
+          outerHtmlPreview: att.outerHtmlPreview,
+          imageName: att.croppedDataUrl ? att.name : undefined,
+        }),
+      );
+      if (att.croppedDataUrl) parts.push(imageHistoryPlaceholder(att.name));
+      continue;
+    }
     if ((att.kind === 'text' || att.kind === 'pdf') && att.text) {
       parts.push(fileContentBlock(att.name, att.text));
     }
@@ -442,6 +468,22 @@ function buildVlmUserApiContent(
       );
       continue;
     }
+    if (isElementRefAttachment(att)) {
+      textParts.push(
+        elementRefHistoryBlock({
+          selector: att.selector,
+          uid: att.uid ?? null,
+          pageUrl: att.pageUrl,
+          tagName: att.tagName,
+          classList: att.classList,
+          rect: att.rect,
+          stylesDigest: att.stylesDigest,
+          outerHtmlPreview: att.outerHtmlPreview,
+          imageName: att.croppedDataUrl ? att.name : undefined,
+        }),
+      );
+      continue;
+    }
     if ((att.kind === 'text' || att.kind === 'pdf') && att.text) {
       textParts.push(fileContentBlock(att.name, att.text));
     }
@@ -458,6 +500,12 @@ function buildVlmUserApiContent(
       parts.push({
         type: 'image_url',
         image_url: { url: att.dataUrl, detail: 'auto' },
+      });
+    }
+    if (att.kind === 'elementRef' && att.croppedDataUrl) {
+      parts.push({
+        type: 'image_url',
+        image_url: { url: att.croppedDataUrl, detail: 'auto' },
       });
     }
   }

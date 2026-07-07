@@ -16,6 +16,8 @@ import { createAnnotationOverlay, type AnnotationOverlay } from './overlay';
 import {
   getDesignTool,
   registerBuiltinPlaceholderDesignTools,
+  registerDesignTool,
+  createSelectDesignTool,
   BUILTIN_DESIGN_TOOL_IDS,
   type BuiltinDesignToolId,
   type DesignTool,
@@ -249,6 +251,9 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
   const existing = sessions.get(options.instanceId);
   if (existing) return existing;
 
+  // Real Select tool (MIN-366); re-registering per enable gives each session a fresh
+  // picker/marker closure. Placeholders below fill draw/comment/inspect (P4+) only.
+  registerDesignTool(createSelectDesignTool());
   registerBuiltinPlaceholderDesignTools();
 
   const { instanceId, host } = options;
