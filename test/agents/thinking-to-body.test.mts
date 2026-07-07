@@ -90,6 +90,32 @@ describe('thinkingToCompletionBody', () => {
     });
     assert.deepEqual(body, {});
   });
+
+  test('anthropic-v1 uses adaptive thinking for sonnet-5 capabilities', () => {
+    const patch = thinkingToCompletionBody('on', 'anthropic-v1', {
+      vision: false,
+      tools: null,
+      streaming: null,
+      grammar: null,
+      reasoning: true,
+      reasoningThinkingEnabledValue: 'adaptive',
+      contextLength: null,
+      loadState: null,
+    });
+    assert.deepEqual(patch.body.providerOptions, {
+      anthropic: { thinking: { type: 'adaptive' } },
+    });
+  });
+
+  test('anthropic-v1 medium effort maps to adaptive + effort for opus-4-6', () => {
+    const patch = reasoningEffortToCompletionBody('medium', 'anthropic-v1', {
+      ...reasoningCaps,
+      reasoningThinkingEnabledValue: 'adaptive',
+    });
+    assert.deepEqual(patch.body.providerOptions, {
+      anthropic: { thinking: { type: 'adaptive' }, effort: 'medium' },
+    });
+  });
 });
 
 describe('reasoningEffortToCompletionBody', () => {

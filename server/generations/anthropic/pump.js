@@ -27,6 +27,7 @@ import {
   buildAnthropicProvider as defaultBuildAnthropicProvider,
   deriveAnthropicBaseUrl,
 } from './provider-runtime.js';
+import { normalizeAnthropicProviderOptions } from '../../../src/lib/anthropic-thinking-style.mjs';
 
 export { deriveAnthropicBaseUrl };
 
@@ -83,7 +84,8 @@ function buildProviderOptions(body) {
     };
   }
 
-  return Object.keys(options).length > 0 ? options : undefined;
+  const modelId = typeof body.model === 'string' ? body.model : '';
+  return normalizeAnthropicProviderOptions(modelId, Object.keys(options).length > 0 ? options : undefined);
 }
 
 /**
@@ -139,9 +141,11 @@ function classifySdkError(err) {
       status || 500,
       typeof apiErr.responseBody === 'string' ? apiErr.responseBody : apiErr.message,
     );
-    return classifyUpstreamError(err, typeof status === 'number' ? { status } : undefined);
+    const classified = classifyUpstreamError(err, typeof status === 'number' ? { status } : undefined);
+    return { kind: classified.kind, message };
   }
-  return classifyUpstreamError(err);
+  const classified = classifyUpstreamError(err);
+  return { kind: classified.kind, message: classified.reason };
 }
 
 /**
@@ -343,13 +347,13 @@ export async function pumpAnthropicUpstream({
     const classified = classifySdkError(err);
     if (!bytesEmitted && classified.kind === 'retryable' && canFailover) {
       markHostDead(origin, cooldownSeconds);
-      return { outcome: 'retry', message: classified.reason };
+      return { outcome: 'retry', message: classified.message };
     }
 
     if (!bytesEmitted) {
-      markError(state, classified.reason);
+      markError(state, classified.message);
     }
-    return { outcome: 'fatal', message: classified.reason };
+    return { outcome: 'fatal', message: classified.message };
   } finally {
     if (idleTimer) clearTimeout(idleTimer);
     clearTimeout(maxTimer);

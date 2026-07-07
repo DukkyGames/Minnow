@@ -147,6 +147,57 @@ describe('pumpAnthropicUpstream', () => {
     assert.equal(state.errorMessage, 'Invalid prompt');
   });
 
+  test('normalizes enabled thinking to adaptive for claude-sonnet-5 before streamText', async () => {
+    const streamText = mock.fn(() => ({
+      fullStream: (async function* () {
+        yield { type: 'start' };
+        yield {
+          type: 'finish',
+          finishReason: 'stop',
+          totalUsage: {
+            inputTokens: 1,
+            outputTokens: 1,
+            totalTokens: 2,
+            inputTokenDetails: { noCacheTokens: 1 },
+            outputTokenDetails: { textTokens: 1 },
+          },
+        };
+      })(),
+    }));
+
+    __setAnthropicPumpMocksForTests({
+      streamText,
+      buildAnthropicProvider: fakeAnthropicProvider,
+    });
+
+    const state = createGenerationState({
+      providerId: CANDIDATE.providerId,
+      body: {
+        model: 'claude-sonnet-5',
+        stream: true,
+        messages: [{ role: 'user', content: 'Hi' }],
+        providerOptions: {
+          anthropic: {
+            thinking: { type: 'enabled', budgetTokens: 10240 },
+          },
+        },
+      },
+    });
+    activeStates.push(state);
+
+    await pumpAnthropicUpstream({
+      state,
+      runtime: RUNTIME,
+      candidate: { providerId: 'zen', modelId: 'claude-sonnet-5' },
+      ...PUMP_OPTS,
+    });
+
+    assert.equal(streamText.mock.callCount(), 1);
+    const callOptions = streamText.mock.calls[0]?.arguments[0];
+    assert.deepEqual(callOptions.providerOptions?.anthropic?.thinking, { type: 'adaptive' });
+    assert.equal(callOptions.providerOptions?.anthropic?.effort, 'medium');
+  });
+
   test('non-streaming path emits OpenAI chat.completion JSON via appendChunk', async () => {
     const generateText = mock.fn(async () => ({
       text: 'All done',

@@ -6,6 +6,7 @@ import { isModelLoaded } from '../api/model-loaded-state';
 import { modelCache } from '../app-state';
 import { isServerStorageMode } from '../config/storage-mode';
 import { contextLengthFromModelRow } from '../lib/context-length';
+import { anthropicModelUsesAdaptiveThinking } from '../lib/anthropic-thinking-style';
 import {
   inferReasoningOptionsFromModelId,
   isReasoningEffortOption,
@@ -105,15 +106,23 @@ export function catalogCapabilitiesFromRow(
     }
   }
   const isMiniMax = /minimax/i.test(row.id);
+  const usesAdaptiveAnthropicThinking =
+    apiKind === 'anthropic-v1' && anthropicModelUsesAdaptiveThinking(row.id);
   return {
     vision,
     tools: null,
     streaming: null,
     grammar: null,
     reasoning: reasoningCaps.reasoning ?? (reasoningAllowedOptions?.length ? true : null),
-    reasoningAllowedOptions,
+    reasoningAllowedOptions:
+      reasoningAllowedOptions?.length
+        ? reasoningAllowedOptions
+        : usesAdaptiveAnthropicThinking
+          ? (['off', 'low', 'medium', 'high'] as const)
+          : reasoningAllowedOptions,
     reasoningDefault: reasoningCaps.reasoningDefault ?? (reasoningAllowedOptions?.includes('medium') ? 'medium' : undefined),
     ...(isMiniMax ? { reasoningThinkingEnabledValue: 'adaptive' as const } : {}),
+    ...(usesAdaptiveAnthropicThinking ? { reasoningThinkingEnabledValue: 'adaptive' as const } : {}),
     contextLength,
     loadState: row.state?.trim() || null,
     sources: {
@@ -159,6 +168,15 @@ export function resolveSendCapabilities(
       reasoning: fromCatalog.reasoning ?? cached.reasoning,
       reasoningAllowedOptions: fromCatalog.reasoningAllowedOptions,
       reasoningDefault: fromCatalog.reasoningDefault ?? cached.reasoningDefault,
+      reasoningThinkingEnabledValue:
+        cached.reasoningThinkingEnabledValue ?? fromCatalog.reasoningThinkingEnabledValue,
+    };
+  }
+
+  if (!cached.reasoningThinkingEnabledValue && fromCatalog.reasoningThinkingEnabledValue) {
+    return {
+      ...cached,
+      reasoningThinkingEnabledValue: fromCatalog.reasoningThinkingEnabledValue,
     };
   }
 
