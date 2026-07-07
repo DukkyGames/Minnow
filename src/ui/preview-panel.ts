@@ -50,6 +50,7 @@ import { bindPreviewTabs, registerPreviewTabHandlers } from './preview-tabs';
 import { HTTP_URL_RE, parsePreviewAddress } from './preview-url';
 import { shouldAutoRestorePreviewPanel, isCodeAppForeground } from './preview-restore-policy';
 import { showToast } from './toast';
+import { disableDesignMode, enableDesignMode, isDesignModeEnabled } from '../design/design-mode';
 
 const BROWSER_PREVIEW_HINT =
   'Full Chromium preview (any website or local file) runs in the Minnow desktop shell. Run npm start — Electron opens by default — or npm run electron:dev.';
@@ -57,6 +58,9 @@ const PREVIEW_FILE_API = '/api/preview/file/';
 const FRAME_BLOCKED_TIMEOUT_MS = 1500;
 const MIN_RELOAD_INTERVAL_MS = 1000;
 const DEFERRED_PREVIEW_LOAD_MS = 800;
+
+/** Default preview instance id (see electron/preview-instance-registry.ts DEFAULT_PREVIEW_INSTANCE_ID). */
+const DESIGN_MODE_INSTANCE_ID = 'workspace-preview';
 
 const EMBED_BLOCKED_MESSAGE =
   'This site blocks embedded previews (X-Frame-Options or CSP frame-ancestors). Sites like Google, GitHub, and most login pages cannot load inside an iframe. Preview workspace HTML files instead, or open this URL in a new tab.';
@@ -179,6 +183,36 @@ function getOpenExternalLink(): HTMLAnchorElement | null {
 
 function getPreviewBody(): HTMLElement | null {
   return document.getElementById('previewBody');
+}
+
+function getPreviewPane(): HTMLElement | null {
+  return document.getElementById('previewPane');
+}
+
+function getDesignToggleButton(): HTMLButtonElement | null {
+  return document.getElementById('btnPreviewDesignToggle') as HTMLButtonElement | null;
+}
+
+/** Toggle Design Mode's overlay + tool strip over the preview guest (MIN-365). Guest untouched. */
+async function toggleDesignModeFromToolbar(): Promise<void> {
+  const host = getPreviewBody();
+  const pane = getPreviewPane();
+  if (!host) return;
+
+  if (isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID)) {
+    disableDesignMode(DESIGN_MODE_INSTANCE_ID);
+    getDesignToggleButton()?.setAttribute('aria-pressed', 'false');
+    getDesignToggleButton()?.classList.remove('is-active');
+    return;
+  }
+
+  getDesignToggleButton()?.setAttribute('aria-pressed', 'true');
+  getDesignToggleButton()?.classList.add('is-active');
+  await enableDesignMode({
+    instanceId: DESIGN_MODE_INSTANCE_ID,
+    host,
+    paneElement: pane ?? host,
+  });
 }
 
 function getAutoReloadCheckbox(): HTMLInputElement | null {
@@ -875,6 +909,11 @@ export async function openPreviewPanel(source?: PreviewSource | null): Promise<v
 /** Close the preview panel. */
 export function closePreviewPanel(): void {
   cancelDeferredPreviewLoad();
+  if (isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID)) {
+    disableDesignMode(DESIGN_MODE_INSTANCE_ID);
+    getDesignToggleButton()?.setAttribute('aria-pressed', 'false');
+    getDesignToggleButton()?.classList.remove('is-active');
+  }
   if (usesElectronPreview()) {
     void clearPreviewGuest().then(() => hidePreviewHost());
   } else {
@@ -1073,6 +1112,9 @@ function bindPreviewControls(): void {
   document.getElementById('btnPreviewReload')?.addEventListener('click', () => reloadPreview());
   document.getElementById('btnPreviewGo')?.addEventListener('click', () => navigateFromAddressBar());
   document.getElementById('btnPreviewClose')?.addEventListener('click', () => closePreviewPanel());
+  document
+    .getElementById('btnPreviewDesignToggle')
+    ?.addEventListener('click', () => void toggleDesignModeFromToolbar());
 
   getUrlInput()?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {

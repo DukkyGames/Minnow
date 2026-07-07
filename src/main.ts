@@ -35,6 +35,7 @@ import './styles/git-commit-diff.css';
 import './styles/editor-quick-edit.css';
 import './styles/editor-intent-mode.css';
 import './styles/preview-panel.css';
+import './styles/design-mode.css';
 import './styles/terminal.css';
 import './styles/skill-picker.css';
 import './styles/composer-tools-popover.css';
