@@ -674,21 +674,18 @@ export function finalizeBoardTaskOnStreamEnd(
       board?.systemPaused !== true &&
       (stopReason === 'user' || board?.userStopped === true);
     if (parkUserStop) {
-      quarantineTaskAndDependents(
-        group,
-        task.id,
-        {
-          category: 'stall',
-          summary: 'Stopped by user — requeue to resume',
-          resolutionSteps: ['inspect if needed, then Requeue'],
-          at: Date.now(),
-        },
-        plannerChat,
-      );
+      // MIN-304: a user Stop is a neutral pause, not a failure. Park the
+      // in-flight task back to `planned` so Start re-delegates it, and leave
+      // dependents untouched (they were never started and must stay planned).
+      // The old path called quarantineTaskAndDependents here, which cascaded
+      // Quarantine across the whole downstream graph on a plain Stop. A user
+      // Stop also does not burn a stopRetry (that budget is for stall/timeout
+      // stops only), so resume starts from a clean attempt count.
+      logTaskStatus(group, task.id, task.status, 'planned');
       updateTask(
         group,
         task.id,
-        { endedAt: Date.now(), chatId: undefined },
+        { status: 'planned', endedAt: Date.now(), chatId: undefined },
         plannerChat,
       );
       if (isBoardRunning(group)) {
@@ -3274,6 +3271,25 @@ export async function finalizeTaskTestingOnStreamEnd(
 ): Promise<void> {
   if (task.status !== 'testing') return;
   const fresh = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
+
+  // MIN-304: a tester aborted by a user Stop / board pause has no verdict and
+  // must not be routed through self-heal as a test failure. Clear the linkage
+  // and leave the task in `testing` — the resume sweep (isTaskStalledForRestart)
+  // restarts the tester when the board runs again.
+  const testChatId = fresh.testChatId?.trim();
+  const stoppedTestChat = testChatId ? findChatById(testChatId) : undefined;
+  if (stoppedTestChat && resolveTaskChatStreamOutcome(stoppedTestChat) === 'stopped') {
+    const board = group.orchestrateBoard;
+    const stopReason = resolveTaskChatStopReason(stoppedTestChat, board);
+    const neutralStop =
+      stopReason === 'user' || board?.userStopped === true || !isBoardRunning(group);
+    if (neutralStop) {
+      updateTask(group, fresh.id, { testChatId: undefined }, plannerChat);
+      teardownBoardTaskChatResources(stoppedTestChat, sessionState?.groups);
+      return;
+    }
+  }
+
   let report = resolveBoardReport(fresh);
 
   if (!report) {

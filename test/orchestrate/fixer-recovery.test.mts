@@ -931,7 +931,7 @@ describe('Fix D — systemPaused vs user Stop', () => {
     assert.equal(updated.chatId, undefined);
   });
 
-  test('userStopped without systemPaused quarantines on stream-end', async () => {
+  test('userStopped without systemPaused parks to planned, no quarantine (MIN-304)', async () => {
     const { group, planner } = makeFixDRunningGroup();
     const board = group.orchestrateBoard!;
     board.userStopped = true;
@@ -948,13 +948,12 @@ describe('Fix D — systemPaused vs user Stop', () => {
     await new Promise((resolve) => setImmediate(resolve));
 
     const updated = board.tasks.find((t) => t.id === 'W1-A')!;
-    assert.equal(updated.status, 'quarantined');
+    // MIN-304: a user Stop is a neutral pause — park to planned, never quarantine,
+    // and do not burn a stopRetry (that budget is for stall/timeout stops).
+    assert.equal(updated.status, 'planned');
     assert.equal(updated.chatId, undefined);
-    assert.match(updated.quarantine?.summary ?? '', /stopped by user/i);
-    assert.equal(
-      isTaskStalledForRestart(board, updated, () => false),
-      false,
-    );
+    assert.equal(updated.quarantine, undefined);
+    assert.equal(updated.stopRetries, undefined);
   });
 
   test('systemPaused takes precedence when both flags are set', () => {
