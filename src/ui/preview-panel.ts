@@ -523,7 +523,10 @@ async function applyAgentPreviewNavigation(url: string, desktopHosted: boolean):
 export async function openUrlInPreviewPanel(url: string): Promise<void> {
   const trimmed = url.trim();
   if (!trimmed || !HTTP_URL_RE.test(trimmed)) return;
-  if (!dismissFileViewerForPreview()) return;
+
+  const { isDesktopWorkspaceHostingActive } = await import('../os/desktop-workspace-mounts');
+  const desktopHosted = isDesktopWorkspaceHostingActive();
+  if (!desktopHosted && !dismissFileViewerForPreview()) return;
 
   const api = getPreviewApi();
   if (!api) {
