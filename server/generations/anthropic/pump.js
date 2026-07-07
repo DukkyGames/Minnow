@@ -27,7 +27,12 @@ import {
   buildAnthropicProvider as defaultBuildAnthropicProvider,
   deriveAnthropicBaseUrl,
 } from './provider-runtime.js';
-import { normalizeAnthropicProviderOptions } from '../../../src/lib/anthropic-thinking-style.mjs';
+import {
+  adjustAnthropicRequestForGateway,
+  adjustAnthropicThinkingForToolHistory,
+  anthropicThinkingTypeFromProviderOptions,
+  normalizeAnthropicProviderOptions,
+} from '../../../src/lib/anthropic-thinking-style.mjs';
 
 export { deriveAnthropicBaseUrl };
 
@@ -90,6 +95,27 @@ function buildProviderOptions(body) {
 
 /**
  * @param {Record<string, unknown>} body
+ * @param {import('@ai-sdk/provider-utils').ProviderOptions | undefined} providerOptions
+ * @returns {boolean}
+ */
+function anthropicThinkingActive(body, providerOptions) {
+  const fromOptions = anthropicThinkingTypeFromProviderOptions(
+    typeof body.model === 'string' ? body.model : '',
+    providerOptions,
+  );
+  if (fromOptions === 'enabled' || fromOptions === 'adaptive') {
+    return true;
+  }
+  const thinking = body.thinking;
+  if (!thinking || typeof thinking !== 'object') {
+    return false;
+  }
+  const type = /** @type {Record<string, unknown>} */ (thinking).type;
+  return type === 'enabled' || type === 'adaptive';
+}
+
+/**
+ * @param {Record<string, unknown>} body
  * @param {import('@ai-sdk/anthropic').AnthropicProvider} provider
  * @param {AbortSignal} abortSignal
  * @returns {Record<string, unknown>}
@@ -100,6 +126,7 @@ function buildGenerationCallOptions(body, provider, abortSignal) {
   const tools = mapOpenAiTools(body.tools);
   const toolChoice = mapOpenAiToolChoice(body.tool_choice);
   const providerOptions = buildProviderOptions(body);
+  const thinkingActive = anthropicThinkingActive(body, providerOptions);
 
   /** @type {Record<string, unknown>} */
   const options = {
@@ -116,10 +143,10 @@ function buildGenerationCallOptions(body, provider, abortSignal) {
   if (typeof body.max_tokens === 'number') {
     options.maxOutputTokens = body.max_tokens;
   }
-  if (typeof body.temperature === 'number') {
+  if (!thinkingActive && typeof body.temperature === 'number') {
     options.temperature = body.temperature;
   }
-  if (typeof body.top_p === 'number') {
+  if (!thinkingActive && typeof body.top_p === 'number') {
     options.topP = body.top_p;
   }
   if (providerOptions) {
@@ -214,6 +241,9 @@ export async function pumpAnthropicUpstream({
 
   armIdleTimeout();
 
+  /** @type {Record<string, unknown> | undefined} */
+  let adjustedBody;
+
   try {
     if (state.status === 'cancelled') {
       return { outcome: 'complete' };
@@ -232,8 +262,16 @@ export async function pumpAnthropicUpstream({
       body.model = candidate.modelId;
     }
 
+    adjustedBody = adjustAnthropicRequestForGateway(
+      runtime.profile.baseUrl,
+      adjustAnthropicThinkingForToolHistory(
+        typeof body.model === 'string' ? body.model : '',
+        body,
+      ),
+    );
+
     const anthropic = buildAnthropicProvider(runtime);
-    const callOptions = buildGenerationCallOptions(body, anthropic, controller.signal);
+    const callOptions = buildGenerationCallOptions(adjustedBody, anthropic, controller.signal);
     const stream = body.stream === true;
 
     if (stream) {
@@ -333,6 +371,21 @@ export async function pumpAnthropicUpstream({
   } catch (err) {
     if (state.status === 'cancelled') {
       return { outcome: 'complete' };
+    }
+
+    if (err instanceof APICallError || (err && typeof err === 'object' && err.name === 'APICallError')) {
+      const apiErr = /** @type {APICallError} */ (err);
+      if (apiErr.statusCode === 400) {
+        const toolCount = Array.isArray(adjustedBody?.tools) ? adjustedBody.tools.length : 0;
+        const messageCount = Array.isArray(adjustedBody?.messages) ? adjustedBody.messages.length : 0;
+        const detail =
+          typeof apiErr.responseBody === 'string'
+            ? apiErr.responseBody.replace(/\s+/g, ' ').trim().slice(0, 300)
+            : '';
+        console.warn(
+          `[anthropic-pump] upstream 400 model=${String(adjustedBody?.model ?? '')} tools=${toolCount} messages=${messageCount} host=${runtime.profile.baseUrl}${detail ? ` detail=${detail}` : ''}`,
+        );
+      }
     }
 
     if (timeoutKind) {

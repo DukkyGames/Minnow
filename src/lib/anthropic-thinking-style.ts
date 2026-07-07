@@ -3,7 +3,13 @@
  */
 
 export {
+  adjustAnthropicRequestForGateway,
+  adjustAnthropicThinkingForToolHistory,
   anthropicBudgetTokensToEffort,
+  anthropicHistoryHasUnsignedToolCalls,
   anthropicModelUsesAdaptiveThinking,
+  anthropicThinkingTypeFromProviderOptions,
+  hasOutboundAnthropicTools,
+  isAnthropicGatewayBaseUrl,
   normalizeAnthropicProviderOptions,
 } from './anthropic-thinking-style.mjs';

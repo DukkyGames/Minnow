@@ -105,6 +105,13 @@ export interface AssistantToolCallMessage {
   role: 'assistant';
   content: string | null;
   tool_calls: ToolCall[];
+  /** Reasoning segments shown in UI; replayed to Anthropic when signature is set. */
+  thinking?: string[];
+  /**
+   * Anthropic extended-thinking signature for this turn (required to replay tool_use
+   * blocks when thinking stays enabled on follow-up Messages API requests).
+   */
+  thinkingSignature?: string;
   stats?: Stats;
   usage?: Usage;
 }
@@ -203,6 +210,10 @@ export interface ApiAssistantMessage {
   role: 'assistant';
   content: ApiMessageContent;
   tool_calls?: ToolCall[];
+  /** Outbound reasoning text for Anthropic tool-loop replay (not persisted in session). */
+  reasoning?: string;
+  /** Anthropic thinking signature paired with `reasoning` for Messages API replay. */
+  reasoning_signature?: string;
 }
 
 export interface ApiToolMessage {
@@ -924,6 +935,8 @@ export interface ChatCompletionChoiceDelta {
   reasoning_content?: string;
   /** Some Ollama-compatible gateways (e.g. MiniMax) emit thinking in this field. */
   thinking?: string;
+  /** Anthropic extended-thinking signature (Minnow anthropic-v1 bridge extension). */
+  reasoning_signature?: string;
   tool_calls?: ChatCompletionToolCallDelta[];
 }
 

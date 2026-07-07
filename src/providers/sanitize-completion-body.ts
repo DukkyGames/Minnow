@@ -2,6 +2,7 @@
  * Strip provider-incompatible completion fields before upstream POST.
  */
 
+import { anthropicThinkingTypeFromProviderOptions } from '../lib/anthropic-thinking-style';
 import type { ModelCapabilities } from '../types';
 import type { ProviderPublic } from './types';
 
@@ -13,15 +14,48 @@ function modelUsesMaxCompletionTokens(modelId: string): boolean {
   return id.includes('gpt-5');
 }
 
+function anthropicThinkingEnabled(body: Record<string, unknown>): boolean {
+  const providerOptions = body.providerOptions;
+  if (providerOptions && typeof providerOptions === 'object') {
+    const type = anthropicThinkingTypeFromProviderOptions(
+      typeof body.model === 'string' ? body.model : '',
+      providerOptions as Record<string, Record<string, unknown>>,
+    );
+    if (type === 'enabled' || type === 'adaptive') {
+      return true;
+    }
+    if (type === 'disabled') {
+      return false;
+    }
+  }
+  const thinking = body.thinking;
+  if (!thinking || typeof thinking !== 'object') {
+    return false;
+  }
+  const thinkingType = (thinking as { type?: string }).type;
+  return thinkingType === 'enabled' || thinkingType === 'adaptive';
+}
+
 /**
  * Normalize a chat completion body for the target provider.
  * openai-v1: drop LM Studio sampler fields, optional thinking, map max_tokens when needed.
+ * anthropic-v1: drop sampler fields when extended thinking is active.
  */
 export function sanitizeCompletionBodyForProvider(
   body: Record<string, unknown>,
   provider: ProviderPublic,
   modelCapabilities?: ModelCapabilities | null,
 ): Record<string, unknown> {
+  if (provider.apiKind === 'anthropic-v1') {
+    const next = { ...body };
+    if (anthropicThinkingEnabled(next)) {
+      delete next.temperature;
+      delete next.top_p;
+      delete next.top_k;
+    }
+    return next;
+  }
+
   if (provider.apiKind !== 'openai-v1') {
     return body;
   }

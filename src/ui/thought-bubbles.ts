@@ -58,6 +58,9 @@ export class ThoughtBubbleController {
 
   private thinkingStartNotified = false;
 
+  /** Anthropic thinking signature for the current reasoning block (tool-loop replay). */
+  private anthropicThinkingSignature: string | null = null;
+
   constructor(assistantWrap: HTMLElement, phaseCallbacks: ThoughtPhaseCallbacks = {}) {
     this.assistantWrap = assistantWrap;
     this.phaseCallbacks = phaseCallbacks;
@@ -70,6 +73,7 @@ export class ThoughtBubbleController {
   /** Reset phase callbacks for a new streaming shell in the same user send (e.g. after tools). */
   resetStreamPhaseHints(): void {
     this.thinkingStartNotified = false;
+    this.anthropicThinkingSignature = null;
   }
 
   setAssistantWrap(wrap: HTMLElement): void {
@@ -110,6 +114,18 @@ export class ThoughtBubbleController {
     this.tailWork = this.tailWork
       .then(() => this.applyReasoningDeltaInQueue(delta))
       .catch(() => undefined);
+  }
+
+  /** Store Anthropic signature_delta for replay on later tool-loop turns. */
+  appendReasoningSignature(signature: string): void {
+    const trimmed = signature.trim();
+    if (this.disposed || !trimmed) return;
+    this.anthropicThinkingSignature = trimmed;
+  }
+
+  /** Signature captured during this assistant turn (if any). */
+  getAnthropicThinkingSignature(): string | undefined {
+    return this.anthropicThinkingSignature?.trim() || undefined;
   }
 
   /** Await all queued reasoning UI work (for tests). */

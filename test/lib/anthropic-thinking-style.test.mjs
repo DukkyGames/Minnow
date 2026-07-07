@@ -5,7 +5,10 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
+  adjustAnthropicRequestForGateway,
+  adjustAnthropicThinkingForToolHistory,
   anthropicBudgetTokensToEffort,
+  anthropicHistoryHasUnsignedToolCalls,
   anthropicModelUsesAdaptiveThinking,
   normalizeAnthropicProviderOptions,
 } from '../../src/lib/anthropic-thinking-style.mjs';
@@ -64,5 +67,86 @@ describe('normalizeAnthropicProviderOptions', () => {
     };
     const normalized = normalizeAnthropicProviderOptions('claude-sonnet-4-5', input);
     assert.deepEqual(normalized, input);
+  });
+});
+
+describe('anthropicHistoryHasUnsignedToolCalls', () => {
+  test('detects assistant tool_calls missing reasoning_signature', () => {
+    assert.equal(
+      anthropicHistoryHasUnsignedToolCalls([
+        { role: 'user', content: 'hi' },
+        {
+          role: 'assistant',
+          content: null,
+          tool_calls: [{ id: 'c1', type: 'function', function: { name: 'noop', arguments: '{}' } }],
+        },
+      ]),
+      true,
+    );
+  });
+
+  test('returns false when signature is present', () => {
+    assert.equal(
+      anthropicHistoryHasUnsignedToolCalls([
+        {
+          role: 'assistant',
+          content: null,
+          reasoning_signature: 'sig_ok',
+          tool_calls: [{ id: 'c1', type: 'function', function: { name: 'noop', arguments: '{}' } }],
+        },
+      ]),
+      false,
+    );
+  });
+});
+
+describe('adjustAnthropicThinkingForToolHistory', () => {
+  test('disables thinking when unsigned tool history would 400', () => {
+    const adjusted = adjustAnthropicThinkingForToolHistory('claude-opus-4-6', {
+      model: 'claude-opus-4-6',
+      temperature: 0.7,
+      top_p: 0.95,
+      providerOptions: {
+        anthropic: {
+          thinking: { type: 'adaptive' },
+          effort: 'medium',
+        },
+      },
+      messages: [
+        { role: 'user', content: 'run tool' },
+        {
+          role: 'assistant',
+          content: null,
+          tool_calls: [{ id: 'c1', type: 'function', function: { name: 'noop', arguments: '{}' } }],
+        },
+        { role: 'tool', tool_call_id: 'c1', content: 'ok' },
+      ],
+    });
+
+    assert.equal(adjusted.temperature, undefined);
+    assert.equal(adjusted.top_p, undefined);
+    assert.equal(adjusted.providerOptions?.anthropic?.thinking, undefined);
+    assert.equal(adjusted.providerOptions?.anthropic?.effort, undefined);
+  });
+});
+
+describe('adjustAnthropicRequestForGateway', () => {
+  test('strips effort and omits thinking for tool requests on OpenCode', () => {
+    const adjusted = adjustAnthropicRequestForGateway('https://opencode.ai', {
+      model: 'claude-opus-4-6',
+      tools: [{ type: 'function', function: { name: 'noop', parameters: {} } }],
+      providerOptions: {
+        anthropic: {
+          thinking: { type: 'adaptive' },
+          effort: 'medium',
+        },
+      },
+    });
+
+    assert.equal(adjusted.providerOptions?.anthropic?.thinking, undefined);
+    assert.equal(adjusted.providerOptions?.anthropic?.effort, undefined);
+    assert.equal(adjusted.providerOptions?.anthropic?.structuredOutputMode, undefined);
+    assert.equal(adjusted.providerOptions?.anthropic?.toolStreaming, false);
+    assert.equal(adjusted.providerOptions?.anthropic?.disableParallelToolUse, true);
   });
 });

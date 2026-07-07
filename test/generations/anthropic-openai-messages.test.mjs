@@ -36,6 +36,35 @@ describe('openAiMessagesToCoreMessages', () => {
     assert.deepEqual(converted[1], { role: 'user', content: 'Hello' });
   });
 
+  test('maps assistant tool_calls with reasoning signature before tool-call parts', () => {
+    const converted = openAiMessagesToCoreMessages([
+      {
+        role: 'assistant',
+        content: '',
+        reasoning: 'Let me read that file.',
+        reasoning_signature: 'sig_abc123',
+        tool_calls: [
+          {
+            id: 'call_1',
+            type: 'function',
+            function: { name: 'read_file', arguments: '{"path":"a.txt"}' },
+          },
+        ],
+      },
+    ]);
+
+    assert.equal(converted.length, 1);
+    assert.equal(converted[0].role, 'assistant');
+    const content = converted[0].content;
+    assert.ok(Array.isArray(content));
+    assert.equal(content[0].type, 'reasoning');
+    assert.equal(content[0].text, 'Let me read that file.');
+    assert.deepEqual(content[0].providerMetadata, {
+      anthropic: { signature: 'sig_abc123' },
+    });
+    assert.equal(content[1].type, 'tool-call');
+  });
+
   test('maps assistant tool_calls and tool results', () => {
     const converted = openAiMessagesToCoreMessages([
       {

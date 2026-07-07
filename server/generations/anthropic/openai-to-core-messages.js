@@ -117,6 +117,21 @@ function convertMessage(msg, toolNames) {
   if (role === 'assistant') {
     /** @type {import('@ai-sdk/provider-utils').AssistantContent} */
     const contentParts = [];
+    const reasoningText = typeof msg.reasoning === 'string' ? msg.reasoning.trim() : '';
+    const reasoningSignature =
+      typeof msg.reasoning_signature === 'string' ? msg.reasoning_signature.trim() : '';
+    if (reasoningSignature && reasoningText) {
+      contentParts.push({
+        type: 'reasoning',
+        text: reasoningText,
+        providerMetadata: {
+          anthropic: {
+            signature: reasoningSignature,
+          },
+        },
+      });
+    }
+
     const text = textFromContent(msg.content);
     if (text) {
       contentParts.push({ type: 'text', text });

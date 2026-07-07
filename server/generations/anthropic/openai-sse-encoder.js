@@ -112,10 +112,16 @@ export function createOpenAiSseEncoder() {
           choices: [{ index: 0, delta: { content: part.text } }],
         });
 
-      case 'reasoning-delta':
+      case 'reasoning-delta': {
+        const delta = { reasoning: part.text };
+        const signature = part.providerMetadata?.anthropic?.signature;
+        if (typeof signature === 'string' && signature.trim()) {
+          delta.reasoning_signature = signature;
+        }
         return encodeOpenAiSseChunk({
-          choices: [{ index: 0, delta: { reasoning: part.text } }],
+          choices: [{ index: 0, delta }],
         });
+      }
 
       case 'tool-input-start': {
         const toolCallId = typeof part.id === 'string' ? part.id : '';

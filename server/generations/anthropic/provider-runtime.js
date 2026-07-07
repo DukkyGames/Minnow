@@ -3,6 +3,12 @@
  */
 
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { isAnthropicGatewayBaseUrl } from '../../../src/lib/anthropic-thinking-style.mjs';
+import {
+  createAnthropicGatewayFetch,
+  sanitizeAnthropicGatewayRequestBody,
+  stripAnthropicGatewayBetasFromSet,
+} from './gateway-fetch.js';
 
 /**
  * Derive the Anthropic SDK baseURL from provider origin + messages path directory.
@@ -75,6 +81,39 @@ function buildCustomHeaders(profile, secrets) {
 }
 
 /**
+ * Gateways (OpenCode Zen) reject structured-output betas and strict tool mode that
+ * the AI SDK enables by default for Opus 4.6+.
+ *
+ * @param {import('@ai-sdk/anthropic').AnthropicProvider} baseProvider
+ * @returns {import('@ai-sdk/anthropic').AnthropicProvider}
+ */
+function wrapAnthropicGatewayProvider(baseProvider) {
+  /** @param {string} modelId */
+  const createGatewayModel = (modelId) => {
+    const model = baseProvider(modelId);
+    model.config.supportsNativeStructuredOutput = false;
+    model.config.supportsStrictTools = false;
+
+    const priorTransform = model.config.transformRequestBody;
+    model.config.transformRequestBody = (args, betas) => {
+      const body = priorTransform ? priorTransform(args, betas) : args;
+      stripAnthropicGatewayBetasFromSet(betas);
+      return sanitizeAnthropicGatewayRequestBody(body);
+    };
+
+    return model;
+  };
+
+  const provider = /** @type {import('@ai-sdk/anthropic').AnthropicProvider} */ (
+    Object.assign(createGatewayModel, baseProvider)
+  );
+  provider.languageModel = createGatewayModel;
+  provider.chat = createGatewayModel;
+  provider.messages = createGatewayModel;
+  return provider;
+}
+
+/**
  * @param {{ profile: object, paths: object, secrets: object }} runtime
  * @returns {import('@ai-sdk/anthropic').AnthropicProvider}
  */
@@ -84,10 +123,14 @@ export function buildAnthropicProvider(runtime) {
   const baseURL = deriveAnthropicBaseUrl(profile.baseUrl, messagesPath);
   const auth = buildAuthOptions(profile, secrets);
   const headers = buildCustomHeaders(profile, secrets);
+  const isGateway = isAnthropicGatewayBaseUrl(profile.baseUrl);
 
-  return createAnthropic({
+  const baseProvider = createAnthropic({
     baseURL,
     ...auth,
+    fetch: createAnthropicGatewayFetch(profile.baseUrl),
     ...(Object.keys(headers).length > 0 ? { headers } : {}),
   });
+
+  return isGateway ? wrapAnthropicGatewayProvider(baseProvider) : baseProvider;
 }

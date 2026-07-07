@@ -9,7 +9,7 @@
  * - `openai-v1`: nested `thinking.type` (`enabled` / `disabled`); Kimi/Moonshot reject
  *   `enable_thinking` and non-standard `reasoning_effort` values.
  * - `anthropic-v1`: `providerOptions.anthropic.thinking` (`enabled` + `budgetTokens`,
- *   `adaptive` + `effort`, or `disabled`) per model family.
+ *   `adaptive` + `effort`, or omit when off) per model family.
  */
 
 import type { ApiKind } from '../providers/types';
@@ -109,7 +109,7 @@ export function reasoningEffortToCompletionBody(
 
   if (apiKind === 'anthropic-v1') {
     if (effort === 'off') {
-      return anthropicThinkingPatch({ type: 'disabled' });
+      return { body: {} };
     }
 
     if (anthropicUsesAdaptiveThinking(modelCapabilities)) {
@@ -211,7 +211,7 @@ export function thinkingToCompletionBody(
   // MiniMax rejects `thinking.type: "enabled"` — only allows "adaptive" or "disabled".
   if (apiKind === 'anthropic-v1') {
     if (resolved === 'off') {
-      return anthropicThinkingPatch({ type: 'disabled' });
+      return { body: {} };
     }
 
     if (anthropicUsesAdaptiveThinking(modelCapabilities)) {

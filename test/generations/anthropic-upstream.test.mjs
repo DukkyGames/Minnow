@@ -196,6 +196,61 @@ describe('pumpAnthropicUpstream', () => {
     const callOptions = streamText.mock.calls[0]?.arguments[0];
     assert.deepEqual(callOptions.providerOptions?.anthropic?.thinking, { type: 'adaptive' });
     assert.equal(callOptions.providerOptions?.anthropic?.effort, 'medium');
+    assert.equal(callOptions.temperature, undefined);
+    assert.equal(callOptions.topP, undefined);
+  });
+
+  test('omits temperature and topP when adaptive thinking is active', async () => {
+    const streamText = mock.fn(() => ({
+      fullStream: (async function* () {
+        yield { type: 'start' };
+        yield {
+          type: 'finish',
+          finishReason: 'stop',
+          totalUsage: {
+            inputTokens: 1,
+            outputTokens: 1,
+            totalTokens: 2,
+            inputTokenDetails: { noCacheTokens: 1 },
+            outputTokenDetails: { textTokens: 1 },
+          },
+        };
+      })(),
+    }));
+
+    __setAnthropicPumpMocksForTests({
+      streamText,
+      buildAnthropicProvider: fakeAnthropicProvider,
+    });
+
+    const state = createGenerationState({
+      providerId: CANDIDATE.providerId,
+      body: {
+        model: 'claude-opus-4-6',
+        stream: true,
+        temperature: 0.7,
+        top_p: 0.95,
+        messages: [{ role: 'user', content: 'Hi' }],
+        providerOptions: {
+          anthropic: {
+            thinking: { type: 'adaptive' },
+            effort: 'medium',
+          },
+        },
+      },
+    });
+    activeStates.push(state);
+
+    await pumpAnthropicUpstream({
+      state,
+      runtime: RUNTIME,
+      candidate: { providerId: 'zen', modelId: 'claude-opus-4-6' },
+      ...PUMP_OPTS,
+    });
+
+    const callOptions = streamText.mock.calls[0]?.arguments[0];
+    assert.equal(callOptions.temperature, undefined);
+    assert.equal(callOptions.topP, undefined);
   });
 
   test('non-streaming path emits OpenAI chat.completion JSON via appendChunk', async () => {

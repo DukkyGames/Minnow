@@ -76,6 +76,22 @@ describe('createOpenAiSseEncoder', () => {
     assert.equal(reasoningChunk.choices[0].delta.reasoning, 'think');
   });
 
+  test('forwards Anthropic reasoning signatures on reasoning deltas', () => {
+    const encoder = createOpenAiSseEncoder();
+    const chunk = parseSseDataLine(
+      encoder.encodeStreamPart({
+        type: 'reasoning-delta',
+        text: '',
+        id: 'r1',
+        providerMetadata: {
+          anthropic: { signature: 'sig_test_123' },
+        },
+      }),
+    );
+
+    assert.equal(chunk.choices[0].delta.reasoning_signature, 'sig_test_123');
+  });
+
   test('streams indexed tool call deltas compatible with mergeToolCallDelta', () => {
     const encoder = createOpenAiSseEncoder();
     const lines = [

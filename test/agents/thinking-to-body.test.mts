@@ -116,6 +116,11 @@ describe('thinkingToCompletionBody', () => {
       anthropic: { thinking: { type: 'adaptive' }, effort: 'medium' },
     });
   });
+
+  test('anthropic-v1 off omits thinking (do not send disabled)', () => {
+    const { body } = thinkingToCompletionBody('off', 'anthropic-v1', reasoningCaps);
+    assert.deepEqual(body, {});
+  });
 });
 
 describe('reasoningEffortToCompletionBody', () => {
