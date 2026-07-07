@@ -174,12 +174,14 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   const boardGroup = codeMount ? getActiveBoardGroup() : null;
   if (boardGroup?.viewMode === 'board') {
     teardownHub();
+    void import('./orchestrate-board-setup-banner').then((m) => m.removeBoardSetupReturnBanner());
     void import('./orchestrate-board').then((m) => {
       m.renderBoardView(boardGroup);
       m.refreshActiveBoardIfMounted();
     });
     return;
   }
+  void import('./orchestrate-board-setup-banner').then((m) => m.syncBoardSetupReturnBanner(chat));
   clearSubAgentCardDomRegistry();
   if (!chat.history.length) {
     if (codeMount) {
