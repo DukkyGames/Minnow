@@ -1942,6 +1942,7 @@ export function mergeConfigMeta(existing, patch) {
         : {
             enabled: true,
             allowNavigate: true,
+            restoreBrowserTabs: true,
             allowedOriginPatterns: [
               'http://localhost:*',
               'http://127.0.0.1:*',
@@ -1952,6 +1953,9 @@ export function mergeConfigMeta(existing, patch) {
     if (typeof b.enabled === 'boolean') existingBrowser.enabled = b.enabled;
     if (typeof b.allowNavigate === 'boolean') {
       existingBrowser.allowNavigate = b.allowNavigate;
+    }
+    if (typeof b.restoreBrowserTabs === 'boolean') {
+      existingBrowser.restoreBrowserTabs = b.restoreBrowserTabs;
     }
     if (Array.isArray(b.allowedOriginPatterns)) {
       existingBrowser.allowedOriginPatterns = b.allowedOriginPatterns.filter(
