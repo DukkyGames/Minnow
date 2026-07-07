@@ -39,6 +39,30 @@ export function previewGetGuestInfo(wc: WebContents): PreviewGuestInfo {
   };
 }
 
+const BLANK_GUEST_URL = 'about:blank';
+
+/** True when Electron aborted a navigation (superseded by a newer load or stop). */
+export function isNavigationAbortedError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { errno?: number; code?: string; message?: string };
+  if (e.errno === -3 || e.code === 'ERR_ABORTED') return true;
+  return typeof e.message === 'string' && e.message.includes('ERR_ABORTED');
+}
+
+/** Reset the preview guest to an empty page; ignores superseded navigations. */
+export async function previewClearGuest(wc: WebContents): Promise<void> {
+  if (wc.isDestroyed()) return;
+  const current = wc.getURL();
+  if (!wc.isLoading() && (current === BLANK_GUEST_URL || current === '')) {
+    return;
+  }
+  try {
+    await wc.loadURL(BLANK_GUEST_URL);
+  } catch (err) {
+    if (!isNavigationAbortedError(err)) throw err;
+  }
+}
+
 /** Load a URL in the preview guest and await Electron's loadURL promise. */
 export async function previewNavigateAwait(
   wc: WebContents,
