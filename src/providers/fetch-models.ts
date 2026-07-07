@@ -13,8 +13,8 @@ export function normalizeModelsForUi(
 ): LmModelRecord[] {
   return data.map((m) => ({
     id: m.id,
-    type: m.type || (apiKind === 'openai-v1' ? 'llm' : m.type),
-    state: m.state || (apiKind === 'openai-v1' ? 'loaded' : m.state),
+    type: m.type || (apiKind === 'openai-v1' || apiKind === 'anthropic-v1' ? 'llm' : m.type),
+    state: m.state || (apiKind === 'openai-v1' || apiKind === 'anthropic-v1' ? 'loaded' : m.state),
     arch: m.arch,
     quantization: m.quantization,
     max_context_length: m.max_context_length,

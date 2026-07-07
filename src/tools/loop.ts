@@ -59,7 +59,7 @@ import {
   modelLikelyUsesInlineThinking,
   type RoutedContentPart,
 } from '../api/inline-thinking';
-import { extractReasoningDelta, extractReasoningMessage } from '../api/reasoning';
+import { extractReasoningDelta, extractReasoningMessage, extractReasoningSignatureDelta } from '../api/reasoning';
 import { resolveModelInfo } from '../api/models';
 import {
   cancelAssistantBubbleRenderDebounce,
@@ -554,10 +554,15 @@ export function buildApiMessages(
     if (m.role === 'assistant') {
       const withTools = m as AssistantToolCallMessage;
       if (withTools.tool_calls?.length) {
+        const reasoningText = withTools.thinking?.join('\n\n').trim();
         messages.push({
           role: 'assistant',
           content: withTools.content ?? null,
           tool_calls: withTools.tool_calls,
+          ...(reasoningText ? { reasoning: reasoningText } : {}),
+          ...(withTools.thinkingSignature
+            ? { reasoning_signature: withTools.thinkingSignature }
+            : {}),
         });
       } else {
         messages.push({ role: 'assistant', content: m.content });
@@ -698,6 +703,11 @@ async function streamCompletionTurn(
     const reasoning = extractReasoningDelta(chunk);
     if (reasoning) {
       thoughtController?.appendReasoningDelta(reasoning);
+      onStreamContextActivity?.();
+    }
+    const reasoningSignature = extractReasoningSignatureDelta(chunk);
+    if (reasoningSignature) {
+      thoughtController?.appendReasoningSignature(reasoningSignature);
       onStreamContextActivity?.();
     }
     const contentDelta = extractStreamDelta(chunk);
@@ -1571,10 +1581,14 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           removeOrphanStreamingRow(wrap, streamStatus);
         }
 
+        const thinkingNorm = thoughtController?.getSegmentsNormalized() ?? [];
+        const thinkingSignature = thoughtController?.getAnthropicThinkingSignature();
         const assistantToolMsg: AssistantToolCallMessage = {
           role: 'assistant',
           content: toolProse || null,
           tool_calls: turnResult.toolCalls,
+          ...(thinkingNorm.length > 0 ? { thinking: thinkingNorm } : {}),
+          ...(thinkingSignature ? { thinkingSignature } : {}),
         };
         syncTurnContextUsage(
           chat.id,

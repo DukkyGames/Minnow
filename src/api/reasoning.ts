@@ -23,6 +23,12 @@ export function extractReasoningDelta(chunk: ChatCompletionChunk): string {
   return '';
 }
 
+/** Anthropic extended-thinking signature from a streamed reasoning delta (if present). */
+export function extractReasoningSignatureDelta(chunk: ChatCompletionChunk): string {
+  const signature = chunk.choices?.[0]?.delta?.reasoning_signature;
+  return typeof signature === 'string' ? signature.trim() : '';
+}
+
 /** Reasoning string from a non-streaming completion message object. */
 export function extractReasoningMessage(
   message:
