@@ -76,4 +76,5 @@ export function clearComposerInput(input: HTMLTextAreaElement | null | undefined
   if (input.id === 'desktopInput') {
     autoResizeDesktopComposer(input);
   }
+  void import('./composer-prompt-history').then((m) => m.resetComposerPromptHistory());
 }
