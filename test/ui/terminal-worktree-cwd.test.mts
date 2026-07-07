@@ -1,5 +1,5 @@
 /**
- * Terminal worktree cwd resolution (MIN-349).
+ * Terminal worktree cwd resolution (MIN-349) — follows file explorer root.
  */
 
 import assert from 'node:assert/strict';
@@ -10,9 +10,13 @@ import {
   formatTerminalShellHint,
   getTerminalCwdLabelSuffix,
   isTerminalWorktreeCwd,
-  resolveActiveChatTerminalCwd,
+  resolveFileExplorerTerminalCwd,
   terminalCwdsEqual,
 } from '../../src/ui/terminal-worktree-cwd.ts';
+import {
+  resetFileTreeListingRootForTests,
+  setFileTreeListingWorkspaceRoot,
+} from '../../src/ui/file-tree-listing-root.ts';
 import {
   resetWorkspaceStateForTests,
   setWorkspaceFromServer,
@@ -23,56 +27,32 @@ const WORKTREE = 'C:/projects/minnow/.minnow/worktrees/task-abc';
 
 afterEach(() => {
   resetWorkspaceStateForTests();
+  resetFileTreeListingRootForTests();
 });
 
-describe('resolveActiveChatTerminalCwd', () => {
-  test('returns chat worktreeRoot when set', () => {
+describe('resolveFileExplorerTerminalCwd', () => {
+  test('prefers file tree listing worktree root', () => {
     setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
-    const cwd = resolveActiveChatTerminalCwd(
-      { worktreeRoot: WORKTREE },
-      undefined,
-    );
-    assert.equal(cwd, WORKTREE);
+    setFileTreeListingWorkspaceRoot(WORKTREE);
+    assert.equal(resolveFileExplorerTerminalCwd(), WORKTREE);
   });
 
-  test('falls back to main workspace when no worktree', () => {
+  test('falls back to git panel cwd when listing root is unset', async () => {
     setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
-    const cwd = resolveActiveChatTerminalCwd({}, undefined);
+    setFileTreeListingWorkspaceRoot(undefined);
+    // Patch via module: use listing root unset + simulate panel cwd via direct fn
+    const { setGitPanelCwd, getGitPanelCwd } = await import('../../src/ui/git-panel.ts');
+    setGitPanelCwd(WORKTREE);
+    assert.equal(resolveFileExplorerTerminalCwd(), WORKTREE);
+    setGitPanelCwd(undefined);
+    assert.equal(getGitPanelCwd(), undefined);
+  });
+
+  test('falls back to main workspace when no worktree is selected', () => {
+    setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
+    setFileTreeListingWorkspaceRoot(undefined);
+    const cwd = resolveFileExplorerTerminalCwd();
     assert.equal(cwd, MAIN_WS);
-  });
-
-  test('resolves board task worktreePath', () => {
-    setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
-    const cwd = resolveActiveChatTerminalCwd(
-      { boardGroupId: 'grp-1', boardTaskId: 'W1-A' },
-      [
-        {
-          id: 'grp-1',
-          name: 'Board',
-          workspacePath: MAIN_WS,
-          collapsed: false,
-          order: 0,
-          createdAt: 1,
-          orchestrateBoard: {
-            planPath: 'plan.md',
-            executionMode: 'auto',
-            tasks: [
-              {
-                id: 'W1-A',
-                title: 'Task',
-                wave: 'W1',
-                category: 'build',
-                status: 'in_progress',
-                worktreePath: WORKTREE,
-              },
-            ],
-            waves: [{ id: 'W1', status: 'in_progress' }],
-            finalTest: { status: 'pending' },
-          },
-        },
-      ],
-    );
-    assert.equal(cwd, WORKTREE);
   });
 });
 
@@ -96,18 +76,18 @@ describe('formatTerminalShellHint', () => {
   test('mentions worktree path when scoped', () => {
     setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
     const hint = formatTerminalShellHint(WORKTREE);
-    assert.match(hint, /active chat worktree/);
+    assert.match(hint, /file explorer worktree/);
     assert.match(hint, /task-abc/);
   });
 
-  test('prompts for new tab after chat switch', () => {
+  test('prompts for new tab after file root change', () => {
     setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
     const hint = formatTerminalShellHint(WORKTREE, {
-      chatSwitched: true,
+      scopeChanged: true,
       activeShellDiffers: true,
     });
     assert.match(hint, /open a new terminal tab/);
-    assert.match(hint, /task-abc/);
+    assert.match(hint, /File root changed/);
   });
 });
 

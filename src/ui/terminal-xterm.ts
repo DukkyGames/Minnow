@@ -14,9 +14,8 @@ import {
   resizeTerminalSession,
   type ShellProfile,
 } from '../api/terminal-pty';
-import { getActiveChat, sessionState } from '../state/sessions';
 import { getLocalServerAvailable } from '../tools/client';
-import { resolveActiveChatTerminalCwd } from './terminal-worktree-cwd';
+import { resolveFileExplorerTerminalCwd } from './terminal-worktree-cwd';
 import {
   copyTextToClipboard,
   shouldCopyTerminalSelectionOnKeydown,
@@ -288,17 +287,10 @@ export function isTerminalXtermReady(): boolean {
   return hostEl !== null;
 }
 
-/** Fill chat/cwd scope on restored tabs before spawning a PTY session. */
+/** Fill cwd scope on restored tabs before spawning a PTY session. */
 function ensureTabScope(tab: TerminalTabSession): void {
-  if (!sessionState) return;
-  try {
-    const chat = getActiveChat();
-    tab.chatId = tab.chatId ?? chat.id;
-    if (!tab.boundCwd) {
-      tab.boundCwd = resolveActiveChatTerminalCwd(chat, sessionState.groups);
-    }
-  } catch {
-    /* no active chat */
+  if (!tab.boundCwd) {
+    tab.boundCwd = resolveFileExplorerTerminalCwd();
   }
 }
 

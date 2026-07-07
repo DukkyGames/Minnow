@@ -4,10 +4,8 @@
 
 import { fetchShellProfiles, type ShellProfile } from '../api/terminal-pty';
 import { randomUUID } from '../lib/random-id.ts';
-import { getActiveChat, sessionState } from '../state/sessions';
-import { getWorkspacePath } from '../state/workspace';
 import {
-  resolveActiveChatTerminalCwd,
+  resolveFileExplorerTerminalCwd,
   terminalCwdsEqual,
 } from './terminal-worktree-cwd';
 import {
@@ -44,9 +42,8 @@ let onActiveTabChange: ((tabId: string, kind: TerminalTabKind) => void) | null =
   null;
 /** When true, the Agent tab shows a pulse dot (agent command running off-tab). */
 let agentTabActivityBadge = false;
-/** Target cwd for newly opened PTY tabs (follows active chat). */
+/** Target cwd for newly opened PTY tabs (follows file explorer). */
 let newTabTargetCwd: string | undefined;
-let newTabTargetChatId: string | null = null;
 
 export function isAgentTabId(tabId: string): boolean {
   return tabId === AGENT_TAB_ID;
@@ -117,9 +114,8 @@ function sessionsToMeta(): TerminalTabMeta[] {
   }));
 }
 
-/** Scope for the next PTY tab — updated when the active chat or worktree changes. */
-export function setTerminalNewTabScope(chatId: string, cwd: string): void {
-  newTabTargetChatId = chatId;
+/** Scope for the next PTY tab — updated when the file explorer root changes. */
+export function setTerminalNewTabScope(cwd: string): void {
   newTabTargetCwd = cwd;
 }
 
@@ -137,22 +133,11 @@ export function activePtyDiffersFromTargetCwd(targetCwd: string): boolean {
   return !terminalCwdsEqual(activeCwd, targetCwd);
 }
 
-function resolveScopeForNewTab(): { chatId: string | null; cwd: string } {
-  if (newTabTargetChatId && newTabTargetCwd) {
-    return { chatId: newTabTargetChatId, cwd: newTabTargetCwd };
+function resolveScopeForNewTab(): { cwd: string } {
+  if (newTabTargetCwd) {
+    return { cwd: newTabTargetCwd };
   }
-  if (!sessionState) {
-    const ws = getWorkspacePath().trim();
-    return { chatId: null, cwd: ws || '.' };
-  }
-  try {
-    const chat = getActiveChat();
-    const cwd = resolveActiveChatTerminalCwd(chat, sessionState.groups);
-    return { chatId: chat.id, cwd };
-  } catch {
-    const ws = getWorkspacePath().trim();
-    return { chatId: null, cwd: ws || '.' };
-  }
+  return { cwd: resolveFileExplorerTerminalCwd() };
 }
 
 async function persistTabs(activeId: string | null): Promise<void> {
@@ -314,14 +299,14 @@ export async function addTab(shellProfileId?: string): Promise<string> {
     profiles[0]?.id ??
     'powershell';
   const profile = profiles.find((p) => p.id === profileId) ?? profiles[0];
-  const { chatId, cwd } = resolveScopeForNewTab();
+  const { cwd } = resolveScopeForNewTab();
   const tabId = randomTabId();
   const session: TerminalTabSession = {
     tabId,
     shellProfileId: profile?.id ?? profileId,
     sessionId: null,
     title: profile ? profileTabTitle(profile) : profileId,
-    chatId,
+    chatId: null,
     boundCwd: cwd,
   };
   liveTabs.set(tabId, session);

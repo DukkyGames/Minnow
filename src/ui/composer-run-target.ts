@@ -254,8 +254,6 @@ async function refreshGitPanel(): Promise<void> {
   try {
     const mod = await import('./git-panel.ts');
     mod.syncGitPanelFromOrchestrator();
-    const terminal = await import('./terminal-panel.ts');
-    terminal.syncTerminalFromActiveChat();
   } catch {
     /* optional */
   }

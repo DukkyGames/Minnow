@@ -85,7 +85,7 @@ import { updateModelStateDot } from './model-state-dot';
 import { syncModelSelectPicker } from './model-select-picker';
 import { setStatus } from './status';
 import { formatSidebarStatsPreview } from './stats';
-import { refreshTerminalHistoryForActiveChat, syncTerminalFromActiveChat } from './terminal-panel';
+import { refreshTerminalHistoryForActiveChat } from './terminal-panel';
 import {
   applyChatItemDotClasses,
   applyGroupHeaderDotClasses,
@@ -1160,7 +1160,6 @@ export function switchChat(id: string): void {
   syncComposerRunTargetFromActiveChat();
   syncViewModeToggleFromActiveChat();
   void import('./git-panel').then((m) => m.syncGitPanelFromOrchestrator());
-  syncTerminalFromActiveChat();
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
   syncGoalActiveHint();

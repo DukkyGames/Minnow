@@ -14,7 +14,7 @@ import {
   loadTerminalMeta,
   saveTerminalMeta,
 } from '../config/terminal-meta';
-import { getActiveChat, scheduleSaveSessions, sessionState } from '../state/sessions';
+import { getActiveChat, scheduleSaveSessions } from '../state/sessions';
 import type { TerminalRunRecord } from '../types';
 import { getLocalServerAvailable } from '../tools/client';
 import { registerShellRun, unregisterShellRun } from './shell-run-registry';
@@ -47,7 +47,7 @@ import {
   formatTerminalCwdHeader,
   formatTerminalShellHint,
   getTerminalCwdLabelSuffix,
-  resolveActiveChatTerminalCwd,
+  resolveFileExplorerTerminalCwd,
   terminalCwdsEqual,
 } from './terminal-worktree-cwd';
 
@@ -79,9 +79,9 @@ let activeTabKind: TerminalTabKind = 'pty';
 let agentRunHintDepth = 0;
 /** Depth of agent runs that should badge the Agent tab while the user is on another tab. */
 let agentTabActivityDepth = 0;
-/** Last synced target cwd for new PTY tabs (chat-switch detection). */
+/** Last synced target cwd for new PTY tabs (file-explorer scope change detection). */
 let terminalTargetCwd: string | undefined;
-let terminalChatSwitchPending = false;
+let terminalScopeChangePending = false;
 
 const TERMINAL_BTN_DEFAULT_TITLE = 'Terminal (Ctrl+`)';
 const TERMINAL_BTN_AGENT_RUN_TITLE =
@@ -132,38 +132,36 @@ function updateTerminalShellHintText(cwd: string): void {
   const hintEl = document.getElementById('terminalShellHint');
   if (!hintEl) return;
   const activeShellDiffers =
-    terminalChatSwitchPending && activePtyDiffersFromTargetCwd(cwd);
+    terminalScopeChangePending && activePtyDiffersFromTargetCwd(cwd);
   hintEl.textContent = formatTerminalShellHint(cwd, {
-    chatSwitched: terminalChatSwitchPending,
+    scopeChanged: terminalScopeChangePending,
     activeShellDiffers,
   });
 }
 
-function maybeClearChatSwitchPending(): void {
-  if (!terminalTargetCwd || !terminalChatSwitchPending) return;
+function maybeClearScopeChangePending(): void {
+  if (!terminalTargetCwd || !terminalScopeChangePending) return;
   if (!activePtyDiffersFromTargetCwd(terminalTargetCwd)) {
-    terminalChatSwitchPending = false;
+    terminalScopeChangePending = false;
     updateTerminalShellHintText(terminalTargetCwd);
   }
 }
 
 /**
- * Align terminal cwd scope with the active chat worktree (MIN-349).
+ * Align terminal cwd with the file explorer / git panel root (MIN-349).
  * New PTY tabs spawn in the resolved cwd; existing shells keep their directory.
  */
-export function syncTerminalFromActiveChat(): void {
-  if (!sessionState) return;
+export function syncTerminalFromFileExplorer(): void {
   getElements();
 
-  const chat = getActiveChat();
-  const cwd = resolveActiveChatTerminalCwd(chat, sessionState.groups);
+  const cwd = resolveFileExplorerTerminalCwd();
   const prevCwd = terminalTargetCwd;
   const cwdChanged =
     prevCwd !== undefined && !terminalCwdsEqual(prevCwd, cwd);
 
   terminalTargetCwd = cwd;
-  terminalChatSwitchPending = cwdChanged;
-  setTerminalNewTabScope(chat.id, cwd);
+  terminalScopeChangePending = cwdChanged;
+  setTerminalNewTabScope(cwd);
   updateTerminalCwdChrome(cwd);
   updateTerminalShellHintText(cwd);
 }
@@ -893,7 +891,7 @@ export async function initTerminalPanel(): Promise<void> {
   setTerminalTabChangeHandler((_tabId, kind) => {
     applyActiveTabView(kind);
     if (kind === 'pty') {
-      maybeClearChatSwitchPending();
+      maybeClearScopeChangePending();
     }
   });
   wireAgentRunSelect();
@@ -919,7 +917,7 @@ export async function initTerminalPanel(): Promise<void> {
 
   setupResizeHandle();
   setupOutputScroll();
-  syncTerminalFromActiveChat();
+  syncTerminalFromFileExplorer();
   await refreshTerminalHistoryForActiveChat();
 }
 
