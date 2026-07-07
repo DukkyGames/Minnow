@@ -6,6 +6,7 @@ import { DEFAULT_EDITOR_AI_COMPLETION } from '../../src/config/editor-ai-complet
 import { createEmptyChatObject, setSessionStateForTests } from '../../src/state/sessions.ts';
 import {
   buildGitCommitMessagePrompt,
+  extractCommitMessageFromModelOutput,
   resolveCommitMessageDisplayText,
   resolveGitCommitMessageBinding,
   sanitizeCommitMessage,
@@ -64,6 +65,43 @@ describe('stripThinkingFromCommitOutput', () => {
     const raw = '<thinking>analyze diff</thinking>feat: add widget';
     assert.equal(stripThinkingFromCommitOutput(raw), 'feat: add widget');
   });
+
+  test('returns empty while thinking block is still open', () => {
+    const raw = '<thinking>still analyzing the diff';
+    assert.equal(stripThinkingFromCommitOutput(raw), '');
+  });
+
+  test('returns empty for reasoning monologue without commit line', () => {
+    const raw = 'Let me analyze the diff and figure out the right message.';
+    assert.equal(extractCommitMessageFromModelOutput(raw), '');
+  });
+});
+
+describe('extractCommitMessageFromModelOutput', () => {
+  test('extracts subject and body from mixed reasoning output', () => {
+    const raw =
+      'Let me read the diff.\n\nfeat(ui): add git commit generator\n\nWire sparkles button to generations API.';
+    assert.equal(
+      extractCommitMessageFromModelOutput(raw),
+      'feat(ui): add git commit generator\n\nWire sparkles button to generations API.',
+    );
+  });
+
+  test('drops trailing meta commentary after commit body', () => {
+    const raw =
+      'The diff adds a new panel.\n\nfeat(ui): add git commit generator\n\nLooks good.';
+    assert.equal(
+      extractCommitMessageFromModelOutput(raw),
+      'feat(ui): add git commit generator',
+    );
+  });
+
+  test('returns empty when no conventional commit line exists', () => {
+    assert.equal(
+      extractCommitMessageFromModelOutput('I need to summarize these file changes first.'),
+      '',
+    );
+  });
 });
 
 describe('resolveCommitMessageDisplayText', () => {
@@ -88,7 +126,16 @@ describe('resolveCommitMessageDisplayText', () => {
       'The diff adds a new panel.\n\nfeat(ui): add git commit generator\n\nLooks good.';
     assert.equal(
       resolveCommitMessageDisplayText('', reasoning, { reasoningFallback: true }),
-      'feat(ui): add git commit generator\n\nLooks good.',
+      'feat(ui): add git commit generator',
+    );
+  });
+
+  test('does not surface raw reasoning when no commit line is present', () => {
+    assert.equal(
+      resolveCommitMessageDisplayText('', 'Let me analyze the staged diff carefully.', {
+        reasoningFallback: true,
+      }),
+      '',
     );
   });
 
