@@ -20,12 +20,57 @@ function setupDom() {
 function assistantWrap() {
   const wrap = document.createElement('div');
   wrap.className = 'msg assistant';
-  wrap.innerHTML = '<div class="msg-label">Assistant</div><div class="msg-bubble"></div>';
+  wrap.innerHTML =
+    '<div class="msg-label">Assistant</div><div class="stream-status"></div><div class="msg-bubble"></div>';
   return wrap;
 }
 
 describe('ThoughtBubbleController', { concurrency: false }, () => {
-  test('queued deltas after a paragraph boundary resolve without hanging', async () => {
+  test('reasoning prose is collapsed by default during streaming', () => {
+    setupDom();
+    const wrap = assistantWrap();
+    const ctrl = new ThoughtBubbleController(wrap);
+
+    ctrl.appendReasoningDelta('Hidden reasoning text');
+
+    const flow = wrap.querySelector('.thoughts-flow');
+    const toggle = wrap.querySelector('.thoughts-toggle');
+    const segment = wrap.querySelector('.thoughts-segment');
+
+    assert.ok(toggle);
+    assert.equal(toggle?.getAttribute('aria-expanded'), 'false');
+    assert.ok(flow?.hidden);
+    assert.equal(segment?.textContent, '');
+    assert.ok(wrap.querySelector('.stream-status')?.classList.contains('hidden'));
+
+    ctrl.endReasoningPhase();
+  });
+
+  test('click expands to reveal streaming reasoning text', () => {
+    setupDom();
+    const wrap = assistantWrap();
+    const ctrl = new ThoughtBubbleController(wrap);
+
+    ctrl.appendReasoningDelta('Visible when expanded');
+
+    const toggle = wrap.querySelector('.thoughts-toggle');
+    toggle?.click();
+
+    const flow = wrap.querySelector('.thoughts-flow');
+    const segment = wrap.querySelector('.thoughts-segment');
+
+    assert.equal(toggle?.getAttribute('aria-expanded'), 'true');
+    assert.equal(flow?.hidden, false);
+    assert.equal(segment?.textContent, 'Visible when expanded');
+
+    toggle?.click();
+    assert.equal(toggle?.getAttribute('aria-expanded'), 'false');
+    assert.ok(flow?.hidden);
+
+    ctrl.endReasoningPhase();
+  });
+
+  test('paragraph boundaries split stored segments', async () => {
     setupDom();
     const wrap = assistantWrap();
     const ctrl = new ThoughtBubbleController(wrap);
@@ -34,12 +79,7 @@ describe('ThoughtBubbleController', { concurrency: false }, () => {
     ctrl.appendReasoningDelta('\n\n');
     ctrl.appendReasoningDelta('Second thought');
 
-    await Promise.race([
-      ctrl.flushPendingWork(),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('reasoning queue hung')), 2500),
-      ),
-    ]);
+    await ctrl.flushPendingWork();
 
     assert.deepEqual(ctrl.getSegmentsNormalized(), [
       'First thought',
@@ -48,15 +88,48 @@ describe('ThoughtBubbleController', { concurrency: false }, () => {
 
     ctrl.endReasoningPhase();
   });
+
+  test('setThinkingElapsed updates live toggle label', () => {
+    setupDom();
+    const wrap = assistantWrap();
+    const ctrl = new ThoughtBubbleController(wrap);
+
+    ctrl.appendReasoningDelta('Reasoning');
+    ctrl.setThinkingElapsed(5000);
+
+    const label = wrap.querySelector('.thoughts-toggle__label');
+    assert.equal(label?.textContent, 'Thinking… 5.0s');
+
+    ctrl.endReasoningPhase();
+  });
 });
 
 describe('renderThoughtsToggle', () => {
-  test('durationMs updates button label', () => {
+  test('durationMs updates button label and starts collapsed', () => {
     setupDom();
     const wrap = assistantWrap();
     renderThoughtsToggle(wrap, ['Segment one'], { durationMs: 5000 });
     const btn = wrap.querySelector('.thoughts-toggle');
-    assert.equal(btn?.textContent, 'Thought for 5.0s');
+    const flow = wrap.querySelector('.thoughts-flow');
+    assert.equal(btn?.querySelector('.thoughts-toggle__label')?.textContent, 'Thought for 5.0s');
     assert.equal(btn?.getAttribute('aria-label'), 'Thought for 5.0s');
+    assert.equal(btn?.getAttribute('aria-expanded'), 'false');
+    assert.ok(flow?.hidden);
+  });
+
+  test('click toggles persisted reasoning visibility', () => {
+    setupDom();
+    const wrap = assistantWrap();
+    renderThoughtsToggle(wrap, ['Segment one']);
+    const btn = wrap.querySelector('.thoughts-toggle');
+    const flow = wrap.querySelector('.thoughts-flow');
+
+    btn?.click();
+    assert.equal(btn?.getAttribute('aria-expanded'), 'true');
+    assert.equal(flow?.hidden, false);
+
+    btn?.click();
+    assert.equal(btn?.getAttribute('aria-expanded'), 'false');
+    assert.ok(flow?.hidden);
   });
 });

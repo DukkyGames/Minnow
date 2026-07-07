@@ -1196,7 +1196,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
   thinkingTracker = new ThinkingDurationTracker((elapsedMs) => {
     if (isStreamDomVisible(chat.id)) {
-      streamCtx.streamStatus.setThinkingElapsed(elapsedMs);
+      thoughtController?.setThinkingElapsed(elapsedMs);
     }
   });
 
