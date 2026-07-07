@@ -119,7 +119,7 @@ function wrapAnthropicGatewayProvider(baseProvider) {
  */
 export function buildAnthropicProvider(runtime) {
   const { profile, paths, secrets } = runtime;
-  const messagesPath = paths?.chatCompletionsPath || '/v1/messages';
+  const messagesPath = paths?.messagesPath || paths?.chatCompletionsPath || '/v1/messages';
   const baseURL = deriveAnthropicBaseUrl(profile.baseUrl, messagesPath);
   const auth = buildAuthOptions(profile, secrets);
   const headers = buildCustomHeaders(profile, secrets);

@@ -5,6 +5,7 @@
 const PROVIDER_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const API_KINDS = new Set(['lm-studio-v0', 'openai-v1', 'anthropic-v1']);
 const AUTH_STYLES = new Set(['bearer', 'api-key', 'x-api-key']);
+const SAFE_PROVIDER_PATH_RE = /^\/[a-zA-Z0-9._~!$&'()*+,;=:@/-]*$/;
 
 /**
  * @param {string} id
@@ -68,6 +69,50 @@ export function validateAuthStyle(style) {
  */
 export function isSafeProviderPathSegment(pathnameSegment) {
   return typeof pathnameSegment === 'string' && PROVIDER_ID_RE.test(pathnameSegment);
+}
+
+/**
+ * Validate an upstream API path override (must start with /).
+ * @param {string | undefined} raw
+ * @param {string} fallback
+ * @returns {string}
+ */
+export function validateProviderPath(raw, fallback) {
+  const path = typeof raw === 'string' && raw.trim() ? raw.trim() : fallback;
+  if (!path.startsWith('/')) {
+    throw new Error('Provider paths must start with /');
+  }
+  if (!SAFE_PROVIDER_PATH_RE.test(path)) {
+    throw new Error('Invalid provider path');
+  }
+  return path;
+}
+
+/**
+ * @param {string | undefined} raw
+ * @returns {string}
+ */
+export function validateMessagesPath(raw) {
+  return validateProviderPath(raw, '/v1/messages');
+}
+
+/**
+ * @param {unknown} raw
+ * @returns {Record<string, 'lm-studio-v0' | 'openai-v1' | 'anthropic-v1'> | undefined}
+ */
+export function validateModelApiOverrides(raw) {
+  if (raw === undefined) return undefined;
+  if (raw === null) return {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error('Invalid modelApiOverrides');
+  }
+  /** @type {Record<string, 'lm-studio-v0' | 'openai-v1' | 'anthropic-v1'>} */
+  const out = {};
+  for (const [modelId, apiKind] of Object.entries(raw)) {
+    if (typeof modelId !== 'string' || !modelId.trim()) continue;
+    out[modelId.trim()] = validateApiKind(String(apiKind));
+  }
+  return out;
 }
 
 /**

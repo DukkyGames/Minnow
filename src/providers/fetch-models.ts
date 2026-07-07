@@ -3,14 +3,16 @@
  */
 
 import type { LmModelRecord } from '../types';
+import { resolveModelApi } from './resolve-model-api';
 import { resolveProviderEndpoints } from './resolve';
 import type { ProviderPublic } from './types';
 
 /** Normalize provider model rows to LM Studio-shaped records for modelCache. */
 export function normalizeModelsForUi(
-  apiKind: ProviderPublic['apiKind'],
+  provider: ProviderPublic,
   data: LmModelRecord[],
 ): LmModelRecord[] {
+  const apiKind = provider.apiKind;
   return data.map((m) => ({
     id: m.id,
     type: m.type || (apiKind === 'openai-v1' || apiKind === 'anthropic-v1' ? 'llm' : m.type),
@@ -19,6 +21,9 @@ export function normalizeModelsForUi(
     quantization: m.quantization,
     max_context_length: m.max_context_length,
     loaded_context_length: m.loaded_context_length,
+    ...(m.owned_by ? { owned_by: m.owned_by } : {}),
+    ...(m.family ? { family: m.family } : {}),
+    api: m.api ?? resolveModelApi(provider, m.id, m),
     ...(m.reasoning ? { reasoning: m.reasoning } : {}),
     ...(m.catalogVision !== undefined ? { catalogVision: m.catalogVision } : {}),
   }));
@@ -38,6 +43,6 @@ export async function fetchModelsForProvider(
   }
   const json = (await res.json()) as { data?: LmModelRecord[] };
   const raw = json.data || [];
-  const normalized = normalizeModelsForUi(provider.apiKind, raw);
+  const normalized = normalizeModelsForUi(provider, raw);
   return normalized.filter((m) => m.type === 'llm' || m.type === 'vlm');
 }

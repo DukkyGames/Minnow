@@ -27,6 +27,7 @@ OpenCode Zen Claude models (and native Anthropic) use the **Anthropic Messages A
 - [x] Extend ApiKind to `anthropic-v1` across types, validate, paths (server + client), settings UI
 - [x] Create `server/generations/anthropic/` bridge module
 - [x] Branch upstream.js on anthropic-v1
+- [x] Per-model API resolution for mixed gateways (`autoApi`, `messagesPath`, `resolveModelApi`) — MIN-322
 - [x] Add anthropic-v1 thinking-to-body branch; adjust capability probes
 - [x] Add missing Claude model IDs to known-context-windows.ts
 - [x] Add conversion, SSE encoder, and path tests (`test/generations/anthropic-*.test.mjs`, `test/providers/paths.test.js`)

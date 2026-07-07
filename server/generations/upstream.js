@@ -27,6 +27,7 @@ import {
   readGenerationUpstreamTimeouts,
 } from './timeouts.js';
 import { pumpAnthropicUpstream } from './anthropic/pump.js';
+import { resolveModelApi } from './resolve-model-api.js';
 import { formatUpstreamHttpErrorMessage } from './upstream-error-detail.js';
 import { upstreamFetch } from './upstream-fetch.js';
 
@@ -36,10 +37,11 @@ import { upstreamFetch } from './upstream-fetch.js';
  * @param {Buffer} requestBody
  * @param {{ apiKind?: string, baseUrl?: string }} profile
  * @param {string} modelId
+ * @param {'lm-studio-v0' | 'openai-v1' | 'anthropic-v1'} [resolvedApi]
  * @returns {Buffer}
  */
-function prepareUpstreamRequestBody(requestBody, profile, modelId) {
-  const apiKind = profile.apiKind ?? 'openai-v1';
+function prepareUpstreamRequestBody(requestBody, profile, modelId, resolvedApi) {
+  const apiKind = resolvedApi ?? profile.apiKind ?? 'openai-v1';
   let body = requestBody;
 
   try {
@@ -138,11 +140,26 @@ async function pumpUpstreamAsync({ state }) {
     }
 
     const canFailover = !state.failoverDisabled && index < state.candidates.length - 1;
+    const resolvedApi = resolveModelApi(runtime, candidate.modelId);
+    const anthropicRuntime =
+      resolvedApi === 'anthropic-v1'
+        ? {
+            ...runtime,
+            paths: {
+              ...runtime.paths,
+              messagesPath:
+                runtime.paths.messagesPath ||
+                runtime.profile.messagesPath ||
+                runtime.paths.chatCompletionsPath ||
+                '/v1/messages',
+            },
+          }
+        : runtime;
     const result =
-      runtime.profile.apiKind === 'anthropic-v1'
+      resolvedApi === 'anthropic-v1'
         ? await pumpAnthropicUpstream({
             state,
-            runtime,
+            runtime: anthropicRuntime,
             candidate,
             index,
             idleMs,
@@ -160,6 +177,7 @@ async function pumpUpstreamAsync({ state }) {
               buildCandidateRequestBody(state.requestBody, candidate.modelId),
               runtime.profile,
               candidate.modelId,
+              resolvedApi,
             ),
             idleMs,
             maxMs,

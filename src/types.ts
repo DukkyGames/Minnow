@@ -902,6 +902,8 @@ export interface ModelCapabilities {
   reasoningThinkingEnabledValue?: 'enabled' | 'adaptive';
   contextLength: number | null;
   loadState: string | null;
+  /** Resolved upstream API for this model (gateway auto-routing). */
+  api?: import('./providers/types').ApiKind;
   sources?: Partial<Record<keyof ModelCapabilities | 'loadState', CapabilitySource>>;
   probeErrors?: Record<string, string>;
 }
@@ -926,6 +928,11 @@ export interface LmModelRecord {
   };
   /** Upstream catalog vision flag (`capabilities.vision` or `type: vlm`) before Minnow merge. */
   catalogVision?: boolean;
+  /** Resolved upstream API (`openai-v1` vs `anthropic-v1`) for mixed gateways. */
+  api?: import('./providers/types').ApiKind;
+  /** OpenAI-compatible catalog owner when present (e.g. OpenRouter `owned_by`). */
+  owned_by?: string;
+  family?: string;
 }
 
 export interface LmModelsListResponse {

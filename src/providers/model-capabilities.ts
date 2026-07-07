@@ -95,19 +95,20 @@ export function catalogCapabilitiesFromRow(
   row: LmModelRecord,
   apiKind?: ApiKind,
 ): ModelCapabilities {
+  const resolvedApi = row.api ?? apiKind;
   const contextLength = contextLengthFromModelRow(row) ?? null;
   const vision = catalogRowHasVision(row);
   const reasoningCaps = reasoningCatalogFromRow(row);
   let reasoningAllowedOptions = reasoningCaps.reasoningAllowedOptions;
-  if ((!reasoningAllowedOptions || reasoningAllowedOptions.length === 0) && apiKind) {
-    const inferred = inferReasoningOptionsFromModelId(row.id, apiKind);
+  if ((!reasoningAllowedOptions || reasoningAllowedOptions.length === 0) && resolvedApi) {
+    const inferred = inferReasoningOptionsFromModelId(row.id, resolvedApi);
     if (inferred.length > 0) {
       reasoningAllowedOptions = inferred;
     }
   }
   const isMiniMax = /minimax/i.test(row.id);
   const usesAdaptiveAnthropicThinking =
-    apiKind === 'anthropic-v1' && anthropicModelUsesAdaptiveThinking(row.id);
+    resolvedApi === 'anthropic-v1' && anthropicModelUsesAdaptiveThinking(row.id);
   return {
     vision,
     tools: null,
@@ -125,6 +126,7 @@ export function catalogCapabilitiesFromRow(
     ...(usesAdaptiveAnthropicThinking ? { reasoningThinkingEnabledValue: 'adaptive' as const } : {}),
     contextLength,
     loadState: row.state?.trim() || null,
+    ...(resolvedApi ? { api: resolvedApi } : {}),
     sources: {
       vision: 'catalog',
       contextLength: contextLength !== null ? 'catalog' : undefined,
@@ -239,6 +241,11 @@ export function mergeModelCapabilities(
   }
   if (fromFile.probeErrors && Object.keys(fromFile.probeErrors).length > 0) {
     merged.probeErrors = { ...catalog.probeErrors, ...fromFile.probeErrors };
+  }
+  if (fromFile.api) {
+    merged.api = fromFile.api;
+  } else if (catalog.api) {
+    merged.api = catalog.api;
   }
 
   return merged;
