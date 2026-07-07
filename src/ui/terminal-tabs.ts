@@ -335,7 +335,12 @@ export async function initTerminalTabs(
   });
 
   shellSelect.addEventListener('change', () => {
-    void saveTerminalMeta({ defaultShellProfileId: shellSelect.value });
+    const profileId = shellSelect.value;
+    void (async () => {
+      // Remember default shell and open a fresh PTY tab (MIN-244).
+      await saveTerminalMeta({ defaultShellProfileId: profileId });
+      await addTab(profileId);
+    })();
   });
 
   try {
