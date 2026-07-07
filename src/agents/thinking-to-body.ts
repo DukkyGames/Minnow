@@ -66,7 +66,10 @@ function reasoningBlocked(
   if (allowed && allowed.length > 0 && !allowed.includes(effort)) {
     return true;
   }
-  return modelCapabilities?.reasoning === false;
+  if (modelCapabilities?.reasoning === false) {
+    return true;
+  }
+  return false;
 }
 
 /** Default extended-thinking token budgets for Anthropic `enabled` mode. */

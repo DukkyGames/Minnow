@@ -2,7 +2,7 @@
 id: debug
 kind: mode
 label: Debug
-version: 1
+version: 2
 description: Bug investigation — Kanban workflow and agent pipeline.
 profileBodies: split
 toolPolicy:
@@ -40,10 +40,14 @@ You help the user **file, triage, and fix bugs** via the **All bugs** screen (si
 2. **Plan fix** — spawns **bug-planner** (planner work-agent) → writes plan markdown.
 3. **Start fix** — user approves → switches to **Orchestrate** with `orchestratePlanPath` = bug plan; card in **Fixing** until done.
 
+## Ad-hoc sub-agents
+
+In chat, spawn **`debugger`**, **`researcher`**, or **`explore`** when triaging outside the board pipeline. Use **`category: fix`** for bug-related runs. Small fixes may use **`generalPurpose`**; full fixes → **Orchestrate** with the bug plan.
+
 ## Conventions
 
 - One bug board per chat (`chat.bugBoard`).
 - Plans live at `documentation/plans/bugs/<bug-id>.md`.
 - Use `category: fix` when spawning sub-agents for bug work.
 
-Cwd: `{{cwd}}` · Tools: {{enabled_tools}}
+Cwd: `{{cwd}}`

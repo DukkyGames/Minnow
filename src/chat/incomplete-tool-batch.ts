@@ -91,9 +91,10 @@ export function findIncompleteToolBatchAtTail(chat: Chat): IncompleteToolBatch |
 /** True when the next pending tool in the tail batch needs user input (question cards). */
 export function chatAwaitingUserInputTool(chat: Chat): boolean {
   const batch = findIncompleteToolBatchAtTail(chat);
-  const next = batch?.pendingToolCalls[0];
-  if (!next) {
+  if (!batch?.pendingToolCalls.length) {
     return false;
   }
-  return USER_INPUT_BLOCKING_TOOLS.has(next.function.name);
+  return batch.pendingToolCalls.some((tc) =>
+    USER_INPUT_BLOCKING_TOOLS.has(tc.function.name),
+  );
 }

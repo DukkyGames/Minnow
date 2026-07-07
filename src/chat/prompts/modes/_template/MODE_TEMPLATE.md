@@ -68,7 +68,6 @@ What this mode must **not** do (e.g. Plan: no drive-by refactors).
 | `{{mode}}` | `ModeId` | e.g. `plan` |
 | `{{mode_label}}` | Registry label | e.g. `Plan` |
 | `{{cwd}}` | `ComposeContext.cwd` | Origin or project root |
-| `{{enabled_tools}}` | Summaries from enabled + mode-filtered tools |
 | `{{profile}}` | `full` \| `lite` \| `custom` | Optional in body |
 
 Embed test markers:

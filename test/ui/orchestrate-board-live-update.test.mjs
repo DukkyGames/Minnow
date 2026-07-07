@@ -987,6 +987,38 @@ describe('orchestrate board live updates', () => {
     assert.ok(document.getElementById('vibeHub'));
   });
 
+  test('createChat from code overview dismisses overview and shows new chat', async () => {
+    setupDom();
+    await primeSubAgentConfig();
+    const chat = createEmptyChatObject('');
+    chat.id = FIXED_CHAT_ID;
+    chat.modeId = 'general';
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+      groups: [],
+    });
+
+    const area = document.getElementById('chatArea');
+    area.classList.add('chat-area--code-overview');
+    document.getElementById('mainColumn')?.classList.add('main-column--code-overview');
+    const overviewRoot = document.createElement('div');
+    overviewRoot.id = 'codeOverviewRoot';
+    area.replaceChildren(overviewRoot);
+
+    createChat();
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(document.getElementById('codeOverviewRoot'), null);
+    assert.notEqual(getActiveChat().id, chat.id);
+    assert.ok(document.getElementById('vibeHub'));
+    assert.equal(area.classList.contains('chat-area--code-overview'), false);
+  });
+
   test('header activity chip shows last assistant message', () => {
     setupDom();
     setBoardNowForTests(() => 1_700_000_000_000);
@@ -1233,6 +1265,39 @@ describe('orchestrate board live updates', () => {
     setStreaming(false, FIXED_TASK_CHAT_ID);
     resetWrapperState();
     disposeBoardViewForTests();
+  });
+
+  test('refreshActiveBoardIfMounted does not replace code overview overlay', async () => {
+    setupDom();
+    setBoardNowForTests(() => 1_700_000_000_000);
+    const chat = makeOrchestrateChat();
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
+
+    await primeSubAgentConfig();
+    renderBoardView(group);
+    await waitForKanban();
+    assert.ok(document.querySelector('.board-root'), 'board should mount first');
+
+    const overviewRoot = document.createElement('div');
+    overviewRoot.id = 'codeOverviewRoot';
+    document.getElementById('chatArea').replaceChildren(overviewRoot);
+
+    refreshActiveBoardIfMounted();
+
+    assert.ok(
+      document.getElementById('codeOverviewRoot'),
+      'code overview overlay should stay mounted',
+    );
+    assert.equal(
+      document.querySelector('.board-root'),
+      null,
+      'board should not repaint over the overlay',
+    );
   });
 
 });

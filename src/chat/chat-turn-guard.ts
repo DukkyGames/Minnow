@@ -2,6 +2,7 @@
  * Prevents overlapping chat turn setup for the same session (double-send before streaming flag is set).
  */
 
+import { getChatAbort } from '../app-state';
 import { isChatStreaming } from './streaming-state';
 
 const chatTurnSetupPending = new Set<string>();
@@ -9,6 +10,15 @@ const chatTurnSetupPending = new Set<string>();
 /** True while this chat is preparing or running a turn (before or during global streaming). */
 export function isChatTurnSetupPending(chatId: string): boolean {
   return chatTurnSetupPending.has(chatId);
+}
+
+/** True while a chat turn is in flight (setup, streaming flag, or active abort controller). */
+export function isChatTurnInProgress(chatId: string): boolean {
+  return (
+    isChatStreaming(chatId) ||
+    isChatTurnSetupPending(chatId) ||
+    Boolean(getChatAbort(chatId))
+  );
 }
 
 /**

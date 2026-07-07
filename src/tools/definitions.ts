@@ -5,7 +5,6 @@
 
 import {
   ASK_QUESTION_TOOL_DESCRIPTION,
-  askQuestionItemSchema,
 } from './ask-question-schema';
 
 /** Tool grouping for settings UI and documentation. */
@@ -113,7 +112,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: false,
     definition: toolSchema(
       'check_reef_widget',
-      'Validate reef-widget HTML before finishing a Reef reply. Pass the fence body (not markdown delimiters). Returns JSON with ok, errors, and warnings.',
+      'Validate reef-widget HTML before finishing. Pass the fence body (not markdown delimiters). Returns JSON with ok, errors, and warnings.',
       {
         html: {
           type: 'string',
@@ -241,17 +240,10 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       'ask_question',
       ASK_QUESTION_TOOL_DESCRIPTION,
       {
-        title: {
-          type: 'string',
-          description: 'Optional short category or context label shown above the questions.',
-        },
+        title: { type: 'string' },
         questions: {
           type: 'array',
-          description:
-            'Required. One object per card (1–10). Each object must have id, prompt, and options (not "question", "choices", or string options).',
-          minItems: 1,
-          maxItems: 10,
-          items: askQuestionItemSchema,
+          items: { type: 'object' },
         },
       },
       ['questions'],
@@ -261,7 +253,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'set_chat_mode',
     label: 'Set chat mode',
     description:
-      'Switch the active chat operating mode (General, Build, Plan, Orchestrate, Reef, Debug) after the user chooses a handoff option.',
+      'Switch the active chat operating mode (General, Desktop, Build, Plan, Orchestrate, Reef, Debug) after the user chooses a handoff option.',
     category: 'utility',
     serverRequired: false,
     definition: toolSchema(
@@ -270,7 +262,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       {
         mode_id: {
           type: 'string',
-          enum: ['general', 'build', 'plan', 'orchestrate', 'reef', 'debug'],
+          enum: ['general', 'desktop', 'build', 'plan', 'orchestrate', 'reef', 'debug'],
           description: 'Target operating mode for the active chat',
         },
       },
@@ -290,7 +282,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       {
         mode_id: {
           type: 'string',
-          enum: ['general', 'build', 'plan', 'orchestrate', 'reef', 'debug'],
+          enum: ['general', 'desktop', 'build', 'plan', 'orchestrate', 'reef', 'debug'],
           description: 'Operating mode for the new chat',
         },
         plan_path: {
@@ -330,7 +322,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         settings_section: {
           type: 'string',
           description:
-            'When app_id is settings: legacy area slug (e.g. memory, tools) or category slug (e.g. knowledge)',
+            'When app_id is settings: legacy area slug (e.g. memory, tools) or category slug (e.g. agents)',
         },
         settings_query: {
           type: 'string',
@@ -345,12 +337,12 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'propose_mode_switch',
     label: 'Propose mode switch',
     description:
-      'Show standard mode-handoff multiple-choice cards (plan complete, wrong mode, Reef widget offer).',
+      'Show standard mode-handoff multiple-choice cards (plan complete, wrong mode).',
     category: 'utility',
     serverRequired: false,
     definition: toolSchema(
       'propose_mode_switch',
-      'Ask the user a standard mode-handoff question via the ask_question UI. Situations: plan_complete, implement_in_wrong_mode, plan_in_build, reef_visualization.',
+      'Ask the user a standard mode-handoff question via the ask_question UI. Situations: plan_complete, implement_in_wrong_mode, plan_in_build.',
       {
         situation: {
           type: 'string',
@@ -358,7 +350,6 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
             'plan_complete',
             'implement_in_wrong_mode',
             'plan_in_build',
-            'reef_visualization',
           ],
           description: 'Which handoff preset to show',
         },
@@ -526,45 +517,19 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'grep',
-      'Search file contents under a workspace directory. Returns path:line:snippet lines. Respects .gitignore. Use search_in_file when you already know the file path.',
+      'Search file contents (ripgrep-style). path:line:snippet; respects .gitignore.',
       {
-        pattern: {
-          type: 'string',
-          description: 'Regex pattern, or literal string when literal is true',
-        },
-        path: {
-          type: 'string',
-          description: 'Directory or file to search under (default ".")',
-        },
-        glob: {
-          type: 'string',
-          description: 'Optional file glob filter, e.g. "**/*.{ts,tsx}"',
-        },
-        case_insensitive: {
-          type: 'boolean',
-          description: 'Case-insensitive search (default false)',
-        },
-        literal: {
-          type: 'boolean',
-          description: 'Treat pattern as a fixed string, not regex (default false)',
-        },
-        context: {
-          type: 'number',
-          description: 'Lines of context before/after each match (0-5, default 0)',
-        },
-        head_limit: {
-          type: 'number',
-          description: 'Max lines to return (default 50, max 200)',
-        },
-        offset: {
-          type: 'number',
-          description: 'Skip this many result lines before applying head_limit (default 0)',
-        },
+        pattern: { type: 'string' },
+        path: { type: 'string' },
+        glob: { type: 'string' },
+        case_insensitive: { type: 'boolean' },
+        literal: { type: 'boolean' },
+        context: { type: 'number' },
+        head_limit: { type: 'number' },
+        offset: { type: 'number' },
         output_mode: {
           type: 'string',
           enum: ['content', 'count', 'files_with_matches', 'grouped'],
-          description:
-            'Output format: content (path:line:snippet), grouped (per-file blocks with indented lines), count (path:match_count), or files_with_matches (paths only). Default content.',
         },
       },
       ['pattern'],
@@ -775,37 +740,15 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'execute_command',
-      'Execute a shell command and return stdout and stderr. Default: blocking (30s timeout). Set timeout_ms (1000–600000) for long-running suites. Set background: true for servers, watchers, and processes that may not exit; poll with read_command_log; stop with stop_command or stop: true + run_id. Always pass --test-force-exit when running node --test directly to prevent the process hanging after tests pass.',
+      'Shell command → stdout/stderr. Blocking 30s default; timeout_ms for longer. background + read_command_log for detached; stop + run_id to end.',
       {
-        command: { type: 'string', description: 'Shell command to run (omit when stop: true)' },
-        background: {
-          type: 'boolean',
-          description:
-            'When true, spawn detached with no timeout and return runId immediately. Mutually exclusive with stop.',
-        },
-        block_until_ms: {
-          type: 'number',
-          description:
-            'With background: true, wait up to this many ms for initial output (0–120000) before returning.',
-        },
-        timeout_ms: {
-          type: 'number',
-          description:
-            'Blocking run timeout in milliseconds (1000–600000). Default 30000. Use for test suites or builds that legitimately take longer than 30s.',
-        },
-        cwd: {
-          type: 'string',
-          description: 'Working directory relative to workspace root (default .)',
-        },
-        stop: {
-          type: 'boolean',
-          description:
-            'When true, stop an existing run by run_id instead of spawning (mutually exclusive with background and command).',
-        },
-        run_id: {
-          type: 'string',
-          description: 'runId from a background execute_command (required when stop: true)',
-        },
+        command: { type: 'string' },
+        background: { type: 'boolean' },
+        block_until_ms: { type: 'number' },
+        timeout_ms: { type: 'number' },
+        cwd: { type: 'string' },
+        stop: { type: 'boolean' },
+        run_id: { type: 'string' },
       },
       ['command'],
     ),
@@ -948,7 +891,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         type: {
           type: 'string',
           description:
-            'Sub-agent type id (e.g. generalPurpose, explore, shell, reef-widget)',
+            'Sub-agent type id (e.g. researcher, explore, generalPurpose, shell, debugger)',
         },
         task: { type: 'string', description: 'Task description for the sub-agent' },
         wait: {
@@ -978,58 +921,35 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: false,
     definition: toolSchema(
       'board_init',
-      'Create or replace orchestrateBoard. Call only after parsing the plan: pass plan_path plus every task (tasks[].id) and wave (waves[].id). plan_path alone fails validation.',
+      'Create/replace orchestrate board. Requires plan_path, tasks[{id,title,wave,category}], waves[{id}].',
       {
-        plan_path: {
-          type: 'string',
-          description:
-            'Workspace-relative plan path (e.g. documentation/plans/my-feature.md)',
-        },
+        plan_path: { type: 'string' },
         tasks: {
           type: 'array',
-          description:
-            'All tasks from the plan Wave Breakdown. Each item uses id (not task_id), title, wave, category.',
           minItems: 1,
           items: {
             type: 'object',
             properties: {
-              id: {
-                type: 'string',
-                description: 'Stable task id from plan headings (e.g. W1-A)',
-              },
-              title: { type: 'string', description: 'Short task title' },
-              wave: {
-                type: 'string',
-                description: 'Wave id string or number; must match a waves[].id',
-              },
+              id: { type: 'string' },
+              title: { type: 'string' },
+              wave: { type: 'string' },
               category: {
                 type: 'string',
                 enum: ['build', 'fix', 'test', 'research'],
-                description: 'Sub-agent category for this task',
               },
-              build: {
-                type: 'string',
-                description: 'Optional build spec from the plan (stored on the card)',
-              },
-              test: {
-                type: 'string',
-                description: 'Optional test spec from the plan (stored on the card)',
-              },
+              build: { type: 'string' },
+              test: { type: 'string' },
             },
             required: ['id', 'title', 'wave', 'category'],
           },
         },
         waves: {
           type: 'array',
-          description: 'Wave ids referenced by tasks[].wave',
           minItems: 1,
           items: {
             type: 'object',
             properties: {
-              id: {
-                type: 'string',
-                description: 'Wave id (e.g. W1 or 1)',
-              },
+              id: { type: 'string' },
             },
             required: ['id'],
           },
@@ -1614,7 +1534,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'manage_brain',
-      'Destructive Brain data management. Use only after explicit user request to delete or clear Brain data. All destructive actions require confirmed: true after user approval.',
+      'Destructive Brain ops. Requires user approval; confirmed: true.',
       {
         action: {
           type: 'string',
@@ -1626,39 +1546,104 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
             'clear_code_index',
             'clear_sources',
           ],
-          description: 'Destructive Brain operation to perform',
         },
-        path: {
-          type: 'string',
-          description: 'Wiki page path for delete_page (relative under pages/)',
-        },
-        chatId: {
-          type: 'string',
-          description: 'Chat id for delete_archive',
-        },
-        workspaceKey: {
-          type: 'string',
-          description: 'Workspace key for delete_archive or clear_code_index',
-        },
+        path: { type: 'string' },
+        chatId: { type: 'string' },
+        workspaceKey: { type: 'string' },
         scope: {
           type: 'string',
           enum: ['pending', 'all'],
-          description: 'Proposal clear scope (default pending)',
         },
-        all: {
-          type: 'boolean',
-          description: 'When true, clear_code_index resets every workspace index',
+        all: { type: 'boolean' },
+        archive: { type: 'boolean' },
+        confirmed: { type: 'boolean' },
+      },
+      ['action'],
+    ),
+  },
+  {
+    id: 'search_settings',
+    label: 'Search settings',
+    description:
+      'Search the Minnow Settings catalog by label or keyword. Returns field keys, types, and sensitivity — never secret values.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'search_settings',
+      'Find settings fields before reading or changing them. Use when the user mentions a setting but you are unsure of the canonical key.',
+      {
+        query: {
+          type: 'string',
+          description: 'Search text (matches label, key, keywords)',
         },
-        archive: {
-          type: 'boolean',
-          description: 'Backup Brain before clear_wiki or clear_sources',
+        category: {
+          type: 'string',
+          description: 'Optional filter: general, appearance, models, agents, integrations, advanced',
+        },
+        area: {
+          type: 'string',
+          description: 'Optional settings section id filter (e.g. search, tools, general)',
+        },
+      },
+      ['query'],
+    ),
+  },
+  {
+    id: 'get_settings',
+    label: 'Get settings',
+    description:
+      'Read current settings values by key or filter. Secret fields return [redacted] / configured flags only.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'get_settings',
+      'Read settings values. Provide keys OR category/area filters (mutually exclusive). Browser-only fields may require the Settings UI.',
+      {
+        keys: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Canonical settings keys from search_settings',
+        },
+        category: {
+          type: 'string',
+          description: 'Read all server-backed fields in a category',
+        },
+        area: {
+          type: 'string',
+          description: 'Read all server-backed fields in a settings section',
+        },
+      },
+    ),
+  },
+  {
+    id: 'update_settings',
+    label: 'Update settings',
+    description:
+      'Change Minnow Settings after user approval. Batch multiple keys in one call. Secret/dangerous fields require confirmed: true.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'update_settings',
+      'Apply settings changes. Always search_settings or get_settings first for unfamiliar keys. Summarize intended changes in chat before calling.',
+      {
+        changes: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              key: { type: 'string' },
+              value: {},
+            },
+            required: ['key', 'value'],
+          },
+          description: 'List of { key, value } patches',
         },
         confirmed: {
           type: 'boolean',
-          description: 'Must be true for any destructive action after user approval',
+          description: 'Required true after approval for secret or dangerous fields',
         },
       },
-      ['action'],
+      ['changes'],
     ),
   },
   {
@@ -1801,32 +1786,28 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'manage_calendar',
-      'Manage local calendar events under ~/.minnow/calendar. Use list with a date range (default limit 50, max 200; optional offset for pagination), create/update with ISO startsAt/endsAt, delete only after user confirmation (confirmed: true), or find_free_time for open slots on a day.',
+      'Calendar ops.',
       {
         action: {
           type: 'string',
           enum: ['list', 'create', 'update', 'delete', 'find_free_time'],
-          description: 'Calendar operation to perform',
         },
-        calendarId: { type: 'string', description: 'Target calendar id (optional for list/create)' },
-        eventId: { type: 'string', description: 'Event id for update/delete' },
-        title: { type: 'string', description: 'Event title' },
-        startsAt: { type: 'string', description: 'ISO 8601 start time' },
-        endsAt: { type: 'string', description: 'ISO 8601 end time' },
-        from: { type: 'string', description: 'ISO range start for list' },
-        to: { type: 'string', description: 'ISO range end for list' },
-        limit: { type: 'number', description: 'Max events to return for list (default 50, max 200)' },
-        offset: { type: 'number', description: 'Skip N events for list pagination (default 0)' },
-        date: { type: 'string', description: 'YYYY-MM-DD for find_free_time' },
-        minMinutes: { type: 'number', description: 'Minimum free slot length in minutes' },
-        description: { type: 'string', description: 'Event description' },
-        location: { type: 'string', description: 'Event location' },
-        allDay: { type: 'boolean', description: 'All-day event flag' },
-        rrule: { type: 'string', description: 'RFC 5545 RRULE string' },
-        confirmed: {
-          type: 'boolean',
-          description: 'Must be true to delete an event after user approval',
-        },
+        calendarId: { type: 'string' },
+        eventId: { type: 'string' },
+        title: { type: 'string' },
+        startsAt: { type: 'string' },
+        endsAt: { type: 'string' },
+        from: { type: 'string' },
+        to: { type: 'string' },
+        limit: { type: 'number' },
+        offset: { type: 'number' },
+        date: { type: 'string' },
+        minMinutes: { type: 'number' },
+        description: { type: 'string' },
+        location: { type: 'string' },
+        allDay: { type: 'boolean' },
+        rrule: { type: 'string' },
+        confirmed: { type: 'boolean' },
       },
       ['action'],
     ),

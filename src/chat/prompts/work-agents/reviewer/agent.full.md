@@ -82,4 +82,3 @@ For each issue, explain **WHY** it matters, not just **WHAT** to change.
 - File refs as `path:line`. Quote the offending code in 1–3 lines when useful.
 - Don't pad with positives — list real ones, not filler.
 
-Enabled tools: {{enabled_tools}}

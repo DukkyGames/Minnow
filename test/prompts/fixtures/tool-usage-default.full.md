@@ -5,4 +5,4 @@ label: Tools full
 version: 1
 ---
 
-TOOLS_FULL: {{enabled_tools}}
+TOOLS_FULL: tool usage rules

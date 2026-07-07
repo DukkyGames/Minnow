@@ -29,6 +29,7 @@ import './styles/responsive.css';
 import './styles/mode-selector.css';
 import './styles/mode-icons.css';
 import './styles/composer-controls.css';
+import './styles/composer-message-queue.css';
 import './styles/file-panel.css';
 import './styles/git-commit-diff.css';
 import './styles/editor-quick-edit.css';
@@ -56,6 +57,7 @@ import './styles/orchestrate-hub.css';
 import './styles/orchestrate-plan-screen.css';
 import './styles/minnowos-shell.css';
 import './styles/minnowos-desktop.css';
+import './styles/desktop-workspace-rail.css';
 import './styles/minnowos-wallpaper.css';
 import './styles/minnowos-apps.css';
 import './styles/chat-app.css';
@@ -205,6 +207,7 @@ import {
 } from './ui/terminal-panel';
 import { scheduleMarkAppReady } from './boot/app-ready';
 import { installRendererDiagnostics } from './boot/diagnostics';
+import { initNotificationAudioUnlock } from './notifications/sound';
 import { initOsPageBridge, isOsShellEnabled } from './os/page-bridge';
 import { initOsRouter } from './os/router';
 import { initOsShell } from './os/shell';
@@ -451,6 +454,7 @@ function startApp(): void {
     initOsRouter();
   }
   installRendererDiagnostics();
+  initNotificationAudioUnlock();
   void initApp();
 }
 

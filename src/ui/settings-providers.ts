@@ -23,6 +23,10 @@ import {
 } from '../providers/store';
 import { normalizeModelPricingRates, normalizeProviderPricing } from '../usage/pricing';
 import type { ProviderPricing } from '../usage/types';
+import {
+  createSettingsActionsRow,
+  createSettingsSelectRow,
+} from './settings-controls';
 import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
 
@@ -443,64 +447,62 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
   });
   form.append(enabledLabel);
 
-  const constrainedField = el('div', 'field');
-  constrainedField.append(el('label', undefined, 'Constrained tool calls'));
-  const constrainedSel = document.createElement('select');
-  constrainedSel.className = 'settings-select';
-  constrainedSel.name = 'constrainedToolCalls';
-  for (const opt of [
-    { value: 'inherit', label: 'Use global default' },
-    { value: 'on', label: 'Enabled' },
-    { value: 'off', label: 'Disabled' },
-  ]) {
-    const o = document.createElement('option');
-    o.value = opt.value;
-    o.textContent = opt.label;
-    constrainedSel.appendChild(o);
-  }
-  if (provider.constrainedToolCalls === true) {
-    constrainedSel.value = 'on';
-  } else if (provider.constrainedToolCalls === false) {
-    constrainedSel.value = 'off';
-  } else {
-    constrainedSel.value = 'inherit';
-  }
-  constrainedField.append(constrainedSel);
-  constrainedField.append(
-    el(
-      'p',
-      'field-hint',
-      'Attach JSON Schema response_format on tool turns when the provider probe reports structured output support.',
-    ),
+  const constrainedValue =
+    provider.constrainedToolCalls === true
+      ? 'on'
+      : provider.constrainedToolCalls === false
+        ? 'off'
+        : 'inherit';
+  const { row: constrainedRow, select: constrainedSel } = createSettingsSelectRow(
+    'Constrained tool calls',
+    {
+      name: 'constrainedToolCalls',
+      searchKey: `models.providers.${provider.id}.constrained`,
+      description:
+        'Attach JSON Schema response_format on tool turns when the provider probe reports structured output support.',
+      options: [
+        { value: 'inherit', label: 'Use global default' },
+        { value: 'on', label: 'Enabled' },
+        { value: 'off', label: 'Disabled' },
+      ],
+      value: constrainedValue,
+    },
   );
-  form.append(constrainedField);
+  form.append(constrainedRow);
 
   appendPricingFields(form, provider.pricing);
 
   const loadedModelId = findLoadedModelIdForProvider(provider.id);
 
-  const probeRow = el('div', 'settings-providers-form-actions');
-  const modelProbeBtn = el('button', 'settings-inline-btn', 'Probe models');
-  modelProbeBtn.type = 'button';
-  modelProbeBtn.dataset.providerModelProbe = provider.id;
-  modelProbeBtn.disabled = provider.apiKind === 'lm-studio-v0' && !loadedModelId;
-  if (provider.apiKind === 'lm-studio-v0' && !loadedModelId) {
-    modelProbeBtn.title = NO_LOADED_MODEL_PROBE_MSG;
-  }
-  const structuredProbeBtn = el('button', 'settings-inline-btn', 'Probe structured output');
-  structuredProbeBtn.type = 'button';
-  structuredProbeBtn.dataset.providerStructuredProbe = provider.id;
-  structuredProbeBtn.disabled = !loadedModelId;
-  if (!loadedModelId) {
-    structuredProbeBtn.title = NO_LOADED_MODEL_PROBE_MSG;
-  }
-  probeRow.append(modelProbeBtn, structuredProbeBtn);
   const probeHint =
     provider.apiKind === 'lm-studio-v0'
       ? 'On LM Studio, both probes require at least one loaded model. Model probe runs chat checks on up to 8 loaded models (tools/streaming); vision is read from the catalog. Structured-output probe tests JSON Schema response_format. Neither runs on refresh.'
       : 'Model probe checks tools and streaming (up to 8 models); vision comes from the catalog. Structured-output probe requires a loaded model and tests JSON Schema response_format. Neither runs on refresh.';
   form.append(el('p', 'field-hint', probeHint));
-  form.append(probeRow);
+  form.append(
+    createSettingsActionsRow(
+      [
+        {
+          label: 'Probe models',
+          className: 'settings-inline-btn',
+          disabled: provider.apiKind === 'lm-studio-v0' && !loadedModelId,
+          title:
+            provider.apiKind === 'lm-studio-v0' && !loadedModelId
+              ? NO_LOADED_MODEL_PROBE_MSG
+              : undefined,
+          dataset: { providerModelProbe: provider.id },
+        },
+        {
+          label: 'Probe structured output',
+          className: 'settings-inline-btn',
+          disabled: !loadedModelId,
+          title: !loadedModelId ? NO_LOADED_MODEL_PROBE_MSG : undefined,
+          dataset: { providerStructuredProbe: provider.id },
+        },
+      ],
+      { className: 'settings-providers-form-actions' },
+    ),
+  );
   if (!loadedModelId) {
     const noLoadedNotice = el('p', 'settings-providers-probe-notice');
     noLoadedNotice.setAttribute('role', 'status');
@@ -514,11 +516,12 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
   err.dataset.providerEditError = provider.id;
   form.append(err);
 
-  const actions = el('div', 'settings-providers-form-actions');
-  const saveBtn = el('button', 'settings-action-btn', 'Save changes');
-  saveBtn.type = 'submit';
-  actions.append(saveBtn);
-  form.append(actions);
+  form.append(
+    createSettingsActionsRow(
+      [{ label: 'Save changes', type: 'submit' }],
+      { className: 'settings-providers-form-actions' },
+    ),
+  );
 
   return form;
 }

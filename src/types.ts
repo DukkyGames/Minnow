@@ -487,6 +487,8 @@ export interface OrchestrateBoardState {
   isolationBaseRef?: string;
   /** Epoch ms when plan-complete UI was shown (dedupe). */
   completionShownAt?: number;
+  /** Plan-complete wrap-up turn deferred until planner stream ends. */
+  wrapUpPending?: boolean;
   /** User dismissed the finish dashboard to view the kanban again. */
   dashboardDismissed?: boolean;
   /** Epoch ms when integration was merged into the workspace and committed (finish dashboard). */
@@ -699,6 +701,13 @@ export interface TurnRunRecord {
 /** Expert thread or legacy Expert Lab session (hidden from main sidebar). */
 export type ChatKind = 'expert' | 'expert-lab';
 
+/** Follow-up message queued while the agent turn is in progress (MIN-200). */
+export interface QueuedComposerMessage {
+  id: string;
+  text: string;
+  createdAt: number;
+}
+
 export interface Chat {
   id: string;
   name: string;
@@ -770,8 +779,10 @@ export interface Chat {
   viewMode?: 'chat' | 'board';
   /** Backend-owned generation id for in-flight main chat completion (reload re-subscribe). */
   currentGenerationId?: string;
-  /** Queued steering correction for the in-flight turn (last write wins; cleared on consume or stop). */
+  /** Queued steering correction for the in-flight turn (push-now; cleared on consume or stop). */
   pendingSteerMessage?: string;
+  /** Follow-up messages queued while this chat is streaming (MIN-200). */
+  pendingMessageQueue?: QueuedComposerMessage[];
   /** Active /goal completion loop; persists across reload until cleared. */
   activeGoal?: ActiveGoalState;
   /** Queued mode switch from set_chat_mode during streaming (last write wins; flushed on stream end). */

@@ -38,6 +38,8 @@ import { appendSettingsCrosslinks, appendSettingsGroup } from './settings-layout
 
 import { createSettingsSwitch } from './settings-switch';
 
+import { appendSettingsOfflineHint } from './settings-controls';
+
 import { setStatus } from './status';
 
 
@@ -59,20 +61,6 @@ function el<K extends keyof HTMLElementTagNameMap>(
   if (text !== undefined) node.textContent = text;
 
   return node;
-
-}
-
-
-
-function serverBanner(message: string): HTMLElement {
-
-  const p = el('p', 'settings-server-banner');
-
-  p.setAttribute('role', 'status');
-
-  p.innerHTML = message;
-
-  return p;
 
 }
 
@@ -1268,13 +1256,11 @@ export async function renderLspSection(): Promise<void> {
 
   if (!online) {
 
-    mount.append(
+    appendSettingsOfflineHint(
 
-      serverBanner(
+      mount,
 
-        'Start with <code>npm start</code> to load server status, toggle analyzers, and save <code>~/.minnow/lsp.json</code>.',
-
-      ),
+      'Start with <code>npm start</code> to load server status, toggle analyzers, and save <code>~/.minnow/lsp.json</code>.',
 
     );
 
@@ -1290,9 +1276,11 @@ export async function renderLspSection(): Promise<void> {
 
   if (!config) {
 
-    mount.append(
+    appendSettingsOfflineHint(
 
-      serverBanner('Could not load language server config. Confirm <code>npm start</code> is running.'),
+      mount,
+
+      'Could not load language server config. Confirm <code>npm start</code> is running.',
 
     );
 

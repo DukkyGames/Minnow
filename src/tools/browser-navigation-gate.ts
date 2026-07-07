@@ -15,16 +15,94 @@ import {
   releaseUserPromptLock,
 } from '../ui/user-prompt-lock';
 import type { ToolApprovalContext } from './approval-queue';
-import type { AskQuestionToolResult } from './ask-question-types';
+import type { AskQuestionArgs, AskQuestionToolResult } from './ask-question-types';
 import { isLocalServerAvailable } from './config';
 import type { ToolExecutionResult } from '../types';
 
-const ALLOWLIST_QUESTION_ID = 'browser_allow_origin';
+export const ALLOWLIST_QUESTION_ID = 'browser_allow_origin';
 
 /** Option ids must match src/chat/prompts/tool-usage/browser-allowlist.md */
 const DECISION_ONCE = 'once';
 const DECISION_PERSIST = 'persist';
 const DECISION_DENY = 'deny';
+
+export type BrowserAllowlistDecision = 'once' | 'persist' | 'deny';
+
+/** Map model/UI option ids (including "always allow" aliases) to allowlist decisions. */
+export function normalizeBrowserAllowlistDecision(raw: string | undefined): BrowserAllowlistDecision | null {
+  if (!raw?.trim()) return null;
+  const lower = raw.trim().toLowerCase();
+  if (lower === DECISION_ONCE || lower === 'allow_once' || lower === 'allow-once') {
+    return DECISION_ONCE;
+  }
+  if (
+    lower === DECISION_PERSIST ||
+    lower === 'always_allow' ||
+    lower === 'always-allow' ||
+    lower === 'alwaysallow' ||
+    lower === 'add_to_allowlist' ||
+    lower === 'add-to-allowlist'
+  ) {
+    return DECISION_PERSIST;
+  }
+  if (lower === DECISION_DENY || lower === 'no' || lower === 'cancel') {
+    return DECISION_DENY;
+  }
+  return null;
+}
+
+/** Pull an http(s) target from browser allowlist ask_question prompt text. */
+export function extractBrowserAllowlistTargetUrl(prompt: string): string | null {
+  const text = prompt.trim();
+  if (!text) return null;
+
+  const allowNavMatch = /allow browser navigation to\s+(.+?)\s*\??$/i.exec(text);
+  if (allowNavMatch?.[1]) {
+    const candidate = allowNavMatch[1].trim();
+    if (candidate) {
+      return candidate.includes('://') ? candidate : `https://${candidate}`;
+    }
+  }
+
+  const urlMatch = /https?:\/\/[^\s'"<>]+/i.exec(text);
+  return urlMatch?.[0] ?? null;
+}
+
+function questionLooksLikeBrowserAllowlist(
+  questionId: string,
+  optionIds: Set<string>,
+): boolean {
+  if (questionId === ALLOWLIST_QUESTION_ID) return true;
+  return optionIds.has(DECISION_ONCE) && (optionIds.has(DECISION_PERSIST) || optionIds.has(DECISION_DENY));
+}
+
+/**
+ * When ask_question collected browser allowlist consent, persist the choice immediately
+ * (do not rely on the model to call request_browser_origin_access afterward).
+ */
+export async function applyBrowserAllowlistFromAskQuestion(
+  args: AskQuestionArgs,
+  result: AskQuestionToolResult,
+): Promise<void> {
+  if (result.status !== 'answered' || !isLocalServerAvailable()) return;
+
+  for (const question of args.questions) {
+    const entry = result.answers.find((a) => a.questionId === question.id);
+    const selected = entry?.selectedIds[0];
+    const decision = normalizeBrowserAllowlistDecision(selected);
+    if (!decision || decision === DECISION_DENY) continue;
+
+    const optionIds = new Set(question.options.map((o) => o.id));
+    if (!questionLooksLikeBrowserAllowlist(question.id, optionIds)) continue;
+
+    const url = extractBrowserAllowlistTargetUrl(question.prompt);
+    if (!url) continue;
+
+    const mode = decision === DECISION_PERSIST ? 'persist' : 'once';
+    await approveBrowserNavigation(url, mode);
+    return;
+  }
+}
 
 /**
  * Shows ask_question cards for a blocked origin; returns null when navigation may proceed.
@@ -125,8 +203,8 @@ export async function maybeBlockBrowserNavigation(
   }
 
   const entry = parsed.answers.find((a) => a.questionId === ALLOWLIST_QUESTION_ID);
-  const selected = entry?.selectedIds[0];
-  if (!selected || selected === DECISION_DENY) {
+  const decision = normalizeBrowserAllowlistDecision(entry?.selectedIds[0]);
+  if (!decision || decision === DECISION_DENY) {
     return {
       content:
         `Error: User denied browser navigation to ${url}. ` +
@@ -134,17 +212,8 @@ export async function maybeBlockBrowserNavigation(
     };
   }
 
-  if (selected !== DECISION_ONCE && selected !== DECISION_PERSIST) {
-    return {
-      content:
-        `Error: Unexpected allowlist answer "${selected}". ` +
-        'Use ask_question options once, persist, or deny.',
-    };
-  }
-
-  const mode = selected === DECISION_PERSIST ? 'persist' : 'once';
-  const ok = await approveBrowserNavigation(url, mode);
-  if (!ok) {
+  const recheck = await checkBrowserNavigationAllowed(url);
+  if (!recheck?.allowed) {
     return {
       content: 'Error: Could not update browser allowlist (is npm start running?)',
     };
@@ -207,13 +276,15 @@ export async function executeRequestBrowserOriginAccess(
   }
 
   const rawDecision = args.decision;
-  if (rawDecision === DECISION_ONCE || rawDecision === DECISION_PERSIST) {
-    const blocked = await applyBrowserOriginDecision(url, rawDecision);
+  const normalizedDecision =
+    typeof rawDecision === 'string' ? normalizeBrowserAllowlistDecision(rawDecision) : null;
+  if (normalizedDecision === DECISION_ONCE || normalizedDecision === DECISION_PERSIST) {
+    const blocked = await applyBrowserOriginDecision(url, normalizedDecision);
     if (blocked) {
       return blocked.content;
     }
     return (
-      `Origin for ${url} is allowed (${rawDecision === DECISION_PERSIST ? 'added to allowlist' : 'once'}). ` +
+      `Origin for ${url} is allowed (${normalizedDecision === DECISION_PERSIST ? 'added to allowlist' : 'once'}). ` +
       'Call browser_navigate with this URL.'
     );
   }

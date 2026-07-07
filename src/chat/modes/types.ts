@@ -5,6 +5,7 @@
 /** Stable ids — do not rename without migration. */
 export type ModeId =
   | 'general'
+  | 'desktop'
   | 'build'
   | 'plan'
   | 'orchestrate'
@@ -15,6 +16,7 @@ export const DEFAULT_MODE_ID: ModeId = 'build';
 
 export const MODE_IDS: readonly ModeId[] = [
   'general',
+  'desktop',
   'build',
   'plan',
   'orchestrate',

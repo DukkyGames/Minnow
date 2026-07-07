@@ -53,6 +53,12 @@ export function formatGenerationErrorMessage(message: string): string {
   ) {
     return 'The model stopped sending data for several minutes (connection timed out). Try again, shorten context, or adjust Generation timeouts in Settings → Tools.';
   }
+  if (
+    lower.includes('upstream http 503') ||
+    lower.includes('inference is temporarily unavailable')
+  ) {
+    return 'The model provider is temporarily unavailable (HTTP 503). Load a model in LM Studio, wait for it to finish loading, or switch the top-bar model and try again.';
+  }
   return trimmed;
 }
 

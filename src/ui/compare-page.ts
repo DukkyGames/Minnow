@@ -3,7 +3,7 @@
  */
 
 import '../styles/compare.css';
-import '../styles/settings-page.css';
+import '../styles/settings-controls.css';
 
 import { humanizeModelSlug, slugFromModelId } from '../lib/format-model-label';
 import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';

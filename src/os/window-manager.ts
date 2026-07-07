@@ -1,3 +1,4 @@
+import { scheduleAnimationFrame } from '../lib/schedule-animation-frame';
 import { getAppById } from './app-registry';
 import {
   CALENDAR_EVENT_EDITOR_INSTANCE_ID,
@@ -6,6 +7,7 @@ import {
   centeredCalendarBounds,
 } from './calendar-constants';
 import type { AppId } from './types';
+import { getStageDimensions } from './stage-metrics';
 import { mountWindowFrame, type WindowBounds, type WindowFrame } from './window-frame';
 import type { SnapMode } from './window-snap';
 
@@ -48,12 +50,43 @@ class WindowManager {
   private zCounter = 10;
   private listeners = new Set<WindowListener>();
   private layer: HTMLElement | null = null;
+  private stageResizeObserver: ResizeObserver | null = null;
+  private readonly onStageResize = scheduleAnimationFrame(() => this.reclampWindowsToStage());
 
   /** Attach to the DOM windows layer (idempotent). */
   ensureLayer(): HTMLElement | null {
-    if (this.layer?.isConnected) return this.layer;
+    if (this.layer?.isConnected) {
+      this.ensureStageResizeObserver();
+      return this.layer;
+    }
     this.layer = document.getElementById('osWindowsLayer');
+    this.ensureStageResizeObserver();
     return this.layer;
+  }
+
+  /** Watch stage size so floating windows stay inside the viewport when the shell resizes. */
+  private ensureStageResizeObserver(): void {
+    if (this.stageResizeObserver) return;
+    const stage = document.getElementById('osStage');
+    if (!stage || typeof ResizeObserver === 'undefined') return;
+    this.stageResizeObserver = new ResizeObserver(() => this.onStageResize());
+    this.stageResizeObserver.observe(stage);
+  }
+
+  /** Fit all open windows to the current stage viewport. */
+  reclampWindowsToStage(): void {
+    let anyChanged = false;
+    for (const [id, frame] of this.frames) {
+      const record = this.windows.get(id);
+      if (!record) continue;
+      if (!frame.reclampToStage()) continue;
+      anyChanged = true;
+      record.bounds = frame.getBounds();
+      record.snapMode = frame.getSnapMode();
+      record.maximized = frame.isMaximized();
+      if (record.persistBounds) this.persistBounds(record);
+    }
+    if (anyChanged) this.emit();
   }
 
   /** Open or foreground a window for an app instance. */
@@ -223,12 +256,12 @@ class WindowManager {
       record.bounds = restored;
       frame.setBounds(restored, { snapMode: null, maximized: false });
     } else {
-      const stage = document.getElementById('osStage');
-      const rect = (stage ?? document.body).getBoundingClientRect();
+      const stage = document.getElementById('osStage') ?? document.body;
+      const { width, height } = getStageDimensions(stage);
       record.preMaximizeBounds = { ...record.bounds };
       record.maximized = true;
       record.snapMode = 'maximize';
-      record.bounds = { x: 0, y: 0, width: rect.width, height: rect.height };
+      record.bounds = { x: 0, y: 0, width, height };
       frame.setBounds(record.bounds, { snapMode: 'maximize', maximized: true });
     }
     this.persistBounds(record);
@@ -274,6 +307,8 @@ class WindowManager {
     this.focusedId = null;
     this.zCounter = 10;
     this.listeners.clear();
+    this.stageResizeObserver?.disconnect();
+    this.stageResizeObserver = null;
     this.layer = null;
   }
 

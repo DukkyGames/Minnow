@@ -161,6 +161,28 @@ export function createAssistantChat(
   };
 }
 
+/** New desktop chat defaults (desktop mode, desktop workspace sandbox). */
+export function createDesktopChat(
+  desktopWorkspacePath: string,
+  chatId: string,
+  modelId = '',
+): Chat {
+  const now = Date.now();
+  return {
+    id: chatId,
+    name: PLACEHOLDER_CHAT_NAME,
+    workspacePath: normalizeWorkspacePath(desktopWorkspacePath),
+    modelId: modelId || '',
+    modeId: 'desktop',
+    workAgentAuto: true,
+    history: [],
+    lastStats: null,
+    modelInfo: {},
+    updatedAt: now,
+    lastMessageAt: now,
+  };
+}
+
 /**
  * Pick the active assistant chat: remembered app id, else newest assistant chat,
  * else create a new assistant chat bound to the chats workspace.

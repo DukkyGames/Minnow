@@ -8,6 +8,7 @@ import { normalizeModeId, type ModeId } from '../chat/modes/types';
 /** Public URL for each mode icon under /public/icons. */
 export const MODE_ICON_SRC: Record<ModeId, string> = {
   general: '/icons/mode-general.png',
+  desktop: '/icons/mode-general.png',
   build: '/icons/mode-build.png',
   plan: '/icons/mode-plan.png',
   orchestrate: '/icons/mode-orchestrate.svg',

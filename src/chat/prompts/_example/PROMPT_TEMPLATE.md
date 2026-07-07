@@ -47,7 +47,6 @@ defaultProfile: full      # full | lite
 |-------|--------|
 | `{{mode}}` | Active mode id |
 | `{{expert}}` | Expert id / label |
-| `{{enabled_tools}}` | Full: id + description; Lite: ids only (max 12) |
 | `{{cwd}}` | Project / page origin |
 | `{{memory}}` | Retrieved memory block (Step 16) |
 | `{{user_message}}` | Current turn preview |

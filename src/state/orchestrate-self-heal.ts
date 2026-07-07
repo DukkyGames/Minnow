@@ -22,7 +22,7 @@
 
 import type { BoardTask, Chat, ChatGroup, UnresolvedIssue } from '../types.ts';
 import { type FailureCategory } from './orchestrate-failure-classify.ts';
-import { updateTask } from './orchestrate-board-store.ts';
+import { isBoardRunning, updateTask } from './orchestrate-board-store.ts';
 import { scheduleSaveSessions } from './sessions.ts';
 
 export interface SelfHealDeps {
@@ -183,6 +183,14 @@ export async function runSelfHeal(
   const { phase, category, summary } = options;
   const board = group.orchestrateBoard;
   const freshTask = board?.tasks.find((t) => t.id === task.id) ?? task;
+
+  // ── 0. Board stopped/paused → record the failure, spawn nothing ───────────
+  // Stop kills chats, whose stream-ends run finalizers, which route here —
+  // healing (env fixers, reseeds, quarantine) must not fire on a stopped board.
+  if (!isBoardRunning(group)) {
+    updateTask(group, freshTask.id, { error: summary }, plannerChat);
+    return;
+  }
 
   // ── 1. Global self-heal ceiling above per-category attempt caps (GAP-2) ───
   // Per-category caps (buildAttempts, fixerAttempts, envFixAttempts, …) are the

@@ -22,6 +22,10 @@ import {
 } from '../state/git-api';
 import { resolvePanelWorktreeCwd } from './panel-worktree-cwd';
 import { renderGitGraph, type GitGraphOptions } from './git-graph';
+import {
+  showGitGraphCommitContextMenu,
+  type GitGraphContextMenuCtx,
+} from './git-graph-context-menu';
 import { parseUnifiedPatchToDiffLines } from './git-patch-parse';
 import { renderUnifiedPromptDiff } from './prompt-diff-unified';
 import {
@@ -47,6 +51,8 @@ export interface GitOperationsPanelOptions {
   /** Called after successful git mutations (sync file tree, topology, etc.). */
   onAfterGitOp?: () => void;
   initialTab?: GitOpsTab;
+  /** Conflict alert host (Git Center lightbox). */
+  conflictHost?: HTMLElement | null;
 }
 
 export interface GitOperationsPanelHandle {
@@ -476,7 +482,28 @@ export function createGitOperationsPanel(
   function ensureGitGraph(): void {
     if (graphHandle) return;
     graphOptions.onSelectCommit = (sha) => void showCommitDiff(sha);
+    graphOptions.onContextMenu = (visual, event) => {
+      void showGitGraphCommitContextMenu(visual, event, buildGraphContextMenuCtx());
+    };
     graphHandle = renderGitGraph(graphMount, graphOptions);
+  }
+
+  function buildGraphContextMenuCtx(): GitGraphContextMenuCtx {
+    return {
+      cwd: getEffectiveCwd(),
+      onOpenChanges: (sha) => void showCommitDiff(sha),
+      onRefresh: async () => {
+        await refresh();
+        options.onAfterGitOp?.();
+      },
+      getCurrentBranch: () => currentBranchName,
+      conflictHost: options.conflictHost,
+      onConflict: (message) => {
+        if (!options.conflictHost) {
+          showToast(message, 'error');
+        }
+      },
+    };
   }
 
   async function ensureGraphAndRefresh(): Promise<void> {
@@ -639,6 +666,9 @@ export function createGitOperationsPanel(
         return;
       }
       setStatus('');
+      if (status.branch) {
+        currentBranchName = status.branch === 'HEAD' ? '' : status.branch;
+      }
       renderSections(status);
       if (options.layout === 'stacked' || activeTab === 'history') {
         await ensureGraphAndRefresh();

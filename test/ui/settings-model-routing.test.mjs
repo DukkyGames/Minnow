@@ -11,9 +11,9 @@ describe('settings model routing HTML', () => {
   test('model-routing section and nav exist', () => {
     assert.match(html, /id="settingsSection-model-routing"/);
     assert.match(html, /id="settingsModelRoutingBody"/);
-    assert.match(html, /data-settings-nav="model-routing"/);
-    assert.match(html, />Models</);
-    assert.match(html, /<h2>Models<\/h2>/);
+    assert.match(html, /data-settings-nav-area="model-routing"/);
+    assert.match(html, /data-settings-nav-area="providers"/);
+    assert.match(html, /<h2>Routing<\/h2>/);
   });
 });
 
@@ -27,13 +27,12 @@ describe('settings model routing catalog', () => {
 });
 
 describe('settings model routing types', () => {
-  test('SETTINGS_SECTIONS includes model-routing', async () => {
-    const { SETTINGS_SECTIONS } = await import('../../src/ui/settings-page-types.ts');
-    assert.ok(SETTINGS_SECTIONS.includes('model-routing'));
-    const providersIdx = SETTINGS_SECTIONS.indexOf('providers');
-    const routingIdx = SETTINGS_SECTIONS.indexOf('model-routing');
-    const modesIdx = SETTINGS_SECTIONS.indexOf('modes');
-    assert.ok(providersIdx >= 0 && routingIdx >= 0 && routingIdx < providersIdx);
-    assert.ok(modesIdx > routingIdx);
+  test('models category areas include model-routing', async () => {
+    const { SETTINGS_CATEGORY_AREAS } = await import('../../src/ui/settings-page-types.ts');
+    const modelsAreas = SETTINGS_CATEGORY_AREAS.models;
+    assert.ok(modelsAreas.includes('model-routing'));
+    const providersIdx = modelsAreas.indexOf('providers');
+    const routingIdx = modelsAreas.indexOf('model-routing');
+    assert.ok(providersIdx >= 0 && routingIdx > providersIdx);
   });
 });

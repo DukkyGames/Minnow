@@ -40,7 +40,7 @@ const SECTION_SEARCH_ALIASES: Partial<
 > = {
   general: ['notifications', 'bell', 'sound', 'alert', 'background chat', 'network', 'lan', 'wifi', 'remote'],
   features: ['orchestration', 'orchestrate', 'orchestrator', 'hub', 'board'],
-  prompting: ['prompts', 'prompt', 'profile', 'system prompt'],
+  'agent-center': ['prompts', 'prompt', 'profile', 'system prompt', 'modes', 'work agents', 'sub-agents'],
   rules: ['user rules', 'cursor rules', 'rule'],
   'model-routing': ['models', 'routing', 'bindings'],
   providers: ['api', 'lm studio', 'openai'],
@@ -48,8 +48,6 @@ const SECTION_SEARCH_ALIASES: Partial<
   'deep-research': ['research', 'iterresearch', 'deep research', 'engine'],
   servers: ['searxng', 'managed server', 'local search', 'metasearch', 'install searxng'],
   tools: ['permissions', 'tool cache'],
-  'sub-agents': ['subagent', 'sub agent', 'spawn'],
-  'work-agents': ['work agent', 'worker'],
   mcp: ['model context protocol'],
   webhooks: ['outgoing webhook', 'hmac', 'automation', 'signed events'],
   lsp: ['language server', 'typescript server'],
@@ -202,7 +200,7 @@ function modeEntries(): SettingsSearchEntry[] {
   return listModes().map((mode) => ({
     id: `mode:${mode.id}`,
     label: mode.label,
-    sectionId: 'modes' as const,
+    sectionId: 'agent-center' as const,
     kind: 'mode' as const,
     searchKey: `modes.${mode.id}`,
     keywords: [mode.id, mode.description.toLowerCase(), 'composer mode'],
@@ -226,7 +224,7 @@ function workAgentEntries(): SettingsSearchEntry[] {
   return listWorkAgents(true).map((agent) => ({
     id: `work-agent:${agent.id}`,
     label: agent.label,
-    sectionId: 'work-agents' as const,
+    sectionId: 'agent-center' as const,
     kind: 'work-agent' as const,
     searchKey: `work-agents.${agent.id}`,
     keywords: [agent.id, 'work agent', 'agent'],
@@ -242,7 +240,7 @@ function subAgentEntries(): SettingsSearchEntry[] {
   return Object.entries(types).map(([typeId, cfg]) => ({
     id: `sub-agent:${typeId}`,
     label: cfg.label?.trim() || typeId,
-    sectionId: 'sub-agents' as const,
+    sectionId: 'agent-center' as const,
     kind: 'sub-agent' as const,
     searchKey: `sub-agents.${typeId}`,
     keywords: [typeId, 'sub-agent', 'sub agent', 'spawn'],

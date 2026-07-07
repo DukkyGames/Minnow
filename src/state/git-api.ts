@@ -39,6 +39,7 @@ export interface GitOpResult {
   path?: string;
   conflict?: boolean;
   stashes?: string[];
+  url?: string;
 }
 
 async function postGit(
@@ -143,9 +144,29 @@ export function gitBranches(cwd?: string): Promise<GitOpResult> {
 export function gitCheckout(input: {
   branch: string;
   create?: boolean;
+  startPoint?: string;
   cwd?: string;
 }): Promise<GitOpResult> {
   return postGit('checkout', input);
+}
+
+export function gitCheckoutDetach(input: {
+  sha: string;
+  cwd?: string;
+}): Promise<GitOpResult> {
+  return postGit('checkoutDetach', input);
+}
+
+export function gitCreateTag(input: {
+  name: string;
+  sha: string;
+  cwd?: string;
+}): Promise<GitOpResult> {
+  return postGit('createTag', input);
+}
+
+export function gitRemoteUrl(cwd?: string): Promise<GitOpResult> {
+  return postGit('remoteUrl', cwd ? { cwd } : {});
 }
 
 export function gitDeleteBranch(input: {

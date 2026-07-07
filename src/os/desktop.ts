@@ -6,6 +6,10 @@ import { renderMiniPreviews } from './mini-previews';
 import { renderWallpaper, type WallpaperRenderOptions } from './wallpaper';
 import { getAppearanceAssetObjectUrl } from '../appearance/asset-store';
 import { wireDesktopChatRail } from '../ui/desktop-chat-rail';
+import {
+  renderDesktopWorkspaceRail,
+  wireDesktopWorkspaceRail,
+} from './desktop-workspace-rail';
 import { isDesktopExpertsActive, isDesktopResearchActive, subscribeDesktopState } from './desktop-state';
 import { wireDesktopResearchControls } from './research-desktop';
 import { windowManager } from './window-manager';
@@ -221,6 +225,7 @@ export function renderDesktop(root: HTMLElement): () => void {
   desktopChat.append(transcript);
   stage.append(hero, desktopChat, desktopResearch, desktopExperts);
   root.append(rail, railBackdrop);
+  renderDesktopWorkspaceRail(root);
   root.appendChild(stage);
 
   const composerDock = document.createElement('div');
@@ -240,6 +245,7 @@ export function renderDesktop(root: HTMLElement): () => void {
   root.appendChild(composerDock);
 
   wireDesktopChatRail();
+  wireDesktopWorkspaceRail();
   wireDesktopResearchControls();
 
   const previewsMount = document.createElement('div');

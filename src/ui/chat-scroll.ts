@@ -3,6 +3,8 @@
  */
 
 import { isChatAppForeground } from './chat-mount';
+import { isDesktopChatActive } from '../os/desktop-state';
+import { getForegroundAppId } from '../os/instances';
 
 /** Distance from bottom that still counts as "pinned" (larger than terminal — more padding in .chat-area). */
 export const CHAT_PIN_THRESHOLD_PX = 80;
@@ -22,6 +24,9 @@ export function getChatScrollRoot(): HTMLElement | null {
     `[data-testid="${BOARD_INIT_SPLIT_CHAT_TESTID}"]`,
   ) as HTMLElement | null;
   if (splitPane) return splitPane;
+  if (isDesktopChatActive() && getForegroundAppId() !== 'code') {
+    return document.querySelector('.mn-os-chat-transcript') ?? chatAreaEl;
+  }
   if (isChatAppForeground()) {
     return document.getElementById('chatAppArea') ?? chatAreaEl;
   }

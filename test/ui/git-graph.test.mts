@@ -8,6 +8,7 @@ import {
   assignCommitVisuals,
   buildMainlineSet,
   detectTrunkBranch,
+  extractLocalBranchRefs,
 } from '../../src/ui/git-graph.ts';
 import type { GitCommitEntry } from '../../src/state/git-api.ts';
 
@@ -209,5 +210,23 @@ describe('buildMainlineSet', () => {
 
     const mainline = buildMainlineSet(commits, 'main');
     assert.equal(mainline.size, 3);
+  });
+});
+
+describe('extractLocalBranchRefs', () => {
+  it('keeps local branches and HEAD pointers', () => {
+    const refs = extractLocalBranchRefs([
+      'HEAD -> main',
+      'feature/foo',
+      'origin/main',
+      'remotes/origin/dev',
+      'tag: v1.0',
+    ]);
+    assert.deepEqual(refs, ['main', 'feature/foo']);
+  });
+
+  it('deduplicates branch names', () => {
+    const refs = extractLocalBranchRefs(['main', 'HEAD -> main']);
+    assert.deepEqual(refs, ['main']);
   });
 });

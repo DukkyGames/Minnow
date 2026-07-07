@@ -28,7 +28,7 @@ allowedTools:             # optional — null = all mode-allowed tools
 ---
 ```
 
-Body supports interpolation: `{{work_agent}}`, `{{work_agent_label}}`, `{{mode}}`, `{{mode_label}}`, `{{enabled_tools}}`, `{{cwd}}`.
+Body supports interpolation: `{{work_agent}}`, `{{work_agent_label}}`, `{{mode}}`, `{{mode_label}}`, `{{cwd}}`.
 
 User overrides:
 

@@ -167,6 +167,21 @@ describe('preview-electron-visibility', () => {
     assert.equal(isChromePopoverOpen(), false);
   });
 
+  test('shouldShowElectronPreviewHost is true when desktop browser mount is active', () => {
+    Object.assign(globalThis.window, {
+      minnow: { preview: { show: async () => {}, hide: async () => {} } },
+    });
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+    });
+    elements.set('desktopPreviewMount', { classList: new Set(['is-active']) });
+    elements.get('previewPane')!.classList.add('hidden');
+    docElDataset.osApp = '';
+    assert.equal(shouldShowElectronPreviewHost(), true);
+  });
+
   test('shouldShowElectronPreviewHost is false when Code is not foreground', () => {
     Object.assign(globalThis.window, {
       minnow: { preview: { show: async () => {}, hide: async () => {} } },

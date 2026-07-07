@@ -1,5 +1,5 @@
 import { streaming } from '../app-state';
-import { enqueueSteerMessage } from '../chat/steer-message';
+import { enqueueComposerMessage } from '../chat/message-queue';
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import { stopGeneration } from '../chat/stop-generation';
 import { getActiveChat } from '../state/sessions';
@@ -13,6 +13,10 @@ import { setStatus } from './status';
 import { refreshActiveBoardIfMounted } from './orchestrate-board';
 import { syncBackgroundStreamHint } from './composer-stream-hint';
 import { syncGoalActiveHint } from './goal-active-hint';
+import {
+  syncComposerFollowUpPlaceholder,
+  syncComposerMessageQueue,
+} from './composer-message-queue';
 
 export type ComposerStreamingMode = 'idle' | 'streaming';
 
@@ -52,7 +56,7 @@ export function refreshComposerStreamingAffordance(): void {
   const hasText = composerInputHasText();
   sendBtn.setAttribute(
     'aria-label',
-    hasText ? 'Send steering message' : 'Stop generating',
+    hasText ? 'Queue follow-up message' : 'Stop generating',
   );
   sendBtn.dataset.steerReady = hasText ? 'true' : 'false';
 }
@@ -118,29 +122,6 @@ export function setComposerStreamingMode(mode: ComposerStreamingMode): void {
   syncDesktopComposerFishSwim();
 }
 
-/** Hint when a steering correction is queued on the active streaming chat. */
-export function syncSteerQueuedHint(): void {
-  let el = document.getElementById('composerSteerQueuedHint');
-  if (!el) {
-    el = document.createElement('p');
-    el.id = 'composerSteerQueuedHint';
-    el.className = 'composer-steer-queued-hint hidden';
-    el.setAttribute('role', 'status');
-    const host = document.querySelector('.input-bar-composer');
-    if (host) {
-      host.insertBefore(el, host.firstChild);
-    } else {
-      document.body.appendChild(el);
-    }
-  }
-
-  const chat = getActiveChat();
-  const show =
-    isActiveChatStreaming() && Boolean(chat.pendingSteerMessage?.trim());
-  el.classList.toggle('hidden', !show);
-  el.textContent = show ? 'Correction queued — applies after current step' : '';
-}
-
 /** Swim the desktop send fish while the active chat is streaming. */
 export function syncDesktopComposerFishSwim(): void {
   const composer = document.getElementById('desktopComposerRoot');
@@ -157,35 +138,30 @@ export function syncComposerFromStreamingState(): void {
   setComposerStreamingMode(isActiveChatStreaming() ? 'streaming' : 'idle');
   syncDesktopComposerFishSwim();
   syncBackgroundStreamHint();
-  syncSteerQueuedHint();
+  syncComposerMessageQueue();
+  syncComposerFollowUpPlaceholder(isActiveChatStreaming());
   syncGoalActiveHint();
   refreshActiveBoardIfMounted();
   void import('./composer-run-target').then((m) => m.refreshComposerRunTargetDisabled());
 }
 
-function submitSteerFromComposer(): void {
+function submitQueueFromComposer(): void {
   const input = getActiveComposerSurface().inputEl;
   const text = input?.value.trim() ?? '';
   if (!text) return;
   const chat = getActiveChat();
-  const hadPrior = Boolean(chat.pendingSteerMessage?.trim());
-  if (!enqueueSteerMessage(chat, text)) return;
+  if (!enqueueComposerMessage(chat, text)) return;
   clearComposerInput(input);
-  setStatus(
-    'ok',
-    hadPrior
-      ? 'Correction updated — applies after current step'
-      : 'Steering at next step…',
-  );
+  setStatus('ok', 'Follow-up queued');
   refreshComposerStreamingAffordance();
-  syncSteerQueuedHint();
+  syncComposerMessageQueue();
 }
 
-/** Send when idle; steer when streaming with text; stop when streaming with empty input. */
+/** Send when idle; queue follow-up when streaming with text; stop when streaming with empty input. */
 export function handleComposerPrimaryAction(): void {
   if (isActiveChatStreaming()) {
     if (composerInputHasText()) {
-      submitSteerFromComposer();
+      submitQueueFromComposer();
       return;
     }
     stopGeneration();

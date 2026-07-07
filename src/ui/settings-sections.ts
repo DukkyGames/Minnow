@@ -99,8 +99,16 @@ import { renderEditorSection } from './settings-editor';
 import { setStatus } from './status';
 import type { SettingsSectionId } from './settings-page-types';
 import { appendSettingsCrosslinks, appendSettingsGroup, linkToSettingsSection } from './settings-layout';
+import {
+  appendSettingsOfflineHint,
+  createSettingsActionsRow,
+  createSettingsInputRow,
+  createSettingsKvList,
+  createSettingsRadioRow,
+  createSettingsSelectRow,
+} from './settings-controls';
 import { renderAppearanceSettingsSection } from './settings-appearance';
-import { renderPromptsHubPanel } from './settings-prompts-hub';
+import { renderAgentCenterPanel } from './settings-agent-center';
 import {
   createSettingsSwitch,
   createSettingsToggleRow,
@@ -124,6 +132,7 @@ import { renderSamplerSettingsSection } from './settings-sampler';
 import { renderThinkingSettingsSection } from './settings-thinking';
 import { renderWebhooksSettingsSection } from './settings-webhooks';
 import {
+  getTerminalMetaCached,
   loadTerminalMeta,
   saveTerminalMeta,
 } from '../config/terminal-meta';
@@ -178,24 +187,60 @@ function clearMount(id: string): HTMLElement | null {
   return mount;
 }
 
-function serverBanner(message: string): HTMLElement {
-  const p = el('p', 'settings-server-banner');
-  p.setAttribute('role', 'status');
-  p.innerHTML = message;
-  return p;
-}
-
-
-/** Terminal panel note (agent runs do not auto-open the dock). */
+/** Terminal panel behavior when agents run shell commands (MIN-242). */
 async function appendTerminalControls(mount: HTMLElement): Promise<void> {
-  void (await loadTerminalMeta());
-  mount.appendChild(
-    el(
-      'p',
-      'settings-field-hint',
-      'Agent and sub-agent shell commands run in the background. Open the terminal panel yourself; the Terminal button pulses while a command is running.',
-    ),
+  await loadTerminalMeta();
+  const meta = getTerminalMetaCached();
+
+  const { row: autoOpenRow, input: autoOpenCb } = createSettingsToggleRow(
+    'Open terminal when agent runs a command',
+    {
+      checked: meta.autoOpenOnAgentRun,
+      ariaLabel: 'Open terminal when agent runs a command',
+      searchKey: 'general.chat.terminal.autoOpenOnAgentRun',
+      description:
+        'Raises the console panel when an agent starts execute_command. Off by default so your own shell session stays uninterrupted.',
+    },
   );
+  mount.appendChild(autoOpenRow);
+
+  const { row: autoFollowRow, input: autoFollowCb } = createSettingsToggleRow(
+    'Switch to Agent tab when agent runs a command',
+    {
+      checked: meta.autoFollowAgentTab,
+      ariaLabel: 'Switch to Agent tab when agent runs a command',
+      searchKey: 'general.chat.terminal.autoFollowAgentTab',
+      description:
+        'When the console is already open, jump to the Agent output tab at run start. Off by default — a pulse on the Terminal button (panel closed) or Agent tab (panel open) still signals activity.',
+    },
+  );
+  mount.appendChild(autoFollowRow);
+
+  const saveTerminalSetting = async (
+    patch: Parameters<typeof saveTerminalMeta>[0],
+    okMessage: string,
+  ): Promise<void> => {
+    try {
+      await saveTerminalMeta(patch);
+      setStatus('ok', okMessage);
+    } catch {
+      setStatus('err', 'Could not save terminal setting');
+    }
+  };
+
+  autoOpenCb.addEventListener('change', () => {
+    void saveTerminalSetting(
+      { autoOpenOnAgentRun: autoOpenCb.checked },
+      'Terminal auto-open setting updated',
+    );
+  });
+
+  autoFollowCb.addEventListener('change', () => {
+    void saveTerminalSetting(
+      { autoFollowAgentTab: autoFollowCb.checked },
+      'Terminal auto-follow setting updated',
+    );
+  });
 }
 
 /** Constrained decoding default (persisted in config.json `toolCalls`). */
@@ -241,10 +286,9 @@ async function renderGeneralSection(): Promise<void> {
 
   const serverUp = await detectConfigServer();
   if (!serverUp) {
-    mount.appendChild(
-      serverBanner(
-        'File-backed settings require <code>npm start</code>. Values below use browser storage until then.',
-      ),
+    appendSettingsOfflineHint(
+      mount,
+      'File-backed settings require <code>npm start</code>. Values below use browser storage until then.',
     );
   }
 
@@ -290,21 +334,16 @@ async function renderGeneralSection(): Promise<void> {
     'Registered LLM backends. Pick provider and model in the top bar; edit profiles under Providers.',
   );
 
-  const summary = el('dl', 'settings-kv');
-  const addRow = (term: string, value: string) => {
-    const dt = el('dt', 'settings-kv__term', term);
-    const dd = el('dd', 'settings-kv__value', value);
-    summary.appendChild(dt);
-    summary.appendChild(dd);
-  };
-
-  addRow('Enabled providers', String(enabled.length));
-  addRow(
-    'This chat’s provider',
-    chatProv ? `${chatProv.label} (${chatProv.id})` : '—',
+  connection.appendChild(
+    createSettingsKvList([
+      { term: 'Enabled providers', value: String(enabled.length) },
+      {
+        term: 'This chat’s provider',
+        value: chatProv ? `${chatProv.label} (${chatProv.id})` : '—',
+      },
+      { term: 'Storage', value: serverUp ? '~/.minnow' : 'Browser (localStorage)' },
+    ]),
   );
-  addRow('Storage', serverUp ? '~/.minnow' : 'Browser (localStorage)');
-  connection.appendChild(summary);
 
   const cross = el('div', 'settings-crosslinks');
   cross.appendChild(el('span', 'settings-crosslinks__label', 'Related'));
@@ -670,7 +709,7 @@ async function bindPromptingToolbar(): Promise<void> {
   await syncCustomBarVisibility();
 }
 
-async function renderPromptingSection(): Promise<void> {
+async function renderAgentCenterBasePrompts(): Promise<void> {
   const profilesMount = document.getElementById('settingsSetupProfilesMount');
   if (profilesMount) {
     mountSetupProfilesPanel(profilesMount, setStatus);
@@ -680,21 +719,43 @@ async function renderPromptingSection(): Promise<void> {
   const meta = await loadPromptMetaSettings();
   await renderPromptPartsPanel(meta.activePromptProfile, meta.activePromptConfigId);
   schedulePromptTokenEstimateRefresh();
+}
 
-  const hubMount = document.getElementById('settingsPromptsHubMount');
-  if (hubMount) {
-    const hubGen = beginAsyncSectionRender('prompting');
-    await renderPromptsHubPanel(hubMount);
-    if (isAsyncSectionRenderStale('prompting', hubGen)) return;
+async function renderAgentCenterSection(): Promise<void> {
+  const generation = beginAsyncSectionRender('agent-center');
+  await renderAgentCenterPanel(document.getElementById('settingsAgentCenterBody'));
+  if (isAsyncSectionRenderStale('agent-center', generation)) return;
+
+  const basePromptPanel = document.getElementById('settingsBasePromptPanel');
+  if (basePromptPanel instanceof HTMLDetailsElement && basePromptPanel.open) {
+    await renderAgentCenterBasePrompts();
+    if (isAsyncSectionRenderStale('agent-center', generation)) return;
+  } else {
+    ensureBasePromptPanelLazyLoad();
   }
+}
+
+let basePromptLazyLoadBound = false;
+
+/** Load base prompt editors the first time the disclosure opens. */
+function ensureBasePromptPanelLazyLoad(): void {
+  if (basePromptLazyLoadBound) return;
+  const panel = document.getElementById('settingsBasePromptPanel');
+  if (!(panel instanceof HTMLDetailsElement)) return;
+  basePromptLazyLoadBound = true;
+  panel.addEventListener('toggle', () => {
+    if (!panel.open) return;
+    void renderAgentCenterBasePrompts();
+  });
+}
+
+/** @deprecated Use renderAgentCenterSection — kept for legacy hash aliases. */
+async function renderPromptingSection(): Promise<void> {
+  await renderAgentCenterSection();
 }
 
 /** Plan granularity control inside Modes → Plan expandable row. */
 async function mountPlanGranularityField(container: HTMLElement): Promise<void> {
-  const field = el('div', 'settings-field');
-  const label = el('label', 'settings-field-label', 'Plan granularity');
-  label.htmlFor = 'settingsPlanGranularity';
-
   const select = document.createElement('select');
   select.id = 'settingsPlanGranularity';
   select.className = 'settings-select';
@@ -711,16 +772,12 @@ async function mountPlanGranularityField(container: HTMLElement): Promise<void> 
     select.appendChild(option);
   }
 
-  field.appendChild(label);
-  field.appendChild(select);
-  field.appendChild(
-    el(
-      'p',
-      'settings-field-hint',
+  const { row } = createSettingsSelectRow('Plan granularity', {
+    select,
+    description:
       'Controls how finely the Planner breaks work into tasks. The user can override this per session.',
-    ),
-  );
-  container.appendChild(field);
+  });
+  container.appendChild(row);
 
   const meta = await loadPromptMetaSettings();
   select.value = meta.planGranularity ?? 'medium';
@@ -735,7 +792,7 @@ async function renderModesSection(): Promise<void> {
   const mount = clearMount('settingsModesBody');
   if (!mount) return;
 
-  appendSettingsCrosslinks(mount, [{ label: 'Edit prompts in Prompts', sectionId: 'prompting' }]);
+  appendSettingsCrosslinks(mount, [{ label: 'Edit prompts in Agents', sectionId: 'agent-center' }]);
 
   const listBody = appendSettingsGroup(
     mount,
@@ -766,7 +823,7 @@ async function renderExpertsSection(): Promise<void> {
   const mount = clearMount('settingsExpertsBody');
   if (!mount) return;
 
-  appendSettingsCrosslinks(mount, [{ label: 'Edit prompts in Prompts', sectionId: 'prompting' }]);
+  appendSettingsCrosslinks(mount, [{ label: 'Edit prompts in Agents', sectionId: 'agent-center' }]);
 
   const labBody = appendSettingsGroup(mount, 'Expert Lab', 'Try personas outside the main composer.');
   const labLink = document.createElement('button');
@@ -847,8 +904,9 @@ async function renderWorkAgentsSection(): Promise<void> {
   const generation = beginAsyncSectionRender('work-agents');
 
   if (!isServerStorageMode()) {
-    mount.appendChild(
-      serverBanner('Work agent editing requires <code>npm start</code>.'),
+    appendSettingsOfflineHint(
+      mount,
+      'Work agent editing requires <code>npm start</code>.',
     );
     return;
   }
@@ -858,8 +916,8 @@ async function renderWorkAgentsSection(): Promise<void> {
   const agents = remote?.agents ?? [];
 
   appendSettingsCrosslinks(mount, [
-    { label: 'Edit prompts in Prompts', sectionId: 'prompting' },
-    { label: 'Set model in Models', sectionId: 'model-routing' },
+    { label: 'Edit prompts in Agents', sectionId: 'agent-center' },
+    { label: 'Set model in Agents', sectionId: 'agent-center' },
   ]);
 
   const listBody = appendSettingsGroup(
@@ -918,23 +976,11 @@ async function renderSubAgentsSection(): Promise<void> {
     setStatus(ok ? 'ok' : 'err', ok ? 'Sub-agents updated' : 'Save failed — use npm start');
   };
 
-  const summary = el('dl', 'settings-kv');
-  const addTerm = (term: string): HTMLElement => {
-    const dt = el('dt', 'settings-kv__term', term);
-    summary.appendChild(dt);
-    const dd = el('dd', 'settings-kv__value');
-    summary.appendChild(dd);
-    return dd;
-  };
-
-  const enabledDd = addTerm('Enabled');
   const { root: enabledSwitch, input: enabledCb } = createSettingsSwitch({
     checked: config.enabled !== false,
     ariaLabel: 'Enable sub-agents',
   });
-  enabledDd.appendChild(enabledSwitch);
 
-  const maxDd = addTerm('Max concurrent');
   const maxInput = document.createElement('input');
   maxInput.type = 'number';
   maxInput.className = 'settings-select settings-kv-input';
@@ -943,9 +989,7 @@ async function renderSubAgentsSection(): Promise<void> {
   maxInput.step = '1';
   maxInput.value = String(config.globalMaxConcurrent);
   maxInput.setAttribute('aria-label', 'Max concurrent sub-agents');
-  maxDd.appendChild(maxInput);
 
-  const timeoutDd = addTerm('Default timeout');
   const timeoutWrap = el('span', 'settings-kv-input-wrap');
   const timeoutInput = document.createElement('input');
   timeoutInput.type = 'number';
@@ -956,9 +1000,7 @@ async function renderSubAgentsSection(): Promise<void> {
   timeoutInput.setAttribute('aria-label', 'Default sub-agent timeout in milliseconds');
   timeoutWrap.appendChild(timeoutInput);
   timeoutWrap.appendChild(el('span', 'settings-kv-suffix', 'ms'));
-  timeoutDd.appendChild(timeoutWrap);
 
-  const nudgeDd = addTerm('Check-in nudge');
   const nudgeWrap = el('span', 'settings-kv-input-wrap');
   const nudgeInput = document.createElement('input');
   nudgeInput.type = 'number';
@@ -972,7 +1014,13 @@ async function renderSubAgentsSection(): Promise<void> {
   );
   nudgeWrap.appendChild(nudgeInput);
   nudgeWrap.appendChild(el('span', 'settings-kv-suffix', 'ms'));
-  nudgeDd.appendChild(nudgeWrap);
+
+  const summary = createSettingsKvList([
+    { term: 'Enabled', value: enabledSwitch },
+    { term: 'Max concurrent', value: maxInput },
+    { term: 'Default timeout', value: timeoutWrap },
+    { term: 'Check-in nudge', value: nudgeWrap },
+  ]);
 
   const globalBody = appendSettingsGroup(
     mount,
@@ -982,8 +1030,8 @@ async function renderSubAgentsSection(): Promise<void> {
   globalBody.appendChild(summary);
 
   appendSettingsCrosslinks(mount, [
-    { label: 'Edit prompts in Prompts', sectionId: 'prompting' },
-    { label: 'Set model in Models', sectionId: 'model-routing' },
+    { label: 'Edit prompts in Agents', sectionId: 'agent-center' },
+    { label: 'Set model in Agents', sectionId: 'agent-center' },
   ]);
 
   const typesBody = appendSettingsGroup(
@@ -1068,9 +1116,6 @@ async function renderAutopilotSection(): Promise<void> {
     'New orchestrate boards inherit these values. Per-board overrides stay on the board header.',
   );
 
-  const modeField = el('div', 'settings-field');
-  const modeLabel = el('label', 'settings-field-label', 'Default execution mode');
-  modeLabel.htmlFor = 'settingsAutopilotExecMode';
   const modeSelect = document.createElement('select');
   modeSelect.id = 'settingsAutopilotExecMode';
   modeSelect.className = 'settings-select';
@@ -1086,12 +1131,10 @@ async function renderAutopilotSection(): Promise<void> {
     modeSelect.appendChild(option);
   }
   modeSelect.value = meta.defaultExecutionMode;
-  modeField.append(modeLabel, modeSelect);
-  defaultsBody.appendChild(modeField);
+  defaultsBody.appendChild(
+    createSettingsSelectRow('Default execution mode', { select: modeSelect }).row,
+  );
 
-  const isoField = el('div', 'settings-field');
-  const isoLabel = el('label', 'settings-field-label', 'Default isolation mode');
-  isoLabel.htmlFor = 'settingsAutopilotIsolation';
   const isoSelect = document.createElement('select');
   isoSelect.id = 'settingsAutopilotIsolation';
   isoSelect.className = 'settings-select';
@@ -1107,12 +1150,10 @@ async function renderAutopilotSection(): Promise<void> {
     isoSelect.appendChild(option);
   }
   isoSelect.value = meta.isolationMode;
-  isoField.append(isoLabel, isoSelect);
-  defaultsBody.appendChild(isoField);
+  defaultsBody.appendChild(
+    createSettingsSelectRow('Default isolation mode', { select: isoSelect }).row,
+  );
 
-  const concField = el('div', 'settings-field');
-  const concLabel = el('label', 'settings-field-label', 'Max concurrent tasks');
-  concLabel.htmlFor = 'settingsAutopilotConcurrency';
   const concInput = document.createElement('input');
   concInput.type = 'number';
   concInput.id = 'settingsAutopilotConcurrency';
@@ -1121,12 +1162,12 @@ async function renderAutopilotSection(): Promise<void> {
   concInput.max = '20';
   concInput.step = '1';
   concInput.value = String(meta.maxConcurrentTasks);
-  concField.append(
-    concLabel,
-    concInput,
-    el('p', 'settings-field-hint', 'Applies in Auto and AFK modes (sequential always uses 1).'),
+  defaultsBody.appendChild(
+    createSettingsInputRow('Max concurrent tasks', {
+      input: concInput,
+      description: 'Applies in Auto and AFK modes (sequential always uses 1).',
+    }).row,
   );
-  defaultsBody.appendChild(concField);
 
   const testsBody = appendSettingsGroup(
     mount,
@@ -1134,9 +1175,6 @@ async function renderAutopilotSection(): Promise<void> {
     'Global thresholds for per-task test/build failures and final integration tests.',
   );
 
-  const taskAttemptsField = el('div', 'settings-field');
-  const taskAttemptsLabel = el('label', 'settings-field-label', 'Per-task test attempts');
-  taskAttemptsLabel.htmlFor = 'settingsAutopilotTaskAttempts';
   const taskAttemptsInput = document.createElement('input');
   taskAttemptsInput.type = 'number';
   taskAttemptsInput.id = 'settingsAutopilotTaskAttempts';
@@ -1144,12 +1182,10 @@ async function renderAutopilotSection(): Promise<void> {
   taskAttemptsInput.min = '1';
   taskAttemptsInput.max = '10';
   taskAttemptsInput.value = String(meta.maxTestAttempts);
-  taskAttemptsField.append(taskAttemptsLabel, taskAttemptsInput);
-  testsBody.appendChild(taskAttemptsField);
+  testsBody.appendChild(
+    createSettingsInputRow('Per-task test attempts', { input: taskAttemptsInput }).row,
+  );
 
-  const buildAttemptsField = el('div', 'settings-field');
-  const buildAttemptsLabel = el('label', 'settings-field-label', 'Per-task build attempts');
-  buildAttemptsLabel.htmlFor = 'settingsAutopilotBuildAttempts';
   const buildAttemptsInput = document.createElement('input');
   buildAttemptsInput.type = 'number';
   buildAttemptsInput.id = 'settingsAutopilotBuildAttempts';
@@ -1157,12 +1193,10 @@ async function renderAutopilotSection(): Promise<void> {
   buildAttemptsInput.min = '1';
   buildAttemptsInput.max = '10';
   buildAttemptsInput.value = String(meta.maxBuildAttempts);
-  buildAttemptsField.append(buildAttemptsLabel, buildAttemptsInput);
-  testsBody.appendChild(buildAttemptsField);
+  testsBody.appendChild(
+    createSettingsInputRow('Per-task build attempts', { input: buildAttemptsInput }).row,
+  );
 
-  const finalAttemptsField = el('div', 'settings-field');
-  const finalAttemptsLabel = el('label', 'settings-field-label', 'Final test attempts');
-  finalAttemptsLabel.htmlFor = 'settingsAutopilotFinalAttempts';
   const finalAttemptsInput = document.createElement('input');
   finalAttemptsInput.type = 'number';
   finalAttemptsInput.id = 'settingsAutopilotFinalAttempts';
@@ -1170,12 +1204,10 @@ async function renderAutopilotSection(): Promise<void> {
   finalAttemptsInput.min = '1';
   finalAttemptsInput.max = '10';
   finalAttemptsInput.value = String(meta.maxFinalTestAttempts);
-  finalAttemptsField.append(finalAttemptsLabel, finalAttemptsInput);
-  testsBody.appendChild(finalAttemptsField);
+  testsBody.appendChild(
+    createSettingsInputRow('Final test attempts', { input: finalAttemptsInput }).row,
+  );
 
-  const smartRouteField = el('div', 'settings-field');
-  const smartRouteLabel = el('label', 'settings-field-label', 'Continue smart-route');
-  smartRouteLabel.htmlFor = 'settingsAutopilotContinueSmartRoute';
   const smartRouteSelect = document.createElement('select');
   smartRouteSelect.id = 'settingsAutopilotContinueSmartRoute';
   smartRouteSelect.className = 'settings-select';
@@ -1190,16 +1222,13 @@ async function renderAutopilotSection(): Promise<void> {
     smartRouteSelect.appendChild(option);
   }
   smartRouteSelect.value = meta.continueSmartRoute;
-  smartRouteField.append(
-    smartRouteLabel,
-    smartRouteSelect,
-    el(
-      'p',
-      'settings-field-hint',
-      'When Continue would bloat a derailed build chat, hand off to a fresh summarized chat instead.',
-    ),
+  testsBody.appendChild(
+    createSettingsSelectRow('Continue smart-route', {
+      select: smartRouteSelect,
+      description:
+        'When Continue would bloat a derailed build chat, hand off to a fresh summarized chat instead.',
+    }).row,
   );
-  testsBody.appendChild(smartRouteField);
 
   const heartbeatBody = appendSettingsGroup(
     mount,
@@ -1214,20 +1243,15 @@ async function renderAutopilotSection(): Promise<void> {
     value: number,
     hint: string,
   ): HTMLInputElement => {
-    const field = el('div', 'settings-field');
-    const labelEl = el('label', 'settings-field-label', label);
-    labelEl.htmlFor = id;
-    const wrap = el('span', 'settings-kv-input-wrap');
     const input = document.createElement('input');
     input.type = 'number';
     input.id = id;
     input.className = 'settings-input';
     input.step = '1000';
     input.value = String(value);
-    wrap.appendChild(input);
-    wrap.appendChild(el('span', 'settings-kv-suffix', 'ms'));
-    field.append(labelEl, wrap, el('p', 'settings-field-hint', hint));
-    container.appendChild(field);
+    container.appendChild(
+      createSettingsInputRow(`${label} (ms)`, { id: `label-${id}`, input, description: hint }).row,
+    );
     return input;
   };
 
@@ -1370,47 +1394,38 @@ async function renderAutopilotSection(): Promise<void> {
     'Timeout for docker/infra provisioning commands (30 000–600 000 ms).',
   );
 
-  const appendBoolToggle = (
-    container: HTMLElement,
-    id: string,
-    label: string,
-    value: boolean,
-    hint: string,
-  ): HTMLInputElement => {
-    const field = el('div', 'settings-field');
-    const row = el('label', 'settings-toggle-row');
-    const labelEl = el('span', '', label);
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.id = id;
-    input.checked = value;
-    row.append(labelEl, input);
-    field.append(row, el('p', 'settings-field-hint', hint));
-    container.appendChild(field);
-    return input;
-  };
-
-  const autoProvisionToggle = appendBoolToggle(
-    selfHealBody,
-    'settingsAutopilotAutoProvision',
+  const { row: autoProvisionRow, input: autoProvisionToggle } = createSettingsToggleRow(
     'Auto-provision infra',
-    meta.autoProvisionInfra,
-    'Automatically attempt docker/infra provisioning when an infra failure is detected.',
+    {
+      id: 'settingsAutopilotAutoProvision',
+      checked: meta.autoProvisionInfra,
+      description:
+        'Automatically attempt docker/infra provisioning when an infra failure is detected.',
+    },
   );
-  const afkRestartStallsToggle = appendBoolToggle(
-    selfHealBody,
-    'settingsAutopilotAfkRestartStalls',
+  selfHealBody.appendChild(autoProvisionRow);
+
+  const { row: afkRestartStallsRow, input: afkRestartStallsToggle } = createSettingsToggleRow(
     'Auto-restart stalled tasks',
-    meta.afkAutoRestartStalls,
-    'When off, stalling tasks are quarantined immediately instead of receiving a nudge.',
+    {
+      id: 'settingsAutopilotAfkRestartStalls',
+      checked: meta.afkAutoRestartStalls,
+      description:
+        'When off, stalling tasks are quarantined immediately instead of receiving a nudge.',
+    },
   );
-  const guardCdToggle = appendBoolToggle(
-    selfHealBody,
-    'settingsAutopilotGuardCd',
+  selfHealBody.appendChild(afkRestartStallsRow);
+
+  const { row: guardCdRow, input: guardCdToggle } = createSettingsToggleRow(
     'Guard cd outside worktree',
-    meta.guardCdOutsideWorktree,
-    'Rewrite leading absolute cd commands that escape the task worktree boundary.',
+    {
+      id: 'settingsAutopilotGuardCd',
+      checked: meta.guardCdOutsideWorktree,
+      description:
+        'Rewrite leading absolute cd commands that escape the task worktree boundary.',
+    },
   );
+  selfHealBody.appendChild(guardCdRow);
 
   healRoundsInput.addEventListener('change', () => {
     const value = Math.min(6, Math.max(0, Math.floor(Number(healRoundsInput.value) || 0)));
@@ -1442,31 +1457,25 @@ async function appendToolTurnLimitsSection(mount: HTMLElement): Promise<void> {
     'Cap how many times the agent can call tools in one run (main composer and all sub-agents, including eval runs).',
   );
 
-  const mainRow = el('label', 'settings-toggle-row');
-  mainRow.appendChild(el('span', '', 'Main agents'));
   const mainInput = document.createElement('input');
   mainInput.type = 'number';
-  mainInput.className = 'settings-select';
+  mainInput.className = 'settings-input';
   mainInput.min = '1';
   mainInput.max = String(MAX_CHAT_MAX_TOOL_TURNS);
   mainInput.step = '1';
   mainInput.value = String(getChatMetaSync().maxToolTurns);
   mainInput.setAttribute('aria-label', 'Main agent maximum tool turns per send');
-  mainRow.appendChild(mainInput);
-  section.appendChild(mainRow);
+  section.appendChild(createSettingsInputRow('Main agents', { input: mainInput }).row);
 
-  const subRow = el('label', 'settings-toggle-row');
-  subRow.appendChild(el('span', '', 'Sub-agents'));
   const subInput = document.createElement('input');
   subInput.type = 'number';
-  subInput.className = 'settings-select';
+  subInput.className = 'settings-input';
   subInput.min = '1';
   subInput.max = String(MAX_CHAT_MAX_TOOL_TURNS);
   subInput.step = '1';
   subInput.value = String(getSubAgentsMaxToolTurns(subConfig));
   subInput.setAttribute('aria-label', 'Sub-agent maximum tool turns per run');
-  subRow.appendChild(subInput);
-  section.appendChild(subRow);
+  section.appendChild(createSettingsInputRow('Sub-agents', { input: subInput }).row);
 
   mainInput.addEventListener('change', () => {
     void (async () => {
@@ -1497,11 +1506,9 @@ async function appendToolTurnLimitsSection(mount: HTMLElement): Promise<void> {
     'Server-side limits while streaming from the model. Idle timeout resets when new tokens arrive. Applies to the next generation; no restart needed.',
   );
 
-  const idleRow = el('label', 'settings-toggle-row');
-  idleRow.appendChild(el('span', '', 'Idle timeout (minutes)'));
   const idleInput = document.createElement('input');
   idleInput.type = 'number';
-  idleInput.className = 'settings-select';
+  idleInput.className = 'settings-input';
   idleInput.min = '1';
   idleInput.max = '30';
   idleInput.step = '1';
@@ -1512,14 +1519,13 @@ async function appendToolTurnLimitsSection(mount: HTMLElement): Promise<void> {
     'aria-label',
     'Minutes without model stream data before aborting',
   );
-  idleRow.appendChild(idleInput);
-  timeoutSection.appendChild(idleRow);
+  timeoutSection.appendChild(
+    createSettingsInputRow('Idle timeout (minutes)', { input: idleInput }).row,
+  );
 
-  const maxRow = el('label', 'settings-toggle-row');
-  maxRow.appendChild(el('span', '', 'Max duration (minutes)'));
   const maxInput = document.createElement('input');
   maxInput.type = 'number';
-  maxInput.className = 'settings-select';
+  maxInput.className = 'settings-input';
   maxInput.min = '1';
   maxInput.max = '240';
   maxInput.step = '1';
@@ -1527,8 +1533,9 @@ async function appendToolTurnLimitsSection(mount: HTMLElement): Promise<void> {
     generationTimeoutMsToMinutes(getChatMetaSync().generationMaxDurationMs),
   );
   maxInput.setAttribute('aria-label', 'Maximum wall-clock minutes per generation');
-  maxRow.appendChild(maxInput);
-  timeoutSection.appendChild(maxRow);
+  timeoutSection.appendChild(
+    createSettingsInputRow('Max duration (minutes)', { input: maxInput }).row,
+  );
 
   idleInput.addEventListener('change', () => {
     void (async () => {
@@ -1614,20 +1621,15 @@ async function renderToolsSection(): Promise<void> {
     if (generation !== toolsSectionRenderGeneration) return;
   }
 
-  const banner = document.createElement('p');
-  banner.id = 'settingsToolsServerBanner';
-  banner.className = 'settings-server-banner hidden';
-  banner.setAttribute('role', 'status');
-  banner.textContent = 'Server tools need npm start (not npm run dev).';
-  mount.appendChild(banner);
-
-  const previewBanner = document.createElement('p');
-  previewBanner.id = 'settingsToolsPreviewBanner';
-  previewBanner.className = 'settings-server-banner hidden';
-  previewBanner.setAttribute('role', 'status');
-  previewBanner.textContent =
-    'Browser tools only work in the Minnow desktop app window (from npm start), not in a separate browser tab.';
-  mount.appendChild(previewBanner);
+  appendSettingsOfflineHint(mount, 'Server tools need npm start (not npm run dev).', {
+    id: 'settingsToolsServerBanner',
+    hidden: true,
+  });
+  appendSettingsOfflineHint(
+    mount,
+    'Browser tools only work in the Minnow desktop app window (from npm start), not in a separate browser tab.',
+    { id: 'settingsToolsPreviewBanner', hidden: true },
+  );
 
   const permissions = appendSettingsGroup(
     mount,
@@ -1671,35 +1673,22 @@ async function renderToolsSection(): Promise<void> {
     'Filesystem access',
     'When restricted, file tools cannot resolve paths outside the workspace. Full access is dangerous on untrusted models.',
   );
-  const fsSection = document.createElement('div');
-  fsSection.className = 'settings-tool-filesystem';
-  const fsRadios = document.createElement('div');
-  fsRadios.className = 'settings-filesystem-radios';
-  const rWorkspace = document.createElement('input');
-  rWorkspace.type = 'radio';
-  rWorkspace.name = 'minnow-fs-access-settings';
-  rWorkspace.value = 'workspace';
+  const { row: fsRow, inputs: fsInputs, getValue: getFsValue, setValue: setFsValue } =
+    createSettingsRadioRow(
+    'Path resolution',
+    {
+      name: 'minnow-fs-access-settings',
+      searchKey: 'tools.filesystem.access',
+      options: [
+        { value: 'workspace', label: 'Workspace only' },
+        { value: 'full', label: 'Full disk' },
+      ],
+    },
+  );
+  const [rWorkspace, rFull] = fsInputs;
   rWorkspace.id = 'fsAccessWorkspaceSettings';
-  const lWorkspace = document.createElement('label');
-  lWorkspace.className = 'settings-radio-option';
-  const spanWorkspace = document.createElement('span');
-  spanWorkspace.className = 'settings-radio-option__text';
-  spanWorkspace.textContent = 'Restrict to workspace (default)';
-  lWorkspace.append(rWorkspace, spanWorkspace);
-  const rFull = document.createElement('input');
-  rFull.type = 'radio';
-  rFull.name = 'minnow-fs-access-settings';
-  rFull.value = 'full';
   rFull.id = 'fsAccessFullSettings';
-  const lFull = document.createElement('label');
-  lFull.className = 'settings-radio-option';
-  const spanFull = document.createElement('span');
-  spanFull.className = 'settings-radio-option__text';
-  spanFull.textContent = 'Full filesystem access (dangerous)';
-  lFull.append(rFull, spanFull);
-  fsRadios.append(lWorkspace, lFull);
-  fsSection.appendChild(fsRadios);
-  fsGroup.appendChild(fsSection);
+  fsGroup.appendChild(fsRow);
 
   const browserGroup = appendSettingsGroup(
     mount,
@@ -1711,14 +1700,11 @@ async function renderToolsSection(): Promise<void> {
   await renderBrowserAllowlistSettings(browserMount);
 
   const applyFsRadios = (meta: ToolSecurityMeta = getToolSecurityMetaCached()): void => {
-    const mode = meta.filesystemAccess;
-    rWorkspace.checked = mode === 'workspace';
-    rFull.checked = mode === 'full';
+    setFsValue(meta.filesystemAccess === 'full' ? 'full' : 'workspace');
   };
-  applyFsRadios(toolSecurity);
 
   const persistFs = async (): Promise<void> => {
-    const next = rFull.checked ? 'full' : 'workspace';
+    const next = getFsValue() === 'full' ? 'full' : 'workspace';
     if (next === 'full') {
       const ok = window.confirm(
         'Enable full filesystem access?\n\nFile and git tools will be able to resolve paths outside your current workspace. A malicious or mistaken model could read or modify sensitive files anywhere on this computer.\n\nOnly continue if you understand and accept this risk.',
@@ -1736,6 +1722,8 @@ async function renderToolsSection(): Promise<void> {
       applyFsRadios();
     }
   };
+
+  applyFsRadios(toolSecurity);
 
   rWorkspace.addEventListener('change', () => {
     if (rWorkspace.checked) void persistFs();
@@ -1810,7 +1798,10 @@ async function renderToolsSection(): Promise<void> {
   cacheCheckbox.checked = config.toolCache?.enabled !== false;
   loadToolConfigIntoDrawer(list);
 
-  banner.classList.toggle('hidden', isLocalServerAvailable());
+  document.getElementById('settingsToolsServerBanner')?.classList.toggle(
+    'hidden',
+    isLocalServerAvailable(),
+  );
 }
 
 /** Test fixture server — hidden from settings UI. */
@@ -1901,14 +1892,6 @@ function createMcpSettingsRow(
   detail.append(status);
 
   if (server.id === 'context7') {
-    const keyField = document.createElement('div');
-    keyField.className = 'settings-mcp-key-field';
-
-    const keyLabel = document.createElement('label');
-    keyLabel.className = 'settings-field-label';
-    keyLabel.htmlFor = 'settingsMcpContext7ApiKey';
-    keyLabel.textContent = 'Context7 API key';
-
     const keyInput = document.createElement('input');
     keyInput.type = 'password';
     keyInput.id = 'settingsMcpContext7ApiKey';
@@ -1918,52 +1901,54 @@ function createMcpSettingsRow(
       ? 'Leave blank to keep current key'
       : 'Optional — get one at context7.com';
 
-    const keyActions = document.createElement('div');
-    keyActions.className = 'settings-mcp-key-actions';
-
-    const saveKeyBtn = document.createElement('button');
-    saveKeyBtn.type = 'button';
-    saveKeyBtn.className = 'settings-inline-btn';
-    saveKeyBtn.textContent = 'Save key';
-
     const keyHint = document.createElement('p');
     keyHint.className = 'settings-mcp-hint';
     keyHint.textContent = options?.hasContext7ApiKey
       ? 'A key is saved on the server (not shown here). Encrypted at rest under ~/.minnow/mcp/secrets.json.'
       : 'No API key saved yet. Required for live library docs from Context7.';
 
-    saveKeyBtn.addEventListener('click', () => {
-      void (async () => {
-        const value = keyInput.value.trim();
-        if (!value) {
-          if (!options?.hasContext7ApiKey) {
-            setStatus('err', 'Enter a Context7 API key');
-            return;
-          }
-          setStatus('ok', 'Context7 API key unchanged');
-          return;
-        }
-        const result = await updateMcpSecrets({ context7ApiKey: value });
-        if (result.ok === false) {
-          setStatus('err', result.error);
-          return;
-        }
-        const { flags } = result;
-        keyInput.value = '';
-        keyInput.placeholder = flags.hasContext7ApiKey
-          ? 'Leave blank to keep current key'
-          : 'Optional — get one at context7.com';
-        keyHint.textContent = flags.hasContext7ApiKey
-          ? 'A key is saved on the server (not shown here). Encrypted at rest under ~/.minnow/mcp/secrets.json.'
-          : 'No API key saved yet. Required for live library docs from Context7.';
-        setStatus('ok', 'Context7 API key saved');
-        await renderMcpSection();
-      })();
-    });
-
-    keyActions.append(saveKeyBtn);
-    keyField.append(keyLabel, keyInput, keyActions, keyHint);
-    detail.append(keyField);
+    detail.appendChild(
+      createSettingsInputRow('Context7 API key', {
+        input: keyInput,
+        description: keyHint.textContent,
+      }).row,
+    );
+    detail.appendChild(
+      createSettingsActionsRow([
+        {
+          label: 'Save key',
+          className: 'settings-inline-btn',
+          onClick: () => {
+            void (async () => {
+              const value = keyInput.value.trim();
+              if (!value) {
+                if (!options?.hasContext7ApiKey) {
+                  setStatus('err', 'Enter a Context7 API key');
+                  return;
+                }
+                setStatus('ok', 'Context7 API key unchanged');
+                return;
+              }
+              const result = await updateMcpSecrets({ context7ApiKey: value });
+              if (result.ok === false) {
+                setStatus('err', result.error);
+                return;
+              }
+              const { flags } = result;
+              keyInput.value = '';
+              keyInput.placeholder = flags.hasContext7ApiKey
+                ? 'Leave blank to keep current key'
+                : 'Optional — get one at context7.com';
+              keyHint.textContent = flags.hasContext7ApiKey
+                ? 'A key is saved on the server (not shown here). Encrypted at rest under ~/.minnow/mcp/secrets.json.'
+                : 'No API key saved yet. Required for live library docs from Context7.';
+              setStatus('ok', 'Context7 API key saved');
+              await renderMcpSection();
+            })();
+          },
+        },
+      ]),
+    );
   }
 
   row.append(detail);
@@ -2287,26 +2272,23 @@ export async function refreshSettingsSection(
     case 'thinking':
       await renderThinkingSettingsSectionWrapper();
       break;
+    case 'agent-center':
+      await renderAgentCenterSection();
+      break;
     case 'prompting':
-      await renderPromptingSection();
+    case 'modes':
+    case 'work-agents':
+    case 'sub-agents':
+      await renderAgentCenterSection();
       break;
     case 'rules':
       await renderRulesSection();
       break;
-    case 'modes':
-      await renderModesSection();
-      break;
     case 'experts':
       await renderExpertsSection();
       break;
-    case 'work-agents':
-      await renderWorkAgentsSection();
-      break;
     case 'agent-packs':
       await renderAgentPacksSection();
-      break;
-    case 'sub-agents':
-      await renderSubAgentsSection();
       break;
     case 'autopilot':
       await renderAutopilotSection();

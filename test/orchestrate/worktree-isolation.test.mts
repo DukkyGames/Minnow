@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
+import { normalizeWorkspacePath } from '../../src/lib/normalize-workspace-path.ts';
 import {
   resetAutopilotMetaCache,
   setAutopilotMetaForTests,
@@ -235,6 +236,24 @@ describe('resolveChatToolWorkspaceRoot', () => {
     assert.equal(
       resolveChatToolWorkspaceRoot({ workspacePath: 'C:/project' }, []),
       undefined,
+    );
+  });
+
+  test('uses desktop sandbox workspace for desktop chats without board linkage', () => {
+    const desktopWs = 'C:/Users/me/.minnow/workspace';
+    assert.equal(
+      resolveChatToolWorkspaceRoot({ workspacePath: desktopWs }, []),
+      normalizeWorkspacePath(desktopWs),
+    );
+  });
+
+  test('uses chats sandbox workspace for legacy assistant chats', () => {
+    assert.equal(
+      resolveChatToolWorkspaceRoot(
+        { workspacePath: '/home/user/.minnow/chats' },
+        [],
+      ),
+      '/home/user/.minnow/chats',
     );
   });
 });

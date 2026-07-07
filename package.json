@@ -11,15 +11,17 @@
   },
   "scripts": {
     "dev": "vite",
-    "prebuild": "node scripts/generate-skills-manifest.mjs",
+    "prebuild": "node scripts/generate-skills-manifest.mjs && tsx scripts/generate-settings-registry.mjs",
     "build:benchmark-packs": "node scripts/build-benchmark-packs.mjs",
     "build": "tsc && vite build",
     "postinstall": "node scripts/sync-impeccable-skill.mjs && node scripts/ensure-electron.mjs",
+    "app-icon:sync": "node scripts/sync-app-icon.mjs && node scripts/brand-electron-win.mjs",
     "impeccable:sync": "node scripts/sync-impeccable-skill.mjs",
     "impeccable:update": "npx impeccable skills update && node scripts/sync-impeccable-skill.mjs",
     "impeccable:detect": "npx impeccable detect src/ index.html",
     "caveman:sync": "node scripts/sync-caveman-skill.mjs",
     "matt-pocock-skills:sync": "node scripts/sync-matt-pocock-skills.mjs",
+    "settings-registry:generate": "tsx scripts/generate-settings-registry.mjs",
     "matt-pocock-skills:update": "node scripts/sync-matt-pocock-skills.mjs",
     "test:skills": "tsx --test --test-force-exit test/skills-loader.test.ts test/skills/caveman-client.test.mts test/skills/partymode-client.test.mts test/skills/pinned-skill.test.mts test/skills-matt-pocock.test.mjs",
     "test:attachments": "node --test --test-force-exit test/attachments/*.test.mjs test/server/read-document.test.mjs && node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --import ./test/test-loader.mjs --test --test-force-exit test/workspace-ref.test.ts test/workspace-path-composer.test.mts test/attachments/code-ref.test.mts test/attachments/image-path.test.ts test/attachments/reader-routing.test.mts",
@@ -31,19 +33,22 @@
     "desktop": "npm run electron:dev",
     "electron:prod": "npm run build && npm run electron:build && cross-env MINNOW_ELECTRON=1 electron electron/dist/main.js",
     "package:clean": "node scripts/clean-release.mjs",
-    "prepackage": "node scripts/clean-release.mjs",
-    "prepackage:dir": "node scripts/clean-release.mjs",
+    "prepackage": "node scripts/clean-release.mjs && node scripts/validate-packaged-runtime-files.mjs",
+    "prepackage:dir": "node scripts/clean-release.mjs && node scripts/validate-packaged-runtime-files.mjs",
     "package": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs",
     "package:dir": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --dir",
+    "package:win": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --win",
+    "package:mac": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --mac",
     "start": "node server.js",
     "minnow:run": "node bin/minnow.mjs run",
-    "test": "node --test --test-force-exit test/config/*.test.js test/generations/*.test.mjs test/generations/*.test.js test/providers/*.test.js test/providers/*.test.mts test/api/*.test.mjs test/profiles/*.test.mjs test/prompts/*.test.js test/browser/*.test.js test/electron/*.test.mjs test/skills-impeccable.test.mjs test/skills-matt-pocock.test.mjs test/security/*.test.mjs test/memory/*.test.mjs test/network/*.test.mjs test/stt/*.test.mjs test/tts/*.test.mjs test/voice/*.test.mjs test/voice/*.test.mts test/compare/*.test.mjs test/lsp/*.test.mjs test/mcp/*.test.mjs test/research/*.test.mjs test/servers/*.test.mjs test/webhooks/*.test.mjs test/calendar/*.test.mjs test/email/*.test.mjs test/server/*.test.mjs test/models/*.test.mjs test/system/*.test.mjs test/system/*.test.js test/scheduler/*.test.mjs && node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --test --test-force-exit test/research/*.test.mts test/server/**/*.test.mjs test/workspace/*.test.js test/terminal/shell-profiles.test.mjs test/terminal/pty-protocol.test.mjs && node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --import ./test/test-loader.mjs --test --test-force-exit test/boot/*.test.mts test/sessions/*.test.mts test/state/*.test.mts test/api/models-load-unload.test.mts test/api/streaming-tool-name.test.mts test/file/*.test.mjs test/file/*.test.mts test/lib/*.test.mts test/ui-designer/**/*.test.mts test/ui/stream-status.test.mjs test/ui/tool-start-indicator.test.mjs test/ui/chat-item-dot.test.mjs test/ui/thinking-duration.test.mjs test/ui/messages-stream-row.test.mjs test/ui/empty-assistant-bubble.test.mjs test/ui/expert-lab-custom-expert.test.mjs test/ui/message-actions.test.mjs test/ui/voice-controls.test.mts test/chat/experts/*.test.mjs test/ui/composer-send.test.mjs test/ui/composer-steer.test.mjs test/ui/skill-picker.test.mts test/ui/composer-auto-resize.test.mjs test/ui/composer-stream-hint.test.mjs test/ui/sidebar-streaming-switch.test.mjs test/ui/settings-sections.test.mjs test/ui/settings-entity-editor.test.mjs test/ui/settings-servers-section.test.mts test/ui/prompt-diff-panel.test.mjs test/ui/settings-page-html.test.mjs test/ui/settings-search-index.test.mjs test/ui/settings-search-rank.test.mjs test/ui/settings-search-finder.test.mjs test/ui/settings-model-routing.test.mjs test/settings/model-routing-catalog.test.mts test/ui/benchmark-page-html.test.mjs test/ui/research-page-html.test.mjs test/ui/global-bugs-page.test.mjs test/ui/benchmark-suite-toggles.test.mts test/ui/research-synapse.test.mts test/ui/research-panel.test.mts test/ui/research-library.test.mts test/ui/memory-tags-parse.test.mjs test/models/*.test.mts test/benchmark/*.test.mts test/compare/*.test.mts test/os/compare-app.test.mts test/os/models-app.test.mts test/os/calendar-app.test.mts test/os/email-app.test.mts test/os/scheduler-app.test.mts test/ui/topbar-layout.test.mjs test/ui/model-state-dot.test.mts test/ui/model-select-picker.test.mts test/ui/theme-resolve.test.mts test/ui/thought-bubbles.test.mjs test/ui/chat-scroll.test.mjs test/ui/stats-split-layout.test.mjs test/ui/file-sidebar-toggle.test.mjs test/ui/workspace-recent-menu.test.mjs test/ui/welcome-page.test.mjs test/ui/sub-agent-cards.test.mts test/ui/editor-ai-completion-prompt.test.mts test/ui/editor-ai-completion-client.test.mts test/ui/editor-intent-mode/*.test.mts test/ui/file-editor-ai-keymap.test.mts test/ui/view-mode-toggle.test.mjs test/ui/orchestrate-board-live-update.test.mjs test/ui/orchestrate-plan-picker.test.mjs test/ui/orchestrate-board-onboarding.test.mjs test/ui/terminal-tabs.test.mjs test/ui/terminal-history-nav.test.mts test/prompts/*.test.mjs test/titles/*.test.mjs test/usage/*.test.mjs test/usage/code-change-ledger.test.mts test/usage/code-change-backfill.test.mts test/ui/tool-messages-code-change.test.mjs test/modes/*.test.mts test/experts/**/*.test.mjs test/work-agents/**/*.test.mjs test/sub-agents/**/*.test.mts test/tools/**/*.test.mts test/tools/tools-list-sync.test.mjs test/tools/fetch-web-content.test.mjs test/agents/pack-loader.test.mts test/agents/controller-heartbeat.test.mts test/agents/controller-watchdog.test.mts test/agents/controller-persistence.test.mts test/chat/*.test.mts test/chat/streaming-state.test.mjs test/chat/reef/*.test.mjs test/chat/reef/*.test.mts test/orchestrate/**/*.test.mts test/skills-loader.test.ts test/workspace-ref.test.ts && node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --import ./test/test-loader.mjs --test --test-force-exit test/headless/*.test.mts test/evals/*.test.mts && node --test --test-force-exit test/evals/eval-api.test.mjs",
-    "test:notifications": "node --test --test-force-exit test/notifications/prefs.test.mjs test/notifications/store.test.mjs test/notifications/preview.test.mjs test/notifications/app-for-chat.test.mjs && node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --import ./test/test-loader.mjs --test --test-force-exit test/notifications/producers-chat-turn.test.mjs test/notifications/producers-quarantine.test.mjs",
+    "test": "node --test --test-force-exit test/config/*.test.js test/generations/*.test.mjs test/generations/*.test.js test/providers/*.test.js test/providers/*.test.mts test/api/*.test.mjs test/profiles/*.test.mjs test/prompts/*.test.js test/browser/*.test.js test/electron/*.test.mjs test/skills-impeccable.test.mjs test/skills-matt-pocock.test.mjs test/security/*.test.mjs test/memory/*.test.mjs test/network/*.test.mjs test/stt/*.test.mjs test/tts/*.test.mjs test/voice/*.test.mjs test/voice/*.test.mts test/compare/*.test.mjs test/lsp/*.test.mjs test/mcp/*.test.mjs test/research/*.test.mjs test/servers/*.test.mjs test/webhooks/*.test.mjs test/calendar/*.test.mjs test/email/*.test.mjs test/server/*.test.mjs test/models/*.test.mjs test/system/*.test.mjs test/system/*.test.js test/scheduler/*.test.mjs && node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --test --test-force-exit test/research/*.test.mts test/server/**/*.test.mjs test/workspace/*.test.js test/terminal/shell-profiles.test.mjs test/terminal/pty-protocol.test.mjs && node ./node_modules/tsx/dist/cli.mjs --experimental-test-module-mocks --import ./test/test-loader.mjs --test --test-force-exit test/boot/*.test.mts test/sessions/*.test.mts test/state/*.test.mts test/api/models-load-unload.test.mts test/api/streaming-tool-name.test.mts test/file/*.test.mjs test/file/*.test.mts test/lib/*.test.mts test/ui-designer/**/*.test.mts test/ui/stream-status.test.mjs test/ui/tool-start-indicator.test.mjs test/ui/chat-item-dot.test.mjs test/ui/thinking-duration.test.mjs test/ui/messages-stream-row.test.mjs test/ui/empty-assistant-bubble.test.mjs test/ui/expert-lab-custom-expert.test.mjs test/ui/message-actions.test.mjs test/ui/voice-controls.test.mts test/chat/experts/*.test.mjs test/ui/composer-send.test.mjs test/ui/composer-steer.test.mjs test/ui/skill-picker.test.mts test/ui/composer-auto-resize.test.mjs test/ui/composer-stream-hint.test.mjs test/ui/sidebar-streaming-switch.test.mjs test/ui/settings-sections.test.mjs test/ui/settings-entity-editor.test.mjs test/ui/settings-servers-section.test.mts test/ui/prompt-diff-panel.test.mjs test/ui/settings-page-html.test.mjs test/ui/settings-search-index.test.mjs test/ui/settings-search-rank.test.mjs test/ui/settings-search-finder.test.mjs test/ui/settings-model-routing.test.mjs test/settings/model-routing-catalog.test.mts test/ui/benchmark-page-html.test.mjs test/ui/research-page-html.test.mjs test/ui/global-bugs-page.test.mjs test/ui/benchmark-suite-toggles.test.mts test/ui/research-synapse.test.mts test/ui/research-panel.test.mts test/ui/research-library.test.mts test/ui/memory-tags-parse.test.mjs test/models/*.test.mts test/benchmark/*.test.mts test/compare/*.test.mts test/os/compare-app.test.mts test/os/models-app.test.mts test/os/calendar-app.test.mts test/os/email-app.test.mts test/os/scheduler-app.test.mts test/ui/topbar-layout.test.mjs test/ui/model-state-dot.test.mts test/ui/model-select-picker.test.mts test/ui/theme-resolve.test.mts test/ui/thought-bubbles.test.mjs test/ui/chat-scroll.test.mjs test/ui/stats-split-layout.test.mjs test/ui/file-sidebar-toggle.test.mjs test/ui/workspace-recent-menu.test.mjs test/ui/welcome-page.test.mjs test/ui/sub-agent-cards.test.mts test/ui/editor-ai-completion-prompt.test.mts test/ui/editor-ai-completion-client.test.mts test/ui/editor-intent-mode/*.test.mts test/ui/file-editor-ai-keymap.test.mts test/ui/view-mode-toggle.test.mjs test/ui/orchestrate-board-live-update.test.mjs test/ui/orchestrate-plan-picker.test.mjs test/ui/orchestrate-board-onboarding.test.mjs test/ui/terminal-tabs.test.mjs test/ui/terminal-history-nav.test.mts test/prompts/*.test.mjs test/titles/*.test.mjs test/usage/*.test.mjs test/usage/code-change-ledger.test.mts test/usage/code-change-backfill.test.mts test/ui/tool-messages-code-change.test.mjs test/modes/*.test.mts test/experts/**/*.test.mjs test/work-agents/**/*.test.mjs test/sub-agents/**/*.test.mts test/tools/**/*.test.mts test/tools/tools-list-sync.test.mjs test/tools/fetch-web-content.test.mjs test/agents/pack-loader.test.mts test/agents/controller-heartbeat.test.mts test/agents/controller-watchdog.test.mts test/agents/controller-persistence.test.mts test/chat/*.test.mts test/chat/streaming-state.test.mjs test/chat/reef/*.test.mjs test/chat/reef/*.test.mts test/orchestrate/**/*.test.mts test/skills-loader.test.ts test/workspace-ref.test.ts && node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --import ./test/test-loader.mjs --test --test-force-exit test/headless/*.test.mts test/evals/*.test.mts && node --test --test-force-exit test/evals/eval-api.test.mjs",
+    "test:notifications": "node --test --test-force-exit test/notifications/prefs.test.mjs test/notifications/push.test.mjs test/notifications/store.test.mjs test/notifications/preview.test.mjs test/notifications/app-for-chat.test.mjs && node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --import ./test/test-loader.mjs --test --test-force-exit test/notifications/sound.test.mjs test/notifications/producers-chat-turn.test.mjs test/notifications/producers-quarantine.test.mjs",
     "test:calendar": "node --test --test-force-exit test/calendar/*.test.mjs && node --import tsx --test --test-force-exit test/os/calendar-app.test.mts",
     "test:email": "node --test --test-force-exit test/email/*.test.mjs && node --import tsx --test --test-force-exit test/os/email-app.test.mts",
     "test:terminal-pty": "node test/terminal/pty-session.test.mjs",
     "test:memory": "node --test --test-force-exit test/memory/*.test.mjs",
     "test:brain": "node --test --test-force-exit test/brain/*.test.mjs test/brain/code/*.test.mjs",
+    "test:settings": "node --import tsx --test --test-force-exit test/settings/*.test.mjs",
     "test:engine": "node --test --test-force-exit test/engine/*.test.mjs",
     "test:lsp": "node --test --test-force-exit test/lsp/*.test.mjs",
     "test:mcp": "node --test --test-force-exit test/mcp/*.test.mjs",
@@ -107,7 +112,6 @@
     "diff": "^9.0.0",
     "dockerfile-language-server-nodejs": "^0.14.0",
     "dompurify": "^3.1.6",
-    "electron": "^42.3.0",
     "graphql-language-service-cli": "^3.3.0",
     "highlight.js": "^11.10.0",
     "imapflow": "^1.4.0",
@@ -141,10 +145,13 @@
     "@types/node": "^22.10.0",
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
+    "electron": "^42.3.0",
     "electron-builder": "^26.8.1",
     "happy-dom": "^20.9.0",
     "hyparquet": "^1.26.0",
     "impeccable": "^3.1.0",
+    "png-to-ico": "^3.0.1",
+    "rcedit": "^5.0.2",
     "tsx": "^4.19.2",
     "vite": "^6.2.5",
     "wait-on": "^8.0.1"
@@ -165,10 +172,22 @@
       "dist/**",
       "electron/dist/**",
       "server/**",
+      "src/skills/**",
+      "src/chat/prompts/**",
+      "src/chat/reef/**",
+      "src/lsp/**",
+      "src/lib/**",
+      "src/attachments/document-extensions.mjs",
+      "src/evals/packs/**",
+      "build/icon.ico",
+      "public/logos/minnow-logo/minnow/png/minnow-1024.png",
       "scripts/generate-skills-manifest.mjs",
       "package.json",
       "skills-lock.json",
-      "!**/*.map"
+      "!**/*.map",
+      "!src/**/*.ts",
+      "!src/**/*.tsx",
+      "!src/**/*.css"
     ],
     "asarUnpack": [
       "node_modules/@lydell/node-pty/**"
@@ -183,8 +202,22 @@
       "target": "nsis",
       "icon": "build/icon.ico"
     },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "public/logos/minnow-logo/minnow/png/minnow-1024.png",
+      "category": "public.app-category.developer-tools",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "dmg": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
     "nsis": {
-      "artifactName": "${productName}-Setup-${version}.${ext}"
+      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
     }
   }
 }

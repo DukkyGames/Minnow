@@ -7,6 +7,7 @@ import { normalizeWorkspacePath } from '../lib/normalize-workspace-path.ts';
 import type { ToolExecutionResult } from '../types.ts';
 import { extractPathLikeArgs, normalizePathArg } from './path-args.ts';
 import { loadToolConfig } from './config.ts';
+import { getCachePolicyForTool, type ToolCachePolicy } from './tool-cache-policy.ts';
 
 /** Minimal executeTool context for cache scoping (avoids circular import with client.ts). */
 export interface ToolCacheContext {
@@ -39,10 +40,7 @@ const MAX_ENTRIES_PER_SCOPE = 500;
 /** Separator between tool name and serialized args in cache keys. */
 const CACHE_KEY_SEP = '\0';
 
-type CachePolicy = {
-  cacheable: boolean;
-  ttlMs: number;
-};
+type CachePolicy = ToolCachePolicy;
 
 type CacheEntry = {
   result: ToolExecutionResult;
@@ -129,29 +127,6 @@ const INVALIDATION_MAP: Record<string, InvalidationRule> = {
   },
 };
 
-/** Per-tool cache policy (v1 constants; invalidation-primary for filesystem reads). */
-const CACHE_POLICY: Record<string, CachePolicy> = {
-  read_file: { cacheable: true, ttlMs: 0 },
-  read_file_range: { cacheable: true, ttlMs: 0 },
-  list_directory: { cacheable: true, ttlMs: 0 },
-  search_in_file: { cacheable: true, ttlMs: 0 },
-  grep: { cacheable: true, ttlMs: 0 },
-  get_file_metadata: { cacheable: true, ttlMs: 0 },
-  find_files: { cacheable: true, ttlMs: 0 },
-  git_status: { cacheable: true, ttlMs: 0 },
-  git_diff: { cacheable: true, ttlMs: 0 },
-  git_log: { cacheable: true, ttlMs: 0 },
-  get_lsp_diagnostics: { cacheable: true, ttlMs: 30_000 },
-  list_lsp_servers: { cacheable: true, ttlMs: 60_000 },
-  load_impeccable_context: { cacheable: true, ttlMs: 300_000 },
-  web_search: { cacheable: true, ttlMs: 120_000 },
-  web_search_ddg: { cacheable: true, ttlMs: 120_000 },
-  web_search_tavily: { cacheable: true, ttlMs: 120_000 },
-  fetch_web_content: { cacheable: true, ttlMs: 120_000 },
-  rag_web_content: { cacheable: true, ttlMs: 120_000 },
-  read_document: { cacheable: true, ttlMs: 0 },
-};
-
 const scopeStores = new Map<string, Map<string, CacheEntry>>();
 
 let cacheNowMs = 0;
@@ -177,15 +152,9 @@ export function isToolCacheEnabled(): boolean {
   return config.toolCache?.enabled !== false;
 }
 
-/** Resolve cache policy for a built-in tool name. */
-export function getCachePolicyForTool(name: string): CachePolicy {
-  if (name.startsWith('mcp__') || name.startsWith('plugin__')) {
-    return DEFAULT_CACHE_POLICY;
-  }
-  return CACHE_POLICY[name] ?? DEFAULT_CACHE_POLICY;
-}
+export { getCachePolicyForTool } from './tool-cache-policy.ts';
 
-/** True when tool output should not be stored. */
+/** Whether session tool caching is enabled in settings (default on). */
 export function isErrorToolResult(result: ToolExecutionResult): boolean {
   const text = typeof result.content === 'string' ? result.content : '';
   return text.startsWith('Error:');

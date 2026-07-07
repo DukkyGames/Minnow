@@ -6,7 +6,10 @@ import type { ToolDefinition } from '../../tools/definitions';
 import { getMode } from './registry';
 import type { ModeId, ToolPolicyAction } from './types';
 
-const BUG_BOARD_TOOL_IDS = new Set(['bug_add', 'bug_update', 'bug_get_state']);
+/** MCP and native plugin tools are user-configured outside the built-in group matrix. */
+export function isExternalDynamicTool(toolName: string): boolean {
+  return toolName.startsWith('mcp__') || toolName.startsWith('plugin__');
+}
 
 /**
  * Resolve effective policy for a tool name (function name === tool id).
@@ -16,7 +19,6 @@ function effectiveAction(
   modeId: ModeId,
   toolName: string,
 ): ToolPolicyAction {
-  if (BUG_BOARD_TOOL_IDS.has(toolName)) return 'allow';
   const policy = getMode(modeId).toolPolicy;
   const explicit = policy.tools?.[toolName];
   const action = explicit ?? policy.default;
@@ -39,11 +41,12 @@ export function filterToolsByMode(
 
 /**
  * Whether a tool function name may be sent to the model for this mode.
- * MCP and plugin tools use the same policy map as built-ins.
+ * MCP/plugin tools bypass the built-in group matrix; user Settings gate them instead.
  */
 export function isToolAllowedForMode(
   modeId: ModeId,
   toolName: string,
 ): boolean {
+  if (isExternalDynamicTool(toolName)) return true;
   return effectiveAction(modeId, toolName) === 'allow';
 }

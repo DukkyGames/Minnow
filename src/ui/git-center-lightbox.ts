@@ -17,6 +17,7 @@ import {
   createGitOperationsPanel,
   type GitOperationsPanelHandle,
 } from './git-operations-panel';
+import { confirmDirtyCheckout } from './git-checkout-confirm';
 import {
   gitBranches,
   gitCheckout,
@@ -41,6 +42,7 @@ import {
   openStashPushDialog,
 } from './git-advanced-actions';
 import { filterUserFacingBranches } from '../lib/worktree-list-parse';
+import { decorateGitSourceControlButton } from './git-source-control-icons';
 
 const OVERLAY_ID = 'gitCenterLightboxOverlay';
 const DIALOG_ID = 'gitCenterLightbox';
@@ -79,9 +81,9 @@ function createIconBtn(label: string, title: string): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'git-center-toolbar-btn';
-  btn.textContent = label;
   btn.title = title;
   btn.setAttribute('aria-label', title);
+  decorateGitSourceControlButton(btn, label);
   return btn;
 }
 
@@ -183,17 +185,7 @@ async function handleNodeSelect(node: TopologyNode): Promise<void> {
 async function handleNodeDoubleClick(node: TopologyNode): Promise<void> {
   if (node.kind === 'branch' && node.branch) {
     const cwd = getEffectiveCwd();
-    const status = await import('../state/git-api').then((m) => m.gitStatus(cwd));
-    if (status.ok) {
-      const dirty =
-        (status.staged?.length ?? 0) +
-          (status.unstaged?.length ?? 0) +
-          (status.untracked?.length ?? 0) >
-        0;
-      if (dirty && !window.confirm('Working tree has uncommitted changes. Checkout anyway?')) {
-        return;
-      }
-    }
+    if (!(await confirmDirtyCheckout(cwd))) return;
     await runToolbarOp(
       () => gitCheckout({ branch: node.branch!, cwd }),
       `Switched to ${node.branch}`,
@@ -489,6 +481,7 @@ export async function openGitCenterLightbox(): Promise<void> {
       getPanelCwd: () => panelCwd,
       onAfterGitOp: () => void refreshAll(),
       initialTab: 'changes',
+      conflictHost,
     });
   }
 

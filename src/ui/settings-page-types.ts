@@ -35,6 +35,7 @@ export type SettingsSectionId =
   | 'model-routing'
   | 'sampler'
   | 'thinking'
+  | 'agent-center'
   | 'prompting'
   | 'rules'
   | 'modes'
@@ -65,6 +66,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   'model-routing': 'Routing',
   sampler: 'Sampler',
   thinking: 'Thinking',
+  'agent-center': 'Agents',
   prompting: 'Prompts',
   rules: 'Rules',
   modes: 'Modes',
@@ -88,7 +90,6 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
 
 export type SettingsNavGroupId =
   | 'app'
-  | 'prompting'
   | 'agents'
   | 'integrations'
   | 'advanced';
@@ -103,19 +104,13 @@ export type SettingsNavGroup = {
 export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   { id: 'app', label: 'App', sections: ['general', 'appearance', 'audio'] },
   {
-    id: 'prompting',
-    label: 'Prompting & memory',
-    sections: ['prompting', 'rules'],
-  },
-  {
     id: 'agents',
     label: 'Agents',
     sections: [
-      'modes',
+      'agent-center',
+      'rules',
       'experts',
-      'work-agents',
       'agent-packs',
-      'sub-agents',
       'autopilot',
     ],
   },

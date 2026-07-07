@@ -36,6 +36,8 @@ const liveTabs = new Map<string, TerminalTabSession>();
 let tabsInitialized = false;
 let onActiveTabChange: ((tabId: string, kind: TerminalTabKind) => void) | null =
   null;
+/** When true, the Agent tab shows a pulse dot (agent command running off-tab). */
+let agentTabActivityBadge = false;
 
 export function isAgentTabId(tabId: string): boolean {
   return tabId === AGENT_TAB_ID;
@@ -59,6 +61,24 @@ export function setTerminalTabChangeHandler(
   handler: (tabId: string, kind: TerminalTabKind) => void,
 ): void {
   onActiveTabChange = handler;
+}
+
+function syncAgentTabActivityBadge(): void {
+  const btn = tabBarEl?.querySelector<HTMLButtonElement>('.terminal-tab--agent');
+  if (!btn) return;
+  btn.classList.toggle('terminal-tab--agent-run', agentTabActivityBadge);
+  btn.setAttribute(
+    'title',
+    agentTabActivityBadge
+      ? 'Agent command running — click to view output'
+      : 'Agent command output',
+  );
+}
+
+/** Show or hide the activity dot on the Agent tab (MIN-242). */
+export function setAgentTabActivityBadge(active: boolean): void {
+  agentTabActivityBadge = active;
+  syncAgentTabActivityBadge();
 }
 
 function notifyActiveTabChange(tabId: string): void {
@@ -181,6 +201,7 @@ function renderTabBar(activeId: string | null): void {
 
   tabBarEl.appendChild(list);
   tabBarEl.appendChild(addBtn);
+  syncAgentTabActivityBadge();
 }
 
 function fillShellSelect(): void {

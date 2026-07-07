@@ -1,0 +1,3679 @@
+[
+  {
+    "key": "general.notifications",
+    "label": "Notifications",
+    "description": "Menubar bell when background chats, tasks, or jobs need attention.",
+    "keywords": [
+      "bell",
+      "alert",
+      "sound",
+      "menubar"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
+    "key": "general.notifications.enabled",
+    "label": "Enable notifications",
+    "keywords": [
+      "master toggle",
+      "bell"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "browser",
+    "path": "enabled",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
+    "key": "general.notifications.chat",
+    "label": "Chat notifications",
+    "category": "general",
+    "area": "general",
+    "storage": "browser",
+    "path": "chatEnabled",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
+    "key": "general.notifications.tasks",
+    "label": "Task notifications",
+    "keywords": [
+      "orchestrate",
+      "sub-agent"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "browser",
+    "path": "tasksEnabled",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
+    "key": "general.notifications.background",
+    "label": "Background job notifications",
+    "keywords": [
+      "scheduler",
+      "research",
+      "synthesis"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "browser",
+    "path": "backgroundEnabled",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
+    "key": "general.notifications.sound",
+    "label": "Notification sounds",
+    "category": "general",
+    "area": "general",
+    "storage": "browser",
+    "path": "soundEnabled",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
+    "key": "general.network",
+    "label": "Network access",
+    "description": "Let other devices on your Wi-Fi open Minnow in a browser while this PC runs npm start.",
+    "keywords": [
+      "lan",
+      "wifi",
+      "local network",
+      "remote",
+      "phone",
+      "tablet",
+      "0.0.0.0"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "meta",
+    "path": "server.networkAccess",
+    "type": "enum",
+    "allowedValues": [
+      "local",
+      "lan"
+    ],
+    "sensitivity": "dangerous",
+    "writable": true,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
+    "key": "general.chat.terminal.autoOpenOnAgentRun",
+    "label": "Open terminal on agent command",
+    "description": "Raise the console panel when an agent starts execute_command.",
+    "keywords": [
+      "shell",
+      "background command",
+      "auto open",
+      "terminal"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "meta",
+    "path": "terminal.autoOpenOnAgentRun",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
+    "key": "general.chat.terminal.autoFollowAgentTab",
+    "label": "Follow agent commands in terminal",
+    "description": "Switch to the Agent tab when an agent starts a shell command while the console is open.",
+    "keywords": [
+      "shell",
+      "auto follow",
+      "agent tab",
+      "terminal"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "meta",
+    "path": "terminal.autoFollowAgentTab",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
+    "key": "general.toolCalls.constrained",
+    "label": "Constrained tool calls",
+    "description": "Validate tool arguments with JSON Schema when the provider supports structured output.",
+    "keywords": [
+      "json schema",
+      "structured output"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "meta",
+    "path": "toolCalls.useConstrainedDecoding",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "general",
+      "tools"
+    ]
+  },
+  {
+    "key": "general.generation.timeout",
+    "label": "Generation timeout",
+    "category": "general",
+    "area": "general",
+    "storage": "meta",
+    "path": "chat.generationIdleTimeoutMs",
+    "type": "number",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "general.generation.maxTurns",
+    "label": "Max tool turns",
+    "category": "general",
+    "area": "general",
+    "storage": "meta",
+    "path": "chat.maxToolTurns",
+    "type": "number",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "audio.devices",
+    "label": "Audio devices",
+    "keywords": [
+      "microphone",
+      "speaker",
+      "input",
+      "output"
+    ],
+    "category": "general",
+    "area": "audio",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "audio"
+    ]
+  },
+  {
+    "key": "audio.inputDevice",
+    "label": "Input device",
+    "keywords": [
+      "microphone",
+      "mic"
+    ],
+    "category": "general",
+    "area": "audio",
+    "storage": "meta",
+    "path": "voice.audio.inputDeviceId",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "audio"
+    ]
+  },
+  {
+    "key": "audio.outputDevice",
+    "label": "Output device",
+    "keywords": [
+      "speaker",
+      "sink"
+    ],
+    "category": "general",
+    "area": "audio",
+    "storage": "meta",
+    "path": "voice.audio.outputDeviceId",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "audio"
+    ]
+  },
+  {
+    "key": "audio.echoCancellation",
+    "label": "Echo cancellation",
+    "category": "general",
+    "area": "audio",
+    "storage": "meta",
+    "path": "voice.audio.echoCancellation",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "audio"
+    ]
+  },
+  {
+    "key": "audio.noiseSuppression",
+    "label": "Noise suppression",
+    "category": "general",
+    "area": "audio",
+    "storage": "meta",
+    "path": "voice.audio.noiseSuppression",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "audio"
+    ]
+  },
+  {
+    "key": "audio.autoGainControl",
+    "label": "Auto gain control",
+    "category": "general",
+    "area": "audio",
+    "storage": "meta",
+    "path": "voice.audio.autoGainControl",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "audio"
+    ]
+  },
+  {
+    "key": "appearance.theme",
+    "label": "Theme presets",
+    "keywords": [
+      "color",
+      "dark",
+      "light",
+      "sage",
+      "palette"
+    ],
+    "category": "appearance",
+    "area": "appearance",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "appearance"
+    ]
+  },
+  {
+    "key": "appearance.theme.family",
+    "label": "Theme family",
+    "category": "appearance",
+    "area": "appearance",
+    "storage": "browser",
+    "path": "themeFamily",
+    "type": "enum",
+    "allowedValues": [
+      "sage",
+      "amber",
+      "cyan",
+      "coral"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "appearance"
+    ]
+  },
+  {
+    "key": "appearance.theme.mode",
+    "label": "Theme mode",
+    "keywords": [
+      "dark mode",
+      "light mode",
+      "follow system"
+    ],
+    "category": "appearance",
+    "area": "appearance",
+    "storage": "browser",
+    "path": "themeMode",
+    "type": "enum",
+    "allowedValues": [
+      "dark",
+      "light",
+      "system"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "appearance"
+    ]
+  },
+  {
+    "key": "appearance.wallpaper",
+    "label": "Desktop wallpaper",
+    "keywords": [
+      "background",
+      "desktop"
+    ],
+    "category": "appearance",
+    "area": "appearance",
+    "storage": "browser",
+    "path": "wallpaper",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "appearance"
+    ]
+  },
+  {
+    "key": "appearance.fonts",
+    "label": "Fonts",
+    "keywords": [
+      "typography",
+      "mono",
+      "ui font"
+    ],
+    "category": "appearance",
+    "area": "appearance",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "appearance"
+    ]
+  },
+  {
+    "key": "appearance.customColors",
+    "label": "Custom colors",
+    "keywords": [
+      "tokens",
+      "override"
+    ],
+    "category": "appearance",
+    "area": "appearance",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "appearance"
+    ]
+  },
+  {
+    "key": "models.providers",
+    "label": "Providers",
+    "keywords": [
+      "api",
+      "lm studio",
+      "openai",
+      "backend"
+    ],
+    "category": "models",
+    "area": "providers",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "providers"
+    ]
+  },
+  {
+    "key": "models.providers.add",
+    "label": "Add provider",
+    "category": "models",
+    "area": "providers",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "providers"
+    ]
+  },
+  {
+    "key": "models.routing",
+    "label": "Model routing",
+    "keywords": [
+      "bindings",
+      "roles",
+      "default model",
+      "goal evaluator",
+      "goal-eval"
+    ],
+    "category": "models",
+    "area": "model-routing",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "model-routing"
+    ]
+  },
+  {
+    "key": "models.routing.goalEval",
+    "label": "Goal evaluator",
+    "description": "Model for /goal loop evaluation after each turn.",
+    "keywords": [
+      "goal",
+      "/goal",
+      "evaluator",
+      "completion judge"
+    ],
+    "category": "models",
+    "area": "model-routing",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "model-routing"
+    ]
+  },
+  {
+    "key": "models.sampler",
+    "label": "Sampler defaults",
+    "keywords": [
+      "temperature",
+      "top p",
+      "penalties"
+    ],
+    "category": "models",
+    "area": "sampler",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "sampler"
+    ]
+  },
+  {
+    "key": "models.sampler.temperature",
+    "label": "Temperature",
+    "category": "models",
+    "area": "sampler",
+    "storage": "meta",
+    "path": "sampler.temperature",
+    "type": "number",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "sampler"
+    ]
+  },
+  {
+    "key": "models.sampler.topP",
+    "label": "Top P",
+    "category": "models",
+    "area": "sampler",
+    "storage": "meta",
+    "path": "sampler.topP",
+    "type": "number",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "sampler"
+    ]
+  },
+  {
+    "key": "models.sampler.topK",
+    "label": "Top K",
+    "category": "models",
+    "area": "sampler",
+    "storage": "meta",
+    "path": "sampler.topK",
+    "type": "number",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "sampler"
+    ]
+  },
+  {
+    "key": "models.sampler.minP",
+    "label": "Min P",
+    "category": "models",
+    "area": "sampler",
+    "storage": "meta",
+    "path": "sampler.minP",
+    "type": "number",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "sampler"
+    ]
+  },
+  {
+    "key": "models.sampler.repetitionPenalty",
+    "label": "Repeat penalty",
+    "category": "models",
+    "area": "sampler",
+    "storage": "meta",
+    "path": "sampler.repetitionPenalty",
+    "type": "number",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "sampler"
+    ]
+  },
+  {
+    "key": "models.sampler.presencePenalty",
+    "label": "Presence penalty",
+    "category": "models",
+    "area": "sampler",
+    "storage": "meta",
+    "path": "sampler.presencePenalty",
+    "type": "number",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "sampler"
+    ]
+  },
+  {
+    "key": "models.sampler.maxTokens",
+    "label": "Max tokens",
+    "category": "models",
+    "area": "sampler",
+    "storage": "meta",
+    "path": "sampler.maxTokens",
+    "type": "number",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "sampler"
+    ]
+  },
+  {
+    "key": "models.thinking",
+    "label": "Thinking defaults",
+    "keywords": [
+      "reasoning",
+      "chain of thought"
+    ],
+    "category": "models",
+    "area": "thinking",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "thinking"
+    ]
+  },
+  {
+    "key": "models.usage",
+    "label": "Usage & cost",
+    "keywords": [
+      "tokens",
+      "billing",
+      "inference"
+    ],
+    "category": "models",
+    "area": "usage",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "usage"
+    ]
+  },
+  {
+    "key": "agents.center",
+    "label": "Agents center",
+    "keywords": [
+      "modes",
+      "work agents",
+      "sub-agents",
+      "prompts",
+      "routing"
+    ],
+    "category": "agents",
+    "area": "agent-center",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "agent-center"
+    ]
+  },
+  {
+    "key": "agents.modes",
+    "label": "Composer modes",
+    "category": "agents",
+    "area": "agent-center",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "agent-center"
+    ]
+  },
+  {
+    "key": "agents.experts",
+    "label": "Experts",
+    "keywords": [
+      "persona",
+      "specialist"
+    ],
+    "category": "agents",
+    "area": "experts",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "experts"
+    ]
+  },
+  {
+    "key": "agents.workAgents",
+    "label": "Work agents",
+    "category": "agents",
+    "area": "agent-center",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "agent-center"
+    ]
+  },
+  {
+    "key": "agents.agentPacks",
+    "label": "Agent packs",
+    "category": "agents",
+    "area": "agent-packs",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "agent-packs"
+    ]
+  },
+  {
+    "key": "agents.subAgents",
+    "label": "Sub-agents",
+    "keywords": [
+      "spawn",
+      "subagent"
+    ],
+    "category": "agents",
+    "area": "agent-center",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "agent-center"
+    ]
+  },
+  {
+    "key": "agents.subAgents.maxTurns",
+    "label": "Sub-agent max tool turns",
+    "category": "agents",
+    "area": "agent-center",
+    "storage": "resource",
+    "path": "maxToolTurns",
+    "resource": "sub-agents",
+    "type": "number",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "agent-center",
+      "tools"
+    ]
+  },
+  {
+    "key": "agents.autopilot",
+    "label": "Orchestrator autopilot",
+    "description": "Global defaults for orchestrate board execution, testing, and heartbeat.",
+    "keywords": [
+      "orchestrate",
+      "board",
+      "autopilot",
+      "concurrency",
+      "isolation"
+    ],
+    "category": "agents",
+    "area": "autopilot",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "autopilot"
+    ]
+  },
+  {
+    "key": "agents.autopilot.executionMode",
+    "label": "Default execution mode",
+    "category": "agents",
+    "area": "autopilot",
+    "storage": "meta",
+    "path": "autopilot.defaultExecutionMode",
+    "type": "enum",
+    "allowedValues": [
+      "manual",
+      "sequential",
+      "auto",
+      "afk"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "autopilot"
+    ]
+  },
+  {
+    "key": "agents.autopilot.isolation",
+    "label": "Default isolation mode",
+    "category": "agents",
+    "area": "autopilot",
+    "storage": "meta",
+    "path": "autopilot.defaultIsolationMode",
+    "type": "enum",
+    "allowedValues": [
+      "auto",
+      "off",
+      "per-task",
+      "per-wave"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "autopilot"
+    ]
+  },
+  {
+    "key": "agents.autopilot.concurrency",
+    "label": "Max concurrent tasks",
+    "category": "agents",
+    "area": "autopilot",
+    "storage": "meta",
+    "path": "autopilot.maxConcurrentTasks",
+    "type": "number",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "autopilot"
+    ]
+  },
+  {
+    "key": "agents.autopilot.plannerModel",
+    "label": "Default planner model",
+    "category": "agents",
+    "area": "autopilot",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "autopilot"
+    ]
+  },
+  {
+    "key": "agents.autopilot.selfHeal",
+    "label": "Self-heal & provisioning",
+    "description": "Configure AFK self-heal rounds, infra provisioning, and worktree cd-guard.",
+    "keywords": [
+      "self-heal",
+      "provision",
+      "quarantine",
+      "infra",
+      "worktree",
+      "stall"
+    ],
+    "category": "agents",
+    "area": "autopilot",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "autopilot"
+    ]
+  },
+  {
+    "key": "agents.autopilot.selfHealMaxRounds",
+    "label": "Max self-heal rounds",
+    "keywords": [
+      "self-heal",
+      "rounds",
+      "quarantine"
+    ],
+    "category": "agents",
+    "area": "autopilot",
+    "storage": "meta",
+    "path": "autopilot.selfHealMaxRounds",
+    "type": "number",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "autopilot"
+    ]
+  },
+  {
+    "key": "agents.autopilot.infraProvisionTimeout",
+    "label": "Infra provision timeout",
+    "keywords": [
+      "infra",
+      "provision",
+      "timeout"
+    ],
+    "category": "agents",
+    "area": "autopilot",
+    "storage": "meta",
+    "path": "autopilot.infraProvisionTimeoutMs",
+    "type": "number",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "autopilot"
+    ]
+  },
+  {
+    "key": "agents.autopilot.autoProvisionInfra",
+    "label": "Auto-provision infra",
+    "keywords": [
+      "provision",
+      "infra",
+      "docker"
+    ],
+    "category": "agents",
+    "area": "autopilot",
+    "storage": "meta",
+    "path": "autopilot.autoProvisionInfra",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "autopilot"
+    ]
+  },
+  {
+    "key": "agents.autopilot.afkAutoRestartStalls",
+    "label": "Auto-restart stalled tasks",
+    "keywords": [
+      "stall",
+      "restart",
+      "quarantine",
+      "afk"
+    ],
+    "category": "agents",
+    "area": "autopilot",
+    "storage": "meta",
+    "path": "autopilot.afkAutoRestartStalls",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "autopilot"
+    ]
+  },
+  {
+    "key": "agents.autopilot.guardCdOutsideWorktree",
+    "label": "Guard cd outside worktree",
+    "keywords": [
+      "worktree",
+      "cd",
+      "guard",
+      "isolation"
+    ],
+    "category": "agents",
+    "area": "autopilot",
+    "storage": "meta",
+    "path": "autopilot.guardCdOutsideWorktree",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "autopilot"
+    ]
+  },
+  {
+    "key": "agents.prompting",
+    "label": "Prompt profiles",
+    "keywords": [
+      "prompt",
+      "system prompt",
+      "full",
+      "lite",
+      "custom"
+    ],
+    "category": "agents",
+    "area": "agent-center",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "agent-center"
+    ]
+  },
+  {
+    "key": "agents.prompting.profiles",
+    "label": "Setup profiles",
+    "keywords": [
+      "bundle",
+      "export",
+      "import"
+    ],
+    "category": "agents",
+    "area": "agent-center",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "agent-center"
+    ]
+  },
+  {
+    "key": "agents.prompting.hub",
+    "label": "Agent cards",
+    "category": "agents",
+    "area": "agent-center",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "agent-center"
+    ]
+  },
+  {
+    "key": "agents.rules",
+    "label": "User rules",
+    "keywords": [
+      "cursor rules",
+      "instructions"
+    ],
+    "category": "agents",
+    "area": "rules",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "rules"
+    ]
+  },
+  {
+    "key": "agents.rules.enabled",
+    "label": "Enable user rules",
+    "category": "agents",
+    "area": "rules",
+    "storage": "resource",
+    "path": "enabled",
+    "resource": "rules",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "rules"
+    ]
+  },
+  {
+    "key": "agents.rules.text",
+    "label": "Rules text",
+    "category": "agents",
+    "area": "rules",
+    "storage": "resource",
+    "path": "text",
+    "resource": "rules",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "rules"
+    ]
+  },
+  {
+    "key": "integrations.search",
+    "label": "Web search provider",
+    "keywords": [
+      "brave",
+      "tavily",
+      "duckduckgo",
+      "searxng",
+      "web research"
+    ],
+    "category": "integrations",
+    "area": "search",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "search"
+    ]
+  },
+  {
+    "key": "integrations.search.provider",
+    "label": "Search provider",
+    "category": "integrations",
+    "area": "search",
+    "storage": "resource",
+    "path": "provider",
+    "resource": "search",
+    "type": "enum",
+    "allowedValues": [
+      "searxng",
+      "tavily",
+      "brave",
+      "duckduckgo",
+      "disabled"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "search"
+    ]
+  },
+  {
+    "key": "integrations.search.apiKeys",
+    "label": "Search API keys",
+    "category": "integrations",
+    "area": "search",
+    "storage": "resource",
+    "path": "keys",
+    "resource": "search",
+    "type": "json",
+    "sensitivity": "secret",
+    "writable": true,
+    "refreshAreas": [
+      "search"
+    ]
+  },
+  {
+    "key": "integrations.deepResearch",
+    "label": "Deep Research",
+    "keywords": [
+      "research engine",
+      "iterresearch"
+    ],
+    "category": "integrations",
+    "area": "deep-research",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "deep-research"
+    ]
+  },
+  {
+    "key": "integrations.servers",
+    "label": "Managed servers",
+    "keywords": [
+      "searxng",
+      "local search"
+    ],
+    "category": "integrations",
+    "area": "servers",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "servers"
+    ]
+  },
+  {
+    "key": "integrations.tools",
+    "label": "Tool permissions",
+    "keywords": [
+      "allow",
+      "deny",
+      "security"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.cache",
+    "label": "Tool result cache",
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "path": "toolCache.enabled",
+    "resource": "tools",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.mcp",
+    "label": "MCP servers",
+    "keywords": [
+      "model context protocol",
+      "dev stack"
+    ],
+    "category": "integrations",
+    "area": "mcp",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "mcp"
+    ]
+  },
+  {
+    "key": "integrations.lsp",
+    "label": "Language servers",
+    "keywords": [
+      "diagnostics",
+      "typescript",
+      "dev stack"
+    ],
+    "category": "integrations",
+    "area": "lsp",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "lsp"
+    ]
+  },
+  {
+    "key": "integrations.editor",
+    "label": "Editor copilot",
+    "keywords": [
+      "ghost text",
+      "inline completion",
+      "dev stack"
+    ],
+    "category": "integrations",
+    "area": "editor",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "editor"
+    ]
+  },
+  {
+    "key": "integrations.skills",
+    "label": "Skills",
+    "keywords": [
+      "slash command",
+      "skill pack"
+    ],
+    "category": "integrations",
+    "area": "skills",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "skills"
+    ]
+  },
+  {
+    "key": "integrations.webhooks",
+    "label": "Webhooks",
+    "keywords": [
+      "hmac",
+      "outgoing events"
+    ],
+    "category": "integrations",
+    "area": "webhooks",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "webhooks"
+    ]
+  },
+  {
+    "key": "integrations.browser",
+    "label": "Browser allowlist",
+    "keywords": [
+      "cdp",
+      "automation"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "meta",
+    "path": "browser.enabled",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "advanced.orchestration",
+    "label": "Orchestration supervisor",
+    "keywords": [
+      "orchestrate",
+      "heartbeat",
+      "board"
+    ],
+    "category": "advanced",
+    "area": "features",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "features"
+    ]
+  },
+  {
+    "key": "advanced.evals",
+    "label": "Eval harness",
+    "keywords": [
+      "benchmark",
+      "rubric",
+      "task pack"
+    ],
+    "category": "advanced",
+    "area": "evals",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "evals"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.get_datetime",
+    "label": "Tool permission: get_datetime",
+    "description": "Permission mode for the get_datetime tool (off, ask, or full).",
+    "keywords": [
+      "get_datetime",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.get_datetime",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.calculate",
+    "label": "Tool permission: calculate",
+    "description": "Permission mode for the calculate tool (off, ask, or full).",
+    "keywords": [
+      "calculate",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.calculate",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.check_reef_widget",
+    "label": "Tool permission: check_reef_widget",
+    "description": "Permission mode for the check_reef_widget tool (off, ask, or full).",
+    "keywords": [
+      "check_reef_widget",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.check_reef_widget",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.web_search",
+    "label": "Tool permission: web_search",
+    "description": "Permission mode for the web_search tool (off, ask, or full).",
+    "keywords": [
+      "web_search",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.web_search",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.wikipedia_search",
+    "label": "Tool permission: wikipedia_search",
+    "description": "Permission mode for the wikipedia_search tool (off, ask, or full).",
+    "keywords": [
+      "wikipedia_search",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.wikipedia_search",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.fetch_web_content",
+    "label": "Tool permission: fetch_web_content",
+    "description": "Permission mode for the fetch_web_content tool (off, ask, or full).",
+    "keywords": [
+      "fetch_web_content",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.fetch_web_content",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.rag_web_content",
+    "label": "Tool permission: rag_web_content",
+    "description": "Permission mode for the rag_web_content tool (off, ask, or full).",
+    "keywords": [
+      "rag_web_content",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.rag_web_content",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.read_clipboard",
+    "label": "Tool permission: read_clipboard",
+    "description": "Permission mode for the read_clipboard tool (off, ask, or full).",
+    "keywords": [
+      "read_clipboard",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.read_clipboard",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.write_clipboard",
+    "label": "Tool permission: write_clipboard",
+    "description": "Permission mode for the write_clipboard tool (off, ask, or full).",
+    "keywords": [
+      "write_clipboard",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.write_clipboard",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.get_system_info",
+    "label": "Tool permission: get_system_info",
+    "description": "Permission mode for the get_system_info tool (off, ask, or full).",
+    "keywords": [
+      "get_system_info",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.get_system_info",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.ask_question",
+    "label": "Tool permission: ask_question",
+    "description": "Permission mode for the ask_question tool (off, ask, or full).",
+    "keywords": [
+      "ask_question",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.ask_question",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.set_chat_mode",
+    "label": "Tool permission: set_chat_mode",
+    "description": "Permission mode for the set_chat_mode tool (off, ask, or full).",
+    "keywords": [
+      "set_chat_mode",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.set_chat_mode",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.create_chat_with_mode",
+    "label": "Tool permission: create_chat_with_mode",
+    "description": "Permission mode for the create_chat_with_mode tool (off, ask, or full).",
+    "keywords": [
+      "create_chat_with_mode",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.create_chat_with_mode",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.launch_minnow_app",
+    "label": "Tool permission: launch_minnow_app",
+    "description": "Permission mode for the launch_minnow_app tool (off, ask, or full).",
+    "keywords": [
+      "launch_minnow_app",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.launch_minnow_app",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.propose_mode_switch",
+    "label": "Tool permission: propose_mode_switch",
+    "description": "Permission mode for the propose_mode_switch tool (off, ask, or full).",
+    "keywords": [
+      "propose_mode_switch",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.propose_mode_switch",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.list_directory",
+    "label": "Tool permission: list_directory",
+    "description": "Permission mode for the list_directory tool (off, ask, or full).",
+    "keywords": [
+      "list_directory",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.list_directory",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.read_file",
+    "label": "Tool permission: read_file",
+    "description": "Permission mode for the read_file tool (off, ask, or full).",
+    "keywords": [
+      "read_file",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.read_file",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.read_file_range",
+    "label": "Tool permission: read_file_range",
+    "description": "Permission mode for the read_file_range tool (off, ask, or full).",
+    "keywords": [
+      "read_file_range",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.read_file_range",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.save_file",
+    "label": "Tool permission: save_file",
+    "description": "Permission mode for the save_file tool (off, ask, or full).",
+    "keywords": [
+      "save_file",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.save_file",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.append_file",
+    "label": "Tool permission: append_file",
+    "description": "Permission mode for the append_file tool (off, ask, or full).",
+    "keywords": [
+      "append_file",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.append_file",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.insert_at_line",
+    "label": "Tool permission: insert_at_line",
+    "description": "Permission mode for the insert_at_line tool (off, ask, or full).",
+    "keywords": [
+      "insert_at_line",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.insert_at_line",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.replace_text_in_file",
+    "label": "Tool permission: replace_text_in_file",
+    "description": "Permission mode for the replace_text_in_file tool (off, ask, or full).",
+    "keywords": [
+      "replace_text_in_file",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.replace_text_in_file",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.search_in_file",
+    "label": "Tool permission: search_in_file",
+    "description": "Permission mode for the search_in_file tool (off, ask, or full).",
+    "keywords": [
+      "search_in_file",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.search_in_file",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.grep",
+    "label": "Tool permission: grep",
+    "description": "Permission mode for the grep tool (off, ask, or full).",
+    "keywords": [
+      "grep",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.grep",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.make_directory",
+    "label": "Tool permission: make_directory",
+    "description": "Permission mode for the make_directory tool (off, ask, or full).",
+    "keywords": [
+      "make_directory",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.make_directory",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.move_file",
+    "label": "Tool permission: move_file",
+    "description": "Permission mode for the move_file tool (off, ask, or full).",
+    "keywords": [
+      "move_file",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.move_file",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.copy_file",
+    "label": "Tool permission: copy_file",
+    "description": "Permission mode for the copy_file tool (off, ask, or full).",
+    "keywords": [
+      "copy_file",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.copy_file",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.delete_path",
+    "label": "Tool permission: delete_path",
+    "description": "Permission mode for the delete_path tool (off, ask, or full).",
+    "keywords": [
+      "delete_path",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.delete_path",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.find_files",
+    "label": "Tool permission: find_files",
+    "description": "Permission mode for the find_files tool (off, ask, or full).",
+    "keywords": [
+      "find_files",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.find_files",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.get_file_metadata",
+    "label": "Tool permission: get_file_metadata",
+    "description": "Permission mode for the get_file_metadata tool (off, ask, or full).",
+    "keywords": [
+      "get_file_metadata",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.get_file_metadata",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.git_status",
+    "label": "Tool permission: git_status",
+    "description": "Permission mode for the git_status tool (off, ask, or full).",
+    "keywords": [
+      "git_status",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.git_status",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.git_diff",
+    "label": "Tool permission: git_diff",
+    "description": "Permission mode for the git_diff tool (off, ask, or full).",
+    "keywords": [
+      "git_diff",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.git_diff",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.git_log",
+    "label": "Tool permission: git_log",
+    "description": "Permission mode for the git_log tool (off, ask, or full).",
+    "keywords": [
+      "git_log",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.git_log",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.git_add",
+    "label": "Tool permission: git_add",
+    "description": "Permission mode for the git_add tool (off, ask, or full).",
+    "keywords": [
+      "git_add",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.git_add",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.git_commit",
+    "label": "Tool permission: git_commit",
+    "description": "Permission mode for the git_commit tool (off, ask, or full).",
+    "keywords": [
+      "git_commit",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.git_commit",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.git_checkout",
+    "label": "Tool permission: git_checkout",
+    "description": "Permission mode for the git_checkout tool (off, ask, or full).",
+    "keywords": [
+      "git_checkout",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.git_checkout",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.execute_command",
+    "label": "Tool permission: execute_command",
+    "description": "Permission mode for the execute_command tool (off, ask, or full).",
+    "keywords": [
+      "execute_command",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.execute_command",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.read_command_log",
+    "label": "Tool permission: read_command_log",
+    "description": "Permission mode for the read_command_log tool (off, ask, or full).",
+    "keywords": [
+      "read_command_log",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.read_command_log",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.list_running_commands",
+    "label": "Tool permission: list_running_commands",
+    "description": "Permission mode for the list_running_commands tool (off, ask, or full).",
+    "keywords": [
+      "list_running_commands",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.list_running_commands",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.stop_command",
+    "label": "Tool permission: stop_command",
+    "description": "Permission mode for the stop_command tool (off, ask, or full).",
+    "keywords": [
+      "stop_command",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.stop_command",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.start_background_command",
+    "label": "Tool permission: start_background_command",
+    "description": "Permission mode for the start_background_command tool (off, ask, or full).",
+    "keywords": [
+      "start_background_command",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.start_background_command",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.stop_background_command",
+    "label": "Tool permission: stop_background_command",
+    "description": "Permission mode for the stop_background_command tool (off, ask, or full).",
+    "keywords": [
+      "stop_background_command",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.stop_background_command",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.run_javascript",
+    "label": "Tool permission: run_javascript",
+    "description": "Permission mode for the run_javascript tool (off, ask, or full).",
+    "keywords": [
+      "run_javascript",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.run_javascript",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.run_python",
+    "label": "Tool permission: run_python",
+    "description": "Permission mode for the run_python tool (off, ask, or full).",
+    "keywords": [
+      "run_python",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.run_python",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.spawn_sub_agent",
+    "label": "Tool permission: spawn_sub_agent",
+    "description": "Permission mode for the spawn_sub_agent tool (off, ask, or full).",
+    "keywords": [
+      "spawn_sub_agent",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.spawn_sub_agent",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.board_init",
+    "label": "Tool permission: board_init",
+    "description": "Permission mode for the board_init tool (off, ask, or full).",
+    "keywords": [
+      "board_init",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.board_init",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.board_update_task",
+    "label": "Tool permission: board_update_task",
+    "description": "Permission mode for the board_update_task tool (off, ask, or full).",
+    "keywords": [
+      "board_update_task",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.board_update_task",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.board_set_autonomy",
+    "label": "Tool permission: board_set_autonomy",
+    "description": "Permission mode for the board_set_autonomy tool (off, ask, or full).",
+    "keywords": [
+      "board_set_autonomy",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.board_set_autonomy",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.board_get_state",
+    "label": "Tool permission: board_get_state",
+    "description": "Permission mode for the board_get_state tool (off, ask, or full).",
+    "keywords": [
+      "board_get_state",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.board_get_state",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.board_report",
+    "label": "Tool permission: board_report",
+    "description": "Permission mode for the board_report tool (off, ask, or full).",
+    "keywords": [
+      "board_report",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.board_report",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.delegate_tasks",
+    "label": "Tool permission: delegate_tasks",
+    "description": "Permission mode for the delegate_tasks tool (off, ask, or full).",
+    "keywords": [
+      "delegate_tasks",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.delegate_tasks",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.bug_add",
+    "label": "Tool permission: bug_add",
+    "description": "Permission mode for the bug_add tool (off, ask, or full).",
+    "keywords": [
+      "bug_add",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.bug_add",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.bug_update",
+    "label": "Tool permission: bug_update",
+    "description": "Permission mode for the bug_update tool (off, ask, or full).",
+    "keywords": [
+      "bug_update",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.bug_update",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.bug_get_state",
+    "label": "Tool permission: bug_get_state",
+    "description": "Permission mode for the bug_get_state tool (off, ask, or full).",
+    "keywords": [
+      "bug_get_state",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.bug_get_state",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.cancel_sub_agent",
+    "label": "Tool permission: cancel_sub_agent",
+    "description": "Permission mode for the cancel_sub_agent tool (off, ask, or full).",
+    "keywords": [
+      "cancel_sub_agent",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.cancel_sub_agent",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.list_sub_agents",
+    "label": "Tool permission: list_sub_agents",
+    "description": "Permission mode for the list_sub_agents tool (off, ask, or full).",
+    "keywords": [
+      "list_sub_agents",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.list_sub_agents",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.get_sub_agent_status",
+    "label": "Tool permission: get_sub_agent_status",
+    "description": "Permission mode for the get_sub_agent_status tool (off, ask, or full).",
+    "keywords": [
+      "get_sub_agent_status",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.get_sub_agent_status",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.browser_list",
+    "label": "Tool permission: browser_list",
+    "description": "Permission mode for the browser_list tool (off, ask, or full).",
+    "keywords": [
+      "browser_list",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.browser_list",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.browser_navigate",
+    "label": "Tool permission: browser_navigate",
+    "description": "Permission mode for the browser_navigate tool (off, ask, or full).",
+    "keywords": [
+      "browser_navigate",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.browser_navigate",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.request_browser_origin_access",
+    "label": "Tool permission: request_browser_origin_access",
+    "description": "Permission mode for the request_browser_origin_access tool (off, ask, or full).",
+    "keywords": [
+      "request_browser_origin_access",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.request_browser_origin_access",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.browser_snapshot",
+    "label": "Tool permission: browser_snapshot",
+    "description": "Permission mode for the browser_snapshot tool (off, ask, or full).",
+    "keywords": [
+      "browser_snapshot",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.browser_snapshot",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.browser_click",
+    "label": "Tool permission: browser_click",
+    "description": "Permission mode for the browser_click tool (off, ask, or full).",
+    "keywords": [
+      "browser_click",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.browser_click",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.browser_fill",
+    "label": "Tool permission: browser_fill",
+    "description": "Permission mode for the browser_fill tool (off, ask, or full).",
+    "keywords": [
+      "browser_fill",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.browser_fill",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.browser_eval",
+    "label": "Tool permission: browser_eval",
+    "description": "Permission mode for the browser_eval tool (off, ask, or full).",
+    "keywords": [
+      "browser_eval",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.browser_eval",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.browser_screenshot",
+    "label": "Tool permission: browser_screenshot",
+    "description": "Permission mode for the browser_screenshot tool (off, ask, or full).",
+    "keywords": [
+      "browser_screenshot",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.browser_screenshot",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.load_impeccable_context",
+    "label": "Tool permission: load_impeccable_context",
+    "description": "Permission mode for the load_impeccable_context tool (off, ask, or full).",
+    "keywords": [
+      "load_impeccable_context",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.load_impeccable_context",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.run_impeccable",
+    "label": "Tool permission: run_impeccable",
+    "description": "Permission mode for the run_impeccable tool (off, ask, or full).",
+    "keywords": [
+      "run_impeccable",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.run_impeccable",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.recall_chat_context",
+    "label": "Tool permission: recall_chat_context",
+    "description": "Permission mode for the recall_chat_context tool (off, ask, or full).",
+    "keywords": [
+      "recall_chat_context",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.recall_chat_context",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.recall_turn_full",
+    "label": "Tool permission: recall_turn_full",
+    "description": "Permission mode for the recall_turn_full tool (off, ask, or full).",
+    "keywords": [
+      "recall_turn_full",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.recall_turn_full",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.brain_search",
+    "label": "Tool permission: brain_search",
+    "description": "Permission mode for the brain_search tool (off, ask, or full).",
+    "keywords": [
+      "brain_search",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.brain_search",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.brain_read_page",
+    "label": "Tool permission: brain_read_page",
+    "description": "Permission mode for the brain_read_page tool (off, ask, or full).",
+    "keywords": [
+      "brain_read_page",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.brain_read_page",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.brain_list",
+    "label": "Tool permission: brain_list",
+    "description": "Permission mode for the brain_list tool (off, ask, or full).",
+    "keywords": [
+      "brain_list",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.brain_list",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.brain_write_page",
+    "label": "Tool permission: brain_write_page",
+    "description": "Permission mode for the brain_write_page tool (off, ask, or full).",
+    "keywords": [
+      "brain_write_page",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.brain_write_page",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.brain_append_log",
+    "label": "Tool permission: brain_append_log",
+    "description": "Permission mode for the brain_append_log tool (off, ask, or full).",
+    "keywords": [
+      "brain_append_log",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.brain_append_log",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.brain_ingest_source",
+    "label": "Tool permission: brain_ingest_source",
+    "description": "Permission mode for the brain_ingest_source tool (off, ask, or full).",
+    "keywords": [
+      "brain_ingest_source",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.brain_ingest_source",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.manage_brain",
+    "label": "Tool permission: manage_brain",
+    "description": "Permission mode for the manage_brain tool (off, ask, or full).",
+    "keywords": [
+      "manage_brain",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.manage_brain",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.save_memory",
+    "label": "Tool permission: save_memory",
+    "description": "Permission mode for the save_memory tool (off, ask, or full).",
+    "keywords": [
+      "save_memory",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.save_memory",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.repo_map",
+    "label": "Tool permission: repo_map",
+    "description": "Permission mode for the repo_map tool (off, ask, or full).",
+    "keywords": [
+      "repo_map",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.repo_map",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.find_symbol",
+    "label": "Tool permission: find_symbol",
+    "description": "Permission mode for the find_symbol tool (off, ask, or full).",
+    "keywords": [
+      "find_symbol",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.find_symbol",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.who_calls",
+    "label": "Tool permission: who_calls",
+    "description": "Permission mode for the who_calls tool (off, ask, or full).",
+    "keywords": [
+      "who_calls",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.who_calls",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.read_symbol",
+    "label": "Tool permission: read_symbol",
+    "description": "Permission mode for the read_symbol tool (off, ask, or full).",
+    "keywords": [
+      "read_symbol",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.read_symbol",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.explain_symbol",
+    "label": "Tool permission: explain_symbol",
+    "description": "Permission mode for the explain_symbol tool (off, ask, or full).",
+    "keywords": [
+      "explain_symbol",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.explain_symbol",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.manage_calendar",
+    "label": "Tool permission: manage_calendar",
+    "description": "Permission mode for the manage_calendar tool (off, ask, or full).",
+    "keywords": [
+      "manage_calendar",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.manage_calendar",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.list_mail",
+    "label": "Tool permission: list_mail",
+    "description": "Permission mode for the list_mail tool (off, ask, or full).",
+    "keywords": [
+      "list_mail",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.list_mail",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.draft_reply",
+    "label": "Tool permission: draft_reply",
+    "description": "Permission mode for the draft_reply tool (off, ask, or full).",
+    "keywords": [
+      "draft_reply",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.draft_reply",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.summarize_inbox",
+    "label": "Tool permission: summarize_inbox",
+    "description": "Permission mode for the summarize_inbox tool (off, ask, or full).",
+    "keywords": [
+      "summarize_inbox",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.summarize_inbox",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.generate_reply_variants",
+    "label": "Tool permission: generate_reply_variants",
+    "description": "Permission mode for the generate_reply_variants tool (off, ask, or full).",
+    "keywords": [
+      "generate_reply_variants",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.generate_reply_variants",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.email_action",
+    "label": "Tool permission: email_action",
+    "description": "Permission mode for the email_action tool (off, ask, or full).",
+    "keywords": [
+      "email_action",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.email_action",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.get_lsp_diagnostics",
+    "label": "Tool permission: get_lsp_diagnostics",
+    "description": "Permission mode for the get_lsp_diagnostics tool (off, ask, or full).",
+    "keywords": [
+      "get_lsp_diagnostics",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.get_lsp_diagnostics",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.list_lsp_servers",
+    "label": "Tool permission: list_lsp_servers",
+    "description": "Permission mode for the list_lsp_servers tool (off, ask, or full).",
+    "keywords": [
+      "list_lsp_servers",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.list_lsp_servers",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  }
+]

@@ -51,7 +51,7 @@ function ensureLastActiveMap(raw) {
 }
 
 /** Valid operating mode ids (mirror src/chat/modes/types.ts). */
-const MODE_IDS = ['general', 'build', 'plan', 'orchestrate', 'reef', 'debug'];
+const MODE_IDS = ['general', 'desktop', 'build', 'plan', 'orchestrate', 'reef', 'debug'];
 const DEFAULT_MODE_ID = 'build';
 
 /** Normalize persisted or unknown mode ids. */
@@ -986,6 +986,9 @@ export function normalizeArchiveConfig(raw) {
 }
 
 function defaultPermissionForTool(id, enabled) {
+  if (id === 'search_settings' || id === 'get_settings') {
+    return enabled ? 'full' : 'off';
+  }
   if (BRAIN_FULL_PERMISSION_TOOL_ID_SET.has(id)) {
     return enabled ? 'full' : 'off';
   }
@@ -1007,6 +1010,9 @@ export function normalizeToolConfig(raw) {
     'brain_append_log',
     'brain_ingest_source',
     'manage_brain',
+    'search_settings',
+    'get_settings',
+    'update_settings',
     'repo_map',
     'find_symbol',
     'who_calls',
@@ -1566,6 +1572,7 @@ export function mergeConfigMeta(existing, patch) {
             open: false,
             heightPx: 240,
             autoOpenOnAgentRun: false,
+            autoFollowAgentTab: false,
           };
     const t = /** @type {Record<string, unknown>} */ (p.terminal);
     if (typeof t.open === 'boolean') existingTerminal.open = t.open;
@@ -1574,6 +1581,9 @@ export function mergeConfigMeta(existing, patch) {
     }
     if (typeof t.autoOpenOnAgentRun === 'boolean') {
       existingTerminal.autoOpenOnAgentRun = t.autoOpenOnAgentRun;
+    }
+    if (typeof t.autoFollowAgentTab === 'boolean') {
+      existingTerminal.autoFollowAgentTab = t.autoFollowAgentTab;
     }
     base.terminal = existingTerminal;
   }

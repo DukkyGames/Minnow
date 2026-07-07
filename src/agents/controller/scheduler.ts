@@ -106,7 +106,7 @@ export function drainQueue(): void {
       acquireConcurrencySlot(internals, internals.run.type);
       dispatch(internals, item.modeId);
     }
-  });
+  }).catch((err) => console.error('[sub-agent-scheduler] drainQueue config load failed; queue retained', err));
 }
 
 /** Wipe queue and slot counters (test reset). */

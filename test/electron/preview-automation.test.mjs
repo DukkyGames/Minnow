@@ -7,8 +7,10 @@ import { describe, test } from 'node:test';
 const {
   previewExecJs,
   previewCapturePageBase64,
+  previewClearGuest,
   previewGetGuestInfo,
   previewNavigateAwait,
+  isNavigationAbortedError,
 } = await import('../../electron/dist/preview-guest-actions.js');
 
 function createMockWebContents(overrides = {}) {
@@ -22,6 +24,7 @@ function createMockWebContents(overrides = {}) {
     ...overrides,
   };
   return {
+    isDestroyed: () => false,
     getURL: () => state.url,
     getTitle: () => state.title,
     isLoading: () => state.loading,
@@ -100,5 +103,44 @@ describe('preview guest actions', () => {
     const result = await previewNavigateAwait(wc, 'https://bad.test/');
     assert.equal(result.ok, false);
     assert.match(result.errorDescription ?? '', /ERR_FAILED/);
+  });
+
+  test('isNavigationAbortedError detects ERR_ABORTED', () => {
+    assert.equal(isNavigationAbortedError({ errno: -3, code: 'ERR_ABORTED' }), true);
+    assert.equal(isNavigationAbortedError(new Error('ERR_ABORTED (-3) loading about:blank')), true);
+    assert.equal(isNavigationAbortedError(new Error('ERR_FAILED')), false);
+  });
+
+  test('previewClearGuest skips when guest is already blank', async () => {
+    const wc = createMockWebContents({ url: 'about:blank', loading: false });
+    await previewClearGuest(wc);
+    assert.deepEqual(wc._state.loadCalls, []);
+  });
+
+  test('previewClearGuest loads about:blank', async () => {
+    const wc = createMockWebContents({ url: 'https://example.com/' });
+    await previewClearGuest(wc);
+    assert.deepEqual(wc._state.loadCalls, ['about:blank']);
+    assert.equal(wc._state.url, 'about:blank');
+  });
+
+  test('previewClearGuest ignores ERR_ABORTED from loadURL', async () => {
+    const wc = createMockWebContents({
+      url: 'https://example.com/',
+      loadReject: Object.assign(new Error('ERR_ABORTED (-3) loading about:blank'), {
+        errno: -3,
+        code: 'ERR_ABORTED',
+      }),
+    });
+    await previewClearGuest(wc);
+    assert.deepEqual(wc._state.loadCalls, ['about:blank']);
+  });
+
+  test('previewClearGuest rethrows non-abort loadURL errors', async () => {
+    const wc = createMockWebContents({
+      url: 'https://example.com/',
+      loadReject: new Error('ERR_FAILED'),
+    });
+    await assert.rejects(() => previewClearGuest(wc), /ERR_FAILED/);
   });
 });

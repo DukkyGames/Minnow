@@ -1,0 +1,130 @@
+/**
+ * Composer message queue strip (MIN-200).
+ */
+
+.composer-message-queue {
+  margin: 0 0 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-surface-2);
+  overflow: hidden;
+}
+
+.composer-message-queue.hidden {
+  display: none;
+}
+
+.composer-message-queue__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .composer-message-queue__header:hover {
+    color: var(--mn-fg);
+    background: color-mix(in srgb, var(--mn-fg) 4%, transparent);
+  }
+}
+
+.composer-message-queue__chevron {
+  width: 12px;
+  flex-shrink: 0;
+  color: var(--mn-fg-subtle);
+}
+
+.composer-message-queue__count {
+  color: var(--mn-fg);
+}
+
+.composer-message-queue__list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.composer-message-queue__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--mn-bg);
+}
+
+.composer-message-queue__status {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border: 1.5px solid var(--mn-fg-subtle);
+  border-radius: 50%;
+}
+
+.composer-message-queue__text {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.82rem;
+  color: var(--mn-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-message-queue__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.composer-message-queue__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  transition:
+    color 0.15s var(--ease-out),
+    background 0.15s var(--ease-out);
+}
+
+.composer-message-queue__icon {
+  width: 14px;
+  height: 14px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .composer-message-queue__action:hover {
+    color: var(--mn-fg);
+    background: color-mix(in srgb, var(--mn-fg) 6%, transparent);
+  }
+}
+
+.composer-message-queue__action:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
+}
+
+.chat-app-composer .composer-message-queue {
+  margin-bottom: 6px;
+}
+
+.mn-os-desktop-composer .composer-message-queue {
+  margin-bottom: 6px;
+}

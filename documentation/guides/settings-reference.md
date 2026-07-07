@@ -4,7 +4,7 @@ Complete inventory of Minnow settings: where they appear in the UI, what they co
 
 For storage layout and `config.json` overview, see [configuration.md](configuration.md). For the Settings page IA and search catalog, see [`src/ui/settings-catalog.ts`](../../src/ui/settings-catalog.ts) and [settings-page-rebuild-min-130.md](../plans/settings-page-rebuild-min-130.md).
 
-**Last updated:** 2026-06-27
+**Last updated:** 2026-07-03
 
 ---
 
@@ -12,7 +12,7 @@ For storage layout and `config.json` overview, see [configuration.md](configurat
 
 | Item | Count |
 |------|------:|
-| Settings sidebar categories | 7 |
+| Settings sidebar categories | 6 |
 | Settings sections (areas) | 27 |
 | Cataloged searchable fields | ~100 |
 | Built-in tools (per-tool permissions) | 89 |
@@ -33,8 +33,7 @@ Open via **Settings** (`#/settings/<category>`) or legacy `#/settings/<area>`.
 | **General** | General, Audio |
 | **Appearance** | Appearance |
 | **Models** | Providers, Routing, Sampler, Thinking, Usage & cost |
-| **Agents** | Modes, Experts, Work agents, Agent packs, Sub-agents, Autopilot |
-| **Knowledge** | Prompts, Rules |
+| **Agents** | Prompts, Rules, Modes, Experts, Work agents, Agent packs, Sub-agents, Autopilot |
 | **Integrations** | Search, Deep Research, Servers, Tools, Skills, MCP, LSP, Editor, Webhooks, OAuth |
 | **Advanced** | Orchestration, Evals |
 
@@ -51,10 +50,11 @@ Open via **Settings** (`#/settings/<category>`) or legacy `#/settings/<area>`.
 | Setting | Persistence | Notes |
 |---------|-------------|-------|
 | Enable notifications | `localStorage` (`notification prefs`) | Master bell toggle |
+| Silence notifications (dropdown) | `minnow.notifications.muted` | Quick mute from menubar bell popover; blocks new alerts until cleared |
 | Chat notifications | notification prefs | Background chat finish/error |
 | Task & sub-agent notifications | notification prefs | Orchestrate board + sub-agent events |
 | Background job notifications | notification prefs | Scheduler, research, memory/skill proposals |
-| Play notification sound | notification prefs | When Minnow is open but unfocused |
+| Play notification sound | notification prefs | When Minnow is unfocused (Electron: includes alt-tab / minimized) |
 | Notification sound | notification prefs | `none`, `chime`, `ping`, `soft`, `pop` |
 | Network access | `config.server.networkAccess` | `local` (loopback) vs `lan` (Wi‑Fi). Override: `MINNOW_NETWORK` |
 | Terminal behavior | — | Info only: commands run in background |
@@ -159,6 +159,23 @@ See [`src/config/voice-meta.ts`](../../src/config/voice-meta.ts) and [`src/voice
 
 ## 4. Agents
 
+### Prompts
+
+| Setting | Persistence |
+|---------|-------------|
+| Prompt profile | `activePromptProfile` (`full` / `lite` / `custom`) |
+| Info preset | `activeInfoPresetId` |
+| Setup profiles | `profiles/` bundles |
+| Custom prompt configs | Per-part editors (base, mode, expert, info, tool-usage, work-agent, memory, skills) |
+| Prompt hub | Browse/edit all prompt files |
+
+### Rules (`rules.json`)
+
+| Setting | Description |
+|---------|-------------|
+| Enable user rules | |
+| Rules text | Global standing instructions |
+
 ### Modes (6)
 
 `general` · `build` · `plan` · `orchestrate` · `reef` · `debug`
@@ -213,36 +230,7 @@ Per type: enabled, max concurrent, timeout, max input tokens, context policy, su
 
 ---
 
-## 5. Knowledge
-
-### Prompts
-
-| Setting | Persistence |
-|---------|-------------|
-| Prompt profile | `activePromptProfile` (`full` / `lite` / `custom`) |
-| Info preset | `activeInfoPresetId` |
-| Setup profiles | `profiles/` bundles |
-| Custom prompt configs | Per-part editors (base, mode, expert, info, tool-usage, work-agent, memory, skills) |
-| Prompt hub | Browse/edit all prompt files |
-
-### Rules (`rules.json`)
-
-| Setting | Description |
-|---------|-------------|
-| Enable user rules | |
-| Rules text | Global standing instructions |
-
-### Memory (Brain app)
-
-Memory store, entry CRUD, semantic embeddings, and auto-learning cadence moved to the **Brain** app (`#/app/brain/memories` and `#/app/brain/settings`). Legacy `#/settings/memory` redirects automatically.
-
-**Memories section** — store enable (`memory.enabled`), inject on send (`features.memoryInjection`), entry list/add/delete, backup/clear.
-
-**Settings section** — semantic embeddings (`memory.embeddings.*`), synthesis cadence (`config.synthesis`), code index (`config.brain.code.*`).
-
----
-
-## 6. Integrations
+## 5. Integrations
 
 ### Search (`search.json`)
 
@@ -336,7 +324,7 @@ Google and Microsoft: client ID, client secret (Microsoft: tenant ID). Tokens en
 
 ---
 
-## 7. Advanced
+## 6. Advanced
 
 ### Orchestration (`config.supervisor`)
 
@@ -398,7 +386,7 @@ Not all exposed in Settings UI:
 |-------|--------------|
 | `workspace` | Path, recent paths, dev server settings per path |
 | `filePanel` | Sidebar, viewer, split ratio, tabs, preview |
-| `terminal` | Open, height, auto-open on agent run |
+| `terminal` | Open, height, `autoOpenOnAgentRun`, `autoFollowAgentTab` (MIN-242) |
 | `titles` | Chat title generation model/settings |
 | `goalEval` | /goal loop evaluator model/settings |
 | `activePromptProfile`, `activePromptConfigId`, `activeSetupProfileId` | Prompt state |
@@ -477,3 +465,25 @@ Most features require `npm start` for full persistence.
 | Config normalization | [`server/config/validators.js`](../../server/config/validators.js) |
 | Default meta scaffold | [`server/config/home.js`](../../server/config/home.js) |
 | Tool definitions | [`src/tools/definitions.ts`](../../src/tools/definitions.ts) |
+
+---
+
+## Agent settings tools
+
+Desktop and General modes include the **`settings`** tool group (`search_settings`, `get_settings`, `update_settings`).
+
+| Tool | Permission | Notes |
+|------|------------|-------|
+| `search_settings` | `full` | Returns catalog metadata (key, label, type, sensitivity) — never values |
+| `get_settings` | `full` | Server-backed fields from `~/.minnow`; secrets → `[redacted]`; browser fields enriched client-side |
+| `update_settings` | `ask` | Approval strip shows human diff; secret/dangerous fields require `confirmed: true` after approval |
+
+**Registry:** [`src/settings/field-registry.ts`](../../src/settings/field-registry.ts) maps catalog keys → `config.json`, `tools.json`, `search.json`, etc. Generated server mirror: `server/settings/registry-manifest.json` (`npm run settings-registry:generate` / `prebuild`).
+
+**HTTP API:** `GET /api/settings/catalog`, `POST /api/settings/read`, `POST /api/settings/update` ([`server/settings/middleware.js`](../../server/settings/middleware.js)).
+
+**Client sync:** [`src/settings/client-sync.ts`](../../src/settings/client-sync.ts) applies `clientPatches` (notifications, theme), refreshes settings sections, dispatches `minnow:settings-changed`.
+
+**Prompt:** [`src/chat/prompts/tool-usage/manage-settings.md`](../../src/chat/prompts/tool-usage/manage-settings.md) (gated when `update_settings` is enabled in General/Desktop).
+
+Plan: [`documentation/plans/settings-agent-tools.md`](../plans/settings-agent-tools.md).

@@ -15,7 +15,7 @@ import { SttStreamClient } from '../voice/stt-stream-client';
 import { ensureVoiceWorker } from '../voice/api-client';
 import { fetchSttStatus } from './voice-controls';
 
-type MicState = 'idle' | 'recording' | 'transcribing';
+export type MicState = 'idle' | 'starting' | 'recording' | 'transcribing';
 
 let mediaRecorder: MediaRecorder | null = null;
 let audioChunks: BlobPart[] = [];
@@ -35,6 +35,7 @@ let autoGainControl = true;
 let micAnalyserDisconnect: (() => void) | null = null;
 let stopSilenceWatch: (() => void) | null = null;
 let micDetecting = false;
+let micErrorFlashTimer: ReturnType<typeof setTimeout> | null = null;
 /** Composer textarea pinned when dictation starts (avoids stale routing on async stop). */
 let dictationInputEl: HTMLTextAreaElement | null = null;
 
@@ -93,9 +94,33 @@ function clearDictationInput(): void {
   dictationInputEl = null;
 }
 
+function clearMicErrorFlash(): void {
+  if (micErrorFlashTimer) {
+    clearTimeout(micErrorFlashTimer);
+    micErrorFlashTimer = null;
+  }
+  for (const id of MIC_BUTTON_IDS) {
+    document.getElementById(id)?.classList.remove('composer-mic-btn--error');
+  }
+}
+
+/** Brief error accent on mic buttons after voice server or mic failures. */
+function flashMicError(): void {
+  clearMicErrorFlash();
+  for (const id of MIC_BUTTON_IDS) {
+    document.getElementById(id)?.classList.add('composer-mic-btn--error');
+  }
+  micErrorFlashTimer = setTimeout(() => {
+    clearMicErrorFlash();
+  }, 2_500);
+}
+
 /** Sync visual classes and ARIA on every composer mic button. */
 function setMicButtonsState(state: MicState): void {
   micState = state;
+  if (state === 'idle') {
+    clearMicErrorFlash();
+  }
   if (state !== 'recording') {
     setMicDetecting(false);
     stopSilenceMonitor();
@@ -105,15 +130,23 @@ function setMicButtonsState(state: MicState): void {
     const btn = document.getElementById(id);
     if (!btn) continue;
     btn.classList.toggle('composer-mic-btn--recording', state === 'recording');
-    btn.classList.toggle('composer-mic-btn--busy', state === 'transcribing');
-    btn.setAttribute('aria-busy', state === 'transcribing' ? 'true' : 'false');
+    btn.classList.toggle(
+      'composer-mic-btn--busy',
+      state === 'transcribing' || state === 'starting',
+    );
+    btn.setAttribute(
+      'aria-busy',
+      state === 'transcribing' || state === 'starting' ? 'true' : 'false',
+    );
     btn.setAttribute(
       'aria-label',
       state === 'recording'
         ? 'Listening — pauses auto-submit, or click to stop'
         : state === 'transcribing'
           ? 'Transcribing speech'
-          : 'Dictate with microphone',
+          : state === 'starting'
+            ? 'Starting voice'
+            : 'Dictate with microphone',
     );
     btn.title =
       state === 'recording'
@@ -122,7 +155,9 @@ function setMicButtonsState(state: MicState): void {
           : 'Listening… pause to transcribe'
         : state === 'transcribing'
           ? 'Transcribing…'
-          : 'Dictate';
+          : state === 'starting'
+            ? 'Starting voice…'
+            : 'Dictate';
     if (state !== 'recording') {
       btn.style.removeProperty('--mic-level');
     }
@@ -428,13 +463,16 @@ async function startRecording(): Promise<void> {
   }
 
   if (!status.healthy && status.backend === 'local') {
-    setStatus('spin', 'Starting voice server…');
+    setMicButtonsState('starting');
+    setStatus('spin', 'Starting voice…');
     try {
       await ensureVoiceWorker();
       status = await fetchSttStatus();
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Voice server could not start';
+      setMicButtonsState('idle');
+      flashMicError();
       setStatus('err', message);
       openModels('voice');
       return;
@@ -446,6 +484,8 @@ async function startRecording(): Promise<void> {
       status?.backend === 'local'
         ? (status.warning ?? 'Voice worker is not ready. Open Models → Voice.')
         : 'STT provider is not configured. Open Models → Voice.';
+    setMicButtonsState('idle');
+    flashMicError();
     setStatus('err', message);
     openModels('voice');
     return;
@@ -510,7 +550,7 @@ function onMicClick(): void {
     stopRecording();
     return;
   }
-  if (micState === 'transcribing') return;
+  if (micState === 'transcribing' || micState === 'starting') return;
   void startRecording();
 }
 
@@ -616,6 +656,7 @@ export function initComposerVoice(): void {
     }
   })();
 }
+
 
 export function getMicState(): MicState {
   return micState;

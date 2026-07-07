@@ -13,12 +13,12 @@ import {
   countRunningTaskChats,
   drainTaskQueueForTests,
   isTaskChatActive,
+  isTaskChatActiveForStallCheck,
   listRunningBoardTaskSlots,
   releaseLaunchSlotForTests,
   reserveLaunchSlotForTests,
   resolveBoardMaxConcurrent,
   startBoardAutoRun,
-  tryTriggerFinalIntegrationTest,
   type RunningBoardTaskSlot,
 } from '../../src/state/orchestrate-board-actions.ts';
 import {
@@ -294,6 +294,9 @@ export function injectChatOutcome(
       chat.history.push({ role: 'user', content: 'Execute task' });
       return;
     }
+    if (task) {
+      task.boardReport = { outcome: 'pass', summary: `Build verified for ${task.id}` };
+    }
     chat.history.push({
       role: 'assistant',
       content: `Build complete for ${task?.id ?? 'task'}.`,
@@ -315,6 +318,9 @@ export function injectChatOutcome(
   }
 
   if (phase === 'fix') {
+    if (task) {
+      task.boardReport = { outcome: 'pass', summary: 'Merge committed' };
+    }
     chat.history.push({
       role: 'assistant',
       content: 'Resolved conflict with git commit --no-edit.',
@@ -453,7 +459,7 @@ export async function bootstrapPendingLaunches(
     .filter(
       (t) =>
         isTaskReadyForAuto(board, t) ||
-        isTaskStalledForRestart(board, t, isTaskChatActive),
+        isTaskStalledForRestart(board, t, isTaskChatActiveForStallCheck),
     )
     .sort((a, b) => {
       const wa = waveOrder.get(String(a.wave)) ?? 999;
@@ -490,15 +496,7 @@ export async function bootstrapPendingLaunches(
     board.finalTest?.status !== 'passed' &&
     countRunningTaskChats(board) < resolveBoardMaxConcurrent(board)
   ) {
-    tryTriggerFinalIntegrationTest(group, planner);
-    if (board.finalTest?.status !== 'in_progress') {
-      createFinalTestChat(group, planner);
-    } else {
-      const finalId = board.finalTest.chatId?.trim();
-      if (finalId && !isTaskChatActive(finalId)) {
-        activateChatSlot(finalId);
-      }
-    }
+    createFinalTestChat(group, planner);
   }
 }
 
@@ -616,7 +614,6 @@ export async function driveBoardToConvergence(
     }
 
     if (!advanced) {
-      tryTriggerFinalIntegrationTest(group, planner);
       await bootstrapPendingLaunches(group, planner);
       const pending = listRunningBoardTaskSlots(board);
       if (!pending.length && !assertBoardConverged(group)) {

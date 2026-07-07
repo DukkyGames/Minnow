@@ -158,6 +158,43 @@ function opts(
   return { phase, category: 'code', summary: 'test failure', ...overrides };
 }
 
+// ── Stopped board guard ────────────────────────────────────────────────────
+
+describe('runSelfHeal — board not running', () => {
+  test('autoRunning=false → records error only, no heal work or quarantine', async () => {
+    const t = task('W1-A');
+    const { group, planner } = makeSetup([t]);
+    group.orchestrateBoard!.autoRunning = false;
+
+    const { deps, s } = makeDeps();
+    await runSelfHeal(group, t, planner, opts('build', { category: 'infra' }), deps);
+
+    assert.equal(s.envFixerCalls.length, 0, 'must not spawn env fixers on a stopped board');
+    assert.equal(s.startTaskCalls.length, 0);
+    assert.equal(s.nudgeCalls.length, 0);
+    assert.equal(s.quarantineCalls.length, 0, 'must not quarantine on user Stop');
+    assert.equal(s.autoDelegateCalls, 0);
+    const fresh = group.orchestrateBoard!.tasks.find((x) => x.id === 'W1-A')!;
+    assert.equal(fresh.error, 'test failure', 'failure summary must be recorded');
+    assert.equal(fresh.selfHealRound ?? 0, 0);
+    assert.equal(fresh.envFixAttempts ?? 0, 0);
+  });
+
+  test('manual mode board → same guard applies', async () => {
+    const t = task('W1-A');
+    const { group, planner } = makeSetup([t]);
+    group.orchestrateBoard!.executionMode = 'manual';
+
+    const { deps, s } = makeDeps();
+    await runSelfHeal(group, t, planner, opts('build', { category: 'code' }), deps);
+
+    assert.equal(s.startTaskCalls.length, 0);
+    assert.equal(s.quarantineCalls.length, 0);
+    const fresh = group.orchestrateBoard!.tasks.find((x) => x.id === 'W1-A')!;
+    assert.equal(fresh.error, 'test failure');
+  });
+});
+
 // ── Infra path ─────────────────────────────────────────────────────────────
 
 describe('runSelfHeal — infra (env-fixer)', () => {

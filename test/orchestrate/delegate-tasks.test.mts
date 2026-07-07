@@ -8,12 +8,11 @@ import { resetSubAgentOrchestrator } from '../../src/agents/orchestrator.ts';
 import {
   buildOrchestratorTaskReportMessage,
   deliverOrchestratorTaskReport,
-  initOrchestratorAutoReports,
   resetOrchestratorAutoReportsForTests,
   setOrchestratorReportDeliverHook,
 } from '../../src/agents/controller/report.ts';
 import { setStreaming } from '../../src/app-state.ts';
-import { notifyChatStreamEnded } from '../../src/chat/streaming-state.ts';
+import { isChatStreaming } from '../../src/chat/streaming-state.ts';
 import {
   getBoardExecutionMode,
   isBoardAutoMode,
@@ -213,10 +212,11 @@ describe('orchestrator auto reports', () => {
     assert.match(message, /Lifecycle: complete/);
     assert.match(message, /Shipped the API/);
     assert.doesNotMatch(message, /delegate_tasks/);
-    assert.match(message, /automatically/i);
+    assert.match(message, /Auto-pilot starts the next ready planned tasks automatically/);
+    assert.doesNotMatch(message, /board_update_task/);
   });
 
-  test('deliverOrchestratorTaskReport dedupes by task and kind', async () => {
+  test('deliverOrchestratorTaskReport dedupes by task, kind, and round', async () => {
     const { planner, group } = seedBoard('auto');
     group.orchestrateBoard!.autoRunning = true;
     const task = group.orchestrateBoard!.tasks[0]!;
@@ -228,17 +228,25 @@ describe('orchestrator auto reports', () => {
     await deliverOrchestratorTaskReport(group, planner, task, 'failed');
     await deliverOrchestratorTaskReport(group, planner, task, 'failed');
     assert.equal(deliveries.length, 1);
+
+    task.selfHealRound = 1;
+    await deliverOrchestratorTaskReport(group, planner, task, 'failed');
+    assert.equal(deliveries.length, 2);
     setOrchestratorReportDeliverHook(null);
   });
 
-  test('queues concurrent failure reports while planner is streaming and drains on idle', async () => {
-    initOrchestratorAutoReports();
+  test('defers failure reports while planner is streaming; flushes on stream end', async () => {
     const { planner, group } = seedBoard('auto');
+    setSessionStateForTests({ version: 5, activeId: PLANNER_ID, chats: [planner], groups: [group] });
     group.orchestrateBoard!.autoRunning = true;
     const taskA = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
-    const taskB = group.orchestrateBoard!.tasks.find((t) => t.id === 'W2-A')!;
     taskA.status = 'failed';
-    taskB.status = 'failed';
+
+    planner.history.push({
+      role: 'assistant',
+      content: '',
+      tool_calls: [{ id: 'tc1', type: 'function', function: { name: 'board_get_state', arguments: '{}' } }],
+    });
 
     const deliveries: string[] = [];
     setOrchestratorReportDeliverHook(async (_chatId, message) => {
@@ -247,17 +255,38 @@ describe('orchestrator auto reports', () => {
 
     setStreaming(true, planner.id);
     await deliverOrchestratorTaskReport(group, planner, taskA, 'failed');
-    await deliverOrchestratorTaskReport(group, planner, taskB, 'failed');
-    assert.equal(deliveries.length, 0);
+    assert.equal(deliveries.length, 0, 'report should be deferred while streaming');
 
-    setStreaming(false, planner.id);
+    const { notifyChatStreamEnded } = await import('../../src/chat/streaming-state.ts');
+    const { initOrchestratorAutoReports } = await import('../../src/agents/controller/report.ts');
+    initOrchestratorAutoReports();
     notifyChatStreamEnded(planner.id);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    setStreaming(false, planner.id);
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
 
-    assert.equal(deliveries.length, 2);
-    assert.ok(deliveries.some((m) => m.includes('W1-A')));
-    assert.ok(deliveries.some((m) => m.includes('W2-A')));
+    assert.equal(deliveries.length, 1);
+    assert.ok(deliveries[0]!.includes('W1-A'));
     setOrchestratorReportDeliverHook(null);
+  });
+
+  test('silent delivery appends assistant message without starting a planner turn', async () => {
+    const { planner, group } = seedBoard('auto');
+    setSessionStateForTests({ version: 5, activeId: PLANNER_ID, chats: [planner], groups: [group] });
+    group.orchestrateBoard!.autoRunning = true;
+    const task = group.orchestrateBoard!.tasks[0]!;
+    task.status = 'complete';
+    task.notes = 'Done';
+
+    setOrchestratorReportDeliverHook(null);
+    const historyBefore = planner.history.length;
+    await deliverOrchestratorTaskReport(group, planner, task, 'complete');
+
+    assert.equal(planner.history.length, historyBefore + 1);
+    const last = planner.history[planner.history.length - 1]!;
+    assert.equal(last.role, 'assistant');
+    assert.match(String(last.content), /W1-A/);
+    assert.equal(isChatStreaming(planner.id), false);
   });
 });
 
