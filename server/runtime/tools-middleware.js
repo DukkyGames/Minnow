@@ -17,6 +17,7 @@ import {
 } from '../terminal-runner.js';
 import { toolRunImpeccable } from '../impeccable/run-impeccable.js';
 import { toolLoadImpeccableContext } from '../impeccable/load-impeccable-context.js';
+import { toolLoadAestheticsReference } from '../design/load-aesthetics-reference.js';
 import {
   blockPlanModeWrite,
   resolveModeIdFromToolsBody,
@@ -1121,6 +1122,7 @@ const SERVER_TOOL_HANDLERS = {
     toolRunImpeccable(args, getAppRoot(), getEffectiveWorkspaceRoot()),
   load_impeccable_context: () =>
     toolLoadImpeccableContext(getAppRoot(), getEffectiveWorkspaceRoot()),
+  load_aesthetics_reference: () => toolLoadAestheticsReference(getAppRoot()),
   get_lsp_diagnostics: async (args) => {
     const { getLspDiagnostics } = await import('../lsp/manager.js');
     return getLspDiagnostics(String(args?.path ?? ''));

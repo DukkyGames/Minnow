@@ -25,6 +25,7 @@ const CACHE_POLICY: Record<string, ToolCachePolicy> = {
   get_lsp_diagnostics: { cacheable: true, ttlMs: 30_000 },
   list_lsp_servers: { cacheable: true, ttlMs: 60_000 },
   load_impeccable_context: { cacheable: true, ttlMs: 300_000 },
+  load_aesthetics_reference: { cacheable: true, ttlMs: 300_000 },
   web_search: { cacheable: true, ttlMs: 120_000 },
   web_search_ddg: { cacheable: true, ttlMs: 120_000 },
   web_search_tavily: { cacheable: true, ttlMs: 120_000 },

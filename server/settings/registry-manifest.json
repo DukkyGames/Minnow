@@ -3053,6 +3053,32 @@
     ]
   },
   {
+    "key": "integrations.tools.permission.load_aesthetics_reference",
+    "label": "Tool permission: load_aesthetics_reference",
+    "description": "Permission mode for the load_aesthetics_reference tool (off, ask, or full).",
+    "keywords": [
+      "load_aesthetics_reference",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.load_aesthetics_reference",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
     "key": "integrations.tools.permission.run_impeccable",
     "label": "Tool permission: run_impeccable",
     "description": "Permission mode for the run_impeccable tool (off, ask, or full).",
