@@ -80,6 +80,15 @@ export async function renderBrowserAllowlistSettings(
   });
   section.appendChild(allowNavRow);
 
+  const { row: restoreTabsRow, input: restoreTabsCb } = createSettingsToggleRow(
+    'Restore browser tabs',
+    {
+      id: 'settingsBrowserRestoreTabs',
+      checked: meta.restoreBrowserTabs,
+    },
+  );
+  section.appendChild(restoreTabsRow);
+
   const patternsArea = document.createElement('textarea');
   patternsArea.id = 'settingsBrowserAllowlistPatterns';
   patternsArea.rows = 6;
@@ -107,6 +116,7 @@ export async function renderBrowserAllowlistSettings(
             try {
               await saveBrowserMeta({
                 allowNavigate: allowNavCb.checked,
+                restoreBrowserTabs: restoreTabsCb.checked,
                 allowedOriginPatterns: patterns,
               });
               invalidateBrowserMetaCache();
@@ -131,6 +141,18 @@ export async function renderBrowserAllowlistSettings(
       } catch {
         setStatus('err', 'Could not save browser settings');
         allowNavCb.checked = !allowNavCb.checked;
+      }
+    })();
+  });
+
+  restoreTabsCb.addEventListener('change', () => {
+    void (async () => {
+      try {
+        await saveBrowserMeta({ restoreBrowserTabs: restoreTabsCb.checked });
+        setStatus('ok', 'Browser tab restore setting saved');
+      } catch {
+        setStatus('err', 'Could not save browser settings');
+        restoreTabsCb.checked = !restoreTabsCb.checked;
       }
     })();
   });

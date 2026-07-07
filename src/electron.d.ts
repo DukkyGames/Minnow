@@ -36,25 +36,43 @@ export interface MinnowPreviewGuestInfo {
   loading: boolean;
 }
 
+export interface MinnowPreviewTabInfo {
+  id: string;
+  url: string;
+  title: string;
+  loading: boolean;
+  active: boolean;
+}
+
+export interface MinnowPreviewTabsApi {
+  create(tabId?: string): Promise<string>;
+  close(id: string): Promise<void>;
+  activate(id: string): Promise<void>;
+  list(): Promise<MinnowPreviewTabInfo[]>;
+}
+
 export interface MinnowPreviewApi {
-  show(bounds?: MinnowPreviewBounds): Promise<void>;
-  hide(): Promise<void>;
-  clear(): Promise<void>;
-  loadURL(url: string): Promise<void>;
-  loadSource(payload: MinnowPreviewLoadSourcePayload): Promise<void>;
-  reload(): Promise<void>;
-  stop(): Promise<void>;
-  goBack(): Promise<void>;
-  goForward(): Promise<void>;
-  setBounds(bounds: MinnowPreviewBounds): Promise<void>;
-  execJs(code: string): Promise<unknown>;
-  capturePage(): Promise<string>;
-  getInfo(): Promise<MinnowPreviewGuestInfo>;
-  navigateAndWait(url: string): Promise<MinnowPreviewNavigateAwaitResult>;
-  onNavigation(callback: (url: string) => void): () => void;
-  onLoading(callback: (loading: boolean) => void): () => void;
-  onPageTitle(callback: (title: string) => void): () => void;
-  onLoadFailed(callback: (detail: MinnowPreviewLoadFailedDetail) => void): () => void;
+  show(bounds?: MinnowPreviewBounds, tabId?: string): Promise<void>;
+  hide(tabId?: string): Promise<void>;
+  clear(tabId?: string): Promise<void>;
+  loadURL(url: string, tabId?: string): Promise<void>;
+  loadSource(payload: MinnowPreviewLoadSourcePayload, tabId?: string): Promise<void>;
+  reload(tabId?: string): Promise<void>;
+  stop(tabId?: string): Promise<void>;
+  goBack(tabId?: string): Promise<void>;
+  goForward(tabId?: string): Promise<void>;
+  setBounds(bounds: MinnowPreviewBounds, tabId?: string): Promise<void>;
+  execJs(code: string, tabId?: string): Promise<unknown>;
+  capturePage(tabId?: string): Promise<string>;
+  getInfo(tabId?: string): Promise<MinnowPreviewGuestInfo>;
+  navigateAndWait(url: string, tabId?: string): Promise<MinnowPreviewNavigateAwaitResult>;
+  tabs: MinnowPreviewTabsApi;
+  onNavigation(callback: (url: string, tabId?: string) => void): () => void;
+  onLoading(callback: (loading: boolean, tabId?: string) => void): () => void;
+  onPageTitle(callback: (title: string, tabId?: string) => void): () => void;
+  onLoadFailed(
+    callback: (detail: MinnowPreviewLoadFailedDetail, tabId?: string) => void,
+  ): () => void;
 }
 
 export interface MinnowAppApi {

@@ -28,6 +28,14 @@ export const PREVIEW_LOADING = 'minnow:preview:loading';
 export const PREVIEW_PAGE_TITLE = 'minnow:preview:page-title';
 /** Main → renderer: preview load failed. */
 export const PREVIEW_LOAD_FAILED = 'minnow:preview:load-failed';
+/** Renderer → main: create a preview tab guest; returns tab id. */
+export const PREVIEW_TAB_CREATE = 'minnow:preview:tab-create';
+/** Renderer → main: close a preview tab guest. */
+export const PREVIEW_TAB_CLOSE = 'minnow:preview:tab-close';
+/** Renderer → main: activate a preview tab guest. */
+export const PREVIEW_TAB_ACTIVATE = 'minnow:preview:tab-activate';
+/** Renderer → main: list preview tab guests. */
+export const PREVIEW_TAB_LIST = 'minnow:preview:tab-list';
 export const APP_OPEN_EXTERNAL = 'minnow:app:open-external';
 /** Renderer → main: forward renderer errors to crash.jsonl (fire-and-forget). */
 export const DIAGNOSTICS_REPORT_ERROR = 'minnow:diagnostics:report-error';

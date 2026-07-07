@@ -263,14 +263,26 @@ export interface OpenViewerTabResult {
  * Open or focus a tab. Returns whether an existing tab was focused.
  * When `confirmUnsaved` returns false, open is aborted.
  */
+export type ViewerUnsavedGuard = () => boolean | Promise<boolean>;
+
 export function openViewerTab(
   path: string,
   options?: OpenViewerTabOptions & {
-    confirmUnsaved?: () => boolean;
+    confirmUnsaved?: ViewerUnsavedGuard;
     /** Snapshot outgoing editor before unsaved guard / tab switch. */
     beforeActivate?: () => void;
   },
-): OpenViewerTabResult | null {
+): Promise<OpenViewerTabResult | null> {
+  return openViewerTabInternal(path, options);
+}
+
+async function openViewerTabInternal(
+  path: string,
+  options?: OpenViewerTabOptions & {
+    confirmUnsaved?: ViewerUnsavedGuard;
+    beforeActivate?: () => void;
+  },
+): Promise<OpenViewerTabResult | null> {
   const key = tabKey(path);
   const existing = tabs.get(key);
   if (existing) {
@@ -282,7 +294,7 @@ export function openViewerTab(
       activeTabPath &&
       activeTabPath !== key &&
       options?.confirmUnsaved &&
-      !options.confirmUnsaved()
+      !(await options.confirmUnsaved())
     ) {
       return null;
     }
@@ -308,7 +320,7 @@ export function openViewerTab(
     !options?.skipUnsavedGuard &&
     activeTabPath &&
     options?.confirmUnsaved &&
-    !options.confirmUnsaved()
+    !(await options.confirmUnsaved())
   ) {
     return null;
   }
@@ -330,11 +342,22 @@ export function activateViewerTab(
   path: string,
   options?: {
     skipUnsavedGuard?: boolean;
-    confirmUnsaved?: () => boolean;
+    confirmUnsaved?: ViewerUnsavedGuard;
     /** Snapshot outgoing editor before unsaved guard / tab switch. */
     beforeActivate?: () => void;
   },
-): boolean {
+): Promise<boolean> {
+  return activateViewerTabInternal(path, options);
+}
+
+async function activateViewerTabInternal(
+  path: string,
+  options?: {
+    skipUnsavedGuard?: boolean;
+    confirmUnsaved?: ViewerUnsavedGuard;
+    beforeActivate?: () => void;
+  },
+): Promise<boolean> {
   const key = tabKey(path);
   if (!tabs.has(key)) return false;
   if (activeTabPath && activeTabPath !== key) {
@@ -345,7 +368,7 @@ export function activateViewerTab(
     activeTabPath &&
     activeTabPath !== key &&
     options?.confirmUnsaved &&
-    !options.confirmUnsaved()
+    !(await options.confirmUnsaved())
   ) {
     return false;
   }
@@ -353,6 +376,53 @@ export function activateViewerTab(
   emitChange();
   persistWorkspaceTabs();
   return true;
+}
+
+/** Reorder a tab to a new index in the strip (0-based). */
+export function reorderViewerTab(path: string, toIndex: number): void {
+  const key = tabKey(path);
+  const fromIndex = tabOrder.indexOf(key);
+  if (fromIndex < 0) return;
+  const clamped = Math.max(0, Math.min(toIndex, tabOrder.length - 1));
+  if (fromIndex === clamped) return;
+  tabOrder.splice(fromIndex, 1);
+  tabOrder.splice(clamped, 0, key);
+  emitChange();
+  persistWorkspaceTabs();
+}
+
+/** Close every tab except the given path (no unsaved guard — caller handles). */
+export function closeOtherViewerTabs(keepPath: string): string[] {
+  const keepKey = tabKey(keepPath);
+  const closed = tabOrder.filter((p) => p !== keepKey);
+  for (const p of closed) {
+    tabs.delete(p);
+  }
+  tabOrder = tabs.has(keepKey) ? [keepKey] : [];
+  if (activeTabPath && !tabs.has(activeTabPath)) {
+    activeTabPath = tabOrder[tabOrder.length - 1] ?? null;
+  }
+  emitChange();
+  persistWorkspaceTabs();
+  return closed;
+}
+
+/** Close tabs to the right of the given path (no unsaved guard — caller handles). */
+export function closeViewerTabsToRight(path: string): string[] {
+  const key = tabKey(path);
+  const idx = tabOrder.indexOf(key);
+  if (idx < 0) return [];
+  const closed = tabOrder.slice(idx + 1);
+  for (const p of closed) {
+    tabs.delete(p);
+  }
+  tabOrder = tabOrder.slice(0, idx + 1);
+  if (activeTabPath && !tabs.has(activeTabPath)) {
+    activeTabPath = tabOrder[tabOrder.length - 1] ?? null;
+  }
+  emitChange();
+  persistWorkspaceTabs();
+  return closed;
 }
 
 export function removeViewerTab(path: string): void {

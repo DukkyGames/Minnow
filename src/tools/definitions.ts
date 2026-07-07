@@ -1176,13 +1176,13 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'browser_list',
     label: 'Browser list tabs',
-    description: 'Shows the active built-in preview panel URL and title.',
+    description: 'Lists all built-in preview browser tabs (active tab marked).',
     category: 'browser',
     serverRequired: false,
     previewRequired: true,
     definition: toolSchema(
       'browser_list',
-      'List the shared built-in preview browser (single visible panel).',
+      'List all built-in preview browser tabs; the active tab is marked [active].',
       {},
     ),
   },
@@ -1226,6 +1226,56 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         },
       },
       ['url'],
+    ),
+  },
+  {
+    id: 'browser_new_tab',
+    label: 'Browser new tab',
+    description: 'Open a new built-in preview browser tab.',
+    category: 'browser',
+    serverRequired: false,
+    previewRequired: true,
+    definition: toolSchema(
+      'browser_new_tab',
+      'Open a new tab in the built-in preview browser (optional URL or workspace path).',
+      {
+        url: {
+          type: 'string',
+          description: 'Optional http(s) URL or workspace path to load in the new tab',
+        },
+      },
+    ),
+  },
+  {
+    id: 'browser_switch_tab',
+    label: 'Browser switch tab',
+    description: 'Activate a preview browser tab by id.',
+    category: 'browser',
+    serverRequired: false,
+    previewRequired: true,
+    definition: toolSchema(
+      'browser_switch_tab',
+      'Switch the active built-in preview browser tab.',
+      {
+        tab_id: { type: 'string', description: 'Preview tab id from browser_list' },
+      },
+      ['tab_id'],
+    ),
+  },
+  {
+    id: 'browser_close_tab',
+    label: 'Browser close tab',
+    description: 'Close a preview browser tab by id.',
+    category: 'browser',
+    serverRequired: false,
+    previewRequired: true,
+    definition: toolSchema(
+      'browser_close_tab',
+      'Close a built-in preview browser tab.',
+      {
+        tab_id: { type: 'string', description: 'Preview tab id from browser_list' },
+      },
+      ['tab_id'],
     ),
   },
   {

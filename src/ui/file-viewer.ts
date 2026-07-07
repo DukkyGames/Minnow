@@ -56,6 +56,8 @@ import {
 import {
   activateViewerTab,
   clearAllViewerTabs,
+  closeOtherViewerTabs,
+  closeViewerTabsToRight,
   getActiveViewerTab,
   getActiveViewerTabPath,
   getOpenViewerTabPaths,
@@ -74,6 +76,7 @@ import {
   type ViewerTabState,
 } from './file-viewer-tab-store';
 import { refreshFileViewerTabs, registerFileViewerTabHandlers } from './file-viewer-tabs';
+import { showViewerUnsavedDialog } from './file-viewer-unsaved-dialog';
 import { setStatus } from './status';
 
 export const LARGE_FILE_BYTES = 512_000;
@@ -718,15 +721,34 @@ export function renderActiveViewerTab(): void {
   mountEditor(tab, content);
 }
 
-/** Confirm when leaving a dirty active editor tab. */
-export function confirmLeaveDirtyActiveTab(): boolean {
+/** Confirm when leaving a dirty active editor tab (Save / Discard / Cancel). */
+export async function confirmLeaveDirtyActiveTab(): Promise<boolean> {
   const tab = getActiveViewerTab();
   if (!tab?.isDirty) return true;
-  return window.confirm('You have unsaved changes. Continue without saving?');
+  const choice = await showViewerUnsavedDialog(
+    `You have unsaved changes in "${tab.displayName}".`,
+  );
+  if (choice === 'cancel') return false;
+  if (choice === 'discard') return true;
+  return saveCurrentFile();
+}
+
+/** Confirm closing a dirty tab (may be inactive). */
+async function confirmCloseDirtyTab(tab: ViewerTabState): Promise<boolean> {
+  if (!tab.isDirty) return true;
+  const choice = await showViewerUnsavedDialog(
+    `You have unsaved changes in "${tab.displayName}".`,
+  );
+  if (choice === 'cancel') return false;
+  if (choice === 'discard') return true;
+  if (tab.path === getActiveViewerTabPath()) {
+    return saveCurrentFile();
+  }
+  return false;
 }
 
 async function activateTabAndRender(path: string, options?: { skipUnsavedGuard?: boolean }): Promise<boolean> {
-  const ok = activateViewerTab(path, {
+  const ok = await activateViewerTab(path, {
     skipUnsavedGuard: options?.skipUnsavedGuard,
     confirmUnsaved: confirmLeaveDirtyActiveTab,
     beforeActivate: snapshotOutgoingEditorTab,
@@ -742,13 +764,7 @@ export async function closeViewerTab(path: string): Promise<void> {
   const tab = listViewerTabs().find((t) => t.path === path);
   if (!tab) return;
 
-  if (path === getActiveViewerTabPath() && tab.isDirty) {
-    const proceed = window.confirm('You have unsaved changes. Close without saving?');
-    if (!proceed) return;
-  } else if (tab.isDirty) {
-    const proceed = window.confirm('You have unsaved changes. Close without saving?');
-    if (!proceed) return;
-  }
+  if (!(await confirmCloseDirtyTab(tab))) return;
 
   const wasActive = path === getActiveViewerTabPath();
   if (wasActive) {
@@ -765,6 +781,61 @@ export async function closeViewerTab(path: string): Promise<void> {
     renderActiveViewerTab();
   }
   renderFileTreeViaBridge();
+}
+
+/** Close every tab except the given path. */
+export async function closeOtherViewerTabsUi(keepPath: string): Promise<void> {
+  const toClose = listViewerTabs().filter((t) => t.path !== keepPath);
+  for (const tab of toClose) {
+    if (!(await confirmCloseDirtyTab(tab))) return;
+  }
+  const wasActiveDirty = getActiveViewerTabPath() !== keepPath;
+  if (wasActiveDirty) destroyEditor();
+  closeOtherViewerTabs(keepPath);
+  if (getActiveViewerTabPath() === keepPath) {
+    renderActiveViewerTab();
+  }
+  if (listViewerTabs().length === 0) {
+    hideViewerSplit();
+  }
+  renderFileTreeViaBridge();
+}
+
+/** Close tabs to the right of the given path. */
+export async function closeViewerTabsToRightUi(path: string): Promise<void> {
+  const idx = listViewerTabs().findIndex((t) => t.path === path);
+  if (idx < 0) return;
+  const toClose = listViewerTabs().slice(idx + 1);
+  for (const tab of toClose) {
+    if (!(await confirmCloseDirtyTab(tab))) return;
+  }
+  const activePath = getActiveViewerTabPath();
+  if (activePath && toClose.some((t) => t.path === activePath)) {
+    destroyEditor();
+  }
+  closeViewerTabsToRight(path);
+  renderActiveViewerTab();
+  renderFileTreeViaBridge();
+}
+
+/** Close all open tabs (with per-tab dirty guard). */
+export async function closeAllViewerTabsUi(): Promise<void> {
+  for (const tab of [...listViewerTabs()]) {
+    if (!(await confirmCloseDirtyTab(tab))) return;
+  }
+  resetAllViewerTabs();
+}
+
+/** Cycle to the next or previous tab in the strip. */
+export async function cycleViewerTab(direction: 'next' | 'prev'): Promise<void> {
+  const tabs = listViewerTabs();
+  if (tabs.length < 2) return;
+  const activePath = getActiveViewerTabPath();
+  const idx = tabs.findIndex((t) => t.path === activePath);
+  if (idx < 0) return;
+  const nextIdx =
+    direction === 'next' ? (idx + 1) % tabs.length : (idx - 1 + tabs.length) % tabs.length;
+  await activateTabAndRender(tabs[nextIdx]!.path);
 }
 
 /** Persist the open file via save_file. */
@@ -814,14 +885,18 @@ export function switchMarkdownViewerToCode(): void {
 }
 
 /** Switch the open markdown file from the code editor to GFM preview. */
-export function switchMarkdownViewerToPreview(): void {
+export async function switchMarkdownViewerToPreview(): Promise<void> {
   const tab = getActiveViewerTab();
   if (!tab || !isMarkdownFilePath(tab.path) || !editorView) return;
   if (tab.isDirty) {
-    const proceed = window.confirm(
-      'You have unsaved changes. Switch to preview without saving?',
+    const choice = await showViewerUnsavedDialog(
+      `You have unsaved changes in "${tab.displayName}".`,
     );
-    if (!proceed) return;
+    if (choice === 'cancel') return;
+    if (choice === 'save') {
+      const saved = await saveCurrentFile();
+      if (!saved) return;
+    }
   }
   const content = editorView.state.doc.toString();
   tab.originalContent = content;
@@ -842,6 +917,18 @@ export function bindFileViewerControls(): void {
     },
     onClose: (path) => {
       void closeViewerTab(path);
+    },
+    onCloseOthers: (path) => {
+      void closeOtherViewerTabsUi(path);
+    },
+    onCloseToRight: (path) => {
+      void closeViewerTabsToRightUi(path);
+    },
+    onCloseAll: () => {
+      void closeAllViewerTabsUi();
+    },
+    onCycle: (direction) => {
+      void cycleViewerTab(direction);
     },
   });
 
@@ -928,7 +1015,9 @@ export function bindFileViewerContextMenu(): void {
         openQuickEditPanel(editorView, tab.path);
       },
       onSwitchToCode: () => switchMarkdownViewerToCode(),
-      onSwitchToPreview: () => switchMarkdownViewerToPreview(),
+      onSwitchToPreview: () => {
+        void switchMarkdownViewerToPreview();
+      },
     });
 
     if (items.length === 0) return;
@@ -961,11 +1050,11 @@ function openTabOptionsFromViewerOptions(
 }
 
 /** Open inlined chat attachment text in a read-only editor pane. */
-export function openAttachmentSnapshotInViewer(displayName: string, content: string): void {
+export async function openAttachmentSnapshotInViewer(displayName: string, content: string): Promise<void> {
   const safeName = displayName.replace(/[/\\]/g, '_') || 'attachment';
   const path = `.minnow/attachments/${safeName}`;
 
-  const result = openViewerTab(path, {
+  const result = await openViewerTab(path, {
     kind: 'attachment',
     displayName,
     content,
@@ -984,9 +1073,9 @@ export function openAttachmentSnapshotInViewer(displayName: string, content: str
 }
 
 /** Open a workspace image via the preview file API (binary-safe). */
-export function openWorkspaceImageInViewer(relativePath: string): void {
+export async function openWorkspaceImageInViewer(relativePath: string): Promise<void> {
   const displayName = relativePath.split(/[/\\]/).pop() ?? relativePath;
-  const result = openViewerTab(relativePath, {
+  const result = await openViewerTab(relativePath, {
     viewMode: 'image',
     readOnlyExcerpt: true,
     readOnlyBannerText: 'Workspace image (read-only preview).',
@@ -1001,11 +1090,11 @@ export function openWorkspaceImageInViewer(relativePath: string): void {
 }
 
 /** Open an image data URL from a chat attachment in the viewer pane. */
-export function openImageDataUrlInViewer(displayName: string, dataUrl: string): void {
+export async function openImageDataUrlInViewer(displayName: string, dataUrl: string): Promise<void> {
   const safeName = displayName.replace(/[/\\]/g, '_') || 'image';
   const path = `.minnow/attachments/${safeName}`;
 
-  const result = openViewerTab(path, {
+  const result = await openViewerTab(path, {
     kind: 'attachment',
     displayName,
     content: dataUrl,
@@ -1035,7 +1124,7 @@ export async function openFileInViewer(
     ? 'markdown-preview'
     : 'editor';
 
-  const result = openViewerTab(relativePath, {
+  const result = await openViewerTab(relativePath, {
     ...openTabOptionsFromViewerOptions(options),
     viewMode,
     confirmUnsaved: options?.skipUnsavedGuard ? undefined : confirmLeaveDirtyActiveTab,
@@ -1104,10 +1193,11 @@ export function closeFileViewer(): void {
 }
 
 /** Dismiss all file viewer tabs when switching to preview. */
-export function dismissFileViewerForPreview(): boolean {
-  if (isAnyViewerTabDirty()) {
-    const proceed = window.confirm('You have unsaved changes. Close without saving?');
-    if (!proceed) return false;
+export async function dismissFileViewerForPreview(): Promise<boolean> {
+  for (const tab of listViewerTabs()) {
+    if (tab.isDirty && !(await confirmCloseDirtyTab(tab))) {
+      return false;
+    }
   }
   resetAllViewerTabs({ closeSplit: false });
   return true;

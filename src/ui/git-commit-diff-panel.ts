@@ -239,7 +239,7 @@ export async function openGitCommitDiffPanel(
     return { ok: false, error: result.error ?? 'Could not load commit' };
   }
 
-  if (!dismissFileViewerForPreview()) {
+  if (!(await dismissFileViewerForPreview())) {
     return { ok: false, cancelled: true };
   }
 

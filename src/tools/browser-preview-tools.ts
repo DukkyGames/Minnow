@@ -85,9 +85,91 @@ export async function browserPreviewList(): Promise<string> {
   const disabled = await assertBrowserAutomationEnabled();
   if (disabled) return disabled;
 
-  const info = await previewApi().getInfo();
+  const api = previewApi();
+  if (api.tabs?.list) {
+    const tabs = await api.tabs.list();
+    if (tabs.length === 0) return '(no preview tabs)';
+    return tabs
+      .map((tab) => {
+        const prefix = tab.active ? '[active] ' : '';
+        const title = tab.title || '(no title)';
+        const url = tab.url || '(no url)';
+        return `${prefix}${title}\n  ${url}\n  id: ${tab.id}`;
+      })
+      .join('\n\n');
+  }
+
+  const info = await api.getInfo();
   const title = info.title || '(no title)';
   return `[active] ${title}\n  ${info.url || '(no url)'}`;
+}
+
+export async function browserPreviewNewTab(url?: string): Promise<string> {
+  if (!isElectronPreviewAvailable()) return DESKTOP_SHELL_MESSAGE;
+  const disabled = await assertBrowserAutomationEnabled();
+  if (disabled) return disabled;
+
+  const { openPreviewTab } = await import('../ui/preview-tab-store');
+  const { activatePreviewTabGuest, loadPreviewSource } = await import('../ui/preview-panel');
+  const { showPreviewSplit } = await import('../ui/file-layout');
+
+  const trimmed = url?.trim() ?? '';
+  const source =
+    trimmed && trimmed.startsWith('http')
+      ? ({ kind: 'url' as const, url: trimmed })
+      : trimmed
+        ? ({ kind: 'workspace' as const, path: trimmed })
+        : null;
+
+  const tab = openPreviewTab(source);
+  if (!tab) return 'Error: preview tab limit reached';
+
+  showPreviewSplit();
+  const api = previewApi();
+  if (api.tabs?.create) {
+    await api.tabs.create(tab.id);
+    await api.tabs.activate(tab.id);
+  }
+  await activatePreviewTabGuest(tab.id, { forceLoad: Boolean(source) });
+  if (source?.kind === 'url') {
+    await loadPreviewSource(source);
+  }
+
+  return `Opened preview tab ${tab.id}${trimmed ? `\n${trimmed}` : ''}`;
+}
+
+export async function browserPreviewSwitchTab(tabId: string): Promise<string> {
+  if (!isElectronPreviewAvailable()) return DESKTOP_SHELL_MESSAGE;
+  const disabled = await assertBrowserAutomationEnabled();
+  if (disabled) return disabled;
+  if (!tabId.trim()) return 'Error: tab_id is required';
+
+  const { getPreviewTab, activatePreviewTab } = await import('../ui/preview-tab-store');
+  const { activatePreviewTabGuest } = await import('../ui/preview-panel');
+  if (!getPreviewTab(tabId.trim())) {
+    return `Error: unknown preview tab "${tabId.trim()}"`;
+  }
+
+  const api = previewApi();
+  if (api.tabs?.activate) {
+    await api.tabs.activate(tabId.trim());
+  }
+  activatePreviewTab(tabId.trim());
+  await activatePreviewTabGuest(tabId.trim());
+
+  const info = await api.getInfo(tabId.trim());
+  return `Active tab: ${tabId.trim()}\nTitle: ${info.title || '(no title)'}\n${info.url || ''}`;
+}
+
+export async function browserPreviewCloseTab(tabId: string): Promise<string> {
+  if (!isElectronPreviewAvailable()) return DESKTOP_SHELL_MESSAGE;
+  const disabled = await assertBrowserAutomationEnabled();
+  if (disabled) return disabled;
+  if (!tabId.trim()) return 'Error: tab_id is required';
+
+  const { closePreviewTabUi } = await import('../ui/preview-panel');
+  await closePreviewTabUi(tabId.trim());
+  return `Closed preview tab ${tabId.trim()}`;
 }
 
 export async function browserPreviewNavigate(url: string): Promise<string> {
@@ -290,6 +372,24 @@ export async function executeBrowserPreviewTool(
       }
       case 'browser_screenshot':
         return browserPreviewScreenshot();
+      case 'browser_new_tab': {
+        const url = typeof args.url === 'string' ? args.url : undefined;
+        return { content: await browserPreviewNewTab(url) };
+      }
+      case 'browser_switch_tab': {
+        const tabId = args.tab_id ?? args.tabId;
+        if (typeof tabId !== 'string' || !tabId.trim()) {
+          return { content: 'Error: tab_id is required' };
+        }
+        return { content: await browserPreviewSwitchTab(tabId.trim()) };
+      }
+      case 'browser_close_tab': {
+        const tabId = args.tab_id ?? args.tabId;
+        if (typeof tabId !== 'string' || !tabId.trim()) {
+          return { content: 'Error: tab_id is required' };
+        }
+        return { content: await browserPreviewCloseTab(tabId.trim()) };
+      }
       default:
         return { content: `Error: unknown preview browser tool "${name}"` };
     }

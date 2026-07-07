@@ -4,6 +4,7 @@
  * Browser (npm start): same-origin iframe in #previewFrame (MIN-105).
  */
 
+import { loadBrowserMeta } from '../config/browser-meta';
 import type { MinnowPreviewApi } from '../electron';
 import {
   getFilePanelState,
@@ -13,7 +14,6 @@ import {
 import { onFileSaved } from '../state/preview-events';
 import {
   hidePreviewSplit,
-  hidePreviewSplitKeepSource,
   resetRightSplitForCodeEntry,
   showPreviewSplit,
 } from './file-layout';
@@ -26,6 +26,23 @@ import {
   scheduleElectronPreviewHostVisibilitySync,
   syncElectronPreviewHostLayout,
 } from './preview-electron-visibility';
+import {
+  activatePreviewTab,
+  closePreviewTab,
+  ensureDefaultPreviewTab,
+  getActivePreviewTab,
+  getActivePreviewTabId,
+  getPreviewTab,
+  listPreviewTabs,
+  migrateLegacyPreviewSource,
+  openPreviewTab,
+  restorePreviewTabs,
+  setPreviewTabLoadFailed,
+  setPreviewTabLoading,
+  setPreviewTabTitle,
+  updatePreviewTabSource,
+} from './preview-tab-store';
+import { bindPreviewTabs, registerPreviewTabHandlers } from './preview-tabs';
 import { HTTP_URL_RE, parsePreviewAddress } from './preview-url';
 import { shouldAutoRestorePreviewPanel, isCodeAppForeground } from './preview-restore-policy';
 
@@ -49,6 +66,18 @@ let embedBlockedActive = false;
 let unsubscribeNavigation: (() => void) | null = null;
 let unsubscribeLoading: (() => void) | null = null;
 let unsubscribeLoadFailed: (() => void) | null = null;
+let unsubscribePageTitle: (() => void) | null = null;
+const iframesByTabId = new Map<string, HTMLIFrameElement>();
+const loadedTabGuests = new Set<string>();
+
+function getActivePreviewSource(): PreviewSource | null {
+  return getActivePreviewTab()?.source ?? getFilePanelState().previewSource;
+}
+
+function resolveTabId(tabId?: string): string | null {
+  if (tabId) return tabId;
+  return getActivePreviewTabId();
+}
 
 function usesElectronPreview(): boolean {
   return Boolean(getPreviewApi());
@@ -58,8 +87,72 @@ function getPreviewApi(): MinnowPreviewApi | undefined {
   return window.minnow?.preview;
 }
 
-function getFrame(): HTMLIFrameElement | null {
-  return document.getElementById('previewFrame') as HTMLIFrameElement | null;
+function getOrCreateFrame(tabId: string): HTMLIFrameElement | null {
+  const body = getPreviewBody();
+  if (!body) return null;
+  let frame = iframesByTabId.get(tabId);
+  if (!frame) {
+    frame = document.createElement('iframe');
+    frame.className = 'preview-frame';
+    frame.setAttribute(
+      'sandbox',
+      'allow-scripts allow-forms allow-popups allow-modals',
+    );
+    frame.title = 'Workspace preview';
+    frame.hidden = true;
+    frame.addEventListener('load', () => {
+      onIframeLoad(tabId);
+    });
+    body.appendChild(frame);
+    iframesByTabId.set(tabId, frame);
+  }
+  return frame;
+}
+
+function getActiveFrame(): HTMLIFrameElement | null {
+  const tabId = getActivePreviewTabId();
+  if (!tabId) return null;
+  return getOrCreateFrame(tabId);
+}
+
+function showActiveTabFrame(): void {
+  const activeId = getActivePreviewTabId();
+  for (const [id, frame] of iframesByTabId) {
+    frame.hidden = id !== activeId;
+  }
+}
+
+function destroyPreviewFrame(tabId: string): void {
+  const frame = iframesByTabId.get(tabId);
+  if (frame) {
+    frame.remove();
+    iframesByTabId.delete(tabId);
+  }
+  loadedTabGuests.delete(tabId);
+}
+
+function onIframeLoad(tabId: string): void {
+  if (usesElectronPreview()) return;
+  if (tabId !== getActivePreviewTabId()) return;
+  clearFrameBlockedTimer();
+  const source = getPreviewTabSource(tabId);
+  if (source?.kind !== 'url') {
+    hideEmbedBlockedNotice();
+    return;
+  }
+  if (embedBlockedActive) return;
+  const frame = iframesByTabId.get(tabId);
+  if (!frame) return;
+  const { href } = readFrameEmbedSignals(frame);
+  if (href === 'about:blank') return;
+  checkExternalUrlEmbedAfterLoad(tabId);
+  if (!embedBlockedActive) {
+    scheduleFrameBlockedCheck(tabId);
+  }
+}
+
+function getPreviewTabSource(tabId: string): PreviewSource | null {
+  return getPreviewTab(tabId)?.source ?? null;
 }
 
 function getUrlInput(): HTMLInputElement | null {
@@ -176,7 +269,9 @@ function hidePreviewStatus(): void {
   }
 }
 
-function setPreviewLoading(loading: boolean): void {
+function setPreviewLoading(loading: boolean, tabId?: string): void {
+  const id = resolveTabId(tabId);
+  if (id) setPreviewTabLoading(id, loading);
   const el = getLoadingIndicator();
   if (!el) return;
   el.classList.toggle('hidden', !loading);
@@ -188,8 +283,8 @@ function syncAddressBarFromNavigation(url: string): void {
   if (!input) return;
   if (!url || url === 'about:blank') return;
 
-  const state = getFilePanelState();
-  if (state.previewSource?.kind === 'workspace') {
+  const activeSource = getActivePreviewSource();
+  if (activeSource?.kind === 'workspace') {
     try {
       const parsed = new URL(url);
       const prefix = `${window.location.origin}${PREVIEW_FILE_API}`;
@@ -207,7 +302,17 @@ function syncAddressBarFromNavigation(url: string): void {
   input.value = url;
 }
 
-function onPreviewNavigation(url: string): void {
+function commitActivePreviewSource(source: PreviewSource | null): void {
+  const tabId = getActivePreviewTabId();
+  if (tabId) {
+    updatePreviewTabSource(tabId, source);
+  } else {
+    patchFilePanelState({ previewSource: source });
+  }
+}
+
+function onPreviewNavigation(url: string, tabId?: string): void {
+  const resolvedTabId = resolveTabId(tabId);
   if (
     usesElectronPreview() &&
     !isPreviewPaneDomVisible() &&
@@ -218,12 +323,17 @@ function onPreviewNavigation(url: string): void {
     void revealPreviewPanelForAgentNavigation(url);
   }
 
-  syncAddressBarFromNavigation(url);
+  if (resolvedTabId === getActivePreviewTabId()) {
+    syncAddressBarFromNavigation(url);
+  }
   if (!url || url === 'about:blank' || url.startsWith('chrome-error:')) return;
-  hidePreviewStatus();
+  if (resolvedTabId === getActivePreviewTabId()) {
+    hidePreviewStatus();
+  }
 
   if (url.startsWith('file://') || HTTP_URL_RE.test(url)) {
-    patchFilePanelState({ previewSource: { kind: 'url', url } });
+    if (resolvedTabId) updatePreviewTabSource(resolvedTabId, { kind: 'url', url });
+    else commitActivePreviewSource({ kind: 'url', url });
     return;
   }
 
@@ -233,19 +343,32 @@ function onPreviewNavigation(url: string): void {
     if (parsed.origin === window.location.origin && parsed.pathname.startsWith(PREVIEW_FILE_API)) {
       const encoded = parsed.pathname.slice(PREVIEW_FILE_API.length);
       const path = decodeURIComponent(encoded).replace(/^\/+/, '');
-      patchFilePanelState({ previewSource: { kind: 'workspace', path } });
+      const source = { kind: 'workspace' as const, path };
+      if (resolvedTabId) updatePreviewTabSource(resolvedTabId, source);
+      else commitActivePreviewSource(source);
     }
   } catch {
     /* ignore malformed URLs */
   }
 }
 
-function onPreviewLoadFailed(detail: {
-  errorCode: number;
-  errorDescription: string;
-  url?: string;
-}): void {
-  setPreviewLoading(false);
+function onPreviewLoadFailed(
+  detail: {
+    errorCode: number;
+    errorDescription: string;
+    url?: string;
+  },
+  tabId?: string,
+): void {
+  const resolvedTabId = resolveTabId(tabId);
+  if (resolvedTabId) {
+    setPreviewTabLoadFailed(resolvedTabId, {
+      errorCode: detail.errorCode,
+      errorDescription: detail.errorDescription,
+    });
+  }
+  if (resolvedTabId !== getActivePreviewTabId()) return;
+  setPreviewLoading(false, resolvedTabId ?? undefined);
   let message =
     detail.errorDescription?.trim() ||
     `Preview failed to load (error ${detail.errorCode}).`;
@@ -253,7 +376,7 @@ function onPreviewLoadFailed(detail: {
     message =
       'This site refused to load in the embedded browser. Use Open in new tab, or try again after restarting Minnow.';
   }
-  const previewSource = getFilePanelState().previewSource;
+  const previewSource = getActivePreviewSource();
   const externalUrl =
     detail.url && (detail.url.startsWith('http') || detail.url.startsWith('file:'))
       ? detail.url
@@ -301,28 +424,36 @@ async function hidePreviewHost(): Promise<void> {
 }
 
 /** Drop the guest document so a closed/empty preview does not resurrect the last page. */
-async function clearPreviewGuest(): Promise<void> {
+async function clearPreviewGuest(tabId?: string): Promise<void> {
   const api = getPreviewApi();
   if (!api) return;
-  if (api.clear) {
-    await api.clear();
+  const id = resolveTabId(tabId);
+  if (api.tabs?.close && id) {
+    await api.tabs.close(id);
     return;
   }
-  await api.loadURL('about:blank');
+  if (api.clear) {
+    await api.clear(id);
+    return;
+  }
+  await api.loadURL('about:blank', id);
 }
 
-async function loadSourceInPreview(source: PreviewSource, cacheBust?: number): Promise<void> {
+async function loadSourceInPreview(
+  source: PreviewSource,
+  cacheBust?: number,
+  tabId?: string,
+): Promise<void> {
   const api = getPreviewApi();
   if (!api) return;
-  setPreviewLoading(true);
-  // Workspace files go through /api/preview/file/ on the renderer's server so the
-  // server's workspaceRoot (not the Electron main process's process.cwd) is the resolver.
+  const id = resolveTabId(tabId);
+  setPreviewLoading(true, id ?? undefined);
   const url = resolvePreviewLoadUrl(source, cacheBust);
   if (api.loadSource) {
-    await api.loadSource({ kind: 'url', url, cacheBust });
+    await api.loadSource({ kind: 'url', url, cacheBust }, id);
     return;
   }
-  await api.loadURL(url);
+  await api.loadURL(url, id);
 }
 
 function clearFrameBlockedTimer(): void {
@@ -380,9 +511,10 @@ function hideEmbedBlockedNotice(): void {
   body?.classList.remove('is-embed-blocked');
 }
 
-function checkExternalUrlEmbedAfterLoad(): void {
-  const frame = getFrame();
-  const source = getFilePanelState().previewSource;
+function checkExternalUrlEmbedAfterLoad(tabId?: string): void {
+  const id = resolveTabId(tabId);
+  const frame = id ? iframesByTabId.get(id) ?? null : getActiveFrame();
+  const source = id ? getPreviewTabSource(id) : getActivePreviewSource();
   if (!frame || source?.kind !== 'url') return;
 
   if (isExternalUrlBlockedInFrame(frame)) {
@@ -403,67 +535,160 @@ function checkExternalUrlEmbedAfterLoad(): void {
   hideEmbedBlockedNotice();
 }
 
-function scheduleFrameBlockedCheck(): void {
+function scheduleFrameBlockedCheck(tabId?: string): void {
   clearFrameBlockedTimer();
   frameBlockedTimer = setTimeout(() => {
     frameBlockedTimer = null;
-    checkExternalUrlEmbedAfterLoad();
+    checkExternalUrlEmbedAfterLoad(tabId);
   }, FRAME_BLOCKED_TIMEOUT_MS);
 }
 
-function clearPreviewFrame(): void {
-  const frame = getFrame();
+function clearPreviewFrame(tabId?: string): void {
+  const id = resolveTabId(tabId);
+  const frame = id ? iframesByTabId.get(id) : getActiveFrame();
   if (!frame) return;
   frame.removeAttribute('src');
   frame.src = 'about:blank';
 }
 
-function applySourceToFrame(source: PreviewSource, cacheBust?: number): void {
-  const frame = getFrame();
-  const input = getUrlInput();
+function applySourceToFrame(tabId: string, source: PreviewSource, cacheBust?: number): void {
+  const frame = getOrCreateFrame(tabId);
   if (!frame) return;
 
   embedBlockedActive = false;
   hideEmbedBlockedNotice();
   clearFrameBlockedTimer();
-  hidePreviewStatus();
-
-  if (input) input.value = sourceToAddressBar(source);
+  if (tabId === getActivePreviewTabId()) {
+    hidePreviewStatus();
+    const input = getUrlInput();
+    if (input) input.value = sourceToAddressBar(source);
+  }
 
   if (source.kind === 'url') {
     frame.src = source.url;
-    scheduleFrameBlockedCheck();
+    if (tabId === getActivePreviewTabId()) {
+      scheduleFrameBlockedCheck(tabId);
+    }
     return;
   }
 
   frame.src = workspacePreviewUrl(source.path, cacheBust);
 }
 
-function applySourceToPreview(source: PreviewSource, cacheBust?: number): void {
+function applySourceToPreview(source: PreviewSource, cacheBust?: number, tabId?: string): void {
+  const id = resolveTabId(tabId);
+  if (!id) return;
   if (usesElectronPreview()) {
-    hidePreviewStatus();
-    const input = getUrlInput();
-    if (input) input.value = sourceToAddressBar(source);
-    void loadSourceInPreview(source, cacheBust);
+    if (id === getActivePreviewTabId()) {
+      hidePreviewStatus();
+      const input = getUrlInput();
+      if (input) input.value = sourceToAddressBar(source);
+    }
+    void loadSourceInPreview(source, cacheBust, id);
     return;
   }
 
-  if (source.kind === 'url') {
-    showPreviewStatus(BROWSER_PREVIEW_HINT, source.url);
-  } else {
-    hidePreviewStatus();
+  if (id === getActivePreviewTabId()) {
+    if (source.kind === 'url') {
+      showPreviewStatus(BROWSER_PREVIEW_HINT, source.url);
+    } else {
+      hidePreviewStatus();
+    }
   }
-  applySourceToFrame(source, cacheBust);
+  applySourceToFrame(id, source, cacheBust);
+  showActiveTabFrame();
 }
 
-/** Load the given source into the preview host and persist state. */
-export function loadPreviewSource(source: PreviewSource, options?: { cacheBust?: boolean }): void {
-  const state = getFilePanelState();
-  const bust = options?.cacheBust ? Date.now() : undefined;
-  if (!sourcesEqual(state.previewSource, source)) {
-    patchFilePanelState({ previewSource: source });
+export async function activatePreviewTabGuest(tabId: string, options?: { forceLoad?: boolean }): Promise<void> {
+  activatePreviewTab(tabId);
+  showActiveTabFrame();
+  syncPreviewChromeFromState();
+
+  const tab = getPreviewTab(tabId);
+  if (!tab) return;
+
+  const api = getPreviewApi();
+  if (usesElectronPreview() && api) {
+    if (api.tabs?.create) {
+      const listed = await api.tabs.list();
+      if (!listed.some((t) => t.id === tabId)) {
+        await api.tabs.create(tabId);
+      }
+    }
+    if (api.tabs?.activate) {
+      await api.tabs.activate(tabId);
+      if (!loadedTabGuests.has(tabId) || options?.forceLoad) {
+        if (tab.source) {
+          await loadSourceInPreview(tab.source, undefined, tabId);
+        } else {
+          await clearPreviewGuest(tabId);
+        }
+        loadedTabGuests.add(tabId);
+      }
+      return;
+    }
+    if (tab.source) {
+      await loadSourceInPreview(tab.source, undefined, tabId);
+    } else {
+      await clearPreviewGuest(tabId);
+    }
+    loadedTabGuests.add(tabId);
+    return;
   }
-  applySourceToPreview(source, bust);
+
+  if (!usesElectronPreview()) {
+    if (tab.source && (!loadedTabGuests.has(tabId) || options?.forceLoad)) {
+      applySourceToFrame(tabId, tab.source);
+      loadedTabGuests.add(tabId);
+    }
+  }
+}
+
+async function openNewPreviewTabUi(): Promise<void> {
+  const tab = openPreviewTab(null);
+  if (!tab) return;
+  await activatePreviewTabGuest(tab.id, { forceLoad: true });
+  getUrlInput()?.focus();
+}
+
+export async function closePreviewTabUi(tabId: string): Promise<void> {
+  const tabs = listPreviewTabs();
+  if (tabs.length <= 1) {
+    updatePreviewTabSource(tabId, null);
+    if (usesElectronPreview()) {
+      await clearPreviewGuest(tabId);
+    } else {
+      clearPreviewFrame(tabId);
+    }
+    syncPreviewChromeFromState();
+    return;
+  }
+
+  if (usesElectronPreview()) {
+    const api = getPreviewApi();
+    if (api?.tabs?.close) {
+      await api.tabs.close(tabId);
+    } else {
+      await clearPreviewGuest(tabId);
+    }
+  }
+  destroyPreviewFrame(tabId);
+  closePreviewTab(tabId);
+  const nextId = getActivePreviewTabId();
+  if (nextId) {
+    await activatePreviewTabGuest(nextId);
+  }
+}
+
+/** Load the given source into the active preview tab and persist state. */
+export function loadPreviewSource(source: PreviewSource, options?: { cacheBust?: boolean }): void {
+  const tabId = getActivePreviewTabId() ?? ensureDefaultPreviewTab().id;
+  const tab = getPreviewTab(tabId);
+  const bust = options?.cacheBust ? Date.now() : undefined;
+  if (!sourcesEqual(tab?.source ?? null, source)) {
+    updatePreviewTabSource(tabId, source);
+  }
+  applySourceToPreview(source, bust, tabId);
 }
 
 /**
@@ -479,7 +704,7 @@ export async function revealPreviewPanelForAgentNavigation(url: string): Promise
   if (desktopHosted) {
     const mounts = await import('../os/desktop-workspace-mounts');
     await mounts.revealDesktopBrowserPanel();
-  } else if (!dismissFileViewerForPreview()) {
+  } else if (!(await dismissFileViewerForPreview())) {
     return;
   }
 
@@ -487,24 +712,21 @@ export async function revealPreviewPanelForAgentNavigation(url: string): Promise
 }
 
 async function applyAgentPreviewNavigation(url: string, desktopHosted: boolean): Promise<void> {
-  if (!desktopHosted && !dismissFileViewerForPreview()) return;
+  if (!desktopHosted && !(await dismissFileViewerForPreview())) return;
 
   if (isFullscreenOverlayObscuringWorkspace()) {
-    patchFilePanelState({ previewSource: { kind: 'url', url } });
+    loadPreviewSource({ kind: 'url', url });
     hidePreviewStatus();
     setPreviewLoading(true);
     const input = getUrlInput();
     if (input) input.value = url;
-    if (usesElectronPreview()) {
-      void loadSourceInPreview({ kind: 'url', url });
-    }
     return;
   }
 
   if (!desktopHosted) {
     showPreviewSplit();
   }
-  patchFilePanelState({ previewSource: { kind: 'url', url } });
+  loadPreviewSource({ kind: 'url', url });
   hidePreviewStatus();
   setPreviewLoading(true);
 
@@ -523,7 +745,7 @@ async function applyAgentPreviewNavigation(url: string, desktopHosted: boolean):
 export async function openUrlInPreviewPanel(url: string): Promise<void> {
   const trimmed = url.trim();
   if (!trimmed || !HTTP_URL_RE.test(trimmed)) return;
-  if (!dismissFileViewerForPreview()) return;
+  if (!(await dismissFileViewerForPreview())) return;
 
   const api = getPreviewApi();
   if (!api) {
@@ -554,15 +776,15 @@ export async function openUrlInPreviewPanel(url: string): Promise<void> {
 
 /** Open the preview panel with an optional initial source. */
 export async function openPreviewPanel(source?: PreviewSource | null): Promise<void> {
-  if (!dismissFileViewerForPreview()) return;
+  if (!(await dismissFileViewerForPreview())) return;
   showPreviewSplit();
-  const state = getFilePanelState();
-  const resolved = source ?? state.previewSource;
+  const resolved = source ?? getActivePreviewSource();
 
   if (usesElectronPreview()) {
     if (!resolved) {
-      patchFilePanelState({ previewSource: null });
-      await clearPreviewGuest();
+      const tabId = getActivePreviewTabId() ?? ensureDefaultPreviewTab().id;
+      updatePreviewTabSource(tabId, null);
+      await clearPreviewGuest(tabId);
     }
     await showPreviewHost();
     scheduleElectronPreviewHostVisibilitySync();
@@ -628,8 +850,8 @@ function reloadPreview(): void {
   lastReloadAt = now;
 
   const api = getPreviewApi();
-  const state = getFilePanelState();
-  if (!state.previewSource) {
+  const activeSource = getActivePreviewSource();
+  if (!activeSource) {
     const input = getUrlInput();
     const parsed = input ? parseAddressInput(input.value) : null;
     if (parsed) {
@@ -638,18 +860,18 @@ function reloadPreview(): void {
     return;
   }
 
-  if (api && state.previewSource.kind === 'workspace') {
-    loadPreviewSource(state.previewSource, { cacheBust: true });
+  if (api && activeSource.kind === 'workspace') {
+    loadPreviewSource(activeSource, { cacheBust: true });
     return;
   }
 
   if (api) {
     setPreviewLoading(true);
-    void api.reload();
+    void api.reload(getActivePreviewTabId() ?? undefined);
     return;
   }
 
-  loadPreviewSource(state.previewSource, { cacheBust: true });
+  loadPreviewSource(activeSource, { cacheBust: true });
 }
 
 function navigateFromAddressBar(): void {
@@ -667,9 +889,10 @@ function syncPreviewChromeFromState(): void {
   const state = getFilePanelState();
   const checkbox = getAutoReloadCheckbox();
   if (checkbox) checkbox.checked = state.previewAutoReload;
-  if (state.previewSource) {
+  const source = getActivePreviewSource();
+  if (source) {
     const input = getUrlInput();
-    if (input) input.value = sourceToAddressBar(state.previewSource);
+    if (input) input.value = sourceToAddressBar(source);
   }
 }
 
@@ -682,8 +905,9 @@ function pathsMatchForReload(savedPath: string, previewPath: string): boolean {
 function onWorkspaceFileSaved(path: string): void {
   const state = getFilePanelState();
   if (!state.previewAutoReload || state.rightPaneMode !== 'preview') return;
-  if (!state.previewSource || state.previewSource.kind !== 'workspace') return;
-  if (!pathsMatchForReload(path, state.previewSource.path)) return;
+  const activeSource = getActivePreviewSource();
+  if (!activeSource || activeSource.kind !== 'workspace') return;
+  if (!pathsMatchForReload(path, activeSource.path)) return;
 
   if (autoReloadDebounce) clearTimeout(autoReloadDebounce);
   autoReloadDebounce = setTimeout(() => {
@@ -705,14 +929,25 @@ function bindPreviewIpcListeners(): void {
   unsubscribeNavigation?.();
   unsubscribeLoading?.();
   unsubscribeLoadFailed?.();
+  unsubscribePageTitle?.();
 
-  unsubscribeNavigation = api.onNavigation(onPreviewNavigation);
-  unsubscribeLoading = api.onLoading(setPreviewLoading);
-  unsubscribeLoadFailed = api.onLoadFailed(onPreviewLoadFailed);
+  unsubscribeNavigation = api.onNavigation((url, tabId) => {
+    onPreviewNavigation(url, tabId);
+  });
+  unsubscribeLoading = api.onLoading((loading, tabId) => {
+    setPreviewLoading(loading, tabId);
+  });
+  unsubscribeLoadFailed = api.onLoadFailed((detail, tabId) => {
+    onPreviewLoadFailed(detail, tabId);
+  });
+  unsubscribePageTitle = api.onPageTitle((title, tabId) => {
+    const id = resolveTabId(tabId);
+    if (id && title.trim()) setPreviewTabTitle(id, title);
+  });
 }
 
 function goBackInFrame(): void {
-  const frame = getFrame();
+  const frame = getActiveFrame();
   try {
     frame?.contentWindow?.history.back();
   } catch {
@@ -721,7 +956,7 @@ function goBackInFrame(): void {
 }
 
 function goForwardInFrame(): void {
-  const frame = getFrame();
+  const frame = getActiveFrame();
   try {
     frame?.contentWindow?.history.forward();
   } catch {
@@ -736,15 +971,17 @@ function bindPreviewControls(): void {
   markPreviewHostMode();
 
   document.getElementById('btnPreviewBack')?.addEventListener('click', () => {
+    const tabId = getActivePreviewTabId() ?? undefined;
     if (usesElectronPreview()) {
-      void getPreviewApi()?.goBack();
+      void getPreviewApi()?.goBack(tabId);
     } else {
       goBackInFrame();
     }
   });
   document.getElementById('btnPreviewForward')?.addEventListener('click', () => {
+    const tabId = getActivePreviewTabId() ?? undefined;
     if (usesElectronPreview()) {
-      void getPreviewApi()?.goForward();
+      void getPreviewApi()?.goForward(tabId);
     } else {
       goForwardInFrame();
     }
@@ -774,23 +1011,18 @@ function bindPreviewControls(): void {
     }
   });
 
-  const frame = getFrame();
-  frame?.addEventListener('load', () => {
-    if (usesElectronPreview()) return;
-    clearFrameBlockedTimer();
-    const source = getFilePanelState().previewSource;
-    if (source?.kind !== 'url') {
-      hideEmbedBlockedNotice();
-      return;
-    }
-    if (embedBlockedActive) return;
-    const { href } = readFrameEmbedSignals(frame);
-    if (href === 'about:blank') return;
-    checkExternalUrlEmbedAfterLoad();
-    if (!embedBlockedActive) {
-      scheduleFrameBlockedCheck();
-    }
+  registerPreviewTabHandlers({
+    onActivate: (id) => {
+      void activatePreviewTabGuest(id);
+    },
+    onClose: (id) => {
+      void closePreviewTabUi(id);
+    },
+    onNew: () => {
+      void openNewPreviewTabUi();
+    },
   });
+  bindPreviewTabs();
 
   onFileSaved(onWorkspaceFileSaved);
   bindPreviewIpcListeners();
@@ -844,13 +1076,14 @@ function scheduleDeferredPreviewLoad(source: PreviewSource | null): void {
 }
 
 /** Restore preview chrome without loading the guest until the app shell is idle. */
-function restorePreviewPanelFromPrefs(source: PreviewSource | null): void {
-  if (!dismissFileViewerForPreview()) {
+async function restorePreviewPanelFromPrefs(): Promise<void> {
+  if (!(await dismissFileViewerForPreview())) {
     patchFilePanelState({ rightPaneMode: null, viewerOpen: false });
     return;
   }
   showPreviewSplit();
-  applyPersistedPreviewGuest(source, { deferLoad: true });
+  const active = getActivePreviewTab();
+  applyPersistedPreviewGuest(active?.source ?? null, { deferLoad: true });
 }
 
 /**
@@ -868,10 +1101,11 @@ export function resyncOpenPreviewPanelFromState(options?: { reload?: boolean }):
     void showPreviewHost();
   }
 
-  const source = state.previewSource;
+  const source = getActivePreviewSource();
   if (!source) {
     if (!usesElectronPreview()) {
-      clearPreviewFrame();
+      const tabId = getActivePreviewTabId();
+      if (tabId) clearPreviewFrame(tabId);
     }
     return;
   }
@@ -884,9 +1118,9 @@ export function resyncOpenPreviewPanelFromState(options?: { reload?: boolean }):
     return;
   }
 
-  // Iframe fallback: restore src when the panel was shown without a guest load.
   if (!usesElectronPreview()) {
-    const frame = getFrame();
+    const tabId = getActivePreviewTabId();
+    const frame = tabId ? iframesByTabId.get(tabId) : null;
     const href = frame?.src?.trim() ?? '';
     if (!href || href === 'about:blank') {
       loadPreviewSource(source);
@@ -921,15 +1155,27 @@ function applyPersistedPreviewGuest(
 }
 
 /** Wire preview UI after file panel boot. */
-export function initPreviewPanel(): void {
+export async function initPreviewPanel(): Promise<void> {
+  const state = getFilePanelState();
+  const browserMeta = await loadBrowserMeta();
+
+  if (!browserMeta.restoreBrowserTabs) {
+    ensureDefaultPreviewTab();
+  } else if (state.previewTabs.length > 0) {
+    restorePreviewTabs(state.previewTabs, state.activePreviewTab);
+  } else {
+    migrateLegacyPreviewSource(state.previewSource);
+    ensureDefaultPreviewTab();
+  }
+
   bindPreviewControls();
-  // Reconcile native guest after reload — main process may still show a stale overlay.
+
   if (usesElectronPreview()) {
     scheduleElectronPreviewHostVisibilitySync();
   }
-  const state = getFilePanelState();
+
   if (shouldAutoRestorePreviewPanel()) {
-    restorePreviewPanelFromPrefs(state.previewSource);
+    await restorePreviewPanelFromPrefs();
     return;
   }
   if (isCodeAppForeground() || state.rightPaneMode === 'preview') {

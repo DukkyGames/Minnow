@@ -2301,6 +2301,7 @@
   </section>
 
   <section class="preview-pane hidden" id="previewPane" aria-label="Preview browser">
+    <div class="preview-tabs" id="previewTabs" role="tablist" aria-label="Preview tabs"></div>
     <header class="preview-header">
       <button type="button" class="icon-btn" id="btnPreviewBack" title="Back" aria-label="Preview back" disabled>
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
@@ -2324,8 +2325,6 @@
       </button>
     </header>
     <div class="preview-body" id="previewBody" aria-label="Preview content area">
-      <iframe id="previewFrame" class="preview-frame" sandbox="allow-scripts allow-forms allow-popups allow-modals"
-              title="Workspace preview"></iframe>
     </div>
     <div class="preview-status" id="previewStatus" hidden role="status">
       <p class="preview-status__message" id="previewStatusMessage"></p>
