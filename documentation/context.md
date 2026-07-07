@@ -1533,7 +1533,7 @@ Docked **bottom panel** in `.main-column`: **interactive PTY tabs** (xterm.js + 
 |---------|----------|
 | Panel orchestration | `src/ui/terminal-panel.ts` |
 | xterm + WS | `src/ui/terminal-xterm.ts`, `src/api/terminal-pty.ts`, `src/ui/terminal-history-nav.ts` |
-| Tabs + shell select | `src/ui/terminal-tabs.ts`, `#terminalTabBar`, `#terminalShellSelect` (PTY tabs init when the panel opens; `pagehide` kills PTY sessions) |
+| Tabs + shell select | `src/ui/terminal-tabs.ts`, `#terminalTabBar`, `#terminalShellSelect` (PTY tabs init when the panel opens; `pagehide` kills PTY sessions). **MIN-244:** Changing `#terminalShellSelect` saves `defaultShellProfileId` and spawns a **new** PTY tab with that shell; prior tabs stay open until closed. |
 | PTY host | `server/terminal/pty-host.js`, `pty-ws.js`, `shell-profiles.js` |
 | Agent SSE | `src/api/terminal.ts`, `server/terminal-runner.js` |
 | Dev server SSE | [`ensureDevServerStream`](../src/ui/terminal-panel.ts) → Dev server tab; hub Console → [`openDevServerConsole`](../src/ui/terminal-panel.ts) |
