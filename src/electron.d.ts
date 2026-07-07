@@ -50,36 +50,63 @@ export interface MinnowPreviewTabInfo {
 }
 
 export interface MinnowPreviewTabsApi {
-  create(tabId?: string): Promise<string>;
-  close(id: string): Promise<void>;
-  activate(id: string): Promise<void>;
-  list(): Promise<MinnowPreviewTabInfo[]>;
+  create(tabId?: string, instanceId?: string): Promise<string>;
+  close(id: string, instanceId?: string): Promise<void>;
+  activate(id: string, instanceId?: string): Promise<void>;
+  list(instanceId?: string): Promise<MinnowPreviewTabInfo[]>;
+}
+
+/**
+ * Named preview instance lifecycle (MIN-364). Instances are parallel WebContentsView-backed
+ * surfaces (workspace right pane, Design surface, future Studio live-component frames), each
+ * with its own tab set. See electron/preview-instance-registry.ts for the default instance id
+ * ('workspace-preview') and reserved id conventions.
+ */
+export interface MinnowPreviewInstancesApi {
+  create(instanceId?: string): Promise<string>;
+  destroy(instanceId: string): Promise<void>;
+  list(): Promise<string[]>;
 }
 
 export interface MinnowPreviewApi {
-  show(bounds?: MinnowPreviewBounds, tabId?: string): Promise<void>;
-  hide(tabId?: string): Promise<void>;
-  clear(tabId?: string): Promise<void>;
-  loadURL(url: string, tabId?: string): Promise<void>;
-  loadSource(payload: MinnowPreviewLoadSourcePayload, tabId?: string): Promise<void>;
-  reload(tabId?: string): Promise<void>;
-  stop(tabId?: string): Promise<void>;
-  goBack(tabId?: string): Promise<void>;
-  goForward(tabId?: string): Promise<void>;
-  setBounds(bounds: MinnowPreviewBounds, tabId?: string): Promise<void>;
-  execJs(code: string, tabId?: string): Promise<unknown>;
-  capturePage(tabId?: string): Promise<string>;
-  getInfo(tabId?: string): Promise<MinnowPreviewGuestInfo>;
-  navigateAndWait(url: string, tabId?: string): Promise<MinnowPreviewNavigateAwaitResult>;
+  // Every method takes an optional trailing `instanceId`; omitting it targets the default
+  // 'workspace-preview' instance, so every pre-MIN-364 call site keeps working unchanged.
+  show(bounds?: MinnowPreviewBounds, tabId?: string, instanceId?: string): Promise<void>;
+  hide(tabId?: string, instanceId?: string): Promise<void>;
+  clear(tabId?: string, instanceId?: string): Promise<void>;
+  loadURL(url: string, tabId?: string, instanceId?: string): Promise<void>;
+  loadSource(
+    payload: MinnowPreviewLoadSourcePayload,
+    tabId?: string,
+    instanceId?: string,
+  ): Promise<void>;
+  reload(tabId?: string, instanceId?: string): Promise<void>;
+  stop(tabId?: string, instanceId?: string): Promise<void>;
+  goBack(tabId?: string, instanceId?: string): Promise<void>;
+  goForward(tabId?: string, instanceId?: string): Promise<void>;
+  setBounds(bounds: MinnowPreviewBounds, tabId?: string, instanceId?: string): Promise<void>;
+  execJs(code: string, tabId?: string, instanceId?: string): Promise<unknown>;
+  capturePage(tabId?: string, instanceId?: string): Promise<string>;
+  getInfo(tabId?: string, instanceId?: string): Promise<MinnowPreviewGuestInfo>;
+  navigateAndWait(
+    url: string,
+    tabId?: string,
+    instanceId?: string,
+  ): Promise<MinnowPreviewNavigateAwaitResult>;
   tabs: MinnowPreviewTabsApi;
-  onNavigation(callback: (url: string, tabId?: string) => void): () => void;
-  onLoading(callback: (loading: boolean, tabId?: string) => void): () => void;
-  onPageTitle(callback: (title: string, tabId?: string) => void): () => void;
+  instances: MinnowPreviewInstancesApi;
+  onNavigation(callback: (url: string, tabId?: string, instanceId?: string) => void): () => void;
+  onLoading(callback: (loading: boolean, tabId?: string, instanceId?: string) => void): () => void;
+  onPageTitle(callback: (title: string, tabId?: string, instanceId?: string) => void): () => void;
   onLoadFailed(
-    callback: (detail: MinnowPreviewLoadFailedDetail, tabId?: string) => void,
+    callback: (detail: MinnowPreviewLoadFailedDetail, tabId?: string, instanceId?: string) => void,
   ): () => void;
   onGuestCrashed?(
-    callback: (detail: MinnowPreviewGuestCrashedDetail, tabId?: string) => void,
+    callback: (
+      detail: MinnowPreviewGuestCrashedDetail,
+      tabId?: string,
+      instanceId?: string,
+    ) => void,
   ): () => void;
 }
 
