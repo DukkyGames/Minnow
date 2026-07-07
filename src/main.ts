@@ -99,6 +99,7 @@ import {
   sessionState,
 } from './state/sessions';
 import { initChatScroll } from './ui/chat-scroll';
+import { initMinnowBrowserLinkRouting } from './ui/minnow-browser-links';
 import { clearChat, renderChatFromHistory, renderStatsForChat } from './ui/messages';
 import { refreshHubLiveData } from './ui/hub';
 import { bootGenerationResumeForChats } from './chat/generation-resume';
@@ -363,6 +364,7 @@ export async function initApp(): Promise<void> {
   initCodeChangeStrip();
   initOrchestrateStatsLiveRefresh();
   initChatScroll();
+  initMinnowBrowserLinkRouting();
   registerTerminalKeyboardShortcut();
   loadToolConfigIntoDrawer();
   applySidebarVisuals();
