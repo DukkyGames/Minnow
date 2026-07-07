@@ -63,7 +63,7 @@ function chipLabel(attachment: Attachment): string {
   if (attachment.kind === 'workspace') {
     return attachment.workspacePath ?? attachment.name;
   }
-  if (attachment.kind === 'codeRef' || attachment.kind === 'elementRef') {
+  if (attachment.kind === 'codeRef' || attachment.kind === 'elementRef' || attachment.kind === 'designRef') {
     return attachment.name;
   }
   if (attachment.largeTextWarning) {
@@ -149,6 +149,21 @@ function createAttachChip(attachment: Attachment): HTMLElement {
     chip.title = attachment.selector
       ? `${attachment.selector} — included when you send`
       : 'Element reference — included when you send';
+  }
+
+  if (attachment.kind === 'designRef') {
+    chip.classList.add('attach-chip--design-ref');
+    if (attachment.compositedDataUrl) {
+      chip.classList.add('attach-chip--image');
+      const thumb = document.createElement('img');
+      thumb.className = 'attach-chip-thumb';
+      thumb.src = attachment.compositedDataUrl;
+      thumb.alt = '';
+      chip.appendChild(thumb);
+    }
+    chip.title = attachment.intentText
+      ? `${attachment.intentText} — included when you send`
+      : 'Design annotation — included when you send';
   }
 
   if (attachment.kind === 'error') {

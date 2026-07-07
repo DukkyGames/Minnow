@@ -86,3 +86,62 @@
   outline: 1px dashed var(--mn-accent-soft);
   outline-offset: -1px;
 }
+
+/* Comment tool pin thread popover (MIN-367) — plain HTML panel positioned over the SVG pin. */
+.mn-design-pin-popover {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 200px;
+  max-width: 280px;
+  padding: 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-md, 8px);
+  background: var(--mn-surface-2);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.24);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+
+.mn-design-pin-popover__notes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.mn-design-pin-popover__note {
+  padding: 4px 6px;
+  border-radius: var(--mn-radius-sm, 4px);
+  background: var(--mn-surface-3, rgba(127, 127, 127, 0.15));
+  color: var(--mn-fg);
+  white-space: pre-wrap;
+}
+
+.mn-design-pin-popover__input {
+  padding: 4px 6px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-sm, 4px);
+  background: var(--mn-surface-1);
+  color: var(--mn-fg);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+
+.mn-design-pin-popover__add,
+.mn-design-pin-popover__close {
+  align-self: flex-end;
+  padding: 2px 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-sm, 4px);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+}
+
+.mn-design-pin-popover__add:hover,
+.mn-design-pin-popover__close:hover {
+  background: var(--mn-surface-3, rgba(127, 127, 127, 0.15));
+  color: var(--mn-fg);
+}

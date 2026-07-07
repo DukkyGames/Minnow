@@ -38,6 +38,7 @@ import {
 import type { Attachment } from '../attachments/types';
 import { codeRefHistoryBlock, isCodeRefAttachment } from '../attachments/code-ref';
 import { elementRefHistoryBlock, isElementRefAttachment } from '../attachments/element-ref';
+import { designRefHistoryBlock, isDesignRefAttachment } from '../attachments/design-ref';
 import { resolveWorkspaceReferences } from '../attachments/workspace-ref';
 import {
   extractMessageText,
@@ -350,7 +351,10 @@ function indexOfMultimodalUserMessage(
   pending: Attachment[],
 ): number {
   const hasPendingImages = pending.some(
-    (a) => (a.kind === 'image' && a.dataUrl) || (a.kind === 'elementRef' && a.croppedDataUrl),
+    (a) =>
+      (a.kind === 'image' && a.dataUrl) ||
+      (a.kind === 'elementRef' && a.croppedDataUrl) ||
+      (a.kind === 'designRef' && a.compositedDataUrl),
   );
   if (!hasPendingImages) {
     return indexOfLastUserMessage(history);
@@ -368,7 +372,10 @@ function indexOfMultimodalUserMessage(
 function turnHasImageContext(chat: Chat, pending: Attachment[]): boolean {
   if (
     pending.some(
-      (a) => (a.kind === 'image' && a.dataUrl) || (a.kind === 'elementRef' && a.croppedDataUrl),
+      (a) =>
+        (a.kind === 'image' && a.dataUrl) ||
+        (a.kind === 'elementRef' && a.croppedDataUrl) ||
+        (a.kind === 'designRef' && a.compositedDataUrl),
     )
   ) {
     return true;
@@ -430,6 +437,18 @@ export function buildHistoryUserContent(
       if (att.croppedDataUrl) parts.push(imageHistoryPlaceholder(att.name));
       continue;
     }
+    if (isDesignRefAttachment(att)) {
+      parts.push(
+        designRefHistoryBlock({
+          shape: att.shape,
+          pageUrl: att.pageUrl,
+          intentText: att.intentText,
+          imageName: att.compositedDataUrl ? att.name : undefined,
+        }),
+      );
+      if (att.compositedDataUrl) parts.push(imageHistoryPlaceholder(att.name));
+      continue;
+    }
     if ((att.kind === 'text' || att.kind === 'pdf') && att.text) {
       parts.push(fileContentBlock(att.name, att.text));
     }
@@ -447,7 +466,7 @@ function buildStringUserApiContent(
 }
 
 /** VLM API payload: text part plus image_url parts (no image placeholders in text). */
-function buildVlmUserApiContent(
+export function buildVlmUserApiContent(
   userText: string,
   attachments: Attachment[],
 ): ContentPart[] {
@@ -484,6 +503,17 @@ function buildVlmUserApiContent(
       );
       continue;
     }
+    if (isDesignRefAttachment(att)) {
+      textParts.push(
+        designRefHistoryBlock({
+          shape: att.shape,
+          pageUrl: att.pageUrl,
+          intentText: att.intentText,
+          imageName: att.compositedDataUrl ? att.name : undefined,
+        }),
+      );
+      continue;
+    }
     if ((att.kind === 'text' || att.kind === 'pdf') && att.text) {
       textParts.push(fileContentBlock(att.name, att.text));
     }
@@ -506,6 +536,12 @@ function buildVlmUserApiContent(
       parts.push({
         type: 'image_url',
         image_url: { url: att.croppedDataUrl, detail: 'auto' },
+      });
+    }
+    if (att.kind === 'designRef' && att.compositedDataUrl) {
+      parts.push({
+        type: 'image_url',
+        image_url: { url: att.compositedDataUrl, detail: 'auto' },
       });
     }
   }

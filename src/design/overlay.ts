@@ -6,6 +6,7 @@
  */
 
 import type { CapturedRegion } from './region-capture';
+import type { CommentPin, DesignShape } from './shape-model';
 
 export interface OverlayMarker {
   id: string;
@@ -24,6 +25,12 @@ export interface AnnotationOverlay {
   removeCaptureFromMarker(markerId: string): void;
   enableFreeDraw(onRect: (rect: OverlayMarker['rect']) => void): void;
   disableFreeDraw(): void;
+  /** Draw & Comment tool (MIN-367): pen/rect/arrow/label shapes in their own overlay layer. */
+  renderShapes(shapes: DesignShape[]): void;
+  /** Numbered comment pins; onPinClick fires with the pin id (host toggles the thread popover). */
+  renderPins(pins: CommentPin[], onPinClick?: (pinId: string) => void): void;
+  /** Serialized `<svg>` markup (markers + shapes + pins) for composite region capture. */
+  getSvgMarkup(): string;
   resize(): void;
   destroy(): void;
 }
@@ -35,7 +42,10 @@ export interface CreateAnnotationOverlayOptions {
 const OVERLAY_CLASS = 'mn-design-overlay';
 const MARKER_LAYER_CLASS = 'mn-design-overlay-markers';
 const DRAW_LAYER_CLASS = 'mn-design-overlay-draw';
+const SHAPE_LAYER_CLASS = 'mn-design-overlay-shapes';
+const PIN_LAYER_CLASS = 'mn-design-overlay-pins';
 const BADGE_SIZE = 20;
+const PIN_RADIUS = 11;
 
 /** Create the SVG overlay mounted inside the given host element. */
 export function createAnnotationOverlay(
@@ -51,6 +61,22 @@ export function createAnnotationOverlay(
     'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2;overflow:visible;';
   host.appendChild(svg);
 
+  const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+  const arrowHead = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+  arrowHead.setAttribute('id', 'mn-design-arrowhead');
+  arrowHead.setAttribute('viewBox', '0 0 10 10');
+  arrowHead.setAttribute('refX', '8');
+  arrowHead.setAttribute('refY', '5');
+  arrowHead.setAttribute('markerWidth', '8');
+  arrowHead.setAttribute('markerHeight', '8');
+  arrowHead.setAttribute('orient', 'auto-start-reverse');
+  const arrowHeadPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  arrowHeadPath.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
+  arrowHeadPath.setAttribute('fill', 'var(--mn-accent)');
+  arrowHead.appendChild(arrowHeadPath);
+  defs.appendChild(arrowHead);
+  svg.appendChild(defs);
+
   const markerLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
   markerLayer.setAttribute('class', MARKER_LAYER_CLASS);
   svg.appendChild(markerLayer);
@@ -58,6 +84,15 @@ export function createAnnotationOverlay(
   const drawLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
   drawLayer.setAttribute('class', DRAW_LAYER_CLASS);
   svg.appendChild(drawLayer);
+
+  const shapeLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  shapeLayer.setAttribute('class', SHAPE_LAYER_CLASS);
+  svg.appendChild(shapeLayer);
+
+  const pinLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  pinLayer.setAttribute('class', PIN_LAYER_CLASS);
+  pinLayer.style.pointerEvents = 'auto';
+  svg.appendChild(pinLayer);
 
   let freeDrawActive = false;
   let freeDrawCallback: ((rect: OverlayMarker['rect']) => void) | null = null;
@@ -260,6 +295,112 @@ export function createAnnotationOverlay(
       drawLayer.innerHTML = '';
       svg.style.pointerEvents = 'none';
       svg.style.cursor = '';
+    },
+
+    renderShapes(shapes: DesignShape[]): void {
+      shapeLayer.innerHTML = '';
+      for (const shape of shapes) {
+        if (shape.kind === 'pen' && shape.points?.length) {
+          const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+          polyline.setAttribute('points', shape.points.map((p) => `${p.x},${p.y}`).join(' '));
+          polyline.setAttribute('fill', 'none');
+          polyline.setAttribute('stroke', 'var(--mn-accent)');
+          polyline.setAttribute('stroke-width', '2');
+          polyline.setAttribute('stroke-linecap', 'round');
+          polyline.setAttribute('stroke-linejoin', 'round');
+          shapeLayer.appendChild(polyline);
+        } else if (shape.kind === 'rect' && shape.rect) {
+          const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          rect.setAttribute('x', String(shape.rect.x));
+          rect.setAttribute('y', String(shape.rect.y));
+          rect.setAttribute('width', String(shape.rect.width));
+          rect.setAttribute('height', String(shape.rect.height));
+          rect.setAttribute('rx', '2');
+          rect.setAttribute('fill', 'var(--mn-accent-soft)');
+          rect.setAttribute('fill-opacity', '0.25');
+          rect.setAttribute('stroke', 'var(--mn-accent)');
+          rect.setAttribute('stroke-width', '2');
+          shapeLayer.appendChild(rect);
+        } else if (shape.kind === 'arrow' && shape.points?.length === 2) {
+          const [from, to] = shape.points;
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', String(from!.x));
+          line.setAttribute('y1', String(from!.y));
+          line.setAttribute('x2', String(to!.x));
+          line.setAttribute('y2', String(to!.y));
+          line.setAttribute('stroke', 'var(--mn-accent)');
+          line.setAttribute('stroke-width', '2.5');
+          line.setAttribute('marker-end', 'url(#mn-design-arrowhead)');
+          shapeLayer.appendChild(line);
+        } else if (shape.kind === 'label') {
+          const rect = shape.rect ?? {
+            x: (shape.points?.[0]?.x ?? 0) - 4,
+            y: (shape.points?.[0]?.y ?? 0) - 10,
+            width: Math.max(24, (shape.label?.length ?? 0) * 7),
+            height: 20,
+          };
+          const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          bg.setAttribute('x', String(rect.x));
+          bg.setAttribute('y', String(rect.y));
+          bg.setAttribute('width', String(rect.width));
+          bg.setAttribute('height', String(rect.height));
+          bg.setAttribute('rx', '3');
+          bg.setAttribute('fill', 'var(--mn-accent)');
+          shapeLayer.appendChild(bg);
+          const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          text.setAttribute('x', String(rect.x + 6));
+          text.setAttribute('y', String(rect.y + rect.height / 2 + 4));
+          text.setAttribute('fill', 'var(--mn-fg-on-accent)');
+          text.setAttribute('font-size', '12');
+          text.setAttribute('font-family', 'var(--font-ui)');
+          text.textContent = shape.label ?? '';
+          shapeLayer.appendChild(text);
+        }
+      }
+    },
+
+    renderPins(pins: CommentPin[], onPinClick): void {
+      pinLayer.innerHTML = '';
+      for (const pin of pins) {
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', String(pin.x));
+        circle.setAttribute('cy', String(pin.y));
+        circle.setAttribute('r', String(PIN_RADIUS));
+        circle.setAttribute('fill', 'var(--mn-accent)');
+        circle.setAttribute('stroke', 'var(--mn-fg-on-accent)');
+        circle.setAttribute('stroke-width', '1.5');
+        circle.style.cursor = 'pointer';
+        circle.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          onPinClick?.(pin.id);
+        });
+        pinLayer.appendChild(circle);
+
+        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        label.setAttribute('x', String(pin.x));
+        label.setAttribute('y', String(pin.y + 4));
+        label.setAttribute('text-anchor', 'middle');
+        label.setAttribute('fill', 'var(--mn-fg-on-accent)');
+        label.setAttribute('font-size', '11');
+        label.setAttribute('font-family', 'var(--font-ui)');
+        label.setAttribute('font-weight', '600');
+        label.style.pointerEvents = 'none';
+        label.textContent = String(pin.index);
+        pinLayer.appendChild(label);
+      }
+    },
+
+    getSvgMarkup(): string {
+      try {
+        const XmlSerializerCtor = (host.ownerDocument?.defaultView as (Window & { XMLSerializer?: typeof XMLSerializer }) | null)
+          ?.XMLSerializer;
+        if (XmlSerializerCtor) {
+          return new XmlSerializerCtor().serializeToString(svg);
+        }
+      } catch {
+        /* fall through to outerHTML */
+      }
+      return (svg as unknown as { outerHTML?: string }).outerHTML ?? '';
     },
 
     resize(): void {
