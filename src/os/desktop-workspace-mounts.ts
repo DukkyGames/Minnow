@@ -101,6 +101,8 @@ function restoreToCode(record: ReparentRecord): void {
   } else {
     codeParent.appendChild(node);
   }
+  // Desktop drawer strips .hidden when mounting; re-sync before Code layout runs.
+  node.classList.add('hidden');
 }
 
 /** Point the file tree at the desktop sandbox or Code workspace; true when root changed. */
@@ -185,8 +187,13 @@ export async function syncDesktopWorkspaceMounts(): Promise<void> {
       mountSurface = 'code';
       if (document.getElementById('btnFileSidebarCollapse')) {
         const fileLayout = await import('../ui/file-layout');
-        fileLayout.reconcileRightSplitDomWithState();
-        fileLayout.applyFileSidebarVisuals();
+        if (isCodeForeground()) {
+          const preview = await import('../ui/preview-panel');
+          preview.collapsePreviewPanelKeepingSource();
+        } else {
+          fileLayout.reconcileRightSplitDomWithState();
+          fileLayout.applyFileSidebarVisuals();
+        }
       }
     }
   }

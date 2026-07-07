@@ -47,6 +47,9 @@ import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
 import { initGitPanel, syncGitPanelFromOrchestrator } from './git-panel';
 import { initGitCenterLightbox } from './git-center-lightbox';
 import { startFileTreeGitStatusPoll } from './file-tree';
+import {
+  shouldAutoRestoreViewerSplitOnBoot,
+} from './preview-restore-policy';
 
 let resizerBound = false;
 
@@ -150,23 +153,15 @@ export async function initFilePanel(): Promise<void> {
   initPreviewPanel();
 
   const state = getFilePanelState();
-  if (state.rightPaneMode === 'preview') {
-    // Restored by initPreviewPanel from persisted previewSource.
-  } else if (state.openViewerTabs.length > 0) {
-    await restoreViewerTabsFromPrefs(state.openViewerTabs, state.activeViewerTab);
-  } else if (state.viewerOpen && state.selectedPath) {
-    await openFileInViewer(state.selectedPath);
+  if (shouldAutoRestoreViewerSplitOnBoot()) {
+    if (state.openViewerTabs.length > 0) {
+      await restoreViewerTabsFromPrefs(state.openViewerTabs, state.activeViewerTab);
+    } else if (state.viewerOpen && state.selectedPath) {
+      await openFileInViewer(state.selectedPath);
+    }
   }
 
   applyFileSidebarVisuals();
-
-  if (state.rightPaneMode === 'preview') {
-    const { getForegroundAppId, getOsView } = await import('../os/instances');
-    if (getOsView() === 'app' && getForegroundAppId() === 'code') {
-      const { resyncOpenPreviewPanelFromState } = await import('./preview-panel');
-      resyncOpenPreviewPanelFromState();
-    }
-  }
 
   bindSplitResizer();
   bindFilePanelControls();

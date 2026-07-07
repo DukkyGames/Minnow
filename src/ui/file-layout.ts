@@ -79,20 +79,35 @@ function isRightSplitOpen(): boolean {
   return isRightPaneDomVisible(mode);
 }
 
+/** Hide preview, viewer, and resizer DOM without changing persisted prefs. */
+export function hideAllRightSplitPanesDom(): void {
+  hidePreviewPaneDom();
+  hideViewerPaneDom();
+  void window.minnow?.preview.hide();
+  document.getElementById('splitResizer')?.classList.add('hidden');
+}
+
 /**
  * Unhide the pane matching persisted rightPaneMode when state and DOM diverge
  * (e.g. reload applied viewer-open before preview restore, or Code foreground).
  */
 export function reconcileRightSplitDomWithState(): void {
   const mode = resolvedRightPaneMode();
-  if (mode === 'preview' && !isRightPaneDomVisible('preview')) {
-    showPreviewSplit();
-    schedulePreviewGuestResyncAfterReconcile();
+  if (mode === null) {
+    hideAllRightSplitPanesDom();
     return;
   }
-  if (mode === 'viewer' && !isRightPaneDomVisible('viewer')) {
-    hidePreviewPaneDom();
-    void window.minnow?.preview.hide();
+  if (mode === 'preview') {
+    hideViewerPaneDom();
+    if (!isRightPaneDomVisible('preview')) {
+      showPreviewSplit();
+      schedulePreviewGuestResyncAfterReconcile();
+    }
+    return;
+  }
+  hidePreviewPaneDom();
+  void window.minnow?.preview.hide();
+  if (!isRightPaneDomVisible('viewer')) {
     document.getElementById('fileViewerPane')?.classList.remove('hidden');
     document.getElementById('splitResizer')?.classList.remove('hidden');
   }
@@ -263,5 +278,25 @@ export function hidePreviewSplit(): void {
   const resizer = document.getElementById('splitResizer');
   if (resizer) resizer.classList.add('hidden');
   patchFilePanelState({ rightPaneMode: null, viewerOpen: false, previewSource: null });
+  applyFileSidebarVisuals();
+}
+
+/**
+ * Close the preview split without clearing previewSource (MIN-342).
+ * Used when Code becomes foreground so the user can reopen via #btnPreviewToggle.
+ */
+export function hidePreviewSplitKeepSource(): void {
+  hideAllRightSplitPanesDom();
+  patchFilePanelState({ rightPaneMode: null, viewerOpen: false });
+  applyFileSidebarVisuals();
+}
+
+/**
+ * Close both right split panes on Code entry while keeping previewSource and
+ * openViewerTabs for explicit reopen (MIN-342).
+ */
+export function resetRightSplitForCodeEntry(): void {
+  hideAllRightSplitPanesDom();
+  patchFilePanelState({ rightPaneMode: null, viewerOpen: false });
   applyFileSidebarVisuals();
 }
