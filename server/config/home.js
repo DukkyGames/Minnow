@@ -137,6 +137,7 @@ const DEFAULT_META = {
     open: false,
     heightPx: 240,
     autoOpenOnAgentRun: false,
+    autoFollowAgentTab: false,
   },
   browser: {
     enabled: true,

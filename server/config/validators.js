@@ -1572,6 +1572,7 @@ export function mergeConfigMeta(existing, patch) {
             open: false,
             heightPx: 240,
             autoOpenOnAgentRun: false,
+            autoFollowAgentTab: false,
           };
     const t = /** @type {Record<string, unknown>} */ (p.terminal);
     if (typeof t.open === 'boolean') existingTerminal.open = t.open;
@@ -1580,6 +1581,9 @@ export function mergeConfigMeta(existing, patch) {
     }
     if (typeof t.autoOpenOnAgentRun === 'boolean') {
       existingTerminal.autoOpenOnAgentRun = t.autoOpenOnAgentRun;
+    }
+    if (typeof t.autoFollowAgentTab === 'boolean') {
+      existingTerminal.autoFollowAgentTab = t.autoFollowAgentTab;
     }
     base.terminal = existingTerminal;
   }

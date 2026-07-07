@@ -386,7 +386,7 @@ Not all exposed in Settings UI:
 |-------|--------------|
 | `workspace` | Path, recent paths, dev server settings per path |
 | `filePanel` | Sidebar, viewer, split ratio, tabs, preview |
-| `terminal` | Open, height, auto-open on agent run |
+| `terminal` | Open, height, `autoOpenOnAgentRun`, `autoFollowAgentTab` (MIN-242) |
 | `titles` | Chat title generation model/settings |
 | `goalEval` | /goal loop evaluator model/settings |
 | `activePromptProfile`, `activePromptConfigId`, `activeSetupProfileId` | Prompt state |
