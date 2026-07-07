@@ -14,7 +14,9 @@ import {
   resizeTerminalSession,
   type ShellProfile,
 } from '../api/terminal-pty';
+import { getActiveChat, sessionState } from '../state/sessions';
 import { getLocalServerAvailable } from '../tools/client';
+import { resolveActiveChatTerminalCwd } from './terminal-worktree-cwd';
 import {
   copyTextToClipboard,
   shouldCopyTerminalSelectionOnKeydown,
@@ -34,6 +36,10 @@ export interface TerminalTabSession {
   shellProfileId: string;
   sessionId: string | null;
   title: string;
+  /** Chat bound when the session was created (MIN-349). */
+  chatId?: string | null;
+  /** Absolute cwd used when the PTY was spawned. */
+  boundCwd?: string;
 }
 
 let hostEl: HTMLElement | null = null;
@@ -282,6 +288,20 @@ export function isTerminalXtermReady(): boolean {
   return hostEl !== null;
 }
 
+/** Fill chat/cwd scope on restored tabs before spawning a PTY session. */
+function ensureTabScope(tab: TerminalTabSession): void {
+  if (!sessionState) return;
+  try {
+    const chat = getActiveChat();
+    tab.chatId = tab.chatId ?? chat.id;
+    if (!tab.boundCwd) {
+      tab.boundCwd = resolveActiveChatTerminalCwd(chat, sessionState.groups);
+    }
+  } catch {
+    /* no active chat */
+  }
+}
+
 /** Open or reconnect PTY for a tab. */
 export async function attachTerminalTab(
   tab: TerminalTabSession,
@@ -310,14 +330,18 @@ export async function attachTerminalTab(
     return;
   }
 
+  ensureTabScope(tab);
+
   try {
     const created = await createTerminalSession({
       shellProfileId: tab.shellProfileId,
       cols,
       rows,
-      chatId: null,
+      chatId: tab.chatId ?? null,
+      cwd: tab.boundCwd,
     });
     tab.sessionId = created.sessionId;
+    tab.boundCwd = created.cwd;
     connectWs(created.sessionId, tab.tabId);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

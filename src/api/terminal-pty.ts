@@ -50,6 +50,8 @@ export async function createTerminalSession(options: {
   cols?: number;
   rows?: number;
   chatId?: string | null;
+  /** Absolute cwd for the PTY; server falls back to chat worktree or workspace. */
+  cwd?: string;
 }): Promise<PtySessionCreated> {
   const res = await fetch('/api/terminal/session', {
     method: 'POST',

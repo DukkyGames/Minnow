@@ -75,6 +75,22 @@
   outline-offset: 2px;
 }
 
+.terminal-cwd-label {
+  flex-shrink: 0;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--mn-fg-muted);
+}
+
+.terminal-cwd-label--worktree {
+  color: var(--mn-accent);
+}
+
 .terminal-tab-bar {
   flex: 1;
   display: flex;

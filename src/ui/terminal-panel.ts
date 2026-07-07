@@ -14,7 +14,7 @@ import {
   loadTerminalMeta,
   saveTerminalMeta,
 } from '../config/terminal-meta';
-import { getActiveChat, scheduleSaveSessions } from '../state/sessions';
+import { getActiveChat, scheduleSaveSessions, sessionState } from '../state/sessions';
 import type { TerminalRunRecord } from '../types';
 import { getLocalServerAvailable } from '../tools/client';
 import { registerShellRun, unregisterShellRun } from './shell-run-registry';
@@ -25,7 +25,9 @@ import {
   isTerminalTabsInitialized,
   onTerminalPanelResize,
   setAgentTabActivityBadge,
+  setTerminalNewTabScope,
   setTerminalTabChangeHandler,
+  activePtyDiffersFromTargetCwd,
   switchToAgentTab,
   switchToDevServerTab,
   type TerminalTabKind,
@@ -41,6 +43,13 @@ import {
   shouldShowAgentTabActivityBadge,
   shouldSwitchToAgentTab,
 } from './terminal-agent-follow-policy';
+import {
+  formatTerminalCwdHeader,
+  formatTerminalShellHint,
+  getTerminalCwdLabelSuffix,
+  resolveActiveChatTerminalCwd,
+  terminalCwdsEqual,
+} from './terminal-worktree-cwd';
 
 const MIN_HEIGHT_PX = 120;
 const MAX_HEIGHT_RATIO = 0.5;
@@ -54,6 +63,7 @@ let outputEl: HTMLElement | null = null;
 let xtermHostEl: HTMLElement | null = null;
 let agentRunSelectEl: HTMLSelectElement | null = null;
 let offlineBannerEl: HTMLElement | null = null;
+let terminalCwdLabelEl: HTMLElement | null = null;
 let activeRunId: string | null = null;
 /** Background dev-server log stream (hub-owned; does not open the panel). */
 let devServerSubscribedRunId: string | null = null;
@@ -69,6 +79,9 @@ let activeTabKind: TerminalTabKind = 'pty';
 let agentRunHintDepth = 0;
 /** Depth of agent runs that should badge the Agent tab while the user is on another tab. */
 let agentTabActivityDepth = 0;
+/** Last synced target cwd for new PTY tabs (chat-switch detection). */
+let terminalTargetCwd: string | undefined;
+let terminalChatSwitchPending = false;
 
 const TERMINAL_BTN_DEFAULT_TITLE = 'Terminal (Ctrl+`)';
 const TERMINAL_BTN_AGENT_RUN_TITLE =
@@ -103,6 +116,56 @@ function getElements(): void {
     'terminalAgentRunSelect',
   ) as HTMLSelectElement | null;
   offlineBannerEl = document.getElementById('terminalOfflineBanner');
+  terminalCwdLabelEl = document.getElementById('terminalCwdLabel');
+}
+
+function updateTerminalCwdChrome(cwd: string): void {
+  if (!terminalCwdLabelEl) return;
+  const label = formatTerminalCwdHeader(cwd);
+  const suffix = getTerminalCwdLabelSuffix(cwd);
+  terminalCwdLabelEl.textContent = label;
+  terminalCwdLabelEl.title = cwd;
+  terminalCwdLabelEl.classList.toggle('terminal-cwd-label--worktree', suffix.length > 0);
+}
+
+function updateTerminalShellHintText(cwd: string): void {
+  const hintEl = document.getElementById('terminalShellHint');
+  if (!hintEl) return;
+  const activeShellDiffers =
+    terminalChatSwitchPending && activePtyDiffersFromTargetCwd(cwd);
+  hintEl.textContent = formatTerminalShellHint(cwd, {
+    chatSwitched: terminalChatSwitchPending,
+    activeShellDiffers,
+  });
+}
+
+function maybeClearChatSwitchPending(): void {
+  if (!terminalTargetCwd || !terminalChatSwitchPending) return;
+  if (!activePtyDiffersFromTargetCwd(terminalTargetCwd)) {
+    terminalChatSwitchPending = false;
+    updateTerminalShellHintText(terminalTargetCwd);
+  }
+}
+
+/**
+ * Align terminal cwd scope with the active chat worktree (MIN-349).
+ * New PTY tabs spawn in the resolved cwd; existing shells keep their directory.
+ */
+export function syncTerminalFromActiveChat(): void {
+  if (!sessionState) return;
+  getElements();
+
+  const chat = getActiveChat();
+  const cwd = resolveActiveChatTerminalCwd(chat, sessionState.groups);
+  const prevCwd = terminalTargetCwd;
+  const cwdChanged =
+    prevCwd !== undefined && !terminalCwdsEqual(prevCwd, cwd);
+
+  terminalTargetCwd = cwd;
+  terminalChatSwitchPending = cwdChanged;
+  setTerminalNewTabScope(chat.id, cwd);
+  updateTerminalCwdChrome(cwd);
+  updateTerminalShellHintText(cwd);
 }
 
 function applyActiveTabView(kind: TerminalTabKind): void {
@@ -118,6 +181,7 @@ function applyActiveTabView(kind: TerminalTabKind): void {
 
   document.getElementById('terminalShellHint')?.classList.toggle('hidden', isVirtual);
   document.getElementById('terminalShellSelect')?.classList.toggle('hidden', isVirtual);
+  document.getElementById('terminalCwdLabel')?.classList.toggle('hidden', isVirtual);
   const clearBtn = document.getElementById('btnTerminalClear');
   clearBtn?.classList.toggle('hidden', !isAgent && !isDevServer);
   if (clearBtn) {
@@ -828,6 +892,9 @@ export async function initTerminalPanel(): Promise<void> {
   wireTerminalPanelButtons();
   setTerminalTabChangeHandler((_tabId, kind) => {
     applyActiveTabView(kind);
+    if (kind === 'pty') {
+      maybeClearChatSwitchPending();
+    }
   });
   wireAgentRunSelect();
 
@@ -852,6 +919,7 @@ export async function initTerminalPanel(): Promise<void> {
 
   setupResizeHandle();
   setupOutputScroll();
+  syncTerminalFromActiveChat();
   await refreshTerminalHistoryForActiveChat();
 }
 
