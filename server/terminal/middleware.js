@@ -17,12 +17,6 @@ import {
 
 const HEARTBEAT_MS = 15_000;
 
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
-
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -57,7 +51,6 @@ function writeSse(res, data) {
  * @returns {Promise<boolean>}
  */
 export async function handleTerminalRequest(req, res, pathname, projectRoot) {
-  setCorsHeaders(res);
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;

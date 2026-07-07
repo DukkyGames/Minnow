@@ -2,6 +2,8 @@
  * Calendar API client for the MinnowOS Calendar app.
  */
 
+import { withSessionToken } from '../api/session-token.ts';
+
 export interface CalendarRow {
   id: string;
   name: string;
@@ -113,7 +115,8 @@ export async function importIcsFile(calendarId: string, file: File): Promise<num
 }
 
 export function exportIcsUrl(calendarId: string): string {
-  return `/api/calendar/export/ics?calendarId=${encodeURIComponent(calendarId)}`;
+  // Opened via window.open (direct navigation, no fetch) — token rides the query string.
+  return withSessionToken(`/api/calendar/export/ics?calendarId=${encodeURIComponent(calendarId)}`);
 }
 
 export async function fetchCalDavAccounts(): Promise<CalDavAccount[]> {

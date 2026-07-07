@@ -1198,13 +1198,6 @@ export async function executeServerTool(name, args, options = {}) {
   });
 }
 
-/** CORS headers for local Vite dev (browser tools calling same origin or localhost). */
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
-
 /** Read JSON body from POST /api/tools. */
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
@@ -1233,8 +1226,6 @@ export function createToolsMiddleware() {
       next();
       return;
     }
-
-    setCorsHeaders(res);
 
     if (req.method === 'OPTIONS') {
       res.statusCode = 204;

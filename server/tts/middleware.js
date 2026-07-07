@@ -17,13 +17,6 @@ const MAX_TTS_TEXT_CHARS = 4096;
 const MIN_TTS_SPEED = 0.25;
 const MAX_TTS_SPEED = 4.0;
 
-/** CORS headers for dev SPA. */
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
-
 function sendJson(res, status, payload) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
@@ -395,7 +388,6 @@ export function createTtsMiddleware() {
       return;
     }
 
-    setCorsHeaders(res);
     if (req.method === 'OPTIONS') {
       res.statusCode = 204;
       res.end();

@@ -15,6 +15,7 @@ import { deleteGenerationsForProviderShutdown } from './server/generations/store
 import { getAppRoot } from './server/workspace/root.js';
 import { getMinnowHome } from './server/config/home.js';
 import { applyMinnowMiddlewares } from './server/runtime/middlewares.js';
+import { getSessionToken, injectSessionTokenScript } from './server/runtime/session-token.js';
 import { bootstrapMinnowRuntime } from './server/runtime/bootstrap.js';
 import {
   startSchedulerTickLoop,
@@ -162,6 +163,9 @@ async function main() {
             runWithPathAccess,
           });
         },
+        transformIndexHtml(html) {
+          return injectSessionTokenScript(html, getSessionToken());
+        },
       },
     ],
   });
@@ -178,6 +182,7 @@ async function main() {
   const localUrl = urls[0];
   const boundPort = Number(new URL(localUrl).port) || PORT;
   writeDevHostState({ localUrl, port: boundPort });
+  getSessionToken();
   const networkUrls = vite.resolvedUrls?.network ?? [];
   console.log(`Minnow dev server: ${localUrl}`);
   if (networkAccess === 'lan') {

@@ -20,6 +20,7 @@ import {
 } from './file-layout';
 import { dismissFileViewerForPreview } from './file-viewer';
 import { listViewerTabs } from './file-viewer-tab-store';
+import { withSessionToken } from '../api/session-token.ts';
 import { detectEmbedBlockedFrame } from './preview-embed-detect';
 import {
   isFullscreenOverlayObscuringWorkspace,
@@ -205,9 +206,10 @@ export function workspacePreviewUrl(relativePath: string, cacheBust?: number): s
   const normalized = normalizeWorkspacePath(relativePath);
   const encoded = normalized.split('/').map((segment) => encodeURIComponent(segment)).join('/');
   const base = `${PREVIEW_FILE_API}${encoded}`;
-  if (cacheBust === undefined) return base;
-  const sep = base.includes('?') ? '&' : '?';
-  return `${base}${sep}v=${cacheBust}`;
+  const withCacheBust = cacheBust === undefined ? base : `${base}${base.includes('?') ? '&' : '?'}v=${cacheBust}`;
+  // This URL feeds the iframe `src`/Electron `loadURL` directly (no fetch, so
+  // the global fetch-auth header never applies) — the token must ride the query string.
+  return withSessionToken(withCacheBust);
 }
 
 /**
@@ -809,6 +811,10 @@ export async function openUrlInPreviewPanel(url: string): Promise<void> {
   const trimmed = url.trim();
   if (!trimmed || !HTTP_URL_RE.test(trimmed)) return;
   if (!(await dismissFileViewerForPreview())) return;
+
+  const { isDesktopWorkspaceHostingActive } = await import('../os/desktop-workspace-mounts');
+  const desktopHosted = isDesktopWorkspaceHostingActive();
+  if (!desktopHosted && !dismissFileViewerForPreview()) return;
 
   const api = getPreviewApi();
   if (!api) {

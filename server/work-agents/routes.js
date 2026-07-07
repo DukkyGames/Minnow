@@ -23,12 +23,6 @@ import { normalizeArchiveConfig } from '../config/validators.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
-
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -62,8 +56,6 @@ export async function handleWorkAgentsRequest(req, res, pathname, search) {
   if (!pathname.startsWith('/api/work-agents')) {
     return false;
   }
-
-  setCorsHeaders(res);
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;

@@ -18,12 +18,6 @@ import {
   startResearch,
 } from './store.js';
 
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
-
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -70,8 +64,6 @@ export async function handleResearchRequest(req, res, pathname) {
   if (!pathname.startsWith('/api/research')) {
     return false;
   }
-
-  setCorsHeaders(res);
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;

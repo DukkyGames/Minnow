@@ -5,6 +5,7 @@ import { renderConcierge } from './concierge';
 import { renderMiniPreviews } from './mini-previews';
 import { renderWallpaper, type WallpaperRenderOptions } from './wallpaper';
 import { getAppearanceAssetObjectUrl } from '../appearance/asset-store';
+import { bindDesktopChatTranscriptScroll } from '../ui/chat-scroll';
 import { wireDesktopChatRail } from '../ui/desktop-chat-rail';
 import {
   renderDesktopWorkspaceRail,
@@ -165,6 +166,7 @@ export function renderDesktop(root: HTMLElement): () => void {
   transcriptCol.id = 'desktopChatCol';
   transcriptCol.className = 'mn-os-chat-col';
   transcript.appendChild(transcriptCol);
+  bindDesktopChatTranscriptScroll();
 
   const desktopResearch = document.createElement('div');
   desktopResearch.className = 'mn-os-desktop-research dr';

@@ -4,7 +4,7 @@
  * fetch() does not deadlock the in-process Vite dev server in server.js.
  */
 
-import { spawnElectronShell } from './spawn-electron.mjs';
+import { ensureElectronBuild, spawnElectronShell } from './spawn-electron.mjs';
 import { waitForMinnowDev } from './wait-for-minnow-dev.mjs';
 import { resolveMinnowPort } from '../server/constants/minnow-port.js';
 
@@ -20,7 +20,12 @@ const preferredPort = readPortArg();
 
 try {
   console.log(`[electron] Waiting for Minnow dev server near port ${preferredPort}…`);
-  const { origin, port } = await waitForMinnowDev({ preferredPort });
+  const buildPromise = ensureElectronBuild();
+  const { origin, port } = await waitForMinnowDev({
+    preferredPort,
+    logLabel: '[electron]',
+  });
+  await buildPromise;
   const devUrl = `${origin}/`;
   await spawnElectronShell({ port, devUrl, dev: true, foreground: false });
   console.log(`Minnow desktop: Electron shell launched (${devUrl}).`);

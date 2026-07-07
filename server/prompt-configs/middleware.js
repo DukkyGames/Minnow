@@ -23,15 +23,6 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader(
-    'Access-Control-Allow-Methods',
-    'GET, PUT, POST, DELETE, OPTIONS',
-  );
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
-
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -70,8 +61,6 @@ export async function handlePromptRequest(req, res, pathname, search = '') {
   const profileParam = params.get('profile') === 'lite' ? 'lite' : 'full';
   const baselineBuiltin = params.get('baseline') === 'builtin';
   const rawFile = params.get('raw') === '1' || params.get('raw') === 'true';
-
-  setCorsHeaders(res);
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;

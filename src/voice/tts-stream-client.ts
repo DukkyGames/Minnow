@@ -2,6 +2,8 @@
  * Browser WebSocket client for live local TTS — Int16 PCM mono over WS.
  */
 
+import { withSessionToken } from '../api/session-token.ts';
+
 const MAX_TTS_WS_MESSAGE_CHARS = 64 * 1024;
 
 export type TtsStreamServerEvent =
@@ -49,7 +51,7 @@ export function parseTtsServerMessage(raw: string): TtsStreamServerEvent | null 
 /** Build same-origin WebSocket URL for TTS streaming. */
 export function buildTtsWsUrl(): string {
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${proto}//${window.location.host}/api/tts/ws`;
+  return withSessionToken(`${proto}//${window.location.host}/api/tts/ws`);
 }
 
 /**

@@ -37,6 +37,8 @@ import type {
   Usage,
 } from '../types';
 import {
+  captureChatScrollAnchor,
+  restoreChatScrollAnchor,
   scrollChatIfPinned,
   scrollChatToBottom,
 } from './chat-scroll';
@@ -109,6 +111,9 @@ function isAssistantToolCallMessage(msg: Message): msg is AssistantToolCallMessa
 
 export { resolveModelInfo, showCachedModelInfo } from '../api/models';
 
+/** Suppress per-bubble scroll while bulk-rendering history (renderChatFromHistory). */
+let suppressBubbleScroll = false;
+
 export function renderStatsForChat(chat: Chat): void {
   const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;
   const mid = (sel && sel.value) || chat.modelId || '';
@@ -142,6 +147,7 @@ export function renderStatsForChat(chat: Chat): void {
 export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement): void {
   const area = resolveChatMount(mount);
   const codeMount = isCodeChatMount(mount);
+  const scrollAnchor = captureChatScrollAnchor();
 
   // Code overview / code map own #chatArea — do not repaint chat or board underneath.
   if (codeMount && isMainColumnOverlaySuppressingChatDom()) {
@@ -149,6 +155,8 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   }
 
   runWithChatMount(area, () => {
+  suppressBubbleScroll = true;
+  try {
   if (codeMount) {
     teardownCodeBrainMapBeforeChatPaint();
     stripMainColumnOverlayClasses();
@@ -339,8 +347,11 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
     attachVoicePlayButton(wrap, trimmed);
   }
   renderPersistedSubAgentCardsForChat(chat);
-  scrollChatToBottom();
+  restoreChatScrollAnchor(scrollAnchor);
   refreshContextUsageRing();
+  } finally {
+    suppressBubbleScroll = false;
+  }
   });
 }
 
@@ -441,10 +452,12 @@ export function appendBubble(
   wrap.appendChild(label);
   wrap.appendChild(bubble);
   getActiveChatMountElement().appendChild(wrap);
-  if (role === 'user') {
-    scrollChatToBottom();
-  } else {
-    scrollChatIfPinned();
+  if (!suppressBubbleScroll) {
+    if (role === 'user') {
+      scrollChatToBottom();
+    } else {
+      scrollChatIfPinned();
+    }
   }
   return { wrap, bubble };
 }

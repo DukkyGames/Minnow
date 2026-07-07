@@ -8,13 +8,12 @@ import {
   createWorkspaceSubfolder,
   fetchWorkspace,
   removeRecentWorkspace,
-  setWorkspacePath,
   type WorkspaceRecentItem,
 } from '../config/workspace-api';
 import { isDefaultWorkspace } from '../state/workspace';
 import { detectLocalServer, getLocalServerAvailable } from '../tools/client';
 import { isOsShellEnabled } from '../os/page-bridge';
-import { applyWorkspaceSwitch } from './workspace-button';
+import { executeWorkspaceSwitch } from './workspace-switch-guard';
 import { openWorkspaceFolderPicker } from './workspace-folder-picker';
 import { setStatus } from './status';
 
@@ -280,8 +279,11 @@ async function activateRecentWorkspace(absPath: string): Promise<void> {
   }
   setStatus('spin', 'Switching workspace…');
   try {
-    const info = await setWorkspacePath(absPath);
-    await applyWorkspaceSwitch(info);
+    const info = await executeWorkspaceSwitch(absPath);
+    if (!info) {
+      setStatus('ok', 'Workspace unchanged');
+      return;
+    }
     closeWelcome();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -306,8 +308,11 @@ async function onOpenProject(): Promise<void> {
       setStatus('err', 'No folder selected');
       return;
     }
-    const info = await setWorkspacePath(result.path);
-    await applyWorkspaceSwitch(info);
+    const info = await executeWorkspaceSwitch(result.path);
+    if (!info) {
+      setStatus('ok', 'Workspace unchanged');
+      return;
+    }
     closeWelcome();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -358,8 +363,11 @@ async function onCreateProjectSubmit(): Promise<void> {
 
   try {
     const created = await createWorkspaceSubfolder(parent, name.trim());
-    const info = await setWorkspacePath(created.path);
-    await applyWorkspaceSwitch(info);
+    const info = await executeWorkspaceSwitch(created.path);
+    if (!info) {
+      setStatus('ok', 'Workspace unchanged');
+      return;
+    }
     showCreatePanel(false);
     closeWelcome();
   } catch (err) {
