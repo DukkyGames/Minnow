@@ -1,0 +1,185 @@
+/**
+ * Test runner profiles, path-based runner overrides, scoped suites, and exclusions.
+ * Used by test/run-all.mjs and test/check-test-coverage.mjs.
+ */
+
+/** @typedef {'node' | 'tsx-mocks' | 'tsx-loader-mocks' | 'tsx' | 'node-tsx'} RunnerId */
+
+/** How each runner invokes node:test. */
+export const RUNNERS = {
+  node: {
+    command: 'node',
+    prefixArgs: ['--test', '--test-force-exit'],
+  },
+  'tsx-mocks': {
+    command: 'node',
+    prefixArgs: [
+      '--experimental-test-module-mocks',
+      './node_modules/tsx/dist/cli.mjs',
+      '--test',
+      '--test-force-exit',
+    ],
+  },
+  'tsx-loader-mocks': {
+    command: 'node',
+    prefixArgs: [
+      '--experimental-test-module-mocks',
+      './node_modules/tsx/dist/cli.mjs',
+      '--import',
+      './test/test-loader.mjs',
+      '--test',
+      '--test-force-exit',
+    ],
+  },
+  tsx: {
+    command: 'tsx',
+    prefixArgs: ['--test', '--test-force-exit'],
+  },
+  'node-tsx': {
+    command: 'node',
+    prefixArgs: ['--import', 'tsx', '--test', '--test-force-exit'],
+  },
+};
+
+/** Default runner when no path rule matches. */
+export const DEFAULT_RUNNER_BY_EXT = {
+  '.test.js': 'node',
+  '.test.mjs': 'node',
+  '.test.ts': 'tsx-loader-mocks',
+  '.test.mts': 'tsx-loader-mocks',
+};
+
+/**
+ * Path-specific runner overrides (first match wins).
+ * Patterns use forward slashes and support `*` / `**` globs via fs.globSync.
+ */
+export const PATH_RUNNER_RULES = [
+  { pattern: 'test/research/*.test.mts', runner: 'tsx-mocks' },
+  { pattern: 'test/server/**/*.test.mjs', runner: 'tsx-mocks' },
+  { pattern: 'test/workspace/*.test.js', runner: 'tsx-mocks' },
+  { pattern: 'test/terminal/shell-profiles.test.mjs', runner: 'tsx-mocks' },
+  { pattern: 'test/terminal/pty-protocol.test.mjs', runner: 'tsx-mocks' },
+  { pattern: 'test/settings/**', runner: 'node-tsx' },
+  { pattern: 'test/os/calendar-app.test.mts', runner: 'node-tsx' },
+  { pattern: 'test/os/email-app.test.mts', runner: 'node-tsx' },
+];
+
+/**
+ * Test files that exist on disk but are not node:test modules.
+ * They are excluded from npm test and orphan detection.
+ */
+export const EXCLUDED_TESTS = [
+  {
+    path: 'test/terminal/pty-session.test.mjs',
+    reason: 'integration script (requires live server; use npm run test:terminal-pty)',
+  },
+  {
+    path: 'test/terminal-stream.test.mjs',
+    reason: 'integration script (requires live server)',
+  },
+];
+
+/**
+ * Scoped suites for `npm run test:<area>` — patterns relative to repo root.
+ * `post` runs after discovered tests (e.g. smoke scripts).
+ */
+export const SCOPED_SUITES = {
+  skills: {
+    patterns: [
+      'test/skills-loader.test.ts',
+      'test/skills/**/*.test.mts',
+      'test/skills-matt-pocock.test.mjs',
+    ],
+  },
+  attachments: {
+    patterns: [
+      'test/attachments/**/*.test.mjs',
+      'test/attachments/**/*.test.mts',
+      'test/attachments/**/*.test.ts',
+      'test/server/read-document.test.mjs',
+      'test/workspace-ref.test.ts',
+      'test/workspace-path-composer.test.mts',
+    ],
+  },
+  'skills-impeccable': {
+    patterns: ['test/skills-impeccable.test.mjs'],
+  },
+  impeccable: {
+    patterns: ['test/impeccable/**/*.test.mjs', 'test/skills/impeccable-client.test.mts'],
+  },
+  notifications: {
+    patterns: ['test/notifications/**/*.test.mjs'],
+  },
+  calendar: {
+    patterns: ['test/calendar/**/*.test.mjs', 'test/os/calendar-app.test.mts'],
+  },
+  email: {
+    patterns: ['test/email/**/*.test.mjs', 'test/os/email-app.test.mts'],
+  },
+  memory: {
+    patterns: ['test/memory/**/*.test.mjs'],
+  },
+  brain: {
+    patterns: ['test/brain/**/*.test.mjs'],
+  },
+  settings: {
+    patterns: ['test/settings/**/*.test.mjs'],
+  },
+  engine: {
+    patterns: ['test/engine/**/*.test.mjs'],
+  },
+  lsp: {
+    patterns: ['test/lsp/**/*.test.mjs'],
+  },
+  mcp: {
+    patterns: ['test/mcp/**/*.test.mjs'],
+  },
+  research: {
+    patterns: ['test/research/**/*.test.mjs', 'test/research/**/*.test.mts'],
+  },
+  servers: {
+    patterns: ['test/servers/**/*.test.mjs'],
+  },
+  webhooks: {
+    patterns: ['test/webhooks/**/*.test.mjs'],
+  },
+  plugins: {
+    patterns: [
+      'test/tools/plugin-scan.test.mjs',
+      'test/tools/plugin-loader.test.mjs',
+      'test/plugins/**/*.test.mjs',
+    ],
+  },
+  'ui-designer': {
+    patterns: ['test/ui-designer/**/*.test.mts'],
+    post: ['node scripts/step15-smoke.mjs'],
+  },
+  browser: {
+    patterns: [
+      'test/browser/**/*.test.js',
+      'test/tools/browser-preview-tools.test.mts',
+      'test/tools/minnow-shell.test.mts',
+    ],
+  },
+  benchmark: {
+    patterns: [
+      'test/api/message-content.test.mts',
+      'test/benchmark/**/*.test.mts',
+      'test/ui/benchmark-stop.test.mts',
+      'test/ui/benchmark-stopped-card.test.mts',
+      'test/ui/benchmark-history-browse.test.mts',
+      'test/ui/benchmark-nav-persistence.test.mts',
+      'test/ui/benchmark-suite-toggles.test.mts',
+      'test/ui/benchmark-transcript-resolve.test.mts',
+      'test/ui/transcript-view.test.mts',
+      'test/ui/benchmark-page-html.test.mjs',
+      'test/benchmark-workspace/**/*.test.mjs',
+    ],
+  },
+  evals: {
+    patterns: ['test/evals/**/*.test.mjs', 'test/evals/**/*.test.mts'],
+  },
+};
+
+/** Glob used to discover all node:test files under test/. */
+export const TEST_FILE_GLOB = 'test/**/*.test.{js,mjs,mts,ts}';
