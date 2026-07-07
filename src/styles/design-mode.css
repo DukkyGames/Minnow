@@ -1,0 +1,88 @@
+/* Design Mode overlay chrome — tool strip + viewport/dark-mode framing (MIN-365). */
+
+#btnPreviewDesignToggle[aria-pressed='true'] {
+  background: var(--mn-accent-soft);
+  color: var(--mn-accent);
+}
+
+.mn-design-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  padding: 6px 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-md, 8px);
+  background: var(--mn-surface-2);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.24);
+}
+
+.mn-design-strip__tools,
+.mn-design-strip__viewports {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-inline-end: 8px;
+  border-inline-end: 1px solid var(--mn-border);
+}
+
+.mn-design-strip__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--mn-radius-sm, 4px);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font-size: 0.75rem;
+  font-family: var(--font-ui);
+  cursor: pointer;
+}
+
+.mn-design-strip__btn:hover {
+  background: var(--mn-surface-3, rgba(127, 127, 127, 0.15));
+  color: var(--mn-fg);
+}
+
+.mn-design-strip__btn[aria-pressed='true'] {
+  background: var(--mn-accent-soft);
+  border-color: var(--mn-accent);
+  color: var(--mn-fg);
+}
+
+.mn-design-strip__dark-toggle {
+  border-inline-start: 1px solid var(--mn-border);
+  padding-inline-start: 8px;
+}
+
+/* Viewport preset frame — mobile/tablet constrain the guest's host width so the native
+   Electron WebContentsView (or iframe) resizes to match, centered inside the pane. */
+.mn-design-viewport--mobile,
+.mn-design-viewport--tablet {
+  margin-inline: auto;
+  border-inline: 1px solid var(--mn-border);
+  box-shadow: 0 0 0 9999px var(--mn-surface-1);
+}
+
+.mn-design-viewport--mobile {
+  max-width: 375px;
+}
+
+.mn-design-viewport--tablet {
+  max-width: 768px;
+}
+
+.mn-design-viewport--desktop {
+  max-width: none;
+}
+
+/* Dark-mode emulation frame indicator (actual guest color-scheme emulation is a P3/P4 concern). */
+.mn-design-dark-emulation {
+  outline: 1px dashed var(--mn-accent-soft);
+  outline-offset: -1px;
+}
