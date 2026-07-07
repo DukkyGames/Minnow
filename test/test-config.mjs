@@ -9,7 +9,7 @@
 export const RUNNERS = {
   node: {
     command: 'node',
-    prefixArgs: ['--test', '--test-force-exit'],
+    prefixArgs: ['--test', '--test-force-exit', '--test-timeout=120000'],
   },
   'tsx-mocks': {
     command: 'node',
@@ -18,6 +18,7 @@ export const RUNNERS = {
       './node_modules/tsx/dist/cli.mjs',
       '--test',
       '--test-force-exit',
+      '--test-timeout=120000',
     ],
   },
   'tsx-loader-mocks': {
@@ -29,15 +30,16 @@ export const RUNNERS = {
       './test/test-loader.mjs',
       '--test',
       '--test-force-exit',
+      '--test-timeout=120000',
     ],
   },
   tsx: {
     command: 'tsx',
-    prefixArgs: ['--test', '--test-force-exit'],
+    prefixArgs: ['--test', '--test-force-exit', '--test-timeout=120000'],
   },
   'node-tsx': {
     command: 'node',
-    prefixArgs: ['--import', 'tsx', '--test', '--test-force-exit'],
+    prefixArgs: ['--import', 'tsx', '--test', '--test-force-exit', '--test-timeout=120000'],
   },
 };
 
