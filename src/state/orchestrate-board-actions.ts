@@ -1251,6 +1251,55 @@ export function isTaskChatActive(chatId: string): boolean {
   return isTaskChatStreaming(chatId);
 }
 
+/**
+ * Stall-restart check: reserved-but-not-streaming chats are leaked launch slots,
+ * not healthy occupancy — treat them as idle so auto-pilot can recover.
+ */
+export function isTaskChatActiveForStallCheck(chatId: string): boolean {
+  if (
+    isLaunchReserved(chatId) &&
+    !isChatStreaming(chatId) &&
+    !isChatTurnSetupPending(chatId)
+  ) {
+    return false;
+  }
+  return isTaskChatActive(chatId);
+}
+
+/** Running slots minus one reserved-only chat that must not block its own launch. */
+function effectiveRunningTaskCount(
+  board: NonNullable<ChatGroup['orchestrateBoard']>,
+  excludeReservedOnlyChatId?: string,
+): number {
+  let count = countRunningTaskChats(board);
+  const exclude = excludeReservedOnlyChatId?.trim();
+  if (
+    exclude &&
+    isLaunchReserved(exclude) &&
+    !isChatStreaming(exclude) &&
+    !isChatTurnSetupPending(exclude)
+  ) {
+    count = Math.max(0, count - 1);
+  }
+  return count;
+}
+
+/** Whether a board task can take a concurrency slot (reclaims its own leaked tester reservation). */
+function canLaunchBoardTask(
+  board: NonNullable<ChatGroup['orchestrateBoard']>,
+  task?: BoardTask,
+): boolean {
+  const exclude =
+    task?.status === 'testing' ? task.testChatId?.trim() : undefined;
+  return effectiveRunningTaskCount(board, exclude) < maxConcurrent(board);
+}
+
+/** Release a leaked launch reservation on a task test chat before early return. */
+function releaseTestChatLaunchReservation(testChatId: string | undefined): void {
+  const id = testChatId?.trim();
+  if (id && isLaunchReserved(id)) releaseLaunchSlot(id);
+}
+
 function resolveBoardContext(plannerOrMemberChat: Chat): {
   group: ChatGroup;
   planner: Chat;
@@ -1414,7 +1463,9 @@ async function resumeBoardTask(
   const task = board?.tasks.find((t) => t.id === taskId);
   if (!task) return;
   if (task.status === 'testing') {
-    await startTaskTesting(group, taskId, plannerChat);
+    await startTaskTesting(group, taskId, plannerChat, {
+      allowPreReservedTestChat: true,
+    });
     return;
   }
   await startTask(group, taskId, plannerChat);
@@ -1776,7 +1827,9 @@ export async function continueBoardTask(
     return;
   }
   if (task.status === 'testing') {
-    await startTaskTesting(group, taskId, plannerChat);
+    await startTaskTesting(group, taskId, plannerChat, {
+      allowPreReservedTestChat: true,
+    });
     return;
   }
   clearTaskFailureState(group, task, plannerChat, { resetAttempts: false });
@@ -3015,7 +3068,9 @@ export async function startTaskTesting(
     if (!preReservedOnly) return;
   }
 
-  if (countRunningTaskChats(board) >= maxConcurrent(board)) {
+  const taskForCapacity = options?.allowPreReservedTestChat ? task : undefined;
+  if (!canLaunchBoardTask(board, taskForCapacity)) {
+    releaseTestChatLaunchReservation(existingTestId);
     if (options?.enqueueAtFront) {
       enqueueTaskAtFront(group.id, taskId);
     } else {
@@ -3024,12 +3079,16 @@ export async function startTaskTesting(
     return;
   }
 
-  if (skipBackgroundBoardChatLaunch()) return;
+  if (skipBackgroundBoardChatLaunch()) {
+    releaseTestChatLaunchReservation(existingTestId);
+    return;
+  }
 
   ensureStreamEndSubscription();
 
   const { providerId, modelId } = resolvePlannerModelBinding(plannerChat);
   if (!modelId) {
+    releaseTestChatLaunchReservation(existingTestId);
     updateTask(
       group,
       taskId,
@@ -4056,7 +4115,7 @@ export async function autoDelegateNext(
     .filter(
       (t) =>
         isTaskReadyForAuto(board, t) ||
-        isTaskStalledForRestart(board, t, isTaskChatActive),
+        isTaskStalledForRestart(board, t, isTaskChatActiveForStallCheck),
     )
     .sort((a, b) => {
       const wa = waveOrder.get(String(a.wave)) ?? 999;
@@ -4133,6 +4192,10 @@ export function reserveLaunchSlotForTests(chatId: string): void {
 
 export function releaseLaunchSlotForTests(chatId: string): void {
   releaseLaunchSlot(chatId);
+}
+
+export function isLaunchReservedForTests(chatId: string): boolean {
+  return isLaunchReserved(chatId);
 }
 
 export function enqueueTaskForTests(groupId: string, taskId: string): void {

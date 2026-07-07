@@ -13,6 +13,7 @@ import {
   countRunningTaskChats,
   drainTaskQueueForTests,
   isTaskChatActive,
+  isTaskChatActiveForStallCheck,
   listRunningBoardTaskSlots,
   releaseLaunchSlotForTests,
   reserveLaunchSlotForTests,
@@ -458,7 +459,7 @@ export async function bootstrapPendingLaunches(
     .filter(
       (t) =>
         isTaskReadyForAuto(board, t) ||
-        isTaskStalledForRestart(board, t, isTaskChatActive),
+        isTaskStalledForRestart(board, t, isTaskChatActiveForStallCheck),
     )
     .sort((a, b) => {
       const wa = waveOrder.get(String(a.wave)) ?? 999;

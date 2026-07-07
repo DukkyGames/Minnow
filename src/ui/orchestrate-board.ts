@@ -55,6 +55,7 @@ import {
   getBoardExecutionMode,
   isBoardRunning,
   isTaskChatActive,
+  isTaskChatActiveForStallCheck,
   listRunningBoardTaskSlots,
   moveTaskStatus,
   moveTaskToNewChat,
@@ -1744,7 +1745,7 @@ function runningSlotShowsContinue(
   if (slot.isFinalTest || !slot.task) return false;
   if (isChatStreaming(slot.chatId)) return false;
   return (
-    isTaskStalledForRestart(board, slot.task, isTaskChatActive) ||
+    isTaskStalledForRestart(board, slot.task, isTaskChatActiveForStallCheck) ||
     isTaskChatActive(slot.chatId)
   );
 }
