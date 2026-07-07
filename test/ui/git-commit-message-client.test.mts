@@ -6,6 +6,7 @@ import { DEFAULT_EDITOR_AI_COMPLETION } from '../../src/config/editor-ai-complet
 import { createEmptyChatObject, setSessionStateForTests } from '../../src/state/sessions.ts';
 import {
   buildGitCommitMessagePrompt,
+  extractCommitMessageFromChain,
   normalizeCommitMessageOutput,
   resolveCommitMessageDisplayText,
   resolveGitCommitMessageBinding,
@@ -73,32 +74,38 @@ describe('stripThinkingFromCommitOutput', () => {
   });
 });
 
-describe('stripReasoningFraming', () => {
-  test('removes leading reasoning but keeps plain commit text', () => {
-    const raw = 'Let me read the diff.\n\nFix git auto commit message generation';
-    assert.equal(
-      stripReasoningFraming(raw),
-      'Fix git auto commit message generation',
-    );
+describe('extractCommitMessageFromChain', () => {
+  test('extracts the last conventional commit block from a reasoning chain', () => {
+    const chain = [
+      'The user wants a commit message for these git changes.',
+      'I need to analyze the diff carefully.',
+      'The diff shows changes to git-commit-message-client.ts.',
+      "I'll use a fix type since this is a bug fix.",
+      '',
+      'fix(git): extract commit message from reasoning chain',
+      '',
+      'Strip mirrored reasoning instead of dumping the full chain.',
+    ].join('\n');
+
+    const result = extractCommitMessageFromChain(chain);
+    assert.match(result, /^fix\(git\):/);
+    assert.match(result, /Strip mirrored reasoning/);
   });
 
-  test('removes trailing meta commentary', () => {
-    const raw = 'feat(ui): add generator\n\nLooks good.';
-    assert.equal(stripReasoningFraming(raw), 'feat(ui): add generator');
-  });
-});
-
-describe('normalizeCommitMessageOutput', () => {
-  test('accepts plain commit text without conventional prefix', () => {
-    assert.equal(
-      normalizeCommitMessageOutput('Fix git auto commit message generation'),
+  test('extracts plain commit text from trailing paragraph', () => {
+    const chain = [
+      'Let me read the diff.',
+      'The changes update git panel behavior.',
+      '',
       'Fix git auto commit message generation',
-    );
+    ].join('\n');
+
+    assert.equal(extractCommitMessageFromChain(chain), 'Fix git auto commit message generation');
   });
 
   test('returns empty for reasoning-only output', () => {
     assert.equal(
-      normalizeCommitMessageOutput('Let me analyze the staged diff carefully.'),
+      extractCommitMessageFromChain('Let me analyze the staged diff carefully.'),
       '',
     );
   });
@@ -114,38 +121,62 @@ describe('resolveCommitMessageDisplayText', () => {
     );
   });
 
-  test('falls back to reasoning when content is empty', () => {
+  test('does not surface mirrored reasoning chains in content', () => {
+    const chain = [
+      'The user wants a commit message.',
+      'I need to analyze the diff.',
+      '',
+      'feat(git): add commit generator',
+    ].join('\n');
+
     assert.equal(
-      resolveCommitMessageDisplayText('', 'feat: ship panel', { reasoningFallback: true }),
-      'feat: ship panel',
+      resolveCommitMessageDisplayText(chain, chain, { reasoningFallback: true }),
+      'feat(git): add commit generator',
     );
   });
 
-  test('extracts commit message from reasoning analysis without conventional prefix', () => {
-    const reasoning =
-      'The diff adds a new panel.\n\nFix git commit message generation\n\nLooks good.';
+  test('does not stream partial reasoning while the chain is still growing', () => {
+    const partial = 'The user wants a commit message.\nI need to analyze the diff.';
+    assert.equal(
+      resolveCommitMessageDisplayText(partial, partial, { reasoningFallback: false }),
+      '',
+    );
+  });
+
+  test('falls back to reasoning channel when content is empty', () => {
+    const reasoning = [
+      'Analyzing patch.',
+      '',
+      'fix(ui): handle empty diff',
+    ].join('\n');
+
     assert.equal(
       resolveCommitMessageDisplayText('', reasoning, { reasoningFallback: true }),
-      'Fix git commit message generation',
+      'fix(ui): handle empty diff',
     );
   });
 
-  test('matches main-branch content handling during streaming', () => {
+  test('matches main-branch clean content fast path', () => {
     assert.equal(
-      resolveCommitMessageDisplayText('feat: ship it', 'ignored reasoning', {
-        reasoningFallback: false,
-      }),
+      resolveCommitMessageDisplayText('feat: ship it', '', { reasoningFallback: true }),
       'feat: ship it',
     );
   });
+});
 
-  test('does not use reasoning while streaming', () => {
+describe('normalizeCommitMessageOutput', () => {
+  test('accepts plain commit text without conventional prefix', () => {
     assert.equal(
-      resolveCommitMessageDisplayText('', 'feat: only in reasoning', {
-        reasoningFallback: false,
-      }),
-      '',
+      normalizeCommitMessageOutput('Fix git auto commit message generation'),
+      'Fix git auto commit message generation',
     );
+  });
+});
+
+describe('stripReasoningFraming', () => {
+  test('removes trailing meta commentary', () => {
+    const raw = 'feat(ui): add generator\n\nLooks good.';
+    assert.equal(stripReasoningFraming(raw), 'feat(ui): add generator');
   });
 });
 
