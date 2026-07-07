@@ -14,6 +14,7 @@ import {
 import * as channels from './ipc-channels.js';
 import {
   previewCapturePageBase64,
+  previewClearGuest,
   previewExecJs,
   previewGetGuestInfo,
   previewNavigateAwait,
@@ -297,11 +298,11 @@ export function registerPreviewHostIpc(): void {
   ipcMain.handle(channels.PREVIEW_CLEAR, async (event) => {
     const entry = getHostFromInvoke(event);
     if (!entry) return;
-    const wc = entry.view.webContents;
-    if (wc.isLoading()) {
-      wc.stop();
+    try {
+      await previewClearGuest(entry.view.webContents);
+    } catch (err) {
+      console.warn('[preview] clear failed:', err instanceof Error ? err.message : err);
     }
-    await wc.loadURL('about:blank');
   });
 
   ipcMain.handle(channels.PREVIEW_LOAD_SOURCE, (event, payload: PreviewLoadSourcePayload) => {
