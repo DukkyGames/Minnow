@@ -6,7 +6,7 @@
  */
 
 import type { CapturedRegion } from './region-capture';
-import type { CommentPin, DesignShape } from './shape-model';
+import { boundingRectOfShape, type CommentPin, type DesignShape } from './shape-model';
 
 export interface OverlayMarker {
   id: string;
@@ -25,12 +25,20 @@ export interface AnnotationOverlay {
   removeCaptureFromMarker(markerId: string): void;
   enableFreeDraw(onRect: (rect: OverlayMarker['rect']) => void): void;
   disableFreeDraw(): void;
-  /** Draw & Comment tool (MIN-367): pen/rect/arrow/label shapes in their own overlay layer. */
-  renderShapes(shapes: DesignShape[]): void;
+  /**
+   * Draw & Comment tool (MIN-367): pen/rect/arrow/label shapes in their own overlay layer.
+   * Shapes with `links` (MIN-368: sent to a chat turn) render a small clickable chat-glyph
+   * badge; `onLinkClick` fires with the shape id when it's clicked (host jumps to that turn).
+   */
+  renderShapes(shapes: DesignShape[], onLinkClick?: (shapeId: string) => void): void;
   /** Numbered comment pins; onPinClick fires with the pin id (host toggles the thread popover). */
   renderPins(pins: CommentPin[], onPinClick?: (pinId: string) => void): void;
   /** Serialized `<svg>` markup (markers + shapes + pins) for composite region capture. */
   getSvgMarkup(): string;
+  /** Pulse-highlight already-rendered shapes by id for a few seconds (MIN-368 transcript → page). */
+  pulseShapeIds(ids: string[], durationMs?: number): void;
+  /** Pulse-highlight already-rendered pins by id for a few seconds (MIN-368 transcript → page). */
+  pulsePinIds(ids: string[], durationMs?: number): void;
   resize(): void;
   destroy(): void;
 }
@@ -46,6 +54,12 @@ const SHAPE_LAYER_CLASS = 'mn-design-overlay-shapes';
 const PIN_LAYER_CLASS = 'mn-design-overlay-pins';
 const BADGE_SIZE = 20;
 const PIN_RADIUS = 11;
+
+/** CSS.escape with a manual fallback (happy-dom/older runtimes may not implement it). */
+function cssEscape(value: string): string {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(value);
+  return value.replace(/([.#:[\]"'\\])/g, '\\$1');
+}
 
 /** Create the SVG overlay mounted inside the given host element. */
 export function createAnnotationOverlay(
@@ -297,9 +311,13 @@ export function createAnnotationOverlay(
       svg.style.cursor = '';
     },
 
-    renderShapes(shapes: DesignShape[]): void {
+    renderShapes(shapes: DesignShape[], onLinkClick?: (shapeId: string) => void): void {
       shapeLayer.innerHTML = '';
       for (const shape of shapes) {
+        const shapeGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        shapeGroup.setAttribute('data-shape-id', shape.id);
+        shapeLayer.appendChild(shapeGroup);
+
         if (shape.kind === 'pen' && shape.points?.length) {
           const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
           polyline.setAttribute('points', shape.points.map((p) => `${p.x},${p.y}`).join(' '));
@@ -308,7 +326,7 @@ export function createAnnotationOverlay(
           polyline.setAttribute('stroke-width', '2');
           polyline.setAttribute('stroke-linecap', 'round');
           polyline.setAttribute('stroke-linejoin', 'round');
-          shapeLayer.appendChild(polyline);
+          shapeGroup.appendChild(polyline);
         } else if (shape.kind === 'rect' && shape.rect) {
           const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
           rect.setAttribute('x', String(shape.rect.x));
@@ -320,7 +338,7 @@ export function createAnnotationOverlay(
           rect.setAttribute('fill-opacity', '0.25');
           rect.setAttribute('stroke', 'var(--mn-accent)');
           rect.setAttribute('stroke-width', '2');
-          shapeLayer.appendChild(rect);
+          shapeGroup.appendChild(rect);
         } else if (shape.kind === 'arrow' && shape.points?.length === 2) {
           const [from, to] = shape.points;
           const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -331,7 +349,7 @@ export function createAnnotationOverlay(
           line.setAttribute('stroke', 'var(--mn-accent)');
           line.setAttribute('stroke-width', '2.5');
           line.setAttribute('marker-end', 'url(#mn-design-arrowhead)');
-          shapeLayer.appendChild(line);
+          shapeGroup.appendChild(line);
         } else if (shape.kind === 'label') {
           const rect = shape.rect ?? {
             x: (shape.points?.[0]?.x ?? 0) - 4,
@@ -346,7 +364,7 @@ export function createAnnotationOverlay(
           bg.setAttribute('height', String(rect.height));
           bg.setAttribute('rx', '3');
           bg.setAttribute('fill', 'var(--mn-accent)');
-          shapeLayer.appendChild(bg);
+          shapeGroup.appendChild(bg);
           const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           text.setAttribute('x', String(rect.x + 6));
           text.setAttribute('y', String(rect.y + rect.height / 2 + 4));
@@ -354,7 +372,33 @@ export function createAnnotationOverlay(
           text.setAttribute('font-size', '12');
           text.setAttribute('font-family', 'var(--font-ui)');
           text.textContent = shape.label ?? '';
-          shapeLayer.appendChild(text);
+          shapeGroup.appendChild(text);
+        }
+
+        // Chat-linked shape (MIN-368): small clickable glyph badge at the shape's top-right so
+        // "page → transcript" navigation has a click target without disturbing the shape itself.
+        if (shape.links?.length && onLinkClick) {
+          const bounds = boundingRectOfShape(shape);
+          const badge = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          const bx = bounds.x + bounds.width;
+          const by = bounds.y;
+          badge.setAttribute('class', 'mn-design-shape-link-badge');
+          badge.setAttribute('cx', String(bx));
+          badge.setAttribute('cy', String(by));
+          badge.setAttribute('r', '8');
+          badge.setAttribute('fill', 'var(--mn-accent)');
+          badge.setAttribute('stroke', 'var(--mn-fg-on-accent)');
+          badge.setAttribute('stroke-width', '1');
+          badge.style.pointerEvents = 'auto';
+          badge.style.cursor = 'pointer';
+          const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+          title.textContent = 'Open linked chat turn';
+          badge.appendChild(title);
+          badge.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            onLinkClick(shape.id);
+          });
+          shapeGroup.appendChild(badge);
         }
       }
     },
@@ -363,6 +407,7 @@ export function createAnnotationOverlay(
       pinLayer.innerHTML = '';
       for (const pin of pins) {
         const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('data-pin-id', pin.id);
         circle.setAttribute('cx', String(pin.x));
         circle.setAttribute('cy', String(pin.y));
         circle.setAttribute('r', String(PIN_RADIUS));
@@ -387,6 +432,24 @@ export function createAnnotationOverlay(
         label.style.pointerEvents = 'none';
         label.textContent = String(pin.index);
         pinLayer.appendChild(label);
+      }
+    },
+
+    pulseShapeIds(ids: string[], durationMs = 2200): void {
+      for (const id of ids) {
+        const group = shapeLayer.querySelector(`[data-shape-id="${cssEscape(id)}"]`);
+        if (!(group instanceof SVGElement)) continue;
+        group.classList.add('mn-design-shape--pulse');
+        window.setTimeout(() => group.classList.remove('mn-design-shape--pulse'), durationMs);
+      }
+    },
+
+    pulsePinIds(ids: string[], durationMs = 2200): void {
+      for (const id of ids) {
+        const circle = pinLayer.querySelector(`[data-pin-id="${cssEscape(id)}"]`);
+        if (!(circle instanceof SVGElement)) continue;
+        circle.classList.add('mn-design-shape--pulse');
+        window.setTimeout(() => circle.classList.remove('mn-design-shape--pulse'), durationMs);
       }
     },
 

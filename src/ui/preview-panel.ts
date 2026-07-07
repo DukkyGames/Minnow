@@ -50,7 +50,18 @@ import { bindPreviewTabs, registerPreviewTabHandlers } from './preview-tabs';
 import { HTTP_URL_RE, parsePreviewAddress } from './preview-url';
 import { shouldAutoRestorePreviewPanel, isCodeAppForeground } from './preview-restore-policy';
 import { showToast } from './toast';
-import { disableDesignMode, enableDesignMode, isDesignModeEnabled } from '../design/design-mode';
+import { disableDesignMode, enableDesignMode, isDesignModeEnabled, getDesignModeSession } from '../design/design-mode';
+import { currentPreviewPageRef, gatherAnchorCandidates } from '../design/design-tool';
+import {
+  eraseShape,
+  erasePin,
+  loadPageAnnotations,
+} from '../design/annotation-store';
+import {
+  mountAnnotationsPanel,
+  type AnnotationsPanelHandle,
+  type AnnotationsPanelItem,
+} from '../design/annotations-panel';
 
 const BROWSER_PREVIEW_HINT =
   'Full Chromium preview (any website or local file) runs in the Minnow desktop shell. Run npm start — Electron opens by default — or npm run electron:dev.';
@@ -193,6 +204,62 @@ function getDesignToggleButton(): HTMLButtonElement | null {
   return document.getElementById('btnPreviewDesignToggle') as HTMLButtonElement | null;
 }
 
+function getAnnotationsToggleButton(): HTMLButtonElement | null {
+  return document.getElementById('btnPreviewAnnotationsToggle') as HTMLButtonElement | null;
+}
+
+let annotationsPanel: AnnotationsPanelHandle | null = null;
+
+/** Refresh the mounted annotations panel from the annotation store for the current page. */
+async function refreshAnnotationsPanel(): Promise<void> {
+  if (!annotationsPanel) return;
+  const pageKey = currentPreviewPageRef();
+  const [data, candidates] = await Promise.all([
+    loadPageAnnotations(pageKey),
+    gatherAnchorCandidates(),
+  ]);
+  annotationsPanel.setData(data, candidates);
+}
+
+function highlightAnnotationItem(item: AnnotationsPanelItem): void {
+  const session = getDesignModeSession(DESIGN_MODE_INSTANCE_ID);
+  if (!session) return;
+  if (item.type === 'shape') session.overlay.pulseShapeIds([item.id]);
+  else session.overlay.pulsePinIds([item.id]);
+}
+
+async function bulkDeleteAnnotationItems(ids: { shapeIds: string[]; pinIds: string[] }): Promise<void> {
+  const pageKey = currentPreviewPageRef();
+  for (const shapeId of ids.shapeIds) await eraseShape(pageKey, shapeId);
+  for (const pinId of ids.pinIds) await erasePin(pageKey, pinId);
+  await refreshAnnotationsPanel();
+}
+
+/** Toggle the annotations panel (MIN-368) — a collapsible list of every mark on the current page. */
+async function toggleAnnotationsPanel(): Promise<void> {
+  const host = getPreviewBody();
+  if (!host) return;
+
+  if (annotationsPanel) {
+    annotationsPanel.destroy();
+    annotationsPanel = null;
+    getAnnotationsToggleButton()?.setAttribute('aria-pressed', 'false');
+    getAnnotationsToggleButton()?.classList.remove('is-active');
+    return;
+  }
+
+  getAnnotationsToggleButton()?.setAttribute('aria-pressed', 'true');
+  getAnnotationsToggleButton()?.classList.add('is-active');
+  annotationsPanel = mountAnnotationsPanel(host, {
+    onHighlight: highlightAnnotationItem,
+    onJumpToChat: (chatId, turnId) => {
+      void import('../design/annotation-nav').then((m) => m.jumpToChatTurn(chatId, turnId));
+    },
+    onBulkDelete: bulkDeleteAnnotationItems,
+  });
+  await refreshAnnotationsPanel();
+}
+
 /** Toggle Design Mode's overlay + tool strip over the preview guest (MIN-365). Guest untouched. */
 async function toggleDesignModeFromToolbar(): Promise<void> {
   const host = getPreviewBody();
@@ -205,6 +272,35 @@ async function toggleDesignModeFromToolbar(): Promise<void> {
     getDesignToggleButton()?.classList.remove('is-active');
     return;
   }
+
+  getDesignToggleButton()?.setAttribute('aria-pressed', 'true');
+  getDesignToggleButton()?.classList.add('is-active');
+  await enableDesignMode({
+    instanceId: DESIGN_MODE_INSTANCE_ID,
+    host,
+    paneElement: pane ?? host,
+  });
+}
+
+/** Design Mode's preview instance id, for callers outside this module (MIN-368 annotation-nav.ts). */
+export const WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID = DESIGN_MODE_INSTANCE_ID;
+
+/**
+ * Open a page (workspace path or http(s) URL) in the preview panel and ensure Design Mode is
+ * on for it (MIN-368 transcript → page navigation). No-ops the design-mode enable if it's
+ * already on for this instance.
+ */
+export async function openPreviewPageAndEnableDesignMode(pageUrl: string): Promise<void> {
+  const isUrl = HTTP_URL_RE.test(pageUrl.trim());
+  if (isUrl) {
+    await openUrlInPreviewPanel(pageUrl);
+  } else {
+    openWorkspacePathInPreview(pageUrl);
+  }
+
+  const host = getPreviewBody();
+  const pane = getPreviewPane();
+  if (!host || isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID)) return;
 
   getDesignToggleButton()?.setAttribute('aria-pressed', 'true');
   getDesignToggleButton()?.classList.add('is-active');
@@ -1115,6 +1211,9 @@ function bindPreviewControls(): void {
   document
     .getElementById('btnPreviewDesignToggle')
     ?.addEventListener('click', () => void toggleDesignModeFromToolbar());
+  document
+    .getElementById('btnPreviewAnnotationsToggle')
+    ?.addEventListener('click', () => void toggleAnnotationsPanel());
 
   getUrlInput()?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {

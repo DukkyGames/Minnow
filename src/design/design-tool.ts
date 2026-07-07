@@ -98,8 +98,12 @@ export function resetDesignToolRegistryForTests(): void {
   registry.clear();
 }
 
-/** Page the current preview is showing: workspace path or URL (elementRef context). */
-function currentPreviewPageRef(): string {
+/**
+ * Page the current preview is showing: workspace path or URL (elementRef context). Exported
+ * (MIN-368) so the annotations panel / preview-panel.ts toolbar can key annotation-store
+ * lookups off the same page identity Draw/Comment tools already persist under.
+ */
+export function currentPreviewPageRef(): string {
   const source = getFilePanelState().previewSource;
   if (!source) return '';
   return source.kind === 'workspace' ? source.path : source.url;
@@ -197,9 +201,11 @@ function getPreviewFrame(): HTMLIFrameElement | null {
 /**
  * Draw/Comment anchor resolution (MIN-367): already-tagged `data-mn-uid` elements in the guest,
  * for {@link resolveShapeAnchor} to hit-test a drawn shape's region against. Best-effort — an
- * empty list just means every shape/pin anchors to the page instead of an element.
+ * empty list just means every shape/pin anchors to the page instead of an element. Exported
+ * (MIN-368) so annotation-nav.ts's transcript → page re-highlight can reuse the same live-guest
+ * read instead of re-implementing it.
  */
-async function gatherAnchorCandidates(): Promise<AnchorCandidate[]> {
+export async function gatherAnchorCandidates(): Promise<AnchorCandidate[]> {
   const transport = createPickerTransport();
   try {
     if (transport.mode === 'iframe') {
@@ -266,7 +272,14 @@ export function createDrawDesignTool(): DrawDesignTool {
   let penPoints: ShapePoint[] = [];
 
   function renderShapes(): void {
-    ctx?.overlay.renderShapes(shapes);
+    // Dynamic import avoids a static cycle (annotation-nav.ts calls back into this module's
+    // gatherAnchorCandidates for the transcript → page direction).
+    ctx?.overlay.renderShapes(shapes, (shapeId) => {
+      const shape = shapes.find((s) => s.id === shapeId);
+      const link = shape?.links?.[0];
+      if (!link) return;
+      void import('./annotation-nav').then((m) => m.jumpToChatTurn(link.chatId, link.turnId));
+    });
   }
 
   async function finalizeShape(partial: Pick<DesignShape, 'kind' | 'points' | 'rect' | 'label'>): Promise<void> {
