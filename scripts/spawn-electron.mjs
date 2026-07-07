@@ -170,8 +170,18 @@ export async function spawnElectronShell(options = {}) {
     windowsHide: false,
   });
 
-  child.on('error', (err) => {
-    console.error('[electron] Failed to launch:', err.message || err);
+  await new Promise((resolve, reject) => {
+    let settled = false;
+    child.once('error', (err) => {
+      if (settled) return;
+      settled = true;
+      reject(err instanceof Error ? err : new Error(String(err)));
+    });
+    child.once('spawn', () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    });
   });
 
   if (!foreground) {
