@@ -4,8 +4,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  min-width: var(--viewer-min-w);
-  border-left: 1px solid var(--mn-border);
+  min-width: 0;
   background: var(--mn-surface-1);
 }
 
@@ -13,16 +12,9 @@
   display: none;
 }
 
+/* Legacy selectors kept for unified tab chips that reuse preview-tab classes. */
 .preview-tabs {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 8px 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
-  flex-shrink: 0;
-  mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 12px), transparent 100%);
+  display: none;
 }
 
 .preview-tab {
@@ -100,6 +92,10 @@
 
 .preview-tab--drop-before {
   box-shadow: -2px 0 0 0 var(--mn-accent);
+}
+
+.preview-tab--crashed .preview-tab__label {
+  color: var(--mn-danger, #e5484d);
 }
 
 .preview-header {
@@ -242,7 +238,7 @@
 }
 
 @media (max-width: 640px) {
-  .workspace-split.viewer-open .preview-pane:not(.hidden) {
+  .workspace-split.viewer-open .right-pane-column {
     flex: 1 1 auto;
     min-width: 0;
   }

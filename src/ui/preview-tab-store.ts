@@ -17,8 +17,13 @@ export interface PreviewTabState {
   title: string;
   loading: boolean;
   loadFailed?: { errorCode: number; errorDescription: string };
+  guestCrashed?: { reason: string; exitCode: number };
   createdAt: number;
 }
+
+export type OpenPreviewTabResult =
+  | { tab: PreviewTabState; evictedId?: string }
+  | { tab: null; atLimit: true; evictedId?: string };
 
 type TabStoreListener = () => void;
 
@@ -95,7 +100,11 @@ export function getActivePreviewTabId(): string | null {
 }
 
 export function openPreviewTab(source?: PreviewSource | null): PreviewTabState | null {
-  if (tabOrder.length >= MAX_PREVIEW_TABS) return null;
+  const result = openPreviewTabWithCapacity(source);
+  return result.tab;
+}
+
+function insertPreviewTab(source?: PreviewSource | null): PreviewTabState {
   const tab = createTabState(source);
   tabs.set(tab.id, tab);
   tabOrder.push(tab.id);
@@ -103,6 +112,44 @@ export function openPreviewTab(source?: PreviewSource | null): PreviewTabState |
   emitChange();
   persistPreviewTabs();
   return tab;
+}
+
+/** Oldest non-active tab (for eviction when MAX_PREVIEW_TABS is reached). */
+export function findOldestBackgroundPreviewTab(): PreviewTabState | null {
+  let oldest: PreviewTabState | null = null;
+  for (const id of tabOrder) {
+    if (id === activeTabId) continue;
+    const tab = tabs.get(id);
+    if (!tab) continue;
+    if (!oldest || tab.createdAt < oldest.createdAt) {
+      oldest = tab;
+    }
+  }
+  return oldest;
+}
+
+/**
+ * Open a tab when below capacity, or return the oldest background tab to evict first.
+ * Callers must `closePreviewTabUi(evictedId)` before retrying when only evictedId is set.
+ */
+export function openPreviewTabWithCapacity(
+  source?: PreviewSource | null,
+  options?: { evict?: boolean },
+): OpenPreviewTabResult {
+  if (tabOrder.length < MAX_PREVIEW_TABS) {
+    return { tab: insertPreviewTab(source) };
+  }
+
+  if (options?.evict === false) {
+    return { tab: null, atLimit: true };
+  }
+
+  const victim = findOldestBackgroundPreviewTab();
+  if (!victim) {
+    return { tab: null, atLimit: true };
+  }
+
+  return { tab: null, atLimit: true, evictedId: victim.id };
 }
 
 export function activatePreviewTab(id: string): boolean {
@@ -169,6 +216,20 @@ export function setPreviewTabLoadFailed(
   const tab = tabs.get(id);
   if (!tab) return;
   tab.loadFailed = detail;
+  emitChange();
+}
+
+export function setPreviewTabGuestCrashed(
+  id: string,
+  detail: { reason: string; exitCode: number } | undefined,
+): void {
+  const tab = tabs.get(id);
+  if (!tab) return;
+  tab.guestCrashed = detail;
+  tab.loading = false;
+  if (detail) {
+    tab.loadFailed = undefined;
+  }
   emitChange();
 }
 

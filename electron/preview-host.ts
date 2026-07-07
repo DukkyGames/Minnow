@@ -48,6 +48,14 @@ interface WindowPreviewState {
 }
 
 const hostsByWindowId = new Map<number, WindowPreviewState>();
+/** Last renderer-supplied bounds per window — reused when navigating without a fresh show(). */
+const lastBoundsByWindowId = new Map<number, PreviewBounds>();
+
+function rememberPreviewBounds(win: BrowserWindow, bounds: PreviewBounds): void {
+  if (isValidPreviewBounds(bounds)) {
+    lastBoundsByWindowId.set(win.id, bounds);
+  }
+}
 
 function ensurePreviewSession(): void {
   configurePreviewSession(session.fromPartition(PREVIEW_SESSION_PARTITION));
@@ -83,7 +91,8 @@ function sendToRenderer(win: BrowserWindow, channel: string, ...args: unknown[])
 
 function resolveTabId(win: BrowserWindow, tabId?: string): string | null {
   const state = windowState(win);
-  if (tabId && state.tabs.has(tabId)) return tabId;
+  // Renderer tab ids exist before the main-process guest is created (address bar, loadSource).
+  if (typeof tabId === 'string' && tabId.trim()) return tabId.trim();
   if (state.activeTabId && state.tabs.has(state.activeTabId)) return state.activeTabId;
   const first = state.tabs.keys().next().value as string | undefined;
   return first ?? null;
@@ -157,6 +166,39 @@ function wirePreviewGuestEvents(win: BrowserWindow, tabId: string, wc: WebConten
     }
     return { action: 'deny' };
   });
+
+  wc.on('render-process-gone', (_event, details) => {
+    handleTabGuestCrash(win, tabId, details.reason, details.exitCode);
+  });
+}
+
+/** Tear down a crashed guest without switching the active tab or closing renderer tabs. */
+function handleTabGuestCrash(
+  win: BrowserWindow,
+  tabId: string,
+  reason: string,
+  exitCode: number,
+): void {
+  const state = windowState(win);
+  const entry = state.tabs.get(tabId);
+  if (!entry) return;
+
+  state.tabs.delete(tabId);
+  if (!win.isDestroyed()) {
+    try {
+      win.contentView.removeChildView(entry.view);
+    } catch {
+      /* already detached */
+    }
+  }
+  if (!entry.view.webContents.isDestroyed()) {
+    entry.view.webContents.close();
+  }
+
+  sendToRenderer(win, channels.PREVIEW_GUEST_CRASHED, tabId, {
+    reason,
+    exitCode,
+  });
 }
 
 function destroyTabGuest(win: BrowserWindow, tabId: string): void {
@@ -186,6 +228,7 @@ function destroyHostForWindow(win: BrowserWindow): void {
     destroyTabGuest(win, tabId);
   }
   hostsByWindowId.delete(win.id);
+  lastBoundsByWindowId.delete(win.id);
 }
 
 async function loadSourceInGuest(
@@ -235,7 +278,7 @@ function applyPreviewViewBounds(
   entry: PreviewHostEntry,
   bounds: PreviewBounds,
   zoomFactor: number,
-): void {
+): boolean {
   const rounded = roundBounds({
     x: bounds.x * zoomFactor,
     y: bounds.y * zoomFactor,
@@ -243,10 +286,14 @@ function applyPreviewViewBounds(
     height: bounds.height * zoomFactor,
   });
   if (rounded.width <= 0 || rounded.height <= 0) {
+    entry.visible = false;
     entry.view.setVisible(false);
-    return;
+    return false;
   }
   entry.view.setBounds(rounded);
+  entry.visible = true;
+  entry.view.setVisible(true);
+  return true;
 }
 
 function hidePreviewHostEntry(entry: PreviewHostEntry): void {
@@ -300,16 +347,22 @@ function showActiveTab(win: BrowserWindow, bounds?: PreviewBounds): PreviewHostE
   if (!tabId) return null;
   const entry = getOrCreateTab(win, tabId);
   detachAllTabViews(win);
-  if (isValidPreviewBounds(bounds)) {
-    applyPreviewViewBounds(entry, bounds, hostZoomFactor(win));
+  const effectiveBounds = isValidPreviewBounds(bounds)
+    ? bounds
+    : lastBoundsByWindowId.get(win.id);
+  const hasBounds = isValidPreviewBounds(effectiveBounds);
+  if (hasBounds) {
+    applyPreviewViewBounds(entry, effectiveBounds!, hostZoomFactor(win));
+    rememberPreviewBounds(win, effectiveBounds!);
+  } else {
+    entry.visible = false;
+    entry.view.setVisible(false);
   }
   try {
     win.contentView.addChildView(entry.view);
   } catch {
     /* already attached */
   }
-  entry.visible = true;
-  entry.view.setVisible(true);
   state.activeTabId = tabId;
   return entry;
 }
@@ -317,7 +370,10 @@ function showActiveTab(win: BrowserWindow, bounds?: PreviewBounds): PreviewHostE
 function getActiveEntry(event: IpcMainInvokeEvent, tabId?: string): PreviewHostEntry | null {
   const win = windowFromInvoke(event);
   if (!win) return null;
-  const resolved = resolveTabId(win, tabId);
+  if (typeof tabId === 'string' && tabId.trim()) {
+    return getOrCreateTab(win, tabId.trim());
+  }
+  const resolved = resolveTabId(win, undefined);
   if (!resolved) return null;
   return getOrCreateTab(win, resolved);
 }
@@ -372,6 +428,9 @@ export function registerPreviewHostIpc(): void {
     if (tabId && typeof tabId === 'string') {
       state.activeTabId = tabId;
     }
+    if (bounds && isValidPreviewBounds(bounds)) {
+      rememberPreviewBounds(win, bounds);
+    }
     showActiveTab(win, bounds);
   });
 
@@ -404,8 +463,8 @@ export function registerPreviewHostIpc(): void {
       if (!entry || !win || !payload || typeof payload !== 'object') return;
       if (tabId && typeof tabId === 'string') {
         windowState(win).activeTabId = tabId;
-        showActiveTab(win);
       }
+      // Do not call showActiveTab here — it detaches the guest and clears bounds mid-navigation.
       void loadSourceInGuest(entry.view.webContents, payload).catch((err) => {
         if (!win) return;
         const message = err instanceof Error ? err.message : String(err);
@@ -425,7 +484,6 @@ export function registerPreviewHostIpc(): void {
     if (!entry || typeof url !== 'string' || !url.trim()) return;
     if (win && tabId && typeof tabId === 'string') {
       windowState(win).activeTabId = tabId;
-      showActiveTab(win);
     }
     void entry.view.webContents.loadURL(url);
   });
@@ -462,15 +520,16 @@ export function registerPreviewHostIpc(): void {
     const win = windowFromInvoke(event);
     const entry = getActiveEntry(event, tabId);
     if (!entry || !bounds || !win) return;
-    if (!entry.visible) return;
     if (!isValidPreviewBounds(bounds)) {
       const { width, height } = bounds;
       if (Number.isFinite(width) && Number.isFinite(height) && (width <= 0 || height <= 0)) {
         entry.view.setVisible(false);
+        entry.visible = false;
       }
       return;
     }
     applyPreviewViewBounds(entry, bounds, hostZoomFactor(win));
+    rememberPreviewBounds(win, bounds);
   });
 
   ipcMain.handle(channels.PREVIEW_EXEC_JS, async (event, code: string, tabId?: string) => {

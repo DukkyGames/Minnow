@@ -4,8 +4,11 @@ import { resetFilePanelStateForTests } from '../../src/state/file-panel.ts';
 import {
   activatePreviewTab,
   closePreviewTab,
+  findOldestBackgroundPreviewTab,
   getActivePreviewTabId,
+  MAX_PREVIEW_TABS,
   openPreviewTab,
+  openPreviewTabWithCapacity,
   reorderPreviewTab,
   resetPreviewTabStoreForTests,
   restorePreviewTabs,
@@ -51,5 +54,33 @@ describe('preview-tab-store', () => {
       't2',
     );
     assert.equal(getActivePreviewTabId(), 't2');
+  });
+
+  test('openPreviewTabWithCapacity returns evictedId when at tab limit', () => {
+    const ids: string[] = [];
+    for (let i = 0; i < MAX_PREVIEW_TABS; i++) {
+      const tab = openPreviewTab({ kind: 'url', url: `https://tab-${i}.test` });
+      assert.ok(tab);
+      ids.push(tab.id);
+    }
+    const oldestBackground = findOldestBackgroundPreviewTab();
+    assert.ok(oldestBackground);
+    const result = openPreviewTabWithCapacity({ kind: 'url', url: 'https://new.test' });
+    assert.equal(result.tab, null);
+    assert.equal(result.evictedId, oldestBackground.id);
+  });
+
+  test('openPreviewTabWithCapacity opens after eviction slot is freed', () => {
+    const ids: string[] = [];
+    for (let i = 0; i < MAX_PREVIEW_TABS; i++) {
+      const tab = openPreviewTab({ kind: 'url', url: `https://tab-${i}.test` });
+      assert.ok(tab);
+      ids.push(tab.id);
+    }
+    const evict = openPreviewTabWithCapacity(null);
+    assert.ok(evict.evictedId);
+    closePreviewTab(evict.evictedId!);
+    const opened = openPreviewTabWithCapacity(null, { evict: false });
+    assert.ok(opened.tab);
   });
 });

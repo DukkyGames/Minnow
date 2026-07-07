@@ -35,8 +35,9 @@ import {
   getPreviewTab,
   listPreviewTabs,
   migrateLegacyPreviewSource,
-  openPreviewTab,
+  openPreviewTabWithCapacity,
   restorePreviewTabs,
+  setPreviewTabGuestCrashed,
   setPreviewTabLoadFailed,
   setPreviewTabLoading,
   setPreviewTabTitle,
@@ -45,6 +46,7 @@ import {
 import { bindPreviewTabs, registerPreviewTabHandlers } from './preview-tabs';
 import { HTTP_URL_RE, parsePreviewAddress } from './preview-url';
 import { shouldAutoRestorePreviewPanel, isCodeAppForeground } from './preview-restore-policy';
+import { showToast } from './toast';
 
 const BROWSER_PREVIEW_HINT =
   'Full Chromium preview (any website or local file) runs in the Minnow desktop shell. Run npm start — Electron opens by default — or npm run electron:dev.';
@@ -67,6 +69,7 @@ let unsubscribeNavigation: (() => void) | null = null;
 let unsubscribeLoading: (() => void) | null = null;
 let unsubscribeLoadFailed: (() => void) | null = null;
 let unsubscribePageTitle: (() => void) | null = null;
+let unsubscribeGuestCrashed: (() => void) | null = null;
 const iframesByTabId = new Map<string, HTMLIFrameElement>();
 const loadedTabGuests = new Set<string>();
 
@@ -352,6 +355,30 @@ function onPreviewNavigation(url: string, tabId?: string): void {
   }
 }
 
+function clearLoadedTabGuest(tabId?: string): void {
+  if (tabId) {
+    loadedTabGuests.delete(tabId);
+    return;
+  }
+  loadedTabGuests.clear();
+}
+
+function onPreviewGuestCrashed(
+  detail: { reason: string; exitCode: number },
+  tabId?: string,
+): void {
+  const resolvedTabId = resolveTabId(tabId);
+  if (!resolvedTabId) return;
+  clearLoadedTabGuest(resolvedTabId);
+  setPreviewTabGuestCrashed(resolvedTabId, detail);
+  if (resolvedTabId !== getActivePreviewTabId()) return;
+  setPreviewLoading(false, resolvedTabId);
+  const reason = detail.reason?.trim() || 'crashed';
+  showPreviewStatus(
+    `Preview tab crashed (${reason}). Reload or switch tabs to continue.`,
+  );
+}
+
 function onPreviewLoadFailed(
   detail: {
     errorCode: number;
@@ -394,10 +421,14 @@ function startBoundsObserver(): void {
   };
   boundsObserver = new ResizeObserver(onLayoutChange);
   boundsObserver.observe(body);
+  const column = document.getElementById('rightPaneColumn');
   const pane = document.getElementById('previewPane');
   const split = document.getElementById('workspaceSplit');
+  const resizer = document.getElementById('splitResizer');
+  if (column) boundsObserver.observe(column);
   if (pane) boundsObserver.observe(pane);
   if (split) boundsObserver.observe(split);
+  if (resizer) boundsObserver.observe(resizer);
   window.addEventListener('resize', onLayoutChange);
   window.addEventListener('scroll', onLayoutChange, true);
   scheduleElectronPreviewHostLayoutSync();
@@ -428,6 +459,7 @@ async function clearPreviewGuest(tabId?: string): Promise<void> {
   const api = getPreviewApi();
   if (!api) return;
   const id = resolveTabId(tabId);
+  clearLoadedTabGuest(id ?? undefined);
   if (api.tabs?.close && id) {
     await api.tabs.close(id);
     return;
@@ -451,9 +483,10 @@ async function loadSourceInPreview(
   const url = resolvePreviewLoadUrl(source, cacheBust);
   if (api.loadSource) {
     await api.loadSource({ kind: 'url', url, cacheBust }, id);
-    return;
+  } else {
+    await api.loadURL(url, id);
   }
-  await api.loadURL(url, id);
+  await showPreviewHost();
 }
 
 function clearFrameBlockedTimer(): void {
@@ -601,11 +634,19 @@ function applySourceToPreview(source: PreviewSource, cacheBust?: number, tabId?:
 
 export async function activatePreviewTabGuest(tabId: string, options?: { forceLoad?: boolean }): Promise<void> {
   activatePreviewTab(tabId);
+  const { showPreviewSplit } = await import('./file-layout');
+  showPreviewSplit();
   showActiveTabFrame();
   syncPreviewChromeFromState();
 
   const tab = getPreviewTab(tabId);
   if (!tab) return;
+
+  const forceLoad = options?.forceLoad || Boolean(tab.guestCrashed);
+  if (tab.guestCrashed) {
+    setPreviewTabGuestCrashed(tabId, undefined);
+    hidePreviewStatus();
+  }
 
   const api = getPreviewApi();
   if (usesElectronPreview() && api) {
@@ -617,7 +658,7 @@ export async function activatePreviewTabGuest(tabId: string, options?: { forceLo
     }
     if (api.tabs?.activate) {
       await api.tabs.activate(tabId);
-      if (!loadedTabGuests.has(tabId) || options?.forceLoad) {
+      if (!loadedTabGuests.has(tabId) || forceLoad) {
         if (tab.source) {
           await loadSourceInPreview(tab.source, undefined, tabId);
         } else {
@@ -625,29 +666,40 @@ export async function activatePreviewTabGuest(tabId: string, options?: { forceLo
         }
         loadedTabGuests.add(tabId);
       }
-      return;
-    }
-    if (tab.source) {
+    } else if (tab.source) {
       await loadSourceInPreview(tab.source, undefined, tabId);
+      loadedTabGuests.add(tabId);
     } else {
       await clearPreviewGuest(tabId);
+      loadedTabGuests.add(tabId);
     }
-    loadedTabGuests.add(tabId);
+    await showPreviewHost();
     return;
   }
 
   if (!usesElectronPreview()) {
-    if (tab.source && (!loadedTabGuests.has(tabId) || options?.forceLoad)) {
+    if (tab.source && (!loadedTabGuests.has(tabId) || forceLoad)) {
       applySourceToFrame(tabId, tab.source);
       loadedTabGuests.add(tabId);
     }
   }
 }
 
+async function openPreviewTabFromUi(source?: PreviewSource | null): Promise<void> {
+  let opened = openPreviewTabWithCapacity(source ?? null);
+  if (!opened.tab && opened.evictedId) {
+    await closePreviewTabUi(opened.evictedId);
+    opened = openPreviewTabWithCapacity(source ?? null, { evict: false });
+  }
+  if (!opened.tab) {
+    showToast('Tab limit reached (6 max). Close a tab to open another.', 'error');
+    return;
+  }
+  await activatePreviewTabGuest(opened.tab.id, { forceLoad: true });
+}
+
 async function openNewPreviewTabUi(): Promise<void> {
-  const tab = openPreviewTab(null);
-  if (!tab) return;
-  await activatePreviewTabGuest(tab.id, { forceLoad: true });
+  await openPreviewTabFromUi(null);
   getUrlInput()?.focus();
 }
 
@@ -673,6 +725,7 @@ export async function closePreviewTabUi(tabId: string): Promise<void> {
     }
   }
   destroyPreviewFrame(tabId);
+  clearLoadedTabGuest(tabId);
   closePreviewTab(tabId);
   const nextId = getActivePreviewTabId();
   if (nextId) {
@@ -824,6 +877,7 @@ export function closePreviewPanel(): void {
 export function collapsePreviewPanelKeepingSource(): void {
   resetRightSplitForCodeEntry();
   cancelDeferredPreviewLoad();
+  clearLoadedTabGuest();
   if (usesElectronPreview()) {
     void clearPreviewGuest().then(() => hidePreviewHost());
   } else {
@@ -848,6 +902,13 @@ function reloadPreview(): void {
   const now = Date.now();
   if (now - lastReloadAt < MIN_RELOAD_INTERVAL_MS) return;
   lastReloadAt = now;
+
+  const tabId = getActivePreviewTabId();
+  const crashedTab = tabId ? getPreviewTab(tabId) : null;
+  if (crashedTab?.guestCrashed && tabId) {
+    void activatePreviewTabGuest(tabId, { forceLoad: true });
+    return;
+  }
 
   const api = getPreviewApi();
   const activeSource = getActivePreviewSource();
@@ -930,12 +991,16 @@ function bindPreviewIpcListeners(): void {
   unsubscribeLoading?.();
   unsubscribeLoadFailed?.();
   unsubscribePageTitle?.();
+  unsubscribeGuestCrashed?.();
 
   unsubscribeNavigation = api.onNavigation((url, tabId) => {
     onPreviewNavigation(url, tabId);
   });
   unsubscribeLoading = api.onLoading((loading, tabId) => {
     setPreviewLoading(loading, tabId);
+    if (!loading && usesElectronPreview() && resolveTabId(tabId) === getActivePreviewTabId()) {
+      void showPreviewHost();
+    }
   });
   unsubscribeLoadFailed = api.onLoadFailed((detail, tabId) => {
     onPreviewLoadFailed(detail, tabId);
@@ -944,6 +1009,9 @@ function bindPreviewIpcListeners(): void {
     const id = resolveTabId(tabId);
     if (id && title.trim()) setPreviewTabTitle(id, title);
   });
+  unsubscribeGuestCrashed = api.onGuestCrashed?.((detail, tabId) => {
+    onPreviewGuestCrashed(detail, tabId);
+  }) ?? null;
 }
 
 function goBackInFrame(): void {
@@ -1094,6 +1162,7 @@ export function resyncOpenPreviewPanelFromState(options?: { reload?: boolean }):
   const state = getFilePanelState();
   if (state.rightPaneMode !== 'preview') return;
   if (!isPreviewPaneDomVisible()) return;
+  if (isCodeAppForeground() && !shouldAutoRestorePreviewPanel()) return;
 
   syncPreviewChromeFromState();
 

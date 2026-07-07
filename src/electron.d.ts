@@ -15,6 +15,11 @@ export interface MinnowPreviewLoadFailedDetail {
   url?: string;
 }
 
+export interface MinnowPreviewGuestCrashedDetail {
+  reason: string;
+  exitCode: number;
+}
+
 export interface MinnowPreviewLoadSourcePayload {
   kind: 'workspace' | 'url';
   path?: string;
@@ -72,6 +77,9 @@ export interface MinnowPreviewApi {
   onPageTitle(callback: (title: string, tabId?: string) => void): () => void;
   onLoadFailed(
     callback: (detail: MinnowPreviewLoadFailedDetail, tabId?: string) => void,
+  ): () => void;
+  onGuestCrashed?(
+    callback: (detail: MinnowPreviewGuestCrashedDetail, tabId?: string) => void,
   ): () => void;
 }
 

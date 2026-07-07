@@ -28,6 +28,8 @@ export const PREVIEW_LOADING = 'minnow:preview:loading';
 export const PREVIEW_PAGE_TITLE = 'minnow:preview:page-title';
 /** Main → renderer: preview load failed. */
 export const PREVIEW_LOAD_FAILED = 'minnow:preview:load-failed';
+/** Main → renderer: preview guest render process crashed (per-tab; strip stays up). */
+export const PREVIEW_GUEST_CRASHED = 'minnow:preview:guest-crashed';
 /** Renderer → main: create a preview tab guest; returns tab id. */
 export const PREVIEW_TAB_CREATE = 'minnow:preview:tab-create';
 /** Renderer → main: close a preview tab guest. */

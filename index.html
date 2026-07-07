@@ -2282,9 +2282,13 @@
 
   <div class="split-resizer hidden" id="splitResizer" role="separator" aria-orientation="vertical" aria-valuemin="35" aria-valuemax="75" aria-valuenow="55" tabindex="0"></div>
 
+  <div class="right-pane-column hidden" id="rightPaneColumn">
+    <header class="unified-tab-bar" id="unifiedTabBar">
+      <div class="unified-tabs" id="unifiedTabs" role="tablist" aria-label="Editor and browser tabs"></div>
+    </header>
+
   <section class="file-viewer-pane hidden" id="fileViewerPane" aria-label="File viewer">
     <header class="file-viewer-header">
-      <div class="file-viewer-tabs" id="fileViewerTabs" role="tablist" aria-label="Open files"></div>
       <span class="file-viewer-diagnostics" id="fileViewerDiagnostics" hidden></span>
       <span class="file-viewer-intent-status" id="fileViewerIntentStatus" hidden aria-live="polite"></span>
       <button type="button" class="file-viewer-intent-toggle" id="btnFileViewerIntent" aria-pressed="false" title="Intent mode (Ctrl+I)" disabled>
@@ -2301,7 +2305,6 @@
   </section>
 
   <section class="preview-pane hidden" id="previewPane" aria-label="Preview browser">
-    <div class="preview-tabs" id="previewTabs" role="tablist" aria-label="Preview tabs"></div>
     <header class="preview-header">
       <button type="button" class="icon-btn" id="btnPreviewBack" title="Back" aria-label="Preview back" disabled>
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
@@ -2332,6 +2335,8 @@
          rel="noopener noreferrer">Open in new tab</a>
     </div>
   </section>
+  </div>
+
   </div>
 
   <aside class="file-sidebar" id="fileSidebar" aria-label="Project files">

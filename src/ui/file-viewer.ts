@@ -7,11 +7,13 @@ import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { isImageFilePath } from '../attachments/image-path';
 import { setAssistantBubbleContent } from '../markdown/renderer';
 import { executeTool, getLocalServerAvailable } from '../tools/client';
-import { resolvePreviewLoadUrl } from './preview-panel';
+import { resolvePreviewLoadUrl, activatePreviewTabGuest } from './preview-panel';
+import { getActivePreviewTabId, listPreviewTabs } from './preview-tab-store';
 import { fetchLspConfig } from '../lsp/config-client';
 import { notifyLspDocument } from '../lsp/completion-client';
 import {
   MAX_OPEN_VIEWER_TABS,
+  getFilePanelState,
   patchFilePanelState,
 } from '../state/file-panel';
 import {
@@ -754,6 +756,7 @@ async function activateTabAndRender(path: string, options?: { skipUnsavedGuard?:
     beforeActivate: snapshotOutgoingEditorTab,
   });
   if (!ok) return false;
+  showViewerSplit();
   renderActiveViewerTab();
   renderFileTreeViaBridge();
   return true;
@@ -774,9 +777,16 @@ export async function closeViewerTab(path: string): Promise<void> {
 
   if (listViewerTabs().length === 0) {
     patchFilePanelState({ openViewerTabs: [], activeViewerTab: null, selectedPath: null });
-    hideViewerSplit();
     const host = getViewerHost();
     if (host) host.innerHTML = '';
+    if (listPreviewTabs().length > 0) {
+      const { showPreviewSplit } = await import('./file-layout');
+      showPreviewSplit();
+      const nextId = getActivePreviewTabId();
+      if (nextId) await activatePreviewTabGuest(nextId);
+    } else {
+      hideViewerSplit();
+    }
   } else if (wasActive) {
     renderActiveViewerTab();
   }
@@ -1192,15 +1202,12 @@ export function closeFileViewer(): void {
   void closeViewerTab(path);
 }
 
-/** Dismiss all file viewer tabs when switching to preview. */
+/** Confirm leaving the active file tab when switching to browser preview (tabs stay open). */
 export async function dismissFileViewerForPreview(): Promise<boolean> {
-  for (const tab of listViewerTabs()) {
-    if (tab.isDirty && !(await confirmCloseDirtyTab(tab))) {
-      return false;
-    }
-  }
-  resetAllViewerTabs({ closeSplit: false });
-  return true;
+  if (getFilePanelState().rightPaneMode !== 'viewer') return true;
+  const active = getActiveViewerTab();
+  if (!active?.isDirty) return true;
+  return confirmLeaveDirtyActiveTab();
 }
 
 /** Close all tabs without unsaved prompt (paths removed on disk). */

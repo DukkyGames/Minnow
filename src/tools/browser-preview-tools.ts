@@ -109,8 +109,10 @@ export async function browserPreviewNewTab(url?: string): Promise<string> {
   const disabled = await assertBrowserAutomationEnabled();
   if (disabled) return disabled;
 
-  const { openPreviewTab } = await import('../ui/preview-tab-store');
-  const { activatePreviewTabGuest, loadPreviewSource } = await import('../ui/preview-panel');
+  const { openPreviewTabWithCapacity } = await import('../ui/preview-tab-store');
+  const { activatePreviewTabGuest, closePreviewTabUi, loadPreviewSource } = await import(
+    '../ui/preview-panel'
+  );
   const { showPreviewSplit } = await import('../ui/file-layout');
 
   const trimmed = url?.trim() ?? '';
@@ -121,8 +123,14 @@ export async function browserPreviewNewTab(url?: string): Promise<string> {
         ? ({ kind: 'workspace' as const, path: trimmed })
         : null;
 
-  const tab = openPreviewTab(source);
-  if (!tab) return 'Error: preview tab limit reached';
+  let opened = openPreviewTabWithCapacity(source);
+  let evictedId = opened.evictedId;
+  if (!opened.tab && evictedId) {
+    await closePreviewTabUi(evictedId);
+    opened = openPreviewTabWithCapacity(source, { evict: false });
+  }
+  if (!opened.tab) return 'Error: preview tab limit reached';
+  const tab = opened.tab;
 
   showPreviewSplit();
   const api = previewApi();
@@ -135,7 +143,10 @@ export async function browserPreviewNewTab(url?: string): Promise<string> {
     await loadPreviewSource(source);
   }
 
-  return `Opened preview tab ${tab.id}${trimmed ? `\n${trimmed}` : ''}`;
+  const evictedNote = evictedId
+    ? `\nClosed oldest background tab ${evictedId} (tab limit).`
+    : '';
+  return `Opened preview tab ${tab.id}${trimmed ? `\n${trimmed}` : ''}${evictedNote}`;
 }
 
 export async function browserPreviewSwitchTab(tabId: string): Promise<string> {
@@ -338,6 +349,7 @@ export async function executeBrowserPreviewTool(
   try {
     switch (name) {
       case 'browser_list':
+      case 'browser_list_tabs':
         return { content: await browserPreviewList() };
       case 'browser_navigate': {
         const url = args.url;

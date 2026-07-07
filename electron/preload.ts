@@ -19,6 +19,11 @@ export interface PreviewLoadFailedDetail {
   url?: string;
 }
 
+export interface PreviewGuestCrashedDetail {
+  reason: string;
+  exitCode: number;
+}
+
 export interface PreviewLoadSourcePayload {
   kind: 'workspace' | 'url';
   path?: string;
@@ -127,6 +132,21 @@ const preview = {
     ipcRenderer.on(channels.PREVIEW_LOAD_FAILED, handler);
     return () => {
       ipcRenderer.removeListener(channels.PREVIEW_LOAD_FAILED, handler);
+    };
+  },
+  onGuestCrashed: (
+    callback: (detail: PreviewGuestCrashedDetail, tabId?: string) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: IpcRendererEvent,
+      tabId: string,
+      detail: PreviewGuestCrashedDetail,
+    ) => {
+      callback(detail, tabId);
+    };
+    ipcRenderer.on(channels.PREVIEW_GUEST_CRASHED, handler);
+    return () => {
+      ipcRenderer.removeListener(channels.PREVIEW_GUEST_CRASHED, handler);
     };
   },
 };
