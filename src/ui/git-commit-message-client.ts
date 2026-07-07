@@ -11,7 +11,10 @@ import {
 } from '../api/generations';
 import { modelCache } from '../app-state';
 import { thinkingToCompletionBody } from '../agents/thinking-to-body';
-import { BenchmarkStreamReasoningAccumulator } from '../benchmark/stream-text';
+import {
+  BenchmarkStreamReasoningAccumulator,
+  resolveBenchmarkCompletionText,
+} from '../benchmark/stream-text';
 import { StreamingContentAccumulator } from '../api/message-content';
 import { loadEditorAiCompletionConfig, type EditorAiCompletionConfig } from '../config/editor-ai-completion';
 import { encodeModelSelectKey } from '../lib/model-select-key';
@@ -179,7 +182,12 @@ export async function fetchGitCommitMessage(
   const contentAcc = new StreamingContentAccumulator();
   const reasoningAcc = new BenchmarkStreamReasoningAccumulator();
 
-  const emit = (): string => sanitizeCommitMessage(contentAcc.getText().trim());
+  const emit = (reasoningFallback = false): string => {
+    const raw = reasoningFallback
+      ? resolveBenchmarkCompletionText(contentAcc.getText(), reasoningAcc.getText())
+      : contentAcc.getText();
+    return sanitizeCommitMessage(raw.trim());
+  };
 
   return new Promise<GitCommitMessageResult>((resolve) => {
     let settled = false;
@@ -193,7 +201,7 @@ export async function fetchGitCommitMessage(
       signal: input.signal,
       onChunk: (chunk) => {
         ingestChunk(contentAcc, reasoningAcc, chunk);
-        const cleaned = emit();
+        const cleaned = emit(false);
         if (cleaned) input.onPartial?.(cleaned);
       },
       onEnd: (event?: GenerationEndEvent) => {
@@ -202,7 +210,7 @@ export async function fetchGitCommitMessage(
           finish(null, generationEndErrorMessage(event));
           return;
         }
-        const cleaned = emit();
+        const cleaned = emit(true);
         finish(
           cleaned.length > 0 ? cleaned : null,
           cleaned.length > 0 ? undefined : EDITOR_AI_EMPTY_COMPLETION_MESSAGE,

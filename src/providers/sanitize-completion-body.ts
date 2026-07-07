@@ -13,6 +13,12 @@ function modelUsesMaxCompletionTokens(modelId: string): boolean {
   return id.includes('gpt-5');
 }
 
+/** True when the body explicitly disables thinking (must survive sanitization). */
+function isThinkingExplicitlyDisabled(thinking: unknown): boolean {
+  if (!thinking || typeof thinking !== 'object') return false;
+  return (thinking as { type?: string }).type === 'disabled';
+}
+
 /** GPT-5 / o-series on Responses API reject custom temperature. */
 function modelRejectsTemperature(modelId: string): boolean {
   const id = modelId.trim().toLowerCase();
@@ -44,7 +50,10 @@ export function sanitizeCompletionBodyForProvider(
     modelCapabilities?.reasoning === true ||
     (modelCapabilities?.reasoningAllowedOptions?.length ?? 0) > 0;
   if (!reasoningSupported) {
-    delete next.thinking;
+    // Keep explicit thinking disable — without it some models stream only to reasoning_content.
+    if (!isThinkingExplicitlyDisabled(next.thinking)) {
+      delete next.thinking;
+    }
     delete next.reasoning;
     delete next.reasoning_effort;
   }

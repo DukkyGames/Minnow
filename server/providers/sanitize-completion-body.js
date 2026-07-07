@@ -15,6 +15,15 @@ function modelUsesMaxCompletionTokens(modelId) {
 }
 
 /**
+ * True when the body explicitly disables thinking (must survive sanitization).
+ * @param {unknown} thinking
+ */
+function isThinkingExplicitlyDisabled(thinking) {
+  if (!thinking || typeof thinking !== 'object') return false;
+  return /** @type {{ type?: string }} */ (thinking).type === 'disabled';
+}
+
+/**
  * GPT models on OpenCode Zen / OpenAI Responses API reject custom temperature.
  * @param {string} modelId
  */
@@ -47,7 +56,10 @@ export function sanitizeCompletionBodyForProvider(body, provider, modelCapabilit
     modelCapabilities?.reasoning === true ||
     (modelCapabilities?.reasoningAllowedOptions?.length ?? 0) > 0;
   if (!reasoningSupported) {
-    delete next.thinking;
+    // Keep explicit thinking disable — without it some models stream only to reasoning_content.
+    if (!isThinkingExplicitlyDisabled(next.thinking)) {
+      delete next.thinking;
+    }
     delete next.reasoning;
     delete next.reasoning_effort;
   }

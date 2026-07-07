@@ -78,4 +78,13 @@ describe('sanitizeCompletionBodyForProvider (server)', () => {
     assert.equal(out.max_completion_tokens, 512);
     assert.equal(out.max_tokens, undefined);
   });
+
+  test('preserves thinking disabled without model capabilities', () => {
+    const out = sanitizeCompletionBodyForProvider(
+      { model: 'deepseek-chat', thinking: { type: 'disabled' }, reasoning_effort: 'medium' },
+      { apiKind: 'openai-v1' },
+    );
+    assert.deepEqual(out.thinking, { type: 'disabled' });
+    assert.equal(out.reasoning_effort, undefined);
+  });
 });

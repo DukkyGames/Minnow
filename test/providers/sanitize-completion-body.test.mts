@@ -47,7 +47,7 @@ describe('sanitizeCompletionBodyForProvider', () => {
     assert.equal(out.temperature, 0.7);
   });
 
-  test('removes thinking when model has no reasoning capability', () => {
+  test('removes reasoning enable fields when model has no reasoning capability', () => {
     const out = sanitizeCompletionBodyForProvider(
       {
         model: 'gpt-4o-mini',
@@ -58,8 +58,33 @@ describe('sanitizeCompletionBodyForProvider', () => {
       OPENAI,
       { reasoning: false },
     );
-    assert.equal(out.thinking, undefined);
+    assert.deepEqual(out.thinking, { type: 'disabled' });
     assert.equal(out.reasoning, undefined);
+    assert.equal(out.reasoning_effort, undefined);
+  });
+
+  test('strips thinking enable when model has no reasoning capability', () => {
+    const out = sanitizeCompletionBodyForProvider(
+      {
+        model: 'gpt-4o-mini',
+        thinking: { type: 'enabled' },
+      },
+      OPENAI,
+      { reasoning: false },
+    );
+    assert.equal(out.thinking, undefined);
+  });
+
+  test('preserves thinking disabled without model capabilities (upstream path)', () => {
+    const out = sanitizeCompletionBodyForProvider(
+      {
+        model: 'deepseek-chat',
+        thinking: { type: 'disabled' },
+        reasoning_effort: 'medium',
+      },
+      OPENAI,
+    );
+    assert.deepEqual(out.thinking, { type: 'disabled' });
     assert.equal(out.reasoning_effort, undefined);
   });
 
