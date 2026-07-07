@@ -25,6 +25,7 @@ import {
 } from '../dev-server/manager.js';
 import { readDevServerSettings, writeDevServerSettings } from '../dev-server/settings.js';
 import { getWorkspaceGitStatus } from './git-status.js';
+import { ensureBaselineGitignore } from './baseline-gitignore.js';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -99,6 +100,21 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
       const workspaceRoot = searchParams.get('workspaceRoot')?.trim() || undefined;
       const status = await getWorkspaceGitStatus(workspaceRoot);
       sendJson(res, 200, { ok: true, ...status });
+      return true;
+    }
+
+    if (pathname === '/api/workspace/ensure-baseline-gitignore' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const workspaceRoot =
+        typeof body?.workspaceRoot === 'string' && body.workspaceRoot.trim()
+          ? body.workspaceRoot.trim()
+          : undefined;
+      const result = await ensureBaselineGitignore(workspaceRoot);
+      if (!result.ok) {
+        sendJson(res, 400, { ok: false, created: false, error: result.error ?? 'failed' });
+        return true;
+      }
+      sendJson(res, 200, { ok: true, created: result.created, path: result.path });
       return true;
     }
 

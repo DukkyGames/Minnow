@@ -81,6 +81,14 @@ export {
 
 export {
 
+  GIT_SETUP_SKILL_ID,
+
+  prepareGitSetupTurn,
+
+} from './git-setup-client';
+
+export {
+
   ensurePinnedSkill,
 
   isCavemanStopPhrase,
