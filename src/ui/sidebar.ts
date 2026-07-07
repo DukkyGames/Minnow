@@ -1,6 +1,7 @@
 ﻿import { isChatsWorkspacePath } from '../lib/chats-workspace';
 import { isDesktopChatActive } from '../os/desktop-state';
 import { decodeModelSelectKey, encodeModelSelectKey } from '../lib/model-select-key';
+import { isBoardSetupIncomplete } from '../chat/orchestrate/board-setup';
 import { isChatStreaming } from '../chat/streaming-state';
 import { stopGeneration } from '../chat/stop-generation';
 import {
@@ -612,7 +613,7 @@ function appendGroupHeader(
     showGroupContextMenu(e.clientX, e.clientY, group.id, nameSpan);
   });
 
-  if (group.orchestrateBoard) {
+  if (group.orchestrateBoard || isBoardSetupIncomplete(group)) {
     head.addEventListener('click', (e) => {
       if ((e.target as Element).closest('.chat-group-header__caret')) return;
       openBoardGroup(group.id);
@@ -955,7 +956,7 @@ function showChatItemContextMenu(
     orchestrateItem.addEventListener('click', () => {
       menu.remove();
       const group = getBoardGroupForChat(chat) ?? findBoardGroupForPlanner(chat.id);
-      if (group?.orchestrateBoard) {
+      if (group && (group.orchestrateBoard || isBoardSetupIncomplete(group))) {
         void import('../state/chat-groups').then((m) => m.openBoardGroup(group.id));
         return;
       }

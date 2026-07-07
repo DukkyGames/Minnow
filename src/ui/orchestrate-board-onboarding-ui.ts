@@ -388,6 +388,9 @@ export function wireBoardOnboardingInteractions(
 
   onboardingStateUnsubscribe = subscribeBoardOnboardingState(() => {
     void import('./orchestrate-board').then((m) => m.refreshBoardOnboardingIfMounted());
+    void import('./orchestrate-board-setup-banner').then((m) =>
+      m.syncBoardSetupReturnBanner(),
+    );
   });
 }
 

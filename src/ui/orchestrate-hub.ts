@@ -5,6 +5,9 @@
 import { PLACEHOLDER_CHAT_NAME } from '../constants';
 import { mountPlanPreviewContent } from '../chat/orchestrate/plan-preview';
 import {
+  boardSetupStatusLabel,
+} from '../chat/orchestrate/board-setup';
+import {
   isExecutableOrchestratePlan,
 } from '../chat/orchestrate/plan-path';
 import { executeTool } from '../tools/client';
@@ -281,7 +284,7 @@ function renderBoardList(container: HTMLElement): void {
     const when = formatRelativeTime(boardGroupSortKey(group));
     const metrics = boardTileMetrics(group);
     const statsLine = formatBoardStatsLine(metrics);
-    const statusLabel = group.orchestrateBoard ? 'Board' : 'Plan';
+    const statusLabel = group.orchestrateBoard ? 'Board' : boardSetupStatusLabel(group);
     const board = group.orchestrateBoard;
     const taskCount = board?.tasks.length ?? 0;
     const progressPct = board ? getBoardProgressPercent(board) : 0;
