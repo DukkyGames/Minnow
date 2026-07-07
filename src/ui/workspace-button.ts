@@ -2,7 +2,8 @@
  * Top bar workspace folder button — recent workspaces menu + in-app folder picker.
  */
 
-import { setWorkspacePath, type WorkspaceInfo } from '../config/workspace-api';
+import type { WorkspaceInfo } from '../config/workspace-api';
+import { executeWorkspaceSwitch, dismissBoardViewOutsideWorkspace } from './workspace-switch-guard';
 import { patchFilePanelState } from '../state/file-panel';
 import {
   getWorkspacePath,
@@ -60,6 +61,7 @@ export function updateWorkspaceButtonLabel(label: string, fullPath: string): voi
  */
 export async function applyWorkspaceSwitch(info: WorkspaceInfo): Promise<void> {
   const previousPath = getWorkspacePath();
+  await dismissBoardViewOutsideWorkspace(info.path);
   clearCachesForWorkspace(previousPath);
   setWorkspaceFromServer(info);
   updateWorkspaceButtonLabel(info.label, info.path);
@@ -97,6 +99,9 @@ export async function refreshWorkspaceUi(): Promise<void> {
   }
 }
 
+/** Guarded workspace switch used by the top bar, welcome page, and deep links. */
+export { executeWorkspaceSwitch } from './workspace-switch-guard';
+
 async function onOpenNewWorkspace(): Promise<void> {
   if (!getLocalServerAvailable()) {
     setStatus('err', 'Workspace requires npm start (local server)');
@@ -118,8 +123,10 @@ async function onOpenNewWorkspace(): Promise<void> {
       return;
     }
 
-    const info = await setWorkspacePath(result.path);
-    await applyWorkspaceSwitch(info);
+    const info = await executeWorkspaceSwitch(result.path);
+    if (!info) {
+      setStatus('ok', 'Workspace unchanged');
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     setStatus('err', message);
@@ -137,7 +144,12 @@ export function initWorkspaceButton(): void {
   });
 
   configureWorkspaceRecentMenu({
-    onSwitch: applyWorkspaceSwitch,
+    onSelectWorkspace: async (absPath) => {
+      const info = await executeWorkspaceSwitch(absPath);
+      if (!info) {
+        setStatus('ok', 'Workspace unchanged');
+      }
+    },
     onOpenNew: onOpenNewWorkspace,
   });
 
