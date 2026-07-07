@@ -65,6 +65,7 @@ import './styles/models-page.css';
 
 import 'highlight.js/styles/github.min.css';
 
+import { installFetchAuth } from './api/install-fetch-auth';
 import { initTheme } from './ui/theme';
 import { initAttachments, onFileSelected } from './attachments/store';
 import { initComposerDrop } from './ui/composer-drop';
@@ -457,6 +458,8 @@ function startApp(): void {
   initNotificationAudioUnlock();
   void initApp();
 }
+
+installFetchAuth();
 
 registerWindowHandlers();
 registerServiceWorker();

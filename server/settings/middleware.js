@@ -6,13 +6,6 @@ import { getSettingsCatalog } from './tools.js';
 import { readSettings } from './read.js';
 import { parseUpdateSettingsArgs, updateSettings } from './update.js';
 
-/** CORS headers aligned with /api/config. */
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
-
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -86,8 +79,6 @@ export function createSettingsMiddleware() {
       next();
       return;
     }
-
-    setCorsHeaders(res);
 
     if (req.method === 'OPTIONS') {
       res.statusCode = 204;

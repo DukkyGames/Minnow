@@ -3,6 +3,7 @@
  */
 
 import net from 'node:net';
+import os from 'node:os';
 import { isPrivateIpAddress } from '../webhooks/ssrf.js';
 
 /** @typedef {'local' | 'lan'} NetworkAccess */
@@ -124,4 +125,77 @@ export function isClientAllowed(req, networkAccess = activeNetworkAccess) {
   const normalized = addr.startsWith('::ffff:') ? addr.slice(7) : addr;
   if (net.isIP(normalized) === 0 && net.isIP(addr) === 0) return false;
   return isPrivateIpAddress(addr);
+}
+
+/**
+ * @param {string} hostname - already lowercased, port stripped
+ * @returns {boolean}
+ */
+function isLoopbackHostname(hostname) {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+}
+
+/**
+ * Strip a trailing `:port` from a `Host` header value. Handles bracketed
+ * IPv6 literals (`[::1]:9473`) and bare IPv6 (`::1`, no port — browsers
+ * always bracket IPv6 literals that carry a port).
+ * @param {string} host
+ * @returns {string}
+ */
+function stripHostPort(host) {
+  if (!host) return '';
+  if (host.startsWith('[')) {
+    const end = host.indexOf(']');
+    return end === -1 ? '' : host.slice(1, end);
+  }
+  const colonCount = host.split(':').length - 1;
+  if (colonCount <= 1) {
+    const idx = host.indexOf(':');
+    return idx === -1 ? host : host.slice(0, idx);
+  }
+  return host;
+}
+
+/** @type {Set<string> | null} */
+let cachedOwnLanHostnames = null;
+
+/**
+ * This machine's own hostname plus non-internal interface addresses,
+ * lowercased. Used to allow LAN clients that reach us via our real LAN IP
+ * while still rejecting an attacker-chosen Host header (DNS rebinding).
+ * @returns {Set<string>}
+ */
+function getOwnLanHostnames() {
+  if (cachedOwnLanHostnames) return cachedOwnLanHostnames;
+  const names = new Set([os.hostname().toLowerCase()]);
+  const interfaces = os.networkInterfaces();
+  for (const entries of Object.values(interfaces)) {
+    for (const entry of entries ?? []) {
+      if (!entry.internal) names.add(entry.address.toLowerCase());
+    }
+  }
+  cachedOwnLanHostnames = names;
+  return names;
+}
+
+/** Reset cached LAN hostname set (tests only). */
+export function resetOwnLanHostnamesCache() {
+  cachedOwnLanHostnames = null;
+}
+
+/**
+ * Anti-DNS-rebinding `Host` header check for /api/* requests. Loopback
+ * hostnames are always allowed; in LAN mode, this machine's own hostname/IPs
+ * are also allowed. Everything else (including an attacker's domain that
+ * merely *resolves* to a local address) is rejected.
+ * @param {string} hostHeader - raw `Host` header value (may include :port)
+ * @param {NetworkAccess} [networkAccess]
+ * @returns {boolean}
+ */
+export function isHostAllowed(hostHeader, networkAccess = activeNetworkAccess) {
+  const hostname = stripHostPort(hostHeader).toLowerCase();
+  if (!hostname) return false;
+  if (isLoopbackHostname(hostname)) return true;
+  if (networkAccess !== 'lan') return false;
+  return getOwnLanHostnames().has(hostname);
 }

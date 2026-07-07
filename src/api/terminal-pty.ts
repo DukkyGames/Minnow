@@ -2,6 +2,8 @@
  * Interactive PTY session API (requires npm start).
  */
 
+import { withSessionToken } from './session-token.ts';
+
 export interface ShellProfile {
   id: string;
   label: string;
@@ -88,7 +90,9 @@ export async function resizeTerminalSession(
 export function buildTerminalWsUrl(sessionId: string): string {
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const host = window.location.host;
-  return `${proto}//${host}/api/terminal/ws?sessionId=${encodeURIComponent(sessionId)}`;
+  return withSessionToken(
+    `${proto}//${host}/api/terminal/ws?sessionId=${encodeURIComponent(sessionId)}`,
+  );
 }
 
 /** Parse a server PTY WebSocket message. */

@@ -32,6 +32,8 @@ export interface HeadlessRunCliOptions {
   chatName: string | null;
   /** Scheduled job subprocess — adds guidance to avoid save_memory noise. */
   schedulerRun: boolean;
+  /** Session token override; falls back to MINNOW_TOKEN env, then ~/.minnow/session-token. */
+  token: string | null;
 }
 
 const RUN_HELP = `minnow run — execute one agent turn without the SPA
@@ -43,6 +45,9 @@ Server:
   --base-url <url>      Dev server origin (default ${DEFAULT_BASE_URL})
   --start-server        Spawn "node server.js" with BROWSER=none if ping fails
   --server-timeout <s>  Preflight wait in seconds (default 30)
+
+Auth:
+  --token <token>       Session token (default: MINNOW_TOKEN env, else ~/.minnow/session-token)
 
 Agent / model:
   --agent <id>          Work agent id (e.g. builder, planner)
@@ -114,6 +119,7 @@ export function parseRunArgs(argv: string[]): { ok: true; options: HeadlessRunCl
       'base-url': { type: 'string', default: DEFAULT_BASE_URL },
       'start-server': { type: 'boolean', default: false },
       'server-timeout': { type: 'string', default: '30' },
+      token: { type: 'string' },
       agent: { type: 'string' },
       mode: { type: 'string', default: 'build' },
       provider: { type: 'string' },
@@ -218,6 +224,7 @@ export function parseRunArgs(argv: string[]): { ok: true; options: HeadlessRunCl
       chatId,
       chatName,
       schedulerRun: Boolean(values['scheduler-run']),
+      token: values.token ? String(values.token).trim() : null,
     },
   };
 }

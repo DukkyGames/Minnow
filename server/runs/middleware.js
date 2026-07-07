@@ -12,12 +12,6 @@ import {
   writeRegistryRecord,
 } from './store.js';
 
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
-
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -47,7 +41,6 @@ function sendJson(res, status, payload) {
  * @returns {Promise<boolean>}
  */
 export async function handleRunsConfigRequest(req, res, pathname) {
-  setCorsHeaders(res);
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;
