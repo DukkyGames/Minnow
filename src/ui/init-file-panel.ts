@@ -47,6 +47,9 @@ import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
 import { initGitPanel, syncGitPanelFromOrchestrator } from './git-panel';
 import { initGitCenterLightbox } from './git-center-lightbox';
 import { startFileTreeGitStatusPoll } from './file-tree';
+import {
+  shouldAutoRestoreViewerSplitOnBoot,
+} from './preview-restore-policy';
 
 let resizerBound = false;
 
@@ -150,12 +153,12 @@ export async function initFilePanel(): Promise<void> {
   initPreviewPanel();
 
   const state = getFilePanelState();
-  if (state.rightPaneMode === 'preview') {
-    // Restored by initPreviewPanel when desktop browser drawer is active (MIN-342).
-  } else if (state.openViewerTabs.length > 0) {
-    await restoreViewerTabsFromPrefs(state.openViewerTabs, state.activeViewerTab);
-  } else if (state.viewerOpen && state.selectedPath) {
-    await openFileInViewer(state.selectedPath);
+  if (shouldAutoRestoreViewerSplitOnBoot()) {
+    if (state.openViewerTabs.length > 0) {
+      await restoreViewerTabsFromPrefs(state.openViewerTabs, state.activeViewerTab);
+    } else if (state.viewerOpen && state.selectedPath) {
+      await openFileInViewer(state.selectedPath);
+    }
   }
 
   applyFileSidebarVisuals();

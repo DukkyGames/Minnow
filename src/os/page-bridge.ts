@@ -106,11 +106,8 @@ export function osOnAppOpen(appId: AppId): void {
   if (!isOsShellEnabled()) return;
   document.documentElement.dataset.osApp = appId;
   if (appId === 'code') {
-    void import('../ui/preview-panel').then(async (preview) => {
+    void import('../ui/preview-panel').then((preview) => {
       preview.collapsePreviewPanelKeepingSource();
-      const fileLayout = await import('../ui/file-layout');
-      fileLayout.reconcileRightSplitDomWithState();
-      fileLayout.applyFileSidebarVisuals();
     });
     void import('./desktop-workspace-mounts').then((m) => m.syncDesktopWorkspaceMounts());
   }

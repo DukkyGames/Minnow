@@ -6,27 +6,34 @@ Opening the **Code** app sometimes showed the browser preview panel already expa
 
 ## Behavior (shipped)
 
-| Event | Browser panel | `previewSource` |
-|-------|---------------|-----------------|
-| **Code app entry** (dock, launcher, `#/app/code`) | **Closed** | Preserved |
-| **App boot** with persisted `rightPaneMode: 'preview'` | Closed unless desktop browser drawer is open | Preserved |
-| **Desktop browser drawer** open on reload | Restored (same as before MIN-288) | Loaded |
-| **`#btnPreviewToggle` / explicit open** | Opens with last `previewSource` | Unchanged |
-| **`#btnPreviewClose` / close** | Closed | Cleared |
+| Event | Browser panel | File viewer | `previewSource` / `openViewerTabs` |
+|-------|---------------|-------------|-------------------------------------|
+| **Code app entry** (dock, launcher, `#/app/code`) | **Closed** | **Closed** | Preserved |
+| **App boot** with persisted open split | Closed unless matching desktop drawer tab is open | Same | Preserved |
+| **Desktop browser drawer** open on reload | Restored | Closed | Loaded |
+| **Desktop file-preview drawer** open on reload | Closed | Restored | Loaded |
+| **`#btnPreviewToggle` / explicit open** | Opens with last `previewSource` | Closed | Unchanged |
+| **Open file from tree** | Closed | Opens | Unchanged |
+| **`#btnPreviewClose` / close** | Closed | — | `previewSource` cleared |
+
+## Root cause
+
+Desktop workspace mounts call `classList.remove('hidden')` when reparenting `#previewPane` / `#fileViewerPane` into the drawer. `restoreToCode()` only moved nodes back without re-applying `.hidden`, so both panes could stay visible in Code. `reconcileRightSplitDomWithState()` also did nothing when `rightPaneMode` was `null`.
 
 ## Implementation
 
-- [`src/ui/preview-restore-policy.ts`](../../src/ui/preview-restore-policy.ts) — `shouldAutoRestorePreviewPanel()` gates boot restore.
-- [`src/ui/preview-panel.ts`](../../src/ui/preview-panel.ts) — `collapsePreviewPanelKeepingSource()` hides DOM + clears Electron guest without wiping `previewSource`.
-- [`src/ui/file-layout.ts`](../../src/ui/file-layout.ts) — `hidePreviewSplitKeepSource()` persists closed split without nulling `previewSource`.
-- [`src/os/page-bridge.ts`](../../src/os/page-bridge.ts) — `osOnAppOpen('code')` collapses preview instead of `resyncOpenPreviewPanelFromState()`.
+- [`src/ui/preview-restore-policy.ts`](../../src/ui/preview-restore-policy.ts) — `shouldAutoRestorePreviewPanel()` + `shouldAutoRestoreViewerSplitOnBoot()` gate boot restore.
+- [`src/ui/file-layout.ts`](../../src/ui/file-layout.ts) — `hideAllRightSplitPanesDom()`, `resetRightSplitForCodeEntry()`, reconcile hides both panes when split is closed.
+- [`src/ui/preview-panel.ts`](../../src/ui/preview-panel.ts) — `collapsePreviewPanelKeepingSource()` resets both panes + clears Electron guest.
+- [`src/os/desktop-workspace-mounts.ts`](../../src/os/desktop-workspace-mounts.ts) — `restoreToCode()` re-applies `.hidden`; Code foreground calls collapse on surface switch.
+- [`src/os/page-bridge.ts`](../../src/os/page-bridge.ts) — `osOnAppOpen('code')` collapses right split.
 
 Legacy non-OS mode (`isOsShellEnabled() === false`) still auto-restores an open preview on full page reload.
 
 ## Verification
 
-1. Open Code → toggle browser → load `http://localhost:3000` → switch to desktop → reopen Code → panel is **closed**; toggle browser → URL is restored.
-2. Reload with `#/app/code` while `filePanel.rightPaneMode` was `preview` → panel starts **closed**.
-3. Desktop: open Browser drawer → reload `#/desktop` → drawer + preview **restore**.
+1. Open Code → toggle browser → load `http://localhost:3000` → open a file in viewer on desktop drawer → reopen Code → **both panels closed**; toggle browser / open file restores prior state.
+2. Reload with `#/app/code` while `filePanel.rightPaneMode` was `preview` or `viewer` → **both panels closed**.
+3. Desktop: open Browser drawer → reload `#/desktop` → browser **restores**. Open File preview drawer → reload → viewer **restores**.
 
-Tests: `test/ui/preview-restore-policy.test.mts`
+Tests: `test/ui/preview-restore-policy.test.mts`, `test/ui/file-layout-right-split.test.mts`

@@ -14,6 +14,7 @@ import {
 import {
   isCodeAppForeground,
   shouldAutoRestorePreviewPanel,
+  shouldAutoRestoreViewerSplitOnBoot,
 } from '../../src/ui/preview-restore-policy.ts';
 
 describe('preview restore policy (MIN-342)', () => {
@@ -65,5 +66,29 @@ describe('preview restore policy (MIN-342)', () => {
       previewSource: { kind: 'url', url: 'http://localhost:5173' },
     });
     assert.equal(shouldAutoRestorePreviewPanel(), false);
+  });
+
+  test('does not auto-restore viewer tabs when Code is foreground', () => {
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: 'viewer',
+      viewerOpen: true,
+      openViewerTabs: ['src/index.ts'],
+      activeViewerTab: 'src/index.ts',
+    });
+    launchInstance('code');
+    assert.equal(shouldAutoRestoreViewerSplitOnBoot(), false);
+  });
+
+  test('auto-restores viewer when desktop file-preview drawer is open', () => {
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: 'viewer',
+      viewerOpen: true,
+      openViewerTabs: ['src/a.ts'],
+      activeViewerTab: 'src/a.ts',
+    });
+    openDesktopWorkspaceTab('viewer');
+    assert.equal(shouldAutoRestoreViewerSplitOnBoot(), true);
   });
 });

@@ -1,9 +1,9 @@
 /**
- * When the in-app browser preview auto-opens vs stays closed (MIN-342).
+ * When the in-app browser / file-viewer split auto-opens vs stays closed (MIN-342).
  *
- * Code app entry defaults to a closed panel so stale Electron guests and
- * orphan localhost URLs do not surprise users. Desktop browser drawer restore
- * and explicit #btnPreviewToggle still reopen the last previewSource.
+ * Code app entry defaults to a closed right split so stale Electron guests,
+ * desktop drawer reparenting, and orphan localhost URLs do not surprise users.
+ * Desktop drawer restore and explicit toggles still reopen the last state.
  */
 
 import { getDesktopWorkspacePanelState } from '../os/desktop-workspace-state';
@@ -33,4 +33,28 @@ export function shouldAutoRestorePreviewPanel(): boolean {
   }
 
   return false;
+}
+
+/**
+ * Whether initFilePanel should reopen persisted file-viewer tabs.
+ * Desktop file-preview drawer: yes. Code app entry: no (both panes start closed).
+ */
+export function shouldAutoRestoreViewerSplitOnBoot(): boolean {
+  const state = getFilePanelState();
+  const hasViewer =
+    state.rightPaneMode === 'viewer' ||
+    state.openViewerTabs.length > 0 ||
+    (state.viewerOpen && Boolean(state.selectedPath));
+  if (!hasViewer) return false;
+
+  if (!isOsShellEnabled()) return true;
+
+  if (isCodeAppForeground()) return false;
+
+  const desktopPanel = getDesktopWorkspacePanelState();
+  if (desktopPanel.open && desktopPanel.tab === 'viewer') {
+    return true;
+  }
+
+  return state.rightPaneMode === 'viewer';
 }
