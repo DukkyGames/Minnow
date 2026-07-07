@@ -36,6 +36,19 @@ export interface HistoryElementRefPart {
   outerHtmlPreview: string;
 }
 
+/** Design Mode drawn shape (`<design-ref kind="…" page="…" anchor="…" …>`). */
+export interface HistoryDesignRefPart {
+  kind: string;
+  pageUrl: string;
+  anchor:
+    | { type: 'element'; uid: number | null; selector: string }
+    | { type: 'page'; x: number; y: number }
+    | null;
+  /** Name of the co-emitted `[image: name]` placeholder, when a composited crop was captured. */
+  imageName: string | null;
+  intentText: string;
+}
+
 /** Parsed segments for chat UI rendering. */
 export interface ParsedHistoryUserMessage {
   /** User-typed prose without attachment markers or file bodies. */
@@ -44,6 +57,7 @@ export interface ParsedHistoryUserMessage {
   images: HistoryImagePart[];
   codeRefs: HistoryCodeRefPart[];
   elementRefs: HistoryElementRefPart[];
+  designRefs: HistoryDesignRefPart[];
 }
 
 const FILE_BLOCK_RE = /<file name="([^"]*)">\n([\s\S]*?)\n<\/file>/g;
@@ -51,6 +65,8 @@ const CODE_REF_BLOCK_RE =
   /<code-ref path="([^"]*)" start="(\d+)" end="(\d+)">\n([\s\S]*?)\n<\/code-ref>/g;
 const ELEMENT_REF_BLOCK_RE =
   /<element-ref selector="([^"]*)"(?: uid="(\d+)")? page="([^"]*)" tag="([^"]*)" classes="([^"]*)" rect="([^"]*)" styles="([^"]*)"(?: image="([^"]*)")?>\n([\s\S]*?)\n<\/element-ref>/g;
+const DESIGN_REF_BLOCK_RE =
+  /<design-ref kind="([^"]*)" page="([^"]*)" anchor="(element|page)"(?: anchorSelector="([^"]*)")?(?: anchorUid="(\d+)")?(?: anchorX="(-?\d+)")?(?: anchorY="(-?\d+)")?(?: image="([^"]*)")?>\n([\s\S]*?)\n<\/design-ref>/g;
 const IMAGE_PLACEHOLDER_RE = /\[image:\s*([^\]]+)\]/g;
 
 function parseRect(raw: string): { x: number; y: number; width: number; height: number } | null {
@@ -65,7 +81,8 @@ function stripAttachmentMarkers(content: string): string {
   const withoutFiles = content.replace(FILE_BLOCK_RE, '');
   const withoutCodeRefs = withoutFiles.replace(CODE_REF_BLOCK_RE, '');
   const withoutElementRefs = withoutCodeRefs.replace(ELEMENT_REF_BLOCK_RE, '');
-  const withoutImages = withoutElementRefs.replace(IMAGE_PLACEHOLDER_RE, '');
+  const withoutDesignRefs = withoutElementRefs.replace(DESIGN_REF_BLOCK_RE, '');
+  const withoutImages = withoutDesignRefs.replace(IMAGE_PLACEHOLDER_RE, '');
   return withoutImages.replace(/\n{3,}/g, '\n\n').trim();
 }
 
@@ -78,6 +95,7 @@ export function parseHistoryUserContent(content: string): ParsedHistoryUserMessa
   const images: HistoryImagePart[] = [];
   const codeRefs: HistoryCodeRefPart[] = [];
   const elementRefs: HistoryElementRefPart[] = [];
+  const designRefs: HistoryDesignRefPart[] = [];
 
   for (const match of content.matchAll(FILE_BLOCK_RE)) {
     const name = match[1] ?? '';
@@ -125,6 +143,27 @@ export function parseHistoryUserContent(content: string): ParsedHistoryUserMessa
     }
   }
 
+  for (const match of content.matchAll(DESIGN_REF_BLOCK_RE)) {
+    const kind = match[1] ?? '';
+    const pageUrl = match[2] ?? '';
+    const anchorType = match[3];
+    const anchorSelector = match[4] ?? '';
+    const anchorUid = match[5] != null ? Number(match[5]) : null;
+    const anchorX = match[6] != null ? Number(match[6]) : null;
+    const anchorY = match[7] != null ? Number(match[7]) : null;
+    const imageName = match[8] ?? null;
+    const intentText = match[9] ?? '';
+    let anchor: HistoryDesignRefPart['anchor'] = null;
+    if (anchorType === 'element' && anchorSelector) {
+      anchor = { type: 'element', uid: anchorUid, selector: anchorSelector };
+    } else if (anchorType === 'page' && anchorX != null && anchorY != null) {
+      anchor = { type: 'page', x: anchorX, y: anchorY };
+    }
+    if (kind) {
+      designRefs.push({ kind, pageUrl, anchor, imageName, intentText });
+    }
+  }
+
   for (const match of content.matchAll(IMAGE_PLACEHOLDER_RE)) {
     const name = (match[1] ?? '').trim();
     if (name) images.push({ name });
@@ -136,6 +175,7 @@ export function parseHistoryUserContent(content: string): ParsedHistoryUserMessa
     images,
     codeRefs,
     elementRefs,
+    designRefs,
   };
 }
 
@@ -144,11 +184,13 @@ export function historyUserContentHasAttachments(content: string): boolean {
   FILE_BLOCK_RE.lastIndex = 0;
   CODE_REF_BLOCK_RE.lastIndex = 0;
   ELEMENT_REF_BLOCK_RE.lastIndex = 0;
+  DESIGN_REF_BLOCK_RE.lastIndex = 0;
   IMAGE_PLACEHOLDER_RE.lastIndex = 0;
   return (
     FILE_BLOCK_RE.test(content) ||
     CODE_REF_BLOCK_RE.test(content) ||
     ELEMENT_REF_BLOCK_RE.test(content) ||
+    DESIGN_REF_BLOCK_RE.test(content) ||
     IMAGE_PLACEHOLDER_RE.test(content)
   );
 }

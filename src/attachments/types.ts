@@ -2,6 +2,8 @@
  * Attachment shapes for the composer preview and API payload builders (SA-13).
  */
 
+import type { DesignShape } from '../design/shape-model';
+
 /** How an attachment is represented after `processFile` or workspace drag-drop. */
 export type AttachmentKind =
   | 'image'
@@ -10,7 +12,8 @@ export type AttachmentKind =
   | 'error'
   | 'workspace'
   | 'codeRef'
-  | 'elementRef';
+  | 'elementRef'
+  | 'designRef';
 
 /** One pending file in the composer strip before send. */
 export interface Attachment {
@@ -55,4 +58,10 @@ export interface Attachment {
   stylesDigest?: string;
   /** DPR-correct cropped screenshot data URL of the picked element (`elementRef`). */
   croppedDataUrl?: string;
+  /** The drawn shape (pen/rect/arrow/label) captured into this attachment (`designRef`). */
+  shape?: DesignShape;
+  /** Composited crop (screenshot region + rasterized overlay shapes) data URL (`designRef`). */
+  compositedDataUrl?: string;
+  /** Structured intent line: move/motion, region-of-interest, or instruction text (`designRef`). */
+  intentText?: string;
 }

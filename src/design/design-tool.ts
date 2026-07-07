@@ -13,9 +13,31 @@ import {
   type ElementPicker,
   type PickedElement,
 } from './element-picker';
-import { captureRegion } from './region-capture';
+import { captureRegion, captureRegionWithOverlay } from './region-capture';
 import { addElementRefToComposer } from '../attachments/element-ref';
+import { addDesignRefToComposer } from '../attachments/design-ref';
 import { getFilePanelState } from '../state/file-panel';
+import {
+  boundingRectOfShape,
+  newPinId,
+  newShapeId,
+  resolveShapeAnchor,
+  thinPoints,
+  type AnchorCandidate,
+  type CommentPin,
+  type DesignShape,
+  type ShapeKind,
+  type ShapePoint,
+} from './shape-model';
+import {
+  addPin as persistPin,
+  addNoteToPin as persistNote,
+  addShape as persistShape,
+  erasePin as erasePinAnnotation,
+  eraseShape as eraseShapeAnnotation,
+  loadPageAnnotations,
+  undoPage,
+} from './annotation-store';
 
 /** Shared context handed to a tool when it becomes the armed tool. */
 export interface DesignToolContext {
@@ -155,6 +177,388 @@ export function createSelectDesignTool(): DesignTool {
     },
     render() {
       ctx?.overlay.render(markers);
+    },
+  };
+}
+
+const TAGGED_ELEMENTS_SCRIPT = `(() => {
+  const els = Array.from(document.querySelectorAll('[data-mn-uid]'));
+  return els.map((el) => {
+    const uid = Number(el.getAttribute('data-mn-uid'));
+    const r = el.getBoundingClientRect();
+    return { uid, rect: { x: r.x, y: r.y, width: r.width, height: r.height } };
+  });
+})()`;
+
+function getPreviewFrame(): HTMLIFrameElement | null {
+  return document.getElementById('previewFrame') as HTMLIFrameElement | null;
+}
+
+/**
+ * Draw/Comment anchor resolution (MIN-367): already-tagged `data-mn-uid` elements in the guest,
+ * for {@link resolveShapeAnchor} to hit-test a drawn shape's region against. Best-effort — an
+ * empty list just means every shape/pin anchors to the page instead of an element.
+ */
+async function gatherAnchorCandidates(): Promise<AnchorCandidate[]> {
+  const transport = createPickerTransport();
+  try {
+    if (transport.mode === 'iframe') {
+      const doc = getPreviewFrame()?.contentDocument;
+      if (!doc) return [];
+      return Array.from(doc.querySelectorAll('[data-mn-uid]')).map((el) => {
+        const uid = Number(el.getAttribute('data-mn-uid'));
+        const r = el.getBoundingClientRect();
+        return {
+          uid,
+          selector: uidFallbackSelector(uid),
+          rect: { x: r.x, y: r.y, width: r.width, height: r.height },
+        };
+      });
+    }
+    const raw = await transport.eval(TAGGED_ELEMENTS_SCRIPT);
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .filter((row): row is { uid: number; rect: AnchorCandidate['rect'] } => {
+        return (
+          row != null &&
+          typeof row === 'object' &&
+          typeof (row as { uid?: unknown }).uid === 'number' &&
+          (row as { rect?: unknown }).rect != null
+        );
+      })
+      .map((row) => ({ uid: row.uid, selector: uidFallbackSelector(row.uid), rect: row.rect }));
+  } catch {
+    return [];
+  }
+}
+
+function guestScrollOffset(): { x: number; y: number } {
+  const frame = getPreviewFrame();
+  const view = frame?.contentWindow;
+  if (view) {
+    return { x: view.scrollX || 0, y: view.scrollY || 0 };
+  }
+  return { x: window.scrollX || 0, y: window.scrollY || 0 };
+}
+
+/** Draw tool factory return type — exposes shape-kind switching and eraser/undo for the strip. */
+export interface DrawDesignTool extends DesignTool {
+  setShapeKind(kind: ShapeKind): void;
+  getShapeKind(): ShapeKind;
+  getShapes(): DesignShape[];
+  eraseShape(shapeId: string): void;
+  undo(): void;
+}
+
+/**
+ * Real Draw tool (MIN-367): pen/rect/arrow/label shapes drawn directly on the live page.
+ * Pointer events arrive in host-space (design-mode.ts's capture layer); each finished shape is
+ * anchored (element vs. page), persisted per-page (annotation-store.ts), rendered into the
+ * overlay's shape layer, and pushed to the composer as its own `designRef` chip with a
+ * composited region crop + structured intent text (design-ref.ts).
+ */
+export function createDrawDesignTool(): DrawDesignTool {
+  let ctx: DesignToolContext | null = null;
+  let kind: ShapeKind = 'rect';
+  let shapes: DesignShape[] = [];
+  let pageKey = '';
+  let dragStart: ShapePoint | null = null;
+  let penPoints: ShapePoint[] = [];
+
+  function renderShapes(): void {
+    ctx?.overlay.renderShapes(shapes);
+  }
+
+  async function finalizeShape(partial: Pick<DesignShape, 'kind' | 'points' | 'rect' | 'label'>): Promise<void> {
+    const armedCtx = ctx;
+    if (!armedCtx) return;
+    const draft: DesignShape = {
+      id: '',
+      anchor: { type: 'page', x: 0, y: 0, scrollX: 0, scrollY: 0 },
+      createdAt: 0,
+      ...partial,
+    };
+    const rect = boundingRectOfShape(draft);
+    const [candidates, scroll] = await Promise.all([
+      gatherAnchorCandidates(),
+      Promise.resolve(guestScrollOffset()),
+    ]);
+    if (ctx !== armedCtx) return; // torn down while awaiting
+    const anchor = resolveShapeAnchor(rect, candidates, {
+      x: rect.x,
+      y: rect.y,
+      scrollX: scroll.x,
+      scrollY: scroll.y,
+    });
+    const shape: DesignShape = { ...draft, id: newShapeId(), anchor, createdAt: Date.now() };
+    shapes = [...shapes, shape];
+    renderShapes();
+    void persistShape(pageKey, shape);
+
+    const svgMarkup = armedCtx.overlay.getSvgMarkup();
+    const dpr = window.devicePixelRatio || 1;
+    const selector = anchor.type === 'element' ? anchor.selector : `page@${Math.round(rect.x)},${Math.round(rect.y)}`;
+    try {
+      const captured = await captureRegionWithOverlay(
+        { selector, boundingRect: rect, devicePixelRatio: dpr },
+        svgMarkup,
+      );
+      addDesignRefToComposer({ shape, pageUrl: pageKey, compositedDataUrl: captured.dataUrl });
+    } catch {
+      addDesignRefToComposer({ shape, pageUrl: pageKey });
+    }
+  }
+
+  return {
+    id: 'draw',
+    label: 'Draw',
+    arm(context) {
+      ctx = context;
+      shapes = [];
+      dragStart = null;
+      penPoints = [];
+      pageKey = currentPreviewPageRef();
+      void loadPageAnnotations(pageKey).then((data) => {
+        if (ctx !== context) return;
+        shapes = data.shapes;
+        renderShapes();
+      });
+    },
+    disarm() {
+      ctx?.overlay.renderShapes([]);
+      ctx = null;
+      shapes = [];
+      dragStart = null;
+      penPoints = [];
+    },
+    onPointerDown(evt) {
+      dragStart = { x: evt.x, y: evt.y };
+      if (kind === 'pen') penPoints = [{ x: evt.x, y: evt.y }];
+    },
+    onPointerMove(evt) {
+      if (!dragStart) return;
+      if (kind === 'pen') penPoints.push({ x: evt.x, y: evt.y });
+    },
+    onPointerUp(evt) {
+      if (!dragStart) return;
+      const start = dragStart;
+      dragStart = null;
+      const end = { x: evt.x, y: evt.y };
+
+      if (kind === 'rect') {
+        const rect = {
+          x: Math.min(start.x, end.x),
+          y: Math.min(start.y, end.y),
+          width: Math.abs(end.x - start.x),
+          height: Math.abs(end.y - start.y),
+        };
+        if (rect.width < 4 && rect.height < 4) return;
+        void finalizeShape({ kind: 'rect', rect });
+        return;
+      }
+
+      if (kind === 'arrow') {
+        if (Math.hypot(end.x - start.x, end.y - start.y) < 4) return;
+        void finalizeShape({ kind: 'arrow', points: [start, end] });
+        return;
+      }
+
+      if (kind === 'pen') {
+        const raw = penPoints.length >= 2 ? penPoints : [start, end];
+        penPoints = [];
+        const thinned = thinPoints(raw);
+        if (thinned.length < 2) return;
+        void finalizeShape({ kind: 'pen', points: thinned });
+        return;
+      }
+
+      if (kind === 'label') {
+        const text =
+          typeof window !== 'undefined' && typeof window.prompt === 'function'
+            ? window.prompt('Label text')?.trim()
+            : '';
+        if (!text) return;
+        const rect = { x: start.x, y: start.y - 10, width: Math.max(24, text.length * 7 + 12), height: 20 };
+        void finalizeShape({ kind: 'label', rect, label: text });
+      }
+    },
+    render() {
+      renderShapes();
+    },
+    setShapeKind(next) {
+      kind = next;
+    },
+    getShapeKind() {
+      return kind;
+    },
+    getShapes() {
+      return [...shapes];
+    },
+    eraseShape(shapeId) {
+      shapes = shapes.filter((s) => s.id !== shapeId);
+      renderShapes();
+      void eraseShapeAnnotation(pageKey, shapeId);
+    },
+    undo() {
+      void undoPage(pageKey).then((data) => {
+        if (!data) return;
+        shapes = data.shapes;
+        renderShapes();
+      });
+    },
+  };
+}
+
+/** Comment tool factory return type — exposes pin/note access for the strip's thread popover. */
+export interface CommentDesignTool extends DesignTool {
+  getPins(): CommentPin[];
+  addNote(pinId: string, text: string): Promise<void>;
+  erasePin(pinId: string): void;
+  undo(): void;
+}
+
+/**
+ * Real Comment tool (MIN-367): click drops a numbered pin anchored like a draw shape; each pin
+ * threads plain-text notes (with timestamps) in a small popover. Pins persist per-page via
+ * annotation-store.ts — no chat/composer coupling (comments are markup, not chat turns).
+ */
+export function createCommentDesignTool(): CommentDesignTool {
+  let ctx: DesignToolContext | null = null;
+  let pins: CommentPin[] = [];
+  let pageKey = '';
+  let popover: HTMLElement | null = null;
+
+  function closePopover(): void {
+    popover?.remove();
+    popover = null;
+  }
+
+  function renderPins(): void {
+    ctx?.overlay.renderPins(pins, (pinId) => {
+      const pin = pins.find((p) => p.id === pinId);
+      if (pin) openPopover(pin);
+    });
+  }
+
+  function openPopover(pin: CommentPin): void {
+    if (!ctx) return;
+    closePopover();
+    const panel = document.createElement('div');
+    panel.className = 'mn-design-pin-popover';
+    panel.style.cssText = `position:absolute;left:${Math.round(pin.x) + 14}px;top:${Math.round(pin.y)}px;z-index:5;`;
+
+    const list = document.createElement('div');
+    list.className = 'mn-design-pin-popover__notes';
+    for (const note of pin.notes) {
+      const row = document.createElement('div');
+      row.className = 'mn-design-pin-popover__note';
+      row.textContent = note.text;
+      list.appendChild(row);
+    }
+    panel.appendChild(list);
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'mn-design-pin-popover__input';
+    input.placeholder = 'Add a note…';
+    panel.appendChild(input);
+
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'mn-design-pin-popover__add';
+    addBtn.textContent = 'Add';
+    addBtn.addEventListener('click', () => {
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      void addNoteInternal(pin.id, text);
+    });
+    panel.appendChild(addBtn);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'mn-design-pin-popover__close';
+    closeBtn.textContent = '×';
+    closeBtn.addEventListener('click', () => closePopover());
+    panel.appendChild(closeBtn);
+
+    ctx.host.appendChild(panel);
+    popover = panel;
+  }
+
+  async function addNoteInternal(pinId: string, text: string): Promise<void> {
+    const armedCtx = ctx;
+    const data = await persistNote(pageKey, pinId, text);
+    if (!data || ctx !== armedCtx) return;
+    pins = data.pins;
+    renderPins();
+    const refreshed = pins.find((p) => p.id === pinId);
+    if (refreshed) openPopover(refreshed);
+  }
+
+  return {
+    id: 'comment',
+    label: 'Comment',
+    arm(context) {
+      ctx = context;
+      pins = [];
+      pageKey = currentPreviewPageRef();
+      void loadPageAnnotations(pageKey).then((data) => {
+        if (ctx !== context) return;
+        pins = data.pins;
+        renderPins();
+      });
+    },
+    disarm() {
+      closePopover();
+      ctx?.overlay.renderPins([]);
+      ctx = null;
+      pins = [];
+    },
+    onPointerUp(evt) {
+      const armedCtx = ctx;
+      if (!armedCtx) return;
+      void (async () => {
+        const rect = { x: evt.x - 1, y: evt.y - 1, width: 2, height: 2 };
+        const [candidates, scroll] = await Promise.all([
+          gatherAnchorCandidates(),
+          Promise.resolve(guestScrollOffset()),
+        ]);
+        if (ctx !== armedCtx) return;
+        const anchor = resolveShapeAnchor(rect, candidates, {
+          x: evt.x,
+          y: evt.y,
+          scrollX: scroll.x,
+          scrollY: scroll.y,
+        });
+        const pin: CommentPin = { id: newPinId(), index: pins.length + 1, x: evt.x, y: evt.y, anchor, notes: [] };
+        pins = [...pins, pin];
+        renderPins();
+        void persistPin(pageKey, pin);
+        openPopover(pin);
+      })();
+    },
+    render() {
+      renderPins();
+    },
+    getPins() {
+      return [...pins];
+    },
+    async addNote(pinId, text) {
+      await addNoteInternal(pinId, text);
+    },
+    erasePin(pinId) {
+      pins = pins.filter((p) => p.id !== pinId);
+      renderPins();
+      if (popover) closePopover();
+      void erasePinAnnotation(pageKey, pinId);
+    },
+    undo() {
+      void undoPage(pageKey).then((data) => {
+        if (!data) return;
+        pins = data.pins;
+        renderPins();
+      });
     },
   };
 }

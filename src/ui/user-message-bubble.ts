@@ -4,7 +4,12 @@
 
 import type { Attachment } from '../attachments/types';
 import { formatElementRefLabel } from '../attachments/element-ref-format';
-import { parseHistoryUserContent, type HistoryElementRefPart } from '../chat/user-message-parts';
+import { formatDesignRefLabel } from '../attachments/design-ref-format';
+import {
+  parseHistoryUserContent,
+  type HistoryDesignRefPart,
+  type HistoryElementRefPart,
+} from '../chat/user-message-parts';
 import { stripSkillTagFromHistory } from '../skills/history-content';
 import { createCodeRefLinkButton } from './code-ref-link';
 
@@ -32,6 +37,15 @@ function findLiveElementRefDataUrl(
   return hit?.croppedDataUrl;
 }
 
+function findLiveDesignRefDataUrl(
+  name: string,
+  liveAttachments?: Attachment[],
+): string | undefined {
+  if (!liveAttachments?.length) return undefined;
+  const hit = liveAttachments.find((a) => a.kind === 'designRef' && a.name === name);
+  return hit?.compositedDataUrl;
+}
+
 /** Multi-line "open" body for an element-ref chip (selector, styles, outerHTML preview). */
 function elementRefSummaryText(ref: HistoryElementRefPart): string {
   const lines: string[] = [
@@ -48,6 +62,25 @@ function elementRefSummaryText(ref: HistoryElementRefPart): string {
     `Styles: ${ref.stylesDigest}`,
     '',
     ref.outerHtmlPreview,
+  ];
+  return lines.join('\n');
+}
+
+/** Multi-line "open" body for a design-ref chip (kind, anchor, page, intent text). */
+function designRefSummaryText(ref: HistoryDesignRefPart): string {
+  const lines: string[] = [
+    `Kind: ${ref.kind}`,
+    ...(ref.anchor?.type === 'element'
+      ? [
+          `Anchor: element ${ref.anchor.selector}`,
+          ...(ref.anchor.uid != null ? [`data-mn-uid: ${ref.anchor.uid}`] : []),
+        ]
+      : ref.anchor?.type === 'page'
+        ? [`Anchor: page @ ${ref.anchor.x},${ref.anchor.y}`]
+        : []),
+    `Page: ${ref.pageUrl}`,
+    '',
+    ref.intentText,
   ];
   return lines.join('\n');
 }
@@ -122,13 +155,19 @@ export function renderUserMessageBubble(
   const elementRefImageNames = new Set(
     parsed.elementRefs.map((ref) => ref.imageName).filter((name): name is string => Boolean(name)),
   );
-  const visibleImages = parsed.images.filter((image) => !elementRefImageNames.has(image.name));
+  const designRefImageNames = new Set(
+    parsed.designRefs.map((ref) => ref.imageName).filter((name): name is string => Boolean(name)),
+  );
+  const visibleImages = parsed.images.filter(
+    (image) => !elementRefImageNames.has(image.name) && !designRefImageNames.has(image.name),
+  );
 
   const hasChips =
     parsed.files.length > 0 ||
     visibleImages.length > 0 ||
     parsed.codeRefs.length > 0 ||
-    parsed.elementRefs.length > 0;
+    parsed.elementRefs.length > 0 ||
+    parsed.designRefs.length > 0;
   if (!hasChips) {
     if (!parsed.text) {
       bubble.textContent = displaySource.trim() || historyContent;
@@ -197,7 +236,24 @@ export function renderUserMessageBubble(
     );
   }
 
-  if (parsed.files.length > 0 || visibleImages.length > 0 || parsed.elementRefs.length > 0) {
+  for (const ref of parsed.designRefs) {
+    const label = formatDesignRefLabel(ref.kind, ref.pageUrl);
+    const dataUrl = ref.imageName ? findLiveDesignRefDataUrl(ref.imageName, live) : undefined;
+    row.appendChild(
+      createMessageAttachChip(label, {
+        kind: 'image',
+        dataUrl,
+        onOpen: () => openFilePart(label, designRefSummaryText(ref)),
+      }),
+    );
+  }
+
+  if (
+    parsed.files.length > 0 ||
+    visibleImages.length > 0 ||
+    parsed.elementRefs.length > 0 ||
+    parsed.designRefs.length > 0
+  ) {
     bubble.appendChild(row);
   }
 }

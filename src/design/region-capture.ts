@@ -45,6 +45,12 @@ export interface RegionCaptureTestHooks {
   uploadScreenshot?: (dataBase64: string) => Promise<{ id: string; sizeBytes: number }>;
   scrollIntoView?: (selector: string) => Promise<void>;
   getPageDimensions?: (fullPagePngBase64: string) => Promise<{ pageW: number; pageH: number }>;
+  compositeOverlay?: (
+    cropDataUrl: string,
+    svgMarkup: string,
+    crop: CropRect,
+    dpr: number,
+  ) => Promise<{ dataUrl: string } | { tainted: true }>;
 }
 
 let testHooks: RegionCaptureTestHooks | null = null;
@@ -110,6 +116,74 @@ export async function cropPngToDataUrl(
 
   ctx.drawImage(img, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, crop.sw, crop.sh);
   img.src = '';
+
+  try {
+    const dataUrl = canvas.toDataURL('image/png');
+    canvas.width = 0;
+    canvas.height = 0;
+    return { dataUrl };
+  } catch {
+    canvas.width = 0;
+    canvas.height = 0;
+    return { tainted: true };
+  }
+}
+
+/**
+ * Draw & Comment tool (MIN-367): rasterize the parent-owned SVG overlay (shapes/pins) onto an
+ * already-cropped region screenshot, so the composited image "looks like" a marked-up
+ * screenshot — not a separate overlay layer the model has to reconcile with the crop.
+ */
+export async function compositeOverlayOntoCrop(
+  cropDataUrl: string,
+  svgMarkup: string,
+  crop: CropRect,
+  dpr = 1,
+): Promise<{ dataUrl: string } | { tainted: true }> {
+  if (testHooks?.compositeOverlay) {
+    return testHooks.compositeOverlay(cropDataUrl, svgMarkup, crop, dpr);
+  }
+  if (!svgMarkup) return { dataUrl: cropDataUrl };
+
+  const baseImg = new Image();
+  await new Promise<void>((resolve, reject) => {
+    baseImg.onload = () => resolve();
+    baseImg.onerror = () => reject(new Error('failed to decode crop image'));
+    baseImg.src = cropDataUrl;
+  });
+
+  const canvas = document.createElement('canvas');
+  canvas.width = crop.sw;
+  canvas.height = crop.sh;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return { tainted: true };
+  ctx.drawImage(baseImg, 0, 0, crop.sw, crop.sh);
+  baseImg.src = '';
+
+  const svgDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`;
+  const overlayImg = new Image();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      overlayImg.onload = () => resolve();
+      overlayImg.onerror = () => reject(new Error('failed to decode overlay svg'));
+      overlayImg.src = svgDataUrl;
+    });
+    // The overlay SVG is sized in host CSS px (full preview host, not just the crop region);
+    // scale by dpr and translate by the crop origin (device px) so it lines up with the crop.
+    const scale = Number.isFinite(dpr) && dpr > 0 ? dpr : 1;
+    ctx.save();
+    ctx.scale(scale, scale);
+    ctx.drawImage(overlayImg, -crop.sx / scale, -crop.sy / scale);
+    ctx.restore();
+  } catch {
+    // Overlay failed to decode (unsupported SVG-in-canvas in this runtime) — fall back to the
+    // plain crop rather than losing the region capture entirely.
+    overlayImg.src = '';
+    canvas.width = 0;
+    canvas.height = 0;
+    return { dataUrl: cropDataUrl };
+  }
+  overlayImg.src = '';
 
   try {
     const dataUrl = canvas.toDataURL('image/png');
@@ -244,4 +318,36 @@ export async function captureRegion(ctx: RegionCaptureContext): Promise<Captured
     const message = err instanceof Error ? err.message : String(err);
     return buildCapturedBase(ctx, { error: message });
   }
+}
+
+/**
+ * Draw & Comment tool (MIN-367): {@link captureRegion} plus the parent-owned overlay SVG
+ * rasterized on top, so the composited image reads like a marked-up screenshot. Falls back to
+ * the plain crop (or the full-page/error result) when compositing can't run — never worse than
+ * captureRegion alone.
+ */
+export async function captureRegionWithOverlay(
+  ctx: RegionCaptureContext,
+  svgMarkup: string,
+): Promise<CapturedRegion> {
+  const base = await captureRegion(ctx);
+  if (!base.cropped || !base.dataUrl || !svgMarkup) return base;
+
+  const dpr = ctx.devicePixelRatio || 1;
+  const crop: CropRect = {
+    sx: Math.round(ctx.boundingRect.x * dpr),
+    sy: Math.round(ctx.boundingRect.y * dpr),
+    sw: Math.max(1, Math.round(ctx.boundingRect.width * dpr)),
+    sh: Math.max(1, Math.round(ctx.boundingRect.height * dpr)),
+  };
+
+  try {
+    const composited = await compositeOverlayOntoCrop(base.dataUrl, svgMarkup, crop, dpr);
+    if ('dataUrl' in composited) {
+      return { ...base, dataUrl: composited.dataUrl };
+    }
+  } catch {
+    /* fall back to the uncomposited crop below */
+  }
+  return base;
 }
