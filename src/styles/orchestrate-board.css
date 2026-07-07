@@ -1863,6 +1863,63 @@ button.board-header__activity {
   gap: 10px 12px;
 }
 
+/* Chat-view banner while board setup is incomplete (MIN-340). */
+.board-setup-return-banner {
+  max-width: 760px;
+  margin: 0 auto 14px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--mn-accent) 35%, var(--mn-border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--mn-accent) 8%, var(--mn-surface-1));
+}
+
+.board-setup-return-banner__text {
+  margin: 0 0 12px;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--mn-fg);
+}
+
+.board-setup-return-banner__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.board-setup-return-banner__resume,
+.board-setup-return-banner__cancel {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.board-setup-return-banner__resume {
+  border: 1px solid var(--mn-accent);
+  background: var(--mn-accent);
+  color: var(--mn-accent-fg, var(--mn-bg));
+}
+
+.board-setup-return-banner__cancel {
+  border: 1px solid var(--mn-border);
+  background: transparent;
+  color: var(--mn-fg-muted);
+}
+
+@media (hover: hover) {
+  .board-setup-return-banner__resume:hover {
+    filter: brightness(1.05);
+  }
+
+  .board-setup-return-banner__cancel:hover {
+    color: var(--mn-fg);
+    border-color: var(--mn-fg-subtle);
+  }
+}
+
 /* Board view: onboarding fills the chat column above the composer rail. */
 .main-column.main-column--board-view .chat-area > .board-root > .board-onboarding {
   flex: 1 1 auto;
