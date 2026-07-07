@@ -384,12 +384,12 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'read_file',
     label: 'Read file',
-    description: 'Reads the full text content of a file.',
+    description: 'Reads text content of a file (truncates very large files).',
     category: 'files',
     serverRequired: true,
     definition: toolSchema(
       'read_file',
-      'Read a UTF-8 text file from the project.',
+      'Read a UTF-8 text file from the project. Large files are truncated (~32k chars) with line counts and a pointer to read_file_range for the remainder — prefer read_file_range when you know you only need part of a file.',
       {
         path: { type: 'string', description: 'Relative file path' },
       },
@@ -646,14 +646,14 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'git_diff',
     label: 'Git diff',
-    description: 'Shows git diff for staged or unstaged changes.',
+    description: 'Shows git diff for staged or unstaged changes (truncates large patches).',
     category: 'git',
     serverRequired: true,
     definition: toolSchema(
       'git_diff',
-      'Show git diff for changes.',
+      'Show git diff for changes. Large patches are truncated with a --numstat summary, complete per-file hunks that fit, and a footer listing omitted files — use path= to fetch one file at a time. Prefer path= or staged=true for overview-sized calls instead of a repo-wide diff.',
       {
-        path: { type: 'string', description: 'Optional file path to limit diff' },
+        path: { type: 'string', description: 'Optional file path to limit diff (recommended for large changes)' },
         staged: {
           type: 'boolean',
           description: 'If true, diff staged (--cached) changes',

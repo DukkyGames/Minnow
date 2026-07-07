@@ -3,6 +3,12 @@
  */
 
 import { spawn } from 'node:child_process';
+import {
+  DEFAULT_MAX_OUTPUT_CHARS,
+  PROCESS_MAX_ACCUMULATE_BYTES,
+  appendWithByteCap,
+  capTextOutput,
+} from './tools/output-cap.js';
 
 /** Default timeout for shell/code tools (ms). */
 export const COMMAND_TIMEOUT_MS = 30_000;
@@ -22,7 +28,7 @@ export const COMMAND_TIMEOUT_MS = 30_000;
  * @param {(child: import('node:child_process').ChildProcess) => void} [options.killTree]
  *   Platform-aware tree killer injected by callers (avoids circular imports).
  *   Falls back to child.kill('SIGTERM') when omitted.
- * @returns {Promise<{ code: number, stdout: string, stderr: string, timedOut: boolean }>}
+ * @returns {Promise<{ code: number, stdout: string, stderr: string, timedOut: boolean, accumulationTruncated?: boolean }>}
  */
 export function runProcess(command, args, options = {}) {
   const {
@@ -49,6 +55,7 @@ export function runProcess(command, args, options = {}) {
     let stdout = '';
     let stderr = '';
     let timedOut = false;
+    let accumulationTruncated = false;
     let settled = false;
 
     let graceTimer = null;
@@ -80,13 +87,17 @@ export function runProcess(command, args, options = {}) {
 
     child.stdout?.on('data', (chunk) => {
       const text = chunk.toString();
-      stdout += text;
+      const capped = appendWithByteCap(stdout, text, PROCESS_MAX_ACCUMULATE_BYTES);
+      stdout = capped.text;
+      if (capped.truncated) accumulationTruncated = true;
       onStdout?.(text);
     });
 
     child.stderr?.on('data', (chunk) => {
       const text = chunk.toString();
-      stderr += text;
+      const capped = appendWithByteCap(stderr, text, PROCESS_MAX_ACCUMULATE_BYTES);
+      stderr = capped.text;
+      if (capped.truncated) accumulationTruncated = true;
       onStderr?.(text);
     });
 
@@ -104,7 +115,7 @@ export function runProcess(command, args, options = {}) {
         settle(() => reject(new Error(`Command timed out after ${timeout / 1000}s`)));
         return;
       }
-      settle(() => resolve({ code: code ?? 1, stdout, stderr, timedOut: false }));
+      settle(() => resolve({ code: code ?? 1, stdout, stderr, timedOut: false, accumulationTruncated }));
     });
   });
 }
@@ -114,7 +125,15 @@ export function runProcess(command, args, options = {}) {
  * @param {string} label
  * @param {{ code: number, stdout: string, stderr: string, timedOut?: boolean, stopped?: boolean, timeoutSecs?: number }} result
  */
-export function formatProcessOutput(label, { code, stdout, stderr, timedOut = false, stopped = false, timeoutSecs }) {
+export function formatProcessOutput(label, {
+  code,
+  stdout,
+  stderr,
+  timedOut = false,
+  stopped = false,
+  timeoutSecs,
+  accumulationTruncated = false,
+}) {
   const parts = [
     stopped
       ? `${label} (stopped by user — process terminated, not a failure)`
@@ -122,11 +141,26 @@ export function formatProcessOutput(label, { code, stdout, stderr, timedOut = fa
         ? `${label} (timed out after ${timeoutSecs ?? COMMAND_TIMEOUT_MS / 1000}s)`
         : `${label} (exit ${code})`,
   ];
+
+  if (accumulationTruncated) {
+    parts.push(
+      `(subprocess output exceeded ${PROCESS_MAX_ACCUMULATE_BYTES} bytes and was cut during capture)`,
+    );
+  }
+
   if (stdout.trim()) {
-    parts.push(`stdout:\n${stdout.trimEnd()}`);
+    const { text } = capTextOutput(stdout.trimEnd(), {
+      maxOutputChars: DEFAULT_MAX_OUTPUT_CHARS,
+      footerHint: 'narrow the command scope or paginate follow-up reads',
+    });
+    parts.push(`stdout:\n${text}`);
   }
   if (stderr.trim()) {
-    parts.push(`stderr:\n${stderr.trimEnd()}`);
+    const { text } = capTextOutput(stderr.trimEnd(), {
+      maxOutputChars: DEFAULT_MAX_OUTPUT_CHARS,
+      footerHint: 'narrow the command scope or paginate follow-up reads',
+    });
+    parts.push(`stderr:\n${text}`);
   }
   if (!stdout.trim() && !stderr.trim()) {
     parts.push('(no output)');
