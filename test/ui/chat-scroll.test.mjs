@@ -4,10 +4,13 @@ import { Window } from 'happy-dom';
 
 const {
   CHAT_PIN_THRESHOLD_PX,
+  bindDesktopChatTranscriptScroll,
+  captureChatScrollAnchor,
   isChatAtBottom,
   initChatScroll,
   isChatScrollPinned,
   pinChatScroll,
+  restoreChatScrollAnchor,
   scrollChatToBottom,
   scrollChatIfPinned,
 } = await import('../../src/ui/chat-scroll.ts');
@@ -167,5 +170,97 @@ describe('chat-scroll', () => {
     const before = scrollTop;
     scrollChatIfPinned();
     assert.equal(scrollTop, before);
+  });
+
+  test('desktop transcript scroll updates pin state', async () => {
+    const { setDesktopStateForTests, resetDesktopStateForTests } = await import(
+      '../../src/os/desktop-state.ts'
+    );
+    const { resetInstancesForTests } = await import('../../src/os/instances.ts');
+
+    const window = new Window();
+    globalThis.document = window.document;
+    globalThis.requestAnimationFrame = (cb) => {
+      cb();
+      return 0;
+    };
+
+    resetInstancesForTests();
+    setDesktopStateForTests('chatActive');
+
+    const transcript = document.createElement('div');
+    transcript.className = 'mn-os-chat-transcript';
+    Object.defineProperty(transcript, 'scrollHeight', { value: 2000, configurable: true });
+    Object.defineProperty(transcript, 'clientHeight', { value: 400, configurable: true });
+    let scrollTop = 1600;
+    Object.defineProperty(transcript, 'scrollTop', {
+      get: () => scrollTop,
+      set: (v) => {
+        scrollTop = v;
+      },
+      configurable: true,
+    });
+
+    const col = document.createElement('div');
+    col.id = 'desktopChatCol';
+    transcript.appendChild(col);
+    document.body.appendChild(transcript);
+
+    const chip = document.createElement('button');
+    chip.id = 'chatJumpLatest';
+    chip.className = 'chat-jump-latest hidden';
+    document.body.appendChild(chip);
+
+    initChatScroll();
+    bindDesktopChatTranscriptScroll();
+    pinChatScroll();
+    assert.equal(isChatScrollPinned(), true);
+
+    scrollTop = 120;
+    transcript.dispatchEvent(new window.Event('scroll'));
+    assert.equal(isChatScrollPinned(), false);
+
+    resetDesktopStateForTests();
+    resetInstancesForTests();
+  });
+
+  test('restoreChatScrollAnchor preserves distance from bottom when detached', () => {
+    const window = new Window();
+    globalThis.document = window.document;
+    globalThis.requestAnimationFrame = (cb) => {
+      cb();
+      return 0;
+    };
+
+    const area = document.createElement('main');
+    area.id = 'chatArea';
+    Object.defineProperty(area, 'scrollHeight', { value: 2000, configurable: true });
+    Object.defineProperty(area, 'clientHeight', { value: 400, configurable: true });
+    let scrollTop = 120;
+    Object.defineProperty(area, 'scrollTop', {
+      get: () => scrollTop,
+      set: (v) => {
+        scrollTop = v;
+      },
+      configurable: true,
+    });
+    document.body.appendChild(area);
+
+    const chip = document.createElement('button');
+    chip.id = 'chatJumpLatest';
+    chip.className = 'hidden';
+    document.body.appendChild(chip);
+
+    initChatScroll();
+    const anchor = captureChatScrollAnchor();
+    assert.equal(anchor?.pinned, false);
+
+    scrollTop = 0;
+    Object.defineProperty(area, 'scrollHeight', { value: 2400, configurable: true });
+    restoreChatScrollAnchor(anchor);
+
+    const distance = area.scrollHeight - scrollTop - area.clientHeight;
+    assert.equal(distance, anchor.distanceFromBottom);
+    assert.equal(isChatScrollPinned(), false);
   });
 });
