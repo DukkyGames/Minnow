@@ -37,7 +37,6 @@ import type {
   Usage,
 } from '../types';
 import {
-  pinChatScroll,
   scrollChatIfPinned,
   scrollChatToBottom,
 } from './chat-scroll';
@@ -587,8 +586,8 @@ export function appendStreamingAssistantRow(forChatId?: string): StreamingAssist
   wrap.appendChild(bubble);
   bubble.appendChild(cursor);
   getActiveChatMountElement().appendChild(wrap);
-  pinChatScroll();
-  scrollChatToBottom();
+  // Respect scroll pin: only follow the tail when the user is already near bottom.
+  scrollChatIfPinned();
   return { wrap, bubble, cursor, streamStatus };
 }
 
