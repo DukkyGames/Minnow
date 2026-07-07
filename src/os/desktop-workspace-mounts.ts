@@ -28,6 +28,8 @@ interface ReparentRecord {
   codeParent: HTMLElement;
   codeNextSibling: ChildNode | null;
   desktopHostId: string;
+  /** Whether the node carried `.hidden` in the Code layout before any desktop mount. */
+  codeHadHiddenClass: boolean;
 }
 
 const REPARENT_TARGETS: Array<{
@@ -82,6 +84,7 @@ function captureRecords(): void {
       codeParent,
       codeNextSibling: node.nextSibling,
       desktopHostId: target.desktopHostId,
+      codeHadHiddenClass: node.classList.contains('hidden'),
     });
   }
 }
@@ -101,8 +104,9 @@ function restoreToCode(record: ReparentRecord): void {
   } else {
     codeParent.appendChild(node);
   }
-  // Desktop drawer strips .hidden when mounting; re-sync before Code layout runs.
-  node.classList.add('hidden');
+  // Desktop drawer strips `.hidden` when mounting; restore each node's Code visibility.
+  // Only preview/viewer panes use `.hidden` in Code — not #fileSidebarFilesView.
+  node.classList.toggle('hidden', record.codeHadHiddenClass);
 }
 
 /** Point the file tree at the desktop sandbox or Code workspace; true when root changed. */

@@ -180,6 +180,34 @@ describe('syncDesktopWorkspaceMounts listing root', () => {
     assert.equal(isDesktopWorkspaceHostingActive(), false);
   });
 
+  test('Code foreground keeps fileSidebarFilesView visible after desktop round-trip', async () => {
+    openDesktopWorkspaceTab('files');
+    await syncDesktopWorkspaceMounts();
+
+    const filesView = document.getElementById('fileSidebarFilesView');
+    assert.ok(filesView);
+    assert.equal(filesView.classList.contains('hidden'), false);
+
+    const { launchInstance } = await import('../../src/os/instances.ts');
+    launchInstance('code');
+    await syncDesktopWorkspaceMounts();
+
+    assert.equal(filesView.classList.contains('hidden'), false);
+    assert.equal(filesView.parentElement?.id, 'fileSidebar');
+  });
+
+  test('first Code sync does not hide fileSidebarFilesView', async () => {
+    const { launchInstance } = await import('../../src/os/instances.ts');
+    launchInstance('code');
+
+    const filesView = document.getElementById('fileSidebarFilesView');
+    assert.ok(filesView);
+    assert.equal(filesView.classList.contains('hidden'), false);
+
+    await syncDesktopWorkspaceMounts();
+    assert.equal(filesView.classList.contains('hidden'), false);
+  });
+
   test('desktop hosting keeps sandbox listing root scoped on sync', async () => {
     openDesktopWorkspaceTab('files');
     await syncDesktopWorkspaceMounts();
