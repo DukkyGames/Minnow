@@ -47,6 +47,8 @@ export interface HistoryDesignRefPart {
   /** Name of the co-emitted `[image: name]` placeholder, when a composited crop was captured. */
   imageName: string | null;
   intentText: string;
+  /** annotation-store shape id (MIN-368) — links this history block back to annotations.json. */
+  shapeId: string | null;
 }
 
 /** Parsed segments for chat UI rendering. */
@@ -66,7 +68,7 @@ const CODE_REF_BLOCK_RE =
 const ELEMENT_REF_BLOCK_RE =
   /<element-ref selector="([^"]*)"(?: uid="(\d+)")? page="([^"]*)" tag="([^"]*)" classes="([^"]*)" rect="([^"]*)" styles="([^"]*)"(?: image="([^"]*)")?>\n([\s\S]*?)\n<\/element-ref>/g;
 const DESIGN_REF_BLOCK_RE =
-  /<design-ref kind="([^"]*)" page="([^"]*)" anchor="(element|page)"(?: anchorSelector="([^"]*)")?(?: anchorUid="(\d+)")?(?: anchorX="(-?\d+)")?(?: anchorY="(-?\d+)")?(?: image="([^"]*)")?>\n([\s\S]*?)\n<\/design-ref>/g;
+  /<design-ref kind="([^"]*)" page="([^"]*)" anchor="(element|page)"(?: anchorSelector="([^"]*)")?(?: anchorUid="(\d+)")?(?: anchorX="(-?\d+)")?(?: anchorY="(-?\d+)")?(?: image="([^"]*)")?(?: id="([^"]*)")?>\n([\s\S]*?)\n<\/design-ref>/g;
 const IMAGE_PLACEHOLDER_RE = /\[image:\s*([^\]]+)\]/g;
 
 function parseRect(raw: string): { x: number; y: number; width: number; height: number } | null {
@@ -152,7 +154,8 @@ export function parseHistoryUserContent(content: string): ParsedHistoryUserMessa
     const anchorX = match[6] != null ? Number(match[6]) : null;
     const anchorY = match[7] != null ? Number(match[7]) : null;
     const imageName = match[8] ?? null;
-    const intentText = match[9] ?? '';
+    const shapeId = match[9] ?? null;
+    const intentText = match[10] ?? '';
     let anchor: HistoryDesignRefPart['anchor'] = null;
     if (anchorType === 'element' && anchorSelector) {
       anchor = { type: 'element', uid: anchorUid, selector: anchorSelector };
@@ -160,7 +163,7 @@ export function parseHistoryUserContent(content: string): ParsedHistoryUserMessa
       anchor = { type: 'page', x: anchorX, y: anchorY };
     }
     if (kind) {
-      designRefs.push({ kind, pageUrl, anchor, imageName, intentText });
+      designRefs.push({ kind, pageUrl, anchor, imageName, intentText, shapeId });
     }
   }
 

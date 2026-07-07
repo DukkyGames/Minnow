@@ -91,6 +91,35 @@ function openFilePart(name: string, body: string): void {
   });
 }
 
+/**
+ * "View on page" affordance for a linked design-ref (MIN-368): opens the preview at the
+ * shape's page, enables Design Mode, and pulses the surviving anchor — or toasts that it's
+ * moved/removed when the shape's uid AND selector both fail to resolve on the live page.
+ */
+function createOnPageButton(pageUrl: string, shapeId: string): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'msg-onpage-btn';
+  btn.title = 'View this mark on the page';
+  btn.setAttribute('aria-label', 'View this mark on the page');
+  btn.textContent = '◎';
+  btn.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    void Promise.all([
+      import('../design/annotation-nav'),
+      import('./toast'),
+    ]).then(async ([nav, toast]) => {
+      const status = await nav.openAnnotationOnPage(pageUrl, { shapeId });
+      if (status === 'dead') {
+        toast.showToast('This mark moved or was removed from the page.', 'error');
+      } else if (status === 'unavailable') {
+        toast.showToast('Could not locate this annotation.', 'error');
+      }
+    });
+  });
+  return btn;
+}
+
 function createMessageAttachChip(
   label: string,
   options: {
@@ -246,6 +275,9 @@ export function renderUserMessageBubble(
         onOpen: () => openFilePart(label, designRefSummaryText(ref)),
       }),
     );
+    if (ref.shapeId) {
+      row.appendChild(createOnPageButton(ref.pageUrl, ref.shapeId));
+    }
   }
 
   if (

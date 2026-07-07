@@ -7,7 +7,9 @@
  * a round trip, then persists the result.
  */
 
-import type { AnchorCandidate, CommentPin, DesignShape } from './shape-model';
+import { isDesignRefAttachment } from '../attachments/design-ref';
+import type { Attachment } from '../attachments/types';
+import type { AnchorCandidate, AnnotationLink, CommentPin, DesignShape, ShapeAnchor } from './shape-model';
 
 export interface PageAnnotations {
   shapes: DesignShape[];
@@ -18,6 +20,10 @@ function emptyAnnotations(): PageAnnotations {
   return { shapes: [], pins: [] };
 }
 
+function cloneLinks(links: AnnotationLink[] | undefined): AnnotationLink[] | undefined {
+  return links ? links.map((link) => ({ ...link })) : undefined;
+}
+
 function cloneAnnotations(data: PageAnnotations): PageAnnotations {
   return {
     shapes: data.shapes.map((shape) => ({
@@ -25,11 +31,13 @@ function cloneAnnotations(data: PageAnnotations): PageAnnotations {
       ...(shape.points ? { points: shape.points.map((p) => ({ ...p })) } : {}),
       ...(shape.rect ? { rect: { ...shape.rect } } : {}),
       anchor: { ...shape.anchor },
+      ...(shape.links ? { links: cloneLinks(shape.links) } : {}),
     })),
     pins: data.pins.map((pin) => ({
       ...pin,
       anchor: { ...pin.anchor },
       notes: pin.notes.map((note) => ({ ...note })),
+      ...(pin.links ? { links: cloneLinks(pin.links) } : {}),
     })),
   };
 }
@@ -206,6 +214,78 @@ export function reanchorPin(pin: CommentPin, candidates: AnchorCandidate[]): Com
   const { candidate } = reanchorElementAnchor(pin, candidates);
   if (!candidate) return pin;
   return { ...pin, x: candidate.rect.x, y: candidate.rect.y };
+}
+
+/**
+ * Stamp shapes/pins with a link to the chat turn they were sent to (MIN-368), newest link
+ * first. Mutates the in-memory page state directly (same pattern as addShape/eraseShape — no
+ * network read-before-write, since the caller's target ids only exist if this page's shapes/
+ * pins are already loaded/mutated in this session) and persists the result. No undo snapshot:
+ * linking is send-time metadata, not a drawing edit users would want to "undo".
+ */
+export async function linkAnnotationsToTurn(
+  pageKey: string,
+  targets: { shapeIds?: string[]; pinIds?: string[] },
+  link: { chatId: string; turnId: string },
+): Promise<PageAnnotations | null> {
+  if (!pageKey) return null;
+  const shapeIds = new Set(targets.shapeIds ?? []);
+  const pinIds = new Set(targets.pinIds ?? []);
+  if (shapeIds.size === 0 && pinIds.size === 0) return null;
+
+  const state = getState(pageKey);
+  const entry: AnnotationLink = { chatId: link.chatId, turnId: link.turnId, at: Date.now() };
+  state.data = {
+    shapes: state.data.shapes.map((s) =>
+      shapeIds.has(s.id) ? { ...s, links: [entry, ...(s.links ?? [])] } : s,
+    ),
+    pins: state.data.pins.map((p) =>
+      pinIds.has(p.id) ? { ...p, links: [entry, ...(p.links ?? [])] } : p,
+    ),
+  };
+  await persist(pageKey);
+  return cloneAnnotations(state.data);
+}
+
+/**
+ * Stamp every `designRef` attachment in a sent turn with a link to that chat turn (MIN-368).
+ * This is the exact function tools/loop.ts's send path calls once the user message has been
+ * pushed to history — `turnId` is the pushed message's history index (as a string), the same
+ * identity {@link jumpToChatTurn}-style navigation and message-actions.ts already key off of.
+ * `elementRef` picks (Select tool) have no annotation-store entry to link — only drawn
+ * shapes (Draw tool) persist per-page, so only those participate in this link.
+ */
+export async function linkSentAttachmentsToTurn(
+  chatId: string,
+  turnId: string,
+  attachments: Attachment[],
+): Promise<void> {
+  const shapeIdsByPage = new Map<string, string[]>();
+  for (const att of attachments) {
+    if (!isDesignRefAttachment(att)) continue;
+    const shapeId = att.shape.id;
+    if (!shapeId) continue;
+    const list = shapeIdsByPage.get(att.pageUrl) ?? [];
+    list.push(shapeId);
+    shapeIdsByPage.set(att.pageUrl, list);
+  }
+  for (const [pageKey, shapeIds] of shapeIdsByPage) {
+    await linkAnnotationsToTurn(pageKey, { shapeIds }, { chatId, turnId });
+  }
+}
+
+/**
+ * True when an element-anchored shape/pin's uid AND selector both fail to resolve against the
+ * current page's tagged elements — the transcript "on-page" affordance and the annotations
+ * panel render a moved/removed badge instead of a pulse highlight for these (MIN-368). Mirrors
+ * {@link reanchorElementAnchor}'s uid-then-selector fallback; page-anchored items are never
+ * "dead" (they always resolve to a bare page position).
+ */
+export function isAnchorDead(anchor: ShapeAnchor, candidates: AnchorCandidate[]): boolean {
+  if (anchor.type !== 'element') return false;
+  const byUid = anchor.uid != null ? candidates.find((c) => c.uid === anchor.uid) : undefined;
+  const bySelector = byUid ? undefined : candidates.find((c) => c.selector === anchor.selector);
+  return !byUid && !bySelector;
 }
 
 /** Test helper — clear all in-memory page state between cases. */

@@ -355,6 +355,43 @@
   outline-offset: 2px;
 }
 
+/* Transcript "on-page" affordance for a linked design-ref mark (MIN-368). */
+.msg-onpage-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid color-mix(in srgb, var(--mn-fg) 12%, var(--mn-border));
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg-muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.msg-onpage-btn:hover,
+.msg-onpage-btn:focus-visible {
+  border-color: var(--mn-accent);
+  color: var(--mn-accent);
+  outline: none;
+}
+
+/* Page → transcript jump target pulse (MIN-368) — brief highlight on the landed-on message row. */
+.mn-design-jump-pulse {
+  animation: mn-design-jump-pulse-anim 1.6s ease-out;
+}
+
+@keyframes mn-design-jump-pulse-anim {
+  0% {
+    box-shadow: 0 0 0 3px var(--mn-accent-soft);
+  }
+  100% {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+
 .msg.assistant .msg-bubble {
   background: var(--mn-bg);
   border: 1px solid var(--mn-border);

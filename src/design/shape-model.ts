@@ -23,6 +23,17 @@ export type ShapeAnchor =
   | { type: 'element'; uid: number | null; selector: string }
   | { type: 'page'; x: number; y: number; scrollX: number; scrollY: number };
 
+/**
+ * One chat turn a shape/pin was sent to (MIN-368) — bidirectional annotation <-> chat linking.
+ * `turnId` mirrors the `data-history-index` identity messages.ts/message-actions.ts already
+ * stamp on rendered message rows (chat.history has no persisted message ids of its own).
+ */
+export interface AnnotationLink {
+  chatId: string;
+  turnId: string;
+  at: number;
+}
+
 /** One drawn shape (pen stroke, rectangle, arrow, or text label). */
 export interface DesignShape {
   id: string;
@@ -35,6 +46,8 @@ export interface DesignShape {
   label?: string;
   anchor: ShapeAnchor;
   createdAt: number;
+  /** Chat turns this shape was sent to (MIN-368), newest first. */
+  links?: AnnotationLink[];
 }
 
 /** One threaded note on a comment pin. */
@@ -52,6 +65,8 @@ export interface CommentPin {
   y: number;
   anchor: ShapeAnchor;
   notes: CommentNote[];
+  /** Chat turns this pin was sent to (MIN-368), newest first. */
+  links?: AnnotationLink[];
 }
 
 let counter = 0;

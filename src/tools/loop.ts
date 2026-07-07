@@ -39,6 +39,7 @@ import type { Attachment } from '../attachments/types';
 import { codeRefHistoryBlock, isCodeRefAttachment } from '../attachments/code-ref';
 import { elementRefHistoryBlock, isElementRefAttachment } from '../attachments/element-ref';
 import { designRefHistoryBlock, isDesignRefAttachment } from '../attachments/design-ref';
+import { linkSentAttachmentsToTurn } from '../design/annotation-store';
 import { resolveWorkspaceReferences } from '../attachments/workspace-ref';
 import {
   extractMessageText,
@@ -1065,10 +1066,18 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     recordChatMessage(chat);
     scheduleSaveSessions();
     syncTurnContextUsage(chat.id, '', null);
+    const pushedUserIdx = chat.history.length - 1;
+    if (validAttachments.length > 0) {
+      // MIN-368: stamp every sent designRef (Draw tool) attachment's shape with a link back to
+      // this turn. `turnId` is the pushed message's history index (as a string) — the same
+      // `data-history-index` identity messages.ts/message-actions.ts already stamp on every
+      // rendered row, so both link directions agree on what a "turn" is.
+      void linkSentAttachmentsToTurn(chat.id, String(pushedUserIdx), validAttachments);
+    }
     if (!suppressUserEcho) {
       renderSidebar();
       if (isStreamDomVisible(chat.id)) {
-        const userIdx = chat.history.length - 1;
+        const userIdx = pushedUserIdx;
         const { wrap: userWrap } = appendBubble(
           'user',
           historyContent,

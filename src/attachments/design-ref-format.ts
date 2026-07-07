@@ -43,8 +43,12 @@ export function designRefHistoryBlock(input: DesignRefBlockInput): string {
         (shape.anchor.uid != null ? ` anchorUid="${shape.anchor.uid}"` : '')
       : ` anchor="page" anchorX="${Math.round(shape.anchor.x)}" anchorY="${Math.round(shape.anchor.y)}"`;
   const imageAttr = input.imageName ? ` image="${attr(input.imageName)}"` : '';
+  // `id` (the shape's annotation-store id) is appended last, after the optional image attribute,
+  // so it doesn't disturb the leading `<design-ref kind="…" page="…" anchor="…"` shape other
+  // callers/tests already match on (MIN-368 — round-trips back to annotation-store.ts links[]).
+  const idAttr = ` id="${attr(shape.id)}"`;
   return (
-    `<design-ref kind="${attr(shape.kind)}" page="${attr(input.pageUrl)}"${anchorAttr}${imageAttr}>\n` +
+    `<design-ref kind="${attr(shape.kind)}" page="${attr(input.pageUrl)}"${anchorAttr}${imageAttr}${idAttr}>\n` +
     `${input.intentText}\n</design-ref>`
   );
 }

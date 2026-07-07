@@ -145,3 +145,152 @@
   background: var(--mn-surface-3, rgba(127, 127, 127, 0.15));
   color: var(--mn-fg);
 }
+
+/* Chat-link badge on a drawn shape's overlay + transcript → page pulse (MIN-368). */
+.mn-design-shape-link-badge {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+
+.mn-design-shape--pulse {
+  animation: mn-design-shape-pulse-anim 2.2s ease-out;
+}
+
+@keyframes mn-design-shape-pulse-anim {
+  0%,
+  30%,
+  60% {
+    filter: drop-shadow(0 0 0 var(--mn-accent));
+  }
+  15%,
+  45% {
+    filter: drop-shadow(0 0 6px var(--mn-accent));
+  }
+  100% {
+    filter: drop-shadow(0 0 0 transparent);
+  }
+}
+
+/* Annotations panel (MIN-368) — collapsible list of every mark on the current page, docked to
+   the right edge of the preview host. Functional layout; visual polish is a later pass. */
+.mn-design-annotations-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  width: 260px;
+  max-width: 80%;
+  border-inline-start: 1px solid var(--mn-border);
+  background: var(--mn-surface-2);
+  overflow: hidden;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+
+.mn-design-annotations-panel--collapsed .mn-design-annotations-panel__body {
+  display: none;
+}
+
+.mn-design-annotations-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.mn-design-annotations-panel__collapse {
+  flex: 1 1 auto;
+  text-align: start;
+  border: none;
+  background: transparent;
+  color: var(--mn-fg);
+  font-weight: 600;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.mn-design-annotations-panel__filter {
+  max-width: 90px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-sm, 4px);
+  background: var(--mn-surface-1);
+  color: var(--mn-fg);
+  font-family: inherit;
+  font-size: 0.75rem;
+}
+
+.mn-design-annotations-panel__bulk-delete {
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-sm, 4px);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font-family: inherit;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.mn-design-annotations-panel__bulk-delete:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.mn-design-annotations-panel__body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.mn-design-annotations-panel__empty {
+  padding: 12px 8px;
+  color: var(--mn-fg-muted);
+}
+
+.mn-design-annotations-panel__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 4px;
+  border-radius: var(--mn-radius-sm, 4px);
+}
+
+.mn-design-annotations-panel__row:hover {
+  background: var(--mn-surface-3, rgba(127, 127, 127, 0.15));
+}
+
+.mn-design-annotations-panel__row-kind {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: capitalize;
+}
+
+.mn-design-annotations-panel__row-badge {
+  padding: 1px 6px;
+  border-radius: var(--mn-radius-sm, 4px);
+  background: var(--mn-warn-soft, rgba(217, 119, 6, 0.18));
+  color: var(--mn-warn, #d97706);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.mn-design-annotations-panel__row-highlight,
+.mn-design-annotations-panel__link-chip {
+  border: none;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 2px;
+}
+
+.mn-design-annotations-panel__row-highlight:hover,
+.mn-design-annotations-panel__link-chip:hover {
+  color: var(--mn-accent);
+}
