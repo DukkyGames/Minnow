@@ -4,14 +4,25 @@
  * Avoids fragile && chains under concurrently on Windows.
  */
 
-import { spawnElectronShell } from './spawn-electron.mjs';
+import { ensureElectronBuild, spawnElectronShell } from './spawn-electron.mjs';
 import { waitForMinnowDev } from './wait-for-minnow-dev.mjs';
+import { resolveMinnowPort } from '../server/constants/minnow-port.js';
 
 async function main() {
-  const { origin, port } = await waitForMinnowDev();
+  const preferredPort = resolveMinnowPort();
+  console.log(`[electron:dev] Waiting for Minnow dev server near port ${preferredPort}…`);
+
+  // Compile while Vite cold-starts so the window opens sooner once the server is up.
+  const buildPromise = ensureElectronBuild();
+
+  const { origin, port } = await waitForMinnowDev({
+    preferredPort,
+    logLabel: '[electron:dev]',
+  });
+  await buildPromise;
+
   const devUrl = `${origin}/`;
   console.log(`[electron:dev] Minnow dev server ready at ${devUrl}`);
-
   console.log('[electron:dev] Launching Electron…');
   const child = await spawnElectronShell({
     port,
