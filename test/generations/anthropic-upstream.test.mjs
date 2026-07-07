@@ -111,6 +111,42 @@ describe('pumpAnthropicUpstream', () => {
     assert.ok(emitted.endsWith('data: [DONE]\n\n'));
   });
 
+  test('streaming path surfaces AI SDK error stream parts as fatal', async () => {
+    const streamText = mock.fn(() => ({
+      fullStream: (async function* () {
+        yield { type: 'start' };
+        yield { type: 'error', error: new Error('Invalid prompt') };
+      })(),
+    }));
+
+    __setAnthropicPumpMocksForTests({
+      streamText,
+      buildAnthropicProvider: fakeAnthropicProvider,
+    });
+
+    const state = createGenerationState({
+      providerId: CANDIDATE.providerId,
+      body: {
+        model: CANDIDATE.modelId,
+        stream: true,
+        messages: [{ role: 'user', content: 'Hi' }],
+      },
+    });
+    activeStates.push(state);
+
+    const result = await pumpAnthropicUpstream({
+      state,
+      runtime: RUNTIME,
+      candidate: CANDIDATE,
+      ...PUMP_OPTS,
+    });
+
+    assert.equal(result.outcome, 'fatal');
+    assert.equal(result.message, 'Invalid prompt');
+    assert.equal(state.status, 'error');
+    assert.equal(state.errorMessage, 'Invalid prompt');
+  });
+
   test('non-streaming path emits OpenAI chat.completion JSON via appendChunk', async () => {
     const generateText = mock.fn(async () => ({
       text: 'All done',

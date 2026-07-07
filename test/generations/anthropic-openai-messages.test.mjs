@@ -64,7 +64,7 @@ describe('openAiMessagesToCoreMessages', () => {
         type: 'tool-result',
         toolCallId: 'call_1',
         toolName: 'read_file',
-        output: 'file contents',
+        output: { type: 'text', value: 'file contents' },
       },
     ]);
   });

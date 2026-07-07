@@ -156,7 +156,7 @@ function convertMessage(msg, toolNames) {
   if (role === 'tool') {
     const toolCallId = typeof msg.tool_call_id === 'string' ? msg.tool_call_id : '';
     const toolName = toolNames.get(toolCallId) || 'unknown_tool';
-    const output =
+    const outputText =
       typeof msg.content === 'string'
         ? msg.content
         : textFromContent(msg.content) || JSON.stringify(msg.content ?? '');
@@ -168,7 +168,8 @@ function convertMessage(msg, toolNames) {
           type: 'tool-result',
           toolCallId,
           toolName,
-          output,
+          // AI SDK ModelMessage schema requires structured ToolResultOutput, not a raw string.
+          output: { type: 'text', value: outputText },
         },
       ],
     };

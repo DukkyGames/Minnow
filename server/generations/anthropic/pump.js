@@ -249,6 +249,11 @@ export async function pumpAnthropicUpstream({
 
         armIdleTimeout();
 
+        if (part.type === 'error') {
+          const streamErr = part.error;
+          throw streamErr instanceof Error ? streamErr : new Error(String(streamErr));
+        }
+
         if (part.type === 'finish') {
           lastUsage = part.totalUsage;
           lastFinishReason = part.finishReason;
