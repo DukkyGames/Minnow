@@ -75,7 +75,11 @@ export function sanitizeAnthropicGatewayInputSchema(schema) {
   delete record.$schema;
   delete record.$id;
   delete record.$defs;
+  delete record.$ref;
+  delete record.$comment;
   delete record.definitions;
+  // Console/Bedrock upstreams reject additionalProperties even when false.
+  delete record.additionalProperties;
   delete record.maxItems;
   delete record.minLength;
   delete record.maxLength;

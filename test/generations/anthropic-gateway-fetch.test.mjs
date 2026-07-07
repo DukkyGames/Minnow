@@ -41,7 +41,11 @@ describe('sanitizeAnthropicGatewayRequestBody', () => {
         {
           name: 'noop',
           strict: true,
-          input_schema: { $schema: 'http://json-schema.org/draft-07/schema#', type: 'object' },
+          input_schema: {
+            $schema: 'http://json-schema.org/draft-07/schema#',
+            type: 'object',
+            additionalProperties: false,
+          },
         },
       ],
     });
@@ -49,6 +53,7 @@ describe('sanitizeAnthropicGatewayRequestBody', () => {
     assert.equal(sanitized.output_config, undefined);
     assert.deepEqual(sanitized.tool_choice, { type: 'auto' });
     assert.deepEqual(sanitized.tools, [{ name: 'noop', input_schema: { type: 'object' } }]);
+    assert.equal(JSON.stringify(sanitized.tools).includes('additionalProperties'), false);
   });
 });
 
@@ -101,6 +106,44 @@ describe('sanitizeAnthropicGatewayInputSchema', () => {
           items: { type: 'string' },
         },
       },
+    });
+  });
+
+  test('strips additionalProperties from nested object schemas', () => {
+    const sanitized = sanitizeAnthropicGatewayInputSchema({
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        questions: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              id: { type: 'string' },
+            },
+            required: ['id'],
+          },
+        },
+      },
+      required: ['questions'],
+    });
+
+    assert.deepEqual(sanitized, {
+      type: 'object',
+      properties: {
+        questions: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+            },
+            required: ['id'],
+          },
+        },
+      },
+      required: ['questions'],
     });
   });
 });

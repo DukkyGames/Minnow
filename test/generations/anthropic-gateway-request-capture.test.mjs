@@ -5,7 +5,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { streamText } from 'ai';
-import { BUILT_IN_TOOLS } from '../../src/tools/definitions.ts';
 import { buildAnthropicProvider } from '../../server/generations/anthropic/provider-runtime.js';
 import { mapOpenAiTools } from '../../server/generations/anthropic/openai-tools.js';
 import { openAiMessagesToCoreMessages } from '../../server/generations/anthropic/openai-to-core-messages.js';
@@ -19,6 +18,72 @@ const RUNTIME = {
   paths: { chatCompletionsPath: '/zen/v1/messages' },
   secrets: { bearerToken: 'test-token' },
 };
+
+/** Representative built-in tools including ask_question nested additionalProperties. */
+const SAMPLE_TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'get_datetime',
+      description: 'Return the current date and time.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'grep',
+      description: 'Search file contents under a workspace directory.',
+      parameters: {
+        type: 'object',
+        properties: {
+          pattern: { type: 'string', description: 'Regex pattern' },
+          path: { type: 'string', description: 'Directory to search' },
+        },
+        required: ['pattern'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'ask_question',
+      description: 'Ask structured multiple-choice questions.',
+      parameters: {
+        type: 'object',
+        properties: {
+          questions: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 10,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                id: { type: 'string' },
+                prompt: { type: 'string' },
+                options: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      id: { type: 'string' },
+                      label: { type: 'string' },
+                    },
+                    required: ['id', 'label'],
+                  },
+                },
+              },
+              required: ['id', 'prompt', 'options'],
+            },
+          },
+        },
+        required: ['questions'],
+      },
+    },
+  },
+];
 
 describe('anthropic gateway outbound request capture', () => {
   test('builds sanitized tool request without gateway-rejected fields', async () => {
@@ -37,9 +102,9 @@ describe('anthropic gateway outbound request capture', () => {
     globalThis.fetch = fetchImpl;
 
     try {
-      const tools = BUILT_IN_TOOLS.map((t) => t.definition);
+      const tools = SAMPLE_TOOLS;
       let body = {
-        model: 'claude-opus-4-6',
+        model: 'claude-opus-4-7',
         stream: true,
         max_tokens: 32768,
         messages: [{ role: 'user', content: 'list files' }],
@@ -52,7 +117,7 @@ describe('anthropic gateway outbound request capture', () => {
 
       body = adjustAnthropicRequestForGateway(
         'https://opencode.ai',
-        adjustAnthropicThinkingForToolHistory('claude-opus-4-6', body),
+        adjustAnthropicThinkingForToolHistory('claude-opus-4-7', body),
       );
 
       const anthropic = buildAnthropicProvider(RUNTIME);
@@ -60,7 +125,7 @@ describe('anthropic gateway outbound request capture', () => {
       const messages = openAiMessagesToCoreMessages(body.messages);
 
       const result = streamText({
-        model: anthropic('claude-opus-4-6'),
+        model: anthropic('claude-opus-4-7'),
         messages,
         tools: mappedTools,
         toolChoice: 'auto',
@@ -95,13 +160,10 @@ describe('anthropic gateway outbound request capture', () => {
         assert.equal(schemaJson.includes('$schema'), false);
         assert.equal(schemaJson.includes('$id'), false);
         assert.equal(schemaJson.includes('maxItems'), false);
+        assert.equal(schemaJson.includes('additionalProperties'), false);
       }
 
       assert.deepEqual(capturedBody.tool_choice, { type: 'auto' });
-
-      // Log for debugging when this test is run in isolation
-      console.log('tool_choice', JSON.stringify(capturedBody.tool_choice));
-      console.log('beta header', betaHeader || '(none)');
     } finally {
       globalThis.fetch = originalFetch;
     }
