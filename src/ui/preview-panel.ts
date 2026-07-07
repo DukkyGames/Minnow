@@ -16,8 +16,10 @@ import {
   hidePreviewSplit,
   resetRightSplitForCodeEntry,
   showPreviewSplit,
+  showViewerSplit,
 } from './file-layout';
 import { dismissFileViewerForPreview } from './file-viewer';
+import { listViewerTabs } from './file-viewer-tab-store';
 import { detectEmbedBlockedFrame } from './preview-embed-detect';
 import {
   isFullscreenOverlayObscuringWorkspace,
@@ -705,16 +707,7 @@ async function openNewPreviewTabUi(): Promise<void> {
 
 export async function closePreviewTabUi(tabId: string): Promise<void> {
   const tabs = listPreviewTabs();
-  if (tabs.length <= 1) {
-    updatePreviewTabSource(tabId, null);
-    if (usesElectronPreview()) {
-      await clearPreviewGuest(tabId);
-    } else {
-      clearPreviewFrame(tabId);
-    }
-    syncPreviewChromeFromState();
-    return;
-  }
+  const isLastTab = tabs.length <= 1;
 
   if (usesElectronPreview()) {
     const api = getPreviewApi();
@@ -727,6 +720,23 @@ export async function closePreviewTabUi(tabId: string): Promise<void> {
   destroyPreviewFrame(tabId);
   clearLoadedTabGuest(tabId);
   closePreviewTab(tabId);
+
+  if (isLastTab) {
+    cancelDeferredPreviewLoad();
+    hidePreviewStatus();
+    setPreviewLoading(false);
+    if (listViewerTabs().length > 0) {
+      showViewerSplit();
+    } else {
+      if (usesElectronPreview()) {
+        await hidePreviewHost();
+      }
+      hidePreviewSplit();
+    }
+    scheduleElectronPreviewHostVisibilitySync();
+    return;
+  }
+
   const nextId = getActivePreviewTabId();
   if (nextId) {
     await activatePreviewTabGuest(nextId);
