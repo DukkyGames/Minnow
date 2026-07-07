@@ -325,7 +325,7 @@ export function wireDesktopWorkspaceRail(): void {
     tab.addEventListener('click', () => handleTabClick(def.tab));
   }
 
-  const segmentGroup = document.querySelector('.mn-os-workspace-rail-drawer-segments');
+  const segmentGroup = document.querySelector<HTMLElement>('.mn-os-workspace-rail-drawer-segments');
   if (segmentGroup && segmentGroup.dataset.bound !== '1') {
     segmentGroup.dataset.bound = '1';
     for (const def of TAB_DEFS) {

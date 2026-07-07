@@ -57,9 +57,9 @@ const loadingDirs = new Set<string>();
 
 /** Git status letters keyed by repo-relative path (MIN-198 file tree badges). */
 let gitStatusMap = new Map<string, string>();
-let gitStatusPollTimer: number | undefined;
+let gitStatusPollTimer: ReturnType<typeof setTimeout> | undefined;
 let gitStatusPollCwd: string | undefined;
-let gitStatusPollDebounce: number | undefined;
+let gitStatusPollDebounce: ReturnType<typeof setTimeout> | undefined;
 let gitStatusPollInFlight = false;
 
 /** Update git badge map and re-render visible file rows. */
@@ -69,7 +69,7 @@ export function setFileTreeGitStatus(map: Map<string, string>): void {
 }
 
 /** Git poll timers must not block `node --test` process exit (happy-dom uses Node timers). */
-function unrefPollTimerIfSupported(timer: ReturnType<typeof setInterval> | undefined): void {
+function unrefPollTimerIfSupported(timer: ReturnType<typeof setTimeout> | undefined): void {
   if (timer !== undefined && typeof timer === 'object' && 'unref' in timer) {
     (timer as NodeJS.Timeout).unref();
   }
@@ -93,12 +93,12 @@ export function startFileTreeGitStatusPoll(cwd?: string): void {
   if (gitStatusPollDebounce !== undefined) {
     clearTimeout(gitStatusPollDebounce);
   }
-  gitStatusPollDebounce = window.setTimeout(() => {
+  gitStatusPollDebounce = setTimeout(() => {
     gitStatusPollDebounce = undefined;
     void pollFileTreeGitStatus();
   }, 200);
   unrefPollTimerIfSupported(gitStatusPollDebounce);
-  gitStatusPollTimer = window.setInterval(() => {
+  gitStatusPollTimer = setInterval(() => {
     void pollFileTreeGitStatus();
   }, 5000);
   unrefPollTimerIfSupported(gitStatusPollTimer);
