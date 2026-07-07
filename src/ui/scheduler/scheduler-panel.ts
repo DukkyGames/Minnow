@@ -23,6 +23,7 @@ import {
 } from '../../scheduler/run-summary';
 import { findChatById, loadSessionsFromStorage, sessionState } from '../../state/sessions';
 import { setWorkspacePath } from '../../config/workspace-api';
+import { confirmAndStopBoardsForWorkspaceSwitch, dismissBoardViewOutsideWorkspace } from '../workspace-switch-guard';
 import { getWorkspacePath, setWorkspaceFromServer } from '../../state/workspace';
 import { launchApp } from '../../os/router';
 import { switchChat, applyWorkspaceScopedSession } from '../sidebar';
@@ -251,8 +252,13 @@ export async function renderSchedulerPanel(
     const chatWorkspace = chat.workspacePath?.trim();
     if (chatWorkspace && chatWorkspace !== getWorkspacePath()) {
       try {
+        const allowed = await confirmAndStopBoardsForWorkspaceSwitch(chatWorkspace);
+        if (!allowed) {
+          return;
+        }
         const info = await setWorkspacePath(chatWorkspace);
         setWorkspaceFromServer(info);
+        await dismissBoardViewOutsideWorkspace(chatWorkspace);
         applyWorkspaceScopedSession(chatWorkspace);
       } catch (err) {
         notify('err', err instanceof Error ? err.message : String(err));
