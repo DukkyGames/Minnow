@@ -307,10 +307,13 @@
 
 /* Full-width transcript (outputs panel takes the right edge). */
 .chat-app-scroll .msg,
-.chat-app-scroll .tool-call-msg,
 .chat-app-scroll .sub-agent-card {
   max-width: 100%;
   width: 100%;
+}
+
+.chat-app-scroll .tool-call-msg {
+  max-width: min(var(--chat-tool-call-max), 100%);
 }
 
 .chat-app-scroll .msg-bubble.msg-bubble--md {
