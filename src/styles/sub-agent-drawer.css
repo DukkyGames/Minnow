@@ -3,9 +3,9 @@
  */
 
 .sub-agent-card {
-  /* Match .msg / .tool-call-msg inset inside .chat-area (padding + 720px column). */
+  /* Match .msg / .tool-call-msg inset inside .chat-area (padding + column max). */
   align-self: flex-start;
-  max-width: min(720px, 100%);
+  max-width: min(var(--chat-msg-max), 100%);
   width: 100%;
   margin: 0;
   padding: 12px 14px;

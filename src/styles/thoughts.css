@@ -15,7 +15,7 @@
 .thoughts-panel-wrap {
   align-self: flex-start;
   margin-bottom: 6px;
-  max-width: min(720px, 100%);
+  max-width: min(var(--chat-msg-max), 100%);
 }
 
 .thoughts-toggle {

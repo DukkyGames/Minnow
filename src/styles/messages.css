@@ -20,7 +20,7 @@
   scroll-behavior: smooth;
 }
 
-/* Init split: center the 720px transcript column in the wide lower pane */
+/* Init split: center the transcript column in the wide lower pane */
 .board-init-split__chat {
   align-items: center;
   scroll-padding-bottom: 12px;
@@ -132,7 +132,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-width: min(720px, 100%);
+  max-width: min(var(--chat-msg-max), 100%);
   width: 100%;
   animation: fadeUp 0.22s var(--ease-out);
 }
@@ -365,7 +365,7 @@
 /* Assistant markdown: normal paragraph flow (user bubbles keep pre-wrap) */
 .msg-bubble.msg-bubble--md {
   white-space: normal;
-  max-width: min(720px, 72ch);
+  max-width: min(var(--chat-msg-max), var(--chat-msg-md-ch));
 }
 
 .msg-bubble.msg-bubble--md > *:first-child {
@@ -540,11 +540,10 @@
 .stat-chip.y { color: var(--mn-warning); border-color: color-mix(in srgb, var(--mn-warning) 35%, transparent); }
 .stat-chip.r { color: var(--mn-danger); border-color: color-mix(in srgb, var(--mn-danger) 35%, transparent); }
 
-/* Tool call / result bubbles (SA-8) */
+/* Tool call / result bubbles (SA-8) — narrower than prose messages */
 .tool-call-msg {
   align-self: flex-start;
-  max-width: min(720px, 100%);
-  width: 100%;
+  max-width: min(var(--chat-tool-call-max), 100%);
   animation: fadeUp 0.22s var(--ease-out);
 }
 

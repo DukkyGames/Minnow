@@ -721,6 +721,8 @@
     var(--os-composer-dock-bottom) + var(--os-composer-row-height) + var(--os-composer-dock-gap)
   );
   --os-chat-transcript-bottom: var(--os-chat-composer-reserve);
+  --os-chat-shell-max: 1040px;
+  --os-chat-column-max: 960px;
   --os-chat-message-gap: 14px;
   /* Research dock adds Library row above the composer input */
   --os-research-toolbar-row: 1.75rem;
@@ -766,7 +768,7 @@
 .mn-os-desktop-chat {
   flex: 1;
   width: 100%;
-  max-width: 920px;
+  max-width: var(--os-chat-shell-max);
   display: flex;
   gap: 0;
   min-height: 0;
@@ -901,7 +903,7 @@
 /* Centered transcript column — mirrors .chat-area rhythm (impeccable 8efe228a, variant 1) */
 .mn-os-chat-col {
   width: 100%;
-  max-width: min(760px, 100%);
+  max-width: min(var(--os-chat-column-max), 100%);
   margin-inline: auto;
   display: flex;
   flex-direction: column;
@@ -910,23 +912,27 @@
 }
 
 .mn-os-chat-transcript .msg,
-.mn-os-chat-transcript .tool-call-msg,
 .mn-os-chat-transcript .sub-agent-card {
   max-width: 100%;
-  width: 100%;
 }
 
+.mn-os-chat-transcript .tool-call-msg {
+  max-width: min(var(--chat-tool-call-max), 100%);
+  align-self: flex-start;
+}
+
+/* Desktop chat: content-sized bubbles that can grow up to the column cap */
 .mn-os-chat-transcript .msg-bubble.msg-bubble--md {
-  max-width: min(720px, 72ch);
+  max-width: min(var(--os-chat-column-max), var(--chat-msg-md-ch), 100%);
+}
+
+.mn-os-chat-transcript .msg.user .msg-bubble {
+  max-width: min(85%, var(--os-chat-column-max), 42rem);
 }
 
 .mn-os-chat-transcript .thought-stage,
 .mn-os-chat-transcript .thoughts-panel-wrap {
   max-width: 100%;
-}
-
-.mn-os-chat-transcript .msg.user .msg-bubble {
-  max-width: min(85%, 42rem);
 }
 
 .mn-os-chat-empty {
@@ -940,7 +946,7 @@
   left: 50%;
   bottom: var(--os-composer-dock-bottom);
   transform: translateX(-50%);
-  width: min(760px, calc(100% - 48px));
+  width: min(var(--os-chat-column-max), calc(100% - 48px));
   z-index: 12;
   pointer-events: none;
   opacity: 0;
@@ -1204,7 +1210,7 @@
   inset: 0;
   flex: none;
   width: 100%;
-  max-width: 920px;
+  max-width: var(--os-chat-shell-max);
   margin-inline: auto;
   overflow: hidden;
   visibility: hidden;
@@ -1783,7 +1789,7 @@
 
 .mn-os-chat-variant--centered > .mn-os-chat-transcript .mn-os-chat-col {
   width: 100%;
-  max-width: min(760px, 100%);
+  max-width: min(var(--os-chat-column-max), 100%);
   margin-inline: auto;
 }
 
@@ -1841,7 +1847,7 @@
 }
 
 .mn-os-chat-variant--bleed > .mn-os-chat-transcript .mn-os-chat-col {
-  max-width: min(760px, 100%);
+  max-width: min(var(--os-chat-column-max), 100%);
   margin-inline: auto;
 }
 
