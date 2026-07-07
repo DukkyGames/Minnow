@@ -105,6 +105,7 @@ export const TOOL_GROUP_IDS = {
   calendar: ['manage_calendar'],
   reef: ['check_reef_widget'],
   impeccable: ['load_impeccable_context', 'run_impeccable'],
+  todo: ['todo_write'],
 } as const;
 
 export type ToolGroupId = keyof typeof TOOL_GROUP_IDS;
@@ -164,6 +165,7 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'brain',
     'recall',
     'impeccable',
+    'todo',
   ],
   plan: [
     'util-basic',
@@ -222,6 +224,7 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'brain',
     'recall',
     'impeccable',
+    'todo',
   ],
 };
 
