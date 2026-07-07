@@ -63,7 +63,7 @@ function chipLabel(attachment: Attachment): string {
   if (attachment.kind === 'workspace') {
     return attachment.workspacePath ?? attachment.name;
   }
-  if (attachment.kind === 'codeRef') {
+  if (attachment.kind === 'codeRef' || attachment.kind === 'elementRef') {
     return attachment.name;
   }
   if (attachment.largeTextWarning) {
@@ -134,6 +134,21 @@ function createAttachChip(attachment: Attachment): HTMLElement {
       });
     });
     chip.appendChild(link);
+  }
+
+  if (attachment.kind === 'elementRef') {
+    chip.classList.add('attach-chip--element-ref');
+    if (attachment.croppedDataUrl) {
+      chip.classList.add('attach-chip--image');
+      const thumb = document.createElement('img');
+      thumb.className = 'attach-chip-thumb';
+      thumb.src = attachment.croppedDataUrl;
+      thumb.alt = '';
+      chip.appendChild(thumb);
+    }
+    chip.title = attachment.selector
+      ? `${attachment.selector} — included when you send`
+      : 'Element reference — included when you send';
   }
 
   if (attachment.kind === 'error') {

@@ -3,7 +3,8 @@
  */
 
 import type { Attachment } from '../attachments/types';
-import { parseHistoryUserContent } from '../chat/user-message-parts';
+import { formatElementRefLabel } from '../attachments/element-ref-format';
+import { parseHistoryUserContent, type HistoryElementRefPart } from '../chat/user-message-parts';
 import { stripSkillTagFromHistory } from '../skills/history-content';
 import { createCodeRefLinkButton } from './code-ref-link';
 
@@ -20,6 +21,35 @@ function findLiveImageDataUrl(
   if (!liveAttachments?.length) return undefined;
   const hit = liveAttachments.find((a) => a.kind === 'image' && a.name === name);
   return hit?.dataUrl;
+}
+
+function findLiveElementRefDataUrl(
+  name: string,
+  liveAttachments?: Attachment[],
+): string | undefined {
+  if (!liveAttachments?.length) return undefined;
+  const hit = liveAttachments.find((a) => a.kind === 'elementRef' && a.name === name);
+  return hit?.croppedDataUrl;
+}
+
+/** Multi-line "open" body for an element-ref chip (selector, styles, outerHTML preview). */
+function elementRefSummaryText(ref: HistoryElementRefPart): string {
+  const lines: string[] = [
+    `Selector: ${ref.selector}`,
+    ...(ref.uid != null ? [`data-mn-uid: ${ref.uid}`] : []),
+    `Tag: ${ref.tagName}`,
+    ...(ref.classList.length ? [`Classes: ${ref.classList.join(' ')}`] : []),
+    ...(ref.rect
+      ? [
+          `Rect: ${Math.round(ref.rect.x)},${Math.round(ref.rect.y)} ${Math.round(ref.rect.width)}×${Math.round(ref.rect.height)}`,
+        ]
+      : []),
+    `Page: ${ref.pageUrl}`,
+    `Styles: ${ref.stylesDigest}`,
+    '',
+    ref.outerHtmlPreview,
+  ];
+  return lines.join('\n');
 }
 
 function openFilePart(name: string, body: string): void {
@@ -86,10 +116,19 @@ export function renderUserMessageBubble(
     bubble.appendChild(textEl);
   }
 
+  // The crop for an elementRef is co-emitted as its own `[image: name]` placeholder
+  // (same multimodal pipeline as any other image); skip rendering it a second time
+  // as a bare image chip once the elementRef chip below already shows it.
+  const elementRefImageNames = new Set(
+    parsed.elementRefs.map((ref) => ref.imageName).filter((name): name is string => Boolean(name)),
+  );
+  const visibleImages = parsed.images.filter((image) => !elementRefImageNames.has(image.name));
+
   const hasChips =
     parsed.files.length > 0 ||
-    parsed.images.length > 0 ||
-    parsed.codeRefs.length > 0;
+    visibleImages.length > 0 ||
+    parsed.codeRefs.length > 0 ||
+    parsed.elementRefs.length > 0;
   if (!hasChips) {
     if (!parsed.text) {
       bubble.textContent = displaySource.trim() || historyContent;
@@ -127,7 +166,7 @@ export function renderUserMessageBubble(
     );
   }
 
-  for (const image of parsed.images) {
+  for (const image of visibleImages) {
     const dataUrl = findLiveImageDataUrl(image.name, live);
     row.appendChild(
       createMessageAttachChip(image.name, {
@@ -146,7 +185,19 @@ export function renderUserMessageBubble(
     );
   }
 
-  if (parsed.files.length > 0 || parsed.images.length > 0) {
+  for (const ref of parsed.elementRefs) {
+    const label = formatElementRefLabel(ref.selector, ref.pageUrl);
+    const dataUrl = ref.imageName ? findLiveElementRefDataUrl(ref.imageName, live) : undefined;
+    row.appendChild(
+      createMessageAttachChip(label, {
+        kind: 'image',
+        dataUrl,
+        onOpen: () => openFilePart(label, elementRefSummaryText(ref)),
+      }),
+    );
+  }
+
+  if (parsed.files.length > 0 || visibleImages.length > 0 || parsed.elementRefs.length > 0) {
     bubble.appendChild(row);
   }
 }

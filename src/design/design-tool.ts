@@ -5,7 +5,17 @@
  * pointer capture, and dispatch live in design-mode.ts.
  */
 
-import type { AnnotationOverlay } from './overlay';
+import type { AnnotationOverlay, OverlayMarker } from './overlay';
+import {
+  createElementPicker,
+  createPickerTransport,
+  uidFallbackSelector,
+  type ElementPicker,
+  type PickedElement,
+} from './element-picker';
+import { captureRegion } from './region-capture';
+import { addElementRefToComposer } from '../attachments/element-ref';
+import { getFilePanelState } from '../state/file-panel';
 
 /** Shared context handed to a tool when it becomes the armed tool. */
 export interface DesignToolContext {
@@ -64,6 +74,89 @@ export function listDesignTools(): DesignTool[] {
 /** Test helper — clear all registered tools between cases. */
 export function resetDesignToolRegistryForTests(): void {
   registry.clear();
+}
+
+/** Page the current preview is showing: workspace path or URL (elementRef context). */
+function currentPreviewPageRef(): string {
+  const source = getFilePanelState().previewSource;
+  if (!source) return '';
+  return source.kind === 'workspace' ? source.path : source.url;
+}
+
+/**
+ * Real Select tool (MIN-366): arms the P0 element picker (element-picker.ts), captures a
+ * DPR-correct crop per pick via region-capture.ts, and pushes an `elementRef` composer chip
+ * (attachments/element-ref.ts). Picks accumulate as numbered overlay markers with pinned crop
+ * thumbnails; dedupe by page + uid is handled by addElementRefToComposer itself, so re-picking
+ * the same element (shift-click or not) just re-focuses the existing chip.
+ */
+export function createSelectDesignTool(): DesignTool {
+  let ctx: DesignToolContext | null = null;
+  let picker: ElementPicker | null = null;
+  let markers: OverlayMarker[] = [];
+
+  function resetSelection(): void {
+    markers = [];
+    ctx?.overlay.clear();
+  }
+
+  async function handlePick(picked: PickedElement): Promise<void> {
+    if (!ctx) return;
+    const selector =
+      picked.cssSelector || (picked.uid != null ? uidFallbackSelector(picked.uid) : '');
+    if (!selector) return;
+
+    const captured = await captureRegion({
+      selector,
+      boundingRect: picked.boundingRect,
+      devicePixelRatio: picked.devicePixelRatio,
+    });
+
+    const attachment = addElementRefToComposer({
+      selector,
+      uid: picked.uid,
+      pageUrl: currentPreviewPageRef(),
+      tagName: picked.tagName,
+      classList: picked.classList,
+      outerHtmlPreview: picked.outerHTMLPreview,
+      rect: picked.boundingRect,
+      stylesDigest: picked.stylesDigest,
+      croppedDataUrl: captured.dataUrl,
+    });
+    if (!attachment || !ctx) return;
+
+    const markerId = attachment.id;
+    if (!markers.some((marker) => marker.id === markerId)) {
+      const rect = ctx.overlay.mapGuestRect(picked.boundingRect, picked.devicePixelRatio);
+      markers.push({ id: markerId, index: markers.length + 1, rect });
+    }
+    ctx.overlay.render(markers);
+    if (captured.dataUrl) ctx.overlay.pinCaptureToMarker(markerId, captured);
+  }
+
+  return {
+    id: 'select',
+    label: 'Select',
+    arm(context) {
+      ctx = context;
+      resetSelection();
+      picker = createElementPicker({
+        transport: createPickerTransport(),
+        onPick: (picked) => void handlePick(picked),
+      });
+      void picker.enable().catch(() => {});
+    },
+    disarm() {
+      void picker?.disable();
+      picker?.destroy();
+      picker = null;
+      resetSelection();
+      ctx = null;
+    },
+    render() {
+      ctx?.overlay.render(markers);
+    },
+  };
 }
 
 /** Ids the built-in tool strip renders buttons for; P3/P4 implement the real behavior. */
