@@ -6,10 +6,11 @@ import { DEFAULT_EDITOR_AI_COMPLETION } from '../../src/config/editor-ai-complet
 import { createEmptyChatObject, setSessionStateForTests } from '../../src/state/sessions.ts';
 import {
   buildGitCommitMessagePrompt,
-  extractCommitMessageFromModelOutput,
+  normalizeCommitMessageOutput,
   resolveCommitMessageDisplayText,
   resolveGitCommitMessageBinding,
   sanitizeCommitMessage,
+  stripReasoningFraming,
   stripThinkingFromCommitOutput,
   truncateStagedPatch,
 } from '../../src/ui/git-commit-message-client.ts';
@@ -70,35 +71,34 @@ describe('stripThinkingFromCommitOutput', () => {
     const raw = '<thinking>still analyzing the diff';
     assert.equal(stripThinkingFromCommitOutput(raw), '');
   });
+});
 
-  test('returns empty for reasoning monologue without commit line', () => {
-    const raw = 'Let me analyze the diff and figure out the right message.';
-    assert.equal(extractCommitMessageFromModelOutput(raw), '');
+describe('stripReasoningFraming', () => {
+  test('removes leading reasoning but keeps plain commit text', () => {
+    const raw = 'Let me read the diff.\n\nFix git auto commit message generation';
+    assert.equal(
+      stripReasoningFraming(raw),
+      'Fix git auto commit message generation',
+    );
+  });
+
+  test('removes trailing meta commentary', () => {
+    const raw = 'feat(ui): add generator\n\nLooks good.';
+    assert.equal(stripReasoningFraming(raw), 'feat(ui): add generator');
   });
 });
 
-describe('extractCommitMessageFromModelOutput', () => {
-  test('extracts subject and body from mixed reasoning output', () => {
-    const raw =
-      'Let me read the diff.\n\nfeat(ui): add git commit generator\n\nWire sparkles button to generations API.';
+describe('normalizeCommitMessageOutput', () => {
+  test('accepts plain commit text without conventional prefix', () => {
     assert.equal(
-      extractCommitMessageFromModelOutput(raw),
-      'feat(ui): add git commit generator\n\nWire sparkles button to generations API.',
+      normalizeCommitMessageOutput('Fix git auto commit message generation'),
+      'Fix git auto commit message generation',
     );
   });
 
-  test('drops trailing meta commentary after commit body', () => {
-    const raw =
-      'The diff adds a new panel.\n\nfeat(ui): add git commit generator\n\nLooks good.';
+  test('returns empty for reasoning-only output', () => {
     assert.equal(
-      extractCommitMessageFromModelOutput(raw),
-      'feat(ui): add git commit generator',
-    );
-  });
-
-  test('returns empty when no conventional commit line exists', () => {
-    assert.equal(
-      extractCommitMessageFromModelOutput('I need to summarize these file changes first.'),
+      normalizeCommitMessageOutput('Let me analyze the staged diff carefully.'),
       '',
     );
   });
@@ -121,21 +121,21 @@ describe('resolveCommitMessageDisplayText', () => {
     );
   });
 
-  test('extracts conventional commit line from reasoning analysis', () => {
+  test('extracts commit message from reasoning analysis without conventional prefix', () => {
     const reasoning =
-      'The diff adds a new panel.\n\nfeat(ui): add git commit generator\n\nLooks good.';
+      'The diff adds a new panel.\n\nFix git commit message generation\n\nLooks good.';
     assert.equal(
       resolveCommitMessageDisplayText('', reasoning, { reasoningFallback: true }),
-      'feat(ui): add git commit generator',
+      'Fix git commit message generation',
     );
   });
 
-  test('does not surface raw reasoning when no commit line is present', () => {
+  test('matches main-branch content handling during streaming', () => {
     assert.equal(
-      resolveCommitMessageDisplayText('', 'Let me analyze the staged diff carefully.', {
-        reasoningFallback: true,
+      resolveCommitMessageDisplayText('feat: ship it', 'ignored reasoning', {
+        reasoningFallback: false,
       }),
-      '',
+      'feat: ship it',
     );
   });
 

@@ -14,6 +14,7 @@ import { extractInlineThinkingFromContent } from '../api/inline-thinking';
 import { thinkingToCompletionBody } from '../agents/thinking-to-body';
 import {
   BenchmarkStreamReasoningAccumulator,
+  resolveBenchmarkCompletionText,
 } from '../benchmark/stream-text';
 import { StreamingContentAccumulator } from '../api/message-content';
 import { loadEditorAiCompletionConfig, type EditorAiCompletionConfig } from '../config/editor-ai-completion';
@@ -79,13 +80,6 @@ export function buildGitCommitMessagePrompt(
   ];
 }
 
-const COMMIT_TYPE = '(?:feat|fix|docs|style|refactor|test|chore)';
-const CONVENTIONAL_COMMIT_LINE_RE = new RegExp(
-  `^${COMMIT_TYPE}(?:\\([^)]+\\))?:\\s+\\S`,
-  'im',
-);
-const CONVENTIONAL_COMMIT_PREFIX_RE = new RegExp(`^${COMMIT_TYPE}(?:\\([^)]+\\))?:`, 'i');
-
 /** Lines that are model reasoning / meta commentary, not commit body text. */
 const REASONING_LINE_RE =
   /^\s*(?:the user |i need |i should |i will |let me |thinking(?:\s+process)?\s*:|looking at |based on |(?:okay|alright|hmm|right|so|well|first|next|now)[,.]?\s+(?:the|i|let|this|that)|looks good|that should|this looks|the diff |analy(?:s|z)(?:e|ing)|i(?:'ll| will) (?:use|write|draft|create))/i;
@@ -125,63 +119,65 @@ export function stripThinkingFromCommitOutput(raw: string): string {
     .trim();
 }
 
-/**
- * Pull a conventional commit subject (+ optional body) out of model output.
- * Never returns raw reasoning monologue.
- */
-export function extractCommitMessageFromModelOutput(raw: string): string {
+/** Trim leading/trailing reasoning paragraphs while keeping the commit message body. */
+export function stripReasoningFraming(text: string): string {
+  const lines = text.split('\n');
+  let start = 0;
+  while (start < lines.length) {
+    const trimmed = lines[start].trim();
+    if (!trimmed) {
+      start += 1;
+      continue;
+    }
+    if (looksLikeReasoningLine(trimmed)) {
+      start += 1;
+      continue;
+    }
+    break;
+  }
+
+  let end = lines.length;
+  while (end > start) {
+    const trimmed = lines[end - 1].trim();
+    if (!trimmed) {
+      end -= 1;
+      continue;
+    }
+    if (
+      looksLikeReasoningLine(trimmed) ||
+      /^\s*(?:looks good|done|perfect|great)\.?\s*$/i.test(trimmed)
+    ) {
+      end -= 1;
+      continue;
+    }
+    break;
+  }
+
+  return lines.slice(start, end).join('\n').trim();
+}
+
+/** Normalize stripped model text into a commit message (main-branch behavior + light cleanup). */
+export function normalizeCommitMessageOutput(raw: string): string {
   const stripped = stripThinkingFromCommitOutput(raw);
   if (!stripped) return '';
-
-  const lines = stripped.split('\n');
-
-  let subjectIdx = -1;
-  for (let i = lines.length - 1; i >= 0; i -= 1) {
-    const trimmed = lines[i].trim();
-    if (!trimmed || looksLikeReasoningLine(trimmed)) continue;
-    if (CONVENTIONAL_COMMIT_LINE_RE.test(trimmed)) {
-      subjectIdx = i;
-      break;
-    }
-  }
-
-  if (subjectIdx === -1) {
-    for (let i = lines.length - 1; i >= 0; i -= 1) {
-      const trimmed = lines[i].trim();
-      if (!trimmed || looksLikeReasoningLine(trimmed)) continue;
-      if (CONVENTIONAL_COMMIT_PREFIX_RE.test(trimmed)) {
-        subjectIdx = i;
-        break;
-      }
-    }
-  }
-
-  if (subjectIdx === -1) return '';
-
-  const kept: string[] = [];
-  for (let i = subjectIdx; i < lines.length; i += 1) {
-    const trimmed = lines[i].trim();
-    if (i > subjectIdx && looksLikeReasoningLine(trimmed)) break;
-    if (i > subjectIdx && /^\s*(?:looks good|done|perfect|great)\.?\s*$/i.test(trimmed)) break;
-    kept.push(lines[i]);
-  }
-
-  return sanitizeCommitMessage(kept.join('\n'));
+  return sanitizeCommitMessage(stripReasoningFraming(stripped));
 }
 
 /**
- * Prefer main `content`; at stream end fall back to reasoning when prose stayed empty
- * (common on thinking-capable models). Only surfaces extracted commit messages.
+ * Prefer main `content` (same as pre-MIN-347 main). At stream end only, fall back to
+ * reasoning when content stayed empty — common on thinking-capable models.
  */
 export function resolveCommitMessageDisplayText(
   contentText: string,
   reasoningText: string,
   options?: { reasoningFallback?: boolean },
 ): string {
-  const fromContent = extractCommitMessageFromModelOutput(contentText);
+  const fromContent = normalizeCommitMessageOutput(contentText);
   if (fromContent) return fromContent;
   if (!options?.reasoningFallback) return '';
-  return extractCommitMessageFromModelOutput(reasoningText);
+  return normalizeCommitMessageOutput(
+    resolveBenchmarkCompletionText('', reasoningText),
+  );
 }
 
 /** Normalize model output into a plain commit message string. */
