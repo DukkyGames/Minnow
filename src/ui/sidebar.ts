@@ -22,6 +22,7 @@ import { createBoardCategoryIcon } from './board-category-icons';
 import { isChatAppForeground } from './chat-mount';
 import { syncComposerFromStreamingState } from './composer-send';
 import { syncGoalActiveHint } from './goal-active-hint';
+import { syncTodoPanel } from './todo-panel';
 import {
   createEmptyChatObject,
   getActiveChat,
@@ -1162,6 +1163,7 @@ export function switchChat(id: string): void {
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
   syncGoalActiveHint();
+  syncTodoPanel();
   onModelRoutingActiveChatChanged(chat.id);
   void refreshTerminalHistoryForActiveChat();
   syncComposerFromStreamingState();

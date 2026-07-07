@@ -13,6 +13,7 @@ import { setStatus } from './status';
 import { refreshActiveBoardIfMounted } from './orchestrate-board';
 import { syncBackgroundStreamHint } from './composer-stream-hint';
 import { syncGoalActiveHint } from './goal-active-hint';
+import { syncTodoPanel } from './todo-panel';
 import {
   syncComposerFollowUpPlaceholder,
   syncComposerMessageQueue,
@@ -141,6 +142,7 @@ export function syncComposerFromStreamingState(): void {
   syncComposerMessageQueue();
   syncComposerFollowUpPlaceholder(isActiveChatStreaming());
   syncGoalActiveHint();
+  syncTodoPanel();
   refreshActiveBoardIfMounted();
   void import('./composer-run-target').then((m) => m.refreshComposerRunTargetDisabled());
 }

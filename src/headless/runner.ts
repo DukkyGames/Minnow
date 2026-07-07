@@ -341,6 +341,7 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
             {
               modeId,
               workAgentId: workAgentId ?? undefined,
+              chatId: chat.id,
             },
             approvalOpts,
           );

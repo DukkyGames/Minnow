@@ -123,6 +123,7 @@ import {
 } from '../ui/composer-send';
 import { syncComposerMessageQueue } from '../ui/composer-message-queue';
 import { syncGoalActiveHint } from '../ui/goal-active-hint';
+import { syncTodoPanel } from '../ui/todo-panel';
 import {
   clearComposerInput,
   resolveComposerSurface,
@@ -2392,6 +2393,7 @@ export async function sendMessageWithTools(
   syncComposerPinnedSkillFromActiveChat();
   scheduleSaveSessions();
   syncGoalActiveHint();
+  syncTodoPanel();
 
   await runChatTurn({
     chat,
