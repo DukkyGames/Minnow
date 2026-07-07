@@ -324,6 +324,7 @@ describe('preview-electron-visibility', () => {
     rectLeft = 40;
     await syncElectronPreviewHostLayout();
 
-    assert.deepEqual(lastBounds, { x: 40, y: 20, width: 400, height: 300 });
+    assert.deepEqual(lastShowBounds, { x: 40, y: 20, width: 400, height: 300 });
+    assert.equal(lastBounds, null);
   });
 });

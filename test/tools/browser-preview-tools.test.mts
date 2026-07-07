@@ -134,6 +134,43 @@ describe('browser-preview-tools', () => {
     );
   });
 
+  test('browser_list_tabs alias lists tabs with active marker', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/config/meta')) return metaFetchResponse();
+      return new Response('{}', { status: 404 });
+    }) as typeof fetch;
+
+    Object.defineProperty(globalThis, 'window', {
+      value: {
+        minnow: {
+          app: { isElectron: true, platform: 'linux', openExternal: async () => {} },
+          preview: {
+            tabs: {
+              list: async () => [
+                { id: 'a', title: 'One', url: 'https://one.test', loading: false, active: false },
+                { id: 'b', title: 'Two', url: 'https://two.test', loading: false, active: true },
+              ],
+            },
+            execJs: async () => ({}),
+            getInfo: async () => ({ url: '', title: '', loading: false }),
+            capturePage: async () => '',
+            navigateAndWait: async () => ({ ok: true, url: '', title: '' }),
+            show: async () => {},
+          },
+        },
+      },
+      configurable: true,
+      writable: true,
+    });
+
+    const mod = await import('../../src/tools/browser-preview-tools.ts');
+    const result = await mod.executeBrowserPreviewTool('browser_list_tabs', {});
+    assert.match(result.content ?? '', /\[active\] Two/);
+    assert.match(result.content ?? '', /id: b/);
+    assert.match(result.content ?? '', /One/);
+  });
+
   test('browser_snapshot prefers uid tree when guest text is empty page', async () => {
     let execCalls = 0;
     globalThis.fetch = (async (input: RequestInfo | URL) => {
