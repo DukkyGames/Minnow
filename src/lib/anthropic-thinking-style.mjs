@@ -154,8 +154,10 @@ export function adjustAnthropicRequestForGateway(baseUrl, body) {
   if (hasOutboundAnthropicTools(next)) {
     delete anthropic.thinking;
     delete anthropic.structuredOutputMode;
+    delete anthropic.disableParallelToolUse;
     anthropic.toolStreaming = false;
-    anthropic.disableParallelToolUse = true;
+    // Gateways behind Console/Bedrock reject disable_parallel_tool_use in tool_choice.
+    delete next.thinking;
   }
 
   if (anthropic.thinking && typeof anthropic.thinking === 'object') {

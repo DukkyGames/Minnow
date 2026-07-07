@@ -36,6 +36,7 @@ describe('sanitizeAnthropicGatewayRequestBody', () => {
   test('strips output_config and strict tool fields', () => {
     const sanitized = sanitizeAnthropicGatewayRequestBody({
       output_config: { effort: 'medium' },
+      tool_choice: { type: 'auto', disable_parallel_tool_use: true },
       tools: [
         {
           name: 'noop',
@@ -46,6 +47,7 @@ describe('sanitizeAnthropicGatewayRequestBody', () => {
     });
 
     assert.equal(sanitized.output_config, undefined);
+    assert.deepEqual(sanitized.tool_choice, { type: 'auto' });
     assert.deepEqual(sanitized.tools, [{ name: 'noop', input_schema: { type: 'object' } }]);
   });
 });
@@ -72,6 +74,32 @@ describe('sanitizeAnthropicGatewayInputSchema', () => {
       type: 'object',
       properties: {
         path: { type: 'string' },
+      },
+    });
+  });
+
+  test('removes unsupported array and string constraints', () => {
+    const sanitized = sanitizeAnthropicGatewayInputSchema({
+      type: 'object',
+      properties: {
+        pattern: { type: 'string', description: 'Regex pattern' },
+        items: {
+          type: 'array',
+          minItems: 2,
+          maxItems: 10,
+          items: { type: 'string', minLength: 1, maxLength: 20, pattern: '^[a-z]+$' },
+        },
+      },
+    });
+
+    assert.deepEqual(sanitized, {
+      type: 'object',
+      properties: {
+        pattern: { type: 'string', description: 'Regex pattern' },
+        items: {
+          type: 'array',
+          items: { type: 'string' },
+        },
       },
     });
   });

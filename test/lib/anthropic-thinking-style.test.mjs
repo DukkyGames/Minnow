@@ -147,6 +147,6 @@ describe('adjustAnthropicRequestForGateway', () => {
     assert.equal(adjusted.providerOptions?.anthropic?.effort, undefined);
     assert.equal(adjusted.providerOptions?.anthropic?.structuredOutputMode, undefined);
     assert.equal(adjusted.providerOptions?.anthropic?.toolStreaming, false);
-    assert.equal(adjusted.providerOptions?.anthropic?.disableParallelToolUse, true);
+    assert.equal(adjusted.providerOptions?.anthropic?.disableParallelToolUse, undefined);
   });
 });

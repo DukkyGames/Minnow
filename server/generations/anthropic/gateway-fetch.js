@@ -76,6 +76,21 @@ export function sanitizeAnthropicGatewayInputSchema(schema) {
   delete record.$id;
   delete record.$defs;
   delete record.definitions;
+  delete record.maxItems;
+  delete record.minLength;
+  delete record.maxLength;
+  delete record.minimum;
+  delete record.maximum;
+  delete record.multipleOf;
+  delete record.uniqueItems;
+
+  if (record.type === 'string' && typeof record.pattern === 'string') {
+    delete record.pattern;
+  }
+
+  if (typeof record.minItems === 'number' && record.minItems > 1) {
+    delete record.minItems;
+  }
 
   if (record.properties && typeof record.properties === 'object' && !Array.isArray(record.properties)) {
     /** @type {Record<string, unknown>} */
@@ -135,6 +150,12 @@ export function sanitizeAnthropicGatewayRequestBody(body) {
 
   if (Array.isArray(next.tools)) {
     next.tools = next.tools.map(sanitizeGatewayToolEntry);
+  }
+
+  if (next.tool_choice && typeof next.tool_choice === 'object') {
+    const toolChoice = { .../** @type {Record<string, unknown>} */ (next.tool_choice) };
+    delete toolChoice.disable_parallel_tool_use;
+    next.tool_choice = toolChoice;
   }
 
   return next;
