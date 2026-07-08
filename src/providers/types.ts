@@ -18,6 +18,12 @@ export interface ProviderPublic {
   authStyle?: AuthStyle;
   modelsPath?: string;
   chatCompletionsPath?: string;
+  /** Anthropic Messages path for anthropic-v1 or autoApi gateways. Default `/v1/messages`. */
+  messagesPath?: string;
+  /** When true on openai-v1 providers, route Claude models to messagesPath automatically. */
+  autoApi?: boolean;
+  /** Explicit per-model API overrides (highest priority). */
+  modelApiOverrides?: Record<string, ApiKind>;
   /** LM Studio v1 load/unload; default true for lm-studio-v0. */
   supportsModelLoadUnload?: boolean;
   modelsLoadPath?: string;

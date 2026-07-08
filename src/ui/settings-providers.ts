@@ -86,10 +86,18 @@ function setProviderEditFormError(providerId: string, message: string | null): v
   errEl.classList.remove('hidden');
 }
 
-/** Read models/chat paths from a provider form; paths must start with /. */
+/** Read models/chat/messages paths and gateway flags from a provider form. */
 function parsePathFields(
   form: ParentNode,
-): { modelsPath: string; chatCompletionsPath: string } | { error: string } {
+):
+  | {
+      modelsPath: string;
+      chatCompletionsPath: string;
+      messagesPath?: string;
+      autoApi?: boolean;
+      modelApiOverrides?: Record<string, ApiKind>;
+    }
+  | { error: string } {
   const apiKind = parseApiKind(form.querySelector<HTMLSelectElement>('select[name="apiKind"]'));
   const chatLabel = chatPathLabel(apiKind);
   const models =
@@ -103,7 +111,55 @@ function parsePathFields(
   if (!models.startsWith('/') || !chat.startsWith('/')) {
     return { error: 'Paths must start with / (e.g. /v1/models).' };
   }
-  return { modelsPath: models, chatCompletionsPath: chat };
+
+  const autoApi =
+    apiKind === 'openai-v1' &&
+    form.querySelector<HTMLInputElement>('input[name="autoApi"]')?.checked === true;
+  const messagesRaw =
+    form.querySelector<HTMLInputElement>('input[name="messagesPath"]')?.value.trim() ?? '';
+  let messagesPath: string | undefined;
+  if (apiKind === 'anthropic-v1' || autoApi) {
+    messagesPath = messagesRaw || getDefaultPaths(apiKind).messagesPath || '/v1/messages';
+    if (!messagesPath.startsWith('/')) {
+      return { error: 'Messages path must start with /.' };
+    }
+  }
+
+  const overridesRaw =
+    form.querySelector<HTMLTextAreaElement>('textarea[name="modelApiOverridesJson"]')?.value.trim();
+  let modelApiOverrides: Record<string, ApiKind> | null | undefined;
+  if (overridesRaw !== undefined) {
+    if (!overridesRaw) {
+      modelApiOverrides = null;
+    } else {
+      try {
+        const parsed = JSON.parse(overridesRaw) as unknown;
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          return { error: 'Per-model API overrides must be a JSON object.' };
+        }
+        modelApiOverrides = {};
+        for (const [modelId, api] of Object.entries(parsed)) {
+          if (typeof modelId !== 'string' || !modelId.trim()) continue;
+          const kind = apiKindFromValue(String(api));
+          modelApiOverrides[modelId.trim()] = kind;
+        }
+      } catch {
+        return { error: 'Per-model API overrides JSON is invalid.' };
+      }
+    }
+  }
+
+  return {
+    modelsPath: models,
+    chatCompletionsPath: chat,
+    ...(messagesPath ? { messagesPath } : {}),
+    ...(autoApi ? { autoApi: true } : {}),
+    ...(modelApiOverrides === undefined
+      ? {}
+      : modelApiOverrides && Object.keys(modelApiOverrides).length > 0
+        ? { modelApiOverrides }
+        : { modelApiOverrides: null }),
+  };
 }
 
 /** Sync path field labels and hint text when API style changes. */
@@ -123,13 +179,151 @@ function applyAuthStyleDefaultForApiKind(form: ParentNode, apiKind: ApiKind): vo
   if (authSel) authSel.value = 'x-api-key';
 }
 
-/** Set models/chat path inputs from apiKind defaults. */
+/** Set models/chat/messages path inputs from apiKind defaults. */
 function fillPathInputs(form: ParentNode, apiKind: ApiKind): void {
   const defaults = getDefaultPaths(apiKind);
   const modelsInput = form.querySelector<HTMLInputElement>('input[name="modelsPath"]');
   const chatInput = form.querySelector<HTMLInputElement>('input[name="chatCompletionsPath"]');
+  const messagesInput = form.querySelector<HTMLInputElement>('input[name="messagesPath"]');
   if (modelsInput) modelsInput.value = defaults.modelsPath;
   if (chatInput) chatInput.value = defaults.chatCompletionsPath;
+  if (messagesInput && defaults.messagesPath) messagesInput.value = defaults.messagesPath;
+}
+
+/** Show gateway-only fields when openai-v1 auto-routing is relevant. */
+function syncGatewayFieldVisibility(form: ParentNode): void {
+  const apiKind = parseApiKind(form.querySelector<HTMLSelectElement>('select[name="apiKind"]'));
+  const autoApi = form.querySelector<HTMLInputElement>('input[name="autoApi"]')?.checked === true;
+  const gatewayBlock = form.querySelector<HTMLElement>('[data-provider-gateway-fields]');
+  const messagesField = form.querySelector<HTMLElement>('[data-provider-messages-path-field]');
+  const showGateway = apiKind === 'openai-v1';
+  const showMessages = apiKind === 'anthropic-v1' || (showGateway && autoApi);
+  if (gatewayBlock) gatewayBlock.classList.toggle('hidden', !showGateway);
+  if (messagesField) messagesField.classList.toggle('hidden', !showMessages);
+}
+
+interface GatewayPreset {
+  id: string;
+  label: string;
+  baseUrl: string;
+  modelsPath: string;
+  chatCompletionsPath: string;
+  messagesPath: string;
+  authStyle: AuthStyle;
+}
+
+const GATEWAY_PRESETS: GatewayPreset[] = [
+  {
+    id: 'opencode-zen',
+    label: 'OpenCode Zen',
+    baseUrl: 'https://opencode.ai/zen',
+    modelsPath: '/v1/models',
+    chatCompletionsPath: '/v1/chat/completions',
+    messagesPath: '/v1/messages',
+    authStyle: 'bearer',
+  },
+  {
+    id: 'openrouter',
+    label: 'OpenRouter',
+    baseUrl: 'https://openrouter.ai/api',
+    modelsPath: '/v1/models',
+    chatCompletionsPath: '/v1/chat/completions',
+    messagesPath: '/v1/messages',
+    authStyle: 'bearer',
+  },
+];
+
+/** Apply a quick-add gateway preset to the add-provider form. */
+function applyGatewayPreset(form: ParentNode, preset: GatewayPreset): void {
+  const idInput = form.querySelector<HTMLInputElement>('input[name="id"]');
+  const labelInput = form.querySelector<HTMLInputElement>('input[name="label"]');
+  const baseUrlInput = form.querySelector<HTMLInputElement>('input[name="baseUrl"]');
+  const apiKindSel = form.querySelector<HTMLSelectElement>('select[name="apiKind"]');
+  const authSel = form.querySelector<HTMLSelectElement>('select[name="authStyle"]');
+  const autoApiInput = form.querySelector<HTMLInputElement>('input[name="autoApi"]');
+  if (idInput && !idInput.value.trim()) idInput.value = preset.id;
+  if (labelInput) labelInput.value = preset.label;
+  if (baseUrlInput) baseUrlInput.value = preset.baseUrl;
+  if (apiKindSel) apiKindSel.value = 'openai-v1';
+  if (authSel) authSel.value = preset.authStyle;
+  if (autoApiInput) autoApiInput.checked = true;
+  const modelsInput = form.querySelector<HTMLInputElement>('input[name="modelsPath"]');
+  const chatInput = form.querySelector<HTMLInputElement>('input[name="chatCompletionsPath"]');
+  const messagesInput = form.querySelector<HTMLInputElement>('input[name="messagesPath"]');
+  if (modelsInput) modelsInput.value = preset.modelsPath;
+  if (chatInput) chatInput.value = preset.chatCompletionsPath;
+  if (messagesInput) messagesInput.value = preset.messagesPath;
+  syncGatewayFieldVisibility(form);
+  updatePathFieldLabels(form, 'openai-v1');
+}
+
+/** Gateway auto-routing controls for mixed OpenAI + Anthropic catalogs. */
+function appendGatewayFields(parent: HTMLElement, provider?: ProviderPublic): void {
+  const block = el('div', 'settings-providers-gateway-fields');
+  block.dataset.providerGatewayFields = '';
+
+  const autoRow = el('label', 'settings-toggle-row');
+  const autoInput = document.createElement('input');
+  autoInput.type = 'checkbox';
+  autoInput.name = 'autoApi';
+  autoInput.checked = provider?.autoApi === true;
+  autoRow.append(autoInput);
+  autoRow.append(el('span', undefined, 'Auto-detect API per model (gateway)'));
+  block.append(autoRow);
+
+  const messagesField = el('div', 'field');
+  messagesField.dataset.providerMessagesPathField = '';
+  messagesField.append(el('label', undefined, 'Messages path'));
+  const messagesInput = document.createElement('input');
+  messagesInput.type = 'text';
+  messagesInput.className = 'settings-input';
+  messagesInput.name = 'messagesPath';
+  messagesInput.autocomplete = 'off';
+  messagesInput.spellcheck = false;
+  messagesInput.value =
+    provider?.messagesPath ||
+    getDefaultPaths(provider?.apiKind ?? 'openai-v1').messagesPath ||
+    '/v1/messages';
+  messagesField.append(messagesInput);
+  block.append(messagesField);
+
+  const overridesField = el('div', 'field');
+  overridesField.append(el('label', undefined, 'Per-model API overrides (JSON)'));
+  const overridesArea = document.createElement('textarea');
+  overridesArea.className = 'settings-input settings-providers-pricing-json';
+  overridesArea.name = 'modelApiOverridesJson';
+  overridesArea.rows = 4;
+  overridesArea.spellcheck = false;
+  overridesArea.placeholder =
+    '{"claude-sonnet-4-5":"anthropic-v1","gpt-4o-mini":"openai-v1"}';
+  if (provider?.modelApiOverrides && Object.keys(provider.modelApiOverrides).length > 0) {
+    overridesArea.value = JSON.stringify(provider.modelApiOverrides, null, 2);
+  }
+  overridesField.append(overridesArea);
+  block.append(overridesField);
+
+  const hint = el(
+    'p',
+    'field-hint',
+    'Use for OpenCode Zen and OpenRouter: GPT/Gemini use chat completions; Claude routes to the messages path automatically.',
+  );
+  block.append(hint);
+
+  parent.append(block);
+  autoInput.addEventListener('change', () => syncGatewayFieldVisibility(parent));
+  syncGatewayFieldVisibility(parent);
+}
+
+/** Quick-add preset buttons for common mixed gateways. */
+function appendGatewayPresetButtons(parent: HTMLElement, form: ParentNode): void {
+  const row = el('div', 'settings-providers-form-actions');
+  for (const preset of GATEWAY_PRESETS) {
+    const btn = el('button', 'settings-inline-btn', `Preset: ${preset.label}`);
+    btn.type = 'button';
+    btn.addEventListener('click', () => applyGatewayPreset(form, preset));
+    row.append(btn);
+  }
+  parent.insertBefore(row, parent.querySelector('.settings-providers-form-actions'));
 }
 
 /** When API style changes, refresh paths if they still match the previous kind's defaults. */
@@ -154,6 +348,7 @@ function wirePathSyncOnApiKindChange(form: HTMLElement, kindSel: HTMLSelectEleme
     }
     applyAuthStyleDefaultForApiKind(form, nextKind);
     updatePathFieldLabels(form, nextKind);
+    syncGatewayFieldVisibility(form);
     kindSel.dataset.prevApiKind = kindSel.value;
   });
 }
@@ -418,6 +613,7 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
 
   const kindSel = appendApiFields(form, provider.apiKind, provider.authStyle ?? 'bearer');
   appendPathFields(form, resolved.modelsPath, resolved.chatCompletionsPath, provider.apiKind);
+  appendGatewayFields(form, provider);
   wirePathSyncOnApiKindChange(form, kindSel);
 
   const keyField = el('div', 'field');
@@ -581,7 +777,9 @@ function createProviderSettingsRow(
     el(
       'p',
       'settings-field-hint',
-      `${resolved.modelsPath} · ${resolved.chatCompletionsPath}`,
+      provider.autoApi
+        ? `${resolved.modelsPath} · ${resolved.chatCompletionsPath} · ${resolved.messagesPath ?? '/v1/messages'} (auto API)`
+        : `${resolved.modelsPath} · ${resolved.chatCompletionsPath}`,
     ),
   );
   const kindLine = el(
@@ -633,7 +831,12 @@ function bindProvidersAddForm(): void {
 
   if (form && apiKindInput) {
     fillPathInputs(form, parseApiKind(apiKindInput));
+    appendGatewayFields(form);
     wirePathSyncOnApiKindChange(form, apiKindInput);
+    const actions = form.querySelector('.settings-providers-form-actions');
+    if (actions?.parentElement) {
+      appendGatewayPresetButtons(actions.parentElement, form);
+    }
   }
 
   resetBtn?.addEventListener('click', () => clearProvidersAddForm());
@@ -678,6 +881,9 @@ function bindProvidersAddForm(): void {
         enabled: enabledInput?.checked !== false,
         modelsPath: paths.modelsPath,
         chatCompletionsPath: paths.chatCompletionsPath,
+        messagesPath: paths.messagesPath,
+        autoApi: paths.autoApi,
+        modelApiOverrides: paths.modelApiOverrides,
       });
 
       if (result.ok === false) {
@@ -764,6 +970,9 @@ async function handleProviderEditSubmit(form: HTMLFormElement): Promise<void> {
     enabled: enabledInput?.checked === true,
     modelsPath: paths.modelsPath,
     chatCompletionsPath: paths.chatCompletionsPath,
+    messagesPath: paths.messagesPath,
+    autoApi: paths.autoApi ?? false,
+    modelApiOverrides: paths.modelApiOverrides ?? undefined,
     constrainedToolCalls,
     pricing:
       pricingParsed === null

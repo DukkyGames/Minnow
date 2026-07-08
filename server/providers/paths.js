@@ -3,6 +3,8 @@
  * LM Studio list/chat use v0; load/unload use v1 REST on the same baseUrl.
  */
 
+import { deriveMessagesPathFromChat } from '../../src/lib/derive-messages-path.mjs';
+
 /**
  * @param {'lm-studio-v0' | 'openai-v1' | 'anthropic-v1'} apiKind
  */
@@ -14,7 +16,7 @@ export function getProviderCapabilities(apiKind) {
 
 /**
  * @param {'lm-studio-v0' | 'openai-v1' | 'anthropic-v1'} apiKind
- * @param {{ modelsPath?: string, chatCompletionsPath?: string, modelsLoadPath?: string, modelsUnloadPath?: string }} [overrides]
+ * @param {{ modelsPath?: string, chatCompletionsPath?: string, messagesPath?: string, modelsLoadPath?: string, modelsUnloadPath?: string }} [overrides]
  */
 export function getDefaultPaths(apiKind, overrides = {}) {
   const defaults =
@@ -22,12 +24,14 @@ export function getDefaultPaths(apiKind, overrides = {}) {
       ? {
           modelsPath: '/v1/models',
           chatCompletionsPath: '/v1/chat/completions',
+          messagesPath: '/v1/messages',
           embeddingsPath: '/v1/embeddings',
         }
       : apiKind === 'anthropic-v1'
         ? {
             modelsPath: '/v1/models',
             chatCompletionsPath: '/v1/messages',
+            messagesPath: '/v1/messages',
             embeddingsPath: '/v1/embeddings',
           }
         : {
@@ -42,6 +46,15 @@ export function getDefaultPaths(apiKind, overrides = {}) {
     chatCompletionsPath: overrides.chatCompletionsPath || defaults.chatCompletionsPath,
     embeddingsPath: overrides.embeddingsPath || defaults.embeddingsPath || '/v1/embeddings',
   };
+
+  if (defaults.messagesPath) {
+    const chatPath = overrides.chatCompletionsPath || defaults.chatCompletionsPath;
+    out.messagesPath =
+      overrides.messagesPath ||
+      (apiKind === 'anthropic-v1'
+        ? overrides.chatCompletionsPath || defaults.messagesPath
+        : deriveMessagesPathFromChat(chatPath));
+  }
 
   if (defaults.modelsLoadPath) {
     out.modelsLoadPath = overrides.modelsLoadPath || defaults.modelsLoadPath;
@@ -178,6 +191,9 @@ function normalizeOpenAiModelRow(item) {
     type,
     state,
     ...(maxContext !== undefined ? { max_context_length: maxContext } : {}),
+    ...(typeof src.owned_by === 'string' ? { owned_by: src.owned_by } : {}),
+    ...(typeof src.arch === 'string' ? { arch: src.arch } : {}),
+    ...(typeof src.family === 'string' ? { family: src.family } : {}),
   };
 }
 

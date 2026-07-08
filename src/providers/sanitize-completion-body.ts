@@ -3,8 +3,9 @@
  */
 
 import { anthropicThinkingTypeFromProviderOptions } from '../lib/anthropic-thinking-style';
+import type { ProviderPublic, ApiKind } from './types';
+import { resolvedApiForModel } from './resolve-model-api';
 import type { ModelCapabilities } from '../types';
-import type { ProviderPublic } from './types';
 
 /** True when OpenAI o-series / gpt-5 models expect max_completion_tokens. */
 function modelUsesMaxCompletionTokens(modelId: string): boolean {
@@ -59,8 +60,10 @@ export function sanitizeCompletionBodyForProvider(
   body: Record<string, unknown>,
   provider: ProviderPublic,
   modelCapabilities?: ModelCapabilities | null,
+  modelApi?: ApiKind,
 ): Record<string, unknown> {
-  if (provider.apiKind === 'anthropic-v1') {
+  const apiKind = modelApi ?? modelCapabilities?.api ?? resolvedApiForModel(provider);
+  if (apiKind === 'anthropic-v1') {
     const next = { ...body };
     if (anthropicThinkingEnabled(next)) {
       delete next.temperature;
@@ -70,7 +73,7 @@ export function sanitizeCompletionBodyForProvider(
     return next;
   }
 
-  if (provider.apiKind !== 'openai-v1') {
+  if (apiKind !== 'openai-v1') {
     return body;
   }
 

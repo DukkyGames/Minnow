@@ -10,6 +10,7 @@ import {
 } from './models-dev-context.js';
 import { normalizeOpenCodeZenRelativePath } from './opencode-zen.js';
 import { validateProviderId } from './validate.js';
+import { resolveModelApi } from '../generations/resolve-model-api.js';
 
 const MODELS_TIMEOUT_MS = 15_000;
 const MODEL_LOAD_TIMEOUT_MS = 120_000;
@@ -51,6 +52,12 @@ export async function proxyModels(id) {
     if (isOpenCodeProviderBaseUrl(profile.baseUrl)) {
       normalized = await enrichOpenCodeModelsFromModelsDev(normalized);
     }
+    normalized = {
+      data: normalized.data.map((row) => ({
+        ...row,
+        api: resolveModelApi({ profile }, row.id, row),
+      })),
+    };
     return normalized;
   } finally {
     clearTimeout(timer);
