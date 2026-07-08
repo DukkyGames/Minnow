@@ -131,43 +131,18 @@
     ]
   },
   {
-    "key": "general.chat.terminal.autoOpenOnAgentRun",
-    "label": "Open terminal on agent command",
-    "description": "Raise the console panel when an agent starts execute_command.",
+    "key": "general.chat.terminal",
+    "label": "Terminal behavior",
     "keywords": [
       "shell",
-      "background command",
-      "auto open",
-      "terminal"
+      "background command"
     ],
     "category": "general",
     "area": "general",
-    "storage": "meta",
-    "path": "terminal.autoOpenOnAgentRun",
-    "type": "boolean",
+    "storage": "section",
+    "type": "string",
     "sensitivity": "normal",
-    "writable": true,
-    "refreshAreas": [
-      "general"
-    ]
-  },
-  {
-    "key": "general.chat.terminal.autoFollowAgentTab",
-    "label": "Follow agent commands in terminal",
-    "description": "Switch to the Agent tab when an agent starts a shell command while the console is open.",
-    "keywords": [
-      "shell",
-      "auto follow",
-      "agent tab",
-      "terminal"
-    ],
-    "category": "general",
-    "area": "general",
-    "storage": "meta",
-    "path": "terminal.autoFollowAgentTab",
-    "type": "boolean",
-    "sensitivity": "normal",
-    "writable": true,
+    "writable": false,
     "refreshAreas": [
       "general"
     ]
@@ -2663,6 +2638,32 @@
     ]
   },
   {
+    "key": "integrations.tools.permission.todo_write",
+    "label": "Tool permission: todo_write",
+    "description": "Permission mode for the todo_write tool (off, ask, or full).",
+    "keywords": [
+      "todo_write",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.todo_write",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
     "key": "integrations.tools.permission.bug_add",
     "label": "Tool permission: bug_add",
     "description": "Permission mode for the bug_add tool (off, ask, or full).",
@@ -2884,6 +2885,84 @@
     "storage": "resource",
     "resource": "tools",
     "path": "permissions.default.request_browser_origin_access",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.browser_new_tab",
+    "label": "Tool permission: browser_new_tab",
+    "description": "Permission mode for the browser_new_tab tool (off, ask, or full).",
+    "keywords": [
+      "browser_new_tab",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.browser_new_tab",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.browser_switch_tab",
+    "label": "Tool permission: browser_switch_tab",
+    "description": "Permission mode for the browser_switch_tab tool (off, ask, or full).",
+    "keywords": [
+      "browser_switch_tab",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.browser_switch_tab",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.browser_close_tab",
+    "label": "Tool permission: browser_close_tab",
+    "description": "Permission mode for the browser_close_tab tool (off, ask, or full).",
+    "keywords": [
+      "browser_close_tab",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.browser_close_tab",
     "type": "enum",
     "allowedValues": [
       "off",
@@ -3300,6 +3379,84 @@
     "storage": "resource",
     "resource": "tools",
     "path": "permissions.default.manage_brain",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.search_settings",
+    "label": "Tool permission: search_settings",
+    "description": "Permission mode for the search_settings tool (off, ask, or full).",
+    "keywords": [
+      "search_settings",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.search_settings",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.get_settings",
+    "label": "Tool permission: get_settings",
+    "description": "Permission mode for the get_settings tool (off, ask, or full).",
+    "keywords": [
+      "get_settings",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.get_settings",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.update_settings",
+    "label": "Tool permission: update_settings",
+    "description": "Permission mode for the update_settings tool (off, ask, or full).",
+    "keywords": [
+      "update_settings",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.update_settings",
     "type": "enum",
     "allowedValues": [
       "off",

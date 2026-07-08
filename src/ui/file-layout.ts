@@ -10,7 +10,6 @@ import {
 } from '../state/file-panel';
 import { syncStatsStripLayoutForViewer } from './stats';
 import { mountOsMobileDrawerBackdrops, syncOsMobileDrawerHtmlClass } from './mobile-drawer-portal';
-import { closeGitSidePanel, isGitSidePanelOpen } from './git-panel';
 import {
   syncAppBodySidebarWidthVars,
   syncFileSidebarResizer,
@@ -45,7 +44,9 @@ export function repairRightPaneDomStructure(): boolean {
 
 /** Close source control when the file sidebar is collapsed or dismissed. */
 function closeGitPanelIfOpen(): void {
-  if (isGitSidePanelOpen()) closeGitSidePanel();
+  void import('./git-panel').then((m) => {
+    if (m.isGitSidePanelOpen()) m.closeGitSidePanel();
+  });
 }
 
 /** Clear mobile drawer classes without closing source control (safe during layout refresh). */

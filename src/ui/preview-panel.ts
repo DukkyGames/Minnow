@@ -18,10 +18,10 @@ import {
   showPreviewSplit,
   showViewerSplit,
 } from './file-layout';
-import { dismissFileViewerForPreview } from './file-viewer';
 import { listViewerTabs } from './file-viewer-tab-store';
 import { withSessionToken } from '../api/session-token.ts';
 import { detectEmbedBlockedFrame } from './preview-embed-detect';
+import { resolvePreviewLoadUrl, workspacePreviewUrl } from './preview-load-url';
 import {
   isFullscreenOverlayObscuringWorkspace,
   isPreviewPaneDomVisible,
@@ -50,6 +50,11 @@ import { bindPreviewTabs, registerPreviewTabHandlers } from './preview-tabs';
 import { HTTP_URL_RE, parsePreviewAddress } from './preview-url';
 import { shouldAutoRestorePreviewPanel, isCodeAppForeground } from './preview-restore-policy';
 import { showToast } from './toast';
+
+async function dismissFileViewerForPreview(): Promise<boolean> {
+  const mod = await import('./file-viewer');
+  return mod.dismissFileViewerForPreview();
+}
 
 const BROWSER_PREVIEW_HINT =
   'Full Chromium preview (any website or local file) runs in the Minnow desktop shell. Run npm start — Electron opens by default — or npm run electron:dev.';
@@ -201,34 +206,8 @@ function normalizeWorkspacePath(input: string): string {
   return input.replace(/^\/+/, '').trim();
 }
 
-/** Build preview URL for a workspace-relative path (path only; use resolvePreviewLoadUrl for absolute). */
-export function workspacePreviewUrl(relativePath: string, cacheBust?: number): string {
-  const normalized = normalizeWorkspacePath(relativePath);
-  const encoded = normalized.split('/').map((segment) => encodeURIComponent(segment)).join('/');
-  const base = `${PREVIEW_FILE_API}${encoded}`;
-  const withCacheBust = cacheBust === undefined ? base : `${base}${base.includes('?') ? '&' : '?'}v=${cacheBust}`;
-  // This URL feeds the iframe `src`/Electron `loadURL` directly (no fetch, so
-  // the global fetch-auth header never applies) — the token must ride the query string.
-  return withSessionToken(withCacheBust);
-}
-
-/**
- * Root-relative paths (e.g. `/api/research/report/…`) must be absolute before
- * Electron `loadURL`; otherwise Chromium treats them as local file paths.
- */
-function resolveRootRelativeUrl(url: string): string {
-  if (url.startsWith('/') && !url.startsWith('//')) {
-    return `${window.location.origin}${url}`;
-  }
-  return url;
-}
-
-/** Absolute URL passed to the preview guest (Electron or iframe with full origin). */
-export function resolvePreviewLoadUrl(source: PreviewSource, cacheBust?: number): string {
-  if (source.kind === 'url') return resolveRootRelativeUrl(source.url);
-  const path = workspacePreviewUrl(source.path, cacheBust);
-  return `${window.location.origin}${path}`;
-}
+/** @deprecated Import from `./preview-load-url` to avoid the editor bundle. */
+export { resolvePreviewLoadUrl, workspacePreviewUrl } from './preview-load-url';
 
 function sourceToAddressBar(source: PreviewSource): string {
   if (source.kind === 'url') return source.url;
@@ -814,7 +793,7 @@ export async function openUrlInPreviewPanel(url: string): Promise<void> {
 
   const { isDesktopWorkspaceHostingActive } = await import('../os/desktop-workspace-mounts');
   const desktopHosted = isDesktopWorkspaceHostingActive();
-  if (!desktopHosted && !dismissFileViewerForPreview()) return;
+  if (!desktopHosted && !(await dismissFileViewerForPreview())) return;
 
   const api = getPreviewApi();
   if (!api) {

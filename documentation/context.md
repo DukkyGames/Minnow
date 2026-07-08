@@ -123,8 +123,9 @@ Minnow/
 ├── server/                 # Config, tools, providers, generations, MCP, memory, …
 ├── package.json
 ├── tsconfig.json
-├── vite.config.ts          # base: './', outDir: dist
+├── vite.config.ts          # base: './', outDir: dist, vendor manualChunks, chunkSizeWarningLimit 1500
 ├── public/                 # Copied verbatim to dist/ (not bundled)
+│   ├── benchmark-packs/    # Standard eval JSON (mini + full tiers; fetched at bench run time)
 │   ├── manifest.json       # PWA manifest (start_url: ./)
 │   ├── sw.js               # Service worker (cache: minnow-v7)
 │   └── icons/              # PWA icons; add-folder.png (**New group**); folder.png (collapsed rail group folders); board-group.png (Orchestrate board folders in sidebar); mode-*.png (operating mode glyphs — selector + sidebar); bugs.png (**All bugs** `#btnAllBugs`); stats.png (**Inference metrics** `#btnStats`); agent-activity.png (**Agent activity** `#btnAgentActivity`); console.png (**Terminal** `#btnTerminal`)
@@ -279,7 +280,7 @@ User-defined **task packs** (prompt, tool allow/deny, rubric) run across multipl
 
 Unified **Benchmarking** app at `#/benchmark` / `#/app/bench` (OS **Benchmarking** app). Tabbed UI: **Overview** (multi-model comparison grid with animated tok/s and quality bars, MinnowOS-style), **Charts** (flat sections: run toolbar, summary strip with deltas, per-run comparison, test-family matrix, ranked weak spots, score-over-runs trend with sparse axis labels, all-time best), **Tests** (integration + standard + custom catalog, prompt drawer, pack editor, full-tier JSON import), **Run** (model roster, integration suite toggles, standard mini/full packs, linear run flow). **`header.topbar` stays visible** while open.
 
-**Multi-model campaigns:** `runBenchmarkCampaign()` (`src/benchmark/campaign-runner.ts`) runs integration suites per target via `matrix-scheduler.ts` (concurrency from eval config). Model **roster** in `sessionStorage` (`minnow.benchmark.roster`); Run tab adds models via provider/model dropdowns (`roster-picker.ts`, same catalog as Settings) plus **Add active** from the top-bar model. **Standard benchmarks** (tiered): bundled mini packs in `src/benchmark/standard/packs/` and bundled full packs in `src/benchmark/standard/packs/full/` (MMLU ~14k, GSM8K ~8.8k, ARC ~1.2k, HumanEval 164, TruthfulQA ~817). Full tier loads lazily via `preloadBundledFullPacks()`; user imports via Tests tab still override bundled full. Regenerate with `npm run build:benchmark-packs`. Campaign persistence: `GET/POST /api/benchmarks/campaigns`, `GET /api/benchmarks/models` → `~/.minnow/benchmarks/campaigns/`; legacy single-run JSON at `~/.minnow/benchmarks/*.json` unchanged.
+**Multi-model campaigns:** `runBenchmarkCampaign()` (`src/benchmark/campaign-runner.ts`) runs integration suites per target via `matrix-scheduler.ts` (concurrency from eval config). Model **roster** in `sessionStorage` (`minnow.benchmark.roster`); Run tab adds models via provider/model dropdowns (`roster-picker.ts`, same catalog as Settings) plus **Add active** from the top-bar model. **Standard benchmarks** (tiered): mini packs in `public/benchmark-packs/mini/` and full packs in `public/benchmark-packs/full/` (MMLU ~14k, GSM8K ~8.8k, ARC ~1.2k, HumanEval 164, TruthfulQA ~817). `pack-loader.ts` `fetch()`es JSON at run time (not bundled as JS); full tier loads lazily via `preloadBundledFullPacks()`; user imports via Tests tab still override bundled full. Regenerate with `npm run build:benchmark-packs`. Campaign persistence: `GET/POST /api/benchmarks/campaigns`, `GET /api/benchmarks/models` → `~/.minnow/benchmarks/campaigns/`; legacy single-run JSON at `~/.minnow/benchmarks/*.json` unchanged.
 
 **Settings → Advanced → Evals** shows a link to `#/app/bench/tests` (eval APIs under `/api/evals/*` unchanged; custom packs still in `~/.minnow/evals/packs/`).
 
