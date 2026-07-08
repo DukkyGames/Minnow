@@ -27,6 +27,7 @@ import {
   readGenerationUpstreamTimeouts,
 } from './timeouts.js';
 import { pumpAnthropicUpstream } from './anthropic/pump.js';
+import { deriveMessagesPathFromChat } from '../../src/lib/derive-messages-path.mjs';
 import { resolveModelApi } from './resolve-model-api.js';
 import { formatUpstreamHttpErrorMessage } from './upstream-error-detail.js';
 import { upstreamFetch } from './upstream-fetch.js';
@@ -148,10 +149,9 @@ async function pumpUpstreamAsync({ state }) {
             paths: {
               ...runtime.paths,
               messagesPath:
-                runtime.paths.messagesPath ||
                 runtime.profile.messagesPath ||
-                runtime.paths.chatCompletionsPath ||
-                '/v1/messages',
+                runtime.paths.messagesPath ||
+                deriveMessagesPathFromChat(runtime.paths.chatCompletionsPath),
             },
           }
         : runtime;

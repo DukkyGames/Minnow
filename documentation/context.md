@@ -1154,9 +1154,9 @@ Registered in [`server/providers/routes.js`](../server/providers/routes.js) befo
 
 **`capabilities.json`:** Provider-level `structuredOutput`, `structuredOutputWithTools`, `structuredOutputStreaming`, `probeError` (#10). Per-model `vision`, `tools`, `streaming`, `grammar`, `contextLength`, `loadState`, `api` (resolved upstream API per model — MIN-322), `sources`, `probeErrors` (MIN-48). **Vision catalog signal:** `type === 'vlm'` **or** LM Studio 0.4.8+ upstream `capabilities.vision: true` on `type: llm` rows — normalized to `catalogVision` in [`normalizeModelsResponse`](../server/providers/paths.js) (upstream `capabilities` stripped before merge). Probes run only from **Settings → Providers → Edit provider**: **Probe models** (`POST .../capabilities/probe`; on `lm-studio-v0`, defaults to **loaded** models only, up to 8 — no chat probes against unloaded rows; per-model **`api`** resolution picks OpenAI fetch vs Messages bridge) and **Probe structured output** (`POST .../probe-capabilities`; requires a **loaded** model on `openai-v1` paths; models resolved to **`anthropic-v1`** record `structuredOutput: false` with an explicit `probeError` — v1 bridge does not map `response_format` yet) are separate actions. **Refresh models** loads the list and merges any existing `capabilities.json` from disk but does not probe. Server: [`capabilities-store.js`](../server/providers/capabilities-store.js), [`capability-probe.js`](../server/providers/capability-probe.js). Client: [`model-capabilities.ts`](../src/providers/model-capabilities.ts), [`capability-probe.ts`](../src/providers/capability-probe.ts) (structured output), [`vision-model.ts`](../src/providers/vision-model.ts), picker [`capability-badges.ts`](../src/providers/capability-badges.ts).
 
-**`apiKind`:** Three kinds — `lm-studio-v0` (default paths `/api/v0/...`), `openai-v1` (`/v1/chat/completions`), and **`anthropic-v1`** (Anthropic Messages API). For `anthropic-v1`, **`chatCompletionsPath` is the messages path** (Settings UI labels it **Messages path**); default `/v1/messages`. **Mixed gateways (MIN-322):** keep `apiKind: openai-v1`, set **`autoApi: true`**, and add a separate **`messagesPath`** (default `/v1/messages`, distinct from `chatCompletionsPath`). [`resolveModelApi`](../server/generations/resolve-model-api.js) / [`src/lib/resolve-model-api.mjs`](../src/lib/resolve-model-api.mjs) picks `anthropic-v1` vs `openai-v1` per model (catalog `owned_by`, `anthropic/` namespace, `claude-*` heuristics; optional **`modelApiOverrides`** map wins). Each catalog row carries resolved **`api`** for client thinking/sanitization. Model load/unload is disabled (`supportsModelLoadUnload: false`) for non–`lm-studio-v0`. **`baseUrl`** stays origin-only; gateway prefixes (e.g. `/zen/v1`) belong in path overrides.
+**`apiKind`:** Three kinds — `lm-studio-v0` (default paths `/api/v0/...`), `openai-v1` (`/v1/chat/completions`), and **`anthropic-v1`** (Anthropic Messages API). For `anthropic-v1`, **`chatCompletionsPath` is the messages path** (Settings UI labels it **Messages path**); default `/v1/messages`. **Mixed gateways (MIN-322):** keep `apiKind: openai-v1`, set **`autoApi: true`**, and add a separate **`messagesPath`** (derived from `chatCompletionsPath` when omitted). [`resolveModelApi`](../server/generations/resolve-model-api.js) / [`src/lib/resolve-model-api.mjs`](../src/lib/resolve-model-api.mjs) picks `anthropic-v1` vs `openai-v1` per model (catalog `owned_by`, `anthropic/` namespace, `claude-*` heuristics; optional **`modelApiOverrides`** map wins). Each catalog row carries resolved **`api`** for client thinking/sanitization. Model load/unload is disabled (`supportsModelLoadUnload: false`) for non–`lm-studio-v0`. **`baseUrl`** may include a gateway path prefix (e.g. `https://opencode.ai/zen`, `https://openrouter.ai/api`); path fields stay relative (`/v1/models`, `/v1/chat/completions`, `/v1/messages`). OpenCode Zen path normalization in [`opencode-zen.js`](../server/providers/opencode-zen.js) avoids duplicate `/v1` when the base already ends with `/v1`.
 
-**Auth (`authStyle`):** `bearer` (OpenCode Zen — key in `Authorization: Bearer …`), `x-api-key` (native Anthropic — key in `X-Api-Key`), or legacy `api-key`. Secrets live in encrypted `secrets.json` (`bearer` or `apiKey` field per style).
+**Auth (`authStyle`):** `bearer` (OpenCode Zen OpenAI chat path — key in `Authorization: Bearer …`; Claude Messages bridge sends the same key as `x-api-key`), `x-api-key` (native Anthropic — key in `X-Api-Key`), or legacy `api-key`. Secrets live in encrypted `secrets.json` (`apiKey` field from Settings; optional `bearerToken`).
 
 **Example `profile.json` snippets:**
 
@@ -1165,13 +1165,13 @@ OpenCode Zen (mixed GPT + Claude gateway — recommended):
 ```json
 {
   "label": "OpenCode Zen",
-  "baseUrl": "https://opencode.ai",
+  "baseUrl": "https://opencode.ai/zen",
   "apiKind": "openai-v1",
   "autoApi": true,
   "authStyle": "bearer",
-  "modelsPath": "/zen/v1/models",
-  "chatCompletionsPath": "/zen/v1/chat/completions",
-  "messagesPath": "/zen/v1/messages"
+  "modelsPath": "/v1/models",
+  "chatCompletionsPath": "/v1/chat/completions",
+  "messagesPath": "/v1/messages"
 }
 ```
 
@@ -1221,7 +1221,7 @@ Native Anthropic:
 
 **v1 limitations (MIN-329):** Constrained tool calls (`response_format` / `json_schema`) and structured-output probes are **not mapped** for `anthropic-v1` yet — capability probe records `structuredOutput: false` with an explicit `probeError`; keep global/per-provider constrained decoding off for Claude providers. Anthropic-specific features (prompt cache control, web search, code execution) are out of scope. Plan: [`documentation/plans/anthropic-messages-api.md`](plans/anthropic-messages-api.md).
 
-**Setup — Claude via OpenCode Zen:** (1) Obtain a Zen API key from OpenCode. (2) `npm start`. (3) **Settings → Providers → Add provider** — use preset **OpenCode Zen** (or manually: API style **OpenAI v1**, enable **Auto-detect API per model**, base URL `https://opencode.ai`, paths `/zen/v1/models`, `/zen/v1/chat/completions`, `/zen/v1/messages`, auth **Bearer**, paste key under secrets). (4) **Refresh models**, pick a `claude-*` or `gpt-*` model in the composer. (5) Optional: **Probe models** to populate capability badges.
+**Setup — Claude via OpenCode Zen:** (1) Obtain a Zen API key from OpenCode. (2) `npm start`. (3) **Settings → Providers → Add provider** — use preset **OpenCode Zen** (or manually: API style **OpenAI v1**, enable **Auto-detect API per model**, base URL `https://opencode.ai/zen`, paths `/v1/models`, `/v1/chat/completions`, `/v1/messages`, auth **Bearer**, paste key under secrets). For Zen Go, use base URL `https://opencode.ai/zen/go` with the same `/v1/...` paths. (4) **Refresh models**, pick a `claude-*` or `gpt-*` model in the composer. (5) Optional: **Probe models** to populate capability badges.
 
 For `lm-studio-v0` and `openai-v1`, **chat completions** are not proxied on `/api/providers`; all LLM streams use [`/api/generations`](#backend-owned-generations-phase-1) (raw upstream fetch for those kinds; `anthropic-v1` uses the bridge above).
 

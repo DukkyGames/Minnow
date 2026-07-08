@@ -216,10 +216,10 @@ const GATEWAY_PRESETS: GatewayPreset[] = [
   {
     id: 'opencode-zen',
     label: 'OpenCode Zen',
-    baseUrl: 'https://opencode.ai',
-    modelsPath: '/zen/v1/models',
-    chatCompletionsPath: '/zen/v1/chat/completions',
-    messagesPath: '/zen/v1/messages',
+    baseUrl: 'https://opencode.ai/zen',
+    modelsPath: '/v1/models',
+    chatCompletionsPath: '/v1/chat/completions',
+    messagesPath: '/v1/messages',
     authStyle: 'bearer',
   },
   {

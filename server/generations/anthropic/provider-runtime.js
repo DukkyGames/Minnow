@@ -3,7 +3,9 @@
  */
 
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { deriveMessagesPathFromChat } from '../../../src/lib/derive-messages-path.mjs';
 import { isAnthropicGatewayBaseUrl } from '../../../src/lib/anthropic-thinking-style.mjs';
+import { isOpenCodeProviderBaseUrl } from '../../providers/models-dev-context.js';
 import {
   createAnthropicGatewayFetch,
   sanitizeAnthropicGatewayRequestBody,
@@ -29,15 +31,25 @@ export function deriveAnthropicBaseUrl(baseUrl, messagesPath) {
 
 /**
  * Resolve apiKey vs authToken for createAnthropic from profile authStyle.
+ * OpenCode Zen Messages expects x-api-key even when the OpenAI chat path uses Bearer.
+ *
  * @param {object} profile
  * @param {object} secrets
  * @returns {{ apiKey?: string, authToken?: string }}
  */
-function buildAuthOptions(profile, secrets) {
+export function buildAuthOptions(profile, secrets) {
   const apiKey = typeof secrets?.apiKey === 'string' ? secrets.apiKey.trim() : '';
   const bearerToken =
     typeof secrets?.bearerToken === 'string' ? secrets.bearerToken.trim() : '';
   const authStyle = profile?.authStyle || 'bearer';
+
+  if (isOpenCodeProviderBaseUrl(profile?.baseUrl)) {
+    const key = apiKey || bearerToken;
+    if (key) {
+      return { apiKey: key };
+    }
+    return {};
+  }
 
   if ((authStyle === 'x-api-key' || authStyle === 'api-key') && apiKey) {
     return { apiKey };
@@ -119,7 +131,8 @@ function wrapAnthropicGatewayProvider(baseProvider) {
  */
 export function buildAnthropicProvider(runtime) {
   const { profile, paths, secrets } = runtime;
-  const messagesPath = paths?.messagesPath || paths?.chatCompletionsPath || '/v1/messages';
+  const messagesPath =
+    paths?.messagesPath || deriveMessagesPathFromChat(paths?.chatCompletionsPath);
   const baseURL = deriveAnthropicBaseUrl(profile.baseUrl, messagesPath);
   const auth = buildAuthOptions(profile, secrets);
   const headers = buildCustomHeaders(profile, secrets);

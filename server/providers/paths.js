@@ -3,6 +3,8 @@
  * LM Studio list/chat use v0; load/unload use v1 REST on the same baseUrl.
  */
 
+import { deriveMessagesPathFromChat } from '../../src/lib/derive-messages-path.mjs';
+
 /**
  * @param {'lm-studio-v0' | 'openai-v1' | 'anthropic-v1'} apiKind
  */
@@ -46,11 +48,12 @@ export function getDefaultPaths(apiKind, overrides = {}) {
   };
 
   if (defaults.messagesPath) {
+    const chatPath = overrides.chatCompletionsPath || defaults.chatCompletionsPath;
     out.messagesPath =
       overrides.messagesPath ||
       (apiKind === 'anthropic-v1'
         ? overrides.chatCompletionsPath || defaults.messagesPath
-        : defaults.messagesPath);
+        : deriveMessagesPathFromChat(chatPath));
   }
 
   if (defaults.modelsLoadPath) {

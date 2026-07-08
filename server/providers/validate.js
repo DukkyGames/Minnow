@@ -2,6 +2,8 @@
  * Provider id, URL, and enum validation for ~/.minnow/providers.
  */
 
+import { normalizeProviderBaseUrl } from '../../src/lib/normalize-provider-base-url.mjs';
+
 const PROVIDER_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const API_KINDS = new Set(['lm-studio-v0', 'openai-v1', 'anthropic-v1']);
 const AUTH_STYLES = new Set(['bearer', 'api-key', 'x-api-key']);
@@ -19,25 +21,12 @@ export function validateProviderId(id) {
 }
 
 /**
- * Normalize base URL to origin without trailing slash.
+ * Normalize base URL: origin plus optional pathname prefix (no trailing slash).
  * @param {string} raw
  * @returns {string}
  */
 export function validateBaseUrl(raw) {
-  if (typeof raw !== 'string' || !raw.trim()) {
-    throw new Error('baseUrl is required');
-  }
-  const trimmed = raw.trim().replace(/\/$/, '');
-  let u;
-  try {
-    u = new URL(trimmed);
-  } catch {
-    throw new Error('Invalid baseUrl');
-  }
-  if (u.protocol !== 'http:' && u.protocol !== 'https:') {
-    throw new Error('baseUrl must use http or https');
-  }
-  return u.origin;
+  return normalizeProviderBaseUrl(raw);
 }
 
 /**

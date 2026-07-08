@@ -3,6 +3,7 @@
  */
 
 import type { ApiKind, ProviderPublic } from './types';
+import { deriveMessagesPathFromChat } from '../lib/derive-messages-path.mjs';
 
 export interface ProviderPathOverrides {
   modelsPath?: string;
@@ -52,7 +53,9 @@ export function getDefaultPaths(
             overrides.messagesPath ||
             (apiKind === 'anthropic-v1'
               ? overrides.chatCompletionsPath || defaults.messagesPath
-              : defaults.messagesPath),
+              : deriveMessagesPathFromChat(
+                  overrides.chatCompletionsPath || defaults.chatCompletionsPath,
+                )),
         }
       : {}),
   };

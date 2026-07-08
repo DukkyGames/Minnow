@@ -14,9 +14,9 @@ import {
 } from '../../src/lib/anthropic-thinking-style.mjs';
 
 const RUNTIME = {
-  profile: { baseUrl: 'https://opencode.ai', authStyle: 'bearer' },
-  paths: { chatCompletionsPath: '/zen/v1/messages' },
-  secrets: { bearerToken: 'test-token' },
+  profile: { baseUrl: 'https://opencode.ai/zen', authStyle: 'bearer' },
+  paths: { chatCompletionsPath: '/v1/messages', messagesPath: '/v1/messages' },
+  secrets: { apiKey: 'test-token' },
 };
 
 /** Representative built-in tools including ask_question nested additionalProperties. */
@@ -144,6 +144,8 @@ describe('anthropic gateway outbound request capture', () => {
       }
 
       assert.ok(capturedBody, 'expected fetch to be called');
+      assert.equal(capturedHeaders?.['x-api-key'], 'test-token');
+      assert.equal(capturedHeaders?.Authorization, undefined);
       assert.equal(capturedBody.tools?.length, tools.length);
       assert.equal(capturedBody.thinking, undefined);
       assert.equal(capturedBody.output_config, undefined);
