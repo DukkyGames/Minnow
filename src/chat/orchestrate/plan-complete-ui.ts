@@ -163,7 +163,12 @@ export async function maybeEmitOrchestratePlanComplete(groupId: string): Promise
       renderChatFromHistory(active);
     }
   }
-  showPlanCompleteToast('Orchestrate plan complete');
+  const allQuarantined =
+    board.tasks.length > 0 &&
+    board.tasks.every((t) => t.status === 'quarantined');
+  showPlanCompleteToast(
+    allQuarantined ? 'Orchestrate plan blocked' : 'Orchestrate plan complete',
+  );
 
   void firePlanCompleteWrapUpTurn(planner, board).catch((err) =>
     reportBackgroundError('orchestrate-plan-complete-wrap-up', err),

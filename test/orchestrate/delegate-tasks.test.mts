@@ -216,7 +216,7 @@ describe('orchestrator auto reports', () => {
     assert.doesNotMatch(message, /board_update_task/);
   });
 
-  test('deliverOrchestratorTaskReport dedupes by task, kind, and round', async () => {
+  test('deliverOrchestratorTaskReport dedupes by task, kind, and lifecycle run', async () => {
     const { planner, group } = seedBoard('auto');
     group.orchestrateBoard!.autoRunning = true;
     const task = group.orchestrateBoard!.tasks[0]!;
@@ -229,7 +229,7 @@ describe('orchestrator auto reports', () => {
     await deliverOrchestratorTaskReport(group, planner, task, 'failed');
     assert.equal(deliveries.length, 1);
 
-    task.selfHealRound = 1;
+    task.lifecycleRun = 1;
     await deliverOrchestratorTaskReport(group, planner, task, 'failed');
     assert.equal(deliveries.length, 2);
     setOrchestratorReportDeliverHook(null);

@@ -96,7 +96,7 @@ describe('buildOrchestrateCompletionMessage', () => {
     assert.equal(b.unresolvedIssues.length, 1);
   });
 
-  test('all-quarantined board shows 0/N complete', () => {
+  test('all-quarantined board shows blocked headline and 0/N complete', () => {
     const chat = {
       id: '11111111-1111-1111-1111-111111111111',
       orchestratePlanPath: 'documentation/plans/demo-plan.md',
@@ -115,6 +115,7 @@ describe('buildOrchestrateCompletionMessage', () => {
       },
     ];
     const text = buildOrchestrateCompletionMessage(chat, b, END);
+    assert.match(text, /Orchestrate plan blocked/);
     assert.match(text, /0\/1 complete/);
     assert.match(text, /\*\*Quarantined:\*\* 1/);
     assert.match(text, /infra/);
