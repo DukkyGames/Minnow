@@ -33,6 +33,25 @@ export function getTerminalCwdLabelSuffix(cwd: string): string {
   return base ? ` · ${base}` : '';
 }
 
+/** PTY tab title: shell label plus workspace or worktree scope (e.g. "PowerShell 7 · workspace"). */
+export function formatTerminalTabTitle(shellLabel: string, cwd: string): string {
+  const label = shellLabel.trim() || 'Terminal';
+  if (!isTerminalWorktreeCwd(cwd)) {
+    return `${label} · workspace`;
+  }
+  const suffix = getTerminalCwdLabelSuffix(cwd);
+  return suffix ? `${label}${suffix}` : label;
+}
+
+/** Tooltip for a PTY tab — full shell label and absolute cwd. */
+export function formatTerminalTabTooltip(shellLabel: string, cwd: string): string {
+  const label = shellLabel.trim() || 'Terminal';
+  const scope = isTerminalWorktreeCwd(cwd)
+    ? formatTerminalCwdHeader(cwd)
+    : 'main workspace';
+  return `${label} — ${scope}\n${cwd}`;
+}
+
 /** Short label for the terminal header cwd chip. */
 export function formatTerminalCwdHeader(cwd: string): string {
   const normalized = normalizePanelPath(cwd);

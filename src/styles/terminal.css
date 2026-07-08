@@ -114,7 +114,7 @@
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
-  max-width: 160px;
+  max-width: 200px;
   min-height: 32px;
   padding: 4px 8px;
   border: 1px solid transparent;
@@ -148,6 +148,13 @@
 .terminal-tab:focus-visible {
   outline: 2px solid var(--mn-accent);
   outline-offset: 2px;
+}
+
+.terminal-tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .terminal-tab-close {

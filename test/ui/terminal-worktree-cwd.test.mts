@@ -8,6 +8,8 @@ import { afterEach, describe, test } from 'node:test';
 import {
   formatTerminalCwdHeader,
   formatTerminalShellHint,
+  formatTerminalTabTitle,
+  formatTerminalTabTooltip,
   getTerminalCwdLabelSuffix,
   isTerminalWorktreeCwd,
   resolveFileExplorerTerminalCwd,
@@ -69,6 +71,17 @@ describe('terminal cwd labels', () => {
     setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
     assert.equal(formatTerminalCwdHeader(WORKTREE), 'task-abc (worktree)');
     assert.equal(formatTerminalCwdHeader(MAIN_WS), 'minnow');
+  });
+
+  test('tab titles show workspace vs worktree scope', () => {
+    setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
+    assert.equal(formatTerminalTabTitle('PowerShell 7', MAIN_WS), 'PowerShell 7 · workspace');
+    assert.equal(
+      formatTerminalTabTitle('PowerShell 7', WORKTREE),
+      'PowerShell 7 · task-abc',
+    );
+    assert.match(formatTerminalTabTooltip('PowerShell 7', WORKTREE), /task-abc/);
+    assert.match(formatTerminalTabTooltip('PowerShell 7', MAIN_WS), /main workspace/);
   });
 });
 

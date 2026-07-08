@@ -5,6 +5,8 @@
 import { fetchShellProfiles, type ShellProfile } from '../api/terminal-pty';
 import { randomUUID } from '../lib/random-id.ts';
 import {
+  formatTerminalTabTitle,
+  formatTerminalTabTooltip,
   resolveFileExplorerTerminalCwd,
   terminalCwdsEqual,
 } from './terminal-worktree-cwd';
@@ -101,6 +103,7 @@ function metaToSession(meta: TerminalTabMeta): TerminalTabSession {
     shellProfileId: meta.shellProfileId,
     sessionId: null,
     title: meta.title ?? meta.shellProfileId,
+    boundCwd: meta.boundCwd,
   };
 }
 
@@ -109,9 +112,21 @@ function sessionsToMeta(): TerminalTabMeta[] {
     id: t.tabId,
     shellProfileId: t.shellProfileId,
     title: t.title,
+    boundCwd: t.boundCwd,
     chatId: t.chatId ?? null,
     order: i,
   }));
+}
+
+/** Visible tab label — shell name plus workspace or worktree scope. */
+function resolveTabDisplayTitle(tab: TerminalTabSession): string {
+  const cwd = tab.boundCwd ?? resolveFileExplorerTerminalCwd();
+  return formatTerminalTabTitle(tab.title, cwd);
+}
+
+function resolveTabTooltip(tab: TerminalTabSession): string {
+  const cwd = tab.boundCwd ?? resolveFileExplorerTerminalCwd();
+  return formatTerminalTabTooltip(tab.title, cwd);
 }
 
 /** Scope for the next PTY tab — updated when the file explorer root changes. */
@@ -197,6 +212,7 @@ function renderTabBar(activeId: string | null): void {
   list.appendChild(renderDevServerTab(activeId));
 
   for (const tab of liveTabs.values()) {
+    const displayTitle = resolveTabDisplayTitle(tab);
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'terminal-tab';
@@ -204,15 +220,19 @@ function renderTabBar(activeId: string | null): void {
     btn.dataset.tabId = tab.tabId;
     btn.setAttribute('aria-selected', tab.tabId === activeId ? 'true' : 'false');
     btn.tabIndex = tab.tabId === activeId ? 0 : -1;
-    btn.textContent = tab.title;
-    btn.title = tab.title;
+    btn.title = resolveTabTooltip(tab);
     btn.addEventListener('click', () => {
       void switchTab(tab.tabId);
     });
 
+    const label = document.createElement('span');
+    label.className = 'terminal-tab-label';
+    label.textContent = displayTitle;
+    btn.appendChild(label);
+
     const close = document.createElement('span');
     close.className = 'terminal-tab-close';
-    close.setAttribute('aria-label', `Close ${tab.title}`);
+    close.setAttribute('aria-label', `Close ${displayTitle}`);
     close.textContent = '×';
     close.addEventListener('click', (e) => {
       e.stopPropagation();
