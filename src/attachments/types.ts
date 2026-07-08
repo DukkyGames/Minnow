@@ -3,6 +3,7 @@
  */
 
 import type { DesignShape } from '../design/shape-model';
+import type { SourceMapping } from '../design/source-map';
 
 /** How an attachment is represented after `processFile` or workspace drag-drop. */
 export type AttachmentKind =
@@ -58,6 +59,8 @@ export interface Attachment {
   stylesDigest?: string;
   /** DPR-correct cropped screenshot data URL of the picked element (`elementRef`). */
   croppedDataUrl?: string;
+  /** Resolved file:line (or best-effort guess) the picked element came from (`elementRef`, MIN-369). Set async after the chip is pushed. */
+  sourceMapping?: SourceMapping;
   /** The drawn shape (pen/rect/arrow/label) captured into this attachment (`designRef`). */
   shape?: DesignShape;
   /** Composited crop (screenshot region + rasterized overlay shapes) data URL (`designRef`). */

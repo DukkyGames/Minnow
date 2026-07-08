@@ -12,10 +12,13 @@ import {
   uidFallbackSelector,
   type ElementPicker,
   type PickedElement,
+  type PickerTransport,
 } from './element-picker';
 import { captureRegion, captureRegionWithOverlay } from './region-capture';
+import { resolveElementSourceMapping } from './source-map';
 import { addElementRefToComposer } from '../attachments/element-ref';
 import { addDesignRefToComposer } from '../attachments/design-ref';
+import { updateAttachmentSourceMapping } from '../attachments/store';
 import { getFilePanelState } from '../state/file-panel';
 import {
   boundingRectOfShape,
@@ -119,6 +122,7 @@ export function currentPreviewPageRef(): string {
 export function createSelectDesignTool(): DesignTool {
   let ctx: DesignToolContext | null = null;
   let picker: ElementPicker | null = null;
+  let transport: PickerTransport | null = null;
   let markers: OverlayMarker[] = [];
 
   function resetSelection(): void {
@@ -158,6 +162,22 @@ export function createSelectDesignTool(): DesignTool {
     }
     ctx.overlay.render(markers);
     if (captured.dataUrl) ctx.overlay.pinCaptureToMarker(markerId, captured);
+
+    // Source resolution (MIN-369) runs after the chip is already on screen — never delays or
+    // blocks the pick itself. Best-effort: resolveElementSourceMapping never rejects.
+    const armedTransport = transport;
+    void resolveElementSourceMapping(
+      {
+        selector,
+        pageUrl: currentPreviewPageRef(),
+        tagName: picked.tagName,
+        classList: picked.classList,
+        outerHtmlPreview: picked.outerHTMLPreview,
+      },
+      armedTransport,
+    ).then((mapping) => {
+      updateAttachmentSourceMapping(attachment.id, mapping);
+    });
   }
 
   return {
@@ -166,8 +186,9 @@ export function createSelectDesignTool(): DesignTool {
     arm(context) {
       ctx = context;
       resetSelection();
+      transport = createPickerTransport();
       picker = createElementPicker({
-        transport: createPickerTransport(),
+        transport,
         onPick: (picked) => void handlePick(picked),
       });
       void picker.enable().catch(() => {});
@@ -176,6 +197,7 @@ export function createSelectDesignTool(): DesignTool {
       void picker?.disable();
       picker?.destroy();
       picker = null;
+      transport = null;
       resetSelection();
       ctx = null;
     },

@@ -2,6 +2,8 @@
  * Element-reference label and history serialization (no store dependency).
  */
 
+import type { SourceMapping } from '../design/source-map';
+
 function basename(path: string): string {
   const withoutProtocol = path.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
   const normalized = withoutProtocol.replace(/\\/g, '/').replace(/\/+$/, '');
@@ -36,10 +38,26 @@ export interface ElementRefBlockInput {
   outerHtmlPreview: string;
   /** Name of the co-emitted `[image: name]` placeholder, when a crop was captured. */
   imageName?: string;
+  /** Resolved file:line (or guess) for the picked element, when async resolution has landed (MIN-369). */
+  sourceMapping?: SourceMapping;
 }
 
 function attr(value: string): string {
   return value.replace(/"/g, "'");
+}
+
+/**
+ * `source="file:line"` (or component name when there's no line) plus `confidence="…"` — only
+ * emitted once resolution has landed; omitted entirely while a pick's mapping is still pending
+ * or resolution never ran (never blocks/delays the block from being sent).
+ */
+function sourceMapAttrs(mapping: SourceMapping | undefined): string {
+  if (!mapping) return '';
+  const location = mapping.file
+    ? `${mapping.file}${mapping.line != null ? `:${mapping.line}` : ''}`
+    : (mapping.component ?? '');
+  const sourceAttr = location ? ` source="${attr(location)}"` : '';
+  return `${sourceAttr} confidence="${mapping.confidence}"`;
 }
 
 /** Persisted/API block for a Design Mode element pick (body is the outerHTML preview). */
@@ -48,9 +66,10 @@ export function elementRefHistoryBlock(input: ElementRefBlockInput): string {
   const rectAttr = `${Math.round(rect.x)},${Math.round(rect.y)},${Math.round(rect.width)},${Math.round(rect.height)}`;
   const uidAttr = input.uid == null ? '' : ` uid="${input.uid}"`;
   const imageAttr = input.imageName ? ` image="${attr(input.imageName)}"` : '';
+  const sourceAttrs = sourceMapAttrs(input.sourceMapping);
   return (
     `<element-ref selector="${attr(input.selector)}"${uidAttr} page="${attr(input.pageUrl)}" ` +
     `tag="${attr(input.tagName)}" classes="${attr(input.classList.join(' '))}" rect="${rectAttr}" ` +
-    `styles="${attr(input.stylesDigest)}"${imageAttr}>\n${input.outerHtmlPreview}\n</element-ref>`
+    `styles="${attr(input.stylesDigest)}"${sourceAttrs}${imageAttr}>\n${input.outerHtmlPreview}\n</element-ref>`
   );
 }

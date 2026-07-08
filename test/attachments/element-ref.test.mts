@@ -87,6 +87,57 @@ describe('elementRefHistoryBlock', () => {
     const withoutImage = elementRefHistoryBlock(baseInput);
     assert.doesNotMatch(withoutImage, /image="/);
   });
+
+  it('omits source/confidence entirely when sourceMapping is unresolved (MIN-369)', () => {
+    const block = elementRefHistoryBlock(baseInput);
+    assert.doesNotMatch(block, /source="/);
+    assert.doesNotMatch(block, /confidence="/);
+  });
+
+  it('serializes an exact file:line match', () => {
+    const block = elementRefHistoryBlock({
+      ...baseInput,
+      sourceMapping: { file: 'pricing.html', line: 42, confidence: 'exact' },
+    });
+    assert.match(block, /source="pricing\.html:42" confidence="exact"/);
+  });
+
+  it('serializes a probable dev-server component match without a line', () => {
+    const block = elementRefHistoryBlock({
+      ...baseInput,
+      sourceMapping: { file: 'src/components/Cta.tsx', component: 'CtaButton', confidence: 'probable' },
+    });
+    assert.match(block, /source="src\/components\/Cta\.tsx" confidence="probable"/);
+  });
+
+  it('falls back to the component name for source when there is no file', () => {
+    const block = elementRefHistoryBlock({
+      ...baseInput,
+      sourceMapping: { component: 'CtaButton', confidence: 'probable' },
+    });
+    assert.match(block, /source="CtaButton" confidence="probable"/);
+  });
+
+  it('emits confidence="guess" with no source attribute when nothing resolved', () => {
+    const block = elementRefHistoryBlock({
+      ...baseInput,
+      sourceMapping: { confidence: 'guess' },
+    });
+    assert.doesNotMatch(block, /source="/);
+    assert.match(block, /confidence="guess"/);
+  });
+
+  it('places source/confidence between styles and image attributes', () => {
+    const block = elementRefHistoryBlock({
+      ...baseInput,
+      sourceMapping: { file: 'pricing.html', line: 42, confidence: 'exact' },
+      imageName: 'button.cta — pricing.html',
+    });
+    assert.match(
+      block,
+      /styles="[^"]*" source="pricing\.html:42" confidence="exact" image="button\.cta — pricing\.html"/,
+    );
+  });
 });
 
 describe('addElementRefToComposer', () => {

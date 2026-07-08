@@ -34,6 +34,10 @@ export interface HistoryElementRefPart {
   /** Name of the co-emitted `[image: name]` placeholder, when a crop was captured. */
   imageName: string | null;
   outerHtmlPreview: string;
+  /** `file:line` (or component name) resolved for this pick, when resolution had landed by send time (MIN-369). */
+  source: string | null;
+  /** `exact` | `probable` | `guess`, when `source` is present. */
+  confidence: string | null;
 }
 
 /** Design Mode drawn shape (`<design-ref kind="…" page="…" anchor="…" …>`). */
@@ -66,7 +70,7 @@ const FILE_BLOCK_RE = /<file name="([^"]*)">\n([\s\S]*?)\n<\/file>/g;
 const CODE_REF_BLOCK_RE =
   /<code-ref path="([^"]*)" start="(\d+)" end="(\d+)">\n([\s\S]*?)\n<\/code-ref>/g;
 const ELEMENT_REF_BLOCK_RE =
-  /<element-ref selector="([^"]*)"(?: uid="(\d+)")? page="([^"]*)" tag="([^"]*)" classes="([^"]*)" rect="([^"]*)" styles="([^"]*)"(?: image="([^"]*)")?>\n([\s\S]*?)\n<\/element-ref>/g;
+  /<element-ref selector="([^"]*)"(?: uid="(\d+)")? page="([^"]*)" tag="([^"]*)" classes="([^"]*)" rect="([^"]*)" styles="([^"]*)"(?: source="([^"]*)")?(?: confidence="([^"]*)")?(?: image="([^"]*)")?>\n([\s\S]*?)\n<\/element-ref>/g;
 const DESIGN_REF_BLOCK_RE =
   /<design-ref kind="([^"]*)" page="([^"]*)" anchor="(element|page)"(?: anchorSelector="([^"]*)")?(?: anchorUid="(\d+)")?(?: anchorX="(-?\d+)")?(?: anchorY="(-?\d+)")?(?: image="([^"]*)")?(?: id="([^"]*)")?>\n([\s\S]*?)\n<\/design-ref>/g;
 const IMAGE_PLACEHOLDER_RE = /\[image:\s*([^\]]+)\]/g;
@@ -128,8 +132,10 @@ export function parseHistoryUserContent(content: string): ParsedHistoryUserMessa
     const classList = (match[5] ?? '').split(/\s+/).filter(Boolean);
     const rect = parseRect(match[6] ?? '');
     const stylesDigest = match[7] ?? '';
-    const imageName = match[8] ?? null;
-    const outerHtmlPreview = match[9] ?? '';
+    const source = match[8] ?? null;
+    const confidence = match[9] ?? null;
+    const imageName = match[10] ?? null;
+    const outerHtmlPreview = match[11] ?? '';
     if (selector) {
       elementRefs.push({
         selector,
@@ -141,6 +147,8 @@ export function parseHistoryUserContent(content: string): ParsedHistoryUserMessa
         stylesDigest,
         imageName,
         outerHtmlPreview,
+        source,
+        confidence,
       });
     }
   }
