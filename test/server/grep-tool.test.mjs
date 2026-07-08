@@ -114,7 +114,7 @@ describe('grep helpers', () => {
 
 describe('grep constants (MIN-196)', () => {
   it('uses conservative default and max head limits', () => {
-    assert.equal(GREP_DEFAULT_HEAD_LIMIT, 50);
+    assert.equal(GREP_DEFAULT_HEAD_LIMIT, 200);
     assert.equal(GREP_MAX_HEAD_LIMIT, 200);
     assert.equal(GREP_MAX_OUTPUT_CHARS, 32000);
     assert.equal(GREP_MAX_LINE_CHARS, 400);

@@ -512,12 +512,12 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'grep',
     label: 'Grep / Search workspace',
     description:
-      'Search file contents under a directory (ripgrep-style). Respects .gitignore. Results paginate (default 50 lines).',
+      'Search file contents under a directory (ripgrep-style). Respects .gitignore. Results paginate (default 200 lines).',
     category: 'files',
     serverRequired: true,
     definition: toolSchema(
       'grep',
-      'Search file contents (ripgrep-style). path:line:snippet; respects .gitignore. Returns at most head_limit match lines per call (default 50, max 200) and 32k total chars — truncated output includes offset= for the next page. Prefer output_mode files_with_matches or count for overview scans; use path/glob to narrow scope before paging.',
+      'Search file contents (ripgrep-style). path:line:snippet; respects .gitignore. Returns at most head_limit match lines per call (default 200, max 200) and 32k total chars — truncated output includes offset= for the next page. Prefer output_mode files_with_matches or count for overview scans; use path/glob to narrow scope before paging.',
       {
         pattern: { type: 'string', description: 'Regex or literal search pattern' },
         path: { type: 'string', description: 'Directory or file to search (default workspace root)' },
@@ -527,7 +527,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         context: { type: 'number', description: 'Lines of context around each match (0–5)' },
         head_limit: {
           type: 'number',
-          description: 'Max match lines per page (default 50, max 200)',
+          description: 'Max match lines per page (default 200, max 200)',
         },
         offset: {
           type: 'number',

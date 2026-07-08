@@ -19,7 +19,7 @@ import {
 const execFileAsync = promisify(execFile);
 
 /** Default max lines returned per request. */
-export const GREP_DEFAULT_HEAD_LIMIT = 50;
+export const GREP_DEFAULT_HEAD_LIMIT = 200;
 
 /** Hard cap for head_limit argument. */
 export const GREP_MAX_HEAD_LIMIT = 200;
@@ -116,9 +116,12 @@ export function capGrepOutput(stdout, options = {}) {
   const nextOffset = offset + lineCount;
 
   if (truncated) {
+    const canRaiseLimit = GREP_DEFAULT_HEAD_LIMIT < GREP_MAX_HEAD_LIMIT;
     const hint =
       lineCount > 0
-        ? `use offset=${nextOffset} for the next page or raise head_limit (max ${GREP_MAX_HEAD_LIMIT})`
+        ? canRaiseLimit
+          ? `use offset=${nextOffset} for the next page or raise head_limit (max ${GREP_MAX_HEAD_LIMIT})`
+          : `use offset=${nextOffset} for the next page`
         : `use offset=${offset} with a smaller head_limit`;
     text = `${text}\n(truncated at ${lineCount} match lines, default head_limit=${GREP_DEFAULT_HEAD_LIMIT}; ${hint})`;
   }
