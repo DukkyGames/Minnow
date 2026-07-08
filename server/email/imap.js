@@ -132,6 +132,9 @@ export async function parseRawMessage(source, context) {
   const to = formatAddressList(
     parsed.to?.value?.map((row) => ({ name: row.name, address: row.address })) ?? [],
   );
+  const replyTo = formatFromAddress(
+    parsed.replyTo?.value?.map((row) => ({ name: row.name, address: row.address })) ?? [],
+  );
 
   const plain = parsed.text ?? '';
   const rawHtml = parsed.html ? String(parsed.html) : '';
@@ -166,6 +169,7 @@ export async function parseRawMessage(source, context) {
     folder: context.folder,
     from,
     to,
+    replyTo,
     subject,
     date,
     bodyPreview,

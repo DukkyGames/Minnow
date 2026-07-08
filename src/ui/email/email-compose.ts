@@ -9,6 +9,12 @@ import {
   sendEmailMessage,
 } from "../../email/client";
 import { regenerateReplyVariants } from "../../email/client-ext";
+import {
+  buildReferencesChain,
+  collectAccountEmails,
+  extractEmailAddress,
+  resolveReplyTarget,
+} from "../../email/reply-headers";
 import { createComposeBodyEditor } from "./email-compose-editor";
 
 export type ComposeMode = "reply" | "replyAll" | "forward" | "new";
@@ -36,8 +42,7 @@ function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 function extractEmail(header: string): string {
-  const match = header.match(/<([^>]+)>/);
-  return (match?.[1] ?? header).trim();
+  return extractEmailAddress(header);
 }
 
 function collectRecipients(
@@ -243,7 +248,10 @@ export function mountEmailCompose(
     if (!latest) return;
 
     if (options.mode === "reply") {
-      toInput.value = extractEmail(latest.from);
+      toInput.value = resolveReplyTarget(
+        options.messages ?? [],
+        collectAccountEmails(options.account),
+      );
       subjectInput.value = latest.subject.startsWith("Re:")
         ? latest.subject
         : `Re: ${latest.subject}`;
@@ -466,6 +474,7 @@ export function mountEmailCompose(
 
   sendBtn.addEventListener("click", async () => {
     const to = toInput.value.trim();
+    const cc = ccInput.value.trim();
     const subject = subjectInput.value.trim();
     const body = bodyEditor.getPlainText();
     const bodyHtml = bodyEditor.getHtml();
@@ -479,16 +488,24 @@ export function mountEmailCompose(
     if (!ok) return;
 
     const latest = options.messages?.[options.messages.length - 1];
+    const replyHeaders =
+      options.mode !== "new" && latest
+        ? {
+            inReplyTo: latest.messageId,
+            references: buildReferencesChain(latest),
+          }
+        : undefined;
 
     try {
       await sendEmailMessage({
         accountId: options.account.id,
         to,
+        cc: cc || undefined,
         subject,
         body,
         bodyHtml,
-        inReplyTo: options.mode !== "new" ? latest?.messageId : undefined,
-        references: options.mode !== "new" ? latest?.messageId : undefined,
+        inReplyTo: replyHeaders?.inReplyTo,
+        references: replyHeaders?.references,
         confirmed: true,
       });
 
