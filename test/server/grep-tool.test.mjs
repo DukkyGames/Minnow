@@ -56,7 +56,7 @@ describe('grep helpers', () => {
     assert.match(text, /1:alpha/);
     assert.match(text, /2-beta/);
     assert.doesNotMatch(text, /3:gamma/);
-    assert.match(text, /truncated at 2 lines/);
+    assert.match(text, /truncated at 2 match lines/);
   });
 
   it('capGrepOutput supports offset pagination', () => {
@@ -114,7 +114,7 @@ describe('grep helpers', () => {
 
 describe('grep constants (MIN-196)', () => {
   it('uses conservative default and max head limits', () => {
-    assert.equal(GREP_DEFAULT_HEAD_LIMIT, 50);
+    assert.equal(GREP_DEFAULT_HEAD_LIMIT, 200);
     assert.equal(GREP_MAX_HEAD_LIMIT, 200);
     assert.equal(GREP_MAX_OUTPUT_CHARS, 32000);
     assert.equal(GREP_MAX_LINE_CHARS, 400);
@@ -185,7 +185,7 @@ describe('runGrepSearch fixture workspace', () => {
       path: 'src',
       head_limit: 1,
     });
-    assert.match(out, /truncated at 1 lines/);
+    assert.match(out, /truncated at 1 match lines/);
   });
 
   it('supports output_mode files_with_matches', async () => {
