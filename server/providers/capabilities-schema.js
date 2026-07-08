@@ -5,6 +5,7 @@
 const SCHEMA_VERSION = 1;
 
 const CAPABILITY_SOURCES = new Set(['catalog', 'probe', 'assumed']);
+const API_KINDS = new Set(['lm-studio-v0', 'openai-v1', 'anthropic-v1']);
 
 /**
  * @param {unknown} value
@@ -81,6 +82,9 @@ export function normalizeModelCapabilities(raw) {
 
   if (row.structuredOutput === true || row.structuredOutput === false) {
     out.structuredOutput = row.structuredOutput;
+  }
+  if (typeof row.api === 'string' && API_KINDS.has(row.api)) {
+    out.api = row.api;
   }
   if (typeof row.denyReason === 'string') {
     out.denyReason = row.denyReason;
