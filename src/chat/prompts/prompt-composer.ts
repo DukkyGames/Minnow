@@ -2,6 +2,7 @@
  * Assemble the system prompt from enabled parts and profile rules.
  */
 
+import { getDefaultWorkAgentForMode } from '../../agents/work-agent-registry';
 import { getMode } from '../modes/registry';
 import { isModeId, type ModeId } from '../modes/types';
 import { BROWSER_PREVIEW_TOOL_IDS } from './browser-allowlist-gate';
@@ -56,25 +57,24 @@ function contextHasBrowserPreviewTools(ctx: ComposeContext): boolean {
   return ids.some((id) => BROWSER_PREVIEW_TOOL_IDS.has(id));
 }
 
-/** Lite truncation caps when no lite template exists. */
-const LITE_TRUNCATE_CAPS: Record<PromptPartId, number> = {
-  base: 800,
-  mode: 600,
-  expert: 500,
-  'work-agent': 600,
-  'tool-usage': 400,
-  info: 0,
-  skill: 2000,
-  memory: 0,
-};
-
 /** Default lite part gating (memory uses shorter retrieve cap when enabled). */
 const LITE_DISABLED_PARTS = new Set<PromptPartId>(['info']);
 
-function truncateForLite(text: string, maxChars: number): string {
-  if (maxChars <= 0 || !text.trim()) return '';
-  if (text.length <= maxChars) return text;
-  return `${text.slice(0, maxChars).trimEnd()}…`;
+/** Strip HTML comments (e.g. MINNOW_MODE_MARKER) before sending to the model. */
+export function stripPromptHtmlComments(text: string): string {
+  return text.replace(/<!--[\s\S]*?-->/g, '').trim();
+}
+
+/**
+ * When the active work-agent is the mode default (builder/planner/…), omit the mode
+ * body — the work-agent prompt already carries deliverable instructions.
+ */
+export function shouldSuppressModePart(ctx: ComposeContext): boolean {
+  const modeId = ctx.modeId?.trim();
+  const workAgentId = ctx.workAgentId?.trim();
+  if (!modeId || !workAgentId) return false;
+  const defaultAgent = getDefaultWorkAgentForMode(modeId);
+  return defaultAgent?.id === workAgentId;
 }
 
 function partSettings(
@@ -104,7 +104,9 @@ function isPartEnabled(
     return Boolean(ctx.memoryBlock?.trim());
   }
   if (partId === 'mode') {
-    return Boolean(ctx.modeId);
+    if (!ctx.modeId) return false;
+    if (shouldSuppressModePart(ctx)) return false;
+    return true;
   }
   if (partId === 'expert') {
     return Boolean(ctx.expertId);
@@ -153,7 +155,7 @@ function resolvePartBody(
 ): string {
   const custom = partSettings(ctx.customConfig, partId);
   if (custom?.contentOverride?.trim()) {
-    return custom.contentOverride.trim();
+    return stripPromptHtmlComments(custom.contentOverride.trim());
   }
 
   if (partId === 'skill' && ctx.skillBody?.trim()) {
@@ -178,15 +180,15 @@ function resolvePartBody(
   const loaded = loadPromptById(kind, id || 'default', loadProfile);
   if (!loaded?.body) return '';
 
-  let body = loaded.body;
   if (profile === 'lite') {
     if (loaded.liteBody?.trim()) {
-      body = loaded.liteBody.trim();
-    } else {
-      body = truncateForLite(body, LITE_TRUNCATE_CAPS[partId]);
+      return stripPromptHtmlComments(loaded.liteBody.trim());
     }
+    // No lite variant — omit the part rather than mid-sentence truncation.
+    return '';
   }
-  return body;
+
+  return stripPromptHtmlComments(loaded.body);
 }
 
 function contextHasContext7Tools(ctx: ComposeContext): boolean {
@@ -301,10 +303,7 @@ function resolveLaunchMinnowAppBody(ctx: ComposeContext, profile: PromptProfile)
   return loaded?.body?.trim() ?? '';
 }
 
-function buildInterpolationVars(ctx: ComposeContext, profile: PromptProfile): InterpolationVars {
-  const includeSummary =
-    profile !== 'lite' || ctx.includeChatHistorySummary === true;
-
+function buildInterpolationVars(ctx: ComposeContext): InterpolationVars {
   const modeId = ctx.modeId ?? '';
   const modeLabel =
     modeId && isModeId(modeId) ? getMode(modeId).label : modeId;
@@ -320,7 +319,6 @@ function buildInterpolationVars(ctx: ComposeContext, profile: PromptProfile): In
     cwd: ctx.cwd,
     memory: ctx.memoryBlock ?? '',
     user_message: ctx.userMessagePreview ?? '',
-    chat_history_summary: includeSummary ? '' : '',
     work_agent: ctx.workAgentId ?? '',
     work_agent_label: ctx.workAgentLabel?.trim() || ctx.workAgentId || '',
     skill: ctx.skillBody ?? '',
@@ -341,7 +339,7 @@ export function composeSystemPrompt(ctx: ComposeContext): string {
   const effectiveProfile: PromptProfile =
     profile === 'custom' ? 'custom' : profile;
 
-  const vars = buildInterpolationVars(ctx, effectiveProfile === 'lite' ? 'lite' : 'full');
+  const vars = buildInterpolationVars(ctx);
 
   const sections: string[] = [];
 

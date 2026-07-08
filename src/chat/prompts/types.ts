@@ -93,7 +93,6 @@ export interface ComposeContext {
   enabledToolIds: string[];
   infoPresetId: string | null;
   userMessagePreview?: string;
-  includeChatHistorySummary?: boolean;
   planGranularity?: string | null;
   /** Workspace-relative plan path when mode is orchestrate (for {{orchestrate_plan}}). */
   orchestratePlanPath?: string | null;
@@ -110,7 +109,6 @@ export interface InterpolationVars {
   cwd: string;
   memory: string;
   user_message: string;
-  chat_history_summary: string;
   work_agent: string;
   work_agent_label: string;
   skill: string;
