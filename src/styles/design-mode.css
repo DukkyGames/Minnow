@@ -19,6 +19,15 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.24);
 }
 
+/* Tool strip in #previewDesignChrome sits below the guest — no absolute overlay positioning. */
+.preview-design-chrome .mn-design-strip {
+  position: static;
+  left: auto;
+  bottom: auto;
+  transform: none;
+  box-shadow: none;
+}
+
 .mn-design-strip__tools,
 .mn-design-strip__viewports {
   display: flex;
