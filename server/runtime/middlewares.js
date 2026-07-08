@@ -23,6 +23,7 @@ import { createMemoryMiddleware } from '../memory/middleware.js';
 import { createBrainMiddleware } from '../brain/middleware.js';
 import { createPreviewMiddleware } from '../preview/middleware.js';
 import { createDesignAnnotationsMiddleware } from '../design/annotations-routes.js';
+import { createSourceMapMiddleware } from '../design/source-map-routes.js';
 import { createProfilesMiddleware } from '../profiles/middleware.js';
 import { createPromptConfigsMiddleware } from '../prompt-configs/middleware.js';
 import { createProviderMiddleware } from '../providers/routes.js';
@@ -79,6 +80,12 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   );
   connectApp.use(
     createDesignAnnotationsMiddleware({
+      resolveSafePath,
+      runWithPathAccess,
+    }),
+  );
+  connectApp.use(
+    createSourceMapMiddleware({
       resolveSafePath,
       runWithPathAccess,
     }),

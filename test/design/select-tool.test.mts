@@ -68,6 +68,14 @@ describe('Select design tool (MIN-366)', () => {
       getPageDimensions: async () => ({ pageW: 400, pageH: 300 }),
       cropPngToDataUrl: async () => ({ dataUrl: 'data:image/png;base64,CROPPED' }),
     });
+
+    // Element → source mapping (MIN-369) calls fetch as its first ladder step for a static
+    // .html page; stub it so handlePick's async resolution has something deterministic to land.
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        json: async () => ({ file: 'pricing.html', line: 42, confidence: 'exact' }),
+      }) as Response) as typeof fetch;
   });
 
   afterEach(() => {
@@ -75,6 +83,8 @@ describe('Select design tool (MIN-366)', () => {
     resetRegionCaptureForTests();
     resetFilePanelStateForTests();
     document.body.innerHTML = '';
+    // @ts-expect-error test cleanup
+    delete globalThis.fetch;
   });
 
   function makeCtx(): DesignToolContext {
@@ -117,6 +127,45 @@ describe('Select design tool (MIN-366)', () => {
     assert.ok(chip.stylesDigest && chip.stylesDigest.includes('font:'), 'stylesDigest should be a computed-styles digest');
     assert.equal(chip.croppedDataUrl, 'data:image/png;base64,CROPPED');
     assert.match(chip.outerHtmlPreview ?? '', /button/);
+
+    tool.disarm();
+  });
+
+  test('the chip is pushed without a sourceMapping, then upgraded in place once resolution lands (MIN-369)', async () => {
+    // Hold the source-map fetch open so we can observe the chip's un-upgraded state before
+    // resolving it — proves the pick never waits on this lookup.
+    let resolveFetch: (res: Response) => void = () => {};
+    globalThis.fetch = (() =>
+      new Promise<Response>((resolve) => {
+        resolveFetch = resolve;
+      })) as unknown as typeof fetch;
+
+    const tool = createSelectDesignTool();
+    const ctx = makeCtx();
+    tool.arm(ctx);
+    await flush();
+
+    const button = childWin.document.querySelector('button')!;
+    button.dispatchEvent(new childWin.MouseEvent('click', { bubbles: true }));
+    await flush();
+
+    const beforeResolution = getPendingAttachments();
+    assert.equal(beforeResolution.length, 1, 'chip pushed even though source-map lookup is still pending');
+    assert.equal(beforeResolution[0].sourceMapping, undefined);
+
+    resolveFetch({
+      ok: true,
+      json: async () => ({ file: 'pricing.html', line: 42, confidence: 'exact' }),
+    } as Response);
+    await flush();
+
+    const afterResolution = getPendingAttachments();
+    assert.equal(afterResolution.length, 1, 'still the same single chip, not a duplicate');
+    assert.deepEqual(afterResolution[0].sourceMapping, {
+      file: 'pricing.html',
+      line: 42,
+      confidence: 'exact',
+    });
 
     tool.disarm();
   });

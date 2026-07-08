@@ -60,6 +60,7 @@ function elementRefSummaryText(ref: HistoryElementRefPart): string {
       : []),
     `Page: ${ref.pageUrl}`,
     `Styles: ${ref.stylesDigest}`,
+    ...(ref.source ? [`Source: ${ref.source}${ref.confidence ? ` (${ref.confidence})` : ''}`] : []),
     '',
     ref.outerHtmlPreview,
   ];

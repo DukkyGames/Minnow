@@ -433,6 +433,7 @@ export function buildHistoryUserContent(
           stylesDigest: att.stylesDigest,
           outerHtmlPreview: att.outerHtmlPreview,
           imageName: att.croppedDataUrl ? att.name : undefined,
+          sourceMapping: att.sourceMapping,
         }),
       );
       if (att.croppedDataUrl) parts.push(imageHistoryPlaceholder(att.name));
@@ -500,6 +501,7 @@ export function buildVlmUserApiContent(
           stylesDigest: att.stylesDigest,
           outerHtmlPreview: att.outerHtmlPreview,
           imageName: att.croppedDataUrl ? att.name : undefined,
+          sourceMapping: att.sourceMapping,
         }),
       );
       continue;

@@ -5,6 +5,7 @@ import {
   historyUserContentHasAttachments,
 } from '../../src/chat/user-message-parts.ts';
 import { designRefHistoryBlock } from '../../src/attachments/design-ref-format.ts';
+import { elementRefHistoryBlock } from '../../src/attachments/element-ref-format.ts';
 
 describe('parseHistoryUserContent', () => {
   test('extracts prose without file bodies', () => {
@@ -100,6 +101,41 @@ describe('parseHistoryUserContent', () => {
     assert.equal(ref.kind, 'rect');
     assert.deepEqual(ref.anchor, { type: 'page', x: 5, y: 5 });
     assert.equal(ref.imageName, null);
+  });
+
+  test('extracts element-ref source/confidence (MIN-369) and still parses blocks without it', () => {
+    const withMapping = elementRefHistoryBlock({
+      selector: 'button.cta',
+      uid: 3,
+      pageUrl: 'pricing.html',
+      tagName: 'button',
+      classList: ['cta'],
+      rect: { x: 1, y: 2, width: 3, height: 4 },
+      stylesDigest: 'font:14px/20px Inter 400',
+      outerHtmlPreview: '<button class="cta">Buy</button>',
+      sourceMapping: { file: 'pricing.html', line: 42, confidence: 'exact' },
+    });
+    const parsedWithMapping = parseHistoryUserContent(withMapping);
+    assert.equal(parsedWithMapping.elementRefs.length, 1);
+    assert.equal(parsedWithMapping.elementRefs[0].source, 'pricing.html:42');
+    assert.equal(parsedWithMapping.elementRefs[0].confidence, 'exact');
+    // The block is still stripped cleanly out of the visible prose.
+    assert.equal(parsedWithMapping.text, '');
+
+    const withoutMapping = elementRefHistoryBlock({
+      selector: 'button.cta',
+      uid: 3,
+      pageUrl: 'pricing.html',
+      tagName: 'button',
+      classList: ['cta'],
+      rect: { x: 1, y: 2, width: 3, height: 4 },
+      stylesDigest: 'font:14px/20px Inter 400',
+      outerHtmlPreview: '<button class="cta">Buy</button>',
+    });
+    const parsedWithoutMapping = parseHistoryUserContent(withoutMapping);
+    assert.equal(parsedWithoutMapping.elementRefs.length, 1);
+    assert.equal(parsedWithoutMapping.elementRefs[0].source, null);
+    assert.equal(parsedWithoutMapping.elementRefs[0].confidence, null);
   });
 
   test('detects attachment markers', () => {
