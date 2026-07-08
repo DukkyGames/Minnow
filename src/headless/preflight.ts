@@ -5,7 +5,7 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { headlessApiUrl, normalizeBaseUrl } from './server-context';
+import { headlessApiUrl, normalizeBaseUrl } from './server-context.ts';
 
 const APP_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 

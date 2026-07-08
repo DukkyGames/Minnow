@@ -58,6 +58,7 @@ export const DEFAULT_RUNNER_BY_EXT = {
  * Patterns use forward slashes and support `*` / `**` globs via fs.globSync.
  */
 export const PATH_RUNNER_RULES = [
+  { pattern: 'test/headless/preflight.test.mts', runner: 'tsx' },
   { pattern: 'test/sub-agents/scheduler-drain-reject.test.mts', runner: 'tsx-mocks' },
   { pattern: 'test/research/*.test.mts', runner: 'tsx-mocks' },
   { pattern: 'test/server/**/*.test.mjs', runner: 'tsx-mocks' },

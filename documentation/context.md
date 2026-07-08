@@ -1907,6 +1907,20 @@ Cursor-style **⋮ menu** on each history-backed user/assistant row (not on in-f
 
 E2E checklist and manual QA steps: [`documentation/plans/tool-usage-verification.md`](plans/tool-usage-verification.md).
 
+**Runner overrides** ([`test/test-config.mjs`](../test/test-config.mjs)): `scheduler-drain-reject.test.mts` uses `tsx-mocks` (`--import tsx` + `--experimental-test-module-mocks` so `mock.module` works). `preflight.test.mts` uses plain `tsx` (imports `preflight.ts` which resolves `server-context.ts`). `test/server/**`, `test/workspace/*.test.js`, and related suites use `tsx-mocks`.
+
+**Shared UI harness** ([`test/os/dom-helpers.mts`](../test/os/dom-helpers.mts)): `installHappyDomGlobals`, `teardownHappyDomAsync`, `setupMinimalComposerDom`, `seedMinimalSession` — used by OS/UI suites under happy-dom.
+
+**Benchmark contracts:** `suitesForPreset` in [`runner.ts`](../src/benchmark/runner.ts) treats `suites: []` as an explicit empty override (`override !== undefined`), not a fallback to `quick`. [`skill-probes.ts`](../src/benchmark/suites/skill-probes.ts) defines an explicit probe for every built-in skill id in [`builtin-manifest.json`](../src/skills/builtin-manifest.json).
+
+**Prompt marker:** `orchestrate.lite.md` includes `<!-- MINNOW_MODE_MARKER: orchestrate lite -->` (parity with other mode lite prompts).
+
+**Dev-server reconcile:** `reconcileRow` in [`manager.js`](../server/dev-server/manager.js) keeps `running`/`starting` for ~2s when the terminal registry has not yet attached the child (Windows spawn lag). `resetDevServerManagerForTests()` clears in-memory rows between tests.
+
+**Headless defaults:** `read_file` is in `DEFAULT_ENABLED_TOOL_IDS` ([`defaults.ts`](../src/tools/defaults.ts)); `setStorageModeForTests()` in [`storage-mode.ts`](../src/config/storage-mode.ts) for test isolation.
+
+**Orchestrate board:** Kanban columns expose `data-kanban-column` (`planned`, `in_progress`, `testing`, `complete`) for stable test selectors.
+
 **Step 01 (chat UX / streaming):** [`documentation/plans/verification/step-01.md`](plans/verification/step-01.md) — `npm test`, `npm run build`, `scripts/step01-ui-smoke.mjs`.
 
 **Step 02 (`~/.minnow`):** [`documentation/plans/verification/step-02.md`](plans/verification/step-02.md) — config API + migration tests with `MINNOW_HOME`.

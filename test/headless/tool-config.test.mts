@@ -71,6 +71,10 @@ describe('headless tool config', () => {
     restoreFetch = null;
     invalidateToolConfigCache();
     setStorageModeForTests(previousStorageMode);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    if (server && typeof server.closeAllConnections === 'function') {
+      server.closeAllConnections();
+    }
     await new Promise<void>((resolve, reject) => {
       if (!server) {
         resolve();

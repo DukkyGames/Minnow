@@ -46,7 +46,11 @@ describe('headless preflight', () => {
   });
 
   after(async () => {
-    await new Promise<void>((resolve) => server?.close(() => resolve()));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    if (typeof server?.closeAllConnections === 'function') server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => {
+      server?.close((err) => (err ? reject(err) : resolve()));
+    });
     if (tempHome) {
       rmSync(tempHome, { recursive: true, force: true });
     }

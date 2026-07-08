@@ -2645,15 +2645,16 @@ function renderKanbanColumns(
   grid.className = 'kanban-grid';
   // Stable key lets us restore horizontal scroll (phone lane swipe) across rebuilds.
   if (scrollKeyPrefix) grid.dataset.boardScrollKey = `grid:${scrollKeyPrefix}`;
-  const columns: Array<{ label: string; statuses: BoardTaskStatus[] }> = [
-    { label: 'Planned', statuses: ['planned', 'blocked'] },
-    { label: 'In Progress', statuses: ['in_progress', 'merging'] },
-    { label: 'Testing', statuses: ['testing'] },
-    { label: 'Complete', statuses: ['complete', 'failed', 'quarantined'] },
+  const columns: Array<{ id: string; label: string; statuses: BoardTaskStatus[] }> = [
+    { id: 'planned', label: 'Planned', statuses: ['planned', 'blocked'] },
+    { id: 'in_progress', label: 'In Progress', statuses: ['in_progress', 'merging'] },
+    { id: 'testing', label: 'Testing', statuses: ['testing'] },
+    { id: 'complete', label: 'Complete', statuses: ['complete', 'failed', 'quarantined'] },
   ];
   for (const col of columns) {
     const column = document.createElement('section');
     column.className = 'kanban-column';
+    column.dataset.kanbanColumn = col.id;
     const colTasks = tasks.filter((t) => col.statuses.includes(t.status));
     const h = document.createElement('h3');
     const colLabel = document.createElement('span');
