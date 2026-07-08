@@ -5,6 +5,7 @@
  */
 
 import type { MinnowPreviewBounds } from '../electron';
+import { isDesignModeUsingIframeGuest } from './preview-design-mode-guest';
 import { getFilePanelState } from '../state/file-panel';
 
 const FULLSCREEN_OVERLAY_IDS = [
@@ -94,6 +95,8 @@ function isCodeWorkspaceForeground(): boolean {
 /** Whether the Chromium guest should be visible and receive bounds updates. */
 export function shouldShowElectronPreviewHost(): boolean {
   if (!usesElectronPreview()) return false;
+  // Design Mode uses a same-origin iframe in #previewBody so DOM overlays stack above the guest.
+  if (isDesignModeUsingIframeGuest()) return false;
   if (!isPreviewSurfaceActive()) return false;
   if (!isPreviewPaneDomVisible()) return false;
   if (isFullscreenOverlayObscuringWorkspace()) return false;

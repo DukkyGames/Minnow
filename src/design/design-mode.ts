@@ -50,6 +50,12 @@ export interface DesignModeMountOptions {
   instanceId: string;
   /** Host element the overlay/strip mount into — must be the guest's bounds-source element. */
   host: HTMLElement;
+  /**
+   * Optional footer outside the guest bounds (e.g. `#previewDesignChrome`). The tool strip
+   * mounts here when provided so it stays above Electron WebContentsView, which paints over DOM
+   * inside `#previewBody`.
+   */
+  chromeHost?: HTMLElement;
   /** Keyboard-shortcut scope; defaults to `host` when omitted. */
   paneElement?: HTMLElement;
 }
@@ -261,7 +267,9 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
   registerBuiltinPlaceholderDesignTools();
 
   const { instanceId, host } = options;
+  const stripHost = options.chromeHost ?? host;
   const paneElement = options.paneElement ?? host;
+  options.chromeHost?.removeAttribute('hidden');
 
   const overlay = createAnnotationOverlay({ host });
 
@@ -324,7 +332,7 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
 
   session.captureLayer = buildCaptureLayer(host, session);
   session.strip = buildStrip(session);
-  host.appendChild(session.strip);
+  stripHost.appendChild(session.strip);
   applyCaptureMode(session);
 
   const keyHandler = (ev: KeyboardEvent): void => onKeyDown(session, paneElement, ev);

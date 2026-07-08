@@ -29,6 +29,7 @@ import {
   scheduleElectronPreviewHostVisibilitySync,
   syncElectronPreviewHostLayout,
 } from './preview-electron-visibility';
+import { setDesignModeUsingIframeGuest } from './preview-design-mode-guest';
 import {
   activatePreviewTab,
   closePreviewTab,
@@ -160,7 +161,7 @@ function destroyPreviewFrame(tabId: string): void {
 }
 
 function onIframeLoad(tabId: string): void {
-  if (usesElectronPreview()) return;
+  if (usesElectronPreview() && !usesDesignModeIframeGuest()) return;
   if (tabId !== getActivePreviewTabId()) return;
   onPreviewReloadSettled();
   clearFrameBlockedTimer();
@@ -206,6 +207,15 @@ function getPreviewBody(): HTMLElement | null {
 
 function getPreviewPane(): HTMLElement | null {
   return document.getElementById('previewPane');
+}
+
+function getPreviewDesignChrome(): HTMLElement | null {
+  return document.getElementById('previewDesignChrome');
+}
+
+/** Electron hides the native guest while Design Mode uses a same-origin iframe under the overlay. */
+function usesDesignModeIframeGuest(): boolean {
+  return usesElectronPreview() && isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID);
 }
 
 function getDesignToggleButton(): HTMLButtonElement | null {
@@ -268,6 +278,36 @@ async function toggleAnnotationsPanel(): Promise<void> {
   await refreshAnnotationsPanel();
 }
 
+async function syncDesignModeElectronGuest(): Promise<void> {
+  const body = getPreviewBody();
+  const chrome = getPreviewDesignChrome();
+  if (!body) return;
+
+  const usingIframe = usesDesignModeIframeGuest();
+  setDesignModeUsingIframeGuest(usingIframe);
+
+  if (usingIframe) {
+    body.classList.add('preview-body--design-mode');
+    chrome?.removeAttribute('hidden');
+    const tabId = getActivePreviewTabId();
+    if (tabId) {
+      const tab = getPreviewTab(tabId);
+      if (tab?.source) {
+        applySourceToFrame(tabId, tab.source);
+      }
+      showActiveTabFrame();
+    }
+  } else {
+    body.classList.remove('preview-body--design-mode');
+    chrome?.setAttribute('hidden', '');
+    for (const frame of iframesByTabId.values()) {
+      frame.hidden = true;
+    }
+  }
+
+  await syncElectronPreviewHostLayout();
+}
+
 /** Toggle Design Mode's overlay + tool strip over the preview guest (MIN-365). Guest untouched. */
 async function toggleDesignModeFromToolbar(): Promise<void> {
   const host = getPreviewBody();
@@ -278,6 +318,7 @@ async function toggleDesignModeFromToolbar(): Promise<void> {
     disableDesignMode(DESIGN_MODE_INSTANCE_ID);
     getDesignToggleButton()?.setAttribute('aria-pressed', 'false');
     getDesignToggleButton()?.classList.remove('is-active');
+    await syncDesignModeElectronGuest();
     return;
   }
 
@@ -286,8 +327,10 @@ async function toggleDesignModeFromToolbar(): Promise<void> {
   await enableDesignMode({
     instanceId: DESIGN_MODE_INSTANCE_ID,
     host,
+    chromeHost: getPreviewDesignChrome() ?? undefined,
     paneElement: pane ?? host,
   });
+  await syncDesignModeElectronGuest();
 }
 
 /** Design Mode's preview instance id, for callers outside this module (MIN-368 annotation-nav.ts). */
@@ -315,8 +358,10 @@ export async function openPreviewPageAndEnableDesignMode(pageUrl: string): Promi
   await enableDesignMode({
     instanceId: DESIGN_MODE_INSTANCE_ID,
     host,
+    chromeHost: getPreviewDesignChrome() ?? undefined,
     paneElement: pane ?? host,
   });
+  await syncDesignModeElectronGuest();
 }
 
 function getAutoReloadCheckbox(): HTMLInputElement | null {
@@ -753,6 +798,16 @@ function applySourceToFrame(tabId: string, source: PreviewSource, cacheBust?: nu
 function applySourceToPreview(source: PreviewSource, cacheBust?: number, tabId?: string): void {
   const id = resolveTabId(tabId);
   if (!id) return;
+  if (usesDesignModeIframeGuest()) {
+    if (id === getActivePreviewTabId()) {
+      hidePreviewStatus();
+      const input = getUrlInput();
+      if (input) input.value = sourceToAddressBar(source);
+    }
+    applySourceToFrame(id, source, cacheBust);
+    showActiveTabFrame();
+    return;
+  }
   if (usesElectronPreview()) {
     if (id === getActivePreviewTabId()) {
       hidePreviewStatus();
@@ -791,6 +846,14 @@ export async function activatePreviewTabGuest(tabId: string, options?: { forceLo
   }
 
   const api = getPreviewApi();
+  if (usesDesignModeIframeGuest()) {
+    if (tab.source && (!loadedTabGuests.has(tabId) || forceLoad)) {
+      applySourceToFrame(tabId, tab.source);
+      loadedTabGuests.add(tabId);
+    }
+    showActiveTabFrame();
+    return;
+  }
   if (usesElectronPreview() && api) {
     if (api.tabs?.create) {
       const listed = await api.tabs.list();
@@ -1017,6 +1080,7 @@ export function closePreviewPanel(): void {
     disableDesignMode(DESIGN_MODE_INSTANCE_ID);
     getDesignToggleButton()?.setAttribute('aria-pressed', 'false');
     getDesignToggleButton()?.classList.remove('is-active');
+    void syncDesignModeElectronGuest();
   }
   if (usesElectronPreview()) {
     void clearPreviewGuest().then(() => hidePreviewHost());
@@ -1076,6 +1140,21 @@ function reloadPreview(): void {
     const parsed = input ? parseAddressInput(input.value) : null;
     if (parsed) {
       loadPreviewSource(parsed, { cacheBust: true });
+    }
+    return;
+  }
+
+  if (usesDesignModeIframeGuest()) {
+    if (activeSource.kind === 'workspace') {
+      loadPreviewSource(activeSource, { cacheBust: true });
+    } else {
+      const frame = getActiveFrame();
+      const id = tabId ?? getActivePreviewTabId();
+      try {
+        frame?.contentWindow?.location.reload();
+      } catch {
+        if (id) applySourceToFrame(id, activeSource, Date.now());
+      }
     }
     return;
   }
@@ -1176,6 +1255,10 @@ function onWorkspaceFileSaved(path: string): void {
   if (autoReloadDebounce) clearTimeout(autoReloadDebounce);
   autoReloadDebounce = setTimeout(() => {
     autoReloadDebounce = null;
+    if (usesDesignModeIframeGuest()) {
+      reloadPreview();
+      return;
+    }
     const api = getPreviewApi();
     if (api) {
       setPreviewLoading(true);

@@ -16,6 +16,10 @@ import {
   resetFilePanelStateForTests,
   setFilePanelState,
 } from '../../src/state/file-panel.ts';
+import {
+  resetDesignModeIframeGuestForTests,
+  setDesignModeUsingIframeGuest,
+} from '../../src/ui/preview-design-mode-guest.ts';
 
 describe('preview-electron-visibility', () => {
   const originalDocument = globalThis.document;
@@ -46,6 +50,7 @@ describe('preview-electron-visibility', () => {
     resetFilePanelStateForTests();
     resetChromePopoverRegistryForTests();
     resetPreviewGuestVisibilityForTests();
+    resetDesignModeIframeGuestForTests();
     globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
       layoutSyncRaf += 1;
       cb(0);
@@ -102,6 +107,7 @@ describe('preview-electron-visibility', () => {
   });
 
   afterEach(() => {
+    resetDesignModeIframeGuestForTests();
     globalThis.requestAnimationFrame = originalRaf;
     Object.defineProperty(globalThis, 'document', {
       value: originalDocument,
@@ -213,6 +219,23 @@ describe('preview-electron-visibility', () => {
     assert.equal(shouldShowElectronPreviewHost(), false);
     unregisterChromePopover();
     assert.equal(shouldShowElectronPreviewHost(), true);
+  });
+
+  test('shouldShowElectronPreviewHost is false when Design Mode uses iframe guest', () => {
+    Object.assign(globalThis.window, {
+      minnow: { preview: { show: async () => {}, hide: async () => {} } },
+    });
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+    });
+    elements.get('previewPane')!.classList.delete('hidden');
+    enableCodeForeground();
+    assert.equal(shouldShowElectronPreviewHost(), true);
+
+    setDesignModeUsingIframeGuest(true);
+    assert.equal(shouldShowElectronPreviewHost(), false);
   });
 
   test('syncElectronPreviewHostLayout shows with bounds when preview pane is open', async () => {
