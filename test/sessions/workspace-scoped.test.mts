@@ -1,5 +1,5 @@
 /**
- * Workspace-scoped chats — schema v3 migration and sidebar filters.
+ * Workspace-scoped chats — schema v5 migration and sidebar filters.
  */
 
 import assert from 'node:assert/strict';
@@ -15,6 +15,7 @@ import {
   resolveActiveChatIdForWorkspace,
 } from '../../src/state/session-workspace-scope.ts';
 import type { SessionState } from '../../src/types.ts';
+import { SESSION_SCHEMA_VERSION } from '../../src/types.ts';
 import { resetWorkspaceStateForTests, setWorkspaceFromServer } from '../../src/state/workspace.ts';
 
 const CHAT_A = '11111111-1111-1111-1111-111111111111';
@@ -46,7 +47,7 @@ function chatRow(
 
 function seedState(partial: SessionState): SessionState {
   return {
-    version: 3,
+    version: SESSION_SCHEMA_VERSION,
     sidebarCollapsed: false,
     lastActiveChatIdByWorkspace: {},
     ...partial,
@@ -74,7 +75,7 @@ describe('migrateSessionStateV1ToV2', () => {
       () => coerceChatWorkspaceFields(null),
     );
 
-    assert.equal(migrated.version, 3);
+    assert.equal(migrated.version, SESSION_SCHEMA_VERSION);
     assert.equal(migrated.chats.length, 1);
     assert.equal(migrated.chats[0].workspacePath, '');
     assert.deepEqual(migrated.lastActiveChatIdByWorkspace, {});
@@ -93,7 +94,7 @@ describe('migrateSessionStateV1ToV2', () => {
       () => coerceChatWorkspaceFields(null),
     );
 
-    assert.equal(migrated.version, 3);
+    assert.equal(migrated.version, SESSION_SCHEMA_VERSION);
     assert.equal(
       normalizeWorkspacePath(migrated.chats[0].workspacePath),
       normalizeWorkspacePath(PATH_A),

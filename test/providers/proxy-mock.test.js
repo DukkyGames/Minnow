@@ -4,6 +4,8 @@
 
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import http from 'node:http';
 import {
   setTestHome,
@@ -195,14 +197,17 @@ describe('provider CRUD + proxy', () => {
   });
 
   it('rejects deleting last provider', async () => {
-    const ids = (await httpRequest(baseUrl, 'GET', '/api/providers')).json.providers.map(
-      (p) => p.id,
+    const deleteIds = new Set(
+      (await httpRequest(baseUrl, 'GET', '/api/providers')).json.providers.map((p) => p.id),
     );
-    for (const id of ids) {
-      if (id === 'lm-studio-local') continue;
+    deleteIds.add('llama-cpp-local');
+    deleteIds.add('lm-studio-local');
+    for (const id of deleteIds) {
       await httpRequest(baseUrl, 'DELETE', `/api/providers/${id}`);
     }
-    const del = await httpRequest(baseUrl, 'DELETE', '/api/providers/lm-studio-local');
+    // `.gitkeep` is counted as a provider dir; remove it so only llama-cpp-local remains.
+    await fs.rm(path.join(homeDir, 'providers', '.gitkeep'), { force: true });
+    const del = await httpRequest(baseUrl, 'DELETE', '/api/providers/llama-cpp-local');
     assert.equal(del.status, 409);
   });
 });

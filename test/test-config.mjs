@@ -15,7 +15,8 @@ export const RUNNERS = {
     command: 'node',
     prefixArgs: [
       '--experimental-test-module-mocks',
-      './node_modules/tsx/dist/cli.mjs',
+      '--import',
+      'tsx',
       '--test',
       '--test-force-exit',
       '--test-timeout=120000',
@@ -57,6 +58,7 @@ export const DEFAULT_RUNNER_BY_EXT = {
  * Patterns use forward slashes and support `*` / `**` globs via fs.globSync.
  */
 export const PATH_RUNNER_RULES = [
+  { pattern: 'test/sub-agents/scheduler-drain-reject.test.mts', runner: 'tsx-mocks' },
   { pattern: 'test/research/*.test.mts', runner: 'tsx-mocks' },
   { pattern: 'test/server/**/*.test.mjs', runner: 'tsx-mocks' },
   { pattern: 'test/workspace/*.test.js', runner: 'tsx-mocks' },

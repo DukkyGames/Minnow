@@ -79,7 +79,7 @@ describe('scheduleChatTitleGeneration', () => {
   });
 
   test('updates placeholder name after job completes', async () => {
-    setGenerateChatTitleForTests(async () => 'Generated title');
+    setGenerateChatTitleForTests(async () => ({ title: 'Generated title' }));
 
     scheduleChatTitleGeneration(CHAT_ID, 'Hello world');
     await waitMicrotasks();
@@ -93,7 +93,7 @@ describe('scheduleChatTitleGeneration', () => {
     setGenerateChatTitleForTests(
       () =>
         new Promise((resolve) => {
-          setTimeout(() => resolve('Late title'), 20);
+          setTimeout(() => resolve({ title: 'Late title' }), 20);
         }),
     );
 
@@ -110,7 +110,7 @@ describe('scheduleChatTitleGeneration', () => {
     setGenerateChatTitleForTests(async () => {
       calls += 1;
       await new Promise((r) => setTimeout(r, 10));
-      return 'Once';
+      return { title: 'Once' };
     });
 
     scheduleChatTitleGeneration(CHAT_ID, 'a');
@@ -122,7 +122,7 @@ describe('scheduleChatTitleGeneration', () => {
 
   test('applies for New Chat casing variant', async () => {
     seedSession('New Chat');
-    setGenerateChatTitleForTests(async () => 'Cased title');
+    setGenerateChatTitleForTests(async () => ({ title: 'Cased title' }));
 
     scheduleChatTitleGeneration(CHAT_ID, 'Hello');
     await waitMicrotasks();
@@ -136,7 +136,7 @@ describe('scheduleChatTitleGeneration', () => {
     setGenerateChatTitleForTests(async (_seed, options) => {
       assert.equal(options.modelId, 'context-model');
       assert.equal(options.providerId, 'context-provider');
-      return 'Context title';
+      return { title: 'Context title' };
     });
 
     scheduleChatTitleGeneration(CHAT_ID, 'Hello', {
@@ -150,7 +150,7 @@ describe('scheduleChatTitleGeneration', () => {
   });
 
   test('falls back to truncated user seed when generation returns null', async () => {
-    setGenerateChatTitleForTests(async () => null);
+    setGenerateChatTitleForTests(async () => ({ title: null }));
 
     scheduleChatTitleGeneration(CHAT_ID, 'How do I tune Redis cache eviction?');
     await waitMicrotasks();
@@ -163,7 +163,7 @@ describe('scheduleChatTitleGeneration', () => {
     let calls = 0;
     setGenerateChatTitleForTests(async () => {
       calls += 1;
-      return 'Nope';
+      return { title: 'Nope' };
     });
     setTitlesConfigForTests({
       enabled: false,

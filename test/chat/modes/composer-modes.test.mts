@@ -10,6 +10,6 @@ describe('listComposerModes', () => {
     assert.ok(all.includes('reef'));
     assert.ok(!composer.includes('orchestrate'));
     assert.ok(!composer.includes('reef'));
-    assert.equal(composer.length, all.length - 2);
+    assert.equal(composer.length, all.length - 3);
   });
 });

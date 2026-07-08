@@ -10,7 +10,12 @@ import {
   resetSubAgentCompletionPushForTests,
   setSubAgentCompletionDeliverHook,
 } from '../../src/agents/sub-agent-completion-push.ts';
-import { getSubAgentRun, resetSubAgentOrchestrator, spawnSubAgent } from '../../src/agents/orchestrator.ts';
+import {
+  getSubAgentRun,
+  resetSubAgentOrchestrator,
+  spawnSubAgent,
+  waitForSubAgent,
+} from '../../src/agents/orchestrator.ts';
 import { resetSubAgentConfigCache, setRuntimeSubAgentOverrides } from '../../src/agents/sub-agent-config.ts';
 import {
   resetSubAgentRunIdFactory,
@@ -83,7 +88,8 @@ describe('sub-agent check-in nudge', () => {
   });
 
   test('one nudge before completion when run is still active', async () => {
-    setRuntimeSubAgentOverrides({ checkInNudgeMs: 30 });
+    // Automatic nudge disabled; exercise manual fireSubAgentCheckInNudge only.
+    setRuntimeSubAgentOverrides({ checkInNudgeMs: 0 });
     setSubAgentRunnerFactory(() => createMockSubAgentRunner({ delayMs: 200 }));
     await spawnSubAgent({
       type: 'explore',
@@ -101,7 +107,7 @@ describe('sub-agent check-in nudge', () => {
     assert.equal(messages.filter((m) => m.includes('check-in')).length, 1);
     fireSubAgentCheckInNudge(FIXED_RUN_ID);
     assert.equal(messages.filter((m) => m.includes('check-in')).length, 1);
-    await new Promise((r) => setTimeout(r, 200));
-    assert.equal(getSubAgentRun(FIXED_RUN_ID)?.status, 'completed');
+    const settled = await waitForSubAgent(FIXED_RUN_ID);
+    assert.equal(settled.status, 'completed');
   });
 });

@@ -111,7 +111,7 @@ describe('welcome-page', { concurrency: false }, () => {
     assert.equal(isOtherFullPageHash('#/welcome'), false);
   });
 
-  test('shouldShowWelcomeOnBoot when workspace is default', () => {
+  test('shouldShowWelcomeOnBoot is false under MinnowOS shell', () => {
     setupWelcomeDom();
     resetWelcomeStateForTests();
     resetWorkspaceStateForTests();
@@ -121,7 +121,7 @@ describe('welcome-page', { concurrency: false }, () => {
       isDefault: true,
     });
     window.location.hash = '#/';
-    assert.equal(shouldShowWelcomeOnBoot(), true);
+    assert.equal(shouldShowWelcomeOnBoot(), false);
     window.location.hash = '#/settings/general';
     assert.equal(shouldShowWelcomeOnBoot(), false);
   });
@@ -139,7 +139,7 @@ describe('welcome-page', { concurrency: false }, () => {
     assert.equal(shouldShowWelcomeOnBoot(), false);
   });
 
-  test('openWelcome hides app body and shows welcome view', () => {
+  test('openWelcome shows OS overlay and hides app body', () => {
     setupWelcomeDom();
     resetWelcomeStateForTests();
     resetWorkspaceStateForTests();
@@ -152,7 +152,10 @@ describe('welcome-page', { concurrency: false }, () => {
     openWelcome({ skipHash: true });
     assert.equal(isWelcomePageOpen(), true);
     assert.equal(document.getElementById('appBody')?.classList.contains('hidden'), true);
-    assert.equal(document.querySelector('header.topbar')?.classList.contains('topbar--welcome'), true);
+    assert.equal(
+      document.getElementById('welcomeView')?.classList.contains('welcome-page--os-overlay'),
+      true,
+    );
 
     closeWelcome({ skipHash: true });
     assert.equal(isWelcomePageOpen(), false);
