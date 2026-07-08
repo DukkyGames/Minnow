@@ -21,6 +21,8 @@ const cannedPick: PickedElement = {
   devicePixelRatio: 2,
   stylesDigest: 'font:16px/1.5 Arial 400; color:rgb(0, 0, 0); bg:rgba(0, 0, 0, 0); p:0px m:0px; layout:block',
   shiftKey: false,
+  accessibleName: 'Hero',
+  contrastRatio: null,
 };
 
 function makeTransport(

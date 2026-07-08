@@ -61,6 +61,10 @@ export interface Attachment {
   croppedDataUrl?: string;
   /** Resolved file:line (or best-effort guess) the picked element came from (`elementRef`, MIN-369). Set async after the chip is pushed. */
   sourceMapping?: SourceMapping;
+  /** A11y quick-pass (MIN-370): aria-label || alt || trimmed text content (`elementRef`). */
+  accessibleName?: string;
+  /** A11y quick-pass (MIN-370): WCAG contrast ratio of color vs background, or null when it can't be computed (`elementRef`). */
+  contrastRatio?: number | null;
   /** The drawn shape (pen/rect/arrow/label) captured into this attachment (`designRef`). */
   shape?: DesignShape;
   /** Composited crop (screenshot region + rasterized overlay shapes) data URL (`designRef`). */

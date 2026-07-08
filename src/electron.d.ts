@@ -68,6 +68,35 @@ export interface MinnowPreviewInstancesApi {
   list(): Promise<string[]>;
 }
 
+/**
+ * CDP-adapted pick — structurally identical to `PickedElement` in
+ * `src/design/element-picker.ts` (kept as a separate type here since electron.d.ts can't import
+ * from src/design without creating a renderer↔main type coupling across build boundaries).
+ */
+export interface MinnowCdpPickedElement {
+  uid: number | null;
+  cssSelector: string;
+  tagName: string;
+  classList: string[];
+  outerHTMLPreview: string;
+  boundingRect: { x: number; y: number; width: number; height: number };
+  devicePixelRatio: number;
+  stylesDigest: string;
+  shiftKey: boolean;
+  accessibleName: string;
+  contrastRatio: number | null;
+}
+
+/** Native (script-free) element picking over CDP for cross-origin preview guests (MIN-370). */
+export interface MinnowCdpPickerApi {
+  enable(tabId?: string, instanceId?: string): Promise<{ ok: boolean; error?: string }>;
+  disable(tabId?: string, instanceId?: string): Promise<void>;
+  onPick(
+    callback: (picked: MinnowCdpPickedElement, tabId?: string, instanceId?: string) => void,
+  ): () => void;
+  onError(callback: (message: string, tabId?: string, instanceId?: string) => void): () => void;
+}
+
 export interface MinnowPreviewApi {
   // Every method takes an optional trailing `instanceId`; omitting it targets the default
   // 'workspace-preview' instance, so every pre-MIN-364 call site keeps working unchanged.
@@ -95,6 +124,7 @@ export interface MinnowPreviewApi {
   ): Promise<MinnowPreviewNavigateAwaitResult>;
   tabs: MinnowPreviewTabsApi;
   instances: MinnowPreviewInstancesApi;
+  cdpPicker: MinnowCdpPickerApi;
   onNavigation(callback: (url: string, tabId?: string, instanceId?: string) => void): () => void;
   onLoading(callback: (loading: boolean, tabId?: string, instanceId?: string) => void): () => void;
   onPageTitle(callback: (title: string, tabId?: string, instanceId?: string) => void): () => void;
