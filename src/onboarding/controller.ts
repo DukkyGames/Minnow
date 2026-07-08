@@ -1,0 +1,284 @@
+/**
+ * Onboarding overlay controller — mount, navigation, keyboard, persistence.
+ */
+
+import { isServerStorageMode } from '../config/storage-mode';
+import { getLocalServerAvailable } from '../tools/client';
+import { navigateToSettingsField } from '../ui/settings-page';
+import { mountProgressRail, type ProgressRailHandle } from './progress-rail';
+import { getApplicableSteps, resolveStepIndex, ONBOARDING_STEPS } from './steps/registry';
+import { warmProviderProbes } from './steps/provider';
+import { advanceExplainerPanel } from './steps/remaining';
+import {
+  buildOnboardingContext,
+  loadOnboardingState,
+  markOnboardingComplete,
+  migrateExistingUsersIfNeeded,
+  releaseOnboardingOverlayClaim,
+  saveOnboardingState,
+  tryClaimOnboardingOverlay,
+} from './state';
+import type { OnboardingContext, OnboardingStepActions, OnboardingStepId } from './types';
+
+let mounted = false;
+let rootEl: HTMLElement | null = null;
+let contentEl: HTMLElement | null = null;
+let railHandle: ProgressRailHandle | null = null;
+let stepCleanup: (() => void) | null = null;
+let ctx: OnboardingContext | null = null;
+let stepIndex = 0;
+let applicableSteps = ONBOARDING_STEPS;
+let primaryBtn: HTMLButtonElement | null = null;
+let backBtn: HTMLButtonElement | null = null;
+let skipBtn: HTMLButtonElement | null = null;
+
+/** Whether first-run wizard should open on boot (does not claim overlay). */
+export async function shouldShowOnboardingOnBoot(): Promise<boolean> {
+  let state = await loadOnboardingState();
+  state = await migrateExistingUsersIfNeeded(state);
+  return !state.completedAt;
+}
+
+/** Open wizard (boot or Settings → Run setup again). */
+export async function mountOnboarding(options?: { force?: boolean }): Promise<void> {
+  if (mounted) return;
+
+  let state = await loadOnboardingState();
+  if (!options?.force) {
+    state = await migrateExistingUsersIfNeeded(state);
+    if (state.completedAt) return;
+    const claim = await tryClaimOnboardingOverlay(state);
+    if (!claim.claimed) return;
+    state = claim.state;
+  }
+
+  await warmProviderProbes();
+
+  ctx = buildOnboardingContext(state, {
+    serverAvailable: getLocalServerAvailable(),
+    configServerAvailable: isServerStorageMode(),
+  });
+
+  applicableSteps = getApplicableSteps(ctx);
+  stepIndex = resolveStepIndex(applicableSteps, state.lastStep);
+
+  rootEl = document.createElement('div');
+  rootEl.className = 'mn-onboarding';
+  rootEl.setAttribute('role', 'dialog');
+  rootEl.setAttribute('aria-modal', 'true');
+  rootEl.setAttribute('aria-label', 'Minnow setup');
+
+  const shell = document.createElement('div');
+  shell.className = 'mn-onboarding__shell';
+
+  contentEl = document.createElement('div');
+  contentEl.className = 'mn-onboarding__content';
+
+  const footer = document.createElement('footer');
+  footer.className = 'mn-onboarding__footer';
+
+  backBtn = document.createElement('button');
+  backBtn.type = 'button';
+  backBtn.className = 'mn-onboarding-back-btn';
+  backBtn.textContent = 'Back';
+  backBtn.addEventListener('click', () => goBack());
+
+  skipBtn = document.createElement('button');
+  skipBtn.type = 'button';
+  skipBtn.className = 'mn-onboarding-skip-btn';
+  skipBtn.textContent = 'Set up later';
+  skipBtn.addEventListener('click', () => void skipCurrent());
+
+  primaryBtn = document.createElement('button');
+  primaryBtn.type = 'button';
+  primaryBtn.className = 'mn-onboarding-primary-btn';
+  primaryBtn.textContent = 'Continue';
+  primaryBtn.addEventListener('click', () => void goNext());
+
+  const actions = document.createElement('div');
+  actions.className = 'mn-onboarding__actions';
+  actions.append(backBtn, skipBtn, primaryBtn);
+  footer.appendChild(actions);
+
+  const railMount = document.createElement('div');
+  footer.appendChild(railMount);
+
+  shell.append(contentEl, footer);
+  rootEl.appendChild(shell);
+  document.body.appendChild(rootEl);
+  document.documentElement.classList.add('onboarding-active');
+
+  railHandle = mountProgressRail(railMount, applicableSteps, applicableSteps[stepIndex]?.id ?? 'welcome');
+
+  mounted = true;
+  bindKeyboard();
+  renderCurrentStep();
+
+  rootEl.addEventListener('click', (ev) => {
+    const target = ev.target as HTMLElement;
+    const key = target.closest('[data-settings-search-key]')?.getAttribute('data-settings-search-key');
+    if (key) {
+      navigateToSettingsField(key);
+    }
+  });
+}
+
+/** Tear down overlay and release second-window claim. */
+export async function unmountOnboarding(complete = false): Promise<void> {
+  if (!mounted || !ctx) return;
+  stepCleanup?.();
+  stepCleanup = null;
+  railHandle?.destroy();
+  railHandle = null;
+  rootEl?.remove();
+  rootEl = null;
+  contentEl = null;
+  mounted = false;
+  document.documentElement.classList.remove('onboarding-active');
+  unbindKeyboard();
+
+  if (complete) {
+    ctx.state = await markOnboardingComplete(ctx.state);
+  } else {
+    ctx.state = await releaseOnboardingOverlayClaim(ctx.state);
+    await saveOnboardingState(ctx.state);
+  }
+  ctx = null;
+}
+
+function bindKeyboard(): void {
+  document.addEventListener('keydown', onKeyDown);
+}
+
+function unbindKeyboard(): void {
+  document.removeEventListener('keydown', onKeyDown);
+}
+
+function onKeyDown(ev: KeyboardEvent): void {
+  if (!mounted) return;
+  if (ev.key === 'Escape') {
+    ev.preventDefault();
+    void unmountOnboarding(false);
+    return;
+  }
+  if (ev.key === 'Enter' && !ev.shiftKey && primaryBtn && !primaryBtn.disabled) {
+    const tag = (ev.target as HTMLElement)?.tagName;
+    if (tag === 'TEXTAREA' || tag === 'INPUT') return;
+    ev.preventDefault();
+    void goNext();
+  }
+}
+
+function makeActions(): OnboardingStepActions {
+  return {
+    next: () => void goNext(),
+    back: () => goBack(),
+    skip: () => void skipCurrent(),
+    patchContext: (patch) => {
+      if (!ctx) return;
+      ctx = { ...ctx, ...patch };
+      applicableSteps = getApplicableSteps(ctx);
+    },
+    setPrimaryEnabled: (enabled) => {
+      if (primaryBtn) primaryBtn.disabled = !enabled;
+    },
+    setPrimaryLabel: (label) => {
+      if (primaryBtn) primaryBtn.textContent = label;
+    },
+  };
+}
+
+function renderCurrentStep(): void {
+  if (!ctx || !contentEl) return;
+  stepCleanup?.();
+  stepCleanup = null;
+
+  const step = applicableSteps[stepIndex];
+  if (!step) return;
+
+  if (backBtn) backBtn.hidden = stepIndex === 0;
+  if (skipBtn) skipBtn.hidden = !step.canSkip;
+
+  const cleanup = step.render(contentEl, ctx, makeActions());
+  if (typeof cleanup === 'function') stepCleanup = cleanup;
+
+  const railIdx = Math.max(0, applicableSteps.findIndex((s) => s.id === step.id));
+  railHandle?.setActiveIndex(railIdx);
+}
+
+async function goNext(): Promise<void> {
+  if (!ctx || !contentEl) return;
+  const step = applicableSteps[stepIndex];
+  if (!step) return;
+
+  if (step.id === 'explainer' && advanceExplainerPanel()) {
+    renderCurrentStep();
+    return;
+  }
+
+  await step.commit(ctx);
+  await saveOnboardingState(ctx.state);
+
+  if (step.id === 'provider-choice') {
+    applicableSteps = getApplicableSteps(ctx);
+  }
+
+  if (step.id === 'done') {
+    await unmountOnboarding(true);
+    return;
+  }
+
+  if (stepIndex < applicableSteps.length - 1) {
+    stepIndex += 1;
+    applicableSteps = getApplicableSteps(ctx);
+    renderCurrentStep();
+  } else {
+    await unmountOnboarding(true);
+  }
+}
+
+function goBack(): void {
+  if (stepIndex <= 0) return;
+  stepIndex -= 1;
+  renderCurrentStep();
+}
+
+async function skipCurrent(): Promise<void> {
+  if (!ctx) return;
+  const step = applicableSteps[stepIndex];
+  if (!step?.canSkip) return;
+
+  if (step.id === 'welcome') {
+    await unmountOnboarding(true);
+    return;
+  }
+
+  ctx.state = {
+    ...ctx.state,
+    lastStep: step.id,
+    steps: {
+      ...ctx.state.steps,
+      [step.id]: { ...(ctx.state.steps[step.id] ?? {}), skipped: true },
+    },
+  };
+  await saveOnboardingState(ctx.state);
+
+  if (stepIndex < applicableSteps.length - 1) {
+    stepIndex += 1;
+    applicableSteps = getApplicableSteps(ctx);
+    renderCurrentStep();
+  } else {
+    await unmountOnboarding(true);
+  }
+}
+
+/** Re-run entry from Settings. */
+export async function rerunOnboardingFromSettings(): Promise<void> {
+  const { resetOnboardingForRerun } = await import('./state');
+  await resetOnboardingForRerun();
+  await mountOnboarding({ force: true });
+}
+
+export function isOnboardingMounted(): boolean {
+  return mounted;
+}

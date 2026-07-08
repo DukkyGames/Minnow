@@ -139,6 +139,10 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
     keywords: ['lan', 'wifi', 'local network', 'remote', 'phone', 'tablet', '0.0.0.0'],
     description: 'Let other devices on your Wi-Fi open Minnow in a browser while this PC runs npm start.',
   }),
+  field('general.onboarding', 'Run setup again', 'general', 'general', {
+    keywords: ['wizard', 'onboarding', 'first run', 'setup'],
+    description: 'Re-open the first-run setup wizard.',
+  }),
   field('general.chat.terminal', 'Terminal behavior', 'general', 'general', {
     keywords: ['shell', 'background command'],
   }),

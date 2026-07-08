@@ -62,6 +62,7 @@ import './styles/minnowos-wallpaper.css';
 import './styles/minnowos-apps.css';
 import './styles/chat-app.css';
 import './styles/models-page.css';
+import './styles/onboarding.css';
 
 import 'highlight.js/styles/github.min.css';
 
@@ -323,6 +324,11 @@ export async function initApp(): Promise<void> {
   initWorkAgentDevUi();
   await bindExpertsSettingsCheckbox();
   await detectLocalServer();
+  const { shouldShowOnboardingOnBoot, mountOnboarding } = await import('./onboarding');
+  const showOnboarding = await shouldShowOnboardingOnBoot();
+  if (showOnboarding) {
+    await mountOnboarding();
+  }
   startSchedulerNotificationPoll();
   initNotificationProducers();
   onWelcomeServerAvailabilityChanged();
