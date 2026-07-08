@@ -55,6 +55,7 @@ import { currentPreviewPageRef, gatherAnchorCandidates } from '../design/design-
 import {
   eraseShape,
   erasePin,
+  healPageAnnotations,
   loadPageAnnotations,
 } from '../design/annotation-store';
 import {
@@ -62,6 +63,12 @@ import {
   type AnnotationsPanelHandle,
   type AnnotationsPanelItem,
 } from '../design/annotations-panel';
+import {
+  notifyDesignFileSaved,
+  notifyDesignReloadSettled,
+  onBeforeAfterPair,
+} from '../design/before-after-integration';
+import { getActiveChat } from '../state/sessions';
 
 const BROWSER_PREVIEW_HINT =
   'Full Chromium preview (any website or local file) runs in the Minnow desktop shell. Run npm start — Electron opens by default — or npm run electron:dev.';
@@ -155,6 +162,7 @@ function destroyPreviewFrame(tabId: string): void {
 function onIframeLoad(tabId: string): void {
   if (usesElectronPreview()) return;
   if (tabId !== getActivePreviewTabId()) return;
+  onPreviewReloadSettled();
   clearFrameBlockedTimer();
   const source = getPreviewTabSource(tabId);
   if (source?.kind !== 'url') {
@@ -1114,12 +1122,56 @@ function pathsMatchForReload(savedPath: string, previewPath: string): boolean {
   return a === b;
 }
 
+/**
+ * Before/after diff capture (MIN-370 P1): only meaningful while Design Mode is on for this
+ * instance (the proxy this module uses for "the user is doing iterative visual work" — there's
+ * no direct signal here for which chat turn "owns" a given tool-driven file save). Captures the
+ * pre-reload viewport immediately; {@link onPreviewReloadSettled} captures the post-reload side.
+ */
+function notifyDesignFileSavedIfLinked(path: string): void {
+  if (!isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID)) return;
+  const chat = getActiveChat();
+  if (!chat?.id) return;
+  const turnId = String(chat.history.length);
+  void notifyDesignFileSaved(chat.id, turnId, path);
+}
+
+/**
+ * Fired once the preview guest's post-save auto-reload has visibly settled (Electron's
+ * `api.onLoading(false)` or the iframe fallback's `load` event) — re-runs anchor healing
+ * (MIN-370 P2) for every mark on the page and finalizes any pending before/after pair
+ * (MIN-370 P1), re-rendering the transcript if the pair landed on the active chat.
+ */
+function onPreviewReloadSettled(): void {
+  if (!isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID)) return;
+  const pageKey = currentPreviewPageRef();
+  if (pageKey) {
+    void gatherAnchorCandidates().then(async (candidates) => {
+      const result = await healPageAnnotations(pageKey, candidates);
+      const session = getDesignModeSession(DESIGN_MODE_INSTANCE_ID);
+      if (!session) return;
+      session.overlay.renderShapes(result.data.shapes, (shapeId) => {
+        const shape = result.data.shapes.find((s) => s.id === shapeId);
+        const link = shape?.links?.[0];
+        if (link) void import('../design/annotation-nav').then((m) => m.jumpToChatTurn(link.chatId, link.turnId));
+      });
+      session.overlay.renderPins(result.data.pins);
+      void refreshAnnotationsPanel();
+    });
+  }
+
+  const chat = getActiveChat();
+  if (chat?.id) void notifyDesignReloadSettled(chat.id);
+}
+
 function onWorkspaceFileSaved(path: string): void {
   const state = getFilePanelState();
   if (!state.previewAutoReload || state.rightPaneMode !== 'preview') return;
   const activeSource = getActivePreviewSource();
   if (!activeSource || activeSource.kind !== 'workspace') return;
   if (!pathsMatchForReload(path, activeSource.path)) return;
+
+  notifyDesignFileSavedIfLinked(path);
 
   if (autoReloadDebounce) clearTimeout(autoReloadDebounce);
   autoReloadDebounce = setTimeout(() => {
@@ -1151,6 +1203,7 @@ function bindPreviewIpcListeners(): void {
     setPreviewLoading(loading, tabId);
     if (!loading && usesElectronPreview() && resolveTabId(tabId) === getActivePreviewTabId()) {
       void showPreviewHost();
+      onPreviewReloadSettled();
     }
   });
   unsubscribeLoadFailed = api.onLoadFailed((detail, tabId) => {
@@ -1250,6 +1303,10 @@ function bindPreviewControls(): void {
   bindPreviewTabs();
 
   onFileSaved(onWorkspaceFileSaved);
+  onBeforeAfterPair((chatId) => {
+    if (getActiveChat().id !== chatId) return;
+    void import('./messages').then((m) => m.renderChatFromHistory(getActiveChat()));
+  });
   bindPreviewIpcListeners();
   startBoundsObserver();
 

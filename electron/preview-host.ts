@@ -31,6 +31,7 @@ import {
 } from './preview-guest-actions.js';
 import { PreviewInstanceRegistry, DEFAULT_PREVIEW_INSTANCE_ID } from './preview-instance-registry.js';
 import { configurePreviewSession, PREVIEW_SESSION_PARTITION } from './preview-session.js';
+import { enableCdpPicking, type CdpPickSession } from './preview-cdp-pick.js';
 
 export interface PreviewBounds {
   x: number;
@@ -67,6 +68,9 @@ const previewInstances = new PreviewInstanceRegistry<WindowPreviewState>({
 
 /** Window-level listeners (did-finish-load / closed) are wired once per window, not per instance. */
 const wiredWindowIds = new Set<number>();
+
+/** webContents.id → live CDP picking session (MIN-370). At most one per guest. */
+const cdpPickSessions = new Map<number, CdpPickSession>();
 
 /** Last renderer-supplied bounds per (window, instance) — reused when navigating without a fresh show(). */
 const lastBoundsByInstance = new Map<string, PreviewBounds>();
@@ -671,6 +675,55 @@ export function registerPreviewHostIpc(): void {
         return previewNavigateAwait(entry.view.webContents, '');
       }
       return previewNavigateAwait(entry.view.webContents, url);
+    },
+  );
+
+  ipcMain.handle(
+    channels.PREVIEW_CDP_PICK_ENABLE,
+    async (event, tabId?: string, instanceId?: string) => {
+      const win = windowFromInvoke(event);
+      const entry = getActiveEntry(event, tabId, instanceId);
+      if (!entry || !win) {
+        return { ok: false, error: 'Preview guest is not available' };
+      }
+      const wc = entry.view.webContents;
+      if (cdpPickSessions.has(wc.id)) {
+        return { ok: true };
+      }
+      try {
+        const session = await enableCdpPicking(
+          wc,
+          (picked) => {
+            if (win.isDestroyed()) return;
+            win.webContents.send(channels.PREVIEW_CDP_PICK_EVENT, picked, tabId, instanceId);
+          },
+          (message) => {
+            if (win.isDestroyed()) return;
+            win.webContents.send(channels.PREVIEW_CDP_PICK_ERROR, message, tabId, instanceId);
+          },
+        );
+        cdpPickSessions.set(wc.id, session);
+        wc.once('destroyed', () => {
+          cdpPickSessions.delete(wc.id);
+        });
+        return { ok: true };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return { ok: false, error: message };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    channels.PREVIEW_CDP_PICK_DISABLE,
+    async (event, tabId?: string, instanceId?: string) => {
+      const entry = getActiveEntry(event, tabId, instanceId);
+      if (!entry) return;
+      const wc = entry.view.webContents;
+      const session = cdpPickSessions.get(wc.id);
+      if (!session) return;
+      cdpPickSessions.delete(wc.id);
+      await session.disable();
     },
   );
 }

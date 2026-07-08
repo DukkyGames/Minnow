@@ -19,6 +19,10 @@ export interface PickedElement {
   stylesDigest: string;
   /** True when the pick click was shift-modified (multi-select accumulate). */
   shiftKey: boolean;
+  /** A11y quick-pass (MIN-370): aria-label || alt || trimmed text content, capped at 160 chars. */
+  accessibleName: string;
+  /** A11y quick-pass (MIN-370): WCAG contrast ratio of color vs background, or null when it can't be computed (e.g. transparent background). */
+  contrastRatio: number | null;
 }
 
 export interface PickerTransport {
@@ -140,11 +144,54 @@ export const PICKER_ENABLE_SCRIPT = `(() => {
     return ('font:' + font + '; color:' + cs.color + '; bg:' + cs.backgroundColor + '; ' + spacing + '; layout:' + layout).slice(0, 300);
   }
 
+  function accessibleNameFor(el) {
+    const ariaLabel = (el.getAttribute('aria-label') || '').trim();
+    if (ariaLabel) return ariaLabel.slice(0, 160);
+    const alt = (el.getAttribute('alt') || '').trim();
+    if (alt) return alt.slice(0, 160);
+    const text = (el.textContent || '').trim().replace(/\\s+/g, ' ');
+    return text.slice(0, 160);
+  }
+
+  function parseCssColorGuest(value) {
+    const trimmed = (value || '').trim();
+    if (!trimmed || trimmed === 'transparent') return null;
+    const m = /^rgba?\\(([^)]+)\\)$/i.exec(trimmed);
+    if (!m) return null;
+    const parts = m[1].split(',').map((p) => parseFloat(p.trim()));
+    if (parts.length < 3 || parts.slice(0, 3).some((n) => Number.isNaN(n))) return null;
+    return { r: parts[0], g: parts[1], b: parts[2], a: parts.length > 3 ? parts[3] : 1 };
+  }
+
+  function linearChannelGuest(c) {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  }
+
+  function relativeLuminanceGuest(rgb) {
+    return 0.2126 * linearChannelGuest(rgb.r) + 0.7152 * linearChannelGuest(rgb.g) + 0.0722 * linearChannelGuest(rgb.b);
+  }
+
+  function contrastRatioFor(digest) {
+    const cm = /color:([^;]+);/.exec(digest);
+    const bm = /bg:([^;]+);/.exec(digest);
+    if (!cm || !bm) return null;
+    const fg = parseCssColorGuest(cm[1]);
+    const bg = parseCssColorGuest(bm[1]);
+    if (!fg || !bg || bg.a === 0) return null;
+    const l1 = relativeLuminanceGuest(fg);
+    const l2 = relativeLuminanceGuest(bg);
+    const lighter = Math.max(l1, l2);
+    const darker = Math.min(l1, l2);
+    return Math.round(((lighter + 0.05) / (darker + 0.05)) * 100) / 100;
+  }
+
   function buildPayload(el, state) {
     const rect = el.getBoundingClientRect();
     const uid = stampUid(el, state);
     const cssSelector = buildSelector(el);
     const outer = (el.outerHTML || '').slice(0, 200).replace(/\\s+/g, ' ');
+    const stylesDigest = stylesDigestFor(el);
     return {
       uid,
       cssSelector,
@@ -158,8 +205,10 @@ export const PICKER_ENABLE_SCRIPT = `(() => {
         height: rect.height,
       },
       devicePixelRatio: window.devicePixelRatio || 1,
-      stylesDigest: stylesDigestFor(el),
+      stylesDigest,
       shiftKey: false,
+      accessibleName: accessibleNameFor(el),
+      contrastRatio: contrastRatioFor(stylesDigest),
     };
   }
 
@@ -355,6 +404,90 @@ export function buildStylesDigestForElement(el: Element): string {
   );
 }
 
+/** Parsed sRGB color channels (0-255) plus alpha (0-1). */
+export interface ParsedRgbColor {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+}
+
+/**
+ * Parse a computed-style color string (`rgb(...)`, `rgba(...)`, or `#hex`) into channels.
+ * Returns null for `transparent`/unparseable values — the caller treats that as "can't compute
+ * contrast reliably" rather than guessing at an ancestor's background.
+ */
+export function parseCssColor(value: string): ParsedRgbColor | null {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === 'transparent') return null;
+
+  const rgbaMatch = /^rgba?\(([^)]+)\)$/i.exec(trimmed);
+  if (rgbaMatch) {
+    const parts = rgbaMatch[1]!.split(',').map((p) => parseFloat(p.trim()));
+    if (parts.length < 3 || parts.slice(0, 3).some((n) => Number.isNaN(n))) return null;
+    return { r: parts[0]!, g: parts[1]!, b: parts[2]!, a: parts.length > 3 ? parts[3]! : 1 };
+  }
+
+  const hexMatch = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(trimmed);
+  if (hexMatch) {
+    const hex = hexMatch[1]!;
+    const full = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex;
+    const num = parseInt(full, 16);
+    return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255, a: 1 };
+  }
+
+  return null;
+}
+
+function srgbChannelToLinear(channel: number): number {
+  const v = channel / 255;
+  return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+}
+
+/** WCAG relative luminance of an sRGB color (0..1). */
+export function relativeLuminance(rgb: { r: number; g: number; b: number }): number {
+  return (
+    0.2126 * srgbChannelToLinear(rgb.r) +
+    0.7152 * srgbChannelToLinear(rgb.g) +
+    0.0722 * srgbChannelToLinear(rgb.b)
+  );
+}
+
+/** WCAG contrast ratio between two sRGB colors, always >= 1. */
+export function contrastRatioOf(a: { r: number; g: number; b: number }, b: { r: number; g: number; b: number }): number {
+  const l1 = relativeLuminance(a);
+  const l2 = relativeLuminance(b);
+  const lighter = Math.max(l1, l2);
+  const darker = Math.min(l1, l2);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/**
+ * A11y quick-pass (MIN-370): parse `color:`/`bg:` out of an element-picker stylesDigest string
+ * (cheap — no extra DOM read, the digest is already computed) and return the WCAG contrast ratio.
+ * Null when either color is missing/unparseable or the background is fully transparent (can't
+ * compute reliably without walking ancestors for an opaque background).
+ */
+export function computeContrastRatioFromStylesDigest(stylesDigest: string): number | null {
+  const colorMatch = /color:([^;]+);/.exec(stylesDigest);
+  const bgMatch = /bg:([^;]+);/.exec(stylesDigest);
+  if (!colorMatch || !bgMatch) return null;
+  const fg = parseCssColor(colorMatch[1]!.trim());
+  const bg = parseCssColor(bgMatch[1]!.trim());
+  if (!fg || !bg || bg.a === 0) return null;
+  return Math.round(contrastRatioOf(fg, bg) * 100) / 100;
+}
+
+/** A11y quick-pass (MIN-370): aria-label || alt || trimmed text content, capped at 160 chars. */
+export function computeAccessibleNameForElement(el: Element): string {
+  const ariaLabel = el.getAttribute('aria-label')?.trim();
+  if (ariaLabel) return ariaLabel.slice(0, 160);
+  const alt = el.getAttribute('alt')?.trim();
+  if (alt) return alt.slice(0, 160);
+  const text = (el.textContent || '').trim().replace(/\s+/g, ' ');
+  return text.slice(0, 160);
+}
+
 function unwrapExecJsResult(raw: unknown): unknown {
   if (raw && typeof raw === 'object' && '__execError' in (raw as Record<string, unknown>)) {
     const message = String((raw as { __execError?: unknown }).__execError ?? 'Script failed');
@@ -367,7 +500,8 @@ function getPreviewFrame(): HTMLIFrameElement | null {
   return document.getElementById('previewFrame') as HTMLIFrameElement | null;
 }
 
-function isCrossOriginPreview(): boolean {
+/** True when the current preview page is a cross-origin URL (exported for MIN-370 CDP routing). */
+export function isCrossOriginPreview(): boolean {
   const source = getFilePanelState().previewSource;
   if (!source || source.kind !== 'url') return false;
   try {
@@ -467,6 +601,11 @@ function normalizePickedElement(raw: unknown): PickedElement | null {
         : 1,
     stylesDigest: typeof row.stylesDigest === 'string' ? row.stylesDigest : '',
     shiftKey: row.shiftKey === true,
+    accessibleName: typeof row.accessibleName === 'string' ? row.accessibleName : '',
+    contrastRatio:
+      typeof row.contrastRatio === 'number' && Number.isFinite(row.contrastRatio)
+        ? row.contrastRatio
+        : null,
   };
 }
 
@@ -518,6 +657,7 @@ export function createElementPicker(options: ElementPickerOptions): ElementPicke
       ev.stopPropagation();
       const rect = target.getBoundingClientRect();
       const { cssSelector, uid } = buildCssSelectorForElement(doc, target, { nextUid: 1 });
+      const stylesDigest = buildStylesDigestForElement(target);
       void Promise.resolve(
         onPick({
           uid,
@@ -532,8 +672,10 @@ export function createElementPicker(options: ElementPickerOptions): ElementPicke
             height: rect.height,
           },
           devicePixelRatio: frame?.contentWindow?.devicePixelRatio ?? 1,
-          stylesDigest: buildStylesDigestForElement(target),
+          stylesDigest,
           shiftKey: ev.shiftKey,
+          accessibleName: computeAccessibleNameForElement(target),
+          contrastRatio: computeContrastRatioFromStylesDigest(stylesDigest),
         }),
       );
     };
@@ -589,4 +731,88 @@ export function createElementPicker(options: ElementPickerOptions): ElementPicke
       void this.disable();
     },
   };
+}
+
+/**
+ * CDP-backed picker (MIN-370, Electron only): native `webContents.debugger` hover/click on
+ * cross-origin guests, no script injection. Produces the same `PickedElement` shape the
+ * execJs/iframe pickers do, so `handlePick` in design-tool.ts doesn't need a CDP-specific branch.
+ */
+export function createCdpElementPicker(
+  options: Omit<ElementPickerOptions, 'transport'>,
+): ElementPicker {
+  const { onPick, onError } = options;
+  let enabled = false;
+  let unsubscribePick: (() => void) | null = null;
+  let unsubscribeError: (() => void) | null = null;
+
+  return {
+    async enable(): Promise<void> {
+      if (enabled) return;
+      const cdp = window.minnow?.preview?.cdpPicker;
+      if (!cdp) {
+        onError?.('CDP picking is only available in the Electron app');
+        return;
+      }
+      unsubscribePick = cdp.onPick((picked) => {
+        void Promise.resolve(onPick({ ...picked }));
+      });
+      unsubscribeError = cdp.onError((message) => {
+        onError?.(message);
+      });
+      const result = await cdp.enable();
+      if (!result.ok) {
+        unsubscribePick?.();
+        unsubscribeError?.();
+        unsubscribePick = null;
+        unsubscribeError = null;
+        onError?.(result.error ?? 'failed to enable CDP picking');
+        return;
+      }
+      enabled = true;
+    },
+
+    async disable(): Promise<void> {
+      if (!enabled) return;
+      unsubscribePick?.();
+      unsubscribeError?.();
+      unsubscribePick = null;
+      unsubscribeError = null;
+      try {
+        await window.minnow?.preview?.cdpPicker.disable();
+      } catch {
+        /* guest may be gone */
+      }
+      enabled = false;
+    },
+
+    isEnabled(): boolean {
+      return enabled;
+    },
+
+    destroy(): void {
+      void this.disable();
+    },
+  };
+}
+
+/**
+ * True when the CDP picking path should be used instead of execJs/iframe injection: Electron,
+ * with a cross-origin preview page where script injection is undesirable/blocked.
+ */
+export function shouldUseCdpPicker(): boolean {
+  return Boolean(window.minnow?.preview?.cdpPicker) && isCrossOriginPreview();
+}
+
+/**
+ * Pick the right `ElementPicker` for the current preview: CDP for cross-origin Electron guests,
+ * otherwise the existing execJs/iframe picker (same-origin, or the `npm start` fallback).
+ */
+export function createBestElementPicker(
+  options: Omit<ElementPickerOptions, 'transport'>,
+): ElementPicker {
+  if (shouldUseCdpPicker()) {
+    return createCdpElementPicker(options);
+  }
+  return createElementPicker({ ...options, transport: createPickerTransport() });
 }

@@ -9,7 +9,15 @@
 
 import { isDesignRefAttachment } from '../attachments/design-ref';
 import type { Attachment } from '../attachments/types';
-import type { AnchorCandidate, AnnotationLink, CommentPin, DesignShape, ShapeAnchor } from './shape-model';
+import { boundingRectOfShape } from './shape-model';
+import type {
+  AnchorCandidate,
+  AnnotationLink,
+  CommentPin,
+  DesignShape,
+  ShapeAnchor,
+  ShapeRect,
+} from './shape-model';
 
 export interface PageAnnotations {
   shapes: DesignShape[];
@@ -286,6 +294,129 @@ export function isAnchorDead(anchor: ShapeAnchor, candidates: AnchorCandidate[])
   const byUid = anchor.uid != null ? candidates.find((c) => c.uid === anchor.uid) : undefined;
   const bySelector = byUid ? undefined : candidates.find((c) => c.selector === anchor.selector);
   return !byUid && !bySelector;
+}
+
+function rectsEqual(a: ShapeRect, b: ShapeRect): boolean {
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+}
+
+export type AnchorHealStatus = 'healed' | 'dead' | 'unchanged';
+
+export interface AnchorHealEntry {
+  id: string;
+  kind: 'shape' | 'pin';
+  status: AnchorHealStatus;
+}
+
+export interface HealAnnotationsResult {
+  data: PageAnnotations;
+  entries: AnchorHealEntry[];
+}
+
+/**
+ * Anchor healing ladder (MIN-370): re-run {@link reanchorShape}/{@link reanchorPin}'s uid→selector
+ * resolution for every shape/pin on a page against its current live tagged elements.
+ *  - 'dead' ({@link isAnchorDead}): uid AND selector both fail — caller renders the P5 stale
+ *    badge (annotations-panel.ts already does this from `dead` on `AnnotationsPanelItem`).
+ *  - 'healed': resolution succeeded and the rect/position moved — updated quietly, no badge.
+ *  - 'unchanged': resolution succeeded at the same rect/position, or the anchor is page-type
+ *    (page anchors are never dead and never move on their own).
+ * Pure — no store/network I/O. {@link healPageAnnotations} is the persisting wrapper callers use
+ * after an auto-reload settles.
+ */
+export function healAnnotations(
+  data: PageAnnotations,
+  candidates: AnchorCandidate[],
+): HealAnnotationsResult {
+  const entries: AnchorHealEntry[] = [];
+
+  const shapes = data.shapes.map((shape) => {
+    if (isAnchorDead(shape.anchor, candidates)) {
+      entries.push({ id: shape.id, kind: 'shape', status: 'dead' });
+      return shape;
+    }
+    const before = boundingRectOfShape(shape);
+    const healed = reanchorShape(shape, candidates);
+    const after = boundingRectOfShape(healed);
+    entries.push({ id: shape.id, kind: 'shape', status: rectsEqual(before, after) ? 'unchanged' : 'healed' });
+    return healed;
+  });
+
+  const pins = data.pins.map((pin) => {
+    if (isAnchorDead(pin.anchor, candidates)) {
+      entries.push({ id: pin.id, kind: 'pin', status: 'dead' });
+      return pin;
+    }
+    const healed = reanchorPin(pin, candidates);
+    const status: AnchorHealStatus = pin.x === healed.x && pin.y === healed.y ? 'unchanged' : 'healed';
+    entries.push({ id: pin.id, kind: 'pin', status });
+    return healed;
+  });
+
+  return { data: { shapes, pins }, entries };
+}
+
+/**
+ * Persisting wrapper around {@link healAnnotations}: loads the page (cached after first call),
+ * heals every shape/pin against `candidates`, persists the healed rects/positions, and returns
+ * the classification so the caller can refresh dead badges (annotations panel) without a badge
+ * flicker for the common "nothing moved" case.
+ */
+export async function healPageAnnotations(
+  pageKey: string,
+  candidates: AnchorCandidate[],
+): Promise<HealAnnotationsResult> {
+  if (!pageKey) return { data: emptyAnnotations(), entries: [] };
+  await loadPageAnnotations(pageKey);
+  const state = getState(pageKey);
+  const result = healAnnotations(state.data, candidates);
+  state.data = result.data;
+  await persist(pageKey);
+  return { data: cloneAnnotations(result.data), entries: result.entries };
+}
+
+/** New anchor target for {@link repickAnnotation} — the freshly picked element's identity/rect. */
+export interface RepickAnchorInput {
+  uid: number | null;
+  selector: string;
+  rect: ShapeRect;
+}
+
+/**
+ * One-click re-pick (MIN-370): move a dead shape/pin's anchor onto a freshly picked element,
+ * keeping its `links[]` (P5 chat linking) untouched — re-picking re-anchors, it doesn't create a
+ * new mark. `annotationId` is matched against both shapes and pins (ids are namespaced
+ * `dshape-`/`dpin-` by shape-model.ts, so there's no ambiguity). Returns null when no shape/pin
+ * with that id exists on the page (nothing to persist).
+ */
+export async function repickAnnotation(
+  pageKey: string,
+  annotationId: string,
+  newAnchor: RepickAnchorInput,
+): Promise<PageAnnotations | null> {
+  if (!pageKey || !annotationId) return null;
+  await loadPageAnnotations(pageKey);
+  const state = getState(pageKey);
+
+  const hasShape = state.data.shapes.some((s) => s.id === annotationId);
+  const hasPin = state.data.pins.some((p) => p.id === annotationId);
+  if (!hasShape && !hasPin) return null;
+
+  const anchor: ShapeAnchor = { type: 'element', uid: newAnchor.uid, selector: newAnchor.selector };
+  pushUndoSnapshot(pageKey);
+  state.data = {
+    shapes: state.data.shapes.map((shape) => {
+      if (shape.id !== annotationId) return shape;
+      const next: DesignShape = { ...shape, anchor };
+      if (shape.kind === 'rect' || shape.kind === 'label') next.rect = { ...newAnchor.rect };
+      return next;
+    }),
+    pins: state.data.pins.map((pin) =>
+      pin.id === annotationId ? { ...pin, anchor, x: newAnchor.rect.x, y: newAnchor.rect.y } : pin,
+    ),
+  };
+  await persist(pageKey);
+  return cloneAnnotations(state.data);
 }
 
 /** Test helper — clear all in-memory page state between cases. */

@@ -40,6 +40,10 @@ export interface ElementRefBlockInput {
   imageName?: string;
   /** Resolved file:line (or guess) for the picked element, when async resolution has landed (MIN-369). */
   sourceMapping?: SourceMapping;
+  /** A11y quick-pass (MIN-370): aria-label || alt || trimmed text content. */
+  accessibleName?: string;
+  /** A11y quick-pass (MIN-370): WCAG contrast ratio of color vs background, or null when unknown. */
+  contrastRatio?: number | null;
 }
 
 function attr(value: string): string {
@@ -60,6 +64,18 @@ function sourceMapAttrs(mapping: SourceMapping | undefined): string {
   return `${sourceAttr} confidence="${mapping.confidence}"`;
 }
 
+/**
+ * A11y quick-pass (MIN-370): `name="…"` (accessible name, when non-empty) and
+ * `contrast="…"` (WCAG ratio, when computable) — omitted entirely when there's nothing useful to
+ * report, same "never blocks/never required" contract as {@link sourceMapAttrs}.
+ */
+function a11yAttrs(accessibleName: string | undefined, contrastRatio: number | null | undefined): string {
+  const nameAttr = accessibleName?.trim() ? ` name="${attr(accessibleName.trim())}"` : '';
+  const contrastAttr =
+    typeof contrastRatio === 'number' && Number.isFinite(contrastRatio) ? ` contrast="${contrastRatio}"` : '';
+  return `${nameAttr}${contrastAttr}`;
+}
+
 /** Persisted/API block for a Design Mode element pick (body is the outerHTML preview). */
 export function elementRefHistoryBlock(input: ElementRefBlockInput): string {
   const { rect } = input;
@@ -67,9 +83,10 @@ export function elementRefHistoryBlock(input: ElementRefBlockInput): string {
   const uidAttr = input.uid == null ? '' : ` uid="${input.uid}"`;
   const imageAttr = input.imageName ? ` image="${attr(input.imageName)}"` : '';
   const sourceAttrs = sourceMapAttrs(input.sourceMapping);
+  const a11y = a11yAttrs(input.accessibleName, input.contrastRatio);
   return (
     `<element-ref selector="${attr(input.selector)}"${uidAttr} page="${attr(input.pageUrl)}" ` +
     `tag="${attr(input.tagName)}" classes="${attr(input.classList.join(' '))}" rect="${rectAttr}" ` +
-    `styles="${attr(input.stylesDigest)}"${sourceAttrs}${imageAttr}>\n${input.outerHtmlPreview}\n</element-ref>`
+    `styles="${attr(input.stylesDigest)}"${sourceAttrs}${a11y}${imageAttr}>\n${input.outerHtmlPreview}\n</element-ref>`
   );
 }

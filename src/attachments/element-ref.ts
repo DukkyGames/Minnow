@@ -23,6 +23,10 @@ export interface ElementRefInput {
   stylesDigest: string;
   /** DPR-correct cropped screenshot data URL, when region-capture succeeded. */
   croppedDataUrl?: string;
+  /** A11y quick-pass (MIN-370): aria-label || alt || trimmed text content. */
+  accessibleName?: string;
+  /** A11y quick-pass (MIN-370): WCAG contrast ratio of color vs background, or null when unknown. */
+  contrastRatio?: number | null;
 }
 
 /**
@@ -62,6 +66,8 @@ export function addElementRefToComposer(input: ElementRefInput): Attachment | nu
     rect: { ...input.rect },
     stylesDigest: input.stylesDigest,
     croppedDataUrl: input.croppedDataUrl,
+    accessibleName: input.accessibleName,
+    contrastRatio: input.contrastRatio ?? null,
   };
 
   pushAttachment(attachment);

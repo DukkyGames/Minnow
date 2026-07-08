@@ -44,6 +44,15 @@ export const PREVIEW_INSTANCE_CREATE = 'minnow:preview:instance-create';
 export const PREVIEW_INSTANCE_DESTROY = 'minnow:preview:instance-destroy';
 /** Renderer → main: list live preview instance ids for the window (most-recently-used first). */
 export const PREVIEW_INSTANCE_LIST = 'minnow:preview:instance-list';
+/** Renderer → main: attach CDP + arm native hover/click picking (cross-origin, MIN-370). */
+export const PREVIEW_CDP_PICK_ENABLE = 'minnow:preview:cdp-pick-enable';
+/** Renderer → main: disarm CDP picking and detach the debugger. */
+export const PREVIEW_CDP_PICK_DISABLE = 'minnow:preview:cdp-pick-disable';
+/** Main → renderer: a CDP pick landed (adapted to the PickedElement shape). */
+export const PREVIEW_CDP_PICK_EVENT = 'minnow:preview:cdp-pick-event';
+/** Main → renderer: a non-fatal CDP picking error (session stays alive). */
+export const PREVIEW_CDP_PICK_ERROR = 'minnow:preview:cdp-pick-error';
+
 export const APP_OPEN_EXTERNAL = 'minnow:app:open-external';
 /** Renderer → main: forward renderer errors to crash.jsonl (fire-and-forget). */
 export const DIAGNOSTICS_REPORT_ERROR = 'minnow:diagnostics:report-error';

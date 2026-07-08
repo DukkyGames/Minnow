@@ -7,7 +7,7 @@
 
 import type { AnnotationOverlay, OverlayMarker } from './overlay';
 import {
-  createElementPicker,
+  createBestElementPicker,
   createPickerTransport,
   uidFallbackSelector,
   type ElementPicker,
@@ -152,6 +152,8 @@ export function createSelectDesignTool(): DesignTool {
       rect: picked.boundingRect,
       stylesDigest: picked.stylesDigest,
       croppedDataUrl: captured.dataUrl,
+      accessibleName: picked.accessibleName,
+      contrastRatio: picked.contrastRatio,
     });
     if (!attachment || !ctx) return;
 
@@ -186,9 +188,11 @@ export function createSelectDesignTool(): DesignTool {
     arm(context) {
       ctx = context;
       resetSelection();
+      // `transport` still backs the P6 source-map ladder's execJs step (harmless no-op on a
+      // guest CDP picking chose specifically because execJs is unavailable/blocked there) —
+      // it's independent of which picker (CDP vs execJs/iframe) produced the click itself.
       transport = createPickerTransport();
-      picker = createElementPicker({
-        transport,
+      picker = createBestElementPicker({
         onPick: (picked) => void handlePick(picked),
       });
       void picker.enable().catch(() => {});

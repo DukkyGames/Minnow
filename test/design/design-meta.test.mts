@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import {
   DEFAULT_DESIGN_INSTANCE_META,
+  DEFAULT_DIFF_HISTORY_LIMIT,
   getDesignInstanceMetaCached,
   loadDesignInstanceMeta,
   loadDesignMeta,
@@ -13,9 +14,15 @@ import {
 
 describe('design-meta normalize', () => {
   test('normalizeDesignMeta returns empty instances for missing/invalid input', () => {
-    assert.deepEqual(normalizeDesignMeta(null), { instances: {} });
-    assert.deepEqual(normalizeDesignMeta(undefined), { instances: {} });
-    assert.deepEqual(normalizeDesignMeta('nope'), { instances: {} });
+    assert.deepEqual(normalizeDesignMeta(null), { instances: {}, diffHistoryLimit: DEFAULT_DIFF_HISTORY_LIMIT });
+    assert.deepEqual(normalizeDesignMeta(undefined), { instances: {}, diffHistoryLimit: DEFAULT_DIFF_HISTORY_LIMIT });
+    assert.deepEqual(normalizeDesignMeta('nope'), { instances: {}, diffHistoryLimit: DEFAULT_DIFF_HISTORY_LIMIT });
+  });
+
+  test('normalizeDesignMeta clamps a bogus diffHistoryLimit to the default', () => {
+    assert.equal(normalizeDesignMeta({ diffHistoryLimit: -3 }).diffHistoryLimit, DEFAULT_DIFF_HISTORY_LIMIT);
+    assert.equal(normalizeDesignMeta({ diffHistoryLimit: 'lots' }).diffHistoryLimit, DEFAULT_DIFF_HISTORY_LIMIT);
+    assert.equal(normalizeDesignMeta({ diffHistoryLimit: 3.9 }).diffHistoryLimit, 3);
   });
 
   test('normalizeDesignMeta fills defaults for a partial instance entry', () => {
@@ -77,7 +84,7 @@ describe('design-meta load/save round trip', () => {
 
   test('loadDesignMeta returns defaults when nothing persisted', async () => {
     const meta = await loadDesignMeta();
-    assert.deepEqual(meta, { instances: {} });
+    assert.deepEqual(meta, { instances: {}, diffHistoryLimit: DEFAULT_DIFF_HISTORY_LIMIT });
   });
 
   test('saveDesignInstanceMeta persists a patch and loadDesignInstanceMeta reads it back', async () => {

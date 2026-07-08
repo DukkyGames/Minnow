@@ -4,6 +4,7 @@
 
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import * as channels from './ipc-channels.js';
+import type { CdpPickedElement } from './preview-cdp-adapt.js';
 
 /** Preview bounds in CSS pixels relative to the host window content area. */
 export interface PreviewBounds {
@@ -109,6 +110,44 @@ const preview = {
     destroy: (instanceId: string): Promise<void> =>
       ipcRenderer.invoke(channels.PREVIEW_INSTANCE_DESTROY, instanceId),
     list: (): Promise<string[]> => ipcRenderer.invoke(channels.PREVIEW_INSTANCE_LIST),
+  },
+  /**
+   * CDP-backed element picking for cross-origin guests (MIN-370): native hover/click via
+   * `webContents.debugger`, no script injected into the page. Electron only.
+   */
+  cdpPicker: {
+    enable: (tabId?: string, instanceId?: string): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke(channels.PREVIEW_CDP_PICK_ENABLE, tabId, instanceId),
+    disable: (tabId?: string, instanceId?: string): Promise<void> =>
+      ipcRenderer.invoke(channels.PREVIEW_CDP_PICK_DISABLE, tabId, instanceId),
+    onPick: (
+      callback: (picked: CdpPickedElement, tabId?: string, instanceId?: string) => void,
+    ): (() => void) => {
+      const handler = (
+        _event: IpcRendererEvent,
+        picked: CdpPickedElement,
+        tabId?: string,
+        instanceId?: string,
+      ) => callback(picked, tabId, instanceId);
+      ipcRenderer.on(channels.PREVIEW_CDP_PICK_EVENT, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.PREVIEW_CDP_PICK_EVENT, handler);
+      };
+    },
+    onError: (
+      callback: (message: string, tabId?: string, instanceId?: string) => void,
+    ): (() => void) => {
+      const handler = (
+        _event: IpcRendererEvent,
+        message: string,
+        tabId?: string,
+        instanceId?: string,
+      ) => callback(message, tabId, instanceId);
+      ipcRenderer.on(channels.PREVIEW_CDP_PICK_ERROR, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.PREVIEW_CDP_PICK_ERROR, handler);
+      };
+    },
   },
   onNavigation: (callback: (url: string, tabId?: string, instanceId?: string) => void): (() => void) => {
     const handler = (_event: IpcRendererEvent, tabId: string, url: string, instanceId?: string) => {

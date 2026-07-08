@@ -21,6 +21,8 @@ export interface DesignInstanceMeta {
 
 export interface DesignMeta {
   instances: Record<string, DesignInstanceMeta>;
+  /** Before/after diff card history (MIN-370 P1): max pairs kept per chat, oldest evicted first. */
+  diffHistoryLimit: number;
 }
 
 export const DEFAULT_DESIGN_INSTANCE_META: DesignInstanceMeta = {
@@ -30,7 +32,9 @@ export const DEFAULT_DESIGN_INSTANCE_META: DesignInstanceMeta = {
   darkModeEmulation: false,
 };
 
-export const DEFAULT_DESIGN_META: DesignMeta = { instances: {} };
+export const DEFAULT_DIFF_HISTORY_LIMIT = 5;
+
+export const DEFAULT_DESIGN_META: DesignMeta = { instances: {}, diffHistoryLimit: DEFAULT_DIFF_HISTORY_LIMIT };
 
 function normalizeInstanceMeta(raw: unknown): DesignInstanceMeta {
   if (!raw || typeof raw !== 'object') return { ...DEFAULT_DESIGN_INSTANCE_META };
@@ -54,7 +58,7 @@ function normalizeInstanceMeta(raw: unknown): DesignInstanceMeta {
 
 /** Coerce API payload into a design config block. */
 export function normalizeDesignMeta(raw: unknown): DesignMeta {
-  if (!raw || typeof raw !== 'object') return { instances: {} };
+  if (!raw || typeof raw !== 'object') return { instances: {}, diffHistoryLimit: DEFAULT_DIFF_HISTORY_LIMIT };
   const row = raw as Record<string, unknown>;
   const instancesRaw = row.instances;
   const instances: Record<string, DesignInstanceMeta> = {};
@@ -64,7 +68,11 @@ export function normalizeDesignMeta(raw: unknown): DesignMeta {
       instances[id] = normalizeInstanceMeta(value);
     }
   }
-  return { instances };
+  const diffHistoryLimit =
+    typeof row.diffHistoryLimit === 'number' && Number.isFinite(row.diffHistoryLimit) && row.diffHistoryLimit > 0
+      ? Math.floor(row.diffHistoryLimit)
+      : DEFAULT_DIFF_HISTORY_LIMIT;
+  return { instances, diffHistoryLimit };
 }
 
 let cached: DesignMeta | null = null;
@@ -103,6 +111,7 @@ export async function saveDesignMeta(patch: Partial<DesignMeta>): Promise<void> 
   const current = await loadDesignMeta();
   const next: DesignMeta = {
     instances: patch.instances ?? { ...current.instances },
+    diffHistoryLimit: patch.diffHistoryLimit ?? current.diffHistoryLimit,
   };
   cached = next;
   await fetch('/api/config/meta', {
