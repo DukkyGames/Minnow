@@ -25,8 +25,8 @@ describe('test discovery', () => {
   });
 
   test('new convention path gets tsx-loader-mocks by default', () => {
-    const runner = resolveRunner('test/foo/bar.test.mts');
-    assert.equal(runner, 'tsx-loader-mocks');
+    assert.equal(resolveRunner('test/foo/bar.test.mts'), 'tsx-loader-mocks');
+    assert.equal(resolveRunner('test/foo/bar.test.mjs'), 'tsx-loader-mocks');
   });
 
   test('scoped memory suite only includes memory tests', () => {

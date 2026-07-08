@@ -46,7 +46,8 @@ export const RUNNERS = {
 /** Default runner when no path rule matches. */
 export const DEFAULT_RUNNER_BY_EXT = {
   '.test.js': 'node',
-  '.test.mjs': 'node',
+  // .mjs suites often import ../../src/*.ts; plain node cannot resolve TS dependency chains.
+  '.test.mjs': 'tsx-loader-mocks',
   '.test.ts': 'tsx-loader-mocks',
   '.test.mts': 'tsx-loader-mocks',
 };

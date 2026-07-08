@@ -130,18 +130,19 @@ async function waitForGenerationBytes(baseUrl, generationId, minBytes, timeoutMs
 }
 
 async function waitForGenerationStatus(baseUrl, generationId, status, timeoutMs = 10_000) {
+  const expected = Array.isArray(status) ? status : [status];
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const snap = await httpRequest(baseUrl, 'GET', `/api/generations/${generationId}`);
     assert.equal(snap.status, 200, `status snapshot HTTP ${snap.status}`);
-    if (snap.json?.status === status) {
+    if (expected.includes(snap.json?.status)) {
       return snap.json;
     }
     await new Promise((r) => setTimeout(r, 25));
   }
   const last = await httpRequest(baseUrl, 'GET', `/api/generations/${generationId}`);
   assert.fail(
-    `Timed out waiting for status "${status}" (last: ${JSON.stringify(last.json)})`,
+    `Timed out waiting for status ${JSON.stringify(expected)} (last: ${JSON.stringify(last.json)})`,
   );
 }
 
@@ -310,7 +311,8 @@ describe('POST /api/generations + GET status lifecycle', () => {
 describe('parallel stream subscribers', () => {
   it('two GET /stream clients receive identical replay + tail from mock upstream', async () => {
     const generationId = await createGeneration(baseUrl);
-    await waitForGenerationStatus(baseUrl, generationId, 'streaming');
+    // Fast mock upstream may skip observable "streaming" and land on "complete" first.
+    await waitForGenerationStatus(baseUrl, generationId, ['streaming', 'complete']);
 
     const [a, b] = await Promise.all([
       collectSseStream(baseUrl, `/api/generations/${generationId}/stream`),

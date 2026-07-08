@@ -26,7 +26,7 @@ const SESSION_SCHEMA_VERSION = 5;
 const MAX_GOAL_CONDITION_CHARS = 4000;
 
 /** Normalize workspace paths for stable keys (mirror src/lib/normalize-workspace-path.ts). */
-function normalizeWorkspacePath(fsPath) {
+export function normalizeWorkspacePath(fsPath) {
   if (typeof fsPath !== 'string') return '';
   let p = fsPath.trim().replace(/\\/g, '/');
   p = p.replace(/\/+/g, '/');
