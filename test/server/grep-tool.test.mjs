@@ -56,7 +56,7 @@ describe('grep helpers', () => {
     assert.match(text, /1:alpha/);
     assert.match(text, /2-beta/);
     assert.doesNotMatch(text, /3:gamma/);
-    assert.match(text, /truncated at 2 lines/);
+    assert.match(text, /truncated at 2 match lines/);
   });
 
   it('capGrepOutput supports offset pagination', () => {
@@ -185,7 +185,7 @@ describe('runGrepSearch fixture workspace', () => {
       path: 'src',
       head_limit: 1,
     });
-    assert.match(out, /truncated at 1 lines/);
+    assert.match(out, /truncated at 1 match lines/);
   });
 
   it('supports output_mode files_with_matches', async () => {

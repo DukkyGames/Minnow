@@ -118,9 +118,9 @@ export function capGrepOutput(stdout, options = {}) {
   if (truncated) {
     const hint =
       lineCount > 0
-        ? `use offset=${nextOffset} to continue`
+        ? `use offset=${nextOffset} for the next page or raise head_limit (max ${GREP_MAX_HEAD_LIMIT})`
         : `use offset=${offset} with a smaller head_limit`;
-    text = `${text}\n(truncated at ${lineCount} lines; ${hint})`;
+    text = `${text}\n(truncated at ${lineCount} match lines, default head_limit=${GREP_DEFAULT_HEAD_LIMIT}; ${hint})`;
   }
 
   const beforeUtf8 = text;
