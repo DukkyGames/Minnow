@@ -6,6 +6,8 @@ export interface TerminalTabMeta {
   id: string;
   shellProfileId: string;
   title?: string;
+  /** Absolute cwd when the PTY tab was opened (MIN-349 tab scope labels). */
+  boundCwd?: string;
   chatId?: string | null;
   order: number;
 }
@@ -45,6 +47,7 @@ function normalizeTab(raw: unknown, index: number): TerminalTabMeta | null {
     id,
     shellProfileId,
     title: typeof row.title === 'string' ? row.title : undefined,
+    boundCwd: typeof row.boundCwd === 'string' ? row.boundCwd : undefined,
     chatId:
       row.chatId === null || typeof row.chatId === 'string'
         ? (row.chatId as string | null)
