@@ -1,18 +1,17 @@
 import assert from 'node:assert/strict';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { describe, test } from 'node:test';
+import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
+import {
+  installHappyDomGlobals,
+  teardownHappyDomAsync,
+} from '../os/dom-helpers.mts';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+/** @type {import('happy-dom').Window | undefined} */
+let win;
 
 function setupDom() {
-  const window = new Window();
-  // positionMenu uses window.innerWidth; bind the happy-dom window for layout math.
-  globalThis.window = window;
-  globalThis.document = window.document;
-  globalThis.HTMLElement = window.HTMLElement;
-  globalThis.Node = window.Node;
+  win = new Window();
+  installHappyDomGlobals(win);
   document.body.innerHTML =
     '<span id="sDot" class="s-dot"></span><span id="sText"></span>';
   globalThis.fetch = async (url, init) => {
@@ -50,13 +49,13 @@ function setupDom() {
     }
     throw new Error(`unexpected fetch: ${url}`);
   };
-  return window;
 }
 
 const {
   closeWorkspaceMenu,
   isWorkspaceMenuOpen,
   renderWorkspaceMenuForTest,
+  resetWorkspaceMenuForTests,
   setWorkspaceMenuDeps,
   toggleWorkspaceMenu,
 } = await import('../../src/ui/workspace-recent-menu.ts');
@@ -67,6 +66,15 @@ setWorkspaceMenuDeps({
 });
 
 describe('workspace-recent-menu', { concurrency: false }, () => {
+  afterEach(async () => {
+    resetWorkspaceMenuForTests();
+    closeWorkspaceMenu();
+    if (win) {
+      await teardownHappyDomAsync(win);
+      win = undefined;
+    }
+  });
+
   test('render list marks current row with aria-current', async () => {
     setupDom();
     const menu = document.createElement('ul');
@@ -108,9 +116,9 @@ describe('workspace-recent-menu', { concurrency: false }, () => {
     assert.equal(isWorkspaceMenuOpen(), true);
     assert.equal(btn.getAttribute('aria-expanded'), 'true');
 
-    const win = document.defaultView;
+    const winView = document.defaultView;
     document.dispatchEvent(
-      new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+      new winView.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
     );
     assert.equal(isWorkspaceMenuOpen(), false);
     assert.equal(btn.getAttribute('aria-expanded'), 'false');

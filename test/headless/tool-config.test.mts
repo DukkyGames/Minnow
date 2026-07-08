@@ -15,14 +15,17 @@ import {
   installHeadlessFetch,
   installHeadlessLocalStorage,
 } from '../../src/headless/server-context.ts';
-import { detectConfigServer, getStorageMode } from '../../src/config/storage-mode.ts';
+import { detectConfigServer, getStorageMode, setStorageModeForTests } from '../../src/config/storage-mode.ts';
 
 describe('headless tool config', () => {
   let server: Server | null = null;
   let baseUrl = '';
   let restoreFetch: (() => void) | null = null;
+  let previousStorageMode: ReturnType<typeof getStorageMode> = 'localStorage';
 
   beforeEach(async () => {
+    previousStorageMode = getStorageMode();
+    setStorageModeForTests('localStorage');
     invalidateToolConfigCache();
     installHeadlessLocalStorage();
 
@@ -67,6 +70,7 @@ describe('headless tool config', () => {
     restoreFetch?.();
     restoreFetch = null;
     invalidateToolConfigCache();
+    setStorageModeForTests(previousStorageMode);
     await new Promise<void>((resolve, reject) => {
       if (!server) {
         resolve();

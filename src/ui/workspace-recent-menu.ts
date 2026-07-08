@@ -268,3 +268,14 @@ export async function renderWorkspaceMenuForTest(container?: HTMLElement): Promi
   }
   await renderMenuList();
 }
+
+/** Reset module singletons between workspace menu tests. */
+export function resetWorkspaceMenuForTests(): void {
+  closeWorkspaceMenu();
+  detachGlobalListeners();
+  menuEl = null;
+  anchorBtn = null;
+  menuOpen = false;
+  outsidePointerHandler = null;
+  escapeHandler = null;
+}

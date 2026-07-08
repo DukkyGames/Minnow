@@ -2,9 +2,29 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 import {
+  installHappyDomGlobals,
+  teardownHappyDomAsync,
+} from '../os/dom-helpers.mts';
+import { resetFilePanelStateForTests } from '../../src/state/file-panel.ts';
+import {
   appendConsoleOutputWithLinks,
   openConsoleLinkInPreview,
 } from '../../src/ui/terminal-console-links.ts';
+
+function setupPreviewDom(): void {
+  document.body.innerHTML = `
+    <div id="workspaceSplit" class="workspace-split">
+      <div class="main-column"></div>
+      <div id="splitResizer" class="split-resizer hidden"></div>
+      <section id="fileViewerPane" class="file-viewer-pane hidden"></section>
+      <section id="previewPane" class="preview-pane hidden"></section>
+    </div>
+    <aside id="fileSidebar"><button id="btnFileSidebarCollapse" type="button"></button></aside>
+    <iframe id="previewFrame"></iframe>
+    <input id="previewUrlInput" />
+    <div id="previewStatus"></div>
+  `;
+}
 
 describe('terminal-console-links', () => {
   /** @type {Window | undefined} */
@@ -12,15 +32,28 @@ describe('terminal-console-links', () => {
 
   beforeEach(() => {
     win = new Window({ url: 'http://localhost:9473/' });
-    // @ts-expect-error test harness replaces globals
-    globalThis.window = win;
-    // @ts-expect-error test harness replaces globals
-    globalThis.document = win.document;
+    installHappyDomGlobals(win);
+    resetFilePanelStateForTests();
+    setupPreviewDom();
+    window.minnow = {
+      preview: {
+        hide: () => undefined,
+        show: async () => undefined,
+        loadURL: async () => undefined,
+        navigateAndWait: async () => ({ ok: true }),
+        onNavigation: () => () => undefined,
+        onLoading: () => () => undefined,
+        onLoadFailed: () => () => undefined,
+      },
+    };
   });
 
-  afterEach(() => {
-    win?.close();
-    win = undefined;
+  afterEach(async () => {
+    resetFilePanelStateForTests();
+    if (win) {
+      await teardownHappyDomAsync(win);
+      win = undefined;
+    }
   });
 
   test('appendConsoleOutputWithLinks turns URLs into preview anchors', () => {
@@ -44,7 +77,7 @@ describe('terminal-console-links', () => {
     assert.equal(anchor?.getAttribute('href'), 'https://example.com/path');
   });
 
-  test('console link click prevents default navigation', () => {
+  test('console link click prevents default navigation', async () => {
     const parent = document.createElement('pre');
     appendConsoleOutputWithLinks(parent, 'see http://localhost:3000/app');
 
@@ -53,6 +86,7 @@ describe('terminal-console-links', () => {
     anchor.dispatchEvent(event);
 
     assert.equal(event.defaultPrevented, true);
+    await new Promise((resolve) => setTimeout(resolve, 50));
   });
 
   test('openConsoleLinkInPreview ignores empty URLs', async () => {

@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
-import { describe, test, beforeEach } from 'node:test';
+import { afterEach, describe, test, beforeEach } from 'node:test';
 import { Window } from 'happy-dom';
+import {
+  installHappyDomGlobals,
+  seedMinimalSession,
+  teardownHappyDomAsync,
+} from '../os/dom-helpers.mts';
 
 const { applyFileSidebarVisuals } = await import('../../src/ui/file-layout.ts');
 const {
@@ -16,14 +21,19 @@ const {
   setFilePanelState,
   resetFilePanelStateForTests,
 } = await import('../../src/state/file-panel.ts');
+const { setSessionStateForTests } = await import('../../src/state/sessions.ts');
+
+/** @type {import('happy-dom').Window | undefined} */
+let win;
 
 function setupSplitDom() {
-  const window = new Window();
-  globalThis.document = window.document;
-  globalThis.HTMLElement = window.HTMLElement;
-  globalThis.Node = window.Node;
+  win = new Window();
+  installHappyDomGlobals(win);
   document.body.innerHTML = `
     <button type="button" id="btnStats" aria-expanded="false"></button>
+    <aside id="fileSidebar">
+      <button type="button" id="btnFileSidebarCollapse"></button>
+    </aside>
     <div id="workspaceSplit" class="workspace-split">
       <div class="main-column" id="mainColumn">
         <div class="stats-strip is-collapsed" id="statsStrip">
@@ -34,14 +44,25 @@ function setupSplitDom() {
           <span id="stripTotal">—</span>
         </div>
       </div>
+      <div id="splitResizer" class="split-resizer hidden"></div>
+      <section id="fileViewerPane" class="file-viewer-pane hidden"></section>
+      <section id="previewPane" class="preview-pane hidden"></section>
     </div>
   `;
-  return window;
 }
 
 describe('stats split layout', { concurrency: false }, () => {
   beforeEach(() => {
     resetFilePanelStateForTests();
+    seedMinimalSession();
+  });
+
+  afterEach(async () => {
+    setSessionStateForTests(null);
+    if (win) {
+      await teardownHappyDomAsync(win);
+      win = undefined;
+    }
   });
 
   test('collapseStatsPanelForSplit clears is-expanded and aria-expanded', () => {
@@ -99,18 +120,10 @@ describe('stats split layout', { concurrency: false }, () => {
   test('initStatsStrip restores open preference from localStorage', () => {
     setupSplitDom();
     const store = new Map([['minnow.statsStripOpen', '1']]);
-    globalThis.localStorage = {
-      getItem: (key) => store.get(key) ?? null,
-      setItem: (key, value) => {
-        store.set(key, String(value));
-      },
-      removeItem: (key) => {
-        store.delete(key);
-      },
-    };
+    globalThis.localStorage = win.localStorage;
+    win.localStorage.setItem('minnow.statsStripOpen', '1');
     initStatsStrip();
     assert.equal(isStatsStripOpen(), true);
-    delete globalThis.localStorage;
   });
 
   test('applyFileSidebarVisuals removes viewer-open when split closes', () => {

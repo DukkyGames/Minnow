@@ -10,7 +10,7 @@ import type { RunCodingPythonResult } from '../../../src/benchmark/coding-run-py
 import { scoreHumanEval } from '../../../src/benchmark/standard/harnesses/humaneval.ts';
 import type { StandardBenchmarkItem } from '../../../src/benchmark/standard/types.ts';
 
-const BASE = process.env.MINNOW_BENCH_URL ?? 'http://localhost:5173';
+const BASE = process.env.MINNOW_BENCH_URL ?? 'http://localhost:9473';
 
 const pack = JSON.parse(
   readFileSync('src/benchmark/standard/packs/humaneval-mini.json', 'utf8'),

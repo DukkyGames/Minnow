@@ -5,6 +5,9 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { handleConfigRequest } from '../../server/config/middleware.js';
 import { waitForServer } from '../../src/headless/preflight.ts';
 
@@ -25,8 +28,14 @@ function createPingServer() {
 describe('headless preflight', () => {
   let server: http.Server | null = null;
   let baseUrl = '';
+  let tempHome = '';
+  let previousMinnowHome: string | undefined;
 
   before(async () => {
+    previousMinnowHome = process.env.MINNOW_HOME;
+    tempHome = mkdtempSync(path.join(os.tmpdir(), 'minnow-preflight-'));
+    process.env.MINNOW_HOME = tempHome;
+
     server = createPingServer();
     await new Promise<void>((resolve, reject) => {
       server!.listen(0, '127.0.0.1', (err?: Error) => (err ? reject(err) : resolve()));
@@ -38,6 +47,14 @@ describe('headless preflight', () => {
 
   after(async () => {
     await new Promise<void>((resolve) => server?.close(() => resolve()));
+    if (tempHome) {
+      rmSync(tempHome, { recursive: true, force: true });
+    }
+    if (previousMinnowHome === undefined) {
+      delete process.env.MINNOW_HOME;
+    } else {
+      process.env.MINNOW_HOME = previousMinnowHome;
+    }
   });
 
   it('waitForServer succeeds when config and tools ping respond', async () => {
