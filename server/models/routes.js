@@ -19,12 +19,6 @@ import {
 } from './llama-runtime.js';
 import { writeLlamaCppConfig, readLlamaCppConfig, buildLlamaServerArgs } from './llama-args.js';
 
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
-
 function sendJson(res, status, payload) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
@@ -53,7 +47,6 @@ function readJsonBody(req) {
  * @param {string} pathname
  */
 export async function handleModelsRequest(req, res, pathname) {
-  setCorsHeaders(res);
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;

@@ -266,6 +266,7 @@ export async function syncFileTreeToPanelWorktree(panelCwd?: string): Promise<vo
 
   startFileTreeGitStatusPoll(nextRoot ?? getWorkspacePath());
   syncFileSidebarTitleFromFileTree();
+  void import('./terminal-panel').then((m) => m.syncTerminalFromFileExplorer());
 }
 
 /** Update #fileSidebarTitle when the files view is visible. */

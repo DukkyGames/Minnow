@@ -6,6 +6,7 @@ import path from 'node:path';
 import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
 import { subscribeRun, getRun, createRun, cancelRun, getTerminalHistoryForChat, readRunLogTail, stopActiveRunsForChat } from '../terminal-runner.js';
 import { resolveChatCwd } from '../workspace/chat-cwd.js';
+import { resolvePtySessionCwd } from './session-cwd.js';
 import { getAvailableShellProfiles } from './shell-profiles.js';
 import {
   createPtySession,
@@ -16,12 +17,6 @@ import {
 } from './pty-host.js';
 
 const HEARTBEAT_MS = 15_000;
-
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
 
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
@@ -57,7 +52,6 @@ function writeSse(res, data) {
  * @returns {Promise<boolean>}
  */
 export async function handleTerminalRequest(req, res, pathname, projectRoot) {
-  setCorsHeaders(res);
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;
@@ -225,10 +219,14 @@ export async function handleTerminalRequest(req, res, pathname, projectRoot) {
   if (pathname === '/api/terminal/session' && req.method === 'POST') {
     try {
       const body = await readJsonBody(req);
-      const cwd =
-        typeof body?.cwd === 'string' && body.cwd.trim()
-          ? body.cwd.trim()
-          : projectRoot;
+      let cwd;
+      try {
+        cwd = await resolvePtySessionCwd(projectRoot, body);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        sendJson(res, 400, { error: message });
+        return true;
+      }
       const chatId =
         typeof body?.chatId === 'string' ? body.chatId : null;
       const shellProfileId =

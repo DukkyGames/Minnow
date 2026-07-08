@@ -16,6 +16,7 @@ import {
 import { validateProviderId } from './validate.js';
 import { generateText, streamText } from 'ai';
 import { buildAnthropicProvider } from '../generations/anthropic/provider-runtime.js';
+import { resolveModelApi } from '../generations/resolve-model-api.js';
 import { openAiMessagesToCoreMessages } from '../generations/anthropic/openai-to-core-messages.js';
 import { mapOpenAiToolChoice, mapOpenAiTools } from '../generations/anthropic/openai-tools.js';
 
@@ -315,12 +316,14 @@ async function probeAnthropicModelCapabilities(modelRow, runtime, signal) {
  */
 async function probeModelCapabilities(modelRow, runtime, signal) {
   const cap = ingestFromCatalog(modelRow);
+  const resolvedApi = resolveModelApi(runtime, modelRow.id, modelRow);
+  cap.api = resolvedApi;
   const isLmStudio = runtime.profile.apiKind === 'lm-studio-v0';
   if (isLmStudio && !isCatalogModelLoaded(modelRow)) {
     return cap;
   }
 
-  if (runtime.profile.apiKind === 'anthropic-v1') {
+  if (resolvedApi === 'anthropic-v1') {
     return probeAnthropicModelCapabilities(modelRow, runtime, signal);
   }
 
@@ -513,24 +516,30 @@ export async function probeProviderCapabilities(id, options = {}) {
   validateProviderId(id);
   const runtime = await getProviderRuntime(id);
 
-  if (runtime.profile.apiKind === 'anthropic-v1') {
-    const modelsResponse = await proxyModels(id);
-    const catalog = Array.isArray(modelsResponse.data) ? modelsResponse.data : [];
-    const prioritized = prioritizeModelIds(
-      catalog.map((m) => m.id),
-      options.selectedModelId,
-      catalog,
-    );
-    const modelId =
-      typeof options.modelId === 'string' && options.modelId.trim()
-        ? options.modelId.trim()
-        : prioritized[0];
+  const modelsResponse = await proxyModels(id);
+  const catalog = Array.isArray(modelsResponse.data) ? modelsResponse.data : [];
+  const prioritized = prioritizeModelIds(
+    catalog.map((m) => m.id),
+    options.selectedModelId,
+    catalog,
+  );
+  const catalogById = new Map(catalog.map((m) => [m.id, m]));
+  const modelId =
+    typeof options.modelId === 'string' && options.modelId.trim()
+      ? options.modelId.trim()
+      : prioritized[0];
+  const modelRow = modelId ? catalogById.get(modelId) || { id: modelId } : null;
+  const resolvedApi = modelRow
+    ? resolveModelApi(runtime, modelRow.id, modelRow)
+    : runtime.profile.apiKind;
 
+  if (resolvedApi === 'anthropic-v1') {
     const existing = await readCapabilities(id);
     const models = { ...existing.models };
     if (modelId) {
       models[modelId] = {
         ...(models[modelId] || {}),
+        api: 'anthropic-v1',
         structuredOutput: false,
         denyReason: ANTHROPIC_STRUCTURED_PROBE_MSG,
       };
@@ -550,7 +559,7 @@ export async function probeProviderCapabilities(id, options = {}) {
   }
 
   const url = `${runtime.profile.baseUrl}${runtime.paths.chatCompletionsPath}`;
-  const modelId = await resolveStructuredProbeModelId(id, options);
+  const probeModelId = await resolveStructuredProbeModelId(id, options);
 
   const baseMessages = [{ role: 'user', content: 'Reply with JSON: {"ok":true}' }];
   const responseFormat = {
@@ -566,7 +575,7 @@ export async function probeProviderCapabilities(id, options = {}) {
     url,
     headers: runtime.headers,
     body: {
-      model: modelId,
+      model: probeModelId,
       messages: baseMessages,
       max_tokens: 16,
       temperature: 0,
@@ -579,7 +588,7 @@ export async function probeProviderCapabilities(id, options = {}) {
     url,
     headers: runtime.headers,
     body: {
-      model: modelId,
+      model: probeModelId,
       messages: baseMessages,
       max_tokens: 16,
       temperature: 0,
@@ -594,7 +603,7 @@ export async function probeProviderCapabilities(id, options = {}) {
     url,
     headers: runtime.headers,
     body: {
-      model: modelId,
+      model: probeModelId,
       messages: baseMessages,
       max_tokens: 16,
       temperature: 0,
@@ -613,9 +622,9 @@ export async function probeProviderCapabilities(id, options = {}) {
   const existing = await readCapabilities(id);
   const models = { ...existing.models };
 
-  if (modelId) {
-    models[modelId] = {
-      ...(models[modelId] || {}),
+  if (probeModelId) {
+    models[probeModelId] = {
+      ...(models[probeModelId] || {}),
       structuredOutput: withTools.ok || structuredOnly.ok,
       denyReason: null,
     };

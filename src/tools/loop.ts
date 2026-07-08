@@ -123,6 +123,7 @@ import {
 } from '../ui/composer-send';
 import { syncComposerMessageQueue } from '../ui/composer-message-queue';
 import { syncGoalActiveHint } from '../ui/goal-active-hint';
+import { syncTodoPanel } from '../ui/todo-panel';
 import {
   clearComposerInput,
   resolveComposerSurface,
@@ -272,6 +273,8 @@ import {
   augmentPartyModeSkillBody,
   CAVEMAN_SKILL_ID,
   PARTYMODE_SKILL_ID,
+  GIT_SETUP_SKILL_ID,
+  prepareGitSetupTurn,
   formatHistoryWithSkillTag,
   isPartyModePinned,
   isSkillEnabled,
@@ -907,6 +910,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   let turnMountPinned = false;
 
   try {
+    if (skillId === GIT_SETUP_SKILL_ID && !resumeGenerationId) {
+      await prepareGitSetupTurn();
+    }
   const useActiveChatDom = chat.id === getActiveChat().id;
   // Capture the correct DOM mount now so mid-turn navigation (e.g. launch_minnow_app
   // routing to the Code app) cannot re-route stream output to the wrong surface.
@@ -2387,6 +2393,7 @@ export async function sendMessageWithTools(
   syncComposerPinnedSkillFromActiveChat();
   scheduleSaveSessions();
   syncGoalActiveHint();
+  syncTodoPanel();
 
   await runChatTurn({
     chat,

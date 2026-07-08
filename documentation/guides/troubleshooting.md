@@ -9,8 +9,9 @@ Common problems and fixes. If a fix mentions a setting, it's under the in-app **
 | `[providers] fetch failed` on startup | Normal without LM Studio running — provider discovery couldn't reach `localhost:1234`. Start a provider or ignore. |
 | Port already in use | Set `PORT` and open the printed URL: `PORT=3000 npm start` (PowerShell: `$env:PORT=3000; npm start`). |
 | Nothing opens on `npm start` | You may have `BROWSER=none` / `MINNOW_HEADLESS=1` set. Open the URL from the terminal, or set `MINNOW_BROWSER=1` for a system browser tab. |
+| Desktop shell slow on first launch | After `npm install`, Vite may log **Re-optimizing dependencies** (can take 1–2 minutes on a cold start). Electron compile is pre-run in `postinstall`; if you skipped it (`MINNOW_SKIP_ELECTRON=1`), run `npm run electron:build`. Terminal should show `[electron:dev] Waiting…` and periodic still-waiting lines until the server is ready. |
 | "Server tools need npm start" | You're in Vite-only mode. Stop `npm run dev` and run `npm start`. |
-| Health check | `curl http://localhost:5173/api/tools/ping` should return `{"ok":true}`. Also `/api/config/ping`, `/api/memory/ping`, `/api/brain/ping`. |
+| Health check | `curl http://localhost:9473/api/config/ping` requires the session token (`X-Minnow-Token` header). Read it from `~/.minnow/session-token` after the server starts, or use the in-app UI. Also `/api/tools/ping`, `/api/memory/ping`, `/api/brain/ping`. |
 | `npm install` rebuild errors (native modules) | `better-sqlite3` / `@lydell/node-pty` need a toolchain only if prebuilt binaries are unavailable. Ensure Node 18+/20+ and try again, or install platform build tools. |
 
 ## Models & chat

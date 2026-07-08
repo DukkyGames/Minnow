@@ -47,6 +47,9 @@ export function validateToolRequiredArgs(
 
   const missing: string[] = [];
   for (const key of required) {
+    if (toolName === 'todo_write' && key === 'todos' && Array.isArray(args.todos)) {
+      continue;
+    }
     if (toolName === 'execute_command' && key === 'command') {
       if (args.background === true || args.stop === true) continue;
     }

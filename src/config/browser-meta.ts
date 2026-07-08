@@ -6,6 +6,8 @@ export interface BrowserMeta {
   enabled: boolean;
   allowNavigate: boolean;
   allowedOriginPatterns: string[];
+  /** When true, reopen persisted preview tabs on boot (default on). */
+  restoreBrowserTabs: boolean;
 }
 
 export const DEFAULT_BROWSER_META: BrowserMeta = {
@@ -16,6 +18,7 @@ export const DEFAULT_BROWSER_META: BrowserMeta = {
     'http://127.0.0.1:*',
     'https://localhost:*',
   ],
+  restoreBrowserTabs: true,
 };
 
 let cached: BrowserMeta | null = null;
@@ -37,6 +40,7 @@ export function normalizeBrowserMeta(raw: unknown): BrowserMeta {
   };
   if (typeof row.enabled === 'boolean') base.enabled = row.enabled;
   if (typeof row.allowNavigate === 'boolean') base.allowNavigate = row.allowNavigate;
+  if (typeof row.restoreBrowserTabs === 'boolean') base.restoreBrowserTabs = row.restoreBrowserTabs;
   if (Array.isArray(row.allowedOriginPatterns)) {
     base.allowedOriginPatterns = row.allowedOriginPatterns.filter(
       (p): p is string => typeof p === 'string' && p.trim().length > 0,
@@ -80,6 +84,7 @@ export async function saveBrowserMeta(patch: Partial<BrowserMeta>): Promise<void
     allowNavigate: patch.allowNavigate ?? current.allowNavigate,
     allowedOriginPatterns:
       patch.allowedOriginPatterns ?? [...current.allowedOriginPatterns],
+    restoreBrowserTabs: patch.restoreBrowserTabs ?? current.restoreBrowserTabs,
   };
   cached = next;
   await fetch('/api/config/meta', {

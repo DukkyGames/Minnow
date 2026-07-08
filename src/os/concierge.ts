@@ -16,6 +16,7 @@ import {
 } from '../ui/composer-send';
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import { handleSkillPickerKeydown, isSkillPickerOpen } from '../ui/skill-picker';
+import { handleComposerPromptHistoryKeydown } from '../ui/composer-prompt-history';
 import { handleDesktopResearchSubmit } from './research-desktop';
 import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
 
@@ -170,6 +171,7 @@ export function renderConcierge(container: HTMLElement): void {
   field.addEventListener('input', () => syncUi());
   field.addEventListener('keydown', (e) => {
     if (handleSkillPickerKeydown(e)) return;
+    if (handleComposerPromptHistoryKeydown(e, field)) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       if (isSkillPickerOpen()) return;
       e.preventDefault();

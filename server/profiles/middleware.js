@@ -14,15 +14,6 @@ import {
   saveProfileFile,
   setWorkspaceProfileDefault,
 } from './handlers.js';
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader(
-    'Access-Control-Allow-Methods',
-    'GET, PUT, POST, DELETE, OPTIONS',
-  );
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
-
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -55,8 +46,6 @@ export async function handleProfilesRequest(req, res, pathname) {
   if (!pathname.startsWith('/api/profiles')) {
     return false;
   }
-
-  setCorsHeaders(res);
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;

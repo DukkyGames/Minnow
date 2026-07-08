@@ -7,6 +7,8 @@ import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { COMMAND_TIMEOUT_MS, formatProcessOutput, runProcess } from '../process-runner.js';
+import { DEFAULT_MAX_OUTPUT_CHARS, capReadFileOutput } from '../tools/output-cap.js';
+import { truncateGitDiff } from '../tools/git-diff-truncate.js';
 import {
   createBackgroundRun,
   executeCommandBlocking,
@@ -266,7 +268,10 @@ async function toolReadFile(args) {
   if (!stat.isFile()) {
     return `Error: "${args.path}" is not a file`;
   }
-  return await fs.readFile(filePath, 'utf8');
+  const content = await fs.readFile(filePath, 'utf8');
+  const rel = toRelativePath(filePath);
+  const { text } = capReadFileOutput(content, rel);
+  return text;
 }
 
 /** Read UTF-8 file or empty string when missing (for before-write diffs). */
@@ -727,7 +732,37 @@ async function toolGitDiff(args) {
   if (args?.path) {
     gitArgs.push('--', args.path);
   }
-  return runGit(gitArgs);
+
+  const label = `git ${gitArgs.join(' ')}`;
+  const cwd = getEffectiveWorkspaceRoot();
+  const patchBudget = DEFAULT_MAX_OUTPUT_CHARS - 2_000;
+
+  try {
+    const result = await runProcess('git', gitArgs, { cwd });
+    const patch = String(result.stdout ?? '');
+
+    if (patch.trimEnd().length > patchBudget) {
+      const numstatArgs = ['diff', '--numstat'];
+      if (args?.staged) {
+        numstatArgs.push('--cached');
+      }
+      if (args?.path) {
+        numstatArgs.push('--', args.path);
+      }
+      const numstatResult = await runProcess('git', numstatArgs, { cwd });
+      const { text } = truncateGitDiff(patch, numstatResult.stdout ?? '', {
+        maxChars: patchBudget,
+        staged: Boolean(args?.staged),
+        scopePath: typeof args?.path === 'string' ? args.path : undefined,
+      });
+      return formatProcessOutput(label, { ...result, stdout: text });
+    }
+
+    return formatProcessOutput(label, result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return `Error running git: ${message}`;
+  }
 }
 
 async function toolGitLog(args) {
@@ -1198,13 +1233,6 @@ export async function executeServerTool(name, args, options = {}) {
   });
 }
 
-/** CORS headers for local Vite dev (browser tools calling same origin or localhost). */
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
-
 /** Read JSON body from POST /api/tools. */
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
@@ -1233,8 +1261,6 @@ export function createToolsMiddleware() {
       next();
       return;
     }
-
-    setCorsHeaders(res);
 
     if (req.method === 'OPTIONS') {
       res.statusCode = 204;

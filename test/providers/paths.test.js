@@ -26,6 +26,18 @@ describe('provider paths', () => {
     assert.equal(paths.modelsUnloadPath, undefined);
   });
 
+  it('openai-v1 includes default messages path for gateways', () => {
+    const paths = getDefaultPaths('openai-v1');
+    assert.equal(paths.messagesPath, '/v1/messages');
+  });
+
+  it('openai-v1 derives messages path from custom chat completions path', () => {
+    const paths = getDefaultPaths('openai-v1', {
+      chatCompletionsPath: '/zen/v1/chat/completions',
+    });
+    assert.equal(paths.messagesPath, '/zen/v1/messages');
+  });
+
   it('anthropic-v1 uses messages path and no load/unload paths', () => {
     const paths = getDefaultPaths('anthropic-v1');
     assert.equal(paths.modelsPath, '/v1/models');

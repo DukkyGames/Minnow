@@ -74,19 +74,22 @@ describe('file panel preview state', () => {
     assert.notEqual(state.openViewerTabs, before);
   });
 
-  test('preview mode load ignores openViewerTabs and selectedPath migration', () => {
+  test('preview mode load keeps openViewerTabs independently of rightPaneMode', () => {
     const state = normalizeFilePanelBlockForTests({
       rightPaneMode: 'preview',
       viewerOpen: true,
       previewSource: { kind: 'url', url: 'https://example.com' },
+      previewTabs: [{ id: 'tab-1', source: { kind: 'url', url: 'https://example.com' } }],
+      activePreviewTab: 'tab-1',
       selectedPath: 'src/index.ts',
       openViewerTabs: ['src/other.ts'],
       activeViewerTab: 'src/other.ts',
     });
     assert.equal(state.rightPaneMode, 'preview');
-    assert.deepEqual(state.openViewerTabs, []);
-    assert.equal(state.activeViewerTab, null);
-    assert.equal(state.previewSource?.kind, 'url');
+    assert.deepEqual(state.openViewerTabs, ['src/other.ts']);
+    assert.equal(state.activeViewerTab, 'src/other.ts');
+    assert.equal(state.previewTabs.length, 1);
+    assert.equal(state.activePreviewTab, 'tab-1');
   });
 
   test('legacy viewerOpen with previewSource migrates to preview mode', () => {

@@ -5,13 +5,6 @@
 import fs from 'node:fs/promises';
 import { resolveScreenshotPath, writeScreenshot } from './cdp/paths.js';
 
-/** CORS headers for dev SPA. */
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
-
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -39,8 +32,6 @@ export function createBrowserScreenshotMiddleware() {
       next();
       return;
     }
-
-    setCorsHeaders(res);
 
     if (req.method === 'OPTIONS') {
       res.statusCode = 204;

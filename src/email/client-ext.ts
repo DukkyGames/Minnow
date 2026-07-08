@@ -10,6 +10,7 @@ import type {
   EmailMessage,
   ReplyVariant,
 } from './client';
+import { withSessionToken } from '../api/session-token.ts';
 
 export type { EmailAutomation, EmailInboxSummary, ReplyVariant };
 
@@ -192,7 +193,7 @@ export async function deleteAutomationRule(id: string): Promise<void> {
 export function subscribeEmailEvents(
   onEvent: (type: string, payload: Record<string, unknown>) => void,
 ): () => void {
-  const source = new EventSource('/api/email/events');
+  const source = new EventSource(withSessionToken('/api/email/events'));
 
   const handler = (event: MessageEvent<string>) => {
     try {

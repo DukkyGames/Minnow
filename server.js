@@ -6,6 +6,7 @@
 import { createServer } from 'vite';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import { openBrowser } from './scripts/open-browser.mjs';
 import path from 'node:path';
 import { attachPtyWebSocketServer } from './server/terminal/pty-ws.js';
 import { attachSttWebSocketServer } from './server/stt/stt-ws.js';
@@ -15,6 +16,7 @@ import { deleteGenerationsForProviderShutdown } from './server/generations/store
 import { getAppRoot } from './server/workspace/root.js';
 import { getMinnowHome } from './server/config/home.js';
 import { applyMinnowMiddlewares } from './server/runtime/middlewares.js';
+import { getSessionToken, injectSessionTokenScript } from './server/runtime/session-token.js';
 import { bootstrapMinnowRuntime } from './server/runtime/bootstrap.js';
 import {
   startSchedulerTickLoop,
@@ -88,28 +90,11 @@ process.on('unhandledRejection', (reason) => {
   console.error('[minnow] unhandledRejection (kept alive):', reason);
 });
 
-/** Open default browser for the dev URL (platform-specific). */
-function openBrowser(url) {
-  const platform = process.platform;
-  let command;
-  let args;
-
-  if (platform === 'win32') {
-    command = 'cmd';
-    args = ['/c', 'start', '', url];
-  } else if (platform === 'darwin') {
-    command = 'open';
-    args = [url];
-  } else {
-    command = 'xdg-open';
-    args = [url];
-  }
-
-  const child = spawn(command, args, { detached: true, stdio: 'ignore' });
-  child.unref();
-}
-
-/** Launch Electron in a child process (avoids Vite self-fetch deadlock). */
+/**
+ * Launch Electron in a detached child process (avoids Vite self-fetch deadlock).
+ * Success/failure is handled inside the launcher — do not treat its exit code as
+ * Electron launch status (MIN-264: detached bootstrap can exit non-zero spuriously).
+ */
 function launchElectronShell(port, localUrl, appRoot) {
   const launcher = path.join(appRoot, 'scripts', 'launch-electron-after-vite.mjs');
   const child = spawn(process.execPath, [launcher, '--port', String(port)], {
@@ -121,15 +106,8 @@ function launchElectronShell(port, localUrl, appRoot) {
 
   child.on('error', (err) => {
     const message = err instanceof Error ? err.message : String(err);
-    console.warn(`[minnow] Electron launch failed (${message}); opening system browser.`);
+    console.warn(`[minnow] Electron launcher could not start (${message}); opening system browser.`);
     openBrowser(localUrl);
-  });
-
-  child.on('exit', (code) => {
-    if (code !== 0 && code !== null) {
-      console.warn(`[minnow] Electron launch failed (exit ${code}); opening system browser.`);
-      openBrowser(localUrl);
-    }
   });
 
   child.unref();
@@ -162,6 +140,9 @@ async function main() {
             runWithPathAccess,
           });
         },
+        transformIndexHtml(html) {
+          return injectSessionTokenScript(html, getSessionToken());
+        },
       },
     ],
   });
@@ -178,6 +159,7 @@ async function main() {
   const localUrl = urls[0];
   const boundPort = Number(new URL(localUrl).port) || PORT;
   writeDevHostState({ localUrl, port: boundPort });
+  getSessionToken();
   const networkUrls = vite.resolvedUrls?.network ?? [];
   console.log(`Minnow dev server: ${localUrl}`);
   if (networkAccess === 'lan') {

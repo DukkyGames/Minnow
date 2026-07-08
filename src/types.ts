@@ -71,6 +71,12 @@ export interface UserMessage {
   goalAchieved?: boolean;
 }
 
+/** One build-agent progress item (todo_write). */
+export interface ChatTodo {
+  text: string;
+  status: 'pending' | 'in_progress' | 'completed';
+}
+
 /** Persistent /goal loop state on a chat (Claude Code–style completion condition). */
 export interface ActiveGoalState {
   /** Completion condition text (max 4000 chars). */
@@ -785,6 +791,10 @@ export interface Chat {
   pendingMessageQueue?: QueuedComposerMessage[];
   /** Active /goal completion loop; persists across reload until cleared. */
   activeGoal?: ActiveGoalState;
+  /** Build-agent progress checklist (todo_write); replace-all, cleared on /clear. */
+  todos?: ChatTodo[];
+  /** Epoch ms when todos were last written via todo_write. */
+  todosUpdatedAt?: number;
   /** Queued mode switch from set_chat_mode during streaming (last write wins; flushed on stream end). */
   pendingModeId?: ModeId;
   /** Sidebar: green dot on inactive rows until the user opens this chat again. */
@@ -892,6 +902,8 @@ export interface ModelCapabilities {
   reasoningThinkingEnabledValue?: 'enabled' | 'adaptive';
   contextLength: number | null;
   loadState: string | null;
+  /** Resolved upstream API for this model (gateway auto-routing). */
+  api?: import('./providers/types').ApiKind;
   sources?: Partial<Record<keyof ModelCapabilities | 'loadState', CapabilitySource>>;
   probeErrors?: Record<string, string>;
 }
@@ -916,6 +928,11 @@ export interface LmModelRecord {
   };
   /** Upstream catalog vision flag (`capabilities.vision` or `type: vlm`) before Minnow merge. */
   catalogVision?: boolean;
+  /** Resolved upstream API (`openai-v1` vs `anthropic-v1`) for mixed gateways. */
+  api?: import('./providers/types').ApiKind;
+  /** OpenAI-compatible catalog owner when present (e.g. OpenRouter `owned_by`). */
+  owned_by?: string;
+  family?: string;
 }
 
 export interface LmModelsListResponse {

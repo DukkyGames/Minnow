@@ -20,6 +20,7 @@ import {
   getFileTreeListingWorkspaceRoot,
   setFileTreeListingWorkspaceRoot,
 } from '../ui/file-tree-listing-root';
+import { repairRightPaneDomStructure } from '../ui/file-layout';
 
 type MountSurface = 'code' | 'desktop' | null;
 
@@ -44,12 +45,12 @@ const REPARENT_TARGETS: Array<{
   },
   {
     nodeId: 'previewPane',
-    codeParentId: 'workspaceSplit',
+    codeParentId: 'rightPaneColumn',
     desktopHostId: 'desktopPreviewMount',
   },
   {
     nodeId: 'fileViewerPane',
-    codeParentId: 'workspaceSplit',
+    codeParentId: 'rightPaneColumn',
     desktopHostId: 'desktopFileViewerMount',
   },
 ];
@@ -173,6 +174,9 @@ function bindResizeObserver(): void {
 
 /** Move shared mounts to desktop drawer hosts or restore to Code layout. */
 export async function syncDesktopWorkspaceMounts(): Promise<void> {
+  if (repairRightPaneDomStructure()) {
+    records = [];
+  }
   captureRecords();
   const nextSurface: MountSurface = shouldHostOnDesktop() ? 'desktop' : 'code';
   const surfaceChanged = nextSurface !== mountSurface;

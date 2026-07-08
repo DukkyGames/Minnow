@@ -1,17 +1,15 @@
 /**
- * Console URL links open in the Minnow in-app preview (MIN-290).
+ * Console URL links open in the Minnow in-app preview (MIN-290, MIN-378).
  */
+
+import { openUrlInMinnowBrowser } from './minnow-browser-links';
 
 /** Match http(s) URLs in streamed console text (aligned with xterm web-links). */
 const CONSOLE_URL_RE = /https?:\/\/[^\s"'<>]+/gi;
 
 /** Open a console link in the preview panel instead of an external tab. */
 export function openConsoleLinkInPreview(url: string): void {
-  const trimmed = url.trim();
-  if (!trimmed) return;
-  void import('./preview-panel').then(({ openUrlInPreviewPanel }) => {
-    void openUrlInPreviewPanel(trimmed);
-  });
+  openUrlInMinnowBrowser(url);
 }
 
 /** xterm WebLinksAddon handler — route clicks to the preview panel. */

@@ -8,13 +8,6 @@ import { buildLocalSttStatus, transcribeLocal } from '../voice/local-stt.js';
 import { formatByteLimit, isAllowedAudioMime, resolveSttLimits } from './limits.js';
 import { parseMultipartFile } from './multipart.js';
 
-/** CORS headers for dev SPA. */
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
-
 function sendJson(res, status, payload) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
@@ -225,7 +218,6 @@ export function createSttMiddleware() {
       return;
     }
 
-    setCorsHeaders(res);
     if (req.method === 'OPTIONS') {
       res.statusCode = 204;
       res.end();

@@ -601,7 +601,7 @@ describe('orchestrate board live updates', () => {
     assert.ok(panel, 'plan panel visible');
     assert.ok(panel.textContent?.includes('Add feature X'));
     assert.ok(panel.textContent?.includes('npm test'));
-    assert.equal(document.querySelector('.sub-agent-drawer-panel'), null);
+    assert.equal(document.querySelector('.sub-agent-overlay__sheet'), null);
   });
 
   test('clicking in-progress or complete kanban card switches to chat view', async () => {
@@ -670,7 +670,7 @@ describe('orchestrate board live updates', () => {
     inProgressCard.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(getActiveChat().id, FIXED_TASK_CHAT_ID);
-    assert.equal(document.querySelector('.sub-agent-drawer-panel'), null);
+    assert.equal(document.querySelector('.sub-agent-overlay__sheet'), null);
     assert.equal(document.querySelectorAll('.board-agents').length, 0);
   });
 

@@ -16,6 +16,8 @@ import {
   validateApiKind,
   validateAuthStyle,
   validateBaseUrl,
+  validateMessagesPath,
+  validateModelApiOverrides,
   validateProviderId,
   validateProviderPricing,
 } from './validate.js';
@@ -70,6 +72,9 @@ export function toProviderPublic(profile, flags) {
     authStyle: profile.authStyle || 'bearer',
     modelsPath: profile.modelsPath,
     chatCompletionsPath: profile.chatCompletionsPath,
+    messagesPath: profile.messagesPath,
+    autoApi: profile.autoApi === true,
+    modelApiOverrides: profile.modelApiOverrides,
     supportsModelLoadUnload,
     modelsLoadPath: profile.modelsLoadPath,
     modelsUnloadPath: profile.modelsUnloadPath,
@@ -415,6 +420,9 @@ export async function createProvider(body) {
     authStyle,
     modelsPath: body.modelsPath || paths.modelsPath,
     chatCompletionsPath: body.chatCompletionsPath || paths.chatCompletionsPath,
+    ...(paths.messagesPath ? { messagesPath: body.messagesPath || paths.messagesPath } : {}),
+    ...(body.autoApi === true ? { autoApi: true } : {}),
+    ...(body.modelApiOverrides ? { modelApiOverrides: validateModelApiOverrides(body.modelApiOverrides) } : {}),
     supportsModelLoadUnload:
       body.supportsModelLoadUnload !== undefined
         ? body.supportsModelLoadUnload === true
@@ -459,9 +467,26 @@ export async function updateProvider(id, body) {
     const paths = getDefaultPaths(profile.apiKind, body);
     profile.modelsPath = body.modelsPath || paths.modelsPath;
     profile.chatCompletionsPath = body.chatCompletionsPath || paths.chatCompletionsPath;
+    if (paths.messagesPath) {
+      profile.messagesPath = body.messagesPath || paths.messagesPath;
+    }
   } else {
     if (body.modelsPath) profile.modelsPath = body.modelsPath;
     if (body.chatCompletionsPath) profile.chatCompletionsPath = body.chatCompletionsPath;
+    if (body.messagesPath) profile.messagesPath = validateMessagesPath(body.messagesPath);
+  }
+  if (body.autoApi === true) {
+    profile.autoApi = true;
+  } else if (body.autoApi === false) {
+    delete profile.autoApi;
+  }
+  if (body.modelApiOverrides !== undefined) {
+    const overrides = validateModelApiOverrides(body.modelApiOverrides);
+    if (overrides && Object.keys(overrides).length > 0) {
+      profile.modelApiOverrides = overrides;
+    } else {
+      delete profile.modelApiOverrides;
+    }
   }
   if (body.enabled !== undefined) {
     profile.enabled = Boolean(body.enabled);

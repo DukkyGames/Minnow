@@ -29,12 +29,6 @@ import {
   workspaceLandingStats,
 } from './worktree-ops.js';
 
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
-
 function sendJson(res, status, payload) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
@@ -84,7 +78,6 @@ const OPS = {
 };
 
 export async function handleWorktreeRequest(req, res, pathname) {
-  setCorsHeaders(res);
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;
     res.end();

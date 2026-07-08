@@ -150,7 +150,7 @@ export async function initFilePanel(): Promise<void> {
   }
 
   const { initPreviewPanel } = await import('./preview-panel');
-  initPreviewPanel();
+  await initPreviewPanel();
 
   const state = getFilePanelState();
   if (shouldAutoRestoreViewerSplitOnBoot()) {

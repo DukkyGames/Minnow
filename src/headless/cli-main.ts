@@ -17,7 +17,7 @@ import {
   waitForServer,
 } from './preflight';
 import { runHeadless, serializeHeadlessRunResult } from './runner';
-import { installHeadlessFetch, normalizeBaseUrl } from './server-context';
+import { installHeadlessFetch, normalizeBaseUrl, resolveHeadlessToken } from './server-context';
 import { cancelGeneration } from '../api/generations';
 
 let activeGenerationId: string | null = null;
@@ -54,7 +54,7 @@ async function resolveWorkspace(
 
 async function ensureServer(cli: HeadlessRunCliOptions): Promise<number | null> {
   const base = normalizeBaseUrl(cli.baseUrl);
-  installHeadlessFetch(base);
+  installHeadlessFetch(base, resolveHeadlessToken(cli.token));
   if (await waitForServer({ baseUrl: base, timeoutSec: 3 })) {
     return null;
   }
@@ -91,7 +91,7 @@ async function runCommand(cli: HeadlessRunCliOptions): Promise<number> {
   }
 
   const base = normalizeBaseUrl(cli.baseUrl);
-  installHeadlessFetch(base);
+  installHeadlessFetch(base, resolveHeadlessToken(cli.token));
 
   if (workspaceResolved.path) {
     try {

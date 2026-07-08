@@ -8,20 +8,23 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { rgPath } from '@vscode/ripgrep';
 import { truncateUtf8 } from '../../src/lib/fetch-web-content.mjs';
+import {
+  DEFAULT_MAX_LINE_CHARS,
+  DEFAULT_MAX_OUTPUT_CHARS,
+  GREP_MAX_LINE_CHARS,
+  GREP_MAX_OUTPUT_CHARS,
+  capLineLength,
+} from './output-cap.js';
 
 const execFileAsync = promisify(execFile);
 
 /** Default max lines returned per request. */
-export const GREP_DEFAULT_HEAD_LIMIT = 50;
+export const GREP_DEFAULT_HEAD_LIMIT = 200;
 
 /** Hard cap for head_limit argument. */
 export const GREP_MAX_HEAD_LIMIT = 200;
 
-/** Max total output characters (UTF-16 code units) before truncation. */
-export const GREP_MAX_OUTPUT_CHARS = 32000;
-
-/** Max characters per emitted line. */
-export const GREP_MAX_LINE_CHARS = 400;
+export { GREP_MAX_OUTPUT_CHARS, GREP_MAX_LINE_CHARS };
 
 /** Skip files larger than this when ripgrep scans (bytes). */
 const GREP_MAX_FILE_BYTES = '2M';
@@ -59,17 +62,6 @@ export function isRipgrepMatchLine(line) {
   if (/^[^:\n]+:\d+:/.test(line)) return true;
   // Single-file search: 42:content
   return /^\d+:/.test(line);
-}
-
-/**
- * Cap a single output line to maxLineChars.
- * @param {string} line
- * @param {number} maxLineChars
- */
-function capLineLength(line, maxLineChars) {
-  if (line.length <= maxLineChars) return line;
-  if (maxLineChars <= 3) return line.slice(0, maxLineChars);
-  return `${line.slice(0, maxLineChars - 3)}...`;
 }
 
 /**
@@ -124,11 +116,14 @@ export function capGrepOutput(stdout, options = {}) {
   const nextOffset = offset + lineCount;
 
   if (truncated) {
+    const canRaiseLimit = GREP_DEFAULT_HEAD_LIMIT < GREP_MAX_HEAD_LIMIT;
     const hint =
       lineCount > 0
-        ? `use offset=${nextOffset} to continue`
+        ? canRaiseLimit
+          ? `use offset=${nextOffset} for the next page or raise head_limit (max ${GREP_MAX_HEAD_LIMIT})`
+          : `use offset=${nextOffset} for the next page`
         : `use offset=${offset} with a smaller head_limit`;
-    text = `${text}\n(truncated at ${lineCount} lines; ${hint})`;
+    text = `${text}\n(truncated at ${lineCount} match lines, default head_limit=${GREP_DEFAULT_HEAD_LIMIT}; ${hint})`;
   }
 
   const beforeUtf8 = text;

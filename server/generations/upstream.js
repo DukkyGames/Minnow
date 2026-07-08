@@ -3,6 +3,9 @@
  * Supports pre-first-token failover across configured provider/model candidates.
  */
 
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { readConfigJson } from '../config/store.js';
 import { getProviderRuntime } from '../providers/store.js';
 import {
@@ -27,8 +30,48 @@ import {
   readGenerationUpstreamTimeouts,
 } from './timeouts.js';
 import { pumpAnthropicUpstream } from './anthropic/pump.js';
+import { deriveMessagesPathFromChat } from '../../src/lib/derive-messages-path.mjs';
+import { resolveModelApi } from './resolve-model-api.js';
 import { formatUpstreamHttpErrorMessage } from './upstream-error-detail.js';
 import { upstreamFetch } from './upstream-fetch.js';
+
+/**
+ * Best-effort diagnostic dump of the outbound body + upstream error body when an
+ * openai-v1 upstream POST fails, mirroring the anthropic gateway dump so opaque
+ * "Upstream request failed" 400s can be root-caused from the last occurrence.
+ * @param {{ status: number, url: string, providerId: string, modelId: string, requestBody: Buffer, responseText: string }} info
+ */
+function dumpUpstreamFailure(info) {
+  try {
+    const dir = join(homedir(), '.minnow', 'debug');
+    mkdirSync(dir, { recursive: true });
+    let parsedBody;
+    try {
+      parsedBody = JSON.parse(info.requestBody.toString('utf8'));
+    } catch {
+      parsedBody = info.requestBody.toString('utf8');
+    }
+    writeFileSync(
+      join(dir, 'openai-upstream-last-error.json'),
+      JSON.stringify(
+        {
+          at: new Date().toISOString(),
+          status: info.status,
+          url: info.url,
+          providerId: info.providerId,
+          modelId: info.modelId,
+          responseText: info.responseText,
+          requestBody: parsedBody,
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+  } catch {
+    // Best-effort diagnostic only.
+  }
+}
 
 /**
  * Kimi (Moonshot AI) thinking/code models only accept temperature=1.
@@ -36,10 +79,11 @@ import { upstreamFetch } from './upstream-fetch.js';
  * @param {Buffer} requestBody
  * @param {{ apiKind?: string, baseUrl?: string }} profile
  * @param {string} modelId
+ * @param {'lm-studio-v0' | 'openai-v1' | 'anthropic-v1'} [resolvedApi]
  * @returns {Buffer}
  */
-function prepareUpstreamRequestBody(requestBody, profile, modelId) {
-  const apiKind = profile.apiKind ?? 'openai-v1';
+function prepareUpstreamRequestBody(requestBody, profile, modelId, resolvedApi) {
+  const apiKind = resolvedApi ?? profile.apiKind ?? 'openai-v1';
   let body = requestBody;
 
   try {
@@ -138,11 +182,25 @@ async function pumpUpstreamAsync({ state }) {
     }
 
     const canFailover = !state.failoverDisabled && index < state.candidates.length - 1;
+    const resolvedApi = resolveModelApi(runtime, candidate.modelId);
+    const anthropicRuntime =
+      resolvedApi === 'anthropic-v1'
+        ? {
+            ...runtime,
+            paths: {
+              ...runtime.paths,
+              messagesPath:
+                runtime.profile.messagesPath ||
+                runtime.paths.messagesPath ||
+                deriveMessagesPathFromChat(runtime.paths.chatCompletionsPath),
+            },
+          }
+        : runtime;
     const result =
-      runtime.profile.apiKind === 'anthropic-v1'
+      resolvedApi === 'anthropic-v1'
         ? await pumpAnthropicUpstream({
             state,
-            runtime,
+            runtime: anthropicRuntime,
             candidate,
             index,
             idleMs,
@@ -160,6 +218,7 @@ async function pumpUpstreamAsync({ state }) {
               buildCandidateRequestBody(state.requestBody, candidate.modelId),
               runtime.profile,
               candidate.modelId,
+              resolvedApi,
             ),
             idleMs,
             maxMs,
@@ -255,6 +314,14 @@ async function attemptCandidateStream({
         /* ignore */
       }
       const message = formatUpstreamHttpErrorMessage(upstream.status, rawBody);
+      dumpUpstreamFailure({
+        status: upstream.status,
+        url,
+        providerId: candidate.providerId,
+        modelId: candidate.modelId,
+        requestBody,
+        responseText: rawBody,
+      });
       const classified = classifyUpstreamError(null, upstream);
       if (!bytesEmitted && classified.kind === 'retryable' && canFailover) {
         if (upstream.status >= 500 || [502, 503, 504].includes(upstream.status)) {

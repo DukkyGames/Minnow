@@ -2,16 +2,19 @@
  * Network access policy — resolveNetworkAccess and isClientAllowed.
  */
 
-import { describe, test } from 'node:test';
+import { beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   resolveNetworkAccess,
   resolveConfigNetworkAccess,
   isClientAllowed,
+  isHostAllowed,
+  resetOwnLanHostnamesCache,
   initNetworkAccess,
   isNetworkRestartRequired,
   resolveViteHost,
 } from '../../server/network/access.js';
+import os from 'node:os';
 
 /** @param {string} address */
 function mockReq(address) {
@@ -68,6 +71,41 @@ describe('isClientAllowed', () => {
   test('blocks public IPs even in lan mode', () => {
     assert.equal(isClientAllowed(mockReq('8.8.8.8'), 'lan'), false);
     assert.equal(isClientAllowed(mockReq('1.2.3.4'), 'lan'), false);
+  });
+});
+
+describe('isHostAllowed', () => {
+  beforeEach(() => resetOwnLanHostnamesCache());
+
+  test('allows loopback hostnames in local mode', () => {
+    assert.equal(isHostAllowed('localhost:9473', 'local'), true);
+    assert.equal(isHostAllowed('127.0.0.1:9473', 'local'), true);
+    assert.equal(isHostAllowed('[::1]:9473', 'local'), true);
+    assert.equal(isHostAllowed('::1', 'local'), true);
+  });
+
+  test('rejects an attacker-controlled hostname even in local mode', () => {
+    assert.equal(isHostAllowed('evil.example:9473', 'local'), false);
+    assert.equal(isHostAllowed('evil.example', 'local'), false);
+  });
+
+  test('a DNS name that merely resolves to a local IP is still rejected (anti DNS-rebinding)', () => {
+    // The check is purely on the Host *string*, never a DNS lookup — so an
+    // attacker's domain pointed at 127.0.0.1 must not pass as "loopback".
+    assert.equal(isHostAllowed('rebind.evil.example:9473', 'lan'), false);
+  });
+
+  test('rejects LAN-looking hostnames in local mode', () => {
+    assert.equal(isHostAllowed(`${os.hostname()}:9473`, 'local'), false);
+  });
+
+  test('allows this machine own hostname/LAN IPs only in lan mode', () => {
+    assert.equal(isHostAllowed(`${os.hostname()}:9473`, 'lan'), true);
+  });
+
+  test('rejects empty Host header', () => {
+    assert.equal(isHostAllowed('', 'local'), false);
+    assert.equal(isHostAllowed('', 'lan'), false);
   });
 });
 

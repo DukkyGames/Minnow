@@ -4,13 +4,98 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  min-width: var(--viewer-min-w);
-  border-left: 1px solid var(--mn-border);
+  min-width: 0;
   background: var(--mn-surface-1);
 }
 
 .preview-pane.hidden {
   display: none;
+}
+
+/* Legacy selectors kept for unified tab chips that reuse preview-tab classes. */
+.preview-tabs {
+  display: none;
+}
+
+.preview-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 180px;
+  padding: 4px 6px 4px 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: 6px 6px 0 0;
+  background: var(--mn-bg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.preview-tab.is-active {
+  background: var(--mn-surface-2);
+  color: var(--mn-fg);
+  border-color: var(--mn-accent);
+}
+
+.preview-tab--loading .preview-tab__label::after {
+  content: ' …';
+}
+
+.preview-tab__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-tab__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.preview-tab__close:hover {
+  background: var(--mn-surface-3, rgba(127, 127, 127, 0.15));
+}
+
+.preview-tab-add {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: 1px dashed var(--mn-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.preview-tab-add:hover {
+  border-color: var(--mn-accent);
+  color: var(--mn-fg);
+}
+
+.preview-tab--dragging {
+  opacity: 0.55;
+}
+
+.preview-tab--drop-before {
+  box-shadow: -2px 0 0 0 var(--mn-accent);
+}
+
+.preview-tab--crashed .preview-tab__label {
+  color: var(--mn-danger, #e5484d);
 }
 
 .preview-header {
@@ -81,6 +166,10 @@
   background: #fff;
 }
 
+.preview-body iframe.preview-frame[hidden] {
+  display: none;
+}
+
 /* Electron WebContentsView overlays this area; keep iframe out of the way. */
 .preview-body.preview-body--electron iframe.preview-frame {
   display: none;
@@ -149,7 +238,7 @@
 }
 
 @media (max-width: 640px) {
-  .workspace-split.viewer-open .preview-pane:not(.hidden) {
+  .workspace-split.viewer-open .right-pane-column {
     flex: 1 1 auto;
     min-width: 0;
   }

@@ -9,26 +9,11 @@ import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildElectronMain } from './build-electron.mjs';
 import { resolveMinnowPort } from '../server/constants/minnow-port.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
-
-function run(command, args, env = process.env) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: repoRoot,
-      env,
-      stdio: 'inherit',
-      shell: process.platform === 'win32',
-    });
-    child.on('error', reject);
-    child.on('exit', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${command} ${args.join(' ')} exited with ${code}`));
-    });
-  });
-}
 
 function electronPackageDir() {
   return path.join(repoRoot, 'node_modules', 'electron');
@@ -124,11 +109,12 @@ export function isElectronBuildFresh() {
   return newestMtimeMs(electronSourceFiles()) <= outMtime;
 }
 
-async function ensureElectronBuild() {
+/** Compile electron/dist when missing or stale (exported for parallel dev startup). */
+export async function ensureElectronBuild() {
   if (isElectronBuildFresh()) return;
   const reason = electronOutputsExist() ? 'sources changed' : 'first run';
   console.log(`[electron] Compiling main process (${reason})…`);
-  await run('npm', ['run', 'electron:build']);
+  await Promise.resolve().then(() => buildElectronMain());
   if (!electronOutputsExist()) {
     throw new Error('Electron build incomplete. Run npm run electron:build.');
   }
@@ -170,8 +156,18 @@ export async function spawnElectronShell(options = {}) {
     windowsHide: false,
   });
 
-  child.on('error', (err) => {
-    console.error('[electron] Failed to launch:', err.message || err);
+  await new Promise((resolve, reject) => {
+    let settled = false;
+    child.once('error', (err) => {
+      if (settled) return;
+      settled = true;
+      reject(err instanceof Error ? err : new Error(String(err)));
+    });
+    child.once('spawn', () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    });
   });
 
   if (!foreground) {

@@ -65,6 +65,7 @@ import './styles/models-page.css';
 
 import 'highlight.js/styles/github.min.css';
 
+import { installFetchAuth } from './api/install-fetch-auth';
 import { initTheme } from './ui/theme';
 import { initAttachments, onFileSelected } from './attachments/store';
 import { initComposerDrop } from './ui/composer-drop';
@@ -98,6 +99,7 @@ import {
   sessionState,
 } from './state/sessions';
 import { initChatScroll } from './ui/chat-scroll';
+import { initMinnowBrowserLinkRouting } from './ui/minnow-browser-links';
 import { clearChat, renderChatFromHistory, renderStatsForChat } from './ui/messages';
 import { refreshHubLiveData } from './ui/hub';
 import { bootGenerationResumeForChats } from './chat/generation-resume';
@@ -150,6 +152,7 @@ import { bindExpertsSettingsCheckbox } from './ui/experts-settings';
 import { initReefBridge } from './chat/reef/index.ts';
 import { syncComposerPinnedSkillFromActiveChat } from './ui/composer-pinned-skill';
 import { syncGoalActiveHint } from './ui/goal-active-hint';
+import { syncTodoPanel } from './ui/todo-panel';
 import {
   initOrchestratePlanSelector,
   syncOrchestratePlanStripFromActiveChat,
@@ -362,6 +365,7 @@ export async function initApp(): Promise<void> {
   initCodeChangeStrip();
   initOrchestrateStatsLiveRefresh();
   initChatScroll();
+  initMinnowBrowserLinkRouting();
   registerTerminalKeyboardShortcut();
   loadToolConfigIntoDrawer();
   applySidebarVisuals();
@@ -414,6 +418,7 @@ export async function initApp(): Promise<void> {
   syncComposerPinnedSkillFromActiveChat();
   syncViewModeToggleFromActiveChat();
   syncGoalActiveHint();
+  syncTodoPanel();
   renderSidebar();
   bootstrapActiveChatOpenedTimestamp();
 
@@ -457,6 +462,8 @@ function startApp(): void {
   initNotificationAudioUnlock();
   void initApp();
 }
+
+installFetchAuth();
 
 registerWindowHandlers();
 registerServiceWorker();

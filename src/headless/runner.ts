@@ -54,7 +54,7 @@ import {
   type HeadlessRunResult,
   type HeadlessTurnRecord,
 } from './result';
-import { installHeadlessFetch, installHeadlessLocalStorage } from './server-context';
+import { installHeadlessFetch, installHeadlessLocalStorage, resolveHeadlessToken } from './server-context';
 import { persistHeadlessChat } from './persist-chat';
 
 /** Apply --profile in memory only (does not write ~/.minnow). */
@@ -166,7 +166,7 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
   const log = options.log ?? ((line: string) => process.stderr.write(`${line}\n`));
 
   installHeadlessLocalStorage();
-  installHeadlessFetch(options.cli.baseUrl);
+  installHeadlessFetch(options.cli.baseUrl, resolveHeadlessToken(options.cli.token));
 
   await detectConfigServer();
   await detectLocalServer();
@@ -341,6 +341,7 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
             {
               modeId,
               workAgentId: workAgentId ?? undefined,
+              chatId: chat.id,
             },
             approvalOpts,
           );

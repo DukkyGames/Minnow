@@ -9,7 +9,7 @@ import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { getWorkspacePath } from '../state/workspace';
 import { clearForegroundSeed } from './instances';
 import type { LaunchOptions } from './types';
-import { applyWorkspaceSwitch } from '../ui/workspace-button';
+import { executeWorkspaceSwitch } from '../ui/workspace-switch-guard';
 import { createChatWithMode } from '../ui/sidebar';
 import { syncComposerFromStreamingState } from '../ui/composer-send';
 
@@ -102,8 +102,7 @@ export async function applyCodeLaunchOptions(options: LaunchOptions): Promise<vo
   const targetPath = options.workspacePath?.trim();
   if (targetPath && targetPath !== getWorkspacePath()) {
     try {
-      const info = await setWorkspacePath(targetPath);
-      await applyWorkspaceSwitch(info);
+      await executeWorkspaceSwitch(targetPath);
     } catch {
       /* continue with current workspace when switch fails */
     }

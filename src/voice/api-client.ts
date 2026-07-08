@@ -2,6 +2,8 @@
  * Voice runtime API client — install, worker lifecycle, SSE progress.
  */
 
+import { withSessionToken } from '../api/session-token.ts';
+
 export type VoiceRuntimeHealth =
   | 'not_installed'
   | 'installing'
@@ -154,7 +156,7 @@ export async function stopVoiceWorker(): Promise<{ ok: boolean; wasRunning: bool
 export function subscribeInstallProgress(
   onEvent: (event: VoiceInstallJob) => void,
 ): () => void {
-  const source = new EventSource('/api/voice/runtime/install/stream');
+  const source = new EventSource(withSessionToken('/api/voice/runtime/install/stream'));
   source.onmessage = (msg) => {
     try {
       onEvent(JSON.parse(msg.data) as VoiceInstallJob);
@@ -225,7 +227,9 @@ export function subscribeDownloadProgress(
     error?: string | null;
   }) => void,
 ): () => void {
-  const source = new EventSource(`/api/voice/download/${encodeURIComponent(jobId)}/stream`);
+  const source = new EventSource(
+    withSessionToken(`/api/voice/download/${encodeURIComponent(jobId)}/stream`),
+  );
   source.onmessage = (msg) => {
     try {
       onEvent(JSON.parse(msg.data));

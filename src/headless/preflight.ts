@@ -5,13 +5,15 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { headlessApiUrl, normalizeBaseUrl } from './server-context.ts';
+import { headlessApiUrl, normalizeBaseUrl, resolveHeadlessToken } from './server-context';
 
 const APP_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 export interface WaitForServerOptions {
   baseUrl: string;
   timeoutSec: number;
+  /** Session token override; defaults to MINNOW_TOKEN env or ~/.minnow/session-token. */
+  token?: string | null;
   log?: (line: string) => void;
 }
 
@@ -22,10 +24,11 @@ export async function waitForServer(options: WaitForServerOptions): Promise<bool
   const deadline = Date.now() + options.timeoutSec * 1000;
 
   while (Date.now() < deadline) {
+    const token = resolveHeadlessToken(options.token);
     try {
       const [configOk, toolsOk] = await Promise.all([
-        pingEndpoint(`${base}/api/config/ping`),
-        pingEndpoint(`${base}/api/tools/ping`),
+        pingEndpoint(`${base}/api/config/ping`, token),
+        pingEndpoint(`${base}/api/tools/ping`, token),
       ]);
       if (configOk && toolsOk) {
         return true;
@@ -39,8 +42,10 @@ export async function waitForServer(options: WaitForServerOptions): Promise<bool
   return false;
 }
 
-async function pingEndpoint(url: string): Promise<boolean> {
-  const res = await fetch(url, { cache: 'no-store' });
+async function pingEndpoint(url: string, token: string): Promise<boolean> {
+  const headers: Record<string, string> = {};
+  if (token) headers['X-Minnow-Token'] = token;
+  const res = await fetch(url, { cache: 'no-store', headers });
   if (!res.ok) return false;
   const body = (await res.json()) as { ok?: boolean };
   return body.ok === true;

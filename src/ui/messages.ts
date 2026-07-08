@@ -22,6 +22,7 @@ import { setAssistantBubbleContent } from '../markdown/renderer';
 import { getActiveBoardGroup } from '../state/chat-groups';
 import {
   clearActiveGoal,
+  clearChatTodos,
   getActiveChat,
   touchChat,
   scheduleSaveSessions,
@@ -37,6 +38,8 @@ import type {
   Usage,
 } from '../types';
 import {
+  captureChatScrollAnchor,
+  restoreChatScrollAnchor,
   scrollChatIfPinned,
   scrollChatToBottom,
 } from './chat-scroll';
@@ -57,6 +60,7 @@ import { updateWorkspaceCodeChangeDisplay } from './workspace-code-change';
 import { resetTokenLedger } from '../usage/token-ledger';
 import { updateCodeChangeStrip } from './code-change-strip';
 import { renderSidebar } from './sidebar';
+import { syncTodoPanel } from './todo-panel';
 import { renderThoughtsToggle } from './thought-bubbles';
 import { renderToolCall, renderToolResult } from './tool-messages';
 import { attachShellKillUi } from './shell-run-ui';
@@ -109,6 +113,9 @@ function isAssistantToolCallMessage(msg: Message): msg is AssistantToolCallMessa
 
 export { resolveModelInfo, showCachedModelInfo } from '../api/models';
 
+/** Suppress per-bubble scroll while bulk-rendering history (renderChatFromHistory). */
+let suppressBubbleScroll = false;
+
 export function renderStatsForChat(chat: Chat): void {
   const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;
   const mid = (sel && sel.value) || chat.modelId || '';
@@ -142,6 +149,7 @@ export function renderStatsForChat(chat: Chat): void {
 export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement): void {
   const area = resolveChatMount(mount);
   const codeMount = isCodeChatMount(mount);
+  const scrollAnchor = captureChatScrollAnchor();
 
   // Code overview / code map own #chatArea — do not repaint chat or board underneath.
   if (codeMount && isMainColumnOverlaySuppressingChatDom()) {
@@ -149,6 +157,8 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   }
 
   runWithChatMount(area, () => {
+  suppressBubbleScroll = true;
+  try {
   if (codeMount) {
     teardownCodeBrainMapBeforeChatPaint();
     stripMainColumnOverlayClasses();
@@ -339,8 +349,11 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
     attachVoicePlayButton(wrap, trimmed);
   }
   renderPersistedSubAgentCardsForChat(chat);
-  scrollChatToBottom();
+  restoreChatScrollAnchor(scrollAnchor);
   refreshContextUsageRing();
+  } finally {
+    suppressBubbleScroll = false;
+  }
   });
 }
 
@@ -441,10 +454,12 @@ export function appendBubble(
   wrap.appendChild(label);
   wrap.appendChild(bubble);
   getActiveChatMountElement().appendChild(wrap);
-  if (role === 'user') {
-    scrollChatToBottom();
-  } else {
-    scrollChatIfPinned();
+  if (!suppressBubbleScroll) {
+    if (role === 'user') {
+      scrollChatToBottom();
+    } else {
+      scrollChatIfPinned();
+    }
   }
   return { wrap, bubble };
 }
@@ -666,6 +681,7 @@ export function clearChat(): void {
   if (!confirm('Clear all messages in this chat? The chat stays in your sidebar.')) return;
   const chat = getActiveChat();
   clearActiveGoal(chat);
+  clearChatTodos(chat);
   chat.history = [];
   resetTokenLedger(chat);
   resetCodeChangeTotals(chat);
@@ -682,5 +698,6 @@ export function clearChat(): void {
   renderStatsForChat(chat);
   renderSidebar();
   scheduleSaveSessions();
+  syncTodoPanel();
   closeDrawer();
 }

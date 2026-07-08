@@ -2249,6 +2249,7 @@
       <header class="terminal-header">
         <label class="visually-hidden" for="terminalShellSelect">Shell profile</label>
         <select id="terminalShellSelect" class="terminal-shell-select" aria-label="Shell profile for new tabs"></select>
+        <span class="terminal-cwd-label" id="terminalCwdLabel" aria-label="Shell working directory"></span>
         <div class="terminal-tab-bar" id="terminalTabBar"></div>
         <div class="terminal-header-actions">
           <button type="button" class="terminal-header-btn hidden" id="btnTerminalAgentStop">Stop command</button>
@@ -2282,9 +2283,13 @@
 
   <div class="split-resizer hidden" id="splitResizer" role="separator" aria-orientation="vertical" aria-valuemin="35" aria-valuemax="75" aria-valuenow="55" tabindex="0"></div>
 
+  <div class="right-pane-column hidden" id="rightPaneColumn">
+    <header class="unified-tab-bar" id="unifiedTabBar">
+      <div class="unified-tabs" id="unifiedTabs" role="tablist" aria-label="Editor and browser tabs"></div>
+    </header>
+
   <section class="file-viewer-pane hidden" id="fileViewerPane" aria-label="File viewer">
     <header class="file-viewer-header">
-      <div class="file-viewer-tabs" id="fileViewerTabs" role="tablist" aria-label="Open files"></div>
       <span class="file-viewer-diagnostics" id="fileViewerDiagnostics" hidden></span>
       <span class="file-viewer-intent-status" id="fileViewerIntentStatus" hidden aria-live="polite"></span>
       <button type="button" class="file-viewer-intent-toggle" id="btnFileViewerIntent" aria-pressed="false" title="Intent mode (Ctrl+I)" disabled>
@@ -2324,8 +2329,6 @@
       </button>
     </header>
     <div class="preview-body" id="previewBody" aria-label="Preview content area">
-      <iframe id="previewFrame" class="preview-frame" sandbox="allow-scripts allow-forms allow-popups allow-modals"
-              title="Workspace preview"></iframe>
     </div>
     <div class="preview-status" id="previewStatus" hidden role="status">
       <p class="preview-status__message" id="previewStatusMessage"></p>
@@ -2333,6 +2336,8 @@
          rel="noopener noreferrer">Open in new tab</a>
     </div>
   </section>
+  </div>
+
   </div>
 
   <aside class="file-sidebar" id="fileSidebar" aria-label="Project files">

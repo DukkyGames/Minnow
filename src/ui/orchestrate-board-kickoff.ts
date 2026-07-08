@@ -2,6 +2,7 @@
  * Orchestrate board kickoff: git preflight, optional /git-setup skill, then board_init message.
  */
 
+import { GIT_SETUP_SKILL_ID, prepareGitSetupTurn } from '../skills/git-setup-client';
 import { formatHistoryWithSkillTag } from '../skills/parse-slash';
 import { getWorkspaceGitStatus } from '../state/git-workspace';
 import { getActiveChat } from '../state/sessions';
@@ -23,8 +24,6 @@ export const BOARD_ONBOARDING_KICKOFF_MESSAGE =
 
 /** Legacy alias for onboarding kickoff (historical transcripts / init-split detection). */
 export const BOARD_BUILD_KICKOFF_MESSAGE = BOARD_ONBOARDING_KICKOFF_MESSAGE;
-
-export const GIT_SETUP_SKILL_ID = 'git-setup';
 
 const GIT_SETUP_USER_TEXT: Record<BoardGitPromptKind, string> = {
   init:
@@ -55,6 +54,9 @@ async function runGitSetupSkillTurn(
   setBoardOnboardingGitSetupActive(true);
   refreshBoardOnboardingIfMounted();
   try {
+    if (kind === 'init') {
+      await prepareGitSetupTurn(getWorkspacePath());
+    }
     const userText = GIT_SETUP_USER_TEXT[kind];
     const displayText = formatHistoryWithSkillTag(userText, GIT_SETUP_SKILL_ID);
     const historyContent = buildHistoryUserContent(displayText, []);

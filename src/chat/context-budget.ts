@@ -182,6 +182,59 @@ function rebuildFromTurns(
   return [...pinned, ...tail];
 }
 
+/**
+ * End index (exclusive) of the atomic message unit starting at `start`.
+ * An `assistant` message with `tool_calls` binds its following contiguous `tool`
+ * results into one unit so trimming never splits a tool-call/tool-result pair.
+ */
+function unitEndAt(messages: ApiMessage[], start: number): number {
+  const msg = messages[start];
+  if (msg.role === 'assistant' && msg.tool_calls?.length) {
+    let end = start + 1;
+    while (end < messages.length && messages[end].role === 'tool') end += 1;
+    return end;
+  }
+  return start + 1;
+}
+
+/**
+ * Drop tool-call/tool-result pairs left dangling by trimming so the outbound
+ * sequence stays API-valid: every `tool` message must follow an `assistant`
+ * that requested it, and every assistant `tool_calls` entry must be answered.
+ */
+function sanitizeToolPairing(messages: ApiMessage[]): ApiMessage[] {
+  const answeredIds = new Set<string>();
+  for (const msg of messages) {
+    if (msg.role === 'tool' && msg.tool_call_id) answeredIds.add(msg.tool_call_id);
+  }
+
+  const requestedIds = new Set<string>();
+  const out: ApiMessage[] = [];
+  for (const msg of messages) {
+    if (msg.role === 'assistant' && msg.tool_calls?.length) {
+      const kept = msg.tool_calls.filter((tc) => answeredIds.has(tc.id));
+      if (kept.length === 0) {
+        // Assistant announced only unanswered tool calls: keep prose, else drop.
+        if (apiMessageContentToText(msg.content).trim()) {
+          const { tool_calls: _dropped, ...rest } = msg;
+          out.push(rest as ApiMessage);
+        }
+        continue;
+      }
+      for (const tc of kept) requestedIds.add(tc.id);
+      out.push(kept.length === msg.tool_calls.length ? msg : { ...msg, tool_calls: kept });
+      continue;
+    }
+    if (msg.role === 'tool') {
+      if (!requestedIds.has(msg.tool_call_id)) continue;
+      out.push(msg);
+      continue;
+    }
+    out.push(msg);
+  }
+  return out;
+}
+
 function collectTurnText(messages: ApiMessage[], turn: TurnSlice): string {
   const parts: string[] = [];
   for (let i = turn.start; i < turn.end; i += 1) {
@@ -268,10 +321,7 @@ function applyTruncatePolicy(
   let working = [...messages];
   let dropped = 0;
 
-  while (
-    estimateApiMessagesTokens(working) > limit &&
-    working.length > systemEnd + 1
-  ) {
+  while (estimateApiMessagesTokens(working) > limit) {
     let removeAt = -1;
     for (let i = systemEnd; i < working.length; i += 1) {
       if (!isPriorContextSummary(working[i])) {
@@ -280,8 +330,12 @@ function applyTruncatePolicy(
       }
     }
     if (removeAt < 0) break;
-    working = [...working.slice(0, removeAt), ...working.slice(removeAt + 1)];
-    dropped += 1;
+    const removeEnd = unitEndAt(working, removeAt);
+    // Keep the most recent unit intact; hard-truncate its content instead of
+    // shredding it into an orphaned tool message.
+    if (removeEnd >= working.length) break;
+    working = [...working.slice(0, removeAt), ...working.slice(removeEnd)];
+    dropped += removeEnd - removeAt;
   }
 
   if (estimateApiMessagesTokens(working) > limit) {
@@ -465,6 +519,15 @@ export function applyContextBudget(
     }
     tightenPasses += 1;
     if (tokensAfter <= limit) break;
+  }
+
+  // Guarantee a valid tool-call/tool-result sequence regardless of which policy
+  // ran (a single agent turn with one user message falls through to message-level
+  // truncation, which must never orphan a tool result — see MIN gateway 400s).
+  const sanitized = sanitizeToolPairing(nextMessages);
+  if (sanitized.length !== nextMessages.length) {
+    nextMessages = sanitized;
+    tokensAfter = estimateApiMessagesTokens(nextMessages);
   }
 
   return {

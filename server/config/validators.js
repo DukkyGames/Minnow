@@ -1757,6 +1757,34 @@ export function mergeConfigMeta(existing, patch) {
         .replace(/\/+/g, '/')
         .replace(/^\.\//, '');
     }
+    if (Array.isArray(fp.previewTabs)) {
+      const rows = [];
+      const seen = new Set();
+      for (const entry of fp.previewTabs) {
+        if (!entry || typeof entry !== 'object') continue;
+        const row = /** @type {Record<string, unknown>} */ (entry);
+        const id = typeof row.id === 'string' ? row.id.trim() : '';
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        let source = null;
+        if (row.source && typeof row.source === 'object') {
+          const src = /** @type {Record<string, unknown>} */ (row.source);
+          if (src.kind === 'workspace' && typeof src.path === 'string' && src.path.trim()) {
+            source = { kind: 'workspace', path: src.path.trim() };
+          } else if (src.kind === 'url' && typeof src.url === 'string' && src.url.trim()) {
+            source = { kind: 'url', url: src.url.trim() };
+          }
+        }
+        rows.push({ id, source });
+        if (rows.length >= 6) break;
+      }
+      existingPanel.previewTabs = rows;
+    }
+    if (fp.activePreviewTab === null) {
+      existingPanel.activePreviewTab = null;
+    } else if (typeof fp.activePreviewTab === 'string' && fp.activePreviewTab.trim()) {
+      existingPanel.activePreviewTab = fp.activePreviewTab.trim();
+    }
     base.filePanel = existingPanel;
   }
 
@@ -1914,6 +1942,7 @@ export function mergeConfigMeta(existing, patch) {
         : {
             enabled: true,
             allowNavigate: true,
+            restoreBrowserTabs: true,
             allowedOriginPatterns: [
               'http://localhost:*',
               'http://127.0.0.1:*',
@@ -1924,6 +1953,9 @@ export function mergeConfigMeta(existing, patch) {
     if (typeof b.enabled === 'boolean') existingBrowser.enabled = b.enabled;
     if (typeof b.allowNavigate === 'boolean') {
       existingBrowser.allowNavigate = b.allowNavigate;
+    }
+    if (typeof b.restoreBrowserTabs === 'boolean') {
+      existingBrowser.restoreBrowserTabs = b.restoreBrowserTabs;
     }
     if (Array.isArray(b.allowedOriginPatterns)) {
       existingBrowser.allowedOriginPatterns = b.allowedOriginPatterns.filter(

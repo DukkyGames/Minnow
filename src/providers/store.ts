@@ -22,6 +22,9 @@ export interface CreateProviderPayload {
   enabled?: boolean;
   modelsPath?: string;
   chatCompletionsPath?: string;
+  messagesPath?: string;
+  autoApi?: boolean;
+  modelApiOverrides?: Record<string, ApiKind> | null;
   constrainedToolCalls?: boolean | null;
   pricing?: ProviderPricing | null;
 }
@@ -35,6 +38,9 @@ export interface UpdateProviderPayload {
   enabled?: boolean;
   modelsPath?: string;
   chatCompletionsPath?: string;
+  messagesPath?: string;
+  autoApi?: boolean;
+  modelApiOverrides?: Record<string, ApiKind> | null;
   constrainedToolCalls?: boolean | null;
   pricing?: ProviderPricing | null;
 }

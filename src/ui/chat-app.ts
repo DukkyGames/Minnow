@@ -34,6 +34,7 @@ import {
   initComposerSteerInputListener,
   syncComposerFromStreamingState,
 } from './composer-send';
+import { handleComposerPromptHistoryKeydown } from './composer-prompt-history';
 import { handleSkillPickerKeydown, initComposerSlashPicker, isSkillPickerOpen } from './skill-picker';
 import { closeGlobalBugs } from './global-bugs-page';
 import { renderChatFromHistory } from './messages';
@@ -424,6 +425,7 @@ function bindStaticControls(): void {
   });
   input?.addEventListener('keydown', (e) => {
     if (handleSkillPickerKeydown(e)) return;
+    if (handleComposerPromptHistoryKeydown(e, input)) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       if (isSkillPickerOpen()) return;
       e.preventDefault();
