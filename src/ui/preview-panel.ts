@@ -52,6 +52,11 @@ import { HTTP_URL_RE, parsePreviewAddress } from './preview-url';
 import { shouldAutoRestorePreviewPanel, isCodeAppForeground } from './preview-restore-policy';
 import { showToast } from './toast';
 import { disableDesignMode, enableDesignMode, isDesignModeEnabled, getDesignModeSession } from '../design/design-mode';
+import {
+  resolveDesignModeMountOptions,
+  WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID,
+} from './preview-design-mode-mount';
+export { WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID } from './preview-design-mode-mount';
 import { currentPreviewPageRef, gatherAnchorCandidates } from '../design/design-tool';
 import {
   eraseShape,
@@ -78,8 +83,7 @@ const FRAME_BLOCKED_TIMEOUT_MS = 1500;
 const MIN_RELOAD_INTERVAL_MS = 1000;
 const DEFERRED_PREVIEW_LOAD_MS = 800;
 
-/** Default preview instance id (see electron/preview-instance-registry.ts DEFAULT_PREVIEW_INSTANCE_ID). */
-const DESIGN_MODE_INSTANCE_ID = 'workspace-preview';
+const DESIGN_MODE_INSTANCE_ID = WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID;
 
 const EMBED_BLOCKED_MESSAGE =
   'This site blocks embedded previews (X-Frame-Options or CSP frame-ancestors). Sites like Google, GitHub, and most login pages cannot load inside an iframe. Preview workspace HTML files instead, or open this URL in a new tab.';
@@ -324,17 +328,9 @@ async function toggleDesignModeFromToolbar(): Promise<void> {
 
   getDesignToggleButton()?.setAttribute('aria-pressed', 'true');
   getDesignToggleButton()?.classList.add('is-active');
-  await enableDesignMode({
-    instanceId: DESIGN_MODE_INSTANCE_ID,
-    host,
-    chromeHost: getPreviewDesignChrome() ?? undefined,
-    paneElement: pane ?? host,
-  });
+  await enableDesignMode(resolveDesignModeMountOptions(host, pane, getPreviewDesignChrome()));
   await syncDesignModeElectronGuest();
 }
-
-/** Design Mode's preview instance id, for callers outside this module (MIN-368 annotation-nav.ts). */
-export const WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID = DESIGN_MODE_INSTANCE_ID;
 
 /**
  * Open a page (workspace path or http(s) URL) in the preview panel and ensure Design Mode is
@@ -355,12 +351,7 @@ export async function openPreviewPageAndEnableDesignMode(pageUrl: string): Promi
 
   getDesignToggleButton()?.setAttribute('aria-pressed', 'true');
   getDesignToggleButton()?.classList.add('is-active');
-  await enableDesignMode({
-    instanceId: DESIGN_MODE_INSTANCE_ID,
-    host,
-    chromeHost: getPreviewDesignChrome() ?? undefined,
-    paneElement: pane ?? host,
-  });
+  await enableDesignMode(resolveDesignModeMountOptions(host, pane, getPreviewDesignChrome()));
   await syncDesignModeElectronGuest();
 }
 

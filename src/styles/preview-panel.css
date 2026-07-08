@@ -164,6 +164,8 @@
   height: 100%;
   border: none;
   background: #fff;
+  position: relative;
+  z-index: 0;
 }
 
 .preview-body iframe.preview-frame[hidden] {
