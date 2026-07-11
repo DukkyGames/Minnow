@@ -192,6 +192,9 @@ export function createSelectDesignTool(): SelectDesignTool {
       croppedDataUrl: captured.dataUrl,
       accessibleName: picked.accessibleName,
       contrastRatio: picked.contrastRatio,
+      domPath: picked.domPath,
+      attributes: picked.attributes,
+      computedStyles: picked.computedStyles,
     });
     if (!attachment || !ctx) return;
 

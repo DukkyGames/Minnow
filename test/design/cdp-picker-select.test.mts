@@ -31,6 +31,9 @@ const SAMPLE_PICK: PickedElement = {
   shiftKey: false,
   accessibleName: 'Buy now',
   contrastRatio: 21,
+  domPath: 'body > button#buy-now',
+  attributes: { id: 'buy-now' },
+  computedStyles: { color: 'rgb(0,0,0)', display: 'flex' },
 };
 
 function mockCdpPicker(overrides: Partial<Record<string, unknown>> = {}) {

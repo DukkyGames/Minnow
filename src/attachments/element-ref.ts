@@ -27,6 +27,12 @@ export interface ElementRefInput {
   accessibleName?: string;
   /** A11y quick-pass (MIN-370): WCAG contrast ratio of color vs background, or null when unknown. */
   contrastRatio?: number | null;
+  /** Readable ancestor chain, e.g. `div#root > main.page > button.cta`. */
+  domPath?: string;
+  /** Every attribute on the picked element (name → value). */
+  attributes?: Record<string, string>;
+  /** Curated computed styles (camelCase key → value). */
+  computedStyles?: Record<string, string>;
 }
 
 /**
@@ -68,6 +74,9 @@ export function addElementRefToComposer(input: ElementRefInput): Attachment | nu
     croppedDataUrl: input.croppedDataUrl,
     accessibleName: input.accessibleName,
     contrastRatio: input.contrastRatio ?? null,
+    domPath: input.domPath,
+    attributes: input.attributes ? { ...input.attributes } : undefined,
+    computedStyles: input.computedStyles ? { ...input.computedStyles } : undefined,
   };
 
   pushAttachment(attachment);

@@ -65,6 +65,12 @@ export interface Attachment {
   accessibleName?: string;
   /** A11y quick-pass (MIN-370): WCAG contrast ratio of color vs background, or null when it can't be computed (`elementRef`). */
   contrastRatio?: number | null;
+  /** Readable ancestor chain of the picked element, e.g. `div#root > main.page > button.cta` (`elementRef`). */
+  domPath?: string;
+  /** Every attribute on the picked element (name → value) (`elementRef`). */
+  attributes?: Record<string, string>;
+  /** Curated computed styles (camelCase key → value) of the picked element (`elementRef`). */
+  computedStyles?: Record<string, string>;
   /** The drawn shape (pen/rect/arrow/label) captured into this attachment (`designRef`). */
   shape?: DesignShape;
   /** Composited crop (screenshot region + rasterized overlay shapes) data URL (`designRef`). */

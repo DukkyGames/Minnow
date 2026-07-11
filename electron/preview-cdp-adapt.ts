@@ -21,7 +21,41 @@ export interface CdpPickedElement {
   shiftKey: boolean;
   accessibleName: string;
   contrastRatio: number | null;
+  domPath: string;
+  attributes: Record<string, string>;
+  computedStyles: Record<string, string>;
 }
+
+/**
+ * Curated computed-style properties captured per pick as `[outputKey, cssProperty]`. Mirrors
+ * `COMPUTED_STYLE_PROPS` in `src/design/element-picker.ts` (duplicated — electron/tsconfig.json
+ * does not compile `src/`).
+ */
+const COMPUTED_STYLE_PROPS: ReadonlyArray<readonly [string, string]> = [
+  ['color', 'color'],
+  ['backgroundColor', 'background-color'],
+  ['fontSize', 'font-size'],
+  ['fontFamily', 'font-family'],
+  ['fontWeight', 'font-weight'],
+  ['lineHeight', 'line-height'],
+  ['letterSpacing', 'letter-spacing'],
+  ['textAlign', 'text-align'],
+  ['display', 'display'],
+  ['position', 'position'],
+  ['flexDirection', 'flex-direction'],
+  ['justifyContent', 'justify-content'],
+  ['alignItems', 'align-items'],
+  ['gap', 'gap'],
+  ['padding', 'padding'],
+  ['margin', 'margin'],
+  ['border', 'border'],
+  ['borderRadius', 'border-radius'],
+  ['boxShadow', 'box-shadow'],
+  ['opacity', 'opacity'],
+  ['zIndex', 'z-index'],
+];
+
+const ATTR_VALUE_MAX = 200;
 
 /** `DOM.getBoxModel` result content quad: [x1,y1,x2,y2,x3,y3,x4,y4] (clockwise from top-left). */
 export interface CdpBoxModelContent {
@@ -171,6 +205,38 @@ function accessibleNameFromAttrs(attrs: Map<string, string>, outerHTML: string):
   return stripped.slice(0, 160);
 }
 
+/** Attribute map (minus our own `data-mn-uid` stamp) as a plain record, with capped values. */
+function attributesFromCdp(attrs: Map<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, value] of attrs) {
+    if (name === 'data-mn-uid') continue;
+    out[name] = value.length > ATTR_VALUE_MAX ? `${value.slice(0, ATTR_VALUE_MAX)}…` : value;
+  }
+  return out;
+}
+
+/** Curated computed styles (camelCase key → value) from the CDP computed-style entries. */
+function computedStylesFromCdp(style: CdpComputedStyleProperty[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, prop] of COMPUTED_STYLE_PROPS) {
+    const value = computedStyleValue(style, prop).trim();
+    if (value) out[key] = value;
+  }
+  return out;
+}
+
+/**
+ * Best-effort single-segment DOM path from the node itself: `tag#id` or `tag.class1.class2`.
+ * CDP hands us only the picked node (no cheap ancestor chain), so cross-origin picks get this
+ * shallow path rather than the full chain the same-origin pickers build.
+ */
+function domPathFromCdp(tag: string, attrs: Map<string, string>): string {
+  const id = (attrs.get('id') || '').trim();
+  if (id) return `${tag}#${id}`;
+  const classes = (attrs.get('class') || '').trim().split(/\s+/).filter(Boolean).slice(0, 2);
+  return classes.length ? `${tag}${classes.map((c) => `.${c}`).join('')}` : tag;
+}
+
 /**
  * Pure adapter: CDP `DOM.describeNode` + `DOM.getBoxModel` + `CSS.getComputedStyleForNode` +
  * `DOM.getOuterHTML` results → the same `PickedElement`-shaped payload the injected-script and
@@ -195,5 +261,8 @@ export function adaptCdpRawPick(raw: CdpRawPick, uid: number | null): CdpPickedE
     shiftKey: Boolean(raw.shiftKey),
     accessibleName: accessibleNameFromAttrs(attrs, raw.outerHTML || ''),
     contrastRatio: contrastRatioFromComputedStyle(raw.computedStyle),
+    domPath: domPathFromCdp(tagName, attrs),
+    attributes: attributesFromCdp(attrs),
+    computedStyles: computedStylesFromCdp(raw.computedStyle),
   };
 }

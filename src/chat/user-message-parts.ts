@@ -149,7 +149,12 @@ export function parseHistoryUserContent(content: string): ParsedHistoryUserMessa
         ? Number(contrastRaw)
         : null;
     const imageName = match[12] ?? null;
-    const outerHtmlPreview = match[13] ?? '';
+    // The body carries rich PATH/ATTRIBUTES/COMPUTED STYLES/POSITION sections (for the model)
+    // ahead of the HTML, which always comes last after a `HTML` marker. Recover just the markup
+    // for the transcript chip. Older blocks are the bare HTML with no marker — take them whole.
+    const body = match[13] ?? '';
+    const htmlMarker = body.lastIndexOf('\nHTML\n');
+    const outerHtmlPreview = htmlMarker === -1 ? body : body.slice(htmlMarker + '\nHTML\n'.length);
     if (selector) {
       elementRefs.push({
         selector,
