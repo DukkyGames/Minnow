@@ -95,6 +95,36 @@ describe('enableCdpPicking lifecycle', () => {
     assert.equal(picks[0].cssSelector, '#buy');
   });
 
+  test('outlines the picked node in-page as the selection indicator', async () => {
+    const { dbg, calls } = makeDebugger();
+    await enableCdpPicking({ debugger: dbg }, () => {});
+
+    calls.length = 0;
+    dbg.emit('Overlay.inspectNodeRequested', { backendNodeId: 42 });
+    await flush();
+
+    const mark = calls.find(
+      (c) => c.method === 'Runtime.evaluate' && /data-mn-selected/.test(c.params?.expression ?? ''),
+    );
+    assert.ok(mark, 'a Runtime.evaluate marks the picked node with a selection outline');
+    // uid starts at 1 for the first pick; the script targets that element by data-mn-uid.
+    assert.match(mark.params.expression, /data-mn-uid="1"/);
+    assert.match(mark.params.expression, /outline/);
+  });
+
+  test('clears in-page selection outlines on disable', async () => {
+    const { dbg, calls } = makeDebugger();
+    const session = await enableCdpPicking({ debugger: dbg }, () => {});
+
+    calls.length = 0;
+    await session.disable();
+
+    const clear = calls.find(
+      (c) => c.method === 'Runtime.evaluate' && /data-mn-selected/.test(c.params?.expression ?? ''),
+    );
+    assert.ok(clear, 'disable strips the selection outlines from the guest');
+  });
+
   test('re-arms inspect mode after each pick (searchForNode is one-shot)', async () => {
     const { dbg, calls } = makeDebugger();
     await enableCdpPicking({ debugger: dbg }, () => {});

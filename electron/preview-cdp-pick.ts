@@ -23,6 +23,39 @@ const HIGHLIGHT_CONFIG = {
   showInfo: true,
 };
 
+/** App accent (#9ec5a7) — matches the same-origin picker's in-guest hover outline. */
+const SELECTION_OUTLINE_COLOR = '#9ec5a7';
+
+/**
+ * Persistent "selected" indicator, drawn into the page itself rather than via the CDP Overlay
+ * layer. On a cross-origin guest the DOM SVG overlay markers are occluded by the native
+ * WebContentsView, and a CDP `Overlay.highlightNode` is cleared the moment `searchForNode` inspect
+ * mode redraws on hover — so neither is visible. Marking the element with a real CSS outline via
+ * CSSOM paints on top of page content, persists across hovers, accumulates for multi-select, and
+ * is CSP-safe (programmatic `.style` writes are not governed by `style-src`). Keyed off the
+ * `data-mn-uid` the pick already stamps on the node.
+ */
+function markSelectedScript(uid: number): string {
+  return `(() => {
+    const el = document.querySelector('[data-mn-uid=${JSON.stringify(String(uid))}]');
+    if (!el) return false;
+    el.setAttribute('data-mn-selected', '');
+    el.style.setProperty('outline', '2px solid ${SELECTION_OUTLINE_COLOR}', 'important');
+    el.style.setProperty('outline-offset', '1px', 'important');
+    return true;
+  })()`;
+}
+
+/** Undo every {@link markSelectedScript} outline when the session ends. */
+const CLEAR_SELECTION_SCRIPT = `(() => {
+  document.querySelectorAll('[data-mn-selected]').forEach((el) => {
+    el.removeAttribute('data-mn-selected');
+    el.style.removeProperty('outline');
+    el.style.removeProperty('outline-offset');
+  });
+  return true;
+})()`;
+
 /** Minimal shape of the Electron `Debugger` API this module drives. */
 interface DebuggerLike {
   isAttached(): boolean;
@@ -86,7 +119,17 @@ export async function enableCdpPicking(
 
   let nextUid = 1;
 
-  async function handleInspectNode(backendNodeId: number): Promise<void> {
+  const showSelectionHighlight = async (uid: number): Promise<void> => {
+    if (disabled) return;
+    try {
+      await dbg.sendCommand('Runtime.evaluate', { expression: markSelectedScript(uid) });
+    } catch {
+      /* node gone / guest navigated — the missing outline is non-fatal */
+    }
+  };
+
+  /** Resolve + forward a clicked node. Returns the pick's uid, or null when nothing was picked. */
+  async function handleInspectNode(backendNodeId: number): Promise<number | null> {
     try {
       const dprEval = await dbg.sendCommand('Runtime.evaluate', {
         expression: 'window.devicePixelRatio',
@@ -99,7 +142,7 @@ export async function enableCdpPicking(
       const boxModelResult = await dbg.sendCommand('DOM.getBoxModel', { backendNodeId });
       if (!boxModelResult?.model?.content) {
         onError?.('picked node has no box model (non-rendered element)');
-        return;
+        return null;
       }
 
       const pushed = await dbg.sendCommand('DOM.pushNodesByBackendIdsToFrontend', {
@@ -145,16 +188,26 @@ export async function enableCdpPicking(
         uid,
       );
       onPick(picked);
+      return uid;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       onError?.(message);
+      return null;
     }
   }
 
+  const onInspect = async (backendNodeId: number): Promise<void> => {
+    const uid = await handleInspectNode(backendNodeId);
+    // Re-arm inspect mode so the next element is still selectable, then outline the just-picked
+    // node in-page so there's a visible "selected" confirmation (the CDP overlay/DOM-marker layers
+    // are both invisible on a cross-origin native guest).
+    await armInspectMode();
+    if (uid != null) await showSelectionHighlight(uid);
+  };
+
   const messageHandler = (_event: unknown, method: string, params: any) => {
     if (method === 'Overlay.inspectNodeRequested' && typeof params?.backendNodeId === 'number') {
-      // Re-arm inspect mode after the pick resolves so the next element is still selectable.
-      void handleInspectNode(params.backendNodeId).finally(() => void armInspectMode());
+      void onInspect(params.backendNodeId);
     } else if (method === 'DOM.documentUpdated') {
       // The frontend node cache was invalidated (navigation / SPA route swap). Re-request the
       // tree so the next click can still resolve its backendNodeId.
@@ -171,6 +224,9 @@ export async function enableCdpPicking(
           mode: 'none',
           highlightConfig: {},
         });
+        await dbg.sendCommand('Overlay.hideHighlight');
+        // Strip the in-page selection outlines we painted so the guest is left clean.
+        await dbg.sendCommand('Runtime.evaluate', { expression: CLEAR_SELECTION_SCRIPT });
       } catch {
         /* guest may already be gone */
       }
