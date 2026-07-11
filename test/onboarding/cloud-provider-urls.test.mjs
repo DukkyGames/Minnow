@@ -12,6 +12,9 @@ const ONBOARDING_CLOUD_BASE_URLS = [
   'https://api.openai.com',
   'https://api.groq.com/openai',
   'https://api.mistral.ai',
+  'https://opencode.ai/zen',
+  'https://opencode.ai/zen/go',
+  'https://api.anthropic.com',
 ];
 
 describe('onboarding cloud provider URLs', () => {

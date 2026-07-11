@@ -17,6 +17,7 @@ import {
   probeLocalProviders,
   type ProviderProbeResult,
 } from '../provider-probe';
+import type { ApiKind, AuthStyle } from '../../providers/types';
 import type { OnboardingContext, OnboardingStep, OnboardingStepActions } from '../types';
 import { recordStepProgress } from '../state-core';
 
@@ -30,12 +31,41 @@ let cloudApiKey = '';
 let connectionStatus: 'idle' | 'ok' | 'err' = 'idle';
 let connectionError = '';
 
-/** Gateway origin + path prefix only; `/v1/models` etc. come from getDefaultPaths('openai-v1'). */
-const CLOUD_PRESETS: { id: string; label: string; baseUrl: string }[] = [
+interface CloudPreset {
+  id: string;
+  label: string;
+  baseUrl: string;
+  apiKind?: ApiKind;
+  authStyle?: AuthStyle;
+  /** Route Claude models to the messages path on mixed OpenAI gateways. */
+  autoApi?: boolean;
+}
+
+/** Gateway origin only; `/v1/models` etc. come from getDefaultPaths(apiKind). */
+const CLOUD_PRESETS: CloudPreset[] = [
   { id: 'openrouter', label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api' },
   { id: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com' },
   { id: 'groq', label: 'Groq', baseUrl: 'https://api.groq.com/openai' },
   { id: 'mistral', label: 'Mistral', baseUrl: 'https://api.mistral.ai' },
+  {
+    id: 'opencode-zen',
+    label: 'OpenCode Zen',
+    baseUrl: 'https://opencode.ai/zen',
+    autoApi: true,
+  },
+  {
+    id: 'opencode-go',
+    label: 'OpenCode Go',
+    baseUrl: 'https://opencode.ai/zen/go',
+    autoApi: true,
+  },
+  {
+    id: 'anthropic',
+    label: 'Anthropic',
+    baseUrl: 'https://api.anthropic.com',
+    apiKind: 'anthropic-v1',
+    authStyle: 'x-api-key',
+  },
   { id: 'custom', label: 'Custom', baseUrl: '' },
 ];
 
@@ -315,6 +345,8 @@ async function ensureOnboardingProvider(
       enabled: payload.enabled,
       modelsPath: payload.modelsPath,
       chatCompletionsPath: payload.chatCompletionsPath,
+      messagesPath: payload.messagesPath,
+      autoApi: payload.autoApi,
     });
   }
   return created;
@@ -385,17 +417,21 @@ async function testCloudConnection(
     return;
   }
 
+  const preset = CLOUD_PRESETS.find((p) => p.id === cloudPreset);
+  const apiKind = preset?.apiKind ?? 'openai-v1';
+  const paths = getDefaultPaths(apiKind);
   const id = `onboarding-cloud-${cloudPreset}`;
-  const paths = getDefaultPaths('openai-v1');
   const result = await ensureOnboardingProvider({
     id,
-    label: CLOUD_PRESETS.find((p) => p.id === cloudPreset)?.label ?? 'Cloud',
+    label: preset?.label ?? 'Cloud',
     baseUrl: cloudBaseUrl,
-    apiKind: 'openai-v1',
-    authStyle: 'bearer',
+    apiKind,
+    authStyle: preset?.authStyle ?? 'bearer',
+    autoApi: preset?.autoApi,
     enabled: true,
     modelsPath: paths.modelsPath,
     chatCompletionsPath: paths.chatCompletionsPath,
+    messagesPath: paths.messagesPath,
   });
 
   if (result.ok === false) {
