@@ -85,7 +85,6 @@ import { updateModelStateDot } from './model-state-dot';
 import { syncModelSelectPicker } from './model-select-picker';
 import { setStatus } from './status';
 import { formatSidebarStatsPreview } from './stats';
-import { refreshTerminalHistoryForActiveChat } from './terminal-panel';
 import {
   applyChatItemDotClasses,
   applyGroupHeaderDotClasses,
@@ -331,7 +330,7 @@ export function applyWorkspaceScopedSession(newPath: string, previousPath?: stri
     syncWorkAgentDevFromActiveChat();
     syncReefWidgetSettingsFromActiveChat();
     onModelRoutingActiveChatChanged(activeChat.id);
-    void refreshTerminalHistoryForActiveChat();
+    void import('./terminal-panel').then((m) => m.refreshTerminalHistoryForActiveChat());
   }
   renderSidebar();
   if (document.getElementById('globalBugsView')?.classList.contains('is-open')) {
@@ -1165,7 +1164,7 @@ export function switchChat(id: string): void {
   syncGoalActiveHint();
   syncTodoPanel();
   onModelRoutingActiveChatChanged(chat.id);
-  void refreshTerminalHistoryForActiveChat();
+  void import('./terminal-panel').then((m) => m.refreshTerminalHistoryForActiveChat());
   syncComposerFromStreamingState();
   renderSidebar();
   scheduleSaveSessions();
@@ -1265,7 +1264,7 @@ export function createChatWithMode(
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
   onModelRoutingActiveChatChanged(chat.id);
-  void refreshTerminalHistoryForActiveChat();
+  void import('./terminal-panel').then((m) => m.refreshTerminalHistoryForActiveChat());
   syncComposerFromStreamingState();
   renderSidebar();
   scheduleSaveSessions();

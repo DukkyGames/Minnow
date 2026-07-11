@@ -94,7 +94,9 @@ Most TS/UI suites run under `tsx` with `--import ./test/test-loader.mjs` (stubs 
 | `npm run impeccable:update` | Update upstream Impeccable, then re-sync. |
 | `npm run impeccable:detect` | Anti-pattern scan of `src/` + `index.html` (exit `2` = issues found). |
 | `npm run caveman:sync` | Refresh the upstream Caveman `SKILL.md`. |
-| `npm run build:benchmark-packs` | Rebuild benchmark task packs. |
+| `npm run build:benchmark-packs` | Rebuild benchmark task packs into `public/benchmark-packs/`. |
+| `npm run report:bundle-size` | Print production chunk sizes from `dist/assets` (run after `npm run build`). |
+| `npm run report:bundle-size:ci` | Same as above; exits non-zero when entry chunk exceeds 1500 KB or data packs ship as JS. |
 
 ## Smoke scripts
 

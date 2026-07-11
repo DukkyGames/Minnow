@@ -8,7 +8,6 @@ import { executeBoardTool } from './board-tools';
 import { executeTodoWrite } from './todo-tools';
 import { executeBugBoardTool } from './bug-board-tools';
 import { executeSubAgentTool } from './sub-agent-executor';
-import { runCommandWithTerminalStream } from '../ui/terminal-panel';
 import {
   ensureToolConfigReady,
   isLocalServerAvailable,
@@ -660,6 +659,7 @@ async function executeStreamingCodeTool(
 
   try {
     const { getChatAbort } = await import('../app-state');
+    const { runCommandWithTerminalStream } = await import('../ui/terminal-panel');
     return await runCommandWithTerminalStream(mapped.command, {
       chatId: context.chatId!,
       source: 'agent',
