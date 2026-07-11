@@ -51,7 +51,7 @@ import { bindPreviewTabs, registerPreviewTabHandlers } from './preview-tabs';
 import { HTTP_URL_RE, parsePreviewAddress } from './preview-url';
 import { shouldAutoRestorePreviewPanel, isCodeAppForeground } from './preview-restore-policy';
 import { showToast } from './toast';
-import { disableDesignMode, enableDesignMode, isDesignModeEnabled, getDesignModeSession, refreshDesignModeArmedToolGuest } from '../design/design-mode';
+import { disableDesignMode, enableDesignMode, isDesignModeEnabled, getDesignModeSession, refreshDesignModeArmedToolGuest, relocateDesignModeStrip } from '../design/design-mode';
 import {
   resolveDesignModeMountOptions,
   WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID,
@@ -172,12 +172,6 @@ function onIframeLoad(tabId: string): void {
   if (usesElectronPreview() && !usesDesignModeIframeGuest()) return;
   if (tabId !== getActivePreviewTabId()) return;
   onPreviewReloadSettled();
-  if (
-    isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID) &&
-    getDesignModeSession(DESIGN_MODE_INSTANCE_ID)?.getArmedToolId() === 'select'
-  ) {
-    refreshDesignModeArmedToolGuest(DESIGN_MODE_INSTANCE_ID);
-  }
   clearFrameBlockedTimer();
   const source = getPreviewTabSource(tabId);
   if (source?.kind !== 'url') {
@@ -314,12 +308,21 @@ async function syncDesignModeElectronGuest(): Promise<void> {
   const usingIframe = usesDesignModeIframeGuest();
   setDesignModeUsingIframeGuest(usingIframe);
 
-  // The tool strip lives in the chrome footer (below the guest) in Electron. It must stay
-  // visible whenever Design Mode is on — including the cross-origin Select case where the native
-  // WebContentsView is shown instead of the iframe guest — not only while the iframe guest is up.
   const designOn = usesElectronPreview() && isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID);
-  if (designOn) chrome?.removeAttribute('hidden');
-  else chrome?.setAttribute('hidden', '');
+  const session = getDesignModeSession(DESIGN_MODE_INSTANCE_ID);
+  if (designOn && session) {
+    if (usingIframe) {
+      // Iframe guest: native view is hidden — float the strip over the preview like browser mode.
+      chrome?.setAttribute('hidden', '');
+      relocateDesignModeStrip(DESIGN_MODE_INSTANCE_ID, body);
+    } else {
+      // Native WebContentsView covers #previewBody — dock the strip in the footer below it.
+      chrome?.removeAttribute('hidden');
+      if (chrome) relocateDesignModeStrip(DESIGN_MODE_INSTANCE_ID, chrome);
+    }
+  } else {
+    chrome?.setAttribute('hidden', '');
+  }
 
   if (usingIframe) {
     body.classList.add('preview-body--design-mode');
@@ -346,6 +349,10 @@ async function syncDesignModeElectronGuest(): Promise<void> {
   }
 
   await syncElectronPreviewHostLayout();
+
+  if (getDesignModeSession(DESIGN_MODE_INSTANCE_ID)?.getArmedToolId() === 'select') {
+    refreshDesignModeArmedToolGuest(DESIGN_MODE_INSTANCE_ID);
+  }
 }
 
 /** Design Mode is a Code-workspace tool — hidden and disabled on the MinnowOS desktop browser drawer. */

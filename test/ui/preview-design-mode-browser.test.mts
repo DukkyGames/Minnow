@@ -70,7 +70,7 @@ describe('preview design mode browser integration', () => {
 
   test('enableDesignMode with browser mount options places the strip in #previewBody', async () => {
     const options = resolveDesignModeMountOptions(host, pane, chrome);
-    assert.equal(options.chromeHost, undefined);
+    assert.equal(options.host, host);
 
     await enableDesignMode(options);
 

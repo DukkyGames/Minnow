@@ -5,6 +5,7 @@ import {
   enableDesignMode,
   disableDesignMode,
   isDesignModeEnabled,
+  relocateDesignModeStrip,
   resetDesignModeForTests,
 } from '../../src/design/design-mode.ts';
 import {
@@ -161,6 +162,18 @@ describe('design-mode mount/unmount + pointer capture', () => {
 
     assert.equal(isDesignModeEnabled('workspace-preview'), true);
     assert.equal(host.querySelectorAll('.mn-design-strip').length, 1);
+  });
+
+  test('relocateDesignModeStrip moves the strip between host elements', async () => {
+    const chrome = document.createElement('div');
+    chrome.className = 'preview-design-chrome';
+    pane.appendChild(chrome);
+    const session = await enableDesignMode({ instanceId: 'workspace-preview', host, paneElement: pane });
+    assert.ok(host.contains(session.strip));
+
+    relocateDesignModeStrip('workspace-preview', chrome);
+    assert.ok(chrome.contains(session.strip));
+    assert.equal(host.querySelector('.mn-design-strip'), null);
   });
 });
 

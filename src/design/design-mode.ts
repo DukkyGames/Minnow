@@ -55,9 +55,8 @@ export interface DesignModeMountOptions {
   /** Host element the overlay/strip mount into — must be the guest's bounds-source element. */
   host: HTMLElement;
   /**
-   * Optional footer outside the guest bounds (e.g. `#previewDesignChrome`). The tool strip
-   * mounts here when provided so it stays above Electron WebContentsView, which paints over DOM
-   * inside `#previewBody`.
+   * @deprecated Strip relocation is handled by preview-panel (`relocateDesignModeStrip`).
+   * The strip always mounts in `host` first.
    */
   chromeHost?: HTMLElement;
   /** Keyboard-shortcut scope; defaults to `host` when omitted. */
@@ -123,6 +122,13 @@ export function refreshDesignModeArmedToolGuest(instanceId: string): void {
   if (!session || session.armedToolId !== 'select' || !session.armedTool) return;
   const refresh = (session.armedTool as SelectDesignTool).refreshGuestBinding;
   if (typeof refresh === 'function') refresh();
+}
+
+/** Move the tool strip between #previewBody (overlay) and #previewDesignChrome (Electron footer). */
+export function relocateDesignModeStrip(instanceId: string, stripHost: HTMLElement): void {
+  const session = sessions.get(instanceId);
+  if (!session || session.strip.parentElement === stripHost) return;
+  stripHost.appendChild(session.strip);
 }
 
 /** Host-space pointer coordinates (CSS px), matching overlay.ts's own local-point mapping. */
@@ -435,9 +441,7 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
   registerBuiltinPlaceholderDesignTools();
 
   const { instanceId, host } = options;
-  const stripHost = options.chromeHost ?? host;
   const paneElement = options.paneElement ?? host;
-  options.chromeHost?.removeAttribute('hidden');
 
   const overlay = createAnnotationOverlay({ host });
 
@@ -525,7 +529,7 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
 
   session.captureLayer = buildCaptureLayer(host, session);
   session.strip = buildStrip(session);
-  stripHost.appendChild(session.strip);
+  host.appendChild(session.strip);
   applyCaptureMode(session);
 
   const keyHandler = (ev: KeyboardEvent): void => onKeyDown(session, paneElement, ev);
