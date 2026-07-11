@@ -5,7 +5,7 @@
 import { listProviders } from '../../providers/store';
 import { fetchModelsForProvider } from '../../providers/fetch-models';
 import type { LmModelRecord } from '../../types';
-import { el } from '../ui-helpers';
+import { el, renderStepHeader } from '../ui-helpers';
 import type { OnboardingContext, OnboardingStep } from '../types';
 import { recordStepProgress } from '../state-core';
 
@@ -14,7 +14,7 @@ let models: LmModelRecord[] = [];
 
 export const modelPickStep: OnboardingStep = {
   id: 'model-pick',
-  title: 'Default model',
+  title: 'Pick your default model',
   canSkip: true,
 
   isApplicable(ctx) {
@@ -25,7 +25,7 @@ export const modelPickStep: OnboardingStep = {
     container.innerHTML = '';
     container.className = 'mn-onboarding-step';
 
-    container.appendChild(el('h2', 'mn-onboarding-step-title', 'Pick your default model'));
+    renderStepHeader(container, modelPickStep, actions.stepIndex, actions.totalSteps);
     container.appendChild(
       el('p', 'mn-onboarding-step-desc', 'This model loads in the top bar for new chats.'),
     );

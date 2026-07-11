@@ -5,7 +5,7 @@
 import { createProvider, updateProviderSecrets } from '../../providers/store';
 import { getDefaultPaths } from '../../providers/paths';
 import { fetchModelsForProvider } from '../../providers/fetch-models';
-import { createChoiceCard, createStatusPill, el } from '../ui-helpers';
+import { createChoiceCard, createStatusPill, el, renderStepHeader } from '../ui-helpers';
 import {
   firstReachableProbe,
   probeLocalProviders,
@@ -33,7 +33,7 @@ const CLOUD_PRESETS: { id: string; label: string; baseUrl: string }[] = [
 
 export const providerChoiceStep: OnboardingStep = {
   id: 'provider-choice',
-  title: 'Models',
+  title: 'How will you run models?',
   canSkip: true,
 
   isApplicable() {
@@ -45,7 +45,7 @@ export const providerChoiceStep: OnboardingStep = {
     container.className = 'mn-onboarding-step';
     selectedPath = ctx.providerPath;
 
-    container.appendChild(el('h2', 'mn-onboarding-step-title', 'How will you run models?'));
+    renderStepHeader(container, providerChoiceStep, actions.stepIndex, actions.totalSteps);
     container.appendChild(
       el(
         'p',
@@ -126,7 +126,7 @@ export const providerLocalStep: OnboardingStep = {
     container.className = 'mn-onboarding-step';
 
     const hit = firstReachableProbe(probeResults);
-    container.appendChild(el('h2', 'mn-onboarding-step-title', 'Connect your local server'));
+    renderStepHeader(container, providerLocalStep, actions.stepIndex, actions.totalSteps);
     container.appendChild(
       el(
         'p',
@@ -194,7 +194,7 @@ export const providerManagedStep: OnboardingStep = {
     container.innerHTML = '';
     container.className = 'mn-onboarding-step';
 
-    container.appendChild(el('h2', 'mn-onboarding-step-title', 'Minnow-managed models'));
+    renderStepHeader(container, providerManagedStep, actions.stepIndex, actions.totalSteps);
     if (!ctx.serverAvailable) {
       container.appendChild(
         el(
@@ -249,7 +249,7 @@ export const providerCloudStep: OnboardingStep = {
     container.innerHTML = '';
     container.className = 'mn-onboarding-step';
 
-    container.appendChild(el('h2', 'mn-onboarding-step-title', 'Cloud provider'));
+    renderStepHeader(container, providerCloudStep, actions.stepIndex, actions.totalSteps);
     container.appendChild(
       el('p', 'mn-onboarding-step-desc', 'Keys are stored encrypted on this machine only.'),
     );

@@ -2,6 +2,24 @@
  * Shared DOM helpers for onboarding step screens.
  */
 
+import { formatStepPosition } from './phases';
+import type { OnboardingStep } from './types';
+
+/** Step position header shown above step content (non-welcome steps). */
+export function renderStepHeader(
+  container: HTMLElement,
+  step: OnboardingStep,
+  stepIndex: number,
+  totalSteps: number,
+): void {
+  const header = el('header', 'mn-onboarding-step-header');
+  header.appendChild(
+    el('span', 'mn-onboarding-step-eyebrow', formatStepPosition(stepIndex, totalSteps)),
+  );
+  header.appendChild(el('h2', 'mn-onboarding-step-title', step.title));
+  container.appendChild(header);
+}
+
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,

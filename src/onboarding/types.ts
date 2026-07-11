@@ -81,4 +81,8 @@ export interface OnboardingStepActions {
   patchContext: (patch: Partial<OnboardingContext>) => void;
   setPrimaryEnabled: (enabled: boolean) => void;
   setPrimaryLabel: (label: string) => void;
+  /** Current position in the filtered step list (0-based). */
+  readonly stepIndex: number;
+  /** Total applicable steps in this run. */
+  readonly totalSteps: number;
 }

@@ -3,7 +3,7 @@
  */
 
 import { setAllBuiltInToolPermissions } from '../../tools/config';
-import { el, createChoiceCard } from '../ui-helpers';
+import { el, createChoiceCard, renderStepHeader } from '../ui-helpers';
 import type { OnboardingContext, OnboardingStep } from '../types';
 import { recordStepProgress } from '../state-core';
 
@@ -17,7 +17,7 @@ export const permissionsStep: OnboardingStep = {
   render(container, _ctx, actions) {
     container.innerHTML = '';
     container.className = 'mn-onboarding-step';
-    container.appendChild(el('h2', 'mn-onboarding-step-title', 'Tool permissions'));
+    renderStepHeader(container, permissionsStep, actions.stepIndex, actions.totalSteps);
     container.appendChild(
       el(
         'p',
@@ -85,7 +85,7 @@ export const memoryStep: OnboardingStep = {
   render(container, ctx, actions) {
     container.innerHTML = '';
     container.className = 'mn-onboarding-step';
-    container.appendChild(el('h2', 'mn-onboarding-step-title', 'Memory and Brain'));
+    renderStepHeader(container, memoryStep, actions.stepIndex, actions.totalSteps);
     container.appendChild(
       el(
         'p',
@@ -152,8 +152,14 @@ export const explainerStep: OnboardingStep = {
     container.className = 'mn-onboarding-step mn-onboarding-step--explainer';
     const panel = EXPLAINER_PANELS[explainerIndex] ?? EXPLAINER_PANELS[0];
 
-    container.appendChild(el('h2', 'mn-onboarding-step-title', panel.title));
-    container.appendChild(el('p', 'mn-onboarding-explainer-body', panel.body));
+    renderStepHeader(container, explainerStep, actions.stepIndex, actions.totalSteps);
+
+    const card = el('div', 'mn-onboarding-explainer-card');
+    card.appendChild(el('h3', 'mn-onboarding-subtitle', panel.title));
+    card.appendChild(el('p', 'mn-onboarding-explainer-body', panel.body));
+    container.appendChild(card);
+
+    const nav = el('div', 'mn-onboarding-explainer-nav');
 
     const dots = el('div', 'mn-onboarding-explainer-dots');
     EXPLAINER_PANELS.forEach((_, i) => {
@@ -167,7 +173,15 @@ export const explainerStep: OnboardingStep = {
       });
       dots.appendChild(dot);
     });
-    container.appendChild(dots);
+
+    const counter = el(
+      'span',
+      'mn-onboarding-explainer-counter',
+      `${explainerIndex + 1} / ${EXPLAINER_PANELS.length}`,
+    );
+
+    nav.append(dots, counter);
+    container.appendChild(nav);
 
     actions.setPrimaryLabel(
       explainerIndex >= EXPLAINER_PANELS.length - 1 ? 'Continue' : 'Next panel',
@@ -192,7 +206,7 @@ function makePlaceholderStep(
   title: string,
   message: string,
 ): OnboardingStep {
-  return {
+  const step: OnboardingStep = {
     id,
     title,
     canSkip: true,
@@ -204,7 +218,7 @@ function makePlaceholderStep(
     render(container, _ctx, actions) {
       container.innerHTML = '';
       container.className = 'mn-onboarding-step';
-      container.appendChild(el('h2', 'mn-onboarding-step-title', title));
+      renderStepHeader(container, step, actions.stepIndex, actions.totalSteps);
       container.appendChild(el('p', 'mn-onboarding-step-desc', message));
       container.appendChild(
         el('p', 'mn-onboarding-muted', 'Set up later in Settings, or skip this step now.'),
@@ -216,6 +230,7 @@ function makePlaceholderStep(
       ctx.state = recordStepProgress(ctx.state, id, { skipped: true });
     },
   };
+  return step;
 }
 
 export const extrasStep = makePlaceholderStep(
@@ -250,14 +265,17 @@ export const demoChatStep = makePlaceholderStep(
 
 export const doneStep: OnboardingStep = {
   id: 'done',
-  title: 'Done',
+  title: 'You are set up',
   canSkip: false,
   isApplicable: () => true,
   render(container, ctx, actions) {
     container.innerHTML = '';
     container.className = 'mn-onboarding-step mn-onboarding-step--done';
 
-    container.appendChild(el('h2', 'mn-onboarding-step-title', 'You are set up'));
+    const badge = el('div', 'mn-onboarding-done-badge', '✓');
+    container.appendChild(badge);
+
+    renderStepHeader(container, doneStep, actions.stepIndex, actions.totalSteps);
     container.appendChild(
       el('p', 'mn-onboarding-step-desc', 'Minnow is ready. Open the desktop to start chatting.'),
     );

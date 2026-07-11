@@ -1,10 +1,12 @@
 /**
- * S0 — Welcome: wordmark, pitch, primary CTA or skip to desktop.
+ * S0 — Welcome: wordmark, pitch, setup preview, primary CTA or skip.
  */
 
 import { el } from '../ui-helpers';
 import type { OnboardingContext, OnboardingStep, OnboardingStepActions } from '../types';
 import { recordStepProgress } from '../state-core';
+
+const SETUP_TOPICS = ['Appearance', 'Models', 'Permissions', '~2 min'];
 
 export const welcomeStep: OnboardingStep = {
   id: 'welcome',
@@ -20,12 +22,15 @@ export const welcomeStep: OnboardingStep = {
     container.className = 'mn-onboarding-step mn-onboarding-step--welcome';
 
     const hero = el('div', 'mn-onboarding-welcome-hero');
+
+    const glow = el('div', 'mn-onboarding-welcome-glow');
     const glyph = el('img', 'mn-onboarding-welcome-glyph') as HTMLImageElement;
-    glyph.src = '/logos/minnow-glyph-white.svg';
+    glyph.src = '/logos/minnow-glyph.svg';
     glyph.alt = '';
-    glyph.width = 48;
-    glyph.height = 48;
-    hero.appendChild(glyph);
+    glyph.width = 56;
+    glyph.height = 56;
+    glow.appendChild(glyph);
+    hero.appendChild(glow);
 
     hero.appendChild(el('h1', 'mn-onboarding-title', 'Minnow'));
     hero.appendChild(
@@ -35,9 +40,17 @@ export const welcomeStep: OnboardingStep = {
       el(
         'p',
         'mn-onboarding-muted',
-        'Takes about two minutes. Everything can be changed later in Settings.',
+        'A short walkthrough to connect models, set permissions, and learn the apps. Everything can be changed later in Settings.',
       ),
     );
+
+    const pills = el('ul', 'mn-onboarding-welcome-pills');
+    SETUP_TOPICS.forEach((topic) => {
+      const pill = el('li', 'mn-onboarding-welcome-pill', topic);
+      pills.appendChild(pill);
+    });
+    hero.appendChild(pills);
+
     container.appendChild(hero);
 
     actions.setPrimaryLabel('Set up Minnow');

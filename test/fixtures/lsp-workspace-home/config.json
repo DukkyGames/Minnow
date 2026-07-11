@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "createdAt": "2026-07-05T23:40:07.920Z",
+  "createdAt": "2026-07-11T20:16:17.789Z",
   "migratedFromLocalStorage": false,
   "migratedAt": null,
   "localStorageKeysMigrated": [],
@@ -34,7 +34,8 @@
   "terminal": {
     "open": false,
     "heightPx": 240,
-    "autoOpenOnAgentRun": false
+    "autoOpenOnAgentRun": false,
+    "autoFollowAgentTab": false
   },
   "browser": {
     "enabled": true,
@@ -193,11 +194,5 @@
       "maxDurationSeconds": 300,
       "silenceTimeoutSeconds": 2.5
     }
-  },
-  "workspace": {
-    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-tmFbfZ",
-    "recentPaths": [
-      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-tmFbfZ"
-    ]
   }
 }

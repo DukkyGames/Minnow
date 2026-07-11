@@ -5,7 +5,7 @@
 import { isServerStorageMode } from '../config/storage-mode';
 import { getLocalServerAvailable } from '../tools/client';
 import { navigateToSettingsField } from '../ui/settings-page';
-import { mountProgressRail, type ProgressRailHandle } from './progress-rail';
+import { mountStepSidebar, type StepSidebarHandle } from './step-sidebar';
 import { getApplicableSteps, resolveStepIndex, ONBOARDING_STEPS } from './steps/registry';
 import { warmProviderProbes } from './steps/provider';
 import { advanceExplainerPanel } from './steps/remaining';
@@ -23,7 +23,7 @@ import type { OnboardingContext, OnboardingStepActions, OnboardingStepId } from 
 let mounted = false;
 let rootEl: HTMLElement | null = null;
 let contentEl: HTMLElement | null = null;
-let railHandle: ProgressRailHandle | null = null;
+let sidebarHandle: StepSidebarHandle | null = null;
 let stepCleanup: (() => void) | null = null;
 let ctx: OnboardingContext | null = null;
 let stepIndex = 0;
@@ -68,8 +68,11 @@ export async function mountOnboarding(options?: { force?: boolean }): Promise<vo
   rootEl.setAttribute('aria-modal', 'true');
   rootEl.setAttribute('aria-label', 'Minnow setup');
 
-  const shell = document.createElement('div');
-  shell.className = 'mn-onboarding__shell';
+  const asideMount = document.createElement('aside');
+  const main = document.createElement('div');
+  main.className = 'mn-onboarding__main';
+
+  const mobileProgressMount = document.createElement('div');
 
   contentEl = document.createElement('div');
   contentEl.className = 'mn-onboarding__content';
@@ -100,15 +103,17 @@ export async function mountOnboarding(options?: { force?: boolean }): Promise<vo
   actions.append(backBtn, skipBtn, primaryBtn);
   footer.appendChild(actions);
 
-  const railMount = document.createElement('div');
-  footer.appendChild(railMount);
-
-  shell.append(contentEl, footer);
-  rootEl.appendChild(shell);
+  main.append(mobileProgressMount, contentEl, footer);
+  rootEl.append(asideMount, main);
   document.body.appendChild(rootEl);
   document.documentElement.classList.add('onboarding-active');
 
-  railHandle = mountProgressRail(railMount, applicableSteps, applicableSteps[stepIndex]?.id ?? 'welcome');
+  sidebarHandle = mountStepSidebar(
+    asideMount,
+    mobileProgressMount,
+    applicableSteps,
+    applicableSteps[stepIndex]?.id ?? 'welcome',
+  );
 
   mounted = true;
   bindKeyboard();
@@ -128,8 +133,8 @@ export async function unmountOnboarding(complete = false): Promise<void> {
   if (!mounted || !ctx) return;
   stepCleanup?.();
   stepCleanup = null;
-  railHandle?.destroy();
-  railHandle = null;
+  sidebarHandle?.destroy();
+  sidebarHandle = null;
   rootEl?.remove();
   rootEl = null;
   contentEl = null;
@@ -185,7 +190,30 @@ function makeActions(): OnboardingStepActions {
     setPrimaryLabel: (label) => {
       if (primaryBtn) primaryBtn.textContent = label;
     },
+    stepIndex,
+    totalSteps: applicableSteps.length,
   };
+}
+
+function setWelcomeLayout(active: boolean): void {
+  rootEl?.classList.toggle('is-welcome', active);
+}
+
+function animateStepEnter(): void {
+  if (!contentEl) return;
+  const reduced =
+    typeof globalThis.matchMedia === 'function' &&
+    globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduced) return;
+
+  contentEl.classList.remove('is-entering');
+  void contentEl.offsetWidth;
+  contentEl.classList.add('is-entering');
+  const onEnd = () => {
+    contentEl?.classList.remove('is-entering');
+    contentEl?.removeEventListener('animationend', onEnd);
+  };
+  contentEl.addEventListener('animationend', onEnd);
 }
 
 function renderCurrentStep(): void {
@@ -196,14 +224,16 @@ function renderCurrentStep(): void {
   const step = applicableSteps[stepIndex];
   if (!step) return;
 
+  setWelcomeLayout(step.id === 'welcome');
+
   if (backBtn) backBtn.hidden = stepIndex === 0;
   if (skipBtn) skipBtn.hidden = !step.canSkip;
 
   const cleanup = step.render(contentEl, ctx, makeActions());
   if (typeof cleanup === 'function') stepCleanup = cleanup;
 
-  const railIdx = Math.max(0, applicableSteps.findIndex((s) => s.id === step.id));
-  railHandle?.setActiveIndex(railIdx);
+  sidebarHandle?.setActiveStep(step.id, stepIndex);
+  animateStepEnter();
 }
 
 async function goNext(): Promise<void> {
