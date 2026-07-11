@@ -362,6 +362,7 @@ async function toggleDesignModeFromToolbar(): Promise<void> {
       void toggleDesignModeFromToolbar(),
     ),
     onArmedToolChange: () => void syncDesignModeElectronGuest(),
+    onClearAll: () => void refreshAnnotationsPanel(),
   });
   await syncDesignModeElectronGuest();
 }
@@ -390,6 +391,7 @@ export async function openPreviewPageAndEnableDesignMode(pageUrl: string): Promi
       void toggleDesignModeFromToolbar(),
     ),
     onArmedToolChange: () => void syncDesignModeElectronGuest(),
+    onClearAll: () => void refreshAnnotationsPanel(),
   });
   await syncDesignModeElectronGuest();
 }

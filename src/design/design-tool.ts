@@ -34,10 +34,12 @@ import {
   type ShapeKind,
   type ShapePoint,
 } from './shape-model';
+import { removeDesignAttachmentsForPage } from '../attachments/store';
 import {
   addPin as persistPin,
   addNoteToPin as persistNote,
   addShape as persistShape,
+  clearPageAnnotations,
   erasePin as erasePinAnnotation,
   eraseShape as eraseShapeAnnotation,
   loadPageAnnotations,
@@ -128,7 +130,7 @@ export function currentPreviewPageRef(): string {
  * thumbnails; dedupe by page + uid is handled by addElementRefToComposer itself, so re-picking
  * the same element (shift-click or not) just re-focuses the existing chip.
  */
-export function createSelectDesignTool(): DesignTool {
+export function createSelectDesignTool(): SelectDesignTool {
   let ctx: DesignToolContext | null = null;
   let picker: ElementPicker | null = null;
   let transport: PickerTransport | null = null;
@@ -195,6 +197,9 @@ export function createSelectDesignTool(): DesignTool {
     id: 'select',
     label: 'Select',
     pointerMode: 'passthrough',
+    clearAll() {
+      resetSelection();
+    },
     arm(context) {
       ctx = context;
       resetSelection();
@@ -341,12 +346,18 @@ function guestScrollOffset(): { x: number; y: number } {
   return { x: window.scrollX || 0, y: window.scrollY || 0 };
 }
 
+/** Select tool factory return type — exposes marker clearing for strip "Clear all". */
+export interface SelectDesignTool extends DesignTool {
+  clearAll(): void;
+}
+
 /** Draw tool factory return type — exposes shape-kind switching and eraser/undo for the strip. */
 export interface DrawDesignTool extends DesignTool {
   setShapeKind(kind: ShapeKind): void;
   getShapeKind(): ShapeKind;
   getShapes(): DesignShape[];
   eraseShape(shapeId: string): void;
+  clearAll(): void;
   undo(): void;
 }
 
@@ -532,6 +543,13 @@ export function createDrawDesignTool(): DrawDesignTool {
       renderShapes();
       void eraseShapeAnnotation(pageKey, shapeId);
     },
+    clearAll() {
+      shapes = [];
+      dragStart = null;
+      penPoints = [];
+      ctx?.overlay.renderDraft(null);
+      renderShapes();
+    },
     undo() {
       void undoPage(pageKey).then((data) => {
         if (!data) return;
@@ -547,6 +565,7 @@ export interface CommentDesignTool extends DesignTool {
   getPins(): CommentPin[];
   addNote(pinId: string, text: string): Promise<void>;
   erasePin(pinId: string): void;
+  clearAll(): void;
   undo(): void;
 }
 
@@ -756,6 +775,11 @@ export function createCommentDesignTool(): CommentDesignTool {
     erasePin(pinId) {
       erasePinInternal(pinId);
     },
+    clearAll() {
+      closePopover();
+      pins = [];
+      renderPins();
+    },
     undo() {
       void undoPage(pageKey).then((data) => {
         if (!data) return;
@@ -764,6 +788,48 @@ export function createCommentDesignTool(): CommentDesignTool {
       });
     },
   };
+}
+
+function getDrawTool(): DrawDesignTool | null {
+  const tool = getDesignTool('draw');
+  if (tool && typeof (tool as DrawDesignTool).setShapeKind === 'function') {
+    return tool as DrawDesignTool;
+  }
+  return null;
+}
+
+function getSelectTool(): SelectDesignTool | null {
+  const tool = getDesignTool('select');
+  if (tool && typeof (tool as SelectDesignTool).clearAll === 'function') {
+    return tool as SelectDesignTool;
+  }
+  return null;
+}
+
+/**
+ * Wipe every Design Mode mark on the current preview page: overlay markers/shapes/pins,
+ * persisted annotations, and queued elementRef/designRef composer chips. Keeps the armed tool
+ * active so the user can keep working after clearing.
+ */
+export async function clearAllDesignModeMarks(ctx: DesignToolContext): Promise<void> {
+  const pageKey = currentPreviewPageRef();
+
+  getSelectTool()?.clearAll();
+  getDrawTool()?.clearAll();
+  const commentTool = getDesignTool('comment');
+  if (commentTool && typeof (commentTool as CommentDesignTool).clearAll === 'function') {
+    (commentTool as CommentDesignTool).clearAll();
+  }
+
+  if (pageKey) {
+    await clearPageAnnotations(pageKey);
+    removeDesignAttachmentsForPage(pageKey);
+  }
+
+  ctx.overlay.clear();
+  ctx.overlay.renderShapes([]);
+  ctx.overlay.renderPins([]);
+  ctx.overlay.renderDraft(null);
 }
 
 /** Ids the built-in tool strip renders buttons for; P3/P4 implement the real behavior. */

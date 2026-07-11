@@ -20,6 +20,7 @@ import {
   createSelectDesignTool,
   createDrawDesignTool,
   createCommentDesignTool,
+  clearAllDesignModeMarks,
   type BuiltinDesignToolId,
   type DesignTool,
   type DesignToolContext,
@@ -74,6 +75,8 @@ export interface DesignModeMountOptions {
    * persisted-tool restore during enable.
    */
   onArmedToolChange?: (toolId: string | null) => void;
+  /** Called after the strip's Clear all button wipes marks on the current page (host refreshes panel). */
+  onClearAll?: () => void;
 }
 
 export interface DesignModeSession {
@@ -88,6 +91,7 @@ export interface DesignModeSession {
   getViewportPreset(): DesignViewportPreset;
   setDarkModeEmulation(on: boolean): void;
   getDarkModeEmulation(): boolean;
+  clearAll(): Promise<void>;
   destroy(): void;
 }
 
@@ -96,6 +100,7 @@ interface InternalSession extends DesignModeSession {
   armedTool: DesignTool | null;
   armedToolId: string | null;
   onExit?: () => void;
+  onClearAll?: () => void;
 }
 
 const sessions = new Map<string, InternalSession>();
@@ -192,6 +197,8 @@ const STRIP_ICONS: Record<string, string> = {
   dark: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
   exit: '<path d="M18 6L6 18M6 6l12 12"/>',
   undo: '<path d="M9 14L4 9l5-5"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/>',
+  clear:
+    '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
   rect: '<rect x="4" y="6" width="16" height="12" rx="2"/>',
   pen: '<path d="M17 3a2.83 2.83 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>',
   arrow: '<path d="M7 17L17 7"/><path d="M8 7h9v9"/>',
@@ -296,6 +303,17 @@ function buildStrip(session: InternalSession): HTMLElement {
     session.setDarkModeEmulation(!session.getDarkModeEmulation()),
   );
   row.appendChild(darkToggle);
+  row.appendChild(stripSeparator());
+
+  const clearAllBtn = stripButton(
+    'clear',
+    'Clear all marks',
+    `${STRIP_CLASS}__clear-all`,
+  );
+  clearAllBtn.addEventListener('click', () => {
+    void session.clearAll();
+  });
+  row.appendChild(clearAllBtn);
   row.appendChild(stripSeparator());
 
   const exitBtn = stripButton('exit', 'Exit Design Mode', `${STRIP_CLASS}__exit`);
@@ -419,6 +437,7 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
     armedTool: null,
     armedToolId: null,
     onExit: options.onExit,
+    onClearAll: options.onClearAll,
   } as unknown as InternalSession;
 
   const armToolInternal = (id: string, persist: boolean): void => {
@@ -485,6 +504,11 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
   };
   session.getDarkModeEmulation = (): boolean => darkModeEmulation;
   session.setDarkModeEmulation = (on: boolean): void => setDarkModeEmulationInternal(on, true);
+
+  session.clearAll = async (): Promise<void> => {
+    await clearAllDesignModeMarks({ instanceId, host, overlay });
+    options.onClearAll?.();
+  };
 
   session.captureLayer = buildCaptureLayer(host, session);
   session.strip = buildStrip(session);

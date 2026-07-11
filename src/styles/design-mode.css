@@ -94,6 +94,10 @@
   color: var(--mn-fg);
 }
 
+.mn-design-strip__clear-all:hover {
+  color: var(--mn-error, #e5484d);
+}
+
 /* Inline text-label editor for the Draw tool's label kind (replaces window.prompt). */
 .mn-design-label-editor {
   position: absolute;

@@ -9,7 +9,12 @@ import { Window } from 'happy-dom';
 import {
   createDrawDesignTool,
   createCommentDesignTool,
+  createSelectDesignTool,
+  clearAllDesignModeMarks,
+  registerDesignTool,
   type DesignToolContext,
+  type CommentDesignTool,
+  type DrawDesignTool,
 } from '../../src/design/design-tool.ts';
 import { createAnnotationOverlay } from '../../src/design/overlay.ts';
 import { resetRegionCaptureForTests, setRegionCaptureTestHooks } from '../../src/design/region-capture.ts';
@@ -381,6 +386,44 @@ describe('Draw & Comment design tools (MIN-367)', () => {
     await flush();
 
     assert.equal(getPendingAttachments().length, 0);
+    comment.disarm();
+  });
+
+  test('clearAllDesignModeMarks wipes draw shapes, comment pins, and composer design refs for the page', async () => {
+    const draw = createDrawDesignTool();
+    const comment = createCommentDesignTool();
+    registerDesignTool(createSelectDesignTool());
+    registerDesignTool(draw);
+    registerDesignTool(comment);
+
+    const ctx = makeCtx();
+    (draw as DrawDesignTool).arm(ctx);
+    await flush();
+
+    draw.onPointerDown?.({ x: 10, y: 10, raw: {} as PointerEvent });
+    draw.onPointerMove?.({ x: 50, y: 50, raw: {} as PointerEvent });
+    draw.onPointerUp?.({ x: 50, y: 50, raw: {} as PointerEvent });
+    await flush();
+
+    (comment as CommentDesignTool).arm(ctx);
+    await flush();
+    comment.onPointerUp?.({ x: 80, y: 90, raw: {} as PointerEvent });
+    await flush();
+
+    assert.equal(draw.getShapes().length, 1);
+    assert.equal(comment.getPins().length, 1);
+    assert.equal(getPendingAttachments().filter((a) => a.kind === 'designRef').length, 1);
+
+    await clearAllDesignModeMarks(ctx);
+    await flush();
+
+    assert.equal(draw.getShapes().length, 0);
+    assert.equal(comment.getPins().length, 0);
+    assert.equal(getPendingAttachments().filter((a) => a.kind === 'designRef').length, 0);
+    assert.equal(host.querySelectorAll('.mn-design-overlay-shapes *').length, 0);
+    assert.equal(host.querySelectorAll('.mn-design-overlay-pins *').length, 0);
+
+    draw.disarm();
     comment.disarm();
   });
 });

@@ -331,4 +331,25 @@ describe('design-mode tool strip', () => {
     assert.equal(isDesignModeEnabled('workspace-preview'), false);
     assert.equal(host.querySelector('.mn-design-strip'), null);
   });
+
+  test('strip includes a Clear all marks button', async () => {
+    await enableDesignMode({ instanceId: 'workspace-preview', host, paneElement: pane });
+    const clearBtn = host.querySelector<HTMLButtonElement>('.mn-design-strip__clear-all');
+    assert.ok(clearBtn);
+    assert.equal(clearBtn.title, 'Clear all marks');
+  });
+
+  test('Clear all invokes onClearAll after wiping marks', async () => {
+    let cleared = 0;
+    const session = await enableDesignMode({
+      instanceId: 'workspace-preview',
+      host,
+      paneElement: pane,
+      onClearAll: () => {
+        cleared += 1;
+      },
+    });
+    await session.clearAll();
+    assert.equal(cleared, 1);
+  });
 });

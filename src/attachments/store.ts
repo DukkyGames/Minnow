@@ -23,6 +23,18 @@ export function clearAttachments(): void {
   renderAttachPreview();
 }
 
+/** Removes queued Design Mode elementRef and designRef attachments for one preview page. */
+export function removeDesignAttachmentsForPage(pageUrl: string): void {
+  const page = pageUrl.trim();
+  if (!page) return;
+  const next = pendingAttachments.filter(
+    (item) =>
+      !((item.kind === 'elementRef' || item.kind === 'designRef') && item.pageUrl === page),
+  );
+  if (next.length === pendingAttachments.length) return;
+  replacePendingAttachments(next);
+}
+
 /** Removes one attachment by id. */
 export function removeAttachment(id: string): void {
   const index = pendingAttachments.findIndex((item) => item.id === id);
