@@ -111,22 +111,29 @@
 
 /* Viewport preset frame — mobile/tablet constrain the guest's host width so the native
    Electron WebContentsView (or iframe) resizes to match, centered inside the pane.
-   (No spread box-shadow here: a 9999px shadow paints over the whole app outside the pane.) */
+   (No spread box-shadow here: a 9999px shadow paints over the whole app outside the pane.)
+
+   Use an explicit `width` (not just `max-width`): the host is a flex child, and the
+   `margin-inline: auto` centering cancels the default flex `stretch`, so a bare `max-width`
+   lets the item collapse to the guest iframe's intrinsic 300px instead of the preset width.
+   `max-width: 100%` keeps it from overflowing a pane narrower than the preset. */
 .mn-design-viewport--mobile,
 .mn-design-viewport--tablet {
   margin-inline: auto;
+  max-width: 100%;
   border-inline: 1px solid var(--mn-border);
 }
 
 .mn-design-viewport--mobile {
-  max-width: 375px;
+  width: 375px;
 }
 
 .mn-design-viewport--tablet {
-  max-width: 768px;
+  width: 768px;
 }
 
 .mn-design-viewport--desktop {
+  width: auto;
   max-width: none;
 }
 

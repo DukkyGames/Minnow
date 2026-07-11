@@ -66,6 +66,14 @@ export interface DesignModeMountOptions {
    * omitted the strip falls back to disableDesignMode(instanceId).
    */
   onExit?: () => void;
+  /**
+   * Called with the newly-armed tool id (or null on disarm) whenever the armed tool changes.
+   * The Electron host uses this to pick the guest strategy on cross-origin previews: element
+   * Select needs the native WebContentsView visible for CDP inspect, while Draw/Comment want
+   * the iframe guest so their DOM overlay stacks on top. Fired on both user arms and the
+   * persisted-tool restore during enable.
+   */
+  onArmedToolChange?: (toolId: string | null) => void;
 }
 
 export interface DesignModeSession {
@@ -423,6 +431,10 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
     tool.arm(ctx);
     applyCaptureMode(session);
     syncStripState(session);
+    // Let the host re-pick its guest strategy (e.g. reveal the native view for CDP Select on a
+    // cross-origin preview) before/after arming — the picker enable inside tool.arm tolerates the
+    // view being shown a frame later.
+    options.onArmedToolChange?.(id);
     if (persist) void saveDesignInstanceMeta(instanceId, { tool: id as DesignInstanceMeta['tool'] });
   };
   session.armTool = (id: string): void => armToolInternal(id, true);
@@ -434,6 +446,7 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
     session.armedToolId = null;
     applyCaptureMode(session);
     syncStripState(session);
+    options.onArmedToolChange?.(null);
     void saveDesignInstanceMeta(instanceId, { tool: null });
   };
 

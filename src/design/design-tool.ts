@@ -21,6 +21,7 @@ import { addElementRefToComposer } from '../attachments/element-ref';
 import { addDesignRefToComposer } from '../attachments/design-ref';
 import { updateAttachmentSourceMapping } from '../attachments/store';
 import { getFilePanelState } from '../state/file-panel';
+import { showToast } from '../ui/toast';
 import {
   boundingRectOfShape,
   newPinId,
@@ -203,6 +204,16 @@ export function createSelectDesignTool(): DesignTool {
       transport = createPickerTransport();
       picker = createBestElementPicker({
         onPick: (picked) => void handlePick(picked),
+        onError: (message) => {
+          // Element selection needs to read the guest DOM, which a cross-origin preview
+          // (a hosted/public site, or a dev server on a different origin) blocks in the
+          // browser build. Surface why instead of the tool silently doing nothing, and point
+          // at Draw/Comment, which anchor to page coordinates and still work.
+          const friendly = /cross-origin/i.test(message)
+            ? 'Element selection is unavailable on a cross-origin preview. Use Draw or Comment to mark a region instead.'
+            : `Element picker unavailable: ${message}`;
+          showToast(friendly, 'error');
+        },
       });
       void picker.enable().catch(() => {});
     },
@@ -318,7 +329,14 @@ function guestScrollOffset(): { x: number; y: number } {
   const frame = getPreviewFrame();
   const view = frame?.contentWindow;
   if (view) {
-    return { x: view.scrollX || 0, y: view.scrollY || 0 };
+    // Reading scrollX/scrollY on a cross-origin guest throws a SecurityError
+    // ("Blocked a frame with origin…"). A cross-origin page can't be introspected anyway, so
+    // fall back to a zero page-scroll anchor rather than letting the pin/shape drop crash.
+    try {
+      return { x: view.scrollX || 0, y: view.scrollY || 0 };
+    } catch {
+      return { x: 0, y: 0 };
+    }
   }
   return { x: window.scrollX || 0, y: window.scrollY || 0 };
 }

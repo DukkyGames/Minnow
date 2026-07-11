@@ -58,6 +58,7 @@ import {
 } from './preview-design-mode-mount';
 export { WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID } from './preview-design-mode-mount';
 import { currentPreviewPageRef, gatherAnchorCandidates } from '../design/design-tool';
+import { isCrossOriginPreview } from '../design/element-picker';
 import {
   eraseShape,
   erasePin,
@@ -220,9 +221,22 @@ function getPreviewDesignChrome(): HTMLElement | null {
   return document.getElementById('previewDesignChrome');
 }
 
-/** Electron hides the native guest while Design Mode uses a same-origin iframe under the overlay. */
-function usesDesignModeIframeGuest(): boolean {
-  return usesElectronPreview() && isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID);
+/**
+ * Electron hides the native guest while Design Mode drives a same-origin iframe under the SVG
+ * overlay. That swap only works when the iframe can actually read/interact with the guest — i.e.
+ * a same-origin page (workspace HTML, or a URL on Minnow's own origin).
+ *
+ * On a CROSS-ORIGIN preview (a hosted/public URL, or a dev server on another origin) the iframe
+ * can't be introspected, so element Select must fall back to CDP inspect on the native
+ * WebContentsView — which only receives hover/click while it is visible. So when Select is armed
+ * on a cross-origin preview we keep the native view (return false); Draw/Comment (and no tool)
+ * still use the iframe guest so their coordinate-anchored DOM overlay stacks on top.
+ */
+export function usesDesignModeIframeGuest(): boolean {
+  if (!usesElectronPreview() || !isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID)) return false;
+  if (!isCrossOriginPreview()) return true;
+  const armedTool = getDesignModeSession(DESIGN_MODE_INSTANCE_ID)?.getArmedToolId();
+  return armedTool !== 'select';
 }
 
 function getDesignToggleButton(): HTMLButtonElement | null {
@@ -293,9 +307,15 @@ async function syncDesignModeElectronGuest(): Promise<void> {
   const usingIframe = usesDesignModeIframeGuest();
   setDesignModeUsingIframeGuest(usingIframe);
 
+  // The tool strip lives in the chrome footer (below the guest) in Electron. It must stay
+  // visible whenever Design Mode is on — including the cross-origin Select case where the native
+  // WebContentsView is shown instead of the iframe guest — not only while the iframe guest is up.
+  const designOn = usesElectronPreview() && isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID);
+  if (designOn) chrome?.removeAttribute('hidden');
+  else chrome?.setAttribute('hidden', '');
+
   if (usingIframe) {
     body.classList.add('preview-body--design-mode');
-    chrome?.removeAttribute('hidden');
     const tabId = getActivePreviewTabId();
     if (tabId) {
       const tab = getPreviewTab(tabId);
@@ -306,9 +326,9 @@ async function syncDesignModeElectronGuest(): Promise<void> {
     }
   } else {
     body.classList.remove('preview-body--design-mode');
-    chrome?.setAttribute('hidden', '');
     if (usesElectronPreview()) {
-      // Native WebContentsView takes over — park every DOM iframe.
+      // Native WebContentsView is the guest (Design Mode off, or cross-origin Select where CDP
+      // inspect needs the native view visible and on top). Park every DOM iframe.
       for (const frame of iframesByTabId.values()) {
         frame.hidden = true;
       }
@@ -337,11 +357,12 @@ async function toggleDesignModeFromToolbar(): Promise<void> {
 
   getDesignToggleButton()?.setAttribute('aria-pressed', 'true');
   getDesignToggleButton()?.classList.add('is-active');
-  await enableDesignMode(
-    resolveDesignModeMountOptions(host, pane, getPreviewDesignChrome(), () =>
+  await enableDesignMode({
+    ...resolveDesignModeMountOptions(host, pane, getPreviewDesignChrome(), () =>
       void toggleDesignModeFromToolbar(),
     ),
-  );
+    onArmedToolChange: () => void syncDesignModeElectronGuest(),
+  });
   await syncDesignModeElectronGuest();
 }
 
@@ -364,11 +385,12 @@ export async function openPreviewPageAndEnableDesignMode(pageUrl: string): Promi
 
   getDesignToggleButton()?.setAttribute('aria-pressed', 'true');
   getDesignToggleButton()?.classList.add('is-active');
-  await enableDesignMode(
-    resolveDesignModeMountOptions(host, pane, getPreviewDesignChrome(), () =>
+  await enableDesignMode({
+    ...resolveDesignModeMountOptions(host, pane, getPreviewDesignChrome(), () =>
       void toggleDesignModeFromToolbar(),
     ),
-  );
+    onArmedToolChange: () => void syncDesignModeElectronGuest(),
+  });
   await syncDesignModeElectronGuest();
 }
 
