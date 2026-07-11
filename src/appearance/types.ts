@@ -40,6 +40,8 @@ export type CustomThemeTokens = Partial<Record<CoreThemeTokenKey, string>>;
 export const APPEARANCE_STORAGE_KEYS = {
   customEnabled: 'minnow.appearance.customEnabled',
   customTokens: 'minnow.appearance.customTokens',
+  /** `'1'` when the full per-token editor is active (vs simplified seeds). */
+  customAdvanced: 'minnow.appearance.customAdvanced',
   fonts: 'minnow.appearance.fonts',
 } as const;
 
