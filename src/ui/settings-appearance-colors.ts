@@ -236,14 +236,18 @@ export function appendAppearanceCustomColors(mount: HTMLElement): void {
   function setEditorDisabled(disabled: boolean): void {
     for (const control of simplifiedControls.values()) control.setDisabled(disabled);
     for (const control of advancedControls.values()) control.setDisabled(disabled);
-    advancedInput.disabled = disabled;
   }
 
   function updateEditorVisibility(): void {
+    const enabled = enableInput.checked;
     const advanced = advancedInput.checked;
-    simplifiedIntro.hidden = advanced;
-    simplifiedGrid.hidden = advanced;
-    advancedGrid.hidden = !advanced;
+
+    advancedRow.hidden = !enabled;
+    simplifiedIntro.hidden = !enabled || advanced;
+    simplifiedGrid.hidden = !enabled || advanced;
+    advancedGrid.hidden = !enabled || !advanced;
+    warningsMount.hidden = !enabled;
+    actions.hidden = !enabled;
   }
 
   function syncInputsFromStorage(): void {
@@ -263,7 +267,6 @@ export function appendAppearanceCustomColors(mount: HTMLElement): void {
 
     const disabled = !enableInput.checked;
     setEditorDisabled(disabled);
-    advancedRow.classList.toggle('is-disabled', disabled);
     updateEditorVisibility();
     refreshWarnings();
   }

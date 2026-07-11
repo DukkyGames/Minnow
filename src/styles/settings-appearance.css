@@ -368,6 +368,24 @@
 
 
 
+/* `display: grid` / `display: flex` override the native [hidden] rule */
+
+.settings-appearance-simplified[hidden],
+
+.settings-appearance-simplified__hint[hidden],
+
+.settings-appearance-color-grid[hidden],
+
+.settings-appearance-warnings[hidden],
+
+.settings-actions[hidden] {
+
+  display: none !important;
+
+}
+
+
+
 .settings-appearance-simplified__hint {
 
   margin: 10px 0 0;
