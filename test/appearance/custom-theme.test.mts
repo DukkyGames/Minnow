@@ -11,9 +11,11 @@ import {
   exportCustomThemeJson,
   getCustomThemeTokens,
   importCustomThemeJson,
+  isCustomThemeAdvanced,
   isCustomThemeEnabled,
   replaceCustomThemeTokens,
   resetCustomThemeForTests,
+  setCustomThemeAdvanced,
   setCustomThemeEnabled,
   setCustomThemeTokens,
 } from '../../src/appearance/custom-theme.ts';
@@ -102,5 +104,25 @@ describe('custom-theme', () => {
     mockLocalStorage();
     setCustomThemeEnabled(false);
     assert.equal(storage.has(APPEARANCE_STORAGE_KEYS.customEnabled), false);
+  });
+
+  test('setCustomThemeAdvanced persists advanced editor flag', () => {
+    mockLocalStorage();
+    assert.equal(isCustomThemeAdvanced(), false);
+    setCustomThemeAdvanced(true);
+    assert.equal(isCustomThemeAdvanced(), true);
+    assert.equal(storage.get(APPEARANCE_STORAGE_KEYS.customAdvanced), '1');
+  });
+
+  test('import JSON enables advanced editor mode', () => {
+    mockLocalStorage();
+    mockDocument();
+    const json = JSON.stringify({
+      version: 1,
+      enabled: true,
+      tokens: { bg: '#101010', accent: '#aabbcc' },
+    });
+    assert.equal(importCustomThemeJson(json), true);
+    assert.equal(isCustomThemeAdvanced(), true);
   });
 });

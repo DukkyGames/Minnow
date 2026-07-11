@@ -8,6 +8,8 @@ import net from 'node:net';
 import path from 'node:path';
 import {
   createBackgroundRun,
+  getRun,
+  readRunLogTail,
   stopActiveRun,
 } from '../terminal-runner.js';
 import {
@@ -124,26 +126,61 @@ async function pickFreePort(preferred = 8085) {
 }
 
 /**
- * @param {string} baseUrl
+ * Pull a short, user-facing snippet from llama-server stderr/stdout.
+ * @param {string | null} tail
  */
-async function waitForHealth(baseUrl, timeoutMs = 60_000) {
+function summarizeLlamaLogTail(tail) {
+  if (!tail) return '';
+  const lines = tail
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const interesting = lines
+    .filter((line) => /error|fatal|usage:/i.test(line))
+    .slice(-3);
+  const excerpt = (interesting.length ? interesting : lines.slice(-2)).join(' ');
+  return excerpt.slice(0, 280);
+}
+
+/**
+ * @param {string} baseUrl
+ * @param {number} [timeoutMs]
+ * @param {string} [runId]
+ * @returns {Promise<{ ok: true } | { ok: false, error: string }>}
+ */
+async function waitForHealth(baseUrl, timeoutMs = 60_000, runId) {
   if (waitForHealthOverrideForTests) {
-    return waitForHealthOverrideForTests(baseUrl);
+    const ok = await waitForHealthOverrideForTests(baseUrl);
+    if (ok) return { ok: true };
+    return { ok: false, error: 'llama-server did not become healthy in time' };
   }
   const deadline = Date.now() + timeoutMs;
   const urls = [`${baseUrl}/health`, `${baseUrl}/v1/models`];
   while (Date.now() < deadline) {
+    if (runId) {
+      const run = getRun(runId);
+      if (run?.finished) {
+        const tail = await readRunLogTail(runId, 4096);
+        const detail = summarizeLlamaLogTail(tail);
+        return {
+          ok: false,
+          error: detail
+            ? `llama-server exited: ${detail}`
+            : 'llama-server exited before becoming healthy',
+        };
+      }
+    }
     for (const url of urls) {
       try {
         const res = await fetch(url, { signal: AbortSignal.timeout(2_500) });
-        if (res.ok) return true;
+        if (res.ok) return { ok: true };
       } catch {
         /* retry */
       }
     }
     await new Promise((r) => setTimeout(r, 1_000));
   }
-  return false;
+  return { ok: false, error: 'llama-server did not become healthy in time' };
 }
 
 /**
@@ -386,11 +423,11 @@ export async function startServe(body) {
   row.pid = run.pid;
   await saveServes();
 
-  const healthy = await waitForHealth(baseUrl);
-  if (!healthy) {
+  const healthy = await waitForHealth(baseUrl, 60_000, run.runId);
+  if (!healthy.ok) {
     await stopActiveRun(run.runId);
     row.status = 'error';
-    row.error = 'llama-server did not become healthy in time';
+    row.error = healthy.error;
     row.stoppedAt = Date.now();
     await saveServes();
     throw new Error(row.error);

@@ -317,6 +317,27 @@ async function renderGeneralSection(): Promise<void> {
   network.id = 'settingsNetworkAccess';
   await renderNetworkAccessSettings(network);
 
+  const setup = appendSettingsGroup(
+    mount,
+    'Setup wizard',
+    'Re-run the first-launch setup flow (theme, provider, permissions).',
+    'general.onboarding',
+  );
+  setup.appendChild(
+    createSettingsActionsRow(
+      [
+        {
+          label: 'Run setup again',
+          variant: 'primary',
+          onClick: () => {
+            void import('../onboarding').then((m) => m.rerunOnboardingFromSettings());
+          },
+        },
+      ],
+      { searchKey: 'general.onboarding' },
+    ),
+  );
+
   const crossAppearance = el('div', 'settings-crosslinks');
   crossAppearance.appendChild(el('span', 'settings-crosslinks__label', 'Related'));
   crossAppearance.append(linkToSettingsSection('Appearance', 'appearance'));

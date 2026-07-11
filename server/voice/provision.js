@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import { createVenv, runProcess } from '../servers/provisioner.js';
+import { createVenv, pipSpawnOptions, runProcess } from '../servers/provisioner.js';
 import { ensureStandalonePython } from '../servers/searxng.js';
 import { detectHardware } from '../system/hardware.js';
 import { getVoiceMetaPath, getVoiceRoot, getVoiceVenvDir } from './paths.js';
@@ -77,9 +77,11 @@ async function maybeUninstallCpuTorch(venvPython, cudaAvailable, meta, onProgres
   if (!cudaAvailable || !metaHasCpuTorch(meta)) return;
   onProgress?.('Removing CPU-only PyTorch before installing CUDA build');
   try {
-    await runProcess(venvPython, ['-m', 'pip', 'uninstall', '-y', 'torch', 'torchaudio'], {
-      windowsHide: true,
-    });
+    await runProcess(
+      venvPython,
+      ['-m', 'pip', 'uninstall', '-y', 'torch', 'torchaudio'],
+      pipSpawnOptions(),
+    );
   } catch {
     /* torch may already be absent */
   }
@@ -196,8 +198,18 @@ async function pinTorchStack(venvPython, cudaAvailable, onProgress) {
   onProgress?.(`Pinning ${label}`);
   await runProcess(
     venvPython,
-    ['-m', 'pip', 'install', '--force-reinstall', 'torch', 'torchaudio', '--index-url', index],
-    { windowsHide: true },
+    [
+      '-m',
+      'pip',
+      'install',
+      '--no-input',
+      '--force-reinstall',
+      'torch',
+      'torchaudio',
+      '--index-url',
+      index,
+    ],
+    pipSpawnOptions(),
   );
 }
 
@@ -270,11 +282,12 @@ async function writeMeta(meta) {
  */
 async function ensurePip(venvPython, onProgress) {
   onProgress?.('Upgrading pip');
-  await runProcess(venvPython, ['-m', 'ensurepip', '--upgrade'], { windowsHide: true });
+  const spawnOpts = pipSpawnOptions();
+  await runProcess(venvPython, ['-m', 'ensurepip', '--upgrade'], spawnOpts);
   await runProcess(
     venvPython,
-    ['-m', 'pip', 'install', '--upgrade', 'pip', 'wheel', 'setuptools'],
-    { windowsHide: true },
+    ['-m', 'pip', 'install', '--upgrade', '--no-input', 'pip', 'wheel', 'setuptools'],
+    spawnOpts,
   );
 }
 
@@ -289,8 +302,8 @@ async function pipInstallPackage(venvPython, pkg, onProgress) {
   try {
     await runProcess(
       venvPython,
-      ['-m', 'pip', 'install', ...pkg.args],
-      { windowsHide: true, ...pkg.spawnOptions },
+      ['-m', 'pip', 'install', '--no-input', ...pkg.args],
+      pipSpawnOptions(pkg.spawnOptions ?? {}),
     );
   } catch (err) {
     if (pkg.optional) {
@@ -321,8 +334,8 @@ async function maybeInstallFlashAttn(venvPython, cudaAvailable, onProgress) {
   try {
     await runProcess(
       venvPython,
-      ['-m', 'pip', 'install', 'flash-attn', '--no-build-isolation'],
-      { windowsHide: true, env },
+      ['-m', 'pip', 'install', '--no-input', 'flash-attn', '--no-build-isolation'],
+      pipSpawnOptions({ env }),
     );
     return true;
   } catch (err) {
@@ -415,7 +428,8 @@ export async function provision(onProgress) {
 export async function getInstallStatus() {
   const venvPython = venvPythonPath(getVoiceVenvDir());
   const meta = await readMeta();
-  const installed = fs.existsSync(venvPython);
+  // Require meta.installedAt — venv may exist mid-provision before pip/deps finish.
+  const installed = fs.existsSync(venvPython) && Boolean(meta?.installedAt);
   const torchVariant =
     meta?.torchVariant === 'cuda' || meta?.torchVariant === 'cpu' ? meta.torchVariant : null;
   return {
