@@ -180,8 +180,11 @@ export function buildLlamaServerArgs(opts) {
     args.push('--main-gpu', String(merged.main_gpu));
   }
 
+  // llama-server expects `--fit on|off`, not a bare boolean flag.
   if (merged.fit === true) {
-    args.push('--fit');
+    args.push('--fit', 'on');
+  } else if (merged.fit === false) {
+    args.push('--fit', 'off');
   }
 
   if (merged.no_warmup === true) {

@@ -57,6 +57,20 @@ export function isCustomThemeEnabled(): boolean {
   return readStorage(APPEARANCE_STORAGE_KEYS.customEnabled) === '1';
 }
 
+/** Whether the per-token advanced editor is active (false = simplified seed mode). */
+export function isCustomThemeAdvanced(): boolean {
+  return readStorage(APPEARANCE_STORAGE_KEYS.customAdvanced) === '1';
+}
+
+/** Persist simplified vs advanced custom color editor mode. */
+export function setCustomThemeAdvanced(advanced: boolean): void {
+  if (advanced) {
+    writeStorage(APPEARANCE_STORAGE_KEYS.customAdvanced, '1');
+  } else {
+    removeStorage(APPEARANCE_STORAGE_KEYS.customAdvanced);
+  }
+}
+
 /** Read stored custom token map (may be partial). */
 export function getCustomThemeTokens(): CustomThemeTokens {
   const raw = readStorage(APPEARANCE_STORAGE_KEYS.customTokens);
@@ -150,6 +164,7 @@ export function replaceCustomThemeTokens(tokens: CustomThemeTokens): void {
 export function resetCustomTheme(): void {
   removeStorage(APPEARANCE_STORAGE_KEYS.customTokens);
   removeStorage(APPEARANCE_STORAGE_KEYS.customEnabled);
+  removeStorage(APPEARANCE_STORAGE_KEYS.customAdvanced);
   clearCustomTheme();
   emitChange();
 }
@@ -204,6 +219,7 @@ export function importCustomThemeJson(raw: string): boolean {
     }
     replaceCustomThemeTokens(tokens);
     setCustomThemeEnabled(data.enabled !== false);
+    setCustomThemeAdvanced(true);
     return true;
   } catch {
     return false;
