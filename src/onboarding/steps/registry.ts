@@ -8,21 +8,17 @@ import { themeStep } from './theme';
 import {
   providerChoiceStep,
   providerLocalStep,
-  providerManagedStep,
   providerCloudStep,
 } from './provider';
+import { providerManagedStep } from './managed';
 import { modelPickStep } from './model';
-import {
-  permissionsStep,
-  memoryStep,
-  extrasStep,
-  emailStep,
-  calendarStep,
-  apiKeysStep,
-  explainerStep,
-  demoChatStep,
-  doneStep,
-} from './remaining';
+import { extrasStep } from './extras';
+import { emailStep } from './email';
+import { calendarStep } from './calendar';
+import { apiKeysStep } from './api-keys';
+import { explainerStep } from './explainer';
+import { demoChatStep } from './demo-chat';
+import { permissionsStep, memoryStep, doneStep } from './remaining';
 
 /** Full wizard step order; controller filters with isApplicable. */
 export const ONBOARDING_STEPS: OnboardingStep[] = [

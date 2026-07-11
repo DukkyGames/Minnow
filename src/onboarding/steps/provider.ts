@@ -197,60 +197,7 @@ export const providerLocalStep: OnboardingStep = {
   },
 };
 
-export const providerManagedStep: OnboardingStep = {
-  id: 'provider-managed',
-  title: 'Managed models',
-  canSkip: true,
-
-  isApplicable(ctx) {
-    return ctx.providerPath === 'managed';
-  },
-
-  render(container, ctx, actions) {
-    container.innerHTML = '';
-    container.className = 'mn-onboarding-step';
-
-    renderStepHeader(container, providerManagedStep, actions.stepIndex, actions.totalSteps);
-    if (!ctx.serverAvailable) {
-      container.appendChild(
-        el(
-          'p',
-          'mn-onboarding-notice',
-          'Local installs need npm start. You can finish theme and permissions now, then run setup again later.',
-        ),
-      );
-      actions.setPrimaryEnabled(true);
-      actions.setPrimaryLabel('Continue');
-      return;
-    }
-
-    container.appendChild(
-      el(
-        'p',
-        'mn-onboarding-step-desc',
-        'Open the Models app to download and serve a GGUF. We will pick your default model on the next screen.',
-      ),
-    );
-
-    const openBtn = el('button', 'mn-onboarding-secondary-btn', 'Open Models app');
-    openBtn.type = 'button';
-    openBtn.addEventListener('click', () => {
-      void import('../../os/app-host').then((m) => m.launchApp('models'));
-    });
-    container.appendChild(openBtn);
-
-    actions.setPrimaryEnabled(true);
-    actions.setPrimaryLabel('Continue');
-  },
-
-  commit(ctx) {
-    ctx.state = recordStepProgress(ctx.state, 'provider-managed', {
-      done: true,
-      skipped: !ctx.serverAvailable,
-      data: { path: 'managed' },
-    });
-  },
-};
+export { providerManagedStep } from './managed';
 
 export const providerCloudStep: OnboardingStep = {
   id: 'provider-cloud',
@@ -356,7 +303,7 @@ async function ensureOnboardingProvider(
   payload: CreateProviderPayload,
 ): Promise<{ ok: true; provider: ProviderPublic } | { ok: false; error: string }> {
   const created = await createProvider(payload);
-  if (!created.ok) {
+  if (created.ok === false) {
     if (!created.error.includes('already exists')) {
       return created;
     }
@@ -404,7 +351,7 @@ async function testLocalConnection(
     chatCompletionsPath: paths.chatCompletionsPath,
   });
 
-  if (!result.ok) {
+  if (result.ok === false) {
     connectionStatus = 'err';
     connectionError = result.error;
     actions.setPrimaryEnabled(false);
@@ -451,7 +398,7 @@ async function testCloudConnection(
     chatCompletionsPath: paths.chatCompletionsPath,
   });
 
-  if (!result.ok) {
+  if (result.ok === false) {
     connectionStatus = 'err';
     connectionError = result.error;
     actions.setPrimaryEnabled(false);
@@ -460,7 +407,7 @@ async function testCloudConnection(
   }
 
   const keyRes = await updateProviderSecrets(id, { apiKey: cloudApiKey });
-  if (!keyRes.ok) {
+  if (keyRes.ok === false) {
     connectionStatus = 'err';
     connectionError = keyRes.error;
     actions.setPrimaryEnabled(false);

@@ -8,7 +8,7 @@ import { navigateToSettingsField } from '../ui/settings-page';
 import { mountStepSidebar, type StepSidebarHandle } from './step-sidebar';
 import { getApplicableSteps, resolveStepIndex, ONBOARDING_STEPS } from './steps/registry';
 import { warmProviderProbes } from './steps/provider';
-import { advanceExplainerPanel } from './steps/remaining';
+import { advanceExplainerPanel } from './steps/explainer';
 import {
   buildOnboardingContext,
   loadOnboardingState,
@@ -249,7 +249,11 @@ async function goNext(): Promise<void> {
   await step.commit(ctx);
   await saveOnboardingState(ctx.state);
 
-  if (step.id === 'provider-choice') {
+  if (step.id === 'extras') {
+    ctx.searxngSkipped = Boolean(ctx.state.steps.extras?.data?.searxngSkipped);
+  }
+
+  if (step.id === 'provider-choice' || step.id === 'extras') {
     applicableSteps = getApplicableSteps(ctx);
   }
 

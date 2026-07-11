@@ -1,5 +1,5 @@
 /**
- * S5, S6, S10, S12 and placeholder steps for integrations not yet wired.
+ * S5, S6, S12 — permissions, memory, and finish steps.
  */
 
 import { setAllBuiltInToolPermissions } from '../../tools/config';
@@ -113,156 +113,6 @@ export const memoryStep: OnboardingStep = {
   },
 };
 
-const EXPLAINER_PANELS = [
-  {
-    title: 'Brain',
-    body: 'Your local wiki and memory graph. Minnow reads it before answering and files new facts into it.',
-  },
-  {
-    title: 'Deep Research',
-    body: 'A sub-agent searches the web, reads sources, and writes a cited synthesis.',
-  },
-  {
-    title: 'Experts',
-    body: 'Purpose-built agent personas you compose, run, and evaluate.',
-  },
-  {
-    title: 'Code',
-    body: 'A real workspace: files, git, terminal, dev server, and editor.',
-  },
-  {
-    title: 'Email',
-    body: 'Read-only inbox sync with AI triage. Nothing sends without you clicking send.',
-  },
-  {
-    title: 'Tools and /commands',
-    body: 'Tool calls appear inline in chat. Slash commands load skills on demand.',
-  },
-];
-
-let explainerIndex = 0;
-
-export const explainerStep: OnboardingStep = {
-  id: 'explainer',
-  title: 'How Minnow works',
-  canSkip: true,
-  isApplicable: () => true,
-  render(container, _ctx, actions) {
-    container.innerHTML = '';
-    container.className = 'mn-onboarding-step mn-onboarding-step--explainer';
-    const panel = EXPLAINER_PANELS[explainerIndex] ?? EXPLAINER_PANELS[0];
-
-    renderStepHeader(container, explainerStep, actions.stepIndex, actions.totalSteps);
-
-    const card = el('div', 'mn-onboarding-explainer-card');
-    card.appendChild(el('h3', 'mn-onboarding-subtitle', panel.title));
-    card.appendChild(el('p', 'mn-onboarding-explainer-body', panel.body));
-    container.appendChild(card);
-
-    const nav = el('div', 'mn-onboarding-explainer-nav');
-
-    const dots = el('div', 'mn-onboarding-explainer-dots');
-    EXPLAINER_PANELS.forEach((_, i) => {
-      const dot = el('button', 'mn-onboarding-explainer-dot');
-      dot.type = 'button';
-      dot.setAttribute('aria-label', `Panel ${i + 1}`);
-      if (i === explainerIndex) dot.classList.add('is-active');
-      dot.addEventListener('click', () => {
-        explainerIndex = i;
-        explainerStep.render(container, _ctx, actions);
-      });
-      dots.appendChild(dot);
-    });
-
-    const counter = el(
-      'span',
-      'mn-onboarding-explainer-counter',
-      `${explainerIndex + 1} / ${EXPLAINER_PANELS.length}`,
-    );
-
-    nav.append(dots, counter);
-    container.appendChild(nav);
-
-    actions.setPrimaryLabel(
-      explainerIndex >= EXPLAINER_PANELS.length - 1 ? 'Continue' : 'Next panel',
-    );
-    actions.setPrimaryEnabled(true);
-  },
-  commit(ctx) {
-    ctx.state = recordStepProgress(ctx.state, 'explainer', { done: true });
-    explainerIndex = 0;
-  },
-};
-
-/** Advance explainer panels without leaving the step. Returns true when advanced. */
-export function advanceExplainerPanel(): boolean {
-  if (explainerIndex >= EXPLAINER_PANELS.length - 1) return false;
-  explainerIndex += 1;
-  return true;
-}
-
-function makePlaceholderStep(
-  id: OnboardingStep['id'],
-  title: string,
-  message: string,
-): OnboardingStep {
-  const step: OnboardingStep = {
-    id,
-    title,
-    canSkip: true,
-    isApplicable(ctx) {
-      if (id === 'api-keys') return ctx.searxngSkipped;
-      if (id === 'demo-chat') return Boolean(ctx.providerId && ctx.modelId);
-      return true;
-    },
-    render(container, _ctx, actions) {
-      container.innerHTML = '';
-      container.className = 'mn-onboarding-step';
-      renderStepHeader(container, step, actions.stepIndex, actions.totalSteps);
-      container.appendChild(el('p', 'mn-onboarding-step-desc', message));
-      container.appendChild(
-        el('p', 'mn-onboarding-muted', 'Set up later in Settings, or skip this step now.'),
-      );
-      actions.setPrimaryLabel('Continue');
-      actions.setPrimaryEnabled(true);
-    },
-    commit(ctx) {
-      ctx.state = recordStepProgress(ctx.state, id, { skipped: true });
-    },
-  };
-  return step;
-}
-
-export const extrasStep = makePlaceholderStep(
-  'extras',
-  'Install extras',
-  'SearXNG, embeddings, voice, and llama.cpp runtime installs ship in the next phase.',
-);
-
-export const emailStep = makePlaceholderStep(
-  'email',
-  'Email',
-  'Connect IMAP in Settings when you are ready.',
-);
-
-export const calendarStep = makePlaceholderStep(
-  'calendar',
-  'Calendar',
-  'CalDAV and local calendar live in Settings.',
-);
-
-export const apiKeysStep = makePlaceholderStep(
-  'api-keys',
-  'Search API keys',
-  'Add Tavily or Brave keys if you skipped private web search.',
-);
-
-export const demoChatStep = makePlaceholderStep(
-  'demo-chat',
-  'Demo chat',
-  'A guided chat that seeds your Brain arrives in Phase 4. Skip for now.',
-);
-
 export const doneStep: OnboardingStep = {
   id: 'done',
   title: 'You are set up',
@@ -283,10 +133,25 @@ export const doneStep: OnboardingStep = {
     const checklist = el('ul', 'mn-onboarding-checklist');
     const rows: [string, boolean][] = [
       ['Theme', Boolean(ctx.state.steps.theme?.done)],
-      ['Provider', Boolean(ctx.state.steps['provider-local']?.done || ctx.state.steps['provider-cloud']?.done)],
-      ['Model', Boolean(ctx.state.steps['model-pick']?.done)],
+      [
+        'Provider',
+        Boolean(
+          ctx.state.steps['provider-local']?.done ||
+            ctx.state.steps['provider-cloud']?.done ||
+            ctx.state.steps['provider-managed']?.done,
+        ),
+      ],
+      [
+        'Model',
+        Boolean(ctx.state.steps['model-pick']?.done || ctx.state.steps['provider-managed']?.done),
+      ],
+      ['Extras', Boolean(ctx.state.steps.extras?.done)],
       ['Tool permissions', Boolean(ctx.state.steps.permissions?.done)],
       ['Memory and Brain', Boolean(ctx.state.steps.memory?.done)],
+      ['Email', Boolean(ctx.state.steps.email?.done)],
+      ['Calendar', Boolean(ctx.state.steps.calendar?.done)],
+      ['Tour', Boolean(ctx.state.steps.explainer?.done)],
+      ['Demo chat', Boolean(ctx.state.steps['demo-chat']?.done)],
     ];
     rows.forEach(([label, ok]) => {
       const li = el('li', 'mn-onboarding-checklist__row');
