@@ -20,12 +20,16 @@ import {
   createSelectDesignTool,
   createDrawDesignTool,
   createCommentDesignTool,
-  BUILTIN_DESIGN_TOOL_IDS,
+  clearAllDesignModeMarks,
   type BuiltinDesignToolId,
   type DesignTool,
   type DesignToolContext,
   type DesignToolPointerEvent,
+  type DrawDesignTool,
+  type SelectDesignTool,
 } from './design-tool';
+import { createPickerTransport } from './element-picker';
+import type { ShapeKind } from './shape-model';
 import {
   DEFAULT_DESIGN_INSTANCE_META,
   loadDesignInstanceMeta,
@@ -51,13 +55,28 @@ export interface DesignModeMountOptions {
   /** Host element the overlay/strip mount into — must be the guest's bounds-source element. */
   host: HTMLElement;
   /**
-   * Optional footer outside the guest bounds (e.g. `#previewDesignChrome`). The tool strip
-   * mounts here when provided so it stays above Electron WebContentsView, which paints over DOM
-   * inside `#previewBody`.
+   * @deprecated Strip relocation is handled by preview-panel (`relocateDesignModeStrip`).
+   * The strip always mounts in `host` first.
    */
   chromeHost?: HTMLElement;
   /** Keyboard-shortcut scope; defaults to `host` when omitted. */
   paneElement?: HTMLElement;
+  /**
+   * Called when the user exits Design Mode from the strip's close button. Hosts that own extra
+   * teardown (toolbar toggle state, Electron guest swap) pass their own toggle here; when
+   * omitted the strip falls back to disableDesignMode(instanceId).
+   */
+  onExit?: () => void;
+  /**
+   * Called with the newly-armed tool id (or null on disarm) whenever the armed tool changes.
+   * The Electron host uses this to pick the guest strategy on cross-origin previews: element
+   * Select needs the native WebContentsView visible for CDP inspect, while Draw/Comment want
+   * the iframe guest so their DOM overlay stacks on top. Fired on both user arms and the
+   * persisted-tool restore during enable.
+   */
+  onArmedToolChange?: (toolId: string | null) => void | Promise<void>;
+  /** Called after the strip's Clear all button wipes marks on the current page (host refreshes panel). */
+  onClearAll?: () => void;
 }
 
 export interface DesignModeSession {
@@ -72,6 +91,7 @@ export interface DesignModeSession {
   getViewportPreset(): DesignViewportPreset;
   setDarkModeEmulation(on: boolean): void;
   getDarkModeEmulation(): boolean;
+  clearAll(): Promise<void>;
   destroy(): void;
 }
 
@@ -79,6 +99,8 @@ interface InternalSession extends DesignModeSession {
   captureLayer: HTMLElement;
   armedTool: DesignTool | null;
   armedToolId: string | null;
+  onExit?: () => void;
+  onClearAll?: () => void;
 }
 
 const sessions = new Map<string, InternalSession>();
@@ -89,6 +111,24 @@ export function isDesignModeEnabled(instanceId: string): boolean {
 
 export function getDesignModeSession(instanceId: string): DesignModeSession | undefined {
   return sessions.get(instanceId);
+}
+
+/**
+ * Re-bind the Select tool's picker after the preview guest reloads or swaps between the iframe
+ * and native WebContentsView (workspace HTML auto-reload, arming Select on a cross-origin URL).
+ */
+export function refreshDesignModeArmedToolGuest(instanceId: string): void {
+  const session = sessions.get(instanceId);
+  if (!session || session.armedToolId !== 'select' || !session.armedTool) return;
+  const refresh = (session.armedTool as SelectDesignTool).refreshGuestBinding;
+  if (typeof refresh === 'function') refresh();
+}
+
+/** Move the tool strip between #previewBody (overlay) and #previewDesignChrome (Electron footer). */
+export function relocateDesignModeStrip(instanceId: string, stripHost: HTMLElement): void {
+  const session = sessions.get(instanceId);
+  if (!session || session.strip.parentElement === stripHost) return;
+  stripHost.appendChild(session.strip);
 }
 
 /** Host-space pointer coordinates (CSS px), matching overlay.ts's own local-point mapping. */
@@ -107,10 +147,15 @@ function toToolEvent(host: HTMLElement, ev: PointerEvent): DesignToolPointerEven
   return { x, y, raw: ev };
 }
 
-/** Pass-through unless a tool is armed — this is the whole "leave the guest untouched" contract. */
+/**
+ * Pass-through unless a capture-mode tool is armed — this is the whole "leave the guest
+ * untouched" contract. Passthrough tools (Select) keep the guest interactive: their picker
+ * listens inside the guest document and would never see a click this layer swallowed.
+ */
 function applyCaptureMode(session: InternalSession): void {
-  session.captureLayer.style.pointerEvents = session.armedTool ? 'auto' : 'none';
-  session.captureLayer.style.cursor = session.armedTool ? 'crosshair' : '';
+  const captures = Boolean(session.armedTool) && session.armedTool?.pointerMode !== 'passthrough';
+  session.captureLayer.style.pointerEvents = captures ? 'auto' : 'none';
+  session.captureLayer.style.cursor = captures ? 'crosshair' : '';
 }
 
 function buildCaptureLayer(host: HTMLElement, session: InternalSession): HTMLElement {
@@ -119,12 +164,28 @@ function buildCaptureLayer(host: HTMLElement, session: InternalSession): HTMLEle
   layer.style.cssText = 'position:absolute;inset:0;z-index:3;pointer-events:none;';
 
   const onPointerDown = (ev: PointerEvent): void => {
+    // Keep the drag alive when the pointer leaves the host mid-stroke; without capture the
+    // pointerup lands elsewhere and the tool's drag state sticks.
+    if (typeof layer.setPointerCapture === 'function') {
+      try {
+        layer.setPointerCapture(ev.pointerId);
+      } catch {
+        /* pointer may already be gone */
+      }
+    }
     session.armedTool?.onPointerDown?.(toToolEvent(host, ev));
   };
   const onPointerMove = (ev: PointerEvent): void => {
     session.armedTool?.onPointerMove?.(toToolEvent(host, ev));
   };
   const onPointerUp = (ev: PointerEvent): void => {
+    if (typeof layer.releasePointerCapture === 'function') {
+      try {
+        layer.releasePointerCapture(ev.pointerId);
+      } catch {
+        /* not captured */
+      }
+    }
     session.armedTool?.onPointerUp?.(toToolEvent(host, ev));
   };
 
@@ -137,19 +198,80 @@ function buildCaptureLayer(host: HTMLElement, session: InternalSession): HTMLEle
   return layer;
 }
 
-function toolButtonLabel(id: BuiltinDesignToolId): string {
+/** Tool ids the strip renders buttons for. Inspect stays registry-only until it does something. */
+const STRIP_TOOL_IDS = ['select', 'draw', 'comment'] as const satisfies readonly BuiltinDesignToolId[];
+
+const DRAW_SHAPE_KINDS: readonly ShapeKind[] = ['rect', 'pen', 'arrow', 'label'];
+
+/** Stroke-icon markup (24 viewBox, currentColor) matching the app's toolbar icon style. */
+const STRIP_ICONS: Record<string, string> = {
+  select: '<path d="M4 4l7.07 17 2.51-7.39L21 11.07z"/>',
+  draw: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
+  comment:
+    '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
+  mobile: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
+  tablet: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M11 18h2"/>',
+  desktop: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>',
+  dark: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
+  exit: '<path d="M18 6L6 18M6 6l12 12"/>',
+  undo: '<path d="M9 14L4 9l5-5"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/>',
+  clear:
+    '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
+  rect: '<rect x="4" y="6" width="16" height="12" rx="2"/>',
+  pen: '<path d="M17 3a2.83 2.83 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>',
+  arrow: '<path d="M7 17L17 7"/><path d="M8 7h9v9"/>',
+  label: '<path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>',
+};
+
+function stripButton(icon: string, label: string, className = ''): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = `${STRIP_CLASS}__btn${className ? ` ${className}` : ''}`;
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${STRIP_ICONS[icon] ?? ''}</svg>`;
+  return btn;
+}
+
+function stripSeparator(): HTMLElement {
+  const sep = document.createElement('span');
+  sep.className = `${STRIP_CLASS}__sep`;
+  sep.setAttribute('aria-hidden', 'true');
+  return sep;
+}
+
+function toolButtonLabel(id: string): string {
   switch (id) {
     case 'select':
-      return 'Select (V)';
+      return 'Select element (V)';
     case 'draw':
       return 'Draw (P)';
     case 'comment':
       return 'Comment (C)';
-    case 'inspect':
-      return 'Inspect';
     default:
       return id;
   }
+}
+
+function shapeKindLabel(kind: ShapeKind): string {
+  switch (kind) {
+    case 'rect':
+      return 'Rectangle';
+    case 'pen':
+      return 'Freehand pen';
+    case 'arrow':
+      return 'Arrow';
+    case 'label':
+      return 'Text label';
+  }
+}
+
+function getDrawTool(): DrawDesignTool | null {
+  const tool = getDesignTool('draw');
+  if (tool && typeof (tool as DrawDesignTool).setShapeKind === 'function') {
+    return tool as DrawDesignTool;
+  }
+  return null;
 }
 
 function buildStrip(session: InternalSession): HTMLElement {
@@ -157,50 +279,87 @@ function buildStrip(session: InternalSession): HTMLElement {
   strip.className = STRIP_CLASS;
   strip.setAttribute('role', 'toolbar');
   strip.setAttribute('aria-label', 'Design Mode tools');
-  strip.style.cssText = 'position:absolute;z-index:4;pointer-events:auto;';
+
+  const row = document.createElement('div');
+  row.className = `${STRIP_CLASS}__row`;
+  strip.appendChild(row);
 
   const tools = document.createElement('div');
   tools.className = `${STRIP_CLASS}__tools`;
-  for (const id of BUILTIN_DESIGN_TOOL_IDS) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = `${STRIP_CLASS}__btn`;
+  for (const id of STRIP_TOOL_IDS) {
+    const btn = stripButton(id, toolButtonLabel(id));
     btn.dataset.tool = id;
     btn.setAttribute('aria-pressed', 'false');
-    btn.title = toolButtonLabel(id);
-    btn.textContent = toolButtonLabel(id).replace(/\s*\(.*\)$/, '');
     btn.addEventListener('click', () => {
       if (session.armedToolId === id) session.disarmTool();
       else session.armTool(id);
     });
     tools.appendChild(btn);
   }
-  strip.appendChild(tools);
+  row.appendChild(tools);
+  row.appendChild(stripSeparator());
 
   const viewportGroup = document.createElement('div');
   viewportGroup.className = `${STRIP_CLASS}__viewports`;
   (['mobile', 'tablet', 'desktop'] as DesignViewportPreset[]).forEach((preset) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = `${STRIP_CLASS}__btn`;
+    const label =
+      preset === 'desktop'
+        ? 'Desktop (full width)'
+        : `${preset[0]!.toUpperCase()}${preset.slice(1)} (${VIEWPORT_WIDTHS[preset]}px)`;
+    const btn = stripButton(preset, label);
     btn.dataset.viewport = preset;
     btn.setAttribute('aria-pressed', String(preset === session.getViewportPreset()));
-    btn.title =
-      preset === 'desktop' ? 'Desktop (full width)' : `${preset[0]!.toUpperCase()}${preset.slice(1)} (${VIEWPORT_WIDTHS[preset]}px)`;
-    btn.textContent = preset[0]!.toUpperCase() + preset.slice(1);
     btn.addEventListener('click', () => session.setViewportPreset(preset));
     viewportGroup.appendChild(btn);
   });
-  strip.appendChild(viewportGroup);
+  row.appendChild(viewportGroup);
+  row.appendChild(stripSeparator());
 
-  const darkToggle = document.createElement('button');
-  darkToggle.type = 'button';
-  darkToggle.className = `${STRIP_CLASS}__btn ${STRIP_CLASS}__dark-toggle`;
-  darkToggle.title = 'Emulate dark mode';
-  darkToggle.textContent = 'Dark';
+  const darkToggle = stripButton('dark', 'Emulate dark mode', `${STRIP_CLASS}__dark-toggle`);
   darkToggle.setAttribute('aria-pressed', String(session.getDarkModeEmulation()));
-  darkToggle.addEventListener('click', () => session.setDarkModeEmulation(!session.getDarkModeEmulation()));
-  strip.appendChild(darkToggle);
+  darkToggle.addEventListener('click', () =>
+    session.setDarkModeEmulation(!session.getDarkModeEmulation()),
+  );
+  row.appendChild(darkToggle);
+  row.appendChild(stripSeparator());
+
+  const clearAllBtn = stripButton(
+    'clear',
+    'Clear all marks',
+    `${STRIP_CLASS}__clear-all`,
+  );
+  clearAllBtn.addEventListener('click', () => {
+    void session.clearAll();
+  });
+  row.appendChild(clearAllBtn);
+  row.appendChild(stripSeparator());
+
+  const exitBtn = stripButton('exit', 'Exit Design Mode', `${STRIP_CLASS}__exit`);
+  exitBtn.addEventListener('click', () => {
+    if (session.onExit) session.onExit();
+    else disableDesignMode(session.instanceId);
+  });
+  row.appendChild(exitBtn);
+
+  // Draw sub-tools (shape kind + undo) — only visible while the Draw tool is armed.
+  const sub = document.createElement('div');
+  sub.className = `${STRIP_CLASS}__sub`;
+  sub.hidden = true;
+  for (const kind of DRAW_SHAPE_KINDS) {
+    const btn = stripButton(kind, shapeKindLabel(kind));
+    btn.dataset.shapeKind = kind;
+    btn.setAttribute('aria-pressed', 'false');
+    btn.addEventListener('click', () => {
+      getDrawTool()?.setShapeKind(kind);
+      syncStripState(session);
+    });
+    sub.appendChild(btn);
+  }
+  sub.appendChild(stripSeparator());
+  const undoBtn = stripButton('undo', 'Undo last mark', `${STRIP_CLASS}__undo`);
+  undoBtn.addEventListener('click', () => getDrawTool()?.undo());
+  sub.appendChild(undoBtn);
+  strip.appendChild(sub);
 
   return strip;
 }
@@ -216,6 +375,15 @@ function syncStripState(session: InternalSession): void {
   });
   const darkBtn = session.strip.querySelector<HTMLButtonElement>(`.${STRIP_CLASS}__dark-toggle`);
   darkBtn?.setAttribute('aria-pressed', String(session.getDarkModeEmulation()));
+
+  const sub = session.strip.querySelector<HTMLElement>(`.${STRIP_CLASS}__sub`);
+  if (sub) {
+    sub.hidden = session.armedToolId !== 'draw';
+    const activeKind = getDrawTool()?.getShapeKind();
+    sub.querySelectorAll<HTMLButtonElement>('[data-shape-kind]').forEach((btn) => {
+      btn.setAttribute('aria-pressed', String(btn.dataset.shapeKind === activeKind));
+    });
+  }
 }
 
 function applyViewportClass(host: HTMLElement, preset: DesignViewportPreset): void {
@@ -237,7 +405,13 @@ function isTypingTarget(target: EventTarget | null): boolean {
 function onKeyDown(session: InternalSession, paneElement: HTMLElement, ev: KeyboardEvent): void {
   if (!isDesignModeEnabled(session.instanceId)) return;
   if (isTypingTarget(ev.target)) return;
-  if (!paneElement.contains(ev.target as Node)) return;
+  // Keydown targets the focused element. Clicking the preview leaves focus on <body>
+  // (nothing there is focusable), so treat body/root-targeted keys as in-scope; only
+  // ignore keys clearly focused into another widget outside the pane.
+  const target = ev.target as Node | null;
+  const atDocumentRoot =
+    !target || target === document.body || target === document.documentElement;
+  if (!atDocumentRoot && !paneElement.contains(target)) return;
 
   if (ev.key === 'Escape') {
     if (session.armedTool) {
@@ -267,9 +441,7 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
   registerBuiltinPlaceholderDesignTools();
 
   const { instanceId, host } = options;
-  const stripHost = options.chromeHost ?? host;
   const paneElement = options.paneElement ?? host;
-  options.chromeHost?.removeAttribute('hidden');
 
   const overlay = createAnnotationOverlay({ host });
 
@@ -280,21 +452,28 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
     overlay,
     armedTool: null,
     armedToolId: null,
+    onExit: options.onExit,
+    onClearAll: options.onClearAll,
   } as unknown as InternalSession;
 
-  const armToolInternal = (id: string, persist: boolean): void => {
+  const armToolInternal = async (id: string, persist: boolean): Promise<void> => {
     const tool = getDesignTool(id);
     if (!tool) return;
     if (session.armedTool && session.armedTool !== tool) session.armedTool.disarm();
-    session.armedTool = tool;
+    // Guest routing (preview-panel) keys off the armed tool id — set it before sync so
+    // cross-origin Select can reveal the native WebContentsView before the picker binds.
     session.armedToolId = id;
+    await options.onArmedToolChange?.(id);
+    session.armedTool = tool;
     const ctx: DesignToolContext = { instanceId, host, overlay };
     tool.arm(ctx);
     applyCaptureMode(session);
     syncStripState(session);
     if (persist) void saveDesignInstanceMeta(instanceId, { tool: id as DesignInstanceMeta['tool'] });
   };
-  session.armTool = (id: string): void => armToolInternal(id, true);
+  session.armTool = (id: string): void => {
+    void armToolInternal(id, true);
+  };
 
   session.disarmTool = (): void => {
     if (!session.armedTool) return;
@@ -303,6 +482,7 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
     session.armedToolId = null;
     applyCaptureMode(session);
     syncStripState(session);
+    void options.onArmedToolChange?.(null);
     void saveDesignInstanceMeta(instanceId, { tool: null });
   };
 
@@ -324,15 +504,32 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
   const setDarkModeEmulationInternal = (on: boolean, persist: boolean): void => {
     darkModeEmulation = on;
     host.classList.toggle(DARK_EMULATION_CLASS, on);
+    // Best-effort real emulation: flip the guest document's color-scheme so pages that
+    // honor `color-scheme` / `prefers-color-scheme`-driven variables actually re-render.
+    try {
+      const transport = createPickerTransport();
+      void transport
+        .eval(
+          `(() => { document.documentElement.style.colorScheme = ${on ? "'dark'" : "''"}; return true; })()`,
+        )
+        .catch(() => {});
+    } catch {
+      /* guest unavailable — frame indicator still shows the toggle state */
+    }
     syncStripState(session);
     if (persist) void saveDesignInstanceMeta(instanceId, { darkModeEmulation: on });
   };
   session.getDarkModeEmulation = (): boolean => darkModeEmulation;
   session.setDarkModeEmulation = (on: boolean): void => setDarkModeEmulationInternal(on, true);
 
+  session.clearAll = async (): Promise<void> => {
+    await clearAllDesignModeMarks({ instanceId, host, overlay });
+    options.onClearAll?.();
+  };
+
   session.captureLayer = buildCaptureLayer(host, session);
   session.strip = buildStrip(session);
-  stripHost.appendChild(session.strip);
+  host.appendChild(session.strip);
   applyCaptureMode(session);
 
   const keyHandler = (ev: KeyboardEvent): void => onKeyDown(session, paneElement, ev);
@@ -354,12 +551,14 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
   sessions.set(instanceId, session);
 
   // Apply persisted prefs (viewport/dark mode/tool) once loaded, without re-persisting the same
-  // values we just read.
+  // values we just read. When no tool was persisted, default to Select so element picking is
+  // ready immediately.
   const meta = await loadDesignInstanceMeta(instanceId);
   if (sessions.get(instanceId) !== session) return session; // torn down while awaiting
   setViewportPresetInternal(meta.viewportPreset, false);
   setDarkModeEmulationInternal(meta.darkModeEmulation, false);
-  if (meta.tool) armToolInternal(meta.tool, false);
+  if (meta.tool) await armToolInternal(meta.tool, false);
+  else await armToolInternal('select', true);
 
   void saveDesignInstanceMeta(instanceId, { enabled: true });
 

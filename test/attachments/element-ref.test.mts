@@ -138,6 +138,30 @@ describe('elementRefHistoryBlock', () => {
       /styles="[^"]*" source="pricing\.html:42" confidence="exact" image="button\.cta — pricing\.html"/,
     );
   });
+
+  it('renders PATH, ATTRIBUTES, COMPUTED STYLES and POSITION & SIZE sections, HTML last', () => {
+    const block = elementRefHistoryBlock({
+      ...baseInput,
+      domPath: 'body > div.hero > button.cta',
+      attributes: { class: 'cta primary', type: 'button', 'aria-label': 'Buy now' },
+      computedStyles: { color: 'rgb(17, 24, 39)', display: 'flex', fontSize: '14px' },
+    });
+    assert.match(block, /\nPATH\nbody > div\.hero > button\.cta\n/);
+    assert.match(block, /\nATTRIBUTES\nclass: cta primary\ntype: button\naria-label: Buy now\n/);
+    assert.match(block, /\nCOMPUTED STYLES\ncolor: rgb\(17, 24, 39\)\ndisplay: flex\nfontSize: 14px\n/);
+    assert.match(block, /\nPOSITION & SIZE\ntop: 240px; left: 120px; width: 96px; height: 32px\n/);
+    // HTML preview stays last so the display parser can recover just the markup.
+    assert.match(block, /\nHTML\n<button class="cta primary">Buy now<\/button>\n<\/element-ref>$/);
+  });
+
+  it('omits empty rich sections and still ends with the HTML preview', () => {
+    const block = elementRefHistoryBlock(baseInput);
+    assert.doesNotMatch(block, /\nPATH\n/);
+    assert.doesNotMatch(block, /\nATTRIBUTES\n/);
+    assert.doesNotMatch(block, /\nCOMPUTED STYLES\n/);
+    assert.match(block, /\nPOSITION & SIZE\n/);
+    assert.match(block, /<button class="cta primary">Buy now<\/button>\n<\/element-ref>$/);
+  });
 });
 
 describe('addElementRefToComposer', () => {

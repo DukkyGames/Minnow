@@ -38,6 +38,10 @@ export interface HistoryElementRefPart {
   source: string | null;
   /** `exact` | `probable` | `guess`, when `source` is present. */
   confidence: string | null;
+  /** A11y quick-pass (MIN-370): aria-label || alt || trimmed text content. */
+  accessibleName: string | null;
+  /** A11y quick-pass (MIN-370): WCAG contrast ratio, when computable. */
+  contrastRatio: number | null;
 }
 
 /** Design Mode drawn shape (`<design-ref kind="…" page="…" anchor="…" …>`). */
@@ -70,7 +74,9 @@ const FILE_BLOCK_RE = /<file name="([^"]*)">\n([\s\S]*?)\n<\/file>/g;
 const CODE_REF_BLOCK_RE =
   /<code-ref path="([^"]*)" start="(\d+)" end="(\d+)">\n([\s\S]*?)\n<\/code-ref>/g;
 const ELEMENT_REF_BLOCK_RE =
-  /<element-ref selector="([^"]*)"(?: uid="(\d+)")? page="([^"]*)" tag="([^"]*)" classes="([^"]*)" rect="([^"]*)" styles="([^"]*)"(?: source="([^"]*)")?(?: confidence="([^"]*)")?(?: image="([^"]*)")?>\n([\s\S]*?)\n<\/element-ref>/g;
+  /<element-ref selector="([^"]*)"(?: uid="(\d+)")? page="([^"]*)" tag="([^"]*)" classes="([^"]*)" rect="([^"]*)" styles="([^"]*)"(?: source="([^"]*)")?(?: confidence="([^"]*)")?(?: name="([^"]*)")?(?: contrast="([^"]*)")?(?: image="([^"]*)")?>\n([\s\S]*?)\n<\/element-ref>/g;
+/** Fallback: strip any element-ref block the strict regex missed (e.g. legacy inline shapes). */
+const ELEMENT_REF_LOOSE_RE = /<element-ref[\s\S]*?<\/element-ref>/g;
 const DESIGN_REF_BLOCK_RE =
   /<design-ref kind="([^"]*)" page="([^"]*)" anchor="(element|page)"(?: anchorSelector="([^"]*)")?(?: anchorUid="(\d+)")?(?: anchorX="(-?\d+)")?(?: anchorY="(-?\d+)")?(?: image="([^"]*)")?(?: id="([^"]*)")?>\n([\s\S]*?)\n<\/design-ref>/g;
 const IMAGE_PLACEHOLDER_RE = /\[image:\s*([^\]]+)\]/g;
@@ -86,7 +92,9 @@ function parseRect(raw: string): { x: number; y: number; width: number; height: 
 function stripAttachmentMarkers(content: string): string {
   const withoutFiles = content.replace(FILE_BLOCK_RE, '');
   const withoutCodeRefs = withoutFiles.replace(CODE_REF_BLOCK_RE, '');
-  const withoutElementRefs = withoutCodeRefs.replace(ELEMENT_REF_BLOCK_RE, '');
+  const withoutElementRefs = withoutCodeRefs
+    .replace(ELEMENT_REF_BLOCK_RE, '')
+    .replace(ELEMENT_REF_LOOSE_RE, '');
   const withoutDesignRefs = withoutElementRefs.replace(DESIGN_REF_BLOCK_RE, '');
   const withoutImages = withoutDesignRefs.replace(IMAGE_PLACEHOLDER_RE, '');
   return withoutImages.replace(/\n{3,}/g, '\n\n').trim();
@@ -134,8 +142,19 @@ export function parseHistoryUserContent(content: string): ParsedHistoryUserMessa
     const stylesDigest = match[7] ?? '';
     const source = match[8] ?? null;
     const confidence = match[9] ?? null;
-    const imageName = match[10] ?? null;
-    const outerHtmlPreview = match[11] ?? '';
+    const accessibleName = match[10] ?? null;
+    const contrastRaw = match[11] ?? null;
+    const contrastRatio =
+      contrastRaw != null && contrastRaw !== '' && Number.isFinite(Number(contrastRaw))
+        ? Number(contrastRaw)
+        : null;
+    const imageName = match[12] ?? null;
+    // The body carries rich PATH/ATTRIBUTES/COMPUTED STYLES/POSITION sections (for the model)
+    // ahead of the HTML, which always comes last after a `HTML` marker. Recover just the markup
+    // for the transcript chip. Older blocks are the bare HTML with no marker — take them whole.
+    const body = match[13] ?? '';
+    const htmlMarker = body.lastIndexOf('\nHTML\n');
+    const outerHtmlPreview = htmlMarker === -1 ? body : body.slice(htmlMarker + '\nHTML\n'.length);
     if (selector) {
       elementRefs.push({
         selector,
@@ -149,6 +168,8 @@ export function parseHistoryUserContent(content: string): ParsedHistoryUserMessa
         outerHtmlPreview,
         source,
         confidence,
+        accessibleName,
+        contrastRatio,
       });
     }
   }

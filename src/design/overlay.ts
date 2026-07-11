@@ -31,6 +31,11 @@ export interface AnnotationOverlay {
    * badge; `onLinkClick` fires with the shape id when it's clicked (host jumps to that turn).
    */
   renderShapes(shapes: DesignShape[], onLinkClick?: (shapeId: string) => void): void;
+  /**
+   * Live in-progress shape while the Draw tool is dragging (dashed preview in its own layer).
+   * Pass null to clear. Cheap enough to call per pointermove.
+   */
+  renderDraft(shape: DesignShape | null): void;
   /** Numbered comment pins; onPinClick fires with the pin id (host toggles the thread popover). */
   renderPins(pins: CommentPin[], onPinClick?: (pinId: string) => void): void;
   /** Serialized `<svg>` markup (markers + shapes + pins) for composite region capture. */
@@ -50,6 +55,7 @@ export interface CreateAnnotationOverlayOptions {
 const OVERLAY_CLASS = 'mn-design-overlay';
 const MARKER_LAYER_CLASS = 'mn-design-overlay-markers';
 const DRAW_LAYER_CLASS = 'mn-design-overlay-draw';
+const DRAFT_LAYER_CLASS = 'mn-design-overlay-draft';
 const SHAPE_LAYER_CLASS = 'mn-design-overlay-shapes';
 const PIN_LAYER_CLASS = 'mn-design-overlay-pins';
 const BADGE_SIZE = 20;
@@ -102,6 +108,10 @@ export function createAnnotationOverlay(
   const shapeLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
   shapeLayer.setAttribute('class', SHAPE_LAYER_CLASS);
   svg.appendChild(shapeLayer);
+
+  const draftLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  draftLayer.setAttribute('class', DRAFT_LAYER_CLASS);
+  svg.appendChild(draftLayer);
 
   const pinLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
   pinLayer.setAttribute('class', PIN_LAYER_CLASS);
@@ -198,6 +208,66 @@ export function createAnnotationOverlay(
   svg.addEventListener('pointerup', onPointerUp);
   svg.addEventListener('pointercancel', onPointerUp);
 
+  /** Geometry for one shape, shared by the committed shape layer and the live draft layer. */
+  function appendShapeGeometry(shapeGroup: SVGGElement, shape: DesignShape): void {
+    if (shape.kind === 'pen' && shape.points?.length) {
+      const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      polyline.setAttribute('points', shape.points.map((p) => `${p.x},${p.y}`).join(' '));
+      polyline.setAttribute('fill', 'none');
+      polyline.setAttribute('stroke', 'var(--mn-accent)');
+      polyline.setAttribute('stroke-width', '2');
+      polyline.setAttribute('stroke-linecap', 'round');
+      polyline.setAttribute('stroke-linejoin', 'round');
+      shapeGroup.appendChild(polyline);
+    } else if (shape.kind === 'rect' && shape.rect) {
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('x', String(shape.rect.x));
+      rect.setAttribute('y', String(shape.rect.y));
+      rect.setAttribute('width', String(shape.rect.width));
+      rect.setAttribute('height', String(shape.rect.height));
+      rect.setAttribute('rx', '2');
+      rect.setAttribute('fill', 'var(--mn-accent-soft)');
+      rect.setAttribute('fill-opacity', '0.25');
+      rect.setAttribute('stroke', 'var(--mn-accent)');
+      rect.setAttribute('stroke-width', '2');
+      shapeGroup.appendChild(rect);
+    } else if (shape.kind === 'arrow' && shape.points?.length === 2) {
+      const [from, to] = shape.points;
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', String(from!.x));
+      line.setAttribute('y1', String(from!.y));
+      line.setAttribute('x2', String(to!.x));
+      line.setAttribute('y2', String(to!.y));
+      line.setAttribute('stroke', 'var(--mn-accent)');
+      line.setAttribute('stroke-width', '2.5');
+      line.setAttribute('marker-end', 'url(#mn-design-arrowhead)');
+      shapeGroup.appendChild(line);
+    } else if (shape.kind === 'label') {
+      const rect = shape.rect ?? {
+        x: (shape.points?.[0]?.x ?? 0) - 4,
+        y: (shape.points?.[0]?.y ?? 0) - 10,
+        width: Math.max(24, (shape.label?.length ?? 0) * 7),
+        height: 20,
+      };
+      const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      bg.setAttribute('x', String(rect.x));
+      bg.setAttribute('y', String(rect.y));
+      bg.setAttribute('width', String(rect.width));
+      bg.setAttribute('height', String(rect.height));
+      bg.setAttribute('rx', '3');
+      bg.setAttribute('fill', 'var(--mn-accent)');
+      shapeGroup.appendChild(bg);
+      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      text.setAttribute('x', String(rect.x + 6));
+      text.setAttribute('y', String(rect.y + rect.height / 2 + 4));
+      text.setAttribute('fill', 'var(--mn-fg-on-accent)');
+      text.setAttribute('font-size', '12');
+      text.setAttribute('font-family', 'var(--font-ui)');
+      text.textContent = shape.label ?? '';
+      shapeGroup.appendChild(text);
+    }
+  }
+
   syncViewBox();
 
   return {
@@ -267,6 +337,7 @@ export function createAnnotationOverlay(
     clear(): void {
       markerLayer.innerHTML = '';
       drawLayer.innerHTML = '';
+      draftLayer.innerHTML = '';
       pinnedCaptures.clear();
     },
 
@@ -318,62 +389,7 @@ export function createAnnotationOverlay(
         shapeGroup.setAttribute('data-shape-id', shape.id);
         shapeLayer.appendChild(shapeGroup);
 
-        if (shape.kind === 'pen' && shape.points?.length) {
-          const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-          polyline.setAttribute('points', shape.points.map((p) => `${p.x},${p.y}`).join(' '));
-          polyline.setAttribute('fill', 'none');
-          polyline.setAttribute('stroke', 'var(--mn-accent)');
-          polyline.setAttribute('stroke-width', '2');
-          polyline.setAttribute('stroke-linecap', 'round');
-          polyline.setAttribute('stroke-linejoin', 'round');
-          shapeGroup.appendChild(polyline);
-        } else if (shape.kind === 'rect' && shape.rect) {
-          const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-          rect.setAttribute('x', String(shape.rect.x));
-          rect.setAttribute('y', String(shape.rect.y));
-          rect.setAttribute('width', String(shape.rect.width));
-          rect.setAttribute('height', String(shape.rect.height));
-          rect.setAttribute('rx', '2');
-          rect.setAttribute('fill', 'var(--mn-accent-soft)');
-          rect.setAttribute('fill-opacity', '0.25');
-          rect.setAttribute('stroke', 'var(--mn-accent)');
-          rect.setAttribute('stroke-width', '2');
-          shapeGroup.appendChild(rect);
-        } else if (shape.kind === 'arrow' && shape.points?.length === 2) {
-          const [from, to] = shape.points;
-          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-          line.setAttribute('x1', String(from!.x));
-          line.setAttribute('y1', String(from!.y));
-          line.setAttribute('x2', String(to!.x));
-          line.setAttribute('y2', String(to!.y));
-          line.setAttribute('stroke', 'var(--mn-accent)');
-          line.setAttribute('stroke-width', '2.5');
-          line.setAttribute('marker-end', 'url(#mn-design-arrowhead)');
-          shapeGroup.appendChild(line);
-        } else if (shape.kind === 'label') {
-          const rect = shape.rect ?? {
-            x: (shape.points?.[0]?.x ?? 0) - 4,
-            y: (shape.points?.[0]?.y ?? 0) - 10,
-            width: Math.max(24, (shape.label?.length ?? 0) * 7),
-            height: 20,
-          };
-          const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-          bg.setAttribute('x', String(rect.x));
-          bg.setAttribute('y', String(rect.y));
-          bg.setAttribute('width', String(rect.width));
-          bg.setAttribute('height', String(rect.height));
-          bg.setAttribute('rx', '3');
-          bg.setAttribute('fill', 'var(--mn-accent)');
-          shapeGroup.appendChild(bg);
-          const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          text.setAttribute('x', String(rect.x + 6));
-          text.setAttribute('y', String(rect.y + rect.height / 2 + 4));
-          text.setAttribute('fill', 'var(--mn-fg-on-accent)');
-          text.setAttribute('font-size', '12');
-          text.setAttribute('font-family', 'var(--font-ui)');
-          text.textContent = shape.label ?? '';
-          shapeGroup.appendChild(text);
-        }
+        appendShapeGeometry(shapeGroup, shape);
 
         // Chat-linked shape (MIN-368): small clickable glyph badge at the shape's top-right so
         // "page → transcript" navigation has a click target without disturbing the shape itself.
@@ -401,6 +417,16 @@ export function createAnnotationOverlay(
           shapeGroup.appendChild(badge);
         }
       }
+    },
+
+    renderDraft(shape: DesignShape | null): void {
+      draftLayer.innerHTML = '';
+      if (!shape) return;
+      const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      group.setAttribute('class', 'mn-design-overlay-draft__shape');
+      group.setAttribute('opacity', '0.85');
+      appendShapeGeometry(group, shape);
+      draftLayer.appendChild(group);
     },
 
     renderPins(pins: CommentPin[], onPinClick): void {

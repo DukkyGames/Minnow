@@ -138,6 +138,51 @@ describe('parseHistoryUserContent', () => {
     assert.equal(parsedWithoutMapping.elementRefs[0].confidence, null);
   });
 
+  test('extracts element-ref a11y attrs (MIN-370) and strips block from visible prose', () => {
+    const block = elementRefHistoryBlock({
+      selector: '#btn-reset',
+      uid: 4,
+      pageUrl: 'http://localhost:3000/',
+      tagName: 'button',
+      classList: ['btn-danger'],
+      rect: { x: 503, y: 568, width: 40, height: 18 },
+      stylesDigest: 'font:15.2px/normal Arial 400; color:rgb(25,25,25)',
+      outerHtmlPreview: '<button id="btn-reset" class="btn-danger">Reset</button>',
+      accessibleName: 'Reset',
+      contrastRatio: 4.5,
+      imageName: '#btn-reset — localhost:3000',
+    });
+    const content = `change this to purple\n\n${block}\n\n[image: #btn-reset — localhost:3000]`;
+    const parsed = parseHistoryUserContent(content);
+    assert.equal(parsed.text, 'change this to purple');
+    assert.equal(parsed.elementRefs.length, 1);
+    assert.equal(parsed.elementRefs[0].accessibleName, 'Reset');
+    assert.equal(parsed.elementRefs[0].contrastRatio, 4.5);
+    assert.equal(parsed.elementRefs[0].imageName, '#btn-reset — localhost:3000');
+  });
+
+  test('recovers just the HTML preview from an enriched element-ref body', () => {
+    const block = elementRefHistoryBlock({
+      selector: '.mn-design-strip',
+      uid: 7,
+      pageUrl: 'index.html',
+      tagName: 'div',
+      classList: ['mn-design-strip'],
+      rect: { x: 1034, y: 902, width: 247, height: 73 },
+      stylesDigest: 'font:14px/20px system-ui 400',
+      outerHtmlPreview: '<div class="mn-design-strip">',
+      domPath: 'div#minnowOsRoot > div#previewBody > div.mn-design-strip',
+      attributes: { class: 'mn-design-strip', role: 'toolbar' },
+      computedStyles: { color: 'rgb(223, 227, 232)', display: 'flex' },
+    });
+    const parsed = parseHistoryUserContent(block);
+    assert.equal(parsed.elementRefs.length, 1);
+    // The rich sections are for the model; the transcript chip only shows the markup.
+    assert.equal(parsed.elementRefs[0].outerHtmlPreview, '<div class="mn-design-strip">');
+    // The whole block (rich sections included) is stripped out of the visible prose.
+    assert.equal(parsed.text, '');
+  });
+
   test('detects attachment markers', () => {
     assert.equal(historyUserContentHasAttachments('[image: a.png]'), true);
     assert.equal(

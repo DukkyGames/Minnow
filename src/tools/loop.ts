@@ -436,6 +436,9 @@ export function buildHistoryUserContent(
           sourceMapping: att.sourceMapping,
           accessibleName: att.accessibleName,
           contrastRatio: att.contrastRatio,
+          domPath: att.domPath,
+          attributes: att.attributes,
+          computedStyles: att.computedStyles,
         }),
       );
       if (att.croppedDataUrl) parts.push(imageHistoryPlaceholder(att.name));
@@ -506,6 +509,9 @@ export function buildVlmUserApiContent(
           sourceMapping: att.sourceMapping,
           accessibleName: att.accessibleName,
           contrastRatio: att.contrastRatio,
+          domPath: att.domPath,
+          attributes: att.attributes,
+          computedStyles: att.computedStyles,
         }),
       );
       continue;

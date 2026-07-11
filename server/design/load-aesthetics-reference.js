@@ -9,7 +9,6 @@ import path from 'node:path';
 
 const REFERENCE_RELATIVE = path.join(
   'src',
-  'skills',
   'design',
   'reference',
   'frontend-aesthetics.md',

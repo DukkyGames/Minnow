@@ -44,6 +44,12 @@ export interface ElementRefBlockInput {
   accessibleName?: string;
   /** A11y quick-pass (MIN-370): WCAG contrast ratio of color vs background, or null when unknown. */
   contrastRatio?: number | null;
+  /** Readable ancestor chain, e.g. `div#root > main.page > button.cta`. */
+  domPath?: string;
+  /** Every attribute on the picked element (name → value). */
+  attributes?: Record<string, string>;
+  /** Curated computed styles (camelCase key → value). */
+  computedStyles?: Record<string, string>;
 }
 
 function attr(value: string): string {
@@ -76,7 +82,42 @@ function a11yAttrs(accessibleName: string | undefined, contrastRatio: number | n
   return `${nameAttr}${contrastAttr}`;
 }
 
-/** Persisted/API block for a Design Mode element pick (body is the outerHTML preview). */
+/** Render a `KEY: value` list section, or '' when the record is empty/absent. */
+function recordSection(heading: string, record: Record<string, string> | undefined): string {
+  if (!record) return '';
+  const lines = Object.entries(record)
+    .filter(([, value]) => value != null && value !== '')
+    .map(([key, value]) => `${key}: ${value}`);
+  return lines.length ? `${heading}\n${lines.join('\n')}` : '';
+}
+
+/**
+ * Rich, readable body for an element pick: DOM path, attributes, computed styles, position/size,
+ * then the HTML preview last. Empty sections are omitted, and the HTML always comes last after a
+ * `HTML` marker so the display parser can recover just the markup for the transcript chip.
+ * Blocks from before this detail was captured have only the raw HTML (no sections), which the
+ * parser still handles.
+ */
+function elementRefBody(input: ElementRefBlockInput): string {
+  const { rect } = input;
+  const positionSize =
+    `POSITION & SIZE\n` +
+    `top: ${Math.round(rect.y)}px; left: ${Math.round(rect.x)}px; ` +
+    `width: ${Math.round(rect.width)}px; height: ${Math.round(rect.height)}px`;
+
+  const pathSection = input.domPath?.trim() ? `PATH\n${input.domPath.trim()}` : '';
+  const sections = [
+    pathSection,
+    recordSection('ATTRIBUTES', input.attributes),
+    recordSection('COMPUTED STYLES', input.computedStyles),
+    positionSize,
+    `HTML\n${input.outerHtmlPreview}`,
+  ].filter(Boolean);
+
+  return sections.join('\n\n');
+}
+
+/** Persisted/API block for a Design Mode element pick (body carries the rich element detail). */
 export function elementRefHistoryBlock(input: ElementRefBlockInput): string {
   const { rect } = input;
   const rectAttr = `${Math.round(rect.x)},${Math.round(rect.y)},${Math.round(rect.width)},${Math.round(rect.height)}`;
@@ -87,6 +128,6 @@ export function elementRefHistoryBlock(input: ElementRefBlockInput): string {
   return (
     `<element-ref selector="${attr(input.selector)}"${uidAttr} page="${attr(input.pageUrl)}" ` +
     `tag="${attr(input.tagName)}" classes="${attr(input.classList.join(' '))}" rect="${rectAttr}" ` +
-    `styles="${attr(input.stylesDigest)}"${sourceAttrs}${a11y}${imageAttr}>\n${input.outerHtmlPreview}\n</element-ref>`
+    `styles="${attr(input.stylesDigest)}"${sourceAttrs}${a11y}${imageAttr}>\n${elementRefBody(input)}\n</element-ref>`
   );
 }

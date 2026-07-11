@@ -5,6 +5,7 @@
  */
 
 import { getFilePanelState } from '../state/file-panel';
+import { isDesignModeUsingIframeGuest } from '../ui/preview-design-mode-guest';
 
 /** Stable pick payload returned from the guest (JSON-cloneable). */
 export interface PickedElement {
@@ -23,7 +24,48 @@ export interface PickedElement {
   accessibleName: string;
   /** A11y quick-pass (MIN-370): WCAG contrast ratio of color vs background, or null when it can't be computed (e.g. transparent background). */
   contrastRatio: number | null;
+  /** Readable ancestor chain up to the root, e.g. `div#root > main.page > button.cta`. */
+  domPath: string;
+  /** Every attribute on the picked element (name → value); our own `data-mn-uid` stamp is omitted. */
+  attributes: Record<string, string>;
+  /** Curated computed styles (camelCase key → value) — the fuller detail behind {@link stylesDigest}. */
+  computedStyles: Record<string, string>;
 }
+
+/**
+ * Computed-style properties captured per pick as `[outputKey, cssProperty]`. Kept curated (not
+ * the whole `getComputedStyle` dump) so the chat block stays readable and bounded. Mirrored into
+ * the in-guest capture script via JSON interpolation and reused by the iframe/CDP paths.
+ */
+export const COMPUTED_STYLE_PROPS: ReadonlyArray<readonly [string, string]> = [
+  ['color', 'color'],
+  ['backgroundColor', 'background-color'],
+  ['fontSize', 'font-size'],
+  ['fontFamily', 'font-family'],
+  ['fontWeight', 'font-weight'],
+  ['lineHeight', 'line-height'],
+  ['letterSpacing', 'letter-spacing'],
+  ['textAlign', 'text-align'],
+  ['display', 'display'],
+  ['position', 'position'],
+  ['flexDirection', 'flex-direction'],
+  ['justifyContent', 'justify-content'],
+  ['alignItems', 'align-items'],
+  ['gap', 'gap'],
+  ['padding', 'padding'],
+  ['margin', 'margin'],
+  ['border', 'border'],
+  ['borderRadius', 'border-radius'],
+  ['boxShadow', 'box-shadow'],
+  ['opacity', 'opacity'],
+  ['zIndex', 'z-index'],
+];
+
+/** Max ancestor depth walked when building the readable {@link PickedElement.domPath}. */
+const DOM_PATH_MAX_DEPTH = 12;
+
+/** Cap per attribute value so a huge inline `style`/`srcset` can't bloat the chat block. */
+const ATTR_VALUE_MAX = 200;
 
 export interface PickerTransport {
   readonly mode: 'electron' | 'iframe';
@@ -153,6 +195,51 @@ export const PICKER_ENABLE_SCRIPT = `(() => {
     return text.slice(0, 160);
   }
 
+  function domPathFor(el) {
+    const parts = [];
+    let node = el;
+    let depth = 0;
+    while (node && node.nodeType === 1 && node !== document.documentElement && node !== document.body && depth < ${DOM_PATH_MAX_DEPTH}) {
+      let seg = node.tagName.toLowerCase();
+      if (node.id) seg += '#' + node.id;
+      else {
+        const cls = Array.from(node.classList || []).filter((c) => c !== HOVER).slice(0, 2);
+        if (cls.length) seg += cls.map((c) => '.' + c).join('');
+      }
+      parts.unshift(seg);
+      node = node.parentElement;
+      depth += 1;
+    }
+    return parts.join(' > ');
+  }
+
+  function attributesFor(el) {
+    const out = {};
+    const attrs = el.attributes;
+    for (let i = 0; i < attrs.length; i++) {
+      const a = attrs[i];
+      if (a.name === 'data-mn-uid') continue;
+      let value = a.value;
+      if (a.name === 'class') {
+        value = value.split(/\\s+/).filter((c) => c && c !== HOVER).join(' ');
+        if (!value) continue;
+      }
+      out[a.name] = value.length > ${ATTR_VALUE_MAX} ? value.slice(0, ${ATTR_VALUE_MAX}) + '…' : value;
+    }
+    return out;
+  }
+
+  function computedStylesFor(el) {
+    const cs = getComputedStyle(el);
+    const out = {};
+    const props = ${JSON.stringify(COMPUTED_STYLE_PROPS)};
+    for (let i = 0; i < props.length; i++) {
+      const v = (cs.getPropertyValue(props[i][1]) || '').trim();
+      if (v) out[props[i][0]] = v;
+    }
+    return out;
+  }
+
   function parseCssColorGuest(value) {
     const trimmed = (value || '').trim();
     if (!trimmed || trimmed === 'transparent') return null;
@@ -209,6 +296,9 @@ export const PICKER_ENABLE_SCRIPT = `(() => {
       shiftKey: false,
       accessibleName: accessibleNameFor(el),
       contrastRatio: contrastRatioFor(stylesDigest),
+      domPath: domPathFor(el),
+      attributes: attributesFor(el),
+      computedStyles: computedStylesFor(el),
     };
   }
 
@@ -404,6 +494,76 @@ export function buildStylesDigestForElement(el: Element): string {
   );
 }
 
+/**
+ * Readable ancestor chain for an element, e.g. `div#root > main.page > button.cta`. Prefers an
+ * id per segment, otherwise the first stable-ish classes; the picker's own hover class is
+ * skipped. Mirrors the in-guest `domPathFor` in {@link PICKER_ENABLE_SCRIPT}.
+ */
+export function buildDomPathForElement(el: Element): string {
+  const doc = el.ownerDocument;
+  const parts: string[] = [];
+  let node: Element | null = el;
+  let depth = 0;
+  while (
+    node &&
+    node.nodeType === 1 &&
+    node !== doc.documentElement &&
+    node !== doc.body &&
+    depth < DOM_PATH_MAX_DEPTH
+  ) {
+    let segment = node.tagName.toLowerCase();
+    if (node.id) {
+      segment += `#${node.id}`;
+    } else {
+      const classes = Array.from(node.classList)
+        .filter((name) => name !== PICKER_HOVER_CLASS)
+        .slice(0, 2);
+      if (classes.length) segment += classes.map((name) => `.${name}`).join('');
+    }
+    parts.unshift(segment);
+    node = node.parentElement;
+    depth += 1;
+  }
+  return parts.join(' > ');
+}
+
+/**
+ * Every attribute on an element (name → value), minus our own `data-mn-uid` stamp and the
+ * picker's transient hover class. Long values are capped. Mirrors the in-guest `attributesFor`.
+ */
+export function attributesForElement(el: Element): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const attr of Array.from(el.attributes)) {
+    if (attr.name === 'data-mn-uid') continue;
+    let value = attr.value;
+    if (attr.name === 'class') {
+      value = value
+        .split(/\s+/)
+        .filter((name) => name && name !== PICKER_HOVER_CLASS)
+        .join(' ');
+      if (!value) continue;
+    }
+    out[attr.name] = value.length > ATTR_VALUE_MAX ? `${value.slice(0, ATTR_VALUE_MAX)}…` : value;
+  }
+  return out;
+}
+
+/**
+ * Curated computed styles ({@link COMPUTED_STYLE_PROPS}) as a camelCase key → value record.
+ * Mirrors the in-guest `computedStylesFor`; unit-tested with happy-dom.
+ */
+export function computedStylesForElement(el: Element): Record<string, string> {
+  const view = el.ownerDocument.defaultView;
+  if (!view || typeof view.getComputedStyle !== 'function') return {};
+  const cs = view.getComputedStyle(el);
+  const out: Record<string, string> = {};
+  for (const [key, prop] of COMPUTED_STYLE_PROPS) {
+    const value = (cs.getPropertyValue(prop) || '').trim();
+    if (value) out[key] = value;
+  }
+  return out;
+}
+
 /** Parsed sRGB color channels (0-255) plus alpha (0-1). */
 export interface ParsedRgbColor {
   r: number;
@@ -496,8 +656,21 @@ function unwrapExecJsResult(raw: unknown): unknown {
   return raw;
 }
 
-function getPreviewFrame(): HTMLIFrameElement | null {
+/**
+ * The iframe currently hosting the preview guest. Multi-tab previews (MIN-224) create one
+ * `iframe.preview-frame` per tab inside `#previewBody` with no id — only the active tab's
+ * frame is unhidden. The legacy `#previewFrame` id is kept as a fallback for older mounts
+ * and existing tests.
+ */
+export function getPreviewGuestFrame(): HTMLIFrameElement | null {
+  const body = document.getElementById('previewBody');
+  const active = body?.querySelector<HTMLIFrameElement>('iframe.preview-frame:not([hidden])');
+  if (active) return active;
   return document.getElementById('previewFrame') as HTMLIFrameElement | null;
+}
+
+function getPreviewFrame(): HTMLIFrameElement | null {
+  return getPreviewGuestFrame();
 }
 
 /** True when the current preview page is a cross-origin URL (exported for MIN-370 CDP routing). */
@@ -515,7 +688,10 @@ export function isCrossOriginPreview(): boolean {
 /** Detect Electron execJs vs iframe guest access. */
 export function createPickerTransport(): PickerTransport {
   const preview = window.minnow?.preview;
-  if (preview && typeof preview.execJs === 'function') {
+  // In Electron Design Mode the visible guest is a same-origin iframe and the native
+  // WebContentsView is hidden. execJs targets that hidden native view, so it would enable and
+  // poll the picker on a guest the user can't click. Read the iframe directly instead.
+  if (preview && typeof preview.execJs === 'function' && !isDesignModeUsingIframeGuest()) {
     return {
       mode: 'electron',
       async eval(expression: string): Promise<unknown> {
@@ -606,7 +782,20 @@ function normalizePickedElement(raw: unknown): PickedElement | null {
       typeof row.contrastRatio === 'number' && Number.isFinite(row.contrastRatio)
         ? row.contrastRatio
         : null,
+    domPath: typeof row.domPath === 'string' ? row.domPath : '',
+    attributes: normalizeStringRecord(row.attributes),
+    computedStyles: normalizeStringRecord(row.computedStyles),
   };
+}
+
+/** Coerce an unknown value into a `Record<string, string>`, dropping non-string entries. */
+function normalizeStringRecord(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== 'object') return {};
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === 'string') out[key] = value;
+  }
+  return out;
 }
 
 /** Factory for the Design Mode element picker. */
@@ -676,6 +865,9 @@ export function createElementPicker(options: ElementPickerOptions): ElementPicke
           shiftKey: ev.shiftKey,
           accessibleName: computeAccessibleNameForElement(target),
           contrastRatio: computeContrastRatioFromStylesDigest(stylesDigest),
+          domPath: buildDomPathForElement(target),
+          attributes: attributesForElement(target),
+          computedStyles: computedStylesForElement(target),
         }),
       );
     };
