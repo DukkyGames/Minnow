@@ -1,0 +1,395 @@
+/* Design Mode overlay chrome — tool strip + viewport/dark-mode framing (MIN-365). */
+
+#btnPreviewDesignToggle[aria-pressed='true'] {
+  background: var(--mn-accent-soft);
+  color: var(--mn-accent);
+}
+
+/* Floating tool strip — bottom-centered pill over the preview host. All positioning lives
+   here (never inline) so the #previewDesignChrome variant below can win in Electron. */
+.mn-design-strip {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 16px);
+  padding: 6px 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-md, 8px);
+  background: var(--mn-surface-2);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.24);
+  pointer-events: auto;
+}
+
+/* Tool strip in #previewDesignChrome sits below the guest — no absolute overlay positioning. */
+.preview-design-chrome .mn-design-strip {
+  position: static;
+  left: auto;
+  bottom: auto;
+  transform: none;
+  box-shadow: none;
+}
+
+.mn-design-strip__row,
+.mn-design-strip__sub {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.mn-design-strip__sub[hidden] {
+  display: none;
+}
+
+.mn-design-strip__tools,
+.mn-design-strip__viewports {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.mn-design-strip__sep {
+  width: 1px;
+  height: 18px;
+  margin-inline: 4px;
+  background: var(--mn-border);
+  flex-shrink: 0;
+}
+
+.mn-design-strip__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--mn-radius-sm, 4px);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+}
+
+.mn-design-strip__btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.mn-design-strip__btn:hover {
+  background: var(--mn-surface-3, rgba(127, 127, 127, 0.15));
+  color: var(--mn-fg);
+}
+
+.mn-design-strip__btn[aria-pressed='true'] {
+  background: var(--mn-accent-soft);
+  border-color: var(--mn-accent);
+  color: var(--mn-fg);
+}
+
+.mn-design-strip__clear-all:hover {
+  color: var(--mn-error, #e5484d);
+}
+
+/* Inline text-label editor for the Draw tool's label kind (replaces window.prompt). */
+.mn-design-label-editor {
+  position: absolute;
+  z-index: 6;
+  width: 160px;
+  padding: 4px 6px;
+  border: 1px solid var(--mn-accent);
+  border-radius: var(--mn-radius-sm, 4px);
+  background: var(--mn-surface-2);
+  color: var(--mn-fg);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24);
+}
+
+/* Viewport preset frame — mobile/tablet constrain the guest's host width so the native
+   Electron WebContentsView (or iframe) resizes to match, centered inside the pane.
+   (No spread box-shadow here: a 9999px shadow paints over the whole app outside the pane.)
+
+   Use an explicit `width` (not just `max-width`): the host is a flex child, and the
+   `margin-inline: auto` centering cancels the default flex `stretch`, so a bare `max-width`
+   lets the item collapse to the guest iframe's intrinsic 300px instead of the preset width.
+   `max-width: 100%` keeps it from overflowing a pane narrower than the preset. */
+.mn-design-viewport--mobile,
+.mn-design-viewport--tablet {
+  margin-inline: auto;
+  max-width: 100%;
+  border-inline: 1px solid var(--mn-border);
+}
+
+.mn-design-viewport--mobile {
+  width: 375px;
+}
+
+.mn-design-viewport--tablet {
+  width: 768px;
+}
+
+.mn-design-viewport--desktop {
+  width: auto;
+  max-width: none;
+}
+
+/* Dark-mode emulation frame indicator (actual guest color-scheme emulation is a P3/P4 concern). */
+.mn-design-dark-emulation {
+  outline: 1px dashed var(--mn-accent-soft);
+  outline-offset: -1px;
+}
+
+/* Comment tool pin thread popover (MIN-367) — plain HTML panel positioned over the SVG pin. */
+.mn-design-pin-popover {
+  position: absolute;
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 200px;
+  max-width: 280px;
+  padding: 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-md, 8px);
+  background: var(--mn-surface-2);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.24);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+
+.mn-design-pin-popover__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mn-design-pin-popover__title {
+  flex: 1 1 auto;
+  font-weight: 600;
+  color: var(--mn-fg);
+}
+
+.mn-design-pin-popover__input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mn-design-pin-popover__input-row .mn-design-pin-popover__input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mn-design-pin-popover__delete {
+  border: none;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--mn-radius-sm, 4px);
+}
+
+.mn-design-pin-popover__delete:hover {
+  background: var(--mn-surface-3, rgba(127, 127, 127, 0.15));
+  color: var(--mn-error, #e5484d);
+}
+
+.mn-design-pin-popover__notes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.mn-design-pin-popover__note {
+  padding: 4px 6px;
+  border-radius: var(--mn-radius-sm, 4px);
+  background: var(--mn-surface-3, rgba(127, 127, 127, 0.15));
+  color: var(--mn-fg);
+  white-space: pre-wrap;
+}
+
+.mn-design-pin-popover__input {
+  padding: 4px 6px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-sm, 4px);
+  background: var(--mn-surface-1);
+  color: var(--mn-fg);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+
+.mn-design-pin-popover__add,
+.mn-design-pin-popover__close {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-sm, 4px);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+}
+
+.mn-design-pin-popover__add:hover,
+.mn-design-pin-popover__close:hover {
+  background: var(--mn-surface-3, rgba(127, 127, 127, 0.15));
+  color: var(--mn-fg);
+}
+
+/* Chat-link badge on a drawn shape's overlay + transcript → page pulse (MIN-368). */
+.mn-design-shape-link-badge {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+
+.mn-design-shape--pulse {
+  animation: mn-design-shape-pulse-anim 2.2s ease-out;
+}
+
+@keyframes mn-design-shape-pulse-anim {
+  0%,
+  30%,
+  60% {
+    filter: drop-shadow(0 0 0 var(--mn-accent));
+  }
+  15%,
+  45% {
+    filter: drop-shadow(0 0 6px var(--mn-accent));
+  }
+  100% {
+    filter: drop-shadow(0 0 0 transparent);
+  }
+}
+
+/* Annotations panel (MIN-368) — collapsible list of every mark on the current page, docked to
+   the right edge of the preview host. Functional layout; visual polish is a later pass. */
+.mn-design-annotations-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  width: 260px;
+  max-width: 80%;
+  border-inline-start: 1px solid var(--mn-border);
+  background: var(--mn-surface-2);
+  overflow: hidden;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+
+.mn-design-annotations-panel--collapsed .mn-design-annotations-panel__body {
+  display: none;
+}
+
+.mn-design-annotations-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.mn-design-annotations-panel__collapse {
+  flex: 1 1 auto;
+  text-align: start;
+  border: none;
+  background: transparent;
+  color: var(--mn-fg);
+  font-weight: 600;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.mn-design-annotations-panel__filter {
+  max-width: 90px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-sm, 4px);
+  background: var(--mn-surface-1);
+  color: var(--mn-fg);
+  font-family: inherit;
+  font-size: 0.75rem;
+}
+
+.mn-design-annotations-panel__bulk-delete {
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-sm, 4px);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font-family: inherit;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.mn-design-annotations-panel__bulk-delete:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.mn-design-annotations-panel__body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.mn-design-annotations-panel__empty {
+  padding: 12px 8px;
+  color: var(--mn-fg-muted);
+}
+
+.mn-design-annotations-panel__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 4px;
+  border-radius: var(--mn-radius-sm, 4px);
+}
+
+.mn-design-annotations-panel__row:hover {
+  background: var(--mn-surface-3, rgba(127, 127, 127, 0.15));
+}
+
+.mn-design-annotations-panel__row-kind {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: capitalize;
+}
+
+.mn-design-annotations-panel__row-badge {
+  padding: 1px 6px;
+  border-radius: var(--mn-radius-sm, 4px);
+  background: var(--mn-warn-soft, rgba(217, 119, 6, 0.18));
+  color: var(--mn-warn, #d97706);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.mn-design-annotations-panel__row-highlight,
+.mn-design-annotations-panel__link-chip {
+  border: none;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 2px;
+}
+
+.mn-design-annotations-panel__row-highlight:hover,
+.mn-design-annotations-panel__link-chip:hover {
+  color: var(--mn-accent);
+}

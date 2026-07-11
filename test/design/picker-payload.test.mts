@@ -1,0 +1,155 @@
+import assert from 'node:assert/strict';
+import { afterEach, beforeEach, describe, test } from 'node:test';
+import { Window } from 'happy-dom';
+import {
+  attributesForElement,
+  buildDomPathForElement,
+  computedStylesForElement,
+  createElementPicker,
+  PICKER_DISABLE_SCRIPT,
+  PICKER_ENABLE_SCRIPT,
+  PICKER_POLL_SCRIPT,
+  type PickerTransport,
+  type PickedElement,
+} from '../../src/design/element-picker.ts';
+import { DEFAULT_FILE_PANEL_STATE, resetFilePanelStateForTests, setFilePanelState } from '../../src/state/file-panel.ts';
+
+const cannedPick: PickedElement = {
+  uid: 5,
+  cssSelector: '#hero',
+  tagName: 'section',
+  classList: ['hero'],
+  outerHTMLPreview: '<section id="hero" class="hero">',
+  boundingRect: { x: 1, y: 2, width: 300, height: 200 },
+  devicePixelRatio: 2,
+  stylesDigest: 'font:16px/1.5 Arial 400; color:rgb(0, 0, 0); bg:rgba(0, 0, 0, 0); p:0px m:0px; layout:block',
+  shiftKey: false,
+  accessibleName: 'Hero',
+  contrastRatio: null,
+  domPath: 'body > section#hero',
+  attributes: { id: 'hero', class: 'hero' },
+  computedStyles: { color: 'rgb(0, 0, 0)', display: 'block' },
+};
+
+function makeTransport(
+  impl: Partial<PickerTransport> & Pick<PickerTransport, 'eval'>,
+): PickerTransport {
+  return {
+    mode: impl.mode ?? 'electron',
+    eval: impl.eval,
+    canReadGuest: impl.canReadGuest ?? (() => true),
+  };
+}
+
+describe('design picker payload', () => {
+  beforeEach(() => {
+    const win = new Window();
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document;
+    document.body.innerHTML = '<iframe id="previewFrame"></iframe>';
+    Object.assign(globalThis.window, { location: { origin: 'http://127.0.0.1:5173' } });
+    resetFilePanelStateForTests();
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      previewSource: { kind: 'workspace', path: 'index.html' },
+    });
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  test('enable polls guest and forwards full PickedElement', async () => {
+    const evalCalls: string[] = [];
+    let pollCount = 0;
+    const transport = makeTransport({
+      async eval(expr) {
+        evalCalls.push(expr);
+        if (expr === PICKER_ENABLE_SCRIPT) return { ok: true };
+        if (expr === PICKER_POLL_SCRIPT) {
+          pollCount += 1;
+          return pollCount === 1 ? cannedPick : null;
+        }
+        return null;
+      },
+    });
+
+    const picks: PickedElement[] = [];
+    const picker = createElementPicker({
+      transport,
+      onPick: (picked) => picks.push(picked),
+    });
+
+    await picker.enable();
+    assert.equal(picker.isEnabled(), true);
+    assert.ok(evalCalls.some((c) => c === PICKER_ENABLE_SCRIPT));
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    assert.equal(picks.length, 1);
+    assert.deepEqual(picks[0], cannedPick);
+
+    await picker.disable();
+    picker.destroy();
+  });
+
+  test('buildDomPathForElement walks the ancestor chain, id-preferred then class', () => {
+    document.body.innerHTML =
+      '<div id="root"><main class="page"><button class="cta primary">Buy</button></main></div>';
+    const button = document.querySelector('button')!;
+    assert.equal(
+      buildDomPathForElement(button as unknown as Element),
+      'div#root > main.page > button.cta.primary',
+    );
+  });
+
+  test('attributesForElement returns all attributes minus the data-mn-uid stamp', () => {
+    document.body.innerHTML =
+      '<button id="buy" class="cta" type="button" data-mn-uid="9" aria-label="Buy now">Buy</button>';
+    const button = document.querySelector('button')!;
+    assert.deepEqual(attributesForElement(button as unknown as Element), {
+      id: 'buy',
+      class: 'cta',
+      type: 'button',
+      'aria-label': 'Buy now',
+    });
+  });
+
+  test('computedStylesForElement returns curated camelCase style keys', () => {
+    document.body.innerHTML = '<div style="display:flex;color:rgb(1, 2, 3)">x</div>';
+    const div = document.querySelector('div')!;
+    const styles = computedStylesForElement(div as unknown as Element);
+    assert.equal(styles.display, 'flex');
+    assert.equal(styles.color, 'rgb(1, 2, 3)');
+  });
+
+  test('disable stops polling and runs DISABLE_SCRIPT', async () => {
+    const evalCalls: string[] = [];
+    const transport = makeTransport({
+      async eval(expr) {
+        evalCalls.push(expr);
+        if (expr === PICKER_ENABLE_SCRIPT) return { ok: true };
+        if (expr === PICKER_POLL_SCRIPT) return cannedPick;
+        if (expr === PICKER_DISABLE_SCRIPT) return { ok: true };
+        return null;
+      },
+    });
+
+    const picks: PickedElement[] = [];
+    const picker = createElementPicker({
+      transport,
+      onPick: (picked) => picks.push(picked),
+    });
+
+    await picker.enable();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const countAfterEnable = picks.length;
+
+    await picker.disable();
+    assert.equal(picker.isEnabled(), false);
+    assert.ok(evalCalls.includes(PICKER_DISABLE_SCRIPT));
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    assert.equal(picks.length, countAfterEnable);
+    picker.destroy();
+  });
+});

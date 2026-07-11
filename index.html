@@ -2330,12 +2330,19 @@
       <label class="preview-autoreload">
         <input type="checkbox" id="previewAutoReload" checked /> Auto-reload
       </label>
+      <button type="button" class="icon-btn" id="btnPreviewDesignToggle" aria-label="Design Mode" title="Design Mode" aria-pressed="false">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+      </button>
+      <button type="button" class="icon-btn" id="btnPreviewAnnotationsToggle" aria-label="Annotations panel" title="Annotations panel" aria-pressed="false">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      </button>
       <button type="button" class="icon-btn" id="btnPreviewClose" aria-label="Close preview" title="Close preview">
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </header>
     <div class="preview-body" id="previewBody" aria-label="Preview content area">
     </div>
+    <div class="preview-design-chrome" id="previewDesignChrome" hidden aria-label="Design Mode tools"></div>
     <div class="preview-status" id="previewStatus" hidden role="status">
       <p class="preview-status__message" id="previewStatusMessage"></p>
       <a class="preview-status__open-external hidden" id="previewOpenExternal" target="_blank"

@@ -194,5 +194,11 @@
       "maxDurationSeconds": 300,
       "silenceTimeoutSeconds": 2.5
     }
+  },
+  "workspace": {
+    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-1RPb4L",
+    "recentPaths": [
+      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-1RPb4L"
+    ]
   }
 }

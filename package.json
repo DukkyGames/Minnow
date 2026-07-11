@@ -13,6 +13,8 @@
     "dev": "vite",
     "prebuild": "node scripts/generate-skills-manifest.mjs && tsx scripts/generate-settings-registry.mjs",
     "build:benchmark-packs": "node scripts/build-benchmark-packs.mjs",
+    "report:bundle-size": "node scripts/report-bundle-size.mjs",
+    "report:bundle-size:ci": "node scripts/report-bundle-size.mjs --fail-over-kb 1500",
     "build": "tsc && vite build",
     "postinstall": "node scripts/sync-impeccable-skill.mjs && node scripts/ensure-electron.mjs",
     "app-icon:sync": "node scripts/sync-app-icon.mjs && node scripts/brand-electron-win.mjs",
@@ -57,6 +59,7 @@
     "test:webhooks": "node --test --test-force-exit test/webhooks/*.test.mjs",
     "test:plugins": "node --test --test-force-exit test/tools/plugin-scan.test.mjs test/tools/plugin-loader.test.mjs test/plugins/api.test.mjs",
     "test:ui-designer": "tsx --test --test-force-exit test/ui-designer/**/*.test.mts && node scripts/step15-smoke.mjs",
+    "test:design": "tsx --import ./test/test-loader.mjs --test --test-force-exit test/design/*.test.mts test/ui/preview-design-mode-browser.test.mts test/ui/preview-design-mode-guest-strategy.test.mts test/ui/preview-electron-visibility.test.mts test/ui/preview-panel.test.mts && node --test --test-force-exit test/design/load-aesthetics-reference.test.mjs test/server/design-*.test.mjs",
     "test:browser": "node --test --test-force-exit test/browser/*.test.js && node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --import ./test/test-loader.mjs --test --test-force-exit test/tools/browser-preview-tools.test.mts test/tools/minnow-shell.test.mts",
     "test:benchmark": "node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --import ./test/test-loader.mjs --test --test-force-exit test/api/message-content.test.mts test/benchmark/*.test.mts test/ui/benchmark-stop.test.mts test/ui/benchmark-stopped-card.test.mts test/ui/benchmark-history-browse.test.mts test/ui/benchmark-nav-persistence.test.mts test/ui/benchmark-suite-toggles.test.mts test/ui/benchmark-transcript-resolve.test.mts test/ui/transcript-view.test.mts && node --test --test-force-exit test/ui/benchmark-page-html.test.mjs test/benchmark-workspace/*.test.mjs",
     "test:evals": "node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --import ./test/test-loader.mjs --test --test-force-exit test/evals/*.test.mts && node --test --test-force-exit test/evals/eval-api.test.mjs"

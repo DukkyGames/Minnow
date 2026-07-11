@@ -31,7 +31,6 @@ import {
   applyAppearanceFonts,
   subscribeAppearanceFonts,
 } from '../appearance/fonts';
-import { refreshXtermTheme } from './terminal-xterm';
 
 export {
   getFollowSystem,
@@ -89,7 +88,7 @@ export function applyResolvedTheme(id: ThemeId): void {
   void applyAppearanceFonts();
   syncHljsDarkStylesheet(getMode(id));
   refreshHljsInDocument();
-  refreshXtermTheme();
+  void import('./terminal-xterm').then((m) => m.refreshXtermTheme());
 }
 
 /** @deprecated Use applyResolvedTheme(getStoredTheme()). */

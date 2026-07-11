@@ -36,14 +36,37 @@ function cssBeforeEntryScriptPlugin(): Plugin {
   };
 }
 
+/** Rollup manual chunk groups for heavy vendor libraries. */
+function manualChunkForNodeModule(id: string): string | undefined {
+  if (!id.includes('node_modules')) return undefined;
+  if (id.includes('@codemirror') || id.includes('/codemirror/')) {
+    return 'vendor-codemirror';
+  }
+  if (id.includes('@xterm')) {
+    return 'vendor-xterm';
+  }
+  if (id.includes('/recharts/') || id.includes('/d3-')) {
+    return 'vendor-charts';
+  }
+  if (id.includes('highlight.js')) {
+    return 'vendor-highlight';
+  }
+  return undefined;
+}
+
 /** Vite build: relative asset paths for PWA / static hosting. */
 export default defineConfig({
   base: './',
   plugins: [cssBeforeEntryScriptPlugin()],
-  server: {
-    hmr: false,      // ← disables hot reload
-  },
   build: {
     outDir: 'dist',
+    chunkSizeWarningLimit: 1500,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          return manualChunkForNodeModule(id);
+        },
+      },
+    },
   },
 });

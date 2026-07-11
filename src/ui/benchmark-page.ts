@@ -11,7 +11,7 @@ import type {
   CampaignProgressEvent,
   ModelAggregate,
 } from '../benchmark/campaign-types.ts';
-import { getStandardPack, hasFullTierPack, preloadBundledFullPacks, resolveStandardItems } from '../benchmark/standard/pack-loader.ts';
+import { getStandardPack, hasFullTierPack, preloadBundledFullPacks, preloadMiniPacks, resolveStandardItems } from '../benchmark/standard/pack-loader.ts';
 import { runBenchmarkCampaign } from '../benchmark/campaign-runner.ts';
 import { loadImportedStandardDatasets } from '../benchmark/campaign-persistence.ts';
 import {
@@ -2185,7 +2185,8 @@ function onSuiteToggleClick(this: HTMLButtonElement): void {
   this.setAttribute('aria-pressed', pressed ? 'false' : 'true');
 }
 
-export function initBenchmarkPage(): void {
+export async function initBenchmarkPage(): Promise<void> {
+  await preloadMiniPacks();
   registerWindowTeardown('bench', () => closeBenchmark({ skipNavigate: true }));
   document.getElementById('btnBenchmarkQuick')?.addEventListener('click', () => {
     void startRun('quick');
