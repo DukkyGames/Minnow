@@ -13,6 +13,17 @@ import {
   resetDesignToolRegistryForTests,
 } from '../../src/design/design-tool.ts';
 import { resetDesignMetaCacheForTests } from '../../src/config/design-meta.ts';
+import type { DesignModeSession } from '../../src/design/design-mode.ts';
+
+/** armTool() is fire-and-forget; poll until the session reflects the new tool. */
+async function armToolAndWait(session: DesignModeSession, id: string): Promise<void> {
+  session.armTool(id);
+  for (let i = 0; i < 50; i++) {
+    if (session.getArmedToolId() === id) return;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  assert.fail(`Expected tool "${id}" to be armed`);
+}
 
 describe('design-mode mount/unmount + pointer capture', () => {
   let host: HTMLElement;
@@ -90,7 +101,7 @@ describe('design-mode mount/unmount + pointer capture', () => {
     const capture = host.querySelector<HTMLElement>('.mn-design-capture')!;
     assert.equal(capture.style.pointerEvents, 'none');
 
-    session.armTool('draw');
+    await armToolAndWait(session, 'draw');
     assert.equal(capture.style.pointerEvents, 'auto');
 
     session.disarmTool();
@@ -105,10 +116,10 @@ describe('design-mode mount/unmount + pointer capture', () => {
     });
     const capture = host.querySelector<HTMLElement>('.mn-design-capture')!;
 
-    session.armTool('select');
+    assert.equal(session.getArmedToolId(), 'select');
     assert.equal(capture.style.pointerEvents, 'none');
 
-    session.armTool('comment');
+    await armToolAndWait(session, 'comment');
     assert.equal(capture.style.pointerEvents, 'auto');
   });
 
@@ -118,7 +129,7 @@ describe('design-mode mount/unmount + pointer capture', () => {
       host,
       paneElement: pane,
     });
-    session.armTool('draw');
+    await armToolAndWait(session, 'draw');
 
     const events: string[] = [];
     const tool = getDesignTool('draw')!;
@@ -151,7 +162,7 @@ describe('design-mode mount/unmount + pointer capture', () => {
       originalDisarm();
     };
 
-    session.armTool('draw');
+    await armToolAndWait(session, 'draw');
     assert.equal(selectDisarmed, true);
     assert.equal(session.getArmedToolId(), 'draw');
   });
@@ -245,7 +256,7 @@ describe('design-mode keyboard shortcuts', () => {
     outside.focus();
 
     outside.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', bubbles: true }));
-    assert.equal(session.getArmedToolId(), null);
+    assert.equal(session.getArmedToolId(), 'select', 'Select stays armed; shortcut ignored outside pane');
   });
 
   test('shortcuts work when nothing is focused (keydown targets <body>)', async () => {
@@ -312,7 +323,7 @@ describe('design-mode tool strip', () => {
     const sub = host.querySelector<HTMLElement>('.mn-design-strip__sub')!;
     assert.equal(sub.hidden, true);
 
-    session.armTool('draw');
+    await armToolAndWait(session, 'draw');
     assert.equal(sub.hidden, false);
     const pressed = sub.querySelector<HTMLButtonElement>('[data-shape-kind][aria-pressed="true"]');
     assert.equal(pressed?.dataset.shapeKind, 'rect');
