@@ -7,7 +7,7 @@ import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { isImageFilePath } from '../attachments/image-path';
 import { setAssistantBubbleContent } from '../markdown/renderer';
 import { executeTool, getLocalServerAvailable } from '../tools/client';
-import { resolvePreviewLoadUrl, activatePreviewTabGuest } from './preview-panel';
+import { resolvePreviewLoadUrl } from './preview-load-url';
 import { getActivePreviewTabId, listPreviewTabs } from './preview-tab-store';
 import { fetchLspConfig } from '../lsp/config-client';
 import { notifyLspDocument } from '../lsp/completion-client';
@@ -783,7 +783,10 @@ export async function closeViewerTab(path: string): Promise<void> {
       const { showPreviewSplit } = await import('./file-layout');
       showPreviewSplit();
       const nextId = getActivePreviewTabId();
-      if (nextId) await activatePreviewTabGuest(nextId);
+      if (nextId) {
+        const preview = await import('./preview-panel');
+        await preview.activatePreviewTabGuest(nextId);
+      }
     } else {
       hideViewerSplit();
     }

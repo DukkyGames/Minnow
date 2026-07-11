@@ -2,7 +2,7 @@
  * Loads workspace image bytes via the preview file API (binary-safe).
  */
 
-import { resolvePreviewLoadUrl } from '../ui/preview-panel';
+import { resolvePreviewLoadUrl } from '../ui/preview-load-url';
 import { MAX_ATTACHMENT_BYTES } from './reader';
 import { mimeTypeForImagePath } from './image-path';
 

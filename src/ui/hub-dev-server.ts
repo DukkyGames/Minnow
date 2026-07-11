@@ -24,11 +24,6 @@ import {
   formatHubDevServerOpenUrl,
   type HubDevServerViewModel,
 } from './hub-dev-server-view';
-import {
-  ensureDevServerStream,
-  openDevServerConsole,
-  stopDevServerStream,
-} from './terminal-panel';
 import { unregisterShellRun } from './shell-run-registry';
 import { refreshShellKillUi } from './shell-run-ui';
 
@@ -252,13 +247,15 @@ function syncDevServerStream(
   if (!active || !runId) {
     if (streamRunId) {
       streamRunId = null;
-      stopDevServerStream();
+      void import('./terminal-panel').then((m) => m.stopDevServerStream());
     }
     return;
   }
 
   streamRunId = runId;
-  ensureDevServerStream(runId, command ?? 'dev server', activeChatId);
+  void import('./terminal-panel').then((m) =>
+    m.ensureDevServerStream(runId, command ?? 'dev server', activeChatId),
+  );
 }
 
 function scheduleSettingsSave(patch: Partial<DevServerSettings>): void {
@@ -331,7 +328,7 @@ async function stopDevServerAndCancelAgent(): Promise<void> {
   }
 
   managedRunId = null;
-  stopDevServerStream();
+  void import('./terminal-panel').then((m) => m.stopDevServerStream());
   streamRunId = null;
   void refreshDevServerCell();
 }
@@ -588,9 +585,11 @@ export function initHubDevServer(cell: HTMLElement, chat: Chat): void {
   consoleBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
     if (managedRunId && activeChatId) {
-      ensureDevServerStream(managedRunId, 'dev server', activeChatId);
+      void import('./terminal-panel').then((m) =>
+        m.ensureDevServerStream(managedRunId!, 'dev server', activeChatId),
+      );
     }
-    void openDevServerConsole();
+    void import('./terminal-panel').then((m) => m.openDevServerConsole());
   });
 
   const onPrimary = (e?: Event): void => {
@@ -636,7 +635,7 @@ export function updateHubDevServer(): void {
 /** Tear down polling when hub unmounts. */
 export function teardownHubDevServer(): void {
   stopPolling();
-  stopDevServerStream();
+  void import('./terminal-panel').then((m) => m.stopDevServerStream());
   streamRunId = null;
   if (settingsSaveTimer) {
     clearTimeout(settingsSaveTimer);
