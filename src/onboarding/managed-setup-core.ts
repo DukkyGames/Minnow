@@ -11,11 +11,24 @@ import {
 } from '../models/fit';
 import type { HardwareSnapshot, ModelFitResult } from '../models/types';
 
-/** Pick the best-fitting catalog row for this machine. */
-export function pickRecommendedModel(hw: HardwareSnapshot): ModelFitResult | null {
+/** Rank catalog rows for this machine (hardware-aware budget). */
+export function listModelsForHardware(
+  hw: HardwareSnapshot,
+  options: { limit?: number; fitOnly?: boolean; search?: string } = {},
+): ModelFitResult[] {
   const gpuIndex = defaultGpuGroupIndex(hw);
   const budgetHw = hardwareForGpuBudget(hw, gpuIndex);
-  const rows = rankModels(budgetHw, { limit: 8, fitOnly: true, useCase: 'general' });
+  return rankModels(budgetHw, {
+    limit: options.limit ?? 40,
+    fitOnly: options.fitOnly ?? false,
+    search: options.search || null,
+    useCase: 'general',
+  });
+}
+
+/** Pick the best-fitting catalog row for this machine. */
+export function pickRecommendedModel(hw: HardwareSnapshot): ModelFitResult | null {
+  const rows = listModelsForHardware(hw, { limit: 8, fitOnly: true });
   return rows.find((row) => row.fit_level !== 'too_tight') ?? rows[0] ?? null;
 }
 

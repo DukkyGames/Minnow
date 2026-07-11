@@ -18,9 +18,17 @@ import {
 } from '../models/api-client';
 import { fetchHardware } from '../models/hardware-client';
 import type { HardwareSnapshot, ModelFitResult } from '../models/types';
-import { artifactPathForFitRow, pickRecommendedModel } from './managed-setup-core';
+import {
+  artifactPathForFitRow,
+  listModelsForHardware,
+  pickRecommendedModel,
+} from './managed-setup-core';
 
-export { pickRecommendedModel, artifactPathForFitRow } from './managed-setup-core';
+export {
+  pickRecommendedModel,
+  listModelsForHardware,
+  artifactPathForFitRow,
+} from './managed-setup-core';
 
 export type ManagedSetupPhase =
   | 'idle'
@@ -187,16 +195,22 @@ async function startRecommendedServe(
   });
 }
 
+export interface ManagedSetupOptions {
+  /** Catalog row to install; defaults to hardware recommendation. */
+  model?: ModelFitResult;
+}
+
 /**
  * Full managed path: probe hardware, install runtime, download model, serve, select provider.
  */
 export async function runManagedModelSetup(
   onProgress: (progress: ManagedSetupProgress) => void,
+  options: ManagedSetupOptions = {},
 ): Promise<ManagedSetupResult> {
   try {
     onProgress({ phase: 'probing', percent: 2, message: 'Scanning hardware…' });
     const hw = await fetchHardware({ fresh: true });
-    const row = pickRecommendedModel(hw);
+    const row = options.model ?? pickRecommendedModel(hw);
     if (!row) {
       throw new Error('No catalog model fits this hardware. Try a local or cloud provider instead.');
     }
@@ -204,7 +218,7 @@ export async function runManagedModelSetup(
     onProgress({
       phase: 'probing',
       percent: 8,
-      message: `Recommended: ${row.name} (${row.quant}, ${row.fit_level})`,
+      message: `Selected: ${row.name} (${row.quant}, ${row.fit_level.replace('_', ' ')})`,
     });
 
     await ensureRuntime(onProgress);
