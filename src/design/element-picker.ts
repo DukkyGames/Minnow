@@ -5,6 +5,7 @@
  */
 
 import { getFilePanelState } from '../state/file-panel';
+import { isDesignModeUsingIframeGuest } from '../ui/preview-design-mode-guest';
 
 /** Stable pick payload returned from the guest (JSON-cloneable). */
 export interface PickedElement {
@@ -528,7 +529,10 @@ export function isCrossOriginPreview(): boolean {
 /** Detect Electron execJs vs iframe guest access. */
 export function createPickerTransport(): PickerTransport {
   const preview = window.minnow?.preview;
-  if (preview && typeof preview.execJs === 'function') {
+  // In Electron Design Mode the visible guest is a same-origin iframe and the native
+  // WebContentsView is hidden. execJs targets that hidden native view, so it would enable and
+  // poll the picker on a guest the user can't click. Read the iframe directly instead.
+  if (preview && typeof preview.execJs === 'function' && !isDesignModeUsingIframeGuest()) {
     return {
       mode: 'electron',
       async eval(expression: string): Promise<unknown> {

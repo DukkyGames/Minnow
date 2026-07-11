@@ -9,6 +9,10 @@ import {
   setRegionCaptureTestHooks,
   type RegionCaptureContext,
 } from '../../src/design/region-capture.ts';
+import {
+  resetDesignModeIframeGuestForTests,
+  setDesignModeUsingIframeGuest,
+} from '../../src/ui/preview-design-mode-guest.ts';
 
 describe('region-capture computeCropRect', () => {
   test('dpr=1 identity mapping', () => {
@@ -58,6 +62,31 @@ describe('region-capture captureRegion', () => {
 
   afterEach(() => {
     resetRegionCaptureForTests();
+  });
+
+  test('Electron Design Mode iframe guest: never calls the hanging native capturePage', async () => {
+    // Real runtime path (no test hooks). The native WebContentsView capturePage() is hidden and
+    // would block until Design Mode exits, so captureRegion must short-circuit to an outline-only
+    // result and let the composer chip appear immediately.
+    resetRegionCaptureForTests();
+    Object.assign(globalThis.window, {
+      minnow: {
+        preview: {
+          capturePage: async () => { throw new Error('capturePage must not be called'); },
+          getInfo: async () => { throw new Error('getInfo must not be called'); },
+        },
+      },
+    });
+    setDesignModeUsingIframeGuest(true);
+
+    const captured = await captureRegion(ctx);
+    assert.equal(captured.cropped, false);
+    assert.equal(captured.dataUrl, undefined);
+    assert.equal(captured.selector, '#hero');
+    assert.match(captured.error ?? '', /design-mode/i);
+
+    resetDesignModeIframeGuestForTests();
+    Object.assign(globalThis.window, { minnow: undefined });
   });
 
   test('inline path returns a cropped data URL', async () => {

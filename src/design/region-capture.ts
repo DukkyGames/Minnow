@@ -5,6 +5,8 @@
  * mode-state coupling — callers own what happens with the captured region.
  */
 
+import { isDesignModeUsingIframeGuest } from '../ui/preview-design-mode-guest';
+
 export interface DomRectLike {
   x: number;
   y: number;
@@ -283,6 +285,14 @@ function buildCapturedBase(ctx: RegionCaptureContext, partial: Partial<CapturedR
  * tainted (cross-origin preview content).
  */
 export async function captureRegion(ctx: RegionCaptureContext): Promise<CapturedRegion> {
+  // Design Mode's iframe guest is not the native WebContentsView that capturePage()/execJs
+  // target — that view is hidden while Design Mode is on, so a native capture would either be
+  // blank or block until the view is shown again (i.e. until Design Mode exits). Skip it: the
+  // chip/marker is created immediately with just its region outline, no raster crop.
+  if (!testHooks && isDesignModeUsingIframeGuest()) {
+    return buildCapturedBase(ctx, { error: 'design-mode preview — region marked without a raster crop' });
+  }
+
   let fullPageBase64: string | null = null;
   try {
     await scrollElementIntoView(ctx.selector);
