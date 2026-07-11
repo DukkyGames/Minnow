@@ -3,7 +3,13 @@
  */
 
 import type { Attachment } from '../attachments/types';
-import { parseHistoryUserContent } from '../chat/user-message-parts';
+import { formatElementRefLabel } from '../attachments/element-ref-format';
+import { formatDesignRefLabel } from '../attachments/design-ref-format';
+import {
+  parseHistoryUserContent,
+  type HistoryDesignRefPart,
+  type HistoryElementRefPart,
+} from '../chat/user-message-parts';
 import { stripSkillTagFromHistory } from '../skills/history-content';
 import { createCodeRefLinkButton } from './code-ref-link';
 
@@ -22,10 +28,99 @@ function findLiveImageDataUrl(
   return hit?.dataUrl;
 }
 
+function findLiveElementRefDataUrl(
+  name: string,
+  liveAttachments?: Attachment[],
+): string | undefined {
+  if (!liveAttachments?.length) return undefined;
+  const hit = liveAttachments.find((a) => a.kind === 'elementRef' && a.name === name);
+  return hit?.croppedDataUrl;
+}
+
+function findLiveDesignRefDataUrl(
+  name: string,
+  liveAttachments?: Attachment[],
+): string | undefined {
+  if (!liveAttachments?.length) return undefined;
+  const hit = liveAttachments.find((a) => a.kind === 'designRef' && a.name === name);
+  return hit?.compositedDataUrl;
+}
+
+/** Multi-line "open" body for an element-ref chip (selector, styles, outerHTML preview). */
+function elementRefSummaryText(ref: HistoryElementRefPart): string {
+  const lines: string[] = [
+    `Selector: ${ref.selector}`,
+    ...(ref.uid != null ? [`data-mn-uid: ${ref.uid}`] : []),
+    `Tag: ${ref.tagName}`,
+    ...(ref.classList.length ? [`Classes: ${ref.classList.join(' ')}`] : []),
+    ...(ref.rect
+      ? [
+          `Rect: ${Math.round(ref.rect.x)},${Math.round(ref.rect.y)} ${Math.round(ref.rect.width)}×${Math.round(ref.rect.height)}`,
+        ]
+      : []),
+    `Page: ${ref.pageUrl}`,
+    `Styles: ${ref.stylesDigest}`,
+    ...(ref.accessibleName ? [`Accessible name: ${ref.accessibleName}`] : []),
+    ...(ref.contrastRatio != null ? [`Contrast: ${ref.contrastRatio}`] : []),
+    ...(ref.source ? [`Source: ${ref.source}${ref.confidence ? ` (${ref.confidence})` : ''}`] : []),
+    '',
+    ref.outerHtmlPreview,
+  ];
+  return lines.join('\n');
+}
+
+/** Multi-line "open" body for a design-ref chip (kind, anchor, page, intent text). */
+function designRefSummaryText(ref: HistoryDesignRefPart): string {
+  const lines: string[] = [
+    `Kind: ${ref.kind}`,
+    ...(ref.anchor?.type === 'element'
+      ? [
+          `Anchor: element ${ref.anchor.selector}`,
+          ...(ref.anchor.uid != null ? [`data-mn-uid: ${ref.anchor.uid}`] : []),
+        ]
+      : ref.anchor?.type === 'page'
+        ? [`Anchor: page @ ${ref.anchor.x},${ref.anchor.y}`]
+        : []),
+    `Page: ${ref.pageUrl}`,
+    '',
+    ref.intentText,
+  ];
+  return lines.join('\n');
+}
+
 function openFilePart(name: string, body: string): void {
   void import('./file-viewer').then((m) => {
     m.openAttachmentSnapshotInViewer(name, body);
   });
+}
+
+/**
+ * "View on page" affordance for a linked design-ref (MIN-368): opens the preview at the
+ * shape's page, enables Design Mode, and pulses the surviving anchor — or toasts that it's
+ * moved/removed when the shape's uid AND selector both fail to resolve on the live page.
+ */
+function createOnPageButton(pageUrl: string, shapeId: string): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'msg-onpage-btn';
+  btn.title = 'View this mark on the page';
+  btn.setAttribute('aria-label', 'View this mark on the page');
+  btn.textContent = '◎';
+  btn.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    void Promise.all([
+      import('../design/annotation-nav'),
+      import('./toast'),
+    ]).then(async ([nav, toast]) => {
+      const status = await nav.openAnnotationOnPage(pageUrl, { shapeId });
+      if (status === 'dead') {
+        toast.showToast('This mark moved or was removed from the page.', 'error');
+      } else if (status === 'unavailable') {
+        toast.showToast('Could not locate this annotation.', 'error');
+      }
+    });
+  });
+  return btn;
 }
 
 function createMessageAttachChip(
@@ -33,6 +128,8 @@ function createMessageAttachChip(
   options: {
     kind: 'file' | 'image';
     dataUrl?: string;
+    /** Native tooltip — defaults to "Open {label}". */
+    title?: string;
     onOpen: () => void;
   },
 ): HTMLButtonElement {
@@ -44,7 +141,7 @@ function createMessageAttachChip(
   } else {
     chip.classList.add('msg-attach-chip--file');
   }
-  chip.title = `Open ${label}`;
+  chip.title = options.title ?? `Open ${label}`;
   chip.setAttribute('aria-label', `Open attachment ${label}`);
 
   if (options.kind === 'image' && options.dataUrl) {
@@ -86,10 +183,25 @@ export function renderUserMessageBubble(
     bubble.appendChild(textEl);
   }
 
+  // The crop for an elementRef is co-emitted as its own `[image: name]` placeholder
+  // (same multimodal pipeline as any other image); skip rendering it a second time
+  // as a bare image chip once the elementRef chip below already shows it.
+  const elementRefImageNames = new Set(
+    parsed.elementRefs.map((ref) => ref.imageName).filter((name): name is string => Boolean(name)),
+  );
+  const designRefImageNames = new Set(
+    parsed.designRefs.map((ref) => ref.imageName).filter((name): name is string => Boolean(name)),
+  );
+  const visibleImages = parsed.images.filter(
+    (image) => !elementRefImageNames.has(image.name) && !designRefImageNames.has(image.name),
+  );
+
   const hasChips =
     parsed.files.length > 0 ||
-    parsed.images.length > 0 ||
-    parsed.codeRefs.length > 0;
+    visibleImages.length > 0 ||
+    parsed.codeRefs.length > 0 ||
+    parsed.elementRefs.length > 0 ||
+    parsed.designRefs.length > 0;
   if (!hasChips) {
     if (!parsed.text) {
       bubble.textContent = displaySource.trim() || historyContent;
@@ -127,7 +239,7 @@ export function renderUserMessageBubble(
     );
   }
 
-  for (const image of parsed.images) {
+  for (const image of visibleImages) {
     const dataUrl = findLiveImageDataUrl(image.name, live);
     row.appendChild(
       createMessageAttachChip(image.name, {
@@ -146,7 +258,41 @@ export function renderUserMessageBubble(
     );
   }
 
-  if (parsed.files.length > 0 || parsed.images.length > 0) {
+  for (const ref of parsed.elementRefs) {
+    const label = formatElementRefLabel(ref.selector, ref.pageUrl);
+    const dataUrl = ref.imageName ? findLiveElementRefDataUrl(ref.imageName, live) : undefined;
+    const summary = elementRefSummaryText(ref);
+    row.appendChild(
+      createMessageAttachChip(label, {
+        kind: 'image',
+        dataUrl,
+        title: summary,
+        onOpen: () => openFilePart(label, summary),
+      }),
+    );
+  }
+
+  for (const ref of parsed.designRefs) {
+    const label = formatDesignRefLabel(ref.kind, ref.pageUrl);
+    const dataUrl = ref.imageName ? findLiveDesignRefDataUrl(ref.imageName, live) : undefined;
+    row.appendChild(
+      createMessageAttachChip(label, {
+        kind: 'image',
+        dataUrl,
+        onOpen: () => openFilePart(label, designRefSummaryText(ref)),
+      }),
+    );
+    if (ref.shapeId) {
+      row.appendChild(createOnPageButton(ref.pageUrl, ref.shapeId));
+    }
+  }
+
+  if (
+    parsed.files.length > 0 ||
+    visibleImages.length > 0 ||
+    parsed.elementRefs.length > 0 ||
+    parsed.designRefs.length > 0
+  ) {
     bubble.appendChild(row);
   }
 }

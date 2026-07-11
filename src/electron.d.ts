@@ -50,36 +50,96 @@ export interface MinnowPreviewTabInfo {
 }
 
 export interface MinnowPreviewTabsApi {
-  create(tabId?: string): Promise<string>;
-  close(id: string): Promise<void>;
-  activate(id: string): Promise<void>;
-  list(): Promise<MinnowPreviewTabInfo[]>;
+  create(tabId?: string, instanceId?: string): Promise<string>;
+  close(id: string, instanceId?: string): Promise<void>;
+  activate(id: string, instanceId?: string): Promise<void>;
+  list(instanceId?: string): Promise<MinnowPreviewTabInfo[]>;
+}
+
+/**
+ * Named preview instance lifecycle (MIN-364). Instances are parallel WebContentsView-backed
+ * surfaces (workspace right pane, Design surface, future Studio live-component frames), each
+ * with its own tab set. See electron/preview-instance-registry.ts for the default instance id
+ * ('workspace-preview') and reserved id conventions.
+ */
+export interface MinnowPreviewInstancesApi {
+  create(instanceId?: string): Promise<string>;
+  destroy(instanceId: string): Promise<void>;
+  list(): Promise<string[]>;
+}
+
+/**
+ * CDP-adapted pick — structurally identical to `PickedElement` in
+ * `src/design/element-picker.ts` (kept as a separate type here since electron.d.ts can't import
+ * from src/design without creating a renderer↔main type coupling across build boundaries).
+ */
+export interface MinnowCdpPickedElement {
+  uid: number | null;
+  cssSelector: string;
+  tagName: string;
+  classList: string[];
+  outerHTMLPreview: string;
+  boundingRect: { x: number; y: number; width: number; height: number };
+  devicePixelRatio: number;
+  stylesDigest: string;
+  shiftKey: boolean;
+  accessibleName: string;
+  contrastRatio: number | null;
+  domPath: string;
+  attributes: Record<string, string>;
+  computedStyles: Record<string, string>;
+}
+
+/** Native (script-free) element picking over CDP for cross-origin preview guests (MIN-370). */
+export interface MinnowCdpPickerApi {
+  enable(tabId?: string, instanceId?: string): Promise<{ ok: boolean; error?: string }>;
+  disable(tabId?: string, instanceId?: string): Promise<void>;
+  onPick(
+    callback: (picked: MinnowCdpPickedElement, tabId?: string, instanceId?: string) => void,
+  ): () => void;
+  onError(callback: (message: string, tabId?: string, instanceId?: string) => void): () => void;
 }
 
 export interface MinnowPreviewApi {
-  show(bounds?: MinnowPreviewBounds, tabId?: string): Promise<void>;
-  hide(tabId?: string): Promise<void>;
-  clear(tabId?: string): Promise<void>;
-  loadURL(url: string, tabId?: string): Promise<void>;
-  loadSource(payload: MinnowPreviewLoadSourcePayload, tabId?: string): Promise<void>;
-  reload(tabId?: string): Promise<void>;
-  stop(tabId?: string): Promise<void>;
-  goBack(tabId?: string): Promise<void>;
-  goForward(tabId?: string): Promise<void>;
-  setBounds(bounds: MinnowPreviewBounds, tabId?: string): Promise<void>;
-  execJs(code: string, tabId?: string): Promise<unknown>;
-  capturePage(tabId?: string): Promise<string>;
-  getInfo(tabId?: string): Promise<MinnowPreviewGuestInfo>;
-  navigateAndWait(url: string, tabId?: string): Promise<MinnowPreviewNavigateAwaitResult>;
+  // Every method takes an optional trailing `instanceId`; omitting it targets the default
+  // 'workspace-preview' instance, so every pre-MIN-364 call site keeps working unchanged.
+  show(bounds?: MinnowPreviewBounds, tabId?: string, instanceId?: string): Promise<void>;
+  hide(tabId?: string, instanceId?: string): Promise<void>;
+  clear(tabId?: string, instanceId?: string): Promise<void>;
+  loadURL(url: string, tabId?: string, instanceId?: string): Promise<void>;
+  loadSource(
+    payload: MinnowPreviewLoadSourcePayload,
+    tabId?: string,
+    instanceId?: string,
+  ): Promise<void>;
+  reload(tabId?: string, instanceId?: string): Promise<void>;
+  stop(tabId?: string, instanceId?: string): Promise<void>;
+  goBack(tabId?: string, instanceId?: string): Promise<void>;
+  goForward(tabId?: string, instanceId?: string): Promise<void>;
+  setBounds(bounds: MinnowPreviewBounds, tabId?: string, instanceId?: string): Promise<void>;
+  execJs(code: string, tabId?: string, instanceId?: string): Promise<unknown>;
+  capturePage(tabId?: string, instanceId?: string): Promise<string>;
+  getInfo(tabId?: string, instanceId?: string): Promise<MinnowPreviewGuestInfo>;
+  navigateAndWait(
+    url: string,
+    tabId?: string,
+    instanceId?: string,
+  ): Promise<MinnowPreviewNavigateAwaitResult>;
   tabs: MinnowPreviewTabsApi;
-  onNavigation(callback: (url: string, tabId?: string) => void): () => void;
-  onLoading(callback: (loading: boolean, tabId?: string) => void): () => void;
-  onPageTitle(callback: (title: string, tabId?: string) => void): () => void;
+  instances: MinnowPreviewInstancesApi;
+  cdpPicker: MinnowCdpPickerApi;
+  onNavigation(callback: (url: string, tabId?: string, instanceId?: string) => void): () => void;
+  onLoading(callback: (loading: boolean, tabId?: string, instanceId?: string) => void): () => void;
+  onPageTitle(callback: (title: string, tabId?: string, instanceId?: string) => void): () => void;
   onLoadFailed(
-    callback: (detail: MinnowPreviewLoadFailedDetail, tabId?: string) => void,
+    callback: (detail: MinnowPreviewLoadFailedDetail, tabId?: string, instanceId?: string) => void,
   ): () => void;
   onGuestCrashed?(
-    callback: (detail: MinnowPreviewGuestCrashedDetail, tabId?: string) => void,
+    callback: (
+      detail: MinnowPreviewGuestCrashedDetail,
+      tabId?: string,
+      instanceId?: string,
+    ) => void,
   ): () => void;
 }
 
