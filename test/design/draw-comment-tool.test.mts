@@ -297,6 +297,80 @@ describe('Draw & Comment design tools (MIN-367)', () => {
     comment.disarm();
   });
 
+  test('draw shows a live draft while dragging and clears it on pointer up', async () => {
+    const draw = createDrawDesignTool();
+    const ctx = makeCtx();
+    draw.arm(ctx);
+    await flush();
+
+    draw.onPointerDown?.({ x: 10, y: 10, raw: {} as PointerEvent });
+    draw.onPointerMove?.({ x: 60, y: 50, raw: {} as PointerEvent });
+    const draft = host.querySelector('.mn-design-overlay-draft');
+    assert.ok(draft);
+    assert.ok(draft!.childNodes.length > 0, 'draft rect should render during the drag');
+
+    draw.onPointerUp?.({ x: 60, y: 50, raw: {} as PointerEvent });
+    await flush();
+    assert.equal(draft!.childNodes.length, 0, 'draft clears once the shape is committed');
+    assert.equal(draw.getShapes().length, 1);
+    draw.disarm();
+  });
+
+  test('clicking an existing pin reopens its thread instead of stacking a duplicate pin', async () => {
+    const comment = createCommentDesignTool();
+    const ctx = makeCtx();
+    comment.arm(ctx);
+    await flush();
+
+    comment.onPointerUp?.({ x: 40, y: 60, raw: {} as PointerEvent });
+    await flush();
+    assert.equal(comment.getPins().length, 1);
+    // Dismiss the popover the new pin opened, then click the pin itself.
+    host.querySelector<HTMLButtonElement>('.mn-design-pin-popover__close')?.click();
+
+    comment.onPointerUp?.({ x: 42, y: 58, raw: {} as PointerEvent });
+    await flush();
+    assert.equal(comment.getPins().length, 1, 'no duplicate pin within the hit radius');
+    assert.ok(host.querySelector('.mn-design-pin-popover'), 'thread popover reopened');
+    comment.disarm();
+  });
+
+  test('clicking elsewhere while a thread is open dismisses it instead of dropping a pin', async () => {
+    const comment = createCommentDesignTool();
+    const ctx = makeCtx();
+    comment.arm(ctx);
+    await flush();
+
+    comment.onPointerUp?.({ x: 40, y: 60, raw: {} as PointerEvent });
+    await flush();
+    assert.ok(host.querySelector('.mn-design-pin-popover'));
+
+    comment.onPointerUp?.({ x: 200, y: 200, raw: {} as PointerEvent });
+    await flush();
+    assert.equal(comment.getPins().length, 1);
+    assert.equal(host.querySelector('.mn-design-pin-popover'), null);
+    comment.disarm();
+  });
+
+  test('Enter in the popover input adds a note to the thread', async () => {
+    const comment = createCommentDesignTool();
+    const ctx = makeCtx();
+    comment.arm(ctx);
+    await flush();
+
+    comment.onPointerUp?.({ x: 40, y: 60, raw: {} as PointerEvent });
+    await flush();
+    const input = host.querySelector<HTMLInputElement>('.mn-design-pin-popover__input')!;
+    input.value = 'tighten this spacing';
+    input.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await flush();
+
+    const pin = comment.getPins()[0];
+    assert.equal(pin?.notes.length, 1);
+    assert.equal(pin?.notes[0]?.text, 'tighten this spacing');
+    comment.disarm();
+  });
+
   test('comment pins do not push composer attachments (comments are markup, not chat turns)', async () => {
     const comment = createCommentDesignTool();
     const ctx = makeCtx();

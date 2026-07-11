@@ -496,8 +496,21 @@ function unwrapExecJsResult(raw: unknown): unknown {
   return raw;
 }
 
-function getPreviewFrame(): HTMLIFrameElement | null {
+/**
+ * The iframe currently hosting the preview guest. Multi-tab previews (MIN-224) create one
+ * `iframe.preview-frame` per tab inside `#previewBody` with no id — only the active tab's
+ * frame is unhidden. The legacy `#previewFrame` id is kept as a fallback for older mounts
+ * and existing tests.
+ */
+export function getPreviewGuestFrame(): HTMLIFrameElement | null {
+  const body = document.getElementById('previewBody');
+  const active = body?.querySelector<HTMLIFrameElement>('iframe.preview-frame:not([hidden])');
+  if (active) return active;
   return document.getElementById('previewFrame') as HTMLIFrameElement | null;
+}
+
+function getPreviewFrame(): HTMLIFrameElement | null {
+  return getPreviewGuestFrame();
 }
 
 /** True when the current preview page is a cross-origin URL (exported for MIN-370 CDP routing). */

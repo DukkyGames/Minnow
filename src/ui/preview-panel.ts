@@ -127,9 +127,12 @@ function getOrCreateFrame(tabId: string): HTMLIFrameElement | null {
   if (!frame) {
     frame = document.createElement('iframe');
     frame.className = 'preview-frame';
+    // allow-same-origin is required for Design Mode: the element picker and anchor
+    // resolution read the guest document, which an opaque-origin sandbox forbids even
+    // for same-origin workspace pages. External URLs stay cross-origin protected by SOP.
     frame.setAttribute(
       'sandbox',
-      'allow-scripts allow-forms allow-popups allow-modals',
+      'allow-scripts allow-forms allow-popups allow-modals allow-same-origin',
     );
     frame.title = 'Workspace preview';
     frame.hidden = true;
@@ -304,8 +307,14 @@ async function syncDesignModeElectronGuest(): Promise<void> {
   } else {
     body.classList.remove('preview-body--design-mode');
     chrome?.setAttribute('hidden', '');
-    for (const frame of iframesByTabId.values()) {
-      frame.hidden = true;
+    if (usesElectronPreview()) {
+      // Native WebContentsView takes over — park every DOM iframe.
+      for (const frame of iframesByTabId.values()) {
+        frame.hidden = true;
+      }
+    } else {
+      // Browser mode: iframes ARE the preview; keep the active tab's frame visible.
+      showActiveTabFrame();
     }
   }
 
@@ -328,7 +337,11 @@ async function toggleDesignModeFromToolbar(): Promise<void> {
 
   getDesignToggleButton()?.setAttribute('aria-pressed', 'true');
   getDesignToggleButton()?.classList.add('is-active');
-  await enableDesignMode(resolveDesignModeMountOptions(host, pane, getPreviewDesignChrome()));
+  await enableDesignMode(
+    resolveDesignModeMountOptions(host, pane, getPreviewDesignChrome(), () =>
+      void toggleDesignModeFromToolbar(),
+    ),
+  );
   await syncDesignModeElectronGuest();
 }
 
@@ -351,7 +364,11 @@ export async function openPreviewPageAndEnableDesignMode(pageUrl: string): Promi
 
   getDesignToggleButton()?.setAttribute('aria-pressed', 'true');
   getDesignToggleButton()?.classList.add('is-active');
-  await enableDesignMode(resolveDesignModeMountOptions(host, pane, getPreviewDesignChrome()));
+  await enableDesignMode(
+    resolveDesignModeMountOptions(host, pane, getPreviewDesignChrome(), () =>
+      void toggleDesignModeFromToolbar(),
+    ),
+  );
   await syncDesignModeElectronGuest();
 }
 

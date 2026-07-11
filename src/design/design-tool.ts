@@ -9,6 +9,7 @@ import type { AnnotationOverlay, OverlayMarker } from './overlay';
 import {
   createBestElementPicker,
   createPickerTransport,
+  getPreviewGuestFrame,
   uidFallbackSelector,
   type ElementPicker,
   type PickedElement,
@@ -66,6 +67,13 @@ export interface DesignToolPointerEvent {
 export interface DesignTool {
   id: string;
   label: string;
+  /**
+   * How the armed tool wants pointer events routed. 'capture' (default) raises the capture
+   * layer so pointer events come through onPointerDown/Move/Up in host-space. 'passthrough'
+   * leaves the guest interactive — used by Select, whose picker listens inside the guest
+   * document itself and would never see a click the capture layer swallowed.
+   */
+  pointerMode?: 'capture' | 'passthrough';
   /** Called when this tool becomes the armed tool. Pointer capture is already enabled. */
   arm(ctx: DesignToolContext): void;
   /** Called when this tool stops being the armed tool (Esc, switching tools, mode off). */
@@ -185,6 +193,7 @@ export function createSelectDesignTool(): DesignTool {
   return {
     id: 'select',
     label: 'Select',
+    pointerMode: 'passthrough',
     arm(context) {
       ctx = context;
       resetSelection();
@@ -221,7 +230,7 @@ const TAGGED_ELEMENTS_SCRIPT = `(() => {
 })()`;
 
 function getPreviewFrame(): HTMLIFrameElement | null {
-  return document.getElementById('previewFrame') as HTMLIFrameElement | null;
+  return getPreviewGuestFrame();
 }
 
 /**
@@ -262,6 +271,47 @@ export async function gatherAnchorCandidates(): Promise<AnchorCandidate[]> {
   } catch {
     return [];
   }
+}
+
+/**
+ * Inline label editor (MIN-367 polish): a small floating text input at the click point.
+ * Replaces window.prompt, which is blocked in the Electron renderer and jarring everywhere
+ * else. Enter commits, Escape cancels, blur commits any non-empty text.
+ */
+function openInlineLabelEditor(
+  host: HTMLElement,
+  point: ShapePoint,
+  onCommit: (text: string) => void,
+): void {
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'mn-design-label-editor';
+  input.placeholder = 'Label…';
+  input.setAttribute('aria-label', 'Label text');
+  input.style.left = `${Math.round(Math.max(0, Math.min(point.x, host.clientWidth - 160)))}px`;
+  input.style.top = `${Math.round(Math.max(0, point.y - 14))}px`;
+
+  let done = false;
+  const finish = (commit: boolean): void => {
+    if (done) return;
+    done = true;
+    const text = input.value.trim();
+    input.remove();
+    if (commit && text) onCommit(text);
+  };
+
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      finish(true);
+    } else if (ev.key === 'Escape') {
+      ev.preventDefault();
+      finish(false);
+    }
+  });
+  input.addEventListener('blur', () => finish(true));
+  host.appendChild(input);
+  input.focus();
 }
 
 function guestScrollOffset(): { x: number; y: number } {
@@ -364,6 +414,7 @@ export function createDrawDesignTool(): DrawDesignTool {
       });
     },
     disarm() {
+      ctx?.overlay.renderDraft(null);
       ctx?.overlay.renderShapes([]);
       ctx = null;
       shapes = [];
@@ -375,13 +426,38 @@ export function createDrawDesignTool(): DrawDesignTool {
       if (kind === 'pen') penPoints = [{ x: evt.x, y: evt.y }];
     },
     onPointerMove(evt) {
-      if (!dragStart) return;
-      if (kind === 'pen') penPoints.push({ x: evt.x, y: evt.y });
+      if (!dragStart || !ctx) return;
+      const start = dragStart;
+      const current = { x: evt.x, y: evt.y };
+      const draftBase = {
+        id: 'draft',
+        anchor: { type: 'page', x: 0, y: 0, scrollX: 0, scrollY: 0 },
+        createdAt: 0,
+      } as const;
+
+      if (kind === 'pen') {
+        penPoints.push(current);
+        ctx.overlay.renderDraft({ ...draftBase, kind: 'pen', points: [...penPoints] });
+      } else if (kind === 'rect') {
+        ctx.overlay.renderDraft({
+          ...draftBase,
+          kind: 'rect',
+          rect: {
+            x: Math.min(start.x, current.x),
+            y: Math.min(start.y, current.y),
+            width: Math.abs(current.x - start.x),
+            height: Math.abs(current.y - start.y),
+          },
+        });
+      } else if (kind === 'arrow') {
+        ctx.overlay.renderDraft({ ...draftBase, kind: 'arrow', points: [start, current] });
+      }
     },
     onPointerUp(evt) {
       if (!dragStart) return;
       const start = dragStart;
       dragStart = null;
+      ctx?.overlay.renderDraft(null);
       const end = { x: evt.x, y: evt.y };
 
       if (kind === 'rect') {
@@ -412,13 +488,13 @@ export function createDrawDesignTool(): DrawDesignTool {
       }
 
       if (kind === 'label') {
-        const text =
-          typeof window !== 'undefined' && typeof window.prompt === 'function'
-            ? window.prompt('Label text')?.trim()
-            : '';
-        if (!text) return;
-        const rect = { x: start.x, y: start.y - 10, width: Math.max(24, text.length * 7 + 12), height: 20 };
-        void finalizeShape({ kind: 'label', rect, label: text });
+        const armedCtx = ctx;
+        if (!armedCtx) return;
+        openInlineLabelEditor(armedCtx.host, start, (text) => {
+          if (ctx !== armedCtx) return; // disarmed while typing
+          const rect = { x: start.x, y: start.y - 10, width: Math.max(24, text.length * 7 + 12), height: 20 };
+          void finalizeShape({ kind: 'label', rect, label: text });
+        });
       }
     },
     render() {
@@ -482,9 +558,37 @@ export function createCommentDesignTool(): CommentDesignTool {
   function openPopover(pin: CommentPin): void {
     if (!ctx) return;
     closePopover();
+    const host = ctx.host;
     const panel = document.createElement('div');
     panel.className = 'mn-design-pin-popover';
-    panel.style.cssText = `position:absolute;left:${Math.round(pin.x) + 14}px;top:${Math.round(pin.y)}px;z-index:5;`;
+
+    const header = document.createElement('div');
+    header.className = 'mn-design-pin-popover__header';
+
+    const title = document.createElement('span');
+    title.className = 'mn-design-pin-popover__title';
+    title.textContent = `Comment ${pin.index}`;
+    header.appendChild(title);
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'mn-design-pin-popover__delete';
+    deleteBtn.title = 'Delete pin';
+    deleteBtn.setAttribute('aria-label', 'Delete pin');
+    deleteBtn.textContent = '🗑';
+    deleteBtn.addEventListener('click', () => erasePinInternal(pin.id));
+    header.appendChild(deleteBtn);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'mn-design-pin-popover__close';
+    closeBtn.title = 'Close';
+    closeBtn.setAttribute('aria-label', 'Close comment thread');
+    closeBtn.textContent = '×';
+    closeBtn.addEventListener('click', () => closePopover());
+    header.appendChild(closeBtn);
+
+    panel.appendChild(header);
 
     const list = document.createElement('div');
     list.className = 'mn-design-pin-popover__notes';
@@ -496,33 +600,63 @@ export function createCommentDesignTool(): CommentDesignTool {
     }
     panel.appendChild(list);
 
+    const inputRow = document.createElement('div');
+    inputRow.className = 'mn-design-pin-popover__input-row';
+
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'mn-design-pin-popover__input';
     input.placeholder = 'Add a note…';
-    panel.appendChild(input);
+    inputRow.appendChild(input);
+
+    const submitNote = (): void => {
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      void addNoteInternal(pin.id, text);
+    };
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        submitNote();
+      } else if (ev.key === 'Escape') {
+        ev.preventDefault();
+        closePopover();
+      }
+    });
 
     const addBtn = document.createElement('button');
     addBtn.type = 'button';
     addBtn.className = 'mn-design-pin-popover__add';
     addBtn.textContent = 'Add';
-    addBtn.addEventListener('click', () => {
-      const text = input.value.trim();
-      if (!text) return;
-      input.value = '';
-      void addNoteInternal(pin.id, text);
-    });
-    panel.appendChild(addBtn);
+    addBtn.addEventListener('click', submitNote);
+    inputRow.appendChild(addBtn);
 
-    const closeBtn = document.createElement('button');
-    closeBtn.type = 'button';
-    closeBtn.className = 'mn-design-pin-popover__close';
-    closeBtn.textContent = '×';
-    closeBtn.addEventListener('click', () => closePopover());
-    panel.appendChild(closeBtn);
+    panel.appendChild(inputRow);
 
-    ctx.host.appendChild(panel);
+    // Position beside the pin, then clamp inside the host so threads near the right/bottom
+    // edge don't overflow off screen.
+    panel.style.left = `${Math.round(pin.x) + 14}px`;
+    panel.style.top = `${Math.round(pin.y)}px`;
+    host.appendChild(panel);
+    const panelW = panel.offsetWidth || 220;
+    const panelH = panel.offsetHeight || 120;
+    const maxLeft = Math.max(0, host.clientWidth - panelW - 8);
+    const maxTop = Math.max(0, host.clientHeight - panelH - 8);
+    let left = Math.round(pin.x) + 14;
+    if (left > maxLeft) left = Math.max(0, Math.round(pin.x) - panelW - 14);
+    panel.style.left = `${Math.min(Math.max(0, left), maxLeft)}px`;
+    panel.style.top = `${Math.min(Math.max(0, Math.round(pin.y)), maxTop)}px`;
+
     popover = panel;
+    input.focus();
+  }
+
+  function erasePinInternal(pinId: string): void {
+    pins = pins.filter((p) => p.id !== pinId);
+    renderPins();
+    closePopover();
+    void erasePinAnnotation(pageKey, pinId);
   }
 
   async function addNoteInternal(pinId: string, text: string): Promise<void> {
@@ -557,6 +691,21 @@ export function createCommentDesignTool(): CommentDesignTool {
     onPointerUp(evt) {
       const armedCtx = ctx;
       if (!armedCtx) return;
+
+      // Clicking an existing pin re-opens its thread — the capture layer sits above the
+      // overlay SVG, so the pin's own click handler never fires while this tool is armed.
+      const hit = pins.find((p) => Math.hypot(p.x - evt.x, p.y - evt.y) <= 14);
+      if (hit) {
+        openPopover(hit);
+        return;
+      }
+
+      // A click elsewhere while a thread is open dismisses it instead of dropping a new pin.
+      if (popover) {
+        closePopover();
+        return;
+      }
+
       void (async () => {
         const rect = { x: evt.x - 1, y: evt.y - 1, width: 2, height: 2 };
         const [candidates, scroll] = await Promise.all([
@@ -587,10 +736,7 @@ export function createCommentDesignTool(): CommentDesignTool {
       await addNoteInternal(pinId, text);
     },
     erasePin(pinId) {
-      pins = pins.filter((p) => p.id !== pinId);
-      renderPins();
-      if (popover) closePopover();
-      void erasePinAnnotation(pageKey, pinId);
+      erasePinInternal(pinId);
     },
     undo() {
       void undoPage(pageKey).then((data) => {

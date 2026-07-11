@@ -20,11 +20,13 @@ export function resolveDesignModeMountOptions(
   host: HTMLElement,
   pane: HTMLElement | null,
   chromeHost: HTMLElement | null,
+  onExit?: () => void,
 ): DesignModeMountOptions {
   return {
     instanceId: WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID,
     host,
     chromeHost: usesElectronPreview() ? (chromeHost ?? undefined) : undefined,
     paneElement: pane ?? host,
+    onExit,
   };
 }

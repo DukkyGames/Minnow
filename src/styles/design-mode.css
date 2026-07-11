@@ -5,18 +5,25 @@
   color: var(--mn-accent);
 }
 
+/* Floating tool strip — bottom-centered pill over the preview host. All positioning lives
+   here (never inline) so the #previewDesignChrome variant below can win in Electron. */
 .mn-design-strip {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  position: absolute;
+  z-index: 6;
   left: 50%;
   bottom: 12px;
   transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 16px);
   padding: 6px 10px;
   border: 1px solid var(--mn-border);
   border-radius: var(--mn-radius-md, 8px);
   background: var(--mn-surface-2);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.24);
+  pointer-events: auto;
 }
 
 /* Tool strip in #previewDesignChrome sits below the guest — no absolute overlay positioning. */
@@ -28,29 +35,52 @@
   box-shadow: none;
 }
 
+.mn-design-strip__row,
+.mn-design-strip__sub {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.mn-design-strip__sub[hidden] {
+  display: none;
+}
+
 .mn-design-strip__tools,
 .mn-design-strip__viewports {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding-inline-end: 8px;
-  border-inline-end: 1px solid var(--mn-border);
+}
+
+.mn-design-strip__sep {
+  width: 1px;
+  height: 18px;
+  margin-inline: 4px;
+  background: var(--mn-border);
+  flex-shrink: 0;
 }
 
 .mn-design-strip__btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 28px;
+  width: 28px;
   height: 28px;
-  padding: 0 8px;
+  padding: 0;
   border: 1px solid transparent;
   border-radius: var(--mn-radius-sm, 4px);
   background: transparent;
   color: var(--mn-fg-muted);
-  font-size: 0.75rem;
-  font-family: var(--font-ui);
   cursor: pointer;
+}
+
+.mn-design-strip__btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .mn-design-strip__btn:hover {
@@ -64,18 +94,28 @@
   color: var(--mn-fg);
 }
 
-.mn-design-strip__dark-toggle {
-  border-inline-start: 1px solid var(--mn-border);
-  padding-inline-start: 8px;
+/* Inline text-label editor for the Draw tool's label kind (replaces window.prompt). */
+.mn-design-label-editor {
+  position: absolute;
+  z-index: 6;
+  width: 160px;
+  padding: 4px 6px;
+  border: 1px solid var(--mn-accent);
+  border-radius: var(--mn-radius-sm, 4px);
+  background: var(--mn-surface-2);
+  color: var(--mn-fg);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24);
 }
 
 /* Viewport preset frame — mobile/tablet constrain the guest's host width so the native
-   Electron WebContentsView (or iframe) resizes to match, centered inside the pane. */
+   Electron WebContentsView (or iframe) resizes to match, centered inside the pane.
+   (No spread box-shadow here: a 9999px shadow paints over the whole app outside the pane.) */
 .mn-design-viewport--mobile,
 .mn-design-viewport--tablet {
   margin-inline: auto;
   border-inline: 1px solid var(--mn-border);
-  box-shadow: 0 0 0 9999px var(--mn-surface-1);
 }
 
 .mn-design-viewport--mobile {
@@ -98,6 +138,8 @@
 
 /* Comment tool pin thread popover (MIN-367) — plain HTML panel positioned over the SVG pin. */
 .mn-design-pin-popover {
+  position: absolute;
+  z-index: 7;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -110,6 +152,43 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.24);
   font-family: var(--font-ui);
   font-size: 0.8rem;
+}
+
+.mn-design-pin-popover__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mn-design-pin-popover__title {
+  flex: 1 1 auto;
+  font-weight: 600;
+  color: var(--mn-fg);
+}
+
+.mn-design-pin-popover__input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mn-design-pin-popover__input-row .mn-design-pin-popover__input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mn-design-pin-popover__delete {
+  border: none;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--mn-radius-sm, 4px);
+}
+
+.mn-design-pin-popover__delete:hover {
+  background: var(--mn-surface-3, rgba(127, 127, 127, 0.15));
+  color: var(--mn-error, #e5484d);
 }
 
 .mn-design-pin-popover__notes {
@@ -140,7 +219,7 @@
 
 .mn-design-pin-popover__add,
 .mn-design-pin-popover__close {
-  align-self: flex-end;
+  flex-shrink: 0;
   padding: 2px 8px;
   border: 1px solid var(--mn-border);
   border-radius: var(--mn-radius-sm, 4px);
