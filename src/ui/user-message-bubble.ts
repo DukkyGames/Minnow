@@ -60,6 +60,8 @@ function elementRefSummaryText(ref: HistoryElementRefPart): string {
       : []),
     `Page: ${ref.pageUrl}`,
     `Styles: ${ref.stylesDigest}`,
+    ...(ref.accessibleName ? [`Accessible name: ${ref.accessibleName}`] : []),
+    ...(ref.contrastRatio != null ? [`Contrast: ${ref.contrastRatio}`] : []),
     ...(ref.source ? [`Source: ${ref.source}${ref.confidence ? ` (${ref.confidence})` : ''}`] : []),
     '',
     ref.outerHtmlPreview,
@@ -126,6 +128,8 @@ function createMessageAttachChip(
   options: {
     kind: 'file' | 'image';
     dataUrl?: string;
+    /** Native tooltip — defaults to "Open {label}". */
+    title?: string;
     onOpen: () => void;
   },
 ): HTMLButtonElement {
@@ -137,7 +141,7 @@ function createMessageAttachChip(
   } else {
     chip.classList.add('msg-attach-chip--file');
   }
-  chip.title = `Open ${label}`;
+  chip.title = options.title ?? `Open ${label}`;
   chip.setAttribute('aria-label', `Open attachment ${label}`);
 
   if (options.kind === 'image' && options.dataUrl) {
@@ -257,11 +261,13 @@ export function renderUserMessageBubble(
   for (const ref of parsed.elementRefs) {
     const label = formatElementRefLabel(ref.selector, ref.pageUrl);
     const dataUrl = ref.imageName ? findLiveElementRefDataUrl(ref.imageName, live) : undefined;
+    const summary = elementRefSummaryText(ref);
     row.appendChild(
       createMessageAttachChip(label, {
         kind: 'image',
         dataUrl,
-        onOpen: () => openFilePart(label, elementRefSummaryText(ref)),
+        title: summary,
+        onOpen: () => openFilePart(label, summary),
       }),
     );
   }

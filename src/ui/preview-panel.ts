@@ -51,7 +51,7 @@ import { bindPreviewTabs, registerPreviewTabHandlers } from './preview-tabs';
 import { HTTP_URL_RE, parsePreviewAddress } from './preview-url';
 import { shouldAutoRestorePreviewPanel, isCodeAppForeground } from './preview-restore-policy';
 import { showToast } from './toast';
-import { disableDesignMode, enableDesignMode, isDesignModeEnabled, getDesignModeSession } from '../design/design-mode';
+import { disableDesignMode, enableDesignMode, isDesignModeEnabled, getDesignModeSession, refreshDesignModeArmedToolGuest } from '../design/design-mode';
 import {
   resolveDesignModeMountOptions,
   WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID,
@@ -172,6 +172,12 @@ function onIframeLoad(tabId: string): void {
   if (usesElectronPreview() && !usesDesignModeIframeGuest()) return;
   if (tabId !== getActivePreviewTabId()) return;
   onPreviewReloadSettled();
+  if (
+    isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID) &&
+    getDesignModeSession(DESIGN_MODE_INSTANCE_ID)?.getArmedToolId() === 'select'
+  ) {
+    refreshDesignModeArmedToolGuest(DESIGN_MODE_INSTANCE_ID);
+  }
   clearFrameBlockedTimer();
   const source = getPreviewTabSource(tabId);
   if (source?.kind !== 'url') {
@@ -276,6 +282,7 @@ async function bulkDeleteAnnotationItems(ids: { shapeIds: string[]; pinIds: stri
 
 /** Toggle the annotations panel (MIN-368) — a collapsible list of every mark on the current page. */
 async function toggleAnnotationsPanel(): Promise<void> {
+  if (!(await isPreviewDesignModeAvailable())) return;
   const host = getPreviewBody();
   if (!host) return;
 
@@ -341,11 +348,46 @@ async function syncDesignModeElectronGuest(): Promise<void> {
   await syncElectronPreviewHostLayout();
 }
 
+/** Design Mode is a Code-workspace tool — hidden and disabled on the MinnowOS desktop browser drawer. */
+async function isPreviewDesignModeAvailable(): Promise<boolean> {
+  const { isDesktopWorkspaceHostingActive } = await import('../os/desktop-workspace-mounts');
+  return !isDesktopWorkspaceHostingActive();
+}
+
+/**
+ * Show or hide Design Mode chrome based on whether preview is hosted in Code vs the desktop drawer.
+ * Tears down an active session when the surface switches to desktop.
+ */
+export async function syncPreviewDesignToolbarForSurface(): Promise<void> {
+  const available = await isPreviewDesignModeAvailable();
+  const designBtn = getDesignToggleButton();
+  const annotationsBtn = getAnnotationsToggleButton();
+
+  if (designBtn) designBtn.hidden = !available;
+  if (annotationsBtn) annotationsBtn.hidden = !available;
+
+  if (available) return;
+
+  if (annotationsPanel) {
+    annotationsPanel.destroy();
+    annotationsPanel = null;
+    annotationsBtn?.setAttribute('aria-pressed', 'false');
+    annotationsBtn?.classList.remove('is-active');
+  }
+  if (!isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID)) return;
+
+  disableDesignMode(DESIGN_MODE_INSTANCE_ID);
+  designBtn?.setAttribute('aria-pressed', 'false');
+  designBtn?.classList.remove('is-active');
+  await syncDesignModeElectronGuest();
+}
+
 /** Toggle Design Mode's overlay + tool strip over the preview guest (MIN-365). Guest untouched. */
 async function toggleDesignModeFromToolbar(): Promise<void> {
   const host = getPreviewBody();
   const pane = getPreviewPane();
   if (!host) return;
+  if (!(await isPreviewDesignModeAvailable())) return;
 
   if (isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID)) {
     disableDesignMode(DESIGN_MODE_INSTANCE_ID);
@@ -361,7 +403,9 @@ async function toggleDesignModeFromToolbar(): Promise<void> {
     ...resolveDesignModeMountOptions(host, pane, getPreviewDesignChrome(), () =>
       void toggleDesignModeFromToolbar(),
     ),
-    onArmedToolChange: () => void syncDesignModeElectronGuest(),
+    onArmedToolChange: async () => {
+      await syncDesignModeElectronGuest();
+    },
     onClearAll: () => void refreshAnnotationsPanel(),
   });
   await syncDesignModeElectronGuest();
@@ -383,6 +427,7 @@ export async function openPreviewPageAndEnableDesignMode(pageUrl: string): Promi
   const host = getPreviewBody();
   const pane = getPreviewPane();
   if (!host || isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID)) return;
+  if (!(await isPreviewDesignModeAvailable())) return;
 
   getDesignToggleButton()?.setAttribute('aria-pressed', 'true');
   getDesignToggleButton()?.classList.add('is-active');
@@ -390,7 +435,9 @@ export async function openPreviewPageAndEnableDesignMode(pageUrl: string): Promi
     ...resolveDesignModeMountOptions(host, pane, getPreviewDesignChrome(), () =>
       void toggleDesignModeFromToolbar(),
     ),
-    onArmedToolChange: () => void syncDesignModeElectronGuest(),
+    onArmedToolChange: async () => {
+      await syncDesignModeElectronGuest();
+    },
     onClearAll: () => void refreshAnnotationsPanel(),
   });
   await syncDesignModeElectronGuest();
@@ -1255,6 +1302,9 @@ function notifyDesignFileSavedIfLinked(path: string): void {
  */
 function onPreviewReloadSettled(): void {
   if (!isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID)) return;
+  if (getDesignModeSession(DESIGN_MODE_INSTANCE_ID)?.getArmedToolId() === 'select') {
+    refreshDesignModeArmedToolGuest(DESIGN_MODE_INSTANCE_ID);
+  }
   const pageKey = currentPreviewPageRef();
   if (pageKey) {
     void gatherAnchorCandidates().then(async (candidates) => {
@@ -1567,6 +1617,7 @@ export async function initPreviewPanel(): Promise<void> {
   }
 
   bindPreviewControls();
+  await syncPreviewDesignToolbarForSurface();
 
   if (usesElectronPreview()) {
     scheduleElectronPreviewHostVisibilitySync();

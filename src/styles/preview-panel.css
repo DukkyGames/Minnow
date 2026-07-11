@@ -107,6 +107,12 @@
   flex-shrink: 0;
 }
 
+/* .icon-btn sets display:flex, which overrides the native [hidden] rule */
+#btnPreviewDesignToggle[hidden],
+#btnPreviewAnnotationsToggle[hidden] {
+  display: none;
+}
+
 .preview-url {
   flex: 1 1 auto;
   min-width: 0;

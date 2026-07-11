@@ -141,6 +141,33 @@ export function createSelectDesignTool(): SelectDesignTool {
     ctx?.overlay.clear();
   }
 
+  function teardownPicker(): void {
+    void picker?.disable();
+    picker?.destroy();
+    picker = null;
+    transport = null;
+  }
+
+  async function bindPicker(): Promise<void> {
+    if (!ctx) return;
+    teardownPicker();
+    transport = createPickerTransport();
+    picker = createBestElementPicker({
+      onPick: (picked) => void handlePick(picked),
+      onError: (message) => {
+        const friendly = /cross-origin/i.test(message)
+          ? 'Element selection is unavailable on a cross-origin preview. Use Draw or Comment to mark a region instead.'
+          : `Element picker unavailable: ${message}`;
+        showToast(friendly, 'error');
+      },
+    });
+    try {
+      await picker.enable();
+    } catch {
+      /* guest may still be loading — preview-panel re-binds on iframe load */
+    }
+  }
+
   async function handlePick(picked: PickedElement): Promise<void> {
     if (!ctx) return;
     const selector =
@@ -203,32 +230,15 @@ export function createSelectDesignTool(): SelectDesignTool {
     arm(context) {
       ctx = context;
       resetSelection();
-      // `transport` still backs the P6 source-map ladder's execJs step (harmless no-op on a
-      // guest CDP picking chose specifically because execJs is unavailable/blocked there) —
-      // it's independent of which picker (CDP vs execJs/iframe) produced the click itself.
-      transport = createPickerTransport();
-      picker = createBestElementPicker({
-        onPick: (picked) => void handlePick(picked),
-        onError: (message) => {
-          // Element selection needs to read the guest DOM, which a cross-origin preview
-          // (a hosted/public site, or a dev server on a different origin) blocks in the
-          // browser build. Surface why instead of the tool silently doing nothing, and point
-          // at Draw/Comment, which anchor to page coordinates and still work.
-          const friendly = /cross-origin/i.test(message)
-            ? 'Element selection is unavailable on a cross-origin preview. Use Draw or Comment to mark a region instead.'
-            : `Element picker unavailable: ${message}`;
-          showToast(friendly, 'error');
-        },
-      });
-      void picker.enable().catch(() => {});
+      void bindPicker();
     },
     disarm() {
-      void picker?.disable();
-      picker?.destroy();
-      picker = null;
-      transport = null;
+      teardownPicker();
       resetSelection();
       ctx = null;
+    },
+    refreshGuestBinding() {
+      void bindPicker();
     },
     render() {
       ctx?.overlay.render(markers);
@@ -349,6 +359,8 @@ function guestScrollOffset(): { x: number; y: number } {
 /** Select tool factory return type — exposes marker clearing for strip "Clear all". */
 export interface SelectDesignTool extends DesignTool {
   clearAll(): void;
+  /** Re-bind the picker after the preview guest reloads or swaps (iframe ↔ native). */
+  refreshGuestBinding(): void;
 }
 
 /** Draw tool factory return type — exposes shape-kind switching and eraser/undo for the strip. */

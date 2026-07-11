@@ -26,6 +26,7 @@ import {
   type DesignToolContext,
   type DesignToolPointerEvent,
   type DrawDesignTool,
+  type SelectDesignTool,
 } from './design-tool';
 import { createPickerTransport } from './element-picker';
 import type { ShapeKind } from './shape-model';
@@ -74,7 +75,7 @@ export interface DesignModeMountOptions {
    * the iframe guest so their DOM overlay stacks on top. Fired on both user arms and the
    * persisted-tool restore during enable.
    */
-  onArmedToolChange?: (toolId: string | null) => void;
+  onArmedToolChange?: (toolId: string | null) => void | Promise<void>;
   /** Called after the strip's Clear all button wipes marks on the current page (host refreshes panel). */
   onClearAll?: () => void;
 }
@@ -111,6 +112,17 @@ export function isDesignModeEnabled(instanceId: string): boolean {
 
 export function getDesignModeSession(instanceId: string): DesignModeSession | undefined {
   return sessions.get(instanceId);
+}
+
+/**
+ * Re-bind the Select tool's picker after the preview guest reloads or swaps between the iframe
+ * and native WebContentsView (workspace HTML auto-reload, arming Select on a cross-origin URL).
+ */
+export function refreshDesignModeArmedToolGuest(instanceId: string): void {
+  const session = sessions.get(instanceId);
+  if (!session || session.armedToolId !== 'select' || !session.armedTool) return;
+  const refresh = (session.armedTool as SelectDesignTool).refreshGuestBinding;
+  if (typeof refresh === 'function') refresh();
 }
 
 /** Host-space pointer coordinates (CSS px), matching overlay.ts's own local-point mapping. */
@@ -440,23 +452,24 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
     onClearAll: options.onClearAll,
   } as unknown as InternalSession;
 
-  const armToolInternal = (id: string, persist: boolean): void => {
+  const armToolInternal = async (id: string, persist: boolean): Promise<void> => {
     const tool = getDesignTool(id);
     if (!tool) return;
     if (session.armedTool && session.armedTool !== tool) session.armedTool.disarm();
-    session.armedTool = tool;
+    // Guest routing (preview-panel) keys off the armed tool id — set it before sync so
+    // cross-origin Select can reveal the native WebContentsView before the picker binds.
     session.armedToolId = id;
+    await options.onArmedToolChange?.(id);
+    session.armedTool = tool;
     const ctx: DesignToolContext = { instanceId, host, overlay };
     tool.arm(ctx);
     applyCaptureMode(session);
     syncStripState(session);
-    // Let the host re-pick its guest strategy (e.g. reveal the native view for CDP Select on a
-    // cross-origin preview) before/after arming — the picker enable inside tool.arm tolerates the
-    // view being shown a frame later.
-    options.onArmedToolChange?.(id);
     if (persist) void saveDesignInstanceMeta(instanceId, { tool: id as DesignInstanceMeta['tool'] });
   };
-  session.armTool = (id: string): void => armToolInternal(id, true);
+  session.armTool = (id: string): void => {
+    void armToolInternal(id, true);
+  };
 
   session.disarmTool = (): void => {
     if (!session.armedTool) return;
@@ -465,7 +478,7 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
     session.armedToolId = null;
     applyCaptureMode(session);
     syncStripState(session);
-    options.onArmedToolChange?.(null);
+    void options.onArmedToolChange?.(null);
     void saveDesignInstanceMeta(instanceId, { tool: null });
   };
 
@@ -539,7 +552,7 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
   if (sessions.get(instanceId) !== session) return session; // torn down while awaiting
   setViewportPresetInternal(meta.viewportPreset, false);
   setDarkModeEmulationInternal(meta.darkModeEmulation, false);
-  if (meta.tool) armToolInternal(meta.tool, false);
+  if (meta.tool) await armToolInternal(meta.tool, false);
 
   void saveDesignInstanceMeta(instanceId, { enabled: true });
 
