@@ -52,10 +52,37 @@ export async function enableCdpPicking(
   await dbg.sendCommand('CSS.enable');
   await dbg.sendCommand('Overlay.enable');
   await dbg.sendCommand('Runtime.enable');
-  await dbg.sendCommand('Overlay.setInspectMode', {
-    mode: 'searchForNode',
-    highlightConfig: HIGHLIGHT_CONFIG,
-  });
+
+  // The DOM agent rejects backendNodeId resolution (DOM.getBoxModel /
+  // DOM.pushNodesByBackendIdsToFrontend) with "Document needs to be requested first" until the
+  // tree has been fetched once. Overlay hover highlighting works without it, so the failure only
+  // surfaces on the first click. Prime it now, and re-prime whenever the document is invalidated
+  // (full navigation, or an SPA route swap that fires DOM.documentUpdated).
+  const requestDocument = async (): Promise<void> => {
+    try {
+      await dbg.sendCommand('DOM.getDocument', { depth: -1, pierce: true });
+    } catch {
+      /* guest mid-navigation — the next inspect/documentUpdated re-primes it */
+    }
+  };
+  await requestDocument();
+
+  // `searchForNode` is one-shot: Chromium drops back to `mode: 'none'` after each click, so the
+  // Select tool (which stays armed for repeated picks) would go dead after the first element.
+  // Re-arm it at enable and after every pick.
+  let disabled = false;
+  const armInspectMode = async (): Promise<void> => {
+    if (disabled) return; // a pick's .finally() must not re-arm after the session was torn down
+    try {
+      await dbg.sendCommand('Overlay.setInspectMode', {
+        mode: 'searchForNode',
+        highlightConfig: HIGHLIGHT_CONFIG,
+      });
+    } catch {
+      /* guest may be gone or the session tearing down */
+    }
+  };
+  await armInspectMode();
 
   let nextUid = 1;
 
@@ -126,13 +153,19 @@ export async function enableCdpPicking(
 
   const messageHandler = (_event: unknown, method: string, params: any) => {
     if (method === 'Overlay.inspectNodeRequested' && typeof params?.backendNodeId === 'number') {
-      void handleInspectNode(params.backendNodeId);
+      // Re-arm inspect mode after the pick resolves so the next element is still selectable.
+      void handleInspectNode(params.backendNodeId).finally(() => void armInspectMode());
+    } else if (method === 'DOM.documentUpdated') {
+      // The frontend node cache was invalidated (navigation / SPA route swap). Re-request the
+      // tree so the next click can still resolve its backendNodeId.
+      void requestDocument();
     }
   };
   dbg.on('message', messageHandler);
 
   return {
     async disable(): Promise<void> {
+      disabled = true;
       try {
         await dbg.sendCommand('Overlay.setInspectMode', {
           mode: 'none',
