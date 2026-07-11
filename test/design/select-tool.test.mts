@@ -186,6 +186,41 @@ describe('Select design tool (MIN-366)', () => {
     tool.disarm();
   });
 
+  test('refreshGuestBinding re-attaches after the iframe guest reloads', async () => {
+    const tool = createSelectDesignTool();
+    const ctx = makeCtx();
+    tool.arm(ctx);
+    await flush();
+
+    const button = childWin.document.querySelector('button')!;
+    button.dispatchEvent(new childWin.MouseEvent('click', { bubbles: true }));
+    await flush();
+    assert.equal(getPendingAttachments().length, 1);
+
+    const reloadedWin = new Window();
+    reloadedWin.document.body.innerHTML = '<p class="headline">Reloaded</p>';
+    const headline = reloadedWin.document.querySelector('p')!;
+    headline.getBoundingClientRect = () =>
+      ({ x: 8, y: 16, width: 120, height: 18, left: 8, top: 16, right: 128, bottom: 34, toJSON: () => ({}) }) as DOMRect;
+    Object.defineProperty(frame, 'contentWindow', { configurable: true, value: reloadedWin });
+    Object.defineProperty(frame, 'contentDocument', { configurable: true, value: reloadedWin.document });
+
+    headline.dispatchEvent(new reloadedWin.MouseEvent('click', { bubbles: true }));
+    await flush();
+    assert.equal(getPendingAttachments().length, 1, 'stale picker should not see the new document');
+
+    tool.refreshGuestBinding();
+    await flush();
+    clearAttachments();
+
+    headline.dispatchEvent(new reloadedWin.MouseEvent('click', { bubbles: true }));
+    await flush();
+    assert.equal(getPendingAttachments().length, 1);
+    assert.equal(getPendingAttachments()[0]?.tagName, 'p');
+
+    tool.disarm();
+  });
+
   test('disarm clears overlay markers and disables the picker', async () => {
     const tool = createSelectDesignTool();
     const ctx = makeCtx();

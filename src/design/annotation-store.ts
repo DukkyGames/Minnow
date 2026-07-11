@@ -176,6 +176,17 @@ export async function erasePin(pageKey: string, pinId: string): Promise<PageAnno
   return cloneAnnotations(state.data);
 }
 
+/** Remove every shape and pin on a page, persist the empty state, and reset the undo stack. */
+export async function clearPageAnnotations(pageKey: string): Promise<PageAnnotations> {
+  if (!pageKey) return emptyAnnotations();
+  const state = getState(pageKey);
+  state.data = emptyAnnotations();
+  state.undoStack = [];
+  state.loaded = true;
+  await persist(pageKey);
+  return emptyAnnotations();
+}
+
 /** Pop the page's undo stack, restoring the prior snapshot and persisting it. Null if empty. */
 export async function undoPage(pageKey: string): Promise<PageAnnotations | null> {
   const state = getState(pageKey);

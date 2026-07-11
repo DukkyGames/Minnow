@@ -107,6 +107,12 @@
   flex-shrink: 0;
 }
 
+/* .icon-btn sets display:flex, which overrides the native [hidden] rule */
+#btnPreviewDesignToggle[hidden],
+#btnPreviewAnnotationsToggle[hidden] {
+  display: none;
+}
+
 .preview-url {
   flex: 1 1 auto;
   min-width: 0;
@@ -164,6 +170,8 @@
   height: 100%;
   border: none;
   background: #fff;
+  position: relative;
+  z-index: 0;
 }
 
 .preview-body iframe.preview-frame[hidden] {

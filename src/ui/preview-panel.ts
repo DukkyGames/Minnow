@@ -51,8 +51,14 @@ import { bindPreviewTabs, registerPreviewTabHandlers } from './preview-tabs';
 import { HTTP_URL_RE, parsePreviewAddress } from './preview-url';
 import { shouldAutoRestorePreviewPanel, isCodeAppForeground } from './preview-restore-policy';
 import { showToast } from './toast';
-import { disableDesignMode, enableDesignMode, isDesignModeEnabled, getDesignModeSession } from '../design/design-mode';
+import { disableDesignMode, enableDesignMode, isDesignModeEnabled, getDesignModeSession, refreshDesignModeArmedToolGuest, relocateDesignModeStrip } from '../design/design-mode';
+import {
+  resolveDesignModeMountOptions,
+  WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID,
+} from './preview-design-mode-mount';
+export { WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID } from './preview-design-mode-mount';
 import { currentPreviewPageRef, gatherAnchorCandidates } from '../design/design-tool';
+import { isCrossOriginPreview } from '../design/element-picker';
 import {
   eraseShape,
   erasePin,
@@ -78,8 +84,7 @@ const FRAME_BLOCKED_TIMEOUT_MS = 1500;
 const MIN_RELOAD_INTERVAL_MS = 1000;
 const DEFERRED_PREVIEW_LOAD_MS = 800;
 
-/** Default preview instance id (see electron/preview-instance-registry.ts DEFAULT_PREVIEW_INSTANCE_ID). */
-const DESIGN_MODE_INSTANCE_ID = 'workspace-preview';
+const DESIGN_MODE_INSTANCE_ID = WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID;
 
 const EMBED_BLOCKED_MESSAGE =
   'This site blocks embedded previews (X-Frame-Options or CSP frame-ancestors). Sites like Google, GitHub, and most login pages cannot load inside an iframe. Preview workspace HTML files instead, or open this URL in a new tab.';
@@ -123,9 +128,12 @@ function getOrCreateFrame(tabId: string): HTMLIFrameElement | null {
   if (!frame) {
     frame = document.createElement('iframe');
     frame.className = 'preview-frame';
+    // allow-same-origin is required for Design Mode: the element picker and anchor
+    // resolution read the guest document, which an opaque-origin sandbox forbids even
+    // for same-origin workspace pages. External URLs stay cross-origin protected by SOP.
     frame.setAttribute(
       'sandbox',
-      'allow-scripts allow-forms allow-popups allow-modals',
+      'allow-scripts allow-forms allow-popups allow-modals allow-same-origin',
     );
     frame.title = 'Workspace preview';
     frame.hidden = true;
@@ -213,9 +221,22 @@ function getPreviewDesignChrome(): HTMLElement | null {
   return document.getElementById('previewDesignChrome');
 }
 
-/** Electron hides the native guest while Design Mode uses a same-origin iframe under the overlay. */
-function usesDesignModeIframeGuest(): boolean {
-  return usesElectronPreview() && isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID);
+/**
+ * Electron hides the native guest while Design Mode drives a same-origin iframe under the SVG
+ * overlay. That swap only works when the iframe can actually read/interact with the guest — i.e.
+ * a same-origin page (workspace HTML, or a URL on Minnow's own origin).
+ *
+ * On a CROSS-ORIGIN preview (a hosted/public URL, or a dev server on another origin) the iframe
+ * can't be introspected, so element Select must fall back to CDP inspect on the native
+ * WebContentsView — which only receives hover/click while it is visible. So when Select is armed
+ * on a cross-origin preview we keep the native view (return false); Draw/Comment (and disarmed/no
+ * tool) still use the iframe guest so their coordinate-anchored DOM overlay stacks on top.
+ */
+export function usesDesignModeIframeGuest(): boolean {
+  if (!usesElectronPreview() || !isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID)) return false;
+  if (!isCrossOriginPreview()) return true;
+  const armedTool = getDesignModeSession(DESIGN_MODE_INSTANCE_ID)?.getArmedToolId();
+  return armedTool !== 'select';
 }
 
 function getDesignToggleButton(): HTMLButtonElement | null {
@@ -255,6 +276,7 @@ async function bulkDeleteAnnotationItems(ids: { shapeIds: string[]; pinIds: stri
 
 /** Toggle the annotations panel (MIN-368) — a collapsible list of every mark on the current page. */
 async function toggleAnnotationsPanel(): Promise<void> {
+  if (!(await isPreviewDesignModeAvailable())) return;
   const host = getPreviewBody();
   if (!host) return;
 
@@ -286,9 +308,24 @@ async function syncDesignModeElectronGuest(): Promise<void> {
   const usingIframe = usesDesignModeIframeGuest();
   setDesignModeUsingIframeGuest(usingIframe);
 
+  const designOn = usesElectronPreview() && isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID);
+  const session = getDesignModeSession(DESIGN_MODE_INSTANCE_ID);
+  if (designOn && session) {
+    if (usingIframe) {
+      // Iframe guest: native view is hidden — float the strip over the preview like browser mode.
+      chrome?.setAttribute('hidden', '');
+      relocateDesignModeStrip(DESIGN_MODE_INSTANCE_ID, body);
+    } else {
+      // Native WebContentsView covers #previewBody — dock the strip in the footer below it.
+      chrome?.removeAttribute('hidden');
+      if (chrome) relocateDesignModeStrip(DESIGN_MODE_INSTANCE_ID, chrome);
+    }
+  } else {
+    chrome?.setAttribute('hidden', '');
+  }
+
   if (usingIframe) {
     body.classList.add('preview-body--design-mode');
-    chrome?.removeAttribute('hidden');
     const tabId = getActivePreviewTabId();
     if (tabId) {
       const tab = getPreviewTab(tabId);
@@ -299,13 +336,57 @@ async function syncDesignModeElectronGuest(): Promise<void> {
     }
   } else {
     body.classList.remove('preview-body--design-mode');
-    chrome?.setAttribute('hidden', '');
-    for (const frame of iframesByTabId.values()) {
-      frame.hidden = true;
+    if (usesElectronPreview()) {
+      // Native WebContentsView is the guest (Design Mode off, or cross-origin Select where CDP
+      // inspect needs the native view visible and on top). Park every DOM iframe.
+      for (const frame of iframesByTabId.values()) {
+        frame.hidden = true;
+      }
+    } else {
+      // Browser mode: iframes ARE the preview; keep the active tab's frame visible.
+      showActiveTabFrame();
     }
   }
 
   await syncElectronPreviewHostLayout();
+
+  if (getDesignModeSession(DESIGN_MODE_INSTANCE_ID)?.getArmedToolId() === 'select') {
+    refreshDesignModeArmedToolGuest(DESIGN_MODE_INSTANCE_ID);
+  }
+}
+
+/** Design Mode is a Code-workspace tool — hidden and disabled on the MinnowOS desktop browser drawer. */
+async function isPreviewDesignModeAvailable(): Promise<boolean> {
+  const { isDesktopWorkspaceHostingActive } = await import('../os/desktop-workspace-mounts');
+  return !isDesktopWorkspaceHostingActive();
+}
+
+/**
+ * Show or hide Design Mode chrome based on whether preview is hosted in Code vs the desktop drawer.
+ * Tears down an active session when the surface switches to desktop.
+ */
+export async function syncPreviewDesignToolbarForSurface(): Promise<void> {
+  const available = await isPreviewDesignModeAvailable();
+  const designBtn = getDesignToggleButton();
+  const annotationsBtn = getAnnotationsToggleButton();
+
+  if (designBtn) designBtn.hidden = !available;
+  if (annotationsBtn) annotationsBtn.hidden = !available;
+
+  if (available) return;
+
+  if (annotationsPanel) {
+    annotationsPanel.destroy();
+    annotationsPanel = null;
+    annotationsBtn?.setAttribute('aria-pressed', 'false');
+    annotationsBtn?.classList.remove('is-active');
+  }
+  if (!isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID)) return;
+
+  disableDesignMode(DESIGN_MODE_INSTANCE_ID);
+  designBtn?.setAttribute('aria-pressed', 'false');
+  designBtn?.classList.remove('is-active');
+  await syncDesignModeElectronGuest();
 }
 
 /** Toggle Design Mode's overlay + tool strip over the preview guest (MIN-365). Guest untouched. */
@@ -313,6 +394,7 @@ async function toggleDesignModeFromToolbar(): Promise<void> {
   const host = getPreviewBody();
   const pane = getPreviewPane();
   if (!host) return;
+  if (!(await isPreviewDesignModeAvailable())) return;
 
   if (isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID)) {
     disableDesignMode(DESIGN_MODE_INSTANCE_ID);
@@ -325,16 +407,16 @@ async function toggleDesignModeFromToolbar(): Promise<void> {
   getDesignToggleButton()?.setAttribute('aria-pressed', 'true');
   getDesignToggleButton()?.classList.add('is-active');
   await enableDesignMode({
-    instanceId: DESIGN_MODE_INSTANCE_ID,
-    host,
-    chromeHost: getPreviewDesignChrome() ?? undefined,
-    paneElement: pane ?? host,
+    ...resolveDesignModeMountOptions(host, pane, getPreviewDesignChrome(), () =>
+      void toggleDesignModeFromToolbar(),
+    ),
+    onArmedToolChange: async () => {
+      await syncDesignModeElectronGuest();
+    },
+    onClearAll: () => void refreshAnnotationsPanel(),
   });
   await syncDesignModeElectronGuest();
 }
-
-/** Design Mode's preview instance id, for callers outside this module (MIN-368 annotation-nav.ts). */
-export const WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID = DESIGN_MODE_INSTANCE_ID;
 
 /**
  * Open a page (workspace path or http(s) URL) in the preview panel and ensure Design Mode is
@@ -352,14 +434,18 @@ export async function openPreviewPageAndEnableDesignMode(pageUrl: string): Promi
   const host = getPreviewBody();
   const pane = getPreviewPane();
   if (!host || isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID)) return;
+  if (!(await isPreviewDesignModeAvailable())) return;
 
   getDesignToggleButton()?.setAttribute('aria-pressed', 'true');
   getDesignToggleButton()?.classList.add('is-active');
   await enableDesignMode({
-    instanceId: DESIGN_MODE_INSTANCE_ID,
-    host,
-    chromeHost: getPreviewDesignChrome() ?? undefined,
-    paneElement: pane ?? host,
+    ...resolveDesignModeMountOptions(host, pane, getPreviewDesignChrome(), () =>
+      void toggleDesignModeFromToolbar(),
+    ),
+    onArmedToolChange: async () => {
+      await syncDesignModeElectronGuest();
+    },
+    onClearAll: () => void refreshAnnotationsPanel(),
   });
   await syncDesignModeElectronGuest();
 }
@@ -1223,6 +1309,9 @@ function notifyDesignFileSavedIfLinked(path: string): void {
  */
 function onPreviewReloadSettled(): void {
   if (!isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID)) return;
+  if (getDesignModeSession(DESIGN_MODE_INSTANCE_ID)?.getArmedToolId() === 'select') {
+    refreshDesignModeArmedToolGuest(DESIGN_MODE_INSTANCE_ID);
+  }
   const pageKey = currentPreviewPageRef();
   if (pageKey) {
     void gatherAnchorCandidates().then(async (candidates) => {
@@ -1535,6 +1624,7 @@ export async function initPreviewPanel(): Promise<void> {
   }
 
   bindPreviewControls();
+  await syncPreviewDesignToolbarForSurface();
 
   if (usesElectronPreview()) {
     scheduleElectronPreviewHostVisibilitySync();

@@ -9,6 +9,7 @@ import {
   addNoteToPin,
   addPin,
   addShape,
+  clearPageAnnotations,
   eraseShape,
   erasePin,
   loadPageAnnotations,
@@ -172,6 +173,28 @@ describe('annotation-store persistence', () => {
     const undoneCheckout = await undoPage('checkout.html');
     assert.equal(undoneCheckout?.shapes.length, 0);
     assert.equal(await undoPage('checkout.html'), null);
+  });
+
+  test('clearPageAnnotations wipes shapes and pins and persists an empty page', async () => {
+    await addShape('pricing.html', rectShape('s1'));
+    await addPin('pricing.html', {
+      id: 'p1',
+      index: 1,
+      x: 5,
+      y: 6,
+      anchor: { type: 'page', x: 5, y: 6, scrollX: 0, scrollY: 0 },
+      notes: [],
+    });
+
+    const cleared = await clearPageAnnotations('pricing.html');
+    assert.deepEqual(cleared, { shapes: [], pins: [] });
+
+    const reloaded = await loadPageAnnotations('pricing.html');
+    assert.deepEqual(reloaded, { shapes: [], pins: [] });
+
+    const lastPut = putBodies.at(-1);
+    assert.equal(lastPut?.body.page, 'pricing.html');
+    assert.deepEqual(lastPut?.body.annotations, { shapes: [], pins: [] });
   });
 });
 

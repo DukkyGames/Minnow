@@ -85,6 +85,9 @@ export interface MinnowCdpPickedElement {
   shiftKey: boolean;
   accessibleName: string;
   contrastRatio: number | null;
+  domPath: string;
+  attributes: Record<string, string>;
+  computedStyles: Record<string, string>;
 }
 
 /** Native (script-free) element picking over CDP for cross-origin preview guests (MIN-370). */
