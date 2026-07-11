@@ -21,6 +21,7 @@ export type OnboardingStepId =
   | 'calendar'
   | 'api-keys'
   | 'explainer'
+  /** Legacy id — S11 merged into 'explainer'; kept so old persisted records stay typed. */
   | 'demo-chat'
   | 'done';
 

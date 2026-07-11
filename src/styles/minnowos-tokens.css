@@ -101,3 +101,31 @@
   --os-wall-b: #ede8e7;
   --os-wall-c: #f0e0de;
 }
+
+:root[data-theme='salt-dark'] .mn-os,
+:root[data-theme='salt-dark'] {
+  --os-wall-a: #242424;
+  --os-wall-b: #1c1c1c;
+  --os-wall-c: #303030;
+}
+
+:root[data-theme='salt-light'] .mn-os,
+:root[data-theme='salt-light'] {
+  --os-wall-a: #f0f0f0;
+  --os-wall-b: #e8e8e8;
+  --os-wall-c: #dedede;
+}
+
+:root[data-theme='retro-dark'] .mn-os,
+:root[data-theme='retro-dark'] {
+  --os-wall-a: #030403;
+  --os-wall-b: #020302;
+  --os-wall-c: #081208;
+}
+
+:root[data-theme='retro-light'] .mn-os,
+:root[data-theme='retro-light'] {
+  --os-wall-a: #e8ece8;
+  --os-wall-b: #e0e6e0;
+  --os-wall-c: #d4e8d8;
+}

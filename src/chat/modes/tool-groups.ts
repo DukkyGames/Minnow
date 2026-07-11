@@ -226,6 +226,8 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'impeccable',
     'todo',
   ],
+  /** First-run wizard tour guide — safe demo set: no shell, no writes, no email/calendar. */
+  onboarding: ['util-basic', 'web', 'files-read', 'brain', 'ask'],
 };
 
 /** Per-mode explicit deny overrides applied after group expansion. */

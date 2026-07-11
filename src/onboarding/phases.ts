@@ -24,7 +24,7 @@ export const ONBOARDING_PHASES: OnboardingPhase[] = [
     label: 'Workspace',
     stepIds: ['extras', 'permissions', 'memory', 'email', 'calendar', 'api-keys'],
   },
-  { id: 'tour', label: 'Tour', stepIds: ['explainer', 'demo-chat'] },
+  { id: 'tour', label: 'Tour', stepIds: ['explainer'] },
   { id: 'finish', label: 'Finish', stepIds: ['done'] },
 ];
 

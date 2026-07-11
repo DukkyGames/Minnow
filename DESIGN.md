@@ -73,7 +73,7 @@ components:
 
 ## Palette themes
 
-`<html data-theme="{family}-{mode}">` (e.g. `sage-dark`, `coral-light`) is set from **Settings → General → Theme**, the inline boot script in `index.html`, or `initTheme()` in [`src/theme.ts`](src/theme.ts). Four families from the Color Scheme Exploration (PDF/HTML reference): **Slate · Sage**, **Stone · Amber**, **Midnight · Cyan**, **Graphite · Coral**, each with dark and light variants. Hex and rgba literals exist only in [`src/styles/tokens.css`](src/styles/tokens.css); application CSS uses **`--mn-*`** tokens (22 core variables per theme plus extended semantics via `color-mix`).
+`<html data-theme="{family}-{mode}">` (e.g. `sage-dark`, `coral-light`) is set from **Settings → General → Theme**, the inline boot script in `index.html`, or `initTheme()` in [`src/theme.ts`](src/theme.ts). Six families: **Slate · Sage**, **Stone · Amber**, **Midnight · Cyan**, **Graphite · Coral**, **Salt · Pepper** (grayscale), **Retro · Terminal** (phosphor green), each with dark and light variants. Hex and rgba literals exist only in [`src/styles/tokens.css`](src/styles/tokens.css); application CSS uses **`--mn-*`** tokens (22 core variables per theme plus extended semantics via `color-mix`).
 
 Storage: `minnow.theme` (explicit id), `minnow.theme.followSystem`, `minnow.theme.family`. Default theme: **sage-dark**. Legacy `light` / `dark` / `system` values migrate on read. **highlight.js** loads `github-dark` when mode is dark (family hue does not change the hljs stylesheet). CodeMirror uses `--cm-*` aliases derived from `--mn-*`. Runtime `theme-color` meta reads computed `--mn-bg`.
 

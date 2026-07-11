@@ -716,59 +716,6 @@ html.onboarding-active .mn-os-shell {
   cursor: pointer;
 }
 
-/* ── Explainer carousel ── */
-
-.mn-onboarding-explainer-card {
-  padding: 20px;
-  margin-bottom: 20px;
-  border: 1px solid var(--mn-border, var(--border));
-  border-radius: var(--mn-radius-md, 10px);
-  background: var(--mn-surface-1, var(--mn-bg, var(--bg)));
-}
-
-.mn-onboarding-explainer-body {
-  font-size: 15px;
-  line-height: 1.55;
-  max-width: 48ch;
-  margin: 0;
-  color: var(--mn-fg, var(--text));
-  text-wrap: pretty;
-}
-
-.mn-onboarding-explainer-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.mn-onboarding-explainer-dots {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.mn-onboarding-explainer-dot {
-  width: 8px;
-  height: 8px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: var(--mn-border-strong, var(--border-strong));
-  cursor: pointer;
-  transition: background-color 0.15s ease-out, transform 0.15s ease-out;
-}
-
-.mn-onboarding-explainer-dot.is-active {
-  background: var(--mn-accent, var(--accent));
-  transform: scale(1.2);
-}
-
-.mn-onboarding-explainer-counter {
-  font: 500 12px/1 var(--mn-font-mono, var(--font-mono, monospace));
-  color: var(--mn-fg-muted, var(--text-muted));
-}
-
 /* ── Done checklist ── */
 
 .mn-onboarding-step--done .mn-onboarding-done-badge {
@@ -1233,126 +1180,106 @@ html.onboarding-active .mn-os-shell {
   border-color: color-mix(in oklch, var(--mn-success, var(--success)) 30%, var(--mn-border, var(--border)));
 }
 
-/* ── Visual explainer map ── */
+/* ── Guided tour chat (real chat surface in the wizard) ── */
 
-.mn-onboarding-explainer-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-  gap: 20px;
-  align-items: start;
+.mn-onboarding-step--guide {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
 }
 
-.mn-onboarding-map-host {
-  border: 1px solid var(--mn-border, var(--border));
-  border-radius: var(--mn-radius-md, 10px);
-  padding: 12px;
-  background: color-mix(in oklch, var(--mn-fg, var(--text)) 2%, var(--mn-bg, var(--bg)));
-}
-
-.mn-onboarding-map {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-
-.mn-onboarding-map__link {
-  stroke: var(--mn-border-strong, var(--border-strong));
-  stroke-width: 0.35;
-  opacity: 0.7;
-}
-
-.mn-onboarding-map__node {
-  cursor: pointer;
-  outline: none;
-}
-
-.mn-onboarding-map__node circle {
-  fill: var(--mn-bg, var(--bg));
-  stroke: var(--mn-border-strong, var(--border-strong));
-  stroke-width: 0.6;
-  transition: stroke 0.15s ease-out, fill 0.15s ease-out;
-}
-
-.mn-onboarding-map__node text {
-  fill: var(--mn-fg-muted, var(--text-muted));
-  font-size: 4px;
-  font-family: var(--mn-font, system-ui, sans-serif);
-  pointer-events: none;
-}
-
-.mn-onboarding-map__node.is-active circle {
-  stroke: var(--mn-accent);
-  fill: var(--onboarding-surface-selected);
-}
-
-.mn-onboarding-map__node.is-visited circle {
-  stroke: var(--mn-accent, var(--accent));
-}
-
-.mn-onboarding-tool-list {
-  margin: 12px 0 0;
-  padding-left: 18px;
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-/* ── Demo chat ── */
-
-.mn-onboarding-demo-transcript {
-  margin: 16px 0;
-  padding: 14px;
-  min-height: 160px;
-  max-height: min(320px, 36vh);
-  overflow: auto;
+.mn-onboarding-guide {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
   border: 1px solid var(--mn-border, var(--border));
   border-radius: var(--mn-radius-md, 10px);
   background: var(--mn-surface-1, var(--bg));
+  overflow: hidden;
 }
 
-.mn-onboarding-demo-msg {
-  margin-bottom: 12px;
+.mn-onboarding-guide__col {
+  flex: 1;
+  min-height: 280px;
+  max-height: min(52vh, 560px);
+  overflow-y: auto;
+  padding: 16px 18px;
+  scroll-behavior: smooth;
 }
 
-.mn-onboarding-demo-msg__label {
-  display: block;
-  font: 600 10px/1 var(--mn-font-mono, monospace);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--mn-fg-muted, var(--text-muted));
-  margin-bottom: 4px;
-}
-
-.mn-onboarding-demo-msg__body {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-}
-
-.mn-onboarding-demo-tools {
+.mn-onboarding-guide__composer {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-  margin-top: 8px;
-  padding-top: 8px;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 10px 12px;
   border-top: 1px solid var(--mn-border, var(--border));
+  background: color-mix(in oklch, var(--mn-fg, var(--text)) 2%, var(--mn-bg, var(--bg)));
 }
 
-.mn-onboarding-demo-tools__title {
-  font: 600 10px/1 var(--mn-font-mono, monospace);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--mn-fg-muted, var(--text-muted));
-  margin-right: 4px;
+.mn-onboarding-guide__input {
+  flex: 1;
+  resize: none;
+  min-height: 38px;
+  max-height: 140px;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--mn-fg, var(--text));
+  background: var(--mn-bg, var(--bg));
+  border: 1px solid var(--mn-border-strong, var(--border-strong));
+  border-radius: var(--mn-radius-md, 10px);
+  outline: none;
 }
 
-.mn-onboarding-explainer-dot.is-done {
-  background: color-mix(in oklch, var(--mn-success, var(--success)) 70%, var(--mn-accent, var(--accent)));
+.mn-onboarding-guide__input:focus {
+  border-color: var(--mn-accent, var(--accent));
+}
+
+.mn-onboarding-guide__send {
+  flex: none;
+  min-width: 74px;
+  padding: 9px 16px;
+  font: 600 13px/1.2 inherit;
+  font-family: inherit;
+  color: var(--mn-accent-contrast, #fff);
+  background: var(--mn-accent, var(--accent));
+  border: none;
+  border-radius: var(--mn-radius-md, 10px);
+  cursor: pointer;
+}
+
+.mn-onboarding-guide__send:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.mn-onboarding-guide__send-stop {
+  display: none;
+}
+
+.mn-onboarding-guide__send[data-mode='stop'] .mn-onboarding-guide__send-label {
+  display: none;
+}
+
+.mn-onboarding-guide__send[data-mode='stop'] .mn-onboarding-guide__send-stop {
+  display: inline;
+}
+
+.mn-onboarding-guide__send[data-mode='stop'] {
+  background: var(--mn-danger, var(--mn-error, #c0392b));
+}
+
+/* Keep real chat bubbles readable inside the narrower wizard column. */
+.mn-onboarding-guide__col .msg,
+.mn-onboarding-guide__col .message-row {
+  max-width: 100%;
 }
 
 @media (max-width: 720px) {
-  .mn-onboarding-explainer-layout {
-    grid-template-columns: 1fr;
+  .mn-onboarding-guide__col {
+    max-height: 46vh;
   }
 }

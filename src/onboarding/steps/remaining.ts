@@ -150,8 +150,7 @@ export const doneStep: OnboardingStep = {
       ['Memory and Brain', Boolean(ctx.state.steps.memory?.done)],
       ['Email', Boolean(ctx.state.steps.email?.done)],
       ['Calendar', Boolean(ctx.state.steps.calendar?.done)],
-      ['Tour', Boolean(ctx.state.steps.explainer?.done)],
-      ['Demo chat', Boolean(ctx.state.steps['demo-chat']?.done)],
+      ['Guided tour chat', Boolean(ctx.state.steps.explainer?.done)],
     ];
     rows.forEach(([label, ok]) => {
       const li = el('li', 'mn-onboarding-checklist__row');
