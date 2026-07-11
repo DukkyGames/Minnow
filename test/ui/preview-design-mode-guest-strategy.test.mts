@@ -4,7 +4,8 @@
  * Same-origin previews (workspace HTML, or a URL on Minnow's own origin) always use the iframe
  * guest. On a cross-origin preview the iframe can't be introspected, so element Select must fall
  * back to CDP inspect on the native WebContentsView — which needs that view visible. So the guest
- * strategy becomes tool-aware there: iframe for Draw/Comment/no-tool, native view for Select.
+ * strategy becomes tool-aware there: iframe for Draw/Comment/disarmed, native view for Select
+ * (armed by default on enable).
  */
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
@@ -95,8 +96,9 @@ describe('design mode guest strategy (cross-origin Select)', () => {
     const { host, pane, chrome } = mountHost();
     const session = await enableDesignMode(resolveDesignModeMountOptions(host, pane, chrome));
 
-    // No tool armed → iframe guest (page shown, overlay ready).
-    assert.equal(usesDesignModeIframeGuest(), true);
+    // Select is armed by default → native view for CDP inspect on cross-origin previews.
+    assert.equal(session.getArmedToolId(), 'select');
+    assert.equal(usesDesignModeIframeGuest(), false, 'default Select reveals the native view for CDP');
 
     session.armTool('select');
     assert.equal(usesDesignModeIframeGuest(), false, 'Select reveals the native view for CDP');

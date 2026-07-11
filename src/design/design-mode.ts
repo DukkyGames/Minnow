@@ -551,12 +551,14 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
   sessions.set(instanceId, session);
 
   // Apply persisted prefs (viewport/dark mode/tool) once loaded, without re-persisting the same
-  // values we just read.
+  // values we just read. When no tool was persisted, default to Select so element picking is
+  // ready immediately.
   const meta = await loadDesignInstanceMeta(instanceId);
   if (sessions.get(instanceId) !== session) return session; // torn down while awaiting
   setViewportPresetInternal(meta.viewportPreset, false);
   setDarkModeEmulationInternal(meta.darkModeEmulation, false);
   if (meta.tool) await armToolInternal(meta.tool, false);
+  else await armToolInternal('select', true);
 
   void saveDesignInstanceMeta(instanceId, { enabled: true });
 

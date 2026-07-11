@@ -62,12 +62,13 @@ describe('design-mode mount/unmount + pointer capture', () => {
   });
 
   test('enableDesignMode mounts overlay, capture layer and strip into the host', async () => {
-    await enableDesignMode({ instanceId: 'workspace-preview', host, paneElement: pane });
+    const session = await enableDesignMode({ instanceId: 'workspace-preview', host, paneElement: pane });
 
     assert.equal(isDesignModeEnabled('workspace-preview'), true);
     assert.ok(host.querySelector('svg.mn-design-overlay'));
     assert.ok(host.querySelector('.mn-design-capture'));
     assert.ok(host.querySelector('.mn-design-strip'));
+    assert.equal(session.getArmedToolId(), 'select', 'Select is armed by default');
   });
 
   test('disableDesignMode unmounts everything and leaves the host otherwise empty', async () => {

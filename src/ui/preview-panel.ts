@@ -229,8 +229,8 @@ function getPreviewDesignChrome(): HTMLElement | null {
  * On a CROSS-ORIGIN preview (a hosted/public URL, or a dev server on another origin) the iframe
  * can't be introspected, so element Select must fall back to CDP inspect on the native
  * WebContentsView — which only receives hover/click while it is visible. So when Select is armed
- * on a cross-origin preview we keep the native view (return false); Draw/Comment (and no tool)
- * still use the iframe guest so their coordinate-anchored DOM overlay stacks on top.
+ * on a cross-origin preview we keep the native view (return false); Draw/Comment (and disarmed/no
+ * tool) still use the iframe guest so their coordinate-anchored DOM overlay stacks on top.
  */
 export function usesDesignModeIframeGuest(): boolean {
   if (!usesElectronPreview() || !isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID)) return false;
