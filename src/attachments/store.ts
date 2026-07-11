@@ -7,6 +7,7 @@ import { formatCodeRefLabel } from './code-ref-format';
 import { processFile } from './reader';
 import { scheduleContextUsageRefresh } from '../ui/context-usage-ring';
 import type { Attachment } from './types';
+import type { SourceMapping } from '../design/source-map';
 
 /** Files queued for the next user message. */
 const pendingAttachments: Attachment[] = [];
@@ -22,6 +23,18 @@ export function clearAttachments(): void {
   renderAttachPreview();
 }
 
+/** Removes queued Design Mode elementRef and designRef attachments for one preview page. */
+export function removeDesignAttachmentsForPage(pageUrl: string): void {
+  const page = pageUrl.trim();
+  if (!page) return;
+  const next = pendingAttachments.filter(
+    (item) =>
+      !((item.kind === 'elementRef' || item.kind === 'designRef') && item.pageUrl === page),
+  );
+  if (next.length === pendingAttachments.length) return;
+  replacePendingAttachments(next);
+}
+
 /** Removes one attachment by id. */
 export function removeAttachment(id: string): void {
   const index = pendingAttachments.findIndex((item) => item.id === id);
@@ -33,6 +46,18 @@ export function removeAttachment(id: string): void {
 /** Appends one attachment and refreshes the preview strip. */
 export function pushAttachment(attachment: Attachment): void {
   pendingAttachments.push(attachment);
+  renderAttachPreview();
+}
+
+/**
+ * Sets/replaces an `elementRef` attachment's resolved source location and re-renders its chip
+ * in place (MIN-369) — called once Design Mode's async file:line resolution lands, well after
+ * the chip already rendered without it. No-op if the attachment was removed/sent meanwhile.
+ */
+export function updateAttachmentSourceMapping(id: string, mapping: SourceMapping): void {
+  const index = pendingAttachments.findIndex((item) => item.id === id);
+  if (index < 0) return;
+  pendingAttachments[index] = { ...pendingAttachments[index], sourceMapping: mapping };
   renderAttachPreview();
 }
 
@@ -63,7 +88,7 @@ function chipLabel(attachment: Attachment): string {
   if (attachment.kind === 'workspace') {
     return attachment.workspacePath ?? attachment.name;
   }
-  if (attachment.kind === 'codeRef') {
+  if (attachment.kind === 'codeRef' || attachment.kind === 'elementRef' || attachment.kind === 'designRef') {
     return attachment.name;
   }
   if (attachment.largeTextWarning) {
@@ -134,6 +159,54 @@ function createAttachChip(attachment: Attachment): HTMLElement {
       });
     });
     chip.appendChild(link);
+  }
+
+  if (attachment.kind === 'elementRef') {
+    chip.classList.add('attach-chip--element-ref');
+    if (attachment.croppedDataUrl) {
+      chip.classList.add('attach-chip--image');
+      const thumb = document.createElement('img');
+      thumb.className = 'attach-chip-thumb';
+      thumb.src = attachment.croppedDataUrl;
+      thumb.alt = '';
+      chip.appendChild(thumb);
+    }
+    chip.title = attachment.selector
+      ? `${attachment.selector} — included when you send`
+      : 'Element reference — included when you send';
+
+    const mapping = attachment.sourceMapping;
+    if (mapping?.file) {
+      const file = mapping.file;
+      const line = mapping.line;
+      const mapBtn = document.createElement('button');
+      mapBtn.type = 'button';
+      mapBtn.className = `attach-chip-source-map attach-chip-source-map--${mapping.confidence}`;
+      mapBtn.textContent = `→ ${file}${line != null ? `:${line}` : ''}`;
+      mapBtn.title = `Open ${file}${line != null ? `:${line}` : ''} (${mapping.confidence} match)`;
+      mapBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        void import('../ui/code-ref-link').then((m) => {
+          m.openCodeRefInViewer({ workspacePath: file, startLine: line ?? 1, endLine: line ?? 1 });
+        });
+      });
+      chip.appendChild(mapBtn);
+    }
+  }
+
+  if (attachment.kind === 'designRef') {
+    chip.classList.add('attach-chip--design-ref');
+    if (attachment.compositedDataUrl) {
+      chip.classList.add('attach-chip--image');
+      const thumb = document.createElement('img');
+      thumb.className = 'attach-chip-thumb';
+      thumb.src = attachment.compositedDataUrl;
+      thumb.alt = '';
+      chip.appendChild(thumb);
+    }
+    chip.title = attachment.intentText
+      ? `${attachment.intentText} — included when you send`
+      : 'Design annotation — included when you send';
   }
 
   if (attachment.kind === 'error') {

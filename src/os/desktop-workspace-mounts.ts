@@ -211,6 +211,8 @@ export async function syncDesktopWorkspaceMounts(): Promise<void> {
   }
 
   syncDrawerPaneVisibility();
+  const previewPanel = await import('../ui/preview-panel');
+  await previewPanel.syncPreviewDesignToolbarForSurface();
   if (typeof window !== 'undefined' && window.minnow?.preview) {
     bindResizeObserver();
     const previewVisibility = await import('../ui/preview-electron-visibility');

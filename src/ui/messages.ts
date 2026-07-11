@@ -86,6 +86,8 @@ import {
   renderUserMessageBubble,
   type UserBubbleRenderOptions,
 } from './user-message-bubble';
+import { getBeforeAfterPairs } from '../design/before-after-integration';
+import { renderBeforeAfterCard } from '../design/before-after-card';
 
 /** Parse stored tool `arguments` JSON for display in the args <details> block. */
 function parseToolArgsForDisplay(raw: string): Record<string, unknown> {
@@ -300,6 +302,12 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
           historyIndex: i,
           turnKind: 'assistant-tools',
         });
+      }
+
+      // Before/after diff card (MIN-370 P1): mount under the turn whose file save(s) produced it.
+      for (const pair of getBeforeAfterPairs(chat.id)) {
+        if (pair.turnId !== String(i)) continue;
+        area.appendChild(renderBeforeAfterCard(pair));
       }
       continue;
     }

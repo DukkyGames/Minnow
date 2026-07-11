@@ -1,5 +1,11 @@
 /**
  * Built-in preview browser automation (Electron WebContentsView via window.minnow.preview).
+ *
+ * MIN-364: every function below accepts an optional trailing `instance` id (default
+ * 'workspace-preview', see electron/preview-instance-registry.ts) so agent-driven automation can
+ * eventually target a non-default preview surface. No caller passes one today — the browser_*
+ * tool JSON schemas in tools/definitions.ts are not yet extended with an `instance` field, since
+ * no other named instance (e.g. a Design surface) exists to target — so behavior is unchanged.
  */
 
 import { loadBrowserMeta } from '../config/browser-meta';
@@ -80,14 +86,14 @@ async function uploadScreenshotBase64(dataBase64: string): Promise<{ id: string;
   return (await res.json()) as { id: string; sizeBytes: number };
 }
 
-export async function browserPreviewList(): Promise<string> {
+export async function browserPreviewList(instance?: string): Promise<string> {
   if (!isElectronPreviewAvailable()) return DESKTOP_SHELL_MESSAGE;
   const disabled = await assertBrowserAutomationEnabled();
   if (disabled) return disabled;
 
   const api = previewApi();
   if (api.tabs?.list) {
-    const tabs = await api.tabs.list();
+    const tabs = await api.tabs.list(instance);
     if (tabs.length === 0) return '(no preview tabs)';
     return tabs
       .map((tab) => {
@@ -99,7 +105,7 @@ export async function browserPreviewList(): Promise<string> {
       .join('\n\n');
   }
 
-  const info = await api.getInfo();
+  const info = await api.getInfo(undefined, instance);
   const title = info.title || '(no title)';
   return `[active] ${title}\n  ${info.url || '(no url)'}`;
 }
@@ -183,7 +189,7 @@ export async function browserPreviewCloseTab(tabId: string): Promise<string> {
   return `Closed preview tab ${tabId.trim()}`;
 }
 
-export async function browserPreviewNavigate(url: string): Promise<string> {
+export async function browserPreviewNavigate(url: string, instance?: string): Promise<string> {
   if (!isElectronPreviewAvailable()) return DESKTOP_SHELL_MESSAGE;
   const disabled = await assertBrowserAutomationEnabled();
   if (disabled) return disabled;
@@ -195,7 +201,7 @@ export async function browserPreviewNavigate(url: string): Promise<string> {
 
   await revealPreviewPanelForAgentNavigation(url);
   const api = previewApi();
-  const result = await api.navigateAndWait(url);
+  const result = await api.navigateAndWait(url, undefined, instance);
   if (!result.ok) {
     const detail = result.errorDescription ?? 'navigation failed';
     return `Error: ${detail}`;
@@ -209,12 +215,12 @@ export async function browserPreviewNavigate(url: string): Promise<string> {
 const EMPTY_SNAPSHOT_HINT =
   'Snapshot found no interactive elements. Try browser_eval or browser_screenshot.';
 
-export async function browserPreviewSnapshot(): Promise<string> {
+export async function browserPreviewSnapshot(instance?: string): Promise<string> {
   if (!isElectronPreviewAvailable()) return DESKTOP_SHELL_MESSAGE;
   const disabled = await assertBrowserAutomationEnabled();
   if (disabled) return disabled;
 
-  const raw = await previewApi().execJs(PREVIEW_DOM_SNAPSHOT_SCRIPT);
+  const raw = await previewApi().execJs(PREVIEW_DOM_SNAPSHOT_SCRIPT, undefined, instance);
   const payload = raw as {
     text?: string;
     nodes?: PreviewSnapshotNode[];
@@ -238,7 +244,7 @@ export async function browserPreviewSnapshot(): Promise<string> {
   return EMPTY_SNAPSHOT_HINT;
 }
 
-export async function browserPreviewClick(uid: number): Promise<string> {
+export async function browserPreviewClick(uid: number, instance?: string): Promise<string> {
   if (!isElectronPreviewAvailable()) return DESKTOP_SHELL_MESSAGE;
   const disabled = await assertBrowserAutomationEnabled();
   if (disabled) return disabled;
@@ -254,7 +260,7 @@ export async function browserPreviewClick(uid: number): Promise<string> {
     return { missing: false, role, name };
   })()`;
 
-  const raw = await previewApi().execJs(script);
+  const raw = await previewApi().execJs(script, undefined, instance);
   const result = raw as { missing?: boolean; role?: string; name?: string };
   if (result?.missing) {
     return 'No snapshot cached. Call browser_snapshot first.';
@@ -262,7 +268,7 @@ export async function browserPreviewClick(uid: number): Promise<string> {
   return `Clicked [${uid}] ${result.role ?? 'element'} "${result.name ?? ''}"`;
 }
 
-export async function browserPreviewFill(uid: number, value: string): Promise<string> {
+export async function browserPreviewFill(uid: number, value: string, instance?: string): Promise<string> {
   if (!isElectronPreviewAvailable()) return DESKTOP_SHELL_MESSAGE;
   const disabled = await assertBrowserAutomationEnabled();
   if (disabled) return disabled;
@@ -283,7 +289,7 @@ export async function browserPreviewFill(uid: number, value: string): Promise<st
     return { missing: false };
   })()`;
 
-  const raw = await previewApi().execJs(script);
+  const raw = await previewApi().execJs(script, undefined, instance);
   const result = raw as { missing?: boolean };
   if (result?.missing) {
     return 'No snapshot cached. Call browser_snapshot first.';
@@ -291,17 +297,17 @@ export async function browserPreviewFill(uid: number, value: string): Promise<st
   return `Filled [${uid}] with "${value}"`;
 }
 
-export async function browserPreviewEval(expression: string): Promise<string> {
+export async function browserPreviewEval(expression: string, instance?: string): Promise<string> {
   if (!isElectronPreviewAvailable()) return DESKTOP_SHELL_MESSAGE;
   const disabled = await assertBrowserAutomationEnabled();
   if (disabled) return disabled;
 
-  const info = await previewApi().getInfo();
+  const info = await previewApi().getInfo(undefined, instance);
   if (info.loading) {
     return 'Error: preview guest is still loading — wait for navigation to finish';
   }
 
-  const val = await previewApi().execJs(expression);
+  const val = await previewApi().execJs(expression, undefined, instance);
   if (val && typeof val === 'object' && val !== null && '__execError' in val) {
     const message = String((val as { __execError: unknown }).__execError ?? 'Script failed');
     return `Error: ${message}`;
@@ -309,7 +315,7 @@ export async function browserPreviewEval(expression: string): Promise<string> {
   return formatEvalResult(val);
 }
 
-export async function browserPreviewScreenshot(): Promise<ToolExecutionResult> {
+export async function browserPreviewScreenshot(instance?: string): Promise<ToolExecutionResult> {
   if (!isElectronPreviewAvailable()) {
     return { content: DESKTOP_SHELL_MESSAGE };
   }
@@ -319,7 +325,7 @@ export async function browserPreviewScreenshot(): Promise<ToolExecutionResult> {
   }
 
   try {
-    const dataBase64 = await previewApi().capturePage();
+    const dataBase64 = await previewApi().capturePage(undefined, instance);
     const { id, sizeBytes } = await uploadScreenshotBase64(dataBase64);
     const url = `/api/browser/screenshot/${id}`;
     const kb = Math.round(sizeBytes / 1024);
@@ -346,26 +352,30 @@ export async function executeBrowserPreviewTool(
   name: string,
   args: Record<string, unknown>,
 ): Promise<ToolExecutionResult> {
+  // MIN-364: optional instance override (undocumented in tool schemas today — no consumer
+  // targets a non-default preview instance yet). Falls back to workspace-preview when absent.
+  const instance = typeof args.instance === 'string' && args.instance.trim() ? args.instance.trim() : undefined;
+
   try {
     switch (name) {
       case 'browser_list':
       case 'browser_list_tabs':
-        return { content: await browserPreviewList() };
+        return { content: await browserPreviewList(instance) };
       case 'browser_navigate': {
         const url = args.url;
         if (typeof url !== 'string' || !url.trim()) {
           return { content: 'Error: url is required' };
         }
-        return { content: await browserPreviewNavigate(url.trim()) };
+        return { content: await browserPreviewNavigate(url.trim(), instance) };
       }
       case 'browser_snapshot':
-        return { content: await browserPreviewSnapshot() };
+        return { content: await browserPreviewSnapshot(instance) };
       case 'browser_click': {
         const uid = Number(args.uid);
         if (!Number.isFinite(uid)) {
           return { content: 'Error: uid is required' };
         }
-        return { content: await browserPreviewClick(uid) };
+        return { content: await browserPreviewClick(uid, instance) };
       }
       case 'browser_fill': {
         const uid = Number(args.uid);
@@ -373,17 +383,17 @@ export async function executeBrowserPreviewTool(
         if (!Number.isFinite(uid)) {
           return { content: 'Error: uid is required' };
         }
-        return { content: await browserPreviewFill(uid, value) };
+        return { content: await browserPreviewFill(uid, value, instance) };
       }
       case 'browser_eval': {
         const expression = args.expression;
         if (typeof expression !== 'string' || !expression.trim()) {
           return { content: 'Error: expression is required' };
         }
-        return { content: await browserPreviewEval(expression) };
+        return { content: await browserPreviewEval(expression, instance) };
       }
       case 'browser_screenshot':
-        return browserPreviewScreenshot();
+        return browserPreviewScreenshot(instance);
       case 'browser_new_tab': {
         const url = typeof args.url === 'string' ? args.url : undefined;
         return { content: await browserPreviewNewTab(url) };

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "pages": {
+    "https://google.com": {
+      "shapes": [],
+      "pins": []
+    },
+    "https://youtube.com": {
+      "shapes": [],
+      "pins": []
+    }
+  }
+}
