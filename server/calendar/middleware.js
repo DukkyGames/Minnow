@@ -11,6 +11,7 @@ import {
   writeBackLocalChanges,
 } from './caldav.js';
 import { syncCalendarAccount } from './sync-backend.js';
+import { importIcsFromUrl } from './ics-feed.js';
 import { exportCalendarIcs, importIcsToCalendar } from './ics.js';
 import { listUpcomingEvents } from './store.js';
 import {
@@ -197,6 +198,18 @@ export function createCalendarMiddleware() {
         const content = await readRawBody(req);
         const events = importIcsToCalendar(calendarId, content);
         sendJson(res, 200, { imported: events.length, events });
+        return;
+      }
+
+      if (url === '/api/calendar/import/ics-url' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const payload = body?.feed ?? body ?? {};
+        const result = await importIcsFromUrl({
+          url: payload.url,
+          calendarId: payload.calendarId,
+          calendarName: payload.calendarName,
+        });
+        sendJson(res, 200, result);
         return;
       }
 

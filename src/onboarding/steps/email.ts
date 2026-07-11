@@ -7,7 +7,7 @@ import {
   fetchEmailAccounts,
   testEmailAccount,
 } from '../../email/client';
-import { el, renderStepHeader } from '../ui-helpers';
+import { createStatusPill, el, renderStepHeader } from '../ui-helpers';
 import type { OnboardingStep } from '../types';
 import { recordStepProgress } from '../state-core';
 
@@ -29,6 +29,26 @@ let imapPort = 993;
 let connectionOk = false;
 let connectionError = '';
 let savedAccountId = '';
+
+const GMAIL_APP_PASSWORD_URL = 'https://myaccount.google.com/apppasswords';
+
+/** Gmail requires app passwords for IMAP; link users to Google's setup page. */
+function appendGmailAppPasswordNotice(container: HTMLElement): void {
+  const notice = el('p', 'mn-onboarding-notice');
+  notice.appendChild(
+    document.createTextNode(
+      'Gmail accounts must use an App Password now — your regular Google password will not work for IMAP. ',
+    ),
+  );
+  const link = el('a', 'mn-onboarding-settings-link') as HTMLAnchorElement;
+  link.href = GMAIL_APP_PASSWORD_URL;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.textContent = 'Create an App Password';
+  notice.appendChild(link);
+  notice.appendChild(document.createTextNode('.'));
+  container.appendChild(notice);
+}
 
 export const emailStep: OnboardingStep = {
   id: 'email',
@@ -68,6 +88,20 @@ export const emailStep: OnboardingStep = {
 
     const form = el('div', 'mn-onboarding-form-grid');
 
+    const statusPill = createStatusPill(
+      connectionOk ? 'ok' : connectionError ? 'err' : 'pending',
+      connectionOk ? 'Connected' : connectionError || 'Not tested',
+    );
+
+    const resetConnectionState = () => {
+      connectionOk = false;
+      connectionError = '';
+      statusPill.className = 'mn-onboarding-status mn-onboarding-status--pending';
+      statusPill.textContent = 'Not tested';
+      testBtn.textContent = 'Test and save';
+      actions.setPrimaryEnabled(false);
+    };
+
     const addField = (id: string, fieldLabel: string, value: string, type = 'text') => {
       const wrap = el('label', 'mn-onboarding-field-label');
       wrap.htmlFor = id;
@@ -77,10 +111,7 @@ export const emailStep: OnboardingStep = {
       input.type = type;
       input.value = value;
       input.autocomplete = type === 'password' ? 'off' : 'email';
-      input.addEventListener('input', () => {
-        connectionOk = false;
-        actions.setPrimaryEnabled(false);
-      });
+      input.addEventListener('input', resetConnectionState);
       wrap.appendChild(input);
       form.appendChild(wrap);
       return input;
@@ -96,10 +127,19 @@ export const emailStep: OnboardingStep = {
 
     container.appendChild(form);
 
-    const notice = el('p', 'mn-onboarding-muted', 'Use an app-specific password for Gmail and Outlook.');
-    container.appendChild(notice);
+    if (preset === 'gmail') {
+      appendGmailAppPasswordNotice(container);
+    } else if (preset === 'outlook') {
+      container.appendChild(
+        el('p', 'mn-onboarding-muted', 'Use an app-specific password for Outlook.'),
+      );
+    }
 
-    const testBtn = el('button', 'mn-onboarding-secondary-btn', 'Test and save');
+    const testBtn = el(
+      'button',
+      'mn-onboarding-secondary-btn',
+      connectionOk ? 'Connected' : 'Test and save',
+    );
     testBtn.type = 'button';
     testBtn.addEventListener('click', () => {
       label = labelInput.value.trim() || 'Personal';
@@ -111,6 +151,8 @@ export const emailStep: OnboardingStep = {
       connectionError = '';
       testBtn.disabled = true;
       testBtn.textContent = 'Testing…';
+      statusPill.className = 'mn-onboarding-status mn-onboarding-status--pending';
+      statusPill.textContent = 'Testing…';
 
       void (async () => {
         try {
@@ -129,22 +171,25 @@ export const emailStep: OnboardingStep = {
           if (!test.ok) throw new Error('IMAP login failed');
           savedAccountId = account.id;
           connectionOk = true;
+          statusPill.className = 'mn-onboarding-status mn-onboarding-status--ok';
+          statusPill.textContent = 'Connected';
+          testBtn.textContent = 'Connected';
           actions.setPrimaryEnabled(true);
         } catch (err) {
           connectionError = err instanceof Error ? err.message : 'Connection failed';
-          notice.textContent = connectionError;
-          notice.className = 'mn-onboarding-notice';
+          statusPill.className = 'mn-onboarding-status mn-onboarding-status--err';
+          statusPill.textContent = connectionError;
+          testBtn.textContent = 'Retry';
         } finally {
           testBtn.disabled = false;
-          testBtn.textContent = 'Test and save';
         }
       })();
     });
     container.appendChild(testBtn);
 
-    if (connectionOk) {
-      container.appendChild(el('p', 'mn-onboarding-notice is-ok', 'Email account connected.'));
-    }
+    const statusRow = el('div', 'mn-onboarding-status-row');
+    statusRow.appendChild(statusPill);
+    container.appendChild(statusRow);
 
     actions.setPrimaryLabel('Continue');
     actions.setPrimaryEnabled(connectionOk);

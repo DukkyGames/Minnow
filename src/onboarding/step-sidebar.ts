@@ -5,7 +5,8 @@
 import { formatStepPosition, getApplicablePhases, resolvePhaseIndex, type OnboardingPhase } from './phases';
 import type { OnboardingStep, OnboardingStepId } from './types';
 
-const GLYPH_URL = '/logos/minnow-glyph.svg';
+const BRAND_GLYPH_URL = '/logos/minnow-1024.png';
+const FAVICON_URL = '/logos/favicon.ico';
 
 export interface StepSidebarHandle {
   setActiveStep: (stepId: OnboardingStepId, stepIndex: number) => void;
@@ -38,7 +39,7 @@ export function mountStepSidebar(
 
   const glyph = document.createElement('img');
   glyph.className = 'mn-onboarding__brand-glyph';
-  glyph.src = GLYPH_URL;
+  glyph.src = BRAND_GLYPH_URL;
   glyph.alt = '';
   glyph.width = 28;
   glyph.height = 28;
@@ -114,7 +115,7 @@ export function mountStepSidebar(
   fish.setAttribute('aria-hidden', 'true');
 
   const fishImg = document.createElement('img');
-  fishImg.src = GLYPH_URL;
+  fishImg.src = FAVICON_URL;
   fishImg.alt = '';
   fishImg.width = 18;
   fishImg.height = 18;

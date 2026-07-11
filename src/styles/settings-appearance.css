@@ -815,7 +815,11 @@
 
   position: relative;
 
+  width: 100%;
+
   aspect-ratio: 16 / 10;
+
+  min-height: 72px;
 
   border-radius: var(--radius-sm);
 
@@ -836,6 +840,10 @@
   transform: scale(1);
 
   pointer-events: none;
+
+  /* Inherit OS wallpaper tokens for live thumbnail renders. */
+
+  color: var(--os-text);
 
 }
 

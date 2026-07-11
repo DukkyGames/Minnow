@@ -102,6 +102,7 @@ async function loadModels(
       rows.forEach((model) => {
         const row = el('button', 'mn-onboarding-model-row');
         row.type = 'button';
+        row.dataset.modelId = model.id;
         if (model.id === selectedModelId) row.classList.add('is-selected');
 
         const name = el('span', 'mn-onboarding-model-row__name', model.id);
@@ -118,7 +119,9 @@ async function loadModels(
           selectedModelId = model.id;
           actions.patchContext({ modelId: model.id, providerId: provider.id });
           actions.setPrimaryEnabled(true);
-          renderRows(search.value);
+          list.querySelectorAll<HTMLButtonElement>('.mn-onboarding-model-row').forEach((btn) => {
+            btn.classList.toggle('is-selected', btn.dataset.modelId === model.id);
+          });
         });
         list.appendChild(row);
       });

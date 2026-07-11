@@ -109,6 +109,30 @@ function renderProgressBar(host: HTMLElement, percent: number): void {
 
 
 
+function modelRowKey(row: ModelFitResult): string {
+
+  return `${row.name}\0${row.quant}`;
+
+}
+
+
+
+/** Toggle selection styling without rebuilding rows (keeps list scroll position). */
+
+function syncModelRowSelection(list: HTMLElement): void {
+
+  const key = selectedModel ? modelRowKey(selectedModel) : '';
+
+  list.querySelectorAll<HTMLButtonElement>('.mn-onboarding-model-row').forEach((button) => {
+
+    button.classList.toggle('is-selected', button.dataset.modelKey === key);
+
+  });
+
+}
+
+
+
 function renderModelRows(
 
   list: HTMLElement,
@@ -136,6 +160,8 @@ function renderModelRows(
     const button = el('button', 'mn-onboarding-model-row');
 
     button.type = 'button';
+
+    button.dataset.modelKey = modelRowKey(row);
 
     if (selectedModel?.name === row.name && selectedModel?.quant === row.quant) {
 
@@ -355,7 +381,7 @@ export const providerManagedStep: OnboardingStep = {
 
       selectedModel = row;
 
-      renderModelRows(modelList, availableModels, selectModel);
+      syncModelRowSelection(modelList);
 
       installBtn.disabled = false;
 

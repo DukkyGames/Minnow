@@ -4,6 +4,7 @@
 
 import '../../styles/settings-page.css';
 import '../../styles/settings-appearance.css';
+import '../../styles/minnowos-wallpaper.css';
 
 import { loadDesktopPrefs, saveDesktopPref } from '../../os/desktop-prefs';
 import {

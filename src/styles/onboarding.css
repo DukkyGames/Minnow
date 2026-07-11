@@ -4,6 +4,9 @@
 
 .mn-onboarding {
   --onboarding-aside-w: 280px;
+  /* Opaque accent tint — mixing rgba accent-soft with surface can read muddy on dark themes */
+  --onboarding-surface-selected: color-mix(in srgb, var(--mn-accent) 12%, var(--mn-surface-1));
+  --onboarding-surface-selected-hover: color-mix(in srgb, var(--mn-accent) 18%, var(--mn-surface-1));
   position: fixed;
   inset: 0;
   z-index: 100000;
@@ -453,9 +456,22 @@ html.onboarding-active .mn-os-shell {
   outline: none;
 }
 
-.mn-onboarding-choice.is-selected {
-  border-color: var(--mn-accent-border, var(--mn-accent, var(--accent)));
-  background: var(--mn-accent-soft, color-mix(in oklch, var(--mn-accent, var(--accent)) 10%, transparent));
+.mn-onboarding-choice.is-selected,
+.mn-onboarding-wallpaper-chip.is-selected,
+.mn-onboarding-model-row.is-selected {
+  border-color: var(--mn-accent-border);
+  background: var(--onboarding-surface-selected);
+}
+
+.mn-onboarding-choice.is-selected:hover,
+.mn-onboarding-choice.is-selected:focus-visible,
+.mn-onboarding-wallpaper-chip.is-selected:hover,
+.mn-onboarding-wallpaper-chip.is-selected:focus-visible,
+.mn-onboarding-model-row.is-selected:hover,
+.mn-onboarding-model-row.is-selected:focus-visible {
+  border-color: var(--mn-accent-border);
+  background: var(--onboarding-surface-selected-hover);
+  outline: none;
 }
 
 .mn-onboarding-choice__head {
@@ -539,8 +555,6 @@ html.onboarding-active .mn-os-shell {
 }
 
 .mn-onboarding-wallpaper-chip.is-selected {
-  border-color: var(--mn-accent, var(--accent));
-  background: var(--mn-accent-soft, color-mix(in oklch, var(--mn-accent, var(--accent)) 10%, transparent));
   font-weight: 600;
 }
 
@@ -595,6 +609,7 @@ html.onboarding-active .mn-os-shell {
 }
 
 .mn-onboarding-notice {
+  margin: 0 0 20px;
   padding: 12px 14px;
   border: 1px solid var(--mn-warning-border, var(--mn-border, var(--border)));
   border-radius: var(--mn-radius-md, 10px);
@@ -645,14 +660,9 @@ html.onboarding-active .mn-os-shell {
   transition: border-color 0.15s ease-out, background-color 0.15s ease-out;
 }
 
-.mn-onboarding-model-row:hover {
+.mn-onboarding-model-row:hover:not(.is-selected) {
   border-color: var(--mn-border-strong, var(--border-strong));
   background: color-mix(in oklch, var(--mn-fg, var(--text)) 3%, transparent);
-}
-
-.mn-onboarding-model-row.is-selected {
-  border-color: var(--mn-accent, var(--accent));
-  background: var(--mn-accent-soft, color-mix(in oklch, var(--mn-accent, var(--accent)) 10%, transparent));
 }
 
 .mn-onboarding-model-row__name-line {
@@ -1035,6 +1045,164 @@ html.onboarding-active .mn-os-shell {
   color: var(--mn-fg-muted, var(--text-muted));
 }
 
+/* ── Install log console (extras step) ── */
+
+.mn-onboarding-install-console {
+  margin: 16px 0 0;
+  border: 1px solid var(--mn-border, var(--border));
+  border-radius: var(--mn-radius-md, 10px);
+  background: color-mix(in oklch, var(--mn-fg, var(--text)) 2%, var(--mn-bg, var(--bg)));
+  overflow: hidden;
+}
+
+.mn-onboarding-install-console.is-hidden {
+  display: none;
+}
+
+.mn-onboarding-install-console__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--mn-border, var(--border));
+  background: var(--mn-surface-1, var(--mn-bg, var(--bg)));
+}
+
+.mn-onboarding-install-console__title {
+  font: 600 11px/1 var(--mn-font-mono, var(--font-mono, monospace));
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--mn-fg-muted, var(--text-muted));
+}
+
+.mn-onboarding-install-console__status {
+  font: 600 11px/1 var(--mn-font-mono, var(--font-mono, monospace));
+  color: var(--mn-fg, var(--text));
+  font-variant-numeric: tabular-nums;
+}
+
+.mn-onboarding-install-console.is-busy .mn-onboarding-install-console__status::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--mn-accent, var(--accent));
+  vertical-align: middle;
+  animation: mn-onboarding-install-pulse 1.2s ease-out infinite;
+}
+
+.mn-onboarding-install-console__body {
+  max-height: min(280px, 32vh);
+  overflow: auto;
+  padding: 8px 0;
+  font-family: var(--mn-font-mono, var(--font-mono, monospace));
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.mn-onboarding-install-console__line {
+  display: grid;
+  grid-template-columns: 4.5rem 5.5rem minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 12px;
+}
+
+.mn-onboarding-install-console__line:hover {
+  background: color-mix(in oklch, var(--mn-fg, var(--text)) 4%, transparent);
+}
+
+.mn-onboarding-install-console__time {
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-fg-subtle, var(--mn-fg-muted, var(--text-muted)));
+  font-size: 11px;
+}
+
+.mn-onboarding-install-console__source {
+  font: 600 9px/1 var(--mn-font-mono, var(--font-mono, monospace));
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--mn-fg-muted, var(--text-muted));
+}
+
+.mn-onboarding-install-console__text {
+  color: var(--mn-fg, var(--text));
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-width: 0;
+}
+
+.mn-onboarding-install-console__line.is-live .mn-onboarding-install-console__text {
+  color: var(--mn-fg, var(--text));
+}
+
+.mn-onboarding-install-console__line.is-live .mn-onboarding-install-console__time::after {
+  content: '…';
+  margin-left: 1px;
+  animation: mn-onboarding-install-pulse 1.2s ease-out infinite;
+}
+
+.mn-onboarding-install-console__line.is-ok .mn-onboarding-install-console__text {
+  color: var(--mn-success-ink, var(--mn-success, var(--success)));
+}
+
+.mn-onboarding-install-console__line.is-err .mn-onboarding-install-console__text {
+  color: var(--mn-danger-ink, var(--mn-danger, var(--danger)));
+}
+
+.mn-onboarding-install-console__line.is-skip .mn-onboarding-install-console__text {
+  color: var(--mn-fg-muted, var(--text-muted));
+}
+
+.mn-onboarding-install-console__line.is-working .mn-onboarding-install-console__source {
+  color: var(--mn-accent-ink, var(--mn-accent, var(--accent)));
+}
+
+@keyframes mn-onboarding-install-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mn-onboarding-install-console.is-busy .mn-onboarding-install-console__status::before {
+    animation: none;
+  }
+
+  .mn-onboarding-install-console__line.is-live .mn-onboarding-install-console__time::after {
+    animation: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .mn-onboarding-install-console__line {
+    grid-template-columns: 4rem minmax(0, 1fr);
+    grid-template-areas:
+      'time source'
+      '. text';
+  }
+
+  .mn-onboarding-install-console__time {
+    grid-area: time;
+  }
+
+  .mn-onboarding-install-console__source {
+    grid-area: source;
+    justify-self: end;
+  }
+
+  .mn-onboarding-install-console__text {
+    grid-area: text;
+  }
+}
+
 .mn-onboarding-form-grid {
   display: flex;
   flex-direction: column;
@@ -1104,8 +1272,8 @@ html.onboarding-active .mn-os-shell {
 }
 
 .mn-onboarding-map__node.is-active circle {
-  stroke: var(--mn-accent, var(--accent));
-  fill: var(--mn-accent-soft, color-mix(in oklch, var(--mn-accent, var(--accent)) 12%, transparent));
+  stroke: var(--mn-accent);
+  fill: var(--onboarding-surface-selected);
 }
 
 .mn-onboarding-map__node.is-visited circle {

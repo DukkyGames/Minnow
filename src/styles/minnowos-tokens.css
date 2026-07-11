@@ -1,5 +1,7 @@
 /* MinnowOS — design tokens aliased to Minnow --mn-* palette (see tokens.css). */
 
+/* Core OS tokens on :root so wallpaper thumbnails work outside the desktop shell. */
+:root,
 .mn-os {
   /* core aliases */
   --os-bg: var(--mn-bg);
@@ -36,7 +38,9 @@
   --os-wall-a: var(--mn-bg);
   --os-wall-b: var(--mn-surface-0);
   --os-wall-c: color-mix(in srgb, var(--mn-bg) 62%, var(--mn-accent) 38%);
+}
 
+.mn-os {
   color: var(--os-text);
 }
 

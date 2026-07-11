@@ -8,6 +8,8 @@ import {
   revokeAppearanceAssetObjectUrl,
   saveAppearanceAsset,
 } from '../appearance/asset-store';
+import '../styles/minnowos-wallpaper.css';
+
 import { loadDesktopPrefs, saveDesktopPref, saveDesktopPrefs } from '../os/desktop-prefs';
 import {
   renderWallpaper,
@@ -50,12 +52,13 @@ export function appendAppearanceWallpaper(
     imageUrl?: string | null,
   ): Promise<void> {
     preview.replaceChildren();
-    const inner = el('div', 'settings-appearance-wallpaper-preview-inner');
+    const inner = el('div', 'settings-appearance-wallpaper-preview-inner mn-os');
     preview.appendChild(inner);
     renderWallpaper(inner, {
       mode,
       imageUrl: imageUrl ?? undefined,
       imageFit: prefs.wallpaperImageFit ?? 'cover',
+      preview: true,
     });
   }
 

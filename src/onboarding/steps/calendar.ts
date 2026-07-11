@@ -1,26 +1,21 @@
 /**
- * S8 — Calendar setup (local + optional CalDAV).
+ * S8 — Calendar setup (local + optional iCal link import).
  */
 
 import {
-  createCalDavAccount,
   createCalendar,
-  fetchCalDavAccounts,
   fetchCalendars,
-  syncCalDav,
+  importIcsFromUrl,
 } from '../../calendar/client';
 import { el, renderStepHeader } from '../ui-helpers';
 import type { OnboardingStep } from '../types';
 import { recordStepProgress } from '../state-core';
 
-let mode: 'local' | 'caldav' = 'local';
-let caldavLabel = 'Work';
-let caldavUrl = '';
-let caldavUser = '';
-let caldavPass = '';
+let mode: 'local' | 'ics' = 'local';
+let icsLabel = 'Personal';
+let icsUrl = '';
 let setupDone = false;
 let savedCalendarId = '';
-let savedCalDavId = '';
 
 export const calendarStep: OnboardingStep = {
   id: 'calendar',
@@ -37,26 +32,26 @@ export const calendarStep: OnboardingStep = {
       el(
         'p',
         'mn-onboarding-step-desc',
-        'Start with a local Minnow calendar or sync CalDAV from Google, Fastmail, or iCloud.',
+        'Start with a local Minnow calendar or import events from a read-only iCal link (Google, iCloud, Fastmail, etc.).',
       ),
     );
 
     const modeRow = el('div', 'mn-onboarding-chip-row');
     const localChip = el('button', 'mn-onboarding-wallpaper-chip', 'Local calendar');
     localChip.type = 'button';
-    const caldavChip = el('button', 'mn-onboarding-wallpaper-chip', 'CalDAV sync');
-    caldavChip.type = 'button';
+    const icsChip = el('button', 'mn-onboarding-wallpaper-chip', 'iCal link');
+    icsChip.type = 'button';
     if (mode === 'local') localChip.classList.add('is-selected');
-    else caldavChip.classList.add('is-selected');
+    else icsChip.classList.add('is-selected');
     localChip.addEventListener('click', () => {
       mode = 'local';
       calendarStep.render(container, _ctx, actions);
     });
-    caldavChip.addEventListener('click', () => {
-      mode = 'caldav';
+    icsChip.addEventListener('click', () => {
+      mode = 'ics';
       calendarStep.render(container, _ctx, actions);
     });
-    modeRow.append(localChip, caldavChip);
+    modeRow.append(localChip, icsChip);
     container.appendChild(modeRow);
 
     const form = el('div', 'mn-onboarding-form-grid');
@@ -110,62 +105,63 @@ export const calendarStep: OnboardingStep = {
         input.id = id;
         input.type = type;
         input.value = value;
-        input.autocomplete = type === 'password' ? 'off' : 'on';
+        input.autocomplete = 'off';
         wrap.appendChild(input);
         form.appendChild(wrap);
         return input;
       };
 
-      const labelInput = addField('onbCalLabel', 'Account label', caldavLabel);
-      const urlInput = addField('onbCalUrl', 'CalDAV URL', caldavUrl);
-      urlInput.placeholder = 'https://caldav.fastmail.com/dav/calendars/user/email@';
-      const userInput = addField('onbCalUser', 'Username', caldavUser);
-      const passInput = addField('onbCalPass', 'Password', caldavPass, 'password');
+      form.appendChild(
+        el(
+          'p',
+          'mn-onboarding-muted',
+          'Paste the secret iCal URL from your calendar provider. Google: Settings → your calendar → Integrate calendar → Secret address in iCal format.',
+        ),
+      );
 
-      const saveBtn = el('button', 'mn-onboarding-secondary-btn', 'Connect and sync');
-      saveBtn.type = 'button';
-      saveBtn.addEventListener('click', () => {
-        caldavLabel = labelInput.value.trim() || 'CalDAV';
-        caldavUrl = urlInput.value.trim();
-        caldavUser = userInput.value.trim();
-        caldavPass = passInput.value;
-        saveBtn.disabled = true;
+      const labelInput = addField('onbCalLabel', 'Calendar name', icsLabel);
+      const urlInput = addField('onbCalUrl', 'iCal URL', icsUrl);
+      urlInput.placeholder = 'https://calendar.google.com/calendar/ical/.../basic.ics';
+
+      const importBtn = el('button', 'mn-onboarding-secondary-btn', 'Import calendar');
+      importBtn.type = 'button';
+      importBtn.addEventListener('click', () => {
+        icsLabel = labelInput.value.trim() || 'Imported calendar';
+        icsUrl = urlInput.value.trim();
+        importBtn.disabled = true;
         void (async () => {
           try {
-            const account = await createCalDavAccount({
-              label: caldavLabel,
-              url: caldavUrl,
-              username: caldavUser,
-              password: caldavPass,
+            const result = await importIcsFromUrl({
+              url: icsUrl,
+              calendarName: icsLabel,
             });
-            savedCalDavId = account.id;
-            await syncCalDav(account.id);
+            savedCalendarId = result.calendarId;
             setupDone = true;
             actions.setPrimaryEnabled(true);
-            saveBtn.textContent = 'Connected';
+            importBtn.textContent = `Imported ${result.imported} event${result.imported === 1 ? '' : 's'}`;
           } catch (err) {
             form.appendChild(
               el(
                 'p',
                 'mn-onboarding-notice',
-                err instanceof Error ? err.message : 'CalDAV connection failed',
+                err instanceof Error ? err.message : 'iCal import failed',
               ),
             );
-            saveBtn.textContent = 'Retry';
+            importBtn.textContent = 'Retry';
           } finally {
-            saveBtn.disabled = false;
+            importBtn.disabled = false;
           }
         })();
       });
-      form.appendChild(saveBtn);
+      form.appendChild(importBtn);
     }
 
     container.appendChild(form);
 
-    void fetchCalDavAccounts().then((accounts) => {
-      if (accounts.length) {
+    void fetchCalendars().then((calendars) => {
+      if (calendars.length) {
         setupDone = true;
-        savedCalDavId = accounts[0].id;
+        savedCalendarId = calendars[0].id;
         actions.setPrimaryEnabled(true);
       }
     });
@@ -178,14 +174,15 @@ export const calendarStep: OnboardingStep = {
     ctx.state = recordStepProgress(ctx.state, 'calendar', {
       done: setupDone,
       skipped: !setupDone,
-      data: { calendarId: savedCalendarId, caldavId: savedCalDavId, mode },
+      data: { calendarId: savedCalendarId, mode },
     });
   },
 };
 
 export function resetCalendarStepState(): void {
   mode = 'local';
+  icsLabel = 'Personal';
+  icsUrl = '';
   setupDone = false;
   savedCalendarId = '';
-  savedCalDavId = '';
 }
