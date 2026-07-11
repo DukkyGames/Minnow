@@ -91,11 +91,27 @@ export async function ensureAgentPacksLayout() {
   const root = getAgentPacksRoot();
   await fs.mkdir(root, { recursive: true });
   const templateDir = `${root}/_template`;
-  try {
-    await fs.access(templateDir);
-  } catch {
+  if (!(await isTemplatePackComplete(templateDir))) {
     await scaffoldTemplatePack(templateDir);
   }
+}
+
+/** True when the authoring template has all expected files (handles partial failed scaffolds). */
+async function isTemplatePackComplete(templateDir) {
+  const required = [
+    `${templateDir}/manifest.json`,
+    `${templateDir}/prompts/example.full.md`,
+    `${templateDir}/prompts/example.lite.md`,
+    `${templateDir}/README.md`,
+  ];
+  for (const filePath of required) {
+    try {
+      await fs.access(filePath);
+    } catch {
+      return false;
+    }
+  }
+  return true;
 }
 
 async function scaffoldTemplatePack(templateDir) {
@@ -127,6 +143,7 @@ async function scaffoldTemplatePack(templateDir) {
     `${JSON.stringify(manifest, null, 2)}\n`,
     'utf8',
   );
+  await fs.mkdir(`${templateDir}/prompts`, { recursive: true });
   await fs.writeFile(
     `${templateDir}/prompts/example.full.md`,
     'You are an example work agent from an agent pack.\n',

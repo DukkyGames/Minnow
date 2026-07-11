@@ -9,6 +9,8 @@ import type { OnboardingPersistedState } from './types';
 import {
   buildOnboardingContext,
   createDefaultOnboardingState,
+  hasExistingChatMessageHistory,
+  hasUserConfiguredProviderIds,
   isOnboardingComplete,
   recordStepProgress,
 } from './state-core';
@@ -16,6 +18,8 @@ import {
 export {
   buildOnboardingContext,
   createDefaultOnboardingState,
+  hasExistingChatMessageHistory,
+  hasUserConfiguredProviderIds,
   isOnboardingComplete,
   recordStepProgress,
 } from './state-core';
@@ -23,7 +27,10 @@ export {
 const STORAGE_KEY = 'minnow.onboarding.v1';
 const CONFIG_KEY = 'onboarding.json';
 
-const DEFAULT_SEED_PROVIDER_IDS = new Set(['lm-studio-local', 'llama-cpp-managed']);
+type ServerOnboardingRead =
+  | { kind: 'found'; state: OnboardingPersistedState }
+  | { kind: 'missing' }
+  | { kind: 'unavailable' };
 
 function readLocalMirror(): OnboardingPersistedState | null {
   try {
@@ -41,18 +48,19 @@ function writeLocalMirror(state: OnboardingPersistedState): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-async function readServerState(): Promise<OnboardingPersistedState | null> {
-  if (!isServerStorageMode()) return null;
+async function readServerState(): Promise<ServerOnboardingRead> {
+  if (!isServerStorageMode()) return { kind: 'unavailable' };
   try {
     const res = await fetch(`/api/config/file?key=${encodeURIComponent(CONFIG_KEY)}`, {
       cache: 'no-store',
     });
-    if (!res.ok) return null;
+    if (res.status === 404) return { kind: 'missing' };
+    if (!res.ok) return { kind: 'unavailable' };
     const parsed = (await res.json()) as OnboardingPersistedState;
-    if (parsed?.version !== 1) return null;
-    return parsed;
+    if (parsed?.version !== 1) return { kind: 'unavailable' };
+    return { kind: 'found', state: parsed };
   } catch {
-    return null;
+    return { kind: 'unavailable' };
   }
 }
 
@@ -71,7 +79,16 @@ export async function loadOnboardingState(): Promise<OnboardingPersistedState> {
     readServerState(),
     Promise.resolve(readLocalMirror()),
   ]);
-  return server ?? local ?? createDefaultOnboardingState();
+
+  // Fresh ~/.minnow install has no onboarding.json — ignore stale browser mirror.
+  if (server.kind === 'missing' && isServerStorageMode()) {
+    const fresh = createDefaultOnboardingState();
+    writeLocalMirror(fresh);
+    return fresh;
+  }
+
+  if (server.kind === 'found') return server.state;
+  return local ?? createDefaultOnboardingState();
 }
 
 /** Persist wizard progress to both stores when possible. */
@@ -101,19 +118,13 @@ export async function resetOnboardingForRerun(): Promise<OnboardingPersistedStat
 }
 
 function hasRealChatHistory(): boolean {
-  if (!sessionState?.chats?.length) return false;
-  return sessionState.chats.some(
-    (chat) =>
-      (chat.history?.length ?? 0) > 0 ||
-      Boolean(chat.modelId?.trim()) ||
-      Boolean(chat.providerId?.trim()),
-  );
+  return hasExistingChatMessageHistory(sessionState?.chats);
 }
 
 async function hasUserConfiguredProviders(): Promise<boolean> {
   try {
     const { providers } = await listProviders();
-    return providers.some((p) => !DEFAULT_SEED_PROVIDER_IDS.has(p.id));
+    return hasUserConfiguredProviderIds(providers.map((p) => p.id));
   } catch {
     return false;
   }

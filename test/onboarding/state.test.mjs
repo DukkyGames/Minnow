@@ -3,6 +3,8 @@ import { describe, test } from 'node:test';
 
 const {
   createDefaultOnboardingState,
+  hasExistingChatMessageHistory,
+  hasUserConfiguredProviderIds,
   isOnboardingComplete,
   recordStepProgress,
   buildOnboardingContext,
@@ -32,6 +34,31 @@ describe('onboarding state-core', () => {
     assert.equal(isOnboardingComplete(open), false);
     const done = { ...open, completedAt: '2026-07-07T00:00:00.000Z' };
     assert.equal(isOnboardingComplete(done), true);
+  });
+
+  test('seed providers alone do not count as user configuration', () => {
+    assert.equal(
+      hasUserConfiguredProviderIds(['lm-studio-local', 'llama-cpp-local']),
+      false,
+    );
+    assert.equal(
+      hasUserConfiguredProviderIds(['lm-studio-local', 'vite-fallback']),
+      false,
+    );
+    assert.equal(hasUserConfiguredProviderIds(['lm-studio-local', 'openrouter']), true);
+  });
+
+  test('hasExistingChatMessageHistory ignores empty chats and model binding', () => {
+    assert.equal(
+      hasExistingChatMessageHistory([
+        { history: [], modelId: 'gpt-4', providerId: 'openrouter' },
+      ]),
+      false,
+    );
+    assert.equal(
+      hasExistingChatMessageHistory([{ history: [{ role: 'user', content: 'hi' }] }]),
+      true,
+    );
   });
 
   test('buildOnboardingContext reads provider path from step data', () => {

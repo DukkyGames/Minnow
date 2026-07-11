@@ -2,7 +2,13 @@
  * S2 — Provider path choice and branch screens (local / managed / cloud).
  */
 
-import { createProvider, updateProviderSecrets } from '../../providers/store';
+import {
+  createProvider,
+  updateProvider,
+  updateProviderSecrets,
+  type CreateProviderPayload,
+} from '../../providers/store';
+import type { ProviderPublic } from '../../providers/types';
 import { getDefaultPaths } from '../../providers/paths';
 import { fetchModelsForProvider } from '../../providers/fetch-models';
 import { createChoiceCard, createStatusPill, el, renderStepHeader } from '../ui-helpers';
@@ -17,17 +23,19 @@ import { recordStepProgress } from '../state-core';
 let selectedPath: OnboardingContext['providerPath'] = null;
 let probeResults: ProviderProbeResult[] = [];
 let localProviderId = '';
+let localBaseUrl = '';
 let cloudPreset = 'openrouter';
-let cloudBaseUrl = 'https://openrouter.ai/api/v1';
+let cloudBaseUrl = 'https://openrouter.ai/api';
 let cloudApiKey = '';
 let connectionStatus: 'idle' | 'ok' | 'err' = 'idle';
 let connectionError = '';
 
+/** Gateway origin + path prefix only; `/v1/models` etc. come from getDefaultPaths('openai-v1'). */
 const CLOUD_PRESETS: { id: string; label: string; baseUrl: string }[] = [
-  { id: 'openrouter', label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
-  { id: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1' },
-  { id: 'groq', label: 'Groq', baseUrl: 'https://api.groq.com/openai/v1' },
-  { id: 'mistral', label: 'Mistral', baseUrl: 'https://api.mistral.ai/v1' },
+  { id: 'openrouter', label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api' },
+  { id: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com' },
+  { id: 'groq', label: 'Groq', baseUrl: 'https://api.groq.com/openai' },
+  { id: 'mistral', label: 'Mistral', baseUrl: 'https://api.mistral.ai' },
   { id: 'custom', label: 'Custom', baseUrl: '' },
 ];
 
@@ -149,17 +157,25 @@ export const providerLocalStep: OnboardingStep = {
     statusRow.appendChild(status);
     container.appendChild(statusRow);
 
+    if (!localBaseUrl) {
+      localBaseUrl = hit?.baseUrl ?? 'http://localhost:1234';
+    }
+
     const urlInput = el('input', 'mn-onboarding-field') as HTMLInputElement;
     urlInput.type = 'url';
     urlInput.placeholder = 'http://localhost:1234';
-    urlInput.value = hit?.baseUrl ?? 'http://localhost:1234';
+    urlInput.value = localBaseUrl;
     urlInput.autocomplete = 'off';
+    urlInput.addEventListener('input', () => {
+      localBaseUrl = urlInput.value.trim();
+    });
     container.appendChild(urlInput);
 
     const testBtn = el('button', 'mn-onboarding-secondary-btn', 'Test connection');
     testBtn.type = 'button';
     testBtn.addEventListener('click', () => {
-      void testLocalConnection(urlInput.value.trim(), actions);
+      localBaseUrl = urlInput.value.trim();
+      void testLocalConnection(localBaseUrl, actions, container, ctx);
     });
     container.appendChild(testBtn);
 
@@ -167,7 +183,7 @@ export const providerLocalStep: OnboardingStep = {
     actions.setPrimaryEnabled(connectionStatus === 'ok');
 
     if (hit && connectionStatus === 'idle') {
-      void testLocalConnection(hit.baseUrl, actions);
+      void testLocalConnection(localBaseUrl, actions, container, ctx);
     }
   },
 
@@ -272,7 +288,7 @@ export const providerCloudStep: OnboardingStep = {
 
     const urlInput = el('input', 'mn-onboarding-field') as HTMLInputElement;
     urlInput.type = 'url';
-    urlInput.placeholder = 'https://api.example.com/v1';
+    urlInput.placeholder = 'https://api.example.com';
     urlInput.value = cloudBaseUrl;
     urlInput.disabled = cloudPreset !== 'custom';
     container.appendChild(urlInput);
@@ -288,7 +304,7 @@ export const providerCloudStep: OnboardingStep = {
     testBtn.addEventListener('click', () => {
       cloudBaseUrl = urlInput.value.trim();
       cloudApiKey = keyInput.value.trim();
-      void testCloudConnection(actions);
+      void testCloudConnection(actions, container, ctx);
     });
     container.appendChild(testBtn);
 
@@ -319,6 +335,14 @@ export const providerCloudStep: OnboardingStep = {
   },
 };
 
+function rerenderLocal(
+  container: HTMLElement,
+  ctx: OnboardingContext,
+  actions: OnboardingStepActions,
+): void {
+  providerLocalStep.render(container, ctx, actions);
+}
+
 function rerenderCloud(
   container: HTMLElement,
   ctx: OnboardingContext,
@@ -327,9 +351,37 @@ function rerenderCloud(
   providerCloudStep.render(container, ctx, actions);
 }
 
-async function testLocalConnection(baseUrl: string, actions: OnboardingStepActions): Promise<void> {
+/** Create provider or update when npm start already seeded the same id. */
+async function ensureOnboardingProvider(
+  payload: CreateProviderPayload,
+): Promise<{ ok: true; provider: ProviderPublic } | { ok: false; error: string }> {
+  const created = await createProvider(payload);
+  if (!created.ok) {
+    if (!created.error.includes('already exists')) {
+      return created;
+    }
+    return updateProvider(payload.id, {
+      label: payload.label,
+      baseUrl: payload.baseUrl,
+      apiKind: payload.apiKind,
+      authStyle: payload.authStyle,
+      enabled: payload.enabled,
+      modelsPath: payload.modelsPath,
+      chatCompletionsPath: payload.chatCompletionsPath,
+    });
+  }
+  return created;
+}
+
+async function testLocalConnection(
+  baseUrl: string,
+  actions: OnboardingStepActions,
+  container?: HTMLElement,
+  ctx?: OnboardingContext,
+): Promise<void> {
   connectionStatus = 'idle';
   connectionError = '';
+  localBaseUrl = baseUrl;
   actions.setPrimaryEnabled(false);
   const match =
     probeResults.find((p) => p.baseUrl === baseUrl) ??
@@ -342,7 +394,7 @@ async function testLocalConnection(baseUrl: string, actions: OnboardingStepActio
     } as ProviderProbeResult);
 
   const paths = getDefaultPaths(match.apiKind);
-  const result = await createProvider({
+  const result = await ensureOnboardingProvider({
     id: match.id,
     label: match.label,
     baseUrl,
@@ -356,6 +408,7 @@ async function testLocalConnection(baseUrl: string, actions: OnboardingStepActio
     connectionStatus = 'err';
     connectionError = result.error;
     actions.setPrimaryEnabled(false);
+    if (container && ctx) rerenderLocal(container, ctx, actions);
     return;
   }
 
@@ -369,19 +422,25 @@ async function testLocalConnection(baseUrl: string, actions: OnboardingStepActio
     connectionError = err instanceof Error ? err.message : 'Could not list models';
     actions.setPrimaryEnabled(false);
   }
+  if (container && ctx) rerenderLocal(container, ctx, actions);
 }
 
-async function testCloudConnection(actions: OnboardingStepActions): Promise<void> {
+async function testCloudConnection(
+  actions: OnboardingStepActions,
+  container?: HTMLElement,
+  ctx?: OnboardingContext,
+): Promise<void> {
   if (!cloudBaseUrl || !cloudApiKey) {
     connectionStatus = 'err';
     connectionError = 'Base URL and API key required';
     actions.setPrimaryEnabled(false);
+    if (container && ctx) rerenderCloud(container, ctx, actions);
     return;
   }
 
   const id = `onboarding-cloud-${cloudPreset}`;
   const paths = getDefaultPaths('openai-v1');
-  const result = await createProvider({
+  const result = await ensureOnboardingProvider({
     id,
     label: CLOUD_PRESETS.find((p) => p.id === cloudPreset)?.label ?? 'Cloud',
     baseUrl: cloudBaseUrl,
@@ -396,6 +455,7 @@ async function testCloudConnection(actions: OnboardingStepActions): Promise<void
     connectionStatus = 'err';
     connectionError = result.error;
     actions.setPrimaryEnabled(false);
+    if (container && ctx) rerenderCloud(container, ctx, actions);
     return;
   }
 
@@ -404,6 +464,7 @@ async function testCloudConnection(actions: OnboardingStepActions): Promise<void
     connectionStatus = 'err';
     connectionError = keyRes.error;
     actions.setPrimaryEnabled(false);
+    if (container && ctx) rerenderCloud(container, ctx, actions);
     return;
   }
 
@@ -417,6 +478,7 @@ async function testCloudConnection(actions: OnboardingStepActions): Promise<void
     connectionError = err instanceof Error ? err.message : 'Connection failed';
     actions.setPrimaryEnabled(false);
   }
+  if (container && ctx) rerenderCloud(container, ctx, actions);
 }
 
 /** Warm probe cache before provider-choice renders. */

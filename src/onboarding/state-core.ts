@@ -4,6 +4,26 @@
 
 import type { OnboardingContext, OnboardingPersistedState, OnboardingStepId } from './types';
 
+/** Provider ids seeded on first `npm start` — not treated as user configuration. */
+export const ONBOARDING_SEED_PROVIDER_IDS = new Set([
+  'lm-studio-local',
+  'llama-cpp-local',
+  'vite-fallback',
+]);
+
+/** True when the user added a provider beyond the shipped seed rows. */
+export function hasUserConfiguredProviderIds(providerIds: readonly string[]): boolean {
+  return providerIds.some((id) => !ONBOARDING_SEED_PROVIDER_IDS.has(id));
+}
+
+/** True when persisted chats contain real messages (not just model binding). */
+export function hasExistingChatMessageHistory(
+  chats: ReadonlyArray<{ history?: readonly unknown[] }> | undefined,
+): boolean {
+  if (!chats?.length) return false;
+  return chats.some((chat) => (chat.history?.length ?? 0) > 0);
+}
+
 /** Empty wizard state for first launch. */
 export function createDefaultOnboardingState(): OnboardingPersistedState {
   return {
