@@ -50,6 +50,8 @@ interface ColumnState {
 
 let sessionId: string | null = null;
 let revealed = false;
+/** Revealed slot models after voting — used for chat handoff model binding. */
+let lastRevealSlots: { providerId: string; modelId: string }[] = [];
 let runParallel = readParallelPref();
 let pickerSlots: PickerSlot[] = [{ id: 0 }, { id: 1 }];
 let nextPickerId = 2;
@@ -284,7 +286,11 @@ function buildColumnShell(screenIndex: number): HTMLElement {
   reveal.id = `compareColumnReveal${screenIndex}`;
   reveal.setAttribute('aria-live', 'polite');
 
-  pane.append(hdr, body, reveal);
+  const actions = document.createElement('div');
+  actions.className = 'compare-column-actions';
+  actions.id = `compareColumnActions${screenIndex}`;
+
+  pane.append(hdr, body, reveal, actions);
   return pane;
 }
 
@@ -302,6 +308,7 @@ function resetColumnByIndex(screenIndex: number): void {
   const body = el(`compareColumnBody${screenIndex}`);
   const status = el(`compareColumnStatus${screenIndex}`);
   const reveal = el(`compareColumnReveal${screenIndex}`);
+  const actions = el(`compareColumnActions${screenIndex}`);
   const pane = document.querySelector(
     `.compare-column[data-screen-index="${screenIndex}"]`,
   );
@@ -309,6 +316,7 @@ function resetColumnByIndex(screenIndex: number): void {
   if (body) clearColumnBody(screenIndex, body);
   if (status) status.textContent = 'Waiting…';
   if (reveal) reveal.textContent = '';
+  if (actions) actions.replaceChildren();
   pane?.classList.remove('is-dimmed');
 }
 
@@ -365,6 +373,62 @@ function allColumnsSettled(): boolean {
   );
 }
 
+function renderColumnContinueButtons(): void {
+  const models = revealed ? lastRevealSlots : readPickerSelections();
+  const handoffReady = allColumnsSettled();
+
+  for (const col of columns) {
+    const host = el(`compareColumnActions${col.screenIndex}`);
+    if (!host) continue;
+    host.replaceChildren();
+
+    const model = models[col.screenIndex];
+    const canContinue =
+      handoffReady &&
+      col.status === 'complete' &&
+      col.text.trim() &&
+      Boolean(model?.providerId && model?.modelId);
+
+    if (!canContinue) continue;
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'compare-continue-chat';
+    btn.textContent = 'Continue in chat';
+    btn.setAttribute('aria-label', `Continue response ${col.label} in chat`);
+    btn.addEventListener('click', () => void handleContinueInChat(col.screenIndex));
+    host.appendChild(btn);
+  }
+}
+
+async function handleContinueInChat(screenIndex: number): Promise<void> {
+  const prompt = el<HTMLTextAreaElement>('comparePrompt')?.value.trim() ?? '';
+  if (!prompt) {
+    setStatus('Enter a prompt before continuing in chat.');
+    return;
+  }
+
+  const models = revealed ? lastRevealSlots : readPickerSelections();
+  const handoffColumns = columns.map((col, index) => ({
+    label: col.label,
+    text: col.text,
+    providerId: models[index]?.providerId ?? '',
+    modelId: models[index]?.modelId ?? '',
+  }));
+
+  try {
+    const { continueCompareInChat } = await import('../compare/continue-in-chat');
+    await continueCompareInChat({
+      prompt,
+      columns: handoffColumns,
+      selectedIndex: screenIndex,
+    });
+    setStatus('');
+  } catch (err) {
+    setStatus(err instanceof Error ? err.message : String(err));
+  }
+}
+
 function renderVoteBar(): void {
   const bar = el('compareVoteBar');
   if (!bar) return;
@@ -393,6 +457,7 @@ function renderVoteBar(): void {
   bothBadBtn.textContent = columns.length > 2 ? 'All bad' : 'Both bad';
   bothBadBtn.addEventListener('click', () => void handleVote('both_bad'));
   bar.appendChild(bothBadBtn);
+  renderColumnContinueButtons();
 }
 
 function updateParallelToggleUi(): void {
@@ -421,6 +486,7 @@ function resetRunUi(): void {
   runAbort = null;
   sessionId = null;
   revealed = false;
+  lastRevealSlots = [];
   columns = [];
   renderColumnGrid(pickerSlots.length);
   for (let i = 0; i < pickerSlots.length; i += 1) {
@@ -639,6 +705,10 @@ async function handleVote(winner: CompareWinner): Promise<void> {
   try {
     const reveal = await submitCompareVote(sessionId, winner);
     revealed = true;
+    lastRevealSlots = reveal.slots.map((slot) => ({
+      providerId: slot.providerId,
+      modelId: slot.modelId,
+    }));
     showReveal(reveal.slots);
     renderVoteBar();
     const prompt = el<HTMLTextAreaElement>('comparePrompt')?.value.trim() ?? '';
