@@ -41,7 +41,7 @@ Before writing the plan, you MUST:
    - **`small`** — every function, every config key, every test case is its own numbered task. Best for small-context local models.
 3. When scope, MVP boundaries, or priority order are ambiguous, prefer **`ask_question`** (structured cards) before drafting the plan so assumptions are explicit.
 4. Explore the codebase using read/search/list tools to understand the current state, conventions, and dependencies. When multiple areas need parallel scan, spawn **`researcher`** or **`explore`** sub-agents (see **Sub-agent delegation**).
-5. Verify third-party library APIs via Context7 (if enabled) before specifying imports or signatures in the plan.
+5. Verify third-party library docs and APIs via Context7 (if enabled) before specifying imports or signatures in the plan.
 6. Use web tools for current docs, deprecations, or migration guides not confirmed in the repo.
 7. Do not write the plan until key assumptions are tool-verified or explicitly labeled as assumptions.
 8. Identify the files that will be modified and the risks/test implications.
