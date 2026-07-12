@@ -58,3 +58,13 @@ export function shouldAutoRestoreViewerSplitOnBoot(): boolean {
 
   return state.rightPaneMode === 'viewer';
 }
+
+/**
+ * Whether passive Electron preview IPC (did-navigate) may auto-open the split.
+ * Agent browser_* tools call showPreviewSplit first (rightPaneMode = preview).
+ * After Code entry collapse (MIN-342), rightPaneMode is null — ignore stale guest events.
+ */
+export function shouldAutoRevealPreviewOnNavigation(): boolean {
+  if (!isOsShellEnabled()) return true;
+  return getFilePanelState().rightPaneMode === 'preview';
+}
