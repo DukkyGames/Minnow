@@ -97,7 +97,7 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   // —— Appearance ——
   'appearance.theme': section(['appearance']),
   'appearance.theme.family': browser('themeFamily', 'enum', {
-    allowedValues: ['sage', 'amber', 'cyan', 'coral'],
+    allowedValues: ['sage', 'amber', 'cyan', 'coral', 'salt', 'retro'],
     refreshAreas: ['appearance'],
   }),
   'appearance.theme.mode': browser('themeMode', 'enum', {

@@ -37,6 +37,9 @@ import {
 } from '../attachments/store';
 import type { Attachment } from '../attachments/types';
 import { codeRefHistoryBlock, isCodeRefAttachment } from '../attachments/code-ref';
+import { elementRefHistoryBlock, isElementRefAttachment } from '../attachments/element-ref';
+import { designRefHistoryBlock, isDesignRefAttachment } from '../attachments/design-ref';
+import { linkSentAttachmentsToTurn } from '../design/annotation-store';
 import { resolveWorkspaceReferences } from '../attachments/workspace-ref';
 import {
   extractMessageText,
@@ -129,6 +132,7 @@ import {
   resolveComposerSurface,
   type ComposerSurface,
 } from '../ui/composer-surface';
+import { clearComposerDraftOnChat } from '../ui/composer-draft';
 
 export type { ComposerSurface } from '../ui/composer-surface';
 import { getActiveChatMountElement, setTurnChatMount } from '../ui/chat-mount';
@@ -348,7 +352,12 @@ function indexOfMultimodalUserMessage(
   history: Message[],
   pending: Attachment[],
 ): number {
-  const hasPendingImages = pending.some((a) => a.kind === 'image' && a.dataUrl);
+  const hasPendingImages = pending.some(
+    (a) =>
+      (a.kind === 'image' && a.dataUrl) ||
+      (a.kind === 'elementRef' && a.croppedDataUrl) ||
+      (a.kind === 'designRef' && a.compositedDataUrl),
+  );
   if (!hasPendingImages) {
     return indexOfLastUserMessage(history);
   }
@@ -363,7 +372,16 @@ function indexOfMultimodalUserMessage(
 
 /** Skip ask_question prose retry when this turn includes image input. */
 function turnHasImageContext(chat: Chat, pending: Attachment[]): boolean {
-  if (pending.some((a) => a.kind === 'image' && a.dataUrl)) return true;
+  if (
+    pending.some(
+      (a) =>
+        (a.kind === 'image' && a.dataUrl) ||
+        (a.kind === 'elementRef' && a.croppedDataUrl) ||
+        (a.kind === 'designRef' && a.compositedDataUrl),
+    )
+  ) {
+    return true;
+  }
   for (const m of chat.history) {
     if (m.role === 'user' && IMAGE_PLACEHOLDER_IN_HISTORY_RE.test(m.content)) {
       return true;
@@ -404,6 +422,41 @@ export function buildHistoryUserContent(
       );
       continue;
     }
+    if (isElementRefAttachment(att)) {
+      parts.push(
+        elementRefHistoryBlock({
+          selector: att.selector,
+          uid: att.uid ?? null,
+          pageUrl: att.pageUrl,
+          tagName: att.tagName,
+          classList: att.classList,
+          rect: att.rect,
+          stylesDigest: att.stylesDigest,
+          outerHtmlPreview: att.outerHtmlPreview,
+          imageName: att.croppedDataUrl ? att.name : undefined,
+          sourceMapping: att.sourceMapping,
+          accessibleName: att.accessibleName,
+          contrastRatio: att.contrastRatio,
+          domPath: att.domPath,
+          attributes: att.attributes,
+          computedStyles: att.computedStyles,
+        }),
+      );
+      if (att.croppedDataUrl) parts.push(imageHistoryPlaceholder(att.name));
+      continue;
+    }
+    if (isDesignRefAttachment(att)) {
+      parts.push(
+        designRefHistoryBlock({
+          shape: att.shape,
+          pageUrl: att.pageUrl,
+          intentText: att.intentText,
+          imageName: att.compositedDataUrl ? att.name : undefined,
+        }),
+      );
+      if (att.compositedDataUrl) parts.push(imageHistoryPlaceholder(att.name));
+      continue;
+    }
     if ((att.kind === 'text' || att.kind === 'pdf') && att.text) {
       parts.push(fileContentBlock(att.name, att.text));
     }
@@ -421,7 +474,7 @@ function buildStringUserApiContent(
 }
 
 /** VLM API payload: text part plus image_url parts (no image placeholders in text). */
-function buildVlmUserApiContent(
+export function buildVlmUserApiContent(
   userText: string,
   attachments: Attachment[],
 ): ContentPart[] {
@@ -442,6 +495,39 @@ function buildVlmUserApiContent(
       );
       continue;
     }
+    if (isElementRefAttachment(att)) {
+      textParts.push(
+        elementRefHistoryBlock({
+          selector: att.selector,
+          uid: att.uid ?? null,
+          pageUrl: att.pageUrl,
+          tagName: att.tagName,
+          classList: att.classList,
+          rect: att.rect,
+          stylesDigest: att.stylesDigest,
+          outerHtmlPreview: att.outerHtmlPreview,
+          imageName: att.croppedDataUrl ? att.name : undefined,
+          sourceMapping: att.sourceMapping,
+          accessibleName: att.accessibleName,
+          contrastRatio: att.contrastRatio,
+          domPath: att.domPath,
+          attributes: att.attributes,
+          computedStyles: att.computedStyles,
+        }),
+      );
+      continue;
+    }
+    if (isDesignRefAttachment(att)) {
+      textParts.push(
+        designRefHistoryBlock({
+          shape: att.shape,
+          pageUrl: att.pageUrl,
+          intentText: att.intentText,
+          imageName: att.compositedDataUrl ? att.name : undefined,
+        }),
+      );
+      continue;
+    }
     if ((att.kind === 'text' || att.kind === 'pdf') && att.text) {
       textParts.push(fileContentBlock(att.name, att.text));
     }
@@ -458,6 +544,18 @@ function buildVlmUserApiContent(
       parts.push({
         type: 'image_url',
         image_url: { url: att.dataUrl, detail: 'auto' },
+      });
+    }
+    if (att.kind === 'elementRef' && att.croppedDataUrl) {
+      parts.push({
+        type: 'image_url',
+        image_url: { url: att.croppedDataUrl, detail: 'auto' },
+      });
+    }
+    if (att.kind === 'designRef' && att.compositedDataUrl) {
+      parts.push({
+        type: 'image_url',
+        image_url: { url: att.compositedDataUrl, detail: 'auto' },
       });
     }
   }
@@ -973,6 +1071,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     if (clearPostToolTailBeforeSend(chat)) {
       scheduleSaveSessions();
     }
+    clearComposerDraftOnChat(chat);
     const artifactAppendix = consumeReefArtifactEditsForPrompt(chat);
     const modelUserContent = artifactAppendix
       ? `${historyContent}${artifactAppendix}`
@@ -981,10 +1080,18 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     recordChatMessage(chat);
     scheduleSaveSessions();
     syncTurnContextUsage(chat.id, '', null);
+    const pushedUserIdx = chat.history.length - 1;
+    if (validAttachments.length > 0) {
+      // MIN-368: stamp every sent designRef (Draw tool) attachment's shape with a link back to
+      // this turn. `turnId` is the pushed message's history index (as a string) — the same
+      // `data-history-index` identity messages.ts/message-actions.ts already stamp on every
+      // rendered row, so both link directions agree on what a "turn" is.
+      void linkSentAttachmentsToTurn(chat.id, String(pushedUserIdx), validAttachments);
+    }
     if (!suppressUserEcho) {
       renderSidebar();
       if (isStreamDomVisible(chat.id)) {
-        const userIdx = chat.history.length - 1;
+        const userIdx = pushedUserIdx;
         const { wrap: userWrap } = appendBubble(
           'user',
           historyContent,

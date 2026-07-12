@@ -203,7 +203,6 @@ describe('builder prompt cwd rendering', () => {
       infoPresetId: 'general-assistant',
       planGranularity: 'medium',
       userMessagePreview: 'Scaffold frontend',
-      includeChatHistorySummary: false,
     });
 
     assert.match(prompt, /Working directory: `C:\/Users\/dukky\/\.minnow\/worktrees\/gb-todo\/grp_932\/task-W1-FOUNDATION`/);

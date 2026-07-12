@@ -159,6 +159,17 @@ export const SCOPED_SUITES = {
     patterns: ['test/ui-designer/**/*.test.mts'],
     post: ['node scripts/step15-smoke.mjs'],
   },
+  design: {
+    patterns: [
+      'test/design/**/*.test.mjs',
+      'test/design/**/*.test.mts',
+      'test/ui/preview-design-mode-browser.test.mts',
+      'test/ui/preview-design-mode-guest-strategy.test.mts',
+      'test/ui/preview-electron-visibility.test.mts',
+      'test/ui/preview-panel.test.mts',
+      'test/server/design-*.test.mjs',
+    ],
+  },
   browser: {
     patterns: [
       'test/browser/**/*.test.js',

@@ -13,7 +13,7 @@ import type { StandardBenchmarkItem } from '../../../src/benchmark/standard/type
 const BASE = process.env.MINNOW_BENCH_URL ?? 'http://localhost:9473';
 
 const pack = JSON.parse(
-  readFileSync('src/benchmark/standard/packs/humaneval-mini.json', 'utf8'),
+  readFileSync('public/benchmark-packs/mini/humaneval-mini.json', 'utf8'),
 ) as { items: StandardBenchmarkItem[] };
 const HUMANEVAL_0 = pack.items[0]!;
 

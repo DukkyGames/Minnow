@@ -16,6 +16,7 @@ import {
   npmSpawnOptions,
   resetBundlesCatalogCache,
   resetLspBundleSpawnOverride,
+  runProcess,
   setLspBundleSpawnForTests,
   uninstallBundle,
 } from '../../server/lsp/bundle-installer.js';
@@ -76,6 +77,14 @@ describe('bundle-installer', () => {
     if (process.platform !== 'win32') return;
     assert.equal(npmSpawnOptions().shell, true);
     assert.equal(npmSpawnOptions({ cwd: '/tmp' }).shell, true);
+  });
+
+  it('runProcess drains stdout to avoid pipe deadlock', async () => {
+    const { stdout } = await runProcess('node', [
+      '-e',
+      "for (let i = 0; i < 200; i++) process.stdout.write('x'.repeat(4096));",
+    ]);
+    assert.ok(stdout.length > 100_000);
   });
 
   it('installs npm bundle idempotently with mocked spawn', async () => {

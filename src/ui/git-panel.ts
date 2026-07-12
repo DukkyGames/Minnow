@@ -100,6 +100,10 @@ import {
   openGitPanelNamePopover,
 } from './git-panel-name-popover';
 import { decorateGitSourceControlButton } from './git-source-control-icons';
+import {
+  isMissingGitRepositoryError,
+  renderGitNoRepositoryState,
+} from './git-no-repo-state';
 
 
 
@@ -110,6 +114,8 @@ const POLL_MS = 5000;
 let panelRoot: HTMLElement | null = null;
 
 let scrollMount: HTMLElement | null = null;
+
+let noRepoMount: HTMLElement | null = null;
 
 let bodyMount: HTMLElement | null = null;
 
@@ -711,6 +717,14 @@ function ensurePanelDom(): HTMLElement {
 
 
 
+  noRepoMount = document.createElement('div');
+
+  noRepoMount.className = 'git-panel-no-repo-mount';
+
+  noRepoMount.hidden = true;
+
+
+
   const commitBox = document.createElement('div');
 
   commitBox.className = 'git-panel-commit-box';
@@ -867,7 +881,7 @@ function ensurePanelDom(): HTMLElement {
 
 
 
-  scrollMount.append(statusEl, commitBox, bodyMount, diffHost, historySection);
+  scrollMount.append(statusEl, noRepoMount, commitBox, bodyMount, diffHost, historySection);
 
   panelRoot.append(toolbar, scrollMount);
 
@@ -1692,6 +1706,24 @@ async function refreshWorktreeDropdown(): Promise<void> {
 
 
 
+function setGitPanelNoRepoState(active: boolean): void {
+
+  panelRoot?.classList.toggle('git-panel-root--no-repo', active);
+
+  if (noRepoMount) {
+
+    noRepoMount.hidden = !active;
+
+    if (active) renderGitNoRepositoryState(noRepoMount);
+
+    else noRepoMount.replaceChildren();
+
+  }
+
+}
+
+
+
 export async function refreshGitPanel(): Promise<void> {
 
   if (!panelOpen || refreshing) return;
@@ -1706,6 +1738,20 @@ export async function refreshGitPanel(): Promise<void> {
 
     if (!status.ok) {
 
+      if (isMissingGitRepositoryError(status.error)) {
+
+        setStatus('');
+
+        setGitPanelNoRepoState(true);
+
+        if (bodyMount) bodyMount.replaceChildren();
+
+        return;
+
+      }
+
+      setGitPanelNoRepoState(false);
+
       setStatus(status.error ?? 'Could not read git status', true);
 
       if (bodyMount) {
@@ -1716,7 +1762,7 @@ export async function refreshGitPanel(): Promise<void> {
 
         err.className = 'git-panel-empty';
 
-        err.textContent = status.error ?? 'Not a git repository';
+        err.textContent = status.error ?? 'Could not load git status';
 
         bodyMount.appendChild(err);
 
@@ -1727,6 +1773,8 @@ export async function refreshGitPanel(): Promise<void> {
     }
 
 
+
+    setGitPanelNoRepoState(false);
 
     setStatus('');
 
@@ -2023,6 +2071,8 @@ export function resetGitPanelForTests(): void {
   panelRoot = null;
 
   scrollMount = null;
+
+  noRepoMount = null;
 
   bodyMount = null;
 

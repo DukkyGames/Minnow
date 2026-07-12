@@ -14,6 +14,7 @@ export const MODE_ICON_SRC: Record<ModeId, string> = {
   orchestrate: '/icons/mode-orchestrate.svg',
   reef: '/icons/mode-reef.svg',
   debug: '/icons/mode-debug.png',
+  onboarding: '/icons/mode-general.png',
 };
 
 /** Resolve icon path for a persisted or unknown mode id. */

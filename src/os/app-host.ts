@@ -1,4 +1,5 @@
 import { getPresentationMode } from './app-registry';
+import { ensureAppInitialized } from './app-modules';
 import {
   CALENDAR_WINDOW_MIN_HEIGHT,
   CALENDAR_WINDOW_MIN_WIDTH,
@@ -121,6 +122,7 @@ function closeAllAppPages(): void {
 }
 
 async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void> {
+  await ensureAppInitialized(appId);
   const route = getCurrentRoute();
   const settingsSection =
     options?.settingsSection ?? route.settingsSection ?? 'general';
@@ -214,6 +216,8 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
       break;
     }
     case 'code': {
+      const { ensureCodeWorkspaceModules } = await import('../boot/code-workspace-modules');
+      await ensureCodeWorkspaceModules();
       const welcome = await import('../ui/welcome-page');
       const { isDefaultWorkspace } = await import('../state/workspace');
       if (welcome.isWelcomePageOpen()) {

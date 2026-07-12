@@ -1,5 +1,7 @@
 /* Code app Overview — instrumentation home (extends hub-strip / hub-tile vocabulary) */
 
+@import './git-no-repo.css';
+
 .chat-area.chat-area--code-overview {
   display: flex;
   flex-direction: column;

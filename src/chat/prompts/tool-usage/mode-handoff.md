@@ -20,7 +20,7 @@ Use **`ask_question`** (or **`propose_mode_switch`** for standard presets) when 
 
 ### After the user chooses
 
-- **New Orchestrate chat:** call **`create_chat_with_mode`** with `modeId: orchestrate` and `planPath` set to the plan file you wrote. The client opens the orchestrator board (same as **Open in orchestrator** on a plan file). Optionally set `initialUserMessage` only when not launching a board from a saved plan path.
+- **New Orchestrate chat:** call **`create_chat_with_mode`** with `mode_id: orchestrate` and `plan_path` set to the plan file you wrote. The client opens the orchestrator board (same as **Open in orchestrator** on a plan file). Optionally set `initial_user_message` only when not launching a board from a saved plan path.
 - **Switch to Build / Plan on this chat:** call **`set_chat_mode`** with the target mode id.
 - **Orchestrate board** is separate from chat handoff — use board tools only in Orchestrate mode with a loaded plan.
 

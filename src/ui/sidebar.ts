@@ -1,4 +1,5 @@
 ﻿import { isChatsWorkspacePath } from '../lib/chats-workspace';
+import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { isDesktopChatActive } from '../os/desktop-state';
 import { decodeModelSelectKey, encodeModelSelectKey } from '../lib/model-select-key';
 import { isBoardSetupIncomplete } from '../chat/orchestrate/board-setup';
@@ -25,11 +26,14 @@ import { syncGoalActiveHint } from './goal-active-hint';
 import { syncTodoPanel } from './todo-panel';
 import {
   createEmptyChatObject,
+  formatDraftChatSidebarName,
   getActiveChat,
-  getChatsForWorkspace,
+  getSidebarListedChatsForWorkspace,
   getUnassignedChats,
+  isEphemeralEmptyChat,
   isHiddenFromMainSidebar,
   onWorkspaceChanged,
+  pruneEphemeralEmptyChats,
   removeChatById,
   sessionState,
   touchChat,
@@ -81,11 +85,11 @@ import { onModelRoutingActiveChatChanged } from './settings-model-routing';
 import { syncReefWidgetSettingsFromActiveChat } from './reef-widget-settings';
 import { syncWorkAgentDevFromActiveChat, workAgentSidebarAbbrev } from './work-agent-dev';
 import { updateModelLoadUnloadButtons } from '../api/models';
+import { restoreChatColumnOnChatSelect } from './workspace-split-resize';
 import { updateModelStateDot } from './model-state-dot';
 import { syncModelSelectPicker } from './model-select-picker';
 import { setStatus } from './status';
 import { formatSidebarStatsPreview } from './stats';
-import { refreshTerminalHistoryForActiveChat } from './terminal-panel';
 import {
   applyChatItemDotClasses,
   applyGroupHeaderDotClasses,
@@ -99,6 +103,12 @@ import {
 } from './chat-item-dot';
 import { acknowledgeChatViewed } from '../notifications/acknowledge';
 import { createModeMaskIcon, applyModeMaskIcon } from './mode-icons';
+import { hasComposerDraft } from '../state/session-workspace-scope';
+import {
+  flushActiveComposerDraftBeforeNewChat,
+  resetComposerForEphemeralReuse,
+  switchComposerDraft,
+} from './composer-draft';
 
 /** True when every task in a wave is complete (sidebar auto-collapse). */
 function isWaveComplete(tasks: BoardTask[], waveId: number | string): boolean {
@@ -331,7 +341,7 @@ export function applyWorkspaceScopedSession(newPath: string, previousPath?: stri
     syncWorkAgentDevFromActiveChat();
     syncReefWidgetSettingsFromActiveChat();
     onModelRoutingActiveChatChanged(activeChat.id);
-    void refreshTerminalHistoryForActiveChat();
+    void import('./terminal-panel').then((m) => m.refreshTerminalHistoryForActiveChat());
   }
   renderSidebar();
   if (document.getElementById('globalBugsView')?.classList.contains('is-open')) {
@@ -412,9 +422,11 @@ export function appendChatRow(
   const inGroup = options?.inGroup === true;
   const modelLabel = chat.modelId || 'No model selected';
   const statsPreview = formatSidebarStatsPreview(chat.lastStats);
+  const isDraftOnly = chat.history.length === 0 && hasComposerDraft(chat);
+  const displayName = isDraftOnly ? formatDraftChatSidebarName(chat) : chat.name;
   const rowLabel = inGroup
-    ? chat.name
-    : `${chat.name}, ${modelLabel}${statsPreview ? `, ${statsPreview}` : ''}`;
+    ? displayName
+    : `${displayName}, ${modelLabel}${statsPreview ? `, ${statsPreview}` : ''}`;
 
   const row = document.createElement('div');
   row.dataset.chatId = chat.id;
@@ -422,10 +434,11 @@ export function appendChatRow(
     'chat-item-row' +
     (isActive ? ' active' : '') +
     (inGroup ? ' chat-item-row--in-group' : '') +
-    (isSelected ? ' chat-item-row--selected' : '');
+    (isSelected ? ' chat-item-row--selected' : '') +
+    (isDraftOnly ? ' chat-item-row--draft' : '');
   row.setAttribute('role', 'listitem');
   row.setAttribute('aria-label', rowLabel);
-  row.title = [chat.name, modelLabel, statsPreview].filter(Boolean).join('\n');
+  row.title = [displayName, modelLabel, statsPreview].filter(Boolean).join('\n');
   row.tabIndex = 0;
   if (options?.draggable !== false) {
     row.draggable = true;
@@ -493,7 +506,10 @@ export function appendChatRow(
 
   const nameSpan = document.createElement('span');
   nameSpan.className = 'chat-item-name';
-  nameSpan.textContent = chat.name;
+  nameSpan.textContent = displayName;
+  if (isDraftOnly) {
+    nameSpan.title = 'Unsent draft';
+  }
 
   const boardCategory = inGroup ? boardCategoryForChat(chat, options?.group) : undefined;
   if (boardCategory) {
@@ -768,7 +784,7 @@ export function renderSidebar(): void {
   const ws = getWorkspacePath();
   const excludeAssistantChats = (chat: { workspacePath?: string }) =>
     !isChatsWorkspacePath(chat.workspacePath ?? '');
-  const workspaceChats = getChatsForWorkspace(ws, sessionState)
+  const workspaceChats = getSidebarListedChatsForWorkspace(ws, sessionState)
     .filter((c) => !isHiddenFromMainSidebar(c))
     .filter(excludeAssistantChats);
   const highlightChatId = sidebarHighlightChatId();
@@ -1094,7 +1110,11 @@ export function deleteChat(chatId: string, evt?: Event): void {
   const idx = sessionState!.chats.findIndex((c) => c.id === chatId);
   if (idx < 0) return;
   const victim = sessionState!.chats[idx];
-  if (!confirm(`Delete "${victim.name}"? Messages in this chat cannot be recovered.`)) return;
+  const victimLabel =
+    victim.history.length === 0 && hasComposerDraft(victim)
+      ? formatDraftChatSidebarName(victim)
+      : victim.name;
+  if (!confirm(`Delete "${victimLabel}"? Messages in this chat cannot be recovered.`)) return;
 
   const { modelId } = readTopBarModelBinding();
   const result = removeChatById(chatId, modelId);
@@ -1102,6 +1122,7 @@ export function deleteChat(chatId: string, evt?: Event): void {
 }
 
 export function switchChat(id: string): void {
+  restoreChatColumnOnChatSelect();
   if (isOrchestrateHubMounted()) {
     teardownOrchestrateHub();
   }
@@ -1142,6 +1163,7 @@ export function switchChat(id: string): void {
   if (!chat) return;
   sessionState.activeId = id;
   acknowledgeChatViewed(id);
+  switchComposerDraft(prevActiveId, chat);
   syncModelSelectForActiveChat();
   paintActiveChatInForegroundShell(chat);
   void import('../usage/code-change-backfill').then((m) =>
@@ -1165,7 +1187,7 @@ export function switchChat(id: string): void {
   syncGoalActiveHint();
   syncTodoPanel();
   onModelRoutingActiveChatChanged(chat.id);
-  void refreshTerminalHistoryForActiveChat();
+  void import('./terminal-panel').then((m) => m.refreshTerminalHistoryForActiveChat());
   syncComposerFromStreamingState();
   renderSidebar();
   scheduleSaveSessions();
@@ -1222,6 +1244,30 @@ export function createChatWithMode(
   }
   exitBoardViewForNavigation();
 
+  const workspacePath = getWorkspacePath();
+  const active = getActiveChat();
+  flushActiveComposerDraftBeforeNewChat();
+
+  if (
+    !options.initialUserMessage?.trim() &&
+    isEphemeralEmptyChat(active) &&
+    normalizeWorkspacePath(active.workspacePath ?? '') === normalizeWorkspacePath(workspacePath)
+  ) {
+    resetComposerForEphemeralReuse();
+    recordChatOpened(active.id);
+    paintActiveChatInForegroundShell(active);
+    renderSidebar();
+    scheduleSaveSessions();
+    closeMobileSidebar();
+    applySidebarVisuals();
+    return {
+      ok: true,
+      chatId: active.id,
+      modeId: normalizeModeId(active.modeId),
+      orchestratePlanPath: active.orchestratePlanPath,
+    };
+  }
+
   const modeId = normalizeModeId(options.modeId);
   const { modelId, providerId } = readTopBarModelBinding();
   const chat = createEmptyChatObject(modelId);
@@ -1250,8 +1296,9 @@ export function createChatWithMode(
   }
 
   sessionState!.chats.unshift(chat);
+  pruneEphemeralEmptyChats(sessionState!, chat.id);
   sessionState!.activeId = chat.id;
-  if (!initial) touchChat(chat);
+  if (!initial) resetComposerForEphemeralReuse();
   recordChatOpened(chat.id);
   paintActiveChatInForegroundShell(chat);
   void bootGenerationResumeForChat(chat);
@@ -1265,7 +1312,7 @@ export function createChatWithMode(
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
   onModelRoutingActiveChatChanged(chat.id);
-  void refreshTerminalHistoryForActiveChat();
+  void import('./terminal-panel').then((m) => m.refreshTerminalHistoryForActiveChat());
   syncComposerFromStreamingState();
   renderSidebar();
   scheduleSaveSessions();

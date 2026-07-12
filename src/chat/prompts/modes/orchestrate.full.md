@@ -86,8 +86,7 @@ You may raise or lower autonomy (`manual` / `sequential` / `auto`) yourself via 
       "wave": "W1",
       "category": "build",
       "build": "…spec from plan…",
-      "test": "…verify steps…",
-      "dependsOn": ["W1-A"]
+      "test": "…verify steps…"
     }
   ]
 }

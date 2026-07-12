@@ -3,14 +3,22 @@
  */
 
 import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
+import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { CHAT_APP_ID, createDesktopChat } from '../state/session-workspace-scope';
 import {
+  getActiveChat,
   getAssistantChats,
+  isEphemeralEmptyChat,
   newChatId,
+  pruneEphemeralEmptyChats,
   rememberActiveChatForApp,
   scheduleSaveSessions,
   sessionState,
 } from '../state/sessions';
+import {
+  flushActiveComposerDraftBeforeNewChat,
+  resetComposerForEphemeralReuse,
+} from './composer-draft';
 import {
   getExpertScopeId,
   isExpertScopeActive,
@@ -158,8 +166,31 @@ export async function createNewDesktopChat(): Promise<void> {
   const path = await getDesktopWorkspacePath();
   if (!path || !sessionState) return;
 
+  flushActiveComposerDraftBeforeNewChat();
+  try {
+    const active = getActiveChat();
+    if (
+      isEphemeralEmptyChat(active) &&
+      normalizeWorkspacePath(active.workspacePath ?? '') === normalizeWorkspacePath(path)
+    ) {
+      resetComposerForEphemeralReuse();
+      const { isDesktopChatActive, activateDesktopChat } = await import('../os/desktop-state');
+      if (!isDesktopChatActive()) {
+        await activateDesktopChat({ chatId: active.id });
+        return;
+      }
+      const desktopChat = await import('../os/desktop-chat');
+      desktopChat.activateDesktopChatSession(active.id);
+      renderDesktopChatRail(path);
+      return;
+    }
+  } catch {
+    /* no active chat */
+  }
+
   const chat = createDesktopChat(path, newChatId());
   sessionState.chats.unshift(chat);
+  pruneEphemeralEmptyChats(sessionState, chat.id);
   sessionState.activeId = chat.id;
   rememberActiveChatForApp(CHAT_APP_ID, chat.id);
   scheduleSaveSessions();
@@ -172,6 +203,7 @@ export async function createNewDesktopChat(): Promise<void> {
 
   const desktopChat = await import('../os/desktop-chat');
   desktopChat.activateDesktopChatSession(chat.id);
+  resetComposerForEphemeralReuse();
   renderDesktopChatRail(path);
 
   const input = document.getElementById('desktopInput') as HTMLTextAreaElement | null;

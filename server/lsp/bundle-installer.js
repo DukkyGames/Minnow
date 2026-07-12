@@ -136,14 +136,22 @@ export function runProcess(command, args, options = {}) {
       ...spawnOpts,
       shell,
     });
+    let stdout = '';
     let stderr = '';
+    // Drain both streams — pip and other tools write progress to stdout; if it is
+    // not consumed the pipe buffer fills and the child blocks indefinitely.
+    child.stdout?.on('data', (c) => {
+      stdout += String(c);
+    });
     child.stderr?.on('data', (c) => {
       stderr += String(c);
     });
+    child.stdout?.on('error', () => {});
+    child.stderr?.on('error', () => {});
     child.on('error', reject);
     child.on('close', (code) => {
-      if (code === 0) resolve({ stderr });
-      else reject(new Error(stderr.trim() || `${command} exited ${code}`));
+      if (code === 0) resolve({ stdout, stderr });
+      else reject(new Error(stderr.trim() || stdout.trim() || `${command} exited ${code}`));
     });
   });
 }

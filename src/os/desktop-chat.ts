@@ -31,6 +31,7 @@ import {
   shouldAllowComposerPrimaryAction,
   syncComposerFromStreamingState,
 } from '../ui/composer-send';
+import { initComposerDraftListener, switchComposerDraft } from '../ui/composer-draft';
 import { initComposerSlashPicker } from '../ui/skill-picker';
 import { refreshContextUsageRing } from '../ui/context-usage-ring';
 import { renderChatFromHistory } from '../ui/messages';
@@ -158,10 +159,12 @@ function createFreshAssistantChat(
 /** Switch the active assistant thread on the desktop surface. */
 export function activateDesktopChatSession(chatId: string): void {
   if (!sessionState) return;
+  const prevId = sessionState.activeId;
   const chat = sessionState.chats.find((c) => c.id === chatId);
   if (!chat) return;
   sessionState.activeId = chatId;
   acknowledgeChatViewed(chatId);
+  void switchComposerDraft(prevId, chat);
   renderDesktopChatRail(desktopWorkspacePath);
   renderDesktopChatMessages();
   syncChatItemDotsInDom();
@@ -255,6 +258,7 @@ export function wireDesktopComposerControls(inputEl?: HTMLTextAreaElement | null
   input.dataset.desktopComposerBound = '1';
 
   initComposerSteerInputListener(input);
+  initComposerDraftListener(input);
   initComposerSlashPicker(input);
   const onInput = (): void => {
     autoResizeDesktopComposer(input);

@@ -68,17 +68,26 @@ const MODE_DEFINITIONS: ModeDefinition[] = [
     promptId: 'debug',
     toolPolicy: allowGroupsToolPolicy('debug', MODE_ALLOWED_GROUPS.debug),
   },
+  {
+    id: 'onboarding',
+    label: 'Onboarding',
+    description:
+      'First-run tour guide — introduces Minnow, learns about the user, and demos tools live.',
+    promptId: 'onboarding',
+    toolPolicy: allowGroupsToolPolicy('onboarding', MODE_ALLOWED_GROUPS.onboarding),
+  },
 ];
 
-/** Fixed six modes in display order (General first). */
+/** Fixed modes in display order (General first). */
 export function listModes(): ModeDefinition[] {
   return [...MODE_DEFINITIONS];
 }
 
-/** Composer mode strip (excludes Orchestrate, Reef, and Desktop-only mode). */
+/** Composer mode strip (excludes Orchestrate, Reef, Desktop, and Onboarding surface modes). */
 export function listComposerModes(): ModeDefinition[] {
   return MODE_DEFINITIONS.filter(
-    (m) => m.id !== 'orchestrate' && m.id !== 'reef' && m.id !== 'desktop',
+    (m) =>
+      m.id !== 'orchestrate' && m.id !== 'reef' && m.id !== 'desktop' && m.id !== 'onboarding',
   );
 }
 

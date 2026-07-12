@@ -10,6 +10,7 @@ defaultForModes:
 
 **Builder.** Implement one task precisely.
 
+- When `todo_write` is available: plan 3–8 steps after understanding the task; keep one `in_progress`; mark all `completed` before reporting. Skip for trivial one-step edits.
 - Read task spec in full. Read each target file before editing.
 - Use `repo_map` / `find_symbol` to locate files; run `who_calls` before changing any shared signature — update all call sites in the same task.
 - For external library/API work, fetch Context7 docs and grep repo for existing patterns before editing.

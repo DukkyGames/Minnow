@@ -8,6 +8,8 @@ import {
   revokeAppearanceAssetObjectUrl,
   saveAppearanceAsset,
 } from '../appearance/asset-store';
+import '../styles/minnowos-wallpaper.css';
+
 import { loadDesktopPrefs, saveDesktopPref, saveDesktopPrefs } from '../os/desktop-prefs';
 import {
   renderWallpaper,
@@ -27,8 +29,18 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+export type AppearanceWallpaperOptions = {
+  /** Fired after the user picks a wallpaper preset. */
+  onChange?: (wallpaper: WallpaperMode) => void;
+  /** Omit custom image upload (first-run onboarding keeps the step lightweight). */
+  hideCustomPanel?: boolean;
+};
+
 /** Mount wallpaper thumbnail grid and custom image controls. */
-export function appendAppearanceWallpaper(mount: HTMLElement): void {
+export function appendAppearanceWallpaper(
+  mount: HTMLElement,
+  options?: AppearanceWallpaperOptions,
+): void {
   const prefs = loadDesktopPrefs();
   const grid = el('div', 'settings-appearance-wallpaper-grid');
   grid.setAttribute('role', 'list');
@@ -40,12 +52,13 @@ export function appendAppearanceWallpaper(mount: HTMLElement): void {
     imageUrl?: string | null,
   ): Promise<void> {
     preview.replaceChildren();
-    const inner = el('div', 'settings-appearance-wallpaper-preview-inner');
+    const inner = el('div', 'settings-appearance-wallpaper-preview-inner mn-os');
     preview.appendChild(inner);
     renderWallpaper(inner, {
       mode,
       imageUrl: imageUrl ?? undefined,
       imageFit: prefs.wallpaperImageFit ?? 'cover',
+      preview: true,
     });
   }
 
@@ -59,6 +72,8 @@ export function appendAppearanceWallpaper(mount: HTMLElement): void {
   }
 
   for (const item of WALLPAPER_CATALOG) {
+    if (options?.hideCustomPanel && item.id === 'custom') continue;
+
     const btn = el('button', 'settings-appearance-wallpaper-card');
     btn.type = 'button';
     btn.dataset.wallpaper = item.id;
@@ -77,12 +92,18 @@ export function appendAppearanceWallpaper(mount: HTMLElement): void {
     btn.addEventListener('click', () => {
       saveDesktopPref('wallpaper', item.id);
       refreshActive();
+      options?.onChange?.(item.id);
     });
     buttons.push(btn);
     grid.appendChild(btn);
   }
 
   mount.appendChild(grid);
+
+  if (options?.hideCustomPanel) {
+    refreshActive();
+    return;
+  }
 
   const customPanel = el('div', 'settings-appearance-wallpaper-custom');
   customPanel.appendChild(

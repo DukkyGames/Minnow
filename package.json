@@ -13,6 +13,8 @@
     "dev": "vite",
     "prebuild": "node scripts/generate-skills-manifest.mjs && tsx scripts/generate-settings-registry.mjs",
     "build:benchmark-packs": "node scripts/build-benchmark-packs.mjs",
+    "report:bundle-size": "node scripts/report-bundle-size.mjs",
+    "report:bundle-size:ci": "node scripts/report-bundle-size.mjs --fail-over-kb 1500",
     "build": "tsc && vite build",
     "postinstall": "node scripts/sync-impeccable-skill.mjs && node scripts/ensure-electron.mjs",
     "app-icon:sync": "node scripts/sync-app-icon.mjs && node scripts/brand-electron-win.mjs",
@@ -58,6 +60,7 @@
     "test:webhooks": "node test/run-all.mjs --suite webhooks",
     "test:plugins": "node test/run-all.mjs --suite plugins",
     "test:ui-designer": "node test/run-all.mjs --suite ui-designer",
+    "test:design": "node test/run-all.mjs --suite design",
     "test:browser": "node test/run-all.mjs --suite browser",
     "test:benchmark": "node test/run-all.mjs --suite benchmark",
     "test:evals": "node test/run-all.mjs --suite evals"

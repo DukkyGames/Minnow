@@ -4,6 +4,8 @@ import {
   parseHistoryUserContent,
   historyUserContentHasAttachments,
 } from '../../src/chat/user-message-parts.ts';
+import { designRefHistoryBlock } from '../../src/attachments/design-ref-format.ts';
+import { elementRefHistoryBlock } from '../../src/attachments/element-ref-format.ts';
 
 describe('parseHistoryUserContent', () => {
   test('extracts prose without file bodies', () => {
@@ -43,6 +45,142 @@ describe('parseHistoryUserContent', () => {
     assert.equal(parsed.codeRefs[0].startLine, 15);
     assert.equal(parsed.codeRefs[0].endLine, 36);
     assert.equal(parsed.codeRefs[0].body, '<div>hello</div>');
+  });
+
+  test('extracts design-ref blocks (element-anchored) with the co-emitted image placeholder', () => {
+    const shape = {
+      id: 'dshape-1',
+      kind: 'arrow',
+      points: [
+        { x: 10, y: 20 },
+        { x: 90, y: 25 },
+      ],
+      anchor: { type: 'element', uid: 7, selector: 'button.cta' },
+      createdAt: 0,
+    };
+    const block = designRefHistoryBlock({
+      shape,
+      pageUrl: 'pricing.html',
+      intentText: 'arrow from 10,20 to 90,25 = move/motion intent',
+      imageName: 'arrow — pricing.html',
+    });
+    const content = `Move this button\n\n${block}\n\n[image: arrow — pricing.html]`;
+
+    const parsed = parseHistoryUserContent(content);
+    assert.equal(parsed.text, 'Move this button');
+    assert.equal(parsed.designRefs.length, 1);
+    const ref = parsed.designRefs[0];
+    assert.equal(ref.kind, 'arrow');
+    assert.equal(ref.pageUrl, 'pricing.html');
+    assert.deepEqual(ref.anchor, { type: 'element', uid: 7, selector: 'button.cta' });
+    assert.equal(ref.imageName, 'arrow — pricing.html');
+    assert.equal(ref.intentText, 'arrow from 10,20 to 90,25 = move/motion intent');
+    // parseHistoryUserContent still reports the co-emitted [image: …] placeholder in `images`
+    // (same as element-ref); user-message-bubble.ts is what de-dupes it against designRefs so
+    // the chip isn't rendered twice.
+    assert.deepEqual(parsed.images, [{ name: 'arrow — pricing.html' }]);
+  });
+
+  test('extracts design-ref blocks (page-anchored, no image)', () => {
+    const shape = {
+      id: 'dshape-2',
+      kind: 'rect',
+      rect: { x: 5, y: 5, width: 40, height: 30 },
+      anchor: { type: 'page', x: 5, y: 5, scrollX: 0, scrollY: 100 },
+      createdAt: 0,
+    };
+    const block = designRefHistoryBlock({
+      shape,
+      pageUrl: 'pricing.html',
+      intentText: 'rect at 5,5 40×30 = region of interest',
+    });
+
+    const parsed = parseHistoryUserContent(block);
+    assert.equal(parsed.designRefs.length, 1);
+    const ref = parsed.designRefs[0];
+    assert.equal(ref.kind, 'rect');
+    assert.deepEqual(ref.anchor, { type: 'page', x: 5, y: 5 });
+    assert.equal(ref.imageName, null);
+  });
+
+  test('extracts element-ref source/confidence (MIN-369) and still parses blocks without it', () => {
+    const withMapping = elementRefHistoryBlock({
+      selector: 'button.cta',
+      uid: 3,
+      pageUrl: 'pricing.html',
+      tagName: 'button',
+      classList: ['cta'],
+      rect: { x: 1, y: 2, width: 3, height: 4 },
+      stylesDigest: 'font:14px/20px Inter 400',
+      outerHtmlPreview: '<button class="cta">Buy</button>',
+      sourceMapping: { file: 'pricing.html', line: 42, confidence: 'exact' },
+    });
+    const parsedWithMapping = parseHistoryUserContent(withMapping);
+    assert.equal(parsedWithMapping.elementRefs.length, 1);
+    assert.equal(parsedWithMapping.elementRefs[0].source, 'pricing.html:42');
+    assert.equal(parsedWithMapping.elementRefs[0].confidence, 'exact');
+    // The block is still stripped cleanly out of the visible prose.
+    assert.equal(parsedWithMapping.text, '');
+
+    const withoutMapping = elementRefHistoryBlock({
+      selector: 'button.cta',
+      uid: 3,
+      pageUrl: 'pricing.html',
+      tagName: 'button',
+      classList: ['cta'],
+      rect: { x: 1, y: 2, width: 3, height: 4 },
+      stylesDigest: 'font:14px/20px Inter 400',
+      outerHtmlPreview: '<button class="cta">Buy</button>',
+    });
+    const parsedWithoutMapping = parseHistoryUserContent(withoutMapping);
+    assert.equal(parsedWithoutMapping.elementRefs.length, 1);
+    assert.equal(parsedWithoutMapping.elementRefs[0].source, null);
+    assert.equal(parsedWithoutMapping.elementRefs[0].confidence, null);
+  });
+
+  test('extracts element-ref a11y attrs (MIN-370) and strips block from visible prose', () => {
+    const block = elementRefHistoryBlock({
+      selector: '#btn-reset',
+      uid: 4,
+      pageUrl: 'http://localhost:3000/',
+      tagName: 'button',
+      classList: ['btn-danger'],
+      rect: { x: 503, y: 568, width: 40, height: 18 },
+      stylesDigest: 'font:15.2px/normal Arial 400; color:rgb(25,25,25)',
+      outerHtmlPreview: '<button id="btn-reset" class="btn-danger">Reset</button>',
+      accessibleName: 'Reset',
+      contrastRatio: 4.5,
+      imageName: '#btn-reset — localhost:3000',
+    });
+    const content = `change this to purple\n\n${block}\n\n[image: #btn-reset — localhost:3000]`;
+    const parsed = parseHistoryUserContent(content);
+    assert.equal(parsed.text, 'change this to purple');
+    assert.equal(parsed.elementRefs.length, 1);
+    assert.equal(parsed.elementRefs[0].accessibleName, 'Reset');
+    assert.equal(parsed.elementRefs[0].contrastRatio, 4.5);
+    assert.equal(parsed.elementRefs[0].imageName, '#btn-reset — localhost:3000');
+  });
+
+  test('recovers just the HTML preview from an enriched element-ref body', () => {
+    const block = elementRefHistoryBlock({
+      selector: '.mn-design-strip',
+      uid: 7,
+      pageUrl: 'index.html',
+      tagName: 'div',
+      classList: ['mn-design-strip'],
+      rect: { x: 1034, y: 902, width: 247, height: 73 },
+      stylesDigest: 'font:14px/20px system-ui 400',
+      outerHtmlPreview: '<div class="mn-design-strip">',
+      domPath: 'div#minnowOsRoot > div#previewBody > div.mn-design-strip',
+      attributes: { class: 'mn-design-strip', role: 'toolbar' },
+      computedStyles: { color: 'rgb(223, 227, 232)', display: 'flex' },
+    });
+    const parsed = parseHistoryUserContent(block);
+    assert.equal(parsed.elementRefs.length, 1);
+    // The rich sections are for the model; the transcript chip only shows the markup.
+    assert.equal(parsed.elementRefs[0].outerHtmlPreview, '<div class="mn-design-strip">');
+    // The whole block (rich sections included) is stripped out of the visible prose.
+    assert.equal(parsed.text, '');
   });
 
   test('detects attachment markers', () => {

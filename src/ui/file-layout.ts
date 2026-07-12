@@ -10,11 +10,12 @@ import {
 } from '../state/file-panel';
 import { syncStatsStripLayoutForViewer } from './stats';
 import { mountOsMobileDrawerBackdrops, syncOsMobileDrawerHtmlClass } from './mobile-drawer-portal';
-import { closeGitSidePanel, isGitSidePanelOpen } from './git-panel';
 import {
   syncAppBodySidebarWidthVars,
   syncFileSidebarResizer,
 } from './sidebar-resize';
+
+let chatColumnDragCollapsed = false;
 
 export function isMobileLayout(): boolean {
   return window.matchMedia('(max-width: 640px)').matches;
@@ -45,7 +46,9 @@ export function repairRightPaneDomStructure(): boolean {
 
 /** Close source control when the file sidebar is collapsed or dismissed. */
 function closeGitPanelIfOpen(): void {
-  if (isGitSidePanelOpen()) closeGitSidePanel();
+  void import('./git-panel').then((m) => {
+    if (m.isGitSidePanelOpen()) m.closeGitSidePanel();
+  });
 }
 
 /** Clear mobile drawer classes without closing source control (safe during layout refresh). */
@@ -187,6 +190,7 @@ export function applyFileSidebarVisuals(): void {
 
   if (split) {
     split.classList.toggle('viewer-open', splitOpen);
+    split.classList.toggle('chat-column-collapsed', chatColumnDragCollapsed && splitOpen);
     split.style.setProperty('--split-ratio', String(state.splitRatio));
     syncStatsStripLayoutForViewer(splitOpen);
   }
@@ -290,6 +294,7 @@ function fallbackRightPaneModeAfterClose(closedMode: Exclude<RightPaneMode, null
 
 /** Show split viewer pane; keeps preview tabs in the unified strip. */
 export function showViewerSplit(): void {
+  clearChatColumnDragCollapsed();
   hidePreviewPaneDom();
   void window.minnow?.preview.hide();
   showRightPaneColumnDom();
@@ -308,12 +313,14 @@ export function hideViewerSplit(): void {
   }
   hideViewerPaneDom();
   hideRightPaneColumnDom();
+  clearChatColumnDragCollapsed();
   patchFilePanelState({ rightPaneMode: null, viewerOpen: false });
   applyFileSidebarVisuals();
 }
 
 /** Show preview pane; keeps file tabs in the unified strip. */
 export function showPreviewSplit(): void {
+  clearChatColumnDragCollapsed();
   hideViewerPaneDom();
   showRightPaneColumnDom();
   patchFilePanelState({
@@ -336,8 +343,40 @@ export function hidePreviewSplit(): void {
   hidePreviewPaneDom();
   void window.minnow?.preview.hide();
   hideRightPaneColumnDom();
+  clearChatColumnDragCollapsed();
   patchFilePanelState({ rightPaneMode: null, viewerOpen: false, previewSource: null });
   applyFileSidebarVisuals();
+}
+
+/** True when the user drag-collapsed the chat column for a full-width preview/viewer. */
+export function isChatColumnDragCollapsed(): boolean {
+  return chatColumnDragCollapsed;
+}
+
+/** Hide the chat column after dragging the split toward the preview pane. */
+export function collapseChatColumnFromDrag(): void {
+  if (!isRightSplitOpen()) return;
+  chatColumnDragCollapsed = true;
+  applyFileSidebarVisuals();
+  scheduleElectronPreviewHostLayoutAfterSplitChange();
+}
+
+/** Restore the chat column after drag-collapse or when selecting a sidebar chat. */
+export function restoreChatColumnFromDrag(): boolean {
+  if (!chatColumnDragCollapsed) return false;
+  chatColumnDragCollapsed = false;
+  applyFileSidebarVisuals();
+  scheduleElectronPreviewHostLayoutAfterSplitChange();
+  return true;
+}
+
+function clearChatColumnDragCollapsed(): void {
+  chatColumnDragCollapsed = false;
+}
+
+/** Test helper — reset drag-collapse memory. */
+export function resetChatColumnDragCollapsedForTests(): void {
+  clearChatColumnDragCollapsed();
 }
 
 /**

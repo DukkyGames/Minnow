@@ -4,6 +4,7 @@
 
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import * as channels from './ipc-channels.js';
+import type { CdpPickedElement } from './preview-cdp-adapt.js';
 
 /** Preview bounds in CSS pixels relative to the host window content area. */
 export interface PreviewBounds {
@@ -54,65 +55,135 @@ export interface PreviewTabInfo {
 }
 
 const preview = {
-  show: (bounds?: PreviewBounds, tabId?: string): Promise<void> =>
-    ipcRenderer.invoke(channels.PREVIEW_SHOW, bounds, tabId),
-  hide: (tabId?: string): Promise<void> =>
-    ipcRenderer.invoke(channels.PREVIEW_HIDE, tabId),
-  clear: (tabId?: string): Promise<void> =>
-    ipcRenderer.invoke(channels.PREVIEW_CLEAR, tabId),
-  loadURL: (url: string, tabId?: string): Promise<void> =>
-    ipcRenderer.invoke(channels.PREVIEW_LOAD_URL, url, tabId),
-  loadSource: (payload: PreviewLoadSourcePayload, tabId?: string): Promise<void> =>
-    ipcRenderer.invoke(channels.PREVIEW_LOAD_SOURCE, payload, tabId),
-  reload: (tabId?: string): Promise<void> =>
-    ipcRenderer.invoke(channels.PREVIEW_RELOAD, tabId),
-  stop: (tabId?: string): Promise<void> =>
-    ipcRenderer.invoke(channels.PREVIEW_STOP, tabId),
-  goBack: (tabId?: string): Promise<void> =>
-    ipcRenderer.invoke(channels.PREVIEW_GO_BACK, tabId),
-  goForward: (tabId?: string): Promise<void> =>
-    ipcRenderer.invoke(channels.PREVIEW_GO_FORWARD, tabId),
-  setBounds: (bounds: PreviewBounds, tabId?: string): Promise<void> =>
-    ipcRenderer.invoke(channels.PREVIEW_SET_BOUNDS, bounds, tabId),
-  execJs: (code: string, tabId?: string): Promise<unknown> =>
-    ipcRenderer.invoke(channels.PREVIEW_EXEC_JS, code, tabId),
-  capturePage: (tabId?: string): Promise<string> =>
-    ipcRenderer.invoke(channels.PREVIEW_CAPTURE_PAGE, tabId),
-  getInfo: (tabId?: string): Promise<PreviewGuestInfo> =>
-    ipcRenderer.invoke(channels.PREVIEW_GET_INFO, tabId),
-  navigateAndWait: (url: string, tabId?: string): Promise<PreviewNavigateAwaitResult> =>
-    ipcRenderer.invoke(channels.PREVIEW_NAVIGATE_AWAIT, url, tabId),
+  // Every method below takes an optional trailing `instanceId` (MIN-364). Omitting it — as every
+  // pre-MIN-364 call site does — targets the default 'workspace-preview' instance, preserving the
+  // single-surface behavior that shipped before named instances existed.
+  show: (bounds?: PreviewBounds, tabId?: string, instanceId?: string): Promise<void> =>
+    ipcRenderer.invoke(channels.PREVIEW_SHOW, bounds, tabId, instanceId),
+  hide: (tabId?: string, instanceId?: string): Promise<void> =>
+    ipcRenderer.invoke(channels.PREVIEW_HIDE, tabId, instanceId),
+  clear: (tabId?: string, instanceId?: string): Promise<void> =>
+    ipcRenderer.invoke(channels.PREVIEW_CLEAR, tabId, instanceId),
+  loadURL: (url: string, tabId?: string, instanceId?: string): Promise<void> =>
+    ipcRenderer.invoke(channels.PREVIEW_LOAD_URL, url, tabId, instanceId),
+  loadSource: (
+    payload: PreviewLoadSourcePayload,
+    tabId?: string,
+    instanceId?: string,
+  ): Promise<void> => ipcRenderer.invoke(channels.PREVIEW_LOAD_SOURCE, payload, tabId, instanceId),
+  reload: (tabId?: string, instanceId?: string): Promise<void> =>
+    ipcRenderer.invoke(channels.PREVIEW_RELOAD, tabId, instanceId),
+  stop: (tabId?: string, instanceId?: string): Promise<void> =>
+    ipcRenderer.invoke(channels.PREVIEW_STOP, tabId, instanceId),
+  goBack: (tabId?: string, instanceId?: string): Promise<void> =>
+    ipcRenderer.invoke(channels.PREVIEW_GO_BACK, tabId, instanceId),
+  goForward: (tabId?: string, instanceId?: string): Promise<void> =>
+    ipcRenderer.invoke(channels.PREVIEW_GO_FORWARD, tabId, instanceId),
+  setBounds: (bounds: PreviewBounds, tabId?: string, instanceId?: string): Promise<void> =>
+    ipcRenderer.invoke(channels.PREVIEW_SET_BOUNDS, bounds, tabId, instanceId),
+  execJs: (code: string, tabId?: string, instanceId?: string): Promise<unknown> =>
+    ipcRenderer.invoke(channels.PREVIEW_EXEC_JS, code, tabId, instanceId),
+  capturePage: (tabId?: string, instanceId?: string): Promise<string> =>
+    ipcRenderer.invoke(channels.PREVIEW_CAPTURE_PAGE, tabId, instanceId),
+  getInfo: (tabId?: string, instanceId?: string): Promise<PreviewGuestInfo> =>
+    ipcRenderer.invoke(channels.PREVIEW_GET_INFO, tabId, instanceId),
+  navigateAndWait: (
+    url: string,
+    tabId?: string,
+    instanceId?: string,
+  ): Promise<PreviewNavigateAwaitResult> =>
+    ipcRenderer.invoke(channels.PREVIEW_NAVIGATE_AWAIT, url, tabId, instanceId),
   tabs: {
-    create: (tabId?: string): Promise<string> =>
-      ipcRenderer.invoke(channels.PREVIEW_TAB_CREATE, tabId),
-    close: (id: string): Promise<void> =>
-      ipcRenderer.invoke(channels.PREVIEW_TAB_CLOSE, id),
-    activate: (id: string): Promise<void> =>
-      ipcRenderer.invoke(channels.PREVIEW_TAB_ACTIVATE, id),
-    list: (): Promise<PreviewTabInfo[]> =>
-      ipcRenderer.invoke(channels.PREVIEW_TAB_LIST),
+    create: (tabId?: string, instanceId?: string): Promise<string> =>
+      ipcRenderer.invoke(channels.PREVIEW_TAB_CREATE, tabId, instanceId),
+    close: (id: string, instanceId?: string): Promise<void> =>
+      ipcRenderer.invoke(channels.PREVIEW_TAB_CLOSE, id, instanceId),
+    activate: (id: string, instanceId?: string): Promise<void> =>
+      ipcRenderer.invoke(channels.PREVIEW_TAB_ACTIVATE, id, instanceId),
+    list: (instanceId?: string): Promise<PreviewTabInfo[]> =>
+      ipcRenderer.invoke(channels.PREVIEW_TAB_LIST, instanceId),
   },
-  onNavigation: (callback: (url: string, tabId?: string) => void): (() => void) => {
-    const handler = (_event: IpcRendererEvent, tabId: string, url: string) => {
-      callback(url, tabId);
+  /** Named preview instance lifecycle (MIN-364) — see electron/preview-instance-registry.ts. */
+  instances: {
+    create: (instanceId?: string): Promise<string> =>
+      ipcRenderer.invoke(channels.PREVIEW_INSTANCE_CREATE, instanceId),
+    destroy: (instanceId: string): Promise<void> =>
+      ipcRenderer.invoke(channels.PREVIEW_INSTANCE_DESTROY, instanceId),
+    list: (): Promise<string[]> => ipcRenderer.invoke(channels.PREVIEW_INSTANCE_LIST),
+  },
+  /**
+   * CDP-backed element picking for cross-origin guests (MIN-370): native hover/click via
+   * `webContents.debugger`, no script injected into the page. Electron only.
+   */
+  cdpPicker: {
+    enable: (tabId?: string, instanceId?: string): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke(channels.PREVIEW_CDP_PICK_ENABLE, tabId, instanceId),
+    disable: (tabId?: string, instanceId?: string): Promise<void> =>
+      ipcRenderer.invoke(channels.PREVIEW_CDP_PICK_DISABLE, tabId, instanceId),
+    onPick: (
+      callback: (picked: CdpPickedElement, tabId?: string, instanceId?: string) => void,
+    ): (() => void) => {
+      const handler = (
+        _event: IpcRendererEvent,
+        picked: CdpPickedElement,
+        tabId?: string,
+        instanceId?: string,
+      ) => callback(picked, tabId, instanceId);
+      ipcRenderer.on(channels.PREVIEW_CDP_PICK_EVENT, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.PREVIEW_CDP_PICK_EVENT, handler);
+      };
+    },
+    onError: (
+      callback: (message: string, tabId?: string, instanceId?: string) => void,
+    ): (() => void) => {
+      const handler = (
+        _event: IpcRendererEvent,
+        message: string,
+        tabId?: string,
+        instanceId?: string,
+      ) => callback(message, tabId, instanceId);
+      ipcRenderer.on(channels.PREVIEW_CDP_PICK_ERROR, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.PREVIEW_CDP_PICK_ERROR, handler);
+      };
+    },
+  },
+  onNavigation: (callback: (url: string, tabId?: string, instanceId?: string) => void): (() => void) => {
+    const handler = (_event: IpcRendererEvent, tabId: string, url: string, instanceId?: string) => {
+      callback(url, tabId, instanceId);
     };
     ipcRenderer.on(channels.PREVIEW_NAVIGATION, handler);
     return () => {
       ipcRenderer.removeListener(channels.PREVIEW_NAVIGATION, handler);
     };
   },
-  onLoading: (callback: (loading: boolean, tabId?: string) => void): (() => void) => {
-    const handler = (_event: IpcRendererEvent, tabId: string, loading: boolean) => {
-      callback(loading, tabId);
+  onLoading: (
+    callback: (loading: boolean, tabId?: string, instanceId?: string) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: IpcRendererEvent,
+      tabId: string,
+      loading: boolean,
+      instanceId?: string,
+    ) => {
+      callback(loading, tabId, instanceId);
     };
     ipcRenderer.on(channels.PREVIEW_LOADING, handler);
     return () => {
       ipcRenderer.removeListener(channels.PREVIEW_LOADING, handler);
     };
   },
-  onPageTitle: (callback: (title: string, tabId?: string) => void): (() => void) => {
-    const handler = (_event: IpcRendererEvent, tabId: string, title: string) => {
-      callback(title, tabId);
+  onPageTitle: (
+    callback: (title: string, tabId?: string, instanceId?: string) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: IpcRendererEvent,
+      tabId: string,
+      title: string,
+      instanceId?: string,
+    ) => {
+      callback(title, tabId, instanceId);
     };
     ipcRenderer.on(channels.PREVIEW_PAGE_TITLE, handler);
     return () => {
@@ -120,14 +191,15 @@ const preview = {
     };
   },
   onLoadFailed: (
-    callback: (detail: PreviewLoadFailedDetail, tabId?: string) => void,
+    callback: (detail: PreviewLoadFailedDetail, tabId?: string, instanceId?: string) => void,
   ): (() => void) => {
     const handler = (
       _event: IpcRendererEvent,
       tabId: string,
       detail: PreviewLoadFailedDetail,
+      instanceId?: string,
     ) => {
-      callback(detail, tabId);
+      callback(detail, tabId, instanceId);
     };
     ipcRenderer.on(channels.PREVIEW_LOAD_FAILED, handler);
     return () => {
@@ -135,14 +207,15 @@ const preview = {
     };
   },
   onGuestCrashed: (
-    callback: (detail: PreviewGuestCrashedDetail, tabId?: string) => void,
+    callback: (detail: PreviewGuestCrashedDetail, tabId?: string, instanceId?: string) => void,
   ): (() => void) => {
     const handler = (
       _event: IpcRendererEvent,
       tabId: string,
       detail: PreviewGuestCrashedDetail,
+      instanceId?: string,
     ) => {
-      callback(detail, tabId);
+      callback(detail, tabId, instanceId);
     };
     ipcRenderer.on(channels.PREVIEW_GUEST_CRASHED, handler);
     return () => {

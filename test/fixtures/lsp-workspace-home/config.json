@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "createdAt": "2026-07-08T03:05:31.875Z",
+  "createdAt": "2026-07-12T00:01:04.851Z",
   "migratedFromLocalStorage": false,
   "migratedAt": null,
   "localStorageKeysMigrated": [],
@@ -196,9 +196,9 @@
     }
   },
   "workspace": {
-    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-gdL6ZC",
+    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-lc0Q2C",
     "recentPaths": [
-      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-gdL6ZC"
+      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-lc0Q2C"
     ]
   }
 }

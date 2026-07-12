@@ -1,0 +1,270 @@
+/**
+ * Design Mode element-picker capture → composer element-reference attachments (MIN-366).
+ */
+import assert from 'node:assert/strict';
+import { afterEach, describe, it } from 'node:test';
+import { Window } from 'happy-dom';
+import {
+  addElementRefToComposer,
+  elementRefHistoryBlock,
+  formatElementRefLabel,
+  isElementRefAttachment,
+} from '../../src/attachments/element-ref.ts';
+import {
+  clearAttachments,
+  getPendingAttachments,
+  removeAttachment,
+} from '../../src/attachments/store.ts';
+import type { Attachment } from '../../src/attachments/types.ts';
+
+function setupDom(): void {
+  const window = new Window();
+  globalThis.document = window.document;
+  globalThis.HTMLElement = window.HTMLElement;
+  globalThis.window = window as unknown as Window & typeof globalThis.window;
+
+  const input = document.createElement('textarea');
+  input.id = 'msgInput';
+  document.body.appendChild(input);
+
+  const preview = document.createElement('div');
+  preview.id = 'attachPreview';
+  preview.className = 'hidden';
+  document.body.appendChild(preview);
+}
+
+const baseInput = {
+  selector: 'button.cta',
+  uid: 12,
+  pageUrl: 'pricing.html',
+  tagName: 'button',
+  classList: ['cta', 'primary'],
+  outerHtmlPreview: '<button class="cta primary">Buy now</button>',
+  rect: { x: 120, y: 240, width: 96, height: 32 },
+  stylesDigest: 'font:14px/20px Inter 600; color:rgb(17, 24, 39); bg:rgb(255, 255, 255); p:8px 16px; layout:flex',
+};
+
+describe('formatElementRefLabel', () => {
+  it('uses the last selector segment and the page basename', () => {
+    assert.equal(
+      formatElementRefLabel('body > div.hero > button.cta', 'pricing.html'),
+      'button.cta — pricing.html',
+    );
+  });
+
+  it('reads the basename out of a full URL', () => {
+    assert.equal(
+      formatElementRefLabel('#hero', 'https://example.com/app/pricing/'),
+      '#hero — pricing',
+    );
+  });
+
+  it('falls back to the selector alone when there is no page', () => {
+    assert.equal(formatElementRefLabel('#hero', ''), '#hero');
+  });
+});
+
+describe('elementRefHistoryBlock', () => {
+  it('serializes selector, uid, page, styles and rect attributes', () => {
+    const block = elementRefHistoryBlock(baseInput);
+    assert.match(block, /^<element-ref selector="button\.cta" uid="12" page="pricing\.html"/);
+    assert.match(block, /tag="button"/);
+    assert.match(block, /classes="cta primary"/);
+    assert.match(block, /rect="120,240,96,32"/);
+    assert.match(block, /styles="font:14px\/20px Inter 600[^"]*"/);
+    assert.match(block, /<button class="cta primary">Buy now<\/button>\n<\/element-ref>$/);
+  });
+
+  it('omits the uid attribute when uid is null', () => {
+    const block = elementRefHistoryBlock({ ...baseInput, uid: null });
+    assert.doesNotMatch(block, /uid="/);
+  });
+
+  it('adds an image attribute only when imageName is provided', () => {
+    const withImage = elementRefHistoryBlock({ ...baseInput, imageName: 'button.cta — pricing.html' });
+    assert.match(withImage, /image="button\.cta — pricing\.html"/);
+
+    const withoutImage = elementRefHistoryBlock(baseInput);
+    assert.doesNotMatch(withoutImage, /image="/);
+  });
+
+  it('omits source/confidence entirely when sourceMapping is unresolved (MIN-369)', () => {
+    const block = elementRefHistoryBlock(baseInput);
+    assert.doesNotMatch(block, /source="/);
+    assert.doesNotMatch(block, /confidence="/);
+  });
+
+  it('serializes an exact file:line match', () => {
+    const block = elementRefHistoryBlock({
+      ...baseInput,
+      sourceMapping: { file: 'pricing.html', line: 42, confidence: 'exact' },
+    });
+    assert.match(block, /source="pricing\.html:42" confidence="exact"/);
+  });
+
+  it('serializes a probable dev-server component match without a line', () => {
+    const block = elementRefHistoryBlock({
+      ...baseInput,
+      sourceMapping: { file: 'src/components/Cta.tsx', component: 'CtaButton', confidence: 'probable' },
+    });
+    assert.match(block, /source="src\/components\/Cta\.tsx" confidence="probable"/);
+  });
+
+  it('falls back to the component name for source when there is no file', () => {
+    const block = elementRefHistoryBlock({
+      ...baseInput,
+      sourceMapping: { component: 'CtaButton', confidence: 'probable' },
+    });
+    assert.match(block, /source="CtaButton" confidence="probable"/);
+  });
+
+  it('emits confidence="guess" with no source attribute when nothing resolved', () => {
+    const block = elementRefHistoryBlock({
+      ...baseInput,
+      sourceMapping: { confidence: 'guess' },
+    });
+    assert.doesNotMatch(block, /source="/);
+    assert.match(block, /confidence="guess"/);
+  });
+
+  it('places source/confidence between styles and image attributes', () => {
+    const block = elementRefHistoryBlock({
+      ...baseInput,
+      sourceMapping: { file: 'pricing.html', line: 42, confidence: 'exact' },
+      imageName: 'button.cta — pricing.html',
+    });
+    assert.match(
+      block,
+      /styles="[^"]*" source="pricing\.html:42" confidence="exact" image="button\.cta — pricing\.html"/,
+    );
+  });
+
+  it('renders PATH, ATTRIBUTES, COMPUTED STYLES and POSITION & SIZE sections, HTML last', () => {
+    const block = elementRefHistoryBlock({
+      ...baseInput,
+      domPath: 'body > div.hero > button.cta',
+      attributes: { class: 'cta primary', type: 'button', 'aria-label': 'Buy now' },
+      computedStyles: { color: 'rgb(17, 24, 39)', display: 'flex', fontSize: '14px' },
+    });
+    assert.match(block, /\nPATH\nbody > div\.hero > button\.cta\n/);
+    assert.match(block, /\nATTRIBUTES\nclass: cta primary\ntype: button\naria-label: Buy now\n/);
+    assert.match(block, /\nCOMPUTED STYLES\ncolor: rgb\(17, 24, 39\)\ndisplay: flex\nfontSize: 14px\n/);
+    assert.match(block, /\nPOSITION & SIZE\ntop: 240px; left: 120px; width: 96px; height: 32px\n/);
+    // HTML preview stays last so the display parser can recover just the markup.
+    assert.match(block, /\nHTML\n<button class="cta primary">Buy now<\/button>\n<\/element-ref>$/);
+  });
+
+  it('omits empty rich sections and still ends with the HTML preview', () => {
+    const block = elementRefHistoryBlock(baseInput);
+    assert.doesNotMatch(block, /\nPATH\n/);
+    assert.doesNotMatch(block, /\nATTRIBUTES\n/);
+    assert.doesNotMatch(block, /\nCOMPUTED STYLES\n/);
+    assert.match(block, /\nPOSITION & SIZE\n/);
+    assert.match(block, /<button class="cta primary">Buy now<\/button>\n<\/element-ref>$/);
+  });
+});
+
+describe('addElementRefToComposer', () => {
+  afterEach(() => {
+    clearAttachments();
+    document.body.replaceChildren();
+  });
+
+  it('queues an elementRef attachment with the full picker payload', () => {
+    setupDom();
+    const attachment = addElementRefToComposer({ ...baseInput, croppedDataUrl: 'data:image/png;base64,AAA' });
+    assert.ok(attachment);
+    const pending = getPendingAttachments();
+    assert.equal(pending.length, 1);
+    assert.equal(pending[0].kind, 'elementRef');
+    assert.equal(pending[0].name, 'button.cta — pricing.html');
+    assert.equal(pending[0].selector, 'button.cta');
+    assert.equal(pending[0].uid, 12);
+    assert.equal(pending[0].pageUrl, 'pricing.html');
+    assert.equal(pending[0].tagName, 'button');
+    assert.deepEqual(pending[0].classList, ['cta', 'primary']);
+    assert.deepEqual(pending[0].rect, baseInput.rect);
+    assert.equal(pending[0].stylesDigest, baseInput.stylesDigest);
+    assert.equal(pending[0].croppedDataUrl, 'data:image/png;base64,AAA');
+  });
+
+  it('dedupes by page + uid, keeping the first chip', () => {
+    setupDom();
+    const first = addElementRefToComposer(baseInput);
+    const second = addElementRefToComposer({ ...baseInput, outerHtmlPreview: '<button>changed</button>' });
+    assert.equal(getPendingAttachments().length, 1);
+    assert.equal(first?.id, second?.id);
+  });
+
+  it('dedupes by page + selector when uid is null', () => {
+    setupDom();
+    addElementRefToComposer({ ...baseInput, uid: null });
+    addElementRefToComposer({ ...baseInput, uid: null });
+    assert.equal(getPendingAttachments().length, 1);
+  });
+
+  it('does not dedupe across different pages', () => {
+    setupDom();
+    addElementRefToComposer(baseInput);
+    addElementRefToComposer({ ...baseInput, pageUrl: 'checkout.html' });
+    assert.equal(getPendingAttachments().length, 2);
+  });
+
+  it('removal behaves like other attachments (removeAttachment by id)', () => {
+    setupDom();
+    const attachment = addElementRefToComposer(baseInput);
+    assert.equal(getPendingAttachments().length, 1);
+    removeAttachment(attachment!.id);
+    assert.equal(getPendingAttachments().length, 0);
+  });
+
+  it('ignores picks with an empty selector', () => {
+    setupDom();
+    const attachment = addElementRefToComposer({ ...baseInput, selector: '   ' });
+    assert.equal(attachment, null);
+    assert.equal(getPendingAttachments().length, 0);
+  });
+});
+
+describe('isElementRefAttachment', () => {
+  it('accepts a fully-populated elementRef attachment', () => {
+    const attachment: Attachment = {
+      id: 'a1',
+      name: 'button.cta — pricing.html',
+      kind: 'elementRef',
+      mimeType: 'text/html',
+      size: 10,
+      selector: 'button.cta',
+      pageUrl: 'pricing.html',
+      tagName: 'button',
+      classList: ['cta'],
+      rect: { x: 0, y: 0, width: 1, height: 1 },
+      stylesDigest: 'font:14px/20px Inter 400',
+      outerHtmlPreview: '<button class="cta"></button>',
+    };
+    assert.equal(isElementRefAttachment(attachment), true);
+  });
+
+  it('rejects other kinds and incomplete elementRef rows', () => {
+    assert.equal(
+      isElementRefAttachment({
+        id: 'a2',
+        name: 'x',
+        kind: 'image',
+        mimeType: 'image/png',
+        size: 1,
+      }),
+      false,
+    );
+    assert.equal(
+      isElementRefAttachment({
+        id: 'a3',
+        name: 'x',
+        kind: 'elementRef',
+        mimeType: 'text/html',
+        size: 1,
+      }),
+      false,
+    );
+  });
+});
