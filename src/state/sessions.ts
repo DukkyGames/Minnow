@@ -678,6 +678,10 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     typeof r.stopRetries === 'number' && Number.isFinite(r.stopRetries)
       ? r.stopRetries
       : undefined;
+  const lifecycleRun =
+    typeof r.lifecycleRun === 'number' && Number.isFinite(r.lifecycleRun) && r.lifecycleRun >= 0
+      ? r.lifecycleRun
+      : undefined;
   let quarantine: BoardTask['quarantine'];
   if (r.quarantine && typeof r.quarantine === 'object') {
     const q = r.quarantine as Record<string, unknown>;
@@ -737,6 +741,7 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     ...(devPort !== undefined ? { devPort } : {}),
     ...(apiPort !== undefined ? { apiPort } : {}),
     ...(stopRetries !== undefined ? { stopRetries } : {}),
+    ...(lifecycleRun !== undefined ? { lifecycleRun } : {}),
     ...(quarantine ? { quarantine } : {}),
   };
 }
@@ -787,6 +792,7 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
       : undefined;
   const completionShownAt =
     typeof r.completionShownAt === 'number' ? r.completionShownAt : undefined;
+  const terminalBlocked = r.terminalBlocked === true ? true : undefined;
   const executionModeRaw =
     typeof r.executionMode === 'string' ? r.executionMode.trim() : '';
   const executionMode =
@@ -820,6 +826,7 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
     ...(timerSegmentStartedAt !== undefined ? { timerSegmentStartedAt } : {}),
     ...(maxConcurrentTasks !== undefined ? { maxConcurrentTasks } : {}),
     ...(completionShownAt !== undefined ? { completionShownAt } : {}),
+    ...(terminalBlocked ? { terminalBlocked } : {}),
     ...(r.dashboardDismissed === true ? { dashboardDismissed: true } : {}),
     ...(typeof r.integrationLandedAt === 'number' ? { integrationLandedAt: r.integrationLandedAt } : {}),
     ...(typeof r.worktreesClearedAt === 'number' ? { worktreesClearedAt: r.worktreesClearedAt } : {}),

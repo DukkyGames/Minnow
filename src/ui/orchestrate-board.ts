@@ -842,11 +842,12 @@ export function deriveBoardHeaderStatus(
     }
     return { variant: 'complete', label: 'Complete' };
   }
-  // All tasks are terminal but some are quarantined — board is done.
+  // All tasks are terminal but some are quarantined — board is done (blocked).
   if (total > 0 && terminalCount === total && quarantinedCount > 0) {
-    const label = quarantinedCount === total
-      ? `All ${quarantinedCount} quarantined`
-      : `${quarantinedCount} quarantined`;
+    const label =
+      quarantinedCount === total
+        ? `Blocked — ${quarantinedCount} quarantined`
+        : `Blocked — ${quarantinedCount} quarantined`;
     return { variant: 'quarantined', label };
   }
   if (userStopped && incomplete && !isStreaming && activeRunCount === 0) {
