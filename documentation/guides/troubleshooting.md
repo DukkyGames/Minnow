@@ -11,8 +11,27 @@ Common problems and fixes. If a fix mentions a setting, it's under the in-app **
 | Nothing opens on `npm start` | You may have `BROWSER=none` / `MINNOW_HEADLESS=1` set. Open the URL from the terminal, or set `MINNOW_BROWSER=1` for a system browser tab. |
 | Desktop shell slow on first launch | After `npm install`, Vite may log **Re-optimizing dependencies** (can take 1–2 minutes on a cold start). Electron compile is pre-run in `postinstall`; if you skipped it (`MINNOW_SKIP_ELECTRON=1`), run `npm run electron:build`. Terminal should show `[electron:dev] Waiting…` and periodic still-waiting lines until the server is ready. |
 | "Server tools need npm start" | You're in Vite-only mode. Stop `npm run dev` and run `npm start`. |
-| Health check | `curl http://localhost:9473/api/config/ping` requires the session token (`X-Minnow-Token` header). Read it from `~/.minnow/session-token` after the server starts, or use the in-app UI. Also `/api/tools/ping`, `/api/memory/ping`, `/api/brain/ping`. |
+| Health check | `curl http://localhost:9473/api/config/ping` requires the session token (`X-Minnow-Token` header). Read it from `~/.minnow/session-token` after the server starts, or use the in-app UI. Also `/api/tools/ping`, `/api/memory/ping`, `/api/brain/ping`, `/api/diagnostics/ping`. |
 | `npm install` rebuild errors (native modules) | `better-sqlite3` / `@lydell/node-pty` need a toolchain only if prebuilt binaries are unavailable. Ensure Node 18+/20+ and try again, or install platform build tools. |
+
+## Local diagnostics (no telemetry)
+
+Minnow captures errors **locally only** — nothing is sent off-device.
+
+| What | Where |
+|------|--------|
+| In-app viewer | **Settings → About** — health strip, grouped recent errors, log tail, **Copy report** (redacted markdown) |
+| Log files | `~/.minnow/logs/diagnostics.jsonl` (server/child-process), `~/.minnow/logs/crash.jsonl` (Electron/renderer) |
+| Health API | `GET /api/diagnostics/health`, `GET /api/diagnostics/errors`, `GET /api/diagnostics/report` |
+| Debug agent tool | `read_diagnostics` (permission `ask` by default; available in **Debug** mode) |
+
+**Copy report** redacts home paths, API keys, tokens, and URLs. Use it when filing bugs or asking for help.
+
+| Problem | Fix |
+|---------|-----|
+| Errors not showing in About | Run `npm start` so the tool server can read `~/.minnow/logs/`. Renderer errors in Electron also land in `crash.jsonl` via the desktop shell. |
+| Empty health strip | Server offline — start with `npm start` and open **Settings → About** again. |
+| Agent cannot read diagnostics | Enable **read_diagnostics** under Settings → Tools; switch chat to **Debug** mode; approve the tool when prompted (`ask` permission). |
 
 ## Models & chat
 

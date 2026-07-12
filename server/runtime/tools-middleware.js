@@ -1183,6 +1183,48 @@ const SERVER_TOOL_HANDLERS = {
   who_calls: toolWhoCalls,
   read_symbol: toolReadSymbol,
   explain_symbol: toolExplainSymbol,
+  read_diagnostics: async (args) => {
+    const { loadGroupedErrors, loadDiagnosticLogTail } = await import('../diagnostics/store.js');
+    const { formatDiagnosticReportMarkdown } = await import('../diagnostics/redact.js');
+    const { buildDiagnosticsHealth } = await import('../diagnostics/middleware.js');
+    const format = typeof args?.format === 'string' ? args.format : 'summary';
+    const source =
+      args?.source === 'renderer' || args?.source === 'server' || args?.source === 'electron'
+        ? args.source
+        : 'all';
+    const maxLines = Number(args?.maxLines) || 50;
+
+    if (format === 'report') {
+      const health = await buildDiagnosticsHealth();
+      const errors = await loadGroupedErrors({ maxLines: 100, source, redact: true });
+      const logLines = await loadDiagnosticLogTail({ maxLines: 50, redact: true });
+      return formatDiagnosticReportMarkdown({
+        version: health.version,
+        platform: health.platform,
+        nodeVersion: health.nodeVersion,
+        electronVersion: health.electronVersion,
+        health,
+        errors,
+        logLines,
+      });
+    }
+
+    const errors = await loadGroupedErrors({ maxLines, source, redact: true });
+    const health = await buildDiagnosticsHealth();
+    return JSON.stringify(
+      {
+        health: {
+          version: health.version,
+          platform: health.platform,
+          components: health.components,
+          lastError: health.lastError,
+        },
+        errors,
+      },
+      null,
+      2,
+    );
+  },
   manage_calendar: toolManageCalendar,
   list_mail: toolListMail,
   draft_reply: toolDraftReply,

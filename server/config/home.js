@@ -78,6 +78,7 @@ const SCAFFOLD_DIRS = [
   'logs/sub-agents',
   'logs/servers',
   'logs/terminal',
+  'logs/crash',
   'servers',
   'screenshots',
   'reef/widgets',
@@ -335,11 +336,15 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'explain_symbol',
   'recall_chat_context',
   'recall_turn_full',
+  'read_diagnostics',
 ]);
 
 function defaultPermissionForTool(id, enabled) {
   if (id === 'search_settings' || id === 'get_settings') {
     return enabled ? 'full' : 'off';
+  }
+  if (id === 'read_diagnostics') {
+    return enabled ? 'ask' : 'off';
   }
   if (BRAIN_FULL_PERMISSION_TOOL_ID_SET.has(id)) {
     return enabled ? 'full' : 'off';

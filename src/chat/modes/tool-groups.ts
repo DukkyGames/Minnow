@@ -95,6 +95,7 @@ export const TOOL_GROUP_IDS = {
   ],
   recall: ['recall_chat_context', 'recall_turn_full'],
   settings: ['search_settings', 'get_settings', 'update_settings'],
+  diagnostics: ['read_diagnostics'],
   email: [
     'list_mail',
     'draft_reply',
@@ -225,6 +226,7 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'recall',
     'impeccable',
     'todo',
+    'diagnostics',
   ],
   /** First-run wizard tour guide — safe demo set: no shell, no writes, no email/calendar. */
   onboarding: ['util-basic', 'web', 'files-read', 'brain', 'ask'],

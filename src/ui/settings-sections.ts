@@ -107,6 +107,7 @@ import {
   createSettingsRadioRow,
   createSettingsSelectRow,
 } from './settings-controls';
+import { renderAboutSettingsSection } from './settings-about';
 import { renderAppearanceSettingsSection } from './settings-appearance';
 import { renderAgentCenterPanel } from './settings-agent-center';
 import {
@@ -2275,6 +2276,9 @@ export async function refreshSettingsSection(
       break;
     case 'audio':
       await renderAudioSettingsSection(setStatus);
+      break;
+    case 'about':
+      await renderAboutSettingsSection();
       break;
     case 'providers':
       refreshProvidersBanner();
