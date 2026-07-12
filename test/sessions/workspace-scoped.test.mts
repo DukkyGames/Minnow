@@ -37,7 +37,8 @@ function chatRow(
     name,
     workspacePath,
     modelId: 'test-model',
-    history: [] as const,
+    // Sidebar list helpers hide ephemeral empty chats; seed one turn for fixtures.
+    history: [{ role: 'user' as const, content: 'fixture' }],
     lastStats: null,
     modelInfo: {},
     updatedAt,

@@ -90,6 +90,33 @@ export function setupMinimalComposerDom(doc: Document): void {
   doc.body.appendChild(sendBtn);
 }
 
+/** Stub Electron preview IPC used by file-layout and link-routing tests. */
+export function installMinnowPreviewMock(win: HappyWindow): void {
+  const w = win as unknown as Window & typeof globalThis;
+  w.minnow = {
+    preview: {
+      hide: () => undefined,
+      show: async () => undefined,
+      loadURL: async () => undefined,
+      navigateAndWait: async () => ({ ok: true }),
+      onNavigation: () => () => undefined,
+      onLoading: () => () => undefined,
+      onLoadFailed: () => () => undefined,
+    },
+  };
+}
+
+/** happy-dom globals shared by benchmark UI harness tests. */
+export function installBenchmarkTestGlobals(win: HappyWindow): void {
+  installHappyDomGlobals(win);
+  const g = globalThis as typeof globalThis & {
+    performance: Performance;
+    CSS: typeof CSS;
+  };
+  g.performance = win.performance;
+  g.CSS = win.CSS;
+}
+
 /** Seed v5 session state with a single empty chat for UI harness tests. */
 export function seedMinimalSession(activeId?: string): Chat {
   const chat = createEmptyChatObject('');

@@ -2185,9 +2185,8 @@ function onSuiteToggleClick(this: HTMLButtonElement): void {
   this.setAttribute('aria-pressed', pressed ? 'false' : 'true');
 }
 
-export async function initBenchmarkPage(): Promise<void> {
-  await preloadMiniPacks();
-  registerWindowTeardown('bench', () => closeBenchmark({ skipNavigate: true }));
+/** Wire run-bar controls only (tests — no pack preload or roster init). */
+export function wireBenchmarkRunBarForTests(): void {
   document.getElementById('btnBenchmarkQuick')?.addEventListener('click', () => {
     void startRun('quick');
   });
@@ -2199,6 +2198,19 @@ export async function initBenchmarkPage(): Promise<void> {
   for (const btn of getSuiteToggleButtons()) {
     btn.addEventListener('click', onSuiteToggleClick);
   }
+
+  for (const btn of document.querySelectorAll<HTMLButtonElement>('.benchmark-standard-toggle')) {
+    btn.addEventListener('click', () => {
+      const pressed = btn.getAttribute('aria-pressed') === 'true';
+      btn.setAttribute('aria-pressed', pressed ? 'false' : 'true');
+    });
+  }
+}
+
+export async function initBenchmarkPage(): Promise<void> {
+  await preloadMiniPacks();
+  registerWindowTeardown('bench', () => closeBenchmark({ skipNavigate: true }));
+  wireBenchmarkRunBarForTests();
 
   document.getElementById('benchmarkHistorySelect')?.addEventListener('change', () => {
     void onHistorySelectChange();
@@ -2231,13 +2243,6 @@ export async function initBenchmarkPage(): Promise<void> {
     renderRosterList();
     refreshOverviewPanel();
   });
-
-  for (const btn of document.querySelectorAll<HTMLButtonElement>('.benchmark-standard-toggle')) {
-    btn.addEventListener('click', () => {
-      const pressed = btn.getAttribute('aria-pressed') === 'true';
-      btn.setAttribute('aria-pressed', pressed ? 'false' : 'true');
-    });
-  }
 
   renderRosterList();
   initBenchmarkRosterPicker();

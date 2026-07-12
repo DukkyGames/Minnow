@@ -32,6 +32,13 @@ const WS = 'C:\\workspace\\demo';
 const PLANNER_ID = '11111111-1111-1111-1111-111111111111';
 const PLAN_PATH = 'documentation/plans/demo-plan.md';
 
+/** Sidebar list helpers hide ephemeral empty chats; seed one turn for fixtures. */
+function markSidebarListed(chat: ReturnType<typeof createEmptyChatObject>): void {
+  if (chat.history.length === 0 && !chat.composerDraft?.trim()) {
+    chat.history.push({ role: 'user', content: 'fixture' });
+  }
+}
+
 afterEach(() => {
   flushScheduledSessionSaveForTests();
   setSessionStateForTests(null);
@@ -99,6 +106,7 @@ describe('chat groups', () => {
     taskChat.id = '22222222-2222-2222-2222-222222222222';
     const other = createEmptyChatObject('', WS);
     other.id = '33333333-3333-3333-3333-333333333333';
+    markSidebarListed(other);
     setSessionStateForTests({
       version: 5,
       activeId: planner.id,
@@ -134,6 +142,7 @@ describe('chat groups', () => {
     planner.orchestratePlanPath = PLAN_PATH;
     const other = createEmptyChatObject('', WS);
     other.id = '22222222-2222-2222-2222-222222222222';
+    markSidebarListed(other);
     setSessionStateForTests({
       version: 5,
       activeId: planner.id,

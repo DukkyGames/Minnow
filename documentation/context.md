@@ -1883,6 +1883,7 @@ Claude Code–style **per-chat step tracking** for **regular Build-mode chats** 
 | Tool + validation | [`src/tools/todo-tools.ts`](../src/tools/todo-tools.ts) — `validateTodoWriteArgs`, `executeTodoWrite` |
 | Catalog entry | [`src/tools/definitions.ts`](../src/tools/definitions.ts) — `todo_write` (agents group, label “Updating todo list”) |
 | Mode gating | [`src/chat/modes/tool-groups.ts`](../src/chat/modes/tool-groups.ts) — `todo` group on **build** + **debug** only; stripped on board via [`orchestrate-tool-filter.ts`](../src/chat/modes/orchestrate-tool-filter.ts) |
+| Default enable | [`src/config/defaults.ts`](../src/config/defaults.ts) — `todo_write` in `DEFAULT_ENABLED_TOOL_IDS` (on by default like other build tools) |
 | State | [`src/state/sessions.ts`](../src/state/sessions.ts) — `Chat.todos`, `setChatTodos`, `clearChatTodos`, `getChatTodos`; cleared on **`clearChat`** with `activeGoal` |
 | UI | [`src/ui/todo-panel.ts`](../src/ui/todo-panel.ts) — `syncTodoPanel`, `deriveTodoPanelView` |
 | Prompts | [`build.full.md`](../src/chat/prompts/modes/build.full.md) v7 — **Progress todos** section (conditional on tool availability) |

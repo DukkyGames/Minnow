@@ -3,6 +3,7 @@ import { afterEach, describe, test, beforeEach } from 'node:test';
 import { Window } from 'happy-dom';
 import {
   installHappyDomGlobals,
+  installMinnowPreviewMock,
   seedMinimalSession,
   teardownHappyDomAsync,
 } from '../os/dom-helpers.mts';
@@ -29,6 +30,7 @@ let win;
 function setupSplitDom() {
   win = new Window();
   installHappyDomGlobals(win);
+  installMinnowPreviewMock(win);
   document.body.innerHTML = `
     <button type="button" id="btnStats" aria-expanded="false"></button>
     <aside id="fileSidebar">
@@ -45,8 +47,10 @@ function setupSplitDom() {
         </div>
       </div>
       <div id="splitResizer" class="split-resizer hidden"></div>
-      <section id="fileViewerPane" class="file-viewer-pane hidden"></section>
-      <section id="previewPane" class="preview-pane hidden"></section>
+      <div id="rightPaneColumn" class="right-pane-column hidden">
+        <section id="fileViewerPane" class="file-viewer-pane hidden"></section>
+        <section id="previewPane" class="preview-pane hidden"></section>
+      </div>
     </div>
   `;
 }

@@ -41,10 +41,22 @@ export function formatDraftChatSidebarName(chat: Chat): string {
   return `${label.slice(0, AUTO_TITLE_MAX_LEN - 1)}…`;
 }
 
+/** Board planners and folder-linked chats stay even when still empty. */
+function isProtectedFromEphemeralPrune(chat: Chat, state: SessionState): boolean {
+  if (chat.boardGroupId?.trim() || chat.boardTaskId?.trim()) return true;
+  for (const group of state.groups ?? []) {
+    if (group.plannerChatId?.trim() === chat.id) return true;
+  }
+  return false;
+}
+
 /** Drop unused ephemeral rows while keeping the active chat and sidebar-listed chats. */
 export function pruneEphemeralEmptyChats(state: SessionState, keepChatId: string): void {
   state.chats = state.chats.filter(
-    (chat) => chat.id === keepChatId || !isEphemeralEmptyChat(chat),
+    (chat) =>
+      chat.id === keepChatId ||
+      isProtectedFromEphemeralPrune(chat, state) ||
+      !isEphemeralEmptyChat(chat),
   );
 }
 

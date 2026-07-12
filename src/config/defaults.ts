@@ -47,6 +47,7 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'read_symbol',
   'explain_symbol',
   'read_file',
+  'todo_write',
 ]);
 
 /** Brain tools default to permission `full` (no prompt). */

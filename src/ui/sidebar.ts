@@ -109,6 +109,7 @@ import {
   resetComposerForEphemeralReuse,
   switchComposerDraft,
 } from './composer-draft';
+import { isMainColumnOverlaySuppressingChatDom } from './main-column-overlay';
 
 /** True when every task in a wave is complete (sidebar auto-collapse). */
 function isWaveComplete(tasks: BoardTask[], waveId: number | string): boolean {
@@ -1202,6 +1203,34 @@ export interface CreateChatWithModeOptions {
   initialUserMessage?: string;
 }
 
+/** Apply operating mode and default work-agent binding on an existing chat row. */
+function applyModeIdToChat(chat: Chat, modeId: ModeId): void {
+  chat.modeId = modeId;
+  if (chat.workAgentAuto !== false) {
+    const agent = getDefaultWorkAgentForMode(modeId);
+    chat.workAgentId = agent?.id ?? null;
+  }
+}
+
+/** Board planners must not be repurposed when New chat requests a different mode. */
+function isBoardAnchorChat(chat: Chat): boolean {
+  if (findBoardGroupForPlanner(chat.id)) return true;
+  return Boolean(chat.boardGroupId?.trim() && !chat.boardTaskId?.trim());
+}
+
+/** Sync composer chrome after reusing or retargeting the active chat row. */
+function syncCreateChatChrome(chatId: string): void {
+  syncModeSelectorFromActiveChat();
+  syncComposerReasoningEffortFromActiveChat();
+  void syncOrchestratePlanStripFromActiveChat();
+  syncComposerPinnedSkillFromActiveChat();
+  syncComposerRunTargetFromActiveChat();
+  syncViewModeToggleFromActiveChat();
+  syncWorkAgentDevFromActiveChat();
+  syncReefWidgetSettingsFromActiveChat();
+  onModelRoutingActiveChatChanged(chatId);
+}
+
 /** Start an LLM turn when the user message was already pushed into history. */
 async function kickoffSeededChatTurn(chat: Chat, message: string): Promise<void> {
   const { detectLocalServer } = await import('../tools/client');
@@ -1248,27 +1277,40 @@ export function createChatWithMode(
   const active = getActiveChat();
   flushActiveComposerDraftBeforeNewChat();
 
-  if (
+  const requestedMode = normalizeModeId(options.modeId);
+  const sameWorkspace =
+    normalizeWorkspacePath(active.workspacePath ?? '') === normalizeWorkspacePath(workspacePath);
+  const canReuseEphemeral =
     !options.initialUserMessage?.trim() &&
     isEphemeralEmptyChat(active) &&
-    normalizeWorkspacePath(active.workspacePath ?? '') === normalizeWorkspacePath(workspacePath)
-  ) {
-    resetComposerForEphemeralReuse();
-    recordChatOpened(active.id);
-    paintActiveChatInForegroundShell(active);
-    renderSidebar();
-    scheduleSaveSessions();
-    closeMobileSidebar();
-    applySidebarVisuals();
-    return {
-      ok: true,
-      chatId: active.id,
-      modeId: normalizeModeId(active.modeId),
-      orchestratePlanPath: active.orchestratePlanPath,
-    };
+    sameWorkspace &&
+    !isMainColumnOverlaySuppressingChatDom();
+
+  if (canReuseEphemeral) {
+    const activeMode = normalizeModeId(active.modeId);
+    const needsNewChat = requestedMode !== activeMode && isBoardAnchorChat(active);
+    if (!needsNewChat) {
+      if (requestedMode !== activeMode) {
+        applyModeIdToChat(active, requestedMode);
+      }
+      resetComposerForEphemeralReuse();
+      recordChatOpened(active.id);
+      paintActiveChatInForegroundShell(active);
+      syncCreateChatChrome(active.id);
+      renderSidebar();
+      scheduleSaveSessions();
+      closeMobileSidebar();
+      applySidebarVisuals();
+      return {
+        ok: true,
+        chatId: active.id,
+        modeId: requestedMode,
+        orchestratePlanPath: active.orchestratePlanPath,
+      };
+    }
   }
 
-  const modeId = normalizeModeId(options.modeId);
+  const modeId = requestedMode;
   const { modelId, providerId } = readTopBarModelBinding();
   const chat = createEmptyChatObject(modelId);
   if (providerId) chat.providerId = providerId;
@@ -1303,15 +1345,7 @@ export function createChatWithMode(
   paintActiveChatInForegroundShell(chat);
   void bootGenerationResumeForChat(chat);
   renderStatsForChat(chat);
-  syncModeSelectorFromActiveChat();
-  syncComposerReasoningEffortFromActiveChat();
-  void syncOrchestratePlanStripFromActiveChat();
-  syncComposerPinnedSkillFromActiveChat();
-  syncComposerRunTargetFromActiveChat();
-  syncViewModeToggleFromActiveChat();
-  syncWorkAgentDevFromActiveChat();
-  syncReefWidgetSettingsFromActiveChat();
-  onModelRoutingActiveChatChanged(chat.id);
+  syncCreateChatChrome(chat.id);
   void import('./terminal-panel').then((m) => m.refreshTerminalHistoryForActiveChat());
   syncComposerFromStreamingState();
   renderSidebar();
