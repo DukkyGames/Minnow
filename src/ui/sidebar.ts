@@ -81,6 +81,7 @@ import { onModelRoutingActiveChatChanged } from './settings-model-routing';
 import { syncReefWidgetSettingsFromActiveChat } from './reef-widget-settings';
 import { syncWorkAgentDevFromActiveChat, workAgentSidebarAbbrev } from './work-agent-dev';
 import { updateModelLoadUnloadButtons } from '../api/models';
+import { restoreChatColumnOnChatSelect } from './workspace-split-resize';
 import { updateModelStateDot } from './model-state-dot';
 import { syncModelSelectPicker } from './model-select-picker';
 import { setStatus } from './status';
@@ -1101,6 +1102,7 @@ export function deleteChat(chatId: string, evt?: Event): void {
 }
 
 export function switchChat(id: string): void {
+  restoreChatColumnOnChatSelect();
   if (isOrchestrateHubMounted()) {
     teardownOrchestrateHub();
   }

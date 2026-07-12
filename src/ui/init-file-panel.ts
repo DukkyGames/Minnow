@@ -50,52 +50,15 @@ import { startFileTreeGitStatusPoll } from './file-tree';
 import {
   shouldAutoRestoreViewerSplitOnBoot,
 } from './preview-restore-policy';
+import { bindWorkspaceSplitResizer } from './workspace-split-resize';
+import { sessionState } from '../state/sessions';
 
 let resizerBound = false;
 
 function bindSplitResizer(): void {
   if (resizerBound) return;
-  const resizer = document.getElementById('splitResizer');
-  const split = document.getElementById('workspaceSplit');
-  if (!resizer || !split) return;
   resizerBound = true;
-
-  let dragging = false;
-
-  const onPointerMove = (e: PointerEvent): void => {
-    if (!dragging) return;
-    const rect = split.getBoundingClientRect();
-    const ratio = (e.clientX - rect.left) / rect.width;
-    const clamped = Math.min(0.75, Math.max(0.35, ratio));
-    patchFilePanelState({ splitRatio: clamped });
-    applyFileSidebarVisuals();
-    resizer.setAttribute('aria-valuenow', String(Math.round(clamped * 100)));
-  };
-
-  const stopDrag = (): void => {
-    if (!dragging) return;
-    dragging = false;
-    resizer.classList.remove('dragging');
-    document.body.style.removeProperty('cursor');
-    window.removeEventListener('pointermove', onPointerMove);
-    window.removeEventListener('pointerup', stopDrag);
-    window.removeEventListener('pointercancel', stopDrag);
-    window.removeEventListener('blur', stopDrag);
-  };
-
-  resizer.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    dragging = true;
-    resizer.classList.add('dragging');
-    resizer.setPointerCapture(e.pointerId);
-    document.body.style.cursor = 'col-resize';
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', stopDrag);
-    window.addEventListener('pointercancel', stopDrag);
-    window.addEventListener('blur', stopDrag);
-  });
-
-  resizer.addEventListener('lostpointercapture', stopDrag);
+  bindWorkspaceSplitResizer();
 }
 
 function bindFilePanelControls(): void {
@@ -121,6 +84,7 @@ function bindFilePanelControls(): void {
 
 /** React to local server ping success/failure (after detectLocalServer). */
 export function onFilePanelServerAvailabilityChanged(): void {
+  if (!sessionState) return;
   setFileTreeServerAvailable(getLocalServerAvailable());
   onFileTreeSearchServerChanged();
   if (getLocalServerAvailable()) {

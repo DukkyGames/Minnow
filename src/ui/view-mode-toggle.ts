@@ -174,6 +174,7 @@ export function refreshViewModeToggleDisabled(): void {
  * Syncs board (composer) and chat (board header) toggles from active chat state.
  */
 export function syncViewModeToggleFromActiveChat(): void {
+  if (!sessionState) return;
   const chat = getActiveChat();
   const boardActive = isBoardViewActive();
   const enabled = isViewModeToggleEnabled(chat);
