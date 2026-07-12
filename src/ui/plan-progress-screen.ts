@@ -3,7 +3,12 @@
  */
 
 import { findLastPlanSavePath } from '../chat/orchestrate/plan-from-history';
-import type { SuperPlanStageId, SuperPlanState } from '../chat/super-plan/types';
+import {
+  SUPER_PLAN_STAGE_LABELS,
+  SUPER_PLAN_STAGE_ORDER,
+  type SuperPlanStageId,
+  type SuperPlanState,
+} from '../chat/super-plan/types';
 import { ResearchProgressPanel } from '../research/progress-panel';
 import { subscribeToResearchStream } from '../research/client';
 import type { Chat } from '../types';
@@ -41,6 +46,17 @@ const SUPER_PLAN_STAGE_TO_STEP: Record<SuperPlanStageId, SuperPlanDisplayStepInd
   impeccable: 5,
   finalize: 6,
   present: 6,
+};
+
+/** First pipeline stage represented by each display step (rework target). */
+export const SUPER_PLAN_STEP_TO_STAGE: Record<SuperPlanDisplayStepIndex, SuperPlanStageId> = {
+  0: 'grill',
+  1: 'spec_confirm',
+  2: 'research',
+  3: 'draft1',
+  4: 'review1',
+  5: 'impeccable',
+  6: 'finalize',
 };
 
 export type PlanPreviewActionId = 'revise' | 'orchestrate' | 'build' | 'close';
@@ -83,6 +99,12 @@ export function superPlanStepNodeState(
 export function superPlanProgressLabel(state: SuperPlanState): string {
   const stepIndex = superPlanStateToDisplayStep(state);
   const record = state.stages[state.activeStage];
+  if (state.cancelled) {
+    return 'Super Plan cancelled';
+  }
+  if (state.paused) {
+    return 'Paused — press Resume to continue';
+  }
   if (record?.status === 'error') {
     return record.error?.trim() || 'Super Plan stopped with an error';
   }
@@ -95,6 +117,35 @@ export function superPlanProgressLabel(state: SuperPlanState): string {
     }
   }
   return SUPER_PLAN_DISPLAY_STEPS[stepIndex]?.label ?? 'Planning in progress';
+}
+
+/**
+ * Verbose one-line status for the Super Plan working screen:
+ * pipeline position, exact stage, stage elapsed, and live turn activity.
+ */
+export function superPlanStageDetail(
+  state: SuperPlanState,
+  activity?: { phase?: 'thinking' | 'generating' | 'tools' | null; currentTool?: string },
+): string {
+  const stageId = state.activeStage;
+  const record = state.stages[stageId];
+  const position = SUPER_PLAN_STAGE_ORDER.indexOf(stageId) + 1;
+  const parts = [
+    `Stage ${position} of ${SUPER_PLAN_STAGE_ORDER.length}: ${SUPER_PLAN_STAGE_LABELS[stageId]}`,
+  ];
+  if (record?.status === 'running' && record.startedAt) {
+    parts.push(`running ${formatClock(Date.now() - record.startedAt)}`);
+  } else if (record?.status) {
+    parts.push(record.status === 'blocked_user' ? 'waiting for you' : record.status);
+  }
+  if (activity?.phase === 'tools' && activity.currentTool?.trim()) {
+    parts.push(`tool: ${activity.currentTool.trim()}`);
+  } else if (activity?.phase === 'thinking') {
+    parts.push('model thinking…');
+  } else if (activity?.phase === 'generating') {
+    parts.push('writing…');
+  }
+  return parts.join(' · ');
 }
 
 export interface RegularPlanWorkingStepInput {
@@ -164,22 +215,33 @@ export class PlanProgressPanel {
   private root: HTMLElement | null = null;
   private timerInterval: ReturnType<typeof setInterval> | null = null;
   private timerStart = 0;
+  /** Wall-clock pipeline start (persisted stage timestamps survive remounts). */
+  private baselineEpochMs: number | null = null;
   private stepIndex = 0;
   private statusLabel = '';
-  private status: 'running' | 'done' | 'error' = 'running';
+  private detailText = '';
+  private status: 'running' | 'paused' | 'done' | 'error' = 'running';
   private researchMount: HTMLElement | null = null;
   private researchPanel: ResearchProgressPanel | null = null;
   private researchUnsubscribe: (() => void) | null = null;
+  private wiredResearchId: string | null = null;
+  private readonly onStepClick?: (stepIndex: number) => void;
 
   constructor(
     mount: HTMLElement,
-    options: { variant: PlanProgressVariant; reducedMotion?: boolean } = {
+    options: {
+      variant: PlanProgressVariant;
+      reducedMotion?: boolean;
+      /** Invoked when the user clicks a completed stepper node (rework a phase). */
+      onStepClick?: (stepIndex: number) => void;
+    } = {
       variant: 'regular-plan',
     },
   ) {
     this.mount = mount;
     this.variant = options.variant;
     this.reducedMotion = options.reducedMotion ?? prefersReducedMotion();
+    this.onStepClick = options.onStepClick;
   }
 
   reset(): void {
@@ -191,11 +253,23 @@ export class PlanProgressPanel {
         ? SUPER_PLAN_DISPLAY_STEPS[0]!.label
         : REGULAR_PLAN_DISPLAY_STEPS[0]!.label;
     this.status = 'running';
+    this.detailText = '';
+    this.wiredResearchId = null;
+    this.baselineEpochMs = null;
     this.timerStart = performance.now();
     this.root = document.createElement('div');
     this.root.className = 'dr-prog plan-progress';
     if (this.reducedMotion) {
       this.root.classList.add('plan-progress--reduced-motion');
+    }
+    if (this.onStepClick) {
+      this.root.addEventListener('click', (event) => {
+        const target = event.target as HTMLElement | null;
+        const node = target?.closest?.('[data-step-index]') as HTMLElement | null;
+        if (!node || !this.root?.contains(node)) return;
+        const index = Number(node.dataset.stepIndex);
+        if (Number.isInteger(index)) this.onStepClick?.(index);
+      });
     }
     this.mount.replaceChildren(this.root);
     this.ensureResearchMount();
@@ -209,22 +283,36 @@ export class PlanProgressPanel {
     this.researchPanel?.destroy();
     this.researchPanel = null;
     this.researchMount = null;
+    this.wiredResearchId = null;
     this.mount.replaceChildren();
     this.root = null;
   }
 
-  applySuperPlanState(state: SuperPlanState): void {
+  applySuperPlanState(
+    state: SuperPlanState,
+    activity?: { phase?: 'thinking' | 'generating' | 'tools' | null; currentTool?: string },
+  ): void {
     if (!this.root) return;
     this.stepIndex = superPlanStateToDisplayStep(state);
     this.statusLabel = superPlanProgressLabel(state);
+    this.detailText = superPlanStageDetail(state, activity);
     const record = state.stages[state.activeStage];
-    this.status = record?.status === 'error' ? 'error' : 'running';
+    this.status = state.paused
+      ? 'paused'
+      : record?.status === 'error'
+        ? 'error'
+        : 'running';
+    const startTimes = Object.values(state.stages)
+      .map((r) => r?.startedAt ?? 0)
+      .filter((t) => t > 0);
+    this.baselineEpochMs = startTimes.length ? Math.min(...startTimes) : null;
     if (state.activeStage === 'research' && state.researchId?.trim()) {
       this.wireResearchStream(state.researchId.trim());
-    } else {
+    } else if (this.wiredResearchId) {
       this.stopResearchStream();
       this.researchPanel?.destroy();
       this.researchPanel = null;
+      this.wiredResearchId = null;
       if (this.researchMount) this.researchMount.replaceChildren();
     }
     this.paintSuperPlan(state);
@@ -238,6 +326,7 @@ export class PlanProgressPanel {
     this.stopResearchStream();
     this.researchPanel?.destroy();
     this.researchPanel = null;
+    this.wiredResearchId = null;
     if (this.researchMount) this.researchMount.replaceChildren();
     this.paintRegularPlan();
   }
@@ -278,6 +367,8 @@ export class PlanProgressPanel {
 
   private wireResearchStream(researchId: string): void {
     if (!this.researchMount) return;
+    if (this.wiredResearchId === researchId) return;
+    this.wiredResearchId = researchId;
     this.stopResearchStream();
     this.researchPanel = new ResearchProgressPanel(this.researchMount);
     this.researchPanel.reset();
@@ -314,10 +405,19 @@ export class PlanProgressPanel {
     }
   }
 
+  private elapsedMs(): number {
+    if (this.baselineEpochMs) return Math.max(0, Date.now() - this.baselineEpochMs);
+    return performance.now() - this.timerStart;
+  }
+
   private paintTimer(): void {
     const el = this.root?.querySelector('[data-plan-timer]');
     if (el) {
-      el.textContent = formatClock(performance.now() - this.timerStart);
+      el.textContent = formatClock(this.elapsedMs());
+    }
+    const detailEl = this.root?.querySelector('[data-plan-detail]');
+    if (detailEl && this.detailText) {
+      detailEl.textContent = this.detailText;
     }
   }
 
@@ -327,6 +427,7 @@ export class PlanProgressPanel {
     const label =
       this.status === 'error' ? this.statusLabel : this.statusLabel || steps[this.stepIndex]!.label;
 
+    const clickable = Boolean(this.onStepClick);
     const stepperHtml = steps
       .map((s, i) => {
         const st = state
@@ -344,7 +445,13 @@ export class PlanProgressPanel {
           st === 'done'
             ? '<span class="dr-check" aria-hidden="true">✓</span>'
             : '<span class="dr-node-i"></span>';
-        return `${track}<span class="dr-node ${st}" title="${escapeHtml(s.short)}">${inner}</span>`;
+        const reworkable = clickable && st === 'done';
+        const title = reworkable
+          ? `${escapeHtml(s.short)} — click to rework from this phase`
+          : escapeHtml(s.short);
+        return `${track}<span class="dr-node ${st}${reworkable ? ' dr-node--clickable' : ''}" ${
+          reworkable ? `data-step-index="${i}" role="button" tabindex="0"` : ''
+        } title="${title}">${inner}</span>`;
       })
       .join('');
 
@@ -364,8 +471,9 @@ export class PlanProgressPanel {
       this.root.innerHTML = `
         <div class="dr-prog-head">
           <div class="dr-prog-title"><span class="dr-dot"></span> <span data-plan-label></span></div>
-          <div class="dr-timer research-mono" data-plan-timer>${formatClock(performance.now() - this.timerStart)}</div>
+          <div class="dr-timer research-mono" data-plan-timer>${formatClock(this.elapsedMs())}</div>
         </div>
+        <div class="plan-progress__detail research-mono" data-plan-detail></div>
         <div class="dr-stepper"></div>
         <div class="dr-stepper-labels"></div>
         <div class="plan-progress__research-feed" data-plan-research-feed id="${PLAN_PROGRESS_RESEARCH_MOUNT_ID}"></div>
@@ -378,6 +486,13 @@ export class PlanProgressPanel {
 
     const labelEl = this.root.querySelector('[data-plan-label]');
     if (labelEl) labelEl.textContent = label;
+    const detailEl = this.root.querySelector('[data-plan-detail]') as HTMLElement | null;
+    if (detailEl) {
+      detailEl.textContent = this.detailText;
+      detailEl.hidden = !this.detailText;
+    }
+    this.root.classList.toggle('plan-progress--paused', this.status === 'paused');
+    this.root.classList.toggle('plan-progress--error', this.status === 'error');
     if (stepper) stepper.innerHTML = stepperHtml;
     if (labels) labels.innerHTML = labelsHtml;
     this.researchMount = feed;

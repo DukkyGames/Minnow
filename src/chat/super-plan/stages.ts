@@ -3,7 +3,7 @@
  */
 
 import type { AggregateResult } from '../../agents/types';
-import { spawnSubAgent } from '../../agents/orchestrator';
+import { spawnSubAgent, waitForSubAgent } from '../../agents/orchestrator';
 import {
   getSuperPlanConfigSync,
   loadSuperPlanConfig,
@@ -14,6 +14,7 @@ import { fetchSkillById } from '../../skills/client';
 import { findLastPlanSavePath } from '../orchestrate/plan-from-history';
 import { isFirstUserMessagePending } from '../titles/schedule';
 import {
+  cancelResearch,
   fetchResearchResult,
   fetchResearchStatus,
   startResearch,
@@ -46,7 +47,9 @@ export type SuperPlanStageOutcome =
   | { kind: 'await_stream' }
   | { kind: 'blocked_user'; artifactPath?: string }
   | { kind: 'done'; artifactPath?: string }
-  | { kind: 'skipped' };
+  | { kind: 'skipped' }
+  /** Stage bowed out because the user paused the pipeline (stage reruns on resume). */
+  | { kind: 'paused' };
 
 export interface SuperPlanStageRunHooks {
   /** Fires after Deep Research starts so the progress UI can subscribe to the stream. */
@@ -110,25 +113,64 @@ async function readFileOrEmpty(path: string | undefined): Promise<string> {
   }
 }
 
-async function waitForResearchDone(researchId: string): Promise<string> {
-  const maxAttempts = 120;
-  for (let i = 0; i < maxAttempts; i += 1) {
+const RESEARCH_POLL_INTERVAL_MS = 3000;
+const RESEARCH_TIMEOUT_MS = 30 * 60 * 1000;
+const RESEARCH_MAX_CONSECUTIVE_POLL_FAILURES = 5;
+const REVIEW_SUB_AGENT_TIMEOUT_MS = 20 * 60 * 1000;
+
+type ResearchWaitResult = { kind: 'done'; report: string } | { kind: 'paused' };
+
+/**
+ * Poll a Deep Research run until it finishes. Tolerates transient status-poll
+ * failures, honors pipeline pause/cancel, and times out after 30 minutes with
+ * an actionable error (the stage can be retried from the plan screen).
+ */
+async function waitForResearchDone(
+  chat: Chat,
+  researchId: string,
+): Promise<ResearchWaitResult> {
+  const deadline = Date.now() + RESEARCH_TIMEOUT_MS;
+  let consecutiveFailures = 0;
+  for (;;) {
+    if (chat.superPlan?.cancelled) {
+      void cancelResearch(researchId).catch(() => undefined);
+      throw new Error('Super Plan cancelled');
+    }
+    if (chat.superPlan?.paused) {
+      return { kind: 'paused' };
+    }
     let status;
     try {
       status = await fetchResearchStatus(researchId);
+      consecutiveFailures = 0;
     } catch (err) {
-      throw err instanceof Error ? err : new Error(String(err));
+      consecutiveFailures += 1;
+      if (consecutiveFailures >= RESEARCH_MAX_CONSECUTIVE_POLL_FAILURES) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `Research status unavailable after ${consecutiveFailures} attempts (${message}). ` +
+            'Retry the stage to reattach or start a new research run.',
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, RESEARCH_POLL_INTERVAL_MS));
+      continue;
     }
     if (status.status === 'done') {
       const result = await fetchResearchResult(researchId);
-      return result.result?.trim() ?? '';
+      return { kind: 'done', report: result.result?.trim() ?? '' };
     }
     if (status.status === 'error' || status.status === 'cancelled') {
-      throw new Error(`Research ${status.status}`);
+      throw new Error(
+        `Research ${status.status}${status.status === 'error' ? ' — retry the stage to run it again' : ''}`,
+      );
     }
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    if (Date.now() >= deadline) {
+      throw new Error(
+        'Research timed out after 30 minutes. Retry the stage to reattach or start a new run.',
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, RESEARCH_POLL_INTERVAL_MS));
   }
-  throw new Error('Research timed out');
 }
 
 function isAggregateResult(value: unknown): value is AggregateResult {
@@ -160,7 +202,7 @@ async function runSpecConfirmStage(chat: Chat): Promise<SuperPlanStageOutcome> {
   const state = ensureSuperPlanState(chat);
   const userText = [
     'Super Plan pipeline — **Build spec stage**.',
-    `Write the build specification to \`${state.specPath}\` using \`save_file\`.`,
+    `Write the build specification to exactly \`${state.specPath}\` using \`save_file\` (overwrite if it exists — never pick a different filename).`,
     'Include: goal, scope, MVP boundaries, constraints, key files, risks, and acceptance criteria.',
     'Do not write the full wave plan yet — only the build spec.',
     'Do not include fenced implementation code blocks in the spec.',
@@ -169,6 +211,23 @@ async function runSpecConfirmStage(chat: Chat): Promise<SuperPlanStageOutcome> {
   ].join('\n');
   await runChatTurnForStage(chat, userText, null, null, getSuperPlanConfigSync().plannerModel);
   return { kind: 'await_stream' };
+}
+
+/** Reuse an in-flight or finished research run instead of starting a duplicate. */
+async function resolveReattachableResearchId(state: {
+  researchId?: string;
+}): Promise<string | null> {
+  const existing = state.researchId?.trim();
+  if (!existing) return null;
+  try {
+    const status = await fetchResearchStatus(existing);
+    if (status.status === 'done' || status.status === 'running') {
+      return existing;
+    }
+  } catch {
+    /* stale id — start fresh */
+  }
+  return null;
 }
 
 async function runResearchStage(
@@ -181,27 +240,35 @@ async function runResearchStage(
   if (state.specPath) {
     specContent = await readFileOrEmpty(state.specPath);
   }
-  const query = [
-    state.prompt,
-    specContent ? `\n\nBuild spec:\n${specContent.slice(0, 4000)}` : '',
-  ]
-    .join('')
-    .trim();
-  const { researchId } = await startResearch({
-    query,
-    scope: config.researchScope,
-    maxRounds: resolveSuperPlanResearchMaxRounds(config),
-    ...(config.researchModel.providerId?.trim()
-      ? { providerId: config.researchModel.providerId.trim() }
-      : {}),
-    ...(config.researchModel.modelId?.trim()
-      ? { model: config.researchModel.modelId.trim() }
-      : {}),
-  });
+
+  let researchId = await resolveReattachableResearchId(state);
+  if (!researchId) {
+    const query = [
+      state.prompt,
+      specContent ? `\n\nBuild spec:\n${specContent.slice(0, 4000)}` : '',
+    ]
+      .join('')
+      .trim();
+    const started = await startResearch({
+      query,
+      scope: config.researchScope,
+      maxRounds: resolveSuperPlanResearchMaxRounds(config),
+      ...(config.researchModel.providerId?.trim()
+        ? { providerId: config.researchModel.providerId.trim() }
+        : {}),
+      ...(config.researchModel.modelId?.trim()
+        ? { model: config.researchModel.modelId.trim() }
+        : {}),
+    });
+    researchId = started.researchId;
+  }
   patchSuperPlanState(chat, { researchId });
   hooks?.onResearchStarted?.(researchId);
-  const report = await waitForResearchDone(researchId);
-  const body = report || `# Research report\n\nNo findings for: ${state.prompt}`;
+  const wait = await waitForResearchDone(chat, researchId);
+  if (wait.kind === 'paused') {
+    return { kind: 'paused' };
+  }
+  const body = wait.report || `# Research report\n\nNo findings for: ${state.prompt}`;
   await executeTool('save_file', {
     path: state.researchPath!,
     content: body,
@@ -221,7 +288,7 @@ async function runDraftStage(
   const planPath = state.planPath ?? superPlanPlanPath(state.slug);
   const lines = [
     `Super Plan pipeline — **Draft ${pass}**.`,
-    `Write the executable plan to \`${planPath}\` using \`save_file\`.`,
+    `Write the executable plan to exactly \`${planPath}\` using \`save_file\` (overwrite if it exists — never pick a different filename).`,
     'Follow the Super Plan markdown structure (front-matter todos, waves, Build/Test per task).',
     'Use real file paths from the codebase. No fenced implementation code — prose and inline identifiers only.',
     `Read \`${state.specPath}\` and \`${state.researchPath}\` first.`,
@@ -264,10 +331,10 @@ async function runReviewStage(
     priorCritique: pass === 2 ? state.review1Critique : undefined,
   });
 
-  const result = await spawnSubAgent({
+  const spawned = await spawnSubAgent({
     type: 'plan-reviewer',
     task,
-    wait: true,
+    wait: false,
     parentChatId: chat.id,
     modeId: 'super-plan',
     ...(config.reviewerModel.providerId?.trim()
@@ -277,6 +344,24 @@ async function runReviewStage(
       ? { modelId: config.reviewerModel.modelId.trim() }
       : {}),
   });
+
+  // Bound the wait so a hung reviewer cannot stall the pipeline forever;
+  // aborting the wait also cancels the sub-agent run.
+  let result: unknown;
+  try {
+    result = await waitForSubAgent(
+      spawned.runId,
+      AbortSignal.timeout(REVIEW_SUB_AGENT_TIMEOUT_MS),
+    );
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(
+        `Plan review (pass ${pass}) timed out after ${REVIEW_SUB_AGENT_TIMEOUT_MS / 60000} minutes — ` +
+          'retry the stage, or lower review rounds in Super Plan settings.',
+      );
+    }
+    throw err;
+  }
 
   if (isAggregateResult(result)) {
     const critique = formatReviewCritiqueForPass2(
@@ -426,7 +511,9 @@ export async function finalizeStreamStage(
       const specPath = state.specPath!;
       const exists = await fileExists(specPath);
       if (!exists) {
-        throw new Error(`Build spec was not saved to ${specPath}`);
+        throw new Error(
+          `Build spec was not saved to ${specPath}. Retry the stage to regenerate it.`,
+        );
       }
       markSuperPlanStageStatus(chat, 'spec_confirm', 'blocked_user', {
         artifactPath: specPath,
@@ -441,8 +528,12 @@ export async function finalizeStreamStage(
         state.planPath ??
         superPlanPlanPath(state.slug);
       if (!(await fileExists(planPath))) {
-        throw new Error(`Plan draft was not saved to ${planPath}`);
+        throw new Error(
+          `Plan draft was not saved to ${planPath}. Retry the stage to draft it again.`,
+        );
       }
+      // Persist the actual save location so later stages and previews agree on one file.
+      patchSuperPlanState(chat, { planPath });
       markSuperPlanStageStatus(chat, stageId, 'done', { artifactPath: planPath });
       return { kind: 'done', artifactPath: planPath };
     }

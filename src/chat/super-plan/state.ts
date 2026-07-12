@@ -149,11 +149,21 @@ export function markSuperPlanStageStatus(
 }
 
 export function resetSuperPlanStage(chat: Chat, stageId: SuperPlanStageId): void {
-  patchSuperPlanStage(chat, stageId, createPendingStageRecord());
+  const state = ensureSuperPlanState(chat);
+  chat.superPlan = {
+    ...state,
+    stages: { ...state.stages, [stageId]: createPendingStageRecord() },
+  };
+  touchChat(chat);
+  scheduleSaveSessions();
+}
+
+export function setSuperPlanPaused(chat: Chat, paused: boolean): SuperPlanState {
+  return patchSuperPlanState(chat, { paused });
 }
 
 export function cancelSuperPlanState(chat: Chat): void {
-  patchSuperPlanState(chat, { cancelled: true });
+  patchSuperPlanState(chat, { cancelled: true, paused: false });
   const state = ensureSuperPlanState(chat);
   const active = state.stages[state.activeStage];
   if (active && active.status !== 'done') {
@@ -161,4 +171,31 @@ export function cancelSuperPlanState(chat: Chat): void {
       error: 'Cancelled by user',
     });
   }
+}
+
+/** Reset `stageId` and every later stage to pending (rework support). */
+export function rewindSuperPlanStages(chat: Chat, stageId: SuperPlanStageId): SuperPlanState {
+  const state = ensureSuperPlanState(chat);
+  const startIndex = SUPER_PLAN_STAGE_ORDER.indexOf(stageId);
+  if (startIndex < 0) return state;
+  const stages = { ...state.stages };
+  for (let i = startIndex; i < SUPER_PLAN_STAGE_ORDER.length; i += 1) {
+    stages[SUPER_PLAN_STAGE_ORDER[i]!] = createPendingStageRecord();
+  }
+  const reviewIndex = SUPER_PLAN_STAGE_ORDER.indexOf('review1');
+  const review2Index = SUPER_PLAN_STAGE_ORDER.indexOf('review2');
+  chat.superPlan = {
+    ...state,
+    activeStage: stageId,
+    stages,
+    paused: false,
+    ...(startIndex <= reviewIndex ? { review1Critique: undefined } : {}),
+    ...(startIndex <= review2Index ? { review2Critique: undefined } : {}),
+    ...(startIndex <= SUPER_PLAN_STAGE_ORDER.indexOf('research')
+      ? { researchId: undefined }
+      : {}),
+  };
+  touchChat(chat);
+  scheduleSaveSessions();
+  return chat.superPlan;
 }

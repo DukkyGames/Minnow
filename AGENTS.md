@@ -12,7 +12,7 @@ Minnow is a **Vite + TypeScript SPA** plus a **Node tool server** (`server.js`) 
 - **MinnowOS apps:** Chat (desktop), Code, Models, Compare, Bench, Research, Experts, Brain, Calendar, Email, Scheduler, Settings ([`src/os/`](src/os/)).
 - **Persistence** lives under `~/.minnow` when the tool server runs.
 
-The **authoritative reference** is [`documentation/context.md`](documentation/context.md) — read it before touching unfamiliar subsystems. Setup/scripts: [`README.md`](README.md). Guides: [`documentation/guides/`](documentation/guides/).
+The **authoritative reference** is [`documentation/context.md`](documentation/context.md) — read it before touching unfamiliar subsystems. Product overview: [`README.md`](README.md). Setup/scripts: [`documentation/getting-started.md`](documentation/getting-started.md). Guides: [`documentation/guides/`](documentation/guides/).
 
 ## Running the app
 

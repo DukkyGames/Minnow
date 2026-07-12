@@ -48,6 +48,37 @@ function appendNumberField(
   return input;
 }
 
+function appendToggleField(
+  container: HTMLElement,
+  labelText: string,
+  inputId: string,
+  hint: string,
+): HTMLInputElement {
+  const field = document.createElement('div');
+  field.className = 'settings-field';
+
+  const label = document.createElement('label');
+  label.className = 'settings-field-label settings-field-label--inline';
+  label.htmlFor = inputId;
+
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.id = inputId;
+  input.className = 'settings-checkbox';
+
+  label.appendChild(input);
+  label.appendChild(document.createTextNode(` ${labelText}`));
+
+  const hintEl = document.createElement('p');
+  hintEl.className = 'settings-field-hint';
+  hintEl.textContent = hint;
+
+  field.appendChild(label);
+  field.appendChild(hintEl);
+  container.appendChild(field);
+  return input;
+}
+
 function appendSelectField(
   container: HTMLElement,
   labelText: string,
@@ -121,11 +152,25 @@ export function mountSuperPlanSettings(container: HTMLElement): void {
     }),
   );
 
+  const grillEnabledInput = appendToggleField(
+    wrap,
+    'Grill interview stage',
+    'superPlanGrillEnabled',
+    'Uncheck to skip the clarifying-questions interview and go straight to the build spec.',
+  );
+
+  const researchEnabledInput = appendToggleField(
+    wrap,
+    'Deep Research stage',
+    'superPlanResearchEnabled',
+    'Uncheck to skip Deep Research and draft the plan from the build spec alone.',
+  );
+
   const reviewRoundsInput = appendNumberField(
     wrap,
     'Review rounds',
     'superPlanReviewRounds',
-    'Number of draft/review cycles before Impeccable and finalize (default 2).',
+    'Number of review cycles after Draft 1 (0 = draft only; default 2).',
     0,
     4,
   );
@@ -237,6 +282,8 @@ export function mountSuperPlanSettings(container: HTMLElement): void {
   const persist = async (): Promise<void> => {
     await saveSuperPlanConfig({
       reviewRounds: Number(reviewRoundsInput.value),
+      grillEnabled: grillEnabledInput.checked,
+      researchEnabled: researchEnabledInput.checked,
       grillQuestionBudget: Number(grillBudgetInput.value),
       impeccable: impeccableSelect.value as SuperPlanImpeccableMode,
       researchScope: researchScopeSelect.value as ResearchScope,
@@ -257,6 +304,8 @@ export function mountSuperPlanSettings(container: HTMLElement): void {
     });
   };
 
+  grillEnabledInput.addEventListener('change', () => void persist());
+  researchEnabledInput.addEventListener('change', () => void persist());
   reviewRoundsInput.addEventListener('change', () => void persist());
   grillBudgetInput.addEventListener('change', () => void persist());
   impeccableSelect.addEventListener('change', () => void persist());
@@ -283,6 +332,8 @@ export function mountSuperPlanSettings(container: HTMLElement): void {
 
   void (async () => {
     const config = await loadSuperPlanConfig();
+    grillEnabledInput.checked = config.grillEnabled;
+    researchEnabledInput.checked = config.researchEnabled;
     reviewRoundsInput.value = String(config.reviewRounds);
     grillBudgetInput.value = String(config.grillQuestionBudget);
     impeccableSelect.value = config.impeccable;

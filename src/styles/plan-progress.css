@@ -46,6 +46,27 @@
   color: var(--mn-fg-muted);
 }
 
+.orchestrate-plan-screen__progress-mount .plan-progress__detail {
+  margin-top: 8px;
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: var(--mn-fg-muted);
+}
+
+.orchestrate-plan-screen__progress-mount .plan-progress__detail[hidden] {
+  display: none;
+}
+
+.orchestrate-plan-screen__progress-mount .plan-progress--paused .dr-dot {
+  background: var(--mn-fg-subtle);
+  animation: none;
+}
+
+.orchestrate-plan-screen__progress-mount .plan-progress--error .dr-dot {
+  background: var(--mn-danger, #d66);
+  animation: none;
+}
+
 .orchestrate-plan-screen__progress-mount .dr-stepper {
   display: flex;
   align-items: center;
@@ -76,6 +97,14 @@
 .orchestrate-plan-screen__progress-mount .dr-node.done {
   background: #7fc99a;
   border-color: #7fc99a;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-node--clickable {
+  cursor: pointer;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-node--clickable:hover {
+  box-shadow: 0 0 0 4px var(--mn-accent-soft);
 }
 
 .orchestrate-plan-screen__progress-mount .dr-node.active {

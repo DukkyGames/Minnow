@@ -154,15 +154,19 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   if (codeMount) {
     restoreOrchestratePlanScreenSessionFromChat(chat);
   }
-  if (codeMount && isOrchestratePlanScreenSuspendedForChat(chat)) {
+  // Suspended plan session: keep the resume banner but still render the
+  // transcript beneath it (a banner-only page reads as a blank/lost chat).
+  const suspendedPlanChat = codeMount && isOrchestratePlanScreenSuspendedForChat(chat);
+  if (suspendedPlanChat) {
     teardownHub();
-    area.innerHTML = '';
-    showOrchestratePlanScreenSuspendedBanner(area, chat);
-    renderPersistedSubAgentCardsForChat(chat);
-    refreshContextUsageRing();
-    return;
-  }
-  if (codeMount && !isOrchestratePlanScreenSessionActive(chat)) {
+    if (!chat.history.length) {
+      area.innerHTML = '';
+      showOrchestratePlanScreenSuspendedBanner(area, chat);
+      renderPersistedSubAgentCardsForChat(chat);
+      refreshContextUsageRing();
+      return;
+    }
+  } else if (codeMount && !isOrchestratePlanScreenSessionActive(chat)) {
     teardownOrchestratePlanScreen();
   } else if (codeMount && isOrchestratePlanScreenMounted()) {
     teardownOrchestratePlanScreenDom();
@@ -193,6 +197,9 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
     teardownHub();
   }
   area.innerHTML = '';
+  if (suspendedPlanChat) {
+    showOrchestratePlanScreenSuspendedBanner(area, chat);
+  }
   const toolResultMap = new Map<
     string,
     {

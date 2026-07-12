@@ -18,6 +18,20 @@ export const SUPER_PLAN_STAGE_ORDER = [
 
 export type SuperPlanStageId = (typeof SUPER_PLAN_STAGE_ORDER)[number];
 
+/** Human-readable stage names for progress and error surfaces. */
+export const SUPER_PLAN_STAGE_LABELS: Record<SuperPlanStageId, string> = {
+  grill: 'Interview',
+  spec_confirm: 'Build spec',
+  research: 'Research',
+  draft1: 'Draft 1',
+  review1: 'Review 1',
+  draft2: 'Draft 2',
+  review2: 'Review 2',
+  impeccable: 'Impeccable UI pass',
+  finalize: 'Finalize',
+  present: 'Present',
+};
+
 export type SuperPlanStageStatus =
   | 'pending'
   | 'running'
@@ -51,6 +65,8 @@ export interface SuperPlanState {
   uiInvolved?: boolean;
   /** Set when the user or controller cancels the pipeline. */
   cancelled?: boolean;
+  /** Set when the user pauses the pipeline (Stop button / manual stop); resumable. */
+  paused?: boolean;
   /** Final plan path under documentation/plans/<slug>.md */
   planPath?: string;
   /** Build spec path under documentation/plans/references/<slug>-spec.md */

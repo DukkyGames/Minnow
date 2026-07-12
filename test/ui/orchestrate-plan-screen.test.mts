@@ -350,6 +350,11 @@ describe('orchestrate plan screen', () => {
     renderChatFromHistory(chat);
     assert.ok(document.getElementById(ORCHESTRATE_PLAN_BANNER_ID));
     assert.equal(document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID), null);
+    assert.match(
+      document.getElementById('chatArea')?.textContent ?? '',
+      /Add OAuth login/,
+      'transcript should render beneath the resume banner (not a blank page)',
+    );
   });
 
   test('view chat during grill questions migrates strip to composer without cancelling', async () => {

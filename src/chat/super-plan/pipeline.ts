@@ -5,9 +5,14 @@
 import type { SuperPlanConfig } from '../../config/super-plan-meta';
 import { nextSuperPlanStage, type SuperPlanStageId } from './types';
 
+/**
+ * Minimum reviewRounds required for a draft/review stage to run.
+ * draft1 always runs; review1 + draft2 (the pass that applies review1's
+ * critique) need at least 1 round; review2 needs 2.
+ */
 function reviewStageIndex(stageId: SuperPlanStageId): number | null {
-  if (stageId === 'draft1' || stageId === 'review1') return 1;
-  if (stageId === 'draft2' || stageId === 'review2') return 2;
+  if (stageId === 'review1' || stageId === 'draft2') return 1;
+  if (stageId === 'review2') return 2;
   return null;
 }
 
@@ -19,6 +24,14 @@ export function shouldSkipSuperPlanStage(
   const reviewIndex = reviewStageIndex(stageId);
   if (reviewIndex != null) {
     return reviewIndex > config.reviewRounds;
+  }
+
+  if (stageId === 'grill' && config.grillEnabled === false) {
+    return true;
+  }
+
+  if (stageId === 'research' && config.researchEnabled === false) {
+    return true;
   }
 
   if (stageId === 'impeccable' && config.impeccable === 'never') {

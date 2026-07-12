@@ -17,6 +17,10 @@ export interface SuperPlanStageModelBinding {
 export interface SuperPlanConfig {
   /** Number of draft/review cycles (default 2). */
   reviewRounds: number;
+  /** Run the grill interview stage (default true). */
+  grillEnabled: boolean;
+  /** Run the Deep Research stage (default true). */
+  researchEnabled: boolean;
   /** Target question count for the grill stage (~20 default). */
   grillQuestionBudget: number;
   /** Impeccable UI stage: auto when UI detected, always, or never. */
@@ -39,6 +43,8 @@ const SUPER_PLAN_META_STORAGE_KEY = 'minnow.superPlanMeta';
 
 export const DEFAULT_SUPER_PLAN_CONFIG: SuperPlanConfig = {
   reviewRounds: 2,
+  grillEnabled: true,
+  researchEnabled: true,
   grillQuestionBudget: 20,
   impeccable: 'auto',
   researchScope: 'both',
@@ -106,6 +112,8 @@ function parseSuperPlanBlock(raw: unknown): SuperPlanConfig {
       : {};
   return {
     reviewRounds: clampReviewRounds(block.reviewRounds),
+    grillEnabled: block.grillEnabled !== false,
+    researchEnabled: block.researchEnabled !== false,
     grillQuestionBudget: clampGrillQuestionBudget(block.grillQuestionBudget),
     impeccable: parseImpeccableMode(block.impeccable),
     researchScope: parseResearchScope(block.researchScope),
@@ -195,6 +203,8 @@ export function getSuperPlanReviewPasses(config: SuperPlanConfig): number[] {
 function serializeSuperPlanForMeta(config: SuperPlanConfig): Record<string, unknown> {
   return {
     reviewRounds: config.reviewRounds,
+    grillEnabled: config.grillEnabled,
+    researchEnabled: config.researchEnabled,
     grillQuestionBudget: config.grillQuestionBudget,
     impeccable: config.impeccable,
     researchScope: config.researchScope,
@@ -218,6 +228,9 @@ export async function saveSuperPlanConfig(
       patch.reviewRounds !== undefined
         ? clampReviewRounds(patch.reviewRounds)
         : current.reviewRounds,
+    grillEnabled: patch.grillEnabled !== undefined ? patch.grillEnabled !== false : current.grillEnabled,
+    researchEnabled:
+      patch.researchEnabled !== undefined ? patch.researchEnabled !== false : current.researchEnabled,
     grillQuestionBudget:
       patch.grillQuestionBudget !== undefined
         ? clampGrillQuestionBudget(patch.grillQuestionBudget)

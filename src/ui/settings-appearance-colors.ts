@@ -58,6 +58,8 @@ import { getStoredTheme } from '../theme';
 
 import { createSettingsToggleRow } from './settings-switch';
 
+import { setStatus } from './status';
+
 
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -81,6 +83,20 @@ function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 
+
+/** Trigger a browser download for a text payload (Electron-safe). */
+function downloadTextFile(filename: string, text: string, mimeType: string): void {
+  const blob = new Blob([text], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
 
 function labelForKey(key: CoreThemeTokenKey): string {
 
@@ -446,29 +462,25 @@ export function appendAppearanceCustomColors(mount: HTMLElement): void {
 
   exportBtn.type = 'button';
 
-  exportBtn.addEventListener('click', async () => {
+  exportBtn.addEventListener('click', () => {
 
     const json = exportCustomThemeJson();
 
     try {
 
-      await navigator.clipboard.writeText(json);
+      downloadTextFile('minnow-theme.json', json, 'application/json');
+
+      setStatus('ok', 'Theme exported as minnow-theme.json');
 
     } catch {
 
-      const blob = new Blob([json], { type: 'application/json' });
+      void navigator.clipboard.writeText(json).then(
 
-      const url = URL.createObjectURL(blob);
+        () => setStatus('ok', 'Theme JSON copied to clipboard'),
 
-      const a = document.createElement('a');
+        () => setStatus('err', 'Could not export theme'),
 
-      a.href = url;
-
-      a.download = 'minnow-theme.json';
-
-      a.click();
-
-      URL.revokeObjectURL(url);
+      );
 
     }
 

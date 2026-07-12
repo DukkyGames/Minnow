@@ -10,11 +10,20 @@ import {
 } from '../chat/orchestrate/plan-path';
 import { normalizeModeId } from '../chat/modes/types';
 import {
+  cancelSuperPlan,
   getSuperPlanCheckpointKind,
+  isSuperPlanAdvancing,
+  isSuperPlanStalled,
+  pauseSuperPlan,
   resumeSuperPlanAfterUser,
+  resumeSuperPlanPipeline,
+  retrySuperPlanStage,
+  rewindSuperPlanToStage,
+  skipSuperPlanStage,
   startSuperPlan,
   subscribeSuperPlanController,
 } from '../chat/super-plan/controller';
+import { SUPER_PLAN_STAGE_LABELS } from '../chat/super-plan/types';
 import { isFirstUserMessagePending } from '../chat/titles/schedule';
 import {
   getMainTurnActivity,
@@ -54,9 +63,12 @@ import {
 import {
   PLAN_PROGRESS_MOUNT_ID,
   PlanProgressPanel,
+  SUPER_PLAN_DISPLAY_STEPS,
+  SUPER_PLAN_STEP_TO_STAGE,
   buildPlanPreviewPopoutDom,
   prefersReducedMotion,
   regularPlanWorkingStepFromChat,
+  type SuperPlanDisplayStepIndex,
 } from './plan-progress-screen';
 
 export const ORCHESTRATE_PLAN_SCREEN_ROOT_ID = 'orchestratePlanScreen';
@@ -215,9 +227,18 @@ function resolvePlanSessionArtifactPath(
 ): string | undefined {
   const sp = chat.superPlan;
   if (!sp) return undefined;
-  if (phase === 'spec_confirm') return sp.specPath?.trim() || undefined;
+  if (phase === 'spec_confirm') {
+    return (
+      sp.stages.spec_confirm?.artifactPath?.trim() || sp.specPath?.trim() || undefined
+    );
+  }
   if (phase === 'preview') {
-    return sp.planPath?.trim() || findLastPlanSavePath(chat.history) || undefined;
+    return (
+      sp.stages.present?.artifactPath?.trim() ||
+      sp.planPath?.trim() ||
+      findLastPlanSavePath(chat.history) ||
+      undefined
+    );
   }
   return sp.planPath?.trim() || undefined;
 }
@@ -392,6 +413,32 @@ function resolvePlanScreenWorkingPhase(chat: Chat): 'working' | 'super-plan-work
   return normalizeModeId(chat.modeId) === 'super-plan' ? 'super-plan-working' : 'working';
 }
 
+/** Confirm + rewind when the user clicks a completed stepper node. */
+function handleSuperPlanStepRework(chatId: string, stepIndex: number): void {
+  const chat = findChatById(chatId);
+  if (!chat?.superPlan || chat.superPlan.cancelled) return;
+  const stageId = SUPER_PLAN_STEP_TO_STAGE[stepIndex as SuperPlanDisplayStepIndex];
+  if (!stageId) return;
+  const stepLabel =
+    SUPER_PLAN_DISPLAY_STEPS[stepIndex]?.label ?? SUPER_PLAN_STAGE_LABELS[stageId];
+  const confirmed =
+    typeof window === 'undefined' ||
+    typeof window.confirm !== 'function' ||
+    window.confirm(
+      `Rework the pipeline from "${stepLabel}"? Later stages will run again.`,
+    );
+  if (!confirmed) return;
+  if (planSession?.chatId === chat.id) {
+    planSession.phase = 'super-plan-working';
+    renderOrchestratePlanScreen({
+      phase: 'super-plan-working',
+      chatId: chat.id,
+      savedPrompt: planSession.savedPrompt,
+    });
+  }
+  void rewindSuperPlanToStage(chat, stageId);
+}
+
 function mountPlanProgressPanel(chat: Chat): void {
   const mount = document.getElementById(PLAN_PROGRESS_MOUNT_ID);
   if (!mount) return;
@@ -402,11 +449,18 @@ function mountPlanProgressPanel(chat: Chat): void {
   planProgressPanel = new PlanProgressPanel(mount, {
     variant,
     reducedMotion: prefersReducedMotion(),
+    ...(variant === 'super-plan'
+      ? { onStepClick: (stepIndex: number) => handleSuperPlanStepRework(chat.id, stepIndex) }
+      : {}),
   });
   planProgressPanel.reset();
 
   if (variant === 'super-plan' && chat.superPlan) {
-    planProgressPanel.applySuperPlanState(chat.superPlan);
+    const activity = getMainTurnActivity(chat.id);
+    planProgressPanel.applySuperPlanState(chat.superPlan, {
+      phase: activity?.phase ?? null,
+      currentTool: activity?.currentTool,
+    });
   } else {
     const activity = getMainTurnActivity(chat.id);
     const step = regularPlanWorkingStepFromChat(
@@ -421,7 +475,12 @@ function mountPlanProgressPanel(chat: Chat): void {
 function syncPlanProgressFromChat(chat: Chat): void {
   if (!planProgressPanel) return;
   if (normalizeModeId(chat.modeId) === 'super-plan' && chat.superPlan) {
-    planProgressPanel.applySuperPlanState(chat.superPlan);
+    const activity = getMainTurnActivity(chat.id);
+    planProgressPanel.applySuperPlanState(chat.superPlan, {
+      phase: activity?.phase ?? null,
+      currentTool: activity?.currentTool,
+    });
+    syncWorkingPhaseControls(chat);
     return;
   }
   const activity = getMainTurnActivity(chat.id);
@@ -431,6 +490,21 @@ function syncPlanProgressFromChat(chat: Chat): void {
     activity?.currentTool,
   );
   planProgressPanel.applyRegularPlanStep(step);
+}
+
+/** Toggle Pause/Resume visibility on the working screen from live pipeline state. */
+function syncWorkingPhaseControls(chat: Chat): void {
+  if (typeof document === 'undefined') return;
+  const root = document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID);
+  if (!root) return;
+  const pauseBtn = root.querySelector('[data-plan-pause]') as HTMLButtonElement | null;
+  const resumeBtn = root.querySelector('[data-plan-resume]') as HTMLButtonElement | null;
+  if (!pauseBtn && !resumeBtn) return;
+  const paused = Boolean(chat.superPlan?.paused);
+  const stalled = !paused && isSuperPlanStalled(chat) && !isSuperPlanAdvancing(chat.id);
+  const showResume = paused || stalled;
+  if (pauseBtn) pauseBtn.hidden = showResume;
+  if (resumeBtn) resumeBtn.hidden = !showResume;
 }
 
 function wirePlanScreenActivityListener(chatId: string): void {
@@ -473,6 +547,28 @@ function resolveOrCreatePlanChat(): Chat {
   return getActiveChat();
 }
 
+/**
+ * True when the plan screen may repaint #chatArea for this chat right now.
+ * Never steal the view while the session is suspended (user is reading the
+ * chat transcript or working in another chat).
+ */
+function canRepaintPlanScreen(chat: Chat): boolean {
+  const session = planSession;
+  if (!session || session.chatId !== chat.id) return false;
+  if (session.planScreenSuspended) return false;
+  return getActiveChat().id === chat.id;
+}
+
+/** Refresh the suspended banner text in place (transcript stays untouched). */
+function refreshSuspendedPlanBanner(chat: Chat): void {
+  if (typeof document === 'undefined') return;
+  if (!planSession || planSession.chatId !== chat.id) return;
+  const banner = document.getElementById(ORCHESTRATE_PLAN_BANNER_ID);
+  if (!banner) return;
+  const text = banner.querySelector('.orchestrate-plan-screen-banner__text');
+  if (text) text.textContent = suspendedPlanBannerText(getOrchestratePlanScreenSession());
+}
+
 async function syncPlanScreenFromSuperPlan(chat: Chat): Promise<void> {
   const session = planSession;
   if (!session || session.chatId !== chat.id) return;
@@ -480,18 +576,16 @@ async function syncPlanScreenFromSuperPlan(chat: Chat): Promise<void> {
   const checkpoint = getSuperPlanCheckpointKind(chat);
   if (checkpoint === 'spec_confirm') {
     const specPath =
-      chat.superPlan?.specPath?.trim() ||
       chat.superPlan?.stages.spec_confirm?.artifactPath?.trim() ||
+      chat.superPlan?.specPath?.trim() ||
       '';
-    const previewMarkdown = specPath ? await readPlanScreenArtifactMarkdown(specPath) : '';
-    if (planSession) {
-      planSession.phase = 'spec_confirm';
-      planSession.planPath = specPath;
-    }
-    if (planSession?.planScreenSuspended && getActiveChat().id === chat.id) {
-      renderChatFromHistory(chat);
+    session.phase = 'spec_confirm';
+    session.planPath = specPath;
+    if (!canRepaintPlanScreen(chat)) {
+      refreshSuspendedPlanBanner(chat);
       return;
     }
+    const previewMarkdown = specPath ? await readPlanScreenArtifactMarkdown(specPath) : '';
     renderOrchestratePlanScreen({
       phase: 'spec_confirm',
       chatId: chat.id,
@@ -504,24 +598,19 @@ async function syncPlanScreenFromSuperPlan(chat: Chat): Promise<void> {
 
   if (checkpoint === 'present') {
     const planPath =
-      chat.superPlan?.planPath?.trim() ?? findLastPlanSavePath(chat.history) ?? '';
-    let previewMarkdown = '';
-    if (planPath) {
-      try {
-        const result = await executeTool('read_file', { path: planPath });
-        previewMarkdown = result.content;
-      } catch {
-        previewMarkdown = '';
-      }
-    }
-    if (planSession) {
-      planSession.planPath = planPath;
-      planSession.phase = 'preview';
-    }
-    if (planSession?.planScreenSuspended && getActiveChat().id === chat.id) {
-      renderChatFromHistory(chat);
+      chat.superPlan?.stages.present?.artifactPath?.trim() ||
+      chat.superPlan?.planPath?.trim() ||
+      findLastPlanSavePath(chat.history) ||
+      '';
+    session.phase = 'preview';
+    session.planPath = planPath;
+    if (!canRepaintPlanScreen(chat)) {
+      refreshSuspendedPlanBanner(chat);
       return;
     }
+    const previewMarkdown = planPath
+      ? await readPlanScreenArtifactMarkdown(planPath)
+      : '';
     renderOrchestratePlanScreen({
       phase: 'preview',
       chatId: chat.id,
@@ -534,22 +623,43 @@ async function syncPlanScreenFromSuperPlan(chat: Chat): Promise<void> {
 
   const activeStage = chat.superPlan?.activeStage;
   const stageStatus = activeStage ? chat.superPlan?.stages[activeStage]?.status : undefined;
-  if (stageStatus === 'error') {
+  if (stageStatus === 'error' && !chat.superPlan?.cancelled) {
+    session.phase = 'error';
+    session.errorMessage =
+      chat.superPlan?.stages[activeStage!]?.error ??
+      'Super Plan stopped with an error. Open the chat to review.';
+    if (!canRepaintPlanScreen(chat)) {
+      refreshSuspendedPlanBanner(chat);
+      return;
+    }
     renderOrchestratePlanScreen({
       phase: 'error',
       chatId: chat.id,
       savedPrompt: session.savedPrompt,
-      errorMessage:
-        chat.superPlan?.stages[activeStage!]?.error ??
-        'Super Plan stopped with an error. Open the chat to review.',
+      errorMessage: session.errorMessage,
     });
     return;
   }
 
-  if (planSession) {
-    planSession.phase = 'super-plan-working';
+  const wasCheckpointPhase =
+    session.phase === 'spec_confirm' || session.phase === 'preview' || session.phase === 'error';
+  const keepQuestions =
+    session.phase === 'questions' && isAskQuestionModalOpenForChat(chat.id);
+  session.phase = keepQuestions ? 'questions' : 'super-plan-working';
+  if (!canRepaintPlanScreen(chat)) {
+    refreshSuspendedPlanBanner(chat);
+    return;
+  }
+  if (wasCheckpointPhase || !document.getElementById(PLAN_PROGRESS_MOUNT_ID)) {
+    renderOrchestratePlanScreen({
+      phase: session.phase,
+      chatId: chat.id,
+      savedPrompt: session.savedPrompt,
+    });
+    return;
   }
   syncPlanProgressFromChat(chat);
+  syncWorkingPhaseControls(chat);
 }
 
 function wireSuperPlanControllerListener(chat: Chat): void {
@@ -580,10 +690,8 @@ async function onPlanSessionStreamEnd(chatId: string): Promise<void> {
   if (!chat) return;
 
   if (normalizeModeId(chat.modeId) === 'super-plan' && chat.superPlan) {
-    const { onSuperPlanStreamEnd } = await import('../chat/super-plan/controller');
-    await onSuperPlanStreamEnd(chatId);
-    const refreshed = findChatById(chatId);
-    if (refreshed) await syncPlanScreenFromSuperPlan(refreshed);
+    // The controller owns its own stream-end hook; only mirror state into the UI here.
+    await syncPlanScreenFromSuperPlan(chat);
     return;
   }
 
@@ -808,16 +916,66 @@ function appendWorkingPhaseContent(
     if (chat) suspendToViewChat(chat);
   });
 
-  const stopBtn = document.createElement('button');
-  stopBtn.type = 'button';
-  stopBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--danger';
-  stopBtn.textContent = 'Stop';
-  stopBtn.addEventListener('click', () => {
-    stopGeneration(opts.chatId);
-  });
+  const actionsEnd = document.createElement('div');
+  actionsEnd.className = 'orchestrate-plan-screen__actions-start';
+
+  if (isSuperPlan) {
+    const chat = findChatById(opts.chatId);
+    const paused = Boolean(chat?.superPlan?.paused);
+    const stalled = Boolean(
+      chat && !paused && isSuperPlanStalled(chat) && !isSuperPlanAdvancing(chat.id),
+    );
+
+    const pauseBtn = document.createElement('button');
+    pauseBtn.type = 'button';
+    pauseBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--ghost';
+    pauseBtn.dataset.planPause = 'true';
+    pauseBtn.textContent = 'Pause';
+    pauseBtn.hidden = paused || stalled;
+    pauseBtn.addEventListener('click', () => {
+      const target = findChatById(opts.chatId);
+      if (target) pauseSuperPlan(target);
+    });
+
+    const resumeBtn = document.createElement('button');
+    resumeBtn.type = 'button';
+    resumeBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--primary';
+    resumeBtn.dataset.planResume = 'true';
+    resumeBtn.textContent = 'Resume';
+    resumeBtn.hidden = !(paused || stalled);
+    resumeBtn.addEventListener('click', () => {
+      const target = findChatById(opts.chatId);
+      if (target) void resumeSuperPlanPipeline(target);
+    });
+
+    const stopBtn = document.createElement('button');
+    stopBtn.type = 'button';
+    stopBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--danger';
+    stopBtn.textContent = 'Stop';
+    stopBtn.title = 'Cancel the Super Plan pipeline (a new run starts fresh)';
+    stopBtn.addEventListener('click', () => {
+      const target = findChatById(opts.chatId);
+      if (target?.superPlan) {
+        cancelSuperPlan(target);
+      } else {
+        stopGeneration(opts.chatId);
+      }
+    });
+
+    actionsEnd.append(pauseBtn, resumeBtn, stopBtn);
+  } else {
+    const stopBtn = document.createElement('button');
+    stopBtn.type = 'button';
+    stopBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--danger';
+    stopBtn.textContent = 'Stop';
+    stopBtn.addEventListener('click', () => {
+      stopGeneration(opts.chatId);
+    });
+    actionsEnd.appendChild(stopBtn);
+  }
 
   actionsStart.appendChild(viewChatBtn);
-  actions.append(actionsStart, stopBtn);
+  actions.append(actionsStart, actionsEnd);
   inner.append(progressMount, questionsHost, actions);
 
   const afterPaint =
@@ -1082,11 +1240,21 @@ function buildPlanScreenDom(opts: RenderOrchestratePlanScreenOptions): HTMLEleme
     actions.append(actionsStart);
     inner.append(previewWrap, popout, actions);
   } else if (opts.phase === 'error') {
+    const chat = findChatById(opts.chatId);
+    const isSuperPlan =
+      normalizeModeId(chat?.modeId) === 'super-plan' && Boolean(chat?.superPlan);
+    const failedStage = isSuperPlan ? chat!.superPlan!.activeStage : null;
+    const stageLabel = failedStage ? SUPER_PLAN_STAGE_LABELS[failedStage] : null;
+
     appendPlanScreenHeader(
       inner,
-      'Orchestrate',
-      'Planning stopped',
-      'The run ended without a saved plan file. Retry or open the chat to see what happened.',
+      isSuperPlan ? 'Super Plan' : 'Orchestrate',
+      isSuperPlan && stageLabel
+        ? `Pipeline stopped at ${stageLabel}`
+        : 'Planning stopped',
+      isSuperPlan
+        ? 'Earlier stages are kept. Retry just this stage, skip it, or open the chat to see what happened.'
+        : 'The run ended without a saved plan file. Retry or open the chat to see what happened.',
     );
 
     const err = document.createElement('p');
@@ -1108,38 +1276,88 @@ function buildPlanScreenDom(opts: RenderOrchestratePlanScreenOptions): HTMLEleme
     viewChatBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--ghost';
     viewChatBtn.textContent = 'View chat';
     viewChatBtn.addEventListener('click', () => {
-      const chat = findChatById(opts.chatId);
-      if (chat) suspendToViewChat(chat);
+      const target = findChatById(opts.chatId);
+      if (target) suspendToViewChat(target);
     });
 
-    const hubBtn = document.createElement('button');
-    hubBtn.type = 'button';
-    hubBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--ghost';
-    hubBtn.textContent = 'Back to hub';
-    hubBtn.addEventListener('click', () => {
-      teardownOrchestratePlanScreen();
-      renderOrchestrateHub();
-    });
+    if (isSuperPlan) {
+      const backToWorking = (): void => {
+        if (planSession) planSession.phase = 'super-plan-working';
+        renderOrchestratePlanScreen({
+          phase: 'super-plan-working',
+          chatId: opts.chatId,
+          savedPrompt: opts.savedPrompt,
+        });
+      };
 
-    const retryBtn = document.createElement('button');
-    retryBtn.type = 'button';
-    retryBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--primary';
-    retryBtn.textContent = 'Try again';
-    retryBtn.addEventListener('click', () => {
-      const saved = opts.savedPrompt?.trim() ?? planSession?.savedPrompt?.trim();
-      if (saved) {
-        void startPlanningFromPrompt(saved);
-        return;
-      }
-      renderOrchestratePlanScreen({
-        phase: 'prompt',
-        chatId: opts.chatId,
-        savedPrompt: opts.savedPrompt,
+      const cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--ghost';
+      cancelBtn.textContent = 'Cancel pipeline';
+      cancelBtn.addEventListener('click', () => {
+        const target = findChatById(opts.chatId);
+        if (target) cancelSuperPlan(target);
+        renderOrchestratePlanScreen({
+          phase: 'prompt',
+          chatId: opts.chatId,
+          savedPrompt: opts.savedPrompt,
+        });
       });
-    });
 
-    actionsStart.append(viewChatBtn, hubBtn);
-    actions.append(actionsStart, retryBtn);
+      const skipBtn = document.createElement('button');
+      skipBtn.type = 'button';
+      skipBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--ghost';
+      skipBtn.textContent = stageLabel ? `Skip ${stageLabel}` : 'Skip stage';
+      skipBtn.addEventListener('click', () => {
+        const target = findChatById(opts.chatId);
+        if (!target) return;
+        backToWorking();
+        void skipSuperPlanStage(target);
+      });
+
+      const retryBtn = document.createElement('button');
+      retryBtn.type = 'button';
+      retryBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--primary';
+      retryBtn.textContent = stageLabel ? `Retry ${stageLabel}` : 'Retry stage';
+      retryBtn.addEventListener('click', () => {
+        const target = findChatById(opts.chatId);
+        if (!target) return;
+        backToWorking();
+        void retrySuperPlanStage(target);
+      });
+
+      actionsStart.append(viewChatBtn, cancelBtn, skipBtn);
+      actions.append(actionsStart, retryBtn);
+    } else {
+      const hubBtn = document.createElement('button');
+      hubBtn.type = 'button';
+      hubBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--ghost';
+      hubBtn.textContent = 'Back to hub';
+      hubBtn.addEventListener('click', () => {
+        teardownOrchestratePlanScreen();
+        renderOrchestrateHub();
+      });
+
+      const retryBtn = document.createElement('button');
+      retryBtn.type = 'button';
+      retryBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--primary';
+      retryBtn.textContent = 'Try again';
+      retryBtn.addEventListener('click', () => {
+        const saved = opts.savedPrompt?.trim() ?? planSession?.savedPrompt?.trim();
+        if (saved) {
+          void startPlanningFromPrompt(saved);
+          return;
+        }
+        renderOrchestratePlanScreen({
+          phase: 'prompt',
+          chatId: opts.chatId,
+          savedPrompt: opts.savedPrompt,
+        });
+      });
+
+      actionsStart.append(viewChatBtn, hubBtn);
+      actions.append(actionsStart, retryBtn);
+    }
     inner.append(err, actions);
   }
 
@@ -1231,7 +1449,31 @@ export async function openOrchestratePlanScreen(): Promise<void> {
   });
 }
 
-/** Paint suspended-session banner into #chatArea (caller clears area first). */
+/** Banner copy for a suspended plan session (also used for in-place refresh). */
+function suspendedPlanBannerText(
+  session: OrchestratePlanScreenSession | null,
+  chat?: Chat,
+): string {
+  const target = chat ?? (session ? findChatById(session.chatId) : undefined);
+  if (target?.superPlan?.paused) {
+    return 'Super Plan is paused. Return to the planning screen to resume the pipeline.';
+  }
+  if (session?.phase === 'preview') {
+    return 'Your plan is ready. Return to the planning screen to review it.';
+  }
+  if (session?.phase === 'spec_confirm') {
+    return 'Build spec ready for review. Return to the planning screen to confirm or revise.';
+  }
+  if (session?.phase === 'error') {
+    return 'Planning stopped with an error. Return to the planning screen to retry or skip the stage.';
+  }
+  if (session?.phase === 'questions') {
+    return 'Answer the grill questions below or return to the planning screen to continue the interview.';
+  }
+  return 'Planning in progress. Return to the planning screen to watch status and answer questions.';
+}
+
+/** Paint suspended-session banner into #chatArea above the transcript. */
 export function showOrchestratePlanScreenSuspendedBanner(
   area: HTMLElement,
   chat: Chat,
@@ -1244,21 +1486,7 @@ export function showOrchestratePlanScreenSuspendedBanner(
   const session = getOrchestratePlanScreenSession();
   const text = document.createElement('p');
   text.className = 'orchestrate-plan-screen-banner__text';
-  if (session?.phase === 'preview') {
-    text.textContent = 'Your plan is ready. Return to the planning screen to review it.';
-  } else if (session?.phase === 'spec_confirm') {
-    text.textContent =
-      'Build spec ready for review. Return to the planning screen to confirm or revise.';
-  } else if (session?.phase === 'error') {
-    text.textContent =
-      'Planning ended without a saved plan. Return to the planning screen or review the chat.';
-  } else if (session?.phase === 'questions') {
-    text.textContent =
-      'Answer the grill questions below or return to the planning screen to continue the interview.';
-  } else {
-    text.textContent =
-      'Planning in progress. Return to the planning screen to watch status and answer questions.';
-  }
+  text.textContent = suspendedPlanBannerText(session, chat);
 
   const actions = document.createElement('div');
   actions.className = 'orchestrate-plan-screen-banner__actions';
