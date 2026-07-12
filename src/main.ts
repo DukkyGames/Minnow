@@ -364,6 +364,8 @@ export async function initApp(): Promise<void> {
   syncModelSelectForActiveChat();
   updateModelLoadUnloadButtons();
   renderChatFromHistory(getActiveChat());
+  const { applyComposerDraftForChat } = await import('./ui/composer-draft');
+  applyComposerDraftForChat(getActiveChat());
   if (sessionState) {
     await rehydrateAllBoardWorktreeRoots(sessionState);
     await bootGenerationResumeForChats(sessionState.chats);
