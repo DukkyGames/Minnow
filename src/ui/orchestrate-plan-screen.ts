@@ -46,6 +46,12 @@ import { launchBoardFromPlan } from './orchestrate-launch';
 import { createChatWithMode, switchChat } from './sidebar';
 import { renderChatFromHistory } from './messages';
 import {
+  forceCloseAskQuestionModalForChat,
+  isAskQuestionModalOnPlanScreenHost,
+  isAskQuestionModalOpenForChat,
+  migrateActiveQuestionModalToHost,
+} from './question-cards-modal';
+import {
   PLAN_PROGRESS_MOUNT_ID,
   PlanProgressPanel,
   buildPlanPreviewPopoutDom,
@@ -180,6 +186,12 @@ function derivePlanScreenPhaseFromSuperPlan(chat: Chat): OrchestratePlanScreenPh
   const sp = chat.superPlan!;
   const record = sp.stages[sp.activeStage];
   if (record?.status === 'error') return 'error';
+  if (
+    sp.activeStage === 'grill' &&
+    (record?.status === 'running' || isChatStreaming(chat.id))
+  ) {
+    return 'questions';
+  }
   return 'super-plan-working';
 }
 
@@ -228,13 +240,64 @@ export function restoreOrchestratePlanScreenSessionFromChat(chat: Chat): boolean
 export function suspendOrchestratePlanScreenOnLeave(leavingChatId: string): void {
   if (!planSession || planSession.chatId !== leavingChatId) return;
   if (!isOrchestratePlanScreenMounted()) return;
+  preservePlanScreenQuestionsPhase();
   planSession.planScreenSuspended = true;
-  teardownOrchestratePlanScreenDom();
+  teardownOrchestratePlanScreenDom({ chatId: leavingChatId });
+}
+
+/** Suspend overlay when foregrounding another MinnowOS app (keep grill questions in composer). */
+export function suspendOrchestratePlanScreenOnAppLeave(leavingChatId: string): void {
+  if (!planSession || planSession.chatId !== leavingChatId) return;
+  if (!isOrchestratePlanScreenMounted()) return;
+  preservePlanScreenQuestionsPhase();
+  planSession.planScreenSuspended = true;
+  teardownOrchestratePlanScreenDom({
+    keepQuestionsInComposer: true,
+    chatId: leavingChatId,
+  });
+}
+
+function preservePlanScreenQuestionsPhase(): void {
+  if (!planSession) return;
+  if (
+    planSession.phase === 'questions' ||
+    planSession.phase === 'super-plan-working' ||
+    planSession.phase === 'working'
+  ) {
+    if (isAskQuestionModalOpenForChat(planSession.chatId)) {
+      planSession.phase = 'questions';
+    }
+  }
+}
+
+function preparePlanScreenQuestionsBeforeTeardown(
+  chatId: string,
+  options: { keepQuestionsInComposer?: boolean } = {},
+): void {
+  if (!isAskQuestionModalOnPlanScreenHost()) {
+    if (isAskQuestionModalOpenForChat(chatId)) {
+      forceCloseAskQuestionModalForChat(chatId);
+    }
+    return;
+  }
+  if (options.keepQuestionsInComposer) {
+    const composerHost = document.getElementById('questionHost');
+    if (composerHost && migrateActiveQuestionModalToHost(composerHost)) {
+      if (planSession) planSession.phase = 'questions';
+      return;
+    }
+  }
+  forceCloseAskQuestionModalForChat(chatId);
 }
 
 /** Remove overlay nodes only; session state is preserved. */
-export function teardownOrchestratePlanScreenDom(): void {
+export function teardownOrchestratePlanScreenDom(
+  options: { keepQuestionsInComposer?: boolean; chatId?: string } = {},
+): void {
   if (typeof document === 'undefined') return;
+  if (options.chatId) {
+    preparePlanScreenQuestionsBeforeTeardown(options.chatId, options);
+  }
   activityUnsubscribe?.();
   activityUnsubscribe = null;
   planProgressPanel?.destroy();
@@ -248,7 +311,8 @@ export function teardownOrchestratePlanScreenDom(): void {
 
 /** Remove overlay and clear plan-screen session. */
 export function teardownOrchestratePlanScreen(): void {
-  teardownOrchestratePlanScreenDom();
+  const chatId = planSession?.chatId;
+  teardownOrchestratePlanScreenDom(chatId ? { chatId } : {});
   planSession = null;
 }
 
@@ -634,8 +698,12 @@ function openBoardWithPlan(planPath: string): void {
 
 function suspendToViewChat(chat: Chat): void {
   if (!planSession) return;
+  preservePlanScreenQuestionsPhase();
   planSession.planScreenSuspended = true;
-  teardownOrchestratePlanScreenDom();
+  teardownOrchestratePlanScreenDom({
+    keepQuestionsInComposer: true,
+    chatId: chat.id,
+  });
   if (sessionState && sessionState.activeId !== chat.id) {
     switchChat(chat.id);
   } else {
@@ -1144,6 +1212,9 @@ export function showOrchestratePlanScreenSuspendedBanner(
   } else if (session?.phase === 'error') {
     text.textContent =
       'Planning ended without a saved plan. Return to the planning screen or review the chat.';
+  } else if (session?.phase === 'questions') {
+    text.textContent =
+      'Answer the grill questions below or return to the planning screen to continue the interview.';
   } else {
     text.textContent =
       'Planning in progress. Return to the planning screen to watch status and answer questions.';
@@ -1166,6 +1237,22 @@ export function showOrchestratePlanScreenSuspendedBanner(
       planPath: session.planPath,
       savedPrompt: session.savedPrompt,
       errorMessage: session.errorMessage,
+    });
+    const afterPaint =
+      typeof requestAnimationFrame === 'function'
+        ? requestAnimationFrame
+        : (fn: () => void) => {
+            fn();
+            return 0;
+          };
+    afterPaint(() => {
+      if (isAskQuestionModalOpenForChat(session.chatId)) {
+        const planHost = document.getElementById(ORCHESTRATE_PLAN_SCREEN_QUESTIONS_ID);
+        if (planHost) {
+          migrateActiveQuestionModalToHost(planHost);
+          planHost.hidden = false;
+        }
+      }
     });
     if (
       (session.phase === 'preview' || session.phase === 'spec_confirm') &&

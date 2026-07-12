@@ -121,8 +121,8 @@ export function osOnAppClose(appId: AppId): void {
   if (appId === 'code') {
     void import('../state/sessions').then(({ sessionState }) => {
       if (!sessionState?.activeId) return;
-      void import('../ui/orchestrate-plan-screen').then(({ suspendOrchestratePlanScreenOnLeave }) => {
-        suspendOrchestratePlanScreenOnLeave(sessionState.activeId);
+      void import('../ui/orchestrate-plan-screen').then(({ suspendOrchestratePlanScreenOnAppLeave }) => {
+        suspendOrchestratePlanScreenOnAppLeave(sessionState.activeId);
       });
     });
   }

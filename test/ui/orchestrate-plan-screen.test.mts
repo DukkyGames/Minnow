@@ -266,4 +266,86 @@ describe('orchestrate plan screen', () => {
     assert.ok(document.getElementById(ORCHESTRATE_PLAN_BANNER_ID));
     assert.equal(document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID), null);
   });
+
+  test('view chat during grill questions migrates strip to composer without cancelling', async () => {
+    const window = new Window();
+    globalThis.document = window.document;
+    globalThis.HTMLElement = window.HTMLElement;
+    globalThis.requestAnimationFrame = (cb: () => void) => {
+      cb();
+      return 0;
+    };
+
+    const area = document.createElement('main');
+    area.id = 'chatArea';
+    document.body.appendChild(area);
+    const mainColumn = document.createElement('div');
+    mainColumn.id = 'mainColumn';
+    document.body.appendChild(mainColumn);
+    const composerHost = document.createElement('div');
+    composerHost.id = 'questionHost';
+    composerHost.hidden = true;
+    mainColumn.appendChild(composerHost);
+
+    const chat = createEmptyChatObject('sp-grill');
+    chat.modeId = 'super-plan';
+    chat.history.push({ role: 'user', content: 'Add OAuth login' });
+    setSessionStateForTests({
+      version: 5,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    renderOrchestratePlanScreen({
+      phase: 'questions',
+      chatId: chat.id,
+      savedPrompt: 'Add OAuth login',
+    });
+
+    const planHost = document.getElementById(ORCHESTRATE_PLAN_SCREEN_QUESTIONS_ID);
+    assert.ok(planHost);
+
+    const { showQuestionCardsModal, resetQuestionCardsModalForTests } = await import(
+      '../../src/ui/question-cards-modal.ts'
+    );
+
+    let settled = false;
+    const modalPromise = showQuestionCardsModal(
+      {
+        questions: [
+          {
+            id: 'q1',
+            prompt: 'Which auth provider?',
+            options: [
+              { id: 'a', label: 'Google' },
+              { id: 'b', label: 'GitHub' },
+            ],
+          },
+        ],
+      },
+      {},
+      { host: planHost!, embedded: true, chatId: chat.id },
+    );
+
+    assert.ok(planHost?.querySelector('.question-cards-panel'));
+
+    const viewChatBtn = [...document.querySelectorAll('.orchestrate-plan-screen__btn')].find(
+      (btn) => btn.textContent === 'View chat',
+    ) as HTMLButtonElement | undefined;
+    assert.ok(viewChatBtn);
+    viewChatBtn.click();
+    assert.equal(isOrchestratePlanScreenSuspended(), true);
+    assert.equal(document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID), null);
+    assert.ok(composerHost.querySelector('.question-cards-panel'));
+    assert.equal(planHost?.childElementCount, 0);
+
+    const session = getOrchestratePlanScreenSession();
+    assert.equal(session?.phase, 'questions');
+
+    resetQuestionCardsModalForTests();
+    settled = true;
+    await modalPromise.catch(() => undefined);
+    assert.equal(settled, true);
+  });
 });
