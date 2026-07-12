@@ -8,7 +8,7 @@ No CI enforced `tsc --noEmit` or `npm test` on PRs. The hand-maintained `npm tes
 
 1. **`test/run-all.mjs`** — discovers `test/**/*.test.{js,mjs,mts,ts}`, assigns runners via `test/test-config.mjs`, batches execution (chunked for Windows command-line limits).
 2. **`test/check-test-coverage.mjs`** — fails when any discoverable test file has no runner (orphan detection).
-3. **`.github/workflows/ci.yml`** — `npm ci`, `test:check-coverage`, `tsc --noEmit`, `npm test`, `impeccable:detect` on `windows-latest` + `ubuntu-latest`.
+3. **`.github/workflows/ci.yml`** — `npm ci`, `test:check-coverage`, `tsc --noEmit`, `npm test` on `windows-latest` + `ubuntu-latest`.
 4. **Branch protection** — document in `.github/BRANCH_PROTECTION.md`; enable `ci` required check on `main` in GitHub Settings.
 
 ## Todos

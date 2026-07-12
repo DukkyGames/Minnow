@@ -58,7 +58,7 @@ UI-only tools (e.g. `ask_question`) fail with a clear error in headless mode unl
 
 `npm test` runs the full suite via [`test/run-all.mjs`](../../test/run-all.mjs) — it discovers every `test/**/*.test.{js,mjs,mts,ts}` file and runs the correct runner/loader per path (see [`test/test-config.mjs`](../../test/test-config.mjs)). New test files are included automatically; `npm run test:check-coverage` fails CI when a file would be orphaned.
 
-**CI (MIN-383):** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs on pull requests and pushes to `main`: `npm ci` → `test:check-coverage` → `npx tsc --noEmit` → `npm test` → `impeccable:detect` on `windows-latest` and `ubuntu-latest`. Require the **`ci`** status check on `main` before merge ([`.github/BRANCH_PROTECTION.md`](../../.github/BRANCH_PROTECTION.md)).
+**CI (MIN-383):** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs on pull requests and pushes to `main`: `npm ci` → `test:check-coverage` → `npx tsc --noEmit` → `npm test` on `windows-latest` and `ubuntu-latest`. Require the **`ci`** status check on `main` before merge ([`.github/BRANCH_PROTECTION.md`](../../.github/BRANCH_PROTECTION.md)).
 
 Scoped suites (each delegates to `node test/run-all.mjs --suite <name>`):
 
