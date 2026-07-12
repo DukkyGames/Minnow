@@ -14,6 +14,7 @@ export type NotificationKind =
   | 'task_failed'
   | 'task_quarantined'
   | 'board_complete'
+  | 'board_blocked'
   | 'sub_agent_complete'
   | 'sub_agent_failed'
   | 'scheduler'

@@ -49,9 +49,34 @@ export function clearOrchestratorReportDedupeForTask(taskId: string): void {
 function reportKey(
   taskId: string,
   kind: OrchestratorTaskReportKind,
-  round: number,
+  lifecycleRun: number,
 ): string {
-  return `${taskId}:${kind}:${round}`;
+  return `${taskId}:${kind}:${lifecycleRun}`;
+}
+
+/** True when any board-linked task/fixer/test chat for this group is streaming. */
+function isAnyBoardChatStreaming(group: ChatGroup): boolean {
+  const board = group.orchestrateBoard;
+  if (!board) return false;
+  for (const task of board.tasks) {
+    if (task.chatId?.trim() && isChatStreaming(task.chatId.trim())) return true;
+    if (task.testChatId?.trim() && isChatStreaming(task.testChatId.trim())) return true;
+    if (task.fixerChatId?.trim() && isChatStreaming(task.fixerChatId.trim())) return true;
+  }
+  const finalChatId = board.finalTest?.chatId?.trim();
+  if (finalChatId && isChatStreaming(finalChatId)) return true;
+  return false;
+}
+
+function isBoardLinkedChat(group: ChatGroup, chatId: string): boolean {
+  const board = group.orchestrateBoard;
+  if (!board) return false;
+  for (const task of board.tasks) {
+    if (task.chatId === chatId || task.testChatId === chatId || task.fixerChatId === chatId) {
+      return true;
+    }
+  }
+  return board.finalTest?.chatId === chatId;
 }
 
 function summarizeTaskChat(task: BoardTask): string {
@@ -159,22 +184,25 @@ async function flushDeliverReport(
   key: string,
 ): Promise<void> {
   if (deliveredReportKeys.has(key)) return;
+  deliveredReportKeys.add(key);
   const deliver = deliverHook ?? defaultDeliver;
   try {
     await deliver(plannerChat.id, message, key);
-  } finally {
-    deliveredReportKeys.add(key);
+  } catch (err) {
+    deliveredReportKeys.delete(key);
+    throw err;
   }
 }
 
 async function deliverReport(
+  group: ChatGroup,
   plannerChat: Chat,
   message: string,
   key: string,
 ): Promise<void> {
   if (deliveredReportKeys.has(key)) return;
 
-  if (isChatStreaming(plannerChat.id)) {
+  if (isChatStreaming(plannerChat.id) || isAnyBoardChatStreaming(group)) {
     let queue = pendingPlannerReports.get(plannerChat.id);
     if (!queue) {
       queue = [];
@@ -221,9 +249,9 @@ export async function deliverOrchestratorTaskReport(
   const kind = mapStatusToReportKind(status);
   if (!kind) return;
 
-  const key = reportKey(task.id, kind, task.selfHealRound ?? 0);
+  const key = reportKey(task.id, kind, task.lifecycleRun ?? 0);
   const message = buildOrchestratorTaskReportMessage(task, kind, status);
-  await deliverReport(plannerChat, message, key);
+  await deliverReport(group, plannerChat, message, key);
 
   // Re-drive on every settled outcome, even when the message copy was already deduped.
   // autoDelegateNext is idempotent — no-op when nothing is ready.
@@ -254,6 +282,18 @@ export function initOrchestratorAutoReports(): void {
 
   unsubscribeStreamEnd?.();
   unsubscribeStreamEnd = subscribeChatStreamEnd((endedChatId) => {
+    if (!sessionState) return;
+    for (const group of sessionState.groups ?? []) {
+      const planner = getPlannerChatForGroup(group);
+      if (!planner) continue;
+      if (
+        endedChatId === planner.id ||
+        isBoardLinkedChat(group, endedChatId)
+      ) {
+        flushPendingPlannerReports(planner.id);
+      }
+    }
+
     if (pendingPlannerReports.has(endedChatId)) {
       flushPendingPlannerReports(endedChatId);
     }
@@ -261,7 +301,18 @@ export function initOrchestratorAutoReports(): void {
     const ctx = resolveBoardContextFromTaskChat(endedChatId);
     if (ctx) {
       const { group, planner, task } = ctx;
-      if (isBoardRunning(group) && (task.status === 'complete' || task.status === 'failed' || task.status === 'blocked' || task.status === 'quarantined')) {
+      const kind = mapStatusToReportKind(task.status);
+      const key = kind ? reportKey(task.id, kind, task.lifecycleRun ?? 0) : null;
+      if (
+        isBoardRunning(group) &&
+        kind &&
+        key &&
+        !deliveredReportKeys.has(key) &&
+        (task.status === 'complete' ||
+          task.status === 'failed' ||
+          task.status === 'blocked' ||
+          task.status === 'quarantined')
+      ) {
         void deliverOrchestratorTaskReport(group, planner, task, task.status);
       }
     }

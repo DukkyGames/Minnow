@@ -15,6 +15,7 @@ import {
   isCodeAppForeground,
   shouldAutoRestorePreviewPanel,
   shouldAutoRestoreViewerSplitOnBoot,
+  shouldAutoRevealPreviewOnNavigation,
 } from '../../src/ui/preview-restore-policy.ts';
 
 describe('preview restore policy (MIN-342)', () => {
@@ -90,5 +91,23 @@ describe('preview restore policy (MIN-342)', () => {
     });
     openDesktopWorkspaceTab('viewer');
     assert.equal(shouldAutoRestoreViewerSplitOnBoot(), true);
+  });
+
+  test('does not auto-reveal preview on navigation when Code collapsed the split', () => {
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: null,
+      viewerOpen: false,
+      previewTabs: [{ id: 'tab-1', source: { kind: 'url', url: 'http://localhost:3000' } }],
+      activePreviewTab: 'tab-1',
+      previewSource: { kind: 'url', url: 'http://localhost:3000' },
+    });
+    launchInstance('code');
+    assert.equal(shouldAutoRevealPreviewOnNavigation(), false);
+  });
+
+  test('allows auto-reveal on navigation when preview mode is active', () => {
+    patchFilePanelState({ rightPaneMode: 'preview', viewerOpen: true });
+    assert.equal(shouldAutoRevealPreviewOnNavigation(), true);
   });
 });

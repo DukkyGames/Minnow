@@ -63,16 +63,25 @@ export function buildOrchestrateCompletionMessage(
   const quarantinedCount = board.tasks.filter((t) => t.status === 'quarantined').length;
   const elapsed = formatElapsedMs(board.startedAt, endedAtMs);
 
+  const allQuarantined = completeCount === 0 && quarantinedCount > 0;
+  const headline = allQuarantined
+    ? `**Orchestrate plan blocked** — ${planName}`
+    : `**Orchestrate plan complete** — ${planName}`;
+
   const lines = [
-    `**Orchestrate plan complete** — ${planName}`,
+    headline,
     '',
     `- **Tasks:** ${completeCount}/${total} complete`,
     ...(quarantinedCount > 0 ? [`- **Quarantined:** ${quarantinedCount}`] : []),
     `- **Elapsed:** ${elapsed}`,
     '',
-    'All board tasks are finished. Move any remaining cards or start a new chat when ready.',
+    allQuarantined
+      ? `All remaining tasks are quarantined (${quarantinedCount}). Requeue cards after addressing resolution steps.`
+      : 'All board tasks are finished. Move any remaining cards or start a new chat when ready.',
     '',
-    '**Next steps:** review results in the board, open task chats, or export/share the plan if needed.',
+    allQuarantined
+      ? '**Next steps:** review quarantined tasks on the board, fix blockers, then Requeue to retry.'
+      : '**Next steps:** review results in the board, open task chats, or export/share the plan if needed.',
   ];
 
   const issues = board.unresolvedIssues;

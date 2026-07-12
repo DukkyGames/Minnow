@@ -401,6 +401,8 @@ export interface BoardTask {
   };
   /** Phase-2 placeholder: self-heal iteration counter. */
   selfHealRound?: number;
+  /** Monotonic lifecycle counter bumped on requeue so completion reports dedupe per run. */
+  lifecycleRun?: number;
   /** Phase-2 placeholder: category of the last self-heal attempt. */
   lastHealCategory?: string;
   /** Phase-2 placeholder: outcome of the last build attempt. */
@@ -493,6 +495,8 @@ export interface OrchestrateBoardState {
   isolationBaseRef?: string;
   /** Epoch ms when plan-complete UI was shown (dedupe). */
   completionShownAt?: number;
+  /** True when every task is quarantined and none completed (terminal blocked state). */
+  terminalBlocked?: boolean;
   /** Plan-complete wrap-up turn deferred until planner stream ends. */
   wrapUpPending?: boolean;
   /** User dismissed the finish dashboard to view the kanban again. */

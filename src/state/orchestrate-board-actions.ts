@@ -3400,7 +3400,13 @@ function isBoardReadyForFinalTest(board: OrchestrateBoardState): boolean {
 /** When every task is terminal, start final test or surface all-quarantined plan-complete. */
 export function syncBoardRunCompletion(group: ChatGroup, plannerChat: Chat): void {
   const board = group.orchestrateBoard;
-  if (!board || !isOrchestratePlanComplete(board)) return;
+  if (!board || !isOrchestratePlanComplete(board)) {
+    if (board) board.terminalBlocked = false;
+    return;
+  }
+  const completeCount = board.tasks.filter((t) => t.status === 'complete').length;
+  const quarantinedCount = board.tasks.filter((t) => t.status === 'quarantined').length;
+  board.terminalBlocked = completeCount === 0 && quarantinedCount > 0;
   if (isBoardReadyForFinalTest(board)) {
     tryTriggerFinalIntegrationTest(group, plannerChat);
   } else {
@@ -3797,11 +3803,13 @@ export async function requeueBoardTask(
   delete board.completionShownAt;
   delete board.finishReport;
   delete board.wrapUpPending;
+  board.terminalBlocked = false;
   if (board.unresolvedIssues?.length) {
     board.unresolvedIssues = board.unresolvedIssues.filter((issue) => !requeuedIds.has(issue.taskId));
   }
 
   for (const id of requeuedIds) {
+    const existing = board.tasks.find((t) => t.id === id);
     updateTask(
       group,
       id,
@@ -3809,19 +3817,17 @@ export async function requeueBoardTask(
         selfHealRound: undefined,
         lastHealCategory: undefined,
         stopRetries: undefined,
+        lifecycleRun: (existing?.lifecycleRun ?? 0) + 1,
         ...BOARD_REPORT_RESET_PATCH,
       },
       plannerChat,
     );
   }
 
-  void import('../agents/controller/report.ts')
-    .then((mod) => {
-      for (const id of requeuedIds) {
-        mod.clearOrchestratorReportDedupeForTask(id);
-      }
-    })
-    .catch((err) => reportBackgroundError('requeue-report-dedupe-clear', err));
+  const { clearOrchestratorReportDedupeForTask } = await import('../agents/controller/report.ts');
+  for (const id of requeuedIds) {
+    clearOrchestratorReportDedupeForTask(id);
+  }
 
   if (isBoardRunning(group)) {
     await autoDelegateNext(group, plannerChat);

@@ -104,7 +104,10 @@ describe('quarantine completion hooks', () => {
 
     assert.ok(board.completionShownAt != null, 'completionShownAt should be set');
     const completionMessages = planner.history.filter(
-      (m) => m.role === 'assistant' && String(m.content).includes('Orchestrate plan complete'),
+      (m) =>
+        m.role === 'assistant' &&
+        (String(m.content).includes('Orchestrate plan blocked') ||
+          String(m.content).includes('Orchestrate plan complete')),
     );
     assert.equal(completionMessages.length, 1);
     setOrchestratorReportDeliverHook(null);

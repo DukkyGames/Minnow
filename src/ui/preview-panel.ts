@@ -49,7 +49,11 @@ import {
 } from './preview-tab-store';
 import { bindPreviewTabs, registerPreviewTabHandlers } from './preview-tabs';
 import { HTTP_URL_RE, parsePreviewAddress } from './preview-url';
-import { shouldAutoRestorePreviewPanel, isCodeAppForeground } from './preview-restore-policy';
+import {
+  shouldAutoRestorePreviewPanel,
+  shouldAutoRevealPreviewOnNavigation,
+  isCodeAppForeground,
+} from './preview-restore-policy';
 import { showToast } from './toast';
 import { disableDesignMode, enableDesignMode, isDesignModeEnabled, getDesignModeSession, refreshDesignModeArmedToolGuest, relocateDesignModeStrip } from '../design/design-mode';
 import {
@@ -572,6 +576,7 @@ function onPreviewNavigation(url: string, tabId?: string): void {
     usesElectronPreview() &&
     !isPreviewPaneDomVisible() &&
     !isFullscreenOverlayObscuringWorkspace() &&
+    shouldAutoRevealPreviewOnNavigation() &&
     url &&
     HTTP_URL_RE.test(url)
   ) {

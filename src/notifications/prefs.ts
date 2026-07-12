@@ -147,6 +147,7 @@ const KIND_GROUP: Record<NotificationKind, NotificationKindGroup> = {
   task_failed: 'tasks',
   task_quarantined: 'tasks',
   board_complete: 'tasks',
+  board_blocked: 'tasks',
   sub_agent_complete: 'tasks',
   sub_agent_failed: 'tasks',
   scheduler: 'background',
