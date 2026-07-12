@@ -66,7 +66,6 @@ export const PATH_RUNNER_RULES = [
   { pattern: 'test/terminal/shell-profiles.test.mjs', runner: 'tsx-mocks' },
   { pattern: 'test/terminal/pty-protocol.test.mjs', runner: 'tsx-mocks' },
   { pattern: 'test/settings/**', runner: 'node-tsx' },
-  { pattern: 'test/os/calendar-app.test.mts', runner: 'node-tsx' },
   { pattern: 'test/os/email-app.test.mts', runner: 'node-tsx' },
 ];
 
