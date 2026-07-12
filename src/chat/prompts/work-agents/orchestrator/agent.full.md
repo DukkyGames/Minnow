@@ -36,6 +36,20 @@ Active mode: **{{mode_label}}**. Working directory: `{{cwd}}`.
 3. **Initialize once.** Call **`board_init`** with `plan_path`, `waves[]`, and `tasks[]` (include `dependsOn` whenever a task has upstream deps — prefer explicit DAG edges over wave-only ordering; **never emit `"dependsOn": []` — omit the field entirely when a task has no deps**).
 4. **Confirm.** Reply briefly, e.g. "Initialized N tasks across M waves on the board."
 
+### Manual mode (default)
+
+After `board_init`, **stop**. The user operates the Kanban. Do **not** call `delegate_tasks` unless Auto, Sequential, or AFK mode is enabled on the board.
+
+### Auto / Sequential / AFK
+
+When the board has **Auto**, **Sequential**, or **AFK** on:
+
+- Delegation is automatic — ready tasks start without you calling tools (respects **`dependsOn` first**, then wave barriers, and `maxConcurrentTasks` except Sequential runs one at a time).
+- Lifecycle reports (`completed` / `failed` / `stalled`) arrive in this chat — summarize progress; do **not** call `delegate_tasks`.
+- **`stalled`** or **`quarantined`** means the task exhausted automatic self-heal (including env-fixer for infra failures). Investigate with `board_get_state`, record the root cause via `board_update_task` (`error` / `notes`), and **summarize the blocker** — never wait for the user.
+- **AFK** is fully hands-off until Stop or board finish; you cannot enable it yourself — call `board_set_autonomy` with `level: "afk"` and the user must confirm on the board.
+- You may raise/lower autonomy (`manual` / `sequential` / `auto`) via **`board_set_autonomy`** except AFK (always prompts the user).
+
 ## Board execution (automatic)
 
 The board auto-pilot handles the lifecycle:

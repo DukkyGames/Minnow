@@ -70,6 +70,17 @@ function assertBoardPromptContract(name, content) {
 }
 
 describe('orchestrate board prompts', () => {
+  test('orchestrate board_init example has no self-dependency in dependsOn', () => {
+    const content = readPrompt('orchestrate.full.md');
+    const exampleBlock = content.match(/```json[\s\S]*?```/)?.[0] ?? '';
+    assert.ok(exampleBlock.length > 0, 'board_init JSON example present');
+    assert.doesNotMatch(
+      exampleBlock,
+      /"dependsOn":\s*\[\s*"W1-A"\s*\]/,
+      'example must not show a task depending on itself',
+    );
+  });
+
   for (const file of PROMPT_FILES) {
     test(`${file} documents board tools and spawn linkage`, () => {
       const content = readPrompt(file);
