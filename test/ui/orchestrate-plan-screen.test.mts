@@ -9,13 +9,16 @@ import {
   getOrchestratePlanScreenSession,
   isOrchestratePlanScreenSuppressingChatDom,
   isOrchestratePlanScreenSuspended,
+  isSuperPlanPipelineResumable,
   openOrchestratePlanScreen,
   renderOrchestratePlanScreen,
   resetOrchestratePlanScreenForTests,
   resolveOrchestratePlanScreenQuestionHost,
+  restoreOrchestratePlanScreenSessionFromChat,
   shouldRouteComposerSendToSuperPlan,
   suspendOrchestratePlanScreenOnLeave,
 } from '../../src/ui/orchestrate-plan-screen.ts';
+import { createInitialSuperPlanStages } from '../../src/chat/super-plan/state.ts';
 import { showQuestionCardsModal } from '../../src/ui/question-cards-modal.ts';
 import { appendStreamingAssistantRow, renderChatFromHistory } from '../../src/ui/messages.ts';
 import { isStreamDomVisible } from '../../src/chat/streaming-state.ts';
@@ -215,5 +218,52 @@ describe('orchestrate plan screen', () => {
       }),
       false,
     );
+  });
+
+  test('restore session from persisted superPlan shows resume banner after reload', () => {
+    const window = new Window();
+    globalThis.document = window.document;
+    globalThis.HTMLElement = window.HTMLElement;
+
+    const area = document.createElement('main');
+    area.id = 'chatArea';
+    document.body.appendChild(area);
+    document.body.appendChild(
+      Object.assign(document.createElement('div'), { id: 'mainColumn' }),
+    );
+
+    const chat = createEmptyChatObject('sp-reload');
+    chat.modeId = 'super-plan';
+    chat.history.push({ role: 'user', content: 'Add OAuth login' });
+    const stages = createInitialSuperPlanStages();
+    stages.research.status = 'running';
+    chat.superPlan = {
+      slug: 'oauth',
+      prompt: 'Add OAuth login',
+      activeStage: 'research',
+      stages,
+      specPath: 'documentation/plans/references/oauth-spec.md',
+      researchPath: 'documentation/plans/references/oauth-research.md',
+      planPath: 'documentation/plans/oauth.md',
+      uiInvolved: false,
+    };
+    setSessionStateForTests({
+      version: 5,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    assert.equal(isSuperPlanPipelineResumable(chat), true);
+    assert.equal(restoreOrchestratePlanScreenSessionFromChat(chat), true);
+
+    const session = getOrchestratePlanScreenSession();
+    assert.equal(session?.chatId, chat.id);
+    assert.equal(session?.phase, 'super-plan-working');
+    assert.equal(session?.planScreenSuspended, true);
+
+    renderChatFromHistory(chat);
+    assert.ok(document.getElementById(ORCHESTRATE_PLAN_BANNER_ID));
+    assert.equal(document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID), null);
   });
 });

@@ -118,6 +118,14 @@ export function osOnAppOpen(appId: AppId): void {
 /** Called when a foreground app is replaced or the shell returns to desktop. */
 export function osOnAppClose(appId: AppId): void {
   if (!isOsShellEnabled()) return;
+  if (appId === 'code') {
+    void import('../state/sessions').then(({ sessionState }) => {
+      if (!sessionState?.activeId) return;
+      void import('../ui/orchestrate-plan-screen').then(({ suspendOrchestratePlanScreenOnLeave }) => {
+        suspendOrchestratePlanScreenOnLeave(sessionState.activeId);
+      });
+    });
+  }
   if (document.documentElement.dataset.osApp === appId) {
     delete document.documentElement.dataset.osApp;
   }
