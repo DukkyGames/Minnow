@@ -451,7 +451,7 @@
 }
 
 .msg-bubble.msg-bubble--md a {
-  color: var(--mn-accent);
+  color: var(--mn-syntax-link);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -488,6 +488,7 @@
   border-radius: var(--radius-sm);
   background: var(--mn-surface-0);
   border: 1px solid var(--mn-border);
+  color: var(--mn-syntax-inline);
 }
 
 /* Fenced code blocks: shell around hljs theme */
@@ -515,6 +516,63 @@
 
 .msg-bubble.msg-bubble--md pre .hljs {
   background: transparent !important;
+}
+
+/* Light themes: remap highlight.js github classes to palette tokens (MIN-243). */
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs {
+  color: var(--mn-fg);
+}
+
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-comment,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-quote,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-formula {
+  color: var(--mn-fg-muted);
+}
+
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-keyword,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-meta .hljs-keyword,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-template-tag,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-template-variable,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-type,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-variable.language_ {
+  color: var(--cm-keyword);
+}
+
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-title,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-title.class_,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-title.class_.inherited__,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-title.function_ {
+  color: var(--cm-title);
+}
+
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-attr,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-attribute,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-literal,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-meta,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-number,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-operator,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-selector-attr,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-selector-class,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-selector-id,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-variable {
+  color: var(--cm-attr);
+}
+
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-meta .hljs-string,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-regexp,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-string {
+  color: var(--cm-string);
+}
+
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-built_in,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-symbol {
+  color: var(--mn-warning);
+}
+
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-name,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-selector-pseudo,
+html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-selector-tag {
+  color: var(--mn-success-ink);
 }
 
 .msg-bubble.msg-bubble--md pre[data-lang]::before {
@@ -632,7 +690,7 @@
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: var(--mn-fg);
+  color: var(--mn-syntax-name);
   word-break: break-word;
 }
 

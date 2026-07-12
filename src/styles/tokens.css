@@ -115,6 +115,10 @@ body {
   --cm-title: var(--mn-accent-ink);
   --cm-attr: var(--mn-accent);
   --cm-string: var(--mn-fg-muted);
+  --mn-syntax-command: var(--mn-accent);
+  --mn-syntax-name: var(--mn-accent);
+  --mn-syntax-inline: var(--mn-fg);
+  --mn-syntax-link: var(--mn-accent);
   /* Editor + native selection (dark: tinted surface, not light-theme CM gray) */
   --mn-selection-bg: color-mix(in srgb, var(--mn-accent) 45%, var(--mn-surface-2));
 }
@@ -189,8 +193,12 @@ body {
 
   --cm-keyword: var(--mn-danger);
   --cm-title: var(--mn-accent-ink);
-  --cm-attr: var(--mn-accent);
+  --cm-attr: var(--mn-accent-ink);
   --cm-string: var(--mn-fg-muted);
+  --mn-syntax-command: var(--mn-accent-ink);
+  --mn-syntax-name: var(--mn-accent-ink);
+  --mn-syntax-inline: var(--mn-fg);
+  --mn-syntax-link: var(--mn-accent-ink);
   --mn-selection-bg: color-mix(in srgb, var(--mn-accent) 38%, var(--mn-surface-0));
 }
 
@@ -266,6 +274,10 @@ body {
   --cm-title: var(--mn-accent-ink);
   --cm-attr: var(--mn-accent);
   --cm-string: var(--mn-fg-muted);
+  --mn-syntax-command: var(--mn-accent);
+  --mn-syntax-name: var(--mn-accent);
+  --mn-syntax-inline: var(--mn-fg);
+  --mn-syntax-link: var(--mn-accent);
   --mn-selection-bg: color-mix(in srgb, var(--mn-accent) 45%, var(--mn-surface-2));
 }
 
@@ -281,7 +293,7 @@ body {
   --mn-border: rgba(45,35,18,0.08);
   --mn-border-strong: rgba(45,35,18,0.16);
   --mn-fg: #2a2418;
-  --mn-fg-muted: #766c54;
+  --mn-fg-muted: #6f6550;
   --mn-fg-subtle: #a89e84;
   --mn-fg-on-accent: #1f1505;
   --mn-accent: #a36f2a;
@@ -339,8 +351,12 @@ body {
 
   --cm-keyword: var(--mn-danger);
   --cm-title: var(--mn-accent-ink);
-  --cm-attr: var(--mn-accent);
+  --cm-attr: var(--mn-accent-ink);
   --cm-string: var(--mn-fg-muted);
+  --mn-syntax-command: var(--mn-accent-ink);
+  --mn-syntax-name: var(--mn-accent-ink);
+  --mn-syntax-inline: var(--mn-fg);
+  --mn-syntax-link: var(--mn-accent-ink);
   --mn-selection-bg: color-mix(in srgb, var(--mn-accent) 38%, var(--mn-surface-0));
 }
 
@@ -416,6 +432,10 @@ body {
   --cm-title: var(--mn-accent-ink);
   --cm-attr: var(--mn-accent);
   --cm-string: var(--mn-fg-muted);
+  --mn-syntax-command: var(--mn-accent);
+  --mn-syntax-name: var(--mn-accent);
+  --mn-syntax-inline: var(--mn-fg);
+  --mn-syntax-link: var(--mn-accent);
   --mn-selection-bg: color-mix(in srgb, var(--mn-accent) 45%, var(--mn-surface-2));
 }
 
@@ -489,8 +509,12 @@ body {
 
   --cm-keyword: var(--mn-danger);
   --cm-title: var(--mn-accent-ink);
-  --cm-attr: var(--mn-accent);
+  --cm-attr: var(--mn-accent-ink);
   --cm-string: var(--mn-fg-muted);
+  --mn-syntax-command: var(--mn-accent-ink);
+  --mn-syntax-name: var(--mn-accent-ink);
+  --mn-syntax-inline: var(--mn-fg);
+  --mn-syntax-link: var(--mn-accent-ink);
   --mn-selection-bg: color-mix(in srgb, var(--mn-accent) 38%, var(--mn-surface-0));
 }
 
@@ -566,6 +590,10 @@ body {
   --cm-title: var(--mn-accent-ink);
   --cm-attr: var(--mn-accent);
   --cm-string: var(--mn-fg-muted);
+  --mn-syntax-command: var(--mn-accent);
+  --mn-syntax-name: var(--mn-accent);
+  --mn-syntax-inline: var(--mn-fg);
+  --mn-syntax-link: var(--mn-accent);
   --mn-selection-bg: color-mix(in srgb, var(--mn-accent) 45%, var(--mn-surface-2));
 }
 
@@ -639,8 +667,12 @@ body {
 
   --cm-keyword: var(--mn-danger);
   --cm-title: var(--mn-accent-ink);
-  --cm-attr: var(--mn-accent);
+  --cm-attr: var(--mn-accent-ink);
   --cm-string: var(--mn-fg-muted);
+  --mn-syntax-command: var(--mn-accent-ink);
+  --mn-syntax-name: var(--mn-accent-ink);
+  --mn-syntax-inline: var(--mn-fg);
+  --mn-syntax-link: var(--mn-accent-ink);
   --mn-selection-bg: color-mix(in srgb, var(--mn-accent) 38%, var(--mn-surface-0));
 }
 
@@ -716,6 +748,10 @@ body {
   --cm-title: var(--mn-accent-ink);
   --cm-attr: var(--mn-accent);
   --cm-string: var(--mn-fg-muted);
+  --mn-syntax-command: var(--mn-accent);
+  --mn-syntax-name: var(--mn-accent);
+  --mn-syntax-inline: var(--mn-fg);
+  --mn-syntax-link: var(--mn-accent);
   --mn-selection-bg: color-mix(in srgb, var(--mn-accent) 45%, var(--mn-surface-2));
 }
 
@@ -789,8 +825,12 @@ body {
 
   --cm-keyword: var(--mn-danger);
   --cm-title: var(--mn-accent-ink);
-  --cm-attr: var(--mn-accent);
+  --cm-attr: var(--mn-accent-ink);
   --cm-string: var(--mn-fg-muted);
+  --mn-syntax-command: var(--mn-accent-ink);
+  --mn-syntax-name: var(--mn-accent-ink);
+  --mn-syntax-inline: var(--mn-fg);
+  --mn-syntax-link: var(--mn-accent-ink);
   --mn-selection-bg: color-mix(in srgb, var(--mn-accent) 38%, var(--mn-surface-0));
 }
 
@@ -867,6 +907,10 @@ body {
   --cm-title: var(--mn-accent-ink);
   --cm-attr: var(--mn-accent);
   --cm-string: var(--mn-fg-muted);
+  --mn-syntax-command: var(--mn-accent);
+  --mn-syntax-name: var(--mn-accent);
+  --mn-syntax-inline: var(--mn-fg);
+  --mn-syntax-link: var(--mn-accent);
   --mn-selection-bg: color-mix(in srgb, var(--mn-accent) 28%, var(--mn-surface-2));
 }
 
@@ -940,8 +984,12 @@ body {
 
   --cm-keyword: var(--mn-danger);
   --cm-title: var(--mn-accent-ink);
-  --cm-attr: var(--mn-accent);
+  --cm-attr: var(--mn-accent-ink);
   --cm-string: var(--mn-fg-muted);
+  --mn-syntax-command: var(--mn-accent-ink);
+  --mn-syntax-name: var(--mn-accent-ink);
+  --mn-syntax-inline: var(--mn-fg);
+  --mn-syntax-link: var(--mn-accent-ink);
   --mn-selection-bg: color-mix(in srgb, var(--mn-accent) 32%, var(--mn-surface-0));
 }
 

@@ -29,7 +29,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--mn-accent);
+  color: var(--mn-syntax-name);
   max-width: 12rem;
 }
 
@@ -75,7 +75,7 @@
 }
 
 .attach-chip-source-map--exact {
-  color: var(--mn-accent);
+  color: var(--mn-syntax-name);
 }
 
 .attach-chip-source-map--probable {
