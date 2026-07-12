@@ -7,6 +7,7 @@ import {
   isOrchestratePlanScreenSessionActive,
   isOrchestratePlanScreenSuppressingChatDom,
   isOrchestratePlanScreenSuspendedForChat,
+  restoreOrchestratePlanScreenSessionFromChat,
   showOrchestratePlanScreenSuspendedBanner,
   teardownOrchestratePlanScreen,
   teardownOrchestratePlanScreenDom,
@@ -149,6 +150,9 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   updateCodeChangeStrip(chat);
   if (codeMount && isOrchestrateHubMounted()) {
     teardownOrchestrateHub();
+  }
+  if (codeMount) {
+    restoreOrchestratePlanScreenSessionFromChat(chat);
   }
   if (codeMount && isOrchestratePlanScreenSuspendedForChat(chat)) {
     teardownHub();
@@ -356,7 +360,8 @@ function shouldStubOrchestrateBoardStreamDom(_chat: Chat): boolean {
 
 /** True when plan authoring screen suppresses chat bubble DOM. */
 function shouldStubOrchestratePlanScreenStreamDom(chat: Chat): boolean {
-  if (normalizeModeId(chat.modeId) !== 'plan' && normalizeModeId(chat.modeId) !== 'orchestrate') {
+  const modeId = normalizeModeId(chat.modeId);
+  if (modeId !== 'plan' && modeId !== 'super-plan' && modeId !== 'orchestrate') {
     return false;
   }
   return isOrchestratePlanScreenSuppressingChatDom(chat.id);

@@ -161,6 +161,69 @@ export function isOrchestratePlanScreenSuspendedForChat(chat: Chat): boolean {
   );
 }
 
+/** True when persisted {@link Chat.superPlan} still has a resumable pipeline (not finished/cancelled). */
+export function isSuperPlanPipelineResumable(chat: Chat): boolean {
+  if (normalizeModeId(chat.modeId) !== 'super-plan') return false;
+  const sp = chat.superPlan;
+  if (!sp || sp.cancelled) return false;
+  if (sp.activeStage === 'present') {
+    const record = sp.stages.present;
+    if (record?.status === 'done') return false;
+  }
+  return true;
+}
+
+function derivePlanScreenPhaseFromSuperPlan(chat: Chat): OrchestratePlanScreenPhase {
+  const checkpoint = getSuperPlanCheckpointKind(chat);
+  if (checkpoint === 'spec_confirm') return 'spec_confirm';
+  if (checkpoint === 'present') return 'preview';
+  const sp = chat.superPlan!;
+  const record = sp.stages[sp.activeStage];
+  if (record?.status === 'error') return 'error';
+  return 'super-plan-working';
+}
+
+function resolvePlanSessionArtifactPath(
+  chat: Chat,
+  phase: OrchestratePlanScreenPhase,
+): string | undefined {
+  const sp = chat.superPlan;
+  if (!sp) return undefined;
+  if (phase === 'spec_confirm') return sp.specPath?.trim() || undefined;
+  if (phase === 'preview') {
+    return sp.planPath?.trim() || findLastPlanSavePath(chat.history) || undefined;
+  }
+  return sp.planPath?.trim() || undefined;
+}
+
+/**
+ * Rebuild the in-memory plan-screen session from persisted {@link Chat.superPlan}
+ * after reload or when returning to Code without an active overlay session.
+ */
+export function restoreOrchestratePlanScreenSessionFromChat(chat: Chat): boolean {
+  if (planSession?.chatId === chat.id) return true;
+  if (!isSuperPlanPipelineResumable(chat)) return false;
+
+  const sp = chat.superPlan!;
+  const record = sp.stages[sp.activeStage];
+  const phase = derivePlanScreenPhaseFromSuperPlan(chat);
+  planSession = {
+    chatId: chat.id,
+    phase,
+    planPath: resolvePlanSessionArtifactPath(chat, phase),
+    savedPrompt: sp.prompt,
+    planScreenSuspended: true,
+    errorMessage:
+      record?.status === 'error'
+        ? record.error?.trim() ||
+          'Super Plan stopped with an error. Open the chat to review.'
+        : undefined,
+  };
+  ensureStreamEndListener();
+  wireSuperPlanControllerListener(chat);
+  return true;
+}
+
 /** Suspend overlay when leaving the plan chat via sidebar (keeps session). */
 export function suspendOrchestratePlanScreenOnLeave(leavingChatId: string): void {
   if (!planSession || planSession.chatId !== leavingChatId) return;
@@ -491,9 +554,35 @@ async function onPlanSessionStreamEnd(chatId: string): Promise<void> {
   }
 }
 
-async function startPlanningFromPrompt(promptText: string): Promise<void> {
+export interface StartPlanningFromPromptOptions {
+  /** Keep the active chat (composer send) instead of reusing/creating an empty plan chat. */
+  useActiveChat?: boolean;
+}
+
+/** Whether a composer send should open the plan screen and start the Super Plan pipeline. */
+export function shouldRouteComposerSendToSuperPlan(
+  chat: Chat,
+  opts: {
+    userText: string;
+    skillId: string | null;
+    attachmentCount: number;
+  },
+): boolean {
+  if (normalizeModeId(chat.modeId) !== 'super-plan') return false;
+  if (!opts.userText.trim()) return false;
+  if (opts.skillId) return false;
+  if (opts.attachmentCount > 0) return false;
+  if (chat.superPlan && !chat.superPlan.cancelled) return false;
+  if (isOrchestratePlanScreenOwningChat(chat.id)) return false;
+  return true;
+}
+
+async function startPlanningFromPrompt(
+  promptText: string,
+  options?: StartPlanningFromPromptOptions,
+): Promise<void> {
   teardownOrchestrateHub();
-  const chat = resolveOrCreatePlanChat();
+  const chat = options?.useActiveChat ? getActiveChat() : resolveOrCreatePlanChat();
   ensureStreamEndListener();
 
   planSession = {
@@ -1012,6 +1101,16 @@ export function renderOrchestratePlanScreen(
   }
 }
 
+/**
+ * Start Super Plan (or regular Plan) from the chat composer — mounts the plan screen
+ * and runs {@link startSuperPlan} / {@link runChatTurn} on the active chat.
+ */
+export async function startPlanningFromComposer(promptText: string): Promise<void> {
+  const text = promptText.trim();
+  if (!text) return;
+  await startPlanningFromPrompt(text, { useActiveChat: true });
+}
+
 /** Open plan screen at prompt phase (entry from Orchestrate hub). */
 export async function openOrchestratePlanScreen(): Promise<void> {
   teardownOrchestrateHub();
@@ -1039,6 +1138,9 @@ export function showOrchestratePlanScreenSuspendedBanner(
   text.className = 'orchestrate-plan-screen-banner__text';
   if (session?.phase === 'preview') {
     text.textContent = 'Your plan is ready. Return to the planning screen to review it.';
+  } else if (session?.phase === 'spec_confirm') {
+    text.textContent =
+      'Build spec ready for review. Return to the planning screen to confirm or revise.';
   } else if (session?.phase === 'error') {
     text.textContent =
       'Planning ended without a saved plan. Return to the planning screen or review the chat.';
@@ -1065,13 +1167,19 @@ export function showOrchestratePlanScreenSuspendedBanner(
       savedPrompt: session.savedPrompt,
       errorMessage: session.errorMessage,
     });
-    if (session.phase === 'preview' && session.planPath) {
+    if (
+      (session.phase === 'preview' || session.phase === 'spec_confirm') &&
+      session.planPath
+    ) {
       void (async () => {
         try {
+          const chat = findChatById(session.chatId);
+          const modeId =
+            normalizeModeId(chat?.modeId) === 'super-plan' ? 'super-plan' : 'plan';
           const result = await executeTool('read_file', { path: session.planPath! });
           const pre = document.querySelector('.orchestrate-plan-screen__preview');
           if (!(pre instanceof HTMLElement)) return;
-          mountPlanPreviewContent(pre, result.content, { modeId: 'plan' });
+          mountPlanPreviewContent(pre, result.content, { modeId });
         } catch {
           /* keep placeholder */
         }

@@ -13,6 +13,7 @@ import {
   renderOrchestratePlanScreen,
   resetOrchestratePlanScreenForTests,
   resolveOrchestratePlanScreenQuestionHost,
+  shouldRouteComposerSendToSuperPlan,
   suspendOrchestratePlanScreenOnLeave,
 } from '../../src/ui/orchestrate-plan-screen.ts';
 import { showQuestionCardsModal } from '../../src/ui/question-cards-modal.ts';
@@ -165,5 +166,54 @@ describe('orchestrate plan screen', () => {
     closeBtn?.click();
     const result = await modalPromise;
     assert.equal(result.status, 'cancelled');
+  });
+
+  test('shouldRouteComposerSendToSuperPlan routes first super-plan composer send', () => {
+    const chat = createEmptyChatObject('sp1');
+    chat.modeId = 'super-plan';
+    assert.equal(
+      shouldRouteComposerSendToSuperPlan(chat, {
+        userText: 'Add OAuth login',
+        skillId: null,
+        attachmentCount: 0,
+      }),
+      true,
+    );
+  });
+
+  test('shouldRouteComposerSendToSuperPlan skips when pipeline already active', () => {
+    const chat = createEmptyChatObject('sp2');
+    chat.modeId = 'super-plan';
+    chat.superPlan = {
+      slug: 'oauth',
+      prompt: 'Add OAuth login',
+      activeStage: 'grill',
+      stages: {} as never,
+      specPath: 'documentation/plans/references/oauth-spec.md',
+      researchPath: 'documentation/plans/references/oauth-research.md',
+      planPath: 'documentation/plans/oauth.md',
+      uiInvolved: false,
+    };
+    assert.equal(
+      shouldRouteComposerSendToSuperPlan(chat, {
+        userText: 'Add OAuth login',
+        skillId: null,
+        attachmentCount: 0,
+      }),
+      false,
+    );
+  });
+
+  test('shouldRouteComposerSendToSuperPlan skips non-super-plan modes', () => {
+    const chat = createEmptyChatObject('sp3');
+    chat.modeId = 'plan';
+    assert.equal(
+      shouldRouteComposerSendToSuperPlan(chat, {
+        userText: 'Plan feature X',
+        skillId: null,
+        attachmentCount: 0,
+      }),
+      false,
+    );
   });
 });
