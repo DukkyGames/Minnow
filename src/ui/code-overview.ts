@@ -28,6 +28,11 @@ import type { Chat, ChatGroup } from '../types';
 import type { GitGraphHandle } from './git-graph';
 import { createChat, switchChat } from './sidebar';
 import { stripMainColumnOverlayClasses } from './main-column-overlay';
+import {
+  isMissingGitRepositoryError,
+  openGitSetupFromOverview,
+  renderGitNoRepositoryState,
+} from './git-no-repo-state';
 
 const ROOT_ID = 'codeOverviewRoot';
 const CHAT_AREA_CLASS = 'chat-area--code-overview';
@@ -155,59 +160,9 @@ function renderError(host: HTMLElement, message: string, onRetry?: () => void): 
   }
 }
 
-/** True when git status failed because the workspace root is not a repository. */
-function isMissingGitRepositoryError(message?: string): boolean {
-  return Boolean(message && /not a git repository/i.test(message));
-}
-
 /** Informational rail block when the workspace has no git metadata yet. */
 function renderNoGitRepository(host: HTMLElement): void {
-  host.replaceChildren();
-
-  const block = document.createElement('div');
-  block.className = 'code-overview__git-empty';
-  block.setAttribute('role', 'status');
-
-  const icon = document.createElement('div');
-  icon.className = 'code-overview__git-empty-icon';
-  icon.setAttribute('aria-hidden', 'true');
-  icon.innerHTML =
-    '<svg class="icon-svg" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7.5 7.5 10.5 16M16.5 7.5 13.5 16M8 6h8"/></svg>';
-
-  const title = document.createElement('p');
-  title.className = 'code-overview__git-empty-title';
-  title.textContent = 'No git repository';
-
-  const hint = document.createElement('p');
-  hint.className = 'code-overview__git-empty-hint';
-  hint.textContent =
-    'This workspace is not tracked with git. Initialize to see branches, changes, and commit history here.';
-
-  const action = document.createElement('button');
-  action.type = 'button';
-  action.className = 'code-overview__git-empty-btn';
-  action.textContent = 'Set up git';
-  action.addEventListener('click', () => {
-    void openGitSetupComposer();
-  });
-
-  block.append(icon, title, hint, action);
-  host.appendChild(block);
-}
-
-/** Open Code chat with /git-setup prefilled in the composer. */
-async function openGitSetupComposer(): Promise<void> {
-  await enterCodeChat();
-  const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
-  if (!input) return;
-  const prompt =
-    '/git-setup Initialize git in this workspace (init, .gitignore, initial commit).';
-  input.value = prompt;
-  input.dispatchEvent(new Event('input', { bubbles: true }));
-  const { autoResize } = await import('./input');
-  autoResize(input);
-  input.focus();
-  input.setSelectionRange(prompt.length, prompt.length);
+  renderGitNoRepositoryState(host, { onSetupGit: () => void openGitSetupFromOverview() });
 }
 
 function buildSparklineSvg(values: number[], className: string): SVGSVGElement {

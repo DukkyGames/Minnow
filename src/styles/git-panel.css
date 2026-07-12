@@ -2,6 +2,8 @@
  * Git source control view — embedded in the file sidebar (#gitPanelRoot).
  */
 
+@import './git-no-repo.css';
+
 .git-panel-root {
   flex: 1;
   min-height: 0;
