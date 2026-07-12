@@ -132,6 +132,7 @@ import {
   resolveComposerSurface,
   type ComposerSurface,
 } from '../ui/composer-surface';
+import { clearComposerDraftOnChat } from '../ui/composer-draft';
 
 export type { ComposerSurface } from '../ui/composer-surface';
 import { getActiveChatMountElement, setTurnChatMount } from '../ui/chat-mount';
@@ -1070,6 +1071,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     if (clearPostToolTailBeforeSend(chat)) {
       scheduleSaveSessions();
     }
+    clearComposerDraftOnChat(chat);
     const artifactAppendix = consumeReefArtifactEditsForPrompt(chat);
     const modelUserContent = artifactAppendix
       ? `${historyContent}${artifactAppendix}`

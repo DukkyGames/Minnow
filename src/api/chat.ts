@@ -20,6 +20,7 @@ import {
   recordChatMessage,
 } from '../state/sessions';
 import { autoResize } from '../ui/input';
+import { clearComposerDraftOnChat } from '../ui/composer-draft';
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
 import type {
   ApiMessage,
@@ -437,6 +438,7 @@ export async function sendMessage(): Promise<void> {
   chat.modelId = modelId || chat.modelId;
   const shouldScheduleTitle = isFirstUserMessagePending(chat);
   chat.history.push({ role: 'user', content: text });
+  clearComposerDraftOnChat(chat);
   recordChatMessage(chat);
   scheduleSaveSessions();
   renderSidebar();

@@ -20,7 +20,7 @@ import {
   getBoardProgressPercent,
   isBoardRunning,
 } from '../state/orchestrate-board-store';
-import { getChatsForWorkspace, getChatLastMessageAt } from '../state/session-workspace-scope';
+import { getChatsForWorkspace, getChatLastMessageAt, getSidebarListedChatsForWorkspace } from '../state/session-workspace-scope';
 import { sessionState } from '../state/sessions';
 import { isLocalServerAvailable } from '../tools/config';
 import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
@@ -574,7 +574,7 @@ function refreshSessionsPanel(): void {
   const host = document.getElementById('codeOverviewSessionsBody');
   if (!host || !sessionState) return;
 
-  const chats = getChatsForWorkspace(getWorkspacePath(), sessionState).slice(
+  const chats = getSidebarListedChatsForWorkspace(getWorkspacePath(), sessionState).slice(
     0,
     RECENT_SESSION_LIMIT,
   );

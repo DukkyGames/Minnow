@@ -1,0 +1,70 @@
+/**
+ * Ephemeral empty chats stay out of sidebar lists until send or draft text.
+ */
+
+import assert from 'node:assert/strict';
+import { describe, test } from 'node:test';
+import {
+  formatDraftChatSidebarName,
+  getSidebarListedChatsForWorkspace,
+  hasComposerDraft,
+  isEphemeralEmptyChat,
+  isSidebarListedChat,
+  pruneEphemeralEmptyChats,
+} from '../../src/state/session-workspace-scope.ts';
+import { createEmptyChatObject } from '../../src/state/sessions.ts';
+import type { SessionState } from '../../src/types.ts';
+
+const WS = 'C:\\workspace\\draft-sidebar';
+
+function stateWithChats(...chats: ReturnType<typeof createEmptyChatObject>[]): SessionState {
+  return {
+    version: 5,
+    activeId: chats[0]?.id ?? '',
+    sidebarCollapsed: false,
+    chats,
+  };
+}
+
+describe('chat sidebar listing', () => {
+  test('ephemeral empty chats are hidden from sidebar lists', () => {
+    const fresh = createEmptyChatObject('', WS);
+    assert.equal(isEphemeralEmptyChat(fresh), true);
+    assert.equal(isSidebarListedChat(fresh), false);
+
+    const state = stateWithChats(fresh);
+    assert.deepEqual(getSidebarListedChatsForWorkspace(WS, state), []);
+  });
+
+  test('draft-only chats appear in sidebar lists', () => {
+    const draft = createEmptyChatObject('', WS);
+    draft.composerDraft = 'Fix the sidebar new-chat flow';
+    assert.equal(isEphemeralEmptyChat(draft), false);
+    assert.equal(hasComposerDraft(draft), true);
+    assert.equal(isSidebarListedChat(draft), true);
+    assert.equal(
+      formatDraftChatSidebarName(draft),
+      'Fix the sidebar new-chat flow',
+    );
+
+    const state = stateWithChats(draft);
+    assert.equal(getSidebarListedChatsForWorkspace(WS, state).length, 1);
+  });
+
+  test('pruneEphemeralEmptyChats keeps the active row and listed chats', () => {
+    const keep = createEmptyChatObject('', WS);
+    const orphan = createEmptyChatObject('', WS);
+    const listed = createEmptyChatObject('', WS);
+    listed.history.push({ role: 'user', content: 'hello' });
+    const draft = createEmptyChatObject('', WS);
+    draft.composerDraft = 'still typing';
+
+    const state = stateWithChats(keep, orphan, listed, draft);
+    pruneEphemeralEmptyChats(state, keep.id);
+    assert.equal(state.chats.length, 3);
+    assert.ok(state.chats.some((c) => c.id === keep.id));
+    assert.ok(state.chats.some((c) => c.id === listed.id));
+    assert.ok(state.chats.some((c) => c.id === draft.id));
+    assert.equal(state.chats.some((c) => c.id === orphan.id), false);
+  });
+});
