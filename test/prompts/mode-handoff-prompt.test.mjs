@@ -56,7 +56,10 @@ describe('mode-handoff prompts', () => {
     assert.ok(loaded?.body);
     assert.match(loaded.body, /ask_question/);
     assert.match(loaded.body, /create_chat_with_mode/);
+    assert.match(loaded.body, /mode_id: orchestrate/);
+    assert.match(loaded.body, /plan_path/);
     assert.match(loaded.body, /set_chat_mode/);
+    assert.doesNotMatch(loaded.body, /modeId:/);
     assert.doesNotMatch(loaded.body, /reef-widget/);
   });
 

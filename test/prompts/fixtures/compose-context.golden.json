@@ -10,6 +10,5 @@
   "memoryBlock": null,
   "enabledToolIds": ["get_datetime", "calculate"],
   "infoPresetId": "general-assistant",
-  "userMessagePreview": "Hello",
-  "includeChatHistorySummary": false
+  "userMessagePreview": "Hello"
 }

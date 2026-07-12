@@ -1,5 +1,5 @@
 /**
- * Phase 5: collapsed cross-section prompt overlap — single authoritative copies.
+ * Phase 5 / MIN-379: collapsed cross-section prompt overlap — single authoritative copies.
  */
 
 import assert from 'node:assert/strict';
@@ -13,7 +13,7 @@ import {
   registerPromptFilesFromRaw,
   resetPromptRegistry,
 } from '../../src/chat/prompts/prompt-loader.ts';
-import { loadBuiltinModePromptMap } from '../modes/test-helpers.mts';
+import { loadBuiltinModePromptMap, registerShippedWorkAgents } from '../modes/test-helpers.mts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '../..');
@@ -22,6 +22,7 @@ async function loadShippedOverlapPromptMap() {
   const toolDir = path.join(REPO_ROOT, 'src/chat/prompts/tool-usage');
   const baseDir = path.join(REPO_ROOT, 'src/chat/prompts/base');
   const infoDir = path.join(REPO_ROOT, 'src/chat/prompts/info');
+  const workAgentDir = path.join(REPO_ROOT, 'src/chat/prompts/work-agents');
   const map = await loadBuiltinModePromptMap();
   const files = [
     ['base/default.full.md', path.join(baseDir, 'default.full.md')],
@@ -34,6 +35,10 @@ async function loadShippedOverlapPromptMap() {
     ['tool-usage/mode-handoff.lite.md', path.join(toolDir, 'mode-handoff.lite.md')],
     ['tool-usage/fact-verification.full.md', path.join(toolDir, 'fact-verification.md')],
     ['tool-usage/fact-verification.lite.md', path.join(toolDir, 'fact-verification.lite.md')],
+    ['work-agents/builder/agent.full.md', path.join(workAgentDir, 'builder/agent.full.md')],
+    ['work-agents/builder/agent.lite.md', path.join(workAgentDir, 'builder/agent.lite.md')],
+    ['work-agents/planner/agent.full.md', path.join(workAgentDir, 'planner/agent.full.md')],
+    ['work-agents/planner/agent.lite.md', path.join(workAgentDir, 'planner/agent.lite.md')],
     ['info/general-assistant.full.md', path.join(infoDir, 'general-assistant.full.md')],
   ];
   for (const [key, abs] of files) {
@@ -47,19 +52,21 @@ function countOccurrences(haystack, needle) {
   return (haystack.match(re) ?? []).length;
 }
 
-describe('prompt overlap collapse (MIN-335)', () => {
-  beforeEach(() => {
+describe('prompt overlap collapse (MIN-335 / MIN-379)', () => {
+  beforeEach(async () => {
     resetPromptRegistry();
+    await registerShippedWorkAgents();
   });
 
-  test('Build prompt: duplicated rules appear once; key guidance retained', async () => {
+  test('Build prompt with default builder: duplicated rules appear once', async () => {
     registerPromptFilesFromRaw(await loadShippedOverlapPromptMap());
     const out = composeSystemPrompt({
       profile: 'full',
       cwd: '/proj',
       modeId: 'build',
       expertId: null,
-      workAgentId: null,
+      workAgentId: 'builder',
+      workAgentLabel: 'Builder',
       skillBody: null,
       memoryBlock: null,
       enabledToolIds: ['ask_question', 'read_file', 'propose_mode_switch'],
@@ -68,6 +75,8 @@ describe('prompt overlap collapse (MIN-335)', () => {
 
     assert.equal(countOccurrences(out, 'Read before'), 1, 'read-before-write once');
     assert.equal(countOccurrences(out, 'Never invent tool'), 1, 'never-invent-output once');
+    assert.equal(countOccurrences(out, 'Operating mode: Build'), 0, 'mode suppressed when builder default');
+    assert.match(out, /Work agent: Builder/);
     assert.match(out, /Structured user choices \(mandatory\)/);
     assert.match(out, /Mode handoff \(structured switches\)/);
     assert.doesNotMatch(out, /General-assistant context/);
@@ -93,25 +102,37 @@ describe('prompt overlap collapse (MIN-335)', () => {
     assert.equal(countOccurrences(out, 'Date:'), 1, 'date only in base session context');
   });
 
-  test('Build composed prompt saves ~400 tokens vs pre-Phase-5 overlap', async () => {
+  test('Build + builder composed prompt saves tokens vs pre-MIN-379 overlap stack', async () => {
     registerPromptFilesFromRaw(await loadShippedOverlapPromptMap());
     const current = composeSystemPrompt({
       profile: 'full',
       cwd: '/proj',
       modeId: 'build',
       expertId: null,
-      workAgentId: null,
+      workAgentId: 'builder',
+      workAgentLabel: 'Builder',
       skillBody: null,
       memoryBlock: null,
-      enabledToolIds: ['ask_question', 'read_file', 'propose_mode_switch', 'set_chat_mode'],
+      enabledToolIds: [
+        'ask_question',
+        'read_file',
+        'propose_mode_switch',
+        'set_chat_mode',
+        'grep',
+        'save_file',
+      ],
       infoPresetId: 'general-assistant',
     });
 
     const currentTokens = estimateTokensFromText(current);
-    // Measured from shipped prompts before MIN-335 (same compose context).
-    const prePhase5BuildTokens = 5652;
-    const saved = prePhase5BuildTokens - currentTokens;
+    // Pre-MIN-379: base + build mode + builder + tool-usage stack (~5900 tok).
+    const preMin379BuildTokens = 5900;
+    const saved = preMin379BuildTokens - currentTokens;
+    const pctSaved = (saved / preMin379BuildTokens) * 100;
 
-    assert.ok(saved >= 350, `expected ~400 tok saved, got ${saved} (${prePhase5BuildTokens} → ${currentTokens})`);
+    assert.ok(
+      pctSaved >= 20,
+      `expected meaningful tok reduction, got ${pctSaved.toFixed(1)}% (${preMin379BuildTokens} → ${currentTokens})`,
+    );
   });
 });

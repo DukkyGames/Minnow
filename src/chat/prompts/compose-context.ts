@@ -127,7 +127,6 @@ export async function buildComposeContext(
         .find((m) => m.role === 'user')
         ?.content?.slice(0, 200) ??
       '',
-    includeChatHistorySummary: false,
     browserActivated:
       options?.overrides?.browserActivated ??
       chatHistoryHasBrowserToolUse(chat.history),

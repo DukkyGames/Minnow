@@ -5,6 +5,12 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  registerWorkAgentFilesFromRaw,
+  resetWorkAgentRegistry,
+  setWorkAgentRegistryIndex,
+} from '../../src/agents/work-agent-registry.ts';
+import registryIndex from '../../src/chat/prompts/work-agents/registry.json' with { type: 'json' };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '../..');
@@ -36,4 +42,31 @@ export async function loadBuiltinModePromptMap(): Promise<Record<string, string>
     }
   }
   return map;
+}
+
+/** Load shipped work-agent prompt files for registerWorkAgentFilesFromRaw. */
+export async function loadBuiltinWorkAgentPromptMap(): Promise<Record<string, string>> {
+  const agentsDir = repoPath('src/chat/prompts/work-agents');
+  const entries = await fs.readdir(agentsDir, { withFileTypes: true });
+  const map: Record<string, string> = {};
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith('_')) continue;
+    for (const profile of ['full', 'lite'] as const) {
+      const fileName = `agent.${profile}.md`;
+      const abs = path.join(agentsDir, entry.name, fileName);
+      try {
+        map[`./work-agents/${entry.name}/${fileName}`] = await fs.readFile(abs, 'utf8');
+      } catch {
+        /* agent may ship full-only */
+      }
+    }
+  }
+  return map;
+}
+
+/** Register shipped work agents (required for defaultForModes / mode suppression tests). */
+export async function registerShippedWorkAgents(): Promise<void> {
+  resetWorkAgentRegistry();
+  setWorkAgentRegistryIndex(registryIndex as { ids: string[] });
+  registerWorkAgentFilesFromRaw(await loadBuiltinWorkAgentPromptMap());
 }

@@ -125,7 +125,6 @@ export async function appendSubAgentMemorySection(
       cwd: '',
       memory: block,
       user_message: task,
-      chat_history_summary: '',
       work_agent: '',
       work_agent_label: '',
       skill: '',
