@@ -15,6 +15,11 @@ export function getStorageMode(): StorageMode {
   return storageMode;
 }
 
+/** Override storage mode (unit / headless tests). */
+export function setStorageModeForTests(mode: StorageMode): void {
+  storageMode = mode;
+}
+
 /** Whether reads/writes should use ~/.minnow via the API. */
 export function isServerStorageMode(): boolean {
   return storageMode === 'server';

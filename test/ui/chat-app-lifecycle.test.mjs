@@ -15,17 +15,16 @@ const appHostSrc = readFileSync(join(root, 'src/os/app-host.ts'), 'utf8');
 
 describe('chat app lifecycle contracts', () => {
   test('openChatApp and closeChatApp are exported with seed support', () => {
-    assert.match(chatAppSrc, /export async function openChatApp\(seed\?: string\)/);
+    assert.match(chatAppSrc, /export async function openChatApp\(options\?: string \| ChatAppOpenOptions\)/);
     assert.match(chatAppSrc, /export function closeChatApp\(/);
-    assert.match(chatAppSrc, /await applyConciergeSeed\(seed\)/);
+    assert.match(chatAppSrc, /await applyConciergeSeed\(opts\.seed\)/);
     assert.match(chatAppSrc, /async function applyConciergeSeed\(seed\?: string\)/);
     assert.match(chatAppSrc, /input\.value = text/);
   });
 
-  test('app-host routes chat foreground to openChatApp with instance seed', () => {
+  test('app-host routes chat foreground to activateDesktopChat with instance seed', () => {
     assert.match(appHostSrc, /case 'chat':/);
-    assert.match(appHostSrc, /await openChatApp\(seed\)/);
-    assert.match(appHostSrc, /else if \(seed && appId === 'chat'\)/);
+    assert.match(appHostSrc, /await activateDesktopChat\(\{ seed: options\?\.seed, chatId: options\?\.chatId \}\)/);
   });
 
   test('closeChatApp navigates to desktop under OS shell', () => {

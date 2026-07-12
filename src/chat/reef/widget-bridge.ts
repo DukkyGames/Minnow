@@ -448,7 +448,7 @@ function handleSendPrompt(text: string): void {
   const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
   if (!input) return;
   input.value = text;
-  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new window.Event('input', { bubbles: true }));
   input.focus();
 }
 

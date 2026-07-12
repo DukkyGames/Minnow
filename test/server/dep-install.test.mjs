@@ -9,12 +9,15 @@ import path from 'node:path';
 import { after, describe, test } from 'node:test';
 import { refreshDependencies } from '../../server/worktree/dep-install.js';
 
+/** Windows CI may still hold temp dir handles briefly after timed-out installs. */
+const RM_OPTS = { recursive: true, force: true, maxRetries: 5, retryDelay: 100 };
+
 describe('dep-install', () => {
   let tmpDir;
 
   after(async () => {
     if (tmpDir) {
-      await fs.rm(tmpDir, { recursive: true, force: true });
+      await fs.rm(tmpDir, RM_OPTS);
     }
   });
 
@@ -59,7 +62,7 @@ describe('dep-install', () => {
     assert.ok(Array.isArray(result.ran));
     assert.ok(Array.isArray(result.failed));
 
-    await fs.rm(isolated, { recursive: true, force: true });
+    await fs.rm(isolated, RM_OPTS);
   });
 
   test('refreshDependencies materializes seed junction before install', async () => {
@@ -105,6 +108,6 @@ describe('dep-install', () => {
     const keep = await fs.readFile(path.join(mainNm, 'keep.txt'), 'utf8');
     assert.equal(keep, 'safe\n');
 
-    await fs.rm(root, { recursive: true, force: true });
+    await fs.rm(root, RM_OPTS);
   });
 });

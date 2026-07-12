@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
+import { Window } from 'happy-dom';
 import { resolveBenchmarkSuites } from '../../src/benchmark/runner.ts';
 import type { SuiteId } from '../../src/benchmark/types.ts';
 import {
@@ -8,9 +9,10 @@ import {
   getSelectedSuitesForTests,
   getSuiteToggleOrderForTests,
   hasSelectedBenchmarkWorkForTests,
-  initBenchmarkPage,
   storedPresetForStartMode,
+  wireBenchmarkRunBarForTests,
 } from '../../src/ui/benchmark-page.ts';
+import { installBenchmarkTestGlobals } from '../os/dom-helpers.mts';
 
 const QUICK_SUITES = resolveBenchmarkSuites('quick');
 const FULL_SUITES = resolveBenchmarkSuites('full');
@@ -48,18 +50,19 @@ function setAllToggles(pressed: boolean): void {
 }
 
 describe('benchmark suite toggles', () => {
-  beforeEach(async () => {
-    const { Window } = await import('happy-dom');
-    const window = new Window();
-    globalThis.window = window;
-    globalThis.document = window.document;
-    globalThis.HTMLElement = window.HTMLElement;
+  let win: Window | undefined;
+
+  beforeEach(() => {
+    win = new Window();
+    installBenchmarkTestGlobals(win);
     document.body.innerHTML = buildBenchmarkRunBarHtml();
-    initBenchmarkPage();
+    wireBenchmarkRunBarForTests();
   });
 
   afterEach(() => {
     document.body.innerHTML = '';
+    win?.close();
+    win = undefined;
   });
 
   test('clicking a toggle flips aria-pressed', () => {

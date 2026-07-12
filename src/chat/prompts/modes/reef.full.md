@@ -82,11 +82,40 @@ Visual polish expectations follow `/impeccable` ([`src/skills/impeccable/SKILL.m
 
 ## Templates and snippets
 
-Widget templates ship **with Minnow**, not in `{{cwd}}`. Discover with `find_files` on `@minnow/reef/widgets` (`*.md` for templates; `snippet-*.md` for building blocks).
+Widget templates ship **with Minnow**, not in `{{cwd}}`. Do **not** search `{{cwd}}` for `src/chat/reef/widgets/`.
 
-**Exemplar paths:** `@minnow/reef/widgets/calculator.md`, `@minnow/reef/widgets/form.md`, `@minnow/reef/widgets/data-table.md`, `@minnow/reef/widgets/snippet-chart-line.md`.
+| Template | `read_file` path |
+|----------|------------------|
+| Calculator | `@minnow/reef/widgets/calculator.md` |
+| Calculator + bar chart | `@minnow/reef/widgets/calculator-with-chart.md` |
+| Slider + chart | `@minnow/reef/widgets/slider-graph.md` |
+| Tabs | `@minnow/reef/widgets/tabs.md` |
+| Form | `@minnow/reef/widgets/form.md` |
+| Data table | `@minnow/reef/widgets/data-table.md` |
+| Comparison | `@minnow/reef/widgets/comparison.md` |
+| Checklist | `@minnow/reef/widgets/checklist.md` |
+| Stats dashboard | `@minnow/reef/widgets/stats-dashboard.md` |
+| Pie chart | `@minnow/reef/widgets/pie-chart.md` |
+| Heatmap | `@minnow/reef/widgets/heatmap.md` |
+| Quiz | `@minnow/reef/widgets/quiz.md` |
+| Q&A (callLLM) | `@minnow/reef/widgets/qa-callllm.md` |
+| Timeline | `@minnow/reef/widgets/timeline.md` |
+| Unit converter | `@minnow/reef/widgets/unit-converter.md` |
 
-When the ask matches a template, `read_file` that path and adapt the fence.
+**Templates** are full-widget examples — when the ask matches one file, `read_file` that path and adapt the fence. To list all: `find_files` with `path: "@minnow/reef/widgets"`, `pattern: "*.md"` (exclude `snippet-*.md` if you only need full apps).
+
+### Snippets
+
+**Snippets** are smaller `snippet-*.md` building blocks (one chart, table, control row, etc.). Compose them into a custom fence or combine several. Discover: `find_files` with `path: "@minnow/reef/widgets"`, `pattern: "snippet-*.md"`.
+
+| Snippet | `read_file` path |
+|---------|------------------|
+| Line chart | `@minnow/reef/widgets/snippet-chart-line.md` |
+| Bar chart | `@minnow/reef/widgets/snippet-chart-bar.md` |
+| Table | `@minnow/reef/widgets/snippet-table.md` |
+| Stat card | `@minnow/reef/widgets/snippet-stat-card.md` |
+| Input row | `@minnow/reef/widgets/snippet-input-row.md` |
+| Sparkline | `@minnow/reef/widgets/snippet-sparkline.md` |
 
 ## Bridge API (`window.minnow`)
 
@@ -121,6 +150,25 @@ After the user sees a **complete** mounted `reef-widget` for their request:
 2. Offer save when the widget is **non-trivial** (dashboards, multi-control tools, likely reuse) — not for one-off trivia or mid-stream partial fences.
 3. On **No**: leave the widget in chat history only — **no** module file.
 4. On **Yes**: write `@minnow/reef/modules/<slug>.md` (optional YAML front matter + the same fence body). If the slug exists, **`ask_question`** again for replace vs new slug.
+
+**Example `ask_question` call** (one question):
+
+```json
+{
+  "questions": [
+    {
+      "id": "save_reef_module",
+      "prompt": "Save this widget as a reusable module in your Minnow library?",
+      "options": [
+        { "id": "yes", "label": "Yes, save to my Minnow library", "description": "Writes ~/.minnow/reef/modules/<slug>.md" },
+        { "id": "no", "label": "No, keep only in this chat", "description": "No file write" }
+      ]
+    }
+  ]
+}
+```
+
+Only when the user selects **yes** (or equivalent via Other) should you `save_file` to `@minnow/reef/modules/<slug>.md`.
 
 ## Artifacts vs modules
 

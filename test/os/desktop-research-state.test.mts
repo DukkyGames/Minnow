@@ -18,6 +18,7 @@ import {
   resolveLegacyHash,
 } from '../../src/os/router.ts';
 import { renderDesktop } from '../../src/os/desktop.ts';
+import { installHappyDomGlobals } from './dom-helpers.mts';
 
 function setupDesktopDom(win: import('happy-dom').Window): void {
   win.document.body.innerHTML = `
@@ -35,27 +36,7 @@ describe('desktop research state', () => {
   beforeEach(async () => {
     const { Window } = await import('happy-dom');
     const win = new Window();
-    const g = globalThis as typeof globalThis & {
-      window: Window;
-      document: Document;
-      HTMLElement: typeof HTMLElement;
-      localStorage: Storage;
-    };
-    g.window = win as unknown as Window & typeof globalThis.window;
-    g.document = win.document;
-    g.HTMLElement = win.HTMLElement;
-    g.localStorage = win.localStorage;
-    win.matchMedia = ((query: string) => ({
-      matches: query.includes('prefers-reduced-motion'),
-      media: query,
-      addEventListener: () => undefined,
-      removeEventListener: () => undefined,
-      addListener: () => undefined,
-      removeListener: () => undefined,
-      dispatchEvent: () => false,
-      onchange: null,
-    })) as typeof window.matchMedia;
-    win.fetch = (async (input: string | URL) => {
+    const fetchImpl = (async (input: string | URL) => {
       const url = String(input);
       if (url.includes('/api/config/research')) {
         return {
@@ -65,6 +46,7 @@ describe('desktop research state', () => {
       }
       return { ok: false, status: 404, json: async () => ({}) } as Response;
     }) as typeof fetch;
+    installHappyDomGlobals(win, { fetch: fetchImpl });
     setupDesktopDom(win);
     win.location.hash = '#/desktop';
     resetInstancesForTests();

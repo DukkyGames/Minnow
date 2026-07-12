@@ -50,67 +50,94 @@ const BOARD_GROUP_ID = '33333333-3333-3333-3333-333333333333';
 const FIXED_NOW = 1710000001000;
 const PLAN_PATH = 'documentation/plans/shiny-minsky-board-view.md';
 
-const EXPECTED_BOARD_INIT_RESULT = `{
-  "planPath": "documentation/plans/shiny-minsky-board-view.md",
-  "tasks": [
-    {
-      "id": "W1-A",
-      "title": "Implement board store",
-      "wave": "W1",
-      "category": "build",
-      "status": "planned"
-    }
-  ],
-  "waves": [
-    {
-      "id": "W1",
-      "status": "planned",
-      "taskCount": 1,
-      "completeCount": 0
-    }
-  ],
-  "startedAt": 1710000001000,
-  "lastUpdatedAt": 1710000001000,
-  "timerAccumulatedMs": 0,
-  "maxConcurrentTasks": 3,
-  "executionMode": "manual"
-}`;
+type BoardTaskJson = {
+  id: string;
+  title: string;
+  wave: string;
+  category: string;
+  status: string;
+  assignedRunId?: string;
+};
 
-const EXPECTED_UPDATE_TASK_RESULT = `{
-  "id": "W1-A",
-  "title": "Implement board store",
-  "wave": "W1",
-  "category": "build",
-  "status": "in_progress",
-  "assignedRunId": "run-0001"
-}`;
+type BoardWaveJson = {
+  id: string;
+  status: string;
+  taskCount: number;
+  completeCount: number;
+};
 
-const EXPECTED_GET_STATE_RESULT = `{
-  "planPath": "documentation/plans/shiny-minsky-board-view.md",
-  "tasks": [
+type BoardStateJson = {
+  planPath: string;
+  tasks: BoardTaskJson[];
+  waves: BoardWaveJson[];
+  startedAt: number;
+  lastUpdatedAt: number;
+  timerAccumulatedMs: number;
+  maxConcurrentTasks: number;
+  executionMode: string;
+  log?: Array<{ type: string; level: string; message: string }>;
+};
+
+function parseBoardState(out: string): BoardStateJson {
+  return JSON.parse(out) as BoardStateJson;
+}
+
+function assertPlannedBoardInit(parsed: BoardStateJson): void {
+  assert.equal(parsed.planPath, PLAN_PATH);
+  assert.equal(parsed.startedAt, FIXED_NOW);
+  assert.equal(parsed.lastUpdatedAt, FIXED_NOW);
+  assert.equal(parsed.timerAccumulatedMs, 0);
+  assert.equal(parsed.maxConcurrentTasks, 3);
+  assert.equal(parsed.executionMode, 'manual');
+  assert.deepEqual(parsed.tasks, [
     {
-      "id": "W1-A",
-      "title": "Implement board store",
-      "wave": "W1",
-      "category": "build",
-      "status": "in_progress",
-      "assignedRunId": "run-0001"
-    }
-  ],
-  "waves": [
+      id: 'W1-A',
+      title: 'Implement board store',
+      wave: 'W1',
+      category: 'build',
+      status: 'planned',
+    },
+  ]);
+  assert.deepEqual(parsed.waves, [
     {
-      "id": "W1",
-      "status": "in_progress",
-      "taskCount": 1,
-      "completeCount": 0
-    }
-  ],
-  "startedAt": 1710000001000,
-  "lastUpdatedAt": 1710000001000,
-  "timerAccumulatedMs": 0,
-  "maxConcurrentTasks": 3,
-  "executionMode": "manual"
-}`;
+      id: 'W1',
+      status: 'planned',
+      taskCount: 1,
+      completeCount: 0,
+    },
+  ]);
+  assert.ok(Array.isArray(parsed.log));
+  assert.ok(parsed.log?.some((entry) => entry.type === 'board_init'));
+}
+
+function assertInProgressBoardState(parsed: BoardStateJson): void {
+  assert.equal(parsed.planPath, PLAN_PATH);
+  assert.equal(parsed.startedAt, FIXED_NOW);
+  assert.equal(parsed.lastUpdatedAt, FIXED_NOW);
+  assert.equal(parsed.timerAccumulatedMs, 0);
+  assert.equal(parsed.maxConcurrentTasks, 3);
+  assert.equal(parsed.executionMode, 'manual');
+  assert.deepEqual(parsed.tasks, [
+    {
+      id: 'W1-A',
+      title: 'Implement board store',
+      wave: 'W1',
+      category: 'build',
+      status: 'in_progress',
+      assignedRunId: 'run-0001',
+    },
+  ]);
+  assert.deepEqual(parsed.waves, [
+    {
+      id: 'W1',
+      status: 'in_progress',
+      taskCount: 1,
+      completeCount: 0,
+    },
+  ]);
+  assert.ok(Array.isArray(parsed.log));
+  assert.ok(parsed.log?.some((entry) => entry.type === 'board_init'));
+}
 
 function seedOrchestrateChat(overrides: Record<string, unknown> = {}) {
   setSessionStateForTests({
@@ -276,7 +303,7 @@ describe('executeBoardTool', () => {
     });
     setBoardExecutorContext(null);
     const out = await executeBoardTool('board_get_state', {}, { chatId: CHAT_ID });
-    assert.equal(out, EXPECTED_BOARD_INIT_RESULT);
+    assertPlannedBoardInit(parseBoardState(out));
   });
 
   test('board_get_state from linked build task chat', async () => {
@@ -340,7 +367,7 @@ describe('executeBoardTool', () => {
     }, { chatId: CHAT_ID });
 
     const out = await executeBoardTool('board_get_state', {}, { chatId: TASK_CHAT_ID });
-    assert.equal(out, EXPECTED_BOARD_INIT_RESULT);
+    assertPlannedBoardInit(parseBoardState(out));
   });
 
   test('board_update_task rejects calls from linked build task chat', async () => {
@@ -429,7 +456,7 @@ describe('executeBoardTool', () => {
       ],
       waves: [{ id: 'W1' }],
     });
-    assert.equal(out, EXPECTED_BOARD_INIT_RESULT);
+    assertPlannedBoardInit(parseBoardState(out));
   });
 
   test('board_update_task and board_get_state happy path', async () => {
@@ -454,10 +481,17 @@ describe('executeBoardTool', () => {
       status: 'in_progress',
       run_id: 'run-0001',
     });
-    assert.equal(updateOut, EXPECTED_UPDATE_TASK_RESULT);
+    assert.deepEqual(JSON.parse(updateOut), {
+      id: 'W1-A',
+      title: 'Implement board store',
+      wave: 'W1',
+      category: 'build',
+      status: 'in_progress',
+      assignedRunId: 'run-0001',
+    });
 
     const getOut = await executeBoardTool('board_get_state', {});
-    assert.equal(getOut, EXPECTED_GET_STATE_RESULT);
+    assertInProgressBoardState(parseBoardState(getOut));
   });
 
   test('board_update_task before init returns error', async () => {
