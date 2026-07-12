@@ -30,7 +30,7 @@ import { startEmailPollLoop, stopEmailPollLoop } from './server/email/poller.js'
 import { setSchedulerServerBaseUrl } from './server/scheduler/server-base-url.js';
 import { shutdownSchedulerRuns } from './server/scheduler/runner.js';
 import { shutdownAllServers } from './server/servers/index.js';
-import { shutdownAllModelServes } from './server/models/index.js';
+import { shutdownAllModelInfrastructure } from './server/models/index.js';
 import {
   resolveSafePath,
   runWithPathAccess,
@@ -204,7 +204,7 @@ async function main() {
     stopEmailPollLoop();
     shutdownSchedulerRuns();
     shutdownAllServers();
-    shutdownAllModelServes();
+    shutdownAllModelInfrastructure();
     destroyAllPtySessions();
     deleteGenerationsForProviderShutdown();
   };

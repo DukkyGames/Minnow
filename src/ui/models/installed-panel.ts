@@ -1,21 +1,27 @@
 /**
- * Models → Installed — download queue, artifacts, and serve controls.
+ * Models → Installed — download queue, artifacts, and router load controls.
  */
 
 import { selectProviderModel } from '../../api/models';
 import {
   cancelModelDownload,
   fetchInstalledModels,
+  fetchRouterStatus,
   fetchRuntimes,
-  listModelServes,
-  startModelServe,
-  stopModelServe,
+  loadLocalModel,
+  restartModelRouter,
+  routerModelIdFromFilename,
+  startModelRouter,
+  stopModelRouter,
   subscribeDownloadProgress,
+  unloadLocalModel,
   type DownloadJob,
   type InstalledArtifact,
+  type RouterModelRow,
+  type RouterStatus,
   type RuntimeDetection,
-  type ServeRecord,
 } from '../../models/api-client';
+import { ensureLlamaRuntimeInstalled } from './llama-install-prompt';
 import { openServeDialog } from './serve-dialog';
 import { setStatus } from '../status';
 
@@ -38,6 +44,19 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
   if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
   return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+}
+
+/** Build a set of loaded model ids from the router catalog. */
+function loadedModelIds(loadedModels: { data?: RouterModelRow[] } | null): Set<string> {
+  const ids = new Set<string>();
+  for (const row of loadedModels?.data ?? []) {
+    if (!row?.id) continue;
+    const state = (row.state ?? '').toLowerCase();
+    if (state === 'loaded' || state === 'loading' || !state) {
+      ids.add(row.id);
+    }
+  }
+  return ids;
 }
 
 function renderProgressBar(job: DownloadJob): HTMLElement {
@@ -94,116 +113,211 @@ function renderDownloadRow(job: DownloadJob): HTMLElement {
   return row;
 }
 
-async function useServedModelInChat(serve: ServeRecord): Promise<void> {
-  const picked = await selectProviderModel(serve.providerId, serve.modelLabel);
-  if (picked) {
-    setStatus('ok', 'Model selected in the top bar.');
-  } else {
-    setStatus('ok', 'Provider active — pick the model in the top bar if needed.');
+/** Ensure router is running, load the model, and select it in chat. */
+async function useModelInChat(modelId: string): Promise<void> {
+  const ready = await ensureLlamaRuntimeInstalled();
+  if (!ready) return;
+
+  await startModelRouter();
+  try {
+    await loadLocalModel(modelId);
+  } catch (err) {
+    setStatus('err', err instanceof Error ? err.message : 'Load failed');
+    return;
   }
+
+  const picked = await selectProviderModel('llama-cpp-local', modelId);
+  if (picked) {
+    setStatus('ok', 'Model loaded and selected.');
+  } else {
+    setStatus('ok', 'Model loaded — pick it in the top bar if needed.');
+  }
+}
+
+function renderRouterCard(
+  router: RouterStatus,
+  loadedModels: { data?: RouterModelRow[] } | null,
+): HTMLElement {
+  const card = el('div', 'models-router-card');
+  const head = el('div', 'models-router-card__head');
+  const title = el('h3', 'models-hardware-card__title', 'llama.cpp router');
+  const pillClass =
+    router.status === 'running'
+      ? 'models-router-pill--running'
+      : router.status === 'starting'
+        ? 'models-router-pill--starting'
+        : router.status === 'error'
+          ? 'models-router-pill--error'
+          : 'models-router-pill--stopped';
+  const pill = el('span', `models-router-pill ${pillClass}`, router.status);
+  head.append(title, pill);
+  card.appendChild(head);
+
+  const loadedCount = loadedModelIds(loadedModels).size;
+  const meta = el('p', 'models-muted');
+  if (!router.routerSupported) {
+    meta.textContent =
+      'Router mode unavailable — update the llama.cpp runtime for multi-model switching.';
+  } else if (router.status === 'running') {
+    meta.textContent = `Port ${router.port} · ${loadedCount} loaded · max ${router.modelsMax}`;
+  } else if (router.status === 'starting') {
+    meta.textContent = `Starting on port ${router.port}…`;
+  } else if (router.status === 'error') {
+    meta.textContent = router.error ?? 'Router failed — see logs in Settings → Servers.';
+  } else {
+    meta.textContent = 'Stopped — load a model or start the router.';
+  }
+  card.appendChild(meta);
+
+  if (router.routerSupported) {
+    const actions = el('div', 'models-installed-actions');
+    if (router.status === 'running' || router.status === 'starting') {
+      const stopBtn = el('button', 'models-inline-btn', 'Stop router');
+      stopBtn.type = 'button';
+      stopBtn.addEventListener('click', () => {
+        stopBtn.disabled = true;
+        void stopModelRouter()
+          .then(() => refreshInstalledSection())
+          .catch((err) => {
+            setStatus('err', err instanceof Error ? err.message : 'Stop failed');
+            stopBtn.disabled = false;
+          });
+      });
+      const restartBtn = el('button', 'models-inline-btn', 'Restart');
+      restartBtn.type = 'button';
+      restartBtn.addEventListener('click', () => {
+        restartBtn.disabled = true;
+        void restartModelRouter()
+          .then(() => refreshInstalledSection())
+          .catch((err) => {
+            setStatus('err', err instanceof Error ? err.message : 'Restart failed');
+            restartBtn.disabled = false;
+          });
+      });
+      actions.append(stopBtn, restartBtn);
+    } else {
+      const startBtn = el('button', 'models-inline-btn is-primary', 'Start router');
+      startBtn.type = 'button';
+      startBtn.addEventListener('click', () => {
+        void ensureLlamaRuntimeInstalled().then((ready) => {
+          if (!ready) return;
+          startBtn.disabled = true;
+          void startModelRouter()
+            .then(() => refreshInstalledSection())
+            .catch((err) => {
+              setStatus('err', err instanceof Error ? err.message : 'Start failed');
+              startBtn.disabled = false;
+            });
+        });
+      });
+      actions.append(startBtn);
+    }
+    card.appendChild(actions);
+  }
+
+  return card;
 }
 
 function renderArtifactRow(
   artifact: InstalledArtifact,
-  serves: ServeRecord[],
+  router: RouterStatus,
+  loadedIds: Set<string>,
   runtimes: RuntimeDetection | null,
 ): HTMLElement {
+  const modelId = routerModelIdFromFilename(artifact.filename);
+  const isLoaded = loadedIds.has(modelId);
+
   const row = el('article', 'models-installed-row');
   const head = el('div', 'models-installed-row__head');
   head.append(
     el('span', 'models-installed-name', artifact.filename),
+    el(
+      'span',
+      `models-load-badge ${isLoaded ? 'models-load-badge--loaded' : 'models-load-badge--disk'}`,
+      isLoaded ? 'loaded' : 'on disk',
+    ),
     el('span', 'models-muted', formatBytes(artifact.sizeBytes)),
   );
   row.appendChild(head);
   row.appendChild(el('p', 'models-recommend-meta', artifact.path));
 
-  const active = serves.find(
-    (s) => s.modelPath === artifact.path && (s.status === 'running' || s.status === 'starting'),
-  );
-
   const actions = el('div', 'models-installed-actions');
-  if (active) {
-    const stopBtn = el('button', 'models-inline-btn', 'Stop');
-    stopBtn.type = 'button';
-    stopBtn.addEventListener('click', () => {
-      void stopModelServe(active.id).then(() => refreshInstalledSection());
-    });
-    const useBtn = el('button', 'models-inline-btn is-primary', 'Use in chat');
+
+  if (router.routerSupported) {
+    if (isLoaded) {
+      const unloadBtn = el('button', 'models-inline-btn', 'Unload');
+      unloadBtn.type = 'button';
+      unloadBtn.addEventListener('click', () => {
+        unloadBtn.disabled = true;
+        void unloadLocalModel(modelId)
+          .then(() => refreshInstalledSection())
+          .catch((err) => {
+            setStatus('err', err instanceof Error ? err.message : 'Unload failed');
+            unloadBtn.disabled = false;
+          });
+      });
+      actions.appendChild(unloadBtn);
+    } else {
+      const loadBtn = el('button', 'models-inline-btn is-primary', 'Load');
+      loadBtn.type = 'button';
+      loadBtn.disabled = !runtimes?.llamaCpp.path && !runtimes?.llamaCpp.installable;
+      loadBtn.addEventListener('click', () => {
+        loadBtn.disabled = true;
+        void useModelInChat(modelId)
+          .then(() => refreshInstalledSection())
+          .catch((err) => {
+            setStatus('err', err instanceof Error ? err.message : 'Load failed');
+            loadBtn.disabled = false;
+          });
+      });
+      actions.appendChild(loadBtn);
+    }
+
+    const useBtn = el('button', 'models-inline-btn', 'Use in chat');
     useBtn.type = 'button';
     useBtn.addEventListener('click', () => {
-      void useServedModelInChat(active);
+      void useModelInChat(modelId).then(() => refreshInstalledSection());
     });
-    actions.append(stopBtn, useBtn);
-  } else {
-    const llamaBtn = el('button', 'models-inline-btn is-primary', 'Serve (llama.cpp)');
-    llamaBtn.type = 'button';
-    const llamaReady = Boolean(runtimes?.llamaCpp.path);
-    const llamaInstallable = runtimes?.llamaCpp.installable ?? false;
-    llamaBtn.disabled = !llamaReady && !llamaInstallable;
-    llamaBtn.title = llamaReady
-      ? 'Start llama-server for this GGUF'
-      : llamaInstallable
-        ? 'Install llama.cpp runtime (~20 MB), then configure serve options'
-        : 'Install llama-server and add it to PATH';
-    llamaBtn.addEventListener('click', () => {
+
+    const settingsBtn = el('button', 'models-inline-btn', 'Launch settings');
+    settingsBtn.type = 'button';
+    settingsBtn.addEventListener('click', () => {
       void openServeDialog({
         modelPath: artifact.path,
         modelLabel: artifact.filename,
-      })
-        .then((serve) => {
-          if (!serve) return;
-          return useServedModelInChat(serve);
-        })
-        .then(() => refreshInstalledSection())
-        .catch((err) => {
-          setStatus('err', err instanceof Error ? err.message : 'Serve failed');
-        });
+        mode: 'settings',
+      }).then(() => refreshInstalledSection());
     });
 
-    const ollamaBtn = el('button', 'models-inline-btn', 'Use Ollama');
-    ollamaBtn.type = 'button';
-    ollamaBtn.disabled = !runtimes?.ollama.serving;
-    ollamaBtn.title = runtimes?.ollama.serving
-      ? 'Register Ollama as the active provider'
-      : 'Start Ollama on http://127.0.0.1:11434';
-    ollamaBtn.addEventListener('click', () => {
-      ollamaBtn.disabled = true;
-      void startModelServe({
+    actions.append(useBtn, settingsBtn);
+  } else {
+    const legacyBtn = el('button', 'models-inline-btn is-primary', 'Serve (legacy)');
+    legacyBtn.type = 'button';
+    legacyBtn.addEventListener('click', () => {
+      void openServeDialog({
         modelPath: artifact.path,
-        runtime: 'ollama',
-        modelLabel: artifact.repoId || artifact.filename,
-      })
-        .then((serve) => useServedModelInChat(serve))
-        .then(() => refreshInstalledSection())
-        .catch((err) => {
-          setStatus('err', err instanceof Error ? err.message : 'Ollama register failed');
-          ollamaBtn.disabled = false;
-        });
-    });
-
-    const lmBtn = el('button', 'models-inline-btn', 'Use LM Studio');
-    lmBtn.type = 'button';
-    lmBtn.disabled = !runtimes?.lmStudio.available;
-    lmBtn.title = runtimes?.lmStudio.available
-      ? 'Register LM Studio as the active provider'
-      : 'Start LM Studio server on http://127.0.0.1:1234';
-    lmBtn.addEventListener('click', () => {
-      lmBtn.disabled = true;
-      void startModelServe({
-        modelPath: artifact.path,
-        runtime: 'lm-studio',
         modelLabel: artifact.filename,
-      })
-        .then((serve) => useServedModelInChat(serve))
-        .then(() => refreshInstalledSection())
-        .catch((err) => {
-          setStatus('err', err instanceof Error ? err.message : 'LM Studio register failed');
-          lmBtn.disabled = false;
-        });
+        mode: 'serve',
+      }).then(() => refreshInstalledSection());
     });
-
-    actions.append(llamaBtn, ollamaBtn, lmBtn);
+    actions.appendChild(legacyBtn);
   }
+
+  const ollamaBtn = el('button', 'models-inline-btn', 'Use Ollama');
+  ollamaBtn.type = 'button';
+  ollamaBtn.disabled = !runtimes?.ollama.serving;
+  ollamaBtn.addEventListener('click', () => {
+    void selectProviderModel('ollama', artifact.repoId || artifact.filename);
+  });
+
+  const lmBtn = el('button', 'models-inline-btn', 'Use LM Studio');
+  lmBtn.type = 'button';
+  lmBtn.disabled = !runtimes?.lmStudio.available;
+  lmBtn.addEventListener('click', () => {
+    void selectProviderModel('lm-studio-local', artifact.filename);
+  });
+
+  actions.append(ollamaBtn, lmBtn);
   row.appendChild(actions);
   return row;
 }
@@ -216,7 +330,7 @@ function renderRuntimesCard(runtimes: RuntimeDetection): HTMLElement {
       runtimes.llamaCpp.path
         ? runtimes.llamaCpp.path
         : runtimes.llamaCpp.installable
-          ? 'not installed — Serve will prompt to install'
+          ? 'not installed — Load will prompt to install'
           : 'not found'
     }`,
     `Ollama: ${runtimes.ollama.serving ? 'serving' : runtimes.ollama.available ? 'installed' : 'not found'}`,
@@ -233,13 +347,16 @@ export async function refreshInstalledSection(): Promise<void> {
   if (!mount) return;
 
   try {
-    const [{ artifacts, downloads }, serves, runtimes] = await Promise.all([
+    const [{ artifacts, downloads }, { router, loadedModels }, runtimes] = await Promise.all([
       fetchInstalledModels(),
-      listModelServes(),
+      fetchRouterStatus(),
       fetchRuntimes(),
     ]);
 
+    const loadedIds = loadedModelIds(loadedModels);
+
     mount.replaceChildren();
+    mount.appendChild(renderRouterCard(router, loadedModels));
     mount.appendChild(renderRuntimesCard(runtimes));
 
     const activeDownloads = downloads.filter((j) => j.status === 'queued' || j.status === 'running');
@@ -259,7 +376,7 @@ export async function refreshInstalledSection(): Promise<void> {
     }
     const list = el('div', 'models-installed-list');
     for (const artifact of artifacts) {
-      list.appendChild(renderArtifactRow(artifact, serves, runtimes));
+      list.appendChild(renderArtifactRow(artifact, router, loadedIds, runtimes));
     }
     mount.appendChild(list);
   } catch (err) {

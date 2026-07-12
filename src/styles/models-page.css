@@ -314,6 +314,70 @@
   margin-top: 10px;
 }
 
+/* Router status card — instrumentation, not hero metrics */
+.models-router-card {
+  padding: 14px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+}
+
+.models-router-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.models-router-pill {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border: 1px solid var(--mn-border-strong);
+  border-radius: 999px;
+}
+
+.models-router-pill--running {
+  color: var(--mn-success);
+  border-color: color-mix(in srgb, var(--mn-success) 40%, var(--mn-border));
+}
+
+.models-router-pill--starting {
+  color: var(--mn-warning);
+  border-color: color-mix(in srgb, var(--mn-warning) 40%, var(--mn-border));
+}
+
+.models-router-pill--stopped {
+  color: var(--mn-text-muted);
+}
+
+.models-router-pill--error {
+  color: var(--mn-danger);
+  border-color: color-mix(in srgb, var(--mn-danger) 40%, var(--mn-border));
+}
+
+.models-load-badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--mn-border);
+}
+
+.models-load-badge--loaded {
+  color: var(--mn-success);
+  border-color: color-mix(in srgb, var(--mn-success) 35%, var(--mn-border));
+}
+
+.models-load-badge--disk {
+  color: var(--mn-text-muted);
+}
+
 .models-download-progress {
   margin-top: 8px;
   height: 8px;

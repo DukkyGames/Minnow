@@ -505,6 +505,22 @@ export async function updateProvider(id, body) {
     delete profile.constrainedToolCalls;
   }
 
+  if (body.supportsModelLoadUnload !== undefined) {
+    profile.supportsModelLoadUnload = body.supportsModelLoadUnload === true;
+  }
+  if (body.modelsLoadPath !== undefined) {
+    profile.modelsLoadPath =
+      typeof body.modelsLoadPath === 'string' && body.modelsLoadPath.trim()
+        ? body.modelsLoadPath.trim()
+        : undefined;
+  }
+  if (body.modelsUnloadPath !== undefined) {
+    profile.modelsUnloadPath =
+      typeof body.modelsUnloadPath === 'string' && body.modelsUnloadPath.trim()
+        ? body.modelsUnloadPath.trim()
+        : undefined;
+  }
+
   if (body.pricing !== undefined) {
     const pricing = validateProviderPricing(body.pricing);
     if (pricing === null) {

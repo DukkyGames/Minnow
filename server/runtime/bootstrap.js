@@ -19,6 +19,7 @@ import { syncReefWidgetTemplates } from '../reef/sync-widgets.js';
 import { initPluginsApi } from '../tools/middleware.js';
 import { initWorkspaceRoot } from '../workspace/root.js';
 import { recomputeAllNextRuns } from '../scheduler/store.js';
+import { reconcileRouterOnBoot, reconcileServesOnBoot } from '../models/index.js';
 
 /**
  * Ensure ~/.minnow layout, sync Reef widgets, load workspace and API registries.
@@ -41,6 +42,8 @@ export async function bootstrapMinnowRuntime() {
   await initServersApi();
   await initPluginsApi();
   await recomputeAllNextRuns();
+  await reconcileRouterOnBoot();
+  await reconcileServesOnBoot();
   const homePath = getMinnowHome();
   return {
     workspacePath,

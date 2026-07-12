@@ -18,6 +18,15 @@ import {
   subscribeLlamaInstallProgress,
 } from './llama-runtime.js';
 import { writeLlamaCppConfig, readLlamaCppConfig, buildLlamaServerArgs } from './llama-args.js';
+import {
+  fetchRouterLoadedModels,
+  getRouterStatus,
+  loadModelOnRouter,
+  restartRouter,
+  startRouter,
+  stopRouter,
+  unloadModelFromRouter,
+} from './llama-router.js';
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -280,6 +289,73 @@ export async function handleModelsRequest(req, res, pathname) {
   if (pathname === '/api/models/serve' && req.method === 'GET') {
     const serves = await listServes();
     sendJson(res, 200, { serves });
+    return true;
+  }
+
+  if (pathname === '/api/models/router' && req.method === 'GET') {
+    try {
+      const router = await getRouterStatus();
+      const loadedModels = await fetchRouterLoadedModels();
+      sendJson(res, 200, { router, loadedModels });
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/models/router/start' && req.method === 'POST') {
+    try {
+      const router = await startRouter();
+      sendJson(res, 200, { router });
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/models/router/stop' && req.method === 'POST') {
+    try {
+      const router = await stopRouter();
+      sendJson(res, 200, { router });
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/models/router/restart' && req.method === 'POST') {
+    try {
+      const router = await restartRouter();
+      sendJson(res, 200, { router });
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/models/load' && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req);
+      const model = typeof body.model === 'string' ? body.model.trim() : '';
+      if (!model) throw new Error('model is required');
+      const result = await loadModelOnRouter(model);
+      sendJson(res, 200, result);
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/models/unload' && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req);
+      const model = typeof body.model === 'string' ? body.model.trim() : '';
+      if (!model) throw new Error('model is required');
+      const result = await unloadModelFromRouter(model);
+      sendJson(res, 200, result);
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    }
     return true;
   }
 

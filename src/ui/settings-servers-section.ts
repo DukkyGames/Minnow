@@ -20,10 +20,11 @@ import {
 } from '../servers/client';
 import {
   fetchLlamaRuntime,
+  fetchRouterStatus,
   installLlamaRuntime,
-  listModelServes,
-  stopModelServe,
-  type ServeRecord,
+  restartModelRouter,
+  startModelRouter,
+  stopModelRouter,
 } from '../models/api-client';
 import { appendSettingsCrosslinks } from './settings-layout';
 import { createSettingsSwitch } from './settings-switch';
@@ -155,12 +156,12 @@ function createLlamaCppServerRow(
   toolbar.append(variantLabel, variantSelect, installBtn);
   body.append(toolbar);
 
-  const servesPanel = el('details', 'settings-server-logs');
-  const servesSummary = el('summary', undefined, 'Active model serves');
-  const servesList = el('div', 'settings-llama-serves-list');
-  servesList.dataset.llamaServesList = server.id;
-  servesPanel.append(servesSummary, servesList);
-  body.append(servesPanel);
+  const routerPanel = el('details', 'settings-server-logs');
+  const routerSummary = el('summary', undefined, 'Router');
+  const routerBody = el('div', 'settings-llama-router-body');
+  routerBody.dataset.llamaRouterBody = server.id;
+  routerPanel.append(routerSummary, routerBody);
+  body.append(routerPanel);
 
   row.append(body);
 
@@ -190,33 +191,77 @@ function createLlamaCppServerRow(
     }
   };
 
-  const refreshServes = async (): Promise<void> => {
-    const serves = await listModelServes();
-    const active = serves.filter(
-      (s: ServeRecord) =>
-        s.runtime === 'llama-cpp' && (s.status === 'running' || s.status === 'starting'),
-    );
-    servesList.replaceChildren();
-    if (!active.length) {
-      servesList.appendChild(
-        el('p', 'settings-field-hint', 'No active serves — use Models → Installed.'),
+  const refreshRouter = async (): Promise<void> => {
+    routerBody.replaceChildren();
+    try {
+      const { router, loadedModels } = await fetchRouterStatus();
+      const statusLine = el('p', 'settings-mcp-hint');
+      if (!router.routerSupported) {
+        statusLine.textContent = 'Router mode unavailable — reinstall or update the managed runtime.';
+      } else {
+        const loaded = loadedModels?.data?.length ?? 0;
+        statusLine.textContent = `${router.status} · port ${router.port} · ${loaded}/${router.modelsMax} slots`;
+      }
+      routerBody.appendChild(statusLine);
+
+      if (router.error) {
+        routerBody.appendChild(el('p', 'settings-field-hint settings-llama-router-error', router.error));
+      }
+
+      const actions = el('div', 'settings-server-actions');
+      if (router.routerSupported) {
+        if (router.status === 'running' || router.status === 'starting') {
+          const stopBtn = el('button', 'settings-inline-btn', 'Stop');
+          stopBtn.type = 'button';
+          stopBtn.addEventListener('click', () => {
+            void stopModelRouter().then(() => {
+              setStatus('ok', 'Router stopped');
+              void refreshRouter();
+              onRefresh();
+            });
+          });
+          const restartBtn = el('button', 'settings-inline-btn', 'Restart');
+          restartBtn.type = 'button';
+          restartBtn.addEventListener('click', () => {
+            void restartModelRouter().then(() => {
+              setStatus('ok', 'Router restarted');
+              void refreshRouter();
+              onRefresh();
+            });
+          });
+          actions.append(stopBtn, restartBtn);
+        } else {
+          const startBtn = el('button', 'settings-action-btn', 'Start router');
+          startBtn.type = 'button';
+          startBtn.addEventListener('click', () => {
+            void startModelRouter().then(() => {
+              setStatus('ok', 'Router started');
+              void refreshRouter();
+              onRefresh();
+            });
+          });
+          actions.append(startBtn);
+        }
+      }
+      routerBody.appendChild(actions);
+
+      const models = loadedModels?.data ?? [];
+      if (models.length) {
+        const list = el('ul', 'settings-llama-loaded-models');
+        for (const m of models) {
+          const item = el('li', undefined, m.id);
+          list.appendChild(item);
+        }
+        routerBody.appendChild(list);
+      }
+    } catch (err) {
+      routerBody.appendChild(
+        el(
+          'p',
+          'settings-field-hint',
+          err instanceof Error ? err.message : 'Could not load router status',
+        ),
       );
-      return;
-    }
-    for (const serve of active) {
-      const item = el('div', 'settings-llama-serve-row');
-      item.append(el('span', undefined, `${serve.modelLabel} · :${serve.port}`));
-      const stopBtn = el('button', 'settings-inline-btn', 'Stop');
-      stopBtn.type = 'button';
-      stopBtn.addEventListener('click', () => {
-        void stopModelServe(serve.id).then(() => {
-          setStatus('ok', 'Serve stopped');
-          void refreshServes();
-          onRefresh();
-        });
-      });
-      item.appendChild(stopBtn);
-      servesList.appendChild(item);
     }
   };
 
@@ -241,7 +286,7 @@ function createLlamaCppServerRow(
   });
 
   void refreshRuntime();
-  void refreshServes();
+  void refreshRouter();
 
   return row;
 }

@@ -4,7 +4,10 @@
 
 import {
   fetchLlamaRuntime,
+  fetchLlamaCppConfig,
   fetchServeProfiles,
+  restartModelRouter,
+  saveLlamaCppConfig,
   startModelServe,
   type LlamaServeSettings,
   type ServeRecord,
@@ -20,6 +23,8 @@ export interface OpenServeDialogOptions {
   paramsB?: number;
   isMoe?: boolean;
   weightsGb?: number;
+  /** `settings` saves per-model launch config; `serve` starts a legacy single-model serve. */
+  mode?: 'serve' | 'settings';
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -89,16 +94,24 @@ function selectInput(
 }
 
 /**
- * Open the serve dialog and return the started serve record, or null when cancelled.
+ * Open the serve or launch-settings dialog.
+ * Returns a started serve record in legacy serve mode, or null when cancelled / settings saved.
  */
 export function openServeDialog(opts: OpenServeDialogOptions): Promise<ServeRecord | null> {
-  return ensureLlamaRuntimeInstalled().then((ready) => {
-    if (!ready) return null;
-    return openServeDialogInner(opts);
-  });
+  const mode = opts.mode ?? 'settings';
+  if (mode === 'serve') {
+    return ensureLlamaRuntimeInstalled().then((ready) => {
+      if (!ready) return null;
+      return openServeDialogInner(opts, 'serve');
+    });
+  }
+  return openServeDialogInner(opts, 'settings');
 }
 
-function openServeDialogInner(opts: OpenServeDialogOptions): Promise<ServeRecord | null> {
+function openServeDialogInner(
+  opts: OpenServeDialogOptions,
+  mode: 'serve' | 'settings',
+): Promise<ServeRecord | null> {
   return new Promise((resolve) => {
     const backdrop = el('div', 'models-serve-dialog__backdrop');
     const dialog = el('div', 'models-serve-dialog');
@@ -106,7 +119,11 @@ function openServeDialogInner(opts: OpenServeDialogOptions): Promise<ServeRecord
     dialog.setAttribute('aria-modal', 'true');
     dialog.setAttribute('aria-labelledby', 'modelsServeDialogTitle');
 
-    const title = el('h2', 'models-serve-dialog__title', 'Serve with llama.cpp');
+    const title = el(
+      'h2',
+      'models-serve-dialog__title',
+      mode === 'settings' ? 'Launch settings' : 'Serve with llama.cpp',
+    );
     title.id = 'modelsServeDialogTitle';
     dialog.appendChild(title);
     dialog.appendChild(el('p', 'models-muted', opts.modelLabel));
@@ -173,7 +190,8 @@ function openServeDialogInner(opts: OpenServeDialogOptions): Promise<ServeRecord
     const actions = el('div', 'models-serve-dialog__actions');
     const cancelBtn = el('button', 'models-inline-btn', 'Cancel');
     cancelBtn.type = 'button';
-    const serveBtn = el('button', 'models-inline-btn is-primary', 'Serve');
+    const primaryLabel = mode === 'settings' ? 'Save' : 'Serve';
+    const serveBtn = el('button', 'models-inline-btn is-primary', primaryLabel);
     serveBtn.type = 'button';
     actions.append(cancelBtn, serveBtn);
     dialog.appendChild(actions);
@@ -207,7 +225,7 @@ function openServeDialogInner(opts: OpenServeDialogOptions): Promise<ServeRecord
 
     void (async () => {
       try {
-        const [runtime, profiles] = await Promise.all([
+        const [runtime, profiles, config] = await Promise.all([
           fetchLlamaRuntime(),
           fetchServeProfiles({
             model: opts.modelLabel,
@@ -216,13 +234,19 @@ function openServeDialogInner(opts: OpenServeDialogOptions): Promise<ServeRecord
             weights_gb: opts.weightsGb,
             is_moe: opts.isMoe,
           }),
+          mode === 'settings' ? fetchLlamaCppConfig() : Promise.resolve(null),
         ]);
         profilesLoaded = profiles;
         runtimeBadge.textContent = runtime.path
           ? `Runtime: ${runtime.variant ?? 'cpu'} · ${runtime.version ?? ''}`
           : `Runtime: not installed (${runtime.preferredVariant ?? 'cpu'} recommended)`;
 
-        const saved = loadSavedSettings(opts.modelPath);
+        const filename = opts.modelPath.split(/[/\\]/).pop() ?? opts.modelLabel;
+        const sectionKey = filename.replace(/\.gguf$/i, '');
+        const saved =
+          mode === 'settings'
+            ? (config?.perModel?.[sectionKey] ?? config?.perModel?.[filename] ?? {})
+            : loadSavedSettings(opts.modelPath);
         if (saved.ctx != null) {
           (ctxField.querySelector('input') as HTMLInputElement).value = String(saved.ctx);
         }
@@ -295,7 +319,33 @@ function openServeDialogInner(opts: OpenServeDialogOptions): Promise<ServeRecord
 
       saveSettings(opts.modelPath, llama);
       serveBtn.disabled = true;
-      serveBtn.textContent = 'Starting…';
+      serveBtn.textContent = mode === 'settings' ? 'Saving…' : 'Starting…';
+
+      if (mode === 'settings') {
+        const filename = opts.modelPath.split(/[/\\]/).pop() ?? opts.modelLabel;
+        const sectionKey = filename.replace(/\.gguf$/i, '');
+        void fetchLlamaCppConfig()
+          .then((prev) =>
+            saveLlamaCppConfig({
+              ...prev,
+              perModel: {
+                ...(prev.perModel ?? {}),
+                [sectionKey]: llama,
+              },
+            }),
+          )
+          .then(() => restartModelRouter())
+          .then(() => {
+            setStatus('ok', 'Launch settings saved — router restarted.');
+            close(null);
+          })
+          .catch((err) => {
+            setStatus('err', err instanceof Error ? err.message : 'Save failed');
+            serveBtn.disabled = false;
+            serveBtn.textContent = primaryLabel;
+          });
+        return;
+      }
 
       void startModelServe({
         modelPath: opts.modelPath,
@@ -313,7 +363,7 @@ function openServeDialogInner(opts: OpenServeDialogOptions): Promise<ServeRecord
         .catch((err) => {
           setStatus('err', err instanceof Error ? err.message : 'Serve failed');
           serveBtn.disabled = false;
-          serveBtn.textContent = 'Serve';
+          serveBtn.textContent = primaryLabel;
         });
     });
   });

@@ -33,3 +33,18 @@ export function repoDownloadDir(repoId) {
 export function modelsLogDir() {
   return path.join(getMinnowHome(), 'logs', 'models');
 }
+
+/** Default GGUF artifact root scanned by the llama.cpp router. */
+export function getArtifactsDir() {
+  return path.join(getModelsRoot(), 'artifacts');
+}
+
+/** Persisted llama-server router process state. */
+export function getRouterStatePath() {
+  return path.join(getModelsRoot(), 'router-state.json');
+}
+
+/** Generated INI preset for per-model router configuration. */
+export function getLlamaPresetIniPath() {
+  return path.join(getModelsRoot(), 'llama-preset.ini');
+}

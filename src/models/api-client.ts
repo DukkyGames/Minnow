@@ -132,6 +132,39 @@ export interface RuntimeDetection {
   lmStudio: { available: boolean; baseUrl: string | null };
 }
 
+/** Persistent llama-server router process state. */
+export interface RouterStatus {
+  status: 'starting' | 'running' | 'stopped' | 'error';
+  port: number;
+  baseUrl: string;
+  runId: string | null;
+  pid: number | null;
+  startedAt: number | null;
+  modelsMax: number;
+  routerSupported: boolean;
+  error: string | null;
+  logTail?: string | null;
+}
+
+/** Persisted llama.cpp launch defaults and per-model overrides. */
+export interface LlamaCppConfig {
+  variant?: string;
+  defaults?: LlamaServeSettings;
+  perModel?: Record<string, LlamaServeSettings>;
+  router?: {
+    port?: number;
+    modelsMax?: number;
+    lifecycle?: 'off' | 'on-demand' | 'always';
+  };
+}
+
+/** Router catalog row from GET /v1/models. */
+export interface RouterModelRow {
+  id: string;
+  object?: string;
+  state?: string;
+}
+
 async function parseJson<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -327,6 +360,71 @@ export async function listModelServes(): Promise<ServeRecord[]> {
   const res = await fetch('/api/models/serve');
   const data = await parseJson<{ serves: ServeRecord[] }>(res);
   return data.serves;
+}
+
+export async function fetchRouterStatus(): Promise<{
+  router: RouterStatus;
+  loadedModels: { data?: RouterModelRow[] } | null;
+}> {
+  const res = await fetch('/api/models/router');
+  return parseJson(res);
+}
+
+export async function startModelRouter(): Promise<RouterStatus> {
+  const res = await fetch('/api/models/router/start', { method: 'POST' });
+  const data = await parseJson<{ router: RouterStatus }>(res);
+  return data.router;
+}
+
+export async function stopModelRouter(): Promise<RouterStatus> {
+  const res = await fetch('/api/models/router/stop', { method: 'POST' });
+  const data = await parseJson<{ router: RouterStatus }>(res);
+  return data.router;
+}
+
+export async function restartModelRouter(): Promise<RouterStatus> {
+  const res = await fetch('/api/models/router/restart', { method: 'POST' });
+  const data = await parseJson<{ router: RouterStatus }>(res);
+  return data.router;
+}
+
+export async function loadLocalModel(model: string): Promise<unknown> {
+  const res = await fetch('/api/models/load', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model }),
+  });
+  return parseJson(res);
+}
+
+export async function unloadLocalModel(model: string): Promise<unknown> {
+  const res = await fetch('/api/models/unload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model }),
+  });
+  return parseJson(res);
+}
+
+export async function fetchLlamaCppConfig(): Promise<LlamaCppConfig> {
+  const res = await fetch('/api/models/llama-cpp-config');
+  return parseJson(res);
+}
+
+export async function saveLlamaCppConfig(patch: LlamaCppConfig): Promise<LlamaCppConfig> {
+  const res = await fetch('/api/models/llama-cpp-config', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  const data = await parseJson<LlamaCppConfig & { ok?: boolean }>(res);
+  const { ok: _ok, ...config } = data;
+  return config;
+}
+
+/** Router model id from a GGUF filename (basename without extension). */
+export function routerModelIdFromFilename(filename: string): string {
+  return filename.replace(/\.gguf$/i, '');
 }
 
 /** Resolve the GGUF download repo for a catalog row. */

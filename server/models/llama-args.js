@@ -5,6 +5,7 @@
 
 import fsp from 'node:fs/promises';
 import path from 'node:path';
+import { runProcess } from '../process-runner.js';
 import { getMinnowHome } from '../config/home.js';
 import { computeServeProfiles } from './profiles.js';
 import { isGpuCapableVariant } from './llama-variant.js';
@@ -200,6 +201,78 @@ export function buildLlamaServerArgs(opts) {
   }
 
   return args;
+}
+
+/** Cached router support probe per binary path. */
+/** @type {Map<string, boolean>} */
+const routerSupportCache = new Map();
+
+/** @type {((binaryPath: string) => Promise<boolean>) | null} */
+let routerSupportProbeOverrideForTests = null;
+
+export function setRouterSupportProbeOverrideForTests(fn) {
+  routerSupportProbeOverrideForTests = fn;
+}
+
+export function resetRouterSupportProbeOverrideForTests() {
+  routerSupportProbeOverrideForTests = null;
+  routerSupportCache.clear();
+}
+
+/**
+ * Probe whether the installed llama-server binary supports router mode.
+ * Router builds expose --models-dir in --help output.
+ * @param {string} binaryPath
+ * @returns {Promise<boolean>}
+ */
+export async function probeLlamaRouterSupport(binaryPath) {
+  if (!binaryPath) return false;
+  if (routerSupportProbeOverrideForTests) {
+    return routerSupportProbeOverrideForTests(binaryPath);
+  }
+  if (routerSupportCache.has(binaryPath)) {
+    return routerSupportCache.get(binaryPath) === true;
+  }
+
+  try {
+    const { code, stdout, stderr } = await runProcess(binaryPath, ['--help'], {
+      timeout: 8_000,
+    });
+    const help = `${stdout}\n${stderr}`;
+    const supported =
+      code === 0 &&
+      (help.includes('--models-dir') || help.includes('--models-preset'));
+    routerSupportCache.set(binaryPath, supported);
+    return supported;
+  } catch {
+    routerSupportCache.set(binaryPath, false);
+    return false;
+  }
+}
+
+/**
+ * Build llama-server argv for router mode (no -m model flag).
+ * @param {object} opts
+ * @param {number} opts.port
+ * @param {string} opts.modelsDir
+ * @param {string} opts.presetPath
+ * @param {number} opts.modelsMax
+ * @returns {string[]}
+ */
+export function buildLlamaRouterArgs(opts) {
+  const { port, modelsDir, presetPath, modelsMax } = opts;
+  return [
+    '--host',
+    '127.0.0.1',
+    '--port',
+    String(port),
+    '--models-dir',
+    modelsDir,
+    '--models-preset',
+    presetPath,
+    '--models-max',
+    String(modelsMax),
+  ];
 }
 
 /**

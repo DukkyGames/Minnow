@@ -24,8 +24,16 @@ import { detectRuntimes } from './runtime-detect.js';
 import {
   buildLlamaServerArgs,
   buildLlamaServerSpawnEnv,
+  probeLlamaRouterSupport,
   readLlamaCppConfig,
 } from './llama-args.js';
+import {
+  ensureRouter,
+  loadModelOnRouter,
+  ROUTER_MODELS_LOAD_PATH,
+  ROUTER_MODELS_UNLOAD_PATH,
+} from './llama-router.js';
+import { writeLlamaPresetIni, presetSectionNameFromFilename } from './llama-preset.js';
 import { getServesIndexPath, modelsLogDir } from './paths.js';
 import { validatePort, validateRuntime, validateServeId } from './validate.js';
 import {
@@ -91,6 +99,38 @@ async function loadServes() {
   } catch {
     servesCache = [];
   }
+}
+
+/**
+ * Mark stale running serves stopped when the child PID is no longer alive.
+ */
+export async function reconcileServesOnBoot() {
+  await loadServes();
+  let changed = false;
+  for (const row of servesCache) {
+    if (row.status !== 'running' && row.status !== 'starting') continue;
+    if (row.runtime === 'ollama' || row.runtime === 'lm-studio') continue;
+    const pid = row.pid;
+    if (!pid) {
+      row.status = 'stopped';
+      row.stoppedAt = Date.now();
+      changed = true;
+      continue;
+    }
+    let alive = false;
+    try {
+      process.kill(pid, 0);
+      alive = true;
+    } catch {
+      alive = false;
+    }
+    if (!alive) {
+      row.status = 'stopped';
+      row.stoppedAt = Date.now();
+      changed = true;
+    }
+  }
+  if (changed) await saveServes();
 }
 
 async function saveServes() {
@@ -213,16 +253,17 @@ function labelFromPath(modelPath) {
 }
 
 /**
- * Stop any running llama-cpp serve before starting a new one (single instance).
+ * Stop prior llama-cpp serve records (legacy per-model spawns only).
+ * @param {boolean} [killProcesses]
  */
-async function stopExistingLlamaCppServes() {
+async function stopExistingLlamaCppServes(killProcesses = true) {
   await loadServes();
   for (const row of servesCache) {
     if (
       row.runtime === 'llama-cpp' &&
       (row.status === 'running' || row.status === 'starting')
     ) {
-      if (row.runId) stopActiveRun(row.runId);
+      if (killProcesses && row.runId) stopActiveRun(row.runId);
       row.status = 'stopped';
       row.stoppedAt = Date.now();
     }
@@ -232,7 +273,7 @@ async function stopExistingLlamaCppServes() {
 
 /**
  * Upsert the stable llama-cpp-local provider for all llama.cpp serves.
- * @param {{ baseUrl: string, enabled: boolean }} opts
+ * @param {{ baseUrl: string, enabled: boolean, supportsModelLoadUnload?: boolean, modelsLoadPath?: string, modelsUnloadPath?: string }} opts
  */
 export async function upsertLlamaCppProvider(opts) {
   const existing = await listProviders();
@@ -241,6 +282,9 @@ export async function upsertLlamaCppProvider(opts) {
     await updateProvider(LLAMA_CPP_LOCAL_ID, {
       baseUrl: opts.baseUrl,
       enabled: opts.enabled,
+      supportsModelLoadUnload: opts.supportsModelLoadUnload ?? true,
+      modelsLoadPath: opts.modelsLoadPath ?? ROUTER_MODELS_LOAD_PATH,
+      modelsUnloadPath: opts.modelsUnloadPath ?? ROUTER_MODELS_UNLOAD_PATH,
     });
   } else {
     await createProvider({
@@ -251,7 +295,9 @@ export async function upsertLlamaCppProvider(opts) {
       enabled: opts.enabled,
       modelsPath: '/v1/models',
       chatCompletionsPath: '/v1/chat/completions',
-      supportsModelLoadUnload: false,
+      supportsModelLoadUnload: opts.supportsModelLoadUnload ?? true,
+      modelsLoadPath: opts.modelsLoadPath ?? ROUTER_MODELS_LOAD_PATH,
+      modelsUnloadPath: opts.modelsUnloadPath ?? ROUTER_MODELS_UNLOAD_PATH,
     });
   }
   if (opts.enabled) {
@@ -303,8 +349,8 @@ export async function startServe(body) {
   const runtimes = await detectRuntimes();
   let llamaServerPath = null;
   let llamaVariant = 'cpu';
+  let routerSupported = false;
   if (runtime === 'llama-cpp') {
-    await stopExistingLlamaCppServes();
     llamaServerPath = (await resolveLlamaServer()).path;
     if (!llamaServerPath) {
       throw new Error(
@@ -312,6 +358,12 @@ export async function startServe(body) {
       );
     }
     llamaVariant = (await getInstalledLlamaVariant()) ?? 'cpu';
+    routerSupported = await probeLlamaRouterSupport(llamaServerPath);
+    if (routerSupported) {
+      await stopExistingLlamaCppServes(false);
+    } else {
+      await stopExistingLlamaCppServes(true);
+    }
   }
   if (runtime === 'ollama' && !runtimes.ollama.serving) {
     throw new Error('Ollama is not running on http://127.0.0.1:11434');
@@ -352,7 +404,6 @@ export async function startServe(body) {
   }
 
   const port = body.port ? validatePort(body.port) : await pickFreePort(8085);
-  const baseUrl = `http://127.0.0.1:${port}`;
   const providerId = LLAMA_CPP_LOCAL_ID;
 
   const profileKey =
@@ -366,6 +417,42 @@ export async function startServe(body) {
   const llamaConfig = await readLlamaCppConfig();
   const userSettings =
     body.llama && typeof body.llama === 'object' ? body.llama : undefined;
+
+  // Router mode: one persistent llama-server handles all local GGUF models.
+  if (routerSupported) {
+    await writeLlamaPresetIni();
+    const routerStatus = await ensureRouter();
+    const routerModelName = presetSectionNameFromFilename(path.basename(modelPath));
+    try {
+      await loadModelOnRouter(routerModelName);
+    } catch {
+      /* router may autoload on first request */
+    }
+
+    const baseUrl = routerStatus.baseUrl;
+    const row = /** @type {ServeRecord} */ ({
+      id: serveId,
+      runtime,
+      modelPath,
+      modelLabel,
+      port: routerStatus.port,
+      baseUrl,
+      providerId,
+      status: 'running',
+      startedAt: Date.now(),
+      llamaSettings: userSettings ?? null,
+    });
+    servesCache.unshift(row);
+    await upsertLlamaCppProvider({
+      baseUrl,
+      enabled: true,
+      supportsModelLoadUnload: true,
+      modelsLoadPath: ROUTER_MODELS_LOAD_PATH,
+      modelsUnloadPath: ROUTER_MODELS_UNLOAD_PATH,
+    });
+    await saveServes();
+    return publicServe(row);
+  }
 
   const args = buildLlamaServerArgs({
     modelPath,
@@ -385,6 +472,7 @@ export async function startServe(body) {
     variant: llamaVariant,
   });
 
+  const baseUrl = `http://127.0.0.1:${port}`;
   const row = /** @type {ServeRecord} */ ({
     id: serveId,
     runtime,
@@ -434,7 +522,11 @@ export async function startServe(body) {
   }
 
   row.status = 'running';
-  await upsertLlamaCppProvider({ baseUrl, enabled: true });
+  await upsertLlamaCppProvider({
+    baseUrl,
+    enabled: true,
+    supportsModelLoadUnload: false,
+  });
   await saveServes();
   return publicServe(row);
 }

@@ -3,7 +3,11 @@
  */
 
 /** Built-in provider ids that always resolve to local inference. */
-export const KNOWN_LOCAL_PROVIDER_IDS = new Set(['lm-studio-local', 'vite-fallback']);
+export const KNOWN_LOCAL_PROVIDER_IDS = new Set([
+  'llama-cpp-local',
+  'lm-studio-local',
+  'vite-fallback',
+]);
 
 /** True when the hostname points at loopback inference (LM Studio, Ollama, etc.). */
 export function isLocalProviderHostname(hostname: string): boolean {

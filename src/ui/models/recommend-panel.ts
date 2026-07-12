@@ -12,12 +12,15 @@ import {
 } from '../../models/fit';
 import {
   fetchCachedModels,
+  loadLocalModel,
   resolveDownloadRepo,
+  routerModelIdFromFilename,
   startModelDownload,
+  startModelRouter,
   subscribeDownloadProgress,
   type CachedModelRow,
 } from '../../models/api-client';
-import { openServeDialog } from './serve-dialog';
+import { ensureLlamaRuntimeInstalled } from './llama-install-prompt';
 import { getModels } from '../../models/catalog';
 import { inferUseCase } from '../../models/quant';
 import type { HardwareSnapshot, ModelFitResult } from '../../models/types';
@@ -394,35 +397,38 @@ function attachRowActions(
   }
 
   if (downloaded) {
-    const serveBtn = el('button', 'models-inline-btn is-primary', 'Serve');
-    serveBtn.type = 'button';
-    serveBtn.addEventListener('click', () => {
+    const useBtn = el('button', 'models-inline-btn is-primary', 'Use in chat');
+    useBtn.type = 'button';
+    useBtn.addEventListener('click', () => {
       const modelPath = artifactPathForRow(row, panelState?.cached ?? []);
       if (!modelPath) {
-        setStatus('err', 'GGUF path not found — open Installed to serve this file.');
+        setStatus('err', 'GGUF path not found — open Installed to load this file.');
         return;
       }
-      void openServeDialog({
-        modelPath,
-        modelLabel: row.name.split('/').pop() || row.name,
-        hardware: hw as unknown as Record<string, unknown>,
-        quant: row.quant,
-        paramsB: row.params_b,
-        isMoe: row.is_moe,
-      })
-        .then(async (serve) => {
-          if (!serve) return;
-          setStatus('ok', 'Model server started.');
-          const picked = await selectProviderModel(serve.providerId, serve.modelLabel);
-          if (!picked) {
-            setStatus('ok', 'Served — pick the model in the top bar.');
-          }
+      const filename = modelPath.split(/[/\\]/).pop() ?? row.name;
+      const modelId = routerModelIdFromFilename(filename);
+      useBtn.disabled = true;
+      useBtn.textContent = 'Loading…';
+      void ensureLlamaRuntimeInstalled()
+        .then((ready) => {
+          if (!ready) return;
+          return startModelRouter()
+            .then(() => loadLocalModel(modelId))
+            .then(() => selectProviderModel('llama-cpp-local', modelId));
+        })
+        .then((picked) => {
+          if (picked === undefined) return;
+          setStatus('ok', picked ? 'Model ready in chat.' : 'Loaded — pick the model in the top bar.');
         })
         .catch((err) => {
-          setStatus('err', err instanceof Error ? err.message : 'Serve failed');
+          setStatus('err', err instanceof Error ? err.message : 'Load failed');
+        })
+        .finally(() => {
+          useBtn.disabled = false;
+          useBtn.textContent = 'Use in chat';
         });
     });
-    trailing.appendChild(serveBtn);
+    trailing.appendChild(useBtn);
   }
 }
 
