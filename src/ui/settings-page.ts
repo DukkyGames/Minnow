@@ -36,10 +36,15 @@ import {
 } from './settings-search-navigate';
 import { upgradeSettingsCheckboxes } from './settings-switch';
 import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
+import {
+  closeInstance,
+  getForegroundAppId,
+  getInstanceSnapshot,
+} from '../os/instances';
 import { requestCloseWindowApp, registerWindowTeardown } from '../os/window-mounted-apps';
 import { fieldByKey } from './settings-catalog';
 import { resolveBrainMemoryRoute } from './brain-memory-routing';
-import { launchApp, navigateToDesktop } from '../os/router';
+import { getCurrentRoute, launchApp, navigateToDesktop } from '../os/router';
 
 export type { SettingsSectionId, SettingsCategoryId } from './settings-page-types';
 export { categoryForArea } from './settings-page-types';
@@ -301,11 +306,46 @@ async function hydrateStaticFields(): Promise<void> {
   });
 }
 
+function getForegroundSettingsInstance() {
+  const snap = getInstanceSnapshot();
+  if (snap.foregroundId == null) return null;
+  const inst = snap.instances.find((i) => i.id === snap.foregroundId);
+  return inst?.appId === 'settings' ? inst : null;
+}
+
+/** Close fullscreen Settings opened from Code and restore the Code workspace. */
+function closeSettingsAndReturnToCode(): boolean {
+  const settingsInst = getForegroundSettingsInstance();
+  if (settingsInst?.launchOptions?.returnToApp !== 'code') return false;
+
+  const root = getSettingsRoot();
+  root?.classList.remove('is-open');
+  clearSettingsPageFilter();
+
+  const codeSection = settingsInst.launchOptions?.codeSection ?? getCurrentRoute().codeSection;
+  closeInstance(settingsInst.id);
+  launchApp('code', { codeSection: codeSection ?? 'overview' });
+  void import('./preview-electron-visibility').then((m) =>
+    m.syncElectronPreviewHostVisibility(),
+  );
+  return true;
+}
+
 /** Open settings; optional legacy area slug or field search key for deep link. */
 export function openSettings(
   section?: SettingsSectionId,
   options?: { searchKey?: string },
 ): void {
+  if (isOsEmbedded() && getForegroundAppId() === 'code') {
+    launchApp('settings', {
+      settingsSection: section,
+      settingsSearchKey: options?.searchKey,
+      returnToApp: 'code',
+      codeSection: getCurrentRoute().codeSection ?? 'overview',
+    });
+    return;
+  }
+
   const root = getSettingsRoot();
   const shell = getChatShell();
   if (!root || !shell) return;
@@ -366,6 +406,10 @@ export function openSettings(
 
 /** Close settings and return to chat or desktop. */
 export function closeSettings(options?: { skipNavigate?: boolean }): void {
+  if (!options?.skipNavigate && isOsEmbedded() && closeSettingsAndReturnToCode()) {
+    return;
+  }
+
   const root = getSettingsRoot();
   const shell = getChatShell();
   if (!root || !shell) return;
@@ -441,6 +485,7 @@ export function initSettingsPage(): void {
     .getElementById('btnSettingsPageBack')
     ?.addEventListener('click', () => {
       if (requestCloseWindowApp('settings')) return;
+      if (closeSettingsAndReturnToCode()) return;
       if (isOsEmbedded()) navigateToDesktop();
       else closeSettings();
     });
