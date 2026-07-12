@@ -61,6 +61,15 @@ function isBlockedCheckpoint(stage: SuperPlanStageId): boolean {
   return stage === 'spec_confirm' || stage === 'present';
 }
 
+/** Resume when active stage was advanced but never started (e.g. stream-end race). */
+async function resumeStalledSuperPlanStage(chat: Chat): Promise<void> {
+  if (!chat.superPlan || chat.superPlan.cancelled) return;
+  if (advancingChats.has(chat.id) || isChatStreaming(chat.id)) return;
+  const record = chat.superPlan.stages[chat.superPlan.activeStage];
+  if (record?.status !== 'pending') return;
+  await advanceSuperPlan(chat);
+}
+
 async function handleStageOutcome(
   chat: Chat,
   stageId: SuperPlanStageId,
@@ -90,7 +99,9 @@ async function handleStageOutcome(
       return;
     }
     setSuperPlanActiveStage(chat, next);
+    notifyListeners(chat);
     await advanceSuperPlan(chat);
+    notifyListeners(chat);
     return;
   }
 
@@ -123,7 +134,10 @@ export async function advanceSuperPlan(chat: Chat): Promise<void> {
   advancingChats.add(chat.id);
   try {
     markSuperPlanStageStatus(chat, stageId, 'running');
-    const outcome = await runSuperPlanStage(chat, stageId);
+    notifyListeners(chat);
+    const outcome = await runSuperPlanStage(chat, stageId, {
+      onResearchStarted: () => notifyListeners(chat),
+    });
     await handleStageOutcome(chat, stageId, outcome);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -147,6 +161,11 @@ export async function onSuperPlanStreamEnd(chatId: string): Promise<void> {
   try {
     const outcome = await finalizeStreamStage(chat, stageId);
     await handleStageOutcome(chat, stageId, outcome);
+    const refreshed = findChatById(chatId);
+    if (refreshed) {
+      await resumeStalledSuperPlanStage(refreshed);
+      notifyListeners(refreshed);
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     markSuperPlanStageStatus(chat, stageId, 'error', { error: message });

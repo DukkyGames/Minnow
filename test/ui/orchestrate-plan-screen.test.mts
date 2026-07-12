@@ -67,6 +67,91 @@ describe('orchestrate plan screen', () => {
     assert.equal(row.wrap.isConnected, false, 'stream row should be stubbed');
   });
 
+  test('spec_confirm phase presents build spec preview and checkpoint actions', () => {
+    const window = new Window();
+    globalThis.document = window.document;
+    globalThis.HTMLElement = window.HTMLElement;
+
+    const area = document.createElement('main');
+    area.id = 'chatArea';
+    document.body.appendChild(area);
+    document.body.appendChild(
+      Object.assign(document.createElement('div'), { id: 'mainColumn' }),
+    );
+
+    const chat = createEmptyChatObject('sp-spec');
+    chat.modeId = 'super-plan';
+    setSessionStateForTests({
+      version: 5,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    renderOrchestratePlanScreen({
+      phase: 'spec_confirm',
+      chatId: chat.id,
+      planPath: 'documentation/plans/references/oauth-spec.md',
+      savedPrompt: 'Add OAuth login',
+    });
+
+    assert.ok(document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID));
+    assert.match(document.body.textContent ?? '', /Confirm build spec/);
+    const preview = document.querySelector('.orchestrate-plan-screen__preview');
+    assert.ok(preview, 'build spec preview mount should exist');
+    assert.match(
+      preview?.textContent ?? '',
+      /build spec file is empty or could not be loaded/,
+      'spec_confirm should use build-spec empty copy when no markdown is loaded yet',
+    );
+    assert.ok(
+      [...document.querySelectorAll('.orchestrate-plan-screen__btn')].some(
+        (btn) => btn.textContent === 'Confirm spec',
+      ),
+    );
+    assert.ok(
+      [...document.querySelectorAll('.orchestrate-plan-screen__btn')].some(
+        (btn) => btn.textContent === 'Revise spec',
+      ),
+    );
+
+    const session = getOrchestratePlanScreenSession();
+    assert.equal(session?.phase, 'spec_confirm');
+    assert.equal(session?.planPath, 'documentation/plans/references/oauth-spec.md');
+  });
+
+  test('restore session from spec_confirm checkpoint keeps spec path for resume', () => {
+    const chat = createEmptyChatObject('sp-spec-restore');
+    chat.modeId = 'super-plan';
+    chat.history.push({ role: 'user', content: 'Add OAuth login' });
+    const stages = createInitialSuperPlanStages();
+    const specPath = 'documentation/plans/references/oauth-spec.md';
+    stages.spec_confirm.status = 'blocked_user';
+    stages.spec_confirm.artifactPath = specPath;
+    chat.superPlan = {
+      slug: 'oauth',
+      prompt: 'Add OAuth login',
+      activeStage: 'spec_confirm',
+      stages,
+      specPath,
+      researchPath: 'documentation/plans/references/oauth-research.md',
+      planPath: 'documentation/plans/oauth.md',
+      uiInvolved: false,
+    };
+    setSessionStateForTests({
+      version: 5,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    assert.equal(restoreOrchestratePlanScreenSessionFromChat(chat), true);
+    const session = getOrchestratePlanScreenSession();
+    assert.equal(session?.phase, 'spec_confirm');
+    assert.equal(session?.planPath, specPath);
+    assert.equal(session?.planScreenSuspended, true);
+  });
+
   test('view chat suspends overlay and resume remounts working phase', async () => {
     const window = new Window();
     globalThis.document = window.document;

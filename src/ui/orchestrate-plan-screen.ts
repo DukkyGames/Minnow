@@ -104,8 +104,10 @@ export interface RenderOrchestratePlanScreenOptions {
   planPath?: string;
   savedPrompt?: string;
   errorMessage?: string;
-  /** Plan markdown body for preview phase. */
+  /** Plan or build-spec markdown for preview / spec_confirm phases. */
   previewMarkdown?: string;
+  /** When true, keep the overlay torn down and only update session (banner resume sets false). */
+  planScreenSuspended?: boolean;
 }
 
 let planSession: OrchestratePlanScreenSession | null = null;
@@ -113,6 +115,18 @@ let streamEndUnsubscribe: (() => void) | null = null;
 let activityUnsubscribe: (() => void) | null = null;
 let superPlanUnsubscribe: (() => void) | null = null;
 let planProgressPanel: PlanProgressPanel | null = null;
+
+/** Read a plan or build-spec artifact for the plan screen preview panel. */
+async function readPlanScreenArtifactMarkdown(path: string): Promise<string> {
+  const trimmed = path.trim();
+  if (!trimmed) return '';
+  try {
+    const result = await executeTool('read_file', { path: trimmed });
+    return result.content;
+  } catch {
+    return '';
+  }
+}
 
 function ensureStreamEndListener(): void {
   if (streamEndUnsubscribe) return;
@@ -298,10 +312,7 @@ export function teardownOrchestratePlanScreenDom(
   if (options.chatId) {
     preparePlanScreenQuestionsBeforeTeardown(options.chatId, options);
   }
-  activityUnsubscribe?.();
-  activityUnsubscribe = null;
-  planProgressPanel?.destroy();
-  planProgressPanel = null;
+  resetPlanScreenDomMounts();
   document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID)?.remove();
   document.getElementById('chatArea')?.classList.remove(CHAT_AREA_PLAN_SCREEN_CLASS);
   document
@@ -468,16 +479,11 @@ async function syncPlanScreenFromSuperPlan(chat: Chat): Promise<void> {
 
   const checkpoint = getSuperPlanCheckpointKind(chat);
   if (checkpoint === 'spec_confirm') {
-    const specPath = chat.superPlan?.specPath?.trim() ?? '';
-    let previewMarkdown = '';
-    if (specPath) {
-      try {
-        const result = await executeTool('read_file', { path: specPath });
-        previewMarkdown = result.content;
-      } catch {
-        previewMarkdown = '';
-      }
-    }
+    const specPath =
+      chat.superPlan?.specPath?.trim() ||
+      chat.superPlan?.stages.spec_confirm?.artifactPath?.trim() ||
+      '';
+    const previewMarkdown = specPath ? await readPlanScreenArtifactMarkdown(specPath) : '';
     if (planSession) {
       planSession.phase = 'spec_confirm';
       planSession.planPath = specPath;
@@ -552,9 +558,10 @@ function wireSuperPlanControllerListener(chat: Chat): void {
     if (updated.id !== chat.id) return;
     if (
       planSession &&
-      (planSession.phase === 'working' ||
-        planSession.phase === 'super-plan-working' ||
-        planSession.phase === 'questions')
+      planSession.chatId === updated.id &&
+      updated.superPlan &&
+      isOrchestratePlanScreenMounted() &&
+      !planSession.planScreenSuspended
     ) {
       syncPlanProgressFromChat(updated);
     }
@@ -964,6 +971,7 @@ function buildPlanScreenDom(opts: RenderOrchestratePlanScreenOptions): HTMLEleme
     previewMount.className = 'orchestrate-plan-screen__preview';
     mountPlanPreviewContent(previewMount, opts.previewMarkdown ?? '', {
       modeId: 'super-plan',
+      emptyLabel: '(build spec file is empty or could not be loaded)',
     });
     previewWrap.appendChild(previewMount);
 
@@ -1139,33 +1147,65 @@ function buildPlanScreenDom(opts: RenderOrchestratePlanScreenOptions): HTMLEleme
   return root;
 }
 
+/** Drop progress/activity mounts before rebuilding the plan screen DOM. */
+function resetPlanScreenDomMounts(): void {
+  activityUnsubscribe?.();
+  activityUnsubscribe = null;
+  planProgressPanel?.destroy();
+  planProgressPanel = null;
+}
+
 /** Paint plan screen into #chatArea for the given phase. */
 export function renderOrchestratePlanScreen(
   opts: RenderOrchestratePlanScreenOptions,
 ): void {
   teardownHub();
+  const prior = planSession;
+  resetPlanScreenDomMounts();
+
   planSession = {
     chatId: opts.chatId,
     phase: opts.phase,
     planPath: opts.planPath,
-    savedPrompt: opts.savedPrompt,
-    planScreenSuspended: false,
+    savedPrompt: opts.savedPrompt ?? prior?.savedPrompt,
+    planScreenSuspended: opts.planScreenSuspended ?? false,
     errorMessage: opts.errorMessage,
   };
 
   const area = document.getElementById('chatArea');
   if (!area) return;
+  if (
+    opts.phase !== 'working' &&
+    opts.phase !== 'super-plan-working' &&
+    opts.phase !== 'questions'
+  ) {
+    planProgressPanel?.destroy();
+    planProgressPanel = null;
+  }
   area.replaceChildren();
   area.appendChild(buildPlanScreenDom(opts));
   area.classList.add(CHAT_AREA_PLAN_SCREEN_CLASS);
   document.getElementById('mainColumn')?.classList.add(MAIN_COLUMN_PLAN_SCREEN_CLASS);
   document.getElementById('mainColumn')?.classList.remove('main-column--board-view');
-  if (opts.phase === 'working' || opts.phase === 'super-plan-working' || opts.phase === 'questions') {
+
+  const chat = findChatById(opts.chatId);
+  const isSuperPlan = chat && normalizeModeId(chat.modeId) === 'super-plan';
+  const wiresSuperPlanListener =
+    isSuperPlan &&
+    (opts.phase === 'working' ||
+      opts.phase === 'super-plan-working' ||
+      opts.phase === 'questions' ||
+      opts.phase === 'spec_confirm' ||
+      opts.phase === 'preview');
+  if (
+    opts.phase === 'working' ||
+    opts.phase === 'super-plan-working' ||
+    opts.phase === 'questions'
+  ) {
     wirePlanScreenActivityListener(opts.chatId);
-    const chat = findChatById(opts.chatId);
-    if (chat && normalizeModeId(chat.modeId) === 'super-plan') {
-      wireSuperPlanControllerListener(chat);
-    }
+  }
+  if (wiresSuperPlanListener && chat) {
+    wireSuperPlanControllerListener(chat);
   }
 }
 
@@ -1228,50 +1268,42 @@ export function showOrchestratePlanScreenSuspendedBanner(
   resumeBtn.className = 'orchestrate-plan-screen-banner__resume';
   resumeBtn.textContent = 'Return to planning screen';
   resumeBtn.addEventListener('click', () => {
-    if (!planSession || planSession.chatId !== chat.id) return;
-    planSession.planScreenSuspended = false;
-    const session = planSession;
-    renderOrchestratePlanScreen({
-      phase: session.phase,
-      chatId: session.chatId,
-      planPath: session.planPath,
-      savedPrompt: session.savedPrompt,
-      errorMessage: session.errorMessage,
-    });
-    const afterPaint =
-      typeof requestAnimationFrame === 'function'
-        ? requestAnimationFrame
-        : (fn: () => void) => {
-            fn();
-            return 0;
-          };
-    afterPaint(() => {
-      if (isAskQuestionModalOpenForChat(session.chatId)) {
-        const planHost = document.getElementById(ORCHESTRATE_PLAN_SCREEN_QUESTIONS_ID);
-        if (planHost) {
-          migrateActiveQuestionModalToHost(planHost);
-          planHost.hidden = false;
-        }
+    void (async () => {
+      if (!planSession || planSession.chatId !== chat.id) return;
+      const session = planSession;
+      let previewMarkdown: string | undefined;
+      if (
+        (session.phase === 'preview' || session.phase === 'spec_confirm') &&
+        session.planPath
+      ) {
+        previewMarkdown = await readPlanScreenArtifactMarkdown(session.planPath);
       }
-    });
-    if (
-      (session.phase === 'preview' || session.phase === 'spec_confirm') &&
-      session.planPath
-    ) {
-      void (async () => {
-        try {
-          const chat = findChatById(session.chatId);
-          const modeId =
-            normalizeModeId(chat?.modeId) === 'super-plan' ? 'super-plan' : 'plan';
-          const result = await executeTool('read_file', { path: session.planPath! });
-          const pre = document.querySelector('.orchestrate-plan-screen__preview');
-          if (!(pre instanceof HTMLElement)) return;
-          mountPlanPreviewContent(pre, result.content, { modeId });
-        } catch {
-          /* keep placeholder */
+      session.planScreenSuspended = false;
+      renderOrchestratePlanScreen({
+        phase: session.phase,
+        chatId: session.chatId,
+        planPath: session.planPath,
+        savedPrompt: session.savedPrompt,
+        errorMessage: session.errorMessage,
+        previewMarkdown,
+      });
+      const afterPaint =
+        typeof requestAnimationFrame === 'function'
+          ? requestAnimationFrame
+          : (fn: () => void) => {
+              fn();
+              return 0;
+            };
+      afterPaint(() => {
+        if (isAskQuestionModalOpenForChat(session.chatId)) {
+          const planHost = document.getElementById(ORCHESTRATE_PLAN_SCREEN_QUESTIONS_ID);
+          if (planHost) {
+            migrateActiveQuestionModalToHost(planHost);
+            planHost.hidden = false;
+          }
         }
-      })();
-    }
+      });
+    })();
   });
 
   const dismissBtn = document.createElement('button');

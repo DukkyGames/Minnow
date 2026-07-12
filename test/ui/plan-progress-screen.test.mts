@@ -89,6 +89,31 @@ describe('plan progress screen', () => {
     panel.destroy();
   });
 
+  test('PlanProgressPanel advances headline when active stage leaves interview', () => {
+    const mount = document.getElementById('mount') as HTMLElement;
+    const panel = new PlanProgressPanel(mount, { variant: 'super-plan', reducedMotion: true });
+    panel.reset();
+
+    const grillState = makeSuperPlanState('grill');
+    grillState.stages.grill.status = 'running';
+    panel.applySuperPlanState(grillState);
+    assert.match(
+      mount.querySelector('[data-plan-label]')?.textContent ?? '',
+      /Interviewing/i,
+    );
+
+    const specState = makeSuperPlanState('spec_confirm');
+    specState.stages.grill.status = 'done';
+    specState.stages.spec_confirm.status = 'running';
+    panel.applySuperPlanState(specState);
+    assert.match(
+      mount.querySelector('[data-plan-label]')?.textContent ?? '',
+      /build spec/i,
+    );
+
+    panel.destroy();
+  });
+
   test('preview popout wires four action buttons', () => {
     const calls: string[] = [];
     const popout = buildPlanPreviewPopoutDom({

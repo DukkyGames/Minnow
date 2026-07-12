@@ -48,6 +48,11 @@ export type SuperPlanStageOutcome =
   | { kind: 'done'; artifactPath?: string }
   | { kind: 'skipped' };
 
+export interface SuperPlanStageRunHooks {
+  /** Fires after Deep Research starts so the progress UI can subscribe to the stream. */
+  onResearchStarted?: (researchId: string) => void;
+}
+
 async function runChatTurnForStage(
   chat: Chat,
   userText: string,
@@ -166,7 +171,10 @@ async function runSpecConfirmStage(chat: Chat): Promise<SuperPlanStageOutcome> {
   return { kind: 'await_stream' };
 }
 
-async function runResearchStage(chat: Chat): Promise<SuperPlanStageOutcome> {
+async function runResearchStage(
+  chat: Chat,
+  hooks?: SuperPlanStageRunHooks,
+): Promise<SuperPlanStageOutcome> {
   const state = ensureSuperPlanState(chat);
   const config = getSuperPlanConfigSync();
   let specContent = '';
@@ -190,6 +198,8 @@ async function runResearchStage(chat: Chat): Promise<SuperPlanStageOutcome> {
       ? { model: config.researchModel.modelId.trim() }
       : {}),
   });
+  patchSuperPlanState(chat, { researchId });
+  hooks?.onResearchStarted?.(researchId);
   const report = await waitForResearchDone(researchId);
   const body = report || `# Research report\n\nNo findings for: ${state.prompt}`;
   await executeTool('save_file', {
@@ -372,6 +382,7 @@ async function runPresentStage(chat: Chat): Promise<SuperPlanStageOutcome> {
 export async function runSuperPlanStage(
   chat: Chat,
   stageId: import('./types').SuperPlanStageId,
+  hooks?: SuperPlanStageRunHooks,
 ): Promise<SuperPlanStageOutcome> {
   await loadSuperPlanConfig();
   switch (stageId) {
@@ -380,7 +391,7 @@ export async function runSuperPlanStage(
     case 'spec_confirm':
       return runSpecConfirmStage(chat);
     case 'research':
-      return runResearchStage(chat);
+      return runResearchStage(chat, hooks);
     case 'draft1':
       return runDraftStage(chat, 'draft1');
     case 'review1':
