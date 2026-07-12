@@ -21,6 +21,7 @@
     "impeccable:sync": "node scripts/sync-impeccable-skill.mjs",
     "impeccable:update": "npx impeccable skills update && node scripts/sync-impeccable-skill.mjs",
     "impeccable:detect": "npx impeccable detect src/ index.html",
+    "index-html:coupling-map": "node scripts/index-html-coupling-map.mjs",
     "caveman:sync": "node scripts/sync-caveman-skill.mjs",
     "matt-pocock-skills:sync": "node scripts/sync-matt-pocock-skills.mjs",
     "settings-registry:generate": "tsx scripts/generate-settings-registry.mjs",

@@ -232,7 +232,7 @@
   <div class="topbar-end">
     <div class="model-wrap" data-model-state="unknown">
       <label class="visually-hidden" id="modelSelectLabel" for="modelSelectTrigger">Model</label>
-      <button class="icon-btn model-refresh-btn" type="button" id="btnRefreshModels" aria-label="Refresh models" title="Refresh model list" onclick="fetchModels()">
+      <button class="icon-btn model-refresh-btn" type="button" id="btnRefreshModels" aria-label="Refresh models" title="Refresh model list">
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M20 4v4h-4"/>
           <path d="M17.5 6.5a8 8 0 1 1-11.3 11.3"/>
@@ -242,13 +242,13 @@
       </button>
       <div class="model-select-inner" id="modelSelectRoot">
         <span class="model-state-dot model-load-dot" id="modelStateDot" aria-hidden="true"></span>
-        <select id="modelSelect" class="model-select-native" tabindex="-1" aria-hidden="true" onchange="onModelSelectChange()"></select>
+        <select id="modelSelect" class="model-select-native" tabindex="-1" aria-hidden="true"></select>
         <button type="button" class="model-select-trigger" id="modelSelectTrigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="modelSelectMenu">
           <span class="model-select-trigger-text" id="modelSelectTriggerText">Loading models…</span>
         </button>
         <ul class="model-select-menu hidden" id="modelSelectMenu" role="listbox" aria-labelledby="modelSelectLabel"></ul>
       </div>
-      <button type="button" id="btnModelLoadUnload" class="model-action-btn" hidden aria-label="Load model" title="Load selected model into VRAM" onclick="toggleSelectedModelLoad()">Load</button>
+      <button type="button" id="btnModelLoadUnload" class="model-action-btn" hidden aria-label="Load model" title="Load selected model into VRAM">Load</button>
       <div class="status-pill" role="status" aria-live="polite">
         <div class="s-dot" id="sDot" aria-hidden="true"></div>
         <span id="sText">Loading models…</span>
@@ -259,7 +259,7 @@
   <div class="topbar-spacer" aria-hidden="true"></div>
 
   <div class="topbar-actions">
-    <button class="icon-btn topbar-sidebar-toggle" id="btnSidebarToggle" type="button" aria-label="Chat sessions" onclick="toggleSidebarLayout()">
+    <button class="icon-btn topbar-sidebar-toggle" id="btnSidebarToggle" type="button" aria-label="Chat sessions">
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
     <div id="workspaceControlSlot" class="topbar-workspace-slot">
@@ -270,24 +270,24 @@
         </button>
       </div>
     </div>
-    <button class="icon-btn" type="button" id="btnResearch" aria-label="Deep Research" title="Deep Research" onclick="openResearchFromTopbar()">
+    <button class="icon-btn" type="button" id="btnResearch" aria-label="Deep Research" title="Deep Research">
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/><path d="M11 8v6M8 11h6"/></svg>
     </button>
-    <button class="icon-btn" type="button" id="btnBenchmark" aria-label="Benchmark" title="Compare model speed and quality" onclick="openBenchmarkFromTopbar()">
+    <button class="icon-btn" type="button" id="btnBenchmark" aria-label="Benchmark" title="Compare model speed and quality">
       <img class="icon-img" src="/icons/benchmark.png" width="18" height="18" alt="" aria-hidden="true">
     </button>
-    <button class="icon-btn" type="button" id="btnExpertLab" aria-label="Experts" title="Experts" onclick="openExpertLabFromTopbar()">
+    <button class="icon-btn" type="button" id="btnExpertLab" aria-label="Experts" title="Experts">
       <img class="icon-img" src="/icons/expert-lab.png" width="18" height="18" alt="" aria-hidden="true">
     </button>
-    <button class="icon-btn" type="button" id="btnSettings" aria-label="Settings" onclick="openSettingsFromTopbar()">
+    <button class="icon-btn" type="button" id="btnSettings" aria-label="Settings">
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
   </div>
 </header>
 
 <!-- Settings drawer -->
-<button type="button" class="drawer-overlay" id="drawerOverlay" aria-label="Close settings" onclick="closeDrawer()" aria-hidden="true"></button>
-<div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" aria-hidden="true" inert onkeydown="onDrawerKeydown(event)">
+<button type="button" class="drawer-overlay" id="drawerOverlay" aria-label="Close settings" aria-hidden="true"></button>
+<div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" aria-hidden="true" inert>
   <div class="drawer-header" id="drawerTitle">
     <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     Settings
@@ -309,13 +309,12 @@
     </div>
     <div class="field">
       <label for="systemPromptPreset">Prompt preset</label>
-      <select id="systemPromptPreset" onchange="onSystemPromptPresetChange()">
+      <select id="systemPromptPreset">
         <option value="">Custom prompt</option>
       </select>
       <p class="field-hint" id="systemPromptHint">Presets fill the box below. For Roleplay, replace [CHARACTER NAME] and [brief description].</p>
       <label for="systemPrompt" class="visually-hidden">System prompt</label>
-      <textarea id="systemPrompt" placeholder="Example: You are a helpful assistant." rows="12"
-        oninput="onSystemPromptInput()"></textarea>
+      <textarea id="systemPrompt" placeholder="Example: You are a helpful assistant." rows="12"></textarea>
     </div>
     <section class="tools-section" id="expertsSection" aria-labelledby="expertsSectionTitle">
       <h2 class="tools-section-title" id="expertsSectionTitle">Experts</h2>
@@ -325,7 +324,7 @@
           Enable experts
         </label>
       </div>
-      <p class="field-hint">When enabled, summon specialists from <button type="button" class="settings-inline-link" onclick="openExpertLabFromTopbar()">Experts</button> (top bar flask icon).</p>
+      <p class="field-hint">When enabled, summon specialists from <button type="button" class="settings-inline-link">Experts</button> (top bar flask icon).</p>
     </section>
     <section class="tools-section" id="toolsSection" aria-labelledby="toolsSectionTitle">
       <h2 class="tools-section-title" id="toolsSectionTitle">Tools</h2>
@@ -352,15 +351,15 @@
         <p class="field-hint">Get a key at <a href="https://docs.tavily.com/welcome" target="_blank" rel="noopener noreferrer">docs.tavily.com</a>. Stored in ~/.minnow/tools.json when npm start is running.</p>
       </div>
     </section>
-    <button class="drawer-clear-btn" type="button" onclick="clearChat()">
+    <button class="drawer-clear-btn" type="button">
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px;display:inline-block;vertical-align:-3px;margin-right:6px"><path d="M18 6L6 18M6 6l12 12"/></svg>
       Clear messages in this chat
     </button>
   </div>
 </div>
 
-<button type="button" class="sidebar-backdrop" id="sidebarBackdrop" aria-label="Close chat list" onclick="closeMobileSidebar()" aria-hidden="true"></button>
-<button type="button" class="file-sidebar-backdrop" id="fileSidebarBackdrop" aria-label="Close file tree" onclick="closeMobileFileSidebar()" aria-hidden="true"></button>
+<button type="button" class="sidebar-backdrop" id="sidebarBackdrop" aria-label="Close chat list" aria-hidden="true"></button>
+<button type="button" class="file-sidebar-backdrop" id="fileSidebarBackdrop" aria-label="Close file tree" aria-hidden="true"></button>
 
 <main id="globalBugsView" class="global-bugs-page" aria-label="All bugs">
   <header class="global-bugs-page-header">
@@ -1983,7 +1982,6 @@
           type="button"
           id="btnSidebarCollapse"
           aria-label="Collapse sidebar"
-          onclick="toggleSidebarCollapsed()"
         >
           <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
@@ -1998,8 +1996,8 @@
         </button>
       </div>
     </div>
-    <button type="button" class="chat-new-wide" onclick="createChat()">+ New chat</button>
-    <button type="button" class="chat-new-compact" aria-label="New chat" onclick="createChat()">+</button>
+    <button type="button" class="chat-new-wide">+ New chat</button>
+    <button type="button" class="chat-new-compact" aria-label="New chat">+</button>
     <button type="button" class="chat-new-group-wide" id="btnNewChatGroup" aria-label="New group">
       <span class="chat-new-group-icon" aria-hidden="true"></span>
       <span class="chat-new-group-label">New group</span>
@@ -2023,7 +2021,7 @@
       <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnCodeBrainMap" aria-label="Code map" title="Code map" aria-pressed="false" aria-expanded="false">
         <img class="icon-img" src="/icons/code-brain-map.png" width="18" height="18" alt="" aria-hidden="true">
       </button>
-      <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnOrchestrate" aria-label="Orchestrate boards" title="Orchestrate boards" aria-pressed="false" aria-expanded="false" onclick="toggleOrchestrateHubFromTopbar()">
+      <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnOrchestrate" aria-label="Orchestrate boards" title="Orchestrate boards" aria-pressed="false" aria-expanded="false">
         <span class="mode-mask-icon mode-mask-icon--lg chat-sidebar-footer-btn__mode-icon" aria-hidden="true"></span>
       </button>
     </div>
@@ -2156,8 +2154,7 @@
         <div class="input-row">
           <div class="input-wrap input-wrap--inset-actions">
             <label for="msgInput" class="visually-hidden">Message</label>
-            <textarea id="msgInput" placeholder="Type a message…" rows="1"
-              onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+            <textarea id="msgInput" placeholder="Type a message…" rows="1"></textarea>
             <div class="input-inset-actions" id="composerInsetActions" aria-label="Message attachments and voice">
               <button type="button" class="input-inset-btn attach-btn" id="attachBtn" aria-label="Attach files">
                 <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
@@ -2170,7 +2167,7 @@
         <button class="icon-btn view-mode-toggle-btn view-mode-toggle-btn--to-board hidden" type="button" id="btnViewModeToggleBoard" aria-label="Board view" title="Board view (Orchestrate mode only)" disabled hidden>
           <svg class="icon-svg view-mode-toggle-btn__icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="8" rx="1"/><rect x="14" y="13" width="7" height="8" rx="1"/></svg>
         </button>
-        <button class="send-btn" id="sendBtn" type="button" onclick="handleComposerPrimaryAction()" aria-label="Send message" data-mode="send">
+        <button class="send-btn" id="sendBtn" type="button" aria-label="Send message" data-mode="send">
           <span id="sendIcon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>
           <span id="sendStopIcon" class="hidden"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/></svg></span>
           <span id="sendSpinner" class="spinner hidden"></span>
@@ -2180,7 +2177,7 @@
 
     <!-- Stats strip -->
     <div class="stats-strip is-collapsed" id="statsStrip">
-      <button type="button" class="stats-expand-btn" id="statsExpandBtn" aria-label="Show inference metrics" aria-expanded="false" aria-controls="statsPanel" onclick="toggleStatsPanel()">
+      <button type="button" class="stats-expand-btn" id="statsExpandBtn" aria-label="Show inference metrics" aria-expanded="false" aria-controls="statsPanel">
         <span class="stats-expand-label">Metrics</span>
         <span class="stats-expand-preview" id="statsExpandPreview">— t/s · — tokens</span>
         <svg class="stats-expand-chevron icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
@@ -2368,11 +2365,11 @@
     ></div>
     <div class="file-sidebar-header">
       <span class="file-sidebar-title" id="fileSidebarTitle">Files</span>
-      <button type="button" class="icon-btn file-sidebar-toggle" id="btnFileSidebarCollapse" aria-label="Project files" title="Project files" onclick="toggleFileSidebarLayout()">
+      <button type="button" class="icon-btn file-sidebar-toggle" id="btnFileSidebarCollapse" aria-label="Project files" title="Project files">
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
       </button>
       <button type="button" class="icon-btn file-sidebar-preview-toggle" id="btnPreviewToggle"
-        aria-label="Preview browser" title="Preview browser" onclick="togglePreviewFromTopbar()">
+        aria-label="Preview browser" title="Preview browser">
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
       </button>
       <button type="button" class="icon-btn file-tree-refresh" id="btnFileTreeRefresh" aria-label="Refresh file tree">
