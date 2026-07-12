@@ -18,7 +18,8 @@ Renderer OOM during heavy AFK orchestrate runs (3 concurrent tasks + merge fixer
 
 ### Phase 2 — Memory discipline
 
-- **Task history trim** — `src/chat/orchestrate/task-history-trim.ts`; invoked from `moveTaskStatus` for terminal tasks.
+- **Task history trim** — `src/chat/orchestrate/task-history-trim.ts`; invoked from `moveTaskStatus` for terminal tasks and `testing` transition.
+- **Idle trim on stream-end (MIN-407)** — `trimIdleBoardTaskChats` runs after every board task chat stream-end (build / test / fixer / final) so concurrent AFK runs do not retain full tool transcripts for every completed chat in RAM; skips active and still-streaming chats.
 - **Board log caps** — `BOARD_LOG_MAX` 100, preview cap 200 (`src/state/orchestrate-board-store.ts`, `src/state/sessions.ts`).
 - **OOM concurrency cap** — `resolveEffectiveMaxConcurrent` limits to 2 while OOM pause is active; header hint in board UI.
 
