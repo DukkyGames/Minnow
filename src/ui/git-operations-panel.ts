@@ -37,6 +37,10 @@ import {
 import { fetchGitCommitMessage } from './git-commit-message-client';
 import { showToast } from './toast';
 import {
+  isMissingGitRepositoryError,
+  renderGitNoRepositoryState,
+} from './git-no-repo-state';
+import {
   closeGitPanelNamePopover,
   openGitPanelNamePopover,
 } from './git-panel-name-popover';
@@ -124,6 +128,10 @@ export function createGitOperationsPanel(
   statusEl.setAttribute('aria-live', 'polite');
   statusEl.hidden = true;
 
+  const noRepoMount = document.createElement('div');
+  noRepoMount.className = 'git-ops-panel__no-repo-mount';
+  noRepoMount.hidden = true;
+
   const commitBox = document.createElement('div');
   commitBox.className = 'git-panel-commit-box';
   const commitInput = document.createElement('textarea');
@@ -176,7 +184,7 @@ export function createGitOperationsPanel(
   diffHost.className = 'git-panel-diff-host';
   diffHost.hidden = true;
 
-  changesPane.append(statusEl, commitBox, bodyMount, diffHost);
+  changesPane.append(statusEl, noRepoMount, commitBox, bodyMount, diffHost);
 
   const historyPane = document.createElement('div');
   historyPane.className = 'git-ops-panel__pane git-ops-panel__pane--history';
@@ -202,6 +210,13 @@ export function createGitOperationsPanel(
 
   function getEffectiveCwd(): string | undefined {
     return resolvePanelWorktreeCwd(options.getPanelCwd());
+  }
+
+  function setGitOpsNoRepoState(active: boolean): void {
+    root.classList.toggle('git-ops-panel--no-repo', active);
+    noRepoMount.hidden = !active;
+    if (active) renderGitNoRepositoryState(noRepoMount);
+    else noRepoMount.replaceChildren();
   }
 
   function setStatus(message: string, isError = false): void {
@@ -657,14 +672,22 @@ export function createGitOperationsPanel(
     try {
       const status = await gitStatus(getEffectiveCwd());
       if (!status.ok) {
+        if (isMissingGitRepositoryError(status.error)) {
+          setStatus('');
+          setGitOpsNoRepoState(true);
+          bodyMount.replaceChildren();
+          return;
+        }
+        setGitOpsNoRepoState(false);
         setStatus(status.error ?? 'Could not read git status', true);
         bodyMount.replaceChildren();
         const err = document.createElement('p');
         err.className = 'git-panel-empty';
-        err.textContent = status.error ?? 'Not a git repository';
+        err.textContent = status.error ?? 'Could not load git status';
         bodyMount.appendChild(err);
         return;
       }
+      setGitOpsNoRepoState(false);
       setStatus('');
       if (status.branch) {
         currentBranchName = status.branch === 'HEAD' ? '' : status.branch;

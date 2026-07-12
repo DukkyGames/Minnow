@@ -1,0 +1,118 @@
+/* Shared empty state when the workspace is not a git repository */
+
+.git-no-repo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 18px 14px 16px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-surface-1);
+}
+
+.git-no-repo__icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 2px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-bg);
+  color: var(--mn-fg-muted);
+}
+
+.git-no-repo__icon .icon-svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.git-no-repo__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--mn-fg);
+}
+
+.git-no-repo__hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+  max-width: 18rem;
+}
+
+.git-no-repo__btn {
+  margin-top: 8px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--mn-border-strong);
+  background: transparent;
+  color: var(--mn-fg);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.12s var(--ease-out),
+    border-color 0.12s var(--ease-out),
+    color 0.12s var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .git-no-repo__btn:hover {
+    border-color: var(--mn-accent);
+    color: var(--mn-accent);
+    background: var(--mn-surface-2);
+  }
+}
+
+/* Code overview Git rail inset */
+.code-overview__section-body--git .git-no-repo {
+  margin: 10px 12px 14px;
+}
+
+/* Git side panel mount */
+.git-panel-no-repo-mount {
+  flex-shrink: 0;
+  padding: 0 10px 10px;
+}
+
+.git-panel-no-repo-mount[hidden] {
+  display: none !important;
+}
+
+.git-panel-root__inner.git-panel-root--no-repo .git-panel-commit-box,
+.git-panel-root__inner.git-panel-root--no-repo .git-panel-sections,
+.git-panel-root__inner.git-panel-root--no-repo .git-panel-section--history,
+.git-panel-root__inner.git-panel-root--no-repo .git-panel-branch-wrap,
+.git-panel-root__inner.git-panel-root--no-repo .git-panel-sync-row,
+.git-panel-root__inner.git-panel-root--no-repo .git-panel-cwd-wrap {
+  display: none !important;
+}
+
+/* Git operations center (tabbed / stacked) */
+.git-ops-panel.git-ops-panel--no-repo .git-ops-panel__tabs,
+.git-ops-panel.git-ops-panel--no-repo .git-panel-commit-box,
+.git-ops-panel.git-ops-panel--no-repo .git-panel-sections,
+.git-ops-panel.git-ops-panel--no-repo .git-panel-diff-host,
+.git-ops-panel.git-ops-panel--no-repo .git-ops-panel__pane--history,
+.git-ops-panel.git-ops-panel--no-repo .git-ops-panel__pane--branches {
+  display: none !important;
+}
+
+.git-ops-panel__no-repo-mount {
+  padding: 12px 10px 16px;
+}
+
+.git-ops-panel__no-repo-mount[hidden] {
+  display: none !important;
+}
