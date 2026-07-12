@@ -49,3 +49,20 @@ export function mergeThinkingTriState(
   }
   return resolved;
 }
+
+/** Min/max for per-thinking-session token budgets (approximate chars ÷ 4). */
+export const THINKING_BUDGET_MIN = 512;
+export const THINKING_BUDGET_MAX = 200_000;
+
+/**
+ * Coerce thinking budget tokens: `null` = inherit/off, `0` = explicitly off,
+ * positive values clamped to [512, 200_000].
+ */
+export function clampThinkingBudgetTokens(value: unknown): number | null {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return null;
+  const rounded = Math.round(n);
+  if (rounded < 0) return null;
+  if (rounded === 0) return 0;
+  return Math.min(THINKING_BUDGET_MAX, Math.max(THINKING_BUDGET_MIN, rounded));
+}

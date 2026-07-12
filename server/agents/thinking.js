@@ -24,3 +24,17 @@ export function normalizeThinkingGlobalDefault(value) {
   if (typeof value === 'string' && GLOBAL_MODES.has(value)) return value;
   return null;
 }
+
+/**
+ * Coerce thinking budget tokens: null = inherit, 0 = off, positive clamped [512, 200_000].
+ * @param {unknown} value
+ * @returns {number | null}
+ */
+export function clampThinkingBudgetTokens(value) {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return null;
+  const rounded = Math.round(n);
+  if (rounded < 0) return null;
+  if (rounded === 0) return 0;
+  return Math.min(200_000, Math.max(512, rounded));
+}

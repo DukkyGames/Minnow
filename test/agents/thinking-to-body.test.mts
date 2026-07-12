@@ -121,6 +121,36 @@ describe('thinkingToCompletionBody', () => {
     const { body } = thinkingToCompletionBody('off', 'anthropic-v1', reasoningCaps);
     assert.deepEqual(body, {});
   });
+
+  test('anthropic-v1 explicit budget beats effort map with 1024 floor', () => {
+    const patch = reasoningEffortToCompletionBody('low', 'anthropic-v1', reasoningCaps, 800);
+    const thinking = (
+      patch.body.providerOptions as { anthropic: { thinking: { budgetTokens: number } } }
+    ).anthropic.thinking;
+    assert.equal(thinking.budgetTokens, 1024);
+    assert.equal(patch.nativeBudgetApplied, true);
+  });
+
+  test('anthropic adaptive skips explicit budget', () => {
+    const patch = thinkingToCompletionBody(
+      'on',
+      'anthropic-v1',
+      {
+        ...reasoningCaps,
+        reasoningThinkingEnabledValue: 'adaptive',
+      },
+      4096,
+    );
+    assert.deepEqual(patch.body.providerOptions, {
+      anthropic: { thinking: { type: 'adaptive' } },
+    });
+    assert.notEqual(patch.nativeBudgetApplied, true);
+  });
+
+  test('openai-v1 emits thinking_budget_tokens when budget set', () => {
+    const { body } = thinkingToCompletionBody('on', 'openai-v1', reasoningCaps, 2048);
+    assert.equal(body.thinking_budget_tokens, 2048);
+  });
 });
 
 describe('reasoningEffortToCompletionBody', () => {

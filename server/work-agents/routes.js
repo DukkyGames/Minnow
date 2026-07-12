@@ -17,7 +17,7 @@ import {
   writeWorkAgentPromptOverride,
 } from './registry.js';
 import { normalizeSamplerPreset } from '../agents/sampler.js';
-import { normalizeThinkingTriState } from '../agents/thinking.js';
+import { clampThinkingBudgetTokens, normalizeThinkingTriState } from '../agents/thinking.js';
 import { normalizeArchiveConfig } from '../config/validators.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -110,6 +110,12 @@ export async function handleWorkAgentsRequest(req, res, pathname, search) {
       if ('thinkingMode' in body) {
         patch.thinkingMode =
           body.thinkingMode === null ? null : normalizeThinkingTriState(body.thinkingMode);
+      }
+      if ('thinkingBudgetTokens' in body) {
+        patch.thinkingBudgetTokens =
+          body.thinkingBudgetTokens === null
+            ? null
+            : clampThinkingBudgetTokens(body.thinkingBudgetTokens);
       }
       if ('archive' in body) {
         const normalized = normalizeArchiveConfig(body.archive);

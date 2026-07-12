@@ -538,3 +538,19 @@ export function buildLlamaServerEnv(binaryPath, baseEnv = process.env) {
 export function resetLlamaRuntimeInstallForTests() {
   installPromise = null;
 }
+
+/**
+ * Feature-detect per-request reasoning budget support via `llama-server --help`.
+ * @param {string} binaryPath
+ * @returns {Promise<boolean>}
+ */
+export async function detectLlamaThinkingBudgetSupport(binaryPath) {
+  if (!binaryPath) return false;
+  try {
+    const result = await runProcess(binaryPath, ['--help'], { timeout: 15_000 });
+    const helpText = `${result.stdout}\n${result.stderr}`;
+    return /--reasoning-budget/.test(helpText);
+  } catch {
+    return false;
+  }
+}

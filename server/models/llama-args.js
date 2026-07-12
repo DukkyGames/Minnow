@@ -191,6 +191,9 @@ export function buildLlamaServerArgs(opts) {
     args.push('--no-warmup');
   }
 
+  // Do NOT pass `--reasoning-budget` here — it overrides and disables per-request
+  // `thinking_budget_tokens` on the OpenAI-compatible API (llama.cpp PR #20297).
+
   if (Array.isArray(merged.extra_args)) {
     for (const token of merged.extra_args) {
       if (typeof token === 'string' && token.trim()) {
@@ -200,6 +203,23 @@ export function buildLlamaServerArgs(opts) {
   }
 
   return args;
+}
+
+/**
+ * Warn when user extra_args include --reasoning-budget (disables per-request budgets).
+ * @param {LlamaServeSettings | null | undefined} settings
+ * @param {LlamaServeSettings | null | undefined} defaults
+ */
+export function warnIfReasoningBudgetCliFlag(settings, defaults) {
+  const extras = [
+    ...(Array.isArray(defaults?.extra_args) ? defaults.extra_args : []),
+    ...(Array.isArray(settings?.extra_args) ? settings.extra_args : []),
+  ];
+  if (extras.some((token) => typeof token === 'string' && /--reasoning-budget\b/.test(token))) {
+    console.warn(
+      '[llama-cpp] --reasoning-budget in serve extra_args disables per-request thinking_budget_tokens',
+    );
+  }
 }
 
 /**

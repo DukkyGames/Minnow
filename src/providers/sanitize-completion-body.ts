@@ -4,6 +4,7 @@
 
 import { anthropicThinkingTypeFromProviderOptions } from '../lib/anthropic-thinking-style';
 import type { ProviderPublic, ApiKind } from './types';
+import { LLAMA_CPP_LOCAL_PROVIDER_ID } from './types';
 import { resolvedApiForModel } from './resolve-model-api';
 import type { ModelCapabilities } from '../types';
 
@@ -104,6 +105,11 @@ export function sanitizeCompletionBodyForProvider(
   if (modelRejectsTemperature(modelId)) {
     delete next.temperature;
     delete next.top_p;
+  }
+
+  // Per-request llama.cpp reasoning budget — only for the local llama-cpp serve provider.
+  if (provider.id !== LLAMA_CPP_LOCAL_PROVIDER_ID) {
+    delete next.thinking_budget_tokens;
   }
 
   // Kimi (Moonshot AI) thinking/code models only accept temperature=1.

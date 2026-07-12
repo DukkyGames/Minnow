@@ -8,6 +8,7 @@ import { DEFAULT_CONTEXT_ENFORCEMENT_POLICY } from '../chat/context-budget';
 import { DEFAULT_SUB_AGENT_SUMMARY_SCHEMA } from './sub-agent-structured-outcome';
 import DEFAULTS from './defaults/sub-agents.json';
 import { clampSamplerPreset, mergeSamplerLayers } from './sampler-types';
+import { clampThinkingBudgetTokens } from './thinking-types';
 import type { SubAgentTypeConfig, SubAgentsFile } from './types';
 
 const SUB_AGENTS_STORAGE_KEY = 'minnow.subAgents';
@@ -154,11 +155,18 @@ export function mergeSubAgentConfig(
               mergeSamplerLayers(existing.sampler, patch.sampler),
             )
           : existing.sampler;
+      const mergedThinkingBudget =
+        patch.thinkingBudgetTokens !== undefined
+          ? patch.thinkingBudgetTokens === null
+            ? null
+            : clampThinkingBudgetTokens(patch.thinkingBudgetTokens)
+          : existing.thinkingBudgetTokens;
       const { maxToolTurns: _ignoredTurns, ...patchWithoutTurns } = patch;
       merged.types[id] = {
         ...existing,
         ...patchWithoutTurns,
         maxToolTurns,
+        thinkingBudgetTokens: mergedThinkingBudget,
         summarySchema:
           patch.summarySchema ??
           existing.summarySchema ??

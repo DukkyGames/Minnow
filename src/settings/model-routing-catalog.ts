@@ -78,6 +78,8 @@ export interface ModelRoutingRow {
   sampler?: SamplerPreset | null;
   /** Stored thinking tri-state when applicable. */
   thinkingMode?: ThinkingTriState;
+  /** Stored thinking budget override (null = inherit, 0 = off). */
+  thinkingBudgetTokens?: number | null;
   /** Main chat: per-chat thinking override from session. */
   chatThinkingMode?: ThinkingTriState;
 }
@@ -121,6 +123,7 @@ function rowFromWorkAgent(
       getUserWorkAgentOverride(agent.id)?.thinkingMode ??
       ((WORK_AGENT_THINKING_DEFAULTS as Record<string, ThinkingTriState>)[agent.id] ??
         'inherit'),
+    thinkingBudgetTokens: getUserWorkAgentOverride(agent.id)?.thinkingBudgetTokens ?? null,
   };
 }
 
@@ -192,6 +195,7 @@ export async function loadModelRoutingCatalog(
       effectiveModelId: effective.modelId,
       sampler: typeCfg.sampler ?? null,
       thinkingMode: typeCfg.thinkingMode ?? 'inherit',
+      thinkingBudgetTokens: typeCfg.thinkingBudgetTokens ?? null,
     });
   }
 

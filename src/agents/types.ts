@@ -78,6 +78,8 @@ export interface SubAgentTypeConfig {
   sampler?: SamplerPreset;
   /** Per-type thinking tri-state (shipped default + user override). */
   thinkingMode?: ThinkingTriState;
+  /** Per-type thinking token budget; null = inherit, 0 = off. */
+  thinkingBudgetTokens?: number | null;
 }
 
 /** Root sub-agents.json shape (user + merged). */

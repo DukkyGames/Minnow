@@ -62,6 +62,8 @@ export interface WorkAgentUserOverride {
   sampler?: SamplerPreset | null;
   /** Tri-state thinking override for this work agent. */
   thinkingMode?: ThinkingTriState | null;
+  /** Per-session thinking token budget; null = inherit, 0 = off. */
+  thinkingBudgetTokens?: number | null;
 }
 
 export interface WorkAgentRegistrySnapshot {

@@ -62,6 +62,19 @@ describe('sub-agent config', () => {
     assert.equal(merged.types.generalPurpose.maxToolTurns, 24);
   });
 
+  test('user thinkingBudgetTokens clamped on merge', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, {
+      types: {
+        explore: { thinkingBudgetTokens: 100 },
+      },
+    });
+    assert.equal(merged.types.explore.thinkingBudgetTokens, 512);
+    const zero = mergeSubAgentConfig(DEFAULTS as never, {
+      types: { explore: { thinkingBudgetTokens: 0 } },
+    });
+    assert.equal(zero.types.explore.thinkingBudgetTokens, 0);
+  });
+
   test('migrates legacy defaultMaxToolTurns', () => {
     const merged = mergeSubAgentConfig(DEFAULTS as never, {
       defaultMaxToolTurns: 20,

@@ -132,6 +132,7 @@ const DEFAULT_META = {
   },
   thinking: {
     defaultMode: 'on',
+    thinkingBudgetTokens: null,
   },
   terminal: {
     open: false,
