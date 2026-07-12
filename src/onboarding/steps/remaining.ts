@@ -1,0 +1,169 @@
+/**
+ * S5, S6, S12 — permissions, memory, and finish steps.
+ */
+
+import { setAllBuiltInToolPermissions } from '../../tools/config';
+import { el, createChoiceCard, renderStepHeader } from '../ui-helpers';
+import type { OnboardingContext, OnboardingStep } from '../types';
+import { recordStepProgress } from '../state-core';
+
+let permissionPreset: 'full' | 'ask' | 'minimal' = 'full';
+
+export const permissionsStep: OnboardingStep = {
+  id: 'permissions',
+  title: 'Tool permissions',
+  canSkip: true,
+  isApplicable: () => true,
+  render(container, _ctx, actions) {
+    container.innerHTML = '';
+    container.className = 'mn-onboarding-step';
+    renderStepHeader(container, permissionsStep, actions.stepIndex, actions.totalSteps);
+    container.appendChild(
+      el(
+        'p',
+        'mn-onboarding-step-desc',
+        'Controls how tools run during chat. Destructive actions still ask in the thread.',
+      ),
+    );
+
+    const grid = el('div', 'mn-onboarding-choice-grid');
+    const presets: { id: typeof permissionPreset; title: string; desc: string; rec?: boolean }[] = [
+      {
+        id: 'full',
+        title: 'Full access',
+        desc: 'All tools run locally with chat confirmations for risky operations.',
+        rec: true,
+      },
+      { id: 'ask', title: 'Ask first', desc: 'Prompt before every tool call.' },
+      { id: 'minimal', title: 'Minimal', desc: 'Read-only tools enabled; writes disabled.' },
+    ];
+
+    presets.forEach((preset) => {
+      grid.appendChild(
+        createChoiceCard({
+          title: preset.title,
+          description: preset.desc,
+          recommended: preset.rec,
+          selected: permissionPreset === preset.id,
+          onSelect: () => {
+            permissionPreset = preset.id;
+            actions.setPrimaryEnabled(true);
+            providerPermissionsRerender(grid, presets);
+          },
+        }),
+      );
+    });
+    container.appendChild(grid);
+    actions.setPrimaryLabel('Continue');
+    actions.setPrimaryEnabled(true);
+  },
+  async commit(ctx) {
+    if (permissionPreset === 'full') await setAllBuiltInToolPermissions('full');
+    else if (permissionPreset === 'ask') await setAllBuiltInToolPermissions('ask');
+    else await setAllBuiltInToolPermissions('off');
+    ctx.state = recordStepProgress(ctx.state, 'permissions', {
+      done: true,
+      data: { preset: permissionPreset },
+    });
+  },
+};
+
+function providerPermissionsRerender(
+  grid: HTMLElement,
+  presets: { id: typeof permissionPreset }[],
+): void {
+  grid.querySelectorAll('.mn-onboarding-choice').forEach((node, i) => {
+    (node as HTMLElement).classList.toggle('is-selected', presets[i]?.id === permissionPreset);
+  });
+}
+
+export const memoryStep: OnboardingStep = {
+  id: 'memory',
+  title: 'Memory and Brain',
+  canSkip: true,
+  isApplicable: () => true,
+  render(container, ctx, actions) {
+    container.innerHTML = '';
+    container.className = 'mn-onboarding-step';
+    renderStepHeader(container, memoryStep, actions.stepIndex, actions.totalSteps);
+    container.appendChild(
+      el(
+        'p',
+        'mn-onboarding-step-desc',
+        'Minnow remembers facts locally under ~/.minnow and files them into your Brain wiki. Both stay on by default.',
+      ),
+    );
+
+    const card = el('div', 'mn-onboarding-info-card');
+    card.appendChild(el('p', null, 'Semantic recall improves answers across chats.'));
+    card.appendChild(el('p', null, 'View and edit memories anytime in the Brain app.'));
+    container.appendChild(card);
+
+    if (!ctx.configServerAvailable) {
+      container.appendChild(
+        el('p', 'mn-onboarding-notice', 'Full memory features need npm start.'),
+      );
+    }
+
+    actions.setPrimaryLabel('Continue');
+    actions.setPrimaryEnabled(true);
+  },
+  commit(ctx) {
+    ctx.state = recordStepProgress(ctx.state, 'memory', { done: true, data: { enabled: true } });
+  },
+};
+
+export const doneStep: OnboardingStep = {
+  id: 'done',
+  title: 'You are set up',
+  canSkip: false,
+  isApplicable: () => true,
+  render(container, ctx, actions) {
+    container.innerHTML = '';
+    container.className = 'mn-onboarding-step mn-onboarding-step--done';
+
+    const badge = el('div', 'mn-onboarding-done-badge', '✓');
+    container.appendChild(badge);
+
+    renderStepHeader(container, doneStep, actions.stepIndex, actions.totalSteps);
+    container.appendChild(
+      el('p', 'mn-onboarding-step-desc', 'Minnow is ready. Open the desktop to start chatting.'),
+    );
+
+    const checklist = el('ul', 'mn-onboarding-checklist');
+    const rows: [string, boolean][] = [
+      ['Theme', Boolean(ctx.state.steps.theme?.done)],
+      [
+        'Provider',
+        Boolean(
+          ctx.state.steps['provider-local']?.done ||
+            ctx.state.steps['provider-cloud']?.done ||
+            ctx.state.steps['provider-managed']?.done,
+        ),
+      ],
+      [
+        'Model',
+        Boolean(ctx.state.steps['model-pick']?.done || ctx.state.steps['provider-managed']?.done),
+      ],
+      ['Extras', Boolean(ctx.state.steps.extras?.done)],
+      ['Tool permissions', Boolean(ctx.state.steps.permissions?.done)],
+      ['Memory and Brain', Boolean(ctx.state.steps.memory?.done)],
+      ['Email', Boolean(ctx.state.steps.email?.done)],
+      ['Calendar', Boolean(ctx.state.steps.calendar?.done)],
+      ['Guided tour chat', Boolean(ctx.state.steps.explainer?.done)],
+    ];
+    rows.forEach(([label, ok]) => {
+      const li = el('li', 'mn-onboarding-checklist__row');
+      li.appendChild(el('span', ok ? 'is-ok' : 'is-muted', ok ? '✓' : '–'));
+      li.appendChild(el('span', null, label));
+      checklist.appendChild(li);
+    });
+    container.appendChild(checklist);
+
+    actions.setPrimaryLabel('Open Minnow');
+    actions.setPrimaryEnabled(true);
+  },
+  commit(ctx) {
+    ctx.state = recordStepProgress(ctx.state, 'done', { done: true });
+  },
+};

@@ -1,8 +1,9 @@
 {
-  "version": 3,
+  "version": 5,
   "activeId": "11111111-1111-1111-1111-111111111111",
   "sidebarCollapsed": false,
   "lastActiveChatIdByWorkspace": {},
+  "groups": [],
   "chats": [
     {
       "id": "11111111-1111-1111-1111-111111111111",
@@ -10,8 +11,10 @@
       "workspacePath": "",
       "modelId": "test-model",
       "modeId": "build",
-      "expertSelection": { "mode": "auto", "expertId": null },
-      "lastResolvedExpertId": null,
+      "expertSelection": {
+        "mode": "auto",
+        "expertId": null
+      },
       "history": [
         {
           "role": "user",

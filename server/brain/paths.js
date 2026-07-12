@@ -127,7 +127,6 @@ export function assertSafeRelativePagePath(relPath) {
 export async function resolvePagePath(relPath) {
   const normalized = assertSafeRelativePagePath(relPath);
   const pagesDir = getBrainPagesDir();
-  const candidate = path.resolve(pagesDir, normalized);
 
   let realPagesRoot;
   try {
@@ -137,15 +136,16 @@ export async function resolvePagePath(relPath) {
     realPagesRoot = path.resolve(pagesDir);
   }
 
-  const relative = path.relative(realPagesRoot, candidate);
-  if (relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw new BrainPathError('Page path escapes the pages directory');
-  }
+  // Build under the canonical pages root. assertSafeRelativePagePath already rejects "..".
+  // Skip a pre-realpath path.relative check: on Windows CI, mixing short (8.3) and long
+  // path forms makes path.relative falsely report escapes when resolving from pagesDir.
+  const segments = normalized.split('/').filter((segment) => segment.length > 0);
+  const candidate = path.resolve(realPagesRoot, ...segments);
 
   try {
     const realCandidate = await fs.realpath(candidate);
-    const realRelative = path.relative(realPagesRoot, realCandidate);
-    if (realRelative.startsWith('..') || path.isAbsolute(realRelative)) {
+    const relative = path.relative(realPagesRoot, realCandidate);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
       throw new BrainPathError('Page path escapes the pages directory via symlink');
     }
     return realCandidate;

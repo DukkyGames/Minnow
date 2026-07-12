@@ -4,7 +4,6 @@
 
 import { gitShow } from '../state/git-api';
 import { showViewerSplit, hideViewerSplit } from './file-layout';
-import { dismissFileViewerForPreview } from './file-viewer';
 import { basename } from './file-tree-path';
 import {
   countPatchLineStats,
@@ -239,6 +238,7 @@ export async function openGitCommitDiffPanel(
     return { ok: false, error: result.error ?? 'Could not load commit' };
   }
 
+  const { dismissFileViewerForPreview } = await import('./file-viewer');
   if (!(await dismissFileViewerForPreview())) {
     return { ok: false, cancelled: true };
   }

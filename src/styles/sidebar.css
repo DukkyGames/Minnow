@@ -671,6 +671,15 @@
   background: var(--mn-accent-soft);
 }
 
+.chat-item-row--draft .chat-item-name {
+  color: var(--mn-fg-muted);
+  font-style: italic;
+}
+
+.chat-item-row--draft.active .chat-item-name {
+  color: var(--mn-fg);
+}
+
 .chat-item-row--selected:not(.active) {
   background: color-mix(in srgb, var(--mn-accent) 8%, transparent);
   border-color: color-mix(in srgb, var(--mn-accent) 30%, transparent);

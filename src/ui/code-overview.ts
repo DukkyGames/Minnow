@@ -20,7 +20,7 @@ import {
   getBoardProgressPercent,
   isBoardRunning,
 } from '../state/orchestrate-board-store';
-import { getChatsForWorkspace, getChatLastMessageAt } from '../state/session-workspace-scope';
+import { getChatsForWorkspace, getChatLastMessageAt, getSidebarListedChatsForWorkspace } from '../state/session-workspace-scope';
 import { sessionState } from '../state/sessions';
 import { isLocalServerAvailable } from '../tools/config';
 import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
@@ -28,6 +28,11 @@ import type { Chat, ChatGroup } from '../types';
 import type { GitGraphHandle } from './git-graph';
 import { createChat, switchChat } from './sidebar';
 import { stripMainColumnOverlayClasses } from './main-column-overlay';
+import {
+  isMissingGitRepositoryError,
+  openGitSetupFromOverview,
+  renderGitNoRepositoryState,
+} from './git-no-repo-state';
 
 const ROOT_ID = 'codeOverviewRoot';
 const CHAT_AREA_CLASS = 'chat-area--code-overview';
@@ -153,6 +158,11 @@ function renderError(host: HTMLElement, message: string, onRetry?: () => void): 
     btn.addEventListener('click', onRetry);
     host.appendChild(btn);
   }
+}
+
+/** Informational rail block when the workspace has no git metadata yet. */
+function renderNoGitRepository(host: HTMLElement): void {
+  renderGitNoRepositoryState(host, { onSetupGit: () => void openGitSetupFromOverview() });
 }
 
 function buildSparklineSvg(values: number[], className: string): SVGSVGElement {
@@ -564,7 +574,7 @@ function refreshSessionsPanel(): void {
   const host = document.getElementById('codeOverviewSessionsBody');
   if (!host || !sessionState) return;
 
-  const chats = getChatsForWorkspace(getWorkspacePath(), sessionState).slice(
+  const chats = getSidebarListedChatsForWorkspace(getWorkspacePath(), sessionState).slice(
     0,
     RECENT_SESSION_LIMIT,
   );
@@ -594,6 +604,10 @@ async function refreshGitPanel(): Promise<void> {
 
   const status = await gitStatus();
   if (!status.ok) {
+    if (isMissingGitRepositoryError(status.error)) {
+      renderNoGitRepository(host);
+      return;
+    }
     renderError(host, status.error ?? 'Could not load git status.', () => void refreshGitPanel());
     return;
   }

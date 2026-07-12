@@ -3,12 +3,10 @@
  */
 
 import assert from 'node:assert/strict';
-import { register } from 'node:module';
-import { afterEach, describe, test } from 'node:test';
+import { afterEach, beforeEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
-
-register('../test-loader.mjs', import.meta.url);
-
+import { launchInstance, resetInstancesForTests } from '../../src/os/instances.ts';
+import { resetDesktopWorkspaceMountsForTests } from '../../src/os/desktop-workspace-mounts.ts';
 import {
   panelPathsEqual,
   resolvePanelWorktreeCwd,
@@ -30,24 +28,30 @@ import {
 } from '../../src/state/workspace.ts';
 import { setFileTreeServerAvailable } from '../../src/ui/file-tree-server.ts';
 import { shouldScheduleFileTreeRefresh } from '../../src/ui/file-tree-auto-refresh.ts';
+import { installHappyDomGlobals } from '../os/dom-helpers.mts';
 
 const MAIN_WS = 'C:/projects/minnow';
 const WORKTREE = 'C:/projects/minnow/.minnow/worktrees/task-abc';
 
 function setupDom(): void {
   const window = new Window();
-  globalThis.document = window.document;
-  globalThis.HTMLElement = window.HTMLElement;
-  globalThis.Node = window.Node;
+  installHappyDomGlobals(window);
   document.body.innerHTML =
     '<div id="fileSidebarTitle">Files</div><div id="fileTreeHost"></div>';
 }
+
+beforeEach(() => {
+  resetInstancesForTests();
+  resetDesktopWorkspaceMountsForTests();
+});
 
 afterEach(() => {
   resetWorkspaceStateForTests();
   resetFileTreeListingRootForTests();
   resetFilePanelStateForTests();
   setFileTreeServerAvailable(false);
+  resetInstancesForTests();
+  resetDesktopWorkspaceMountsForTests();
 });
 
 describe('resolvePanelWorktreeCwd', () => {
@@ -104,6 +108,7 @@ describe('buildFileTreeToolContext', () => {
 describe('syncFileTreeToPanelWorktree', () => {
   test('resets panel state and listing root when cwd changes', async () => {
     setupDom();
+    launchInstance('code');
     setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
     setFileTreeServerAvailable(false);
     patchFilePanelState({
@@ -130,6 +135,7 @@ describe('syncFileTreeToPanelWorktree', () => {
 
   test('no-op panel reset when root unchanged', async () => {
     setupDom();
+    launchInstance('code');
     setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
     setFileTreeListingWorkspaceRoot(undefined);
     patchFilePanelState({ expandedDirs: ['docs'], selectedPath: 'docs/readme.md' });

@@ -11,6 +11,7 @@ import { normalizeModeId } from '../chat/modes/types';
 import {
   getActiveChat,
   scheduleSaveSessions,
+  sessionState,
   touchChat,
 } from '../state/sessions';
 import type { Chat } from '../types';
@@ -125,6 +126,7 @@ export async function syncOrchestratePlanStripFromActiveChat(): Promise<void> {
   const sel = getPlanSelect();
   const hint = getPlanHint();
   if (!strip || !sel || !hint) return;
+  if (!sessionState) return;
 
   const chat = getActiveChat();
   const mode = normalizeModeId(chat.modeId);

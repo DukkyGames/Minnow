@@ -11,7 +11,7 @@ import type {
   CampaignProgressEvent,
   ModelAggregate,
 } from '../benchmark/campaign-types.ts';
-import { getStandardPack, hasFullTierPack, preloadBundledFullPacks, resolveStandardItems } from '../benchmark/standard/pack-loader.ts';
+import { getStandardPack, hasFullTierPack, preloadBundledFullPacks, preloadMiniPacks, resolveStandardItems } from '../benchmark/standard/pack-loader.ts';
 import { runBenchmarkCampaign } from '../benchmark/campaign-runner.ts';
 import { loadImportedStandardDatasets } from '../benchmark/campaign-persistence.ts';
 import {
@@ -2185,8 +2185,8 @@ function onSuiteToggleClick(this: HTMLButtonElement): void {
   this.setAttribute('aria-pressed', pressed ? 'false' : 'true');
 }
 
-export function initBenchmarkPage(): void {
-  registerWindowTeardown('bench', () => closeBenchmark({ skipNavigate: true }));
+/** Wire run-bar controls only (tests — no pack preload or roster init). */
+export function wireBenchmarkRunBarForTests(): void {
   document.getElementById('btnBenchmarkQuick')?.addEventListener('click', () => {
     void startRun('quick');
   });
@@ -2198,6 +2198,19 @@ export function initBenchmarkPage(): void {
   for (const btn of getSuiteToggleButtons()) {
     btn.addEventListener('click', onSuiteToggleClick);
   }
+
+  for (const btn of document.querySelectorAll<HTMLButtonElement>('.benchmark-standard-toggle')) {
+    btn.addEventListener('click', () => {
+      const pressed = btn.getAttribute('aria-pressed') === 'true';
+      btn.setAttribute('aria-pressed', pressed ? 'false' : 'true');
+    });
+  }
+}
+
+export async function initBenchmarkPage(): Promise<void> {
+  await preloadMiniPacks();
+  registerWindowTeardown('bench', () => closeBenchmark({ skipNavigate: true }));
+  wireBenchmarkRunBarForTests();
 
   document.getElementById('benchmarkHistorySelect')?.addEventListener('change', () => {
     void onHistorySelectChange();
@@ -2230,13 +2243,6 @@ export function initBenchmarkPage(): void {
     renderRosterList();
     refreshOverviewPanel();
   });
-
-  for (const btn of document.querySelectorAll<HTMLButtonElement>('.benchmark-standard-toggle')) {
-    btn.addEventListener('click', () => {
-      const pressed = btn.getAttribute('aria-pressed') === 'true';
-      btn.setAttribute('aria-pressed', pressed ? 'false' : 'true');
-    });
-  }
 
   renderRosterList();
   initBenchmarkRosterPicker();

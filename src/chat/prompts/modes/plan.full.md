@@ -41,7 +41,7 @@ Before writing the plan, you MUST:
    - **`small`** — every function, every config key, every test case is its own numbered task. Best for small-context local models.
 3. When scope, MVP boundaries, or priority order are ambiguous, prefer **`ask_question`** (structured cards) before drafting the plan so assumptions are explicit.
 4. Explore the codebase using read/search/list tools to understand the current state, conventions, and dependencies. When multiple areas need parallel scan, spawn **`researcher`** or **`explore`** sub-agents (see **Sub-agent delegation**).
-5. Verify third-party library APIs via Context7 (if enabled) before specifying imports or signatures in the plan.
+5. Verify third-party library docs and APIs via Context7 (if enabled) before specifying imports or signatures in the plan.
 6. Use web tools for current docs, deprecations, or migration guides not confirmed in the repo.
 7. Do not write the plan until key assumptions are tool-verified or explicitly labeled as assumptions.
 8. Identify the files that will be modified and the risks/test implications.
@@ -91,11 +91,13 @@ Tasks in this wave can run concurrently.
 #### Task W1-A: <Title>
 - **Build:** <exact steps, file paths, function names, expected diff scope>
 - **Test:** <exact assertions; what command to run; what output proves success>
+- **Accept:** <one observable outcome that proves this task is done>
 - **Depends on:** <comma-separated task ids, or omit>
 
 #### Task W1-B: <Title>
 - **Build:** ...
 - **Test:** ...
+- **Accept:** ...
 - **Depends on:** <omit if no dependency>
 
 ### Wave 2 — <Wave name>
@@ -112,7 +114,7 @@ Tasks in this wave can run concurrently.
 
 ### Plan-quality requirements
 
-- **Every task has both a Build and a Test sub-task.** A task is not complete until its test passes.
+- **Every task has Build + Test + Accept sub-tasks.** A task is not complete until its test passes.
 - **Tasks within a wave may declare explicit dependencies** via `Depends on:` (task ids). Tasks without a `Depends on:` line are independent and may run concurrently. Cross-wave sequencing still goes between waves; within-wave `Depends on:` is for fine-grained ordering only. No cycles allowed; only reference task ids earlier in the plan.
 - **Each Build sub-task must be specific enough that a fresh sub-agent could execute it with no prior context** — include file paths, function signatures, and expected outcomes.
 - **Each Test sub-task must be objective** — name the command to run or the exact assertion to check.

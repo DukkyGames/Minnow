@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { scanAgentPacks, loadAgentPacksState, isPackEnabled } from '../../server/agent-packs/scan.js';
 import { validatePackManifest } from '../../server/agent-packs/validate.js';
-import { setPackEnabled } from '../../server/agent-packs/registry.js';
+import { ensureAgentPacksLayout, setPackEnabled } from '../../server/agent-packs/registry.js';
 
 const fixtureRoot = join(
   process.cwd(),
@@ -107,5 +107,49 @@ describe('agent-packs scan', () => {
     assert.equal(state.minimal?.enabled, false);
     assert.equal(isPackEnabled(state, 'minimal', true), false);
     await setPackEnabled('minimal', true);
+  });
+});
+
+describe('ensureAgentPacksLayout', () => {
+  /** @type {string[]} */
+  const tempHomes = [];
+
+  after(async () => {
+    delete process.env.MINNOW_HOME;
+    resetMinnowHomeCache();
+    await Promise.all(
+      tempHomes.map((home) => rm(home, { recursive: true, force: true })),
+    );
+  });
+
+  async function useFreshHome() {
+    const home = await mkdtemp(join(tmpdir(), 'minnow-agent-packs-fresh-'));
+    tempHomes.push(home);
+    process.env.MINNOW_HOME = home;
+    resetMinnowHomeCache();
+    return home;
+  }
+
+  test('scaffolds template pack on fresh ~/.minnow home', async () => {
+    const freshHome = await useFreshHome();
+    await ensureAgentPacksLayout();
+
+    const templateDir = join(freshHome, 'agent-packs', '_template');
+    await access(join(templateDir, 'manifest.json'));
+    await access(join(templateDir, 'prompts', 'example.full.md'));
+    await access(join(templateDir, 'prompts', 'example.lite.md'));
+    await access(join(templateDir, 'README.md'));
+  });
+
+  test('repairs partial template scaffold missing prompt files', async () => {
+    const freshHome = await useFreshHome();
+    const templateDir = join(freshHome, 'agent-packs', '_template');
+    await mkdir(templateDir, { recursive: true });
+    await writeFile(join(templateDir, 'manifest.json'), '{}\n', 'utf8');
+
+    await ensureAgentPacksLayout();
+
+    await access(join(templateDir, 'prompts', 'example.full.md'));
+    await access(join(templateDir, 'prompts', 'example.lite.md'));
   });
 });

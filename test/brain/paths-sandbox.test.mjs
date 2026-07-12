@@ -49,6 +49,12 @@ describe('brain path sandbox', () => {
     assert.ok(resolved.endsWith(path.join('pages', 'facts', 'note.md')));
   });
 
+  test('accepts nested project paths under pages root', async () => {
+    const resolved = await resolvePagePath('projects/nested/page.md');
+    const normalized = resolved.replace(/\\/g, '/');
+    assert.ok(normalized.endsWith('projects/nested/page.md'));
+  });
+
   test('rejects absolute paths', async () => {
     const abs = path.join(getBrainPagesDir(), 'facts', 'evil.md');
     await expectPathError(() => resolvePagePath(abs));

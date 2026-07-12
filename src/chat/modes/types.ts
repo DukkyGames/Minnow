@@ -10,7 +10,8 @@ export type ModeId =
   | 'plan'
   | 'orchestrate'
   | 'reef'
-  | 'debug';
+  | 'debug'
+  | 'onboarding';
 
 export const DEFAULT_MODE_ID: ModeId = 'build';
 
@@ -22,6 +23,7 @@ export const MODE_IDS: readonly ModeId[] = [
   'orchestrate',
   'reef',
   'debug',
+  'onboarding',
 ] as const;
 
 /** Type guard for persisted mode ids. */

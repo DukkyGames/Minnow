@@ -644,6 +644,307 @@ body {
   --mn-selection-bg: color-mix(in srgb, var(--mn-accent) 38%, var(--mn-surface-0));
 }
 
+
+:root[data-theme="salt-dark"],
+.settings-theme-preview[data-theme="salt-dark"] {
+  color-scheme: dark;
+
+  --mn-bg: #2b2b2b;
+  --mn-surface-0: #1e1e1e;
+  --mn-surface-1: #323232;
+  --mn-surface-2: #3a3a3a;
+  --mn-border: rgba(212,212,212,0.08);
+  --mn-border-strong: rgba(212,212,212,0.16);
+  --mn-fg: #e8e8e8;
+  --mn-fg-muted: #b3b3b3;
+  --mn-fg-subtle: #7a7a7a;
+  --mn-fg-on-accent: #2b2b2b;
+  --mn-accent: #d4d4d4;
+  --mn-accent-soft: rgba(212,212,212,0.14);
+  --mn-accent-border: rgba(212,212,212,0.28);
+  --mn-accent-ink: #f0f0f0;
+  --mn-success: #9aaa9a;
+  --mn-success-soft: rgba(154,170,154,0.14);
+  --mn-success-border: rgba(154,170,154,0.28);
+  --mn-success-ink: #c4d4c4;
+  --mn-warning: #b3a080;
+  --mn-focus-ring: #d4d4d4;
+  --mn-shadow: rgba(0,0,0,0.5);
+  --mn-folder: #a8a080;
+
+  --mn-danger: #c08080;
+  --mn-danger-soft: rgba(192,128,128,0.18);
+  --mn-danger-border: rgba(192,128,128,0.35);
+  --mn-danger-ink: #e0b0b0;
+  --mn-warning-soft: color-mix(in srgb, var(--mn-warning) 18%, transparent);
+  --mn-warning-border: color-mix(in srgb, var(--mn-warning) 32%, transparent);
+  --mn-overlay: color-mix(in srgb, var(--mn-bg) 72%, transparent);
+  --mn-surface-elevated: color-mix(in srgb, var(--mn-fg) 10%, transparent);
+
+  --asst-bg: var(--mn-bg);
+  --asst-bdr: var(--mn-border);
+  --shadow-popover: 0 8px 28px var(--mn-shadow);
+  --shadow-popover-soft: 0 4px 20px var(--mn-shadow);
+  --shadow-popover-tall: 0 10px 32px var(--mn-shadow);
+  --shadow-lift: 0 8px 24px var(--mn-shadow);
+  --shadow-sidebar: 4px 0 24px var(--mn-shadow);
+  --shadow-sidebar-left: -4px 0 24px var(--mn-shadow);
+  --shadow-card: 0 2px 14px var(--mn-shadow);
+  --shadow-drawer: -8px 0 36px var(--mn-shadow);
+
+  --tool-call-panel-bg: var(--mn-surface-1);
+  --tool-call-status-bg: var(--mn-surface-1);
+  --tool-call-pre-bg: var(--mn-surface-0);
+  --tool-call-status-ok-border: var(--mn-success-border);
+  --tool-call-status-ok-bg: var(--mn-success-soft);
+  --tool-call-status-fail-border: var(--mn-danger-border);
+  --tool-call-status-fail-bg: var(--mn-danger-soft);
+
+  --banner-danger-bg: var(--mn-danger-soft);
+  --banner-danger-hover-bg: color-mix(in srgb, var(--mn-danger) 14%, var(--mn-surface-1));
+  --banner-danger-hover-border: var(--mn-danger-border);
+  --banner-danger-hover-text: var(--mn-danger-ink);
+
+  --thought-bubble-bg: color-mix(in srgb, var(--mn-surface-1) 88%, transparent);
+  --thought-flow-bg: var(--mn-surface-0);
+  --thought-segment-bg: var(--mn-surface-1);
+
+  --settings-warn-banner-border: var(--mn-warning-border);
+  --settings-warn-banner-bg: var(--mn-warning-soft);
+
+  --cm-keyword: var(--mn-danger);
+  --cm-title: var(--mn-accent-ink);
+  --cm-attr: var(--mn-accent);
+  --cm-string: var(--mn-fg-muted);
+  --mn-selection-bg: color-mix(in srgb, var(--mn-accent) 45%, var(--mn-surface-2));
+}
+
+
+:root[data-theme="salt-light"],
+.settings-theme-preview[data-theme="salt-light"] {
+  color-scheme: light;
+
+  --mn-bg: #f7f7f7;
+  --mn-surface-0: #ededed;
+  --mn-surface-1: #fafafa;
+  --mn-surface-2: #d4d4d4;
+  --mn-border: rgba(43,43,43,0.08);
+  --mn-border-strong: rgba(43,43,43,0.16);
+  --mn-fg: #2b2b2b;
+  --mn-fg-muted: #686868;
+  --mn-fg-subtle: #b3b3b3;
+  --mn-fg-on-accent: #f7f7f7;
+  --mn-accent: #2b2b2b;
+  --mn-accent-soft: rgba(43,43,43,0.10);
+  --mn-accent-border: rgba(43,43,43,0.22);
+  --mn-accent-ink: #1a1a1a;
+  --mn-success: #4a6b4a;
+  --mn-success-soft: rgba(74,107,74,0.14);
+  --mn-success-border: rgba(74,107,74,0.28);
+  --mn-success-ink: #2d4a2d;
+  --mn-warning: #8a7040;
+  --mn-focus-ring: #2b2b2b;
+  --mn-shadow: rgba(43,43,43,0.12);
+  --mn-folder: #8a7a50;
+
+  --mn-danger: #a85050;
+  --mn-danger-soft: rgba(168,80,80,0.12);
+  --mn-danger-border: rgba(168,80,80,0.28);
+  --mn-danger-ink: #6e3030;
+  --mn-warning-soft: color-mix(in srgb, var(--mn-warning) 18%, transparent);
+  --mn-warning-border: color-mix(in srgb, var(--mn-warning) 32%, transparent);
+  --mn-overlay: color-mix(in srgb, var(--mn-bg) 35%, transparent);
+  --mn-surface-elevated: color-mix(in srgb, var(--mn-fg) 6%, transparent);
+
+  --asst-bg: var(--mn-bg);
+  --asst-bdr: var(--mn-border);
+  --shadow-popover: 0 8px 28px var(--mn-shadow);
+  --shadow-popover-soft: 0 4px 20px var(--mn-shadow);
+  --shadow-popover-tall: 0 10px 32px var(--mn-shadow);
+  --shadow-lift: 0 8px 24px var(--mn-shadow);
+  --shadow-sidebar: 4px 0 24px var(--mn-shadow);
+  --shadow-sidebar-left: -4px 0 24px var(--mn-shadow);
+  --shadow-card: 0 2px 14px var(--mn-shadow);
+  --shadow-drawer: -8px 0 36px var(--mn-shadow);
+
+  --tool-call-panel-bg: var(--mn-surface-1);
+  --tool-call-status-bg: var(--mn-surface-1);
+  --tool-call-pre-bg: var(--mn-surface-0);
+  --tool-call-status-ok-border: var(--mn-success-border);
+  --tool-call-status-ok-bg: var(--mn-success-soft);
+  --tool-call-status-fail-border: var(--mn-danger-border);
+  --tool-call-status-fail-bg: var(--mn-danger-soft);
+
+  --banner-danger-bg: var(--mn-danger-soft);
+  --banner-danger-hover-bg: color-mix(in srgb, var(--mn-danger) 14%, var(--mn-surface-1));
+  --banner-danger-hover-border: var(--mn-danger-border);
+  --banner-danger-hover-text: var(--mn-danger-ink);
+
+  --thought-bubble-bg: color-mix(in srgb, var(--mn-surface-1) 88%, transparent);
+  --thought-flow-bg: var(--mn-surface-0);
+  --thought-segment-bg: var(--mn-surface-1);
+
+  --settings-warn-banner-border: var(--mn-warning-border);
+  --settings-warn-banner-bg: var(--mn-warning-soft);
+
+  --cm-keyword: var(--mn-danger);
+  --cm-title: var(--mn-accent-ink);
+  --cm-attr: var(--mn-accent);
+  --cm-string: var(--mn-fg-muted);
+  --mn-selection-bg: color-mix(in srgb, var(--mn-accent) 38%, var(--mn-surface-0));
+}
+
+
+:root[data-theme="retro-dark"],
+.settings-theme-preview[data-theme="retro-dark"] {
+  color-scheme: dark;
+
+  /* CRT black ground — green is accent/phosphor only, not panel fill */
+  --mn-bg: #040604;
+  --mn-surface-0: #060806;
+  --mn-surface-1: #0b0f0b;
+  --mn-surface-2: #111711;
+  --mn-border: rgba(160,200,160,0.08);
+  --mn-border-strong: rgba(160,200,160,0.16);
+  --mn-fg: #dce8dc;
+  --mn-fg-muted: #8aaa8a;
+  --mn-fg-subtle: #5e7a5e;
+  --mn-fg-on-accent: #020302;
+  --mn-accent: #28d250;
+  --mn-accent-soft: rgba(40,210,80,0.10);
+  --mn-accent-border: rgba(40,210,80,0.26);
+  --mn-accent-ink: #5ae878;
+  --mn-success: #32c85a;
+  --mn-success-soft: rgba(50,200,90,0.12);
+  --mn-success-border: rgba(50,200,90,0.24);
+  --mn-success-ink: #6ee090;
+  --mn-warning: #c8b060;
+  --mn-focus-ring: #28d250;
+  --mn-shadow: rgba(0,0,0,0.55);
+  --mn-folder: #9ab86a;
+
+  --mn-danger: #e08070;
+  --mn-danger-soft: rgba(224,128,112,0.16);
+  --mn-danger-border: rgba(224,128,112,0.32);
+  --mn-danger-ink: #f0a898;
+  --mn-warning-soft: color-mix(in srgb, var(--mn-warning) 18%, transparent);
+  --mn-warning-border: color-mix(in srgb, var(--mn-warning) 32%, transparent);
+  --mn-overlay: color-mix(in srgb, var(--mn-bg) 72%, transparent);
+  --mn-surface-elevated: color-mix(in srgb, var(--mn-fg) 8%, transparent);
+
+  --asst-bg: var(--mn-bg);
+  --asst-bdr: var(--mn-border);
+  --shadow-popover: 0 8px 28px var(--mn-shadow);
+  --shadow-popover-soft: 0 4px 20px var(--mn-shadow);
+  --shadow-popover-tall: 0 10px 32px var(--mn-shadow);
+  --shadow-lift: 0 8px 24px var(--mn-shadow);
+  --shadow-sidebar: 4px 0 24px var(--mn-shadow);
+  --shadow-sidebar-left: -4px 0 24px var(--mn-shadow);
+  --shadow-card: 0 2px 14px var(--mn-shadow);
+  --shadow-drawer: -8px 0 36px var(--mn-shadow);
+
+  --tool-call-panel-bg: var(--mn-surface-1);
+  --tool-call-status-bg: var(--mn-surface-1);
+  --tool-call-pre-bg: var(--mn-surface-0);
+  --tool-call-status-ok-border: var(--mn-success-border);
+  --tool-call-status-ok-bg: var(--mn-success-soft);
+  --tool-call-status-fail-border: var(--mn-danger-border);
+  --tool-call-status-fail-bg: var(--mn-danger-soft);
+
+  --banner-danger-bg: var(--mn-danger-soft);
+  --banner-danger-hover-bg: color-mix(in srgb, var(--mn-danger) 14%, var(--mn-surface-1));
+  --banner-danger-hover-border: var(--mn-danger-border);
+  --banner-danger-hover-text: var(--mn-danger-ink);
+
+  --thought-bubble-bg: color-mix(in srgb, var(--mn-surface-1) 88%, transparent);
+  --thought-flow-bg: var(--mn-surface-0);
+  --thought-segment-bg: var(--mn-surface-1);
+
+  --settings-warn-banner-border: var(--mn-warning-border);
+  --settings-warn-banner-bg: var(--mn-warning-soft);
+
+  --cm-keyword: var(--mn-danger);
+  --cm-title: var(--mn-accent-ink);
+  --cm-attr: var(--mn-accent);
+  --cm-string: var(--mn-fg-muted);
+  --mn-selection-bg: color-mix(in srgb, var(--mn-accent) 28%, var(--mn-surface-2));
+}
+
+
+:root[data-theme="retro-light"],
+.settings-theme-preview[data-theme="retro-light"] {
+  color-scheme: light;
+
+  --mn-bg: #eef2ee;
+  --mn-surface-0: #e4eae4;
+  --mn-surface-1: #f8faf8;
+  --mn-surface-2: #d6dcd6;
+  --mn-border: rgba(10,20,10,0.08);
+  --mn-border-strong: rgba(10,20,10,0.14);
+  --mn-fg: #0a120a;
+  --mn-fg-muted: #4a624a;
+  --mn-fg-subtle: #6a826a;
+  --mn-fg-on-accent: #f4faf4;
+  --mn-accent: #0a6b28;
+  --mn-accent-soft: rgba(10,107,40,0.10);
+  --mn-accent-border: rgba(10,107,40,0.24);
+  --mn-accent-ink: #025b18;
+  --mn-success: #1a7a32;
+  --mn-success-soft: rgba(26,122,50,0.12);
+  --mn-success-border: rgba(26,122,50,0.24);
+  --mn-success-ink: #0f4a1e;
+  --mn-warning: #8a7040;
+  --mn-focus-ring: #0a6b28;
+  --mn-shadow: rgba(10,20,10,0.12);
+  --mn-folder: #6a8a4a;
+
+  --mn-danger: #a85050;
+  --mn-danger-soft: rgba(168,80,80,0.12);
+  --mn-danger-border: rgba(168,80,80,0.28);
+  --mn-danger-ink: #6e3030;
+  --mn-warning-soft: color-mix(in srgb, var(--mn-warning) 18%, transparent);
+  --mn-warning-border: color-mix(in srgb, var(--mn-warning) 32%, transparent);
+  --mn-overlay: color-mix(in srgb, var(--mn-bg) 35%, transparent);
+  --mn-surface-elevated: color-mix(in srgb, var(--mn-fg) 6%, transparent);
+
+  --asst-bg: var(--mn-bg);
+  --asst-bdr: var(--mn-border);
+  --shadow-popover: 0 8px 28px var(--mn-shadow);
+  --shadow-popover-soft: 0 4px 20px var(--mn-shadow);
+  --shadow-popover-tall: 0 10px 32px var(--mn-shadow);
+  --shadow-lift: 0 8px 24px var(--mn-shadow);
+  --shadow-sidebar: 4px 0 24px var(--mn-shadow);
+  --shadow-sidebar-left: -4px 0 24px var(--mn-shadow);
+  --shadow-card: 0 2px 14px var(--mn-shadow);
+  --shadow-drawer: -8px 0 36px var(--mn-shadow);
+
+  --tool-call-panel-bg: var(--mn-surface-1);
+  --tool-call-status-bg: var(--mn-surface-1);
+  --tool-call-pre-bg: var(--mn-surface-0);
+  --tool-call-status-ok-border: var(--mn-success-border);
+  --tool-call-status-ok-bg: var(--mn-success-soft);
+  --tool-call-status-fail-border: var(--mn-danger-border);
+  --tool-call-status-fail-bg: var(--mn-danger-soft);
+
+  --banner-danger-bg: var(--mn-danger-soft);
+  --banner-danger-hover-bg: color-mix(in srgb, var(--mn-danger) 14%, var(--mn-surface-1));
+  --banner-danger-hover-border: var(--mn-danger-border);
+  --banner-danger-hover-text: var(--mn-danger-ink);
+
+  --thought-bubble-bg: color-mix(in srgb, var(--mn-surface-1) 88%, transparent);
+  --thought-flow-bg: var(--mn-surface-0);
+  --thought-segment-bg: var(--mn-surface-1);
+
+  --settings-warn-banner-border: var(--mn-warning-border);
+  --settings-warn-banner-bg: var(--mn-warning-soft);
+
+  --cm-keyword: var(--mn-danger);
+  --cm-title: var(--mn-accent-ink);
+  --cm-attr: var(--mn-accent);
+  --cm-string: var(--mn-fg-muted);
+  --mn-selection-bg: color-mix(in srgb, var(--mn-accent) 32%, var(--mn-surface-0));
+}
+
 /* Native selection — chat code fences, inputs, and prose */
 ::selection {
   background: var(--mn-selection-bg);

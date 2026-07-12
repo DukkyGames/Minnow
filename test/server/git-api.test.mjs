@@ -266,47 +266,84 @@ describe('git API', () => {
     assert.match(res.json?.error ?? '', /Unknown git op/);
   });
 
-  test('merge, stash, rebase, and cherry-pick ops', async () => {
-    await execFileAsync('git', ['checkout', '-b', 'merge-target'], {
-      cwd: repoDir,
-      windowsHide: true,
-    });
-    await fs.writeFile(path.join(repoDir, 'merge-file.txt'), 'on-target\n', 'utf8');
-    await execFileAsync('git', ['add', 'merge-file.txt'], { cwd: repoDir, windowsHide: true });
-    await execFileAsync('git', ['commit', '-m', 'target commit'], {
-      cwd: repoDir,
-      windowsHide: true,
-    });
-
+  test('merge merges a topic branch', async () => {
     const main = (await branches({ cwd: repoDir })).current;
-    await execFileAsync('git', ['checkout', main], { cwd: repoDir, windowsHide: true });
-    await fs.writeFile(path.join(repoDir, 'main-edit.txt'), 'main\n', 'utf8');
+    assert.ok(main);
 
-    const stashed = await stashPush({ cwd: repoDir, message: 'test stash' });
+    await execFileAsync('git', ['checkout', '-b', 'git-api-merge-target'], {
+      cwd: repoDir,
+      windowsHide: true,
+    });
+    await fs.writeFile(path.join(repoDir, 'git-api-merge.txt'), 'merge-target\n', 'utf8');
+    await execFileAsync('git', ['add', 'git-api-merge.txt'], { cwd: repoDir, windowsHide: true });
+    await execFileAsync('git', ['commit', '-m', 'git-api merge target'], {
+      cwd: repoDir,
+      windowsHide: true,
+    });
+
+    await execFileAsync('git', ['checkout', main], { cwd: repoDir, windowsHide: true });
+    const merged = await merge({ cwd: repoDir, branch: 'git-api-merge-target' });
+    assert.equal(merged.ok, true);
+  });
+
+  test('stash push and list', async () => {
+    await fs.writeFile(path.join(repoDir, 'git-api-stash.txt'), 'stash-me\n', 'utf8');
+
+    const stashed = await stashPush({ cwd: repoDir, message: 'git-api stash' });
     assert.equal(stashed.ok, true);
 
     const stashEntries = await stashList({ cwd: repoDir });
     assert.equal(stashEntries.ok, true);
     assert.ok((stashEntries.stashes ?? []).length >= 1);
+  });
 
-    const merged = await merge({ cwd: repoDir, branch: 'merge-target' });
-    assert.equal(merged.ok, true);
+  test('rebase replays branch commits onto main', async () => {
+    const main = (await branches({ cwd: repoDir })).current;
+    assert.ok(main);
 
-    await execFileAsync('git', ['checkout', '-b', 'rebase-branch'], {
+    await execFileAsync('git', ['checkout', '-b', 'git-api-rebase-branch'], {
       cwd: repoDir,
       windowsHide: true,
     });
-    await fs.writeFile(path.join(repoDir, 'rebase-edit.txt'), 'rebase\n', 'utf8');
-    await execFileAsync('git', ['add', 'rebase-edit.txt'], { cwd: repoDir, windowsHide: true });
-    await execFileAsync('git', ['commit', '-m', 'rebase commit'], {
+    await fs.writeFile(path.join(repoDir, 'git-api-rebase.txt'), 'rebase\n', 'utf8');
+    await execFileAsync('git', ['add', 'git-api-rebase.txt'], { cwd: repoDir, windowsHide: true });
+    await execFileAsync('git', ['commit', '-m', 'git-api rebase commit'], {
       cwd: repoDir,
       windowsHide: true,
     });
 
+    await execFileAsync('git', ['checkout', main], { cwd: repoDir, windowsHide: true });
+    await fs.writeFile(path.join(repoDir, 'git-api-main-only.txt'), 'main-only\n', 'utf8');
+    await execFileAsync('git', ['add', 'git-api-main-only.txt'], { cwd: repoDir, windowsHide: true });
+    await execFileAsync('git', ['commit', '-m', 'git-api main advance'], {
+      cwd: repoDir,
+      windowsHide: true,
+    });
+
+    await execFileAsync('git', ['checkout', 'git-api-rebase-branch'], {
+      cwd: repoDir,
+      windowsHide: true,
+    });
     const rebased = await rebase({ cwd: repoDir, onto: main });
     assert.equal(rebased.ok, true);
+  });
 
-    const logRes = await log({ cwd: repoDir, count: 5 });
+  test('cherry-pick applies a commit onto main', async () => {
+    const main = (await branches({ cwd: repoDir })).current;
+    assert.ok(main);
+
+    await execFileAsync('git', ['checkout', '-b', 'git-api-cherry-src'], {
+      cwd: repoDir,
+      windowsHide: true,
+    });
+    await fs.writeFile(path.join(repoDir, 'git-api-cherry.txt'), 'cherry\n', 'utf8');
+    await execFileAsync('git', ['add', 'git-api-cherry.txt'], { cwd: repoDir, windowsHide: true });
+    await execFileAsync('git', ['commit', '-m', 'git-api cherry source'], {
+      cwd: repoDir,
+      windowsHide: true,
+    });
+
+    const logRes = await log({ cwd: repoDir, count: 1 });
     assert.equal(logRes.ok, true);
     const pickSha = logRes.commits?.[0]?.hash;
     assert.ok(pickSha);
@@ -314,7 +351,9 @@ describe('git API', () => {
     await execFileAsync('git', ['checkout', main], { cwd: repoDir, windowsHide: true });
     const picked = await cherryPick({ cwd: repoDir, sha: pickSha });
     assert.equal(picked.ok, true);
+  });
 
+  test('POST /api/git stashList honors cwd', async () => {
     const viaApi = await httpRequest(baseUrl, 'POST', '/api/git', {
       op: 'stashList',
       cwd: repoDir,

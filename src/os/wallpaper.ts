@@ -17,6 +17,8 @@ export interface WallpaperRenderOptions {
   mode: WallpaperMode;
   imageUrl?: string | null;
   imageFit?: WallpaperImageFit;
+  /** Thumbnail picker — keep other preview instances alive. */
+  preview?: boolean;
 }
 
 export const WALLPAPER_CATALOG: Array<{
@@ -77,8 +79,17 @@ const BUBBLE_CACHE = randomBubbles(16);
 const STAR_CACHE = randomStars(48);
 
 let minnowCleanup: (() => void) | null = null;
+const previewMinnowCleanups = new WeakMap<HTMLElement, () => void>();
 
-function clearMinnow(): void {
+function clearMinnow(container?: HTMLElement): void {
+  if (container) {
+    const previewCleanup = previewMinnowCleanups.get(container);
+    if (previewCleanup) {
+      previewCleanup();
+      previewMinnowCleanups.delete(container);
+    }
+    return;
+  }
   if (minnowCleanup) {
     minnowCleanup();
     minnowCleanup = null;
@@ -90,12 +101,16 @@ export function renderWallpaper(
   container: HTMLElement,
   modeOrOptions: WallpaperMode | WallpaperRenderOptions,
 ): void {
-  clearMinnow();
-  container.replaceChildren();
-
   const options: WallpaperRenderOptions =
     typeof modeOrOptions === 'string' ? { mode: modeOrOptions } : modeOrOptions;
-  const { mode, imageUrl, imageFit = 'cover' } = options;
+  const { mode, imageUrl, imageFit = 'cover', preview = false } = options;
+
+  if (preview) {
+    clearMinnow(container);
+  } else {
+    clearMinnow();
+  }
+  container.replaceChildren();
 
   const wall = document.createElement('div');
   wall.className = `mn-os-wall mn-os-wall-${mode}`;
@@ -179,7 +194,11 @@ export function renderWallpaper(
     container.appendChild(wall);
     void import('./wallpaper/minnow-fish').then((m) => {
       const handle = m.mountMinnowFishWallpaper(container);
-      minnowCleanup = handle.destroy;
+      if (preview) {
+        previewMinnowCleanups.set(container, handle.destroy);
+      } else {
+        minnowCleanup = handle.destroy;
+      }
     });
     const vignette = document.createElement('div');
     vignette.className = 'mn-os-vignette';

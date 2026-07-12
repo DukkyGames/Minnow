@@ -12,6 +12,9 @@
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
   scroll-padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  /* Reflow hub chrome when the Code column is narrow (sidebar / split), not only on viewport width */
+  container-type: inline-size;
+  container-name: hub;
 }
 
 html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
@@ -804,32 +807,29 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
 }
 
 /* ─── Responsive (empty-chat / new chat in Code app) ─── */
+/* Column-width queries: sidebar + split squeeze #chatArea while the viewport stays wide. */
 
-@media (max-width: 600px) {
+@container hub (max-width: 720px) {
   .hub-root {
-    padding: 12px max(12px, env(safe-area-inset-left, 0px)) max(20px, env(safe-area-inset-bottom, 0px))
-      max(12px, env(safe-area-inset-right, 0px));
+    padding: 14px 16px 24px;
     justify-content: flex-start;
   }
 
-  .input-bar--hub {
-    padding: 8px 8px 8px 10px;
-    column-gap: 8px;
-  }
-
-  .input-bar--hub .composer-controls {
-    gap: 6px;
-  }
-
-  .input-bar--hub .input-inset-btn {
-    --input-inset-btn-size: 40px;
-  }
-
   .hub-heading {
-    font-size: clamp(22px, 6vw, 28px);
+    font-size: clamp(22px, 5.5cqi, 28px);
     margin-bottom: 16px;
     padding-left: 0;
     padding-right: 0;
+  }
+
+  .hub-status {
+    margin-bottom: 12px;
+  }
+
+  .hub-status__text {
+    font-size: 11px;
+    line-height: 1.35;
+    text-wrap: balance;
   }
 
   .hub-strip {
@@ -841,6 +841,7 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
   .hub-strip__cell {
     border-right: 1px solid var(--mn-border);
     border-bottom: 1px solid var(--mn-border);
+    padding: 9px 12px;
   }
 
   .hub-strip__cell:nth-child(2n) {
@@ -856,9 +857,58 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
     border-bottom: none;
   }
 
+  .hub-strip__value {
+    font-size: 14px;
+  }
+
   .hub-intents {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     margin-bottom: 18px;
+  }
+
+  /* Five intents: last row centers on a single full-width tile */
+  .hub-intent:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .input-bar--hub {
+    padding: 8px 8px 8px 10px;
+    column-gap: 8px;
+  }
+
+  .input-bar--hub .composer-controls {
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .input-bar--hub .composer-controls .mode-segmented {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .input-bar--hub .composer-controls .mode-segmented::-webkit-scrollbar {
+    display: none;
+  }
+
+  .input-bar--hub .composer-run-target-wrap {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  .input-bar--hub .composer-run-target-btn {
+    max-width: 7rem;
+    font-size: 0.7rem;
+    padding-inline: 6px;
+  }
+
+  .input-bar--hub .input-inset-btn {
+    --input-inset-btn-size: 40px;
   }
 
   .input-bar--hub .input-bar-send-stack .send-btn,
@@ -866,23 +916,84 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
     width: var(--touch-min, 44px);
     height: var(--touch-min, 44px);
   }
+
+  .hub-recent-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
 }
 
-@media (max-width: 420px) {
+@container hub (max-width: 560px) {
+  .hub-root {
+    padding: 12px 12px 20px;
+  }
+
+  .hub-dev-server-settings {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .hub-intent__sub {
+    display: none;
+  }
+
+  .hub-intent {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .hub-intent__title {
+    font-size: 12px;
+  }
+}
+
+@container hub (max-width: 420px) {
   .hub-intents {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hub-intent:last-child:nth-child(odd) {
+    grid-column: auto;
   }
 
   .hub-intent {
     min-height: var(--touch-min, 44px);
   }
 
-  .hub-intent__title {
-    font-size: 12px;
+  .hub-intent__sub {
+    display: block;
+    font-size: 10px;
   }
 
-  .hub-intent__sub {
-    font-size: 10px;
+  .hub-recent-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Viewport fallbacks when container queries are unavailable (rare in Electron) */
+@supports not (container-type: inline-size) {
+  @media (max-width: 720px) {
+    .hub-strip {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .hub-strip__cell--server {
+      grid-column: 1 / -1;
+    }
+
+    .hub-intents {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+}
+
+@media (max-width: 600px) {
+  .hub-root {
+    padding: 12px max(12px, env(safe-area-inset-left, 0px)) max(20px, env(safe-area-inset-bottom, 0px))
+      max(12px, env(safe-area-inset-right, 0px));
+    justify-content: flex-start;
   }
 }
 

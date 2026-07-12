@@ -39,7 +39,7 @@ function suitesForPreset(
   preset: RunCampaignOptions['preset'],
   override?: SuiteId[],
 ): SuiteId[] {
-  if (override?.length) return override;
+  if (override !== undefined) return override;
   return preset === 'full' ? FULL_SUITES : QUICK_SUITES;
 }
 

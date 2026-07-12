@@ -23,8 +23,13 @@ import {
   getChatsForChatsWorkspace as filterChatsForChatsWorkspace,
   getChatLastMessageAt,
   getChatsForWorkspace as filterChatsForWorkspace,
+  getSidebarListedChatsForWorkspace as filterSidebarListedChatsForWorkspace,
   getLastActiveChatIdForApp,
   getUnassignedChats as filterUnassignedChats,
+  isEphemeralEmptyChat,
+  isSidebarListedChat,
+  pruneEphemeralEmptyChats,
+  formatDraftChatSidebarName,
   migrateSessionStateV1ToV2 as migrateSessionJsonToV2,
   rememberActiveChatForApp as rememberActiveChatForAppInState,
   resolveActiveAssistantChatId,
@@ -1258,6 +1263,9 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
     ...(todos && todosUpdatedAt ? { todosUpdatedAt } : {}),
     ...(pendingMessageQueue ? { pendingMessageQueue } : {}),
     ...(pendingSteerMessage ? { pendingSteerMessage } : {}),
+    ...(typeof raw.composerDraft === 'string' && raw.composerDraft
+      ? { composerDraft: raw.composerDraft }
+      : {}),
   };
   ensureTokenLedger(chat);
   return chat;
@@ -1436,6 +1444,21 @@ export function getChatsForWorkspace(
   return filterChatsForWorkspace(workspacePath, state);
 }
 
+/** Sidebar session rows for a workspace (excludes ephemeral empty chats). */
+export function getSidebarListedChatsForWorkspace(
+  workspacePath: string,
+  state: SessionState = requireSessionState(),
+): Chat[] {
+  return filterSidebarListedChatsForWorkspace(workspacePath, state);
+}
+
+export {
+  isEphemeralEmptyChat,
+  isSidebarListedChat,
+  pruneEphemeralEmptyChats,
+  formatDraftChatSidebarName,
+};
+
 /** Legacy or unscoped chats (`workspacePath === ''`), newest first. */
 export function getUnassignedChats(state: SessionState = requireSessionState()): Chat[] {
   return filterUnassignedChats(state);
@@ -1551,8 +1574,16 @@ export function onWorkspaceChanged(
   return { activeChat: getActiveChat(), activeChanged };
 }
 
+export interface LoadSessionsOptions {
+  /** Re-fetch from server/localStorage even when sessionState is already populated. */
+  force?: boolean;
+}
+
 /** Load sessions from API or localStorage (after detectConfigServer). */
-export async function loadSessionsFromStorage(): Promise<void> {
+export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Promise<void> {
+  if (sessionState && !options?.force) {
+    return;
+  }
   try {
     if (isServerStorageMode()) {
       try {
@@ -1837,9 +1868,9 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
     touchChat(fresh);
     activeChanged = true;
   } else if (wasActive) {
-    const inWorkspace = getChatsForWorkspace(victimWorkspace, state);
+    const inWorkspace = getSidebarListedChatsForWorkspace(victimWorkspace, state);
     if (inWorkspace.length) {
-      state.activeId = inWorkspace[0].id;
+      state.activeId = inWorkspace[0]!.id;
     } else {
       const fresh = createEmptyChatObject(fallbackModelId, victimWorkspace);
       state.chats.push(fresh);

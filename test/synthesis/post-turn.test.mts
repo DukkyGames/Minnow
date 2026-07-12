@@ -14,10 +14,13 @@ import type { Chat } from '../../src/types.ts';
 function makeChat(history: Chat['history']): Chat {
   return {
     id: '11111111-1111-1111-1111-111111111111',
-    title: 'Test',
+    name: 'Test',
+    workspacePath: '',
+    modelId: 'test-model',
     history,
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
+    lastStats: null,
+    modelInfo: {},
+    updatedAt: 1,
   };
 }
 
@@ -63,7 +66,8 @@ describe('buildSynthesisMessages', () => {
       { role: 'user', content: 'Hello' },
       {
         role: 'assistant',
-        content: '<think>only thinking here</think>',
+        content: '',
+        thinking: ['only thinking here'],
       },
     ]);
 

@@ -30,6 +30,28 @@ describe('llama args', () => {
     assert.equal(args[nglIdx + 1], '999');
   });
 
+  test('buildLlamaServerArgs passes fit as on|off value', () => {
+    const withFit = buildLlamaServerArgs({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      settings: { fit: true },
+    });
+    const fitIdx = withFit.indexOf('--fit');
+    assert.equal(fitIdx, withFit.length - 2);
+    assert.equal(withFit[fitIdx + 1], 'on');
+
+    const withoutFit = buildLlamaServerArgs({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      settings: { fit: false },
+    });
+    const offIdx = withoutFit.indexOf('--fit');
+    assert.equal(offIdx, withoutFit.length - 2);
+    assert.equal(withoutFit[offIdx + 1], 'off');
+  });
+
   test('buildLlamaServerArgs maps cache and batch flags', () => {
     const args = buildLlamaServerArgs({
       modelPath: '/tmp/model.gguf',

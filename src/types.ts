@@ -818,6 +818,8 @@ export interface Chat {
   runs?: TurnRunRecord[];
   /** forkHistoryIndex (string) → active branchId for the materialized transcript. */
   activeBranchByFork?: Record<string, string>;
+  /** Unsent composer text shown as a draft row in the sidebar until the first send. */
+  composerDraft?: string;
   /** Sticky slash skill for this chat (persists until cleared or replaced). */
   pinnedSkill?: PinnedSkillState | null;
   /** Pending user edits from Reef widgets; consumed on next send. */

@@ -6,6 +6,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { runProcess } from '../process-runner.js';
+import { killProcessTree } from '../terminal-runner.js';
 import { ECOSYSTEM_ENTRIES, materializeDepDirs } from './dep-symlinks.js';
 
 const INSTALL_TIMEOUT_MS = 600_000;
@@ -59,6 +60,8 @@ export async function refreshDependencies(root, changedFiles, { timeout = INSTAL
           cwd: root,
           timeout,
           shell: process.platform === 'win32',
+          // Windows shell spawns cmd.exe; SIGTERM alone leaves grandchildren holding locks.
+          killTree: killProcessTree,
         });
         if (result.code === 0) {
           ran.push(label);

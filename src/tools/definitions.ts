@@ -1407,6 +1407,20 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'load_aesthetics_reference',
+    label: 'Load frontend aesthetics reference',
+    description:
+      'Load the bundled frontend-aesthetics reference (visual hierarchy, density, color, type, motion, specificity ladder).',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'load_aesthetics_reference',
+      'Returns the frozen frontend-aesthetics reference markdown. Call once per session before proposing visual/UI changes.',
+      {},
+      [],
+    ),
+  },
+  {
     id: 'run_impeccable',
     label: 'Run Impeccable',
     description:

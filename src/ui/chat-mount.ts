@@ -57,6 +57,10 @@ function getChatAppMessageCol(): HTMLElement | null {
 export function getActiveChatMountElement(): HTMLElement {
   if (mountOverride) return mountOverride;
   if (turnMount) return turnMount;
+  // First-run wizard chat: the onboarding overlay is modal above the shell, so its
+  // transcript column owns the mount while it exists (guide step in src/onboarding/).
+  const onboardingCol = document.getElementById('onboardingChatCol');
+  if (onboardingCol) return onboardingCol;
   const codeForeground = getForegroundAppId() === 'code';
   if (!codeForeground && isDesktopChatActive()) {
     const desktopCol = document.getElementById('desktopChatCol');

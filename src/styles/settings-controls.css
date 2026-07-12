@@ -421,6 +421,10 @@
   border-bottom: 1px solid var(--mn-border);
 }
 
+.settings-toggle-row[hidden] {
+  display: none !important;
+}
+
 .settings-row:first-child,
 .settings-toggle-row:first-child {
   padding-top: 0;

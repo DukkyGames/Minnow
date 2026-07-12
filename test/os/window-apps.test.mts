@@ -24,6 +24,7 @@ import {
   resetWindowManagerForTests,
   windowManager,
 } from '../../src/os/window-manager.ts';
+import { installHappyDomGlobals } from './dom-helpers.mts';
 
 const WINDOW_APPS = ['settings', 'models', 'brain', 'bench', 'compare', 'calendar'] as const;
 
@@ -62,16 +63,7 @@ describe('window-mounted apps', () => {
   beforeEach(async () => {
     const { Window } = await import('happy-dom');
     const win = new Window();
-    const g = globalThis as typeof globalThis & {
-      window: Window;
-      document: Document;
-      HTMLElement: typeof HTMLElement;
-      localStorage: Storage;
-    };
-    g.window = win as unknown as Window & typeof globalThis.window;
-    g.document = win.document;
-    g.HTMLElement = win.HTMLElement;
-    g.localStorage = win.localStorage;
+    installHappyDomGlobals(win);
     win.localStorage.clear();
     win.location.hash = '#/desktop';
     setupWindowAppsDom(win);

@@ -45,6 +45,7 @@ export function initComposerInput(el: HTMLTextAreaElement): void {
   autoResize(el);
   window.addEventListener('resize', () => autoResize(el));
   initComposerSteerInputListener();
+  void import('./composer-draft').then((m) => m.initComposerDraftListener(el));
 }
 
 export function handleKey(e: KeyboardEvent): void {

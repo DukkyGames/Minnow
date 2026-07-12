@@ -7,7 +7,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
-import { resetMinnowHomeCache } from '../../server/config/home.js';
+import { resetMinnowHomeCache, ensureMinnowLayout } from '../../server/config/home.js';
 import { closeCodeDbForTests } from '../../server/brain/code/schema.js';
 import { createPage } from '../../server/brain/store.js';
 import { loadAllPagesWithBodies } from '../../server/brain/retrieve.js';
@@ -25,6 +25,7 @@ before(async () => {
   homeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-reindex-scope-'));
   process.env.MINNOW_HOME = homeDir;
   resetMinnowHomeCache();
+  await ensureMinnowLayout();
 
   const configPath = path.join(homeDir, 'config.json');
   await fs.writeFile(
@@ -52,9 +53,12 @@ before(async () => {
 
 after(async () => {
   closeCodeDbForTests();
+  await new Promise((resolve) => setTimeout(resolve, 250));
   delete process.env.MINNOW_HOME;
   resetMinnowHomeCache();
-  await fs.rm(homeDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  if (homeDir) {
+    await fs.rm(homeDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  }
 });
 
 describe('embeddings reindex scope', () => {
@@ -64,6 +68,7 @@ describe('embeddings reindex scope', () => {
       title: 'Project note',
       body: 'Wiki page outside facts/.',
       tags: ['wiki'],
+      skipVectorSync: true,
     });
 
     const memoryEntries = await loadAllEntriesWithBodies();

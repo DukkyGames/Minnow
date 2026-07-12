@@ -12,12 +12,26 @@ import {
 } from '../../server/models/llama-variant.js';
 import { LLAMA_CPP_RELEASE_TAG } from '../../server/models/llama-runtime.js';
 
-const MOCK_ASSETS = [
-  { name: `llama-${LLAMA_CPP_RELEASE_TAG}-bin-win-cpu-x64.zip` },
-  { name: `llama-${LLAMA_CPP_RELEASE_TAG}-bin-win-cuda-12.4-x64.zip` },
-  { name: 'cudart-llama-bin-win-cuda-12.4-x64.zip' },
-  { name: `llama-${LLAMA_CPP_RELEASE_TAG}-bin-win-vulkan-x64.zip` },
-];
+const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+const MOCK_ASSETS =
+  process.platform === 'win32'
+    ? [
+        { name: `llama-${LLAMA_CPP_RELEASE_TAG}-bin-win-cpu-${arch}.zip` },
+        { name: `llama-${LLAMA_CPP_RELEASE_TAG}-bin-win-cuda-12.4-${arch}.zip` },
+        { name: `cudart-llama-bin-win-cuda-12.4-${arch}.zip` },
+        { name: `llama-${LLAMA_CPP_RELEASE_TAG}-bin-win-vulkan-${arch}.zip` },
+      ]
+    : process.platform === 'darwin' && process.arch === 'arm64'
+      ? [
+          { name: `llama-${LLAMA_CPP_RELEASE_TAG}-bin-macos-arm64.tar.gz` },
+          { name: `llama-${LLAMA_CPP_RELEASE_TAG}-bin-macos-${arch}.tar.gz` },
+        ]
+      : [
+          { name: `llama-${LLAMA_CPP_RELEASE_TAG}-bin-ubuntu-${arch}.tar.gz` },
+          { name: `llama-${LLAMA_CPP_RELEASE_TAG}-bin-ubuntu-cuda-12.4-${arch}.tar.gz` },
+          { name: `llama-${LLAMA_CPP_RELEASE_TAG}-bin-ubuntu-vulkan-${arch}.tar.gz` },
+          { name: `llama-${LLAMA_CPP_RELEASE_TAG}-bin-ubuntu-rocm-${arch}.tar.gz` },
+        ];
 
 describe('llama variant', () => {
   test('expectedAssetNames returns CPU asset on Windows x64', () => {

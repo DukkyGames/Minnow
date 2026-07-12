@@ -35,6 +35,7 @@ import './styles/git-commit-diff.css';
 import './styles/editor-quick-edit.css';
 import './styles/editor-intent-mode.css';
 import './styles/preview-panel.css';
+import './styles/design-mode.css';
 import './styles/terminal.css';
 import './styles/skill-picker.css';
 import './styles/composer-tools-popover.css';
@@ -62,6 +63,7 @@ import './styles/minnowos-wallpaper.css';
 import './styles/minnowos-apps.css';
 import './styles/chat-app.css';
 import './styles/models-page.css';
+import './styles/onboarding.css';
 
 import 'highlight.js/styles/github.min.css';
 
@@ -145,11 +147,8 @@ import {
   syncModelSelectForActiveChat,
 } from './ui/sidebar';
 import { bootstrapActiveChatOpenedTimestamp } from './ui/chat-item-dot';
-import { initOrchestrateStatsLiveRefresh } from './chat/orchestrate/stats-live';
-import { initCodeChangeStrip } from './ui/code-change-strip';
 import { initStatsStrip, toggleStatsPanel, updateStatsExpandPreview } from './ui/stats';
 import { bindExpertsSettingsCheckbox } from './ui/experts-settings';
-import { initReefBridge } from './chat/reef/index.ts';
 import { syncComposerPinnedSkillFromActiveChat } from './ui/composer-pinned-skill';
 import { syncGoalActiveHint } from './ui/goal-active-hint';
 import { syncTodoPanel } from './ui/todo-panel';
@@ -163,10 +162,6 @@ import {
 } from './ui/view-mode-toggle';
 import { initModeSelector, syncModeSelectorFromActiveChat } from './ui/mode-selector';
 import { initModeChromeIcons } from './ui/mode-icons';
-import {
-  initOrchestrateHub,
-  toggleOrchestrateHubFromTopbar,
-} from './ui/orchestrate-hub';
 import { initThinkingControl } from './ui/composer-thinking';
 import {
   initComposerReasoningEffort,
@@ -202,12 +197,6 @@ import {
 } from './ui/welcome-page';
 import { getWorkspacePath } from './state/workspace.ts';
 import { bindWorkspacePathForToolCache } from './tools/result-cache.ts';
-import {
-  initTerminalPanel,
-  onTerminalServerAvailabilityChanged,
-  refreshTerminalHistoryForActiveChat,
-  registerTerminalKeyboardShortcut,
-} from './ui/terminal-panel';
 import { scheduleMarkAppReady } from './boot/app-ready';
 import { installRendererDiagnostics } from './boot/diagnostics';
 import { initNotificationAudioUnlock } from './notifications/sound';
@@ -263,7 +252,9 @@ function registerWindowHandlers(): void {
   window.togglePreviewFromTopbar = () => {
     void import('./ui/preview-panel').then((m) => m.togglePreviewPanel());
   };
-  window.toggleOrchestrateHubFromTopbar = toggleOrchestrateHubFromTopbar;
+  window.toggleOrchestrateHubFromTopbar = () => {
+    void import('./ui/orchestrate-hub').then((m) => m.toggleOrchestrateHubFromTopbar());
+  };
 }
 
 /** Register PWA service worker (shell cache); failures are ignored. */
@@ -308,21 +299,20 @@ export async function initApp(): Promise<void> {
   initContextUsageRing();
   initModeSelector();
   initModeChromeIcons();
-  initOrchestrateHub();
-  const { initCodeBrainMap } = await import('./ui/code-brain-map');
-  initCodeBrainMap();
-  const { initCodeOverview } = await import('./ui/code-overview');
-  initCodeOverview();
   initThinkingControl();
   initComposerReasoningEffort();
   initOrchestratePlanSelector();
   const { initComposerRunTarget } = await import('./ui/composer-run-target');
   initComposerRunTarget();
   initViewModeToggle();
-  initReefBridge();
   initWorkAgentDevUi();
   await bindExpertsSettingsCheckbox();
   await detectLocalServer();
+  const { shouldShowOnboardingOnBoot, mountOnboarding } = await import('./onboarding');
+  const showOnboarding = await shouldShowOnboardingOnBoot();
+  if (showOnboarding) {
+    await mountOnboarding();
+  }
   startSchedulerNotificationPoll();
   initNotificationProducers();
   onWelcomeServerAvailabilityChanged();
@@ -344,9 +334,8 @@ export async function initApp(): Promise<void> {
   }
   initAllComposerSlashPickers();
   initComposerDrop();
-  const filePanel = await import('./ui/init-file-panel');
-  await filePanel.initFilePanel();
-  filePanel.onFilePanelServerAvailabilityChanged();
+  const { ensureCodeWorkspaceModulesForBoot } = await import('./boot/code-workspace-modules');
+  await ensureCodeWorkspaceModulesForBoot();
   initAppSidebarResizers();
   await loadSkillConfigFromStorage();
   await loadToolSecurityMeta().catch(() => undefined);
@@ -357,51 +346,26 @@ export async function initApp(): Promise<void> {
     .catch(() => undefined);
   await loadAutopilotMeta().catch(() => undefined);
   await loadThinkingMeta().catch(() => undefined);
-  await initTerminalPanel();
-  onTerminalServerAvailabilityChanged();
-  const { initShellRunUi } = await import('./ui/shell-run-ui');
-  initShellRunUi();
   initStatsStrip();
-  initCodeChangeStrip();
-  initOrchestrateStatsLiveRefresh();
   initChatScroll();
   initMinnowBrowserLinkRouting();
-  registerTerminalKeyboardShortcut();
   loadToolConfigIntoDrawer();
   applySidebarVisuals();
   renderSidebar();
   const { wireSidebarNewGroupButton } = await import('./ui/sidebar');
   wireSidebarNewGroupButton();
+  const { refreshTerminalHistoryForActiveChat } = await import('./ui/terminal-panel');
   await refreshTerminalHistoryForActiveChat();
-  const settingsPage = await import('./ui/settings-page');
-  settingsPage.initSettingsPage();
-  const benchmarkPage = await import('./ui/benchmark-page');
-  benchmarkPage.initBenchmarkPage();
-  const modelsPage = await import('./ui/models-page');
-  modelsPage.initModelsPage();
-  const brainPage = await import('./ui/brain-page');
-  brainPage.initBrainPage();
-  const comparePage = await import('./ui/compare-page');
-  comparePage.initComparePage();
-  const schedulerPage = await import('./ui/scheduler-page');
-  schedulerPage.initSchedulerPage();
-  const calendarPage = await import('./ui/calendar-page');
-  calendarPage.initCalendarPage();
-  const emailPage = await import('./ui/email-page');
-  emailPage.initEmailPage();
-  const researchPage = await import('./research/panel');
-  researchPage.initResearchPage();
-  const chatApp = await import('./ui/chat-app');
-  chatApp.initChatApp();
+  const { ensureBootAppsInitialized } = await import('./os/app-modules');
+  await ensureBootAppsInitialized();
   const globalBugsPage = await import('./ui/global-bugs-page');
-  globalBugsPage.initGlobalBugsPage();
-  const expertsHub = await import('./ui/experts/experts-hub');
-  expertsHub.initExpertsHub();
   globalBugsPage.refreshGlobalBugsSidebarBadge();
   await fetchModels();
   syncModelSelectForActiveChat();
   updateModelLoadUnloadButtons();
   renderChatFromHistory(getActiveChat());
+  const { applyComposerDraftForChat } = await import('./ui/composer-draft');
+  applyComposerDraftForChat(getActiveChat());
   if (sessionState) {
     await rehydrateAllBoardWorktreeRoots(sessionState);
     await bootGenerationResumeForChats(sessionState.chats);
@@ -448,7 +412,7 @@ export async function initApp(): Promise<void> {
 }
 
 /** Start init once the document is ready (module scripts often run after `load`). */
-function startApp(): void {
+async function startApp(): Promise<void> {
   if (isOsShellEnabled()) {
     const hash = window.location.hash;
     if (hash === '' || hash === '#' || hash === '#/') {
@@ -456,10 +420,15 @@ function startApp(): void {
     }
     initOsPageBridge();
     initOsShell();
-    initOsRouter();
   }
   installRendererDiagnostics();
   initNotificationAudioUnlock();
+  // Sessions must load before OS routing — Code app mount calls getActiveChat().
+  await detectConfigServer();
+  await loadSessionsFromStorage();
+  if (isOsShellEnabled()) {
+    initOsRouter();
+  }
   void initApp();
 }
 

@@ -170,6 +170,10 @@ async function reconcileRow(row) {
   }
 
   if (!run && row.status !== 'stopping') {
+    // Background spawn can lag before the terminal registry sees the child (esp. Windows).
+    if (row.startedAt && Date.now() - row.startedAt < 2_000) {
+      return row;
+    }
     row.status = 'stopped';
     row.runId = undefined;
     row.pid = null;
@@ -566,4 +570,9 @@ export async function toolStopCommand(args) {
     null,
     2,
   );
+}
+
+/** Clear in-memory dev-server rows between tests (does not touch persisted config). */
+export function resetDevServerManagerForTests() {
+  byWorkspaceKey.clear();
 }

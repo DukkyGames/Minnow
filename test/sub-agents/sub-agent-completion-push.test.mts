@@ -11,7 +11,7 @@ import {
   resetSubAgentCompletionPushForTests,
   setSubAgentCompletionDeliverHook,
 } from '../../src/agents/sub-agent-completion-push.ts';
-import { resetSubAgentOrchestrator } from '../../src/agents/orchestrator.ts';
+import { resetSubAgentOrchestrator, waitForSubAgent } from '../../src/agents/orchestrator.ts';
 import { resetSubAgentConfigCache, setRuntimeSubAgentOverrides } from '../../src/agents/sub-agent-config.ts';
 import {
   resetSubAgentRunIdFactory,
@@ -79,7 +79,7 @@ describe('sub-agent completion push', () => {
       parentTurnId: 'turn-1',
       modeId: 'build',
     });
-    await new Promise((r) => setTimeout(r, 30));
+    await waitForSubAgent(FIXED_RUN_ID);
     await flushSubAgentCompletionPushForChat(CHAT_ID);
 
     assert.equal(deliveries.length, 1);
@@ -99,7 +99,7 @@ describe('sub-agent completion push', () => {
       parentTurnId: 'turn-1',
       modeId: 'build',
     });
-    await new Promise((r) => setTimeout(r, 30));
+    await waitForSubAgent(FIXED_RUN_ID);
     const run = getSubAgentRun(FIXED_RUN_ID);
     assert.ok(run);
     emitSubAgentRunUpdated(run);
