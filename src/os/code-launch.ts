@@ -15,7 +15,8 @@ import { syncComposerFromStreamingState } from '../ui/composer-send';
 
 /** Re-render the Code transcript and sync chrome for the active workspace chat. */
 async function refreshCodeChatSurface(): Promise<void> {
-  const { getActiveChat } = await import('../state/sessions');
+  const { ensureSessionsReady, getActiveChat } = await import('../state/sessions');
+  await ensureSessionsReady();
   const { renderChatFromHistory, renderStatsForChat } = await import('../ui/messages');
   const { renderSidebar } = await import('../ui/sidebar');
   const { syncModeSelectorFromActiveChat } = await import('../ui/mode-selector');
@@ -42,11 +43,13 @@ async function refreshCodeChatSurface(): Promise<void> {
 export async function restoreCodeSessionOnForeground(): Promise<void> {
   const { getChatsWorkspacePath, isChatsWorkspacePath } = await import('../lib/chats-workspace');
   const {
+    ensureSessionsReady,
     getActiveChat,
     resolveActiveChatIdForWorkspace,
     sessionState,
   } = await import('../state/sessions');
 
+  await ensureSessionsReady();
   if (!sessionState) return;
 
   await getChatsWorkspacePath();

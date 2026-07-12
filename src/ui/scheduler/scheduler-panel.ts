@@ -237,7 +237,7 @@ export async function renderSchedulerPanel(
 
   async function openSchedulerRunChat(chatId: string): Promise<void> {
     try {
-      await loadSessionsFromStorage();
+      await loadSessionsFromStorage({ force: true });
     } catch {
       notify('err', 'Could not reload chats from the server.');
       return;

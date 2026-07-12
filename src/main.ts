@@ -410,7 +410,7 @@ export async function initApp(): Promise<void> {
 }
 
 /** Start init once the document is ready (module scripts often run after `load`). */
-function startApp(): void {
+async function startApp(): Promise<void> {
   if (isOsShellEnabled()) {
     const hash = window.location.hash;
     if (hash === '' || hash === '#' || hash === '#/') {
@@ -418,10 +418,15 @@ function startApp(): void {
     }
     initOsPageBridge();
     initOsShell();
-    initOsRouter();
   }
   installRendererDiagnostics();
   initNotificationAudioUnlock();
+  // Sessions must load before OS routing — Code app mount calls getActiveChat().
+  await detectConfigServer();
+  await loadSessionsFromStorage();
+  if (isOsShellEnabled()) {
+    initOsRouter();
+  }
   void initApp();
 }
 

@@ -1544,8 +1544,16 @@ export function onWorkspaceChanged(
   return { activeChat: getActiveChat(), activeChanged };
 }
 
+export interface LoadSessionsOptions {
+  /** Re-fetch from server/localStorage even when sessionState is already populated. */
+  force?: boolean;
+}
+
 /** Load sessions from API or localStorage (after detectConfigServer). */
-export async function loadSessionsFromStorage(): Promise<void> {
+export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Promise<void> {
+  if (sessionState && !options?.force) {
+    return;
+  }
   try {
     if (isServerStorageMode()) {
       try {
