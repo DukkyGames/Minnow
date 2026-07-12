@@ -7,6 +7,11 @@ import {
   openUrlInMinnowBrowser,
   resetMinnowBrowserLinkRoutingForTests,
 } from '../../src/ui/minnow-browser-links.ts';
+import {
+  installHappyDomGlobals,
+  installMinnowPreviewMock,
+  teardownHappyDomAsync,
+} from '../os/dom-helpers.mts';
 
 describe('minnow-browser-links', () => {
   /** @type {Window | undefined} */
@@ -14,16 +19,16 @@ describe('minnow-browser-links', () => {
 
   beforeEach(() => {
     win = new Window({ url: 'http://localhost:9473/' });
-    // @ts-expect-error test harness replaces globals
-    globalThis.window = win;
-    // @ts-expect-error test harness replaces globals
-    globalThis.document = win.document;
+    installHappyDomGlobals(win);
+    installMinnowPreviewMock(win);
     resetMinnowBrowserLinkRoutingForTests();
   });
 
-  afterEach(() => {
-    win?.close();
-    win = undefined;
+  afterEach(async () => {
+    if (win) {
+      await teardownHappyDomAsync(win);
+      win = undefined;
+    }
     resetMinnowBrowserLinkRoutingForTests();
   });
 
@@ -73,6 +78,7 @@ describe('minnow-browser-links', () => {
     let called = false;
     window.minnow = {
       preview: {
+        hide: () => undefined,
         show: async () => {
           called = true;
         },

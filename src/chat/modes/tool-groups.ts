@@ -104,7 +104,7 @@ export const TOOL_GROUP_IDS = {
   ],
   calendar: ['manage_calendar'],
   reef: ['check_reef_widget'],
-  impeccable: ['load_impeccable_context', 'run_impeccable'],
+  impeccable: ['load_impeccable_context', 'load_aesthetics_reference', 'run_impeccable'],
   todo: ['todo_write'],
 } as const;
 

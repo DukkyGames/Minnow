@@ -348,11 +348,17 @@ export async function createBackgroundRun({
   activeRuns.set(runId, state);
   emit(state, { type: 'meta', runId, command, cwd });
 
-  const winOneShot =
-    process.platform === 'win32' && args.length === 0 && typeof command === 'string';
-  const execCommand = winOneShot ? 'cmd.exe' : command;
-  const execArgs = winOneShot ? ['/d', '/s', '/c', command] : args;
-  const useShell = winOneShot ? false : shell === true;
+  // One-shot shell strings (e.g. `node -e "..."`, `sleep 120`) must run through a shell on every OS.
+  const oneShot = args.length === 0 && typeof command === 'string';
+  const winOneShot = oneShot && process.platform === 'win32';
+  const unixOneShot = oneShot && process.platform !== 'win32';
+  const execCommand = winOneShot ? 'cmd.exe' : unixOneShot ? '/bin/sh' : command;
+  const execArgs = winOneShot
+    ? ['/d', '/s', '/c', command]
+    : unixOneShot
+      ? ['-c', command]
+      : args;
+  const useShell = winOneShot || unixOneShot ? false : shell === true;
 
   const childEnv =
     envOverrides && typeof envOverrides === 'object'

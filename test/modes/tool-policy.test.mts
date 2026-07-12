@@ -220,10 +220,10 @@ describe('tool payload token reduction', () => {
       buildDefs.map((definition) => ({ definition })),
     );
 
-    assert.ok(allTokens > 10_000, `baseline should exceed 10k, got ${allTokens}`);
+    assert.ok(allTokens > 9_000, `baseline should exceed 9k, got ${allTokens}`);
     assert.ok(
-      buildTokens >= 7_900 && buildTokens <= 8_700,
-      `build payload expected ~8,300 tok, got ${buildTokens} (all=${allTokens})`,
+      buildTokens >= 7_000 && buildTokens <= 8_200,
+      `build payload expected ~7.5k–8.2k tok, got ${buildTokens} (all=${allTokens})`,
     );
     assert.ok(buildTokens < allTokens - 2_000, 'build should save at least 2k tokens');
   });

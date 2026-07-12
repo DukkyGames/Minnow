@@ -18,6 +18,11 @@ export function normalizePathForComparison(fsPath) {
  */
 export function realpathForBoundaryCheck(resolvedAbs) {
   try {
+    // Prefer native realpath on Windows so 8.3 short names (e.g. RUNNER~1) canonicalize
+    // to the same long path as fs.promises.realpath — required for prefix checks in CI.
+    if (process.platform === 'win32' && typeof fs.realpathSync.native === 'function') {
+      return fs.realpathSync.native(resolvedAbs);
+    }
     return fs.realpathSync(resolvedAbs);
   } catch (err) {
     const code = err && typeof err === 'object' && 'code' in err ? err.code : null;

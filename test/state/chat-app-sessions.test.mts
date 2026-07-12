@@ -41,7 +41,8 @@ function chatRow(
     workspacePath: normalizeWorkspacePath(workspacePath),
     modelId: 'test-model',
     modeId: 'build',
-    history: [],
+    // Sidebar list helpers hide ephemeral empty chats; seed one turn for fixtures.
+    history: [{ role: 'user', content: 'fixture' }],
     lastStats: null,
     modelInfo: {},
     updatedAt,
@@ -182,7 +183,9 @@ describe('createAssistantChat', () => {
       createAssistantChat(path, ASSISTANT_A),
     );
     assert.equal(next, ASSISTANT_A);
-    assert.equal(getAssistantChats(state, CHATS_WS).length, 1);
+    // New assistant chats start ephemeral until the user sends or drafts text.
+    assert.equal(getChatsForChatsWorkspace(state, CHATS_WS).length, 1);
+    assert.equal(getAssistantChats(state, CHATS_WS).length, 0);
     const created = state.chats.find((c) => c.id === ASSISTANT_A);
     assert.ok(created);
     assert.equal(created?.modeId, 'general');

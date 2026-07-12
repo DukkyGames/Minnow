@@ -161,6 +161,7 @@ describe('voice runtime API', () => {
       stdout: { on: () => {} },
       stderr: { on: () => {} },
       on: () => {},
+      kill: () => {},
     }));
     setVoiceFetchOverrideForTests(async () => ({
       ok: true,

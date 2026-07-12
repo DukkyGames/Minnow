@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { Window } from 'happy-dom';
-import { indentWithTab } from '@codemirror/commands';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 
@@ -9,6 +8,7 @@ const {
   fileEditorEscapeBlurBinding,
   fileEditorKeymapBindings,
   fileEditorKeymapExtensions,
+  fileEditorTabBinding,
 } = await import('../../src/ui/file-editor-keymap.ts');
 
 function setupDom() {
@@ -37,20 +37,20 @@ function mountEditor(doc) {
 
 describe('file editor keymap', () => {
   test('fileEditorKeymapBindings includes Tab indent and Escape blur', () => {
-    assert.ok(fileEditorKeymapBindings.includes(indentWithTab));
+    assert.ok(fileEditorKeymapBindings.includes(fileEditorTabBinding));
     assert.ok(fileEditorKeymapBindings.includes(fileEditorEscapeBlurBinding));
     assert.equal(fileEditorEscapeBlurBinding.key, 'Escape');
   });
 
-  test('fileEditorKeymapExtensions returns indent unit and keymap', () => {
-    assert.equal(fileEditorKeymapExtensions().length, 2);
+  test('fileEditorKeymapExtensions returns LSP-aware keymap', () => {
+    assert.equal(fileEditorKeymapExtensions().length, 1);
   });
 
   test('Tab indents the current line', () => {
     setupDom();
     const view = mountEditor('line');
     view.focus();
-    const handled = indentWithTab.run(view);
+    const handled = fileEditorTabBinding.run(view);
     assert.equal(handled, true);
     assert.equal(view.state.doc.toString(), '  line');
   });
