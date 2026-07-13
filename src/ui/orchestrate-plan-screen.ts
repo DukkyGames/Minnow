@@ -499,12 +499,17 @@ function syncWorkingPhaseControls(chat: Chat): void {
   if (!root) return;
   const pauseBtn = root.querySelector('[data-plan-pause]') as HTMLButtonElement | null;
   const resumeBtn = root.querySelector('[data-plan-resume]') as HTMLButtonElement | null;
-  if (!pauseBtn && !resumeBtn) return;
+  const skipInterviewBtn = root.querySelector(
+    '[data-plan-skip-interview]',
+  ) as HTMLButtonElement | null;
+  if (!pauseBtn && !resumeBtn && !skipInterviewBtn) return;
   const paused = Boolean(chat.superPlan?.paused);
   const stalled = !paused && isSuperPlanStalled(chat) && !isSuperPlanAdvancing(chat.id);
   const showResume = paused || stalled;
   if (pauseBtn) pauseBtn.hidden = showResume;
   if (resumeBtn) resumeBtn.hidden = !showResume;
+  // Only offer to skip while the interview stage is the active one.
+  if (skipInterviewBtn) skipInterviewBtn.hidden = chat.superPlan?.activeStage !== 'grill';
 }
 
 function wirePlanScreenActivityListener(chatId: string): void {
@@ -925,6 +930,22 @@ function appendWorkingPhaseContent(
     const stalled = Boolean(
       chat && !paused && isSuperPlanStalled(chat) && !isSuperPlanAdvancing(chat.id),
     );
+    const activeStage = chat?.superPlan?.activeStage;
+
+    // Let the user cut the interview short and jump straight to the build spec.
+    const skipInterviewBtn = document.createElement('button');
+    skipInterviewBtn.type = 'button';
+    skipInterviewBtn.className =
+      'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--ghost';
+    skipInterviewBtn.dataset.planSkipInterview = 'true';
+    skipInterviewBtn.textContent = 'Skip interview';
+    skipInterviewBtn.title =
+      'Skip the interview questions and go straight to writing the build spec';
+    skipInterviewBtn.hidden = activeStage !== 'grill';
+    skipInterviewBtn.addEventListener('click', () => {
+      const target = findChatById(opts.chatId);
+      if (target) void skipSuperPlanStage(target);
+    });
 
     const pauseBtn = document.createElement('button');
     pauseBtn.type = 'button';
@@ -962,7 +983,7 @@ function appendWorkingPhaseContent(
       }
     });
 
-    actionsEnd.append(pauseBtn, resumeBtn, stopBtn);
+    actionsEnd.append(skipInterviewBtn, pauseBtn, resumeBtn, stopBtn);
   } else {
     const stopBtn = document.createElement('button');
     stopBtn.type = 'button';

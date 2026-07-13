@@ -337,6 +337,12 @@ export async function skipSuperPlanStage(chat: Chat): Promise<void> {
   if (!state || state.cancelled) return;
   const stageId = state.activeStage;
   if (stageId === 'present') return;
+  // Skipping a live stage (e.g. an in-progress interview) must abort its
+  // in-flight turn first, or advanceSuperPlan would bail out on the still-
+  // streaming chat and the stopped run would be misread as a pause.
+  if (isChatStreaming(chat.id)) {
+    stopChatTurn(chat.id);
+  }
   resetSuperPlanStage(chat, stageId);
   markSuperPlanStageStatus(chat, stageId, 'done');
   const next = nextRunnableSuperPlanStage(stageId, getSuperPlanConfigSync());

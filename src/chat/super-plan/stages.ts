@@ -188,9 +188,11 @@ async function runGrillStage(chat: Chat): Promise<SuperPlanStageOutcome> {
   const skill = await fetchSkillById('grilling');
   const skillBody = skill?.body ?? null;
   const userText = [
-    'Super Plan pipeline — **Grill stage**.',
-    `Interview me relentlessly (~${config.grillQuestionBudget} questions) about this plan before we write anything.`,
-    'Use `ask_question` one card at a time with a recommended answer each time.',
+    'Super Plan pipeline — **Grill stage** (interview only).',
+    `Ask me ~${config.grillQuestionBudget} design questions about this plan, one \`ask_question\` card at a time, each with a recommended answer. When a question is answerable from the repo, explore instead of asking.`,
+    'Ask only genuine design, scope, and tradeoff questions. Do NOT ask whether a spec or plan "looks good", "is okay", or whether to proceed — those are not design questions.',
+    'This stage is chat only. Do NOT write or save any file, and do NOT draft, outline, or write the build spec — the next stage does that and the user confirms it then.',
+    'When you have asked enough questions, stop with one short sentence saying the interview is complete. The controller advances to the spec stage automatically — never move ahead or combine stages yourself.',
     '',
     state.prompt,
   ].join('\n');

@@ -438,4 +438,58 @@ describe('orchestrate plan screen', () => {
     await modalPromise.catch(() => undefined);
     assert.equal(settled, true);
   });
+
+  test('skip interview button shows only while the grill stage is active', () => {
+    const window = new Window();
+    globalThis.document = window.document;
+    globalThis.HTMLElement = window.HTMLElement;
+
+    const area = document.createElement('main');
+    area.id = 'chatArea';
+    document.body.appendChild(area);
+    document.body.appendChild(
+      Object.assign(document.createElement('div'), { id: 'mainColumn' }),
+    );
+
+    const chat = createEmptyChatObject('sp-skip');
+    chat.modeId = 'super-plan';
+    const stages = createInitialSuperPlanStages();
+    stages.grill.status = 'running';
+    chat.superPlan = {
+      slug: 'oauth',
+      prompt: 'Add OAuth login',
+      activeStage: 'grill',
+      stages,
+    };
+    setSessionStateForTests({
+      version: 5,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    renderOrchestratePlanScreen({
+      phase: 'super-plan-working',
+      chatId: chat.id,
+      savedPrompt: 'Add OAuth login',
+    });
+
+    const skipBtn = document.querySelector(
+      '[data-plan-skip-interview]',
+    ) as HTMLButtonElement | null;
+    assert.ok(skipBtn, 'skip interview button should render');
+    assert.equal(skipBtn?.hidden, false, 'skip button visible during the interview');
+
+    // Advancing past the interview hides the button.
+    chat.superPlan.activeStage = 'spec_confirm';
+    renderOrchestratePlanScreen({
+      phase: 'super-plan-working',
+      chatId: chat.id,
+      savedPrompt: 'Add OAuth login',
+    });
+    const skipAfter = document.querySelector(
+      '[data-plan-skip-interview]',
+    ) as HTMLButtonElement | null;
+    assert.equal(skipAfter?.hidden, true, 'skip button hidden once past the interview');
+  });
 });
