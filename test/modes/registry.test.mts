@@ -1,0 +1,47 @@
+/**
+ * Mode registry tests (super-plan Phase 0).
+ */
+
+import assert from 'node:assert/strict';
+import { describe, test } from 'node:test';
+import {
+  getMode,
+  listComposerModes,
+  listModes,
+} from '../../src/chat/modes/registry.ts';
+import { isToolAllowedForMode } from '../../src/chat/modes/tool-policy.ts';
+
+describe('mode registry super-plan', () => {
+  test('listModes includes super-plan', () => {
+    const ids = listModes().map((m) => m.id);
+    assert.ok(ids.includes('super-plan'));
+  });
+
+  test('getMode returns Super Plan definition', () => {
+    const mode = getMode('super-plan');
+    assert.equal(mode.id, 'super-plan');
+    assert.equal(mode.label, 'Super Plan');
+    assert.equal(mode.promptId, 'super-plan');
+  });
+
+  test('listComposerModes excludes super-plan from top-level strip', () => {
+    const composer = listComposerModes().map((m) => m.id);
+    assert.ok(!composer.includes('super-plan'));
+    assert.ok(composer.includes('plan'));
+  });
+});
+
+describe('super-plan tool policy', () => {
+  test('denies execute_command', () => {
+    assert.equal(isToolAllowedForMode('super-plan', 'execute_command'), false);
+  });
+
+  test('allows spawn_sub_agent and get_sub_agent_status', () => {
+    assert.equal(isToolAllowedForMode('super-plan', 'spawn_sub_agent'), true);
+    assert.equal(isToolAllowedForMode('super-plan', 'get_sub_agent_status'), true);
+  });
+
+  test('allows save_file for plan writes', () => {
+    assert.equal(isToolAllowedForMode('super-plan', 'save_file'), true);
+  });
+});

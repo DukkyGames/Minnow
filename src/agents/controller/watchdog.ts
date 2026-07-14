@@ -114,7 +114,7 @@ export function isNonMutatingSubAgentRun(run: SubAgentRun): boolean {
   if (cat === 'build' || cat === 'fix') return false;
   if (type === 'shell') return false;
   if (cat === 'research' || cat === 'test') return true;
-  if (type === 'explore' || type === 'researcher') return true;
+  if (type === 'explore' || type === 'researcher' || type === 'plan-reviewer') return true;
   return false;
 }
 

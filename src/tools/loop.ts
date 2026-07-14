@@ -2502,6 +2502,27 @@ export async function sendMessageWithTools(
   syncGoalActiveHint();
   syncTodoPanel();
 
+  const { shouldRouteComposerSendToSuperPlan, startPlanningFromComposer } = await import(
+    '../ui/orchestrate-plan-screen'
+  );
+  if (normalizeModeId(chat.modeId) === 'super-plan' && hasUserText && !skillId) {
+    if (validAttachments.length > 0) {
+      setStatus('err', 'Super Plan starts from text only — remove attachments first');
+      return;
+    }
+  }
+  if (
+    shouldRouteComposerSendToSuperPlan(chat, {
+      userText,
+      skillId,
+      attachmentCount: validAttachments.length,
+    })
+  ) {
+    clearComposerInput(input);
+    await startPlanningFromComposer(userText || effectiveRawText);
+    return;
+  }
+
   await runChatTurn({
     chat,
     pushUser: true,

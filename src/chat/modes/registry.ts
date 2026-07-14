@@ -47,6 +47,14 @@ const MODE_DEFINITIONS: ModeDefinition[] = [
     toolPolicy: allowGroupsToolPolicy('plan', MODE_ALLOWED_GROUPS.plan),
   },
   {
+    id: 'super-plan',
+    label: 'Super Plan',
+    description:
+      'Extended planning with sub-agent research; write plans and reference artifacts only.',
+    promptId: 'super-plan',
+    toolPolicy: allowGroupsToolPolicy('super-plan', MODE_ALLOWED_GROUPS['super-plan']),
+  },
+  {
     id: 'orchestrate',
     label: 'Orchestrate',
     description: 'Coordinate multi-step work; delegate and structure tasks.',
@@ -83,11 +91,15 @@ export function listModes(): ModeDefinition[] {
   return [...MODE_DEFINITIONS];
 }
 
-/** Composer mode strip (excludes Orchestrate, Reef, Desktop, and Onboarding surface modes). */
+/** Composer mode strip (excludes Orchestrate, Reef, Super Plan, Desktop, and Onboarding). */
 export function listComposerModes(): ModeDefinition[] {
   return MODE_DEFINITIONS.filter(
     (m) =>
-      m.id !== 'orchestrate' && m.id !== 'reef' && m.id !== 'desktop' && m.id !== 'onboarding',
+      m.id !== 'orchestrate' &&
+      m.id !== 'reef' &&
+      m.id !== 'super-plan' &&
+      m.id !== 'desktop' &&
+      m.id !== 'onboarding',
   );
 }
 

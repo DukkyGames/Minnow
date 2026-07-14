@@ -2,7 +2,7 @@
  * Headless tool execution — server POST only; block browser/UI tools with clear errors.
  */
 
-import { blockPlanModeWrite } from '../chat/modes/plan-write-guard';
+import { blockPlanModeWriteWithContent } from '../chat/modes/plan-write-guard';
 import { isToolAllowedForMode, filterToolsByMode } from '../chat/modes/tool-policy';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import {
@@ -196,7 +196,7 @@ export async function executeHeadlessTool(
   );
   if (blocked) return blocked;
 
-  const planWriteBlock = blockPlanModeWrite(modeId, name, args);
+  const planWriteBlock = blockPlanModeWriteWithContent(modeId, name, args);
   if (planWriteBlock) {
     return { content: planWriteBlock };
   }

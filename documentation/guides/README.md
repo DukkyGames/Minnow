@@ -1,6 +1,6 @@
 # Minnow guides
 
-Task-oriented documentation. For the authoritative, exhaustive architecture reference, see [`../context.md`](../context.md).
+Task-oriented documentation. For the product overview see [`../README.md`](../README.md). For install, commands, and troubleshooting see [`../getting-started.md`](../getting-started.md). For the authoritative, exhaustive architecture reference, see [`../context.md`](../context.md).
 
 | Guide | What it covers |
 |-------|----------------|

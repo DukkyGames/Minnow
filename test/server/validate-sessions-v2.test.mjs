@@ -130,6 +130,61 @@ describe('validateSessionState workspace schema', () => {
     assert.equal(board.tasks[0].devPort, 5200);
   });
 
+  it('preserves superPlan on chats across validateSessionState round-trip', () => {
+    const stages = {
+      grill: { status: 'done' },
+      spec_confirm: { status: 'done' },
+      research: { status: 'running', startedAt: 2000 },
+      draft1: { status: 'pending' },
+      review1: { status: 'pending' },
+      draft2: { status: 'pending' },
+      review2: { status: 'pending' },
+      impeccable: { status: 'pending' },
+      finalize: { status: 'pending' },
+      present: { status: 'pending' },
+    };
+    const out = validateSessionState({
+      version: 5,
+      activeId: 'chat-sp',
+      sidebarCollapsed: false,
+      chats: [
+        {
+          id: 'chat-sp',
+          name: 'Super Plan chat',
+          workspacePath: '',
+          modelId: 'test-model',
+          modeId: 'super-plan',
+          history: [{ role: 'user', content: 'Add OAuth login' }],
+          updatedAt: 1,
+          superPlan: {
+            slug: 'oauth',
+            prompt: 'Add OAuth login',
+            activeStage: 'research',
+            stages,
+            specPath: 'documentation/plans/references/oauth-spec.md',
+            researchPath: 'documentation/plans/references/oauth-research.md',
+            planPath: 'documentation/plans/oauth.md',
+            uiInvolved: false,
+            researchId: 'research-run-1',
+          },
+        },
+      ],
+    });
+
+    assert.equal(out.chats[0].modeId, 'super-plan');
+    assert.deepEqual(out.chats[0].superPlan, {
+      slug: 'oauth',
+      prompt: 'Add OAuth login',
+      activeStage: 'research',
+      stages,
+      specPath: 'documentation/plans/references/oauth-spec.md',
+      researchPath: 'documentation/plans/references/oauth-research.md',
+      planPath: 'documentation/plans/oauth.md',
+      uiInvolved: false,
+      researchId: 'research-run-1',
+    });
+  });
+
   it('preserves activeGoal on chats across validateSessionState round-trip', () => {
     const out = validateSessionState({
       version: 5,

@@ -1,0 +1,221 @@
+/**
+ * Plan / Super Plan progress stepper — Deep Research handoff layout in plan screen.
+ */
+
+.orchestrate-plan-screen:has(.orchestrate-plan-screen__progress-mount) .orchestrate-plan-screen__inner {
+  max-width: 760px;
+}
+
+.orchestrate-plan-screen__progress-mount {
+  margin-bottom: 16px;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-prog,
+.orchestrate-plan-screen__progress-mount .plan-progress {
+  margin: 0;
+  background: var(--mn-surface-0, var(--mn-bg-elevated));
+  border: 1px solid var(--mn-border);
+  border-radius: 14px;
+  padding: 18px 20px;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-prog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-prog-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  background: var(--mn-accent);
+  animation: dr-pulse 1.4s var(--ease-out, ease) infinite;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-timer {
+  font-size: 13px;
+  color: var(--mn-fg-muted);
+}
+
+.orchestrate-plan-screen__progress-mount .plan-progress__detail {
+  margin-top: 8px;
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: var(--mn-fg-muted);
+}
+
+.orchestrate-plan-screen__progress-mount .plan-progress__detail[hidden] {
+  display: none;
+}
+
+.orchestrate-plan-screen__progress-mount .plan-progress--paused .dr-dot {
+  background: var(--mn-fg-subtle);
+  animation: none;
+}
+
+.orchestrate-plan-screen__progress-mount .plan-progress--error .dr-dot {
+  background: var(--mn-danger, #d66);
+  animation: none;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-stepper {
+  display: flex;
+  align-items: center;
+  margin: 22px 6px 10px;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-node {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 99px;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--mn-border-strong, var(--mn-border));
+  background: var(--mn-surface-0, var(--mn-bg));
+  color: var(--mn-fg-on-accent, var(--mn-bg));
+  transition: 0.3s var(--ease-out, ease);
+}
+
+.orchestrate-plan-screen__progress-mount .dr-node-i {
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  background: var(--mn-fg-subtle);
+  transition: 0.3s var(--ease-out, ease);
+}
+
+.orchestrate-plan-screen__progress-mount .dr-node.done {
+  background: #7fc99a;
+  border-color: #7fc99a;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-node--clickable {
+  cursor: pointer;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-node--clickable:hover {
+  box-shadow: 0 0 0 4px var(--mn-accent-soft);
+}
+
+.orchestrate-plan-screen__progress-mount .dr-node.active {
+  border-color: var(--mn-accent);
+  box-shadow: 0 0 0 4px var(--mn-accent-soft);
+}
+
+.orchestrate-plan-screen__progress-mount .dr-node.active .dr-node-i {
+  background: var(--mn-accent);
+  animation: dr-pulse 1.4s var(--ease-out, ease) infinite;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-track {
+  flex: 1;
+  height: 2px;
+  background: var(--mn-border-strong, var(--mn-border));
+  transition: background 0.4s var(--ease-out, ease);
+}
+
+.orchestrate-plan-screen__progress-mount .dr-track.fill {
+  background: #7fc99a;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-stepper-labels {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 -4px 14px;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-slabel {
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  color: var(--mn-fg-subtle);
+  flex: 1;
+  text-align: center;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-slabel.on {
+  color: var(--mn-accent);
+}
+
+.orchestrate-plan-screen__progress-mount .dr-slabel.did {
+  color: var(--mn-fg-muted);
+}
+
+.orchestrate-plan-screen__progress-mount .plan-progress__research-feed {
+  margin-top: 4px;
+}
+
+.orchestrate-plan-screen__progress-mount .plan-progress__research-feed .dr-prog {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+}
+
+.orchestrate-plan-screen__progress-mount .plan-progress__research-feed .dr-stepper {
+  margin-top: 16px;
+}
+
+.orchestrate-plan-screen__progress-mount .plan-progress__research-feed .dr-stepper-labels {
+  margin-bottom: 8px;
+}
+
+.orchestrate-plan-screen__progress-mount .plan-progress--reduced-motion .dr-dot,
+.orchestrate-plan-screen__progress-mount .plan-progress--reduced-motion .dr-node.active .dr-node-i {
+  animation: none;
+}
+
+.orchestrate-plan-screen__progress-mount .plan-progress--reduced-motion .dr-feed-row {
+  animation: none;
+}
+
+.orchestrate-plan-screen__popout {
+  margin-top: 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-surface-1);
+  box-shadow: 0 8px 28px color-mix(in oklch, var(--mn-bg) 72%, transparent);
+}
+
+.orchestrate-plan-screen__popout-title {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mn-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.orchestrate-plan-screen__popout-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+@media (max-width: 560px) {
+  .orchestrate-plan-screen__popout-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .orchestrate-plan-screen__popout-actions .orchestrate-plan-screen__btn {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orchestrate-plan-screen__progress-mount .dr-dot,
+  .orchestrate-plan-screen__progress-mount .dr-node.active .dr-node-i {
+    animation: none;
+  }
+}

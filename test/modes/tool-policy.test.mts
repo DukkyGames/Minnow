@@ -63,6 +63,13 @@ describe('filterToolsByMode', () => {
     assert.ok(filtered.some((t) => t.id === 'execute_command'));
   });
 
+  test('super-plan excludes execute_command but allows spawn_sub_agent', () => {
+    const filtered = filterToolsByMode(BUILT_IN_TOOLS, 'super-plan');
+    assert.ok(!filtered.some((t) => t.id === 'execute_command'));
+    assert.ok(filtered.some((t) => t.id === 'spawn_sub_agent'));
+    assert.ok(filtered.some((t) => t.id === 'get_sub_agent_status'));
+  });
+
   test('plan includes save_file and make_directory for plan document writes', () => {
     const filtered = filterToolsByMode(BUILT_IN_TOOLS, 'plan');
     assert.ok(filtered.some((t) => t.id === 'save_file'));
@@ -114,8 +121,8 @@ describe('per-mode matrix groups', () => {
       const allowedGroups = new Set(MODE_ALLOWED_GROUPS[modeId]);
       for (const groupId of TOOL_GROUP_ID_LIST) {
         const shouldAllow = allowedGroups.has(groupId);
-        if (groupId === 'files-write' && modeId === 'plan') {
-          // Plan: partial files-write — only save_file + make_directory
+        if (groupId === 'files-write' && (modeId === 'plan' || modeId === 'super-plan')) {
+          // Plan / Super Plan: partial files-write — only save_file + make_directory
           assert.ok(isToolAllowedForMode(modeId, 'save_file'));
           assert.ok(isToolAllowedForMode(modeId, 'make_directory'));
           assert.ok(!isToolAllowedForMode(modeId, 'append_file'));
@@ -243,7 +250,10 @@ describe('tool payload token reduction', () => {
       const fromGroups = new Set(expandToolGroups(MODE_ALLOWED_GROUPS[modeId]));
       const fromPolicy = filteredIds(modeId);
       for (const id of fromPolicy) {
-        assert.ok(fromGroups.has(id) || modeId === 'plan', `${modeId}: ${id} not in groups`);
+        assert.ok(
+          fromGroups.has(id) || modeId === 'plan' || modeId === 'super-plan',
+          `${modeId}: ${id} not in groups`,
+        );
       }
     }
   });

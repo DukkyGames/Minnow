@@ -10,6 +10,7 @@ import {
   isOrchestratePlanScreenSessionActive,
   isOrchestratePlanScreenSuppressingChatDom,
   isOrchestratePlanScreenSuspendedForChat,
+  restoreOrchestratePlanScreenSessionFromChat,
   showOrchestratePlanScreenSuspendedBanner,
   teardownOrchestratePlanScreen,
   teardownOrchestratePlanScreenDom,
@@ -169,15 +170,22 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   if (codeMount && isOrchestrateHubMounted()) {
     teardownOrchestrateHub();
   }
-  if (codeMount && isOrchestratePlanScreenSuspendedForChat(chat)) {
-    teardownHub();
-    area.innerHTML = '';
-    showOrchestratePlanScreenSuspendedBanner(area, chat);
-    renderPersistedSubAgentCardsForChat(chat);
-    refreshContextUsageRing();
-    return;
+  if (codeMount) {
+    restoreOrchestratePlanScreenSessionFromChat(chat);
   }
-  if (codeMount && !isOrchestratePlanScreenSessionActive(chat)) {
+  // Suspended plan session: keep the resume banner but still render the
+  // transcript beneath it (a banner-only page reads as a blank/lost chat).
+  const suspendedPlanChat = codeMount && isOrchestratePlanScreenSuspendedForChat(chat);
+  if (suspendedPlanChat) {
+    teardownHub();
+    if (!chat.history.length) {
+      area.innerHTML = '';
+      showOrchestratePlanScreenSuspendedBanner(area, chat);
+      renderPersistedSubAgentCardsForChat(chat);
+      refreshContextUsageRing();
+      return;
+    }
+  } else if (codeMount && !isOrchestratePlanScreenSessionActive(chat)) {
     teardownOrchestratePlanScreen();
   } else if (codeMount && isOrchestratePlanScreenMounted()) {
     teardownOrchestratePlanScreenDom();
@@ -210,6 +218,9 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
     teardownHub();
   }
   area.innerHTML = '';
+  if (suspendedPlanChat) {
+    showOrchestratePlanScreenSuspendedBanner(area, chat);
+  }
   const toolResultMap = new Map<
     string,
     {
@@ -386,7 +397,8 @@ function shouldStubOrchestrateBoardStreamDom(_chat: Chat): boolean {
 
 /** True when plan authoring screen suppresses chat bubble DOM. */
 function shouldStubOrchestratePlanScreenStreamDom(chat: Chat): boolean {
-  if (normalizeModeId(chat.modeId) !== 'plan' && normalizeModeId(chat.modeId) !== 'orchestrate') {
+  const modeId = normalizeModeId(chat.modeId);
+  if (modeId !== 'plan' && modeId !== 'super-plan' && modeId !== 'orchestrate') {
     return false;
   }
   return isOrchestratePlanScreenSuppressingChatDom(chat.id);

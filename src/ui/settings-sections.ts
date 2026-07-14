@@ -119,6 +119,7 @@ import {
   renderEntityEditorList,
 } from './settings-entity-editor';
 import { mountReefWidgetLlmSettings } from './reef-widget-settings';
+import { mountSuperPlanSettings } from './super-plan-settings';
 import { renderModelRoutingSection } from './settings-model-routing';
 import {
   appendProviderModelFields,
@@ -832,6 +833,9 @@ async function renderModesSection(): Promise<void> {
     (id, body) => {
       if (id === 'plan') {
         void mountPlanGranularityField(body);
+      }
+      if (id === 'super-plan') {
+        mountSuperPlanSettings(body);
       }
       if (id === 'reef') {
         mountReefWidgetLlmSettings(body);
