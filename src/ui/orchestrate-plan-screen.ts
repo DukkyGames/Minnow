@@ -325,6 +325,19 @@ function preparePlanScreenQuestionsBeforeTeardown(
   forceCloseAskQuestionModalForChat(chatId);
 }
 
+/** Scroll viewport that hosts the floating resume banner (sibling of #chatArea). */
+function resolvePlanScreenBannerHost(area: HTMLElement): HTMLElement {
+  const viewport = area.closest('.chat-viewport');
+  if (viewport instanceof HTMLElement) return viewport;
+  return area.parentElement ?? area;
+}
+
+/** Remove the suspended-session resume banner from the chat viewport. */
+export function removeOrchestratePlanScreenSuspendedBanner(): void {
+  if (typeof document === 'undefined') return;
+  document.getElementById(ORCHESTRATE_PLAN_BANNER_ID)?.remove();
+}
+
 /** Remove overlay nodes only; session state is preserved. */
 export function teardownOrchestratePlanScreenDom(
   options: { keepQuestionsInComposer?: boolean; chatId?: string } = {},
@@ -334,6 +347,7 @@ export function teardownOrchestratePlanScreenDom(
     preparePlanScreenQuestionsBeforeTeardown(options.chatId, options);
   }
   resetPlanScreenDomMounts();
+  removeOrchestratePlanScreenSuspendedBanner();
   document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID)?.remove();
   document.getElementById('chatArea')?.classList.remove(CHAT_AREA_PLAN_SCREEN_CLASS);
   document
@@ -1046,6 +1060,14 @@ function buildPlanScreenDom(opts: RenderOrchestratePlanScreenOptions): HTMLEleme
   root.setAttribute('role', 'region');
   root.setAttribute('aria-label', 'Orchestrate plan authoring');
 
+  const chat = findChatById(opts.chatId);
+  const isSuperPlanArtifact =
+    opts.phase === 'spec_confirm' ||
+    (opts.phase === 'preview' && chat && normalizeModeId(chat.modeId) === 'super-plan');
+  if (isSuperPlanArtifact) {
+    root.classList.add('orchestrate-plan-screen--super-plan-artifact');
+  }
+
   const inner = document.createElement('div');
   inner.className = 'orchestrate-plan-screen__inner';
 
@@ -1398,6 +1420,7 @@ function resetPlanScreenDomMounts(): void {
 export function renderOrchestratePlanScreen(
   opts: RenderOrchestratePlanScreenOptions,
 ): void {
+  removeOrchestratePlanScreenSuspendedBanner();
   teardownHub();
   const prior = planSession;
   resetPlanScreenDomMounts();
@@ -1494,11 +1517,17 @@ function suspendedPlanBannerText(
   return 'Planning in progress. Return to the planning screen to watch status and answer questions.';
 }
 
-/** Paint suspended-session banner into #chatArea above the transcript. */
+/** Paint suspended-session banner over the chat viewport (pinned at top while scrolling). */
 export function showOrchestratePlanScreenSuspendedBanner(
   area: HTMLElement,
   chat: Chat,
 ): void {
+  if (!isOrchestratePlanScreenSuspendedForChat(chat)) {
+    removeOrchestratePlanScreenSuspendedBanner();
+    return;
+  }
+  removeOrchestratePlanScreenSuspendedBanner();
+  const host = resolvePlanScreenBannerHost(area);
   const banner = document.createElement('div');
   banner.id = ORCHESTRATE_PLAN_BANNER_ID;
   banner.className = 'orchestrate-plan-screen-banner';
@@ -1566,5 +1595,5 @@ export function showOrchestratePlanScreenSuspendedBanner(
 
   actions.append(resumeBtn, dismissBtn);
   banner.append(text, actions);
-  area.appendChild(banner);
+  host.appendChild(banner);
 }

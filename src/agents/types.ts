@@ -167,6 +167,8 @@ export interface SubAgentRun {
   idempotencyKey?: string | null;
   /** Committed result ref when write-ahead completes (Phase 3). */
   committedResultRef?: string | null;
+  /** When watchdog recovery respawns this run, waiters should follow this id. */
+  supersededByRunId?: string | null;
 }
 
 /** Input to spawn a sub-agent. */

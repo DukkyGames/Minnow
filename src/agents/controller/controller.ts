@@ -30,6 +30,7 @@ import {
 } from '../../chat/context-budget';
 import { cloneSubAgentMessages, defaultSubAgentRunner, getSubAgentRunner } from '../sub-agent-runner';
 import { resolveSubAgentModelBinding } from '../resolve-sub-agent-binding';
+import { resolveSubAgentToolModeId } from '../resolve-sub-agent-tool-mode';
 import { resolveSubAgentTools } from '../sub-agent-tools';
 import { clearSubAgentRunListeners, emitSubAgentRunUpdated, subscribeSubAgentRuns } from '../sub-agent-events';
 import type { ApiMessage } from '../../types';
@@ -403,6 +404,7 @@ function launchExecuteRun(internals: RunInternals, modeId: string): void {
 
 async function executeRun(internals: RunInternals, modeId: string): Promise<void> {
   const { run, abort } = internals;
+  const toolModeId = resolveSubAgentToolModeId(modeId);
 
   try {
     const config = await loadSubAgentConfig();
@@ -448,7 +450,7 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
     run.modelId = modelId;
     emitSubAgentRunUpdated(run);
 
-    const parentTools = getEnabledToolDefinitionsForMode(modeId);
+    const parentTools = getEnabledToolDefinitionsForMode(toolModeId);
     const tools = resolveSubAgentTools(typeConfig, run.type, parentTools);
     const allowedNames = new Set(tools.map((t) => t.function.name));
     const systemPrompt = await buildSubAgentSystemPrompt(
@@ -473,7 +475,7 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
       return executeTool(name, args, {
         ...ctx,
         chatId: run.parentChatId ?? undefined,
-        modeId,
+        modeId: toolModeId,
         subAgentType: run.type,
       });
     };
@@ -576,6 +578,7 @@ async function spawnSubAgentInternal(
 
   const runId = createSubAgentRunId();
   const modeId = normalizeModeId(input.modeId);
+  const toolModeId = resolveSubAgentToolModeId(modeId);
 
   const run: SubAgentRun = {
     runId,
@@ -631,6 +634,8 @@ async function spawnSubAgentInternal(
     toolCallLog: [],
     queued: true,
     holdsConcurrencySlot: false,
+    toolModeId,
+    spawnModeId: modeId,
   };
 
   registerRun(runId, internals);
@@ -718,20 +723,38 @@ export async function restartSubAgent(
     parentTurnId,
     parentChatId,
     parentToolCallId: internals.run.parentToolCallId,
-    modeId: undefined,
+    modeId: internals.spawnModeId,
   });
 }
 
 export { getSubAgentRun, listActiveSubAgentRuns, listSubAgentRunsForParentChat, listSubAgentRunsForParentTurn };
+
+/** True when a terminal cancel was issued to spawn a watchdog recovery run. */
+function isWatchdogSupersedingCancel(error: string | null | undefined): boolean {
+  if (!error) return false;
+  return (
+    error === 'watchdog_tier1_restart' || error.startsWith('watchdog_tier2_autorecover:')
+  );
+}
 
 /** Block until run reaches a terminal state. */
 export async function waitForSubAgent(
   runId: string,
   signal?: AbortSignal,
 ): Promise<AggregateResult> {
-  const initial = getSubAgentRun(runId);
+  let activeRunId = runId;
+  const initial = getSubAgentRun(activeRunId);
   if (initial && isSubAgentRunTerminal(initial.status)) {
-    return buildAggregateResult(initial);
+    const nextId = initial.supersededByRunId?.trim();
+    if (
+      nextId &&
+      isWatchdogSupersedingCancel(initial.error) &&
+      (initial.status === 'cancelled' || initial.status === 'failed')
+    ) {
+      activeRunId = nextId;
+    } else {
+      return buildAggregateResult(initial);
+    }
   }
 
   const WAIT_FALLBACK_MS = 3_000;
@@ -754,7 +777,7 @@ export async function waitForSubAgent(
     };
 
     const onAbort = (): void => {
-      cancelSubAgent(runId, 'parent_abort');
+      cancelSubAgent(activeRunId, 'parent_abort');
       fail(new DOMException('Aborted', 'AbortError'));
     };
 
@@ -778,30 +801,45 @@ export async function waitForSubAgent(
     signal?.addEventListener('abort', onAbort, { once: true });
 
     const tryResolveFromRun = (run: SubAgentRun): void => {
-      if (run.runId !== runId) return;
+      if (run.runId !== activeRunId) return;
       if (!isSubAgentRunTerminal(run.status)) return;
+
+      const nextId = run.supersededByRunId?.trim();
+      if (
+        nextId &&
+        isWatchdogSupersedingCancel(run.error) &&
+        (run.status === 'cancelled' || run.status === 'failed')
+      ) {
+        activeRunId = nextId;
+        const replacement = getSubAgentRun(nextId);
+        if (replacement) {
+          tryResolveFromRun(replacement);
+        }
+        return;
+      }
+
       finish(buildAggregateResult(run));
     };
 
     unsubscribe = subscribeSubAgentRuns(tryResolveFromRun);
 
-    const latest = getSubAgentRun(runId);
+    const latest = getSubAgentRun(activeRunId);
     if (latest) {
       tryResolveFromRun(latest);
       if (settled) return;
     }
 
     fallbackTimer = setTimeout(() => {
-      const row = getSubAgentRun(runId);
+      const row = getSubAgentRun(activeRunId);
       if (row) {
         tryResolveFromRun(row);
         if (settled) return;
         // Still in flight — subscription remains active until terminal or abort.
         return;
       }
-      void resolveWaitFromPersistence(runId).then((aggregate) => {
+      void resolveWaitFromPersistence(activeRunId).then((aggregate) => {
         if (aggregate) finish(aggregate);
-        else fail(new Error(`Error: unknown sub-agent run ${runId}`));
+        else fail(new Error(`Error: unknown sub-agent run ${activeRunId}`));
       });
     }, WAIT_FALLBACK_MS);
   });
@@ -1043,8 +1081,6 @@ async function tier1RestartSubAgent(runId: string, reason: string): Promise<void
     attempt,
   } = old;
 
-  cancelSubAgent(runId, 'watchdog_tier1_restart');
-
   const note = `Watchdog tier-1 recovery (${reason})`;
   const nextTask = `${note}\n\n${task}`;
 
@@ -1057,7 +1093,13 @@ async function tier1RestartSubAgent(runId: string, reason: string): Promise<void
     parentToolCallId: parentToolCallId ?? undefined,
     boardTaskId: boardTaskId ?? undefined,
     category,
+    modeId: internals.spawnModeId,
   });
+
+  internals.run.supersededByRunId = result.runId;
+  emitSubAgentRunUpdated(internals.run);
+
+  cancelSubAgent(runId, 'watchdog_tier1_restart');
 
   const next = getRunInternals(result.runId);
   if (!next) return;
@@ -1115,8 +1157,6 @@ async function tier2AutoRecover(runId: string, reason: string): Promise<void> {
     return;
   }
 
-  cancelSubAgent(runId, `watchdog_tier2_autorecover:${reason}`);
-
   const note = `Watchdog AFK auto-recovery (${reason})`;
   const nextTask = `${note}\n\n${task}`;
 
@@ -1129,7 +1169,13 @@ async function tier2AutoRecover(runId: string, reason: string): Promise<void> {
     parentToolCallId: parentToolCallId ?? undefined,
     boardTaskId: boardTaskId ?? undefined,
     category,
+    modeId: internals.spawnModeId,
   });
+
+  internals.run.supersededByRunId = result.runId;
+  emitSubAgentRunUpdated(internals.run);
+
+  cancelSubAgent(runId, `watchdog_tier2_autorecover:${reason}`);
 
   const next = getRunInternals(result.runId);
   if (!next) return;

@@ -651,6 +651,17 @@ function ensureCurrentGenerationId(raw) {
   return GENERATION_ID_RE.test(id) ? id : undefined;
 }
 
+/** Coerce Super Plan pipeline state (mirror src/state/sessions.ts ensureSuperPlanPersisted). */
+function ensureSuperPlanPersisted(raw) {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const sp = /** @type {Record<string, unknown>} */ (raw);
+  if (typeof sp.slug !== 'string' || !sp.slug.trim()) return undefined;
+  if (typeof sp.prompt !== 'string') return undefined;
+  if (typeof sp.activeStage !== 'string' || !sp.activeStage.trim()) return undefined;
+  if (!sp.stages || typeof sp.stages !== 'object') return undefined;
+  return sp;
+}
+
 /** Coerce /goal loop state (mirror src/state/sessions.ts ensureActiveGoal). */
 function ensureActiveGoal(raw) {
   if (!raw || typeof raw !== 'object') return undefined;
@@ -724,6 +735,7 @@ function ensureChatShape(raw) {
       ? row.activeBranchByFork
       : undefined;
   const activeGoal = ensureActiveGoal(row.activeGoal);
+  const superPlan = ensureSuperPlanPersisted(row.superPlan);
 
   return {
     id: typeof row.id === 'string' && row.id ? row.id : newChatId(),
@@ -764,6 +776,7 @@ function ensureChatShape(raw) {
     ...(terminalHistory?.length ? { terminalHistory } : {}),
     ...(currentGenerationId ? { currentGenerationId } : {}),
     ...(activeGoal ? { activeGoal } : {}),
+    ...(superPlan ? { superPlan } : {}),
     ...(row.unread === true ? { unread: true } : {}),
     ...(typeof row.lastAssistantAt === 'number' &&
     Number.isFinite(row.lastAssistantAt) &&

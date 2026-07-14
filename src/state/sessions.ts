@@ -1030,6 +1030,15 @@ function ensurePersistedSubAgentRuns(
       r.boardTaskId === null || typeof r.boardTaskId === 'string'
         ? (r.boardTaskId as string | null)
         : undefined;
+    const structuredOutcome =
+      r.structuredOutcome &&
+      typeof r.structuredOutcome === 'object' &&
+      !Array.isArray(r.structuredOutcome)
+        ? (r.structuredOutcome as PersistedSubAgentRun['structuredOutcome'])
+        : undefined;
+    const budgetEvents = Array.isArray(r.budgetEvents)
+      ? (r.budgetEvents as PersistedSubAgentRun['budgetEvents'])
+      : undefined;
     out.push({
       runId,
       parentTurnId,
@@ -1038,6 +1047,8 @@ function ensurePersistedSubAgentRuns(
       task,
       status,
       summary: typeof r.summary === 'string' ? r.summary : '',
+      ...(structuredOutcome ? { structuredOutcome } : {}),
+      ...(budgetEvents?.length ? { budgetEvents } : {}),
       ...(err === null || typeof err === 'string' ? { error: err as string | null } : {}),
       startedAt: typeof r.startedAt === 'string' ? r.startedAt : null,
       endedAt: typeof r.endedAt === 'string' ? r.endedAt : null,

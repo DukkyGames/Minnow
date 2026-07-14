@@ -24,6 +24,17 @@ import { appendStreamingAssistantRow, renderChatFromHistory } from '../../src/ui
 import { isStreamDomVisible } from '../../src/chat/streaming-state.ts';
 import { createEmptyChatObject, setSessionStateForTests } from '../../src/state/sessions.ts';
 
+/** Test DOM matching Code chat: `.chat-viewport` > `#chatArea`. */
+function mountCodeChatAreaForTests(): HTMLElement {
+  const viewport = document.createElement('div');
+  viewport.className = 'chat-viewport';
+  const area = document.createElement('main');
+  area.id = 'chatArea';
+  viewport.appendChild(area);
+  document.body.appendChild(viewport);
+  return area;
+}
+
 describe('orchestrate plan screen', () => {
   afterEach(() => {
     resetOrchestratePlanScreenForTests();
@@ -72,9 +83,7 @@ describe('orchestrate plan screen', () => {
     globalThis.document = window.document;
     globalThis.HTMLElement = window.HTMLElement;
 
-    const area = document.createElement('main');
-    area.id = 'chatArea';
-    document.body.appendChild(area);
+    const area = mountCodeChatAreaForTests();
     document.body.appendChild(
       Object.assign(document.createElement('div'), { id: 'mainColumn' }),
     );
@@ -97,6 +106,11 @@ describe('orchestrate plan screen', () => {
 
     assert.ok(document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID));
     assert.match(document.body.textContent ?? '', /Confirm build spec/);
+    const root = document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID);
+    assert.ok(
+      root?.classList.contains('orchestrate-plan-screen--super-plan-artifact'),
+      'spec_confirm should use the wider Super Plan artifact layout',
+    );
     const preview = document.querySelector('.orchestrate-plan-screen__preview');
     assert.ok(preview, 'build spec preview mount should exist');
     assert.match(
@@ -157,9 +171,7 @@ describe('orchestrate plan screen', () => {
     globalThis.document = window.document;
     globalThis.HTMLElement = window.HTMLElement;
 
-    const area = document.createElement('main');
-    area.id = 'chatArea';
-    document.body.appendChild(area);
+    const area = mountCodeChatAreaForTests();
     document.body.appendChild(
       Object.assign(document.createElement('div'), { id: 'mainColumn' }),
     );
@@ -190,7 +202,18 @@ describe('orchestrate plan screen', () => {
     assert.equal(session?.chatId, chat.id);
 
     renderChatFromHistory(chat);
-    assert.ok(document.getElementById(ORCHESTRATE_PLAN_BANNER_ID));
+    const banner = document.getElementById(ORCHESTRATE_PLAN_BANNER_ID);
+    assert.ok(banner);
+    assert.equal(banner?.parentElement?.classList.contains('chat-viewport'), true);
+    assert.equal(area.contains(banner), false, 'banner should float over chat, not inside scroll content');
+
+    const resumeBtn = banner?.querySelector(
+      '.orchestrate-plan-screen-banner__resume',
+    ) as HTMLButtonElement | null;
+    assert.ok(resumeBtn);
+    resumeBtn?.click();
+    assert.equal(document.getElementById(ORCHESTRATE_PLAN_BANNER_ID), null);
+    assert.ok(document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID));
 
     session = getOrchestratePlanScreenSession();
     assert.equal(session?.phase, 'working');
@@ -206,9 +229,7 @@ describe('orchestrate plan screen', () => {
       return 0;
     };
 
-    const area = document.createElement('main');
-    area.id = 'chatArea';
-    document.body.appendChild(area);
+    const area = mountCodeChatAreaForTests();
     document.body.appendChild(
       Object.assign(document.createElement('div'), { id: 'mainColumn' }),
     );
@@ -310,9 +331,7 @@ describe('orchestrate plan screen', () => {
     globalThis.document = window.document;
     globalThis.HTMLElement = window.HTMLElement;
 
-    const area = document.createElement('main');
-    area.id = 'chatArea';
-    document.body.appendChild(area);
+    const area = mountCodeChatAreaForTests();
     document.body.appendChild(
       Object.assign(document.createElement('div'), { id: 'mainColumn' }),
     );
@@ -348,7 +367,10 @@ describe('orchestrate plan screen', () => {
     assert.equal(session?.planScreenSuspended, true);
 
     renderChatFromHistory(chat);
-    assert.ok(document.getElementById(ORCHESTRATE_PLAN_BANNER_ID));
+    const banner = document.getElementById(ORCHESTRATE_PLAN_BANNER_ID);
+    assert.ok(banner);
+    assert.equal(banner?.parentElement?.classList.contains('chat-viewport'), true);
+    assert.equal(area.contains(banner), false, 'banner should float over chat, not inside scroll content');
     assert.equal(document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID), null);
     assert.match(
       document.getElementById('chatArea')?.textContent ?? '',
@@ -444,9 +466,7 @@ describe('orchestrate plan screen', () => {
     globalThis.document = window.document;
     globalThis.HTMLElement = window.HTMLElement;
 
-    const area = document.createElement('main');
-    area.id = 'chatArea';
-    document.body.appendChild(area);
+    const area = mountCodeChatAreaForTests();
     document.body.appendChild(
       Object.assign(document.createElement('div'), { id: 'mainColumn' }),
     );

@@ -182,6 +182,26 @@ function isAggregateResult(value: unknown): value is AggregateResult {
   );
 }
 
+/** Reject empty or placeholder plan-reviewer handoffs so the stage can retry. */
+function assertPlanReviewerAggregate(
+  result: unknown,
+  pass: number,
+): AggregateResult {
+  if (!isAggregateResult(result)) {
+    throw new Error(`Plan review (pass ${pass}) did not return a sub-agent result.`);
+  }
+  const summary = (result.outcome?.summary ?? result.summary ?? '').trim();
+  const placeholder = 'Sub-agent completed with no text output.';
+  if (result.status !== 'completed' || !summary || summary === placeholder) {
+    const detail = result.error?.trim() || summary || result.status;
+    throw new Error(
+      `Plan review (pass ${pass}) failed (${detail}). ` +
+        'Retry the stage or check the reviewer model in Super Plan settings.',
+    );
+  }
+  return result;
+}
+
 async function runGrillStage(chat: Chat): Promise<SuperPlanStageOutcome> {
   const state = ensureSuperPlanState(chat);
   const config = getSuperPlanConfigSync();
@@ -365,16 +385,15 @@ async function runReviewStage(
     throw err;
   }
 
-  if (isAggregateResult(result)) {
-    const critique = formatReviewCritiqueForPass2(
-      result.outcome?.summary ?? result.summary,
-      JSON.stringify(result.outcome?.findings ?? [], null, 2),
-    );
-    if (pass === 1) {
-      patchSuperPlanState(chat, { review1Critique: critique });
-    } else {
-      patchSuperPlanState(chat, { review2Critique: critique });
-    }
+  const aggregate = assertPlanReviewerAggregate(result, pass);
+  const critique = formatReviewCritiqueForPass2(
+    aggregate.outcome?.summary ?? aggregate.summary,
+    JSON.stringify(aggregate.outcome?.findings ?? [], null, 2),
+  );
+  if (pass === 1) {
+    patchSuperPlanState(chat, { review1Critique: critique });
+  } else {
+    patchSuperPlanState(chat, { review2Critique: critique });
   }
 
   return { kind: 'done', artifactPath: planPath };
