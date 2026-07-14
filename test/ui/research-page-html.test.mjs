@@ -30,8 +30,10 @@ describe('research page HTML', () => {
     });
   }
 
-  test('topbar button calls openResearchFromTopbar', () => {
-    assert.match(html, /id="btnResearch"[^>]*onclick="openResearchFromTopbar\(\)"/);
+  test('topbar button exists for research', () => {
+    assert.match(html, /id="btnResearch"/);
+    const tag = html.match(/<button[^>]*id="btnResearch"[^>]*>/)?.[0] ?? '';
+    assert.doesNotMatch(tag, /\bon[a-z]+="/i);
   });
 
   test('research view is before appBody', () => {
