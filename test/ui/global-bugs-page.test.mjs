@@ -9,6 +9,10 @@ const html = readFileSync(join(root, 'index.html'), 'utf8');
 const pageTs = readFileSync(join(root, 'src/ui/global-bugs-page.ts'), 'utf8');
 const pageCss = readFileSync(join(root, 'src/styles/global-bugs-page.css'), 'utf8');
 const benchmarkTs = readFileSync(join(root, 'src/ui/benchmark-page.ts'), 'utf8');
+const mainTs = readFileSync(join(root, 'src/main.ts'), 'utf8');
+const appHostTs = readFileSync(join(root, 'src/os/app-host.ts'), 'utf8');
+const appModulesTs = readFileSync(join(root, 'src/os/app-modules.ts'), 'utf8');
+const shellCss = readFileSync(join(root, 'src/styles/minnowos-shell.css'), 'utf8');
 
 describe('global bugs page (POLISH-015)', () => {
   test('globalBugsView exists and sits after topbar before appBody', () => {
@@ -49,5 +53,33 @@ describe('global bugs page (POLISH-015)', () => {
     );
     assert.match(openBlock, /isGlobalBugsPageOpen\(\)/);
     assert.match(openBlock, /closeGlobalBugs\(\)/);
+  });
+
+  test('initGlobalBugsPage runs on every boot (MIN-411)', () => {
+    assert.match(mainTs, /initGlobalBugsPage\(\)/);
+    assert.match(appModulesTs, /await ensureGlobalBugsInitialized\(\)/);
+    assert.doesNotMatch(
+      appModulesTs.slice(appModulesTs.indexOf('ensureBootAppsInitialized')),
+      /isLegacyBugsHash/,
+    );
+  });
+
+  test('globalBugsView is reparented into the Code layer (MIN-411)', () => {
+    assert.match(appHostTs, /getElementById\('globalBugsView'\)/);
+    assert.match(appHostTs, /codeWrap\.appendChild\(globalBugs\)/);
+  });
+
+  test('MinnowOS shows global bugs inside the Code layer', () => {
+    assert.match(shellCss, /\.mn-os-code-layer \.global-bugs-page\.is-open/);
+  });
+
+  test('closeGlobalBugs restores the prior Code hash in MinnowOS', () => {
+    const closeBlock = pageTs.slice(
+      pageTs.indexOf('export function closeGlobalBugs'),
+      pageTs.indexOf('export function openGlobalBugs'),
+    );
+    assert.match(closeBlock, /hashBeforeGlobalBugs/);
+    assert.match(closeBlock, /isOsShellEnabled\(\)/);
+    assert.doesNotMatch(closeBlock, /window\.location\.hash = '#\/';/);
   });
 });
