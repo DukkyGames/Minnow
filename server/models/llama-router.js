@@ -20,6 +20,7 @@ import {
   readLlamaCppConfig,
 } from './llama-args.js';
 import { writeLlamaPresetIni } from './llama-preset.js';
+import { mapLlamaError } from './llama-errors.js';
 import {
   buildLlamaServerEnv,
   llamaServerSpawnCwd,
@@ -540,7 +541,7 @@ export async function loadModelOnRouter(model) {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Router load HTTP ${res.status}: ${text.slice(0, 200)}`);
+    throw new Error(mapLlamaError(`Router load HTTP ${res.status}: ${text.slice(0, 200)}`));
   }
   return res.json();
 }
@@ -560,7 +561,7 @@ export async function unloadModelFromRouter(model) {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Router unload HTTP ${res.status}: ${text.slice(0, 200)}`);
+    throw new Error(mapLlamaError(`Router unload HTTP ${res.status}: ${text.slice(0, 200)}`));
   }
   return res.json();
 }
@@ -591,12 +592,13 @@ export async function fetchRouterLoadedModels() {
 }
 
 /**
- * Mark stale running state stopped; clear dead PIDs on boot.
+ * Mark stale running state stopped; auto-start router when lifecycle is "always".
  */
 export async function reconcileRouterOnBoot() {
   await loadRouterStateFromDisk();
   if (!memoryState) return;
   if (memoryState.status !== 'running' && memoryState.status !== 'starting') {
+    await applyRouterLifecycleOnBoot();
     return;
   }
   const alive = memoryState.pid ? isPidAlive(memoryState.pid) : false;
@@ -614,6 +616,30 @@ export async function reconcileRouterOnBoot() {
       pid: null,
       error: null,
     });
+  }
+  await applyRouterLifecycleOnBoot();
+}
+
+/**
+ * Start the router on boot when lifecycle policy is "always".
+ */
+export async function applyRouterLifecycleOnBoot() {
+  const config = await readLlamaCppConfig();
+  const lifecycle = config.router?.lifecycle ?? 'on-demand';
+  if (lifecycle === 'off') return;
+
+  const resolved = await resolveLlamaServer();
+  if (!resolved.path) return;
+
+  const supported = await probeLlamaRouterSupport(resolved.path);
+  if (!supported) return;
+
+  if (lifecycle === 'always') {
+    try {
+      await startRouter();
+    } catch {
+      /* router may fail if port busy — user can restart from Settings */
+    }
   }
 }
 

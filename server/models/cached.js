@@ -519,8 +519,6 @@ export async function listCachedModels() {
     models.push(...(await scanCustomDir(dir.trim(), seen)));
   }
 
-  models.push(...(await scanOllamaApi(seen)));
-
   models.sort((a, b) => a.repo_id.localeCompare(b.repo_id));
   return { models };
 }

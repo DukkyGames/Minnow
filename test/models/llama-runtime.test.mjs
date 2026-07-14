@@ -7,6 +7,7 @@ import { describe, test } from 'node:test';
 import {
   LLAMA_CPP_RELEASE_TAG,
   isLlamaRuntimeInstallable,
+  normalizeLlamaReleaseTag,
   pickLlamaReleaseAssetName,
 } from '../../server/models/llama-runtime.js';
 
@@ -17,6 +18,11 @@ describe('llama runtime', () => {
       (process.platform === 'darwin' && (process.arch === 'x64' || process.arch === 'arm64')) ||
       (process.platform === 'linux' && (process.arch === 'x64' || process.arch === 'arm64'));
     assert.equal(isLlamaRuntimeInstallable(), supported);
+  });
+
+  test('normalizeLlamaReleaseTag compares build numbers', () => {
+    assert.ok(normalizeLlamaReleaseTag('b9999') > normalizeLlamaReleaseTag('b9628'));
+    assert.equal(normalizeLlamaReleaseTag('b9628'), normalizeLlamaReleaseTag('9628'));
   });
 
   test('picks a CPU asset name for the current platform', () => {

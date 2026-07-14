@@ -8,6 +8,7 @@ import path from 'node:path';
 import { getModelsConfig } from './models-config.js';
 import { getModelsRoot, repoDownloadDir } from './paths.js';
 import { listDownloads } from './download.js';
+import { ggufWeightsGb, readGgufMeta } from './gguf-meta.js';
 
 /** Paths that must never be walked (safety). */
 const BLOCKED_ROOTS = ['/sys', '/proc', '/dev', '/run', '/var/run'];
@@ -19,6 +20,10 @@ const BLOCKED_ROOTS = ['/sys', '/proc', '/dev', '/run', '/var/run'];
  * @property {string} path
  * @property {number} sizeBytes
  * @property {number} mtimeMs
+ * @property {string | null} [architecture]
+ * @property {number | null} [blockCount]
+ * @property {number | null} [parameterCount]
+ * @property {number | null} [weightsGb]
  */
 
 /**
@@ -171,6 +176,18 @@ export async function scanInstalledArtifacts() {
   out.push(...(await scanCustomDirArtifacts(seenPaths)));
 
   out.sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+  await Promise.all(
+    out.map(async (artifact) => {
+      const meta = await readGgufMeta(artifact.path);
+      if (!meta) return;
+      artifact.architecture = meta.architecture;
+      artifact.blockCount = meta.blockCount;
+      artifact.parameterCount = meta.parameterCount;
+      artifact.weightsGb = ggufWeightsGb(meta);
+    }),
+  );
+
   return out;
 }
 

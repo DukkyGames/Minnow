@@ -13,6 +13,7 @@ import {
   type ServeRecord,
 } from '../../models/api-client';
 import { ensureLlamaRuntimeInstalled } from './llama-install-prompt';
+import { splitShellWords } from '../../utils/shell-words';
 import { setStatus } from '../status';
 
 export interface OpenServeDialogOptions {
@@ -311,7 +312,7 @@ function openServeDialogInner(
       if (Number.isFinite(parallel) && parallel > 0) llama.parallel = parallel;
 
       const extraRaw = extraInput.value.trim();
-      if (extraRaw) llama.extra_args = extraRaw.split(/\s+/);
+      if (extraRaw) llama.extra_args = splitShellWords(extraRaw);
 
       if (unifiedCheck.checked) {
         llama.env = { GGML_CUDA_ENABLE_UNIFIED_MEMORY: '1' };

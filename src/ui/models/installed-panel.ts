@@ -291,33 +291,14 @@ function renderArtifactRow(
 
     actions.append(useBtn, settingsBtn);
   } else {
-    const legacyBtn = el('button', 'models-inline-btn is-primary', 'Serve (legacy)');
-    legacyBtn.type = 'button';
-    legacyBtn.addEventListener('click', () => {
-      void openServeDialog({
-        modelPath: artifact.path,
-        modelLabel: artifact.filename,
-        mode: 'serve',
-      }).then(() => refreshInstalledSection());
-    });
-    actions.appendChild(legacyBtn);
+    const hint = el(
+      'p',
+      'models-muted',
+      'Router unavailable — update llama.cpp in Settings → Servers.',
+    );
+    actions.appendChild(hint);
   }
 
-  const ollamaBtn = el('button', 'models-inline-btn', 'Use Ollama');
-  ollamaBtn.type = 'button';
-  ollamaBtn.disabled = !runtimes?.ollama.serving;
-  ollamaBtn.addEventListener('click', () => {
-    void selectProviderModel('ollama', artifact.repoId || artifact.filename);
-  });
-
-  const lmBtn = el('button', 'models-inline-btn', 'Use LM Studio');
-  lmBtn.type = 'button';
-  lmBtn.disabled = !runtimes?.lmStudio.available;
-  lmBtn.addEventListener('click', () => {
-    void selectProviderModel('lm-studio-local', artifact.filename);
-  });
-
-  actions.append(ollamaBtn, lmBtn);
   row.appendChild(actions);
   return row;
 }
@@ -333,8 +314,6 @@ function renderRuntimesCard(runtimes: RuntimeDetection): HTMLElement {
           ? 'not installed — Load will prompt to install'
           : 'not found'
     }`,
-    `Ollama: ${runtimes.ollama.serving ? 'serving' : runtimes.ollama.available ? 'installed' : 'not found'}`,
-    `LM Studio: ${runtimes.lmStudio.available ? runtimes.lmStudio.baseUrl : 'not reachable'}`,
   ];
   for (const line of lines) {
     card.appendChild(el('p', 'models-muted', line));

@@ -18,13 +18,13 @@ Rebuild local GGUF serving around upstream **llama-server router mode**: one per
 - [x] Boot reconcile in `bootstrapMinnowRuntime()`
 - [x] Tests: `test/models/llama-router.test.mjs`
 
-### Phase 2 — Runtime version management (pending)
+### Phase 2 — Runtime version management (shipped)
 
-- [ ] `latestTag` + `updateAvailable` on `GET /api/models/llama-runtime`
-- [ ] One-click update with version rollback
-- [ ] Bump default pin past router-mode minimum
-- [ ] Post-install smoke test
-- [ ] Friendly OOM / driver mismatch error mapping
+- [x] `latestTag` + `updateAvailable` on `GET /api/models/llama-runtime`
+- [x] One-click update with version rollback (`POST /api/models/llama-runtime/rollback`)
+- [x] Pinned tag `b9628` (router-mode minimum); update fetches GitHub latest
+- [x] Post-install smoke test (`probeLlamaRouterSupport`)
+- [x] Friendly OOM / driver mismatch error mapping (`server/models/llama-errors.js`)
 
 ### Phase 3 — UX overhaul (shipped)
 
@@ -33,26 +33,28 @@ Rebuild local GGUF serving around upstream **llama-server router mode**: one per
 - [x] **Serve dialog** — demoted to Launch settings (`mode: 'settings'`), server-side `perModel` persistence
 - [x] **Settings → Servers** — router panel instead of per-serve list
 - [x] **Picker** — `llama-cpp-local` in known-local set; load/unload via provider capability
-- [ ] Quoted-string parsing for `extra_args` (shell-words)
-- [ ] `models-max` + lifecycle policy controls in Settings
+- [x] Quoted-string parsing for `extra_args` (`server/models/shell-words.js`, `src/utils/shell-words.ts`)
+- [x] `models-max` + lifecycle policy controls in Settings (`router.lifecycle`: off / on-demand / always)
 
-### Phase 4 — Fit & profiles accuracy (pending)
+### Phase 4 — Fit & profiles accuracy (shipped)
 
-- [ ] `server/models/gguf-meta.js` — parse GGUF headers server-side
-- [ ] Partial offload suggestions from real layer counts
-- [ ] Recompute catalog fit from on-disk headers
+- [x] `server/models/gguf-meta.js` — parse GGUF headers server-side
+- [x] Partial offload suggestions from real layer counts (`suggestGpuLayers` in `profiles.js`)
+- [x] Recompute catalog fit from on-disk headers (`installed.js`, `GET /api/models/profiles?gguf_path=`)
 
-### Phase 5 — Cleanup (pending)
+### Phase 5 — Cleanup (shipped)
 
-- [ ] Remove legacy single-serve path after one release
-- [ ] Remove Ollama/LM Studio fake serve rows
-- [ ] Extended UI tests for picker load-state
+- [x] Remove legacy single-serve path (router required; upgrade prompt when unsupported)
+- [x] Remove Ollama/LM Studio fake serve rows and Installed panel buttons
+- [x] Extended UI tests (`settings-servers-section-llama.test.mts`, shell-words, gguf-meta, profiles-offload)
 
 ## Key files
 
 | Area | Files |
 |------|-------|
 | Router backend | `server/models/llama-router.js`, `llama-preset.js`, `llama-args.js`, `routes.js`, `serve.js` |
+| Runtime | `server/models/llama-runtime.js`, `llama-errors.js`, `llama-variant.js` |
+| Fit | `server/models/gguf-meta.js`, `profiles.js`, `installed.js` |
 | UI | `src/ui/models/installed-panel.ts`, `serve-dialog.ts`, `recommend-panel.ts`, `settings-servers-section.ts` |
 | Client | `src/models/api-client.ts`, `src/api/models.ts`, `src/providers/provider-host.ts` |
 | Styles | `src/styles/models-page.css` |
@@ -62,3 +64,4 @@ Rebuild local GGUF serving around upstream **llama-server router mode**: one per
 - Scene: developer at desk, switching local models without stopping a server each time.
 - Restrained instrumentation: router status pill uses semantic success/warning/danger only.
 - No serve dialog on happy path; Launch settings is optional per-model tuning.
+- Router lifecycle `always` auto-starts the router on `npm start` when a capable binary is installed.

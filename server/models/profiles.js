@@ -72,15 +72,32 @@ function vramBudgetGb(system) {
 }
 
 /**
+ * Suggest GPU layer count from real block count and VRAM budget.
+ * @param {number} blockCount
+ * @param {number} weightsGb
+ * @param {number} budgetGb
+ * @param {number} fixedOverheadGb
+ */
+export function suggestGpuLayers(blockCount, weightsGb, budgetGb, fixedOverheadGb = 0.6) {
+  if (!blockCount || blockCount <= 0) return 999;
+  const layerGb = weightsGb / blockCount;
+  const available = budgetGb - fixedOverheadGb;
+  if (available <= 0) return 0;
+  const layers = Math.floor(available / Math.max(layerGb, 0.01));
+  return Math.max(0, Math.min(blockCount, layers));
+}
+
+/**
  * Build serve profiles for a model on the given hardware snapshot.
  * @param {Record<string, unknown>} system — hardware probe row
  * @param {Record<string, unknown>} model — catalog or cached model metadata
- * @param {{ serveWeightsGb?: number, serveQuant?: string }} [opts]
+ * @param {{ serveWeightsGb?: number, serveQuant?: string, blockCount?: number }} [opts]
  * @returns {ServeProfile[]}
  */
 export function computeServeProfiles(system, model, opts = {}) {
   const budget = vramBudgetGb(system);
   const fixedGb = opts.serveWeightsGb;
+  const blockCount = typeof opts.blockCount === 'number' ? opts.blockCount : null;
   const baseQuant = (opts.serveQuant || model.quantization || model.quant || 'Q4_K_M')
     .toString()
     .toUpperCase();
@@ -99,11 +116,15 @@ export function computeServeProfiles(system, model, opts = {}) {
     const kv = kvGb(model, t.ctx, t.cache);
     const est = w + kv + 0.6;
     const fits = est <= budget;
+    const ngpu =
+      blockCount != null
+        ? suggestGpuLayers(blockCount, w, budget, kv + 0.6)
+        : t.ngpu;
     profiles.push({
       key: t.key,
       label: t.label,
       quant,
-      n_gpu_layers: t.ngpu,
+      n_gpu_layers: ngpu,
       n_cpu_moe: 0,
       cache_type: t.cache,
       ctx: t.ctx,
