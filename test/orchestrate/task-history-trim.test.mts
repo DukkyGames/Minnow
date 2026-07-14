@@ -9,6 +9,7 @@ import {
   TASK_HISTORY_TOOL_BODY_MAX,
   TASK_HISTORY_TRIM_MARKER,
   trimBoardTaskChatHistory,
+  trimIdleBoardTaskChats,
   trimTaskRelatedChats,
 } from '../../src/chat/orchestrate/task-history-trim.ts';
 import type { Chat, ToolCall } from '../../src/types.ts';
@@ -83,5 +84,52 @@ describe('task history trim', () => {
       (id) => chats.get(id),
     );
     assert.match(String(buildChat.history[1]!.content), new RegExp(TASK_HISTORY_TRIM_MARKER));
+  });
+
+  test('trimIdleBoardTaskChats trims non-streaming chats across the board', () => {
+    const buildChat = makeBoardTaskChat(TASK_HISTORY_KEEP_TOOL_ROUNDS + 2);
+    const testChat = makeBoardTaskChat(TASK_HISTORY_KEEP_TOOL_ROUNDS + 2);
+    testChat.id = '55555555-5555-5555-5555-555555555555';
+    testChat.boardTaskId = 'W1-A';
+    const chats = new Map<string, Chat>([
+      [CHAT_ID, buildChat],
+      [testChat.id, testChat],
+    ]);
+    const board = {
+      tasks: [
+        {
+          id: 'W1-A',
+          title: 'T',
+          wave: 'W1',
+          category: 'build',
+          status: 'testing',
+          chatId: CHAT_ID,
+          testChatId: testChat.id,
+        },
+      ],
+      waves: [{ id: 'W1' }],
+    };
+    const trimmed = trimIdleBoardTaskChats(
+      board,
+      OTHER_CHAT_ID,
+      (id) => chats.get(id),
+    );
+    assert.equal(trimmed, 2);
+    assert.match(String(buildChat.history[1]!.content), new RegExp(TASK_HISTORY_TRIM_MARKER));
+    assert.match(String(testChat.history[1]!.content), new RegExp(TASK_HISTORY_TRIM_MARKER));
+  });
+
+  test('trimBoardTaskChatHistory skips streaming chats', async () => {
+    const { setStreaming } = await import('../../src/app-state.ts');
+    const chat = makeBoardTaskChat(TASK_HISTORY_KEEP_TOOL_ROUNDS + 2);
+    const before = chat.history[1]!.content;
+    setStreaming(true, CHAT_ID);
+    try {
+      const changed = trimBoardTaskChatHistory(chat, OTHER_CHAT_ID);
+      assert.equal(changed, false);
+      assert.equal(chat.history[1]!.content, before);
+    } finally {
+      setStreaming(false, CHAT_ID);
+    }
   });
 });

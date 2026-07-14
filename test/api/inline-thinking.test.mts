@@ -131,6 +131,19 @@ describe('HarmonyChannelRouter', () => {
     assert.equal(thinkingText(parts), 'thinking here');
     assert.equal(replyText(parts), 'visible reply');
   });
+
+  test('suppresses commentary tool-call channel from visible prose', () => {
+    const router = new HarmonyChannelRouter();
+    const parts = [
+      ...router.feed('<|channel|>commentary to=functions.list_directory '),
+      ...router.feed('code{ "path": "." }'),
+      ...router.feed('<|channel|>final<|message|>Listing the workspace.'),
+      ...router.flush(),
+    ];
+    assert.equal(replyText(parts), 'Listing the workspace.');
+    assert.match(router.getCommentaryParseText(), /to=functions\.list_directory/);
+    assert.match(router.getCommentaryParseText(), /"path":\s*"\.\s*"/);
+  });
 });
 
 describe('extractReasoningDelta', () => {

@@ -972,7 +972,9 @@ async function streamCompletionTurn(
   }
 
   const tEnd = performance.now();
-  const toolCalls = mergeContentJsonToolCalls(fullText, finalizeToolCalls(toolAcc));
+  const toolCalls = mergeContentJsonToolCalls(fullText, finalizeToolCalls(toolAcc), {
+    harmonyParseText: harmonyRouter.getCommentaryParseText(),
+  });
   const finishReason =
     streamMeta.finish_reason || (toolCalls.length > 0 ? 'tool_calls' : undefined);
 
