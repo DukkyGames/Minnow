@@ -17,6 +17,7 @@ import {
   listCachedThread,
   readMessageCache,
   updateInboxSummary,
+  updateMessageTriage,
   updateReplyVariants,
 } from './cache.js';
 import { triageMessage } from './triage.js';
@@ -285,7 +286,7 @@ function sleep(ms) {
  * @param {string} messageKey
  * @param {string} reason
  */
-async function recordTriageFailure(accountId, messageKey, reason) {
+export async function recordTriageFailure(accountId, messageKey, reason) {
   await updateMessageTriage(accountId, messageKey, {
     failedAt: new Date().toISOString(),
     failureReason: reason.slice(0, 200),

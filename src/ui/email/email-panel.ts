@@ -15,6 +15,9 @@ import { renderEmailLayout } from './email-layout';
 import { renderEmailAutomations } from './email-automations';
 import { EMAIL_ICONS } from './email-icons';
 
+/** Unsubscribe handles for SSE listeners keyed by panel mount element. */
+const panelEventUnsubs = new WeakMap<HTMLElement, () => void>();
+
 export interface EmailPanelOptions {
   onStatus?: (state: 'ok' | 'err', message: string) => void;
 }
@@ -245,7 +248,6 @@ export async function renderEmailPanel(
   let accountFormMode: 'none' | 'add' | 'edit' = 'none';
   let viewMode: EmailViewMode = 'dashboard';
   let pendingThreadId: string | undefined;
-  let unsubscribeEvents: (() => void) | undefined;
 
   let activeAccount = accounts.find((row) => row.isDefault) ?? accounts[0];
 
@@ -439,17 +441,20 @@ export async function renderEmailPanel(
     settingsBtn.classList.add('is-active');
   });
 
-  unsubscribeEvents?.();
-  unsubscribeEvents = subscribeEmailEvents((type, payload) => {
-    if (payload.accountId && payload.accountId !== activeAccount.id) {
-      return;
-    }
-    if (type === 'summary_updated' || type === 'message_new') {
-      if (viewMode === 'dashboard') {
-        void renderView();
+  panelEventUnsubs.get(mount)?.();
+  panelEventUnsubs.set(
+    mount,
+    subscribeEmailEvents((type, payload) => {
+      if (payload.accountId && payload.accountId !== activeAccount.id) {
+        return;
       }
-    }
-  });
+      if (type === 'summary_updated' || type === 'message_new') {
+        if (viewMode === 'dashboard') {
+          void renderView();
+        }
+      }
+    }),
+  );
 
   await renderView();
 }
