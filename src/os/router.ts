@@ -217,23 +217,28 @@ function applyRoute(route: OsRoute, options?: LaunchOptions): void {
     return;
   }
 
-  const launchOpts: LaunchOptions = { ...options };
+  const routeFields: LaunchOptions = {};
   if (route.settingsSection) {
-    launchOpts.settingsSection = route.settingsSection;
+    routeFields.settingsSection = route.settingsSection;
     pendingSettingsSection = route.settingsSection;
   }
   if (route.modelsSection) {
-    launchOpts.modelsSection = route.modelsSection;
+    routeFields.modelsSection = route.modelsSection;
     pendingModelsSection = route.modelsSection;
   }
   if (route.brainSection) {
-    launchOpts.brainSection = route.brainSection;
+    routeFields.brainSection = route.brainSection;
     pendingBrainSection = route.brainSection;
   }
   if (route.codeSection) {
-    launchOpts.codeSection = route.codeSection;
+    routeFields.codeSection = route.codeSection;
     pendingCodeSection = route.codeSection;
   }
+
+  const launchOpts =
+    options || Object.keys(routeFields).length > 0
+      ? { ...options, ...routeFields }
+      : undefined;
 
   launchInstance(route.appId, launchOpts);
   syncForegroundLifecycle(route.appId);
@@ -338,6 +343,14 @@ export function launchApp(appId: AppId, options?: LaunchOptions): void {
   if (options?.codeSection) {
     pendingCodeSection = options.codeSection;
   }
+  if (appId === 'settings' && getForegroundAppId() === 'code') {
+    options = {
+      ...options,
+      returnToApp: 'code',
+      codeSection:
+        options?.codeSection ?? pendingCodeSection ?? getCurrentRoute().codeSection ?? 'overview',
+    };
+  }
   const codeSection: CodeSectionId | undefined =
     appId === 'code'
       ? options?.chatId?.trim() ||
@@ -360,6 +373,7 @@ export function launchApp(appId: AppId, options?: LaunchOptions): void {
   if (window.location.hash !== next) {
     pendingLaunchOptions = options;
     window.location.hash = next;
+    applyRouteFromHash();
     return;
   }
   applyRoute(

@@ -1,5 +1,5 @@
-import { getPresentationMode } from './app-registry';
 import { closeInstance, getInstanceSnapshot } from './instances';
+import { resolveInstancePresentation } from './presentation-mode';
 import type { AppId } from './types';
 
 /** Apps whose `<main>` layer mounts inside a floating window frame (not fullscreen). */
@@ -22,12 +22,11 @@ export function isWindowMountedApp(appId: AppId): boolean {
  * Returns true when the close was handled via the instance store.
  */
 export function requestCloseWindowApp(appId: AppId): boolean {
-  if (!isWindowMountedApp(appId) || getPresentationMode(appId) !== 'window') {
-    return false;
-  }
   const snap = getInstanceSnapshot();
   const inst = snap.instances.find((i) => i.appId === appId && i.id === snap.foregroundId);
-  if (!inst) return false;
+  if (!inst || !isWindowMountedApp(appId) || resolveInstancePresentation(inst) !== 'window') {
+    return false;
+  }
   closeInstance(inst.id);
   return true;
 }

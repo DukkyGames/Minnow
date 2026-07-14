@@ -1,4 +1,5 @@
 import { getPresentationMode } from './app-registry';
+import { resolveInstancePresentation, resolvePresentationMode } from './presentation-mode';
 import { ensureAppInitialized } from './app-modules';
 import {
   CALENDAR_WINDOW_MIN_HEIGHT,
@@ -276,6 +277,17 @@ function launchOptionsFromSnapshot(snapshot: InstanceSnapshot): LaunchOptions | 
   return inst.launchOptions ?? (inst.seed ? { seed: inst.seed } : undefined);
 }
 
+function presentationForSnapshot(
+  snapshot: InstanceSnapshot,
+  appId: AppId,
+): ReturnType<typeof getPresentationMode> {
+  const inst = snapshot.instances.find((i) => i.id === snapshot.foregroundId);
+  if (inst?.appId === appId) {
+    return resolveInstancePresentation(inst);
+  }
+  return getPresentationMode(appId);
+}
+
 function usesFullscreenLayer(mode: ReturnType<typeof getPresentationMode>): boolean {
   return mode === 'fullscreen' || mode === 'desktop';
 }
@@ -284,7 +296,7 @@ function shouldBlurDesktop(snapshot: InstanceSnapshot): boolean {
   if (snapshot.view !== 'app') return false;
   const appId = getForegroundAppId();
   if (!appId) return false;
-  return usesFullscreenLayer(getPresentationMode(appId));
+  return usesFullscreenLayer(presentationForSnapshot(snapshot, appId));
 }
 
 function stashWindowContent(appId: AppId): void {
@@ -347,7 +359,7 @@ function syncWindowSurfaces(snapshot: InstanceSnapshot): void {
   const openIds = new Set(snapshot.instances.map((i) => i.id));
 
   for (const inst of snapshot.instances) {
-    if (getPresentationMode(inst.appId) !== 'window') continue;
+    if (resolveInstancePresentation(inst) !== 'window') continue;
     if (!WINDOW_MOUNTED_APPS.has(inst.appId)) continue;
     const options =
       inst.launchOptions ?? (inst.seed ? { seed: inst.seed } : undefined);
@@ -359,7 +371,10 @@ function syncWindowSurfaces(snapshot: InstanceSnapshot): void {
   }
 
   for (const mountedId of [...mountedWindowInstances]) {
-    if (!openIds.has(mountedId)) {
+    const inst = snapshot.instances.find((i) => i.id === mountedId);
+    const usesWindow =
+      inst != null && resolveInstancePresentation(inst) === 'window';
+    if (!openIds.has(mountedId) || !usesWindow) {
       const win = windowManager.findWindowByInstance(mountedId);
       teardownWindowSurface(mountedId, win?.appId ?? 'settings');
     }
@@ -384,7 +399,9 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
     hideAllLayers();
     const hadFullscreenForeground =
       lastForegroundApp !== null &&
-      usesFullscreenLayer(getPresentationMode(lastForegroundApp));
+      usesFullscreenLayer(
+        presentationForSnapshot(snapshot, lastForegroundApp),
+      );
     if (hadFullscreenForeground) closeAllAppPages();
     lastForegroundApp = null;
     void import('./desktop-state').then(async (m) => {
@@ -399,7 +416,7 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
   const appId = getForegroundAppId();
   if (!appId) return;
 
-  const mode = getPresentationMode(appId);
+  const mode = presentationForSnapshot(snapshot, appId);
   const options = launchOptionsFromSnapshot(snapshot);
 
   if (mode === 'window' && WINDOW_MOUNTED_APPS.has(appId)) {

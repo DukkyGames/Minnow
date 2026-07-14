@@ -69,6 +69,8 @@ export interface LaunchOptions {
   expertId?: string;
   /** Desktop experts: open the full lab panel on entry. */
   openLab?: boolean;
+  /** When set, closing this app returns to the given app (e.g. Settings from Code). */
+  returnToApp?: AppId;
 }
 
 /** Code app sub-routes: instrumentation home vs chat workspace. */
