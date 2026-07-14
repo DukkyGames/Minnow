@@ -25,7 +25,9 @@ import {
   buildLlamaServerArgs,
   buildLlamaServerSpawnEnv,
   readLlamaCppConfig,
+  warnIfReasoningBudgetCliFlag,
 } from './llama-args.js';
+import { setProviderThinkingBudgetSupport } from '../providers/capabilities-store.js';
 import { getServesIndexPath, modelsLogDir } from './paths.js';
 import { validatePort, validateRuntime, validateServeId } from './validate.js';
 import {
@@ -33,6 +35,7 @@ import {
   getInstalledLlamaVariant,
   llamaServerSpawnCwd,
   resolveLlamaServer,
+  detectLlamaThinkingBudgetSupport,
 } from './llama-runtime.js';
 
 /** @typedef {'starting' | 'running' | 'stopped' | 'error'} ServeStatus */
@@ -434,6 +437,13 @@ export async function startServe(body) {
   }
 
   row.status = 'running';
+  warnIfReasoningBudgetCliFlag(userSettings, llamaConfig.defaults);
+  try {
+    const supportsThinkingBudget = await detectLlamaThinkingBudgetSupport(llamaServerPath);
+    await setProviderThinkingBudgetSupport(LLAMA_CPP_LOCAL_ID, supportsThinkingBudget);
+  } catch (err) {
+    console.warn('[llama-cpp] thinking budget feature detect failed:', err);
+  }
   await upsertLlamaCppProvider({ baseUrl, enabled: true });
   await saveServes();
   return publicServe(row);

@@ -138,6 +138,7 @@ export function normalizeCapabilitiesFile(raw) {
     structuredOutput: file.structuredOutput === true,
     structuredOutputWithTools: file.structuredOutputWithTools === true,
     structuredOutputStreaming: file.structuredOutputStreaming === true,
+    supportsThinkingBudget: file.supportsThinkingBudget === true,
     probeError: typeof file.probeError === 'string' ? file.probeError : null,
     models,
   };

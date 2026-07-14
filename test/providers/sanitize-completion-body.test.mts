@@ -149,4 +149,21 @@ describe('sanitizeCompletionBodyForProvider', () => {
     );
     assert.equal(out.temperature, 1);
   });
+
+  test('keeps thinking_budget_tokens only for llama-cpp-local', () => {
+    const llama = { ...OPENAI, id: 'llama-cpp-local' };
+    const withBudget = sanitizeCompletionBodyForProvider(
+      { model: 'qwen3', thinking_budget_tokens: 1024 },
+      llama,
+      { reasoning: true },
+    );
+    assert.equal(withBudget.thinking_budget_tokens, 1024);
+
+    const stripped = sanitizeCompletionBodyForProvider(
+      { model: 'qwen3', thinking_budget_tokens: 1024 },
+      OPENAI,
+      { reasoning: true },
+    );
+    assert.equal(stripped.thinking_budget_tokens, undefined);
+  });
 });

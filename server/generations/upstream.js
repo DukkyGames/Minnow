@@ -77,12 +77,13 @@ function dumpUpstreamFailure(info) {
  * Kimi (Moonshot AI) thinking/code models only accept temperature=1.
  * OpenAI-v1 bodies are sanitized (sampler + reasoning fields) before upstream POST.
  * @param {Buffer} requestBody
- * @param {{ apiKind?: string, baseUrl?: string }} profile
+ * @param {{ apiKind?: string, baseUrl?: string, id?: string }} profile
  * @param {string} modelId
  * @param {'lm-studio-v0' | 'openai-v1' | 'anthropic-v1'} [resolvedApi]
+ * @param {string} [providerId]
  * @returns {Buffer}
  */
-function prepareUpstreamRequestBody(requestBody, profile, modelId, resolvedApi) {
+function prepareUpstreamRequestBody(requestBody, profile, modelId, resolvedApi, providerId) {
   const apiKind = resolvedApi ?? profile.apiKind ?? 'openai-v1';
   let body = requestBody;
 
@@ -91,7 +92,7 @@ function prepareUpstreamRequestBody(requestBody, profile, modelId, resolvedApi) 
     if (parsed && typeof parsed === 'object') {
       const sanitized = sanitizeCompletionBodyForProvider(
         /** @type {Record<string, unknown>} */ (parsed),
-        { apiKind },
+        { apiKind, id: providerId ?? profile.id },
       );
       body = Buffer.from(JSON.stringify(sanitized), 'utf8');
     }
@@ -219,6 +220,7 @@ async function pumpUpstreamAsync({ state }) {
               runtime.profile,
               candidate.modelId,
               resolvedApi,
+              candidate.providerId,
             ),
             idleMs,
             maxMs,

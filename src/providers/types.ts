@@ -8,6 +8,9 @@ export type ApiKind = 'lm-studio-v0' | 'openai-v1' | 'anthropic-v1';
 export type AuthStyle = 'bearer' | 'api-key' | 'x-api-key';
 export type ProviderId = string;
 
+/** Stable id for llama.cpp local serve (must match server/providers/store.js). */
+export const LLAMA_CPP_LOCAL_PROVIDER_ID = 'llama-cpp-local';
+
 /** Provider metadata returned by GET /api/providers (secrets redacted). */
 export interface ProviderPublic {
   id: ProviderId;
