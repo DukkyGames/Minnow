@@ -69,6 +69,8 @@ let activeRunId: string | null = null;
 let devServerSubscribedRunId: string | null = null;
 let devServerStreamChatId: string | null = null;
 let devServerStreamAbort: AbortController | null = null;
+/** Active SSE subscriptions for agent background shell runs (MIN-402). */
+const agentBackgroundStreams = new Map<string, AbortController>();
 let devServerStickToBottom = true;
 let devServerDisplayBytes = 0;
 let stickToBottom = true;
@@ -515,6 +517,154 @@ export function ensureDevServerStream(
   const abort = new AbortController();
   devServerStreamAbort = abort;
   void pumpDevServerStream(runId, label, chatId, abort);
+}
+
+interface AgentBackgroundStreamUiState {
+  showAgentRunHint: boolean;
+  showAgentTabBadge: boolean;
+}
+
+async function pumpAgentBackgroundStream(
+  runId: string,
+  label: string,
+  chatId: string,
+  startedAt: number,
+  toolCallId: string | undefined,
+  abort: AbortController,
+  ui: AgentBackgroundStreamUiState,
+): Promise<void> {
+  let finished = false;
+  let exitCode: number | null = null;
+  let timedOut = false;
+
+  try {
+    await streamTerminalRun(
+      runId,
+      (ev) => {
+        if (!agentBackgroundStreams.has(runId)) return;
+        if (ev.type === 'stdout') {
+          appendTerminalOutput(runId, 'stdout', ev.text);
+        } else if (ev.type === 'stderr') {
+          appendTerminalOutput(runId, 'stderr', ev.text);
+        } else if (ev.type === 'exit') {
+          finished = true;
+          exitCode = ev.code;
+          timedOut = ev.timedOut;
+          const stoppedSuffix = ev.stopped ? ', stopped' : '';
+          appendTerminalOutput(
+            runId,
+            'stderr',
+            `\n[exit ${ev.code ?? '?'}${ev.timedOut ? ', timed out' : ''}${stoppedSuffix}]\n`,
+          );
+        } else if (ev.type === 'error') {
+          appendTerminalOutput(runId, 'stderr', `\nError: ${ev.message}\n`);
+        }
+      },
+      abort.signal,
+    );
+  } catch (err) {
+    if (abort.signal.aborted) return;
+    appendTerminalOutput(
+      runId,
+      'stderr',
+      `\nError: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+  } finally {
+    agentBackgroundStreams.delete(runId);
+    unregisterShellRun(runId);
+    refreshShellKillUi();
+
+    if (activeRunId === runId) {
+      activeRunId = null;
+    }
+
+    if (ui.showAgentRunHint) {
+      bumpAgentRunHint(-1);
+    }
+    if (ui.showAgentTabBadge) {
+      bumpAgentTabActivity(-1);
+    }
+
+    const chat = getActiveChat();
+    if (chat?.id === chatId && (finished || !abort.signal.aborted)) {
+      upsertChatTerminalRun(chat, {
+        id: runId,
+        command: label,
+        cwd: '.',
+        source: 'agent',
+        ...(toolCallId ? { toolCallId } : {}),
+        startedAt,
+        finishedAt: Date.now(),
+        exitCode,
+        timedOut,
+        logPath: `logs/terminal/${runId}.log`,
+      });
+      await refreshTerminalHistoryForActiveChat();
+      scheduleSaveSessions();
+    }
+  }
+}
+
+/**
+ * Mirror a background agent shell run in the Agent terminal tab (SSE log tail + kill UI).
+ * Idempotent while the same runId is already streaming.
+ */
+export function attachAgentBackgroundRun(options: {
+  runId: string;
+  command: string;
+  chatId: string;
+  toolCallId?: string;
+  startedAt?: number;
+  initialOutput?: string;
+}): void {
+  getElements();
+
+  const runId = options.runId.trim();
+  if (!runId) return;
+
+  if (agentBackgroundStreams.has(runId)) return;
+
+  const command = options.command.trim() || 'background command';
+  const chatId = options.chatId.trim();
+  const startedAt = options.startedAt ?? Date.now();
+  const toolCallId = options.toolCallId?.trim() || undefined;
+
+  const panelWasClosed = !isTerminalPanelOpen();
+  const showAgentRunHint = panelWasClosed;
+  const showAgentTabBadge = !panelWasClosed;
+  if (showAgentRunHint) {
+    bumpAgentRunHint(1);
+  }
+  if (showAgentTabBadge) {
+    bumpAgentTabActivity(1);
+  }
+
+  if (getTerminalMetaCached().autoOpenOnAgentRun) {
+    openTerminalPanel();
+  }
+
+  maybeFollowAgentTab();
+  activeRunId = runId;
+  beginCommandOutput(command, { clear: true });
+  if (options.initialOutput?.trim()) {
+    appendOutputText(options.initialOutput, 'stdout');
+  }
+
+  registerShellRun({
+    runId,
+    command,
+    toolCallId,
+    chatId,
+  });
+  refreshShellKillUi();
+  setActiveHistoryRun(runId);
+
+  const abort = new AbortController();
+  agentBackgroundStreams.set(runId, abort);
+  void pumpAgentBackgroundStream(runId, command, chatId, startedAt, toolCallId, abort, {
+    showAgentRunHint,
+    showAgentTabBadge,
+  });
 }
 
 /** Open the terminal panel on the Dev server tab (Console button). */
