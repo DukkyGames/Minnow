@@ -132,7 +132,7 @@ function appendCustomColorsGroup(mount: HTMLElement): void {
 
       'settings-appearance-advanced__hint',
 
-      'Override individual palette tokens on top of the active preset.',
+      'Pick four colors or expand advanced mode to override every palette token.',
 
     ),
 

@@ -81,3 +81,37 @@ export function formatWorktreeOptionLabel(
   const leaf = normPath.split('/').pop() ?? normPath;
   return `${branchLabel} — ${leaf}`;
 }
+
+/** Minnow orchestration branches (board worktrees) — not user checkout targets. */
+export function isMinnowBoardBranch(name: string): boolean {
+  return name.startsWith('minnow/board/');
+}
+
+function normalizePathForCompare(p: string): string {
+  return p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+}
+
+/** Branches checked out in a worktree other than `mainWorkspaceRoot`. */
+export function branchesLockedToOtherWorktrees(
+  worktrees: ParsedWorktree[],
+  mainWorkspaceRoot: string,
+): Set<string> {
+  const main = normalizePathForCompare(mainWorkspaceRoot);
+  const locked = new Set<string>();
+  for (const wt of worktrees) {
+    const branch = wt.branch?.trim();
+    if (!branch) continue;
+    if (normalizePathForCompare(wt.path) === main) continue;
+    locked.add(branch);
+  }
+  return locked;
+}
+
+/** Local branches suitable for user-facing checkout pickers. */
+export function filterUserFacingBranches(
+  local: string[],
+  lockedElsewhere?: Iterable<string>,
+): string[] {
+  const locked = new Set(lockedElsewhere ?? []);
+  return local.filter((b) => !isMinnowBoardBranch(b) && !locked.has(b));
+}

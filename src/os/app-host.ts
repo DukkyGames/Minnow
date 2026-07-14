@@ -1,4 +1,5 @@
 import { getPresentationMode } from './app-registry';
+import { ensureAppInitialized } from './app-modules';
 import {
   CALENDAR_WINDOW_MIN_HEIGHT,
   CALENDAR_WINDOW_MIN_WIDTH,
@@ -17,6 +18,7 @@ import { shouldSuppressDesktopChrome } from './shell-chrome';
 import { windowManager } from './window-manager';
 import { syncSchedulerSidePanel } from './scheduler-side-panel';
 import { WINDOW_MOUNTED_APPS, runWindowTeardown } from './window-mounted-apps';
+import { mountOsMobileDrawerBackdrops } from '../ui/mobile-drawer-portal';
 
 const APP_LAYER_IDS: Record<AppId, string> = {
   code: 'osAppLayer-code',
@@ -64,6 +66,8 @@ function mountAppLayers(): void {
     if (welcome) codeWrap.appendChild(welcome);
     appsLayer.appendChild(codeWrap);
   }
+
+  mountOsMobileDrawerBackdrops();
 
   for (const [appId, elId] of Object.entries(APP_LAYER_IDS)) {
     if (appId === 'code') continue;
@@ -118,6 +122,7 @@ function closeAllAppPages(): void {
 }
 
 async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void> {
+  await ensureAppInitialized(appId);
   const route = getCurrentRoute();
   const settingsSection =
     options?.settingsSection ?? route.settingsSection ?? 'general';
@@ -211,6 +216,8 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
       break;
     }
     case 'code': {
+      const { ensureCodeWorkspaceModules } = await import('../boot/code-workspace-modules');
+      await ensureCodeWorkspaceModules();
       const welcome = await import('../ui/welcome-page');
       const { isDefaultWorkspace } = await import('../state/workspace');
       if (welcome.isWelcomePageOpen()) {
@@ -380,6 +387,12 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
       usesFullscreenLayer(getPresentationMode(lastForegroundApp));
     if (hadFullscreenForeground) closeAllAppPages();
     lastForegroundApp = null;
+    void import('./desktop-state').then(async (m) => {
+      if (m.isDesktopChatActive()) {
+        const chat = await import('./desktop-chat');
+        chat.renderDesktopChatMessages();
+      }
+    });
     return;
   }
 

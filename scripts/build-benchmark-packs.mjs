@@ -3,7 +3,7 @@
  * Fetch standard benchmark datasets from Hugging Face and write bundled full-tier packs.
  * Usage: node scripts/build-benchmark-packs.mjs [--only mmlu,gsm8k] [--force]
  *
- * Output: src/benchmark/standard/packs/full/*.json
+ * Output: public/benchmark-packs/full/*.json and public/benchmark-packs/mini/*.json
  * Requires network access to huggingface.co and datasets-server.huggingface.co
  */
 
@@ -13,8 +13,8 @@ import { fileURLToPath } from 'node:url';
 import { asyncBufferFromUrl, parquetReadObjects } from 'hyparquet';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const OUT_DIR = path.join(__dirname, '../src/benchmark/standard/packs/full');
-const MINI_DIR = path.join(__dirname, '../src/benchmark/standard/packs');
+const OUT_DIR = path.join(__dirname, '../public/benchmark-packs/full');
+const MINI_DIR = path.join(__dirname, '../public/benchmark-packs/mini');
 const HF_PARQUET = 'https://datasets-server.huggingface.co/parquet';
 const REQUEST_DELAY_MS = 150;
 

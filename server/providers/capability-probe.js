@@ -14,6 +14,11 @@ import {
   writeCapabilities,
 } from './capabilities-store.js';
 import { validateProviderId } from './validate.js';
+import { generateText, streamText } from 'ai';
+import { buildAnthropicProvider } from '../generations/anthropic/provider-runtime.js';
+import { resolveModelApi } from '../generations/resolve-model-api.js';
+import { openAiMessagesToCoreMessages } from '../generations/anthropic/openai-to-core-messages.js';
+import { mapOpenAiToolChoice, mapOpenAiTools } from '../generations/anthropic/openai-tools.js';
 
 const MAX_MODELS_PER_PROBE = 8;
 const MODEL_PROBE_TIMEOUT_MS = 25_000;
@@ -21,6 +26,9 @@ const STRUCTURED_PROBE_TIMEOUT_MS = 30_000;
 
 export const NO_LOADED_MODEL_MATRIX_PROBE_MSG =
   'No loaded model found. Load a model in LM Studio, then run the probe again.';
+
+export const ANTHROPIC_STRUCTURED_PROBE_MSG =
+  'Structured output probe is not supported for Anthropic Messages API (v1 bridge).';
 
 /** Minimal JSON Schema for structured-output probe. */
 const PROBE_SCHEMA = {
@@ -210,15 +218,113 @@ function applyToolsProbe(cap, result) {
 }
 
 /**
+ * @param {number} timeoutMs
+ * @param {AbortSignal | undefined} signal
+ */
+function createProbeAbortSignal(timeoutMs, signal) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const onParentAbort = () => controller.abort();
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener('abort', onParentAbort, { once: true });
+  }
+  return {
+    signal: controller.signal,
+    dispose() {
+      clearTimeout(timer);
+      if (signal) signal.removeEventListener('abort', onParentAbort);
+    },
+  };
+}
+
+/**
+ * Matrix probe via the Anthropic Messages bridge (AI SDK) instead of raw OpenAI fetch.
+ *
+ * @param {object} modelRow
+ * @param {{ profile: object, headers: Record<string, string>, paths: object, secrets: object }} runtime
+ * @param {AbortSignal | undefined} signal
+ */
+async function probeAnthropicModelCapabilities(modelRow, runtime, signal) {
+  const cap = ingestFromCatalog(modelRow);
+  const modelId = modelRow.id;
+  const anthropic = buildAnthropicProvider(runtime);
+  const messages = openAiMessagesToCoreMessages([{ role: 'user', content: 'ping' }]);
+
+  const streamProbe = createProbeAbortSignal(MODEL_PROBE_TIMEOUT_MS, signal);
+  try {
+    const result = streamText({
+      model: anthropic(modelId),
+      messages,
+      maxOutputTokens: 1,
+      abortSignal: streamProbe.signal,
+    });
+    let gotStream = false;
+    for await (const _part of result.fullStream) {
+      gotStream = true;
+      break;
+    }
+    applyStreamingProbe(cap, { ok: gotStream, json: null });
+  } catch {
+    applyStreamingProbe(cap, { ok: false, json: null });
+  } finally {
+    streamProbe.dispose();
+  }
+
+  const toolBody = [
+    {
+      type: 'function',
+      function: {
+        name: 'probe_noop',
+        description: 'Capability probe noop',
+        parameters: { type: 'object', properties: {} },
+      },
+    },
+  ];
+  const tools = mapOpenAiTools(toolBody);
+  const toolProbe = createProbeAbortSignal(MODEL_PROBE_TIMEOUT_MS, signal);
+  try {
+    const result = await generateText({
+      model: anthropic(modelId),
+      messages,
+      tools,
+      toolChoice: mapOpenAiToolChoice('auto'),
+      maxOutputTokens: 64,
+      abortSignal: toolProbe.signal,
+    });
+    const hasTools = Array.isArray(result.toolCalls) && result.toolCalls.length > 0;
+    cap.tools = hasTools;
+    cap.sources = { ...cap.sources, tools: 'probe' };
+    if (!hasTools) {
+      cap.probeErrors = { ...cap.probeErrors, tools: 'tool probe returned no tool calls' };
+    }
+  } catch {
+    cap.tools = false;
+    cap.sources = { ...cap.sources, tools: 'probe' };
+    cap.probeErrors = { ...cap.probeErrors, tools: 'tool probe failed' };
+  } finally {
+    toolProbe.dispose();
+  }
+
+  return cap;
+}
+
+/**
  * @param {object} modelRow
  * @param {{ profile: object, headers: Record<string, string>, paths: object }} runtime
  * @param {AbortSignal | undefined} signal
  */
 async function probeModelCapabilities(modelRow, runtime, signal) {
   const cap = ingestFromCatalog(modelRow);
+  const resolvedApi = resolveModelApi(runtime, modelRow.id, modelRow);
+  cap.api = resolvedApi;
   const isLmStudio = runtime.profile.apiKind === 'lm-studio-v0';
   if (isLmStudio && !isCatalogModelLoaded(modelRow)) {
     return cap;
+  }
+
+  if (resolvedApi === 'anthropic-v1') {
+    return probeAnthropicModelCapabilities(modelRow, runtime, signal);
   }
 
   const modelId = modelRow.id;
@@ -409,8 +515,51 @@ export async function readProviderCapabilitiesFile(id) {
 export async function probeProviderCapabilities(id, options = {}) {
   validateProviderId(id);
   const runtime = await getProviderRuntime(id);
+
+  const modelsResponse = await proxyModels(id);
+  const catalog = Array.isArray(modelsResponse.data) ? modelsResponse.data : [];
+  const prioritized = prioritizeModelIds(
+    catalog.map((m) => m.id),
+    options.selectedModelId,
+    catalog,
+  );
+  const catalogById = new Map(catalog.map((m) => [m.id, m]));
+  const modelId =
+    typeof options.modelId === 'string' && options.modelId.trim()
+      ? options.modelId.trim()
+      : prioritized[0];
+  const modelRow = modelId ? catalogById.get(modelId) || { id: modelId } : null;
+  const resolvedApi = modelRow
+    ? resolveModelApi(runtime, modelRow.id, modelRow)
+    : runtime.profile.apiKind;
+
+  if (resolvedApi === 'anthropic-v1') {
+    const existing = await readCapabilities(id);
+    const models = { ...existing.models };
+    if (modelId) {
+      models[modelId] = {
+        ...(models[modelId] || {}),
+        api: 'anthropic-v1',
+        structuredOutput: false,
+        denyReason: ANTHROPIC_STRUCTURED_PROBE_MSG,
+      };
+    }
+
+    return writeCapabilities(id, {
+      ...existing,
+      providerId: id,
+      probedAt: new Date().toISOString(),
+      apiKind: runtime.profile.apiKind,
+      structuredOutput: false,
+      structuredOutputWithTools: false,
+      structuredOutputStreaming: false,
+      probeError: ANTHROPIC_STRUCTURED_PROBE_MSG,
+      models,
+    });
+  }
+
   const url = `${runtime.profile.baseUrl}${runtime.paths.chatCompletionsPath}`;
-  const modelId = await resolveStructuredProbeModelId(id, options);
+  const probeModelId = await resolveStructuredProbeModelId(id, options);
 
   const baseMessages = [{ role: 'user', content: 'Reply with JSON: {"ok":true}' }];
   const responseFormat = {
@@ -426,7 +575,7 @@ export async function probeProviderCapabilities(id, options = {}) {
     url,
     headers: runtime.headers,
     body: {
-      model: modelId,
+      model: probeModelId,
       messages: baseMessages,
       max_tokens: 16,
       temperature: 0,
@@ -439,7 +588,7 @@ export async function probeProviderCapabilities(id, options = {}) {
     url,
     headers: runtime.headers,
     body: {
-      model: modelId,
+      model: probeModelId,
       messages: baseMessages,
       max_tokens: 16,
       temperature: 0,
@@ -454,7 +603,7 @@ export async function probeProviderCapabilities(id, options = {}) {
     url,
     headers: runtime.headers,
     body: {
-      model: modelId,
+      model: probeModelId,
       messages: baseMessages,
       max_tokens: 16,
       temperature: 0,
@@ -473,9 +622,9 @@ export async function probeProviderCapabilities(id, options = {}) {
   const existing = await readCapabilities(id);
   const models = { ...existing.models };
 
-  if (modelId) {
-    models[modelId] = {
-      ...(models[modelId] || {}),
+  if (probeModelId) {
+    models[probeModelId] = {
+      ...(models[probeModelId] || {}),
       structuredOutput: withTools.ok || structuredOnly.ok,
       denyReason: null,
     };

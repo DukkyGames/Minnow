@@ -15,6 +15,11 @@ export interface MinnowPreviewLoadFailedDetail {
   url?: string;
 }
 
+export interface MinnowPreviewGuestCrashedDetail {
+  reason: string;
+  exitCode: number;
+}
+
 export interface MinnowPreviewLoadSourcePayload {
   kind: 'workspace' | 'url';
   path?: string;
@@ -36,25 +41,106 @@ export interface MinnowPreviewGuestInfo {
   loading: boolean;
 }
 
+export interface MinnowPreviewTabInfo {
+  id: string;
+  url: string;
+  title: string;
+  loading: boolean;
+  active: boolean;
+}
+
+export interface MinnowPreviewTabsApi {
+  create(tabId?: string, instanceId?: string): Promise<string>;
+  close(id: string, instanceId?: string): Promise<void>;
+  activate(id: string, instanceId?: string): Promise<void>;
+  list(instanceId?: string): Promise<MinnowPreviewTabInfo[]>;
+}
+
+/**
+ * Named preview instance lifecycle (MIN-364). Instances are parallel WebContentsView-backed
+ * surfaces (workspace right pane, Design surface, future Studio live-component frames), each
+ * with its own tab set. See electron/preview-instance-registry.ts for the default instance id
+ * ('workspace-preview') and reserved id conventions.
+ */
+export interface MinnowPreviewInstancesApi {
+  create(instanceId?: string): Promise<string>;
+  destroy(instanceId: string): Promise<void>;
+  list(): Promise<string[]>;
+}
+
+/**
+ * CDP-adapted pick — structurally identical to `PickedElement` in
+ * `src/design/element-picker.ts` (kept as a separate type here since electron.d.ts can't import
+ * from src/design without creating a renderer↔main type coupling across build boundaries).
+ */
+export interface MinnowCdpPickedElement {
+  uid: number | null;
+  cssSelector: string;
+  tagName: string;
+  classList: string[];
+  outerHTMLPreview: string;
+  boundingRect: { x: number; y: number; width: number; height: number };
+  devicePixelRatio: number;
+  stylesDigest: string;
+  shiftKey: boolean;
+  accessibleName: string;
+  contrastRatio: number | null;
+  domPath: string;
+  attributes: Record<string, string>;
+  computedStyles: Record<string, string>;
+}
+
+/** Native (script-free) element picking over CDP for cross-origin preview guests (MIN-370). */
+export interface MinnowCdpPickerApi {
+  enable(tabId?: string, instanceId?: string): Promise<{ ok: boolean; error?: string }>;
+  disable(tabId?: string, instanceId?: string): Promise<void>;
+  onPick(
+    callback: (picked: MinnowCdpPickedElement, tabId?: string, instanceId?: string) => void,
+  ): () => void;
+  onError(callback: (message: string, tabId?: string, instanceId?: string) => void): () => void;
+}
+
 export interface MinnowPreviewApi {
-  show(bounds?: MinnowPreviewBounds): Promise<void>;
-  hide(): Promise<void>;
-  clear(): Promise<void>;
-  loadURL(url: string): Promise<void>;
-  loadSource(payload: MinnowPreviewLoadSourcePayload): Promise<void>;
-  reload(): Promise<void>;
-  stop(): Promise<void>;
-  goBack(): Promise<void>;
-  goForward(): Promise<void>;
-  setBounds(bounds: MinnowPreviewBounds): Promise<void>;
-  execJs(code: string): Promise<unknown>;
-  capturePage(): Promise<string>;
-  getInfo(): Promise<MinnowPreviewGuestInfo>;
-  navigateAndWait(url: string): Promise<MinnowPreviewNavigateAwaitResult>;
-  onNavigation(callback: (url: string) => void): () => void;
-  onLoading(callback: (loading: boolean) => void): () => void;
-  onPageTitle(callback: (title: string) => void): () => void;
-  onLoadFailed(callback: (detail: MinnowPreviewLoadFailedDetail) => void): () => void;
+  // Every method takes an optional trailing `instanceId`; omitting it targets the default
+  // 'workspace-preview' instance, so every pre-MIN-364 call site keeps working unchanged.
+  show(bounds?: MinnowPreviewBounds, tabId?: string, instanceId?: string): Promise<void>;
+  hide(tabId?: string, instanceId?: string): Promise<void>;
+  clear(tabId?: string, instanceId?: string): Promise<void>;
+  loadURL(url: string, tabId?: string, instanceId?: string): Promise<void>;
+  loadSource(
+    payload: MinnowPreviewLoadSourcePayload,
+    tabId?: string,
+    instanceId?: string,
+  ): Promise<void>;
+  reload(tabId?: string, instanceId?: string): Promise<void>;
+  stop(tabId?: string, instanceId?: string): Promise<void>;
+  goBack(tabId?: string, instanceId?: string): Promise<void>;
+  goForward(tabId?: string, instanceId?: string): Promise<void>;
+  setBounds(bounds: MinnowPreviewBounds, tabId?: string, instanceId?: string): Promise<void>;
+  execJs(code: string, tabId?: string, instanceId?: string): Promise<unknown>;
+  capturePage(tabId?: string, instanceId?: string): Promise<string>;
+  getInfo(tabId?: string, instanceId?: string): Promise<MinnowPreviewGuestInfo>;
+  navigateAndWait(
+    url: string,
+    tabId?: string,
+    instanceId?: string,
+  ): Promise<MinnowPreviewNavigateAwaitResult>;
+  tabs: MinnowPreviewTabsApi;
+  instances: MinnowPreviewInstancesApi;
+  cdpPicker: MinnowCdpPickerApi;
+  onNavigation(callback: (url: string, tabId?: string, instanceId?: string) => void): () => void;
+  onLoading(callback: (loading: boolean, tabId?: string, instanceId?: string) => void): () => void;
+  onPageTitle(callback: (title: string, tabId?: string, instanceId?: string) => void): () => void;
+  onLoadFailed(
+    callback: (detail: MinnowPreviewLoadFailedDetail, tabId?: string, instanceId?: string) => void,
+  ): () => void;
+  onGuestCrashed?(
+    callback: (
+      detail: MinnowPreviewGuestCrashedDetail,
+      tabId?: string,
+      instanceId?: string,
+    ) => void,
+  ): () => void;
 }
 
 export interface MinnowAppApi {

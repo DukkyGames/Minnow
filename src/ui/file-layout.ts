@@ -9,16 +9,54 @@ import {
   type RightPaneMode,
 } from '../state/file-panel';
 import { syncStatsStripLayoutForViewer } from './stats';
-import { clearAllViewerTabs } from './file-viewer-tab-store';
+import { mountOsMobileDrawerBackdrops, syncOsMobileDrawerHtmlClass } from './mobile-drawer-portal';
+import {
+  syncAppBodySidebarWidthVars,
+  syncFileSidebarResizer,
+} from './sidebar-resize';
+
+let chatColumnDragCollapsed = false;
 
 export function isMobileLayout(): boolean {
   return window.matchMedia('(max-width: 640px)').matches;
 }
 
-export function closeMobileFileSidebar(): void {
+const RIGHT_PANE_CHILD_IDS = ['fileViewerPane', 'previewPane'] as const;
+
+/**
+ * MIN-224: viewer/preview panes must live inside #rightPaneColumn (below #unifiedTabs).
+ * Desktop mount restore used to reparent them onto #workspaceSplit, which squeezed tabs
+ * into a narrow column beside the editor.
+ */
+export function repairRightPaneDomStructure(): boolean {
+  const column = document.getElementById('rightPaneColumn');
+  const split = document.getElementById('workspaceSplit');
+  if (!column || !split) return false;
+
+  let repaired = false;
+  for (const paneId of RIGHT_PANE_CHILD_IDS) {
+    const pane = document.getElementById(paneId);
+    if (pane?.parentElement === split) {
+      column.appendChild(pane);
+      repaired = true;
+    }
+  }
+  return repaired;
+}
+
+/** Close source control when the file sidebar is collapsed or dismissed. */
+function closeGitPanelIfOpen(): void {
+  void import('./git-panel').then((m) => {
+    if (m.isGitSidePanelOpen()) m.closeGitSidePanel();
+  });
+}
+
+/** Clear mobile drawer classes without closing source control (safe during layout refresh). */
+export function clearMobileFileSidebarOverlay(): void {
   const side = document.getElementById('fileSidebar');
   const bd = document.getElementById('fileSidebarBackdrop');
   if (side) side.classList.remove('mobile-open');
+  syncOsMobileDrawerHtmlClass('file', false);
   if (bd) {
     bd.classList.remove('open');
     bd.setAttribute('aria-hidden', 'true');
@@ -26,11 +64,18 @@ export function closeMobileFileSidebar(): void {
   }
 }
 
+export function closeMobileFileSidebar(): void {
+  clearMobileFileSidebarOverlay();
+  closeGitPanelIfOpen();
+}
+
 export function openMobileFileSidebar(): void {
   if (!isMobileLayout()) return;
+  mountOsMobileDrawerBackdrops();
   const side = document.getElementById('fileSidebar');
   const bd = document.getElementById('fileSidebarBackdrop');
   if (side) side.classList.add('mobile-open');
+  syncOsMobileDrawerHtmlClass('file', true);
   if (bd) {
     bd.classList.add('open');
     bd.setAttribute('aria-hidden', 'false');
@@ -46,7 +91,13 @@ function resolvedRightPaneMode(): RightPaneMode {
   return state.viewerOpen ? 'viewer' : null;
 }
 
-/** True when the preview or viewer pane is actually visible (not only persisted as open). */
+/** True when the right split column is visible in the DOM. */
+function isRightPaneColumnDomVisible(): boolean {
+  const column = document.getElementById('rightPaneColumn');
+  return Boolean(column && !column.classList.contains('hidden'));
+}
+
+/** True when the preview or viewer content pane is visible. */
 function isRightPaneDomVisible(mode: Exclude<RightPaneMode, null>): boolean {
   const paneId = mode === 'preview' ? 'previewPane' : 'fileViewerPane';
   const pane = document.getElementById(paneId);
@@ -56,7 +107,25 @@ function isRightPaneDomVisible(mode: Exclude<RightPaneMode, null>): boolean {
 function isRightSplitOpen(): boolean {
   const mode = resolvedRightPaneMode();
   if (mode === null) return false;
-  return isRightPaneDomVisible(mode);
+  return isRightPaneColumnDomVisible();
+}
+
+function showRightPaneColumnDom(): void {
+  document.getElementById('rightPaneColumn')?.classList.remove('hidden');
+  document.getElementById('splitResizer')?.classList.remove('hidden');
+}
+
+function hideRightPaneColumnDom(): void {
+  document.getElementById('rightPaneColumn')?.classList.add('hidden');
+  document.getElementById('splitResizer')?.classList.add('hidden');
+}
+
+/** Hide preview, viewer, and resizer DOM without changing persisted prefs. */
+export function hideAllRightSplitPanesDom(): void {
+  hidePreviewPaneDom();
+  hideViewerPaneDom();
+  hideRightPaneColumnDom();
+  void window.minnow?.preview.hide();
 }
 
 /**
@@ -64,23 +133,32 @@ function isRightSplitOpen(): boolean {
  * (e.g. reload applied viewer-open before preview restore, or Code foreground).
  */
 export function reconcileRightSplitDomWithState(): void {
+  repairRightPaneDomStructure();
   const mode = resolvedRightPaneMode();
-  if (mode === 'preview' && !isRightPaneDomVisible('preview')) {
-    showPreviewSplit();
-    schedulePreviewGuestResyncAfterReconcile();
+  if (mode === null) {
+    hideAllRightSplitPanesDom();
     return;
   }
-  if (mode === 'viewer' && !isRightPaneDomVisible('viewer')) {
-    hidePreviewPaneDom();
-    void window.minnow?.preview.hide();
+  showRightPaneColumnDom();
+  if (mode === 'preview') {
+    hideViewerPaneDom();
+    if (!isRightPaneDomVisible('preview')) {
+      document.getElementById('previewPane')?.classList.remove('hidden');
+      schedulePreviewGuestResyncAfterReconcile();
+    }
+    return;
+  }
+  hidePreviewPaneDom();
+  void window.minnow?.preview.hide();
+  if (!isRightPaneDomVisible('viewer')) {
     document.getElementById('fileViewerPane')?.classList.remove('hidden');
-    document.getElementById('splitResizer')?.classList.remove('hidden');
   }
 }
 
 /** Sync Electron preview guest bounds after workspace split geometry changes. */
 function scheduleElectronPreviewHostLayoutAfterSplitChange(): void {
   if (getFilePanelState().rightPaneMode !== 'preview') return;
+  if (!window.minnow?.preview) return;
   void import('./preview-electron-visibility').then((m) => {
     m.scheduleElectronPreviewHostLayoutSync();
   });
@@ -89,9 +167,15 @@ function scheduleElectronPreviewHostLayoutAfterSplitChange(): void {
 /** Re-show Chromium guest + reload source after reconcile unhides the preview pane. */
 function schedulePreviewGuestResyncAfterReconcile(): void {
   if (getFilePanelState().rightPaneMode !== 'preview') return;
+  if (!window.minnow?.preview) return;
   void import('./preview-panel').then((m) => {
     m.resyncOpenPreviewPanelFromState({ reload: true });
   });
+}
+
+function refreshUnifiedTabsIfPresent(): void {
+  if (!document.getElementById('unifiedTabs')) return;
+  void import('./unified-right-tabs').then((m) => m.refreshUnifiedRightTabs());
 }
 
 /** Apply collapsed rail, mobile overlay, and split ratio CSS variables. */
@@ -106,15 +190,24 @@ export function applyFileSidebarVisuals(): void {
 
   if (split) {
     split.classList.toggle('viewer-open', splitOpen);
+    split.classList.toggle('chat-column-collapsed', chatColumnDragCollapsed && splitOpen);
     split.style.setProperty('--split-ratio', String(state.splitRatio));
     syncStatsStripLayoutForViewer(splitOpen);
   }
   scheduleElectronPreviewHostLayoutAfterSplitChange();
+  refreshUnifiedTabsIfPresent();
 
   if (!side || !btn) return;
 
+  if (isMobileLayout()) {
+    mountOsMobileDrawerBackdrops();
+    syncOsMobileDrawerHtmlClass('file', side.classList.contains('mobile-open'));
+  } else {
+    syncOsMobileDrawerHtmlClass('file', false);
+  }
+
   if (!isMobileLayout()) {
-    closeMobileFileSidebar();
+    clearMobileFileSidebarOverlay();
     side.classList.toggle('collapsed', state.fileSidebarCollapsed);
     btn.innerHTML = state.fileSidebarCollapsed ? ICON_FILE_TREE : ICON_CHEVRON_RIGHT;
     btn.setAttribute(
@@ -139,6 +232,12 @@ export function applyFileSidebarVisuals(): void {
     previewBtn.classList.toggle('is-active', previewOpen);
     previewBtn.setAttribute('aria-pressed', previewOpen ? 'true' : 'false');
   }
+
+  syncAppBodySidebarWidthVars();
+  syncFileSidebarResizer();
+  if (state.rightPaneMode === 'preview') {
+    scheduleElectronPreviewHostLayoutAfterSplitChange();
+  }
 }
 
 export function toggleFileSidebarLayout(): void {
@@ -154,7 +253,9 @@ export function toggleFileSidebarLayout(): void {
   }
 
   const state = getFilePanelState();
-  patchFilePanelState({ fileSidebarCollapsed: !state.fileSidebarCollapsed });
+  const nextCollapsed = !state.fileSidebarCollapsed;
+  patchFilePanelState({ fileSidebarCollapsed: nextCollapsed });
+  if (nextCollapsed) closeGitPanelIfOpen();
   applyFileSidebarVisuals();
 }
 
@@ -165,7 +266,9 @@ export function toggleFileSidebarCollapsed(): void {
     return;
   }
   const state = getFilePanelState();
-  patchFilePanelState({ fileSidebarCollapsed: !state.fileSidebarCollapsed });
+  const nextCollapsed = !state.fileSidebarCollapsed;
+  patchFilePanelState({ fileSidebarCollapsed: nextCollapsed });
+  if (nextCollapsed) closeGitPanelIfOpen();
   applyFileSidebarVisuals();
 }
 
@@ -181,51 +284,117 @@ export function hideViewerPaneDom(): void {
   if (pane) pane.classList.add('hidden');
 }
 
-/** Show split viewer pane and resizer; closes preview if open. */
+/** When closing the active pane type, fall back to the other tab family if any remain. */
+function fallbackRightPaneModeAfterClose(closedMode: Exclude<RightPaneMode, null>): RightPaneMode | null {
+  const state = getFilePanelState();
+  if (closedMode === 'viewer' && state.previewTabs.length > 0) return 'preview';
+  if (closedMode === 'preview' && state.openViewerTabs.length > 0) return 'viewer';
+  return null;
+}
+
+/** Show split viewer pane; keeps preview tabs in the unified strip. */
 export function showViewerSplit(): void {
+  clearChatColumnDragCollapsed();
   hidePreviewPaneDom();
   void window.minnow?.preview.hide();
+  showRightPaneColumnDom();
   const pane = document.getElementById('fileViewerPane');
-  const resizer = document.getElementById('splitResizer');
   if (pane) pane.classList.remove('hidden');
-  if (resizer) resizer.classList.remove('hidden');
   patchFilePanelState({ rightPaneMode: 'viewer', viewerOpen: true });
   applyFileSidebarVisuals();
 }
 
-/** Hide split viewer pane and resizer. */
+/** Hide split viewer pane; switches to preview tabs when available. */
 export function hideViewerSplit(): void {
+  const fallback = fallbackRightPaneModeAfterClose('viewer');
+  if (fallback === 'preview') {
+    showPreviewSplit();
+    return;
+  }
   hideViewerPaneDom();
-  const resizer = document.getElementById('splitResizer');
-  if (resizer) resizer.classList.add('hidden');
+  hideRightPaneColumnDom();
+  clearChatColumnDragCollapsed();
   patchFilePanelState({ rightPaneMode: null, viewerOpen: false });
   applyFileSidebarVisuals();
 }
 
-/** Show preview pane and resizer; closes file viewer if open. */
+/** Show preview pane; keeps file tabs in the unified strip. */
 export function showPreviewSplit(): void {
+  clearChatColumnDragCollapsed();
   hideViewerPaneDom();
-  clearAllViewerTabs();
+  showRightPaneColumnDom();
   patchFilePanelState({
     rightPaneMode: 'preview',
     viewerOpen: true,
-    openViewerTabs: [],
-    activeViewerTab: null,
   });
   const previewPane = document.getElementById('previewPane');
-  const resizer = document.getElementById('splitResizer');
   if (previewPane) previewPane.classList.remove('hidden');
-  if (resizer) resizer.classList.remove('hidden');
   applyFileSidebarVisuals();
   scheduleElectronPreviewHostLayoutAfterSplitChange();
 }
 
-/** Hide preview pane and resizer. */
+/** Hide preview pane; switches to file tabs when available. */
 export function hidePreviewSplit(): void {
+  const fallback = fallbackRightPaneModeAfterClose('preview');
+  if (fallback === 'viewer') {
+    showViewerSplit();
+    return;
+  }
   hidePreviewPaneDom();
   void window.minnow?.preview.hide();
-  const resizer = document.getElementById('splitResizer');
-  if (resizer) resizer.classList.add('hidden');
+  hideRightPaneColumnDom();
+  clearChatColumnDragCollapsed();
   patchFilePanelState({ rightPaneMode: null, viewerOpen: false, previewSource: null });
+  applyFileSidebarVisuals();
+}
+
+/** True when the user drag-collapsed the chat column for a full-width preview/viewer. */
+export function isChatColumnDragCollapsed(): boolean {
+  return chatColumnDragCollapsed;
+}
+
+/** Hide the chat column after dragging the split toward the preview pane. */
+export function collapseChatColumnFromDrag(): void {
+  if (!isRightSplitOpen()) return;
+  chatColumnDragCollapsed = true;
+  applyFileSidebarVisuals();
+  scheduleElectronPreviewHostLayoutAfterSplitChange();
+}
+
+/** Restore the chat column after drag-collapse or when selecting a sidebar chat. */
+export function restoreChatColumnFromDrag(): boolean {
+  if (!chatColumnDragCollapsed) return false;
+  chatColumnDragCollapsed = false;
+  applyFileSidebarVisuals();
+  scheduleElectronPreviewHostLayoutAfterSplitChange();
+  return true;
+}
+
+function clearChatColumnDragCollapsed(): void {
+  chatColumnDragCollapsed = false;
+}
+
+/** Test helper — reset drag-collapse memory. */
+export function resetChatColumnDragCollapsedForTests(): void {
+  clearChatColumnDragCollapsed();
+}
+
+/**
+ * Close the preview split without clearing previewSource (MIN-342).
+ * Used when Code becomes foreground so the user can reopen via #btnPreviewToggle.
+ */
+export function hidePreviewSplitKeepSource(): void {
+  hideAllRightSplitPanesDom();
+  patchFilePanelState({ rightPaneMode: null, viewerOpen: false });
+  applyFileSidebarVisuals();
+}
+
+/**
+ * Close both right split panes on Code entry while keeping previewSource and
+ * openViewerTabs for explicit reopen (MIN-342).
+ */
+export function resetRightSplitForCodeEntry(): void {
+  hideAllRightSplitPanesDom();
+  patchFilePanelState({ rightPaneMode: null, viewerOpen: false });
   applyFileSidebarVisuals();
 }

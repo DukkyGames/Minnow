@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
   computeOutboundPromptEstimateFromParts,
+  computePromptConfigTokenTotal,
   estimateHistoryTokens,
   estimateTokensFromText,
   estimateToolsTokens,
@@ -175,5 +176,31 @@ describe('computeOutboundPromptEstimateFromParts', () => {
       tools: [],
     });
     assert.equal(est.total, 0);
+  });
+});
+
+describe('computePromptConfigTokenTotal', () => {
+  test('sums system, rules, and tools but excludes history', () => {
+    const est = computeOutboundPromptEstimateFromParts({
+      systemText: 'System prompt body',
+      history: [{ role: 'user', content: 'x'.repeat(4000) }],
+      tools: [
+        {
+          type: 'function' as const,
+          function: {
+            name: 'calculate',
+            description: 'Math',
+            parameters: { type: 'object', properties: {} },
+          },
+        },
+      ],
+      userRulesText: 'Always be concise',
+    });
+    assert.ok(est.history > 0);
+    assert.equal(
+      computePromptConfigTokenTotal(est),
+      est.composedSystem + est.userRules + est.tools,
+    );
+    assert.notEqual(computePromptConfigTokenTotal(est), est.total);
   });
 });

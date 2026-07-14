@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T05:23:56.312Z",
+  "generatedAt": "2026-07-08T05:21:27.715Z",
   "skills": [
     {
       "id": "ask-minnow",
@@ -119,6 +119,12 @@
       "id": "improve-codebase-architecture",
       "label": "Improve Codebase Architecture",
       "description": "Scan a codebase for deepening opportunities, present them as a visual HTML report, then grill through whichever one you pick.",
+      "source": "builtin"
+    },
+    {
+      "id": "partymode",
+      "label": "Partymode",
+      "description": "Party mode — Bird Man, your local party animal. Cool-dude persona with maximum vibes. Invoke with /partymode. Stays pinned until dismissed or the user says stop party.",
       "source": "builtin"
     },
     {

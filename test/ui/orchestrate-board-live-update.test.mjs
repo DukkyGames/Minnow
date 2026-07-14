@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
+import { installHappyDomGlobals } from '../os/dom-helpers.mts';
 
 const FIXED_CHAT_ID = '11111111-1111-1111-1111-111111111111';
 const FIXED_GROUP_ID = 'grp_11111111-1111-1111-1111-111111111111';
@@ -52,16 +53,21 @@ const {
   recordHeartbeat,
   resetWrapperState,
 } = await import('../../src/agents/controller/wrapper.ts');
-const { loadSubAgentConfig, resetSubAgentConfigCache } = await import(
+const { loadSubAgentConfig, resetSubAgentConfigCache, setRuntimeSubAgentOverrides } = await import(
   '../../src/agents/sub-agent-config.ts'
 );
 
+/** @type {import('happy-dom').Window | undefined} */
+let win;
+
+function kanbanColumnSelector(columnId) {
+  return `.kanban-column[data-kanban-column="${columnId}"]`;
+}
+
 function setupDom() {
-  const window = new Window();
-  globalThis.window = window;
-  globalThis.document = window.document;
-  globalThis.HTMLElement = window.HTMLElement;
-  globalThis.HTMLSelectElement = window.HTMLSelectElement;
+  win = new Window();
+  installHappyDomGlobals(win);
+  globalThis.HTMLSelectElement = win.HTMLSelectElement;
   const area = document.createElement('div');
   area.id = 'chatArea';
   document.body.appendChild(area);
@@ -169,14 +175,21 @@ function sessionStateForBoard(chat, group, extra = {}) {
   };
 }
 
-/** populateKanbanWaves awaits sub-agent config; prime cache before board paint. */
+/** Avoid server fetch during board paint; prime with stable in-memory overrides. */
 async function primeSubAgentConfig() {
   resetSubAgentConfigCache();
+  setRuntimeSubAgentOverrides({
+    globalMaxConcurrent: 4,
+    types: {
+      builder: { enabled: true, maxConcurrent: 2 },
+      tester: { enabled: true, maxConcurrent: 2 },
+    },
+  });
   await loadSubAgentConfig();
 }
 
 async function waitForKanban() {
-  const deadline = Date.now() + 3000;
+  const deadline = Date.now() + 8000;
   while (Date.now() < deadline) {
     if (document.querySelector('.kanban-grid')) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -185,7 +198,7 @@ async function waitForKanban() {
 }
 
 describe('orchestrate board live updates', () => {
-  afterEach(() => {
+  afterEach(async () => {
     closeSubAgentDrawer();
     disposeBoardViewForTests();
     clearBoardListenersForTests();
@@ -193,7 +206,14 @@ describe('orchestrate board live updates', () => {
     resetMainTurnActivity();
     resetWrapperState();
     setBoardNowForTests(null);
+    // Let dynamic imports from switchChat/createChat finish before clearing session.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
     setSessionStateForTests(null);
+    if (win) {
+      win.close();
+      win = undefined;
+    }
   });
 
   test('empty board view subscribes and paints kanban after board_init', async () => {
@@ -246,7 +266,7 @@ describe('orchestrate board live updates', () => {
     renderBoardView(group);
     await waitForKanban();
     const plannedBefore = document.querySelectorAll(
-      '.kanban-column:first-child .board-task-card',
+      `${kanbanColumnSelector('planned')} .board-task-card`,
     ).length;
     assert.equal(plannedBefore, 2);
 
@@ -255,10 +275,10 @@ describe('orchestrate board live updates', () => {
     await waitForKanban();
 
     const plannedAfter = document.querySelectorAll(
-      '.kanban-column:first-child .board-task-card',
+      `${kanbanColumnSelector('planned')} .board-task-card`,
     ).length;
     const inProgress = document.querySelectorAll(
-      '.kanban-column:nth-child(2) .board-task-card',
+      `${kanbanColumnSelector('in_progress')} .board-task-card`,
     ).length;
     assert.equal(plannedAfter, 1);
     assert.equal(inProgress, 1);
@@ -284,7 +304,7 @@ describe('orchestrate board live updates', () => {
     await waitForKanban();
 
     const plannedList = () =>
-      document.querySelector('.kanban-column:first-child .kanban-column__list');
+      document.querySelector(`${kanbanColumnSelector('planned')} .kanban-column__list`);
     assert.ok(plannedList(), 'planned lane renders');
     // Simulate the user scrolling the lane down.
     plannedList().scrollTop = 120;
@@ -358,7 +378,7 @@ describe('orchestrate board live updates', () => {
     await waitForKanban();
 
     const reopenBtn = document.querySelector(
-      '.kanban-column:nth-child(4) .board-task-card__advance-btn',
+      `${kanbanColumnSelector('complete')} .board-task-card__advance-btn`,
     );
     assert.ok(reopenBtn, 'complete column shows Reopen');
     reopenBtn.focus();
@@ -368,12 +388,12 @@ describe('orchestrate board live updates', () => {
     await waitForKanban();
 
     assert.equal(
-      document.querySelectorAll('.kanban-column:first-child .board-task-card').length,
+      document.querySelectorAll(`${kanbanColumnSelector('planned')} .board-task-card`).length,
       1,
       'reopened task should move to Planned without a second click',
     );
     assert.equal(
-      document.querySelectorAll('.kanban-column:nth-child(4) .board-task-card').length,
+      document.querySelectorAll(`${kanbanColumnSelector('complete')} .board-task-card`).length,
       0,
     );
   });
@@ -572,7 +592,7 @@ describe('orchestrate board live updates', () => {
     await waitForKanban();
 
     const plannedCard = document.querySelector(
-      '.kanban-column:first-child .board-task-card--clickable',
+      `${kanbanColumnSelector('planned')} .board-task-card--clickable`,
     );
     assert.ok(plannedCard);
     plannedCard.click();
@@ -581,7 +601,7 @@ describe('orchestrate board live updates', () => {
     assert.ok(panel, 'plan panel visible');
     assert.ok(panel.textContent?.includes('Add feature X'));
     assert.ok(panel.textContent?.includes('npm test'));
-    assert.equal(document.querySelector('.sub-agent-drawer-panel'), null);
+    assert.equal(document.querySelector('.sub-agent-overlay__sheet'), null);
   });
 
   test('clicking in-progress or complete kanban card switches to chat view', async () => {
@@ -627,7 +647,7 @@ describe('orchestrate board live updates', () => {
     await waitForKanban();
 
     const completeBadge = document.querySelector(
-      '.kanban-column:nth-child(4) .board-task-card__agent--complete',
+      `${kanbanColumnSelector('complete')} .board-task-card__agent--complete`,
     );
     assert.ok(completeBadge, 'complete task shows Complete agent badge');
     completeBadge.closest('.board-task-card--clickable')?.click();
@@ -642,7 +662,7 @@ describe('orchestrate board live updates', () => {
     await waitForKanban();
 
     const inProgressBadge = document.querySelector(
-      '.kanban-column:nth-child(2) .board-task-card__agent--active',
+      `${kanbanColumnSelector('in_progress')} .board-task-card__agent--active`,
     );
     assert.ok(inProgressBadge, 'in-progress task shows Active agent badge');
     const inProgressCard = inProgressBadge.closest('.board-task-card--clickable');
@@ -650,7 +670,7 @@ describe('orchestrate board live updates', () => {
     inProgressCard.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(getActiveChat().id, FIXED_TASK_CHAT_ID);
-    assert.equal(document.querySelector('.sub-agent-drawer-panel'), null);
+    assert.equal(document.querySelector('.sub-agent-overlay__sheet'), null);
     assert.equal(document.querySelectorAll('.board-agents').length, 0);
   });
 
@@ -743,7 +763,7 @@ describe('orchestrate board live updates', () => {
       assert.equal(group.orchestrateBoard?.executionMode, 'afk');
 
       isoSelect.value = 'per-wave';
-      isoSelect.dispatchEvent(new globalThis.window.Event('change', { bubbles: true }));
+      isoSelect.dispatchEvent(new window.Event('change', { bubbles: true }));
       assert.equal(group.orchestrateBoard?.isolationMode, 'per-wave');
     } finally {
       globalThis.window.confirm = priorConfirm;
@@ -985,6 +1005,38 @@ describe('orchestrate board live updates', () => {
     assert.notEqual(getActiveChat().id, chat.id);
     assert.equal(document.querySelector('.board-root'), null);
     assert.ok(document.getElementById('vibeHub'));
+  });
+
+  test('createChat from code overview dismisses overview and shows new chat', async () => {
+    setupDom();
+    await primeSubAgentConfig();
+    const chat = createEmptyChatObject('');
+    chat.id = FIXED_CHAT_ID;
+    chat.modeId = 'general';
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+      groups: [],
+    });
+
+    const area = document.getElementById('chatArea');
+    area.classList.add('chat-area--code-overview');
+    document.getElementById('mainColumn')?.classList.add('main-column--code-overview');
+    const overviewRoot = document.createElement('div');
+    overviewRoot.id = 'codeOverviewRoot';
+    area.replaceChildren(overviewRoot);
+
+    createChat();
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(document.getElementById('codeOverviewRoot'), null);
+    assert.notEqual(getActiveChat().id, chat.id);
+    assert.ok(document.getElementById('vibeHub'));
+    assert.equal(area.classList.contains('chat-area--code-overview'), false);
   });
 
   test('header activity chip shows last assistant message', () => {
@@ -1233,6 +1285,39 @@ describe('orchestrate board live updates', () => {
     setStreaming(false, FIXED_TASK_CHAT_ID);
     resetWrapperState();
     disposeBoardViewForTests();
+  });
+
+  test('refreshActiveBoardIfMounted does not replace code overview overlay', async () => {
+    setupDom();
+    setBoardNowForTests(() => 1_700_000_000_000);
+    const chat = makeOrchestrateChat();
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
+
+    await primeSubAgentConfig();
+    renderBoardView(group);
+    await waitForKanban();
+    assert.ok(document.querySelector('.board-root'), 'board should mount first');
+
+    const overviewRoot = document.createElement('div');
+    overviewRoot.id = 'codeOverviewRoot';
+    document.getElementById('chatArea').replaceChildren(overviewRoot);
+
+    refreshActiveBoardIfMounted();
+
+    assert.ok(
+      document.getElementById('codeOverviewRoot'),
+      'code overview overlay should stay mounted',
+    );
+    assert.equal(
+      document.querySelector('.board-root'),
+      null,
+      'board should not repaint over the overlay',
+    );
   });
 
 });

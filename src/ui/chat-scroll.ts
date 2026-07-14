@@ -3,6 +3,8 @@
  */
 
 import { isChatAppForeground } from './chat-mount';
+import { isDesktopChatActive } from '../os/desktop-state';
+import { getForegroundAppId } from '../os/instances';
 
 /** Distance from bottom that still counts as "pinned" (larger than terminal — more padding in .chat-area). */
 export const CHAT_PIN_THRESHOLD_PX = 80;
@@ -15,6 +17,13 @@ let chatAreaEl: HTMLElement | null = null;
 let jumpChipEl: HTMLButtonElement | null = null;
 let chatAppJumpChipEl: HTMLButtonElement | null = null;
 const BOARD_INIT_SPLIT_CHAT_TESTID = 'boardInitSplitChat';
+const DESKTOP_CHAT_TRANSCRIPT_SELECTOR = '.mn-os-chat-transcript';
+
+/** Saved scroll position before a transcript rebuild (distance from bottom + pin state). */
+export interface ChatScrollAnchor {
+  pinned: boolean;
+  distanceFromBottom: number;
+}
 
 /** Scroll container for messages: split bottom pane during board_init, else #chatArea. */
 export function getChatScrollRoot(): HTMLElement | null {
@@ -22,6 +31,9 @@ export function getChatScrollRoot(): HTMLElement | null {
     `[data-testid="${BOARD_INIT_SPLIT_CHAT_TESTID}"]`,
   ) as HTMLElement | null;
   if (splitPane) return splitPane;
+  if (isDesktopChatActive() && getForegroundAppId() !== 'code') {
+    return document.querySelector('.mn-os-chat-transcript') ?? chatAreaEl;
+  }
   if (isChatAppForeground()) {
     return document.getElementById('chatAppArea') ?? chatAreaEl;
   }
@@ -118,14 +130,56 @@ export function refreshChatJumpChipVisibility(): void {
   updateJumpChipVisibility();
 }
 
+/** Snapshot scroll pin + distance from bottom before rebuilding the transcript. */
+export function captureChatScrollAnchor(): ChatScrollAnchor | null {
+  const root = getChatScrollRoot();
+  if (!root) return null;
+  const distanceFromBottom = root.scrollHeight - root.scrollTop - root.clientHeight;
+  return {
+    pinned: distanceFromBottom <= CHAT_PIN_THRESHOLD_PX,
+    distanceFromBottom,
+  };
+}
+
+/** Restore scroll after a transcript rebuild; follow tail only when the user was pinned. */
+export function restoreChatScrollAnchor(anchor: ChatScrollAnchor | null): void {
+  if (!anchor) return;
+  const root = getChatScrollRoot();
+  if (!root) return;
+  if (anchor.pinned) {
+    scrollChatToBottom();
+    return;
+  }
+  stickToBottom = false;
+  const maxScroll = Math.max(0, root.scrollHeight - root.clientHeight);
+  const target = Math.max(
+    0,
+    Math.min(maxScroll, root.scrollHeight - root.clientHeight - anchor.distanceFromBottom),
+  );
+  applyInstantScroll(root, target);
+  updateJumpChipVisibility();
+}
+
+function bindScrollTarget(el: HTMLElement | null): void {
+  if (!el || el.dataset.chatScrollBound === '1') return;
+  el.dataset.chatScrollBound = '1';
+  el.addEventListener('scroll', onChatScrollTargetScroll, { passive: true });
+}
+
+/** Bind scroll listener on the desktop chat transcript (idempotent; safe before/after OS mount). */
+export function bindDesktopChatTranscriptScroll(): void {
+  bindScrollTarget(
+    document.querySelector(DESKTOP_CHAT_TRANSCRIPT_SELECTOR) as HTMLElement | null,
+  );
+}
+
 /** Bind scroll listener on the board-init split chat pane (idempotent). */
 export function bindBoardInitSplitChatScroll(): void {
-  const pane = document.querySelector(
-    `[data-testid="${BOARD_INIT_SPLIT_CHAT_TESTID}"]`,
-  ) as HTMLElement | null;
-  if (!pane || pane.dataset.chatScrollBound === '1') return;
-  pane.dataset.chatScrollBound = '1';
-  pane.addEventListener('scroll', onChatScrollTargetScroll, { passive: true });
+  bindScrollTarget(
+    document.querySelector(
+      `[data-testid="${BOARD_INIT_SPLIT_CHAT_TESTID}"]`,
+    ) as HTMLElement | null,
+  );
 }
 
 /** Wire scroll listeners on Code and Chat transcript roots (call once from main). */
@@ -140,12 +194,9 @@ export function initChatScroll(): void {
   jumpChipEl = document.getElementById(CHAT_JUMP_CHIP_ID) as HTMLButtonElement | null;
   chatAppJumpChipEl = document.getElementById(CHAT_APP_JUMP_CHIP_ID) as HTMLButtonElement | null;
 
-  chatAreaEl?.addEventListener('scroll', onChatScrollTargetScroll, { passive: true });
-  const chatAppArea = document.getElementById('chatAppArea');
-  if (chatAppArea && chatAppArea.dataset.chatScrollBound !== '1') {
-    chatAppArea.dataset.chatScrollBound = '1';
-    chatAppArea.addEventListener('scroll', onChatScrollTargetScroll, { passive: true });
-  }
+  bindScrollTarget(chatAreaEl);
+  bindScrollTarget(document.getElementById('chatAppArea'));
+  bindDesktopChatTranscriptScroll();
 
   bindJumpChip(jumpChipEl);
   bindJumpChip(chatAppJumpChipEl);

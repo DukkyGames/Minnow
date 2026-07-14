@@ -45,6 +45,16 @@ export function getBoardWorktreesDir(boardId, workspaceRoot = getWorkspaceRoot()
   return path.join(getRepoWorktreesDir(workspaceRoot), seg(boardId));
 }
 
+/** Per-repo chat worktrees directory (MIN-276 regular-chat isolation). */
+export function getChatWorktreesDir(workspaceRoot = getWorkspaceRoot()) {
+  return path.join(getRepoWorktreesDir(workspaceRoot), 'chat');
+}
+
+/** Absolute path for one chat's managed worktree slot. */
+export function getChatWorktreePath(chatId, workspaceRoot = getWorkspaceRoot()) {
+  return path.join(getChatWorktreesDir(workspaceRoot), seg(chatId));
+}
+
 /** Absolute path for a single worktree slot (e.g. `task-T1`, `wave-W1`, `integration`). */
 export function getWorktreeSlotPath(boardId, slotId, workspaceRoot = getWorkspaceRoot()) {
   return path.join(getBoardWorktreesDir(boardId, workspaceRoot), seg(slotId));

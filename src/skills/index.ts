@@ -69,6 +69,26 @@ export {
 
 export {
 
+  PARTYMODE_SKILL_ID,
+
+  augmentPartyModeSkillBody,
+
+  isPartyModePinned,
+
+  isPartyModeStopPhrase,
+
+} from './partymode-client';
+
+export {
+
+  GIT_SETUP_SKILL_ID,
+
+  prepareGitSetupTurn,
+
+} from './git-setup-client';
+
+export {
+
   ensurePinnedSkill,
 
   isCavemanStopPhrase,

@@ -3,6 +3,7 @@
  * Port of Odysseus `llm_call_async` (OpenAI-compatible path) with one retry on transient failure.
  */
 
+import { formatUpstreamHttpErrorMessage } from '../generations/upstream-error-detail.js';
 import { getProviderRuntime as defaultGetProviderRuntime } from '../providers/store.js';
 import { stripDraftOutput, stripThinking } from './strip-thinking.js';
 
@@ -112,14 +113,13 @@ function composeAbortSignal(signal, timeoutMs) {
  * @returns {Promise<never>}
  */
 async function throwHttpError(response) {
-  let detail = '';
+  let rawBody = '';
   try {
-    detail = (await response.text()).replace(/\s+/g, ' ').trim().slice(0, 240);
+    rawBody = await response.text();
   } catch {
     /* ignore */
   }
-  const suffix = detail ? `: ${detail}` : '';
-  const err = new Error(`Upstream HTTP ${response.status}${suffix}`);
+  const err = new Error(formatUpstreamHttpErrorMessage(response.status, rawBody));
   /** @type {Error & { status?: number }} */ (err).status = response.status;
   throw err;
 }

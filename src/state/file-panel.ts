@@ -15,12 +15,24 @@ export type RightPaneMode = 'viewer' | 'preview' | null;
 /** Max workspace file tabs persisted and open at once in the viewer strip. */
 export const MAX_OPEN_VIEWER_TABS = 20;
 
+/** Max preview browser tabs (each Electron tab is a live Chromium renderer). */
+export const MAX_PREVIEW_TABS = 6;
+
+/** Persisted preview tab row (source only; title/loading are runtime). */
+export interface PersistedPreviewTab {
+  id: string;
+  source: PreviewSource | null;
+}
+
 /** Persisted + in-memory file explorer / viewer preferences. */
 export interface FilePanelState {
   fileSidebarCollapsed: boolean;
+  /** Expanded file sidebar width in px (persisted). */
+  fileSidebarWidth?: number;
   /** @deprecated Use rightPaneMode; kept in sync for older persisted configs. */
   viewerOpen: boolean;
   rightPaneMode: RightPaneMode;
+  /** @deprecated Migrated into previewTabs; kept in sync with active tab source. */
   previewSource: PreviewSource | null;
   previewAutoReload: boolean;
   splitRatio: number;
@@ -30,6 +42,10 @@ export interface FilePanelState {
   openViewerTabs: string[];
   /** Active viewer tab path; must be in openViewerTabs or null. */
   activeViewerTab: string | null;
+  /** Open preview browser tabs (order preserved). */
+  previewTabs: PersistedPreviewTab[];
+  /** Active preview tab id; must be in previewTabs or null. */
+  activePreviewTab: string | null;
   treeRoot: string;
 }
 
@@ -44,11 +60,27 @@ export const DEFAULT_FILE_PANEL_STATE: FilePanelState = {
   selectedPath: null,
   openViewerTabs: [],
   activeViewerTab: null,
+  previewTabs: [],
+  activePreviewTab: null,
   treeRoot: '.',
 };
 
-const SPLIT_MIN = 0.35;
-const SPLIT_MAX = 0.75;
+/** Persisted split ratio bounds (main column share when the right pane is open). */
+export const SPLIT_RATIO_MIN = 0.35;
+export const SPLIT_RATIO_MAX = 0.75;
+/** Dragging the split left past this main-column ratio collapses chat for a full-width preview. */
+export const SPLIT_DRAG_CHAT_COLLAPSE_THRESHOLD = 0.12;
+
+const SPLIT_MIN = SPLIT_RATIO_MIN;
+const SPLIT_MAX = SPLIT_RATIO_MAX;
+const FILE_SIDEBAR_MIN_W = 220;
+const FILE_SIDEBAR_MAX_W = 560;
+const DEFAULT_FILE_SIDEBAR_W = 350;
+
+function clampFileSidebarWidth(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_FILE_SIDEBAR_W;
+  return Math.min(FILE_SIDEBAR_MAX_W, Math.max(FILE_SIDEBAR_MIN_W, Math.round(value)));
+}
 
 let panelState: FilePanelState = { ...DEFAULT_FILE_PANEL_STATE };
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -116,6 +148,38 @@ function normalizeActiveViewerTab(
   return openTabs.length > 0 ? openTabs[openTabs.length - 1]! : null;
 }
 
+function normalizePreviewTabs(raw: unknown, legacySource: PreviewSource | null): PersistedPreviewTab[] {
+  if (Array.isArray(raw) && raw.length > 0) {
+    const rows: PersistedPreviewTab[] = [];
+    const seen = new Set<string>();
+    for (const entry of raw) {
+      if (!entry || typeof entry !== 'object') continue;
+      const row = entry as Record<string, unknown>;
+      const id = typeof row.id === 'string' ? row.id.trim() : '';
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      rows.push({ id, source: normalizePreviewSource(row.source) });
+      if (rows.length >= MAX_PREVIEW_TABS) break;
+    }
+    if (rows.length > 0) return rows;
+  }
+  if (legacySource) {
+    return [{ id: 'legacy-preview-tab', source: legacySource }];
+  }
+  return [];
+}
+
+function normalizeActivePreviewTab(
+  raw: unknown,
+  tabs: PersistedPreviewTab[],
+): string | null {
+  if (typeof raw === 'string' && raw.trim()) {
+    const id = raw.trim();
+    if (tabs.some((t) => t.id === id)) return id;
+  }
+  return tabs.length > 0 ? tabs[tabs.length - 1]!.id : null;
+}
+
 function normalizeFilePanelBlock(raw: unknown): FilePanelState {
   if (!raw || typeof raw !== 'object') {
     return { ...DEFAULT_FILE_PANEL_STATE };
@@ -129,11 +193,7 @@ function normalizeFilePanelBlock(raw: unknown): FilePanelState {
   const rightPaneMode = normalizeRightPaneMode(row.rightPaneMode, viewerOpenLegacy, previewSource);
   const viewerOpen = rightPaneMode !== null;
   const selectedPath = typeof row.selectedPath === 'string' ? row.selectedPath : null;
-  let openViewerTabs = normalizeViewerTabPaths(row.openViewerTabs);
-  // Browser preview and file viewer are mutually exclusive — do not restore editor tabs.
-  if (rightPaneMode === 'preview') {
-    openViewerTabs = [];
-  }
+  const openViewerTabs = normalizeViewerTabPaths(row.openViewerTabs);
   const legacySelected =
     selectedPath &&
     !selectedPath.startsWith('.minnow/attachments/') &&
@@ -148,12 +208,22 @@ function normalizeFilePanelBlock(raw: unknown): FilePanelState {
     tabs,
     rightPaneMode === 'preview' ? null : selectedPath,
   );
+  const previewTabs = normalizePreviewTabs(row.previewTabs, previewSource);
+  const activePreviewTab = normalizeActivePreviewTab(row.activePreviewTab, previewTabs);
+  const syncedPreviewSource =
+    activePreviewTab
+      ? (previewTabs.find((t) => t.id === activePreviewTab)?.source ?? previewSource)
+      : previewSource;
   const syncedSelected = activeViewerTab ?? selectedPath;
   return {
     fileSidebarCollapsed: row.fileSidebarCollapsed === true,
+    fileSidebarWidth:
+      typeof row.fileSidebarWidth === 'number'
+        ? clampFileSidebarWidth(row.fileSidebarWidth)
+        : undefined,
     viewerOpen,
     rightPaneMode,
-    previewSource,
+    previewSource: syncedPreviewSource,
     previewAutoReload: row.previewAutoReload !== false,
     splitRatio: clampSplitRatio(
       typeof row.splitRatio === 'number' ? row.splitRatio : DEFAULT_FILE_PANEL_STATE.splitRatio,
@@ -162,6 +232,8 @@ function normalizeFilePanelBlock(raw: unknown): FilePanelState {
     selectedPath: syncedSelected,
     openViewerTabs: tabs,
     activeViewerTab,
+    previewTabs,
+    activePreviewTab,
     treeRoot: typeof row.treeRoot === 'string' && row.treeRoot.trim() ? row.treeRoot : '.',
   };
 }
@@ -188,8 +260,13 @@ export function setFilePanelState(next: FilePanelState): void {
     rightPaneMode,
     viewerOpen: rightPaneMode !== null,
     splitRatio: clampSplitRatio(next.splitRatio),
+    fileSidebarWidth:
+      next.fileSidebarWidth !== undefined
+        ? clampFileSidebarWidth(next.fileSidebarWidth)
+        : next.fileSidebarWidth,
     expandedDirs: [...next.expandedDirs],
     openViewerTabs: [...next.openViewerTabs],
+    previewTabs: [...next.previewTabs],
   };
 }
 
@@ -202,6 +279,10 @@ export function patchFilePanelState(partial: Partial<FilePanelState>): FilePanel
       partial.splitRatio !== undefined
         ? clampSplitRatio(partial.splitRatio)
         : panelState.splitRatio,
+    fileSidebarWidth:
+      partial.fileSidebarWidth !== undefined
+        ? clampFileSidebarWidth(partial.fileSidebarWidth)
+        : panelState.fileSidebarWidth,
     expandedDirs:
       partial.expandedDirs !== undefined
         ? [...partial.expandedDirs]
@@ -210,6 +291,8 @@ export function patchFilePanelState(partial: Partial<FilePanelState>): FilePanel
       partial.openViewerTabs !== undefined
         ? [...partial.openViewerTabs]
         : panelState.openViewerTabs,
+    previewTabs:
+      partial.previewTabs !== undefined ? [...partial.previewTabs] : panelState.previewTabs,
   };
   const rightPaneMode =
     partial.rightPaneMode !== undefined

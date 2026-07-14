@@ -8,6 +8,7 @@ const STORAGE_PREFIX = 'minnow.notifications.';
 
 export const NOTIFICATION_PREFS_KEYS = {
   enabled: `${STORAGE_PREFIX}enabled`,
+  muted: `${STORAGE_PREFIX}muted`,
   soundEnabled: `${STORAGE_PREFIX}soundEnabled`,
   soundId: `${STORAGE_PREFIX}soundId`,
   chatEnabled: `${STORAGE_PREFIX}chatEnabled`,
@@ -17,6 +18,7 @@ export const NOTIFICATION_PREFS_KEYS = {
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   enabled: true,
+  muted: false,
   soundEnabled: true,
   soundId: 'chime',
   chatEnabled: true,
@@ -72,6 +74,7 @@ export function loadNotificationPrefs(): NotificationPrefs {
 
   const prefs: NotificationPrefs = {
     enabled: readBool(NOTIFICATION_PREFS_KEYS.enabled, DEFAULT_NOTIFICATION_PREFS.enabled),
+    muted: readBool(NOTIFICATION_PREFS_KEYS.muted, DEFAULT_NOTIFICATION_PREFS.muted),
     soundEnabled: readBool(
       NOTIFICATION_PREFS_KEYS.soundEnabled,
       DEFAULT_NOTIFICATION_PREFS.soundEnabled,
@@ -108,6 +111,7 @@ function emitPrefs(): void {
 /** Persist all notification prefs and notify subscribers. */
 export function saveNotificationPrefs(prefs: NotificationPrefs): void {
   writeBool(NOTIFICATION_PREFS_KEYS.enabled, prefs.enabled);
+  writeBool(NOTIFICATION_PREFS_KEYS.muted, prefs.muted);
   writeBool(NOTIFICATION_PREFS_KEYS.soundEnabled, prefs.soundEnabled);
   writeString(NOTIFICATION_PREFS_KEYS.soundId, prefs.soundId);
   writeBool(NOTIFICATION_PREFS_KEYS.chatEnabled, prefs.chatEnabled);
@@ -143,6 +147,7 @@ const KIND_GROUP: Record<NotificationKind, NotificationKindGroup> = {
   task_failed: 'tasks',
   task_quarantined: 'tasks',
   board_complete: 'tasks',
+  board_blocked: 'tasks',
   sub_agent_complete: 'tasks',
   sub_agent_failed: 'tasks',
   scheduler: 'background',
@@ -152,7 +157,7 @@ const KIND_GROUP: Record<NotificationKind, NotificationKindGroup> = {
 
 /** True when prefs allow pushing this notification kind. */
 export function isNotificationKindEnabled(kind: NotificationKind, prefs = loadNotificationPrefs()): boolean {
-  if (!prefs.enabled) return false;
+  if (!prefs.enabled || prefs.muted) return false;
   const group = KIND_GROUP[kind];
   if (group === 'chat') return prefs.chatEnabled;
   if (group === 'tasks') return prefs.tasksEnabled;

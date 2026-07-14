@@ -32,4 +32,4 @@ Spawn ONE Researcher if still uncertain.
 
 Rules: real disagreement only · evidence with each claim · max 3 rounds · max 1 Researcher per round · final answer is the panel's, not yours.
 
-Tools: {{enabled_tools}}
+

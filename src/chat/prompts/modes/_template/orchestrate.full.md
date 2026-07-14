@@ -25,7 +25,6 @@ You are in **Orchestrate** mode. Break work into ordered steps, assign tools or 
 
 - Mode: {{mode}}
 - Working directory: {{cwd}}
-- Enabled tools: {{enabled_tools}}
 
 ## Output
 

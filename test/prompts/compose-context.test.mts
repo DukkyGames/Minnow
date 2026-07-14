@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 
+import { normalizeWorkspacePath } from '../../src/lib/normalize-workspace-path.ts';
 import { buildComposeContext } from '../../src/chat/prompts/compose-context.ts';
 import {
   registerPromptFilesFromRaw,
@@ -145,6 +146,38 @@ describe('buildComposeContext cwd', () => {
     const ctx = await buildComposeContext(chat);
     assert.equal(ctx.cwd, MAIN_REPO);
   });
+
+  it('uses desktop sandbox workspace for desktop mode chats', async () => {
+    const desktopWs = 'C:/Users/me/.minnow/workspace';
+    const chat = baseChat({ modeId: 'desktop', workspacePath: desktopWs });
+    const ctx = await buildComposeContext(chat);
+    assert.equal(ctx.cwd, normalizeWorkspacePath(desktopWs));
+    assert.notEqual(ctx.cwd, MAIN_REPO);
+  });
+
+  it('sets browserActivated from chat history browser tool calls', async () => {
+    const fresh = await buildComposeContext(baseChat());
+    assert.equal(fresh.browserActivated, false);
+
+    const activated = await buildComposeContext(
+      baseChat({
+        history: [
+          {
+            role: 'assistant',
+            content: null,
+            tool_calls: [
+              {
+                id: 'call_1',
+                type: 'function',
+                function: { name: 'browser_snapshot', arguments: '{}' },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    assert.equal(activated.browserActivated, true);
+  });
 });
 
 describe('builder prompt cwd rendering', () => {
@@ -167,11 +200,9 @@ describe('builder prompt cwd rendering', () => {
       skillBody: null,
       memoryBlock: null,
       enabledToolIds: ['execute_command', 'save_file'],
-      enabledToolSummaries: 'execute_command: Run shell\nsave_file: Write file',
       infoPresetId: 'general-assistant',
       planGranularity: 'medium',
       userMessagePreview: 'Scaffold frontend',
-      includeChatHistorySummary: false,
     });
 
     assert.match(prompt, /Working directory: `C:\/Users\/dukky\/\.minnow\/worktrees\/gb-todo\/grp_932\/task-W1-FOUNDATION`/);

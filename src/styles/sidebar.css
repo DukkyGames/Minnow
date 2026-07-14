@@ -15,6 +15,36 @@
   position: relative;
 }
 
+/* Drag handles overlay sidebar inner edges (no extra flex gutter). */
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  touch-action: none;
+  z-index: 37;
+  flex: none;
+}
+
+.sidebar-resizer--chat {
+  right: -3px;
+}
+
+.sidebar-resizer--file {
+  left: -3px;
+}
+
+.sidebar-resizer:hover,
+.sidebar-resizer.dragging {
+  background: var(--mn-accent-soft);
+}
+
+.sidebar-resizer[hidden] {
+  display: none;
+}
+
 /* Sidebar backdrop (mobile overlay) */
 .sidebar-backdrop {
   top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px));
@@ -23,6 +53,7 @@
 
 /* ─── CHAT SIDEBAR ─── */
 .chat-sidebar {
+  position: relative;
   width: var(--sidebar-w);
   flex-shrink: 0;
   background: var(--mn-surface-1);
@@ -638,6 +669,15 @@
 .chat-item-row.active {
   border-color: var(--mn-accent);
   background: var(--mn-accent-soft);
+}
+
+.chat-item-row--draft .chat-item-name {
+  color: var(--mn-fg-muted);
+  font-style: italic;
+}
+
+.chat-item-row--draft.active .chat-item-name {
+  color: var(--mn-fg);
 }
 
 .chat-item-row--selected:not(.active) {

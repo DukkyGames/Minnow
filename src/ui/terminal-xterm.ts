@@ -15,6 +15,7 @@ import {
   type ShellProfile,
 } from '../api/terminal-pty';
 import { getLocalServerAvailable } from '../tools/client';
+import { resolveFileExplorerTerminalCwd } from './terminal-worktree-cwd';
 import {
   copyTextToClipboard,
   shouldCopyTerminalSelectionOnKeydown,
@@ -24,6 +25,7 @@ import {
   buildHistoryReplaceInput,
   resolveHistoryNavigation,
 } from './terminal-history-nav';
+import { handleTerminalWebLink } from './terminal-console-links';
 
 const HISTORY_STORAGE_PREFIX = 'minnow.terminal.history.';
 const MAX_TAB_HISTORY = 500;
@@ -33,6 +35,10 @@ export interface TerminalTabSession {
   shellProfileId: string;
   sessionId: string | null;
   title: string;
+  /** Chat bound when the session was created (MIN-349). */
+  chatId?: string | null;
+  /** Absolute cwd used when the PTY was spawned. */
+  boundCwd?: string;
 }
 
 let hostEl: HTMLElement | null = null;
@@ -86,6 +92,27 @@ function pushSubmittedLine(line: string): void {
   historyIndex = tabHistory.length;
 }
 
+function resolveTerminalTypography(): {
+  fontFamily: string;
+  fontSize: number;
+  /** xterm lineHeight is a multiplier on glyph height (not px). */
+  lineHeight: number;
+} {
+  const style = getComputedStyle(document.documentElement);
+  const fontFamily =
+    style.getPropertyValue('--font-mono').trim() ||
+    "'JetBrains Mono', ui-monospace, monospace";
+  const fontSize =
+    Number.parseFloat(style.getPropertyValue('--terminal-font-size')) || 13;
+  const lineHeight =
+    Number.parseFloat(style.getPropertyValue('--terminal-line-height')) || 1.55;
+  return {
+    fontFamily,
+    fontSize,
+    lineHeight,
+  };
+}
+
 function applyXtermTheme(): void {
   if (!term) return;
   const style = getComputedStyle(document.documentElement);
@@ -93,17 +120,22 @@ function applyXtermTheme(): void {
   const bg = style.getPropertyValue('--mn-bg').trim() || '#0f1216';
   const accent = style.getPropertyValue('--mn-accent').trim() || '#9ec5a7';
   const sel = style.getPropertyValue('--mn-surface-0').trim() || '#161a20';
+  const typography = resolveTerminalTypography();
   term.options.theme = {
     background: bg,
     foreground: fg,
     cursor: accent,
     selectionBackground: sel,
   };
+  term.options.fontFamily = typography.fontFamily;
+  term.options.fontSize = typography.fontSize;
+  term.options.lineHeight = typography.lineHeight;
 }
 
 /** Re-read CSS variables into xterm after theme change (no-op if terminal not mounted). */
 export function refreshXtermTheme(): void {
   applyXtermTheme();
+  fitAddon?.fit();
 }
 
 function disconnectWs(): void {
@@ -189,16 +221,18 @@ function ensureTerminal(): Terminal | null {
   if (!hostEl) return null;
   if (term) return term;
 
+  const typography = resolveTerminalTypography();
   term = new Terminal({
     cursorBlink: true,
-    fontFamily: 'var(--font-mono)',
-    fontSize: 13,
+    fontFamily: typography.fontFamily,
+    fontSize: typography.fontSize,
+    lineHeight: typography.lineHeight,
     scrollback: 5000,
     allowProposedApi: false,
   });
   fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
-  term.loadAddon(new WebLinksAddon());
+  term.loadAddon(new WebLinksAddon(handleTerminalWebLink));
   applyXtermTheme();
   term.open(hostEl);
 
@@ -253,6 +287,13 @@ export function isTerminalXtermReady(): boolean {
   return hostEl !== null;
 }
 
+/** Fill cwd scope on restored tabs before spawning a PTY session. */
+function ensureTabScope(tab: TerminalTabSession): void {
+  if (!tab.boundCwd) {
+    tab.boundCwd = resolveFileExplorerTerminalCwd();
+  }
+}
+
 /** Open or reconnect PTY for a tab. */
 export async function attachTerminalTab(
   tab: TerminalTabSession,
@@ -281,14 +322,18 @@ export async function attachTerminalTab(
     return;
   }
 
+  ensureTabScope(tab);
+
   try {
     const created = await createTerminalSession({
       shellProfileId: tab.shellProfileId,
       cols,
       rows,
-      chatId: null,
+      chatId: tab.chatId ?? null,
+      cwd: tab.boundCwd,
     });
     tab.sessionId = created.sessionId;
+    tab.boundCwd = created.cwd;
     connectWs(created.sessionId, tab.tabId);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

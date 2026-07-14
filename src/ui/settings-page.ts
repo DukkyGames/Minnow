@@ -3,6 +3,7 @@
  */
 
 import '../styles/settings-page.css';
+import '../styles/settings-agent-center.css';
 
 import { loadPromptMetaSettings, savePromptMetaSettings } from '../config/prompt-meta';
 import { detectLocalServer } from '../tools/client';
@@ -17,18 +18,21 @@ import type { PromptProfile } from '../chat/prompts/types';
 import {
   SETTINGS_CATEGORY_AREAS,
   SETTINGS_CATEGORIES,
+  SETTINGS_INTEGRATIONS_HUBS,
   categoryForArea,
+  hubForArea,
   type SettingsCategoryId,
+  type SettingsIntegrationsHubId,
   type SettingsSectionId,
 } from './settings-page-types';
 import { initSettingsSearchFinder } from './settings-search-finder';
 import { applySettingsPageFilter, clearSettingsPageFilter } from './settings-filter';
 import {
+  activateIntegrationsHub,
   flashSettingsSearchTarget,
   resolveSettingsSearchDomTarget,
   scrollToSettingsArea,
-  scrollToSettingsHub,
-  updateSettingsSubnavActive,
+  updateSettingsNavActive,
 } from './settings-search-navigate';
 import { upgradeSettingsCheckboxes } from './settings-switch';
 import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
@@ -43,7 +47,16 @@ export { isOsEmbedded };
 
 const CATEGORIES = SETTINGS_CATEGORIES;
 
+/** Legacy agent area hashes → unified Agents center. */
+const LEGACY_AGENT_AREA_ALIASES: Partial<Record<string, SettingsSectionId>> = {
+  prompting: 'agent-center',
+  modes: 'agent-center',
+  'work-agents': 'agent-center',
+  'sub-agents': 'agent-center',
+};
+
 let activeCategory: SettingsCategoryId = 'general';
+let activeArea: SettingsSectionId = 'general';
 let staticBindingsDone = false;
 /** Pending area scroll after category panel opens (legacy hash or deep link). */
 let pendingScrollArea: SettingsSectionId | null = null;
@@ -68,6 +81,15 @@ function isSettingsCategoryId(value: string): value is SettingsCategoryId {
   return CATEGORIES.includes(value as SettingsCategoryId);
 }
 
+/** Write area hash unless OS-embedded (no hash mutation). */
+function writeSettingsHash(slug: string): void {
+  if (isOsEmbedded()) return;
+  const nextHash = `#/settings/${slug}`;
+  if (window.location.hash !== nextHash) {
+    window.location.hash = nextHash;
+  }
+}
+
 /** Parse `#/settings/<category|legacy-area>`. */
 function parseHashRoute(): {
   category: SettingsCategoryId;
@@ -79,8 +101,15 @@ function parseHashRoute(): {
   if (!slug || slug === 'voice') {
     return { category: 'general' };
   }
+  if (slug === 'knowledge') {
+    return { category: 'agents', scrollArea: 'rules' };
+  }
   if (isSettingsCategoryId(slug)) {
     return { category: slug };
+  }
+  if (slug && LEGACY_AGENT_AREA_ALIASES[slug]) {
+    const area = LEGACY_AGENT_AREA_ALIASES[slug]!;
+    return { category: categoryForArea(area), scrollArea: area };
   }
   if (isSettingsSectionId(slug)) {
     return { category: categoryForArea(slug), scrollArea: slug };
@@ -93,53 +122,67 @@ async function refreshCategoryAreas(category: SettingsCategoryId): Promise<void>
   await Promise.all(areas.map((area) => refreshSettingsSection(area)));
 }
 
-/** Highlight the subnav tab that matches a section slug (when present). */
-function syncSettingsSubnavActive(area?: SettingsSectionId): void {
-  updateSettingsSubnavActive(area);
+function getSectionRoot(sectionId: SettingsSectionId): HTMLElement | null {
+  return document.getElementById(`settingsSection-${sectionId}`);
 }
 
-function setActiveCategory(
-  category: SettingsCategoryId,
-  options?: { scrollArea?: SettingsSectionId; searchKey?: string },
+/** Toggle area panels: one page per area; integrations keep hub stacks. */
+function syncAreaVisibility(area: SettingsSectionId): void {
+  const category = categoryForArea(area);
+  const panel = document.querySelector(
+    `.settings-category[data-category="${category}"]`,
+  );
+  if (!panel) return;
+
+  if (category === 'integrations') {
+    const hubId = hubForArea(area);
+    if (hubId) activateIntegrationsHub(hubId);
+    panel.querySelectorAll<HTMLElement>('.settings-area').forEach((section) => {
+      section.classList.remove('is-active');
+    });
+    getSectionRoot(area)?.classList.add('is-active');
+    return;
+  }
+
+  panel.querySelectorAll<HTMLElement>('.settings-area').forEach((section) => {
+    section.classList.toggle('is-active', section.dataset.area === area);
+  });
+}
+
+/** Activate a settings area (primary navigation). */
+export function setActiveArea(
+  area: SettingsSectionId,
+  options?: { searchKey?: string; skipHash?: boolean },
 ): void {
+  activeArea = area;
+  const category = categoryForArea(area);
   activeCategory = category;
 
   for (const cat of CATEGORIES) {
-    const panel = document.querySelector(
+    const catPanel = document.querySelector(
       `.settings-category[data-category="${cat}"]`,
     );
-    const nav = document.querySelector(
-      `[data-settings-category="${cat}"]`,
-    ) as HTMLButtonElement | null;
-    panel?.classList.toggle('is-active', cat === category);
-    if (nav) {
-      if (cat === category) nav.setAttribute('aria-current', 'page');
-      else nav.removeAttribute('aria-current');
-    }
+    catPanel?.classList.toggle('is-active', cat === category);
   }
 
-  if (!isOsEmbedded()) {
-    const nextHash = `#/settings/${category}`;
-    if (window.location.hash !== nextHash && !options?.scrollArea) {
-      window.location.hash = nextHash;
-    }
+  syncAreaVisibility(area);
+
+  const hubId =
+    category === 'integrations' ? hubForArea(area) : undefined;
+  updateSettingsNavActive(area, hubId);
+
+  if (!options?.skipHash) {
+    writeSettingsHash(area);
   }
 
   void refreshCategoryAreas(category).then(() => {
     void detectLocalServer().then(() => refreshPromptTokenEstimate());
-    const scrollArea = options?.scrollArea ?? pendingScrollArea;
     const searchKey = options?.searchKey ?? pendingSearchKey;
-    pendingScrollArea = null;
     pendingSearchKey = null;
-    updateSettingsSubnavActive(scrollArea ?? SETTINGS_CATEGORY_AREAS[category][0]);
 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (searchKey) {
-          const area =
-            options?.scrollArea ??
-            pendingScrollArea ??
-            SETTINGS_CATEGORY_AREAS[category][0]!;
           const target = resolveSettingsSearchDomTarget(area, searchKey);
           if (target) {
             target.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -147,17 +190,61 @@ function setActiveCategory(
             return;
           }
         }
-        if (scrollArea) {
-          scrollToSettingsArea(scrollArea);
-        }
+        scrollToSettingsArea(area, { skipActivation: true });
       });
+    });
+  });
+}
+
+function setActiveCategory(
+  category: SettingsCategoryId,
+  options?: { scrollArea?: SettingsSectionId; searchKey?: string },
+): void {
+  const area =
+    options?.scrollArea ??
+    pendingScrollArea ??
+    SETTINGS_CATEGORY_AREAS[category][0]!;
+  pendingScrollArea = null;
+
+  if (options?.searchKey) {
+    pendingSearchKey = options.searchKey;
+  }
+
+  setActiveArea(area, { searchKey: options?.searchKey });
+}
+
+/** Activate an integrations hub from the sidebar. */
+function setActiveIntegrationsHub(hubId: SettingsIntegrationsHubId): void {
+  const hubDef = SETTINGS_INTEGRATIONS_HUBS.find((hub) => hub.id === hubId);
+  const firstArea = hubDef?.areas[0];
+  if (!firstArea) return;
+
+  activeArea = firstArea;
+  activeCategory = 'integrations';
+
+  for (const cat of CATEGORIES) {
+    const catPanel = document.querySelector(
+      `.settings-category[data-category="${cat}"]`,
+    );
+    catPanel?.classList.toggle('is-active', cat === 'integrations');
+  }
+
+  activateIntegrationsHub(hubId);
+  updateSettingsNavActive(undefined, hubId);
+  writeSettingsHash(firstArea);
+
+  void refreshCategoryAreas('integrations').then(() => {
+    void detectLocalServer().then(() => refreshPromptTokenEstimate());
+    requestAnimationFrame(() => {
+      const hub = document.getElementById(`settingsHub-${hubId}`);
+      hub?.scrollIntoView({ block: 'start', behavior: 'smooth' });
     });
   });
 }
 
 /** Legacy API: open a section slug (maps to category + scroll). */
 export function setActiveSection(section: SettingsSectionId): void {
-  setActiveCategory(categoryForArea(section), { scrollArea: section });
+  setActiveArea(section);
 }
 
 function bindStaticSections(): void {
@@ -177,7 +264,7 @@ function bindStaticSections(): void {
         ),
       );
       setStatus('ok', `Prompt profile: ${profile}`);
-      await refreshSettingsSection('prompting');
+      await refreshSettingsSection('agent-center');
       schedulePromptTokenEstimateRefresh();
     });
   });
@@ -188,18 +275,17 @@ function bindStaticSections(): void {
       const area = (link as HTMLElement).dataset.areaJump as
         | SettingsSectionId
         | undefined;
-      if (area) {
-        syncSettingsSubnavActive(area);
-        scrollToSettingsArea(area);
-      }
+      if (area) setActiveArea(area);
     });
   });
 
   document.querySelectorAll('[data-hub-jump]').forEach((link) => {
     link.addEventListener('click', (event) => {
       event.preventDefault();
-      const hub = (link as HTMLElement).dataset.hubJump;
-      if (hub) scrollToSettingsHub(hub);
+      const hub = (link as HTMLElement).dataset.hubJump as
+        | SettingsIntegrationsHubId
+        | undefined;
+      if (hub) setActiveIntegrationsHub(hub);
     });
   });
 }
@@ -265,8 +351,15 @@ export function openSettings(
     return;
   }
 
+  if (route.scrollArea ?? section) {
+    setActiveArea(route.scrollArea ?? section!, {
+      searchKey: options?.searchKey,
+      skipHash: !section && !options?.searchKey,
+    });
+    return;
+  }
+
   setActiveCategory(route.category, {
-    scrollArea: route.scrollArea ?? section,
     searchKey: options?.searchKey,
   });
 }
@@ -313,8 +406,10 @@ function onHashChange(): void {
     const route = parseHashRoute();
     if (!getSettingsRoot()?.classList.contains('is-open')) {
       openSettings(route.scrollArea);
+    } else if (route.scrollArea) {
+      setActiveArea(route.scrollArea, { skipHash: true });
     } else {
-      setActiveCategory(route.category, { scrollArea: route.scrollArea });
+      setActiveCategory(route.category);
     }
     return;
   }
@@ -328,6 +423,11 @@ function onHashChange(): void {
 
 /** Wire nav, back button, hash routing, and in-page filter hooks. */
 export function initSettingsPage(): void {
+  const root = getSettingsRoot();
+  if (root && isOsEmbedded()) {
+    root.classList.add('settings-page--os-embedded');
+  }
+
   registerWindowTeardown('settings', () => closeSettings({ skipNavigate: true }));
   upgradeSettingsCheckboxes();
   initSettingsSearchFinder({
@@ -344,12 +444,6 @@ export function initSettingsPage(): void {
       if (isOsEmbedded()) navigateToDesktop();
       else closeSettings();
     });
-
-  for (const cat of CATEGORIES) {
-    document
-      .querySelector(`[data-settings-category="${cat}"]`)
-      ?.addEventListener('click', () => setActiveCategory(cat));
-  }
 
   window.addEventListener('hashchange', onHashChange);
   if (window.location.hash.startsWith('#/settings')) {

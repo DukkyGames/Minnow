@@ -10,6 +10,7 @@ import {
   checkWorktreeDirty,
   commitIntegration,
   commitWorktree,
+  createChatWorktree,
   createWorktree,
   ensureIntegration,
   integrationStats,
@@ -21,17 +22,12 @@ import {
   openWorkspacePr,
   pushIntegration,
   refreshIntegrationDeps,
+  removeChatWorktree,
   removeWorktree,
   restoreIntegration,
   verifyIntegrationMerge,
   workspaceLandingStats,
 } from './worktree-ops.js';
-
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -77,10 +73,11 @@ const OPS = {
   push_integration: (a) => pushIntegration(a),
   open_pr: (a) => openPr(a),
   open_workspace_pr: (a) => openWorkspacePr(a),
+  create_chat: (a) => createChatWorktree(a),
+  remove_chat: (a) => removeChatWorktree(a),
 };
 
 export async function handleWorktreeRequest(req, res, pathname) {
-  setCorsHeaders(res);
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;
     res.end();

@@ -224,6 +224,94 @@ describe('hard truncate single message', () => {
   });
 });
 
+/** Assert an OpenAI-valid tool-call/tool-result sequence (no orphans, all answered). */
+function assertValidToolSequence(messages: ApiMessage[]): void {
+  for (let i = 0; i < messages.length; i += 1) {
+    const m = messages[i];
+    if (m.role === 'assistant' && m.tool_calls?.length) {
+      const answered = new Set<string>();
+      let j = i + 1;
+      while (j < messages.length && messages[j].role === 'tool') {
+        answered.add((messages[j] as { tool_call_id: string }).tool_call_id);
+        j += 1;
+      }
+      for (const call of m.tool_calls) {
+        assert.ok(answered.has(call.id), `assistant tool_call ${call.id} is unanswered`);
+      }
+    }
+    if (m.role === 'tool') {
+      const prev = messages[i - 1];
+      const owner =
+        (prev?.role === 'assistant' && prev.tool_calls) ||
+        (prev?.role === 'tool' && messages.slice(0, i).reverse().find((p) => p.role === 'assistant'));
+      assert.ok(prev, `tool message at ${i} has no predecessor`);
+      assert.notEqual(prev.role, 'system', `tool message at ${i} orphaned directly after system`);
+      assert.notEqual(prev.role, 'user', `tool message at ${i} orphaned directly after user`);
+      assert.ok(owner, `tool message at ${i} has no owning assistant`);
+    }
+  }
+}
+
+describe('applyContextBudget preserves tool-call pairing (sub-agent single turn)', () => {
+  test('truncation never orphans a tool result after system', () => {
+    // Reproduces the sub-agent shape: one user task then many assistant/tool
+    // round-trips. Previously message-level truncation produced [system, tool].
+    const messages: ApiMessage[] = [
+      system('s'.repeat(400)),
+      user('research task ' + 'q'.repeat(200)),
+      assistantWithTools(null, [
+        { id: 'call_1', type: 'function', function: { name: 'read_file', arguments: '{}' } },
+      ]),
+      toolResult('call_1', 'first file '.repeat(200)),
+      assistantWithTools(null, [
+        { id: 'call_2', type: 'function', function: { name: 'read_file', arguments: '{}' } },
+      ]),
+      toolResult('call_2', 'export default { plugins: {} }'),
+    ];
+    const resolved = resolveContextBudget({
+      agentConfig: { maxInputTokens: 40, enforcementPolicy: 'summarize' },
+      modelLimit: null,
+    });
+    const out = applyContextBudget(messages, resolved, {
+      maxInputTokens: 40,
+      enforcementPolicy: 'summarize',
+      minRecentTurns: 1,
+    });
+    assert.equal(out.applied, true);
+    // System survives; the orphaned-tool bug would leave a tool right after it.
+    assert.equal(out.messages[0].role, 'system');
+    assertValidToolSequence(out.messages);
+  });
+
+  test('truncate policy keeps the most recent assistant/tool pair intact', () => {
+    const messages: ApiMessage[] = [
+      system('s'),
+      user('task'),
+      assistantWithTools(null, [
+        { id: 'call_9', type: 'function', function: { name: 'grep', arguments: '{}' } },
+      ]),
+      toolResult('call_9', 'z'.repeat(4000)),
+    ];
+    const resolved = resolveContextBudget({
+      agentConfig: { maxInputTokens: 20, enforcementPolicy: 'truncate' },
+      modelLimit: null,
+    });
+    const out = applyContextBudget(messages, resolved, {
+      maxInputTokens: 20,
+      enforcementPolicy: 'truncate',
+    });
+    assertValidToolSequence(out.messages);
+    // The assistant that owns call_9 must still be present for its tool result.
+    const hasAssistant = out.messages.some(
+      (m) => m.role === 'assistant' && m.tool_calls?.some((c) => c.id === 'call_9'),
+    );
+    const hasTool = out.messages.some(
+      (m) => m.role === 'tool' && m.tool_call_id === 'call_9',
+    );
+    assert.equal(hasAssistant, hasTool);
+  });
+});
+
 describe('formatContextTrimStatus', () => {
   test('includes policy and drop count', () => {
     const line = formatContextTrimStatus('slide', 4, false);

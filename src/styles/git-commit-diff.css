@@ -1,0 +1,241 @@
+/* Commit diff review — side-by-side file diffs in the workspace viewer split */
+
+.file-viewer-pane--commit-diff .file-viewer-header {
+  display: none;
+}
+
+.git-commit-diff-host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.git-commit-diff {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.git-commit-diff__meta {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.git-commit-diff__meta-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.git-commit-diff__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--mn-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-commit-diff__detail {
+  margin: 4px 0 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+}
+
+.git-commit-diff-close {
+  flex-shrink: 0;
+}
+
+.git-commit-diff__file-tabs {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--mn-border);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.git-commit-diff__file-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 4px 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .git-commit-diff__file-tab:hover {
+    color: var(--mn-fg);
+    border-color: var(--mn-border-strong);
+  }
+}
+
+.git-commit-diff__file-tab.is-active {
+  color: var(--mn-fg);
+  border-color: var(--mn-accent);
+  background: var(--mn-surface-2);
+}
+
+.git-commit-diff__file-tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.git-commit-diff__file-tab-stats {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.git-commit-diff__no-files {
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+  padding: 2px 4px;
+}
+
+.git-commit-diff__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.git-commit-diff__column-labels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--mn-border);
+  background: var(--mn-surface-2);
+}
+
+.git-commit-diff__column-label {
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--mn-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-commit-diff__column-label + .git-commit-diff__column-label {
+  border-left: 1px solid var(--mn-border);
+}
+
+.git-commit-diff__diff-mount {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.git-commit-diff__binary,
+.git-commit-diff__empty {
+  margin: 0;
+  padding: 16px 12px;
+  font-size: 13px;
+  color: var(--mn-fg-muted);
+}
+
+/* Side-by-side diff grid (shared row scroll) */
+.sbs-diff {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.sbs-diff__truncated {
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+  border-bottom: 1px solid var(--mn-border);
+  flex-shrink: 0;
+}
+
+.sbs-diff__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.sbs-diff__grid {
+  display: flex;
+  flex-direction: column;
+  min-width: max-content;
+}
+
+.sbs-diff__row {
+  display: grid;
+  grid-template-columns: 3.5ch 1fr 3.5ch 1fr;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sbs-diff__gutter {
+  padding: 0 6px;
+  text-align: right;
+  user-select: none;
+  color: var(--mn-fg-muted);
+  font-variant-numeric: tabular-nums;
+  background: var(--mn-surface-2);
+  border-right: 1px solid var(--mn-border);
+}
+
+.sbs-diff__gutter--right {
+  border-left: 1px solid var(--mn-border);
+}
+
+.sbs-diff__cell {
+  padding: 0 8px;
+  white-space: pre;
+  min-width: 0;
+}
+
+.sbs-diff__cell--context {
+  color: var(--mn-fg-muted);
+}
+
+.sbs-diff__cell--remove {
+  background: color-mix(in oklch, var(--mn-danger) 16%, transparent);
+}
+
+.sbs-diff__cell--add {
+  background: color-mix(in oklch, var(--mn-success) 18%, transparent);
+}
+
+.sbs-diff__cell--gap {
+  background: color-mix(in oklch, var(--mn-fg) 4%, transparent);
+}
+
+.sbs-diff__cell--left.sbs-diff__cell--gap {
+  border-right: 1px solid var(--mn-border);
+}
+
+.file-viewer-pane--commit-diff .file-viewer-body {
+  overflow: hidden;
+}

@@ -3,8 +3,15 @@
  * Supports pre-first-token failover across configured provider/model candidates.
  */
 
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { readConfigJson } from '../config/store.js';
 import { getProviderRuntime } from '../providers/store.js';
+import {
+  resolveOpenCodeZenUpstreamUrl,
+} from '../providers/opencode-zen.js';
+import { sanitizeCompletionBodyForProvider } from '../providers/sanitize-completion-body.js';
 import {
   buildCandidateRequestBody,
   classifyUpstreamError,
@@ -22,25 +29,87 @@ import {
   generationTimeoutMessage,
   readGenerationUpstreamTimeouts,
 } from './timeouts.js';
+import { pumpAnthropicUpstream } from './anthropic/pump.js';
+import { deriveMessagesPathFromChat } from '../../src/lib/derive-messages-path.mjs';
+import { resolveModelApi } from './resolve-model-api.js';
+import { formatUpstreamHttpErrorMessage } from './upstream-error-detail.js';
 import { upstreamFetch } from './upstream-fetch.js';
 
 /**
+ * Best-effort diagnostic dump of the outbound body + upstream error body when an
+ * openai-v1 upstream POST fails, mirroring the anthropic gateway dump so opaque
+ * "Upstream request failed" 400s can be root-caused from the last occurrence.
+ * @param {{ status: number, url: string, providerId: string, modelId: string, requestBody: Buffer, responseText: string }} info
+ */
+function dumpUpstreamFailure(info) {
+  try {
+    const dir = join(homedir(), '.minnow', 'debug');
+    mkdirSync(dir, { recursive: true });
+    let parsedBody;
+    try {
+      parsedBody = JSON.parse(info.requestBody.toString('utf8'));
+    } catch {
+      parsedBody = info.requestBody.toString('utf8');
+    }
+    writeFileSync(
+      join(dir, 'openai-upstream-last-error.json'),
+      JSON.stringify(
+        {
+          at: new Date().toISOString(),
+          status: info.status,
+          url: info.url,
+          providerId: info.providerId,
+          modelId: info.modelId,
+          responseText: info.responseText,
+          requestBody: parsedBody,
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+  } catch {
+    // Best-effort diagnostic only.
+  }
+}
+
+/**
  * Kimi (Moonshot AI) thinking/code models only accept temperature=1.
+ * OpenAI-v1 bodies are sanitized (sampler + reasoning fields) before upstream POST.
  * @param {Buffer} requestBody
- * @param {string} apiKind
+ * @param {{ apiKind?: string, baseUrl?: string }} profile
+ * @param {string} modelId
+ * @param {'lm-studio-v0' | 'openai-v1' | 'anthropic-v1'} [resolvedApi]
  * @returns {Buffer}
  */
-function fixModelTemperature(requestBody, apiKind) {
-  if (apiKind !== 'openai-v1') return requestBody;
+function prepareUpstreamRequestBody(requestBody, profile, modelId, resolvedApi) {
+  const apiKind = resolvedApi ?? profile.apiKind ?? 'openai-v1';
+  let body = requestBody;
+
   try {
     const parsed = JSON.parse(requestBody.toString('utf8'));
-    if (!parsed || typeof parsed !== 'object') return requestBody;
-    const modelId = typeof parsed.model === 'string' ? parsed.model : '';
-    if (!/kimi/i.test(modelId)) return requestBody;
-    if (typeof parsed.temperature !== 'number' || parsed.temperature === 1) return requestBody;
+    if (parsed && typeof parsed === 'object') {
+      const sanitized = sanitizeCompletionBodyForProvider(
+        /** @type {Record<string, unknown>} */ (parsed),
+        { apiKind },
+      );
+      body = Buffer.from(JSON.stringify(sanitized), 'utf8');
+    }
+  } catch {
+    /* keep raw body */
+  }
+
+  if (apiKind !== 'openai-v1') return body;
+
+  try {
+    const parsed = JSON.parse(body.toString('utf8'));
+    if (!parsed || typeof parsed !== 'object') return body;
+    const model = typeof parsed.model === 'string' ? parsed.model : modelId;
+    if (!/kimi/i.test(model)) return body;
+    if (typeof parsed.temperature !== 'number' || parsed.temperature === 1) return body;
     return Buffer.from(JSON.stringify({ ...parsed, temperature: 1 }), 'utf8');
   } catch {
-    return requestBody;
+    return body;
   }
 }
 
@@ -98,7 +167,10 @@ async function pumpUpstreamAsync({ state }) {
       return;
     }
 
-    const url = `${runtime.profile.baseUrl}${runtime.paths.chatCompletionsPath}`;
+    const url = resolveOpenCodeZenUpstreamUrl(
+      runtime.profile.baseUrl,
+      runtime.paths.chatCompletionsPath,
+    );
     const origin = originFromUrl(runtime.profile.baseUrl);
     if (isHostDead(origin)) {
       lastError = `Host in cooldown: ${origin}`;
@@ -109,21 +181,51 @@ async function pumpUpstreamAsync({ state }) {
       return;
     }
 
-    const rawBody = buildCandidateRequestBody(state.requestBody, candidate.modelId);
-    const requestBody = fixModelTemperature(rawBody, runtime.profile.apiKind);
-    const result = await attemptCandidateStream({
-      state,
-      candidate,
-      index,
-      url,
-      headers: runtime.headers,
-      requestBody,
-      idleMs,
-      maxMs,
-      cooldownSeconds: fallbackConfig.cooldownSeconds,
-      origin,
-      canFailover: !state.failoverDisabled && index < state.candidates.length - 1,
-    });
+    const canFailover = !state.failoverDisabled && index < state.candidates.length - 1;
+    const resolvedApi = resolveModelApi(runtime, candidate.modelId);
+    const anthropicRuntime =
+      resolvedApi === 'anthropic-v1'
+        ? {
+            ...runtime,
+            paths: {
+              ...runtime.paths,
+              messagesPath:
+                runtime.profile.messagesPath ||
+                runtime.paths.messagesPath ||
+                deriveMessagesPathFromChat(runtime.paths.chatCompletionsPath),
+            },
+          }
+        : runtime;
+    const result =
+      resolvedApi === 'anthropic-v1'
+        ? await pumpAnthropicUpstream({
+            state,
+            runtime: anthropicRuntime,
+            candidate,
+            index,
+            idleMs,
+            maxMs,
+            cooldownSeconds: fallbackConfig.cooldownSeconds,
+            canFailover,
+          })
+        : await attemptCandidateStream({
+            state,
+            candidate,
+            index,
+            url,
+            headers: runtime.headers,
+            requestBody: prepareUpstreamRequestBody(
+              buildCandidateRequestBody(state.requestBody, candidate.modelId),
+              runtime.profile,
+              candidate.modelId,
+              resolvedApi,
+            ),
+            idleMs,
+            maxMs,
+            cooldownSeconds: fallbackConfig.cooldownSeconds,
+            origin,
+            canFailover,
+          });
 
     if (result.outcome === 'complete') {
       return;
@@ -205,20 +307,21 @@ async function attemptCandidateStream({
     });
 
     if (!upstream.ok) {
-      let detail = '';
+      let rawBody = '';
       try {
-        detail = (await upstream.text()).replace(/\s+/g, ' ').trim().slice(0, 240);
+        rawBody = await upstream.text();
       } catch {
         /* ignore */
       }
-      const html =
-        detail.toLowerCase().includes('<!doctype') || detail.toLowerCase().includes('<html');
-      const suffix = detail
-        ? html
-          ? ' (provider returned an HTML error page — check LM Studio / provider logs)'
-          : `: ${detail}`
-        : '';
-      const message = `Upstream HTTP ${upstream.status}${suffix}`;
+      const message = formatUpstreamHttpErrorMessage(upstream.status, rawBody);
+      dumpUpstreamFailure({
+        status: upstream.status,
+        url,
+        providerId: candidate.providerId,
+        modelId: candidate.modelId,
+        requestBody,
+        responseText: rawBody,
+      });
       const classified = classifyUpstreamError(null, upstream);
       if (!bytesEmitted && classified.kind === 'retryable' && canFailover) {
         if (upstream.status >= 500 || [502, 503, 504].includes(upstream.status)) {

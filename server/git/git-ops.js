@@ -113,19 +113,66 @@ export function parseBranchList(text) {
     const line = rawLine.trimEnd();
     if (!line) continue;
     const isCurrent = line.startsWith('* ');
-    const name = (isCurrent ? line.slice(2) : line.slice(2)).trim();
+    // Git marks branches checked out in another worktree with "+ ".
+    const checkedOutElsewhere = line.startsWith('+ ');
+    const name = line.slice(2).trim();
     if (!name) continue;
     if (isCurrent) {
       current = name;
     }
     if (name.startsWith('remotes/')) {
       remote.push(name);
-    } else {
+    } else if (!checkedOutElsewhere) {
       local.push(name);
     }
   }
 
   return { current, local, remote };
+}
+
+/** Minnow orchestration branches (board worktrees) — not user checkout targets. */
+export function isMinnowBoardBranch(name) {
+  return typeof name === 'string' && name.startsWith('minnow/board/');
+}
+
+/**
+ * Branches checked out in worktrees other than `mainRepoRoot`.
+ * @param {string} porcelain `git worktree list --porcelain`
+ * @param {string} mainRepoRoot
+ */
+export function parseWorktreeLockedBranches(porcelain, mainRepoRoot) {
+  const locked = new Set();
+  const norm = (p) =>
+    String(p ?? '')
+      .replace(/\\/g, '/')
+      .replace(/\/+$/, '')
+      .toLowerCase();
+  const main = norm(mainRepoRoot);
+  let currentPath = '';
+
+  for (const rawLine of String(porcelain ?? '').split('\n')) {
+    const line = rawLine.trimEnd();
+    if (line.startsWith('worktree ')) {
+      currentPath = line.slice('worktree '.length);
+      continue;
+    }
+    if (!line.startsWith('branch ') || !currentPath) continue;
+    const branch = line.slice('branch '.length).replace(/^refs\/heads\//, '');
+    if (norm(currentPath) !== main) {
+      locked.add(branch);
+    }
+  }
+
+  return locked;
+}
+
+/**
+ * Local branches suitable for user-facing checkout pickers.
+ * @param {string[]} local
+ * @param {Set<string>} [lockedElsewhere]
+ */
+export function filterUserFacingBranches(local, lockedElsewhere = new Set()) {
+  return local.filter((b) => !isMinnowBoardBranch(b) && !lockedElsewhere.has(b));
 }
 
 /**
@@ -457,12 +504,24 @@ export async function branches({ cwd } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
 
-  const result = await git(['branch', '-a'], repo.cwd);
-  if (result.code !== 0) {
-    return { ok: false, error: processError(result) };
+  const rootResult = await git(['rev-parse', '--show-toplevel'], repo.cwd);
+  const repoRoot = (rootResult.stdout ?? '').trim();
+
+  const [branchResult, wtResult] = await Promise.all([
+    git(['branch', '-a'], repo.cwd),
+    git(['worktree', 'list', '--porcelain'], repo.cwd),
+  ]);
+  if (branchResult.code !== 0) {
+    return { ok: false, error: processError(branchResult) };
   }
 
-  const parsed = parseBranchList(result.stdout);
+  const parsed = parseBranchList(branchResult.stdout);
+  const lockedElsewhere =
+    repoRoot && wtResult.code === 0
+      ? parseWorktreeLockedBranches(wtResult.stdout ?? '', repoRoot)
+      : new Set();
+  parsed.local = filterUserFacingBranches(parsed.local, lockedElsewhere);
+
   return { ok: true, ...parsed };
 }
 
@@ -556,8 +615,8 @@ export async function worktreeRemove({ cwd, path: worktreePath, force } = {}) {
   return { ok: true };
 }
 
-/** `git checkout [-b] <branch>` */
-export async function checkout({ cwd, branch, create } = {}) {
+/** `git checkout [-b] <branch> [<startPoint>]` or `git checkout --detach <sha>` */
+export async function checkout({ cwd, branch, create, startPoint } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
 
@@ -568,12 +627,70 @@ export async function checkout({ cwd, branch, create } = {}) {
   const args = create
     ? ['checkout', '-b', branch.trim()]
     : ['checkout', branch.trim()];
+  if (create && startPoint && typeof startPoint === 'string' && startPoint.trim()) {
+    args.push(startPoint.trim());
+  }
   const result = await git(args, repo.cwd);
   if (result.code !== 0) {
     return { ok: false, error: processError(result) };
   }
 
   return { ok: true };
+}
+
+/** `git checkout --detach <sha>` */
+export async function checkoutDetach({ cwd, sha } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  if (!sha || typeof sha !== 'string' || !sha.trim()) {
+    return { ok: false, error: 'sha is required' };
+  }
+
+  const result = await git(['checkout', '--detach', sha.trim()], repo.cwd);
+  if (result.code !== 0) {
+    return { ok: false, error: processError(result) };
+  }
+
+  return { ok: true };
+}
+
+/** `git tag <name> <sha>` */
+export async function createTag({ cwd, name, sha } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return { ok: false, error: 'name is required' };
+  }
+  if (!sha || typeof sha !== 'string' || !sha.trim()) {
+    return { ok: false, error: 'sha is required' };
+  }
+
+  const result = await git(['tag', name.trim(), sha.trim()], repo.cwd);
+  if (result.code !== 0) {
+    return { ok: false, error: processError(result) };
+  }
+
+  return { ok: true };
+}
+
+/** `git remote get-url origin` */
+export async function remoteUrl({ cwd } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  const result = await git(['remote', 'get-url', 'origin'], repo.cwd);
+  if (result.code !== 0) {
+    return { ok: false, error: processError(result) };
+  }
+
+  const url = (result.stdout ?? '').trim();
+  if (!url) {
+    return { ok: false, error: 'No origin remote configured' };
+  }
+
+  return { ok: true, url };
 }
 
 /** `git show --stat --patch <sha>` */
@@ -592,4 +709,184 @@ export async function show({ cwd, sha } = {}) {
 
   const { stat, patch } = splitShowOutput(result.stdout);
   return { ok: true, patch, stat };
+}
+
+/** Detect merge/rebase/cherry-pick conflict from git stderr/stdout. */
+function isGitConflictOutput(text) {
+  const lower = String(text ?? '').toLowerCase();
+  return (
+    lower.includes('conflict') ||
+    lower.includes('fix conflicts') ||
+    lower.includes('unmerged paths')
+  );
+}
+
+/** `git merge <branch> [--no-ff]` or `--abort` */
+export async function merge({ cwd, branch, noFf, abort } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  if (abort) {
+    const result = await git(['merge', '--abort'], repo.cwd);
+    if (result.code !== 0) {
+      return { ok: false, error: processError(result) };
+    }
+    return { ok: true, stdout: (result.stdout ?? '').trim() };
+  }
+
+  if (!branch || typeof branch !== 'string' || !branch.trim()) {
+    return { ok: false, error: 'branch is required' };
+  }
+
+  const args = ['merge', branch.trim()];
+  if (noFf) args.push('--no-ff');
+
+  const result = await git(args, repo.cwd);
+  if (result.code !== 0) {
+    const err = processError(result);
+    return { ok: false, error: err, conflict: isGitConflictOutput(err) };
+  }
+
+  return { ok: true, stdout: (result.stdout ?? '').trim() };
+}
+
+/** `git rebase <onto>` or `--abort` / `--continue` */
+export async function rebase({ cwd, onto, abort, continue: cont } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  const args = ['rebase'];
+  if (abort) {
+    args.push('--abort');
+  } else if (cont) {
+    args.push('--continue');
+  } else {
+    if (!onto || typeof onto !== 'string' || !onto.trim()) {
+      return { ok: false, error: 'onto is required' };
+    }
+    args.push(onto.trim());
+  }
+
+  const result = await git(args, repo.cwd);
+  if (result.code !== 0) {
+    const err = processError(result);
+    return { ok: false, error: err, conflict: isGitConflictOutput(err) };
+  }
+
+  return { ok: true, stdout: (result.stdout ?? '').trim() };
+}
+
+/** `git stash list` */
+export async function stashList({ cwd } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  const result = await git(['stash', 'list'], repo.cwd);
+  if (result.code !== 0) {
+    return { ok: false, error: processError(result) };
+  }
+
+  const entries = String(result.stdout ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return { ok: true, stashes: entries };
+}
+
+/** `git stash push [-m msg] [-- paths]` */
+export async function stashPush({ cwd, message, paths } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  const args = ['stash', 'push'];
+  if (message && String(message).trim()) {
+    args.push('-m', String(message).trim());
+  }
+  if (Array.isArray(paths) && paths.length > 0) {
+    args.push('--', ...paths.map((p) => String(p)));
+  }
+
+  const result = await git(args, repo.cwd);
+  if (result.code !== 0) {
+    return { ok: false, error: processError(result) };
+  }
+
+  return { ok: true, stdout: (result.stdout ?? '').trim() };
+}
+
+/** `git stash pop [stash@{n}]` */
+export async function stashPop({ cwd, index } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  const ref = typeof index === 'number' && index >= 0 ? `stash@{${index}}` : undefined;
+  const args = ref ? ['stash', 'pop', ref] : ['stash', 'pop'];
+
+  const result = await git(args, repo.cwd);
+  if (result.code !== 0) {
+    const err = processError(result);
+    return { ok: false, error: err, conflict: isGitConflictOutput(err) };
+  }
+
+  return { ok: true, stdout: (result.stdout ?? '').trim() };
+}
+
+/** `git stash apply [stash@{n}]` */
+export async function stashApply({ cwd, index } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  const ref = typeof index === 'number' && index >= 0 ? `stash@{${index}}` : undefined;
+  const args = ref ? ['stash', 'apply', ref] : ['stash', 'apply'];
+
+  const result = await git(args, repo.cwd);
+  if (result.code !== 0) {
+    const err = processError(result);
+    return { ok: false, error: err, conflict: isGitConflictOutput(err) };
+  }
+
+  return { ok: true, stdout: (result.stdout ?? '').trim() };
+}
+
+/** `git stash drop [stash@{n}]` */
+export async function stashDrop({ cwd, index } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  const ref = typeof index === 'number' && index >= 0 ? `stash@{${index}}` : undefined;
+  const args = ref ? ['stash', 'drop', ref] : ['stash', 'drop'];
+
+  const result = await git(args, repo.cwd);
+  if (result.code !== 0) {
+    return { ok: false, error: processError(result) };
+  }
+
+  return { ok: true };
+}
+
+/** `git cherry-pick <sha>` or `--abort` / `--continue` */
+export async function cherryPick({ cwd, sha, abort, continue: cont } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  const args = ['cherry-pick'];
+  if (abort) {
+    args.push('--abort');
+  } else if (cont) {
+    args.push('--continue');
+  } else {
+    if (!sha || typeof sha !== 'string' || !sha.trim()) {
+      return { ok: false, error: 'sha is required' };
+    }
+    args.push(sha.trim());
+  }
+
+  const result = await git(args, repo.cwd);
+  if (result.code !== 0) {
+    const err = processError(result);
+    return { ok: false, error: err, conflict: isGitConflictOutput(err) };
+  }
+
+  return { ok: true, stdout: (result.stdout ?? '').trim() };
 }

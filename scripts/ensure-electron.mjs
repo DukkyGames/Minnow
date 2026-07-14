@@ -11,6 +11,8 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildElectronMain } from './build-electron.mjs';
+import { isElectronBuildFresh } from './spawn-electron.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -63,7 +65,38 @@ function main() {
     process.exit(result.status ?? 1);
   }
 
+  if (process.platform === 'win32') {
+    const syncIcon = spawnSync(process.execPath, [path.join(__dirname, 'sync-app-icon.mjs')], {
+      cwd: PROJECT_ROOT,
+      stdio: 'inherit',
+      env: process.env,
+    });
+    if (syncIcon.status !== 0) {
+      warn('App icon sync failed; Windows taskbar may show the default Electron icon.');
+    }
+
+    const brand = spawnSync(process.execPath, [path.join(__dirname, 'brand-electron-win.mjs')], {
+      cwd: PROJECT_ROOT,
+      stdio: 'inherit',
+      env: process.env,
+    });
+    if (brand.status !== 0) {
+      warn('Electron taskbar branding failed; dev runs may show the default Electron icon.');
+    }
+  }
+
   log('Electron binary ready.');
+
+  if (!isElectronBuildFresh()) {
+    log('Pre-compiling Electron main process for faster first launch…');
+    try {
+      buildElectronMain();
+      log('Electron main process compiled.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      warn(`Electron compile failed (${message}). First launch will compile on demand.`);
+    }
+  }
 }
 
 main();

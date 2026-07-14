@@ -11,7 +11,8 @@ import {
   resizePtySession,
   destroyPtySession,
 } from './pty-host.js';
-import { getNetworkAccess, isClientAllowed } from '../network/access.js';
+import { getNetworkAccess, isClientAllowed, isHostAllowed } from '../network/access.js';
+import { getSessionToken, timingSafeEqualToken } from '../runtime/session-token.js';
 
 /**
  * Attach PTY WebSocket server to the Vite HTTP server.
@@ -26,8 +27,15 @@ export function attachPtyWebSocketServer(httpServer) {
       return;
     }
 
-    if (!isClientAllowed(req, getNetworkAccess())) {
+    if (!isClientAllowed(req, getNetworkAccess()) || !isHostAllowed(req.headers.host ?? '', getNetworkAccess())) {
       socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    const token = url.searchParams.get('token') ?? '';
+    if (!timingSafeEqualToken(token, getSessionToken())) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
       return;
     }

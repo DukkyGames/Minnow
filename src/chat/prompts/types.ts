@@ -91,13 +91,13 @@ export interface ComposeContext {
   skillBody: string | null;
   memoryBlock: string | null;
   enabledToolIds: string[];
-  enabledToolSummaries?: string;
   infoPresetId: string | null;
   userMessagePreview?: string;
-  includeChatHistorySummary?: boolean;
   planGranularity?: string | null;
   /** Workspace-relative plan path when mode is orchestrate (for {{orchestrate_plan}}). */
   orchestratePlanPath?: string | null;
+  /** True once a preview browser tool has been invoked in this chat (gates allowlist fragment). */
+  browserActivated?: boolean;
 }
 
 /** Tokens replaced in composed bodies via interpolate.ts. */
@@ -106,11 +106,9 @@ export interface InterpolationVars {
   mode_label: string;
   profile: string;
   expert: string;
-  enabled_tools: string;
   cwd: string;
   memory: string;
   user_message: string;
-  chat_history_summary: string;
   work_agent: string;
   work_agent_label: string;
   skill: string;

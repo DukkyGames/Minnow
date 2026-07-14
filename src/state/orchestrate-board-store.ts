@@ -10,6 +10,7 @@
  */
 
 import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title.ts';
+import { isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete.ts';
 import { getAutopilotMetaSync } from '../config/autopilot-meta.ts';
 import { reportBackgroundError } from '../boot/report-background-error.ts';
 import type {
@@ -567,6 +568,12 @@ export function quarantineTaskAndDependents(
       if (!visited.has(dependentId)) queue.push(dependentId);
     }
   }
+
+  if (plannerChat && visited.size > 0) {
+    void import('./orchestrate-board-actions.ts')
+      .then((mod) => mod.onTasksQuarantined(group, [...visited], plannerChat))
+      .catch((err) => reportBackgroundError('quarantine-completion-hook', err));
+  }
 }
 
 function formatDependencyCycleError(cycle: string[]): string {
@@ -836,6 +843,7 @@ export type UpdateTaskPatch = Partial<
     | 'quarantine'
     | 'selfHealRound'
     | 'lastHealCategory'
+    | 'lifecycleRun'
     | 'buildOutcome'
   >
 >;
@@ -925,7 +933,35 @@ export function updateTask(
   board.tasks[idx] = task;
   board.lastUpdatedAt = boardNowMs();
   recomputeWaveRollup(board);
+
+  if (
+    'status' in patch &&
+    (patch.status === 'complete' || patch.status === 'quarantined') &&
+    isOrchestratePlanComplete(board)
+  ) {
+    const completeCount = board.tasks.filter((t) => t.status === 'complete').length;
+    const quarantinedCount = board.tasks.filter((t) => t.status === 'quarantined').length;
+    board.terminalBlocked = completeCount === 0 && quarantinedCount > 0;
+  } else if ('status' in patch && !isOrchestratePlanComplete(board)) {
+    board.terminalBlocked = false;
+  }
+
   touchBoardGroup(group, plannerChat);
   emitBoardChange(group.id);
+
+  // When the last task reaches a terminal status, sync completion hooks even if
+  // the caller used updateTask directly (e.g. board_update_task) instead of
+  // moveTaskStatus / quarantineTaskAndDependents.
+  if (
+    plannerChat &&
+    'status' in patch &&
+    (patch.status === 'complete' || patch.status === 'quarantined') &&
+    isOrchestratePlanComplete(board)
+  ) {
+    void import('./orchestrate-board-actions.ts')
+      .then((mod) => mod.syncBoardRunCompletion(group, plannerChat))
+      .catch((err) => reportBackgroundError('update-task-completion-hook', err));
+  }
+
   return task;
 }

@@ -20,7 +20,7 @@
   scroll-behavior: smooth;
 }
 
-/* Init split: center the 720px transcript column in the wide lower pane */
+/* Init split: center the transcript column in the wide lower pane */
 .board-init-split__chat {
   align-items: center;
   scroll-padding-bottom: 12px;
@@ -132,7 +132,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-width: min(720px, 100%);
+  max-width: min(var(--chat-msg-max), 100%);
   width: 100%;
   animation: fadeUp 0.22s var(--ease-out);
 }
@@ -355,6 +355,43 @@
   outline-offset: 2px;
 }
 
+/* Transcript "on-page" affordance for a linked design-ref mark (MIN-368). */
+.msg-onpage-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid color-mix(in srgb, var(--mn-fg) 12%, var(--mn-border));
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg-muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.msg-onpage-btn:hover,
+.msg-onpage-btn:focus-visible {
+  border-color: var(--mn-accent);
+  color: var(--mn-accent);
+  outline: none;
+}
+
+/* Page → transcript jump target pulse (MIN-368) — brief highlight on the landed-on message row. */
+.mn-design-jump-pulse {
+  animation: mn-design-jump-pulse-anim 1.6s ease-out;
+}
+
+@keyframes mn-design-jump-pulse-anim {
+  0% {
+    box-shadow: 0 0 0 3px var(--mn-accent-soft);
+  }
+  100% {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+
 .msg.assistant .msg-bubble {
   background: var(--mn-bg);
   border: 1px solid var(--mn-border);
@@ -365,7 +402,7 @@
 /* Assistant markdown: normal paragraph flow (user bubbles keep pre-wrap) */
 .msg-bubble.msg-bubble--md {
   white-space: normal;
-  max-width: min(720px, 72ch);
+  max-width: min(var(--chat-msg-max), var(--chat-msg-md-ch));
 }
 
 .msg-bubble.msg-bubble--md > *:first-child {
@@ -540,11 +577,10 @@
 .stat-chip.y { color: var(--mn-warning); border-color: color-mix(in srgb, var(--mn-warning) 35%, transparent); }
 .stat-chip.r { color: var(--mn-danger); border-color: color-mix(in srgb, var(--mn-danger) 35%, transparent); }
 
-/* Tool call / result bubbles (SA-8) */
+/* Tool call / result bubbles (SA-8) — narrower than prose messages */
 .tool-call-msg {
   align-self: flex-start;
-  max-width: min(720px, 100%);
-  width: 100%;
+  max-width: min(var(--chat-tool-call-max), 100%);
   animation: fadeUp 0.22s var(--ease-out);
 }
 
@@ -598,6 +634,21 @@
   letter-spacing: 0.02em;
   color: var(--mn-fg);
   word-break: break-word;
+}
+
+.tool-call-title--file-link {
+  pointer-events: auto;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+}
+
+.tool-call-title--file-link:hover {
+  color: var(--mn-accent, var(--mn-fg));
+  text-decoration: underline;
 }
 
 .tool-call-status-label {

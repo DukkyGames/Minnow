@@ -8,6 +8,16 @@
   gap: 8px;
   margin-bottom: 6px;
   min-height: 28px;
+  width: 100%;
+  min-width: 0;
+}
+
+.composer-controls__trail {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .composer-controls .context-usage-anchor {

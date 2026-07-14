@@ -12,6 +12,7 @@ import {
   ensureHealthyVenv,
   extractArchive,
   isVenvHealthy,
+  pipSpawnOptions,
   runProcess,
   venvPythonExe,
   verifySha256,
@@ -412,22 +413,23 @@ async function installSearxngFromSource(venvPython, onProgress) {
   });
 
   progress('Installing Python dependencies');
-  await runProcess(venvPython, ['-m', 'ensurepip', '--upgrade'], { windowsHide: true });
+  const pipOpts = pipSpawnOptions();
+  await runProcess(venvPython, ['-m', 'ensurepip', '--upgrade'], pipOpts);
   await runProcess(
     venvPython,
-    ['-m', 'pip', 'install', '--upgrade', 'pip', 'wheel', 'setuptools'],
-    { windowsHide: true },
+    ['-m', 'pip', 'install', '--upgrade', '--no-input', 'pip', 'wheel', 'setuptools'],
+    pipOpts,
   );
   await runProcess(
     venvPython,
-    ['-m', 'pip', 'install', '-r', path.join(sourceDir, 'requirements.txt')],
-    { windowsHide: true },
+    ['-m', 'pip', 'install', '--no-input', '-r', path.join(sourceDir, 'requirements.txt')],
+    pipOpts,
   );
   progress('Installing SearXNG package');
   await runProcess(
     venvPython,
-    ['-m', 'pip', 'install', '--no-build-isolation', sourceDir],
-    { windowsHide: true },
+    ['-m', 'pip', 'install', '--no-input', '--no-build-isolation', sourceDir],
+    pipOpts,
   );
 
   await applyWindowsCompatibilityPatches({

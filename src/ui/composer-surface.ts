@@ -38,13 +38,27 @@ function resolveByIds(inputId: string, sendBtnId: string): ComposerSurface {
 }
 
 function resolveComposerKey(): AppId | 'desktop' {
+  const foregroundAppId = getForegroundAppId();
+  // Code keeps desktop chat state for return navigation, but Code owns the composer.
+  if (foregroundAppId === 'code') return 'code';
   if (isDesktopChatActive()) return 'desktop';
   if (isChatAppForeground()) return 'chat';
-  return getForegroundAppId() ?? 'code';
+  return foregroundAppId ?? 'code';
 }
 
 /** Composer for the foreground MinnowOS app; Code app when shell is on desktop idle. */
 export function getActiveComposerSurface(): ComposerSurface {
+  // First-run wizard chat: while the onboarding overlay's composer exists it owns
+  // the surface (the overlay is modal above every app surface).
+  const onboardingInput = document.getElementById(
+    'onboardingChatInput',
+  ) as HTMLTextAreaElement | null;
+  if (onboardingInput) {
+    return {
+      inputEl: onboardingInput,
+      sendBtnEl: document.getElementById('onboardingChatSendBtn') as HTMLButtonElement | null,
+    };
+  }
   const key = resolveComposerKey();
   const registered = registry.get(key);
   if (registered) return registered;
@@ -73,4 +87,5 @@ export function clearComposerInput(input: HTMLTextAreaElement | null | undefined
   if (input.id === 'desktopInput') {
     autoResizeDesktopComposer(input);
   }
+  void import('./composer-prompt-history').then((m) => m.resetComposerPromptHistory());
 }

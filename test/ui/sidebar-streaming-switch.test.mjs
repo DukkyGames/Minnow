@@ -1,35 +1,30 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
+import {
+  installHappyDomGlobals,
+  setupMinimalComposerDom,
+  teardownHappyDomAsync,
+} from '../os/dom-helpers.mts';
 
 const appState = await import('../../src/app-state.ts');
 const { setSessionStateForTests, createEmptyChatObject, getActiveChat } = await import(
   '../../src/state/sessions.ts'
 );
+const { resetDesktopStateForTests } = await import('../../src/os/desktop-state.ts');
 const { switchChat } = await import('../../src/ui/sidebar.ts');
 
-function setupDom() {
-  const window = new Window();
-  globalThis.document = window.document;
-  globalThis.HTMLElement = window.HTMLElement;
-  globalThis.Node = window.Node;
+/** @type {import('happy-dom').Window | undefined} */
+let win;
 
-  const area = document.createElement('div');
-  area.id = 'chatArea';
-  document.body.appendChild(area);
+function setupDom() {
+  win = new Window();
+  installHappyDomGlobals(win);
+  setupMinimalComposerDom(document);
 
   const modelSelect = document.createElement('select');
   modelSelect.id = 'modelSelect';
   document.body.appendChild(modelSelect);
-
-  const sendBtn = document.createElement('button');
-  sendBtn.id = 'sendBtn';
-  sendBtn.type = 'button';
-  document.body.appendChild(sendBtn);
-
-  const msgInput = document.createElement('textarea');
-  msgInput.id = 'msgInput';
-  document.body.appendChild(msgInput);
 
   const inputBar = document.createElement('div');
   inputBar.className = 'input-bar-composer';
@@ -40,6 +35,7 @@ function setupDom() {
     'stripTTFT',
     'stripGen',
     'stripTotal',
+    'stripCost',
     'barPrompt',
     'barCompletion',
     'cntPrompt',
@@ -54,17 +50,20 @@ function setupDom() {
     el.id = id;
     document.body.appendChild(el);
   }
-
-  return window;
 }
 
 describe('switchChat while another chat streams', { concurrency: false }, () => {
-  afterEach(() => {
+  afterEach(async () => {
     appState.setStreaming(false);
     setSessionStateForTests(null);
+    resetDesktopStateForTests();
+    if (win) {
+      await teardownHappyDomAsync(win);
+      win = undefined;
+    }
   });
 
-  test('switchChat succeeds without blocking when stream is on another chat', () => {
+  test('switchChat succeeds without blocking when stream is on another chat', async () => {
     setupDom();
     const a = createEmptyChatObject('');
     a.id = 'chat-streaming';
@@ -85,6 +84,7 @@ describe('switchChat while another chat streams', { concurrency: false }, () => 
 
     appState.setStreaming(true, a.id);
     switchChat(b.id);
+    await new Promise((r) => setTimeout(r, 50));
 
     assert.equal(getActiveChat().id, b.id);
     assert.equal(appState.streamingChatId, a.id);

@@ -183,7 +183,7 @@ describe('task stream end finalization', () => {
     assert.ok(updated.endedAt);
   });
 
-  test('user stop parks task as quarantined and clears chatId', () => {
+  test('user stop parks task back to planned without quarantine (MIN-304)', () => {
     const group = makeGroup('auto');
     const planner = makePlanner();
     group.orchestrateBoard!.userStopped = true;
@@ -196,14 +196,56 @@ describe('task stream end finalization', () => {
     });
     finalizeBoardTaskOnStreamEnd(group, task, planner);
     const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
-    assert.equal(updated.status, 'quarantined');
+    assert.equal(updated.status, 'planned');
     assert.equal(updated.chatId, undefined);
     assert.ok(updated.endedAt);
-    assert.match(updated.quarantine?.summary ?? '', /stopped by user/i);
-    assert.equal(
-      isTaskStalledForRestart(group.orchestrateBoard!, updated, () => false),
-      false,
-    );
+    // A user Stop is a neutral pause: no quarantine, and no stopRetry burned.
+    assert.equal(updated.quarantine, undefined);
+    assert.equal(updated.stopRetries, undefined);
+  });
+
+  test('user stop of in-flight task leaves planned dependents planned (MIN-304)', () => {
+    const planner = makePlanner();
+    const group: ChatGroup = {
+      id: GROUP_ID,
+      name: 'Board',
+      workspacePath: '/tmp/ws',
+      collapsed: false,
+      order: 0,
+      plannerChatId: PLANNER_ID,
+      orchestratePlanPath: 'documentation/plans/test.md',
+      viewMode: 'board',
+    };
+    initBoard(group, planner, {
+      planPath: 'documentation/plans/test.md',
+      tasks: [
+        { id: 'W1-A', title: 'Init', wave: 'W1', category: 'build' },
+        { id: 'W1-B', title: 'Depends on A', wave: 'W1', category: 'build', dependsOn: ['W1-A'] },
+        { id: 'W1-C', title: 'Depends on B', wave: 'W1', category: 'build', dependsOn: ['W1-B'] },
+      ],
+      waves: [{ id: 'W1', status: 'in_progress' }],
+    });
+    group.orchestrateBoard!.executionMode = 'auto';
+    group.orchestrateBoard!.autoRunning = true;
+    group.orchestrateBoard!.userStopped = true;
+    updateTask(group, 'W1-A', { status: 'in_progress', chatId: TASK_CHAT_ID, startedAt: 1 }, planner);
+
+    const taskChat = makeTaskChat(true, 'user');
+    setSessionStateForTests({
+      chats: [planner, taskChat],
+      groups: [group],
+      activeChatId: PLANNER_ID,
+    });
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    finalizeBoardTaskOnStreamEnd(group, task, planner);
+
+    const byId = (id: string) => group.orchestrateBoard!.tasks.find((t) => t.id === id)!;
+    // Stopped task parks to planned; dependents that never started stay planned.
+    assert.equal(byId('W1-A').status, 'planned');
+    assert.equal(byId('W1-B').status, 'planned');
+    assert.equal(byId('W1-C').status, 'planned');
+    assert.equal(byId('W1-B').quarantine, undefined);
+    assert.equal(byId('W1-C').quarantine, undefined);
   });
 
   test('system/timeout stop under cap moves task to planned for bounded retry', () => {

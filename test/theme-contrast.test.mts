@@ -16,6 +16,10 @@ const THEME_IDS = [
   'cyan-light',
   'coral-dark',
   'coral-light',
+  'salt-dark',
+  'salt-light',
+  'retro-dark',
+  'retro-light',
 ] as const;
 
 function parseHexOrRgb(color: string): [number, number, number] | null {

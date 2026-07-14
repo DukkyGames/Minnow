@@ -28,6 +28,7 @@ import { renderSymbolInspector } from './inspector';
 import { renderBrainEmptyState, renderBrainLoading } from './empty-state';
 import { openWorkspaceFolderPicker } from '../workspace-folder-picker';
 import { setWorkspacePath } from '../../config/workspace-api';
+import { confirmAndStopBoardsForWorkspaceSwitch } from '../workspace-switch-guard';
 import { setWorkspaceFromServer } from '../../state/workspace';
 import { refreshFileTreeViaBridge } from '../file-tree-refresh-bridge';
 
@@ -510,6 +511,11 @@ async function runReindex(): Promise<void> {
 async function remapCodeRepo(): Promise<void> {
   const result = await openWorkspaceFolderPicker();
   if (result.cancelled || !result.path) return;
+  const allowed = await confirmAndStopBoardsForWorkspaceSwitch(result.path);
+  if (!allowed) {
+    setActionStatus('ok', 'Workspace unchanged');
+    return;
+  }
   setActionStatus('spin', 'Switching workspace…');
   const info = await setWorkspacePath(result.path);
   if (!info) {

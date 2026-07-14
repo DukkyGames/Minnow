@@ -6,6 +6,9 @@
 
 import { normalizeModeId } from '../chat/modes/types';
 import {
+  isBoardSetupIncomplete,
+} from '../chat/orchestrate/board-setup';
+import {
   closeBoardGroupView,
   getActiveBoardGroup,
   getBoardGroupForChat,
@@ -110,6 +113,12 @@ function boardToggleLabels(
       title: 'Board view (select a plan in chat view for full board)',
     };
   }
+  if (group && isBoardSetupIncomplete(group)) {
+    return {
+      ariaLabel: 'Return to board setup',
+      title: 'Board setup in progress — return to finish',
+    };
+  }
   if (boardActive) {
     return { ariaLabel: 'Board view', title: 'Board view' };
   }
@@ -165,6 +174,7 @@ export function refreshViewModeToggleDisabled(): void {
  * Syncs board (composer) and chat (board header) toggles from active chat state.
  */
 export function syncViewModeToggleFromActiveChat(): void {
+  if (!sessionState) return;
   const chat = getActiveChat();
   const boardActive = isBoardViewActive();
   const enabled = isViewModeToggleEnabled(chat);

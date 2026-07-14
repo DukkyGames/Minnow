@@ -63,16 +63,25 @@ export function buildOrchestrateCompletionMessage(
   const quarantinedCount = board.tasks.filter((t) => t.status === 'quarantined').length;
   const elapsed = formatElapsedMs(board.startedAt, endedAtMs);
 
+  const allQuarantined = completeCount === 0 && quarantinedCount > 0;
+  const headline = allQuarantined
+    ? `**Orchestrate plan blocked** — ${planName}`
+    : `**Orchestrate plan complete** — ${planName}`;
+
   const lines = [
-    `**Orchestrate plan complete** — ${planName}`,
+    headline,
     '',
     `- **Tasks:** ${completeCount}/${total} complete`,
     ...(quarantinedCount > 0 ? [`- **Quarantined:** ${quarantinedCount}`] : []),
     `- **Elapsed:** ${elapsed}`,
     '',
-    'All board tasks are finished. Move any remaining cards or start a new chat when ready.',
+    allQuarantined
+      ? `All remaining tasks are quarantined (${quarantinedCount}). Requeue cards after addressing resolution steps.`
+      : 'All board tasks are finished. Move any remaining cards or start a new chat when ready.',
     '',
-    '**Next steps:** review results in the board, open task chats, or export/share the plan if needed.',
+    allQuarantined
+      ? '**Next steps:** review quarantined tasks on the board, fix blockers, then Requeue to retry.'
+      : '**Next steps:** review results in the board, open task chats, or export/share the plan if needed.',
   ];
 
   const issues = board.unresolvedIssues;
@@ -85,6 +94,58 @@ export function buildOrchestrateCompletionMessage(
       }
     }
   }
+
+  return lines.join('\n');
+}
+
+/**
+ * Hidden user seed for the one plan-complete wrap-up LLM turn.
+ */
+export function buildOrchestratePlanCompleteWrapUpSeed(
+  _chat: Chat,
+  board: OrchestrateBoardState,
+): string {
+  const completed = board.tasks.filter((t) => t.status === 'complete');
+  const quarantined = board.tasks.filter((t) => t.status === 'quarantined');
+
+  const lines = [
+    'The Orchestrate board run has finished. Write a concise final wrap-up for the user.',
+    '',
+    'Cover:',
+    '- Completed tasks (what shipped)',
+    '- Quarantined or blocked tasks with root causes',
+    '- Unresolved issues and their resolution steps',
+    '- Suggested next steps',
+    '',
+    `Completed (${completed.length}):`,
+    ...(completed.length > 0
+      ? completed.map((t) => `- \`${t.id}\` — ${t.title}`)
+      : ['- (none)']),
+    '',
+    `Quarantined (${quarantined.length}):`,
+    ...(quarantined.length > 0
+      ? quarantined.map((t) => {
+          const reason = t.quarantine?.summary?.trim() || t.error?.trim() || '(no summary)';
+          return `- \`${t.id}\` — ${t.title}: ${reason}`;
+        })
+      : ['- (none)']),
+  ];
+
+  const issues = board.unresolvedIssues;
+  if (issues && issues.length > 0) {
+    lines.push('', `Unresolved issues (${issues.length}):`);
+    for (const issue of issues) {
+      lines.push(`- **${issue.title}** (${issue.category}) — ${issue.summary}`);
+      for (const step of issue.resolutionSteps) {
+        lines.push(`  - ${step}`);
+      }
+    }
+  }
+
+  lines.push(
+    '',
+    'Use `board_get_state` if you need the full board snapshot. Do not ask the user questions — summarize what happened and what to do next.',
+  );
 
   return lines.join('\n');
 }

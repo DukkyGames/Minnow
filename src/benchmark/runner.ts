@@ -36,7 +36,7 @@ const FULL_SUITES: SuiteId[] = [
 ];
 
 function suitesForPreset(preset: BenchmarkPreset, override?: SuiteId[]): SuiteId[] {
-  if (override?.length) return override;
+  if (override !== undefined) return override;
   return preset === 'full' ? FULL_SUITES : QUICK_SUITES;
 }
 

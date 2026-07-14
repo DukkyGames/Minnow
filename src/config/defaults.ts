@@ -3,6 +3,7 @@
  */
 
 import { SYSTEM_PROMPT_PRESETS } from '../constants';
+import { randomUUID } from '../lib/random-id.ts';
 import { BUILT_IN_TOOLS } from '../tools/definitions';
 import {
   createEmptyToolPermissionsConfig,
@@ -37,11 +38,16 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'brain_append_log',
   'brain_ingest_source',
   'manage_brain',
+  'search_settings',
+  'get_settings',
+  'update_settings',
   'repo_map',
   'find_symbol',
   'who_calls',
   'read_symbol',
   'explain_symbol',
+  'read_file',
+  'todo_write',
 ]);
 
 /** Brain tools default to permission `full` (no prompt). */
@@ -62,7 +68,13 @@ const BRAIN_FULL_PERMISSION_TOOL_IDS = [
 
 const BRAIN_FULL_PERMISSION_TOOL_ID_SET = new Set<string>(BRAIN_FULL_PERMISSION_TOOL_IDS);
 
+/** Settings read tools default to permission `full`. */
+const SETTINGS_READ_TOOL_IDS = new Set(['search_settings', 'get_settings']);
+
 function defaultPermissionForTool(id: string, enabled: boolean): ToolPermissionMode {
+  if (SETTINGS_READ_TOOL_IDS.has(id)) {
+    return enabled ? 'full' : 'off';
+  }
   if (BRAIN_FULL_PERMISSION_TOOL_ID_SET.has(id)) {
     return enabled ? 'full' : 'off';
   }
@@ -103,10 +115,7 @@ export function defaultSystemPromptSettings(): SystemPromptSettings {
 
 /** One empty chat session blob. */
 export function defaultSessionState(): SessionState {
-  const chatId =
-    typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : '00000000-0000-0000-0000-000000000001';
+  const chatId = randomUUID();
 
   return {
     version: 5,

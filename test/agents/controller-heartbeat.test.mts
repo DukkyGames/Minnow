@@ -8,10 +8,12 @@ import {
   bindRunSupervision,
   bumpProgress,
   createRunSupervision,
+  getProgressAgeMs,
   recordHeartbeat,
   resetHeartbeatBaselines,
   resetWrapperState,
   setHeartbeatConfig,
+  simulatePageVisibilityForTests,
   startHeartbeat,
   stopHeartbeat,
 } from '../../src/agents/controller/wrapper.ts';
@@ -96,5 +98,53 @@ describe('controller heartbeat wrapper', () => {
     assert.equal(supervision.lastHeartbeatAt, null);
     assert.equal(supervision.lastProgressAt, null);
     assert.equal(supervision.progressSeq, 1);
+  });
+
+  test('progress age is frozen while the page is hidden', () => {
+    const supervision = createRunSupervision();
+    bindRunSupervision(RUN_ID, supervision);
+
+    now = 100;
+    bumpProgress(RUN_ID);
+    now = 200;
+    assert.equal(getProgressAgeMs(RUN_ID), 100);
+
+    simulatePageVisibilityForTests('hidden');
+    now = 500_000;
+    assert.equal(getProgressAgeMs(RUN_ID), 100);
+  });
+
+  test('hidden interval is excluded after the page becomes visible again', () => {
+    const supervision = createRunSupervision();
+    bindRunSupervision(RUN_ID, supervision);
+
+    now = 100;
+    bumpProgress(RUN_ID);
+    now = 200;
+    simulatePageVisibilityForTests('hidden');
+    now = 10_000;
+    simulatePageVisibilityForTests('visible');
+
+    // Baseline reset on visible — fresh bump should not inherit hidden elapsed time.
+    now = 10_000;
+    bumpProgress(RUN_ID);
+    now = 10_100;
+    assert.equal(getProgressAgeMs(RUN_ID), 100);
+  });
+
+  test('progress age resumes counting after the page becomes visible', () => {
+    const supervision = createRunSupervision();
+    bindRunSupervision(RUN_ID, supervision);
+
+    now = 50;
+    bumpProgress(RUN_ID);
+    simulatePageVisibilityForTests('hidden');
+    now = 9_000;
+    simulatePageVisibilityForTests('visible');
+
+    now = 9_000;
+    bumpProgress(RUN_ID);
+    now = 9_150;
+    assert.equal(getProgressAgeMs(RUN_ID), 150);
   });
 });

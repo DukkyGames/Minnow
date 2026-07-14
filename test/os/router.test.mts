@@ -72,6 +72,13 @@ describe('resolveLegacyHash', () => {
     });
   });
 
+  test('redirects legacy #/settings/knowledge to Agents rules', () => {
+    assert.deepEqual(resolveLegacyHash('#/settings/knowledge'), {
+      hash: '#/app/settings',
+      settingsSection: 'rules',
+    });
+  });
+
   test('redirects legacy full-page routes to OS apps', () => {
     assert.deepEqual(resolveLegacyHash('#/benchmark'), { hash: '#/app/bench' });
     assert.deepEqual(resolveLegacyHash('#/research/run'), {
@@ -89,7 +96,11 @@ describe('parseOsHash', () => {
   test('parses desktop and app routes', () => {
     assert.deepEqual(parseOsHash('#/'), { view: 'desktop' });
     assert.deepEqual(parseOsHash('#/desktop'), { view: 'desktop' });
-    assert.deepEqual(parseOsHash('#/app/code'), { view: 'app', appId: 'code' });
+    assert.deepEqual(parseOsHash('#/app/code'), {
+      view: 'app',
+      appId: 'code',
+      codeSection: 'overview',
+    });
     assert.deepEqual(parseOsHash('#/app/chat'), { view: 'app', appId: 'chat' });
   });
 
@@ -135,7 +146,7 @@ describe('os router navigation', () => {
 
   test('launchApp updates hash and foreground instance', () => {
     launchApp('code');
-    assert.equal(window.location.hash, '#/app/code');
+    assert.equal(window.location.hash, '#/app/code/overview');
     syncOsRouteFromHashForTests();
     const route = getCurrentRoute();
     assert.equal(route.view, 'app');

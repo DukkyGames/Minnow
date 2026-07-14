@@ -33,12 +33,6 @@ const MAX_SLOTS = 6;
 
 let storeLoaded = false;
 
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
-
 function sendJson(res, status, payload) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
@@ -256,8 +250,6 @@ export async function handleCompareRequest(req, res, pathname) {
   if (!pathname.startsWith('/api/compare')) {
     return false;
   }
-
-  setCorsHeaders(res);
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;

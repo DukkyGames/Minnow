@@ -13,12 +13,19 @@ import {
 } from '../../src/agents/controller/wrapper.ts';
 import { resetAutopilotMetaCache, setAutopilotMetaForTests } from '../../src/config/autopilot-meta.ts';
 import {
+  resetOrchestratorAutoReportsForTests,
+  setOrchestratorReportDeliverHook,
+} from '../../src/agents/controller/report.ts';
+import {
   autoDelegateNext,
+  clearStallStoppedChatIdsForTests,
   clearTaskChatStallRestartsForTests,
   continueBoardTask,
+  isStallStoppedChatForTests,
   enqueueMergeCompletedTaskWorktreeForTests,
   finalizeBoardTaskOnStreamEnd,
   getTaskChatStallRestartCountForTests,
+  finalizeMergeFixerOnStreamEndForTests,
   recoverMergingBoardTask,
   reconcileMergingTasks,
   releaseLaunchSlotForTests,
@@ -28,12 +35,15 @@ import {
   startBoardAutoRun,
   startTaskChatSupervisionForTests,
   stopBoardAutoRun,
+  trackFixerStallStopsForTests,
   trackReconcileMergingTasksCallsForTests,
   trackTaskChatStallRecoveryCallsForTests,
   triggerFixerStallReconcileForTests,
   trackDrainResumeCallsForTests,
   enqueueTaskForTests,
   getTaskQueueForTests,
+  countRunningTaskChats,
+  isLaunchReservedForTests,
 } from '../../src/state/orchestrate-board-actions.ts';
 import { initBoard, isTaskStalledForRestart, updateTask } from '../../src/state/orchestrate-board-store.ts';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
@@ -301,7 +311,9 @@ beforeEach(() => {
 
   resetWrapperState();
   clearTaskChatStallRestartsForTests();
+  clearStallStoppedChatIdsForTests();
   trackTaskChatStallRecoveryCallsForTests(false);
+  trackFixerStallStopsForTests(false);
 
   setAutopilotMetaForTests({
     progressStallMs: PROGRESS_STALL_MS,
@@ -315,7 +327,9 @@ afterEach(() => {
   resetWrapperState();
   resetAutopilotMetaCache();
   clearTaskChatStallRestartsForTests();
+  clearStallStoppedChatIdsForTests();
   trackTaskChatStallRecoveryCallsForTests(false);
+  trackFixerStallStopsForTests(false);
 });
 
 describe('Fix A — merge-fixer unified stall recovery', () => {
@@ -370,12 +384,13 @@ describe('Fix A — merge-fixer unified stall recovery', () => {
     assert.equal(fetchCalls, 0, 'heartbeat must not call /api/worktree');
   });
 
-  test('stall at 3x triggers nudge without finalizing', async () => {
+  test('fixer stall at 3x stops the turn only — no nudge, no direct self-heal', async () => {
     const group = makeMergeGroup();
     const fixerChat = makeMergeFixerChat();
     seedMergingTask(group, fixerChat);
 
     trackTaskChatStallRecoveryCallsForTests(true);
+    const stallStops = trackFixerStallStopsForTests(true);
     startTaskChatSupervisionForTests(MERGE_FIXER_CHAT_ID);
     const runId = chatTaskRunId(MERGE_FIXER_CHAT_ID);
     bumpProgress(runId);
@@ -385,33 +400,25 @@ describe('Fix A — merge-fixer unified stall recovery', () => {
 
     const { nudges, selfHeals } = trackTaskChatStallRecoveryCallsForTests(false);
     const task = group.orchestrateBoard!.tasks.find((t) => t.id === MERGE_TASK_ID)!;
-    assert.deepEqual(nudges, [MERGE_TASK_ID], 'first stall should nudge the fixer task');
-    assert.equal(selfHeals.length, 0, 'first stall must not self-heal');
-    assert.equal(task.status, 'merging', 'nudge must not finalize');
-    assert.equal(getTaskChatStallRestartCountForTests(MERGE_FIXER_CHAT_ID), 1);
-  });
-
-  test('second stall triggers merge-phase self-heal', async () => {
-    const group = makeMergeGroup();
-    const fixerChat = makeMergeFixerChat();
-    seedMergingTask(group, fixerChat);
-
-    trackTaskChatStallRecoveryCallsForTests(true);
-    startTaskChatSupervisionForTests(MERGE_FIXER_CHAT_ID);
-    const runId = chatTaskRunId(MERGE_FIXER_CHAT_ID);
-    bumpProgress(runId);
-
-    now = STALL_THRESHOLD_MS + 100;
-    tickHeartbeatForTests(runId);
-
-    startTaskChatSupervisionForTests(MERGE_FIXER_CHAT_ID);
-    bumpProgress(runId);
-    now += STALL_THRESHOLD_MS + 100;
-    tickHeartbeatForTests(runId);
-
-    const { nudges, selfHeals } = trackTaskChatStallRecoveryCallsForTests(false);
-    assert.equal(nudges.length, 1, 'only the first stall should nudge');
-    assert.deepEqual(selfHeals, [MERGE_TASK_ID], 'second stall should self-heal merge phase');
+    assert.deepEqual(
+      stallStops,
+      [{ taskId: MERGE_TASK_ID, chatId: MERGE_FIXER_CHAT_ID }],
+      'fixer stall must be recorded as a stall-stop',
+    );
+    assert.equal(nudges.length, 0, 'fixer stall must not nudge — the finalizer owns recovery');
+    assert.equal(selfHeals.length, 0, 'fixer stall must not self-heal directly');
+    assert.equal(task.status, 'merging', 'stall-stop must not finalize');
+    assert.equal(
+      getTaskChatStallRestartCountForTests(MERGE_FIXER_CHAT_ID),
+      0,
+      'fixer stall-stop must not consume a nudge-restart slot',
+    );
+    assert.equal(
+      isStallStoppedChatForTests(MERGE_FIXER_CHAT_ID),
+      true,
+      'chat must be marked so the stream-end preserves supervision state',
+    );
+    trackFixerStallStopsForTests(false);
   });
 });
 
@@ -567,7 +574,7 @@ describe('Fix C — env-fixer unified stall recovery', () => {
     teardownDom();
   });
 
-  test('env-fixer stall at 3x triggers nudge with stall counter', () => {
+  test('env-fixer stall at 3x stops the turn only — finalizer owns recovery', () => {
     const group = makeGroup();
     seedEnvFixerTask(group);
     const board = group.orchestrateBoard!;
@@ -581,6 +588,7 @@ describe('Fix C — env-fixer unified stall recovery', () => {
     );
 
     trackTaskChatStallRecoveryCallsForTests(true);
+    const stallStops = trackFixerStallStopsForTests(true);
     startTaskChatSupervisionForTests(FIXER_CHAT_ID);
 
     const runId = chatTaskRunId(FIXER_CHAT_ID);
@@ -590,13 +598,19 @@ describe('Fix C — env-fixer unified stall recovery', () => {
     tickHeartbeatForTests(runId);
 
     const { nudges, selfHeals } = trackTaskChatStallRecoveryCallsForTests(false);
-    assert.deepEqual(nudges, [TASK_ID], 'env-fixer stall should nudge the task');
-    assert.equal(selfHeals.length, 0, 'first env-fixer stall must not self-heal');
+    assert.deepEqual(
+      stallStops,
+      [{ taskId: TASK_ID, chatId: FIXER_CHAT_ID }],
+      'env-fixer stall must be recorded as a stall-stop',
+    );
+    assert.equal(nudges.length, 0, 'env-fixer stall must not nudge (double-dispatch race)');
+    assert.equal(selfHeals.length, 0, 'env-fixer stall must not self-heal directly');
     assert.equal(
       getTaskChatStallRestartCountForTests(FIXER_CHAT_ID),
-      1,
-      'env-fixer stall should increment the unified stall-restart counter',
+      0,
+      'env-fixer stall-stop must not consume a nudge-restart slot',
     );
+    trackFixerStallStopsForTests(false);
   });
 });
 
@@ -708,18 +722,79 @@ describe('Env-fixer pass board_report routing', () => {
 
     const taskA = group.orchestrateBoard!.tasks.find((t) => t.id === TASK_ID)!;
     const taskB = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-B')!;
-    const resumed = trackDrainResumeCallsForTests(false);
+    const board = group.orchestrateBoard!;
+    trackDrainResumeCallsForTests(false);
 
     assert.equal(taskA.status, 'testing', 'env-fixed task should advance to testing');
     assert.equal(taskB.status, 'planned', 'queued sibling must not start while A resumes testing');
-    if (resumed.length > 0) {
-      assert.equal(resumed[0], TASK_ID, 'drain should prefer the env-fixed task over the sibling');
-      assert.ok(!resumed.includes('W1-B'), 'sibling must not steal the concurrency slot');
-    }
+    assert.ok(taskA.testChatId?.trim(), 'test-phase pass must create or bind a tester chat');
+    const testChatId = taskA.testChatId!.trim();
+    assert.equal(
+      isLaunchReservedForTests(testChatId),
+      false,
+      'tester launch reservation must not leak when testing cannot launch immediately',
+    );
     const queue = getTaskQueueForTests(GROUP_ID);
-    if (queue.length > 0) {
+    if (queue.includes(TASK_ID)) {
       assert.equal(queue[0], TASK_ID, 'front-insert keeps env-fixed task ahead of siblings');
     }
+
+    releaseLaunchSlotForTests(FIXER_CHAT_ID);
+    assert.equal(
+      countRunningTaskChats(board),
+      0,
+      'leaked tester reservation must not leave the board at max concurrency',
+    );
+  });
+
+  test('resumeBoardTask succeeds when a pre-reserved tester chat exists', async () => {
+    const group = makeGroup();
+    const planner = makePlanner();
+    const testChatId = 'eeee-eeee-tester';
+    updateTask(
+      group,
+      TASK_ID,
+      {
+        status: 'testing',
+        chatId: BUILDER_CHAT_ID,
+        testChatId,
+        worktreePath: '/ws',
+      },
+      planner,
+    );
+    setSessionStateForTests({
+      version: 5,
+      activeId: PLANNER_ID,
+      chats: [
+        planner,
+        makeBuilderChat(),
+        {
+          id: testChatId,
+          name: 'Test W1-A',
+          workspacePath: '/ws',
+          modeId: 'build',
+          modelId: 'm1',
+          history: [],
+          lastStats: null,
+          modelInfo: {},
+          updatedAt: 1,
+          boardGroupId: GROUP_ID,
+          boardTaskId: TASK_ID,
+        },
+      ],
+      groups: [group],
+    });
+
+    reserveLaunchSlotForTests(testChatId);
+    group.orchestrateBoard!.maxConcurrentTasks = 1;
+
+    await continueBoardTask(group, TASK_ID, planner);
+
+    assert.equal(
+      isLaunchReservedForTests(testChatId),
+      false,
+      'resume must not leave a leaked tester reservation',
+    );
   });
 });
 
@@ -815,6 +890,8 @@ function makeFixDRunningGroup(): { group: ChatGroup; planner: Chat } {
 
 describe('Fix D — systemPaused vs user Stop', () => {
   beforeEach(async () => {
+    resetOrchestratorAutoReportsForTests();
+    setOrchestratorReportDeliverHook(async () => {});
     setSessionStateForTests(null);
     const { Window } = await import('happy-dom');
     const window = new Window();
@@ -822,10 +899,20 @@ describe('Fix D — systemPaused vs user Stop', () => {
       localStorage: Storage;
       document: Document;
       HTMLElement: typeof HTMLElement;
+      requestAnimationFrame: typeof requestAnimationFrame;
     };
     g.localStorage = window.localStorage;
     g.document = window.document;
     g.HTMLElement = window.HTMLElement;
+    g.requestAnimationFrame = (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    };
+  });
+
+  afterEach(() => {
+    resetOrchestratorAutoReportsForTests();
+    setOrchestratorReportDeliverHook(null);
   });
 
   test('systemPaused finalizes to planned with stopRetries, not quarantine', () => {
@@ -844,7 +931,7 @@ describe('Fix D — systemPaused vs user Stop', () => {
     assert.equal(updated.chatId, undefined);
   });
 
-  test('userStopped without systemPaused quarantines on stream-end', () => {
+  test('userStopped without systemPaused parks to planned, no quarantine (MIN-304)', async () => {
     const { group, planner } = makeFixDRunningGroup();
     const board = group.orchestrateBoard!;
     board.userStopped = true;
@@ -858,15 +945,15 @@ describe('Fix D — systemPaused vs user Stop', () => {
       activeChatId: FIX_D_PLANNER_ID,
     });
     finalizeBoardTaskOnStreamEnd(group, task, planner);
+    await new Promise((resolve) => setImmediate(resolve));
 
     const updated = board.tasks.find((t) => t.id === 'W1-A')!;
-    assert.equal(updated.status, 'quarantined');
+    // MIN-304: a user Stop is a neutral pause — park to planned, never quarantine,
+    // and do not burn a stopRetry (that budget is for stall/timeout stops).
+    assert.equal(updated.status, 'planned');
     assert.equal(updated.chatId, undefined);
-    assert.match(updated.quarantine?.summary ?? '', /stopped by user/i);
-    assert.equal(
-      isTaskStalledForRestart(board, updated, () => false),
-      false,
-    );
+    assert.equal(updated.quarantine, undefined);
+    assert.equal(updated.stopRetries, undefined);
   });
 
   test('systemPaused takes precedence when both flags are set', () => {
@@ -941,6 +1028,26 @@ describe('Manual recovery — recoverMergingBoardTask', () => {
       process.env.MINNOW_TEST = prevMinnowTest;
     }
     setSessionStateForTests(null);
+  });
+
+  test('finalizeMergeFixerOnStreamEnd git fallback completes when fixer dead without board_report', async () => {
+    const group = makeMergeGroup();
+    const fixerChat = makeMergeFixerChat();
+    const { planner } = seedMergingTask(group, fixerChat);
+
+    restoreFetch = mockWorktreeOps({
+      check_merged: { ok: true, merged: true },
+      verify_integration: { ok: true, verified: true },
+      refresh_integration_deps: { ok: true },
+    });
+
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === MERGE_TASK_ID)!;
+    await finalizeMergeFixerOnStreamEndForTests(group, task, planner, MERGE_FIXER_CHAT_ID);
+
+    const taskAfter = group.orchestrateBoard!.tasks.find((t) => t.id === MERGE_TASK_ID)!;
+    assert.equal(taskAfter.status, 'complete');
+    assert.equal(taskAfter.fixerChatId, undefined);
+    assert.equal(taskAfter.boardReport, undefined);
   });
 
   test('recoverMergingBoardTask with dead fixer and verified merge completes task', async () => {

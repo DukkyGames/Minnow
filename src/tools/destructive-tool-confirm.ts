@@ -25,6 +25,11 @@ export function applyDestructiveConfirmationAfterUserApproval(
 ): void {
   if (isConfirmed(args)) return;
 
+  if (permissionToolId === 'update_settings') {
+    args.confirmed = true;
+    return;
+  }
+
   if (permissionToolId === 'manage_brain') {
     const action = String(args.action ?? '').trim();
     if (MANAGE_BRAIN_DESTRUCTIVE.has(action)) {

@@ -3,6 +3,13 @@
  */
 
 import { fetchShellProfiles, type ShellProfile } from '../api/terminal-pty';
+import { randomUUID } from '../lib/random-id.ts';
+import {
+  formatTerminalTabTitle,
+  formatTerminalTabTooltip,
+  resolveFileExplorerTerminalCwd,
+  terminalCwdsEqual,
+} from './terminal-worktree-cwd';
 import {
   getTerminalMetaCached,
   loadTerminalMeta,
@@ -35,6 +42,10 @@ const liveTabs = new Map<string, TerminalTabSession>();
 let tabsInitialized = false;
 let onActiveTabChange: ((tabId: string, kind: TerminalTabKind) => void) | null =
   null;
+/** When true, the Agent tab shows a pulse dot (agent command running off-tab). */
+let agentTabActivityBadge = false;
+/** Target cwd for newly opened PTY tabs (follows file explorer). */
+let newTabTargetCwd: string | undefined;
 
 export function isAgentTabId(tabId: string): boolean {
   return tabId === AGENT_TAB_ID;
@@ -60,12 +71,30 @@ export function setTerminalTabChangeHandler(
   onActiveTabChange = handler;
 }
 
+function syncAgentTabActivityBadge(): void {
+  const btn = tabBarEl?.querySelector<HTMLButtonElement>('.terminal-tab--agent');
+  if (!btn) return;
+  btn.classList.toggle('terminal-tab--agent-run', agentTabActivityBadge);
+  btn.setAttribute(
+    'title',
+    agentTabActivityBadge
+      ? 'Agent command running — click to view output'
+      : 'Agent command output',
+  );
+}
+
+/** Show or hide the activity dot on the Agent tab (MIN-242). */
+export function setAgentTabActivityBadge(active: boolean): void {
+  agentTabActivityBadge = active;
+  syncAgentTabActivityBadge();
+}
+
 function notifyActiveTabChange(tabId: string): void {
   onActiveTabChange?.(tabId, tabKindFromId(tabId));
 }
 
 function randomTabId(): string {
-  return crypto.randomUUID();
+  return randomUUID();
 }
 
 function metaToSession(meta: TerminalTabMeta): TerminalTabSession {
@@ -74,6 +103,7 @@ function metaToSession(meta: TerminalTabMeta): TerminalTabSession {
     shellProfileId: meta.shellProfileId,
     sessionId: null,
     title: meta.title ?? meta.shellProfileId,
+    boundCwd: meta.boundCwd,
   };
 }
 
@@ -82,9 +112,47 @@ function sessionsToMeta(): TerminalTabMeta[] {
     id: t.tabId,
     shellProfileId: t.shellProfileId,
     title: t.title,
-    chatId: null,
+    boundCwd: t.boundCwd,
+    chatId: t.chatId ?? null,
     order: i,
   }));
+}
+
+/** Visible tab label — shell name plus workspace or worktree scope. */
+function resolveTabDisplayTitle(tab: TerminalTabSession): string {
+  const cwd = tab.boundCwd ?? resolveFileExplorerTerminalCwd();
+  return formatTerminalTabTitle(tab.title, cwd);
+}
+
+function resolveTabTooltip(tab: TerminalTabSession): string {
+  const cwd = tab.boundCwd ?? resolveFileExplorerTerminalCwd();
+  return formatTerminalTabTooltip(tab.title, cwd);
+}
+
+/** Scope for the next PTY tab — updated when the file explorer root changes. */
+export function setTerminalNewTabScope(cwd: string): void {
+  newTabTargetCwd = cwd;
+}
+
+/** Cwd of the active PTY tab's spawned session, if any. */
+export function getActivePtySessionCwd(): string | undefined {
+  const activeId = getTerminalMetaCached().activeTabId;
+  if (!activeId || isVirtualTabId(activeId)) return undefined;
+  return liveTabs.get(activeId)?.boundCwd;
+}
+
+/** True when the active PTY tab was started in a different directory. */
+export function activePtyDiffersFromTargetCwd(targetCwd: string): boolean {
+  const activeCwd = getActivePtySessionCwd();
+  if (!activeCwd) return false;
+  return !terminalCwdsEqual(activeCwd, targetCwd);
+}
+
+function resolveScopeForNewTab(): { cwd: string } {
+  if (newTabTargetCwd) {
+    return { cwd: newTabTargetCwd };
+  }
+  return { cwd: resolveFileExplorerTerminalCwd() };
 }
 
 async function persistTabs(activeId: string | null): Promise<void> {
@@ -144,6 +212,7 @@ function renderTabBar(activeId: string | null): void {
   list.appendChild(renderDevServerTab(activeId));
 
   for (const tab of liveTabs.values()) {
+    const displayTitle = resolveTabDisplayTitle(tab);
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'terminal-tab';
@@ -151,15 +220,19 @@ function renderTabBar(activeId: string | null): void {
     btn.dataset.tabId = tab.tabId;
     btn.setAttribute('aria-selected', tab.tabId === activeId ? 'true' : 'false');
     btn.tabIndex = tab.tabId === activeId ? 0 : -1;
-    btn.textContent = tab.title;
-    btn.title = tab.title;
+    btn.title = resolveTabTooltip(tab);
     btn.addEventListener('click', () => {
       void switchTab(tab.tabId);
     });
 
+    const label = document.createElement('span');
+    label.className = 'terminal-tab-label';
+    label.textContent = displayTitle;
+    btn.appendChild(label);
+
     const close = document.createElement('span');
     close.className = 'terminal-tab-close';
-    close.setAttribute('aria-label', `Close ${tab.title}`);
+    close.setAttribute('aria-label', `Close ${displayTitle}`);
     close.textContent = '×';
     close.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -180,6 +253,7 @@ function renderTabBar(activeId: string | null): void {
 
   tabBarEl.appendChild(list);
   tabBarEl.appendChild(addBtn);
+  syncAgentTabActivityBadge();
 }
 
 function fillShellSelect(): void {
@@ -245,12 +319,15 @@ export async function addTab(shellProfileId?: string): Promise<string> {
     profiles[0]?.id ??
     'powershell';
   const profile = profiles.find((p) => p.id === profileId) ?? profiles[0];
+  const { cwd } = resolveScopeForNewTab();
   const tabId = randomTabId();
   const session: TerminalTabSession = {
     tabId,
     shellProfileId: profile?.id ?? profileId,
     sessionId: null,
     title: profile ? profileTabTitle(profile) : profileId,
+    chatId: null,
+    boundCwd: cwd,
   };
   liveTabs.set(tabId, session);
   await switchTab(tabId);
@@ -313,7 +390,12 @@ export async function initTerminalTabs(
   });
 
   shellSelect.addEventListener('change', () => {
-    void saveTerminalMeta({ defaultShellProfileId: shellSelect.value });
+    const profileId = shellSelect.value;
+    void (async () => {
+      // Remember default shell and open a fresh PTY tab (MIN-244).
+      await saveTerminalMeta({ defaultShellProfileId: profileId });
+      await addTab(profileId);
+    })();
   });
 
   try {

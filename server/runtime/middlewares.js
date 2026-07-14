@@ -6,10 +6,12 @@
 import { createAgentPacksMiddleware } from '../agent-packs/routes.js';
 import { createBenchmarkWorkspaceMiddleware } from '../benchmark-workspace/middleware.js';
 import { createChatsWorkspaceMiddleware } from '../chats-workspace/middleware.js';
+import { createDesktopWorkspaceMiddleware } from '../desktop-workspace/middleware.js';
 import { createBenchmarksMiddleware } from '../benchmarks/middleware.js';
 import { createCompareMiddleware } from '../compare/middleware.js';
 import { createBrowserAllowlistMiddleware } from '../browser-allowlist-middleware.js';
 import { createBrowserScreenshotMiddleware } from '../browser-screenshot-middleware.js';
+import { createSettingsMiddleware } from '../settings/middleware.js';
 import { createConfigMiddleware } from '../config/middleware.js';
 import { createEvalsMiddleware } from '../evals/middleware.js';
 import { createGenerationsMiddleware } from '../generations/routes.js';
@@ -20,6 +22,8 @@ import { createServersMiddleware } from '../servers/index.js';
 import { createMemoryMiddleware } from '../memory/middleware.js';
 import { createBrainMiddleware } from '../brain/middleware.js';
 import { createPreviewMiddleware } from '../preview/middleware.js';
+import { createDesignAnnotationsMiddleware } from '../design/annotations-routes.js';
+import { createSourceMapMiddleware } from '../design/source-map-routes.js';
 import { createProfilesMiddleware } from '../profiles/middleware.js';
 import { createPromptConfigsMiddleware } from '../prompt-configs/middleware.js';
 import { createProviderMiddleware } from '../providers/routes.js';
@@ -43,13 +47,16 @@ import { createWorkAgentsMiddleware } from '../work-agents/routes.js';
 import { createOrchestrateMiddleware } from '../orchestrate/middleware.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
 import { createToolsMiddleware } from './tools-middleware.js';
+import { createAuthMiddleware } from './auth-middleware.js';
 
 /**
  * @param {import('connect').Connect.Server} connectApp
  * @param {{ resolveSafePath: (userPath: string, options?: { write?: boolean }) => string, runWithPathAccess: <T>(fn: () => Promise<T>) => Promise<T> }} deps
  */
 export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPathAccess }) {
+  connectApp.use(createAuthMiddleware());
   connectApp.use(createConfigMiddleware());
+  connectApp.use(createSettingsMiddleware());
   connectApp.use(createBenchmarksMiddleware());
   connectApp.use(createCompareMiddleware());
   connectApp.use(createEvalsMiddleware());
@@ -58,6 +65,7 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   connectApp.use(createWorktreeMiddleware());
   connectApp.use(createOrchestrateMiddleware());
   connectApp.use(createChatsWorkspaceMiddleware());
+  connectApp.use(createDesktopWorkspaceMiddleware());
   connectApp.use(createBenchmarkWorkspaceMiddleware());
   connectApp.use(createSystemMiddleware());
   connectApp.use(createModelsMiddleware());
@@ -66,6 +74,18 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   connectApp.use(createEmailMiddleware());
   connectApp.use(
     createPreviewMiddleware({
+      resolveSafePath,
+      runWithPathAccess,
+    }),
+  );
+  connectApp.use(
+    createDesignAnnotationsMiddleware({
+      resolveSafePath,
+      runWithPathAccess,
+    }),
+  );
+  connectApp.use(
+    createSourceMapMiddleware({
       resolveSafePath,
       runWithPathAccess,
     }),

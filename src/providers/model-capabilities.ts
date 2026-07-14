@@ -6,6 +6,7 @@ import { isModelLoaded } from '../api/model-loaded-state';
 import { modelCache } from '../app-state';
 import { isServerStorageMode } from '../config/storage-mode';
 import { contextLengthFromModelRow } from '../lib/context-length';
+import { anthropicModelUsesAdaptiveThinking } from '../lib/anthropic-thinking-style';
 import {
   inferReasoningOptionsFromModelId,
   isReasoningEffortOption,
@@ -94,28 +95,38 @@ export function catalogCapabilitiesFromRow(
   row: LmModelRecord,
   apiKind?: ApiKind,
 ): ModelCapabilities {
+  const resolvedApi = row.api ?? apiKind;
   const contextLength = contextLengthFromModelRow(row) ?? null;
   const vision = catalogRowHasVision(row);
   const reasoningCaps = reasoningCatalogFromRow(row);
   let reasoningAllowedOptions = reasoningCaps.reasoningAllowedOptions;
-  if ((!reasoningAllowedOptions || reasoningAllowedOptions.length === 0) && apiKind) {
-    const inferred = inferReasoningOptionsFromModelId(row.id, apiKind);
+  if ((!reasoningAllowedOptions || reasoningAllowedOptions.length === 0) && resolvedApi) {
+    const inferred = inferReasoningOptionsFromModelId(row.id, resolvedApi);
     if (inferred.length > 0) {
       reasoningAllowedOptions = inferred;
     }
   }
   const isMiniMax = /minimax/i.test(row.id);
+  const usesAdaptiveAnthropicThinking =
+    resolvedApi === 'anthropic-v1' && anthropicModelUsesAdaptiveThinking(row.id);
   return {
     vision,
     tools: null,
     streaming: null,
     grammar: null,
     reasoning: reasoningCaps.reasoning ?? (reasoningAllowedOptions?.length ? true : null),
-    reasoningAllowedOptions,
+    reasoningAllowedOptions:
+      reasoningAllowedOptions?.length
+        ? reasoningAllowedOptions
+        : usesAdaptiveAnthropicThinking
+          ? (['off', 'low', 'medium', 'high'] as const)
+          : reasoningAllowedOptions,
     reasoningDefault: reasoningCaps.reasoningDefault ?? (reasoningAllowedOptions?.includes('medium') ? 'medium' : undefined),
     ...(isMiniMax ? { reasoningThinkingEnabledValue: 'adaptive' as const } : {}),
+    ...(usesAdaptiveAnthropicThinking ? { reasoningThinkingEnabledValue: 'adaptive' as const } : {}),
     contextLength,
     loadState: row.state?.trim() || null,
+    ...(resolvedApi ? { api: resolvedApi } : {}),
     sources: {
       vision: 'catalog',
       contextLength: contextLength !== null ? 'catalog' : undefined,
@@ -159,6 +170,15 @@ export function resolveSendCapabilities(
       reasoning: fromCatalog.reasoning ?? cached.reasoning,
       reasoningAllowedOptions: fromCatalog.reasoningAllowedOptions,
       reasoningDefault: fromCatalog.reasoningDefault ?? cached.reasoningDefault,
+      reasoningThinkingEnabledValue:
+        cached.reasoningThinkingEnabledValue ?? fromCatalog.reasoningThinkingEnabledValue,
+    };
+  }
+
+  if (!cached.reasoningThinkingEnabledValue && fromCatalog.reasoningThinkingEnabledValue) {
+    return {
+      ...cached,
+      reasoningThinkingEnabledValue: fromCatalog.reasoningThinkingEnabledValue,
     };
   }
 
@@ -221,6 +241,11 @@ export function mergeModelCapabilities(
   }
   if (fromFile.probeErrors && Object.keys(fromFile.probeErrors).length > 0) {
     merged.probeErrors = { ...catalog.probeErrors, ...fromFile.probeErrors };
+  }
+  if (fromFile.api) {
+    merged.api = fromFile.api;
+  } else if (catalog.api) {
+    merged.api = catalog.api;
   }
 
   return merged;
@@ -357,7 +382,7 @@ export async function runCapabilityProbeForProvider(
   options: {
     modelIds?: string[];
     selectedModelId?: string;
-    apiKind?: 'lm-studio-v0' | 'openai-v1';
+    apiKind?: ApiKind;
   } = {},
 ): Promise<void> {
   if (!isServerStorageMode()) return;

@@ -6,8 +6,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { ensureMinnowLayout, getMinnowHome } from '../config/home.js';
 import { readConfigJson, writeConfigJson } from '../config/store.js';
-import { mergeConfigMeta } from '../config/validators.js';
-import { normalizeWorkspacePathKey } from '../workspace/root.js';
+import { mergeConfigMeta, normalizeWorkspacePath } from '../config/validators.js';
 import { listPromptConfigs, loadPromptConfigFile } from '../prompt-configs/handlers.js';
 import { validateProfileBundle } from './validate.js';
 import {
@@ -276,7 +275,7 @@ export async function migrateFromPromptConfigs() {
  * @param {string|null} profileId
  */
 export async function setWorkspaceProfileDefault(workspacePath, profileId) {
-  const key = normalizeWorkspacePathKey(workspacePath);
+  const key = normalizeWorkspacePath(path.resolve(workspacePath));
   const meta = (await readConfigJson('config.json')) ?? {};
   const map =
     meta.workspaceProfiles && typeof meta.workspaceProfiles === 'object'
@@ -308,7 +307,7 @@ export async function maybeAutoApplyWorkspaceProfile(workspacePath) {
     return { skipped: true, reason: 'auto-apply disabled' };
   }
 
-  const key = normalizeWorkspacePathKey(workspacePath);
+  const key = normalizeWorkspacePath(path.resolve(workspacePath));
   const map =
     meta.workspaceProfiles && typeof meta.workspaceProfiles === 'object'
       ? meta.workspaceProfiles

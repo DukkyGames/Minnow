@@ -35,6 +35,7 @@ import {
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
 import { getActiveProvider } from '../providers/store';
 import { parseToolArguments } from '../tools/parse-tool-arguments';
+import { runHeadlessToolBatch } from '../tools/headless-tool-batch';
 import { detectLocalServer } from '../tools/client';
 import {
   ensureToolConfigReady,
@@ -53,7 +54,7 @@ import {
   type HeadlessRunResult,
   type HeadlessTurnRecord,
 } from './result';
-import { installHeadlessFetch, installHeadlessLocalStorage } from './server-context';
+import { installHeadlessFetch, installHeadlessLocalStorage, resolveHeadlessToken } from './server-context';
 import { persistHeadlessChat } from './persist-chat';
 
 /** Apply --profile in memory only (does not write ~/.minnow). */
@@ -165,7 +166,7 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
   const log = options.log ?? ((line: string) => process.stderr.write(`${line}\n`));
 
   installHeadlessLocalStorage();
-  installHeadlessFetch(options.cli.baseUrl);
+  installHeadlessFetch(options.cli.baseUrl, resolveHeadlessToken(options.cli.token));
 
   await detectConfigServer();
   await detectLocalServer();
@@ -331,30 +332,47 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
         tool_calls: turnResult.toolCalls,
       });
 
-      for (const tc of turnResult.toolCalls) {
+      const outcomes = await runHeadlessToolBatch({
+        toolCalls: turnResult.toolCalls,
+        execute: async (name, args) => {
+          const result = await executeHeadlessTool(
+            name,
+            args as Record<string, unknown>,
+            {
+              modeId,
+              workAgentId: workAgentId ?? undefined,
+              chatId: chat.id,
+            },
+            approvalOpts,
+          );
+
+          if (
+            result.content.startsWith('Error: tool ') &&
+            result.content.includes('requires user approval')
+          ) {
+            throw new Error(result.content);
+          }
+          if (result.content.startsWith('Error: --no-approval requires')) {
+            throw new Error(result.content);
+          }
+
+          return result;
+        },
+      });
+
+      for (const outcome of outcomes) {
+        const tc = outcome.toolCall;
         const { args } = parseToolArguments(tc.function.arguments);
-        const result = await executeHeadlessTool(tc.function.name, args, {
-          modeId,
-          workAgentId: workAgentId ?? undefined,
-        }, approvalOpts);
-
-        if (result.content.startsWith('Error: tool ') && result.content.includes('requires user approval')) {
-          throw new Error(result.content);
-        }
-        if (result.content.startsWith('Error: --no-approval requires')) {
-          throw new Error(result.content);
-        }
-
+        const content = outcome.parseError ?? outcome.result?.content ?? '';
         turnRecord.toolCalls.push({
           name: tc.function.name,
           args,
-          resultPreview: previewToolResult(result.content),
+          resultPreview: previewToolResult(content),
         });
-
         chat.history.push({
           role: 'tool',
           tool_call_id: tc.id,
-          content: result.content,
+          content,
         });
       }
 

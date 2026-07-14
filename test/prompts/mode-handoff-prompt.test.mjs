@@ -56,8 +56,11 @@ describe('mode-handoff prompts', () => {
     assert.ok(loaded?.body);
     assert.match(loaded.body, /ask_question/);
     assert.match(loaded.body, /create_chat_with_mode/);
+    assert.match(loaded.body, /mode_id: orchestrate/);
+    assert.match(loaded.body, /plan_path/);
     assert.match(loaded.body, /set_chat_mode/);
-    assert.match(loaded.body, /reef-widget/);
+    assert.doesNotMatch(loaded.body, /modeId:/);
+    assert.doesNotMatch(loaded.body, /reef-widget/);
   });
 
   test('composeSystemPrompt appends handoff for plan mode', async () => {
@@ -71,7 +74,6 @@ describe('mode-handoff prompts', () => {
       skillBody: null,
       memoryBlock: null,
       enabledToolIds: ['ask_question', 'propose_mode_switch'],
-      enabledToolSummaries: 'ask_question: questions',
     });
     assert.match(out, /Mode handoff/);
     assert.match(out, /create_chat_with_mode/);
@@ -89,7 +91,6 @@ describe('mode-handoff prompts', () => {
       skillBody: null,
       memoryBlock: null,
       enabledToolIds: ['ask_question'],
-      enabledToolSummaries: '',
     });
     assert.doesNotMatch(out, /create_chat_with_mode/);
   });
@@ -101,21 +102,5 @@ describe('mode-handoff prompts', () => {
     );
     assert.match(planBody, /propose_mode_switch/);
     assert.match(planBody, /create_chat_with_mode/);
-  });
-});
-
-describe('reef-widget sub-agent defaults', () => {
-  test('shipped config includes reef-widget with read-only tools', async () => {
-    const raw = await fs.readFile(
-      path.join(REPO_ROOT, 'src/agents/defaults/sub-agents.json'),
-      'utf8',
-    );
-    const defaults = JSON.parse(raw);
-    const cfg = defaults.types['reef-widget'];
-    assert.ok(cfg, 'reef-widget type missing');
-    assert.ok(Array.isArray(cfg.allowedTools));
-    assert.ok(cfg.allowedTools.includes('read_file'));
-    assert.ok(cfg.deniedTools.includes('save_file'));
-    assert.ok(cfg.deniedTools.includes('spawn_sub_agent'));
   });
 });

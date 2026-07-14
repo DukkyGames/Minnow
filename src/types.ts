@@ -72,6 +72,12 @@ export interface UserMessage {
   goalAchieved?: boolean;
 }
 
+/** One build-agent progress item (todo_write). */
+export interface ChatTodo {
+  text: string;
+  status: 'pending' | 'in_progress' | 'completed';
+}
+
 /** Persistent /goal loop state on a chat (Claude Code–style completion condition). */
 export interface ActiveGoalState {
   /** Completion condition text (max 4000 chars). */
@@ -106,6 +112,13 @@ export interface AssistantToolCallMessage {
   role: 'assistant';
   content: string | null;
   tool_calls: ToolCall[];
+  /** Reasoning segments shown in UI; replayed to Anthropic when signature is set. */
+  thinking?: string[];
+  /**
+   * Anthropic extended-thinking signature for this turn (required to replay tool_use
+   * blocks when thinking stays enabled on follow-up Messages API requests).
+   */
+  thinkingSignature?: string;
   stats?: Stats;
   usage?: Usage;
 }
@@ -204,6 +217,10 @@ export interface ApiAssistantMessage {
   role: 'assistant';
   content: ApiMessageContent;
   tool_calls?: ToolCall[];
+  /** Outbound reasoning text for Anthropic tool-loop replay (not persisted in session). */
+  reasoning?: string;
+  /** Anthropic thinking signature paired with `reasoning` for Messages API replay. */
+  reasoning_signature?: string;
 }
 
 export interface ApiToolMessage {
@@ -385,6 +402,8 @@ export interface BoardTask {
   };
   /** Phase-2 placeholder: self-heal iteration counter. */
   selfHealRound?: number;
+  /** Monotonic lifecycle counter bumped on requeue so completion reports dedupe per run. */
+  lifecycleRun?: number;
   /** Phase-2 placeholder: category of the last self-heal attempt. */
   lastHealCategory?: string;
   /** Phase-2 placeholder: outcome of the last build attempt. */
@@ -477,6 +496,10 @@ export interface OrchestrateBoardState {
   isolationBaseRef?: string;
   /** Epoch ms when plan-complete UI was shown (dedupe). */
   completionShownAt?: number;
+  /** True when every task is quarantined and none completed (terminal blocked state). */
+  terminalBlocked?: boolean;
+  /** Plan-complete wrap-up turn deferred until planner stream ends. */
+  wrapUpPending?: boolean;
   /** User dismissed the finish dashboard to view the kanban again. */
   dashboardDismissed?: boolean;
   /** Epoch ms when integration was merged into the workspace and committed (finish dashboard). */
@@ -689,6 +712,13 @@ export interface TurnRunRecord {
 /** Expert thread or legacy Expert Lab session (hidden from main sidebar). */
 export type ChatKind = 'expert' | 'expert-lab';
 
+/** Follow-up message queued while the agent turn is in progress (MIN-200). */
+export interface QueuedComposerMessage {
+  id: string;
+  text: string;
+  createdAt: number;
+}
+
 export interface Chat {
   id: string;
   name: string;
@@ -741,6 +771,17 @@ export interface Chat {
    * Code workspace, isolating concurrent board task chats. Unset = shared workspace.
    */
   worktreeRoot?: string;
+  /**
+   * Git branch this chat operates on (MIN-276 composer branch selector). When
+   * {@link worktreeRoot} is set, this is the worktree branch; otherwise the
+   * workspace checkout branch the chat targets.
+   */
+  gitBranch?: string;
+  /**
+   * True when Minnow created the chat worktree at the managed slot (cleanup on
+   * delete / detach to Local). False when attached to an existing worktree.
+   */
+  chatWorktreeManaged?: boolean;
   /** @deprecated Migrated to ~/.minnow/bugs/state.json — stripped on load. */
   bugBoard?: BugBoardState;
   /**
@@ -749,12 +790,18 @@ export interface Chat {
   viewMode?: 'chat' | 'board';
   /** Backend-owned generation id for in-flight main chat completion (reload re-subscribe). */
   currentGenerationId?: string;
-  /** Queued steering correction for the in-flight turn (last write wins; cleared on consume or stop). */
+  /** Queued steering correction for the in-flight turn (push-now; cleared on consume or stop). */
   pendingSteerMessage?: string;
+  /** Follow-up messages queued while this chat is streaming (MIN-200). */
+  pendingMessageQueue?: QueuedComposerMessage[];
   /** Active /goal completion loop; persists across reload until cleared. */
   activeGoal?: ActiveGoalState;
   /** Super Plan pipeline controller state (Plan mode overhaul Phase 3). */
   superPlan?: SuperPlanState;
+  /** Build-agent progress checklist (todo_write); replace-all, cleared on /clear. */
+  todos?: ChatTodo[];
+  /** Epoch ms when todos were last written via todo_write. */
+  todosUpdatedAt?: number;
   /** Queued mode switch from set_chat_mode during streaming (last write wins; flushed on stream end). */
   pendingModeId?: ModeId;
   /** Sidebar: green dot on inactive rows until the user opens this chat again. */
@@ -774,6 +821,8 @@ export interface Chat {
   runs?: TurnRunRecord[];
   /** forkHistoryIndex (string) → active branchId for the materialized transcript. */
   activeBranchByFork?: Record<string, string>;
+  /** Unsent composer text shown as a draft row in the sidebar until the first send. */
+  composerDraft?: string;
   /** Sticky slash skill for this chat (persists until cleared or replaced). */
   pinnedSkill?: PinnedSkillState | null;
   /** Pending user edits from Reef widgets; consumed on next send. */
@@ -816,6 +865,8 @@ export interface SessionState {
   version: SessionSchemaVersion;
   activeId: string | null;
   sidebarCollapsed: boolean;
+  /** Expanded chat sidebar width in px (persisted). */
+  sidebarWidth?: number;
   chats: Chat[];
   /** Collapsible chat folders per workspace. */
   groups?: ChatGroup[];
@@ -860,6 +911,8 @@ export interface ModelCapabilities {
   reasoningThinkingEnabledValue?: 'enabled' | 'adaptive';
   contextLength: number | null;
   loadState: string | null;
+  /** Resolved upstream API for this model (gateway auto-routing). */
+  api?: import('./providers/types').ApiKind;
   sources?: Partial<Record<keyof ModelCapabilities | 'loadState', CapabilitySource>>;
   probeErrors?: Record<string, string>;
 }
@@ -884,6 +937,11 @@ export interface LmModelRecord {
   };
   /** Upstream catalog vision flag (`capabilities.vision` or `type: vlm`) before Minnow merge. */
   catalogVision?: boolean;
+  /** Resolved upstream API (`openai-v1` vs `anthropic-v1`) for mixed gateways. */
+  api?: import('./providers/types').ApiKind;
+  /** OpenAI-compatible catalog owner when present (e.g. OpenRouter `owned_by`). */
+  owned_by?: string;
+  family?: string;
 }
 
 export interface LmModelsListResponse {
@@ -914,6 +972,8 @@ export interface ChatCompletionChoiceDelta {
   reasoning_content?: string;
   /** Some Ollama-compatible gateways (e.g. MiniMax) emit thinking in this field. */
   thinking?: string;
+  /** Anthropic extended-thinking signature (Minnow anthropic-v1 bridge extension). */
+  reasoning_signature?: string;
   tool_calls?: ChatCompletionToolCallDelta[];
 }
 

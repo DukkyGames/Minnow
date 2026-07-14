@@ -1,6 +1,11 @@
 import { ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT } from '../constants';
 import { sessionState } from '../state/sessions';
 import { scheduleSaveSessions } from '../state/sessions';
+import { mountOsMobileDrawerBackdrops, syncOsMobileDrawerHtmlClass } from './mobile-drawer-portal';
+import {
+  syncAppBodySidebarWidthVars,
+  syncChatSidebarResizer,
+} from './sidebar-resize';
 
 export function isMobileLayout(): boolean {
   return window.matchMedia('(max-width: 640px)').matches;
@@ -10,6 +15,7 @@ export function closeMobileSidebar(): void {
   const side = document.getElementById('chatSidebar');
   const bd = document.getElementById('sidebarBackdrop');
   if (side) side.classList.remove('mobile-open');
+  syncOsMobileDrawerHtmlClass('chat', false);
   if (bd) {
     bd.classList.remove('open');
     bd.setAttribute('aria-hidden', 'true');
@@ -19,9 +25,11 @@ export function closeMobileSidebar(): void {
 
 export function openMobileSidebar(): void {
   if (!isMobileLayout()) return;
+  mountOsMobileDrawerBackdrops();
   const side = document.getElementById('chatSidebar');
   const bd = document.getElementById('sidebarBackdrop');
   if (side) side.classList.add('mobile-open');
+  syncOsMobileDrawerHtmlClass('chat', true);
   if (bd) {
     bd.classList.add('open');
     bd.setAttribute('aria-hidden', 'false');
@@ -33,6 +41,12 @@ export function applySidebarVisuals(): void {
   const side = document.getElementById('chatSidebar');
   const btn = document.getElementById('btnSidebarCollapse');
   if (!side || !btn || !sessionState) return;
+  if (isMobileLayout()) {
+    mountOsMobileDrawerBackdrops();
+    syncOsMobileDrawerHtmlClass('chat', side.classList.contains('mobile-open'));
+  } else {
+    syncOsMobileDrawerHtmlClass('chat', false);
+  }
   if (!isMobileLayout()) {
     closeMobileSidebar();
     side.classList.toggle('collapsed', sessionState.sidebarCollapsed);
@@ -50,6 +64,8 @@ export function applySidebarVisuals(): void {
     );
   }
   scheduleElectronPreviewHostLayoutAfterChatSidebarChange();
+  syncAppBodySidebarWidthVars();
+  syncChatSidebarResizer();
 }
 
 /** Re-align the Electron preview guest when the chat rail width changes. */

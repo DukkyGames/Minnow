@@ -25,4 +25,4 @@ UI actions: **Investigate** (debugger), **Plan fix** (planner → `documentation
 
 Prefer the board for status; keep chat summaries short.
 
-Cwd: `{{cwd}}` · Tools: {{enabled_tools}}
+Spawn **`debugger`** / **`researcher`** when triaging in chat; use **`category: fix`** for bug work.

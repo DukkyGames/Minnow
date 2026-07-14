@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import { Window } from 'happy-dom';
+import { encodeModelSelectKey } from '../../src/lib/model-select-key.ts';
+import { DEFAULT_EDITOR_AI_COMPLETION } from '../../src/config/editor-ai-completion.ts';
+import { createEmptyChatObject, setSessionStateForTests } from '../../src/state/sessions.ts';
 import {
   buildGitCommitMessagePrompt,
+  resolveGitCommitMessageBinding,
   sanitizeCommitMessage,
   truncateStagedPatch,
 } from '../../src/ui/git-commit-message-client.ts';
@@ -49,5 +54,36 @@ describe('sanitizeCommitMessage', () => {
   test('preserves multiline body', () => {
     const raw = 'feat: add panel\n\nExplain why this matters.';
     assert.equal(sanitizeCommitMessage(raw), raw);
+  });
+});
+
+describe('resolveGitCommitMessageBinding', () => {
+  test('uses chat model when editor AI is disabled', async () => {
+    const window = new Window();
+    globalThis.window = window;
+    globalThis.document = window.document;
+    globalThis.HTMLElement = window.HTMLElement;
+
+    const chat = createEmptyChatObject('');
+    setSessionStateForTests({ chats: [chat], activeId: chat.id });
+
+    const sel = document.createElement('select');
+    sel.id = 'modelSelect';
+    const opt = document.createElement('option');
+    opt.value = encodeModelSelectKey('lm-studio-local', 'glm-5.2');
+    sel.appendChild(opt);
+    sel.value = opt.value;
+    document.body.appendChild(sel);
+
+    const binding = await resolveGitCommitMessageBinding({
+      ...DEFAULT_EDITOR_AI_COMPLETION,
+      enabled: false,
+      useChatModel: false,
+      providerId: 'opencodego',
+      modelId: 'qwen3.6-plus',
+    });
+
+    assert.equal(binding.providerId, 'lm-studio-local');
+    assert.equal(binding.modelId, 'glm-5.2');
   });
 });

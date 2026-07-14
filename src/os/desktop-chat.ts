@@ -4,15 +4,16 @@
 
 import { sendMessage } from '../chat/messaging';
 import { isActiveChatStreaming, subscribeChatStreamEnd } from '../chat/streaming-state';
-import { getChatsWorkspacePath } from '../lib/chats-workspace';
+import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
+import {
+  CHAT_APP_ID,
+  createDesktopChat,
+  ensureActiveDesktopAssistantChat,
+} from './desktop-chat-sessions';
 import { getWorkspacePath } from '../state/workspace';
 import type { DesktopChatActivateOptions } from './desktop-state';
 import {
-  CHAT_APP_ID,
-  createAssistantChat,
-  ensureActiveAssistantChat,
-} from '../state/chat-app-sessions';
-import {
+  ensureSessionsReady,
   getActiveChat,
   isExpertChat,
   newChatId,
@@ -27,8 +28,10 @@ import { acknowledgeChatViewed } from '../notifications/acknowledge';
 import {
   handleComposerPrimaryAction,
   initComposerSteerInputListener,
+  shouldAllowComposerPrimaryAction,
   syncComposerFromStreamingState,
 } from '../ui/composer-send';
+import { initComposerDraftListener, switchComposerDraft } from '../ui/composer-draft';
 import { initComposerSlashPicker } from '../ui/skill-picker';
 import { refreshContextUsageRing } from '../ui/context-usage-ring';
 import { renderChatFromHistory } from '../ui/messages';
@@ -41,7 +44,7 @@ export { autoResizeDesktopComposer, DESKTOP_COMPOSER_MAX_LINES } from './desktop
 
 const DESKTOP_CHAT_MOUNT = '#desktopChatCol';
 
-let chatsWorkspacePath: string | null = null;
+let desktopWorkspacePath: string | null = null;
 let streamEndBound = false;
 
 function getTranscriptCol(): HTMLElement | null {
@@ -61,7 +64,7 @@ function renderDesktopEmptyState(area: HTMLElement): void {
       <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
     </div>
     <h2>Start a conversation</h2>
-    <p>Ask anything — tools and file outputs work here too.</p>
+    <p>Ask anything — use the Files, Browser, and Preview tabs on the right for workspace files.</p>
   `;
   area.appendChild(empty);
 }
@@ -85,30 +88,26 @@ function syncDesktopComposerSendState(): void {
   const input = document.getElementById('desktopInput') as HTMLTextAreaElement | null;
   const sendBtn = document.getElementById('desktopSendBtn') as HTMLButtonElement | null;
   if (!sendBtn) return;
-  if (isActiveChatStreaming()) {
-    sendBtn.disabled = false;
-    return;
-  }
-  sendBtn.disabled = !input?.value.trim();
+  sendBtn.disabled = !shouldAllowComposerPrimaryAction(input?.value ?? '');
 }
 
-async function ensureChatsWorkspaceReady(): Promise<boolean> {
-  chatsWorkspacePath = await getChatsWorkspacePath();
-  return Boolean(chatsWorkspacePath);
+async function ensureDesktopWorkspaceReady(): Promise<boolean> {
+  desktopWorkspacePath = await getDesktopWorkspacePath();
+  return Boolean(desktopWorkspacePath);
 }
 
 async function ensureReadyForSend(): Promise<boolean> {
   try {
     const chat = getActiveChat();
     if (!isExpertChat(chat)) {
-      await ensureActiveAssistantChat();
+      await ensureActiveDesktopAssistantChat();
     }
-    if (!chatsWorkspacePath) {
-      chatsWorkspacePath = await getChatsWorkspacePath();
+    if (!desktopWorkspacePath) {
+      desktopWorkspacePath = await getDesktopWorkspacePath();
     }
     return true;
   } catch {
-    setStatus('err', 'Chats workspace unavailable — run npm start');
+    setStatus('err', 'Desktop workspace unavailable — run npm start');
     return false;
   }
 }
@@ -133,7 +132,7 @@ export async function handleDesktopSend(prefill?: string): Promise<void> {
   const sendBtn = document.getElementById('desktopSendBtn') as HTMLButtonElement | null;
   await sendMessage({ inputEl: input, sendBtnEl: sendBtn });
   renderDesktopChatMessages();
-  renderDesktopChatRail(chatsWorkspacePath);
+  renderDesktopChatRail(desktopWorkspacePath);
   syncDesktopComposerSendState();
   refreshContextUsageRing();
 }
@@ -145,12 +144,12 @@ async function applyDesktopSeed(seed?: string): Promise<void> {
   await handleDesktopSend(seed.trim());
 }
 
-/** Start a fresh assistant thread in the chats workspace sandbox. */
+/** Start a fresh assistant thread in the desktop workspace sandbox. */
 function createFreshAssistantChat(
-  chatsWorkspacePath: string,
+  workspacePath: string,
   state: NonNullable<typeof sessionState>,
 ): void {
-  const chat = createAssistantChat(chatsWorkspacePath, newChatId());
+  const chat = createDesktopChat(workspacePath, newChatId());
   state.chats.unshift(chat);
   state.activeId = chat.id;
   rememberActiveChatForApp(CHAT_APP_ID, chat.id);
@@ -160,11 +159,13 @@ function createFreshAssistantChat(
 /** Switch the active assistant thread on the desktop surface. */
 export function activateDesktopChatSession(chatId: string): void {
   if (!sessionState) return;
+  const prevId = sessionState.activeId;
   const chat = sessionState.chats.find((c) => c.id === chatId);
   if (!chat) return;
   sessionState.activeId = chatId;
   acknowledgeChatViewed(chatId);
-  renderDesktopChatRail(chatsWorkspacePath);
+  void switchComposerDraft(prevId, chat);
+  renderDesktopChatRail(desktopWorkspacePath);
   renderDesktopChatMessages();
   syncChatItemDotsInDom();
   syncDesktopComposerSendState();
@@ -174,7 +175,7 @@ export function activateDesktopChatSession(chatId: string): void {
 
 function onChatStreamEnded(chatId: string): void {
   if (!isDesktopChatActive()) return;
-  renderDesktopChatRail(chatsWorkspacePath);
+  renderDesktopChatRail(desktopWorkspacePath);
   if (getActiveChat().id === chatId) {
     renderDesktopChatMessages();
     syncDesktopComposerSendState();
@@ -192,7 +193,9 @@ function bindStreamEndOnce(): void {
 export async function bootstrapDesktopChat(options?: DesktopChatActivateOptions): Promise<void> {
   bindStreamEndOnce();
 
-  const ready = await ensureChatsWorkspaceReady();
+  await ensureSessionsReady();
+
+  const ready = await ensureDesktopWorkspaceReady();
   if (ready && sessionState) {
     rememberWorkspaceActiveChat(getWorkspacePath());
 
@@ -215,24 +218,24 @@ export async function bootstrapDesktopChat(options?: DesktopChatActivateOptions)
             }
           }
         } else {
-          await ensureActiveAssistantChat();
+          await ensureActiveDesktopAssistantChat();
         }
       } catch {
         /* server offline — still show shell */
       }
-    } else if (options?.seed?.trim() && chatsWorkspacePath) {
+    } else if (options?.seed?.trim() && desktopWorkspacePath) {
       // Seeded sends from the hero concierge always open a new thread.
-      createFreshAssistantChat(chatsWorkspacePath, state);
+      createFreshAssistantChat(desktopWorkspacePath, state);
     } else {
       try {
-        await ensureActiveAssistantChat();
+        await ensureActiveDesktopAssistantChat();
       } catch {
         /* server offline — still show shell */
       }
     }
   }
 
-  renderDesktopChatRail(chatsWorkspacePath);
+  renderDesktopChatRail(desktopWorkspacePath);
   renderDesktopChatMessages();
   syncDesktopComposerSendState();
   if (sessionState) {
@@ -255,6 +258,7 @@ export function wireDesktopComposerControls(inputEl?: HTMLTextAreaElement | null
   input.dataset.desktopComposerBound = '1';
 
   initComposerSteerInputListener(input);
+  initComposerDraftListener(input);
   initComposerSlashPicker(input);
   const onInput = (): void => {
     autoResizeDesktopComposer(input);

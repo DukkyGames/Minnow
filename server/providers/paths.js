@@ -3,8 +3,10 @@
  * LM Studio list/chat use v0; load/unload use v1 REST on the same baseUrl.
  */
 
+import { deriveMessagesPathFromChat } from '../../src/lib/derive-messages-path.mjs';
+
 /**
- * @param {'lm-studio-v0' | 'openai-v1'} apiKind
+ * @param {'lm-studio-v0' | 'openai-v1' | 'anthropic-v1'} apiKind
  */
 export function getProviderCapabilities(apiKind) {
   return {
@@ -13,8 +15,8 @@ export function getProviderCapabilities(apiKind) {
 }
 
 /**
- * @param {'lm-studio-v0' | 'openai-v1'} apiKind
- * @param {{ modelsPath?: string, chatCompletionsPath?: string, modelsLoadPath?: string, modelsUnloadPath?: string }} [overrides]
+ * @param {'lm-studio-v0' | 'openai-v1' | 'anthropic-v1'} apiKind
+ * @param {{ modelsPath?: string, chatCompletionsPath?: string, messagesPath?: string, modelsLoadPath?: string, modelsUnloadPath?: string }} [overrides]
  */
 export function getDefaultPaths(apiKind, overrides = {}) {
   const defaults =
@@ -22,20 +24,37 @@ export function getDefaultPaths(apiKind, overrides = {}) {
       ? {
           modelsPath: '/v1/models',
           chatCompletionsPath: '/v1/chat/completions',
+          messagesPath: '/v1/messages',
           embeddingsPath: '/v1/embeddings',
         }
-      : {
-          modelsPath: '/api/v0/models',
-          chatCompletionsPath: '/api/v0/chat/completions',
-          modelsLoadPath: '/api/v1/models/load',
-          modelsUnloadPath: '/api/v1/models/unload',
-        };
+      : apiKind === 'anthropic-v1'
+        ? {
+            modelsPath: '/v1/models',
+            chatCompletionsPath: '/v1/messages',
+            messagesPath: '/v1/messages',
+            embeddingsPath: '/v1/embeddings',
+          }
+        : {
+            modelsPath: '/api/v0/models',
+            chatCompletionsPath: '/api/v0/chat/completions',
+            modelsLoadPath: '/api/v1/models/load',
+            modelsUnloadPath: '/api/v1/models/unload',
+          };
 
   const out = {
     modelsPath: overrides.modelsPath || defaults.modelsPath,
     chatCompletionsPath: overrides.chatCompletionsPath || defaults.chatCompletionsPath,
     embeddingsPath: overrides.embeddingsPath || defaults.embeddingsPath || '/v1/embeddings',
   };
+
+  if (defaults.messagesPath) {
+    const chatPath = overrides.chatCompletionsPath || defaults.chatCompletionsPath;
+    out.messagesPath =
+      overrides.messagesPath ||
+      (apiKind === 'anthropic-v1'
+        ? overrides.chatCompletionsPath || defaults.messagesPath
+        : deriveMessagesPathFromChat(chatPath));
+  }
 
   if (defaults.modelsLoadPath) {
     out.modelsLoadPath = overrides.modelsLoadPath || defaults.modelsLoadPath;
@@ -172,11 +191,14 @@ function normalizeOpenAiModelRow(item) {
     type,
     state,
     ...(maxContext !== undefined ? { max_context_length: maxContext } : {}),
+    ...(typeof src.owned_by === 'string' ? { owned_by: src.owned_by } : {}),
+    ...(typeof src.arch === 'string' ? { arch: src.arch } : {}),
+    ...(typeof src.family === 'string' ? { family: src.family } : {}),
   };
 }
 
 /**
- * @param {'lm-studio-v0' | 'openai-v1'} apiKind
+ * @param {'lm-studio-v0' | 'openai-v1' | 'anthropic-v1'} apiKind
  * @param {unknown} json
  * @returns {{ data: Array<{ id: string, type?: string, state?: string, catalogVision?: boolean }> }}
  */
@@ -185,7 +207,7 @@ export function normalizeModelsResponse(apiKind, json) {
     return { data: [] };
   }
 
-  if (apiKind !== 'openai-v1') {
+  if (apiKind !== 'openai-v1' && apiKind !== 'anthropic-v1') {
     const raw = Array.isArray(/** @type {{ data?: unknown }} */ (json).data)
       ? /** @type {{ data: unknown[] }} */ (json).data
       : [];

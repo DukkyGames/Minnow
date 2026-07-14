@@ -2,9 +2,12 @@
  * Provider id, URL, and enum validation for ~/.minnow/providers.
  */
 
+import { normalizeProviderBaseUrl } from '../../src/lib/normalize-provider-base-url.mjs';
+
 const PROVIDER_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
-const API_KINDS = new Set(['lm-studio-v0', 'openai-v1']);
+const API_KINDS = new Set(['lm-studio-v0', 'openai-v1', 'anthropic-v1']);
 const AUTH_STYLES = new Set(['bearer', 'api-key', 'x-api-key']);
+const SAFE_PROVIDER_PATH_RE = /^\/[a-zA-Z0-9._~!$&'()*+,;=:@/-]*$/;
 
 /**
  * @param {string} id
@@ -18,36 +21,23 @@ export function validateProviderId(id) {
 }
 
 /**
- * Normalize base URL to origin without trailing slash.
+ * Normalize base URL: origin plus optional pathname prefix (no trailing slash).
  * @param {string} raw
  * @returns {string}
  */
 export function validateBaseUrl(raw) {
-  if (typeof raw !== 'string' || !raw.trim()) {
-    throw new Error('baseUrl is required');
-  }
-  const trimmed = raw.trim().replace(/\/$/, '');
-  let u;
-  try {
-    u = new URL(trimmed);
-  } catch {
-    throw new Error('Invalid baseUrl');
-  }
-  if (u.protocol !== 'http:' && u.protocol !== 'https:') {
-    throw new Error('baseUrl must use http or https');
-  }
-  return u.origin;
+  return normalizeProviderBaseUrl(raw);
 }
 
 /**
  * @param {string} apiKind
- * @returns {'lm-studio-v0' | 'openai-v1'}
+ * @returns {'lm-studio-v0' | 'openai-v1' | 'anthropic-v1'}
  */
 export function validateApiKind(apiKind) {
   if (!API_KINDS.has(apiKind)) {
     throw new Error('Invalid apiKind');
   }
-  return /** @type {'lm-studio-v0' | 'openai-v1'} */ (apiKind);
+  return /** @type {'lm-studio-v0' | 'openai-v1' | 'anthropic-v1'} */ (apiKind);
 }
 
 /**
@@ -68,6 +58,50 @@ export function validateAuthStyle(style) {
  */
 export function isSafeProviderPathSegment(pathnameSegment) {
   return typeof pathnameSegment === 'string' && PROVIDER_ID_RE.test(pathnameSegment);
+}
+
+/**
+ * Validate an upstream API path override (must start with /).
+ * @param {string | undefined} raw
+ * @param {string} fallback
+ * @returns {string}
+ */
+export function validateProviderPath(raw, fallback) {
+  const path = typeof raw === 'string' && raw.trim() ? raw.trim() : fallback;
+  if (!path.startsWith('/')) {
+    throw new Error('Provider paths must start with /');
+  }
+  if (!SAFE_PROVIDER_PATH_RE.test(path)) {
+    throw new Error('Invalid provider path');
+  }
+  return path;
+}
+
+/**
+ * @param {string | undefined} raw
+ * @returns {string}
+ */
+export function validateMessagesPath(raw) {
+  return validateProviderPath(raw, '/v1/messages');
+}
+
+/**
+ * @param {unknown} raw
+ * @returns {Record<string, 'lm-studio-v0' | 'openai-v1' | 'anthropic-v1'> | undefined}
+ */
+export function validateModelApiOverrides(raw) {
+  if (raw === undefined) return undefined;
+  if (raw === null) return {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error('Invalid modelApiOverrides');
+  }
+  /** @type {Record<string, 'lm-studio-v0' | 'openai-v1' | 'anthropic-v1'>} */
+  const out = {};
+  for (const [modelId, apiKind] of Object.entries(raw)) {
+    if (typeof modelId !== 'string' || !modelId.trim()) continue;
+    out[modelId.trim()] = validateApiKind(String(apiKind));
+  }
+  return out;
 }
 
 /**

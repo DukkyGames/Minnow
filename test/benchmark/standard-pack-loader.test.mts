@@ -8,8 +8,10 @@ import {
   registerBundledFullPackForTests,
   registerImportedStandardPack,
   resetBundledFullPacksForTests,
+  resetMiniPacksForTests,
   resolveStandardItems,
 } from '../../src/benchmark/standard/pack-loader.ts';
+import { seedBuiltinMiniPacksForTests } from './seed-mini-packs.mts';
 import type { StandardBenchmarkPack } from '../../src/benchmark/standard/types.ts';
 
 const MINI_PACK_ID = 'mmlu-mini';
@@ -44,6 +46,8 @@ describe('standard pack-loader tier resolution', () => {
   beforeEach(() => {
     clearImportedStandardPacksForTests();
     resetBundledFullPacksForTests();
+    resetMiniPacksForTests();
+    seedBuiltinMiniPacksForTests();
     registerBundledFullPackForTests(FULL_IMPORT);
   });
 

@@ -8,6 +8,7 @@ import { loadSubAgentConfig } from '../agents/sub-agent-config';
 import { fetchWorkAgentsList } from '../agents/work-agent-prompt-api';
 import { isServerStorageMode } from '../config/storage-mode';
 import { appendSettingsGroup, appendSettingsCrosslinks } from './settings-layout';
+import { appendSettingsOfflineHint } from './settings-controls';
 import {
   mountPromptFileEditor,
   mountWorkAgentPromptEditor,
@@ -37,12 +38,6 @@ function el<K extends keyof HTMLElementTagNameMap>(
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
-}
-
-function serverBanner(message: string): HTMLElement {
-  const banner = el('p', 'settings-server-banner');
-  banner.innerHTML = message;
-  return banner;
 }
 
 /** Collect every editable role prompt for the hub list. */
@@ -128,8 +123,9 @@ export async function renderPromptsHubPanel(mount: HTMLElement): Promise<void> {
   );
 
   if (!isServerStorageMode()) {
-    groupBody.appendChild(
-      serverBanner('Role prompt editing requires <code>npm start</code>.'),
+    appendSettingsOfflineHint(
+      groupBody,
+      'Role prompt editing requires <code>npm start</code>.',
     );
     return;
   }

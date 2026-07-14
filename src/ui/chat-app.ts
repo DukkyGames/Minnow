@@ -6,6 +6,7 @@ import { sendMessage } from '../chat/messaging';
 import { stopGeneration } from '../chat/stop-generation';
 import { isActiveChatStreaming, subscribeChatStreamEnd } from '../chat/streaming-state';
 import { getChatsWorkspacePath } from '../lib/chats-workspace';
+import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
 import { navigateToDesktop } from '../os/router';
 import {
@@ -16,7 +17,9 @@ import {
 import {
   getActiveChat,
   getAssistantChats,
+  isEphemeralEmptyChat,
   newChatId,
+  pruneEphemeralEmptyChats,
   rememberActiveChatForApp,
   scheduleSaveSessions,
   sessionState,
@@ -34,12 +37,19 @@ import {
   initComposerSteerInputListener,
   syncComposerFromStreamingState,
 } from './composer-send';
+import { handleComposerPromptHistoryKeydown } from './composer-prompt-history';
 import { handleSkillPickerKeydown, initComposerSlashPicker, isSkillPickerOpen } from './skill-picker';
 import { closeGlobalBugs } from './global-bugs-page';
 import { renderChatFromHistory } from './messages';
 import { closeSettings } from './settings-page';
 import { ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT } from '../constants';
 import { appendChatRow } from './sidebar';
+import {
+  flushActiveComposerDraftBeforeNewChat,
+  initComposerDraftListener,
+  resetComposerForEphemeralReuse,
+  switchComposerDraft,
+} from './composer-draft';
 import { setStatus } from './status';
 
 const CHAT_APP_MOUNT = '#chatAppMessageCol';
@@ -110,11 +120,13 @@ function renderChatAppMessages(): void {
 /** Activate an assistant chat for the Chat app without touching Code sidebar DOM. */
 function activateAssistantChat(chatId: string): void {
   if (!sessionState) return;
+  const prevId = sessionState.activeId;
   const chat = sessionState.chats.find((c) => c.id === chatId);
   if (!chat) return;
   sessionState.activeId = chatId;
   acknowledgeChatViewed(chatId);
   rememberActiveChatForApp(CHAT_APP_ID, chatId);
+  switchComposerDraft(prevId, chat);
   scheduleSaveSessions();
   renderChatAppSurface();
   void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(chatId));
@@ -130,9 +142,32 @@ async function createNewAssistantChat(): Promise<void> {
   const path = chatsWorkspacePath ?? (await getChatsWorkspacePath());
   if (!path || !sessionState) return;
   chatsWorkspacePath = path;
+  flushActiveComposerDraftBeforeNewChat();
+  try {
+    const active = getActiveChat();
+    if (
+      isEphemeralEmptyChat(active) &&
+      normalizeWorkspacePath(active.workspacePath ?? '') === normalizeWorkspacePath(path)
+    ) {
+      resetComposerForEphemeralReuse();
+      activateAssistantChat(active.id);
+      renderSessionRail();
+      return;
+    }
+  } catch {
+    /* no active chat */
+  }
   const chat = createAssistantChat(path, newChatId());
   sessionState.chats.unshift(chat);
+  pruneEphemeralEmptyChats(sessionState, chat.id);
   activateAssistantChat(chat.id);
+  resetComposerForEphemeralReuse();
+  renderSessionRail();
+}
+
+/** Rebuild the Chat app session rail after draft visibility changes. */
+export function refreshChatAppSessionRail(): void {
+  renderSessionRail();
 }
 
 /** Render session rail threads for the chats workspace. */
@@ -417,6 +452,8 @@ function bindStaticControls(): void {
 
   const input = document.getElementById('chatAppInput') as HTMLTextAreaElement | null;
   initComposerSteerInputListener(input);
+  initComposerDraftListener(input);
+  initComposerDraftListener(input);
   if (input) initComposerSlashPicker(input);
   input?.addEventListener('input', () => {
     autoResizeComposer(input);
@@ -424,6 +461,7 @@ function bindStaticControls(): void {
   });
   input?.addEventListener('keydown', (e) => {
     if (handleSkillPickerKeydown(e)) return;
+    if (handleComposerPromptHistoryKeydown(e, input)) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       if (isSkillPickerOpen()) return;
       e.preventDefault();

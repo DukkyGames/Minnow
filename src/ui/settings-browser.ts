@@ -12,6 +12,7 @@ import {
 } from '../config/browser-meta';
 import { normalizeAllowlistPatterns } from '../tools/browser-allowlist-match';
 import { createSettingsToggleRow } from './settings-switch';
+import { appendSettingsOfflineHint, createSettingsActionsRow, createSettingsTextareaRow } from './settings-controls';
 import { setStatus } from './status';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -23,13 +24,6 @@ function el<K extends keyof HTMLElementTagNameMap>(
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
-}
-
-function serverBanner(message: string): HTMLElement {
-  const p = el('p', 'settings-server-banner');
-  p.setAttribute('role', 'status');
-  p.innerHTML = message;
-  return p;
 }
 
 function patternsToText(patterns: string[]): string {
@@ -51,18 +45,18 @@ export async function renderBrowserAllowlistSettings(
   initialMeta?: BrowserMeta,
 ): Promise<void> {
   if (!isServerStorageMode()) {
-    mount.appendChild(
-      serverBanner(
-        'Browser allowlist settings require <code>npm start</code> (config.json on disk).',
-      ),
+    appendSettingsOfflineHint(
+      mount,
+      'Browser allowlist settings require <code>npm start</code> (config.json on disk).',
     );
     return;
   }
 
   const mode = await detectConfigServer();
   if (mode !== 'server') {
-    mount.appendChild(
-      serverBanner('Connect with <code>npm start</code> to edit the browser allowlist.'),
+    appendSettingsOfflineHint(
+      mount,
+      'Connect with <code>npm start</code> to edit the browser allowlist.',
     );
     return;
   }
@@ -86,23 +80,56 @@ export async function renderBrowserAllowlistSettings(
   });
   section.appendChild(allowNavRow);
 
-  const patternsRow = el('div', 'field settings-tool-browser-patterns');
-  const patternsLabel = document.createElement('label');
-  patternsLabel.htmlFor = 'settingsBrowserAllowlistPatterns';
-  patternsLabel.textContent = 'Allowed origin patterns (one per line)';
+  const { row: restoreTabsRow, input: restoreTabsCb } = createSettingsToggleRow(
+    'Restore browser tabs',
+    {
+      id: 'settingsBrowserRestoreTabs',
+      checked: meta.restoreBrowserTabs,
+    },
+  );
+  section.appendChild(restoreTabsRow);
+
   const patternsArea = document.createElement('textarea');
   patternsArea.id = 'settingsBrowserAllowlistPatterns';
   patternsArea.rows = 6;
   patternsArea.spellcheck = false;
   patternsArea.value = patternsToText(meta.allowedOriginPatterns);
-  patternsRow.append(patternsLabel, patternsArea);
-  section.appendChild(patternsRow);
+  section.appendChild(
+    createSettingsTextareaRow('Allowed origin patterns (one per line)', {
+      textarea: patternsArea,
+    }).row,
+  );
 
-  const saveBtn = document.createElement('button');
-  saveBtn.type = 'button';
-  saveBtn.className = 'settings-inline-btn';
-  saveBtn.textContent = 'Save browser settings';
-  section.appendChild(saveBtn);
+  section.appendChild(
+    createSettingsActionsRow([
+      {
+        label: 'Save browser settings',
+        className: 'settings-inline-btn',
+        onClick: () => {
+          void (async () => {
+            const patterns = normalizeAllowlistPatterns(parsePatternsText(patternsArea.value));
+            if (patterns.length === 0) {
+              setStatus('err', 'Add at least one origin pattern');
+              return;
+            }
+            patternsArea.value = patternsToText(patterns);
+            try {
+              await saveBrowserMeta({
+                allowNavigate: allowNavCb.checked,
+                restoreBrowserTabs: restoreTabsCb.checked,
+                allowedOriginPatterns: patterns,
+              });
+              invalidateBrowserMetaCache();
+              await loadBrowserMeta();
+              setStatus('ok', 'Browser allowlist saved');
+            } catch {
+              setStatus('err', 'Could not save browser allowlist');
+            }
+          })();
+        },
+      },
+    ]),
+  );
 
   mount.appendChild(section);
 
@@ -118,24 +145,14 @@ export async function renderBrowserAllowlistSettings(
     })();
   });
 
-  saveBtn.addEventListener('click', () => {
+  restoreTabsCb.addEventListener('change', () => {
     void (async () => {
-      const patterns = normalizeAllowlistPatterns(parsePatternsText(patternsArea.value));
-      if (patterns.length === 0) {
-        setStatus('err', 'Add at least one origin pattern');
-        return;
-      }
-      patternsArea.value = patternsToText(patterns);
       try {
-        await saveBrowserMeta({
-          allowNavigate: allowNavCb.checked,
-          allowedOriginPatterns: patterns,
-        });
-        invalidateBrowserMetaCache();
-        await loadBrowserMeta();
-        setStatus('ok', 'Browser allowlist saved');
+        await saveBrowserMeta({ restoreBrowserTabs: restoreTabsCb.checked });
+        setStatus('ok', 'Browser tab restore setting saved');
       } catch {
-        setStatus('err', 'Could not save browser allowlist');
+        setStatus('err', 'Could not save browser settings');
+        restoreTabsCb.checked = !restoreTabsCb.checked;
       }
     })();
   });

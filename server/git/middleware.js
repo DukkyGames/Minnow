@@ -5,28 +5,33 @@
 import {
   branches,
   checkout,
+  checkoutDetach,
+  cherryPick,
   commit,
+  createTag,
   deleteBranch,
   diff,
   discard,
   fetch,
   log,
+  merge,
   pull,
   push,
+  rebase,
+  remoteUrl,
   show,
   stage,
   stageAll,
+  stashApply,
+  stashDrop,
+  stashList,
+  stashPop,
+  stashPush,
   status,
   unstage,
   worktreeAdd,
   worktreeRemove,
 } from './git-ops.js';
-
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -64,14 +69,24 @@ const OPS = {
   log: (a) => log(a),
   branches: (a) => branches(a),
   checkout: (a) => checkout(a),
+  checkoutDetach: (a) => checkoutDetach(a),
+  createTag: (a) => createTag(a),
   deleteBranch: (a) => deleteBranch(a),
+  remoteUrl: (a) => remoteUrl(a),
   worktreeAdd: (a) => worktreeAdd(a),
   worktreeRemove: (a) => worktreeRemove(a),
   show: (a) => show(a),
+  merge: (a) => merge(a),
+  rebase: (a) => rebase(a),
+  stashList: (a) => stashList(a),
+  stashPush: (a) => stashPush(a),
+  stashPop: (a) => stashPop(a),
+  stashApply: (a) => stashApply(a),
+  stashDrop: (a) => stashDrop(a),
+  cherryPick: (a) => cherryPick(a),
 };
 
 export async function handleGitRequest(req, res, pathname) {
-  setCorsHeaders(res);
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;
     res.end();

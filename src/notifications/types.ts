@@ -14,6 +14,7 @@ export type NotificationKind =
   | 'task_failed'
   | 'task_quarantined'
   | 'board_complete'
+  | 'board_blocked'
   | 'sub_agent_complete'
   | 'sub_agent_failed'
   | 'scheduler'
@@ -51,6 +52,8 @@ export type NotificationKindGroup = 'chat' | 'tasks' | 'background';
 /** User prefs persisted under `minnow.notifications.*`. */
 export interface NotificationPrefs {
   enabled: boolean;
+  /** Quick mute from the menubar dropdown; blocks new notifications until cleared. */
+  muted: boolean;
   soundEnabled: boolean;
   /** Sound asset id (`none` disables playback). */
   soundId: string;

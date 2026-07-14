@@ -3,8 +3,10 @@
  */
 
 import assert from 'node:assert/strict';
-import { afterEach, describe, test } from 'node:test';
+import { afterEach, beforeEach, describe, test } from 'node:test';
 import { modelCache } from '../../src/app-state.ts';
+import { defaultSessionState } from '../../src/config/defaults.ts';
+import { setSessionStateForTests } from '../../src/state/sessions.ts';
 import {
   buildMultimodalProbeMessages,
   MULTIMODAL_PROBE_IMAGE_DATA_URL,
@@ -16,8 +18,14 @@ import type { LmModelRecord } from '../../src/types.ts';
 const VLM_NO_REGEX_ID = 'vendor/custom-model-q4';
 
 describe('isVisionModel (BUG-004)', () => {
+  beforeEach(() => {
+    modelCache.clear();
+    setSessionStateForTests(defaultSessionState());
+  });
+
   afterEach(() => {
     modelCache.clear();
+    setSessionStateForTests(defaultSessionState());
   });
 
   test('cached type vlm without regex tokens in id', () => {

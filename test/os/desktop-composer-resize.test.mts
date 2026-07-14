@@ -4,23 +4,15 @@ import {
   DESKTOP_COMPOSER_MAX_LINES,
   autoResizeDesktopComposer,
 } from '../../src/os/desktop-composer-resize.ts';
+import { installHappyDomGlobals, prepareDesktopComposerField, stubTextareaScrollHeight } from './dom-helpers.mts';
 
 describe('desktop composer resize', () => {
   let win: import('happy-dom').Window;
 
   beforeEach(async () => {
     const { Window } = await import('happy-dom');
-    win = new Window();
-    const g = globalThis as typeof globalThis & {
-      window: Window;
-      document: Document;
-      HTMLElement: typeof HTMLElement;
-      getComputedStyle: typeof getComputedStyle;
-    };
-    g.window = win as unknown as Window & typeof globalThis.window;
-    g.document = win.document;
-    g.HTMLElement = win.HTMLElement;
-    g.getComputedStyle = win.getComputedStyle.bind(win);
+    win = new Window({ innerHeight: 800 });
+    installHappyDomGlobals(win);
 
     win.document.body.innerHTML = `
       <div class="mn-os-desktop-input-row">
@@ -29,6 +21,9 @@ describe('desktop composer resize', () => {
         </div>
       </div>
     `;
+    prepareDesktopComposerField(
+      win.document.getElementById('desktopInput') as HTMLTextAreaElement,
+    );
   });
 
   afterEach(() => {
@@ -37,14 +32,18 @@ describe('desktop composer resize', () => {
 
   test('expands height for multiple lines', () => {
     const field = win.document.getElementById('desktopInput') as HTMLTextAreaElement;
-    const singleLine = field.offsetHeight;
+    field.value = 'one line';
+    stubTextareaScrollHeight(field, 18);
+    autoResizeDesktopComposer(field);
+    const singleLine = Number.parseInt(field.style.height, 10);
 
     field.value = 'line one\nline two\nline three';
+    stubTextareaScrollHeight(field, 28);
     autoResizeDesktopComposer(field);
 
     assert.ok(
-      field.offsetHeight > singleLine,
-      `expected growth beyond ${singleLine}px, got ${field.offsetHeight}px`,
+      Number.parseInt(field.style.height, 10) > singleLine,
+      `expected growth beyond ${singleLine}px, got ${field.style.height}`,
     );
     assert.equal(field.style.overflowY, 'hidden');
     assert.equal(field.classList.contains('mn-os-desktop-field--scrollable'), false);
@@ -54,10 +53,12 @@ describe('desktop composer resize', () => {
     const field = win.document.getElementById('desktopInput') as HTMLTextAreaElement;
     const lines = Array.from({ length: DESKTOP_COMPOSER_MAX_LINES + 2 }, (_, i) => `line ${i + 1}`);
     field.value = lines.join('\n');
+    // Exceeds max height from lineHeight 1.35 × 8 lines + 20px padding.
+    stubTextareaScrollHeight(field, 80);
     autoResizeDesktopComposer(field);
 
     assert.equal(field.style.overflowY, 'auto');
     assert.equal(field.classList.contains('mn-os-desktop-field--scrollable'), true);
-    assert.ok(field.offsetHeight > 0);
+    assert.ok(Number.parseInt(field.style.height, 10) > 0);
   });
 });

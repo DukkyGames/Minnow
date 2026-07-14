@@ -50,10 +50,34 @@ export const fileEditorEscapeBlurBinding: KeyBinding = {
   },
 };
 
+/** Close the active viewer tab (scoped to the Code editor). */
+export const fileEditorCloseTabBinding: KeyBinding = {
+  key: 'Mod-w',
+  run: () => {
+    void import('./file-viewer').then((m) => m.closeFileViewer());
+    return true;
+  },
+};
+
+/** Cycle viewer tabs forward/back (scoped to the Code editor). */
+export const fileEditorCycleTabBinding: KeyBinding = {
+  key: 'Mod-Tab',
+  run: () => {
+    void import('./file-viewer').then((m) => m.cycleViewerTab('next'));
+    return true;
+  },
+  shift: () => {
+    void import('./file-viewer').then((m) => m.cycleViewerTab('prev'));
+    return true;
+  },
+};
+
 /** Tab indent/outdent (or LSP accept) and Escape blur bindings. */
 export const fileEditorKeymapBindings: KeyBinding[] = [
   fileEditorTabBinding,
   fileEditorEscapeBlurBinding,
+  fileEditorCloseTabBinding,
+  fileEditorCycleTabBinding,
 ];
 
 /**

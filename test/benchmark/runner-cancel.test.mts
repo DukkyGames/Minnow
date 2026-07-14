@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { isAbortError } from '../../src/benchmark/abort.ts';
 import { runBenchmark } from '../../src/benchmark/runner.ts';
+import { defaultSessionState } from '../../src/config/defaults.ts';
+import { setSessionStateForTests } from '../../src/state/sessions.ts';
 
 describe('runBenchmark cancellation', () => {
   beforeEach(async () => {
@@ -12,10 +14,11 @@ describe('runBenchmark cancellation', () => {
     globalThis.performance = window.performance;
     document.body.innerHTML =
       '<select id="modelSelect"><option value="bench-model" selected>Bench</option></select>';
+    setSessionStateForTests(defaultSessionState());
   });
 
   afterEach(() => {
-    /* no shared state */
+    setSessionStateForTests(null);
   });
 
   test('pre-aborted signal rejects with run-cancelled and no run-done', async () => {
@@ -28,6 +31,7 @@ describe('runBenchmark cancellation', () => {
         runBenchmark({
           preset: 'quick',
           suites: [],
+          saveToHistory: false,
           signal: controller.signal,
           onProgress: (event) => {
             events.push(event.type);

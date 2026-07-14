@@ -8,6 +8,7 @@ import {
   isCavemanIntensity,
   parseCavemanIntensity,
 } from './caveman-client';
+import { isPartyModeStopPhrase, PARTYMODE_SKILL_ID } from './partymode-client';
 import type { PinnedSkillState } from './types';
 
 export type { PinnedSkillState };
@@ -65,6 +66,15 @@ export function resolveTurnSkill(input: ResolveTurnSkillInput): ResolveTurnSkill
 
   if (isCavemanStopPhrase(userText)) {
     if (nextPinned?.id === CAVEMAN_SKILL_ID) {
+      nextPinned = null;
+    }
+    if (!slashSkillId) {
+      return { skillId: null, nextPinned, fromPin: false };
+    }
+  }
+
+  if (isPartyModeStopPhrase(userText)) {
+    if (nextPinned?.id === PARTYMODE_SKILL_ID) {
       nextPinned = null;
     }
     if (!slashSkillId) {

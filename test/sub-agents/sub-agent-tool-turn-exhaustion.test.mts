@@ -16,7 +16,7 @@ import {
 } from '../../src/agents/sub-agent-runner.ts';
 import type { SubAgentRunner } from '../../src/agents/types.ts';
 import { buildSubAgentStatusPayload } from '../../src/agents/orchestrator.ts';
-import { getBoardGroupForChat } from '../../src/state/chat-groups.ts';
+import { getOrCreateBoardGroup } from '../../src/state/chat-groups.ts';
 import { initBoard } from '../../src/state/orchestrate-board-store.ts';
 import {
   executeSubAgentTool,
@@ -50,24 +50,12 @@ function seedChat() {
   chat.id = FIXED_CHAT_ID;
   chat.modeId = 'orchestrate';
   chat.orchestratePlanPath = PLAN_PATH;
-
-  const group = {
-    id: GROUP_ID,
-    name: 'Board Group',
-    workspacePath: '',
-    collapsed: false,
-    order: 0,
-    createdAt: 1,
-    orchestratePlanPath: PLAN_PATH,
-  };
-
   setSessionStateForTests({
     version: 5,
     activeId: chat.id,
     chats: [chat],
-    groups: [group],
   });
-
+  const group = getOrCreateBoardGroup(chat);
   initBoard(group, chat, {
     planPath: PLAN_PATH,
     tasks: [{ id: TASK_ID, title: 'Task A', wave: 'W1', category: 'build' }],
@@ -104,8 +92,9 @@ describe('sub-agent tool turn exhaustion', () => {
     }
 
     const chat = findChatById(FIXED_CHAT_ID);
-    const group = getBoardGroupForChat(chat!);
-    const task = group?.orchestrateBoard?.tasks.find((t) => t.id === TASK_ID);
+    assert.ok(chat);
+    const group = getOrCreateBoardGroup(chat);
+    const task = group.orchestrateBoard?.tasks.find((t) => t.id === TASK_ID);
     assert.equal(task?.status, 'failed');
     assert.notEqual(task?.status, 'complete');
   });

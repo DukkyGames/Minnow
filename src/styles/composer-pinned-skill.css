@@ -31,6 +31,19 @@
   max-width: 7.5rem;
 }
 
+.pinned-skill-control__select.hidden {
+  display: none;
+}
+
+.pinned-skill-control--party {
+  border-color: rgba(255, 107, 214, 0.45);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 107, 214, 0.18),
+    rgba(77, 150, 255, 0.16)
+  );
+}
+
 .pinned-skill-control__dismiss {
   display: inline-flex;
   align-items: center;

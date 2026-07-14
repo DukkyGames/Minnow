@@ -6,8 +6,8 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { launchInstance, resetInstancesForTests } from '../../src/os/instances.ts';
 import {
-  activateDesktopChat,
   resetDesktopStateForTests,
+  setDesktopStateForTests,
 } from '../../src/os/desktop-state.ts';
 import {
   initOsPageBridge,
@@ -67,19 +67,7 @@ describe('chat-mount foreground', () => {
     assert.equal(getActiveComposerSurface().inputEl?.id, 'msgInput');
   });
 
-  test('isChatAppForeground is false when Code is foreground while desktop chat stays active', async () => {
-    const g = globalThis as typeof globalThis & { fetch: typeof fetch };
-    g.fetch = (async (input: string | URL) => {
-      const url = String(input);
-      if (url.includes('/api/chats-workspace')) {
-        return {
-          ok: true,
-          json: async () => ({ ok: true, path: '/home/user/.minnow/chats', fileCount: 0 }),
-        } as Response;
-      }
-      return { ok: false, status: 404, json: async () => ({}) } as Response;
-    }) as typeof fetch;
-
+  test('composer uses Code input when Code is foreground while desktop chat stays active', async () => {
     setSessionStateForTests({
       version: 5,
       activeId: 'assistant-chat',
@@ -91,18 +79,21 @@ describe('chat-mount foreground', () => {
           ...createEmptyChatObject('model-a'),
           id: 'assistant-chat',
           name: 'Desktop hello',
-          workspacePath: '/home/user/.minnow/chats',
-          modeId: 'general',
+          workspacePath: '/home/user/.minnow/workspace',
+          modeId: 'desktop',
         },
       ],
     });
 
-    await activateDesktopChat();
+    setDesktopStateForTests('chatActive');
     const { isChatAppForeground } = await import('../../src/ui/chat-mount.ts');
+    const { getActiveComposerSurface } = await import('../../src/ui/composer-surface.ts');
     assert.equal(isChatAppForeground(), true);
+    assert.equal(getActiveComposerSurface().inputEl?.id, 'desktopInput');
 
     launchInstance('code');
     assert.equal(isChatAppForeground(), false);
+    assert.equal(getActiveComposerSurface().inputEl?.id, 'msgInput');
   });
 
   test('isChatAppForeground stays true for legacy chatView.is-open without OS foreground', async () => {

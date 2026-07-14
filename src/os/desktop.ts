@@ -5,7 +5,12 @@ import { renderConcierge } from './concierge';
 import { renderMiniPreviews } from './mini-previews';
 import { renderWallpaper, type WallpaperRenderOptions } from './wallpaper';
 import { getAppearanceAssetObjectUrl } from '../appearance/asset-store';
+import { bindDesktopChatTranscriptScroll } from '../ui/chat-scroll';
 import { wireDesktopChatRail } from '../ui/desktop-chat-rail';
+import {
+  renderDesktopWorkspaceRail,
+  wireDesktopWorkspaceRail,
+} from './desktop-workspace-rail';
 import { isDesktopExpertsActive, isDesktopResearchActive, subscribeDesktopState } from './desktop-state';
 import { wireDesktopResearchControls } from './research-desktop';
 import { windowManager } from './window-manager';
@@ -105,7 +110,7 @@ export function renderDesktop(root: HTMLElement): () => void {
   railTab.className = 'mn-os-chat-rail-tab';
   railTab.setAttribute('aria-label', 'Show chat sessions');
   railTab.setAttribute('aria-expanded', 'false');
-  railTab.appendChild(createOsIcon('chat', { size: 18 }));
+  railTab.appendChild(createOsIcon('chat', { size: 28 }));
 
   const railPanel = document.createElement('div');
   railPanel.className = 'mn-os-chat-rail-panel';
@@ -144,6 +149,13 @@ export function renderDesktop(root: HTMLElement): () => void {
   railPanel.appendChild(railMain);
   rail.append(railTab, railPanel);
 
+  const railBackdrop = document.createElement('button');
+  railBackdrop.type = 'button';
+  railBackdrop.className = 'mn-os-chat-rail-backdrop';
+  railBackdrop.setAttribute('aria-label', 'Close chat sessions');
+  railBackdrop.setAttribute('aria-hidden', 'true');
+  railBackdrop.tabIndex = -1;
+
   const transcript = document.createElement('div');
   transcript.className = 'mn-os-chat-transcript';
   transcript.setAttribute('role', 'log');
@@ -154,6 +166,7 @@ export function renderDesktop(root: HTMLElement): () => void {
   transcriptCol.id = 'desktopChatCol';
   transcriptCol.className = 'mn-os-chat-col';
   transcript.appendChild(transcriptCol);
+  bindDesktopChatTranscriptScroll();
 
   const desktopResearch = document.createElement('div');
   desktopResearch.className = 'mn-os-desktop-research dr';
@@ -213,7 +226,8 @@ export function renderDesktop(root: HTMLElement): () => void {
 
   desktopChat.append(transcript);
   stage.append(hero, desktopChat, desktopResearch, desktopExperts);
-  root.append(rail);
+  root.append(rail, railBackdrop);
+  renderDesktopWorkspaceRail(root);
   root.appendChild(stage);
 
   const composerDock = document.createElement('div');
@@ -258,6 +272,7 @@ export function renderDesktop(root: HTMLElement): () => void {
   root.appendChild(composerDock);
 
   wireDesktopChatRail();
+  wireDesktopWorkspaceRail();
   wireDesktopResearchControls();
 
   const previewsMount = document.createElement('div');

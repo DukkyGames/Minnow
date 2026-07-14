@@ -4,6 +4,7 @@
 
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
 import { appendSettingsGroup } from './settings-layout';
+import { appendSettingsOfflineHint } from './settings-controls';
 import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
 
@@ -47,13 +48,6 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-function serverBanner(message: string): HTMLElement {
-  const p = el('p', 'settings-server-banner');
-  p.setAttribute('role', 'status');
-  p.innerHTML = message;
-  return p;
-}
-
 async function fetchSubscriptions(): Promise<WebhookSubscriptionSummary[]> {
   const res = await fetch('/api/webhooks/subscriptions');
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -75,16 +69,18 @@ export async function renderWebhooksSettingsSection(mount: HTMLElement): Promise
   mount.replaceChildren();
 
   if (!isServerStorageMode()) {
-    mount.appendChild(
-      serverBanner('Webhook settings require <code>npm start</code> (server storage on disk).'),
+    appendSettingsOfflineHint(
+      mount,
+      'Webhook settings require <code>npm start</code> (server storage on disk).',
     );
     return;
   }
 
   const mode = await detectConfigServer();
   if (mode !== 'server') {
-    mount.appendChild(
-      serverBanner('Connect with <code>npm start</code> to manage outgoing webhooks.'),
+    appendSettingsOfflineHint(
+      mount,
+      'Connect with <code>npm start</code> to manage outgoing webhooks.',
     );
     return;
   }

@@ -2,15 +2,23 @@
  * Desktop session rail — assistant sandbox chats on the OS desktop.
  */
 
-import { getChatsWorkspacePath } from '../lib/chats-workspace';
-import { createAssistantChat, CHAT_APP_ID } from '../state/chat-app-sessions';
+import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
+import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
+import { CHAT_APP_ID, createDesktopChat } from '../state/session-workspace-scope';
 import {
+  getActiveChat,
   getAssistantChats,
+  isEphemeralEmptyChat,
   newChatId,
+  pruneEphemeralEmptyChats,
   rememberActiveChatForApp,
   scheduleSaveSessions,
   sessionState,
 } from '../state/sessions';
+import {
+  flushActiveComposerDraftBeforeNewChat,
+  resetComposerForEphemeralReuse,
+} from './composer-draft';
 import {
   getExpertScopeId,
   isExpertScopeActive,
@@ -20,14 +28,27 @@ import {
 import { appendChatRow } from './sidebar';
 import { syncChatItemDotsInDom } from './chat-item-dot';
 
-let railExpanded = false;
+const MOBILE_DESKTOP_MQ = '(max-width: 640px)';
 
-function getRailRoot(): HTMLElement | null {
-  return document.querySelector('.mn-os-chat-rail');
+let railExpanded = false;
+let mobileMq: MediaQueryList | null = null;
+let mobileMqListener: ((event: MediaQueryListEvent) => void) | null = null;
+
+function isMobileDesktopLayout(): boolean {
+  return window.matchMedia(MOBILE_DESKTOP_MQ).matches;
 }
 
-function getRailList(): HTMLElement | null {
-  return document.getElementById('desktopChatSessionList');
+function getRailBackdrop(): HTMLButtonElement | null {
+  return document.querySelector<HTMLButtonElement>('.mn-os-chat-rail-backdrop');
+}
+
+function syncRailBackdrop(): void {
+  const backdrop = getRailBackdrop();
+  if (!backdrop) return;
+  const show = isMobileDesktopLayout() && railExpanded;
+  backdrop.classList.toggle('is-open', show);
+  backdrop.setAttribute('aria-hidden', show ? 'false' : 'true');
+  backdrop.tabIndex = show ? 0 : -1;
 }
 
 function syncRailClasses(): void {
@@ -41,6 +62,8 @@ function syncRailClasses(): void {
     tab.setAttribute('aria-expanded', railExpanded ? 'true' : 'false');
     tab.setAttribute('aria-label', railExpanded ? 'Hide chat sessions' : 'Show chat sessions');
   }
+
+  syncRailBackdrop();
 }
 
 /** Expand the session rail (left-edge tab). */
@@ -56,6 +79,20 @@ export function collapseDesktopChatRail(): void {
   if (!railExpanded) return;
   railExpanded = false;
   syncRailClasses();
+}
+
+function maybeCollapseRailOnMobile(): void {
+  if (isMobileDesktopLayout()) {
+    collapseDesktopChatRail();
+  }
+}
+
+function getRailRoot(): HTMLElement | null {
+  return document.querySelector('.mn-os-chat-rail');
+}
+
+function getRailList(): HTMLElement | null {
+  return document.getElementById('desktopChatSessionList');
 }
 
 /** Toggle expanded vs collapsed rail. */
@@ -126,11 +163,34 @@ export function clearDesktopExpertScopeRail(): void {
 
 /** Create a new assistant chat on the desktop surface. */
 export async function createNewDesktopChat(): Promise<void> {
-  const path = await getChatsWorkspacePath();
+  const path = await getDesktopWorkspacePath();
   if (!path || !sessionState) return;
 
-  const chat = createAssistantChat(path, newChatId());
+  flushActiveComposerDraftBeforeNewChat();
+  try {
+    const active = getActiveChat();
+    if (
+      isEphemeralEmptyChat(active) &&
+      normalizeWorkspacePath(active.workspacePath ?? '') === normalizeWorkspacePath(path)
+    ) {
+      resetComposerForEphemeralReuse();
+      const { isDesktopChatActive, activateDesktopChat } = await import('../os/desktop-state');
+      if (!isDesktopChatActive()) {
+        await activateDesktopChat({ chatId: active.id });
+        return;
+      }
+      const desktopChat = await import('../os/desktop-chat');
+      desktopChat.activateDesktopChatSession(active.id);
+      renderDesktopChatRail(path);
+      return;
+    }
+  } catch {
+    /* no active chat */
+  }
+
+  const chat = createDesktopChat(path, newChatId());
   sessionState.chats.unshift(chat);
+  pruneEphemeralEmptyChats(sessionState, chat.id);
   sessionState.activeId = chat.id;
   rememberActiveChatForApp(CHAT_APP_ID, chat.id);
   scheduleSaveSessions();
@@ -143,14 +203,15 @@ export async function createNewDesktopChat(): Promise<void> {
 
   const desktopChat = await import('../os/desktop-chat');
   desktopChat.activateDesktopChatSession(chat.id);
+  resetComposerForEphemeralReuse();
   renderDesktopChatRail(path);
 
   const input = document.getElementById('desktopInput') as HTMLTextAreaElement | null;
   input?.focus();
 }
 
-/** Paint session rows for the chats workspace sandbox. */
-export function renderDesktopChatRail(chatsWorkspacePath?: string | null): void {
+/** Paint session rows for the desktop workspace sandbox. */
+export function renderDesktopChatRail(desktopWorkspacePath?: string | null): void {
   const list = getRailList();
   if (!list || !sessionState) return;
 
@@ -165,7 +226,7 @@ export function renderDesktopChatRail(chatsWorkspacePath?: string | null): void 
   mountExpertScopeInRail(false);
   list.replaceChildren();
 
-  const path = chatsWorkspacePath ?? null;
+  const path = desktopWorkspacePath ?? null;
   if (!path) return;
 
   const chats = getAssistantChats(path, sessionState);
@@ -178,10 +239,12 @@ export function renderDesktopChatRail(chatsWorkspacePath?: string | null): void 
           const { isDesktopChatActive, activateDesktopChat } = await import('../os/desktop-state');
           if (!isDesktopChatActive()) {
             await activateDesktopChat({ chatId: item.id });
+            maybeCollapseRailOnMobile();
             return;
           }
           const desktopChat = await import('../os/desktop-chat');
           desktopChat.activateDesktopChatSession(item.id);
+          maybeCollapseRailOnMobile();
         })();
       },
     });
@@ -204,6 +267,24 @@ export function wireDesktopChatRail(): void {
     collapse.addEventListener('click', () => collapseDesktopChatRail());
   }
 
+  const backdrop = getRailBackdrop();
+  if (backdrop && backdrop.dataset.bound !== '1') {
+    backdrop.dataset.bound = '1';
+    backdrop.addEventListener('click', () => collapseDesktopChatRail());
+  }
+
+  if (!mobileMq && typeof window.matchMedia === 'function') {
+    mobileMq = window.matchMedia(MOBILE_DESKTOP_MQ);
+    mobileMqListener = () => {
+      if (!isMobileDesktopLayout()) {
+        syncRailBackdrop();
+        return;
+      }
+      if (railExpanded) syncRailBackdrop();
+    };
+    mobileMq.addEventListener('change', mobileMqListener);
+  }
+
   const newChat = document.getElementById('btnDesktopChatNew');
   if (newChat && newChat.dataset.bound !== '1') {
     newChat.dataset.bound = '1';
@@ -217,7 +298,7 @@ export function wireDesktopChatRail(): void {
 
 /** Ensure workspace path is loaded before first rail paint. */
 export async function refreshDesktopChatRail(): Promise<void> {
-  const path = await getChatsWorkspacePath();
+  const path = await getDesktopWorkspacePath();
   renderDesktopChatRail(path);
 }
 
@@ -226,4 +307,9 @@ export function resetDesktopChatRailForTests(): void {
   railExpanded = false;
   mountExpertScopeInRail(false);
   syncRailClasses();
+  if (mobileMq && mobileMqListener) {
+    mobileMq.removeEventListener('change', mobileMqListener);
+    mobileMq = null;
+    mobileMqListener = null;
+  }
 }

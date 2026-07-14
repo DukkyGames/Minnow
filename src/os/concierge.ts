@@ -10,7 +10,13 @@ import {
   handleDesktopSend,
   wireDesktopComposerControls,
 } from './desktop-chat';
+import {
+  shouldAllowComposerPrimaryAction,
+  syncComposerFromStreamingState,
+} from '../ui/composer-send';
+import { isActiveChatStreaming } from '../chat/streaming-state';
 import { handleSkillPickerKeydown, isSkillPickerOpen } from '../ui/skill-picker';
+import { handleComposerPromptHistoryKeydown } from '../ui/composer-prompt-history';
 import { handleDesktopResearchSubmit } from './research-desktop';
 import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
 
@@ -116,6 +122,11 @@ export function renderConcierge(container: HTMLElement): void {
   wireDesktopComposerControls(field);
 
   function syncUi(): void {
+    if (isDesktopChatActive()) {
+      syncComposerFromStreamingState();
+      sendBtn.disabled = !shouldAllowComposerPrimaryAction(field.value);
+      return;
+    }
     sendBtn.disabled = !field.value.trim();
   }
 
@@ -125,17 +136,23 @@ export function renderConcierge(container: HTMLElement): void {
 
   async function submit(text?: string): Promise<void> {
     const q = (text ?? field.value).trim();
-    if (!q) return;
 
     if (isDesktopChatActive()) {
-      field.value = q;
-      field.dispatchEvent(new window.Event('input', { bubbles: true }));
+      if (!shouldAllowComposerPrimaryAction(q)) return;
+      if (q) {
+        field.value = q;
+        field.dispatchEvent(new window.Event('input', { bubbles: true }));
+      }
       await handleDesktopSend();
-      field.value = '';
-      autoResizeDesktopComposer(field);
+      if (!isActiveChatStreaming()) {
+        field.value = '';
+        autoResizeDesktopComposer(field);
+      }
       syncUi();
       return;
     }
+
+    if (!q) return;
 
     if (isDesktopResearchActive()) {
       field.value = q;
@@ -154,6 +171,7 @@ export function renderConcierge(container: HTMLElement): void {
   field.addEventListener('input', () => syncUi());
   field.addEventListener('keydown', (e) => {
     if (handleSkillPickerKeydown(e)) return;
+    if (handleComposerPromptHistoryKeydown(e, field)) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       if (isSkillPickerOpen()) return;
       e.preventDefault();

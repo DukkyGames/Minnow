@@ -18,6 +18,7 @@ export const ALLOWED_CONFIG_FILES = new Set([
   'rules.json',
   'sub-agents.json',
   'bugs/state.json',
+  'onboarding.json',
 ]);
 
 /**

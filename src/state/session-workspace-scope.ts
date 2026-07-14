@@ -3,7 +3,7 @@
  * Used by sessions.ts and unit tests.
  */
 
-import { PLACEHOLDER_CHAT_NAME } from '../constants';
+import { AUTO_TITLE_MAX_LEN, PLACEHOLDER_CHAT_NAME } from '../constants';
 import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Chat, SessionState } from '../types';
@@ -11,6 +11,53 @@ import type { Chat, SessionState } from '../types';
 /** Expert threads and legacy Expert Lab chats stay out of the main sidebar. */
 export function isSidebarVisibleChat(chat: Chat): boolean {
   return chat.kind !== 'expert-lab' && chat.kind !== 'expert';
+}
+
+/** True when the chat has unsent composer text persisted on the session row. */
+export function hasComposerDraft(chat: Chat): boolean {
+  return Boolean(chat.composerDraft?.trim());
+}
+
+/** Empty chat with no committed history and no unsent draft (hidden from sidebar lists). */
+export function isEphemeralEmptyChat(chat: Chat): boolean {
+  return chat.history.length === 0 && !hasComposerDraft(chat);
+}
+
+/**
+ * Chats that belong in sidebar session rails: committed turns and/or an unsent draft.
+ * Ephemeral empty chats stay out until the user types or sends.
+ */
+export function isSidebarListedChat(chat: Chat): boolean {
+  return isSidebarVisibleChat(chat) && (chat.history.length > 0 || hasComposerDraft(chat));
+}
+
+/** Sidebar label for draft-only chats (first line of unsent text, capped). */
+export function formatDraftChatSidebarName(chat: Chat): string {
+  const draft = chat.composerDraft?.trim() ?? '';
+  if (!draft) return 'Draft';
+  const firstLine = draft.split(/\r?\n/, 1)[0]?.trim() ?? '';
+  const label = firstLine || 'Draft';
+  if (label.length <= AUTO_TITLE_MAX_LEN) return label;
+  return `${label.slice(0, AUTO_TITLE_MAX_LEN - 1)}…`;
+}
+
+/** Board planners and folder-linked chats stay even when still empty. */
+function isProtectedFromEphemeralPrune(chat: Chat, state: SessionState): boolean {
+  if (chat.boardGroupId?.trim() || chat.boardTaskId?.trim()) return true;
+  for (const group of state.groups ?? []) {
+    if (group.plannerChatId?.trim() === chat.id) return true;
+  }
+  return false;
+}
+
+/** Drop unused ephemeral rows while keeping the active chat and sidebar-listed chats. */
+export function pruneEphemeralEmptyChats(state: SessionState, keepChatId: string): void {
+  state.chats = state.chats.filter(
+    (chat) =>
+      chat.id === keepChatId ||
+      isProtectedFromEphemeralPrune(chat, state) ||
+      !isEphemeralEmptyChat(chat),
+  );
 }
 
 /** Sidebar / prune ordering: last committed message, else legacy `updatedAt`. */
@@ -29,6 +76,7 @@ export type RawSessionJson = {
   version?: number;
   activeId?: string | null;
   sidebarCollapsed?: boolean;
+  sidebarWidth?: number;
   chats?: unknown[];
   lastActiveChatIdByWorkspace?: Record<string, string>;
   lastActiveChatIdByApp?: Record<string, string>;
@@ -92,6 +140,14 @@ export function getChatsForWorkspace(workspacePath: string, state: SessionState)
     .sort((a, b) => getChatLastMessageAt(b) - getChatLastMessageAt(a));
 }
 
+/** Sidebar session rows for a workspace (excludes ephemeral empty chats). */
+export function getSidebarListedChatsForWorkspace(
+  workspacePath: string,
+  state: SessionState,
+): Chat[] {
+  return getChatsForWorkspace(workspacePath, state).filter(isSidebarListedChat);
+}
+
 /** True when the chat belongs to the MinnowOS Chat app (chats workspace sandbox). */
 export function isAssistantChat(chat: Chat, chatsWorkspacePath: string): boolean {
   const key = normalizeWorkspacePath(chatsWorkspacePath);
@@ -111,9 +167,17 @@ export function getChatsForChatsWorkspace(
     .sort((a, b) => getChatLastMessageAt(b) - getChatLastMessageAt(a));
 }
 
+/** Sidebar session rows for the chats workspace (excludes ephemeral empty chats). */
+export function getSidebarListedAssistantChats(
+  state: SessionState,
+  chatsWorkspacePath: string,
+): Chat[] {
+  return getChatsForChatsWorkspace(state, chatsWorkspacePath).filter(isSidebarListedChat);
+}
+
 /** Sidebar-visible assistant chats for the chats workspace (newest first). */
 export function getAssistantChats(state: SessionState, chatsWorkspacePath: string): Chat[] {
-  return getChatsForChatsWorkspace(state, chatsWorkspacePath).filter(isSidebarVisibleChat);
+  return getSidebarListedAssistantChats(state, chatsWorkspacePath);
 }
 
 /** Remember the last active chat for a MinnowOS app (e.g. Chat). */
@@ -151,6 +215,28 @@ export function createAssistantChat(
     workspacePath: normalizeWorkspacePath(chatsWorkspacePath),
     modelId: modelId || '',
     modeId: 'general',
+    workAgentAuto: true,
+    history: [],
+    lastStats: null,
+    modelInfo: {},
+    updatedAt: now,
+    lastMessageAt: now,
+  };
+}
+
+/** New desktop chat defaults (desktop mode, desktop workspace sandbox). */
+export function createDesktopChat(
+  desktopWorkspacePath: string,
+  chatId: string,
+  modelId = '',
+): Chat {
+  const now = Date.now();
+  return {
+    id: chatId,
+    name: PLACEHOLDER_CHAT_NAME,
+    workspacePath: normalizeWorkspacePath(desktopWorkspacePath),
+    modelId: modelId || '',
+    modeId: 'desktop',
     workAgentAuto: true,
     history: [],
     lastStats: null,
@@ -203,7 +289,7 @@ export function getUnassignedChats(state: SessionState): Chat[] {
   return [...state.chats]
     .filter(
       (c) =>
-        isSidebarVisibleChat(c) &&
+        isSidebarListedChat(c) &&
         normalizeWorkspacePath(c.workspacePath ?? '') === '',
     )
     .sort((a, b) => getChatLastMessageAt(b) - getChatLastMessageAt(a));
@@ -232,8 +318,8 @@ export function resolveActiveChatIdForWorkspace(
     if (chat) return chat.id;
   }
 
-  const scoped = getChatsForWorkspace(key, state);
-  if (scoped.length) return scoped[0].id;
+  const scoped = getSidebarListedChatsForWorkspace(key, state);
+  if (scoped.length) return scoped[0]!.id;
 
   const fresh = createScopedEmptyChat(fallbackModelId, key);
   state.chats.unshift(fresh);

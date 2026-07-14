@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
+import { installHappyDomGlobals, teardownHappyDomAsync } from '../../os/dom-helpers.mts';
 import {
   getActiveReefLlmCountForTests,
   handleReefMessageForTests,
@@ -22,15 +23,15 @@ import {
   setSessionStateForTests,
 } from '../../../src/state/sessions.ts';
 
+/** @type {import('happy-dom').Window | undefined} */
+let win;
+
 function setupDom(): void {
   setSkipReefWidgetValidationTimeoutForTests(true);
   setAutoRevealReefWidgetsForTests(true);
-  const window = new Window();
-  globalThis.window = window as unknown as Window & typeof globalThis;
-  globalThis.document = window.document;
-  globalThis.HTMLElement = window.HTMLElement;
-  globalThis.HTMLTextAreaElement = window.HTMLTextAreaElement;
-  globalThis.Node = window.Node;
+  win = new Window();
+  installHappyDomGlobals(win);
+  globalThis.HTMLTextAreaElement = win.HTMLTextAreaElement;
   const input = document.createElement('textarea');
   input.id = 'msgInput';
   document.body.appendChild(input);
@@ -55,9 +56,13 @@ function reefMessageFromIframe(
 }
 
 describe('widget-bridge', { concurrency: false }, () => {
-  afterEach(() => {
+  afterEach(async () => {
     setSessionStateForTests(null);
     resetReefBridgeForTests();
+    if (win) {
+      await teardownHappyDomAsync(win);
+      win = undefined;
+    }
   });
 
   test('sendPrompt fills composer and dispatches input without sending', () => {

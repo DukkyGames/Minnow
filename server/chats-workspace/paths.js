@@ -6,6 +6,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getBenchmarkWorkspacePath } from '../benchmark-workspace/paths.js';
+import { getDesktopWorkspacePath } from '../desktop-workspace/paths.js';
 import { getSchedulerWorkspacePath } from '../scheduler-workspace/paths.js';
 import { getMinnowHome } from '../config/home.js';
 import {
@@ -22,7 +23,7 @@ const README_BODY = `# Minnow Chats Workspace
 This directory is a sandbox for chat-scoped files (attachments, exports, and session artifacts).
 
 - Files here stay separate from your active Code workspace unless tools are explicitly pointed at this path.
-- The server allows tool \`workspaceRoot\` overrides for your Code workspace, chats folder, benchmark workspace, scheduler workspace, and board task worktrees under ~/.minnow/worktrees.
+- The server allows tool \`workspaceRoot\` overrides for your Code workspace, chats folder, desktop workspace, benchmark workspace, scheduler workspace, and board task worktrees under ~/.minnow/worktrees.
 - Do not store secrets here if you sync or share ~/.minnow.
 `;
 
@@ -66,11 +67,13 @@ export function isAllowedWorkspaceRoot(rootPath) {
   const key = normalizeWorkspacePathKey(resolved);
   const codeKey = normalizeWorkspacePathKey(getWorkspaceRoot());
   const chatsKey = normalizeWorkspacePathKey(getChatsWorkspacePath());
+  const desktopKey = normalizeWorkspacePathKey(getDesktopWorkspacePath());
   const benchmarkKey = normalizeWorkspacePathKey(getBenchmarkWorkspacePath());
   const schedulerKey = normalizeWorkspacePathKey(getSchedulerWorkspacePath());
   return (
     key === codeKey ||
     key === chatsKey ||
+    key === desktopKey ||
     key === benchmarkKey ||
     key === schedulerKey
   );
@@ -84,7 +87,7 @@ export function isAllowedWorkspaceRoot(rootPath) {
 export async function validateAllowedWorkspaceRoot(rootPath) {
   if (!isAllowedWorkspaceRoot(rootPath)) {
     throw new Error(
-      'workspaceRoot is not in the allowlist (Code workspace, chats workspace, benchmark workspace, or scheduler workspace)',
+      'workspaceRoot is not in the allowlist (Code workspace, chats workspace, desktop workspace, benchmark workspace, or scheduler workspace)',
     );
   }
   const resolved = path.resolve(String(rootPath).trim());

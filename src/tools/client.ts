@@ -5,9 +5,9 @@
 
 import { executeBrowserTool } from './browser-executor';
 import { executeBoardTool } from './board-tools';
+import { executeTodoWrite } from './todo-tools';
 import { executeBugBoardTool } from './bug-board-tools';
 import { executeSubAgentTool } from './sub-agent-executor';
-import { runCommandWithTerminalStream } from '../ui/terminal-panel';
 import {
   ensureToolConfigReady,
   isLocalServerAvailable,
@@ -23,6 +23,7 @@ import {
 import {
   applyBoardMemberToolFilter,
   applyOrchestrateAutoToolFilter,
+  injectBoardMemberSubsetTools,
 } from '../chat/modes/orchestrate-tool-filter';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import type { Chat } from '../types';
@@ -55,6 +56,9 @@ import {
 import { validateAskQuestionArgs, stringifyAskQuestionResult } from './ask-question-types';
 import { maybeBlockToolForUserApproval } from './permission-gate';
 import { getChatsWorkspacePath } from '../lib/chats-workspace';
+import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
+import { isDesktopChatActive } from '../os/desktop-state';
+import { resolveChatToolWorkspaceRoot } from '../state/worktree-isolation';
 import { isChatAppForeground } from '../ui/chat-mount';
 import { runWithFileTreeAutoRefresh } from '../ui/file-tree-auto-refresh';
 import { executeWithResultCache } from './result-cache';
@@ -64,6 +68,10 @@ import {
   hasBraveApiKey,
   resolveWebSearchExecution,
 } from './web-search-routing';
+import {
+  afterSettingsToolSuccess,
+  augmentGetSettingsResult,
+} from '../settings/client-sync';
 
 /** Ping timeout for local dev server detection (ms). */
 const PING_TIMEOUT_MS = 2500;
@@ -329,6 +337,13 @@ async function executeToolInner(
     return { content: text };
   }
 
+  if (name === 'todo_write') {
+    const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
+    if (blocked) return blocked;
+    const text = executeTodoWrite(args, { chatId: context?.chatId });
+    return { content: text };
+  }
+
   if (name === 'bug_add' || name === 'bug_update' || name === 'bug_get_state') {
     const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
     if (blocked) return blocked;
@@ -551,6 +566,9 @@ export function getEnabledToolDefinitionsForChat(
   const normalized = normalizeModeId(chat.modeId);
   let defs = getEnabledToolDefinitionsForMode(normalized);
   const executionMode = getBoardGroupForChat(chat)?.orchestrateBoard?.executionMode;
+  if (chat.boardTaskId?.trim()) {
+    defs = injectBoardMemberSubsetTools(defs);
+  }
   defs = applyBoardMemberToolFilter(defs, chat, executionMode);
   if (normalized !== 'orchestrate') return defs;
 
@@ -629,7 +647,7 @@ async function executeStreamingCodeTool(
   }
 
   const workspaceRoot =
-    context.workspaceRoot?.trim() || (await resolveToolWorkspaceRoot());
+    context.workspaceRoot?.trim() || (await resolveToolWorkspaceRoot(context));
   const relativeCwd =
     name === 'execute_command' && typeof args.cwd === 'string'
       ? args.cwd.trim()
@@ -641,6 +659,7 @@ async function executeStreamingCodeTool(
 
   try {
     const { getChatAbort } = await import('../app-state');
+    const { runCommandWithTerminalStream } = await import('../ui/terminal-panel');
     return await runCommandWithTerminalStream(mapped.command, {
       chatId: context.chatId!,
       source: 'agent',
@@ -661,8 +680,22 @@ async function executeStreamingCodeTool(
   }
 }
 
-/** Chats sandbox root when the Chat app is foreground; otherwise server default workspace. */
-async function resolveToolWorkspaceRoot(): Promise<string | undefined> {
+/** Resolve tool workspace from chat binding, then desktop/chat UI foreground, else server default. */
+async function resolveToolWorkspaceRoot(
+  context?: ExecuteToolContext,
+): Promise<string | undefined> {
+  const chatId = context?.chatId?.trim();
+  if (chatId && sessionState) {
+    const chat = findChatById(chatId);
+    if (chat) {
+      const scoped = resolveChatToolWorkspaceRoot(chat, sessionState.groups);
+      if (scoped) return scoped;
+    }
+  }
+  if (isDesktopChatActive()) {
+    const path = await getDesktopWorkspacePath();
+    return path ?? undefined;
+  }
   if (!isChatAppForeground()) return undefined;
   const path = await getChatsWorkspacePath();
   return path ?? undefined;
@@ -677,7 +710,7 @@ async function executeServerTool(
 ): Promise<ToolExecutionResult> {
   let response: Response;
   const workspaceRoot =
-    context?.workspaceRoot?.trim() || (await resolveToolWorkspaceRoot());
+    context?.workspaceRoot?.trim() || (await resolveToolWorkspaceRoot(context));
   const payload: {
     name: string;
     args: Record<string, unknown>;
@@ -722,6 +755,14 @@ async function executeServerTool(
   }
 
   const content = String(responsePayload.result ?? '');
+  let finalContent = content;
+  if (!content.trimStart().startsWith('Error:')) {
+    if (name === 'get_settings') {
+      finalContent = augmentGetSettingsResult(content);
+    }
+    void afterSettingsToolSuccess(name, finalContent);
+  }
+
   const attachments = Array.isArray(responsePayload.attachments)
     ? responsePayload.attachments.filter(
         (a): a is NonNullable<ToolExecutionResult['attachments']>[number] =>
@@ -749,7 +790,7 @@ async function executeServerTool(
     }
   }
 
-  const base: ToolExecutionResult = { content };
+  const base: ToolExecutionResult = { content: finalContent };
   if (attachments?.length) base.attachments = attachments;
   if (codeChange) base.codeChange = codeChange;
   return base;

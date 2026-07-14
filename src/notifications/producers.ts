@@ -101,11 +101,16 @@ function handleBoardChange(groupId: string): void {
 
   if (isOrchestratePlanComplete(board) && !notifiedBoardComplete.has(groupId)) {
     notifiedBoardComplete.add(groupId);
+    const completeCount = board.tasks.filter((t) => t.status === 'complete').length;
+    const quarantinedCount = board.tasks.filter((t) => t.status === 'quarantined').length;
+    const allQuarantined = completeCount === 0 && quarantinedCount > 0;
     const unresolvedCount = board.unresolvedIssues?.length ?? 0;
     pushNotification({
-      kind: 'board_complete',
+      kind: allQuarantined ? 'board_blocked' : 'board_complete',
       title: 'Orchestrate board',
-      preview: `Complete — ${unresolvedCount} unresolved issue${unresolvedCount === 1 ? '' : 's'}`,
+      preview: allQuarantined
+        ? `Blocked — ${quarantinedCount} quarantined`
+        : `Complete — ${unresolvedCount} unresolved issue${unresolvedCount === 1 ? '' : 's'}`,
       chatId: defaultChatId,
       appId: 'code',
       dedupeKey: `board_complete:${groupId}`,

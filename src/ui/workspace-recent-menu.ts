@@ -5,8 +5,6 @@
 import {
   fetchWorkspace,
   removeRecentWorkspace,
-  setWorkspacePath,
-  type WorkspaceInfo,
   type WorkspaceRecentItem,
 } from '../config/workspace-api';
 import {
@@ -37,18 +35,18 @@ let menuOpen = false;
 let outsidePointerHandler: ((e: PointerEvent) => void) | null = null;
 let escapeHandler: ((e: KeyboardEvent) => void) | null = null;
 
-export type WorkspaceSwitchHandler = (info: WorkspaceInfo) => Promise<void>;
+export type WorkspaceSelectHandler = (absPath: string) => Promise<void>;
 export type OpenNewWorkspaceHandler = () => Promise<void>;
 
-let onSwitch: WorkspaceSwitchHandler | null = null;
+let onSelectWorkspace: WorkspaceSelectHandler | null = null;
 let onOpenNew: OpenNewWorkspaceHandler | null = null;
 
 /** Wire callbacks from workspace-button (shared post-switch refresh). */
 export function configureWorkspaceRecentMenu(handlers: {
-  onSwitch: WorkspaceSwitchHandler;
+  onSelectWorkspace: WorkspaceSelectHandler;
   onOpenNew: OpenNewWorkspaceHandler;
 }): void {
-  onSwitch = handlers.onSwitch;
+  onSelectWorkspace = handlers.onSelectWorkspace;
   onOpenNew = handlers.onOpenNew;
 }
 
@@ -193,11 +191,10 @@ function createRecentRow(item: WorkspaceRecentItem): HTMLLIElement {
 
 async function selectRecentWorkspace(absPath: string): Promise<void> {
   closeWorkspaceMenu();
-  if (!onSwitch) return;
+  if (!onSelectWorkspace) return;
   menuDeps.reportStatus('spin', 'Switching workspace…');
   try {
-    const info = await setWorkspacePath(absPath);
-    await onSwitch(info);
+    await onSelectWorkspace(absPath);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     menuDeps.reportStatus('err', message);
@@ -267,4 +264,15 @@ export async function renderWorkspaceMenuForTest(container?: HTMLElement): Promi
     menuEl.setAttribute('role', 'menu');
   }
   await renderMenuList();
+}
+
+/** Reset module singletons between workspace menu tests. */
+export function resetWorkspaceMenuForTests(): void {
+  closeWorkspaceMenu();
+  detachGlobalListeners();
+  menuEl = null;
+  anchorBtn = null;
+  menuOpen = false;
+  outsidePointerHandler = null;
+  escapeHandler = null;
 }

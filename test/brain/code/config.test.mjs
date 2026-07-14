@@ -31,6 +31,6 @@ describe('normalizeBrainCodeConfig', () => {
 describe('clampRepoMapTokenBudget', () => {
   it('floors fractional values and rejects non-finite input', () => {
     assert.equal(clampRepoMapTokenBudget(1500.9), 1500);
-    assert.equal(clampRepoMapTokenBudget('nope'), 1500);
+    assert.equal(clampRepoMapTokenBudget('nope'), 32000);
   });
 });

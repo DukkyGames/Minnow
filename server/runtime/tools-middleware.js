@@ -7,6 +7,8 @@ import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { COMMAND_TIMEOUT_MS, formatProcessOutput, runProcess } from '../process-runner.js';
+import { DEFAULT_MAX_OUTPUT_CHARS, capReadFileOutput } from '../tools/output-cap.js';
+import { truncateGitDiff } from '../tools/git-diff-truncate.js';
 import {
   createBackgroundRun,
   executeCommandBlocking,
@@ -17,6 +19,7 @@ import {
 } from '../terminal-runner.js';
 import { toolRunImpeccable } from '../impeccable/run-impeccable.js';
 import { toolLoadImpeccableContext } from '../impeccable/load-impeccable-context.js';
+import { toolLoadAestheticsReference } from '../design/load-aesthetics-reference.js';
 import {
   blockPlanModeWrite,
   resolveModeIdFromToolsBody,
@@ -25,6 +28,7 @@ import { assessHostKillCommand } from '../tools/host-kill-guard.js';
 import { assessHostPortBindCommand } from '../tools/host-port-bind-guard.js';
 import { assessUnixPipeOnWindows } from '../tools/windows-pipe-guard.js';
 import {
+  coerceContentToFileEol,
   detectDominantEol,
   flexibleReplaceAll,
   matchModeLabel,
@@ -47,6 +51,11 @@ import {
   toolBrainWritePage,
   toolManageBrain,
 } from '../tools/brain-tools.js';
+import {
+  toolGetSettings,
+  toolSearchSettings,
+  toolUpdateSettings,
+} from '../settings/tools.js';
 import {
   toolExplainSymbol,
   toolFindSymbol,
@@ -260,7 +269,10 @@ async function toolReadFile(args) {
   if (!stat.isFile()) {
     return `Error: "${args.path}" is not a file`;
   }
-  return await fs.readFile(filePath, 'utf8');
+  const content = await fs.readFile(filePath, 'utf8');
+  const rel = toRelativePath(filePath);
+  const { text } = capReadFileOutput(content, rel);
+  return text;
 }
 
 /** Read UTF-8 file or empty string when missing (for before-write diffs). */
@@ -324,10 +336,16 @@ async function toolSaveFile(args) {
     return withCodeChange(message, codeChangeFromDiff(before, nextContent, rel));
   }
   const before = await readUtf8OrEmpty(filePath);
+  const { content: normalizedContent, converted, eol } = coerceContentToFileEol(
+    nextContent,
+    before,
+  );
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, nextContent, 'utf8');
-  const message = `Saved ${rel} (${nextContent.length} bytes)`;
-  return withCodeChange(message, codeChangeFromDiff(before, nextContent, rel));
+  await fs.writeFile(filePath, normalizedContent, 'utf8');
+  const eolNote =
+    converted && eol ? `, preserved ${eol === '\r\n' ? 'CRLF' : 'LF'} line endings` : '';
+  const message = `Saved ${rel} (${normalizedContent.length} bytes${eolNote})`;
+  return withCodeChange(message, codeChangeFromDiff(before, normalizedContent, rel));
 }
 
 async function toolAppendFile(args) {
@@ -340,8 +358,15 @@ async function toolAppendFile(args) {
   const appendStats = countAppendLineStats(content);
   const { lines, truncated } = buildAddOnlyDiffLines(content);
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.appendFile(filePath, content, 'utf8');
-  const message = `Appended to ${rel}`;
+  const existing = await readUtf8OrEmpty(filePath);
+  const { content: normalizedContent, converted, eol } = coerceContentToFileEol(
+    content,
+    existing,
+  );
+  await fs.appendFile(filePath, normalizedContent, 'utf8');
+  const eolNote =
+    converted && eol ? ` (preserved ${eol === '\r\n' ? 'CRLF' : 'LF'} line endings)` : '';
+  const message = `Appended to ${rel}${eolNote}`;
   return withCodeChange(
     message,
     buildCodeChangePayload({
@@ -529,6 +554,36 @@ async function toolCopyFile(args) {
   return withCodeChange(message, codeChangeFromDiff(destBefore, sourceContent, destRel));
 }
 
+/** Max bytes for UI drag-import (matches client attachment cap). */
+const IMPORT_WORKSPACE_FILE_MAX_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Write binary file bytes from a base64 payload (OS drag-import into workspace).
+ * UI-only — not registered in the LLM tool catalog.
+ */
+async function toolImportWorkspaceFile(args) {
+  const filePath = resolveSafePath(args?.path, { write: true });
+  if (args?.content === undefined || args?.content === null) {
+    return 'Error: content (base64 file bytes) is required';
+  }
+  let buffer;
+  try {
+    buffer = Buffer.from(String(args.content), 'base64');
+  } catch {
+    return 'Error: content is not valid base64';
+  }
+  if (buffer.length > IMPORT_WORKSPACE_FILE_MAX_BYTES) {
+    return `Error: file exceeds ${IMPORT_WORKSPACE_FILE_MAX_BYTES / (1024 * 1024)}MB limit`;
+  }
+  const rel = toRelativePath(filePath);
+  const before = await readUtf8OrEmpty(filePath);
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, buffer);
+  const message = `Imported ${rel} (${buffer.length} bytes)`;
+  const afterText = buffer.toString('utf8');
+  return withCodeChange(message, codeChangeFromDiff(before, afterText, rel));
+}
+
 async function toolDeletePath(args) {
   const target = resolveSafePath(args?.path, { write: true });
   const rel = toRelativePath(target);
@@ -636,13 +691,32 @@ async function toolFindFiles(args) {
 async function toolGetFileMetadata(args) {
   const target = resolveSafePath(args?.path);
   const stat = await fs.stat(target);
-  return [
+  const lines = [
     `path: ${toRelativePath(target)}`,
     `type: ${stat.isDirectory() ? 'directory' : stat.isFile() ? 'file' : 'other'}`,
     `size: ${stat.size} bytes`,
     `modified: ${stat.mtime.toISOString()}`,
     `created: ${stat.birthtime.toISOString()}`,
-  ].join('\n');
+  ];
+  if (stat.isFile() && stat.size > 0) {
+    try {
+      const sample = await fs.readFile(target, 'utf8');
+      const crlf = (sample.match(/\r\n/g) || []).length;
+      const lf = (sample.match(/(?<!\r)\n/g) || []).length;
+      if (crlf === 0 && lf === 0) {
+        lines.push('line_ending: none');
+      } else if (crlf > 0 && lf === 0) {
+        lines.push('line_ending: CRLF');
+      } else if (lf > 0 && crlf === 0) {
+        lines.push('line_ending: LF');
+      } else {
+        lines.push('line_ending: mixed');
+      }
+    } catch {
+      /* skip line-ending hint for non-UTF-8 files */
+    }
+  }
+  return lines.join('\n');
 }
 
 // --- Git tools ---
@@ -659,7 +733,37 @@ async function toolGitDiff(args) {
   if (args?.path) {
     gitArgs.push('--', args.path);
   }
-  return runGit(gitArgs);
+
+  const label = `git ${gitArgs.join(' ')}`;
+  const cwd = getEffectiveWorkspaceRoot();
+  const patchBudget = DEFAULT_MAX_OUTPUT_CHARS - 2_000;
+
+  try {
+    const result = await runProcess('git', gitArgs, { cwd });
+    const patch = String(result.stdout ?? '');
+
+    if (patch.trimEnd().length > patchBudget) {
+      const numstatArgs = ['diff', '--numstat'];
+      if (args?.staged) {
+        numstatArgs.push('--cached');
+      }
+      if (args?.path) {
+        numstatArgs.push('--', args.path);
+      }
+      const numstatResult = await runProcess('git', numstatArgs, { cwd });
+      const { text } = truncateGitDiff(patch, numstatResult.stdout ?? '', {
+        maxChars: patchBudget,
+        staged: Boolean(args?.staged),
+        scopePath: typeof args?.path === 'string' ? args.path : undefined,
+      });
+      return formatProcessOutput(label, { ...result, stdout: text });
+    }
+
+    return formatProcessOutput(label, result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return `Error running git: ${message}`;
+  }
 }
 
 async function toolGitLog(args) {
@@ -1029,6 +1133,7 @@ const SERVER_TOOL_HANDLERS = {
   make_directory: toolMakeDirectory,
   move_file: toolMoveFile,
   copy_file: toolCopyFile,
+  import_workspace_file: toolImportWorkspaceFile,
   delete_path: toolDeletePath,
   find_files: toolFindFiles,
   get_file_metadata: toolGetFileMetadata,
@@ -1052,6 +1157,7 @@ const SERVER_TOOL_HANDLERS = {
     toolRunImpeccable(args, getAppRoot(), getEffectiveWorkspaceRoot()),
   load_impeccable_context: () =>
     toolLoadImpeccableContext(getAppRoot(), getEffectiveWorkspaceRoot()),
+  load_aesthetics_reference: () => toolLoadAestheticsReference(getAppRoot()),
   get_lsp_diagnostics: async (args) => {
     const { getLspDiagnostics } = await import('../lsp/manager.js');
     return getLspDiagnostics(String(args?.path ?? ''));
@@ -1067,6 +1173,9 @@ const SERVER_TOOL_HANDLERS = {
   brain_append_log: toolBrainAppendLog,
   brain_ingest_source: toolBrainIngestSource,
   manage_brain: toolManageBrain,
+  search_settings: toolSearchSettings,
+  get_settings: toolGetSettings,
+  update_settings: toolUpdateSettings,
   save_memory: toolSaveMemory,
   board_provision_infra: toolBoardProvisionInfra,
   repo_map: toolRepoMap,
@@ -1126,13 +1235,6 @@ export async function executeServerTool(name, args, options = {}) {
   });
 }
 
-/** CORS headers for local Vite dev (browser tools calling same origin or localhost). */
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
-
 /** Read JSON body from POST /api/tools. */
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
@@ -1161,8 +1263,6 @@ export function createToolsMiddleware() {
       next();
       return;
     }
-
-    setCorsHeaders(res);
 
     if (req.method === 'OPTIONS') {
       res.statusCode = 204;
@@ -1214,6 +1314,16 @@ export function createToolsMiddleware() {
         if (planWriteBlock) {
           res.statusCode = 200;
           res.end(JSON.stringify({ result: planWriteBlock }));
+          return;
+        }
+
+        if (modeId === 'plan' && name === 'update_settings') {
+          res.statusCode = 200;
+          res.end(
+            JSON.stringify({
+              result: 'Error: Plan mode does not allow update_settings. Use launch_minnow_app to open Settings.',
+            }),
+          );
           return;
         }
 

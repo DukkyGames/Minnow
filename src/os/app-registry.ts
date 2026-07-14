@@ -126,3 +126,20 @@ export function getAppById(id: AppId): AppDefinition | undefined {
 export function getPresentationMode(id: AppId): PresentationMode {
   return getAppById(id)?.presentationMode ?? 'fullscreen';
 }
+
+type AppModuleLoader = () => Promise<{ init: () => void | Promise<void> }>;
+
+/** Dynamic import entry points for each MinnowOS app page bundle. */
+export const APP_MODULE_LOADERS: Partial<Record<AppId, AppModuleLoader>> = {
+  settings: () => import('../ui/settings-page').then((m) => ({ init: m.initSettingsPage })),
+  bench: () => import('../ui/benchmark-page').then((m) => ({ init: m.initBenchmarkPage })),
+  compare: () => import('../ui/compare-page').then((m) => ({ init: m.initComparePage })),
+  models: () => import('../ui/models-page').then((m) => ({ init: m.initModelsPage })),
+  brain: () => import('../ui/brain-page').then((m) => ({ init: m.initBrainPage })),
+  scheduler: () => import('../ui/scheduler-page').then((m) => ({ init: m.initSchedulerPage })),
+  calendar: () => import('../ui/calendar-page').then((m) => ({ init: m.initCalendarPage })),
+  email: () => import('../ui/email-page').then((m) => ({ init: m.initEmailPage })),
+  research: () => import('../research/panel').then((m) => ({ init: m.initResearchPage })),
+  chat: () => import('../ui/chat-app').then((m) => ({ init: m.initChatApp })),
+  experts: () => import('../ui/experts/experts-hub').then((m) => ({ init: m.initExpertsHub })),
+};

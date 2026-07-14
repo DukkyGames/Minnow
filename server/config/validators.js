@@ -26,7 +26,7 @@ const SESSION_SCHEMA_VERSION = 5;
 const MAX_GOAL_CONDITION_CHARS = 4000;
 
 /** Normalize workspace paths for stable keys (mirror src/lib/normalize-workspace-path.ts). */
-function normalizeWorkspacePath(fsPath) {
+export function normalizeWorkspacePath(fsPath) {
   if (typeof fsPath !== 'string') return '';
   let p = fsPath.trim().replace(/\\/g, '/');
   p = p.replace(/\/+/g, '/');
@@ -51,7 +51,17 @@ function ensureLastActiveMap(raw) {
 }
 
 /** Valid operating mode ids (mirror src/chat/modes/types.ts). */
-const MODE_IDS = ['general', 'build', 'plan', 'super-plan', 'orchestrate', 'reef', 'debug'];
+const MODE_IDS = [
+  'general',
+  'desktop',
+  'build',
+  'plan',
+  'super-plan',
+  'orchestrate',
+  'reef',
+  'debug',
+  'onboarding',
+];
 const DEFAULT_MODE_ID = 'build';
 
 /** Normalize persisted or unknown mode ids. */
@@ -765,6 +775,10 @@ function ensureChatShape(raw) {
     ...(typeof row.worktreeRoot === 'string' && row.worktreeRoot.trim()
       ? { worktreeRoot: row.worktreeRoot.trim() }
       : {}),
+    ...(typeof row.gitBranch === 'string' && row.gitBranch.trim()
+      ? { gitBranch: row.gitBranch.trim() }
+      : {}),
+    ...(row.chatWorktreeManaged === true ? { chatWorktreeManaged: true } : {}),
     ...(typeof row.workAgentId === 'string' && row.workAgentId.trim()
       ? { workAgentId: row.workAgentId.trim() }
       : {}),
@@ -847,6 +861,9 @@ export function validateSessionState(raw) {
     groups,
     chats: chats.length ? chats : [ensureChatShape(null)],
   };
+  if (typeof parsed.sidebarWidth === 'number' && Number.isFinite(parsed.sidebarWidth)) {
+    state.sidebarWidth = Math.min(520, Math.max(200, Math.round(parsed.sidebarWidth)));
+  }
   if (
     typeof parsed.activeBoardGroupId === 'string' &&
     parsed.activeBoardGroupId.trim()
@@ -992,6 +1009,9 @@ export function normalizeArchiveConfig(raw) {
 }
 
 function defaultPermissionForTool(id, enabled) {
+  if (id === 'search_settings' || id === 'get_settings') {
+    return enabled ? 'full' : 'off';
+  }
   if (BRAIN_FULL_PERMISSION_TOOL_ID_SET.has(id)) {
     return enabled ? 'full' : 'off';
   }
@@ -1013,6 +1033,9 @@ export function normalizeToolConfig(raw) {
     'brain_append_log',
     'brain_ingest_source',
     'manage_brain',
+    'search_settings',
+    'get_settings',
+    'update_settings',
     'repo_map',
     'find_symbol',
     'who_calls',
@@ -1654,6 +1677,7 @@ export function mergeConfigMeta(existing, patch) {
             open: false,
             heightPx: 240,
             autoOpenOnAgentRun: false,
+            autoFollowAgentTab: false,
           };
     const t = /** @type {Record<string, unknown>} */ (p.terminal);
     if (typeof t.open === 'boolean') existingTerminal.open = t.open;
@@ -1662,6 +1686,9 @@ export function mergeConfigMeta(existing, patch) {
     }
     if (typeof t.autoOpenOnAgentRun === 'boolean') {
       existingTerminal.autoOpenOnAgentRun = t.autoOpenOnAgentRun;
+    }
+    if (typeof t.autoFollowAgentTab === 'boolean') {
+      existingTerminal.autoFollowAgentTab = t.autoFollowAgentTab;
     }
     base.terminal = existingTerminal;
   }
@@ -1785,6 +1812,9 @@ export function mergeConfigMeta(existing, patch) {
     if (typeof fp.splitRatio === 'number' && Number.isFinite(fp.splitRatio)) {
       existingPanel.splitRatio = Math.min(0.75, Math.max(0.35, fp.splitRatio));
     }
+    if (typeof fp.fileSidebarWidth === 'number' && Number.isFinite(fp.fileSidebarWidth)) {
+      existingPanel.fileSidebarWidth = Math.min(560, Math.max(220, Math.round(fp.fileSidebarWidth)));
+    }
     if (Array.isArray(fp.expandedDirs)) {
       existingPanel.expandedDirs = fp.expandedDirs.filter((d) => typeof d === 'string');
     }
@@ -1831,6 +1861,34 @@ export function mergeConfigMeta(existing, patch) {
         .replace(/\\/g, '/')
         .replace(/\/+/g, '/')
         .replace(/^\.\//, '');
+    }
+    if (Array.isArray(fp.previewTabs)) {
+      const rows = [];
+      const seen = new Set();
+      for (const entry of fp.previewTabs) {
+        if (!entry || typeof entry !== 'object') continue;
+        const row = /** @type {Record<string, unknown>} */ (entry);
+        const id = typeof row.id === 'string' ? row.id.trim() : '';
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        let source = null;
+        if (row.source && typeof row.source === 'object') {
+          const src = /** @type {Record<string, unknown>} */ (row.source);
+          if (src.kind === 'workspace' && typeof src.path === 'string' && src.path.trim()) {
+            source = { kind: 'workspace', path: src.path.trim() };
+          } else if (src.kind === 'url' && typeof src.url === 'string' && src.url.trim()) {
+            source = { kind: 'url', url: src.url.trim() };
+          }
+        }
+        rows.push({ id, source });
+        if (rows.length >= 6) break;
+      }
+      existingPanel.previewTabs = rows;
+    }
+    if (fp.activePreviewTab === null) {
+      existingPanel.activePreviewTab = null;
+    } else if (typeof fp.activePreviewTab === 'string' && fp.activePreviewTab.trim()) {
+      existingPanel.activePreviewTab = fp.activePreviewTab.trim();
     }
     base.filePanel = existingPanel;
   }
@@ -1989,6 +2047,7 @@ export function mergeConfigMeta(existing, patch) {
         : {
             enabled: true,
             allowNavigate: true,
+            restoreBrowserTabs: true,
             allowedOriginPatterns: [
               'http://localhost:*',
               'http://127.0.0.1:*',
@@ -1999,6 +2058,9 @@ export function mergeConfigMeta(existing, patch) {
     if (typeof b.enabled === 'boolean') existingBrowser.enabled = b.enabled;
     if (typeof b.allowNavigate === 'boolean') {
       existingBrowser.allowNavigate = b.allowNavigate;
+    }
+    if (typeof b.restoreBrowserTabs === 'boolean') {
+      existingBrowser.restoreBrowserTabs = b.restoreBrowserTabs;
     }
     if (Array.isArray(b.allowedOriginPatterns)) {
       existingBrowser.allowedOriginPatterns = b.allowedOriginPatterns.filter(

@@ -5,6 +5,7 @@
  */
 
 import type { MinnowPreviewBounds } from '../electron';
+import { isDesignModeUsingIframeGuest } from './preview-design-mode-guest';
 import { getFilePanelState } from '../state/file-panel';
 
 const FULLSCREEN_OVERLAY_IDS = [
@@ -56,17 +57,47 @@ export function resetChromePopoverRegistryForTests(): void {
   chromePopoverOpenCount = 0;
 }
 
+/** True when the desktop workspace drawer is showing the browser mount. */
+function isDesktopBrowserMountActive(): boolean {
+  const mount = document.getElementById('desktopPreviewMount');
+  return Boolean(mount?.classList.contains('is-active'));
+}
+
 /** True when the preview split pane is the active right pane and not CSS-hidden. */
 export function isPreviewPaneDomVisible(): boolean {
   if (getFilePanelState().rightPaneMode !== 'preview') return false;
   const pane = document.getElementById('previewPane');
-  if (!pane || pane.classList.contains('hidden')) return false;
+  if (!pane) return false;
+  // Desktop drawer CSS keeps #previewPane flex-visible even when .hidden lingers briefly.
+  if (isDesktopBrowserMountActive()) return true;
+  if (pane.classList.contains('hidden')) return false;
   return true;
+}
+
+/** True when the Code workspace or desktop browser drawer hosts the preview guest. */
+function isPreviewSurfaceActive(): boolean {
+  if (isDesktopBrowserSurfaceActive()) return true;
+  return isCodeWorkspaceForeground();
+}
+
+function isDesktopBrowserSurfaceActive(): boolean {
+  if (!isDesktopBrowserMountActive()) return false;
+  return isPreviewPaneDomVisible();
+}
+
+/** True when the Code workspace (where #previewBody lives) is the active shell surface. */
+function isCodeWorkspaceForeground(): boolean {
+  if (document.documentElement.dataset.osApp !== 'code') return false;
+  const appBody = document.getElementById('appBody');
+  return Boolean(appBody && !appBody.classList.contains('hidden'));
 }
 
 /** Whether the Chromium guest should be visible and receive bounds updates. */
 export function shouldShowElectronPreviewHost(): boolean {
   if (!usesElectronPreview()) return false;
+  // Design Mode uses a same-origin iframe in #previewBody so DOM overlays stack above the guest.
+  if (isDesignModeUsingIframeGuest()) return false;
+  if (!isPreviewSurfaceActive()) return false;
   if (!isPreviewPaneDomVisible()) return false;
   if (isFullscreenOverlayObscuringWorkspace()) return false;
   if (isChromePopoverOpen()) return false;
@@ -156,6 +187,7 @@ async function runElectronPreviewHostLayoutSync(): Promise<void> {
   if (!api) return;
 
   if (!shouldShowElectronPreviewHost()) {
+    // Always invoke hide — main-process guest can outlive renderer reload (MIN-179).
     await api.hide();
     previewGuestVisible = false;
     return;
@@ -163,14 +195,12 @@ async function runElectronPreviewHostLayoutSync(): Promise<void> {
 
   const bounds = await waitForStablePreviewBodyBounds();
   if (!bounds) return;
+  if (!shouldShowElectronPreviewHost()) return;
 
-  if (!previewGuestVisible) {
-    await api.show(bounds);
-    previewGuestVisible = true;
-    return;
-  }
-
-  await api.setBounds(bounds);
+  // Always use show(bounds) — tab activate / loadSource can attach the guest at 0×0
+  // before layout is ready; setBounds alone is skipped when the guest is not visible.
+  await api.show(bounds);
+  previewGuestVisible = true;
 }
 
 /**
@@ -222,4 +252,9 @@ export const scheduleElectronPreviewHostLayoutSync = scheduleElectronPreviewHost
 export function resetPreviewGuestVisibilityForTests(): void {
   previewGuestVisible = false;
   layoutSyncChain = Promise.resolve();
+  if (layoutSyncRaf && typeof cancelAnimationFrame === 'function') {
+    cancelAnimationFrame(layoutSyncRaf);
+    layoutSyncRaf = 0;
+  }
+  layoutRetryFrames = 0;
 }

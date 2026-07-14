@@ -1,12 +1,12 @@
 /**
- * Eight palette themes (4 families × dark/light), persistence, and DOM application.
+ * Twelve palette themes (6 families × dark/light), persistence, and DOM application.
  */
 
 export const THEME_STORAGE_KEY = 'minnow.theme';
 export const THEME_FOLLOW_SYSTEM_KEY = 'minnow.theme.followSystem';
 export const THEME_FAMILY_KEY = 'minnow.theme.family';
 
-export const THEME_FAMILIES = ['sage', 'amber', 'cyan', 'coral'] as const;
+export const THEME_FAMILIES = ['sage', 'amber', 'cyan', 'coral', 'salt', 'retro'] as const;
 export type ThemeFamily = (typeof THEME_FAMILIES)[number];
 
 export const THEME_MODES = ['dark', 'light'] as const;
@@ -14,7 +14,7 @@ export type ThemeMode = (typeof THEME_MODES)[number];
 
 export type ThemeId = `${ThemeFamily}-${ThemeMode}`;
 
-const THEME_ID_RE = /^(sage|amber|cyan|coral)-(dark|light)$/;
+const THEME_ID_RE = /^(sage|amber|cyan|coral|salt|retro)-(dark|light)$/;
 
 export interface ThemeFamilyMeta {
   id: ThemeFamily;
@@ -43,6 +43,16 @@ export const THEME_FAMILY_META: ThemeFamilyMeta[] = [
     name: 'Graphite · Coral',
     blurb: 'True graphite neutrals with a warm coral accent. Distinct and soft-modern.',
   },
+  {
+    id: 'salt',
+    name: 'Salt · Pepper',
+    blurb: 'Pure grayscale. Proof on newsprint, bench in charcoal.',
+  },
+  {
+    id: 'retro',
+    name: 'Retro · Terminal',
+    blurb: 'Phosphor green on CRT black. Accent-only green, readable long sessions.',
+  },
 ];
 
 /** Default when storage is empty or invalid. */
@@ -50,7 +60,7 @@ export const DEFAULT_THEME_ID: ThemeId = 'sage-dark';
 export const DEFAULT_THEME_FAMILY: ThemeFamily = 'sage';
 
 function isThemeFamily(v: string | null): v is ThemeFamily {
-  return v === 'sage' || v === 'amber' || v === 'cyan' || v === 'coral';
+  return typeof v === 'string' && (THEME_FAMILIES as readonly string[]).includes(v);
 }
 
 function isThemeId(v: string | null): v is ThemeId {

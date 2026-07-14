@@ -20,6 +20,7 @@ import { renderChatFromHistory } from './messages';
 import { setStatus } from './status';
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
+import { refreshComposerRunTargetDisabled } from './composer-run-target';
 import {
   applyModeMaskIcon,
   createModeMaskIcon,
@@ -175,6 +176,7 @@ export function refreshModeSelectorDisabled(): void {
   root.querySelectorAll<HTMLButtonElement>('.mode-segment__caret').forEach((btn) => {
     btn.disabled = disabled;
   });
+  refreshComposerRunTargetDisabled();
 }
 
 function showModeStatusPill(label: string): void {

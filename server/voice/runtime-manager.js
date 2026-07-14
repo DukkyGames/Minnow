@@ -186,14 +186,14 @@ function killWorkerChild(child) {
         windowsHide: true,
       }).unref();
     } catch {
-      child.kill();
+      if (typeof child.kill === 'function') child.kill();
     }
     return;
   }
   try {
     process.kill(-child.pid, 'SIGTERM');
   } catch {
-    child.kill('SIGTERM');
+    if (typeof child.kill === 'function') child.kill('SIGTERM');
   }
 }
 

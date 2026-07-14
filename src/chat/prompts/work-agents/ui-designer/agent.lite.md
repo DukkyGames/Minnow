@@ -30,4 +30,4 @@ allowedTools:
 
 Tokens only, no magic numbers. OKLCH colors. WCAG AA. Keyboard-reachable. Mobile-first. Respect `prefers-reduced-motion`.
 
-Tools: {{enabled_tools}}
+

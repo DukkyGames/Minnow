@@ -39,7 +39,7 @@ If phones cannot connect after enabling LAN mode, allow inbound TCP on your dev 
 | LLM inference | Works (providers on **host**) |
 | `browser_*` tools | Unavailable (Electron-only on host) |
 | Terminal PTY | Works when LAN + WS policy relaxed |
-| Voice mic/TTS | Likely broken on `http://192.168.x.x` (secure context) |
+| Voice mic/TTS | May fail on `http://192.168.x.x` (secure-context APIs; id generation is handled via `src/lib/random-id.ts`) |
 | OAuth connect | Works only if user opens the same LAN URL used for redirect base |
 
 ## Security

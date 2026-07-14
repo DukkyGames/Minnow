@@ -23,6 +23,7 @@ import {
 } from '../state/orchestrate-board-store.ts';
 import {
   requestPendingAfk,
+  moveTaskStatus,
   setBoardExecutionMode,
   startBoardAutoRun,
 } from '../state/orchestrate-board-actions.ts';
@@ -664,14 +665,21 @@ async function executeBoardUpdateTask(
       }
     }
 
-    const patch: Parameters<typeof updateTask>[2] = { status: validated.args.status };
+    const patch: Parameters<typeof updateTask>[2] = {};
     if (validated.args.run_id) patch.assignedRunId = validated.args.run_id;
     if (validated.args.files_changed !== undefined) {
       patch.filesChanged = validated.args.files_changed;
     }
     if (validated.args.notes !== undefined) patch.notes = validated.args.notes;
     if (validated.args.error !== undefined) patch.error = validated.args.error;
-    const task = updateTask(group, validated.args.task_id, patch, chat);
+    if (Object.keys(patch).length > 0) {
+      updateTask(group, validated.args.task_id, patch, chat);
+    }
+    moveTaskStatus(group, validated.args.task_id, validated.args.status, chat);
+    const task = board.tasks.find((t) => t.id === validated.args.task_id);
+    if (!task) {
+      return `Error: unknown board task "${validated.args.task_id}"`;
+    }
     return JSON.stringify(task, null, 2);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

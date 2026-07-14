@@ -354,6 +354,48 @@
 
 
 
+.settings-appearance-simplified {
+
+  display: grid;
+
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+
+  gap: 12px 16px;
+
+  margin-top: 12px;
+
+}
+
+
+
+/* `display: grid` / `display: flex` override the native [hidden] rule */
+
+.settings-appearance-simplified[hidden],
+
+.settings-appearance-simplified__hint[hidden],
+
+.settings-appearance-color-grid[hidden],
+
+.settings-appearance-warnings[hidden],
+
+.settings-actions[hidden] {
+
+  display: none !important;
+
+}
+
+
+
+.settings-appearance-simplified__hint {
+
+  margin: 10px 0 0;
+
+  max-width: 72ch;
+
+}
+
+
+
 .settings-appearance-color-grid {
 
   display: flex;
@@ -815,7 +857,11 @@
 
   position: relative;
 
+  width: 100%;
+
   aspect-ratio: 16 / 10;
+
+  min-height: 72px;
 
   border-radius: var(--radius-sm);
 
@@ -836,6 +882,10 @@
   transform: scale(1);
 
   pointer-events: none;
+
+  /* Inherit OS wallpaper tokens for live thumbnail renders. */
+
+  color: var(--os-text);
 
 }
 

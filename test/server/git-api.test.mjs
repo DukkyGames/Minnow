@@ -12,12 +12,21 @@ import { promisify } from 'node:util';
 import { after, before, describe, test } from 'node:test';
 import {
   branches,
+  cherryPick,
   commit,
   deleteBranch,
   diff,
+  filterUserFacingBranches,
+  isMinnowBoardBranch,
   log,
+  merge,
+  parseBranchList,
+  parseWorktreeLockedBranches,
+  rebase,
   show,
   stage,
+  stashList,
+  stashPush,
   status,
   worktreeAdd,
   worktreeRemove,
@@ -154,6 +163,43 @@ describe('git API', () => {
     assert.ok(listed.local?.includes(listed.current));
   });
 
+  test('parseBranchList omits branches checked out in other worktrees', () => {
+    const parsed = parseBranchList(
+      [
+        '  main',
+        '* develop',
+        '+ feature/other-worktree',
+        '  remotes/origin/main',
+      ].join('\n'),
+    );
+    assert.equal(parsed.current, 'develop');
+    assert.deepEqual(parsed.local, ['main', 'develop']);
+    assert.deepEqual(parsed.remote, ['remotes/origin/main']);
+  });
+
+  test('filterUserFacingBranches omits board and locked worktree branches', () => {
+    assert.equal(isMinnowBoardBranch('minnow/board/x/task/W1-A'), true);
+    assert.equal(isMinnowBoardBranch('feature/foo'), false);
+
+    const locked = parseWorktreeLockedBranches(
+      [
+        'worktree /repo/main',
+        'branch refs/heads/main',
+        '',
+        'worktree /repo/wt',
+        'branch refs/heads/feature/wt',
+      ].join('\n'),
+      '/repo/main',
+    );
+    assert.deepEqual([...locked], ['feature/wt']);
+
+    const filtered = filterUserFacingBranches(
+      ['main', 'feature/wt', 'minnow/board/x/integration', 'release'],
+      locked,
+    );
+    assert.deepEqual(filtered, ['main', 'release']);
+  });
+
   test('deleteBranch removes a non-current branch', async () => {
     const before = await branches({ cwd: repoDir });
     const original = before.current;
@@ -181,11 +227,19 @@ describe('git API', () => {
     assert.equal(added.ok, true);
     assert.equal(added.branch, 'wt-feature');
 
+    const listed = await branches({ cwd: repoDir });
+    assert.equal(listed.ok, true);
+    assert.ok(!listed.local?.includes('wt-feature'));
+
     const removed = await worktreeRemove({
       cwd: repoDir,
       path: path.join(repoDir, '.worktrees', 'wt-feature'),
     });
     assert.equal(removed.ok, true);
+
+    const afterRemove = await branches({ cwd: repoDir });
+    assert.equal(afterRemove.ok, true);
+    assert.ok(afterRemove.local?.includes('wt-feature'));
   });
 
   test('POST /api/git status honors cwd', async () => {
@@ -210,5 +264,101 @@ describe('git API', () => {
     const res = await httpRequest(baseUrl, 'POST', '/api/git', { op: 'nope' });
     assert.equal(res.status, 400);
     assert.match(res.json?.error ?? '', /Unknown git op/);
+  });
+
+  test('merge merges a topic branch', async () => {
+    const main = (await branches({ cwd: repoDir })).current;
+    assert.ok(main);
+
+    await execFileAsync('git', ['checkout', '-b', 'git-api-merge-target'], {
+      cwd: repoDir,
+      windowsHide: true,
+    });
+    await fs.writeFile(path.join(repoDir, 'git-api-merge.txt'), 'merge-target\n', 'utf8');
+    await execFileAsync('git', ['add', 'git-api-merge.txt'], { cwd: repoDir, windowsHide: true });
+    await execFileAsync('git', ['commit', '-m', 'git-api merge target'], {
+      cwd: repoDir,
+      windowsHide: true,
+    });
+
+    await execFileAsync('git', ['checkout', main], { cwd: repoDir, windowsHide: true });
+    const merged = await merge({ cwd: repoDir, branch: 'git-api-merge-target' });
+    assert.equal(merged.ok, true);
+  });
+
+  test('stash push and list', async () => {
+    await fs.writeFile(path.join(repoDir, 'git-api-stash.txt'), 'stash-me\n', 'utf8');
+
+    const stashed = await stashPush({ cwd: repoDir, message: 'git-api stash' });
+    assert.equal(stashed.ok, true);
+
+    const stashEntries = await stashList({ cwd: repoDir });
+    assert.equal(stashEntries.ok, true);
+    assert.ok((stashEntries.stashes ?? []).length >= 1);
+  });
+
+  test('rebase replays branch commits onto main', async () => {
+    const main = (await branches({ cwd: repoDir })).current;
+    assert.ok(main);
+
+    await execFileAsync('git', ['checkout', '-b', 'git-api-rebase-branch'], {
+      cwd: repoDir,
+      windowsHide: true,
+    });
+    await fs.writeFile(path.join(repoDir, 'git-api-rebase.txt'), 'rebase\n', 'utf8');
+    await execFileAsync('git', ['add', 'git-api-rebase.txt'], { cwd: repoDir, windowsHide: true });
+    await execFileAsync('git', ['commit', '-m', 'git-api rebase commit'], {
+      cwd: repoDir,
+      windowsHide: true,
+    });
+
+    await execFileAsync('git', ['checkout', main], { cwd: repoDir, windowsHide: true });
+    await fs.writeFile(path.join(repoDir, 'git-api-main-only.txt'), 'main-only\n', 'utf8');
+    await execFileAsync('git', ['add', 'git-api-main-only.txt'], { cwd: repoDir, windowsHide: true });
+    await execFileAsync('git', ['commit', '-m', 'git-api main advance'], {
+      cwd: repoDir,
+      windowsHide: true,
+    });
+
+    await execFileAsync('git', ['checkout', 'git-api-rebase-branch'], {
+      cwd: repoDir,
+      windowsHide: true,
+    });
+    const rebased = await rebase({ cwd: repoDir, onto: main });
+    assert.equal(rebased.ok, true);
+  });
+
+  test('cherry-pick applies a commit onto main', async () => {
+    const main = (await branches({ cwd: repoDir })).current;
+    assert.ok(main);
+
+    await execFileAsync('git', ['checkout', '-b', 'git-api-cherry-src'], {
+      cwd: repoDir,
+      windowsHide: true,
+    });
+    await fs.writeFile(path.join(repoDir, 'git-api-cherry.txt'), 'cherry\n', 'utf8');
+    await execFileAsync('git', ['add', 'git-api-cherry.txt'], { cwd: repoDir, windowsHide: true });
+    await execFileAsync('git', ['commit', '-m', 'git-api cherry source'], {
+      cwd: repoDir,
+      windowsHide: true,
+    });
+
+    const logRes = await log({ cwd: repoDir, count: 1 });
+    assert.equal(logRes.ok, true);
+    const pickSha = logRes.commits?.[0]?.hash;
+    assert.ok(pickSha);
+
+    await execFileAsync('git', ['checkout', main], { cwd: repoDir, windowsHide: true });
+    const picked = await cherryPick({ cwd: repoDir, sha: pickSha });
+    assert.equal(picked.ok, true);
+  });
+
+  test('POST /api/git stashList honors cwd', async () => {
+    const viaApi = await httpRequest(baseUrl, 'POST', '/api/git', {
+      op: 'stashList',
+      cwd: repoDir,
+    });
+    assert.equal(viaApi.status, 200);
+    assert.equal(viaApi.json?.ok, true);
   });
 });

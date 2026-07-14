@@ -10,6 +10,8 @@ import {
 
   formatWorktreeOptionLabel,
 
+  filterUserFacingBranches,
+
   parseWorktreeListPorcelain,
 
   type ParsedWorktree,
@@ -40,8 +42,6 @@ import {
 
   gitUnstage,
 
-  gitShow,
-
   gitDeleteBranch,
 
   gitWorktreeAdd,
@@ -56,9 +56,14 @@ import {
 
 import { getFilePanelState, patchFilePanelState } from '../state/file-panel';
 
-import { renderGitGraph } from './git-graph';
+import { renderGitGraph, type GitGraphOptions } from './git-graph';
 
-import { applyFileSidebarVisuals } from './file-layout';
+import {
+  showGitGraphCommitContextMenu,
+  type GitGraphContextMenuCtx,
+} from './git-graph-context-menu';
+
+import { applyFileSidebarVisuals, isMobileLayout, openMobileFileSidebar } from './file-layout';
 
 import { getActiveChat, sessionState } from '../state/sessions';
 
@@ -79,6 +84,13 @@ import { parseUnifiedPatchToDiffLines } from './git-patch-parse';
 
 import { renderUnifiedPromptDiff } from './prompt-diff-unified';
 
+import {
+  closeGitCommitDiffPanel,
+  getOpenGitCommitDiffSha,
+  GIT_COMMIT_DIFF_CLOSED_EVENT,
+  openGitCommitDiffPanel,
+} from './git-commit-diff-panel';
+
 import { fetchGitCommitMessage } from './git-commit-message-client';
 
 import { showToast } from './toast';
@@ -87,6 +99,11 @@ import {
   closeGitPanelNamePopover,
   openGitPanelNamePopover,
 } from './git-panel-name-popover';
+import { decorateGitSourceControlButton } from './git-source-control-icons';
+import {
+  isMissingGitRepositoryError,
+  renderGitNoRepositoryState,
+} from './git-no-repo-state';
 
 
 
@@ -97,6 +114,8 @@ const POLL_MS = 5000;
 let panelRoot: HTMLElement | null = null;
 
 let scrollMount: HTMLElement | null = null;
+
+let noRepoMount: HTMLElement | null = null;
 
 let bodyMount: HTMLElement | null = null;
 
@@ -111,6 +130,12 @@ let cwdWrap: HTMLElement | null = null;
 let aheadBehindEl: HTMLElement | null = null;
 
 let commitInput: HTMLTextAreaElement | null = null;
+
+let commitBtn: HTMLButtonElement | null = null;
+
+let commitPushBtn: HTMLButtonElement | null = null;
+
+let commitBusy = false;
 
 let aiGenerateBtn: HTMLButtonElement | null = null;
 
@@ -157,7 +182,7 @@ let selectedCommitSha: string | null = null;
 
 let graphHandle: ReturnType<typeof renderGitGraph> | null = null;
 
-const graphOptions: { cwd?: string; onSelectCommit?: (sha: string) => void } = {};
+const graphOptions: GitGraphOptions = {};
 
 
 
@@ -182,6 +207,42 @@ function getGitMount(): HTMLElement | null {
 export function getGitPanelCwd(): string | undefined {
 
   return panelCwd;
+
+}
+
+/** Set panel cwd (Git Center lightbox sync). */
+
+export function setGitPanelCwd(cwd: string | undefined): void {
+
+  panelCwd = cwd;
+
+  if (cwdSelect) {
+
+    const target = cwd ?? getWorkspacePath();
+
+    for (const opt of cwdSelect.options) {
+
+      if (pathsEqual(opt.value, target)) {
+
+        cwdSelect.value = opt.value;
+
+        break;
+
+      }
+
+    }
+
+    syncWorktreeDeleteButton();
+
+  }
+
+  if (panelOpen) {
+
+    void refreshGitPanel();
+
+  }
+
+  void syncFileTreeGitPollCwd();
 
 }
 
@@ -325,6 +386,90 @@ function setStatus(message: string, isError = false): void {
 
 
 
+type CommitActionKind = 'commit' | 'commit-push';
+
+
+
+function setCommitButtonBusy(btn: HTMLButtonElement, label: string): void {
+
+  btn.disabled = true;
+
+  btn.classList.add('is-busy');
+
+  btn.setAttribute('aria-busy', 'true');
+
+  btn.innerHTML =
+    '<span class="git-panel-action-spinner" aria-hidden="true"></span>' +
+    `<span class="git-panel-action-label">${label}</span>`;
+
+}
+
+
+
+function setCommitActionsBusy(active: CommitActionKind, progressLabel: string): void {
+
+  commitBusy = true;
+
+  setStatus(progressLabel);
+
+  if (commitInput) commitInput.disabled = true;
+
+  if (aiGenerateBtn) aiGenerateBtn.disabled = true;
+
+  const activeBtn = active === 'commit-push' ? commitPushBtn : commitBtn;
+
+  const idleBtn = active === 'commit-push' ? commitBtn : commitPushBtn;
+
+  if (activeBtn) setCommitButtonBusy(activeBtn, progressLabel);
+
+  if (idleBtn) idleBtn.disabled = true;
+
+}
+
+
+
+function clearCommitActionsBusy(): void {
+
+  commitBusy = false;
+
+  if (commitInput) commitInput.disabled = false;
+
+  if (aiGenerateBtn) {
+
+    aiGenerateBtn.disabled = false;
+
+    aiGenerateBtn.removeAttribute('aria-busy');
+
+  }
+
+  if (commitBtn) {
+
+    commitBtn.classList.remove('is-busy');
+
+    commitBtn.removeAttribute('aria-busy');
+
+    commitBtn.disabled = false;
+
+    commitBtn.textContent = 'Commit';
+
+  }
+
+  if (commitPushBtn) {
+
+    commitPushBtn.classList.remove('is-busy');
+
+    commitPushBtn.removeAttribute('aria-busy');
+
+    commitPushBtn.disabled = false;
+
+    commitPushBtn.textContent = 'Commit & Push';
+
+  }
+
+}
+
+
+
 function getEffectiveCwdArg(): string | undefined {
   return resolvePanelWorktreeCwd(panelCwd);
 }
@@ -379,6 +524,28 @@ function ensurePanelDom(): HTMLElement {
   const toolbar = document.createElement('div');
 
   toolbar.className = 'git-panel-toolbar';
+
+  const centerRow = document.createElement('div');
+
+  centerRow.className = 'git-panel-center-row';
+
+  const centerBtn = document.createElement('button');
+
+  centerBtn.type = 'button';
+
+  centerBtn.id = 'btnGitCenter';
+
+  centerBtn.className = 'git-panel-center-btn';
+
+  centerBtn.textContent = 'Control Center';
+
+  centerBtn.title = 'Open Source Control Center';
+
+  centerBtn.setAttribute('aria-label', 'Open Source Control Center');
+
+  centerRow.appendChild(centerBtn);
+
+  toolbar.appendChild(centerRow);
 
 
 
@@ -504,7 +671,7 @@ function ensurePanelDom(): HTMLElement {
 
   pullBtn.className = 'git-panel-action-btn';
 
-  pullBtn.textContent = 'Pull';
+  decorateGitSourceControlButton(pullBtn, 'Pull');
 
   pullBtn.addEventListener('click', () =>
     void runGitOp(() => gitPull(getEffectiveCwdArg()), { successMessage: 'Pulled changes' }),
@@ -518,7 +685,7 @@ function ensurePanelDom(): HTMLElement {
 
   pushBtn.className = 'git-panel-action-btn';
 
-  pushBtn.textContent = 'Push';
+  decorateGitSourceControlButton(pushBtn, 'Push');
 
   pushBtn.addEventListener('click', () =>
     void runGitOp(() => gitPush({ cwd: getEffectiveCwdArg() }), { successMessage: 'Pushed changes' }),
@@ -547,6 +714,14 @@ function ensurePanelDom(): HTMLElement {
   statusEl.setAttribute('aria-live', 'polite');
 
   statusEl.hidden = true;
+
+
+
+  noRepoMount = document.createElement('div');
+
+  noRepoMount.className = 'git-panel-no-repo-mount';
+
+  noRepoMount.hidden = true;
 
 
 
@@ -608,7 +783,7 @@ function ensurePanelDom(): HTMLElement {
 
   aiGenerateBtn.addEventListener('click', () => void handleGenerateCommitMessage());
 
-  const commitBtn = document.createElement('button');
+  commitBtn = document.createElement('button');
 
   commitBtn.type = 'button';
 
@@ -620,7 +795,7 @@ function ensurePanelDom(): HTMLElement {
 
 
 
-  const commitPushBtn = document.createElement('button');
+  commitPushBtn = document.createElement('button');
 
   commitPushBtn.type = 'button';
 
@@ -706,7 +881,7 @@ function ensurePanelDom(): HTMLElement {
 
 
 
-  scrollMount.append(statusEl, commitBox, bodyMount, diffHost, historySection);
+  scrollMount.append(statusEl, noRepoMount, commitBox, bodyMount, diffHost, historySection);
 
   panelRoot.append(toolbar, scrollMount);
 
@@ -864,6 +1039,8 @@ async function handleGenerateCommitMessage(): Promise<void> {
 
 async function handleCommit(andPush: boolean): Promise<void> {
 
+  if (commitBusy) return;
+
   const message = commitInput?.value.trim() ?? '';
 
   if (!message) {
@@ -876,17 +1053,31 @@ async function handleCommit(andPush: boolean): Promise<void> {
 
   const cwd = getEffectiveCwdArg();
 
-  const ok = await runGitOp(() => gitCommit({ message, cwd }), {
-    successMessage: andPush ? undefined : 'Committed changes',
-  });
+  const action: CommitActionKind = andPush ? 'commit-push' : 'commit';
 
-  if (!ok) return;
+  setCommitActionsBusy(action, 'Committing…');
 
-  if (commitInput) commitInput.value = '';
+  try {
 
-  if (andPush) {
+    const ok = await runGitOp(() => gitCommit({ message, cwd }), {
+      successMessage: andPush ? undefined : 'Committed changes',
+    });
 
-    await runGitOp(() => gitPush({ cwd }), { successMessage: 'Committed and pushed' });
+    if (!ok) return;
+
+    if (commitInput) commitInput.value = '';
+
+    if (andPush) {
+
+      setCommitActionsBusy(action, 'Pushing…');
+
+      await runGitOp(() => gitPush({ cwd }), { successMessage: 'Committed and pushed' });
+
+    }
+
+  } finally {
+
+    clearCommitActionsBusy();
 
   }
 
@@ -1164,29 +1355,46 @@ function buildSection(
 
 
 
+function syncGraphSelectedCommit(): void {
+  graphOptions.selectedSha = selectedCommitSha;
+  void graphHandle?.refresh();
+}
+
 function ensureGitGraph(): void {
 
   if (!graphMount || graphHandle) return;
 
   graphOptions.onSelectCommit = (sha) => void showCommitDiff(sha);
 
+  graphOptions.onContextMenu = (visual, event) => {
+    void showGitGraphCommitContextMenu(visual, event, buildGraphContextMenuCtx());
+  };
+
   graphHandle = renderGitGraph(graphMount, graphOptions);
 
+}
+
+function buildGraphContextMenuCtx(): GitGraphContextMenuCtx {
+  return {
+    cwd: getEffectiveCwdArg(),
+    onOpenChanges: (sha) => void showCommitDiff(sha),
+    onRefresh: () => refreshGitPanel(),
+    getCurrentBranch: () => currentBranchName,
+    onConflict: (message) => showToast(message, 'error'),
+  };
 }
 
 
 
 async function showCommitDiff(sha: string): Promise<void> {
 
-  if (!diffHost) return;
-
-  if (selectedCommitSha === sha) {
+  if (selectedCommitSha === sha && getOpenGitCommitDiffSha() === sha) {
 
     selectedCommitSha = null;
 
-    diffHost.hidden = true;
+    closeGitCommitDiffPanel();
 
-    diffHost.replaceChildren();
+    syncGraphSelectedCommit();
 
     return;
 
@@ -1194,11 +1402,15 @@ async function showCommitDiff(sha: string): Promise<void> {
 
 
 
-  const result = await gitShow({ sha, cwd: getEffectiveCwdArg() });
+  const opened = await openGitCommitDiffPanel({ sha, cwd: getEffectiveCwdArg() });
 
-  if (!result.ok) {
+  if (!opened.ok) {
 
-    setStatus(result.error ?? 'Could not load commit', true);
+    if ('cancelled' in opened && opened.cancelled) return;
+
+    const message = 'error' in opened ? opened.error : 'Could not load commit';
+
+    setStatus(message ?? 'Could not load commit', true);
 
     return;
 
@@ -1210,39 +1422,15 @@ async function showCommitDiff(sha: string): Promise<void> {
 
   selectedCommitSha = sha;
 
-  diffHost.hidden = false;
+  if (diffHost) {
 
-  diffHost.replaceChildren();
+    diffHost.hidden = true;
 
-
-
-  const label = document.createElement('p');
-
-  label.className = 'git-panel-diff-label';
-
-  const shortSha = sha.slice(0, 7);
-
-  const statLine = result.stat?.trim().split('\n').pop()?.trim();
-
-  label.textContent = statLine ? `Commit ${shortSha} — ${statLine}` : `Commit ${shortSha}`;
-
-
-
-  diffHost.appendChild(label);
-
-  if (result.patch) {
-
-    const mount = document.createElement('div');
-
-    diffHost.appendChild(mount);
-
-    renderUnifiedPromptDiff(mount, parseUnifiedPatchToDiffLines(result.patch));
+    diffHost.replaceChildren();
 
   }
 
-
-
-  diffHost.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  syncGraphSelectedCommit();
 
 }
 
@@ -1267,6 +1455,10 @@ async function showFileDiff(path: string, staged: boolean): Promise<void> {
 
 
   selectedCommitSha = null;
+
+  closeGitCommitDiffPanel();
+
+  syncGraphSelectedCommit();
 
 
 
@@ -1418,7 +1610,7 @@ async function refreshBranchSelect(): Promise<void> {
 
   currentBranchName = result.current ?? '';
 
-  for (const branch of result.local ?? []) {
+  for (const branch of filterUserFacingBranches(result.local ?? [])) {
 
     const opt = document.createElement('option');
 
@@ -1514,6 +1706,24 @@ async function refreshWorktreeDropdown(): Promise<void> {
 
 
 
+function setGitPanelNoRepoState(active: boolean): void {
+
+  panelRoot?.classList.toggle('git-panel-root--no-repo', active);
+
+  if (noRepoMount) {
+
+    noRepoMount.hidden = !active;
+
+    if (active) renderGitNoRepositoryState(noRepoMount);
+
+    else noRepoMount.replaceChildren();
+
+  }
+
+}
+
+
+
 export async function refreshGitPanel(): Promise<void> {
 
   if (!panelOpen || refreshing) return;
@@ -1528,6 +1738,20 @@ export async function refreshGitPanel(): Promise<void> {
 
     if (!status.ok) {
 
+      if (isMissingGitRepositoryError(status.error)) {
+
+        setStatus('');
+
+        setGitPanelNoRepoState(true);
+
+        if (bodyMount) bodyMount.replaceChildren();
+
+        return;
+
+      }
+
+      setGitPanelNoRepoState(false);
+
       setStatus(status.error ?? 'Could not read git status', true);
 
       if (bodyMount) {
@@ -1538,7 +1762,7 @@ export async function refreshGitPanel(): Promise<void> {
 
         err.className = 'git-panel-empty';
 
-        err.textContent = status.error ?? 'Not a git repository';
+        err.textContent = status.error ?? 'Could not load git status';
 
         bodyMount.appendChild(err);
 
@@ -1549,6 +1773,8 @@ export async function refreshGitPanel(): Promise<void> {
     }
 
 
+
+    setGitPanelNoRepoState(false);
 
     setStatus('');
 
@@ -1621,6 +1847,9 @@ function syncToggleButtonState(): void {
 
 
 function ensureSidebarExpandedForGit(): void {
+  if (isMobileLayout()) {
+    openMobileFileSidebar();
+  }
 
   const state = getFilePanelState();
 
@@ -1629,7 +1858,6 @@ function ensureSidebarExpandedForGit(): void {
   patchFilePanelState({ fileSidebarCollapsed: false });
 
   applyFileSidebarVisuals();
-
 }
 
 
@@ -1650,11 +1878,11 @@ export async function openGitSidePanel(): Promise<void> {
 
   ensurePanelDom();
 
-  ensureSidebarExpandedForGit();
-
   panelOpen = true;
 
   syncSidebarChrome();
+
+  ensureSidebarExpandedForGit();
 
   await refreshGitPanel();
 
@@ -1683,6 +1911,13 @@ export function closeGitSidePanel(): void {
 /** Toggle git view visibility in the file sidebar. */
 
 export function toggleGitSidePanel(): void {
+
+  const state = getFilePanelState();
+
+  if (state.fileSidebarCollapsed) {
+    void openGitSidePanel();
+    return;
+  }
 
   if (isGitSidePanelOpen()) closeGitSidePanel();
 
@@ -1798,6 +2033,16 @@ export function initGitPanel(): void {
 
 
 
+  window.addEventListener(GIT_COMMIT_DIFF_CLOSED_EVENT, () => {
+
+    selectedCommitSha = null;
+
+    syncGraphSelectedCommit();
+
+  });
+
+
+
   syncGitPanelFromOrchestrator();
 
 }
@@ -1827,6 +2072,8 @@ export function resetGitPanelForTests(): void {
 
   scrollMount = null;
 
+  noRepoMount = null;
+
   bodyMount = null;
 
   branchSelect = null;
@@ -1840,6 +2087,12 @@ export function resetGitPanelForTests(): void {
   aheadBehindEl = null;
 
   commitInput = null;
+
+  commitBtn = null;
+
+  commitPushBtn = null;
+
+  commitBusy = false;
 
   aiGenerateBtn = null;
 

@@ -28,6 +28,31 @@ export const PREVIEW_LOADING = 'minnow:preview:loading';
 export const PREVIEW_PAGE_TITLE = 'minnow:preview:page-title';
 /** Main → renderer: preview load failed. */
 export const PREVIEW_LOAD_FAILED = 'minnow:preview:load-failed';
+/** Main → renderer: preview guest render process crashed (per-tab; strip stays up). */
+export const PREVIEW_GUEST_CRASHED = 'minnow:preview:guest-crashed';
+/** Renderer → main: create a preview tab guest; returns tab id. */
+export const PREVIEW_TAB_CREATE = 'minnow:preview:tab-create';
+/** Renderer → main: close a preview tab guest. */
+export const PREVIEW_TAB_CLOSE = 'minnow:preview:tab-close';
+/** Renderer → main: activate a preview tab guest. */
+export const PREVIEW_TAB_ACTIVATE = 'minnow:preview:tab-activate';
+/** Renderer → main: list preview tab guests. */
+export const PREVIEW_TAB_LIST = 'minnow:preview:tab-list';
+/** Renderer → main: create (or no-op if it exists) a named preview instance. */
+export const PREVIEW_INSTANCE_CREATE = 'minnow:preview:instance-create';
+/** Renderer → main: destroy a named preview instance and all of its tabs/guests. */
+export const PREVIEW_INSTANCE_DESTROY = 'minnow:preview:instance-destroy';
+/** Renderer → main: list live preview instance ids for the window (most-recently-used first). */
+export const PREVIEW_INSTANCE_LIST = 'minnow:preview:instance-list';
+/** Renderer → main: attach CDP + arm native hover/click picking (cross-origin, MIN-370). */
+export const PREVIEW_CDP_PICK_ENABLE = 'minnow:preview:cdp-pick-enable';
+/** Renderer → main: disarm CDP picking and detach the debugger. */
+export const PREVIEW_CDP_PICK_DISABLE = 'minnow:preview:cdp-pick-disable';
+/** Main → renderer: a CDP pick landed (adapted to the PickedElement shape). */
+export const PREVIEW_CDP_PICK_EVENT = 'minnow:preview:cdp-pick-event';
+/** Main → renderer: a non-fatal CDP picking error (session stays alive). */
+export const PREVIEW_CDP_PICK_ERROR = 'minnow:preview:cdp-pick-error';
+
 export const APP_OPEN_EXTERNAL = 'minnow:app:open-external';
 /** Renderer → main: forward renderer errors to crash.jsonl (fire-and-forget). */
 export const DIAGNOSTICS_REPORT_ERROR = 'minnow:diagnostics:report-error';

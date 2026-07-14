@@ -15,6 +15,10 @@ const BRANCH_INDENT_PX = 14;
 export interface GitGraphOptions {
   cwd?: string;
   onSelectCommit?: (sha: string) => void;
+  /** Right-click handler for commit rows. */
+  onContextMenu?: (visual: CommitVisual, event: MouseEvent) => void;
+  /** Highlight the selected commit row (e.g. open in diff panel). */
+  selectedSha?: string | null;
   /** Max commits to fetch (default 200). */
   logCount?: number;
 }
@@ -70,6 +74,24 @@ export function normalizeBranchRef(ref: string): string | null {
   }
 
   return trimmed;
+}
+
+/** Local branch names from git log refs (excludes tags and remote-tracking refs). */
+export function extractLocalBranchRefs(refs: string[]): string[] {
+  const names: string[] = [];
+  for (const ref of refs) {
+    const trimmed = ref.trim();
+    if (!trimmed || trimmed.startsWith('tag:')) continue;
+    if (trimmed.startsWith('origin/') || trimmed.startsWith('remotes/')) continue;
+
+    const headMatch = trimmed.match(/^HEAD -> (.+)$/);
+    if (headMatch) {
+      names.push(headMatch[1]);
+      continue;
+    }
+    names.push(trimmed);
+  }
+  return [...new Set(names)];
 }
 
 function extractBranchRefs(refs: string[]): string[] {
@@ -312,10 +334,18 @@ function appendConnectorLine(
   row.appendChild(line);
 }
 
-function renderRow(visual: CommitVisual, onSelect?: (sha: string) => void): HTMLElement {
+function renderRow(
+  visual: CommitVisual,
+  onSelect?: (sha: string) => void,
+  selectedSha?: string | null,
+  onContextMenu?: (visual: CommitVisual, event: MouseEvent) => void,
+): HTMLElement {
   const row = document.createElement('div');
   row.className = 'git-graph__row';
   if (!visual.isMain) row.classList.add('git-graph__row--branch');
+  if (selectedSha && (visual.commit.hash === selectedSha || visual.commit.hash.startsWith(selectedSha))) {
+    row.classList.add('git-graph__row--selected');
+  }
   row.dataset.sha = visual.commit.hash;
   row.title = `${visual.commit.subject} (${visual.branchKey})`;
 
@@ -328,6 +358,13 @@ function renderRow(visual: CommitVisual, onSelect?: (sha: string) => void): HTML
         e.preventDefault();
         onSelect(visual.commit.hash);
       }
+    });
+  }
+
+  if (onContextMenu) {
+    row.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      onContextMenu(visual, e);
     });
   }
 
@@ -415,6 +452,8 @@ function renderGraph(
   host: HTMLElement,
   visuals: CommitVisual[],
   onSelect?: (sha: string) => void,
+  selectedSha?: string | null,
+  onContextMenu?: (visual: CommitVisual, event: MouseEvent) => void,
 ): void {
   host.className = 'git-graph git-panel-graph-mount';
   host.replaceChildren();
@@ -422,7 +461,7 @@ function renderGraph(
   const list = document.createElement('div');
   list.className = 'git-graph__list';
   for (const visual of visuals) {
-    list.appendChild(renderRow(visual, onSelect));
+    list.appendChild(renderRow(visual, onSelect, selectedSha, onContextMenu));
   }
   host.appendChild(list);
 }
@@ -454,7 +493,13 @@ export function renderGitGraph(
     }
 
     const visuals = annotateCommitLines(assignCommitVisuals(commits));
-    renderGraph(host, visuals, options.onSelectCommit);
+    renderGraph(
+      host,
+      visuals,
+      options.onSelectCommit,
+      options.selectedSha,
+      options.onContextMenu,
+    );
   };
 
   const destroy = (): void => {

@@ -1,7 +1,10 @@
 import { isHubMounted, renderHub, refreshHubLiveData, teardownHub } from './hub';
 import { isOrchestrateHubMounted, teardownOrchestrateHub } from './orchestrate-hub';
 import { teardownCodeBrainMapBeforeChatPaint } from './code-brain-map';
-import { stripMainColumnOverlayClasses } from './main-column-overlay';
+import {
+  isMainColumnOverlaySuppressingChatDom,
+  stripMainColumnOverlayClasses,
+} from './main-column-overlay';
 import {
   isOrchestratePlanScreenMounted,
   isOrchestratePlanScreenSessionActive,
@@ -20,6 +23,7 @@ import { setAssistantBubbleContent } from '../markdown/renderer';
 import { getActiveBoardGroup } from '../state/chat-groups';
 import {
   clearActiveGoal,
+  clearChatTodos,
   getActiveChat,
   touchChat,
   scheduleSaveSessions,
@@ -35,7 +39,8 @@ import type {
   Usage,
 } from '../types';
 import {
-  pinChatScroll,
+  captureChatScrollAnchor,
+  restoreChatScrollAnchor,
   scrollChatIfPinned,
   scrollChatToBottom,
 } from './chat-scroll';
@@ -56,6 +61,7 @@ import { updateWorkspaceCodeChangeDisplay } from './workspace-code-change';
 import { resetTokenLedger } from '../usage/token-ledger';
 import { updateCodeChangeStrip } from './code-change-strip';
 import { renderSidebar } from './sidebar';
+import { syncTodoPanel } from './todo-panel';
 import { renderThoughtsToggle } from './thought-bubbles';
 import { renderToolCall, renderToolResult } from './tool-messages';
 import { attachShellKillUi } from './shell-run-ui';
@@ -81,6 +87,8 @@ import {
   renderUserMessageBubble,
   type UserBubbleRenderOptions,
 } from './user-message-bubble';
+import { getBeforeAfterPairs } from '../design/before-after-integration';
+import { renderBeforeAfterCard } from '../design/before-after-card';
 
 /** Parse stored tool `arguments` JSON for display in the args <details> block. */
 function parseToolArgsForDisplay(raw: string): Record<string, unknown> {
@@ -107,6 +115,9 @@ function isAssistantToolCallMessage(msg: Message): msg is AssistantToolCallMessa
 }
 
 export { resolveModelInfo, showCachedModelInfo } from '../api/models';
+
+/** Suppress per-bubble scroll while bulk-rendering history (renderChatFromHistory). */
+let suppressBubbleScroll = false;
 
 export function renderStatsForChat(chat: Chat): void {
   const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;
@@ -141,8 +152,16 @@ export function renderStatsForChat(chat: Chat): void {
 export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement): void {
   const area = resolveChatMount(mount);
   const codeMount = isCodeChatMount(mount);
+  const scrollAnchor = captureChatScrollAnchor();
+
+  // Code overview / code map own #chatArea — do not repaint chat or board underneath.
+  if (codeMount && isMainColumnOverlaySuppressingChatDom()) {
+    return;
+  }
 
   runWithChatMount(area, () => {
+  suppressBubbleScroll = true;
+  try {
   if (codeMount) {
     teardownCodeBrainMapBeforeChatPaint();
     stripMainColumnOverlayClasses();
@@ -174,12 +193,14 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   const boardGroup = codeMount ? getActiveBoardGroup() : null;
   if (boardGroup?.viewMode === 'board') {
     teardownHub();
+    void import('./orchestrate-board-setup-banner').then((m) => m.removeBoardSetupReturnBanner());
     void import('./orchestrate-board').then((m) => {
       m.renderBoardView(boardGroup);
       m.refreshActiveBoardIfMounted();
     });
     return;
   }
+  void import('./orchestrate-board-setup-banner').then((m) => m.syncBoardSetupReturnBanner(chat));
   clearSubAgentCardDomRegistry();
   if (!chat.history.length) {
     if (codeMount) {
@@ -293,6 +314,12 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
           turnKind: 'assistant-tools',
         });
       }
+
+      // Before/after diff card (MIN-370 P1): mount under the turn whose file save(s) produced it.
+      for (const pair of getBeforeAfterPairs(chat.id)) {
+        if (pair.turnId !== String(i)) continue;
+        area.appendChild(renderBeforeAfterCard(pair));
+      }
       continue;
     }
 
@@ -341,8 +368,11 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
     attachVoicePlayButton(wrap, trimmed);
   }
   renderPersistedSubAgentCardsForChat(chat);
-  scrollChatToBottom();
+  restoreChatScrollAnchor(scrollAnchor);
   refreshContextUsageRing();
+  } finally {
+    suppressBubbleScroll = false;
+  }
   });
 }
 
@@ -444,10 +474,12 @@ export function appendBubble(
   wrap.appendChild(label);
   wrap.appendChild(bubble);
   getActiveChatMountElement().appendChild(wrap);
-  if (role === 'user') {
-    scrollChatToBottom();
-  } else {
-    scrollChatIfPinned();
+  if (!suppressBubbleScroll) {
+    if (role === 'user') {
+      scrollChatToBottom();
+    } else {
+      scrollChatIfPinned();
+    }
   }
   return { wrap, bubble };
 }
@@ -591,8 +623,8 @@ export function appendStreamingAssistantRow(forChatId?: string): StreamingAssist
   wrap.appendChild(bubble);
   bubble.appendChild(cursor);
   getActiveChatMountElement().appendChild(wrap);
-  pinChatScroll();
-  scrollChatToBottom();
+  // Respect scroll pin: only follow the tail when the user is already near bottom.
+  scrollChatIfPinned();
   return { wrap, bubble, cursor, streamStatus };
 }
 
@@ -669,6 +701,7 @@ export function clearChat(): void {
   if (!confirm('Clear all messages in this chat? The chat stays in your sidebar.')) return;
   const chat = getActiveChat();
   clearActiveGoal(chat);
+  clearChatTodos(chat);
   chat.history = [];
   resetTokenLedger(chat);
   resetCodeChangeTotals(chat);
@@ -685,5 +718,6 @@ export function clearChat(): void {
   renderStatsForChat(chat);
   renderSidebar();
   scheduleSaveSessions();
+  syncTodoPanel();
   closeDrawer();
 }

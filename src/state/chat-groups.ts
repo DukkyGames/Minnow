@@ -5,6 +5,7 @@
  */
 
 import { getChatAbort, setChatStopReason } from '../app-state.ts';
+import { isBoardSetupIncomplete } from '../chat/orchestrate/board-setup.ts';
 import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title.ts';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Chat, ChatGroup } from '../types';
@@ -347,7 +348,9 @@ function activateBoardGroupView(groupId: string, group: ChatGroup): void {
   group.viewMode = 'board';
   scheduleSaveSessions();
   void import('./orchestrate-board-store.ts').then(({ applyOpenBoardWaveCollapse }) => {
-    applyOpenBoardWaveCollapse(group);
+    if (group.orchestrateBoard) {
+      applyOpenBoardWaveCollapse(group);
+    }
     void import('../ui/sidebar').then((m) => m.renderSidebar());
     void import('../ui/messages').then((m) => {
       const chat = state.chats.find((c) => c.id === state.activeId);
@@ -360,7 +363,8 @@ function activateBoardGroupView(groupId: string, group: ChatGroup): void {
 export function openBoardGroup(groupId: string): void {
   const state = requireSession();
   const group = findGroupById(groupId);
-  if (!group?.orchestrateBoard) return;
+  if (!group) return;
+  if (!group.orchestrateBoard && !isBoardSetupIncomplete(group)) return;
 
   const plannerId = group.plannerChatId?.trim();
   const active = state.chats.find((c) => c.id === state.activeId);

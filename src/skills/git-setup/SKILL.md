@@ -19,7 +19,7 @@ disable-model-invocation: true
 
 1. **Detect state** — run `execute_command` with `git rev-parse --is-inside-work-tree` (or `git_status`). If already inside a git repo, skip `git init` and report the current branch and remotes.
 2. **Initialize** — when not a repo, run `git init` in the workspace root.
-3. **Baseline ignore** — if `.gitignore` does not exist, create one with sensible defaults (`node_modules/`, `.env`, `.env.*`, `dist/`, `build/`, OS junk like `.DS_Store` and `Thumbs.db`). Do **not** overwrite an existing `.gitignore`.
+3. **Baseline ignore** — if `.gitignore` does not exist, create one with sensible defaults (`node_modules/`, `.env`, `.env.*`, `dist/`, `build/`, OS junk like `.DS_Store` and `Thumbs.db`). Do **not** overwrite an existing `.gitignore`. Minnow also runs this step programmatically when `/git-setup` starts (before tools run) so fresh repos always get a baseline ignore even if this step is skipped in chat.
 4. **Initial commit** — when there are untracked files and no commits yet, stage all with `git_add` and commit with message `chore: initial commit`.
 5. **GitHub remote**
    - Run `gh auth status`. If unauthenticated, explain that the user must run `gh auth login` in a terminal and stop — do not invent tokens or credentials.

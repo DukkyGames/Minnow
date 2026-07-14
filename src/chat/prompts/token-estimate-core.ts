@@ -26,6 +26,10 @@ export function formatTokenEstimateLabel(tokens: number): string {
 export const TOKEN_ESTIMATE_TOOLTIP =
   'Approximate size using characters ÷ 4. Real prompt tokens depend on the model tokenizer. Excludes pending composer text and attachments.';
 
+/** Settings header tooltip — fixed prompt config only (no chat history). */
+export const SETTINGS_PROMPT_CONFIG_ESTIMATE_TOOLTIP =
+  'Approximate system prompt, rules, and tools using characters ÷ 4. Excludes chat history, pending composer text, and attachments.';
+
 /**
  * Map persisted chat history to API messages for token estimate.
  * Mirrors `buildApiMessages` history rows — assistant `thinking` is UI-only and excluded.
@@ -98,6 +102,13 @@ export interface OutboundPromptEstimate {
   history: number;
   tools: number;
   legacyFallback: boolean;
+}
+
+/** System + rules + tools — excludes chat history (settings prompt config display). */
+export function computePromptConfigTokenTotal(
+  est: Pick<OutboundPromptEstimate, 'composedSystem' | 'userRules' | 'tools'>,
+): number {
+  return est.composedSystem + est.userRules + est.tools;
 }
 
 /** Pure breakdown from resolved strings. */

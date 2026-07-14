@@ -9,6 +9,7 @@ import {
   getOpenViewerTabPaths,
   openViewerTab,
   removeViewerTab,
+  reorderViewerTab,
   resetViewerTabStoreForTests,
   restoreWorkspaceViewerTabs,
   retargetViewerTab,
@@ -23,35 +24,35 @@ describe('file-viewer-tab-store', () => {
       ({ ok: true, json: async () => ({}) }) as Response) as typeof fetch;
   });
 
-  test('openTab focuses existing workspace path without duplicate', () => {
-    const first = openViewerTab('src/a.ts', { skipUnsavedGuard: true });
+  test('openTab focuses existing workspace path without duplicate', async () => {
+    const first = await openViewerTab('src/a.ts', { skipUnsavedGuard: true });
     assert.ok(first);
     assert.equal(first.focusedExisting, false);
-    openViewerTab('src/b.ts', { skipUnsavedGuard: true });
-    const second = openViewerTab('src/a.ts', { skipUnsavedGuard: true });
+    await openViewerTab('src/b.ts', { skipUnsavedGuard: true });
+    const second = await openViewerTab('src/a.ts', { skipUnsavedGuard: true });
     assert.ok(second);
     assert.equal(second.focusedExisting, true);
     assert.equal(getOpenViewerTabPaths().length, 2);
     assert.equal(getActiveViewerTabPath(), 'src/a.ts');
   });
 
-  test('close last tab clears active path', () => {
-    openViewerTab('readme.md', { skipUnsavedGuard: true });
+  test('close last tab clears active path', async () => {
+    await openViewerTab('readme.md', { skipUnsavedGuard: true });
     removeViewerTab('readme.md');
     assert.equal(getActiveViewerTabPath(), null);
     assert.deepEqual(getOpenViewerTabPaths(), []);
   });
 
-  test('retargetTab updates path key', () => {
-    openViewerTab('old/name.ts', { skipUnsavedGuard: true });
+  test('retargetTab updates path key', async () => {
+    await openViewerTab('old/name.ts', { skipUnsavedGuard: true });
     retargetViewerTab('old/name.ts', 'new/name.ts');
     assert.deepEqual(getOpenViewerTabPaths(), ['new/name.ts']);
     assert.equal(getActiveViewerTabPath(), 'new/name.ts');
   });
 
-  test('serializeWorkspaceTabs excludes attachments', () => {
-    openViewerTab('src/index.ts', { skipUnsavedGuard: true });
-    openViewerTab('.minnow/attachments/snap.txt', {
+  test('serializeWorkspaceTabs excludes attachments', async () => {
+    await openViewerTab('src/index.ts', { skipUnsavedGuard: true });
+    await openViewerTab('.minnow/attachments/snap.txt', {
       skipUnsavedGuard: true,
       kind: 'attachment',
       content: 'hi',
@@ -65,29 +66,36 @@ describe('file-viewer-tab-store', () => {
     assert.equal(getActiveViewerTabPath(), 'a.ts');
   });
 
-  test('closeTabsUnderDeletedAncestor removes nested paths', () => {
-    openViewerTab('pkg/a.ts', { skipUnsavedGuard: true });
-    openViewerTab('pkg/sub/b.ts', { skipUnsavedGuard: true });
-    openViewerTab('other.ts', { skipUnsavedGuard: true });
+  test('closeTabsUnderDeletedAncestor removes nested paths', async () => {
+    await openViewerTab('pkg/a.ts', { skipUnsavedGuard: true });
+    await openViewerTab('pkg/sub/b.ts', { skipUnsavedGuard: true });
+    await openViewerTab('other.ts', { skipUnsavedGuard: true });
     closeViewerTabsUnderAncestor('pkg');
     assert.deepEqual(getOpenViewerTabPaths(), ['other.ts']);
   });
 
-  test('activateTab returns false when confirmUnsaved rejects', () => {
-    openViewerTab('a.ts', { skipUnsavedGuard: true, content: 'x' });
-    const tab = openViewerTab('b.ts', { skipUnsavedGuard: true, content: 'y' });
+  test('activateTab returns false when confirmUnsaved rejects', async () => {
+    await openViewerTab('a.ts', { skipUnsavedGuard: true, content: 'x' });
+    const tab = await openViewerTab('b.ts', { skipUnsavedGuard: true, content: 'y' });
     assert.ok(tab);
     tab.tab.isDirty = true;
-    const ok = activateViewerTab('a.ts', {
+    const ok = await activateViewerTab('a.ts', {
       confirmUnsaved: () => false,
     });
     assert.equal(ok, false);
     assert.equal(getActiveViewerTabPath(), 'b.ts');
   });
 
-  test('clearAllViewerTabs resets store', () => {
-    openViewerTab('x.ts', { skipUnsavedGuard: true });
+  test('clearAllViewerTabs resets store', async () => {
+    await openViewerTab('x.ts', { skipUnsavedGuard: true });
     clearAllViewerTabs();
     assert.equal(getActiveViewerTabPath(), null);
+  });
+
+  test('reorderViewerTab updates tab order', async () => {
+    await openViewerTab('a.ts', { skipUnsavedGuard: true });
+    await openViewerTab('b.ts', { skipUnsavedGuard: true });
+    reorderViewerTab('a.ts', 1);
+    assert.deepEqual(getOpenViewerTabPaths(), ['b.ts', 'a.ts']);
   });
 });

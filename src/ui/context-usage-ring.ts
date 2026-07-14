@@ -13,6 +13,7 @@ import { getPendingAttachments } from '../attachments/store';
 import { getActiveChat } from '../state/sessions';
 import { getActiveComposerSurface } from './composer-surface';
 import {
+  bindContextUsageProfileTabs,
   closeContextUsageBreakdown,
   isContextUsageBreakdownOpen,
   syncContextUsageBreakdownIfOpen,
@@ -155,6 +156,7 @@ function bindRingButton(surface: ContextUsageSurface): void {
 
 /** Bind any context rings added after initial boot (e.g. desktop composer). */
 export function bindContextUsageRings(): void {
+  bindContextUsageProfileTabs();
   for (const surface of listContextUsageSurfaces()) {
     bindRingButton(surface);
   }
@@ -166,6 +168,8 @@ let initialized = false;
 export function initContextUsageRing(): void {
   if (initialized) return;
   initialized = true;
+
+  bindContextUsageProfileTabs();
 
   for (const surface of listContextUsageSurfaces()) {
     bindRingButton(surface);

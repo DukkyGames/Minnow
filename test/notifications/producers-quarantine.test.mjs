@@ -111,7 +111,7 @@ describe('quarantine + board_complete notification producers', () => {
     assert.match(boardCompleteNotifs[0].preview, /1 unresolved issue/);
   });
 
-  test('GAP-1: all-quarantined zero-complete board emits board_complete', () => {
+  test('GAP-1: all-quarantined zero-complete board emits board_blocked', () => {
     const board = makeBoard(
       [
         { id: 'T1', title: 'Task One', wave: 'W1', category: 'build', status: 'quarantined' },
@@ -131,12 +131,12 @@ describe('quarantine + board_complete notification producers', () => {
 
     producers.__testHooks.handleBoardChange('grp-1');
 
-    const boardCompleteNotifs = store.getNotifications().filter((n) => n.kind === 'board_complete');
-    assert.equal(boardCompleteNotifs.length, 1, 'should emit exactly one board_complete');
-    assert.match(boardCompleteNotifs[0].preview, /2 unresolved issues/);
+    const blockedNotifs = store.getNotifications().filter((n) => n.kind === 'board_blocked');
+    assert.equal(blockedNotifs.length, 1, 'should emit exactly one board_blocked');
+    assert.match(blockedNotifs[0].preview, /Blocked — 2 quarantined/);
   });
 
-  test('board_complete fires only once even on repeated handleBoardChange calls', () => {
+  test('board_blocked fires only once even on repeated handleBoardChange calls', () => {
     const board = makeBoard([
       { id: 'T1', title: 'Task One', wave: 'W1', category: 'build', status: 'quarantined' },
     ]);
@@ -151,8 +151,8 @@ describe('quarantine + board_complete notification producers', () => {
     producers.__testHooks.handleBoardChange('grp-1');
     producers.__testHooks.handleBoardChange('grp-1');
 
-    const boardCompleteNotifs = store.getNotifications().filter((n) => n.kind === 'board_complete');
-    assert.equal(boardCompleteNotifs.length, 1, 'board_complete should fire only once');
+    const blockedNotifs = store.getNotifications().filter((n) => n.kind === 'board_blocked');
+    assert.equal(blockedNotifs.length, 1, 'board_blocked should fire only once');
   });
 
   test('seedBoardTaskStatuses suppresses board_complete for already-complete boards', () => {

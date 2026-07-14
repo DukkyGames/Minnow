@@ -1,16 +1,23 @@
 /**
- * Internal file-tree drag-and-drop: drop on folder → confirm → movePath.
+ * File-tree drag-and-drop: internal moves + OS file import into workspace folders.
  */
 
+import {
+  classifyFileDrag,
+  filesFromDataTransfer,
+  isLikelyDirectoryDrop,
+} from '../attachments/external-file-drop';
 import { WORKSPACE_FILE_MIME } from '../attachments/workspace-ref';
 import { basename, computeMoveDestination } from './file-tree-path';
 import { getLocalServerAvailable } from '../tools/client';
 import { expandDir } from './file-tree';
+import { importExternalFilesToWorkspace } from './import-external-files';
 import { movePath } from './file-tree-ops';
 import { showMoveConfirmDialog } from './file-tree-move-dialog';
 import { setStatus } from './status';
 
 const DROP_TARGET_CLASS = 'file-tree-row--drop-target';
+const HOST_DROP_CLASS = 'file-tree-host--drop-target';
 
 let hostBound: HTMLElement | null = null;
 let moveInFlight = false;
@@ -18,11 +25,15 @@ let moveInFlight = false;
 let activeDragSourcePath: string | null = null;
 
 function hasWorkspaceDrag(dataTransfer: DataTransfer | null): boolean {
-  if (!dataTransfer) return false;
-  if (dataTransfer.types.includes(WORKSPACE_FILE_MIME)) return true;
-  const plain = dataTransfer.getData('text/plain');
-  if (plain && !plain.includes('\n') && plain.length <= 512) return true;
-  return false;
+  return classifyFileDrag(dataTransfer) === 'workspace';
+}
+
+function hasExternalDrag(dataTransfer: DataTransfer | null): boolean {
+  return classifyFileDrag(dataTransfer) === 'external';
+}
+
+function hasTreeDrag(dataTransfer: DataTransfer | null): boolean {
+  return classifyFileDrag(dataTransfer) !== null;
 }
 
 function pathFromDataTransfer(dataTransfer: DataTransfer): string | null {
@@ -40,6 +51,7 @@ function folderRowFromTarget(target: EventTarget | null): HTMLElement | null {
 }
 
 function clearDropHighlight(host: HTMLElement): void {
+  host.classList.remove(HOST_DROP_CLASS);
   for (const row of host.querySelectorAll(`.${DROP_TARGET_CLASS}`)) {
     row.classList.remove(DROP_TARGET_CLASS);
   }
@@ -93,6 +105,34 @@ async function handleTreeDrop(
   }
 }
 
+function importableFiles(dataTransfer: DataTransfer): File[] {
+  return filesFromDataTransfer(dataTransfer).filter((file) => !isLikelyDirectoryDrop(file));
+}
+
+async function handleExternalTreeDrop(
+  event: DragEvent,
+  destDir: string,
+): Promise<void> {
+  const dataTransfer = event.dataTransfer;
+  if (!dataTransfer) return;
+
+  const files = importableFiles(dataTransfer);
+  if (!files.length) {
+    setStatus('err', 'Drop files to import — folders are not supported yet.');
+    return;
+  }
+
+  moveInFlight = true;
+  try {
+    const result = await importExternalFilesToWorkspace(files, destDir);
+    if (result.imported > 0) {
+      void expandDir(destDir);
+    }
+  } finally {
+    moveInFlight = false;
+  }
+}
+
 function pathFromDragRow(target: EventTarget | null): string | null {
   if (!(target instanceof HTMLElement)) return null;
   const row = target.closest('.file-tree-row[data-path]');
@@ -112,6 +152,25 @@ function bindHost(host: HTMLElement): void {
 
   host.addEventListener('dragover', (event) => {
     if (moveInFlight || !getLocalServerAvailable()) return;
+    if (!hasTreeDrag(event.dataTransfer)) return;
+
+    if (hasExternalDrag(event.dataTransfer)) {
+      const row = folderRowFromTarget(event.target);
+      const destDir = row?.dataset.path ?? '.';
+      if (!destDir) return;
+      event.preventDefault();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = 'copy';
+      }
+      clearDropHighlight(host);
+      if (row) {
+        row.classList.add(DROP_TARGET_CLASS);
+      } else {
+        host.classList.add(HOST_DROP_CLASS);
+      }
+      return;
+    }
+
     if (!hasWorkspaceDrag(event.dataTransfer)) return;
 
     const row = folderRowFromTarget(event.target);
@@ -133,22 +192,37 @@ function bindHost(host: HTMLElement): void {
 
   host.addEventListener('dragleave', (event) => {
     const row = folderRowFromTarget(event.target);
-    if (!row) return;
-    const related = event.relatedTarget;
-    if (related instanceof Node && row.contains(related)) return;
-    row.classList.remove(DROP_TARGET_CLASS);
+    if (row) {
+      const related = event.relatedTarget;
+      if (related instanceof Node && row.contains(related)) return;
+      row.classList.remove(DROP_TARGET_CLASS);
+      return;
+    }
+    if (event.target === host) {
+      host.classList.remove(HOST_DROP_CLASS);
+    }
   });
 
   host.addEventListener('drop', (event) => {
     clearDropHighlight(host);
     if (moveInFlight || !getLocalServerAvailable()) return;
+    if (!hasTreeDrag(event.dataTransfer)) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (hasExternalDrag(event.dataTransfer)) {
+      const row = folderRowFromTarget(event.target);
+      const destDir = row?.dataset.path ?? '.';
+      void handleExternalTreeDrop(event, destDir);
+      return;
+    }
+
     if (!hasWorkspaceDrag(event.dataTransfer)) return;
 
     const row = folderRowFromTarget(event.target);
     if (!row?.dataset.path) return;
 
-    event.preventDefault();
-    event.stopPropagation();
     void handleTreeDrop(event, row);
   });
 

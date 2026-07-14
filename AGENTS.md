@@ -6,7 +6,7 @@ Guidance for AI coding agents (Cursor, Claude Code, etc.) working in the Minnow 
 
 Minnow is a **Vite + TypeScript SPA** plus a **Node tool server** (`server.js`) and an **Electron desktop shell** (the "MinnowOS" window). It is a local-first AI workspace for LM Studio and other OpenAI-compatible providers.
 
-- **Six operating modes** (four in the Code composer strip): General, Build, Plan (no-destructive guard), Orchestrate, Reef, Debug. Orchestrate and Reef are not in the composer picker — Orchestrate opens from the sidebar hub; Reef remains available via mode handoff and sub-agents. Modes are defined in [`src/chat/modes/registry.ts`](src/chat/modes/registry.ts); prompts in [`src/chat/prompts/modes/`](src/chat/prompts/modes/).
+- **Six operating modes** (four in the Code composer strip): General, Build, Plan (no-destructive guard), Orchestrate, Reef, Debug. Orchestrate is not in the composer picker — it opens from the sidebar hub. Reef remains available when the user selects it in the UI; chat agents are not prompted to suggest or hand off to Reef. Modes are defined in [`src/chat/modes/registry.ts`](src/chat/modes/registry.ts); prompts in [`src/chat/prompts/modes/`](src/chat/prompts/modes/).
 - **~88 built-in tools** across web / utility / files / git / code / agents / browser / lsp ([`src/tools/definitions.ts`](src/tools/definitions.ts)).
 - **Built-in slash skills** (~33): core helpers (`git-commit`, `code-review`, `ask-user`, …), `impeccable`, `caveman`, `ui-designer`, and **19 Matt Pocock productivity/engineering skills** (`ask-minnow`, `triage`, `implement`, `handoff`, … — see [`documentation/context.md`](documentation/context.md) § Skills → Matt Pocock). Sync: `npm run matt-pocock-skills:sync`.
 - **MinnowOS apps:** Chat (desktop), Code, Models, Compare, Bench, Research, Experts, Brain, Calendar, Email, Scheduler, Settings ([`src/os/`](src/os/)).
@@ -24,7 +24,9 @@ The **authoritative reference** is [`documentation/context.md`](documentation/co
 
 ## Testing
 
-- **`npm test`** runs the full suite (`node --test` + `tsx`, several hundred tests).
+- **`npm test`** runs the full suite via [`test/run-all.mjs`](test/run-all.mjs) — auto-discovers `test/**/*.test.{js,mjs,mts,ts}` and batches by runner (`node --test`, `tsx` + [`test/test-loader.mjs`](test/test-loader.mjs)). New test files under `test/` are picked up with zero `package.json` edits.
+- **`npm run test:check-coverage`** fails if any discoverable test file is not covered (CI gate).
+- **CI:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every PR + push to `main` — `npm ci`, `test:check-coverage`, `npx tsc --noEmit`, `npm test` (Windows + Ubuntu). Enable branch protection per [`.github/BRANCH_PROTECTION.md`](.github/BRANCH_PROTECTION.md).
 - **`npx tsc --noEmit`** for type checking (no separate ESLint config).
 - Scoped suites: `npm run test:memory|brain|engine|lsp|mcp|browser|skills|attachments|research|benchmark|evals|calendar|email|webhooks|notifications|voice|servers|plugins|terminal-pty|ui-designer|scheduler`. See `package.json` for exact globs.
 - Many TS/UI suites run under `tsx` with `--import ./test/test-loader.mjs` (the loader stubs `.css` and xterm). Some use `--experimental-test-module-mocks`.
@@ -44,7 +46,7 @@ The **authoritative reference** is [`documentation/context.md`](documentation/co
 - **Secrets are encrypted** at rest with `~/.minnow/.key`. Deleting/rotating the key makes existing encrypted secrets unrecoverable.
 - **Path safety:** file/git tools resolve under the workspace root unless `TOOLS_ALLOW_ALL_PATHS=1`.
 - **LAN access** is opt-in (`Settings → General → Network access` or `MINNOW_NETWORK=lan`); default is loopback-only — restart after toggling.
-- **Plan mode** denies destructive tools (`execute_command`, write/delete/move file ops, git mutations) — see `PLAN_DENIED_TOOLS` in the mode registry.
+- **Plan mode** denies mutating file edits and git writes; allows `save_file`/`make_directory` under `documentation/plans/` only (see `tool-groups.ts` + `plan-write-guard.ts`). Shell/code-exec is allowed per the mode matrix (MIN-332).
 
 ## Conventions
 

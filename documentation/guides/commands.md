@@ -56,7 +56,11 @@ UI-only tools (e.g. `ask_question`) fail with a clear error in headless mode unl
 
 ## Tests
 
-`npm test` runs the full suite (`node --test` for JS, `tsx` for TS/UI). Scoped suites:
+`npm test` runs the full suite via [`test/run-all.mjs`](../../test/run-all.mjs) — it discovers every `test/**/*.test.{js,mjs,mts,ts}` file and runs the correct runner/loader per path (see [`test/test-config.mjs`](../../test/test-config.mjs)). New test files are included automatically; `npm run test:check-coverage` fails CI when a file would be orphaned.
+
+**CI (MIN-383):** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs on pull requests and pushes to `main`: `npm ci` → `test:check-coverage` → `npx tsc --noEmit` → `npm test` on `windows-latest` and `ubuntu-latest`. Require the **`ci`** status check on `main` before merge ([`.github/BRANCH_PROTECTION.md`](../../.github/BRANCH_PROTECTION.md)).
+
+Scoped suites (each delegates to `node test/run-all.mjs --suite <name>`):
 
 | Command | Area |
 |---------|------|
@@ -74,15 +78,14 @@ UI-only tools (e.g. `ask_question`) fail with a clear error in headless mode unl
 | `npm run test:evals` | Eval harness |
 | `npm run test:calendar` | Calendar app + CalDAV/ICS |
 | `npm run test:email` | Email app |
-| `npm run test:oauth` | OAuth flows |
 | `npm run test:webhooks` | Outgoing webhooks |
 | `npm run test:notifications` | Notification inbox |
-| `npm run test:voice` *(see package.json globs)* | STT/TTS/voice |
 | `npm run test:servers` | Managed server processes |
 | `npm run test:plugins` | Tool plugin scan/loader |
-| `npm run test:terminal-pty` | Terminal PTY session |
+| `npm run test:terminal-pty` | Terminal PTY session (live server) |
 | `npm run test:ui-designer` | UI Designer agent |
-| `npm run test:scheduler` *(see package.json)* | Scheduler jobs |
+| `npm run test:settings` | Settings registry |
+| `npm run test:check-coverage` | Orphan test detection (also in CI) |
 
 Most TS/UI suites run under `tsx` with `--import ./test/test-loader.mjs` (stubs `.css` + xterm); some use `--experimental-test-module-mocks`.
 
@@ -94,7 +97,9 @@ Most TS/UI suites run under `tsx` with `--import ./test/test-loader.mjs` (stubs 
 | `npm run impeccable:update` | Update upstream Impeccable, then re-sync. |
 | `npm run impeccable:detect` | Anti-pattern scan of `src/` + `index.html` (exit `2` = issues found). |
 | `npm run caveman:sync` | Refresh the upstream Caveman `SKILL.md`. |
-| `npm run build:benchmark-packs` | Rebuild benchmark task packs. |
+| `npm run build:benchmark-packs` | Rebuild benchmark task packs into `public/benchmark-packs/`. |
+| `npm run report:bundle-size` | Print production chunk sizes from `dist/assets` (run after `npm run build`). |
+| `npm run report:bundle-size:ci` | Same as above; exits non-zero when entry chunk exceeds 1500 KB or data packs ship as JS. |
 
 ## Smoke scripts
 

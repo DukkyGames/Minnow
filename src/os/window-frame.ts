@@ -1,6 +1,9 @@
+import { getStageRect } from './stage-metrics';
 import { createOsIcon, type SvgIconName } from './icons';
+import { getWindowStageUsableSize } from './window-stage-bounds';
 import {
   detectSnapPreview,
+  getSnapRectForMode,
   shouldReleaseSnap,
   type SnapMode,
   type SnapPreview,
@@ -78,6 +81,9 @@ export class WindowFrame {
     this.onMinimize = options.onMinimize;
     this.onMaximize = options.onMaximize;
     this.onBoundsChange = options.onBoundsChange;
+    if (!this.maximized) {
+      this.bounds = this.clampBounds(this.bounds);
+    }
 
     const root = document.createElement('div');
     root.className = 'mn-os-window';
@@ -156,14 +162,48 @@ export class WindowFrame {
   }
 
   setBounds(bounds: WindowBounds, meta?: { snapMode?: SnapMode | null; maximized?: boolean }): void {
-    this.bounds = { ...bounds };
     if (meta?.snapMode !== undefined) this.snapMode = meta.snapMode;
     if (meta?.maximized !== undefined) this.maximized = meta.maximized;
+    this.bounds = this.maximized ? { ...bounds } : this.clampBounds(bounds);
     this.applyBoundsToDom();
+  }
+
+  /** Re-fit bounds when the stage viewport shrinks or grows (e.g. Electron window resize). */
+  reclampToStage(): boolean {
+    const stage = this.getStageRect();
+    const prev = this.bounds;
+    let next: WindowBounds;
+
+    if (this.maximized || this.snapMode === 'maximize') {
+      next = { x: 0, y: 0, width: stage.width, height: stage.height };
+    } else if (this.snapMode === 'left' || this.snapMode === 'right') {
+      next = { ...getSnapRectForMode(this.snapMode, stage) };
+    } else {
+      next = this.clampBounds(this.bounds);
+    }
+
+    if (
+      prev.x === next.x &&
+      prev.y === next.y &&
+      prev.width === next.width &&
+      prev.height === next.height
+    ) {
+      return false;
+    }
+
+    this.bounds = next;
+    this.applyBoundsToDom();
+    return true;
   }
 
   focus(): void {
     this.root.classList.add('is-focused');
+    // Never steal DOM focus from an editable control inside the window body — doing so
+    // leaves keyboard input dead until the user clicks outside the app (MIN-179).
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && this.body.contains(active) && isInteractiveFocusTarget(active)) {
+      return;
+    }
     this.root.focus({ preventScroll: true });
   }
 
@@ -191,8 +231,7 @@ export class WindowFrame {
   }
 
   private getStageRect(): DOMRect {
-    const stage = document.getElementById('osStage');
-    return (stage ?? document.body).getBoundingClientRect();
+    return getStageRect();
   }
 
   private applyBoundsToDom(): void {
@@ -264,13 +303,14 @@ export class WindowFrame {
 
   private clampBounds(bounds: WindowBounds): WindowBounds {
     const stage = this.getStageRect();
-    const width = Math.max(this.minWidth, Math.min(bounds.width, stage.width));
-    const height = Math.max(this.minHeight, Math.min(bounds.height, stage.height));
-    const maxX = Math.max(0, stage.width - width);
-    const maxY = Math.max(0, stage.height - height);
+    const { width: usableW, height: usableH, insets } = getWindowStageUsableSize(stage);
+    const width = Math.max(this.minWidth, Math.min(bounds.width, usableW));
+    const height = Math.max(this.minHeight, Math.min(bounds.height, usableH));
+    const maxX = Math.max(insets.left, usableW - width + insets.left);
+    const maxY = Math.max(insets.top, usableH - height + insets.top);
     return {
-      x: Math.min(Math.max(0, bounds.x), maxX),
-      y: Math.min(Math.max(0, bounds.y), maxY),
+      x: Math.min(Math.max(insets.left, bounds.x), maxX),
+      y: Math.min(Math.max(insets.top, bounds.y), maxY),
       width,
       height,
     };
@@ -411,6 +451,15 @@ export class WindowFrame {
       document.addEventListener('mouseup', onUp);
     });
   }
+}
+
+/** True when the element (or an ancestor) should keep DOM focus during window raise. */
+function isInteractiveFocusTarget(el: HTMLElement): boolean {
+  if (el.isContentEditable) return true;
+  const tag = el.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (el.closest('.cm-editor, [contenteditable="true"]')) return true;
+  return false;
 }
 
 /** Create a window frame and append it to the windows layer. */

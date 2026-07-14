@@ -20,7 +20,7 @@ import {
   getBoardProgressPercent,
   isBoardRunning,
 } from '../state/orchestrate-board-store';
-import { getChatsForWorkspace, getChatLastMessageAt } from '../state/session-workspace-scope';
+import { getChatsForWorkspace, getChatLastMessageAt, getSidebarListedChatsForWorkspace } from '../state/session-workspace-scope';
 import { sessionState } from '../state/sessions';
 import { isLocalServerAvailable } from '../tools/config';
 import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
@@ -28,6 +28,11 @@ import type { Chat, ChatGroup } from '../types';
 import type { GitGraphHandle } from './git-graph';
 import { createChat, switchChat } from './sidebar';
 import { stripMainColumnOverlayClasses } from './main-column-overlay';
+import {
+  isMissingGitRepositoryError,
+  openGitSetupFromOverview,
+  renderGitNoRepositoryState,
+} from './git-no-repo-state';
 
 const ROOT_ID = 'codeOverviewRoot';
 const CHAT_AREA_CLASS = 'chat-area--code-overview';
@@ -155,6 +160,11 @@ function renderError(host: HTMLElement, message: string, onRetry?: () => void): 
   }
 }
 
+/** Informational rail block when the workspace has no git metadata yet. */
+function renderNoGitRepository(host: HTMLElement): void {
+  renderGitNoRepositoryState(host, { onSetupGit: () => void openGitSetupFromOverview() });
+}
+
 function buildSparklineSvg(values: number[], className: string): SVGSVGElement {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 80 28');
@@ -190,9 +200,20 @@ function buildShell(): HTMLElement {
   root.className = 'code-overview-root is-open';
   root.innerHTML = `
     <div class="code-overview__scroll">
+      <div class="code-overview__toolbar">
+        <div class="code-overview__title-block">
+          <h1 class="code-overview__title">Overview</h1>
+          <p class="code-overview__lede" id="codeOverviewWorkspaceLede">Workspace status and telemetry</p>
+        </div>
+        <div class="code-overview__toolbar-actions">
+          <button type="button" class="code-overview__btn-ghost" id="codeOverviewRefresh" aria-label="Refresh overview">↻</button>
+          <button type="button" class="code-overview__btn-new" id="codeOverviewNewChat">New chat</button>
+        </div>
+      </div>
+
       <div class="code-overview__pulse" id="codeOverviewPulse">
         <button type="button" class="code-overview__pulse-expand" id="codeOverviewPulseExpand" aria-expanded="false">
-          <span class="code-overview__pulse-expand-label">Pulse</span>
+          <span class="code-overview__pulse-expand-label">Live metrics</span>
           <span class="code-overview__pulse-expand-preview" id="codeOverviewPulsePreview">—</span>
           <svg class="code-overview__pulse-expand-chevron icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
         </button>
@@ -206,33 +227,17 @@ function buildShell(): HTMLElement {
             <div class="code-overview__pulse-value" id="pulseBoards">—</div>
           </div>
           <div class="code-overview__pulse-cell">
-            <div class="code-overview__pulse-label">Tokens today</div>
-            <div class="code-overview__pulse-value code-overview__pulse-value--accent" id="pulseTokens">—</div>
-            <div class="code-overview__pulse-note" id="pulseTokensNote">session totals</div>
-          </div>
-          <div class="code-overview__pulse-cell">
             <div class="code-overview__pulse-label">TPS</div>
-            <div class="code-overview__pulse-value code-overview__pulse-value--success" id="pulseTps">—</div>
+            <div class="code-overview__pulse-value" id="pulseTps">—</div>
           </div>
           <div class="code-overview__pulse-cell">
             <div class="code-overview__pulse-label">Context</div>
-            <div class="code-overview__pulse-value code-overview__pulse-value--warning" id="pulseContext">—</div>
+            <div class="code-overview__pulse-value" id="pulseContext">—</div>
           </div>
           <div class="code-overview__pulse-cell">
             <div class="code-overview__pulse-label">VRAM</div>
             <div class="code-overview__pulse-value" id="pulseVram">—</div>
           </div>
-        </div>
-      </div>
-
-      <div class="code-overview__toolbar">
-        <div class="code-overview__title-block">
-          <h1 class="code-overview__title">Overview</h1>
-          <p class="code-overview__lede" id="codeOverviewWorkspaceLede">Workspace status and telemetry</p>
-        </div>
-        <div class="code-overview__toolbar-actions">
-          <button type="button" class="code-overview__btn-ghost" id="codeOverviewRefresh" aria-label="Refresh overview">↻</button>
-          <button type="button" class="code-overview__btn-new" id="codeOverviewNewChat">New chat</button>
         </div>
       </div>
 
@@ -253,33 +258,48 @@ function buildShell(): HTMLElement {
         </div>
         <div class="code-overview__rail">
           <section class="code-overview__section" aria-labelledby="codeOverviewGitTitle">
-            <div class="code-overview__section-head">
+            <div class="code-overview__section-head" data-code-overview-rail-toggle>
               <h2 class="code-overview__section-title" id="codeOverviewGitTitle">Git</h2>
+              <svg class="code-overview__section-chevron icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
             </div>
             <div class="code-overview__section-body code-overview__section-body--git" id="codeOverviewGitBody"></div>
           </section>
           <section class="code-overview__section" aria-labelledby="codeOverviewSystemTitle">
-            <div class="code-overview__section-head">
+            <div class="code-overview__section-head" data-code-overview-rail-toggle>
               <h2 class="code-overview__section-title" id="codeOverviewSystemTitle">System</h2>
+              <svg class="code-overview__section-chevron icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
             </div>
             <div class="code-overview__section-body" id="codeOverviewSystemBody"></div>
           </section>
           <section class="code-overview__section" aria-labelledby="codeOverviewSchedulerTitle">
-            <div class="code-overview__section-head">
+            <div class="code-overview__section-head" data-code-overview-rail-toggle>
               <h2 class="code-overview__section-title" id="codeOverviewSchedulerTitle">Scheduler</h2>
+              <svg class="code-overview__section-chevron icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
             </div>
             <div class="code-overview__section-body" id="codeOverviewSchedulerBody"></div>
           </section>
           <section class="code-overview__section" aria-labelledby="codeOverviewWorkspaceTitle">
-            <div class="code-overview__section-head">
+            <div class="code-overview__section-head" data-code-overview-rail-toggle>
               <h2 class="code-overview__section-title" id="codeOverviewWorkspaceTitle">Workspace</h2>
+              <svg class="code-overview__section-chevron icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
             </div>
             <div class="code-overview__section-body" id="codeOverviewWorkspaceBody"></div>
           </section>
         </div>
       </div>
 
-      <div class="code-overview__telemetry">
+      <div class="code-overview__telemetry" id="codeOverviewTelemetry">
+        <button
+          type="button"
+          class="code-overview__telemetry-expand"
+          id="codeOverviewTelemetryExpand"
+          aria-expanded="false"
+          aria-controls="codeOverviewTelemetryGrid"
+        >
+          <span class="code-overview__telemetry-expand-label">Telemetry</span>
+          <span class="code-overview__telemetry-expand-preview" id="codeOverviewTelemetryPreview">—</span>
+          <svg class="code-overview__telemetry-expand-chevron icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
         <div class="code-overview__telemetry-head">
           <h2 class="code-overview__section-title">Telemetry</h2>
         </div>
@@ -347,7 +367,6 @@ async function refreshPulseBand(): Promise<void> {
     agentCount = 0;
   }
 
-  const tokens = sumWorkspaceTokens(workspacePath);
   const tps = readStripText('stripTPS');
   const ctx = readStripText('stripCtx');
   let vramText = '—';
@@ -378,14 +397,13 @@ async function refreshPulseBand(): Promise<void> {
 
   setPulseValue('pulseAgents', String(agentCount), agentCount > 0 ? 'accent' : undefined);
   setPulseValue('pulseBoards', String(boardsActive), boardsActive > 0 ? 'accent' : undefined);
-  setPulseValue('pulseTokens', formatCompactCount(tokens), 'accent');
   setPulseValue('pulseTps', tps === '—' ? '—' : tps, tps !== '—' ? 'success' : undefined);
   setPulseValue('pulseContext', ctx, ctx !== '—' ? 'warning' : undefined);
   setPulseValue('pulseVram', vramText, vramTone);
 
   const preview = document.getElementById('codeOverviewPulsePreview');
   if (preview) {
-    preview.textContent = `${agentCount} agents · ${formatCompactCount(tokens)} tok`;
+    preview.textContent = `${agentCount} agents · ${boardsActive} boards`;
   }
 
   const lede = document.getElementById('codeOverviewWorkspaceLede');
@@ -495,8 +513,8 @@ function renderSessionRow(chat: Chat): HTMLButtonElement {
 
   btn.append(dot, main);
   btn.addEventListener('click', () => {
+    // switchChat closes the overview, updates the hash, and renders the target chat.
     switchChat(chat.id);
-    void enterCodeChat();
   });
   return btn;
 }
@@ -504,7 +522,6 @@ function renderSessionRow(chat: Chat): HTMLButtonElement {
 async function drillToRun(record: PersistedRunRecord): Promise<void> {
   if (record.parentChatId) {
     switchChat(record.parentChatId);
-    await enterCodeChat();
   }
   const { toggleAgentActivityPanel } = await import('./agent-activity-panel');
   const panel = document.getElementById('agentActivityPanel');
@@ -512,7 +529,7 @@ async function drillToRun(record: PersistedRunRecord): Promise<void> {
 }
 
 async function enterCodeChat(): Promise<void> {
-  closeCodeOverview({ skipNavigate: true });
+  closeCodeOverview({ skipNavigate: true, restoreChat: false });
   navigateToCodeChat();
   const { restoreCodeSessionOnForeground } = await import('../os/code-launch');
   await restoreCodeSessionOnForeground();
@@ -557,7 +574,7 @@ function refreshSessionsPanel(): void {
   const host = document.getElementById('codeOverviewSessionsBody');
   if (!host || !sessionState) return;
 
-  const chats = getChatsForWorkspace(getWorkspacePath(), sessionState).slice(
+  const chats = getSidebarListedChatsForWorkspace(getWorkspacePath(), sessionState).slice(
     0,
     RECENT_SESSION_LIMIT,
   );
@@ -587,6 +604,10 @@ async function refreshGitPanel(): Promise<void> {
 
   const status = await gitStatus();
   if (!status.ok) {
+    if (isMissingGitRepositoryError(status.error)) {
+      renderNoGitRepository(host);
+      return;
+    }
     renderError(host, status.error ?? 'Could not load git status.', () => void refreshGitPanel());
     return;
   }
@@ -723,6 +744,9 @@ async function refreshSchedulerPanel(): Promise<void> {
       .filter((j) => j.nextRunAt)
       .sort((a, b) => Date.parse(a.nextRunAt!) - Date.parse(b.nextRunAt!))[0];
 
+    const list = document.createElement('div');
+    list.className = 'code-overview__row-list';
+
     if (nextJob?.nextRunAt) {
       const row = document.createElement('button');
       row.type = 'button';
@@ -735,7 +759,7 @@ async function refreshSchedulerPanel(): Promise<void> {
         </div>
       `;
       row.addEventListener('click', () => launchApp('scheduler'));
-      host.appendChild(row);
+      list.appendChild(row);
     }
 
     const recent = [...jobs]
@@ -756,8 +780,10 @@ async function refreshSchedulerPanel(): Promise<void> {
         </div>
       `;
       row.addEventListener('click', () => launchApp('scheduler'));
-      host.appendChild(row);
+      list.appendChild(row);
     }
+
+    host.appendChild(list);
   } catch {
     renderError(host, 'Could not load scheduler jobs.', () => void refreshSchedulerPanel());
   }
@@ -897,6 +923,12 @@ function refreshTelemetryBand(): void {
       detail: 'Cost estimation needs a pricing table.',
     }),
   );
+
+  const telemetryPreview = document.getElementById('codeOverviewTelemetryPreview');
+  if (telemetryPreview) {
+    const tpsLabel = tpsRaw === '—' ? '—' : `${tpsRaw} tok/s`;
+    telemetryPreview.textContent = `${formatCompactCount(tokens)} tok · ${tpsLabel}`;
+  }
 }
 
 async function refreshAllPanels(): Promise<void> {
@@ -987,6 +1019,49 @@ export function closeCodeOverview(options?: {
   }
 }
 
+const PHONE_LAYOUT_MQ = '(max-width: 600px)';
+
+function syncRailSectionCollapseForViewport(): void {
+  const phone = window.matchMedia(PHONE_LAYOUT_MQ).matches;
+  const sections = document.querySelectorAll<HTMLElement>(
+    '.code-overview__rail > .code-overview__section',
+  );
+  sections.forEach((section, index) => {
+    if (!phone) {
+      section.classList.remove('is-collapsed');
+      return;
+    }
+    if (index === 0) section.classList.remove('is-collapsed');
+    else if (!section.dataset.userExpanded) section.classList.add('is-collapsed');
+  });
+}
+
+function wireRailSectionCollapsibles(): void {
+  syncRailSectionCollapseForViewport();
+  if (!window.matchMedia(PHONE_LAYOUT_MQ).addEventListener) return;
+  window.matchMedia(PHONE_LAYOUT_MQ).addEventListener('change', syncRailSectionCollapseForViewport);
+
+  document.querySelectorAll<HTMLElement>('[data-code-overview-rail-toggle]').forEach((head) => {
+    if (head.dataset.bound === '1') return;
+    head.dataset.bound = '1';
+    head.addEventListener('click', () => {
+      if (!window.matchMedia(PHONE_LAYOUT_MQ).matches) return;
+      const section = head.closest('.code-overview__section') as HTMLElement | null;
+      if (!section) return;
+      const collapsed = section.classList.toggle('is-collapsed');
+      if (!collapsed) section.dataset.userExpanded = '1';
+      else delete section.dataset.userExpanded;
+    });
+    head.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      head.click();
+    });
+    head.setAttribute('role', 'button');
+    head.setAttribute('tabindex', '0');
+  });
+}
+
 function wireShellEvents(): void {
   document.getElementById('codeOverviewNewChat')?.addEventListener('click', () => {
     createChat();
@@ -1004,6 +1079,16 @@ function wireShellEvents(): void {
     const expanded = pulse.classList.toggle('is-expanded');
     btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
   });
+
+  document.getElementById('codeOverviewTelemetryExpand')?.addEventListener('click', () => {
+    const band = document.getElementById('codeOverviewTelemetry');
+    const btn = document.getElementById('codeOverviewTelemetryExpand');
+    if (!band || !btn) return;
+    const expanded = band.classList.toggle('is-expanded');
+    btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  });
+
+  wireRailSectionCollapsibles();
 }
 
 function onHashChange(): void {
@@ -1021,7 +1106,7 @@ function onHashChange(): void {
   }
 
   if (isCodeOverviewOpen()) {
-    closeCodeOverview({ skipNavigate: true });
+    closeCodeOverview({ skipNavigate: true, restoreChat: false });
   }
   syncOverviewNavButtons();
 }

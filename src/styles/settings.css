@@ -460,6 +460,16 @@
   opacity: 0.7;
 }
 
+.prompt-diff--numbered .prompt-diff__lineno {
+  flex-shrink: 0;
+  width: 3.5ch;
+  text-align: right;
+  user-select: none;
+  color: var(--mn-fg-muted);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
 .prompt-diff__line--add {
   background: color-mix(in oklch, var(--mn-success, #22c55e) 18%, transparent);
 }

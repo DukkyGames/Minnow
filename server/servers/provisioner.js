@@ -32,6 +32,16 @@ export function resetSpawnOverrideForTests() {
   resetLspBundleSpawnOverride();
 }
 
+/** Spawn options for headless pip/ensurepip (no TTY — never block on stdin). */
+export function pipSpawnOptions(extra = {}) {
+  const { env: extraEnv, ...rest } = extra;
+  return {
+    windowsHide: true,
+    env: { ...process.env, PIP_NO_INPUT: '1', ...extraEnv },
+    ...rest,
+  };
+}
+
 /**
  * Path to the venv interpreter (Scripts/python.exe on Windows).
  * @param {string} venvDir
@@ -106,13 +116,13 @@ export async function ensureHealthyVenv(pythonExe, venvDir, onProgress) {
  */
 export async function pipInstall(venvPython, spec, onProgress) {
   onProgress?.(`pip install ${spec}`);
-  const spawnOpts = { windowsHide: true };
+  const spawnOpts = pipSpawnOptions();
   await runProcess(venvPython, ['-m', 'ensurepip', '--upgrade'], spawnOpts);
   await runProcess(
     venvPython,
-    ['-m', 'pip', 'install', '--upgrade', 'pip', 'wheel'],
+    ['-m', 'pip', 'install', '--upgrade', '--no-input', 'pip', 'wheel'],
     spawnOpts,
   );
   // Pass spec as a single argv entry — shell:true breaks git+ URLs on Windows (@).
-  await runProcess(venvPython, ['-m', 'pip', 'install', spec], spawnOpts);
+  await runProcess(venvPython, ['-m', 'pip', 'install', '--no-input', spec], spawnOpts);
 }

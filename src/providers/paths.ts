@@ -3,10 +3,12 @@
  */
 
 import type { ApiKind, ProviderPublic } from './types';
+import { deriveMessagesPathFromChat } from '../lib/derive-messages-path.mjs';
 
 export interface ProviderPathOverrides {
   modelsPath?: string;
   chatCompletionsPath?: string;
+  messagesPath?: string;
   modelsLoadPath?: string;
   modelsUnloadPath?: string;
 }
@@ -18,22 +20,44 @@ export function getDefaultPaths(
 ): {
   modelsPath: string;
   chatCompletionsPath: string;
+  messagesPath?: string;
   modelsLoadPath?: string;
   modelsUnloadPath?: string;
 } {
   const defaults =
     apiKind === 'openai-v1'
-      ? { modelsPath: '/v1/models', chatCompletionsPath: '/v1/chat/completions' }
-      : {
-          modelsPath: '/api/v0/models',
-          chatCompletionsPath: '/api/v0/chat/completions',
-          modelsLoadPath: '/api/v1/models/load',
-          modelsUnloadPath: '/api/v1/models/unload',
-        };
+      ? {
+          modelsPath: '/v1/models',
+          chatCompletionsPath: '/v1/chat/completions',
+          messagesPath: '/v1/messages',
+        }
+      : apiKind === 'anthropic-v1'
+        ? {
+            modelsPath: '/v1/models',
+            chatCompletionsPath: '/v1/messages',
+            messagesPath: '/v1/messages',
+          }
+        : {
+            modelsPath: '/api/v0/models',
+            chatCompletionsPath: '/api/v0/chat/completions',
+            modelsLoadPath: '/api/v1/models/load',
+            modelsUnloadPath: '/api/v1/models/unload',
+          };
 
   const out = {
     modelsPath: overrides.modelsPath || defaults.modelsPath,
     chatCompletionsPath: overrides.chatCompletionsPath || defaults.chatCompletionsPath,
+    ...(defaults.messagesPath
+      ? {
+          messagesPath:
+            overrides.messagesPath ||
+            (apiKind === 'anthropic-v1'
+              ? overrides.chatCompletionsPath || defaults.messagesPath
+              : deriveMessagesPathFromChat(
+                  overrides.chatCompletionsPath || defaults.chatCompletionsPath,
+                )),
+        }
+      : {}),
   };
 
   if ('modelsLoadPath' in defaults && defaults.modelsLoadPath) {
@@ -51,12 +75,14 @@ export function getDefaultPaths(
 export function pathsForProvider(provider: ProviderPublic): {
   modelsPath: string;
   chatCompletionsPath: string;
+  messagesPath?: string;
   modelsLoadPath?: string;
   modelsUnloadPath?: string;
 } {
   return getDefaultPaths(provider.apiKind, {
     modelsPath: provider.modelsPath,
     chatCompletionsPath: provider.chatCompletionsPath,
+    messagesPath: provider.messagesPath,
     modelsLoadPath: provider.modelsLoadPath,
     modelsUnloadPath: provider.modelsUnloadPath,
   });

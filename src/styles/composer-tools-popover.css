@@ -21,6 +21,23 @@
     background 0.2s var(--ease-out);
 }
 
+/* Toolbar row beside mode segments */
+.composer-tools-btn--toolbar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+}
+
+.composer-tools-btn--toolbar .icon-svg {
+  width: 18px;
+  height: 18px;
+}
+
+.composer-controls__trail .composer-tools-popover {
+  left: auto;
+  right: 0;
+}
+
 .composer-tools-btn .icon-svg {
   width: 20px;
   height: 20px;

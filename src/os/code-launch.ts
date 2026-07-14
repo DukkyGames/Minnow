@@ -5,16 +5,18 @@
 import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
 import { setWorkspacePath } from '../config/workspace-api';
 import { sendMessageWithTools } from '../tools/loop';
+import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { getWorkspacePath } from '../state/workspace';
 import { clearForegroundSeed } from './instances';
 import type { LaunchOptions } from './types';
-import { applyWorkspaceSwitch } from '../ui/workspace-button';
+import { executeWorkspaceSwitch } from '../ui/workspace-switch-guard';
 import { createChatWithMode } from '../ui/sidebar';
 import { syncComposerFromStreamingState } from '../ui/composer-send';
 
 /** Re-render the Code transcript and sync chrome for the active workspace chat. */
 async function refreshCodeChatSurface(): Promise<void> {
-  const { getActiveChat } = await import('../state/sessions');
+  const { ensureSessionsReady, getActiveChat } = await import('../state/sessions');
+  await ensureSessionsReady();
   const { renderChatFromHistory, renderStatsForChat } = await import('../ui/messages');
   const { renderSidebar } = await import('../ui/sidebar');
   const { syncModeSelectorFromActiveChat } = await import('../ui/mode-selector');
@@ -41,11 +43,13 @@ async function refreshCodeChatSurface(): Promise<void> {
 export async function restoreCodeSessionOnForeground(): Promise<void> {
   const { getChatsWorkspacePath, isChatsWorkspacePath } = await import('../lib/chats-workspace');
   const {
+    ensureSessionsReady,
     getActiveChat,
     resolveActiveChatIdForWorkspace,
     sessionState,
   } = await import('../state/sessions');
 
+  await ensureSessionsReady();
   if (!sessionState) return;
 
   await getChatsWorkspacePath();
@@ -53,6 +57,18 @@ export async function restoreCodeSessionOnForeground(): Promise<void> {
   const workspacePath = getWorkspacePath();
   const active = getActiveChat();
   const activeIsAssistant = isChatsWorkspacePath(active.workspacePath ?? '');
+  const workspaceKey = normalizeWorkspacePath(workspacePath);
+  const activeInCurrentWorkspace =
+    !activeIsAssistant &&
+    normalizeWorkspacePath(active.workspacePath ?? '') === workspaceKey;
+
+  // Honor an explicit workspace chat selection (e.g. overview session row) instead of
+  // reverting to lastActiveChatIdByWorkspace.
+  if (activeInCurrentWorkspace) {
+    await refreshCodeChatSurface();
+    return;
+  }
+
   const targetId = resolveActiveChatIdForWorkspace(
     workspacePath,
     sessionState,
@@ -89,8 +105,7 @@ export async function applyCodeLaunchOptions(options: LaunchOptions): Promise<vo
   const targetPath = options.workspacePath?.trim();
   if (targetPath && targetPath !== getWorkspacePath()) {
     try {
-      const info = await setWorkspacePath(targetPath);
-      await applyWorkspaceSwitch(info);
+      await executeWorkspaceSwitch(targetPath);
     } catch {
       /* continue with current workspace when switch fails */
     }

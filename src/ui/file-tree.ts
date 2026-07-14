@@ -10,6 +10,7 @@ import {
 } from '../tools/result-cache';
 import { getFilePanelState, patchFilePanelState } from '../state/file-panel';
 import { getWorkspacePath } from '../state/workspace';
+import { isDesktopWorkspaceHostingActive } from '../os/desktop-workspace-mounts';
 import {
   buildFileTreeToolContext,
   fileTreeListingRootsEqual,
@@ -56,15 +57,22 @@ const loadingDirs = new Set<string>();
 
 /** Git status letters keyed by repo-relative path (MIN-198 file tree badges). */
 let gitStatusMap = new Map<string, string>();
-let gitStatusPollTimer: number | undefined;
+let gitStatusPollTimer: ReturnType<typeof setTimeout> | undefined;
 let gitStatusPollCwd: string | undefined;
-let gitStatusPollDebounce: number | undefined;
+let gitStatusPollDebounce: ReturnType<typeof setTimeout> | undefined;
 let gitStatusPollInFlight = false;
 
 /** Update git badge map and re-render visible file rows. */
 export function setFileTreeGitStatus(map: Map<string, string>): void {
   gitStatusMap = map;
   renderFileTree();
+}
+
+/** Git poll timers must not block `node --test` process exit (happy-dom uses Node timers). */
+function unrefPollTimerIfSupported(timer: ReturnType<typeof setTimeout> | undefined): void {
+  if (timer !== undefined && typeof timer === 'object' && 'unref' in timer) {
+    (timer as NodeJS.Timeout).unref();
+  }
 }
 
 /** Poll git status every 5s and refresh file tree badges. */
@@ -85,13 +93,29 @@ export function startFileTreeGitStatusPoll(cwd?: string): void {
   if (gitStatusPollDebounce !== undefined) {
     clearTimeout(gitStatusPollDebounce);
   }
-  gitStatusPollDebounce = window.setTimeout(() => {
+  gitStatusPollDebounce = setTimeout(() => {
     gitStatusPollDebounce = undefined;
     void pollFileTreeGitStatus();
   }, 200);
-  gitStatusPollTimer = window.setInterval(() => {
+  unrefPollTimerIfSupported(gitStatusPollDebounce);
+  gitStatusPollTimer = setInterval(() => {
     void pollFileTreeGitStatus();
   }, 5000);
+  unrefPollTimerIfSupported(gitStatusPollTimer);
+}
+
+/** Stop git status polling (tests — open interval blocks node --test between files). */
+export function stopFileTreeGitStatusPollForTests(): void {
+  if (gitStatusPollDebounce !== undefined) {
+    clearTimeout(gitStatusPollDebounce);
+    gitStatusPollDebounce = undefined;
+  }
+  if (gitStatusPollTimer !== undefined) {
+    clearInterval(gitStatusPollTimer);
+    gitStatusPollTimer = undefined;
+  }
+  gitStatusPollCwd = undefined;
+  gitStatusPollInFlight = false;
 }
 
 async function pollFileTreeGitStatus(): Promise<void> {
@@ -210,6 +234,13 @@ export function invalidateFileTreeCache(): void {
 
 /** Sync file tree listing root with git panel worktree cwd; reload when root changes. */
 export async function syncFileTreeToPanelWorktree(panelCwd?: string): Promise<void> {
+  // Desktop drawer scopes the tree to ~/.minnow/workspace — ignore Code git-panel cwd.
+  if (isDesktopWorkspaceHostingActive()) {
+    startFileTreeGitStatusPoll(getFileTreeListingWorkspaceRoot());
+    syncFileSidebarTitleFromFileTree();
+    return;
+  }
+
   const nextRoot = resolveFileTreeListingRoot(panelCwd);
   const prevRoot = getFileTreeListingWorkspaceRoot();
 
@@ -235,6 +266,7 @@ export async function syncFileTreeToPanelWorktree(panelCwd?: string): Promise<vo
 
   startFileTreeGitStatusPoll(nextRoot ?? getWorkspacePath());
   syncFileSidebarTitleFromFileTree();
+  void import('./terminal-panel').then((m) => m.syncTerminalFromFileExplorer());
 }
 
 /** Update #fileSidebarTitle when the files view is visible. */

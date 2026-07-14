@@ -6,6 +6,8 @@ export interface TerminalTabMeta {
   id: string;
   shellProfileId: string;
   title?: string;
+  /** Absolute cwd when the PTY tab was opened (MIN-349 tab scope labels). */
+  boundCwd?: string;
   chatId?: string | null;
   order: number;
 }
@@ -13,7 +15,10 @@ export interface TerminalTabMeta {
 export interface TerminalMeta {
   open: boolean;
   heightPx: number;
+  /** Open the terminal panel when an agent starts a shell command. */
   autoOpenOnAgentRun: boolean;
+  /** Switch to the Agent tab when an agent starts a shell command (panel must be open). */
+  autoFollowAgentTab: boolean;
   tabs?: TerminalTabMeta[];
   activeTabId?: string | null;
   defaultShellProfileId?: string;
@@ -23,6 +28,7 @@ const DEFAULT_TERMINAL_META: TerminalMeta = {
   open: false,
   heightPx: 240,
   autoOpenOnAgentRun: false,
+  autoFollowAgentTab: false,
   tabs: [],
   activeTabId: null,
   defaultShellProfileId: undefined,
@@ -41,6 +47,7 @@ function normalizeTab(raw: unknown, index: number): TerminalTabMeta | null {
     id,
     shellProfileId,
     title: typeof row.title === 'string' ? row.title : undefined,
+    boundCwd: typeof row.boundCwd === 'string' ? row.boundCwd : undefined,
     chatId:
       row.chatId === null || typeof row.chatId === 'string'
         ? (row.chatId as string | null)
@@ -65,6 +72,7 @@ function normalizeTerminalMeta(raw: unknown): TerminalMeta {
         ? Math.min(800, Math.max(120, Math.round(row.heightPx)))
         : DEFAULT_TERMINAL_META.heightPx,
     autoOpenOnAgentRun: row.autoOpenOnAgentRun === true,
+    autoFollowAgentTab: row.autoFollowAgentTab === true,
     tabs,
     activeTabId:
       typeof row.activeTabId === 'string' || row.activeTabId === null
@@ -102,6 +110,7 @@ export async function saveTerminalMeta(patch: Partial<TerminalMeta>): Promise<vo
     open: patch.open ?? current.open,
     heightPx: patch.heightPx ?? current.heightPx,
     autoOpenOnAgentRun: patch.autoOpenOnAgentRun ?? current.autoOpenOnAgentRun,
+    autoFollowAgentTab: patch.autoFollowAgentTab ?? current.autoFollowAgentTab,
     tabs: patch.tabs ?? current.tabs ?? [],
     activeTabId:
       patch.activeTabId !== undefined ? patch.activeTabId : current.activeTabId,

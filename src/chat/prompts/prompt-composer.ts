@@ -2,8 +2,10 @@
  * Assemble the system prompt from enabled parts and profile rules.
  */
 
+import { getDefaultWorkAgentForMode } from '../../agents/work-agent-registry';
 import { getMode } from '../modes/registry';
 import { isModeId, type ModeId } from '../modes/types';
+import { BROWSER_PREVIEW_TOOL_IDS } from './browser-allowlist-gate';
 import { interpolatePromptBody } from './interpolate';
 import { loadPromptById } from './prompt-loader';
 import type {
@@ -33,22 +35,21 @@ const PART_SEPARATOR = '\n\n---\n\n';
 /** Operating modes that receive the shared mode-handoff tool-usage fragment. */
 const MODE_HANDOFF_MODE_IDS = new Set<ModeId>([
   'general',
+  'desktop',
   'plan',
   'build',
   'orchestrate',
-  'reef',
 ]);
 
-/** Tool ids that imply built-in preview browser automation (navigation allowlist rules apply). */
-const BROWSER_PREVIEW_TOOL_IDS = new Set([
-  'browser_list',
-  'browser_navigate',
-  'browser_snapshot',
-  'browser_click',
-  'browser_fill',
-  'browser_eval',
-  'browser_screenshot',
-  'request_browser_origin_access',
+/** Modes that receive the fact-verification tool-usage fragment. */
+const FACT_VERIFICATION_MODE_IDS = new Set<ModeId>(['general', 'desktop', 'plan', 'build']);
+
+/** Modes that receive the shared sub-agent delegation tool-usage fragment. */
+const SUB_AGENT_DELEGATION_MODE_IDS = new Set<ModeId>([
+  'build',
+  'general',
+  'plan',
+  'debug',
 ]);
 
 function contextHasBrowserPreviewTools(ctx: ComposeContext): boolean {
@@ -56,25 +57,24 @@ function contextHasBrowserPreviewTools(ctx: ComposeContext): boolean {
   return ids.some((id) => BROWSER_PREVIEW_TOOL_IDS.has(id));
 }
 
-/** Lite truncation caps when no lite template exists. */
-const LITE_TRUNCATE_CAPS: Record<PromptPartId, number> = {
-  base: 800,
-  mode: 600,
-  expert: 500,
-  'work-agent': 600,
-  'tool-usage': 400,
-  info: 0,
-  skill: 2000,
-  memory: 0,
-};
-
 /** Default lite part gating (memory uses shorter retrieve cap when enabled). */
 const LITE_DISABLED_PARTS = new Set<PromptPartId>(['info']);
 
-function truncateForLite(text: string, maxChars: number): string {
-  if (maxChars <= 0 || !text.trim()) return '';
-  if (text.length <= maxChars) return text;
-  return `${text.slice(0, maxChars).trimEnd()}…`;
+/** Strip HTML comments (e.g. MINNOW_MODE_MARKER) before sending to the model. */
+export function stripPromptHtmlComments(text: string): string {
+  return text.replace(/<!--[\s\S]*?-->/g, '').trim();
+}
+
+/**
+ * When the active work-agent is the mode default (builder/planner/…), omit the mode
+ * body — the work-agent prompt already carries deliverable instructions.
+ */
+export function shouldSuppressModePart(ctx: ComposeContext): boolean {
+  const modeId = ctx.modeId?.trim();
+  const workAgentId = ctx.workAgentId?.trim();
+  if (!modeId || !workAgentId) return false;
+  const defaultAgent = getDefaultWorkAgentForMode(modeId);
+  return defaultAgent?.id === workAgentId;
 }
 
 function partSettings(
@@ -104,7 +104,9 @@ function isPartEnabled(
     return Boolean(ctx.memoryBlock?.trim());
   }
   if (partId === 'mode') {
-    return Boolean(ctx.modeId);
+    if (!ctx.modeId) return false;
+    if (shouldSuppressModePart(ctx)) return false;
+    return true;
   }
   if (partId === 'expert') {
     return Boolean(ctx.expertId);
@@ -117,7 +119,9 @@ function isPartEnabled(
     return ctx.enabledToolIds.length > 0;
   }
   if (partId === 'info') {
-    return Boolean(ctx.infoPresetId);
+    if (!ctx.infoPresetId) return false;
+    // General-assistant context applies in General and Desktop modes.
+    return ctx.modeId === 'general' || ctx.modeId === 'desktop';
   }
   return true;
 }
@@ -151,7 +155,7 @@ function resolvePartBody(
 ): string {
   const custom = partSettings(ctx.customConfig, partId);
   if (custom?.contentOverride?.trim()) {
-    return custom.contentOverride.trim();
+    return stripPromptHtmlComments(custom.contentOverride.trim());
   }
 
   if (partId === 'skill' && ctx.skillBody?.trim()) {
@@ -176,18 +180,43 @@ function resolvePartBody(
   const loaded = loadPromptById(kind, id || 'default', loadProfile);
   if (!loaded?.body) return '';
 
-  let body = loaded.body;
   if (profile === 'lite') {
     if (loaded.liteBody?.trim()) {
-      body = loaded.liteBody.trim();
-    } else {
-      body = truncateForLite(body, LITE_TRUNCATE_CAPS[partId]);
+      return stripPromptHtmlComments(loaded.liteBody.trim());
     }
+    // No lite variant — omit the part rather than mid-sentence truncation.
+    return '';
   }
-  return body;
+
+  return stripPromptHtmlComments(loaded.body);
 }
 
-/** Shared mode-switch / Reef handoff rules appended after default tool-usage. */
+function contextHasContext7Tools(ctx: ComposeContext): boolean {
+  return (ctx.enabledToolIds ?? []).some((id) => id.startsWith('mcp__context7__'));
+}
+
+/** Fact-verification ladder for plan/build/general before drafting or implementing. */
+function resolveFactVerificationBody(ctx: ComposeContext, profile: PromptProfile): string {
+  const modeId = ctx.modeId ?? '';
+  if (!modeId || !isModeId(modeId) || !FACT_VERIFICATION_MODE_IDS.has(modeId)) {
+    return '';
+  }
+  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const loaded = loadPromptById('tool-usage', 'fact-verification', loadProfile);
+  return loaded?.body?.trim() ?? '';
+}
+
+/** Context7 MCP workflow when Context7 tools are enabled for this chat. */
+function resolveContext7DocsBody(ctx: ComposeContext, profile: PromptProfile): string {
+  if (!contextHasContext7Tools(ctx)) {
+    return '';
+  }
+  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const loaded = loadPromptById('tool-usage', 'context7-docs', loadProfile);
+  return loaded?.body?.trim() ?? '';
+}
+
+/** Shared mode-switch handoff rules appended after default tool-usage. */
 function resolveModeHandoffBody(ctx: ComposeContext, profile: PromptProfile): string {
   const modeId = ctx.modeId ?? '';
   if (!modeId || !isModeId(modeId) || !MODE_HANDOFF_MODE_IDS.has(modeId)) {
@@ -198,12 +227,34 @@ function resolveModeHandoffBody(ctx: ComposeContext, profile: PromptProfile): st
   return loaded?.body?.trim() ?? '';
 }
 
+function contextHasSpawnSubAgentTool(ctx: ComposeContext): boolean {
+  return (ctx.enabledToolIds ?? []).includes('spawn_sub_agent');
+}
+
+/** When/how to spawn sub-agents for parallel research and implementation. */
+function resolveSubAgentDelegationBody(ctx: ComposeContext, profile: PromptProfile): string {
+  const modeId = ctx.modeId ?? '';
+  if (
+    !modeId ||
+    !isModeId(modeId) ||
+    !SUB_AGENT_DELEGATION_MODE_IDS.has(modeId) ||
+    !contextHasSpawnSubAgentTool(ctx)
+  ) {
+    return '';
+  }
+  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const loaded = loadPromptById('tool-usage', 'sub-agent-delegation', loadProfile);
+  return loaded?.body?.trim() ?? '';
+}
+
 /** Browser navigation allowlist + ask_question flow when preview browser tools are enabled. */
 function resolveBrowserAllowlistBody(ctx: ComposeContext, profile: PromptProfile): string {
   if (!contextHasBrowserPreviewTools(ctx)) {
     return '';
   }
-  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const useFullAllowlist = ctx.browserActivated === true;
+  const loadProfile =
+    profile === 'lite' || !useFullAllowlist ? 'lite' : 'full';
   const loaded = loadPromptById('tool-usage', 'browser-allowlist', loadProfile);
   return loaded?.body?.trim() ?? '';
 }
@@ -226,10 +277,25 @@ function contextHasLaunchMinnowAppTool(ctx: ComposeContext): boolean {
   return (ctx.enabledToolIds ?? []).includes('launch_minnow_app');
 }
 
+function contextHasSettingsTools(ctx: ComposeContext): boolean {
+  return (ctx.enabledToolIds ?? []).includes('update_settings');
+}
+
+/** Settings agent tools guidance when update_settings is enabled. */
+function resolveManageSettingsBody(ctx: ComposeContext, profile: PromptProfile): string {
+  const modeId = ctx.modeId ?? '';
+  if ((modeId !== 'general' && modeId !== 'desktop') || !contextHasSettingsTools(ctx)) {
+    return '';
+  }
+  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const loaded = loadPromptById('tool-usage', 'manage-settings', loadProfile);
+  return loaded?.body?.trim() ?? '';
+}
+
 /** General-mode MinnowOS app routing when launch_minnow_app is enabled. */
 function resolveLaunchMinnowAppBody(ctx: ComposeContext, profile: PromptProfile): string {
   const modeId = ctx.modeId ?? '';
-  if (modeId !== 'general' || !contextHasLaunchMinnowAppTool(ctx)) {
+  if ((modeId !== 'general' && modeId !== 'desktop') || !contextHasLaunchMinnowAppTool(ctx)) {
     return '';
   }
   const loadProfile = profile === 'lite' ? 'lite' : 'full';
@@ -237,10 +303,7 @@ function resolveLaunchMinnowAppBody(ctx: ComposeContext, profile: PromptProfile)
   return loaded?.body?.trim() ?? '';
 }
 
-function buildInterpolationVars(ctx: ComposeContext, profile: PromptProfile): InterpolationVars {
-  const includeSummary =
-    profile !== 'lite' || ctx.includeChatHistorySummary === true;
-
+function buildInterpolationVars(ctx: ComposeContext): InterpolationVars {
   const modeId = ctx.modeId ?? '';
   const modeLabel =
     modeId && isModeId(modeId) ? getMode(modeId).label : modeId;
@@ -253,11 +316,9 @@ function buildInterpolationVars(ctx: ComposeContext, profile: PromptProfile): In
     mode_label: modeLabel,
     profile: profileLabel,
     expert: ctx.expertLabel?.trim() || ctx.expertId || '',
-    enabled_tools: ctx.enabledToolSummaries ?? '',
     cwd: ctx.cwd,
     memory: ctx.memoryBlock ?? '',
     user_message: ctx.userMessagePreview ?? '',
-    chat_history_summary: includeSummary ? '' : '',
     work_agent: ctx.workAgentId ?? '',
     work_agent_label: ctx.workAgentLabel?.trim() || ctx.workAgentId || '',
     skill: ctx.skillBody ?? '',
@@ -278,7 +339,7 @@ export function composeSystemPrompt(ctx: ComposeContext): string {
   const effectiveProfile: PromptProfile =
     profile === 'custom' ? 'custom' : profile;
 
-  const vars = buildInterpolationVars(ctx, effectiveProfile === 'lite' ? 'lite' : 'full');
+  const vars = buildInterpolationVars(ctx);
 
   const sections: string[] = [];
 
@@ -295,11 +356,32 @@ export function composeSystemPrompt(ctx: ComposeContext): string {
 
     if (partId === 'tool-usage') {
       const profileKey = effectiveProfile === 'lite' ? 'lite' : 'full';
+      const factVerificationRaw = resolveFactVerificationBody(ctx, profileKey);
+      if (factVerificationRaw.trim()) {
+        const factInterpolated = interpolatePromptBody(factVerificationRaw, vars);
+        if (factInterpolated.trim()) {
+          sections.push(factInterpolated.trim());
+        }
+      }
+      const context7DocsRaw = resolveContext7DocsBody(ctx, profileKey);
+      if (context7DocsRaw.trim()) {
+        const context7Interpolated = interpolatePromptBody(context7DocsRaw, vars);
+        if (context7Interpolated.trim()) {
+          sections.push(context7Interpolated.trim());
+        }
+      }
       const handoffRaw = resolveModeHandoffBody(ctx, profileKey);
       if (handoffRaw.trim()) {
         const handoffInterpolated = interpolatePromptBody(handoffRaw, vars);
         if (handoffInterpolated.trim()) {
           sections.push(handoffInterpolated.trim());
+        }
+      }
+      const delegationRaw = resolveSubAgentDelegationBody(ctx, profileKey);
+      if (delegationRaw.trim()) {
+        const delegationInterpolated = interpolatePromptBody(delegationRaw, vars);
+        if (delegationInterpolated.trim()) {
+          sections.push(delegationInterpolated.trim());
         }
       }
       const browserAllowlistRaw = resolveBrowserAllowlistBody(ctx, profileKey);
@@ -321,6 +403,13 @@ export function composeSystemPrompt(ctx: ComposeContext): string {
         const launchInterpolated = interpolatePromptBody(launchAppRaw, vars);
         if (launchInterpolated.trim()) {
           sections.push(launchInterpolated.trim());
+        }
+      }
+      const manageSettingsRaw = resolveManageSettingsBody(ctx, profileKey);
+      if (manageSettingsRaw.trim()) {
+        const manageInterpolated = interpolatePromptBody(manageSettingsRaw, vars);
+        if (manageInterpolated.trim()) {
+          sections.push(manageInterpolated.trim());
         }
       }
     }

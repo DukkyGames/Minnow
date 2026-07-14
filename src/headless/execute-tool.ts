@@ -25,6 +25,7 @@ import { headlessApiUrl } from './server-context';
 import { validateToolRequiredArgs } from '../tools/validate-tool-required-args';
 import { resolveWebSearchExecution } from '../tools/web-search-routing';
 import { isLocalServerAvailable } from '../tools/config';
+import { executeTodoWrite } from '../tools/todo-tools';
 
 /** Browser-catalog tools that run on the server when the tool server is up (BUG-011). */
 const SERVER_PROXY_BROWSER_TOOLS = new Set(['fetch_web_content', 'rag_web_content']);
@@ -59,9 +60,13 @@ function isBrowserOnlyTool(name: string): boolean {
 
 /** Tools exposed to the model in headless mode (server-capable + policy). */
 export function getHeadlessToolDefinitions(modeId: ModeId): OpenAIFunctionDefinition[] {
+  const normalized = normalizeModeId(modeId);
   const catalog = BUILT_IN_TOOLS.filter((tool) => {
     if (!isToolEnabled(tool.id)) return false;
     const fn = tool.definition.function.name;
+    if (fn === 'todo_write') {
+      return normalized === 'build' || normalized === 'debug';
+    }
     if (SERVER_PROXY_BROWSER_TOOLS.has(fn)) return true;
     if (tool.previewRequired) return false;
     if (!tool.serverRequired && isBrowserOnlyTool(fn)) {
@@ -141,6 +146,11 @@ export async function executeHeadlessTool(
           'Error: ask_question is not available in non-interactive headless mode. Proceed without user input or split the task.',
       };
     }
+  }
+
+  if (name === 'todo_write') {
+    const text = executeTodoWrite(args, { chatId: context.chatId });
+    return { content: text };
   }
 
   if (isBrowserOnlyTool(name) && (!tool || tool.previewRequired || !tool.serverRequired)) {

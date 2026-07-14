@@ -6,6 +6,7 @@ import { describe, it } from 'node:test';
 import {
   commandsForImpeccableAugment,
   composeImpeccableSkillBody,
+  listImpeccablePickerOptions,
   parseImpeccableSubcommand,
 } from '../../src/skills/impeccable-client.ts';
 
@@ -26,6 +27,14 @@ function mockFetch(handlers: Record<string, () => Response | Promise<Response>>)
     globalThis.fetch = originalFetch;
   };
 }
+
+describe('listImpeccablePickerOptions', () => {
+  it('lists top sub-commands without verbose argument hints', () => {
+    const options = listImpeccablePickerOptions();
+    assert.ok(options.some((option) => option.id === 'polish'));
+    assert.ok(options.some((option) => option.id === 'init'));
+  });
+});
 
 describe('composeImpeccableSkillBody', () => {
   it('appends init active command when fetch returns init content', async () => {

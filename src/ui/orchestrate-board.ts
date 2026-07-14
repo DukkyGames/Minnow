@@ -55,6 +55,7 @@ import {
   getBoardExecutionMode,
   isBoardRunning,
   isTaskChatActive,
+  isTaskChatActiveForStallCheck,
   listRunningBoardTaskSlots,
   moveTaskStatus,
   moveTaskToNewChat,
@@ -137,6 +138,7 @@ import {
   isOrchestrateInitSplitChromeActive,
 } from './orchestrate-board-init-split';
 import { isOrchestrateHubMounted, teardownOrchestrateHub } from './orchestrate-hub';
+import { isMainColumnOverlaySuppressingChatDom } from './main-column-overlay';
 import { teardownHub } from './hub';
 import { kickoffOrchestrateBoardBuild } from './orchestrate-board-kickoff';
 import {
@@ -738,6 +740,7 @@ let boardUiRefreshFrame: number | undefined;
  */
 function scheduleBoardUiRefresh(groupId: string): void {
   if (isOrchestrateHubMounted()) return;
+  if (isMainColumnOverlaySuppressingChatDom()) return;
   if (!isOrchestrateBoardViewActive() && !isOrchestrateInitSplitChromeActive()) return;
   if (getActiveBoardGroup()?.id !== groupId) return;
   if (boardUiRefreshFrame !== undefined) return;
@@ -839,11 +842,12 @@ export function deriveBoardHeaderStatus(
     }
     return { variant: 'complete', label: 'Complete' };
   }
-  // All tasks are terminal but some are quarantined — board is done.
+  // All tasks are terminal but some are quarantined — board is done (blocked).
   if (total > 0 && terminalCount === total && quarantinedCount > 0) {
-    const label = quarantinedCount === total
-      ? `All ${quarantinedCount} quarantined`
-      : `${quarantinedCount} quarantined`;
+    const label =
+      quarantinedCount === total
+        ? `Blocked — ${quarantinedCount} quarantined`
+        : `Blocked — ${quarantinedCount} quarantined`;
     return { variant: 'quarantined', label };
   }
   if (userStopped && incomplete && !isStreaming && activeRunCount === 0) {
@@ -1742,7 +1746,7 @@ function runningSlotShowsContinue(
   if (slot.isFinalTest || !slot.task) return false;
   if (isChatStreaming(slot.chatId)) return false;
   return (
-    isTaskStalledForRestart(board, slot.task, isTaskChatActive) ||
+    isTaskStalledForRestart(board, slot.task, isTaskChatActiveForStallCheck) ||
     isTaskChatActive(slot.chatId)
   );
 }
@@ -2642,15 +2646,16 @@ function renderKanbanColumns(
   grid.className = 'kanban-grid';
   // Stable key lets us restore horizontal scroll (phone lane swipe) across rebuilds.
   if (scrollKeyPrefix) grid.dataset.boardScrollKey = `grid:${scrollKeyPrefix}`;
-  const columns: Array<{ label: string; statuses: BoardTaskStatus[] }> = [
-    { label: 'Planned', statuses: ['planned', 'blocked'] },
-    { label: 'In Progress', statuses: ['in_progress', 'merging'] },
-    { label: 'Testing', statuses: ['testing'] },
-    { label: 'Complete', statuses: ['complete', 'failed', 'quarantined'] },
+  const columns: Array<{ id: string; label: string; statuses: BoardTaskStatus[] }> = [
+    { id: 'planned', label: 'Planned', statuses: ['planned', 'blocked'] },
+    { id: 'in_progress', label: 'In Progress', statuses: ['in_progress', 'merging'] },
+    { id: 'testing', label: 'Testing', statuses: ['testing'] },
+    { id: 'complete', label: 'Complete', statuses: ['complete', 'failed', 'quarantined'] },
   ];
   for (const col of columns) {
     const column = document.createElement('section');
     column.className = 'kanban-column';
+    column.dataset.kanbanColumn = col.id;
     const colTasks = tasks.filter((t) => col.statuses.includes(t.status));
     const h = document.createElement('h3');
     const colLabel = document.createElement('span');
@@ -3240,6 +3245,7 @@ export async function mountBoardOnboardingPanel(
  */
 export function refreshActiveBoardIfMounted(): void {
   if (isOrchestrateHubMounted()) return;
+  if (isMainColumnOverlaySuppressingChatDom()) return;
   if (!isOrchestrateBoardViewActive() && !isOrchestrateInitSplitChromeActive()) return;
   const group = getActiveBoardGroup();
   if (!group) return;
@@ -3258,6 +3264,7 @@ export function refreshActiveBoardIfMounted(): void {
 
 /** Render Orchestrate board into the board mount (#chatArea or split top pane). */
 export function renderBoardView(group: ChatGroup): void {
+  if (isMainColumnOverlaySuppressingChatDom()) return;
   teardownOrchestrateHub();
   teardownHub();
   const area = document.getElementById('chatArea');

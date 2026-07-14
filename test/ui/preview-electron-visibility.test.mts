@@ -16,6 +16,10 @@ import {
   resetFilePanelStateForTests,
   setFilePanelState,
 } from '../../src/state/file-panel.ts';
+import {
+  resetDesignModeIframeGuestForTests,
+  setDesignModeUsingIframeGuest,
+} from '../../src/ui/preview-design-mode-guest.ts';
 
 describe('preview-electron-visibility', () => {
   const originalDocument = globalThis.document;
@@ -28,9 +32,16 @@ describe('preview-electron-visibility', () => {
 
   let layoutSyncRaf = 0;
   const originalRaf = globalThis.requestAnimationFrame;
+  const docElDataset: { osApp?: string } = {};
+
+  function enableCodeForeground(): void {
+    docElDataset.osApp = 'code';
+    elements.get('appBody')!.classList.delete('hidden');
+  }
 
   beforeEach(() => {
     elements.clear();
+    docElDataset.osApp = '';
     showCalls = 0;
     hideCalls = 0;
     lastBounds = null;
@@ -39,6 +50,7 @@ describe('preview-electron-visibility', () => {
     resetFilePanelStateForTests();
     resetChromePopoverRegistryForTests();
     resetPreviewGuestVisibilityForTests();
+    resetDesignModeIframeGuestForTests();
     globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
       layoutSyncRaf += 1;
       cb(0);
@@ -46,6 +58,7 @@ describe('preview-electron-visibility', () => {
     }) as typeof requestAnimationFrame;
     Object.defineProperty(globalThis, 'document', {
       value: {
+        documentElement: { dataset: docElDataset },
         getElementById: (id: string) => {
           const entry = elements.get(id);
           if (!entry) return null;
@@ -90,9 +103,11 @@ describe('preview-electron-visibility', () => {
     elements.set('previewPane', { classList: new Set(['hidden']) });
     elements.set('previewBody', { classList: new Set() });
     elements.set('globalBugsView', { classList: new Set() });
+    elements.set('appBody', { classList: new Set(['hidden']) });
   });
 
   afterEach(() => {
+    resetDesignModeIframeGuestForTests();
     globalThis.requestAnimationFrame = originalRaf;
     Object.defineProperty(globalThis, 'document', {
       value: originalDocument,
@@ -158,6 +173,36 @@ describe('preview-electron-visibility', () => {
     assert.equal(isChromePopoverOpen(), false);
   });
 
+  test('shouldShowElectronPreviewHost is true when desktop browser mount is active', () => {
+    Object.assign(globalThis.window, {
+      minnow: { preview: { show: async () => {}, hide: async () => {} } },
+    });
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+    });
+    elements.set('desktopPreviewMount', { classList: new Set(['is-active']) });
+    elements.get('previewPane')!.classList.add('hidden');
+    docElDataset.osApp = '';
+    assert.equal(shouldShowElectronPreviewHost(), true);
+  });
+
+  test('shouldShowElectronPreviewHost is false when Code is not foreground', () => {
+    Object.assign(globalThis.window, {
+      minnow: { preview: { show: async () => {}, hide: async () => {} } },
+    });
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+    });
+    elements.get('previewPane')!.classList.delete('hidden');
+    assert.equal(shouldShowElectronPreviewHost(), false);
+    enableCodeForeground();
+    assert.equal(shouldShowElectronPreviewHost(), true);
+  });
+
   test('shouldShowElectronPreviewHost is false when chrome popover is open', () => {
     Object.assign(globalThis.window, {
       minnow: { preview: { show: async () => {}, hide: async () => {} } },
@@ -168,11 +213,29 @@ describe('preview-electron-visibility', () => {
       viewerOpen: true,
     });
     elements.get('previewPane')!.classList.delete('hidden');
+    enableCodeForeground();
     assert.equal(shouldShowElectronPreviewHost(), true);
     registerChromePopover();
     assert.equal(shouldShowElectronPreviewHost(), false);
     unregisterChromePopover();
     assert.equal(shouldShowElectronPreviewHost(), true);
+  });
+
+  test('shouldShowElectronPreviewHost is false when Design Mode uses iframe guest', () => {
+    Object.assign(globalThis.window, {
+      minnow: { preview: { show: async () => {}, hide: async () => {} } },
+    });
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+    });
+    elements.get('previewPane')!.classList.delete('hidden');
+    enableCodeForeground();
+    assert.equal(shouldShowElectronPreviewHost(), true);
+
+    setDesignModeUsingIframeGuest(true);
+    assert.equal(shouldShowElectronPreviewHost(), false);
   });
 
   test('syncElectronPreviewHostLayout shows with bounds when preview pane is open', async () => {
@@ -182,6 +245,7 @@ describe('preview-electron-visibility', () => {
       viewerOpen: true,
     });
     elements.get('previewPane')!.classList.delete('hidden');
+    enableCodeForeground();
 
     await syncElectronPreviewHostLayout();
 
@@ -220,6 +284,7 @@ describe('preview-electron-visibility', () => {
     let maxShowInFlight = 0;
     Object.defineProperty(globalThis, 'document', {
       value: {
+        documentElement: { dataset: docElDataset },
         getElementById: (id: string) => {
           const entry = elements.get(id);
           if (!entry) return null;
@@ -271,6 +336,7 @@ describe('preview-electron-visibility', () => {
       viewerOpen: true,
     });
     elements.get('previewPane')!.classList.delete('hidden');
+    enableCodeForeground();
 
     const first = syncElectronPreviewHostLayout();
     await first;
@@ -281,6 +347,7 @@ describe('preview-electron-visibility', () => {
     rectLeft = 40;
     await syncElectronPreviewHostLayout();
 
-    assert.deepEqual(lastBounds, { x: 40, y: 20, width: 400, height: 300 });
+    assert.deepEqual(lastShowBounds, { x: 40, y: 20, width: 400, height: 300 });
+    assert.equal(lastBounds, null);
   });
 });

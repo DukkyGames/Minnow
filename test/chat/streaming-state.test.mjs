@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
-import { afterEach, describe, test } from 'node:test';
+import { afterEach, beforeEach, describe, test } from 'node:test';
+import { Window } from 'happy-dom';
+import {
+  installHappyDomGlobals,
+  teardownHappyDomAsync,
+} from '../os/dom-helpers.mts';
 
 const appState = await import('../../src/app-state.ts');
 const { setSessionStateForTests, createEmptyChatObject, EXPERT_LAB_CHAT_ID } =
@@ -14,6 +19,24 @@ const {
 const { BOARD_ONBOARDING_KICKOFF_MESSAGE } = await import(
   '../../src/ui/orchestrate-board-kickoff.ts'
 );
+
+/** @type {import('happy-dom').Window | undefined} */
+let win;
+
+beforeEach(() => {
+  win = new Window();
+  installHappyDomGlobals(win);
+});
+
+afterEach(async () => {
+  appState.setStreaming(false);
+  appState.setExpertLabPageOpen(false);
+  setSessionStateForTests(null);
+  if (win) {
+    await teardownHappyDomAsync(win);
+    win = undefined;
+  }
+});
 
 function seedTwoChats(activeId) {
   const a = createEmptyChatObject('');
@@ -32,12 +55,6 @@ function seedTwoChats(activeId) {
 }
 
 describe('streaming-state helpers', () => {
-  afterEach(() => {
-    appState.setStreaming(false);
-    appState.setExpertLabPageOpen(false);
-    setSessionStateForTests(null);
-  });
-
   test('getStreamingChatId is null when idle', () => {
     seedTwoChats('chat-a');
     assert.equal(getStreamingChatId(), null);
@@ -95,7 +112,7 @@ describe('streaming-state helpers', () => {
     assert.equal(isStreamDomVisible(task.id), false);
   });
 
-  test('isStreamDomVisible true during orchestrate board init split', () => {
+  test('isStreamDomVisible false during orchestrate board init split', () => {
     const chat = createEmptyChatObject('');
     chat.id = 'chat-orchestrate-split';
     chat.modeId = 'orchestrate';
@@ -121,7 +138,7 @@ describe('streaming-state helpers', () => {
       groups: [group],
     });
     appState.setStreaming(true, chat.id);
-    assert.equal(isStreamDomVisible(chat.id), true);
+    assert.equal(isStreamDomVisible(chat.id), false);
   });
 
   test('isBackgroundStreamBlockingSend allows concurrent sends', () => {

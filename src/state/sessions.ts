@@ -1,27 +1,36 @@
 import { MAX_CHATS, PLACEHOLDER_CHAT_NAME, SAVE_DEBOUNCE_MS, STORAGE_KEY } from '../constants';
 import { abortChatTitleGeneration } from '../chat/titles/inflight';
+import { cleanupChatWorktreeOnDelete } from './chat-worktree';
 import { isPlaceholderChatName } from '../chat/titles/placeholder';
 import { setSaveTimer, saveTimer } from '../app-state';
 import { getSessions, putSessions } from '../config/api-client';
 import { defaultSessionState } from '../config/defaults';
+import { randomUUID } from '../lib/random-id.ts';
 import { isServerStorageMode } from '../config/storage-mode';
 import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
 import { normalizeThinkingTriState } from '../agents/thinking-types';
 import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
 import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
+import { ensurePendingMessageQueue } from '../chat/message-queue';
 import { notifySessionCreated } from '../webhooks/client';
 import { decodeModelSelectKey } from '../lib/model-select-key';
 import type { SuperPlanState } from '../chat/super-plan/types';
 import {
   CHAT_APP_ID,
   createAssistantChat,
+  createDesktopChat,
   getAssistantChats as filterAssistantChats,
   getChatsForChatsWorkspace as filterChatsForChatsWorkspace,
   getChatLastMessageAt,
   getChatsForWorkspace as filterChatsForWorkspace,
+  getSidebarListedChatsForWorkspace as filterSidebarListedChatsForWorkspace,
   getLastActiveChatIdForApp,
   getUnassignedChats as filterUnassignedChats,
+  isEphemeralEmptyChat,
+  isSidebarListedChat,
+  pruneEphemeralEmptyChats,
+  formatDraftChatSidebarName,
   migrateSessionStateV1ToV2 as migrateSessionJsonToV2,
   rememberActiveChatForApp as rememberActiveChatForAppInState,
   resolveActiveAssistantChatId,
@@ -89,6 +98,7 @@ import type {
   ActiveGoalState,
   Chat,
   ChatGroup,
+  ChatTodo,
   ExpertSelection,
   Message,
   OrchestrateBoardState,
@@ -240,9 +250,28 @@ function ensureExpertSelection(raw: unknown): ExpertSelection {
 /** In-memory session blob mirrored to ~/.minnow or localStorage fallback. */
 export let sessionState: SessionState | null = null;
 
+/** Resolves once `loadSessionsFromStorage()` has populated `sessionState`. */
+let resolveSessionsReady: () => void = () => undefined;
+export const sessionsReady: Promise<void> = new Promise((resolve) => {
+  resolveSessionsReady = resolve;
+});
+
+/** No-op when sessions are already loaded; otherwise waits for boot `initApp`. */
+export async function ensureSessionsReady(): Promise<void> {
+  if (sessionState) return;
+  await sessionsReady;
+}
+
+function markSessionsReady(): void {
+  resolveSessionsReady();
+}
+
 /** Replace in-memory session blob (unit tests). */
 export function setSessionStateForTests(state: SessionState | null): void {
   sessionState = state;
+  if (state) {
+    markSessionsReady();
+  }
 }
 
 export type SaveSessionsResult = 'ok' | 'quota_exceeded';
@@ -263,8 +292,7 @@ function requireSessionState(): SessionState {
 }
 
 export function newChatId(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-  return `c_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+  return randomUUID();
 }
 
 export function createEmptyChatObject(modelId: string, workspacePath?: string): Chat {
@@ -651,6 +679,10 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     typeof r.stopRetries === 'number' && Number.isFinite(r.stopRetries)
       ? r.stopRetries
       : undefined;
+  const lifecycleRun =
+    typeof r.lifecycleRun === 'number' && Number.isFinite(r.lifecycleRun) && r.lifecycleRun >= 0
+      ? r.lifecycleRun
+      : undefined;
   let quarantine: BoardTask['quarantine'];
   if (r.quarantine && typeof r.quarantine === 'object') {
     const q = r.quarantine as Record<string, unknown>;
@@ -710,6 +742,7 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     ...(devPort !== undefined ? { devPort } : {}),
     ...(apiPort !== undefined ? { apiPort } : {}),
     ...(stopRetries !== undefined ? { stopRetries } : {}),
+    ...(lifecycleRun !== undefined ? { lifecycleRun } : {}),
     ...(quarantine ? { quarantine } : {}),
   };
 }
@@ -760,6 +793,7 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
       : undefined;
   const completionShownAt =
     typeof r.completionShownAt === 'number' ? r.completionShownAt : undefined;
+  const terminalBlocked = r.terminalBlocked === true ? true : undefined;
   const executionModeRaw =
     typeof r.executionMode === 'string' ? r.executionMode.trim() : '';
   const executionMode =
@@ -793,6 +827,7 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
     ...(timerSegmentStartedAt !== undefined ? { timerSegmentStartedAt } : {}),
     ...(maxConcurrentTasks !== undefined ? { maxConcurrentTasks } : {}),
     ...(completionShownAt !== undefined ? { completionShownAt } : {}),
+    ...(terminalBlocked ? { terminalBlocked } : {}),
     ...(r.dashboardDismissed === true ? { dashboardDismissed: true } : {}),
     ...(typeof r.integrationLandedAt === 'number' ? { integrationLandedAt: r.integrationLandedAt } : {}),
     ...(typeof r.worktreesClearedAt === 'number' ? { worktreesClearedAt: r.worktreesClearedAt } : {}),
@@ -1061,6 +1096,32 @@ function ensurePersistedSubAgentRuns(
   return out.length ? out : undefined;
 }
 
+const MAX_CHAT_TODO_ITEMS = 20;
+const MAX_CHAT_TODO_TEXT_CHARS = 140;
+
+function normalizeChatTodoStatus(raw: unknown): ChatTodo['status'] {
+  if (raw === 'completed' || raw === 'in_progress' || raw === 'pending') return raw;
+  return 'pending';
+}
+
+/** Sanitize persisted todos — drop malformed rows and cap length. */
+function ensureChatTodos(raw: unknown): ChatTodo[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: ChatTodo[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as Record<string, unknown>;
+    const text = typeof row.text === 'string' ? row.text.trim().slice(0, MAX_CHAT_TODO_TEXT_CHARS) : '';
+    if (!text) continue;
+    out.push({
+      text,
+      status: normalizeChatTodoStatus(row.status),
+    });
+    if (out.length >= MAX_CHAT_TODO_ITEMS) break;
+  }
+  return out.length ? out : undefined;
+}
+
 function ensureActiveGoal(raw: unknown): ActiveGoalState | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const goal = raw as Record<string, unknown>;
@@ -1120,6 +1181,18 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
   const pinnedSkill = ensurePinnedSkill(raw.pinnedSkill);
   const activeGoal = ensureActiveGoal(raw.activeGoal);
   const superPlan = ensureSuperPlanPersisted(raw.superPlan);
+  const todos = ensureChatTodos(raw.todos);
+  const todosUpdatedAt =
+    typeof raw.todosUpdatedAt === 'number' &&
+    Number.isFinite(raw.todosUpdatedAt) &&
+    raw.todosUpdatedAt > 0
+      ? raw.todosUpdatedAt
+      : undefined;
+  const pendingMessageQueue = ensurePendingMessageQueue(raw.pendingMessageQueue);
+  const pendingSteerMessage =
+    typeof raw.pendingSteerMessage === 'string' && raw.pendingSteerMessage.trim()
+      ? raw.pendingSteerMessage.trim()
+      : undefined;
   const chat: Chat = {
     id: typeof raw.id === 'string' && raw.id ? raw.id : newChatId(),
     name:
@@ -1156,6 +1229,10 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
     ...(typeof raw.worktreeRoot === 'string' && raw.worktreeRoot.trim()
       ? { worktreeRoot: raw.worktreeRoot.trim() }
       : {}),
+    ...(typeof raw.gitBranch === 'string' && raw.gitBranch.trim()
+      ? { gitBranch: raw.gitBranch.trim() }
+      : {}),
+    ...(raw.chatWorktreeManaged === true ? { chatWorktreeManaged: true } : {}),
     ...(orchestrateBoard ? { orchestrateBoard } : {}),
     ...(viewMode ? { viewMode } : {}),
     terminalHistory: ensureTerminalHistory(raw.terminalHistory),
@@ -1206,6 +1283,13 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
     ...(pinnedSkill ? { pinnedSkill } : {}),
     ...(activeGoal ? { activeGoal } : {}),
     ...(superPlan ? { superPlan } : {}),
+    ...(todos ? { todos } : {}),
+    ...(todos && todosUpdatedAt ? { todosUpdatedAt } : {}),
+    ...(pendingMessageQueue ? { pendingMessageQueue } : {}),
+    ...(pendingSteerMessage ? { pendingSteerMessage } : {}),
+    ...(typeof raw.composerDraft === 'string' && raw.composerDraft
+      ? { composerDraft: raw.composerDraft }
+      : {}),
   };
   ensureTokenLedger(chat);
   return chat;
@@ -1304,6 +1388,9 @@ function parseSessionStateFromJson(parsed: RawSessionJson | null): SessionState 
   if (!state.lastActiveChatIdByApp) {
     state.lastActiveChatIdByApp = {};
   }
+  if (typeof rawSession.sidebarWidth === 'number' && Number.isFinite(rawSession.sidebarWidth)) {
+    state.sidebarWidth = Math.min(520, Math.max(200, Math.round(rawSession.sidebarWidth)));
+  }
   return state;
 }
 
@@ -1381,6 +1468,21 @@ export function getChatsForWorkspace(
   return filterChatsForWorkspace(workspacePath, state);
 }
 
+/** Sidebar session rows for a workspace (excludes ephemeral empty chats). */
+export function getSidebarListedChatsForWorkspace(
+  workspacePath: string,
+  state: SessionState = requireSessionState(),
+): Chat[] {
+  return filterSidebarListedChatsForWorkspace(workspacePath, state);
+}
+
+export {
+  isEphemeralEmptyChat,
+  isSidebarListedChat,
+  pruneEphemeralEmptyChats,
+  formatDraftChatSidebarName,
+};
+
 /** Legacy or unscoped chats (`workspacePath === ''`), newest first. */
 export function getUnassignedChats(state: SessionState = requireSessionState()): Chat[] {
   return filterUnassignedChats(state);
@@ -1422,6 +1524,23 @@ export function activateAssistantChatForApp(chatsWorkspacePath: string): Chat {
   const state = requireSessionState();
   const nextId = resolveActiveAssistantChatId(chatsWorkspacePath, state, (workspaceKey) => {
     const fresh = createAssistantChat(workspaceKey, newChatId());
+    touchChat(fresh);
+    return fresh;
+  });
+  state.activeId = nextId;
+  rememberActiveChatForAppInState(state, CHAT_APP_ID, nextId);
+  scheduleSaveSessions();
+  return getActiveChat();
+}
+
+/**
+ * Activate the last desktop chat or create one (desktop mode).
+ * Requires the absolute desktop workspace path from `getDesktopWorkspacePath()`.
+ */
+export function activateDesktopAssistantChatForApp(desktopWorkspacePath: string): Chat {
+  const state = requireSessionState();
+  const nextId = resolveActiveAssistantChatId(desktopWorkspacePath, state, (workspaceKey) => {
+    const fresh = createDesktopChat(workspaceKey, newChatId());
     touchChat(fresh);
     return fresh;
   });
@@ -1479,29 +1598,41 @@ export function onWorkspaceChanged(
   return { activeChat: getActiveChat(), activeChanged };
 }
 
-/** Load sessions from API or localStorage (after detectConfigServer). */
-export async function loadSessionsFromStorage(): Promise<void> {
-  if (isServerStorageMode()) {
-    try {
-      const remote = await getSessions();
-      sessionState = parseSessionStateFromJson(remote);
-      await runSessionCodeChangeBackfill(sessionState);
-      return;
-    } catch {
-      setStatus('err', 'Could not load sessions from ~/.minnow');
-    }
-  }
+export interface LoadSessionsOptions {
+  /** Re-fetch from server/localStorage even when sessionState is already populated. */
+  force?: boolean;
+}
 
+/** Load sessions from API or localStorage (after detectConfigServer). */
+export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Promise<void> {
+  if (sessionState && !options?.force) {
+    return;
+  }
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      sessionState = defaultSessionState();
-      return;
+    if (isServerStorageMode()) {
+      try {
+        const remote = await getSessions();
+        sessionState = parseSessionStateFromJson(remote);
+        await runSessionCodeChangeBackfill(sessionState);
+        return;
+      } catch {
+        setStatus('err', 'Could not load sessions from ~/.minnow');
+      }
     }
-    sessionState = parseSessionStateFromJson(JSON.parse(raw) as Partial<SessionState>);
-    await runSessionCodeChangeBackfill(sessionState);
-  } catch {
-    sessionState = defaultSessionState();
+
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) {
+        sessionState = defaultSessionState();
+        return;
+      }
+      sessionState = parseSessionStateFromJson(JSON.parse(raw) as Partial<SessionState>);
+      await runSessionCodeChangeBackfill(sessionState);
+    } catch {
+      sessionState = defaultSessionState();
+    }
+  } finally {
+    markSessionsReady();
   }
 }
 
@@ -1553,6 +1684,31 @@ export function clearActiveGoal(chat: Chat): void {
   chat.activeGoal = undefined;
   touchChat(chat);
   scheduleSaveSessions();
+}
+
+/** Replace the build-agent progress checklist on a chat (todo_write). */
+export function setChatTodos(chat: Chat, todos: ChatTodo[]): void {
+  chat.todos = todos.slice(0, MAX_CHAT_TODO_ITEMS).map((item) => ({
+    text: item.text.trim().slice(0, MAX_CHAT_TODO_TEXT_CHARS),
+    status: normalizeChatTodoStatus(item.status),
+  }));
+  chat.todosUpdatedAt = Date.now();
+  touchChat(chat);
+  scheduleSaveSessions();
+}
+
+/** Clear build-agent todos (/clear or empty todo_write). */
+export function clearChatTodos(chat: Chat): void {
+  if (!chat.todos?.length && chat.todosUpdatedAt === undefined) return;
+  chat.todos = undefined;
+  chat.todosUpdatedAt = undefined;
+  touchChat(chat);
+  scheduleSaveSessions();
+}
+
+/** Read persisted build-agent todos. */
+export function getChatTodos(chat: Chat): ChatTodo[] | undefined {
+  return chat.todos?.length ? chat.todos : undefined;
 }
 
 /** Read persisted goal state (may be achieved but still visible until cleared). */
@@ -1711,6 +1867,7 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
     victim.workspacePath ?? '',
     victimAgent?.contextEnforcementPolicy,
   );
+  void cleanupChatWorktreeOnDelete(victim);
   abortChatTitleGeneration(chatId);
   const wasActive = state.activeId === chatId;
 
@@ -1735,9 +1892,9 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
     touchChat(fresh);
     activeChanged = true;
   } else if (wasActive) {
-    const inWorkspace = getChatsForWorkspace(victimWorkspace, state);
+    const inWorkspace = getSidebarListedChatsForWorkspace(victimWorkspace, state);
     if (inWorkspace.length) {
-      state.activeId = inWorkspace[0].id;
+      state.activeId = inWorkspace[0]!.id;
     } else {
       const fresh = createEmptyChatObject(fallbackModelId, victimWorkspace);
       state.chats.push(fresh);

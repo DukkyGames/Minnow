@@ -41,4 +41,15 @@ describe('text-diff', () => {
     assert.equal(stats.additions, adds);
     assert.equal(stats.deletions, dels);
   });
+
+  test('toChangedLinesWithNumbers skips context and numbers edits', async () => {
+    const { buildLineDiff, toChangedLinesWithNumbers } = await import(
+      '../../src/chat/prompts/text-diff.ts'
+    );
+    const lines = buildLineDiff('a\nb\nc', 'a\nx\nc');
+    const changed = toChangedLinesWithNumbers(lines);
+    assert.equal(changed.length, 2);
+    assert.deepEqual(changed[0], { type: 'remove', text: 'b', lineNumber: 2 });
+    assert.deepEqual(changed[1], { type: 'add', text: 'x', lineNumber: 2 });
+  });
 });

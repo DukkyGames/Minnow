@@ -9,6 +9,7 @@ import {
 } from '../state/file-panel';
 import {
   applyFileSidebarVisuals,
+  clearMobileFileSidebarOverlay,
   closeMobileFileSidebar,
   isMobileLayout,
   toggleFileSidebarCollapsed,
@@ -44,53 +45,20 @@ import { refreshWorkspaceUi } from './workspace-button';
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
 import { initGitPanel, syncGitPanelFromOrchestrator } from './git-panel';
+import { initGitCenterLightbox } from './git-center-lightbox';
 import { startFileTreeGitStatusPoll } from './file-tree';
+import {
+  shouldAutoRestoreViewerSplitOnBoot,
+} from './preview-restore-policy';
+import { bindWorkspaceSplitResizer } from './workspace-split-resize';
+import { sessionState } from '../state/sessions';
 
 let resizerBound = false;
 
 function bindSplitResizer(): void {
   if (resizerBound) return;
-  const resizer = document.getElementById('splitResizer');
-  const split = document.getElementById('workspaceSplit');
-  if (!resizer || !split) return;
   resizerBound = true;
-
-  let dragging = false;
-
-  const onPointerMove = (e: PointerEvent): void => {
-    if (!dragging) return;
-    const rect = split.getBoundingClientRect();
-    const ratio = (e.clientX - rect.left) / rect.width;
-    const clamped = Math.min(0.75, Math.max(0.35, ratio));
-    patchFilePanelState({ splitRatio: clamped });
-    applyFileSidebarVisuals();
-    resizer.setAttribute('aria-valuenow', String(Math.round(clamped * 100)));
-  };
-
-  const stopDrag = (): void => {
-    if (!dragging) return;
-    dragging = false;
-    resizer.classList.remove('dragging');
-    document.body.style.removeProperty('cursor');
-    window.removeEventListener('pointermove', onPointerMove);
-    window.removeEventListener('pointerup', stopDrag);
-    window.removeEventListener('pointercancel', stopDrag);
-    window.removeEventListener('blur', stopDrag);
-  };
-
-  resizer.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    dragging = true;
-    resizer.classList.add('dragging');
-    resizer.setPointerCapture(e.pointerId);
-    document.body.style.cursor = 'col-resize';
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', stopDrag);
-    window.addEventListener('pointercancel', stopDrag);
-    window.addEventListener('blur', stopDrag);
-  });
-
-  resizer.addEventListener('lostpointercapture', stopDrag);
+  bindWorkspaceSplitResizer();
 }
 
 function bindFilePanelControls(): void {
@@ -116,6 +84,7 @@ function bindFilePanelControls(): void {
 
 /** React to local server ping success/failure (after detectLocalServer). */
 export function onFilePanelServerAvailabilityChanged(): void {
+  if (!sessionState) return;
   setFileTreeServerAvailable(getLocalServerAvailable());
   onFileTreeSearchServerChanged();
   if (getLocalServerAvailable()) {
@@ -145,26 +114,18 @@ export async function initFilePanel(): Promise<void> {
   }
 
   const { initPreviewPanel } = await import('./preview-panel');
-  initPreviewPanel();
+  await initPreviewPanel();
 
   const state = getFilePanelState();
-  if (state.rightPaneMode === 'preview') {
-    // Restored by initPreviewPanel from persisted previewSource.
-  } else if (state.openViewerTabs.length > 0) {
-    await restoreViewerTabsFromPrefs(state.openViewerTabs, state.activeViewerTab);
-  } else if (state.viewerOpen && state.selectedPath) {
-    await openFileInViewer(state.selectedPath);
+  if (shouldAutoRestoreViewerSplitOnBoot()) {
+    if (state.openViewerTabs.length > 0) {
+      await restoreViewerTabsFromPrefs(state.openViewerTabs, state.activeViewerTab);
+    } else if (state.viewerOpen && state.selectedPath) {
+      await openFileInViewer(state.selectedPath);
+    }
   }
 
   applyFileSidebarVisuals();
-
-  if (state.rightPaneMode === 'preview') {
-    const { getForegroundAppId, getOsView } = await import('../os/instances');
-    if (getOsView() === 'app' && getForegroundAppId() === 'code') {
-      const { resyncOpenPreviewPanelFromState } = await import('./preview-panel');
-      resyncOpenPreviewPanelFromState();
-    }
-  }
 
   bindSplitResizer();
   bindFilePanelControls();
@@ -178,18 +139,20 @@ export async function initFilePanel(): Promise<void> {
   initFileTreeSearch();
 
   initGitPanel();
+  initGitCenterLightbox();
   if (getLocalServerAvailable()) {
     startFileTreeGitStatusPoll();
   }
 
   window.addEventListener('resize', () => {
-    if (!isMobileLayout()) closeMobileFileSidebar();
+    if (!isMobileLayout()) clearMobileFileSidebarOverlay();
     applyFileSidebarVisuals();
   });
 }
 
 export {
   applyFileSidebarVisuals,
+  clearMobileFileSidebarOverlay,
   closeMobileFileSidebar,
   toggleFileSidebarCollapsed,
   toggleFileSidebarLayout,

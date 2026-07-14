@@ -10,6 +10,7 @@ import { normalizeWorkspacePath } from '../../src/lib/normalize-workspace-path.t
 import {
   CHAT_APP_ID,
   createAssistantChat,
+  createDesktopChat,
   getAssistantChats,
   getChatsForChatsWorkspace,
   getLastActiveChatIdForApp,
@@ -40,7 +41,8 @@ function chatRow(
     workspacePath: normalizeWorkspacePath(workspacePath),
     modelId: 'test-model',
     modeId: 'build',
-    history: [],
+    // Sidebar list helpers hide ephemeral empty chats; seed one turn for fixtures.
+    history: [{ role: 'user', content: 'fixture' }],
     lastStats: null,
     modelInfo: {},
     updatedAt,
@@ -151,6 +153,17 @@ describe('lastActiveChatIdByApp', () => {
   });
 });
 
+describe('createDesktopChat', () => {
+  test('defaults to desktop mode, workAgentAuto, and workspace path', () => {
+    const desktopWs = '/home/user/.minnow/workspace';
+    const chat = createDesktopChat(desktopWs, 'chat-desktop-1', 'model-x');
+    assert.equal(chat.modeId, 'desktop');
+    assert.equal(chat.workAgentAuto, true);
+    assert.equal(chat.modelId, 'model-x');
+    assert.equal(normalizeWorkspacePath(chat.workspacePath), normalizeWorkspacePath(desktopWs));
+  });
+});
+
 describe('createAssistantChat', () => {
   test('defaults to general mode, workAgentAuto, and chats workspace path', () => {
     const chat = createAssistantChat(CHATS_WS, ASSISTANT_A, 'model-x');
@@ -170,7 +183,9 @@ describe('createAssistantChat', () => {
       createAssistantChat(path, ASSISTANT_A),
     );
     assert.equal(next, ASSISTANT_A);
-    assert.equal(getAssistantChats(state, CHATS_WS).length, 1);
+    // New assistant chats start ephemeral until the user sends or drafts text.
+    assert.equal(getChatsForChatsWorkspace(state, CHATS_WS).length, 1);
+    assert.equal(getAssistantChats(state, CHATS_WS).length, 0);
     const created = state.chats.find((c) => c.id === ASSISTANT_A);
     assert.ok(created);
     assert.equal(created?.modeId, 'general');

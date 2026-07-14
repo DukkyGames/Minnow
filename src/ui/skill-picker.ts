@@ -3,18 +3,28 @@
  * Lists SKILL.md skills and built-in slash commands (e.g. /goal).
  */
 
-import { streaming } from '../app-state';
-import { UI_DESIGNER_COMPOSER_HINT } from '../agents/ui-designer/runner';
+import { isUserPromptLocked } from './user-prompt-lock';
 import { listSlashPickerRows, type SlashPickerRow } from '../chat/slash-commands/picker-catalog';
-import { impeccableComposerHint } from '../skills/impeccable-client';
+import { getSkillCatalog } from '../skills/client';
+import {
+  buildSkillPickerInsertion,
+  hasSkillPickerOptions,
+  listSkillPickerOptions,
+  type SkillPickerOption,
+} from '../skills/picker-insertion';
+
+type PickerPhase = 'list' | 'options';
 
 let pickerEl: HTMLDivElement | null = null;
+let headerEl: HTMLDivElement | null = null;
 let listEl: HTMLUListElement | null = null;
 let inputEl: HTMLTextAreaElement | null = null;
 let filterQuery = '';
 let activeIndex = 0;
 let open = false;
 let slashStart = -1;
+let pickerPhase: PickerPhase = 'list';
+let pendingSkill: { id: string; label: string } | null = null;
 let repositionHandler: (() => void) | null = null;
 
 /** Skills confirmed via picker selection (not manual typing), keyed by element. */
@@ -30,8 +40,29 @@ function ensurePicker(): void {
   pickerEl.setAttribute('role', 'listbox');
   pickerEl.id = 'skillPicker';
 
+  headerEl = document.createElement('div');
+  headerEl.className = 'skill-picker__header hidden';
+  headerEl.setAttribute('role', 'presentation');
+
+  const backBtn = document.createElement('button');
+  backBtn.type = 'button';
+  backBtn.className = 'skill-picker__back';
+  backBtn.textContent = 'Back';
+  backBtn.setAttribute('aria-label', 'Back to skills');
+  backBtn.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    backToSkillList();
+  });
+
+  const headerTitle = document.createElement('span');
+  headerTitle.className = 'skill-picker__header-title';
+
+  headerEl.appendChild(backBtn);
+  headerEl.appendChild(headerTitle);
+
   listEl = document.createElement('ul');
   listEl.className = 'skill-picker__list';
+  pickerEl.appendChild(headerEl);
   pickerEl.appendChild(listEl);
 }
 
@@ -99,13 +130,79 @@ function filteredPickerRows(): SlashPickerRow[] {
   return listSlashPickerRows(filterQuery);
 }
 
+function filteredSkillOptions(): SkillPickerOption[] {
+  if (!pendingSkill) return [];
+  const options = listSkillPickerOptions(pendingSkill.id) ?? [];
+  const q = filterQuery.trim().toLowerCase();
+  if (!q) return options;
+  return options.filter(
+    (option) =>
+      option.id.toLowerCase().includes(q) ||
+      option.label.toLowerCase().includes(q) ||
+      (option.description?.toLowerCase().includes(q) ?? false) ||
+      (option.group?.toLowerCase().includes(q) ?? false),
+  );
+}
+
+function resolveSkillLabel(skillId: string): string {
+  return getSkillCatalog().find((skill) => skill.id === skillId)?.label ?? skillId;
+}
+
+/** Match `/impeccable`, `/impeccable `, or `/impeccable polish` while the caret is in the token. */
+function matchSkillSubOptionContext(before: string): {
+  skillId: string;
+  filter: string;
+  slashStart: number;
+} | null {
+  const match =
+    before.match(/(?:^|\s)\/(impeccable|ui-designer|caveman)\s+([a-z0-9-]*)$/i) ??
+    before.match(/(?:^|\s)\/(impeccable|ui-designer|caveman)\s*$/i);
+  if (!match || match.index == null) return null;
+
+  const skillId = match[1].toLowerCase();
+  if (!hasSkillPickerOptions(skillId)) return null;
+
+  const leadingWs = match[0].startsWith(' ') ? 1 : 0;
+  return {
+    skillId,
+    filter: (match[2] ?? '').toLowerCase(),
+    slashStart: match.index + leadingWs,
+  };
+}
+
+function showPickerSurface(): void {
+  ensurePicker();
+  mountPickerPortal();
+  open = true;
+  if (pickerEl) pickerEl.classList.remove('hidden');
+  if (inputEl) inputEl.setAttribute('aria-expanded', 'true');
+  attachRepositionListeners();
+}
+
+function enterSkillOptionsPhase(skillId: string, label: string, start: number, query = ''): void {
+  slashStart = start;
+  pendingSkill = { id: skillId, label };
+  pickerPhase = 'options';
+  filterQuery = query;
+  activeIndex = 0;
+  showPickerSurface();
+  renderList();
+}
+
 function pickerRowId(row: SlashPickerRow): string {
   return row.kind === 'skill' ? row.skill.id : row.command.id;
 }
 
-function renderList(): void {
-  if (!listEl || !pickerEl) return;
+function setHeaderTitle(text: string): void {
+  if (!headerEl) return;
+  const title = headerEl.querySelector('.skill-picker__header-title');
+  if (title) title.textContent = text;
+}
 
+function renderSkillList(): void {
+  if (!listEl || !pickerEl || !headerEl) return;
+
+  headerEl.classList.add('hidden');
   const items = filteredPickerRows();
   listEl.innerHTML = '';
 
@@ -161,6 +258,15 @@ function renderList(): void {
     li.appendChild(id);
     li.appendChild(desc);
 
+    if (row.kind === 'skill' && hasSkillPickerOptions(row.skill.id)) {
+      const chevron = document.createElement('span');
+      chevron.className = 'skill-picker__chevron';
+      chevron.setAttribute('aria-hidden', 'true');
+      chevron.textContent = '›';
+      li.appendChild(chevron);
+      li.classList.add('skill-picker__item--has-options');
+    }
+
     li.addEventListener('mousedown', (e) => {
       e.preventDefault();
       applyPickerRow(row);
@@ -172,11 +278,105 @@ function renderList(): void {
   if (open) positionPicker();
 }
 
+function renderOptionRows(): void {
+  if (!listEl || !pickerEl || !headerEl || !pendingSkill) return;
+
+  headerEl.classList.remove('hidden');
+  setHeaderTitle(pendingSkill.label);
+
+  const options = filteredSkillOptions();
+  listEl.innerHTML = '';
+
+  if (options.length === 0) {
+    const empty = document.createElement('li');
+    empty.className = 'skill-picker__empty';
+    empty.textContent = 'No matching options';
+    listEl.appendChild(empty);
+    activeIndex = 0;
+    if (open) positionPicker();
+    return;
+  }
+
+  if (options.length === 0) {
+    activeIndex = 0;
+  } else {
+    if (activeIndex >= options.length) activeIndex = options.length - 1;
+    if (activeIndex < 0) activeIndex = 0;
+  }
+
+  let lastGroup = '';
+
+  options.forEach((option, i) => {
+    if (option.group && option.group !== lastGroup) {
+      lastGroup = option.group;
+      const group = document.createElement('li');
+      group.className = 'skill-picker__group';
+      group.setAttribute('role', 'presentation');
+      group.textContent = option.group;
+      listEl.appendChild(group);
+    }
+
+    const li = document.createElement('li');
+    li.className = 'skill-picker__item skill-picker__item--option';
+    li.setAttribute('role', 'option');
+    li.id = `skill-opt-${pendingSkill!.id}-${option.id}`;
+    li.setAttribute('aria-selected', i === activeIndex ? 'true' : 'false');
+    if (i === activeIndex) {
+      li.classList.add('skill-picker__item--active');
+      pickerEl.setAttribute('aria-activedescendant', li.id);
+    }
+
+    const badge = document.createElement('span');
+    badge.className = 'skill-picker__badge skill-picker__badge--option';
+    badge.textContent = 'Option';
+
+    const label = document.createElement('span');
+    label.className = 'skill-picker__label';
+    label.textContent = option.label;
+
+    const id = document.createElement('code');
+    id.className = 'skill-picker__id';
+    id.textContent = option.id;
+
+    const desc = document.createElement('span');
+    desc.className = 'skill-picker__desc';
+    desc.textContent = option.description ?? '';
+
+    li.appendChild(badge);
+    li.appendChild(label);
+    li.appendChild(id);
+    li.appendChild(desc);
+
+    li.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      applySkillOption(option.id);
+    });
+
+    listEl.appendChild(li);
+  });
+
+  if (open) positionPicker();
+}
+
+function renderList(): void {
+  if (pickerPhase === 'options') {
+    renderOptionRows();
+    return;
+  }
+  renderSkillList();
+}
+
+function resetPickerState(): void {
+  pickerPhase = 'list';
+  pendingSkill = null;
+}
+
 function closePicker(): void {
   open = false;
   slashStart = -1;
   filterQuery = '';
   activeIndex = 0;
+  resetPickerState();
   detachRepositionListeners();
   if (pickerEl) {
     pickerEl.classList.add('hidden');
@@ -184,6 +384,7 @@ function closePicker(): void {
     pickerEl.style.removeProperty('left');
     pickerEl.style.removeProperty('width');
   }
+  if (headerEl) headerEl.classList.add('hidden');
   if (inputEl) inputEl.setAttribute('aria-expanded', 'false');
 }
 
@@ -194,10 +395,52 @@ function openPickerAt(start: number, query: string): void {
   slashStart = start;
   filterQuery = query;
   activeIndex = 0;
+  resetPickerState();
   if (pickerEl) pickerEl.classList.remove('hidden');
   if (inputEl) inputEl.setAttribute('aria-expanded', 'true');
   renderList();
   attachRepositionListeners();
+}
+
+function insertAtSlashStart(insertion: string): void {
+  if (!inputEl || slashStart < 0) return;
+
+  const before = inputEl.value.slice(0, slashStart);
+  const after = inputEl.value.slice(inputEl.selectionEnd);
+  inputEl.value = `${before}${insertion}${after.trimStart()}`;
+  const caret = before.length + insertion.length;
+  inputEl.setSelectionRange(caret, caret);
+  applyingSkill = true;
+  inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+  applyingSkill = false;
+}
+
+function openSkillOptions(skillId: string, label: string): void {
+  if (!inputEl || slashStart < 0) return;
+
+  insertAtSlashStart(`/${skillId} `);
+  const nextStart = inputEl.value.lastIndexOf(`/${skillId}`);
+  enterSkillOptionsPhase(skillId, label, nextStart >= 0 ? nextStart : slashStart);
+  inputEl.focus();
+}
+
+function backToSkillList(): void {
+  if (!inputEl || slashStart < 0) {
+    closePicker();
+    return;
+  }
+
+  const before = inputEl.value.slice(0, slashStart);
+  const after = inputEl.value.slice(inputEl.selectionEnd);
+  const token = filterQuery ? `/${filterQuery}` : '/';
+  inputEl.value = `${before}${token}${after}`;
+  const caret = before.length + token.length;
+  inputEl.setSelectionRange(caret, caret);
+
+  resetPickerState();
+  activeIndex = 0;
+  renderList();
+  inputEl.focus();
 }
 
 /** Insert a picker row into the composer and close the popover. */
@@ -207,36 +450,39 @@ function applyPickerRow(row: SlashPickerRow): void {
     return;
   }
 
-  const before = inputEl.value.slice(0, slashStart);
-  const after = inputEl.value.slice(inputEl.selectionEnd);
-
-  let insertion: string;
   if (row.kind === 'command') {
-    insertion = row.command.insertion;
-  } else {
-    const skillId = row.skill.id;
-    const hint =
-      skillId === 'ui-designer'
-        ? `plan — ${UI_DESIGNER_COMPOSER_HINT} `
-        : skillId === 'impeccable'
-          ? `${impeccableComposerHint()} `
-          : '';
-    insertion = `/${skillId} ${hint}`;
-    pickerApplied.set(inputEl, skillId);
+    insertAtSlashStart(row.command.insertion);
+    closePicker();
+    inputEl.focus();
+    return;
   }
 
-  inputEl.value = `${before}${insertion}${after.trimStart()}`;
-  const caret = before.length + insertion.length;
-  inputEl.setSelectionRange(caret, caret);
-  applyingSkill = true;
-  inputEl.dispatchEvent(new Event('input', { bubbles: true }));
-  applyingSkill = false;
+  const skillId = row.skill.id;
+  if (hasSkillPickerOptions(skillId)) {
+    openSkillOptions(skillId, row.skill.label);
+    return;
+  }
+
+  insertAtSlashStart(buildSkillPickerInsertion(skillId));
+  pickerApplied.set(inputEl, skillId);
+  closePicker();
+  inputEl.focus();
+}
+
+function applySkillOption(optionId: string): void {
+  if (!inputEl || slashStart < 0 || !pendingSkill) {
+    closePicker();
+    return;
+  }
+
+  insertAtSlashStart(buildSkillPickerInsertion(pendingSkill.id, optionId));
+  pickerApplied.set(inputEl, pendingSkill.id);
   closePicker();
   inputEl.focus();
 }
 
 function detectSlashContext(): void {
-  if (!inputEl || streaming) {
+  if (!inputEl || isUserPromptLocked()) {
     closePicker();
     return;
   }
@@ -244,6 +490,27 @@ function detectSlashContext(): void {
   const value = inputEl.value;
   const pos = inputEl.selectionStart;
   const before = value.slice(0, pos);
+
+  const subOptionContext = matchSkillSubOptionContext(before);
+  if (subOptionContext) {
+    const label =
+      pendingSkill?.id === subOptionContext.skillId
+        ? pendingSkill.label
+        : resolveSkillLabel(subOptionContext.skillId);
+    slashStart = subOptionContext.slashStart;
+    pendingSkill = { id: subOptionContext.skillId, label };
+    pickerPhase = 'options';
+    filterQuery = subOptionContext.filter;
+    activeIndex = 0;
+    if (!open) showPickerSurface();
+    renderList();
+    return;
+  }
+
+  if (pickerPhase === 'options') {
+    resetPickerState();
+  }
+
   const slashMatch = before.match(/(?:^|\s)\/([a-z0-9-]*)$/);
 
   if (!slashMatch || slashMatch.index == null) {
@@ -253,7 +520,13 @@ function detectSlashContext(): void {
 
   const leadingWs = slashMatch[0].startsWith(' ') ? 1 : 0;
   const start = slashMatch.index + leadingWs;
-  openPickerAt(start, slashMatch[1] ?? '');
+  if (!open || slashStart !== start || pickerPhase !== 'list') {
+    openPickerAt(start, slashMatch[1] ?? '');
+    return;
+  }
+
+  filterQuery = slashMatch[1] ?? '';
+  renderList();
 }
 
 /** Whether picker is open (Enter should select, not send). */
@@ -269,6 +542,36 @@ export function getPickerAppliedSkillId(el: HTMLTextAreaElement): string | null 
 /** Handle keyboard while picker is open. Returns true if consumed. */
 export function handleSkillPickerKeydown(e: KeyboardEvent): boolean {
   if (!open) return false;
+
+  if (pickerPhase === 'options') {
+    const options = filteredSkillOptions();
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      backToSkillList();
+      return true;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      activeIndex = Math.min(activeIndex + 1, Math.max(0, options.length - 1));
+      renderList();
+      return true;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      activeIndex = Math.max(activeIndex - 1, 0);
+      renderList();
+      return true;
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      const selected = options[activeIndex];
+      if (selected) {
+        e.preventDefault();
+        applySkillOption(selected.id);
+        return true;
+      }
+    }
+    return false;
+  }
 
   const items = filteredPickerRows();
   if (e.key === 'Escape') {
@@ -298,6 +601,15 @@ export function handleSkillPickerKeydown(e: KeyboardEvent): boolean {
   return false;
 }
 
+/** @internal Reset module singleton between happy-dom document swaps in tests. */
+export function __resetSkillPickerForTests(): void {
+  closePicker();
+  pickerEl = null;
+  headerEl = null;
+  listEl = null;
+  inputEl = null;
+}
+
 /** Mount slash picker listeners on one composer textarea (idempotent). */
 export function initComposerSlashPicker(composerInput: HTMLTextAreaElement): void {
   if (composerInput.dataset.slashPickerBound === '1') return;
@@ -311,20 +623,18 @@ export function initComposerSlashPicker(composerInput: HTMLTextAreaElement): voi
   });
 
   composerInput.addEventListener('input', () => {
-    if (!applyingSkill) {
-      const storedSkill = pickerApplied.get(composerInput);
-      if (storedSkill && !new RegExp(`(?:^|\\s)/${storedSkill}(?:\\s|$)`).test(composerInput.value)) {
-        pickerApplied.delete(composerInput);
-      }
-    }
     bindActiveInput(composerInput);
+    if (applyingSkill) return;
+
+    const storedSkill = pickerApplied.get(composerInput);
+    if (storedSkill && !new RegExp(`(?:^|\\s)/${storedSkill}(?:\\s|$)`).test(composerInput.value)) {
+      pickerApplied.delete(composerInput);
+    }
     detectSlashContext();
   });
 
-  composerInput.addEventListener('keydown', (e) => {
-    if (inputEl !== composerInput) bindActiveInput(composerInput);
-    handleSkillPickerKeydown(e);
-  });
+  // Keydown is handled by each composer's outer handler (handleKey / chat-app / concierge)
+  // so ArrowDown/Up are not processed twice when the slash picker is open.
 
   composerInput.addEventListener('blur', () => {
     window.setTimeout(() => closePicker(), 150);
@@ -343,3 +653,4 @@ export function initAllComposerSlashPickers(): void {
     if (el) initComposerSlashPicker(el);
   }
 }
+

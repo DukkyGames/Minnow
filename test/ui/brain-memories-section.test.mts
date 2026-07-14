@@ -28,6 +28,6 @@ describe('brain memories section', () => {
   });
 
   test('resolveBrainMemoryRoute ignores unrelated keys', () => {
-    assert.equal(resolveBrainMemoryRoute('knowledge.rules.enabled'), null);
+    assert.equal(resolveBrainMemoryRoute('agents.rules.enabled'), null);
   });
 });
