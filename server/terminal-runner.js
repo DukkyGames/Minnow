@@ -15,6 +15,7 @@ import {
   formatProcessOutput,
   runProcess,
 } from './process-runner.js';
+import { resolveOneShotSpawn } from './terminal/one-shot-spawn.js';
 
 /** Max in-memory bytes per run before UI/log truncation marker. */
 export const MAX_TERMINAL_BUFFER_BYTES = 2 * 1024 * 1024;
@@ -231,16 +232,12 @@ export async function createRun({
 
   const runChild = async () => {
     try {
-      const winOneShot =
-        process.platform === 'win32' && args.length === 0 && typeof command === 'string';
-      const execCommand = winOneShot ? 'cmd.exe' : command;
-      const execArgs = winOneShot ? ['/d', '/s', '/c', command] : args;
-      const useShell = winOneShot ? false : shell === true;
+      const spawnTarget = resolveOneShotSpawn({ command, args, shell });
 
-      const result = await runProcess(execCommand, execArgs, {
+      const result = await runProcess(spawnTarget.command, spawnTarget.args, {
         cwd,
         timeout: clampedTimeout,
-        shell: useShell,
+        shell: spawnTarget.shell,
         killTree: killProcessTree,
         env:
           envOverrides && typeof envOverrides === 'object'
@@ -348,17 +345,10 @@ export async function createBackgroundRun({
   activeRuns.set(runId, state);
   emit(state, { type: 'meta', runId, command, cwd });
 
-  // One-shot shell strings (e.g. `node -e "..."`, `sleep 120`) must run through a shell on every OS.
-  const oneShot = args.length === 0 && typeof command === 'string';
-  const winOneShot = oneShot && process.platform === 'win32';
-  const unixOneShot = oneShot && process.platform !== 'win32';
-  const execCommand = winOneShot ? 'cmd.exe' : unixOneShot ? '/bin/sh' : command;
-  const execArgs = winOneShot
-    ? ['/d', '/s', '/c', command]
-    : unixOneShot
-      ? ['-c', command]
-      : args;
-  const useShell = winOneShot || unixOneShot ? false : shell === true;
+  const spawnTarget = resolveOneShotSpawn({ command, args, shell });
+  const execCommand = spawnTarget.command;
+  const execArgs = spawnTarget.args;
+  const useShell = spawnTarget.shell;
 
   const childEnv =
     envOverrides && typeof envOverrides === 'object'
