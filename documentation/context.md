@@ -2022,7 +2022,7 @@ Order in `initApp()`:
 2. `await loadToolConfigFromStorage()` — read `tools.json` (or `minnow.tools`) **before** prompt/session UI so permission state is never stale on first paint; overlapping calls share one in-flight promise and the loader always resolves (falls back to `defaultToolConfig()` on unexpected errors, so Node tests never see a rejected load).
 3. `await initPromptSystem()` — built-in prompts + user registry from `/api/prompts/registry`.
 4. `await initWorkAgentSystem()` — work agents from glob + `/api/work-agents` overrides.
-5. `await loadSessionsFromStorage()` (no-op when already loaded from `startApp()`); `fillSystemPromptPresetSelect()` + `await loadSystemPromptSettings()`.
+5. `await loadSessionsFromStorage({ force: true })` when server mode (re-hydrates from `~/.minnow` after a localStorage boot race — **MIN-408**); otherwise no-op when already loaded from `startApp()`. `registerSessionPersistenceShutdownHandler()` flushes debounced saves on `pagehide` via `fetch` `keepalive`. Server PUT is blocked until a successful GET hydrates `sessionState` so an empty boot blob cannot clobber `sessions/state.json`.
 6. `fillToolsSection()` + `registerToolHandlers()`; `initAttachments()`; `initModeSelector()`; `initWorkAgentDevUi()`.
 7. `await detectLocalServer()` → `loadToolConfigIntoDrawer()` (server-required rows depend on ping).
 8. `applySidebarVisuals()` + `renderSidebar()`.

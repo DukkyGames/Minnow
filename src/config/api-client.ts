@@ -93,6 +93,23 @@ export async function putSessions(state: SessionState): Promise<void> {
   await parseJsonResponse<{ ok: boolean }>(res);
 }
 
+/**
+ * Best-effort session save during `pagehide` / abrupt shutdown.
+ * `keepalive` lets the browser finish the request after the tab closes.
+ */
+export function putSessionsKeepalive(state: SessionState): void {
+  try {
+    void fetch('/api/config/sessions', {
+      method: 'PUT',
+      headers: JSON_HEADERS,
+      body: JSON.stringify(state),
+      keepalive: true,
+    });
+  } catch {
+    /* ignore — nothing else we can do during unload */
+  }
+}
+
 /** GET /api/config/tools */
 export async function getTools(): Promise<ToolConfig> {
   const res = await fetch('/api/config/tools', { cache: 'no-store' });
