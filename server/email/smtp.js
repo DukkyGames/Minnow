@@ -9,6 +9,7 @@ import { sanitizeEmailHtml } from './sanitize-html.js';
 import { wrapUntrusted } from '../security/untrusted.js';
 import { llmCall } from '../research/llm.js';
 import { loadSynthesisConfig, resolveSynthesisModel } from '../memory/synthesis-config.js';
+import { computeReplyHeaders } from './reply-headers.js';
 
 /**
  * Infer nodemailer transport security from account SMTP settings.
@@ -49,15 +50,7 @@ export async function draftReply(input) {
     throw new Error('Thread not found in cache — sync the folder first');
   }
 
-  const latest = thread[thread.length - 1];
-  const subject = String(latest.subject ?? '').trim();
-  const replySubject = /^re:/i.test(subject) ? subject : `Re: ${subject}`;
-  const to = String(latest.from ?? '').trim();
-  const inReplyTo = String(latest.messageId ?? '');
-  const references = [inReplyTo, ...(Array.isArray(latest.references) ? latest.references : [])]
-    .filter(Boolean)
-    .join(' ');
-
+  const headers = computeReplyHeaders(thread, account);
   const instructions = String(input.instructions ?? '').trim();
   let replyBody = '';
 
@@ -100,10 +93,10 @@ export async function draftReply(input) {
   return {
     accountId: input.accountId,
     threadId: input.threadId,
-    to,
-    subject: replySubject,
-    inReplyTo,
-    references,
+    to: headers.to,
+    subject: headers.subject,
+    inReplyTo: headers.inReplyTo,
+    references: headers.references,
     body: replyBody,
     note: 'Draft only — review and send explicitly from the Email app.',
   };
@@ -111,7 +104,7 @@ export async function draftReply(input) {
 
 /**
  * Send an email after explicit user confirmation.
- * @param {{ accountId: string, to: string, subject: string, body: string, bodyHtml?: string, inReplyTo?: string, references?: string, confirmed: boolean }} input
+ * @param {{ accountId: string, to: string, subject: string, body: string, bodyHtml?: string, cc?: string, bcc?: string, inReplyTo?: string, references?: string, confirmed: boolean }} input
  */
 export async function sendEmail(input) {
   if (!input.confirmed) {
@@ -124,6 +117,8 @@ export async function sendEmail(input) {
   }
 
   const to = String(input.to ?? '').trim();
+  const cc = String(input.cc ?? '').trim();
+  const bcc = String(input.bcc ?? '').trim();
   const subject = String(input.subject ?? '').trim();
   const body = String(input.body ?? '');
   const bodyHtml = sanitizeEmailHtml(input.bodyHtml);
@@ -144,6 +139,8 @@ export async function sendEmail(input) {
   const info = await transport.sendMail({
     from,
     to,
+    cc: cc || undefined,
+    bcc: bcc || undefined,
     subject,
     text: body,
     html: bodyHtml || undefined,
@@ -168,6 +165,11 @@ export async function sendReplyVariant(input) {
     throw new Error('Send requires explicit user confirmation (confirmed: true)');
   }
 
+  const account = await getEmailAccount(input.accountId);
+  if (!account) {
+    throw new Error('Email account not found');
+  }
+
   const message = await getCachedMessage(input.accountId, input.messageKey);
   if (!message) {
     throw new Error('Cached message not found');
@@ -180,19 +182,19 @@ export async function sendReplyVariant(input) {
   }
 
   const thread = await listCachedThread(input.accountId, input.threadId);
-  const latest = thread[thread.length - 1];
-  const draft = await draftReply({
-    accountId: input.accountId,
-    threadId: input.threadId,
-  });
+  if (thread.length === 0) {
+    throw new Error('Thread not found in cache — sync the folder first');
+  }
+
+  const headers = computeReplyHeaders(thread, account);
 
   return sendEmail({
     accountId: input.accountId,
-    to: draft.to,
-    subject: draft.subject,
+    to: headers.to,
+    subject: headers.subject,
     body: String(variant.body ?? ''),
-    inReplyTo: latest?.messageId,
-    references: draft.references,
+    inReplyTo: headers.inReplyTo,
+    references: headers.references,
     confirmed: true,
   });
 }

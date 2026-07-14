@@ -24,6 +24,7 @@ export interface EmailMessage {
   folder: string;
   from: string;
   to: string[];
+  replyTo?: string;
   subject: string;
   date: string;
   bodyPreview: string;
@@ -32,6 +33,8 @@ export interface EmailMessage {
   bodyHash?: string;
   hasAttachments: boolean;
   attachments?: Array<{ filename: string; contentType: string; size: number }>;
+  inReplyTo?: string;
+  references?: string[];
   flags?: {
     seen: boolean;
     flagged: boolean;
@@ -233,6 +236,8 @@ export async function sendEmailMessage(input: {
   subject: string;
   body: string;
   bodyHtml?: string;
+  cc?: string;
+  bcc?: string;
   inReplyTo?: string;
   references?: string;
   confirmed: boolean;
