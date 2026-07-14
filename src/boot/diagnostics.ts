@@ -93,6 +93,20 @@ function report(kind: string, message: string, stack?: string): void {
 
   window.minnow?.diagnostics?.reportError({ kind, message, stack });
 
+  // Mirror to server JSONL when the tool server is reachable (browser tab + Electron).
+  void fetch('/api/diagnostics/report', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      kind,
+      message,
+      stack,
+      surface: window.location.hash || 'app',
+    }),
+  }).catch(() => {
+    /* offline or Vite-only — Electron IPC may still capture */
+  });
+
   setStatus('err', truncateStatus(message));
 
   if (!isBugsStoreLoaded()) return;

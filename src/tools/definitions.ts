@@ -1692,6 +1692,34 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'read_diagnostics',
+    label: 'Read diagnostics',
+    description:
+      'Read recent local errors and health probes from ~/.minnow/logs (redacted). Debug mode helper — no telemetry.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'read_diagnostics',
+      'Return grouped recent errors and subsystem health from local diagnostics logs. Use when the user asks why something failed. Output is redacted (no secrets or home paths).',
+      {
+        format: {
+          type: 'string',
+          enum: ['summary', 'report'],
+          description: 'summary = JSON health + errors; report = markdown bundle',
+        },
+        source: {
+          type: 'string',
+          enum: ['all', 'renderer', 'server', 'electron'],
+          description: 'Filter errors by capture source',
+        },
+        maxLines: {
+          type: 'number',
+          description: 'Max error groups to include (default 50)',
+        },
+      },
+    ),
+  },
+  {
     id: 'get_settings',
     label: 'Get settings',
     description:
