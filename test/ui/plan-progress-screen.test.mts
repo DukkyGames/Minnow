@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { createInitialSuperPlanStages } from '../../src/chat/super-plan/state.ts';
 import type { SuperPlanState } from '../../src/chat/super-plan/types.ts';
@@ -131,5 +134,22 @@ describe('plan progress screen', () => {
     findPlanPreviewActionButton(popout, 'close')?.click();
 
     assert.deepEqual(calls, ['revise', 'orchestrate', 'build', 'close']);
+  });
+
+  test('plan progress CSS constrains embedded research source feed overflow', () => {
+    const cssPath = join(
+      dirname(fileURLToPath(import.meta.url)),
+      '../../src/styles/plan-progress.css',
+    );
+    const css = readFileSync(cssPath, 'utf8');
+    assert.match(css, /\.orchestrate-plan-screen__progress-mount \.dr-feed[\s\S]*overflow-y:\s*auto/);
+    assert.match(
+      css,
+      /\.orchestrate-plan-screen__progress-mount \.dr-feed-title[\s\S]*text-overflow:\s*ellipsis/,
+    );
+    assert.match(
+      css,
+      /\.orchestrate-plan-screen__progress-mount \.dr-feed-host[\s\S]*text-overflow:\s*ellipsis/,
+    );
   });
 });

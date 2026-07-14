@@ -2,17 +2,29 @@
  * Plan / Super Plan progress stepper — Deep Research handoff layout in plan screen.
  */
 
+.orchestrate-plan-screen:has(.orchestrate-plan-screen__progress-mount) {
+  justify-content: flex-start;
+  align-self: stretch;
+}
+
 .orchestrate-plan-screen:has(.orchestrate-plan-screen__progress-mount) .orchestrate-plan-screen__inner {
   max-width: 760px;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .orchestrate-plan-screen__progress-mount {
   margin-bottom: 16px;
+  min-width: 0;
+  width: 100%;
+  overflow-x: hidden;
 }
 
 .orchestrate-plan-screen__progress-mount .dr-prog,
 .orchestrate-plan-screen__progress-mount .plan-progress {
   margin: 0;
+  min-width: 0;
+  overflow-x: hidden;
   background: var(--mn-surface-0, var(--mn-bg-elevated));
   border: 1px solid var(--mn-border);
   border-radius: 14px;
@@ -152,12 +164,16 @@
 
 .orchestrate-plan-screen__progress-mount .plan-progress__research-feed {
   margin-top: 4px;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .orchestrate-plan-screen__progress-mount .plan-progress__research-feed .dr-prog {
   margin-top: 12px;
   padding: 14px 16px;
   border-radius: var(--radius-md);
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .orchestrate-plan-screen__progress-mount .plan-progress__research-feed .dr-stepper {
@@ -166,6 +182,138 @@
 
 .orchestrate-plan-screen__progress-mount .plan-progress__research-feed .dr-stepper-labels {
   margin-bottom: 8px;
+}
+
+/* Embedded Deep Research source feed — mirrors research-page.css dr-feed layout */
+.orchestrate-plan-screen__progress-mount .dr-current {
+  padding: 14px 0 4px;
+  border-top: 1px solid var(--mn-border);
+  min-width: 0;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-cur-link {
+  font-size: 14px;
+  color: var(--mn-accent);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-cur-link:hover {
+  text-decoration: underline;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-cur-meta {
+  font-size: 11.5px;
+  color: var(--mn-fg-muted);
+  margin-top: 6px;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-cur-dim {
+  color: var(--mn-fg-muted);
+}
+
+.orchestrate-plan-screen__progress-mount .dr-feed {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: min(36vh, 280px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-feed-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 10px;
+  border-radius: 9px;
+  min-width: 0;
+  animation: dr-feed-in 0.32s var(--ease-out, ease);
+}
+
+.orchestrate-plan-screen__progress-mount .dr-feed-row.reading {
+  background: var(--mn-accent-soft);
+}
+
+.orchestrate-plan-screen__progress-mount .dr-feed-row.read {
+  opacity: 0.72;
+}
+
+@keyframes dr-feed-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.orchestrate-plan-screen__progress-mount .dr-stype {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex: none;
+  width: 50px;
+  text-align: center;
+  padding: 3px 0;
+  border-radius: 6px;
+  background: var(--mn-surface-2, var(--mn-bg-elevated));
+  border: 1px solid var(--mn-border);
+  color: var(--mn-fg-muted);
+}
+
+.orchestrate-plan-screen__progress-mount .dr-stype.t-paper {
+  color: var(--mn-accent);
+  border-color: var(--mn-accent-border, var(--mn-accent));
+}
+
+.orchestrate-plan-screen__progress-mount .dr-stype.t-docs {
+  color: #8fd0e0;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-stype.t-news {
+  color: #e0b87f;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-feed-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-feed-title:hover {
+  color: var(--mn-accent);
+  text-decoration: underline;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-feed-host {
+  font-size: 11px;
+  flex: none;
+  max-width: 34%;
+  color: var(--mn-fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-feed-state {
+  width: 18px;
+  display: grid;
+  place-items: center;
+  color: #7fc99a;
+  flex: none;
+}
+
+.orchestrate-plan-screen__progress-mount .dr-check {
+  color: #7fc99a;
 }
 
 .orchestrate-plan-screen__progress-mount .plan-progress--reduced-motion .dr-dot,
