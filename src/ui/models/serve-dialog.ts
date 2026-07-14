@@ -141,7 +141,7 @@ function openServeDialogInner(
     let selectedProfile = 'balanced';
     let profilesLoaded: Awaited<ReturnType<typeof fetchServeProfiles>> | null = null;
 
-    const ctxField = numInput('Context (-c)', 4096, 'serveCtx');
+    const ctxField = numInput('Context (-c)', 65_536, 'serveCtx');
     const nglField = selectInput(
       'GPU layers (-ngl)',
       [
@@ -297,7 +297,7 @@ function openServeDialogInner(
 
       /** @type {LlamaServeSettings} */
       const llama: LlamaServeSettings = {
-        ctx: Number.isFinite(ctx) ? ctx : 4096,
+        ctx: Number.isFinite(ctx) ? ctx : 65_536,
         n_gpu_layers: Number.isFinite(ngl) ? ngl : 999,
         cache_type: (cacheField.querySelector('select') as HTMLSelectElement).value,
       };

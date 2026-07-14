@@ -1243,7 +1243,7 @@ Full-page **Models** hub at `#/app/models/<section>` (`src/ui/models-page.ts`, `
 | `GET` | `/api/models/cached` | Scan HF hub cache, `~/.minnow/models/artifacts`, Ollama tags, `config.json` → `models.modelDirs[]` |
 | `GET` | `/api/models/config` | Masked HF token status + model dirs |
 | `PUT` | `/api/models/config` | Save `hfToken` / `modelDirs` (plaintext v1) |
-| `GET` | `/api/models/profiles?model=…` | llama.cpp Quality/Balanced/Speed presets from hardware |
+| `GET` | `/api/models/profiles?model=…` | llama.cpp Quality/Balanced/Speed presets from hardware (default ctx: 128k / 64k / 32k) |
 | `GET` | `/api/models/downloads` | Download job list |
 | `POST` | `/api/models/download` | Start HF GGUF download (SSE progress on `…/stream`; jobs left `queued`/`running` in `downloads.json` are marked failed on server restart; truncated HF streams surface as `failed` with error) |
 | `POST` | `/api/models/download/:id/cancel` | Cancel download |
