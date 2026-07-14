@@ -1,0 +1,108 @@
+/**
+ * One-shot shell spawn resolution (MIN-427 macOS agent shell parity).
+ */
+
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import {
+  resolveOneShotSpawn,
+  resolveUnixLoginShell,
+} from '../../server/terminal/one-shot-spawn.js';
+import { executeCommandBlocking } from '../../server/terminal-runner.js';
+import { ensureMinnowLayout } from '../../server/config/home.js';
+import { initWorkspaceRoot, setWorkspaceRoot } from '../../server/workspace/root.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { rmTestHome, setTestHome } from '../config/test-helpers.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, '../..');
+
+describe('resolveOneShotSpawn', () => {
+  it('wraps Unix one-shot strings in a login shell', () => {
+    const prevShell = process.env.SHELL;
+    delete process.env.SHELL;
+    try {
+      const darwin = resolveOneShotSpawn({
+        command: 'which npm 2>&1 || true',
+        args: [],
+        platform: 'darwin',
+      });
+      assert.equal(darwin.command, '/bin/zsh');
+      assert.deepEqual(darwin.args, ['-l', '-c', 'which npm 2>&1 || true']);
+      assert.equal(darwin.shell, false);
+    } finally {
+      if (prevShell === undefined) delete process.env.SHELL;
+      else process.env.SHELL = prevShell;
+    }
+
+    const linux = resolveOneShotSpawn({
+      command: 'echo hi',
+      args: [],
+      platform: 'linux',
+    });
+    assert.equal(linux.command, '/bin/bash');
+    assert.deepEqual(linux.args, ['-l', '-c', 'echo hi']);
+    assert.equal(linux.shell, false);
+  });
+
+  it('uses cmd.exe for Windows one-shot strings', () => {
+    const win = resolveOneShotSpawn({
+      command: 'echo MINNOW_WIN',
+      args: [],
+      platform: 'win32',
+    });
+    assert.equal(win.command, 'cmd.exe');
+    assert.deepEqual(win.args, ['/d', '/s', '/c', 'echo MINNOW_WIN']);
+    assert.equal(win.shell, false);
+  });
+
+  it('passes argv invocations through unchanged', () => {
+    const direct = resolveOneShotSpawn({
+      command: 'node',
+      args: ['-e', 'console.log(1)'],
+      platform: 'linux',
+    });
+    assert.equal(direct.command, 'node');
+    assert.deepEqual(direct.args, ['-e', 'console.log(1)']);
+    assert.equal(direct.shell, false);
+  });
+
+  it('honors SHELL on macOS when set to zsh', () => {
+    const prev = process.env.SHELL;
+    process.env.SHELL = '/opt/homebrew/bin/zsh';
+    try {
+      const resolved = resolveUnixLoginShell('darwin');
+      assert.equal(resolved.shell, '/opt/homebrew/bin/zsh');
+      assert.deepEqual(resolved.loginArgs, ['-l']);
+    } finally {
+      if (prev === undefined) delete process.env.SHELL;
+      else process.env.SHELL = prev;
+    }
+  });
+});
+
+describe('executeCommandBlocking unix shell strings', () => {
+  let homeDir;
+
+  it('runs shell metacharacters via login shell on Unix', async () => {
+    if (process.platform === 'win32') return;
+
+    homeDir = setTestHome(process.env, 'minnow-test-unix-shell');
+    await ensureMinnowLayout();
+    await initWorkspaceRoot();
+    await setWorkspaceRoot(repoRoot);
+
+    const marker = `MINNOW_UNIX_SHELL_${Date.now()}`;
+    const output = await executeCommandBlocking({
+      command: `echo ${marker} 2>&1 || true`,
+      cwd: repoRoot,
+    });
+
+    assert.match(output, new RegExp(marker));
+    assert.doesNotMatch(output, /\(no output\)/);
+
+    await rmTestHome(homeDir);
+    homeDir = undefined;
+  });
+});
