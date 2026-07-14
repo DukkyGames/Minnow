@@ -26,6 +26,7 @@ import {
   resolveHistoryNavigation,
 } from './terminal-history-nav';
 import { handleTerminalWebLink } from './terminal-console-links';
+import { buildTerminalXtermTheme } from './terminal-xterm-theme';
 
 const HISTORY_STORAGE_PREFIX = 'minnow.terminal.history.';
 const MAX_TAB_HISTORY = 500;
@@ -116,17 +117,8 @@ function resolveTerminalTypography(): {
 function applyXtermTheme(): void {
   if (!term) return;
   const style = getComputedStyle(document.documentElement);
-  const fg = style.getPropertyValue('--mn-fg').trim() || '#dfe3e8';
-  const bg = style.getPropertyValue('--mn-bg').trim() || '#0f1216';
-  const accent = style.getPropertyValue('--mn-accent').trim() || '#9ec5a7';
-  const sel = style.getPropertyValue('--mn-surface-0').trim() || '#161a20';
   const typography = resolveTerminalTypography();
-  term.options.theme = {
-    background: bg,
-    foreground: fg,
-    cursor: accent,
-    selectionBackground: sel,
-  };
+  term.options.theme = buildTerminalXtermTheme(style);
   term.options.fontFamily = typography.fontFamily;
   term.options.fontSize = typography.fontSize;
   term.options.lineHeight = typography.lineHeight;

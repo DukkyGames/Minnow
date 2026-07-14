@@ -26,6 +26,8 @@ const THEME_IDS = [
   'mint-light',
 ] as const;
 
+const LIGHT_THEME_IDS = THEME_IDS.filter((id) => id.endsWith('-light'));
+
 function parseHexOrRgb(color: string): [number, number, number] | null {
   const hex = color.trim();
   if (hex.startsWith('#')) {
@@ -82,6 +84,17 @@ function readThemeBlock(css: string, themeId: string): Record<string, string> {
   return vars;
 }
 
+/** Resolve one level of var(--token) aliases to a hex/rgb literal. */
+function resolveToken(vars: Record<string, string>, name: string, depth = 0): string | null {
+  if (depth > 4) return null;
+  const raw = vars[name];
+  if (!raw) return null;
+  const alias = /^var\((--[\w-]+)\)$/.exec(raw);
+  if (alias) return resolveToken(vars, alias[1], depth + 1);
+  if (parseHexOrRgb(raw)) return raw;
+  return null;
+}
+
 describe('theme-contrast', () => {
   const css = readFileSync(path.join(process.cwd(), 'src/styles/tokens.css'), 'utf8');
 
@@ -94,6 +107,35 @@ describe('theme-contrast', () => {
       assert.ok(fg && bg && surface1, `missing core tokens for ${themeId}`);
       assert.ok(contrastRatio(fg, bg) >= 4.5, `fg on bg contrast too low for ${themeId}`);
       assert.ok(contrastRatio(fg, surface1) >= 4.5, `fg on surface-1 contrast too low for ${themeId}`);
+    });
+  }
+
+  for (const id of LIGHT_THEME_IDS) {
+    test(`${id}: syntax highlights meet WCAG AA on code surfaces`, () => {
+      const vars = readThemeBlock(css, id);
+      const s0 = vars['--mn-surface-0'];
+      const bg = vars['--mn-bg'];
+      assert.ok(s0 && bg, 'surface tokens present');
+
+      const pairs: Array<[string, string]> = [
+        ['--mn-syntax-command', s0],
+        ['--mn-syntax-name', s0],
+        ['--mn-syntax-inline', s0],
+        ['--mn-syntax-link', bg],
+        ['--cm-attr', s0],
+        ['--cm-title', s0],
+        ['--cm-string', s0],
+        ['--mn-fg-muted', s0],
+      ];
+
+      for (const [token, surface] of pairs) {
+        const fg = resolveToken(vars, token);
+        assert.ok(fg, `${token} resolves to a color`);
+        assert.ok(
+          contrastRatio(fg!, surface) >= 4.5,
+          `${token} on ${surface} ${contrastRatio(fg!, surface).toFixed(2)} < 4.5`,
+        );
+      }
     });
   }
 });

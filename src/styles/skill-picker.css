@@ -102,7 +102,7 @@
 .skill-picker__badge--command {
   background: color-mix(in srgb, var(--mn-accent) 12%, var(--mn-bg));
   border-color: color-mix(in srgb, var(--mn-accent) 45%, var(--mn-border-strong));
-  color: var(--mn-accent);
+  color: var(--mn-syntax-command);
 }
 
 .skill-picker__label {
