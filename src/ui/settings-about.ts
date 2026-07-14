@@ -1,11 +1,15 @@
 /**
- * Settings → About → Diagnostics — local error viewer and report copy.
+ * Settings → About — local build info, health probes, and diagnostics viewer.
  */
 
 import '../styles/settings-about.css';
 import { detectConfigServer } from '../config/storage-mode';
 import { appendSettingsGroup } from './settings-layout';
-import { appendSettingsOfflineHint, createSettingsActionsRow } from './settings-controls';
+import {
+  appendSettingsOfflineHint,
+  createSettingsActionsRow,
+  createSettingsKvList,
+} from './settings-controls';
 import { setStatus } from './status';
 import {
   fetchDiagnosticsHealth,
@@ -43,6 +47,22 @@ function clearMount(id: string): HTMLElement | null {
   return mount;
 }
 
+/** Mono span for technical build values. */
+function monoValue(text: string): HTMLElement {
+  return el('span', 'about-build__mono', text);
+}
+
+/** Human-readable timestamp for diagnostic meta rows. */
+function formatDiagnosticTime(iso?: string): string {
+  if (!iso) return '';
+  const parsed = Date.parse(iso);
+  if (Number.isNaN(parsed)) return iso;
+  return new Date(parsed).toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'medium',
+  });
+}
+
 /** Load grouped errors for the viewer. */
 async function fetchDiagnosticErrors(source: SourceFilter): Promise<DiagnosticErrorGroup[]> {
   const params = new URLSearchParams({ source, maxLines: '200' });
@@ -66,59 +86,89 @@ function renderFilterRow(
   active: SourceFilter,
 ): HTMLElement {
   const row = el('div', 'diagnostics-filter-row');
+  row.setAttribute('role', 'tablist');
+  row.setAttribute('aria-label', 'Filter diagnostics by source');
+
   const filters: Array<{ id: SourceFilter; label: string }> = [
     { id: 'all', label: 'All' },
     { id: 'renderer', label: 'Renderer' },
     { id: 'server', label: 'Server' },
     { id: 'electron', label: 'Electron' },
   ];
+
   for (const f of filters) {
     const btn = el('button', 'diagnostics-filter-btn', f.label);
     btn.type = 'button';
     btn.dataset.source = f.id;
+    btn.setAttribute('role', 'tab');
+    btn.setAttribute('aria-selected', String(f.id === active));
     btn.classList.toggle('is-active', f.id === active);
     btn.addEventListener('click', () => onChange(f.id));
     row.appendChild(btn);
   }
+
   return row;
 }
 
 function renderErrorList(host: HTMLElement, errors: DiagnosticErrorGroup[]): void {
   host.replaceChildren();
+
   if (!errors.length) {
     host.appendChild(el('p', 'diagnostics-empty', 'No captured errors yet.'));
     return;
   }
 
   const list = el('ul', 'diagnostics-error-list');
+  list.setAttribute('aria-label', 'Grouped diagnostic errors');
+
   for (const group of errors) {
     const item = el('li', 'diagnostics-error-item');
     const head = el('div', 'diagnostics-error-item__head');
-    const title = el('span', 'diagnostics-error-item__title', group.message || group.signature);
+
+    const titleWrap = el('div', 'diagnostics-error-item__title-wrap');
+    titleWrap.appendChild(
+      el('span', 'diagnostics-error-item__title', group.message || group.signature),
+    );
+
     const badge = el('span', 'diagnostics-error-item__badge', `×${group.count}`);
-    head.append(title, badge);
+    badge.setAttribute('aria-label', `${group.count} occurrences`);
+    head.append(titleWrap, badge);
     item.appendChild(head);
 
     const meta = el('div', 'diagnostics-error-item__meta');
-    if (group.source) meta.appendChild(el('span', '', `${group.source}`));
-    if (group.lastAt) meta.appendChild(el('span', '', group.lastAt));
-    item.appendChild(meta);
+    if (group.source) {
+      meta.appendChild(el('span', 'diagnostics-source-badge', group.source));
+    }
+    if (group.lastAt) {
+      const time = el('time', 'diagnostics-error-item__time');
+      time.dateTime = group.lastAt;
+      time.textContent = formatDiagnosticTime(group.lastAt);
+      meta.appendChild(time);
+    }
+    if (meta.childElementCount) item.appendChild(meta);
 
     if (group.stack) {
+      const details = el('details', 'diagnostics-error-item__details');
+      const summary = el('summary', 'diagnostics-error-item__summary', 'Stack trace');
       const pre = el('pre', 'diagnostics-error-item__stack', group.stack);
-      item.appendChild(pre);
+      details.append(summary, pre);
+      item.appendChild(details);
     }
+
     list.appendChild(item);
   }
+
   host.appendChild(list);
 }
 
 function renderLogTail(host: HTMLElement, lines: Record<string, unknown>[]): void {
   host.replaceChildren();
+
   if (!lines.length) {
     host.appendChild(el('p', 'diagnostics-empty', 'Log tail is empty.'));
     return;
   }
+
   const pre = el('pre', 'diagnostics-log-tail');
   pre.textContent = lines.map((line) => JSON.stringify(line)).join('\n');
   host.appendChild(pre);
@@ -142,31 +192,25 @@ export async function renderAboutSettingsSection(): Promise<void> {
     health = await fetchDiagnosticsHealth();
   }
 
-  const about = appendSettingsGroup(
-    mount,
-    'About',
-    'Local-first diagnostics — nothing is sent off-device.',
-    'about.info',
-  );
+  const build = appendSettingsGroup(mount, 'Build', undefined, 'about.info');
 
   const version = health?.version ?? '—';
   const platform = health?.platform ?? navigator.platform;
   const nodeVersion = health?.nodeVersion ?? '—';
   const electronVersion = health?.electronVersion ?? (window.minnow ? 'desktop' : '—');
 
-  const kv = el('dl', 'settings-kv-list');
-  for (const [term, value] of [
-    ['App version', version],
-    ['Platform', platform],
-    ['Node', nodeVersion],
-    ['Electron', electronVersion],
-    ['Storage', '~/.minnow'],
-  ]) {
-    const dt = el('dt', '', term);
-    const dd = el('dd', '', value);
-    kv.append(dt, dd);
-  }
-  about.appendChild(kv);
+  build.appendChild(
+    createSettingsKvList(
+      [
+        { term: 'App version', value: monoValue(version) },
+        { term: 'Platform', value: monoValue(platform) },
+        { term: 'Node', value: monoValue(nodeVersion) },
+        { term: 'Electron', value: monoValue(electronVersion) },
+        { term: 'Storage', value: monoValue('~/.minnow') },
+      ],
+      { className: 'settings-kv about-build__kv', searchKey: 'about.version' },
+    ),
+  );
 
   const healthGroup = appendSettingsGroup(
     mount,
@@ -186,9 +230,17 @@ export async function renderAboutSettingsSection(): Promise<void> {
 
   let activeFilter: SourceFilter = 'all';
   const filterHost = el('div', 'diagnostics-filter-host');
+  const errorsSection = el('section', 'diagnostics-subsection');
+  errorsSection.appendChild(el('h4', 'diagnostics-subsection__title', 'Errors'));
   const errorsHost = el('div', 'diagnostics-errors-host');
+  errorsSection.appendChild(errorsHost);
+
+  const logsSection = el('section', 'diagnostics-subsection');
+  logsSection.appendChild(el('h4', 'diagnostics-subsection__title', 'Log tail'));
   const logsHost = el('div', 'diagnostics-logs-host');
-  diagnostics.append(filterHost, errorsHost, logsHost);
+  logsSection.appendChild(logsHost);
+
+  diagnostics.append(filterHost, errorsSection, logsSection);
 
   const actions = createSettingsActionsRow(
     [
@@ -222,8 +274,18 @@ export async function renderAboutSettingsSection(): Promise<void> {
   diagnostics.appendChild(actions);
 
   const scrollToErrors = (): void => {
-    errorsHost.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    errorsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
+
+  function setActiveFilter(source: SourceFilter): void {
+    activeFilter = source;
+    for (const btn of filterHost.querySelectorAll<HTMLButtonElement>('.diagnostics-filter-btn')) {
+      const isActive = btn.dataset.source === source;
+      btn.classList.toggle('is-active', isActive);
+      btn.setAttribute('aria-selected', String(isActive));
+    }
+    void refreshViewer();
+  }
 
   async function refreshViewer(): Promise<void> {
     if (serverUp) {
@@ -248,12 +310,7 @@ export async function renderAboutSettingsSection(): Promise<void> {
   }
 
   filterHost.replaceChildren();
-  filterHost.appendChild(
-    renderFilterRow((source) => {
-      activeFilter = source;
-      void refreshViewer();
-    }, activeFilter),
-  );
+  filterHost.appendChild(renderFilterRow(setActiveFilter, activeFilter));
 
   renderHealthStrip(healthHost, health, { onErrorClick: scrollToErrors });
   await refreshViewer();

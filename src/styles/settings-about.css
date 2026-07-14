@@ -1,144 +1,335 @@
-/* Settings → About / local diagnostics viewer */
+/**
+ * Settings → About — build info, health probes, diagnostics viewer.
+ * Flat instrument layout: borders and type hierarchy, not nested cards.
+ */
+
+/* ── Build info ─────────────────────────────────────────────────────────── */
+
+.about-build__kv {
+  margin-bottom: 0;
+}
+
+.about-build__mono {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* ── Health strip ───────────────────────────────────────────────────────── */
+
+.diagnostics-health-host {
+  min-width: 0;
+}
 
 .diagnostics-health-strip {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--mn-space-3);
-  padding: var(--mn-space-3);
-  border: 1px solid var(--mn-border-subtle);
-  border-radius: var(--mn-radius-md);
-  background: var(--mn-surface-raised);
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-surface-1);
 }
 
 .diagnostics-health-strip__list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--mn-space-2);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 8px;
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
 .diagnostics-health-strip__item {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: var(--mn-space-1);
-  font-size: var(--mn-text-sm);
-  color: var(--mn-text-secondary);
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  font-size: 12px;
+  color: var(--mn-fg-muted);
 }
 
 .diagnostics-health-strip__dot {
-  width: 8px;
-  height: 8px;
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--mn-text-tertiary);
+  background: var(--mn-fg-subtle);
 }
 
 .diagnostics-health-strip__dot.is-ok {
-  background: var(--mn-accent-green, #3ecf8e);
+  background: var(--mn-success);
+  box-shadow: 0 0 0 2px var(--mn-success-soft);
 }
 
 .diagnostics-health-strip__dot.is-err {
-  background: var(--mn-accent-red, #f87171);
+  background: var(--mn-danger);
+  box-shadow: 0 0 0 2px var(--mn-danger-soft);
 }
 
 .diagnostics-health-strip__dot.is-unknown {
-  background: var(--mn-text-tertiary);
+  background: var(--mn-fg-subtle);
+}
+
+.diagnostics-health-strip__label {
+  font-weight: 600;
+  color: var(--mn-fg);
+  white-space: nowrap;
 }
 
 .diagnostics-health-strip__detail {
-  opacity: 0.75;
-  font-size: var(--mn-text-xs);
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--mn-fg-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .diagnostics-health-strip__last-error {
-  margin-left: auto;
+  align-self: flex-start;
+  margin: 0;
+  padding: 4px 0;
   border: 0;
   background: transparent;
-  color: var(--mn-accent-red, #f87171);
-  font-size: var(--mn-text-sm);
+  color: var(--mn-danger-ink);
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
   text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .diagnostics-health-strip__last-error:hover {
+    color: var(--mn-danger);
+  }
+}
+
+/* ── Source filter tabs ─────────────────────────────────────────────────── */
+
+.diagnostics-filter-host {
+  margin-bottom: 4px;
 }
 
 .diagnostics-filter-row {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--mn-space-2);
-  margin-bottom: var(--mn-space-3);
+  gap: 8px;
 }
 
 .diagnostics-filter-btn {
-  border: 1px solid var(--mn-border-subtle);
-  background: var(--mn-surface);
-  color: var(--mn-text-secondary);
-  border-radius: var(--mn-radius-sm);
-  padding: 0.2rem 0.6rem;
-  font-size: var(--mn-text-sm);
+  padding: 5px 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: 999px;
+  background: var(--mn-bg);
+  color: var(--mn-fg-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
+  transition:
+    background-color var(--duration-fast, 0.15s) var(--ease-out, ease),
+    border-color var(--duration-fast, 0.15s) var(--ease-out, ease),
+    color var(--duration-fast, 0.15s) var(--ease-out, ease);
 }
 
 .diagnostics-filter-btn.is-active {
+  background: var(--mn-accent);
   border-color: var(--mn-accent);
-  color: var(--mn-text-primary);
+  color: var(--mn-fg-on-accent);
 }
+
+@media (hover: hover) and (pointer: fine) {
+  .diagnostics-filter-btn:not(.is-active):hover {
+    border-color: var(--mn-border-strong);
+    color: var(--mn-fg);
+  }
+}
+
+/* ── Diagnostics subsections ─────────────────────────────────────────────── */
+
+.diagnostics-subsection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.diagnostics-subsection__title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+/* ── Error list ─────────────────────────────────────────────────────────── */
 
 .diagnostics-error-list {
   list-style: none;
-  margin: 0 0 var(--mn-space-4);
+  margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--mn-space-3);
+  gap: 10px;
 }
 
 .diagnostics-error-item {
-  border: 1px solid var(--mn-border-subtle);
-  border-radius: var(--mn-radius-md);
-  padding: var(--mn-space-3);
-  background: var(--mn-surface);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  background: var(--mn-surface-1);
 }
 
 .diagnostics-error-item__head {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: var(--mn-space-2);
+  gap: 12px;
+}
+
+.diagnostics-error-item__title-wrap {
+  min-width: 0;
+  flex: 1;
 }
 
 .diagnostics-error-item__title {
+  display: block;
+  font-size: 14px;
   font-weight: 600;
-  color: var(--mn-text-primary);
+  line-height: 1.4;
+  color: var(--mn-fg);
+  word-break: break-word;
 }
 
 .diagnostics-error-item__badge {
-  font-size: var(--mn-text-xs);
-  color: var(--mn-text-tertiary);
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border: 1px solid var(--mn-border-strong);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-fg-muted);
+  background: var(--mn-bg);
 }
 
 .diagnostics-error-item__meta {
   display: flex;
-  gap: var(--mn-space-3);
-  font-size: var(--mn-text-xs);
-  color: var(--mn-text-tertiary);
-  margin-top: var(--mn-space-1);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 8px;
+}
+
+.diagnostics-source-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+  background: var(--mn-bg);
+}
+
+.diagnostics-error-item__time {
+  font-size: 12px;
+  color: var(--mn-fg-subtle);
+}
+
+.diagnostics-error-item__details {
+  margin-top: 10px;
+}
+
+.diagnostics-error-item__summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.diagnostics-error-item__summary::-webkit-details-marker {
+  display: none;
+}
+
+.diagnostics-error-item__summary::before {
+  content: '▸';
+  font-size: 10px;
+  color: var(--mn-fg-subtle);
+  transition: transform var(--duration-fast, 0.15s) var(--ease-out, ease);
+}
+
+.diagnostics-error-item__details[open] .diagnostics-error-item__summary::before {
+  transform: rotate(90deg);
+}
+
+.diagnostics-error-item__details[open] .diagnostics-error-item__summary {
+  margin-bottom: 8px;
+  color: var(--mn-fg);
 }
 
 .diagnostics-error-item__stack,
 .diagnostics-log-tail {
-  margin-top: var(--mn-space-2);
-  max-height: 12rem;
+  margin: 0;
+  max-height: 14rem;
   overflow: auto;
-  font-size: var(--mn-text-xs);
-  background: var(--mn-surface-raised);
-  border-radius: var(--mn-radius-sm);
-  padding: var(--mn-space-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--mn-fg-muted);
+  background: var(--mn-surface-0);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
+/* ── Log tail ───────────────────────────────────────────────────────────── */
+
+.diagnostics-log-tail {
+  max-height: 18rem;
+}
+
+/* ── Empty states ───────────────────────────────────────────────────────── */
+
 .diagnostics-empty {
-  color: var(--mn-text-tertiary);
-  font-size: var(--mn-text-sm);
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px dashed var(--mn-border);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--mn-fg-muted);
+  text-align: center;
+  background: color-mix(in srgb, var(--mn-fg) 2%, var(--mn-bg));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .diagnostics-filter-btn,
+  .diagnostics-error-item__summary::before {
+    transition: none;
+  }
 }
