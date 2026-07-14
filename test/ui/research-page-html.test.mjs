@@ -12,6 +12,7 @@ const RESEARCH_IDS = [
   'researchView',
   'researchQuery',
   'researchMaxRounds',
+  'researchScope',
   'researchCategory',
   'btnResearchStart',
   'btnResearchCancel',

@@ -843,6 +843,7 @@ export type UpdateTaskPatch = Partial<
     | 'quarantine'
     | 'selfHealRound'
     | 'lastHealCategory'
+    | 'lifecycleRun'
     | 'buildOutcome'
   >
 >;

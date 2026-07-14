@@ -1,6 +1,6 @@
 # Setup guide
 
-A step-by-step walkthrough to get Minnow running locally. For a fast version, see [Quick start in the README](../../README.md#quick-start).
+A step-by-step walkthrough to get Minnow running locally. For a fast version, see [Quick start](../getting-started.md#quick-start). Product overview: [README](../../README.md).
 
 ## 1. Prerequisites
 

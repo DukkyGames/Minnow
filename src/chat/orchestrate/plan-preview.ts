@@ -22,6 +22,8 @@ export interface PlanPreviewParsed {
 
 export interface BuildPlanPreviewDomOptions {
   modeId?: string;
+  /** Shown when the artifact file is missing or has no displayable body. */
+  emptyLabel?: string;
 }
 
 function parseScalarLine(line: string): { key: string; value: string } | null {
@@ -187,7 +189,7 @@ export function mountPlanPreviewContent(
   if (!displayMarkdown) {
     const empty = document.createElement('p');
     empty.className = PLAN_PREVIEW_EMPTY_CLASS;
-    empty.textContent = '(empty plan file)';
+    empty.textContent = options.emptyLabel?.trim() || '(empty plan file)';
     container.appendChild(empty);
     return;
   }

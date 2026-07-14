@@ -44,10 +44,134 @@ export interface QuestionCardsModalOptions {
 /** Invoked from stop-generation to close the strip without waiting for user input. */
 let requestQuestionCardsCancel: (() => void) | null = null;
 
+type ActiveQuestionModalState = {
+  host: HTMLElement;
+  chatId: string;
+  embedded: boolean;
+  composerShell: HTMLElement | null;
+  msgInput: HTMLTextAreaElement | null;
+  sendBtn: HTMLButtonElement | null;
+  prevInputDisabled: boolean;
+  prevSendDisabled: boolean;
+};
+
+let activeQuestionModal: ActiveQuestionModalState | null = null;
+
+const PLAN_SCREEN_QUESTIONS_HOST_ID = 'orchestratePlanScreenQuestions';
+
+export function isAskQuestionModalOpenForChat(chatId: string): boolean {
+  return Boolean(
+    requestQuestionCardsCancel &&
+      activeQuestionModal &&
+      activeQuestionModal.chatId === chatId,
+  );
+}
+
+/** True when the open strip is embedded in the Super Plan / plan screen host. */
+export function isAskQuestionModalOnPlanScreenHost(): boolean {
+  return Boolean(
+    activeQuestionModal?.embedded &&
+      activeQuestionModal.host.id === PLAN_SCREEN_QUESTIONS_HOST_ID,
+  );
+}
+
+function activateComposerQuestionChrome(state: ActiveQuestionModalState): void {
+  state.embedded = false;
+  acquireUserPromptLock();
+  state.composerShell?.classList.add('main-column--question-pending');
+  setSidebarInputPendingForActiveChat(true);
+  const panel = state.host.querySelector('.question-cards-panel');
+  panel?.classList.remove('question-cards-panel--embedded');
+  const surfaceClass = resolveQuestionPanelSurfaceClass(state.host);
+  if (surfaceClass) {
+    panel?.classList.add(surfaceClass);
+  }
+}
+
+function deactivateComposerQuestionChrome(state: ActiveQuestionModalState): void {
+  state.composerShell?.classList.remove('main-column--question-pending');
+  state.host.hidden = true;
+  setSidebarInputPendingForActiveChat(false);
+  releaseUserPromptLock();
+  if (!isUserPromptLocked()) {
+    if (state.msgInput) {
+      state.msgInput.disabled = isActiveChatStreaming()
+        ? false
+        : state.prevInputDisabled;
+    }
+    if (state.sendBtn) {
+      if (isActiveChatStreaming()) {
+        setComposerStreamingMode('streaming');
+      } else {
+        state.sendBtn.disabled = state.prevSendDisabled;
+      }
+    }
+    state.msgInput?.focus();
+  }
+}
+
+function activateEmbeddedQuestionChrome(state: ActiveQuestionModalState): void {
+  state.embedded = true;
+  state.composerShell?.classList.remove('main-column--question-pending');
+  setSidebarInputPendingForActiveChat(false);
+  releaseUserPromptLock();
+  const panel = state.host.querySelector('.question-cards-panel');
+  panel?.classList.add('question-cards-panel--embedded');
+  panel?.classList.remove(
+    'question-cards-panel--os-dock',
+    'question-cards-panel--chat-app',
+  );
+  state.host.hidden = false;
+}
+
+/**
+ * Move the active question strip to another host (plan screen ↔ composer)
+ * without cancelling the pending tool call.
+ */
+export function migrateActiveQuestionModalToHost(newHost: HTMLElement): boolean {
+  if (!activeQuestionModal || !requestQuestionCardsCancel) return false;
+  const state = activeQuestionModal;
+  if (state.host === newHost) return true;
+
+  const panel = state.host.querySelector('.question-cards-panel');
+  if (!panel) return false;
+
+  newHost.replaceChildren();
+  newHost.appendChild(panel);
+  newHost.hidden = false;
+  state.host.replaceChildren();
+
+  const prevHost = state.host;
+  state.host = newHost;
+
+  if (state.embedded && newHost.id !== PLAN_SCREEN_QUESTIONS_HOST_ID) {
+    activateComposerQuestionChrome(state);
+  } else if (!state.embedded && newHost.id === PLAN_SCREEN_QUESTIONS_HOST_ID) {
+    activateEmbeddedQuestionChrome(state);
+  }
+
+  if (prevHost.id === PLAN_SCREEN_QUESTIONS_HOST_ID) {
+    prevHost.hidden = true;
+  }
+
+  return true;
+}
+
+export function forceCloseAskQuestionModalForChat(chatId?: string): void {
+  if (!requestQuestionCardsCancel) return;
+  if (chatId?.trim() && activeQuestionModal?.chatId !== chatId.trim()) return;
+  forceCloseAskQuestionModal();
+}
+
 export function forceCloseAskQuestionModal(): void {
   requestQuestionCardsCancel?.();
   requestQuestionCardsCancel = null;
   setSidebarInputPendingForActiveChat(false);
+}
+
+export function resetQuestionCardsModalForTests(): void {
+  forceCloseAskQuestionModal();
+  activeQuestionModal = null;
 }
 
 function getQuestionHost(): HTMLElement | null {
@@ -121,6 +245,17 @@ export function showQuestionCardsModal(
       host.hidden = false;
     }
     host.replaceChildren();
+
+    activeQuestionModal = {
+      host,
+      chatId: chatIdForAbort,
+      embedded,
+      composerShell,
+      msgInput,
+      sendBtn,
+      prevInputDisabled,
+      prevSendDisabled,
+    };
 
     const drafts = new Map<string, AskQuestionAnswerDraft>();
     let cardIndex = 0;
@@ -223,26 +358,12 @@ export function showQuestionCardsModal(
       if (abortListener) {
         getChatAbort(chatIdForAbort)?.signal.removeEventListener('abort', abortListener);
       }
-      if (!embedded) {
-        composerShell?.classList.remove('main-column--question-pending');
-        host.hidden = true;
-        setSidebarInputPendingForActiveChat(false);
-        releaseUserPromptLock();
-        if (!isUserPromptLocked()) {
-          if (msgInput) {
-            msgInput.disabled = isActiveChatStreaming() ? false : prevInputDisabled;
-          }
-          if (sendBtn) {
-            if (isActiveChatStreaming()) {
-              setComposerStreamingMode('streaming');
-            } else {
-              sendBtn.disabled = prevSendDisabled;
-            }
-          }
-          msgInput?.focus();
-        }
+      const modal = activeQuestionModal;
+      if (modal && !modal.embedded) {
+        deactivateComposerQuestionChrome(modal);
       }
-      host.replaceChildren();
+      (modal?.host ?? host).replaceChildren();
+      activeQuestionModal = null;
       resolve(result);
     };
 

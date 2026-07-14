@@ -6,7 +6,7 @@ describe('listComposerModes', () => {
   test('excludes surface-specific modes from the composer strip', () => {
     const all = listModes().map((m) => m.id);
     const composer = listComposerModes().map((m) => m.id);
-    const excluded = ['orchestrate', 'reef', 'desktop', 'onboarding'] as const;
+    const excluded = ['orchestrate', 'reef', 'super-plan', 'desktop', 'onboarding'] as const;
     for (const id of excluded) {
       assert.ok(all.includes(id), `${id} should be a registered mode`);
       assert.ok(!composer.includes(id), `${id} should not be in the composer strip`);

@@ -12,11 +12,17 @@ let originalLlmCall;
 let originalSearch;
 /** @type {typeof engineDeps.fetchAndExtract} */
 let originalExtract;
+/** @type {typeof engineDeps.searchCodebase} */
+let originalCodebaseSearch;
+/** @type {typeof engineDeps.extractFromFile} */
+let originalExtractFromFile;
 
 afterEach(() => {
   engineDeps.llmCall = originalLlmCall;
   engineDeps.searchStructured = originalSearch;
   engineDeps.fetchAndExtract = originalExtract;
+  engineDeps.searchCodebase = originalCodebaseSearch;
+  engineDeps.extractFromFile = originalExtractFromFile;
 });
 
 /**
@@ -246,5 +252,97 @@ describe('DeepResearcher', () => {
     assert.ok(researcher.urlsFetched.has(priorUrl));
     assert.ok(researcher.findings.length >= 1);
     assert.equal(researcher.findings[0]?.url, priorUrl);
+  });
+
+  test('codebase scope produces file-grounded findings without web search', async () => {
+    originalLlmCall = engineDeps.llmCall;
+    originalSearch = engineDeps.searchStructured;
+    originalExtract = engineDeps.fetchAndExtract;
+    originalCodebaseSearch = engineDeps.searchCodebase;
+    originalExtractFromFile = engineDeps.extractFromFile;
+
+    let webSearchCalls = 0;
+    engineDeps.searchStructured = async () => {
+      webSearchCalls += 1;
+      return [];
+    };
+    engineDeps.fetchAndExtract = async () => {
+      throw new Error('web extract should not run');
+    };
+    engineDeps.searchCodebase = async (query) => [
+      {
+        path: `server/research/${query}.js`,
+        title: `${query}.js`,
+        snippet: 'class DeepResearcher',
+      },
+    ];
+    engineDeps.extractFromFile = async ({ path }) => ({
+      url: path,
+      title: path,
+      rational: 'Local source',
+      evidence: 'export class DeepResearcher',
+      summary: 'DeepResearcher lives in the research engine module.',
+    });
+
+    engineDeps.llmCall = mockLlmCall({
+      'research strategist': '{"sub_questions":["a"],"key_topics":["engine"],"success_criteria":"ok"}',
+      'local codebase searches': '["DeepResearcher"]',
+      'evolving research report': '## Draft\n\nCode-grounded body.',
+      'comprehensive enough': 'YES — enough coverage.',
+      'long, detailed, comprehensive': '# Final\n\nCodebase final report.',
+    });
+
+    const researcher = new DeepResearcher({
+      providerId: 'p1',
+      model: 'm1',
+      scope: 'codebase',
+      minRounds: 1,
+      maxRounds: 2,
+      maxEmptyRounds: 2,
+    });
+
+    const result = await researcher.research({ question: 'Where is DeepResearcher defined?' });
+    assert.match(result, /Final/);
+    assert.equal(webSearchCalls, 0);
+    assert.ok(researcher.findings.some((f) => f.url.includes('server/research/')));
+  });
+
+  test('web scope keeps existing web-only behavior', async () => {
+    originalLlmCall = engineDeps.llmCall;
+    originalSearch = engineDeps.searchStructured;
+    originalExtract = engineDeps.fetchAndExtract;
+    originalCodebaseSearch = engineDeps.searchCodebase;
+    originalExtractFromFile = engineDeps.extractFromFile;
+
+    let codebaseSearchCalls = 0;
+    engineDeps.searchCodebase = async () => {
+      codebaseSearchCalls += 1;
+      return [];
+    };
+    engineDeps.extractFromFile = async () => {
+      throw new Error('codebase extract should not run');
+    };
+    engineDeps.llmCall = mockLlmCall({
+      'research strategist': '{"sub_questions":["a"],"key_topics":["b"],"success_criteria":"ok"}',
+      'planning web searches': '["web-only-query"]',
+      'evolving research report': '## Draft\n\nWeb body.',
+      'comprehensive enough': 'YES — enough coverage.',
+      'long, detailed, comprehensive': '# Final\n\nWeb final report.',
+    });
+    engineDeps.searchStructured = mockSearch(1);
+    engineDeps.fetchAndExtract = mockExtract();
+
+    const researcher = new DeepResearcher({
+      providerId: 'p1',
+      model: 'm1',
+      scope: 'web',
+      minRounds: 1,
+      maxRounds: 2,
+    });
+
+    const result = await researcher.research({ question: 'Web topic?' });
+    assert.match(result, /Web final report/);
+    assert.equal(codebaseSearchCalls, 0);
+    assert.ok(researcher.urlsFetched.has('https://example.com/web-only-query-0'));
   });
 });

@@ -51,7 +51,17 @@ function ensureLastActiveMap(raw) {
 }
 
 /** Valid operating mode ids (mirror src/chat/modes/types.ts). */
-const MODE_IDS = ['general', 'desktop', 'build', 'plan', 'orchestrate', 'reef', 'debug'];
+const MODE_IDS = [
+  'general',
+  'desktop',
+  'build',
+  'plan',
+  'super-plan',
+  'orchestrate',
+  'reef',
+  'debug',
+  'onboarding',
+];
 const DEFAULT_MODE_ID = 'build';
 
 /** Normalize persisted or unknown mode ids. */
@@ -651,6 +661,17 @@ function ensureCurrentGenerationId(raw) {
   return GENERATION_ID_RE.test(id) ? id : undefined;
 }
 
+/** Coerce Super Plan pipeline state (mirror src/state/sessions.ts ensureSuperPlanPersisted). */
+function ensureSuperPlanPersisted(raw) {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const sp = /** @type {Record<string, unknown>} */ (raw);
+  if (typeof sp.slug !== 'string' || !sp.slug.trim()) return undefined;
+  if (typeof sp.prompt !== 'string') return undefined;
+  if (typeof sp.activeStage !== 'string' || !sp.activeStage.trim()) return undefined;
+  if (!sp.stages || typeof sp.stages !== 'object') return undefined;
+  return sp;
+}
+
 /** Coerce /goal loop state (mirror src/state/sessions.ts ensureActiveGoal). */
 function ensureActiveGoal(raw) {
   if (!raw || typeof raw !== 'object') return undefined;
@@ -724,6 +745,7 @@ function ensureChatShape(raw) {
       ? row.activeBranchByFork
       : undefined;
   const activeGoal = ensureActiveGoal(row.activeGoal);
+  const superPlan = ensureSuperPlanPersisted(row.superPlan);
 
   return {
     id: typeof row.id === 'string' && row.id ? row.id : newChatId(),
@@ -768,6 +790,7 @@ function ensureChatShape(raw) {
     ...(terminalHistory?.length ? { terminalHistory } : {}),
     ...(currentGenerationId ? { currentGenerationId } : {}),
     ...(activeGoal ? { activeGoal } : {}),
+    ...(superPlan ? { superPlan } : {}),
     ...(row.unread === true ? { unread: true } : {}),
     ...(typeof row.lastAssistantAt === 'number' &&
     Number.isFinite(row.lastAssistantAt) &&
@@ -1294,6 +1317,88 @@ export function mergeSupervisorConfig(patch, base) {
   }
 
   return out;
+}
+
+/**
+ * Normalize Super Plan pipeline settings under config.json planning.superPlan.
+ * @param {unknown} raw
+ * @param {Record<string, unknown>} [existing]
+ * @returns {object}
+ */
+export function normalizeSuperPlanConfig(raw, existing = {}) {
+  const base = {
+    reviewRounds: 2,
+    grillQuestionBudget: 20,
+    impeccable: 'auto',
+    researchScope: 'both',
+    researchMaxRounds: 0,
+    researchDepth: 'auto',
+    models: {
+      research: { providerId: '', modelId: '' },
+      reviewer: { providerId: '', modelId: '' },
+      planner: { providerId: '', modelId: '' },
+    },
+    ...(existing && typeof existing === 'object' ? existing : {}),
+    models: {
+      research: { providerId: '', modelId: '' },
+      reviewer: { providerId: '', modelId: '' },
+      planner: { providerId: '', modelId: '' },
+      ...(existing?.models && typeof existing.models === 'object'
+        ? /** @type {Record<string, unknown>} */ (existing.models)
+        : {}),
+    },
+  };
+
+  if (!raw || typeof raw !== 'object') {
+    return base;
+  }
+
+  const patch = /** @type {Record<string, unknown>} */ (raw);
+  if (typeof patch.reviewRounds === 'number' && Number.isFinite(patch.reviewRounds)) {
+    base.reviewRounds = Math.min(4, Math.max(0, Math.round(patch.reviewRounds)));
+  }
+  if (typeof patch.grillQuestionBudget === 'number' && Number.isFinite(patch.grillQuestionBudget)) {
+    base.grillQuestionBudget = Math.min(40, Math.max(5, Math.round(patch.grillQuestionBudget)));
+  }
+  if (patch.impeccable === 'auto' || patch.impeccable === 'always' || patch.impeccable === 'never') {
+    base.impeccable = patch.impeccable;
+  }
+  if (
+    patch.researchScope === 'web' ||
+    patch.researchScope === 'codebase' ||
+    patch.researchScope === 'both'
+  ) {
+    base.researchScope = patch.researchScope;
+  }
+  if (typeof patch.researchMaxRounds === 'number' && Number.isFinite(patch.researchMaxRounds)) {
+    base.researchMaxRounds = Math.min(8, Math.max(0, Math.round(patch.researchMaxRounds)));
+  }
+  if (
+    patch.researchDepth === 'auto' ||
+    patch.researchDepth === 'quick' ||
+    patch.researchDepth === 'standard' ||
+    patch.researchDepth === 'deep'
+  ) {
+    base.researchDepth = patch.researchDepth;
+  }
+
+  const modelPatch =
+    patch.models && typeof patch.models === 'object'
+      ? /** @type {Record<string, unknown>} */ (patch.models)
+      : {};
+  for (const key of ['research', 'reviewer', 'planner']) {
+    const row = modelPatch[key];
+    if (!row || typeof row !== 'object') continue;
+    const m = /** @type {Record<string, unknown>} */ (row);
+    if (typeof m.providerId === 'string') {
+      base.models[key].providerId = m.providerId;
+    }
+    if (typeof m.modelId === 'string') {
+      base.models[key].modelId = m.modelId;
+    }
+  }
+
+  return base;
 }
 
 /**
@@ -1973,6 +2078,14 @@ export function mergeConfigMeta(existing, patch) {
     const pl = /** @type {Record<string, unknown>} */ (p.planning);
     if (pl.granularity === 'large' || pl.granularity === 'medium' || pl.granularity === 'small') {
       existingPlanning.granularity = pl.granularity;
+    }
+    if (pl.superPlan && typeof pl.superPlan === 'object') {
+      existingPlanning.superPlan = normalizeSuperPlanConfig(
+        pl.superPlan,
+        existingPlanning.superPlan && typeof existingPlanning.superPlan === 'object'
+          ? /** @type {Record<string, unknown>} */ (existingPlanning.superPlan)
+          : {},
+      );
     }
     base.planning = existingPlanning;
   }

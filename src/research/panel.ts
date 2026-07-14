@@ -20,7 +20,7 @@ import {
 import { renderResearchLibrary } from './library';
 import { ResearchProgressPanel } from './progress-panel';
 import { renderResearchResultFromMarkdown } from './report-view';
-import type { ResearchCategory, ResearchStartRequest } from './types';
+import type { ResearchCategory, ResearchScope, ResearchStartRequest } from './types';
 import { closeBenchmark } from '../ui/benchmark-page';
 import { closeCompare } from '../ui/compare-page';
 import { closeGlobalBugs } from '../ui/global-bugs-page';
@@ -215,9 +215,13 @@ function readStartOptions(): Omit<ResearchStartRequest, 'query' | 'continueFrom'
   const searchProvider = (
     document.getElementById('researchSearchProvider') as HTMLSelectElement | null
   )?.value?.trim();
+  const scope = (
+    (document.getElementById('researchScope') as HTMLSelectElement | null)?.value ?? 'web'
+  ) as ResearchScope;
   return {
     maxRounds: Number.isFinite(maxRounds) ? maxRounds : 0,
     category,
+    scope,
     ...(searchProvider ? { searchProvider } : {}),
   };
 }

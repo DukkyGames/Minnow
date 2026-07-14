@@ -15,6 +15,7 @@ import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { ensurePendingMessageQueue } from '../chat/message-queue';
 import { notifySessionCreated } from '../webhooks/client';
 import { decodeModelSelectKey } from '../lib/model-select-key';
+import type { SuperPlanState } from '../chat/super-plan/types';
 import {
   CHAT_APP_ID,
   createAssistantChat,
@@ -1064,6 +1065,15 @@ function ensurePersistedSubAgentRuns(
       r.boardTaskId === null || typeof r.boardTaskId === 'string'
         ? (r.boardTaskId as string | null)
         : undefined;
+    const structuredOutcome =
+      r.structuredOutcome &&
+      typeof r.structuredOutcome === 'object' &&
+      !Array.isArray(r.structuredOutcome)
+        ? (r.structuredOutcome as PersistedSubAgentRun['structuredOutcome'])
+        : undefined;
+    const budgetEvents = Array.isArray(r.budgetEvents)
+      ? (r.budgetEvents as PersistedSubAgentRun['budgetEvents'])
+      : undefined;
     out.push({
       runId,
       parentTurnId,
@@ -1072,6 +1082,8 @@ function ensurePersistedSubAgentRuns(
       task,
       status,
       summary: typeof r.summary === 'string' ? r.summary : '',
+      ...(structuredOutcome ? { structuredOutcome } : {}),
+      ...(budgetEvents?.length ? { budgetEvents } : {}),
       ...(err === null || typeof err === 'string' ? { error: err as string | null } : {}),
       startedAt: typeof r.startedAt === 'string' ? r.startedAt : null,
       endedAt: typeof r.endedAt === 'string' ? r.endedAt : null,
@@ -1137,6 +1149,16 @@ function ensureActiveGoal(raw: unknown): ActiveGoalState | undefined {
   };
 }
 
+function ensureSuperPlanPersisted(raw: unknown): SuperPlanState | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const sp = raw as Partial<SuperPlanState>;
+  if (typeof sp.slug !== 'string' || !sp.slug.trim()) return undefined;
+  if (typeof sp.prompt !== 'string') return undefined;
+  if (typeof sp.activeStage !== 'string' || !sp.activeStage.trim()) return undefined;
+  if (!sp.stages || typeof sp.stages !== 'object') return undefined;
+  return sp as SuperPlanState;
+}
+
 export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
   if (!raw || typeof raw !== 'object') return createEmptyChatObject('');
   const history = Array.isArray(raw.history)
@@ -1158,6 +1180,7 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
   }
   const pinnedSkill = ensurePinnedSkill(raw.pinnedSkill);
   const activeGoal = ensureActiveGoal(raw.activeGoal);
+  const superPlan = ensureSuperPlanPersisted(raw.superPlan);
   const todos = ensureChatTodos(raw.todos);
   const todosUpdatedAt =
     typeof raw.todosUpdatedAt === 'number' &&
@@ -1259,6 +1282,7 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
       : {}),
     ...(pinnedSkill ? { pinnedSkill } : {}),
     ...(activeGoal ? { activeGoal } : {}),
+    ...(superPlan ? { superPlan } : {}),
     ...(todos ? { todos } : {}),
     ...(todos && todosUpdatedAt ? { todosUpdatedAt } : {}),
     ...(pendingMessageQueue ? { pendingMessageQueue } : {}),

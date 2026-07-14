@@ -167,6 +167,8 @@ export interface SubAgentRun {
   idempotencyKey?: string | null;
   /** Committed result ref when write-ahead completes (Phase 3). */
   committedResultRef?: string | null;
+  /** When watchdog recovery respawns this run, waiters should follow this id. */
+  supersededByRunId?: string | null;
 }
 
 /** Input to spawn a sub-agent. */
@@ -181,6 +183,10 @@ export interface SpawnSubAgentInput {
   parentToolCallId?: string | null;
   /** Parent mode for tool policy when resolving enabled tools. */
   modeId?: string;
+  /** Optional provider override (Super Plan reviewer model, etc.). */
+  providerId?: string;
+  /** Optional model override (Super Plan reviewer model, etc.). */
+  modelId?: string;
   /** Board category for Orchestrate board UI. */
   category?: BoardCategory;
   /** Board task id (board_update_task / spawn hook). */
