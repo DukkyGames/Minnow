@@ -1,0 +1,159 @@
+import assert from 'node:assert/strict';
+import { afterEach, beforeEach, describe, test } from 'node:test';
+import { installHappyDomGlobals } from './dom-helpers.mts';
+
+function setupCodeSettingsDom(doc: Document): void {
+  doc.body.innerHTML = `
+    <header class="topbar"></header>
+    <div id="osStage" class="mn-os-stage" style="width:1200px;height:800px;position:relative">
+      <div id="osAppsLayer" class="mn-os-apps-layer"></div>
+      <div id="osWindowsLayer" class="mn-os-windows-layer"></div>
+    </div>
+    <div id="appBody"></div>
+    <main id="settingsView" class="settings-page mn-os-app-layer" data-os-app="settings">
+      <button type="button" id="btnSettingsPageBack" aria-label="Back">Back</button>
+    </main>
+  `;
+}
+
+describe('code app settings (MIN-417)', () => {
+  let launchApp: typeof import('../../src/os/router.ts').launchApp;
+  let syncOsRouteFromHashForTests: typeof import('../../src/os/router.ts').syncOsRouteFromHashForTests;
+  let initOsRouter: typeof import('../../src/os/router.ts').initOsRouter;
+  let resetOsRouterForTests: typeof import('../../src/os/router.ts').resetOsRouterForTests;
+  let initAppHost: typeof import('../../src/os/app-host.ts').initAppHost;
+  let resetAppHostForTests: typeof import('../../src/os/app-host.ts').resetAppHostForTests;
+  let syncAppHostForTests: typeof import('../../src/os/app-host.ts').syncAppHostForTests;
+  let initOsPageBridge: typeof import('../../src/os/page-bridge.ts').initOsPageBridge;
+  let resetOsPageBridgeForTests: typeof import('../../src/os/page-bridge.ts').resetOsPageBridgeForTests;
+  let launchInstance: typeof import('../../src/os/instances.ts').launchInstance;
+  let getForegroundAppId: typeof import('../../src/os/instances.ts').getForegroundAppId;
+  let getInstanceSnapshot: typeof import('../../src/os/instances.ts').getInstanceSnapshot;
+  let getOsView: typeof import('../../src/os/instances.ts').getOsView;
+  let resetInstancesForTests: typeof import('../../src/os/instances.ts').resetInstancesForTests;
+  let resolveInstancePresentation: typeof import('../../src/os/presentation-mode.ts').resolveInstancePresentation;
+  let resetWindowManagerForTests: typeof import('../../src/os/window-manager.ts').resetWindowManagerForTests;
+  let windowManager: typeof import('../../src/os/window-manager.ts').windowManager;
+  let initSettingsPage: typeof import('../../src/ui/settings-page.ts').initSettingsPage;
+  let openSettingsFromTopbar: typeof import('../../src/ui/settings-page.ts').openSettingsFromTopbar;
+  let closeSettings: typeof import('../../src/ui/settings-page.ts').closeSettings;
+
+  beforeEach(async () => {
+    const { Window } = await import('happy-dom');
+    const win = new Window();
+    win.fetch = async () =>
+      new Response(JSON.stringify({ activePromptProfile: 'default' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    installHappyDomGlobals(win, { fetch: win.fetch });
+    win.localStorage.clear();
+    win.location.hash = '#/app/code/overview';
+    setupCodeSettingsDom(win.document);
+
+    ({
+      launchApp,
+      syncOsRouteFromHashForTests,
+      initOsRouter,
+      resetOsRouterForTests,
+    } = await import('../../src/os/router.ts'));
+    ({
+      initAppHost,
+      resetAppHostForTests,
+      syncAppHostForTests,
+    } = await import('../../src/os/app-host.ts'));
+    ({
+      initOsPageBridge,
+      resetOsPageBridgeForTests,
+    } = await import('../../src/os/page-bridge.ts'));
+    ({
+      launchInstance,
+      getForegroundAppId,
+      getInstanceSnapshot,
+      getOsView,
+      resetInstancesForTests,
+    } = await import('../../src/os/instances.ts'));
+    ({ resolveInstancePresentation } = await import('../../src/os/presentation-mode.ts'));
+    ({
+      resetWindowManagerForTests,
+      windowManager,
+    } = await import('../../src/os/window-manager.ts'));
+    ({
+      initSettingsPage,
+      openSettingsFromTopbar,
+      closeSettings,
+    } = await import('../../src/ui/settings-page.ts'));
+
+    resetWindowManagerForTests();
+    resetInstancesForTests();
+    resetOsRouterForTests();
+    resetOsPageBridgeForTests();
+    resetAppHostForTests();
+    initOsPageBridge();
+    initOsRouter();
+    initAppHost();
+    initSettingsPage();
+    launchInstance('code');
+    syncAppHostForTests();
+    syncOsRouteFromHashForTests();
+  });
+
+  afterEach(async () => {
+    const { resetWindowManagerForTests } = await import('../../src/os/window-manager.ts');
+    const { resetInstancesForTests } = await import('../../src/os/instances.ts');
+    const { resetOsRouterForTests } = await import('../../src/os/router.ts');
+    const { resetOsPageBridgeForTests } = await import('../../src/os/page-bridge.ts');
+    const { resetAppHostForTests } = await import('../../src/os/app-host.ts');
+    resetWindowManagerForTests();
+    resetInstancesForTests();
+    resetOsRouterForTests();
+    resetOsPageBridgeForTests();
+    resetAppHostForTests();
+  });
+
+  test('opening settings from Code uses fullscreen presentation', async () => {
+    assert.equal(getForegroundAppId(), 'code');
+    openSettingsFromTopbar();
+    syncOsRouteFromHashForTests();
+    syncAppHostForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const snap = getInstanceSnapshot();
+    const settingsInst = snap.instances.find((i) => i.appId === 'settings');
+    assert.ok(settingsInst);
+    assert.equal(settingsInst.launchOptions?.returnToApp, 'code');
+    assert.equal(resolveInstancePresentation(settingsInst), 'fullscreen');
+    assert.equal(getOsView(), 'app');
+    assert.equal(getForegroundAppId(), 'settings');
+    assert.equal(windowManager.getWindows().length, 0);
+  });
+
+  test('closing settings returns to the Code app', async () => {
+    openSettingsFromTopbar();
+    syncOsRouteFromHashForTests();
+    syncAppHostForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    closeSettings();
+    syncOsRouteFromHashForTests();
+    syncAppHostForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const snap = getInstanceSnapshot();
+    assert.equal(snap.instances.some((i) => i.appId === 'settings'), false);
+    assert.equal(getForegroundAppId(), 'code');
+    assert.equal(getOsView(), 'app');
+    assert.equal(window.location.hash, '#/app/code/overview');
+  });
+
+  test('launchApp(settings) from Code menubar path is fullscreen, not a window', async () => {
+    launchApp('settings');
+    syncOsRouteFromHashForTests();
+    syncAppHostForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(getForegroundAppId(), 'settings');
+    assert.equal(getOsView(), 'app');
+    assert.equal(windowManager.getWindows().length, 0);
+  });
+});

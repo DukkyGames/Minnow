@@ -50,7 +50,7 @@ import {
 import { getWorkspacePath } from '../state/workspace';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
-import type { BoardTask, Chat, ChatGroup } from '../types';
+import type { BoardCategory, BoardTask, Chat, ChatGroup } from '../types';
 import {
   applySidebarVisuals,
   closeMobileSidebar,

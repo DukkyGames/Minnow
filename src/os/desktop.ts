@@ -236,13 +236,38 @@ export function renderDesktop(root: HTMLElement): () => void {
   const researchComposerActions = document.createElement('div');
   researchComposerActions.className = 'mn-os-composer-research-actions';
 
+  const researchScopeLabel = document.createElement('label');
+  researchScopeLabel.className = 'mn-os-research-toolbar-scope';
+  researchScopeLabel.htmlFor = 'desktopResearchScope';
+
+  const researchScopeText = document.createElement('span');
+  researchScopeText.className = 'mn-os-research-toolbar-scope__label';
+  researchScopeText.textContent = 'Scope';
+
+  const researchScope = document.createElement('select');
+  researchScope.id = 'desktopResearchScope';
+  researchScope.className = 'mn-os-research-toolbar-select';
+  researchScope.setAttribute('aria-label', 'Research scope');
+  for (const option of [
+    { value: 'web', label: 'Web' },
+    { value: 'codebase', label: 'Codebase' },
+    { value: 'both', label: 'Web + Codebase' },
+  ]) {
+    const opt = document.createElement('option');
+    opt.value = option.value;
+    opt.textContent = option.label;
+    researchScope.appendChild(opt);
+  }
+
+  researchScopeLabel.append(researchScopeText, researchScope);
+
   const researchLibrary = document.createElement('button');
   researchLibrary.type = 'button';
   researchLibrary.id = 'btnDesktopResearchLibrary';
   researchLibrary.className = 'mn-os-research-toolbar-btn';
   researchLibrary.textContent = 'Library';
 
-  researchComposerActions.appendChild(researchLibrary);
+  researchComposerActions.append(researchScopeLabel, researchLibrary);
   composerDock.appendChild(researchComposerActions);
   root.appendChild(composerDock);
 

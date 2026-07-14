@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { mergeConfigMeta, validateSessionState } from '../../server/config/validators.js';
+import { mergeConfigMeta, normalizeSuperPlanConfig, validateSessionState } from '../../server/config/validators.js';
 
 const GROUP_ID = 'grp_11111111-1111-1111-1111-111111111111';
 const PLANNER_ID = '11111111-1111-1111-1111-111111111111';
@@ -474,5 +474,37 @@ describe('mergeConfigMeta autopilot', () => {
     assert.equal(merged.autopilot.plannerProviderId, 'p1');
     assert.equal(merged.autopilot.plannerModelId, 'm2');
     assert.equal(merged.autopilot.defaultExecutionMode, 'manual');
+  });
+});
+
+describe('normalizeSuperPlanConfig', () => {
+  it('defaults match Phase 6 spec', () => {
+    const cfg = normalizeSuperPlanConfig({});
+    assert.equal(cfg.reviewRounds, 2);
+    assert.equal(cfg.grillQuestionBudget, 20);
+    assert.equal(cfg.impeccable, 'auto');
+    assert.equal(cfg.researchScope, 'both');
+    assert.equal(cfg.researchMaxRounds, 0);
+    assert.equal(cfg.researchDepth, 'auto');
+  });
+
+  it('mergeConfigMeta persists planning.superPlan', () => {
+    const merged = mergeConfigMeta(
+      {},
+      {
+        planning: {
+          superPlan: {
+            reviewRounds: 1,
+            grillQuestionBudget: 12,
+            impeccable: 'never',
+            researchScope: 'web',
+          },
+        },
+      },
+    );
+    assert.equal(merged.planning.superPlan.reviewRounds, 1);
+    assert.equal(merged.planning.superPlan.grillQuestionBudget, 12);
+    assert.equal(merged.planning.superPlan.impeccable, 'never');
+    assert.equal(merged.planning.superPlan.researchScope, 'web');
   });
 });

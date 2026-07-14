@@ -7,35 +7,51 @@
 <script>
 (function () {
   var THEME_BG = {
-    'sage-dark': '#0f1216', 'sage-light': '#f7f7f4',
-    'amber-dark': '#16140f', 'amber-light': '#f7f4ec',
-    'cyan-dark': '#0d1117', 'cyan-light': '#f4f6f9',
+    'swamp-dark': '#0f1216', 'swamp-light': '#f7f7f4',
+    'desert-dark': '#16140f', 'desert-light': '#f7f4ec',
+    'ocean-dark': '#0d1117', 'ocean-light': '#f4f6f9',
     'coral-dark': '#141416', 'coral-light': '#fafaf8',
-    'salt-dark': '#2b2b2b', 'salt-light': '#f7f7f7',
-    'retro-dark': '#040604', 'retro-light': '#eef2ee'
+    'mono-dark': '#2b2b2b', 'mono-light': '#f7f7f7',
+    'matrix-dark': '#040604', 'matrix-light': '#eef2ee',
+    'human-dark': '#0f0f0f', 'human-light': '#fbf1ea',
+    'mint-dark': '#141615', 'mint-light': '#f2faf6'
   };
+  var LEGACY_FAMILY = {
+    sage: 'swamp', amber: 'desert', cyan: 'ocean', salt: 'mono', retro: 'matrix', ember: 'human'
+  };
+  function normalizeFamily(f) {
+    return LEGACY_FAMILY[f] || f;
+  }
   function resolveThemeId() {
     try {
       var follow = localStorage.getItem('minnow.theme.followSystem') === '1';
-      var family = localStorage.getItem('minnow.theme.family') || 'sage';
-      if (!/^(sage|amber|cyan|coral|salt|retro)$/.test(family)) family = 'sage';
+      var family = normalizeFamily(localStorage.getItem('minnow.theme.family') || 'swamp');
+      if (!/^(swamp|desert|ocean|coral|mono|matrix|human|mint)$/.test(family)) family = 'swamp';
       if (follow) {
         var light = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
         return family + (light ? '-light' : '-dark');
       }
       var v = localStorage.getItem('minnow.theme');
-      if (v === 'light') { localStorage.setItem('minnow.theme', 'sage-light'); return 'sage-light'; }
-      if (v === 'dark') { localStorage.setItem('minnow.theme', 'sage-dark'); return 'sage-dark'; }
+      if (v === 'light') { localStorage.setItem('minnow.theme', 'swamp-light'); return 'swamp-light'; }
+      if (v === 'dark') { localStorage.setItem('minnow.theme', 'swamp-dark'); return 'swamp-dark'; }
       if (v === 'system') {
         localStorage.setItem('minnow.theme.followSystem', '1');
-        localStorage.setItem('minnow.theme.family', 'sage');
+        localStorage.setItem('minnow.theme.family', 'swamp');
         localStorage.removeItem('minnow.theme');
         var l = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
-        return 'sage-' + (l ? 'light' : 'dark');
+        return 'swamp-' + (l ? 'light' : 'dark');
       }
-      if (/^(sage|amber|cyan|coral|salt|retro)-(dark|light)$/.test(v || '')) return v;
+      if (/^(swamp|desert|ocean|coral|mono|matrix|human|mint)-(dark|light)$/.test(v || '')) return v;
+      if (/^(sage|amber|cyan|salt|retro|ember)-(dark|light)$/.test(v || '')) {
+        var parts = v.split('-');
+        var mode = parts.pop();
+        var mapped = normalizeFamily(parts.join('-'));
+        var id = mapped + '-' + mode;
+        localStorage.setItem('minnow.theme', id);
+        return id;
+      }
     } catch (e) { /* private mode */ }
-    return 'sage-dark';
+    return 'swamp-dark';
   }
   try {
     var id = resolveThemeId();
@@ -81,16 +97,20 @@
     background: #0f1216;
     color: #dfe3e8;
   }
-  html[data-theme="amber-light"], html[data-theme="amber-light"] body { background: #f7f4ec; color: #2a2418; }
-  html[data-theme="amber-dark"], html[data-theme="amber-dark"] body { background: #16140f; color: #e8dcc6; }
-  html[data-theme="cyan-light"], html[data-theme="cyan-light"] body { background: #f4f6f9; color: #1a2230; }
-  html[data-theme="cyan-dark"], html[data-theme="cyan-dark"] body { background: #0d1117; color: #dde4ed; }
+  html[data-theme="desert-light"], html[data-theme="desert-light"] body { background: #f7f4ec; color: #2a2418; }
+  html[data-theme="desert-dark"], html[data-theme="desert-dark"] body { background: #16140f; color: #e8dcc6; }
+  html[data-theme="ocean-light"], html[data-theme="ocean-light"] body { background: #f4f6f9; color: #1a2230; }
+  html[data-theme="ocean-dark"], html[data-theme="ocean-dark"] body { background: #0d1117; color: #dde4ed; }
   html[data-theme="coral-light"], html[data-theme="coral-light"] body { background: #fafaf8; color: #1c1c1f; }
   html[data-theme="coral-dark"], html[data-theme="coral-dark"] body { background: #141416; color: #e6e4e1; }
-  html[data-theme="salt-light"], html[data-theme="salt-light"] body { background: #f7f7f7; color: #2b2b2b; }
-  html[data-theme="salt-dark"], html[data-theme="salt-dark"] body { background: #2b2b2b; color: #e8e8e8; }
-  html[data-theme="retro-light"], html[data-theme="retro-light"] body { background: #eef2ee; color: #0a120a; }
-  html[data-theme="retro-dark"], html[data-theme="retro-dark"] body { background: #040604; color: #dce8dc; }
+  html[data-theme="mono-light"], html[data-theme="mono-light"] body { background: #f7f7f7; color: #2b2b2b; }
+  html[data-theme="mono-dark"], html[data-theme="mono-dark"] body { background: #2b2b2b; color: #e8e8e8; }
+  html[data-theme="matrix-light"], html[data-theme="matrix-light"] body { background: #eef2ee; color: #0a120a; }
+  html[data-theme="matrix-dark"], html[data-theme="matrix-dark"] body { background: #040604; color: #dce8dc; }
+  html[data-theme="human-light"], html[data-theme="human-light"] body { background: #fbf1ea; color: #2e2218; }
+  html[data-theme="human-dark"], html[data-theme="human-dark"] body { background: #0f0f0f; color: #ffdbbd; }
+  html[data-theme="mint-light"], html[data-theme="mint-light"] body { background: #f2faf6; color: #121a16; }
+  html[data-theme="mint-dark"], html[data-theme="mint-dark"] body { background: #141615; color: #ffffff; }
   html:not(.app-ready) body > :not(#app-loader) {
     visibility: hidden;
   }
@@ -967,6 +987,16 @@
                   <option value="3">3</option>
                   <option value="4">4</option>
                   <option value="5">5</option>
+                </select>
+              </div>
+            </label>
+            <label class="dr-field">
+              <span class="dr-flabel research-mono">SCOPE</span>
+              <div class="dr-select">
+                <select id="researchScope" class="research-select">
+                  <option value="web">Web</option>
+                  <option value="codebase">Codebase</option>
+                  <option value="both">Web + Codebase</option>
                 </select>
               </div>
             </label>

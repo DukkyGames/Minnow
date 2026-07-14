@@ -11,6 +11,7 @@ export const MODE_ICON_SRC: Record<ModeId, string> = {
   desktop: '/icons/mode-general.png',
   build: '/icons/mode-build.png',
   plan: '/icons/mode-plan.png',
+  'super-plan': '/icons/mode-super-plan.png',
   orchestrate: '/icons/mode-orchestrate.svg',
   reef: '/icons/mode-reef.svg',
   debug: '/icons/mode-debug.png',

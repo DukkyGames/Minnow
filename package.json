@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "description": "Local-first AI chat client for LM Studio and OpenAI-compatible providers",
   "author": "Grim Media",
+  "license": "AGPL-3.0-or-later",
   "type": "module",
   "main": "electron/dist/main.js",
   "bin": {

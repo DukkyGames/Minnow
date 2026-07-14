@@ -9,7 +9,7 @@ import { getMinnowHome } from '../config/home.js';
 import { readResource } from '../config/store.js';
 import { getActiveProviderId } from '../providers/store.js';
 import { validateProviderId } from '../providers/validate.js';
-import { DeepResearcher } from './engine.js';
+import { DeepResearcher, normalizeResearchScope } from './engine.js';
 import { stripThinking, isLowQuality } from './strip-thinking.js';
 
 /** Composite #modelSelect value separator (see src/lib/model-select-key.ts). */
@@ -602,6 +602,9 @@ function mergeEngineConfig(config, overrides) {
   if (typeof overrides.category === 'string' && overrides.category.trim()) {
     merged.category = overrides.category.trim();
   }
+  if (typeof overrides.scope === 'string' && overrides.scope.trim()) {
+    merged.scope = normalizeResearchScope(overrides.scope);
+  }
   return merged;
 }
 
@@ -637,6 +640,7 @@ async function runResearchTask(state, opts) {
     maxEmptyRounds: Number(cfg.maxEmptyRounds ?? 2),
     searchProvider: typeof cfg.searchProvider === 'string' ? cfg.searchProvider : '',
     category: state.category || (typeof cfg.category === 'string' ? cfg.category : ''),
+    scope: normalizeResearchScope(typeof cfg.scope === 'string' ? cfg.scope : 'web'),
     progressCallback: (event) => appendProgress(state, event),
   });
 

@@ -30,7 +30,9 @@ import {
 import { FIXED_RUN_ID } from './test-helpers.mts';
 
 const FIXED_CHAT_ID = '11111111-1111-1111-1111-111111111111';
+const GROUP_ID = 'grp_11111111-1111-1111-1111-111111111111';
 const TASK_ID = 'W1-A';
+const PLAN_PATH = 'documentation/plans/test-plan.md';
 
 const exhaustingRunner: SubAgentRunner = {
   async run(input) {
@@ -47,16 +49,15 @@ function seedChat() {
   const chat = createEmptyChatObject('');
   chat.id = FIXED_CHAT_ID;
   chat.modeId = 'orchestrate';
-  chat.orchestratePlanPath = 'documentation/plans/test-plan.md';
+  chat.orchestratePlanPath = PLAN_PATH;
   setSessionStateForTests({
-    version: 2,
+    version: 5,
     activeId: chat.id,
-    sidebarCollapsed: false,
     chats: [chat],
   });
   const group = getOrCreateBoardGroup(chat);
   initBoard(group, chat, {
-    planPath: 'documentation/plans/test-plan.md',
+    planPath: PLAN_PATH,
     tasks: [{ id: TASK_ID, title: 'Task A', wave: 'W1', category: 'build' }],
     waves: [{ id: 'W1' }],
   });

@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const files = [
+  'plan-write-guard.test.mts',
+  'registry.test.mts',
   'resolve-mode-prompt.test.mts',
   'load-mode-prompt.test.mts',
   'tool-policy.test.mts',

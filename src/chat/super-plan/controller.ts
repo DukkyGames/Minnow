@@ -1,0 +1,439 @@
+/**
+ * Super Plan controller — sequences the full pipeline with two user checkpoints.
+ *
+ * Advancement is a single sequential loop per chat: each stage runner resolves
+ * only after its work (chat turn, research run, sub-agent review) has fully
+ * completed, so the loop finalizes the stage deterministically and moves on.
+ * The chat stream-end hook is only a stall-recovery safety net, never the
+ * primary advancement path (that dual path previously double-ran stages).
+ */
+
+import { isChatStreaming, subscribeChatStreamEnd } from '../streaming-state';
+import { isChatTurnSetupPending } from '../chat-turn-guard';
+import type { Chat, TurnRunRecord } from '../../types';
+import { cancelResearch } from '../../research/client';
+import {
+  cancelSuperPlanState,
+  initSuperPlanState,
+  markSuperPlanStageStatus,
+  resetSuperPlanStage,
+  rewindSuperPlanStages,
+  setSuperPlanActiveStage,
+  setSuperPlanPaused,
+} from './state';
+import {
+  finalizeStreamStage,
+  runSuperPlanStage,
+  type SuperPlanStageOutcome,
+} from './stages';
+import { nextRunnableSuperPlanStage, shouldSkipSuperPlanStage } from './pipeline';
+import {
+  getSuperPlanConfigSync,
+  loadSuperPlanConfig,
+} from '../../config/super-plan-meta';
+import {
+  SUPER_PLAN_STAGE_LABELS,
+  SUPER_PLAN_STAGE_ORDER,
+  type SuperPlanCheckpointAction,
+  type SuperPlanStageId,
+} from './types';
+
+export type SuperPlanControllerListener = (chat: Chat) => void;
+
+const advancingChats = new Set<string>();
+let streamEndUnsubscribe: (() => void) | null = null;
+const listeners = new Set<SuperPlanControllerListener>();
+
+function ensureStreamEndHook(): void {
+  if (streamEndUnsubscribe) return;
+  streamEndUnsubscribe = subscribeChatStreamEnd((chatId) => {
+    void onSuperPlanStreamEnd(chatId);
+  });
+}
+
+export function subscribeSuperPlanController(
+  listener: SuperPlanControllerListener,
+): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function notifyListeners(chat: Chat): void {
+  for (const fn of listeners) {
+    try {
+      fn(chat);
+    } catch {
+      /* UI hook */
+    }
+  }
+}
+
+function isBlockedCheckpoint(stage: SuperPlanStageId): boolean {
+  return stage === 'spec_confirm' || stage === 'present';
+}
+
+/** Abort the chat's in-flight turn (lazy import keeps the UI chain out of tests). */
+function stopChatTurn(chatId: string): void {
+  void import('../stop-generation')
+    .then((m) => m.stopGeneration(chatId))
+    .catch(() => undefined);
+}
+
+/** True while the sequential stage loop is running for this chat. */
+export function isSuperPlanAdvancing(chatId: string): boolean {
+  return advancingChats.has(chatId);
+}
+
+/** Newest turn run on this chat (stage turns create exactly one run each). */
+function newestTurnRun(chat: Chat): TurnRunRecord | undefined {
+  const runs = chat.runs ?? [];
+  let newest: TurnRunRecord | undefined;
+  for (const run of runs) {
+    if (!newest || run.createdAt > newest.createdAt) newest = run;
+  }
+  return newest;
+}
+
+/** Start the Super Plan pipeline for a chat (resumes an interrupted one instead of restarting). */
+export async function startSuperPlan(chat: Chat, prompt: string): Promise<void> {
+  ensureStreamEndHook();
+  await loadSuperPlanConfig();
+  const existing = chat.superPlan;
+  const finished = existing?.stages.present?.status === 'done';
+  if (existing && !existing.cancelled && !finished && existing.prompt === prompt.trim()) {
+    await resumeSuperPlanPipeline(chat);
+    return;
+  }
+  initSuperPlanState(chat, prompt);
+  await advanceSuperPlan(chat);
+}
+
+/**
+ * Run stages sequentially from the active stage until the pipeline blocks on
+ * the user, pauses, errors, or completes. Re-entrant calls are no-ops.
+ */
+export async function advanceSuperPlan(chat: Chat): Promise<void> {
+  if (!chat.superPlan || chat.superPlan.cancelled || chat.superPlan.paused) return;
+  if (advancingChats.has(chat.id)) return;
+  if (isChatStreaming(chat.id)) return;
+
+  ensureStreamEndHook();
+  advancingChats.add(chat.id);
+  let currentStage: SuperPlanStageId | null = null;
+  try {
+    await loadSuperPlanConfig();
+    for (;;) {
+      const state = chat.superPlan;
+      if (!state || state.cancelled || state.paused) break;
+      // A concurrent send claimed the chat: back off and let the stream-end
+      // safety net resume the pending stage once the chat is free again.
+      if (isChatStreaming(chat.id) || isChatTurnSetupPending(chat.id)) break;
+      const stageId = state.activeStage;
+      currentStage = stageId;
+      const config = getSuperPlanConfigSync();
+      const record = state.stages[stageId];
+
+      if (record?.status === 'blocked_user' || record?.status === 'error') break;
+      if (record?.status === 'done') {
+        const next = nextRunnableSuperPlanStage(stageId, config);
+        if (!next) break;
+        setSuperPlanActiveStage(chat, next);
+        notifyListeners(chat);
+        continue;
+      }
+
+      if (shouldSkipSuperPlanStage(stageId, config)) {
+        markSuperPlanStageStatus(chat, stageId, 'done');
+        const next = nextRunnableSuperPlanStage(stageId, config);
+        if (!next) break;
+        setSuperPlanActiveStage(chat, next);
+        notifyListeners(chat);
+        continue;
+      }
+
+      markSuperPlanStageStatus(chat, stageId, 'running');
+      notifyListeners(chat);
+
+      const runsBefore = chat.runs?.length ?? 0;
+      let outcome: SuperPlanStageOutcome = await runSuperPlanStage(chat, stageId, {
+        onResearchStarted: () => notifyListeners(chat),
+      });
+
+      if (outcome.kind === 'await_stream') {
+        // The stage's chat turn has fully completed by the time the runner
+        // resolves; finalize deterministically instead of waiting on the
+        // stream-end hook (which fires mid-turn and used to double-advance).
+        if (chat.superPlan?.cancelled) break;
+        if ((chat.runs?.length ?? 0) <= runsBefore) {
+          // runChatTurn no-opped (chat was busy) — leave the stage pending so
+          // the safety net or the Resume button reruns it.
+          resetSuperPlanStage(chat, stageId);
+          notifyListeners(chat);
+          break;
+        }
+        const lastRun = newestTurnRun(chat);
+        if (lastRun?.status === 'stopped') {
+          resetSuperPlanStage(chat, stageId);
+          setSuperPlanPaused(chat, true);
+          notifyListeners(chat);
+          break;
+        }
+        if (lastRun?.status === 'failed') {
+          throw new Error(
+            `${SUPER_PLAN_STAGE_LABELS[stageId]} turn failed before finishing — ` +
+              'retry the stage, or open the chat to check the provider/model error.',
+          );
+        }
+        outcome = await finalizeStreamStage(chat, stageId);
+      }
+
+      if (outcome.kind === 'paused') {
+        resetSuperPlanStage(chat, stageId);
+        setSuperPlanPaused(chat, true);
+        notifyListeners(chat);
+        break;
+      }
+
+      if (outcome.kind === 'blocked_user') {
+        notifyListeners(chat);
+        break;
+      }
+
+      if (outcome.kind === 'done' || outcome.kind === 'skipped') {
+        if (!isBlockedCheckpoint(stageId) || outcome.kind === 'skipped') {
+          markSuperPlanStageStatus(chat, stageId, 'done', {
+            ...(outcome.kind === 'done' && outcome.artifactPath
+              ? { artifactPath: outcome.artifactPath }
+              : {}),
+          });
+        }
+        const next = nextRunnableSuperPlanStage(stageId, getSuperPlanConfigSync());
+        if (!next) {
+          notifyListeners(chat);
+          break;
+        }
+        setSuperPlanActiveStage(chat, next);
+        notifyListeners(chat);
+        continue;
+      }
+
+      break;
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (currentStage) {
+      markSuperPlanStageStatus(chat, currentStage, 'error', { error: message });
+    }
+    notifyListeners(chat);
+  } finally {
+    advancingChats.delete(chat.id);
+    notifyListeners(chat);
+  }
+}
+
+/**
+ * Stall-recovery safety net: if a chat turn ends and the pipeline has a
+ * pending or stale-running stage with no loop in flight, kick the loop.
+ */
+export async function onSuperPlanStreamEnd(chatId: string): Promise<void> {
+  const { findChatById } = await import('../../state/sessions');
+  const chat = findChatById(chatId);
+  if (!chat?.superPlan || chat.superPlan.cancelled || chat.superPlan.paused) return;
+  if (advancingChats.has(chat.id) || isChatStreaming(chat.id)) return;
+
+  const record = chat.superPlan.stages[chat.superPlan.activeStage];
+  if (record?.status === 'running') {
+    // A running stage with no loop and no stream is stale (e.g. reload mid-stage).
+    resetSuperPlanStage(chat, chat.superPlan.activeStage);
+  } else if (record?.status !== 'pending') {
+    return;
+  }
+  await advanceSuperPlan(chat);
+}
+
+/** Resume after a user checkpoint (spec_confirm or present). */
+export async function resumeSuperPlanAfterUser(
+  chat: Chat,
+  action: SuperPlanCheckpointAction,
+): Promise<void> {
+  if (!chat.superPlan || chat.superPlan.cancelled) return;
+  ensureStreamEndHook();
+  if (chat.superPlan.paused) setSuperPlanPaused(chat, false);
+  const stageId = chat.superPlan.activeStage;
+
+  if (stageId === 'spec_confirm') {
+    if (action === 'revise') {
+      resetSuperPlanStage(chat, 'spec_confirm');
+      notifyListeners(chat);
+      await advanceSuperPlan(chat);
+      return;
+    }
+    markSuperPlanStageStatus(chat, 'spec_confirm', 'done', {
+      artifactPath: chat.superPlan.specPath,
+    });
+    const config = getSuperPlanConfigSync();
+    const next = nextRunnableSuperPlanStage('spec_confirm', config);
+    if (next) {
+      setSuperPlanActiveStage(chat, next);
+      notifyListeners(chat);
+      await advanceSuperPlan(chat);
+    }
+    return;
+  }
+
+  if (stageId === 'present') {
+    if (action === 'revise') {
+      resetSuperPlanStage(chat, 'present');
+      resetSuperPlanStage(chat, 'finalize');
+      setSuperPlanActiveStage(chat, 'finalize');
+      notifyListeners(chat);
+      await advanceSuperPlan(chat);
+      return;
+    }
+    markSuperPlanStageStatus(chat, 'present', 'done', {
+      artifactPath: chat.superPlan.planPath,
+    });
+    notifyListeners(chat);
+  }
+}
+
+/** Pause the pipeline: stop the in-flight stage turn; the stage reruns on resume. */
+export function pauseSuperPlan(chat: Chat): void {
+  if (!chat.superPlan || chat.superPlan.cancelled) return;
+  setSuperPlanPaused(chat, true);
+  if (isChatStreaming(chat.id)) {
+    stopChatTurn(chat.id);
+  }
+  notifyListeners(chat);
+}
+
+/** Resume a paused (or stalled/errored) pipeline at its active stage. */
+export async function resumeSuperPlanPipeline(chat: Chat): Promise<void> {
+  const state = chat.superPlan;
+  if (!state || state.cancelled) return;
+  ensureStreamEndHook();
+  setSuperPlanPaused(chat, false);
+  const record = state.stages[state.activeStage];
+  if (record?.status === 'running' || record?.status === 'error') {
+    resetSuperPlanStage(chat, state.activeStage);
+  }
+  notifyListeners(chat);
+  await advanceSuperPlan(chat);
+}
+
+/** Re-run the active (usually errored) stage from scratch. */
+export async function retrySuperPlanStage(chat: Chat): Promise<void> {
+  const state = chat.superPlan;
+  if (!state || state.cancelled) return;
+  resetSuperPlanStage(chat, state.activeStage);
+  setSuperPlanPaused(chat, false);
+  notifyListeners(chat);
+  await advanceSuperPlan(chat);
+}
+
+/** Skip the active stage and continue with the next runnable one. */
+export async function skipSuperPlanStage(chat: Chat): Promise<void> {
+  const state = chat.superPlan;
+  if (!state || state.cancelled) return;
+  const stageId = state.activeStage;
+  if (stageId === 'present') return;
+  // Skipping a live stage (e.g. an in-progress interview) must abort its
+  // in-flight turn first, or advanceSuperPlan would bail out on the still-
+  // streaming chat and the stopped run would be misread as a pause.
+  if (isChatStreaming(chat.id)) {
+    stopChatTurn(chat.id);
+  }
+  resetSuperPlanStage(chat, stageId);
+  markSuperPlanStageStatus(chat, stageId, 'done');
+  const next = nextRunnableSuperPlanStage(stageId, getSuperPlanConfigSync());
+  if (!next) {
+    notifyListeners(chat);
+    return;
+  }
+  setSuperPlanActiveStage(chat, next);
+  setSuperPlanPaused(chat, false);
+  notifyListeners(chat);
+  await advanceSuperPlan(chat);
+}
+
+/** Rework the pipeline from an earlier stage: reset it and everything after, then run. */
+export async function rewindSuperPlanToStage(
+  chat: Chat,
+  stageId: SuperPlanStageId,
+): Promise<void> {
+  const state = chat.superPlan;
+  if (!state || state.cancelled) return;
+  const targetIndex = SUPER_PLAN_STAGE_ORDER.indexOf(stageId);
+  const activeIndex = SUPER_PLAN_STAGE_ORDER.indexOf(state.activeStage);
+  if (targetIndex < 0 || targetIndex > activeIndex) return;
+  if (isChatStreaming(chat.id)) {
+    stopChatTurn(chat.id);
+  }
+  rewindSuperPlanStages(chat, stageId);
+  notifyListeners(chat);
+  await advanceSuperPlan(chat);
+}
+
+/** Cancel the Super Plan pipeline (terminal — a new run starts fresh). */
+export function cancelSuperPlan(chat: Chat): void {
+  const researchId = chat.superPlan?.researchId?.trim();
+  const researchRunning =
+    chat.superPlan?.activeStage === 'research' &&
+    chat.superPlan.stages.research?.status === 'running';
+  cancelSuperPlanState(chat);
+  if (isChatStreaming(chat.id)) {
+    stopChatTurn(chat.id);
+  }
+  if (researchId && researchRunning) {
+    void cancelResearch(researchId).catch(() => undefined);
+  }
+  notifyListeners(chat);
+}
+
+export function isSuperPlanBlocked(chat: Chat): boolean {
+  const state = chat.superPlan;
+  if (!state) return false;
+  const record = state.stages[state.activeStage];
+  return record?.status === 'blocked_user';
+}
+
+/**
+ * Pipeline is idle without user input: paused, errored, or a stage sits
+ * pending/stale-running with no loop or stream in flight (e.g. after reload).
+ */
+export function isSuperPlanStalled(chat: Chat): boolean {
+  const state = chat.superPlan;
+  if (!state || state.cancelled) return false;
+  if (state.stages.present?.status === 'done') return false;
+  if (state.paused) return true;
+  if (advancingChats.has(chat.id) || isChatStreaming(chat.id)) return false;
+  const record = state.stages[state.activeStage];
+  return (
+    !record ||
+    record.status === 'pending' ||
+    record.status === 'running' ||
+    record.status === 'error'
+  );
+}
+
+export function getSuperPlanCheckpointKind(
+  chat: Chat,
+): 'spec_confirm' | 'present' | null {
+  const state = chat.superPlan;
+  if (!state) return null;
+  const record = state.stages[state.activeStage];
+  if (record?.status !== 'blocked_user') return null;
+  if (state.activeStage === 'spec_confirm') return 'spec_confirm';
+  if (state.activeStage === 'present') return 'present';
+  return null;
+}
+
+/** Test helper — reset module hooks. */
+export function resetSuperPlanControllerForTests(): void {
+  advancingChats.clear();
+  if (streamEndUnsubscribe) {
+    streamEndUnsubscribe();
+    streamEndUnsubscribe = null;
+  }
+  listeners.clear();
+}

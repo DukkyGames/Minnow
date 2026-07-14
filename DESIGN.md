@@ -73,15 +73,15 @@ components:
 
 ## Palette themes
 
-`<html data-theme="{family}-{mode}">` (e.g. `sage-dark`, `coral-light`) is set from **Settings → General → Theme**, the inline boot script in `index.html`, or `initTheme()` in [`src/theme.ts`](src/theme.ts). Six families: **Slate · Sage**, **Stone · Amber**, **Midnight · Cyan**, **Graphite · Coral**, **Salt · Pepper** (grayscale), **Retro · Terminal** (phosphor green), each with dark and light variants. Hex and rgba literals exist only in [`src/styles/tokens.css`](src/styles/tokens.css); application CSS uses **`--mn-*`** tokens (22 core variables per theme plus extended semantics via `color-mix`).
+`<html data-theme="{family}-{mode}">` (e.g. `swamp-dark`, `coral-light`) is set from **Settings → Appearance → Theme**, the inline boot script in `index.html`, or `initTheme()` in [`src/theme.ts`](src/theme.ts). Eight families: **Swamp**, **Desert**, **Ocean**, **Coral**, **Mono** (grayscale), **Matrix** (phosphor green), **Human**, **Mint**, each with dark and light variants. Hex and rgba literals exist only in [`src/styles/tokens.css`](src/styles/tokens.css); application CSS uses **`--mn-*`** tokens (22 core variables per theme plus extended semantics via `color-mix`).
 
-Storage: `minnow.theme` (explicit id), `minnow.theme.followSystem`, `minnow.theme.family`. Default theme: **sage-dark**. Legacy `light` / `dark` / `system` values migrate on read. **highlight.js** loads `github-dark` when mode is dark (family hue does not change the hljs stylesheet). CodeMirror uses `--cm-*` aliases derived from `--mn-*`. Runtime `theme-color` meta reads computed `--mn-bg`.
+Storage: `minnow.theme` (explicit id), `minnow.theme.followSystem`, `minnow.theme.family`. Default theme: **swamp-dark**. Legacy `light` / `dark` / `system` values and pre-rename family ids (e.g. `sage`→`swamp`) migrate on read.
 
 ## Overview
 
 **Creative North Star: "Calm local instrument"**
 
-Minnow is a long-session chat bench: conversation first, metrics as instrumentation, borders instead of card stacks. Palette families change mood (cool sage, warm amber, cyan midnight, coral graphite) without neon HUD chrome, hero metric templates, glassmorphism, or gradient text.
+Minnow is a long-session chat bench: conversation first, metrics as instrumentation, borders instead of card stacks. Palette families change mood (swamp, desert, ocean, coral, mono, matrix, human, mint) without neon HUD chrome, hero metric templates, glassmorphism, or gradient text.
 
 **Key Characteristics:**
 

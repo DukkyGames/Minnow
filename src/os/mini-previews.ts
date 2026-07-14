@@ -1,5 +1,6 @@
-import { APPS, getAppById, getPresentationMode } from './app-registry';
+import { APPS, getAppById } from './app-registry';
 import { createAppIcon, createOsIcon } from './icons';
+import { resolveInstancePresentation } from './presentation-mode';
 import { isWindowMountedApp } from './window-mounted-apps';
 import { windowManager } from './window-manager';
 import type { AppInstance } from './types';
@@ -11,7 +12,7 @@ function shouldShowInMiniStack(
   snapshot: { foregroundId: string | null; view: 'desktop' | 'app' },
 ): boolean {
   // Window-mode apps stay visible as floating frames until minimized.
-  if (isWindowMountedApp(inst.appId) && getPresentationMode(inst.appId) === 'window') {
+  if (isWindowMountedApp(inst.appId) && resolveInstancePresentation(inst) === 'window') {
     const win = windowManager.findWindowByInstance(inst.id);
     return win?.minimized ?? false;
   }

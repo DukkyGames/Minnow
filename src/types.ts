@@ -4,6 +4,7 @@
  */
 
 import type { ModeId } from './chat/modes/types';
+import type { SuperPlanState } from './chat/super-plan/types';
 import type { PinnedSkillState } from './skills/types';
 import type { ChatTokenLedger } from './usage/types';
 import type {
@@ -795,6 +796,8 @@ export interface Chat {
   pendingMessageQueue?: QueuedComposerMessage[];
   /** Active /goal completion loop; persists across reload until cleared. */
   activeGoal?: ActiveGoalState;
+  /** Super Plan pipeline controller state (Plan mode overhaul Phase 3). */
+  superPlan?: SuperPlanState;
   /** Build-agent progress checklist (todo_write); replace-all, cleared on /clear. */
   todos?: ChatTodo[];
   /** Epoch ms when todos were last written via todo_write. */

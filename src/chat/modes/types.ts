@@ -8,6 +8,7 @@ export type ModeId =
   | 'desktop'
   | 'build'
   | 'plan'
+  | 'super-plan'
   | 'orchestrate'
   | 'reef'
   | 'debug'
@@ -20,6 +21,7 @@ export const MODE_IDS: readonly ModeId[] = [
   'desktop',
   'build',
   'plan',
+  'super-plan', // Phase 0 plan-mode overhaul — sub-item of Plan segment (not composer top-level)
   'orchestrate',
   'reef',
   'debug',

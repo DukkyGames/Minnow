@@ -1,5 +1,5 @@
 import type { AppId, AppInstance, LaunchOptions, OsView, PresentationMode } from './types';
-import { getPresentationMode } from './app-registry';
+import { resolveInstancePresentation, resolvePresentationMode } from './presentation-mode';
 import { windowManager } from './window-manager';
 
 export interface InstanceSnapshot {
@@ -59,8 +59,9 @@ export function getForegroundAppId(): AppId | null {
 
 /** Presentation mode of the focused surface. */
 export function getForegroundPresentationMode(): PresentationMode | null {
-  const appId = getForegroundAppId();
-  return appId ? getPresentationMode(appId) : null;
+  if (!foregroundId) return null;
+  const inst = instances.find((i) => i.id === foregroundId);
+  return inst ? resolveInstancePresentation(inst) : null;
 }
 
 function viewForPresentationMode(mode: PresentationMode): OsView {
@@ -68,9 +69,16 @@ function viewForPresentationMode(mode: PresentationMode): OsView {
 }
 
 function pickNextForeground(excludeId: string): string | null {
+  const closing = instances.find((i) => i.id === excludeId);
+  const returnApp = closing?.launchOptions?.returnToApp;
+  if (returnApp) {
+    const target = instances.find((i) => i.appId === returnApp && i.id !== excludeId);
+    if (target) return target.id;
+  }
+
   const remaining = instances.filter((i) => i.id !== excludeId);
   const windowed = remaining.filter((i) => {
-    const mode = getPresentationMode(i.appId);
+    const mode = resolveInstancePresentation(i);
     return mode === 'window' || mode === 'sidePanel';
   });
   // Only rotate among floating surfaces — never resurrect a background fullscreen app
@@ -101,18 +109,29 @@ export function showDesktop(): void {
 }
 
 function applyLaunchOptionsToInstance(inst: AppInstance, options?: LaunchOptions): void {
-  if (!options) return;
-  inst.launchOptions = { ...options };
+  if (!options || Object.keys(options).length === 0) return;
+  inst.launchOptions = { ...inst.launchOptions, ...options };
   if (options.seed) inst.seed = options.seed;
 }
 
 /** Launch or foreground an app; returns the active instance id. */
 export function launchInstance(appId: AppId, options?: LaunchOptions): string {
-  const mode = getPresentationMode(appId);
   const existing = instances.find((i) => i.appId === appId);
+  let resolvedOptions = options;
+  if (
+    appId === 'settings' &&
+    getForegroundAppId() === 'code' &&
+    resolvedOptions?.returnToApp == null
+  ) {
+    resolvedOptions = { ...resolvedOptions, returnToApp: 'code' };
+  }
+
   if (existing) {
+    if (resolvedOptions && Object.keys(resolvedOptions).length > 0) {
+      applyLaunchOptionsToInstance(existing, resolvedOptions);
+    }
+    const mode = resolvePresentationMode(appId, existing.launchOptions);
     foregroundId = existing.id;
-    applyLaunchOptionsToInstance(existing, options);
     existing.unread = 0;
     view = viewForPresentationMode(mode);
     if (mode === 'window') {
@@ -123,11 +142,12 @@ export function launchInstance(appId: AppId, options?: LaunchOptions): string {
     return existing.id;
   }
 
+  const mode = resolvePresentationMode(appId, resolvedOptions);
   const inst: AppInstance = {
     id: uid(),
     appId,
-    seed: options?.seed,
-    launchOptions: options ? { ...options } : undefined,
+    seed: resolvedOptions?.seed,
+    launchOptions: resolvedOptions ? { ...resolvedOptions } : undefined,
     unread: 0,
     msg: '',
   };
@@ -142,7 +162,7 @@ export function launchInstance(appId: AppId, options?: LaunchOptions): string {
 export function focusInstance(id: string): boolean {
   const inst = instances.find((i) => i.id === id);
   if (!inst) return false;
-  const nextView = viewForPresentationMode(getPresentationMode(inst.appId));
+  const nextView = viewForPresentationMode(resolveInstancePresentation(inst));
   if (foregroundId === id && view === nextView) return true;
   foregroundId = id;
   view = nextView;
@@ -156,7 +176,7 @@ export function restoreInstance(id: string): boolean {
   if (!inst) return false;
   foregroundId = id;
   inst.unread = 0;
-  view = viewForPresentationMode(getPresentationMode(inst.appId));
+  view = viewForPresentationMode(resolveInstancePresentation(inst));
   emit();
   return true;
 }
@@ -172,7 +192,7 @@ export function closeInstance(id: string): boolean {
       view = 'desktop';
     } else {
       const next = instances.find((i) => i.id === foregroundId);
-      view = next ? viewForPresentationMode(getPresentationMode(next.appId)) : 'desktop';
+      view = next ? viewForPresentationMode(resolveInstancePresentation(next)) : 'desktop';
     }
   } else if (instances.length === 0) {
     view = 'desktop';

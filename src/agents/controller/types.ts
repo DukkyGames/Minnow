@@ -20,4 +20,8 @@ export interface RunInternals {
   queued: boolean;
   /** True after this run consumed a global/type concurrency slot. */
   holdsConcurrencySlot: boolean;
+  /** Mode used for tool allow/deny when executing nested tools. */
+  toolModeId: string;
+  /** Parent spawn mode id (before tool-mode resolution). */
+  spawnModeId: string;
 }
