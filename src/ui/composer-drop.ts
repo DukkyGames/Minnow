@@ -60,6 +60,13 @@ function hasComposerDrag(dataTransfer: DataTransfer | null): boolean {
   return classifyFileDrag(dataTransfer) !== null;
 }
 
+/** One handler per composer surface — nested targets would each see the same bubbling drop. */
+function outermostDropTargets(targets: HTMLElement[]): HTMLElement[] {
+  return targets.filter(
+    (el) => !targets.some((other) => other !== el && other.contains(el)),
+  );
+}
+
 function bindDropTarget(
   element: HTMLElement,
   dropTargets: HTMLElement[],
@@ -94,6 +101,7 @@ function bindDropTarget(
     const kind = classifyFileDrag(event.dataTransfer);
     if (!kind) return;
     event.preventDefault();
+    event.stopPropagation();
     dragDepth = 0;
     setDropActive(dropTargets, false);
 
@@ -145,7 +153,8 @@ export function initComposerDrop(): void {
 
   if (targets.length === 0) return;
 
-  for (const target of targets) {
+  const dropRoots = outermostDropTargets(targets);
+  for (const target of dropRoots) {
     bindDropTarget(target, targets);
   }
 }
