@@ -4,8 +4,6 @@
 
 import { fetchWorkAgentsList } from '../agents/work-agent-prompt-api';
 import {
-  clampSubAgentMaxToolTurns,
-  getSubAgentsMaxToolTurns,
   loadSubAgentConfig,
   saveSubAgentConfigToServer,
 } from '../agents/sub-agent-config';
@@ -141,8 +139,6 @@ import {
 import {
   clampGenerationIdleTimeoutMs,
   clampGenerationMaxDurationMs,
-  clampMaxToolTurns,
-  MAX_CHAT_MAX_TOOL_TURNS,
   generationTimeoutMinutesToMs,
   generationTimeoutMsToMinutes,
   getChatMetaSync,
@@ -1472,59 +1468,9 @@ async function renderAutopilotSection(): Promise<void> {
   });
 }
 
-/** Main and sub-agent tool-loop caps (Settings → Tools). */
-async function appendToolTurnLimitsSection(mount: HTMLElement): Promise<void> {
-  await Promise.all([loadChatMeta(), loadSubAgentConfig()]);
-  const subConfig = await loadSubAgentConfig();
-
-  const section = appendSettingsGroup(
-    mount,
-    'Tool turn limits',
-    'Cap how many times the agent can call tools in one run (main composer and all sub-agents, including eval runs).',
-  );
-
-  const mainInput = document.createElement('input');
-  mainInput.type = 'number';
-  mainInput.className = 'settings-input';
-  mainInput.min = '1';
-  mainInput.max = String(MAX_CHAT_MAX_TOOL_TURNS);
-  mainInput.step = '1';
-  mainInput.value = String(getChatMetaSync().maxToolTurns);
-  mainInput.setAttribute('aria-label', 'Main agent maximum tool turns per send');
-  section.appendChild(createSettingsInputRow('Main agents', { input: mainInput }).row);
-
-  const subInput = document.createElement('input');
-  subInput.type = 'number';
-  subInput.className = 'settings-input';
-  subInput.min = '1';
-  subInput.max = String(MAX_CHAT_MAX_TOOL_TURNS);
-  subInput.step = '1';
-  subInput.value = String(getSubAgentsMaxToolTurns(subConfig));
-  subInput.setAttribute('aria-label', 'Sub-agent maximum tool turns per run');
-  section.appendChild(createSettingsInputRow('Sub-agents', { input: subInput }).row);
-
-  mainInput.addEventListener('change', () => {
-    void (async () => {
-      const value = clampMaxToolTurns(Number(mainInput.value));
-      mainInput.value = String(value);
-      try {
-        await saveChatMeta({ maxToolTurns: value });
-        setStatus('ok', 'Main agent tool turn limit updated');
-      } catch {
-        setStatus('err', 'Could not save main agent tool turn limit');
-      }
-    })();
-  });
-
-  subInput.addEventListener('change', () => {
-    void (async () => {
-      const value = clampSubAgentMaxToolTurns(Number(subInput.value));
-      subInput.value = String(value);
-      const fresh = await loadSubAgentConfig();
-      const ok = await saveSubAgentConfigToServer({ ...fresh, maxToolTurns: value });
-      setStatus(ok ? 'ok' : 'err', ok ? 'Sub-agent tool turn limit updated' : 'Save failed — use npm start');
-    })();
-  });
+/** Generation upstream timeouts (Settings → Tools). */
+async function appendGenerationTimeoutsSection(mount: HTMLElement): Promise<void> {
+  await loadChatMeta();
 
   const timeoutSection = appendSettingsGroup(
     mount,
@@ -1590,8 +1536,6 @@ async function appendToolTurnLimitsSection(mount: HTMLElement): Promise<void> {
       }
     })();
   });
-
-  mount.appendChild(section);
 }
 
 let toolsSectionInitialized = false;
@@ -1629,7 +1573,7 @@ async function renderToolsSection(): Promise<void> {
   await appendToolCallDefaults(toolDefaults);
   if (generation !== toolsSectionRenderGeneration) return;
 
-  await appendToolTurnLimitsSection(mount);
+  await appendGenerationTimeoutsSection(mount);
   if (generation !== toolsSectionRenderGeneration) return;
 
   let toolSecurity: ToolSecurityMeta;

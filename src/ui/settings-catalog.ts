@@ -151,7 +151,6 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
     description: 'Validate tool arguments with JSON Schema when the provider supports structured output.',
   }),
   field('general.generation.timeout', 'Generation timeout', 'general', 'general'),
-  field('general.generation.maxTurns', 'Max tool turns', 'general', 'general'),
   field('audio.devices', 'Audio devices', 'general', 'audio', {
     keywords: ['microphone', 'speaker', 'input', 'output'],
   }),
@@ -233,7 +232,6 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   field('agents.subAgents', 'Sub-agents', 'agents', 'agent-center', {
     keywords: ['spawn', 'subagent'],
   }),
-  field('agents.subAgents.maxTurns', 'Sub-agent max tool turns', 'agents', 'agent-center'),
   field('agents.autopilot', 'Orchestrator autopilot', 'agents', 'autopilot', {
     keywords: ['orchestrate', 'board', 'autopilot', 'concurrency', 'isolation'],
     description: 'Global defaults for orchestrate board execution, testing, and heartbeat.',

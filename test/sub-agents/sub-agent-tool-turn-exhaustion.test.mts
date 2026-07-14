@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { beforeEach, describe, test } from 'node:test';
 import { resetSubAgentOrchestrator, spawnSubAgent } from '../../src/agents/orchestrator.ts';
-import { resetSubAgentConfigCache, setRuntimeSubAgentOverrides } from '../../src/agents/sub-agent-config.ts';
+import { resetSubAgentConfigCache } from '../../src/agents/sub-agent-config.ts';
 import {
   resetSubAgentRunIdFactory,
   setSubAgentRunIdFactory,
@@ -35,10 +35,10 @@ const TASK_ID = 'W1-A';
 const PLAN_PATH = 'documentation/plans/test-plan.md';
 
 const exhaustingRunner: SubAgentRunner = {
-  async run(input) {
+  async run() {
     return {
-      summary: `Sub-agent reached maximum tool turns (${input.maxToolTurns}).`,
-      toolTurns: input.maxToolTurns,
+      summary: 'Sub-agent reached maximum tool turns (4).',
+      toolTurns: 4,
       messages: [],
       toolTurnLimitExhausted: true,
     };
@@ -71,7 +71,6 @@ describe('sub-agent tool turn exhaustion', () => {
     resetSubAgentRunIdFactory();
     setSubAgentRunnerFactory(() => exhaustingRunner);
     setSubAgentRunIdFactory(() => FIXED_RUN_ID);
-    setRuntimeSubAgentOverrides({ maxToolTurns: 4 });
     seedChat();
   });
 

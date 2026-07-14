@@ -26,7 +26,6 @@ export interface EvalRunnerInput {
   tools: OpenAIFunctionDefinition[];
   providerId: string;
   modelId: string;
-  maxToolTurns: number;
   signal: AbortSignal;
   executeTool: (
     name: string,
@@ -123,9 +122,8 @@ export const defaultEvalRunner: EvalRunner = {
 
     let toolTurns = 0;
     const usageSegments: Usage[] = [];
-    const maxTurns = Math.max(1, Math.floor(input.maxToolTurns));
 
-    for (let turn = 0; turn < maxTurns; turn++) {
+    for (let turn = 0; ; turn++) {
       const body: EvalCompletionBody = {
         model: input.modelId || undefined,
         messages,
@@ -215,12 +213,6 @@ export const defaultEvalRunner: EvalRunner = {
         usage: usageSegments.length ? sumUsageSegments(usageSegments) : undefined,
       };
     }
-
-    return {
-      summary: `Eval reached maximum tool turns (${maxTurns}).`,
-      toolTurns,
-      messages,
-    };
   },
 };
 

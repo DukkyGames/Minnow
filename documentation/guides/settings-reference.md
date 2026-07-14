@@ -229,7 +229,6 @@ Enable/disable bundled agent definition packs.
 | Max concurrent | Global cap |
 | Default timeout | ms |
 | Check-in nudge | ms (0 = off) |
-| Max tool turns | Per sub-agent run |
 
 **Types (9):** `generalPurpose`, `explore`, `researcher`, `shell`, `explorer`, `debugger`, `bug-planner`, `plan-reviewer`, `reef-widget`
 
@@ -280,8 +279,6 @@ Managed **SearXNG** install/start/stop (`~/.minnow/servers/`).
 | Setting | Key |
 |---------|-----|
 | Constrained tool calls | `toolCalls.useConstrainedDecoding` |
-| Main agent max tool turns | `chat.maxToolTurns` |
-| Sub-agent max tool turns | `sub-agents.json` → `maxToolTurns` |
 | Idle timeout (minutes) | `chat.generationIdleTimeoutMs` |
 | Max duration (minutes) | `chat.generationMaxDurationMs` |
 | Tool result cache | Session-scoped |

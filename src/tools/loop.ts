@@ -309,13 +309,6 @@ import {
 import { looksLikeProseStructuredQuestion } from './prose-question-detect';
 import { isToolEnabled } from './config';
 import { runChatToolBatch } from './chat-tool-batch';
-import {
-  DEFAULT_CHAT_MAX_TOOL_TURNS,
-  getChatMetaSync,
-} from '../config/chat-meta';
-
-/** Default max assistant↔tool rounds (see Settings → Tools and `chat.maxToolTurns` in config). */
-export const MAX_TOOL_TURNS = DEFAULT_CHAT_MAX_TOOL_TURNS;
 
 /** Options for {@link buildApiMessages} when the composer has pending files. */
 export interface BuildApiMessagesOptions {
@@ -1445,7 +1438,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     }
     snapTools = applyUiDesignerToolFilter(snapTools, uiDesignerCtx);
     const enabledToolNames = snapTools.map((t) => t.function.name);
-    const maxToolTurnsCap = getChatMetaSync().maxToolTurns;
 
     if (replaySnapshot) {
       const run = createRun(chat, replaySnapshot, {
@@ -1461,7 +1453,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         composedSystemPrompt: sysPrompt,
         userRulesContent: userRulesContent ?? undefined,
         enabledToolNames,
-        maxToolTurns: maxToolTurnsCap,
         providerId: sendProviderId,
         modelId: sendModelId,
         temperature:
@@ -1502,7 +1493,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     let emptyPostToolRetries = 0;
     let proseQuestionRetries = 0;
     let ephemeralPostToolInstruction: string | undefined;
-    const maxToolTurns = getChatMetaSync().maxToolTurns;
     const workAgentBudget = activeWorkAgent
       ? agentContextBudgetFromWorkAgent(activeWorkAgent)
       : { maxInputTokens: null, enforcementPolicy: DEFAULT_CONTEXT_ENFORCEMENT_POLICY };
@@ -1530,7 +1520,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       patchMainTurnActivity(chat.id, { phase: 'generating', currentTool: null });
     };
 
-    for (let turn = 0; turn < maxToolTurns; turn++) {
+    for (let turn = 0; ; turn++) {
       if (chatSignal.aborted) {
         throw new DOMException('Aborted', 'AbortError');
       }
@@ -1905,11 +1895,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           trackHistoryPush: () => trackRunHistoryPush(chat, turnRunId),
         });
 
-        if (turn + 1 >= maxToolTurns) {
-          setStatus('err', 'Maximum tool turns reached');
-          break;
-        }
-
         prepareNextStreamRound('Generating reply…');
         ephemeralPostToolInstruction = undefined;
         continue;
@@ -2200,12 +2185,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       completedNormally = true;
       break;
     }
-
-    if (!completedNormally) {
-      const attachHint =
-        getPendingAttachments().length > 0 ? ' Attachments kept for retry.' : '';
-      setStatus('err', `Maximum tool turns reached.${attachHint}`);
-    }
   } catch (err) {
     const e = err as { name?: string; message?: string };
     if (e && e.name === 'AbortError') {
@@ -2473,7 +2452,7 @@ export async function resumeParentChatWithMessage(
   });
 }
 
-/** Send the composer text with tool calling (SSE loop; max rounds from Settings → Tools / `chat.maxToolTurns`, default {@link MAX_TOOL_TURNS}). */
+/** Send the composer text with tool calling (SSE loop until final answer or user cancel). */
 export async function sendMessageWithTools(
   composer?: Partial<ComposerSurface>,
 ): Promise<void> {

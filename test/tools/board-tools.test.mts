@@ -514,10 +514,10 @@ describe('executeBoardTool', () => {
   test('board_update_task rejects complete when linked run hit max tool turns', async () => {
     const FIXED_RUN_ID = '11111111-1111-1111-1111-111111111111';
     const exhaustingRunner: SubAgentRunner = {
-      async run(input) {
+      async run() {
         return {
-          summary: `Sub-agent reached maximum tool turns (${input.maxToolTurns}).`,
-          toolTurns: input.maxToolTurns,
+          summary: 'Sub-agent reached maximum tool turns (8).',
+          toolTurns: 8,
           messages: [],
           toolTurnLimitExhausted: true,
         };

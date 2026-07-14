@@ -23,9 +23,6 @@ import { buildHeadlessApiMessages } from './build-messages';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import {
   loadChatMeta,
-  setChatMetaForTests,
-  getChatMetaSync,
-  DEFAULT_CHAT_MAX_TOOL_TURNS,
 } from '../config/chat-meta';
 import {
   loadPromptMetaSettings,
@@ -180,10 +177,6 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
     );
   }
 
-  if (options.cli.maxToolTurns != null) {
-    setChatMetaForTests({ maxToolTurns: options.cli.maxToolTurns });
-  }
-
   const workspacePath = options.workspaceAbs ?? '';
   const chat = buildHeadlessChat(options.cli, workspacePath);
 
@@ -270,14 +263,13 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
       enabledTools = enabledTools.filter((t) => allow.has(t.function.name));
     }
 
-    const maxToolTurns = options.cli.maxToolTurns ?? getChatMetaSync().maxToolTurns ?? DEFAULT_CHAT_MAX_TOOL_TURNS;
     const approvalOpts = {
       noApproval: options.cli.noApproval,
       modeId,
       autoRejectQuestions: options.cli.autoRejectQuestions,
     };
 
-    for (let turn = 0; turn < maxToolTurns; turn++) {
+    for (let turn = 0; ; turn++) {
       if (options.signal.aborted) {
         throw new DOMException('Aborted', 'AbortError');
       }
@@ -377,10 +369,6 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
       }
 
       turns.push(turnRecord);
-
-      if (turn + 1 >= maxToolTurns) {
-        throw new Error(`Max tool turns (${maxToolTurns}) exceeded without a final assistant message`);
-      }
     }
 
     if (!ok) {

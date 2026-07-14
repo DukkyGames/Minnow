@@ -2,7 +2,6 @@
  * Build eval tool allowlist and executeTool wrapper for isolated runs.
  */
 
-import { DEFAULT_SUB_AGENT_MAX_TOOL_TURNS } from '../agents/sub-agent-config';
 import { resolveSubAgentTools } from '../agents/sub-agent-tools';
 import type { SubAgentTypeConfig } from '../agents/types';
 import { getEnabledToolDefinitionsForMode } from '../tools/client';
@@ -19,7 +18,6 @@ function taskToTypeConfig(task: EvalTask): SubAgentTypeConfig {
     modelId: '',
     maxConcurrent: 1,
     timeoutMs: 120_000,
-    maxToolTurns: DEFAULT_SUB_AGENT_MAX_TOOL_TURNS,
     workAgentId: null,
     allowedTools: task.allowedTools.length > 0 ? task.allowedTools : null,
     deniedTools: task.deniedTools,

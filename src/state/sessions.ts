@@ -166,7 +166,6 @@ function ensureTurnSnapshot(raw: unknown): TurnSnapshot | null {
       ? { userRulesContent: row.userRulesContent }
       : {}),
     enabledToolNames: row.enabledToolNames.filter((n) => typeof n === 'string'),
-    maxToolTurns: typeof row.maxToolTurns === 'number' ? row.maxToolTurns : 25,
     historyPrefixHash:
       typeof row.historyPrefixHash === 'string' ? row.historyPrefixHash : '',
     ...(typeof row.orchestratePlanPath === 'string'

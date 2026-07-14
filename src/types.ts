@@ -670,7 +670,8 @@ export interface TurnSnapshot {
   userRulesContent?: string;
   /** Ordered tool function names enabled for this turn. */
   enabledToolNames: string[];
-  maxToolTurns: number;
+  /** @deprecated Ignored; retained for replay of older turn snapshots. */
+  maxToolTurns?: number;
   /** SHA-256 hex of JSON.stringify(apiMessages prefix through fork). */
   historyPrefixHash: string;
   orchestratePlanPath?: string;

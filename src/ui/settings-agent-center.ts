@@ -6,8 +6,6 @@
 import { fetchWorkAgentsList } from '../agents/work-agent-prompt-api';
 import type { WorkAgentDefinition } from '../agents/work-agent-types';
 import {
-  clampSubAgentMaxToolTurns,
-  getSubAgentsMaxToolTurns,
   loadSubAgentConfig,
   saveSubAgentConfigToServer,
 } from '../agents/sub-agent-config';
@@ -449,22 +447,6 @@ async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
   nudgeWrap.appendChild(nudgeInput);
   nudgeWrap.appendChild(el('span', 'settings-kv-suffix', 'ms'));
 
-  const maxTurns = document.createElement('input');
-  maxTurns.type = 'number';
-  maxTurns.className = 'settings-select settings-kv-input';
-  maxTurns.min = '1';
-  maxTurns.max = '64';
-  maxTurns.step = '1';
-  maxTurns.value = String(getSubAgentsMaxToolTurns(config));
-  maxTurns.setAttribute('aria-label', 'Sub-agent max tool turns');
-  maxTurns.addEventListener('change', () => {
-    const value = clampSubAgentMaxToolTurns(Number(maxTurns.value));
-    maxTurns.value = String(value);
-    void saveSubAgentConfigToServer({ maxToolTurns: value }).then((ok) => {
-      setStatus(ok ? 'ok' : 'err', ok ? 'Max tool turns saved' : 'Save failed');
-    });
-  });
-
   groupBody.appendChild(
     createSettingsKvList(
       [
@@ -472,7 +454,6 @@ async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
         { term: 'Max concurrent', value: maxInput },
         { term: 'Default timeout', value: timeoutWrap },
         { term: 'Check-in nudge', value: nudgeWrap },
-        { term: 'Max tool turns', value: maxTurns },
       ],
       { className: 'settings-kv settings-kv--row' },
     ),

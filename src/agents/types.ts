@@ -62,8 +62,6 @@ export interface SubAgentTypeConfig {
   modelId: string;
   maxConcurrent: number;
   timeoutMs: number;
-  /** Max LLM↔tool rounds (set from root `maxToolTurns` on merge; not per-type configurable). */
-  maxToolTurns?: number;
   workAgentId: string | null;
   allowedTools: string[] | null;
   deniedTools: string[];
@@ -93,16 +91,12 @@ export interface SubAgentsFile {
    * `0` disables. Default 120_000 from shipped defaults.
    */
   checkInNudgeMs?: number;
-  /** Max tool rounds for all sub-agent types (Settings → Tools). */
-  maxToolTurns?: number;
   /** Heartbeat tick interval H (ms); observe-only until Phase 2 watchdog. */
   heartbeatIntervalMs?: number;
   /** Progress stall threshold P (ms); observe-only until Phase 2. */
   progressStallMs?: number;
   /** Heartbeat dead threshold D (ms); observe-only until Phase 2. */
   heartbeatDeadMs?: number;
-  /** @deprecated Use `maxToolTurns`. Migrated on load. */
-  defaultMaxToolTurns?: number;
   defaultMaxInputTokens?: number | null;
   defaultContextEnforcementPolicy?: ContextEnforcementPolicy;
   defaultSummarySchema?: string;
@@ -134,8 +128,8 @@ export interface SubAgentRun {
   startedAt: string | null;
   endedAt: string | null;
   toolTurns: number;
-  /** Configured cap for this run (from type config at spawn). */
-  maxToolTurns: number;
+  /** @deprecated Ignored; retained for persisted run records from older versions. */
+  maxToolTurns?: number;
   cancelled: boolean;
   messages: ApiMessage[];
   /**
@@ -248,7 +242,7 @@ export interface SubAgentRunnerOutput {
   structuredOutcome?: SubAgentStructuredOutcome;
   toolTurns: number;
   messages: ApiMessage[];
-  /** True when the tool loop hit {@link SubAgentRunner.run maxToolTurns} without a final answer. */
+  /** @deprecated Real runners no longer cap tool turns; retained for custom/test runners. */
   toolTurnLimitExhausted?: boolean;
   /** True when input tokens could not be reduced under the cap. */
   contextBudgetExhausted?: boolean;
@@ -271,7 +265,6 @@ export interface SubAgentRunner {
     modelId: string;
     /** Parent chat for token ledger attribution. */
     parentChatId?: string | null;
-    maxToolTurns: number;
     contextBudget?: AgentContextBudgetConfig;
     summarySchema?: string;
     modelContextLimit?: number | null;
