@@ -3,7 +3,8 @@
  * Collapses older tool-round bodies while keeping the last few rounds intact.
  */
 
-import type { BoardTask, Chat, Message } from '../../types.ts';
+import { isChatStreaming } from '../streaming-state.ts';
+import type { BoardTask, Chat, Message, OrchestrateBoardState } from '../../types.ts';
 import { scheduleSaveSessions } from '../../state/sessions.ts';
 
 export const TASK_HISTORY_TRIM_MARKER = '[… trimmed after task completion]';
@@ -61,6 +62,8 @@ export function trimBoardTaskChatHistory(
 ): boolean {
   if (!chat.boardTaskId?.trim()) return false;
   if (activeChatId && chat.id === activeChatId) return false;
+  // Never trim a chat that is still streaming — transcript is live upstream context.
+  if (isChatStreaming(chat.id)) return false;
 
   const spans = collectToolRoundSpans(chat.history);
   if (spans.length <= TASK_HISTORY_KEEP_TOOL_ROUNDS) return false;
@@ -116,4 +119,39 @@ export function trimTaskRelatedChats(
     const chat = findChatById(id);
     if (chat) trimBoardTaskChatHistory(chat, activeChatId);
   }
+}
+
+/** Linked board-task chat ids for one task row (build, test, fixer). */
+function linkedTaskChatIds(task: BoardTask): string[] {
+  const ids: string[] = [];
+  for (const chatId of [task.chatId, task.testChatId, task.fixerChatId]) {
+    const id = chatId?.trim();
+    if (id) ids.push(id);
+  }
+  return ids;
+}
+
+/**
+ * Trim idle (non-streaming, non-active) board task chats across the whole board.
+ * Called after each task turn ends so concurrent AFK runs do not retain full tool
+ * transcripts for every completed builder/tester chat in RAM.
+ */
+export function trimIdleBoardTaskChats(
+  board: OrchestrateBoardState,
+  activeChatId: string | null | undefined,
+  findChatById: (id: string) => Chat | undefined,
+): number {
+  let trimmed = 0;
+  for (const task of board.tasks) {
+    for (const chatId of linkedTaskChatIds(task)) {
+      const chat = findChatById(chatId);
+      if (chat && trimBoardTaskChatHistory(chat, activeChatId)) trimmed += 1;
+    }
+  }
+  const finalChatId = board.finalTest?.chatId?.trim();
+  if (finalChatId) {
+    const finalChat = findChatById(finalChatId);
+    if (finalChat && trimBoardTaskChatHistory(finalChat, activeChatId)) trimmed += 1;
+  }
+  return trimmed;
 }

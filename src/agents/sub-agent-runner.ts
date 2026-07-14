@@ -381,7 +381,9 @@ async function streamSubAgentTurn(
     fullText = split.reply;
   }
   const streamedToolCalls = finalizeToolCalls(toolAcc);
-  const toolCalls = mergeContentJsonToolCalls(fullText, streamedToolCalls);
+  const toolCalls = mergeContentJsonToolCalls(fullText, streamedToolCalls, {
+    harmonyParseText: harmonyRouter.getCommentaryParseText(),
+  });
   const finishReason =
     streamMeta.finish_reason || (toolCalls.length > 0 ? 'tool_calls' : undefined);
 

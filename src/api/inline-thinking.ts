@@ -87,8 +87,9 @@ const REPLY_STARTS = [
 ] as const;
 
 const HARMONY_MARKER_RE = new RegExp(
-  '<\\|channel\\|>(analysis|final)' +
+  '<\\|channel\\|>(analysis|commentary|final)' +
     '|<\\|start\\|>(?:assistant|system|user|tool)?' +
+    '|<\\|constrain\\|>\\s*\\w*' +
     '|<\\|message\\|>' +
     '|<\\|end\\|>' +
     '|<\\|return\\|>' +
@@ -97,12 +98,15 @@ const HARMONY_MARKER_RE = new RegExp(
 
 const HARMONY_MARKERS = [
   '<|channel|>analysis',
+  '<|channel|>commentary',
   '<|channel|>final',
   '<|start|>assistant',
   '<|start|>system',
   '<|start|>user',
   '<|start|>tool',
   '<|start|>',
+  '<|constrain|>json',
+  '<|constrain|>',
   '<|message|>',
   '<|end|>',
   '<|return|>',
@@ -595,7 +599,7 @@ function harmonySuffixHoldLen(text: string): number {
   return 0;
 }
 
-/** Route gpt-oss harmony `<|channel|>analysis` / `final` markers without leaking control tokens. */
+/** Route gpt-oss harmony channels without leaking control tokens into user prose. */
 export class HarmonyChannelRouter {
   private buffer = '';
 
@@ -604,6 +608,9 @@ export class HarmonyChannelRouter {
   private channel: string | null = null;
 
   private inMessage = false;
+
+  /** Commentary-channel text (tool-call headers + JSON) for post-stream parsing. */
+  private commentaryParseText = '';
 
   feed(text: string): RoutedContentPart[] {
     if (!text) {
@@ -617,12 +624,21 @@ export class HarmonyChannelRouter {
     return this.drain(true);
   }
 
+  /** Buffered Harmony commentary segments (tool-call payloads). */
+  getCommentaryParseText(): string {
+    return this.commentaryParseText;
+  }
+
   private appendText(out: RoutedContentPart[], text: string): void {
     if (!text) {
       return;
     }
     if (!this.seenHarmony) {
       out.push([text, false]);
+      return;
+    }
+    if (this.channel === 'commentary') {
+      this.commentaryParseText += text;
       return;
     }
     if (this.inMessage) {

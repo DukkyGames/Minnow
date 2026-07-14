@@ -6,6 +6,10 @@ import {
   toolArgumentsRichnessScore,
   tryParseToolCallsFromAssistantContent,
 } from '../../src/providers/constrained-tool-content.ts';
+import {
+  normalizeHarmonyToolName,
+  tryParseHarmonyToolCallsFromText,
+} from '../../src/providers/harmony-tool-calls.ts';
 
 describe('constrained-tool-content', () => {
   test('tryParseToolCallsFromAssistantContent parses Minnow constrained shape', () => {
@@ -116,5 +120,36 @@ describe('constrained-tool-content', () => {
     };
     assert.equal(args.tasks?.length, 1);
     assert.equal(args.waves?.length, 1);
+  });
+
+  test('normalizeHarmonyToolName strips functions and repo_browser namespaces', () => {
+    assert.equal(normalizeHarmonyToolName('functions.read_file'), 'read_file');
+    assert.equal(normalizeHarmonyToolName('repo_browser.list_directory'), 'list_directory');
+  });
+
+  test('tryParseHarmonyToolCallsFromText parses commentary channel code variant', () => {
+    const text =
+      '<|channel|>commentary to=repo_browser.list_directory code{ "path": "." }';
+    const calls = tryParseHarmonyToolCallsFromText(text);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].function.name, 'list_directory');
+    assert.deepEqual(JSON.parse(calls[0].function.arguments), { path: '.' });
+  });
+
+  test('tryParseHarmonyToolCallsFromText parses canonical harmony message JSON', () => {
+    const text =
+      '<|channel|>commentary to=functions.read_file <|constrain|>json<|message|>{"path":"README.md"}<|call|>';
+    const calls = tryParseHarmonyToolCallsFromText(text);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].function.name, 'read_file');
+    assert.deepEqual(JSON.parse(calls[0].function.arguments), { path: 'README.md' });
+  });
+
+  test('mergeContentJsonToolCalls recovers harmony tool calls when SSE is empty', () => {
+    const harmony =
+      ' to=functions.list_directory <|constrain|>json<|message|>{"path":"."}';
+    const merged = mergeContentJsonToolCalls('', [], { harmonyParseText: harmony });
+    assert.equal(merged.length, 1);
+    assert.equal(merged[0].function.name, 'list_directory');
   });
 });
