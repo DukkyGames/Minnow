@@ -3,7 +3,7 @@ import { abortChatTitleGeneration } from '../chat/titles/inflight';
 import { cleanupChatWorktreeOnDelete } from './chat-worktree';
 import { isPlaceholderChatName } from '../chat/titles/placeholder';
 import { setSaveTimer, saveTimer } from '../app-state';
-import { getSessions, putSessions } from '../config/api-client';
+import { getSessions, putSessions, putSessionsKeepalive } from '../config/api-client';
 import { defaultSessionState } from '../config/defaults';
 import { randomUUID } from '../lib/random-id.ts';
 import { isServerStorageMode } from '../config/storage-mode';
@@ -250,6 +250,14 @@ function ensureExpertSelection(raw: unknown): ExpertSelection {
 /** In-memory session blob mirrored to ~/.minnow or localStorage fallback. */
 export let sessionState: SessionState | null = null;
 
+/**
+ * Set after a successful GET from ~/.minnow. Blocks PUT until hydration so a boot-time
+ * localStorage fallback cannot clobber on-disk sessions (MIN-408).
+ */
+let sessionsHydratedFromServer = false;
+
+let sessionPersistenceShutdownRegistered = false;
+
 /** Resolves once `loadSessionsFromStorage()` has populated `sessionState`. */
 let resolveSessionsReady: () => void = () => undefined;
 export const sessionsReady: Promise<void> = new Promise((resolve) => {
@@ -271,7 +279,21 @@ export function setSessionStateForTests(state: SessionState | null): void {
   sessionState = state;
   if (state) {
     markSessionsReady();
+    sessionsHydratedFromServer = true;
+  } else {
+    sessionsHydratedFromServer = false;
   }
+}
+
+/** Reset persistence guards between unit tests. */
+export function resetSessionPersistenceForTests(): void {
+  sessionsHydratedFromServer = false;
+  sessionPersistenceShutdownRegistered = false;
+}
+
+/** Expose hydration guard for persistence unit tests. */
+export function isSessionsHydratedFromServerForTests(): boolean {
+  return sessionsHydratedFromServer;
 }
 
 export type SaveSessionsResult = 'ok' | 'quota_exceeded';
@@ -1614,12 +1636,22 @@ export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Pr
         const remote = await getSessions();
         sessionState = parseSessionStateFromJson(remote);
         await runSessionCodeChangeBackfill(sessionState);
+        sessionsHydratedFromServer = true;
         return;
       } catch {
-        setStatus('err', 'Could not load sessions from ~/.minnow');
+        if (typeof document !== 'undefined') {
+          setStatus('err', 'Could not load sessions from ~/.minnow');
+        }
+        // Never fall through to localStorage when file-backed storage is active — that
+        // empty blob would later overwrite ~/.minnow on save (MIN-408).
+        if (!sessionState) {
+          sessionState = defaultSessionState();
+        }
+        return;
       }
     }
 
+    sessionsHydratedFromServer = false;
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) {
@@ -1745,14 +1777,26 @@ function trimChatsIfNeeded(): void {
   }
 }
 
-export function saveSessionsNow(): SaveSessionsResult {
+export type SaveSessionsOptions = {
+  /** Use fetch keepalive for unload handlers (fire-and-forget). */
+  keepalive?: boolean;
+};
+
+export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResult {
   trimChatsIfNeeded();
   if (!sessionState) return 'ok';
 
   if (isServerStorageMode()) {
-    void putSessions(sessionState).catch(() => {
-      setStatus('err', 'Could not save sessions to ~/.minnow');
-    });
+    if (!sessionsHydratedFromServer) {
+      return 'ok';
+    }
+    if (options?.keepalive) {
+      putSessionsKeepalive(sessionState);
+    } else {
+      void putSessions(sessionState).catch(() => {
+        setStatus('err', 'Could not save sessions to ~/.minnow');
+      });
+    }
     void import('../ui/hub').then((m) => m.refreshHubLiveData());
     return 'ok';
   }
@@ -1786,6 +1830,24 @@ export function flushScheduledSessionSaveForTests(): void {
   clearTimeout(saveTimer);
   setSaveTimer(null);
   saveSessionsNow();
+}
+
+/** Flush debounced saves and persist immediately (pagehide / abrupt quit). */
+export function flushPendingSessionSaveOnShutdown(): void {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    setSaveTimer(null);
+  }
+  saveSessionsNow({ keepalive: true });
+}
+
+/** Register a one-time pagehide handler so debounced saves are not lost on quit. */
+export function registerSessionPersistenceShutdownHandler(): void {
+  if (sessionPersistenceShutdownRegistered || typeof window === 'undefined') return;
+  sessionPersistenceShutdownRegistered = true;
+  window.addEventListener('pagehide', () => {
+    flushPendingSessionSaveOnShutdown();
+  });
 }
 
 /** Create a chat, make it active, and persist (debounced). */

@@ -82,7 +82,7 @@ import {
 } from './api/models';
 import { initWorkAgentSystem } from './agents/init-work-agents';
 import { initPromptSystem } from './chat/prompts/init-prompts';
-import { detectConfigServer, refreshConfigStorageBanner } from './config/storage-mode';
+import { detectConfigServer, isServerStorageMode, refreshConfigStorageBanner } from './config/storage-mode';
 import { runMigrationIfNeeded } from './config/migrate';
 import { detectLocalServer } from './tools/client';
 import { startSchedulerNotificationPoll } from './scheduler/notifications-poll';
@@ -99,6 +99,7 @@ import { loadAutopilotMeta } from './config/autopilot-meta';
 import {
   getActiveChat,
   loadSessionsFromStorage,
+  registerSessionPersistenceShutdownHandler,
   sessionState,
 } from './state/sessions';
 import { initChatScroll } from './ui/chat-scroll';
@@ -203,8 +204,9 @@ export async function initApp(): Promise<void> {
   await loadToolConfigFromStorage();
   await initPromptSystem();
   await initWorkAgentSystem();
-  await loadSessionsFromStorage();
+  await loadSessionsFromStorage(isServerStorageMode() ? { force: true } : undefined);
   registerOrchestrateBoardShutdownHandler();
+  registerSessionPersistenceShutdownHandler();
   const { loadBugsFromStorage, migrateBugsFromChats } = await import(
     './state/bug-board-store.ts'
   );
