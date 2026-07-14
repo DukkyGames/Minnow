@@ -28,15 +28,26 @@ describe('insertWorkspacePathInComposer', () => {
 
   it('appends a normalized project-relative path', () => {
     const input = setupComposerDom();
-    insertWorkspacePathInComposer('src\\foo.ts');
+    insertWorkspacePathInComposer('src\\foo.ts', input);
     assert.equal(input.value, 'src/foo.ts');
   });
 
   it('dedupes when the path is already in the composer', () => {
     const input = setupComposerDom();
     input.value = 'See src/foo.ts';
-    insertWorkspacePathInComposer('src/foo.ts');
+    insertWorkspacePathInComposer('src/foo.ts', input);
     assert.equal(input.value, 'See src/foo.ts');
+  });
+
+  it('targets an explicit composer textarea (desktop)', () => {
+    setupComposerDom();
+    const desktopInput = document.createElement('textarea');
+    desktopInput.id = 'desktopInput';
+    document.body.appendChild(desktopInput);
+
+    insertWorkspacePathInComposer('src/desktop.ts', desktopInput);
+    assert.equal(desktopInput.value, 'src/desktop.ts');
+    assert.equal((document.getElementById('msgInput') as HTMLTextAreaElement).value, '');
   });
 });
 

@@ -343,6 +343,16 @@
   max-width: 14rem;
 }
 
+.msg-attach-chip--file {
+  padding-left: 4px;
+  gap: 8px;
+  align-items: center;
+}
+
+.msg-attach-chip--file .attach-file-name {
+  max-width: 14rem;
+}
+
 @media (hover: hover) and (pointer: fine) {
   .msg-attach-chip:hover {
     border-color: var(--mn-accent);

@@ -3,6 +3,8 @@
  * Send path and multimodal API wiring land in SA-13 / SA-15.
  */
 
+import { createFileCardBody, inferFileKindFromName } from './file-card';
+import { isImageFilePath } from './image-path';
 import { formatCodeRefLabel } from './code-ref-format';
 import { processFile } from './reader';
 import { scheduleContextUsageRefresh } from '../ui/context-usage-ring';
@@ -97,6 +99,22 @@ function chipLabel(attachment: Attachment): string {
   return attachment.name;
 }
 
+/** True when this attachment should use the file preview card (not a plain label). */
+function isFileCardAttachment(attachment: Attachment): boolean {
+  if (attachment.kind === 'text' || attachment.kind === 'pdf') return true;
+  if (attachment.kind === 'workspace' && attachment.workspacePath) {
+    return !isImageFilePath(attachment.workspacePath);
+  }
+  return false;
+}
+
+/** Badge kind for workspace paths queued before send. */
+function fileCardKindForAttachment(attachment: Attachment): Attachment['kind'] {
+  if (attachment.kind === 'text' || attachment.kind === 'pdf') return attachment.kind;
+  if (attachment.kind === 'workspace') return inferFileKindFromName(attachment.name);
+  return 'text';
+}
+
 /** Builds one preview chip element. */
 function createAttachChip(attachment: Attachment): HTMLElement {
   const chip = document.createElement('div');
@@ -115,8 +133,12 @@ function createAttachChip(attachment: Attachment): HTMLElement {
   }
 
   if (attachment.kind === 'workspace') {
-    chip.classList.add('attach-chip--workspace');
-    chip.title = 'Workspace image — loads when you send';
+    if (isImageFilePath(attachment.workspacePath ?? '')) {
+      chip.classList.add('attach-chip--workspace');
+      chip.title = 'Workspace image — loads when you send';
+    } else {
+      chip.title = 'Workspace file — loads when you send';
+    }
   }
 
   if (
@@ -216,10 +238,24 @@ function createAttachChip(attachment: Attachment): HTMLElement {
     chip.title = 'File is larger than 32KB; only an excerpt may be sent.';
   }
 
-  const label = document.createElement('span');
-  label.className = 'attach-chip-label';
-  label.textContent = chipLabel(attachment);
-  chip.appendChild(label);
+  const usesFileCard = isFileCardAttachment(attachment);
+  if (usesFileCard) {
+    chip.classList.add('attach-chip--file');
+    const { icon, stack } = createFileCardBody({
+      name: attachment.largeTextWarning
+        ? `${attachment.name} (large file)`
+        : attachment.name,
+      size: attachment.size,
+      kind: fileCardKindForAttachment(attachment),
+      workspaceRef: attachment.kind === 'workspace',
+    });
+    chip.append(icon, stack);
+  } else {
+    const label = document.createElement('span');
+    label.className = 'attach-chip-label';
+    label.textContent = chipLabel(attachment);
+    chip.appendChild(label);
+  }
 
   const removeBtn = document.createElement('button');
   removeBtn.type = 'button';

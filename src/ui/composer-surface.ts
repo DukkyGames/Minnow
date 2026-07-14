@@ -4,7 +4,7 @@
 
 import { isDesktopChatActive } from '../os/desktop-state';
 import { autoResizeDesktopComposer } from '../os/desktop-composer-resize';
-import { getForegroundAppId } from '../os/instances';
+import { getForegroundAppId, getOsView } from '../os/instances';
 import type { AppId } from '../os/types';
 import { isChatAppForeground } from './chat-mount';
 
@@ -43,6 +43,7 @@ function resolveComposerKey(): AppId | 'desktop' {
   if (foregroundAppId === 'code') return 'code';
   if (isDesktopChatActive()) return 'desktop';
   if (isChatAppForeground()) return 'chat';
+  if (getOsView() === 'desktop' && document.getElementById('desktopInput')) return 'desktop';
   return foregroundAppId ?? 'code';
 }
 
