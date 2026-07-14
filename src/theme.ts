@@ -1,12 +1,12 @@
 /**
- * Twelve palette themes (6 families × dark/light), persistence, and DOM application.
+ * Sixteen palette themes (8 families × dark/light), persistence, and DOM application.
  */
 
 export const THEME_STORAGE_KEY = 'minnow.theme';
 export const THEME_FOLLOW_SYSTEM_KEY = 'minnow.theme.followSystem';
 export const THEME_FAMILY_KEY = 'minnow.theme.family';
 
-export const THEME_FAMILIES = ['sage', 'amber', 'cyan', 'coral', 'salt', 'retro'] as const;
+export const THEME_FAMILIES = ['swamp', 'desert', 'ocean', 'coral', 'mono', 'matrix', 'human', 'mint'] as const;
 export type ThemeFamily = (typeof THEME_FAMILIES)[number];
 
 export const THEME_MODES = ['dark', 'light'] as const;
@@ -14,7 +14,17 @@ export type ThemeMode = (typeof THEME_MODES)[number];
 
 export type ThemeId = `${ThemeFamily}-${ThemeMode}`;
 
-const THEME_ID_RE = /^(sage|amber|cyan|coral|salt|retro)-(dark|light)$/;
+const THEME_ID_RE = /^(swamp|desert|ocean|coral|mono|matrix|human|mint)-(dark|light)$/;
+
+/** Maps pre-rename family ids (and sage default) to current ThemeFamily. */
+const LEGACY_FAMILY_ALIASES: Record<string, ThemeFamily> = {
+  sage: 'swamp',
+  amber: 'desert',
+  cyan: 'ocean',
+  salt: 'mono',
+  retro: 'matrix',
+  ember: 'human',
+};
 
 export interface ThemeFamilyMeta {
   id: ThemeFamily;
@@ -24,40 +34,50 @@ export interface ThemeFamilyMeta {
 
 export const THEME_FAMILY_META: ThemeFamilyMeta[] = [
   {
-    id: 'sage',
-    name: 'Slate · Sage',
-    blurb: 'Cool neutrals, muted sage accent. Calm and editor-like.',
+    id: 'swamp',
+    name: 'Swamp',
+    blurb: 'Cool neutrals, muted green accent. Calm and editor-like.',
   },
   {
-    id: 'amber',
-    name: 'Stone · Amber',
+    id: 'desert',
+    name: 'Desert',
     blurb: 'Warm taupe neutrals with an amber accent. Cozy for long sessions.',
   },
   {
-    id: 'cyan',
-    name: 'Cyan · Midnight',
+    id: 'ocean',
+    name: 'Ocean',
     blurb: 'Blue-tinted neutrals with a soft cyan accent. Modern dev-tool feel.',
   },
   {
     id: 'coral',
-    name: 'Graphite · Coral',
-    blurb: 'True graphite neutrals with a warm coral accent. Distinct and soft-modern.',
+    name: 'Coral',
+    blurb: 'Graphite neutrals with a warm coral accent. Distinct and soft-modern.',
   },
   {
-    id: 'salt',
-    name: 'Salt · Pepper',
+    id: 'mono',
+    name: 'Mono',
     blurb: 'Pure grayscale. Proof on newsprint, bench in charcoal.',
   },
   {
-    id: 'retro',
-    name: 'Retro · Terminal',
+    id: 'matrix',
+    name: 'Matrix',
     blurb: 'Phosphor green on CRT black. Accent-only green, readable long sessions.',
+  },
+  {
+    id: 'human',
+    name: 'Human',
+    blurb: 'Near-black ground with burnt orange accent and peach cream text. Warm evening sessions.',
+  },
+  {
+    id: 'mint',
+    name: 'Mint',
+    blurb: 'Cool charcoal neutrals with mint phosphor accent and icy cyan highlights.',
   },
 ];
 
 /** Default when storage is empty or invalid. */
-export const DEFAULT_THEME_ID: ThemeId = 'sage-dark';
-export const DEFAULT_THEME_FAMILY: ThemeFamily = 'sage';
+export const DEFAULT_THEME_ID: ThemeId = 'swamp-dark';
+export const DEFAULT_THEME_FAMILY: ThemeFamily = 'swamp';
 
 function isThemeFamily(v: string | null): v is ThemeFamily {
   return typeof v === 'string' && (THEME_FAMILIES as readonly string[]).includes(v);
@@ -65,6 +85,12 @@ function isThemeFamily(v: string | null): v is ThemeFamily {
 
 function isThemeId(v: string | null): v is ThemeId {
   return typeof v === 'string' && THEME_ID_RE.test(v);
+}
+
+function resolveFamilyAlias(raw: string | null): ThemeFamily | null {
+  if (!raw) return null;
+  if (isThemeFamily(raw)) return raw;
+  return LEGACY_FAMILY_ALIASES[raw] ?? null;
 }
 
 function readStorage(key: string): string | null {
@@ -104,16 +130,42 @@ function composeThemeId(family: ThemeFamily, mode: ThemeMode): ThemeId {
   return `${family}-${mode}`;
 }
 
+/** Migrate renamed families (sage→swamp, amber→desert, …) in localStorage. */
+function migrateRenamedThemeFamilies(): void {
+  const familyRaw = readStorage(THEME_FAMILY_KEY);
+  const resolvedFamily = resolveFamilyAlias(familyRaw);
+  if (familyRaw && resolvedFamily && familyRaw !== resolvedFamily) {
+    writeStorage(THEME_FAMILY_KEY, resolvedFamily);
+  }
+
+  const raw = readStorage(THEME_STORAGE_KEY);
+  if (!raw || isThemeId(raw)) return;
+
+  const mode = raw.endsWith('-light') ? 'light' : raw.endsWith('-dark') ? 'dark' : null;
+  if (!mode) return;
+
+  const legacyFamily = raw.slice(0, -(mode.length + 1));
+  const family = resolveFamilyAlias(legacyFamily);
+  if (family && legacyFamily !== family) {
+    writeStorage(THEME_STORAGE_KEY, composeThemeId(family, mode));
+  }
+}
+
+function runThemeStorageMigrations(): void {
+  migrateLegacyThemeStorage();
+  migrateRenamedThemeFamilies();
+}
+
 /** One-time migration from legacy light | dark | system values. */
 function migrateLegacyThemeStorage(): void {
   const raw = readStorage(THEME_STORAGE_KEY);
   if (raw === 'light') {
-    writeStorage(THEME_STORAGE_KEY, 'sage-light');
+    writeStorage(THEME_STORAGE_KEY, 'swamp-light');
     removeStorage(THEME_FOLLOW_SYSTEM_KEY);
     return;
   }
   if (raw === 'dark') {
-    writeStorage(THEME_STORAGE_KEY, 'sage-dark');
+    writeStorage(THEME_STORAGE_KEY, 'swamp-dark');
     removeStorage(THEME_FOLLOW_SYSTEM_KEY);
     return;
   }
@@ -130,17 +182,19 @@ export function getFollowSystem(): boolean {
 
 /** Family from follow-system storage, or derived from the explicit theme id. */
 export function getStoredFamily(): ThemeFamily {
+  runThemeStorageMigrations();
   if (!getFollowSystem()) {
     return getFamily(getStoredTheme());
   }
   const raw = readStorage(THEME_FAMILY_KEY);
-  if (isThemeFamily(raw)) return raw;
+  const family = resolveFamilyAlias(raw);
+  if (family) return family;
   return DEFAULT_THEME_FAMILY;
 }
 
 /** Effective theme id from localStorage (includes follow-system + migration). */
 export function getStoredTheme(): ThemeId {
-  migrateLegacyThemeStorage();
+  runThemeStorageMigrations();
 
   if (getFollowSystem()) {
     const family = getStoredFamily();
