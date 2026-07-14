@@ -278,7 +278,7 @@
         "git_push"
       ],
       "systemPromptPath": null,
-      "maxInputTokens": 16000,
+      "maxInputTokens": null,
       "contextEnforcementPolicy": "summarize",
       "summarySchema": "minnow.sub-agent.v1",
       "sampler": {
