@@ -2,7 +2,10 @@
  * Apply resolved thinking mode to a chat completion body and surface LM Studio hints.
  */
 
-import { modelUsesComposerReasoningDropdown } from '../lib/reasoning-effort';
+import {
+  modelUsesComposerReasoningDropdown,
+  resolveEffectiveReasoningEffort,
+} from '../lib/reasoning-effort';
 import type { ProviderPublic, ApiKind } from '../providers/types';
 import { LLAMA_CPP_LOCAL_PROVIDER_ID } from '../providers/types';
 import type { ModelCapabilities, ReasoningEffortOption } from '../types';
@@ -14,6 +17,7 @@ import {
   wasLmStudioThinkingHintShown,
 } from './thinking-to-body';
 import type { ThinkingResolvedMode } from './thinking-types';
+import { DEFAULT_LLAMA_THINKING_BUDGET_TOKENS } from './thinking-types';
 
 export interface MergeThinkingResult<T> {
   body: T;
@@ -33,10 +37,23 @@ export function mergeThinkingIntoCompletionBody<T extends Record<string, unknown
 ): MergeThinkingResult<T> {
   const apiKind = modelApi ?? modelCapabilities?.api ?? provider.apiKind;
   const useEffortDropdown = modelUsesComposerReasoningDropdown(modelCapabilities);
+  let effortForSend = reasoningEffort ?? undefined;
+  if (useEffortDropdown) {
+    if (resolved === 'off') {
+      effortForSend = 'off';
+    } else {
+      effortForSend =
+        resolveEffectiveReasoningEffort(
+          { reasoningEffort: reasoningEffort ?? undefined },
+          modelCapabilities ?? null,
+          resolved,
+        ) ?? effortForSend;
+    }
+  }
   const patch =
-    useEffortDropdown && reasoningEffort
+    useEffortDropdown && effortForSend
       ? reasoningEffortToCompletionBody(
-          reasoningEffort,
+          effortForSend,
           apiKind,
           modelCapabilities,
           budgetTokens,
@@ -53,6 +70,16 @@ export function mergeThinkingIntoCompletionBody<T extends Record<string, unknown
     budgetTokens > 0 &&
     typeof body.thinking_budget_tokens === 'number'
   ) {
+    nativeBudgetApplied = true;
+  }
+  if (
+    resolved === 'on' &&
+    provider.id === LLAMA_CPP_LOCAL_PROVIDER_ID &&
+    options?.llamaSupportsThinkingBudget === true &&
+    (budgetTokens == null || budgetTokens <= 0) &&
+    typeof (body as Record<string, unknown>).thinking_budget_tokens !== 'number'
+  ) {
+    (body as Record<string, unknown>).thinking_budget_tokens = DEFAULT_LLAMA_THINKING_BUDGET_TOKENS;
     nativeBudgetApplied = true;
   }
 

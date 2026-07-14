@@ -51,12 +51,14 @@ export function mergeThinkingTriState(
 }
 
 /** Min/max for per-thinking-session token budgets (approximate chars ÷ 4). */
-export const THINKING_BUDGET_MIN = 512;
+export const THINKING_BUDGET_MIN = 10;
+/** Default per-request thinking budget for llama.cpp when mode is on and no tier sets a budget. */
+export const DEFAULT_LLAMA_THINKING_BUDGET_TOKENS = 8192;
 export const THINKING_BUDGET_MAX = 200_000;
 
 /**
  * Coerce thinking budget tokens: `null` = inherit/off, `0` = explicitly off,
- * positive values clamped to [512, 200_000].
+ * positive values clamped to [10, 200_000].
  */
 export function clampThinkingBudgetTokens(value: unknown): number | null {
   const n = typeof value === 'number' ? value : Number(value);

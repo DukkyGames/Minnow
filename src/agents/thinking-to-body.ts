@@ -243,6 +243,16 @@ export function thinkingToCompletionBody(
   if (allowed && allowed.length > 0) {
     const target = resolved;
     if (!allowed.includes(target)) {
+      // Level-only catalogs (off/low/medium/high) — map on/off via effort instead of dropping fields.
+      const hasLevels = allowed.some(
+        (option) => option === 'low' || option === 'medium' || option === 'high',
+      );
+      if (target === 'on' && hasLevels) {
+        return reasoningEffortToCompletionBody('medium', apiKind, modelCapabilities, budgetTokens);
+      }
+      if (target === 'off' && allowed.includes('off')) {
+        return reasoningEffortToCompletionBody('off', apiKind, modelCapabilities, budgetTokens);
+      }
       return { body: {} };
     }
   } else if (modelCapabilities?.reasoning === false && resolved === 'on') {

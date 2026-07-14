@@ -33,7 +33,7 @@ export function buildThinkingBudgetFieldInputs(
   const hint = document.createElement('p');
   hint.className = 'settings-field-hint';
   hint.textContent =
-    options?.hint ?? 'Blank = inherit · 0 = off · min 512 when set';
+    options?.hint ?? 'Blank = inherit · 0 = off · min 10 when set';
 
   const applyInitial = (value: number | null | undefined): void => {
     if (value === undefined || value === null) {

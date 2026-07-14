@@ -16,8 +16,9 @@ import type { SubAgentTypeConfig } from '../../src/agents/types.ts';
 import { clampThinkingBudgetTokens } from '../../src/agents/thinking-types.ts';
 
 describe('clampThinkingBudgetTokens', () => {
-  test('clamps positive values to [512, 200_000]', () => {
-    assert.equal(clampThinkingBudgetTokens(100), 512);
+  test('clamps positive values to [10, 200_000]', () => {
+    assert.equal(clampThinkingBudgetTokens(5), 10);
+    assert.equal(clampThinkingBudgetTokens(100), 100);
     assert.equal(clampThinkingBudgetTokens(999_999), 200_000);
     assert.equal(clampThinkingBudgetTokens(4096), 4096);
   });
@@ -96,6 +97,16 @@ describe('ThinkingBudgetTracker', () => {
     tracker.feed('b'.repeat(4));
     assert.equal(tracker.exceeded, true);
     assert.equal(tracker.nudgeCount, 1);
+  });
+
+  test('feed replaces cumulative reasoning instead of double-counting', () => {
+    const tracker = new ThinkingBudgetTracker(4);
+    tracker.feed('abcd');
+    assert.equal(tracker.exceeded, false);
+    tracker.feed('abcdefgh');
+    assert.equal(tracker.exceeded, false);
+    tracker.feed('abcdefghijklmnop');
+    assert.equal(tracker.exceeded, true);
   });
 
   test('endSession resets exceeded state', () => {

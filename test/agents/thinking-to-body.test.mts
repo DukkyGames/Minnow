@@ -91,6 +91,15 @@ describe('thinkingToCompletionBody', () => {
     assert.deepEqual(body, {});
   });
 
+  test('level-only allowed options map on to medium effort', () => {
+    const patch = thinkingToCompletionBody('on', 'openai-v1', {
+      ...reasoningCaps,
+      reasoningAllowedOptions: ['off', 'low', 'medium', 'high'],
+    }, null);
+    assert.equal(patch.body.reasoning_effort, 'medium');
+    assert.deepEqual(patch.body.reasoning, { effort: 'medium' });
+  });
+
   test('anthropic-v1 uses adaptive thinking for sonnet-5 capabilities', () => {
     const patch = thinkingToCompletionBody('on', 'anthropic-v1', {
       vision: false,

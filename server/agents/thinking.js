@@ -26,7 +26,7 @@ export function normalizeThinkingGlobalDefault(value) {
 }
 
 /**
- * Coerce thinking budget tokens: null = inherit, 0 = off, positive clamped [512, 200_000].
+ * Coerce thinking budget tokens: null = inherit, 0 = off, positive clamped [10, 200_000].
  * @param {unknown} value
  * @returns {number | null}
  */
@@ -36,5 +36,5 @@ export function clampThinkingBudgetTokens(value) {
   const rounded = Math.round(n);
   if (rounded < 0) return null;
   if (rounded === 0) return 0;
-  return Math.min(200_000, Math.max(512, rounded));
+  return Math.min(200_000, Math.max(10, rounded));
 }

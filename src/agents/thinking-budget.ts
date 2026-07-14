@@ -42,7 +42,12 @@ export class ThinkingBudgetTracker {
   /** Feed a reasoning delta; marks exceeded when estimated tokens cross the limit. */
   feed(delta: string): void {
     if (!delta || this._exceeded) return;
-    this.accumulatedText += delta;
+    // Some providers resend cumulative reasoning text each SSE chunk — replace, don't append.
+    if (this.accumulatedText && delta.startsWith(this.accumulatedText)) {
+      this.accumulatedText = delta;
+    } else {
+      this.accumulatedText += delta;
+    }
     if (estimateTokensFromText(this.accumulatedText) >= this.limit) {
       this._exceeded = true;
       this._nudgeCount += 1;

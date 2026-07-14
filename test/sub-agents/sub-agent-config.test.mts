@@ -68,7 +68,7 @@ describe('sub-agent config', () => {
         explore: { thinkingBudgetTokens: 100 },
       },
     });
-    assert.equal(merged.types.explore.thinkingBudgetTokens, 512);
+    assert.equal(merged.types.explore.thinkingBudgetTokens, 100);
     const zero = mergeSubAgentConfig(DEFAULTS as never, {
       types: { explore: { thinkingBudgetTokens: 0 } },
     });

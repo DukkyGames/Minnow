@@ -133,8 +133,8 @@ export function inferReasoningOptionsFromModelId(
 }
 
 /**
- * Merge chat override, catalog default, and brain-toggle resolution into one effort.
- * Resolution order: chat override → catalog default → brain toggle map → first allowed.
+ * Merge chat override, inherited thinking mode, catalog default, and fallbacks into one effort.
+ * Resolution order: chat override → inherited on → catalog default → inherited off → first allowed.
  */
 export function resolveEffectiveReasoningEffort(
   chat: Pick<Chat, 'reasoningEffort'>,
@@ -153,15 +153,18 @@ export function resolveEffectiveReasoningEffort(
     return chat.reasoningEffort;
   }
 
+  // Inherited thinking on must win over catalog defaults such as `off` on some models.
+  if (inheritedResolved === 'on') {
+    if (allowed.includes('medium')) return 'medium';
+    if (allowed.includes('on')) return 'on';
+  }
+
   const catalogDefault = caps?.reasoningDefault;
   if (catalogDefault && allowed.includes(catalogDefault)) {
     return catalogDefault;
   }
 
-  if (inheritedResolved === 'on') {
-    if (allowed.includes('medium')) return 'medium';
-    if (allowed.includes('on')) return 'on';
-  } else if (allowed.includes('off')) {
+  if (inheritedResolved === 'off' && allowed.includes('off')) {
     return 'off';
   }
 
