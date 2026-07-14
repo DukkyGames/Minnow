@@ -176,10 +176,12 @@ export function filterUserFacingBranches(local, lockedElsewhere = new Set()) {
 }
 
 /**
- * Parse one `git log --format="%H %P %s %an %ar %D"` line.
- * Subject and author are ambiguous when both contain spaces; author is taken as the
- * final token before relative time (sufficient for typical single-token author names).
- * Refs (%D) follow the relative time and may be bare (`origin/foo, bar`) or wrapped in parens.
+ * Parse one git log line.
+ * Preferred format is %x1f-delimited (`%H%x1f%P%x1f%s%x1f%an%x1f%ar%x1f%D`),
+ * which is unambiguous for any subject/author. Legacy space-separated lines
+ * (`%H %P %s %an %ar %D`) are still parsed; there the author is taken as the
+ * final token before the relative time, so multi-word authors lose tokens
+ * into the subject.
  * @param {string} line
  */
 const LOG_RELATIVE_TIME =
@@ -197,9 +199,25 @@ function splitLogRefList(text) {
     .filter(Boolean);
 }
 
+const LOG_FIELD_SEP = '\u001f';
+
 export function parseLogLine(line) {
   const trimmed = String(line ?? '').trimEnd();
   if (!trimmed || trimmed.length < 42) return null;
+
+  if (trimmed.includes(LOG_FIELD_SEP)) {
+    const [hash, parentsField, subject, author, relativeTime, refsField] =
+      trimmed.split(LOG_FIELD_SEP);
+    if (!/^[0-9a-f]{40}$/.test(hash ?? '')) return null;
+    return {
+      hash,
+      parents: (parentsField ?? '').split(' ').filter(Boolean),
+      subject: (subject ?? '').trim(),
+      author: (author ?? '').trim(),
+      relativeTime: (relativeTime ?? '').trim(),
+      refs: splitLogRefList(refsField ?? ''),
+    };
+  }
 
   const hash = trimmed.slice(0, 40);
   if (!/^[0-9a-f]{40}$/.test(hash)) return null;
@@ -477,14 +495,22 @@ export async function fetch({ cwd } = {}) {
   return { ok: true };
 }
 
-/** `git log --format="%H %P %s %an %ar %D" --all -n <count>` */
+/** `git log --topo-order --format=<%x1f-delimited> --exclude=refs/stash --all -n <count>` */
 export async function log({ cwd, count = 10 } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
 
   const n = Math.max(1, Math.min(Number(count) || 10, 200));
   const result = await git(
-    ['log', '--format=%H %P %s %an %ar %D', '--all', '-n', String(n)],
+    [
+      'log',
+      '--topo-order',
+      '--format=%H%x1f%P%x1f%s%x1f%an%x1f%ar%x1f%D',
+      '--exclude=refs/stash',
+      '--all',
+      '-n',
+      String(n),
+    ],
     repo.cwd,
   );
   if (result.code !== 0) {
