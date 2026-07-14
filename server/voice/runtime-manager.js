@@ -13,6 +13,7 @@ import {
   provision,
 } from './provision.js';
 import { getVoiceLogPath, getVoiceWorkerScriptPath } from './paths.js';
+import { logChildProcessDiagnostic } from '../diagnostics/process-handlers.js';
 import { detectHardware } from '../system/hardware.js';
 import { isCudaHardware } from './provision.js';
 import { resetLocalSttForTests as resetSttModelCache } from './local-stt.js';
@@ -327,12 +328,24 @@ export async function startWorker() {
       resetWorkerModelCache();
       void appendWorkerLog(`\n[exit] code=${code ?? 'null'}\n`);
       void patchMeta({ pid: null, port: null });
+      if (code !== 0 && code != null) {
+        void logChildProcessDiagnostic({
+          kind: 'voice-worker-exit',
+          message: `Voice worker exited with code ${code}`,
+          extra: { exitCode: code },
+        });
+      }
     }
   });
 
   child.on('error', (err) => {
     const message = err instanceof Error ? err.message : String(err);
     void appendWorkerLog(`\n[spawn error] ${message}\n`);
+    void logChildProcessDiagnostic({
+      kind: 'voice-worker-error',
+      message,
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     if (workerState?.child === child) {
       workerState.phase = 'error';
       workerState.healthy = false;

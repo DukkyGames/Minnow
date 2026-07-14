@@ -54,7 +54,8 @@ export type SettingsSectionId =
   | 'skills'
   | 'webhooks'
   | 'features'
-  | 'evals';
+  | 'evals'
+  | 'about';
 
 /** Sidebar label (hash id stays stable for bookmarks). */
 export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
@@ -86,6 +87,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   webhooks: 'Webhooks',
   features: 'Orchestration',
   evals: 'Evals',
+  about: 'About',
 };
 
 export type SettingsNavGroupId =
@@ -102,7 +104,7 @@ export type SettingsNavGroup = {
 
 /** Sidebar groups and nav order (must match index.html section order). */
 export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
-  { id: 'app', label: 'App', sections: ['general', 'appearance', 'audio'] },
+  { id: 'app', label: 'App', sections: ['general', 'appearance', 'audio', 'about'] },
   {
     id: 'agents',
     label: 'Agents',

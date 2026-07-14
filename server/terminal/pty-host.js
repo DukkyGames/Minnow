@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import pty from '@lydell/node-pty';
 import { getMinnowHome } from '../config/home.js';
+import { logChildProcessDiagnostic } from '../diagnostics/process-handlers.js';
 import { formatServerMessage } from './pty-protocol.js';
 import { getShellProfileById, getDefaultShellProfileId } from './shell-profiles.js';
 
@@ -182,6 +183,13 @@ export function createPtySession(options) {
     session.exitCode = exitCode ?? 0;
     broadcast(session, formatServerMessage('exit', { code: session.exitCode }));
     auditLog(`exit sessionId=${sessionId} code=${session.exitCode}`);
+    if (session.exitCode !== 0) {
+      void logChildProcessDiagnostic({
+        kind: 'pty-exit',
+        message: `PTY session ${sessionId} exited with code ${session.exitCode}`,
+        extra: { sessionId, shell: profile.id, exitCode: session.exitCode },
+      });
+    }
     // Release the slot so reloads and tab churn do not exhaust the 8-session cap.
     destroyPtySession(sessionId);
   });
