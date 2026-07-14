@@ -884,9 +884,3 @@ export function initExpertsHub(): void {
     launchApp('experts');
   }
 }
-
-if (typeof window !== 'undefined') {
-  window.openExpertLab = openExpertLab;
-  window.openExperts = openExperts;
-  window.openExpertLabFromTopbar = openExpertLabFromTopbar;
-}

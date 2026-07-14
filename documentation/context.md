@@ -119,7 +119,7 @@ Minnow is a **Vite + TypeScript** single-page web client for **LM Studio** and o
 
 ```
 Minnow/
-├── index.html              # Vite shell: inline `#app-loader` until `html.app-ready` (set when `main.ts` module runs)
+├── index.html              # Vite shell (MIN-387 incremental retire): boot theme script, loader, static markup — event wiring via `src/ui/shell-handlers.ts` (`npm run index-html:coupling-map` tracks id coupling)
 ├── server.js               # Dev server: Vite + /api/* (npm start)
 ├── server/                 # Config, tools, providers, generations, MCP, memory, …
 ├── package.json
@@ -131,7 +131,7 @@ Minnow/
 │   ├── sw.js               # Service worker (cache: minnow-v7)
 │   └── icons/              # PWA icons; add-folder.png (**New group**); folder.png (collapsed rail group folders); board-group.png (Orchestrate board folders in sidebar); mode-*.png (operating mode glyphs — selector + sidebar); bugs.png (**All bugs** `#btnAllBugs`); stats.png (**Inference metrics** `#btnStats`); agent-activity.png (**Agent activity** `#btnAgentActivity`); console.png (**Terminal** `#btnTerminal`)
 ├── src/
-│   ├── main.ts             # Entry: CSS imports, initTheme(), window handlers, initApp()
+│   ├── main.ts             # Entry: CSS imports, initTheme(), shell-handlers, initApp()
 │   ├── types.ts            # Messages, ApiMessage, ToolCall, ContentPart
 │   ├── constants.ts        # STORAGE_KEY, PRESET_STORAGE_KEY; theme keys re-exported from theme.ts
 │   ├── theme.ts            # 16 palette themes (8 families × dark/light), storage, applyTheme, initTheme

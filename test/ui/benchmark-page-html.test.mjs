@@ -38,8 +38,10 @@ describe('benchmark page HTML', () => {
     });
   }
 
-  test('benchmark topbar button calls openBenchmarkFromTopbar', () => {
-    assert.match(html, /id="btnBenchmark"[^>]*onclick="openBenchmarkFromTopbar\(\)"/);
+  test('benchmark topbar button exists without inline handler', () => {
+    assert.match(html, /id="btnBenchmark"/);
+    const tag = html.match(/<button[^>]*id="btnBenchmark"[^>]*>/)?.[0] ?? '';
+    assert.doesNotMatch(tag, /\bon[a-z]+="/i);
   });
 
   test('benchmark topbar uses custom icon asset', () => {
