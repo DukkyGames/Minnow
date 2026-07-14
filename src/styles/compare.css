@@ -225,6 +225,27 @@
   min-height: 1.5rem;
 }
 
+.compare-column-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.45rem 0.75rem 0.65rem;
+  border-top: 1px solid color-mix(in srgb, var(--mn-fg) 8%, transparent);
+}
+
+.compare-continue-chat {
+  border-radius: 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--mn-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--mn-accent) 12%, var(--mn-surface));
+  color: var(--mn-fg);
+  padding: 0.35rem 0.65rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.compare-continue-chat:hover {
+  background: color-mix(in srgb, var(--mn-accent) 20%, var(--mn-surface));
+}
+
 .compare-vote-bar {
   display: flex;
   flex-wrap: wrap;
