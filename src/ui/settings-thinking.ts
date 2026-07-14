@@ -8,6 +8,7 @@ import {
 } from '../config/thinking-meta';
 import { appendSettingsCrosslinks, appendSettingsGroup } from './settings-layout';
 import { createSettingsActionsRow, createSettingsRadioRow } from './settings-controls';
+import { buildThinkingBudgetFieldInputs } from './settings-thinking-budget-fields';
 import { setStatus } from './status';
 
 function mountGlobalThinkingBlock(mount: HTMLElement): void {
@@ -28,8 +29,16 @@ function mountGlobalThinkingBlock(mount: HTMLElement): void {
   });
   body.appendChild(row);
 
+  const budgetFields = buildThinkingBudgetFieldInputs(null, {
+    label: 'Default thinking budget (tokens)',
+    placeholder: 'Off',
+    hint: 'Blank = off globally · 0 = off · approximate (chars ÷ 4)',
+  });
+  body.appendChild(budgetFields.root);
+
   void loadThinkingMeta().then((meta) => {
     setValue(meta.defaultMode === 'off' ? 'off' : 'on');
+    budgetFields.setValue(meta.thinkingBudgetTokens);
   });
 
   body.appendChild(
@@ -39,7 +48,12 @@ function mountGlobalThinkingBlock(mount: HTMLElement): void {
         onClick: () => {
           void (async () => {
             const mode = getValue() === 'off' ? 'off' : 'on';
-            await saveThinkingMeta({ defaultMode: mode });
+            const budgetRead = budgetFields.readValue();
+            await saveThinkingMeta({
+              defaultMode: mode,
+              thinkingBudgetTokens:
+                budgetRead === undefined ? null : budgetRead,
+            });
             setStatus('ok', 'Global thinking default saved');
           })();
         },

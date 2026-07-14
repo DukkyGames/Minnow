@@ -33,6 +33,18 @@ export interface ResolvedThinking {
   sourceLabel: string;
 }
 
+export interface ResolveThinkingBudgetInput {
+  kind: ThinkingResolveKind;
+  agentKey: string | null;
+  subAgentType?: SubAgentTypeConfig | null;
+}
+
+export interface ResolvedThinkingBudget {
+  /** Positive budget, or null when off / not configured. */
+  budgetTokens: number | null;
+  sourceLabel: string;
+}
+
 function builtinWorkAgentThinking(agentId: string): ThinkingTriState {
   const map = WORK_AGENT_THINKING_DEFAULTS as Record<string, ThinkingTriState>;
   return normalizeThinkingTriState(map[agentId], 'inherit');
@@ -52,6 +64,59 @@ function userWorkAgentThinking(agentId: string | null): ThinkingTriState {
 
 function globalDefault(): ThinkingResolvedMode {
   return getThinkingMetaSync().defaultMode;
+}
+
+function globalBudget(): number | null {
+  return getThinkingMetaSync().thinkingBudgetTokens;
+}
+
+function userWorkAgentBudget(agentId: string | null): number | null | undefined {
+  if (!agentId) return undefined;
+  const raw = getUserWorkAgentOverride(agentId)?.thinkingBudgetTokens;
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  return raw;
+}
+
+/**
+ * Merge budget layers: later explicit values win; `0` at any tier turns budget off.
+ */
+function mergeThinkingBudgetLayers(
+  ...layers: Array<number | null | undefined>
+): number | null {
+  let resolved: number | null = null;
+  for (const layer of layers) {
+    if (layer === 0) return null;
+    if (layer != null && layer > 0) resolved = layer;
+  }
+  return resolved;
+}
+
+function sourceForWorkAgentBudget(agentKey: string | null): string {
+  if (!agentKey || isPassthroughWorkAgentId(agentKey)) return 'global default';
+  const user = getUserWorkAgentOverride(agentKey)?.thinkingBudgetTokens;
+  if (user === 0) return `work agent (${agentKey})`;
+  if (user != null && user > 0) return `work agent (${agentKey})`;
+  const global = globalBudget();
+  if (global != null && global > 0) return 'global default';
+  return 'global default';
+}
+
+function sourceForSubAgentBudget(
+  agentKey: string | null,
+  subAgentType?: SubAgentTypeConfig | null,
+): string {
+  const key = agentKey ?? 'sub-agent';
+  const typeBudget = subAgentType?.thinkingBudgetTokens;
+  if (typeBudget === 0) return `sub-agent (${key})`;
+  if (typeBudget != null && typeBudget > 0) return `sub-agent (${key})`;
+  const workAgentId = subAgentType?.workAgentId?.trim();
+  if (workAgentId) {
+    const wa = getUserWorkAgentOverride(workAgentId)?.thinkingBudgetTokens;
+    if (wa === 0) return `work agent (${workAgentId})`;
+    if (wa != null && wa > 0) return `work agent (${workAgentId})`;
+  }
+  return 'global default';
 }
 
 function sourceForWorkAgent(agentKey: string | null): string {
@@ -109,5 +174,34 @@ export function resolveThinkingMode(input: ResolveThinkingInput): ResolvedThinki
   return {
     mode,
     sourceLabel: sourceForWorkAgent(key),
+  };
+}
+
+/**
+ * Resolve per-thinking-session token budget for main chat or sub-agents.
+ * Precedence: sub-agent type → work-agent user override → global; `0` disables at any tier.
+ */
+export function resolveThinkingBudgetTokens(
+  input: ResolveThinkingBudgetInput,
+): ResolvedThinkingBudget {
+  const global = globalBudget();
+
+  if (input.kind === 'sub-agent') {
+    const typeBudget = input.subAgentType?.thinkingBudgetTokens;
+    const workAgentId = input.subAgentType?.workAgentId?.trim() || null;
+    const workAgentBudget = userWorkAgentBudget(workAgentId);
+    const budgetTokens = mergeThinkingBudgetLayers(global, workAgentBudget, typeBudget);
+    return {
+      budgetTokens,
+      sourceLabel: sourceForSubAgentBudget(input.agentKey, input.subAgentType),
+    };
+  }
+
+  const key = input.agentKey;
+  const userBudget = userWorkAgentBudget(key ?? 'default');
+  const budgetTokens = mergeThinkingBudgetLayers(global, userBudget);
+  return {
+    budgetTokens,
+    sourceLabel: sourceForWorkAgentBudget(key),
   };
 }

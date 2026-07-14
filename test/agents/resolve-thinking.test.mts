@@ -7,7 +7,7 @@ import type { SubAgentTypeConfig } from '../../src/agents/types.ts';
 describe('resolveThinkingMode', () => {
   test('global default on when layers inherit', () => {
     resetThinkingMetaCache();
-    setThinkingMetaForTests({ defaultMode: 'on' });
+    setThinkingMetaForTests({ defaultMode: 'on', thinkingBudgetTokens: null });
     const r = resolveThinkingMode({
       kind: 'work-agent',
       agentKey: 'builder',
@@ -18,7 +18,7 @@ describe('resolveThinkingMode', () => {
 
   test('work-agent on overrides global off', () => {
     resetThinkingMetaCache();
-    setThinkingMetaForTests({ defaultMode: 'off' });
+    setThinkingMetaForTests({ defaultMode: 'off', thinkingBudgetTokens: null });
     const r = resolveThinkingMode({
       kind: 'work-agent',
       agentKey: 'planner',
@@ -29,7 +29,7 @@ describe('resolveThinkingMode', () => {
 
   test('chat on overrides sub-agent type off', () => {
     resetThinkingMetaCache();
-    setThinkingMetaForTests({ defaultMode: 'off' });
+    setThinkingMetaForTests({ defaultMode: 'off', thinkingBudgetTokens: null });
     const type: SubAgentTypeConfig = {
       enabled: true,
       providerId: 'p',
@@ -53,7 +53,7 @@ describe('resolveThinkingMode', () => {
 
   test('chat inherit uses sub-agent type on', () => {
     resetThinkingMetaCache();
-    setThinkingMetaForTests({ defaultMode: 'off' });
+    setThinkingMetaForTests({ defaultMode: 'off', thinkingBudgetTokens: null });
     const type: SubAgentTypeConfig = {
       enabled: true,
       providerId: 'p',

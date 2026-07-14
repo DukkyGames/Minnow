@@ -6,6 +6,7 @@ import { ALL_TOOL_IDS, ARCHIVE_RECALL_TOOL_IDS, BRAIN_DESTRUCTIVE_TOOL_IDS, BRAI
 import { normalizeOrchestratePlanPath } from './orchestrate-plan-path.js';
 import { normalizeSamplerPreset } from '../agents/sampler.js';
 import {
+  clampThinkingBudgetTokens,
   normalizeThinkingGlobalDefault,
   normalizeThinkingTriState,
 } from '../agents/thinking.js';
@@ -1474,6 +1475,15 @@ export function mergeConfigMeta(existing, patch) {
     const t = /** @type {Record<string, unknown>} */ (p.thinking);
     const mode = normalizeThinkingGlobalDefault(t.defaultMode);
     if (mode) existingThinking.defaultMode = mode;
+    if (t.thinkingBudgetTokens !== undefined) {
+      if (t.thinkingBudgetTokens === null) {
+        existingThinking.thinkingBudgetTokens = null;
+      } else {
+        const budget = clampThinkingBudgetTokens(t.thinkingBudgetTokens);
+        if (budget === null) delete existingThinking.thinkingBudgetTokens;
+        else existingThinking.thinkingBudgetTokens = budget;
+      }
+    }
     base.thinking = existingThinking;
   }
 
@@ -3252,6 +3262,16 @@ export function normalizeSubAgentsConfig(body) {
         delete row.thinkingMode;
       } else {
         row.thinkingMode = normalized;
+      }
+    }
+
+    if (row.thinkingBudgetTokens !== undefined) {
+      if (row.thinkingBudgetTokens === null) {
+        row.thinkingBudgetTokens = null;
+      } else {
+        const budget = clampThinkingBudgetTokens(row.thinkingBudgetTokens);
+        if (budget === null) delete row.thinkingBudgetTokens;
+        else row.thinkingBudgetTokens = budget;
       }
     }
 

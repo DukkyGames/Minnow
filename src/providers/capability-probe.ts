@@ -19,6 +19,8 @@ export interface ProviderCapabilities {
   structuredOutput: boolean;
   structuredOutputWithTools: boolean;
   structuredOutputStreaming?: boolean;
+  /** llama.cpp-local: per-request thinking_budget_tokens supported by pinned runtime. */
+  supportsThinkingBudget?: boolean;
   probeError?: string | null;
   models?: Record<string, ModelCapabilityEntry>;
 }
@@ -53,6 +55,7 @@ function normalizeCapabilities(raw: unknown, providerId: string): ProviderCapabi
     structuredOutput: row.structuredOutput === true,
     structuredOutputWithTools: row.structuredOutputWithTools === true,
     structuredOutputStreaming: row.structuredOutputStreaming === true,
+    supportsThinkingBudget: row.supportsThinkingBudget === true,
     probeError: typeof row.probeError === 'string' ? row.probeError : null,
     models:
       row.models && typeof row.models === 'object'

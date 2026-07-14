@@ -3,6 +3,7 @@
  */
 
 import {
+  clampThinkingBudgetTokens,
   normalizeThinkingGlobalDefault,
   type ThinkingGlobalDefault,
 } from '../agents/thinking-types';
@@ -10,10 +11,13 @@ import { detectConfigServer } from './storage-mode';
 
 export interface ThinkingGlobalMeta {
   defaultMode: ThinkingGlobalDefault;
+  /** Global thinking budget; null = off (inherit layers resolve to off). */
+  thinkingBudgetTokens: number | null;
 }
 
 export const DEFAULT_THINKING_GLOBAL: ThinkingGlobalMeta = {
   defaultMode: 'on',
+  thinkingBudgetTokens: null,
 };
 
 const THINKING_META_STORAGE_KEY = 'minnow.thinkingMeta';
@@ -25,8 +29,14 @@ function parseThinkingBlock(raw: unknown): ThinkingGlobalMeta {
     return { ...DEFAULT_THINKING_GLOBAL };
   }
   const block = raw as Record<string, unknown>;
+  const budgetRaw = block.thinkingBudgetTokens;
+  const thinkingBudgetTokens =
+    budgetRaw === null || budgetRaw === undefined
+      ? null
+      : clampThinkingBudgetTokens(budgetRaw);
   return {
     defaultMode: normalizeThinkingGlobalDefault(block.defaultMode, 'on'),
+    thinkingBudgetTokens,
   };
 }
 
@@ -81,6 +91,12 @@ export async function saveThinkingMeta(
     defaultMode: patch.defaultMode
       ? normalizeThinkingGlobalDefault(patch.defaultMode, current.defaultMode)
       : current.defaultMode,
+    thinkingBudgetTokens:
+      patch.thinkingBudgetTokens !== undefined
+        ? patch.thinkingBudgetTokens === null
+          ? null
+          : clampThinkingBudgetTokens(patch.thinkingBudgetTokens)
+        : current.thinkingBudgetTokens,
   };
   cachedThinking = merged;
   writeLocalThinkingMeta(merged);

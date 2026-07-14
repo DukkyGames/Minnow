@@ -37,11 +37,12 @@ function modelRejectsTemperature(modelId) {
 /**
  * Normalize a chat completion body for the target provider.
  * @param {Record<string, unknown>} body
- * @param {{ apiKind?: string }} provider
+ * @param {{ apiKind?: string, id?: string }} provider
  * @param {{ reasoning?: boolean, reasoningAllowedOptions?: string[] } | null | undefined} [modelCapabilities]
  * @returns {Record<string, unknown>}
  */
 export function sanitizeCompletionBodyForProvider(body, provider, modelCapabilities) {
+  const providerId = typeof provider.id === 'string' ? provider.id : '';
   if (provider.apiKind !== 'openai-v1') {
     return body;
   }
@@ -77,6 +78,10 @@ export function sanitizeCompletionBodyForProvider(body, provider, modelCapabilit
   if (modelRejectsTemperature(modelId)) {
     delete next.temperature;
     delete next.top_p;
+  }
+
+  if (providerId !== 'llama-cpp-local') {
+    delete next.thinking_budget_tokens;
   }
 
   return next;

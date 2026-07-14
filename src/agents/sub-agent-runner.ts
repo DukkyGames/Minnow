@@ -77,7 +77,14 @@ import {
 } from '../tools/turn-continuation';
 import { getSubAgentTypeConfig } from './sub-agent-config';
 import { mergeThinkingIntoCompletionBody } from './merge-thinking-body';
-import { resolveThinkingMode } from './resolve-thinking';
+import { resolveThinkingMode, resolveThinkingBudgetTokens } from './resolve-thinking';
+import {
+  ThinkingBudgetTracker,
+  THINKING_BUDGET_EPHEMERAL_RETRY_INSTRUCTION,
+  buildThinkingPrefillAssistantMessage,
+  stripPrefillEchoFromDelta,
+} from './thinking-budget';
+import { LLAMA_CPP_LOCAL_PROVIDER_ID } from '../providers/types';
 import { resolveSamplerPreset } from './resolve-sampler';
 import { applySamplerToBody } from './sampler-types';
 import { findChatById } from '../state/sessions';
@@ -214,6 +221,10 @@ async function streamSubAgentTurn(
   fallbackRole: string,
   onDelta?: (delta: string) => void,
   sanitizeOptions?: { provider?: ProviderPublic; modelCapabilities?: ModelCapabilities | null },
+  streamOptions?: {
+    thinkingBudgetTracker?: ThinkingBudgetTracker | null;
+    prefillEchoPartial?: string;
+  },
 ): Promise<{
   fullText: string;
   reasoningText: string;
@@ -223,6 +234,8 @@ async function streamSubAgentTurn(
   t0: number;
   tFirst: number | null;
   tEnd: number;
+  thinkingBudgetExceeded?: boolean;
+  partialThinkingText?: string;
 }> {
   const provider = sanitizeOptions?.provider ?? (await resolveProvider(providerId));
   const sanitized = sanitizeSubAgentBody(
@@ -230,7 +243,15 @@ async function streamSubAgentTurn(
     provider,
     sanitizeOptions?.modelCapabilities,
   );
-  const res = await postChatCompletions(provider, sanitized, signal, { fallbackRole });
+  const turnAbort = new AbortController();
+  if (signal.aborted) {
+    turnAbort.abort();
+  } else {
+    signal.addEventListener('abort', () => turnAbort.abort(), { once: true });
+  }
+  const res = await postChatCompletions(provider, sanitized, turnAbort.signal, {
+    fallbackRole,
+  });
 
   if (!res.ok) {
     const err = await res.text();
@@ -248,11 +269,26 @@ async function streamSubAgentTurn(
   let toolAcc: ToolCallAccumulator = {};
   const t0 = performance.now();
   let tFirst: number | null = null;
+  const thinkingBudgetTracker = streamOptions?.thinkingBudgetTracker ?? null;
+  let prefillEchoPartial = streamOptions?.prefillEchoPartial?.trim() ?? '';
+  let budgetTripped = false;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+
+  function feedThinkingBudget(delta: string): void {
+    if (!thinkingBudgetTracker || !delta) return;
+    thinkingBudgetTracker.feed(delta);
+    if (thinkingBudgetTracker.exceeded && !budgetTripped) {
+      budgetTripped = true;
+      void reader?.cancel();
+      turnAbort.abort();
+    }
+  }
 
   function processRoutedParts(parts: RoutedContentPart[]): void {
     for (const [text, isThinking] of parts) {
       if (isThinking) {
         if (text) {
+          feedThinkingBudget(text);
           reasoningText += text;
         }
         continue;
@@ -260,6 +296,7 @@ async function streamSubAgentTurn(
       if (!text) {
         continue;
       }
+      thinkingBudgetTracker?.endSession();
       if (tFirst == null) tFirst = performance.now();
       proseText += text;
       onDelta?.(proseText);
@@ -273,6 +310,7 @@ async function streamSubAgentTurn(
     for (const [harmonyText, isHarmonyThinking] of harmonyRouter.feed(delta)) {
       if (isHarmonyThinking) {
         if (harmonyText) {
+          feedThinkingBudget(harmonyText);
           reasoningText += harmonyText;
         }
         continue;
@@ -285,6 +323,7 @@ async function streamSubAgentTurn(
     for (const [harmonyText, isHarmonyThinking] of harmonyRouter.flush()) {
       if (isHarmonyThinking) {
         if (harmonyText) {
+          feedThinkingBudget(harmonyText);
           reasoningText += harmonyText;
         }
         continue;
@@ -294,7 +333,7 @@ async function streamSubAgentTurn(
     processRoutedParts(inlineRouter.flush());
   }
 
-  const reader = res.body!.getReader();
+  reader = res.body!.getReader();
   const decoder = new TextDecoder();
   const sseBuffer = createSseEventBuffer();
 
@@ -303,18 +342,32 @@ async function streamSubAgentTurn(
     toolAcc = mergeToolCallDelta(toolAcc, chunk);
     const reasoningDelta = extractReasoningDelta(chunk);
     if (reasoningDelta) {
+      feedThinkingBudget(reasoningDelta);
       reasoningText += reasoningDelta;
     }
     const contentDelta = extractStreamDelta(chunk);
     if (contentDelta) {
-      routeContentDelta(contentDelta);
+      let routedDelta = contentDelta;
+      if (prefillEchoPartial) {
+        routedDelta = stripPrefillEchoFromDelta(routedDelta, prefillEchoPartial);
+        prefillEchoPartial = '';
+      }
+      routeContentDelta(routedDelta);
     }
   }
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    feedSseEventBuffer(sseBuffer, decoder.decode(value, { stream: true }), handleChunk);
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      feedSseEventBuffer(sseBuffer, decoder.decode(value, { stream: true }), handleChunk);
+      if (budgetTripped) break;
+    }
+  } catch (err) {
+    const e = err as { name?: string };
+    if (e?.name !== 'AbortError' || !budgetTripped) {
+      throw err;
+    }
   }
 
   flushSseEventBuffer(sseBuffer, handleChunk);
@@ -343,6 +396,8 @@ async function streamSubAgentTurn(
     t0,
     tFirst,
     tEnd,
+    thinkingBudgetExceeded: budgetTripped,
+    partialThinkingText: budgetTripped ? thinkingBudgetTracker?.sessionText : undefined,
   };
 }
 
@@ -387,6 +442,11 @@ export const defaultSubAgentRunner: SubAgentRunner = {
       kind: 'sub-agent',
       agentKey: input.type,
       chatThinkingMode: parentChat?.thinkingMode,
+      subAgentType: typeConfig,
+    });
+    const resolvedThinkingBudget = resolveThinkingBudgetTokens({
+      kind: 'sub-agent',
+      agentKey: input.type,
       subAgentType: typeConfig,
     });
     const maxToolTurns = Math.max(1, Math.floor(input.maxToolTurns) || MAX_SUB_AGENT_TOOL_TURNS);
@@ -659,13 +719,29 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         resolvedSampler.preset,
         resolvedSampler.maxTokens,
       ) as SubAgentCompletionBody;
-      mergeThinkingIntoCompletionBody(
+      const llamaSupportsThinkingBudget =
+        provider.id === LLAMA_CPP_LOCAL_PROVIDER_ID &&
+        providerCapabilities?.supportsThinkingBudget === true;
+      const { nativeBudgetApplied } = mergeThinkingIntoCompletionBody(
         body as unknown as Record<string, unknown>,
         resolvedThinking.mode,
         provider,
         sendCaps,
         turnReasoningEffort,
+        undefined,
+        resolvedThinkingBudget.budgetTokens,
+        { llamaSupportsThinkingBudget },
       );
+      let thinkingBudgetTracker: ThinkingBudgetTracker | null = null;
+      if (
+        resolvedThinkingBudget.budgetTokens != null &&
+        !nativeBudgetApplied &&
+        resolvedThinking.mode === 'on'
+      ) {
+        thinkingBudgetTracker = new ThinkingBudgetTracker(
+          resolvedThinkingBudget.budgetTokens,
+        );
+      }
 
       if (input.tools.length > 0) {
         body.tools = input.tools;
@@ -686,7 +762,13 @@ export const defaultSubAgentRunner: SubAgentRunner = {
       }
 
       let streamingAssistant = '';
-      const runSubTurn = (turnBody: SubAgentCompletionBody) =>
+      const runSubTurn = (
+        turnBody: SubAgentCompletionBody,
+        streamOpts?: {
+          thinkingBudgetTracker?: ThinkingBudgetTracker | null;
+          prefillEchoPartial?: string;
+        },
+      ) =>
         streamSubAgentTurn(
           input.providerId,
           turnBody,
@@ -697,19 +779,98 @@ export const defaultSubAgentRunner: SubAgentRunner = {
             emitProgress(streamingAssistant);
           },
           { provider, modelCapabilities: sendCaps },
+          streamOpts,
         );
 
-      let turnResult: Awaited<ReturnType<typeof streamSubAgentTurn>>;
-      try {
-        turnResult = await runSubTurn(body);
-      } catch (streamErr) {
-        if (usedConstrained && isResponseFormatRejectionError(streamErr)) {
-          usedConstrained = false;
-          turnResult = await runSubTurn(stripResponseFormatFromBody(body));
-        } else {
-          throw streamErr;
+      const runSubTurnWithThinkingBudget = async (): Promise<
+        Awaited<ReturnType<typeof streamSubAgentTurn>>
+      > => {
+        let attempts = 0;
+        let currentBody = body;
+        let tracker = thinkingBudgetTracker;
+        let prefillPartial = '';
+        const maxContinuations = 2;
+
+        while (true) {
+          let turnResult: Awaited<ReturnType<typeof streamSubAgentTurn>>;
+          try {
+            turnResult = await runSubTurn(currentBody, {
+              thinkingBudgetTracker: tracker,
+              prefillEchoPartial: prefillPartial || undefined,
+            });
+          } catch (streamErr) {
+            if (usedConstrained && isResponseFormatRejectionError(streamErr)) {
+              usedConstrained = false;
+              currentBody = stripResponseFormatFromBody(currentBody);
+              turnResult = await runSubTurn(currentBody, {
+                thinkingBudgetTracker: tracker,
+                prefillEchoPartial: prefillPartial || undefined,
+              });
+            } else {
+              throw streamErr;
+            }
+          }
+
+          if (!turnResult.thinkingBudgetExceeded || attempts >= maxContinuations) {
+            return turnResult;
+          }
+
+          attempts += 1;
+          const partial = turnResult.partialThinkingText ?? '';
+          if (attempts === 1) {
+            const canPrefill =
+              modelLikelyUsesInlineThinking(input.modelId) ||
+              (provider.id === LLAMA_CPP_LOCAL_PROVIDER_ID && !llamaSupportsThinkingBudget);
+            if (canPrefill) {
+              currentBody = {
+                ...body,
+                messages: [
+                  ...messages,
+                  buildThinkingPrefillAssistantMessage(partial),
+                ],
+              };
+              prefillPartial = partial;
+              if (resolvedThinkingBudget.budgetTokens != null) {
+                tracker = new ThinkingBudgetTracker(resolvedThinkingBudget.budgetTokens);
+              }
+              continue;
+            }
+          }
+
+          const ephemeralBody = applySamplerToBody(
+            {
+              model: input.modelId || undefined,
+              messages: [
+                ...messages,
+                { role: 'user', content: THINKING_BUDGET_EPHEMERAL_RETRY_INSTRUCTION },
+              ],
+              stream: true,
+            },
+            resolvedSampler.preset,
+            resolvedSampler.maxTokens,
+          ) as SubAgentCompletionBody;
+          mergeThinkingIntoCompletionBody(
+            ephemeralBody as unknown as Record<string, unknown>,
+            'off',
+            provider,
+            sendCaps,
+            turnReasoningEffort,
+          );
+          if (input.tools.length > 0) {
+            ephemeralBody.tools = input.tools;
+            ephemeralBody.tool_choice = 'auto';
+          }
+          currentBody = ephemeralBody;
+          tracker = null;
+          prefillPartial = '';
+          if (attempts >= maxContinuations) {
+            return await runSubTurn(currentBody);
+          }
         }
-      }
+      };
+
+      let turnResult: Awaited<ReturnType<typeof streamSubAgentTurn>>;
+      turnResult = await runSubTurnWithThinkingBudget();
 
       await ledgerSubAgentTurn(input, turnResult);
 

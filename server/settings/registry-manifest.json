@@ -131,6 +131,26 @@
     ]
   },
   {
+    "key": "general.onboarding",
+    "label": "Run setup again",
+    "description": "Re-open the first-run setup wizard.",
+    "keywords": [
+      "wizard",
+      "onboarding",
+      "first run",
+      "setup"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
     "key": "general.chat.terminal",
     "label": "Terminal behavior",
     "keywords": [
@@ -300,6 +320,8 @@
       "dark",
       "light",
       "sage",
+      "salt",
+      "retro",
       "palette"
     ],
     "category": "appearance",
@@ -324,7 +346,9 @@
       "sage",
       "amber",
       "cyan",
-      "coral"
+      "coral",
+      "salt",
+      "retro"
     ],
     "sensitivity": "normal",
     "writable": true,
