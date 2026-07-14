@@ -2,6 +2,11 @@
  * User message bubbles: prose plus clickable file/image chips (MIN-31).
  */
 
+import {
+  createFileCardBody,
+  estimateTextByteSize,
+  inferFileKindFromName,
+} from '../attachments/file-card';
 import type { Attachment } from '../attachments/types';
 import { formatElementRefLabel } from '../attachments/element-ref-format';
 import { formatDesignRefLabel } from '../attachments/design-ref-format';
@@ -128,6 +133,10 @@ function createMessageAttachChip(
   options: {
     kind: 'file' | 'image';
     dataUrl?: string;
+    /** Byte size for file cards (history estimate or live attachment). */
+    fileSize?: number;
+    /** Attachment kind for file badge tint (`text` | `pdf`). */
+    fileKind?: Attachment['kind'];
     /** Native tooltip — defaults to "Open {label}". */
     title?: string;
     onOpen: () => void;
@@ -152,13 +161,35 @@ function createMessageAttachChip(
     chip.appendChild(thumb);
   }
 
-  const nameEl = document.createElement('span');
-  nameEl.className = 'msg-attach-chip-label';
-  nameEl.textContent = label;
-  chip.appendChild(nameEl);
+  if (options.kind === 'file') {
+    const fileKind = options.fileKind ?? 'text';
+    const fileSize = options.fileSize ?? 0;
+    const { icon, stack } = createFileCardBody({
+      name: label,
+      size: fileSize,
+      kind: fileKind,
+    });
+    chip.append(icon, stack);
+  } else {
+    const nameEl = document.createElement('span');
+    nameEl.className = 'msg-attach-chip-label';
+    nameEl.textContent = label;
+    chip.appendChild(nameEl);
+  }
 
   chip.addEventListener('click', () => options.onOpen());
   return chip;
+}
+
+function findLiveFileAttachment(
+  name: string,
+  liveAttachments?: Attachment[],
+): Attachment | undefined {
+  if (!liveAttachments?.length) return undefined;
+  return liveAttachments.find(
+    (item) =>
+      item.name === name && (item.kind === 'text' || item.kind === 'pdf'),
+  );
 }
 
 /**
@@ -231,9 +262,14 @@ export function renderUserMessageBubble(
   row.setAttribute('role', 'list');
 
   for (const file of parsed.files) {
+    const liveFile = findLiveFileAttachment(file.name, live);
+    const fileKind = liveFile?.kind ?? inferFileKindFromName(file.name);
+    const fileSize = liveFile?.size ?? estimateTextByteSize(file.body);
     row.appendChild(
       createMessageAttachChip(file.name, {
         kind: 'file',
+        fileSize,
+        fileKind,
         onOpen: () => openFilePart(file.name, file.body),
       }),
     );

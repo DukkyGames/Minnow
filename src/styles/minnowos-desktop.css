@@ -1008,6 +1008,24 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
+.mn-os-desktop-input-stack {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mn-os-desktop-input-stack .attach-preview {
+  width: 100%;
+  margin: 0;
+  padding: 0 2px;
+}
+
+.mn-os-desktop-input-stack .attach-preview:not(.hidden) + .mn-os-desktop-input-wrap .mn-os-desktop-field {
+  min-height: 36px;
+}
+
 .mn-os-desktop-input-row:focus-within {
   border-color: var(--os-accent-glow);
   box-shadow:

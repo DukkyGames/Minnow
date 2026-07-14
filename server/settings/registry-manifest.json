@@ -319,9 +319,14 @@
       "color",
       "dark",
       "light",
-      "sage",
-      "salt",
-      "retro",
+      "swamp",
+      "desert",
+      "ocean",
+      "coral",
+      "mono",
+      "matrix",
+      "human",
+      "mint",
       "palette"
     ],
     "category": "appearance",
@@ -343,12 +348,14 @@
     "path": "themeFamily",
     "type": "enum",
     "allowedValues": [
-      "sage",
-      "amber",
-      "cyan",
+      "swamp",
+      "desert",
+      "ocean",
       "coral",
-      "salt",
-      "retro"
+      "mono",
+      "matrix",
+      "human",
+      "mint"
     ],
     "sensitivity": "normal",
     "writable": true,
@@ -687,6 +694,46 @@
     "writable": false,
     "refreshAreas": [
       "agent-center"
+    ]
+  },
+  {
+    "key": "agents.modes.superPlan",
+    "label": "Super Plan pipeline",
+    "description": "Review rounds, grill budget, research scope/rounds/depth, Impeccable toggle, per-stage models.",
+    "keywords": [
+      "super plan",
+      "grill",
+      "review rounds",
+      "impeccable",
+      "research scope"
+    ],
+    "category": "agents",
+    "area": "modes",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "modes"
+    ]
+  },
+  {
+    "key": "agents.modes.planGranularity",
+    "label": "Plan granularity",
+    "keywords": [
+      "large",
+      "medium",
+      "small",
+      "planner tasks"
+    ],
+    "category": "agents",
+    "area": "modes",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "modes"
     ]
   },
   {
@@ -3455,6 +3502,32 @@
     "storage": "resource",
     "resource": "tools",
     "path": "permissions.default.search_settings",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.read_diagnostics",
+    "label": "Tool permission: read_diagnostics",
+    "description": "Permission mode for the read_diagnostics tool (off, ask, or full).",
+    "keywords": [
+      "read_diagnostics",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.read_diagnostics",
     "type": "enum",
     "allowedValues": [
       "off",

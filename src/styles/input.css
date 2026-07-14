@@ -181,6 +181,74 @@
   max-width: 12rem;
 }
 
+/* File attachment preview cards (MIN-410) — keep variant selectors static for Vite CSS scan */
+.attach-file-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.attach-file-icon--code {
+  background: color-mix(in srgb, var(--mn-accent) 12%, var(--mn-bg));
+  color: var(--mn-fg);
+}
+
+.attach-file-icon--pdf {
+  background: color-mix(in srgb, var(--mn-danger) 14%, var(--mn-bg));
+  color: color-mix(in srgb, var(--mn-danger) 78%, var(--mn-fg));
+}
+
+.attach-file-icon--doc {
+  background: color-mix(in srgb, var(--mn-accent) 8%, var(--mn-bg));
+  color: var(--mn-fg-muted);
+  border: 1px solid var(--mn-border);
+}
+
+.attach-file-icon--file {
+  background: var(--mn-surface-1);
+  color: var(--mn-fg-muted);
+  border: 1px solid var(--mn-border);
+}
+
+.attach-file-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.attach-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 12rem;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.attach-file-size {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--mn-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.attach-chip--file {
+  padding-left: 4px;
+  gap: 8px;
+  align-items: center;
+}
+
 .attach-chip-remove {
   display: flex;
   align-items: center;

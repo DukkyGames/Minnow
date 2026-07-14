@@ -1,16 +1,19 @@
 /**
- * File-tree → composer: project path in message text, or image attachment chip.
+ * File-tree → composer: workspace file/image preview chips (MIN-410).
  */
 
 import { isImageFilePath } from '../attachments/image-path';
 import {
+  addWorkspaceFileReference,
   addWorkspaceReference,
-  insertWorkspacePathInComposer,
 } from '../attachments/workspace-ref';
 import { applyOrchestratePlanFromWorkspacePath } from './orchestrate-plan-selector';
 
 /** Drop / Add to chat entry point (Orchestrate plans update the plan selector). */
-export function attachWorkspacePathToComposer(workspacePath: string): void {
+export function attachWorkspacePathToComposer(
+  workspacePath: string,
+  _inputOverride?: HTMLTextAreaElement | null,
+): void {
   const path = workspacePath.trim();
   if (!path) return;
   if (applyOrchestratePlanFromWorkspacePath(path)) return;
@@ -18,5 +21,5 @@ export function attachWorkspacePathToComposer(workspacePath: string): void {
     addWorkspaceReference(path);
     return;
   }
-  insertWorkspacePathInComposer(path);
+  addWorkspaceFileReference(path);
 }

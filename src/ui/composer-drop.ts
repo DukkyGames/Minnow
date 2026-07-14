@@ -9,9 +9,36 @@ import {
   hasWorkspaceFileDrag,
 } from '../attachments/external-file-drop';
 import { WORKSPACE_FILE_MIME } from '../attachments/workspace-ref';
+import { getActiveComposerSurface } from './composer-surface';
 import { attachWorkspacePathToComposer } from './workspace-composer-link';
 
 const DROP_ACTIVE_CLASS = 'composer-drop-active';
+
+/** Map a drop target element to its composer textarea. */
+function resolveComposerInputFromDropTarget(target: HTMLElement): HTMLTextAreaElement | null {
+  if (target instanceof HTMLTextAreaElement) return target;
+
+  const byId = (id: string): HTMLTextAreaElement | null =>
+    document.getElementById(id) as HTMLTextAreaElement | null;
+
+  if (
+    target.id === 'desktopInput' ||
+    target.closest('.mn-os-desktop-composer, .mn-os-desktop-input-row')
+  ) {
+    return byId('desktopInput');
+  }
+  if (target.id === 'chatAppInput' || target.closest('.chat-app-composer')) {
+    return byId('chatAppInput');
+  }
+  if (target.id === 'msgInput' || target.closest('.input-bar, .input-bar-composer')) {
+    return byId('msgInput');
+  }
+
+  const nested = target.querySelector('textarea');
+  if (nested instanceof HTMLTextAreaElement) return nested;
+
+  return getActiveComposerSurface().inputEl;
+}
 
 function pathFromDataTransfer(dataTransfer: DataTransfer): string | null {
   const typed = dataTransfer.getData(WORKSPACE_FILE_MIME).trim();
@@ -81,7 +108,8 @@ function bindDropTarget(
     if (event.dataTransfer && hasWorkspaceFileDrag(event.dataTransfer)) {
       const path = pathFromDataTransfer(event.dataTransfer);
       if (path) {
-        attachWorkspacePathToComposer(path);
+        const input = resolveComposerInputFromDropTarget(event.currentTarget as HTMLElement);
+        attachWorkspacePathToComposer(path, input);
       }
     }
   });

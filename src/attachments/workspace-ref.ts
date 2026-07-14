@@ -36,13 +36,13 @@ function newWorkspaceAttachmentId(): string {
   return `ws-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-/** Inserts a project-relative path into #msgInput (deduped; not an attachment). */
-export function insertWorkspacePathInComposer(workspacePath: string): void {
+/** Inserts a project-relative path into a composer textarea (deduped; not an attachment). */
+export function insertWorkspacePathInComposer(
+  workspacePath: string,
+  input: HTMLTextAreaElement | null | undefined,
+): void {
   const normalized = workspacePath.trim().replace(/\\/g, '/');
-  if (!normalized) return;
-
-  const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
-  if (!input) return;
+  if (!normalized || !input) return;
 
   const value = input.value;
   if (value.includes(normalized)) {
@@ -87,6 +87,11 @@ export function addWorkspaceReference(workspacePath: string): void {
     size: 0,
     workspacePath: path,
   });
+}
+
+/** Queues a non-image workspace file as a preview card (deduped by path). */
+export function addWorkspaceFileReference(workspacePath: string): void {
+  addWorkspaceReference(workspacePath);
 }
 
 /** Removes a workspace reference chip by attachment id. */

@@ -56,6 +56,9 @@ function buildDesktopComposer(): HTMLElement {
   attachBtn.innerHTML =
     '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
 
+  const inputStack = document.createElement('div');
+  inputStack.className = 'mn-os-desktop-input-stack';
+
   const inputWrap = document.createElement('div');
   inputWrap.className = 'mn-os-desktop-input-wrap';
 
@@ -66,6 +69,8 @@ function buildDesktopComposer(): HTMLElement {
   field.placeholder = 'What would you like to do today?';
   field.spellcheck = false;
   inputWrap.appendChild(field);
+
+  inputStack.append(attachPreview, inputWrap);
 
   const contextAnchor = document.createElement('div');
   contextAnchor.className = 'context-usage-anchor mn-os-desktop-context';
@@ -100,8 +105,8 @@ function buildDesktopComposer(): HTMLElement {
   sendBtn.setAttribute('aria-label', 'Send message');
   sendBtn.innerHTML = MINNOW_GLYPH_HEADER_HTML;
 
-  row.append(attachBtn, inputWrap, contextAnchor, sendBtn);
-  root.append(attachPreview, toolApprovalHost, questionHost, row);
+  row.append(attachBtn, inputStack, contextAnchor, sendBtn);
+  root.append(toolApprovalHost, questionHost, row);
   return root;
 }
 
