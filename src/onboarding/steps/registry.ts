@@ -16,6 +16,7 @@ import { extrasStep } from './extras';
 import { emailStep } from './email';
 import { calendarStep } from './calendar';
 import { apiKeysStep } from './api-keys';
+import { context7Step } from './context7';
 import { guideStep } from './guide';
 import { permissionsStep, memoryStep, doneStep } from './remaining';
 
@@ -34,6 +35,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   emailStep,
   calendarStep,
   apiKeysStep,
+  context7Step,
   guideStep,
   doneStep,
 ];

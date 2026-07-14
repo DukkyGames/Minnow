@@ -150,6 +150,7 @@ export const doneStep: OnboardingStep = {
       ['Memory and Brain', Boolean(ctx.state.steps.memory?.done)],
       ['Email', Boolean(ctx.state.steps.email?.done)],
       ['Calendar', Boolean(ctx.state.steps.calendar?.done)],
+      ['Context7 library docs', Boolean(ctx.state.steps.context7?.done)],
       ['Guided tour chat', Boolean(ctx.state.steps.explainer?.done)],
     ];
     rows.forEach(([label, ok]) => {
