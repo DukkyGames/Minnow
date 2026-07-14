@@ -12,7 +12,8 @@ import { createGunzip } from 'node:zlib';
 import { getMinnowHome } from '../config/home.js';
 import { runProcess } from '../process-runner.js';
 import { getAppRoot } from '../workspace/root.js';
-import { readLlamaCppConfig } from './llama-args.js';
+import { probeLlamaRouterSupport, readLlamaCppConfig } from './llama-args.js';
+import { mapLlamaError } from './llama-errors.js';
 import {
   detectPreferredLlamaVariant,
   fetchReleaseAssetList,
@@ -96,6 +97,11 @@ export function getManagedLlamaRoot() {
 /** Metadata written after a successful managed install. */
 export function getManagedLlamaMetaPath() {
   return path.join(getManagedLlamaRoot(), 'meta.json');
+}
+
+/** Backup of the previous managed install for rollback. */
+export function getManagedLlamaBackupRoot() {
+  return path.join(getMinnowHome(), 'models-runtime', 'llama-cpp-backup');
 }
 
 /** Shipped-with-app vendor directory (optional; populated by packaging or postinstall). */
@@ -239,17 +245,37 @@ export async function getLlamaRuntimeStatus() {
     meta?.variant ??
     preferredVariant;
 
+  const installedVersion = meta?.version ?? (resolved.path ? LLAMA_CPP_RELEASE_TAG : null);
+  const latestTag = await fetchLatestReleaseTag();
+  const updateAvailable =
+    Boolean(latestTag) &&
+    Boolean(installedVersion) &&
+    normalizeLlamaReleaseTag(latestTag) > normalizeLlamaReleaseTag(installedVersion);
+
+  let canRollback = false;
+  try {
+    await fsp.access(getManagedLlamaBackupRoot());
+    canRollback = true;
+  } catch {
+    canRollback = false;
+  }
+
   return {
     path: resolved.path,
     source: resolved.source,
     variant: meta?.variant ?? (resolved.path ? variant : preferredVariant),
-    version: meta?.version ?? LLAMA_CPP_RELEASE_TAG,
+    version: installedVersion ?? LLAMA_CPP_RELEASE_TAG,
+    latestTag,
+    updateAvailable,
+    canRollback,
+    previousVersion: meta?.previous?.version ?? null,
     assetNames: meta?.assetNames ?? [],
     installedAt: meta?.installedAt ?? null,
     installable: isLlamaRuntimeInstallable(),
     gpuCapable: isGpuCapableVariant(meta?.variant ?? preferredVariant),
     preferredVariant,
     installableVariants,
+    pinnedTag: LLAMA_CPP_RELEASE_TAG,
   };
 }
 
@@ -261,6 +287,81 @@ async function fetchJson(url) {
     throw new Error(`HTTP ${res.status} for ${url}`);
   }
   return res.json();
+}
+
+/**
+ * Normalize a llama.cpp release tag (e.g. b7052) to a comparable number.
+ * @param {string | null | undefined} tag
+ */
+export function normalizeLlamaReleaseTag(tag) {
+  if (!tag) return 0;
+  const m = String(tag).match(/b?(\d+)/i);
+  return m ? Number(m[1]) : 0;
+}
+
+/**
+ * Fetch the newest published llama.cpp release tag from GitHub.
+ * @returns {Promise<string | null>}
+ */
+export async function fetchLatestReleaseTag() {
+  try {
+    const release = await fetchJson(
+      `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`,
+    );
+    const tag = release?.tag_name;
+    return typeof tag === 'string' ? tag : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Post-install smoke test — verify router mode support.
+ * @param {string} binaryPath
+ */
+export async function smokeTestLlamaServer(binaryPath) {
+  const routerOk = await probeLlamaRouterSupport(binaryPath);
+  if (!routerOk) {
+    throw new Error(
+      'Installed llama-server does not support router mode — try updating to a newer release',
+    );
+  }
+}
+
+/**
+ * Copy managed install to backup dir before reinstall.
+ */
+async function backupManagedInstall() {
+  const managedRoot = getManagedLlamaRoot();
+  const backupRoot = getManagedLlamaBackupRoot();
+  try {
+    await fsp.access(managedRoot);
+  } catch {
+    return;
+  }
+  await fsp.rm(backupRoot, { recursive: true, force: true });
+  await fsp.cp(managedRoot, backupRoot, { recursive: true });
+}
+
+/**
+ * Restore the previous managed install from backup.
+ * @returns {Promise<string | null>} restored binary path
+ */
+export async function rollbackManagedLlamaInstall() {
+  const backupRoot = getManagedLlamaBackupRoot();
+  const managedRoot = getManagedLlamaRoot();
+  try {
+    await fsp.access(backupRoot);
+  } catch {
+    throw new Error('No previous llama.cpp install to roll back to');
+  }
+  await fsp.rm(managedRoot, { recursive: true, force: true });
+  await fsp.cp(backupRoot, managedRoot, { recursive: true });
+  const installed = findBinaryInDir(managedRoot);
+  if (!installed) {
+    throw new Error('Rollback completed but llama-server binary is missing');
+  }
+  return installed;
 }
 
 /**
@@ -377,7 +478,7 @@ export async function ensureLlamaServer(opts = {}) {
   const config = await readLlamaCppConfig();
   const wantsVariant = opts.variant ?? config.variant;
 
-  if (resolved.path && !opts.reinstall) {
+  if (resolved.path && !opts.reinstall && !opts.update) {
     if (!wantsVariant || wantsVariant === installedVariant) {
       return resolved.path;
     }
@@ -411,7 +512,7 @@ async function installManagedLlamaServer(opts) {
     opts.onProgress?.(patch);
   };
   setInstallJob({ phase: 'installing', percent: 0, message: 'Starting install', error: null });
-  const tag = opts.tag ?? LLAMA_CPP_RELEASE_TAG;
+  const tag = opts.tag ?? (opts.update ? (await fetchLatestReleaseTag()) ?? LLAMA_CPP_RELEASE_TAG : LLAMA_CPP_RELEASE_TAG);
   const config = await readLlamaCppConfig();
   const assets = await fetchReleaseAssetList(tag);
   const variant =
@@ -447,7 +548,18 @@ async function installManagedLlamaServer(opts) {
   const tmpRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'minnow-llama-'));
   const managedRoot = getManagedLlamaRoot();
 
+  let previousMeta = null;
   try {
+    previousMeta = JSON.parse(await fsp.readFile(getManagedLlamaMetaPath(), 'utf8'));
+  } catch {
+    /* first install */
+  }
+
+  try {
+    if (opts.reinstall || opts.update) {
+      await backupManagedInstall();
+    }
+
     onProgress({ percent: 5, message: `Downloading ${mainZip}` });
     const mainArchivePath = path.join(tmpRoot, mainZip);
     await downloadToFile(mainAsset.browser_download_url, mainArchivePath, (pct) => {
@@ -483,6 +595,8 @@ async function installManagedLlamaServer(opts) {
       throw new Error('llama-server install completed but binary is missing');
     }
 
+    await smokeTestLlamaServer(installed);
+
     await fsp.writeFile(
       getManagedLlamaMetaPath(),
       `${JSON.stringify(
@@ -492,6 +606,13 @@ async function installManagedLlamaServer(opts) {
           assetNames,
           installedAt: new Date().toISOString(),
           path: installed,
+          previous: previousMeta
+            ? {
+                version: previousMeta.version,
+                variant: previousMeta.variant,
+                installedAt: previousMeta.installedAt,
+              }
+            : undefined,
         },
         null,
         2,
@@ -503,9 +624,9 @@ async function installManagedLlamaServer(opts) {
     setInstallJob({ phase: 'completed', percent: 100, message: 'llama-server ready', error: null });
     return installed;
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = mapLlamaError(err instanceof Error ? err.message : String(err));
     setInstallJob({ phase: 'failed', percent: 0, message, error: message });
-    throw err;
+    throw new Error(message);
   } finally {
     await fsp.rm(tmpRoot, { recursive: true, force: true });
   }

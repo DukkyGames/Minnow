@@ -16,11 +16,18 @@ import {
 } from '../../server/providers/store.js';
 import {
   resetServesForTests,
-  setServeBackgroundRunOverrideForTests,
-  setServeHealthOverrideForTests,
   startServe,
   stopServe,
 } from '../../server/models/serve.js';
+import {
+  setRouterSupportProbeOverrideForTests,
+  resetRouterSupportProbeOverrideForTests,
+} from '../../server/models/llama-args.js';
+import {
+  resetRouterForTests,
+  setRouterBackgroundRunOverrideForTests,
+  setRouterHealthOverrideForTests,
+} from '../../server/models/llama-router.js';
 
 describe('llama-cpp single provider', () => {
   /** @type {string} */
@@ -46,16 +53,19 @@ describe('llama-cpp single provider', () => {
       `${JSON.stringify({ variant: 'cpu', version: 'test', path: path.join(managedRoot, binName) })}\n`,
     );
 
-    setServeBackgroundRunOverrideForTests(async () => ({
-      runId: 'test-run',
-      pid: 12345,
+    setRouterSupportProbeOverrideForTests(async () => true);
+    setRouterBackgroundRunOverrideForTests(async () => ({
+      runId: 'router-run-test',
+      pid: process.pid,
     }));
-    setServeHealthOverrideForTests(async () => true);
+    setRouterHealthOverrideForTests(async () => true);
   });
 
   after(async () => {
+    resetRouterSupportProbeOverrideForTests();
     delete process.env.MINNOW_HOME;
     resetMinnowHomeCache();
+    await resetRouterForTests();
     await resetServesForTests();
     await fs.rm(homeDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   });

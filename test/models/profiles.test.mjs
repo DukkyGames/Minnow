@@ -29,12 +29,20 @@ describe('serve profiles', () => {
     );
   });
 
+  test('presets use 128k / 64k / 32k context windows', () => {
+    const profiles = computeServeProfiles(system, model);
+    const byKey = Object.fromEntries(profiles.map((p) => [p.key, p]));
+    assert.equal(byKey.quality?.ctx, 131_072);
+    assert.equal(byKey.balanced?.ctx, 65_536);
+    assert.equal(byKey.speed?.ctx, 32_768);
+  });
+
   test('balanced profile fits on 12 GB GPU budget', () => {
     const profiles = computeServeProfiles(system, model);
     const balanced = profiles.find((p) => p.key === 'balanced');
     assert.ok(balanced);
     assert.equal(balanced.fits, true);
-    assert.ok(balanced.ctx >= 2048);
+    assert.equal(balanced.ctx, 65_536);
   });
 
   test('profileToLlamaArgs includes context and ngl', () => {

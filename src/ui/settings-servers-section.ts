@@ -21,8 +21,11 @@ import {
 import {
   fetchLlamaRuntime,
   fetchRouterStatus,
+  fetchLlamaCppConfig,
   installLlamaRuntime,
   restartModelRouter,
+  rollbackLlamaRuntime,
+  saveLlamaCppConfig,
   startModelRouter,
   stopModelRouter,
 } from '../models/api-client';
@@ -153,8 +156,41 @@ function createLlamaCppServerRow(
   const installBtn = el('button', 'settings-action-btn', server.installed ? 'Reinstall' : 'Install');
   installBtn.type = 'button';
   installBtn.dataset.llamaInstall = server.id;
-  toolbar.append(variantLabel, variantSelect, installBtn);
+  const updateBtn = el('button', 'settings-inline-btn hidden', 'Update');
+  updateBtn.type = 'button';
+  updateBtn.dataset.llamaUpdate = server.id;
+  const rollbackBtn = el('button', 'settings-inline-btn hidden', 'Rollback');
+  rollbackBtn.type = 'button';
+  rollbackBtn.dataset.llamaRollback = server.id;
+  toolbar.append(variantLabel, variantSelect, installBtn, updateBtn, rollbackBtn);
   body.append(toolbar);
+
+  const routerPolicy = el('div', 'settings-server-toolbar settings-llama-router-policy');
+  const modelsMaxLabel = el('label', 'settings-server-toolbar__label', 'Model slots');
+  const modelsMaxInput = el('input', 'settings-input settings-llama-models-max') as HTMLInputElement;
+  modelsMaxInput.type = 'number';
+  modelsMaxInput.min = '1';
+  modelsMaxInput.max = '8';
+  modelsMaxInput.dataset.llamaModelsMax = server.id;
+  const lifecycleLabel = el('label', 'settings-server-toolbar__label', 'Lifecycle');
+  const lifecycleSelect = el('select', 'settings-select settings-llama-lifecycle') as HTMLSelectElement;
+  lifecycleSelect.dataset.llamaLifecycle = server.id;
+  for (const value of ['on-demand', 'always', 'off'] as const) {
+    const opt = el('option', undefined, value) as HTMLOptionElement;
+    opt.value = value;
+    lifecycleSelect.appendChild(opt);
+  }
+  const policyApplyBtn = el('button', 'settings-inline-btn', 'Apply router policy');
+  policyApplyBtn.type = 'button';
+  policyApplyBtn.dataset.llamaPolicyApply = server.id;
+  routerPolicy.append(
+    modelsMaxLabel,
+    modelsMaxInput,
+    lifecycleLabel,
+    lifecycleSelect,
+    policyApplyBtn,
+  );
+  body.append(routerPolicy);
 
   const routerPanel = el('details', 'settings-server-logs');
   const routerSummary = el('summary', undefined, 'Router');
@@ -175,8 +211,11 @@ function createLlamaCppServerRow(
       installBtn.textContent = installed ? 'Reinstall' : 'Install';
 
       runtimeInfo.textContent = runtime.path
-        ? `${runtime.variant ?? 'cpu'} · ${runtime.version} · ${runtime.path}`
+        ? `${runtime.variant ?? 'cpu'} · ${runtime.version}${runtime.latestTag ? ` (latest ${runtime.latestTag})` : ''} · ${runtime.path}`
         : `Recommended variant: ${runtime.preferredVariant}`;
+
+      updateBtn.classList.toggle('hidden', !runtime.updateAvailable);
+      rollbackBtn.classList.toggle('hidden', !runtime.canRollback);
 
       variantSelect.replaceChildren();
       for (const v of runtime.installableVariants) {
@@ -188,6 +227,20 @@ function createLlamaCppServerRow(
     } catch (err) {
       runtimeInfo.textContent =
         err instanceof Error ? err.message : 'Could not load llama.cpp runtime';
+    }
+  };
+
+  const refreshRouterPolicy = async (): Promise<void> => {
+    try {
+      const [config, { router }] = await Promise.all([
+        fetchLlamaCppConfig(),
+        fetchRouterStatus(),
+      ]);
+      modelsMaxInput.value = String(config.router?.modelsMax ?? router.modelsMax ?? 1);
+      lifecycleSelect.value = config.router?.lifecycle ?? 'on-demand';
+    } catch {
+      modelsMaxInput.value = '1';
+      lifecycleSelect.value = 'on-demand';
     }
   };
 
@@ -285,7 +338,66 @@ function createLlamaCppServerRow(
     })();
   });
 
+  updateBtn.addEventListener('click', () => {
+    void (async () => {
+      updateBtn.disabled = true;
+      runtimeInfo.textContent = 'Updating…';
+      try {
+        await installLlamaRuntime({
+          variant: variantSelect.value || undefined,
+          update: true,
+        });
+        setStatus('ok', 'llama.cpp runtime updated');
+        await refreshRuntime();
+        await refreshRouter();
+        onRefresh();
+      } catch (err) {
+        setStatus('err', err instanceof Error ? err.message : 'Update failed');
+      } finally {
+        updateBtn.disabled = false;
+      }
+    })();
+  });
+
+  rollbackBtn.addEventListener('click', () => {
+    void (async () => {
+      rollbackBtn.disabled = true;
+      try {
+        await rollbackLlamaRuntime();
+        setStatus('ok', 'Rolled back to previous llama.cpp runtime');
+        await refreshRuntime();
+        await refreshRouter();
+        onRefresh();
+      } catch (err) {
+        setStatus('err', err instanceof Error ? err.message : 'Rollback failed');
+      } finally {
+        rollbackBtn.disabled = false;
+      }
+    })();
+  });
+
+  policyApplyBtn.addEventListener('click', () => {
+    void (async () => {
+      const modelsMax = Number(modelsMaxInput.value);
+      const lifecycle = lifecycleSelect.value as 'off' | 'on-demand' | 'always';
+      try {
+        await saveLlamaCppConfig({
+          router: { modelsMax, lifecycle },
+        });
+        if (lifecycle !== 'off') {
+          await restartModelRouter();
+        }
+        setStatus('ok', 'Router policy saved');
+        await refreshRouter();
+        onRefresh();
+      } catch (err) {
+        setStatus('err', err instanceof Error ? err.message : 'Could not save router policy');
+      }
+    })();
+  });
+
   void refreshRuntime();
+  void refreshRouterPolicy();
   void refreshRouter();
 
   return row;

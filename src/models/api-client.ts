@@ -98,6 +98,11 @@ export interface LlamaRuntimeStatus {
   source: string | null;
   variant: string | null;
   version: string;
+  latestTag: string | null;
+  updateAvailable: boolean;
+  canRollback: boolean;
+  previousVersion: string | null;
+  pinnedTag: string;
   assetNames: string[];
   installedAt: string | null;
   installable: boolean;
@@ -305,12 +310,21 @@ export async function installLlamaRuntime(payload?: {
   variant?: string;
   tag?: string;
   reinstall?: boolean;
+  update?: boolean;
 }): Promise<LlamaRuntimeStatus & { ok: boolean; path?: string }> {
   const res = await fetch('/api/models/llama-runtime/install', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload ?? {}),
   });
+  return parseJson(res);
+}
+
+/** Restore the previous managed llama.cpp install after a failed update. */
+export async function rollbackLlamaRuntime(): Promise<
+  LlamaRuntimeStatus & { ok: boolean; path?: string }
+> {
+  const res = await fetch('/api/models/llama-runtime/rollback', { method: 'POST' });
   return parseJson(res);
 }
 

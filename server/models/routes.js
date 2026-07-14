@@ -7,6 +7,7 @@ import { listCachedModels } from './cached.js';
 import { listInstalled } from './installed.js';
 import { getModelsConfig, patchModelsConfig } from './models-config.js';
 import { computeServeProfiles } from './profiles.js';
+import { ggufWeightsGb, readGgufMeta } from './gguf-meta.js';
 import { detectRuntimes } from './runtime-detect.js';
 import { listServes, startServe, stopServe } from './serve.js';
 import { validateJobId, validateServeId } from './validate.js';
@@ -16,6 +17,7 @@ import {
   ensureLlamaServer,
   getInstalledLlamaVariant,
   subscribeLlamaInstallProgress,
+  rollbackManagedLlamaInstall,
 } from './llama-runtime.js';
 import { writeLlamaCppConfig, readLlamaCppConfig, buildLlamaServerArgs } from './llama-args.js';
 import {
@@ -179,8 +181,20 @@ export async function handleModelsRequest(req, res, pathname) {
       const modelName = parsed.searchParams.get('model') || '';
       const quant = parsed.searchParams.get('quant') || undefined;
       const weightsGb = parsed.searchParams.get('weights_gb');
+      const ggufPath = parsed.searchParams.get('gguf_path');
       const fresh = parsed.searchParams.get('fresh') === '1';
       const hardware = await detectHardware({ fresh });
+
+      let blockCount;
+      let serveWeightsGb = weightsGb ? Number(weightsGb) : undefined;
+      if (ggufPath) {
+        const meta = await readGgufMeta(ggufPath);
+        if (meta) {
+          if (meta.blockCount != null) blockCount = meta.blockCount;
+          serveWeightsGb = ggufWeightsGb(meta);
+        }
+      }
+
       const model = {
         name: modelName,
         parameter_count: parsed.searchParams.get('params') || undefined,
@@ -194,8 +208,9 @@ export async function handleModelsRequest(req, res, pathname) {
         is_moe: parsed.searchParams.get('is_moe') === '1',
       };
       const profiles = computeServeProfiles(hardware, model, {
-        serveWeightsGb: weightsGb ? Number(weightsGb) : undefined,
+        serveWeightsGb,
         serveQuant: quant,
+        blockCount,
       });
       const variant = (await getInstalledLlamaVariant()) ?? 'cpu';
       const profilesWithArgs = profiles.map((p) => ({
@@ -257,12 +272,24 @@ export async function handleModelsRequest(req, res, pathname) {
       const variant = typeof body.variant === 'string' ? body.variant : undefined;
       const tag = typeof body.tag === 'string' ? body.tag : undefined;
       const reinstall = body.reinstall === true;
+      const update = body.update === true;
       if (variant) {
         await writeLlamaCppConfig({ variant });
       }
-      const path = await ensureLlamaServer({ variant, tag, reinstall });
+      const path = await ensureLlamaServer({ variant, tag, reinstall, update });
       const status = await getLlamaRuntimeStatus();
       sendJson(res, 200, { ok: true, path, ...status });
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/models/llama-runtime/rollback' && req.method === 'POST') {
+    try {
+      const restored = await rollbackManagedLlamaInstall();
+      const status = await getLlamaRuntimeStatus();
+      sendJson(res, 200, { ok: true, path: restored, ...status });
     } catch (err) {
       sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
     }

@@ -4,12 +4,8 @@
 
 import crypto from 'node:crypto';
 import fsp from 'node:fs/promises';
-import net from 'node:net';
 import path from 'node:path';
 import {
-  createBackgroundRun,
-  getRun,
-  readRunLogTail,
   stopActiveRun,
 } from '../terminal-runner.js';
 import {
@@ -19,14 +15,8 @@ import {
   setActiveProviderId,
   updateProvider,
 } from '../providers/store.js';
-import { detectHardware } from '../system/hardware.js';
-import { detectRuntimes } from './runtime-detect.js';
-import {
-  buildLlamaServerArgs,
-  buildLlamaServerSpawnEnv,
-  probeLlamaRouterSupport,
-  readLlamaCppConfig,
-} from './llama-args.js';
+import { mapLlamaError } from './llama-errors.js';
+import { probeLlamaRouterSupport } from './llama-args.js';
 import {
   ensureRouter,
   loadModelOnRouter,
@@ -34,14 +24,9 @@ import {
   ROUTER_MODELS_UNLOAD_PATH,
 } from './llama-router.js';
 import { writeLlamaPresetIni, presetSectionNameFromFilename } from './llama-preset.js';
-import { getServesIndexPath, modelsLogDir } from './paths.js';
-import { validatePort, validateRuntime, validateServeId } from './validate.js';
-import {
-  buildLlamaServerEnv,
-  getInstalledLlamaVariant,
-  llamaServerSpawnCwd,
-  resolveLlamaServer,
-} from './llama-runtime.js';
+import { getServesIndexPath } from './paths.js';
+import { validateRuntime, validateServeId } from './validate.js';
+import { resolveLlamaServer } from './llama-runtime.js';
 
 /** @typedef {'starting' | 'running' | 'stopped' | 'error'} ServeStatus */
 
@@ -67,27 +52,14 @@ import {
 let servesCache = [];
 let loaded = false;
 
-/** Test overrides — avoid spawning real llama-server in unit tests. */
-/** @type {typeof createBackgroundRun | null} */
-let createBackgroundRunOverrideForTests = null;
-/** @type {((baseUrl: string) => Promise<boolean>) | null} */
-let waitForHealthOverrideForTests = null;
+/** Test overrides retained for compatibility with older suites. */
+export function setServeBackgroundRunOverrideForTests(_fn) {}
 
-export function setServeBackgroundRunOverrideForTests(fn) {
-  createBackgroundRunOverrideForTests = fn;
-}
+export function resetServeBackgroundRunOverrideForTests() {}
 
-export function resetServeBackgroundRunOverrideForTests() {
-  createBackgroundRunOverrideForTests = null;
-}
+export function setServeHealthOverrideForTests(_fn) {}
 
-export function setServeHealthOverrideForTests(fn) {
-  waitForHealthOverrideForTests = fn;
-}
-
-export function resetServeHealthOverrideForTests() {
-  waitForHealthOverrideForTests = null;
-}
+export function resetServeHealthOverrideForTests() {}
 
 async function loadServes() {
   if (loaded) return;
@@ -109,7 +81,12 @@ export async function reconcileServesOnBoot() {
   let changed = false;
   for (const row of servesCache) {
     if (row.status !== 'running' && row.status !== 'starting') continue;
-    if (row.runtime === 'ollama' || row.runtime === 'lm-studio') continue;
+    if (row.runtime === 'ollama' || row.runtime === 'lm-studio') {
+      row.status = 'stopped';
+      row.stoppedAt = Date.now();
+      changed = true;
+      continue;
+    }
     const pid = row.pid;
     if (!pid) {
       row.status = 'stopped';
@@ -140,87 +117,6 @@ async function saveServes() {
     `${JSON.stringify({ version: 1, serves: servesCache }, null, 2)}\n`,
     'utf8',
   );
-}
-
-/**
- * @returns {Promise<number>}
- */
-async function pickFreePort(preferred = 8085) {
-  const tryPort = (port) =>
-    new Promise((resolve, reject) => {
-      const server = net.createServer();
-      server.unref();
-      server.on('error', reject);
-      server.listen(port, '127.0.0.1', () => {
-        const address = server.address();
-        const chosen = typeof address === 'object' && address ? address.port : port;
-        server.close(() => resolve(chosen));
-      });
-    });
-
-  try {
-    return await tryPort(preferred);
-  } catch {
-    return tryPort(0);
-  }
-}
-
-/**
- * Pull a short, user-facing snippet from llama-server stderr/stdout.
- * @param {string | null} tail
- */
-function summarizeLlamaLogTail(tail) {
-  if (!tail) return '';
-  const lines = tail
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const interesting = lines
-    .filter((line) => /error|fatal|usage:/i.test(line))
-    .slice(-3);
-  const excerpt = (interesting.length ? interesting : lines.slice(-2)).join(' ');
-  return excerpt.slice(0, 280);
-}
-
-/**
- * @param {string} baseUrl
- * @param {number} [timeoutMs]
- * @param {string} [runId]
- * @returns {Promise<{ ok: true } | { ok: false, error: string }>}
- */
-async function waitForHealth(baseUrl, timeoutMs = 60_000, runId) {
-  if (waitForHealthOverrideForTests) {
-    const ok = await waitForHealthOverrideForTests(baseUrl);
-    if (ok) return { ok: true };
-    return { ok: false, error: 'llama-server did not become healthy in time' };
-  }
-  const deadline = Date.now() + timeoutMs;
-  const urls = [`${baseUrl}/health`, `${baseUrl}/v1/models`];
-  while (Date.now() < deadline) {
-    if (runId) {
-      const run = getRun(runId);
-      if (run?.finished) {
-        const tail = await readRunLogTail(runId, 4096);
-        const detail = summarizeLlamaLogTail(tail);
-        return {
-          ok: false,
-          error: detail
-            ? `llama-server exited: ${detail}`
-            : 'llama-server exited before becoming healthy',
-        };
-      }
-    }
-    for (const url of urls) {
-      try {
-        const res = await fetch(url, { signal: AbortSignal.timeout(2_500) });
-        if (res.ok) return { ok: true };
-      } catch {
-        /* retry */
-      }
-    }
-    await new Promise((r) => setTimeout(r, 1_000));
-  }
-  return { ok: false, error: 'llama-server did not become healthy in time' };
 }
 
 /**
@@ -307,29 +203,6 @@ export async function upsertLlamaCppProvider(opts) {
 }
 
 /**
- * @param {{ serveId: string, baseUrl: string, modelLabel: string, apiKind: string, providerId?: string }} opts
- */
-async function registerServeProvider(opts) {
-  const providerId = opts.providerId || `models-${opts.serveId.slice(0, 8)}`;
-  const existing = await listProviders();
-  if (!existing.providers.some((p) => p.id === providerId)) {
-    const isOpenAi = opts.apiKind === 'openai-v1';
-    await createProvider({
-      id: providerId,
-      label: `Models · ${opts.modelLabel}`,
-      baseUrl: opts.baseUrl,
-      apiKind: opts.apiKind,
-      enabled: true,
-      modelsPath: isOpenAi ? '/v1/models' : '/api/v0/models',
-      chatCompletionsPath: isOpenAi ? '/v1/chat/completions' : '/api/v0/chat/completions',
-      supportsModelLoadUnload: false,
-    });
-  }
-  await setActiveProviderId(providerId);
-  return providerId;
-}
-
-/**
  * @param {{ modelPath: string, runtime?: string, port?: number, modelLabel?: string, profile?: string, hardware?: object, llama?: object, quant?: string, paramsB?: number, isMoe?: boolean, weightsGb?: number }} body
  */
 export async function startServe(body) {
@@ -346,31 +219,27 @@ export async function startServe(body) {
     throw new Error('Only local .gguf files can be served in v1');
   }
 
-  const runtimes = await detectRuntimes();
-  let llamaServerPath = null;
-  let llamaVariant = 'cpu';
-  let routerSupported = false;
-  if (runtime === 'llama-cpp') {
-    llamaServerPath = (await resolveLlamaServer()).path;
-    if (!llamaServerPath) {
-      throw new Error(
-        'llama-server is not installed — install from Models or Settings → Servers before serving',
-      );
-    }
-    llamaVariant = (await getInstalledLlamaVariant()) ?? 'cpu';
-    routerSupported = await probeLlamaRouterSupport(llamaServerPath);
-    if (routerSupported) {
-      await stopExistingLlamaCppServes(false);
-    } else {
-      await stopExistingLlamaCppServes(true);
-    }
+  if (runtime !== 'llama-cpp') {
+    throw new Error(
+      'Only llama-cpp runtime is supported — use Ollama or LM Studio providers directly from Settings → Providers',
+    );
   }
-  if (runtime === 'ollama' && !runtimes.ollama.serving) {
-    throw new Error('Ollama is not running on http://127.0.0.1:11434');
+
+  const llamaServerPath = (await resolveLlamaServer()).path;
+  if (!llamaServerPath) {
+    throw new Error(
+      'llama-server is not installed — install from Models or Settings → Servers before serving',
+    );
   }
-  if (runtime === 'lm-studio' && !runtimes.lmStudio.available) {
-    throw new Error('LM Studio server is not reachable on http://127.0.0.1:1234');
+
+  const routerSupported = await probeLlamaRouterSupport(llamaServerPath);
+  if (!routerSupported) {
+    throw new Error(
+      mapLlamaError('Installed llama-server does not support router mode'),
+    );
   }
+
+  await stopExistingLlamaCppServes(false);
 
   const serveId = crypto.randomUUID();
   const modelLabel =
@@ -378,154 +247,40 @@ export async function startServe(body) {
       ? body.modelLabel.trim()
       : labelFromPath(modelPath);
 
-  if (runtime === 'ollama' || runtime === 'lm-studio') {
-    const baseUrl =
-      runtime === 'ollama' ? runtimes.ollama.baseUrl : runtimes.lmStudio.baseUrl;
-    const providerId = await registerServeProvider({
-      serveId,
-      baseUrl,
-      modelLabel,
-      apiKind: runtime === 'ollama' ? 'openai-v1' : 'lm-studio-v0',
-    });
-    const row = /** @type {ServeRecord} */ ({
-      id: serveId,
-      runtime,
-      modelPath,
-      modelLabel,
-      port: runtime === 'ollama' ? 11434 : 1234,
-      baseUrl,
-      providerId,
-      status: 'running',
-      startedAt: Date.now(),
-    });
-    servesCache.unshift(row);
-    await saveServes();
-    return publicServe(row);
-  }
-
-  const port = body.port ? validatePort(body.port) : await pickFreePort(8085);
   const providerId = LLAMA_CPP_LOCAL_ID;
-
-  const profileKey =
-    typeof body.profile === 'string' && body.profile.trim() ? body.profile.trim() : 'balanced';
-
-  const hardware =
-    body.hardware && typeof body.hardware === 'object'
-      ? body.hardware
-      : await detectHardware();
-
-  const llamaConfig = await readLlamaCppConfig();
   const userSettings =
     body.llama && typeof body.llama === 'object' ? body.llama : undefined;
 
   // Router mode: one persistent llama-server handles all local GGUF models.
-  if (routerSupported) {
-    await writeLlamaPresetIni();
-    const routerStatus = await ensureRouter();
-    const routerModelName = presetSectionNameFromFilename(path.basename(modelPath));
-    try {
-      await loadModelOnRouter(routerModelName);
-    } catch {
-      /* router may autoload on first request */
-    }
-
-    const baseUrl = routerStatus.baseUrl;
-    const row = /** @type {ServeRecord} */ ({
-      id: serveId,
-      runtime,
-      modelPath,
-      modelLabel,
-      port: routerStatus.port,
-      baseUrl,
-      providerId,
-      status: 'running',
-      startedAt: Date.now(),
-      llamaSettings: userSettings ?? null,
-    });
-    servesCache.unshift(row);
-    await upsertLlamaCppProvider({
-      baseUrl,
-      enabled: true,
-      supportsModelLoadUnload: true,
-      modelsLoadPath: ROUTER_MODELS_LOAD_PATH,
-      modelsUnloadPath: ROUTER_MODELS_UNLOAD_PATH,
-    });
-    await saveServes();
-    return publicServe(row);
+  await writeLlamaPresetIni();
+  const routerStatus = await ensureRouter();
+  const routerModelName = presetSectionNameFromFilename(path.basename(modelPath));
+  try {
+    await loadModelOnRouter(routerModelName);
+  } catch {
+    /* router may autoload on first chat request */
   }
 
-  const args = buildLlamaServerArgs({
-    modelPath,
-    port,
-    profileKey,
-    hardware,
-    modelMeta: {
-      name: modelLabel,
-      quantization: body.quant,
-      parameters_raw: body.paramsB,
-      is_moe: body.isMoe,
-      serveWeightsGb: body.weightsGb,
-      serveQuant: body.quant,
-    },
-    settings: userSettings,
-    defaults: llamaConfig.defaults,
-    variant: llamaVariant,
-  });
-
-  const baseUrl = `http://127.0.0.1:${port}`;
+  const baseUrl = routerStatus.baseUrl;
   const row = /** @type {ServeRecord} */ ({
     id: serveId,
     runtime,
     modelPath,
     modelLabel,
-    port,
+    port: routerStatus.port,
     baseUrl,
     providerId,
-    status: 'starting',
+    status: 'running',
     startedAt: Date.now(),
     llamaSettings: userSettings ?? null,
   });
   servesCache.unshift(row);
-  await saveServes();
-
-  await fsp.mkdir(modelsLogDir(), { recursive: true });
-
-  const spawnEnv = buildLlamaServerSpawnEnv(
-    llamaServerPath,
-    userSettings,
-    process.env,
-    buildLlamaServerEnv,
-  );
-
-  const createRun = createBackgroundRunOverrideForTests ?? createBackgroundRun;
-  const run = await createRun({
-    command: llamaServerPath,
-    args,
-    cwd: llamaServerSpawnCwd(llamaServerPath),
-    env: spawnEnv,
-    source: 'agent',
-    logSubdir: 'models',
-  });
-
-  row.runId = run.runId;
-  row.pid = run.pid;
-  await saveServes();
-
-  const healthy = await waitForHealth(baseUrl, 60_000, run.runId);
-  if (!healthy.ok) {
-    await stopActiveRun(run.runId);
-    row.status = 'error';
-    row.error = healthy.error;
-    row.stoppedAt = Date.now();
-    await saveServes();
-    throw new Error(row.error);
-  }
-
-  row.status = 'running';
   await upsertLlamaCppProvider({
     baseUrl,
     enabled: true,
-    supportsModelLoadUnload: false,
+    supportsModelLoadUnload: true,
+    modelsLoadPath: ROUTER_MODELS_LOAD_PATH,
+    modelsUnloadPath: ROUTER_MODELS_UNLOAD_PATH,
   });
   await saveServes();
   return publicServe(row);

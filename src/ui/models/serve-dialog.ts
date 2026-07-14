@@ -13,6 +13,7 @@ import {
   type ServeRecord,
 } from '../../models/api-client';
 import { ensureLlamaRuntimeInstalled } from './llama-install-prompt';
+import { splitShellWords } from '../../utils/shell-words';
 import { setStatus } from '../status';
 
 export interface OpenServeDialogOptions {
@@ -140,7 +141,7 @@ function openServeDialogInner(
     let selectedProfile = 'balanced';
     let profilesLoaded: Awaited<ReturnType<typeof fetchServeProfiles>> | null = null;
 
-    const ctxField = numInput('Context (-c)', 4096, 'serveCtx');
+    const ctxField = numInput('Context (-c)', 65_536, 'serveCtx');
     const nglField = selectInput(
       'GPU layers (-ngl)',
       [
@@ -296,7 +297,7 @@ function openServeDialogInner(
 
       /** @type {LlamaServeSettings} */
       const llama: LlamaServeSettings = {
-        ctx: Number.isFinite(ctx) ? ctx : 4096,
+        ctx: Number.isFinite(ctx) ? ctx : 65_536,
         n_gpu_layers: Number.isFinite(ngl) ? ngl : 999,
         cache_type: (cacheField.querySelector('select') as HTMLSelectElement).value,
       };
@@ -311,7 +312,7 @@ function openServeDialogInner(
       if (Number.isFinite(parallel) && parallel > 0) llama.parallel = parallel;
 
       const extraRaw = extraInput.value.trim();
-      if (extraRaw) llama.extra_args = extraRaw.split(/\s+/);
+      if (extraRaw) llama.extra_args = splitShellWords(extraRaw);
 
       if (unifiedCheck.checked) {
         llama.env = { GGML_CUDA_ENABLE_UNIFIED_MEMORY: '1' };
