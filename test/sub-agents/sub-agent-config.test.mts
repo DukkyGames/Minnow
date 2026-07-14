@@ -88,6 +88,7 @@ describe('sub-agent config', () => {
     assert.ok(r);
     assert.equal(r.label, 'Plan reviewer');
     assert.equal(r.maxConcurrent, 2);
+    assert.equal(r.maxInputTokens, null, 'plan-reviewer should have no input token cap');
     assert.equal(r.summarySchema, 'minnow.sub-agent.v1');
     assert.ok(r.allowedTools?.includes('read_file'));
     assert.ok(r.allowedTools?.includes('grep'));
