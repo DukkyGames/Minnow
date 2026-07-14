@@ -21,7 +21,7 @@ function setupDom(): void {
   globalThis.MutationObserver = window.MutationObserver;
   globalThis.getComputedStyle = window.getComputedStyle.bind(window);
   const root = document.documentElement;
-  root.setAttribute('data-theme', 'sage-dark');
+  root.setAttribute('data-theme', 'swamp-dark');
   for (const name of REEF_THEME_TOKEN_NAMES) {
     root.style.setProperty(name, `test-${name}`);
   }
@@ -53,8 +53,8 @@ describe('theme-forward', () => {
       calls += 1;
     });
     assert.equal(calls, 1);
-    document.documentElement.setAttribute('data-theme', 'sage-light');
-    assert.equal(document.documentElement.getAttribute('data-theme'), 'sage-light');
+    document.documentElement.setAttribute('data-theme', 'swamp-light');
+    assert.equal(document.documentElement.getAttribute('data-theme'), 'swamp-light');
     themeUnsub();
     themeUnsub = null;
   });

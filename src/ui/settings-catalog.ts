@@ -167,7 +167,7 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
 
   // —— Appearance ——
   field('appearance.theme', 'Theme presets', 'appearance', 'appearance', {
-    keywords: ['color', 'dark', 'light', 'sage', 'salt', 'retro', 'palette'],
+    keywords: ['color', 'dark', 'light', 'swamp', 'desert', 'ocean', 'coral', 'mono', 'matrix', 'human', 'mint', 'palette'],
   }),
   field('appearance.theme.family', 'Theme family', 'appearance', 'appearance'),
   field('appearance.theme.mode', 'Theme mode', 'appearance', 'appearance', {

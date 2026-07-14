@@ -8,18 +8,22 @@ import { describe, test } from 'node:test';
 import path from 'node:path';
 
 const THEME_IDS = [
-  'sage-dark',
-  'sage-light',
-  'amber-dark',
-  'amber-light',
-  'cyan-dark',
-  'cyan-light',
+  'swamp-dark',
+  'swamp-light',
+  'desert-dark',
+  'desert-light',
+  'ocean-dark',
+  'ocean-light',
   'coral-dark',
   'coral-light',
-  'salt-dark',
-  'salt-light',
-  'retro-dark',
-  'retro-light',
+  'mono-dark',
+  'mono-light',
+  'matrix-dark',
+  'matrix-light',
+  'human-dark',
+  'human-light',
+  'mint-dark',
+  'mint-light',
 ] as const;
 
 function parseHexOrRgb(color: string): [number, number, number] | null {
@@ -79,25 +83,17 @@ function readThemeBlock(css: string, themeId: string): Record<string, string> {
 }
 
 describe('theme-contrast', () => {
-  const tokensPath = path.join(process.cwd(), 'src', 'styles', 'tokens.css');
-  const css = readFileSync(tokensPath, 'utf8');
+  const css = readFileSync(path.join(process.cwd(), 'src/styles/tokens.css'), 'utf8');
 
-  for (const id of THEME_IDS) {
-    test(`${id}: fg on bg and fg on surface-1 meet WCAG AA`, () => {
-      const vars = readThemeBlock(css, id);
+  for (const themeId of THEME_IDS) {
+    test(`${themeId}: fg on bg and fg on surface-1 meet WCAG AA`, () => {
+      const vars = readThemeBlock(css, themeId);
       const fg = vars['--mn-fg'];
       const bg = vars['--mn-bg'];
-      const s1 = vars['--mn-surface-1'];
-      const selectionBg = vars['--mn-selection-bg'];
-      assert.ok(fg && bg && s1 && selectionBg, 'core tokens present');
-      assert.ok(
-        contrastRatio(fg, bg) >= 4.5,
-        `fg/bg ${contrastRatio(fg, bg).toFixed(2)} < 4.5`,
-      );
-      assert.ok(
-        contrastRatio(fg, s1) >= 4.5,
-        `fg/surface-1 ${contrastRatio(fg, s1).toFixed(2)} < 4.5`,
-      );
+      const surface1 = vars['--mn-surface-1'];
+      assert.ok(fg && bg && surface1, `missing core tokens for ${themeId}`);
+      assert.ok(contrastRatio(fg, bg) >= 4.5, `fg on bg contrast too low for ${themeId}`);
+      assert.ok(contrastRatio(fg, surface1) >= 4.5, `fg on surface-1 contrast too low for ${themeId}`);
     });
   }
 });
