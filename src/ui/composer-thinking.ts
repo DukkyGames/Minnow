@@ -4,7 +4,7 @@
  * and sets reasoningEffort to `off`; on restores a default level.
  */
 
-import { resolveThinkingMode } from '../agents/resolve-thinking';
+import { resolveThinkingMode, resolveThinkingBudgetTokens } from '../agents/resolve-thinking';
 import {
   formatThinkingInheritedLabel,
   modelAllowsThinkingMode,
@@ -44,6 +44,15 @@ export function nextThinkingTriStateOnClick(
   if (tri === 'inherit') return resolved === 'on' ? 'off' : 'on';
   if (tri === 'on') return 'off';
   return 'inherit';
+}
+
+function formatBudgetHint(budget: ReturnType<typeof resolveThinkingBudgetTokens>): string {
+  if (budget.budgetTokens == null || budget.budgetTokens <= 0) return '';
+  const k =
+    budget.budgetTokens >= 1000
+      ? `${Math.round(budget.budgetTokens / 1000)}k`
+      : String(budget.budgetTokens);
+  return ` · budget: ${k} (${budget.sourceLabel})`;
 }
 
 function effectiveCapabilities(): ReturnType<typeof resolveSendCapabilities> {
@@ -203,7 +212,13 @@ export function syncThinkingControlFromActiveChat(): void {
   } else if (!allowed) {
     toggleBtn.title = `Model does not support thinking ${resolved.mode}`;
   } else if (tri === 'inherit') {
-    toggleBtn.title = formatThinkingInheritedLabel(tri, resolved.mode, resolved.sourceLabel);
+    const budget = resolveThinkingBudgetTokens({
+      kind: 'work-agent',
+      agentKey: agent?.id ?? null,
+    });
+    toggleBtn.title =
+      formatThinkingInheritedLabel(tri, resolved.mode, resolved.sourceLabel) +
+      formatBudgetHint(budget);
   } else {
     toggleBtn.title = effectiveOn ? 'Thinking on (chat override)' : 'Thinking off (chat override)';
   }

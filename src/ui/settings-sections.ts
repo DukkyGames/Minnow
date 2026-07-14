@@ -107,6 +107,7 @@ import {
   createSettingsRadioRow,
   createSettingsSelectRow,
 } from './settings-controls';
+import { renderAboutSettingsSection } from './settings-about';
 import { renderAppearanceSettingsSection } from './settings-appearance';
 import { renderAgentCenterPanel } from './settings-agent-center';
 import {
@@ -119,6 +120,7 @@ import {
   renderEntityEditorList,
 } from './settings-entity-editor';
 import { mountReefWidgetLlmSettings } from './reef-widget-settings';
+import { mountSuperPlanSettings } from './super-plan-settings';
 import { renderModelRoutingSection } from './settings-model-routing';
 import {
   appendProviderModelFields,
@@ -832,6 +834,9 @@ async function renderModesSection(): Promise<void> {
     (id, body) => {
       if (id === 'plan') {
         void mountPlanGranularityField(body);
+      }
+      if (id === 'super-plan') {
+        mountSuperPlanSettings(body);
       }
       if (id === 'reef') {
         mountReefWidgetLlmSettings(body);
@@ -2275,6 +2280,9 @@ export async function refreshSettingsSection(
       break;
     case 'audio':
       await renderAudioSettingsSection(setStatus);
+      break;
+    case 'about':
+      await renderAboutSettingsSection();
       break;
     case 'providers':
       refreshProvidersBanner();

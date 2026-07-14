@@ -5,6 +5,7 @@
 import { patchWorkAgentOverride } from '../agents/work-agent-prompt-api';
 import type { ThinkingTriState } from '../agents/thinking-types';
 import { saveSubAgentConfigToServer, loadSubAgentConfig } from '../agents/sub-agent-config';
+import { buildThinkingBudgetFieldInputs } from './settings-thinking-budget-fields';
 import { saveUiDesignerConfig } from '../agents/ui-designer/config';
 import { saveTitlesConfig } from '../config/titles-meta';
 import { saveGoalEvalConfig } from '../config/goal-eval-meta';
@@ -77,6 +78,7 @@ interface RowControls {
   effectiveEl?: HTMLElement;
   samplerFields?: ReturnType<typeof buildSamplerFieldInputs>;
   thinkingSelect?: HTMLSelectElement;
+  thinkingBudgetFields?: ReturnType<typeof buildThinkingBudgetFieldInputs>;
   fallbackEditor?: FallbackRowEditor;
 }
 
@@ -114,7 +116,7 @@ function buildThinkingSelect(initial: ThinkingTriState): HTMLSelectElement {
 }
 
 async function saveAdvanced(controls: RowControls): Promise<void> {
-  const { row, samplerFields, thinkingSelect } = controls;
+  const { row, samplerFields, thinkingSelect, thinkingBudgetFields } = controls;
   if (!samplerFields || !thinkingSelect) return;
 
   switch (row.persistKind) {
@@ -132,9 +134,16 @@ async function saveAdvanced(controls: RowControls): Promise<void> {
       break;
     }
     case 'work-agent': {
+      const budgetRead = thinkingBudgetFields?.readValue();
       const agent = await patchWorkAgentOverride(row.id, {
         sampler: samplerFields.readPatch(),
         thinkingMode: thinkingSelect.value as ThinkingTriState,
+        ...(thinkingBudgetFields
+          ? {
+              thinkingBudgetTokens:
+                budgetRead === undefined ? null : budgetRead,
+            }
+          : {}),
       });
       setStatus(
         agent ? 'ok' : 'err',
@@ -156,6 +165,14 @@ async function saveAdvanced(controls: RowControls): Promise<void> {
             ...existing,
             sampler: samplerFields.readPatch(),
             thinkingMode: thinkingSelect.value as ThinkingTriState,
+            ...(thinkingBudgetFields
+              ? {
+                  thinkingBudgetTokens:
+                    thinkingBudgetFields.readValue() === undefined
+                      ? null
+                      : thinkingBudgetFields.readValue(),
+                }
+              : {}),
           },
         },
       });
@@ -413,6 +430,12 @@ function appendRoutingRow(
       searchKey: `models.routing.${row.id}.thinking`,
     });
     panel.appendChild(thinkingSettingsRow);
+
+    if (row.persistKind === 'work-agent' || row.persistKind === 'sub-agent') {
+      const budgetFields = buildThinkingBudgetFieldInputs(row.thinkingBudgetTokens ?? null);
+      controls.thinkingBudgetFields = budgetFields;
+      panel.appendChild(budgetFields.root);
+    }
 
     panel.appendChild(
       createSettingsActionsRow([
@@ -890,6 +913,13 @@ export async function mountStandaloneRoutingEditor(
       searchKey: `models.routing.${row.id}.thinking`,
     });
     advancedBody.appendChild(thinkingSettingsRow);
+
+    if (row.persistKind === 'work-agent' || row.persistKind === 'sub-agent') {
+      const budgetFields = buildThinkingBudgetFieldInputs(row.thinkingBudgetTokens ?? null);
+      controls.thinkingBudgetFields = budgetFields;
+      advancedBody.appendChild(budgetFields.root);
+    }
+
     advanced.appendChild(advancedBody);
     panel.appendChild(advanced);
   }

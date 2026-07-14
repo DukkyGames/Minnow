@@ -563,12 +563,11 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
 .git-graph {
   min-width: 0;
   max-width: 100%;
+  /* Overridden inline per render: lane count × lane step (see git-graph.ts). */
   --git-marker-w: 14px;
-  --git-body-pad-top: 5px;
-  --git-marker-pad-top: 4px;
-  --git-dot-half: 4px;
-  /* Dot sits at the top of the row body — not at 50% height. */
-  --git-dot-center-y: calc(var(--git-body-pad-top) + var(--git-marker-pad-top) + var(--git-dot-half));
+  /* Dot sits near the top of the row body — not at 50% height.
+     Must match DOT_CENTER_Y in git-graph.ts. */
+  --git-dot-center-y: 13px;
   --git-lane-1: var(--mn-success);
   --git-lane-2: var(--mn-warning);
   --git-lane-3: var(--mn-danger);
@@ -605,61 +604,85 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
   align-items: flex-start;
   gap: 8px;
   padding: 5px 0;
-  padding-left: calc(var(--git-branch-indent, 0px));
 }
 
-/* Connector lines are in the marker column; top/bottom anchor to the row via body. */
-.git-graph__trunk-line,
-.git-graph__branch-line {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1.5px;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.git-graph__trunk-line {
-  left: calc(var(--git-marker-w) / 2 - 0.75px);
-  background: var(--mn-accent);
-}
-
-.git-graph__trunk-line--up {
-  bottom: auto;
-  height: var(--git-dot-center-y);
-}
-
-.git-graph__trunk-line--down {
-  top: var(--git-dot-center-y);
-  bottom: 0;
-}
-
-.git-graph__branch-line {
-  left: calc(
-    var(--git-branch-line-indent, var(--git-branch-indent, 0px)) + var(--git-marker-w) / 2 - 0.75px
-  );
-  background: var(--branch-color);
-}
-
-.git-graph__branch-line--up {
-  bottom: auto;
-  height: var(--git-dot-center-y);
-}
-
-.git-graph__branch-line--down {
-  top: var(--git-dot-center-y);
-  bottom: 0;
-}
-
+/* Spacer column; rails and dot anchor to the body so they span the full row height. */
 .git-graph__marker {
   position: static;
   flex: none;
   width: var(--git-marker-w);
   min-height: 18px;
+}
+
+.git-graph__rails {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.git-graph__rails line,
+.git-graph__rails path {
+  fill: none;
+  stroke-width: 2;
+}
+
+.git-graph__toggle {
   display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding-top: 4px;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 3px 8px;
+  border: none;
+  background: none;
+  font-size: 10px;
+  color: var(--mn-fg-subtle);
+  cursor: pointer;
+  text-align: left;
+}
+
+.git-graph__toggle:hover {
+  color: var(--mn-fg-muted);
+}
+
+.git-graph__toggle-chevron {
+  flex: none;
+  width: 10px;
+  text-align: center;
+}
+
+/* Collapsed view: branch work summarized as small dots beside the main dot. */
+.git-graph__subdot {
+  position: absolute;
+  z-index: 2;
+  left: var(--git-dot-x, 7px);
+  top: var(--git-dot-center-y);
+  transform: translate(-50%, -50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--branch-color);
+  cursor: pointer;
+}
+
+.git-graph__subdot--head {
+  background: var(--mn-bg);
+  box-shadow: 0 0 0 1.5px var(--branch-color);
+}
+
+.git-graph__subdot-more {
+  position: absolute;
+  z-index: 2;
+  left: var(--git-dot-x, 7px);
+  top: var(--git-dot-center-y);
+  transform: translateY(-50%);
+  font-size: 9px;
+  line-height: 1;
+  color: var(--mn-fg-subtle);
+  cursor: pointer;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -683,9 +706,11 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
 }
 
 .git-graph__dot {
-  position: relative;
+  position: absolute;
   z-index: 2;
-  flex: none;
+  left: var(--git-dot-x, 7px);
+  top: var(--git-dot-center-y);
+  transform: translate(-50%, -50%);
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -698,10 +723,6 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
 
 .git-graph__dot--branch {
   background: var(--branch-color);
-}
-
-.git-graph__row:has(.git-graph__dot--head) {
-  --git-dot-half: 5px;
 }
 
 .git-graph__dot--head {
@@ -765,9 +786,9 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
   font-family: var(--font-mono);
   padding: 1px 6px;
   border-radius: 999px;
-  border: 1px solid var(--mn-accent-border);
-  background: var(--mn-accent-soft);
-  color: var(--mn-accent-ink);
+  border: 1px solid color-mix(in srgb, var(--branch-color, var(--mn-accent)) 45%, transparent);
+  background: color-mix(in srgb, var(--branch-color, var(--mn-accent)) 12%, transparent);
+  color: var(--branch-color, var(--mn-accent-ink));
   white-space: nowrap;
   max-width: 100%;
   overflow: hidden;

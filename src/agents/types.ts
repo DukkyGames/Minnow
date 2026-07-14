@@ -78,6 +78,8 @@ export interface SubAgentTypeConfig {
   sampler?: SamplerPreset;
   /** Per-type thinking tri-state (shipped default + user override). */
   thinkingMode?: ThinkingTriState;
+  /** Per-type thinking token budget; null = inherit, 0 = off. */
+  thinkingBudgetTokens?: number | null;
 }
 
 /** Root sub-agents.json shape (user + merged). */
@@ -167,6 +169,8 @@ export interface SubAgentRun {
   idempotencyKey?: string | null;
   /** Committed result ref when write-ahead completes (Phase 3). */
   committedResultRef?: string | null;
+  /** When watchdog recovery respawns this run, waiters should follow this id. */
+  supersededByRunId?: string | null;
 }
 
 /** Input to spawn a sub-agent. */
@@ -181,6 +185,10 @@ export interface SpawnSubAgentInput {
   parentToolCallId?: string | null;
   /** Parent mode for tool policy when resolving enabled tools. */
   modeId?: string;
+  /** Optional provider override (Super Plan reviewer model, etc.). */
+  providerId?: string;
+  /** Optional model override (Super Plan reviewer model, etc.). */
+  modelId?: string;
   /** Board category for Orchestrate board UI. */
   category?: BoardCategory;
   /** Board task id (board_update_task / spawn hook). */

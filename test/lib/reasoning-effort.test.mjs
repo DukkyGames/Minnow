@@ -186,6 +186,17 @@ describe('resolveEffectiveReasoningEffort', () => {
     assert.equal(resolveEffectiveReasoningEffort({}, effortOnly, 'on'), 'medium');
   });
 
+  test('inherited on beats catalog default off', () => {
+    assert.equal(
+      resolveEffectiveReasoningEffort(
+        {},
+        { reasoningAllowedOptions: ['off', 'low', 'medium', 'high'], reasoningDefault: 'off' },
+        'on',
+      ),
+      'medium',
+    );
+  });
+
   test('maps resolved brain off to off when catalog default is absent', () => {
     const effortOnly = { reasoningAllowedOptions: ['off', 'low', 'medium', 'high'] };
     assert.equal(resolveEffectiveReasoningEffort({}, effortOnly, 'off'), 'off');

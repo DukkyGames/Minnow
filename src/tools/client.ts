@@ -15,7 +15,7 @@ import {
   loadToolConfig,
   setLocalServerAvailable,
 } from './config';
-import { blockPlanModeWrite } from '../chat/modes/plan-write-guard';
+import { blockPlanModeWriteWithContent } from '../chat/modes/plan-write-guard';
 import {
   filterToolsByMode,
   isToolAllowedForMode,
@@ -409,7 +409,7 @@ async function executeToolInner(
       name,
     );
     if (blocked) return blocked;
-    const planWriteBlock = blockPlanModeWrite(context.modeId, name, enrichedArgs);
+    const planWriteBlock = blockPlanModeWriteWithContent(context.modeId, name, enrichedArgs);
     if (planWriteBlock) {
       return { content: planWriteBlock };
     }
@@ -437,7 +437,7 @@ async function executeToolInner(
   );
   if (blocked) return blocked;
 
-  const planWriteBlock = blockPlanModeWrite(context.modeId, name, enrichedArgs);
+  const planWriteBlock = blockPlanModeWriteWithContent(context.modeId, name, enrichedArgs);
   if (planWriteBlock) {
     return { content: planWriteBlock };
   }

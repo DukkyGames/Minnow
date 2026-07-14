@@ -1,5 +1,5 @@
 /**
- * Minnow Vite entry: styles, highlight.js theme, window handlers, init, service worker.
+ * Minnow Vite entry: styles, highlight.js theme, shell handlers, init, service worker.
  */
 
 import './styles/fonts.css';
@@ -56,6 +56,7 @@ import './styles/hub.css';
 import './styles/code-overview.css';
 import './styles/orchestrate-hub.css';
 import './styles/orchestrate-plan-screen.css';
+import './styles/plan-progress.css';
 import './styles/minnowos-shell.css';
 import './styles/minnowos-desktop.css';
 import './styles/desktop-workspace-rail.css';
@@ -69,7 +70,8 @@ import 'highlight.js/styles/github.min.css';
 
 import { installFetchAuth } from './api/install-fetch-auth';
 import { initTheme } from './ui/theme';
-import { initAttachments, onFileSelected } from './attachments/store';
+import { initAttachments } from './attachments/store';
+import { initShellHandlers } from './ui/shell-handlers';
 import { initComposerDrop } from './ui/composer-drop';
 import { initContextUsageRing, refreshContextUsageRing } from './ui/context-usage-ring';
 import { closeContextUsageBreakdown } from './ui/context-usage-breakdown';
@@ -80,7 +82,6 @@ import {
 } from './api/models';
 import { initWorkAgentSystem } from './agents/init-work-agents';
 import { initPromptSystem } from './chat/prompts/init-prompts';
-import { sendMessage } from './chat/messaging';
 import { detectConfigServer, refreshConfigStorageBanner } from './config/storage-mode';
 import { runMigrationIfNeeded } from './config/migrate';
 import { detectLocalServer } from './tools/client';
@@ -102,7 +103,7 @@ import {
 } from './state/sessions';
 import { initChatScroll } from './ui/chat-scroll';
 import { initMinnowBrowserLinkRouting } from './ui/minnow-browser-links';
-import { clearChat, renderChatFromHistory, renderStatsForChat } from './ui/messages';
+import { renderChatFromHistory, renderStatsForChat } from './ui/messages';
 import { refreshHubLiveData } from './ui/hub';
 import { bootGenerationResumeForChats } from './chat/generation-resume';
 import { bootIncompleteToolResumeForChats } from './chat/incomplete-tool-resume';
@@ -110,30 +111,18 @@ import { bootOrchestrateBoardResume } from './chat/orchestrate/board-boot-resume
 import { initBoardLogDiskSink } from './state/board-log-disk.ts';
 import { registerOrchestrateBoardShutdownHandler } from './chat/orchestrate/board-shutdown';
 import { rehydrateAllBoardWorktreeRoots } from './state/orchestrate-board-actions';
-import {
-  autoResize,
-  handleComposerPrimaryAction,
-  handleKey,
-  initComposerInput,
-} from './ui/input';
+import { initComposerInput } from './ui/input';
 import {
   applySidebarVisuals,
   closeMobileSidebar,
   isMobileLayout,
-  toggleSidebarCollapsed,
-  toggleSidebarLayout,
 } from './ui/layout';
 import { initAppSidebarResizers } from './ui/sidebar-resize';
 import {
-  closeDrawer,
   fillSystemPromptPresetSelect,
   fillToolsSection,
   loadSystemPromptSettings,
-  onDrawerKeydown,
-  onSystemPromptInput,
-  onSystemPromptPresetChange,
   registerToolHandlers,
-  toggleDrawer,
 } from './ui/settings';
 import { loadToolConfigIntoDrawer } from './tools/config';
 import {
@@ -141,13 +130,11 @@ import {
   syncModelSelectPicker,
 } from './ui/model-select-picker';
 import {
-  createChat,
-  onModelSelectChange,
   renderSidebar,
   syncModelSelectForActiveChat,
 } from './ui/sidebar';
 import { bootstrapActiveChatOpenedTimestamp } from './ui/chat-item-dot';
-import { initStatsStrip, toggleStatsPanel, updateStatsExpandPreview } from './ui/stats';
+import { initStatsStrip, updateStatsExpandPreview } from './ui/stats';
 import { bindExpertsSettingsCheckbox } from './ui/experts-settings';
 import { syncComposerPinnedSkillFromActiveChat } from './ui/composer-pinned-skill';
 import { syncGoalActiveHint } from './ui/goal-active-hint';
@@ -181,12 +168,7 @@ import {
 import { initComposerVoice } from './ui/composer-voice';
 import { initVoiceStatus } from './ui/voice-controls';
 import { dismissOpenLayers } from './ui/status';
-import {
-  clearMobileFileSidebarOverlay,
-  closeMobileFileSidebar,
-  toggleFileSidebarCollapsed,
-  toggleFileSidebarLayout,
-} from './ui/file-layout';
+import { clearMobileFileSidebarOverlay, closeMobileFileSidebar } from './ui/file-layout';
 import { initWorkspaceButton, refreshWorkspaceUi } from './ui/workspace-button';
 import {
   initWelcomePage,
@@ -203,59 +185,6 @@ import { initNotificationAudioUnlock } from './notifications/sound';
 import { initOsPageBridge, isOsShellEnabled } from './os/page-bridge';
 import { initOsRouter } from './os/router';
 import { initOsShell } from './os/shell';
-
-/** Expose inline HTML event handlers on `window` for the static markup. */
-function registerWindowHandlers(): void {
-  window.toggleSidebarLayout = toggleSidebarLayout;
-  window.createChat = createChat;
-  window.fetchModels = fetchModels;
-  window.toggleSelectedModelLoad = toggleSelectedModelLoad;
-  window.toggleDrawer = toggleDrawer;
-  window.openSettingsFromTopbar = () => {
-    void import('./ui/settings-page').then((m) => m.openSettingsFromTopbar());
-  };
-  window.openBenchmarkFromTopbar = () => {
-    void import('./ui/benchmark-page').then((m) => m.openBenchmarkFromTopbar());
-  };
-  window.openModelsFromTopbar = () => {
-    void import('./ui/models-page').then((m) => m.openModelsFromTopbar());
-  };
-  window.openBrainFromTopbar = () => {
-    void import('./ui/brain-page').then((m) => m.openBrainFromTopbar());
-  };
-  window.openCompareFromTopbar = () => {
-    void import('./ui/compare-page').then((m) => m.openCompareFromTopbar());
-  };
-  window.openResearchFromTopbar = () => {
-    void import('./research/panel').then((m) => m.openResearchFromTopbar());
-  };
-  window.openExpertLabFromTopbar = () => {
-    void import('./ui/experts/experts-hub').then((m) => m.openExpertLabFromTopbar());
-  };
-  window.closeDrawer = closeDrawer;
-  window.onDrawerKeydown = onDrawerKeydown;
-  window.clearChat = clearChat;
-  window.closeMobileSidebar = closeMobileSidebar;
-  window.toggleSidebarCollapsed = toggleSidebarCollapsed;
-  window.sendMessage = sendMessage;
-  window.handleComposerPrimaryAction = handleComposerPrimaryAction;
-  window.toggleStatsPanel = toggleStatsPanel;
-  window.onModelSelectChange = onModelSelectChange;
-  window.onSystemPromptPresetChange = onSystemPromptPresetChange;
-  window.onSystemPromptInput = onSystemPromptInput;
-  window.handleKey = handleKey;
-  window.autoResize = autoResize;
-  window.onFileSelected = onFileSelected;
-  window.toggleFileSidebarLayout = toggleFileSidebarLayout;
-  window.toggleFileSidebarCollapsed = toggleFileSidebarCollapsed;
-  window.closeMobileFileSidebar = closeMobileFileSidebar;
-  window.togglePreviewFromTopbar = () => {
-    void import('./ui/preview-panel').then((m) => m.togglePreviewPanel());
-  };
-  window.toggleOrchestrateHubFromTopbar = () => {
-    void import('./ui/orchestrate-hub').then((m) => m.toggleOrchestrateHubFromTopbar());
-  };
-}
 
 /** Register PWA service worker (shell cache); failures are ignored. */
 function registerServiceWorker(): void {
@@ -413,6 +342,7 @@ export async function initApp(): Promise<void> {
 
 /** Start init once the document is ready (module scripts often run after `load`). */
 async function startApp(): Promise<void> {
+  initShellHandlers();
   if (isOsShellEnabled()) {
     const hash = window.location.hash;
     if (hash === '' || hash === '#' || hash === '#/') {
@@ -434,7 +364,6 @@ async function startApp(): Promise<void> {
 
 installFetchAuth();
 
-registerWindowHandlers();
 registerServiceWorker();
 
 initTheme();

@@ -128,4 +128,5 @@ export const ALL_TOOL_IDS = [
   'draft_reply',
   'recall_chat_context',
   'recall_turn_full',
+  'read_diagnostics',
 ];

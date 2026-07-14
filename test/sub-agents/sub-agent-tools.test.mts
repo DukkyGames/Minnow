@@ -109,6 +109,41 @@ describe('resolveSubAgentTools', () => {
     assert.ok(!tools.some((t) => t.function.name === 'execute_command'));
   });
 
+  test('plan-reviewer excludes writes and shell', () => {
+    const cfg: SubAgentTypeConfig = {
+      enabled: true,
+      providerId: 'lm-studio-local',
+      modelId: '',
+      maxConcurrent: 2,
+      timeoutMs: 300000,
+      workAgentId: null,
+      allowedTools: [
+        'list_directory',
+        'read_file',
+        'read_file_range',
+        'find_files',
+        'search_in_file',
+        'grep',
+        'get_file_metadata',
+        'git_status',
+        'git_log',
+        'web_search',
+      ],
+      deniedTools: [
+        'spawn_sub_agent',
+        'cancel_sub_agent',
+        'execute_command',
+        'save_file',
+      ],
+      systemPromptPath: null,
+    };
+    const tools = resolveSubAgentTools(cfg, 'plan-reviewer', parentEnabled);
+    assert.ok(!tools.some((t) => t.function.name === 'execute_command'));
+    assert.ok(!tools.some((t) => t.function.name === 'save_file'));
+    assert.ok(tools.some((t) => t.function.name === 'read_file'));
+    assert.ok(tools.some((t) => t.function.name === 'web_search'));
+  });
+
   test('researcher excludes execute_command and spawn_sub_agent', () => {
     const cfg: SubAgentTypeConfig = {
       enabled: true,

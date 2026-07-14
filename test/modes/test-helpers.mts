@@ -27,6 +27,7 @@ export async function loadBuiltinModePromptMap(): Promise<Record<string, string>
     'desktop',
     'build',
     'plan',
+    'super-plan',
     'orchestrate',
     'reef',
     'debug',

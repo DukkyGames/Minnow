@@ -41,38 +41,51 @@ describe('theme', () => {
     });
   });
 
-  test('defaults to sage-dark when storage empty', () => {
+  test('defaults to swamp-dark when storage empty', () => {
     assert.equal(getStoredTheme(), DEFAULT_THEME_ID);
-    assert.equal(DEFAULT_THEME_ID, 'sage-dark');
+    assert.equal(DEFAULT_THEME_ID, 'swamp-dark');
   });
 
   test('reads explicit theme id from minnow.theme', () => {
-    store.set(THEME_STORAGE_KEY, 'cyan-light');
-    assert.equal(getStoredTheme(), 'cyan-light');
+    store.set(THEME_STORAGE_KEY, 'ocean-light');
+    assert.equal(getStoredTheme(), 'ocean-light');
   });
 
-  test('migrates legacy light to sage-light', () => {
+  test('migrates legacy light to swamp-light', () => {
     store.set(THEME_STORAGE_KEY, 'light');
-    assert.equal(getStoredTheme(), 'sage-light');
-    assert.equal(store.get(THEME_STORAGE_KEY), 'sage-light');
+    assert.equal(getStoredTheme(), 'swamp-light');
+    assert.equal(store.get(THEME_STORAGE_KEY), 'swamp-light');
   });
 
-  test('migrates legacy dark to sage-dark', () => {
+  test('migrates legacy dark to swamp-dark', () => {
     store.set(THEME_STORAGE_KEY, 'dark');
-    assert.equal(getStoredTheme(), 'sage-dark');
+    assert.equal(getStoredTheme(), 'swamp-dark');
   });
 
   test('migrates legacy system to followSystem + family', () => {
     store.set(THEME_STORAGE_KEY, 'system');
     getStoredTheme();
     assert.equal(store.get(THEME_FOLLOW_SYSTEM_KEY), '1');
-    assert.equal(store.get(THEME_FAMILY_KEY), 'sage');
+    assert.equal(store.get(THEME_FAMILY_KEY), 'swamp');
     assert.equal(store.has(THEME_STORAGE_KEY), false);
+  });
+
+  test('migrates renamed theme ids (sage → swamp)', () => {
+    store.set(THEME_STORAGE_KEY, 'sage-dark');
+    assert.equal(getStoredTheme(), 'swamp-dark');
+    assert.equal(store.get(THEME_STORAGE_KEY), 'swamp-dark');
+  });
+
+  test('migrates renamed follow-system family (amber → desert)', () => {
+    store.set(THEME_FOLLOW_SYSTEM_KEY, '1');
+    store.set(THEME_FAMILY_KEY, 'amber');
+    assert.equal(getStoredFamily(), 'desert');
+    assert.equal(store.get(THEME_FAMILY_KEY), 'desert');
   });
 
   test('followSystem resolves mode from matchMedia', () => {
     store.set(THEME_FOLLOW_SYSTEM_KEY, '1');
-    store.set(THEME_FAMILY_KEY, 'amber');
+    store.set(THEME_FAMILY_KEY, 'desert');
     const mm = { matches: true, addEventListener: () => {}, removeEventListener: () => {} };
     const orig = globalThis.matchMedia;
     Object.defineProperty(globalThis, 'matchMedia', {
@@ -80,9 +93,9 @@ describe('theme', () => {
       value: () => mm,
     });
     try {
-      assert.equal(getStoredTheme(), 'amber-light');
+      assert.equal(getStoredTheme(), 'desert-light');
       mm.matches = false;
-      assert.equal(getStoredTheme(), 'amber-dark');
+      assert.equal(getStoredTheme(), 'desert-dark');
     } finally {
       Object.defineProperty(globalThis, 'matchMedia', {
         configurable: true,
@@ -91,9 +104,9 @@ describe('theme', () => {
     }
   });
 
-  test('invalid theme id falls back to sage-dark', () => {
+  test('invalid theme id falls back to swamp-dark', () => {
     store.set(THEME_STORAGE_KEY, 'neon-dark');
-    assert.equal(getStoredTheme(), 'sage-dark');
+    assert.equal(getStoredTheme(), 'swamp-dark');
   });
 
   test('getFollowSystem and getStoredFamily', () => {
@@ -105,10 +118,10 @@ describe('theme', () => {
   });
 
   test('getStoredFamily derives from theme id when not following system', () => {
-    store.set(THEME_STORAGE_KEY, 'cyan-dark');
-    store.set(THEME_FAMILY_KEY, 'sage');
+    store.set(THEME_STORAGE_KEY, 'ocean-dark');
+    store.set(THEME_FAMILY_KEY, 'swamp');
     assert.equal(getFollowSystem(), false);
-    assert.equal(getStoredFamily(), 'cyan');
+    assert.equal(getStoredFamily(), 'ocean');
   });
 
   test('applyTheme clears FOUC inline tokens so stylesheet themes apply', async () => {
@@ -124,9 +137,9 @@ describe('theme', () => {
       const root = document.documentElement;
       root.style.setProperty('--mn-bg', '#111111');
       root.style.setProperty('--mn-fg', '#eeeeee');
-      applyTheme('sage-light', { persist: false });
+      applyTheme('swamp-light', { persist: false });
       assert.equal(root.style.getPropertyValue('--mn-bg'), '');
-      assert.equal(root.getAttribute('data-theme'), 'sage-light');
+      assert.equal(root.getAttribute('data-theme'), 'swamp-light');
     } finally {
       Object.defineProperty(globalThis, 'document', {
         configurable: true,

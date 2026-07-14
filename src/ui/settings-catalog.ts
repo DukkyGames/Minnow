@@ -50,7 +50,7 @@ export const SETTINGS_CATEGORY_AREAS: Record<
   SettingsCategoryId,
   SettingsSectionId[]
 > = {
-  general: ['general', 'audio'],
+  general: ['general', 'audio', 'about'],
   appearance: ['appearance'],
   models: ['providers', 'model-routing', 'sampler', 'thinking', 'usage'],
   agents: ['agent-center', 'rules', 'experts', 'agent-packs', 'autopilot'],
@@ -167,7 +167,7 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
 
   // —— Appearance ——
   field('appearance.theme', 'Theme presets', 'appearance', 'appearance', {
-    keywords: ['color', 'dark', 'light', 'sage', 'salt', 'retro', 'palette'],
+    keywords: ['color', 'dark', 'light', 'swamp', 'desert', 'ocean', 'coral', 'mono', 'matrix', 'human', 'mint', 'palette'],
   }),
   field('appearance.theme.family', 'Theme family', 'appearance', 'appearance'),
   field('appearance.theme.mode', 'Theme mode', 'appearance', 'appearance', {
@@ -217,6 +217,14 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
     keywords: ['modes', 'work agents', 'sub-agents', 'prompts', 'routing'],
   }),
   field('agents.modes', 'Composer modes', 'agents', 'agent-center'),
+  field('agents.modes.superPlan', 'Super Plan pipeline', 'agents', 'modes', {
+    keywords: ['super plan', 'grill', 'review rounds', 'impeccable', 'research scope'],
+    description:
+      'Review rounds, grill budget, research scope/rounds/depth, Impeccable toggle, per-stage models.',
+  }),
+  field('agents.modes.planGranularity', 'Plan granularity', 'agents', 'modes', {
+    keywords: ['large', 'medium', 'small', 'planner tasks'],
+  }),
   field('agents.experts', 'Experts', 'agents', 'experts', {
     keywords: ['persona', 'specialist'],
   }),

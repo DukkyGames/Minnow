@@ -48,13 +48,17 @@ import { createOrchestrateMiddleware } from '../orchestrate/middleware.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
 import { createToolsMiddleware } from './tools-middleware.js';
 import { createAuthMiddleware } from './auth-middleware.js';
+import { createDiagnosticsMiddleware } from '../diagnostics/middleware.js';
+import { installDiagnosticsProcessHandlers } from '../diagnostics/process-handlers.js';
 
 /**
  * @param {import('connect').Connect.Server} connectApp
  * @param {{ resolveSafePath: (userPath: string, options?: { write?: boolean }) => string, runWithPathAccess: <T>(fn: () => Promise<T>) => Promise<T> }} deps
  */
 export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPathAccess }) {
+  installDiagnosticsProcessHandlers();
   connectApp.use(createAuthMiddleware());
+  connectApp.use(createDiagnosticsMiddleware());
   connectApp.use(createConfigMiddleware());
   connectApp.use(createSettingsMiddleware());
   connectApp.use(createBenchmarksMiddleware());

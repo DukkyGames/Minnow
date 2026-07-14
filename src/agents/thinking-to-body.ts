@@ -10,6 +10,7 @@
  *   `enable_thinking` and non-standard `reasoning_effort` values.
  * - `anthropic-v1`: `providerOptions.anthropic.thinking` (`enabled` + `budgetTokens`,
  *   `adaptive` + `effort`, or omit when off) per model family.
+ * - `llama-cpp-local`: per-request `thinking_budget_tokens` (never CLI `--reasoning-budget`).
  */
 
 import type { ApiKind } from '../providers/types';
@@ -25,6 +26,8 @@ export interface ThinkingBodyHint {
 export interface ThinkingCompletionPatch {
   body: Record<string, unknown>;
   hint?: ThinkingBodyHint;
+  /** True when a provider-native per-request budget was applied. */
+  nativeBudgetApplied?: boolean;
 }
 
 const LM_STUDIO_BEST_EFFORT: ThinkingBodyHint = {
@@ -32,6 +35,8 @@ const LM_STUDIO_BEST_EFFORT: ThinkingBodyHint = {
   message:
     'LM Studio may ignore API reasoning controls and use per-model Inference settings instead.',
 };
+
+const ANTHROPIC_BUDGET_FLOOR = 1024;
 
 let lmStudioHintShown = false;
 
@@ -85,15 +90,41 @@ function anthropicUsesAdaptiveThinking(
   return modelCapabilities?.reasoningThinkingEnabledValue === 'adaptive';
 }
 
+function resolveAnthropicBudgetTokens(
+  effort: 'low' | 'medium' | 'high' | undefined,
+  explicitBudget?: number | null,
+): number {
+  if (explicitBudget != null && explicitBudget > 0) {
+    return Math.max(ANTHROPIC_BUDGET_FLOOR, explicitBudget);
+  }
+  if (effort && isLevelEffort(effort)) {
+    return ANTHROPIC_BUDGET_BY_EFFORT[effort];
+  }
+  return ANTHROPIC_BUDGET_BY_EFFORT.medium;
+}
+
 function anthropicThinkingPatch(
   thinking: Record<string, unknown>,
   effort?: 'low' | 'medium' | 'high',
+  explicitBudget?: number | null,
 ): ThinkingCompletionPatch {
   const anthropic: Record<string, unknown> = { thinking };
   if (effort && thinking.type === 'adaptive') {
     anthropic.effort = effort;
   }
-  return { body: { providerOptions: { anthropic } } };
+  const nativeBudgetApplied =
+    thinking.type === 'enabled' &&
+    explicitBudget != null &&
+    explicitBudget > 0;
+  if (thinking.type === 'enabled') {
+    const budgetTokens = resolveAnthropicBudgetTokens(effort, explicitBudget);
+    thinking = { ...thinking, budgetTokens };
+    anthropic.thinking = thinking;
+  }
+  return {
+    body: { providerOptions: { anthropic } },
+    nativeBudgetApplied,
+  };
 }
 
 /**
@@ -103,6 +134,7 @@ export function reasoningEffortToCompletionBody(
   effort: ReasoningEffortOption,
   apiKind: ApiKind,
   modelCapabilities?: ModelCapabilities | null,
+  budgetTokens?: number | null,
 ): ThinkingCompletionPatch {
   if (reasoningBlocked(effort, modelCapabilities)) {
     return { body: {} };
@@ -126,16 +158,18 @@ export function reasoningEffortToCompletionBody(
     }
 
     if (isLevelEffort(effort)) {
-      return anthropicThinkingPatch({
-        type: 'enabled',
-        budgetTokens: ANTHROPIC_BUDGET_BY_EFFORT[effort],
-      });
+      return anthropicThinkingPatch(
+        { type: 'enabled' },
+        effort,
+        budgetTokens,
+      );
     }
 
-    return anthropicThinkingPatch({
-      type: 'enabled',
-      budgetTokens: ANTHROPIC_BUDGET_BY_EFFORT.medium,
-    });
+    return anthropicThinkingPatch(
+      { type: 'enabled' },
+      'medium',
+      budgetTokens,
+    );
   }
 
   if (apiKind === 'openai-v1') {
@@ -143,8 +177,13 @@ export function reasoningEffortToCompletionBody(
       return { body: { thinking: { type: 'disabled' } } };
     }
 
+    const body: Record<string, unknown> = {};
+    if (budgetTokens != null && budgetTokens > 0) {
+      body.thinking_budget_tokens = budgetTokens;
+    }
+
     if (isLevelEffort(effort)) {
-      const body: Record<string, unknown> = { reasoning_effort: effort };
+      body.reasoning_effort = effort;
       const allowed = modelCapabilities?.reasoningAllowedOptions;
       if (allowed?.some((option) => isLevelEffort(option))) {
         body.reasoning = { effort };
@@ -155,7 +194,8 @@ export function reasoningEffortToCompletionBody(
       return { body };
     }
 
-    return { body: { thinking: { type: enabledValue } } };
+    body.thinking = { type: enabledValue };
+    return { body };
   }
 
   if (effort === 'off') {
@@ -197,21 +237,28 @@ export function thinkingToCompletionBody(
   resolved: ThinkingResolvedMode,
   apiKind: ApiKind,
   modelCapabilities?: ModelCapabilities | null,
+  budgetTokens?: number | null,
 ): ThinkingCompletionPatch {
   const allowed = modelCapabilities?.reasoningAllowedOptions;
   if (allowed && allowed.length > 0) {
     const target = resolved;
     if (!allowed.includes(target)) {
+      // Level-only catalogs (off/low/medium/high) — map on/off via effort instead of dropping fields.
+      const hasLevels = allowed.some(
+        (option) => option === 'low' || option === 'medium' || option === 'high',
+      );
+      if (target === 'on' && hasLevels) {
+        return reasoningEffortToCompletionBody('medium', apiKind, modelCapabilities, budgetTokens);
+      }
+      if (target === 'off' && allowed.includes('off')) {
+        return reasoningEffortToCompletionBody('off', apiKind, modelCapabilities, budgetTokens);
+      }
       return { body: {} };
     }
   } else if (modelCapabilities?.reasoning === false && resolved === 'on') {
     return { body: {} };
   }
 
-  // OpenAI-compatible APIs reject `reasoning_effort: "none"`. DeepSeek V3/V4 needs an
-  // explicit thinking disable flag or it streams only to `reasoning_content`.
-  // Kimi/Moonshot reject `enable_thinking` — use nested `thinking.type` instead.
-  // MiniMax rejects `thinking.type: "enabled"` — only allows "adaptive" or "disabled".
   if (apiKind === 'anthropic-v1') {
     if (resolved === 'off') {
       return { body: {} };
@@ -221,10 +268,7 @@ export function thinkingToCompletionBody(
       return anthropicThinkingPatch({ type: 'adaptive' });
     }
 
-    return anthropicThinkingPatch({
-      type: 'enabled',
-      budgetTokens: ANTHROPIC_BUDGET_BY_EFFORT.medium,
-    });
+    return anthropicThinkingPatch({ type: 'enabled' }, 'medium', budgetTokens);
   }
 
   if (apiKind === 'openai-v1') {
@@ -232,7 +276,11 @@ export function thinkingToCompletionBody(
       return { body: { thinking: { type: 'disabled' } } };
     }
     const enabledValue = modelCapabilities?.reasoningThinkingEnabledValue ?? 'enabled';
-    return { body: { thinking: { type: enabledValue } } };
+    const body: Record<string, unknown> = { thinking: { type: enabledValue } };
+    if (budgetTokens != null && budgetTokens > 0) {
+      body.thinking_budget_tokens = budgetTokens;
+    }
+    return { body };
   }
 
   const effort = effortForResolved(resolved);

@@ -14,6 +14,9 @@ export type ResearchCategory =
   | 'market'
   | 'general';
 
+/** Where Deep Research gathers evidence. */
+export type ResearchScope = 'web' | 'codebase' | 'both';
+
 /** SSE progress events from `server/research/engine.js` `_emit`. */
 export type ResearchProgress =
   | { phase: 'probing'; model: string }
@@ -62,6 +65,7 @@ export interface ResearchStartRequest {
   maxRounds?: number;
   searchProvider?: string;
   category?: ResearchCategory;
+  scope?: ResearchScope;
   providerId?: string;
   model?: string;
   continueFrom?: string;

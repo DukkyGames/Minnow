@@ -1,0 +1,7 @@
+# Shows a "Sponsor" button on the GitHub repo.
+# Fill in the handles you actually enroll; delete the lines you don't use.
+github: [DukkyGames]        # requires enrolling at github.com/sponsors
+# open_collective: minnow   # https://opencollective.com
+# patreon: yourhandle
+# ko_fi: yourhandle
+# custom: ["https://your-donation-link"]

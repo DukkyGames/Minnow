@@ -78,6 +78,7 @@ const SCAFFOLD_DIRS = [
   'logs/sub-agents',
   'logs/servers',
   'logs/terminal',
+  'logs/crash',
   'servers',
   'screenshots',
   'reef/widgets',
@@ -132,6 +133,7 @@ const DEFAULT_META = {
   },
   thinking: {
     defaultMode: 'on',
+    thinkingBudgetTokens: null,
   },
   terminal: {
     open: false,
@@ -227,6 +229,19 @@ const DEFAULT_META = {
   },
   planning: {
     granularity: 'medium',
+    superPlan: {
+      reviewRounds: 2,
+      grillQuestionBudget: 20,
+      impeccable: 'auto',
+      researchScope: 'both',
+      researchMaxRounds: 0,
+      researchDepth: 'auto',
+      models: {
+        research: { providerId: '', modelId: '' },
+        reviewer: { providerId: '', modelId: '' },
+        planner: { providerId: '', modelId: '' },
+      },
+    },
   },
   chat: {
     maxToolTurns: 100,
@@ -335,11 +350,15 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'explain_symbol',
   'recall_chat_context',
   'recall_turn_full',
+  'read_diagnostics',
 ]);
 
 function defaultPermissionForTool(id, enabled) {
   if (id === 'search_settings' || id === 'get_settings') {
     return enabled ? 'full' : 'off';
+  }
+  if (id === 'read_diagnostics') {
+    return enabled ? 'ask' : 'off';
   }
   if (BRAIN_FULL_PERMISSION_TOOL_ID_SET.has(id)) {
     return enabled ? 'full' : 'off';

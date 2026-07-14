@@ -4,7 +4,7 @@ overview: "Full review of the Minnow Email app (server/email/*, src/ui/email/*, 
 todos:
   - id: phase0-correctness
     content: "Phase 0 — Fix verified defects: missing import, Cc dropped, References chain, variant-send LLM waste, uid-collision lookups, SSE leak"
-    status: pending
+    status: completed
   - id: phase1-engine
     content: "Phase 1 — Storage + sync engine: SQLite message store, IMAP connection reuse, incremental flag sync, IDLE push"
     status: pending

@@ -62,6 +62,19 @@ describe('sub-agent config', () => {
     assert.equal(merged.types.generalPurpose.maxToolTurns, 24);
   });
 
+  test('user thinkingBudgetTokens clamped on merge', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, {
+      types: {
+        explore: { thinkingBudgetTokens: 100 },
+      },
+    });
+    assert.equal(merged.types.explore.thinkingBudgetTokens, 100);
+    const zero = mergeSubAgentConfig(DEFAULTS as never, {
+      types: { explore: { thinkingBudgetTokens: 0 } },
+    });
+    assert.equal(zero.types.explore.thinkingBudgetTokens, 0);
+  });
+
   test('migrates legacy defaultMaxToolTurns', () => {
     const merged = mergeSubAgentConfig(DEFAULTS as never, {
       defaultMaxToolTurns: 20,
@@ -78,6 +91,22 @@ describe('sub-agent config', () => {
     assert.equal(r.maxConcurrent, 5);
     assert.equal(r.timeoutMs, 420000);
     assert.ok(r.allowedTools?.includes('web_search'));
+    assert.ok(r.deniedTools.includes('save_file'));
+    assert.ok(r.deniedTools.includes('spawn_sub_agent'));
+  });
+
+  test('plan-reviewer type is registered with read-only allow list', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, null);
+    const r = merged.types['plan-reviewer'];
+    assert.ok(r);
+    assert.equal(r.label, 'Plan reviewer');
+    assert.equal(r.maxConcurrent, 2);
+    assert.equal(r.summarySchema, 'minnow.sub-agent.v1');
+    assert.ok(r.allowedTools?.includes('read_file'));
+    assert.ok(r.allowedTools?.includes('grep'));
+    assert.ok(r.allowedTools?.includes('git_log'));
+    assert.ok(r.allowedTools?.includes('web_search'));
+    assert.ok(!r.allowedTools?.includes('execute_command'));
     assert.ok(r.deniedTools.includes('save_file'));
     assert.ok(r.deniedTools.includes('spawn_sub_agent'));
   });

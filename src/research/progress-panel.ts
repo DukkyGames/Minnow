@@ -54,6 +54,11 @@ function formatClock(ms: number): string {
 }
 
 function hostFromUrl(url: string): string {
+  if (!/^https?:\/\//i.test(url)) {
+    const pathPart = url.startsWith('file://') ? url.slice(7) : url;
+    const segments = pathPart.replace(/\\/g, '/').split('/');
+    return segments[segments.length - 1] || pathPart.slice(0, 40);
+  }
   try {
     return new URL(url).hostname.replace(/^www\./, '');
   } catch {
@@ -61,9 +66,25 @@ function hostFromUrl(url: string): string {
   }
 }
 
-/** Infer source badge type from URL host. */
+/** Infer source badge type from URL host or local file path. */
 export function inferSourceType(url: string): string {
-  const lower = url.toLowerCase();
+  const trimmed = url.trim();
+  if (!trimmed) {
+    return 'blog';
+  }
+
+  const pathPart = trimmed.startsWith('file://') ? trimmed.slice(7) : trimmed;
+  const looksLikeLocalPath =
+    !/^https?:\/\//i.test(trimmed) &&
+    (/[/\\]/.test(pathPart) ||
+      /\.(ts|tsx|js|jsx|mjs|cjs|py|rs|go|java|cs|cpp|h|md|json|yaml|yml|css|html|vue|svelte)$/i.test(
+        pathPart,
+      ));
+  if (looksLikeLocalPath) {
+    return 'code';
+  }
+
+  const lower = trimmed.toLowerCase();
   if (lower.includes('arxiv.org') || lower.includes('doi.org') || lower.includes('scholar.')) {
     return 'paper';
   }

@@ -40,7 +40,7 @@ export function autoResize(el: HTMLTextAreaElement): void {
   el.style.overflowY = 'auto';
 }
 
-/** Wire composer resize listeners (input handler lives on the textarea in index.html). */
+/** Wire composer resize listeners (keydown/input wired in shell-handlers.ts). */
 export function initComposerInput(el: HTMLTextAreaElement): void {
   autoResize(el);
   window.addEventListener('resize', () => autoResize(el));

@@ -7,6 +7,7 @@ import { describe, test } from 'node:test';
 import {
   blockPlanModeWrite,
   isPlanMarkdownPath,
+  isSuperPlanReferenceArtifactPath,
   isUnderDocumentationPlans,
 } from '../../src/chat/modes/plan-write-guard.ts';
 
@@ -84,5 +85,70 @@ describe('blockPlanModeWrite', () => {
       content: 'x',
     });
     assert.ok(msg?.includes('Plan mode'));
+  });
+});
+
+describe('super-plan references write guard', () => {
+  test('isSuperPlanReferenceArtifactPath accepts research-artifact and build-spec', () => {
+    assert.equal(
+      isSuperPlanReferenceArtifactPath(
+        'documentation/plans/references/my-plan/research-artifact.md',
+      ),
+      true,
+    );
+    assert.equal(
+      isSuperPlanReferenceArtifactPath(
+        'documentation/plans/references/my-plan/build-spec.md',
+      ),
+      true,
+    );
+    assert.equal(
+      isSuperPlanReferenceArtifactPath(
+        'documentation/plans/references/my-plan/notes.md',
+      ),
+      false,
+    );
+  });
+
+  test('allows save_file for slug-based super-plan reference artifacts', () => {
+    assert.equal(
+      blockPlanModeWrite('super-plan', 'save_file', {
+        path: 'documentation/plans/references/feature-x-spec.md',
+        content: '# Build spec',
+      }),
+      null,
+    );
+    assert.equal(
+      blockPlanModeWrite('super-plan', 'save_file', {
+        path: 'documentation/plans/references/feature-x-research.md',
+        content: '# Research',
+      }),
+      null,
+    );
+  });
+
+  test('allows save_file for super-plan reference artifacts', () => {
+    assert.equal(
+      blockPlanModeWrite('super-plan', 'save_file', {
+        path: 'documentation/plans/references/feature-x/research-artifact.md',
+        content: '# Research',
+      }),
+      null,
+    );
+    assert.equal(
+      blockPlanModeWrite('super-plan', 'save_file', {
+        path: 'documentation/plans/references/feature-x/build-spec.md',
+        content: '# Build spec',
+      }),
+      null,
+    );
+  });
+
+  test('blocks save_file outside plans in super-plan mode', () => {
+    const msg = blockPlanModeWrite('super-plan', 'save_file', {
+      path: 'src/foo.ts',
+      content: 'x',
+    });
+    assert.ok(msg?.includes('Super Plan'));
   });
 });

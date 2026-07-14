@@ -193,11 +193,18 @@ export function readEffectiveThemeTokens(): Record<CoreThemeTokenKey, string> {
 
 /** Export custom theme JSON for sharing. */
 export function exportCustomThemeJson(): string {
+  const enabled = isCustomThemeEnabled();
+  const stored = getCustomThemeTokens();
+  // When custom colors are on, include the full effective palette (not only persisted partials).
+  const tokens =
+    enabled && typeof getComputedStyle === 'function'
+      ? { ...readEffectiveThemeTokens(), ...stored }
+      : stored;
   return JSON.stringify(
     {
       version: 1,
-      enabled: isCustomThemeEnabled(),
-      tokens: getCustomThemeTokens(),
+      enabled,
+      tokens,
     },
     null,
     2,

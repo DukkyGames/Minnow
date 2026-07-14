@@ -20,7 +20,7 @@ import {
 } from '../research/library-window';
 import { ResearchProgressPanel } from '../research/progress-panel';
 import { renderResearchResultFromMarkdown } from '../research/report-view';
-import type { ResearchStartRequest } from '../research/types';
+import type { ResearchScope, ResearchStartRequest } from '../research/types';
 import { getActiveChat } from '../state/sessions';
 import { setStatus } from '../ui/status';
 import type { DesktopResearchActivateOptions } from './desktop-state';
@@ -85,9 +85,13 @@ async function resolveResearchBinding(): Promise<{ providerId: string; model: st
 }
 
 function readDefaultStartOptions(): Omit<ResearchStartRequest, 'query' | 'continueFrom'> {
+  const scope = (
+    (document.getElementById('desktopResearchScope') as HTMLSelectElement | null)?.value ?? 'web'
+  ) as ResearchScope;
   return {
     maxRounds: 0,
     category: '',
+    scope,
   };
 }
 

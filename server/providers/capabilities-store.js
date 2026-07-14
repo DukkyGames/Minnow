@@ -54,12 +54,27 @@ export async function writeCapabilities(id, file) {
     structuredOutput: normalized.structuredOutput === true,
     structuredOutputWithTools: normalized.structuredOutputWithTools === true,
     structuredOutputStreaming: normalized.structuredOutputStreaming === true,
+    supportsThinkingBudget: normalized.supportsThinkingBudget === true,
     probeError: normalized.probeError ?? null,
     models: normalized.models || {},
   };
   await fs.writeFile(tmp, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
   await fs.rename(tmp, target);
   return payload;
+}
+
+/**
+ * Persist llama.cpp per-request thinking budget support on the provider capabilities file.
+ * @param {string} id
+ * @param {boolean} supportsThinkingBudget
+ */
+export async function setProviderThinkingBudgetSupport(id, supportsThinkingBudget) {
+  const existing = await readCapabilities(id);
+  return writeCapabilities(id, {
+    ...existing,
+    supportsThinkingBudget: supportsThinkingBudget === true,
+    probedAt: new Date().toISOString(),
+  });
 }
 
 /**

@@ -842,7 +842,9 @@ export type UpdateTaskPatch = Partial<
     | 'apiPort'
     | 'quarantine'
     | 'selfHealRound'
+    | 'lifecycleRun'
     | 'lastHealCategory'
+    | 'lifecycleRun'
     | 'buildOutcome'
   >
 >;

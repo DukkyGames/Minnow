@@ -13,6 +13,7 @@ import {
 import { getBuiltinLspIds, loadMergedLspConfig } from './config-loader.js';
 import { getBundledTsserverPath, resolveLspSpawnArgv } from './resolve-command.js';
 import { buildLspProcessEnv } from './paths.js';
+import { logChildProcessDiagnostic } from '../diagnostics/process-handlers.js';
 import {
   matchServersForPath,
   serverSupportsWorkspaceSymbols,
@@ -428,8 +429,19 @@ function bindLspProcessLifecycle(serverId, state) {
       console.error(
         `[lsp] ${serverId} exited with code ${code}${detail ? `: ${detail}` : ''}`,
       );
+      void logChildProcessDiagnostic({
+        kind: 'lsp-exit',
+        message: `LSP server ${serverId} exited with code ${code}`,
+        stack: detail || undefined,
+        extra: { serverId, exitCode: code },
+      });
     } else if (signal) {
       console.error(`[lsp] ${serverId} exited on signal ${signal}`);
+      void logChildProcessDiagnostic({
+        kind: 'lsp-exit',
+        message: `LSP server ${serverId} exited on signal ${signal}`,
+        extra: { serverId, signal },
+      });
     }
     discardLspState(serverId, state);
   });

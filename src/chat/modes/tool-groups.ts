@@ -95,6 +95,7 @@ export const TOOL_GROUP_IDS = {
   ],
   recall: ['recall_chat_context', 'recall_turn_full'],
   settings: ['search_settings', 'get_settings', 'update_settings'],
+  diagnostics: ['read_diagnostics'],
   email: [
     'list_mail',
     'draft_reply',
@@ -183,6 +184,21 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'recall',
     'impeccable',
   ],
+  'super-plan': [
+    'util-basic',
+    'web',
+    'files-read',
+    'git-read',
+    'code-intel',
+    'lsp',
+    'sub-agents',
+    'mode-mgmt',
+    'ask',
+    'browser',
+    'brain',
+    'recall',
+    'impeccable',
+  ],
   orchestrate: [
     'util-basic',
     'files-read',
@@ -225,6 +241,7 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'recall',
     'impeccable',
     'todo',
+    'diagnostics',
   ],
   /** First-run wizard tour guide — safe demo set: no shell, no writes, no email/calendar. */
   onboarding: ['util-basic', 'web', 'files-read', 'brain', 'ask'],
@@ -241,12 +258,22 @@ export const MODE_TOOL_DENY_OVERRIDES: Partial<Record<ModeId, readonly string[]>
     'delete_path',
     'update_settings',
   ],
+  'super-plan': [
+    'append_file',
+    'insert_at_line',
+    'replace_text_in_file',
+    'move_file',
+    'copy_file',
+    'delete_path',
+    'update_settings',
+  ],
   orchestrate: ['spawn_sub_agent', 'cancel_sub_agent'],
 };
 
 /** Per-mode explicit allow overrides applied after group expansion. */
 export const MODE_TOOL_ALLOW_OVERRIDES: Partial<Record<ModeId, readonly string[]>> = {
   plan: [...PLAN_FILES_WRITE_ALLOW],
+  'super-plan': [...PLAN_FILES_WRITE_ALLOW],
 };
 
 /** Flatten group ids to a deduplicated tool id list. */

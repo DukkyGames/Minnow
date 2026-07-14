@@ -25,8 +25,13 @@ import { sessionState } from '../state/sessions';
 import { isLocalServerAvailable } from '../tools/config';
 import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
 import type { Chat, ChatGroup } from '../types';
-import type { GitGraphHandle } from './git-graph';
+import type { CommitVisual, GitGraphHandle } from './git-graph';
+import {
+  showGitGraphCommitContextMenu,
+  type GitGraphContextMenuCtx,
+} from './git-graph-context-menu';
 import { createChat, switchChat } from './sidebar';
+import { showToast } from './toast';
 import { stripMainColumnOverlayClasses } from './main-column-overlay';
 import {
   isMissingGitRepositoryError,
@@ -54,6 +59,7 @@ let returnChatId: string | null = null;
 let runsTimer: number | undefined;
 let slowTimer: number | undefined;
 let gitGraphHandle: GitGraphHandle | null = null;
+let overviewCurrentBranchName = '';
 let refreshGen = 0;
 
 /** True when the overview overlay is mounted in #chatArea. */
@@ -593,6 +599,24 @@ function refreshSessionsPanel(): void {
   host.appendChild(list);
 }
 
+/** Context menu callbacks for the overview git graph (same menu as Source Control). */
+function buildOverviewGraphContextMenuCtx(): GitGraphContextMenuCtx {
+  const cwd = getWorkspacePath();
+  return {
+    cwd,
+    onOpenChanges: (sha) => {
+      void (async () => {
+        await enterCodeChat();
+        const { openGitCommitDiffPanel } = await import('./git-commit-diff-panel');
+        await openGitCommitDiffPanel({ sha, cwd });
+      })();
+    },
+    onRefresh: () => refreshGitPanel(),
+    getCurrentBranch: () => overviewCurrentBranchName,
+    onConflict: (message) => showToast(message, 'error'),
+  };
+}
+
 async function refreshGitPanel(): Promise<void> {
   const host = document.getElementById('codeOverviewGitBody');
   if (!host) return;
@@ -611,6 +635,8 @@ async function refreshGitPanel(): Promise<void> {
     renderError(host, status.error ?? 'Could not load git status.', () => void refreshGitPanel());
     return;
   }
+
+  overviewCurrentBranchName = status.branch ?? '';
 
   const summaryHost = document.createElement('div');
   summaryHost.className = 'code-overview__git-summary';
@@ -651,12 +677,16 @@ async function refreshGitPanel(): Promise<void> {
   gitGraphHandle?.destroy();
   const { renderGitGraph } = await import('./git-graph');
   gitGraphHandle = renderGitGraph(graphMount, {
+    cwd: getWorkspacePath(),
     onSelectCommit: () => {
       void (async () => {
         await enterCodeChat();
         const { openGitSidePanel } = await import('./git-panel');
         await openGitSidePanel();
       })();
+    },
+    onContextMenu: (visual: CommitVisual, event: MouseEvent) => {
+      void showGitGraphCommitContextMenu(visual, event, buildOverviewGraphContextMenuCtx());
     },
   });
   await gitGraphHandle.refresh();

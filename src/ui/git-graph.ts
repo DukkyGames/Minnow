@@ -1,16 +1,34 @@
 /**
- * Commit history list for the git source control panel (MIN-198 P2).
+ * Commit history graph for the git source control panel (MIN-198 P2).
  *
- * Each row shows a branch-colored dot (accent for main) and indents
- * commits that are not on the mainline.
+ * Two view modes, toggled from a header row and persisted in localStorage:
+ * - Expanded: commits laid out on vertical lanes (columns), one per concurrent
+ *   branch. Each row renders an SVG with continuous rails for every active
+ *   lane plus rounded curve connectors at fork/merge points.
+ * - Collapsed (default): only mainline commits as rows; branch work is
+ *   summarized as small sub-dots on the main commit it forks from.
  */
 
 import { gitLog, type GitCommitEntry } from '../state/git-api';
 
 const LOG_COUNT = 200;
 const BRANCH_COLORS = 7;
-/** Extra left padding for commits on a side branch. */
-const BRANCH_INDENT_PX = 14;
+/** Horizontal distance between lane centers. */
+const LANE_STEP = 14;
+/** The marker column stops growing past this many lanes; lanes squeeze closer instead. */
+const MAX_FULL_LANES = 8;
+/** Dot center distance from the row top; must match --git-dot-center-y in git-panel.css. */
+const DOT_CENTER_Y = 13;
+/** Vertical run a merge curve takes below the dot before straightening out. */
+const CURVE_DROP = 14;
+/** Collapsed view: spacing between branch sub-dot centers. */
+const SUBDOT_STEP = 7;
+/** Collapsed view: sub-dots shown per row before the +N overflow. */
+const MAX_SUBDOTS = 3;
+
+const COLLAPSED_PREF_KEY = 'minnow.git-graph.collapsed';
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
 
 export interface GitGraphOptions {
   cwd?: string;
@@ -28,25 +46,56 @@ export interface GitGraphHandle {
   destroy: () => void;
 }
 
-/** Vertical line segment for main or branch connectors. */
-export type LineSegment = 'none' | 'up' | 'down' | 'both' | 'through';
+/** Vertical rail through a row: full height, top→dot, or dot→bottom. */
+export interface GraphRail {
+  lane: number;
+  colorIndex: number;
+  kind: 'through' | 'up' | 'down';
+}
+
+/**
+ * Rounded connector between lanes.
+ * `in`: a line arriving from the row above at `fromLane` bends into the dot at `toLane`.
+ * `out`: an edge leaves the dot at `fromLane` and straightens into `toLane` below.
+ */
+export interface GraphCurve {
+  kind: 'in' | 'out';
+  fromLane: number;
+  toLane: number;
+  colorIndex: number;
+  /** `out` only: the target lane already has a rail this row, so no tail is drawn. */
+  joins?: boolean;
+}
 
 /** Visual metadata attached to each commit row. */
 export interface CommitVisual {
   commit: GitCommitEntry;
   branchKey: string;
   isMain: boolean;
-  indentPx: number;
   colorIndex: number;
   isHead: boolean;
-  /** Vertical mainline connector behind main dots. */
-  mainLine: LineSegment;
-  /** Vertical branch connector behind branch dots (same branch color + indent). */
-  branchLine?: {
-    segment: LineSegment;
-    colorIndex: number;
-    indentPx: number;
-  };
+  /** Lane (column) the commit dot sits on. */
+  lane: number;
+  /** Vertical rails behind this row. */
+  rails: GraphRail[];
+  /** Fork/merge connectors on this row. */
+  curves: GraphCurve[];
+}
+
+/** Collapsed view: branch commits summarized on their mainline fork base. */
+export interface BranchCluster {
+  branchKey: string;
+  colorIndex: number;
+  count: number;
+  /** True when HEAD is one of the summarized commits. */
+  hasHead: boolean;
+}
+
+export interface CollapsedRow {
+  visual: CommitVisual;
+  clusters: BranchCluster[];
+  /** Commits in clusters beyond MAX_SUBDOTS, shown as +N. */
+  extraCount: number;
 }
 
 function commitIsHead(refs: string[]): boolean {
@@ -134,8 +183,8 @@ export function buildMainlineSet(commits: GitCommitEntry[], trunkBranch: string)
 }
 
 /**
- * Assign each commit a branch key, dot color, and indent.
- * Mainline commits use the accent color with no indent; side branches are indented.
+ * Assign each commit a branch key and dot color.
+ * Mainline commits use the accent color; side branches cycle the lane palette.
  */
 export function assignCommitVisuals(
   commits: GitCommitEntry[],
@@ -192,113 +241,271 @@ export function assignCommitVisuals(
       commit,
       branchKey,
       isMain,
-      indentPx: isMain ? 0 : BRANCH_INDENT_PX,
       colorIndex: isMain ? 0 : (branchColor.get(branchKey) ?? 1),
       isHead: commitIsHead(commit.refs),
-      mainLine: 'none' as const,
+      lane: 0,
+      rails: [],
+      curves: [],
     };
   });
 }
 
-type LineSegmentMut = LineSegment;
+/** Squash-merge PR subjects: "PR title (#123)". */
+const SQUASH_SUFFIX = /\s*\(#\d+\)$/;
 
-function mergeLineSegment(current: LineSegmentMut, add: 'up' | 'down'): LineSegmentMut {
-  if (current === 'through') return 'through';
-  if (add === 'up') {
-    if (current === 'down') return 'both';
-    return current === 'none' ? 'up' : current;
+/**
+ * Heuristic links from squash-merge commits to the branch they merged.
+ *
+ * Git records no edge between a squash commit and its PR branch. But with
+ * GitHub squash merges the commit subject is the PR title, and the branch
+ * contains a commit titled exactly that (PR titles default to the branch's
+ * first commit subject). Returns squash hash → newest commit of the matched
+ * branch displayed below the squash, so the pair renders like a merge.
+ */
+export function computeSquashLinks(visuals: CommitVisual[]): Map<string, string> {
+  const links = new Map<string, string>();
+  const linkedBranches = new Set<string>();
+
+  const branchBySubject = new Map<string, CommitVisual[]>();
+  for (const visual of visuals) {
+    if (visual.isMain) continue;
+    const subject = visual.commit.subject.trim().toLowerCase();
+    const list = branchBySubject.get(subject) ?? [];
+    list.push(visual);
+    branchBySubject.set(subject, list);
   }
-  if (current === 'up') return 'both';
-  return current === 'none' ? 'down' : current;
+
+  visuals.forEach((visual, index) => {
+    if (!visual.isMain) return;
+    const subject = visual.commit.subject.trim();
+    if (!SQUASH_SUFFIX.test(subject)) return;
+
+    const title = subject.replace(SQUASH_SUFFIX, '').trim().toLowerCase();
+    for (const candidate of branchBySubject.get(title) ?? []) {
+      if (linkedBranches.has(candidate.branchKey)) continue;
+      // Link the branch's newest commit below the squash (its state at merge).
+      const target = visuals.find(
+        (v, i) => i > index && !v.isMain && v.branchKey === candidate.branchKey,
+      );
+      if (!target) continue;
+      links.set(visual.commit.hash, target.commit.hash);
+      linkedBranches.add(candidate.branchKey);
+      break;
+    }
+  });
+
+  return links;
 }
 
-/** Build line segments for consecutive member rows in display order. */
-export function computeLineSegments(memberIndices: number[], rowCount: number): LineSegment[] {
-  const segments: LineSegment[] = Array.from({ length: rowCount }, () => 'none');
+interface ActiveLane {
+  /** Parent hash this lane's edge is heading toward. */
+  expecting: string;
+  colorIndex: number;
+}
 
-  for (let k = 0; k < memberIndices.length - 1; k++) {
-    const start = memberIndices[k];
-    const end = memberIndices[k + 1];
+/**
+ * Assign lanes and per-row rails/curves by walking commits in display order.
+ *
+ * Each active lane tracks the parent hash its edge is heading toward. A commit
+ * lands on the leftmost lane expecting it (other expectant lanes curve into
+ * its dot), or opens a new lane when none does. First-parent edges continue
+ * down the same lane in the commit's color; extra merge parents swing out into
+ * their own lane, reusing one that already expects the same parent.
+ *
+ * Squash-merge simplification: when a branch bottoms out on the mainline (its
+ * oldest shown commit sits directly on a mainline commit), the edge bends into
+ * the live mainline lane at that row instead of running a rail down to the
+ * fork commit — which is often dozens of rows away and drags a lane through
+ * the whole graph.
+ *
+ * `squashLinks` (from computeSquashLinks) are drawn as phantom merge edges so
+ * squashed PR branches visually close into the commit that merged them.
+ */
+export function computeGraphLayout(
+  visuals: CommitVisual[],
+  squashLinks: Map<string, string> = new Map(),
+): CommitVisual[] {
+  const lanes: (ActiveLane | null)[] = [];
+  const colorByHash = new Map(visuals.map((v) => [v.commit.hash, v.colorIndex]));
+  const isMainByHash = new Map(visuals.map((v) => [v.commit.hash, v.isMain]));
 
-    segments[start] = mergeLineSegment(segments[start], 'down');
+  const takeFreeLane = (): number => {
+    const free = lanes.findIndex((l) => l === null);
+    if (free >= 0) return free;
+    lanes.push(null);
+    return lanes.length - 1;
+  };
 
-    for (let i = start + 1; i < end; i++) {
-      segments[i] = 'through';
+  return visuals.map((visual) => {
+    const { commit } = visual;
+    const rails: GraphRail[] = [];
+    const curves: GraphCurve[] = [];
+
+    const matches: number[] = [];
+    lanes.forEach((laneState, index) => {
+      if (laneState?.expecting === commit.hash) matches.push(index);
+    });
+
+    let lane: number;
+    if (matches.length > 0) {
+      lane = matches[0];
+      rails.push({ lane, colorIndex: lanes[lane]!.colorIndex, kind: 'up' });
+      for (const other of matches.slice(1)) {
+        curves.push({
+          kind: 'in',
+          fromLane: other,
+          toLane: lane,
+          colorIndex: lanes[other]!.colorIndex,
+        });
+        lanes[other] = null;
+      }
+    } else {
+      lane = takeFreeLane();
     }
 
-    segments[end] = mergeLineSegment(segments[end], 'up');
-  }
-
-  return segments;
-}
-
-function applyMainLines(visuals: CommitVisual[], segments: LineSegment[]): CommitVisual[] {
-  return visuals.map((visual, index) => ({
-    ...visual,
-    mainLine: segments[index],
-  }));
-}
-
-/** Mark rows on the vertical line between consecutive main commits. */
-export function annotateMainTrunkSegments(visuals: CommitVisual[]): CommitVisual[] {
-  const mainIndices = visuals
-    .map((visual, index) => (visual.isMain ? index : -1))
-    .filter((index) => index >= 0);
-
-  return applyMainLines(visuals, computeLineSegments(mainIndices, visuals.length));
-}
-
-/** Whether this branch key can share a connector with other commits. */
-export function isConnectableBranchKey(branchKey: string, trunkBranch: string): boolean {
-  if (branchKey === trunkBranch) return false;
-  if (branchKey.startsWith('detached:')) return false;
-  return true;
-}
-
-/** Add branch-colored connectors for each named branch (skips detached one-offs). */
-export function annotateBranchLineSegments(visuals: CommitVisual[]): CommitVisual[] {
-  const trunkBranch = visuals.find((visual) => visual.isMain)?.branchKey ?? 'main';
-  const branchKeys = [
-    ...new Set(
-      visuals
-        .map((visual) => visual.branchKey)
-        .filter((key) => isConnectableBranchKey(key, trunkBranch)),
-    ),
-  ];
-
-  let result = visuals.map((visual) => ({ ...visual, branchLine: undefined as CommitVisual['branchLine'] }));
-
-  for (const branchKey of branchKeys) {
-    const sample = result.find((visual) => visual.branchKey === branchKey);
-    if (!sample) continue;
-
-    const memberIndices = result
-      .map((visual, index) => (visual.branchKey === branchKey ? index : -1))
-      .filter((index) => index >= 0);
-
-    if (memberIndices.length < 2) continue;
-
-    const segments = computeLineSegments(memberIndices, result.length);
-    result = result.map((visual, index) => {
-      const segment = segments[index];
-      if (segment === 'none') return visual;
-      return {
-        ...visual,
-        branchLine: {
-          segment,
-          colorIndex: sample.colorIndex,
-          indentPx: sample.indentPx,
-        },
-      };
+    lanes.forEach((laneState, index) => {
+      if (laneState && index !== lane) {
+        rails.push({ lane: index, colorIndex: laneState.colorIndex, kind: 'through' });
+      }
     });
-  }
 
-  return result;
+    const [firstParent, ...mergeParents] = commit.parents;
+    if (firstParent) {
+      const mainlineLane =
+        !visual.isMain && isMainByHash.get(firstParent) === true
+          ? lanes.findIndex((l) => l !== null && isMainByHash.get(l.expecting) === true)
+          : -1;
+      if (mainlineLane >= 0) {
+        // Branch bottoms out on the mainline: bend into main's lane here.
+        curves.push({
+          kind: 'out',
+          fromLane: lane,
+          toLane: mainlineLane,
+          colorIndex: visual.colorIndex,
+          joins: true,
+        });
+        lanes[lane] = null;
+      } else {
+        lanes[lane] = { expecting: firstParent, colorIndex: visual.colorIndex };
+        rails.push({ lane, colorIndex: visual.colorIndex, kind: 'down' });
+      }
+    } else {
+      lanes[lane] = null;
+    }
+
+    const phantomParent = squashLinks.get(commit.hash);
+    const outParents =
+      phantomParent && !commit.parents.includes(phantomParent)
+        ? [...mergeParents, phantomParent]
+        : mergeParents;
+
+    for (const parent of outParents) {
+      const existing = lanes.findIndex((l) => l?.expecting === parent);
+      if (existing >= 0) {
+        curves.push({
+          kind: 'out',
+          fromLane: lane,
+          toLane: existing,
+          colorIndex: lanes[existing]!.colorIndex,
+          joins: true,
+        });
+        continue;
+      }
+      const target = takeFreeLane();
+      const colorIndex = colorByHash.get(parent) ?? visual.colorIndex;
+      lanes[target] = { expecting: parent, colorIndex };
+      curves.push({ kind: 'out', fromLane: lane, toLane: target, colorIndex });
+    }
+
+    return { ...visual, lane, rails, curves };
+  });
 }
 
-/** Annotate main and branch vertical connectors for every row. */
-export function annotateCommitLines(visuals: CommitVisual[]): CommitVisual[] {
-  return annotateBranchLineSegments(annotateMainTrunkSegments(visuals));
+/** Widest lane index any row touches (dot, rail, or curve). */
+export function maxLaneIndex(visuals: CommitVisual[]): number {
+  let max = 0;
+  for (const visual of visuals) {
+    max = Math.max(max, visual.lane);
+    for (const rail of visual.rails) max = Math.max(max, rail.lane);
+    for (const curve of visual.curves) max = Math.max(max, curve.fromLane, curve.toLane);
+  }
+  return max;
+}
+
+/**
+ * Collapsed view model: mainline rows with branch commits clustered onto the
+ * mainline commit that squash-merged them (via squashLinks), falling back to
+ * the mainline commit their first-parent chain forks from. Branch commits
+ * whose base falls outside the fetched log are omitted from clusters.
+ */
+export function computeCollapsedRows(
+  visuals: CommitVisual[],
+  squashLinks: Map<string, string> = new Map(),
+): CollapsedRow[] {
+  const byHash = new Map(visuals.map((v) => [v.commit.hash, v]));
+  const clustersByBase = new Map<string, Map<string, BranchCluster>>();
+
+  const squashBaseByBranch = new Map<string, string>();
+  for (const [squashHash, branchHash] of squashLinks) {
+    const branchVisual = byHash.get(branchHash);
+    if (branchVisual) squashBaseByBranch.set(branchVisual.branchKey, squashHash);
+  }
+
+  for (const visual of visuals) {
+    if (visual.isMain) continue;
+
+    let base: string | null = squashBaseByBranch.get(visual.branchKey) ?? null;
+
+    let cursor = base ? null : visual.commit.parents[0];
+    const seen = new Set<string>();
+    while (cursor && !seen.has(cursor)) {
+      seen.add(cursor);
+      const node = byHash.get(cursor);
+      if (!node) break;
+      if (node.isMain) {
+        base = cursor;
+        break;
+      }
+      cursor = node.commit.parents[0];
+    }
+    if (!base) continue;
+
+    let clusters = clustersByBase.get(base);
+    if (!clusters) {
+      clusters = new Map();
+      clustersByBase.set(base, clusters);
+    }
+    const cluster = clusters.get(visual.branchKey) ?? {
+      branchKey: visual.branchKey,
+      colorIndex: visual.colorIndex,
+      count: 0,
+      hasHead: false,
+    };
+    cluster.count += 1;
+    cluster.hasHead = cluster.hasHead || visual.isHead;
+    clusters.set(visual.branchKey, cluster);
+  }
+
+  return visuals
+    .filter((visual) => visual.isMain)
+    .map((visual) => {
+      const all = [...(clustersByBase.get(visual.commit.hash)?.values() ?? [])];
+      const clusters = all.slice(0, MAX_SUBDOTS);
+      const extraCount = all
+        .slice(MAX_SUBDOTS)
+        .reduce((total, cluster) => total + cluster.count, 0);
+      return { visual, clusters, extraCount };
+    });
+}
+
+/** Lane center spacing; shrinks when the graph is wider than MAX_FULL_LANES. */
+function laneStep(laneCount: number): number {
+  if (laneCount <= MAX_FULL_LANES) return LANE_STEP;
+  return (MAX_FULL_LANES * LANE_STEP) / laneCount;
+}
+
+function laneX(lane: number, step: number): number {
+  return lane * step + step / 2;
 }
 
 function branchColorVar(colorIndex: number): string {
@@ -306,49 +513,131 @@ function branchColorVar(colorIndex: number): string {
   return `var(--git-lane-${((colorIndex - 1) % BRANCH_COLORS) + 1})`;
 }
 
-function renderRefChip(ref: string): HTMLElement {
+function renderRefChip(ref: string, colorIndex: number): HTMLElement {
   const chip = document.createElement('span');
   chip.className = 'git-graph__ref-chip';
   chip.textContent = ref.replace(/^HEAD -> /, '');
   chip.title = ref;
+  chip.style.setProperty('--branch-color', branchColorVar(colorIndex));
   return chip;
 }
 
-function appendConnectorLine(
-  row: HTMLElement,
-  kind: 'main' | 'branch',
-  segment: LineSegment,
-  colorIndex?: number,
-  indentPx?: number,
-): void {
-  const line = document.createElement('span');
-  line.className =
-    kind === 'main'
-      ? `git-graph__trunk-line git-graph__trunk-line--${segment}`
-      : `git-graph__branch-line git-graph__branch-line--${segment}`;
-  line.setAttribute('aria-hidden', 'true');
-  if (kind === 'branch' && colorIndex !== undefined) {
-    line.style.setProperty('--branch-color', branchColorVar(colorIndex));
-    line.style.setProperty('--git-branch-line-indent', `${indentPx ?? 0}px`);
-  }
-  row.appendChild(line);
+function svgLine(x: number, y1: string, y2: string, colorIndex: number): SVGLineElement {
+  const line = document.createElementNS(SVG_NS, 'line');
+  line.setAttribute('x1', String(x));
+  line.setAttribute('x2', String(x));
+  line.setAttribute('y1', y1);
+  line.setAttribute('y2', y2);
+  line.style.stroke = branchColorVar(colorIndex);
+  return line;
 }
 
-function renderRow(
-  visual: CommitVisual,
-  onSelect?: (sha: string) => void,
-  selectedSha?: string | null,
-  onContextMenu?: (visual: CommitVisual, event: MouseEvent) => void,
-): HTMLElement {
+function appendRail(svg: SVGSVGElement, rail: GraphRail, step: number): void {
+  const x = laneX(rail.lane, step);
+  const y1 = rail.kind === 'down' ? String(DOT_CENTER_Y) : '0';
+  const y2 = rail.kind === 'up' ? String(DOT_CENTER_Y) : '100%';
+  svg.appendChild(svgLine(x, y1, y2, rail.colorIndex));
+}
+
+function appendCurve(svg: SVGSVGElement, curve: GraphCurve, step: number): void {
+  const from = laneX(curve.fromLane, step);
+  const to = laneX(curve.toLane, step);
+  const path = document.createElementNS(SVG_NS, 'path');
+
+  if (curve.kind === 'in') {
+    // Arrive from the row above, bend horizontally into the dot.
+    path.setAttribute('d', `M ${from} 0 Q ${from} ${DOT_CENTER_Y} ${to} ${DOT_CENTER_Y}`);
+  } else {
+    // Leave the dot sideways and straighten downward. When the target lane has
+    // its own rail this row the curve just merges into it; otherwise run a
+    // tail down to the row bottom.
+    path.setAttribute(
+      'd',
+      `M ${from} ${DOT_CENTER_Y} Q ${to} ${DOT_CENTER_Y} ${to} ${DOT_CENTER_Y + CURVE_DROP}`,
+    );
+    if (!curve.joins) {
+      svg.appendChild(svgLine(to, String(DOT_CENTER_Y + CURVE_DROP), '100%', curve.colorIndex));
+    }
+  }
+
+  path.style.stroke = branchColorVar(curve.colorIndex);
+  svg.appendChild(path);
+}
+
+function renderRails(visual: CommitVisual, step: number): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', 'git-graph__rails');
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', '100%');
+  svg.setAttribute('aria-hidden', 'true');
+
+  // Curves render after rails so junctions sit on top of passing lines.
+  for (const rail of visual.rails) appendRail(svg, rail, step);
+  for (const curve of visual.curves) appendCurve(svg, curve, step);
+  return svg;
+}
+
+interface RowContext {
+  onSelect?: (sha: string) => void;
+  selectedSha?: string | null;
+  onContextMenu?: (visual: CommitVisual, event: MouseEvent) => void;
+  /** Collapsed view: branch clusters shown as sub-dots after the main dot. */
+  clusters?: BranchCluster[];
+  extraCount?: number;
+  /** Collapsed view: invoked when a sub-dot is clicked. */
+  onExpand?: () => void;
+}
+
+function appendSubdots(marker: HTMLElement, ctx: RowContext): void {
+  const clusters = ctx.clusters ?? [];
+  const baseX = LANE_STEP + 4;
+
+  clusters.forEach((cluster, index) => {
+    const sub = document.createElement('span');
+    sub.className = 'git-graph__subdot';
+    if (cluster.hasHead) sub.classList.add('git-graph__subdot--head');
+    sub.style.setProperty('--branch-color', branchColorVar(cluster.colorIndex));
+    sub.style.setProperty('--git-dot-x', `${baseX + index * SUBDOT_STEP + 2.5}px`);
+    sub.title = `${cluster.branchKey} — ${cluster.count} commit${cluster.count === 1 ? '' : 's'} (click to expand)`;
+    if (ctx.onExpand) {
+      sub.addEventListener('click', (e) => {
+        e.stopPropagation();
+        ctx.onExpand?.();
+      });
+    }
+    marker.appendChild(sub);
+  });
+
+  if (ctx.extraCount) {
+    const more = document.createElement('span');
+    more.className = 'git-graph__subdot-more';
+    more.textContent = `+${ctx.extraCount}`;
+    more.style.setProperty('--git-dot-x', `${baseX + clusters.length * SUBDOT_STEP}px`);
+    more.title = `${ctx.extraCount} more branch commit${ctx.extraCount === 1 ? '' : 's'} (click to expand)`;
+    if (ctx.onExpand) {
+      more.addEventListener('click', (e) => {
+        e.stopPropagation();
+        ctx.onExpand?.();
+      });
+    }
+    marker.appendChild(more);
+  }
+}
+
+function renderRow(visual: CommitVisual, step: number, ctx: RowContext): HTMLElement {
   const row = document.createElement('div');
   row.className = 'git-graph__row';
   if (!visual.isMain) row.classList.add('git-graph__row--branch');
-  if (selectedSha && (visual.commit.hash === selectedSha || visual.commit.hash.startsWith(selectedSha))) {
+  if (
+    ctx.selectedSha &&
+    (visual.commit.hash === ctx.selectedSha || visual.commit.hash.startsWith(ctx.selectedSha))
+  ) {
     row.classList.add('git-graph__row--selected');
   }
   row.dataset.sha = visual.commit.hash;
   row.title = `${visual.commit.subject} (${visual.branchKey})`;
 
+  const onSelect = ctx.onSelect;
   if (onSelect) {
     row.setAttribute('role', 'button');
     row.tabIndex = 0;
@@ -361,10 +650,10 @@ function renderRow(
     });
   }
 
-  if (onContextMenu) {
+  if (ctx.onContextMenu) {
     row.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      onContextMenu(visual, e);
+      ctx.onContextMenu?.(visual, e);
     });
   }
 
@@ -375,6 +664,7 @@ function renderRow(
   else dot.classList.add('git-graph__dot--branch');
   if (visual.isHead) dot.classList.add('git-graph__dot--head');
   dot.style.setProperty('--branch-color', branchColorVar(visual.colorIndex));
+  dot.style.setProperty('--git-dot-x', `${laneX(visual.lane, step)}px`);
 
   const body = document.createElement('div');
   body.className = 'git-graph__body';
@@ -382,29 +672,14 @@ function renderRow(
   const marker = document.createElement('div');
   marker.className = 'git-graph__marker';
 
-  // Lines live in the marker column but span the full row height (anchored to body).
-  if (visual.mainLine !== 'none') {
-    appendConnectorLine(marker, 'main', visual.mainLine);
+  if (visual.rails.length > 0 || visual.curves.length > 0) {
+    marker.appendChild(renderRails(visual, step));
   }
-
-  if (visual.branchLine) {
-    appendConnectorLine(
-      marker,
-      'branch',
-      visual.branchLine.segment,
-      visual.branchLine.colorIndex,
-      visual.branchLine.indentPx,
-    );
-  }
-
   marker.appendChild(dot);
+  appendSubdots(marker, ctx);
 
   const content = document.createElement('div');
   content.className = 'git-graph__content';
-
-  if (visual.indentPx > 0) {
-    body.style.setProperty('--git-branch-indent', `${visual.indentPx}px`);
-  }
 
   const subject = document.createElement('span');
   subject.className = 'git-graph__subject';
@@ -427,7 +702,7 @@ function renderRow(
     const refsEl = document.createElement('div');
     refsEl.className = 'git-graph__refs';
     for (const ref of visual.commit.refs) {
-      refsEl.appendChild(renderRefChip(ref));
+      refsEl.appendChild(renderRefChip(ref, visual.colorIndex));
     }
     content.append(subject, meta, refsEl);
   } else {
@@ -439,6 +714,46 @@ function renderRow(
   return row;
 }
 
+function renderToggleRow(
+  collapsed: boolean,
+  hiddenCount: number,
+  onToggle: () => void,
+): HTMLElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'git-graph__toggle';
+  btn.setAttribute('aria-expanded', String(!collapsed));
+
+  const chevron = document.createElement('span');
+  chevron.className = 'git-graph__toggle-chevron';
+  chevron.textContent = collapsed ? '▸' : '▾';
+
+  const label = document.createElement('span');
+  label.textContent = collapsed
+    ? `${hiddenCount} branch commit${hiddenCount === 1 ? '' : 's'} hidden`
+    : 'Collapse branch graph';
+
+  btn.append(chevron, label);
+  btn.addEventListener('click', onToggle);
+  return btn;
+}
+
+function loadCollapsedPref(): boolean {
+  try {
+    return (globalThis.localStorage?.getItem(COLLAPSED_PREF_KEY) ?? '1') === '1';
+  } catch {
+    return true;
+  }
+}
+
+function saveCollapsedPref(collapsed: boolean): void {
+  try {
+    globalThis.localStorage?.setItem(COLLAPSED_PREF_KEY, collapsed ? '1' : '0');
+  } catch {
+    // localStorage unavailable; keep in-memory state only.
+  }
+}
+
 function renderEmpty(host: HTMLElement, message: string): void {
   host.className = 'git-graph git-panel-graph-mount';
   host.replaceChildren();
@@ -448,58 +763,134 @@ function renderEmpty(host: HTMLElement, message: string): void {
   host.appendChild(empty);
 }
 
+function appendExpandedRows(
+  list: HTMLElement,
+  visuals: CommitVisual[],
+  squashLinks: Map<string, string>,
+  ctx: RowContext,
+): void {
+  const laidOut = computeGraphLayout(visuals, squashLinks);
+  const laneCount = maxLaneIndex(laidOut) + 1;
+  const step = laneStep(laneCount);
+  list.style.setProperty('--git-marker-w', `${Math.max(LANE_STEP, step * laneCount)}px`);
+
+  for (const visual of laidOut) {
+    list.appendChild(renderRow(visual, step, ctx));
+  }
+}
+
+function appendCollapsedRows(
+  list: HTMLElement,
+  visuals: CommitVisual[],
+  squashLinks: Map<string, string>,
+  ctx: RowContext,
+  onExpand: () => void,
+): void {
+  const rows = computeCollapsedRows(visuals, squashLinks);
+  if (rows.length === 0) {
+    // No mainline detected (e.g. detached history) — nothing to collapse onto.
+    appendExpandedRows(list, visuals, squashLinks, ctx);
+    return;
+  }
+
+  // Lay out the mainline alone; merge parents are stripped so hidden branch
+  // lanes don't leave dangling rails.
+  const laidOut = computeGraphLayout(
+    rows.map(({ visual }) => ({
+      ...visual,
+      commit: { ...visual.commit, parents: visual.commit.parents.slice(0, 1) },
+    })),
+  );
+
+  const maxShown = rows.reduce((max, row) => Math.max(max, row.clusters.length), 0);
+  const hasExtra = rows.some((row) => row.extraCount > 0);
+  const width =
+    LANE_STEP + (maxShown > 0 ? 4 + maxShown * SUBDOT_STEP : 0) + (hasExtra ? 16 : 0);
+  list.style.setProperty('--git-marker-w', `${width}px`);
+
+  laidOut.forEach((visual, index) => {
+    const { clusters, extraCount } = rows[index];
+    // Re-attach the original commit so callbacks see the true parent list.
+    const restored = { ...visual, commit: rows[index].visual.commit };
+    list.appendChild(
+      renderRow(restored, LANE_STEP, { ...ctx, clusters, extraCount, onExpand }),
+    );
+  });
+}
+
 function renderGraph(
   host: HTMLElement,
   visuals: CommitVisual[],
-  onSelect?: (sha: string) => void,
-  selectedSha?: string | null,
-  onContextMenu?: (visual: CommitVisual, event: MouseEvent) => void,
+  collapsed: boolean,
+  onToggle: () => void,
+  ctx: RowContext,
 ): void {
   host.className = 'git-graph git-panel-graph-mount';
   host.replaceChildren();
 
   const list = document.createElement('div');
   list.className = 'git-graph__list';
-  for (const visual of visuals) {
-    list.appendChild(renderRow(visual, onSelect, selectedSha, onContextMenu));
+
+  const squashLinks = computeSquashLinks(visuals);
+  const branchCommitCount = visuals.filter((visual) => !visual.isMain).length;
+  if (branchCommitCount > 0) {
+    list.appendChild(renderToggleRow(collapsed, branchCommitCount, onToggle));
   }
+
+  if (collapsed && branchCommitCount > 0) {
+    appendCollapsedRows(list, visuals, squashLinks, ctx, onToggle);
+  } else {
+    appendExpandedRows(list, visuals, squashLinks, ctx);
+  }
+
   host.appendChild(list);
 }
 
 /**
  * Render commit history into `host`.
  * Fetches up to 200 commits via `gitLog`; call `refresh` after cwd changes.
+ * The collapse toggle re-renders from cached commits without refetching.
  */
 export function renderGitGraph(
   host: HTMLElement,
   options: GitGraphOptions = {},
 ): GitGraphHandle {
   let destroyed = false;
+  let commits: GitCommitEntry[] = [];
+  let collapsed = loadCollapsedPref();
+
+  const rerender = (): void => {
+    if (destroyed) return;
+    if (commits.length === 0) {
+      renderEmpty(host, 'No commits');
+      return;
+    }
+    renderGraph(host, assignCommitVisuals(commits), collapsed, toggle, {
+      onSelect: options.onSelectCommit,
+      selectedSha: options.selectedSha,
+      onContextMenu: options.onContextMenu,
+    });
+  };
+
+  const toggle = (): void => {
+    collapsed = !collapsed;
+    saveCollapsedPref(collapsed);
+    rerender();
+  };
 
   const refresh = async (): Promise<void> => {
     if (destroyed) return;
 
     const count = options.logCount ?? LOG_COUNT;
     const result = await gitLog({ count, cwd: options.cwd });
+    if (destroyed) return;
     if (!result.ok) {
       renderEmpty(host, result.error ?? 'Could not load history');
       return;
     }
 
-    const commits = result.commits ?? [];
-    if (commits.length === 0) {
-      renderEmpty(host, 'No commits');
-      return;
-    }
-
-    const visuals = annotateCommitLines(assignCommitVisuals(commits));
-    renderGraph(
-      host,
-      visuals,
-      options.onSelectCommit,
-      options.selectedSha,
-      options.onContextMenu,
-    );
+    commits = result.commits ?? [];
+    rerender();
   };
 
   const destroy = (): void => {

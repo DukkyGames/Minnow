@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "description": "Local-first AI chat client for LM Studio and OpenAI-compatible providers",
   "author": "Grim Media",
+  "license": "AGPL-3.0-or-later",
   "type": "module",
   "main": "electron/dist/main.js",
   "bin": {
@@ -21,6 +22,7 @@
     "impeccable:sync": "node scripts/sync-impeccable-skill.mjs",
     "impeccable:update": "npx impeccable skills update && node scripts/sync-impeccable-skill.mjs",
     "impeccable:detect": "npx impeccable detect src/ index.html",
+    "index-html:coupling-map": "node scripts/index-html-coupling-map.mjs",
     "caveman:sync": "node scripts/sync-caveman-skill.mjs",
     "matt-pocock-skills:sync": "node scripts/sync-matt-pocock-skills.mjs",
     "settings-registry:generate": "tsx scripts/generate-settings-registry.mjs",
