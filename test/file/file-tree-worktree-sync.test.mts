@@ -23,19 +23,30 @@ import {
   getFilePanelState,
 } from '../../src/state/file-panel.ts';
 import {
+  stopFileTreeGitStatusPollForTests,
+} from '../../src/ui/file-tree.ts';
+import {
   resetWorkspaceStateForTests,
   setWorkspaceFromServer,
 } from '../../src/state/workspace.ts';
 import { setFileTreeServerAvailable } from '../../src/ui/file-tree-server.ts';
 import { shouldScheduleFileTreeRefresh } from '../../src/ui/file-tree-auto-refresh.ts';
-import { installHappyDomGlobals } from '../os/dom-helpers.mts';
+import {
+  resetSessionPersistenceForTests,
+  setSessionStateForTests,
+} from '../../src/state/sessions.ts';
+import { installHappyDomGlobals, teardownHappyDomAsync } from '../os/dom-helpers.mts';
 
 const MAIN_WS = 'C:/projects/minnow';
 const WORKTREE = 'C:/projects/minnow/.minnow/worktrees/task-abc';
 
+/** happy-dom windows keep the event loop alive unless closed. */
+let testWindow: Window | null = null;
+
 function setupDom(): void {
-  const window = new Window();
-  installHappyDomGlobals(window);
+  testWindow?.close();
+  testWindow = new Window();
+  installHappyDomGlobals(testWindow);
   document.body.innerHTML =
     '<div id="fileSidebarTitle">Files</div><div id="fileTreeHost"></div>';
 }
@@ -45,7 +56,14 @@ beforeEach(() => {
   resetDesktopWorkspaceMountsForTests();
 });
 
-afterEach(() => {
+afterEach(async () => {
+  stopFileTreeGitStatusPollForTests();
+  if (testWindow) {
+    await teardownHappyDomAsync(testWindow);
+    testWindow = null;
+  }
+  setSessionStateForTests(null);
+  resetSessionPersistenceForTests();
   resetWorkspaceStateForTests();
   resetFileTreeListingRootForTests();
   resetFilePanelStateForTests();
@@ -146,6 +164,20 @@ describe('syncFileTreeToPanelWorktree', () => {
     assert.deepEqual(getFilePanelState().expandedDirs, ['docs']);
     assert.equal(buildFileTreeToolContext().workspaceRoot, undefined);
   });
+
+  test('force refresh reloads tree even when listing root unchanged', async () => {
+    setupDom();
+    launchInstance('code');
+    setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
+    setFileTreeListingWorkspaceRoot(undefined);
+    patchFilePanelState({ expandedDirs: ['docs'], selectedPath: 'docs/readme.md' });
+
+    const { syncFileTreeToPanelWorktree } = await import('../../src/ui/file-tree.ts');
+    await syncFileTreeToPanelWorktree(MAIN_WS, { force: true });
+
+    assert.deepEqual(getFilePanelState().expandedDirs, []);
+    assert.equal(getFilePanelState().selectedPath, null);
+  });
 });
 
 describe('file tree tool context merge', () => {
@@ -153,6 +185,47 @@ describe('file tree tool context merge', () => {
     setFileTreeListingWorkspaceRoot(WORKTREE);
     const merged = { ...buildFileTreeToolContext(), chatId: 'chat-1' };
     assert.deepEqual(merged, { workspaceRoot: WORKTREE, chatId: 'chat-1' });
+  });
+});
+
+describe('syncPanelFromActiveChat browse override', () => {
+  test('skips sync while browse override is active', async () => {
+    setupDom();
+    launchInstance('code');
+    setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
+    const { createEmptyChatObject, setSessionStateForTests } = await import(
+      '../../src/state/sessions.ts'
+    );
+    const gitPanel = await import('../../src/ui/git-panel.ts');
+    const chat = createEmptyChatObject('model');
+    chat.id = 'chat-override';
+    chat.worktreeRoot = WORKTREE;
+    setSessionStateForTests({ activeId: chat.id, chats: [chat], groups: [] });
+
+    gitPanel.setGitPanelCwd('C:/projects/other-wt');
+    gitPanel.syncPanelFromActiveChat();
+    assert.equal(gitPanel.getGitPanelCwd(), 'C:/projects/other-wt');
+    gitPanel.resetGitPanelForTests();
+  });
+
+  test('syncs chat worktree after override cleared', async () => {
+    setupDom();
+    launchInstance('code');
+    setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
+    const { createEmptyChatObject, setSessionStateForTests } = await import(
+      '../../src/state/sessions.ts'
+    );
+    const gitPanel = await import('../../src/ui/git-panel.ts');
+    const chat = createEmptyChatObject('model');
+    chat.id = 'chat-override';
+    chat.worktreeRoot = WORKTREE;
+    setSessionStateForTests({ activeId: chat.id, chats: [chat], groups: [] });
+
+    gitPanel.setGitPanelCwd('C:/projects/other-wt');
+    gitPanel.clearPanelCwdUserOverride();
+    gitPanel.syncPanelFromActiveChat();
+    assert.equal(gitPanel.getGitPanelCwd(), WORKTREE);
+    gitPanel.resetGitPanelForTests();
   });
 });
 

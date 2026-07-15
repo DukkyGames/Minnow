@@ -36,6 +36,7 @@ import {
 import { initComposerDraftListener, switchComposerDraft } from '../ui/composer-draft';
 import { initComposerSlashPicker } from '../ui/skill-picker';
 import { refreshContextUsageRing } from '../ui/context-usage-ring';
+import { clearPanelCwdUserOverride, syncPanelFromActiveChat } from '../ui/git-panel';
 import { renderChatFromHistory } from '../ui/messages';
 import { syncAskQuestionModalOnChatSwitch } from '../ui/question-cards-modal';
 import { setStatus } from '../ui/status';
@@ -191,6 +192,8 @@ export function activateDesktopChatSession(chatId: string): void {
   }
   sessionState.activeId = chatId;
   syncDesktopChatSessionSwitch(prevId, chat);
+  clearPanelCwdUserOverride();
+  syncPanelFromActiveChat({ forceFileTree: true });
   acknowledgeChatViewed(chatId);
   void switchComposerDraft(prevId, chat);
   renderDesktopChatRail(desktopWorkspacePath);

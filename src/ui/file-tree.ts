@@ -233,7 +233,10 @@ export function invalidateFileTreeCache(): void {
 }
 
 /** Sync file tree listing root with git panel worktree cwd; reload when root changes. */
-export async function syncFileTreeToPanelWorktree(panelCwd?: string): Promise<void> {
+export async function syncFileTreeToPanelWorktree(
+  panelCwd?: string,
+  options?: { force?: boolean },
+): Promise<void> {
   // Desktop drawer scopes the tree to ~/.minnow/workspace — ignore Code git-panel cwd.
   if (isDesktopWorkspaceHostingActive()) {
     startFileTreeGitStatusPoll(getFileTreeListingWorkspaceRoot());
@@ -244,7 +247,7 @@ export async function syncFileTreeToPanelWorktree(panelCwd?: string): Promise<vo
   const nextRoot = resolveFileTreeListingRoot(panelCwd);
   const prevRoot = getFileTreeListingWorkspaceRoot();
 
-  if (!fileTreeListingRootsEqual(prevRoot, nextRoot)) {
+  if (!fileTreeListingRootsEqual(prevRoot, nextRoot) || options?.force) {
     invalidateListingCacheScopes(prevRoot, nextRoot, getWorkspacePath().trim() || undefined);
     setFileTreeListingWorkspaceRoot(nextRoot);
 
@@ -363,11 +366,19 @@ function renderOfflineEmpty(host: HTMLElement): void {
   host.appendChild(msg);
 }
 
+function friendlyListingError(message: string): string {
+  const lower = message.toLowerCase();
+  if (lower.includes('allowlist') || lower.includes('workspaceroot')) {
+    return 'Worktree not accessible — enable Full disk access in Settings or add the path via git worktree.';
+  }
+  return message;
+}
+
 function renderTreeError(host: HTMLElement, message: string): void {
   host.innerHTML = '';
   const msg = document.createElement('p');
   msg.className = 'file-tree-empty file-tree-error';
-  msg.textContent = message;
+  msg.textContent = friendlyListingError(message);
   host.appendChild(msg);
 }
 

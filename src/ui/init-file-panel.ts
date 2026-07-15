@@ -44,7 +44,8 @@ import { getLocalServerAvailable } from '../tools/client';
 import { refreshWorkspaceUi } from './workspace-button';
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
-import { initGitPanel, syncGitPanelFromOrchestrator } from './git-panel';
+import { initGitPanel, syncPanelFromActiveChat } from './git-panel';
+import { syncComposerRunTargetFromActiveChat } from './composer-run-target';
 import { initGitCenterLightbox } from './git-center-lightbox';
 import { startFileTreeGitStatusPoll } from './file-tree';
 import {
@@ -94,7 +95,8 @@ export function onFilePanelServerAvailabilityChanged(): void {
     void refreshWorkspaceUi();
     void syncOrchestratePlanStripFromActiveChat();
     syncViewModeToggleFromActiveChat();
-    syncGitPanelFromOrchestrator();
+    syncPanelFromActiveChat({ forceFileTree: true });
+    syncComposerRunTargetFromActiveChat();
     startFileTreeGitStatusPoll();
   } else {
     renderFileTree();

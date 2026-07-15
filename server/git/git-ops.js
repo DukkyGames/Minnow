@@ -6,6 +6,7 @@ import path from 'node:path';
 
 import { runProcess } from '../process-runner.js';
 import { isGitRepository } from '../tools/git-change-stats.js';
+import { invalidateRegisteredWorktreeCache } from '../worktree/allowlist.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
 
 const GIT_TIMEOUT_MS = 120_000;
@@ -606,6 +607,7 @@ export async function worktreeAdd({ cwd, branch, path: worktreePath, baseRef } =
     return { ok: false, error: processError(result) };
   }
 
+  invalidateRegisteredWorktreeCache();
   return { ok: true, path: targetPath, branch: branchName };
 }
 
@@ -638,6 +640,7 @@ export async function worktreeRemove({ cwd, path: worktreePath, force } = {}) {
     return { ok: false, error: processError(result) };
   }
 
+  invalidateRegisteredWorktreeCache();
   return { ok: true };
 }
 

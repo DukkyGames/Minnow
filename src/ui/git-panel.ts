@@ -18,10 +18,7 @@ import {
 
 } from '../lib/worktree-list-parse';
 
-import { subscribeAllBoardChanges } from '../state/orchestrate-board-events';
-
 import {
-
   gitBranches,
 
   gitCheckout,
@@ -164,8 +161,10 @@ let refreshing = false;
 
 
 /** Effective cwd for git ops; undefined means server workspace root. */
-
 let panelCwd: string | undefined;
+
+/** When true, manual worktree browse (dropdown / Git Center) is not overwritten by chat sync. */
+let panelCwdUserOverride = false;
 
 let knownWorktrees: ParsedWorktree[] = [];
 let currentBranchName = '';
@@ -202,8 +201,12 @@ function getGitMount(): HTMLElement | null {
 
 
 
-/** Current cwd passed to git API calls (undefined → server default). */
+/** Clear browse override so the next chat/composer sync can drive panel cwd. */
+export function clearPanelCwdUserOverride(): void {
+  panelCwdUserOverride = false;
+}
 
+/** Current cwd passed to git API calls (undefined → server default). */
 export function getGitPanelCwd(): string | undefined {
 
   return panelCwd;
@@ -211,9 +214,8 @@ export function getGitPanelCwd(): string | undefined {
 }
 
 /** Set panel cwd (Git Center lightbox sync). */
-
 export function setGitPanelCwd(cwd: string | undefined): void {
-
+  panelCwdUserOverride = true;
   panelCwd = cwd;
 
   if (cwdSelect) {
@@ -576,9 +578,8 @@ function ensurePanelDom(): HTMLElement {
   cwdSelect.title = 'Git worktree root';
 
   cwdSelect.addEventListener('change', () => {
-
     const value = cwdSelect?.value ?? '';
-
+    panelCwdUserOverride = true;
     panelCwd = value || undefined;
 
     syncWorktreeDeleteButton();
@@ -895,9 +896,9 @@ function ensurePanelDom(): HTMLElement {
 
 
 
-async function syncFileTreeGitPollCwd(): Promise<void> {
+async function syncFileTreeGitPollCwd(force?: boolean): Promise<void> {
   const { syncFileTreeToPanelWorktree } = await import('./file-tree');
-  await syncFileTreeToPanelWorktree(panelCwd);
+  await syncFileTreeToPanelWorktree(panelCwd, { force });
 }
 
 
@@ -1630,6 +1631,26 @@ async function refreshBranchSelect(): Promise<void> {
 
 
 
+function worktreeDropdownMatches(select: HTMLSelectElement, worktrees: ParsedWorktree[]): boolean {
+  if (select.options.length !== worktrees.length) return false;
+  for (let i = 0; i < worktrees.length; i++) {
+    if (!pathsEqual(select.options[i]?.value ?? '', worktrees[i]!.path)) return false;
+  }
+  return true;
+}
+
+function syncCwdSelectValue(): void {
+  if (!cwdSelect) return;
+  const target = panelCwd ?? getWorkspacePath();
+  for (const opt of cwdSelect.options) {
+    if (pathsEqual(opt.value, target)) {
+      if (cwdSelect.value !== opt.value) cwdSelect.value = opt.value;
+      break;
+    }
+  }
+  syncWorktreeDeleteButton();
+}
+
 async function refreshWorktreeDropdown(): Promise<void> {
 
   if (!cwdSelect || !cwdWrap) return;
@@ -1677,6 +1698,11 @@ async function refreshWorktreeDropdown(): Promise<void> {
   if (knownWorktrees.length === 0) return;
 
   const selected = panelCwd ?? ws;
+
+  if (worktreeDropdownMatches(cwdSelect, knownWorktrees)) {
+    syncCwdSelectValue();
+    return;
+  }
 
   cwdSelect.replaceChildren();
 
@@ -1928,69 +1954,31 @@ export function toggleGitSidePanel(): void {
 
 
 /**
-
- * When an orchestrator board task chat is active, point the panel at that task's
-
- * worktree cwd (falls back to workspace root for non-board chats).
-
+ * Sync git panel browse cwd + file tree from the active chat's composer run-target.
+ * Skips when the user manually picked a worktree (browse override).
  */
-
-export function syncGitPanelFromOrchestrator(): void {
-
-  // No-op without session state: this can run from a deferred dynamic import
-  // (sidebar switchChat) after teardown, where getActiveChat() would throw.
+export function syncPanelFromActiveChat(options?: { forceFileTree?: boolean }): void {
   if (!sessionState) return;
+  if (panelCwdUserOverride) return;
 
   const chat = getActiveChat();
-
   const groups = sessionState?.groups;
-
   const worktreeRoot = resolveChatWorktreeRoot(chat, groups);
 
-
-
   if (worktreeRoot) {
-
     panelCwd = worktreeRoot;
-
   } else {
-
     const ws = getWorkspacePath().trim();
-
     panelCwd = ws || undefined;
-
   }
 
+  syncCwdSelectValue();
+  void syncFileTreeGitPollCwd(options?.forceFileTree);
+}
 
-
-  if (cwdSelect) {
-
-    const target = panelCwd ?? getWorkspacePath();
-
-    for (const opt of cwdSelect.options) {
-
-      if (pathsEqual(opt.value, target)) {
-
-        cwdSelect.value = opt.value;
-
-        break;
-
-      }
-
-    }
-
-  }
-
-
-
-  if (panelOpen) {
-
-    void refreshGitPanel();
-
-  }
-
-  void syncFileTreeGitPollCwd();
-
+/** @deprecated Use syncPanelFromActiveChat — kept for existing dynamic imports. */
+export function syncGitPanelFromOrchestrator(): void {
+  syncPanelFromActiveChat();
 }
 
 
@@ -2018,20 +2006,8 @@ export function initGitPanel(): void {
 
 
   window.addEventListener('focus', () => {
-
     if (panelOpen) void refreshGitPanel();
-
   });
-
-
-
-  subscribeAllBoardChanges(() => {
-
-    syncGitPanelFromOrchestrator();
-
-  });
-
-
 
   window.addEventListener(GIT_COMMIT_DIFF_CLOSED_EVENT, () => {
 
@@ -2043,8 +2019,7 @@ export function initGitPanel(): void {
 
 
 
-  syncGitPanelFromOrchestrator();
-
+  syncPanelFromActiveChat();
 }
 
 
@@ -2058,6 +2033,7 @@ export function resetGitPanelForTests(): void {
   panelOpen = false;
 
   panelCwd = undefined;
+  panelCwdUserOverride = false;
 
   knownWorktrees = [];
   currentBranchName = '';

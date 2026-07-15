@@ -72,6 +72,7 @@ import { syncComposerReasoningEffortFromActiveChat } from './composer-reasoning-
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import { syncComposerPinnedSkillFromActiveChat } from './composer-pinned-skill';
 import { syncComposerRunTargetFromActiveChat } from './composer-run-target';
+import { clearPanelCwdUserOverride, syncPanelFromActiveChat } from './git-panel';
 import { buildDefaultPinnedSkillForNewChat } from '../skills/config';
 import { isBoardViewActive, syncViewModeToggleFromActiveChat } from './view-mode-toggle';
 import {
@@ -315,6 +316,8 @@ export function applyWorkspaceScopedSession(newPath: string, previousPath?: stri
     syncComposerPinnedSkillFromActiveChat();
     syncComposerRunTargetFromActiveChat();
     syncViewModeToggleFromActiveChat();
+    clearPanelCwdUserOverride();
+    syncPanelFromActiveChat({ forceFileTree: true });
     syncWorkAgentDevFromActiveChat();
     syncReefWidgetSettingsFromActiveChat();
     onModelRoutingActiveChatChanged(activeChat.id);
@@ -1164,7 +1167,8 @@ export function switchChat(id: string): void {
   syncComposerPinnedSkillFromActiveChat();
   syncComposerRunTargetFromActiveChat();
   syncViewModeToggleFromActiveChat();
-  void import('./git-panel').then((m) => m.syncGitPanelFromOrchestrator());
+  clearPanelCwdUserOverride();
+  syncPanelFromActiveChat({ forceFileTree: true });
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
   syncGoalActiveHint();
