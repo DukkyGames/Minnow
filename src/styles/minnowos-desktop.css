@@ -1192,9 +1192,37 @@
 
 .mn-os-research-progress-chrome {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
-  padding: 16px 0 0;
+  gap: 10px;
+  padding: 14px 0 2px;
   pointer-events: auto;
+}
+
+.mn-os-research-progress-chrome .research-activity-bar {
+  margin-bottom: 0;
+}
+
+.mn-os-research-progress-chrome .research-activity-btn {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-color: var(--os-border-strong);
+  background: color-mix(in srgb, var(--os-surface-2) 88%, transparent);
+  color: var(--os-text);
+}
+
+.mn-os-research-progress-chrome .research-activity-btn:hover,
+.mn-os-research-progress-chrome .research-activity-btn:focus-visible {
+  border-color: var(--os-border-strong);
+  background: var(--os-surface-3);
+  color: var(--os-text);
+}
+
+.mn-os-research-progress-chrome .research-activity-btn__dot.is-live {
+  background: var(--mn-success);
 }
 
 .mn-os-research-progress-chrome:has([hidden]) {
@@ -1254,6 +1282,54 @@
 #desktopResearchProgressMount.mn-os-research-progress .dr-stepper-labels {
   margin-left: 0;
   margin-right: 0;
+}
+
+#desktopResearchProgressMount.mn-os-research-progress .dr-prog-head {
+  gap: 12px;
+  margin-top: 2px;
+}
+
+#desktopResearchProgressMount.mn-os-research-progress .dr-prog-title {
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+#desktopResearchProgressMount.mn-os-research-progress .dr-timer {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--os-text-dim);
+}
+
+#desktopResearchProgressMount.mn-os-research-progress .dr-stepper {
+  margin: 16px 0 8px;
+}
+
+#desktopResearchProgressMount.mn-os-research-progress .dr-node.done {
+  background: var(--mn-success);
+  border-color: var(--mn-success);
+}
+
+#desktopResearchProgressMount.mn-os-research-progress .dr-node.active {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mn-accent) 22%, transparent);
+}
+
+#desktopResearchProgressMount.mn-os-research-progress .dr-track.fill {
+  background: var(--mn-success);
+}
+
+#desktopResearchProgressMount.mn-os-research-progress .dr-slabel {
+  color: var(--os-text-dim);
+}
+
+#desktopResearchProgressMount.mn-os-research-progress .dr-slabel.on {
+  color: var(--os-accent);
+  font-weight: 600;
+}
+
+#desktopResearchProgressMount.mn-os-research-progress .dr-slabel.did {
+  color: var(--os-text-dim);
 }
 
 #osDesktopLayer.is-research-active .mn-os-desk-stage {

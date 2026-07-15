@@ -107,8 +107,8 @@
 }
 
 .orchestrate-plan-screen__progress-mount .dr-node.done {
-  background: #7fc99a;
-  border-color: #7fc99a;
+  background: var(--mn-success);
+  border-color: var(--mn-success);
 }
 
 .orchestrate-plan-screen__progress-mount .dr-node--clickable {
@@ -137,7 +137,7 @@
 }
 
 .orchestrate-plan-screen__progress-mount .dr-track.fill {
-  background: #7fc99a;
+  background: var(--mn-success);
 }
 
 .orchestrate-plan-screen__progress-mount .dr-stepper-labels {
@@ -148,10 +148,15 @@
 
 .orchestrate-plan-screen__progress-mount .dr-slabel {
   font-size: 10px;
+  line-height: 1.25;
   letter-spacing: 0.03em;
-  color: var(--mn-fg-subtle);
+  color: var(--mn-fg-muted);
   flex: 1;
+  min-width: 0;
   text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .orchestrate-plan-screen__progress-mount .dr-slabel.on {
@@ -308,12 +313,12 @@
   width: 18px;
   display: grid;
   place-items: center;
-  color: #7fc99a;
+  color: var(--mn-success);
   flex: none;
 }
 
 .orchestrate-plan-screen__progress-mount .dr-check {
-  color: #7fc99a;
+  color: var(--mn-success);
 }
 
 .orchestrate-plan-screen__progress-mount .plan-progress--reduced-motion .dr-dot,

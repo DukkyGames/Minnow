@@ -7,8 +7,8 @@ import type { ResearchProgress } from './types';
 const STEPS = [
   { key: 'plan', label: 'Planning the investigation', short: 'Planning' },
   { key: 'search', label: 'Searching the web', short: 'Searching' },
-  { key: 'read', label: 'Reading sources', short: 'Reading sources' },
-  { key: 'cross', label: 'Cross-checking claims', short: 'Cross-checking' },
+  { key: 'read', label: 'Reading sources', short: 'Reading' },
+  { key: 'cross', label: 'Cross-checking claims', short: 'Cross-check' },
   { key: 'write', label: 'Synthesizing the brief', short: 'Synthesizing' },
 ] as const;
 

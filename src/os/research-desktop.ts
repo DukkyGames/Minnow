@@ -10,9 +10,11 @@ import {
   cancelResearch,
   fetchResearchDetail,
   fetchResearchResult,
+  normalizeResearchActivityLog,
   startResearch,
   subscribeToResearchStream,
 } from '../research/client';
+import { ResearchActivitySession } from '../research/research-activity-session';
 import {
   closeResearchLibraryWindow,
   isResearchLibraryWindowOpen,
@@ -30,6 +32,7 @@ import {
 } from './desktop-state';
 
 let progressPanel: ResearchProgressPanel | null = null;
+let researchActivity = new ResearchActivitySession();
 let streamUnsubscribe: (() => void) | null = null;
 let runAbort: AbortController | null = null;
 let activeResearchId: string | null = null;
@@ -109,6 +112,8 @@ function clearProgressUi(): void {
   if (progressMount) {
     progressMount.innerHTML = '';
   }
+  researchActivity.destroy();
+  researchActivity = new ResearchActivitySession();
 }
 
 function resetRunUi(): void {
@@ -138,6 +143,13 @@ async function showResultForId(researchId: string): Promise<void> {
   syncResearchToolbar();
   try {
     const data = await fetchResearchDetail(researchId);
+    const activityLog = normalizeResearchActivityLog(data);
+    if (activityLog.length) {
+      researchActivity.configure({});
+      researchActivity.hydrate(activityLog);
+      researchActivity.setRunning(data.status === 'running');
+      researchActivity.mountDesktopChromeButton();
+    }
     if (data.query?.trim()) {
       currentQuery = data.query.trim();
     }
@@ -249,6 +261,9 @@ export async function startDesktopResearchRun(
     progressPanel = new ResearchProgressPanel(progressMount);
     progressPanel.reset();
   }
+  researchActivity.configure({});
+  researchActivity.reset();
+  researchActivity.mountDesktopChromeButton();
   const resultMount = getResultMount();
   if (resultMount) {
     resultMount.innerHTML = '';
@@ -272,12 +287,14 @@ export async function startDesktopResearchRun(
       signal: runAbort.signal,
       onProgress: (event) => {
         progressPanel?.apply(event);
+        researchActivity.appendProgress(event);
         if (event.phase === 'searching' && event.round) {
           lastRunRound = event.round;
         }
       },
       onEnd: (endEvent) => {
         running = false;
+        researchActivity.setRunning(false);
         const status = endEvent?.status ?? 'done';
         if (status === 'cancelled') {
           activeResearchId = null;
@@ -312,6 +329,7 @@ export async function startDesktopResearchRun(
       },
       onTransportError: (err) => {
         running = false;
+        researchActivity.setRunning(false);
         syncResearchToolbar();
         const msg = err instanceof Error ? err.message : 'Stream error';
         progressPanel?.complete('error', msg);

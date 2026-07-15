@@ -345,4 +345,48 @@ describe('DeepResearcher', () => {
     assert.equal(codebaseSearchCalls, 0);
     assert.ok(researcher.urlsFetched.has('https://example.com/web-only-query-0'));
   });
+
+  test('emits planSummary, queryList, and decision events for activity log', async () => {
+    originalLlmCall = engineDeps.llmCall;
+    originalSearch = engineDeps.searchStructured;
+    originalExtract = engineDeps.fetchAndExtract;
+
+    engineDeps.llmCall = mockLlmCall({
+      'research strategist':
+        '{"sub_questions":["What is it?"],"key_topics":["minnow"],"success_criteria":"clear answer"}',
+      Classify: 'general',
+      'planning web searches': '["alpha", "beta"]',
+      'evolving research report': '## Draft report\n\nBody with citations.',
+      'comprehensive enough': 'YES — enough coverage.',
+      'long, detailed, comprehensive': '# Final\n\nExpanded final report body.',
+    });
+    engineDeps.searchStructured = mockSearch(1);
+    engineDeps.fetchAndExtract = mockExtract();
+
+    const events = [];
+    const researcher = new DeepResearcher({
+      providerId: 'p1',
+      model: 'm1',
+      minRounds: 1,
+      maxRounds: 2,
+      progressCallback: (event) => events.push(event),
+    });
+
+    await researcher.research({ question: 'What is Minnow?' });
+
+    const planningWithSummary = events.find(
+      (e) => e.phase === 'planning' && typeof e.planSummary === 'string' && e.planSummary.length > 0,
+    );
+    assert.ok(planningWithSummary);
+
+    const searchingWithQueries = events.find(
+      (e) => e.phase === 'searching' && Array.isArray(e.queryList) && e.queryList.length === 2,
+    );
+    assert.ok(searchingWithQueries);
+    assert.deepEqual(searchingWithQueries.queryList, ['alpha', 'beta']);
+
+    const decision = events.find((e) => e.phase === 'decision');
+    assert.ok(decision);
+    assert.match(String(decision.message), /Stopping/);
+  });
 });
