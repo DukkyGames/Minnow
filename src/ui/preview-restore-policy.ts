@@ -9,7 +9,7 @@
 import { getDesktopWorkspacePanelState } from '../os/desktop-workspace-state';
 import { getForegroundAppId, getOsView } from '../os/instances';
 import { isOsShellEnabled } from '../os/page-bridge';
-import { getFilePanelState } from '../state/file-panel';
+import { getFilePanelState, patchFilePanelState } from '../state/file-panel';
 
 /** True when Code is the active fullscreen MinnowOS app. */
 export function isCodeAppForeground(): boolean {
@@ -67,4 +67,33 @@ export function shouldAutoRestoreViewerSplitOnBoot(): boolean {
 export function shouldAutoRevealPreviewOnNavigation(): boolean {
   if (!isOsShellEnabled()) return true;
   return getFilePanelState().rightPaneMode === 'preview';
+}
+
+/**
+ * After loadFilePanelPrefs, drop persisted open-split flags that must not auto-restore
+ * on the active surface (MIN-342 / MIN-434). Keeps previewSource and tab lists intact.
+ */
+export function clampPersistedFilePanelForActiveSurface(): void {
+  if (!isOsShellEnabled()) return;
+
+  const state = getFilePanelState();
+  let rightPaneMode = state.rightPaneMode;
+
+  if (isCodeAppForeground()) {
+    if (rightPaneMode === 'preview' && !shouldAutoRestorePreviewPanel()) {
+      rightPaneMode = null;
+    }
+    if (rightPaneMode === 'viewer' && !shouldAutoRestoreViewerSplitOnBoot()) {
+      rightPaneMode = null;
+    }
+  }
+
+  if (rightPaneMode === state.rightPaneMode && (rightPaneMode !== null) === state.viewerOpen) {
+    return;
+  }
+
+  patchFilePanelState({
+    rightPaneMode,
+    viewerOpen: rightPaneMode !== null,
+  });
 }

@@ -110,6 +110,8 @@ export async function initFilePanel(): Promise<void> {
   });
 
   await loadFilePanelPrefs();
+  const { clampPersistedFilePanelForActiveSurface } = await import('./preview-restore-policy');
+  clampPersistedFilePanelForActiveSurface();
   setFileTreeServerAvailable(getLocalServerAvailable());
   if (getLocalServerAvailable()) {
     void initFileTreeIfNeeded();

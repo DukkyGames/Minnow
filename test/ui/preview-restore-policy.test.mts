@@ -7,11 +7,13 @@ import {
 import { launchInstance, resetInstancesForTests } from '../../src/os/instances.ts';
 import {
   DEFAULT_FILE_PANEL_STATE,
+  getFilePanelState,
   patchFilePanelState,
   resetFilePanelStateForTests,
   setFilePanelState,
 } from '../../src/state/file-panel.ts';
 import {
+  clampPersistedFilePanelForActiveSurface,
   isCodeAppForeground,
   shouldAutoRestorePreviewPanel,
   shouldAutoRestoreViewerSplitOnBoot,
@@ -109,5 +111,38 @@ describe('preview restore policy (MIN-342)', () => {
   test('allows auto-reveal on navigation when preview mode is active', () => {
     patchFilePanelState({ rightPaneMode: 'preview', viewerOpen: true });
     assert.equal(shouldAutoRevealPreviewOnNavigation(), true);
+  });
+
+  test('clampPersistedFilePanelForActiveSurface clears stale preview on Code foreground (MIN-434)', () => {
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+      previewSource: { kind: 'url', url: 'http://localhost:3000' },
+      previewTabs: [{ id: 'tab-1', source: { kind: 'url', url: 'http://localhost:3000' } }],
+      activePreviewTab: 'tab-1',
+    });
+    launchInstance('code');
+    assert.equal(isCodeAppForeground(), true);
+
+    clampPersistedFilePanelForActiveSurface();
+
+    const state = getFilePanelState();
+    assert.equal(state.rightPaneMode, null);
+    assert.equal(state.viewerOpen, false);
+    assert.equal(state.previewSource?.kind, 'url');
+    assert.equal(state.previewTabs.length, 1);
+  });
+
+  test('clampPersistedFilePanelForActiveSurface keeps desktop browser drawer restore', () => {
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+      previewSource: { kind: 'url', url: 'https://example.com' },
+    });
+    openDesktopWorkspaceTab('browser');
+    clampPersistedFilePanelForActiveSurface();
+    assert.equal(getFilePanelState().rightPaneMode, 'preview');
   });
 });

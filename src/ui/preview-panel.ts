@@ -1342,6 +1342,32 @@ function onWorkspaceFileSaved(path: string): void {
   }, 250);
 }
 
+async function onPreviewGuestLoadSettled(tabId?: string): Promise<void> {
+  if (!usesElectronPreview()) return;
+  const resolvedTabId = resolveTabId(tabId);
+  if (!resolvedTabId || resolvedTabId !== getActivePreviewTabId()) return;
+
+  // Split closed — keep native guest hidden (MIN-434).
+  if (getFilePanelState().rightPaneMode !== 'preview') {
+    await hidePreviewHost();
+    return;
+  }
+
+  const api = getPreviewApi();
+  const info = api?.getInfo ? await api.getInfo(resolvedTabId) : null;
+  const guestUrl = info?.url?.trim() ?? '';
+  const source = getActivePreviewSource();
+
+  // Blank guest with no active source = collapsed clear; do not resurface the overlay.
+  if (!source && (guestUrl === 'about:blank' || guestUrl === '')) {
+    await hidePreviewHost();
+    return;
+  }
+
+  await showPreviewHost();
+  onPreviewReloadSettled();
+}
+
 function bindPreviewIpcListeners(): void {
   const api = getPreviewApi();
   if (!api) return;
@@ -1358,8 +1384,7 @@ function bindPreviewIpcListeners(): void {
   unsubscribeLoading = api.onLoading((loading, tabId) => {
     setPreviewLoading(loading, tabId);
     if (!loading && usesElectronPreview() && resolveTabId(tabId) === getActivePreviewTabId()) {
-      void showPreviewHost();
-      onPreviewReloadSettled();
+      void onPreviewGuestLoadSettled(tabId);
     }
   });
   unsubscribeLoadFailed = api.onLoadFailed((detail, tabId) => {
