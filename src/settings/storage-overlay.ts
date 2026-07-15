@@ -60,6 +60,10 @@ function section(refreshAreas?: SettingsSectionId[]): OverlayEntry {
 /** Writable and section-only storage mappings keyed by catalog id. */
 export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   // —— General ——
+  // App updates state lives in the Electron main process (~/.minnow/updater.json),
+  // not in config.json, so both keys are section-only for agent tools.
+  'general.updates': section(['general']),
+  'general.updates.channel': section(['general']),
   'general.notifications': section(['general']),
   'general.notifications.enabled': browser('enabled', 'boolean', { refreshAreas: ['general'] }),
   'general.notifications.chat': browser('chatEnabled', 'boolean', { refreshAreas: ['general'] }),

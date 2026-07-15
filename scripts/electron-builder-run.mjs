@@ -29,6 +29,10 @@ const builderArgs = [
   'electron-builder',
   ...process.argv.slice(2),
   `--config.directories.output=${outputDir}`,
+  // Publish config exists only so electron-builder emits latest.yml for the
+  // auto-updater; uploading to GitHub Releases stays a manual step (MIN-384).
+  '--publish',
+  'never',
 ];
 
 console.log(`[package] Output: ${outputDir}/`);

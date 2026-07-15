@@ -3,6 +3,7 @@
  */
 
 @import './settings-controls.css';
+@import './settings-updates.css';
 
 .settings-page {
   display: none;

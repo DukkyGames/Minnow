@@ -201,6 +201,21 @@ npm run package:dir    # unpacked app directory
 
 `package` runs `build` → `electron:build` → `electron-builder`. App id `org.grimmedia.minnow`; Windows target NSIS with `build/icon.ico`. `documentation/` is bundled as an extra resource and `@lydell/node-pty` is unpacked from the asar.
 
+### Auto-update + releasing (MIN-384)
+
+Packaged Windows installs auto-update from **GitHub Releases** (`DukkyGames/Minnow`) via `electron-updater`: the app checks on launch and every 4 hours, downloads in the background, and installs when the user clicks **Restart to update** (Settings → General → App updates, or the menubar pill). `npm run package` also emits `latest.yml` next to the installer — the updater feed metadata. Nothing is uploaded automatically (`--publish never`).
+
+To ship a release:
+
+1. Bump `version` in `package.json` (installs stay frozen on whatever version they see in the feed, so every release needs a bump).
+2. `npm run package`.
+3. Create a GitHub release tagged `v<version>` and attach **both** `Minnow-Setup-<version>.exe` and `latest.yml` (plus `.blockmap` if present). The release notes body is what users see under “What’s new”.
+4. Mark the release as a **pre-release** to ship it to the **Beta** channel only; full releases go to everyone.
+
+Known limitations: Windows builds are unsigned, so SmartScreen may warn on first install (auto-updates after that are silent). macOS auto-update requires code signing — the Settings section shows a disabled state with a signing note until certificates exist.
+
+Full walkthrough — the release checklist and the user-facing update flow — is in [`guides/updating.md`](guides/updating.md).
+
 ---
 
 ## Troubleshooting
@@ -264,6 +279,7 @@ Minnow/
   - [`apps.md`](guides/apps.md) — tour of the MinnowOS apps
   - [`architecture.md`](guides/architecture.md) — high-level system map
   - [`configuration.md`](guides/configuration.md) — `~/.minnow`, `config.json`, providers, secrets
+  - [`updating.md`](guides/updating.md) — cutting a release + how auto-update reaches users
   - [`troubleshooting.md`](guides/troubleshooting.md) — common problems
   - [`oauth-google.md`](guides/oauth-google.md) / [`oauth-microsoft.md`](guides/oauth-microsoft.md) — Email/Calendar OAuth
 - [`PRODUCT.md`](../PRODUCT.md) — product goals and tone.

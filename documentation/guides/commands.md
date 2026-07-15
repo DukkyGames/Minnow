@@ -14,7 +14,7 @@ Every npm script, the headless CLI, smoke/maintenance scripts, and environment v
 | `npm run electron:prod` | Full build + Electron build, then run the packaged main against `dist/`. |
 | `npm run build` | `tsc && vite build` → `dist/`. `prebuild` regenerates `src/skills/builtin-manifest.json`. |
 | `npm run preview` | `vite preview` of the production build (no tool API). |
-| `npm run package` | Build + Electron build + **electron-builder** installer → `release/pkg` (Windows NSIS). |
+| `npm run package` | Build + Electron build + **electron-builder** installer → `release/pkg` (Windows NSIS + `latest.yml` auto-update feed metadata; never uploads — see [Getting started → Packaging](../getting-started.md#packaging-a-desktop-build)). |
 | `npm run package:dir` | Same, unpacked directory (`--dir`). |
 | `npm run package:clean` | Clean the `release/` output. |
 | `npx tsc --noEmit` | Typecheck only. |
