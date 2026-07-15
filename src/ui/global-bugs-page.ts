@@ -9,6 +9,7 @@ import {
   countOpenGlobalBugs,
   type GlobalBugScope,
 } from '../state/global-bugs.ts';
+import { isBugsStoreLoaded } from '../state/bug-board-store.ts';
 import { findChatById, sessionState } from '../state/sessions.ts';
 import { getWorkspacePath } from '../state/workspace.ts';
 import type { BugColumn } from '../types.ts';
@@ -225,7 +226,7 @@ export function initGlobalBugsPage(): void {
 
 /** Refresh sidebar badge count (call after bug board changes). */
 export function refreshGlobalBugsSidebarBadge(): void {
-  if (typeof document === 'undefined' || !sessionState) return;
+  if (typeof document === 'undefined' || !sessionState || !isBugsStoreLoaded()) return;
   const badge = document.getElementById('btnAllBugsCount');
   if (!badge) return;
   const openCurrent = countOpenGlobalBugs({

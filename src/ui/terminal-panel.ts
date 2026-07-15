@@ -14,7 +14,12 @@ import {
   loadTerminalMeta,
   saveTerminalMeta,
 } from '../config/terminal-meta';
-import { getActiveChat, scheduleSaveSessions } from '../state/sessions';
+import {
+  ensureSessionsReady,
+  getActiveChat,
+  scheduleSaveSessions,
+  sessionState,
+} from '../state/sessions';
 import type { TerminalRunRecord } from '../types';
 import { getLocalServerAvailable } from '../tools/client';
 import { registerShellRun, unregisterShellRun } from './shell-run-registry';
@@ -632,6 +637,9 @@ async function loadHistoryRun(runId: string): Promise<void> {
 }
 
 export async function refreshTerminalHistoryForActiveChat(): Promise<void> {
+  await ensureSessionsReady();
+  if (!sessionState) return;
+
   const chat = getActiveChat();
   if (!chat) return;
 

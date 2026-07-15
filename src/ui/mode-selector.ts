@@ -13,6 +13,7 @@ import {
   getActiveChat,
   isExpertChat,
   scheduleSaveSessions,
+  sessionState,
   touchChat,
 } from '../state/sessions';
 import { unmountReefWidgetsInChat } from '../chat/reef';
@@ -128,7 +129,7 @@ function syncPlanSegmentDisplay(btn: HTMLButtonElement, activeId: ModeId): void 
 /** Apply active chat mode to segment buttons. */
 export function syncModeSelectorFromActiveChat(): void {
   const root = getModeSelectorEl();
-  if (!root) return;
+  if (!root || !sessionState) return;
 
   const chat = getActiveChat();
   if (isExpertChat(chat) && chat.modeId !== 'general') {
