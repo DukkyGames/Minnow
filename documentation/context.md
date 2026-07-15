@@ -1465,8 +1465,8 @@ The app supports **multiple chat sessions** with a **collapsible left sidebar**.
 | Store | `src/state/runs-store.ts` — `createRun`, `activateBranch`, `pruneSupersededRunsAfterTruncate` |
 | Snapshot | `src/chat/turn-snapshot.ts` |
 | Fork / replay API | `src/chat/fork-from-run.ts`; `resendFromIndex` delegates here |
-| Turn hook | `runChatTurn` in `src/tools/loop.ts` — `replaySnapshot`, finalize on complete/stop/error |
-| UI | `src/ui/branch-picker.ts`, `src/ui/fork-model-dialog.ts`, message menu **Replay** / **Fork with different model…** |
+| Turn hook | `runChatTurn` in `src/tools/loop.ts` — `replaySnapshot`, finalize on complete/stop/error; replay applies snapshot `providerId` + `modelId` (ignores top-bar picker) |
+| UI | `src/ui/branch-picker.ts`, `src/ui/fork-model-dialog.ts` (top-bar model combobox via `populateMultiProviderModelSelect` + `mountAuxiliaryModelSelectCombobox`), message menu **Replay** / **Fork with different model…** |
 | Styles | `src/styles/branch-picker.css` |
 | QA | [`documentation/plans/verification/feature-01-trace-replay.md`](plans/verification/feature-01-trace-replay.md) |
 

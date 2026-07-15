@@ -1070,8 +1070,12 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     '';
   const parsedSelect = domRaw ? decodeModelSelectKey(domRaw) : null;
   const domModelId = parsedSelect?.modelId ?? domRaw;
-  // Background board task chats reuse the top-bar model when their stored binding is empty.
-  if (parsedSelect && (useActiveChatDom || !chat.modelId?.trim())) {
+  if (replaySnapshot) {
+    // Replay must use the provider/model frozen in the turn snapshot, not the top-bar picker.
+    chat.providerId = replaySnapshot.providerId;
+    chat.modelId = replaySnapshot.modelId;
+  } else if (parsedSelect && (useActiveChatDom || !chat.modelId?.trim())) {
+    // Background board task chats reuse the top-bar model when their stored binding is empty.
     chat.providerId = parsedSelect.providerId;
     chat.modelId = parsedSelect.modelId;
   }

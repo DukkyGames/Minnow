@@ -1,11 +1,16 @@
 /**
- * Compact provider + model picker for "Fork with different model…".
+ * Model picker for "Fork with different model…" (same combobox UI as the top bar).
  */
 
-import { fetchModels } from '../api/models';
+import { populateMultiProviderModelSelect } from '../api/models';
 import type { ForkOverrides } from '../chat/fork-from-run';
 import { readGlobalSamplerForSend } from '../config/sampler-meta';
-import { listProviders } from '../providers/store';
+import { decodeModelSelectKey } from '../lib/model-select-key';
+import {
+  closeModelSelectMenu,
+  mountAuxiliaryModelSelectCombobox,
+  syncAuxiliaryModelSelectCombobox,
+} from './model-select-picker';
 
 export interface ForkModelDialogResult {
   providerId: string;
@@ -22,11 +27,17 @@ function readSamplerFromDom(): { temperature: number; maxTokens: number } {
   };
 }
 
+function decodeForkSelection(value: string): { providerId: string; modelId: string } | null {
+  return decodeModelSelectKey(value.trim());
+}
+
 /** Modal dialog; resolves null when cancelled. */
 export function openForkModelDialog(
   initial: ForkOverrides & { providerId?: string; modelId?: string },
 ): Promise<ForkModelDialogResult | null> {
   return new Promise((resolve) => {
+    closeModelSelectMenu();
+
     const backdrop = document.createElement('div');
     backdrop.className = 'fork-model-dialog__backdrop';
     backdrop.setAttribute('role', 'presentation');
@@ -42,17 +53,18 @@ export function openForkModelDialog(
     title.className = 'fork-model-dialog__title';
     title.textContent = 'Fork with different model';
 
-    const providerLabel = document.createElement('label');
-    providerLabel.className = 'fork-model-dialog__label';
-    providerLabel.textContent = 'Provider';
-    const providerSelect = document.createElement('select');
-    providerSelect.className = 'fork-model-dialog__select';
-
+    const modelField = document.createElement('div');
+    modelField.className = 'settings-field fork-model-dialog__model-field';
     const modelLabel = document.createElement('label');
-    modelLabel.className = 'fork-model-dialog__label';
+    modelLabel.className = 'settings-field-label';
+    modelLabel.htmlFor = 'forkModelDialogModel';
     modelLabel.textContent = 'Model';
     const modelSelect = document.createElement('select');
-    modelSelect.className = 'fork-model-dialog__select';
+    modelSelect.id = 'forkModelDialogModel';
+    modelSelect.setAttribute('aria-label', 'Model');
+    modelSelect.innerHTML = '<option value="">Loading models…</option>';
+
+    modelField.append(modelLabel, modelSelect);
 
     const actions = document.createElement('div');
     actions.className = 'fork-model-dialog__actions';
@@ -64,26 +76,36 @@ export function openForkModelDialog(
     okBtn.type = 'button';
     okBtn.className = 'fork-model-dialog__btn fork-model-dialog__btn--primary';
     okBtn.textContent = 'Fork';
+    okBtn.disabled = true;
+
+    const syncForkButton = (): void => {
+      okBtn.disabled = decodeForkSelection(modelSelect.value) === null;
+    };
 
     const close = (result: ForkModelDialogResult | null): void => {
+      closeModelSelectMenu();
       backdrop.remove();
       document.removeEventListener('keydown', onKey);
       resolve(result);
     };
 
     const onKey = (ev: KeyboardEvent): void => {
-      if (ev.key === 'Escape') close(null);
+      if (ev.key !== 'Escape') return;
+      if (panel.querySelector('.model-select-inner.is-open')) {
+        closeModelSelectMenu();
+        return;
+      }
+      close(null);
     };
 
     cancelBtn.addEventListener('click', () => close(null));
     okBtn.addEventListener('click', () => {
-      const providerId = providerSelect.value.trim();
-      const modelId = modelSelect.value.trim();
-      if (!providerId || !modelId) return;
+      const decoded = decodeForkSelection(modelSelect.value);
+      if (!decoded) return;
       const sampler = readSamplerFromDom();
       close({
-        providerId,
-        modelId,
+        providerId: decoded.providerId,
+        modelId: decoded.modelId,
         temperature: initial.temperature ?? sampler.temperature,
         maxTokens: initial.maxTokens ?? sampler.maxTokens,
       });
@@ -93,47 +115,31 @@ export function openForkModelDialog(
       if (ev.target === backdrop) close(null);
     });
 
+    modelSelect.addEventListener('change', syncForkButton);
+
+    mountAuxiliaryModelSelectCombobox(modelSelect);
+
     actions.append(cancelBtn, okBtn);
-    panel.append(title, providerLabel, providerSelect, modelLabel, modelSelect, actions);
+    panel.append(title, modelField, actions);
     backdrop.appendChild(panel);
     document.body.appendChild(backdrop);
     document.addEventListener('keydown', onKey);
 
     void (async () => {
-      const { providers } = await listProviders();
-      const preProvider = initial.providerId ?? providers[0]?.id ?? '';
-      for (const p of providers) {
-        const opt = document.createElement('option');
-        opt.value = p.id;
-        opt.textContent = p.label || p.id;
-        if (p.id === preProvider) opt.selected = true;
-        providerSelect.appendChild(opt);
-      }
-
-      const fillModels = async (): Promise<void> => {
-        modelSelect.innerHTML = '';
-        await fetchModels();
-        const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;
-        if (!sel) return;
-        for (const opt of Array.from(sel.options)) {
-          if (!opt.value) continue;
-          const m = document.createElement('option');
-          m.value = opt.value;
-          m.textContent = opt.textContent ?? opt.value;
-          if (opt.value === (initial.modelId ?? '')) m.selected = true;
-          modelSelect.appendChild(m);
-        }
-        if (!modelSelect.value && modelSelect.options.length > 0) {
-          modelSelect.selectedIndex = 0;
-        }
-      };
-
-      providerSelect.addEventListener('change', () => {
-        void fillModels();
+      await populateMultiProviderModelSelect(modelSelect, {
+        selectedProviderId: initial.providerId,
+        selectedModelId: initial.modelId,
+        includeEmptyOption: false,
       });
+      syncAuxiliaryModelSelectCombobox(modelSelect);
+      syncForkButton();
 
-      await fillModels();
-      okBtn.focus();
+      const picker = modelField.querySelector('.model-select-trigger') as HTMLButtonElement | null;
+      if (picker && !picker.disabled) {
+        picker.focus();
+      } else {
+        cancelBtn.focus();
+      }
     })();
   });
 }
