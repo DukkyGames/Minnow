@@ -4,8 +4,8 @@
 
 import {
   createEmailAccount,
+  deleteEmailAccount,
   fetchEmailAccounts,
-  testEmailAccount,
   updateEmailAccount,
   type EmailAccount,
 } from '../../email/client';
@@ -58,8 +58,39 @@ interface AccountFormOptions extends EmailPanelOptions {
   existing?: EmailAccount;
   /** First account becomes default automatically when none exist yet. */
   isFirstAccount?: boolean;
+  /** Total configured accounts — used for sign-out confirmation copy. */
+  accountCount?: number;
   onSaved: () => void;
   onCancel?: () => void;
+  onSignedOut?: () => void;
+}
+
+/** Build the confirmation copy before removing a stored email account. */
+function signOutConfirmMessage(account: EmailAccount, accountCount: number): string {
+  const identity = `"${account.label}" (${account.username})`;
+  if (accountCount > 1) {
+    return `Sign out of ${identity}? This device will stop syncing mail for this account and remove its cached messages.`;
+  }
+  return `Sign out of ${identity}? You will need to connect again to use Email. Cached messages on this device will be removed.`;
+}
+
+/** Confirm and delete a stored email account (sign out). */
+async function signOutEmailAccount(
+  account: EmailAccount,
+  accountCount: number,
+  options: EmailPanelOptions,
+): Promise<boolean> {
+  if (!window.confirm(signOutConfirmMessage(account, accountCount))) {
+    return false;
+  }
+  try {
+    await deleteEmailAccount(account.id);
+    options.onStatus?.('ok', 'Signed out');
+    return true;
+  } catch (err) {
+    options.onStatus?.('err', err instanceof Error ? err.message : 'Sign out failed');
+    return false;
+  }
 }
 
 /** Render create- or edit-account form. */
@@ -158,6 +189,27 @@ function renderAccountForm(mount: HTMLElement, options: AccountFormOptions): voi
   saveBtn.type = 'submit';
   actions.appendChild(saveBtn);
   form.appendChild(actions);
+
+  if (editing && existing && options.onSignedOut) {
+    const signOutZone = el('div', 'email-setup-signout');
+    const signOutBtn = el('button', 'email-btn email-btn-danger', 'Sign out') as HTMLButtonElement;
+    signOutBtn.type = 'button';
+    signOutBtn.addEventListener('click', async () => {
+      signOutBtn.disabled = true;
+      const signedOut = await signOutEmailAccount(
+        existing,
+        options.accountCount ?? 1,
+        options,
+      );
+      if (signedOut) {
+        options.onSignedOut();
+      } else {
+        signOutBtn.disabled = false;
+      }
+    });
+    signOutZone.appendChild(signOutBtn);
+    form.appendChild(signOutZone);
+  }
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -301,9 +353,7 @@ export async function renderEmailPanel(
 
   const utils = el('div', 'email-chrome-utils');
   const settingsBtn = chromeIconBtn(EMAIL_ICONS.settings, 'Account settings');
-  const testBtn = chromeIconBtn(EMAIL_ICONS.testConnection, 'Test connection');
   utils.appendChild(settingsBtn);
-  utils.appendChild(testBtn);
 
   chrome.appendChild(identity);
   chrome.appendChild(nav);
@@ -389,18 +439,6 @@ export async function renderEmailPanel(
     void renderView();
   });
 
-  testBtn.addEventListener('click', async () => {
-    testBtn.disabled = true;
-    try {
-      await testEmailAccount(activeAccount.id);
-      options.onStatus?.('ok', 'Connection OK');
-    } catch (err) {
-      options.onStatus?.('err', err instanceof Error ? err.message : 'Test failed');
-    } finally {
-      testBtn.disabled = false;
-    }
-  });
-
   const openAccountSetup = (mode: 'add' | 'edit') => {
     accountFormMode = mode;
     body.replaceChildren();
@@ -421,7 +459,9 @@ export async function renderEmailPanel(
       ...options,
       title: 'Edit email account',
       existing: activeAccount,
+      accountCount: accounts.length,
       onSaved: () => void renderEmailPanel(mount, options),
+      onSignedOut: () => void renderEmailPanel(mount, options),
       onCancel: () => {
         accountFormMode = 'none';
         settingsBtn.classList.remove('is-active');

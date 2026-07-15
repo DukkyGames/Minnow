@@ -10,10 +10,13 @@ import { after, before, describe, test } from 'node:test';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
 import {
   createEmailAccount,
+  deleteEmailAccount,
   listEmailAccounts,
   redactAccount,
   validateAccountInput,
 } from '../../server/email/accounts.js';
+import { createAutomation, listAutomations } from '../../server/email/automations.js';
+import { emailCacheDir, emailCacheMessagesPath } from '../../server/email/paths.js';
 import { resetSecretBoxCacheForTests, setSecretKeyBytesForTests } from '../../server/security/secret-box.js';
 
 /** @type {string} */
@@ -79,5 +82,52 @@ describe('account API redaction', () => {
     const fromList = redactAccount(listed[0]);
     assert.equal(fromList.hasPassword, true);
     assert.equal(JSON.stringify(fromList).includes('super-secret-password'), false);
+  });
+});
+
+describe('deleteEmailAccount', () => {
+  test('removes credentials, cache, and automations for the account', async () => {
+    for (const row of await listEmailAccounts()) {
+      await deleteEmailAccount(row.id);
+    }
+
+    const primary = await createEmailAccount(
+      {
+        label: 'Primary',
+        username: 'primary@example.com',
+        imap: { host: 'imap.example.com', port: 993, tls: true },
+        isDefault: true,
+      },
+      'primary-password',
+    );
+    const secondary = await createEmailAccount(
+      {
+        label: 'Secondary',
+        username: 'secondary@example.com',
+        imap: { host: 'imap.example.com', port: 993, tls: true },
+      },
+      'secondary-password',
+    );
+
+    await fs.mkdir(emailCacheDir(primary.id), { recursive: true });
+    await fs.writeFile(emailCacheMessagesPath(primary.id), '{"messages":[]}\n', 'utf8');
+    await createAutomation({
+      name: 'Triage primary',
+      accountId: primary.id,
+      trigger: 'on_new_message',
+      action: 'triage',
+    });
+
+    await deleteEmailAccount(primary.id);
+
+    const remaining = await listEmailAccounts();
+    assert.equal(remaining.length, 1);
+    assert.equal(remaining[0].id, secondary.id);
+    assert.equal(remaining[0].isDefault, true);
+
+    const rules = await listAutomations();
+    assert.equal(rules.length, 0);
+
+    await assert.rejects(fs.stat(emailCacheDir(primary.id)), /ENOENT/);
   });
 });

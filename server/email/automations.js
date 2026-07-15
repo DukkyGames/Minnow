@@ -112,6 +112,20 @@ export async function deleteAutomation(id) {
 }
 
 /**
+ * Remove all automation rules bound to an email account (sign-out cleanup).
+ * @param {string} accountId
+ */
+export async function deleteAutomationsForAccount(accountId) {
+  const rules = await listAutomations();
+  const next = rules.filter((row) => row.accountId !== accountId);
+  if (next.length === rules.length) {
+    return { removed: 0 };
+  }
+  await writeAutomations(next);
+  return { removed: rules.length - next.length };
+}
+
+/**
  * Match automation trigger against a message.
  * @param {EmailAutomation} rule
  * @param {Record<string, unknown>} message
