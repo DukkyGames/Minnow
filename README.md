@@ -245,3 +245,5 @@ Contributions welcome — issues, PRs, docs, and skills.
 | [DESIGN.md](DESIGN.md) | Visual design system |
 
 A fuller wiki is planned — guides in [`documentation/guides/`](documentation/guides/) are the home for task docs until then.
+
+<!-- test change: agent edit verification -->
