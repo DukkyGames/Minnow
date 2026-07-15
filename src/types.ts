@@ -4,7 +4,7 @@
  */
 
 import type { ModeId } from './chat/modes/types';
-import type { SuperPlanState } from './chat/super-plan/types';
+import type { SuperPlanStageId, SuperPlanState } from './chat/super-plan/types';
 import type { PinnedSkillState } from './skills/types';
 import type { ChatTokenLedger } from './usage/types';
 import type {
@@ -70,6 +70,8 @@ export interface UserMessage {
   steer?: boolean;
   /** True when the row records a satisfied /goal completion condition. */
   goalAchieved?: boolean;
+  /** Super Plan controller stage prompt — hidden from the chat transcript UI. */
+  superPlanStage?: SuperPlanStageId;
 }
 
 /** One build-agent progress item (todo_write). */
