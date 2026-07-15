@@ -82,6 +82,54 @@ export function isVenvTemplatePython(exePath) {
   );
 }
 
+/** Versioned interpreter filename in python-build-standalone (e.g. python3.12). */
+function standalonePythonVersionedBinaryName() {
+  const [major, minor] = PYTHON_STANDALONE_VERSION.split('.');
+  return `python${major}.${minor}`;
+}
+
+/** True when exePath exists on disk and is not a stdlib venv template stub. */
+function isStandalonePythonCandidate(exePath) {
+  return Boolean(exePath) && fs.existsSync(exePath) && !isVenvTemplatePython(exePath);
+}
+
+/**
+ * python-build-standalone ships bin/python3 as a symlink. Default fs.cp can leave
+ * absolute symlinks into the temp extract dir; after cleanup spawn ENOENT (MIN-432).
+ * Re-link bin/python3 and bin/python relative to the versioned interpreter when found.
+ * @param {string} runtimeDir
+ * @returns {Promise<string | null>}
+ */
+export async function repairStandalonePythonBinSymlinks(runtimeDir) {
+  if (process.platform === 'win32') {
+    return null;
+  }
+  const binDir = path.join(runtimeDir, 'bin');
+  if (!fs.existsSync(binDir)) {
+    return null;
+  }
+
+  const preferred = standalonePythonVersionedBinaryName();
+  let versionedName = preferred;
+  const preferredPath = path.join(binDir, preferred);
+  if (!fs.existsSync(preferredPath)) {
+    const entries = await fsp.readdir(binDir);
+    const hit = entries.find((name) => /^python3\.\d+(?:\.\d+)?$/.test(name));
+    if (!hit || !fs.existsSync(path.join(binDir, hit))) {
+      return null;
+    }
+    versionedName = hit;
+  }
+
+  const py3 = path.join(binDir, 'python3');
+  const py = path.join(binDir, 'python');
+  await fsp.rm(py3, { force: true });
+  await fsp.symlink(versionedName, py3);
+  await fsp.rm(py, { force: true });
+  await fsp.symlink('python3', py);
+  return path.join(binDir, versionedName);
+}
+
 /**
  * Resolve python.exe / python3 after extracting install_only archive.
  * install_only layouts put the interpreter at the extract root (e.g. runtime/python.exe),
@@ -90,6 +138,7 @@ export function isVenvTemplatePython(exePath) {
  * @returns {Promise<string>}
  */
 export async function findStandalonePythonExe(pythonRoot) {
+  const versionedBinary = standalonePythonVersionedBinaryName();
   const candidates =
     process.platform === 'win32'
       ? [
@@ -98,15 +147,18 @@ export async function findStandalonePythonExe(pythonRoot) {
           path.join(pythonRoot, 'python', 'install', 'python.exe'),
         ]
       : [
+          path.join(pythonRoot, 'bin', versionedBinary),
           path.join(pythonRoot, 'bin', 'python3'),
           path.join(pythonRoot, 'bin', 'python'),
+          path.join(pythonRoot, 'python', 'bin', versionedBinary),
           path.join(pythonRoot, 'python', 'bin', 'python3'),
           path.join(pythonRoot, 'python', 'bin', 'python'),
+          path.join(pythonRoot, 'python', 'install', 'bin', versionedBinary),
           path.join(pythonRoot, 'python', 'install', 'bin', 'python3'),
         ];
 
   for (const candidate of candidates) {
-    if (fs.existsSync(candidate) && !isVenvTemplatePython(candidate)) {
+    if (isStandalonePythonCandidate(candidate)) {
       return candidate;
     }
   }
@@ -124,8 +176,9 @@ export async function findStandalonePythonExe(pythonRoot) {
       } else if (
         (ent.name === 'python.exe' ||
           ent.name === 'python3' ||
-          ent.name === 'python') &&
-        !isVenvTemplatePython(full)
+          ent.name === 'python' ||
+          /^python3\.\d+(?:\.\d+)?$/.test(ent.name)) &&
+        isStandalonePythonCandidate(full)
       ) {
         return full;
       }
@@ -204,6 +257,7 @@ export async function ensureStandalonePython(onProgress) {
   if (fs.existsSync(runtimeDir)) {
     onProgress?.('Repairing Python runtime');
     try {
+      await repairStandalonePythonBinSymlinks(runtimeDir);
       const repaired = await findStandalonePythonExe(runtimeDir);
       if (await verifyStandalonePythonExe(repaired)) {
         await writePythonRuntimeMeta(pythonRoot, repaired, {
@@ -245,9 +299,14 @@ export async function ensureStandalonePython(onProgress) {
     const targetDir = path.join(pythonRoot, 'runtime');
     await fsp.rm(targetDir, { recursive: true, force: true });
     await fsp.mkdir(path.dirname(targetDir), { recursive: true });
-    await fsp.cp(inner, targetDir, { recursive: true });
+    // Preserve relative symlinks — default cp can leave absolute links into tmp (MIN-432).
+    await fsp.cp(inner, targetDir, { recursive: true, verbatimSymlinks: true });
 
-    const pythonExe = await findStandalonePythonExe(targetDir);
+    await repairStandalonePythonBinSymlinks(targetDir);
+    let pythonExe = await findStandalonePythonExe(targetDir);
+    if (!(await verifyStandalonePythonExe(pythonExe))) {
+      throw new Error('Python runtime install succeeded but interpreter is not runnable');
+    }
     await writePythonRuntimeMeta(pythonRoot, pythonExe, { asset: assetName });
     return pythonExe;
   } finally {
