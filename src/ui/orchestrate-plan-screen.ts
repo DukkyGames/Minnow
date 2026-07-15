@@ -9,6 +9,7 @@ import {
   isExecutableOrchestratePlan,
 } from '../chat/orchestrate/plan-path';
 import { normalizeModeId } from '../chat/modes/types';
+import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
 import {
   cancelSuperPlan,
   getSuperPlanCheckpointKind,
@@ -369,6 +370,7 @@ export function teardownOrchestratePlanScreenDom(
   document
     .getElementById('mainColumn')
     ?.classList.remove(MAIN_COLUMN_PLAN_SCREEN_CLASS);
+  notifyAskQuestionDisplayContextChanged();
 }
 
 /** Remove overlay and clear plan-screen session. */
@@ -1485,6 +1487,7 @@ export function renderOrchestratePlanScreen(
   if (wiresSuperPlanListener && chat) {
     wireSuperPlanControllerListener(chat);
   }
+  notifyAskQuestionDisplayContextChanged();
 }
 
 /**

@@ -3,7 +3,7 @@
  */
 
 import { getChatAbort } from '../app-state';
-import { isAskQuestionDomVisible } from '../chat/ask-question-display';
+import { isAskQuestionDomVisible, registerAskQuestionDisplayContextSync } from '../chat/ask-question-display';
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import { getActiveChat } from '../state/sessions';
 import {
@@ -428,10 +428,6 @@ export function showQuestionCardsModal(
     panel.append(header, cardBody, footer);
     host.appendChild(panel);
 
-    if (!isAskQuestionDomVisible(chatIdForAbort)) {
-      parkActiveQuestionModal();
-    }
-
     let settled = false;
     const finish = (result: AskQuestionToolResult): void => {
       if (settled) return;
@@ -451,6 +447,10 @@ export function showQuestionCardsModal(
     };
 
     requestQuestionCardsCancel = () => finish({ status: 'cancelled', answers: [] });
+
+    if (!isAskQuestionDomVisible(chatIdForAbort)) {
+      parkActiveQuestionModal();
+    }
 
     const abortListener = (): void => {
       finish({ status: 'cancelled', answers: [] });
@@ -701,3 +701,5 @@ export async function runAskQuestionModal(
   const result = await showQuestionCardsModal(args, context);
   return stringifyAskQuestionResult(result);
 }
+
+registerAskQuestionDisplayContextSync(syncAskQuestionModalOnDisplayContextChange);

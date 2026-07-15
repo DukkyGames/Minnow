@@ -14,6 +14,16 @@ import { isChatAppForeground } from '../ui/chat-mount';
 import { isMainColumnOverlaySuppressingChatDom } from '../ui/main-column-overlay';
 import { isBoardViewActive } from '../ui/view-mode-toggle';
 
+type AskQuestionDisplayContextSync = () => void;
+let displayContextSync: AskQuestionDisplayContextSync | null = null;
+
+/** Wire modal park/unpark from question-cards-modal without a circular import. */
+export function registerAskQuestionDisplayContextSync(
+  sync: AskQuestionDisplayContextSync,
+): void {
+  displayContextSync = sync;
+}
+
 type AskQuestionDisplayListener = () => void;
 const displayListeners = new Set<AskQuestionDisplayListener>();
 
@@ -46,6 +56,7 @@ export function notifyAskQuestionDisplayContextChanged(): void {
       /* ignore subscriber errors */
     }
   }
+  displayContextSync?.();
 }
 
 /** Subscribe to chat / app context changes that affect ask_question visibility. */

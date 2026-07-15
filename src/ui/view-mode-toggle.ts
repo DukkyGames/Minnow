@@ -5,6 +5,7 @@
  */
 
 import { normalizeModeId } from '../chat/modes/types';
+import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
 import {
   isBoardSetupIncomplete,
 } from '../chat/orchestrate/board-setup';
@@ -74,6 +75,7 @@ export function syncBoardViewChrome(): void {
   const initSplit = mainColumn.classList.contains('main-column--orchestrate-init-split');
   mainColumn.classList.toggle('main-column--board-view', boardView && !initSplit);
   void import('./chat-scroll').then((m) => m.refreshChatJumpChipVisibility());
+  notifyAskQuestionDisplayContextChanged();
 }
 
 function getBoardToggleButton(): HTMLButtonElement | null {

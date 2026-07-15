@@ -14,6 +14,7 @@ import {
   navigateToCodeOverview,
 } from '../os/router';
 import { fetchSchedulerJobs } from '../scheduler/client';
+import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
 import { getGroupsForWorkspace, openBoardGroup } from '../state/chat-groups';
 import { gitStatus } from '../state/git-api';
 import {
@@ -1014,6 +1015,7 @@ export async function openCodeOverview(): Promise<void> {
   syncOverviewNavButtons();
   startPolling();
   await refreshAllPanels();
+  notifyAskQuestionDisplayContextChanged();
 }
 
 /** Tear down overview and optionally restore chat view. */
@@ -1047,6 +1049,7 @@ export function closeCodeOverview(options?: {
   } else if (area) {
     area.replaceChildren();
   }
+  notifyAskQuestionDisplayContextChanged();
 }
 
 const PHONE_LAYOUT_MQ = '(max-width: 600px)';

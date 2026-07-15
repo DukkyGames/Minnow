@@ -18,6 +18,7 @@ import { createEmptyChatObject, setSessionStateForTests } from '../../src/state/
 function setupDom(win: import('happy-dom').Window): void {
   win.document.body.innerHTML = `
     <div id="mainColumn">
+      <div id="chatArea" class="chat-area"></div>
       <div id="questionHost" class="question-host" hidden></div>
     </div>
     <main id="chatView" class="chat-app-page">
@@ -126,5 +127,25 @@ describe('ask-question-display', () => {
 
     await waiter;
     assert.equal(isAskQuestionDomVisible('chat-b'), true);
+  });
+
+  test('waitForAskQuestionDisplayContext resolves when code overview overlay closes', async () => {
+    const { isAskQuestionDomVisible, waitForAskQuestionDisplayContext, notifyAskQuestionDisplayContextChanged } =
+      await import('../../src/chat/ask-question-display.ts');
+    launchInstance('code');
+
+    const overviewRoot = document.createElement('div');
+    overviewRoot.id = 'codeOverviewRoot';
+    document.getElementById('chatArea')?.appendChild(overviewRoot);
+    document.getElementById('chatArea')?.classList.add('chat-area--code-overview');
+    assert.equal(isAskQuestionDomVisible('chat-a'), false);
+
+    const waiter = waitForAskQuestionDisplayContext('chat-a');
+    overviewRoot.remove();
+    document.getElementById('chatArea')?.classList.remove('chat-area--code-overview');
+    notifyAskQuestionDisplayContextChanged();
+
+    await waiter;
+    assert.equal(isAskQuestionDomVisible('chat-a'), true);
   });
 });

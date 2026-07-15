@@ -109,12 +109,14 @@ import { renderChatFromHistory, renderStatsForChat } from './ui/messages';
 import { refreshHubLiveData } from './ui/hub';
 import { bootGenerationResumeForChats } from './chat/generation-resume';
 import { bootIncompleteToolResumeForChats } from './chat/incomplete-tool-resume';
-import { bindAskQuestionPlanScreenHooks } from './chat/ask-question-display';
+import {
+  bindAskQuestionPlanScreenHooks,
+  notifyAskQuestionDisplayContextChanged,
+} from './chat/ask-question-display';
 import {
   isOrchestratePlanScreenSuppressingChatDom,
   resolveOrchestratePlanScreenQuestionHost,
 } from './ui/orchestrate-plan-screen';
-import { syncAskQuestionModalOnDisplayContextChange } from './ui/question-cards-modal';
 import { subscribeInstances } from './os/instances';
 import { bootOrchestrateBoardResume } from './chat/orchestrate/board-boot-resume';
 import { initBoardLogDiskSink } from './state/board-log-disk.ts';
@@ -213,7 +215,7 @@ export async function initApp(): Promise<void> {
     isSuppressingChatDom: (chatId) => isOrchestratePlanScreenSuppressingChatDom(chatId),
   });
   subscribeInstances(() => {
-    syncAskQuestionModalOnDisplayContextChange();
+    notifyAskQuestionDisplayContextChanged();
   });
   await detectConfigServer();
   refreshConfigStorageBanner();
