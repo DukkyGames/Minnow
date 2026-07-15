@@ -5,6 +5,7 @@
 import '../styles/code-brain-map.css';
 
 import { sessionState } from '../state/sessions';
+import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
 import { stripMainColumnOverlayClasses } from './main-column-overlay';
 
 const CODE_SECTION_ID = 'brainSection-code';
@@ -184,6 +185,7 @@ export async function openCodeBrainMap(): Promise<void> {
   await renderBrainSection('code');
 
   syncFooterButton();
+  notifyAskQuestionDisplayContextChanged();
 }
 
 /** Tear down the overlay and restore the prior chat view. */
@@ -205,6 +207,7 @@ export function closeCodeBrainMap(): void {
   } else if (area) {
     area.replaceChildren();
   }
+  notifyAskQuestionDisplayContextChanged();
 }
 
 /** Toggle the code map from the chat sidebar footer. */

@@ -9,6 +9,7 @@ import {
   isExecutableOrchestratePlan,
 } from '../chat/orchestrate/plan-path';
 import { normalizeModeId } from '../chat/modes/types';
+import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
 import {
   cancelSuperPlan,
   getSuperPlanCheckpointKind,
@@ -297,7 +298,10 @@ export function suspendOrchestratePlanScreenOnLeave(leavingChatId: string): void
   if (!isOrchestratePlanScreenMounted()) return;
   preservePlanScreenQuestionsPhase();
   planSession.planScreenSuspended = true;
-  teardownOrchestratePlanScreenDom({ chatId: leavingChatId });
+  teardownOrchestratePlanScreenDom({
+    keepQuestionsInComposer: true,
+    chatId: leavingChatId,
+  });
 }
 
 /** Suspend overlay when foregrounding another MinnowOS app (keep grill questions in composer). */
@@ -329,18 +333,24 @@ function preparePlanScreenQuestionsBeforeTeardown(
   chatId: string,
   options: { keepQuestionsInComposer?: boolean } = {},
 ): void {
-  if (!isAskQuestionModalOnPlanScreenHost()) {
-    if (isAskQuestionModalOpenForChat(chatId)) {
-      forceCloseAskQuestionModalForChat(chatId);
-    }
+  if (!isAskQuestionModalOpenForChat(chatId)) {
     return;
   }
-  if (options.keepQuestionsInComposer) {
-    const composerHost = document.getElementById('questionHost');
-    if (composerHost && migrateActiveQuestionModalToHost(composerHost)) {
-      if (planSession) planSession.phase = 'questions';
-      return;
+  if (isAskQuestionModalOnPlanScreenHost()) {
+    if (options.keepQuestionsInComposer) {
+      const composerHost = document.getElementById('questionHost');
+      if (composerHost && migrateActiveQuestionModalToHost(composerHost)) {
+        if (planSession) planSession.phase = 'questions';
+        return;
+      }
     }
+    forceCloseAskQuestionModalForChat(chatId);
+    return;
+  }
+  // Strip already lives in the composer — leave it for chat-switch park/unpark.
+  if (options.keepQuestionsInComposer) {
+    if (planSession) planSession.phase = 'questions';
+    return;
   }
   forceCloseAskQuestionModalForChat(chatId);
 }
@@ -373,6 +383,7 @@ export function teardownOrchestratePlanScreenDom(
   document
     .getElementById('mainColumn')
     ?.classList.remove(MAIN_COLUMN_PLAN_SCREEN_CLASS);
+  notifyAskQuestionDisplayContextChanged();
 }
 
 /** Remove overlay and clear plan-screen session. */
@@ -1511,6 +1522,7 @@ export function renderOrchestratePlanScreen(
   if (wiresSuperPlanListener && chat) {
     wireSuperPlanControllerListener(chat);
   }
+  notifyAskQuestionDisplayContextChanged();
 }
 
 /**
