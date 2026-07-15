@@ -10,6 +10,7 @@ import { resetDesktopWorkspaceMountsForTests } from '../../src/os/desktop-worksp
 import {
   panelPathsEqual,
   resolvePanelWorktreeCwd,
+  resolvePanelBrowseRunTargetSeed,
 } from '../../src/ui/panel-worktree-cwd.ts';
 import {
   buildFileTreeToolContext,
@@ -94,6 +95,32 @@ describe('resolvePanelWorktreeCwd', () => {
 describe('panelPathsEqual', () => {
   test('normalizes slashes and trailing separators', () => {
     assert.equal(panelPathsEqual('a/b/', 'a\\b'), true);
+  });
+});
+
+describe('resolvePanelBrowseRunTargetSeed', () => {
+  test('returns null when browse override is off', () => {
+    setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
+    assert.equal(
+      resolvePanelBrowseRunTargetSeed(WORKTREE, false, [{ path: WORKTREE, branch: 'feat/x' }]),
+      null,
+    );
+  });
+
+  test('returns local when override selects main workspace', () => {
+    setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
+    assert.deepEqual(resolvePanelBrowseRunTargetSeed(MAIN_WS, true, []), { kind: 'local' });
+  });
+
+  test('returns worktree root and branch when override selects a worktree', () => {
+    setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
+    assert.deepEqual(
+      resolvePanelBrowseRunTargetSeed(WORKTREE, true, [
+        { path: MAIN_WS, branch: 'main' },
+        { path: WORKTREE, branch: 'feat/task' },
+      ]),
+      { kind: 'worktree', worktreeRoot: WORKTREE, gitBranch: 'feat/task' },
+    );
   });
 });
 

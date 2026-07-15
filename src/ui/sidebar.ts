@@ -73,6 +73,7 @@ import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selec
 import { syncComposerPinnedSkillFromActiveChat } from './composer-pinned-skill';
 import { syncComposerRunTargetFromActiveChat } from './composer-run-target';
 import { clearPanelCwdUserOverride, syncPanelFromActiveChat } from './git-panel';
+import { seedNewChatComposerRunTarget } from './new-chat-run-target-seed';
 import { buildDefaultPinnedSkillForNewChat } from '../skills/config';
 import { isBoardViewActive, syncViewModeToggleFromActiveChat } from './view-mode-toggle';
 import {
@@ -1280,11 +1281,14 @@ export function createChatWithMode(
         applyModeIdToChat(active, requestedMode);
       }
       applyDefaultModelToChat(active);
+      seedNewChatComposerRunTarget(active);
       touchChat(active);
       resetComposerForEphemeralReuse();
       recordChatOpened(active.id);
       paintActiveChatInForegroundShell(active);
       syncCreateChatChrome(active.id);
+      clearPanelCwdUserOverride();
+      syncPanelFromActiveChat({ forceFileTree: true });
       syncModelSelectForActiveChat();
       renderSidebar();
       scheduleSaveSessions();
@@ -1326,6 +1330,8 @@ export function createChatWithMode(
     recordChatMessage(chat);
   }
 
+  seedNewChatComposerRunTarget(chat);
+
   sessionState!.chats.unshift(chat);
   pruneEphemeralEmptyChats(sessionState!, chat.id);
   sessionState!.activeId = chat.id;
@@ -1335,6 +1341,8 @@ export function createChatWithMode(
   void bootGenerationResumeForChat(chat);
   renderStatsForChat(chat);
   syncCreateChatChrome(chat.id);
+  clearPanelCwdUserOverride();
+  syncPanelFromActiveChat({ forceFileTree: true });
   syncModelSelectForActiveChat();
   void import('./terminal-panel').then((m) => m.refreshTerminalHistoryForActiveChat());
   syncComposerFromStreamingState();
