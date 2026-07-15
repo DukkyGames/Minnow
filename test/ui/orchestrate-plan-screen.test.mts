@@ -10,6 +10,7 @@ import {
   isOrchestratePlanScreenSuppressingChatDom,
   isOrchestratePlanScreenSuspended,
   isSuperPlanPipelineResumable,
+  isSuperPlanPlanScreenRestorable,
   openOrchestratePlanScreen,
   renderOrchestratePlanScreen,
   resetOrchestratePlanScreenForTests,
@@ -377,6 +378,60 @@ describe('orchestrate plan screen', () => {
       /Add OAuth login/,
       'transcript should render beneath the resume banner (not a blank page)',
     );
+  });
+
+  test('restore session from cancelled superPlan shows resume banner after reload', () => {
+    const window = new Window();
+    globalThis.document = window.document;
+    globalThis.HTMLElement = window.HTMLElement;
+
+    const area = mountCodeChatAreaForTests();
+    document.body.appendChild(
+      Object.assign(document.createElement('div'), { id: 'mainColumn' }),
+    );
+
+    const chat = createEmptyChatObject('sp-cancelled-reload');
+    chat.modeId = 'super-plan';
+    chat.history.push({ role: 'user', content: 'Add OAuth login' });
+    const stages = createInitialSuperPlanStages();
+    stages.draft1.status = 'error';
+    stages.draft1.error = 'Cancelled by user';
+    chat.superPlan = {
+      slug: 'oauth',
+      prompt: 'Add OAuth login',
+      activeStage: 'draft1',
+      stages,
+      cancelled: true,
+      specPath: 'documentation/plans/references/oauth-spec.md',
+      researchPath: 'documentation/plans/references/oauth-research.md',
+      planPath: 'documentation/plans/oauth.md',
+      uiInvolved: false,
+    };
+    setSessionStateForTests({
+      version: 5,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    assert.equal(isSuperPlanPipelineResumable(chat), false);
+    assert.equal(isSuperPlanPlanScreenRestorable(chat), true);
+    assert.equal(restoreOrchestratePlanScreenSessionFromChat(chat), true);
+
+    const session = getOrchestratePlanScreenSession();
+    assert.equal(session?.chatId, chat.id);
+    assert.equal(session?.phase, 'super-plan-working');
+    assert.equal(session?.planScreenSuspended, true);
+
+    renderChatFromHistory(chat);
+    const banner = document.getElementById(ORCHESTRATE_PLAN_BANNER_ID);
+    assert.ok(banner);
+    assert.match(
+      banner?.textContent ?? '',
+      /Super Plan was stopped/,
+      'cancelled pipeline should offer a return path after reload',
+    );
+    assert.equal(area.contains(banner), false, 'banner should float over chat, not inside scroll content');
   });
 
   test('view chat during grill questions migrates strip to composer without cancelling', async () => {
