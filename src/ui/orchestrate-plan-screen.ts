@@ -70,6 +70,8 @@ import {
   regularPlanWorkingStepFromChat,
   type SuperPlanDisplayStepIndex,
 } from './plan-progress-screen';
+import { PlanActivityCollector } from './plan-activity-collector';
+import { ResearchActivitySession } from '../research/research-activity-session';
 
 export const ORCHESTRATE_PLAN_SCREEN_ROOT_ID = 'orchestratePlanScreen';
 export const ORCHESTRATE_PLAN_SCREEN_PROMPT_ID = 'orchestratePlanScreenPrompt';
@@ -127,6 +129,8 @@ let streamEndUnsubscribe: (() => void) | null = null;
 let activityUnsubscribe: (() => void) | null = null;
 let superPlanUnsubscribe: (() => void) | null = null;
 let planProgressPanel: PlanProgressPanel | null = null;
+let planActivitySession: ResearchActivitySession | null = null;
+let planActivityCollector: PlanActivityCollector | null = null;
 
 /** Read a plan or build-spec artifact for the plan screen preview panel. */
 async function readPlanScreenArtifactMarkdown(path: string): Promise<string> {
@@ -951,6 +955,8 @@ function appendWorkingPhaseContent(
     if (chat) suspendToViewChat(chat);
   });
 
+  startPlanActivitySession(opts.chatId);
+
   const actionsEnd = document.createElement('div');
   actionsEnd.className = 'orchestrate-plan-screen__actions-start';
 
@@ -1025,9 +1031,10 @@ function appendWorkingPhaseContent(
     actionsEnd.appendChild(stopBtn);
   }
 
-  actionsStart.appendChild(viewChatBtn);
+  actionsStart.append(viewChatBtn);
   actions.append(actionsStart, actionsEnd);
   inner.append(progressMount, questionsHost, actions);
+  mountPlanActivityButton(actionsStart);
 
   const afterPaint =
     typeof requestAnimationFrame === 'function'
@@ -1428,8 +1435,27 @@ function buildPlanScreenDom(opts: RenderOrchestratePlanScreenOptions): HTMLEleme
 function resetPlanScreenDomMounts(): void {
   activityUnsubscribe?.();
   activityUnsubscribe = null;
+  planActivityCollector?.stop();
+  planActivityCollector = null;
+  planActivitySession?.destroy();
+  planActivitySession = null;
   planProgressPanel?.destroy();
   planProgressPanel = null;
+}
+
+function startPlanActivitySession(chatId: string): void {
+  planActivityCollector?.stop();
+  planActivitySession?.destroy();
+  planActivitySession = new ResearchActivitySession();
+  planActivitySession.configure({ title: 'Activity' });
+  planActivitySession.reset();
+  planActivityCollector = new PlanActivityCollector(chatId, planActivitySession.buffer);
+  planActivityCollector.start();
+}
+
+function mountPlanActivityButton(actionsStart: HTMLElement): void {
+  if (!planActivitySession) return;
+  planActivitySession.mountButton(actionsStart);
 }
 
 /** Paint plan screen into #chatArea for the given phase. */

@@ -94,6 +94,22 @@ export async function fetchResearchDetail(researchId: string): Promise<ResearchD
   return (await res.json()) as ResearchDetailResponse;
 }
 
+/** Normalize activity log rows from detail API (snake_case or camelCase). */
+export function normalizeResearchActivityLog(
+  detail: ResearchDetailResponse | Record<string, unknown>,
+): ResearchProgress[] {
+  const raw =
+    (detail as ResearchDetailResponse).activityLog ??
+    (detail as Record<string, unknown>).activity_log;
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.filter(
+    (row): row is ResearchProgress =>
+      Boolean(row) && typeof row === 'object' && typeof (row as { phase?: unknown }).phase === 'string',
+  );
+}
+
 /** URL for the visual HTML report (open in preview or new tab). */
 export function researchReportUrl(researchId: string): string {
   // Opened via direct navigation (window.open/openExternal), not fetch — the

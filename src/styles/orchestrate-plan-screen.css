@@ -276,7 +276,20 @@
 .orchestrate-plan-screen__actions-start {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
+}
+
+/* Activity trigger sits inline with plan action buttons — match height, drop bar margin */
+.orchestrate-plan-screen__actions .research-activity-bar {
+  margin-bottom: 0;
+  align-items: center;
+}
+
+.orchestrate-plan-screen__actions .research-activity-btn {
+  min-height: 40px;
+  padding: 0 16px;
+  font-weight: 600;
 }
 
 .orchestrate-plan-screen__btn {

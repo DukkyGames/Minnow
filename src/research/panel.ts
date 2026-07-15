@@ -13,10 +13,12 @@ import {
   cancelResearch,
   fetchResearchDetail,
   fetchResearchResult,
+  normalizeResearchActivityLog,
   researchReportUrl,
   startResearch,
   subscribeToResearchStream,
 } from './client';
+import { ResearchActivitySession } from './research-activity-session';
 import { renderResearchLibrary } from './library';
 import { ResearchProgressPanel } from './progress-panel';
 import { renderResearchResultFromMarkdown } from './report-view';
@@ -43,6 +45,7 @@ import {
 type ResearchPanelTab = 'run' | 'library';
 
 let progressPanel: ResearchProgressPanel | null = null;
+let researchActivity = new ResearchActivitySession();
 let streamUnsubscribe: (() => void) | null = null;
 let runAbort: AbortController | null = null;
 let activeResearchId: string | null = null;
@@ -128,6 +131,10 @@ function setRunningState(isRunning: boolean): void {
 
 function getProgressMount(): HTMLElement | null {
   return document.getElementById('researchProgressMount');
+}
+
+function getActivityButtonMount(): HTMLElement | null {
+  return getProgressMount()?.parentElement ?? null;
 }
 
 function getResultMount(): HTMLElement | null {
@@ -240,6 +247,8 @@ function resetRunUi(): void {
     progressPanel = null;
     progressMount.innerHTML = '';
   }
+  researchActivity.destroy();
+  researchActivity = new ResearchActivitySession();
   const resultMount = getResultMount();
   if (resultMount) {
     resultMount.innerHTML = '';
@@ -255,6 +264,13 @@ async function showResultForId(researchId: string): Promise<void> {
   mount.innerHTML = '<p class="dr-rep-stats research-mono">Loading result…</p>';
   try {
     const data = await fetchResearchDetail(researchId);
+    const activityLog = normalizeResearchActivityLog(data);
+    if (activityLog.length) {
+      researchActivity.configure({});
+      researchActivity.hydrate(activityLog);
+      researchActivity.setRunning(data.status === 'running');
+      researchActivity.mountButton(getActivityButtonMount());
+    }
     const queryInput = document.getElementById('researchQuery') as HTMLTextAreaElement | null;
     const storedQuery = data.query?.trim() ?? '';
     if (queryInput && storedQuery && !queryInput.value.trim()) {
@@ -363,6 +379,9 @@ async function startResearchRun(extra: { continueFrom?: string } = {}): Promise<
     progressPanel = new ResearchProgressPanel(progressMount);
     progressPanel.reset();
   }
+  researchActivity.configure({ buttonInsert: 'prepend' });
+  researchActivity.reset();
+  researchActivity.mountButton(getActivityButtonMount());
   const resultMount = getResultMount();
   if (resultMount) {
     resultMount.innerHTML = '';
@@ -385,12 +404,14 @@ async function startResearchRun(extra: { continueFrom?: string } = {}): Promise<
       signal: runAbort.signal,
       onProgress: (event) => {
         progressPanel?.apply(event);
+        researchActivity.appendProgress(event);
         if (event.phase === 'searching' && event.round) {
           lastRunRound = event.round;
         }
       },
       onEnd: (endEvent) => {
         setRunningState(false);
+        researchActivity.setRunning(false);
         const status = endEvent?.status ?? 'done';
         progressPanel?.complete(status, endEvent?.message);
         if (status === 'done') {
@@ -417,6 +438,7 @@ async function startResearchRun(extra: { continueFrom?: string } = {}): Promise<
       },
       onTransportError: (err) => {
         setRunningState(false);
+        researchActivity.setRunning(false);
         const msg = err instanceof Error ? err.message : 'Stream error';
         progressPanel?.complete('error', msg);
         setStatus('err', msg);
@@ -443,6 +465,7 @@ async function cancelActiveRun(): Promise<void> {
   }
   teardownStream();
   setRunningState(false);
+  researchActivity.setRunning(false);
   progressPanel?.complete('cancelled');
 }
 

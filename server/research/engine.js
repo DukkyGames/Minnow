@@ -39,6 +39,23 @@ export const engineDeps = {
  * @param {number} concurrency
  * @returns {(fn: () => Promise<unknown>) => Promise<unknown>}
  */
+/**
+ * Truncate operational log text for SSE payloads.
+ * @param {unknown} text
+ * @param {number} [maxLen]
+ * @returns {string}
+ */
+function truncateOperationalText(text, maxLen = 500) {
+  const normalized = String(text ?? '').trim();
+  if (!normalized) {
+    return '';
+  }
+  if (normalized.length <= maxLen) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxLen)}…`;
+}
+
 export function pLimit(concurrency) {
   const limit = Math.max(1, concurrency);
   let activeCount = 0;
@@ -208,6 +225,21 @@ export class DeepResearcher {
     if (kwargs.queries !== undefined) {
       event.queries = kwargs.queries;
     }
+    if (kwargs.query_list !== undefined) {
+      event.queryList = kwargs.query_list;
+    }
+    if (kwargs.query_count !== undefined) {
+      event.queryCount = kwargs.query_count;
+    }
+    if (kwargs.plan_summary !== undefined) {
+      event.planSummary = kwargs.plan_summary;
+    }
+    if (kwargs.summary !== undefined) {
+      event.summary = kwargs.summary;
+    }
+    if (kwargs.category !== undefined) {
+      event.category = kwargs.category;
+    }
     if (kwargs.query_preview !== undefined) {
       event.queryPreview = kwargs.query_preview;
     }
@@ -286,10 +318,17 @@ export class DeepResearcher {
 
     this._emit({ phase: 'planning' });
     this.researchPlan = await this.createPlan(question, signal);
+    if (this.researchPlan?.trim()) {
+      this._emit({
+        phase: 'planning',
+        plan_summary: truncateOperationalText(this.researchPlan, 500),
+      });
+    }
     if (!priorReport && !this.category) {
       const detected = await this.classifyCategory(question, signal);
       if (detected) {
         this.category = detected;
+        this._emit({ phase: 'category', category: detected });
       }
     }
 
@@ -325,7 +364,8 @@ export class DeepResearcher {
       this._emit({
         phase: 'searching',
         round: roundNum,
-        queries: queries.length,
+        query_list: queries.slice(0, 8),
+        query_count: queries.length,
         query_preview: queries[0] ?? '',
         total_sources: this.urlsFetched.size,
       });
@@ -380,6 +420,10 @@ export class DeepResearcher {
           if (roundNum >= this.minRounds) {
             const stop = await this.shouldStop(question, report, roundNum, signal);
             if (stop) {
+              this._emit({
+                phase: 'decision',
+                message: 'Stopping: sufficient coverage',
+              });
               break;
             }
           }
@@ -391,6 +435,7 @@ export class DeepResearcher {
         this._emit({
           phase: 'analyzing',
           round: roundNum,
+          message: `Synthesizing round ${roundNum}`,
           total_sources: this.urlsFetched.size,
           total_findings: findings.length,
         });
@@ -400,6 +445,10 @@ export class DeepResearcher {
       if (roundNum >= this.minRounds) {
         const stop = await this.shouldStop(question, report, roundNum, signal);
         if (stop) {
+          this._emit({
+            phase: 'decision',
+            message: 'Stopping: sufficient coverage',
+          });
           break;
         }
       }
@@ -728,7 +777,7 @@ export class DeepResearcher {
             title: display,
             total_sources: this.urlsFetched.size,
           });
-          return engineDeps.fetchAndExtract({
+          const extracted = await engineDeps.fetchAndExtract({
             url: row.url,
             question,
             title: row.title,
@@ -738,6 +787,19 @@ export class DeepResearcher {
             extractionTimeoutSeconds: this.extractionTimeout,
             signal,
           });
+          if (extracted) {
+            const snippet = extracted.summary || extracted.evidence || extracted.rational || '';
+            if (snippet) {
+              this._emit({
+                phase: 'reading',
+                url: row.url,
+                title: display,
+                summary: truncateOperationalText(snippet, 200),
+                total_sources: this.urlsFetched.size,
+              });
+            }
+          }
+          return extracted;
         }),
       ),
     );
@@ -803,7 +865,7 @@ export class DeepResearcher {
             title: display,
             total_sources: this.urlsFetched.size,
           });
-          return engineDeps.extractFromFile({
+          const extracted = await engineDeps.extractFromFile({
             path: row.path,
             question,
             title: row.title,
@@ -813,6 +875,19 @@ export class DeepResearcher {
             extractionTimeoutSeconds: this.extractionTimeout,
             signal,
           });
+          if (extracted) {
+            const snippet = extracted.summary || extracted.evidence || extracted.rational || '';
+            if (snippet) {
+              this._emit({
+                phase: 'reading',
+                url: row.path,
+                title: display,
+                summary: truncateOperationalText(snippet, 200),
+                total_sources: this.urlsFetched.size,
+              });
+            }
+          }
+          return extracted;
         }),
       ),
     );

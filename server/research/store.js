@@ -260,6 +260,34 @@ function formatSseData(obj) {
 }
 
 /**
+ * Parse persisted SSE buffers into operational activity log entries.
+ * @param {Buffer[]} events
+ * @returns {Record<string, unknown>[]}
+ */
+function parseActivityLogFromEvents(events) {
+  /** @type {Record<string, unknown>[]} */
+  const log = [];
+  for (const buf of events) {
+    const text = buf.toString('utf8');
+    const match = text.match(/^data:\s*(.+)$/m);
+    if (!match) {
+      continue;
+    }
+    try {
+      const parsed = /** @type {Record<string, unknown>} */ (JSON.parse(match[1]));
+      if (typeof parsed.phase !== 'string') {
+        continue;
+      }
+      const { status, final, ...rest } = parsed;
+      log.push(rest);
+    } catch {
+      /* ignore malformed buffers */
+    }
+  }
+  return log;
+}
+
+/**
  * @param {ServerResponse} res
  * @returns {SubscriberWriteState}
  */
@@ -463,6 +491,7 @@ async function persistResearch(state) {
     started_at: state.startedAt,
     completed_at: state.completedAt,
     archived: state.archived,
+    activity_log: parseActivityLogFromEvents(state.events),
   };
   await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8');
 }
@@ -917,6 +946,7 @@ export async function getResearchDetail(id) {
       started_at: live.startedAt,
       completed_at: live.completedAt,
       archived: live.archived,
+      activity_log: parseActivityLogFromEvents(live.events),
     };
   }
   return loadResearchFromDisk(id);

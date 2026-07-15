@@ -20,11 +20,13 @@ export type ResearchScope = 'web' | 'codebase' | 'both';
 /** SSE progress events from `server/research/engine.js` `_emit`. */
 export type ResearchProgress =
   | { phase: 'probing'; model: string }
-  | { phase: 'planning' }
+  | { phase: 'planning'; planSummary?: string }
   | {
       phase: 'searching';
       round: number;
       queries?: number;
+      queryList?: string[];
+      queryCount?: number;
       queryPreview?: string;
       totalSources: number;
     }
@@ -33,6 +35,7 @@ export type ResearchProgress =
       round?: number;
       url?: string;
       title?: string;
+      summary?: string;
       newSources?: number;
       totalSources: number;
       totalFindings?: number;
@@ -40,9 +43,12 @@ export type ResearchProgress =
   | {
       phase: 'analyzing';
       round: number;
+      message?: string;
       totalSources: number;
       totalFindings: number;
     }
+  | { phase: 'category'; category: string }
+  | { phase: 'decision'; message: string }
   | {
       phase: 'writing';
       message?: string;
@@ -138,6 +144,7 @@ export interface ResearchDetailResponse extends ResearchResultResponse {
   rawReport?: string;
   startedAt?: string;
   completedAt?: string;
+  activityLog?: ResearchProgress[];
 }
 
 export type ResearchLibrarySort = 'newest' | 'oldest' | 'query';

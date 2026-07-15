@@ -372,13 +372,13 @@
 }
 
 :is(#researchView, .mn-os-desktop-research, .research-library-window-body) .dr-node.done {
-  background: #7fc99a;
-  border-color: #7fc99a;
+  background: var(--mn-success);
+  border-color: var(--mn-success);
 }
 
 :is(#researchView, .mn-os-desktop-research, .research-library-window-body) .dr-node.active {
   border-color: var(--mn-accent);
-  box-shadow: 0 0 0 4px var(--mn-accent-soft);
+  box-shadow: 0 0 0 3px var(--mn-accent-soft);
 }
 
 :is(#researchView, .mn-os-desktop-research, .research-library-window-body) .dr-node.active .dr-node-i {
@@ -394,21 +394,27 @@
 }
 
 :is(#researchView, .mn-os-desktop-research, .research-library-window-body) .dr-track.fill {
-  background: #7fc99a;
+  background: var(--mn-success);
 }
 
 :is(#researchView, .mn-os-desktop-research, .research-library-window-body) .dr-stepper-labels {
   display: flex;
   justify-content: space-between;
-  margin: 0 -4px 14px;
+  gap: 4px;
+  margin: 0 -2px 14px;
 }
 
 :is(#researchView, .mn-os-desktop-research, .research-library-window-body) .dr-slabel {
   font-size: 10px;
+  line-height: 1.25;
   letter-spacing: 0.03em;
-  color: var(--mn-fg-subtle);
+  color: var(--mn-fg-muted);
   flex: 1;
+  min-width: 0;
   text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 :is(#researchView, .mn-os-desktop-research, .research-library-window-body) .dr-slabel.on {
@@ -530,12 +536,12 @@
   width: 18px;
   display: grid;
   place-items: center;
-  color: #7fc99a;
+  color: var(--mn-success);
   flex: none;
 }
 
 :is(#researchView, .mn-os-desktop-research, .research-library-window-body) .dr-check {
-  color: #7fc99a;
+  color: var(--mn-success);
 }
 
 /* ----- report ----- */
