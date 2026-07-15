@@ -1,11 +1,6 @@
 ﻿import { isChatsWorkspacePath } from '../lib/chats-workspace';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { isDesktopChatActive } from '../os/desktop-state';
-import {
-  applyModelSelectValueToChat,
-  decodeModelSelectKey,
-  resolveModelSelectValueForChat,
-} from '../lib/model-select-key';
 import { isBoardSetupIncomplete } from '../chat/orchestrate/board-setup';
 import { isChatStreaming } from '../chat/streaming-state';
 import { stopGeneration } from '../chat/stop-generation';
@@ -92,6 +87,12 @@ import { updateModelLoadUnloadButtons } from '../api/models';
 import { restoreChatColumnOnChatSelect } from './workspace-split-resize';
 import { updateModelStateDot } from './model-state-dot';
 import { syncModelSelectPicker } from './model-select-picker';
+import {
+  applyDefaultModelToChat,
+  persistDefaultModelValue,
+  readDefaultModelBinding,
+} from './default-model';
+import { syncActiveChatModelUi, onActiveChatModelChange } from './chat-model-ui';
 import { setStatus } from './status';
 import { formatSidebarStatsPreview } from './stats';
 import {
@@ -276,50 +277,22 @@ function updateSelectionVisuals(): void {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Read canonical model id + optional provider from the top-bar composite select value. */
-function readTopBarModelBinding(): { modelId: string; providerId?: string } {
-  const raw = (document.getElementById('modelSelect') as HTMLSelectElement)?.value ?? '';
-  const parsed = decodeModelSelectKey(raw);
-  const modelId = (parsed?.modelId ?? raw).trim();
-  return { modelId, providerId: parsed?.providerId };
-}
-
-/** Keep model picker aligned with the active chat's stored model id. */
+/** Refresh composer model UI from the active chat (default #modelSelect stays put). */
 export function syncModelSelectForActiveChat(): void {
-  const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;
-  const chat = getActiveChat();
-  if (!sel || !sel.options.length) return;
-  const values = [...sel.options].map((o) => o.value);
-  const next = resolveModelSelectValueForChat(chat, values);
-  if (next) {
-    sel.value = next;
-  } else if (chat.modelId?.trim()) {
-    // Chat remembers a model that is not in the current catalog — clear stale picker bleed.
-    sel.value = '';
-  }
-  updateModelStateDot(sel.value);
-  updateModelLoadUnloadButtons();
-  syncModelSelectPicker();
+  syncActiveChatModelUi();
 }
 
+export { onActiveChatModelChange };
+
+/** Global default model changed via header picker or menubar chip. */
 export function onModelSelectChange(): void {
   const sel = document.getElementById('modelSelect') as HTMLSelectElement;
-  const chat = getActiveChat();
-  const raw = sel.value;
-
-  if (isChatStreaming(chat.id)) {
-    stopGeneration(chat.id, 'user');
-    setStatus('ok', 'Stopped — model changed');
-  }
-
-  applyModelSelectValueToChat(chat, raw);
-  touchChat(chat);
-  scheduleSaveSessions();
+  persistDefaultModelValue(sel.value);
   updateModelStateDot(sel.value);
   updateModelLoadUnloadButtons();
   syncModelSelectPicker();
   showCachedModelInfo();
-  syncComposerReasoningEffortFromActiveChat();
+  void import('./composer-model-trigger').then((m) => m.syncComposerModelTriggers());
 }
 
 /** Refresh main column after workspace folder changes. */
@@ -692,7 +665,7 @@ function showGroupContextMenu(
     } else if (!confirm('Delete this group? Chats will stay in the list, ungrouped.')) {
       return;
     }
-    const { modelId } = readTopBarModelBinding();
+    const { modelId } = readDefaultModelBinding();
     const result = deleteGroup(groupId, { fallbackModelId: modelId });
     if (result.chatRemoval) {
       onChatRemoved({ ...result.chatRemoval, activeChanged: result.activeChanged });
@@ -882,7 +855,7 @@ function showMultiSelectContextMenu(x: number, y: number, chatIds: string[]): vo
     if (!confirm(`Delete ${n} chat${n === 1 ? '' : 's'}? This cannot be undone.`)) return;
     const prevActiveId = sessionState?.activeId;
     clearChatSelection();
-    const { modelId } = readTopBarModelBinding();
+    const { modelId } = readDefaultModelBinding();
     let lastResult: ReturnType<typeof removeChatById> | null = null;
     for (const chat of deletable) {
       const r = removeChatById(chat.id, modelId);
@@ -1115,7 +1088,7 @@ export function deleteChat(chatId: string, evt?: Event): void {
       : victim.name;
   if (!confirm(`Delete "${victimLabel}"? Messages in this chat cannot be recovered.`)) return;
 
-  const { modelId } = readTopBarModelBinding();
+  const { modelId } = readDefaultModelBinding();
   const result = removeChatById(chatId, modelId);
   onChatRemoved(result);
 }
@@ -1291,10 +1264,13 @@ export function createChatWithMode(
       if (requestedMode !== activeMode) {
         applyModeIdToChat(active, requestedMode);
       }
+      applyDefaultModelToChat(active);
+      touchChat(active);
       resetComposerForEphemeralReuse();
       recordChatOpened(active.id);
       paintActiveChatInForegroundShell(active);
       syncCreateChatChrome(active.id);
+      syncModelSelectForActiveChat();
       renderSidebar();
       scheduleSaveSessions();
       closeMobileSidebar();
@@ -1309,9 +1285,9 @@ export function createChatWithMode(
   }
 
   const modeId = requestedMode;
-  const { modelId, providerId } = readTopBarModelBinding();
+  const { modelId } = readDefaultModelBinding();
   const chat = createEmptyChatObject(modelId);
-  if (providerId) chat.providerId = providerId;
+  applyDefaultModelToChat(chat);
   chat.modeId = modeId;
   if (chat.workAgentAuto !== false) {
     const agent = getDefaultWorkAgentForMode(modeId);
@@ -1344,6 +1320,7 @@ export function createChatWithMode(
   void bootGenerationResumeForChat(chat);
   renderStatsForChat(chat);
   syncCreateChatChrome(chat.id);
+  syncModelSelectForActiveChat();
   void import('./terminal-panel').then((m) => m.refreshTerminalHistoryForActiveChat());
   syncComposerFromStreamingState();
   renderSidebar();

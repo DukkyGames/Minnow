@@ -120,8 +120,7 @@ export { resolveModelInfo, showCachedModelInfo } from '../api/models';
 let suppressBubbleScroll = false;
 
 export function renderStatsForChat(chat: Chat): void {
-  const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;
-  const mid = (sel && sel.value) || chat.modelId || '';
+  const mid = chat.modelId?.trim() || '';
   const ls = chat.lastStats;
   const hasNumeric =
     ls &&

@@ -927,8 +927,9 @@ export function renderModelSelectMenuRows(
   menu: HTMLUListElement,
   sel: HTMLSelectElement,
   onSelect?: ModelSelectPickHandler,
+  selectedValueOverride?: string,
 ): void {
-  const selectedValue = sel.value;
+  const selectedValue = selectedValueOverride?.trim() || sel.value;
   const scrollTop = menu.scrollTop;
   menu.innerHTML = '';
 

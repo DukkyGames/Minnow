@@ -3,12 +3,14 @@
  * Opens a fixed popover wired to the canonical #modelSelect catalog.
  */
 
-import { decodeModelSelectKey } from '../lib/model-select-key';
+import { decodeModelSelectKey, resolveModelSelectValueForChat } from '../lib/model-select-key';
 import { getModelRowForSelectOrCanonicalId, updateModelLoadUnloadButtons } from '../api/models';
 import { modelCache } from '../app-state';
 import { modelProducerLogoSvg } from '../providers/model-producer';
 import { isModelLoadUnloadBusy } from './model-load-unload-button';
 import { resolveModelState } from './model-state-dot';
+import { getActiveChat } from '../state/sessions';
+import { onActiveChatModelChange } from './chat-model-ui';
 import {
   clearModelSearchQuery,
   closeModelSelectMenu,
@@ -59,13 +61,26 @@ function canonicalModelIdFromSelectValue(value: string): string {
   return decodeModelSelectKey(value)?.modelId ?? value.trim();
 }
 
-function selectedOption(sel: HTMLSelectElement): HTMLOptionElement | undefined {
-  const value = sel.value.trim();
-  if (value) {
-    const match = [...sel.options].find((o) => o.value === value);
+function selectedOptionForValue(
+  sel: HTMLSelectElement,
+  value: string,
+): HTMLOptionElement | undefined {
+  const trimmed = value.trim();
+  if (trimmed) {
+    const match = [...sel.options].find((o) => o.value === trimmed);
     if (match) return match;
   }
   return sel.options[sel.selectedIndex];
+}
+
+function resolveTriggerSelectValue(trigger: ComposerModelTrigger): string {
+  const sel = getModelSelect();
+  if (!sel) return '';
+  if (trigger.variant === 'menubar') {
+    return sel.value.trim();
+  }
+  const values = [...sel.options].map((o) => o.value);
+  return resolveModelSelectValueForChat(getActiveChat(), values);
 }
 
 /** Split composite option text into model name and provider label. */
@@ -112,10 +127,11 @@ function syncMenubarLoadDot(trigger: ComposerModelTrigger, selectValue: string):
   trigger.dotEl.dataset.loadState = state;
 }
 
-/** Sync logo + label on one composer model trigger from #modelSelect. */
+/** Sync logo + label on one composer model trigger. */
 function syncTrigger(trigger: ComposerModelTrigger): void {
   const sel = getModelSelect();
-  const selectedOpt = sel ? selectedOption(sel) : undefined;
+  const selectValue = resolveTriggerSelectValue(trigger);
+  const selectedOpt = sel ? selectedOptionForValue(sel, selectValue) : undefined;
   const { model, provider } = parseModelOptionLabels(selectedOpt);
 
   if (trigger.variant === 'menubar') {
@@ -130,20 +146,18 @@ function syncTrigger(trigger: ComposerModelTrigger): void {
     trigger.labelEl.textContent = label;
   }
 
-  const title = selectedOpt?.title?.trim() || sel?.value.trim() || '';
+  const title = selectedOpt?.title?.trim() || selectValue || '';
   if (title) trigger.labelEl.title = title;
   else trigger.labelEl.removeAttribute('title');
 
-  const modelId = sel?.value.trim()
-    ? canonicalModelIdFromSelectValue(sel.value)
-    : '';
+  const modelId = selectValue ? canonicalModelIdFromSelectValue(selectValue) : '';
   if (trigger.variant === 'menubar') {
     if (trigger.iconLogoEl) {
       applyLogoSvg(trigger.iconLogoEl, modelId);
       const hasProducerLogo = Boolean(modelId && modelProducerLogoSvg(modelId));
       trigger.trigger.classList.toggle('has-producer-logo', hasProducerLogo);
     }
-    syncMenubarLoadDot(trigger, sel?.value.trim() ?? '');
+    syncMenubarLoadDot(trigger, selectValue);
     const summary = provider ? `${model} · ${provider}` : model;
     trigger.trigger.setAttribute('aria-label', `Default model: ${summary}`);
     trigger.trigger.title = summary;
@@ -164,18 +178,32 @@ export function syncComposerModelTriggers(): void {
   if (openTrigger) rebuildOpenMenu();
 }
 
+function handleComposerModelPick(trigger: ComposerModelTrigger, modelId: string): void {
+  if (trigger.variant === 'menubar') {
+    selectModelInPicker(modelId);
+    return;
+  }
+  onActiveChatModelChange(modelId);
+}
+
 function rebuildOpenMenu(): void {
   if (!openTrigger) return;
   const sel = getModelSelect();
   if (!sel) return;
-  renderModelSelectMenuRows(openTrigger.menu, sel, (modelId) => {
-    selectModelInPicker(modelId);
-    if (!shouldKeepModelMenuOpenAfterSelect(modelId)) {
-      closeComposerModelMenu();
-    } else {
-      rebuildOpenMenu();
-    }
-  });
+  const selectedValue = resolveTriggerSelectValue(openTrigger);
+  renderModelSelectMenuRows(
+    openTrigger.menu,
+    sel,
+    (modelId) => {
+      handleComposerModelPick(openTrigger!, modelId);
+      if (!shouldKeepModelMenuOpenAfterSelect(modelId)) {
+        closeComposerModelMenu();
+      } else {
+        rebuildOpenMenu();
+      }
+    },
+    selectedValue,
+  );
 }
 
 function positionPanel(trigger: ComposerModelTrigger): void {

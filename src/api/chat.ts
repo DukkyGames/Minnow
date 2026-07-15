@@ -19,6 +19,8 @@ import {
   scheduleSaveSessions,
   recordChatMessage,
 } from '../state/sessions';
+import { resolveEffectiveChatModelBinding } from '../ui/default-model';
+import { applyModelSelectValueToChat } from '../lib/model-select-key';
 import { autoResize } from '../ui/input';
 import { clearComposerDraftOnChat } from '../ui/composer-draft';
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
@@ -411,7 +413,11 @@ export async function sendMessage(): Promise<void> {
   if (!text) return;
 
   const chat = getActiveChat();
-  const modelId = (document.getElementById('modelSelect') as HTMLSelectElement).value;
+  const binding = resolveEffectiveChatModelBinding(chat);
+  const modelId = binding.modelId;
+  if (binding.selectValue && !chat.modelId?.trim()) {
+    applyModelSelectValueToChat(chat, binding.selectValue);
+  }
   const temp = parseFloat((document.getElementById('temperature') as HTMLInputElement).value);
   const maxTok = parseInt((document.getElementById('maxTokens') as HTMLInputElement).value, 10);
   const legacySysPrompt = (
@@ -435,7 +441,7 @@ export async function sendMessage(): Promise<void> {
   setChatAbort(chat.id, controller);
   const chatSignal = controller.signal;
 
-  chat.modelId = modelId || chat.modelId;
+  chat.modelId = binding.modelId || chat.modelId;
   const shouldScheduleTitle = isFirstUserMessagePending(chat);
   chat.history.push({ role: 'user', content: text });
   clearComposerDraftOnChat(chat);
@@ -706,8 +712,7 @@ export async function sendMessage(): Promise<void> {
       recordAssistantReplyOnChat(chat);
       chat.lastStats = buildLastStatsSnapshot(meta.stats, meta.usage);
       chat.modelInfo = { ...modelInfo };
-      chat.modelId =
-        (document.getElementById('modelSelect') as HTMLSelectElement).value || chat.modelId;
+      chat.modelId = binding.modelId || chat.modelId;
       recordChatMessage(chat);
       appendStats(wrap, meta.stats, meta.usage);
       if (thinkingNorm.length > 0) {

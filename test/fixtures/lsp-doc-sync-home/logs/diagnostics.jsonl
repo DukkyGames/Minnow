@@ -1,1 +1,1 @@
-{"ts":"2026-07-15T02:21:22.329Z","pid":41368,"source":"server","kind":"lsp-exit","message":"LSP server fake exited on signal SIGTERM","extra":{"serverId":"fake","signal":"SIGTERM"}}
+{"ts":"2026-07-15T06:27:42.434Z","pid":63120,"source":"server","kind":"lsp-exit","message":"LSP server fake exited on signal SIGTERM","extra":{"serverId":"fake","signal":"SIGTERM"}}

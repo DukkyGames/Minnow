@@ -45,6 +45,11 @@ import {
 } from '../providers/model-capabilities';
 import { syncComposerReasoningEffortFromActiveChat } from '../ui/composer-reasoning-effort';
 import { syncModelSelectPicker } from '../ui/model-select-picker';
+import {
+  applyDefaultModelToChat,
+  persistDefaultModelValue,
+  resolveDefaultModelSelectValue,
+} from '../ui/default-model';
 import { renderSidebar } from '../ui/sidebar';
 import { setReadyStatus, setStatus } from '../ui/status';
 import { updateStrip } from '../ui/stats';
@@ -516,15 +521,18 @@ export async function fetchModels(): Promise<void> {
 
     const ac = getActiveChat();
     const optionValues = [...sel.options].map((o) => o.value);
-    const hadBinding = Boolean(ac.modelId?.trim());
 
-    if (hadBinding) {
-      const resolved = resolveModelSelectValueForChat(ac, optionValues);
-      if (resolved) sel.value = resolved;
+    const savedDefault = resolveDefaultModelSelectValue(optionValues);
+    if (savedDefault) {
+      sel.value = savedDefault;
     } else {
       const chosen = pickInitialSelectValue(results, ac);
       sel.value = chosen;
-      applyModelSelectValueToChat(ac, chosen);
+      if (chosen) persistDefaultModelValue(chosen);
+    }
+
+    if (!ac.modelId?.trim() && sel.value) {
+      applyDefaultModelToChat(ac);
       touchChat(ac);
     }
 
@@ -542,6 +550,7 @@ export async function fetchModels(): Promise<void> {
     updateModelStateDot(sel.value);
     showCachedModelInfo();
     syncModelSelectPicker();
+    void import('../ui/composer-model-trigger').then((m) => m.syncComposerModelTriggers());
     syncComposerReasoningEffortFromActiveChat();
     renderSidebar();
     scheduleSaveSessions();
