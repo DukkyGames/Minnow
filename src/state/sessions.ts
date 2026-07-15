@@ -15,7 +15,7 @@ import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { ensurePendingMessageQueue } from '../chat/message-queue';
 import { notifySessionCreated } from '../webhooks/client';
 import { decodeModelSelectKey } from '../lib/model-select-key';
-import type { SuperPlanState } from '../chat/super-plan/types';
+import { isSuperPlanStageId, type SuperPlanStageId, type SuperPlanState } from '../chat/super-plan/types';
 import {
   CHAT_APP_ID,
   createAssistantChat,
@@ -386,11 +386,19 @@ function ensureMessageEntry(m: Partial<Message> | null | undefined): Message | n
   if (m.role === 'user') {
     const content = m.content != null ? String(m.content) : '';
     const user = m as Partial<UserMessage>;
+    let superPlanStage: SuperPlanStageId | undefined;
+    if (typeof user.superPlanStage === 'string') {
+      const candidate = user.superPlanStage.trim();
+      if (isSuperPlanStageId(candidate)) {
+        superPlanStage = candidate;
+      }
+    }
     return {
       role: 'user',
       content,
       ...(user.steer === true ? { steer: true } : {}),
       ...(user.goalAchieved === true ? { goalAchieved: true } : {}),
+      ...(superPlanStage ? { superPlanStage } : {}),
     };
   }
 

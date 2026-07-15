@@ -44,6 +44,7 @@ import {
   patchSuperPlanState,
   superPlanPlanPath,
 } from './state';
+import type { SuperPlanStageId } from './types';
 
 export type SuperPlanStageOutcome =
   | { kind: 'await_stream' }
@@ -60,6 +61,7 @@ export interface SuperPlanStageRunHooks {
 
 async function runChatTurnForStage(
   chat: Chat,
+  stageId: SuperPlanStageId,
   userText: string,
   skillId: string | null,
   skillBody: string | null,
@@ -77,6 +79,7 @@ async function runChatTurnForStage(
     await detectLocalServer();
     const displayText = userText;
     const historyContent = buildHistoryUserContent(displayText, []);
+    const titleSeed = chat.superPlan?.prompt?.trim() || userText;
     await runChatTurn({
       chat,
       pushUser: true,
@@ -86,9 +89,10 @@ async function runChatTurnForStage(
       displayText,
       historyContent,
       validAttachments: [],
-      titleSeed: userText,
+      titleSeed,
       shouldScheduleTitle: isFirstUserMessagePending(chat),
       skillBody,
+      superPlanStage: stageId,
     });
   } finally {
     chat.providerId = savedProvider;
@@ -252,7 +256,7 @@ async function runGrillStage(chat: Chat): Promise<SuperPlanStageOutcome> {
     '',
     state.prompt,
   ].join('\n');
-  await runChatTurnForStage(chat, userText, 'grilling', skillBody, config.plannerModel);
+  await runChatTurnForStage(chat, 'grill', userText, 'grilling', skillBody, config.plannerModel);
   return { kind: 'await_stream' };
 }
 
@@ -267,7 +271,7 @@ async function runSpecConfirmStage(chat: Chat): Promise<SuperPlanStageOutcome> {
     '',
     `Original request: ${state.prompt}`,
   ].join('\n');
-  await runChatTurnForStage(chat, userText, null, null, getSuperPlanConfigSync().plannerModel);
+  await runChatTurnForStage(chat, 'spec_confirm', userText, null, null, getSuperPlanConfigSync().plannerModel);
   return { kind: 'await_stream' };
 }
 
@@ -358,7 +362,7 @@ async function runDraftStage(
     );
   }
   lines.push('', `Original request: ${state.prompt}`);
-  await runChatTurnForStage(chat, lines.join('\n'), null, null, config.plannerModel);
+  await runChatTurnForStage(chat, stageId, lines.join('\n'), null, null, config.plannerModel);
   return { kind: 'await_stream' };
 }
 
@@ -502,7 +506,7 @@ async function runImpeccableStage(chat: Chat): Promise<SuperPlanStageOutcome> {
     `Refine UI-related sections of the plan at \`${planPath}\` using the injected Impeccable \`shape\` workflow.`,
     'Update the plan file in place with improved UX clarity — still no implementation code fences.',
   ].join('\n');
-  await runChatTurnForStage(chat, userText, 'impeccable', skillBody, config.plannerModel);
+  await runChatTurnForStage(chat, 'impeccable', userText, 'impeccable', skillBody, config.plannerModel);
   return { kind: 'await_stream' };
 }
 
@@ -516,7 +520,7 @@ async function runFinalizeStage(chat: Chat): Promise<SuperPlanStageOutcome> {
     `Ensure \`${planPath}\` is complete: front-matter todos match tasks, verification checklist present.`,
     'Save the final plan if anything is missing. Reply briefly confirming the path.',
   ].join('\n');
-  await runChatTurnForStage(chat, userText, null, null, config.plannerModel);
+  await runChatTurnForStage(chat, 'finalize', userText, null, null, config.plannerModel);
   return { kind: 'await_stream' };
 }
 
