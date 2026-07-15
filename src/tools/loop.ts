@@ -156,6 +156,7 @@ import {
 import { setBugBoardExecutorContext } from './bug-board-tools';
 import {
   appendBubble,
+  anchorPersistedThoughtsOnRow,
   appendStats,
   appendStreamingAssistantRow,
   assistantProseHasVisibleContent,
@@ -167,6 +168,7 @@ import {
 import { setContextInFlightOverlay } from '../chat/context-in-flight';
 import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
 import { ThinkingDurationTracker } from '../ui/thinking-duration';
+import type { StreamingStatusHandle } from '../ui/stream-status';
 import { scheduleContextUsageRefresh } from '../ui/context-usage-ring';
 import { consumeReefArtifactEditsForPrompt } from '../chat/reef/artifact-context.ts';
 import {
@@ -1016,6 +1018,41 @@ function syncTurnContextUsage(
   scheduleContextUsageRefresh();
 }
 
+interface FinalizedThinkingRound {
+  segments: string[];
+  durationMs: number;
+}
+
+/** Consume one response's reasoning segments and anchor them on its assistant row. */
+function finalizeAndAnchorThinkingRound(opts: {
+  thoughtController: ThoughtBubbleController | null;
+  thinkingTracker: ThinkingDurationTracker | null;
+  wrap: HTMLElement;
+  streamStatus: StreamingStatusHandle;
+  domVisible: boolean;
+  hasProse: boolean;
+}): FinalizedThinkingRound {
+  const segments = opts.thoughtController?.consumePersistedSegments() ?? [];
+  const durationMs = opts.thinkingTracker?.finalizeRound() ?? 0;
+  if (opts.domVisible) {
+    if (segments.length > 0) {
+      if (opts.hasProse) {
+        renderThoughtsToggle(opts.wrap, segments, {
+          durationMs: durationMs > 0 ? durationMs : undefined,
+        });
+      } else {
+        anchorPersistedThoughtsOnRow(opts.wrap, segments, {
+          durationMs: durationMs > 0 ? durationMs : undefined,
+          streamStatus: opts.streamStatus,
+        });
+      }
+    } else if (!opts.hasProse) {
+      removeOrphanStreamingRow(opts.wrap, opts.streamStatus);
+    }
+  }
+  return { segments, durationMs };
+}
+
 export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   const {
     chat,
@@ -1836,20 +1873,28 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         });
 
         const toolProse = turnResult.fullText.trim();
-        if (toolProse && isStreamDomVisible(chat.id)) {
+        const hasToolProse = Boolean(toolProse);
+        if (hasToolProse && isStreamDomVisible(chat.id)) {
           revealProse();
           setAssistantBubbleContent(bubble, toolProse, { streaming: false, modeId: chat.modeId });
-        } else if (!toolProse && isStreamDomVisible(chat.id)) {
-          removeOrphanStreamingRow(wrap, streamStatus);
         }
 
-        const thinkingNorm = thoughtController?.getSegmentsNormalized() ?? [];
         const thinkingSignature = thoughtController?.getAnthropicThinkingSignature();
+        const { segments: thinkingNorm, durationMs: thinkingDurationMs } =
+          finalizeAndAnchorThinkingRound({
+            thoughtController,
+            thinkingTracker,
+            wrap,
+            streamStatus,
+            domVisible: isStreamDomVisible(chat.id),
+            hasProse: hasToolProse,
+          });
         const assistantToolMsg: AssistantToolCallMessage = {
           role: 'assistant',
           content: toolProse || null,
           tool_calls: turnResult.toolCalls,
           ...(thinkingNorm.length > 0 ? { thinking: thinkingNorm } : {}),
+          ...(thinkingDurationMs > 0 ? { thinkingDurationMs } : {}),
           ...(thinkingSignature ? { thinkingSignature } : {}),
         };
         syncTurnContextUsage(
@@ -2002,6 +2047,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
         const thinkingNormForPersist =
           thoughtController?.consumePersistedSegments() ?? [];
+        const thinkingDurationForPersist = thinkingTracker?.finalizeRound() ?? 0;
         const { content: persistedContent } = resolveFinalAssistantContent(
           fullText,
           thinkingNormForPersist,
@@ -2038,6 +2084,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         };
         if (thinkingNormForPersist.length > 0) {
           proseRetryAssistantMsg.thinking = thinkingNormForPersist;
+          if (thinkingDurationForPersist > 0) {
+            proseRetryAssistantMsg.thinkingDurationMs = thinkingDurationForPersist;
+          }
         }
         chat.history.push(proseRetryAssistantMsg);
         trackRunHistoryPush(chat, turnRunId);
@@ -2049,7 +2098,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         if (isStreamDomVisible(chat.id)) {
           appendStats(lastWrap, proseRetryMeta.stats, proseRetryMeta.usage);
           if (thinkingNormForPersist.length > 0) {
-            renderThoughtsToggle(lastWrap, thinkingNormForPersist);
+            renderThoughtsToggle(lastWrap, thinkingNormForPersist, {
+              durationMs:
+                thinkingDurationForPersist > 0 ? thinkingDurationForPersist : undefined,
+            });
           }
           const histIdx = chat.history.length - 1;
           const { attachMessageActions } = await import('../ui/message-actions');
@@ -2081,13 +2133,15 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         continue;
       }
 
-      const thinkingNorm = thoughtController?.getSegmentsNormalized() ?? [];
+      const thinkingNorm = thoughtController?.consumePersistedSegments() ?? [];
+      const thinkingDurationMs = thinkingTracker?.finalizeRound() ?? 0;
       const hasMeaningfulProse = assistantProseHasVisibleContent(
         fullText,
         thinkingNorm.length > 0,
       );
       const { content: finalContent, usedThinkingAsContent } =
         resolveFinalAssistantContent(fullText, thinkingNorm);
+      const hasVisibleBubble = Boolean(fullText.trim()) || usedThinkingAsContent;
 
       if (!fullText.trim()) {
         logTurnDebug({
@@ -2116,7 +2170,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       });
       const displayMeta = applyOrchestrateAggregatedStatsToChat(chat, parentTurnId, meta);
       const modelInfo = resolveModelInfo(streamMeta.model || modelId, displayMeta.model_info);
-      const thinkingDurationMs = thinkingTracker?.finalize() ?? 0;
       chat.lastStats = buildLastStatsSnapshot(displayMeta.stats, displayMeta.usage);
       chat.modelInfo = { ...modelInfo };
       // Persist the provider/model that served this turn (not the global default picker).
@@ -2125,11 +2178,23 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
       if (hasMeaningfulProse) {
         if (isStreamDomVisible(chat.id)) {
-          revealProse();
-          setAssistantBubbleContent(bubble, finalContent, {
-            streaming: false,
-            modeId: chat.modeId,
-          });
+          if (hasVisibleBubble) {
+            revealProse();
+            setAssistantBubbleContent(bubble, finalContent, {
+              streaming: false,
+              modeId: chat.modeId,
+            });
+            if (thinkingNorm.length > 0) {
+              renderThoughtsToggle(lastWrap, thinkingNorm, {
+                durationMs: thinkingDurationMs > 0 ? thinkingDurationMs : undefined,
+              });
+            }
+          } else if (thinkingNorm.length > 0) {
+            anchorPersistedThoughtsOnRow(lastWrap, thinkingNorm, {
+              durationMs: thinkingDurationMs > 0 ? thinkingDurationMs : undefined,
+              streamStatus,
+            });
+          }
         }
         const assistantMsg: AssistantMessage = {
           role: 'assistant',
@@ -2150,11 +2215,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         recordChatMessage(chat);
         if (isStreamDomVisible(chat.id)) {
           appendStats(lastWrap, meta.stats, meta.usage);
-          if (thinkingNorm.length > 0) {
-            renderThoughtsToggle(lastWrap, thinkingNorm, {
-              durationMs: thinkingDurationMs > 0 ? thinkingDurationMs : undefined,
-            });
-          }
           const histIdx = chat.history.length - 1;
           const { attachMessageActions } = await import('../ui/message-actions');
           const { attachVoicePlayButton } = await import('../ui/voice-controls');

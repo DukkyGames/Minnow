@@ -60,6 +60,14 @@ export class ThinkingDurationTracker {
     return this.getElapsedMs();
   }
 
+  /** Close the current response's reasoning interval and reset for the next round. */
+  finalizeRound(): number {
+    const ms = this.finalize();
+    this.closedMs = 0;
+    this.lastTickFormatted = '';
+    return ms;
+  }
+
   /** Total ms across closed segments plus any open segment. */
   getElapsedMs(): number {
     let total = this.closedMs;
