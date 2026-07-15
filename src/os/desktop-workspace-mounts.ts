@@ -108,6 +108,10 @@ function mountToDesktop(hostId: string, node: HTMLElement): void {
  */
 function shouldHidePaneInCode(nodeId: string): boolean {
   if (nodeId === 'fileSidebarFilesView') return false;
+  // Code entry always closes both right panes (MIN-342). Do not consult persisted
+  // rightPaneMode here — desktop drawer strips `.hidden` and preview mode may still
+  // be set until collapsePreviewPanelKeepingSource runs.
+  if (isCodeForeground()) return true;
   const mode = getFilePanelState().rightPaneMode;
   if (nodeId === 'previewPane') return mode !== 'preview';
   if (nodeId === 'fileViewerPane') return mode !== 'viewer';
@@ -253,6 +257,22 @@ export async function syncDesktopWorkspaceMounts(): Promise<void> {
   if (isCodeForeground() && mountSurface !== 'code') {
     const applied = await applySurfaceChange('code', generation);
     if (!applied || generation !== syncGeneration) return;
+  }
+
+  // MIN-342: reconcile DOM when state says closed but a pane stayed visible (async races).
+  if (isCodeForeground() && getFilePanelState().rightPaneMode === null) {
+    const column = document.getElementById('rightPaneColumn');
+    const preview = document.getElementById('previewPane');
+    const viewer = document.getElementById('fileViewerPane');
+    const domOpen =
+      !column?.classList.contains('hidden') ||
+      !preview?.classList.contains('hidden') ||
+      !viewer?.classList.contains('hidden');
+    if (domOpen) {
+      const previewPanel = await import('../ui/preview-panel');
+      if (generation !== syncGeneration) return;
+      previewPanel.collapsePreviewPanelKeepingSource();
+    }
   }
 
   syncDrawerPaneVisibility();

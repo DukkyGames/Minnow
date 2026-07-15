@@ -305,8 +305,10 @@ export function showViewerSplit(): void {
 }
 
 /** Hide split viewer pane; switches to preview tabs when available. */
-export function hideViewerSplit(): void {
-  const fallback = fallbackRightPaneModeAfterClose('viewer');
+export function hideViewerSplit(options?: { skipPreviewFallback?: boolean }): void {
+  const fallback = options?.skipPreviewFallback
+    ? null
+    : fallbackRightPaneModeAfterClose('viewer');
   if (fallback === 'preview') {
     showPreviewSplit();
     return;

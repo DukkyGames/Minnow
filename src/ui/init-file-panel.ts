@@ -50,6 +50,7 @@ import { initGitCenterLightbox } from './git-center-lightbox';
 import { initGitHelpLightbox } from './git-help-lightbox';
 import { startFileTreeGitStatusPoll } from './file-tree';
 import {
+  isCodeAppForeground,
   shouldAutoRestoreViewerSplitOnBoot,
 } from './preview-restore-policy';
 import { bindWorkspaceSplitResizer } from './workspace-split-resize';
@@ -113,6 +114,12 @@ export async function initFilePanel(): Promise<void> {
   });
 
   await loadFilePanelPrefs();
+  // MIN-342: prefs may reload rightPaneMode=preview after osOnAppOpen collapsed the split.
+  if (isCodeAppForeground()) {
+    const { hideAllRightSplitPanesDom } = await import('./file-layout');
+    hideAllRightSplitPanesDom();
+    patchFilePanelState({ rightPaneMode: null, viewerOpen: false });
+  }
   setFileTreeServerAvailable(getLocalServerAvailable());
   if (getLocalServerAvailable()) {
     void initFileTreeIfNeeded();

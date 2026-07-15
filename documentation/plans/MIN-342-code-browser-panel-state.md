@@ -14,6 +14,7 @@ Opening the **Code** app sometimes showed the browser preview panel already expa
 | **Desktop file-preview drawer** open on reload | Closed | Restored | Loaded |
 | **`#btnPreviewToggle` / explicit open** | Opens with last `previewSource` | Closed | Unchanged |
 | **Open file from tree** | Closed | Opens | Unchanged |
+| **Switch sidebar chat** | Closed | Closed | Unchanged (force-close viewer must not fall back to preview) |
 | **`#btnPreviewClose` / close** | Closed | — | `previewSource` cleared |
 
 ## Root cause
@@ -23,10 +24,11 @@ Desktop workspace mounts call `classList.remove('hidden')` when reparenting `#pr
 ## Implementation
 
 - [`src/ui/preview-restore-policy.ts`](../../src/ui/preview-restore-policy.ts) — `shouldAutoRestorePreviewPanel()` + `shouldAutoRestoreViewerSplitOnBoot()` gate boot restore.
-- [`src/ui/file-layout.ts`](../../src/ui/file-layout.ts) — `hideAllRightSplitPanesDom()`, `resetRightSplitForCodeEntry()`, reconcile hides both panes when split is closed.
+- [`src/ui/file-layout.ts`](../../src/ui/file-layout.ts) — `hideAllRightSplitPanesDom()`, `resetRightSplitForCodeEntry()`, reconcile hides both panes when split is closed; `hideViewerSplit({ skipPreviewFallback })` for programmatic viewer teardown on chat switch.
 - [`src/ui/preview-panel.ts`](../../src/ui/preview-panel.ts) — `collapsePreviewPanelKeepingSource()` resets both panes + clears Electron guest.
-- [`src/os/desktop-workspace-mounts.ts`](../../src/os/desktop-workspace-mounts.ts) — `restoreToCode()` sets preview/viewer `.hidden` from `filePanel.rightPaneMode`; sync generation token drops stale desktop remounts; Code foreground collapses on surface switch.
+- [`src/os/desktop-workspace-mounts.ts`](../../src/os/desktop-workspace-mounts.ts) — `restoreToCode()` sets preview/viewer `.hidden` from `filePanel.rightPaneMode`; sync generation token drops stale desktop remounts; Code foreground collapses on surface switch; DOM/state reconciliation when panes drift open while `rightPaneMode` is null.
 - [`src/os/page-bridge.ts`](../../src/os/page-bridge.ts) — `osOnAppOpen('code')` collapses right split.
+- [`src/ui/init-file-panel.ts`](../../src/ui/init-file-panel.ts) — after `loadFilePanelPrefs()`, clears open split when Code is already foreground (prefs reload race).
 
 Legacy non-OS mode (`isOsShellEnabled() === false`) still auto-restores an open preview on full page reload.
 

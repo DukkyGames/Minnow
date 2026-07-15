@@ -244,6 +244,24 @@ describe('syncDesktopWorkspaceMounts listing root', () => {
     assert.equal(document.getElementById('rightPaneColumn')?.classList.contains('hidden'), true);
   });
 
+  test('Code entry hides preview when persisted rightPaneMode is preview (MIN-342)', async () => {
+    const { patchFilePanelState } = await import('../../src/state/file-panel.ts');
+    patchFilePanelState({
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+      previewSource: { kind: 'url', url: 'http://localhost:3000' },
+    });
+
+    const { launchInstance } = await import('../../src/os/instances.ts');
+    launchInstance('code');
+    await syncDesktopWorkspaceMounts();
+
+    const preview = document.getElementById('previewPane');
+    assert.ok(preview);
+    assert.equal(preview.classList.contains('hidden'), true);
+    assert.equal(document.getElementById('rightPaneColumn')?.classList.contains('hidden'), true);
+  });
+
   test('stale desktop sync cannot remount preview while Code is foreground', async () => {
     openDesktopWorkspaceTab('browser');
     const desktopSync = syncDesktopWorkspaceMounts();
