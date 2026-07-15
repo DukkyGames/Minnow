@@ -294,7 +294,10 @@ export function suspendOrchestratePlanScreenOnLeave(leavingChatId: string): void
   if (!isOrchestratePlanScreenMounted()) return;
   preservePlanScreenQuestionsPhase();
   planSession.planScreenSuspended = true;
-  teardownOrchestratePlanScreenDom({ chatId: leavingChatId });
+  teardownOrchestratePlanScreenDom({
+    keepQuestionsInComposer: true,
+    chatId: leavingChatId,
+  });
 }
 
 /** Suspend overlay when foregrounding another MinnowOS app (keep grill questions in composer). */

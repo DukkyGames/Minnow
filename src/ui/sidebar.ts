@@ -80,7 +80,10 @@ import {
   refreshOrchestrateHubPlanList,
   teardownOrchestrateHub,
 } from './orchestrate-hub';
-import { suspendOrchestratePlanScreenOnLeave } from './orchestrate-plan-screen';
+import {
+  isOrchestratePlanScreenSuspendedForChat,
+  suspendOrchestratePlanScreenOnLeave,
+} from './orchestrate-plan-screen';
 import { exitBoardViewForNavigation } from './exit-board-view';
 import { onModelRoutingActiveChatChanged } from './settings-model-routing';
 import { syncReefWidgetSettingsFromActiveChat } from './reef-widget-settings';
@@ -1113,13 +1116,17 @@ export function switchChat(id: string): void {
 
   if (id === sessionState.activeId) {
     acknowledgeChatViewed(id);
-    if (boardWasOpen) {
-      const sameChat = sessionState.chats.find((c) => c.id === id);
+    const sameChat = sessionState.chats.find((c) => c.id === id);
+    const planScreenSuspendedForSameChat =
+      sameChat != null && isOrchestratePlanScreenSuspendedForChat(sameChat);
+    if (boardWasOpen || planScreenSuspendedForSameChat) {
       if (sameChat) {
-        renderChatFromHistory(sameChat);
+        paintActiveChatInForegroundShell(sameChat);
         syncViewModeToggleFromActiveChat();
+        syncComposerFromStreamingState();
         renderSidebar();
         scheduleSaveSessions();
+        void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(id));
       }
     }
     closeMobileSidebar();

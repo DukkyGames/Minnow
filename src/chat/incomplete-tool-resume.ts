@@ -24,6 +24,7 @@ import { getActiveChatMountElement } from '../ui/chat-mount';
 
 import { renderToolCall } from '../ui/tool-messages';
 
+import { isAskQuestionModalOpenForChat } from '../ui/question-cards-modal';
 import { isUserPromptLocked } from '../ui/user-prompt-lock';
 
 import { setStatus } from '../ui/status';
@@ -121,6 +122,13 @@ export async function resumeIncompleteToolBatch(
   }
 
   if (isUserPromptLocked()) {
+
+    return false;
+
+  }
+
+  // ask_question is still waiting on the parked/open strip — do not re-run the tool.
+  if (isAskQuestionModalOpenForChat(chat.id)) {
 
     return false;
 
@@ -329,6 +337,12 @@ async function ensureAskQuestionSurfaceForChat(chat: Chat): Promise<void> {
 export async function resumeIncompleteToolBatchOnChatSwitch(chat: Chat): Promise<void> {
 
   if (!findIncompleteToolBatchAtTail(chat)) {
+
+    return;
+
+  }
+
+  if (isAskQuestionModalOpenForChat(chat.id)) {
 
     return;
 
