@@ -37,6 +37,12 @@
   justify-content: space-between;
 }
 
+.git-panel-center-row__start {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .git-panel-center-btn {
   padding: 0;
   border: none;

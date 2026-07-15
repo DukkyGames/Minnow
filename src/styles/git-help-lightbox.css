@@ -335,6 +335,28 @@
   border-color: var(--mn-border-strong);
 }
 
+.git-panel-help-btn.is-busy .icon-svg {
+  animation: git-panel-toolbar-refresh-spin 0.65s linear infinite;
+}
+
+.git-panel-help-btn.is-busy:disabled {
+  opacity: 1;
+  cursor: wait;
+}
+
+@keyframes git-panel-toolbar-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .git-panel-help-btn.is-busy .icon-svg {
+    animation: none;
+    opacity: 0.75;
+  }
+}
+
 @media (max-width: 520px) {
   .git-help-concepts,
   .git-help-diagram__folders {
