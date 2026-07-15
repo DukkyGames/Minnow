@@ -11,7 +11,7 @@ import {
   readEncryptedJsonFile,
   writeEncryptedJsonFile,
 } from '../security/secret-box.js';
-import { emailAccountsPath, emailSecretPath } from './paths.js';
+import { emailAccountsPath, emailSecretPath, emailCacheDir } from './paths.js';
 
 /** Default IMAP folders when none are configured. */
 export const DEFAULT_FOLDERS = ['INBOX'];
@@ -253,13 +253,32 @@ export async function deleteEmailAccount(accountId) {
     throw new Error('Email account not found');
   }
 
+  const removed = file.accounts[index];
   file.accounts.splice(index, 1);
+
+  if (removed.isDefault && file.accounts.length > 0) {
+    file.accounts[0].isDefault = true;
+  }
+
   await writeAccountsFile(file);
 
   try {
     await fs.unlink(emailSecretPath(accountId));
   } catch {
     /* ignore missing secret */
+  }
+
+  try {
+    await fs.rm(emailCacheDir(accountId), { recursive: true, force: true });
+  } catch {
+    /* ignore missing cache */
+  }
+
+  try {
+    const { deleteAutomationsForAccount } = await import('./automations.js');
+    await deleteAutomationsForAccount(accountId);
+  } catch {
+    /* ignore automation cleanup failures */
   }
 
   return { deleted: true };
