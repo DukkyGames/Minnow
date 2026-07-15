@@ -14,6 +14,7 @@ import { chatToggleAriaLabel, isChatToggleVisible } from './menubar-visibility';
 import { initOsNotificationsMenu } from './notifications-menu';
 import { openSchedulerFromMenubar } from '../ui/scheduler-page';
 import { initShellMenubarChrome } from './menubar-window-controls';
+import { initMenubarModelChip } from './menubar-model-chip';
 
 function formatClock(d: Date): string {
   return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -145,6 +146,11 @@ export function renderMenubar(root: HTMLElement): () => void {
   workspaceSlot.className = 'mn-os-mb-workspace-slot';
   workspaceSlot.hidden = true;
 
+  const modelChipAnchor = document.createElement('div');
+  modelChipAnchor.id = 'osMenubarModelChip';
+  modelChipAnchor.className = 'mn-os-mb-model-slot';
+  const cleanupModelChip = initMenubarModelChip(modelChipAnchor);
+
   const schedulerBtn = document.createElement('button');
   schedulerBtn.type = 'button';
   schedulerBtn.className = 'mn-os-mb-icon mn-os-mb-scheduler';
@@ -175,7 +181,7 @@ export function renderMenubar(root: HTMLElement): () => void {
   timeEl.className = 'mn-os-mb-time mn-os-mono';
   timeEl.textContent = formatClock(new Date());
 
-  right.append(workspaceSlot, schedulerBtn, bell, settingsBtn, timeEl);
+  right.append(workspaceSlot, modelChipAnchor, schedulerBtn, bell, settingsBtn, timeEl);
   root.append(left, right);
 
   const cleanupShellChrome = initShellMenubarChrome(root, right);
@@ -252,6 +258,7 @@ export function renderMenubar(root: HTMLElement): () => void {
     unsubInbox();
     unsubNotif();
     stopClock();
+    cleanupModelChip();
     cleanupNotifications();
     cleanupShellChrome();
   };

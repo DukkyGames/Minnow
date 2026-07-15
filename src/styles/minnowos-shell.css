@@ -66,7 +66,8 @@ html.minnow-os-enabled {
   border-bottom: 1px solid var(--os-border);
   position: relative;
   z-index: 40;
-  overflow: hidden;
+  /* Let icon focus rings / open glows paint outside the 46px bar (left cluster still clips). */
+  overflow: visible;
 }
 
 .mn-os-mb-left,
@@ -85,15 +86,30 @@ html.minnow-os-enabled {
 .mn-os-mb-right {
   flex: 1 1 0;
   justify-content: flex-end;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .mn-os-mb-workspace-slot {
   min-width: 0;
+  transition:
+    opacity 0.18s var(--ease-out),
+    visibility 0.18s var(--ease-out),
+    max-width 0.22s var(--ease-out),
+    flex-basis 0.22s var(--ease-out);
 }
 
 .mn-os-mb-workspace-slot[hidden] {
   display: none !important;
+}
+
+/* Model label expands left from the chip; tuck workspace aside so they do not overlap. */
+.mn-os-menubar:has(.mn-os-mb-model-chip.is-expanded) .mn-os-mb-workspace-slot:not([hidden]) {
+  flex: 0 0 0;
+  max-width: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  overflow: hidden;
 }
 
 /* Workspace picker in the menubar right cluster */
@@ -1054,7 +1070,8 @@ html.minnow-os-enabled header.topbar.hidden {
   .mn-os-app-layer,
   .mn-os-mb-desktop,
   .mn-os-mb-icon,
-  .mn-os-mb-bell {
+  .mn-os-mb-bell,
+  .mn-os-mb-workspace-slot {
     transition-duration: 0.001ms !important;
   }
 
