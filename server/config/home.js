@@ -244,7 +244,6 @@ const DEFAULT_META = {
     },
   },
   chat: {
-    maxToolTurns: 100,
     generationIdleTimeoutMs: 25 * 60_000,
     generationMaxDurationMs: 3_600_000,
   },

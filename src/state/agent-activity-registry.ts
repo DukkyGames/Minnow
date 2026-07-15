@@ -29,7 +29,6 @@ export interface AgentActivityRow {
   modelId?: string;
   currentTool?: string | null;
   toolTurns?: number;
-  maxToolTurns?: number;
   contextPercent: number | null;
   contextIsEstimate: boolean;
   startedAtMs: number;
@@ -153,7 +152,6 @@ function buildSubAgentRows(input: BuildAgentActivitySnapshotInput): AgentActivit
       modelId: run.modelId,
       currentTool: run.liveCurrentToolName ?? null,
       toolTurns: run.toolTurns,
-      maxToolTurns: run.maxToolTurns,
       contextPercent: null,
       contextIsEstimate: true,
       startedAtMs: safeStart,
@@ -257,6 +255,6 @@ export function formatAgentActivityStatusLine(row: AgentActivityRow): string {
 /** Optional tool-round suffix for sub-agents. */
 export function formatAgentActivityToolRounds(row: AgentActivityRow): string {
   if (row.kind !== 'sub_agent') return '';
-  if (row.toolTurns == null || row.maxToolTurns == null) return '';
-  return `${row.toolTurns}/${row.maxToolTurns} rounds`;
+  if (row.toolTurns == null) return '';
+  return `${row.toolTurns} rounds`;
 }

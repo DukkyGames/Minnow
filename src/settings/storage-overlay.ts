@@ -80,7 +80,6 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   'general.generation.timeout': meta('chat.generationIdleTimeoutMs', 'number', {
     refreshAreas: ['tools'],
   }),
-  'general.generation.maxTurns': meta('chat.maxToolTurns', 'number', { refreshAreas: ['tools'] }),
   'audio.devices': section(['audio']),
   'audio.inputDevice': meta('voice.audio.inputDeviceId', 'string', { refreshAreas: ['audio'] }),
   'audio.outputDevice': meta('voice.audio.outputDeviceId', 'string', { refreshAreas: ['audio'] }),
@@ -135,9 +134,6 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   'agents.workAgents': section(['agent-center']),
   'agents.agentPacks': section(['agent-packs']),
   'agents.subAgents': section(['agent-center']),
-  'agents.subAgents.maxTurns': resource('sub-agents', 'maxToolTurns', 'number', {
-    refreshAreas: ['agent-center', 'tools'],
-  }),
   'agents.autopilot': section(['autopilot']),
   'agents.autopilot.executionMode': meta('autopilot.defaultExecutionMode', 'enum', {
     allowedValues: ['manual', 'sequential', 'auto', 'afk'],

@@ -7,7 +7,6 @@
   "heartbeatIntervalMs": 7000,
   "progressStallMs": 90000,
   "heartbeatDeadMs": 30000,
-  "maxToolTurns": 100,
   "defaultMaxInputTokens": null,
   "defaultContextEnforcementPolicy": "summarize",
   "defaultSummarySchema": "minnow.sub-agent.v1",
@@ -330,6 +329,5 @@
         "topK": 20
       }
     }
-  },
-  "maxToolTurns": 100
+  }
 }

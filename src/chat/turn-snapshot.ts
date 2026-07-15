@@ -14,7 +14,6 @@ export interface BuildTurnSnapshotParams {
   composedSystemPrompt: string;
   userRulesContent?: string;
   enabledToolNames: string[];
-  maxToolTurns: number;
   providerId: string;
   modelId: string;
   temperature: number;
@@ -59,7 +58,6 @@ export async function buildTurnSnapshot(
     composedSystemPrompt,
     userRulesContent,
     enabledToolNames,
-    maxToolTurns,
     providerId,
     modelId,
     temperature,
@@ -92,7 +90,6 @@ export async function buildTurnSnapshot(
     composedSystemPrompt,
     ...(userRulesContent ? { userRulesContent } : {}),
     enabledToolNames: [...enabledToolNames],
-    maxToolTurns,
     historyPrefixHash,
     ...(chat.orchestratePlanPath ? { orchestratePlanPath: chat.orchestratePlanPath } : {}),
   };

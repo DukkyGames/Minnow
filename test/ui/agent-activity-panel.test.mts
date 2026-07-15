@@ -29,7 +29,7 @@ const ROW_BASE: AgentActivityRow = {
 
 describe('agent-activity-panel helpers', () => {
   test('formatAgentActivityToolRounds for sub-agents only', () => {
-    assert.equal(formatAgentActivityToolRounds(ROW_BASE), '3/12 rounds');
+    assert.equal(formatAgentActivityToolRounds(ROW_BASE), '3 rounds');
     assert.equal(
       formatAgentActivityToolRounds({ ...ROW_BASE, kind: 'main_turn' }),
       '',

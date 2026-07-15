@@ -175,7 +175,6 @@ describe('sub-agent runner reasoning effort', () => {
       providerId: PROVIDER_ID,
       modelId: MODEL_ID,
       parentChatId: PARENT_CHAT_ID,
-      maxToolTurns: 1,
       signal: AbortSignal.timeout(5000),
       executeTool: async () => ({ content: 'ok' }),
     });
