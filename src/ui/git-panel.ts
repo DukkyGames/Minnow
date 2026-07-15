@@ -166,6 +166,8 @@ let panelOpen = false;
 
 let refreshing = false;
 
+let refreshBtn: HTMLButtonElement | null = null;
+
 
 
 /** Effective cwd for git ops; undefined means server workspace root. */
@@ -280,6 +282,30 @@ function createToolbarIconBtn(label: string, title: string): HTMLButtonElement {
   btn.title = title;
   btn.setAttribute('aria-label', title);
   return btn;
+}
+
+/** Circular refresh icon (matches #btnFileTreeRefresh in index.html). */
+const GIT_PANEL_REFRESH_ICON =
+  '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">' +
+  '<path d="M20 4v4h-4"/>' +
+  '<path d="M17.5 6.5a8 8 0 1 1-11.3 11.3"/>' +
+  '<path d="M4 20v-4h4"/>' +
+  '<path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/>' +
+  '</svg>';
+
+/** Manual refresh from the toolbar button (status, branches, history graph). */
+async function handleManualRefresh(): Promise<void> {
+  if (!refreshBtn || refreshing) return;
+
+  refreshBtn.classList.add('is-busy');
+  refreshBtn.disabled = true;
+  try {
+    await refreshGitPanel();
+    await syncFileTreeGitPollCwd(true);
+  } finally {
+    refreshBtn.classList.remove('is-busy');
+    refreshBtn.disabled = false;
+  }
 }
 
 function isMainWorktreePath(worktreePath: string): boolean {
@@ -577,6 +603,19 @@ function ensurePanelDom(): HTMLElement {
     '<line x1="12" y1="17" x2="12.01" y2="17"/>' +
     '</svg>';
 
+  refreshBtn = document.createElement('button');
+  refreshBtn.type = 'button';
+  refreshBtn.id = 'btnGitPanelRefresh';
+  refreshBtn.className = 'git-panel-help-btn icon-btn';
+  refreshBtn.title = 'Refresh';
+  refreshBtn.setAttribute('aria-label', 'Refresh source control');
+  refreshBtn.innerHTML = GIT_PANEL_REFRESH_ICON;
+  refreshBtn.addEventListener('click', () => void handleManualRefresh());
+
+  const toolbarStart = document.createElement('div');
+  toolbarStart.className = 'git-panel-center-row__start';
+  toolbarStart.append(helpBtn, refreshBtn);
+
   const centerBtn = document.createElement('button');
 
   centerBtn.type = 'button';
@@ -591,7 +630,7 @@ function ensurePanelDom(): HTMLElement {
 
   centerBtn.setAttribute('aria-label', 'Open Source Control Center');
 
-  centerRow.append(helpBtn, centerBtn);
+  centerRow.append(toolbarStart, centerBtn);
 
   toolbar.appendChild(centerRow);
 
@@ -2128,6 +2167,8 @@ export function resetGitPanelForTests(): void {
   graphHandle?.destroy();
 
   graphHandle = null;
+
+  refreshBtn = null;
 
   selectedCommitSha = null;
 
