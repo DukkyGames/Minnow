@@ -47,6 +47,7 @@ export function notifyChatTurnEnded(chatId: string, runId: string): void {
   if (run.status === 'failed') {
     if (!background) return;
     const errPreview =
+      run.errorMessage?.trim() ||
       lastAssistantPreview(output) ||
       truncatePreview(
         (run.outputMessages?.find((m) => m.role === 'assistant')?.content as string) ??

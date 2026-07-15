@@ -22,6 +22,18 @@ function emitError(kind: string, message: string, stack: string | undefined): vo
   try {
     if (typeof window !== 'undefined') {
       window.minnow?.diagnostics?.reportError?.({ kind, message, stack });
+      void fetch('/api/diagnostics/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kind,
+          message,
+          stack,
+          surface: window.location.hash || 'app',
+        }),
+      }).catch(() => {
+        /* offline or Vite-only */
+      });
     }
   } catch {
     /* logging must never throw */

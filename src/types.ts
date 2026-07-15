@@ -714,6 +714,8 @@ export interface TurnRunRecord {
   stopReason?: ChatStopReason;
   /** Set when the turn ended because it hit a hard cap rather than finishing normally. */
   endReason?: 'max_tool_turns';
+  /** User-facing failure detail when {@link status} is `failed` (survives history rollback). */
+  errorMessage?: string;
 }
 
 /** Expert thread or legacy Expert Lab session (hidden from main sidebar). */

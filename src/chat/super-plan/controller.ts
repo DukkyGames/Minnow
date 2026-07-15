@@ -208,9 +208,11 @@ export async function advanceSuperPlan(chat: Chat): Promise<void> {
           break;
         }
         if (lastRun?.status === 'failed') {
+          const detail =
+            lastRun.errorMessage?.trim() ||
+            'Retry the stage, or open the chat for the failure notice.';
           throw new Error(
-            `${SUPER_PLAN_STAGE_LABELS[stageId]} turn failed before finishing — ` +
-              'retry the stage, or open the chat to check the provider/model error.',
+            `${SUPER_PLAN_STAGE_LABELS[stageId]} turn failed — ${detail}`,
           );
         }
         try {

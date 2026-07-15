@@ -1456,7 +1456,7 @@ The app supports **multiple chat sessions** with a **collapsible left sidebar**.
 
 ### Trace and replay (feature 01 / MIN-37)
 
-**Turn runs** are semantic fork records parallel to linear `chat.history`. Each user-message fork can have multiple **`TurnRunRecord`** branches (`chat.runs[]`) with a captured **`TurnSnapshot`** (model, provider, composed system prompt, tool allowlist, sampler) and stored **`outputMessages`** for branch switching without re-calling the LLM.
+**Turn runs** are semantic fork records parallel to linear `chat.history`. Each user-message fork can have multiple **`TurnRunRecord`** branches (`chat.runs[]`) with a captured **`TurnSnapshot`** (model, provider, composed system prompt, tool allowlist, sampler) and stored **`outputMessages`** for branch switching without re-calling the LLM. Failed runs also persist **`errorMessage`** (survives history rollback) so Super Plan stage errors, notifications, and `read_diagnostics` can surface provider/model failures; Super Plan stage turns append a visible assistant failure notice via [`appendSuperPlanStageFailureNotice`](../src/chat/super-plan/hidden-user-messages.ts) when the plan screen suppresses chat DOM.
 
 | Layer | Lifetime | Purpose |
 |-------|----------|---------|

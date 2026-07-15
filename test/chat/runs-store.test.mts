@@ -118,4 +118,16 @@ describe('runs-store', () => {
     assert.equal(run.status, 'superseded');
     assert.equal(listSelectableBranchesAtFork(chat, 0).length, 0);
   });
+
+  test('finalizeRun stores errorMessage on failed runs', () => {
+    const chat = makeChat();
+    const snap = baseSnapshot(0);
+    const run = createRun(chat, snap);
+    finalizeRun(chat, run.runId, {
+      status: 'failed',
+      errorMessage: 'Could not complete this reply: Model not loaded',
+    });
+    assert.equal(run.status, 'failed');
+    assert.equal(run.errorMessage, 'Could not complete this reply: Model not loaded');
+  });
 });

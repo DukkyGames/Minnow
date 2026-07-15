@@ -180,6 +180,7 @@ export interface FinalizeRunOptions {
   endedAt?: number;
   stopReason?: ChatStopReason;
   endReason?: 'max_tool_turns';
+  errorMessage?: string;
 }
 
 export function finalizeRun(
@@ -205,6 +206,9 @@ export function finalizeRun(
   }
   if (options.endReason) {
     run.endReason = options.endReason;
+  }
+  if (options.errorMessage?.trim()) {
+    run.errorMessage = options.errorMessage.trim();
   }
   if (run.status === 'completed' || run.status === 'stopped') {
     setActiveBranch(chat, run.forkHistoryIndex, run.branchId);

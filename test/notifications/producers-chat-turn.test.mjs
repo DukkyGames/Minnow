@@ -140,6 +140,44 @@ describe('chat turn notification producer', () => {
     assert.equal(rows.find((r) => r.kind === 'chat_tool_failure')?.appId, 'code');
   });
 
+  test('uses run errorMessage when failed turn output was rolled back', () => {
+    instances.showDesktop();
+    const chat = sessions.createEmptyChatObject('model-a');
+    chat.id = 'chat-fail';
+    chat.name = 'Failed plan';
+    chat.history = [{ role: 'user', content: 'draft' }];
+    chat.runs = [
+      {
+        runId: 'run-fail',
+        branchId: 'bf',
+        forkHistoryIndex: 0,
+        status: 'failed',
+        createdAt: 1,
+        endedAt: 2,
+        errorMessage: 'Could not complete this reply: Model not loaded',
+        snapshot: {
+          forkHistoryIndex: 0,
+          providerId: 'p',
+          modelId: 'm',
+          temperature: 0.7,
+          maxTokens: 100,
+          historyPrefixHash: 'fail',
+        },
+      },
+    ];
+    sessions.setSessionStateForTests({
+      version: 5,
+      activeId: 'other-chat',
+      chats: [chat, { ...sessions.createEmptyChatObject('model-a'), id: 'other-chat' }],
+      groups: [],
+    });
+
+    chatTurn.notifyChatTurnEnded('chat-fail', 'run-fail');
+
+    const row = store.getNotifications().find((r) => r.kind === 'chat_turn_error');
+    assert.match(row?.preview ?? '', /Model not loaded/);
+  });
+
   test('uses chat app id for assistant workspace completions', () => {
     const chat = sessions.createEmptyChatObject('model-a');
     chat.id = 'chat-c';
