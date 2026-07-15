@@ -281,6 +281,10 @@ function contextHasSettingsTools(ctx: ComposeContext): boolean {
   return (ctx.enabledToolIds ?? []).includes('update_settings');
 }
 
+function contextHasAppearanceTools(ctx: ComposeContext): boolean {
+  return (ctx.enabledToolIds ?? []).includes('update_appearance');
+}
+
 /** Settings agent tools guidance when update_settings is enabled. */
 function resolveManageSettingsBody(ctx: ComposeContext, profile: PromptProfile): string {
   const modeId = ctx.modeId ?? '';
@@ -289,6 +293,17 @@ function resolveManageSettingsBody(ctx: ComposeContext, profile: PromptProfile):
   }
   const loadProfile = profile === 'lite' ? 'lite' : 'full';
   const loaded = loadPromptById('tool-usage', 'manage-settings', loadProfile);
+  return loaded?.body?.trim() ?? '';
+}
+
+/** Desktop appearance tools guidance when update_appearance is enabled. */
+function resolveManageAppearanceBody(ctx: ComposeContext, profile: PromptProfile): string {
+  const modeId = ctx.modeId ?? '';
+  if (modeId !== 'desktop' || !contextHasAppearanceTools(ctx)) {
+    return '';
+  }
+  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const loaded = loadPromptById('tool-usage', 'manage-appearance', loadProfile);
   return loaded?.body?.trim() ?? '';
 }
 
@@ -410,6 +425,13 @@ export function composeSystemPrompt(ctx: ComposeContext): string {
         const manageInterpolated = interpolatePromptBody(manageSettingsRaw, vars);
         if (manageInterpolated.trim()) {
           sections.push(manageInterpolated.trim());
+        }
+      }
+      const manageAppearanceRaw = resolveManageAppearanceBody(ctx, profileKey);
+      if (manageAppearanceRaw.trim()) {
+        const appearanceInterpolated = interpolatePromptBody(manageAppearanceRaw, vars);
+        if (appearanceInterpolated.trim()) {
+          sections.push(appearanceInterpolated.trim());
         }
       }
     }

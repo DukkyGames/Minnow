@@ -1778,6 +1778,116 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'get_appearance',
+    label: 'Get appearance',
+    description:
+      'Read current MinnowOS appearance: theme family/mode, custom colors, fonts, and desktop wallpaper.',
+    category: 'utility',
+    serverRequired: false,
+    definition: toolSchema(
+      'get_appearance',
+      'Return JSON snapshot of browser-local appearance (theme, customColors, fonts, wallpaper). Desktop mode only.',
+      {},
+      [],
+    ),
+  },
+  {
+    id: 'update_appearance',
+    label: 'Update appearance',
+    description:
+      'Change theme, custom color tokens, fonts, or desktop wallpaper after user approval. Desktop mode only.',
+    category: 'utility',
+    serverRequired: false,
+    definition: toolSchema(
+      'update_appearance',
+      'Batch patch appearance. All fields optional. Call get_appearance first. Summarize intended changes in chat before calling.',
+      {
+        patch: {
+          type: 'object',
+          description: 'Appearance patch object',
+          properties: {
+            theme: {
+              type: 'object',
+              properties: {
+                family: {
+                  type: 'string',
+                  enum: ['swamp', 'desert', 'ocean', 'coral', 'mono', 'matrix', 'human', 'mint'],
+                },
+                mode: { type: 'string', enum: ['dark', 'light', 'system'] },
+              },
+            },
+            customColors: {
+              type: 'object',
+              properties: {
+                enabled: { type: 'boolean' },
+                advanced: { type: 'boolean' },
+                seeds: {
+                  type: 'object',
+                  properties: {
+                    bg: { type: 'string' },
+                    fg: { type: 'string' },
+                    accent: { type: 'string' },
+                    danger: { type: 'string' },
+                  },
+                },
+                tokens: { type: 'object', additionalProperties: { type: 'string' } },
+                replaceTokens: { type: 'object', additionalProperties: { type: 'string' } },
+              },
+            },
+            fonts: {
+              type: 'object',
+              properties: {
+                ui: {},
+                mono: {},
+              },
+            },
+            wallpaper: {
+              type: 'object',
+              properties: {
+                mode: {
+                  type: 'string',
+                  enum: [
+                    'flat',
+                    'gradient',
+                    'underwater',
+                    'minnow',
+                    'aurora',
+                    'starfield',
+                    'grain',
+                    'mesh',
+                    'custom',
+                  ],
+                },
+                imageAssetId: { type: 'string' },
+                imageFit: { type: 'string', enum: ['cover', 'contain'] },
+              },
+            },
+          },
+        },
+      },
+      ['patch'],
+    ),
+  },
+  {
+    id: 'upload_appearance_asset',
+    label: 'Upload appearance asset',
+    description:
+      'Import a workspace font or wallpaper image into browser appearance storage. Requires npm start.',
+    category: 'utility',
+    serverRequired: false,
+    definition: toolSchema(
+      'upload_appearance_asset',
+      'Read a workspace file and store it in IndexedDB for custom fonts or wallpaper. Follow with update_appearance to apply wallpaper asset ids.',
+      {
+        kind: { type: 'string', enum: ['wallpaper', 'font'] },
+        path: { type: 'string', description: 'Workspace-relative file path' },
+        slot: { type: 'string', enum: ['ui', 'mono'], description: 'Font slot when kind is font' },
+        familyName: { type: 'string', description: 'CSS font-family name for uploaded fonts' },
+      },
+      ['kind', 'path'],
+    ),
+  },
+  {
     id: 'save_memory',
     label: 'Save memory',
     description:

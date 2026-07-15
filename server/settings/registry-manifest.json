@@ -344,7 +344,7 @@
       "mint"
     ],
     "sensitivity": "normal",
-    "writable": true,
+    "writable": false,
     "refreshAreas": [
       "appearance"
     ]
@@ -368,7 +368,7 @@
       "system"
     ],
     "sensitivity": "normal",
-    "writable": true,
+    "writable": false,
     "refreshAreas": [
       "appearance"
     ]
@@ -386,7 +386,7 @@
     "path": "wallpaper",
     "type": "string",
     "sensitivity": "normal",
-    "writable": true,
+    "writable": false,
     "refreshAreas": [
       "appearance"
     ]
@@ -3550,6 +3550,84 @@
     "storage": "resource",
     "resource": "tools",
     "path": "permissions.default.update_settings",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.get_appearance",
+    "label": "Tool permission: get_appearance",
+    "description": "Permission mode for the get_appearance tool (off, ask, or full).",
+    "keywords": [
+      "get_appearance",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.get_appearance",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.update_appearance",
+    "label": "Tool permission: update_appearance",
+    "description": "Permission mode for the update_appearance tool (off, ask, or full).",
+    "keywords": [
+      "update_appearance",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.update_appearance",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.upload_appearance_asset",
+    "label": "Tool permission: upload_appearance_asset",
+    "description": "Permission mode for the upload_appearance_asset tool (off, ask, or full).",
+    "keywords": [
+      "upload_appearance_asset",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.upload_appearance_asset",
     "type": "enum",
     "allowedValues": [
       "off",

@@ -51,6 +51,12 @@ export function describeToolInvocation(
       lines.push(`${label} → ${newVal}`);
     }
     argsJson = lines.length ? lines.join('\n') : '(no changes)';
+  } else if (toolName === 'update_appearance' && args.patch && typeof args.patch === 'object') {
+    argsJson = JSON.stringify(args.patch, null, 2);
+  } else if (toolName === 'upload_appearance_asset') {
+    const kind = String(args.kind ?? '');
+    const path = String(args.path ?? '');
+    argsJson = `Upload ${kind || 'asset'} from ${path || '(path)'}`;
   } else {
     try {
       const json = JSON.stringify(args, null, 2);

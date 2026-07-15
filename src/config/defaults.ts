@@ -41,6 +41,9 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'search_settings',
   'get_settings',
   'update_settings',
+  'get_appearance',
+  'update_appearance',
+  'upload_appearance_asset',
   'repo_map',
   'find_symbol',
   'who_calls',
@@ -71,8 +74,11 @@ const BRAIN_FULL_PERMISSION_TOOL_ID_SET = new Set<string>(BRAIN_FULL_PERMISSION_
 /** Settings read tools default to permission `full`. */
 const SETTINGS_READ_TOOL_IDS = new Set(['search_settings', 'get_settings']);
 
+/** Appearance read tool defaults to permission `full`. */
+const APPEARANCE_READ_TOOL_IDS = new Set(['get_appearance']);
+
 function defaultPermissionForTool(id: string, enabled: boolean): ToolPermissionMode {
-  if (SETTINGS_READ_TOOL_IDS.has(id)) {
+  if (SETTINGS_READ_TOOL_IDS.has(id) || APPEARANCE_READ_TOOL_IDS.has(id)) {
     return enabled ? 'full' : 'off';
   }
   if (BRAIN_FULL_PERMISSION_TOOL_ID_SET.has(id)) {

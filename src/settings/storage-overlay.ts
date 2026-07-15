@@ -98,12 +98,17 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   'appearance.theme.family': browser('themeFamily', 'enum', {
     allowedValues: ['swamp', 'desert', 'ocean', 'coral', 'mono', 'matrix', 'human', 'mint'],
     refreshAreas: ['appearance'],
+    writable: false,
   }),
   'appearance.theme.mode': browser('themeMode', 'enum', {
     allowedValues: ['dark', 'light', 'system'],
     refreshAreas: ['appearance'],
+    writable: false,
   }),
-  'appearance.wallpaper': browser('wallpaper', 'string', { refreshAreas: ['appearance'] }),
+  'appearance.wallpaper': browser('wallpaper', 'string', {
+    refreshAreas: ['appearance'],
+    writable: false,
+  }),
   'appearance.fonts': section(['appearance']),
   'appearance.customColors': section(['appearance']),
 

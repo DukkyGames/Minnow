@@ -18,6 +18,11 @@ import {
   truncateUtf8,
   WEB_TEXT_MAX_BYTES,
 } from '../lib/fetch-web-content.mjs';
+import {
+  toolGetAppearance,
+  toolUpdateAppearance,
+  toolUploadAppearanceAsset,
+} from './appearance-tools';
 import { toolLaunchMinnowApp } from './os-launch-tool';
 import { toolRecallChatContext } from './recall-chat-context';
 import { toolRecallTurnFull } from './recall-turn-full';
@@ -62,6 +67,12 @@ export async function executeBrowserTool(
         return await toolRecallChatContext(args);
       case 'recall_turn_full':
         return toolRecallTurnFull(args);
+      case 'get_appearance':
+        return toolGetAppearance();
+      case 'update_appearance':
+        return await toolUpdateAppearance(args);
+      case 'upload_appearance_asset':
+        return await toolUploadAppearanceAsset(args);
       default:
         return `Error: unknown browser tool "${name}"`;
     }

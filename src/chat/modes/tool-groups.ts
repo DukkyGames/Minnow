@@ -95,6 +95,7 @@ export const TOOL_GROUP_IDS = {
   ],
   recall: ['recall_chat_context', 'recall_turn_full'],
   settings: ['search_settings', 'get_settings', 'update_settings'],
+  appearance: ['get_appearance', 'update_appearance', 'upload_appearance_asset'],
   diagnostics: ['read_diagnostics'],
   email: [
     'list_mail',
