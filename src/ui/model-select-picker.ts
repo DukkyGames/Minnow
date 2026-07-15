@@ -21,16 +21,36 @@ import {
   resolveModelProducer,
 } from '../providers/model-producer';
 import { isModelLoaded, resolveModelState, type ModelLoadState } from './model-state-dot';
-import { isModelLoadUnloadBusy } from './model-load-unload-button';
+import { isModelLoadUnloadBusy, setModelLoadUnloadIconButtonIdle, setModelLoadUnloadIconButtonUnsupported } from './model-load-unload-button';
+
+/** Stroke icon reused for compact refresh controls in model picker filter bars. */
+const MODEL_REFRESH_ICON_HTML =
+  '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">' +
+  '<path d="M20 4v4h-4"/>' +
+  '<path d="M17.5 6.5a8 8 0 1 1-11.3 11.3"/>' +
+  '<path d="M4 20v-4h4"/>' +
+  '<path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/>' +
+  '</svg>';
 
 /** Flat list when catalog is small; larger catalogs get collapsible producer headers. */
 const BROWSE_ALL_LIMIT = 12;
 
 const COLLAPSED_STORAGE_KEY = 'minnow-model-producer-collapsed';
 const HOST_FILTER_STORAGE_KEY = 'minnow-model-host-filter';
+const LOCAL_LOAD_FILTER_STORAGE_KEY = 'minnow-model-local-load-filter';
+const MODEL_SEARCH_DEBOUNCE_MS = 150;
 
 /** Filter models by provider host: all, loopback/local, or remote/cloud APIs. */
 export type ModelHostFilter = 'all' | 'local' | 'cloud';
+
+/** Stroke icon for the loaded-only toggle (filled dot matches model load indicator). */
+const MODEL_LOADED_TOGGLE_ICON_HTML =
+  '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">' +
+  '<circle cx="12" cy="12" r="5" fill="currentColor"/>' +
+  '</svg>';
+
+/** When host is Local: show only models loaded in memory. */
+export type ModelLocalLoadFilter = 'all' | 'loaded';
 
 const HOST_FILTER_CHOICES: { id: ModelHostFilter; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -41,6 +61,28 @@ const HOST_FILTER_CHOICES: { id: ModelHostFilter; label: string }[] = [
 let pickerBound = false;
 let open = false;
 let hostFilter: ModelHostFilter = loadModelHostFilter();
+let localLoadFilter: ModelLocalLoadFilter = loadModelLocalLoadFilter();
+let modelSearchQuery = '';
+let modelSearchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Optional close hooks for composer / OS model menus that share the #modelSelect catalog. */
+const externalModelMenuClosers = new Set<() => void>();
+
+/** Register a handler that closes a secondary model menu when the top-bar picker opens. */
+export function registerModelSelectExternalCloser(close: () => void): () => void {
+  externalModelMenuClosers.add(close);
+  return () => externalModelMenuClosers.delete(close);
+}
+
+function closeExternalModelMenus(): void {
+  for (const close of externalModelMenuClosers) {
+    try {
+      close();
+    } catch {
+      /* ignore subscriber errors */
+    }
+  }
+}
 
 function getElements() {
   const root = document.querySelector('.model-select-inner');
@@ -80,6 +122,17 @@ function loadModelHostFilter(): ModelHostFilter {
   return 'all';
 }
 
+function loadModelLocalLoadFilter(): ModelLocalLoadFilter {
+  try {
+    const raw = localStorage.getItem(LOCAL_LOAD_FILTER_STORAGE_KEY);
+    if (raw === 'loaded') return 'loaded';
+    if (raw === 'unloaded') return 'all';
+  } catch {
+    /* ignore private mode */
+  }
+  return 'all';
+}
+
 /** Active local/cloud filter for model picker menus (persisted in localStorage). */
 export function getModelHostFilter(): ModelHostFilter {
   return hostFilter;
@@ -95,12 +148,87 @@ export function setModelHostFilter(filter: ModelHostFilter): void {
   syncAllModelHostFilterBars();
 }
 
+/** Active loaded-only filter when browsing local models (persisted in localStorage). */
+export function getModelLocalLoadFilter(): ModelLocalLoadFilter {
+  return localLoadFilter;
+}
+
+export function setModelLocalLoadFilter(filter: ModelLocalLoadFilter): void {
+  localLoadFilter = filter;
+  try {
+    localStorage.setItem(LOCAL_LOAD_FILTER_STORAGE_KEY, filter);
+  } catch {
+    /* ignore quota / private mode */
+  }
+  syncAllModelHostFilterBars();
+}
+
+export function toggleModelLocalLoadFilter(): ModelLocalLoadFilter {
+  const next: ModelLocalLoadFilter = localLoadFilter === 'loaded' ? 'all' : 'loaded';
+  setModelLocalLoadFilter(next);
+  return next;
+}
+
+/** Current model name search query (ephemeral; shared across picker menus). */
+export function getModelSearchQuery(): string {
+  return modelSearchQuery;
+}
+
+export function setModelSearchQuery(query: string): void {
+  modelSearchQuery = query;
+  syncAllModelHostFilterSearchInputs();
+}
+
+/** Clear search when a model menu closes. */
+export function clearModelSearchQuery(): void {
+  if (!modelSearchQuery) return;
+  modelSearchQuery = '';
+  if (modelSearchDebounceTimer) {
+    clearTimeout(modelSearchDebounceTimer);
+    modelSearchDebounceTimer = null;
+  }
+  syncAllModelHostFilterSearchInputs();
+}
+
+/** Focus the search field in the first visible host filter bar. */
+export function focusModelHostFilterSearch(): void {
+  for (const input of document.querySelectorAll<HTMLInputElement>(
+    '.model-select-host-filter .model-host-filter-search',
+  )) {
+    if (!input.closest('.hidden')) {
+      input.focus({ preventScroll: true });
+      input.select();
+      return;
+    }
+  }
+}
+
+function syncAllModelHostFilterSearchInputs(): void {
+  const query = getModelSearchQuery();
+  for (const input of document.querySelectorAll<HTMLInputElement>(
+    '.model-select-host-filter .model-host-filter-search',
+  )) {
+    if (input.value !== query) input.value = query;
+  }
+}
+
 function syncAllModelHostFilterBars(): void {
-  const current = getModelHostFilter();
+  const currentHost = getModelHostFilter();
+  const loadedOnly = getModelLocalLoadFilter() === 'loaded';
   for (const bar of document.querySelectorAll('.model-select-host-filter')) {
     for (const btn of bar.querySelectorAll<HTMLButtonElement>('.model-host-filter-segment')) {
       const id = btn.dataset.filter as ModelHostFilter | undefined;
-      btn.setAttribute('aria-checked', id === current ? 'true' : 'false');
+      if (id) btn.setAttribute('aria-checked', id === currentHost ? 'true' : 'false');
+    }
+    const loadedToggle = bar.querySelector<HTMLButtonElement>(
+      '.model-host-filter-loaded-toggle',
+    );
+    if (loadedToggle) {
+      loadedToggle.hidden = currentHost !== 'local';
+      loadedToggle.setAttribute('aria-pressed', loadedOnly ? 'true' : 'false');
+      loadedToggle.title = loadedOnly
+        ? 'Showing loaded models only'
+        : 'Show loaded models only';
     }
   }
 }
@@ -136,22 +264,221 @@ function filterOptionsByHost(
   return options.filter((opt) => optionMatchesHostFilter(opt, filter));
 }
 
-function emptyFilterMessage(filter: ModelHostFilter): string {
-  if (filter === 'local') return 'No local models';
-  if (filter === 'cloud') return 'No cloud models';
+function optionMatchesLocalLoadFilter(
+  opt: HTMLOptionElement,
+  filter: ModelLocalLoadFilter,
+): boolean {
+  if (filter === 'all') return true;
+  if (!isLocalProviderId(providerIdForOption(opt), opt)) return true;
+  const cached = modelCache.get(opt.value.trim());
+  return cached ? resolveModelState(cached) === 'loaded' : false;
+}
+
+function filterOptionsByLocalLoad(
+  options: HTMLOptionElement[],
+  filter: ModelLocalLoadFilter,
+): HTMLOptionElement[] {
+  if (filter === 'all') return options;
+  return options.filter((opt) => optionMatchesLocalLoadFilter(opt, filter));
+}
+
+function optionMatchesSearch(opt: HTMLOptionElement, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const canonicalId = tooltipModelIdForOptionValue(opt.value);
+  const producer = producerDisplayName(producerSlugFromModelId(canonicalId)).toLowerCase();
+  const haystack = [
+    opt.text,
+    opt.value,
+    canonicalId,
+    opt.title ?? '',
+    producer,
+  ]
+    .join(' ')
+    .toLowerCase();
+  return haystack.includes(q);
+}
+
+function filterOptionsBySearch(
+  options: HTMLOptionElement[],
+  query: string,
+): HTMLOptionElement[] {
+  if (!query.trim()) return options;
+  return options.filter((opt) => optionMatchesSearch(opt, query));
+}
+
+function emptyFilterMessage(
+  hostFilter: ModelHostFilter,
+  loadFilter: ModelLocalLoadFilter,
+  searchQuery: string,
+): string {
+  if (searchQuery.trim()) return 'No matching models';
+  if (hostFilter === 'local' && loadFilter === 'loaded') return 'No loaded local models';
+  if (hostFilter === 'local') return 'No local models';
+  if (hostFilter === 'cloud') return 'No cloud models';
   return 'No models';
 }
 
-/** Mount All / Local / Cloud segments; returns the filter bar root. */
+/** Optional hooks after refresh or load/unload from a host-filter action row. */
+export interface ModelHostFilterBarOptions {
+  onFilterChange: () => void;
+  onAfterRefresh?: () => void;
+  onAfterLoadUnload?: () => void;
+}
+
+function normalizeHostFilterBarOptions(
+  callbacks: ModelHostFilterBarOptions | (() => void),
+): ModelHostFilterBarOptions {
+  return typeof callbacks === 'function' ? { onFilterChange: callbacks } : callbacks;
+}
+
+async function refreshModelsFromHostFilterBar(
+  refreshBtn: HTMLButtonElement,
+  onAfterRefresh?: () => void,
+): Promise<void> {
+  if (refreshBtn.disabled || isModelLoadUnloadBusy()) return;
+  refreshBtn.disabled = true;
+  try {
+    const { fetchModels } = await import('../api/models');
+    await fetchModels();
+    onAfterRefresh?.();
+  } finally {
+    refreshBtn.disabled = false;
+  }
+}
+
+async function toggleLoadUnloadFromHostFilterBar(
+  onAfterLoadUnload?: () => void,
+): Promise<void> {
+  if (isModelLoadUnloadBusy()) return;
+  const { toggleSelectedModelLoad } = await import('../api/models');
+  await toggleSelectedModelLoad();
+  onAfterLoadUnload?.();
+}
+
+function mountModelHostFilterActions(
+  toolbarEnd: HTMLDivElement,
+  options: ModelHostFilterBarOptions,
+): void {
+  const actions = document.createElement('div');
+  actions.className = 'model-host-filter-actions';
+  actions.setAttribute('role', 'group');
+  actions.setAttribute('aria-label', 'Model actions');
+
+  const refreshBtn = document.createElement('button');
+  refreshBtn.type = 'button';
+  refreshBtn.className = 'model-host-filter-action model-host-filter-action--refresh';
+  refreshBtn.innerHTML = MODEL_REFRESH_ICON_HTML;
+  refreshBtn.setAttribute('aria-label', 'Refresh models');
+  refreshBtn.title = 'Refresh model list';
+  refreshBtn.addEventListener('mousedown', (e) => e.preventDefault());
+  refreshBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    await refreshModelsFromHostFilterBar(refreshBtn, options.onAfterRefresh);
+  });
+
+  const loadUnloadBtn = document.createElement('button');
+  loadUnloadBtn.type = 'button';
+  loadUnloadBtn.className =
+    'model-host-filter-action model-host-filter-action--load-unload';
+  loadUnloadBtn.addEventListener('mousedown', (e) => e.preventDefault());
+  loadUnloadBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    await toggleLoadUnloadFromHostFilterBar(options.onAfterLoadUnload);
+  });
+
+  actions.append(refreshBtn, loadUnloadBtn);
+  toolbarEnd.appendChild(actions);
+
+  if (!isServerStorageMode()) {
+    setModelLoadUnloadIconButtonUnsupported(loadUnloadBtn, false);
+  } else {
+    setModelLoadUnloadIconButtonIdle(loadUnloadBtn, false, false);
+  }
+}
+
+function scheduleModelSearchRerender(onFilterChange: () => void): void {
+  if (modelSearchDebounceTimer) clearTimeout(modelSearchDebounceTimer);
+  modelSearchDebounceTimer = setTimeout(() => {
+    modelSearchDebounceTimer = null;
+    onFilterChange();
+  }, MODEL_SEARCH_DEBOUNCE_MS);
+}
+
+function mountModelHostFilterSearch(
+  bar: HTMLDivElement,
+  onFilterChange: () => void,
+): void {
+  const searchWrap = document.createElement('div');
+  searchWrap.className = 'model-host-filter-search-wrap';
+
+  const searchInput = document.createElement('input');
+  searchInput.type = 'search';
+  searchInput.className = 'model-host-filter-search';
+  searchInput.placeholder = 'Search models…';
+  searchInput.setAttribute('aria-label', 'Search models');
+  searchInput.autocomplete = 'off';
+  searchInput.spellcheck = false;
+  searchInput.value = getModelSearchQuery();
+
+  searchInput.addEventListener('mousedown', (e) => e.stopPropagation());
+  searchInput.addEventListener('click', (e) => e.stopPropagation());
+  searchInput.addEventListener('input', () => {
+    setModelSearchQuery(searchInput.value);
+    scheduleModelSearchRerender(onFilterChange);
+  });
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      if (searchInput.value) {
+        setModelSearchQuery('');
+        onFilterChange();
+      }
+    }
+  });
+
+  searchWrap.appendChild(searchInput);
+  bar.appendChild(searchWrap);
+}
+
+function mountModelHostFilterLoadedToggle(
+  toolbarEnd: HTMLDivElement,
+  onFilterChange: () => void,
+): void {
+  const loadedToggle = document.createElement('button');
+  loadedToggle.type = 'button';
+  loadedToggle.className =
+    'model-host-filter-action model-host-filter-loaded-toggle';
+  loadedToggle.innerHTML = MODEL_LOADED_TOGGLE_ICON_HTML;
+  loadedToggle.setAttribute('aria-label', 'Loaded models only');
+  loadedToggle.setAttribute('aria-pressed', 'false');
+  loadedToggle.hidden = getModelHostFilter() !== 'local';
+  loadedToggle.title = 'Show loaded models only';
+  loadedToggle.addEventListener('mousedown', (e) => e.preventDefault());
+  loadedToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleModelLocalLoadFilter();
+    onFilterChange();
+  });
+  toolbarEnd.appendChild(loadedToggle);
+}
+
+/** Mount search, All / Local / Cloud segments, loaded toggle, and action icons. */
 export function mountModelHostFilterBar(
   parent: HTMLElement,
-  onChange: () => void,
+  callbacks: ModelHostFilterBarOptions | (() => void),
   extraClass = '',
 ): HTMLDivElement {
+  const options = normalizeHostFilterBarOptions(callbacks);
   const bar = document.createElement('div');
   bar.className = ['model-select-host-filter', extraClass].filter(Boolean).join(' ');
   bar.setAttribute('role', 'group');
-  bar.setAttribute('aria-label', 'Model host filter');
+  bar.setAttribute('aria-label', 'Model filters');
+
+  mountModelHostFilterSearch(bar, options.onFilterChange);
+
+  const controls = document.createElement('div');
+  controls.className = 'model-host-filter-controls';
 
   const segments = document.createElement('div');
   segments.className = 'model-host-filter-segmented';
@@ -168,13 +495,21 @@ export function mountModelHostFilterBar(
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       setModelHostFilter(id);
-      onChange();
+      options.onFilterChange();
     });
     segments.appendChild(btn);
   }
 
-  bar.appendChild(segments);
+  const toolbarEnd = document.createElement('div');
+  toolbarEnd.className = 'model-host-filter-toolbar-end';
+
+  controls.appendChild(segments);
+  controls.appendChild(toolbarEnd);
+  mountModelHostFilterLoadedToggle(toolbarEnd, options.onFilterChange);
+  mountModelHostFilterActions(toolbarEnd, options);
+  bar.appendChild(controls);
   parent.appendChild(bar);
+  syncAllModelHostFilterBars();
   return bar;
 }
 
@@ -185,6 +520,7 @@ function getTopBarModelPopover(): HTMLElement | null {
 /** Close the model list popover. */
 export function closeModelSelectMenu(): void {
   closeAuxiliaryModelSelectMenu();
+  clearModelSearchQuery();
   const { root, trigger, menu } = getElements();
   open = false;
   root?.classList.remove('is-open');
@@ -197,11 +533,16 @@ function openModelSelectMenu(): void {
   const { root, trigger, menu, sel } = getElements();
   if (!root || !trigger || !menu || !sel || trigger.disabled) return;
   closeAuxiliaryModelSelectMenu();
+  closeExternalModelMenus();
   open = true;
   root.classList.add('is-open');
   getTopBarModelPopover()?.classList.remove('hidden');
   menu.classList.remove('hidden');
   trigger.setAttribute('aria-expanded', 'true');
+  void import('../api/models').then(({ updateModelLoadUnloadButtons }) => {
+    updateModelLoadUnloadButtons();
+  });
+  focusModelHostFilterSearch();
 }
 
 function toggleModelSelectMenu(): void {
@@ -595,12 +936,18 @@ export function renderModelSelectMenuRows(
   if (allOptions.length === 0) return;
 
   const hostFilter = getModelHostFilter();
-  const options = filterOptionsByHost(allOptions, hostFilter);
+  const loadFilter = getModelLocalLoadFilter();
+  const searchQuery = getModelSearchQuery();
+  let options = filterOptionsByHost(allOptions, hostFilter);
+  if (hostFilter === 'local') {
+    options = filterOptionsByLocalLoad(options, loadFilter);
+  }
+  options = filterOptionsBySearch(options, searchQuery);
   if (options.length === 0) {
     const empty = document.createElement('li');
     empty.className = 'model-select-empty-filter';
     empty.setAttribute('role', 'presentation');
-    empty.textContent = emptyFilterMessage(hostFilter);
+    empty.textContent = emptyFilterMessage(hostFilter, loadFilter, searchQuery);
     menu.appendChild(empty);
     return;
   }
@@ -668,6 +1015,7 @@ export function syncModelSelectPicker(): void {
   trigger.disabled = !hasSelectable;
 
   renderModelSelectMenuRows(menu, sel);
+  document.dispatchEvent(new CustomEvent('minnow:model-select-synced'));
 }
 
 /** Bind trigger, outside click, and escape for the model combobox. */
@@ -681,9 +1029,19 @@ function ensureTopBarHostFilterBar(): void {
   menu.parentNode?.insertBefore(shell, menu);
   shell.appendChild(menu);
 
-  mountModelHostFilterBar(shell, () => {
-    const { sel, menu: menuEl } = getElements();
-    if (sel && menuEl) renderModelSelectMenuRows(menuEl, sel);
+  mountModelHostFilterBar(shell, {
+    onFilterChange: () => {
+      const { sel, menu: menuEl } = getElements();
+      if (sel && menuEl) renderModelSelectMenuRows(menuEl, sel);
+    },
+    onAfterRefresh: () => {
+      const { sel, menu: menuEl } = getElements();
+      if (sel && menuEl) renderModelSelectMenuRows(menuEl, sel);
+    },
+    onAfterLoadUnload: () => {
+      const { sel, menu: menuEl } = getElements();
+      if (sel && menuEl) renderModelSelectMenuRows(menuEl, sel);
+    },
   });
 }
 

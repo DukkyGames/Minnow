@@ -1,8 +1,5 @@
 import { loadDesktopPrefs, subscribeDesktopPrefs } from './desktop-prefs';
-import { closeInstance, getInstanceSnapshot, subscribeInstances } from './instances';
-import { launchApp } from './router';
 import { renderConcierge } from './concierge';
-import { renderMiniPreviews } from './mini-previews';
 import { renderWallpaper, type WallpaperRenderOptions } from './wallpaper';
 import { getAppearanceAssetObjectUrl } from '../appearance/asset-store';
 import { bindDesktopChatTranscriptScroll } from '../ui/chat-scroll';
@@ -13,7 +10,6 @@ import {
 } from './desktop-workspace-rail';
 import { isDesktopExpertsActive, isDesktopResearchActive, subscribeDesktopState } from './desktop-state';
 import { wireDesktopResearchControls } from './research-desktop';
-import { windowManager } from './window-manager';
 import { createOsIcon } from './icons';
 import { ICON_CHEVRON_LEFT } from '../constants';
 import type { DesktopPrefs } from './types';
@@ -39,7 +35,7 @@ function msUntilNextMinute(d: Date): number {
   return (60 - d.getSeconds()) * 1000 - d.getMilliseconds();
 }
 
-/** Render the MinnowOS desktop (greeting, concierge, chat surface, mini-previews). */
+/** Render the MinnowOS desktop (greeting, concierge, chat surface). */
 export function renderDesktop(root: HTMLElement): () => void {
   root.replaceChildren();
   root.className = 'mn-os-desktop';
@@ -275,27 +271,9 @@ export function renderDesktop(root: HTMLElement): () => void {
   wireDesktopWorkspaceRail();
   wireDesktopResearchControls();
 
-  const previewsMount = document.createElement('div');
-  previewsMount.className = 'mn-os-desktop-previews';
-  root.appendChild(previewsMount);
-
-  function refreshPreviews(): void {
-    renderMiniPreviews(
-      previewsMount,
-      getInstanceSnapshot(),
-      loadDesktopPrefs(),
-      (id) => {
-        const inst = getInstanceSnapshot().instances.find((i) => i.id === id);
-        if (inst) launchApp(inst.appId);
-      },
-      (id) => closeInstance(id),
-    );
-  }
-
   function applyWallpaper(p: DesktopPrefs): void {
     void paintWallpaper(p);
   }
-  refreshPreviews();
 
   function refreshGreetingClock(): void {
     const d = new Date();
@@ -313,11 +291,8 @@ export function renderDesktop(root: HTMLElement): () => void {
     clockInterval = window.setInterval(refreshGreetingClock, 60_000);
   }, msUntilNextMinute(new Date()));
 
-  const unsubInstances = subscribeInstances(() => refreshPreviews());
-  const unsubWindows = windowManager.subscribe(() => refreshPreviews());
   const unsubPrefs = subscribeDesktopPrefs((p) => {
     applyWallpaper(p);
-    refreshPreviews();
   });
   const unsubDesktopState = subscribeDesktopState(() => {
     rail.hidden = false;
@@ -326,8 +301,6 @@ export function renderDesktop(root: HTMLElement): () => void {
   return () => {
     clearTimeout(clockAlignTimeout);
     if (clockInterval !== undefined) clearInterval(clockInterval);
-    unsubInstances();
-    unsubWindows();
     unsubPrefs();
     unsubDesktopState();
   };

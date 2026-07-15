@@ -1,0 +1,49 @@
+/**
+ * Composer model trigger: label sync from #modelSelect.
+ */
+
+import assert from 'node:assert/strict';
+import { describe, test } from 'node:test';
+
+describe('composer model trigger', () => {
+  test('syncComposerModelTriggers updates label from selected option', async () => {
+    const { Window } = await import('happy-dom');
+    const win = new Window();
+    const doc = win.document;
+    doc.body.innerHTML = `
+      <select id="modelSelect">
+        <option value="qwen/qwen2.5-7b">Qwen 2.5 7B</option>
+      </select>
+      <div id="desktopComposerModelAnchor"></div>
+      <span id="modelSelectTriggerText">Qwen 2.5 7B</span>
+    `;
+
+    const prevDocument = globalThis.document;
+    const prevWindow = globalThis.window;
+    (globalThis as { document: Document }).document = doc as unknown as Document;
+    (globalThis as { window: Window }).window = win as unknown as Window & typeof globalThis.window;
+
+    try {
+      const {
+        initComposerModelTriggers,
+        syncComposerModelTriggers,
+      } = await import('../../src/ui/composer-model-trigger.ts');
+
+      const sel = doc.getElementById('modelSelect') as HTMLSelectElement;
+      sel.value = 'qwen/qwen2.5-7b';
+
+      initComposerModelTriggers();
+      syncComposerModelTriggers();
+
+      const label = doc.querySelector('.composer-model-trigger__label');
+      assert.equal(label?.textContent, 'Qwen 2.5 7B');
+
+      const logo = doc.querySelector('.composer-model-trigger__logo');
+      assert.ok(logo);
+      assert.ok(logo?.querySelector('svg'));
+    } finally {
+      (globalThis as { document: Document }).document = prevDocument;
+      (globalThis as { window: Window }).window = prevWindow;
+    }
+  });
+});

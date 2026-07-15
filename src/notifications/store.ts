@@ -42,7 +42,7 @@ export function getUnreadNotificationCount(): number {
   return items.filter((n) => !n.read).length;
 }
 
-/** Unread count filtered by app id (dock mini-previews). */
+/** Unread count filtered by app id (dock open indicators). */
 export function getUnreadCountForApp(appId: NotificationRecord['appId']): number {
   return items.filter((n) => !n.read && n.appId === appId).length;
 }

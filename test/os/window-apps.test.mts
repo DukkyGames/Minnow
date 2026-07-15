@@ -14,8 +14,6 @@ import {
 } from '../../src/os/instances.ts';
 import { initOsPageBridge, resetOsPageBridgeForTests } from '../../src/os/page-bridge.ts';
 import { resetOsRouterForTests } from '../../src/os/router.ts';
-import { renderMiniPreviews } from '../../src/os/mini-previews.ts';
-import { loadDesktopPrefs } from '../../src/os/desktop-prefs.ts';
 import {
   requestCloseWindowApp,
   WINDOW_MOUNTED_APPS,
@@ -160,28 +158,6 @@ describe('window-mounted apps', () => {
     launchInstance('settings');
     syncAppHostForTests();
     assert.equal(windowManager.getWindows()[0]?.minimized, false);
-  });
-
-  test('mini-previews show window-mounted apps only when minimized', () => {
-    const mount = document.createElement('div');
-    const prefs = loadDesktopPrefs();
-
-    markWindowAppOpen('settings');
-    const instanceId = launchInstance('settings');
-    syncAppHostForTests();
-
-    renderMiniPreviews(mount, getInstanceSnapshot(), prefs, () => {}, () => {});
-    assert.doesNotMatch(mount.textContent ?? '', /Settings/i);
-
-    const win = windowManager.findWindowByInstance(instanceId);
-    assert.ok(win);
-    windowManager.minimize(win.id, true);
-
-    mount.replaceChildren();
-    renderMiniPreviews(mount, getInstanceSnapshot(), prefs, () => {}, () => {});
-    const text = mount.textContent ?? '';
-    assert.match(text, /Settings/i);
-    assert.match(text, /RUNNING · 1/);
   });
 
   test('WINDOW_MOUNTED_APPS includes all window presentation apps', () => {

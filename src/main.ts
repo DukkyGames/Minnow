@@ -48,6 +48,7 @@ import './styles/reef-widgets.css';
 import './styles/sub-agent-drawer.css';
 import './styles/orchestrate-plan-selector.css';
 import './styles/composer-pinned-skill.css';
+import './styles/composer-model-trigger.css';
 import './styles/view-mode-toggle.css';
 import './styles/orchestrate-board.css';
 import './styles/toast.css';
@@ -130,6 +131,10 @@ import {
   initModelSelectPicker,
   syncModelSelectPicker,
 } from './ui/model-select-picker';
+import {
+  initComposerModelTriggers,
+  syncComposerModelTriggers,
+} from './ui/composer-model-trigger';
 import {
   renderSidebar,
   syncModelSelectForActiveChat,
@@ -258,6 +263,7 @@ export async function initApp(): Promise<void> {
     document.documentElement.classList.remove('welcome-pending');
   }
   initModelSelectPicker();
+  initComposerModelTriggers();
   await refreshSkillCatalog();
   const msgInput = document.getElementById('msgInput') as HTMLTextAreaElement | null;
   if (msgInput) {
@@ -294,6 +300,8 @@ export async function initApp(): Promise<void> {
   globalBugsPage.refreshGlobalBugsSidebarBadge();
   await fetchModels();
   syncModelSelectForActiveChat();
+  syncModelSelectPicker();
+  syncComposerModelTriggers();
   updateModelLoadUnloadButtons();
   renderChatFromHistory(getActiveChat());
   const { applyComposerDraftForChat } = await import('./ui/composer-draft');

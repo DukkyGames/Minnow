@@ -1603,16 +1603,7 @@ export function showOrchestratePlanScreenSuspendedBanner(
     })();
   });
 
-  const dismissBtn = document.createElement('button');
-  dismissBtn.type = 'button';
-  dismissBtn.className = 'orchestrate-plan-screen-banner__dismiss';
-  dismissBtn.textContent = 'Dismiss';
-  dismissBtn.addEventListener('click', () => {
-    teardownOrchestratePlanScreen();
-    renderChatFromHistory(chat);
-  });
-
-  actions.append(resumeBtn, dismissBtn);
+  actions.append(resumeBtn);
   banner.append(text, actions);
   host.appendChild(banner);
 }

@@ -24,7 +24,6 @@ export interface DesktopPrefs {
   /** IndexedDB asset id when wallpaper is `custom`. */
   wallpaperImageId?: string;
   wallpaperImageFit?: 'cover' | 'contain';
-  previewStyle: 'card' | 'tile';
 }
 
 import type { ModeId } from '../chat/modes/types';
