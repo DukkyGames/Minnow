@@ -1476,7 +1476,7 @@ The app supports **multiple chat sessions** with a **collapsible left sidebar**.
 
 ### Programmatic chat titles (Step 07)
 
-On the **first user message** while the chat is still named **`New chat`**, an async **non-streaming** title job runs (`scheduleChatTitleGeneration` in [`src/chat/titles/schedule.ts`](../src/chat/titles/schedule.ts)). The main send path is **not** awaited.
+On the **first user message** while the chat is still named **`New chat`**, an async **non-streaming** title job runs **after the assistant reply completes** (`scheduleChatTitleGeneration` in [`src/chat/titles/schedule.ts`](../src/chat/titles/schedule.ts), deferred from `runChatTurn` / legacy `sendMessage` in [`src/api/chat.ts`](../src/api/chat.ts)). The main send path is **not** awaited.
 
 | Topic | Detail |
 |-------|--------|
