@@ -57,6 +57,7 @@ import { renderUsageSettingsSection } from './settings-usage';
 import { renderAudioSettingsSection } from './settings-audio';
 import { renderNotificationsSettingsSection } from './settings-notifications';
 import { renderNetworkAccessSettings } from './settings-network';
+import { renderAppUpdatesSettings } from './settings-updates';
 import { renderAgentPacksSettingsSection } from './settings-agent-packs';
 import { renderSkillsSettingsSection } from './settings-skills';
 import {
@@ -289,6 +290,16 @@ async function renderGeneralSection(): Promise<void> {
       'File-backed settings require <code>npm start</code>. Values below use browser storage until then.',
     );
   }
+
+  // App updates leads the section: it is about the installed shell, not chat behavior.
+  const updates = appendSettingsGroup(
+    mount,
+    'App updates',
+    'Stay on the latest build. Downloads run in the background; restart when you are ready.',
+    'general.updates',
+  );
+  updates.id = 'settingsAppUpdates';
+  renderAppUpdatesSettings(updates);
 
   const chat = appendSettingsGroup(
     mount,

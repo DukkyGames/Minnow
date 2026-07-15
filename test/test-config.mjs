@@ -147,7 +147,7 @@ export const SCOPED_SUITES = {
     patterns: ['test/brain/**/*.test.mjs'],
   },
   settings: {
-    patterns: ['test/settings/**/*.test.mjs'],
+    patterns: ['test/settings/**/*.test.mjs', 'test/settings/**/*.test.mts'],
   },
   engine: {
     patterns: ['test/engine/**/*.test.mjs'],
