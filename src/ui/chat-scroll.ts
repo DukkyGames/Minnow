@@ -13,6 +13,8 @@ export const CHAT_JUMP_CHIP_ID = 'chatJumpLatest';
 export const CHAT_APP_JUMP_CHIP_ID = 'chatAppJumpLatest';
 
 let stickToBottom = true;
+/** Ignore scroll events triggered by our own scrollTop writes during stream follow. */
+let programmaticScroll = false;
 let chatAreaEl: HTMLElement | null = null;
 let jumpChipEl: HTMLButtonElement | null = null;
 let chatAppJumpChipEl: HTMLButtonElement | null = null;
@@ -40,10 +42,20 @@ export function getChatScrollRoot(): HTMLElement | null {
   return chatAreaEl;
 }
 
-function onChatScrollTargetScroll(): void {
+function onChatScrollTargetScroll(boundEl: HTMLElement): void {
+  if (programmaticScroll) return;
   const root = getChatScrollRoot();
-  if (!root) return;
+  if (!root || boundEl !== root) return;
   stickToBottom = isChatAtBottom(root);
+  updateJumpChipVisibility();
+}
+
+/** Release auto-follow immediately when the user wheels up (before the next stream tick). */
+function onChatScrollTargetWheel(ev: WheelEvent, boundEl: HTMLElement): void {
+  const root = getChatScrollRoot();
+  if (!root || boundEl !== root) return;
+  if (ev.deltaY >= 0) return;
+  stickToBottom = false;
   updateJumpChipVisibility();
 }
 
@@ -87,9 +99,11 @@ function updateJumpChipVisibility(): void {
 /** Programmatic scroll without CSS smooth lag during rapid stream updates. */
 function applyInstantScroll(area: HTMLElement, scrollTop: number): void {
   const prev = area.style.scrollBehavior;
+  programmaticScroll = true;
   area.style.scrollBehavior = 'auto';
   area.scrollTop = scrollTop;
   requestAnimationFrame(() => {
+    programmaticScroll = false;
     if (prev) area.style.scrollBehavior = prev;
     else area.style.removeProperty('scroll-behavior');
   });
@@ -163,7 +177,8 @@ export function restoreChatScrollAnchor(anchor: ChatScrollAnchor | null): void {
 function bindScrollTarget(el: HTMLElement | null): void {
   if (!el || el.dataset.chatScrollBound === '1') return;
   el.dataset.chatScrollBound = '1';
-  el.addEventListener('scroll', onChatScrollTargetScroll, { passive: true });
+  el.addEventListener('scroll', () => onChatScrollTargetScroll(el), { passive: true });
+  el.addEventListener('wheel', (ev) => onChatScrollTargetWheel(ev, el), { passive: true });
 }
 
 /** Bind scroll listener on the desktop chat transcript (idempotent; safe before/after OS mount). */
