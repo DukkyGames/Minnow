@@ -174,6 +174,12 @@ function onKeyDown(ev: KeyboardEvent): void {
   }
 }
 
+function refreshApplicableSteps(): void {
+  if (!ctx) return;
+  applicableSteps = getApplicableSteps(ctx);
+  sidebarHandle?.setSteps(applicableSteps);
+}
+
 function makeActions(): OnboardingStepActions {
   return {
     next: () => void goNext(),
@@ -182,7 +188,7 @@ function makeActions(): OnboardingStepActions {
     patchContext: (patch) => {
       if (!ctx) return;
       ctx = { ...ctx, ...patch };
-      applicableSteps = getApplicableSteps(ctx);
+      refreshApplicableSteps();
     },
     setPrimaryEnabled: (enabled) => {
       if (primaryBtn) primaryBtn.disabled = !enabled;
@@ -249,7 +255,7 @@ async function goNext(): Promise<void> {
   }
 
   if (step.id === 'provider-choice' || step.id === 'extras') {
-    applicableSteps = getApplicableSteps(ctx);
+    refreshApplicableSteps();
   }
 
   if (step.id === 'done') {
@@ -259,7 +265,7 @@ async function goNext(): Promise<void> {
 
   if (stepIndex < applicableSteps.length - 1) {
     stepIndex += 1;
-    applicableSteps = getApplicableSteps(ctx);
+    refreshApplicableSteps();
     renderCurrentStep();
   } else {
     await unmountOnboarding(true);
@@ -294,7 +300,7 @@ async function skipCurrent(): Promise<void> {
 
   if (stepIndex < applicableSteps.length - 1) {
     stepIndex += 1;
-    applicableSteps = getApplicableSteps(ctx);
+    refreshApplicableSteps();
     renderCurrentStep();
   } else {
     await unmountOnboarding(true);
