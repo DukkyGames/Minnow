@@ -6,7 +6,6 @@
 import { detectConfigServer } from './storage-mode';
 
 export interface ChatMeta {
-  maxToolTurns: number;
   /** Abort when no upstream SSE bytes arrive for this long (resets per chunk). */
   generationIdleTimeoutMs: number;
   /** Wall-clock cap for a single upstream generation. */
@@ -14,12 +13,6 @@ export interface ChatMeta {
 }
 
 const CHAT_META_STORAGE_KEY = 'minnow.chatMeta';
-
-/** Default cap when unset (Settings → Tools). */
-export const DEFAULT_CHAT_MAX_TOOL_TURNS = 100;
-
-/** Upper bound for `chat.maxToolTurns` (main agent and sub-agents share this range). */
-export const MAX_CHAT_MAX_TOOL_TURNS = 500;
 
 export const DEFAULT_GENERATION_IDLE_TIMEOUT_MS = 25 * 60_000;
 export const DEFAULT_GENERATION_MAX_DURATION_MS = 60 * 60_000;
@@ -30,19 +23,11 @@ const MIN_GENERATION_MAX_DURATION_MS = 60_000;
 const MAX_GENERATION_MAX_DURATION_MS = 4 * 60 * 60_000;
 
 const DEFAULT_CHAT_META: ChatMeta = {
-  maxToolTurns: DEFAULT_CHAT_MAX_TOOL_TURNS,
   generationIdleTimeoutMs: DEFAULT_GENERATION_IDLE_TIMEOUT_MS,
   generationMaxDurationMs: DEFAULT_GENERATION_MAX_DURATION_MS,
 };
 
 let cachedChat: ChatMeta | null = null;
-
-/** Coerce a value to an integer max tool turn count in [1, {@link MAX_CHAT_MAX_TOOL_TURNS}]. */
-export function clampMaxToolTurns(value: unknown): number {
-  const n = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(n)) return DEFAULT_CHAT_MAX_TOOL_TURNS;
-  return Math.min(MAX_CHAT_MAX_TOOL_TURNS, Math.max(1, Math.round(n)));
-}
 
 /** Coerce idle timeout (ms) to server-allowed range. */
 export function clampGenerationIdleTimeoutMs(value: unknown): number {
@@ -80,7 +65,6 @@ function parseChatBlock(raw: unknown): ChatMeta {
   }
   const block = raw as Record<string, unknown>;
   return {
-    maxToolTurns: clampMaxToolTurns(block.maxToolTurns),
     generationIdleTimeoutMs: clampGenerationIdleTimeoutMs(block.generationIdleTimeoutMs),
     generationMaxDurationMs: clampGenerationMaxDurationMs(block.generationMaxDurationMs),
   };
@@ -124,9 +108,6 @@ export function getChatMetaSync(): ChatMeta {
 
 function mergeChatMeta(current: ChatMeta, patch: Partial<ChatMeta>): ChatMeta {
   return {
-    maxToolTurns: clampMaxToolTurns(
-      patch.maxToolTurns !== undefined ? patch.maxToolTurns : current.maxToolTurns,
-    ),
     generationIdleTimeoutMs: clampGenerationIdleTimeoutMs(
       patch.generationIdleTimeoutMs !== undefined
         ? patch.generationIdleTimeoutMs

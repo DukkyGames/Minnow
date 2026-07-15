@@ -3,21 +3,92 @@
  */
 
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
-import {
+import { describe, mock, test } from 'node:test';
+
+// Mocked before any static import touches these specifiers (both are lazily
+// dynamic-imported in production code specifically so tests can intercept them).
+let runSuperPlanStageImpl: (
+  chat: unknown,
+  stageId: string,
+  hooks?: unknown,
+) => Promise<unknown> = async () => ({ kind: 'blocked_user' });
+let finalizeStreamStageImpl: (chat: unknown, stageId: string) => Promise<unknown> = async () => ({
+  kind: 'done',
+});
+
+mock.module('../../src/chat/super-plan/stages.ts', {
+  namedExports: {
+    runSuperPlanStage: (chat: unknown, stageId: string, hooks?: unknown) =>
+      runSuperPlanStageImpl(chat, stageId, hooks),
+    finalizeStreamStage: (chat: unknown, stageId: string) =>
+      finalizeStreamStageImpl(chat, stageId),
+  },
+});
+
+// mock.module replaces the whole module; agents/orchestrator.ts re-exports
+// everything from this file, and something in state/sessions.ts's transitive
+// graph loads that shim, so every real export must be present here too or
+// the mock silently never takes effect (see the tools/client.ts trap note in
+// test/chat/super-plan/stages.test.mts for the mechanism).
+let cancelSubAgentCalls: Array<{ runId: string; reason: string }> = [];
+mock.module('../../src/agents/controller/controller.ts', {
+  namedExports: {
+    cancelSubAgent: (runId: string, reason = 'cancelled') => {
+      cancelSubAgentCalls.push({ runId, reason });
+      return { ok: true, runId, status: 'cancelled' as const };
+    },
+    assertSubAgentRunReadableByParent: (run: unknown) => run,
+    buildAggregateResult: () => ({}),
+    buildSubAgentStatusPayload: () => ({}),
+    cancelAllForParentTurn: () => undefined,
+    deriveSubAgentTerminalReason: () => undefined,
+    formatAggregateResult: () => '{}',
+    formatSubAgentListToolResult: () => '{}',
+    formatSubAgentListToolResultForChat: () => '{}',
+    getRunToolCallFingerprint: () => '',
+    getSubAgentRun: () => undefined,
+    listActiveSubAgentRuns: () => [],
+    listSubAgentRunsForParentChat: () => [],
+    listSubAgentRunsForParentTurn: () => [],
+    recordToolCallForRun: () => undefined,
+    resetSubAgentOrchestrator: () => undefined,
+    resetSubAgentController: () => undefined,
+    restartSubAgent: async () => ({ runId: '', status: 'queued' }),
+    spawnSubAgent: async () => ({ runId: '', status: 'queued' }),
+    waitForSubAgent: async () => ({}),
+    initControllerPersistence: async () => undefined,
+    ensureControllerReady: async () => undefined,
+  },
+});
+
+const {
+  advanceSuperPlan,
   cancelSuperPlan,
   isSuperPlanStalled,
+  onSuperPlanStreamEnd,
   pauseSuperPlan,
   resetSuperPlanControllerForTests,
-} from '../../src/chat/super-plan/controller.ts';
-import {
+} = await import('../../src/chat/super-plan/controller.ts');
+const {
   createInitialSuperPlanStages,
   createSuperPlanState,
   markSuperPlanStageStatus,
   resetSuperPlanStage,
   rewindSuperPlanStages,
-} from '../../src/chat/super-plan/state.ts';
-import { createEmptyChatObject } from '../../src/state/sessions.ts';
+} = await import('../../src/chat/super-plan/state.ts');
+const { createEmptyChatObject, setSessionStateForTests } = await import(
+  '../../src/state/sessions.ts'
+);
+const { defaultSessionState } = await import('../../src/config/defaults.ts');
+const { streamingChatIds } = await import('../../src/app-state.ts');
+const { DEFAULT_SUPER_PLAN_CONFIG, setSuperPlanConfigForTests } = await import(
+  '../../src/config/super-plan-meta.ts'
+);
+
+// advanceSuperPlan/getSuperPlanConfigSync read this cache; seed it so config
+// loading never falls through to a real localStorage/network call (neither
+// exists in this runner) and throws past the mocks below.
+setSuperPlanConfigForTests({ ...DEFAULT_SUPER_PLAN_CONFIG });
 
 function makeChat(activeStage: Parameters<typeof rewindSuperPlanStages>[1] = 'grill') {
   const chat = createEmptyChatObject('sp-lifecycle');
@@ -26,6 +97,18 @@ function makeChat(activeStage: Parameters<typeof rewindSuperPlanStages>[1] = 'gr
   chat.superPlan.stages = createInitialSuperPlanStages();
   chat.superPlan.activeStage = activeStage;
   return chat;
+}
+
+/** Register a chat so findChatById(chat.id) resolves it (onSuperPlanStreamEnd needs this). */
+function registerChatForLookup(chat: ReturnType<typeof makeChat>): void {
+  const state = defaultSessionState();
+  state.chats = [chat as unknown as (typeof state.chats)[number]];
+  state.activeId = chat.id;
+  setSessionStateForTests(state);
+}
+
+async function settle(ms = 20): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 describe('Super Plan stage reset', () => {
@@ -115,5 +198,148 @@ describe('Super Plan pause and cancel', () => {
     const errored = makeChat('research');
     markSuperPlanStageStatus(errored, 'research', 'error', { error: 'Research timed out' });
     assert.equal(isSuperPlanStalled(errored), true);
+  });
+});
+
+describe('Super Plan review cancellation (Fix 3: pause/cancel reach the reviewer sub-agent)', () => {
+  test.after(() => resetSuperPlanControllerForTests());
+
+  test('cancelSuperPlan cancels the in-flight reviewer sub-agent run', async () => {
+    cancelSubAgentCalls = [];
+    const chat = makeChat('review1');
+    markSuperPlanStageStatus(chat, 'review1', 'running');
+    chat.superPlan!.reviewRunId = 'sub-agent-run-123';
+
+    cancelSuperPlan(chat);
+    await settle();
+
+    assert.deepEqual(cancelSubAgentCalls, [
+      { runId: 'sub-agent-run-123', reason: 'parent_abort' },
+    ]);
+  });
+
+  test('pauseSuperPlan cancels the in-flight reviewer sub-agent run', async () => {
+    cancelSubAgentCalls = [];
+    const chat = makeChat('review1');
+    markSuperPlanStageStatus(chat, 'review1', 'running');
+    chat.superPlan!.reviewRunId = 'sub-agent-run-456';
+
+    pauseSuperPlan(chat);
+    await settle();
+
+    assert.deepEqual(cancelSubAgentCalls, [
+      { runId: 'sub-agent-run-456', reason: 'parent_abort' },
+    ]);
+  });
+
+  test('pause/cancel without an in-flight reviewer run does not call cancelSubAgent', async () => {
+    cancelSubAgentCalls = [];
+    const chat = makeChat('draft1');
+    markSuperPlanStageStatus(chat, 'draft1', 'running');
+
+    pauseSuperPlan(chat);
+    await settle();
+
+    assert.deepEqual(cancelSubAgentCalls, []);
+  });
+});
+
+describe('advanceSuperPlan max-tool-turns hint (Fix 5)', () => {
+  test.after(() => resetSuperPlanControllerForTests());
+
+  test('appends the tool-turn cap hint when the newest run hit the cap and the stage failed to save', async () => {
+    runSuperPlanStageImpl = async (chatArg) => {
+      const chat = chatArg as ReturnType<typeof makeChat>;
+      chat.history.push({ role: 'user', content: 'go' });
+      chat.runs = [
+        {
+          runId: 'run-cap',
+          branchId: 'branch-cap',
+          forkHistoryIndex: 0,
+          status: 'completed',
+          createdAt: Date.now(),
+          snapshot: {} as unknown as import('../../src/types.ts').TurnSnapshot,
+          outputHistoryStart: chat.history.length - 1,
+          outputHistoryEnd: chat.history.length - 1,
+          endReason: 'max_tool_turns',
+        },
+      ];
+      return { kind: 'await_stream' };
+    };
+    finalizeStreamStageImpl = async () => {
+      throw new Error(
+        'Plan draft was not saved to documentation/plans/add-oauth-login.md. Retry the stage to draft it again.',
+      );
+    };
+
+    const chat = makeChat('draft1');
+    await advanceSuperPlan(chat);
+
+    assert.equal(chat.superPlan!.stages.draft1.status, 'error');
+    assert.match(chat.superPlan!.stages.draft1.error ?? '', /Plan draft was not saved/);
+    assert.match(
+      chat.superPlan!.stages.draft1.error ?? '',
+      /tool-turn cap.*Settings.*Tools.*max tool turns/,
+    );
+  });
+
+  test('does not append the hint when the run finished normally (no endReason)', async () => {
+    runSuperPlanStageImpl = async (chatArg) => {
+      const chat = chatArg as ReturnType<typeof makeChat>;
+      chat.history.push({ role: 'user', content: 'go' });
+      chat.runs = [
+        {
+          runId: 'run-normal',
+          branchId: 'branch-normal',
+          forkHistoryIndex: 0,
+          status: 'completed',
+          createdAt: Date.now(),
+          snapshot: {} as unknown as import('../../src/types.ts').TurnSnapshot,
+          outputHistoryStart: chat.history.length - 1,
+          outputHistoryEnd: chat.history.length - 1,
+        },
+      ];
+      return { kind: 'await_stream' };
+    };
+    finalizeStreamStageImpl = async () => {
+      throw new Error('Plan draft was not saved to documentation/plans/add-oauth-login.md.');
+    };
+
+    const chat = makeChat('draft1');
+    await advanceSuperPlan(chat);
+
+    assert.equal(chat.superPlan!.stages.draft1.status, 'error');
+    assert.doesNotMatch(chat.superPlan!.stages.draft1.error ?? '', /tool-turn cap/);
+  });
+});
+
+describe('onSuperPlanStreamEnd stream-end ordering (Fix 9)', () => {
+  test.after(() => resetSuperPlanControllerForTests());
+
+  test('proceeds once the streaming flag clears, even though it read true synchronously', async () => {
+    runSuperPlanStageImpl = async () => ({ kind: 'blocked_user' });
+    finalizeStreamStageImpl = async () => ({ kind: 'done' });
+
+    const chat = makeChat('present');
+    registerChatForLookup(chat);
+
+    // Mirrors src/tools/loop.ts: notifyChatStreamEnded fires while the chat is
+    // still marked streaming; setStreaming(false) runs synchronously right after.
+    streamingChatIds.add(chat.id);
+    const done = onSuperPlanStreamEnd(chat.id);
+    assert.equal(
+      streamingChatIds.has(chat.id),
+      true,
+      'flag is still true at the moment stream-end fires',
+    );
+    streamingChatIds.delete(chat.id);
+
+    await done;
+
+    assert.equal(
+      chat.superPlan!.stages.present.status,
+      'running',
+      'advanceSuperPlan ran once the deferral let it observe the cleared flag',
+    );
   });
 });

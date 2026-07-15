@@ -62,3 +62,11 @@ export const DIAGNOSTICS_LAST_CRASH = 'minnow:diagnostics:last-crash';
 export const DIAGNOSTICS_OOM_PAUSE = 'minnow:diagnostics:oom-pause';
 /** Renderer → main: clear OOM pause marker after user resumes the board. */
 export const DIAGNOSTICS_CLEAR_OOM_PAUSE = 'minnow:diagnostics:clear-oom-pause';
+
+/** Renderer → main: shell window minimize / maximize / close / query maximized. */
+export const WINDOW_MINIMIZE = 'minnow:window:minimize';
+export const WINDOW_MAXIMIZE = 'minnow:window:maximize';
+export const WINDOW_CLOSE = 'minnow:window:close';
+export const WINDOW_IS_MAXIMIZED = 'minnow:window:is-maximized';
+/** Main → renderer: shell window maximized state changed. */
+export const WINDOW_MAXIMIZED_CHANGED = 'minnow:window:maximized-changed';

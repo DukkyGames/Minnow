@@ -3,7 +3,7 @@
  * Used by test/run-all.mjs and test/check-test-coverage.mjs.
  */
 
-/** @typedef {'node' | 'tsx-mocks' | 'tsx-loader-mocks' | 'tsx' | 'node-tsx'} RunnerId */
+/** @typedef {'node' | 'tsx-mocks' | 'tsx-mocks-loader' | 'tsx-loader-mocks' | 'tsx' | 'node-tsx'} RunnerId */
 
 /** How each runner invokes node:test. */
 export const RUNNERS = {
@@ -17,6 +17,22 @@ export const RUNNERS = {
       '--experimental-test-module-mocks',
       '--import',
       'tsx',
+      '--test',
+      '--test-force-exit',
+      '--test-timeout=120000',
+    ],
+  },
+  // Same as tsx-mocks but also registers test-loader.mjs's CSS/@xterm stubs
+  // (--import composes, unlike tsx-loader-mocks's cli.mjs wrapper below,
+  // which silently disables --experimental-test-module-mocks entirely).
+  'tsx-mocks-loader': {
+    command: 'node',
+    prefixArgs: [
+      '--experimental-test-module-mocks',
+      '--import',
+      'tsx',
+      '--import',
+      './test/test-loader.mjs',
       '--test',
       '--test-force-exit',
       '--test-timeout=120000',
@@ -61,6 +77,9 @@ export const PATH_RUNNER_RULES = [
   { pattern: 'test/headless/preflight.test.mts', runner: 'tsx' },
   { pattern: 'test/sub-agents/scheduler-drain-reject.test.mts', runner: 'tsx-mocks' },
   { pattern: 'test/research/*.test.mts', runner: 'tsx-mocks' },
+  // Both use mock.module and transitively pull in UI code that imports CSS.
+  { pattern: 'test/chat/super-plan/stages.test.mts', runner: 'tsx-mocks-loader' },
+  { pattern: 'test/super-plan/controller-lifecycle.test.mts', runner: 'tsx-mocks-loader' },
   { pattern: 'test/server/**/*.test.mjs', runner: 'tsx-mocks' },
   { pattern: 'test/workspace/*.test.js', runner: 'tsx-mocks' },
   { pattern: 'test/terminal/shell-profiles.test.mjs', runner: 'tsx-mocks' },

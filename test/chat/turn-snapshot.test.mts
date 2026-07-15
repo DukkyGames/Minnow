@@ -34,7 +34,6 @@ describe('turn-snapshot', () => {
       forkHistoryIndex: 0,
       composedSystemPrompt: 'SYS',
       enabledToolNames: ['grep', 'read_file'],
-      maxToolTurns: 10,
       providerId: 'local',
       modelId: 'qwen',
       temperature: 0.5,

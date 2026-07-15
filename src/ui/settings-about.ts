@@ -268,6 +268,35 @@ export async function renderAboutSettingsSection(): Promise<void> {
           void refreshViewer();
         },
       },
+      {
+        label: 'Clear',
+        variant: 'danger',
+        title: 'Delete local diagnostic logs under ~/.minnow/logs/',
+        onClick: () => {
+          void (async () => {
+            if (
+              !window.confirm(
+                'Clear all captured diagnostic errors and log tail?\n\nThis deletes local JSONL files under ~/.minnow/logs/ and cannot be undone.',
+              )
+            ) {
+              return;
+            }
+            if (!serverUp) {
+              setStatus('err', 'Diagnostics server offline');
+              return;
+            }
+            try {
+              setStatus('spin', 'Clearing diagnostics…');
+              const res = await fetch('/api/diagnostics/clear', { method: 'POST' });
+              if (!res.ok) throw new Error('Clear failed');
+              setStatus('ok', 'Diagnostics cleared');
+              await refreshViewer();
+            } catch {
+              setStatus('err', 'Could not clear diagnostics');
+            }
+          })();
+        },
+      },
     ],
     { searchKey: 'about.diagnostics.actions' },
   );

@@ -279,7 +279,6 @@ export async function supersedeOlderAttempts(
       startedAt: record.startedAt,
       endedAt: now,
       toolTurns: 0,
-      maxToolTurns: 0,
       cancelled: false,
       messages: [],
       boardTaskId: record.boardTaskId,

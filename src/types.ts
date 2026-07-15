@@ -670,7 +670,8 @@ export interface TurnSnapshot {
   userRulesContent?: string;
   /** Ordered tool function names enabled for this turn. */
   enabledToolNames: string[];
-  maxToolTurns: number;
+  /** @deprecated Ignored; retained for replay of older turn snapshots. */
+  maxToolTurns?: number;
   /** SHA-256 hex of JSON.stringify(apiMessages prefix through fork). */
   historyPrefixHash: string;
   orchestratePlanPath?: string;
@@ -707,6 +708,8 @@ export interface TurnRunRecord {
   parentTurnId?: string;
   /** Set when {@link status} is `stopped` — who/what aborted the turn. */
   stopReason?: ChatStopReason;
+  /** Set when the turn ended because it hit a hard cap rather than finishing normally. */
+  endReason?: 'max_tool_turns';
 }
 
 /** Expert thread or legacy Expert Lab session (hidden from main sidebar). */

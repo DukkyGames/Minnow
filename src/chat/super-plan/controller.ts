@@ -10,8 +10,9 @@
 
 import { isChatStreaming, subscribeChatStreamEnd } from '../streaming-state';
 import { isChatTurnSetupPending } from '../chat-turn-guard';
-import type { Chat, TurnRunRecord } from '../../types';
+import type { Chat } from '../../types';
 import { cancelResearch } from '../../research/client';
+import { newestRun } from '../../state/runs-store';
 import {
   cancelSuperPlanState,
   initSuperPlanState,
@@ -79,19 +80,16 @@ function stopChatTurn(chatId: string): void {
     .catch(() => undefined);
 }
 
+/** Cancel the in-flight plan-reviewer sub-agent (lazy import keeps the UI chain out of tests). */
+function cancelReviewerSubAgent(runId: string): void {
+  void import('../../agents/controller/controller')
+    .then((m) => m.cancelSubAgent(runId, 'parent_abort'))
+    .catch(() => undefined);
+}
+
 /** True while the sequential stage loop is running for this chat. */
 export function isSuperPlanAdvancing(chatId: string): boolean {
   return advancingChats.has(chatId);
-}
-
-/** Newest turn run on this chat (stage turns create exactly one run each). */
-function newestTurnRun(chat: Chat): TurnRunRecord | undefined {
-  const runs = chat.runs ?? [];
-  let newest: TurnRunRecord | undefined;
-  for (const run of runs) {
-    if (!newest || run.createdAt > newest.createdAt) newest = run;
-  }
-  return newest;
 }
 
 /** Start the Super Plan pipeline for a chat (resumes an interrupted one instead of restarting). */
@@ -171,7 +169,7 @@ export async function advanceSuperPlan(chat: Chat): Promise<void> {
           notifyListeners(chat);
           break;
         }
-        const lastRun = newestTurnRun(chat);
+        const lastRun = newestRun(chat);
         if (lastRun?.status === 'stopped') {
           resetSuperPlanStage(chat, stageId);
           setSuperPlanPaused(chat, true);
@@ -184,7 +182,18 @@ export async function advanceSuperPlan(chat: Chat): Promise<void> {
               'retry the stage, or open the chat to check the provider/model error.',
           );
         }
-        outcome = await finalizeStreamStage(chat, stageId);
+        try {
+          outcome = await finalizeStreamStage(chat, stageId);
+        } catch (err) {
+          if (lastRun?.endReason === 'max_tool_turns') {
+            const message = err instanceof Error ? err.message : String(err);
+            throw new Error(
+              `${message} The turn hit the tool-turn cap before finishing — ` +
+                'raise Settings → Tools → max tool turns, then retry.',
+            );
+          }
+          throw err;
+        }
       }
 
       if (outcome.kind === 'paused') {
@@ -200,6 +209,9 @@ export async function advanceSuperPlan(chat: Chat): Promise<void> {
       }
 
       if (outcome.kind === 'done' || outcome.kind === 'skipped') {
+        // A reviewer run that completes just as the user cancels must not
+        // overwrite the 'Cancelled by user' record with a done stage.
+        if (chat.superPlan?.cancelled) break;
         if (!isBlockedCheckpoint(stageId) || outcome.kind === 'skipped') {
           markSuperPlanStageStatus(chat, stageId, 'done', {
             ...(outcome.kind === 'done' && outcome.artifactPath
@@ -236,6 +248,13 @@ export async function advanceSuperPlan(chat: Chat): Promise<void> {
  * pending or stale-running stage with no loop in flight, kick the loop.
  */
 export async function onSuperPlanStreamEnd(chatId: string): Promise<void> {
+  // notifyChatStreamEnded fires *before* setStreaming(false) in the same
+  // synchronous block (src/tools/loop.ts), so isChatStreaming(chat.id) below
+  // would still read true without yielding first. This previously worked only
+  // because `await import(...)` happened to defer past that block — make the
+  // ordering explicit instead of relying on that coincidence (same hazard
+  // documented in src/state/orchestrate-board-actions.ts).
+  await new Promise((resolve) => setTimeout(resolve, 0));
   const { findChatById } = await import('../../state/sessions');
   const chat = findChatById(chatId);
   if (!chat?.superPlan || chat.superPlan.cancelled || chat.superPlan.paused) return;
@@ -300,9 +319,13 @@ export async function resumeSuperPlanAfterUser(
 /** Pause the pipeline: stop the in-flight stage turn; the stage reruns on resume. */
 export function pauseSuperPlan(chat: Chat): void {
   if (!chat.superPlan || chat.superPlan.cancelled) return;
+  const reviewRunId = chat.superPlan.reviewRunId?.trim();
   setSuperPlanPaused(chat, true);
   if (isChatStreaming(chat.id)) {
     stopChatTurn(chat.id);
+  }
+  if (reviewRunId) {
+    cancelReviewerSubAgent(reviewRunId);
   }
   notifyListeners(chat);
 }
@@ -380,12 +403,16 @@ export function cancelSuperPlan(chat: Chat): void {
   const researchRunning =
     chat.superPlan?.activeStage === 'research' &&
     chat.superPlan.stages.research?.status === 'running';
+  const reviewRunId = chat.superPlan?.reviewRunId?.trim();
   cancelSuperPlanState(chat);
   if (isChatStreaming(chat.id)) {
     stopChatTurn(chat.id);
   }
   if (researchId && researchRunning) {
     void cancelResearch(researchId).catch(() => undefined);
+  }
+  if (reviewRunId) {
+    cancelReviewerSubAgent(reviewRunId);
   }
   notifyListeners(chat);
 }

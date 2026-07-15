@@ -7,7 +7,6 @@
   "heartbeatIntervalMs": 7000,
   "progressStallMs": 90000,
   "heartbeatDeadMs": 30000,
-  "maxToolTurns": 100,
   "defaultMaxInputTokens": null,
   "defaultContextEnforcementPolicy": "summarize",
   "defaultSummarySchema": "minnow.sub-agent.v1",
@@ -249,7 +248,7 @@
       "providerId": "",
       "modelId": "",
       "maxConcurrent": 2,
-      "timeoutMs": 300000,
+      "timeoutMs": 1200000,
       "workAgentId": null,
       "allowedTools": [
         "list_directory",
@@ -330,6 +329,5 @@
         "topK": 20
       }
     }
-  },
-  "maxToolTurns": 100
+  }
 }

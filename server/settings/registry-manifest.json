@@ -202,20 +202,6 @@
     ]
   },
   {
-    "key": "general.generation.maxTurns",
-    "label": "Max tool turns",
-    "category": "general",
-    "area": "general",
-    "storage": "meta",
-    "path": "chat.maxToolTurns",
-    "type": "number",
-    "sensitivity": "normal",
-    "writable": true,
-    "refreshAreas": [
-      "tools"
-    ]
-  },
-  {
     "key": "audio.devices",
     "label": "Audio devices",
     "keywords": [
@@ -794,22 +780,6 @@
     "writable": false,
     "refreshAreas": [
       "agent-center"
-    ]
-  },
-  {
-    "key": "agents.subAgents.maxTurns",
-    "label": "Sub-agent max tool turns",
-    "category": "agents",
-    "area": "agent-center",
-    "storage": "resource",
-    "path": "maxToolTurns",
-    "resource": "sub-agents",
-    "type": "number",
-    "sensitivity": "normal",
-    "writable": true,
-    "refreshAreas": [
-      "agent-center",
-      "tools"
     ]
   },
   {

@@ -96,9 +96,6 @@ import { resolveSendCapabilities } from '../providers/model-capabilities';
 import type { SubAgentRunner, SubAgentRunnerOutput } from './types';
 import type { ProviderPublic } from '../providers/types';
 
-/** Legacy export: prefer per-type `maxToolTurns` from sub-agents config. */
-export const MAX_SUB_AGENT_TOOL_TURNS = 100;
-
 /** Prefer main `content`; some reasoning models only emit JSON on the reasoning channel. */
 function resolveStreamedCompletionText(content: string, reasoning: string): string {
   const prose = content.trim();
@@ -451,7 +448,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
       agentKey: input.type,
       subAgentType: typeConfig,
     });
-    const maxToolTurns = Math.max(1, Math.floor(input.maxToolTurns) || MAX_SUB_AGENT_TOOL_TURNS);
+    let toolUseNudgeSent = false;
     const contextBudget = input.contextBudget ?? {
       maxInputTokens: null,
       enforcementPolicy: DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
@@ -699,7 +696,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
       }
     };
 
-    for (let turn = 0; turn < maxToolTurns; turn++) {
+    for (let turn = 0; ; turn++) {
       if (!enforceContextBudget(turn)) {
         return {
           summary: SUB_AGENT_CONTEXT_BUDGET_ERROR,
@@ -978,8 +975,9 @@ export const defaultSubAgentRunner: SubAgentRunner = {
       if (
         input.tools.length > 0 &&
         toolTurns === 0 &&
-        turn < maxToolTurns - 1
+        !toolUseNudgeSent
       ) {
+        toolUseNudgeSent = true;
         messages.push({ role: 'user', content: SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION });
         emitProgress(undefined, true);
         continue;
@@ -1042,16 +1040,6 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         stats: statsSegments.length ? averageStatsSegments(statsSegments) : undefined,
       };
     }
-
-    emitProgress(undefined, true);
-    return {
-      summary: `Sub-agent reached maximum tool turns (${maxToolTurns}).`,
-      toolTurns,
-      messages,
-      toolTurnLimitExhausted: true,
-      usage: usageSegments.length ? sumUsageSegments(usageSegments) : undefined,
-      stats: statsSegments.length ? averageStatsSegments(statsSegments) : undefined,
-    };
   },
 };
 

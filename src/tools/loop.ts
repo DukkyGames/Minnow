@@ -198,7 +198,7 @@ import {
 } from '../providers/constrained-tool-calls';
 import { mergeContentJsonToolCalls } from '../providers/constrained-tool-content';
 import type { CompletionBodyWithResponseFormat } from '../providers/completion-types';
-import { decodeModelSelectKey } from '../lib/model-select-key';
+import { applyModelSelectValueToChat, decodeModelSelectKey } from '../lib/model-select-key';
 import { getActiveProvider } from '../providers/store';
 import { isVisionModel } from '../providers/vision-model.ts';
 import {
@@ -309,13 +309,6 @@ import {
 import { looksLikeProseStructuredQuestion } from './prose-question-detect';
 import { isToolEnabled } from './config';
 import { runChatToolBatch } from './chat-tool-batch';
-import {
-  DEFAULT_CHAT_MAX_TOOL_TURNS,
-  getChatMetaSync,
-} from '../config/chat-meta';
-
-/** Default max assistant↔tool rounds (see Settings → Tools and `chat.maxToolTurns` in config). */
-export const MAX_TOOL_TURNS = DEFAULT_CHAT_MAX_TOOL_TURNS;
 
 /** Options for {@link buildApiMessages} when the composer has pending files. */
 export interface BuildApiMessagesOptions {
@@ -1052,6 +1045,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   let turnRunId: TurnRunId | undefined;
   let turnRunStatus: 'completed' | 'stopped' | 'failed' = 'completed';
   let turnStopReason: ChatStopReason | undefined;
+  let turnEndReason: 'max_tool_turns' | undefined;
   let turnMountPinned = false;
 
   try {
@@ -1070,8 +1064,12 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     '';
   const parsedSelect = domRaw ? decodeModelSelectKey(domRaw) : null;
   const domModelId = parsedSelect?.modelId ?? domRaw;
-  // Background board task chats reuse the top-bar model when their stored binding is empty.
-  if (parsedSelect && (useActiveChatDom || !chat.modelId?.trim())) {
+  if (replaySnapshot) {
+    // Replay must use the provider/model frozen in the turn snapshot, not the top-bar picker.
+    chat.providerId = replaySnapshot.providerId;
+    chat.modelId = replaySnapshot.modelId;
+  } else if (parsedSelect && (useActiveChatDom || !chat.modelId?.trim())) {
+    // Background board task chats reuse the top-bar model when their stored binding is empty.
     chat.providerId = parsedSelect.providerId;
     chat.modelId = parsedSelect.modelId;
   }
@@ -1445,7 +1443,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     }
     snapTools = applyUiDesignerToolFilter(snapTools, uiDesignerCtx);
     const enabledToolNames = snapTools.map((t) => t.function.name);
-    const maxToolTurnsCap = getChatMetaSync().maxToolTurns;
 
     if (replaySnapshot) {
       const run = createRun(chat, replaySnapshot, {
@@ -1461,7 +1458,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         composedSystemPrompt: sysPrompt,
         userRulesContent: userRulesContent ?? undefined,
         enabledToolNames,
-        maxToolTurns: maxToolTurnsCap,
         providerId: sendProviderId,
         modelId: sendModelId,
         temperature:
@@ -1502,7 +1498,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     let emptyPostToolRetries = 0;
     let proseQuestionRetries = 0;
     let ephemeralPostToolInstruction: string | undefined;
-    const maxToolTurns = getChatMetaSync().maxToolTurns;
     const workAgentBudget = activeWorkAgent
       ? agentContextBudgetFromWorkAgent(activeWorkAgent)
       : { maxInputTokens: null, enforcementPolicy: DEFAULT_CONTEXT_ENFORCEMENT_POLICY };
@@ -1530,7 +1525,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       patchMainTurnActivity(chat.id, { phase: 'generating', currentTool: null });
     };
 
-    for (let turn = 0; turn < maxToolTurns; turn++) {
+    for (let turn = 0; ; turn++) {
       if (chatSignal.aborted) {
         throw new DOMException('Aborted', 'AbortError');
       }
@@ -1905,11 +1900,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           trackHistoryPush: () => trackRunHistoryPush(chat, turnRunId),
         });
 
-        if (turn + 1 >= maxToolTurns) {
-          setStatus('err', 'Maximum tool turns reached');
-          break;
-        }
-
         prepareNextStreamRound('Generating reply…');
         ephemeralPostToolInstruction = undefined;
         continue;
@@ -2133,10 +2123,16 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       const thinkingDurationMs = thinkingTracker?.finalize() ?? 0;
       chat.lastStats = buildLastStatsSnapshot(displayMeta.stats, displayMeta.usage);
       chat.modelInfo = { ...modelInfo };
-      const selVal = (document.getElementById('modelSelect') as HTMLSelectElement).value;
-      const parsedVal = decodeModelSelectKey(selVal);
-      chat.modelId = parsedVal?.modelId ?? selVal;
-      if (parsedVal) chat.providerId = parsedVal.providerId;
+      // Foreground chats mirror the top-bar picker (user may have changed model between
+      // stream end and finalize). Background board chats keep the binding that served
+      // this turn — they do not own the shared picker.
+      if (chat.id === getActiveChat().id) {
+        const selVal = (document.getElementById('modelSelect') as HTMLSelectElement).value;
+        applyModelSelectValueToChat(chat, selVal);
+      } else {
+        chat.modelId = sendModelId;
+        chat.providerId = sendProviderId;
+      }
 
       if (hasMeaningfulProse) {
         if (isStreamDomVisible(chat.id)) {
@@ -2199,12 +2195,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       synthesisRoundCount += 1;
       completedNormally = true;
       break;
-    }
-
-    if (!completedNormally) {
-      const attachHint =
-        getPendingAttachments().length > 0 ? ' Attachments kept for retry.' : '';
-      setStatus('err', `Maximum tool turns reached.${attachHint}`);
     }
   } catch (err) {
     const e = err as { name?: string; message?: string };
@@ -2423,6 +2413,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         outputHistoryEnd: persistOutput ? end : undefined,
         outputMessages,
         stopReason: turnRunStatus === 'stopped' ? (turnStopReason ?? 'user') : undefined,
+        endReason: turnEndReason,
       });
       scheduleSaveSessions();
       if (ownsGlobalStreaming) {
@@ -2473,7 +2464,7 @@ export async function resumeParentChatWithMessage(
   });
 }
 
-/** Send the composer text with tool calling (SSE loop; max rounds from Settings → Tools / `chat.maxToolTurns`, default {@link MAX_TOOL_TURNS}). */
+/** Send the composer text with tool calling (SSE loop until final answer or user cancel). */
 export async function sendMessageWithTools(
   composer?: Partial<ComposerSurface>,
 ): Promise<void> {

@@ -18,6 +18,24 @@ const ALLOWED_FENCE_LANGS = new Set([
   'cmd',
   'console',
   'terminal',
+  // Documentation/data languages: not implementation code, allowed anywhere
+  // a plan needs to show structured examples (front-matter, diagrams, diffs).
+  'json',
+  'jsonc',
+  'yaml',
+  'yml',
+  'toml',
+  'ini',
+  'xml',
+  'mermaid',
+  'diff',
+  'patch',
+  'text',
+  'txt',
+  'plaintext',
+  'markdown',
+  'md',
+  'csv',
 ]);
 
 /** Implementation languages that must not appear as fenced blocks in plans. */

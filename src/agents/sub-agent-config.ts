@@ -2,7 +2,6 @@
  * Load and merge sub-agent configuration (defaults + ~/.minnow/sub-agents.json).
  */
 
-import { MAX_CHAT_MAX_TOOL_TURNS } from '../config/chat-meta';
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
 import { DEFAULT_CONTEXT_ENFORCEMENT_POLICY } from '../chat/context-budget';
 import { DEFAULT_SUB_AGENT_SUMMARY_SCHEMA } from './sub-agent-structured-outcome';
@@ -15,22 +14,6 @@ const SUB_AGENTS_STORAGE_KEY = 'minnow.subAgents';
 
 /** Shipped default provider before inherit fix — migrate to empty when model is also unset. */
 export const LEGACY_SUB_AGENT_DEFAULT_PROVIDER = 'lm-studio-local';
-
-/** Coerce legacy lm-studio-local + empty model rows to inherit parent/global provider. */
-export function migrateLegacySubAgentProviderId(
-  providerId: string | undefined,
-  modelId: string | undefined,
-): string {
-  const pid = providerId?.trim() ?? '';
-  const mid = modelId?.trim() ?? '';
-  if (pid === LEGACY_SUB_AGENT_DEFAULT_PROVIDER && !mid) {
-    return '';
-  }
-  return pid;
-}
-
-/** Fallback when sub-agents config omits `maxToolTurns`. */
-export const DEFAULT_SUB_AGENT_MAX_TOOL_TURNS = 100;
 
 let runtimeUserOverrides: Partial<SubAgentsFile> | null = null;
 let cachedMerged: SubAgentsFile | null = null;
@@ -65,21 +48,6 @@ export function clampHeartbeatDeadMs(value: unknown, fallback = 30_000): number 
   return Math.min(300_000, Math.max(5_000, Math.round(n)));
 }
 
-/** Coerce sub-agent max tool turns to [1, {@link MAX_CHAT_MAX_TOOL_TURNS}]. */
-export function clampSubAgentMaxToolTurns(value: unknown): number {
-  const n = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(n)) return DEFAULT_SUB_AGENT_MAX_TOOL_TURNS;
-  return Math.min(MAX_CHAT_MAX_TOOL_TURNS, Math.max(1, Math.round(n)));
-}
-
-/** Resolve global sub-agent tool-turn cap from merged or partial config. */
-export function getSubAgentsMaxToolTurns(
-  file: Pick<SubAgentsFile, 'maxToolTurns' | 'defaultMaxToolTurns'>,
-): number {
-  const raw = file.maxToolTurns ?? file.defaultMaxToolTurns;
-  return clampSubAgentMaxToolTurns(raw);
-}
-
 function cloneTypeConfig(raw: SubAgentTypeConfig): SubAgentTypeConfig {
   return {
     ...raw,
@@ -89,7 +57,7 @@ function cloneTypeConfig(raw: SubAgentTypeConfig): SubAgentTypeConfig {
   };
 }
 
-/** Deep-merge type maps: user overrides win per field (except `maxToolTurns`, which is global). */
+/** Deep-merge type maps: user overrides win per field. */
 export function mergeSubAgentConfig(
   defaults: SubAgentsFile,
   user: Partial<SubAgentsFile> | null | undefined,
@@ -98,13 +66,6 @@ export function mergeSubAgentConfig(
   for (const [id, cfg] of Object.entries(defaults.types)) {
     baseTypes[id] = cloneTypeConfig(cfg);
   }
-
-  const maxToolTurns = clampSubAgentMaxToolTurns(
-    user?.maxToolTurns ??
-      user?.defaultMaxToolTurns ??
-      defaults.maxToolTurns ??
-      defaults.defaultMaxToolTurns,
-  );
 
   const merged: SubAgentsFile = {
     version: user?.version ?? defaults.version,
@@ -124,7 +85,6 @@ export function mergeSubAgentConfig(
     heartbeatDeadMs: clampHeartbeatDeadMs(
       user?.heartbeatDeadMs ?? defaults.heartbeatDeadMs,
     ),
-    maxToolTurns,
     defaultMaxInputTokens: user?.defaultMaxInputTokens ?? defaults.defaultMaxInputTokens,
     defaultContextEnforcementPolicy:
       user?.defaultContextEnforcementPolicy ??
@@ -143,7 +103,6 @@ export function mergeSubAgentConfig(
         modelId: '',
         maxConcurrent: 1,
         timeoutMs: merged.defaultTimeoutMs,
-        maxToolTurns,
         workAgentId: null,
         allowedTools: null,
         deniedTools: ['spawn_sub_agent', 'cancel_sub_agent'],
@@ -161,11 +120,9 @@ export function mergeSubAgentConfig(
             ? null
             : clampThinkingBudgetTokens(patch.thinkingBudgetTokens)
           : existing.thinkingBudgetTokens;
-      const { maxToolTurns: _ignoredTurns, ...patchWithoutTurns } = patch;
       merged.types[id] = {
         ...existing,
-        ...patchWithoutTurns,
-        maxToolTurns,
+        ...patch,
         thinkingBudgetTokens: mergedThinkingBudget,
         summarySchema:
           patch.summarySchema ??
@@ -188,7 +145,6 @@ export function mergeSubAgentConfig(
 
   for (const cfg of Object.values(merged.types)) {
     cfg.providerId = migrateLegacySubAgentProviderId(cfg.providerId, cfg.modelId);
-    cfg.maxToolTurns = maxToolTurns;
     if (!cfg.summarySchema?.trim()) {
       cfg.summarySchema = merged.defaultSummarySchema ?? DEFAULT_SUB_AGENT_SUMMARY_SCHEMA;
     }
@@ -199,6 +155,19 @@ export function mergeSubAgentConfig(
   }
 
   return merged;
+}
+
+/** Coerce legacy lm-studio-local + empty model rows to inherit parent/global provider. */
+export function migrateLegacySubAgentProviderId(
+  providerId: string | undefined,
+  modelId: string | undefined,
+): string {
+  const pid = providerId?.trim() ?? '';
+  const mid = modelId?.trim() ?? '';
+  if (pid === LEGACY_SUB_AGENT_DEFAULT_PROVIDER && !mid) {
+    return '';
+  }
+  return pid;
 }
 
 function readLocalSubAgents(): Partial<SubAgentsFile> | null {

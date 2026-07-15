@@ -1,7 +1,6 @@
 /** Chat send: tool loop is the app default send path (SA-7, wired SA-11). */
 import {
   buildApiMessages,
-  MAX_TOOL_TURNS,
   runChatTurn,
   sendMessageWithTools,
 } from '../tools/loop';
@@ -9,7 +8,6 @@ import type { ComposerSurface } from '../ui/composer-surface';
 
 export {
   buildApiMessages,
-  MAX_TOOL_TURNS,
   runChatTurn,
   sendMessageWithTools,
 };
