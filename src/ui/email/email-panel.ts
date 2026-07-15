@@ -6,7 +6,6 @@ import {
   createEmailAccount,
   deleteEmailAccount,
   fetchEmailAccounts,
-  testEmailAccount,
   updateEmailAccount,
   type EmailAccount,
 } from '../../email/client';
@@ -353,12 +352,8 @@ export async function renderEmailPanel(
   nav.appendChild(segments);
 
   const utils = el('div', 'email-chrome-utils');
-  const signOutBtn = chromeIconBtn(EMAIL_ICONS.signOut, 'Sign out');
   const settingsBtn = chromeIconBtn(EMAIL_ICONS.settings, 'Account settings');
-  const testBtn = chromeIconBtn(EMAIL_ICONS.testConnection, 'Test connection');
-  utils.appendChild(signOutBtn);
   utils.appendChild(settingsBtn);
-  utils.appendChild(testBtn);
 
   chrome.appendChild(identity);
   chrome.appendChild(nav);
@@ -442,28 +437,6 @@ export async function renderEmailPanel(
     activeAccount = next;
     accountHint.textContent = `${accountProviderLabel(next)} · ${next.username}`;
     void renderView();
-  });
-
-  testBtn.addEventListener('click', async () => {
-    testBtn.disabled = true;
-    try {
-      await testEmailAccount(activeAccount.id);
-      options.onStatus?.('ok', 'Connection OK');
-    } catch (err) {
-      options.onStatus?.('err', err instanceof Error ? err.message : 'Test failed');
-    } finally {
-      testBtn.disabled = false;
-    }
-  });
-
-  signOutBtn.addEventListener('click', async () => {
-    signOutBtn.disabled = true;
-    const signedOut = await signOutEmailAccount(activeAccount, accounts.length, options);
-    if (signedOut) {
-      void renderEmailPanel(mount, options);
-      return;
-    }
-    signOutBtn.disabled = false;
   });
 
   const openAccountSetup = (mode: 'add' | 'edit') => {

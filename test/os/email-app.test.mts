@@ -52,7 +52,7 @@ describe('email IMAP setup UI', () => {
     );
     assert.match(source, /deleteEmailAccount/);
     assert.match(source, /Sign out/);
-    assert.match(source, /EMAIL_ICONS\.signOut/);
+    assert.doesNotMatch(source, /chromeIconBtn\(EMAIL_ICONS\.signOut/);
   });
 });
 
