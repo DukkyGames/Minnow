@@ -290,6 +290,7 @@ export async function initApp(): Promise<void> {
   const { ensureBootAppsInitialized } = await import('./os/app-modules');
   await ensureBootAppsInitialized();
   const globalBugsPage = await import('./ui/global-bugs-page');
+  globalBugsPage.initGlobalBugsPage();
   globalBugsPage.refreshGlobalBugsSidebarBadge();
   await fetchModels();
   syncModelSelectForActiveChat();

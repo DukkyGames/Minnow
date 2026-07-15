@@ -14,6 +14,7 @@ import {
   queueDesktopResearchActivation,
 } from './desktop-state';
 import { isAppId } from './app-registry';
+import { ensureGlobalBugsInitialized } from './app-modules';
 import {
   closeInstance,
   getForegroundAppId,
@@ -251,6 +252,7 @@ function applyRouteFromHash(): void {
     const raw = window.location.hash;
     // Global bugs (#/bugs) is a legacy overlay — global-bugs-page owns the route.
     if (isLegacyOverlayHash(raw)) {
+      void ensureGlobalBugsInitialized();
       return;
     }
     const legacy = resolveLegacyHash(raw);

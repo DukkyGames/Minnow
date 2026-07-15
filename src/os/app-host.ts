@@ -62,6 +62,8 @@ function mountAppLayers(): void {
     codeWrap.className = 'mn-os-app-layer mn-os-code-layer';
     codeWrap.dataset.osApp = 'code';
     if (topbar) codeWrap.appendChild(topbar);
+    const globalBugs = document.getElementById('globalBugsView');
+    if (globalBugs) codeWrap.appendChild(globalBugs);
     codeWrap.appendChild(appBody);
     const welcome = document.getElementById('welcomeView');
     if (welcome) codeWrap.appendChild(welcome);

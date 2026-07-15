@@ -21,6 +21,7 @@ import {
   unmountGlobalBugKanban,
 } from './bug-board.ts';
 import { closeSettings } from './settings-page.ts';
+import { isOsShellEnabled } from '../os/page-bridge.ts';
 
 export type GlobalBugFilters = {
   scope: GlobalBugScope;
@@ -35,6 +36,8 @@ const DEFAULT_FILTERS: GlobalBugFilters = {
 };
 
 let filters: GlobalBugFilters = { ...DEFAULT_FILTERS };
+/** Hash to restore when closing the overlay (Code route in MinnowOS). */
+let hashBeforeGlobalBugs: string | null = null;
 
 function getGlobalBugsRoot(): HTMLElement | null {
   return document.getElementById('globalBugsView');
@@ -127,7 +130,12 @@ export function closeGlobalBugs(): void {
   const mount = document.getElementById('globalBugsList');
   if (mount) mount.innerHTML = '';
   if (window.location.hash.startsWith('#/bugs')) {
-    window.location.hash = '#/';
+    const fallback = isOsShellEnabled() ? '#/app/code/overview' : '#/';
+    const next = hashBeforeGlobalBugs ?? fallback;
+    hashBeforeGlobalBugs = null;
+    if (window.location.hash !== next) {
+      window.location.hash = next;
+    }
   }
 }
 
@@ -160,6 +168,10 @@ export function openGlobalBugs(): void {
 
   syncFilterControls();
   renderGlobalBugsList();
+
+  if (!window.location.hash.startsWith('#/bugs')) {
+    hashBeforeGlobalBugs = window.location.hash || '#/app/code/overview';
+  }
 
   const nextHash = '#/bugs';
   if (window.location.hash !== nextHash) {

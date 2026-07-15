@@ -32,19 +32,12 @@ function bootAppIdFromHash(hash: string): AppId | null {
   return isAppId(segment) ? segment : null;
 }
 
-function isLegacyBugsHash(hash: string): boolean {
-  return hash === '#/bugs' || hash.startsWith('#/bugs/');
-}
-
 /** Initialize app modules required for the current hash route at cold boot. */
 export async function ensureBootAppsInitialized(): Promise<void> {
-  const hash = window.location.hash;
-  if (isLegacyBugsHash(hash)) {
-    await ensureGlobalBugsInitialized();
-    return;
-  }
+  // Sidebar #btnAllBugs and #/bugs routing need listeners on every boot.
+  await ensureGlobalBugsInitialized();
 
-  const appId = bootAppIdFromHash(hash);
+  const appId = bootAppIdFromHash(window.location.hash);
   if (appId) {
     await ensureAppInitialized(appId);
   }
