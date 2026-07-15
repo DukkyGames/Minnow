@@ -218,8 +218,8 @@ html.minnow-os-enabled {
 /* Shared pill metrics — model chip */
 .mn-os-mb-chip {
   box-sizing: border-box;
-  min-height: 34px;
-  padding-block: 6px;
+  min-height: 30px;
+  padding-block: 4px;
   font-size: 12.5px;
   line-height: 1.2;
   border-radius: 8px;
@@ -228,14 +228,14 @@ html.minnow-os-enabled {
 .mn-os-mb-chip {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   flex-shrink: 1;
   min-width: 0;
   max-width: min(22rem, 42vw);
   background: var(--os-surface-2);
   border: 1px solid var(--os-border);
   color: var(--os-text-dim);
-  padding-inline: 11px;
+  padding-inline: 9px;
   cursor: pointer;
   transition:
     background 0.14s var(--os-ease),
@@ -697,6 +697,70 @@ html.minnow-os-enabled {
   font-family: var(--font-mono);
 }
 
+/* ---------- frameless Electron shell menubar ---------- */
+
+html.is-electron-shell .mn-os-menubar--shell-frameless {
+  -webkit-app-region: drag;
+  user-select: none;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+html.is-electron-shell .mn-os-menubar--shell-frameless button,
+html.is-electron-shell .mn-os-menubar--shell-frameless a,
+html.is-electron-shell .mn-os-menubar--shell-frameless input,
+html.is-electron-shell .mn-os-menubar--shell-frameless select,
+html.is-electron-shell .mn-os-menubar--shell-frameless textarea,
+html.is-electron-shell .mn-os-menubar--shell-frameless [contenteditable='true'],
+html.is-electron-shell .mn-os-menubar--shell-frameless .mn-os-mb-window-controls,
+html.is-electron-shell .mn-os-menubar--shell-frameless .mn-os-mb-chip,
+html.is-electron-shell .mn-os-menubar--shell-frameless .status-pill {
+  -webkit-app-region: no-drag;
+}
+
+html.is-electron-shell[data-platform='darwin'] .mn-os-mb-left {
+  /* Clear native traffic lights (hiddenInset) — logo + brand sit to the right */
+  padding-left: 92px;
+}
+
+html.is-electron-shell[data-platform='darwin'] .mn-os-mb-window-controls {
+  display: none !important;
+}
+
+.mn-os-mb-window-controls {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+html.is-electron-shell .mn-os-mb-window-controls .mn-os-window-btn {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  border-radius: 6px;
+}
+
+html.is-electron-shell .mn-os-mb-window-controls .mn-os-window-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+@media (max-width: 640px) {
+  html.is-electron-shell .mn-os-mb-window-controls .mn-os-window-btn {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    min-height: 28px;
+  }
+
+  html.is-electron-shell .mn-os-mb-window-controls .mn-os-window-btn svg {
+    width: 13px;
+    height: 13px;
+  }
+}
+
 .mn-os-ws-dot {
   width: 7px;
   height: 7px;
@@ -953,7 +1017,7 @@ html.minnow-os-enabled header.topbar.hidden {
 
   .mn-os-mb-chip {
     max-width: min(7.5rem, 30vw);
-    padding-inline: 8px;
+    padding-inline: 6px;
     font-size: 12px;
   }
 
