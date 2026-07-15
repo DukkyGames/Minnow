@@ -352,6 +352,12 @@
   margin-top: 12px;
 }
 
+.email-setup-signout {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--mn-border);
+}
+
 .email-empty,
 .email-loading {
   color: var(--mn-fg-muted);

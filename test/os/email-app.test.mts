@@ -44,6 +44,16 @@ describe('email IMAP setup UI', () => {
     assert.match(source, /imap\.gmail\.com/);
     assert.doesNotMatch(source, /mountOAuthConnectPanel/);
   });
+
+  test('email panel exposes sign-out controls', () => {
+    const source = fs.readFileSync(
+      new URL('../../src/ui/email/email-panel.ts', import.meta.url),
+      'utf8',
+    );
+    assert.match(source, /deleteEmailAccount/);
+    assert.match(source, /Sign out/);
+    assert.doesNotMatch(source, /chromeIconBtn\(EMAIL_ICONS\.signOut/);
+  });
 });
 
 describe('email markup contract', () => {
