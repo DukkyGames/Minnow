@@ -1370,12 +1370,15 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   let streamRow = appendStreamingAssistantRow(chat.id);
   let { wrap, bubble, cursor, streamStatus } = streamRow;
   const streamCtx = { wrap, streamStatus };
+  // Track prose-awaiting without DOM class — stub rows in board view omit msg--awaiting-prose.
+  let awaitingProse = true;
   let toolStartIndicator: ToolStartIndicatorHandle | null = null;
   const resetToolStartIndicator = (): void => {
     toolStartIndicator?.dispose();
     toolStartIndicator = null;
   };
   let revealProse = (): void => {
+    awaitingProse = false;
     if (!isStreamDomVisible(chat.id)) return;
     revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
   };
@@ -1395,7 +1398,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     streamCtx.streamStatus = streamStatus;
     lastWrap = wrap;
     resetToolStartIndicator();
+    awaitingProse = true;
     revealProse = (): void => {
+      awaitingProse = false;
       if (!isStreamDomVisible(chat.id)) return;
       revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
     };
@@ -1421,12 +1426,15 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       thinkingTracker?.endSegment();
       if (isStreamDomVisible(chat.id)) {
         streamCtx.streamStatus.setThinkingElapsed(null);
-        if (streamCtx.wrap.classList.contains('msg--awaiting-prose')) {
+        if (awaitingProse) {
           streamCtx.streamStatus.setPhase('generating');
           setSidebarStreamPhase('generating', chat.id);
         } else {
           setSidebarStreamPhase(null, chat.id);
         }
+      } else if (awaitingProse) {
+        patchMainTurnActivity(chat.id, { phase: 'generating', currentTool: null });
+        setSidebarStreamPhase('generating', chat.id);
       } else {
         setSidebarStreamPhase(null, chat.id);
       }
@@ -1549,7 +1557,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       streamCtx.streamStatus = streamStatus;
       lastWrap = wrap;
       resetToolStartIndicator();
+      awaitingProse = true;
       revealProse = (): void => {
+        awaitingProse = false;
         if (!isStreamDomVisible(chat.id)) return;
         revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
       };
@@ -2016,7 +2026,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         streamCtx.streamStatus = streamStatus;
         lastWrap = wrap;
         resetToolStartIndicator();
+        awaitingProse = true;
         revealProse = (): void => {
+          awaitingProse = false;
           if (!isStreamDomVisible(chat.id)) return;
           revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
         };
@@ -2123,7 +2135,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         streamCtx.streamStatus = streamStatus;
         lastWrap = wrap;
         resetToolStartIndicator();
+        awaitingProse = true;
         revealProse = (): void => {
+          awaitingProse = false;
           if (!isStreamDomVisible(chat.id)) return;
           revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
         };

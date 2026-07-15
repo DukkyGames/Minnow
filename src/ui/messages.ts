@@ -19,7 +19,8 @@ import { extractInlineThinkingFromContent } from '../api/inline-thinking';
 import { normalizeModeId } from '../chat/modes/types';
 import { isSuperPlanPipelineUserMessage } from '../chat/super-plan/hidden-user-messages';
 import { resolveModelInfo, showCachedModelInfo } from '../api/models';
-import { isActiveChatStreaming, isStreamDomVisible } from '../chat/streaming-state';
+import { isActiveChatStreaming, isChatStreaming, isStreamDomVisible } from '../chat/streaming-state';
+import { remountStreamDomForChat } from '../tools/stream-chat-dom';
 import { setAssistantBubbleContent } from '../markdown/renderer';
 import { getActiveBoardGroup } from '../state/chat-groups';
 import {
@@ -385,6 +386,9 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   renderPersistedSubAgentCardsForChat(chat);
   restoreChatScrollAnchor(scrollAnchor);
   refreshContextUsageRing();
+  if (isChatStreaming(chat.id) && isStreamDomVisible(chat.id)) {
+    remountStreamDomForChat(chat.id);
+  }
   } finally {
     suppressBubbleScroll = false;
   }
