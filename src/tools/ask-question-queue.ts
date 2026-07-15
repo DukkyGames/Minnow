@@ -2,6 +2,9 @@
  * Serializes ask_question UI so only one question strip runs at a time.
  */
 
+import { getChatAbort } from '../app-state';
+import { waitForAskQuestionDisplayContext } from '../chat/ask-question-display';
+import { getActiveChat } from '../state/sessions';
 import { showQuestionCardsModal } from '../ui/question-cards-modal';
 import type {
   QuestionCardsModalContext,
@@ -42,7 +45,9 @@ async function drainQueue(): Promise<void> {
   if (!next) return;
   draining = true;
   try {
-    const chatId = next.chatId;
+    const chatId = next.chatId?.trim() || getActiveChat().id;
+    const abortSignal = chatId ? getChatAbort(chatId)?.signal : undefined;
+    await waitForAskQuestionDisplayContext(chatId, abortSignal);
     const planHost = resolveOrchestratePlanScreenQuestionHost(chatId);
     const modalOptions: QuestionCardsModalOptions = planHost
       ? { host: planHost, embedded: true, chatId }

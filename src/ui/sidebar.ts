@@ -56,6 +56,8 @@ import {
 } from './layout';
 import { bootGenerationResumeForChat } from '../chat/generation-resume';
 import { resumeIncompleteToolBatchOnChatSwitch } from '../chat/incomplete-tool-resume';
+import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
+import { syncAskQuestionModalOnChatSwitch } from './question-cards-modal';
 import {
   renderChatFromHistory,
   renderStatsForChat,
@@ -1134,6 +1136,8 @@ export function switchChat(id: string): void {
   const chat = sessionState.chats.find((c) => c.id === id);
   if (!chat) return;
   sessionState.activeId = id;
+  syncAskQuestionModalOnChatSwitch(prevActiveId, id);
+  notifyAskQuestionDisplayContextChanged();
   acknowledgeChatViewed(id);
   switchComposerDraft(prevActiveId, chat);
   syncModelSelectForActiveChat();

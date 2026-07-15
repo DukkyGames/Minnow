@@ -3,6 +3,7 @@
  */
 
 import { getChatAbort } from '../app-state';
+import { isAskQuestionDomVisible } from '../chat/ask-question-display';
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import { getActiveChat } from '../state/sessions';
 import {
@@ -19,7 +20,7 @@ import {
 } from './question-cards-state';
 import { getActiveComposerSurface } from './composer-surface';
 import { setComposerStreamingMode } from './composer-send';
-import { setSidebarInputPendingForActiveChat } from './chat-item-dot';
+import { setSidebarInputPendingChatId } from './chat-item-dot';
 import { resolveOrchestratePlanScreenQuestionHost } from './orchestrate-plan-screen';
 import { resolvePromptComposerShell, resolveQuestionHost } from './prompt-host-resolve';
 import {
@@ -48,6 +49,7 @@ type ActiveQuestionModalState = {
   host: HTMLElement;
   chatId: string;
   embedded: boolean;
+  parked: boolean;
   composerShell: HTMLElement | null;
   msgInput: HTMLTextAreaElement | null;
   sendBtn: HTMLButtonElement | null;
@@ -77,21 +79,22 @@ export function isAskQuestionModalOnPlanScreenHost(): boolean {
 
 function activateComposerQuestionChrome(state: ActiveQuestionModalState): void {
   state.embedded = false;
+  state.parked = false;
   acquireUserPromptLock();
   state.composerShell?.classList.add('main-column--question-pending');
-  setSidebarInputPendingForActiveChat(true);
+  setSidebarInputPendingChatId(state.chatId);
   const panel = state.host.querySelector('.question-cards-panel');
   panel?.classList.remove('question-cards-panel--embedded');
   const surfaceClass = resolveQuestionPanelSurfaceClass(state.host);
   if (surfaceClass) {
     panel?.classList.add(surfaceClass);
   }
+  state.host.hidden = false;
 }
 
-function deactivateComposerQuestionChrome(state: ActiveQuestionModalState): void {
+function restoreComposerAfterQuestion(state: ActiveQuestionModalState): void {
   state.composerShell?.classList.remove('main-column--question-pending');
   state.host.hidden = true;
-  setSidebarInputPendingForActiveChat(false);
   releaseUserPromptLock();
   if (!isUserPromptLocked()) {
     if (state.msgInput) {
@@ -110,10 +113,16 @@ function deactivateComposerQuestionChrome(state: ActiveQuestionModalState): void
   }
 }
 
+function deactivateComposerQuestionChrome(state: ActiveQuestionModalState): void {
+  restoreComposerAfterQuestion(state);
+  setSidebarInputPendingChatId(null);
+}
+
 function activateEmbeddedQuestionChrome(state: ActiveQuestionModalState): void {
   state.embedded = true;
+  state.parked = false;
   state.composerShell?.classList.remove('main-column--question-pending');
-  setSidebarInputPendingForActiveChat(false);
+  setSidebarInputPendingChatId(state.chatId);
   releaseUserPromptLock();
   const panel = state.host.querySelector('.question-cards-panel');
   panel?.classList.add('question-cards-panel--embedded');
@@ -122,6 +131,70 @@ function activateEmbeddedQuestionChrome(state: ActiveQuestionModalState): void {
     'question-cards-panel--chat-app',
   );
   state.host.hidden = false;
+}
+
+function parkActiveQuestionModal(): void {
+  const state = activeQuestionModal;
+  if (!state || state.parked || !requestQuestionCardsCancel) return;
+  state.parked = true;
+  state.host.hidden = true;
+  if (!state.embedded) {
+    restoreComposerAfterQuestion(state);
+  }
+  setSidebarInputPendingChatId(state.chatId);
+}
+
+function unparkActiveQuestionModal(): void {
+  const state = activeQuestionModal;
+  if (!state || !state.parked || !requestQuestionCardsCancel) return;
+  if (!isAskQuestionDomVisible(state.chatId)) return;
+
+  const planHost = resolveOrchestratePlanScreenQuestionHost(state.chatId);
+  if (planHost) {
+    migrateActiveQuestionModalToHost(planHost);
+    activateEmbeddedQuestionChrome(state);
+    return;
+  }
+
+  const host = resolveQuestionHost();
+  if (!host) return;
+  migrateActiveQuestionModalToHost(host);
+  state.composerShell = resolvePromptComposerShell();
+  const surface = getActiveComposerSurface();
+  state.msgInput = surface.inputEl;
+  state.sendBtn = surface.sendBtnEl;
+  activateComposerQuestionChrome(state);
+}
+
+/** Hide the strip when leaving the owning chat; restore when returning. */
+export function syncAskQuestionModalOnChatSwitch(
+  fromChatId: string | null | undefined,
+  toChatId: string,
+): void {
+  const state = activeQuestionModal;
+  if (!state || !requestQuestionCardsCancel) return;
+
+  if (fromChatId && state.chatId === fromChatId && toChatId !== fromChatId && !state.parked) {
+    parkActiveQuestionModal();
+    return;
+  }
+
+  if (state.chatId === toChatId && state.parked) {
+    unparkActiveQuestionModal();
+  }
+}
+
+/** Park or restore the strip when the foreground app changes. */
+export function syncAskQuestionModalOnDisplayContextChange(): void {
+  const state = activeQuestionModal;
+  if (!state || !requestQuestionCardsCancel) return;
+
+  if (isAskQuestionDomVisible(state.chatId)) {
+    if (state.parked) unparkActiveQuestionModal();
+    return;
+  }
+
+  if (!state.parked) parkActiveQuestionModal();
 }
 
 /**
@@ -164,9 +237,12 @@ export function forceCloseAskQuestionModalForChat(chatId?: string): void {
 }
 
 export function forceCloseAskQuestionModal(): void {
+  const chatId = activeQuestionModal?.chatId;
   requestQuestionCardsCancel?.();
   requestQuestionCardsCancel = null;
-  setSidebarInputPendingForActiveChat(false);
+  if (chatId) {
+    setSidebarInputPendingChatId(null);
+  }
 }
 
 export function resetQuestionCardsModalForTests(): void {
@@ -239,7 +315,9 @@ export function showQuestionCardsModal(
     if (!embedded) {
       acquireUserPromptLock();
       composerShell?.classList.add('main-column--question-pending');
-      setSidebarInputPendingForActiveChat(true);
+      setSidebarInputPendingChatId(chatIdForAbort);
+    } else {
+      setSidebarInputPendingChatId(chatIdForAbort);
     }
     if (!embedded) {
       host.hidden = false;
@@ -250,6 +328,7 @@ export function showQuestionCardsModal(
       host,
       chatId: chatIdForAbort,
       embedded,
+      parked: false,
       composerShell,
       msgInput,
       sendBtn,
@@ -348,6 +427,10 @@ export function showQuestionCardsModal(
     footer.append(validation, btnSubmit, hints);
     panel.append(header, cardBody, footer);
     host.appendChild(panel);
+
+    if (!isAskQuestionDomVisible(chatIdForAbort)) {
+      parkActiveQuestionModal();
+    }
 
     let settled = false;
     const finish = (result: AskQuestionToolResult): void => {
