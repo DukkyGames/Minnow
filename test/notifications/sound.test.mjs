@@ -71,4 +71,10 @@ describe('notification sound gating', () => {
     setFocusState({ hasFocus: false, visibilityState: 'hidden' });
     assert.equal(sound.shouldPlayNotificationSound(), true);
   });
+
+  test('chat_question: plays when window is focused', () => {
+    setFocusState({ hasFocus: true, visibilityState: 'visible' });
+    assert.equal(sound.shouldPlayNotificationSound(), false);
+    assert.equal(sound.shouldPlayNotificationSound('chat_question'), true);
+  });
 });

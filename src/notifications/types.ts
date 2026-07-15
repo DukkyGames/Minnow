@@ -9,6 +9,7 @@ export type NotificationKind =
   | 'chat_turn_complete'
   | 'chat_turn_error'
   | 'chat_tool_failure'
+  | 'chat_question'
   | 'task_started'
   | 'task_complete'
   | 'task_failed'

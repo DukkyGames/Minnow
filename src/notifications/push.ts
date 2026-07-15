@@ -71,7 +71,7 @@ export function pushNotification(input: PushNotificationInput): NotificationReco
 
   notifyNew(record);
 
-  if (shouldPlayNotificationSound()) {
+  if (shouldPlayNotificationSound(input.kind)) {
     playNotificationSound();
   }
 
