@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import {
   DIAGNOSTICS_LOG_MAX_BYTES,
   appendDiagnosticEntry,
+  clearDiagnosticLogs,
   diagnosticsLogPath,
   readDiagnosticEntries,
   resetDiagnosticWriteQueuesForTests,
@@ -60,5 +61,18 @@ describe('diagnostics ring-log', () => {
     assert.match(raw, /rotate-test/);
     const size = (await fs.stat(logPath)).size;
     assert.ok(size < DIAGNOSTICS_LOG_MAX_BYTES, 'active log should stay under cap after rotation');
+  });
+
+  test('clearDiagnosticLogs removes diagnostics and crash JSONL files', async () => {
+    await appendDiagnosticEntry({ kind: 'a', message: 'before-clear', source: 'server' });
+    const crashPath = path.join(path.dirname(diagnosticsLogPath()), 'crash.jsonl');
+    await fs.writeFile(crashPath, '{"kind":"crash"}\n', 'utf8');
+
+    await clearDiagnosticLogs();
+
+    const entries = await readDiagnosticEntries({ maxLines: 10 });
+    assert.equal(entries.length, 0);
+    await assert.rejects(() => fs.stat(diagnosticsLogPath()), /ENOENT/);
+    await assert.rejects(() => fs.stat(crashPath), /ENOENT/);
   });
 });
