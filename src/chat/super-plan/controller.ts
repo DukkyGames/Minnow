@@ -9,7 +9,7 @@
  */
 
 import { isChatStreaming, subscribeChatStreamEnd } from '../streaming-state';
-import { isChatTurnSetupPending } from '../chat-turn-guard';
+import { isChatTurnInProgress, isChatTurnSetupPending } from '../chat-turn-guard';
 import type { Chat } from '../../types';
 import { cancelResearch } from '../../research/client';
 import { newestRun } from '../../state/runs-store';
@@ -71,6 +71,22 @@ function notifyListeners(chat: Chat): void {
 
 function isBlockedCheckpoint(stage: SuperPlanStageId): boolean {
   return stage === 'spec_confirm' || stage === 'present';
+}
+
+/**
+ * True when skipSuperPlanStage (or another external action) finished or advanced
+ * past `stageId` while the sequential loop was still tied to that stage.
+ */
+function wasSuperPlanStageSuperseded(
+  chat: Chat,
+  stageId: SuperPlanStageId,
+): boolean {
+  const state = chat.superPlan;
+  if (!state) return false;
+  if (state.stages[stageId]?.status === 'done') return true;
+  const stageIndex = SUPER_PLAN_STAGE_ORDER.indexOf(stageId);
+  const activeIndex = SUPER_PLAN_STAGE_ORDER.indexOf(state.activeStage);
+  return stageIndex >= 0 && activeIndex > stageIndex;
 }
 
 /** Abort the chat's in-flight turn (lazy import keeps the UI chain out of tests). */
@@ -152,6 +168,12 @@ export async function advanceSuperPlan(chat: Chat): Promise<void> {
       markSuperPlanStageStatus(chat, stageId, 'running');
       notifyListeners(chat);
 
+      // Skip may land between marking running and starting the runner — do not
+      // launch a superseded stage (e.g. grill interview after Skip interview).
+      if (wasSuperPlanStageSuperseded(chat, stageId)) {
+        continue;
+      }
+
       const runsBefore = chat.runs?.length ?? 0;
       let outcome: SuperPlanStageOutcome = await runSuperPlanStage(chat, stageId, {
         onResearchStarted: () => notifyListeners(chat),
@@ -162,15 +184,24 @@ export async function advanceSuperPlan(chat: Chat): Promise<void> {
         // resolves; finalize deterministically instead of waiting on the
         // stream-end hook (which fires mid-turn and used to double-advance).
         if (chat.superPlan?.cancelled) break;
+        if (wasSuperPlanStageSuperseded(chat, stageId)) {
+          continue;
+        }
         if ((chat.runs?.length ?? 0) <= runsBefore) {
           // runChatTurn no-opped (chat was busy) — leave the stage pending so
           // the safety net or the Resume button reruns it.
+          if (wasSuperPlanStageSuperseded(chat, stageId)) {
+            continue;
+          }
           resetSuperPlanStage(chat, stageId);
           notifyListeners(chat);
           break;
         }
         const lastRun = newestRun(chat);
         if (lastRun?.status === 'stopped') {
+          if (wasSuperPlanStageSuperseded(chat, stageId)) {
+            continue;
+          }
           resetSuperPlanStage(chat, stageId);
           setSuperPlanPaused(chat, true);
           notifyListeners(chat);
@@ -362,8 +393,10 @@ export async function skipSuperPlanStage(chat: Chat): Promise<void> {
   if (stageId === 'present') return;
   // Skipping a live stage (e.g. an in-progress interview) must abort its
   // in-flight turn first, or advanceSuperPlan would bail out on the still-
-  // streaming chat and the stopped run would be misread as a pause.
-  if (isChatStreaming(chat.id)) {
+  // streaming chat and the stopped run would be misread as a pause. Include
+  // turn setup (before the streaming flag is set) so an early Skip interview
+  // does not let the grill turn start asking questions.
+  if (isChatTurnInProgress(chat.id)) {
     stopChatTurn(chat.id);
   }
   resetSuperPlanStage(chat, stageId);
