@@ -183,6 +183,11 @@ declare global {
   interface Window {
     minnow?: MinnowElectronBridge;
   }
+
+  /** Electron frameless shell uses -webkit-app-region for draggable title bars. */
+  interface CSSStyleDeclaration {
+    webkitAppRegion: 'drag' | 'no-drag' | string;
+  }
 }
 
 export {};
