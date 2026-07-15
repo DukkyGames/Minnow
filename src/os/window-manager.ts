@@ -114,7 +114,7 @@ class WindowManager {
     if (existing) {
       if (options?.activate !== false) {
         this.focus(existing.id);
-        // User-facing open (dock, mini-preview) restores minimized windows.
+        // User-facing open (dock) restores minimized windows.
         if (existing.minimized) this.minimize(existing.id, false);
       }
       return existing.id;

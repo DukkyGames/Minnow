@@ -8,14 +8,12 @@ export const DESKTOP_PREFS_KEYS = {
   wallpaper: `${STORAGE_PREFIX}wallpaper`,
   wallpaperImageId: `${STORAGE_PREFIX}wallpaperImageId`,
   wallpaperImageFit: `${STORAGE_PREFIX}wallpaperImageFit`,
-  previewStyle: `${STORAGE_PREFIX}previewStyle`,
 } as const;
 
 export const DEFAULT_DESKTOP_PREFS: DesktopPrefs = {
   desktopLayout: 'dock',
   wallpaper: 'underwater',
   wallpaperImageFit: 'cover',
-  previewStyle: 'card',
 };
 
 type DesktopPrefsListener = (prefs: DesktopPrefs) => void;
@@ -75,10 +73,6 @@ function normalizeImageFit(value: string | null): WallpaperImageFit {
   return value === 'contain' ? 'contain' : 'cover';
 }
 
-function normalizePreviewStyle(value: string | null): DesktopPrefs['previewStyle'] {
-  return value === 'tile' ? 'tile' : DEFAULT_DESKTOP_PREFS.previewStyle;
-}
-
 /** Load desktop prefs from localStorage (cached after first read). */
 export function loadDesktopPrefs(): DesktopPrefs {
   if (cachedPrefs) return { ...cachedPrefs };
@@ -95,7 +89,6 @@ export function loadDesktopPrefs(): DesktopPrefs {
     wallpaper: normalizeWallpaper(readStorage(DESKTOP_PREFS_KEYS.wallpaper)),
     wallpaperImageId: wallpaperImageId || undefined,
     wallpaperImageFit: normalizeImageFit(readStorage(DESKTOP_PREFS_KEYS.wallpaperImageFit)),
-    previewStyle: normalizePreviewStyle(readStorage(DESKTOP_PREFS_KEYS.previewStyle)),
   };
   cachedPrefs = prefs;
   return { ...prefs };
@@ -122,7 +115,6 @@ export function saveDesktopPrefs(prefs: DesktopPrefs): void {
   } else {
     removeStorage(DESKTOP_PREFS_KEYS.wallpaperImageId);
   }
-  writeStorage(DESKTOP_PREFS_KEYS.previewStyle, prefs.previewStyle);
   cachedPrefs = { ...prefs };
   emitDesktopPrefs();
 }

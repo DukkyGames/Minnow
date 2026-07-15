@@ -63,6 +63,12 @@ function buildDockTile(
   ico.appendChild(createAppIcon(app.icon as 'code', { size: 24 }));
   btn.appendChild(ico);
 
+  const openDot = document.createElement('span');
+  openDot.className = 'mn-os-tile-open-dot';
+  openDot.hidden = true;
+  openDot.setAttribute('aria-hidden', 'true');
+  btn.appendChild(openDot);
+
   const name = document.createElement('span');
   name.className = 'mn-os-tile-name';
   name.textContent = app.name;
@@ -135,6 +141,10 @@ export function initDockLauncher(root: HTMLElement): () => void {
       tile.classList.toggle('is-open', open);
       tile.classList.toggle('is-active', active);
       tile.setAttribute('aria-pressed', active ? 'true' : 'false');
+      const openDot = tile.querySelector('.mn-os-tile-open-dot');
+      if (openDot instanceof HTMLElement) {
+        openDot.hidden = !open;
+      }
     }
   }
 

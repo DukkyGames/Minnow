@@ -158,16 +158,20 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
   grid-column: 1 / -1;
   grid-row: 1;
   margin-bottom: 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
   width: 100%;
   min-width: 0;
+  overflow: hidden;
 }
 
 .input-bar--hub .composer-controls__trail {
   margin-left: auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .input-bar--hub .composer-tools-btn--toolbar {
@@ -878,7 +882,7 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
 
   .input-bar--hub .composer-controls {
     gap: 6px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
   .input-bar--hub .composer-controls .mode-segmented {

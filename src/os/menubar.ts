@@ -10,7 +10,6 @@ import { subscribeNotifications } from '../notifications/store';
 import { launchApp, navigateToDesktop } from './router';
 import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
 import { createAppIcon, createOsIcon } from './icons';
-import { initOsModelChipMenu } from './model-chip-menu';
 import { chatToggleAriaLabel, isChatToggleVisible } from './menubar-visibility';
 import { initOsNotificationsMenu } from './notifications-menu';
 import { openSchedulerFromMenubar } from '../ui/scheduler-page';
@@ -146,15 +145,6 @@ export function renderMenubar(root: HTMLElement): () => void {
   workspaceSlot.className = 'mn-os-mb-workspace-slot';
   workspaceSlot.hidden = true;
 
-  const modelChip = document.createElement('button');
-  modelChip.type = 'button';
-  modelChip.className = 'mn-os-mb-chip';
-  const chipDot = document.createElement('span');
-  const chipText = document.createElement('span');
-  chipText.className = 'mn-os-mb-chip-text';
-  modelChip.append(chipDot, chipText);
-  const cleanupModelChip = initOsModelChipMenu(modelChip, chipDot, chipText);
-
   const schedulerBtn = document.createElement('button');
   schedulerBtn.type = 'button';
   schedulerBtn.className = 'mn-os-mb-icon mn-os-mb-scheduler';
@@ -185,7 +175,7 @@ export function renderMenubar(root: HTMLElement): () => void {
   timeEl.className = 'mn-os-mb-time mn-os-mono';
   timeEl.textContent = formatClock(new Date());
 
-  right.append(workspaceSlot, modelChip, schedulerBtn, bell, settingsBtn, timeEl);
+  right.append(workspaceSlot, schedulerBtn, bell, settingsBtn, timeEl);
   root.append(left, right);
 
   const cleanupShellChrome = initShellMenubarChrome(root, right);
@@ -262,7 +252,6 @@ export function renderMenubar(root: HTMLElement): () => void {
     unsubInbox();
     unsubNotif();
     stopClock();
-    cleanupModelChip();
     cleanupNotifications();
     cleanupShellChrome();
   };

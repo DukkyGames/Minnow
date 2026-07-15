@@ -96,7 +96,7 @@ html.minnow-os-enabled {
   display: none !important;
 }
 
-/* Workspace picker sits beside the model chip in the menubar right cluster */
+/* Workspace picker in the menubar right cluster */
 .mn-os-mb-right .mn-os-mb-workspace-slot .workspace-control {
   max-width: min(18rem, 28vw);
 }
@@ -215,53 +215,6 @@ html.minnow-os-enabled {
   color: var(--os-text-dim);
 }
 
-/* Shared pill metrics — model chip */
-.mn-os-mb-chip {
-  box-sizing: border-box;
-  min-height: 30px;
-  padding-block: 4px;
-  font-size: 12.5px;
-  line-height: 1.2;
-  border-radius: 8px;
-}
-
-.mn-os-mb-chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 1;
-  min-width: 0;
-  max-width: min(22rem, 42vw);
-  background: var(--os-surface-2);
-  border: 1px solid var(--os-border);
-  color: var(--os-text-dim);
-  padding-inline: 9px;
-  cursor: pointer;
-  transition:
-    background 0.14s var(--os-ease),
-    border-color 0.14s var(--os-ease),
-    color 0.14s var(--os-ease);
-}
-
-.mn-os-mb-chip:hover {
-  background: var(--os-surface-3);
-  border-color: var(--os-border-strong);
-  color: var(--os-text);
-}
-
-.mn-os-mb-chip.is-open {
-  border-color: var(--os-accent);
-  box-shadow: 0 0 0 2px var(--os-accent-glow);
-  color: var(--os-text);
-}
-
-.mn-os-mb-chip-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-
 /* Operational status (Ready, loading models, errors) — mirrors legacy .status-pill */
 .mn-os-mb-status.status-pill {
   display: flex;
@@ -275,94 +228,6 @@ html.minnow-os-enabled {
 
 .mn-os-mb-status #osStatusText {
   overflow: visible;
-}
-
-/* OS menubar model picker popover */
-.mn-os-model-menu {
-  position: fixed;
-  z-index: 55;
-  width: max-content;
-  min-width: min(20rem, calc(100vw - 1rem));
-  max-width: min(32rem, calc(100vw - 1rem));
-  background: var(--mn-bg);
-  border: 1px solid var(--mn-border);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-popover-soft);
-  color: var(--mn-fg);
-}
-
-.mn-os-model-menu.hidden {
-  display: none;
-}
-
-.mn-os-model-menu__filter {
-  border-bottom: 1px solid var(--mn-border);
-}
-
-.mn-os-model-menu__list {
-  margin: 0;
-  padding: 4px 0;
-  list-style: none;
-  max-height: min(16rem, 50vh);
-  overflow-y: auto;
-}
-
-.mn-os-model-menu__footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 8px 10px;
-  border-top: 1px solid var(--mn-border);
-}
-
-.mn-os-model-menu__action {
-  padding: 6px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--mn-border);
-  background: var(--mn-bg);
-  color: var(--mn-fg);
-  font-family: var(--font-ui);
-  font-size: 12.5px;
-  cursor: pointer;
-  transition:
-    background 0.14s var(--ease-out),
-    border-color 0.14s var(--ease-out);
-}
-
-.mn-os-model-menu__action:hover:not(:disabled) {
-  background: var(--mn-surface-0);
-  border-color: var(--mn-border-strong);
-}
-
-.mn-os-model-menu__action:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.mn-os-model-menu__action--primary {
-  background: var(--mn-accent-soft);
-  border-color: var(--mn-accent);
-  color: var(--mn-fg);
-  font-weight: 600;
-}
-
-.mn-os-model-menu__action--primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--mn-accent) 18%, var(--mn-bg));
-}
-
-.mn-os-model-menu__action.is-busy {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-width: 6.5rem;
-  opacity: 1;
-  cursor: wait;
-}
-
-.mn-os-model-menu__action.is-busy:disabled {
-  opacity: 1;
 }
 
 /* Shared spinner markup from model-load-unload-button.ts */
@@ -712,7 +577,6 @@ html.is-electron-shell .mn-os-menubar--shell-frameless select,
 html.is-electron-shell .mn-os-menubar--shell-frameless textarea,
 html.is-electron-shell .mn-os-menubar--shell-frameless [contenteditable='true'],
 html.is-electron-shell .mn-os-menubar--shell-frameless .mn-os-mb-window-controls,
-html.is-electron-shell .mn-os-menubar--shell-frameless .mn-os-mb-chip,
 html.is-electron-shell .mn-os-menubar--shell-frameless .status-pill {
   -webkit-app-region: no-drag;
 }
@@ -1023,12 +887,6 @@ html.minnow-os-enabled header.topbar.hidden {
     display: none !important;
   }
 
-  .mn-os-mb-chip {
-    max-width: min(7.5rem, 30vw);
-    padding-inline: 6px;
-    font-size: 12px;
-  }
-
   /* Workspace path lives in the folder popover on narrow screens */
   .mn-os-mb-right .mn-os-mb-workspace-slot .workspace-path-label {
     display: none;
@@ -1058,20 +916,15 @@ html.minnow-os-enabled header.topbar.hidden {
     height: var(--touch-min);
   }
 
-  .mn-os-model-menu,
   .mn-os-notif-menu {
     max-width: calc(100vw - max(12px, env(safe-area-inset-left, 0px)) - max(12px, env(safe-area-inset-right, 0px)));
   }
 }
 
-/* Ultra-narrow phones: drop scheduler to keep model chip + inbox reachable */
+/* Ultra-narrow phones: drop scheduler to keep workspace + inbox reachable */
 @media (max-width: 400px) {
   .mn-os-mb-scheduler {
     display: none;
-  }
-
-  .mn-os-mb-chip {
-    max-width: min(6.5rem, 26vw);
   }
 }
 

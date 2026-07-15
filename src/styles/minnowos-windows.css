@@ -298,8 +298,7 @@ html.minnow-os-enabled .mn-os-window-body .brain-page.is-open {
   :is(
     .mn-os-composer-dock,
     .mn-os-chat-rail,
-    .mn-os-desk-stage,
-    .mn-os-desktop-previews
+    .mn-os-desk-stage
   ) {
   display: none !important;
   visibility: hidden !important;

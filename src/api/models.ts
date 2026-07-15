@@ -33,6 +33,9 @@ import {
   setModelLoadUnloadButtonBusy,
   setModelLoadUnloadButtonIdle,
   setModelLoadUnloadButtonUnsupported,
+  setModelLoadUnloadIconButtonBusy,
+  setModelLoadUnloadIconButtonIdle,
+  setModelLoadUnloadIconButtonUnsupported,
 } from '../ui/model-load-unload-button';
 import { updateModelStateDot } from '../ui/model-state-dot';
 import {
@@ -124,11 +127,41 @@ export function syncModelLoadUnloadButtonElement(btn: HTMLButtonElement): void {
   setModelLoadUnloadButtonIdle(btn, loaded, Boolean(raw));
 }
 
+/** Sync one icon-only Load/Unload control from selection + in-flight state. */
+export function syncModelLoadUnloadIconButtonElement(btn: HTMLButtonElement): void {
+  if (isModelLoadUnloadBusy()) {
+    setModelLoadUnloadIconButtonBusy(btn, getModelLoadUnloadPhase());
+    return;
+  }
+
+  const serverMode = isServerStorageMode();
+  const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;
+  if (!sel) return;
+
+  const opt = sel.options[sel.selectedIndex];
+  const supportsUnload =
+    serverMode && opt?.getAttribute('data-supports-load-unload') === '1';
+
+  if (!supportsUnload) {
+    setModelLoadUnloadIconButtonUnsupported(btn, serverMode);
+    return;
+  }
+
+  const raw = sel.value.trim();
+  const row = raw ? getModelRowForSelectOrCanonicalId(raw) : undefined;
+  const loaded = row ? isModelLoaded(row.state) : false;
+  setModelLoadUnloadIconButtonIdle(btn, loaded, Boolean(raw));
+}
+
 /** Update the combined Load/Unload button from selection + provider. */
 export function updateModelLoadUnloadButtons(): void {
   const btn = document.getElementById('btnModelLoadUnload') as HTMLButtonElement | null;
-  if (!btn) return;
-  syncModelLoadUnloadButtonElement(btn);
+  if (btn) syncModelLoadUnloadButtonElement(btn);
+  for (const iconBtn of document.querySelectorAll<HTMLButtonElement>(
+    '.model-host-filter-action--load-unload',
+  )) {
+    syncModelLoadUnloadIconButtonElement(iconBtn);
+  }
 }
 
 async function postModelAction(url: string, body: Record<string, string>): Promise<void> {

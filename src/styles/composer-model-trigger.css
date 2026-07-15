@@ -1,0 +1,177 @@
+/**
+ * Compact active-model label on composer surfaces (desktop + Code).
+ */
+
+.composer-model-trigger-anchor {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.composer-model-trigger-wrap {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+/* Code / hub trail: shrink model label; keep tools button visible */
+.composer-controls__trail .composer-model-trigger-anchor,
+.composer-controls__trail .composer-model-trigger-wrap {
+  flex: 1 1 auto;
+  flex-shrink: 1;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.composer-controls__trail .composer-model-trigger {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.composer-controls__trail .composer-tools-anchor {
+  flex-shrink: 0;
+}
+
+.composer-model-trigger-wrap--desktop {
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.composer-model-trigger-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 0 4px;
+  min-height: 20px;
+}
+
+.composer-model-trigger {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(18rem, 42vw);
+  padding: 2px 4px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  cursor: pointer;
+  transition: color 0.16s var(--ease-out), background 0.16s var(--ease-out);
+}
+
+.mn-os-desktop-composer .composer-model-trigger {
+  color: var(--os-text-dim);
+  font-size: 11px;
+}
+
+.composer-model-trigger__logo {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  opacity: 0.75;
+}
+
+.composer-model-trigger__logo.hidden {
+  display: none;
+}
+
+.composer-model-trigger__logo svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.composer-model-trigger__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-model-trigger__chevron {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  opacity: 0.55;
+  transition: transform 0.16s var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .composer-model-trigger:hover:not(:disabled) {
+    color: var(--mn-fg);
+    background: color-mix(in srgb, var(--mn-fg) 6%, transparent);
+  }
+
+  .mn-os-desktop-composer .composer-model-trigger:hover:not(:disabled) {
+    color: var(--os-text);
+    background: color-mix(in srgb, var(--os-text) 8%, transparent);
+  }
+}
+
+.composer-model-trigger:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.composer-model-trigger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.composer-model-trigger-wrap.is-open .composer-model-trigger__chevron {
+  transform: rotate(180deg);
+}
+
+.composer-model-menu {
+  position: fixed;
+  z-index: 1300;
+  width: max-content;
+  min-width: 16rem;
+  max-width: min(90vw, 32rem);
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-popover-soft);
+  overflow: hidden;
+}
+
+.composer-model-menu.hidden {
+  display: none;
+}
+
+.composer-model-menu__filter {
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.composer-model-menu__list {
+  position: static;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  max-height: min(16rem, 50vh);
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+@media (max-width: 600px) {
+  .composer-model-trigger {
+    max-width: min(12rem, 36vw);
+    font-size: 11px;
+  }
+}

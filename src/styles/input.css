@@ -6,19 +6,32 @@
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
   padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
-  display: flex;
-  gap: 10px;
-  align-items: flex-end;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 10px;
+  row-gap: 10px;
+  align-items: end;
   flex-shrink: 0;
 }
 
-/* Composer column: preview strip + attach + textarea row */
+/* Composer column: children participate in the input-bar grid */
 .input-bar-composer {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: contents;
+}
+
+/* Mode strip, hints, and attach preview span the full bar (including send column) */
+.input-bar > :not(.input-bar-send-stack):not(.input-row) {
+  grid-column: 1 / -1;
+}
+
+.input-bar .input-row {
+  grid-column: 1;
+  grid-row: -1;
+}
+
+.input-bar .input-bar-send-stack {
+  grid-column: 2;
+  grid-row: -1;
 }
 
 .input-row {

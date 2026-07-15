@@ -18,7 +18,7 @@ import {
 import type { NotificationRecord } from '../notifications/types';
 import { getAppById } from './app-registry';
 import { createAppIcon, createOsIcon, type OsIconName } from './icons';
-import { closeOsModelChipMenu } from './model-chip-menu';
+import { closeComposerModelMenu } from '../ui/composer-model-trigger';
 import {
   registerChromePopover,
   unregisterChromePopover,
@@ -255,7 +255,7 @@ function ensurePanel(): HTMLDivElement {
 function openMenu(): void {
   const bell = anchorBell;
   if (!bell) return;
-  closeOsModelChipMenu();
+  closeComposerModelMenu();
   const panel = ensurePanel();
   syncMutedUi();
   rebuildList();

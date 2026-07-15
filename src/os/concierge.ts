@@ -44,6 +44,13 @@ function buildDesktopComposer(): HTMLElement {
   questionHost.setAttribute('aria-live', 'polite');
   questionHost.hidden = true;
 
+  const modelTriggerRow = document.createElement('div');
+  modelTriggerRow.className = 'composer-model-trigger-row';
+  const modelTriggerAnchor = document.createElement('div');
+  modelTriggerAnchor.id = 'desktopComposerModelAnchor';
+  modelTriggerAnchor.className = 'composer-model-trigger-anchor';
+  modelTriggerRow.appendChild(modelTriggerAnchor);
+
   const row = document.createElement('div');
   row.className = 'mn-os-desktop-input-row';
 
@@ -106,7 +113,7 @@ function buildDesktopComposer(): HTMLElement {
   sendBtn.innerHTML = MINNOW_GLYPH_HEADER_HTML;
 
   row.append(attachBtn, inputStack, contextAnchor, sendBtn);
-  root.append(toolApprovalHost, questionHost, row);
+  root.append(toolApprovalHost, questionHost, modelTriggerRow, row);
   return root;
 }
 

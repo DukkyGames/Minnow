@@ -14,6 +14,10 @@ function dockTile(appId: string): HTMLButtonElement | null {
   ) as HTMLButtonElement | null;
 }
 
+function dockOpenDot(appId: string): HTMLElement | null {
+  return dockTile(appId)?.querySelector('.mn-os-tile-open-dot') ?? null;
+}
+
 describe('dock launcher open highlights', () => {
   let cleanup: (() => void) | undefined;
 
@@ -52,6 +56,7 @@ describe('dock launcher open highlights', () => {
     assert.equal(settings.classList.contains('is-open'), true);
     assert.equal(settings.classList.contains('is-active'), true);
     assert.equal(settings.getAttribute('aria-pressed'), 'true');
+    assert.equal(dockOpenDot('settings')?.hidden, false);
   });
 
   test('keeps open highlight when another app is foreground', () => {
@@ -65,5 +70,7 @@ describe('dock launcher open highlights', () => {
     assert.equal(settings.classList.contains('is-active'), false);
     assert.equal(models.classList.contains('is-open'), true);
     assert.equal(models.classList.contains('is-active'), true);
+    assert.equal(dockOpenDot('settings')?.hidden, false);
+    assert.equal(dockOpenDot('models')?.hidden, false);
   });
 });

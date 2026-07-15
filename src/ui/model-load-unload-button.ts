@@ -4,6 +4,18 @@
 
 export type ModelLoadUnloadPhase = 'load' | 'unload';
 
+/** Download-into-tray stroke icon for compact Load affordances. */
+const LOAD_ICON_HTML =
+  '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">' +
+  '<path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 20h16"/>' +
+  '</svg>';
+
+/** Eject-from-tray stroke icon for compact Unload affordances. */
+const UNLOAD_ICON_HTML =
+  '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">' +
+  '<path d="M12 21V9"/><path d="M8 13l4-4 4 4"/><path d="M4 4h16"/>' +
+  '</svg>';
+
 let inFlight = false;
 let phase: ModelLoadUnloadPhase | null = null;
 
@@ -88,6 +100,59 @@ export function setModelLoadUnloadButtonUnsupported(
   btn.classList.remove('is-busy');
   btn.removeAttribute('aria-busy');
   btn.textContent = 'Load';
+  btn.setAttribute('aria-label', 'Load model');
+  btn.title = serverMode
+    ? 'Model load/unload is not supported for this provider'
+    : 'Start with npm start to load or unload models';
+}
+
+/** Show spinner on a compact icon-only Load/Unload control. */
+export function setModelLoadUnloadIconButtonBusy(
+  btn: HTMLButtonElement,
+  nextPhase: ModelLoadUnloadPhase | null,
+): void {
+  const label = busyLabel(nextPhase);
+  btn.hidden = false;
+  btn.disabled = true;
+  btn.classList.add('is-busy');
+  btn.setAttribute('aria-busy', 'true');
+  btn.innerHTML = '<span class="model-load-unload-spinner" aria-hidden="true"></span>';
+  btn.setAttribute('aria-label', label);
+  btn.title = 'Model action in progress…';
+}
+
+/** Restore idle load/unload icon on a compact control. */
+export function setModelLoadUnloadIconButtonIdle(
+  btn: HTMLButtonElement,
+  loaded: boolean,
+  hasSelection: boolean,
+): void {
+  btn.hidden = false;
+  btn.classList.remove('is-busy');
+  btn.removeAttribute('aria-busy');
+  btn.innerHTML = loaded ? UNLOAD_ICON_HTML : LOAD_ICON_HTML;
+  btn.setAttribute('aria-label', loaded ? 'Unload model' : 'Load model');
+  btn.disabled = !hasSelection;
+
+  if (!hasSelection) {
+    btn.title = 'Select a model to load or unload';
+  } else if (loaded) {
+    btn.title = 'Unload selected model from VRAM';
+  } else {
+    btn.title = 'Load selected model into VRAM';
+  }
+}
+
+/** Hide a compact load/unload icon when the provider does not support it. */
+export function setModelLoadUnloadIconButtonUnsupported(
+  btn: HTMLButtonElement,
+  serverMode: boolean,
+): void {
+  btn.hidden = true;
+  btn.disabled = true;
+  btn.classList.remove('is-busy');
+  btn.removeAttribute('aria-busy');
+  btn.innerHTML = LOAD_ICON_HTML;
   btn.setAttribute('aria-label', 'Load model');
   btn.title = serverMode
     ? 'Model load/unload is not supported for this provider'

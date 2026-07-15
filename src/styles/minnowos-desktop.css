@@ -1,7 +1,7 @@
 @import './minnowos-tokens.css';
 
 /* ============================================================
-   MinnowOS — desktop, concierge, dock, grid, mini-previews
+   MinnowOS — desktop, concierge, dock, grid
    ============================================================ */
 
 .mn-os-desktop {
@@ -12,16 +12,6 @@
 .mn-os-desktop-wall {
   position: absolute;
   inset: 0;
-}
-
-.mn-os-desktop-previews {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.mn-os-desktop-previews > * {
-  pointer-events: auto;
 }
 
 .mn-os-desk-stage {
@@ -392,6 +382,22 @@
   font-size: 11px;
 }
 
+.mn-os-tile-open-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--os-text-dim) 80%, transparent);
+  flex-shrink: 0;
+}
+
+.mn-os-tile-open-dot[hidden] {
+  display: none;
+}
+
+.mn-os-tile-dock.is-active .mn-os-tile-open-dot {
+  background: var(--os-accent);
+}
+
 .mn-os-tile-dock:hover {
   color: var(--os-text);
   transform: translateY(-4px);
@@ -454,256 +460,6 @@
   border-color: var(--os-border-strong);
   transform: translateY(-3px);
 }
-
-/* ---------- minimized previews ---------- */
-
-.mn-os-mini-stack {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  z-index: 20;
-  width: 268px;
-}
-
-.mn-os-stack-tile {
-  flex-direction: column;
-  width: auto;
-}
-
-.mn-os-mini-stack-label {
-  font-size: 10.5px;
-  color: var(--os-text-faint);
-  letter-spacing: 0.08em;
-  padding-left: 4px;
-  font-family: var(--font-mono);
-}
-
-.mn-os-mini-card {
-  background: color-mix(in srgb, var(--os-surface-2) 92%, transparent);
-  backdrop-filter: blur(12px);
-  border: 1px solid var(--os-border-strong);
-  border-radius: 14px;
-  overflow: hidden;
-  cursor: pointer;
-  transition: 0.18s var(--os-ease);
-  animation: mn-os-pop-in 0.3s var(--os-ease-out);
-}
-
-.mn-os-mini-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--os-accent-glow);
-  box-shadow: 0 14px 36px -14px rgba(0, 0, 0, 0.7);
-}
-
-.mn-os-mini-card.is-alert {
-  border-color: var(--os-accent-glow);
-  box-shadow:
-    0 0 0 1px var(--os-accent-glow),
-    0 0 24px -6px var(--os-accent-glow);
-}
-
-@keyframes mn-os-pop-in {
-  from {
-    opacity: 0;
-    transform: translateY(-8px) scale(0.96);
-  }
-}
-
-.mn-os-mini-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 10px;
-  border-bottom: 1px solid var(--os-border);
-}
-
-.mn-os-mini-ico {
-  color: var(--os-accent);
-  display: grid;
-  place-items: center;
-}
-
-.mn-os-mini-title {
-  font-size: 13px;
-  font-weight: 600;
-  flex: 1;
-}
-
-.mn-os-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  background: var(--os-accent);
-  color: var(--os-on-accent);
-  font-size: 10px;
-  font-weight: 700;
-  padding: 2px 6px;
-  border-radius: 7px;
-}
-
-.mn-os-mini-close {
-  width: 22px;
-  height: 22px;
-  display: grid;
-  place-items: center;
-  border: none;
-  background: transparent;
-  color: var(--os-text-faint);
-  border-radius: 6px;
-}
-
-.mn-os-mini-close:hover {
-  background: var(--os-surface-3);
-  color: var(--os-text);
-}
-
-.mn-os-mini-body {
-  padding: 10px;
-}
-
-.mn-os-mini-snap {
-  height: 76px;
-  border-radius: 9px;
-  overflow: hidden;
-  background: var(--os-bg);
-  border: 1px solid var(--os-border);
-  position: relative;
-}
-
-.mn-os-snap-generic {
-  width: 100%;
-  height: 100%;
-  display: grid;
-  place-items: center;
-  color: var(--os-accent);
-  opacity: 0.5;
-}
-
-.mn-os-snap-code {
-  display: flex;
-  height: 100%;
-}
-
-.mn-os-snap-lines {
-  flex: 1;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.mn-os-snap-lines span {
-  height: 5px;
-  border-radius: 3px;
-  background: var(--os-border-strong);
-}
-
-.mn-os-snap-side {
-  width: 38px;
-  border-left: 1px solid var(--os-border);
-  padding: 10px 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.mn-os-snap-side span {
-  height: 5px;
-  border-radius: 3px;
-  background: var(--os-accent-soft);
-}
-
-.mn-os-mini-msg {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12px;
-  color: var(--os-accent-2);
-  margin-top: 9px;
-  line-height: 1.3;
-}
-
-.mn-os-mini-msg.is-dim {
-  color: var(--os-text-faint);
-}
-
-/* tile-style mini */
-
-.mn-os-mini-tile {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 10px 12px;
-  background: color-mix(in srgb, var(--os-surface-2) 90%, transparent);
-  border: 1px solid var(--os-border-strong);
-  border-radius: 12px;
-  color: var(--os-text);
-  cursor: pointer;
-  transition: 0.16s var(--os-ease);
-}
-
-.mn-os-mini-tile:hover {
-  border-color: var(--os-accent-glow);
-}
-
-.mn-os-mini-tile .mn-os-mini-tile-name {
-  font-size: 13px;
-  font-weight: 500;
-  flex: 1;
-  text-align: left;
-}
-
-.mn-os-mini-tile.is-alert {
-  border-color: var(--os-accent-glow);
-  box-shadow: 0 0 18px -6px var(--os-accent-glow);
-  color: var(--os-accent);
-}
-
-.mn-os-mini-x {
-  width: 20px;
-  height: 20px;
-  display: grid;
-  place-items: center;
-  border-radius: 6px;
-  color: var(--os-text-faint);
-}
-
-.mn-os-mini-x:hover {
-  background: var(--os-surface-3);
-  color: var(--os-text);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .mn-os-cc-input,
-  .mn-os-cc-send,
-  .mn-os-cc-chip,
-  .mn-os-dock-panel,
-  .mn-os-dock-reveal,
-  .mn-os-dock-hide,
-  .mn-os-tile-dock,
-  .mn-os-tile-grid,
-  .mn-os-mini-card,
-  .mn-os-mini-tile {
-    transition-duration: 0.001ms !important;
-  }
-
-  .mn-os-tile-dock:hover,
-  .mn-os-tile-grid:hover,
-  .mn-os-mini-card:hover {
-    transform: none;
-  }
-
-  .mn-os-cc-dot,
-  .mn-os-mini-card {
-    animation: none !important;
-  }
-}
-
-/* ---------- desktop chat (Phase 2) ---------- */
 
 #osDesktopLayer {
   --os-chat-stage-top: 10px;
@@ -2030,12 +1786,6 @@
   }
 
   /* Minimized previews: fit narrow screens */
-  .mn-os-mini-stack {
-    width: min(240px, calc(100vw - 24px));
-    right: max(12px, env(safe-area-inset-right, 0px));
-    top: max(10px, env(safe-area-inset-top, 0px));
-  }
-
   .mn-os-composer-dock {
     width: calc(100% - max(20px, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px)));
     bottom: var(--os-composer-dock-bottom);
@@ -2148,9 +1898,5 @@
 
   .mn-os-greet {
     font-size: clamp(26px, 6vw, 40px);
-  }
-
-  .mn-os-mini-stack {
-    width: min(200px, 42vw);
   }
 }
