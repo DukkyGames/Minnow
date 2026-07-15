@@ -38,7 +38,7 @@ npm install
 npm start
 ```
 
-Load a model in LM Studio (or point Minnow at your provider), then open the desktop window. Full setup, commands, packaging, and troubleshooting: **[Getting started](documentation/getting-started.md)**.
+Load a model in LM Studio (or point Minnow at your provider), then open the desktop window. Full setup, commands, packaging, and troubleshooting: **[Getting started](documentation/getting-started.md)**. Packaged installs auto-update from [GitHub Releases](https://github.com/DukkyGames/Minnow/releases) — check status under Settings → General → App updates.
 
 ---
 
