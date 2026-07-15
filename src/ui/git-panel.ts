@@ -18,10 +18,7 @@ import {
 
 } from '../lib/worktree-list-parse';
 
-import { subscribeAllBoardChanges } from '../state/orchestrate-board-events';
-
 import {
-
   gitBranches,
 
   gitCheckout,
@@ -76,6 +73,8 @@ import { getWorkspacePath } from '../state/workspace';
 import {
   panelPathsEqual,
   resolvePanelWorktreeCwd,
+  resolvePanelBrowseRunTargetSeed,
+  type PanelBrowseRunTargetSeed,
 } from './panel-worktree-cwd';
 
 import { getFileTreeSidebarTitleSuffix } from './file-tree-listing-root';
@@ -104,6 +103,11 @@ import {
   isMissingGitRepositoryError,
   renderGitNoRepositoryState,
 } from './git-no-repo-state';
+import {
+  renderGitStatusWithSendToChat,
+  type GitErrorChatContext,
+  type GitErrorChatKind,
+} from './git-error-to-chat';
 
 
 
@@ -141,7 +145,8 @@ let aiGenerateBtn: HTMLButtonElement | null = null;
 
 let generateMessageAbort: AbortController | null = null;
 
-let statusEl: HTMLElement | null = null;
+let statusWrap: HTMLElement | null = null;
+let statusMessageEl: HTMLElement | null = null;
 
 let diffHost: HTMLElement | null = null;
 
@@ -161,11 +166,15 @@ let panelOpen = false;
 
 let refreshing = false;
 
+let refreshBtn: HTMLButtonElement | null = null;
+
 
 
 /** Effective cwd for git ops; undefined means server workspace root. */
-
 let panelCwd: string | undefined;
+
+/** When true, manual worktree browse (dropdown / Git Center) is not overwritten by chat sync. */
+let panelCwdUserOverride = false;
 
 let knownWorktrees: ParsedWorktree[] = [];
 let currentBranchName = '';
@@ -202,8 +211,20 @@ function getGitMount(): HTMLElement | null {
 
 
 
-/** Current cwd passed to git API calls (undefined → server default). */
+/** Clear browse override so the next chat/composer sync can drive panel cwd. */
+export function clearPanelCwdUserOverride(): void {
+  panelCwdUserOverride = false;
+}
 
+/**
+ * Composer run-target seed for new chats when the user manually picked a worktree
+ * in Source Control (browse override). Null → keep default Local.
+ */
+export function getGitPanelNewChatRunTargetSeed(): PanelBrowseRunTargetSeed | null {
+  return resolvePanelBrowseRunTargetSeed(panelCwd, panelCwdUserOverride, knownWorktrees);
+}
+
+/** Current cwd passed to git API calls (undefined → server default). */
 export function getGitPanelCwd(): string | undefined {
 
   return panelCwd;
@@ -211,9 +232,8 @@ export function getGitPanelCwd(): string | undefined {
 }
 
 /** Set panel cwd (Git Center lightbox sync). */
-
 export function setGitPanelCwd(cwd: string | undefined): void {
-
+  panelCwdUserOverride = true;
   panelCwd = cwd;
 
   if (cwdSelect) {
@@ -262,6 +282,30 @@ function createToolbarIconBtn(label: string, title: string): HTMLButtonElement {
   btn.title = title;
   btn.setAttribute('aria-label', title);
   return btn;
+}
+
+/** Circular refresh icon (matches #btnFileTreeRefresh in index.html). */
+const GIT_PANEL_REFRESH_ICON =
+  '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">' +
+  '<path d="M20 4v4h-4"/>' +
+  '<path d="M17.5 6.5a8 8 0 1 1-11.3 11.3"/>' +
+  '<path d="M4 20v-4h4"/>' +
+  '<path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/>' +
+  '</svg>';
+
+/** Manual refresh from the toolbar button (status, branches, history graph). */
+async function handleManualRefresh(): Promise<void> {
+  if (!refreshBtn || refreshing) return;
+
+  refreshBtn.classList.add('is-busy');
+  refreshBtn.disabled = true;
+  try {
+    await refreshGitPanel();
+    await syncFileTreeGitPollCwd(true);
+  } finally {
+    refreshBtn.classList.remove('is-busy');
+    refreshBtn.disabled = false;
+  }
 }
 
 function isMainWorktreePath(worktreePath: string): boolean {
@@ -372,16 +416,27 @@ async function handleDeleteWorktree(): Promise<void> {
 
 
 
-function setStatus(message: string, isError = false): void {
+function gitErrorChatContext(): GitErrorChatContext {
+  return {
+    cwd: (getEffectiveCwdArg() ?? getWorkspacePath().trim()) || undefined,
+    branch: currentBranchName || branchSelect?.value || undefined,
+  };
+}
 
-  if (!statusEl) return;
-
-  statusEl.textContent = message;
-
-  statusEl.classList.toggle('is-err', isError);
-
-  statusEl.hidden = !message;
-
+function setStatus(
+  message: string,
+  isError = false,
+  sendToChat?: GitErrorChatKind,
+): void {
+  if (!statusWrap || !statusMessageEl) return;
+  renderGitStatusWithSendToChat(
+    statusWrap,
+    statusMessageEl,
+    message,
+    isError,
+    sendToChat,
+    gitErrorChatContext(),
+  );
 }
 
 
@@ -529,6 +584,38 @@ function ensurePanelDom(): HTMLElement {
 
   centerRow.className = 'git-panel-center-row';
 
+  const helpBtn = document.createElement('button');
+
+  helpBtn.type = 'button';
+
+  helpBtn.id = 'btnGitHelp';
+
+  helpBtn.className = 'git-panel-help-btn icon-btn';
+
+  helpBtn.title = 'How worktrees and branches work';
+
+  helpBtn.setAttribute('aria-label', 'How worktrees and branches work');
+
+  helpBtn.innerHTML =
+    '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">' +
+    '<circle cx="12" cy="12" r="10"/>' +
+    '<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>' +
+    '<line x1="12" y1="17" x2="12.01" y2="17"/>' +
+    '</svg>';
+
+  refreshBtn = document.createElement('button');
+  refreshBtn.type = 'button';
+  refreshBtn.id = 'btnGitPanelRefresh';
+  refreshBtn.className = 'git-panel-help-btn icon-btn';
+  refreshBtn.title = 'Refresh';
+  refreshBtn.setAttribute('aria-label', 'Refresh source control');
+  refreshBtn.innerHTML = GIT_PANEL_REFRESH_ICON;
+  refreshBtn.addEventListener('click', () => void handleManualRefresh());
+
+  const toolbarStart = document.createElement('div');
+  toolbarStart.className = 'git-panel-center-row__start';
+  toolbarStart.append(helpBtn, refreshBtn);
+
   const centerBtn = document.createElement('button');
 
   centerBtn.type = 'button';
@@ -543,7 +630,7 @@ function ensurePanelDom(): HTMLElement {
 
   centerBtn.setAttribute('aria-label', 'Open Source Control Center');
 
-  centerRow.appendChild(centerBtn);
+  centerRow.append(toolbarStart, centerBtn);
 
   toolbar.appendChild(centerRow);
 
@@ -576,9 +663,8 @@ function ensurePanelDom(): HTMLElement {
   cwdSelect.title = 'Git worktree root';
 
   cwdSelect.addEventListener('change', () => {
-
     const value = cwdSelect?.value ?? '';
-
+    panelCwdUserOverride = true;
     panelCwd = value || undefined;
 
     syncWorktreeDeleteButton();
@@ -705,15 +791,15 @@ function ensurePanelDom(): HTMLElement {
 
 
 
-  statusEl = document.createElement('p');
+  statusWrap = document.createElement('div');
+  statusWrap.className = 'git-panel-status-wrap';
+  statusWrap.setAttribute('role', 'status');
+  statusWrap.setAttribute('aria-live', 'polite');
+  statusWrap.hidden = true;
 
-  statusEl.className = 'git-panel-status';
-
-  statusEl.setAttribute('role', 'status');
-
-  statusEl.setAttribute('aria-live', 'polite');
-
-  statusEl.hidden = true;
+  statusMessageEl = document.createElement('p');
+  statusMessageEl.className = 'git-panel-status';
+  statusWrap.appendChild(statusMessageEl);
 
 
 
@@ -881,7 +967,7 @@ function ensurePanelDom(): HTMLElement {
 
 
 
-  scrollMount.append(statusEl, noRepoMount, commitBox, bodyMount, diffHost, historySection);
+  scrollMount.append(statusWrap, noRepoMount, commitBox, bodyMount, diffHost, historySection);
 
   panelRoot.append(toolbar, scrollMount);
 
@@ -895,9 +981,9 @@ function ensurePanelDom(): HTMLElement {
 
 
 
-async function syncFileTreeGitPollCwd(): Promise<void> {
+async function syncFileTreeGitPollCwd(force?: boolean): Promise<void> {
   const { syncFileTreeToPanelWorktree } = await import('./file-tree');
-  await syncFileTreeToPanelWorktree(panelCwd);
+  await syncFileTreeToPanelWorktree(panelCwd, { force });
 }
 
 
@@ -1061,6 +1147,7 @@ async function handleCommit(andPush: boolean): Promise<void> {
 
     const ok = await runGitOp(() => gitCommit({ message, cwd }), {
       successMessage: andPush ? undefined : 'Committed changes',
+      sendToChat: 'commit',
     });
 
     if (!ok) return;
@@ -1071,7 +1158,10 @@ async function handleCommit(andPush: boolean): Promise<void> {
 
       setCommitActionsBusy(action, 'Pushing…');
 
-      await runGitOp(() => gitPush({ cwd }), { successMessage: 'Committed and pushed' });
+      await runGitOp(() => gitPush({ cwd }), {
+        successMessage: 'Committed and pushed',
+        sendToChat: 'commit',
+      });
 
     }
 
@@ -1086,33 +1176,21 @@ async function handleCommit(andPush: boolean): Promise<void> {
 
 
 type RunGitOpOptions = {
-
   successMessage?: string;
-
+  /** When set, failed ops show a Send to chat action beside the error. */
+  sendToChat?: GitErrorChatKind;
 };
 
-
-
 async function runGitOp(
-
   fn: () => Promise<GitOpResult>,
-
   options?: RunGitOpOptions,
-
 ): Promise<boolean> {
-
   const result = await fn();
-
   if (!result.ok) {
-
     const error = result.error ?? 'Git operation failed';
-
-    setStatus(error, true);
-
+    setStatus(error, true, options?.sendToChat);
     showToast(error, 'error');
-
     return false;
-
   }
 
   setStatus('');
@@ -1630,6 +1708,26 @@ async function refreshBranchSelect(): Promise<void> {
 
 
 
+function worktreeDropdownMatches(select: HTMLSelectElement, worktrees: ParsedWorktree[]): boolean {
+  if (select.options.length !== worktrees.length) return false;
+  for (let i = 0; i < worktrees.length; i++) {
+    if (!pathsEqual(select.options[i]?.value ?? '', worktrees[i]!.path)) return false;
+  }
+  return true;
+}
+
+function syncCwdSelectValue(): void {
+  if (!cwdSelect) return;
+  const target = panelCwd ?? getWorkspacePath();
+  for (const opt of cwdSelect.options) {
+    if (pathsEqual(opt.value, target)) {
+      if (cwdSelect.value !== opt.value) cwdSelect.value = opt.value;
+      break;
+    }
+  }
+  syncWorktreeDeleteButton();
+}
+
 async function refreshWorktreeDropdown(): Promise<void> {
 
   if (!cwdSelect || !cwdWrap) return;
@@ -1677,6 +1775,11 @@ async function refreshWorktreeDropdown(): Promise<void> {
   if (knownWorktrees.length === 0) return;
 
   const selected = panelCwd ?? ws;
+
+  if (worktreeDropdownMatches(cwdSelect, knownWorktrees)) {
+    syncCwdSelectValue();
+    return;
+  }
 
   cwdSelect.replaceChildren();
 
@@ -1928,69 +2031,31 @@ export function toggleGitSidePanel(): void {
 
 
 /**
-
- * When an orchestrator board task chat is active, point the panel at that task's
-
- * worktree cwd (falls back to workspace root for non-board chats).
-
+ * Sync git panel browse cwd + file tree from the active chat's composer run-target.
+ * Skips when the user manually picked a worktree (browse override).
  */
-
-export function syncGitPanelFromOrchestrator(): void {
-
-  // No-op without session state: this can run from a deferred dynamic import
-  // (sidebar switchChat) after teardown, where getActiveChat() would throw.
+export function syncPanelFromActiveChat(options?: { forceFileTree?: boolean }): void {
   if (!sessionState) return;
+  if (panelCwdUserOverride) return;
 
   const chat = getActiveChat();
-
   const groups = sessionState?.groups;
-
   const worktreeRoot = resolveChatWorktreeRoot(chat, groups);
 
-
-
   if (worktreeRoot) {
-
     panelCwd = worktreeRoot;
-
   } else {
-
     const ws = getWorkspacePath().trim();
-
     panelCwd = ws || undefined;
-
   }
 
+  syncCwdSelectValue();
+  void syncFileTreeGitPollCwd(options?.forceFileTree);
+}
 
-
-  if (cwdSelect) {
-
-    const target = panelCwd ?? getWorkspacePath();
-
-    for (const opt of cwdSelect.options) {
-
-      if (pathsEqual(opt.value, target)) {
-
-        cwdSelect.value = opt.value;
-
-        break;
-
-      }
-
-    }
-
-  }
-
-
-
-  if (panelOpen) {
-
-    void refreshGitPanel();
-
-  }
-
-  void syncFileTreeGitPollCwd();
-
+/** @deprecated Use syncPanelFromActiveChat — kept for existing dynamic imports. */
+export function syncGitPanelFromOrchestrator(): void {
+  syncPanelFromActiveChat();
 }
 
 
@@ -2018,20 +2083,8 @@ export function initGitPanel(): void {
 
 
   window.addEventListener('focus', () => {
-
     if (panelOpen) void refreshGitPanel();
-
   });
-
-
-
-  subscribeAllBoardChanges(() => {
-
-    syncGitPanelFromOrchestrator();
-
-  });
-
-
 
   window.addEventListener(GIT_COMMIT_DIFF_CLOSED_EVENT, () => {
 
@@ -2043,8 +2096,7 @@ export function initGitPanel(): void {
 
 
 
-  syncGitPanelFromOrchestrator();
-
+  syncPanelFromActiveChat();
 }
 
 
@@ -2058,6 +2110,7 @@ export function resetGitPanelForTests(): void {
   panelOpen = false;
 
   panelCwd = undefined;
+  panelCwdUserOverride = false;
 
   knownWorktrees = [];
   currentBranchName = '';
@@ -2100,7 +2153,8 @@ export function resetGitPanelForTests(): void {
 
   generateMessageAbort = null;
 
-  statusEl = null;
+  statusWrap = null;
+  statusMessageEl = null;
 
   diffHost = null;
 
@@ -2113,6 +2167,8 @@ export function resetGitPanelForTests(): void {
   graphHandle?.destroy();
 
   graphHandle = null;
+
+  refreshBtn = null;
 
   selectedCommitSha = null;
 

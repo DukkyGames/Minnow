@@ -19,6 +19,7 @@ import {
   shouldRouteComposerSendToSuperPlan,
   suspendOrchestratePlanScreenOnLeave,
 } from '../../src/ui/orchestrate-plan-screen.ts';
+import { switchChat } from '../../src/ui/sidebar.ts';
 import { createInitialSuperPlanStages } from '../../src/chat/super-plan/state.ts';
 import { showQuestionCardsModal } from '../../src/ui/question-cards-modal.ts';
 import { appendStreamingAssistantRow, renderChatFromHistory } from '../../src/ui/messages.ts';
@@ -514,6 +515,225 @@ describe('orchestrate plan screen', () => {
     settled = true;
     await modalPromise.catch(() => undefined);
     assert.equal(settled, true);
+  });
+
+  test('sidebar switch during grill questions migrates strip to composer without cancelling', async () => {
+    const window = new Window();
+    globalThis.document = window.document;
+    globalThis.HTMLElement = window.HTMLElement;
+    globalThis.requestAnimationFrame = (cb: () => void) => {
+      cb();
+      return 0;
+    };
+
+    const area = document.createElement('main');
+    area.id = 'chatArea';
+    document.body.appendChild(area);
+    const mainColumn = document.createElement('div');
+    mainColumn.id = 'mainColumn';
+    document.body.appendChild(mainColumn);
+    const composerHost = document.createElement('div');
+    composerHost.id = 'questionHost';
+    composerHost.hidden = true;
+    mainColumn.appendChild(composerHost);
+
+    const chat = createEmptyChatObject('sp-grill-sidebar');
+    chat.modeId = 'super-plan';
+    chat.history.push({ role: 'user', content: 'Add OAuth login' });
+    const otherChat = createEmptyChatObject('other');
+    otherChat.id = 'other-chat';
+    setSessionStateForTests({
+      version: 5,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat, otherChat],
+    });
+
+    renderOrchestratePlanScreen({
+      phase: 'questions',
+      chatId: chat.id,
+      savedPrompt: 'Add OAuth login',
+    });
+
+    const planHost = document.getElementById(ORCHESTRATE_PLAN_SCREEN_QUESTIONS_ID);
+    assert.ok(planHost);
+
+    const { showQuestionCardsModal, syncAskQuestionModalOnChatSwitch, resetQuestionCardsModalForTests } =
+      await import('../../src/ui/question-cards-modal.ts');
+
+    let settled = false;
+    const modalPromise = showQuestionCardsModal(
+      {
+        questions: [
+          {
+            id: 'q1',
+            prompt: 'Which auth provider?',
+            options: [
+              { id: 'a', label: 'Google' },
+              { id: 'b', label: 'GitHub' },
+            ],
+          },
+        ],
+      },
+      {},
+      { host: planHost!, embedded: true, chatId: chat.id },
+    );
+
+    assert.ok(planHost?.querySelector('.question-cards-panel'));
+
+    suspendOrchestratePlanScreenOnLeave(chat.id);
+    assert.equal(isOrchestratePlanScreenSuspended(), true);
+    assert.equal(document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID), null);
+    assert.ok(composerHost.querySelector('.question-cards-panel'));
+    assert.equal(planHost?.childElementCount, 0);
+
+    const session = getOrchestratePlanScreenSession();
+    assert.equal(session?.phase, 'questions');
+
+    syncAskQuestionModalOnChatSwitch(chat.id, otherChat.id);
+    assert.equal(composerHost.hidden, true);
+
+    syncAskQuestionModalOnChatSwitch(otherChat.id, chat.id);
+    assert.equal(composerHost.hidden, false);
+    assert.ok(composerHost.querySelector('.question-cards-panel'));
+
+    resetQuestionCardsModalForTests();
+    settled = true;
+    await modalPromise.catch(() => undefined);
+    assert.equal(settled, true);
+  });
+
+  test('renderChatFromHistory for other chat preserves suspended grill questions', async () => {
+    const window = new Window();
+    globalThis.document = window.document;
+    globalThis.HTMLElement = window.HTMLElement;
+    globalThis.requestAnimationFrame = (cb: () => void) => {
+      cb();
+      return 0;
+    };
+
+    mountCodeChatAreaForTests();
+    const mainColumn = document.createElement('div');
+    mainColumn.id = 'mainColumn';
+    document.body.appendChild(mainColumn);
+    const composerHost = document.createElement('div');
+    composerHost.id = 'questionHost';
+    composerHost.hidden = true;
+    mainColumn.appendChild(composerHost);
+
+    const chat = createEmptyChatObject('sp-grill-render');
+    chat.modeId = 'super-plan';
+    chat.history.push({ role: 'user', content: 'Add OAuth login' });
+    const otherChat = createEmptyChatObject('other-render');
+    otherChat.id = 'other-render-chat';
+    otherChat.history.push({ role: 'user', content: 'Hello' });
+    setSessionStateForTests({
+      version: 5,
+      activeId: otherChat.id,
+      sidebarCollapsed: false,
+      chats: [chat, otherChat],
+    });
+
+    renderOrchestratePlanScreen({
+      phase: 'questions',
+      chatId: chat.id,
+      savedPrompt: 'Add OAuth login',
+    });
+
+    const planHost = document.getElementById(ORCHESTRATE_PLAN_SCREEN_QUESTIONS_ID);
+    assert.ok(planHost);
+
+    const {
+      showQuestionCardsModal,
+      syncAskQuestionModalOnChatSwitch,
+      isAskQuestionModalOpenForChat,
+      resetQuestionCardsModalForTests,
+    } = await import('../../src/ui/question-cards-modal.ts');
+
+    let settled = false;
+    const modalPromise = showQuestionCardsModal(
+      {
+        questions: [
+          {
+            id: 'q1',
+            prompt: 'Which auth provider?',
+            options: [
+              { id: 'a', label: 'Google' },
+              { id: 'b', label: 'GitHub' },
+            ],
+          },
+        ],
+      },
+      {},
+      { host: planHost!, embedded: true, chatId: chat.id },
+    );
+
+    suspendOrchestratePlanScreenOnLeave(chat.id);
+    syncAskQuestionModalOnChatSwitch(chat.id, otherChat.id);
+    assert.equal(composerHost.hidden, true);
+
+    renderChatFromHistory(otherChat);
+
+    assert.equal(isAskQuestionModalOpenForChat(chat.id), true);
+    assert.equal(getOrchestratePlanScreenSession()?.phase, 'questions');
+    assert.equal(getOrchestratePlanScreenSession()?.planScreenSuspended, true);
+
+    resetQuestionCardsModalForTests();
+    settled = true;
+    await modalPromise.catch(() => undefined);
+    assert.equal(settled, true);
+  });
+
+  test('clicking active super-plan chat in sidebar shows transcript instead of blank area', () => {
+    const window = new Window();
+    globalThis.document = window.document;
+    globalThis.HTMLElement = window.HTMLElement;
+
+    const area = mountCodeChatAreaForTests();
+    document.body.appendChild(
+      Object.assign(document.createElement('div'), { id: 'mainColumn' }),
+    );
+
+    const chat = createEmptyChatObject('sp-sidebar-same');
+    chat.modeId = 'super-plan';
+    chat.history.push({ role: 'user', content: 'Add OAuth login' });
+    const stages = createInitialSuperPlanStages();
+    stages.research.status = 'running';
+    chat.superPlan = {
+      slug: 'oauth',
+      prompt: 'Add OAuth login',
+      activeStage: 'research',
+      stages,
+      specPath: 'documentation/plans/references/oauth-spec.md',
+      researchPath: 'documentation/plans/references/oauth-research.md',
+      planPath: 'documentation/plans/oauth.md',
+      uiInvolved: false,
+    };
+    setSessionStateForTests({
+      version: 5,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    renderOrchestratePlanScreen({
+      phase: 'super-plan-working',
+      chatId: chat.id,
+      savedPrompt: 'Add OAuth login',
+    });
+    assert.ok(document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID));
+
+    switchChat(chat.id);
+
+    assert.equal(document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID), null);
+    assert.equal(isOrchestratePlanScreenSuspended(), true);
+    const banner = document.getElementById(ORCHESTRATE_PLAN_BANNER_ID);
+    assert.ok(banner, 'resume banner should appear after sidebar click');
+    assert.match(
+      document.getElementById('chatArea')?.textContent ?? '',
+      /Add OAuth login/,
+      'transcript should render beneath the resume banner (not a blank page)',
+    );
   });
 
   test('skip interview button shows only while the grill stage is active', () => {

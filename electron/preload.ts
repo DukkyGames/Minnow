@@ -5,6 +5,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import * as channels from './ipc-channels.js';
 import type { CdpPickedElement } from './preview-cdp-adapt.js';
+import type { UpdaterChannel, UpdaterStatus } from './updater-core.js';
 
 /** Preview bounds in CSS pixels relative to the host window content area. */
 export interface PreviewBounds {
@@ -242,6 +243,22 @@ const minnowBridge = {
       ipcRenderer.on(channels.WINDOW_MAXIMIZED_CHANGED, handler);
       return () => {
         ipcRenderer.removeListener(channels.WINDOW_MAXIMIZED_CHANGED, handler);
+      };
+    },
+  },
+  updater: {
+    getStatus: (): Promise<UpdaterStatus | null> =>
+      ipcRenderer.invoke(channels.UPDATER_GET_STATUS),
+    checkNow: (): Promise<UpdaterStatus | null> =>
+      ipcRenderer.invoke(channels.UPDATER_CHECK_NOW),
+    restart: (): Promise<boolean> => ipcRenderer.invoke(channels.UPDATER_RESTART),
+    setChannel: (channel: UpdaterChannel): Promise<UpdaterStatus | null> =>
+      ipcRenderer.invoke(channels.UPDATER_SET_CHANNEL, channel),
+    onStatusChanged: (callback: (status: UpdaterStatus) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, next: UpdaterStatus) => callback(next);
+      ipcRenderer.on(channels.UPDATER_STATUS_CHANGED, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.UPDATER_STATUS_CHANGED, handler);
       };
     },
   },

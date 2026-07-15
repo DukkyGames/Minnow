@@ -197,9 +197,27 @@ Useful environment variables (full list in [`guides/commands.md`](guides/command
 ```bash
 npm run package        # installer (Windows NSIS → release/pkg)
 npm run package:dir    # unpacked app directory
+npm run package:mac    # macOS .dmg + .zip (signed when cert + .env.signing are configured)
 ```
 
-`package` runs `build` → `electron:build` → `electron-builder`. App id `org.grimmedia.minnow`; Windows target NSIS with `build/icon.ico`. `documentation/` is bundled as an extra resource and `@lydell/node-pty` is unpacked from the asar.
+`package` runs `build` → `electron:build` → `electron-builder`. App id `org.grimmedia.minnow`; Windows target NSIS with `build/icon.ico`. macOS uses hardened runtime + entitlements in `build/entitlements.mac.plist`. `documentation/` is bundled as an extra resource and `@lydell/node-pty` is unpacked from the asar.
+
+**macOS signing:** `npm run signing:check` / `npm run signing:setup` — full guide in [`guides/macos-signing.md`](guides/macos-signing.md).
+
+### Auto-update + releasing (MIN-384)
+
+Packaged Windows installs auto-update from **GitHub Releases** (`DukkyGames/Minnow`) via `electron-updater`: the app checks on launch and every 4 hours, downloads in the background, and installs when the user clicks **Restart to update** (Settings → General → App updates, or the menubar pill). `npm run package` also emits `latest.yml` next to the installer — the updater feed metadata. Nothing is uploaded automatically (`--publish never`).
+
+To ship a release:
+
+1. Bump `version` in `package.json` (installs stay frozen on whatever version they see in the feed, so every release needs a bump).
+2. `npm run package`.
+3. Create a GitHub release tagged `v<version>` and attach **both** `Minnow-Setup-<version>.exe` and `latest.yml` (plus `.blockmap` if present). The release notes body is what users see under “What’s new”.
+4. Mark the release as a **pre-release** to ship it to the **Beta** channel only; full releases go to everyone.
+
+Known limitations: Windows builds are unsigned, so SmartScreen may warn on first install (auto-updates after that are silent). macOS releases need a **Developer ID Application** certificate + notarization — see [`guides/macos-signing.md`](guides/macos-signing.md). Unsigned macOS builds still package, but Gatekeeper blocks first open and auto-update stays disabled in Settings.
+
+Full walkthrough — the release checklist and the user-facing update flow — is in [`guides/updating.md`](guides/updating.md).
 
 ---
 
@@ -264,6 +282,7 @@ Minnow/
   - [`apps.md`](guides/apps.md) — tour of the MinnowOS apps
   - [`architecture.md`](guides/architecture.md) — high-level system map
   - [`configuration.md`](guides/configuration.md) — `~/.minnow`, `config.json`, providers, secrets
+  - [`updating.md`](guides/updating.md) — cutting a release + how auto-update reaches users
   - [`troubleshooting.md`](guides/troubleshooting.md) — common problems
   - [`oauth-google.md`](guides/oauth-google.md) / [`oauth-microsoft.md`](guides/oauth-microsoft.md) — Email/Calendar OAuth
 - [`PRODUCT.md`](../PRODUCT.md) — product goals and tone.

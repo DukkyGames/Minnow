@@ -24,6 +24,7 @@ import { getProjectRoot, importServerModule } from './server-import.js';
 import { startInProcessServer, type InProcessServerHandle } from './server-host.js';
 import { loadWindowState, trackWindowState } from './window-state.js';
 import { resolveMinnowPort } from './minnow-port.js';
+import { disposeUpdater, initUpdater } from './updater.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -53,6 +54,7 @@ const devUrl = (
 
 let mainWindow: BrowserWindow | null = null;
 let inProcessServer: InProcessServerHandle | null = null;
+let quitInProgress = false;
 
 /** Sliding window of renderer crash timestamps for anti-reload-loop. */
 const rendererCrashTimestamps: number[] = [];
@@ -182,6 +184,17 @@ async function shutdownRuntime(): Promise<void> {
     inProcessServer = null;
     await close();
   }
+}
+
+/**
+ * Tear down the runtime ahead of autoUpdater.quitAndInstall() and mark quit as in
+ * progress so the before-quit handler lets the install-triggered quit proceed.
+ */
+async function prepareQuitForUpdate(): Promise<void> {
+  if (quitInProgress) return;
+  quitInProgress = true;
+  disposeUpdater();
+  await shutdownRuntime();
 }
 
 function focusMainWindow(): void {
@@ -342,6 +355,7 @@ async function bootstrap(): Promise<void> {
   }
   configurePreviewSession(session.fromPartition('persist:minnow-preview'));
   registerIpcHandlers();
+  initUpdater({ prepareQuitForUpdate });
 
   mainWindow = await createMainWindow();
   const loadUrl = await resolveLoadUrl();
@@ -435,11 +449,11 @@ if (!gotSingleInstanceLock) {
     }
   });
 
-  let quitInProgress = false;
   app.on('before-quit', (event) => {
     if (quitInProgress) return;
     event.preventDefault();
     quitInProgress = true;
+    disposeUpdater();
     shutdownRuntime()
       .catch((err) => {
         console.error('[electron] shutdown error:', err);

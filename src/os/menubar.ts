@@ -15,6 +15,7 @@ import { initOsNotificationsMenu } from './notifications-menu';
 import { openSchedulerFromMenubar } from '../ui/scheduler-page';
 import { initShellMenubarChrome } from './menubar-window-controls';
 import { initMenubarModelChip } from './menubar-model-chip';
+import { initUpdateMenubarPill } from './update-menubar';
 
 function formatClock(d: Date): string {
   return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -170,6 +171,13 @@ export function renderMenubar(root: HTMLElement): () => void {
   bell.appendChild(bellBadge);
   const cleanupNotifications = initOsNotificationsMenu(bell);
 
+  // Update pill (MIN-384): hidden unless an update is downloading or ready.
+  const updateSlot = document.createElement('div');
+  updateSlot.id = 'osMenubarUpdateSlot';
+  updateSlot.className = 'mn-os-mb-update-slot';
+  updateSlot.hidden = true;
+  const cleanupUpdatePill = initUpdateMenubarPill(updateSlot);
+
   const settingsBtn = document.createElement('button');
   settingsBtn.type = 'button';
   settingsBtn.className = 'mn-os-mb-icon';
@@ -181,7 +189,7 @@ export function renderMenubar(root: HTMLElement): () => void {
   timeEl.className = 'mn-os-mb-time mn-os-mono';
   timeEl.textContent = formatClock(new Date());
 
-  right.append(workspaceSlot, modelChipAnchor, schedulerBtn, bell, settingsBtn, timeEl);
+  right.append(workspaceSlot, modelChipAnchor, schedulerBtn, bell, updateSlot, settingsBtn, timeEl);
   root.append(left, right);
 
   const cleanupShellChrome = initShellMenubarChrome(root, right);
@@ -260,6 +268,7 @@ export function renderMenubar(root: HTMLElement): () => void {
     stopClock();
     cleanupModelChip();
     cleanupNotifications();
+    cleanupUpdatePill();
     cleanupShellChrome();
   };
 }

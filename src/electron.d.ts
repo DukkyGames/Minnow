@@ -172,11 +172,49 @@ export interface MinnowDiagnosticsApi {
   clearOomPause(): Promise<void>;
 }
 
+export type MinnowUpdaterChannel = 'stable' | 'beta';
+
+export type MinnowUpdaterState =
+  | 'unsupported'
+  | 'idle'
+  | 'checking'
+  | 'downloading'
+  | 'ready'
+  | 'error';
+
+/**
+ * Renderer copy of electron/updater-core.ts UpdaterStatus (same cross-boundary type
+ * convention as MinnowCdpPickedElement above).
+ */
+export interface MinnowUpdaterStatus {
+  state: MinnowUpdaterState;
+  supported: boolean;
+  unsupportedReason: 'dev' | 'macos-signing' | null;
+  installedVersion: string;
+  channel: MinnowUpdaterChannel;
+  pendingVersion: string | null;
+  releaseNotes: string | null;
+  progressPercent: number | null;
+  lastCheckedAt: number | null;
+  nextCheckAt: number | null;
+  errorMessage: string | null;
+}
+
+/** Auto-update controls (MIN-384). Only present on shells built with the updater bridge. */
+export interface MinnowUpdaterApi {
+  getStatus(): Promise<MinnowUpdaterStatus | null>;
+  checkNow(): Promise<MinnowUpdaterStatus | null>;
+  restart(): Promise<boolean>;
+  setChannel(channel: MinnowUpdaterChannel): Promise<MinnowUpdaterStatus | null>;
+  onStatusChanged(callback: (status: MinnowUpdaterStatus) => void): () => void;
+}
+
 export interface MinnowElectronBridge {
   preview: MinnowPreviewApi;
   app: MinnowAppApi;
   window?: MinnowWindowApi;
   diagnostics?: MinnowDiagnosticsApi;
+  updater?: MinnowUpdaterApi;
 }
 
 declare global {

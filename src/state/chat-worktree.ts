@@ -3,6 +3,7 @@
  */
 
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path.ts';
+import { gitBranches } from './git-api.ts';
 import { sanitizeRefFragment } from './worktree-isolation.ts';
 import { getWorkspacePath } from './workspace.ts';
 import {
@@ -90,6 +91,12 @@ export async function createManagedChatWorktree(
 /** Switch chat back to the main Code workspace (Local target). */
 export async function setChatRunTargetLocal(chat: Chat): Promise<void> {
   await detachChatWorktree(chat);
+  const res = await gitBranches(composerGitRepoRoot());
+  if (res.ok && res.current?.trim()) {
+    chat.gitBranch = res.current.trim();
+  } else {
+    delete chat.gitBranch;
+  }
 }
 
 /** Best-effort cleanup when a chat is deleted. */

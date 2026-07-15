@@ -56,6 +56,8 @@ import {
 } from './layout';
 import { bootGenerationResumeForChat } from '../chat/generation-resume';
 import { resumeIncompleteToolBatchOnChatSwitch } from '../chat/incomplete-tool-resume';
+import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
+import { syncAskQuestionModalOnChatSwitch } from './question-cards-modal';
 import {
   renderChatFromHistory,
   renderStatsForChat,
@@ -70,8 +72,10 @@ import { syncComposerReasoningEffortFromActiveChat } from './composer-reasoning-
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import { syncComposerPinnedSkillFromActiveChat } from './composer-pinned-skill';
 import { syncComposerRunTargetFromActiveChat } from './composer-run-target';
+import { clearPanelCwdUserOverride, syncPanelFromActiveChat } from './git-panel';
+import { seedNewChatComposerRunTarget } from './new-chat-run-target-seed';
 import { buildDefaultPinnedSkillForNewChat } from '../skills/config';
-import { dismissCodeOverviewForNavigation } from './code-overview';
+import { dismissCodeOverviewForNavigation, isCodeOverviewOpen } from './code-overview';
 import { isBoardViewActive, syncViewModeToggleFromActiveChat } from './view-mode-toggle';
 import {
   isOrchestrateHubMounted,
@@ -79,7 +83,10 @@ import {
   refreshOrchestrateHubPlanList,
   teardownOrchestrateHub,
 } from './orchestrate-hub';
-import { suspendOrchestratePlanScreenOnLeave } from './orchestrate-plan-screen';
+import {
+  isOrchestratePlanScreenSuspendedForChat,
+  suspendOrchestratePlanScreenOnLeave,
+} from './orchestrate-plan-screen';
 import { exitBoardViewForNavigation } from './exit-board-view';
 import { onModelRoutingActiveChatChanged } from './settings-model-routing';
 import { syncReefWidgetSettingsFromActiveChat } from './reef-widget-settings';
@@ -311,6 +318,8 @@ export function applyWorkspaceScopedSession(newPath: string, previousPath?: stri
     syncComposerPinnedSkillFromActiveChat();
     syncComposerRunTargetFromActiveChat();
     syncViewModeToggleFromActiveChat();
+    clearPanelCwdUserOverride();
+    syncPanelFromActiveChat({ forceFileTree: true });
     syncWorkAgentDevFromActiveChat();
     syncReefWidgetSettingsFromActiveChat();
     onModelRoutingActiveChatChanged(activeChat.id);
@@ -1107,20 +1116,18 @@ export function switchChat(id: string): void {
   if (id === sessionState.activeId) {
     acknowledgeChatViewed(id);
     const sameChat = sessionState.chats.find((c) => c.id === id);
-    if (sameChat && dismissCodeOverviewForNavigation()) {
-      renderChatFromHistory(sameChat);
-      syncViewModeToggleFromActiveChat();
-      renderSidebar();
-      scheduleSaveSessions();
-      closeMobileSidebar();
-      applySidebarVisuals();
-      return;
-    }
-    if (boardWasOpen && sameChat) {
-      renderChatFromHistory(sameChat);
-      syncViewModeToggleFromActiveChat();
-      renderSidebar();
-      scheduleSaveSessions();
+    const planScreenSuspendedForSameChat =
+      sameChat != null && isOrchestratePlanScreenSuspendedForChat(sameChat);
+    const codeOverviewOpen = isCodeOverviewOpen();
+    if (boardWasOpen || planScreenSuspendedForSameChat || codeOverviewOpen) {
+      if (sameChat) {
+        paintActiveChatInForegroundShell(sameChat);
+        syncViewModeToggleFromActiveChat();
+        syncComposerFromStreamingState();
+        renderSidebar();
+        scheduleSaveSessions();
+        void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(id));
+      }
     }
     closeMobileSidebar();
     applySidebarVisuals();
@@ -1136,6 +1143,8 @@ export function switchChat(id: string): void {
   const chat = sessionState.chats.find((c) => c.id === id);
   if (!chat) return;
   sessionState.activeId = id;
+  syncAskQuestionModalOnChatSwitch(prevActiveId, id);
+  notifyAskQuestionDisplayContextChanged();
   acknowledgeChatViewed(id);
   switchComposerDraft(prevActiveId, chat);
   syncModelSelectForActiveChat();
@@ -1155,7 +1164,8 @@ export function switchChat(id: string): void {
   syncComposerPinnedSkillFromActiveChat();
   syncComposerRunTargetFromActiveChat();
   syncViewModeToggleFromActiveChat();
-  void import('./git-panel').then((m) => m.syncGitPanelFromOrchestrator());
+  clearPanelCwdUserOverride();
+  syncPanelFromActiveChat({ forceFileTree: true });
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
   syncGoalActiveHint();
@@ -1267,11 +1277,14 @@ export function createChatWithMode(
         applyModeIdToChat(active, requestedMode);
       }
       applyDefaultModelToChat(active);
+      seedNewChatComposerRunTarget(active);
       touchChat(active);
       resetComposerForEphemeralReuse();
       recordChatOpened(active.id);
       paintActiveChatInForegroundShell(active);
       syncCreateChatChrome(active.id);
+      clearPanelCwdUserOverride();
+      syncPanelFromActiveChat({ forceFileTree: true });
       syncModelSelectForActiveChat();
       renderSidebar();
       scheduleSaveSessions();
@@ -1313,6 +1326,8 @@ export function createChatWithMode(
     recordChatMessage(chat);
   }
 
+  seedNewChatComposerRunTarget(chat);
+
   sessionState!.chats.unshift(chat);
   pruneEphemeralEmptyChats(sessionState!, chat.id);
   sessionState!.activeId = chat.id;
@@ -1322,6 +1337,8 @@ export function createChatWithMode(
   void bootGenerationResumeForChat(chat);
   renderStatsForChat(chat);
   syncCreateChatChrome(chat.id);
+  clearPanelCwdUserOverride();
+  syncPanelFromActiveChat({ forceFileTree: true });
   syncModelSelectForActiveChat();
   void import('./terminal-panel').then((m) => m.refreshTerminalHistoryForActiveChat());
   syncComposerFromStreamingState();

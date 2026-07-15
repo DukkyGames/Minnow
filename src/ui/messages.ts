@@ -6,6 +6,7 @@ import {
   stripMainColumnOverlayClasses,
 } from './main-column-overlay';
 import {
+  getOrchestratePlanScreenSession,
   isOrchestratePlanScreenMounted,
   isOrchestratePlanScreenSessionActive,
   isOrchestratePlanScreenSuppressingChatDom,
@@ -186,7 +187,17 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
       return;
     }
   } else if (codeMount && !isOrchestratePlanScreenSessionActive(chat)) {
-    teardownOrchestratePlanScreen();
+    // Another chat may be foreground while Super Plan grill questions stay parked
+    // in the composer for the planning chat — do not cancel that session.
+    const foreignSuspendedPlan = (() => {
+      const session = getOrchestratePlanScreenSession();
+      return Boolean(
+        session?.planScreenSuspended && session.chatId !== chat.id,
+      );
+    })();
+    if (!foreignSuspendedPlan) {
+      teardownOrchestratePlanScreen();
+    }
   } else if (codeMount && isOrchestratePlanScreenMounted()) {
     teardownOrchestratePlanScreenDom();
   }

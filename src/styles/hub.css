@@ -167,6 +167,15 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
   overflow: hidden;
 }
 
+/* Plan / Super Plan caret menu is absolutely positioned below the mode strip */
+.input-bar--hub .composer-controls:has(.is-submenu-open) {
+  overflow: visible;
+}
+
+.input-bar--hub .mode-segment-wrap--plan.is-submenu-open {
+  z-index: 5;
+}
+
 .input-bar--hub .composer-controls__trail {
   margin-left: auto;
   flex: 0 1 auto;
@@ -894,6 +903,10 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
     overscroll-behavior-x: contain;
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
+  }
+
+  .input-bar--hub .composer-controls .mode-segmented:has(.is-submenu-open) {
+    overflow: visible;
   }
 
   .input-bar--hub .composer-controls .mode-segmented::-webkit-scrollbar {

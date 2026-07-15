@@ -11,6 +11,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { runProcess } from '../process-runner.js';
 import { parseGitNumstat } from '../tools/git-change-stats.js';
+import { invalidateRegisteredWorktreeCache } from './allowlist.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
 import { refreshDependencies } from './dep-install.js';
 import { symlinkDependencyDirs } from './dep-symlinks.js';
@@ -686,12 +687,14 @@ export async function createChatWorktree({ chatId, branch, baseRef }) {
     const w = await git(['worktree', 'add', wtPath, branchName]);
     if (!ok(w)) return { ok: false, path: wtPath, branch: branchName, output: out(w) };
     await symlinkDependencyDirs(depSource, wtPath);
+    invalidateRegisteredWorktreeCache();
     return { ok: true, path: wtPath, branch: branchName, created: true };
   }
 
   const r = await git(['worktree', 'add', '-b', branchName, wtPath, baseSha]);
   if (!ok(r)) return { ok: false, path: wtPath, branch: branchName, output: out(r) };
   await symlinkDependencyDirs(depSource, wtPath);
+  invalidateRegisteredWorktreeCache();
   return { ok: true, path: wtPath, branch: branchName, created: true };
 }
 
@@ -719,6 +722,7 @@ export async function removeChatWorktree({ chatId }) {
   } catch {
     /* best-effort — Windows may keep a handle */
   }
+  invalidateRegisteredWorktreeCache();
   return { ok: true, path: wtPath, removed: true, output: out(r) };
 }
 

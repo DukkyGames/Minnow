@@ -2,6 +2,8 @@
  * Desktop chat surface — sessions, transcript, and composer send on the OS desktop.
  */
 
+import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
+import { resumeIncompleteToolBatchOnChatSwitch } from '../chat/incomplete-tool-resume';
 import { sendMessage } from '../chat/messaging';
 import { isActiveChatStreaming, subscribeChatStreamEnd } from '../chat/streaming-state';
 import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
@@ -34,8 +36,12 @@ import {
 import { initComposerDraftListener, switchComposerDraft } from '../ui/composer-draft';
 import { initComposerSlashPicker } from '../ui/skill-picker';
 import { refreshContextUsageRing } from '../ui/context-usage-ring';
+import { clearPanelCwdUserOverride, syncPanelFromActiveChat } from '../ui/git-panel';
+import { seedNewChatComposerRunTarget } from '../ui/new-chat-run-target-seed';
 import { renderChatFromHistory } from '../ui/messages';
+import { syncAskQuestionModalOnChatSwitch } from '../ui/question-cards-modal';
 import { setStatus } from '../ui/status';
+import type { Chat } from '../types';
 import { isDesktopChatActive } from './desktop-state';
 import { renderDesktopChatRail } from '../ui/desktop-chat-rail';
 import { autoResizeDesktopComposer } from './desktop-composer-resize';
@@ -150,10 +156,26 @@ function createFreshAssistantChat(
   state: NonNullable<typeof sessionState>,
 ): void {
   const chat = createDesktopChat(workspacePath, newChatId());
+  seedNewChatComposerRunTarget(chat);
   state.chats.unshift(chat);
   state.activeId = chat.id;
+  clearPanelCwdUserOverride();
+  syncPanelFromActiveChat({ forceFileTree: true });
   rememberActiveChatForApp(CHAT_APP_ID, chat.id);
   scheduleSaveSessions();
+}
+
+/**
+ * Park/unpark ask_question UI and resume incomplete tool batches when the desktop
+ * session rail switches chats (mirrors sidebar `switchChat` hooks).
+ */
+export function syncDesktopChatSessionSwitch(
+  prevChatId: string | null | undefined,
+  chat: Chat,
+): void {
+  syncAskQuestionModalOnChatSwitch(prevChatId, chat.id);
+  notifyAskQuestionDisplayContextChanged();
+  void resumeIncompleteToolBatchOnChatSwitch(chat);
 }
 
 /** Switch the active assistant thread on the desktop surface. */
@@ -162,7 +184,20 @@ export function activateDesktopChatSession(chatId: string): void {
   const prevId = sessionState.activeId;
   const chat = sessionState.chats.find((c) => c.id === chatId);
   if (!chat) return;
+  if (chatId === prevId) {
+    acknowledgeChatViewed(chatId);
+    renderDesktopChatRail(desktopWorkspacePath);
+    renderDesktopChatMessages();
+    syncChatItemDotsInDom();
+    syncDesktopComposerSendState();
+    refreshContextUsageRing();
+    void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(chatId));
+    return;
+  }
   sessionState.activeId = chatId;
+  syncDesktopChatSessionSwitch(prevId, chat);
+  clearPanelCwdUserOverride();
+  syncPanelFromActiveChat({ forceFileTree: true });
   acknowledgeChatViewed(chatId);
   void switchComposerDraft(prevId, chat);
   renderDesktopChatRail(desktopWorkspacePath);
@@ -246,6 +281,12 @@ export async function bootstrapDesktopChat(options?: DesktopChatActivateOptions)
   refreshContextUsageRing();
 
   await applyDesktopSeed(options?.seed);
+
+  try {
+    void resumeIncompleteToolBatchOnChatSwitch(getActiveChat());
+  } catch {
+    /* server offline */
+  }
 
   const input = document.getElementById('desktopInput') as HTMLTextAreaElement | null;
   input?.focus();

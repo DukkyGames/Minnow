@@ -42,6 +42,7 @@ import './styles/composer-tools-popover.css';
 import './styles/workspace-menu.css';
 import './styles/workspace-folder-picker.css';
 import './styles/git-center-lightbox.css';
+import './styles/git-help-lightbox.css';
 import './styles/tool-approval.css';
 import './styles/question-cards.css';
 import './styles/reef-widgets.css';
@@ -109,6 +110,15 @@ import { renderChatFromHistory, renderStatsForChat } from './ui/messages';
 import { refreshHubLiveData } from './ui/hub';
 import { bootGenerationResumeForChats } from './chat/generation-resume';
 import { bootIncompleteToolResumeForChats } from './chat/incomplete-tool-resume';
+import {
+  bindAskQuestionPlanScreenHooks,
+  notifyAskQuestionDisplayContextChanged,
+} from './chat/ask-question-display';
+import {
+  isOrchestratePlanScreenSuppressingChatDom,
+  resolveOrchestratePlanScreenQuestionHost,
+} from './ui/orchestrate-plan-screen';
+import { subscribeInstances } from './os/instances';
 import { bootOrchestrateBoardResume } from './chat/orchestrate/board-boot-resume';
 import { initBoardLogDiskSink } from './state/board-log-disk.ts';
 import { registerOrchestrateBoardShutdownHandler } from './chat/orchestrate/board-shutdown';
@@ -201,6 +211,13 @@ function registerServiceWorker(): void {
 
 /** Boot app: sessions, settings, sidebar, models, first paint. */
 export async function initApp(): Promise<void> {
+  bindAskQuestionPlanScreenHooks({
+    resolveQuestionHost: resolveOrchestratePlanScreenQuestionHost,
+    isSuppressingChatDom: (chatId) => isOrchestratePlanScreenSuppressingChatDom(chatId),
+  });
+  subscribeInstances(() => {
+    notifyAskQuestionDisplayContextChanged();
+  });
   await detectConfigServer();
   refreshConfigStorageBanner();
   initBoardLogDiskSink();

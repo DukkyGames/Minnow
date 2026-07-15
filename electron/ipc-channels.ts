@@ -63,6 +63,17 @@ export const DIAGNOSTICS_OOM_PAUSE = 'minnow:diagnostics:oom-pause';
 /** Renderer → main: clear OOM pause marker after user resumes the board. */
 export const DIAGNOSTICS_CLEAR_OOM_PAUSE = 'minnow:diagnostics:clear-oom-pause';
 
+/** Renderer → main: current auto-update status snapshot (MIN-384). */
+export const UPDATER_GET_STATUS = 'minnow:updater:get-status';
+/** Renderer → main: user-initiated update check (failures surface inline). */
+export const UPDATER_CHECK_NOW = 'minnow:updater:check-now';
+/** Renderer → main: quit and install the downloaded update. */
+export const UPDATER_RESTART = 'minnow:updater:restart';
+/** Renderer → main: switch stable/beta release channel and re-check. */
+export const UPDATER_SET_CHANNEL = 'minnow:updater:set-channel';
+/** Main → renderer: updater status changed. */
+export const UPDATER_STATUS_CHANGED = 'minnow:updater:status-changed';
+
 /** Renderer → main: shell window minimize / maximize / close / query maximized. */
 export const WINDOW_MINIMIZE = 'minnow:window:minimize';
 export const WINDOW_MAXIMIZE = 'minnow:window:maximize';

@@ -120,6 +120,14 @@ function field(
 /** Static field catalog — union with dynamic registry entries in search index. */
 export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   // —— General ——
+  field('general.updates', 'App updates', 'general', 'general', {
+    keywords: ['update', 'version', 'upgrade', 'beta', 'release', 'restart', 'auto-update'],
+    description: 'Stay on the latest build. Downloads run in the background; restart when you are ready.',
+  }),
+  field('general.updates.channel', 'Update channel', 'general', 'general', {
+    keywords: ['beta', 'stable', 'prerelease', 'channel'],
+    description: 'Choose Stable releases or Beta pre-releases for auto-update.',
+  }),
   field('general.notifications', 'Notifications', 'general', 'general', {
     keywords: ['bell', 'alert', 'sound', 'menubar'],
     description: 'Menubar bell when background chats, tasks, or jobs need attention.',

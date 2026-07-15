@@ -14,6 +14,10 @@ import {
   normalizeWorkspacePathKey,
 } from '../workspace/root.js';
 import { isResolvedPathUnderRoot } from '../workspace/safe-path.js';
+import {
+  isRegisteredGitWorktreePath,
+  isRepoLocalWorktreePath,
+} from '../worktree/allowlist.js';
 import { isPathUnderWorktreesRoot } from '../worktree/paths.js';
 
 const CHATS_DIR_NAME = 'chats';
@@ -51,7 +55,8 @@ export async function ensureChatsWorkspace() {
 }
 
 /**
- * True when rootPath is the active Code workspace, chats sandbox, benchmark workspace, or scheduler workspace.
+ * True when rootPath is the active Code workspace, chats sandbox, benchmark workspace,
+ * scheduler workspace, a registered git worktree, or repo-local `.worktrees/`.
  * @param {string} rootPath
  */
 export function isAllowedWorkspaceRoot(rootPath) {
@@ -62,6 +67,9 @@ export function isAllowedWorkspaceRoot(rootPath) {
   // Board task worktrees (MIN-275) live under ~/.minnow/worktrees and are valid
   // per-request tool roots so isolated task chats run inside their worktree.
   if (isPathUnderWorktreesRoot(resolved)) {
+    return true;
+  }
+  if (isRepoLocalWorktreePath(resolved)) {
     return true;
   }
   const key = normalizeWorkspacePathKey(resolved);
@@ -80,14 +88,26 @@ export function isAllowedWorkspaceRoot(rootPath) {
 }
 
 /**
+ * Async allowlist check including registered git worktrees (`git worktree list`).
+ * @param {string} rootPath
+ * @returns {Promise<boolean>}
+ */
+export async function isAllowedWorkspaceRootAsync(rootPath) {
+  if (isAllowedWorkspaceRoot(rootPath)) return true;
+  const resolved = path.resolve(String(rootPath).trim());
+  return isRegisteredGitWorktreePath(resolved);
+}
+
+/**
  * Validate an allowed workspace root exists as a directory.
  * @param {string} rootPath
  * @returns {Promise<string>} resolved absolute path
  */
 export async function validateAllowedWorkspaceRoot(rootPath) {
-  if (!isAllowedWorkspaceRoot(rootPath)) {
+  const allowed = await isAllowedWorkspaceRootAsync(rootPath);
+  if (!allowed) {
     throw new Error(
-      'workspaceRoot is not in the allowlist (Code workspace, chats workspace, desktop workspace, benchmark workspace, or scheduler workspace)',
+      'workspaceRoot is not in the allowlist (Code workspace, chats workspace, desktop workspace, benchmark workspace, scheduler workspace, registered git worktree, or repo-local .worktrees/)',
     );
   }
   const resolved = path.resolve(String(rootPath).trim());

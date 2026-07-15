@@ -1,5 +1,48 @@
 [
   {
+    "key": "general.updates",
+    "label": "App updates",
+    "description": "Stay on the latest build. Downloads run in the background; restart when you are ready.",
+    "keywords": [
+      "update",
+      "version",
+      "upgrade",
+      "beta",
+      "release",
+      "restart",
+      "auto-update"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
+    "key": "general.updates.channel",
+    "label": "Update channel",
+    "description": "Choose Stable releases or Beta pre-releases for auto-update.",
+    "keywords": [
+      "beta",
+      "stable",
+      "prerelease",
+      "channel"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
     "key": "general.notifications",
     "label": "Notifications",
     "description": "Menubar bell when background chats, tasks, or jobs need attention.",

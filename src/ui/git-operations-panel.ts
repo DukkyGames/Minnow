@@ -20,6 +20,7 @@ import {
   type GitFileEntry,
   type GitOpResult,
 } from '../state/git-api';
+import { getWorkspacePath } from '../state/workspace';
 import { resolvePanelWorktreeCwd } from './panel-worktree-cwd';
 import { renderGitGraph, type GitGraphOptions } from './git-graph';
 import {
@@ -44,6 +45,11 @@ import {
   closeGitPanelNamePopover,
   openGitPanelNamePopover,
 } from './git-panel-name-popover';
+import {
+  renderGitStatusWithSendToChat,
+  type GitErrorChatContext,
+  type GitErrorChatKind,
+} from './git-error-to-chat';
 
 export type GitOpsTab = 'changes' | 'history' | 'branches';
 
@@ -122,11 +128,15 @@ export function createGitOperationsPanel(
   changesPane.className = 'git-ops-panel__pane git-ops-panel__pane--changes';
   changesPane.dataset.pane = 'changes';
 
+  const statusWrap = document.createElement('div');
+  statusWrap.className = 'git-panel-status-wrap';
+  statusWrap.setAttribute('role', 'status');
+  statusWrap.setAttribute('aria-live', 'polite');
+  statusWrap.hidden = true;
+
   const statusEl = document.createElement('p');
   statusEl.className = 'git-panel-status';
-  statusEl.setAttribute('role', 'status');
-  statusEl.setAttribute('aria-live', 'polite');
-  statusEl.hidden = true;
+  statusWrap.appendChild(statusEl);
 
   const noRepoMount = document.createElement('div');
   noRepoMount.className = 'git-ops-panel__no-repo-mount';
@@ -184,7 +194,7 @@ export function createGitOperationsPanel(
   diffHost.className = 'git-panel-diff-host';
   diffHost.hidden = true;
 
-  changesPane.append(statusEl, noRepoMount, commitBox, bodyMount, diffHost);
+  changesPane.append(statusWrap, noRepoMount, commitBox, bodyMount, diffHost);
 
   const historyPane = document.createElement('div');
   historyPane.className = 'git-ops-panel__pane git-ops-panel__pane--history';
@@ -219,10 +229,22 @@ export function createGitOperationsPanel(
     else noRepoMount.replaceChildren();
   }
 
-  function setStatus(message: string, isError = false): void {
-    statusEl.textContent = message;
-    statusEl.classList.toggle('is-err', isError);
-    statusEl.hidden = !message;
+  function gitErrorChatContext(): GitErrorChatContext {
+    return {
+      cwd: (getEffectiveCwd() ?? getWorkspacePath().trim()) || undefined,
+      branch: currentBranchName || undefined,
+    };
+  }
+
+  function setStatus(message: string, isError = false, sendToChat?: GitErrorChatKind): void {
+    renderGitStatusWithSendToChat(
+      statusWrap,
+      statusEl,
+      message,
+      isError,
+      sendToChat,
+      gitErrorChatContext(),
+    );
   }
 
   function setTab(tab: GitOpsTab): void {
@@ -278,11 +300,12 @@ export function createGitOperationsPanel(
   async function runGitOp(
     fn: () => Promise<GitOpResult>,
     successMessage?: string,
+    sendToChat?: GitErrorChatKind,
   ): Promise<boolean> {
     const result = await fn();
     if (!result.ok) {
       const error = result.error ?? 'Git operation failed';
-      setStatus(error, true);
+      setStatus(error, true, sendToChat);
       showToast(error, 'error');
       return false;
     }
@@ -304,12 +327,16 @@ export function createGitOperationsPanel(
     const action: CommitActionKind = andPush ? 'commit-push' : 'commit';
     setCommitActionsBusy(action, 'Committing…');
     try {
-      const ok = await runGitOp(() => gitCommit({ message, cwd }), andPush ? undefined : 'Committed changes');
+      const ok = await runGitOp(
+        () => gitCommit({ message, cwd }),
+        andPush ? undefined : 'Committed changes',
+        'commit',
+      );
       if (!ok) return;
       commitInput.value = '';
       if (andPush) {
         setCommitActionsBusy(action, 'Pushing…');
-        await runGitOp(() => gitPush({ cwd }), 'Committed and pushed');
+        await runGitOp(() => gitPush({ cwd }), 'Committed and pushed', 'commit');
       }
     } finally {
       clearCommitActionsBusy();
