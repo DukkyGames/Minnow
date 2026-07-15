@@ -1007,6 +1007,75 @@ describe('orchestrate board live updates', () => {
     assert.ok(document.getElementById('vibeHub'));
   });
 
+  test('switchChat to same chat dismisses code overview and restores chat', async () => {
+    setupDom();
+    const chat = createEmptyChatObject('');
+    chat.id = FIXED_CHAT_ID;
+    chat.modeId = 'general';
+    chat.history = [{ role: 'user', content: 'Active chat message' }];
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+      groups: [],
+    });
+
+    const area = document.getElementById('chatArea');
+    area.classList.add('chat-area--code-overview');
+    document.getElementById('mainColumn')?.classList.add('main-column--code-overview');
+    const overviewRoot = document.createElement('div');
+    overviewRoot.id = 'codeOverviewRoot';
+    area.replaceChildren(overviewRoot);
+
+    switchChat(chat.id);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(document.getElementById('codeOverviewRoot'), null);
+    assert.equal(getActiveChat().id, chat.id);
+    assert.ok(document.querySelector('.msg.user'));
+    assert.match(
+      document.querySelector('.msg.user')?.textContent ?? '',
+      /Active chat message/,
+    );
+    assert.equal(area.classList.contains('chat-area--code-overview'), false);
+  });
+
+  test('openBoardGroup from code overview dismisses overview and mounts board', async () => {
+    setupDom();
+    await primeSubAgentConfig();
+    setBoardNowForTests(() => 1_700_000_000_000);
+    const chat = makeOrchestrateChat();
+    chat.history = [{ role: 'user', content: 'Run the plan' }];
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
+
+    renderBoardView(group);
+    await waitForKanban();
+    assert.ok(document.querySelector('.board-root'));
+
+    const area = document.getElementById('chatArea');
+    area.classList.add('chat-area--code-overview');
+    document.getElementById('mainColumn')?.classList.add('main-column--code-overview');
+    const overviewRoot = document.createElement('div');
+    overviewRoot.id = 'codeOverviewRoot';
+    area.replaceChildren(overviewRoot);
+
+    openBoardGroup(group.id);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await waitForKanban();
+
+    assert.equal(document.getElementById('codeOverviewRoot'), null);
+    assert.equal(group.viewMode, 'board');
+    assert.ok(document.querySelector('.board-root'));
+    assert.equal(area.classList.contains('chat-area--code-overview'), false);
+  });
+
   test('createChat from code overview dismisses overview and shows new chat', async () => {
     setupDom();
     await primeSubAgentConfig();
