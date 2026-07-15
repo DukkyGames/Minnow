@@ -1610,16 +1610,19 @@ export async function initPreviewPanel(): Promise<void> {
   bindPreviewControls();
   await syncPreviewDesignToolbarForSurface();
 
-  if (usesElectronPreview()) {
-    scheduleElectronPreviewHostVisibilitySync();
-  }
-
   if (shouldAutoRestorePreviewPanel()) {
     await restorePreviewPanelFromPrefs();
+    if (usesElectronPreview()) {
+      scheduleElectronPreviewHostVisibilitySync();
+    }
     return;
   }
   if (isCodeAppForeground() || state.rightPaneMode === 'preview') {
     collapsePreviewPanelKeepingSource();
+  }
+
+  if (usesElectronPreview()) {
+    scheduleElectronPreviewHostVisibilitySync();
   }
 }
 

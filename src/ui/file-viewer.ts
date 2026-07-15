@@ -1191,7 +1191,8 @@ function resetAllViewerTabs(options?: { closeSplit?: boolean }): void {
   const saveBtn = getSaveButton();
   if (saveBtn) saveBtn.disabled = true;
   if (options?.closeSplit !== false) {
-    hideViewerSplit();
+    // Worktree/chat sync force-closes tabs — do not fall back to browser preview (MIN-342).
+    hideViewerSplit({ skipPreviewFallback: true });
   } else {
     hideViewerPaneDom();
   }

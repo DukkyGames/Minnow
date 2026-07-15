@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import {
+  getFilePanelState,
   patchFilePanelState,
   resetFilePanelStateForTests,
 } from '../../src/state/file-panel.ts';
@@ -94,5 +95,38 @@ describe('file-layout right split reconcile (MIN-342)', () => {
     assert.equal(repairRightPaneDomStructure(), true);
     assert.equal(viewer.parentElement, column);
     assert.equal(preview.parentElement, column);
+  });
+
+  test('hideViewerSplit skipPreviewFallback keeps split closed when preview tabs exist', async () => {
+    const { hideViewerSplit } = await import('../../src/ui/file-layout.ts');
+    patchFilePanelState({
+      rightPaneMode: 'viewer',
+      viewerOpen: true,
+      previewTabs: [{ id: 'tab-1', source: { kind: 'url', url: 'http://localhost:3000' } }],
+      activePreviewTab: 'tab-1',
+    });
+    document.getElementById('rightPaneColumn')?.classList.remove('hidden');
+    document.getElementById('fileViewerPane')?.classList.remove('hidden');
+
+    hideViewerSplit({ skipPreviewFallback: true });
+
+    assert.equal(getFilePanelState().rightPaneMode, null);
+    assert.equal(document.getElementById('previewPane')?.classList.contains('hidden'), true);
+    assert.equal(document.getElementById('rightPaneColumn')?.classList.contains('hidden'), true);
+  });
+
+  test('hideViewerSplit still falls back to preview when user closes last viewer tab', async () => {
+    const { hideViewerSplit } = await import('../../src/ui/file-layout.ts');
+    patchFilePanelState({
+      rightPaneMode: 'viewer',
+      viewerOpen: true,
+      previewTabs: [{ id: 'tab-1', source: { kind: 'url', url: 'http://localhost:3000' } }],
+      activePreviewTab: 'tab-1',
+    });
+
+    hideViewerSplit();
+
+    assert.equal(getFilePanelState().rightPaneMode, 'preview');
+    assert.equal(document.getElementById('previewPane')?.classList.contains('hidden'), false);
   });
 });
