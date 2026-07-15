@@ -252,7 +252,6 @@ function persistedRowToSubAgentRun(
     startedAt: row.startedAt ?? null,
     endedAt: row.endedAt ?? null,
     toolTurns: row.toolTurns,
-    maxToolTurns: 0,
     cancelled: row.status === 'cancelled',
     messages: row.messages as SubAgentRun['messages'],
     category: row.category,

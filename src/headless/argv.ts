@@ -3,7 +3,6 @@
  */
 
 import { parseArgs } from 'node:util';
-import { MAX_CHAT_MAX_TOOL_TURNS } from '../config/chat-meta';
 import { defaultMinnowLocalOrigin } from '../config/minnow-port.ts';
 
 const DEFAULT_BASE_URL = defaultMinnowLocalOrigin();
@@ -25,7 +24,6 @@ export interface HeadlessRunCliOptions {
   json: boolean;
   jsonOut: string | null;
   quiet: boolean;
-  maxToolTurns: number | null;
   autoRejectQuestions: boolean;
   persistChat: boolean;
   chatId: string | null;
@@ -68,9 +66,6 @@ Output:
   --json                Print HeadlessRunResult JSON to stdout
   --json-out <file>     Write JSON artifact to path
   --quiet               Only final assistant text on stdout (logs on stderr)
-
-Limits:
-  --max-tool-turns <n>  Cap tool rounds for this run (1–${MAX_CHAT_MAX_TOOL_TURNS})
 
 Session:
   --persist-chat          Save transcript to ~/.minnow sessions (requires --chat-id)
@@ -132,7 +127,6 @@ export function parseRunArgs(argv: string[]): { ok: true; options: HeadlessRunCl
       json: { type: 'boolean', default: false },
       'json-out': { type: 'string' },
       quiet: { type: 'boolean', default: false },
-      'max-tool-turns': { type: 'string' },
       'persist-chat': { type: 'boolean', default: false },
       'chat-id': { type: 'string' },
       'chat-name': { type: 'string' },
@@ -158,18 +152,6 @@ export function parseRunArgs(argv: string[]): { ok: true; options: HeadlessRunCl
   }
 
   const serverTimeoutSec = Math.max(1, parseInt(String(values['server-timeout'] ?? '30'), 10) || 30);
-
-  let maxToolTurns: number | null = null;
-  if (values['max-tool-turns'] != null) {
-    const n = parseInt(String(values['max-tool-turns']), 10);
-    if (!Number.isFinite(n) || n < 1 || n > MAX_CHAT_MAX_TOOL_TURNS) {
-      return {
-        ok: false,
-        message: `--max-tool-turns must be an integer between 1 and ${MAX_CHAT_MAX_TOOL_TURNS}`,
-      };
-    }
-    maxToolTurns = n;
-  }
 
   const profile = String(values.profile ?? 'full').trim();
   if (
@@ -218,7 +200,6 @@ export function parseRunArgs(argv: string[]): { ok: true; options: HeadlessRunCl
       json: Boolean(values.json),
       jsonOut: values['json-out'] ? String(values['json-out']).trim() : null,
       quiet: Boolean(values.quiet),
-      maxToolTurns,
       autoRejectQuestions: values['auto-reject-questions'] !== false,
       persistChat,
       chatId,

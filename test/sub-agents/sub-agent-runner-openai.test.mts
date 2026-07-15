@@ -149,7 +149,6 @@ describe('sub-agent runner OpenAI finalization', () => {
         tools: [],
         providerId: PROVIDER_ID,
         modelId: MODEL_ID,
-        maxToolTurns: 5,
         summarySchema: 'minnow.sub-agent.v1',
         modelContextLimit: null,
         signal: AbortSignal.timeout(15_000),

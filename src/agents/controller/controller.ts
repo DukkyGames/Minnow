@@ -12,7 +12,6 @@ import { executeTool, getEnabledToolDefinitionsForMode } from '../../tools/clien
 import { loadSubAgentConfig } from '../sub-agent-config';
 import { buildSubAgentSystemPrompt } from '../sub-agent-prompt';
 import { createSubAgentRunId } from '../sub-agent-run-id';
-import { getSubAgentsMaxToolTurns } from '../sub-agent-config';
 import {
   isContextBudgetFailure,
   isMaxToolTurnFailure,
@@ -498,7 +497,6 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
       providerId,
       modelId,
       parentChatId: run.parentChatId,
-      maxToolTurns: run.maxToolTurns,
       contextBudget: agentContextBudgetFromSubAgentType(typeConfig),
       summarySchema: typeConfig.summarySchema,
       signal: abort.signal,
@@ -594,7 +592,6 @@ async function spawnSubAgentInternal(
     startedAt: null,
     endedAt: null,
     toolTurns: 0,
-    maxToolTurns: getSubAgentsMaxToolTurns(config),
     cancelled: false,
     messages: [],
     ...(input.category ? { category: input.category } : {}),
@@ -956,7 +953,6 @@ export function formatSubAgentListToolResult(parentTurnId: string | null | undef
     taskPreview: r.task.length > 120 ? `${r.task.slice(0, 120)}…` : r.task,
     startedAt: r.startedAt,
     toolTurns: r.toolTurns,
-    maxToolTurns: r.maxToolTurns,
     liveNestedToolCalls: r.liveNestedToolCalls,
   }));
   return JSON.stringify({ runs: rows }, null, 2);
@@ -976,7 +972,6 @@ export function formatSubAgentListToolResultForChat(
     taskPreview: r.task.length > 120 ? `${r.task.slice(0, 120)}…` : r.task,
     startedAt: r.startedAt,
     toolTurns: r.toolTurns,
-    maxToolTurns: r.maxToolTurns,
     liveNestedToolCalls: r.liveNestedToolCalls,
   }));
   for (const p of persisted ?? []) {
@@ -988,7 +983,6 @@ export function formatSubAgentListToolResultForChat(
       taskPreview: p.task.length > 120 ? `${p.task.slice(0, 120)}…` : p.task,
       startedAt: p.startedAt ?? null,
       toolTurns: p.toolTurns,
-      maxToolTurns: 0,
       liveNestedToolCalls: undefined,
     });
   }
@@ -1012,7 +1006,6 @@ export function buildSubAgentStatusPayload(run: SubAgentRun): Record<string, unk
     startedAt: run.startedAt,
     endedAt: run.endedAt,
     toolTurns: run.toolTurns,
-    maxToolTurns: run.maxToolTurns,
     cancelled: run.cancelled,
     lastMessagePreview: lastNonSystemPreview(run.messages),
   };
@@ -1235,7 +1228,6 @@ async function finalizeReconciledCompleted(
     startedAt: completed.startedAt,
     endedAt,
     toolTurns: result.toolTurns ?? 0,
-    maxToolTurns: 0,
     cancelled: false,
     messages: [],
     boardTaskId: completed.boardTaskId,
@@ -1281,7 +1273,6 @@ async function reconcileInterruptedRecord(record: PersistedRunRecord): Promise<v
     startedAt: record.startedAt,
     endedAt,
     toolTurns: 0,
-    maxToolTurns: 0,
     cancelled: false,
     messages: [],
     boardTaskId: record.boardTaskId,

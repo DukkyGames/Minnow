@@ -7,16 +7,6 @@ import {
   clampGenerationIdleTimeoutMs,
   clampGenerationMaxDurationMs,
 } from '../generations/timeouts.js';
-
-const DEFAULT_CHAT_MAX_TOOL_TURNS = 100;
-const MAX_CHAT_MAX_TOOL_TURNS = 500;
-
-/** @param {unknown} value */
-function clampMaxToolTurns(value) {
-  const n = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(n)) return DEFAULT_CHAT_MAX_TOOL_TURNS;
-  return Math.min(MAX_CHAT_MAX_TOOL_TURNS, Math.max(1, Math.round(n)));
-}
 import { mergeConfigMeta } from '../config/validators.js';
 import { getFieldByKey } from './registry.js';
 import { patchFromPath } from './paths.js';
@@ -50,7 +40,6 @@ function validateFieldValue(field, value) {
     }
   }
 
-  if (field.path === 'chat.maxToolTurns') clampMaxToolTurns(value);
   if (field.path === 'chat.generationIdleTimeoutMs') clampGenerationIdleTimeoutMs(value);
   if (field.path === 'chat.generationMaxDurationMs') clampGenerationMaxDurationMs(value);
 
@@ -65,7 +54,6 @@ function coerceValue(field, value) {
   if (field.type === 'boolean') return Boolean(value);
   if (field.type === 'number') {
     const n = typeof value === 'number' ? value : Number(value);
-    if (field.path === 'chat.maxToolTurns') return clampMaxToolTurns(n);
     if (field.path === 'chat.generationIdleTimeoutMs') return clampGenerationIdleTimeoutMs(n);
     if (field.path === 'chat.generationMaxDurationMs') return clampGenerationMaxDurationMs(n);
     return n;
