@@ -102,6 +102,21 @@ describe('ThoughtBubbleController', { concurrency: false }, () => {
 
     ctrl.endReasoningPhase();
   });
+
+  test('consumePersistedSegments returns segments and clears state for the next response', () => {
+    setupDom();
+    const wrap = assistantWrap();
+    const ctrl = new ThoughtBubbleController(wrap);
+
+    ctrl.appendReasoningDelta('First response');
+    assert.deepEqual(ctrl.consumePersistedSegments(), ['First response']);
+    assert.deepEqual(ctrl.getSegmentsNormalized(), []);
+
+    ctrl.appendReasoningDelta('Second response');
+    assert.deepEqual(ctrl.consumePersistedSegments(), ['Second response']);
+
+    ctrl.endReasoningPhase();
+  });
 });
 
 describe('renderThoughtsToggle', () => {
@@ -131,5 +146,25 @@ describe('renderThoughtsToggle', () => {
     btn?.click();
     assert.equal(btn?.getAttribute('aria-expanded'), 'false');
     assert.ok(flow?.hidden);
+  });
+});
+
+describe('anchorPersistedThoughtsOnRow', () => {
+  test('pins thinking on a row and removes empty streaming chrome', async () => {
+    setupDom();
+    const { anchorPersistedThoughtsOnRow } = await import('../../src/ui/messages.ts');
+    const wrap = assistantWrap();
+    const streamStatus = wrap.querySelector('.stream-status');
+
+    anchorPersistedThoughtsOnRow(wrap, ['Round one thought'], { durationMs: 2500 });
+
+    assert.ok(wrap.querySelector('.thoughts-panel-wrap'));
+    assert.equal(
+      wrap.querySelector('.thoughts-toggle__label')?.textContent,
+      'Thought for 2.5s',
+    );
+    assert.equal(wrap.querySelector('.msg-bubble'), null);
+    assert.equal(wrap.querySelector('.stream-status'), null);
+    assert.equal(streamStatus?.isConnected, false);
   });
 });

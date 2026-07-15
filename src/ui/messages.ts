@@ -269,13 +269,25 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
 
     if (isAssistantToolCallMessage(msg)) {
       const prose = msg.content != null ? String(msg.content).trim() : '';
-      if (prose) {
-        const { wrap } = appendBubble('assistant', prose, {
+      const toolThinking =
+        msg.thinking != null && msg.thinking.length > 0 ? msg.thinking : undefined;
+      const hasToolThinking = toolThinking != null && toolThinking.length > 0;
+      if (prose || hasToolThinking) {
+        const { wrap, bubble } = appendBubble('assistant', prose, {
           historyIndex: i,
           turnKind: 'assistant-tools',
           chatId: chat.id,
           modeId: chat.modeId,
         });
+        if (!prose && hasToolThinking) {
+          bubble.remove();
+        }
+        if (hasToolThinking) {
+          const durationMs = msg.thinkingDurationMs;
+          renderThoughtsToggle(wrap, toolThinking!, {
+            durationMs: durationMs != null && durationMs > 0 ? durationMs : undefined,
+          });
+        }
         if (msg.stats || msg.usage) {
           appendStats(wrap, msg.stats || {}, msg.usage || {});
         }
@@ -307,7 +319,7 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
         }
         attachShellKillUi(toolWrap, tc.function.name, tc.id, argsObj, undefined, chat.id);
       }
-      if (!prose && firstToolEl) {
+      if (!prose && !hasToolThinking && firstToolEl) {
         attachMessageActions(firstToolEl, {
           chatId: chat.id,
           historyIndex: i,
@@ -660,6 +672,30 @@ export function removeOrphanStreamingRow(
   if (wrap.isConnected) {
     wrap.remove();
   }
+}
+
+export interface AnchorPersistedThoughtsOptions {
+  durationMs?: number;
+  streamStatus?: StreamingStatusHandle;
+}
+
+/**
+ * Pin a completed thinking block on an assistant row at the response that produced it.
+ * When there is no prose, drops the empty streaming bubble and status chrome.
+ */
+export function anchorPersistedThoughtsOnRow(
+  wrap: HTMLElement,
+  segments: string[],
+  opts: AnchorPersistedThoughtsOptions = {},
+): void {
+  if (segments.length === 0) return;
+  renderThoughtsToggle(wrap, segments, {
+    durationMs: opts.durationMs != null && opts.durationMs > 0 ? opts.durationMs : undefined,
+  });
+  opts.streamStatus?.dispose();
+  wrap.querySelector('.msg-bubble')?.remove();
+  wrap.querySelector('.stream-status')?.remove();
+  wrap.classList.remove('msg--awaiting-prose');
 }
 
 /** Add per-turn metric chips under an assistant bubble. */

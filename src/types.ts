@@ -114,9 +114,11 @@ export interface AssistantToolCallMessage {
   tool_calls: ToolCall[];
   /** Reasoning segments shown in UI; replayed to Anthropic when signature is set. */
   thinking?: string[];
+  /** Accumulated reasoning-active wall time for this tool-call reply (ms), not TTFT. */
+  thinkingDurationMs?: number;
   /**
    * Anthropic extended-thinking signature for this turn (required to replay tool_use
-   * blocks when thinking stays enabled on follow-up Messages API requests).
+   * blocks when thinking stays enabled on follow-up Messages API requests.
    */
   thinkingSignature?: string;
   stats?: Stats;
