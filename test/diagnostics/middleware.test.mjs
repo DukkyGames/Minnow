@@ -121,4 +121,17 @@ describe('diagnostics middleware', () => {
       assert.ok(!res.json.markdown.includes(`${home}/.minnow/.key`), 'sensitive path should be redacted');
     }
   });
+
+  test('POST /api/diagnostics/clear removes stored errors', async () => {
+    const before = await httpRequest(baseUrl, 'GET', '/api/diagnostics/errors');
+    assert.ok(before.json.errors.length >= 1);
+
+    const cleared = await httpRequest(baseUrl, 'POST', '/api/diagnostics/clear');
+    assert.equal(cleared.status, 200);
+    assert.equal(cleared.json.ok, true);
+
+    const after = await httpRequest(baseUrl, 'GET', '/api/diagnostics/errors');
+    assert.equal(after.status, 200);
+    assert.equal(after.json.errors.length, 0);
+  });
 });

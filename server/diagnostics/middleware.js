@@ -4,6 +4,7 @@
 
 import { createRequire } from 'node:module';
 import os from 'node:os';
+import { clearDiagnosticLogs } from './ring-log.js';
 import { loadDiagnosticLogTail, loadGroupedErrors } from './store.js';
 import { formatDiagnosticReportMarkdown } from './redact.js';
 import { logRendererDiagnostic } from './process-handlers.js';
@@ -175,6 +176,12 @@ export async function handleDiagnosticsRequest(req, res, pathname) {
         logLines,
       });
       sendJson(res, 200, { markdown });
+      return true;
+    }
+
+    if (pathname === '/api/diagnostics/clear' && req.method === 'POST') {
+      await clearDiagnosticLogs();
+      sendJson(res, 200, { ok: true });
       return true;
     }
 
