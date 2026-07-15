@@ -142,6 +142,7 @@ const KIND_GROUP: Record<NotificationKind, NotificationKindGroup> = {
   chat_turn_complete: 'chat',
   chat_turn_error: 'chat',
   chat_tool_failure: 'chat',
+  chat_question: 'chat',
   task_started: 'tasks',
   task_complete: 'tasks',
   task_failed: 'tasks',
