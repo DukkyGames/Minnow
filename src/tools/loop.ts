@@ -83,7 +83,6 @@ import {
 import { getBoardGroupForChat } from '../state/chat-groups';
 import {
   getActiveChat,
-  isExpertChat,
   scheduleSaveSessions,
   sessionState,
   touchChat,
@@ -585,7 +584,7 @@ export interface RunChatTurnOptions {
   validAttachments: Attachment[];
   titleSeed?: string;
   shouldScheduleTitle?: boolean;
-  /** Expert chats: run title job after the first turn so LM Studio is not double-booked. */
+  /** Run title job after the first turn completes (avoids competing with main chat for TTFT). */
   deferTitleUntilTurnEnd?: boolean;
   /** Pre-resolved skill body when skillId is set (composer path). */
   skillBody?: string | null;
@@ -1290,13 +1289,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     (modelUsesComposerReasoningDropdown(sendCaps)
       ? resolveEffectiveReasoningEffort(chat, sendCaps, resolvedThinking.mode)
       : undefined);
-
-  if (shouldScheduleTitle) {
-    scheduleChatTitleGeneration(chat.id, titleSeed, {
-      modelId: sendModelId,
-      providerId: sendProviderId,
-    });
-  }
 
   const mainTurnLabel = uiDesignerCtx.active
     ? 'UI Designer'
@@ -2384,12 +2376,12 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     thinkingTracker?.abort();
     if (completedNormally) {
       clearAttachments();
-      if (deferTitleUntilTurnEnd) {
+      if (deferTitleUntilTurnEnd || shouldScheduleTitle) {
         const seed = titleSeed?.trim() || userText?.trim() || rawText?.trim();
         if (seed) {
           scheduleChatTitleGeneration(chat.id, seed, {
-            modelId: chat.modelId?.trim() || undefined,
-            providerId: chat.providerId?.trim() || undefined,
+            modelId: sendModelId?.trim() || undefined,
+            providerId: sendProviderId?.trim() || undefined,
           });
         }
       }
@@ -2709,7 +2701,7 @@ export async function sendMessageWithTools(
   const historyContent = buildHistoryUserContent(displayText, validAttachments);
   const titleSeed = userText || effectiveRawText || validAttachments[0]?.name || 'Attachment';
   const firstUserPending = isFirstUserMessagePending(chat);
-  const deferTitleUntilTurnEnd = firstUserPending && isExpertChat(chat);
+  const deferTitleUntilTurnEnd = firstUserPending;
 
   syncComposerPinnedSkillFromActiveChat();
   scheduleSaveSessions();
@@ -2747,7 +2739,6 @@ export async function sendMessageWithTools(
     historyContent,
     validAttachments,
     titleSeed,
-    shouldScheduleTitle: firstUserPending && !deferTitleUntilTurnEnd,
     deferTitleUntilTurnEnd,
     skillBody,
     composerSurface: composer,

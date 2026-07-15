@@ -594,12 +594,6 @@ export async function sendMessage(): Promise<void> {
   try {
     const provider = await getActiveProvider(chat.providerId);
     chat.providerId = provider.id;
-    if (shouldScheduleTitle) {
-      scheduleChatTitleGeneration(chat.id, text, {
-        modelId: modelId || chat.modelId,
-        providerId: provider.id,
-      });
-    }
     const res = await postChatCompletions(provider, body, chatSignal);
 
     if (!res.ok) {
@@ -722,6 +716,12 @@ export async function sendMessage(): Promise<void> {
       }
       updateStrip(meta.stats, meta.usage, modelInfo);
       setStatus('ok', 'Ready');
+      if (shouldScheduleTitle) {
+        scheduleChatTitleGeneration(chat.id, text, {
+          modelId: modelId || chat.modelId,
+          providerId: chat.providerId,
+        });
+      }
       renderSidebar();
       scheduleSaveSessions();
     }
