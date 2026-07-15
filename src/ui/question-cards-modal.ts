@@ -5,6 +5,7 @@
 import { getChatAbort } from '../app-state';
 import { isAskQuestionDomVisible, registerAskQuestionDisplayContextSync } from '../chat/ask-question-display';
 import { isActiveChatStreaming } from '../chat/streaming-state';
+import { notifyAskQuestionShown } from '../notifications/ask-question';
 import { getActiveChat } from '../state/sessions';
 import {
   ASK_QUESTION_OTHER_ID,
@@ -671,6 +672,8 @@ export function showQuestionCardsModal(
 
     document.addEventListener('keydown', onDocKeyDown, true);
     showCard();
+
+    notifyAskQuestionShown(chatIdForAbort, args);
 
     requestAnimationFrame(() => {
       host.scrollIntoView({ block: 'nearest', behavior: 'smooth' });

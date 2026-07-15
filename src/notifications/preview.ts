@@ -87,6 +87,8 @@ export function kindLabel(kind: import('./types').NotificationKind): string {
       return 'Turn error';
     case 'chat_tool_failure':
       return 'Tool failure';
+    case 'chat_question':
+      return 'Question';
     case 'task_started':
       return 'Task started';
     case 'task_complete':
