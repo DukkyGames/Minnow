@@ -2,9 +2,11 @@ import { modelCache, modelsFetchAbort, setModelsFetchAbort } from '../app-state'
 import { isServerStorageMode } from '../config/storage-mode';
 import { buildTopBarModelOptionHtml, escapeHtml } from '../lib/format-model-label';
 import {
+  applyModelSelectValueToChat,
   decodeModelSelectKey,
   encodeModelSelectKey,
   findFirstSelectKeyForCanonicalModelId,
+  resolveModelSelectValueForChat,
 } from '../lib/model-select-key';
 import { contextLengthFromModelRow } from '../lib/context-length';
 import {
@@ -480,15 +482,16 @@ export async function fetchModels(): Promise<void> {
     }
 
     const ac = getActiveChat();
-    const chosen = pickInitialSelectValue(results, ac);
-    sel.value = chosen;
-    const picked = decodeModelSelectKey(chosen);
-    if (picked) {
-      ac.providerId = picked.providerId;
-      ac.modelId = picked.modelId;
-      touchChat(ac);
-    } else if (chosen) {
-      ac.modelId = chosen;
+    const optionValues = [...sel.options].map((o) => o.value);
+    const hadBinding = Boolean(ac.modelId?.trim());
+
+    if (hadBinding) {
+      const resolved = resolveModelSelectValueForChat(ac, optionValues);
+      if (resolved) sel.value = resolved;
+    } else {
+      const chosen = pickInitialSelectValue(results, ac);
+      sel.value = chosen;
+      applyModelSelectValueToChat(ac, chosen);
       touchChat(ac);
     }
 
@@ -547,8 +550,7 @@ export async function selectProviderModel(
     if (mid.includes(hint) || hint.includes(mid) || mid.endsWith(hint) || hint.endsWith(mid)) {
       sel.value = opt.value;
       const chat = getActiveChat();
-      chat.providerId = decoded.providerId;
-      chat.modelId = decoded.modelId;
+      applyModelSelectValueToChat(chat, opt.value);
       touchChat(chat);
       scheduleSaveSessions();
       syncModelSelectPicker();

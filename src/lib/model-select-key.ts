@@ -34,6 +34,52 @@ export function isCompositeModelSelectKey(value: string): boolean {
   return decodeModelSelectKey(value) != null;
 }
 
+export interface ModelSelectChatBinding {
+  providerId?: string;
+  modelId?: string;
+}
+
+/**
+ * Pick the best `<option>` value for a chat's stored provider/model binding.
+ * Prefers the composite key when both provider and model are set.
+ */
+export function resolveModelSelectValueForChat(
+  chat: ModelSelectChatBinding,
+  optionValues: readonly string[],
+): string {
+  const values = optionValues.filter((v) => v.trim() !== '');
+  const pid = chat.providerId?.trim();
+  const mid = chat.modelId?.trim();
+  if (!mid) return '';
+
+  if (pid) {
+    const want = encodeModelSelectKey(pid, mid);
+    if (values.includes(want)) return want;
+  }
+
+  const match = values.find(
+    (v) => decodeModelSelectKey(v)?.modelId === mid || v === mid,
+  );
+  return match ?? '';
+}
+
+/** Persist a native or composite `<select>` value onto a chat session. */
+export function applyModelSelectValueToChat(
+  chat: ModelSelectChatBinding,
+  selectValue: string,
+): { modelId: string; providerId?: string } {
+  const decoded = decodeModelSelectKey(selectValue);
+  if (decoded) {
+    chat.providerId = decoded.providerId;
+    chat.modelId = decoded.modelId;
+    return decoded;
+  }
+  const modelId = selectValue.trim();
+  chat.modelId = modelId;
+  delete chat.providerId;
+  return { modelId };
+}
+
 /**
  * Find first modelCache key whose decoded model id matches (any provider).
  * Used when only a canonical model id is known (e.g. API stream) and chat has no provider yet.

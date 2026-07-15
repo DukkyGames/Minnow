@@ -4,10 +4,12 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
+  applyModelSelectValueToChat,
   decodeModelSelectKey,
   encodeModelSelectKey,
   findFirstSelectKeyForCanonicalModelId,
   MODEL_SELECT_KEY_SEP,
+  resolveModelSelectValueForChat,
 } from '../../src/lib/model-select-key.ts';
 import { buildTopBarModelOptionHtml } from '../../src/lib/format-model-label.ts';
 
@@ -39,5 +41,22 @@ describe('model-select-key', () => {
     assert.match(html, /data-provider-id="prov"/);
     assert.match(html, /data-supports-load-unload="1"/);
     assert.match(html, /— Local LM/);
+  });
+
+  test('resolveModelSelectValueForChat prefers composite provider+model key', () => {
+    const keyA = encodeModelSelectKey('prov-a', 'model-x');
+    const keyB = encodeModelSelectKey('prov-b', 'model-x');
+    const resolved = resolveModelSelectValueForChat(
+      { providerId: 'prov-b', modelId: 'model-x' },
+      [keyA, keyB],
+    );
+    assert.equal(resolved, keyB);
+  });
+
+  test('applyModelSelectValueToChat clears provider for legacy plain model id', () => {
+    const chat = { providerId: 'old-prov', modelId: 'old-model' };
+    applyModelSelectValueToChat(chat, 'plain-model');
+    assert.equal(chat.modelId, 'plain-model');
+    assert.equal(chat.providerId, undefined);
   });
 });
