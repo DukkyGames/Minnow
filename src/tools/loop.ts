@@ -18,7 +18,10 @@ import {
   notifyChatStreamActivity,
 } from '../chat/streaming-state';
 import { flushPendingMode } from '../chat/pending-mode';
-import { superPlanPipelineUserMessage } from '../chat/super-plan/hidden-user-messages';
+import {
+  appendSuperPlanStageFailureNotice,
+  superPlanPipelineUserMessage,
+} from '../chat/super-plan/hidden-user-messages';
 import type { SuperPlanStageId } from '../chat/super-plan/types';
 import {
   clearPendingSteer,
@@ -1090,6 +1093,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   let turnRunStatus: 'completed' | 'stopped' | 'failed' = 'completed';
   let turnStopReason: ChatStopReason | undefined;
   let turnEndReason: 'max_tool_turns' | undefined;
+  let turnErrorMessage: string | undefined;
   let turnMountPinned = false;
 
   try {
@@ -2339,6 +2343,19 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       e.message === GENERATION_LOST_ON_RESTART_MESSAGE
         ? GENERATION_LOST_ON_RESTART_MESSAGE
         : `Could not complete this reply: ${formatGenerationErrorMessage(e.message ?? 'Unknown error')}`;
+    turnErrorMessage = lost;
+    if (superPlanStage && rolledBack) {
+      appendSuperPlanStageFailureNotice(chat, superPlanStage, lost);
+      recordChatMessage(chat);
+      scheduleSaveSessions();
+      renderSidebar();
+      if (isStreamDomVisible(chat.id)) {
+        renderChatFromHistory(chat);
+      }
+    }
+    void import('../boot/report-background-error.js').then((mod) => {
+      mod.reportBackgroundError('chat-turn-failed', err);
+    });
     if (isStreamDomVisible(chat.id)) {
       if (!rolledBack) {
         if (cursor.parentElement) cursor.remove();
@@ -2353,6 +2370,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       const attachHint =
         getPendingAttachments().length > 0 ? ' Attachments kept for retry.' : '';
       setStatus('err', (rolledBack ? lost : statusMsg) + attachHint);
+    } else {
+      const statusMsg = lost.length > 80 ? `${lost.slice(0, 77)}…` : lost;
+      setStatus('err', statusMsg);
     }
   } finally {
     setContextInFlightOverlay(null);
@@ -2466,6 +2486,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         outputMessages,
         stopReason: turnRunStatus === 'stopped' ? (turnStopReason ?? 'user') : undefined,
         endReason: turnEndReason,
+        errorMessage: turnErrorMessage,
       });
       scheduleSaveSessions();
       if (ownsGlobalStreaming) {

@@ -214,6 +214,15 @@ function ensureTurnRuns(raw: unknown): TurnRunRecord[] | undefined {
         ? { generationIds: row.generationIds.filter((g) => typeof g === 'string') }
         : {}),
       ...(typeof row.parentTurnId === 'string' ? { parentTurnId: row.parentTurnId } : {}),
+      ...(row.stopReason === 'user' ||
+      row.stopReason === 'timeout' ||
+      row.stopReason === 'system'
+        ? { stopReason: row.stopReason }
+        : {}),
+      ...(row.endReason === 'max_tool_turns' ? { endReason: row.endReason } : {}),
+      ...(typeof row.errorMessage === 'string' && row.errorMessage.trim()
+        ? { errorMessage: row.errorMessage.trim() }
+        : {}),
     });
   }
   return out.length ? out : undefined;

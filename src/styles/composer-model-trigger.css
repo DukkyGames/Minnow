@@ -14,12 +14,12 @@
   min-width: 0;
 }
 
-/* Code / hub trail: shrink model label; keep tools button visible */
+/* Code / hub trail: shrink model label; keep tools button adjacent on the right */
 .composer-controls__trail .composer-model-trigger-anchor,
 .composer-controls__trail .composer-model-trigger-wrap {
-  flex: 1 1 auto;
-  flex-shrink: 1;
-  max-width: 100%;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(18rem, 42vw);
   overflow: hidden;
 }
 

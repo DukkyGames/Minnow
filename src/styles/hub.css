@@ -179,6 +179,7 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
 .input-bar--hub .composer-controls__trail {
   margin-left: auto;
   flex: 0 1 auto;
+  justify-content: flex-end;
   min-width: 0;
   overflow: hidden;
 }

@@ -5,9 +5,11 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
+  appendSuperPlanStageFailureNotice,
   isSuperPlanPipelineUserMessage,
   superPlanPipelineUserMessage,
 } from '../../src/chat/super-plan/hidden-user-messages.ts';
+import { createEmptyChatObject } from '../../src/state/sessions.ts';
 
 describe('super plan hidden user messages', () => {
   test('stamped rows are treated as pipeline prompts', () => {
@@ -34,5 +36,18 @@ describe('super plan hidden user messages', () => {
       }),
       false,
     );
+  });
+
+  test('appendSuperPlanStageFailureNotice adds a visible assistant row', () => {
+    const chat = createEmptyChatObject('sp-fail-notice');
+    appendSuperPlanStageFailureNotice(
+      chat,
+      'draft1',
+      'Could not complete this reply: Model not loaded',
+    );
+    assert.equal(chat.history.length, 1);
+    assert.equal(chat.history[0]?.role, 'assistant');
+    assert.match(String(chat.history[0]?.content), /Draft 1 failed/);
+    assert.match(String(chat.history[0]?.content), /Model not loaded/);
   });
 });

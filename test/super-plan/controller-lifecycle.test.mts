@@ -312,6 +312,32 @@ describe('advanceSuperPlan max-tool-turns hint (Fix 5)', () => {
     assert.equal(chat.superPlan!.stages.draft1.status, 'error');
     assert.doesNotMatch(chat.superPlan!.stages.draft1.error ?? '', /tool-turn cap/);
   });
+
+  test('surfaces the failed turn error message on the stage record', async () => {
+    runSuperPlanStageImpl = async (chatArg) => {
+      const chat = chatArg as ReturnType<typeof makeChat>;
+      chat.history.push({ role: 'user', content: 'go' });
+      chat.runs = [
+        {
+          runId: 'run-fail',
+          branchId: 'branch-fail',
+          forkHistoryIndex: 0,
+          status: 'failed',
+          createdAt: Date.now(),
+          snapshot: {} as unknown as import('../../src/types.ts').TurnSnapshot,
+          errorMessage: 'Could not complete this reply: Model not loaded',
+        },
+      ];
+      return { kind: 'await_stream' };
+    };
+
+    const chat = makeChat('draft1');
+    await advanceSuperPlan(chat);
+
+    assert.equal(chat.superPlan!.stages.draft1.status, 'error');
+    assert.match(chat.superPlan!.stages.draft1.error ?? '', /Draft 1 turn failed/);
+    assert.match(chat.superPlan!.stages.draft1.error ?? '', /Model not loaded/);
+  });
 });
 
 describe('onSuperPlanStreamEnd stream-end ordering (Fix 9)', () => {
