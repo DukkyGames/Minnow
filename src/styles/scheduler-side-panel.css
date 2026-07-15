@@ -98,7 +98,6 @@
   min-height: 0;
   max-width: none;
   overflow: auto;
-  padding-bottom: 12px;
 }
 
 .scheduler-panel-mount--side .scheduler-panel {
@@ -116,7 +115,6 @@
   bottom: 0;
   margin: 0 -14px;
   padding: 12px 14px 14px;
-  border-top: 1px solid var(--mn-border);
   background: color-mix(in srgb, var(--mn-bg) 92%, transparent);
   backdrop-filter: blur(10px);
 }
