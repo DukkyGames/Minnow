@@ -64,6 +64,16 @@ function dismissDesktopResearchResult(): void {
 function syncResearchToolbar(): void {
   const cancelBtn = document.getElementById('btnDesktopResearchCancel');
   cancelBtn?.toggleAttribute('hidden', !running);
+  const roundsSelect = document.getElementById(
+    'desktopResearchMaxRounds',
+  ) as HTMLSelectElement | null;
+  const scopeSelect = document.getElementById('desktopResearchScope') as HTMLSelectElement | null;
+  if (roundsSelect) {
+    roundsSelect.disabled = running;
+  }
+  if (scopeSelect) {
+    scopeSelect.disabled = running;
+  }
 }
 
 function getComposerInput(): HTMLTextAreaElement | null {
@@ -88,11 +98,15 @@ async function resolveResearchBinding(): Promise<{ providerId: string; model: st
 }
 
 function readDefaultStartOptions(): Omit<ResearchStartRequest, 'query' | 'continueFrom'> {
+  const maxRoundsRaw = (
+    document.getElementById('desktopResearchMaxRounds') as HTMLSelectElement | null
+  )?.value;
+  const maxRounds = maxRoundsRaw === 'auto' ? 0 : Number(maxRoundsRaw);
   const scope = (
     (document.getElementById('desktopResearchScope') as HTMLSelectElement | null)?.value ?? 'web'
   ) as ResearchScope;
   return {
-    maxRounds: 0,
+    maxRounds: Number.isFinite(maxRounds) ? maxRounds : 0,
     category: '',
     scope,
   };

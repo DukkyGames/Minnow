@@ -63,16 +63,16 @@ function buildDockTile(
   ico.appendChild(createAppIcon(app.icon as 'code', { size: 24 }));
   btn.appendChild(ico);
 
+  const name = document.createElement('span');
+  name.className = 'mn-os-tile-name';
+  name.textContent = app.name;
+  btn.appendChild(name);
+
   const openDot = document.createElement('span');
   openDot.className = 'mn-os-tile-open-dot';
   openDot.hidden = true;
   openDot.setAttribute('aria-hidden', 'true');
   btn.appendChild(openDot);
-
-  const name = document.createElement('span');
-  name.className = 'mn-os-tile-name';
-  name.textContent = app.name;
-  btn.appendChild(name);
 
   btn.addEventListener('click', () => onLaunch(app.id));
   return btn;
