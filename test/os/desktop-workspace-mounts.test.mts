@@ -40,10 +40,19 @@ const DESKTOP_WS = 'C:/Users/me/.minnow/workspace';
 function setupDom(win: Window): void {
   win.document.body.innerHTML = `
     <div id="workspaceSplit">
-      <aside id="fileSidebar"><div id="fileSidebarFilesView"></div></aside>
-      <section id="previewPane" class="hidden"></section>
-      <section id="fileViewerPane" class="hidden"></section>
+      <aside id="fileSidebar">
+        <button id="btnFileSidebarCollapse" type="button"></button>
+        <div id="fileSidebarFilesView"></div>
+      </aside>
+      <div id="splitResizer" class="hidden"></div>
+      <div id="rightPaneColumn" class="hidden">
+        <section id="previewPane" class="hidden"></section>
+        <section id="fileViewerPane" class="hidden"></section>
+      </div>
     </div>
+    <div id="desktopFileTreeMount"></div>
+    <div id="desktopPreviewMount"></div>
+    <div id="desktopFileViewerMount"></div>
   `;
 }
 
@@ -215,5 +224,39 @@ describe('syncDesktopWorkspaceMounts listing root', () => {
     assert.ok(desktopRoot);
     assert.notEqual(desktopRoot, CODE_WS);
     assert.equal(isDesktopWorkspaceHostingActive(), true);
+  });
+
+  test('Code entry hides preview after desktop browser drawer stripped .hidden (MIN-342)', async () => {
+    openDesktopWorkspaceTab('browser');
+    await syncDesktopWorkspaceMounts();
+
+    const preview = document.getElementById('previewPane');
+    assert.ok(preview);
+    assert.equal(preview.classList.contains('hidden'), false);
+    assert.equal(preview.parentElement?.id, 'desktopPreviewMount');
+
+    const { launchInstance } = await import('../../src/os/instances.ts');
+    launchInstance('code');
+    await syncDesktopWorkspaceMounts();
+
+    assert.equal(preview.parentElement?.id, 'rightPaneColumn');
+    assert.equal(preview.classList.contains('hidden'), true);
+    assert.equal(document.getElementById('rightPaneColumn')?.classList.contains('hidden'), true);
+  });
+
+  test('stale desktop sync cannot remount preview while Code is foreground', async () => {
+    openDesktopWorkspaceTab('browser');
+    const desktopSync = syncDesktopWorkspaceMounts();
+
+    const { launchInstance } = await import('../../src/os/instances.ts');
+    launchInstance('code');
+    await syncDesktopWorkspaceMounts();
+    await desktopSync;
+
+    const preview = document.getElementById('previewPane');
+    assert.ok(preview);
+    assert.equal(preview.parentElement?.id, 'rightPaneColumn');
+    assert.equal(preview.classList.contains('hidden'), true);
+    assert.equal(document.getElementById('desktopPreviewMount')?.classList.contains('is-active'), false);
   });
 });

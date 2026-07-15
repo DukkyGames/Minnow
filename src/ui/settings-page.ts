@@ -324,7 +324,7 @@ function closeSettingsAndReturnToCode(): boolean {
 
   const codeSection = settingsInst.launchOptions?.codeSection ?? getCurrentRoute().codeSection;
   closeInstance(settingsInst.id);
-  launchApp('code', { codeSection: codeSection ?? 'overview' });
+  launchApp('code', { codeSection: codeSection ?? 'chat' });
   void import('./preview-electron-visibility').then((m) =>
     m.syncElectronPreviewHostVisibility(),
   );
@@ -341,7 +341,7 @@ export function openSettings(
       settingsSection: section,
       settingsSearchKey: options?.searchKey,
       returnToApp: 'code',
-      codeSection: getCurrentRoute().codeSection ?? 'overview',
+      codeSection: getCurrentRoute().codeSection ?? 'chat',
     });
     return;
   }

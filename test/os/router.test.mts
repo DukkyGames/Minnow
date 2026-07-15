@@ -99,7 +99,7 @@ describe('parseOsHash', () => {
     assert.deepEqual(parseOsHash('#/app/code'), {
       view: 'app',
       appId: 'code',
-      codeSection: 'overview',
+      codeSection: 'chat',
     });
     assert.deepEqual(parseOsHash('#/app/chat'), { view: 'app', appId: 'chat' });
   });
@@ -146,7 +146,7 @@ describe('os router navigation', () => {
 
   test('launchApp updates hash and foreground instance', () => {
     launchApp('code');
-    assert.equal(window.location.hash, '#/app/code/overview');
+    assert.equal(window.location.hash, '#/app/code/chat');
     syncOsRouteFromHashForTests();
     const route = getCurrentRoute();
     assert.equal(route.view, 'app');
