@@ -252,6 +252,10 @@ export async function initApp(): Promise<void> {
   startSchedulerNotificationPoll();
   initNotificationProducers();
   onWelcomeServerAvailabilityChanged();
+  const { notifyCodeWorkspaceServerAvailability } = await import(
+    './boot/code-workspace-modules'
+  );
+  await notifyCodeWorkspaceServerAvailability();
   bindWorkspacePathForToolCache(getWorkspacePath);
   initWorkspaceButton();
   await refreshWorkspaceUi();
@@ -367,6 +371,9 @@ async function startApp(): Promise<void> {
   // Sessions must load before OS routing — Code app mount calls getActiveChat().
   await detectConfigServer();
   await loadSessionsFromStorage();
+  // Probe the tool server before routing — Code boot initializes the file tree during
+  // initOsRouter() and reads this flag (MIN-436).
+  await detectLocalServer();
   if (isOsShellEnabled()) {
     initOsRouter();
   }

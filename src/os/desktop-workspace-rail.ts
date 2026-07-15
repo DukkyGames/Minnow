@@ -134,6 +134,8 @@ async function onTabActivated(tab: DesktopWorkspaceTab): Promise<void> {
     const { showViewerSplit } = await import('../ui/file-layout');
     showViewerSplit();
   } else if (tab === 'files') {
+    const { ensureCodeWorkspaceModules } = await import('../boot/code-workspace-modules');
+    await ensureCodeWorkspaceModules();
     const { initFileTreeIfNeeded, refreshFileTree } = await import('../ui/file-tree');
     await initFileTreeIfNeeded();
     await refreshFileTree();

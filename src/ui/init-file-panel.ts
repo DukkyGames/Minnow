@@ -84,12 +84,14 @@ function bindFilePanelControls(): void {
 
 /** React to local server ping success/failure (after detectLocalServer). */
 export function onFilePanelServerAvailabilityChanged(): void {
-  if (!sessionState) return;
   setFileTreeServerAvailable(getLocalServerAvailable());
   onFileTreeSearchServerChanged();
   if (getLocalServerAvailable()) {
+    if (typeof document !== 'undefined' && document.getElementById('fileTreeHost')) {
+      void refreshFileTree();
+    }
+    if (!sessionState) return;
     void refreshWorkspaceUi();
-    void refreshFileTree();
     void syncOrchestratePlanStripFromActiveChat();
     syncViewModeToggleFromActiveChat();
     syncGitPanelFromOrchestrator();
