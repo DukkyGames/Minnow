@@ -47,6 +47,7 @@ import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
 import { initGitPanel, syncPanelFromActiveChat } from './git-panel';
 import { syncComposerRunTargetFromActiveChat } from './composer-run-target';
 import { initGitCenterLightbox } from './git-center-lightbox';
+import { initGitHelpLightbox } from './git-help-lightbox';
 import { startFileTreeGitStatusPoll } from './file-tree';
 import {
   shouldAutoRestoreViewerSplitOnBoot,
@@ -144,6 +145,7 @@ export async function initFilePanel(): Promise<void> {
 
   initGitPanel();
   initGitCenterLightbox();
+  initGitHelpLightbox();
   if (getLocalServerAvailable()) {
     startFileTreeGitStatusPoll();
   }

@@ -33,7 +33,8 @@
 
 .git-panel-center-row {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .git-panel-center-btn {
@@ -365,6 +366,14 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
   cursor: wait;
 }
 
+.git-panel-status-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .git-panel-status {
   margin: 0;
   font-size: 12px;
@@ -373,6 +382,30 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
 
 .git-panel-status.is-err {
   color: var(--mn-danger);
+}
+
+.git-panel-status-chat-btn {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-surface-1);
+  color: var(--mn-fg);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .git-panel-status-chat-btn:hover {
+    background: var(--mn-surface-2);
+    border-color: var(--mn-border-strong);
+  }
+}
+
+.git-panel-status-chat-btn:focus-visible {
+  outline: 2px solid var(--mn-focus-ring);
+  outline-offset: 2px;
 }
 
 .git-panel-commit-box {

@@ -14,11 +14,21 @@ import {
   type GitOpResult,
 } from '../state/git-api';
 import { showToast } from './toast';
+import {
+  appendGitErrorSendToChatButton,
+  type GitErrorChatContext,
+} from './git-error-to-chat';
 
 export interface AdvancedGitContext {
   cwd?: string;
   onSuccess: () => void;
   onConflict?: (message: string, kind: 'merge' | 'rebase' | 'cherry-pick' | 'stash') => void;
+  /** Branch context for Send to chat seeds. */
+  branch?: string;
+}
+
+function gitErrorChatContext(ctx: AdvancedGitContext): GitErrorChatContext {
+  return { cwd: ctx.cwd, branch: ctx.branch };
 }
 
 /** Show inline conflict alert with abort/continue actions. */
@@ -75,6 +85,32 @@ export function renderConflictAlert(
       actions.appendChild(contBtn);
     }
   }
+  if (kind === 'merge') {
+    appendGitErrorSendToChatButton(actions, 'merge', message, gitErrorChatContext(ctx));
+  }
+  alert.append(title, body, actions);
+  host.appendChild(alert);
+}
+
+/** Inline merge failure (non-conflict) with Send to chat. */
+export function renderMergeErrorAlert(
+  host: HTMLElement,
+  message: string,
+  ctx: AdvancedGitContext,
+): void {
+  host.replaceChildren();
+  const alert = document.createElement('div');
+  alert.className = 'git-center-conflict';
+  alert.setAttribute('role', 'alert');
+  const title = document.createElement('p');
+  title.className = 'git-center-conflict__title';
+  title.textContent = 'Merge failed';
+  const body = document.createElement('pre');
+  body.className = 'git-center-conflict__body';
+  body.textContent = message;
+  const actions = document.createElement('div');
+  actions.className = 'git-center-conflict__actions';
+  appendGitErrorSendToChatButton(actions, 'merge', message, gitErrorChatContext(ctx));
   alert.append(title, body, actions);
   host.appendChild(alert);
 }
@@ -124,6 +160,7 @@ export async function openMergeDialog(
       ctx.onConflict?.(err, 'merge');
       return;
     }
+    renderMergeErrorAlert(conflictHost, err, ctx);
     showToast(err, 'error');
     return;
   }
