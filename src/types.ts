@@ -708,6 +708,8 @@ export interface TurnRunRecord {
   parentTurnId?: string;
   /** Set when {@link status} is `stopped` — who/what aborted the turn. */
   stopReason?: ChatStopReason;
+  /** Set when the turn ended because it hit a hard cap rather than finishing normally. */
+  endReason?: 'max_tool_turns';
 }
 
 /** Expert thread or legacy Expert Lab session (hidden from main sidebar). */

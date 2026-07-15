@@ -1,5 +1,8 @@
 import { getStageRect } from './stage-metrics';
-import { createOsIcon, type SvgIconName } from './icons';
+import {
+  createWindowControlButton,
+  type WindowControlKind,
+} from './window-control-buttons';
 import { getWindowStageUsableSize } from './window-stage-bounds';
 import {
   detectSnapPreview,
@@ -216,18 +219,8 @@ export class WindowFrame {
     this.root.remove();
   }
 
-  private makeControlButton(kind: SvgIconName, label: string, onClick: () => void): HTMLButtonElement {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = `mn-os-window-btn mn-os-window-btn--${kind}`;
-    btn.setAttribute('aria-label', label);
-    btn.title = label;
-    btn.appendChild(createOsIcon(kind, { size: 14, stroke: 1.8 }));
-    btn.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      onClick();
-    });
-    return btn;
+  private makeControlButton(kind: WindowControlKind, label: string, onClick: () => void): HTMLButtonElement {
+    return createWindowControlButton(kind, label, onClick);
   }
 
   private getStageRect(): DOMRect {

@@ -149,6 +149,14 @@ export interface MinnowAppApi {
   openExternal(url: string): Promise<void>;
 }
 
+export interface MinnowWindowApi {
+  minimize(): Promise<void>;
+  maximize(): Promise<void>;
+  close(): Promise<void>;
+  isMaximized(): Promise<boolean>;
+  onMaximizedChanged(callback: (maximized: boolean) => void): () => void;
+}
+
 export interface MinnowLastCrashMarker {
   kind: string;
   reason?: string;
@@ -167,6 +175,7 @@ export interface MinnowDiagnosticsApi {
 export interface MinnowElectronBridge {
   preview: MinnowPreviewApi;
   app: MinnowAppApi;
+  window?: MinnowWindowApi;
   diagnostics?: MinnowDiagnosticsApi;
 }
 

@@ -205,13 +205,29 @@ export function isSuperPlanPipelineResumable(chat: Chat): boolean {
   return true;
 }
 
+/**
+ * True when persisted {@link Chat.superPlan} should rebuild the plan-screen
+ * session after reload (includes user-stopped/cancelled runs; excludes finished).
+ */
+export function isSuperPlanPlanScreenRestorable(chat: Chat): boolean {
+  if (normalizeModeId(chat.modeId) !== 'super-plan') return false;
+  const sp = chat.superPlan;
+  if (!sp) return false;
+  if (sp.activeStage === 'present') {
+    const record = sp.stages.present;
+    if (record?.status === 'done') return false;
+  }
+  return true;
+}
+
 function derivePlanScreenPhaseFromSuperPlan(chat: Chat): OrchestratePlanScreenPhase {
   const checkpoint = getSuperPlanCheckpointKind(chat);
   if (checkpoint === 'spec_confirm') return 'spec_confirm';
   if (checkpoint === 'present') return 'preview';
   const sp = chat.superPlan!;
   const record = sp.stages[sp.activeStage];
-  if (record?.status === 'error') return 'error';
+  // Cancelled runs keep the working stepper (read-only progress), not the error panel.
+  if (record?.status === 'error' && !sp.cancelled) return 'error';
   if (
     sp.activeStage === 'grill' &&
     (record?.status === 'running' || isChatStreaming(chat.id))
@@ -249,7 +265,7 @@ function resolvePlanSessionArtifactPath(
  */
 export function restoreOrchestratePlanScreenSessionFromChat(chat: Chat): boolean {
   if (planSession?.chatId === chat.id) return true;
-  if (!isSuperPlanPipelineResumable(chat)) return false;
+  if (!isSuperPlanPlanScreenRestorable(chat)) return false;
 
   const sp = chat.superPlan!;
   const record = sp.stages[sp.activeStage];
@@ -261,7 +277,7 @@ export function restoreOrchestratePlanScreenSessionFromChat(chat: Chat): boolean
     savedPrompt: sp.prompt,
     planScreenSuspended: true,
     errorMessage:
-      record?.status === 'error'
+      record?.status === 'error' && !sp.cancelled
         ? record.error?.trim() ||
           'Super Plan stopped with an error. Open the chat to review.'
         : undefined,
@@ -1499,6 +1515,9 @@ function suspendedPlanBannerText(
   chat?: Chat,
 ): string {
   const target = chat ?? (session ? findChatById(session.chatId) : undefined);
+  if (target?.superPlan?.cancelled) {
+    return 'Super Plan was stopped. Return to the planning screen to review progress or start a new run.';
+  }
   if (target?.superPlan?.paused) {
     return 'Super Plan is paused. Return to the planning screen to resume the pipeline.';
   }

@@ -60,6 +60,31 @@ module.exports = {};
 `;
     assert.ok(validatePlanSaveNoCodeSnippets(content)?.includes('js'));
   });
+
+  for (const lang of ['json', 'yaml', 'mermaid', 'diff']) {
+    test(`allows ${lang} fences outside Test sections`, () => {
+      const content = `#### Task W1-A: Config
+- **Build:** Add the following:
+
+\`\`\`${lang}
+{ "example": true }
+\`\`\`
+`;
+      assert.equal(validatePlanSaveNoCodeSnippets(content), null);
+    });
+  }
+
+  test('still rejects typescript fences even alongside allowed doc fences', () => {
+    const content = `\`\`\`yaml
+key: value
+\`\`\`
+
+\`\`\`typescript
+export function foo() {}
+\`\`\`
+`;
+    assert.ok(validatePlanSaveNoCodeSnippets(content)?.includes('typescript'));
+  });
 });
 
 describe('blockSuperPlanCodeSnippets', () => {

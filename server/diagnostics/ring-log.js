@@ -164,6 +164,39 @@ export async function readDiagnosticEntries(opts) {
   return entries.slice(-maxLines);
 }
 
+/** Log basenames merged by readDiagnosticEntries (active + rotated backups). */
+const DIAGNOSTIC_LOG_BASES = [DIAGNOSTICS_LOG_FILE, 'crash.jsonl'];
+
+/**
+ * Delete diagnostics + crash JSONL files (active and rotated backups).
+ * @param {{ override?: string }} [opts]
+ */
+export async function clearDiagnosticLogs(opts) {
+  const logPath = diagnosticsLogPath(opts);
+  const dir = path.dirname(logPath);
+
+  const pending = writeQueues.get(logPath);
+  if (pending) {
+    await pending.catch(() => {
+      /* drain queue before unlink */
+    });
+  }
+
+  for (const base of DIAGNOSTIC_LOG_BASES) {
+    for (let rot = 0; rot <= DIAGNOSTICS_LOG_MAX_ROTATIONS; rot += 1) {
+      const candidate =
+        rot === 0 ? path.join(dir, base) : path.join(dir, `${base}.${rot}`);
+      try {
+        await fsp.unlink(candidate);
+      } catch (err) {
+        if (/** @type {NodeJS.ErrnoException} */ (err).code !== 'ENOENT') {
+          /* best-effort clear */
+        }
+      }
+    }
+  }
+}
+
 /** Reset write queues (tests only). */
 export function resetDiagnosticWriteQueuesForTests() {
   writeQueues.clear();

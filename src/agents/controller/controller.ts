@@ -416,7 +416,7 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
     setStatus(run, 'running');
     run.lifecycle = 'dispatching';
     if (!run.startedAt) run.startedAt = nowIso();
-    const timeoutMs = typeConfig.timeoutMs || config.defaultTimeoutMs;
+    const timeoutMs = internals.spawnTimeoutMs ?? typeConfig.timeoutMs ?? config.defaultTimeoutMs;
     const checkInMs = config.checkInNudgeMs ?? 0;
     armRunTimers(internals, timeoutMs, checkInMs, runTimerHandlers);
     setHeartbeatConfig({
@@ -633,6 +633,7 @@ async function spawnSubAgentInternal(
     holdsConcurrencySlot: false,
     toolModeId,
     spawnModeId: modeId,
+    ...(input.timeoutMs !== undefined ? { spawnTimeoutMs: input.timeoutMs } : {}),
   };
 
   registerRun(runId, internals);
@@ -774,8 +775,12 @@ export async function waitForSubAgent(
     };
 
     const onAbort = (): void => {
-      cancelSubAgent(activeRunId, 'parent_abort');
+      // Fail (and unsubscribe) before cancelling: cancelSubAgent settles the run
+      // synchronously (settleRun → emitSubAgentRunUpdated), which would otherwise
+      // resolve this wait with a cancelled aggregate first and make the reject a
+      // no-op — the caller's abort-specific handling would never run.
       fail(new DOMException('Aborted', 'AbortError'));
+      cancelSubAgent(activeRunId, 'parent_abort');
     };
 
     let unsubscribe: (() => void) | null = null;

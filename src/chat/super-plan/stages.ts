@@ -12,6 +12,7 @@ import {
 } from '../../config/super-plan-meta';
 import { fetchSkillById } from '../../skills/client';
 import { findLastPlanSavePath } from '../orchestrate/plan-from-history';
+import { isSuperPlanReferenceArtifactPath } from '../modes/plan-write-guard';
 import { isFirstUserMessagePending } from '../titles/schedule';
 import {
   cancelResearch,
@@ -22,6 +23,7 @@ import {
 import type { Chat } from '../../types';
 import { detectLocalServer, executeTool } from '../../tools/client';
 import { buildHistoryUserContent, runChatTurn } from '../../tools/loop';
+import { newestRun } from '../../state/runs-store';
 import {
   composeSuperPlanImpeccableStage,
   shouldRunImpeccableStage,
@@ -94,13 +96,34 @@ async function runChatTurnForStage(
   }
 }
 
-async function fileExists(path: string): Promise<boolean> {
+/** Classify one get_file_metadata probe for {@link fileExists}. */
+async function probeFileMetadata(path: string): Promise<'exists' | 'missing' | 'error'> {
+  let result: { content?: string };
   try {
-    const result = await executeTool('read_file', { path });
-    return Boolean(result.content?.trim());
+    result = await executeTool('get_file_metadata', { path });
   } catch {
-    return false;
+    return 'error';
   }
+  const content = result.content ?? '';
+  if (!content.trimStart().startsWith('Error:')) return 'exists';
+  if (/enoent|no such file/i.test(content)) return 'missing';
+  return 'error';
+}
+
+/**
+ * True when `path` exists in the workspace, false when it genuinely doesn't.
+ * A transient tools-server error is retried once, then throws a distinct
+ * error instead of reporting `false` — a hiccup here must not read as
+ * "the plan wasn't saved".
+ */
+async function fileExists(path: string): Promise<boolean> {
+  const first = await probeFileMetadata(path);
+  if (first !== 'error') return first === 'exists';
+
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  const retry = await probeFileMetadata(path);
+  if (retry !== 'error') return retry === 'exists';
+  throw new Error(`Could not verify the save (tools server error): ${path}`);
 }
 
 async function readFileOrEmpty(path: string | undefined): Promise<string> {
@@ -182,13 +205,26 @@ function isAggregateResult(value: unknown): value is AggregateResult {
   );
 }
 
+/** Friendly message shared by both timeout detection paths (abort + type-level timer). */
+function reviewTimeoutError(pass: number): Error {
+  return new Error(
+    `Plan review (pass ${pass}) timed out after ${REVIEW_SUB_AGENT_TIMEOUT_MS / 60000} minutes — ` +
+      'retry the stage, or lower review rounds in Super Plan settings.',
+  );
+}
+
 /** Reject empty or placeholder plan-reviewer handoffs so the stage can retry. */
-function assertPlanReviewerAggregate(
+export function assertPlanReviewerAggregate(
   result: unknown,
   pass: number,
 ): AggregateResult {
   if (!isAggregateResult(result)) {
     throw new Error(`Plan review (pass ${pass}) did not return a sub-agent result.`);
+  }
+  if (result.status === 'cancelled' && result.error === 'timeout') {
+    // The sub-agent type's own wall-clock timer fired (possibly racing the
+    // stage's AbortSignal.timeout below) — report it the same way either way.
+    throw reviewTimeoutError(pass);
   }
   const summary = (result.outcome?.summary ?? result.summary ?? '').trim();
   const placeholder = 'Sub-agent completed with no text output.';
@@ -359,6 +395,7 @@ async function runReviewStage(
     wait: false,
     parentChatId: chat.id,
     modeId: 'super-plan',
+    timeoutMs: REVIEW_SUB_AGENT_TIMEOUT_MS,
     ...(config.reviewerModel.providerId?.trim()
       ? { providerId: config.reviewerModel.providerId.trim() }
       : {}),
@@ -366,6 +403,8 @@ async function runReviewStage(
       ? { modelId: config.reviewerModel.modelId.trim() }
       : {}),
   });
+  // Let pauseSuperPlan/cancelSuperPlan reach this run while it's in flight.
+  patchSuperPlanState(chat, { reviewRunId: spawned.runId });
 
   // Bound the wait so a hung reviewer cannot stall the pipeline forever;
   // aborting the wait also cancels the sub-agent run.
@@ -377,12 +416,20 @@ async function runReviewStage(
     );
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
-      throw new Error(
-        `Plan review (pass ${pass}) timed out after ${REVIEW_SUB_AGENT_TIMEOUT_MS / 60000} minutes — ` +
-          'retry the stage, or lower review rounds in Super Plan settings.',
-      );
+      throw reviewTimeoutError(pass);
     }
     throw err;
+  } finally {
+    if (chat.superPlan?.reviewRunId === spawned.runId) {
+      patchSuperPlanState(chat, { reviewRunId: undefined });
+    }
+  }
+
+  if (chat.superPlan?.cancelled) {
+    throw new Error('Super Plan cancelled');
+  }
+  if (chat.superPlan?.paused) {
+    return { kind: 'paused' };
   }
 
   const aggregate = assertPlanReviewerAggregate(result, pass);
@@ -517,11 +564,21 @@ export async function runSuperPlanStage(
   }
 }
 
+/** Path filter for {@link findLastPlanSavePath}: Super Plan spec/research reference artifacts. */
+function normalizeSuperPlanReferencePath(raw: string): string | undefined {
+  const trimmed = raw.trim().replace(/\\/g, '/');
+  return isSuperPlanReferenceArtifactPath(trimmed) ? trimmed : undefined;
+}
+
 export async function finalizeStreamStage(
   chat: Chat,
   stageId: import('./types').SuperPlanStageId,
 ): Promise<SuperPlanStageOutcome> {
   const state = ensureSuperPlanState(chat);
+  // Scope history scans to this stage's own turn so an older artifact from a
+  // prior draft/spec attempt can't be mistaken for this run's output.
+  const run = newestRun(chat);
+  const runRange = { startIndex: run?.outputHistoryStart, endIndex: run?.outputHistoryEnd };
 
   switch (stageId) {
     case 'grill':
@@ -529,34 +586,42 @@ export async function finalizeStreamStage(
       return { kind: 'done' };
 
     case 'spec_confirm': {
-      const specPath = state.specPath!;
-      const exists = await fileExists(specPath);
-      if (!exists) {
+      // The model may save the spec under a near-miss filename (still a valid
+      // reference artifact) — adopt whatever it actually saved this turn.
+      // Scoped to this run's window: an older spec save must not mask this
+      // attempt failing to save (same hazard as the draft case below).
+      const savedSpecPath = findLastPlanSavePath(chat.history, {
+        ...runRange,
+        normalizePath: normalizeSuperPlanReferencePath,
+      });
+      if (!savedSpecPath || !(await fileExists(savedSpecPath))) {
+        const expected = savedSpecPath ?? state.specPath!;
         throw new Error(
-          `Build spec was not saved to ${specPath}. Retry the stage to regenerate it.`,
+          `Build spec was not saved to ${expected}. Retry the stage to regenerate it.`,
         );
       }
+      if (savedSpecPath !== state.specPath) {
+        patchSuperPlanState(chat, { specPath: savedSpecPath });
+      }
       markSuperPlanStageStatus(chat, 'spec_confirm', 'blocked_user', {
-        artifactPath: specPath,
+        artifactPath: savedSpecPath,
       });
-      return { kind: 'blocked_user', artifactPath: specPath };
+      return { kind: 'blocked_user', artifactPath: savedSpecPath };
     }
 
     case 'draft1':
     case 'draft2': {
-      const planPath =
-        findLastPlanSavePath(chat.history) ??
-        state.planPath ??
-        superPlanPlanPath(state.slug);
-      if (!(await fileExists(planPath))) {
+      const savedPlanPath = findLastPlanSavePath(chat.history, runRange);
+      if (!savedPlanPath || !(await fileExists(savedPlanPath))) {
+        const expected = savedPlanPath ?? state.planPath ?? superPlanPlanPath(state.slug);
         throw new Error(
-          `Plan draft was not saved to ${planPath}. Retry the stage to draft it again.`,
+          `Plan draft was not saved to ${expected}. Retry the stage to draft it again.`,
         );
       }
       // Persist the actual save location so later stages and previews agree on one file.
-      patchSuperPlanState(chat, { planPath });
-      markSuperPlanStageStatus(chat, stageId, 'done', { artifactPath: planPath });
-      return { kind: 'done', artifactPath: planPath };
+      patchSuperPlanState(chat, { planPath: savedPlanPath });
+      markSuperPlanStageStatus(chat, stageId, 'done', { artifactPath: savedPlanPath });
+      return { kind: 'done', artifactPath: savedPlanPath };
     }
 
     case 'impeccable':

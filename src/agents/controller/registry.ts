@@ -140,7 +140,7 @@ export function evictRun(runId: string): void {
 
 /** Schedule eviction of a terminal run from the in-memory registry. */
 export function scheduleRunEviction(runId: string): void {
-  if (process.env.MINNOW_TEST === '1') return;
+  if (typeof process !== 'undefined' && process.env.MINNOW_TEST === '1') return;
   if (evictTimers.has(runId)) return;
   const timer = setTimeout(() => {
     evictTimers.delete(runId);

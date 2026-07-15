@@ -5,6 +5,7 @@ import {
   getSubAgentRun,
   resetSubAgentOrchestrator,
   spawnSubAgent,
+  waitForSubAgent,
 } from '../../src/agents/orchestrator.ts';
 import {
   resetSubAgentConfigCache,
@@ -59,5 +60,48 @@ describe('orchestrator cancel', () => {
     const cancelled = cancelSubAgent(second.runId, 'queued_cancel');
     assert.equal(cancelled.status, 'cancelled');
     assert.equal(getSubAgentRun(second.runId)?.status, 'cancelled');
+  });
+
+  test('waitForSubAgent rejects with AbortError on signal abort instead of resolving with the cancelled aggregate', async () => {
+    await spawnSubAgent({ type: 'explore', task: 'long task', wait: false });
+
+    const controller = new AbortController();
+    const waitPromise = waitForSubAgent(FIXED_RUN_ID, controller.signal);
+    controller.abort();
+
+    // Before the fail-before-cancel fix, cancelSubAgent's synchronous settle
+    // resolved this wait with a cancelled aggregate first, making the reject
+    // a no-op — callers relying on AbortError (e.g. Super Plan's review-stage
+    // timeout) never saw it.
+    await assert.rejects(
+      waitPromise,
+      (err: unknown) => err instanceof Error && err.name === 'AbortError',
+    );
+
+    const run = getSubAgentRun(FIXED_RUN_ID);
+    assert.equal(run?.status, 'cancelled');
+    assert.equal(run?.error, 'parent_abort');
+  });
+
+  test('spawn-level timeoutMs override arms the run timer instead of the (much longer) type default', async () => {
+    setSubAgentRunnerFactory(() => createMockSubAgentRunner({ delayMs: 5000 }));
+
+    // "explore" ships with a 300000ms default — the override must win.
+    const spawned = await spawnSubAgent({
+      type: 'explore',
+      task: 'long task',
+      wait: false,
+      timeoutMs: 30,
+    });
+
+    const deadline = Date.now() + 2000;
+    let run = getSubAgentRun(spawned.runId);
+    while (run && run.status === 'running' && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 10));
+      run = getSubAgentRun(spawned.runId);
+    }
+
+    assert.equal(run?.status, 'cancelled');
+    assert.equal(run?.error, 'timeout');
   });
 });
