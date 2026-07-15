@@ -71,4 +71,28 @@ describe('ThinkingDurationTracker', () => {
 
     performance.now = original;
   });
+
+  test('finalizeRound returns elapsed time and resets for the next response', () => {
+    let now = 0;
+    const original = performance.now;
+    performance.now = () => now;
+
+    const tracker = new ThinkingDurationTracker();
+    tracker.startSegment();
+    now += 300;
+    tracker.endSegment();
+    now += 5000;
+    tracker.startSegment();
+    now += 200;
+
+    assert.equal(tracker.finalizeRound(), 500);
+    assert.equal(tracker.getElapsedMs(), 0);
+
+    tracker.startSegment();
+    now += 100;
+    assert.equal(tracker.finalizeRound(), 100);
+    assert.equal(tracker.getElapsedMs(), 0);
+
+    performance.now = original;
+  });
 });
