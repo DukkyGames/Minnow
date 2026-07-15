@@ -7,6 +7,8 @@
 
 import { isLocalServerAvailable } from '../tools/config.ts';
 import { reportBackgroundError } from '../boot/report-background-error.ts';
+import { parseWorktreeListPorcelain } from '../lib/worktree-list-parse.ts';
+import { noteRegisteredWorktreePaths } from '../lib/worktree-allowlist-client.ts';
 
 /** One git worktree entry parsed from `git worktree list --porcelain`. */
 export interface WorktreeListEntry {
@@ -239,8 +241,15 @@ export function openIntegrationPr(input: {
 }
 
 /** List all git worktrees for the active repo (`git worktree list --porcelain`). */
-export function listWorktrees(): Promise<WorktreeOpResult> {
-  return postWorktree('list', {});
+export async function listWorktrees(): Promise<WorktreeOpResult> {
+  const result = await postWorktree('list', {});
+  if (result.ok) {
+    const paths =
+      result.worktrees?.map((wt) => wt.path) ??
+      (result.output ? parseWorktreeListPorcelain(result.output).map((wt) => wt.path) : []);
+    if (paths.length) noteRegisteredWorktreePaths(paths);
+  }
+  return result;
 }
 
 /** Create a managed per-chat worktree (MIN-276). */

@@ -13,6 +13,7 @@ import {
 import { describeToolInvocation } from './describe-invocation';
 import { extractPathLikeArgs } from './path-args';
 import { isPathUnderWorkspace } from './workspace-path-guard';
+import { isCachedRegisteredWorktreePath } from '../lib/worktree-allowlist-client.ts';
 import type { ToolExecutionResult } from '../types';
 import { enqueueToolApproval, type ToolApprovalContext } from './approval-queue';
 import type { ToolApprovalRequest } from './tool-approval-types';
@@ -32,6 +33,7 @@ function isPathInAllowedRoots(
   extraRoots: string[] | undefined,
 ): boolean {
   if (isPathUnderWorkspace(userPath, workspaceRoot)) return true;
+  if (isCachedRegisteredWorktreePath(userPath)) return true;
   for (const root of extraRoots ?? []) {
     const trimmed = root.trim();
     if (trimmed && isPathUnderWorkspace(userPath, trimmed)) return true;
