@@ -590,7 +590,7 @@ export function showQuestionCardsModal(
     document.addEventListener('keydown', onDocKeyDown, true);
     showCard();
 
-    notifyAskQuestionShown(chatIdForAbort, args, host, embedded);
+    notifyAskQuestionShown(chatIdForAbort, args);
 
     requestAnimationFrame(() => {
       host.scrollIntoView({ block: 'nearest', behavior: 'smooth' });

@@ -4,7 +4,7 @@
 
 import { isMinnowElectronShell } from '../tools/minnow-shell';
 import { loadNotificationPrefs } from './prefs';
-import type { NotificationSoundOption } from './types';
+import type { NotificationKind, NotificationSoundOption } from './types';
 
 /** Available notification sounds for settings + playback. */
 export const NOTIFICATION_SOUNDS: readonly NotificationSoundOption[] = [
@@ -69,12 +69,13 @@ export function initNotificationAudioUnlock(): void {
 }
 
 /** True when sound should play for a new notification. */
-export function shouldPlayNotificationSound(): boolean {
+export function shouldPlayNotificationSound(kind?: NotificationKind): boolean {
   const prefs = loadNotificationPrefs();
   if (!prefs.enabled || prefs.muted || !prefs.soundEnabled) return false;
   if (prefs.soundId === 'none') return false;
   if (typeof document === 'undefined') return false;
-  if (document.hasFocus()) return false;
+  // Agent questions need attention even when this window is focused.
+  if (kind !== 'chat_question' && document.hasFocus()) return false;
   // Electron: chime whenever the desktop window loses focus (another app, minimized, etc.).
   if (isMinnowElectronShell()) return true;
   // Browser tab: skip hidden background tabs; allow visible-but-unfocused edge cases.

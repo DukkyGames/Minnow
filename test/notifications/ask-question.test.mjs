@@ -49,17 +49,6 @@ describe('ask_question notification producer', () => {
     ],
   };
 
-  function makeVisibleHost(id = 'questionHost') {
-    const host = document.createElement('div');
-    host.id = id;
-    host.hidden = false;
-    const main = document.createElement('div');
-    main.id = 'mainColumn';
-    main.appendChild(host);
-    document.body.appendChild(main);
-    return host;
-  }
-
   test('pushes notification when user is on desktop', () => {
     const chat = sessions.createEmptyChatObject('model-a');
     chat.id = 'chat-a';
@@ -72,8 +61,7 @@ describe('ask_question notification producer', () => {
     });
     instances.showDesktop();
 
-    const host = makeVisibleHost();
-    askQuestion.notifyAskQuestionShown('chat-a', sampleArgs, host, false);
+    askQuestion.notifyAskQuestionShown('chat-a', sampleArgs);
 
     assert.equal(store.getUnreadNotificationCount(), 1);
     const row = store.getNotifications()[0];
@@ -82,7 +70,7 @@ describe('ask_question notification producer', () => {
     assert.equal(row?.chatId, 'chat-a');
   });
 
-  test('suppresses notification when embedded plan screen owns the chat', async () => {
+  test('pushes notification even when embedded plan screen owns the chat', async () => {
     const planScreen = await import('../../src/ui/orchestrate-plan-screen.ts');
     const chat = sessions.createEmptyChatObject('model-a');
     chat.id = 'chat-a';
@@ -113,11 +101,9 @@ describe('ask_question notification producer', () => {
       savedPrompt: 'Build a dashboard',
     });
 
-    const host = document.getElementById('orchestratePlanScreenQuestions');
-    assert.ok(host);
-
-    askQuestion.notifyAskQuestionShown('chat-a', sampleArgs, host, true);
-    assert.equal(store.getUnreadNotificationCount(), 0);
+    askQuestion.notifyAskQuestionShown('chat-a', sampleArgs);
+    assert.equal(store.getUnreadNotificationCount(), 1);
+    assert.equal(store.getNotifications()[0]?.kind, 'chat_question');
 
     planScreen.resetOrchestratePlanScreenForTests();
   });
@@ -144,9 +130,8 @@ describe('ask_question notification producer', () => {
     instances.showDesktop();
 
     planScreen.restoreOrchestratePlanScreenSessionFromChat(chat);
-    const host = makeVisibleHost('orchestratePlanScreenQuestions');
 
-    askQuestion.notifyAskQuestionShown('chat-a', sampleArgs, host, false);
+    askQuestion.notifyAskQuestionShown('chat-a', sampleArgs);
     assert.equal(store.getUnreadNotificationCount(), 1);
     assert.equal(store.getNotifications()[0]?.kind, 'chat_question');
 
@@ -164,9 +149,8 @@ describe('ask_question notification producer', () => {
     });
     instances.showDesktop();
 
-    const host = makeVisibleHost();
-    askQuestion.notifyAskQuestionShown('chat-a', sampleArgs, host, false);
-    askQuestion.notifyAskQuestionShown('chat-a', sampleArgs, host, false);
+    askQuestion.notifyAskQuestionShown('chat-a', sampleArgs);
+    askQuestion.notifyAskQuestionShown('chat-a', sampleArgs);
     assert.equal(store.getUnreadNotificationCount(), 1);
   });
 });
