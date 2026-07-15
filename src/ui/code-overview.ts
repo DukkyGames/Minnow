@@ -67,6 +67,17 @@ export function isCodeOverviewOpen(): boolean {
   return Boolean(document.getElementById(ROOT_ID));
 }
 
+/**
+ * Tear down code overview so sidebar navigation can repaint chat or board.
+ * Syncs hash to #/app/code/chat when overview was open.
+ */
+export function dismissCodeOverviewForNavigation(): boolean {
+  if (!isCodeOverviewOpen()) return false;
+  closeCodeOverview({ skipNavigate: true, restoreChat: false });
+  navigateToCodeChat();
+  return true;
+}
+
 function formatCompactCount(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return '0';
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;

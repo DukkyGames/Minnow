@@ -71,6 +71,7 @@ import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selec
 import { syncComposerPinnedSkillFromActiveChat } from './composer-pinned-skill';
 import { syncComposerRunTargetFromActiveChat } from './composer-run-target';
 import { buildDefaultPinnedSkillForNewChat } from '../skills/config';
+import { dismissCodeOverviewForNavigation } from './code-overview';
 import { isBoardViewActive, syncViewModeToggleFromActiveChat } from './view-mode-toggle';
 import {
   isOrchestrateHubMounted,
@@ -1060,14 +1061,8 @@ function paintActiveChatInForegroundShell(chat: Chat): void {
     renderChatFromHistory(chat, '#chatAppMessageCol');
     return;
   }
-  if (document.getElementById('codeOverviewRoot')) {
-    void import('./code-overview').then(({ closeCodeOverview }) => {
-      closeCodeOverview({ skipNavigate: true, restoreChat: false });
-      void import('../os/router').then(({ navigateToCodeChat }) => {
-        navigateToCodeChat();
-        renderChatFromHistory(chat);
-      });
-    });
+  if (dismissCodeOverviewForNavigation()) {
+    renderChatFromHistory(chat);
     return;
   }
   renderChatFromHistory(chat);
@@ -1111,14 +1106,21 @@ export function switchChat(id: string): void {
 
   if (id === sessionState.activeId) {
     acknowledgeChatViewed(id);
-    if (boardWasOpen) {
-      const sameChat = sessionState.chats.find((c) => c.id === id);
-      if (sameChat) {
-        renderChatFromHistory(sameChat);
-        syncViewModeToggleFromActiveChat();
-        renderSidebar();
-        scheduleSaveSessions();
-      }
+    const sameChat = sessionState.chats.find((c) => c.id === id);
+    if (sameChat && dismissCodeOverviewForNavigation()) {
+      renderChatFromHistory(sameChat);
+      syncViewModeToggleFromActiveChat();
+      renderSidebar();
+      scheduleSaveSessions();
+      closeMobileSidebar();
+      applySidebarVisuals();
+      return;
+    }
+    if (boardWasOpen && sameChat) {
+      renderChatFromHistory(sameChat);
+      syncViewModeToggleFromActiveChat();
+      renderSidebar();
+      scheduleSaveSessions();
     }
     closeMobileSidebar();
     applySidebarVisuals();
