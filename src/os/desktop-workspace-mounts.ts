@@ -154,8 +154,10 @@ async function refreshFileTreeForSurface(): Promise<void> {
   if (!document.getElementById('fileTreeHost')) {
     return;
   }
+  const { ensureCodeWorkspaceModules } = await import('../boot/code-workspace-modules');
+  await ensureCodeWorkspaceModules();
   const { initFileTreeIfNeeded, refreshFileTree } = await import('../ui/file-tree');
-  initFileTreeIfNeeded();
+  await initFileTreeIfNeeded();
   await refreshFileTree();
 }
 

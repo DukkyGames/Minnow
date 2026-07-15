@@ -1021,7 +1021,7 @@ Project file explorer (right) and editable CodeMirror viewer in a horizontal spl
 
 **Tree row density (E4 / feature-21):** Default rows are compact (`min-height: 0`, tighter padding in `file-panel.css`); `@media (pointer: coarse)` restores `min-height: var(--touch-min)` (44px) and touch padding. Row hover/selection matches chat sidebar (`.chat-item-row`): fine-pointer `--surface-elevated` hover, `--accent` border when selected. Depth indent: `src/ui/file-tree-indent.ts` (`FILE_TREE_DEPTH_INDENT_PX` = 12, dir/file base 6 / 24), re-exported from `file-tree.ts`.
 
-**Server:** Tree and viewer call `executeTool()` directly (`POST /api/tools`); tool catalog toggles in Settings are **not** required. Offline (`npm run dev`): empty state “Start with `npm start`…”. On boot, after `detectLocalServer()`, `initFilePanel()` and `onFilePanelServerAvailabilityChanged()` load the tree when the server is up (no need to open the Files panel or click refresh).
+**Server:** Tree and viewer call `executeTool()` directly (`POST /api/tools`); tool catalog toggles in Settings are **not** required. Offline (`npm run dev`): empty state “Start with `npm start`…”. On boot, `detectLocalServer()` runs in `startApp()` **before** `initOsRouter()` so Code reload does not initialize the tree while the ping flag is still false (**MIN-436**); `initFilePanel()` + `onFilePanelServerAvailabilityChanged()` load the tree when the server is up (desktop Files drawer calls `ensureCodeWorkspaceModules()` first).
 
 **Persistence (`filePanel`):** `fileSidebarCollapsed`, `fileSidebarWidth` (220–560px), `viewerOpen` (legacy; kept in sync with `rightPaneMode`), `rightPaneMode` (`viewer` | `preview` | null), `previewSource` (legacy; synced from active preview tab), `previewTabs` + `activePreviewTab` (MIN-224), `previewAutoReload`, `splitRatio` (0.35–0.75), `expandedDirs`, `selectedPath`, `openViewerTabs`, `activeViewerTab` (workspace paths only; `selectedPath` stays in sync with the active tab for tree highlight), `treeRoot`. **Workspace switch** clears viewer tabs (`applyWorkspaceSwitch` in `workspace-button.ts`). Legacy configs with only `selectedPath` migrate into `openViewerTabs` on load. No dedicated `localStorage` key when config API is up.
 
@@ -2016,7 +2016,8 @@ Use the port printed by `server.js` (default **9473**; another port if `PORT` is
 Order in `startApp()` (before `initApp()`):
 
 1. `await detectConfigServer()` → `await loadSessionsFromStorage()` — **must complete before `initOsRouter()`** so Code app foregrounding never calls `getActiveChat()` on an empty blob.
-2. `initOsRouter()` (MinnowOS shell only) — hash routing after sessions are ready.
+2. `await detectLocalServer()` — **must complete before `initOsRouter()`** so Code boot (`ensureCodeWorkspaceModules` → `initFilePanel`) sees the tool-server ping result (**MIN-436**).
+3. `initOsRouter()` (MinnowOS shell only) — hash routing after sessions and server ping are ready.
 
 Order in `initApp()`:
 
@@ -2026,7 +2027,7 @@ Order in `initApp()`:
 4. `await initWorkAgentSystem()` — work agents from glob + `/api/work-agents` overrides.
 5. `await loadSessionsFromStorage({ force: true })` when server mode (re-hydrates from `~/.minnow` after a localStorage boot race — **MIN-408**); otherwise no-op when already loaded from `startApp()`. `registerSessionPersistenceShutdownHandler()` flushes debounced saves on `pagehide` via `fetch` `keepalive`. Server PUT is blocked until a successful GET hydrates `sessionState` so an empty boot blob cannot clobber `sessions/state.json`.
 6. `fillToolsSection()` + `registerToolHandlers()`; `initAttachments()`; `initModeSelector()`; `initWorkAgentDevUi()`.
-7. `await detectLocalServer()` → `loadToolConfigIntoDrawer()` (server-required rows depend on ping).
+7. `await detectLocalServer()` (re-probe) → `notifyCodeWorkspaceServerAvailability()` when Code modules already initialized → `loadToolConfigIntoDrawer()` (server-required rows depend on ping).
 8. `applySidebarVisuals()` + `renderSidebar()`.
 9. `await fetchModels()` → `syncModelSelectForActiveChat()`, `renderChatFromHistory()`, `renderStatsForChat()`, `renderSidebar()` again.
 

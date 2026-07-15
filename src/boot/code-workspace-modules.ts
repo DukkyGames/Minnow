@@ -64,3 +64,12 @@ export async function ensureCodeWorkspaceModulesForBoot(): Promise<void> {
     await ensureCodeWorkspaceModules();
   }
 }
+
+/** Re-sync file tree / terminal offline state after a later detectLocalServer() probe. */
+export async function notifyCodeWorkspaceServerAvailability(): Promise<void> {
+  if (!initialized) return;
+  const filePanel = await import('../ui/init-file-panel');
+  filePanel.onFilePanelServerAvailabilityChanged();
+  const terminal = await import('../ui/terminal-panel');
+  terminal.onTerminalServerAvailabilityChanged();
+}
