@@ -75,6 +75,8 @@ export interface SuperPlanState {
   researchPath?: string;
   /** Active Deep Research run id while the research stage is in flight. */
   researchId?: string;
+  /** Transient plan-reviewer sub-agent run id while a review stage is in flight (not resumed across reloads). */
+  reviewRunId?: string;
   /** Pass 1 plan-reviewer structured critique (for pass 2 and draft2). */
   review1Critique?: string;
   /** Pass 2 plan-reviewer structured critique (optional audit trail). */

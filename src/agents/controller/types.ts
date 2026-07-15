@@ -24,4 +24,6 @@ export interface RunInternals {
   toolModeId: string;
   /** Parent spawn mode id (before tool-mode resolution). */
   spawnModeId: string;
+  /** Per-spawn wall-clock timeout override (ms); wins over type/global defaults. */
+  spawnTimeoutMs?: number;
 }

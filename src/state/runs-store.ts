@@ -179,6 +179,7 @@ export interface FinalizeRunOptions {
   outputMessages?: Message[];
   endedAt?: number;
   stopReason?: ChatStopReason;
+  endReason?: 'max_tool_turns';
 }
 
 export function finalizeRun(
@@ -202,9 +203,22 @@ export function finalizeRun(
   if (run.status === 'stopped' && options.stopReason) {
     run.stopReason = options.stopReason;
   }
+  if (options.endReason) {
+    run.endReason = options.endReason;
+  }
   if (run.status === 'completed' || run.status === 'stopped') {
     setActiveBranch(chat, run.forkHistoryIndex, run.branchId);
   }
+}
+
+/** Most recently created run on this chat (stage/turn runners create exactly one run each). */
+export function newestRun(chat: Chat): TurnRunRecord | undefined {
+  const runs = chat.runs ?? [];
+  let newest: TurnRunRecord | undefined;
+  for (const run of runs) {
+    if (!newest || run.createdAt > newest.createdAt) newest = run;
+  }
+  return newest;
 }
 
 /**

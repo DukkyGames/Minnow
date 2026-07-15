@@ -93,22 +93,40 @@ function toolCallForResult(
   return assistant.tool_calls.find((tc) => tc.id === toolRow.tool_call_id);
 }
 
-function normalizedPlanPathFromSaveFile(
+function normalizedSavePathFromSaveFile(
   argsJson: string,
   resultContent: string,
+  normalizePath: (raw: string) => string | undefined,
 ): string | undefined {
   const fromArgs = pathFromSaveFileArgs(argsJson);
   const fromResult = pathFromToolResultContent(resultContent);
   const raw = fromArgs ?? fromResult;
-  return raw ? normalizeOrchestratePlanPath(raw) : undefined;
+  return raw ? normalizePath(raw) : undefined;
+}
+
+export interface FindLastPlanSavePathOptions {
+  /** Inclusive lower bound on history index (default: 0) — e.g. a run's outputHistoryStart. */
+  startIndex?: number;
+  /** Inclusive upper bound on history index (default: history.length - 1). */
+  endIndex?: number;
+  /** Path validity + normalization; defaults to the executable-plan filter (documentation/plans/*.md). */
+  normalizePath?: (raw: string) => string | undefined;
 }
 
 /**
  * Latest workspace-relative plan path written via save_file to documentation/plans/*.md.
- * Scans history newest-first; correlates tool rows with preceding assistant tool_calls.
+ * Scans history newest-first (optionally restricted to `[startIndex, endIndex]`, e.g. a
+ * single run's own output range); correlates tool rows with preceding assistant tool_calls.
  */
-export function findLastPlanSavePath(history: Message[]): string | undefined {
-  for (let i = history.length - 1; i >= 0; i -= 1) {
+export function findLastPlanSavePath(
+  history: Message[],
+  options: FindLastPlanSavePathOptions = {},
+): string | undefined {
+  const start = Math.max(0, options.startIndex ?? 0);
+  const end = Math.min(history.length - 1, options.endIndex ?? history.length - 1);
+  const normalizePath = options.normalizePath ?? normalizeOrchestratePlanPath;
+
+  for (let i = end; i >= start; i -= 1) {
     const msg = history[i];
     if (msg.role !== 'tool') continue;
 
@@ -122,11 +140,12 @@ export function findLastPlanSavePath(history: Message[]): string | undefined {
     const toolCall = toolCallForResult(assistant, toolRow);
     if (!toolCall || toolCall.function?.name !== SAVE_FILE_TOOL) continue;
 
-    const planPath = normalizedPlanPathFromSaveFile(
+    const savedPath = normalizedSavePathFromSaveFile(
       toolCall.function.arguments ?? '{}',
       toolRow.content,
+      normalizePath,
     );
-    if (planPath) return planPath;
+    if (savedPath) return savedPath;
   }
 
   return undefined;

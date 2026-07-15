@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "createdAt": "2026-07-12T03:53:50.292Z",
+  "createdAt": "2026-07-15T02:21:21.808Z",
   "migratedFromLocalStorage": false,
   "migratedAt": null,
   "localStorageKeysMigrated": [],
@@ -29,7 +29,8 @@
     "maxTokens": 32768
   },
   "thinking": {
-    "defaultMode": "on"
+    "defaultMode": "on",
+    "thinkingBudgetTokens": null
   },
   "terminal": {
     "open": false,
@@ -124,7 +125,29 @@
     "rejectedRetentionDays": 30
   },
   "planning": {
-    "granularity": "medium"
+    "granularity": "medium",
+    "superPlan": {
+      "reviewRounds": 2,
+      "grillQuestionBudget": 20,
+      "impeccable": "auto",
+      "researchScope": "both",
+      "researchMaxRounds": 0,
+      "researchDepth": "auto",
+      "models": {
+        "research": {
+          "providerId": "",
+          "modelId": ""
+        },
+        "reviewer": {
+          "providerId": "",
+          "modelId": ""
+        },
+        "planner": {
+          "providerId": "",
+          "modelId": ""
+        }
+      }
+    }
   },
   "chat": {
     "maxToolTurns": 100,
@@ -196,9 +219,9 @@
     }
   },
   "workspace": {
-    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-E25yPR",
+    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-uO71W1",
     "recentPaths": [
-      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-E25yPR"
+      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-uO71W1"
     ]
   }
 }
