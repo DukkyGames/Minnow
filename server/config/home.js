@@ -342,6 +342,9 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'search_settings',
   'get_settings',
   'update_settings',
+  'get_appearance',
+  'update_appearance',
+  'upload_appearance_asset',
   'repo_map',
   'find_symbol',
   'who_calls',
@@ -353,7 +356,7 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
 ]);
 
 function defaultPermissionForTool(id, enabled) {
-  if (id === 'search_settings' || id === 'get_settings') {
+  if (id === 'search_settings' || id === 'get_settings' || id === 'get_appearance') {
     return enabled ? 'full' : 'off';
   }
   if (id === 'read_diagnostics') {

@@ -156,6 +156,7 @@ describe('cross-mode policy invariants', () => {
   const BRAIN_TOOLS = TOOL_GROUP_IDS.brain;
   const EMAIL_TOOLS = TOOL_GROUP_IDS.email;
   const CALENDAR_TOOLS = TOOL_GROUP_IDS.calendar;
+  const APPEARANCE_TOOLS = TOOL_GROUP_IDS.appearance;
 
   test('bug-board tools allowed only in general, debug, and desktop', () => {
     for (const modeId of MODE_IDS) {
@@ -190,6 +191,19 @@ describe('cross-mode policy invariants', () => {
         assert.ok(
           allowed === expected,
           `${toolId} in ${modeId}: expected ${expected}`,
+        );
+      }
+    }
+  });
+
+  test('appearance tools denied except in desktop mode', () => {
+    for (const modeId of MODE_IDS) {
+      for (const toolId of APPEARANCE_TOOLS) {
+        const allowed = isToolAllowedForMode(modeId, toolId);
+        assert.equal(
+          allowed,
+          modeId === 'desktop',
+          `${toolId} in ${modeId}: expected ${modeId === 'desktop'}`,
         );
       }
     }

@@ -77,6 +77,8 @@ Open via **Settings** (`#/settings/<category>`) or legacy `#/settings/<area>`.
 
 Stored primarily in browser `localStorage` (custom token overrides may sync via appearance modules).
 
+**Agent writes (Desktop mode only):** use `get_appearance`, `update_appearance`, and `upload_appearance_asset` — not `update_settings`. Registry keys `appearance.theme.family`, `appearance.theme.mode`, and `appearance.wallpaper` remain readable via `get_settings` but are not writable through the settings agent tools.
+
 | Setting | Options / notes |
 |---------|-----------------|
 | Theme family | `sage`, `amber`, `cyan`, `coral` |
