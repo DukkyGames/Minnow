@@ -603,6 +603,87 @@ describe('orchestrate plan screen', () => {
     assert.equal(settled, true);
   });
 
+  test('renderChatFromHistory for other chat preserves suspended grill questions', async () => {
+    const window = new Window();
+    globalThis.document = window.document;
+    globalThis.HTMLElement = window.HTMLElement;
+    globalThis.requestAnimationFrame = (cb: () => void) => {
+      cb();
+      return 0;
+    };
+
+    mountCodeChatAreaForTests();
+    const mainColumn = document.createElement('div');
+    mainColumn.id = 'mainColumn';
+    document.body.appendChild(mainColumn);
+    const composerHost = document.createElement('div');
+    composerHost.id = 'questionHost';
+    composerHost.hidden = true;
+    mainColumn.appendChild(composerHost);
+
+    const chat = createEmptyChatObject('sp-grill-render');
+    chat.modeId = 'super-plan';
+    chat.history.push({ role: 'user', content: 'Add OAuth login' });
+    const otherChat = createEmptyChatObject('other-render');
+    otherChat.id = 'other-render-chat';
+    otherChat.history.push({ role: 'user', content: 'Hello' });
+    setSessionStateForTests({
+      version: 5,
+      activeId: otherChat.id,
+      sidebarCollapsed: false,
+      chats: [chat, otherChat],
+    });
+
+    renderOrchestratePlanScreen({
+      phase: 'questions',
+      chatId: chat.id,
+      savedPrompt: 'Add OAuth login',
+    });
+
+    const planHost = document.getElementById(ORCHESTRATE_PLAN_SCREEN_QUESTIONS_ID);
+    assert.ok(planHost);
+
+    const {
+      showQuestionCardsModal,
+      syncAskQuestionModalOnChatSwitch,
+      isAskQuestionModalOpenForChat,
+      resetQuestionCardsModalForTests,
+    } = await import('../../src/ui/question-cards-modal.ts');
+
+    let settled = false;
+    const modalPromise = showQuestionCardsModal(
+      {
+        questions: [
+          {
+            id: 'q1',
+            prompt: 'Which auth provider?',
+            options: [
+              { id: 'a', label: 'Google' },
+              { id: 'b', label: 'GitHub' },
+            ],
+          },
+        ],
+      },
+      {},
+      { host: planHost!, embedded: true, chatId: chat.id },
+    );
+
+    suspendOrchestratePlanScreenOnLeave(chat.id);
+    syncAskQuestionModalOnChatSwitch(chat.id, otherChat.id);
+    assert.equal(composerHost.hidden, true);
+
+    renderChatFromHistory(otherChat);
+
+    assert.equal(isAskQuestionModalOpenForChat(chat.id), true);
+    assert.equal(getOrchestratePlanScreenSession()?.phase, 'questions');
+    assert.equal(getOrchestratePlanScreenSession()?.planScreenSuspended, true);
+
+    resetQuestionCardsModalForTests();
+    settled = true;
+    await modalPromise.catch(() => undefined);
+    assert.equal(settled, true);
+  });
+
   test('clicking active super-plan chat in sidebar shows transcript instead of blank area', () => {
     const window = new Window();
     globalThis.document = window.document;

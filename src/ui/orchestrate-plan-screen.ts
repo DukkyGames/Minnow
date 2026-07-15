@@ -329,18 +329,24 @@ function preparePlanScreenQuestionsBeforeTeardown(
   chatId: string,
   options: { keepQuestionsInComposer?: boolean } = {},
 ): void {
-  if (!isAskQuestionModalOnPlanScreenHost()) {
-    if (isAskQuestionModalOpenForChat(chatId)) {
-      forceCloseAskQuestionModalForChat(chatId);
-    }
+  if (!isAskQuestionModalOpenForChat(chatId)) {
     return;
   }
-  if (options.keepQuestionsInComposer) {
-    const composerHost = document.getElementById('questionHost');
-    if (composerHost && migrateActiveQuestionModalToHost(composerHost)) {
-      if (planSession) planSession.phase = 'questions';
-      return;
+  if (isAskQuestionModalOnPlanScreenHost()) {
+    if (options.keepQuestionsInComposer) {
+      const composerHost = document.getElementById('questionHost');
+      if (composerHost && migrateActiveQuestionModalToHost(composerHost)) {
+        if (planSession) planSession.phase = 'questions';
+        return;
+      }
     }
+    forceCloseAskQuestionModalForChat(chatId);
+    return;
+  }
+  // Strip already lives in the composer — leave it for chat-switch park/unpark.
+  if (options.keepQuestionsInComposer) {
+    if (planSession) planSession.phase = 'questions';
+    return;
   }
   forceCloseAskQuestionModalForChat(chatId);
 }
