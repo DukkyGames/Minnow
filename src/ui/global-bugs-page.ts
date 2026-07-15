@@ -130,7 +130,7 @@ export function closeGlobalBugs(): void {
   const mount = document.getElementById('globalBugsList');
   if (mount) mount.innerHTML = '';
   if (window.location.hash.startsWith('#/bugs')) {
-    const fallback = isOsShellEnabled() ? '#/app/code/overview' : '#/';
+    const fallback = isOsShellEnabled() ? '#/app/code/chat' : '#/';
     const next = hashBeforeGlobalBugs ?? fallback;
     hashBeforeGlobalBugs = null;
     if (window.location.hash !== next) {
@@ -170,7 +170,7 @@ export function openGlobalBugs(): void {
   renderGlobalBugsList();
 
   if (!window.location.hash.startsWith('#/bugs')) {
-    hashBeforeGlobalBugs = window.location.hash || '#/app/code/overview';
+    hashBeforeGlobalBugs = window.location.hash || '#/app/code/chat';
   }
 
   const nextHash = '#/bugs';

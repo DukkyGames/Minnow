@@ -48,7 +48,7 @@ describe('code app settings (MIN-417)', () => {
       });
     installHappyDomGlobals(win, { fetch: win.fetch });
     win.localStorage.clear();
-    win.location.hash = '#/app/code/overview';
+    win.location.hash = '#/app/code/chat';
     setupCodeSettingsDom(win.document);
 
     ({
@@ -143,7 +143,7 @@ describe('code app settings (MIN-417)', () => {
     assert.equal(snap.instances.some((i) => i.appId === 'settings'), false);
     assert.equal(getForegroundAppId(), 'code');
     assert.equal(getOsView(), 'app');
-    assert.equal(window.location.hash, '#/app/code/overview');
+    assert.equal(window.location.hash, '#/app/code/chat');
   });
 
   test('launchApp(settings) from Code menubar path is fullscreen, not a window', async () => {

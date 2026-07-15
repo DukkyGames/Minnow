@@ -18,14 +18,14 @@ Opening the **Code** app sometimes showed the browser preview panel already expa
 
 ## Root cause
 
-Desktop workspace mounts call `classList.remove('hidden')` when reparenting `#previewPane` / `#fileViewerPane` into the drawer. `restoreToCode()` only moved nodes back without re-applying `.hidden`, so both panes could stay visible in Code. `reconcileRightSplitDomWithState()` also did nothing when `rightPaneMode` was `null`.
+Desktop workspace mounts call `classList.remove('hidden')` when reparenting `#previewPane` / `#fileViewerPane` into the drawer. Early fixes re-applied a **captured** `.hidden` flag, but re-capturing after a drawer mount stored `hidden=false`, so Code entry restored the browser open. Overlapping async `syncDesktopWorkspaceMounts` runs could also remount the preview to the desktop host while Code was foreground (Electron guest overlay). `reconcileRightSplitDomWithState()` also did nothing when `rightPaneMode` was `null`.
 
 ## Implementation
 
 - [`src/ui/preview-restore-policy.ts`](../../src/ui/preview-restore-policy.ts) — `shouldAutoRestorePreviewPanel()` + `shouldAutoRestoreViewerSplitOnBoot()` gate boot restore.
 - [`src/ui/file-layout.ts`](../../src/ui/file-layout.ts) — `hideAllRightSplitPanesDom()`, `resetRightSplitForCodeEntry()`, reconcile hides both panes when split is closed.
 - [`src/ui/preview-panel.ts`](../../src/ui/preview-panel.ts) — `collapsePreviewPanelKeepingSource()` resets both panes + clears Electron guest.
-- [`src/os/desktop-workspace-mounts.ts`](../../src/os/desktop-workspace-mounts.ts) — `restoreToCode()` re-applies `.hidden`; Code foreground calls collapse on surface switch.
+- [`src/os/desktop-workspace-mounts.ts`](../../src/os/desktop-workspace-mounts.ts) — `restoreToCode()` sets preview/viewer `.hidden` from `filePanel.rightPaneMode`; sync generation token drops stale desktop remounts; Code foreground collapses on surface switch.
 - [`src/os/page-bridge.ts`](../../src/os/page-bridge.ts) — `osOnAppOpen('code')` collapses right split.
 
 Legacy non-OS mode (`isOsShellEnabled() === false`) still auto-restores an open preview on full page reload.
@@ -36,4 +36,4 @@ Legacy non-OS mode (`isOsShellEnabled() === false`) still auto-restores an open 
 2. Reload with `#/app/code` while `filePanel.rightPaneMode` was `preview` or `viewer` → **both panels closed**.
 3. Desktop: open Browser drawer → reload `#/desktop` → browser **restores**. Open File preview drawer → reload → viewer **restores**.
 
-Tests: `test/ui/preview-restore-policy.test.mts`, `test/ui/file-layout-right-split.test.mts`
+Tests: `test/ui/preview-restore-policy.test.mts`, `test/ui/file-layout-right-split.test.mts`, `test/os/desktop-workspace-mounts.test.mts` (Code entry hide + stale sync)

@@ -147,9 +147,9 @@ export function parseOsHash(hash: string): OsRoute {
     if (route.appId === 'code') {
       const seg = appMatch[2];
       route.codeSection =
-        seg === 'chat'
-          ? 'chat'
-          : (pendingCodeSection ?? 'overview');
+        seg === 'overview'
+          ? 'overview'
+          : (pendingCodeSection ?? 'chat');
     }
     return route;
   }
@@ -174,8 +174,8 @@ function hashForRoute(route: OsRoute): string {
     return `#/app/brain/${route.brainSection}`;
   }
   if (route.appId === 'code') {
-    const section = route.codeSection ?? 'overview';
-    return section === 'chat' ? '#/app/code/chat' : '#/app/code/overview';
+    const section = route.codeSection ?? 'chat';
+    return section === 'overview' ? '#/app/code/overview' : '#/app/code/chat';
   }
   if (route.appId) return `#/app/${route.appId}`;
   return '#/desktop';
@@ -350,7 +350,7 @@ export function launchApp(appId: AppId, options?: LaunchOptions): void {
       ...options,
       returnToApp: 'code',
       codeSection:
-        options?.codeSection ?? pendingCodeSection ?? getCurrentRoute().codeSection ?? 'overview',
+        options?.codeSection ?? pendingCodeSection ?? getCurrentRoute().codeSection ?? 'chat',
     };
   }
   const codeSection: CodeSectionId | undefined =
@@ -360,7 +360,7 @@ export function launchApp(appId: AppId, options?: LaunchOptions): void {
         options?.modeId ||
         options?.workspacePath?.trim()
         ? 'chat'
-        : (options?.codeSection ?? 'overview')
+        : (options?.codeSection ?? 'chat')
       : undefined;
   const next =
     appId === 'models' && options?.modelsSection

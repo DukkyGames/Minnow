@@ -240,7 +240,7 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
         Boolean(options?.workspacePath?.trim()) ||
         route.codeSection === 'chat';
       const overview = await import('../ui/code-overview');
-      if (!wantsChat && (route.codeSection === 'overview' || !route.codeSection)) {
+      if (route.codeSection === 'overview' && !wantsChat) {
         await overview.openCodeOverview();
         break;
       }

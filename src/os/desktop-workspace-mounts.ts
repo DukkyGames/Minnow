@@ -3,6 +3,7 @@
  */
 
 import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
+import { getFilePanelState } from '../state/file-panel';
 import { getWorkspacePath } from '../state/workspace';
 import { isDesktopChatActive } from './desktop-state';
 import { getForegroundAppId, getOsView } from './instances';
@@ -29,8 +30,7 @@ interface ReparentRecord {
   codeParent: HTMLElement;
   codeNextSibling: ChildNode | null;
   desktopHostId: string;
-  /** Whether the node carried `.hidden` in the Code layout before any desktop mount. */
-  codeHadHiddenClass: boolean;
+  nodeId: string;
 }
 
 const REPARENT_TARGETS: Array<{
@@ -59,6 +59,8 @@ let mountSurface: MountSurface = null;
 let records: ReparentRecord[] = [];
 let panelSubscribed = false;
 let resizeObserver: ResizeObserver | null = null;
+/** Bumps on each sync so overlapping async runs do not apply a stale surface. */
+let syncGeneration = 0;
 
 function isCodeForeground(): boolean {
   return getOsView() === 'app' && getForegroundAppId() === 'code';
@@ -85,7 +87,7 @@ function captureRecords(): void {
       codeParent,
       codeNextSibling: node.nextSibling,
       desktopHostId: target.desktopHostId,
-      codeHadHiddenClass: node.classList.contains('hidden'),
+      nodeId: target.nodeId,
     });
   }
 }
@@ -95,19 +97,31 @@ function mountToDesktop(hostId: string, node: HTMLElement): void {
   if (!host) return;
   host.replaceChildren();
   host.appendChild(node);
+  // Drawer hosts always show the mounted node; Code visibility is restored on the way back.
   node.classList.remove('hidden');
 }
 
+/**
+ * Whether a pane should carry `.hidden` after returning to the Code layout.
+ * Do not reuse the class captured while the node was desktop-mounted (drawer always
+ * strips `.hidden`) — that left the browser open on Code entry (MIN-342 regression).
+ */
+function shouldHidePaneInCode(nodeId: string): boolean {
+  if (nodeId === 'fileSidebarFilesView') return false;
+  const mode = getFilePanelState().rightPaneMode;
+  if (nodeId === 'previewPane') return mode !== 'preview';
+  if (nodeId === 'fileViewerPane') return mode !== 'viewer';
+  return false;
+}
+
 function restoreToCode(record: ReparentRecord): void {
-  const { node, codeParent, codeNextSibling } = record;
+  const { node, codeParent, codeNextSibling, nodeId } = record;
   if (codeNextSibling && codeNextSibling.parentNode === codeParent) {
     codeParent.insertBefore(node, codeNextSibling);
   } else {
     codeParent.appendChild(node);
   }
-  // Desktop drawer strips `.hidden` when mounting; restore each node's Code visibility.
-  // Only preview/viewer panes use `.hidden` in Code — not #fileSidebarFilesView.
-  node.classList.toggle('hidden', record.codeHadHiddenClass);
+  node.classList.toggle('hidden', shouldHidePaneInCode(nodeId));
 }
 
 /** Point the file tree at the desktop sandbox or Code workspace; true when root changed. */
@@ -174,8 +188,48 @@ function bindResizeObserver(): void {
   if (drawer) resizeObserver.observe(drawer);
 }
 
+/** Apply Code/desktop reparent when the target surface still matches after awaits. */
+async function applySurfaceChange(
+  nextSurface: MountSurface,
+  generation: number,
+): Promise<boolean> {
+  if (generation !== syncGeneration) return false;
+  // Re-resolve after awaits — a stale desktop sync must not win over Code foreground.
+  const liveSurface: MountSurface = shouldHostOnDesktop() ? 'desktop' : 'code';
+  if (liveSurface !== nextSurface) return false;
+
+  if (nextSurface === 'desktop') {
+    for (const record of records) {
+      mountToDesktop(record.desktopHostId, record.node);
+    }
+    mountSurface = 'desktop';
+    return true;
+  }
+
+  for (const record of records) {
+    restoreToCode(record);
+  }
+  mountSurface = 'code';
+  if (!document.getElementById('btnFileSidebarCollapse')) return true;
+
+  if (isCodeForeground()) {
+    // Code entry always starts with both right panes closed (MIN-342).
+    const preview = await import('../ui/preview-panel');
+    if (generation !== syncGeneration) return false;
+    preview.collapsePreviewPanelKeepingSource();
+  } else {
+    const fileLayout = await import('../ui/file-layout');
+    if (generation !== syncGeneration) return false;
+    fileLayout.reconcileRightSplitDomWithState();
+    fileLayout.applyFileSidebarVisuals();
+  }
+  return true;
+}
+
 /** Move shared mounts to desktop drawer hosts or restore to Code layout. */
 export async function syncDesktopWorkspaceMounts(): Promise<void> {
+  const generation = ++syncGeneration;
+
   if (repairRightPaneDomStructure()) {
     records = [];
   }
@@ -183,41 +237,33 @@ export async function syncDesktopWorkspaceMounts(): Promise<void> {
   const nextSurface: MountSurface = shouldHostOnDesktop() ? 'desktop' : 'code';
   const surfaceChanged = nextSurface !== mountSurface;
   const listingRootChanged = await applyListingRootForSurface(nextSurface);
+  if (generation !== syncGeneration) return;
 
   if (surfaceChanged) {
-    if (nextSurface === 'desktop') {
-      for (const record of records) {
-        mountToDesktop(record.desktopHostId, record.node);
-      }
-      mountSurface = 'desktop';
-    } else {
-      for (const record of records) {
-        restoreToCode(record);
-      }
-      mountSurface = 'code';
-      if (document.getElementById('btnFileSidebarCollapse')) {
-        const fileLayout = await import('../ui/file-layout');
-        if (isCodeForeground()) {
-          const preview = await import('../ui/preview-panel');
-          preview.collapsePreviewPanelKeepingSource();
-        } else {
-          fileLayout.reconcileRightSplitDomWithState();
-          fileLayout.applyFileSidebarVisuals();
-        }
-      }
-    }
+    const applied = await applySurfaceChange(nextSurface, generation);
+    if (!applied || generation !== syncGeneration) return;
   }
 
   if (surfaceChanged || listingRootChanged) {
     await refreshFileTreeForSurface();
+    if (generation !== syncGeneration) return;
+  }
+
+  // If Code is foreground, never leave drawer hosts marked active (stale Electron overlay).
+  if (isCodeForeground() && mountSurface !== 'code') {
+    const applied = await applySurfaceChange('code', generation);
+    if (!applied || generation !== syncGeneration) return;
   }
 
   syncDrawerPaneVisibility();
   const previewPanel = await import('../ui/preview-panel');
+  if (generation !== syncGeneration) return;
   await previewPanel.syncPreviewDesignToolbarForSurface();
+  if (generation !== syncGeneration) return;
   if (typeof window !== 'undefined' && window.minnow?.preview) {
     bindResizeObserver();
     const previewVisibility = await import('../ui/preview-electron-visibility');
+    if (generation !== syncGeneration) return;
     await previewVisibility.syncElectronPreviewHostLayout();
   }
 }
@@ -266,6 +312,7 @@ export function resetDesktopWorkspaceMountsForTests(): void {
   mountSurface = null;
   records = [];
   panelSubscribed = false;
+  syncGeneration = 0;
   resizeObserver?.disconnect();
   resizeObserver = null;
 }

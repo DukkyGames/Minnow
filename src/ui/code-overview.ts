@@ -1,5 +1,5 @@
 /**
- * Code app Overview — default landing dashboard for live status and telemetry.
+ * Code app Overview — instrumentation dashboard for live status and telemetry.
  */
 
 import '../styles/code-overview.css';
