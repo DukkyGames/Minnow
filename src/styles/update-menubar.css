@@ -1,6 +1,8 @@
 /* Menubar update pill + popover (MIN-384). Hidden unless downloading or ready. */
 
-.mn-os-mb-update-slot {
+/* :not([hidden]) so the slot's flex display never overrides the hidden attribute
+   (an empty pill would otherwise sit in the header in dev/unsupported states). */
+.mn-os-mb-update-slot:not([hidden]) {
   display: flex;
   align-items: center;
 }

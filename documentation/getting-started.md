@@ -214,6 +214,8 @@ To ship a release:
 
 Known limitations: Windows builds are unsigned, so SmartScreen may warn on first install (auto-updates after that are silent). macOS auto-update requires code signing — the Settings section shows a disabled state with a signing note until certificates exist.
 
+Full walkthrough — the release checklist and the user-facing update flow — is in [`guides/updating.md`](guides/updating.md).
+
 ---
 
 ## Troubleshooting
@@ -277,6 +279,7 @@ Minnow/
   - [`apps.md`](guides/apps.md) — tour of the MinnowOS apps
   - [`architecture.md`](guides/architecture.md) — high-level system map
   - [`configuration.md`](guides/configuration.md) — `~/.minnow`, `config.json`, providers, secrets
+  - [`updating.md`](guides/updating.md) — cutting a release + how auto-update reaches users
   - [`troubleshooting.md`](guides/troubleshooting.md) — common problems
   - [`oauth-google.md`](guides/oauth-google.md) / [`oauth-microsoft.md`](guides/oauth-microsoft.md) — Email/Calendar OAuth
 - [`PRODUCT.md`](../PRODUCT.md) — product goals and tone.
