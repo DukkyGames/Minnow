@@ -347,7 +347,12 @@ function activateBoardGroupView(groupId: string, group: ChatGroup): void {
   state.activeBoardGroupId = groupId;
   group.viewMode = 'board';
   scheduleSaveSessions();
-  void import('./orchestrate-board-store.ts').then(({ applyOpenBoardWaveCollapse }) => {
+  void import('../ui/code-overview')
+    .then(({ dismissCodeOverviewForNavigation }) => {
+      dismissCodeOverviewForNavigation();
+      return import('./orchestrate-board-store.ts');
+    })
+    .then(({ applyOpenBoardWaveCollapse }) => {
     if (group.orchestrateBoard) {
       applyOpenBoardWaveCollapse(group);
     }
@@ -405,6 +410,8 @@ export function closeBoardGroupView(group: ChatGroup): void {
         return;
       }
       sidebar.renderSidebar();
+      const { dismissCodeOverviewForNavigation } = await import('../ui/code-overview');
+      dismissCodeOverviewForNavigation();
       const { renderChatFromHistory } = await import('../ui/messages');
       const planner = state.chats.find((c) => c.id === plannerId);
       if (planner) renderChatFromHistory(planner);
@@ -412,8 +419,11 @@ export function closeBoardGroupView(group: ChatGroup): void {
     return;
   }
   void import('../ui/sidebar').then((m) => m.renderSidebar());
-  void import('../ui/messages').then((m) => {
-    const chat = state.chats.find((c) => c.id === state.activeId);
-    if (chat) m.renderChatFromHistory(chat);
+  void import('../ui/code-overview').then(({ dismissCodeOverviewForNavigation }) => {
+    dismissCodeOverviewForNavigation();
+    void import('../ui/messages').then((m) => {
+      const chat = state.chats.find((c) => c.id === state.activeId);
+      if (chat) m.renderChatFromHistory(chat);
+    });
   });
 }

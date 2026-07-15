@@ -75,6 +75,7 @@ import { syncComposerRunTargetFromActiveChat } from './composer-run-target';
 import { clearPanelCwdUserOverride, syncPanelFromActiveChat } from './git-panel';
 import { seedNewChatComposerRunTarget } from './new-chat-run-target-seed';
 import { buildDefaultPinnedSkillForNewChat } from '../skills/config';
+import { dismissCodeOverviewForNavigation, isCodeOverviewOpen } from './code-overview';
 import { isBoardViewActive, syncViewModeToggleFromActiveChat } from './view-mode-toggle';
 import {
   isOrchestrateHubMounted,
@@ -1069,14 +1070,8 @@ function paintActiveChatInForegroundShell(chat: Chat): void {
     renderChatFromHistory(chat, '#chatAppMessageCol');
     return;
   }
-  if (document.getElementById('codeOverviewRoot')) {
-    void import('./code-overview').then(({ closeCodeOverview }) => {
-      closeCodeOverview({ skipNavigate: true, restoreChat: false });
-      void import('../os/router').then(({ navigateToCodeChat }) => {
-        navigateToCodeChat();
-        renderChatFromHistory(chat);
-      });
-    });
+  if (dismissCodeOverviewForNavigation()) {
+    renderChatFromHistory(chat);
     return;
   }
   renderChatFromHistory(chat);
@@ -1123,7 +1118,8 @@ export function switchChat(id: string): void {
     const sameChat = sessionState.chats.find((c) => c.id === id);
     const planScreenSuspendedForSameChat =
       sameChat != null && isOrchestratePlanScreenSuspendedForChat(sameChat);
-    if (boardWasOpen || planScreenSuspendedForSameChat) {
+    const codeOverviewOpen = isCodeOverviewOpen();
+    if (boardWasOpen || planScreenSuspendedForSameChat || codeOverviewOpen) {
       if (sameChat) {
         paintActiveChatInForegroundShell(sameChat);
         syncViewModeToggleFromActiveChat();
