@@ -232,6 +232,19 @@ const minnowBridge = {
     openExternal: (url: string): Promise<void> =>
       ipcRenderer.invoke(channels.APP_OPEN_EXTERNAL, url),
   },
+  window: {
+    minimize: (): Promise<void> => ipcRenderer.invoke(channels.WINDOW_MINIMIZE),
+    maximize: (): Promise<void> => ipcRenderer.invoke(channels.WINDOW_MAXIMIZE),
+    close: (): Promise<void> => ipcRenderer.invoke(channels.WINDOW_CLOSE),
+    isMaximized: (): Promise<boolean> => ipcRenderer.invoke(channels.WINDOW_IS_MAXIMIZED),
+    onMaximizedChanged: (callback: (maximized: boolean) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, maximized: boolean) => callback(maximized);
+      ipcRenderer.on(channels.WINDOW_MAXIMIZED_CHANGED, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.WINDOW_MAXIMIZED_CHANGED, handler);
+      };
+    },
+  },
   diagnostics: {
     reportError: (payload: { kind: string; message: string; stack?: string }): void => {
       ipcRenderer.send(channels.DIAGNOSTICS_REPORT_ERROR, payload);

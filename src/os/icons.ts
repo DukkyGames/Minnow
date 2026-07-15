@@ -25,6 +25,7 @@ export type OsIconName =
   | 'close'
   | 'minimize'
   | 'maximize'
+  | 'restore'
   | 'bell'
   | 'bellOff'
   | 'fish'
@@ -62,6 +63,7 @@ const PATHS: Record<SvgIconName, string> = {
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   minimize: '<path d="M5 12h14"/>',
   maximize: '<rect x="5" y="5" width="14" height="14" rx="1"/>',
+  restore: '<rect x="9" y="9" width="10" height="10" rx="1"/><path d="M5 15V5h10"/>',
   bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',
   bellOff:
     '<path d="M13.7 21a2 2 0 0 1-3.4 0"/><path d="M18 8a6 6 0 0 0-9.3-5.7"/><path d="M6.3 6.3A6 6 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 1 .7 2.7"/><path d="m2 2 20 20"/>',

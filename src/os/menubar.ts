@@ -14,6 +14,7 @@ import { initOsModelChipMenu } from './model-chip-menu';
 import { chatToggleAriaLabel, isChatToggleVisible } from './menubar-visibility';
 import { initOsNotificationsMenu } from './notifications-menu';
 import { openSchedulerFromMenubar } from '../ui/scheduler-page';
+import { initShellMenubarChrome } from './menubar-window-controls';
 
 function formatClock(d: Date): string {
   return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -187,6 +188,8 @@ export function renderMenubar(root: HTMLElement): () => void {
   right.append(workspaceSlot, modelChip, schedulerBtn, bell, settingsBtn, timeEl);
   root.append(left, right);
 
+  const cleanupShellChrome = initShellMenubarChrome(root, right);
+
   function syncMenubar(): void {
     const view = getOsView();
     const fgApp = getForegroundAppId();
@@ -261,5 +264,6 @@ export function renderMenubar(root: HTMLElement): () => void {
     stopClock();
     cleanupModelChip();
     cleanupNotifications();
+    cleanupShellChrome();
   };
 }
