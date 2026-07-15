@@ -198,7 +198,7 @@ import {
 } from '../providers/constrained-tool-calls';
 import { mergeContentJsonToolCalls } from '../providers/constrained-tool-content';
 import type { CompletionBodyWithResponseFormat } from '../providers/completion-types';
-import { decodeModelSelectKey } from '../lib/model-select-key';
+import { applyModelSelectValueToChat, decodeModelSelectKey } from '../lib/model-select-key';
 import { getActiveProvider } from '../providers/store';
 import { isVisionModel } from '../providers/vision-model.ts';
 import {
@@ -1064,8 +1064,12 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     '';
   const parsedSelect = domRaw ? decodeModelSelectKey(domRaw) : null;
   const domModelId = parsedSelect?.modelId ?? domRaw;
-  // Background board task chats reuse the top-bar model when their stored binding is empty.
-  if (parsedSelect && (useActiveChatDom || !chat.modelId?.trim())) {
+  if (replaySnapshot) {
+    // Replay must use the provider/model frozen in the turn snapshot, not the top-bar picker.
+    chat.providerId = replaySnapshot.providerId;
+    chat.modelId = replaySnapshot.modelId;
+  } else if (parsedSelect && (useActiveChatDom || !chat.modelId?.trim())) {
+    // Background board task chats reuse the top-bar model when their stored binding is empty.
     chat.providerId = parsedSelect.providerId;
     chat.modelId = parsedSelect.modelId;
   }
@@ -2119,10 +2123,16 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       const thinkingDurationMs = thinkingTracker?.finalize() ?? 0;
       chat.lastStats = buildLastStatsSnapshot(displayMeta.stats, displayMeta.usage);
       chat.modelInfo = { ...modelInfo };
-      const selVal = (document.getElementById('modelSelect') as HTMLSelectElement).value;
-      const parsedVal = decodeModelSelectKey(selVal);
-      chat.modelId = parsedVal?.modelId ?? selVal;
-      if (parsedVal) chat.providerId = parsedVal.providerId;
+      // Foreground chats mirror the top-bar picker (user may have changed model between
+      // stream end and finalize). Background board chats keep the binding that served
+      // this turn — they do not own the shared picker.
+      if (chat.id === getActiveChat().id) {
+        const selVal = (document.getElementById('modelSelect') as HTMLSelectElement).value;
+        applyModelSelectValueToChat(chat, selVal);
+      } else {
+        chat.modelId = sendModelId;
+        chat.providerId = sendProviderId;
+      }
 
       if (hasMeaningfulProse) {
         if (isStreamDomVisible(chat.id)) {

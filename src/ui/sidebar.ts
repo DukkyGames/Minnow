@@ -1,7 +1,11 @@
 ﻿import { isChatsWorkspacePath } from '../lib/chats-workspace';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { isDesktopChatActive } from '../os/desktop-state';
-import { decodeModelSelectKey, encodeModelSelectKey } from '../lib/model-select-key';
+import {
+  applyModelSelectValueToChat,
+  decodeModelSelectKey,
+  resolveModelSelectValueForChat,
+} from '../lib/model-select-key';
 import { isBoardSetupIncomplete } from '../chat/orchestrate/board-setup';
 import { isChatStreaming } from '../chat/streaming-state';
 import { stopGeneration } from '../chat/stop-generation';
@@ -285,19 +289,13 @@ export function syncModelSelectForActiveChat(): void {
   const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;
   const chat = getActiveChat();
   if (!sel || !sel.options.length) return;
-  const opts = [...sel.options];
-  const values = opts.map((o) => o.value);
-  const pid = chat.providerId?.trim();
-  const mid = chat.modelId?.trim();
-  if (pid && mid) {
-    const want = encodeModelSelectKey(pid, mid);
-    if (values.includes(want)) sel.value = want;
-  }
-  if (!sel.value && mid) {
-    const match = opts.find(
-      (o) => decodeModelSelectKey(o.value)?.modelId === mid || o.value === mid,
-    );
-    if (match) sel.value = match.value;
+  const values = [...sel.options].map((o) => o.value);
+  const next = resolveModelSelectValueForChat(chat, values);
+  if (next) {
+    sel.value = next;
+  } else if (chat.modelId?.trim()) {
+    // Chat remembers a model that is not in the current catalog — clear stale picker bleed.
+    sel.value = '';
   }
   updateModelStateDot(sel.value);
   updateModelLoadUnloadButtons();
@@ -308,13 +306,13 @@ export function onModelSelectChange(): void {
   const sel = document.getElementById('modelSelect') as HTMLSelectElement;
   const chat = getActiveChat();
   const raw = sel.value;
-  const decoded = decodeModelSelectKey(raw);
-  if (decoded) {
-    chat.providerId = decoded.providerId;
-    chat.modelId = decoded.modelId;
-  } else {
-    chat.modelId = raw;
+
+  if (isChatStreaming(chat.id)) {
+    stopGeneration(chat.id, 'user');
+    setStatus('ok', 'Stopped — model changed');
   }
+
+  applyModelSelectValueToChat(chat, raw);
   touchChat(chat);
   scheduleSaveSessions();
   updateModelStateDot(sel.value);
