@@ -17,6 +17,7 @@ import {
 } from './orchestrate-plan-screen';
 import { extractInlineThinkingFromContent } from '../api/inline-thinking';
 import { normalizeModeId } from '../chat/modes/types';
+import { isSuperPlanPipelineUserMessage } from '../chat/super-plan/hidden-user-messages';
 import { resolveModelInfo, showCachedModelInfo } from '../api/models';
 import { isActiveChatStreaming, isStreamDomVisible } from '../chat/streaming-state';
 import { setAssistantBubbleContent } from '../markdown/renderer';
@@ -245,6 +246,9 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
 
     if (msg.role === 'user') {
       const userMsg = msg;
+      if (isSuperPlanPipelineUserMessage(userMsg)) {
+        continue;
+      }
       const { wrap } = appendBubble('user', userMsg.content, {
         historyIndex: i,
         turnKind: 'user',

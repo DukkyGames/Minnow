@@ -68,6 +68,7 @@ const {
   onSuperPlanStreamEnd,
   pauseSuperPlan,
   resetSuperPlanControllerForTests,
+  skipSuperPlanStage,
 } = await import('../../src/chat/super-plan/controller.ts');
 const {
   createInitialSuperPlanStages,
@@ -341,5 +342,67 @@ describe('onSuperPlanStreamEnd stream-end ordering (Fix 9)', () => {
       'running',
       'advanceSuperPlan ran once the deferral let it observe the cleared flag',
     );
+  });
+});
+
+describe('skipSuperPlanStage during grill (MIN-442)', () => {
+  test.after(() => {
+    resetSuperPlanControllerForTests();
+    runSuperPlanStageImpl = async () => ({ kind: 'blocked_user' });
+    finalizeStreamStageImpl = async () => ({ kind: 'done' });
+  });
+
+  test('skipping an in-flight interview does not pause the pipeline', async () => {
+    let releaseGrill!: () => void;
+    const grillStarted = new Promise<void>((resolve) => {
+      releaseGrill = resolve;
+    });
+
+    runSuperPlanStageImpl = async (chatArg, stageId) => {
+      const chat = chatArg as ReturnType<typeof makeChat>;
+      if (stageId !== 'grill') {
+        return { kind: 'blocked_user' };
+      }
+      releaseGrill();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      chat.history.push({ role: 'user', content: 'interview' });
+      chat.runs = [
+        {
+          runId: 'run-skipped-grill',
+          branchId: 'branch-skipped-grill',
+          forkHistoryIndex: 0,
+          status: 'stopped',
+          createdAt: Date.now(),
+          snapshot: {} as unknown as import('../../src/types.ts').TurnSnapshot,
+          outputHistoryStart: chat.history.length - 1,
+          outputHistoryEnd: chat.history.length - 1,
+        },
+      ];
+      return { kind: 'await_stream' };
+    };
+    finalizeStreamStageImpl = async () => ({ kind: 'done' });
+
+    const chat = makeChat('grill');
+    const advancePromise = advanceSuperPlan(chat);
+    await grillStarted;
+    await skipSuperPlanStage(chat);
+    await advancePromise;
+
+    assert.equal(chat.superPlan!.paused, false, 'skip interview must not pause');
+    assert.equal(chat.superPlan!.activeStage, 'spec_confirm');
+    assert.equal(chat.superPlan!.stages.grill.status, 'done');
+    assert.equal(chat.superPlan!.stages.spec_confirm.status, 'running');
+  });
+
+  test('skipSuperPlanStage from a pending grill advances without pausing', async () => {
+    runSuperPlanStageImpl = async () => ({ kind: 'blocked_user' });
+
+    const chat = makeChat('grill');
+    await skipSuperPlanStage(chat);
+
+    assert.equal(chat.superPlan!.activeStage, 'spec_confirm');
+    assert.equal(chat.superPlan!.paused, false);
+    assert.equal(chat.superPlan!.stages.grill.status, 'done');
+    assert.equal(chat.superPlan!.stages.spec_confirm.status, 'running');
   });
 });

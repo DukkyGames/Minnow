@@ -18,6 +18,8 @@ import {
   notifyChatStreamActivity,
 } from '../chat/streaming-state';
 import { flushPendingMode } from '../chat/pending-mode';
+import { superPlanPipelineUserMessage } from '../chat/super-plan/hidden-user-messages';
+import type { SuperPlanStageId } from '../chat/super-plan/types';
 import {
   clearPendingSteer,
   consumePendingSteer,
@@ -601,6 +603,8 @@ export interface RunChatTurnOptions {
   composedSystemPromptOverride?: string;
   /** Push user text to history without showing a user bubble (sub-agent completion resume). */
   suppressUserEcho?: boolean;
+  /** Super Plan controller stage — stamps history and hides the user bubble from the transcript. */
+  superPlanStage?: SuperPlanStageId;
   /** Turn started by /goal or goal auto-continuation (triggers post-turn evaluator). */
   goalDriven?: boolean;
   /** Composer input/send override (defaults to foreground app surface). */
@@ -1073,8 +1077,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     forkOverrides,
     composedSystemPromptOverride,
     suppressUserEcho = false,
+    superPlanStage,
     goalDriven = false,
   } = options;
+
+  const hideUserEcho = suppressUserEcho || Boolean(superPlanStage);
 
   if (!beginChatTurnSetup(chat.id)) {
     return;
@@ -1154,7 +1161,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     const modelUserContent = artifactAppendix
       ? `${historyContent}${artifactAppendix}`
       : historyContent;
-    chat.history.push({ role: 'user', content: modelUserContent });
+    chat.history.push(
+      superPlanStage
+        ? superPlanPipelineUserMessage(modelUserContent, superPlanStage)
+        : { role: 'user', content: modelUserContent },
+    );
     recordChatMessage(chat);
     scheduleSaveSessions();
     syncTurnContextUsage(chat.id, '', null);
@@ -1166,7 +1177,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       // rendered row, so both link directions agree on what a "turn" is.
       void linkSentAttachmentsToTurn(chat.id, String(pushedUserIdx), validAttachments);
     }
-    if (!suppressUserEcho) {
+    if (!hideUserEcho) {
       renderSidebar();
       if (isStreamDomVisible(chat.id)) {
         const userIdx = pushedUserIdx;
@@ -1318,7 +1329,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     setStreaming(true, chat.id);
     syncOrchestrateInitSplitChrome(chat);
     if (
-      !suppressUserEcho &&
+      !hideUserEcho &&
       pushUser &&
       isOrchestrateBoardInitSplitActive(chat)
     ) {
