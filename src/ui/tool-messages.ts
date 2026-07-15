@@ -32,18 +32,46 @@ export function extractShellRunIdFromToolResult(
   toolName: string,
   result: string,
 ): string | null {
+  const payload = parseBackgroundShellToolPayload(toolName, result);
+  return payload?.runId ?? null;
+}
+
+export interface BackgroundShellToolPayload {
+  runId: string;
+  output?: string;
+  startedAt?: number;
+}
+
+/** Parse runId and optional startup fields from background shell tool JSON. */
+export function parseBackgroundShellToolPayload(
+  toolName: string,
+  result: string,
+): BackgroundShellToolPayload | null {
   if (!isKillableShellTool(toolName) || isToolResultFailure(result)) return null;
   try {
     const parsed = JSON.parse(result) as {
       runId?: unknown;
       background?: unknown;
       ok?: unknown;
+      output?: unknown;
+      startedAt?: unknown;
     };
     if (parsed.ok !== true) return null;
     if (toolName === 'execute_command' && parsed.background !== true) return null;
-    return typeof parsed.runId === 'string' && parsed.runId.trim()
-      ? parsed.runId.trim()
-      : null;
+    const runId =
+      typeof parsed.runId === 'string' && parsed.runId.trim()
+        ? parsed.runId.trim()
+        : null;
+    if (!runId) return null;
+    return {
+      runId,
+      ...(typeof parsed.output === 'string' && parsed.output.length
+        ? { output: parsed.output }
+        : {}),
+      ...(typeof parsed.startedAt === 'number' && Number.isFinite(parsed.startedAt)
+        ? { startedAt: parsed.startedAt }
+        : {}),
+    };
   } catch {
     return null;
   }

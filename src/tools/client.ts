@@ -72,6 +72,7 @@ import {
   afterSettingsToolSuccess,
   augmentGetSettingsResult,
 } from '../settings/client-sync';
+import { isKillableShellTool } from '../ui/tool-messages';
 
 /** Ping timeout for local dev server detection (ms). */
 const PING_TIMEOUT_MS = 2500;
@@ -597,6 +598,36 @@ function mergeServerToolContextArgs(
   return out;
 }
 
+/** Bridge background shell tool results into the Agent terminal tab (MIN-402). */
+async function maybeAttachAgentBackgroundRunFromResult(
+  name: string,
+  content: string,
+  args: Record<string, unknown>,
+  context?: ExecuteToolContext,
+): Promise<void> {
+  if (!context?.chatId?.trim() || !isKillableShellTool(name)) return;
+  if (content.trimStart().startsWith('Error:')) return;
+
+  const { parseBackgroundShellToolPayload } = await import('../ui/tool-messages');
+  const payload = parseBackgroundShellToolPayload(name, content);
+  if (!payload) return;
+
+  const command =
+    typeof args.command === 'string' && args.command.trim()
+      ? args.command.trim()
+      : name;
+
+  const { attachAgentBackgroundRun } = await import('../ui/terminal-panel');
+  attachAgentBackgroundRun({
+    runId: payload.runId,
+    command,
+    chatId: context.chatId,
+    toolCallId: context.toolCallId,
+    startedAt: payload.startedAt,
+    initialOutput: payload.output,
+  });
+}
+
 /** Map code tools to process argv for the terminal runner. */
 function mapCodeToolToCommand(
   name: string,
@@ -788,6 +819,15 @@ async function executeServerTool(
       }
       updateCodeChangeStrip(chat);
     }
+  }
+
+  if (!content.trimStart().startsWith('Error:')) {
+    void maybeAttachAgentBackgroundRunFromResult(
+      name,
+      finalContent,
+      args,
+      context,
+    );
   }
 
   const base: ToolExecutionResult = { content: finalContent };
