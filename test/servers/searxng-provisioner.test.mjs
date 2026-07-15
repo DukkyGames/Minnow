@@ -14,6 +14,7 @@ import {
   getSpawnSpec,
   isVenvTemplatePython,
   patchValkeydbForWindows,
+  repairStandalonePythonBinSymlinks,
   verifyStandalonePythonExe,
   writeSearxngSettings,
 } from '../../server/servers/searxng.js';
@@ -80,6 +81,39 @@ describe('searxng provisioner', () => {
     assert.equal(isVenvTemplatePython(path.join(stubDir, 'python.exe')), true);
     assert.equal(isVenvTemplatePython(realExe), false);
     assert.equal(await findStandalonePythonExe(runtime), realExe);
+  });
+
+  it('findStandalonePythonExe prefers versioned python3.12 when python3 symlink is broken', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+    const runtime = path.join(tempHome, 'servers', 'python', 'runtime-broken-link');
+    const binDir = path.join(runtime, 'bin');
+    await fsp.mkdir(binDir, { recursive: true });
+    await fsp.writeFile(path.join(binDir, 'python3.12'), '#!/bin/sh\necho 3.12.9\n', { mode: 0o755 });
+    await fsp.symlink('/tmp/missing-python3.12', path.join(binDir, 'python3'));
+    await fsp.symlink('/tmp/missing-python3.12', path.join(binDir, 'python'));
+
+    assert.equal(await findStandalonePythonExe(runtime), path.join(binDir, 'python3.12'));
+  });
+
+  it('repairStandalonePythonBinSymlinks fixes absolute symlinks into temp extract dirs', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+    const runtime = path.join(tempHome, 'servers', 'python', 'runtime-repair');
+    const binDir = path.join(runtime, 'bin');
+    await fsp.mkdir(binDir, { recursive: true });
+    const versioned = path.join(binDir, 'python3.12');
+    await fsp.writeFile(versioned, '#!/bin/sh\necho 3.12.9\n', { mode: 0o755 });
+    await fsp.symlink('/tmp/minnow-python-abc/extract/python/bin/python3.12', path.join(binDir, 'python3'));
+    await fsp.symlink('/tmp/minnow-python-abc/extract/python/bin/python3.12', path.join(binDir, 'python'));
+
+    const repaired = await repairStandalonePythonBinSymlinks(runtime);
+    assert.equal(repaired, versioned);
+    assert.equal(await fsp.readlink(path.join(binDir, 'python3')), 'python3.12');
+    assert.equal(await fsp.readlink(path.join(binDir, 'python')), 'python3');
+    assert.equal(await findStandalonePythonExe(runtime), versioned);
   });
 
   it('writeSearxngSettings includes json format, secret, loopback, and port', async () => {
