@@ -1095,6 +1095,8 @@ export function deleteChat(chatId: string, evt?: Event): void {
 
 export function switchChat(id: string): void {
   restoreChatColumnOnChatSelect();
+  // Drop a blank preview that raced open after Code-entry collapse (MIN-434).
+  void import('./preview-panel').then((m) => m.suppressStaleBlankPreviewOnChatSwitch());
   if (isOrchestrateHubMounted()) {
     teardownOrchestrateHub();
   }

@@ -711,16 +711,15 @@ async function hidePreviewHost(): Promise<void> {
   await syncElectronPreviewHostLayout();
 }
 
-/** Drop the guest document so a closed/empty preview does not resurrect the last page. */
+/**
+ * Reset the guest document to about:blank without destroying the Electron tab.
+ * Tab close belongs in closePreviewTabUi — collapse / empty-open must keep tab ids.
+ */
 async function clearPreviewGuest(tabId?: string): Promise<void> {
   const api = getPreviewApi();
   if (!api) return;
   const id = resolveTabId(tabId);
   clearLoadedTabGuest(id ?? undefined);
-  if (api.tabs?.close && id) {
-    await api.tabs.close(id);
-    return;
-  }
   if (api.clear) {
     await api.clear(id);
     return;
@@ -1181,6 +1180,36 @@ export function collapsePreviewPanelKeepingSource(): void {
   setPreviewLoading(false);
 }
 
+/**
+ * After switching chats in Code, hide a stray blank Electron guest if the split
+ * was never meant to be open (MIN-434 follow-up).
+ */
+export async function suppressStaleBlankPreviewOnChatSwitch(): Promise<void> {
+  if (!isCodeAppForeground()) return;
+  if (!usesElectronPreview()) return;
+
+  const state = getFilePanelState();
+  if (state.rightPaneMode !== 'preview') {
+    await hidePreviewHost();
+    return;
+  }
+
+  const api = getPreviewApi();
+  const tabId = getActivePreviewTabId() ?? undefined;
+  const info = api?.getInfo ? await api.getInfo(tabId) : null;
+  if (info?.loading) return;
+
+  const guestUrl = info?.url?.trim() ?? '';
+  const isBlank =
+    !guestUrl || guestUrl === 'about:blank' || guestUrl.startsWith('chrome-error:');
+  if (!isBlank) return;
+
+  // Blank guest with a persisted source = collapse clear that raced open again.
+  if (getActivePreviewSource()) {
+    collapsePreviewPanelKeepingSource();
+  }
+}
+
 /** Toggle preview panel using last source or empty address bar. */
 export function togglePreviewPanel(): void {
   const state = getFilePanelState();
@@ -1357,10 +1386,21 @@ async function onPreviewGuestLoadSettled(tabId?: string): Promise<void> {
   const info = api?.getInfo ? await api.getInfo(resolvedTabId) : null;
   const guestUrl = info?.url?.trim() ?? '';
   const source = getActivePreviewSource();
+  const isBlankGuest =
+    !guestUrl || guestUrl === 'about:blank' || guestUrl.startsWith('chrome-error:');
 
-  // Blank guest with no active source = collapsed clear; do not resurface the overlay.
-  if (!source && (guestUrl === 'about:blank' || guestUrl === '')) {
+  // Collapse clears to about:blank while keeping previewSource. A prefs/layout race can
+  // briefly restore rightPaneMode=preview — do not resurface a blank guest with a stale source.
+  // Intentional empty "New tab" has no source and may show blank chrome.
+  if (isBlankGuest && source) {
     await hidePreviewHost();
+    return;
+  }
+
+  if (isBlankGuest && !source) {
+    // Empty new tab: only show when the split is already open (caller used showPreviewSplit).
+    await showPreviewHost();
+    onPreviewReloadSettled();
     return;
   }
 

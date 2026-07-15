@@ -11,9 +11,29 @@ import { getForegroundAppId, getOsView } from '../os/instances';
 import { isOsShellEnabled } from '../os/page-bridge';
 import { getFilePanelState, patchFilePanelState } from '../state/file-panel';
 
+/** Test-only hash override so clamp tests do not touch `window.location`. */
+let codeHashOverrideForTests: string | null = null;
+
 /** True when Code is the active fullscreen MinnowOS app. */
 export function isCodeAppForeground(): boolean {
   return getOsView() === 'app' && getForegroundAppId() === 'code';
+}
+
+/** Override `window.location.hash` for tests (pass null to clear). */
+export function setCodeHashOverrideForTests(hash: string | null): void {
+  codeHashOverrideForTests = hash;
+}
+
+/**
+ * Code may init the file panel before the OS router foregrounds the app (boot hash).
+ * Treat a Code hash as Code surface so clamp still drops stale preview splits.
+ */
+export function isCodeSurfacePendingOrForeground(): boolean {
+  if (isCodeAppForeground()) return true;
+  const hash =
+    codeHashOverrideForTests ??
+    (typeof window !== 'undefined' ? window.location.hash : '');
+  return hash.startsWith('#/app/code') || hash === '#/code' || hash.startsWith('#/code/');
 }
 
 /**
@@ -79,13 +99,11 @@ export function clampPersistedFilePanelForActiveSurface(): void {
   const state = getFilePanelState();
   let rightPaneMode = state.rightPaneMode;
 
-  if (isCodeAppForeground()) {
-    if (rightPaneMode === 'preview' && !shouldAutoRestorePreviewPanel()) {
-      rightPaneMode = null;
-    }
-    if (rightPaneMode === 'viewer' && !shouldAutoRestoreViewerSplitOnBoot()) {
-      rightPaneMode = null;
-    }
+  // Code boot hash may run before the router sets foreground — always drop open splits
+  // so a later chat switch cannot resurrect a blank preview guest (MIN-434).
+  if (isCodeSurfacePendingOrForeground()) {
+    if (rightPaneMode === 'preview') rightPaneMode = null;
+    if (rightPaneMode === 'viewer') rightPaneMode = null;
   }
 
   if (rightPaneMode === state.rightPaneMode && (rightPaneMode !== null) === state.viewerOpen) {

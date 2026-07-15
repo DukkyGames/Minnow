@@ -15,6 +15,7 @@ import {
 import {
   clampPersistedFilePanelForActiveSurface,
   isCodeAppForeground,
+  setCodeHashOverrideForTests,
   shouldAutoRestorePreviewPanel,
   shouldAutoRestoreViewerSplitOnBoot,
   shouldAutoRevealPreviewOnNavigation,
@@ -25,12 +26,14 @@ describe('preview restore policy (MIN-342)', () => {
     resetFilePanelStateForTests();
     resetInstancesForTests();
     resetDesktopWorkspacePanelForTests();
+    setCodeHashOverrideForTests(null);
   });
 
   afterEach(() => {
     resetFilePanelStateForTests();
     resetInstancesForTests();
     resetDesktopWorkspacePanelForTests();
+    setCodeHashOverrideForTests(null);
   });
 
   test('does not auto-restore preview when Code is foreground', () => {
@@ -134,6 +137,22 @@ describe('preview restore policy (MIN-342)', () => {
     assert.equal(state.previewTabs.length, 1);
   });
 
+  test('clampPersistedFilePanelForActiveSurface clears preview on Code boot hash before foreground', () => {
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+      previewSource: { kind: 'url', url: 'http://localhost:3000' },
+    });
+    // Simulate Code boot hash before the OS router foregrounds the app.
+    setCodeHashOverrideForTests('#/app/code/chat');
+    assert.equal(isCodeAppForeground(), false);
+    clampPersistedFilePanelForActiveSurface();
+    assert.equal(getFilePanelState().rightPaneMode, null);
+    assert.equal(getFilePanelState().viewerOpen, false);
+    assert.equal(getFilePanelState().previewSource?.kind, 'url');
+  });
+
   test('clampPersistedFilePanelForActiveSurface keeps desktop browser drawer restore', () => {
     setFilePanelState({
       ...DEFAULT_FILE_PANEL_STATE,
@@ -141,6 +160,7 @@ describe('preview restore policy (MIN-342)', () => {
       viewerOpen: true,
       previewSource: { kind: 'url', url: 'https://example.com' },
     });
+    setCodeHashOverrideForTests('#/desktop');
     openDesktopWorkspaceTab('browser');
     clampPersistedFilePanelForActiveSurface();
     assert.equal(getFilePanelState().rightPaneMode, 'preview');

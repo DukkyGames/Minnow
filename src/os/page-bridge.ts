@@ -106,7 +106,12 @@ export function osOnAppOpen(appId: AppId): void {
   if (!isOsShellEnabled()) return;
   document.documentElement.dataset.osApp = appId;
   if (appId === 'code') {
-    void import('../ui/preview-panel').then((preview) => {
+    void import('../ui/preview-panel').then(async (preview) => {
+      // Re-clamp after prefs races that can resurrect rightPaneMode=preview (MIN-434).
+      const { clampPersistedFilePanelForActiveSurface } = await import(
+        '../ui/preview-restore-policy',
+      );
+      clampPersistedFilePanelForActiveSurface();
       preview.collapsePreviewPanelKeepingSource();
     });
     void import('./desktop-workspace-mounts').then((m) => m.syncDesktopWorkspaceMounts());
