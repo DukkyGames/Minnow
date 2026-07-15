@@ -385,6 +385,7 @@
 .mn-os-tile-open-dot {
   width: 5px;
   height: 5px;
+  margin-top: -2px;
   border-radius: 50%;
   background: color-mix(in srgb, var(--os-text-dim) 80%, transparent);
   flex-shrink: 0;

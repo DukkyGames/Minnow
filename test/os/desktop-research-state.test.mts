@@ -106,6 +106,7 @@ describe('desktop research state', () => {
     assert.ok(document.getElementById('desktopResearchResultMount'));
     assert.ok(document.getElementById('desktopResearchResultBody'));
     assert.ok(document.getElementById('btnDesktopResearchClose'));
+    assert.ok(document.getElementById('desktopResearchMaxRounds'));
     assert.ok(document.getElementById('desktopResearchScope'));
   });
 

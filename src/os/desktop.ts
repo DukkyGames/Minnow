@@ -232,6 +232,34 @@ export function renderDesktop(root: HTMLElement): () => void {
   const researchComposerActions = document.createElement('div');
   researchComposerActions.className = 'mn-os-composer-research-actions';
 
+  const researchRoundsLabel = document.createElement('label');
+  researchRoundsLabel.className = 'mn-os-research-toolbar-scope';
+  researchRoundsLabel.htmlFor = 'desktopResearchMaxRounds';
+
+  const researchRoundsText = document.createElement('span');
+  researchRoundsText.className = 'mn-os-research-toolbar-scope__label';
+  researchRoundsText.textContent = 'Rounds';
+
+  const researchRounds = document.createElement('select');
+  researchRounds.id = 'desktopResearchMaxRounds';
+  researchRounds.className = 'mn-os-research-toolbar-select';
+  researchRounds.setAttribute('aria-label', 'Research rounds');
+  for (const option of [
+    { value: 'auto', label: 'Auto' },
+    { value: '1', label: '1' },
+    { value: '2', label: '2' },
+    { value: '3', label: '3' },
+    { value: '4', label: '4' },
+    { value: '5', label: '5' },
+  ]) {
+    const opt = document.createElement('option');
+    opt.value = option.value;
+    opt.textContent = option.label;
+    researchRounds.appendChild(opt);
+  }
+
+  researchRoundsLabel.append(researchRoundsText, researchRounds);
+
   const researchScopeLabel = document.createElement('label');
   researchScopeLabel.className = 'mn-os-research-toolbar-scope';
   researchScopeLabel.htmlFor = 'desktopResearchScope';
@@ -263,7 +291,7 @@ export function renderDesktop(root: HTMLElement): () => void {
   researchLibrary.className = 'mn-os-research-toolbar-btn';
   researchLibrary.textContent = 'Library';
 
-  researchComposerActions.append(researchScopeLabel, researchLibrary);
+  researchComposerActions.append(researchRoundsLabel, researchScopeLabel, researchLibrary);
   composerDock.appendChild(researchComposerActions);
   root.appendChild(composerDock);
 
