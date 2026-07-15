@@ -2369,8 +2369,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         const seed = titleSeed?.trim() || userText?.trim() || rawText?.trim();
         if (seed) {
           scheduleChatTitleGeneration(chat.id, seed, {
-            modelId: chat.modelId?.trim() || undefined,
-            providerId: chat.providerId?.trim() || undefined,
+            modelId: sendModelId?.trim() || undefined,
+            providerId: sendProviderId?.trim() || undefined,
           });
         }
       }
