@@ -10,6 +10,8 @@ const FAVICON_URL = '/logos/favicon.ico';
 
 export interface StepSidebarHandle {
   setActiveStep: (stepId: OnboardingStepId, stepIndex: number) => void;
+  /** Replace the filtered step list when path-dependent steps become applicable. */
+  setSteps: (steps: OnboardingStep[]) => void;
   destroy: () => void;
 }
 
@@ -27,7 +29,8 @@ export function mountStepSidebar(
   steps: OnboardingStep[],
   activeId: OnboardingStepId,
 ): StepSidebarHandle {
-  const phases = getApplicablePhases(steps);
+  let activeSteps = steps;
+  let phases = getApplicablePhases(activeSteps);
   const reduced = prefersReducedMotion();
 
   asideMount.innerHTML = '';
@@ -74,7 +77,7 @@ export function mountStepSidebar(
 
     const hint = document.createElement('span');
     hint.className = 'mn-onboarding__phase-hint';
-    hint.textContent = formatPhaseHint(phase, steps);
+    hint.textContent = formatPhaseHint(phase, activeSteps);
 
     copy.append(label, hint);
     item.append(marker, copy);
@@ -135,12 +138,20 @@ export function mountStepSidebar(
   mobileLabel.className = 'mn-onboarding__mobile-progress-label';
   mobileMount.append(mobileTrack, mobileLabel);
 
-  let activeStepIndex = Math.max(0, steps.findIndex((s) => s.id === activeId));
+  let activeStepIndex = Math.max(0, activeSteps.findIndex((s) => s.id === activeId));
+
+  function refreshPhaseHints(): void {
+    phases.forEach((phase, phaseIndex) => {
+      const hint = phaseItems[phaseIndex]?.querySelector('.mn-onboarding__phase-hint');
+      if (hint) hint.textContent = formatPhaseHint(phase, activeSteps);
+    });
+  }
 
   function paint(stepId: OnboardingStepId, stepIndex: number): void {
     activeStepIndex = stepIndex;
     const phaseIndex = resolvePhaseIndex(phases, stepId);
-    const pct = steps.length <= 1 ? 0 : Math.round((stepIndex / (steps.length - 1)) * 100);
+    const pct =
+      activeSteps.length <= 1 ? 0 : Math.round((stepIndex / (activeSteps.length - 1)) * 100);
 
     phaseItems.forEach((item, i) => {
       item.classList.toggle('is-active', i === phaseIndex);
@@ -152,7 +163,7 @@ export function mountStepSidebar(
     progressTrack.setAttribute('aria-valuenow', String(pct));
     mobileTrack.setAttribute('aria-valuenow', String(pct));
 
-    const position = formatStepPosition(stepIndex, steps.length);
+    const position = formatStepPosition(stepIndex, activeSteps.length);
     progressLabel.textContent = position;
     mobileLabel.textContent = position;
 
@@ -165,12 +176,20 @@ export function mountStepSidebar(
 
   paint(activeId, activeStepIndex);
 
-  const onResize = () => paint(steps[activeStepIndex]?.id ?? activeId, activeStepIndex);
+  const onResize = () =>
+    paint(activeSteps[activeStepIndex]?.id ?? activeId, activeStepIndex);
   window.addEventListener('resize', onResize);
 
   return {
     setActiveStep(stepId, stepIndex) {
       paint(stepId, stepIndex);
+    },
+    setSteps(nextSteps) {
+      activeSteps = nextSteps;
+      phases = getApplicablePhases(activeSteps);
+      refreshPhaseHints();
+      const stepId = activeSteps[activeStepIndex]?.id ?? activeId;
+      paint(stepId, activeStepIndex);
     },
     destroy() {
       window.removeEventListener('resize', onResize);
