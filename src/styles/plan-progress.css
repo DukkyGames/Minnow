@@ -3,7 +3,7 @@
  */
 
 .orchestrate-plan-screen:has(.orchestrate-plan-screen__progress-mount) {
-  justify-content: flex-start;
+  justify-content: center;
   align-self: stretch;
 }
 
