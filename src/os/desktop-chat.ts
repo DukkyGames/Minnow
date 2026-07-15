@@ -37,6 +37,7 @@ import { initComposerDraftListener, switchComposerDraft } from '../ui/composer-d
 import { initComposerSlashPicker } from '../ui/skill-picker';
 import { refreshContextUsageRing } from '../ui/context-usage-ring';
 import { clearPanelCwdUserOverride, syncPanelFromActiveChat } from '../ui/git-panel';
+import { seedNewChatComposerRunTarget } from '../ui/new-chat-run-target-seed';
 import { renderChatFromHistory } from '../ui/messages';
 import { syncAskQuestionModalOnChatSwitch } from '../ui/question-cards-modal';
 import { setStatus } from '../ui/status';
@@ -155,8 +156,11 @@ function createFreshAssistantChat(
   state: NonNullable<typeof sessionState>,
 ): void {
   const chat = createDesktopChat(workspacePath, newChatId());
+  seedNewChatComposerRunTarget(chat);
   state.chats.unshift(chat);
   state.activeId = chat.id;
+  clearPanelCwdUserOverride();
+  syncPanelFromActiveChat({ forceFileTree: true });
   rememberActiveChatForApp(CHAT_APP_ID, chat.id);
   scheduleSaveSessions();
 }

@@ -73,6 +73,8 @@ import { getWorkspacePath } from '../state/workspace';
 import {
   panelPathsEqual,
   resolvePanelWorktreeCwd,
+  resolvePanelBrowseRunTargetSeed,
+  type PanelBrowseRunTargetSeed,
 } from './panel-worktree-cwd';
 
 import { getFileTreeSidebarTitleSuffix } from './file-tree-listing-root';
@@ -204,6 +206,14 @@ function getGitMount(): HTMLElement | null {
 /** Clear browse override so the next chat/composer sync can drive panel cwd. */
 export function clearPanelCwdUserOverride(): void {
   panelCwdUserOverride = false;
+}
+
+/**
+ * Composer run-target seed for new chats when the user manually picked a worktree
+ * in Source Control (browse override). Null → keep default Local.
+ */
+export function getGitPanelNewChatRunTargetSeed(): PanelBrowseRunTargetSeed | null {
+  return resolvePanelBrowseRunTargetSeed(panelCwd, panelCwdUserOverride, knownWorktrees);
 }
 
 /** Current cwd passed to git API calls (undefined → server default). */

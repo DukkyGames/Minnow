@@ -24,3 +24,33 @@ export function resolvePanelWorktreeCwd(panelCwd?: string): string | undefined {
   if (ws && panelPathsEqual(panelCwd, ws)) return undefined;
   return panelCwd;
 }
+
+export interface PanelWorktreeBranchEntry {
+  path: string;
+  branch?: string;
+}
+
+/** Composer run-target seed when the user manually picked a browse root in Source Control. */
+export type PanelBrowseRunTargetSeed =
+  | { kind: 'local' }
+  | { kind: 'worktree'; worktreeRoot: string; gitBranch?: string };
+
+/**
+ * Map a manual git-panel worktree pick to a composer run-target for new chats.
+ * Returns null when browse override is off (new chats keep default Local).
+ */
+export function resolvePanelBrowseRunTargetSeed(
+  panelCwd: string | undefined,
+  panelCwdUserOverride: boolean,
+  knownWorktrees: PanelWorktreeBranchEntry[],
+): PanelBrowseRunTargetSeed | null {
+  if (!panelCwdUserOverride) return null;
+  const root = resolvePanelWorktreeCwd(panelCwd);
+  if (!root) return { kind: 'local' };
+  const match = knownWorktrees.find((wt) => panelPathsEqual(wt.path, root));
+  return {
+    kind: 'worktree',
+    worktreeRoot: root,
+    gitBranch: match?.branch,
+  };
+}
