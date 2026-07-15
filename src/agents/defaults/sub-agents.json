@@ -249,7 +249,7 @@
       "providerId": "",
       "modelId": "",
       "maxConcurrent": 2,
-      "timeoutMs": 300000,
+      "timeoutMs": 1200000,
       "workAgentId": null,
       "allowedTools": [
         "list_directory",

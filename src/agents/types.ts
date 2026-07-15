@@ -193,6 +193,8 @@ export interface SpawnSubAgentInput {
   category?: BoardCategory;
   /** Board task id (board_update_task / spawn hook). */
   boardTaskId?: string | null;
+  /** Per-spawn wall-clock timeout override (ms); wins over type/global defaults. */
+  timeoutMs?: number;
 }
 
 /** Immediate spawn acknowledgement. */

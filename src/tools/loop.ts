@@ -1052,6 +1052,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   let turnRunId: TurnRunId | undefined;
   let turnRunStatus: 'completed' | 'stopped' | 'failed' = 'completed';
   let turnStopReason: ChatStopReason | undefined;
+  let turnEndReason: 'max_tool_turns' | undefined;
   let turnMountPinned = false;
 
   try {
@@ -1907,6 +1908,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
         if (turn + 1 >= maxToolTurns) {
           setStatus('err', 'Maximum tool turns reached');
+          turnEndReason = 'max_tool_turns';
           break;
         }
 
@@ -2423,6 +2425,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         outputHistoryEnd: persistOutput ? end : undefined,
         outputMessages,
         stopReason: turnRunStatus === 'stopped' ? (turnStopReason ?? 'user') : undefined,
+        endReason: turnEndReason,
       });
       scheduleSaveSessions();
       if (ownsGlobalStreaming) {
