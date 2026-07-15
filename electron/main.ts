@@ -128,6 +128,40 @@ function registerIpcHandlers(): void {
   ipcMain.handle(channels.DIAGNOSTICS_CLEAR_OOM_PAUSE, () => {
     crashLog.clearOomPauseMarker();
   });
+
+  ipcMain.handle(channels.WINDOW_MINIMIZE, (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize();
+  });
+
+  ipcMain.handle(channels.WINDOW_MAXIMIZE, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+  });
+
+  ipcMain.handle(channels.WINDOW_CLOSE, (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.close();
+  });
+
+  ipcMain.handle(channels.WINDOW_IS_MAXIMIZED, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    return win?.isMaximized() ?? false;
+  });
+}
+
+/** Push shell maximize state to the renderer for menubar control icons. */
+function wireShellWindowState(win: BrowserWindow): void {
+  const emit = (): void => {
+    if (win.isDestroyed()) return;
+    win.webContents.send(channels.WINDOW_MAXIMIZED_CHANGED, win.isMaximized());
+  };
+
+  win.on('maximize', emit);
+  win.on('unmaximize', emit);
+  win.on('enter-full-screen', emit);
+  win.on('leave-full-screen', emit);
+  win.webContents.on('did-finish-load', emit);
 }
 
 /** Tear down PTY sessions, generations, and in-process HTTP server. */
@@ -170,6 +204,12 @@ async function createMainWindow(): Promise<BrowserWindow> {
     y: saved.y,
     show: false,
     icon: appIconPath(),
+    ...(process.platform === 'darwin'
+      ? {
+          titleBarStyle: 'hiddenInset' as const,
+          trafficLightPosition: { x: 14, y: 14 },
+        }
+      : { frame: false, thickFrame: true }),
     backgroundColor: '#0e0e10',
     webPreferences: {
       preload: preloadPath,
@@ -189,6 +229,7 @@ async function createMainWindow(): Promise<BrowserWindow> {
   }
 
   trackWindowState(win);
+  wireShellWindowState(win);
 
   const showFallbackTimer = setTimeout(() => {
     if (!win.isDestroyed() && !win.isVisible()) {
