@@ -2,3 +2,5 @@ node_modules/
 dist/
 electron/dist/
 release/
+.env.signing
+build/macos-signing/

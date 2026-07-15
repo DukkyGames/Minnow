@@ -45,6 +45,8 @@
     "package:dir": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --dir",
     "package:win": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --win",
     "package:mac": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --mac",
+    "signing:check": "node scripts/check-macos-signing.mjs",
+    "signing:setup": "node scripts/check-macos-signing.mjs --setup",
     "start": "node server.js",
     "minnow:run": "node bin/minnow.mjs run",
     "test:notifications": "node test/run-all.mjs --suite notifications",
@@ -221,7 +223,11 @@
       ],
       "icon": "public/logos/minnow-logo/minnow/png/minnow-1024.png",
       "category": "public.app-category.developer-tools",
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist"
     },
     "dmg": {
       "artifactName": "${productName}-${version}-${arch}.${ext}"

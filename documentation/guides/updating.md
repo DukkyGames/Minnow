@@ -9,9 +9,7 @@ How updates flow through Minnow — **releasing** a new version (for maintainers
 [`src/os/update-menubar.ts`](../../src/os/update-menubar.ts). Tracked in
 [MIN-384](https://linear.app/minnowai/issue/MIN-384).
 
-> **Platform support today:** Windows (NSIS) only. macOS auto-update needs code signing
-> we don't have yet — the Settings panel shows a disabled state with a signing note.
-> Dev and browser sessions can't self-update and show a hint instead of controls.
+> **Platform support today:** Windows (NSIS) and **signed** macOS (Developer ID + notarization). Unsigned macOS installs show a disabled updater with a signing note. Dev and browser sessions can't self-update and show a hint instead of controls.
 
 ---
 

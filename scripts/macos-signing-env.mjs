@@ -1,0 +1,134 @@
+#!/usr/bin/env node
+/**
+ * Shared helpers for macOS code signing + notarization during electron-builder runs.
+ * Loads optional `.env.signing` (gitignored) and inspects the login keychain.
+ */
+
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const signingEnvPath = path.join(repoRoot, '.env.signing');
+const csrDir = path.join(repoRoot, 'build', 'macos-signing');
+
+/** @typedef {{ name: string; hash: string }} SigningIdentity */
+
+/** Keychain label prefix that electron-builder 26+ rejects in mac.identity / CSC_NAME. */
+const DEVELOPER_ID_APPLICATION_PREFIX = /^Developer ID Application:\s*/i;
+
+/**
+ * Strip the keychain certificate-type prefix for electron-builder.
+ * Keychain lists "Developer ID Application: Acme (TEAMID)" but mac.identity wants "Acme (TEAMID)".
+ * @param {string} name
+ */
+export function normalizeIdentityForSigning(name) {
+  return name.trim().replace(DEVELOPER_ID_APPLICATION_PREFIX, '');
+}
+
+/**
+ * Parse a simple KEY=VALUE env file (no export prefix, # comments).
+ * @param {string} filePath
+ */
+export function loadSigningEnvFile(filePath = signingEnvPath) {
+  if (!fs.existsSync(filePath)) return;
+  const text = fs.readFileSync(filePath, 'utf8');
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eq = line.indexOf('=');
+    if (eq <= 0) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (!(key in process.env)) process.env[key] = value;
+  }
+}
+
+/** @returns {SigningIdentity[]} */
+export function listDeveloperIdIdentities() {
+  const result = spawnSync('security', ['find-identity', '-v', '-p', 'codesigning'], {
+    encoding: 'utf8',
+  });
+  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  /** @type {SigningIdentity[]} */
+  const identities = [];
+  for (const line of output.split('\n')) {
+    const match = line.match(/^\s*\d+\)\s+([0-9A-F]+)\s+"(Developer ID Application:[^"]+)"/i);
+    if (match) identities.push({ hash: match[1], name: match[2] });
+  }
+  return identities;
+}
+
+/** True when a Developer ID Application cert is installed locally. */
+export function hasDeveloperIdIdentity() {
+  return listDeveloperIdIdentities().length > 0;
+}
+
+/** True when notarization credentials are available for electron-builder. */
+export function hasNotarizationCredentials() {
+  const teamId = process.env.APPLE_TEAM_ID?.trim();
+  if (!teamId) return false;
+
+  const appPassword = process.env.APPLE_APP_SPECIFIC_PASSWORD?.trim();
+  const appleId = process.env.APPLE_ID?.trim();
+  if (appleId && appPassword) return true;
+
+  const apiKey = process.env.APPLE_API_KEY?.trim();
+  const apiKeyId = process.env.APPLE_API_KEY_ID?.trim();
+  const apiIssuer = process.env.APPLE_API_KEY_ISSUER?.trim();
+  return Boolean(apiKey && apiKeyId && apiIssuer);
+}
+
+/**
+ * electron-builder CLI overrides for the current signing environment.
+ * @returns {string[]}
+ */
+export function electronBuilderSigningArgs() {
+  if (process.platform !== 'darwin') return [];
+
+  loadSigningEnvFile();
+
+  if (process.env.MINNOW_SKIP_SIGNING === '1') {
+    console.warn('[signing] MINNOW_SKIP_SIGNING=1 — building an unsigned macOS package.');
+    return ['--config.mac.identity=null', '--config.mac.notarize=false'];
+  }
+
+  const identities = listDeveloperIdIdentities();
+  if (identities.length === 0) {
+    console.warn(
+      '[signing] No Developer ID Application certificate in the login keychain.',
+    );
+    console.warn('[signing] Run: npm run signing:setup');
+    console.warn('[signing] Building unsigned (Gatekeeper will block on first open).');
+    return ['--config.mac.identity=null', '--config.mac.notarize=false'];
+  }
+
+  const rawIdentity = process.env.CSC_NAME?.trim() || identities[0].name;
+  const identity = normalizeIdentityForSigning(rawIdentity);
+  console.log(`[signing] Using identity: ${identity}`);
+
+  const args = [`--config.mac.identity=${identity}`];
+
+  if (hasNotarizationCredentials()) {
+    const teamId = process.env.APPLE_TEAM_ID?.trim();
+    console.log(`[signing] Notarization enabled (team ${teamId}).`);
+    args.push(`--config.mac.notarize.teamId=${teamId}`);
+  } else {
+    console.warn(
+      '[signing] Signed build, but notarization credentials missing — app may still be quarantined.',
+    );
+    console.warn('[signing] Copy .env.signing.example → .env.signing and fill Apple credentials.');
+    args.push('--config.mac.notarize=false');
+  }
+
+  return args;
+}
+
+export { repoRoot, signingEnvPath, csrDir };
