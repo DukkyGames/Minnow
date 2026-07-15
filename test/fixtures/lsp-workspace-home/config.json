@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "createdAt": "2026-07-15T02:21:21.817Z",
+  "createdAt": "2026-07-15T06:27:41.901Z",
   "migratedFromLocalStorage": false,
   "migratedAt": null,
   "localStorageKeysMigrated": [],
@@ -150,7 +150,6 @@
     }
   },
   "chat": {
-    "maxToolTurns": 100,
     "generationIdleTimeoutMs": 1500000,
     "generationMaxDurationMs": 3600000
   },
@@ -219,9 +218,9 @@
     }
   },
   "workspace": {
-    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-ArXuuL",
+    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-TnhOMR",
     "recentPaths": [
-      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-ArXuuL"
+      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-TnhOMR"
     ]
   }
 }

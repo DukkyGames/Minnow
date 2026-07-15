@@ -234,10 +234,7 @@ export async function getContextBudget(
   const chat = options?.chat ?? getActiveChat();
   const modelId =
     options?.modelId?.trim() ||
-    chat.modelId ||
-    (typeof document !== 'undefined'
-      ? (document.getElementById('modelSelect') as HTMLSelectElement | null)?.value
-      : '') ||
+    chat.modelId?.trim() ||
     '';
 
   const { resolveOutboundPromptEstimate } = await import('./prompts/token-estimate');

@@ -10,6 +10,7 @@ import {
 } from '../chat/context-usage';
 import { TOKEN_ESTIMATE_TOOLTIP } from '../chat/prompts/token-estimate-core';
 import { getPendingAttachments } from '../attachments/store';
+import { resolveEffectiveChatModelBinding } from './default-model';
 import { getActiveChat } from '../state/sessions';
 import { getActiveComposerSurface } from './composer-surface';
 import {
@@ -94,8 +95,8 @@ function paintUnavailable(surface: ContextUsageSurface): void {
 async function runRefresh(): Promise<void> {
   try {
     const chat = getActiveChat();
-    const modelSelect = document.getElementById('modelSelect') as HTMLSelectElement | null;
-    const modelId = modelSelect?.value || chat.modelId || '';
+    const { selectValue } = resolveEffectiveChatModelBinding(chat);
+    const modelId = selectValue || chat.modelId || '';
     const budget = await getContextBudget({
       chat,
       modelId,

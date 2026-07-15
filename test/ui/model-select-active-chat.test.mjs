@@ -16,6 +16,8 @@ const {
   onModelSelectChange,
   syncModelSelectForActiveChat,
 } = await import('../../src/ui/sidebar.ts');
+const { onActiveChatModelChange } = await import('../../src/ui/chat-model-ui.ts');
+const { readPersistedDefaultModelValue } = await import('../../src/ui/default-model.ts');
 
 /** @type {import('happy-dom').Window | undefined} */
 let win;
@@ -66,13 +68,18 @@ describe('model select active chat binding', { concurrency: false }, () => {
   afterEach(async () => {
     appState.setStreaming(false);
     setSessionStateForTests(null);
+    try {
+      localStorage.removeItem('minnow-default-model-select');
+    } catch {
+      /* ignore */
+    }
     if (win) {
       await teardownHappyDomAsync(win);
       win = undefined;
     }
   });
 
-  test('syncModelSelectForActiveChat does not bleed picker value across chats', () => {
+  test('syncModelSelectForActiveChat keeps default picker when switching chats', () => {
     setupDom();
     const sel = document.getElementById('modelSelect');
     appendModelOption(sel, 'prov-a', 'model-a', 'A');
@@ -106,14 +113,14 @@ describe('model select active chat binding', { concurrency: false }, () => {
 
     assert.equal(
       sel.value,
-      encodeModelSelectKey('prov-b', 'model-b'),
-      'picker should follow the newly active chat',
+      encodeModelSelectKey('prov-a', 'model-a'),
+      'default picker should stay on the global default',
     );
     assert.equal(getActiveChat().providerId, 'prov-b');
     assert.equal(getActiveChat().modelId, 'model-b');
   });
 
-  test('onModelSelectChange persists composite provider and model on chat', () => {
+  test('onModelSelectChange updates persisted default without mutating active chat', () => {
     setupDom();
     const sel = document.getElementById('modelSelect');
     appendModelOption(sel, 'prov-a', 'model-a', 'A');
@@ -134,11 +141,45 @@ describe('model select active chat binding', { concurrency: false }, () => {
     sel.value = encodeModelSelectKey('prov-b', 'model-b');
     onModelSelectChange();
 
-    assert.equal(getActiveChat().providerId, 'prov-b');
-    assert.equal(getActiveChat().modelId, 'model-b');
+    assert.equal(getActiveChat().providerId, 'prov-a');
+    assert.equal(getActiveChat().modelId, 'model-a');
+    assert.equal(
+      readPersistedDefaultModelValue(),
+      encodeModelSelectKey('prov-b', 'model-b'),
+    );
   });
 
-  test('onModelSelectChange stops streaming on the active chat', () => {
+  test('onActiveChatModelChange persists composite provider and model on chat', () => {
+    setupDom();
+    const sel = document.getElementById('modelSelect');
+    appendModelOption(sel, 'prov-a', 'model-a', 'A');
+    appendModelOption(sel, 'prov-b', 'model-b', 'B');
+
+    const chat = createEmptyChatObject('');
+    chat.id = 'chat-1';
+    chat.providerId = 'prov-a';
+    chat.modelId = 'model-a';
+
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    sel.value = encodeModelSelectKey('prov-a', 'model-a');
+    onActiveChatModelChange(encodeModelSelectKey('prov-b', 'model-b'));
+
+    assert.equal(getActiveChat().providerId, 'prov-b');
+    assert.equal(getActiveChat().modelId, 'model-b');
+    assert.equal(
+      sel.value,
+      encodeModelSelectKey('prov-a', 'model-a'),
+      'composer change must not alter default picker',
+    );
+  });
+
+  test('onActiveChatModelChange stops streaming on the active chat', () => {
     setupDom();
     const sel = document.getElementById('modelSelect');
     appendModelOption(sel, 'prov-a', 'model-a', 'A');
@@ -166,36 +207,10 @@ describe('model select active chat binding', { concurrency: false }, () => {
       abortCalled = true;
     });
 
-    sel.value = encodeModelSelectKey('prov-b', 'model-b');
-    onModelSelectChange();
+    onActiveChatModelChange(encodeModelSelectKey('prov-b', 'model-b'));
 
     assert.equal(abortCalled, true);
     assert.equal(getActiveChat().providerId, 'prov-b');
     assert.equal(getActiveChat().modelId, 'model-b');
-  });
-
-  test('syncModelSelectForActiveChat clears stale picker when chat model is missing from catalog', () => {
-    setupDom();
-    const sel = document.getElementById('modelSelect');
-    appendModelOption(sel, 'prov-a', 'model-a', 'A');
-
-    const chat = createEmptyChatObject('');
-    chat.id = 'chat-missing';
-    chat.providerId = 'prov-z';
-    chat.modelId = 'model-z';
-
-    setSessionStateForTests({
-      version: 2,
-      activeId: chat.id,
-      sidebarCollapsed: false,
-      chats: [chat],
-    });
-
-    sel.value = encodeModelSelectKey('prov-a', 'model-a');
-    syncModelSelectForActiveChat();
-
-    assert.equal(sel.value, '');
-    assert.equal(getActiveChat().providerId, 'prov-z');
-    assert.equal(getActiveChat().modelId, 'model-z');
   });
 });
