@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { app, BrowserWindow, ipcMain } from 'electron';
 import electronUpdater from 'electron-updater';
 import * as channels from './ipc-channels.js';
@@ -67,12 +68,30 @@ function persistChannel(channel: UpdaterChannel): void {
 }
 
 /**
- * Windows NSIS works unsigned; macOS auto-update requires code signing we don't
- * have yet (documented limitation); dev/unpackaged runs have no install to update.
+ * Packaged macOS builds must be signed with a Developer ID cert for auto-update.
+ * Unsigned/ad-hoc installs keep the legacy unsupported state in Settings.
+ */
+function isMacAppSignedForUpdate(): boolean {
+  if (process.platform !== 'darwin' || !app.isPackaged) return false;
+  try {
+    const result = spawnSync('codesign', ['-dv', process.execPath], { encoding: 'utf8' });
+    const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+    if (/Signature=adhoc/i.test(output)) return false;
+    return /Authority=Developer ID Application/i.test(output);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Windows NSIS works unsigned; macOS auto-update requires a signed Developer ID build.
+ * Dev/unpackaged runs have no install to update.
  */
 function detectSupport(): { supported: boolean; reason: UpdaterUnsupportedReason | null } {
   if (!app.isPackaged) return { supported: false, reason: 'dev' };
-  if (process.platform === 'darwin') return { supported: false, reason: 'macos-signing' };
+  if (process.platform === 'darwin' && !isMacAppSignedForUpdate()) {
+    return { supported: false, reason: 'macos-signing' };
+  }
   return { supported: true, reason: null };
 }
 

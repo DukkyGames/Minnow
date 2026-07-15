@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { electronBuilderSigningArgs } from './macos-signing-env.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const defaultOut = path.join(repoRoot, 'release', 'pkg');
@@ -29,6 +30,7 @@ const builderArgs = [
   'electron-builder',
   ...process.argv.slice(2),
   `--config.directories.output=${outputDir}`,
+  ...electronBuilderSigningArgs(),
   // Publish config exists only so electron-builder emits latest.yml for the
   // auto-updater; uploading to GitHub Releases stays a manual step (MIN-384).
   '--publish',
