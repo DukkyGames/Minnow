@@ -189,6 +189,7 @@ export async function createNewDesktopChat(): Promise<void> {
   }
 
   const chat = createDesktopChat(path, newChatId());
+  const prevId = sessionState.activeId;
   sessionState.chats.unshift(chat);
   pruneEphemeralEmptyChats(sessionState, chat.id);
   sessionState.activeId = chat.id;
@@ -196,12 +197,13 @@ export async function createNewDesktopChat(): Promise<void> {
   scheduleSaveSessions();
 
   const { isDesktopChatActive, activateDesktopChat } = await import('../os/desktop-state');
+  const desktopChat = await import('../os/desktop-chat');
+  desktopChat.syncDesktopChatSessionSwitch(prevId, chat);
   if (!isDesktopChatActive()) {
     await activateDesktopChat({ chatId: chat.id });
     return;
   }
 
-  const desktopChat = await import('../os/desktop-chat');
   desktopChat.activateDesktopChatSession(chat.id);
   resetComposerForEphemeralReuse();
   renderDesktopChatRail(path);

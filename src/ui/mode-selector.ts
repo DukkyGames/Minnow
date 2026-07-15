@@ -64,6 +64,9 @@ function closePlanSubmenu(): void {
   document
     .querySelectorAll('.mode-segment-wrap--plan.is-submenu-open')
     .forEach((el) => el.classList.remove('is-submenu-open'));
+  document.querySelectorAll<HTMLButtonElement>('.mode-segment__caret').forEach((caret) => {
+    caret.setAttribute('aria-expanded', 'false');
+  });
 }
 
 function openPlanSubmenu(wrap: HTMLElement, caret: HTMLButtonElement): void {

@@ -11,6 +11,7 @@ import {
   isExecutableOrchestratePlan,
 } from '../chat/orchestrate/plan-path';
 import { executeTool } from '../tools/client';
+import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
 import { normalizeModeId } from '../chat/modes/types';
 import {
   getGroupsForWorkspace,
@@ -116,6 +117,7 @@ export function teardownOrchestrateHub(): void {
   document.getElementById('chatArea')?.classList.remove('chat-area--orchestrate-hub');
   hubReturnChatId = null;
   syncTopBarOrchestrateButton();
+  notifyAskQuestionDisplayContextChanged();
 }
 
 function formatRelativeTime(ts: number): string {
@@ -578,6 +580,7 @@ export function renderOrchestrateHub(): void {
   // Board view stays in chat state; hide board chrome while the hub overlay is open.
   document.getElementById('mainColumn')?.classList.remove('main-column--board-view');
   syncTopBarOrchestrateButton();
+  notifyAskQuestionDisplayContextChanged();
 }
 
 /** Close hub and restore the chat that was active when the hub opened. */
