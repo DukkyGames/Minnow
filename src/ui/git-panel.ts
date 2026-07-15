@@ -103,6 +103,11 @@ import {
   isMissingGitRepositoryError,
   renderGitNoRepositoryState,
 } from './git-no-repo-state';
+import {
+  renderGitStatusWithSendToChat,
+  type GitErrorChatContext,
+  type GitErrorChatKind,
+} from './git-error-to-chat';
 
 
 
@@ -140,7 +145,8 @@ let aiGenerateBtn: HTMLButtonElement | null = null;
 
 let generateMessageAbort: AbortController | null = null;
 
-let statusEl: HTMLElement | null = null;
+let statusWrap: HTMLElement | null = null;
+let statusMessageEl: HTMLElement | null = null;
 
 let diffHost: HTMLElement | null = null;
 
@@ -384,16 +390,27 @@ async function handleDeleteWorktree(): Promise<void> {
 
 
 
-function setStatus(message: string, isError = false): void {
+function gitErrorChatContext(): GitErrorChatContext {
+  return {
+    cwd: (getEffectiveCwdArg() ?? getWorkspacePath().trim()) || undefined,
+    branch: currentBranchName || branchSelect?.value || undefined,
+  };
+}
 
-  if (!statusEl) return;
-
-  statusEl.textContent = message;
-
-  statusEl.classList.toggle('is-err', isError);
-
-  statusEl.hidden = !message;
-
+function setStatus(
+  message: string,
+  isError = false,
+  sendToChat?: GitErrorChatKind,
+): void {
+  if (!statusWrap || !statusMessageEl) return;
+  renderGitStatusWithSendToChat(
+    statusWrap,
+    statusMessageEl,
+    message,
+    isError,
+    sendToChat,
+    gitErrorChatContext(),
+  );
 }
 
 
@@ -541,6 +558,25 @@ function ensurePanelDom(): HTMLElement {
 
   centerRow.className = 'git-panel-center-row';
 
+  const helpBtn = document.createElement('button');
+
+  helpBtn.type = 'button';
+
+  helpBtn.id = 'btnGitHelp';
+
+  helpBtn.className = 'git-panel-help-btn icon-btn';
+
+  helpBtn.title = 'How worktrees and branches work';
+
+  helpBtn.setAttribute('aria-label', 'How worktrees and branches work');
+
+  helpBtn.innerHTML =
+    '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">' +
+    '<circle cx="12" cy="12" r="10"/>' +
+    '<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>' +
+    '<line x1="12" y1="17" x2="12.01" y2="17"/>' +
+    '</svg>';
+
   const centerBtn = document.createElement('button');
 
   centerBtn.type = 'button';
@@ -555,7 +591,7 @@ function ensurePanelDom(): HTMLElement {
 
   centerBtn.setAttribute('aria-label', 'Open Source Control Center');
 
-  centerRow.appendChild(centerBtn);
+  centerRow.append(helpBtn, centerBtn);
 
   toolbar.appendChild(centerRow);
 
@@ -716,15 +752,15 @@ function ensurePanelDom(): HTMLElement {
 
 
 
-  statusEl = document.createElement('p');
+  statusWrap = document.createElement('div');
+  statusWrap.className = 'git-panel-status-wrap';
+  statusWrap.setAttribute('role', 'status');
+  statusWrap.setAttribute('aria-live', 'polite');
+  statusWrap.hidden = true;
 
-  statusEl.className = 'git-panel-status';
-
-  statusEl.setAttribute('role', 'status');
-
-  statusEl.setAttribute('aria-live', 'polite');
-
-  statusEl.hidden = true;
+  statusMessageEl = document.createElement('p');
+  statusMessageEl.className = 'git-panel-status';
+  statusWrap.appendChild(statusMessageEl);
 
 
 
@@ -892,7 +928,7 @@ function ensurePanelDom(): HTMLElement {
 
 
 
-  scrollMount.append(statusEl, noRepoMount, commitBox, bodyMount, diffHost, historySection);
+  scrollMount.append(statusWrap, noRepoMount, commitBox, bodyMount, diffHost, historySection);
 
   panelRoot.append(toolbar, scrollMount);
 
@@ -1072,6 +1108,7 @@ async function handleCommit(andPush: boolean): Promise<void> {
 
     const ok = await runGitOp(() => gitCommit({ message, cwd }), {
       successMessage: andPush ? undefined : 'Committed changes',
+      sendToChat: 'commit',
     });
 
     if (!ok) return;
@@ -1082,7 +1119,10 @@ async function handleCommit(andPush: boolean): Promise<void> {
 
       setCommitActionsBusy(action, 'Pushing…');
 
-      await runGitOp(() => gitPush({ cwd }), { successMessage: 'Committed and pushed' });
+      await runGitOp(() => gitPush({ cwd }), {
+        successMessage: 'Committed and pushed',
+        sendToChat: 'commit',
+      });
 
     }
 
@@ -1097,33 +1137,21 @@ async function handleCommit(andPush: boolean): Promise<void> {
 
 
 type RunGitOpOptions = {
-
   successMessage?: string;
-
+  /** When set, failed ops show a Send to chat action beside the error. */
+  sendToChat?: GitErrorChatKind;
 };
 
-
-
 async function runGitOp(
-
   fn: () => Promise<GitOpResult>,
-
   options?: RunGitOpOptions,
-
 ): Promise<boolean> {
-
   const result = await fn();
-
   if (!result.ok) {
-
     const error = result.error ?? 'Git operation failed';
-
-    setStatus(error, true);
-
+    setStatus(error, true, options?.sendToChat);
     showToast(error, 'error');
-
     return false;
-
   }
 
   setStatus('');
@@ -2086,7 +2114,8 @@ export function resetGitPanelForTests(): void {
 
   generateMessageAbort = null;
 
-  statusEl = null;
+  statusWrap = null;
+  statusMessageEl = null;
 
   diffHost = null;
 

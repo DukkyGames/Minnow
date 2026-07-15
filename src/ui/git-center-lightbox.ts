@@ -257,6 +257,10 @@ async function openMergeForBranch(branch: string): Promise<void> {
     if (result.conflict && conflictHost) {
       const { renderConflictAlert } = await import('./git-advanced-actions');
       renderConflictAlert(conflictHost, 'merge', result.error ?? 'Conflict', ctx);
+    } else if (conflictHost) {
+      const { renderMergeErrorAlert } = await import('./git-advanced-actions');
+      renderMergeErrorAlert(conflictHost, result.error ?? 'Merge failed', ctx);
+      showToast(result.error ?? 'Merge failed', 'error');
     } else {
       showToast(result.error ?? 'Merge failed', 'error');
     }

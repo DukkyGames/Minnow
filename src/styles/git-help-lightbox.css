@@ -1,0 +1,347 @@
+/* Source Control help lightbox — branches vs worktrees explainer */
+
+.git-help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: var(--mn-overlay);
+}
+
+.git-help-overlay.hidden {
+  display: none;
+}
+
+.git-help-lightbox {
+  display: flex;
+  flex-direction: column;
+  width: min(42rem, calc(100vw - 1.5rem));
+  max-height: min(88dvh, calc(100dvh - 1.5rem));
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  color: var(--mn-fg);
+  outline: none;
+  animation: minnow-panel-reveal var(--duration-normal) var(--ease-out);
+}
+
+/* ─── Header ─── */
+
+.git-help-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px 12px 16px;
+  border-bottom: 1px solid var(--mn-border);
+  flex-shrink: 0;
+}
+
+.git-help-header__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.git-help-close.icon-btn {
+  width: 32px;
+  height: 32px;
+}
+
+.git-help-close .icon-svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ─── Body ─── */
+
+.git-help-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.git-help-intro {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--mn-fg);
+  max-width: 62ch;
+}
+
+/* ─── Diagram ─── */
+
+.git-help-diagram {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 14px 12px 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-surface-0);
+}
+
+.git-help-diagram__repo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.git-help-diagram__repo-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.25rem;
+  padding: 6px 12px;
+  border: 1px solid var(--mn-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.git-help-diagram__repo-text {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
+.git-help-diagram__connectors {
+  position: relative;
+  width: min(280px, 100%);
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.git-help-diagram__stem {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 1px;
+  height: 14px;
+  background: var(--mn-border-strong);
+  transform: translateX(-50%);
+}
+
+.git-help-diagram__fork {
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: 14px;
+  height: 1px;
+  background: var(--mn-border-strong);
+}
+
+.git-help-diagram__fork::before,
+.git-help-diagram__fork::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 14px;
+  background: var(--mn-border-strong);
+}
+
+.git-help-diagram__fork::before {
+  left: 0;
+}
+
+.git-help-diagram__fork::after {
+  right: 0;
+}
+
+.git-help-diagram__folders {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 14px;
+}
+
+.git-help-diagram__folder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  text-align: center;
+}
+
+.git-help-diagram__folder-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--mn-fg-muted);
+}
+
+.git-help-diagram__folder-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.git-help-diagram__folder-branch {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+}
+
+.git-help-diagram__timeline {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.git-help-diagram__caption {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+  text-align: center;
+  max-width: 36ch;
+}
+
+/* ─── Concept cards ─── */
+
+.git-help-concepts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.git-help-concept {
+  padding: 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+}
+
+.git-help-concept__hdr {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.git-help-concept__icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--mn-fg-muted);
+}
+
+.git-help-concept__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.git-help-concept__body {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+}
+
+.git-help-concept__list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--mn-fg);
+}
+
+.git-help-concept__list li + li {
+  margin-top: 4px;
+}
+
+/* ─── Minnow tips ─── */
+
+.git-help-tips {
+  padding-top: 4px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.git-help-tips__title {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.git-help-tips__list {
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.git-help-tips__list dt {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mn-fg);
+}
+
+.git-help-tips__list dd {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+}
+
+/* ─── Git panel help trigger ─── */
+
+.git-panel-help-btn.icon-btn {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.git-panel-help-btn .icon-svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.git-panel-help-btn.is-active {
+  background: var(--mn-accent-soft);
+  border-color: var(--mn-border-strong);
+}
+
+@media (max-width: 520px) {
+  .git-help-concepts,
+  .git-help-diagram__folders {
+    grid-template-columns: 1fr;
+  }
+
+  .git-help-diagram__connectors {
+    display: none;
+  }
+}
