@@ -40,11 +40,16 @@ export function autoResize(el: HTMLTextAreaElement): void {
   el.style.overflowY = 'auto';
 }
 
-/** Wire composer resize listeners (keydown/input wired in shell-handlers.ts). */
+/** Wire Code composer keydown, resize, steer, and draft listeners (idempotent). */
 export function initComposerInput(el: HTMLTextAreaElement): void {
   autoResize(el);
   window.addEventListener('resize', () => autoResize(el));
-  initComposerSteerInputListener();
+  initComposerSteerInputListener(el);
+  if (el.dataset.composerKeydownWired !== '1') {
+    el.dataset.composerKeydownWired = '1';
+    el.addEventListener('keydown', handleKey);
+    el.addEventListener('input', () => autoResize(el));
+  }
   void import('./composer-draft').then((m) => m.initComposerDraftListener(el));
 }
 

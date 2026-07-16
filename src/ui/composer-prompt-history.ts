@@ -1,12 +1,26 @@
 /**
- * Per-chat composer prompt history (ArrowUp/ArrowDown), shell-style recall of prior user messages.
+ * Composer prompt history (ArrowUp/ArrowDown), shell-style recall of prior user messages.
+ * Per-chat in normal chat view; workspace-wide on the Vibe hub (empty active chat).
  */
 
-import type { Message } from '../types';
+import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
+import type { Message, SessionState } from '../types';
 import { stripSkillTagFromHistory } from '../skills/history-content';
-import { getActiveChat } from '../state/sessions';
+import { getWorkspacePath } from '../state/workspace';
+import {
+  getChatLastMessageAt,
+  getChatsForWorkspace,
+} from '../state/session-workspace-scope';
+import { getActiveChat, sessionState } from '../state/sessions';
 import { autoResizeDesktopComposer } from '../os/desktop-composer-resize';
 import { resolveHistoryNavigation } from './terminal-history-nav';
+
+/** Matches `HUB_ROOT_ID` in hub.ts — DOM probe avoids a hub import cycle. */
+const HUB_ROOT_ID = 'vibeHub';
+
+function isHubComposerActive(): boolean {
+  return Boolean(document.getElementById(HUB_ROOT_ID));
+}
 
 let trackedChatId: string | null = null;
 let historyIndex = 0;
@@ -22,6 +36,39 @@ export function collectChatUserPrompts(history: Message[]): string[] {
     prompts.push(text);
   }
   return prompts;
+}
+
+/** Collect user prompts across workspace chats, oldest chat activity first. */
+export function collectWorkspaceUserPrompts(
+  state: SessionState,
+  workspacePath: string,
+): string[] {
+  const chats = getChatsForWorkspace(workspacePath, state)
+    .filter((chat) => chat.history.length > 0)
+    .sort((a, b) => getChatLastMessageAt(a) - getChatLastMessageAt(b));
+  const prompts: string[] = [];
+  for (const chat of chats) {
+    prompts.push(...collectChatUserPrompts(chat.history));
+  }
+  return prompts;
+}
+
+function hubPromptScopeKey(workspacePath: string): string {
+  return `hub:${normalizeWorkspacePath(workspacePath)}`;
+}
+
+function resolvePromptHistoryScopeKey(): string {
+  if (isHubComposerActive()) {
+    return hubPromptScopeKey(getWorkspacePath());
+  }
+  return getActiveChat().id;
+}
+
+function resolvePromptsForNavigation(): string[] {
+  if (isHubComposerActive() && sessionState) {
+    return collectWorkspaceUserPrompts(sessionState, getWorkspacePath());
+  }
+  return collectChatUserPrompts(getActiveChat().history);
 }
 
 /** True when a collapsed caret sits at the start of the composer (Up may recall). */
@@ -69,10 +116,9 @@ function syncChatScope(chatId: string, promptCount: number): void {
 }
 
 /** Snap recall position to the draft tail after send or composer clear. */
-export function resetComposerPromptHistory(chatId?: string): void {
-  const chat = getActiveChat();
-  const id = chatId ?? chat.id;
-  const prompts = collectChatUserPrompts(chat.history);
+export function resetComposerPromptHistory(scopeKey?: string): void {
+  const id = scopeKey ?? resolvePromptHistoryScopeKey();
+  const prompts = resolvePromptsForNavigation();
   trackedChatId = id;
   historyIndex = prompts.length;
 }
@@ -95,11 +141,10 @@ export function handleComposerPromptHistoryKeydown(
   if (e.altKey || e.ctrlKey || e.metaKey) return false;
   if (e.shiftKey) return false;
 
-  const chat = getActiveChat();
-  const prompts = collectChatUserPrompts(chat.history);
+  const prompts = resolvePromptsForNavigation();
   if (prompts.length === 0) return false;
 
-  syncChatScope(chat.id, prompts.length);
+  syncChatScope(resolvePromptHistoryScopeKey(), prompts.length);
 
   if (e.key === 'ArrowUp' && !isComposerCaretAtStart(input)) return false;
   if (e.key === 'ArrowDown' && !isComposerCaretAtEnd(input)) return false;

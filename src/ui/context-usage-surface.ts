@@ -3,7 +3,7 @@
  */
 
 import { isDesktopChatActive } from '../os/desktop-state';
-import { getForegroundAppId } from '../os/instances';
+import { getForegroundAppId, getOsView } from '../os/instances';
 import { isChatAppForeground } from './chat-mount';
 
 export interface ContextUsageSurface {
@@ -28,10 +28,12 @@ const SURFACES: Record<'code' | 'chat' | 'desktop', ContextUsageSurface> = {
 
 function resolveSurfaceKey(): keyof typeof SURFACES {
   const foregroundAppId = getForegroundAppId();
+  // Code keeps desktop chat state for return navigation, but Code owns the composer.
   if (foregroundAppId === 'code') return 'code';
   if (isDesktopChatActive()) return 'desktop';
   if (isChatAppForeground()) return 'chat';
-  return 'code';
+  if (getOsView() === 'desktop' && document.getElementById('desktopContextRing')) return 'desktop';
+  return foregroundAppId ?? 'code';
 }
 
 /** Ring + breakdown ids for the foreground chat surface. */
