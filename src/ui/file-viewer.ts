@@ -8,6 +8,7 @@ import { isImageFilePath } from '../attachments/image-path';
 import { setAssistantBubbleContent } from '../markdown/renderer';
 import { executeTool, getLocalServerAvailable } from '../tools/client';
 import { resolvePreviewLoadUrl } from './preview-load-url';
+import { getFileTreeListingWorkspaceRoot } from './file-tree-listing-root';
 import { getActivePreviewTabId, listPreviewTabs } from './preview-tab-store';
 import { fetchLspConfig } from '../lsp/config-client';
 import { notifyLspDocument } from '../lsp/completion-client';
@@ -652,7 +653,7 @@ async function loadFileContent(path: string): Promise<LoadedFileContent> {
     };
   }
 
-  const content = await readWorkspaceTextFile(path);
+  const content = await readWorkspaceTextFile(path, toolContext.workspaceRoot);
   return { content, readOnlyExcerpt: false };
 }
 
@@ -711,7 +712,11 @@ export function renderActiveViewerTab(): void {
     if (tab.kind === 'attachment') {
       mountImagePreview(tab, content);
     } else {
-      const src = resolvePreviewLoadUrl({ kind: 'workspace', path: tab.path });
+      const src = resolvePreviewLoadUrl(
+        { kind: 'workspace', path: tab.path },
+        undefined,
+        getFileTreeListingWorkspaceRoot(),
+      );
       mountImagePreview(tab, src, () => {
         setViewerError(
           'Could not load image preview. Is the tool server running (npm start)?',

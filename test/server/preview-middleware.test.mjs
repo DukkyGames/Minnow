@@ -48,8 +48,8 @@ function resolveSafePath(userPath) {
 
 async function startPreviewServer() {
   const server = createServer(async (req, res) => {
-    const pathname = new URL(req.url ?? '/', 'http://127.0.0.1').pathname;
-    const handled = await handlePreviewRequest(req, res, pathname, {
+    const parsed = new URL(req.url ?? '/', 'http://127.0.0.1');
+    const handled = await handlePreviewRequest(req, res, parsed.pathname, parsed.searchParams, {
       resolveSafePath,
       runWithPathAccess: (fn) => fn(),
     });
@@ -123,5 +123,78 @@ describe('preview middleware', () => {
     );
     assert.equal(res.status, 403);
     assert.match(res.json.error, /blocked/i);
+  });
+});
+
+describe('preview middleware workspaceRoot override', () => {
+  let homeDir;
+  let workspaceDir;
+  let server;
+  let baseUrl;
+  let desktopRoot;
+
+  before(async () => {
+    const { setTestHome, rmTestHome } = await import('../config/test-helpers.js');
+    const { ensureMinnowLayout } = await import('../../server/config/home.js');
+    const { ensureDesktopWorkspace, getDesktopWorkspacePath } = await import(
+      '../../server/desktop-workspace/paths.js'
+    );
+    const { resolveSafePath, runWithPathAccess } = await import('../../server/runtime/path-access.js');
+    const { initWorkspaceRoot, setWorkspaceRoot } = await import('../../server/workspace/root.js');
+
+    homeDir = setTestHome(process.env, 'minnow-test-preview-workspace-root');
+    await ensureMinnowLayout();
+    await ensureDesktopWorkspace();
+    desktopRoot = getDesktopWorkspacePath();
+    await fs.writeFile(path.join(desktopRoot, 'desktop-only.txt'), 'desktop workspace file\n', 'utf8');
+
+    workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-preview-code-'));
+    await fs.writeFile(path.join(workspaceDir, 'code-only.txt'), 'code workspace file\n', 'utf8');
+    process.env.MINNOW_WORKSPACE = workspaceDir;
+    await setWorkspaceRoot(workspaceDir);
+    await initWorkspaceRoot();
+
+    server = createServer(async (req, res) => {
+      const parsed = new URL(req.url ?? '/', 'http://127.0.0.1');
+      const handled = await handlePreviewRequest(req, res, parsed.pathname, parsed.searchParams, {
+        resolveSafePath,
+        runWithPathAccess,
+      });
+      if (!handled) {
+        res.statusCode = 404;
+        res.end('not found');
+      }
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = server.address().port;
+    baseUrl = `http://127.0.0.1:${port}`;
+  });
+
+  after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+    delete process.env.MINNOW_WORKSPACE;
+    const { rmTestHome } = await import('../config/test-helpers.js');
+    await rmTestHome(homeDir);
+    await fs.rm(workspaceDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  });
+
+  test('GET /api/preview/file serves from desktop workspace when workspaceRoot is set', async () => {
+    const res = await httpRequest(
+      baseUrl,
+      'GET',
+      `/api/preview/file/desktop-only.txt?workspaceRoot=${encodeURIComponent(desktopRoot)}`,
+    );
+    assert.equal(res.status, 200);
+    assert.match(res.body, /desktop workspace file/);
+  });
+
+  test('rejects disallowed workspaceRoot', async () => {
+    const res = await httpRequest(
+      baseUrl,
+      'GET',
+      `/api/preview/file/desktop-only.txt?workspaceRoot=${encodeURIComponent('/tmp/not-allowed')}`,
+    );
+    assert.equal(res.status, 400);
+    assert.match(res.json.error, /allowlist/i);
   });
 });

@@ -13,8 +13,8 @@ export function parseGetFileMetadataSize(metadata: string): number | null {
 }
 
 /** Fetches a workspace UTF-8 text file through GET /api/preview/file/… */
-export async function readWorkspaceTextFile(path: string): Promise<string> {
-  const url = resolvePreviewLoadUrl({ kind: 'workspace', path });
+export async function readWorkspaceTextFile(path: string, workspaceRoot?: string): Promise<string> {
+  const url = resolvePreviewLoadUrl({ kind: 'workspace', path }, undefined, workspaceRoot);
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`Could not read file (HTTP ${res.status})`);
