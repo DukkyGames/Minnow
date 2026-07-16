@@ -44,6 +44,7 @@ import {
 } from '../config/tool-calls-meta';
 import { getModelRowForSelectOrCanonicalId } from '../api/models';
 import { resolveProvider } from '../providers/store';
+import { resolveModelApi } from '../providers/resolve-model-api';
 import { runHeadlessToolBatch } from '../tools/headless-tool-batch';
 import {
   DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
@@ -566,16 +567,20 @@ export const defaultSubAgentRunner: SubAgentRunner = {
       ) as SubAgentCompletionBody;
       mergeThinkingIntoCompletionBody(
         body as unknown as Record<string, unknown>,
-        resolvedThinking.mode,
+        'off',
         provider,
         sendCaps,
-        turnReasoningEffort,
       );
+
+      const modelRow = getModelRowForSelectOrCanonicalId(input.modelId);
+      const resolvedApi = resolveModelApi(provider, input.modelId, modelRow ?? undefined);
+      const anthropicFinalization = resolvedApi === 'anthropic-v1';
 
       let usedOutcomeResponseFormat = false;
       const outcomeFormat = buildSubAgentOutcomeResponseFormat(summarySchema);
       if (
         outcomeFormat &&
+        !anthropicFinalization &&
         isStructuredOutcomeResponseFormatAvailable(input.modelId, providerCapabilities)
       ) {
         body = { ...body, response_format: outcomeFormat };

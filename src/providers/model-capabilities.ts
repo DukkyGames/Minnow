@@ -330,6 +330,42 @@ export function findLoadedModelIdsForProvider(providerId: string): string[] {
   return [...new Set(loaded)];
 }
 
+/** All catalog model ids for a provider (from modelCache), regardless of load state. */
+export function findCatalogModelIdsForProvider(providerId: string): string[] {
+  const pid = providerId.trim();
+  if (!pid) return [];
+
+  const ids: string[] = [];
+  for (const [key] of modelCache.entries()) {
+    const decoded = decodeModelSelectKey(key);
+    if (!decoded || decoded.providerId !== pid) continue;
+    ids.push(decoded.modelId);
+  }
+  return [...new Set(ids)];
+}
+
+/**
+ * Model id to use for capability probes: prefers the top-bar / chat selection when
+ * it belongs to this provider; cloud providers may use any catalog row (not only loaded).
+ */
+export function findProbeModelIdForProvider(
+  providerId: string,
+  preferredModelId?: string,
+  apiKind?: ApiKind,
+): string | null {
+  const isLmStudio = apiKind === 'lm-studio-v0';
+  const candidateIds = isLmStudio
+    ? findLoadedModelIdsForProvider(providerId)
+    : findCatalogModelIdsForProvider(providerId);
+  if (candidateIds.length === 0) return null;
+
+  const preferredCanonical = preferredModelId
+    ? decodeModelSelectKey(preferredModelId)?.modelId ?? preferredModelId.trim()
+    : undefined;
+  const [pick] = prioritizeModelIdsForProbe(candidateIds, preferredCanonical);
+  return pick ?? null;
+}
+
 /**
  * First loaded model id for a provider (selected chat model preferred when loaded).
  */

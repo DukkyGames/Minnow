@@ -6,6 +6,7 @@ import {
   isStructuredOutcomeResponseFormatAvailable,
   setProviderCapabilitiesForTests,
   resetCapabilitiesCache,
+  structuredOutputBadge,
   type ProviderCapabilities,
 } from '../../src/providers/capability-probe.ts';
 
@@ -71,5 +72,30 @@ describe('capability-probe', () => {
       models: { 'bad-model': { structuredOutput: false, denyReason: 'unsupported' } },
     };
     assert.equal(isStructuredOutcomeResponseFormatAvailable('bad-model', caps), false);
+  });
+
+  it('isStructuredOutcomeResponseFormatAvailable prefers per-model true over provider false', () => {
+    const caps: ProviderCapabilities = {
+      ...CAPS,
+      structuredOutput: false,
+      structuredOutputWithTools: false,
+      models: { 'gpt-4o-mini': { structuredOutput: true } },
+    };
+    assert.equal(isStructuredOutcomeResponseFormatAvailable('gpt-4o-mini', caps), true);
+    assert.equal(isStructuredOutcomeResponseFormatAvailable('claude-sonnet-4-5', caps), false);
+  });
+
+  it('structuredOutputBadge prefers per-model entry over provider flags', () => {
+    const caps: ProviderCapabilities = {
+      ...CAPS,
+      structuredOutput: true,
+      models: {
+        'claude-sonnet-4-5': { structuredOutput: false, denyReason: 'anthropic bridge' },
+        'gpt-4o-mini': { structuredOutput: true },
+      },
+    };
+    assert.equal(structuredOutputBadge(caps, 'claude-sonnet-4-5'), 'no');
+    assert.equal(structuredOutputBadge(caps, 'gpt-4o-mini'), 'yes');
+    assert.equal(structuredOutputBadge(caps), 'yes');
   });
 });

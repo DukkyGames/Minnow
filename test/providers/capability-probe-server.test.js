@@ -285,4 +285,131 @@ describe('probe-capabilities route', () => {
       await new Promise((resolve) => unloadedMock.close(resolve));
     }
   });
+
+  it('structured probe with Claude model does not poison provider when GPT model exists', async () => {
+    probeBodies = [];
+    const mixedGatewayMock = http.createServer((req, res) => {
+      if (req.method === 'GET' && req.url === '/v1/models') {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(
+          JSON.stringify({
+            data: [
+              { id: 'claude-sonnet-4-5', owned_by: 'anthropic' },
+              { id: 'gpt-4o-mini', owned_by: 'openai' },
+            ],
+          }),
+        );
+        return;
+      }
+      if (req.method === 'POST' && req.url === '/v1/chat/completions') {
+        let raw = '';
+        req.on('data', (chunk) => {
+          raw += chunk;
+        });
+        req.on('end', () => {
+          const body = JSON.parse(raw);
+          probeBodies.push({ body });
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ choices: [{ message: { content: '{"ok":true}' } }] }));
+        });
+        return;
+      }
+      res.statusCode = 404;
+      res.end('not found');
+    });
+    await new Promise((resolve) => mixedGatewayMock.listen(0, '127.0.0.1', resolve));
+    const port = /** @type {import('net').AddressInfo} */ (mixedGatewayMock.address()).port;
+    const gatewayBaseUrl = `http://127.0.0.1:${port}`;
+
+    try {
+      await httpRequest(baseUrl, 'POST', '/api/providers', {
+        id: 'probe-mixed-gateway',
+        label: 'Mixed gateway',
+        baseUrl: gatewayBaseUrl,
+        apiKind: 'openai-v1',
+        autoApi: true,
+        modelsPath: '/v1/models',
+        chatCompletionsPath: '/v1/chat/completions',
+        messagesPath: '/v1/messages',
+      });
+
+      const res = await httpRequest(
+        baseUrl,
+        'POST',
+        '/api/providers/probe-mixed-gateway/probe-capabilities',
+        { modelId: 'claude-sonnet-4-5' },
+      );
+      assert.equal(res.status, 200);
+      assert.equal(res.json.structuredOutput, true);
+      assert.equal(res.json.models['claude-sonnet-4-5'].structuredOutput, false);
+      assert.equal(res.json.models['gpt-4o-mini'].structuredOutput, true);
+      assert.ok(probeBodies.length >= 1);
+      assert.equal(probeBodies[0].body.model, 'gpt-4o-mini');
+    } finally {
+      await new Promise((resolve) => mixedGatewayMock.close(resolve));
+    }
+  });
+
+  it('structured probe prefers explicit openai model over alphabetical fallback', async () => {
+    probeBodies = [];
+    const gatewayMock = http.createServer((req, res) => {
+      if (req.method === 'GET' && req.url === '/v1/models') {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(
+          JSON.stringify({
+            data: [
+              { id: 'deepseek/deepseek-v4-flash', owned_by: 'deepseek' },
+              { id: 'openai/gpt-4o-mini', owned_by: 'openai' },
+            ],
+          }),
+        );
+        return;
+      }
+      if (req.method === 'POST' && req.url === '/v1/chat/completions') {
+        let raw = '';
+        req.on('data', (chunk) => {
+          raw += chunk;
+        });
+        req.on('end', () => {
+          const body = JSON.parse(raw);
+          probeBodies.push({ body });
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ choices: [{ message: { content: '{"ok":true}' } }] }));
+        });
+        return;
+      }
+      res.statusCode = 404;
+      res.end('not found');
+    });
+    await new Promise((resolve) => gatewayMock.listen(0, '127.0.0.1', resolve));
+    const port = /** @type {import('net').AddressInfo} */ (gatewayMock.address()).port;
+    const gatewayBaseUrl = `http://127.0.0.1:${port}`;
+
+    try {
+      await httpRequest(baseUrl, 'POST', '/api/providers', {
+        id: 'probe-explicit-model',
+        label: 'Explicit model',
+        baseUrl: gatewayBaseUrl,
+        apiKind: 'openai-v1',
+        modelsPath: '/v1/models',
+        chatCompletionsPath: '/v1/chat/completions',
+      });
+
+      const res = await httpRequest(
+        baseUrl,
+        'POST',
+        '/api/providers/probe-explicit-model/probe-capabilities',
+        { modelId: 'openai/gpt-4o-mini', selectedModelId: 'openai/gpt-4o-mini' },
+      );
+      assert.equal(res.status, 200);
+      assert.equal(res.json.structuredOutput, true);
+      assert.equal(res.json.models['openai/gpt-4o-mini'].structuredOutput, true);
+      assert.ok(probeBodies.length >= 1);
+      assert.equal(probeBodies[0].body.model, 'openai/gpt-4o-mini');
+    } finally {
+      await new Promise((resolve) => gatewayMock.close(resolve));
+    }
+  });
 });

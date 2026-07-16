@@ -146,13 +146,13 @@
   cursor: not-allowed;
 }
 
-/* Chip strip above the textarea */
+/* Chip strip above the composer toolbar */
 .attach-preview {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   padding: 0 2px;
-  margin-bottom: 2px;
+  margin-bottom: 8px;
 }
 
 .attach-preview.hidden {
