@@ -2,6 +2,7 @@
  * Derive a short label for the orchestrator's latest tool run or message (board header).
  */
 
+import { getMainTurnActivity } from '../main-turn-activity';
 import { describeToolInvocation } from '../../tools/describe-invocation';
 import type { Chat } from '../../types';
 
@@ -38,17 +39,38 @@ function truncatePreview(text: string, max = PREVIEW_MAX): string {
   return flat.length <= max ? flat : `${flat.slice(0, max - 1)}…`;
 }
 
+/** Live stream phase for the board header while the planner chat is in-flight. */
+function deriveStreamingOrchestratorActivity(chat: Chat): OrchestratorActivity {
+  const mainTurn = getMainTurnActivity(chat.id);
+  if (mainTurn?.phase === 'tools' && mainTurn.currentTool) {
+    const label = describeToolInvocation(mainTurn.currentTool, {}).title;
+    return {
+      kind: 'tool',
+      text: `Running ${label}…`,
+      title: `Running tool: ${mainTurn.currentTool}`,
+    };
+  }
+  if (mainTurn?.phase === 'thinking') {
+    return {
+      kind: 'thinking',
+      text: 'Thinking…',
+      title: 'Model is reasoning',
+    };
+  }
+  return {
+    kind: 'waiting',
+    text: 'Generating…',
+    title: 'Waiting for model output',
+  };
+}
+
 /** Latest orchestrator tool or message for the board header activity chip. */
 export function deriveOrchestratorLastActivity(
   chat: Chat,
   isStreaming: boolean,
 ): OrchestratorActivity | null {
   if (isStreaming) {
-    return {
-      kind: 'waiting',
-      text: 'Generating…',
-      title: 'Waiting for model output',
-    };
+    return deriveStreamingOrchestratorActivity(chat);
   }
 
   for (let i = chat.history.length - 1; i >= 0; i--) {

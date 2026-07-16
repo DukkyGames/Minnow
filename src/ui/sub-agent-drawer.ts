@@ -17,6 +17,7 @@ import { findChatById } from '../state/sessions';
 import { legacyOutcomeFromSummary } from '../agents/sub-agent-structured-outcome';
 import type { SubAgentStructuredOutcome } from '../agents/sub-agent-structured-outcome';
 import type { PersistedSubAgentRun } from '../types';
+import { humanizeToolName } from './tool-messages';
 import { renderTranscriptView } from './transcript-view.ts';
 
 type AnyRun = SubAgentRun | PersistedSubAgentRun;
@@ -129,11 +130,15 @@ function resolveOutcome(run: AnyRun, live: boolean): SubAgentStructuredOutcome |
 /** Live status line when a structured outcome is not ready yet. */
 function liveStatusLine(run: SubAgentRun): string {
   const snap = buildSubAgentStatusPayload(run);
+  const toolName = run.liveCurrentToolName?.trim();
+  if (toolName) {
+    return `Calling ${humanizeToolName(toolName)}…`;
+  }
   const preview =
     typeof snap.lastMessagePreview === 'string' ? snap.lastMessagePreview.trim() : '';
   if (preview) return preview;
   if (run.status === 'queued') return 'Queued — waiting for a concurrency slot…';
-  if (run.status === 'running') return 'Working…';
+  if (run.status === 'running') return 'Generating response…';
   return '';
 }
 

@@ -2,6 +2,7 @@
  * Per-task Kanban card activity line (live tool phase, idle last action, sub-agent fallback).
  */
 
+import { getSubAgentRun } from '../../agents/orchestrator';
 import {
   getMainTurnActivity,
   type MainTurnActivity,
@@ -79,7 +80,25 @@ export interface TaskCardSubAgentHint {
 
 function deriveSubAgentOnlyActivity(
   hint: TaskCardSubAgentHint | null | undefined,
+  runId?: string | null,
 ): TaskCardActivity | null {
+  const live = runId ? getSubAgentRun(runId) : null;
+  if (live?.liveCurrentToolName?.trim()) {
+    const name = live.liveCurrentToolName.trim();
+    const label = describeToolInvocation(name, {}).title;
+    return {
+      kind: 'tool',
+      text: `Running ${label}…`,
+      title: `Running tool: ${name}`,
+    };
+  }
+  if (live?.status === 'running') {
+    return {
+      kind: 'waiting',
+      text: 'Generating…',
+      title: 'Waiting for model output',
+    };
+  }
   if (!hint) return null;
   const rawTask = hint.taskLabel.trim();
   if (rawTask) {
@@ -102,6 +121,8 @@ export interface DeriveTaskCardActivityInput {
   taskChat?: Chat | null;
   mainTurn?: MainTurnActivity;
   subAgentHint?: TaskCardSubAgentHint | null;
+  /** Live sub-agent run when the task has no dedicated chat yet. */
+  subAgentRunId?: string | null;
 }
 
 /** Activity line for a Kanban task card, or null when nothing to show. */
@@ -136,7 +157,7 @@ export function deriveTaskCardActivity(
   }
 
   if (!taskChatId) {
-    return deriveSubAgentOnlyActivity(input.subAgentHint);
+    return deriveSubAgentOnlyActivity(input.subAgentHint, input.subAgentRunId);
   }
 
   return null;

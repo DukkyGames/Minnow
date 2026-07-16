@@ -546,6 +546,7 @@ export function buildKanbanRefreshKey(
       taskChat,
       mainTurn,
       subAgentHint: resolveTaskCardSubAgentHint(task, plannerChat),
+      subAgentRunId: runId,
     });
     const relatedChats = listTaskRelatedChats(task, folder, allChats);
     // Heartbeat age and progressSeq are time/stream-derived; synced in place via
@@ -2429,6 +2430,7 @@ function buildTaskCard(
     taskChat,
     mainTurn: task.chatId ? getMainTurnActivity(task.chatId) : undefined,
     subAgentHint: resolveTaskCardSubAgentHint(task, plannerChat),
+    subAgentRunId: getBoardTaskPrimaryRunId(task),
   });
   if (activity) appendTaskCardActivityLine(card, activity);
 
