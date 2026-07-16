@@ -14,7 +14,7 @@ import { sessionState } from '../state/sessions';
 import type { LastStats } from '../types';
 import type { Chat } from '../types';
 import type { ModeId } from '../chat/modes/types';
-import { setChatMode } from './mode-selector';
+import { setChatMode, syncModeSelectorFromActiveChat } from './mode-selector';
 import { createModeMaskIconLg } from './mode-icons';
 import { intentPrefill, mapIntentModeId, type HubIntentId } from './hub-intents';
 import { switchChat } from './sidebar';
@@ -73,6 +73,7 @@ function relocateComposerIntoHub(slot: HTMLElement): void {
   slot.appendChild(bar);
   bar.classList.add('input-bar--hub');
   document.getElementById('mainColumn')?.classList.add('main-column--hub');
+  syncModeSelectorFromActiveChat();
   const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
   if (input) {
     input.placeholder = 'Tell Minnow what you want to build…';
@@ -89,6 +90,7 @@ function restoreComposer(): void {
   }
   bar.classList.remove('input-bar--hub');
   document.getElementById('mainColumn')?.classList.remove('main-column--hub');
+  syncModeSelectorFromActiveChat();
   const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
   if (input) {
     input.placeholder = 'Type a message…';

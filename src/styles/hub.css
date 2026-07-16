@@ -197,8 +197,8 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
 }
 
 .input-bar--hub .composer-controls .mode-segmented {
-  flex: 0 1 auto;
-  width: fit-content;
+  flex: 1 1 auto;
+  width: auto;
   min-width: 0;
   max-width: 100%;
 }
@@ -897,8 +897,8 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
   }
 
   .input-bar--hub .composer-controls .mode-segmented {
-    flex: 0 1 auto;
-    width: fit-content;
+    flex: 1 1 auto;
+    width: auto;
     min-width: 0;
     max-width: 100%;
   }
