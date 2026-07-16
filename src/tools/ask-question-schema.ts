@@ -12,7 +12,8 @@ export const ASK_QUESTION_EXAMPLE_JSON =
  * Appended to the short summary in definitions.ts.
  */
 export const ASK_QUESTION_TOOL_DESCRIPTION = [
-  'questions[{id,prompt,options[{id,label}]}];not question/choices/__other__.',
+  'questions[{id,prompt,options[{id,label}],allow_multiple?}];not question/choices/__other__.',
+  'allow_multiple:true for click-all-that-apply.',
   `Ex:${ASK_QUESTION_EXAMPLE_JSON}`,
 ].join('');
 
@@ -35,6 +36,11 @@ export const askQuestionItemSchema = {
     options: {
       type: 'array',
       items: askQuestionOptionSchema,
+    },
+    allow_multiple: {
+      type: 'boolean',
+      description:
+        'Set true for click-all-that-apply questions; the UI shows checkboxes and waits for Submit.',
     },
   },
   required: ['id', 'prompt', 'options'],
