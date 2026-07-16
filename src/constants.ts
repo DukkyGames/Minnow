@@ -11,6 +11,10 @@ export const ICON_CHEVRON_LEFT =
 export const ICON_CHEVRON_RIGHT =
   '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>';
 
+/** SVG magnifier for chat search buttons (sidebar + desktop rail). */
+export const ICON_SEARCH =
+  '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>';
+
 /** Document-with-lines icon for the file sidebar toggle. */
 export const ICON_FILE_TREE =
   '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>';
