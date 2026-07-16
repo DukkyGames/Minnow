@@ -5,11 +5,13 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
+import { Window } from 'happy-dom';
 import {
   buildPlanPreviewDom,
   mountPlanPreviewContent,
   parsePlanFrontMatter,
   planMarkdownForDisplay,
+  readPlanArtifactMarkdown,
   splitPlanMarkdown,
 } from '../../../src/chat/orchestrate/plan-preview.ts';
 
@@ -98,6 +100,38 @@ todos:
     assert.match(display, /^# only-title/);
     assert.match(display, /Short summary line/);
     assert.match(display, /- \[ \] First task/);
+  });
+});
+
+describe('readPlanArtifactMarkdown', () => {
+  const originalFetch = globalThis.fetch;
+  const originalWindow = globalThis.window;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    globalThis.window = originalWindow;
+  });
+
+  test('loads full file via preview API (not read_file cap)', async () => {
+    globalThis.window = { location: { origin: 'http://localhost:9473' } } as Window;
+
+    const body = 'x'.repeat(40_000);
+    globalThis.fetch = async (input: RequestInfo | URL) => {
+      const url = String(input);
+      assert.match(url, /\/api\/preview\/file\/documentation\/plans\/big-plan\.md/);
+      return new Response(body, { status: 200, headers: { 'Content-Type': 'text/plain' } });
+    };
+
+    const markdown = await readPlanArtifactMarkdown('documentation/plans/big-plan.md');
+    assert.equal(markdown, body);
+    assert.ok(markdown.length > 32_000);
+  });
+
+  test('returns empty string for blank path or failed fetch', async () => {
+    assert.equal(await readPlanArtifactMarkdown(''), '');
+    globalThis.window = { location: { origin: 'http://localhost:9473' } } as Window;
+    globalThis.fetch = async () => new Response('missing', { status: 404 });
+    assert.equal(await readPlanArtifactMarkdown('documentation/plans/missing.md'), '');
   });
 });
 

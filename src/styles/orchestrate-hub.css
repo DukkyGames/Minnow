@@ -214,6 +214,11 @@
   margin: 0 0 10px;
 }
 
+.orchestrate-hub__plan-preview .orchestrate-plan-screen__preview {
+  max-height: min(48vh, 420px);
+  overflow-y: auto;
+}
+
 .orchestrate-hub__plan-preview-loading {
   margin: 0;
   font-size: 13px;

@@ -117,13 +117,12 @@ describe('plan progress screen', () => {
     panel.destroy();
   });
 
-  test('preview popout wires four action buttons', () => {
+  test('preview popout wires three action buttons', () => {
     const calls: string[] = [];
     const popout = buildPlanPreviewPopoutDom({
       onRevise: () => calls.push('revise'),
       onStartOrchestrator: () => calls.push('orchestrate'),
       onBuild: () => calls.push('build'),
-      onClose: () => calls.push('close'),
     });
 
     document.body.appendChild(popout);
@@ -131,9 +130,8 @@ describe('plan progress screen', () => {
     findPlanPreviewActionButton(popout, 'revise')?.click();
     findPlanPreviewActionButton(popout, 'orchestrate')?.click();
     findPlanPreviewActionButton(popout, 'build')?.click();
-    findPlanPreviewActionButton(popout, 'close')?.click();
 
-    assert.deepEqual(calls, ['revise', 'orchestrate', 'build', 'close']);
+    assert.deepEqual(calls, ['revise', 'orchestrate', 'build']);
   });
 
   test('plan progress CSS constrains embedded research source feed overflow', () => {
