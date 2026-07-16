@@ -8,7 +8,6 @@ import {
   savePromptMetaSettings,
   type PromptProfileName,
 } from '../config/prompt-meta';
-import { TOKEN_ESTIMATE_TOOLTIP } from '../chat/prompts/token-estimate-core';
 import {
   getActiveContextUsageSurface,
   getContextUsageBreakdownPanel,
@@ -40,15 +39,94 @@ function maxSectionTokens(sections: ContextUsageSection[]): number {
   return max;
 }
 
-function renderSectionRow(section: ContextUsageSection, scaleMax: number): string {
-  const fill = scaleMax > 0 ? section.tokens / scaleMax : 0;
+/** Bar width: each section's share of total used tokens (fallback: largest section). */
+function sectionFillScale(
+  sectionTokens: number,
+  usedTotal: number,
+  scaleMax: number,
+): number {
+  const denom = usedTotal > 0 ? usedTotal : scaleMax;
+  if (denom <= 0) return 0;
+  return Math.min(1, sectionTokens / denom);
+}
+
+function renderSectionRow(
+  section: ContextUsageSection,
+  usedTotal: number,
+  scaleMax: number,
+): string {
+  const fill = sectionFillScale(section.tokens, usedTotal, scaleMax);
+  const inFlight = section.key === 'inFlight';
   return `
-    <div class="context-usage-row" data-section="${section.key}">
+    <div class="context-usage-row" role="listitem" data-section="${section.key}">
       <span class="context-usage-row__label">${section.label}</span>
       <div class="context-usage-row__track" aria-hidden="true">
-        <div class="context-usage-row__fill" style="--fill-scale: ${fill.toFixed(4)}"></div>
+        <div class="context-usage-row__fill${inFlight ? ' is-in-flight' : ''}" style="--fill-scale: ${fill.toFixed(4)}"></div>
       </div>
       <span class="context-usage-row__count">~${formatTokens(section.tokens)}</span>
+    </div>`;
+}
+
+function renderSummary(budget: ContextBudget): string {
+  const warn = budget.percent != null && budget.percent >= 85;
+  const fillScale =
+    budget.limit != null && budget.limit > 0
+      ? Math.min(1, budget.used / budget.limit)
+      : 0;
+
+  if (budget.limit == null) {
+    return `
+    <div class="context-usage-breakdown__summary${warn ? ' is-warn' : ''}" role="group" aria-label="Context usage">
+      <div class="context-usage-breakdown__summary-stats">
+        <div class="context-usage-breakdown__summary-stat">
+          <span class="context-usage-breakdown__summary-label">Used</span>
+          <span class="context-usage-breakdown__summary-value">~${formatTokens(budget.used)}</span>
+        </div>
+      </div>
+      <p class="context-usage-breakdown__limit-unknown">Context limit unknown for this model.</p>
+    </div>`;
+  }
+
+  const ariaLabel = [
+    budget.percent != null ? `${budget.percent}% used` : null,
+    `~${formatTokens(budget.used)} of ${formatTokens(budget.limit)} tokens`,
+    budget.remaining != null ? `~${formatTokens(budget.remaining)} free` : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
+
+  const freeStat =
+    budget.remaining != null
+      ? `<div class="context-usage-breakdown__summary-stat context-usage-breakdown__summary-stat--end">
+          <span class="context-usage-breakdown__summary-label">Free</span>
+          <span class="context-usage-breakdown__summary-value">~${formatTokens(budget.remaining)}</span>
+        </div>`
+      : '';
+
+  const gaugePct =
+    budget.percent != null
+      ? `<span class="context-usage-breakdown__gauge-pct${warn ? ' is-warn' : ''}">${budget.percent}%</span>`
+      : '';
+
+  return `
+    <div class="context-usage-breakdown__summary${warn ? ' is-warn' : ''}" role="group" aria-label="${ariaLabel}">
+      <div class="context-usage-breakdown__summary-stats">
+        <div class="context-usage-breakdown__summary-stat">
+          <span class="context-usage-breakdown__summary-label">Used</span>
+          <span class="context-usage-breakdown__summary-value">~${formatTokens(budget.used)}</span>
+        </div>
+        ${freeStat}
+      </div>
+      <div class="context-usage-breakdown__gauge" aria-hidden="true">
+        <div class="context-usage-breakdown__gauge-track">
+          <div class="context-usage-breakdown__gauge-fill${warn ? ' is-warn' : ''}" style="--fill-scale: ${fillScale.toFixed(4)}"></div>
+        </div>
+        ${gaugePct}
+      </div>
+      <div class="context-usage-breakdown__summary-foot">
+        <span class="context-usage-breakdown__summary-foot-label">Window</span>
+        <span class="context-usage-breakdown__summary-foot-value">${formatTokens(budget.limit)}</span>
+      </div>
     </div>`;
 }
 
@@ -122,36 +200,38 @@ export function bindContextUsageProfileTabs(): void {
 
 function renderPanelBody(budget: ContextBudget): string {
   const activeProfile = getPromptMetaSettingsSync().activePromptProfile;
-  const scaleMax = maxSectionTokens(budget.breakdown);
-  const rows = budget.breakdown.map((s) => renderSectionRow(s, scaleMax)).join('');
-  const limitLine =
-    budget.limit != null
-      ? `<p class="context-usage-breakdown__meta"><span>Context limit</span><strong>${formatTokens(budget.limit)}</strong></p>`
-      : `<p class="context-usage-breakdown__meta context-usage-breakdown__meta--warn">Context limit unknown for this model.</p>`;
-  const usedLine = `<p class="context-usage-breakdown__meta"><span>Estimated used</span><strong>~${formatTokens(budget.used)}</strong></p>`;
-  const remainingLine =
-    budget.remaining != null
-      ? `<p class="context-usage-breakdown__meta"><span>Remaining (approx.)</span><strong>~${formatTokens(budget.remaining)}</strong></p>`
-      : '';
+  const visibleSections = budget.breakdown.filter((section) => section.tokens > 0);
+  const scaleMax = maxSectionTokens(visibleSections.length > 0 ? visibleSections : budget.breakdown);
+  const rows = visibleSections
+    .map((section) => renderSectionRow(section, budget.used, scaleMax))
+    .join('');
+  const sectionsBlock =
+    visibleSections.length > 0
+      ? `<div class="context-usage-breakdown__sections" role="list">${rows}</div>`
+      : `<p class="context-usage-breakdown__sections-empty">No context allocated yet.</p>`;
   const lastTurnLine =
     budget.lastTurnPromptTokens != null
-      ? `<p class="context-usage-breakdown__meta context-usage-breakdown__meta--api"><span>Last turn (API)</span><strong>${formatTokens(budget.lastTurnPromptTokens)} prompt tokens</strong></p>`
+      ? `<p class="context-usage-breakdown__api-turn">
+          <span class="context-usage-breakdown__api-turn-label">Last turn (API)</span>
+          <span class="context-usage-breakdown__api-turn-value">${formatTokens(budget.lastTurnPromptTokens)} prompt</span>
+        </p>`
       : '';
   const estimateNote = budget.isEstimate
-    ? `<p class="context-usage-breakdown__note">${TOKEN_ESTIMATE_TOOLTIP}</p>`
-    : `<p class="context-usage-breakdown__note">Section sizes are approximate (chars ÷ 4). Last turn prompt tokens came from the provider.</p>`;
+    ? `<p class="context-usage-breakdown__note">Section sizes use characters ÷ 4. Token counts vary by model tokenizer.</p>`
+    : `<p class="context-usage-breakdown__note">Last turn prompt tokens came from the provider. Section rows remain approximate.</p>`;
 
   return `
     <header class="context-usage-breakdown__header">
-      <h3 class="context-usage-breakdown__title">Context usage</h3>
-      <p class="context-usage-breakdown__model">${budget.modelDisplayName}</p>
+      <div class="context-usage-breakdown__headline">
+        <h3 class="context-usage-breakdown__title">Context</h3>
+        <p class="context-usage-breakdown__model">${budget.modelDisplayName}</p>
+      </div>
       ${renderProfileTabs(activeProfile)}
     </header>
-    ${limitLine}
-    ${usedLine}
-    ${remainingLine}
+    ${renderSummary(budget)}
     ${lastTurnLine}
-    <div class="context-usage-breakdown__sections" role="list">${rows}</div>
+    <h4 class="context-usage-breakdown__sections-title">Breakdown</h4>
+    ${sectionsBlock}
     ${estimateNote}
   `;
 }
