@@ -159,9 +159,30 @@ function teardownEntryDevTools(win: BrowserWindow | null, entry: PreviewHostEntr
       /* not attached */
     }
   }
-  if (!dt.webContents.isDestroyed()) {
-    dt.webContents.close();
+  try {
+    // Destroying the devtools WebContents is what actually closes DevTools:
+    // guest.closeDevTools() is a silent no-op when DevTools renders into a
+    // custom WebContents via setDevToolsWebContents (verified by probe).
+    if (!dt.webContents.isDestroyed()) {
+      dt.webContents.close();
+    }
+  } catch {
+    /* view already torn down — accessing .webContents on a destroyed view throws */
   }
+}
+
+/** Close docked DevTools now and tell the renderer. Single close path for toggle + shortcut. */
+function closeEntryDevTools(
+  win: BrowserWindow,
+  tabId: string,
+  entry: PreviewHostEntry,
+  instanceId?: string,
+): void {
+  if (!entry.devtools) return;
+  const id = PreviewInstanceRegistry.resolveInstanceId(instanceId);
+  teardownEntryDevTools(win.isDestroyed() ? null : win, entry);
+  relayoutInstanceEntry(win, entry, id);
+  sendToRenderer(win, channels.PREVIEW_DEVTOOLS_STATE, tabId, false, id);
 }
 
 /** Re-apply the last known bounds so the guest/DevTools split updates without a renderer round-trip. */
@@ -270,13 +291,13 @@ function wirePreviewGuestEvents(win: BrowserWindow, tabId: string, entry: Previe
     if (!combo) return;
     event.preventDefault();
     if (entry.devtools) {
-      wc.closeDevTools();
+      closeEntryDevTools(win, tabId, entry, instanceId);
     } else {
       openEntryDevTools(win, tabId, entry, instanceId);
     }
   });
 
-  // Fires for closeDevTools() and any devtools-internal close; single teardown path.
+  // Fallback for DevTools closed from inside its own UI; toggle/shortcut close directly.
   wc.on('devtools-closed', () => {
     if (!entry.devtools) return;
     teardownEntryDevTools(win.isDestroyed() ? null : win, entry);
@@ -837,7 +858,7 @@ export function registerPreviewHostIpc(): void {
       if (!resolved) return { open: false };
       const entry = getOrCreateTab(win, resolved, instanceId);
       if (entry.devtools) {
-        entry.view.webContents.closeDevTools();
+        closeEntryDevTools(win, resolved, entry, instanceId);
         return { open: false };
       }
       openEntryDevTools(win, resolved, entry, instanceId);
