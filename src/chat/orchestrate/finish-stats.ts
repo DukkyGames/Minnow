@@ -19,6 +19,8 @@ export interface FinishBoardStats {
   deletions: number | null;
   hasRemote: boolean;
   hasGh: boolean;
+  /** True when the integration branch is already merged into the workspace HEAD. */
+  alreadyLanded?: boolean;
   gitStatsLoading: boolean;
   gitStatsError?: string;
 }
@@ -209,6 +211,7 @@ export async function fetchGitFinishStats(
     | 'deletions'
     | 'hasRemote'
     | 'hasGh'
+    | 'alreadyLanded'
     | 'gitStatsError'
   >
 > {
@@ -240,5 +243,6 @@ export async function fetchGitFinishStats(
     deletions: res.deletions ?? null,
     hasRemote: res.hasRemote === true,
     hasGh: res.hasGh === true,
+    alreadyLanded: res.alreadyLanded === true,
   };
 }
