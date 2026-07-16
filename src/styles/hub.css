@@ -167,9 +167,13 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
   overflow: visible;
 }
 
-/* Plan / Super Plan caret menu is absolutely positioned below the mode strip */
+/* Plan / Super Plan caret menu is absolutely positioned below the mode strip.
+   Hub uses the same input-bar grid as chat — raise the controls row so the
+   dropdown is not covered by #msgInput on the next grid row. */
 .input-bar--hub .composer-controls:has(.is-submenu-open) {
   overflow: visible;
+  position: relative;
+  z-index: 30;
 }
 
 /* Context usage breakdown opens above the ring — same overflow escape as plan submenu */
@@ -182,7 +186,7 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
 }
 
 .input-bar--hub .mode-segment-wrap--plan.is-submenu-open {
-  z-index: 5;
+  z-index: 30;
 }
 
 .input-bar--hub .composer-controls__trail {
