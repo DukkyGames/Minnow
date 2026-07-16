@@ -21,6 +21,10 @@ import {
   selectModelInPicker,
   shouldKeepModelMenuOpenAfterSelect,
 } from './model-select-picker';
+import {
+  registerChromePopover,
+  unregisterChromePopover,
+} from './preview-electron-visibility';
 
 const CHEVRON_SVG =
   '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
@@ -50,6 +54,7 @@ interface ComposerModelTrigger {
 
 const triggers: ComposerModelTrigger[] = [];
 let openTrigger: ComposerModelTrigger | null = null;
+let chromePopoverRegistered = false;
 let globalsBound = false;
 let unregisterExternalCloser: (() => void) | null = null;
 
@@ -364,6 +369,10 @@ export function closeComposerModelMenu(): void {
   if (current.variant === 'menubar') {
     collapseMenubarExpand(current);
   }
+  if (chromePopoverRegistered) {
+    unregisterChromePopover();
+    chromePopoverRegistered = false;
+  }
   detachGlobalListeners();
 }
 
@@ -387,6 +396,10 @@ function openMenu(trigger: ComposerModelTrigger): void {
   trigger.trigger.setAttribute('aria-expanded', 'true');
   positionPanel(trigger);
   attachGlobalListeners();
+  if (!chromePopoverRegistered) {
+    registerChromePopover();
+    chromePopoverRegistered = true;
+  }
   focusModelHostFilterSearch();
 }
 

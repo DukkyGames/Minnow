@@ -32,6 +32,10 @@ import {
   type AgentActivityRow,
 } from '../state/agent-activity-registry';
 import { sessionState } from '../state/sessions';
+import {
+  registerChromePopover,
+  unregisterChromePopover,
+} from './preview-electron-visibility';
 import { openSubAgentDrawer } from './sub-agent-drawer';
 import { switchChat } from './sidebar';
 
@@ -39,6 +43,7 @@ const REFRESH_THROTTLE_MS = 150;
 const ELAPSED_TICK_MS = 1000;
 
 let panelOpen = false;
+let chromePopoverRegistered = false;
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 let elapsedTimer: ReturnType<typeof setInterval> | null = null;
 let contextCache = new Map<string, AgentActivityContextFill>();
@@ -73,9 +78,17 @@ export function setAgentActivityPanelOpen(open: boolean): void {
   }
 
   if (open) {
+    if (!chromePopoverRegistered) {
+      registerChromePopover();
+      chromePopoverRegistered = true;
+    }
     void refreshAgentActivityPanel(true);
     startElapsedTimer();
   } else {
+    if (chromePopoverRegistered) {
+      unregisterChromePopover();
+      chromePopoverRegistered = false;
+    }
     stopElapsedTimer();
   }
 }
