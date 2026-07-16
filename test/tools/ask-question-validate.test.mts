@@ -7,6 +7,8 @@ import { describe, test } from 'node:test';
 import {
   ASK_QUESTION_OTHER_ID,
   diagnoseAskQuestionItem,
+  normalizeAskQuestionItem,
+  promptImpliesAllowMultiple,
   validateAskQuestionArgs,
 } from '../../src/tools/ask-question-types.ts';
 
@@ -127,5 +129,44 @@ describe('validateAskQuestionArgs', () => {
       assert.ok(r.error.includes('questions[0]'));
       assert.ok(r.error.includes('prompt'));
     }
+  });
+
+  test('normalizes allowMultiple alias', () => {
+    const r = validateAskQuestionArgs({
+      questions: [{ ...validQ('q1'), allowMultiple: true }],
+    });
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(r.args.questions[0].allow_multiple, true);
+  });
+
+  test('infers allow_multiple from click-all-that-apply prompt', () => {
+    const r = validateAskQuestionArgs({
+      questions: [
+        {
+          id: 'q1',
+          prompt: 'Which platforms matter? (Click all that apply)',
+          options: [
+            { id: 'web', label: 'Web' },
+            { id: 'desktop', label: 'Desktop' },
+          ],
+        },
+      ],
+    });
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(r.args.questions[0].allow_multiple, true);
+  });
+
+  test('promptImpliesAllowMultiple matches common phrasing', () => {
+    assert.equal(promptImpliesAllowMultiple('Select all that apply'), true);
+    assert.equal(promptImpliesAllowMultiple('Pick one option'), false);
+  });
+
+  test('normalizeAskQuestionItem preserves explicit false', () => {
+    const item = normalizeAskQuestionItem({
+      ...validQ('q1'),
+      prompt: 'Select all that apply',
+      allow_multiple: false,
+    });
+    assert.equal(item.allow_multiple, false);
   });
 });

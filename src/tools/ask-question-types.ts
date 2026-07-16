@@ -9,6 +9,10 @@ export const ASK_QUESTION_OTHER_ID = '__other__';
 const MAX_QUESTIONS = 10;
 const MIN_OPTIONS = 2;
 
+/** Common Super Plan / grill phrasing for click-all-that-apply cards. */
+export const ASK_QUESTION_MULTI_SELECT_PROMPT_RE =
+  /\b(click|select|choose|pick|check)\s+all(\s+that|\s+which|\s+the)?\s+(apply|are\s+relevant|relevant)\b/i;
+
 export interface AskQuestionOption {
   id: string;
   label: string;
@@ -51,6 +55,55 @@ function isAskQuestionOption(raw: unknown): raw is AskQuestionOption {
 
 function isAskQuestionItem(raw: unknown): raw is AskQuestionItem {
   return diagnoseAskQuestionItem(raw) === null;
+}
+
+/** True when the prompt text signals a click-all-that-apply question. */
+export function promptImpliesAllowMultiple(prompt: string): boolean {
+  return ASK_QUESTION_MULTI_SELECT_PROMPT_RE.test(prompt.trim());
+}
+
+/** True when the UI should render checkboxes instead of radios. */
+export function isAskQuestionMultiSelect(q: AskQuestionItem): boolean {
+  return q.allow_multiple === true;
+}
+
+function readExplicitAllowMultiple(o: Record<string, unknown>): boolean | undefined {
+  const flags = [o.allow_multiple, o.allowMultiple, o.multi_select, o.multiSelect];
+  for (const flag of flags) {
+    if (flag === true) return true;
+    if (flag === false) return false;
+  }
+  if (typeof o.type === 'string') {
+    const kind = o.type.trim().toLowerCase();
+    if (kind === 'multiple' || kind === 'multi_select' || kind === 'multi') return true;
+    if (kind === 'single' || kind === 'single_select') return false;
+  }
+  return undefined;
+}
+
+/**
+ * Canonicalize one validated question object (aliases + prompt inference for multi-select).
+ */
+export function normalizeAskQuestionItem(raw: unknown): AskQuestionItem {
+  const o = raw as Record<string, unknown>;
+  const item: AskQuestionItem = {
+    id: String(o.id).trim(),
+    prompt: String(o.prompt).trim(),
+    options: (o.options as AskQuestionOption[]).map((opt) => ({
+      id: opt.id.trim(),
+      label: opt.label.trim(),
+      ...(opt.description ? { description: opt.description.trim() } : {}),
+    })),
+  };
+  const explicit = readExplicitAllowMultiple(o);
+  if (explicit === true) {
+    item.allow_multiple = true;
+  } else if (explicit === false) {
+    item.allow_multiple = false;
+  } else if (promptImpliesAllowMultiple(item.prompt)) {
+    item.allow_multiple = true;
+  }
+  return item;
 }
 
 /**
@@ -111,8 +164,13 @@ export function diagnoseAskQuestionItem(raw: unknown): string | null {
       return `options[${j}] missing non-empty "label"`;
     }
   }
-  if (typeof o.allow_multiple !== 'undefined' && typeof o.allow_multiple !== 'boolean') {
-    return 'allow_multiple must be a boolean when provided';
+  for (const key of ['allow_multiple', 'allowMultiple', 'multi_select', 'multiSelect'] as const) {
+    if (typeof o[key] !== 'undefined' && typeof o[key] !== 'boolean') {
+      return `${key} must be a boolean when provided`;
+    }
+  }
+  if (typeof o.type !== 'undefined' && typeof o.type !== 'string') {
+    return 'type must be a string when provided';
   }
   return null;
 }
@@ -168,7 +226,8 @@ export function validateAskQuestionArgs(
       optionIds.add(opt.id);
     }
   }
-  return { ok: true, args: { title, questions: o.questions as AskQuestionItem[] } };
+  const questions = o.questions.map((q) => normalizeAskQuestionItem(q));
+  return { ok: true, args: { title, questions } };
 }
 
 /** Serializes a structured tool result for the model (always JSON string in history). */
