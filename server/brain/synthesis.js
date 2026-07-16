@@ -7,6 +7,13 @@ import { loadAllPagesWithBodies, retrieveMemoryBlockHybrid } from './retrieve.js
 import { createPage, loadBrainConfig, updatePage } from './store.js';
 import { loadSynthesisConfig, resolveSynthesisModel } from './synthesis-config.js';
 import { addMemoryProposal } from './proposals.js';
+import { getEmbedder, embedTexts } from '../engine/embeddings.js';
+import {
+  cosineSimilarity,
+  getEntryVector,
+  isVectorStoreCompatible,
+  loadVectorStore,
+} from './vector-store.js';
 
 /** Recent message pairs included in extraction context. */
 export const CONTEXT_WINDOW = 6;
@@ -144,24 +151,62 @@ export function slugifyFactTitle(title) {
 }
 
 /**
+ * Cosine similarity above which a new fact counts as a duplicate of an existing page.
+ * Must stay high enough that same-topic updates ("prefers dark mode" → "prefers light
+ * mode") are written and left to retireSupersededPages, not silently dropped here.
+ */
+export const VECTOR_DUPLICATE_THRESHOLD = 0.92;
+
+/**
  * @param {string} title
  * @param {string} body
  * @param {Array<{ meta: object, body: string }>} existing
  * @param {object} brainConfig
+ * @param {{ getEmbedder?: typeof getEmbedder, embedTexts?: typeof embedTexts, loadVectorStore?: typeof loadVectorStore, getEntryVector?: typeof getEntryVector }} [deps]
  * @returns {Promise<boolean>}
  */
-export async function isDuplicateMemory(title, body, existing, brainConfig) {
+export async function isDuplicateMemory(title, body, existing, brainConfig, deps = {}) {
   const query = `${title} ${body}`.trim();
   if (!query) return true;
 
   const emb = brainConfig.embeddings ?? {};
-  if (emb.enabled) {
-    const { ids } = await retrieveMemoryBlockHybrid(
-      existing,
-      { query, limit: 3, maxChars: 4000 },
-      brainConfig,
-    );
-    if (ids.length > 0) return true;
+  if (emb.enabled && existing.length > 0) {
+    // Score each existing page directly against a similarity threshold. Top-k
+    // retrieval is the wrong tool here: it always returns ids once any page
+    // exists (no score cutoff, plus a recent/pinned fallback), which made every
+    // new fact a "duplicate" after the first page was written.
+    try {
+      const embedder = await (deps.getEmbedder ?? getEmbedder)(brainConfig);
+      const store = await (deps.loadVectorStore ?? loadVectorStore)();
+      if (
+        isVectorStoreCompatible(store, {
+          modelId: embedder.id,
+          backend: emb.backend,
+          dim: embedder.dim,
+        })
+      ) {
+        const [queryVector] = await (deps.embedTexts ?? embedTexts)(
+          embedder,
+          [query],
+          emb.queryTimeoutMs,
+        );
+        if (queryVector) {
+          for (const row of existing) {
+            const stored =
+              store.vectors[row.meta.id] ??
+              (await (deps.getEntryVector ?? getEntryVector)(row.meta.id));
+            if (
+              stored &&
+              cosineSimilarity(queryVector, stored) >= VECTOR_DUPLICATE_THRESHOLD
+            ) {
+              return true;
+            }
+          }
+        }
+      }
+    } catch {
+      /* embeddings unavailable — fall through to the keyword check */
+    }
   }
 
   const needle = query.toLowerCase();

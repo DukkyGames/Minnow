@@ -90,6 +90,8 @@ export interface ComposeContext {
   workAgentLabel?: string | null;
   skillBody: string | null;
   memoryBlock: string | null;
+  /** True when memory retrieval/saving is enabled for this chat (injects save guidance even with an empty wiki). */
+  memoryEnabled?: boolean;
   enabledToolIds: string[];
   infoPresetId: string | null;
   userMessagePreview?: string;
