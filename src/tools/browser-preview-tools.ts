@@ -47,6 +47,27 @@ async function assertBrowserAutomationEnabled(): Promise<string | null> {
   return null;
 }
 
+/**
+ * Ensure the renderer's active preview tab has a main-process WebContentsView guest.
+ * Browser tools historically called execJs without tabId; during orchestrate AFK runs the guest
+ * often did not exist yet, which surfaced as "Preview guest is not available" in Electron logs.
+ */
+async function ensureBrowserPreviewTab(instance?: string): Promise<string> {
+  const { getActivePreviewTabId, ensureDefaultPreviewTab } = await import('../ui/preview-tab-store');
+  const tabId = getActivePreviewTabId() ?? ensureDefaultPreviewTab().id;
+  const api = previewApi();
+  if (api.tabs?.create) {
+    const listed = await api.tabs.list(instance);
+    if (!listed.some((t) => t.id === tabId)) {
+      await api.tabs.create(tabId, instance);
+    }
+  }
+  if (api.tabs?.activate) {
+    await api.tabs.activate(tabId, instance);
+  }
+  return tabId;
+}
+
 /** Consume a one-time allowlist grant after a successful navigation. */
 async function consumeEphemeralNavigationGrant(url: string): Promise<void> {
   try {
@@ -104,7 +125,8 @@ export async function browserPreviewList(instance?: string): Promise<string> {
       .join('\n\n');
   }
 
-  const info = await api.getInfo(undefined, instance);
+  const tabId = await ensureBrowserPreviewTab(instance);
+  const info = await api.getInfo(tabId, instance);
   const title = info.title || '(no title)';
   return `[active] ${title}\n  ${info.url || '(no url)'}`;
 }
@@ -200,8 +222,9 @@ export async function browserPreviewNavigate(url: string, instance?: string): Pr
 
   const { revealPreviewPanelForAgentNavigation } = await import('../ui/preview-panel');
   await revealPreviewPanelForAgentNavigation(url);
+  const tabId = await ensureBrowserPreviewTab(instance);
   const api = previewApi();
-  const result = await api.navigateAndWait(url, undefined, instance);
+  const result = await api.navigateAndWait(url, tabId, instance);
   if (!result.ok) {
     const detail = result.errorDescription ?? 'navigation failed';
     return `Error: ${detail}`;
@@ -220,7 +243,8 @@ export async function browserPreviewSnapshot(instance?: string): Promise<string>
   const disabled = await assertBrowserAutomationEnabled();
   if (disabled) return disabled;
 
-  const raw = await previewApi().execJs(PREVIEW_DOM_SNAPSHOT_SCRIPT, undefined, instance);
+  const tabId = await ensureBrowserPreviewTab(instance);
+  const raw = await previewApi().execJs(PREVIEW_DOM_SNAPSHOT_SCRIPT, tabId, instance);
   const payload = raw as {
     text?: string;
     nodes?: PreviewSnapshotNode[];
@@ -260,7 +284,8 @@ export async function browserPreviewClick(uid: number, instance?: string): Promi
     return { missing: false, role, name };
   })()`;
 
-  const raw = await previewApi().execJs(script, undefined, instance);
+  const tabId = await ensureBrowserPreviewTab(instance);
+  const raw = await previewApi().execJs(script, tabId, instance);
   const result = raw as { missing?: boolean; role?: string; name?: string };
   if (result?.missing) {
     return 'No snapshot cached. Call browser_snapshot first.';
@@ -289,7 +314,8 @@ export async function browserPreviewFill(uid: number, value: string, instance?: 
     return { missing: false };
   })()`;
 
-  const raw = await previewApi().execJs(script, undefined, instance);
+  const tabId = await ensureBrowserPreviewTab(instance);
+  const raw = await previewApi().execJs(script, tabId, instance);
   const result = raw as { missing?: boolean };
   if (result?.missing) {
     return 'No snapshot cached. Call browser_snapshot first.';
@@ -302,12 +328,13 @@ export async function browserPreviewEval(expression: string, instance?: string):
   const disabled = await assertBrowserAutomationEnabled();
   if (disabled) return disabled;
 
-  const info = await previewApi().getInfo(undefined, instance);
+  const tabId = await ensureBrowserPreviewTab(instance);
+  const info = await previewApi().getInfo(tabId, instance);
   if (info.loading) {
     return 'Error: preview guest is still loading — wait for navigation to finish';
   }
 
-  const val = await previewApi().execJs(expression, undefined, instance);
+  const val = await previewApi().execJs(expression, tabId, instance);
   if (val && typeof val === 'object' && val !== null && '__execError' in val) {
     const message = String((val as { __execError: unknown }).__execError ?? 'Script failed');
     return `Error: ${message}`;
@@ -325,7 +352,8 @@ export async function browserPreviewScreenshot(instance?: string): Promise<ToolE
   }
 
   try {
-    const dataBase64 = await previewApi().capturePage(undefined, instance);
+    const tabId = await ensureBrowserPreviewTab(instance);
+    const dataBase64 = await previewApi().capturePage(tabId, instance);
     const { id, sizeBytes } = await uploadScreenshotBase64(dataBase64);
     const url = `/api/browser/screenshot/${id}`;
     const kb = Math.round(sizeBytes / 1024);

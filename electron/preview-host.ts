@@ -124,7 +124,8 @@ function resolveTabId(win: BrowserWindow, tabId: string | undefined, instanceId?
   const state = windowState(win, instanceId);
   // Renderer tab ids exist before the main-process guest is created (address bar, loadSource).
   if (typeof tabId === 'string' && tabId.trim()) return tabId.trim();
-  if (state.activeTabId && state.tabs.has(state.activeTabId)) return state.activeTabId;
+  // activeTabId may be set by PREVIEW_LOAD_SOURCE / TAB_ACTIVATE before getOrCreateTab runs.
+  if (state.activeTabId) return state.activeTabId;
   const first = state.tabs.keys().next().value as string | undefined;
   return first ?? null;
 }
