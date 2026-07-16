@@ -6,6 +6,8 @@
 
 import fsp from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
+import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
+import { runWithToolContext } from '../runtime/path-access.js';
 import { contentTypeForPreviewPath } from './mime-types.js';
 
 const PREVIEW_FILE_PREFIX = '/api/preview/file/';
@@ -84,10 +86,11 @@ function decodePreviewRelativePath(pathname) {
  * @param {import('http').IncomingMessage} req
  * @param {import('http').ServerResponse} res
  * @param {string} pathname
+ * @param {URLSearchParams} [searchParams]
  * @param {{ resolveSafePath: (userPath: string) => string, runWithPathAccess: <T>(fn: () => Promise<T>) => Promise<T> }} deps
  * @returns {Promise<boolean>}
  */
-export async function handlePreviewRequest(req, res, pathname, deps) {
+export async function handlePreviewRequest(req, res, pathname, searchParams, deps) {
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;
@@ -130,8 +133,24 @@ export async function handlePreviewRequest(req, res, pathname, deps) {
     return true;
   }
 
+  const workspaceRootParam = searchParams?.get('workspaceRoot')?.trim() || undefined;
+  let workspaceRoot;
+  if (workspaceRootParam) {
+    try {
+      workspaceRoot = await validateAllowedWorkspaceRoot(workspaceRootParam);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      sendJson(res, 400, { error: message });
+      return true;
+    }
+  }
+
   try {
-    const absPath = await deps.runWithPathAccess(async () => deps.resolveSafePath(relativePath));
+    const absPath = workspaceRoot
+      ? await runWithToolContext(async () => deps.resolveSafePath(relativePath), {
+          workspaceRoot,
+        })
+      : await deps.runWithPathAccess(async () => deps.resolveSafePath(relativePath));
     const stat = await fsp.stat(absPath);
     if (!stat.isFile()) {
       sendJson(res, 404, { error: 'Not a file' });
@@ -199,7 +218,7 @@ export function createPreviewMiddleware(deps) {
       next();
       return;
     }
-    const handled = await handlePreviewRequest(req, res, parsed.pathname, deps);
+    const handled = await handlePreviewRequest(req, res, parsed.pathname, parsed.searchParams, deps);
     if (!handled) next();
   };
 }
