@@ -172,6 +172,15 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
   overflow: visible;
 }
 
+/* Context usage breakdown opens above the ring — same overflow escape as plan submenu */
+.input-bar--hub .composer-controls:has(.context-usage-breakdown:not(.hidden)) {
+  overflow: visible;
+}
+
+.input-bar--hub .composer-controls:has(.context-usage-breakdown:not(.hidden)) .context-usage-anchor {
+  z-index: 10;
+}
+
 .input-bar--hub .mode-segment-wrap--plan.is-submenu-open {
   z-index: 5;
 }
