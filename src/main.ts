@@ -11,6 +11,7 @@ import './styles/motion.css';
 import './styles/topbar.css';
 import './styles/model-select.css';
 import './styles/sidebar.css';
+import './styles/chat-search.css';
 import './styles/messages.css';
 import './styles/message-actions.css';
 import './styles/voice.css';

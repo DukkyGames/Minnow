@@ -11,7 +11,7 @@ import {
 import { isDesktopExpertsActive, isDesktopResearchActive, subscribeDesktopState } from './desktop-state';
 import { wireDesktopResearchControls } from './research-desktop';
 import { createOsIcon } from './icons';
-import { ICON_CHEVRON_LEFT } from '../constants';
+import { ICON_CHEVRON_LEFT, ICON_SEARCH } from '../constants';
 import type { DesktopPrefs } from './types';
 
 function greetingFor(d: Date): string {
@@ -121,6 +121,15 @@ export function renderDesktop(root: HTMLElement): () => void {
   railTitle.className = 'chat-sidebar-title';
   railTitle.textContent = 'Chats';
 
+  const railSearch = document.createElement('button');
+  railSearch.type = 'button';
+  railSearch.id = 'btnDesktopChatSearch';
+  railSearch.className = 'icon-btn';
+  railSearch.setAttribute('aria-label', 'Search chats');
+  railSearch.title = 'Search chats';
+  railSearch.setAttribute('aria-expanded', 'false');
+  railSearch.innerHTML = ICON_SEARCH;
+
   const railCollapse = document.createElement('button');
   railCollapse.type = 'button';
   railCollapse.id = 'btnDesktopChatRailCollapse';
@@ -128,7 +137,7 @@ export function renderDesktop(root: HTMLElement): () => void {
   railCollapse.setAttribute('aria-label', 'Collapse chat sessions');
   railCollapse.innerHTML = ICON_CHEVRON_LEFT;
 
-  railHeader.append(railTitle, railCollapse);
+  railHeader.append(railTitle, railSearch, railCollapse);
 
   const railNewChat = document.createElement('button');
   railNewChat.type = 'button';

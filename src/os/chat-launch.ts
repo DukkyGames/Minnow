@@ -2,7 +2,36 @@
  * Code app launch helper — switch workspace chat from OS deep-links.
  */
 
+import { isChatsWorkspacePath } from '../lib/chats-workspace';
+import { isDesktopWorkspacePath } from '../lib/desktop-workspace';
+import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
+import { sessionState } from '../state/sessions';
+import { getWorkspacePath } from '../state/workspace';
 import { launchApp } from './router';
+
+/** True when the chat belongs to a user project folder (not a Minnow sandbox). */
+function isProjectWorkspacePath(path: string): boolean {
+  const trimmed = path.trim();
+  if (!trimmed) return false;
+  return !isChatsWorkspacePath(trimmed) && !isDesktopWorkspacePath(trimmed);
+}
+
+/** Switch the Code workspace when a deep-linked chat lives in another project folder. */
+async function ensureWorkspaceForCodeChat(chatId: string): Promise<boolean> {
+  const chat = sessionState?.chats.find((row) => row.id === chatId);
+  const chatWorkspace = chat?.workspacePath?.trim();
+  if (!chat || !chatWorkspace || !isProjectWorkspacePath(chatWorkspace)) {
+    return true;
+  }
+
+  if (normalizeWorkspacePath(chatWorkspace) === normalizeWorkspacePath(getWorkspacePath())) {
+    return true;
+  }
+
+  const { executeWorkspaceSwitch } = await import('../ui/workspace-switch-guard');
+  const info = await executeWorkspaceSwitch(chatWorkspace);
+  return info !== null;
+}
 
 /** Foreground Code and activate the given chat session. */
 export async function launchCodeWithChat(chatId: string): Promise<void> {
@@ -11,6 +40,9 @@ export async function launchCodeWithChat(chatId: string): Promise<void> {
     launchApp('code');
     return;
   }
+
+  const allowed = await ensureWorkspaceForCodeChat(trimmed);
+  if (!allowed) return;
 
   launchApp('code', { chatId: trimmed, codeSection: 'chat' });
   await switchToCodeChat(trimmed);
