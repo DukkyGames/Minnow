@@ -35,20 +35,23 @@ export function registerStreamDomRemount(
 /** After switchChat, attach a fresh stream shell if this chat is still in-flight. */
 export function remountStreamDomForChat(chatId: string): void {
   if (!isChatStreaming(chatId) || !isStreamDomVisible(chatId)) return;
-  const listener = remountListeners.get(chatId);
-  if (!listener) return;
 
   const row: StreamingAssistantRow = appendStreamingAssistantRow(chatId);
-  listener({
-    wrap: row.wrap,
-    bubble: row.bubble,
-    cursor: row.cursor,
-    streamStatus: row.streamStatus,
-  });
+  const listener = remountListeners.get(chatId);
+  if (listener) {
+    listener({
+      wrap: row.wrap,
+      bubble: row.bubble,
+      cursor: row.cursor,
+      streamStatus: row.streamStatus,
+    });
+  }
 
   // Restore thinking/generating label after history re-render cleared the live row.
   const phase = getSidebarStreamPhase(chatId);
   if (phase === 'thinking') {
     row.streamStatus.setPhase('thinking');
+  } else if (phase === 'generating') {
+    row.streamStatus.setPhase('generating');
   }
 }
