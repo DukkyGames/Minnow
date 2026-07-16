@@ -208,6 +208,52 @@ describe('browser-preview-tools', () => {
     assert.equal(execCalls, 1);
   });
 
+  test('browser_snapshot ensures preview tab guest exists before execJs', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/config/meta')) return metaFetchResponse();
+      return new Response('{}', { status: 404 });
+    }) as typeof fetch;
+
+    const tabOps: string[] = [];
+    let execTabId: string | undefined;
+    Object.defineProperty(globalThis, 'window', {
+      value: {
+        minnow: {
+          app: { isElectron: true, platform: 'linux', openExternal: async () => {} },
+          preview: {
+            execJs: async (_script: string, tabId?: string) => {
+              execTabId = tabId;
+              return { text: '(empty page)', nodes: [] };
+            },
+            getInfo: async () => ({ url: '', title: '', loading: false }),
+            capturePage: async () => '',
+            navigateAndWait: async () => ({ ok: true, url: '', title: '' }),
+            show: async () => {},
+            tabs: {
+              list: async () => [],
+              create: async (tabId?: string) => {
+                tabOps.push(`create:${tabId ?? ''}`);
+                return tabId ?? 'tab';
+              },
+              activate: async (tabId: string) => {
+                tabOps.push(`activate:${tabId}`);
+              },
+            },
+          },
+        },
+      },
+      configurable: true,
+      writable: true,
+    });
+
+    const mod = await import('../../src/tools/browser-preview-tools.ts');
+    await mod.executeBrowserPreviewTool('browser_snapshot', {});
+    assert.ok(tabOps.some((op) => op.startsWith('create:')), 'should create guest tab');
+    assert.ok(tabOps.some((op) => op.startsWith('activate:')), 'should activate guest tab');
+    assert.ok(execTabId && execTabId.length > 0, 'execJs should receive tab id');
+  });
+
   test('browser_snapshot returns exec error from guest script', async () => {
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
