@@ -12,6 +12,8 @@ The default surface. Type in the concierge composer to start a conversation, or 
 
 The IDE-style surface: file tree, **CodeMirror** editor (with AI completion), CRUD, search, and drag-to-composer workspace references. Opens fullscreen and reparents the legacy chat/topbar into the app layer. File and git tools resolve under the open **workspace root**. Includes the integrated **terminal** (xterm.js PTY tabs).
 
+The **browser preview** pane (desktop shell only) renders workspace HTML and localhost URLs in a real Chromium guest. Press **F12** (or **Ctrl+Shift+I** / **Cmd+Opt+I**, or the `</>` toolbar button) to toggle **DevTools** docked below the page — console, network, and element inspection for the previewed page, whether focus is in the preview or the surrounding app.
+
 ## Models
 
 Everything about models in one place (`#/app/models/<section>`):

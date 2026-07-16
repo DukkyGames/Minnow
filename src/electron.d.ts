@@ -90,6 +90,15 @@ export interface MinnowCdpPickedElement {
   computedStyles: Record<string, string>;
 }
 
+/** Docked Chromium DevTools for the preview guest (MIN-177). Electron only. */
+export interface MinnowPreviewDevToolsApi {
+  toggle(tabId?: string, instanceId?: string): Promise<{ open: boolean }>;
+  isOpen(tabId?: string, instanceId?: string): Promise<boolean>;
+  onState(
+    callback: (open: boolean, tabId?: string, instanceId?: string) => void,
+  ): () => void;
+}
+
 /** Native (script-free) element picking over CDP for cross-origin preview guests (MIN-370). */
 export interface MinnowCdpPickerApi {
   enable(tabId?: string, instanceId?: string): Promise<{ ok: boolean; error?: string }>;
@@ -127,6 +136,8 @@ export interface MinnowPreviewApi {
   ): Promise<MinnowPreviewNavigateAwaitResult>;
   tabs: MinnowPreviewTabsApi;
   instances: MinnowPreviewInstancesApi;
+  /** Optional: packaged shells older than MIN-177 lack the devtools bridge. */
+  devtools?: MinnowPreviewDevToolsApi;
   cdpPicker: MinnowCdpPickerApi;
   onNavigation(callback: (url: string, tabId?: string, instanceId?: string) => void): () => void;
   onLoading(callback: (loading: boolean, tabId?: string, instanceId?: string) => void): () => void;

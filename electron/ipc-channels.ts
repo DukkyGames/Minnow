@@ -52,6 +52,12 @@ export const PREVIEW_CDP_PICK_DISABLE = 'minnow:preview:cdp-pick-disable';
 export const PREVIEW_CDP_PICK_EVENT = 'minnow:preview:cdp-pick-event';
 /** Main → renderer: a non-fatal CDP picking error (session stays alive). */
 export const PREVIEW_CDP_PICK_ERROR = 'minnow:preview:cdp-pick-error';
+/** Renderer → main: toggle docked DevTools for a preview tab guest (MIN-177). */
+export const PREVIEW_DEVTOOLS_TOGGLE = 'minnow:preview:devtools-toggle';
+/** Renderer → main: is docked DevTools open for a preview tab guest? */
+export const PREVIEW_DEVTOOLS_GET_STATE = 'minnow:preview:devtools-get-state';
+/** Main → renderer: docked DevTools opened/closed (guest shortcut, tab close, crash). */
+export const PREVIEW_DEVTOOLS_STATE = 'minnow:preview:devtools-state';
 
 export const APP_OPEN_EXTERNAL = 'minnow:app:open-external';
 /** Renderer → main: forward renderer errors to crash.jsonl (fire-and-forget). */

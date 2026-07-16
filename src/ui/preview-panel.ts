@@ -110,6 +110,7 @@ let unsubscribeLoading: (() => void) | null = null;
 let unsubscribeLoadFailed: (() => void) | null = null;
 let unsubscribePageTitle: (() => void) | null = null;
 let unsubscribeGuestCrashed: (() => void) | null = null;
+let unsubscribeDevToolsState: (() => void) | null = null;
 const iframesByTabId = new Map<string, HTMLIFrameElement>();
 const loadedTabGuests = new Set<string>();
 
@@ -457,6 +458,45 @@ export async function openPreviewPageAndEnableDesignMode(pageUrl: string): Promi
     onClearAll: () => void refreshAnnotationsPanel(),
   });
   await syncDesignModeElectronGuest();
+}
+
+function getDevToolsButton(): HTMLButtonElement | null {
+  return document.getElementById('btnPreviewDevTools') as HTMLButtonElement | null;
+}
+
+function setDevToolsButtonPressed(open: boolean): void {
+  getDevToolsButton()?.setAttribute('aria-pressed', open ? 'true' : 'false');
+}
+
+/** Reflect the active tab's docked-DevTools state on the toolbar toggle (Electron only). */
+async function syncDevToolsButtonState(): Promise<void> {
+  const api = getPreviewApi();
+  if (!api?.devtools) return;
+  const tabId = getActivePreviewTabId() ?? undefined;
+  try {
+    setDevToolsButtonPressed(await api.devtools.isOpen(tabId));
+  } catch {
+    /* stale guest during teardown */
+  }
+}
+
+/** Toggle Chromium DevTools docked under the preview guest (MIN-177). */
+async function toggleDevToolsFromToolbar(): Promise<void> {
+  const api = getPreviewApi();
+  if (!api?.devtools) return;
+  const tabId = getActivePreviewTabId() ?? undefined;
+  try {
+    const { open } = await api.devtools.toggle(tabId);
+    setDevToolsButtonPressed(open);
+  } catch {
+    /* guest not ready yet */
+  }
+}
+
+/** F12 or Ctrl+Shift+I toggles preview DevTools while the preview pane is on screen. */
+function isDevToolsShortcut(e: KeyboardEvent): boolean {
+  if (e.key === 'F12') return true;
+  return (e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'i';
 }
 
 function getAutoReloadCheckbox(): HTMLInputElement | null {
@@ -949,6 +989,7 @@ export async function activatePreviewTabGuest(tabId: string, options?: { forceLo
       loadedTabGuests.add(tabId);
     }
     await showPreviewHost();
+    void syncDevToolsButtonState();
     return;
   }
 
@@ -1372,6 +1413,12 @@ function bindPreviewIpcListeners(): void {
   unsubscribeGuestCrashed = api.onGuestCrashed?.((detail, tabId) => {
     onPreviewGuestCrashed(detail, tabId);
   }) ?? null;
+  unsubscribeDevToolsState?.();
+  unsubscribeDevToolsState = api.devtools?.onState((open, tabId, instanceId) => {
+    if (instanceId && instanceId !== 'workspace-preview') return;
+    if (resolveTabId(tabId) !== getActivePreviewTabId()) return;
+    setDevToolsButtonPressed(open);
+  }) ?? null;
 }
 
 function goBackInFrame(): void {
@@ -1423,6 +1470,19 @@ function bindPreviewControls(): void {
   document
     .getElementById('btnPreviewAnnotationsToggle')
     ?.addEventListener('click', () => void toggleAnnotationsPanel());
+
+  // Docked DevTools is a WebContentsView feature — the button stays hidden in the plain browser build.
+  const devToolsBtn = getDevToolsButton();
+  if (devToolsBtn && getPreviewApi()?.devtools) {
+    devToolsBtn.hidden = false;
+    devToolsBtn.addEventListener('click', () => void toggleDevToolsFromToolbar());
+    document.addEventListener('keydown', (e) => {
+      if (!isDevToolsShortcut(e)) return;
+      if (!isPreviewPaneDomVisible()) return;
+      e.preventDefault();
+      void toggleDevToolsFromToolbar();
+    });
+  }
 
   getUrlInput()?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {

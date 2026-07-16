@@ -112,6 +112,27 @@ const preview = {
       ipcRenderer.invoke(channels.PREVIEW_INSTANCE_DESTROY, instanceId),
     list: (): Promise<string[]> => ipcRenderer.invoke(channels.PREVIEW_INSTANCE_LIST),
   },
+  /** Docked Chromium DevTools for the preview guest (MIN-177). Electron only. */
+  devtools: {
+    toggle: (tabId?: string, instanceId?: string): Promise<{ open: boolean }> =>
+      ipcRenderer.invoke(channels.PREVIEW_DEVTOOLS_TOGGLE, tabId, instanceId),
+    isOpen: (tabId?: string, instanceId?: string): Promise<boolean> =>
+      ipcRenderer.invoke(channels.PREVIEW_DEVTOOLS_GET_STATE, tabId, instanceId),
+    onState: (
+      callback: (open: boolean, tabId?: string, instanceId?: string) => void,
+    ): (() => void) => {
+      const handler = (
+        _event: IpcRendererEvent,
+        tabId: string,
+        open: boolean,
+        instanceId?: string,
+      ) => callback(open, tabId, instanceId);
+      ipcRenderer.on(channels.PREVIEW_DEVTOOLS_STATE, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.PREVIEW_DEVTOOLS_STATE, handler);
+      };
+    },
+  },
   /**
    * CDP-backed element picking for cross-origin guests (MIN-370): native hover/click via
    * `webContents.debugger`, no script injected into the page. Electron only.
