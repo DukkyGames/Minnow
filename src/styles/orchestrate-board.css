@@ -2825,8 +2825,17 @@ button.board-header__activity {
 .board-finish-dashboard__commit-split {
   display: inline-flex;
   align-items: stretch;
-  margin-left: auto;
   position: relative;
+}
+
+.board-finish-dashboard__git-action {
+  margin-left: auto;
+}
+
+.board-finish-dashboard__worktrees-cleared {
+  align-self: center;
+  font-size: 13px;
+  color: var(--mn-fg-muted, var(--text-dim));
 }
 
 .board-finish-dashboard__commit-primary {
@@ -2935,8 +2944,12 @@ button.board-header__activity {
     border-bottom: 1px solid var(--mn-border);
   }
 
-  .board-finish-dashboard__commit-split {
+  .board-finish-dashboard__git-action {
     margin-left: 0;
+    width: 100%;
+  }
+
+  .board-finish-dashboard__commit-split {
     width: 100%;
   }
 

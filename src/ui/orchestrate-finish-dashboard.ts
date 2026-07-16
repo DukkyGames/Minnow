@@ -144,6 +144,28 @@ function closeSplitMenu(menu: HTMLElement | null): void {
   menu?.remove();
 }
 
+type FinishGitActionKind = 'commit' | 'clear' | 'cleared';
+
+function resolveFinishGitActionKind(board: OrchestrateBoardState): FinishGitActionKind {
+  if (board.worktreesClearedAt) return 'cleared';
+  if (board.integrationLandedAt) return 'clear';
+  return 'commit';
+}
+
+/** Right-aligned footer slot shared by commit, clear-worktrees, and cleared label. */
+function tagFinishGitAction(el: HTMLElement, kind: FinishGitActionKind): HTMLElement {
+  el.classList.add('board-finish-dashboard__git-action');
+  el.dataset.boardGitAction = kind;
+  return el;
+}
+
+function readFinishGitActionKind(actions: HTMLElement): FinishGitActionKind | null {
+  const el = actions.querySelector('[data-board-git-action]');
+  const kind = el?.getAttribute('data-board-git-action');
+  if (kind === 'commit' || kind === 'clear' || kind === 'cleared') return kind;
+  return null;
+}
+
 /** Mark integration landed and swap the primary git action to "Clear worktrees". */
 function swapToClearWorktreesButton(
   wrap: HTMLElement,
@@ -168,6 +190,7 @@ function buildClearWorktreesButton(
   btn.className = 'board-btn board-btn--primary board-finish-dashboard__commit-primary';
   btn.textContent = 'Clear worktrees';
   btn.title = 'Remove all git worktrees created for this board';
+  tagFinishGitAction(btn, 'clear');
 
   let busy = false;
 
@@ -206,7 +229,7 @@ function buildWorktreesClearedLabel(): HTMLElement {
   const el = document.createElement('span');
   el.className = 'board-finish-dashboard__worktrees-cleared';
   el.textContent = 'Worktrees cleared';
-  return el;
+  return tagFinishGitAction(el, 'cleared');
 }
 
 /** Primary git action on the finish dashboard: commit, clear worktrees, or cleared label. */
@@ -235,6 +258,7 @@ function buildCommitSplitButton(
 ): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'board-finish-dashboard__commit-split';
+  tagFinishGitAction(wrap, 'commit');
 
   const hasRemote = git?.hasRemote === true;
   const hasGh = git?.hasGh === true;
@@ -520,6 +544,29 @@ function renderStatsGrid(stats: FinishBoardStats, grid: HTMLElement): void {
   }
 }
 
+function syncFinishGitAction(
+  root: HTMLElement,
+  group: ChatGroup,
+  board: OrchestrateBoardState,
+  plannerChat: Chat,
+): void {
+  const actions = root.querySelector('.board-finish-dashboard__actions');
+  const statusEl = root.querySelector('.board-finish-dashboard__git-status');
+  if (!(actions instanceof HTMLElement) || !(statusEl instanceof HTMLElement)) return;
+
+  const expected = resolveFinishGitActionKind(board);
+  if (readFinishGitActionKind(actions) === expected) return;
+
+  const existing = actions.querySelector('[data-board-git-action]');
+  const git = gitStateByGroup.get(group.id)?.stats ?? null;
+  const next = buildFinishGitAction(group, board, plannerChat, git, statusEl);
+  if (existing) {
+    existing.replaceWith(next);
+  } else {
+    actions.appendChild(next);
+  }
+}
+
 function loadGitStats(
   group: ChatGroup,
   board: OrchestrateBoardState,
@@ -557,7 +604,23 @@ function loadGitStats(
       };
       gitStateByGroup.set(group.id, { loading: false, stats: merged });
       renderStatsGrid(merged, grid);
-      if (board.integrationLandedAt || board.worktreesClearedAt) return;
+
+      if (gitPart.alreadyLanded && !board.integrationLandedAt && !board.worktreesClearedAt) {
+        markBoardIntegrationLanded(group, plannerChat);
+      }
+
+      const panel = commitWrap.closest('.board-finish-dashboard');
+      if (panel instanceof HTMLElement) {
+        syncFinishGitAction(panel, group, board, plannerChat);
+        return;
+      }
+
+      if (board.integrationLandedAt || board.worktreesClearedAt) {
+        commitWrap.replaceWith(
+          buildFinishGitAction(group, board, plannerChat, merged, statusEl),
+        );
+        return;
+      }
       const newCommit = buildCommitSplitButton(group, board, plannerChat, merged, statusEl);
       commitWrap.replaceWith(newCommit);
     });
@@ -593,6 +656,8 @@ export function syncFinishDashboard(
     state.stats.completionTokens = local.completionTokens;
   }
   renderStatsGrid(merged, grid);
+
+  syncFinishGitAction(root, group, board, plannerChat);
 
   const reportBody = root.querySelector('.board-finish-dashboard__report');
   const reportMarkdown = board.finishReport?.trim();
