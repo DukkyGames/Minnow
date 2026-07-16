@@ -111,6 +111,11 @@ export function initShellHandlers(): void {
   wireClick('fileSidebarBackdrop', closeMobileFileSidebar);
 
   // Chat sidebar
+  wireClick('btnChatSearch', () => {
+    const btn = document.getElementById('btnChatSearch');
+    if (!btn) return;
+    void import('./chat-search-popover').then((m) => m.toggleChatSearchPopover(btn));
+  });
   wireClick('btnSidebarCollapse', toggleSidebarCollapsed);
   wireClickAll('.chat-new-wide, .chat-new-compact', createChat);
   wireClick('btnOrchestrate', () => {

@@ -269,6 +269,14 @@ export function wireDesktopChatRail(): void {
     collapse.addEventListener('click', () => collapseDesktopChatRail());
   }
 
+  const search = document.getElementById('btnDesktopChatSearch');
+  if (search && search.dataset.bound !== '1') {
+    search.dataset.bound = '1';
+    search.addEventListener('click', () => {
+      void import('./chat-search-popover').then((m) => m.toggleChatSearchPopover(search));
+    });
+  }
+
   const backdrop = getRailBackdrop();
   if (backdrop && backdrop.dataset.bound !== '1') {
     backdrop.dataset.bound = '1';
