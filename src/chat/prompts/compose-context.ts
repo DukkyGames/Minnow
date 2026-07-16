@@ -116,6 +116,7 @@ export async function buildComposeContext(
     workAgentId: null,
     skillBody: null,
     memoryBlock,
+    memoryEnabled: injectMemory,
     enabledToolIds,
     infoPresetId,
     planGranularity: meta.planGranularity ?? 'medium',

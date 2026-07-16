@@ -57,6 +57,24 @@ function contextHasBrowserPreviewTools(ctx: ComposeContext): boolean {
   return ids.some((id) => BROWSER_PREVIEW_TOOL_IDS.has(id));
 }
 
+/** Brain write tools whose presence warrants save guidance even with an empty wiki. */
+const BRAIN_WRITE_TOOL_IDS = new Set(['save_memory', 'brain_write_page']);
+
+function contextHasBrainWriteTools(ctx: ComposeContext): boolean {
+  return (ctx.enabledToolIds ?? []).some((id) => BRAIN_WRITE_TOOL_IDS.has(id));
+}
+
+/**
+ * Memory part gate: retrieved notes always inject; with no notes (fresh/empty
+ * wiki) the part still injects when memory is on and write tools are enabled,
+ * so the agent learns how to save — otherwise nothing is ever written and the
+ * section never appears (cold-start deadlock).
+ */
+function isMemoryPartEnabled(ctx: ComposeContext): boolean {
+  if (ctx.memoryBlock?.trim()) return true;
+  return ctx.memoryEnabled === true && contextHasBrainWriteTools(ctx);
+}
+
 /** Default lite part gating (memory uses shorter retrieve cap when enabled). */
 const LITE_DISABLED_PARTS = new Set<PromptPartId>(['info']);
 
@@ -101,7 +119,7 @@ function isPartEnabled(
     return Boolean(ctx.skillBody?.trim());
   }
   if (partId === 'memory') {
-    return Boolean(ctx.memoryBlock?.trim());
+    return isMemoryPartEnabled(ctx);
   }
   if (partId === 'mode') {
     if (!ctx.modeId) return false;
@@ -161,13 +179,13 @@ function resolvePartBody(
   if (partId === 'skill' && ctx.skillBody?.trim()) {
     return ctx.skillBody.trim();
   }
-  if (partId === 'memory' && ctx.memoryBlock?.trim()) {
+  if (partId === 'memory' && isMemoryPartEnabled(ctx)) {
     const loadProfile = profile === 'lite' ? 'lite' : 'full';
     const loaded = loadPromptById('info', 'memory', loadProfile);
     if (loaded?.body?.trim()) {
       return loaded.body.trim();
     }
-    return ctx.memoryBlock.trim();
+    return ctx.memoryBlock?.trim() ?? '';
   }
 
   const kind = kindForPart(partId);
@@ -332,7 +350,9 @@ function buildInterpolationVars(ctx: ComposeContext): InterpolationVars {
     profile: profileLabel,
     expert: ctx.expertLabel?.trim() || ctx.expertId || '',
     cwd: ctx.cwd,
-    memory: ctx.memoryBlock ?? '',
+    memory:
+      ctx.memoryBlock?.trim() ||
+      '(no wiki notes matched this message — the wiki may still be empty)',
     user_message: ctx.userMessagePreview ?? '',
     work_agent: ctx.workAgentId ?? '',
     work_agent_label: ctx.workAgentLabel?.trim() || ctx.workAgentId || '',
