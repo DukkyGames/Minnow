@@ -18,7 +18,12 @@ import {
   modelLikelyUsesInlineThinking,
   type RoutedContentPart,
 } from '../api/inline-thinking';
-import { extractReasoningDelta, extractReasoningMessage } from '../api/reasoning';
+import {
+  extractReasoningDelta,
+  extractReasoningMessage,
+  modelRequiresReasoningContentReplay,
+  outboundReasoningReplayFields,
+} from '../api/reasoning';
 import {
   createSseEventBuffer,
   feedSseEventBuffer,
@@ -56,6 +61,7 @@ import { SUB_AGENT_CONTEXT_BUDGET_ERROR } from './sub-agent-outcome';
 import { buildSubAgentOutcomeResponseFormat } from './sub-agent-outcome-response-format';
 import {
   buildSubAgentFinalizationPrompt,
+  legacyOutcomeFromSummary,
   parseStructuredOutcomeJson,
   SUB_AGENT_STRUCTURED_OUTCOME_REPAIR_PROMPT,
   tryParseStructuredOutcomeFromAssistantProse,
@@ -85,6 +91,7 @@ import {
   buildThinkingPrefillAssistantMessage,
   stripPrefillEchoFromDelta,
 } from './thinking-budget';
+import { retryOnceOnTransientFetch } from '../lib/transient-fetch-retry';
 import { LLAMA_CPP_LOCAL_PROVIDER_ID } from '../providers/types';
 import { resolveSamplerPreset } from './resolve-sampler';
 import { applySamplerToBody } from './sampler-types';
@@ -196,6 +203,34 @@ export function cloneSubAgentMessages(messages: ApiMessage[]): ApiMessage[] {
   return structuredClone(messages);
 }
 
+/** Build the assistant row after a tool turn (DeepSeek needs `reasoning_content` replay). */
+function buildSubAgentToolAssistantMessage(
+  modelId: string,
+  turnResult: {
+    fullText: string;
+    reasoningText: string;
+    toolCalls: ReturnType<typeof finalizeToolCalls>;
+  },
+): ApiMessage {
+  let reasoningText = turnResult.reasoningText.trim();
+  let content = turnResult.fullText.trim() || null;
+
+  // Some DeepSeek proxies stream thinking on `content` instead of `reasoning_content`.
+  if (modelRequiresReasoningContentReplay(modelId) && !reasoningText && content) {
+    reasoningText = content;
+    content = null;
+  }
+
+  return {
+    role: 'assistant',
+    content,
+    tool_calls: turnResult.toolCalls,
+    ...outboundReasoningReplayFields(modelId, reasoningText, undefined, {
+      toolCallTurn: true,
+    }),
+  };
+}
+
 interface SubAgentCompletionBody extends CompletionBodyWithResponseFormat {
   model?: string;
   messages: ApiMessage[];
@@ -211,8 +246,45 @@ interface SubAgentCompletionBody extends CompletionBodyWithResponseFormat {
   tool_choice?: 'auto';
 }
 
-/** Headless SSE turn (no DOM). */
+/** Headless SSE turn (no DOM). Retries once on transient fetch errors. */
 async function streamSubAgentTurn(
+  providerId: string,
+  body: SubAgentCompletionBody,
+  signal: AbortSignal,
+  fallbackRole: string,
+  onDelta?: (delta: string) => void,
+  sanitizeOptions?: { provider?: ProviderPublic; modelCapabilities?: ModelCapabilities | null },
+  streamOptions?: {
+    thinkingBudgetTracker?: ThinkingBudgetTracker | null;
+    prefillEchoPartial?: string;
+  },
+): Promise<{
+  fullText: string;
+  reasoningText: string;
+  finishReason: string | undefined;
+  toolCalls: ReturnType<typeof finalizeToolCalls>;
+  streamMeta: StreamMetaAccumulator;
+  t0: number;
+  tFirst: number | null;
+  tEnd: number;
+  thinkingBudgetExceeded?: boolean;
+  partialThinkingText?: string;
+}> {
+  return retryOnceOnTransientFetch(() =>
+    streamSubAgentTurnOnce(
+      providerId,
+      body,
+      signal,
+      fallbackRole,
+      onDelta,
+      sanitizeOptions,
+      streamOptions,
+    ),
+  );
+}
+
+/** Single attempt at a headless SSE sub-agent turn. */
+async function streamSubAgentTurnOnce(
   providerId: string,
   body: SubAgentCompletionBody,
   signal: AbortSignal,
@@ -897,15 +969,9 @@ export const defaultSubAgentRunner: SubAgentRunner = {
 
       if (turnResult.toolCalls.length > 0) {
         toolTurns += 1;
-        const assistantContent = resolveStreamedCompletionText(
-          turnResult.fullText,
-          turnResult.reasoningText,
+        messages.push(
+          buildSubAgentToolAssistantMessage(input.modelId, turnResult),
         );
-        messages.push({
-          role: 'assistant',
-          content: assistantContent || null,
-          tool_calls: turnResult.toolCalls,
-        });
         emitProgress(undefined, true);
 
         const outcomes = await runHeadlessToolBatch({
@@ -1015,35 +1081,66 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         };
       }
 
-      const firstFinal = await requestStructuredOutcome(false);
-      const finalized = firstFinal.ok
-        ? firstFinal
-        : await requestStructuredOutcome(true);
-
-      if (finalized.ok === false) {
-        const parseError = finalized.parseError;
+      const returnProseFallbackOutcome = (): SubAgentRunnerOutput => {
+        messages.push({ role: 'assistant', content: prose });
+        emitProgress(undefined, true);
+        const legacy = legacyOutcomeFromSummary(prose);
+        logSubAgentDebug('prose_fallback_outcome', { proseLen: prose.length, toolTurns });
         return {
-          summary: parseError,
+          summary: legacy.summary,
+          structuredOutcome: legacy,
           toolTurns,
           messages,
-          structuredOutcomeParseError: parseError,
           budgetEvents: budgetEvents.length ? budgetEvents : undefined,
           usage: usageSegments.length ? sumUsageSegments(usageSegments) : undefined,
           stats: statsSegments.length ? averageStatsSegments(statsSegments) : undefined,
         };
-      }
-
-      messages.push({ role: 'assistant', content: finalized.rawText });
-      emitProgress(undefined, true);
-      return {
-        summary: finalized.outcome.summary,
-        structuredOutcome: finalized.outcome,
-        toolTurns,
-        messages,
-        budgetEvents: budgetEvents.length ? budgetEvents : undefined,
-        usage: usageSegments.length ? sumUsageSegments(usageSegments) : undefined,
-        stats: statsSegments.length ? averageStatsSegments(statsSegments) : undefined,
       };
+
+      try {
+        const firstFinal = await requestStructuredOutcome(false);
+        const finalized = firstFinal.ok
+          ? firstFinal
+          : await requestStructuredOutcome(true);
+
+        if (finalized.ok === false) {
+          if (prose.trim() && toolTurns > 0) {
+            return returnProseFallbackOutcome();
+          }
+          const parseError = finalized.parseError;
+          return {
+            summary: parseError,
+            toolTurns,
+            messages,
+            structuredOutcomeParseError: parseError,
+            budgetEvents: budgetEvents.length ? budgetEvents : undefined,
+            usage: usageSegments.length ? sumUsageSegments(usageSegments) : undefined,
+            stats: statsSegments.length ? averageStatsSegments(statsSegments) : undefined,
+          };
+        }
+
+        messages.push({ role: 'assistant', content: finalized.rawText });
+        emitProgress(undefined, true);
+        return {
+          summary: finalized.outcome.summary,
+          structuredOutcome: finalized.outcome,
+          toolTurns,
+          messages,
+          budgetEvents: budgetEvents.length ? budgetEvents : undefined,
+          usage: usageSegments.length ? sumUsageSegments(usageSegments) : undefined,
+          stats: statsSegments.length ? averageStatsSegments(statsSegments) : undefined,
+        };
+      } catch (finalErr) {
+        if (prose.trim() && toolTurns > 0) {
+          logSubAgentDebug('finalization_error_prose_fallback', {
+            proseLen: prose.length,
+            toolTurns,
+            error: finalErr instanceof Error ? finalErr.message : String(finalErr),
+          });
+          return returnProseFallbackOutcome();
+        }
+        throw finalErr;
+      }
     }
   },
 };

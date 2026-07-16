@@ -13,6 +13,7 @@ import {
 import type { ChatCompletionBody } from '../api/chat';
 import { parseCompletionResponseBody } from '../api/sse-parse';
 import type { ChatCompletionChunk } from '../types';
+import { retryOnceOnTransientFetch } from '../lib/transient-fetch-retry';
 import type { ProviderPublic } from './types';
 import { resolveProviderEndpoints } from './resolve';
 
@@ -36,10 +37,12 @@ export async function postChatCompletions(
     stream: options.stream ?? body.stream ?? true,
   };
 
-  const { generationId } = await createGeneration(provider.id, payload, {
-    persist: false,
-    fallbackRole: options.fallbackRole,
-  });
+  const { generationId } = await retryOnceOnTransientFetch(() =>
+    createGeneration(provider.id, payload, {
+      persist: false,
+      fallbackRole: options.fallbackRole,
+    }),
+  );
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
