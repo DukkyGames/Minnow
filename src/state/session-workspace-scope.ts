@@ -71,6 +71,9 @@ export function getChatLastMessageAt(chat: Chat): number {
 /** MinnowOS Chat app id stored in `lastActiveChatIdByApp`. */
 export const CHAT_APP_ID = 'chat';
 
+/** MinnowOS desktop chat id stored in `lastActiveChatIdByApp` (separate from legacy Chat app). */
+export const DESKTOP_APP_ID = 'desktop';
+
 /** Raw session JSON from disk or API (may be schema v1 or v2). */
 export type RawSessionJson = {
   version?: number;
@@ -254,6 +257,7 @@ export function resolveActiveAssistantChatId(
   chatsWorkspacePath: string,
   state: SessionState,
   createScopedAssistantChat: (chatsWorkspacePath: string) => Chat,
+  appId: string = CHAT_APP_ID,
 ): string {
   const key = normalizeWorkspacePath(chatsWorkspacePath);
   if (!key) {
@@ -265,7 +269,7 @@ export function resolveActiveAssistantChatId(
     return fresh.id;
   }
 
-  const remembered = getLastActiveChatIdForApp(state, CHAT_APP_ID);
+  const remembered = getLastActiveChatIdForApp(state, appId);
   if (remembered) {
     const chat = state.chats.find(
       (c) => c.id === remembered && isAssistantChat(c, key),

@@ -18,6 +18,7 @@ import { decodeModelSelectKey } from '../lib/model-select-key';
 import { isSuperPlanStageId, type SuperPlanStageId, type SuperPlanState } from '../chat/super-plan/types';
 import {
   CHAT_APP_ID,
+  DESKTOP_APP_ID,
   createAssistantChat,
   createDesktopChat,
   getAssistantChats as filterAssistantChats,
@@ -38,7 +39,7 @@ import {
   type RawSessionJson,
 } from './session-workspace-scope';
 import { getForegroundAppId } from '../os/instances';
-import { isChatAppForeground } from '../ui/chat-mount';
+import { isChatAppForeground, shouldPaintDesktopChatSurface } from '../ui/chat-mount';
 import { setStatus } from '../ui/status';
 import { ensureTokenLedger } from '../usage/token-ledger';
 import { getWorkspacePath } from './workspace';
@@ -1467,11 +1468,15 @@ function repairPlannerChatFolderMembership(state: SessionState): void {
   }
 }
 
-/** When the Chat app is foreground, persist its active chat id. */
+/** When a foreground chat surface is active, persist its last active chat id per app. */
 function maybeRememberActiveChatForForegroundApp(
   state: SessionState,
   chat: Chat,
 ): void {
+  if (shouldPaintDesktopChatSurface()) {
+    rememberActiveChatForAppInState(state, DESKTOP_APP_ID, chat.id);
+    return;
+  }
   if (getForegroundAppId() !== CHAT_APP_ID && !isChatAppForeground()) return;
   rememberActiveChatForAppInState(state, CHAT_APP_ID, chat.id);
 }
@@ -1577,13 +1582,34 @@ export function activateAssistantChatForApp(chatsWorkspacePath: string): Chat {
  */
 export function activateDesktopAssistantChatForApp(desktopWorkspacePath: string): Chat {
   const state = requireSessionState();
-  const nextId = resolveActiveAssistantChatId(desktopWorkspacePath, state, (workspaceKey) => {
-    const fresh = createDesktopChat(workspaceKey, newChatId());
-    touchChat(fresh);
-    return fresh;
-  });
+  const key = normalizeWorkspacePath(desktopWorkspacePath);
+  const nextId = resolveActiveAssistantChatId(
+    desktopWorkspacePath,
+    state,
+    (workspaceKey) => {
+      const fresh = createDesktopChat(workspaceKey, newChatId());
+      touchChat(fresh);
+      return fresh;
+    },
+    DESKTOP_APP_ID,
+  );
+  // Migrate legacy `lastActiveChatIdByApp.chat` entries that pointed at desktop threads.
+  if (
+    key &&
+    !getLastActiveChatIdForApp(state, DESKTOP_APP_ID) &&
+    getLastActiveChatIdForApp(state, CHAT_APP_ID)
+  ) {
+    const legacy = state.chats.find(
+      (c) =>
+        c.id === getLastActiveChatIdForApp(state, CHAT_APP_ID) &&
+        normalizeWorkspacePath(c.workspacePath ?? '') === key,
+    );
+    if (legacy) {
+      rememberActiveChatForAppInState(state, DESKTOP_APP_ID, legacy.id);
+    }
+  }
   state.activeId = nextId;
-  rememberActiveChatForAppInState(state, CHAT_APP_ID, nextId);
+  rememberActiveChatForAppInState(state, DESKTOP_APP_ID, nextId);
   scheduleSaveSessions();
   return getActiveChat();
 }

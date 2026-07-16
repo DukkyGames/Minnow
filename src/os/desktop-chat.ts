@@ -8,7 +8,7 @@ import { sendMessage } from '../chat/messaging';
 import { isActiveChatStreaming, subscribeChatStreamEnd } from '../chat/streaming-state';
 import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
 import {
-  CHAT_APP_ID,
+  DESKTOP_APP_ID,
   createDesktopChat,
   ensureActiveDesktopAssistantChat,
 } from './desktop-chat-sessions';
@@ -161,7 +161,7 @@ function createFreshAssistantChat(
   state.activeId = chat.id;
   clearPanelCwdUserOverride();
   syncPanelFromActiveChat({ forceFileTree: true });
-  rememberActiveChatForApp(CHAT_APP_ID, chat.id);
+  rememberActiveChatForApp(DESKTOP_APP_ID, chat.id);
   scheduleSaveSessions();
 }
 

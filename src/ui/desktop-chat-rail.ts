@@ -4,7 +4,7 @@
 
 import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
-import { CHAT_APP_ID, createDesktopChat } from '../state/session-workspace-scope';
+import { DESKTOP_APP_ID, createDesktopChat } from '../state/session-workspace-scope';
 import {
   getActiveChat,
   getAssistantChats,
@@ -193,7 +193,7 @@ export async function createNewDesktopChat(): Promise<void> {
   sessionState.chats.unshift(chat);
   pruneEphemeralEmptyChats(sessionState, chat.id);
   sessionState.activeId = chat.id;
-  rememberActiveChatForApp(CHAT_APP_ID, chat.id);
+  rememberActiveChatForApp(DESKTOP_APP_ID, chat.id);
   scheduleSaveSessions();
 
   const { isDesktopChatActive, activateDesktopChat } = await import('../os/desktop-state');
