@@ -19,6 +19,25 @@ body {
   flex-direction: column;
   /* Keep chrome below the notch; fixed overlays use the same inset in top offsets */
   padding-top: env(safe-area-inset-top, 0px);
+  /* MIN-451: shell chrome is not part of select-all; panels opt in below */
+  user-select: none;
+}
+
+/* MIN-451: text selection stays inside the focused workspace panel */
+.chat-area,
+.board-init-split__chat,
+[data-testid='orchestrate-chat-pane'],
+.mn-os-chat-transcript,
+.chat-app-scroll,
+.file-viewer-body,
+.file-viewer-markdown-preview,
+.preview-body,
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']),
+textarea,
+[contenteditable='true'],
+.cm-editor,
+.xterm {
+  user-select: text;
 }
 
 .visually-hidden {
