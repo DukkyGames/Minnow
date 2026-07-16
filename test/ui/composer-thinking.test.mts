@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { nextThinkingTriStateOnClick } from '../../src/ui/composer-thinking.ts';
+import { setSessionStateForTests } from '../../src/state/sessions.ts';
+import {
+  nextThinkingTriStateOnClick,
+  syncThinkingControlFromActiveChat,
+} from '../../src/ui/composer-thinking.ts';
 
 describe('nextThinkingTriStateOnClick', () => {
   test('from inherit with resolved on sets off', () => {
@@ -18,5 +22,12 @@ describe('nextThinkingTriStateOnClick', () => {
   test('from explicit off returns to inherit', () => {
     assert.equal(nextThinkingTriStateOnClick('off', 'off'), 'inherit');
     assert.equal(nextThinkingTriStateOnClick('off', 'on'), 'inherit');
+  });
+});
+
+describe('syncThinkingControlFromActiveChat', () => {
+  test('does not throw before sessions are loaded', () => {
+    setSessionStateForTests(null);
+    assert.doesNotThrow(() => syncThinkingControlFromActiveChat());
   });
 });

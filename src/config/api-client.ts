@@ -104,6 +104,8 @@ export function putSessionsKeepalive(state: SessionState): void {
       headers: JSON_HEADERS,
       body: JSON.stringify(state),
       keepalive: true,
+    }).catch(() => {
+      /* ignore — server may already be down during pagehide */
     });
   } catch {
     /* ignore — nothing else we can do during unload */
