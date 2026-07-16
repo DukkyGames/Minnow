@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "createdAt": "2026-07-15T06:36:36.920Z",
+  "createdAt": "2026-07-16T04:14:06.472Z",
   "migratedFromLocalStorage": false,
   "migratedAt": null,
   "localStorageKeysMigrated": [],
@@ -59,7 +59,7 @@
     "enabled": false,
     "tier1": {
       "maxRestartsPerParentTurn": 2,
-      "duplicateToolCallThreshold": 3,
+      "duplicateToolCallThreshold": 5,
       "sameErrorThreshold": 3,
       "noProgressTurnThreshold": 4
     },
@@ -87,7 +87,7 @@
     "llmEscalationTimeoutMs": 8000,
     "tickIntervalMs": 5000,
     "repetition": {
-      "duplicateToolCallThreshold": 3,
+      "duplicateToolCallThreshold": 5,
       "sameErrorThreshold": 3,
       "maxRestartsPerRun": 2
     },
@@ -218,9 +218,9 @@
     }
   },
   "workspace": {
-    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-tNXs55",
+    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-OdijBV",
     "recentPaths": [
-      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-tNXs55"
+      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-OdijBV"
     ]
   }
 }

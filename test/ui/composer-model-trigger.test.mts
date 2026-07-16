@@ -4,6 +4,10 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import {
+  createEmptyChatObject,
+  setSessionStateForTests,
+} from '../../src/state/sessions.ts';
 
 describe('composer model trigger', () => {
   test('syncComposerModelTriggers updates label from selected option', async () => {
@@ -22,6 +26,9 @@ describe('composer model trigger', () => {
     const prevWindow = globalThis.window;
     (globalThis as { document: Document }).document = doc as unknown as Document;
     (globalThis as { window: Window }).window = win as unknown as Window & typeof globalThis.window;
+
+    const chat = createEmptyChatObject('qwen/qwen2.5-7b');
+    setSessionStateForTests({ chats: [chat], activeId: chat.id });
 
     try {
       const {
@@ -42,6 +49,7 @@ describe('composer model trigger', () => {
       assert.ok(logo);
       assert.ok(logo?.querySelector('svg'));
     } finally {
+      setSessionStateForTests(null);
       (globalThis as { document: Document }).document = prevDocument;
       (globalThis as { window: Window }).window = prevWindow;
     }

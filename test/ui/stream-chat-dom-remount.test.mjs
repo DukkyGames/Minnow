@@ -15,7 +15,10 @@ const { STREAM_LABEL_GENERATING, STREAM_LABEL_THINKING } = await import(
   '../../src/ui/stream-status.ts'
 );
 
+let activeWindow = null;
+
 function setupDom() {
+  activeWindow?.close();
   const window = new Window();
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
@@ -62,17 +65,20 @@ function setupDom() {
     document.body.appendChild(el);
   }
 
+  activeWindow = window;
   return window;
 }
 
 describe('stream-chat-dom remount', { concurrency: false }, () => {
   afterEach(() => {
+    activeWindow?.close();
+    activeWindow = null;
     appState.setStreaming(false);
     registerStreamDomRemount('chat-streaming', null);
     setSessionStateForTests(null);
   });
 
-  test('remountStreamDomForChat restores Generating response… after history re-render', () => {
+  test('remountStreamDomForChat restores Generating response… after history re-render', async () => {
     setupDom();
     const streaming = createEmptyChatObject('');
     streaming.id = 'chat-streaming';
@@ -96,10 +102,9 @@ describe('stream-chat-dom remount', { concurrency: false }, () => {
     });
 
     renderChatFromHistory(streaming);
-    assert.equal(document.getElementById('chatArea')?.querySelector('.stream-status'), null);
-
-    remountStreamDomForChat(streaming.id);
-    assert.ok(remounted, 'remount listener should run for in-flight chat');
+    // renderChatFromHistory lazy-imports remountStreamDomForChat to avoid a circular module graph.
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(remounted, 'remount listener should run during history re-render');
 
     const label = document
       .getElementById('chatArea')

@@ -162,7 +162,7 @@ const DEFAULT_META = {
     enabled: false,
     tier1: {
       maxRestartsPerParentTurn: 2,
-      duplicateToolCallThreshold: 3,
+      duplicateToolCallThreshold: 5,
       sameErrorThreshold: 3,
       noProgressTurnThreshold: 4,
     },
@@ -190,7 +190,7 @@ const DEFAULT_META = {
     llmEscalationTimeoutMs: 8_000,
     tickIntervalMs: 5_000,
     repetition: {
-      duplicateToolCallThreshold: 3,
+      duplicateToolCallThreshold: 5,
       sameErrorThreshold: 3,
       maxRestartsPerRun: 2,
     },

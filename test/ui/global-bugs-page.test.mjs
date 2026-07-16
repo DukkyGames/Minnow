@@ -81,6 +81,8 @@ describe('global bugs page (POLISH-015)', () => {
     assert.match(closeBlock, /hashBeforeGlobalBugs/);
     assert.match(closeBlock, /isOsShellEnabled\(\)/);
     assert.doesNotMatch(closeBlock, /window\.location\.hash = '#\/';/);
+  });
+
   test('refreshGlobalBugsSidebarBadge waits for bugs store hydration', () => {
     const badgeBlock = pageTs.slice(pageTs.indexOf('export function refreshGlobalBugsSidebarBadge'));
     assert.match(badgeBlock, /isBugsStoreLoaded\(\)/);

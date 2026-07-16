@@ -231,6 +231,7 @@ Enable/disable bundled agent definition packs.
 | Max concurrent | Global cap |
 | Default timeout | ms |
 | Check-in nudge | ms (0 = off) |
+| Duplicate tool limit | Identical tool+args calls before watchdog repetition recovery (`0` = off, max 256; default 5) |
 
 **Types (9):** `generalPurpose`, `explore`, `researcher`, `shell`, `explorer`, `debugger`, `bug-planner`, `plan-reviewer`, `reef-widget`
 
@@ -366,7 +367,7 @@ Google and Microsoft: client ID, client secret (Microsoft: tenant ID). Tokens en
 | `llmEscalationTimeoutMs` | `8000` |
 | `tickIntervalMs` | `5000` |
 | `escalationProviderId` / `escalationModelId` | |
-| `repetition.duplicateToolCallThreshold` | `3` |
+| `repetition.duplicateToolCallThreshold` | `5` |
 | `repetition.sameErrorThreshold` | `3` |
 | `repetition.maxRestartsPerRun` | `2` |
 
