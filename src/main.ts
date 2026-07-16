@@ -74,6 +74,7 @@ import { installFetchAuth } from './api/install-fetch-auth';
 import { initTheme } from './ui/theme';
 import { initAttachments } from './attachments/store';
 import { initShellHandlers } from './ui/shell-handlers';
+import { installScopedSelectAllHandler } from './ui/scoped-select-all';
 import { initComposerDrop } from './ui/composer-drop';
 import { initContextUsageRing, refreshContextUsageRing } from './ui/context-usage-ring';
 import { closeContextUsageBreakdown } from './ui/context-usage-breakdown';
@@ -375,6 +376,7 @@ export async function initApp(): Promise<void> {
 /** Start init once the document is ready (module scripts often run after `load`). */
 async function startApp(): Promise<void> {
   initShellHandlers();
+  installScopedSelectAllHandler();
   if (isOsShellEnabled()) {
     const hash = window.location.hash;
     if (hash === '' || hash === '#' || hash === '#/') {
