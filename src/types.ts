@@ -223,6 +223,8 @@ export interface ApiAssistantMessage {
   tool_calls?: ToolCall[];
   /** Outbound reasoning text for Anthropic tool-loop replay (not persisted in session). */
   reasoning?: string;
+  /** DeepSeek thinking-mode replay on tool-loop turns (OpenCode Go / api.deepseek.com). */
+  reasoning_content?: string;
   /** Anthropic thinking signature paired with `reasoning` for Messages API replay. */
   reasoning_signature?: string;
 }

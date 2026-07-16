@@ -32,7 +32,7 @@ import { resolveSubAgentModelBinding } from '../resolve-sub-agent-binding';
 import { resolveSubAgentToolModeId } from '../resolve-sub-agent-tool-mode';
 import { resolveSubAgentTools } from '../sub-agent-tools';
 import { clearSubAgentRunListeners, emitSubAgentRunUpdated, subscribeSubAgentRuns } from '../sub-agent-events';
-import type { ApiMessage } from '../../types';
+import type { ApiAssistantMessage, ApiMessage } from '../../types';
 import type {
   AggregateResult,
   CancelSubAgentResult,
@@ -128,6 +128,44 @@ const runTimerHandlers = {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+/** Count assistant tool-call rows already streamed to the run transcript. */
+function countToolTurnsInMessages(messages: ApiMessage[]): number {
+  return messages.filter((m) => {
+    if (m.role !== 'assistant') return false;
+    const toolCalls = (m as ApiAssistantMessage).tool_calls;
+    return Array.isArray(toolCalls) && toolCalls.length > 0;
+  }).length;
+}
+
+/** Last non-tool assistant prose from a partial transcript (for failure summaries). */
+function lastAssistantProseFromMessages(messages: ApiMessage[]): string {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const m = messages[i];
+    if (m.role !== 'assistant') continue;
+    const row = m as ApiAssistantMessage;
+    if (row.tool_calls?.length) continue;
+    if (typeof row.content === 'string' && row.content.trim()) {
+      return row.content.trim();
+    }
+  }
+  return '';
+}
+
+function applyPartialRunProgress(run: SubAgentRun): void {
+  const messages = run.messages;
+  if (!messages?.length) return;
+  const partialToolTurns = countToolTurnsInMessages(messages);
+  if (partialToolTurns > 0) {
+    run.toolTurns = partialToolTurns;
+  }
+  if (!run.summary?.trim()) {
+    const prose = lastAssistantProseFromMessages(messages);
+    if (prose) {
+      run.summary = prose.length > 2000 ? `${prose.slice(0, 2000)}…` : prose;
+    }
+  }
 }
 
 function setStatus(run: SubAgentRun, status: SubAgentStatus): void {
@@ -397,7 +435,8 @@ function launchExecuteRun(internals: RunInternals, modeId: string): void {
       return;
     }
     const message = err instanceof Error ? err.message : String(err);
-    settleRun(internals, 'failed', '', message);
+    applyPartialRunProgress(run);
+    settleRun(internals, 'failed', run.summary || '', message);
   });
 }
 
@@ -556,7 +595,8 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
       settleRun(internals, 'cancelled', run.summary || '', 'cancelled');
       return;
     }
-    settleRun(internals, 'failed', '', message);
+    applyPartialRunProgress(run);
+    settleRun(internals, 'failed', run.summary || '', message);
   }
 }
 

@@ -4,6 +4,7 @@
  * and non-streaming message fields.
  */
 
+import type { ApiAssistantMessage } from '../types';
 import type { ChatCompletionChunk } from '../types';
 
 /** Pull reasoning text from one SSE JSON chunk (streaming). */
@@ -53,6 +54,49 @@ export function splitThinkingSegments(buffer: string): string[] {
   for (const p of parts) {
     const t = p.trim();
     if (t) out.push(t);
+  }
+  return out;
+}
+
+/**
+ * DeepSeek thinking mode (incl. OpenCode Go) requires `reasoning_content` on assistant
+ * tool-loop turns — omitting it yields HTTP 400 on the next request.
+ */
+export function modelRequiresReasoningContentReplay(modelId: string): boolean {
+  return /deepseek/i.test(modelId.trim());
+}
+
+export interface OutboundReasoningReplayOptions {
+  /** DeepSeek tool-loop rows must always include `reasoning_content` (may be empty). */
+  toolCallTurn?: boolean;
+}
+
+/** Outbound assistant fields for replaying reasoning on follow-up completions. */
+export function outboundReasoningReplayFields(
+  modelId: string,
+  reasoningText: string,
+  thinkingSignature?: string,
+  options?: OutboundReasoningReplayOptions,
+): Pick<ApiAssistantMessage, 'reasoning' | 'reasoning_content' | 'reasoning_signature'> {
+  const trimmed = reasoningText.trim();
+  const out: Pick<
+    ApiAssistantMessage,
+    'reasoning' | 'reasoning_content' | 'reasoning_signature'
+  > = {};
+  const deepSeekToolLoop =
+    options?.toolCallTurn === true && modelRequiresReasoningContentReplay(modelId);
+
+  if (deepSeekToolLoop) {
+    out.reasoning_content = trimmed;
+  } else if (trimmed) {
+    if (modelRequiresReasoningContentReplay(modelId)) {
+      out.reasoning_content = trimmed;
+    } else {
+      out.reasoning = trimmed;
+    }
+  }
+  if (thinkingSignature?.trim()) {
+    out.reasoning_signature = thinkingSignature.trim();
   }
   return out;
 }
