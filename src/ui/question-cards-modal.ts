@@ -9,6 +9,8 @@ import { notifyAskQuestionShown } from '../notifications/ask-question';
 import { getActiveChat } from '../state/sessions';
 import {
   ASK_QUESTION_OTHER_ID,
+  isAskQuestionMultiSelect,
+  normalizeAskQuestionItem,
   stringifyAskQuestionResult,
   type AskQuestionArgs,
   type AskQuestionItem,
@@ -339,7 +341,7 @@ export function showQuestionCardsModal(
 
     const drafts = new Map<string, AskQuestionAnswerDraft>();
     let cardIndex = 0;
-    const questions = args.questions;
+    const questions = args.questions.map((q) => normalizeAskQuestionItem(q));
 
     const surfaceClass = resolveQuestionPanelSurfaceClass(host);
     const panelClasses = ['question-cards-panel'];
@@ -464,9 +466,15 @@ export function showQuestionCardsModal(
     function tryAutoSubmitAfterSingleSelect(): void {
       if (questions.length !== 1) return;
       const only = questions[0];
-      if (only.allow_multiple === true) return;
+      if (isAskQuestionMultiSelect(only)) return;
       if (!areAllDraftsValid(questions, drafts)) return;
       finish({ status: 'answered', answers: buildAnswerEntries(questions, drafts) });
+    }
+
+    function syncSubmitLabel(): void {
+      const singleMulti =
+        questions.length === 1 && isAskQuestionMultiSelect(questions[0]);
+      btnSubmit.textContent = singleMulti ? 'Continue' : 'Submit answers';
     }
 
     function syncNav(): void {
@@ -476,15 +484,23 @@ export function showQuestionCardsModal(
       indicator.textContent = `${cardIndex + 1} / ${questions.length}`;
       const onLast = cardIndex === last;
       const allValid = areAllDraftsValid(questions, drafts);
+      const current = questions[cardIndex];
+      const multiSelect = isAskQuestionMultiSelect(current);
       btnSubmit.hidden = !onLast;
       btnSubmit.disabled = !allValid;
+      syncSubmitLabel();
       if (onLast && !allValid) {
-        validation.textContent = 'Answer every question to continue.';
+        validation.textContent = multiSelect
+          ? 'Select at least one answer, then continue.'
+          : 'Answer every question to continue.';
         validation.hidden = false;
       } else {
         validation.textContent = '';
         validation.hidden = true;
       }
+      hints.textContent = multiSelect
+        ? 'Select all that apply, then continue · Esc to cancel'
+        : 'Esc to cancel · Arrow keys to change card';
     }
 
     function renderQuestion(q: AskQuestionItem): void {
@@ -499,10 +515,10 @@ export function showQuestionCardsModal(
       list.className = 'question-cards-options';
       // +1 for the synthetic Other row; drives grid layout for short option sets.
       list.dataset.optionCount = String(q.options.length + 1);
-      list.setAttribute('role', q.allow_multiple ? 'group' : 'radiogroup');
+      list.setAttribute('role', isAskQuestionMultiSelect(q) ? 'group' : 'radiogroup');
       list.setAttribute(
         'aria-label',
-        q.allow_multiple ? 'Select one or more answers' : 'Select one answer',
+        isAskQuestionMultiSelect(q) ? 'Select one or more answers' : 'Select one answer',
       );
 
       const draft = getOrCreateDraft(drafts, q.id);
@@ -515,7 +531,7 @@ export function showQuestionCardsModal(
         if (selected) row.classList.add('question-cards-option--selected');
 
         const input = document.createElement('input');
-        if (q.allow_multiple) {
+        if (isAskQuestionMultiSelect(q)) {
           input.type = 'checkbox';
           input.checked = selected;
           input.addEventListener('change', () => {
@@ -566,7 +582,7 @@ export function showQuestionCardsModal(
       if (otherSelected) otherRow.classList.add('question-cards-option--selected');
 
       const otherInput = document.createElement('input');
-      if (q.allow_multiple) {
+      if (isAskQuestionMultiSelect(q)) {
         otherInput.type = 'checkbox';
         otherInput.checked = otherSelected;
         otherInput.addEventListener('change', () => {
