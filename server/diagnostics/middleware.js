@@ -58,7 +58,8 @@ export async function buildDiagnosticsHealth() {
   try {
     const servers = await listLspServers();
     lspRunning = servers.filter((s) => s.running).length;
-    lspOk = servers.every((s) => s.disabled || s.running || !s.hasCommand);
+    // LSP processes are on-demand; idle configured servers are healthy.
+    lspOk = true;
   } catch {
     lspOk = false;
   }

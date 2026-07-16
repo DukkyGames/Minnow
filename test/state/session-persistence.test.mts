@@ -7,6 +7,7 @@ import { afterEach, describe, test } from 'node:test';
 
 import { setStorageModeForTests } from '../../src/config/storage-mode.ts';
 import { defaultSessionState } from '../../src/config/defaults.ts';
+import { putSessionsKeepalive } from '../../src/config/api-client.ts';
 import {
   flushPendingSessionSaveOnShutdown,
   isSessionsHydratedFromServerForTests,
@@ -128,5 +129,26 @@ describe('session persistence (MIN-408)', () => {
 
     flushPendingSessionSaveOnShutdown();
     assert.equal(keepalive, true);
+  });
+
+  test('putSessionsKeepalive attaches catch to keepalive fetch', () => {
+    let catchAttached = false;
+    globalThis.fetch = (() => {
+      const base = Promise.reject(new TypeError('Failed to fetch')) as Promise<Response>;
+      return new Proxy(base, {
+        get(target, prop, receiver) {
+          if (prop === 'catch') {
+            return (...args: Parameters<Promise<Response>['catch']>) => {
+              catchAttached = true;
+              return Reflect.get(target, prop, receiver).apply(target, args);
+            };
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      });
+    }) as typeof fetch;
+
+    putSessionsKeepalive(defaultSessionState());
+    assert.equal(catchAttached, true);
   });
 });
