@@ -59,13 +59,12 @@ export const SUPER_PLAN_STEP_TO_STAGE: Record<SuperPlanDisplayStepIndex, SuperPl
   6: 'finalize',
 };
 
-export type PlanPreviewActionId = 'revise' | 'orchestrate' | 'build' | 'close';
+export type PlanPreviewActionId = 'revise' | 'orchestrate' | 'build';
 
 export interface PlanPreviewActionHandlers {
   onRevise: () => void;
   onStartOrchestrator: () => void;
   onBuild: () => void;
-  onClose: () => void;
 }
 
 export interface BuildPlanPreviewPopoutOptions {
@@ -543,7 +542,7 @@ export class PlanProgressPanel {
   }
 }
 
-/** Final preview popout with Revise / Orchestrator / Build / Close actions. */
+/** Final preview popout with Revise / Orchestrator / Build actions. */
 export function buildPlanPreviewPopoutDom(
   handlers: PlanPreviewActionHandlers,
   options: BuildPlanPreviewPopoutOptions = {},
@@ -567,13 +566,6 @@ export function buildPlanPreviewPopoutDom(
   reviseBtn.textContent = 'Revise';
   reviseBtn.addEventListener('click', handlers.onRevise);
 
-  const closeBtn = document.createElement('button');
-  closeBtn.type = 'button';
-  closeBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--ghost';
-  closeBtn.dataset.planAction = 'close';
-  closeBtn.textContent = 'Close';
-  closeBtn.addEventListener('click', handlers.onClose);
-
   const buildBtn = document.createElement('button');
   buildBtn.type = 'button';
   buildBtn.className = 'orchestrate-plan-screen__btn orchestrate-plan-screen__btn--ghost';
@@ -589,7 +581,7 @@ export function buildPlanPreviewPopoutDom(
   orchestrateBtn.disabled = options.orchestrateEnabled === false;
   orchestrateBtn.addEventListener('click', handlers.onStartOrchestrator);
 
-  actions.append(reviseBtn, closeBtn, buildBtn, orchestrateBtn);
+  actions.append(reviseBtn, buildBtn, orchestrateBtn);
   popout.append(title, actions);
   return popout;
 }
