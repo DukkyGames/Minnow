@@ -9,21 +9,21 @@ import path from 'node:path';
 import { buildTerminalXtermTheme } from '../../src/ui/terminal-xterm-theme.ts';
 
 const LIGHT_THEME_IDS = [
-  'sage-light',
-  'amber-light',
-  'cyan-light',
+  'swamp-light',
+  'desert-light',
+  'ocean-light',
   'coral-light',
-  'salt-light',
-  'retro-light',
+  'mono-light',
+  'matrix-light',
 ] as const;
 
 const DARK_THEME_IDS = [
-  'sage-dark',
-  'amber-dark',
-  'cyan-dark',
+  'swamp-dark',
+  'desert-dark',
+  'ocean-dark',
   'coral-dark',
-  'salt-dark',
-  'retro-dark',
+  'mono-dark',
+  'matrix-dark',
 ] as const;
 
 const ANSI_KEYS = [
@@ -143,8 +143,8 @@ describe('terminal xterm ANSI palette (light)', () => {
     });
   }
 
-  test('sage-light maps yellow from readable gold tokens and brightBlack to fg-muted', () => {
-    const vars = readThemeBlock(tokensCss, 'sage-light');
+  test('swamp-light maps yellow from readable gold tokens and brightBlack to fg-muted', () => {
+    const vars = readThemeBlock(tokensCss, 'swamp-light');
     const theme = buildTerminalXtermTheme(mockLightStyle(vars));
     assert.equal(theme.brightBlack, vars['--mn-fg-muted']);
     assert.ok(contrastRatio(theme.yellow!, theme.background!) >= 4.5);
@@ -168,8 +168,8 @@ describe('terminal xterm selection contrast (light)', () => {
     });
   }
 
-  test('sage-light: selection is more visible than legacy surface-0 mapping', () => {
-    const vars = readThemeBlock(tokensCss, 'sage-light');
+  test('swamp-light: selection is more visible than legacy surface-0 mapping', () => {
+    const vars = readThemeBlock(tokensCss, 'swamp-light');
     const theme = buildTerminalXtermTheme(mockLightStyle(vars));
     const legacySurface0 = vars['--mn-surface-0'];
     const newRatio = contrastRatio(theme.selectionBackground!, theme.background!);
@@ -195,8 +195,8 @@ describe('terminal xterm selection contrast (dark)', () => {
     });
   }
 
-  test('sage-dark: selection is more visible than legacy surface-0 mapping', () => {
-    const vars = readThemeBlock(tokensCss, 'sage-dark');
+  test('swamp-dark: selection is more visible than legacy surface-0 mapping', () => {
+    const vars = readThemeBlock(tokensCss, 'swamp-dark');
     const theme = buildTerminalXtermTheme(mockDarkStyle(vars));
     const legacySurface0 = vars['--mn-surface-0'];
     const newRatio = contrastRatio(theme.selectionBackground!, theme.background!);

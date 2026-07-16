@@ -250,18 +250,35 @@ export function schedulePostTurnSynthesis(input: SynthesisRunInput): void {
 
       const data = (await res.json()) as {
         memoryProposals?: unknown[];
+        memoryPages?: unknown[];
+        memorySkipped?: string[];
         skillProposal?: unknown | null;
       };
-      const created =
+      if (data.memorySkipped?.includes('no-model')) {
+        console.warn(
+          '[synthesis] Skipped: no utility model resolved. Pick a model in the menubar or Settings → Memory → Synthesis.',
+        );
+      }
+      const savedPages = data.memoryPages?.length ?? 0;
+      const proposals =
         (data.memoryProposals?.length ?? 0) + (data.skillProposal ? 1 : 0);
-      if (created > 0) {
+      if (savedPages > 0 || proposals > 0) {
+        const parts: string[] = [];
+        if (savedPages > 0) {
+          parts.push(`${savedPages} memor${savedPages === 1 ? 'y' : 'ies'} saved`);
+        }
+        if (proposals > 0) {
+          parts.push(
+            `${proposals} proposal${proposals === 1 ? '' : 's'} ready for review`,
+          );
+        }
         const { pushNotification } = await import('../notifications/push');
         pushNotification({
           kind: 'synthesis',
           title: 'Auto-learning',
-          preview: `${created} new memory/skill proposal${created === 1 ? '' : 's'} ready for review`,
-          appId: 'settings',
-          dedupeKey: `synthesis:${input.chatId}:${created}`,
+          preview: parts.join(' · '),
+          appId: savedPages > 0 ? 'brain' : 'settings',
+          dedupeKey: `synthesis:${input.chatId}:${savedPages}:${proposals}`,
         });
       }
     } catch {

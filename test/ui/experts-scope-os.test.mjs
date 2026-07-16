@@ -15,6 +15,7 @@ import {
   resetOsRouterForTests,
 } from '../../src/os/router.ts';
 import { renderDesktop } from '../../src/os/desktop.ts';
+import { resetWindowManagerForTests } from '../../src/os/window-manager.ts';
 import { setExpertsPageOpen } from '../../src/app-state.ts';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
 import {
@@ -102,6 +103,7 @@ describe('expert scope OS routing', () => {
     resetOsRouterForTests();
     resetOsPageBridgeForTests();
     resetAppHostForTests();
+    resetWindowManagerForTests();
     const layer = document.getElementById('osDesktopLayer');
     cleanupDesktop = renderDesktop(layer);
     initAppHost();
@@ -149,6 +151,7 @@ describe('expert scope OS routing', () => {
     resetInstancesForTests();
     resetOsPageBridgeForTests();
     resetAppHostForTests();
+    resetWindowManagerForTests();
     if (win) {
       await teardownHappyDomAsync(win);
       win = undefined;

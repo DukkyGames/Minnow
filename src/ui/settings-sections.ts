@@ -4,6 +4,7 @@
 
 import { fetchWorkAgentsList } from '../agents/work-agent-prompt-api';
 import {
+  clampDuplicateToolCallThreshold,
   loadSubAgentConfig,
   saveSubAgentConfigToServer,
 } from '../agents/sub-agent-config';
@@ -1000,7 +1001,11 @@ async function renderSubAgentsSection(): Promise<void> {
     patch: Partial<
       Pick<
         typeof config,
-        'enabled' | 'globalMaxConcurrent' | 'defaultTimeoutMs' | 'checkInNudgeMs'
+        | 'enabled'
+        | 'globalMaxConcurrent'
+        | 'defaultTimeoutMs'
+        | 'checkInNudgeMs'
+        | 'duplicateToolCallThreshold'
       >
     >,
   ): Promise<void> => {
@@ -1048,17 +1053,33 @@ async function renderSubAgentsSection(): Promise<void> {
   nudgeWrap.appendChild(nudgeInput);
   nudgeWrap.appendChild(el('span', 'settings-kv-suffix', 'ms'));
 
+  const duplicateToolInput = document.createElement('input');
+  duplicateToolInput.type = 'number';
+  duplicateToolInput.className = 'settings-select settings-kv-input';
+  duplicateToolInput.min = '0';
+  duplicateToolInput.max = '256';
+  duplicateToolInput.step = '1';
+  duplicateToolInput.value = String(
+    config.duplicateToolCallThreshold ??
+      clampDuplicateToolCallThreshold(undefined),
+  );
+  duplicateToolInput.setAttribute(
+    'aria-label',
+    'Identical tool calls before watchdog flags repetition (0 disables)',
+  );
+
   const summary = createSettingsKvList([
     { term: 'Enabled', value: enabledSwitch },
     { term: 'Max concurrent', value: maxInput },
     { term: 'Default timeout', value: timeoutWrap },
     { term: 'Check-in nudge', value: nudgeWrap },
+    { term: 'Duplicate tool limit', value: duplicateToolInput },
   ]);
 
   const globalBody = appendSettingsGroup(
     mount,
     'Global limits',
-    'While a sub-agent runs, remind the parent agent once after this interval (Build, General, and Research only; not Orchestrate). Set 0 to turn off.',
+    'While a sub-agent runs, remind the parent agent once after the check-in interval (Build, General, and Research only; not Orchestrate). Set 0 to turn off. Duplicate tool limit is how many identical tool calls (same name and arguments) trigger watchdog repetition recovery; set 0 to disable.',
   );
   globalBody.appendChild(summary);
 
@@ -1131,6 +1152,14 @@ async function renderSubAgentsSection(): Promise<void> {
     const value = raw <= 0 ? 0 : Math.min(1_800_000, Math.max(10_000, raw));
     nudgeInput.value = String(value);
     void persistGlobal({ checkInNudgeMs: value });
+  });
+
+  duplicateToolInput.addEventListener('change', () => {
+    const value = clampDuplicateToolCallThreshold(
+      Number(duplicateToolInput.value),
+    );
+    duplicateToolInput.value = String(value);
+    void persistGlobal({ duplicateToolCallThreshold: value });
   });
 
 }

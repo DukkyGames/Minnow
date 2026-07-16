@@ -57,6 +57,10 @@ export function detectRepetition(
   log: ToolCallLogEntry[],
   thresholds: DetectorThresholds,
 ): DetectionResult | null {
+  if (thresholds.duplicateToolCallThreshold <= 0) {
+    return null;
+  }
+
   if (log.length < thresholds.duplicateToolCallThreshold) {
     return null;
   }

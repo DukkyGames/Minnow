@@ -1230,7 +1230,7 @@ const SUPERVISOR_DEFAULTS = {
   llmEscalationTimeoutMs: 8_000,
   tickIntervalMs: 5_000,
   repetition: {
-    duplicateToolCallThreshold: 3,
+    duplicateToolCallThreshold: 5,
     sameErrorThreshold: 3,
     maxRestartsPerRun: 2,
   },
@@ -1306,7 +1306,9 @@ export function mergeSupervisorConfig(patch, base) {
   if (rep && typeof rep === 'object') {
     const r = /** @type {Record<string, unknown>} */ (rep);
     if (typeof r.duplicateToolCallThreshold === 'number' && Number.isFinite(r.duplicateToolCallThreshold)) {
-      out.repetition.duplicateToolCallThreshold = Math.min(10, Math.max(2, Math.round(r.duplicateToolCallThreshold)));
+      const rounded = Math.round(r.duplicateToolCallThreshold);
+      out.repetition.duplicateToolCallThreshold =
+        rounded <= 0 ? 0 : Math.min(256, rounded);
     }
     if (typeof r.sameErrorThreshold === 'number' && Number.isFinite(r.sameErrorThreshold)) {
       out.repetition.sameErrorThreshold = Math.min(10, Math.max(2, Math.round(r.sameErrorThreshold)));
@@ -3134,6 +3136,17 @@ export function normalizeSubAgentsConfig(body) {
     base.checkInNudgeMs = rounded <= 0 ? 0 : Math.min(1_800_000, Math.max(10_000, rounded));
   } else {
     base.checkInNudgeMs = 120_000;
+  }
+  if (
+    typeof base.duplicateToolCallThreshold === 'number' &&
+    Number.isFinite(base.duplicateToolCallThreshold)
+  ) {
+    base.duplicateToolCallThreshold = Math.min(
+      256,
+      Math.max(0, Math.round(base.duplicateToolCallThreshold)),
+    );
+  } else {
+    base.duplicateToolCallThreshold = 5;
   }
   delete base.maxToolTurns;
   delete base.defaultMaxToolTurns;

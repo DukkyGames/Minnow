@@ -16,6 +16,13 @@ import { getHeartbeatConfig } from './wrapper';
 
 const WATCHDOG_TICK_MS = 5_000;
 
+/** Runtime repetition thresholds (merged from sub-agents.json on dispatch). */
+let repetitionThresholds = {
+  duplicateToolCallThreshold:
+    DEFAULT_SELF_HEALING_CONFIG.tier1.duplicateToolCallThreshold,
+  sameErrorThreshold: DEFAULT_SELF_HEALING_CONFIG.tier1.sameErrorThreshold,
+};
+
 /** Monotonic clock for progress/heartbeat age (mockable in tests). */
 let monotonicNow = (): number => performance.now();
 
@@ -60,6 +67,14 @@ export function registerWatchdogHandlers(
 /** Test hook: override monotonic clock. */
 export function setWatchdogMonotonicNow(fn: () => number): void {
   monotonicNow = fn;
+}
+
+/** Update repetition detection thresholds from merged sub-agents config. */
+export function setRepetitionThresholds(partial: {
+  duplicateToolCallThreshold?: number;
+  sameErrorThreshold?: number;
+}): void {
+  repetitionThresholds = { ...repetitionThresholds, ...partial };
 }
 
 function ensureRunState(runId: string): WatchdogRunState {
@@ -223,10 +238,11 @@ export function observeSubAgentToolCall(
   log: ToolCallLogEntry[],
   _parentChatId: string | null,
 ): void {
-  const thresholds = DEFAULT_SELF_HEALING_CONFIG.tier1;
+  if (repetitionThresholds.duplicateToolCallThreshold <= 0) return;
+
   const hit = detectRepetition(log, {
-    duplicateToolCallThreshold: thresholds.duplicateToolCallThreshold,
-    sameErrorThreshold: thresholds.sameErrorThreshold,
+    duplicateToolCallThreshold: repetitionThresholds.duplicateToolCallThreshold,
+    sameErrorThreshold: repetitionThresholds.sameErrorThreshold,
   });
   if (!hit) return;
 
@@ -243,6 +259,11 @@ export function observeSubAgentToolCall(
 export function resetWatchdogState(): void {
   runState.clear();
   monotonicNow = () => performance.now();
+  repetitionThresholds = {
+    duplicateToolCallThreshold:
+      DEFAULT_SELF_HEALING_CONFIG.tier1.duplicateToolCallThreshold,
+    sameErrorThreshold: DEFAULT_SELF_HEALING_CONFIG.tier1.sameErrorThreshold,
+  };
 }
 
 /** Reset handlers to noop defaults (tests + controller reset). */

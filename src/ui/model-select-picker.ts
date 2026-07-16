@@ -1016,7 +1016,8 @@ export function syncModelSelectPicker(): void {
   trigger.disabled = !hasSelectable;
 
   renderModelSelectMenuRows(menu, sel);
-  document.dispatchEvent(new CustomEvent('minnow:model-select-synced'));
+  const CustomEventCtor = document.defaultView?.CustomEvent ?? CustomEvent;
+  document.dispatchEvent(new CustomEventCtor('minnow:model-select-synced'));
 }
 
 /** Bind trigger, outside click, and escape for the model combobox. */

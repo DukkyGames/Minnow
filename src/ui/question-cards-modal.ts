@@ -705,4 +705,7 @@ export async function runAskQuestionModal(
   return stringifyAskQuestionResult(result);
 }
 
-registerAskQuestionDisplayContextSync(syncAskQuestionModalOnDisplayContextChange);
+// Defer until after module init — ask-question-display ↔ orchestrate-plan-screen cycle.
+queueMicrotask(() => {
+  registerAskQuestionDisplayContextSync(syncAskQuestionModalOnDisplayContextChange);
+});

@@ -186,6 +186,27 @@ export function flushSseEventBuffer(
   state.buffer = '';
 }
 
+/** True when a completion chunk carries assistant text or structured parsed JSON. */
+function completionChunkHasAssistantMessage(chunk: ChatCompletionChunk): boolean {
+  const msg = chunk.choices?.[0]?.message;
+  if (!msg) return false;
+  return (
+    msg.content != null ||
+    msg.parsed != null ||
+    msg.reasoning != null ||
+    msg.reasoning_content != null
+  );
+}
+
+/** Prefer the last chunk that carries assistant content over trailing control events. */
+function selectBestCompletionChunk(
+  last: ChatCompletionChunk | null,
+  lastWithMessage: ChatCompletionChunk | null,
+): ChatCompletionChunk | null {
+  if (lastWithMessage) return lastWithMessage;
+  return last;
+}
+
 /**
  * Parse a full response body from {@link postChatCompletions} (JSON or SSE bytes).
  * Used by non-streaming fallback — never call Response.json() on the SSE shim.
@@ -223,28 +244,28 @@ export function parseCompletionResponseBody(text: string): ChatCompletionChunk {
       const chunk = tryParseChunk(jsonSlice);
       if (!chunk) return;
       lastGlued = chunk;
-      const msg = chunk.choices?.[0]?.message;
-      if (
-        msg &&
-        (msg.content != null || msg.reasoning != null || msg.reasoning_content != null)
-      ) {
+      if (completionChunkHasAssistantMessage(chunk)) {
         lastWithMessage = chunk;
       }
     });
-    if (lastWithMessage) return lastWithMessage;
-    if (lastGlued) return lastGlued;
+    const glued = selectBestCompletionChunk(lastGlued, lastWithMessage);
+    if (glued) return glued;
   }
 
   let last: ChatCompletionChunk | null = null;
+  let lastWithMessage: ChatCompletionChunk | null = null;
   const state = createSseEventBuffer();
-  feedSseEventBuffer(state, normalized, (chunk) => {
+  const trackCompletionChunk = (chunk: ChatCompletionChunk): void => {
     last = chunk;
-  });
-  flushSseEventBuffer(state, (chunk) => {
-    last = chunk;
-  });
+    if (completionChunkHasAssistantMessage(chunk)) {
+      lastWithMessage = chunk;
+    }
+  };
+  feedSseEventBuffer(state, normalized, trackCompletionChunk);
+  flushSseEventBuffer(state, trackCompletionChunk);
 
-  if (last) return last;
+  const selected = selectBestCompletionChunk(last, lastWithMessage);
+  if (selected) return selected;
   const preview =
     normalized.length > 200 ? `${normalized.slice(0, 200)}…` : normalized;
   throw new Error(
