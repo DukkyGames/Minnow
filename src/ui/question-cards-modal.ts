@@ -25,6 +25,7 @@ import { getActiveComposerSurface } from './composer-surface';
 import { setComposerStreamingMode } from './composer-send';
 import { setSidebarInputPendingChatId } from './chat-item-dot';
 import { resolveOrchestratePlanScreenQuestionHost } from './orchestrate-plan-screen';
+import { resolveBoardOnboardingQuestionHost } from './orchestrate-board-onboarding-questions';
 import { resolvePromptComposerShell, resolveQuestionHost } from './prompt-host-resolve';
 import {
   acquireUserPromptLock,
@@ -63,6 +64,16 @@ type ActiveQuestionModalState = {
 let activeQuestionModal: ActiveQuestionModalState | null = null;
 
 const PLAN_SCREEN_QUESTIONS_HOST_ID = 'orchestratePlanScreenQuestions';
+const BOARD_ONBOARDING_QUESTIONS_HOST_ID = 'boardOnboardingQuestions';
+
+const EMBEDDED_QUESTIONS_HOST_IDS = new Set([
+  PLAN_SCREEN_QUESTIONS_HOST_ID,
+  BOARD_ONBOARDING_QUESTIONS_HOST_ID,
+]);
+
+function isEmbeddedQuestionsHost(host: HTMLElement): boolean {
+  return EMBEDDED_QUESTIONS_HOST_IDS.has(host.id);
+}
 
 export function isAskQuestionModalOpenForChat(chatId: string): boolean {
   return Boolean(
@@ -159,6 +170,13 @@ function unparkActiveQuestionModal(): void {
     return;
   }
 
+  const boardHost = resolveBoardOnboardingQuestionHost(state.chatId);
+  if (boardHost) {
+    migrateActiveQuestionModalToHost(boardHost);
+    activateEmbeddedQuestionChrome(state);
+    return;
+  }
+
   const host = resolveQuestionHost();
   if (!host) return;
   migrateActiveQuestionModalToHost(host);
@@ -220,13 +238,13 @@ export function migrateActiveQuestionModalToHost(newHost: HTMLElement): boolean 
   const prevHost = state.host;
   state.host = newHost;
 
-  if (state.embedded && newHost.id !== PLAN_SCREEN_QUESTIONS_HOST_ID) {
+  if (state.embedded && !isEmbeddedQuestionsHost(newHost)) {
     activateComposerQuestionChrome(state);
-  } else if (!state.embedded && newHost.id === PLAN_SCREEN_QUESTIONS_HOST_ID) {
+  } else if (!state.embedded && isEmbeddedQuestionsHost(newHost)) {
     activateEmbeddedQuestionChrome(state);
   }
 
-  if (prevHost.id === PLAN_SCREEN_QUESTIONS_HOST_ID) {
+  if (isEmbeddedQuestionsHost(prevHost)) {
     prevHost.hidden = true;
   }
 
@@ -300,6 +318,12 @@ export function showQuestionCardsModal(
       if (planHost) {
         host = planHost;
         embedded = true;
+      } else {
+        const boardHost = resolveBoardOnboardingQuestionHost(options.chatId);
+        if (boardHost) {
+          host = boardHost;
+          embedded = true;
+        }
       }
     }
     if (!host) {

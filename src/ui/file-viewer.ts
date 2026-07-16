@@ -619,13 +619,18 @@ interface LoadedFileContent {
 
 async function loadFileContent(path: string): Promise<LoadedFileContent> {
   const { buildFileTreeToolContext } = await import('./file-tree-listing-root');
+  const { parseGetFileMetadataSize, readWorkspaceTextFile } = await import(
+    '../attachments/workspace-text-read'
+  );
   const toolContext = buildFileTreeToolContext();
-  const raw = (await executeTool('read_file', { path }, toolContext)).content;
-  if (raw.startsWith('Error:')) {
-    throw new Error(raw.replace(/^Error:\s*/i, '').trim());
-  }
 
-  if (raw.length > LARGE_FILE_BYTES) {
+  const metaRaw = (await executeTool('get_file_metadata', { path }, toolContext)).content;
+  if (metaRaw.startsWith('Error:')) {
+    throw new Error(metaRaw.replace(/^Error:\s*/i, '').trim());
+  }
+  const byteSize = parseGetFileMetadataSize(metaRaw);
+
+  if (byteSize !== null && byteSize > LARGE_FILE_BYTES) {
     const rangeRaw = (
       await executeTool(
         'read_file_range',
@@ -642,12 +647,13 @@ async function loadFileContent(path: string): Promise<LoadedFileContent> {
     }
     const body = parseReadFileRangeBody(rangeRaw);
     return {
-      content: body + buildLargeFileExcerptFooter(raw.length),
+      content: body + buildLargeFileExcerptFooter(byteSize),
       readOnlyExcerpt: true,
     };
   }
 
-  return { content: raw, readOnlyExcerpt: false };
+  const content = await readWorkspaceTextFile(path);
+  return { content, readOnlyExcerpt: false };
 }
 
 /** Load workspace file content for the active tab when needed. */

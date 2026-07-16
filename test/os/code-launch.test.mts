@@ -229,6 +229,73 @@ describe('applyCodeLaunchOptions', () => {
     resetChatsWorkspacePathCache();
   });
 
+  test('switchChat paints Code transcript when desktop chat state is still active', async () => {
+    const CHATS_WS = '/home/user/.minnow/chats';
+    const { resetChatsWorkspacePathCache } = await import('../../src/lib/chats-workspace.ts');
+    const { launchInstance, resetInstancesForTests } = await import('../../src/os/instances.ts');
+    const { setDesktopStateForTests } = await import('../../src/os/desktop-state.ts');
+    resetChatsWorkspacePathCache();
+
+    const g = globalThis as typeof globalThis & { fetch: typeof fetch };
+    const prevFetch = g.fetch;
+    g.fetch = (async (url: RequestInfo | URL) => {
+      const path = String(url);
+      if (path.includes('/api/chats-workspace')) {
+        return {
+          ok: true,
+          json: async () => ({ path: CHATS_WS, fileCount: 0 }),
+        } as Response;
+      }
+      return prevFetch(url);
+    }) as typeof fetch;
+
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      '<div id="desktopChatCol"></div>',
+    );
+
+    setSessionStateForTests({
+      version: 5,
+      activeId: 'assistant-chat',
+      sidebarCollapsed: false,
+      lastActiveChatIdByWorkspace: { [CURRENT_WS]: 'chat-existing' },
+      lastActiveChatIdByApp: { chat: 'assistant-chat' },
+      chats: [
+        {
+          ...createEmptyChatObject('model-a'),
+          id: 'chat-existing',
+          name: 'Project thread',
+          workspacePath: CURRENT_WS,
+          modeId: 'build',
+          history: [{ role: 'user', content: 'Code workspace hello' }],
+        },
+        {
+          ...createEmptyChatObject('model-a'),
+          id: 'assistant-chat',
+          name: 'Desktop hello',
+          workspacePath: CHATS_WS,
+          modeId: 'general',
+          history: [{ role: 'user', content: 'Hello' }],
+        },
+      ],
+    });
+
+    setDesktopStateForTests('chatActive');
+    launchInstance('code');
+
+    const { switchChat } = await import('../../src/ui/sidebar.ts');
+    switchChat('chat-existing');
+
+    const { getActiveChat } = await import('../../src/state/sessions.ts');
+    assert.equal(getActiveChat().id, 'chat-existing');
+    assert.match(document.getElementById('chatArea')?.textContent ?? '', /Code workspace hello/);
+    assert.equal(document.getElementById('desktopChatCol')?.textContent?.trim() ?? '', '');
+
+    g.fetch = prevFetch;
+    resetChatsWorkspacePathCache();
+    resetInstancesForTests();
+  });
+
   test('restoreCodeSessionOnForeground keeps an explicit workspace chat selection', async () => {
     setSessionStateForTests({
       version: 5,

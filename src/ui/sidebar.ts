@@ -1,6 +1,5 @@
 ﻿import { isChatsWorkspacePath } from '../lib/chats-workspace';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
-import { isDesktopChatActive } from '../os/desktop-state';
 import { isBoardSetupIncomplete } from '../chat/orchestrate/board-setup';
 import { isChatStreaming } from '../chat/streaming-state';
 import { stopGeneration } from '../chat/stop-generation';
@@ -19,7 +18,7 @@ import {
   toggleGroupCollapsed,
 } from '../state/chat-groups';
 import { createBoardCategoryIcon } from './board-category-icons';
-import { isChatAppForeground } from './chat-mount';
+import { isChatAppForeground, shouldPaintDesktopChatSurface } from './chat-mount';
 import { syncComposerFromStreamingState } from './composer-send';
 import { syncGoalActiveHint } from './goal-active-hint';
 import { syncTodoPanel } from './todo-panel';
@@ -1043,12 +1042,12 @@ function onChatRemoved(result: RemoveChatResult): void {
     recordChatOpened(active.id);
     syncModelSelectForActiveChat();
     renderStatsForChat(active);
-    if (isDesktopChatActive()) {
+    if (shouldPaintDesktopChatSurface()) {
       void import('../os/desktop-chat').then((m) => m.activateDesktopChatSession(active.id));
     } else {
       renderChatFromHistory(active);
     }
-  } else if (isDesktopChatActive()) {
+  } else if (shouldPaintDesktopChatSurface()) {
     void import('../ui/desktop-chat-rail').then((m) => m.refreshDesktopChatRail());
   }
   renderSidebar();
@@ -1062,7 +1061,7 @@ function onChatRemoved(result: RemoveChatResult): void {
 
 /** Render the active chat into the correct foreground shell (desktop / chat app / code). */
 function paintActiveChatInForegroundShell(chat: Chat): void {
-  if (isDesktopChatActive()) {
+  if (shouldPaintDesktopChatSurface()) {
     void import('../os/desktop-chat').then((m) => m.activateDesktopChatSession(chat.id));
     return;
   }

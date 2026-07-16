@@ -6,6 +6,12 @@ import { isDesktopChatActive } from '../os/desktop-state';
 import { getForegroundAppId } from '../os/instances';
 import { getOrchestrateChatMountElement } from './orchestrate-board-init-split';
 
+/** True when chat transcript/actions should target the desktop shell, not Code. */
+export function shouldPaintDesktopChatSurface(): boolean {
+  if (getForegroundAppId() === 'code') return false;
+  return isDesktopChatActive();
+}
+
 /** True when desktop chat or the legacy Chat app is the active UI. */
 export function isChatAppForeground(): boolean {
   const foregroundAppId = getForegroundAppId();

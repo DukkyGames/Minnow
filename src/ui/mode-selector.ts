@@ -38,6 +38,88 @@ const PLAN_SUBMENU_ITEMS: ReadonlyArray<{ id: ModeId; label: string }> = [
 let modeSelectorRoot: HTMLElement | null = null;
 let statusHideTimer: ReturnType<typeof setTimeout> | null = null;
 let planSubmenuDocListener: ((event: MouseEvent) => void) | null = null;
+let modeSelectorCompactObserver: ResizeObserver | null = null;
+
+function measureComposerGapPx(parent: HTMLElement): number {
+  const style = getComputedStyle(parent);
+  const raw = style.columnGap !== 'normal' ? style.columnGap : style.gap;
+  const gap = parseFloat(raw);
+  return Number.isFinite(gap) ? gap : 0;
+}
+
+/** Space left in #composerControls for the mode strip (not its current icon-only width). */
+function availableModeSelectorWidth(root: HTMLElement): number {
+  const parent = root.parentElement;
+  if (!parent) return root.clientWidth;
+
+  const gap = measureComposerGapPx(parent);
+  const childCount = parent.children.length;
+  let siblingsWidth = 0;
+
+  for (const child of parent.children) {
+    if (child === root) continue;
+    siblingsWidth += (child as HTMLElement).getBoundingClientRect().width;
+  }
+
+  const totalGap = childCount > 1 ? gap * (childCount - 1) : 0;
+  return Math.max(0, parent.clientWidth - siblingsWidth - totalGap);
+}
+
+/** Hide segment labels when labelled content cannot fit the space left in the composer row. */
+function syncModeSelectorCompact(root: HTMLElement): void {
+  if (root.querySelector('.is-submenu-open')) return;
+
+  root.classList.remove('mode-segmented--compact');
+  // Measure natural labelled width, not the shrunken icon-only box.
+  void root.offsetWidth;
+  const labelledWidth = root.scrollWidth;
+  const availableWidth = availableModeSelectorWidth(root);
+
+  if (labelledWidth > availableWidth + 1) {
+    root.classList.add('mode-segmented--compact');
+  }
+
+  syncPlanSegmentCompactAffordance(root);
+}
+
+function isModeSelectorCompact(root: HTMLElement | null = getModeSelectorEl()): boolean {
+  return root?.classList.contains('mode-segmented--compact') ?? false;
+}
+
+function syncPlanSegmentCompactAffordance(root: HTMLElement): void {
+  const planBtn = root.querySelector<HTMLButtonElement>('.mode-segment--plan');
+  if (!planBtn) return;
+
+  const compact = isModeSelectorCompact(root);
+  const mode = getMode('plan');
+  if (compact) {
+    planBtn.title = `${mode.label} — choose Plan or Super Plan`;
+    planBtn.setAttribute('aria-label', `${mode.label}, open plan mode menu`);
+    return;
+  }
+
+  if (!sessionState) return;
+  const activeId = normalizeModeId(getActiveChat().modeId);
+  const displayMode = getMode(resolvePlanFamilyDisplayMode(activeId));
+  planBtn.title = displayMode.description;
+  planBtn.setAttribute('aria-label', displayMode.label);
+}
+
+function attachModeSelectorCompactObserver(root: HTMLElement): void {
+  if (modeSelectorCompactObserver) return;
+  const parent = root.parentElement;
+  if (!parent) return;
+
+  modeSelectorCompactObserver = new ResizeObserver(() => {
+    syncModeSelectorCompact(root);
+  });
+  modeSelectorCompactObserver.observe(root);
+  modeSelectorCompactObserver.observe(parent);
+  for (const child of parent.children) {
+    if (child !== root) modeSelectorCompactObserver.observe(child);
+  }
+  syncModeSelectorCompact(root);
+}
 
 function getModeSelectorEl(): HTMLElement | null {
   if (!modeSelectorRoot) {
@@ -167,6 +249,7 @@ export function syncModeSelectorFromActiveChat(): void {
   );
 
   refreshModeSelectorDisabled();
+  syncModeSelectorCompact(root);
 }
 
 /** Disable segments while the model is streaming. */
@@ -299,7 +382,18 @@ function buildPlanSegment(mode: ReturnType<typeof listComposerModes>[number]): H
   label.textContent = mode.label;
   btn.append(icon, label);
 
-  btn.addEventListener('click', () => {
+  btn.addEventListener('click', (event) => {
+    if (isActiveChatStreaming() || isComposerRecoveryBlocked()) return;
+
+    const root = getModeSelectorEl();
+    const caret = wrap.querySelector<HTMLButtonElement>('.mode-segment__caret');
+    if (root && isModeSelectorCompact(root) && caret) {
+      event.preventDefault();
+      event.stopPropagation();
+      openPlanSubmenu(wrap, caret);
+      return;
+    }
+
     const activeId = normalizeModeId(getActiveChat().modeId);
     selectMode(isPlanFamilyMode(activeId) ? activeId : 'plan');
   });
@@ -358,5 +452,6 @@ export function initModeSelector(): void {
   }
 
   root.dataset.initialized = 'true';
+  attachModeSelectorCompactObserver(root);
   syncModeSelectorFromActiveChat();
 }

@@ -29,14 +29,41 @@
   flex-shrink: 0;
 }
 
+.composer-controls:has(.is-submenu-open) {
+  overflow: visible;
+}
+
+.mode-segment-wrap--plan.is-submenu-open {
+  z-index: 5;
+}
+
+/* Hug labelled content; shrink (and scroll / go compact) when the row is tight. */
+#modeSelector.mode-segmented,
 .mode-segmented {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  align-items: center;
   gap: 2px;
+  width: fit-content;
+  min-width: 0;
+  max-width: 100%;
   padding: 2px;
   border-radius: var(--radius-md);
   background: var(--mn-bg);
   border: 1px solid var(--mn-border);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mode-segmented:has(.is-submenu-open) {
+  overflow: visible;
+}
+
+.mode-segmented::-webkit-scrollbar {
+  display: none;
 }
 
 .mode-segment {
@@ -53,6 +80,8 @@
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   gap: 5px;
   transition:
     background 0.2s var(--ease-out),
@@ -62,6 +91,8 @@
 
 .mode-segment__label {
   line-height: 1.2;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -92,6 +123,7 @@
   position: relative;
   display: inline-flex;
   align-items: stretch;
+  flex-shrink: 0;
 }
 
 .mode-segment-wrap--plan .mode-segment--plan {
@@ -115,6 +147,7 @@
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  flex-shrink: 0;
   transition:
     background 0.2s var(--ease-out),
     color 0.2s var(--ease-out),
@@ -185,10 +218,28 @@
   color: var(--mn-fg-on-accent);
 }
 
+/* Icon-only when the strip itself is squeezed (class toggled in mode-selector.ts). */
+.mode-segmented--compact .mode-segment__label {
+  display: none;
+}
+
+.mode-segmented--compact .mode-segment {
+  padding: 5px;
+  gap: 0;
+  min-width: 26px;
+}
+
+.mode-segmented--compact .mode-segment-wrap--plan .mode-segment--plan {
+  padding-right: 5px;
+  min-width: 26px;
+}
+
+.mode-segmented--compact .mode-segment__caret {
+  display: none;
+}
+
 @media (max-width: 600px) {
   .mode-segment {
     font-size: 0.7rem;
-    padding: 4px 6px;
-    gap: 4px;
   }
 }

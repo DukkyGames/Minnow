@@ -96,6 +96,16 @@ describe('chat-mount foreground', () => {
     assert.equal(getActiveComposerSurface().inputEl?.id, 'msgInput');
   });
 
+  test('shouldPaintDesktopChatSurface is false when Code is foreground', async () => {
+    const { shouldPaintDesktopChatSurface } = await import('../../src/ui/chat-mount.ts');
+
+    setDesktopStateForTests('chatActive');
+    assert.equal(shouldPaintDesktopChatSurface(), true);
+
+    launchInstance('code');
+    assert.equal(shouldPaintDesktopChatSurface(), false);
+  });
+
   test('isChatAppForeground stays true for legacy chatView.is-open without OS foreground', async () => {
     resetOsPageBridgeForTests();
     const { isChatAppForeground } = await import('../../src/ui/chat-mount.ts');
