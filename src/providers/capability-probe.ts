@@ -143,6 +143,12 @@ export function structuredOutputBadge(
 ): 'yes' | 'no' | 'unknown' {
   if (modelId && isHarmonyDeniedModel(modelId)) return 'no';
   if (!caps) return 'unknown';
+
+  const modelEntry = modelId ? caps.models?.[modelId] : undefined;
+  if (modelEntry?.denyReason) return 'no';
+  if (modelEntry?.structuredOutput === true) return 'yes';
+  if (modelEntry?.structuredOutput === false) return 'no';
+
   if (caps.structuredOutputWithTools) return 'yes';
   if (caps.structuredOutput) return 'yes';
   if (caps.probeError) return 'no';
@@ -183,11 +189,14 @@ export function isStructuredOutcomeResponseFormatAvailable(
   if (!modelId.trim()) return false;
   if (isHarmonyDeniedModel(modelId)) return false;
   if (!capabilities) return false;
+
+  const modelEntry = capabilities.models?.[modelId];
+  if (modelEntry?.denyReason) return false;
+  if (modelEntry?.structuredOutput === true) return true;
+  if (modelEntry?.structuredOutput === false) return false;
+
   if (!capabilities.structuredOutput && !capabilities.structuredOutputWithTools) {
     return false;
   }
-  const modelEntry = capabilities.models?.[modelId];
-  if (modelEntry?.denyReason) return false;
-  if (modelEntry?.structuredOutput === false) return false;
   return true;
 }

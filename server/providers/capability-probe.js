@@ -19,6 +19,8 @@ import { buildAnthropicProvider } from '../generations/anthropic/provider-runtim
 import { resolveModelApi } from '../generations/resolve-model-api.js';
 import { openAiMessagesToCoreMessages } from '../generations/anthropic/openai-to-core-messages.js';
 import { mapOpenAiToolChoice, mapOpenAiTools } from '../generations/anthropic/openai-tools.js';
+import { resolveOpenCodeZenUpstreamUrl } from './opencode-zen.js';
+import { sanitizeCompletionBodyForProvider } from './sanitize-completion-body.js';
 
 const MAX_MODELS_PER_PROBE = 8;
 const MODEL_PROBE_TIMEOUT_MS = 25_000;
@@ -48,6 +50,144 @@ const DUMMY_TOOL = {
     parameters: { type: 'object', properties: {} },
   },
 };
+
+/**
+ * @param {{ profile: { baseUrl: string }, paths: { chatCompletionsPath: string } }} runtime
+ */
+function resolveProbeChatCompletionsUrl(runtime) {
+  return resolveOpenCodeZenUpstreamUrl(
+    runtime.profile.baseUrl,
+    runtime.paths.chatCompletionsPath,
+  );
+}
+
+/**
+ * Pick an openai-v1 catalog model for structured-output HTTP probes on mixed gateways.
+ *
+ * @param {object} runtime
+ * @param {Array<{ id: string }>} catalog
+ * @param {{ selectedModelId?: string }} [options]
+ */
+function findOpenAiModelForStructuredProbe(runtime, catalog, options = {}) {
+  const catalogById = new Map(catalog.map((m) => [m.id, m]));
+
+  const explicitId =
+    typeof options.modelId === 'string' && options.modelId.trim()
+      ? options.modelId.trim()
+      : undefined;
+  if (explicitId) {
+    const row = catalogById.get(explicitId) || { id: explicitId };
+    if (resolveModelApi(runtime, row.id, row) === 'openai-v1') {
+      return row.id;
+    }
+  }
+
+  const prioritized = prioritizeModelIds(
+    catalog.map((m) => m.id),
+    options.selectedModelId,
+    catalog,
+  );
+  for (const id of prioritized) {
+    const row = catalogById.get(id) || { id };
+    if (resolveModelApi(runtime, row.id, row) === 'openai-v1') {
+      return id;
+    }
+  }
+  return null;
+}
+
+/**
+ * Build probe request bodies with provider-specific field sanitization.
+ *
+ * @param {object} runtime
+ * @param {string} probeModelId
+ * @param {object} responseFormat
+ * @param {{ stream?: boolean, tools?: unknown[], tool_choice?: string }} [extra]
+ */
+function buildStructuredProbeBody(runtime, probeModelId, responseFormat, extra = {}) {
+  const base = sanitizeCompletionBodyForProvider(
+    {
+      model: probeModelId,
+      messages: [{ role: 'user', content: 'Reply with JSON: {"ok":true}' }],
+      max_tokens: 64,
+      stream: extra.stream === true,
+      response_format: responseFormat,
+      ...(extra.tools ? { tools: extra.tools, tool_choice: extra.tool_choice ?? 'auto' } : {}),
+    },
+    runtime.profile,
+    null,
+  );
+  return base;
+}
+
+/**
+ * HTTP probes for response_format on an openai-v1 chat completions path.
+ * Tries json_schema (non-strict) first, then json_object when schema mode is rejected.
+ *
+ * @param {object} runtime
+ * @param {string} probeModelId
+ */
+async function runStructuredOutputHttpProbe(runtime, probeModelId) {
+  const url = resolveProbeChatCompletionsUrl(runtime);
+  const jsonSchemaFormat = {
+    type: 'json_schema',
+    json_schema: {
+      name: 'probe_ok',
+      strict: false,
+      schema: PROBE_SCHEMA,
+    },
+  };
+  const jsonObjectFormat = { type: 'json_object' };
+
+  const structuredOnlySchema = await postStructuredProbeCompletion({
+    url,
+    headers: runtime.headers,
+    body: buildStructuredProbeBody(runtime, probeModelId, jsonSchemaFormat),
+  });
+
+  let structuredOnly = structuredOnlySchema;
+  let usedJsonObjectFallback = false;
+  if (!structuredOnly.ok) {
+    structuredOnly = await postStructuredProbeCompletion({
+      url,
+      headers: runtime.headers,
+      body: buildStructuredProbeBody(runtime, probeModelId, jsonObjectFormat),
+    });
+    usedJsonObjectFallback = structuredOnly.ok;
+  }
+
+  const withTools = await postStructuredProbeCompletion({
+    url,
+    headers: runtime.headers,
+    body: buildStructuredProbeBody(runtime, probeModelId, jsonSchemaFormat, {
+      tools: [DUMMY_TOOL],
+      tool_choice: 'auto',
+    }),
+  });
+
+  const streaming = await postStructuredProbeCompletion({
+    url,
+    headers: runtime.headers,
+    body: buildStructuredProbeBody(runtime, probeModelId, jsonSchemaFormat, {
+      stream: true,
+      tools: [DUMMY_TOOL],
+      tool_choice: 'auto',
+    }),
+  });
+
+  const probeError =
+    !structuredOnly.ok && !withTools.ok
+      ? structuredOnly.error || withTools.error || `HTTP ${structuredOnly.status}`
+      : null;
+
+  return {
+    structuredOnly,
+    withTools,
+    streaming,
+    probeError,
+    usedJsonObjectFallback,
+  };
+}
 
 /**
  * @param {string[]} modelIds
@@ -328,7 +468,7 @@ async function probeModelCapabilities(modelRow, runtime, signal) {
   }
 
   const modelId = modelRow.id;
-  const url = `${runtime.profile.baseUrl}${runtime.paths.chatCompletionsPath}`;
+  const url = resolveProbeChatCompletionsUrl(runtime);
 
   const chatBody = {
     model: modelId,
@@ -457,9 +597,12 @@ function isCatalogModelLoaded(row) {
  * @param {{ modelId?: string, selectedModelId?: string }} [options]
  */
 export async function resolveStructuredProbeModelId(providerId, options = {}) {
+  const runtime = await getProviderRuntime(providerId);
   const modelsResponse = await proxyModels(providerId);
   const catalog = Array.isArray(modelsResponse.data) ? modelsResponse.data : [];
-  const loadedIds = catalog.filter(isCatalogModelLoaded).map((m) => m.id);
+  const isLmStudio = runtime.profile.apiKind === 'lm-studio-v0';
+  const candidateRows = isLmStudio ? catalog.filter(isCatalogModelLoaded) : catalog;
+  const candidateIds = candidateRows.map((m) => m.id);
 
   const explicit =
     typeof options.modelId === 'string' && options.modelId.trim()
@@ -467,10 +610,11 @@ export async function resolveStructuredProbeModelId(providerId, options = {}) {
       : undefined;
 
   if (explicit) {
-    if (!loadedIds.includes(explicit)) {
-      throw new Error(
-        `Model "${explicit}" is not loaded. Load it in your backend, then run the structured-output probe again.`,
-      );
+    if (!candidateIds.includes(explicit)) {
+      const msg = isLmStudio
+        ? `Model "${explicit}" is not loaded. Load it in your backend, then run the structured-output probe again.`
+        : `Model "${explicit}" was not found in the provider catalog. Refresh models, then run the structured-output probe again.`;
+      throw new Error(msg);
     }
     return explicit;
   }
@@ -480,11 +624,12 @@ export async function resolveStructuredProbeModelId(providerId, options = {}) {
       ? options.selectedModelId.trim()
       : undefined;
 
-  const pick = prioritizeModelIds(loadedIds, selected, catalog)[0];
+  const pick = prioritizeModelIds(candidateIds, selected, catalog)[0];
   if (!pick) {
-    throw new Error(
-      'No loaded model found. Load a model in LM Studio (or your backend), then run the structured-output probe again.',
-    );
+    const msg = isLmStudio
+      ? 'No loaded model found. Load a model in LM Studio (or your backend), then run the structured-output probe again.'
+      : 'No models found in provider catalog. Refresh models, then run the structured-output probe again.';
+    throw new Error(msg);
   }
   return pick;
 }
@@ -545,79 +690,38 @@ export async function probeProviderCapabilities(id, options = {}) {
       };
     }
 
+    const openAiProbeModelId = findOpenAiModelForStructuredProbe(runtime, catalog, options);
+    if (openAiProbeModelId) {
+      const probeResults = await runStructuredOutputHttpProbe(runtime, openAiProbeModelId);
+      models[openAiProbeModelId] = {
+        ...(models[openAiProbeModelId] || {}),
+        structuredOutput: probeResults.withTools.ok || probeResults.structuredOnly.ok,
+        denyReason: null,
+      };
+      return writeCapabilities(id, {
+        ...existing,
+        providerId: id,
+        probedAt: new Date().toISOString(),
+        apiKind: runtime.profile.apiKind,
+        structuredOutput: probeResults.structuredOnly.ok,
+        structuredOutputWithTools: probeResults.withTools.ok,
+        structuredOutputStreaming: probeResults.streaming.ok,
+        probeError: probeResults.probeError,
+        models,
+      });
+    }
+
     return writeCapabilities(id, {
       ...existing,
       providerId: id,
       probedAt: new Date().toISOString(),
       apiKind: runtime.profile.apiKind,
-      structuredOutput: false,
-      structuredOutputWithTools: false,
-      structuredOutputStreaming: false,
-      probeError: ANTHROPIC_STRUCTURED_PROBE_MSG,
       models,
     });
   }
 
-  const url = `${runtime.profile.baseUrl}${runtime.paths.chatCompletionsPath}`;
   const probeModelId = await resolveStructuredProbeModelId(id, options);
-
-  const baseMessages = [{ role: 'user', content: 'Reply with JSON: {"ok":true}' }];
-  const responseFormat = {
-    type: 'json_schema',
-    json_schema: {
-      name: 'probe_ok',
-      strict: true,
-      schema: PROBE_SCHEMA,
-    },
-  };
-
-  const structuredOnly = await postStructuredProbeCompletion({
-    url,
-    headers: runtime.headers,
-    body: {
-      model: probeModelId,
-      messages: baseMessages,
-      max_tokens: 16,
-      temperature: 0,
-      stream: false,
-      response_format: responseFormat,
-    },
-  });
-
-  const withTools = await postStructuredProbeCompletion({
-    url,
-    headers: runtime.headers,
-    body: {
-      model: probeModelId,
-      messages: baseMessages,
-      max_tokens: 16,
-      temperature: 0,
-      stream: false,
-      response_format: responseFormat,
-      tools: [DUMMY_TOOL],
-      tool_choice: 'auto',
-    },
-  });
-
-  const streaming = await postStructuredProbeCompletion({
-    url,
-    headers: runtime.headers,
-    body: {
-      model: probeModelId,
-      messages: baseMessages,
-      max_tokens: 16,
-      temperature: 0,
-      stream: true,
-      response_format: responseFormat,
-      tools: [DUMMY_TOOL],
-      tool_choice: 'auto',
-    },
-  });
-
-  const probeError =
-    !structuredOnly.ok && !withTools.ok
-      ? structuredOnly.error || withTools.error || `HTTP ${structuredOnly.status}`
-      : null;
+  const probeResults = await runStructuredOutputHttpProbe(runtime, probeModelId);
 
   const existing = await readCapabilities(id);
   const models = { ...existing.models };
@@ -625,7 +729,7 @@ export async function probeProviderCapabilities(id, options = {}) {
   if (probeModelId) {
     models[probeModelId] = {
       ...(models[probeModelId] || {}),
-      structuredOutput: withTools.ok || structuredOnly.ok,
+      structuredOutput: probeResults.withTools.ok || probeResults.structuredOnly.ok,
       denyReason: null,
     };
   }
@@ -635,10 +739,10 @@ export async function probeProviderCapabilities(id, options = {}) {
     providerId: id,
     probedAt: new Date().toISOString(),
     apiKind: runtime.profile.apiKind,
-    structuredOutput: structuredOnly.ok,
-    structuredOutputWithTools: withTools.ok,
-    structuredOutputStreaming: streaming.ok,
-    probeError,
+    structuredOutput: probeResults.structuredOnly.ok,
+    structuredOutputWithTools: probeResults.withTools.ok,
+    structuredOutputStreaming: probeResults.streaming.ok,
+    probeError: probeResults.probeError,
     models,
   });
 }

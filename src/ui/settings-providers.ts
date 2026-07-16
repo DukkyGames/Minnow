@@ -4,7 +4,10 @@
 
 import { isServerStorageMode } from '../config/storage-mode';
 import { fetchModels } from '../api/models';
-import { findLoadedModelIdForProvider } from '../providers/model-capabilities';
+import {
+  findLoadedModelIdForProvider,
+  findProbeModelIdForProvider,
+} from '../providers/model-capabilities';
 import { getDefaultPaths, pathsForProvider } from '../providers/paths';
 import type { ApiKind, AuthStyle, ProviderPublic } from '../providers/types';
 import {
@@ -29,6 +32,31 @@ import {
 } from './settings-controls';
 import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
+import { readDefaultModelBinding, resolveEffectiveChatModelBinding } from './default-model';
+
+/** Prefer the top-bar #modelSelect model for this provider, then the active chat binding. */
+function resolveProbePreferredModelId(providerId: string): string | undefined {
+  const fromDefault = readDefaultModelBinding();
+  if (fromDefault.providerId === providerId && fromDefault.modelId) {
+    return fromDefault.modelId;
+  }
+  return undefined;
+}
+
+async function resolveProbePreferredModelIdAsync(
+  providerId: string,
+): Promise<string | undefined> {
+  const fromTopBar = resolveProbePreferredModelId(providerId);
+  if (fromTopBar) return fromTopBar;
+
+  const { getActiveChat } = await import('../state/sessions');
+  const chat = getActiveChat();
+  const binding = resolveEffectiveChatModelBinding(chat);
+  if (binding.providerId === providerId && binding.modelId) {
+    return binding.modelId;
+  }
+  return undefined;
+}
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -722,8 +750,12 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
   return form;
 }
 
-function formatStructuredOutputBadge(caps: ProviderCapabilities | null): string {
-  const badge = structuredOutputBadge(caps);
+function formatStructuredOutputBadge(
+  caps: ProviderCapabilities | null,
+  providerId?: string,
+): string {
+  const modelId = providerId ? resolveProbePreferredModelId(providerId) : undefined;
+  const badge = structuredOutputBadge(caps, modelId);
   if (badge === 'yes') return 'Structured output: yes';
   if (badge === 'no') return 'Structured output: no';
   return 'Structured output: unknown';
@@ -757,7 +789,7 @@ function createProviderSettingsRow(
     el(
       'span',
       'settings-badge settings-badge--muted',
-      formatStructuredOutputBadge(capabilities),
+      formatStructuredOutputBadge(capabilities, provider.id),
     ),
   );
 
@@ -1030,14 +1062,13 @@ function bindProvidersListActions(listEl: HTMLElement): void {
         try {
           const { providers } = await listProviders();
           const provider = providers.find((p) => p.id === modelProbeId);
-          const { getActiveChat } = await import('../state/sessions');
-          const chat = getActiveChat();
-          let selectedModelId: string | undefined;
-          if (chat.providerId?.trim() === modelProbeId && chat.modelId?.trim()) {
-            selectedModelId = chat.modelId.trim();
-          }
+          const selectedModelId = await resolveProbePreferredModelIdAsync(modelProbeId);
           if (provider?.apiKind === 'lm-studio-v0') {
-            const modelId = findLoadedModelIdForProvider(modelProbeId, selectedModelId);
+            const modelId = findProbeModelIdForProvider(
+              modelProbeId,
+              selectedModelId,
+              provider.apiKind,
+            );
             if (!modelId) {
               setProviderEditFormError(modelProbeId, NO_LOADED_MODEL_PROBE_MSG);
               setStatus('err', NO_LOADED_MODEL_PROBE_MSG);
@@ -1069,13 +1100,14 @@ function bindProvidersListActions(listEl: HTMLElement): void {
     if (structuredProbeId) {
       void (async () => {
         try {
-          const { getActiveChat } = await import('../state/sessions');
-          const chat = getActiveChat();
-          let selectedModelId: string | undefined;
-          if (chat.providerId?.trim() === structuredProbeId && chat.modelId?.trim()) {
-            selectedModelId = chat.modelId.trim();
-          }
-          const modelId = findLoadedModelIdForProvider(structuredProbeId, selectedModelId);
+          const { providers } = await listProviders();
+          const provider = providers.find((p) => p.id === structuredProbeId);
+          const selectedModelId = await resolveProbePreferredModelIdAsync(structuredProbeId);
+          const modelId = findProbeModelIdForProvider(
+            structuredProbeId,
+            selectedModelId,
+            provider?.apiKind,
+          );
           if (!modelId) {
             setProviderEditFormError(structuredProbeId, NO_LOADED_MODEL_PROBE_MSG);
             setStatus('err', NO_LOADED_MODEL_PROBE_MSG);
@@ -1088,7 +1120,7 @@ function bindProvidersListActions(listEl: HTMLElement): void {
           );
           await probeProviderCapabilities(structuredProbeId, {
             modelId,
-            selectedModelId,
+            selectedModelId: selectedModelId ?? modelId,
           });
           setStatus('ok', `Structured output probed for ${structuredProbeId}`);
           await renderProvidersSettingsSection();
