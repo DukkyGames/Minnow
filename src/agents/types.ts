@@ -97,6 +97,8 @@ export interface SubAgentsFile {
   progressStallMs?: number;
   /** Heartbeat dead threshold D (ms); observe-only until Phase 2. */
   heartbeatDeadMs?: number;
+  /** Identical tool+args calls before watchdog flags repetition; `0` disables (default 5). */
+  duplicateToolCallThreshold?: number;
   defaultMaxInputTokens?: number | null;
   defaultContextEnforcementPolicy?: ContextEnforcementPolicy;
   defaultSummarySchema?: string;

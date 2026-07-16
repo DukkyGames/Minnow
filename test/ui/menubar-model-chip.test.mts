@@ -4,6 +4,10 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import {
+  createEmptyChatObject,
+  setSessionStateForTests,
+} from '../../src/state/sessions.ts';
 
 describe('menubar model chip', () => {
   test('syncComposerModelTriggers splits model and provider on menubar expand', async () => {
@@ -22,6 +26,9 @@ describe('menubar model chip', () => {
     const prevWindow = globalThis.window;
     (globalThis as { document: Document }).document = doc as unknown as Document;
     (globalThis as { window: Window }).window = win as unknown as Window & typeof globalThis.window;
+
+    const chat = createEmptyChatObject('lmstudio\u001fqwen2.5-7b');
+    setSessionStateForTests({ chats: [chat], activeId: chat.id });
 
     try {
       const { initMenubarModelChip } = await import('../../src/os/menubar-model-chip.ts');
@@ -47,6 +54,7 @@ describe('menubar model chip', () => {
       assert.ok(expand);
       assert.equal(expand.getAttribute('aria-hidden'), 'true');
     } finally {
+      setSessionStateForTests(null);
       (globalThis as { document: Document }).document = prevDocument;
       (globalThis as { window: Window }).window = prevWindow;
     }
@@ -69,6 +77,9 @@ describe('menubar model chip', () => {
     (globalThis as { document: Document }).document = doc as unknown as Document;
     (globalThis as { window: Window }).window = win as unknown as Window & typeof globalThis.window;
 
+    const chat = createEmptyChatObject('qwen/qwen2.5-7b');
+    setSessionStateForTests({ chats: [chat], activeId: chat.id });
+
     try {
       const { initMenubarModelChip } = await import('../../src/os/menubar-model-chip.ts');
       initMenubarModelChip(doc.getElementById('osMenubarModelChip')!);
@@ -81,6 +92,7 @@ describe('menubar model chip', () => {
       assert.equal(expand.getAttribute('aria-hidden'), 'false');
       assert.ok(expand.style.left);
     } finally {
+      setSessionStateForTests(null);
       (globalThis as { document: Document }).document = prevDocument;
       (globalThis as { window: Window }).window = prevWindow;
     }

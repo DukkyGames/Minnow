@@ -77,6 +77,7 @@ import {
   registerWatchdogHandlers,
   resetWatchdogHandlers,
   resetWatchdogState,
+  setRepetitionThresholds,
   setRunLifecycle,
   startWatchdog,
   stopWatchdog,
@@ -462,6 +463,9 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
       heartbeatIntervalMs: config.heartbeatIntervalMs,
       progressStallMs: config.progressStallMs,
       heartbeatDeadMs: config.heartbeatDeadMs,
+    });
+    setRepetitionThresholds({
+      duplicateToolCallThreshold: config.duplicateToolCallThreshold,
     });
     bindRunSupervision(run.runId, run);
     startHeartbeat(run.runId, () => emitSubAgentRunUpdated(run));

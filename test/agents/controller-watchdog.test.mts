@@ -14,6 +14,7 @@ import {
 import {
   isNonMutatingSubAgentRun,
   resetWatchdogState,
+  setRepetitionThresholds,
   setWatchdogMonotonicNow,
   stopWatchdog,
   tickWatchdog,
@@ -395,10 +396,36 @@ describe('controller watchdog', () => {
     recordToolCallForRun(FIXED_RUN_ID, 'grep', args);
     recordToolCallForRun(FIXED_RUN_ID, 'grep', args);
     recordToolCallForRun(FIXED_RUN_ID, 'grep', args);
+    recordToolCallForRun(FIXED_RUN_ID, 'grep', args);
+    recordToolCallForRun(FIXED_RUN_ID, 'grep', args);
     await flushAsync();
 
     const run = getSubAgentRun(FIXED_RUN_ID);
     assert.equal(run?.status, 'cancelled');
     assert.match(run?.error ?? '', /watchdog_tier2:duplicate_tool/);
+  });
+
+  test('duplicate tool threshold 0 disables repetition detection', async () => {
+    setSubAgentRunnerFactory(() => createMockSubAgentRunner({ delayMs: 5_000 }));
+
+    await spawnSubAgent({
+      type: 'shell',
+      task: 'No repetition guard',
+      wait: false,
+      parentChatId: PARENT_CHAT,
+      parentTurnId: 'turn-watchdog-5',
+      category: 'build',
+    });
+
+    setRepetitionThresholds({ duplicateToolCallThreshold: 0 });
+
+    const args = { pattern: 'auth' };
+    for (let i = 0; i < 8; i++) {
+      recordToolCallForRun(FIXED_RUN_ID, 'grep', args);
+    }
+    await flushAsync();
+
+    const run = getSubAgentRun(FIXED_RUN_ID);
+    assert.equal(run?.status, 'running');
   });
 });
