@@ -387,10 +387,6 @@
 }
 
 @media (max-width: 600px) {
-  .composer-controls {
-    flex-wrap: wrap;
-  }
-
   #expertSelect {
     max-width: 100%;
     flex: 1 1 8rem;

@@ -11,6 +11,7 @@ import {
   isOrchestratePlanScreenSessionActive,
   isOrchestratePlanScreenSuppressingChatDom,
   isOrchestratePlanScreenSuspendedForChat,
+  removeOrchestratePlanScreenSuspendedBanner,
   restoreOrchestratePlanScreenSessionFromChat,
   showOrchestratePlanScreenSuspendedBanner,
   teardownOrchestratePlanScreen,
@@ -197,6 +198,10 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
     })();
     if (!foreignSuspendedPlan) {
       teardownOrchestratePlanScreen();
+    } else {
+      // Banner is pinned on .chat-viewport (not #chatArea) — clear it when foregrounding
+      // another chat while a Super Plan session stays suspended in the background.
+      removeOrchestratePlanScreenSuspendedBanner();
     }
   } else if (codeMount && isOrchestratePlanScreenMounted()) {
     teardownOrchestratePlanScreenDom();

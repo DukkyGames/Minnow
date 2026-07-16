@@ -3,11 +3,14 @@
  */
 
 import { isActiveChatStreaming } from '../chat/streaming-state';
+import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
 import { stopGeneration } from '../chat/stop-generation';
 import { describeToolInvocation } from '../tools/describe-invocation';
 import type { Chat } from '../types';
 import { getActiveChat } from '../state/sessions';
 import { formatBoardOnboardingPlanDisplay } from './orchestrate-board-plan-display';
+import { BOARD_ONBOARDING_QUESTIONS_ID } from './orchestrate-board-onboarding-questions';
+import { isAskQuestionModalOpenForChat } from './question-cards-modal';
 import {
   getBoardGitSetupPromptKind,
   isBoardGitSetupPromptActive,
@@ -317,8 +320,13 @@ export function syncBoardOnboardingBusyUI(
   const planSelect = wrap.querySelector('#boardOnboardingPlanSelect') as HTMLSelectElement | null;
 
   const busy = phase !== 'idle';
-  const showLoader = phase === 'plans' || phase === 'git-setup' || phase === 'init';
-  const showGitPrompt = phase === 'git-prompt';
+  const questionsActive =
+    isAskQuestionModalOpenForChat(chat.id) &&
+    Boolean(wrap.querySelector(`#${BOARD_ONBOARDING_QUESTIONS_ID} .question-cards-panel`));
+  let showLoader =
+    !questionsActive &&
+    (phase === 'plans' || phase === 'git-setup' || phase === 'init');
+  const showGitPrompt = !questionsActive && phase === 'git-prompt';
 
   wrap.dataset.boardOnboardingBusy = phase === 'idle' ? '' : phase;
   panel?.classList.toggle('board-onboarding__panel--busy', busy);
@@ -391,6 +399,7 @@ export function wireBoardOnboardingInteractions(
     void import('./orchestrate-board-setup-banner').then((m) =>
       m.syncBoardSetupReturnBanner(),
     );
+    notifyAskQuestionDisplayContextChanged();
   });
 }
 

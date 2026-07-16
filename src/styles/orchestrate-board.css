@@ -1757,6 +1757,20 @@ button.board-header__activity {
   margin-top: 4px;
 }
 
+.board-onboarding__questions {
+  width: 100%;
+  max-width: min(36rem, 100%);
+  margin: 0 auto;
+}
+
+.board-onboarding__questions[hidden] {
+  display: none;
+}
+
+.board-onboarding__questions .question-cards-panel--embedded {
+  width: 100%;
+}
+
 .board-onboarding__footer {
   display: flex;
   flex-wrap: wrap;

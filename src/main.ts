@@ -119,6 +119,10 @@ import {
   isOrchestratePlanScreenSuppressingChatDom,
   resolveOrchestratePlanScreenQuestionHost,
 } from './ui/orchestrate-plan-screen';
+import {
+  isBoardOnboardingSuppressingChatDom,
+  resolveBoardOnboardingQuestionHost,
+} from './ui/orchestrate-board-onboarding-questions';
 import { subscribeInstances } from './os/instances';
 import { bootOrchestrateBoardResume } from './chat/orchestrate/board-boot-resume';
 import { initBoardLogDiskSink } from './state/board-log-disk.ts';
@@ -213,8 +217,12 @@ function registerServiceWorker(): void {
 /** Boot app: sessions, settings, sidebar, models, first paint. */
 export async function initApp(): Promise<void> {
   bindAskQuestionPlanScreenHooks({
-    resolveQuestionHost: resolveOrchestratePlanScreenQuestionHost,
-    isSuppressingChatDom: (chatId) => isOrchestratePlanScreenSuppressingChatDom(chatId),
+    resolveQuestionHost: (chatId) =>
+      resolveOrchestratePlanScreenQuestionHost(chatId) ??
+      resolveBoardOnboardingQuestionHost(chatId),
+    isSuppressingChatDom: (chatId) =>
+      isOrchestratePlanScreenSuppressingChatDom(chatId) ||
+      isBoardOnboardingSuppressingChatDom(chatId),
   });
   subscribeInstances(() => {
     notifyAskQuestionDisplayContextChanged();

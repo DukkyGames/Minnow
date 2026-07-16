@@ -9,6 +9,7 @@ import {
   isDesktopResearchActive,
 } from '../os/desktop-state';
 import { getForegroundAppId } from '../os/instances';
+import { shouldPaintDesktopChatSurface } from './chat-mount';
 
 const GLOBAL_PROMPT_HOST_IDS = new Set(['globalToolApprovalHost', 'globalQuestionHost']);
 
@@ -71,7 +72,7 @@ export function resolveToolApprovalHost(): HTMLElement | null {
   const desktopHost = document.getElementById('desktopToolApprovalHost');
   const globalHost = document.getElementById('globalToolApprovalHost');
 
-  if (isDesktopChatActive()) {
+  if (shouldPaintDesktopChatSurface()) {
     return pickPromptHost([desktopHost, globalHost, codeHost, chatHost]);
   }
   if (isLegacyChatAppOpen()) {
@@ -87,7 +88,7 @@ export function resolveQuestionHost(): HTMLElement | null {
   const desktopHost = document.getElementById('desktopQuestionHost');
   const globalHost = document.getElementById('globalQuestionHost');
 
-  if (isDesktopChatActive()) {
+  if (shouldPaintDesktopChatSurface()) {
     return pickPromptHost([desktopHost, globalHost, codeHost, chatHost]);
   }
   if (isLegacyChatAppOpen()) {
@@ -98,7 +99,7 @@ export function resolveQuestionHost(): HTMLElement | null {
 
 /** Composer shell that should hide its input row while a prompt strip is open. */
 export function resolvePromptComposerShell(): HTMLElement | null {
-  if (isDesktopChatActive()) {
+  if (shouldPaintDesktopChatSurface()) {
     return (
       document.querySelector('.mn-os-composer-dock') ??
       document.getElementById('desktopComposerRoot')

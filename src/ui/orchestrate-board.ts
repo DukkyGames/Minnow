@@ -144,6 +144,7 @@ import { kickoffOrchestrateBoardBuild } from './orchestrate-board-kickoff';
 import {
   isBoardKickoffInProgress,
 } from './orchestrate-board-onboarding-state';
+import { BOARD_ONBOARDING_QUESTIONS_ID } from './orchestrate-board-onboarding-questions';
 import {
   createBoardGitSetupPrompt,
   createBoardOnboardingHeroIcon,
@@ -3070,6 +3071,11 @@ export async function mountBoardOnboardingPanel(
 
   const gitPrompt = createBoardGitSetupPrompt();
 
+  const questionsHost = document.createElement('div');
+  questionsHost.id = BOARD_ONBOARDING_QUESTIONS_ID;
+  questionsHost.className = 'board-onboarding__questions';
+  questionsHost.hidden = true;
+
   const setup = document.createElement('div');
   setup.className = 'board-onboarding__setup';
   setup.dataset.boardOnboardingSetup = '';
@@ -3168,6 +3174,7 @@ export async function mountBoardOnboardingPanel(
 
   panel.appendChild(loader);
   panel.appendChild(gitPrompt);
+  panel.appendChild(questionsHost);
   panel.appendChild(setup);
   panel.appendChild(footer);
 

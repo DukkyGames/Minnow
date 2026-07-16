@@ -8,7 +8,7 @@ import {
   getActiveComposerSurface,
 } from './composer-surface';
 import { isDesktopChatActive } from '../os/desktop-state';
-import { isChatAppForeground } from './chat-mount';
+import { isChatAppForeground, shouldPaintDesktopChatSurface } from './chat-mount';
 import { setStatus } from './status';
 import { refreshActiveBoardIfMounted } from './orchestrate-board';
 import { syncBackgroundStreamHint } from './composer-stream-hint';
@@ -116,7 +116,7 @@ export function setComposerStreamingMode(mode: ComposerStreamingMode): void {
   }
   if (sendBtn && !isStreaming) {
     const emptyDesktop =
-      isDesktopChatActive() && !composerInputHasText();
+      shouldPaintDesktopChatSurface() && !composerInputHasText();
     sendBtn.disabled = recoveryBlocked || emptyDesktop;
   }
 
@@ -129,7 +129,7 @@ export function syncDesktopComposerFishSwim(): void {
   const sendBtn = document.getElementById('desktopSendBtn');
   if (!composer) return;
 
-  const swimming = isDesktopChatActive() && isActiveChatStreaming();
+  const swimming = shouldPaintDesktopChatSurface() && isActiveChatStreaming();
   composer.classList.toggle('is-streaming', swimming);
   sendBtn?.setAttribute('aria-busy', swimming ? 'true' : 'false');
 }

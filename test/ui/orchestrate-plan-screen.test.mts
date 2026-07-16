@@ -328,6 +328,66 @@ describe('orchestrate plan screen', () => {
     );
   });
 
+  test('switching away from restored super-plan chat removes resume banner', () => {
+    const window = new Window();
+    globalThis.document = window.document;
+    globalThis.HTMLElement = window.HTMLElement;
+
+    mountCodeChatAreaForTests();
+    document.body.appendChild(
+      Object.assign(document.createElement('div'), { id: 'mainColumn' }),
+    );
+
+    const chat = createEmptyChatObject('sp-switch-away');
+    chat.modeId = 'super-plan';
+    chat.history.push({ role: 'user', content: 'Add OAuth login' });
+    const stages = createInitialSuperPlanStages();
+    stages.research.status = 'running';
+    chat.superPlan = {
+      slug: 'oauth',
+      prompt: 'Add OAuth login',
+      activeStage: 'research',
+      stages,
+      specPath: 'documentation/plans/references/oauth-spec.md',
+      researchPath: 'documentation/plans/references/oauth-research.md',
+      planPath: 'documentation/plans/oauth.md',
+      uiInvolved: false,
+    };
+    const otherChat = createEmptyChatObject('other-switch-away');
+    otherChat.id = 'other-switch-away-chat';
+    otherChat.history.push({ role: 'user', content: 'Hello from another chat' });
+    setSessionStateForTests({
+      version: 5,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat, otherChat],
+    });
+
+    assert.equal(restoreOrchestratePlanScreenSessionFromChat(chat), true);
+    renderChatFromHistory(chat);
+    assert.ok(document.getElementById(ORCHESTRATE_PLAN_BANNER_ID));
+
+    setSessionStateForTests({
+      version: 5,
+      activeId: otherChat.id,
+      sidebarCollapsed: false,
+      chats: [chat, otherChat],
+    });
+    renderChatFromHistory(otherChat);
+
+    assert.equal(
+      document.getElementById(ORCHESTRATE_PLAN_BANNER_ID),
+      null,
+      'resume banner should not follow other chats',
+    );
+    assert.match(
+      document.getElementById('chatArea')?.textContent ?? '',
+      /Hello from another chat/,
+    );
+    assert.equal(getOrchestratePlanScreenSession()?.chatId, chat.id);
+    assert.equal(getOrchestratePlanScreenSession()?.planScreenSuspended, true);
+  });
+
   test('restore session from persisted superPlan shows resume banner after reload', () => {
     const window = new Window();
     globalThis.document = window.document;

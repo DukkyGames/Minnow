@@ -164,7 +164,7 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
   gap: 8px;
   width: 100%;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* Plan / Super Plan caret menu is absolutely positioned below the mode strip */
@@ -197,8 +197,9 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
 }
 
 .input-bar--hub .composer-controls .mode-segmented {
-  flex: none;
+  flex: 0 1 auto;
   width: fit-content;
+  min-width: 0;
   max-width: 100%;
 }
 
@@ -896,22 +897,10 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
   }
 
   .input-bar--hub .composer-controls .mode-segmented {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
+    width: fit-content;
     min-width: 0;
     max-width: 100%;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .input-bar--hub .composer-controls .mode-segmented:has(.is-submenu-open) {
-    overflow: visible;
-  }
-
-  .input-bar--hub .composer-controls .mode-segmented::-webkit-scrollbar {
-    display: none;
   }
 
   .input-bar--hub .composer-run-target-wrap {
