@@ -103,6 +103,25 @@ describe('parseCompletionResponseBody', () => {
     const parsed = parseCompletionResponseBody(first + second);
     assert.equal(parsed.choices[0].message.content, 'done');
   });
+
+  it('prefers message.parsed over trailing generation end events', () => {
+    const structured = {
+      choices: [
+        {
+          message: {
+            content: '',
+            parsed: { summary: 'Done.', findings: [], artifacts: [] },
+          },
+          finish_reason: 'stop',
+        },
+      ],
+    };
+    const sse =
+      `data: ${JSON.stringify(structured)}\n\n` +
+      `event: end\ndata: ${JSON.stringify({ status: 'complete' })}\n\n`;
+    const parsed = parseCompletionResponseBody(sse);
+    assert.deepEqual(parsed.choices[0].message.parsed, structured.choices[0].message.parsed);
+  });
 });
 
 describe('extractFirstJsonValue', () => {

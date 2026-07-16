@@ -80,6 +80,9 @@
     "search_settings": true,
     "get_settings": true,
     "update_settings": true,
+    "get_appearance": true,
+    "update_appearance": true,
+    "upload_appearance_asset": true,
     "repo_map": true,
     "find_symbol": true,
     "who_calls": true,
@@ -89,7 +92,8 @@
     "list_mail": false,
     "draft_reply": false,
     "recall_chat_context": true,
-    "recall_turn_full": true
+    "recall_turn_full": true,
+    "read_diagnostics": false
   },
   "permissions": {
     "default": {
@@ -173,6 +177,9 @@
       "search_settings": "full",
       "get_settings": "full",
       "update_settings": "ask",
+      "get_appearance": "full",
+      "update_appearance": "ask",
+      "upload_appearance_asset": "ask",
       "repo_map": "full",
       "find_symbol": "full",
       "who_calls": "full",
@@ -182,7 +189,8 @@
       "list_mail": "off",
       "draft_reply": "off",
       "recall_chat_context": "ask",
-      "recall_turn_full": "ask"
+      "recall_turn_full": "ask",
+      "read_diagnostics": "off"
     }
   },
   "keys": {

@@ -992,6 +992,8 @@ export interface ChatCompletionChoice {
   delta?: ChatCompletionChoiceDelta;
   message?: {
     content?: string;
+    /** OpenAI structured-output JSON when `content` is empty. */
+    parsed?: unknown;
     reasoning?: string;
     reasoning_content?: string;
   };

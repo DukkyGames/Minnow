@@ -4,6 +4,12 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { defaultSubAgentRunner } from '../../src/agents/sub-agent-runner.ts';
+import { modelCache } from '../../src/app-state.ts';
+import { encodeModelSelectKey } from '../../src/lib/model-select-key.ts';
+import {
+  createEmptyChatObject,
+  setSessionStateForTests,
+} from '../../src/state/sessions.ts';
 import {
   resetSubAgentConfigCache,
   setRuntimeSubAgentOverrides,
@@ -71,10 +77,34 @@ describe('sub-agent runner OpenAI finalization', () => {
     setToolCallsMetaForTests({ useConstrainedDecoding: false });
     setProviderCapabilitiesForTests(PROVIDER_ID, CAPS);
     generationCounter = 0;
+
+    const parentChat = createEmptyChatObject(MODEL_ID);
+    parentChat.providerId = PROVIDER_ID;
+    parentChat.modelId = MODEL_ID;
+    setSessionStateForTests({
+      version: 2,
+      activeId: parentChat.id,
+      sidebarCollapsed: false,
+      chats: [parentChat],
+    });
+    modelCache.set(encodeModelSelectKey(PROVIDER_ID, MODEL_ID), {
+      id: MODEL_ID,
+      capabilities: {
+        vision: false,
+        tools: null,
+        streaming: null,
+        grammar: null,
+        reasoning: false,
+        contextLength: null,
+        loadState: null,
+      },
+    });
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    modelCache.clear();
+    setSessionStateForTests(null);
     resetCapabilitiesCache();
     resetToolCallsMetaCache();
     resetSubAgentConfigCache();

@@ -6,6 +6,7 @@
 import { fetchWorkAgentsList } from '../agents/work-agent-prompt-api';
 import type { WorkAgentDefinition } from '../agents/work-agent-types';
 import {
+  clampDuplicateToolCallThreshold,
   loadSubAgentConfig,
   saveSubAgentConfigToServer,
 } from '../agents/sub-agent-config';
@@ -389,7 +390,7 @@ async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
   const groupBody = appendSettingsGroup(
     mount,
     'Sub-agent limits',
-    'Global concurrency, timeouts, and check-in nudges for all sub-agent types.',
+    'Global concurrency, timeouts, check-in nudges, and watchdog repetition limits for all sub-agent types.',
     'agents.subAgents.limits',
   );
   const group = groupBody.closest('.settings-group');
@@ -399,7 +400,11 @@ async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
     patch: Partial<
       Pick<
         typeof config,
-        'enabled' | 'globalMaxConcurrent' | 'defaultTimeoutMs' | 'checkInNudgeMs'
+        | 'enabled'
+        | 'globalMaxConcurrent'
+        | 'defaultTimeoutMs'
+        | 'checkInNudgeMs'
+        | 'duplicateToolCallThreshold'
       >
     >,
   ): Promise<void> => {
@@ -447,6 +452,21 @@ async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
   nudgeWrap.appendChild(nudgeInput);
   nudgeWrap.appendChild(el('span', 'settings-kv-suffix', 'ms'));
 
+  const duplicateToolInput = document.createElement('input');
+  duplicateToolInput.type = 'number';
+  duplicateToolInput.className = 'settings-select settings-kv-input';
+  duplicateToolInput.min = '0';
+  duplicateToolInput.max = '256';
+  duplicateToolInput.step = '1';
+  duplicateToolInput.value = String(
+    config.duplicateToolCallThreshold ??
+      clampDuplicateToolCallThreshold(undefined),
+  );
+  duplicateToolInput.setAttribute(
+    'aria-label',
+    'Identical tool calls before watchdog flags repetition (0 disables)',
+  );
+
   groupBody.appendChild(
     createSettingsKvList(
       [
@@ -454,6 +474,7 @@ async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
         { term: 'Max concurrent', value: maxInput },
         { term: 'Default timeout', value: timeoutWrap },
         { term: 'Check-in nudge', value: nudgeWrap },
+        { term: 'Duplicate tool limit', value: duplicateToolInput },
       ],
       { className: 'settings-kv settings-kv--row' },
     ),
@@ -477,6 +498,13 @@ async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
     const value = raw <= 0 ? 0 : Math.min(1_800_000, Math.max(10_000, raw));
     nudgeInput.value = String(value);
     void persistGlobal({ checkInNudgeMs: value });
+  });
+  duplicateToolInput.addEventListener('change', () => {
+    const value = clampDuplicateToolCallThreshold(
+      Number(duplicateToolInput.value),
+    );
+    duplicateToolInput.value = String(value);
+    void persistGlobal({ duplicateToolCallThreshold: value });
   });
 }
 

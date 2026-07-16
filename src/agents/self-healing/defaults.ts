@@ -6,7 +6,7 @@ export const DEFAULT_SELF_HEALING_CONFIG = {
   enabled: false,
   tier1: {
     maxRestartsPerParentTurn: 2,
-    duplicateToolCallThreshold: 3,
+    duplicateToolCallThreshold: 5,
     sameErrorThreshold: 3,
     noProgressTurnThreshold: 4,
   },

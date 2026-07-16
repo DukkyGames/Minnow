@@ -28,7 +28,7 @@ import { setWorkspaceRoot } from '../../../server/workspace/root.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../../..');
-const SAMPLE_PATH = 'test/fixtures/sample.fake';
+const SAMPLE_PATH = 'sample.fake';
 const PAGE_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const SAMPLE_TEXT = [
   'export const MY_EXPORT = 42;',
@@ -71,15 +71,16 @@ async function seedFakeLspHome(homeDir) {
 
 describe('MIN-B9 bridge anchors', () => {
   let homeDir;
+  let workspaceDir;
 
   before(async () => {
     homeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-b9-bridge-'));
+    workspaceDir = path.join(homeDir, 'ws');
     await seedFakeLspHome(homeDir);
     await ensureBrainStore();
-    await setWorkspaceRoot(PROJECT_ROOT);
-    const abs = path.join(PROJECT_ROOT, SAMPLE_PATH);
-    await fs.mkdir(path.dirname(abs), { recursive: true });
-    await fs.writeFile(abs, SAMPLE_TEXT, 'utf8');
+    await fs.mkdir(workspaceDir, { recursive: true });
+    await setWorkspaceRoot(workspaceDir);
+    await fs.writeFile(path.join(workspaceDir, SAMPLE_PATH), SAMPLE_TEXT, 'utf8');
     await reindexCode({ files: [SAMPLE_PATH] });
   });
 
@@ -88,11 +89,11 @@ describe('MIN-B9 bridge anchors', () => {
     closeCodeDbForTests();
     delete process.env.MINNOW_HOME;
     resetMinnowHomeCache();
-    await fs.rm(homeDir, { recursive: true, force: true });
+    await fs.rm(homeDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   });
 
   it('explain_symbol reverse lookup returns anchoring wiki page', async () => {
-    const repo = brainWorkspaceKeyFromPath(PROJECT_ROOT);
+    const repo = brainWorkspaceKeyFromPath(workspaceDir);
     const symbolId = `${repo}:MY_EXPORT.callee`;
 
     await createPage({
@@ -117,7 +118,7 @@ describe('MIN-B9 bridge anchors', () => {
   });
 
   it('anchor drift flags page stale after symbol content_hash changes', async () => {
-    const repo = brainWorkspaceKeyFromPath(PROJECT_ROOT);
+    const repo = brainWorkspaceKeyFromPath(workspaceDir);
     const symbolId = `${repo}:caller`;
     const db = getCodeDb(repo);
 
@@ -146,7 +147,7 @@ describe('MIN-B9 bridge anchors', () => {
   });
 
   it('cross-repo anchors resolve via read_symbol', async () => {
-    const repo = brainWorkspaceKeyFromPath(PROJECT_ROOT);
+    const repo = brainWorkspaceKeyFromPath(workspaceDir);
     const db = getCodeDb(repo);
     const tsId = 'frontend:dispatchTelemetry';
     const pyId = 'backend:telemetry.dispatch';
@@ -180,20 +181,13 @@ describe('MIN-B9 bridge anchors', () => {
       usage_count: 0,
     });
 
-    const absTs = path.join(PROJECT_ROOT, 'test/fixtures/cross-repo-ts.fake');
-    const absPy = path.join(PROJECT_ROOT, 'test/fixtures/cross-repo-py.fake');
-    await fs.mkdir(path.dirname(absTs), { recursive: true });
-    await fs.writeFile(absTs, 'export function dispatchTelemetry() {}\n', 'utf8');
-    await fs.writeFile(absPy, 'def dispatch():\n    return 1\n', 'utf8');
+    const tsRel = 'cross-repo-ts.fake';
+    const pyRel = 'cross-repo-py.fake';
+    await fs.writeFile(path.join(workspaceDir, tsRel), 'export function dispatchTelemetry() {}\n', 'utf8');
+    await fs.writeFile(path.join(workspaceDir, pyRel), 'def dispatch():\n    return 1\n', 'utf8');
 
-    db.prepare('UPDATE symbols SET file = ? WHERE id = ?').run(
-      'test/fixtures/cross-repo-ts.fake',
-      tsId,
-    );
-    db.prepare('UPDATE symbols SET file = ? WHERE id = ?').run(
-      'test/fixtures/cross-repo-py.fake',
-      pyId,
-    );
+    db.prepare('UPDATE symbols SET file = ? WHERE id = ?').run(tsRel, tsId);
+    db.prepare('UPDATE symbols SET file = ? WHERE id = ?').run(pyRel, pyId);
 
     const resolved = await resolveAnchorsToCode([tsId, pyId]);
     assert.equal(resolved.length, 2);
@@ -202,7 +196,7 @@ describe('MIN-B9 bridge anchors', () => {
   });
 
   it('moving a page keeps anchors keyed by stable page_id', async () => {
-    const repo = brainWorkspaceKeyFromPath(PROJECT_ROOT);
+    const repo = brainWorkspaceKeyFromPath(workspaceDir);
     const symbolId = `${repo}:MY_EXPORT`;
     const moveId = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 

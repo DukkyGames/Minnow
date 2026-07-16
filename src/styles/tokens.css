@@ -1080,7 +1080,7 @@ body {
   --mn-border: rgba(46, 34, 24, 0.08);
   --mn-border-strong: rgba(46, 34, 24, 0.16);
   --mn-fg: #2e2218;
-  --mn-fg-muted: #9f948c;
+  --mn-fg-muted: #6f6550;
   --mn-fg-subtle: #c2b7af;
   --mn-fg-on-accent: #f9f0e9;
   --mn-accent: #c46820;
@@ -1138,8 +1138,12 @@ body {
 
   --cm-keyword: var(--mn-danger);
   --cm-title: var(--mn-accent-ink);
-  --cm-attr: var(--mn-accent);
+  --cm-attr: var(--mn-accent-ink);
   --cm-string: var(--mn-fg-muted);
+  --mn-syntax-command: var(--mn-accent-ink);
+  --mn-syntax-name: var(--mn-accent-ink);
+  --mn-syntax-inline: var(--mn-fg);
+  --mn-syntax-link: var(--mn-accent-ink);
   --mn-selection-bg: color-mix(in srgb, var(--mn-accent) 38%, var(--mn-surface-0));
 }
 
@@ -1230,7 +1234,7 @@ body {
   --mn-border: rgba(18, 26, 22, 0.08);
   --mn-border-strong: rgba(18, 26, 22, 0.16);
   --mn-fg: #121a16;
-  --mn-fg-muted: #8d9591;
+  --mn-fg-muted: #5d6b66;
   --mn-fg-subtle: #b3bbb7;
   --mn-fg-on-accent: #e9f6f0;
   --mn-accent: #1fa86a;
@@ -1288,8 +1292,12 @@ body {
 
   --cm-keyword: var(--mn-danger);
   --cm-title: var(--mn-accent-ink);
-  --cm-attr: var(--mn-accent);
+  --cm-attr: var(--mn-accent-ink);
   --cm-string: var(--mn-fg-muted);
+  --mn-syntax-command: var(--mn-accent-ink);
+  --mn-syntax-name: var(--mn-accent-ink);
+  --mn-syntax-inline: var(--mn-fg);
+  --mn-syntax-link: var(--mn-accent-ink);
   --mn-selection-bg: color-mix(in srgb, var(--mn-accent) 32%, var(--mn-surface-0));
 }
 

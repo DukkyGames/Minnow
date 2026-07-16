@@ -48,6 +48,15 @@ export function clampHeartbeatDeadMs(value: unknown, fallback = 30_000): number 
   return Math.min(300_000, Math.max(5_000, Math.round(n)));
 }
 
+/** Coerce duplicate-tool watchdog threshold to [0, 256]; `0` disables detection. */
+export function clampDuplicateToolCallThreshold(value: unknown, fallback = 5): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  const rounded = Math.round(n);
+  if (rounded <= 0) return 0;
+  return Math.min(256, rounded);
+}
+
 function cloneTypeConfig(raw: SubAgentTypeConfig): SubAgentTypeConfig {
   return {
     ...raw,
@@ -84,6 +93,9 @@ export function mergeSubAgentConfig(
     ),
     heartbeatDeadMs: clampHeartbeatDeadMs(
       user?.heartbeatDeadMs ?? defaults.heartbeatDeadMs,
+    ),
+    duplicateToolCallThreshold: clampDuplicateToolCallThreshold(
+      user?.duplicateToolCallThreshold ?? defaults.duplicateToolCallThreshold,
     ),
     defaultMaxInputTokens: user?.defaultMaxInputTokens ?? defaults.defaultMaxInputTokens,
     defaultContextEnforcementPolicy:
