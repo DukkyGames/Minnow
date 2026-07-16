@@ -3,11 +3,22 @@
  * sidebar / desktop rail search buttons. Results deep-link into the owning surface.
  */
 
-import { searchChats, type ChatSearchResult } from '../chat/chat-search';
+import {
+  filterChatsByWorkspacePath,
+  searchChats,
+  type ChatSearchResult,
+} from '../chat/chat-search';
 import { getChatsWorkspacePath, isChatsWorkspacePath } from '../lib/chats-workspace';
 import { getDesktopWorkspacePath, isDesktopWorkspacePath } from '../lib/desktop-workspace';
 import { sessionState } from '../state/sessions';
+import { getWorkspacePath } from '../state/workspace';
 import type { Chat } from '../types';
+import { createSettingsToggleRow } from './settings-switch';
+
+/** Where the popover was opened from — drives default search scope. */
+type ChatSearchContext = 'code' | 'desktop';
+
+const ALL_WORKSPACES_STORAGE_KEY = 'minnow.chatSearch.allWorkspaces';
 
 /** True when the chat opens on the desktop chat surface (assistant or desktop sandbox). */
 function isDesktopSurfaceChat(chat: Chat): boolean {
@@ -19,11 +30,60 @@ let popoverEl: HTMLDivElement | null = null;
 let anchorEl: HTMLElement | null = null;
 let inputEl: HTMLInputElement | null = null;
 let resultsEl: HTMLDivElement | null = null;
+let searchAllWorkspaces = false;
+let searchContext: ChatSearchContext = 'code';
 let open = false;
 let results: ChatSearchResult[] = [];
 let activeIndex = -1;
 let outsidePointerHandler: ((e: PointerEvent) => void) | null = null;
 let escapeHandler: ((e: KeyboardEvent) => void) | null = null;
+
+function readSearchAllWorkspacesPreference(): boolean {
+  try {
+    return localStorage.getItem(ALL_WORKSPACES_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function persistSearchAllWorkspacesPreference(value: boolean): void {
+  try {
+    localStorage.setItem(ALL_WORKSPACES_STORAGE_KEY, value ? 'true' : 'false');
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+function resolveSearchContext(anchor: HTMLElement): ChatSearchContext {
+  return anchor.id === 'btnDesktopChatSearch' ? 'desktop' : 'code';
+}
+
+function chatsForCurrentScope(): Chat[] {
+  const all = sessionState?.chats ?? [];
+  if (searchAllWorkspaces) return all;
+  if (searchContext === 'desktop') {
+    return all.filter(isDesktopSurfaceChat);
+  }
+  return filterChatsByWorkspacePath(all, getWorkspacePath());
+}
+
+function searchPlaceholder(): string {
+  if (searchAllWorkspaces) return 'Search all chats…';
+  if (searchContext === 'desktop') return 'Search desktop chats…';
+  return 'Search this workspace…';
+}
+
+function emptyQueryHint(): string {
+  if (searchAllWorkspaces) return 'Type to search chat titles and messages';
+  if (searchContext === 'desktop') return 'Type to search desktop chat titles and messages';
+  return 'Type to search chats in this workspace';
+}
+
+function noResultsMessage(): string {
+  if (searchAllWorkspaces) return 'No matching chats';
+  if (searchContext === 'desktop') return 'No matching desktop chats';
+  return 'No matching chats in this workspace';
+}
 
 function detachGlobalListeners(): void {
   if (outsidePointerHandler) {
@@ -45,6 +105,7 @@ export function closeChatSearchPopover(): void {
   anchorEl = null;
   inputEl = null;
   resultsEl = null;
+  searchContext = 'code';
   results = [];
   activeIndex = -1;
   popoverEl?.remove();
@@ -119,6 +180,13 @@ function setActiveIndex(next: number): void {
   rows[activeIndex].scrollIntoView({ block: 'nearest' });
 }
 
+function syncSearchInputPlaceholder(): void {
+  if (!inputEl) return;
+  const placeholder = searchPlaceholder();
+  inputEl.placeholder = placeholder;
+  inputEl.setAttribute('aria-label', placeholder);
+}
+
 function renderResults(query: string): void {
   if (!resultsEl) return;
   resultsEl.replaceChildren();
@@ -128,16 +196,16 @@ function renderResults(query: string): void {
     results = [];
     const hint = document.createElement('div');
     hint.className = 'chat-search-empty';
-    hint.textContent = 'Type to search chat titles and messages';
+    hint.textContent = emptyQueryHint();
     resultsEl.appendChild(hint);
     return;
   }
 
-  results = searchChats(sessionState?.chats ?? [], query);
+  results = searchChats(chatsForCurrentScope(), query);
   if (!results.length) {
     const empty = document.createElement('div');
     empty.className = 'chat-search-empty';
-    empty.textContent = 'No matching chats';
+    empty.textContent = noResultsMessage();
     resultsEl.appendChild(empty);
     return;
   }
@@ -167,7 +235,7 @@ function renderResults(query: string): void {
     name.textContent = chat.name;
     head.appendChild(name);
 
-    if (!isDesktop && chat.workspacePath) {
+    if (!isDesktop && chat.workspacePath && searchAllWorkspaces) {
       const ws = document.createElement('span');
       ws.className = 'chat-search-result__workspace';
       ws.textContent = workspaceBasename(chat.workspacePath);
@@ -221,19 +289,31 @@ function buildPopover(): HTMLDivElement {
   const input = document.createElement('input');
   input.type = 'text';
   input.className = 'chat-search-input';
-  input.placeholder = 'Search all chats…';
-  input.setAttribute('aria-label', 'Search all chats');
   input.addEventListener('input', () => renderResults(input.value));
   input.addEventListener('keydown', onInputKeydown);
+
+  const { row: scopeRow, input: scopeToggle } = createSettingsToggleRow('All workspaces', {
+    id: 'chatSearchAllWorkspaces',
+    checked: searchAllWorkspaces,
+    onChange: (checked) => {
+      searchAllWorkspaces = checked;
+      persistSearchAllWorkspacesPreference(checked);
+      syncSearchInputPlaceholder();
+      renderResults(input.value);
+    },
+  });
+  scopeRow.classList.add('chat-search-scope-toggle');
 
   const list = document.createElement('div');
   list.className = 'chat-search-results';
   list.setAttribute('role', 'listbox');
   list.setAttribute('aria-label', 'Matching chats');
 
-  popover.append(input, list);
+  popover.append(input, scopeRow, list);
   inputEl = input;
   resultsEl = list;
+  syncSearchInputPlaceholder();
+  scopeToggle.checked = searchAllWorkspaces;
   return popover;
 }
 
@@ -244,6 +324,9 @@ export function openChatSearchPopover(anchor: HTMLElement): void {
   // Prime the sandbox path caches so results classify desktop vs Code chats.
   void getChatsWorkspacePath();
   void getDesktopWorkspacePath();
+
+  searchContext = resolveSearchContext(anchor);
+  searchAllWorkspaces = readSearchAllWorkspacesPreference();
 
   popoverEl = buildPopover();
   document.body.appendChild(popoverEl);

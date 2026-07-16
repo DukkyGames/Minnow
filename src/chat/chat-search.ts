@@ -3,6 +3,7 @@
  * Pure matching/scoring — popover UI lives in ui/chat-search-popover.ts.
  */
 
+import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { isPlaceholderChatName } from './titles/placeholder';
 import type { Chat } from '../types';
 
@@ -155,6 +156,13 @@ export function scoreChat(chat: Chat, tokens: string[]): ChatSearchResult | null
     };
   }
   return best;
+}
+
+/** Keep only chats bound to the given workspace root (normalized path equality). */
+export function filterChatsByWorkspacePath(chats: Chat[], workspacePath: string): Chat[] {
+  const key = normalizeWorkspacePath(workspacePath);
+  if (!key) return chats;
+  return chats.filter((chat) => normalizeWorkspacePath(chat.workspacePath ?? '') === key);
 }
 
 /**

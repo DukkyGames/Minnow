@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { matchText, searchChats, tokenizeQuery } from '../../src/chat/chat-search.ts';
+import { filterChatsByWorkspacePath, matchText, searchChats, tokenizeQuery } from '../../src/chat/chat-search.ts';
 import type { Chat, Message } from '../../src/types.ts';
 
 function makeChat(overrides: Partial<Chat> & { id: string }): Chat {
@@ -161,5 +161,28 @@ describe('searchChats', () => {
     );
     assert.equal(searchChats(many, 'deploy').length, 30);
     assert.equal(searchChats(many, 'deploy', { limit: 5 }).length, 5);
+  });
+});
+
+describe('filterChatsByWorkspacePath', () => {
+  test('keeps chats whose workspacePath matches after normalization', () => {
+    const chats = [
+      makeChat({ id: 'a', workspacePath: '/repo/minnow', history: [user('a')] }),
+      makeChat({ id: 'b', workspacePath: '/repo/other', history: [user('b')] }),
+      makeChat({ id: 'c', workspacePath: '', history: [user('c')] }),
+    ];
+    const filtered = filterChatsByWorkspacePath(chats, '/repo/minnow/');
+    assert.deepEqual(
+      filtered.map((chat) => chat.id),
+      ['a'],
+    );
+  });
+
+  test('returns all chats when workspace path is empty', () => {
+    const chats = [
+      makeChat({ id: 'a', workspacePath: '/repo/a', history: [user('a')] }),
+      makeChat({ id: 'b', workspacePath: '/repo/b', history: [user('b')] }),
+    ];
+    assert.equal(filterChatsByWorkspacePath(chats, '').length, 2);
   });
 });

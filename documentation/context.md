@@ -908,12 +908,15 @@ New assistant chats default to `modeId: 'general'`, `workAgentAuto: true`, and t
 
 ### Chat search (sidebar + desktop rail)
 
-Fuzzy search across **all** chats (desktop assistant threads + Code workspace chats) from magnifier buttons in the Code sidebar header (`#btnChatSearch` in `index.html`, wired in [`src/ui/shell-handlers.ts`](../src/ui/shell-handlers.ts)) and the desktop chat rail header (`#btnDesktopChatSearch` built in [`src/os/desktop.ts`](../src/os/desktop.ts), wired in [`src/ui/desktop-chat-rail.ts`](../src/ui/desktop-chat-rail.ts)).
+Fuzzy search from magnifier buttons in the Code sidebar header (`#btnChatSearch` in `index.html`, wired in [`src/ui/shell-handlers.ts`](../src/ui/shell-handlers.ts)) and the desktop chat rail header (`#btnDesktopChatSearch` built in [`src/os/desktop.ts`](../src/os/desktop.ts), wired in [`src/ui/desktop-chat-rail.ts`](../src/ui/desktop-chat-rail.ts)).
+
+**Default scope:** Code sidebar searches **only the current workspace**; desktop rail searches **desktop surface chats** (chats sandbox + desktop workspace). An **All workspaces** toggle in the popover expands to every chat; preference persists in `localStorage` (`minnow.chatSearch.allWorkspaces`).
 
 | Concern | Location |
 |---------|----------|
-| Search core (pure) | [`src/chat/chat-search.ts`](../src/chat/chat-search.ts) — `searchChats()`: token AND-matching over titles + user/assistant message text; substring hits (word-start bonus) outrank bounded-gap subsequence fallbacks; title hits weighted 2× over message hits; recency tiebreak; snippet around the first match |
-| Popover UI | [`src/ui/chat-search-popover.ts`](../src/ui/chat-search-popover.ts) — anchored popover (input + keyboard-navigable results); results badge Chat vs Code (`isChatsWorkspacePath` \|\| `isDesktopWorkspacePath`) and deep-link via `launchChatWithThread` / `launchCodeWithChat` in [`src/os/chat-launch.ts`](../src/os/chat-launch.ts) |
+| Search core (pure) | [`src/chat/chat-search.ts`](../src/chat/chat-search.ts) — `searchChats()`: token AND-matching over titles + user/assistant message text; substring hits (word-start bonus) outrank bounded-gap subsequence fallbacks; title hits weighted 2× over message hits; recency tiebreak; snippet around the first match; `filterChatsByWorkspacePath()` for workspace-scoped lists |
+| Popover UI | [`src/ui/chat-search-popover.ts`](../src/ui/chat-search-popover.ts) — anchored popover (input + **All workspaces** toggle + keyboard-navigable results); results badge Chat vs Code (`isChatsWorkspacePath` \|\| `isDesktopWorkspacePath`); workspace basename shown only when searching all workspaces; deep-link via `launchChatWithThread` / `launchCodeWithChat` in [`src/os/chat-launch.ts`](../src/os/chat-launch.ts) |
+| Cross-workspace navigation | [`src/os/chat-launch.ts`](../src/os/chat-launch.ts) — `launchCodeWithChat` calls `executeWorkspaceSwitch` when the target chat belongs to a different project folder |
 | Styles | [`src/styles/chat-search.css`](../src/styles/chat-search.css) |
 
 Empty placeholder drafts (no history, `New chat` name) are excluded. **Tests:** `test/chat/chat-search.test.mts`.

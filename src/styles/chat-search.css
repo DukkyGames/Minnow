@@ -30,6 +30,17 @@
   border-color: var(--mn-border-strong);
 }
 
+.chat-search-scope-toggle {
+  padding: 4px 2px 2px;
+  border-bottom: none;
+  gap: 10px;
+}
+
+.chat-search-scope-toggle .settings-toggle-row__title {
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
 .chat-search-results {
   display: flex;
   flex-direction: column;
