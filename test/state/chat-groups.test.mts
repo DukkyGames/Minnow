@@ -17,6 +17,7 @@ import {
   getOrCreateBoardGroup,
   listBoardGroupChatIds,
   renameGroup,
+  resolveBoardRestoreGroupOnSwitch,
   toggleGroupCollapsed,
 } from '../../src/state/chat-groups.ts';
 import { initBoard } from '../../src/state/orchestrate-board-store.ts';
@@ -95,6 +96,34 @@ describe('chat groups', () => {
     sessionState.activeBoardGroupId = group.id;
     assert.equal(group.viewMode, 'board');
     assert.equal(sessionState.activeBoardGroupId, group.id);
+  });
+
+  test('resolveBoardRestoreGroupOnSwitch returns group when leaving task chat for planner', () => {
+    const planner = createEmptyChatObject('', WS);
+    planner.id = PLANNER_ID;
+    planner.modeId = 'orchestrate';
+    planner.orchestratePlanPath = PLAN_PATH;
+    const taskChat = createEmptyChatObject('', WS);
+    taskChat.id = '22222222-2222-2222-2222-222222222222';
+    taskChat.boardTaskId = 'W1-A';
+    setSessionStateForTests({
+      version: 5,
+      activeId: taskChat.id,
+      sidebarCollapsed: false,
+      groups: [],
+      chats: [planner, taskChat],
+    });
+    const group = getOrCreateBoardGroup(planner);
+    initBoard(group, planner, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'A', wave: 'W1', category: 'build', chatId: taskChat.id }],
+      waves: [{ id: 'W1' }],
+    });
+    taskChat.groupId = group.id;
+    taskChat.boardGroupId = group.id;
+
+    assert.equal(resolveBoardRestoreGroupOnSwitch(planner.id)?.id, group.id);
+    assert.equal(resolveBoardRestoreGroupOnSwitch(taskChat.id), undefined);
   });
 
   test('delete board group removes folder and all member chats', () => {

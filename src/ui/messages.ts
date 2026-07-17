@@ -619,6 +619,13 @@ function streamingAssistantRowStub(): StreamingAssistantRow {
   };
 }
 
+/** Drop orphaned in-flight assistant shells before mounting a fresh stream row. */
+function removeStaleLiveStreamingRows(mount: HTMLElement): void {
+  for (const row of mount.querySelectorAll('.msg.assistant.msg--awaiting-prose')) {
+    row.remove();
+  }
+}
+
 export function appendStreamingAssistantRow(forChatId?: string): StreamingAssistantRow {
   const active = getActiveChat();
   const targetId = forChatId ?? active.id;
@@ -639,6 +646,9 @@ export function appendStreamingAssistantRow(forChatId?: string): StreamingAssist
     teardownHub();
   }
 
+  const mount = getActiveChatMountElement();
+  removeStaleLiveStreamingRows(mount);
+
   const wrap = document.createElement('div');
   wrap.className = 'msg assistant msg--awaiting-prose';
 
@@ -657,7 +667,7 @@ export function appendStreamingAssistantRow(forChatId?: string): StreamingAssist
   const streamStatus = attachStreamStatus(wrap);
   wrap.appendChild(bubble);
   bubble.appendChild(cursor);
-  getActiveChatMountElement().appendChild(wrap);
+  mount.appendChild(wrap);
   // Respect scroll pin: only follow the tail when the user is already near bottom.
   scrollChatIfPinned();
   return { wrap, bubble, cursor, streamStatus };
