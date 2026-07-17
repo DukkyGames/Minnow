@@ -15,6 +15,7 @@ import {
   listBoardGroupChatIds,
   openBoardGroup,
   renameGroup,
+  resolveBoardRestoreGroupOnSwitch,
   toggleGroupCollapsed,
 } from '../state/chat-groups';
 import { createBoardCategoryIcon } from './board-category-icons';
@@ -1105,6 +1106,22 @@ export function switchChat(id: string): void {
     suspendOrchestratePlanScreenOnLeave(sessionState.activeId);
   }
   if (!sessionState) {
+    closeMobileSidebar();
+    applySidebarVisuals();
+    return;
+  }
+
+  const boardRestoreGroup = resolveBoardRestoreGroupOnSwitch(id);
+  if (boardRestoreGroup) {
+    const prevActiveId = sessionState.activeId;
+    if (prevActiveId !== id) {
+      const leaving = sessionState.chats.find((c) => c.id === prevActiveId);
+      if (leaving) maybeMarkChatUnreadAfterLeave(leaving);
+    }
+    acknowledgeChatViewed(id);
+    openBoardGroup(boardRestoreGroup.id);
+    syncViewModeToggleFromActiveChat();
+    syncComposerFromStreamingState();
     closeMobileSidebar();
     applySidebarVisuals();
     return;

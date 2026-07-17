@@ -36,6 +36,48 @@ function cssBeforeEntryScriptPlugin(): Plugin {
   };
 }
 
+/**
+ * CodeMirror language-data pre-bundles into many hashed `dist-*.js` chunks under
+ * `node_modules/.vite/deps`. Pre-include editor deps and crawl editor entries so
+ * cold start finishes before clients request stale chunk URLs.
+ */
+const CODE_MIRROR_OPTIMIZE_INCLUDE = [
+  '@codemirror/language-data',
+  '@codemirror/language',
+  '@codemirror/state',
+  '@codemirror/view',
+  '@codemirror/autocomplete',
+  '@codemirror/commands',
+  '@codemirror/lint',
+  '@codemirror/search',
+  '@codemirror/lang-angular',
+  '@codemirror/lang-cpp',
+  '@codemirror/lang-css',
+  '@codemirror/lang-go',
+  '@codemirror/lang-html',
+  '@codemirror/lang-java',
+  '@codemirror/lang-javascript',
+  '@codemirror/lang-json',
+  '@codemirror/lang-less',
+  '@codemirror/lang-markdown',
+  '@codemirror/lang-php',
+  '@codemirror/lang-python',
+  '@codemirror/lang-rust',
+  '@codemirror/lang-sass',
+  '@codemirror/lang-sql',
+  '@codemirror/lang-vue',
+  '@codemirror/lang-wast',
+  '@codemirror/lang-xml',
+  '@codemirror/lang-yaml',
+] as const;
+
+/** Client modules that lazy-load the editor and trigger language-data discovery. */
+const EDITOR_WARMUP_FILES = [
+  './src/main.ts',
+  './src/ui/file-viewer.ts',
+  './src/ui/editor-language.ts',
+] as const;
+
 /** Rollup manual chunk groups for heavy vendor libraries. */
 function manualChunkForNodeModule(id: string): string | undefined {
   if (!id.includes('node_modules')) return undefined;
@@ -58,6 +100,17 @@ function manualChunkForNodeModule(id: string): string | undefined {
 export default defineConfig({
   base: './',
   plugins: [cssBeforeEntryScriptPlugin()],
+  optimizeDeps: {
+    // Finish the first dep crawl before serving requests (avoids stale dist-* chunk URLs).
+    holdUntilCrawlEnd: true,
+    entries: ['index.html', ...EDITOR_WARMUP_FILES.map((f) => f.slice(2))],
+    include: [...CODE_MIRROR_OPTIMIZE_INCLUDE, 'highlight.js'],
+  },
+  server: {
+    warmup: {
+      clientFiles: [...EDITOR_WARMUP_FILES],
+    },
+  },
   build: {
     outDir: 'dist',
     chunkSizeWarningLimit: 1500,

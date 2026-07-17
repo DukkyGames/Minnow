@@ -893,6 +893,45 @@ describe('orchestrate board live updates', () => {
     );
   });
 
+  test('switchChat to planner from board task chat restores board view', async () => {
+    setupDom();
+    await primeSubAgentConfig();
+    setBoardNowForTests(() => 1_700_000_000_000);
+    const chat = makeOrchestrateChat();
+    const taskChat = createEmptyChatObject('');
+    taskChat.id = FIXED_TASK_CHAT_ID;
+    taskChat.modeId = 'build';
+    taskChat.boardTaskId = 'W1-A';
+    taskChat.boardGroupId = FIXED_GROUP_ID;
+    taskChat.groupId = FIXED_GROUP_ID;
+    taskChat.history = [{ role: 'user', content: 'Run task build' }];
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [
+        {
+          id: 'W1-A',
+          title: 'Task A',
+          wave: 'W1',
+          category: 'build',
+          chatId: FIXED_TASK_CHAT_ID,
+        },
+      ],
+      waves: [{ id: 'W1' }],
+    });
+    setSessionStateForTests(
+      sessionStateForBoard(chat, group, { chats: [chat, taskChat], activeId: FIXED_TASK_CHAT_ID }),
+    );
+
+    switchChat(chat.id);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await waitForKanban();
+
+    assert.equal(getActiveChat().id, chat.id);
+    assert.equal(group.viewMode, 'board');
+    assert.ok(document.querySelector('.board-root'));
+    assert.equal(document.querySelector('.msg.user'), null);
+  });
+
   test('openBoardGroup from external chat focuses planner before mounting board', async () => {
     setupDom();
     await primeSubAgentConfig();
