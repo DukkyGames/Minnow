@@ -13,9 +13,10 @@ import {
 import { getEmailAccount } from './accounts.js';
 import {
   getCachedMessage,
+  getInboxSummary,
+  getSyncState,
   listCachedMessages,
   listCachedThread,
-  readMessageCache,
   updateInboxSummary,
   updateMessageTriage,
   updateReplyVariants,
@@ -108,8 +109,12 @@ export function parseReplyVariantsJson(raw) {
  * @param {string} accountId
  */
 export async function buildInboxSummary(accountId) {
-  const cache = await readMessageCache(accountId);
-  const inboxRows = cache.messages.filter((row) => String(row.folder) === 'INBOX');
+  // The digest covers the most recent inbox page rather than the whole store —
+  // older mail contributes nothing to a "what needs me today" summary.
+  const { messages: inboxRows } = await listCachedMessages(accountId, {
+    folder: 'INBOX',
+    limit: 200,
+  });
 
   /** @type {{ high: number, normal: number, low: number }} */
   const stats = { high: 0, normal: 0, low: 0 };
@@ -478,9 +483,8 @@ export async function onNewMessages(accountId, newMessages, account, options = {
  * @param {Array<Record<string, unknown>>} incoming
  */
 export async function diffNewMessages(accountId, folder, incoming) {
-  const cache = await readMessageCache(accountId);
-  const prevHighest = cache.folderCursors?.[folder]?.highestUid ?? 0;
-  return incoming.filter((row) => Number(row.uid) > prevHighest);
+  const { highestUid } = await getSyncState(accountId, folder);
+  return incoming.filter((row) => Number(row.uid) > highestUid);
 }
 
 /**
@@ -488,7 +492,7 @@ export async function diffNewMessages(accountId, folder, incoming) {
  * @param {string} accountId
  */
 export async function getOrBuildInboxSummary(accountId) {
-  const existing = (await readMessageCache(accountId)).inboxSummary;
+  const existing = await getInboxSummary(accountId);
   if (existing?.generatedAt) {
     const ageMs = Date.now() - new Date(String(existing.generatedAt)).getTime();
     if (ageMs < 5 * 60_000) {
