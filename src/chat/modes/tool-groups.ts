@@ -34,7 +34,7 @@ export const TOOL_GROUP_IDS = {
     'copy_file',
     'delete_path',
   ],
-  'git-read': ['git_status', 'git_diff', 'git_log'],
+  'git-read': ['git_status', 'git_diff', 'git_log', 'git_branch'],
   'git-write': ['git_add', 'git_commit', 'git_checkout'],
   'code-exec': [
     'execute_command',

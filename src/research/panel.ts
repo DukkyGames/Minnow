@@ -4,10 +4,8 @@
 
 import '../styles/research-page.css';
 
-import { decodeModelSelectKey } from '../lib/model-select-key';
 import { wrapUntrusted } from '../lib/untrusted.mjs';
-import { getActiveModelIdFromDom } from '../benchmark/resolve-binding';
-import { loadResearchConfig } from '../config/research-config';
+import { resolveResearchModelBinding } from './resolve-binding';
 import { pushNotification } from '../notifications/push';
 import {
   cancelResearch,
@@ -184,7 +182,6 @@ async function refreshLibraryPanel(): Promise<void> {
 }
 
 async function resolveResearchBinding(): Promise<{ providerId: string; model: string }> {
-  const config = await loadResearchConfig();
   const overrideProvider = (
     document.getElementById('researchProviderOverride') as HTMLSelectElement | null
   )?.value?.trim();
@@ -192,23 +189,7 @@ async function resolveResearchBinding(): Promise<{ providerId: string; model: st
     document.getElementById('researchModelOverride') as HTMLInputElement | null
   )?.value?.trim();
 
-  if (overrideProvider && overrideModel) {
-    return { providerId: overrideProvider, model: overrideModel };
-  }
-
-  const fromConfig = config.model;
-  if (fromConfig.providerId?.trim() && fromConfig.model?.trim()) {
-    return {
-      providerId: fromConfig.providerId.trim(),
-      model: fromConfig.model.trim(),
-    };
-  }
-
-  const raw = getActiveModelIdFromDom();
-  const parsed = decodeModelSelectKey(raw);
-  const model = parsed?.modelId ?? raw;
-  const providerId = parsed?.providerId ?? getActiveChat().providerId?.trim() ?? '';
-  return { providerId, model };
+  return resolveResearchModelBinding({ overrideProvider, overrideModel });
 }
 
 function readStartOptions(): Omit<ResearchStartRequest, 'query' | 'continueFrom'> {

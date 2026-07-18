@@ -2,9 +2,7 @@
  * Desktop research surface — composer-driven runs with floating progress/result cards.
  */
 
-import { decodeModelSelectKey } from '../lib/model-select-key';
-import { getActiveModelIdFromDom } from '../benchmark/resolve-binding';
-import { loadResearchConfig } from '../config/research-config';
+import { resolveResearchModelBinding } from '../research/resolve-binding';
 import { pushNotification } from '../notifications/push';
 import {
   cancelResearch,
@@ -23,7 +21,6 @@ import {
 import { ResearchProgressPanel } from '../research/progress-panel';
 import { renderResearchResultFromMarkdown } from '../research/report-view';
 import type { ResearchScope, ResearchStartRequest } from '../research/types';
-import { getActiveChat } from '../state/sessions';
 import { setStatus } from '../ui/status';
 import type { DesktopResearchActivateOptions } from './desktop-state';
 import {
@@ -78,23 +75,6 @@ function syncResearchToolbar(): void {
 
 function getComposerInput(): HTMLTextAreaElement | null {
   return document.getElementById('desktopInput') as HTMLTextAreaElement | null;
-}
-
-async function resolveResearchBinding(): Promise<{ providerId: string; model: string }> {
-  const config = await loadResearchConfig();
-  const fromConfig = config.model;
-  if (fromConfig.providerId?.trim() && fromConfig.model?.trim()) {
-    return {
-      providerId: fromConfig.providerId.trim(),
-      model: fromConfig.model.trim(),
-    };
-  }
-
-  const raw = getActiveModelIdFromDom();
-  const parsed = decodeModelSelectKey(raw);
-  const model = parsed?.modelId ?? raw;
-  const providerId = parsed?.providerId ?? getActiveChat().providerId?.trim() ?? '';
-  return { providerId, model };
 }
 
 function readDefaultStartOptions(): Omit<ResearchStartRequest, 'query' | 'continueFrom'> {
@@ -285,7 +265,7 @@ export async function startDesktopResearchRun(
   syncResearchResultChrome();
 
   try {
-    const binding = await resolveResearchBinding();
+    const binding = await resolveResearchModelBinding();
     const body: ResearchStartRequest = {
       query,
       ...readDefaultStartOptions(),

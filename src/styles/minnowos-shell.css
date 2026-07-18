@@ -47,7 +47,8 @@ html.minnow-os-enabled {
 #osDockLayer {
   position: absolute;
   inset: 0;
-  z-index: 35;
+  /* Below floating windows (15) and side panels (25). */
+  z-index: 12;
   pointer-events: none;
 }
 

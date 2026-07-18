@@ -13,6 +13,7 @@ import {
   capGrepOutput,
   formatGroupedGrepOutput,
   isRipgrepMatchLine,
+  runFindFilesSearch,
   runGrepSearch,
   truncateRipgrepOutput,
 } from '../../server/tools/grep.js';
@@ -37,6 +38,20 @@ function grepInFixture(args) {
       toRelativePath,
       getWorkspaceRoot: () => fixtureRoot,
     }),
+  );
+}
+
+function findFilesInFixture(args, options) {
+  return pathAccessStore.run({ allowOutsideWorkspace: false }, () =>
+    runFindFilesSearch(
+      args,
+      {
+        resolveSafePath,
+        toRelativePath,
+        getWorkspaceRoot: () => fixtureRoot,
+      },
+      options,
+    ),
   );
 }
 
@@ -248,5 +263,45 @@ describe('runGrepSearch fixture workspace', () => {
         }),
       /outside the workspace/i,
     );
+  });
+});
+
+describe('runFindFilesSearch fixture workspace', () => {
+  before(async () => {
+    await setWorkspaceRoot(fixtureRoot);
+  });
+
+  after(async () => {
+    await initWorkspaceRoot();
+  });
+
+  it('finds .ts files with forward-slash relative paths', async () => {
+    const out = await findFilesInFixture({ pattern: '**/*.ts' });
+    assert.match(out, /^src\/visible\.ts$/m);
+    assert.match(out, /^src\/nested\/deep\.ts$/m);
+    assert.doesNotMatch(out, /\\/); // no Windows backslashes
+    assert.doesNotMatch(out, /^\.\//m); // no ./ prefix
+  });
+
+  it('matches a bare basename glob in any directory', async () => {
+    const out = await findFilesInFixture({ pattern: '*.ts' });
+    assert.match(out, /visible\.ts/);
+    assert.match(out, /nested\/deep\.ts/);
+  });
+
+  it('respects .gitignore (excludes ignored-dir)', async () => {
+    const out = await findFilesInFixture({ pattern: '**/*.ts' });
+    assert.doesNotMatch(out, /hidden\.ts/);
+  });
+
+  it('returns a no-match message for an absent pattern', async () => {
+    const out = await findFilesInFixture({ pattern: '**/*.rs' });
+    assert.match(out, /No files matching/);
+  });
+
+  it('scopes results to a subdirectory', async () => {
+    const out = await findFilesInFixture({ pattern: '**/*.ts', path: 'src/nested' });
+    assert.match(out, /deep\.ts/);
+    assert.doesNotMatch(out, /visible\.ts/);
   });
 });
