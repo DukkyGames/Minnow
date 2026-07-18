@@ -6,15 +6,14 @@ import '../../styles/experts-hub.css';
 import '../../styles/experts-summon.css';
 
 import { createExpertFromDescription } from '../../chat/experts/create-expert';
-import { generateExpertGreeting } from '../../chat/experts/greet';
-import { isUserOwnedExpert } from '../../chat/experts/expert-ownership';
+import { buildExpertSeedValidationContext } from '../../chat/experts/seed-context';
+import { resolveExpertChatSeed } from '../../chat/experts/runtime-profile';
 import {
   deleteUserExpert,
   loadUserExpertForEdit,
   saveUserExpert,
 } from '../../chat/experts/expert-user-ops';
 import {
-  getBuiltinExpertIds,
   getExpert,
   listExperts,
   syncExpertRegistryFromServer,
@@ -22,11 +21,13 @@ import {
 import type { ExpertAccent, ExpertMeta } from '../../chat/experts/types';
 import { EXPERT_ACCENT_VALUES } from '../../chat/experts/types';
 import { isExpertsPageOpen, setExpertsPageOpen } from '../../app-state';
-import { loadExpertsConfig } from '../../config/experts-config';
+import { loadExpertsConfig, getExpertsConfigSync } from '../../config/experts-config';
+import { normalizeModeId } from '../../chat/modes/types';
+import { resolveEffectiveChatModelBinding } from '../default-model';
 import { getDesktopWorkspacePath } from '../../lib/desktop-workspace';
 import {
   activateChatById,
-  createExpertChat,
+  createExpertChatFromSeed,
   getActiveChat,
   getExpertChats,
   recordChatMessage,
@@ -42,7 +43,7 @@ import {
   openExpertChatInShell,
   teardownExpertScopeShell,
 } from './experts-scope';
-import { appendChatRow, deleteChat } from '../sidebar';
+import { renderExpertDetailTabbed } from './experts-lab-detail';
 import { isOsAppHash, isOsEmbedded } from '../../os/page-bridge';
 import {
   isDesktopChatActive,
@@ -69,6 +70,11 @@ let editLiteEdited = false;
 let editDirty = false;
 let editProfile: 'full' | 'lite' = 'full';
 let summonAbort: AbortController | null = null;
+let detailTab: 'overview' | 'runtime' | 'memory' | 'chats' = 'overview';
+
+function prefersReducedMotion(): boolean {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
 
 function getRoot(): HTMLElement | null {
   return document.getElementById('expertsView');
@@ -140,9 +146,22 @@ function promptPreviewForExpert(expertId: string): string {
   return `${body.slice(0, 1200).trimEnd()}…`;
 }
 
-function modelLabelForExpert(meta: ExpertMeta): string {
-  if (meta.tagline?.trim()) return meta.tagline.trim();
-  return 'Uses the active chat model at send time';
+function runtimeModelLabel(expertId: string): string {
+  const config = getExpertsConfigSync();
+  const profile = config.profiles[expertId];
+  if (profile?.modelId?.trim()) {
+    const provider = profile.providerId?.trim();
+    return provider
+      ? `${provider} / ${profile.modelId.trim()}`
+      : profile.modelId.trim();
+  }
+  const binding = resolveEffectiveChatModelBinding(getActiveChat());
+  if (binding.modelId) {
+    return binding.providerId
+      ? `${binding.providerId} / ${binding.modelId}`
+      : binding.modelId;
+  }
+  return 'Inherits active chat model';
 }
 
 /** Left roster column — selectable expert cards. */
@@ -210,164 +229,43 @@ function renderExpertList(): void {
 
 /** Right detail column for the selected expert. */
 function renderExpertDetail(): void {
-  const mount = document.getElementById('expertsDetailMount');
-  if (!mount) return;
   showExpertsActionError(null);
-  mount.replaceChildren();
-
-  if (!selectedExpertId) return;
-
-  const expert = getExpert(selectedExpertId);
-  if (!expert) return;
-
-  const builtinIds = getBuiltinExpertIds();
-  const accent = expertAccent(expert.meta);
-  const experts = listExperts();
-  const index = experts.findIndex((e) => e.meta.id === selectedExpertId);
-
-  const head = document.createElement('div');
-  head.className = 'experts-detail-head';
-
-  const ava = document.createElement('span');
-  ava.className = `experts-card-ava lg ${hueClassForIndex(Math.max(index, 0))} ${accentClassName(accent)}`;
-  ava.textContent = expertIcon(expert.meta);
-  ava.setAttribute('aria-hidden', 'true');
-  applyAccentToElement(ava, accent);
-
-  const headCopy = document.createElement('div');
-  const title = document.createElement('h3');
-  title.textContent = expert.meta.label;
-  const subtitle = document.createElement('p');
-  subtitle.textContent = expert.meta.description ?? expert.meta.tagline ?? 'Focused specialist persona';
-  headCopy.appendChild(title);
-  headCopy.appendChild(subtitle);
-  head.appendChild(ava);
-  head.appendChild(headCopy);
-  mount.appendChild(head);
-
-  mount.appendChild(
-    buildReadonlyField('MODEL', modelLabelForExpert(expert.meta)),
-  );
-
-  const promptText = promptPreviewForExpert(selectedExpertId);
-  if (promptText) {
-    mount.appendChild(buildPromptField('SYSTEM PROMPT', promptText));
+  if (!selectedExpertId) {
+    const mount = document.getElementById('expertsDetailMount');
+    mount?.replaceChildren();
+    return;
   }
 
-  const chatsSection = document.createElement('div');
-  chatsSection.className = 'experts-chats-section';
-
-  const chatsLabel = document.createElement('div');
-  chatsLabel.className = 'experts-field-label experts-mono';
-  chatsLabel.textContent = 'CHATS';
-  chatsSection.appendChild(chatsLabel);
-
-  const chatList = document.createElement('div');
-  chatList.id = 'expertsChatList';
-  chatList.className = 'experts-chat-list chat-list';
-  chatList.setAttribute('role', 'list');
-
-  const chats = getExpertChats(selectedExpertId);
-  if (chats.length === 0) {
-    const empty = document.createElement('p');
-    empty.className = 'experts-chat-empty';
-    empty.textContent = 'No chats yet. Test this expert in the sandbox below.';
-    chatList.appendChild(empty);
-  } else {
-    for (const chat of chats) {
-      appendChatRow(chatList, chat, null, {
-        draggable: false,
-        onActivate: (c) => {
-          void openExpertChatInShell(c);
-        },
-        onDelete: (c) => {
-          deleteChat(c.id);
-          renderExpertDetail();
-        },
-      });
-    }
-  }
-
-  chatsSection.appendChild(chatList);
-  mount.appendChild(chatsSection);
-
-  const actions = document.createElement('div');
-  actions.className = 'experts-detail-actions';
-
-  const testBtn = document.createElement('button');
-  testBtn.type = 'button';
-  testBtn.className = 'experts-btn-primary';
-  testBtn.innerHTML =
-    '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/></svg> Test in sandbox';
-  testBtn.addEventListener('click', () => {
-    void startExpertChat(selectedExpertId!);
-  });
-
-  actions.appendChild(testBtn);
-
-  if (isUserOwnedExpert(expert, builtinIds)) {
-    const editBtn = document.createElement('button');
-    editBtn.type = 'button';
-    editBtn.className = 'experts-btn-ghost';
-    editBtn.textContent = 'Edit';
-    editBtn.addEventListener('click', (ev) => {
-      ev.stopPropagation();
+  renderExpertDetailTabbed({
+    selectedExpertId,
+    detailTab,
+    setDetailTab: (tab) => {
+      detailTab = tab;
+    },
+    expertIcon,
+    expertAccent,
+    accentClassName,
+    hueClassForIndex,
+    applyAccentToElement,
+    promptPreviewForExpert,
+    runtimeModelLabel,
+    onStartChat: () => {
+      void startExpertChat(selectedExpertId!);
+    },
+    onEdit: () => {
       void openEditExpertStep(selectedExpertId!);
-    });
-
-    const deleteBtn = document.createElement('button');
-    deleteBtn.type = 'button';
-    deleteBtn.className = 'experts-btn-ghost is-danger';
-    deleteBtn.textContent = 'Delete';
-    deleteBtn.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      const expertId = selectedExpertId!;
-      const label = expert.meta.label;
-      if (!confirm(`Delete "${label}"? This cannot be undone.`)) {
-        return;
-      }
-      void deleteExpertConfirmed(expertId);
-    });
-
-    actions.appendChild(editBtn);
-    actions.appendChild(deleteBtn);
-  }
-
-  mount.appendChild(actions);
-}
-
-function buildReadonlyField(label: string, value: string): HTMLElement {
-  const field = document.createElement('div');
-  field.className = 'experts-field';
-
-  const fieldLabel = document.createElement('div');
-  fieldLabel.className = 'experts-field-label experts-mono';
-  fieldLabel.textContent = label;
-
-  const fieldVal = document.createElement('div');
-  fieldVal.className = 'experts-field-val';
-  fieldVal.textContent = value;
-
-  field.appendChild(fieldLabel);
-  field.appendChild(fieldVal);
-  return field;
-}
-
-function buildPromptField(label: string, value: string): HTMLElement {
-  const field = document.createElement('div');
-  field.className = 'experts-field';
-
-  const fieldLabel = document.createElement('div');
-  fieldLabel.className = 'experts-field-label experts-mono';
-  fieldLabel.textContent = label;
-
-  const area = document.createElement('div');
-  area.className = 'experts-field-area';
-  area.textContent = value;
-
-  field.appendChild(fieldLabel);
-  field.appendChild(area);
-  return field;
+    },
+    onDelete: () => {
+      const expert = getExpert(selectedExpertId!);
+      const label = expert?.meta.label ?? selectedExpertId;
+      if (!confirm(`Delete "${label}"? This cannot be undone.`)) return;
+      void deleteExpertConfirmed(selectedExpertId!);
+    },
+    onOpenChat: (chat) => {
+      void openExpertChatInShell(chat);
+    },
+    onRefresh: () => renderExpertDetail(),
+  });
 }
 
 function selectExpert(expertId: string, options?: { skipListRender?: boolean }): void {
@@ -428,34 +326,65 @@ function hideExpertsSummon(): void {
   }, 280);
 }
 
-/** Create expert chat, seed greeting, open scoped chat shell. */
+/** Create expert chat with authored greeting and open scoped chat shell. */
 export async function startExpertChat(expertId: string): Promise<void> {
-  summonAbort?.abort();
-  summonAbort = new AbortController();
-  const signal = summonAbort.signal;
-
-  showExpertsSummon(expertId);
+  showExpertsActionError(null);
+  const sourceChat = getActiveChat();
+  const binding = resolveEffectiveChatModelBinding(sourceChat);
   let chatsWorkspace = getWorkspacePath();
   if (isOsEmbedded()) {
     const desktopPath = await getDesktopWorkspacePath();
     if (desktopPath) chatsWorkspace = desktopPath;
   }
-  const chat = createExpertChat(expertId, '', chatsWorkspace);
-  activateChatById(chat.id);
+
+  const source = {
+    providerId: sourceChat.providerId?.trim() || binding.providerId,
+    modelId: sourceChat.modelId?.trim() || binding.modelId,
+    modeId: normalizeModeId(sourceChat.modeId),
+    workspacePath: chatsWorkspace,
+  };
+
+  const expertsConfig = await loadExpertsConfig();
+  const validation = buildExpertSeedValidationContext();
+  const seedResult = resolveExpertChatSeed(
+    expertId,
+    source,
+    expertsConfig,
+    validation,
+  );
+  if ('error' in seedResult) {
+    showExpertsActionError(seedResult.error);
+    return;
+  }
+
+  const transitionMs = prefersReducedMotion() ? 0 : 200;
+  showExpertsSummon(expertId);
+
+  if (transitionMs > 0) {
+    await new Promise<void>((resolve) => {
+      summonAbort?.abort();
+      summonAbort = new AbortController();
+      const signal = summonAbort.signal;
+      const timer = window.setTimeout(resolve, transitionMs);
+      signal.addEventListener('abort', () => {
+        window.clearTimeout(timer);
+        resolve();
+      });
+    });
+    if (summonAbort?.signal.aborted) return;
+  }
 
   try {
-    const greeting = await generateExpertGreeting(expertId, chat, signal);
-    if (signal.aborted) return;
-    chat.history.push({ role: 'assistant', content: greeting });
+    const chat = createExpertChatFromSeed(seedResult);
+    activateChatById(chat.id);
     recordChatMessage(chat);
     scheduleSaveSessions();
     hideExpertsSummon();
     await openExpertChatInShell(chat);
   } catch (err) {
-    if (signal.aborted) return;
     hideExpertsSummon();
     const message = err instanceof Error ? err.message : String(err);
-    alert(message || 'Could not start expert chat.');
+    showExpertsActionError(message || 'Could not start expert chat.');
   }
 }
 

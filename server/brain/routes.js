@@ -18,7 +18,11 @@ import {
   applyMemoryProposalEdits,
 } from './proposals.js';
 import { clearSynthesisProposals } from './clear-synthesis-proposals.js';
-import { retrieveBrainBlockHybrid, loadAllPagesWithBodies } from './retrieve.js';
+import {
+  retrieveBrainBlockHybrid,
+  loadAllPagesWithBodies,
+  scopePagesToExpert,
+} from './retrieve.js';
 import {
   bundleArchiveRange,
   deleteChatArchive,
@@ -87,6 +91,11 @@ function pageMetaToEntry(meta) {
     updatedAt: meta.updatedAt,
     pinned: Boolean(meta.pinned),
   };
+}
+
+/** Valid expert id slug for namespaced memory paths. */
+function isValidExpertId(expertId) {
+  return /^[a-z][a-z0-9-]{0,63}$/.test(String(expertId ?? '').trim());
 }
 
 /**
@@ -369,8 +378,14 @@ export async function handleBrainRequest(req, res, pathname) {
       });
       const row = edited ?? existing;
       const slug = slugifyFactTitle(row.title);
+      const expertId =
+        typeof row.expertId === 'string' ? row.expertId.trim() : '';
+      let relPath = `facts/${slug}.md`;
+      if (expertId && /^[a-z][a-z0-9-]{0,63}$/.test(expertId)) {
+        relPath = `experts/${expertId}/facts/${slug}.md`;
+      }
       const page = await createWikiPage({
-        relPath: `facts/${slug}.md`,
+        relPath,
         title: row.title,
         body: row.body,
         tags: row.tags,
@@ -488,6 +503,73 @@ export async function handleBrainRequest(req, res, pathname) {
         failed: result.failed,
         durationMs: Date.now() - started,
       });
+      return true;
+    }
+
+    const expertMemoriesMatch = pathname.match(
+      /^\/api\/brain\/experts\/([^/]+)\/memories$/,
+    );
+    if (expertMemoriesMatch && req.method === 'GET') {
+      const expertId = decodeURIComponent(expertMemoriesMatch[1]);
+      if (!isValidExpertId(expertId)) {
+        sendJson(res, 400, { error: 'Invalid expert id' });
+        return true;
+      }
+      const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+      const includeBody = url.searchParams.get('includeBody') === '1';
+      const pages = scopePagesToExpert(await listPages(), expertId);
+      if (!includeBody) {
+        sendJson(res, 200, {
+          entries: pages.map((meta) => ({ ...pageMetaToEntry(meta), path: meta.path })),
+        });
+        return true;
+      }
+      const entries = [];
+      for (const meta of pages) {
+        try {
+          const row = await readPage(meta.path);
+          entries.push({
+            ...pageMetaToEntry(row.meta),
+            path: row.meta.path,
+            body: row.body,
+          });
+        } catch {
+          entries.push({
+            ...pageMetaToEntry(meta),
+            path: meta.path,
+            body: '',
+          });
+        }
+      }
+      sendJson(res, 200, { entries });
+      return true;
+    }
+
+    const expertMemoriesClearMatch = pathname.match(
+      /^\/api\/brain\/experts\/([^/]+)\/memories\/clear$/,
+    );
+    if (expertMemoriesClearMatch && req.method === 'POST') {
+      const expertId = decodeURIComponent(expertMemoriesClearMatch[1]);
+      if (!isValidExpertId(expertId)) {
+        sendJson(res, 400, { error: 'Invalid expert id' });
+        return true;
+      }
+      const body = await readJsonBody(req);
+      if (body.confirmed !== true) {
+        sendJson(res, 400, { error: 'confirmed: true is required' });
+        return true;
+      }
+      const pages = scopePagesToExpert(await listPages(), expertId);
+      let removed = 0;
+      for (const page of pages) {
+        try {
+          await deletePage(page.path);
+          removed += 1;
+        } catch {
+          /* ignore per-page failures */
+        }
+      }
+      sendJson(res, 200, { removed });
       return true;
     }
 

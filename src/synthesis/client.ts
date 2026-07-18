@@ -28,6 +28,7 @@ export interface MemoryProposal {
   confidence: number;
   rationale: string;
   status: ProposalStatus;
+  expertId?: string;
 }
 
 export interface SkillProposal {
@@ -119,12 +120,15 @@ export async function fetchSynthesisStatus(): Promise<SynthesisStatus | null> {
   return synthesisFetch<SynthesisStatus>('/api/memory/synthesis/status');
 }
 
-/** List pending memory proposals. */
+/** List memory proposals, optionally filtered by expert id. */
 export async function fetchMemoryProposals(
   status: ProposalStatus = 'pending',
+  expertId?: string,
 ): Promise<MemoryProposal[] | null> {
+  const params = new URLSearchParams({ status });
+  if (expertId?.trim()) params.set('expertId', expertId.trim());
   const data = await synthesisFetch<{ proposals: MemoryProposal[] }>(
-    `/api/memory/proposals?status=${encodeURIComponent(status)}`,
+    `/api/memory/proposals?${params.toString()}`,
   );
   return data?.proposals ?? null;
 }
@@ -221,6 +225,8 @@ export interface SynthesisRunInput {
   assistantText?: string;
   /** Bypass throttle — use for completion-triggered writes (board tasks). */
   force?: boolean;
+  /** Expert chat specialist id — scopes synthesized memories for review. */
+  expertId?: string;
   /** Explicit model binding so background synthesis doesn't fall back to active chat. */
   providerId?: string;
   modelId?: string;
@@ -249,6 +255,7 @@ export function schedulePostTurnSynthesis(input: SynthesisRunInput): void {
           ...(input.force ? { force: true } : {}),
           ...(input.providerId ? { providerId: input.providerId } : {}),
           ...(input.modelId ? { modelId: input.modelId } : {}),
+          ...(input.expertId ? { expertId: input.expertId } : {}),
         }),
       });
       if (!res.ok) return;

@@ -232,10 +232,6 @@ export function syncModeSelectorFromActiveChat(): void {
   if (!root || !sessionState) return;
 
   const chat = getActiveChat();
-  if (isExpertChat(chat) && chat.modeId !== 'general') {
-    setChatMode('general');
-  }
-
   const activeId = normalizeModeId(getActiveChat().modeId);
   const buttons = root.querySelectorAll<HTMLButtonElement>('[data-mode-id]');
   let index = 0;
@@ -304,11 +300,6 @@ export function setChatMode(modeId: ModeId): SetChatModeResult {
   }
 
   const chat = getActiveChat();
-  if (isExpertChat(chat)) {
-    if (modeId !== 'general') {
-      return { ok: false, error: 'Expert chats use General mode' };
-    }
-  }
 
   const normalized = modeId;
   if (chat.modeId === normalized) {

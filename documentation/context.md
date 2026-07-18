@@ -511,6 +511,8 @@ On-disk wiki at `~/.minnow/brain/` — nested markdown pages with YAML frontmatt
 | `POST /api/brain/lint` | Health report (no auto-edits) |
 | `GET /api/brain/proposals` + accept/reject | Memory proposal queue (same shape as `/api/memory/proposals`) |
 | `POST /api/brain/proposals/clear` | Clear memory **and skill** synthesis proposals (`scope: pending|all`, `confirmed: true`); mirror `POST /api/memory/proposals/clear` |
+| `GET /api/brain/experts/:expertId/memories` | List accepted expert long-term memories (`includeBody=1` optional); client [`fetchExpertMemories`](../src/memory/client.ts) |
+| `POST /api/brain/experts/:expertId/memories/clear` | Delete all pages under `experts/<id>/facts/` (`confirmed: true`); client [`clearExpertMemories`](../src/memory/client.ts) |
 | `POST /api/brain/sources/clear` | Delete raw files under `sources/` (`archive?`, `confirmed: true`) |
 | `GET/PUT /api/brain/embeddings/*` | Embeddings status, config, reindex |
 | `POST /api/brain/backup` / `clear` / `restore` | Wiki backup under `backups/` |
@@ -780,27 +782,31 @@ Assistant markdown with complete ` ```reef-widget ` fences mounts as sandboxed i
 
 **Widget library (snippets):** Six composable `snippet-*.md` files — `snippet-chart-line`, `snippet-chart-bar` (Recharts), `snippet-table`, `snippet-stat-card`, `snippet-input-row`, `snippet-sparkline` (SVG, embed in stat card `.rw-spark`). Full templates (15) cover end-to-end UIs including `qa-callllm` (`callLLM` + `onChunk` streaming). Conventions: description + bullets above one ` ```reef-widget ` fence; **no hex colors** (use `var(--*)` and `color-mix` with forwarded tokens for charts/heatmaps); snippets omit title chrome.
 
-### Expert system (Step 06)
+### Expert system (Step 06 + Experts Mode Overhaul)
 
 Domain personas under `src/chat/prompts/experts/<id>/` (`expert.full.md`, `expert.lite.md`). User overrides: `~/.minnow/prompts/experts/<id>/`.
 
 | Concern | Location |
 |---------|----------|
 | Registry | `src/chat/experts/registry.ts`, `expert-meta-parse.ts`, `expert-markdown.ts` |
-| Greeting | `src/chat/experts/greet.ts` (`generateExpertGreeting` on new expert chat) |
-| Config | `config.json` → `experts.enabled`; loader `src/config/experts-config.ts` |
-| Experts hub (MIN-59) | `#/experts` / `#/app/experts` → `#/desktop` + desktop experts when MinnowOS is enabled; topbar `#btnExpertLab` → `openExperts()` / `launchApp('experts')`; `src/os/experts-desktop.ts`, `src/ui/experts/experts-hub.ts`, `src/styles/experts-hub.css`, `src/styles/experts-summon.css` — MinnowOS split-pane layout (roster left, MODEL / SYSTEM PROMPT / CHATS detail right, header **New expert**); prototype: `documentation/reference/minnowos/project/src/more-apps.jsx` (`ExpertsApp`); expert-scoped sidebar reuses `chat-new-wide` + `chat-list` + `appendChatRow` in legacy browser mode only |
-| Expert chat threads | `kind: 'expert'` chats list in the main Code sidebar and desktop session rail (alongside other threads); MinnowOS opens them in desktop chat (`activateDesktopChat`) without the scoped sidebar chrome; legacy browser still uses `#appBody[data-scope=expert]` via `src/ui/experts/experts-scope.ts` |
-| Settings | `src/ui/experts-settings.ts` (enable toggle); Settings → Experts → **Open Experts** |
-| Persistence | `Chat.kind === 'expert'`, `Chat.expertId`, `Chat.expertSelection` `{ mode: 'manual', expertId }`; legacy `expert-lab` chats pruned on load |
+| Greeting | `src/chat/experts/greet.ts` (`resolveAuthoredGreeting` — frontmatter `greeting`, no model call) |
+| Runtime profile | `src/chat/experts/runtime-profile.ts` (`resolveExpertChatSeed`, `experts.profiles` in config) |
+| Tool policy | `src/chat/experts/expert-tool-policy.ts` (shared send / compose / token estimate) |
+| Config | `config.json` → `experts.enabled` + `experts.profiles[expertId]`; loader `src/config/experts-config.ts` |
+| Experts hub | `src/ui/experts/experts-hub.ts`, `src/ui/experts/experts-lab-detail.ts` — tabbed Lab (Overview / Runtime / Memory / Chats); Runtime: model/mode/tool policy + effective summary; Memory: proposal review + saved CRUD |
+| Expert chat threads | `Chat.kind === 'expert'`, `Chat.expertId`, frozen `Chat.expertRuntime` at creation; session schema **v6** |
+| Expert memory | Brain `pages/experts/<expertId>/facts/`; synthesis proposals optional `expertId` (always pending review); Lab Memory tab: accept/edit/reject pending, delete saved, clear-all |
+| Settings | `src/ui/experts-settings.ts` (enable toggle) |
 
-**Experts:** Full-screen hub — gallery of specialists (each with its own chat list), **Make your own expert** (LLM draft via [`create-expert.ts`](../src/chat/experts/create-expert.ts) + [`expert-creator`](../src/chat/prompts/info/expert-creator.full.md)), **Edit** / **Delete** on user-owned tiles. **New chat** runs a summon overlay (`#expertsSummon`) while `generateExpertGreeting()` seeds the first assistant message, then opens the normal chat shell (desktop chat on MinnowOS; scoped sidebar in legacy browser-only mode). Expert chats use the standard composer + `runChatTurn` (attachments, streaming, tools) but **General mode only** — `#modeSelector` and `#composerThinkingWrap` are hidden when `#appBody[data-scope=expert]` (legacy scoped shell); new expert threads get `modeId: 'general'` and `setChatMode` rejects other modes for `kind === 'expert'`. **LM Studio / Qwen Jinja:** seeded greetings stay in UI history but [`foldLeadingAssistantPreamble`](../src/api/provider-message-normalize.ts) folds leading assistant rows into the outbound system block before the first user turn (avoids “No user query found in messages” / Channel Error). First-send **title** jobs are deferred until the main turn completes so title + chat completions do not hit the provider concurrently. Prompt injection: manual `expertSelection` / `kind: 'expert'` → `resolveExpertContextForSend` → `{{expert}}` part in [`prompt-composer.ts`](../src/chat/prompts/prompt-composer.ts). **No auto-routing** on regular chats. Front matter: `id`, `kind: expert`, `label`, optional `description`, `icon`, `accent`, `tagline`, `greeting` (no routing keywords). APIs: `PUT/DELETE /api/prompts/experts/:id/prompt`, `DELETE /api/prompts/experts/:id`.
+**Runtime precedence (new expert chat):** active/default chat binding → per-expert `profiles` overrides → tools = global ∩ mode ∩ allowlist − denylist → persist `expertRuntime` snapshot on chat.
+
+**Prompt stack:** `base → expert → mode → work-agent → …`. **Start chat** uses authored greeting immediately (~200ms summon transition, no spinner). **Removed:** `ExpertSelection.mode = 'auto'` on new persisted data (session v6 migration).
+
+**Config keys (`experts`):** `enabled`, `profiles` (optional per-expert `providerId`, `modelId`, `modeId`, `toolAllowlist`, `toolDenylist`, `memoryEnabled`).
 
 **Built-in ids:** `general`, `software-engineer`, `technical-writer`, `data-analyst`, `creative-writer`, `security-reviewer`. Template: `src/chat/prompts/experts/_template/`.
 
-**Config keys (`experts`):** `enabled` (boolean).
-
-**Tests:** `test/experts/**/*.test.mjs`, `test/chat/experts/*.test.mjs`, `test/ui/expert-lab-custom-expert.test.mjs` (hub DOM). Verification: [`documentation/plans/verification/step-06.md`](plans/verification/step-06.md).
+**Tests:** `test/chat/experts/greet.test.mts`, `runtime-profile.test.mts`, `session-migration.test.mts`, `test/experts/composer.test.mjs`. Plan: [`documentation/plans/experts-mode-overhaul.md`](plans/experts-mode-overhaul.md).
 
 ### Work Agents (Step 08)
 
