@@ -458,6 +458,32 @@ export function cancel(state) {
   markCancelled(state);
 }
 
+/** Fallback roles for lightweight background jobs (not user-facing agent chat). */
+const NON_AGENT_FALLBACK_ROLES = new Set(['utility', 'chat-titles', 'goal-eval']);
+
+/**
+ * True when a user-facing agent generation is pending or streaming.
+ * Covers main chat (chatId / persist), sub-agents (typed fallbackRole), and similar.
+ */
+export function hasActiveUserAgentGenerations() {
+  for (const state of generations.values()) {
+    if (state.status !== 'pending' && state.status !== 'streaming') {
+      continue;
+    }
+    if (state.chatId) {
+      return true;
+    }
+    if (state.persist) {
+      return true;
+    }
+    const role = state.fallbackRole;
+    if (role && !NON_AGENT_FALLBACK_ROLES.has(role)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Process exit: cancel all in-flight generations.
  */
