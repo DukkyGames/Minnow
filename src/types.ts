@@ -17,7 +17,7 @@ import type { ThinkingResolvedMode, ThinkingTriState } from './agents/thinking-t
 export type ReasoningEffortOption = 'off' | 'on' | 'low' | 'medium' | 'high';
 
 /** Persisted session blob schema version (`minnow-sessions-v1` key; version inside JSON). */
-export const SESSION_SCHEMA_VERSION = 5 as const;
+export const SESSION_SCHEMA_VERSION = 6 as const;
 
 export type SessionSchemaVersion = typeof SESSION_SCHEMA_VERSION;
 
@@ -256,11 +256,14 @@ export interface ModelInfo {
   context_length?: number;
 }
 
-/** Per-chat expert picker state (Step 06). */
+/** @deprecated Migrated to chat.expertId — hydrated for legacy sessions only. */
 export interface ExpertSelection {
   mode: 'auto' | 'manual';
   expertId: string | null;
 }
+
+/** Re-export for chat runtime snapshot typing. */
+export type { ExpertRuntimeSnapshot } from './chat/experts/types';
 
 /** One completed terminal run persisted on the chat (Step 10). */
 export interface TerminalRunRecord {
@@ -752,8 +755,10 @@ export interface Chat {
   reefWidgetProviderId?: string;
   /** Reef widget LLM model override; empty = chat default. */
   reefWidgetModelId?: string;
-  /** Expert auto/manual selection (Step 06). */
+  /** @deprecated Legacy picker — use expertId on expert chats. */
   expertSelection?: ExpertSelection;
+  /** Frozen runtime profile applied when this expert chat was created. */
+  expertRuntime?: import('./chat/experts/types').ExpertRuntimeSnapshot;
   /** Tri-state thinking override for this chat (inherit uses work-agent / global stack). */
   thinkingMode?: ThinkingTriState;
   /** Per-chat reasoning effort override; unset resolves from catalog default + inherit stack. */

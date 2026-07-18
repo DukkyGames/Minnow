@@ -16,7 +16,7 @@ import {
 } from '../../config/user-rules';
 import { getExpertSelection, sessionState } from '../../state/sessions';
 import { resolveChatToolWorkspaceRoot } from '../../state/worktree-isolation';
-import { getEnabledToolDefinitionsForMode } from '../../tools/client';
+import { getExpertAwareToolNamesForChat } from '../experts/expert-tool-policy';
 import { loadToolConfig } from '../../tools/config';
 import type { Chat } from '../../types';
 import { retrieveMemoryBlock } from '../../memory/client';
@@ -41,9 +41,7 @@ export function resolveComposeCwd(): string {
 
 function getEnabledToolIdsForChat(chat: Chat): string[] {
   loadToolConfig();
-  const modeId = normalizeModeId(chat.modeId);
-  const defs = getEnabledToolDefinitionsForMode(modeId);
-  return defs.map((d) => d.function.name);
+  return getExpertAwareToolNamesForChat(chat);
 }
 
 export interface BuildComposeContextOptions {
@@ -83,7 +81,6 @@ export async function buildComposeContext(
       ? normalizeOrchestratePlanPath(chat.orchestratePlanPath) ?? null
       : null;
   const enabledToolIds = getEnabledToolIdsForChat(chat);
-  void getEnabledToolDefinitionsForMode(modeId);
 
   const infoPresetId =
     options?.overrides?.infoPresetId ??
@@ -101,6 +98,11 @@ export async function buildComposeContext(
       (await retrieveMemoryBlock({
         query,
         profile,
+        ...(chat.kind === 'expert' &&
+        chat.expertId?.trim() &&
+        chat.expertRuntime?.memoryEnabled !== false
+          ? { expertId: chat.expertId.trim() }
+          : {}),
       })) || null;
   }
 
@@ -163,7 +165,11 @@ export async function resolveExpertContextForSend(
 
   const expert = listExperts().find((r) => r.meta.id === expertId);
   if (!expert) {
-    return { expertId: null, expertLabel: null, routeSource: 'none' };
+    return {
+      expertId,
+      expertLabel: null,
+      routeSource: 'orphaned',
+    };
   }
 
   return {
@@ -194,7 +200,8 @@ export async function resolveComposedSystemPrompt(
   const ctx = await buildComposeContext(chat, {
     ...options,
     overrides: {
-      expertId: expertCtx.expertId,
+      expertId:
+        expertCtx.routeSource === 'orphaned' ? null : expertCtx.expertId,
       expertLabel: expertCtx.expertLabel,
       workAgentId,
       workAgentLabel: activeWorkAgent?.label ?? null,

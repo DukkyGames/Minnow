@@ -37,6 +37,21 @@ export function scopePagesToWorkspace(pages, workspaceKey) {
 }
 
 /**
+ * Keep only pages under an expert's long-term memory namespace.
+ * @param {Array<{ path: string }>} pages
+ * @param {string} expertId
+ */
+export function scopePagesToExpert(pages, expertId) {
+  const id = String(expertId ?? '').trim();
+  if (!id) return [];
+  const prefix = `experts/${id}/facts/`;
+  return pages.filter((page) => {
+    const rel = String(page.path ?? '').replace(/\\/g, '/');
+    return rel.startsWith(prefix);
+  });
+}
+
+/**
  * When chatId is set, keep only that chat's archive subtree (optionally union globals).
  * @param {Array<{ path: string }>} pages
  * @param {string} workspaceKey
@@ -139,9 +154,12 @@ export async function retrieveBrainBlockHybrid(opts = {}, brainConfig) {
     opts.workspaceKey,
   );
   const chatId = opts.scope?.chatId ? String(opts.scope.chatId).trim() : '';
+  const expertId = opts.scope?.expertId ? String(opts.scope.expertId).trim() : '';
   const workspaceArchive =
     opts.scope?.mode === 'workspace' || opts.scope?.workspaceArchive === true;
-  if (chatId) {
+  if (expertId) {
+    scopedMetas = scopePagesToExpert(scopedMetas, expertId);
+  } else if (chatId) {
     scopedMetas = scopePagesToChatArchive(
       scopedMetas,
       opts.workspaceKey ?? '',

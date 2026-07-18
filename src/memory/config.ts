@@ -43,6 +43,9 @@ export async function fetchMemoryInjectionEnabled(): Promise<boolean> {
 export async function shouldInjectMemory(chat: Chat): Promise<boolean> {
   const injectionOn = await fetchMemoryInjectionEnabled();
   if (!injectionOn) return false;
+  if (chat.kind === 'expert' && chat.expertRuntime?.memoryEnabled === false) {
+    return false;
+  }
   const globalEnabled = await fetchMemoryEnabled();
   return isMemoryEnabledForChat(chat, globalEnabled);
 }

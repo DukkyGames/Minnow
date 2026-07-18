@@ -2189,7 +2189,57 @@ export function mergeConfigMeta(existing, patch) {
     );
   }
 
+  if (p.experts && typeof p.experts === 'object') {
+    base.experts = normalizeExpertsConfigBlock(p.experts);
+  }
+
   return base;
+}
+
+/** Normalize experts.enabled and experts.profiles from config.json meta. */
+function normalizeExpertsConfigBlock(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return { enabled: true, profiles: {} };
+  }
+  const row = /** @type {Record<string, unknown>} */ (raw);
+  const profiles = {};
+  if (row.profiles && typeof row.profiles === 'object') {
+    for (const [key, value] of Object.entries(
+      /** @type {Record<string, unknown>} */ (row.profiles),
+    )) {
+      const id = String(key).trim().slice(0, 64);
+      if (!id || !value || typeof value !== 'object') continue;
+      const src = /** @type {Record<string, unknown>} */ (value);
+      const prof = {};
+      if (typeof src.providerId === 'string' && src.providerId.trim()) {
+        prof.providerId = src.providerId.trim().slice(0, 64);
+      }
+      if (typeof src.modelId === 'string' && src.modelId.trim()) {
+        prof.modelId = src.modelId.trim().slice(0, 64);
+      }
+      if (typeof src.modeId === 'string' && MODE_IDS.includes(src.modeId)) {
+        prof.modeId = src.modeId;
+      }
+      if (Array.isArray(src.toolAllowlist)) {
+        const list = src.toolAllowlist
+          .filter((t) => typeof t === 'string' && t.trim())
+          .map((t) => String(t).trim().slice(0, 128))
+          .slice(0, 128);
+        if (list.length) prof.toolAllowlist = list;
+      }
+      if (Array.isArray(src.toolDenylist)) {
+        const list = src.toolDenylist
+          .filter((t) => typeof t === 'string' && t.trim())
+          .map((t) => String(t).trim().slice(0, 128))
+          .slice(0, 128);
+        if (list.length) prof.toolDenylist = list;
+      }
+      if (src.memoryEnabled === false) prof.memoryEnabled = false;
+      else if (src.memoryEnabled === true) prof.memoryEnabled = true;
+      if (Object.keys(prof).length) profiles[id] = prof;
+    }
+  }
+  return { enabled: row.enabled !== false, profiles };
 }
 
 /**

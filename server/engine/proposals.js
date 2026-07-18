@@ -146,6 +146,9 @@ export function createProposals(getPaths, deps) {
       // Carried through so accepting a workspace-scoped proposal writes it into
       // the workspace pages, not the shared facts/ tree.
       scope: VALID_SCOPES.has(input.scope) ? input.scope : 'personal',
+      ...(typeof input.expertId === 'string' && input.expertId.trim()
+        ? { expertId: input.expertId.trim().slice(0, 64) }
+        : {}),
       confidence,
       rationale: String(input.rationale ?? '').slice(0, 500),
       status: 'pending',
@@ -175,14 +178,20 @@ export function createProposals(getPaths, deps) {
 
   /**
    * @param {ProposalStatus} [status]
+   * @param {string} [expertId]
    * @returns {Promise<MemoryProposal[]>}
    */
-  async function listMemoryProposals(status) {
+  async function listMemoryProposals(status, expertId) {
     const cfg = await deps.loadSynthesisConfig();
     const store = await loadStore();
     let rows = pruneRejected(store.proposals, cfg.rejectedRetentionDays ?? 30);
     if (status && VALID_STATUSES.has(status)) {
       rows = rows.filter((p) => p.status === status);
+    }
+    const expertFilter =
+      typeof expertId === 'string' && expertId.trim() ? expertId.trim() : '';
+    if (expertFilter) {
+      rows = rows.filter((p) => p.expertId === expertFilter);
     }
     return rows.sort(
       (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt),

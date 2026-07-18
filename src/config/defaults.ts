@@ -124,7 +124,7 @@ export function defaultSessionState(): SessionState {
   const chatId = randomUUID();
 
   return {
-    version: 5,
+    version: 6,
     groups: [],
     activeId: chatId,
     sidebarCollapsed: false,

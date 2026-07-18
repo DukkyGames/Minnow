@@ -73,6 +73,62 @@ async function memoryEmbeddingsFetch<T>(
   }
 }
 
+/** Expert-scoped memory entry (Brain pages under experts/<id>/facts/). */
+export interface ExpertMemoryEntry extends MemoryEntryWithBody {
+  path: string;
+}
+
+/** List accepted long-term memories for one expert. */
+export async function fetchExpertMemories(
+  expertId: string,
+  includeBody = true,
+): Promise<ExpertMemoryEntry[] | null> {
+  const id = expertId.trim();
+  if (!id) return null;
+  const qs = includeBody ? '?includeBody=1' : '';
+  const data = await memoryFetch<{ entries: ExpertMemoryEntry[] }>(
+    `/api/brain/experts/${encodeURIComponent(id)}/memories${qs}`,
+  );
+  return data?.entries ?? null;
+}
+
+/** Delete one expert memory page by wiki-relative path. */
+export async function deleteExpertMemoryPage(pagePath: string): Promise<boolean> {
+  if (!isLocalServerAvailable()) return false;
+  const path = pagePath.trim().replace(/\\/g, '/');
+  if (!path) return false;
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/brain/page?path=${encodeURIComponent(path)}`,
+      { method: 'DELETE' },
+    );
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Remove all accepted memories for one expert namespace. */
+export async function clearExpertMemories(expertId: string): Promise<number | null> {
+  const id = expertId.trim();
+  if (!id || !isLocalServerAvailable()) return null;
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/brain/experts/${encodeURIComponent(id)}/memories/clear`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmed: true }),
+      },
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as { removed?: number };
+    return typeof data.removed === 'number' ? data.removed : 0;
+  } catch {
+    return null;
+  }
+}
+
 /** Ping memory API. */
 export async function pingMemoryApi(): Promise<boolean> {
   const data = await memoryFetch<{ ok: boolean }>('/api/memory/ping');
@@ -133,6 +189,7 @@ export async function retrieveMemoryBlock(options: {
   query?: string;
   profile?: PromptProfile;
   limit?: number;
+  expertId?: string;
 }): Promise<string> {
   const enabled = await fetchMemoryEnabled();
   if (!enabled) return '';
@@ -146,6 +203,9 @@ export async function retrieveMemoryBlock(options: {
       profile: options.profile ?? 'full',
       limit: options.limit ?? 8,
       workspaceKey,
+      ...(options.expertId?.trim()
+        ? { scope: { expertId: options.expertId.trim() } }
+        : {}),
     }),
   });
   return data?.block?.trim() ?? '';

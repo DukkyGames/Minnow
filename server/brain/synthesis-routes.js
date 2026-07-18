@@ -149,6 +149,8 @@ export async function handleSynthesisRequest(req, res, pathname) {
         typeof body.providerId === 'string' ? body.providerId.trim() : undefined;
       const explicitModelId =
         typeof body.modelId === 'string' ? body.modelId.trim() : undefined;
+      const expertId =
+        typeof body.expertId === 'string' ? body.expertId.trim() : undefined;
 
       const memoryResult = await runMemorySynthesis({
         messages,
@@ -156,6 +158,7 @@ export async function handleSynthesisRequest(req, res, pathname) {
         sourceExcerpt,
         providerId: explicitProviderId,
         modelId: explicitModelId,
+        ...(expertId ? { expertId } : {}),
       });
 
       const skillResult = await runSkillSynthesis({
@@ -180,8 +183,10 @@ export async function handleSynthesisRequest(req, res, pathname) {
     if (pathname === '/api/memory/proposals' && req.method === 'GET') {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1');
       const status = url.searchParams.get('status') ?? undefined;
+      const expertId = url.searchParams.get('expertId') ?? undefined;
       const proposals = await listMemoryProposals(
         /** @type {'pending' | 'accepted' | 'rejected' | undefined} */ (status),
+        expertId,
       );
       sendJson(res, 200, { proposals });
       return true;
@@ -221,8 +226,12 @@ export async function handleSynthesisRequest(req, res, pathname) {
         tags: body.tags,
       });
       const row = edited ?? existing;
-      // Same write path as auto-write, so an accepted workspace-scoped proposal
-      // lands in the workspace pages and slug collisions still resolve.
+      const expertId =
+        typeof row.expertId === 'string' ? row.expertId.trim() : '';
+      const writeOpts = { source: 'agent' };
+      if (expertId && /^[a-z][a-z0-9-]{0,63}$/.test(expertId)) {
+        writeOpts.dir = `experts/${expertId}/facts`;
+      }
       const { page } = await writeSynthesisFactPage(
         {
           title: row.title,
@@ -232,7 +241,7 @@ export async function handleSynthesisRequest(req, res, pathname) {
           scope: row.scope,
         },
         [],
-        { source: 'agent' },
+        writeOpts,
       );
       await updateMemoryProposalStatus(id, 'accepted');
       sendJson(res, 200, { ok: true, entry: pageMetaToEntry(page.meta), proposalId: id });

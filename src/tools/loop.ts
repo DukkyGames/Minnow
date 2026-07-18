@@ -2436,6 +2436,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           toolCount: synthesisToolCount,
           sourceExcerpt: buildSynthesisExcerpt(chat),
           assistantText,
+          ...(chat.kind === 'expert' && chat.expertId?.trim()
+            ? { expertId: chat.expertId.trim() }
+            : {}),
         });
       }
     }

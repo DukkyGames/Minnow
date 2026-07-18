@@ -1,6 +1,6 @@
 # Experts Mode Overhaul
 
-Status: Proposed  
+Status: In progress (core shipped)  
 Scope: One complete overhaul of Experts mode  
 Surfaces: MinnowOS desktop Experts picker, Experts' Lab, expert chat, prompt composition, tool policy, and Brain memory
 

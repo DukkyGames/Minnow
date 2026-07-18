@@ -26,6 +26,7 @@ import {
   injectBoardMemberSubsetTools,
 } from '../chat/modes/orchestrate-tool-filter';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
+import { filterToolsByExpertSnapshot } from '../chat/experts/expert-tool-policy';
 import type { Chat } from '../types';
 import { getBoardGroupForChat } from '../state/chat-groups';
 import type { CodeChangeStats, ToolExecutionResult } from '../types';
@@ -569,6 +570,7 @@ export function getEnabledToolDefinitionsForChat(
 ): OpenAIFunctionDefinition[] {
   const normalized = normalizeModeId(chat.modeId);
   let defs = getEnabledToolDefinitionsForMode(normalized);
+  defs = filterToolsByExpertSnapshot(chat, defs);
   const executionMode = getBoardGroupForChat(chat)?.orchestrateBoard?.executionMode;
   if (chat.boardTaskId?.trim()) {
     defs = injectBoardMemberSubsetTools(defs);

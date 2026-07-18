@@ -691,7 +691,10 @@ export async function runMemorySynthesis(input) {
     }
 
     const route = routeSynthesisFact(fact, cfg);
-    if (route === 'skip-low') {
+    const expertId =
+      typeof input.expertId === 'string' ? input.expertId.trim() : '';
+    const effectiveRoute = expertId ? 'propose' : route;
+    if (effectiveRoute === 'skip-low') {
       skipped.push('low-confidence');
       continue;
     }
@@ -707,11 +710,12 @@ export async function runMemorySynthesis(input) {
       continue;
     }
 
-    if (route === 'propose') {
+    if (effectiveRoute === 'propose') {
       const proposal = await addMemoryProposal({
         ...fact,
         sourceChatId: input.sourceChatId,
         sourceExcerpt: input.sourceExcerpt,
+        ...(expertId ? { expertId } : {}),
       });
       pendingTitles.add(fact.title.toLowerCase());
       created.push(proposal);
