@@ -41,7 +41,11 @@ import {
 } from './experts-scope';
 import { appendChatRow, deleteChat } from '../sidebar';
 import { isOsAppHash, isOsEmbedded } from '../../os/page-bridge';
-import { isDesktopExpertsActive, isDesktopExpertsHubActive } from '../../os/desktop-state';
+import {
+  isDesktopChatActive,
+  isDesktopExpertsActive,
+  isDesktopExpertsHubActive,
+} from '../../os/desktop-state';
 import { launchApp, navigateToDesktop } from '../../os/router';
 
 export { openExpertChatInShell } from './experts-scope';
@@ -658,6 +662,11 @@ export async function refreshExpertsEnabledState(): Promise<void> {
 
 export { isExpertsPageOpen };
 
+/** Drop the pre-hub chat id so deferred hub teardown cannot restore it over an expert thread. */
+export function abandonExpertsHubSavedChat(): void {
+  savedActiveChatId = null;
+}
+
 export function closeExpertsHub(options?: { skipNavigate?: boolean }): void {
   const root = getRoot();
   const shell = getChatShell();
@@ -686,11 +695,15 @@ export function closeExpertsHub(options?: { skipNavigate?: boolean }): void {
     m.syncElectronPreviewHostVisibility(),
   );
 
-  if (isExpertScopeActive()) {
+  // Desktop expert chat calls deactivateDesktopExperts → async closeExpertsHub while
+  // chatActive; do not tear down scope or restore the pre-hub chat in that case.
+  const preserveDesktopExpertChat = isOsEmbedded() && isDesktopChatActive();
+
+  if (isExpertScopeActive() && !preserveDesktopExpertChat) {
     teardownExpertScopeShell();
   }
 
-  if (savedActiveChatId && sessionState) {
+  if (savedActiveChatId && sessionState && !preserveDesktopExpertChat) {
     const prev = savedActiveChatId;
     savedActiveChatId = null;
     if (sessionState.chats.some((c) => c.id === prev)) {
@@ -707,7 +720,9 @@ export function closeExpertsHub(options?: { skipNavigate?: boolean }): void {
   }
 
   setStep('browse');
-  selectedExpertId = null;
+  if (!preserveDesktopExpertChat) {
+    selectedExpertId = null;
+  }
   editExpertId = null;
   editDirty = false;
 }

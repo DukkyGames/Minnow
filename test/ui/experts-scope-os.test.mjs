@@ -182,4 +182,77 @@ describe('expert scope OS routing', () => {
     assert.ok(document.getElementById('desktopChatCol'));
     assert.equal(isDesktopExpertsActive(), false);
   });
+
+  test('deferred experts hub teardown does not switch away from desktop expert chat', async () => {
+    setSessionStateForTests({
+      version: 5,
+      activeId: 'code-chat',
+      sidebarCollapsed: false,
+      groups: [],
+      chats: [
+        {
+          id: 'code-chat',
+          kind: 'assistant',
+          name: 'Code chat',
+          history: [{ role: 'user', content: 'hello' }],
+          modelId: '',
+          modeId: 'build',
+          workspacePath: '/workspace',
+          workAgentId: null,
+          workAgentAuto: true,
+          lastStats: null,
+          modelInfo: {},
+          updatedAt: 1,
+          lastMessageAt: 1,
+        },
+        {
+          id: 'chat-1',
+          kind: 'expert',
+          expertId: 'software-engineer',
+          expertSelection: { mode: 'manual', expertId: 'software-engineer' },
+          name: 'Expert chat',
+          history: [{ role: 'assistant', content: 'Hi from expert' }],
+          modelId: '',
+          modeId: 'general',
+          workspacePath: '',
+          workAgentId: null,
+          workAgentAuto: true,
+          lastStats: null,
+          modelInfo: {},
+          updatedAt: 2,
+          lastMessageAt: 2,
+        },
+      ],
+      lastActiveChatIdByWorkspace: {},
+      lastActiveChatIdByApp: {},
+    });
+
+    const { openExperts, closeExpertsHub } = await import('../../src/ui/experts/experts-hub.ts');
+    const { openExpertChatInShell, getExpertScopeId } = await import(
+      '../../src/ui/experts/experts-scope.ts'
+    );
+
+    openExperts({ expertId: 'software-engineer' });
+    const expertChat = {
+      id: 'chat-1',
+      kind: 'expert',
+      expertId: 'software-engineer',
+      expertSelection: { mode: 'manual', expertId: 'software-engineer' },
+      name: 'Expert chat',
+      history: [{ role: 'assistant', content: 'Hi from expert' }],
+      modelId: '',
+      modeId: 'general',
+    };
+
+    await openExpertChatInShell(expertChat);
+    await new Promise((r) => setTimeout(r, 0));
+
+    closeExpertsHub({ skipNavigate: true });
+    await new Promise((r) => setTimeout(r, 0));
+
+    const { sessionState } = await import('../../src/state/sessions.ts');
+    assert.equal(sessionState?.activeId, 'chat-1');
+    assert.equal(getExpertScopeId(), 'software-engineer');
+    assert.equal(isDesktopChatActive(), true);
+  });
 });

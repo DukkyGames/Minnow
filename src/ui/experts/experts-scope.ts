@@ -123,6 +123,9 @@ export async function openExpertChatInShell(chat: Chat): Promise<void> {
   setExpertsPageOpen(false);
   root.classList.remove('is-open');
 
+  const { abandonExpertsHubSavedChat } = await import('./experts-hub');
+  abandonExpertsHubSavedChat();
+
   activateChatById(chat.id);
   recordChatOpened(chat.id);
   syncModelSelectForActiveChat();

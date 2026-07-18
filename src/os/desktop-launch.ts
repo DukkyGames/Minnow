@@ -41,6 +41,10 @@ async function refreshDesktopChatSurface(): Promise<void> {
 export async function restoreDesktopSessionOnForeground(): Promise<void> {
   if (!isDesktopChatActive()) return;
 
+  const { getForegroundAppId, getOsView } = await import('./instances');
+  // Stale desktop restore must not repoint the file tree while Code is foreground.
+  if (getOsView() === 'app' && getForegroundAppId() === 'code') return;
+
   const {
     activateDesktopAssistantChatForApp,
     ensureSessionsReady,
