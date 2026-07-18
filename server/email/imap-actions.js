@@ -2,9 +2,7 @@
  * IMAP message mutations — flags, move, archive, delete (imapflow).
  */
 
-import { readAccountPassword, getEmailAccount } from './accounts.js';
-import { createImapClient, listImapFolders } from './imap.js';
-import { withImapErrors } from './imap-errors.js';
+import { listFoldersCached, withMailbox } from './imap-session.js';
 import {
   getCachedMessage,
   removeMessageFromCache,
@@ -84,36 +82,6 @@ export function resolveMailFolder(folders, preferred, role = '') {
 
 /**
  * @param {string} accountId
- * @param {(client: import('imapflow').ImapFlow, account: import('./accounts.js').EmailAccount) => Promise<unknown>} fn
- */
-async function withConnectedImap(accountId, fn) {
-  const account = await getEmailAccount(accountId);
-  if (!account) {
-    throw new Error('Email account not found');
-  }
-  const password = await readAccountPassword(accountId);
-  return withImapErrors(account, async () => {
-    const client = createImapClient(account, password);
-    try {
-      await client.connect();
-      return await fn(client, account);
-    } finally {
-      try {
-        await client.logout();
-      } catch {
-        /* ignore */
-      }
-      try {
-        await client.close();
-      } catch {
-        /* ignore */
-      }
-    }
-  });
-}
-
-/**
- * @param {string} accountId
  * @param {string} messageKey
  */
 async function resolveCachedMessage(accountId, messageKey) {
@@ -138,21 +106,16 @@ async function resolveCachedMessage(accountId, messageKey) {
 export async function setImapMessageFlags(accountId, messageKey, flags) {
   const { message, folder, uid } = await resolveCachedMessage(accountId, messageKey);
 
-  await withConnectedImap(accountId, async (client) => {
-    const lock = await client.getMailboxLock(folder);
-    try {
-      if (flags.seen === true) {
-        await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true });
-      } else if (flags.seen === false) {
-        await client.messageFlagsRemove(uid, ['\\Seen'], { uid: true });
-      }
-      if (flags.flagged === true) {
-        await client.messageFlagsAdd(uid, ['\\Flagged'], { uid: true });
-      } else if (flags.flagged === false) {
-        await client.messageFlagsRemove(uid, ['\\Flagged'], { uid: true });
-      }
-    } finally {
-      lock.release();
+  await withMailbox(accountId, folder, async (client) => {
+    if (flags.seen === true) {
+      await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true });
+    } else if (flags.seen === false) {
+      await client.messageFlagsRemove(uid, ['\\Seen'], { uid: true });
+    }
+    if (flags.flagged === true) {
+      await client.messageFlagsAdd(uid, ['\\Flagged'], { uid: true });
+    } else if (flags.flagged === false) {
+      await client.messageFlagsRemove(uid, ['\\Flagged'], { uid: true });
     }
   });
 
@@ -166,6 +129,74 @@ export async function setImapMessageFlags(accountId, messageKey, flags) {
 }
 
 /**
+ * Set flags on many messages with one STORE per folder (imapflow accepts a UID
+ * set), instead of one connection + one STORE per message.
+ *
+ * @param {string} accountId
+ * @param {string[]} messageKeys
+ * @param {{ seen?: boolean, flagged?: boolean }} flags
+ */
+export async function setImapMessageFlagsBulk(accountId, messageKeys, flags) {
+  /** @type {Map<string, Array<{ key: string, uid: number, message: Record<string, any> }>>} */
+  const byFolder = new Map();
+  /** @type {Array<{ id: string, ok: false, error: string }>} */
+  const failures = [];
+
+  for (const key of messageKeys) {
+    try {
+      const { message, folder, uid } = await resolveCachedMessage(accountId, key);
+      if (!byFolder.has(folder)) byFolder.set(folder, []);
+      byFolder.get(folder).push({ key, uid, message });
+    } catch (err) {
+      failures.push({
+        id: key,
+        ok: false,
+        error: err instanceof Error ? err.message : 'Message not found',
+      });
+    }
+  }
+
+  /** @type {Array<Record<string, unknown>>} */
+  const results = [...failures];
+
+  for (const [folder, entries] of byFolder) {
+    const uidSet = entries.map((entry) => entry.uid).join(',');
+    try {
+      await withMailbox(accountId, folder, async (client) => {
+        if (flags.seen === true) {
+          await client.messageFlagsAdd(uidSet, ['\\Seen'], { uid: true });
+        } else if (flags.seen === false) {
+          await client.messageFlagsRemove(uidSet, ['\\Seen'], { uid: true });
+        }
+        if (flags.flagged === true) {
+          await client.messageFlagsAdd(uidSet, ['\\Flagged'], { uid: true });
+        } else if (flags.flagged === false) {
+          await client.messageFlagsRemove(uidSet, ['\\Flagged'], { uid: true });
+        }
+      });
+    } catch (err) {
+      const error = err instanceof Error ? err.message : 'Bulk flag update failed';
+      for (const entry of entries) {
+        results.push({ id: entry.key, ok: false, error });
+      }
+      continue;
+    }
+
+    for (const entry of entries) {
+      const nextFlags = {
+        seen: flags.seen ?? entry.message.flags?.seen ?? false,
+        flagged: flags.flagged ?? entry.message.flags?.flagged ?? false,
+        answered: entry.message.flags?.answered ?? false,
+      };
+      await updateMessageFlags(accountId, entry.key, nextFlags);
+      results.push({ id: entry.key, ok: true, flags: nextFlags });
+    }
+  }
+
+  return results;
+}
+
+/**
  * Move a message to another folder.
  * @param {string} accountId
  * @param {string} messageKey
@@ -173,23 +204,18 @@ export async function setImapMessageFlags(accountId, messageKey, flags) {
  * @param {'trash' | 'archive' | 'junk' | ''} [role]
  */
 export async function moveImapMessage(accountId, messageKey, destFolder, role = '') {
-  const { message, folder, uid } = await resolveCachedMessage(accountId, messageKey);
-  const folders = await listImapFolders(accountId);
+  const { folder, uid } = await resolveCachedMessage(accountId, messageKey);
+  const folders = await listFoldersCached(accountId);
   const target = resolveMailFolder(folders, destFolder, role);
 
   let newUid = uid;
-  await withConnectedImap(accountId, async (client) => {
-    const lock = await client.getMailboxLock(folder);
-    try {
-      const moved = await client.messageMove(uid, target, { uid: true });
-      if (moved && typeof moved === 'object' && moved.uidMap) {
-        const mapped = moved.uidMap.get(uid);
-        if (mapped) {
-          newUid = mapped;
-        }
+  await withMailbox(accountId, folder, async (client) => {
+    const moved = await client.messageMove(uid, target, { uid: true });
+    if (moved && typeof moved === 'object' && moved.uidMap) {
+      const mapped = moved.uidMap.get(uid);
+      if (mapped) {
+        newUid = mapped;
       }
-    } finally {
-      lock.release();
     }
   });
 
@@ -203,7 +229,7 @@ export async function moveImapMessage(accountId, messageKey, destFolder, role = 
  * @param {string} messageKey
  */
 export async function archiveImapMessage(accountId, messageKey) {
-  const folders = await listImapFolders(accountId);
+  const folders = await listFoldersCached(accountId);
   const archiveFolder = resolveMailFolder(folders, 'Archive', 'archive');
   return moveImapMessage(accountId, messageKey, archiveFolder, 'archive');
 }
@@ -215,20 +241,15 @@ export async function archiveImapMessage(accountId, messageKey) {
  * @param {{ permanent?: boolean }} [options]
  */
 export async function deleteImapMessage(accountId, messageKey, options = {}) {
-  const { message, folder, uid } = await resolveCachedMessage(accountId, messageKey);
-  const folders = await listImapFolders(accountId);
+  const { folder, uid } = await resolveCachedMessage(accountId, messageKey);
+  const folders = await listFoldersCached(accountId);
   const trashFolder = resolveMailFolder(folders, 'Trash', 'trash');
   const folderLower = folder.toLowerCase();
 
   if (options.permanent || folderLower.includes('trash') || folderLower.includes('bin')) {
-    await withConnectedImap(accountId, async (client) => {
-      const lock = await client.getMailboxLock(folder);
-      try {
-        await client.messageFlagsAdd(uid, ['\\Deleted'], { uid: true });
-        await client.messageDelete(uid, { uid: true });
-      } finally {
-        lock.release();
-      }
+    await withMailbox(accountId, folder, async (client) => {
+      await client.messageFlagsAdd(uid, ['\\Deleted'], { uid: true });
+      await client.messageDelete(uid, { uid: true });
     });
     await removeMessageFromCache(accountId, messageKey);
     return { ok: true, deleted: true };

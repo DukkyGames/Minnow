@@ -7,7 +7,16 @@ import {
   deleteImapMessage,
   moveImapMessage,
   setImapMessageFlags,
+  setImapMessageFlagsBulk,
 } from './imap-actions.js';
+
+/** Bulk actions that collapse to one STORE per folder. */
+const BULK_FLAG_ACTIONS = {
+  read: { seen: true },
+  unread: { seen: false },
+  flag: { flagged: true },
+  unflag: { flagged: false },
+};
 
 /**
  * @param {string} accountId
@@ -59,19 +68,18 @@ export async function bulkMessageAction(accountId, input) {
   }
 
   const action = String(input.action ?? '').trim().toLowerCase();
+
+  if (BULK_FLAG_ACTIONS[action]) {
+    const results = await setImapMessageFlagsBulk(accountId, ids, BULK_FLAG_ACTIONS[action]);
+    const failed = results.filter((row) => row.ok === false);
+    return { ok: failed.length === 0, results, failed: failed.length };
+  }
+
   const results = [];
 
   for (const messageKey of ids) {
     try {
-      if (action === 'read') {
-        results.push({ id: messageKey, ...(await setMessageFlags(accountId, messageKey, { seen: true })) });
-      } else if (action === 'unread') {
-        results.push({ id: messageKey, ...(await setMessageFlags(accountId, messageKey, { seen: false })) });
-      } else if (action === 'flag') {
-        results.push({ id: messageKey, ...(await setMessageFlags(accountId, messageKey, { flagged: true })) });
-      } else if (action === 'unflag') {
-        results.push({ id: messageKey, ...(await setMessageFlags(accountId, messageKey, { flagged: false })) });
-      } else if (action === 'archive') {
+      if (action === 'archive') {
         results.push({ id: messageKey, ...(await archiveMessage(accountId, messageKey)) });
       } else if (action === 'delete') {
         results.push({ id: messageKey, ...(await deleteMessage(accountId, messageKey)) });

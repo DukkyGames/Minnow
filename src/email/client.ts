@@ -186,6 +186,72 @@ export async function fetchEmailThread(
   return parseJson(res);
 }
 
+export interface EmailThreadSummary {
+  threadId: string;
+  subject: string;
+  participants: string[];
+  messageCount: number;
+  unreadCount: number;
+  flagged: boolean;
+  hasAttachments: boolean;
+  lastDate: string;
+  folders: string[];
+  snippet: string;
+  summary: string | null;
+}
+
+/** Conversation rollups for the thread list. */
+export async function fetchEmailThreads(
+  accountId: string,
+  query?: { folder?: string; offset?: number; limit?: number; filter?: string; query?: string },
+): Promise<{ threads: EmailThreadSummary[]; total: number }> {
+  const params = new URLSearchParams();
+  if (query?.folder) params.set('folder', query.folder);
+  if (query?.offset !== undefined) params.set('offset', String(query.offset));
+  if (query?.limit !== undefined) params.set('limit', String(query.limit));
+  if (query?.filter) params.set('filter', query.filter);
+  if (query?.query) params.set('query', query.query);
+  const qs = params.toString();
+  const res = await fetch(
+    `/api/email/accounts/${encodeURIComponent(accountId)}/threads${qs ? `?${qs}` : ''}`,
+  );
+  return parseJson(res);
+}
+
+/** Full-text search across folders (all accounts when accountId is omitted). */
+export async function searchEmail(query: {
+  q: string;
+  accountId?: string;
+  folder?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ messages: Array<EmailMessage & { accountId: string }>; total: number }> {
+  const params = new URLSearchParams({ q: query.q });
+  if (query.accountId) params.set('accountId', query.accountId);
+  if (query.folder) params.set('folder', query.folder);
+  if (query.limit !== undefined) params.set('limit', String(query.limit));
+  if (query.offset !== undefined) params.set('offset', String(query.offset));
+  const res = await fetch(`/api/email/search?${params.toString()}`);
+  return parseJson(res);
+}
+
+/**
+ * Load the full body for a message. Sync stores headers plus a text preview,
+ * so the HTML part arrives on first open.
+ */
+export async function fetchEmailMessageBody(
+  accountId: string,
+  messageId: string,
+  options?: { force?: boolean },
+): Promise<{ message: EmailMessage }> {
+  const params = new URLSearchParams({ accountId });
+  if (options?.force) params.set('force', '1');
+  const res = await fetch(
+    `/api/email/messages/${encodeURIComponent(messageId)}/body?${params.toString()}`,
+  );
+  return parseJson(res);
+}
+
 export async function triageEmailMessage(
   accountId: string,
   messageId: string,
