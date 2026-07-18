@@ -16,6 +16,7 @@ import {
   resolveReplyTarget,
 } from "../../email/reply-headers";
 import { createComposeBodyEditor } from "./email-compose-editor";
+import { showSendUndoToast } from "./email-undo-toast";
 
 export type ComposeMode = "reply" | "replyAll" | "forward" | "new";
 
@@ -28,6 +29,8 @@ export interface EmailComposeOptions {
   onStatus?: (state: "ok" | "err", message: string) => void;
   onSent?: () => void;
   onRefresh?: () => void;
+  /** Prefilled fields, used to restore a composer after an undone send. */
+  draft?: { to?: string; cc?: string; subject?: string; body?: string };
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -235,6 +238,17 @@ export function mountEmailCompose(
   };
 
   const applyModeDefaults = () => {
+    // A restored draft is what the user actually typed, so it wins over
+    // anything the reply/forward defaults would compute.
+    if (options.draft) {
+      const { to, cc, subject, body } = options.draft;
+      if (to !== undefined) toInput.value = to;
+      if (cc !== undefined) ccInput.value = cc;
+      if (subject !== undefined) subjectInput.value = subject;
+      if (body !== undefined) bodyEditor.setPlainText(body);
+      return;
+    }
+
     const latest = options.messages?.[options.messages.length - 1];
     const accountEmail =
       options.account.username || options.account.fromAddress || "";
@@ -484,9 +498,6 @@ export function mountEmailCompose(
       return;
     }
 
-    const ok = window.confirm(`Send to ${to}?\n\nSubject: ${subject}`);
-    if (!ok) return;
-
     const latest = options.messages?.[options.messages.length - 1];
     const replyHeaders =
       options.mode !== "new" && latest
@@ -497,7 +508,8 @@ export function mountEmailCompose(
         : undefined;
 
     try {
-      await sendEmailMessage({
+      // Queued, not sent: the undo window below is what confirms the send.
+      const { entry } = await sendEmailMessage({
         accountId: options.account.id,
         to,
         cc: cc || undefined,
@@ -506,10 +518,17 @@ export function mountEmailCompose(
         bodyHtml,
         inReplyTo: replyHeaders?.inReplyTo,
         references: replyHeaders?.references,
-        confirmed: true,
       });
 
-      options.onStatus?.("ok", "Email sent");
+      showSendUndoToast(entry, {
+        onStatus: options.onStatus,
+        // Put the draft back in front of the user rather than silently
+        // discarding what they just wrote.
+        onUndo: () => {
+          mountEmailCompose(mount, { ...options, draft: { to, cc, subject, body } });
+        },
+      });
+
       options.onSent?.();
     } catch (err) {
       options.onStatus?.(

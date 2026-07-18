@@ -6,7 +6,13 @@
 
 import type { EmailAccount, EmailMessage } from "../../email/client";
 
-import { syncEmailFolder, fetchEmailThread } from "../../email/client";
+import {
+  allowImagesFromSender,
+  fetchEmailThread,
+  fetchImageAllowlist,
+  normalizeSender,
+  syncEmailFolder,
+} from "../../email/client";
 
 import {
   archiveEmailMessage,
@@ -28,6 +34,16 @@ import {
 } from "./email-body";
 
 import { EMAIL_ICONS } from "./email-icons";
+
+/**
+ * Senders allowed to load remote images, cached for the session. `null` until
+ * the first fetch resolves — bodies paint blocked in the meantime, so a slow
+ * request can never cause images to load before the allowlist is known.
+ */
+let imageAllowlist: string[] | null = null;
+
+/** Messages the user opted into for this session only ("Load images" once). */
+const imagesLoadedFor = new Set<string>();
 
 export interface EmailLayoutOptions {
   account: EmailAccount;
@@ -71,6 +87,91 @@ function iconBtn(
   btn.innerHTML = svg;
 
   return btn;
+}
+
+/**
+ * Render one message body plus the remote-content bar.
+ *
+ * Images stay withheld until the user asks for this message, or has previously
+ * trusted the sender — see `server/email/remote-content.js` for why they are
+ * blocked in the first place.
+ */
+function renderBodyWithRemoteControls(
+  msg: EmailMessage,
+  viewMode: EmailBodyViewMode,
+  onStatus?: (state: "ok" | "err", message: string) => void,
+): HTMLElement {
+  const wrap = el("div", "email-thread-body-wrap");
+  const sender = normalizeSender(msg.from);
+
+  const paint = (load: boolean): void => {
+    wrap.replaceChildren();
+
+    const notice = el("div", "email-remote-notice");
+    notice.hidden = true;
+    const body = el("div", "email-thread-body");
+    wrap.append(notice, body);
+
+    renderEmailBody(body, msg, {
+      viewMode,
+      loadRemoteImages: load,
+      onRemoteContent: ({ blockedCount }) => {
+        if (load || blockedCount === 0) return;
+
+        const label = blockedCount === 1 ? "1 remote image" : `${blockedCount} remote images`;
+        const text = el(
+          "span",
+          "email-remote-notice-text",
+          `${label} blocked to keep your address and read time private.`,
+        );
+
+        const loadOnce = el("button", "", "Load images") as HTMLButtonElement;
+        loadOnce.type = "button";
+        loadOnce.addEventListener("click", () => {
+          imagesLoadedFor.add(msg.id);
+          paint(true);
+        });
+
+        notice.replaceChildren(text, loadOnce);
+
+        if (sender) {
+          const always = el("button", "", "Always from this sender") as HTMLButtonElement;
+          always.type = "button";
+          always.addEventListener("click", async () => {
+            try {
+              imageAllowlist = await allowImagesFromSender(sender);
+              paint(true);
+            } catch (err) {
+              onStatus?.(
+                "err",
+                err instanceof Error ? err.message : "Could not update the image allowlist",
+              );
+            }
+          });
+          notice.appendChild(always);
+        }
+
+        notice.hidden = false;
+      },
+    });
+  };
+
+  const trusted = imagesLoadedFor.has(msg.id) || (imageAllowlist?.includes(sender) ?? false);
+  paint(trusted);
+
+  // Prime the allowlist once, then repaint if this sender turns out to be on it.
+  if (imageAllowlist === null) {
+    void fetchImageAllowlist()
+      .then((senders) => {
+        imageAllowlist = senders;
+        if (!trusted && senders.includes(sender)) paint(true);
+      })
+      .catch(() => {
+        imageAllowlist = [];
+      });
+  }
+
+  return wrap;
 }
 
 function formatWhen(iso?: string): string {
@@ -1065,11 +1166,9 @@ export async function renderEmailLayout(
           block.appendChild(attRow);
         }
 
-        const body = el("div", "email-thread-body");
-
-        renderEmailBody(body, msg, bodyViewMode);
-
-        block.appendChild(body);
+        block.appendChild(
+          renderBodyWithRemoteControls(msg, bodyViewMode, options.onStatus),
+        );
 
         bodyStack.appendChild(block);
       }

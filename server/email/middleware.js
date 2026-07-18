@@ -24,7 +24,14 @@ import {
   testEmailConnection,
 } from './transport.js';
 import { triageMessage } from './triage.js';
-import { draftReply, sendEmail, sendReplyVariant } from './smtp.js';
+import { draftReply, resolveReplyVariantSend } from './smtp.js';
+import { cancelSend, enqueueSend, listOutbox } from './outbox.js';
+import { fetchRemoteImage } from './image-proxy.js';
+import {
+  allowImagesFromSender,
+  blockImagesFromSender,
+  listImageAllowlist,
+} from './image-allowlist.js';
 import { improveComposeText } from './compose-ai.js';
 import {
   setMessageFlags,
@@ -116,6 +123,39 @@ export function createEmailMiddleware() {
 
       if (url === '/api/email/events' && req.method === 'GET') {
         handleEmailEventsSse(req, res);
+        return;
+      }
+
+      // Remote images are fetched server-side so the renderer never contacts
+      // the sender's host directly (no Referer, no cookies, no fingerprint).
+      if (url === '/api/email/image-proxy' && req.method === 'GET') {
+        const params = parseQuery(req.url ?? '');
+        const target = String(params.get('url') ?? '');
+        const image = await fetchRemoteImage(target);
+        res.statusCode = 200;
+        res.setHeader('Content-Type', image.contentType);
+        res.setHeader('Cache-Control', 'private, max-age=3600');
+        res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+        res.end(image.body);
+        return;
+      }
+
+      if (url === '/api/email/image-allowlist' && req.method === 'GET') {
+        sendJson(res, 200, { senders: await listImageAllowlist() });
+        return;
+      }
+
+      if (url === '/api/email/image-allowlist' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const senders = await allowImagesFromSender(String(body.sender ?? ''));
+        sendJson(res, 200, { senders });
+        return;
+      }
+
+      if (url === '/api/email/image-allowlist' && req.method === 'DELETE') {
+        const params = parseQuery(req.url ?? '');
+        const senders = await blockImagesFromSender(String(params.get('sender') ?? ''));
+        sendJson(res, 200, { senders });
         return;
       }
 
@@ -404,18 +444,14 @@ export function createEmailMiddleware() {
           sendJson(res, 400, { error: 'accountId and threadId are required' });
           return;
         }
-        if (!body.confirmed) {
-          sendJson(res, 400, { error: 'Send requires explicit user confirmation (confirmed: true)' });
-          return;
-        }
-        const result = await sendReplyVariant({
+        const payload = await resolveReplyVariantSend({
           accountId,
           threadId,
           messageKey,
           variantId,
-          confirmed: true,
         });
-        sendJson(res, 200, result);
+        const entry = enqueueSend(payload);
+        sendJson(res, 202, { queued: true, entry });
         return;
       }
 
@@ -448,17 +484,40 @@ export function createEmailMiddleware() {
         return;
       }
 
+      // Send queues into the outbox rather than delivering inline; the undo
+      // window is the send gate. Returns the queued entry, not a receipt.
       if (url === '/api/email/send' && req.method === 'POST') {
         const body = await readJsonBody(req);
-        const result = await sendEmail(body);
-        sendJson(res, 200, result);
+        const entry = enqueueSend(body);
+        sendJson(res, 202, { queued: true, entry });
+        return;
+      }
+
+      if (url === '/api/email/outbox' && req.method === 'GET') {
+        sendJson(res, 200, { entries: listOutbox() });
+        return;
+      }
+
+      const outboxMatch = url.match(/^\/api\/email\/outbox\/([^/]+)$/);
+      if (outboxMatch && req.method === 'DELETE') {
+        const entry = cancelSend(decodeURIComponent(outboxMatch[1]));
+        sendJson(res, 200, { entry });
         return;
       }
 
       sendJson(res, 404, { error: 'Not found' });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Email request failed';
-      sendJson(res, 400, { error: message });
+      // Rate limiting reports 429 so the client can distinguish "slow down"
+      // from "malformed request".
+      const status = Number(/** @type {{ status?: number }} */ (err)?.status) || 400;
+      if (status === 429) {
+        const retryAfterMs = Number(/** @type {{ retryAfterMs?: number }} */ (err)?.retryAfterMs);
+        if (Number.isFinite(retryAfterMs)) {
+          res.setHeader('Retry-After', String(Math.ceil(retryAfterMs / 1000)));
+        }
+      }
+      sendJson(res, status, { error: message });
     }
   };
 }

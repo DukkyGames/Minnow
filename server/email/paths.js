@@ -40,3 +40,8 @@ export function emailDbPath(accountId) {
 export function emailAutomationsPath() {
   return path.join(emailRootDir(), 'automations.json');
 }
+
+/** Senders whose remote images load without asking. */
+export function emailImageAllowlistPath() {
+  return path.join(emailRootDir(), 'image-allowlist.json');
+}
