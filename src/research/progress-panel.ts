@@ -121,6 +121,10 @@ export class ResearchProgressPanel {
   private feedKeys = new Set<string>();
   private status: 'running' | 'done' | 'error' | 'cancelled' = 'running';
   private statusMessage = '';
+  /** Latest SSE phase — drives whether the source feed shows an active read. */
+  private currentPhase = 'probing';
+  /** Optional server message for analyzing / writing phases. */
+  private phaseMessage = '';
 
   constructor(mount: HTMLElement) {
     this.mount = mount;
@@ -135,6 +139,8 @@ export class ResearchProgressPanel {
     this.feedKeys.clear();
     this.status = 'running';
     this.statusMessage = '';
+    this.currentPhase = 'probing';
+    this.phaseMessage = '';
     this.timerStart = performance.now();
     this.root = document.createElement('div');
     this.root.className = 'dr-prog';
@@ -162,6 +168,8 @@ export class ResearchProgressPanel {
     }
     if (event.phase === 'warning') {
       this.statusMessage = event.message;
+    } else {
+      this.currentPhase = event.phase;
     }
     this.stepIndex = progressPhaseToStep(event.phase);
     if (event.phase === 'searching') {
@@ -189,9 +197,11 @@ export class ResearchProgressPanel {
     if (event.phase === 'analyzing') {
       this.round = event.round ?? this.round;
       this.scanned = event.totalSources ?? this.scanned;
+      this.phaseMessage = event.message?.trim() || `Synthesizing round ${this.round}…`;
     }
     if (event.phase === 'writing') {
       this.scanned = event.totalSources ?? this.scanned;
+      this.phaseMessage = event.message?.trim() || 'Composing final report…';
     }
     this.paint();
   }
@@ -269,19 +279,28 @@ export class ResearchProgressPanel {
         `<span class="dr-slabel research-mono ${i === this.stepIndex ? 'on' : i < this.stepIndex ? 'did' : ''}">${escapeHtml(s.short)}</span>`,
     ).join('');
 
+    const isReadingPhase = this.status === 'running' && this.currentPhase === 'reading';
+    const isSynthesisPhase =
+      this.status === 'running' &&
+      (this.currentPhase === 'analyzing' || this.currentPhase === 'writing');
     const latest = this.feed.length ? this.feed[this.feed.length - 1] : null;
-    const currentHtml = latest
+    const currentHtml = isSynthesisPhase
       ? `<div class="dr-current">
+          <div class="dr-cur-link">${escapeHtml(this.phaseMessage)}</div>
+          <div class="dr-cur-meta research-mono">Round ${this.round} · ${this.scanned} sources scanned · ${this.feed.length} read</div>
+        </div>`
+      : latest && isReadingPhase
+        ? `<div class="dr-current">
           <div class="dr-cur-link">${escapeHtml(latest.title)} <span class="dr-cur-dim">| ${escapeHtml(latest.host)}</span></div>
           <div class="dr-cur-meta research-mono">Round ${this.round} · ${this.scanned} sources scanned · ${this.feed.length} read</div>
         </div>`
-      : '';
+        : '';
 
     const feedHtml =
       this.feed.length > 0
         ? `<div class="dr-feed">${this.feed
             .map((s, i) => {
-              const isLast = i === this.feed.length - 1 && this.status === 'running';
+              const isLast = i === this.feed.length - 1 && isReadingPhase;
               return `<div class="dr-feed-row ${isLast ? 'reading' : 'read'}">
                 <span class="dr-stype research-mono t-${escapeHtml(s.type)}">${escapeHtml(s.type)}</span>
                 <a class="dr-feed-title" href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(s.url)}">${escapeHtml(s.title)}</a>

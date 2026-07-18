@@ -51,7 +51,7 @@ describe('research progress panel', () => {
     });
     assert.ok(mount.querySelector('.dr-prog'));
     assert.ok(mount.querySelector('.dr-stepper'));
-    assert.ok(mount.querySelector('.dr-feed-row'));
+    assert.ok(mount.querySelector('.dr-feed-row.reading'));
     const feedLink = mount.querySelector('.dr-feed-title') as HTMLAnchorElement | null;
     assert.ok(feedLink);
     assert.equal(feedLink?.tagName, 'A');
@@ -60,5 +60,51 @@ describe('research progress panel', () => {
     assert.equal(feedLink?.getAttribute('target'), '_blank');
     panel.complete('done');
     assert.ok(mount.querySelector('.dr-node.done'));
+  });
+
+  test('writing phase clears active read state and shows synthesis status', () => {
+    const mount = document.getElementById('progressMount') as HTMLElement;
+    const panel = new ResearchProgressPanel(mount);
+    panel.reset();
+    panel.apply({
+      phase: 'reading',
+      url: 'https://example.com/post',
+      title: 'Example post',
+      totalSources: 2,
+      round: 1,
+    });
+    panel.apply({
+      phase: 'writing',
+      totalSources: 2,
+      totalFindings: 4,
+      message: 'Expanding report...',
+    });
+
+    assert.equal(mount.querySelector('.dr-feed-row.reading'), null);
+    assert.ok(mount.textContent?.includes('Expanding report...'));
+    assert.ok(!mount.textContent?.includes('Example post | example.com'));
+  });
+
+  test('analyzing phase marks all feed rows as read', () => {
+    const mount = document.getElementById('progressMount') as HTMLElement;
+    const panel = new ResearchProgressPanel(mount);
+    panel.reset();
+    panel.apply({
+      phase: 'reading',
+      url: 'https://example.com/a',
+      title: 'Source A',
+      totalSources: 1,
+      round: 1,
+    });
+    panel.apply({
+      phase: 'analyzing',
+      round: 1,
+      totalSources: 1,
+      totalFindings: 1,
+      message: 'Synthesizing round 1',
+    });
+
+    assert.equal(mount.querySelector('.dr-feed-row.reading'), null);
+    assert.ok(mount.textContent?.includes('Synthesizing round 1'));
   });
 });
