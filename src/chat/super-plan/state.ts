@@ -162,6 +162,18 @@ export function setSuperPlanPaused(chat: Chat, paused: boolean): SuperPlanState 
   return patchSuperPlanState(chat, { paused });
 }
 
+/**
+ * True while the sequential Super Plan pipeline owns this chat's turn slot.
+ * Composer follow-up queue drains are deferred so they cannot race stage turns
+ * (e.g. grill → spec_confirm right after the interview ends).
+ */
+export function isSuperPlanPipelineOwningChatTurns(chat: Chat): boolean {
+  const sp = chat.superPlan;
+  if (!sp || sp.cancelled || sp.paused) return false;
+  if (sp.stages.present?.status === 'done') return false;
+  return true;
+}
+
 export function cancelSuperPlanState(chat: Chat): void {
   patchSuperPlanState(chat, { cancelled: true, paused: false });
   const state = ensureSuperPlanState(chat);

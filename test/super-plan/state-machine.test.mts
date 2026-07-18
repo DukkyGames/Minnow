@@ -7,6 +7,7 @@ import { describe, test } from 'node:test';
 import {
   createInitialSuperPlanStages,
   createSuperPlanState,
+  isSuperPlanPipelineOwningChatTurns,
   markSuperPlanStageStatus,
   setSuperPlanActiveStage,
 } from '../../src/chat/super-plan/state.ts';
@@ -71,5 +72,15 @@ describe('Super Plan state helpers', () => {
 
     setSuperPlanActiveStage(chat, 'spec_confirm');
     assert.equal(chat.superPlan.activeStage, 'spec_confirm');
+  });
+
+  test('isSuperPlanPipelineOwningChatTurns is true until present completes', () => {
+    const chat = createEmptyChatObject('sp-own');
+    chat.superPlan = createSuperPlanState('Feature Y');
+    assert.equal(isSuperPlanPipelineOwningChatTurns(chat), true);
+    markSuperPlanStageStatus(chat, 'present', 'done');
+    assert.equal(isSuperPlanPipelineOwningChatTurns(chat), false);
+    chat.superPlan!.paused = true;
+    assert.equal(isSuperPlanPipelineOwningChatTurns(chat), false);
   });
 });

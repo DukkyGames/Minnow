@@ -10,9 +10,8 @@
 
 import { isChatStreaming, subscribeChatStreamEnd } from '../streaming-state';
 import { isChatTurnInProgress, isChatTurnSetupPending } from '../chat-turn-guard';
-import type { Chat } from '../../types';
+import type { Chat, TurnRunRecord } from '../../types';
 import { cancelResearch } from '../../research/client';
-import { newestRun } from '../../state/runs-store';
 import {
   cancelSuperPlanState,
   initSuperPlanState,
@@ -87,6 +86,49 @@ function wasSuperPlanStageSuperseded(
   const stageIndex = SUPER_PLAN_STAGE_ORDER.indexOf(stageId);
   const activeIndex = SUPER_PLAN_STAGE_ORDER.indexOf(state.activeStage);
   return stageIndex >= 0 && activeIndex > stageIndex;
+}
+
+/** Run record created by the stage turn that just finished (not a concurrent follow-up). */
+function resolveStageTurnRun(
+  chat: Chat,
+  runsBefore: number,
+): TurnRunRecord | undefined {
+  const newRuns = (chat.runs ?? []).slice(runsBefore);
+  if (newRuns.length === 0) return undefined;
+  if (newRuns.length === 1) return newRuns[0];
+  // A queued follow-up can start after the stage turn; it is always newer.
+  return newRuns.reduce((earliest, run) =>
+    run.createdAt < earliest.createdAt ? run : earliest,
+  );
+}
+
+/**
+ * True when the sequential loop exited with an idle pending/running stage that
+ * should auto-resume (backed off on a busy chat, or stream-end fired too early).
+ */
+function shouldRetrySuperPlanAdvance(chat: Chat): boolean {
+  const state = chat.superPlan;
+  if (!state || state.cancelled || state.paused) return false;
+  if (getSuperPlanCheckpointKind(chat)) return false;
+  if (advancingChats.has(chat.id)) return false;
+  if (isChatStreaming(chat.id) || isChatTurnSetupPending(chat.id)) return false;
+  const record = state.stages[state.activeStage];
+  if (!record || record.status === 'error') return false;
+  return record.status === 'pending' || record.status === 'running';
+}
+
+/** Defer one advance attempt once the chat turn slot is free again. */
+function scheduleSuperPlanAdvanceIfStalled(chat: Chat): void {
+  if (!shouldRetrySuperPlanAdvance(chat)) return;
+  const chatId = chat.id;
+  setTimeout(() => {
+    void import('../../state/sessions').then(({ findChatById }) => {
+      const current = findChatById(chatId);
+      if (current && shouldRetrySuperPlanAdvance(current)) {
+        void advanceSuperPlan(current);
+      }
+    });
+  }, 0);
 }
 
 /** Abort the chat's in-flight turn (lazy import keeps the UI chain out of tests). */
@@ -197,8 +239,8 @@ export async function advanceSuperPlan(chat: Chat): Promise<void> {
           notifyListeners(chat);
           break;
         }
-        const lastRun = newestRun(chat);
-        if (lastRun?.status === 'stopped') {
+        const stageRun = resolveStageTurnRun(chat, runsBefore);
+        if (stageRun?.status === 'stopped') {
           if (wasSuperPlanStageSuperseded(chat, stageId)) {
             continue;
           }
@@ -207,9 +249,9 @@ export async function advanceSuperPlan(chat: Chat): Promise<void> {
           notifyListeners(chat);
           break;
         }
-        if (lastRun?.status === 'failed') {
+        if (stageRun?.status === 'failed') {
           const detail =
-            lastRun.errorMessage?.trim() ||
+            stageRun.errorMessage?.trim() ||
             'Retry the stage, or open the chat for the failure notice.';
           throw new Error(
             `${SUPER_PLAN_STAGE_LABELS[stageId]} turn failed — ${detail}`,
@@ -218,7 +260,7 @@ export async function advanceSuperPlan(chat: Chat): Promise<void> {
         try {
           outcome = await finalizeStreamStage(chat, stageId);
         } catch (err) {
-          if (lastRun?.endReason === 'max_tool_turns') {
+          if (stageRun?.endReason === 'max_tool_turns') {
             const message = err instanceof Error ? err.message : String(err);
             throw new Error(
               `${message} The turn hit the tool-turn cap before finishing — ` +
@@ -273,6 +315,7 @@ export async function advanceSuperPlan(chat: Chat): Promise<void> {
   } finally {
     advancingChats.delete(chat.id);
     notifyListeners(chat);
+    scheduleSuperPlanAdvanceIfStalled(chat);
   }
 }
 
@@ -291,7 +334,13 @@ export async function onSuperPlanStreamEnd(chatId: string): Promise<void> {
   const { findChatById } = await import('../../state/sessions');
   const chat = findChatById(chatId);
   if (!chat?.superPlan || chat.superPlan.cancelled || chat.superPlan.paused) return;
-  if (advancingChats.has(chat.id) || isChatStreaming(chat.id)) return;
+  if (isChatStreaming(chat.id)) return;
+  if (advancingChats.has(chat.id)) {
+    // Stream-end fired while the sequential loop still owns this chat — retry once
+    // it finishes; the first hook invocation would otherwise no-op permanently.
+    scheduleSuperPlanAdvanceIfStalled(chat);
+    return;
+  }
 
   const record = chat.superPlan.stages[chat.superPlan.activeStage];
   if (record?.status === 'running') {

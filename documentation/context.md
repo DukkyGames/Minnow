@@ -28,6 +28,8 @@ Registry: [`src/chat/modes/registry.ts`](../src/chat/modes/registry.ts). Tool al
 
 **Plan mode** blocks mutating file/git writes except `save_file` / `make_directory` under `documentation/plans/` (client + server guards).
 
+**Super Plan** (`super-plan` mode) runs a sequential pipeline (grill → spec → research → draft/review → present) via [`src/chat/super-plan/controller.ts`](../src/chat/super-plan/controller.ts). The controller owns chat turns for each stage; composer follow-up queue drains are deferred while the pipeline is active so a queued message cannot race the post-interview `spec_confirm` turn. If the loop backs off while a stage is still pending, it schedules a deferred `advanceSuperPlan` retry (stream-end recovery also retries when the hook fires during an in-flight loop). During the **research** stage, [`PlanProgressPanel`](../src/ui/plan-progress-screen.ts) embeds [`ResearchProgressPanel`](../src/research/progress-panel.ts) with `embedded: true` (compact “Deep research” chrome, no nested card, workspace styles in [`plan-progress.css`](../src/styles/plan-progress.css)).
+
 ### MinnowOS apps
 
 Chat (desktop), **Code**, **Models**, **Compare**, **Bench**, **Research**, **Experts**, **Brain**, **Calendar**, **Email**, **Scheduler**, **Settings** — routes `#/desktop`, `#/app/{id}`, registry in [`src/os/app-registry.ts`](../src/os/app-registry.ts).

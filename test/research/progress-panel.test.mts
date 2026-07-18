@@ -78,6 +78,19 @@ describe('research progress panel', () => {
     panel.destroy();
   });
 
+  test('embedded mode hides full headline and uses compact chrome', () => {
+    const mount = document.getElementById('progressMount') as HTMLElement;
+    const panel = new ResearchProgressPanel(mount, { embedded: true });
+    panel.reset();
+    assert.ok(mount.querySelector('.dr-prog--embedded'));
+    assert.equal(mount.querySelector('.dr-prog-head'), null);
+    assert.ok(mount.querySelector('.dr-embedded-bar'));
+    assert.ok(mount.textContent?.includes('Deep research'));
+    assert.ok(mount.querySelector('.dr-stepper--embedded'));
+    assert.ok(mount.querySelector('.dr-workspace--embedded'));
+    panel.destroy();
+  });
+
   test('apply progress renders stepper and feed rows', () => {
     const mount = document.getElementById('progressMount') as HTMLElement;
     const panel = new ResearchProgressPanel(mount);

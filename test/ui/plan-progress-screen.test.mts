@@ -134,6 +134,22 @@ describe('plan progress screen', () => {
     assert.deepEqual(calls, ['revise', 'orchestrate', 'build']);
   });
 
+  test('PlanProgressPanel wires embedded research stream panel', () => {
+    const mount = document.getElementById('mount') as HTMLElement;
+    const panel = new PlanProgressPanel(mount, { variant: 'super-plan', reducedMotion: true });
+    panel.reset();
+    const state = makeSuperPlanState('research');
+    state.stages.grill.status = 'done';
+    state.stages.spec_confirm.status = 'done';
+    state.stages.research.status = 'running';
+    state.researchId = 'research-embed-test';
+    panel.applySuperPlanState(state);
+
+    const feed = mount.querySelector('[data-plan-research-feed]');
+    assert.ok(feed);
+    panel.destroy();
+  });
+
   test('plan progress CSS constrains embedded research source feed overflow', () => {
     const cssPath = join(
       dirname(fileURLToPath(import.meta.url)),

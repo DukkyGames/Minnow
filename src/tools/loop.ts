@@ -22,6 +22,7 @@ import {
   appendSuperPlanStageFailureNotice,
   superPlanPipelineUserMessage,
 } from '../chat/super-plan/hidden-user-messages';
+import { isSuperPlanPipelineOwningChatTurns } from '../chat/super-plan/state';
 import type { SuperPlanStageId } from '../chat/super-plan/types';
 import {
   clearPendingSteer,
@@ -2462,7 +2463,12 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         syncComposerFromStreamingState();
       }
       const runGoalEvalAfterTurn = shouldEvaluateGoalAfterTurn(chat, goalDriven);
-      if (completedNormally && !runGoalEvalAfterTurn && !chat.pendingSteerMessage?.trim()) {
+      if (
+        completedNormally &&
+        !runGoalEvalAfterTurn &&
+        !chat.pendingSteerMessage?.trim() &&
+        !isSuperPlanPipelineOwningChatTurns(chat)
+      ) {
         void flushPendingMessageQueue(chat).then(() => {
           syncComposerMessageQueue();
         });
