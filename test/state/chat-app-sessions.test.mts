@@ -83,7 +83,7 @@ describe('assistant vs code chat filters', () => {
     assert.equal(codeOnly[0].id, CODE_CHAT);
   });
 
-  test('getAssistantChats excludes expert sidebar-hidden kinds', () => {
+  test('getAssistantChats includes expert threads in the chats workspace', () => {
     const state = seedState({
       chats: [
         chatRow(ASSISTANT_A, CHATS_WS, 300),
@@ -92,8 +92,9 @@ describe('assistant vs code chat filters', () => {
     });
 
     const visible = getAssistantChats(state, CHATS_WS);
-    assert.equal(visible.length, 1);
+    assert.equal(visible.length, 2);
     assert.equal(visible[0].id, ASSISTANT_A);
+    assert.equal(visible[1].id, ASSISTANT_B);
   });
 
   test('isAssistantChat and isChatsWorkspacePath agree on chats sandbox paths', () => {

@@ -277,4 +277,16 @@ describe('syncDesktopWorkspaceMounts listing root', () => {
     assert.equal(preview.classList.contains('hidden'), true);
     assert.equal(document.getElementById('desktopPreviewMount')?.classList.contains('is-active'), false);
   });
+
+  test('stale desktop sync cannot pin listing root while Code is foreground', async () => {
+    openDesktopWorkspaceTab('files');
+    const desktopSync = syncDesktopWorkspaceMounts();
+
+    const { launchInstance } = await import('../../src/os/instances.ts');
+    launchInstance('code');
+    await syncDesktopWorkspaceMounts();
+    await desktopSync;
+
+    assert.equal(getFileTreeListingWorkspaceRoot(), CODE_WS);
+  });
 });
