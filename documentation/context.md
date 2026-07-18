@@ -1911,10 +1911,10 @@ While the loop is active (`activeGoal` and not `achieved`), **tool approvals aut
 | Eval tools / gates | [`src/chat/goal/eval-tools.ts`](../src/chat/goal/eval-tools.ts) — allowlist, min turns, min verification tool calls |
 | State helpers | [`src/state/sessions.ts`](../src/state/sessions.ts) — `setActiveGoal`, `clearActiveGoal`, `getActiveGoal` |
 | Composer hint | [`src/ui/goal-active-hint.ts`](../src/ui/goal-active-hint.ts) — `◎ goal active · N turns`; pulses `· evaluating…` while the post-turn evaluator runs |
-| Evaluating UI | [`src/ui/goal-eval-status.ts`](../src/ui/goal-eval-status.ts) — transcript status row + sidebar thinking phase between turns |
+| Evaluating UI | [`src/ui/goal-eval-status.ts`](../src/ui/goal-eval-status.ts) — clickable transcript status row + sidebar thinking phase; opens [`src/ui/goal-eval-drawer.ts`](../src/ui/goal-eval-drawer.ts) (sub-agent-style inset sheet). Live session state: [`src/chat/goal/eval-session.ts`](../src/chat/goal/eval-session.ts) |
 | Model routing | Settings → Models → **Goal evaluator** (`config.goalEval`) |
 
-**Tests:** `test/chat/goal-parse-response.test.mts`, `test/chat/goal-parse-command.test.mts`, `test/chat/goal-command.test.mts`, `test/chat/goal-evaluate.test.mts`, `test/chat/goal-eval-agent.test.mts`, `test/chat/goal-pass-gates.test.mts`, `test/chat/goal-prompt.test.mts`, `test/chat/goal-completion-text.test.mts`, `test/server/validate-sessions-v2.test.mjs` (activeGoal round-trip).
+**Tests:** `test/chat/goal-parse-response.test.mts`, `test/chat/goal-parse-command.test.mts`, `test/chat/goal-command.test.mts`, `test/chat/goal-evaluate.test.mts`, `test/chat/goal-eval-agent.test.mts`, `test/chat/goal-eval-session.test.mts`, `test/chat/goal-pass-gates.test.mts`, `test/chat/goal-prompt.test.mts`, `test/chat/goal-completion-text.test.mts`, `test/server/validate-sessions-v2.test.mjs` (activeGoal round-trip).
 
 ## Build progress checklist (`todo_write`, MIN-273)
 

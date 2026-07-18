@@ -111,6 +111,40 @@
   margin: 8px 0 12px;
 }
 
+.goal-eval-status--clickable {
+  align-self: flex-start;
+  width: 100%;
+  max-width: min(var(--chat-msg-max), 100%);
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--mn-surface-1, var(--mn-bg));
+  cursor: pointer;
+  font-family: var(--font-ui);
+  text-align: left;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.goal-eval-status--clickable:hover,
+.goal-eval-status--clickable:focus-visible {
+  border-color: var(--mn-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--mn-accent) 35%, transparent);
+  outline: none;
+}
+
+.goal-eval-status__hint {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--mn-fg-muted);
+  font-style: italic;
+}
+
 .composer-todo-panel {
   margin: 0 0 8px;
   border: 1px solid var(--mn-border-subtle);

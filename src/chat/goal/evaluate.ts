@@ -25,6 +25,7 @@ import {
 } from './eval-tools';
 import { syncGoalEvalUi } from '../../ui/goal-eval-status';
 import { setGoalEvaluating } from './evaluating-state';
+import { finishGoalEvalSession, startGoalEvalSession } from './eval-session';
 import { parseGoalEvalResponse } from './parse-response';
 import type { ParsedGoalEvalResponse } from './parse-response';
 
@@ -79,12 +80,25 @@ async function runGoalEvalRequest(
 ): Promise<GoalEvaluationResult> {
   const goal = getActiveGoal(chat);
   if (!goal) {
+    finishGoalEvalSession(chat.id, {
+      met: false,
+      reason: 'No active goal.',
+      rawVerdict: '',
+      verificationToolCalls: 0,
+    });
     return { met: false, reason: 'No active goal.' };
   }
 
   const agentResult = await runGoalEvalAgent(chat, conditionText, signal);
   const parsed = parseGoalEvalResponse(agentResult.raw);
-  return enforceGoalPassGates(parsed, goal, agentResult);
+  const gated = enforceGoalPassGates(parsed, goal, agentResult);
+  finishGoalEvalSession(chat.id, {
+    met: gated.met,
+    reason: gated.reason,
+    rawVerdict: agentResult.raw,
+    verificationToolCalls: agentResult.verificationToolCalls,
+  });
+  return gated;
 }
 
 /** Call the configured goal-eval model once after a goal-driven turn. */
@@ -152,6 +166,7 @@ export async function maybeContinueGoalAfterTurn(chat: Chat): Promise<void> {
   touchChat(chat);
   scheduleSaveSessions();
 
+  startGoalEvalSession(chat.id, goal.conditionText);
   setGoalEvaluating(chat.id, true);
   syncGoalEvalUi(chat.id);
   let result: GoalEvaluationResult;

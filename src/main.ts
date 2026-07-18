@@ -180,6 +180,7 @@ import { loadThinkingMeta } from './config/thinking-meta';
 import { syncReefWidgetSettingsFromActiveChat } from './ui/reef-widget-settings';
 import { initWorkAgentDevUi, syncWorkAgentDevFromActiveChat } from './ui/work-agent-dev';
 import { initSubAgentUi } from './ui/sub-agent-cards';
+import { initGoalEvalUi } from './ui/goal-eval-status';
 import { initAgentActivityPanel } from './ui/agent-activity-panel';
 import {
   closeComposerToolsPopover,
@@ -247,6 +248,7 @@ export async function initApp(): Promise<void> {
     await migrateBugsFromChats(sessionState.chats);
   }
   initSubAgentUi();
+  initGoalEvalUi();
   initAgentActivityPanel();
   fillSystemPromptPresetSelect();
   await loadSystemPromptSettings();

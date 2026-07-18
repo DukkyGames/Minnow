@@ -15,6 +15,7 @@ import { extractGoalEvalCompletionText } from './completion-text';
 import { getGoalEvalToolDefinitions, isGoalEvalVerificationTool } from './eval-tools';
 import { buildGoalEvalMessages } from './prompt';
 import { createGoalEvalProviderPort } from './provider-port';
+import { patchGoalEvalSession } from './eval-session';
 
 export interface GoalEvalAgentResult {
   raw: string;
@@ -77,9 +78,17 @@ async function runGoalEvalAgentInner(
 ): Promise<GoalEvalAgentResult> {
   const config = await loadGoalEvalConfig();
   const modelId = config.modelId.trim() || chat.modelId.trim();
+  const messages: ApiMessage[] = buildGoalEvalMessages(chat, conditionText);
+
   if (!modelId) {
+    const raw = 'NO: No model configured for goal evaluation.';
+    patchGoalEvalSession(chat.id, {
+      messages: [...messages, { role: 'assistant', content: raw }],
+      rawVerdict: raw,
+      liveCurrentToolName: undefined,
+    });
     return {
-      raw: 'NO: No model configured for goal evaluation.',
+      raw,
       verificationToolCalls: 0,
     };
   }
@@ -92,8 +101,17 @@ async function runGoalEvalAgentInner(
   const workspaceRoot =
     resolveChatToolWorkspaceRoot(chat, sessionState?.groups ?? undefined) ?? undefined;
 
-  const messages: ApiMessage[] = buildGoalEvalMessages(chat, conditionText);
   let verificationToolCalls = 0;
+
+  const syncSession = (liveCurrentToolName?: string): void => {
+    patchGoalEvalSession(chat.id, {
+      messages: [...messages],
+      verificationToolCalls,
+      liveCurrentToolName,
+    });
+  };
+
+  syncSession();
 
   try {
     for (;;) {
@@ -119,6 +137,7 @@ async function runGoalEvalAgentInner(
           content: extractGoalEvalCompletionText(message) || null,
           tool_calls: toolCalls,
         });
+        syncSession(toolCalls[0]?.function.name);
 
         const outcomes = await runHeadlessToolBatch({
           toolCalls,
@@ -140,11 +159,18 @@ async function runGoalEvalAgentInner(
             content: outcome.parseError ?? outcome.result?.content ?? '',
           });
         }
+        syncSession();
         continue;
       }
 
       const raw = extractGoalEvalCompletionText(message);
       if (raw.trim()) {
+        patchGoalEvalSession(chat.id, {
+          messages: [...messages, { role: 'assistant', content: raw.trim() }],
+          verificationToolCalls,
+          liveCurrentToolName: undefined,
+          rawVerdict: raw.trim(),
+        });
         return { raw: raw.trim(), verificationToolCalls };
       }
 
@@ -155,8 +181,15 @@ async function runGoalEvalAgentInner(
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    const raw = `NO: Goal evaluator failed: ${formatGenerationErrorMessage(message)}`;
+    patchGoalEvalSession(chat.id, {
+      messages: [...messages, { role: 'assistant', content: raw }],
+      rawVerdict: raw,
+      liveCurrentToolName: undefined,
+      verificationToolCalls,
+    });
     return {
-      raw: `NO: Goal evaluator failed: ${formatGenerationErrorMessage(message)}`,
+      raw,
       verificationToolCalls,
     };
   }
