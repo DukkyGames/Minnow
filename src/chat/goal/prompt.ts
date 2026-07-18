@@ -78,7 +78,9 @@ export function buildGoalEvalMessages(chat: Chat, conditionText: string): ApiMes
         '3) Run relevant test, typecheck, or build commands via execute_command (never background: true).',
         '4) For UI or user-facing goals, strongly recommended: browser_navigate, browser_snapshot, and interact — if browser tools are unavailable, return NO for unverified UI claims.',
         'YES only when every checklist item has tool-backed evidence from this evaluation pass.',
+        'When you are done verifying, stop calling tools and send your final message.',
         'Your final message must be exactly one line: YES: <reason> or NO: <reason>.',
+        'Never send analysis, bullet lists, or markdown in the final message — only the verdict line.',
       ].join(' '),
     },
     {
@@ -94,3 +96,7 @@ export function buildGoalEvalMessages(chat: Chat, conditionText: string): ApiMes
     },
   ];
 }
+
+/** Nudge when the evaluator replies with prose instead of a YES/NO verdict line. */
+export const GOAL_EVAL_VERDICT_NUDGE =
+  'Reply with exactly one line: YES: <reason> or NO: <reason>. No bullet lists, analysis, or markdown — only the verdict line.';

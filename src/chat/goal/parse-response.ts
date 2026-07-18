@@ -23,6 +23,7 @@ function stripMarkdownDecorations(line: string): string {
 
 function normalizeVerdictCandidate(line: string): string {
   let normalized = stripMarkdownDecorations(line);
+  normalized = normalized.replace(/^[-*•]\s+/, '').trim();
   normalized = normalized.replace(/^[([{]+/, '').replace(/[)\]}]+$/, '').trim();
   normalized = normalized.replace(
     /^(?:verdict|answer|result|decision|conclusion|final(?:\s+answer)?)\s*:\s*/i,
@@ -121,15 +122,15 @@ function parseEmbeddedVerdict(trimmed: string): ParsedGoalEvalResponse | null {
   };
 }
 
-/**
- * Parse evaluator completion. Malformed output is treated as not met so the loop
- * can continue with guidance rather than falsely clearing the goal.
- */
-export function parseGoalEvalResponse(raw: string): ParsedGoalEvalResponse {
+/** True when the evaluator output contains a parseable YES/NO verdict. */
+export function isGoalEvalVerdictResponse(raw: string): boolean {
+  return tryParseGoalEvalVerdict(raw) !== null;
+}
+
+/** Parse a YES/NO verdict when present; null when the response has no recognizable verdict. */
+export function tryParseGoalEvalVerdict(raw: string): ParsedGoalEvalResponse | null {
   const trimmed = raw.trim();
-  if (!trimmed) {
-    return { met: false, reason: 'Evaluator returned an empty response.' };
-  }
+  if (!trimmed) return null;
 
   const jsonVerdict = tryParseJsonVerdict(trimmed);
   if (jsonVerdict) return jsonVerdict;
@@ -145,6 +146,22 @@ export function parseGoalEvalResponse(raw: string): ParsedGoalEvalResponse {
 
   const trailing = parseVerdictFromTrailingLines(trimmed);
   if (trailing) return trailing;
+
+  return null;
+}
+
+/**
+ * Parse evaluator completion. Malformed output is treated as not met so the loop
+ * can continue with guidance rather than falsely clearing the goal.
+ */
+export function parseGoalEvalResponse(raw: string): ParsedGoalEvalResponse {
+  const parsed = tryParseGoalEvalVerdict(raw);
+  if (parsed) return parsed;
+
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { met: false, reason: 'Evaluator returned an empty response.' };
+  }
 
   return {
     met: false,

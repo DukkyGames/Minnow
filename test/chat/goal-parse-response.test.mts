@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { parseGoalEvalResponse } from '../../src/chat/goal/parse-response.ts';
+import { parseGoalEvalResponse, isGoalEvalVerdictResponse } from '../../src/chat/goal/parse-response.ts';
 
 describe('parseGoalEvalResponse', () => {
   test('parses YES with reason', () => {
@@ -53,5 +53,17 @@ describe('parseGoalEvalResponse', () => {
     );
     assert.equal(result.met, true);
     assert.equal(result.reason, 'All checks passed.');
+  });
+
+  test('parses bullet-list YES verdict', () => {
+    const result = parseGoalEvalResponse('- YES: nav bar matches spec.');
+    assert.equal(result.met, true);
+    assert.equal(result.reason, 'nav bar matches spec.');
+  });
+
+  test('isGoalEvalVerdictResponse is false for analysis without verdict', () => {
+    const raw =
+      '- Nav: `h-[52px]` (matches `topbar-h: "52px"`), `bg-[var(--mn-bg)]`, `border-b`';
+    assert.equal(isGoalEvalVerdictResponse(raw), false);
   });
 });
