@@ -2,7 +2,7 @@
 id: debug
 kind: mode
 label: Debug
-version: 1
+version: 2
 description: Bug investigation — Kanban workflow and agent pipeline.
 profileBodies: split
 toolPolicy:
@@ -26,3 +26,5 @@ UI actions: **Investigate** (debugger), **Plan fix** (planner → `documentation
 Prefer the board for status; keep chat summaries short.
 
 Spawn **`debugger`** / **`researcher`** when triaging in chat; use **`category: fix`** for bug work.
+
+`brain_search` the error message before investigating. When a bug is fixed, one `save_memory` **only if** it yielded a hard-won root cause (symptom → cause → fix), a failed approach, a decision + why, or a discovered quirk — specific searchable title, max one page. Trivial fixes get nothing.

@@ -136,9 +136,19 @@ function bindSettingsSection(): void {
         setStatus('err', 'Throttle must be at least 1 message pair');
         return;
       }
+      const autoWrite = readNumberField('brainSynthesisAutoWrite', 0.85);
+      if (autoWrite < 0 || autoWrite > 1) {
+        setStatus('err', 'Auto-write confidence must be between 0 and 1');
+        return;
+      }
+
       const saved = await saveSynthesisConfig({
         enabled: enabledEl?.checked === true,
         throttleMessagePairs: Math.round(throttle),
+        autoWriteConfidence: autoWrite,
+        skillMinRounds: Math.round(readNumberField('brainSkillMinRounds', 2)),
+        skillMinToolCalls: Math.round(readNumberField('brainSkillMinToolCalls', 2)),
+        skillMinOccurrences: Math.round(readNumberField('brainSkillMinOccurrences', 2)),
       });
       setStatus(saved ? 'ok' : 'err', saved ? 'Synthesis settings saved' : 'Save failed');
       if (saved) await refreshSynthesisFields();
@@ -459,6 +469,25 @@ async function refreshSynthesisFields(): Promise<void> {
       Math.max(1, Math.round(Number(throttleEl.value) || 1)),
     );
   }
+
+  setNumberField('brainSynthesisAutoWrite', config.autoWriteConfidence, 0.85);
+  setNumberField('brainSkillMinRounds', config.skillMinRounds, 2);
+  setNumberField('brainSkillMinToolCalls', config.skillMinToolCalls, 2);
+  setNumberField('brainSkillMinOccurrences', config.skillMinOccurrences, 2);
+}
+
+/** Write a config value into a number input, leaving a focused field alone. */
+function setNumberField(id: string, value: unknown, fallback: number): void {
+  const el = document.getElementById(id) as HTMLInputElement | null;
+  if (!el || el.matches(':focus')) return;
+  el.value = String(typeof value === 'number' && Number.isFinite(value) ? value : fallback);
+}
+
+/** Read a number input, falling back when it's missing or unparseable. */
+function readNumberField(id: string, fallback: number): number {
+  const el = document.getElementById(id) as HTMLInputElement | null;
+  const value = Number(el?.value);
+  return Number.isFinite(value) ? value : fallback;
 }
 
 async function refreshEmbeddingsFields(): Promise<void> {

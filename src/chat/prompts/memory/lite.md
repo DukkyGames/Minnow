@@ -2,7 +2,7 @@
 id: memory
 kind: info
 part: memory
-version: 5
+version: 6
 ---
 
 Prior Brain wiki notes (may be stale — verify before acting):
@@ -13,4 +13,6 @@ Prior Brain wiki notes (may be stale — verify before acting):
 
 **Routing:** why / decisions / domain model / gotchas → `brain_search` + `brain_write_page`; fuzzy prose → `brain_search`; library/framework API docs → Context7 MCP (`resolve-library-id` → `get-library-docs`); code navigation → `repo_map` then `find_symbol` / `who_calls` / `read_symbol`; design intent for a symbol → `explain_symbol` then `read_symbol`; exact strings in files → `grep`; quick facts → `save_memory` (`pages/facts/`).
 
-Use **`save_memory`** or **`brain_write_page`** for explicit "remember this" or **stable** facts. Skip secrets and one-off state. Confirm only after the tool succeeds.
+Use **`save_memory`** or **`brain_write_page`** on explicit "remember this" — and unprompted when a session yields a user correction, a hard-won root cause (symptom → cause → fix), a decision + why, a failed approach, a discovered convention/quirk, or where the authoritative config lives. Specific searchable title. Skip secrets, one-off state, and anything the code already says. Confirm only after the tool succeeds.
+
+Use **`manage_brain`** only when the user explicitly asks to delete or clear Brain data; destructive actions need `confirmed: true`.
