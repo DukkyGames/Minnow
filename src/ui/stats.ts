@@ -125,11 +125,17 @@ export function updateStatsExpandPreview(): void {
   preview.textContent = `${tps} t/s · ${total} tokens${archiveChip}${disabledChip}`;
 }
 
+export interface UpdateStripOptions {
+  /** Override cost chip (e.g. board-wide rollup). */
+  costUsd?: number | null;
+}
+
 /** Refresh bottom metrics strip and token bars from latest turn data. */
 export function updateStrip(
   stats: Stats | undefined,
   usage: Usage | undefined,
-  modelInfo: ModelInfo | undefined
+  modelInfo: ModelInfo | undefined,
+  options?: UpdateStripOptions,
 ): void {
   const s = stats || {};
   const u = usage || {};
@@ -165,12 +171,16 @@ export function updateStrip(
 
   set('stripTotal', u.total_tokens != null ? String(u.total_tokens) : '—', u.total_tokens == null);
 
-  const ledger = getActiveChat().tokenLedger;
-  const lastEntry = ledger?.entries?.[ledger.entries.length - 1];
-  const costLabel =
-    lastEntry?.costUsd != null && lastEntry.costUsd > 0
-      ? formatUsd(lastEntry.costUsd)
-      : '—';
+  let costLabel = '—';
+  if (options?.costUsd != null && options.costUsd > 0) {
+    costLabel = formatUsd(options.costUsd);
+  } else if (options?.costUsd === undefined) {
+    const ledger = getActiveChat().tokenLedger;
+    const lastEntry = ledger?.entries?.[ledger.entries.length - 1];
+    if (lastEntry?.costUsd != null && lastEntry.costUsd > 0) {
+      costLabel = formatUsd(lastEntry.costUsd);
+    }
+  }
   set('stripCost', costLabel, costLabel === '—');
 
   const p = u.prompt_tokens ?? 0;
