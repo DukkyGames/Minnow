@@ -302,5 +302,11 @@ export class ResearchProgressPanel {
       ${currentHtml}
       ${feedHtml}
     `;
+
+    // Keep the newest source in view as the feed grows during a run.
+    const feed = this.root.querySelector('.dr-feed');
+    if (feed) {
+      feed.scrollTop = feed.scrollHeight;
+    }
   }
 }
