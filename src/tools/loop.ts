@@ -33,8 +33,8 @@ import {
   flushPendingMessageQueue,
 } from '../chat/message-queue';
 import { handleGoalCommand } from '../chat/goal/command';
-import { maybeContinueGoalAfterTurn } from '../chat/goal/evaluate';
-import { getActiveGoal } from '../state/sessions';
+import { maybeContinueGoalAfterTurn, shouldEvaluateGoalAfterTurn } from '../chat/goal/evaluate';
+import { getActiveGoal, isGoalLoopActive } from '../state/sessions';
 import {
   clearAttachments,
   getPendingAttachments,
@@ -2461,12 +2461,13 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       } else {
         syncComposerFromStreamingState();
       }
-      if (completedNormally && !goalDriven && !chat.pendingSteerMessage?.trim()) {
+      const runGoalEvalAfterTurn = shouldEvaluateGoalAfterTurn(chat, goalDriven);
+      if (completedNormally && !runGoalEvalAfterTurn && !chat.pendingSteerMessage?.trim()) {
         void flushPendingMessageQueue(chat).then(() => {
           syncComposerMessageQueue();
         });
       }
-      if (completedNormally && goalDriven) {
+      if (completedNormally && runGoalEvalAfterTurn) {
         void maybeContinueGoalAfterTurn(chat);
       }
       if (completedNormally && isPartyModePinned(chat.pinnedSkill) && isStreamDomVisible(chat.id)) {
@@ -2612,7 +2613,7 @@ export async function sendMessageWithTools(
     return;
   }
 
-  let goalDriven = false;
+  let goalDriven = isGoalLoopActive(chat);
   let effectiveRawText = rawText;
   if (goalDispatch === 'set') {
     goalDriven = true;

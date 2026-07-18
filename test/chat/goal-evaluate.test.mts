@@ -4,6 +4,7 @@ import {
   evaluateGoal,
   setGoalEvalAgentImplForTests,
   setGoalEvalImplForTests,
+  shouldEvaluateGoalAfterTurn,
 } from '../../src/chat/goal/evaluate.ts';
 import { MIN_GOAL_EVAL_VERIFICATION_TOOL_CALLS, MIN_GOAL_TURNS_BEFORE_PASS } from '../../src/chat/goal/eval-tools.ts';
 import {
@@ -63,5 +64,29 @@ describe('evaluateGoal', () => {
     const result = await evaluateGoal(chat);
     assert.equal(result.met, true);
     assert.equal(result.reason, 'verified with tests.');
+  });
+});
+
+describe('shouldEvaluateGoalAfterTurn', () => {
+  afterEach(() => {
+    flushScheduledSessionSaveForTests();
+    setSessionStateForTests(null);
+  });
+
+  test('returns true for persisted active goal after reload (goalDriven false)', () => {
+    const chat = seedChat();
+    assert.equal(shouldEvaluateGoalAfterTurn(chat, false), true);
+  });
+
+  test('returns false when goal is achieved', () => {
+    const chat = seedChat();
+    chat.activeGoal!.achieved = true;
+    assert.equal(shouldEvaluateGoalAfterTurn(chat, false), false);
+  });
+
+  test('returns false when chat has no goal', () => {
+    const chat = createEmptyChatObject('m1');
+    chat.id = FIXED_CHAT_ID;
+    assert.equal(shouldEvaluateGoalAfterTurn(chat, false), false);
   });
 });

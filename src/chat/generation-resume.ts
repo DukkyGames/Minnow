@@ -6,6 +6,7 @@
 import { isChatStreaming } from './streaming-state';
 import { GENERATION_LOST_ON_RESTART_MESSAGE } from '../api/generations';
 import type { Chat } from '../types';
+import { isGoalLoopActive } from '../state/sessions';
 import { setStatus } from '../ui/status';
 
 /** Read the composer model picker (empty when none selected). */
@@ -78,6 +79,7 @@ export async function bootGenerationResumeForChat(
       validAttachments: [],
       resumeGenerationId: generationId,
       ownsGlobalStreaming: options.ownsGlobalStreaming ?? true,
+      goalDriven: isGoalLoopActive(chat),
     });
   } catch {
     /* runChatTurn surfaces inline errors; no auto-retry */

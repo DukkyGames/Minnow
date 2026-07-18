@@ -1902,7 +1902,7 @@ Claude Code–style **single-chat** finish line: `/goal <condition>` stores a co
 | `/goal` | Status (condition, elapsed, turns evaluated, token spend, last reason) |
 | `/goal clear` (+ `stop`/`off`/`reset`/`none`/`cancel`) | Clear goal state |
 
-While the loop is active (`activeGoal` and not `achieved`), **tool approvals auto-allow** (`permission-gate.ts`). Bounding is **condition-only** (e.g. “stop after 20 turns” in the condition text); `turnCount` and token baseline are display-only. Achieved goals keep status until `/goal clear` or **`clearChat`**. **`Chat.activeGoal`** is persisted on the chat blob in `sessions/state.json` (client `ensureChatShape` + server `validateSessionState`); composer hint syncs on boot and chat switch via `syncGoalActiveHint`.
+While the loop is active (`activeGoal` and not `achieved`), **tool approvals auto-allow** (`permission-gate.ts`). Bounding is **condition-only** (e.g. “stop after 20 turns” in the condition text); `turnCount` and token baseline are display-only. Achieved goals keep status until `/goal clear` or **`clearChat`**. **`Chat.activeGoal`** is persisted on the chat blob in `sessions/state.json` (client `ensureChatShape` + server `validateSessionState`); composer hint syncs on boot and chat switch via `syncGoalActiveHint`. Post-turn evaluation keys off persisted **`isGoalLoopActive(chat)`** (not only the in-memory `goalDriven` turn flag), so reload mid-goal or generation resume still runs the evaluator after the next completed turn.
 
 | Concern | Location |
 |---------|----------|
