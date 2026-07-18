@@ -8,6 +8,7 @@ import type {
   EmailDraft,
   EmailInboxSummary,
   EmailMessage,
+  OutboxEntry,
   ReplyVariant,
 } from './client';
 import { withSessionToken } from '../api/session-token.ts';
@@ -132,18 +133,19 @@ export async function regenerateReplyVariants(input: {
   return parseJson(res);
 }
 
+/** Queue a reply variant. Recallable during its undo window, like any send. */
 export async function sendReplyVariant(input: {
   accountId: string;
   messageId: string;
   threadId: string;
   variantId: string;
-}): Promise<{ ok: boolean }> {
+}): Promise<{ queued: boolean; entry: OutboxEntry }> {
   const res = await fetch(
     `/api/email/messages/${encodeURIComponent(input.messageId)}/reply-variants/${encodeURIComponent(input.variantId)}/send`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...input, confirmed: true }),
+      body: JSON.stringify(input),
     },
   );
   return parseJson(res);

@@ -9,6 +9,7 @@ import {
   regenerateReplyVariants,
   sendReplyVariant,
 } from '../../email/client-ext';
+import { showSendUndoToast } from './email-undo-toast';
 
 export interface EmailDashboardOptions {
   account: EmailAccount;
@@ -69,16 +70,15 @@ function renderVariantChips(
     chip.textContent = variant.label;
     chip.title = variant.body.slice(0, 120);
     chip.addEventListener('click', async () => {
-      const ok = window.confirm(`Send "${variant.label}" reply to this thread?`);
-      if (!ok) return;
       try {
-        await sendReplyVariant({
+        // Queued rather than sent — the undo toast is the confirmation step.
+        const { entry } = await sendReplyVariant({
           accountId: account.id,
           messageId: highlight.messageId,
           threadId: highlight.threadId,
           variantId: variant.id,
         });
-        options.onStatus?.('ok', 'Reply sent');
+        showSendUndoToast(entry, { onStatus: options.onStatus });
       } catch (err) {
         options.onStatus?.('err', err instanceof Error ? err.message : 'Send failed');
       }

@@ -45,7 +45,11 @@ describe('email-body renderer', () => {
     );
   });
 
-  test('renders sanitized HTML by default', () => {
+  /** The srcdoc of the rendered body frame. */
+  const frameDoc = (mount: HTMLElement): string =>
+    mount.querySelector('iframe')?.getAttribute('srcdoc') ?? '';
+
+  test('renders sanitized HTML into an isolated frame', () => {
     const mount = document.createElement('div');
     emailBody.renderEmailBody(mount, {
       bodyHtml: '<p>Hello <strong>team</strong></p>',
@@ -53,8 +57,124 @@ describe('email-body renderer', () => {
     });
 
     assert.equal(mount.classList.contains('html-body'), true);
-    assert.match(mount.innerHTML, /<strong>team<\/strong>/);
-    assert.equal(mount.textContent, 'Hello team');
+    // Body content must never land in the app DOM, only inside the frame.
+    assert.equal(mount.querySelectorAll('strong').length, 0);
+    assert.match(frameDoc(mount), /<strong>team<\/strong>/);
+  });
+
+  test('frame is sandboxed without script execution', () => {
+    const mount = document.createElement('div');
+    emailBody.renderEmailBody(mount, { bodyHtml: '<p>Hi</p>' });
+
+    const sandbox = mount.querySelector('iframe')?.getAttribute('sandbox') ?? '';
+    // allow-same-origin is needed to measure height; combined with
+    // allow-scripts it would let the frame out of the sandbox entirely.
+    assert.match(sandbox, /allow-same-origin/);
+    assert.doesNotMatch(sandbox, /allow-scripts/);
+    assert.doesNotMatch(sandbox, /allow-top-navigation/);
+  });
+
+  test('frame CSP confines images to the local proxy', () => {
+    const mount = document.createElement('div');
+    emailBody.renderEmailBody(mount, { bodyHtml: '<p>Hi</p>' });
+
+    const doc = frameDoc(mount);
+    assert.match(doc, /default-src 'none'/);
+    assert.match(doc, /img-src 'self' data: cid:/);
+  });
+
+  /*
+   * The remote-content policy is exercised directly rather than through
+   * renderEmailBody: DOMPurify under happy-dom discards <img> and <div>
+   * outright (it keeps them in a real browser), so driving these cases through
+   * the full render path would assert on an empty document and prove nothing.
+   * Building the fragment here keeps the assertions about the policy itself.
+   */
+  const fragmentOf = (html: string): HTMLTemplateElement => {
+    const template = document.createElement('template');
+    template.innerHTML = html;
+    return template;
+  };
+
+  test('withholds remote images and reports the count', () => {
+    const template = fragmentOf(
+      '<img src="https://tracker.example/a.gif"><img src="https://tracker.example/b.gif">',
+    );
+    const blocked = emailBody.applyRemoteContentPolicy(template.content, false);
+
+    assert.equal(blocked, 2);
+    // Nothing left that a renderer would dereference points at the sender.
+    const live = template.innerHTML.replace(/data-minnow-remote-[a-z]+="[^"]*"/g, '');
+    assert.doesNotMatch(live, /tracker\.example/);
+  });
+
+  test('blocks remote images still live in legacy cached bodies', () => {
+    // Bodies cached before server-side parking landed still carry a live src.
+    const template = fragmentOf('<img src="https://tracker.example/legacy.gif">');
+    const blocked = emailBody.applyRemoteContentPolicy(template.content, false);
+
+    assert.equal(blocked, 1);
+    assert.match(
+      template.innerHTML,
+      /data-minnow-remote-src="https:\/\/tracker\.example\/legacy\.gif"/,
+    );
+  });
+
+  test('routes images through the local proxy once loaded', () => {
+    const template = fragmentOf('<img data-minnow-remote-src="https://tracker.example/a.gif">');
+    emailBody.applyRemoteContentPolicy(template.content, true);
+
+    const html = template.innerHTML;
+    assert.match(html, /src="\/api\/email\/image-proxy\?url=/);
+    // The direct URL must never be reachable from the frame, even when loading.
+    assert.doesNotMatch(html, /src="https:\/\/tracker\.example/);
+  });
+
+  test('proxies every srcset candidate but keeps its descriptors', () => {
+    const template = fragmentOf(
+      '<img srcset="https://tracker.example/a.png 1x, https://tracker.example/b.png 2x">',
+    );
+    emailBody.applyRemoteContentPolicy(template.content, true);
+
+    const html = template.innerHTML;
+    assert.doesNotMatch(html, /srcset="https:\/\/tracker/);
+    assert.match(html, /2x/);
+  });
+
+  test('strips remote url() from style attributes', () => {
+    const template = fragmentOf(
+      '<div style="background: url(https://tracker.example/x.png); color: red">hi</div>',
+    );
+    const blocked = emailBody.applyRemoteContentPolicy(template.content, false);
+
+    assert.equal(blocked, 1);
+    // The live style keeps `color` but loses the fetch; the original is parked
+    // so "Load images" can restore it.
+    const live = template.innerHTML.replace(/data-minnow-remote-[a-z]+="[^"]*"/g, '');
+    assert.match(live, /color:\s*red/);
+    assert.doesNotMatch(live, /url\(\s*['"]?https:\/\/tracker/);
+    assert.match(template.innerHTML, /data-minnow-remote-style="[^"]*tracker\.example/);
+  });
+
+  test('leaves non-network cid: and data: sources alone', () => {
+    const template = fragmentOf(
+      '<img src="cid:logo@inline"><img src="data:image/gif;base64,R0lGOD">',
+    );
+    const blocked = emailBody.applyRemoteContentPolicy(template.content, false);
+
+    assert.equal(blocked, 0);
+    assert.match(template.innerHTML, /src="cid:logo@inline"/);
+  });
+
+  test('neutralises javascript: links and hardens the rest', () => {
+    const template = fragmentOf(
+      '<a href="javascript:alert(1)">x</a><a href="https://ok.example">y</a>',
+    );
+    emailBody.applyRemoteContentPolicy(template.content, false);
+
+    const html = template.innerHTML;
+    assert.doesNotMatch(html, /javascript:/i);
+    assert.match(html, /rel="noopener noreferrer"/);
   });
 
   test('plain mode shows only the text alternative', () => {
@@ -65,7 +185,7 @@ describe('email-body renderer', () => {
         bodyHtml: '<p>Hello <strong>team</strong></p>',
         bodyText: 'Hello team',
       },
-      'plain',
+      { viewMode: 'plain' },
     );
 
     assert.equal(mount.classList.contains('html-body'), false);

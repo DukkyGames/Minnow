@@ -142,7 +142,9 @@ New `server/email/imap-session.js`:
 
 ### 2.3 API changes (`middleware.js`)
 
-- **Auth**: require `Authorization: Bearer <session token>` minted by the app shell at boot; drop `Access-Control-Allow-Origin: *` (same-origin; no CORS headers at all). 401 otherwise. This is Phase 2's first item and is non-negotiable before LAN access ships.
+- **Auth**: ✅ shipped, but as a global `/api/*` gate rather than an email-specific
+  Bearer header — see "Phase 2 — As built" below. Same-origin, no CORS headers at all,
+  401 otherwise.
 - New routes:
 
 | Method | Route | Purpose |
@@ -276,9 +278,33 @@ Fix D1 (import), D2 (cc end-to-end minimal: compose → send → nodemailer), D3
 SQLite store + migration; connection pool; incremental sync + flags reconcile; lazy bodies; IDLE; `/threads` route; FTS search route. Cache module keeps its exported API surface where possible so UI changes stay small.
 **Exit criteria**: star click round-trip < 300ms warm; full resync of 5k-message mailbox < 60s; two concurrent writers lose zero updates (stress test); external read/delete reflected within one IDLE cycle.
 
-### Phase 2 — Security hardening
-Bearer-token auth + same-origin (blocks LAN plan until done); remote-image blocking + proxy; iframe body isolation; outbox-based send (undo window doubles as send confirmation); rate-limit `/send` (N/min per account).
+### Phase 2 — Security hardening ✅ shipped (MIN-352)
+Token auth + same-origin (blocks LAN plan until done); remote-image blocking + proxy; iframe body isolation; outbox-based send (undo window doubles as send confirmation); rate-limit `/send` (N/min per account).
 **Exit criteria**: cross-origin fetch from a test page gets 401; opening a tracking-pixel fixture makes zero external requests; CSS bleed fixture renders identically in both themes.
+
+As built:
+
+- **Auth** landed earlier with MIN-381 as a global `/api/*` gate
+  (`server/runtime/auth-middleware.js`): per-boot token in `~/.minnow/session-token`,
+  sent as `X-Minnow-Token`, plus Host validation. No CORS header is emitted anywhere.
+  The Bearer scheme in §2.3 was not used — the same guarantee, one gate for every API.
+- **Remote content** is parked at sanitize time, before storage
+  (`server/email/remote-content.js`), covering `src`/`srcset`/`background`/`poster`
+  and `url()` in style attributes. Originals move to `data-minnow-remote-*` so
+  "Load images" can restore them. `cid:`/`data:` sources are left alone.
+  Outbound mail is unaffected — only `sanitizeInboundEmailHtml` blocks.
+- **Bodies** render in a sandboxed `<iframe srcdoc>` (`src/ui/email/email-body.ts`)
+  with a mail-specific reset and `img-src 'self' data: cid:`, so the frame cannot
+  reach the sender's host even if the parking above ever misses an attribute.
+  Never `allow-scripts`.
+- **Images**, once allowed, are fetched by `server/email/image-proxy.js` with no
+  referrer or cookies and an SSRF guard that re-validates every redirect hop.
+  Per-sender allowlist in `~/.minnow/email/image-allowlist.json`.
+- **Send** goes through an in-memory outbox with an 8s undo window
+  (`server/email/outbox.js`); `/send` returns `202` with the queued entry.
+  The `confirmed: true` body field is gone — it was never a capability check.
+  A send still in its window when the app quits is dropped, not delivered.
+- **Rate limit**: 20 sends/min per account, charged at queue time, `429` + `Retry-After`.
 
 ### Phase 3 — Core mail completeness
 Attachments down/up (+ compose attach UI), drafts autosave (+ IMAP Drafts APPEND), Sent APPEND, conversation list UI + virtualization + optimistic store, keyboard model, bcc, contact autocomplete, snooze, send later, signatures, unified inbox.

@@ -20,7 +20,7 @@ import {
   formatFromAddress,
   stripHtmlToText,
 } from './parse-body.js';
-import { sanitizeEmailHtml } from './sanitize-html.js';
+import { sanitizeInboundEmailHtml } from './sanitize-html.js';
 import {
   countCachedMessages,
   getCachedBody,
@@ -142,7 +142,7 @@ export async function parseRawMessage(source, context) {
   const rawHtml = parsed.html ? String(parsed.html) : '';
   const htmlText = rawHtml ? stripHtmlToText(rawHtml) : '';
   const bodyText = plain.trim() || htmlText;
-  const bodyHtml = rawHtml ? sanitizeEmailHtml(rawHtml) : undefined;
+  const bodyHtml = rawHtml ? sanitizeInboundEmailHtml(rawHtml) : undefined;
   const bodyPreview = buildBodyPreview(bodyText);
   const bodyHash = createHash('sha256').update(bodyText).digest('hex');
 
