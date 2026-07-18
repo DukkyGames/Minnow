@@ -12,11 +12,7 @@ import { executeTool } from '../../tools/client';
 import { runHeadlessToolBatch } from '../../tools/headless-tool-batch';
 import type { ChatCompletionBody } from '../../api/chat';
 import { extractGoalEvalCompletionText } from './completion-text';
-import {
-  getGoalEvalToolDefinitions,
-  isGoalEvalVerificationTool,
-  MAX_GOAL_EVAL_TOOL_ROUNDS,
-} from './eval-tools';
+import { getGoalEvalToolDefinitions, isGoalEvalVerificationTool } from './eval-tools';
 import { buildGoalEvalMessages } from './prompt';
 import { createGoalEvalProviderPort } from './provider-port';
 
@@ -100,7 +96,7 @@ async function runGoalEvalAgentInner(
   let verificationToolCalls = 0;
 
   try {
-    for (let round = 0; round < MAX_GOAL_EVAL_TOOL_ROUNDS; round += 1) {
+    for (;;) {
       const body: ChatCompletionBody = {
         model: modelId,
         messages,
@@ -157,11 +153,6 @@ async function runGoalEvalAgentInner(
         verificationToolCalls,
       };
     }
-
-    return {
-      raw: 'NO: verification incomplete — ran out of evaluator tool rounds.',
-      verificationToolCalls,
-    };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return {

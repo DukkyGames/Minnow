@@ -36,9 +36,6 @@ export const MIN_GOAL_TURNS_BEFORE_PASS = 2;
 /** Minimum independent verification tool calls before YES can stand. */
 export const MIN_GOAL_EVAL_VERIFICATION_TOOL_CALLS = 4;
 
-/** Maximum LLM ↔ tool round-trips per evaluation pass. */
-export const MAX_GOAL_EVAL_TOOL_ROUNDS = 12;
-
 const allowlistSet = new Set<string>(GOAL_EVAL_TOOL_ALLOWLIST);
 
 /** True when the tool name is part of the goal-eval verification allowlist. */
