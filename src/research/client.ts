@@ -13,6 +13,7 @@ import type {
   ResearchStreamEndEvent,
 } from './types';
 import { withSessionToken } from '../api/session-token.ts';
+import { buildResearchReportThemeSearchParams } from './report-theme-params.ts';
 
 export class ResearchNotFoundError extends Error {
   constructor() {
@@ -114,7 +115,10 @@ export function normalizeResearchActivityLog(
 export function researchReportUrl(researchId: string): string {
   // Opened via direct navigation (window.open/openExternal), not fetch — the
   // token must ride the query string since no header can be attached.
-  return withSessionToken(`/api/research/report/${encodeURIComponent(researchId)}`);
+  const base = withSessionToken(`/api/research/report/${encodeURIComponent(researchId)}`);
+  const themeQs = buildResearchReportThemeSearchParams().toString();
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}${themeQs}`;
 }
 
 export interface FetchResearchLibraryOptions {

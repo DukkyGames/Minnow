@@ -294,13 +294,46 @@ export function renderDesktop(root: HTMLElement): () => void {
 
   researchScopeLabel.append(researchScopeText, researchScope);
 
+  const researchWorkspaceLabel = document.createElement('label');
+  researchWorkspaceLabel.className = 'mn-os-research-toolbar-scope';
+  researchWorkspaceLabel.id = 'desktopResearchWorkspaceLabel';
+  researchWorkspaceLabel.htmlFor = 'desktopResearchWorkspace';
+  researchWorkspaceLabel.hidden = true;
+
+  const researchWorkspaceText = document.createElement('span');
+  researchWorkspaceText.className = 'mn-os-research-toolbar-scope__label';
+  researchWorkspaceText.textContent = 'Workspace';
+
+  const researchWorkspace = document.createElement('select');
+  researchWorkspace.id = 'desktopResearchWorkspace';
+  researchWorkspace.className = 'mn-os-research-toolbar-select';
+  researchWorkspace.setAttribute('aria-label', 'Research workspace');
+
+  const researchWorkspaceBrowse = document.createElement('button');
+  researchWorkspaceBrowse.type = 'button';
+  researchWorkspaceBrowse.id = 'btnDesktopResearchWorkspaceBrowse';
+  researchWorkspaceBrowse.className = 'mn-os-research-toolbar-btn';
+  researchWorkspaceBrowse.textContent = 'Browse…';
+  researchWorkspaceBrowse.setAttribute('aria-label', 'Browse for research workspace folder');
+
+  const researchWorkspaceRow = document.createElement('span');
+  researchWorkspaceRow.className = 'mn-os-research-workspace-row';
+  researchWorkspaceRow.append(researchWorkspace, researchWorkspaceBrowse);
+
+  researchWorkspaceLabel.append(researchWorkspaceText, researchWorkspaceRow);
+
   const researchLibrary = document.createElement('button');
   researchLibrary.type = 'button';
   researchLibrary.id = 'btnDesktopResearchLibrary';
   researchLibrary.className = 'mn-os-research-toolbar-btn';
   researchLibrary.textContent = 'Library';
 
-  researchComposerActions.append(researchRoundsLabel, researchScopeLabel, researchLibrary);
+  researchComposerActions.append(
+    researchRoundsLabel,
+    researchScopeLabel,
+    researchWorkspaceLabel,
+    researchLibrary,
+  );
   composerDock.appendChild(researchComposerActions);
   root.appendChild(composerDock);
 

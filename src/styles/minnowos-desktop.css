@@ -1164,6 +1164,11 @@
   gap: 8px;
 }
 
+/* `display: inline-flex` overrides the native [hidden] rule */
+.mn-os-research-toolbar-scope[hidden] {
+  display: none !important;
+}
+
 .mn-os-research-toolbar-scope__label {
   font-size: 11px;
   letter-spacing: 0.06em;
@@ -1178,6 +1183,17 @@
   background: color-mix(in srgb, var(--os-surface-2) 88%, transparent);
   color: var(--os-text);
   font-size: 12px;
+}
+
+.mn-os-research-workspace-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mn-os-research-workspace-row .mn-os-research-toolbar-select {
+  max-width: min(180px, 32vw);
 }
 
 .mn-os-research-card {
@@ -1374,8 +1390,16 @@
 #osDesktopLayer.is-research-active #desktopResearchProgressMount .dr-prog-head,
 #osDesktopLayer.is-research-active #desktopResearchProgressMount .dr-stepper,
 #osDesktopLayer.is-research-active #desktopResearchProgressMount .dr-stepper-labels,
-#osDesktopLayer.is-research-active #desktopResearchProgressMount .dr-current {
+#osDesktopLayer.is-research-active #desktopResearchProgressMount .dr-current,
+#osDesktopLayer.is-research-active #desktopResearchProgressMount .dr-workspace {
   flex-shrink: 0;
+}
+
+#osDesktopLayer.is-research-active #desktopResearchProgressMount .dr-workspace {
+  flex: 1 1 auto;
+  min-height: 120px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 #osDesktopLayer.is-research-active #desktopResearchProgressMount .dr-feed {

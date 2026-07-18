@@ -9,6 +9,8 @@ import { getMinnowHome } from '../config/home.js';
 import { readResource } from '../config/store.js';
 import { getActiveProviderId } from '../providers/store.js';
 import { validateProviderId } from '../providers/validate.js';
+import { runWithToolContext } from '../runtime/path-access.js';
+import { validateWorkspacePath } from '../workspace/root.js';
 import { DeepResearcher, normalizeResearchScope } from './engine.js';
 import { stripThinking, isLowQuality } from './strip-thinking.js';
 
@@ -634,6 +636,9 @@ function mergeEngineConfig(config, overrides) {
   if (typeof overrides.scope === 'string' && overrides.scope.trim()) {
     merged.scope = normalizeResearchScope(overrides.scope);
   }
+  if (typeof overrides.workspaceRoot === 'string' && overrides.workspaceRoot.trim()) {
+    merged.workspaceRoot = overrides.workspaceRoot.trim();
+  }
   return merged;
 }
 
@@ -670,6 +675,9 @@ async function runResearchTask(state, opts) {
     searchProvider: typeof cfg.searchProvider === 'string' ? cfg.searchProvider : '',
     category: state.category || (typeof cfg.category === 'string' ? cfg.category : ''),
     scope: normalizeResearchScope(typeof cfg.scope === 'string' ? cfg.scope : 'web'),
+    ...(typeof cfg.workspaceRoot === 'string' && cfg.workspaceRoot.trim()
+      ? { workspaceRoot: cfg.workspaceRoot.trim() }
+      : {}),
     progressCallback: (event) => appendProgress(state, event),
   });
 
@@ -686,15 +694,22 @@ async function runResearchTask(state, opts) {
   appendProgress(state, { phase: 'probing', model: state.model });
 
   try {
-    const result = await researcher.research({
-      question: state.query,
-      priorReport: opts.priorReport ?? '',
-      priorFindings: /** @type {import('./extractor.js').ResearchFinding[] | null} */ (
-        opts.priorFindings ?? null
-      ),
-      priorUrls: opts.priorUrls ?? null,
-      signal: abortController.signal,
-    });
+    const workspaceRoot =
+      typeof cfg.workspaceRoot === 'string' ? cfg.workspaceRoot.trim() : '';
+    const runResearch = async () =>
+      researcher.research({
+        question: state.query,
+        priorReport: opts.priorReport ?? '',
+        priorFindings: /** @type {import('./extractor.js').ResearchFinding[] | null} */ (
+          opts.priorFindings ?? null
+        ),
+        priorUrls: opts.priorUrls ?? null,
+        signal: abortController.signal,
+      });
+
+    const result = workspaceRoot
+      ? await runWithToolContext(runResearch, { workspaceRoot })
+      : await runResearch();
 
     finalizeFromResearcher(state);
 
@@ -791,6 +806,15 @@ export async function startResearch(opts) {
 
   const baseConfig = /** @type {Record<string, unknown>} */ (await readResource('research'));
   const engineConfig = mergeEngineConfig(baseConfig, opts);
+
+  const scope = normalizeResearchScope(engineConfig.scope);
+  if (
+    (scope === 'codebase' || scope === 'both') &&
+    typeof opts.workspaceRoot === 'string' &&
+    opts.workspaceRoot.trim()
+  ) {
+    engineConfig.workspaceRoot = await validateWorkspacePath(opts.workspaceRoot);
+  }
 
   /** @type {string} */
   let priorReport = '';

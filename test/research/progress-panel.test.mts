@@ -37,6 +37,47 @@ describe('research progress panel', () => {
     assert.equal(inferSourceType('file:///workspace/src/research/types.ts'), 'code');
   });
 
+  test('reset shows early-phase workspace with checklist', () => {
+    const mount = document.getElementById('progressMount') as HTMLElement;
+    const panel = new ResearchProgressPanel(mount);
+    panel.reset();
+    assert.ok(mount.querySelector('.dr-workspace'));
+    assert.ok(mount.querySelector('.dr-workspace-checklist'));
+    assert.ok(mount.querySelector('.dr-workspace-step.active'));
+    assert.ok(mount.textContent?.includes('Breaking down your question'));
+    panel.destroy();
+  });
+
+  test('planning with plan summary renders plan block in workspace', () => {
+    const mount = document.getElementById('progressMount') as HTMLElement;
+    const panel = new ResearchProgressPanel(mount);
+    panel.reset();
+    panel.apply({
+      phase: 'planning',
+      planSummary: 'Compare vector databases for local RAG workloads.',
+    });
+    assert.ok(mount.querySelector('.dr-workspace-plan'));
+    assert.ok(mount.textContent?.includes('Compare vector databases'));
+    panel.destroy();
+  });
+
+  test('searching phase shows query chips before sources arrive', () => {
+    const mount = document.getElementById('progressMount') as HTMLElement;
+    const panel = new ResearchProgressPanel(mount);
+    panel.reset();
+    panel.apply({
+      phase: 'searching',
+      round: 1,
+      totalSources: 0,
+      queryList: ['best local vector db 2026', 'chroma vs lance comparison'],
+      queryCount: 2,
+    });
+    assert.ok(mount.querySelector('.dr-workspace-queries'));
+    assert.ok(mount.textContent?.includes('best local vector db 2026'));
+    assert.equal(mount.querySelector('.dr-feed'), null);
+    panel.destroy();
+  });
+
   test('apply progress renders stepper and feed rows', () => {
     const mount = document.getElementById('progressMount') as HTMLElement;
     const panel = new ResearchProgressPanel(mount);
