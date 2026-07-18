@@ -16,7 +16,7 @@ const GOAL_EVAL_META_STORAGE_KEY = 'minnow.goalEvalMeta';
 export const DEFAULT_GOAL_EVAL_CONFIG: GoalEvalConfig = {
   modelId: '',
   providerId: '',
-  maxTokens: 512,
+  maxTokens: 2048,
   temperature: 0.1,
 };
 
