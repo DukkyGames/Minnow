@@ -23,14 +23,17 @@ import type { ExpertAccent, ExpertMeta } from '../../chat/experts/types';
 import { EXPERT_ACCENT_VALUES } from '../../chat/experts/types';
 import { isExpertsPageOpen, setExpertsPageOpen } from '../../app-state';
 import { loadExpertsConfig } from '../../config/experts-config';
+import { getDesktopWorkspacePath } from '../../lib/desktop-workspace';
 import {
   activateChatById,
   createExpertChat,
+  getActiveChat,
   getExpertChats,
   recordChatMessage,
   scheduleSaveSessions,
   sessionState,
 } from '../../state/sessions';
+import { getWorkspacePath } from '../../state/workspace';
 import { closeBenchmark } from '../benchmark-page';
 import { closeGlobalBugs } from '../global-bugs-page';
 import { closeSettings } from '../settings-page';
@@ -41,7 +44,11 @@ import {
 } from './experts-scope';
 import { appendChatRow, deleteChat } from '../sidebar';
 import { isOsAppHash, isOsEmbedded } from '../../os/page-bridge';
-import { isDesktopExpertsActive, isDesktopExpertsHubActive } from '../../os/desktop-state';
+import {
+  isDesktopChatActive,
+  isDesktopExpertsActive,
+  isDesktopExpertsHubActive,
+} from '../../os/desktop-state';
 import { launchApp, navigateToDesktop } from '../../os/router';
 
 export { openExpertChatInShell } from './experts-scope';
@@ -428,7 +435,12 @@ export async function startExpertChat(expertId: string): Promise<void> {
   const signal = summonAbort.signal;
 
   showExpertsSummon(expertId);
-  const chat = createExpertChat(expertId);
+  let chatsWorkspace = getWorkspacePath();
+  if (isOsEmbedded()) {
+    const desktopPath = await getDesktopWorkspacePath();
+    if (desktopPath) chatsWorkspace = desktopPath;
+  }
+  const chat = createExpertChat(expertId, '', chatsWorkspace);
   activateChatById(chat.id);
 
   try {
@@ -658,6 +670,23 @@ export async function refreshExpertsEnabledState(): Promise<void> {
 
 export { isExpertsPageOpen };
 
+/** Drop the pre-hub chat id so deferred hub teardown cannot restore it over an expert thread. */
+export function abandonExpertsHubSavedChat(): void {
+  savedActiveChatId = null;
+}
+
+/** Hide Experts' Lab UI only — no session restore or expert-scope teardown (desktop chat handoff). */
+export function dismissExpertsHubUi(): void {
+  const root = getRoot();
+  if (!root) return;
+
+  summonAbort?.abort();
+  summonAbort = null;
+  hideExpertsSummon();
+  setExpertsPageOpen(false);
+  root.classList.remove('is-open');
+}
+
 export function closeExpertsHub(options?: { skipNavigate?: boolean }): void {
   const root = getRoot();
   const shell = getChatShell();
@@ -686,11 +715,16 @@ export function closeExpertsHub(options?: { skipNavigate?: boolean }): void {
     m.syncElectronPreviewHostVisibility(),
   );
 
-  if (isExpertScopeActive()) {
+  const activeChat = sessionState ? getActiveChat() : null;
+  const preserveActiveExpertChat =
+    activeChat?.kind === 'expert' ||
+    (isOsEmbedded() && isDesktopChatActive());
+
+  if (isExpertScopeActive() && !preserveActiveExpertChat) {
     teardownExpertScopeShell();
   }
 
-  if (savedActiveChatId && sessionState) {
+  if (savedActiveChatId && sessionState && !preserveActiveExpertChat) {
     const prev = savedActiveChatId;
     savedActiveChatId = null;
     if (sessionState.chats.some((c) => c.id === prev)) {
@@ -704,10 +738,14 @@ export function closeExpertsHub(options?: { skipNavigate?: boolean }): void {
         });
       }
     }
+  } else if (preserveActiveExpertChat) {
+    savedActiveChatId = null;
   }
 
   setStep('browse');
-  selectedExpertId = null;
+  if (!preserveActiveExpertChat) {
+    selectedExpertId = null;
+  }
   editExpertId = null;
   editDirty = false;
 }
