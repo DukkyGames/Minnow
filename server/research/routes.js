@@ -3,6 +3,7 @@
  */
 
 import { generateVisualReport } from './visual-report.js';
+import { parseCustomTokensParam } from './report-theme.js';
 import {
   addSubscriber,
   cancelResearch,
@@ -206,6 +207,11 @@ export async function handleResearchRequest(req, res, pathname) {
         sendJson(res, 404, { error: 'No report content available' });
         return true;
       }
+      const url = requestUrl(req);
+      const customTokens =
+        url.searchParams.get('custom') === '1'
+          ? parseCustomTokensParam(url.searchParams.get('ct'))
+          : null;
       const html = generateVisualReport(
         query,
         reportMd,
@@ -215,6 +221,8 @@ export async function handleResearchRequest(req, res, pathname) {
           : {},
         typeof detail.category === 'string' ? detail.category : null,
         id,
+        url.searchParams.get('theme'),
+        customTokens,
       );
       sendHtml(res, 200, html);
       return true;

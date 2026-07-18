@@ -72,6 +72,8 @@ export interface ResearchStartRequest {
   searchProvider?: string;
   category?: ResearchCategory;
   scope?: ResearchScope;
+  /** Absolute workspace path for codebase scope (defaults to server workspace). */
+  workspaceRoot?: string;
   providerId?: string;
   model?: string;
   continueFrom?: string;

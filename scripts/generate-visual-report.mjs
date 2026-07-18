@@ -1,5 +1,7 @@
 /**
- * Generate server/research/visual-report.js with embedded Odysseus CSS template.
+ * Legacy Odysseus template generator — superseded by hand-maintained
+ * server/research/visual-report.js + visual-report-*.css (Minnow-themed).
+ * Do not run unless re-porting from Odysseus extract JSON.
  */
 import fs from 'node:fs';
 import path from 'node:path';

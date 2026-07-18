@@ -21,6 +21,11 @@ import {
 import { ResearchProgressPanel } from '../research/progress-panel';
 import { renderResearchResultFromMarkdown } from '../research/report-view';
 import type { ResearchScope, ResearchStartRequest } from '../research/types';
+import {
+  readResearchWorkspaceRoot,
+  syncResearchWorkspaceFieldVisibility,
+  wireResearchWorkspaceScopeControls,
+} from '../research/workspace-scope-ui';
 import { setStatus } from '../ui/status';
 import type { DesktopResearchActivateOptions } from './desktop-state';
 import {
@@ -65,11 +70,28 @@ function syncResearchToolbar(): void {
     'desktopResearchMaxRounds',
   ) as HTMLSelectElement | null;
   const scopeSelect = document.getElementById('desktopResearchScope') as HTMLSelectElement | null;
+  const workspaceSelect = document.getElementById(
+    'desktopResearchWorkspace',
+  ) as HTMLSelectElement | null;
+  const workspaceLabel = document.getElementById('desktopResearchWorkspaceLabel');
   if (roundsSelect) {
     roundsSelect.disabled = running;
   }
   if (scopeSelect) {
     scopeSelect.disabled = running;
+    syncResearchWorkspaceFieldVisibility(
+      (scopeSelect.value ?? 'web') as ResearchScope,
+      workspaceLabel,
+    );
+  }
+  if (workspaceSelect) {
+    workspaceSelect.disabled = running;
+  }
+  const workspaceBrowse = document.getElementById(
+    'btnDesktopResearchWorkspaceBrowse',
+  ) as HTMLButtonElement | null;
+  if (workspaceBrowse) {
+    workspaceBrowse.disabled = running;
   }
 }
 
@@ -85,10 +107,15 @@ function readDefaultStartOptions(): Omit<ResearchStartRequest, 'query' | 'contin
   const scope = (
     (document.getElementById('desktopResearchScope') as HTMLSelectElement | null)?.value ?? 'web'
   ) as ResearchScope;
+  const workspaceRoot = readResearchWorkspaceRoot(
+    document.getElementById('desktopResearchWorkspace') as HTMLSelectElement | null,
+    scope,
+  );
   return {
     maxRounds: Number.isFinite(maxRounds) ? maxRounds : 0,
     category: '',
     scope,
+    ...(workspaceRoot ? { workspaceRoot } : {}),
   };
 }
 
@@ -439,6 +466,23 @@ export function wireDesktopResearchControls(): void {
   document.getElementById('btnDesktopResearchLibrary')?.addEventListener('click', () => {
     void showDesktopResearchLibrary();
   });
+
+  const scopeSelect = document.getElementById('desktopResearchScope') as HTMLSelectElement | null;
+  const workspaceSelect = document.getElementById(
+    'desktopResearchWorkspace',
+  ) as HTMLSelectElement | null;
+  const workspaceLabel = document.getElementById('desktopResearchWorkspaceLabel');
+  const workspaceBrowse = document.getElementById(
+    'btnDesktopResearchWorkspaceBrowse',
+  ) as HTMLButtonElement | null;
+  if (scopeSelect && workspaceSelect && workspaceLabel) {
+    wireResearchWorkspaceScopeControls({
+      scopeSelect,
+      workspaceField: workspaceLabel,
+      workspaceSelect,
+      browseBtn: workspaceBrowse,
+    });
+  }
 }
 
 /** Whether a desktop research run is in progress. */
