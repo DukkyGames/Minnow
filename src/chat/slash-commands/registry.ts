@@ -17,7 +17,7 @@ const SLASH_COMMANDS: SlashCommandListItem[] = [
   {
     id: 'goal',
     label: 'Goal',
-    description: 'Set a completion condition and auto-run until an evaluator confirms it',
+    description: 'Set a completion condition; an agentic verifier runs tests and checks code before confirming',
     insertion: '/goal ',
   },
   {

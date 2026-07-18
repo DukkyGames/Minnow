@@ -2,9 +2,6 @@
  * Per-turn goal evaluation and auto-continuation after goal-driven turns settle.
  */
 
-import { formatGenerationErrorMessage } from '../../api/generations';
-import { extractGoalEvalCompletionText } from './completion-text';
-import { loadGoalEvalConfig } from '../../config/goal-eval-meta';
 import {
   getActiveGoal,
   isGoalLoopActive,
@@ -12,7 +9,7 @@ import {
   scheduleSaveSessions,
   touchChat,
 } from '../../state/sessions';
-import type { Chat } from '../../types';
+import type { ActiveGoalState, Chat } from '../../types';
 import { resumeParentChatWithMessage } from '../../tools/loop';
 import { isStreamDomVisible } from '../streaming-state';
 import { appendBubble } from '../../ui/messages';
@@ -20,27 +17,23 @@ import { scrollChatIfPinned } from '../../ui/chat-scroll';
 import { markMessageGoalAchieved } from '../../ui/goal-affordance';
 import { syncGoalActiveHint } from '../../ui/goal-active-hint';
 import { renderSidebar } from '../../ui/sidebar';
-import { buildGoalEvalMessages } from './prompt';
+import { runGoalEvalAgent, setGoalEvalAgentImplForTests, setGoalEvalPortFactoryForTests } from './eval-agent';
+import type { GoalEvalAgentResult } from './eval-agent';
+import {
+  MIN_GOAL_EVAL_VERIFICATION_TOOL_CALLS,
+  MIN_GOAL_TURNS_BEFORE_PASS,
+} from './eval-tools';
 import { parseGoalEvalResponse } from './parse-response';
-import type { ChatCompletionBody } from '../../api/chat';
-import type { ChatCompletionChunk } from '../../types';
-import { createGoalEvalProviderPort } from './provider-port';
+import type { ParsedGoalEvalResponse } from './parse-response';
 
 export interface GoalEvaluationResult {
   met: boolean;
   reason: string;
 }
 
+export { setGoalEvalAgentImplForTests, setGoalEvalPortFactoryForTests };
+
 let goalEvalImpl: typeof runGoalEvalRequest = runGoalEvalRequest;
-
-/** Replace evaluator port factory (unit tests). */
-export function setGoalEvalPortFactoryForTests(
-  factory: typeof createGoalEvalProviderPort | null,
-): void {
-  goalEvalPortFactory = factory ?? createGoalEvalProviderPort;
-}
-
-let goalEvalPortFactory: typeof createGoalEvalProviderPort = createGoalEvalProviderPort;
 
 /** Replace evaluator request impl (unit tests). */
 export function setGoalEvalImplForTests(
@@ -49,22 +42,32 @@ export function setGoalEvalImplForTests(
   goalEvalImpl = impl ?? runGoalEvalRequest;
 }
 
-async function completeGoalEvalWithRetry(
-  port: ReturnType<typeof createGoalEvalProviderPort>,
-  body: ChatCompletionBody,
-  signal: AbortSignal,
-): Promise<ChatCompletionChunk> {
-  try {
-    return await port.complete(body, signal);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const transientFetch = err instanceof TypeError && message.includes('Failed to fetch');
-    if (!transientFetch) {
-      throw err;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    return port.complete(body, signal);
+/**
+ * Programmatic gates that block rubber-stamp YES verdicts.
+ * Exported for unit tests.
+ */
+export function enforceGoalPassGates(
+  parsed: ParsedGoalEvalResponse,
+  goal: ActiveGoalState,
+  agentResult: Pick<GoalEvalAgentResult, 'verificationToolCalls'>,
+): ParsedGoalEvalResponse {
+  if (!parsed.met) return parsed;
+
+  if (goal.turnCount < MIN_GOAL_TURNS_BEFORE_PASS) {
+    return {
+      met: false,
+      reason: `Pass blocked: at least ${MIN_GOAL_TURNS_BEFORE_PASS} goal turns required before achievement (currently ${goal.turnCount}).`,
+    };
   }
+
+  if (agentResult.verificationToolCalls < MIN_GOAL_EVAL_VERIFICATION_TOOL_CALLS) {
+    return {
+      met: false,
+      reason: `Pass blocked: evaluator ran only ${agentResult.verificationToolCalls} verification tool call(s); minimum ${MIN_GOAL_EVAL_VERIFICATION_TOOL_CALLS} required.`,
+    };
+  }
+
+  return parsed;
 }
 
 async function runGoalEvalRequest(
@@ -72,32 +75,14 @@ async function runGoalEvalRequest(
   conditionText: string,
   signal: AbortSignal,
 ): Promise<GoalEvaluationResult> {
-  const config = await loadGoalEvalConfig();
-  const modelId = config.modelId.trim() || chat.modelId.trim();
-  if (!modelId) {
-    return { met: false, reason: 'No model configured for goal evaluation.' };
+  const goal = getActiveGoal(chat);
+  if (!goal) {
+    return { met: false, reason: 'No active goal.' };
   }
 
-  const providerId = config.providerId.trim() || chat.providerId?.trim() || undefined;
-  const port = goalEvalPortFactory(providerId);
-  const body = {
-    model: modelId,
-    messages: buildGoalEvalMessages(chat, conditionText),
-    temperature: config.temperature,
-    max_tokens: config.maxTokens,
-  };
-
-  try {
-    const chunk = await completeGoalEvalWithRetry(port, body, signal);
-    const raw = extractGoalEvalCompletionText(chunk.choices?.[0]?.message);
-    return parseGoalEvalResponse(raw);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return {
-      met: false,
-      reason: `Goal evaluator failed: ${formatGenerationErrorMessage(message)}`,
-    };
-  }
+  const agentResult = await runGoalEvalAgent(chat, conditionText, signal);
+  const parsed = parseGoalEvalResponse(agentResult.raw);
+  return enforceGoalPassGates(parsed, goal, agentResult);
 }
 
 /** Call the configured goal-eval model once after a goal-driven turn. */
@@ -122,6 +107,12 @@ export function buildGoalContinuationMessage(
     `Goal: ${conditionText}`,
     '',
     `Evaluator feedback: ${evaluatorReason}`,
+    '',
+    'Next steps:',
+    '- Re-read every changed file and confirm the diff matches your claims.',
+    '- Run the full relevant test suite, typecheck, or build and fix any failures.',
+    '- For UI or user-facing work, verify in the browser (navigate, snapshot, interact).',
+    '- Do not claim the goal is done in prose alone — produce verifiable evidence.',
   ].join('\n');
 }
 
@@ -179,4 +170,3 @@ export async function maybeContinueGoalAfterTurn(chat: Chat): Promise<void> {
   const directive = buildGoalContinuationMessage(goal.conditionText, result.reason);
   await resumeParentChatWithMessage(chat, directive, { goalDriven: true });
 }
-
