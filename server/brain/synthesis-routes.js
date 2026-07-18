@@ -2,13 +2,11 @@
  * HTTP handlers for memory/skill synthesis and proposal review APIs.
  */
 
-import { createPage } from './store.js';
-import { slugifyFactTitle } from './synthesis.js';
 import { createUserSkill, saveUserSkillContent } from '../skills/user-skills.js';
 import { parseSkillFrontmatter } from '../skills/parse-frontmatter.js';
 import { getAppRoot } from '../workspace/root.js';
 import { loadSynthesisConfig, saveSynthesisConfig } from './synthesis-config.js';
-import { runMemorySynthesis } from './synthesis.js';
+import { runMemorySynthesis, writeSynthesisFactPage } from './synthesis.js';
 import { runSkillSynthesis } from './skill-synthesis.js';
 import { incrementMessagePairs } from './synthesis-state.js';
 import {
@@ -223,14 +221,19 @@ export async function handleSynthesisRequest(req, res, pathname) {
         tags: body.tags,
       });
       const row = edited ?? existing;
-      const slug = slugifyFactTitle(row.title);
-      const page = await createPage({
-        relPath: `facts/${slug}.md`,
-        title: row.title,
-        body: row.body,
-        tags: row.tags,
-        source: 'agent',
-      });
+      // Same write path as auto-write, so an accepted workspace-scoped proposal
+      // lands in the workspace pages and slug collisions still resolve.
+      const { page } = await writeSynthesisFactPage(
+        {
+          title: row.title,
+          body: row.body,
+          tags: row.tags,
+          category: row.category,
+          scope: row.scope,
+        },
+        [],
+        { source: 'agent' },
+      );
       await updateMemoryProposalStatus(id, 'accepted');
       sendJson(res, 200, { ok: true, entry: pageMetaToEntry(page.meta), proposalId: id });
       return true;

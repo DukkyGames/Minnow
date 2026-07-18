@@ -11,6 +11,7 @@ import { navigateToDesktop } from '../os/router';
 import { closeBrainInspector } from './brain/inspector';
 import { initBrainInspectorResize } from './brain/inspector-resize';
 import { renderBrainSection } from './brain/sections';
+import { fetchBrainUsage } from '../brain/client';
 
 export type BrainSectionId =
   | 'graph'
@@ -113,6 +114,40 @@ function updatePageHeader(section: BrainSectionId): void {
   if (titleEl) titleEl.textContent = SECTION_TITLES[section];
   if (leadEl) leadEl.textContent = SECTION_LEADS[section];
   backBtn?.classList.toggle('hidden', isOsEmbedded());
+  void refreshUsageLine();
+}
+
+/**
+ * Show this week's Brain activity in the header.
+ *
+ * The whole overhaul rests on the wiki actually being read and written, so the
+ * number is worth surfacing where it can't be ignored. Hidden when nothing has
+ * happened yet — a row of zeroes is noise.
+ */
+async function refreshUsageLine(): Promise<void> {
+  const el = document.getElementById('brainPageHeaderUsage');
+  if (!el) return;
+
+  const usage = await fetchBrainUsage();
+  if (!usage) {
+    el.classList.add('hidden');
+    return;
+  }
+
+  const reads = usage.thisWeek['agent-read'] ?? 0;
+  const writes =
+    (usage.thisWeek['agent-write'] ?? 0) +
+    (usage.thisWeek['synthesis-write'] ?? 0) +
+    (usage.thisWeek['proposal-accepted'] ?? 0);
+
+  if (reads === 0 && writes === 0) {
+    el.classList.add('hidden');
+    return;
+  }
+
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  el.textContent = `This week: ${plural(writes, 'write')} · ${plural(reads, 'read')}`;
+  el.classList.remove('hidden');
 }
 
 /** Populate the header action slot (cleared on every section switch). */

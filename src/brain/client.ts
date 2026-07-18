@@ -17,6 +17,8 @@ import type {
   BrainCodeWhoCallsResult,
   BrainIngestResult,
   BrainLintReport,
+  BrainPruneLinksReport,
+  BrainUsageReport,
   BrainPage,
   BrainStatus,
   BrainTreeNode,
@@ -140,6 +142,24 @@ export async function lintBrainWiki(options?: {
       apply: options?.apply === true,
     }),
   });
+}
+
+/**
+ * Re-score existing `similarTo` edges against the current linking floors.
+ * Reports without writing unless `apply` is true.
+ */
+export async function pruneBrainWeakLinks(options?: {
+  apply?: boolean;
+}): Promise<BrainPruneLinksReport | null> {
+  return brainFetch<BrainPruneLinksReport>('/api/brain/prune-links', {
+    method: 'POST',
+    body: JSON.stringify({ apply: options?.apply === true }),
+  });
+}
+
+/** Weekly Brain read/write counters. */
+export async function fetchBrainUsage(): Promise<BrainUsageReport | null> {
+  return brainFetch<BrainUsageReport>('/api/brain/usage');
 }
 
 /** Code index status for the active workspace. */

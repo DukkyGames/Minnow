@@ -73,6 +73,25 @@ export interface BrainLintReport {
   applied?: Array<{ path: string; action: string }>;
 }
 
+/** POST /api/brain/prune-links result — weak `similarTo` edge cleanup. */
+export interface BrainPruneLinksReport {
+  generatedAt: string;
+  dryRun: boolean;
+  pagesScanned: number;
+  edgesScanned: number;
+  removals: Array<{ path: string; dropped: string[]; kept: string[] }>;
+  applied: string[];
+}
+
+/** GET /api/brain/usage — weekly read/write counters, newest bucket in `thisWeek`. */
+export interface BrainUsageReport {
+  week: string;
+  thisWeek: Partial<
+    Record<'agent-read' | 'agent-write' | 'synthesis-write' | 'proposal-accepted', number>
+  >;
+  weeks: Record<string, Record<string, number>>;
+}
+
 /** When to trigger background reindex (automation wired in MIN-B10). */
 export type BrainCodeReindexCadence = 'on-demand' | 'on-switch' | 'git-hook';
 

@@ -3073,12 +3073,15 @@ export function normalizeMemoryConfig(raw, existing = {}) {
 export function normalizeSynthesisConfig(raw, existing = {}) {
   const base = {
     enabled: true,
-    requireConfirmation: true,
+    requireConfirmation: false,
     confidenceThreshold: 0.6,
+    autoWriteConfidence: 0.85,
     maxProposalsPerTurn: 3,
     throttleMessagePairs: 4,
     skillMinRounds: 2,
     skillMinToolCalls: 2,
+    skillMinOccurrences: 2,
+    skillObservationRetentionDays: 45,
     utilityProviderId: '',
     utilityModelId: '',
     maxPendingProposals: 100,
@@ -3096,6 +3099,9 @@ export function normalizeSynthesisConfig(raw, existing = {}) {
   if (typeof row.confidenceThreshold === 'number' && Number.isFinite(row.confidenceThreshold)) {
     base.confidenceThreshold = Math.min(1, Math.max(0, row.confidenceThreshold));
   }
+  if (typeof row.autoWriteConfidence === 'number' && Number.isFinite(row.autoWriteConfidence)) {
+    base.autoWriteConfidence = Math.min(1, Math.max(0, row.autoWriteConfidence));
+  }
   if (typeof row.maxProposalsPerTurn === 'number' && Number.isFinite(row.maxProposalsPerTurn)) {
     base.maxProposalsPerTurn = Math.min(10, Math.max(1, Math.floor(row.maxProposalsPerTurn)));
   }
@@ -3107,6 +3113,18 @@ export function normalizeSynthesisConfig(raw, existing = {}) {
   }
   if (typeof row.skillMinToolCalls === 'number' && Number.isFinite(row.skillMinToolCalls)) {
     base.skillMinToolCalls = Math.min(20, Math.max(1, Math.floor(row.skillMinToolCalls)));
+  }
+  if (typeof row.skillMinOccurrences === 'number' && Number.isFinite(row.skillMinOccurrences)) {
+    base.skillMinOccurrences = Math.min(5, Math.max(1, Math.floor(row.skillMinOccurrences)));
+  }
+  if (
+    typeof row.skillObservationRetentionDays === 'number' &&
+    Number.isFinite(row.skillObservationRetentionDays)
+  ) {
+    base.skillObservationRetentionDays = Math.min(
+      365,
+      Math.max(7, Math.floor(row.skillObservationRetentionDays)),
+    );
   }
   if (typeof row.utilityProviderId === 'string') {
     base.utilityProviderId = row.utilityProviderId.trim();

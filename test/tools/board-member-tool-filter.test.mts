@@ -284,6 +284,7 @@ describe('board role matrix groups', () => {
       'code-intel',
       'lsp',
       'browser',
+      'brain-core',
     ]),
     test: new Set([
       'util-basic',
@@ -295,6 +296,7 @@ describe('board role matrix groups', () => {
       'code-intel',
       'lsp',
       'browser',
+      'brain-core',
     ]),
     fix: new Set([
       'util-basic',
@@ -306,6 +308,7 @@ describe('board role matrix groups', () => {
       'code-exec',
       'code-intel',
       'lsp',
+      'brain-core',
     ]),
   };
 

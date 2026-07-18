@@ -29,7 +29,9 @@ function filterCatalogPages(pages: BrainPageMeta[]): BrainPageMeta[] {
 let selectedPath: string | null = null;
 let catalogPages: BrainPageMeta[] = [];
 let graphApi: ForceGraphApi | null = null;
-let includeTags = true;
+// Off by default: free-form tags connect almost every page to every other one,
+// which buries the real similarTo/wikilink structure. Toggle stays available.
+let includeTags = false;
 let layoutMode: 'graph' | 'tree' = 'graph';
 let highlightOrphans = false;
 let orphanPaths = new Set<string>();

@@ -9,7 +9,8 @@ import { getEmbedder, embedTexts, EMBEDDINGS_WARMUP_TIMEOUT_MS } from '../engine
 import { BrainPathError, getBrainDir, getBrainLogPath, getBrainSchemaPath } from './paths.js';
 import { backupBrain, restoreBrain } from './backup.js';
 import { ingestSource, clearIngestSources } from './ingest.js';
-import { lintBrainWiki } from './lint.js';
+import { lintBrainWiki, pruneWeakSimilarLinks } from './lint.js';
+import { readBrainUsage } from './usage.js';
 import {
   listMemoryProposals,
   getMemoryProposal,
@@ -309,6 +310,19 @@ export async function handleBrainRequest(req, res, pathname) {
         includeLlm: body.includeLlm !== false,
         apply: body.apply === true,
       });
+      sendJson(res, 200, report);
+      return true;
+    }
+
+    if (pathname === '/api/brain/usage' && req.method === 'GET') {
+      sendJson(res, 200, await readBrainUsage());
+      return true;
+    }
+
+    if (pathname === '/api/brain/prune-links' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      // Dry run unless the caller explicitly confirms — this rewrites frontmatter.
+      const report = await pruneWeakSimilarLinks({ dryRun: body.apply !== true });
       sendJson(res, 200, report);
       return true;
     }

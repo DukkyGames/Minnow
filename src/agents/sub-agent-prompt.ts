@@ -88,7 +88,8 @@ const SUB_AGENT_SAVE_MEMORY_RULES = `
 
 ### Brain wiki (sub-agent)
 Notes below are from the Brain wiki — treat as context and verify against the codebase.
-Use \`brain_search\` for fuzzy lookup; \`brain_read_page\` / \`brain_write_page\` for structured pages; \`save_memory\` for quick facts under pages/facts/. Skip secrets and one-off state. Confirm only after a write tool succeeds.`;
+Use \`brain_search\` for fuzzy lookup; \`brain_read_page\` / \`brain_write_page\` for structured pages; \`save_memory\` for quick facts under pages/facts/. Skip secrets and one-off state. Confirm only after a write tool succeeds.
+Before returning, make one \`save_memory\` call **only if** your task produced a user correction, a root cause that took real digging (symptom → cause → fix), a decision + why with rejected alternatives, an approach that failed, or a discovered convention/environment quirk. Give it a specific searchable title; at most one page. Otherwise save nothing.`;
 
 /** Inject retrieved memories and optional save_memory guidance for sub-agents. */
 export async function appendSubAgentMemorySection(
