@@ -11,9 +11,15 @@ import {
   redactAccount,
   updateEmailAccount,
 } from './accounts.js';
-import { listCachedMessages, listCachedThread, readMessageCache } from './cache.js';
+import {
+  listCachedMessages,
+  listCachedThread,
+  listCachedThreads,
+  searchCachedMessages,
+} from './cache.js';
 import {
   listEmailFolders,
+  loadMessageBody,
   syncFolderMessages,
   testEmailConnection,
 } from './transport.js';
@@ -27,11 +33,8 @@ import {
   deleteMessage,
   bulkMessageAction,
 } from './mail-actions.js';
-import {
-  getOrBuildInboxSummary,
-  generateReplyVariants,
-  runAgentHooksAfterFolderSync,
-} from './agent.js';
+import { getOrBuildInboxSummary, generateReplyVariants } from './agent.js';
+import { syncFolderWithHooks } from './poller.js';
 import { handleEmailEventsSse } from './events.js';
 import {
   listAutomations,
@@ -145,6 +148,38 @@ export function createEmailMiddleware() {
         }
       }
 
+      if (url === '/api/email/search' && req.method === 'GET') {
+        const params = parseQuery(req.url ?? '');
+        const query = String(params.get('q') ?? params.get('query') ?? '').trim();
+        if (!query) {
+          sendJson(res, 400, { error: 'q is required' });
+          return;
+        }
+        const offset = Number(params.get('offset') ?? 0);
+        const limit = Number(params.get('limit') ?? 50);
+        const folder = params.get('folder') ?? undefined;
+        const accountId = String(params.get('accountId') ?? '').trim();
+
+        const accountIds = accountId
+          ? [accountId]
+          : (await listEmailAccounts()).map((account) => account.id);
+
+        const perAccount = await Promise.all(
+          accountIds.map(async (id) => {
+            const result = await searchCachedMessages(id, { query, folder, offset, limit });
+            return result.messages.map((message) => ({ ...message, accountId: id }));
+          }),
+        );
+
+        const messages = perAccount
+          .flat()
+          .sort((a, b) => new Date(String(b.date)).getTime() - new Date(String(a.date)).getTime())
+          .slice(0, Math.min(200, Math.max(1, limit || 50)));
+
+        sendJson(res, 200, { messages, total: messages.length, query });
+        return;
+      }
+
       if (url === '/api/email/messages/bulk' && req.method === 'POST') {
         const body = await readJsonBody(req);
         const accountId = String(body.accountId ?? '').trim();
@@ -222,11 +257,23 @@ export function createEmailMiddleware() {
           const body = await readJsonBody(req);
           const account = await getEmailAccount(accountId);
           const folder = String(body.folder ?? account?.folders?.[0] ?? 'INBOX');
-          const before = await readMessageCache(accountId);
-          const prevHighest = before.folderCursors?.[folder]?.highestUid ?? 0;
-          const result = await syncFolderMessages(accountId, body);
-          const incoming = Array.isArray(result.messages) ? result.messages : [];
-          await runAgentHooksAfterFolderSync(accountId, folder, incoming, prevHighest);
+          const result = await syncFolderWithHooks(accountId, folder, {
+            limit: body.limit,
+            full: body.full === true,
+          });
+          sendJson(res, 200, result);
+          return;
+        }
+
+        if (tail === 'threads' && req.method === 'GET') {
+          const params = parseQuery(req.url ?? '');
+          const result = await listCachedThreads(accountId, {
+            folder: params.get('folder') ?? undefined,
+            offset: Number(params.get('offset') ?? 0),
+            limit: Number(params.get('limit') ?? 50),
+            filter: params.get('filter') ?? undefined,
+            query: params.get('query') ?? undefined,
+          });
           sendJson(res, 200, result);
           return;
         }
@@ -248,6 +295,22 @@ export function createEmailMiddleware() {
           sendJson(res, 200, { account: redactAccount(account) });
           return;
         }
+      }
+
+      const bodyMatch = url.match(/^\/api\/email\/messages\/([^/]+)\/body$/);
+      if (bodyMatch && req.method === 'GET') {
+        const messageKey = decodeURIComponent(bodyMatch[1]);
+        const params = parseQuery(req.url ?? '');
+        const accountId = String(params.get('accountId') ?? '').trim();
+        if (!accountId) {
+          sendJson(res, 400, { error: 'accountId query param is required' });
+          return;
+        }
+        const message = await loadMessageBody(accountId, messageKey, {
+          force: params.get('force') === '1',
+        });
+        sendJson(res, 200, { message });
+        return;
       }
 
       const triageMatch = url.match(/^\/api\/email\/messages\/([^/]+)\/triage$/);

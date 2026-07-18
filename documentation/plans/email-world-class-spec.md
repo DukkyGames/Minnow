@@ -7,7 +7,7 @@ todos:
     status: completed
   - id: phase1-engine
     content: "Phase 1 — Storage + sync engine: SQLite message store, IMAP connection reuse, incremental flag sync, IDLE push"
-    status: pending
+    status: completed
   - id: phase2-security
     content: "Phase 2 — Security hardening: API auth for /api/email, remote-image blocking, iframe body isolation, send guardrails"
     status: pending

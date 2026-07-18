@@ -275,6 +275,23 @@ export async function deleteEmailAccount(accountId) {
   }
 
   try {
+    // Drop the live IMAP session first — an open socket (or, on Windows, an
+    // open SQLite handle) would otherwise outlive the account.
+    const { closeImapSession, stopIdleWatcher } = await import('./imap-session.js');
+    await stopIdleWatcher(accountId);
+    await closeImapSession(accountId);
+  } catch {
+    /* ignore session teardown failures */
+  }
+
+  try {
+    const { deleteMailDb } = await import('./store.js');
+    deleteMailDb(accountId);
+  } catch {
+    /* ignore missing mail store */
+  }
+
+  try {
     const { deleteAutomationsForAccount } = await import('./automations.js');
     await deleteAutomationsForAccount(accountId);
   } catch {

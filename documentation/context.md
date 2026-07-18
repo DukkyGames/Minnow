@@ -93,7 +93,7 @@ Full directory map: [`guides/configuration.md`](guides/configuration.md). Notabl
 | `work-agents.json`, `sub-agents.json` | Agent overrides and sub-agent types |
 | `brain/` | Wiki pages, vectors, code index DBs, proposals |
 | `skills/`, `skills.json` | User skills and enable flags |
-| `scheduler.json`, `calendar/`, `email/` | Scheduler, calendar DB, email accounts |
+| `scheduler.json`, `calendar/`, `email/` | Scheduler, calendar DB, email accounts + `mail-<accountId>.db` |
 | `compare/`, `benchmarks/`, `evals/` | Compare history, bench runs, eval harness |
 | `reef/widgets/`, `reef/modules/`, `reef/artifacts/` | Reef templates and user widgets |
 
@@ -302,11 +302,19 @@ Design reference: [`DESIGN.md`](../DESIGN.md), [`documentation/design-system/`](
 | **Research** | Desktop / `#/research` | `server/research/`, `~/.minnow/research/` |
 | **Scheduler** | `#/app/scheduler` | `server/scheduler/`, `scheduler.json` (jobs only run while app open) |
 | **Calendar** | `#/app/calendar` | `server/calendar/`, SQLite `calendar.db`, CalDAV |
-| **Email** | `#/app/email` | `server/email/`, IMAP/SMTP, encrypted accounts |
+| **Email** | `#/app/email` | `server/email/`, IMAP/SMTP, encrypted accounts, SQLite `mail-<accountId>.db` |
 | **Voice** | Models → Voice | `server/voice/`, local Whisper + Qwen TTS option |
 | **Settings** | `#/app/settings` | Full config via `/api/config/*` |
 
 **Deep Research** is a dedicated panel (not a composer mode). **Compare** runs 2–6 blind model slots. **Bench** runs integration + academic packs; distinct from eval harness task packs.
+
+### Email sync engine
+
+- **Store:** one SQLite DB per account (`~/.minnow/email/mail-<accountId>.db`, WAL) — `server/email/store.js` owns the schema, `cache.js` the async API. `message_row_id` is the stable PK, so a move rewrites `folder`/`uid` while triage, reply variants, and bodies survive. `messages_fts` (FTS5) backs search over subject/sender/body. Legacy `cache/<id>/messages.json` is imported once on first sync and renamed `.migrated`.
+- **Connections:** `imap-session.js` holds one long-lived ImapFlow client per account. All reads and mutations borrow it via `withMailbox(accountId, folder, fn)`, which serializes per account and closes after 5 minutes idle. The folder list is cached in `meta`, so archive/move no longer pay a `LIST` each.
+- **Sync:** incremental — `UID lastSeen+1:*` for new mail (headers + first text part only), then a FLAGS-only reconcile over the newest 200 UIDs that applies external reads/stars and drops messages deleted or moved elsewhere. `UIDVALIDITY` changes clear the folder and refill it. Full bodies, HTML, and attachment metadata load lazily on first open (`ensureMessageBody`).
+- **Push:** an IMAP IDLE watcher per polling-enabled account (own connection — IDLE parks the socket) triggers a debounced sync; the interval poller stays as the fallback for servers with broken IDLE.
+- **Routes:** `GET /accounts/:id/threads` (conversation rollups), `GET /search?q=` (FTS, all accounts when `accountId` is omitted), `GET /messages/:id/body` (lazy body fetch).
 
 ---
 
