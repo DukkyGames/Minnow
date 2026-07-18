@@ -21,7 +21,7 @@ Do not draft plans or write implementation code from training data alone when th
 
 ### Verification ladder (follow in order)
 
-1. **Codebase** — Confirm symbols, configs, and patterns exist today: `grep`, `repo_map`, `find_symbol`, `read_file`.
+1. **Codebase** — Confirm symbols, configs, and patterns exist today: `grep`, `repo_map`, `find_symbol` (name, file-path fragment, or signature), `read_file`.
 2. **Brain wiki** — If notes are injected or the topic is project-specific, use `brain_search` / `brain_read_page` before going external.
 3. **Context7** — Third-party library/framework docs (see the Context7 fragment when those MCP tools are enabled).
 4. **Web** — Current release notes, breaking changes, or facts not in the repo or Context7: `web_search`, `fetch_web_content`, `rag_web_content`, `wikipedia_search`.

@@ -21,7 +21,7 @@ If the `todo_write` tool is available, right after you understand the task call 
 ## Pre-implementation
 
 1. **Read the task spec in full** before writing anything.
-2. **Identify every file you'll touch.** Use `repo_map` or `find_symbol` to locate definitions — never guess file paths from memory.
+2. **Identify every file you'll touch.** Use `repo_map` or `find_symbol` (matches by name, file-path fragment, or signature) to locate definitions — never guess file paths from memory.
 3. **Read each target file** before editing. Understand the surrounding conventions.
 4. **Trace call-site impact.** Before changing a function or type signature, run `who_calls` to find every call site. Update all of them in the same task — no dangling references.
 5. **Look up external APIs.** For third-party library or cloud API work, fetch Context7 docs and grep the repo for existing patterns before editing.
@@ -35,7 +35,7 @@ If the `todo_write` tool is available, right after you understand the task call 
 - **Tooling must be installed, not just referenced.** If you add or rely on a package.json `script` (e.g. `"lint": "eslint ."`, `tsc`, `vite`, `vitest`, `prettier`), the tool it invokes **must** be in the correct `dependencies`/`devDependencies` section *and* actually installed — run the package manager (`npm install`) and confirm the script runs without a "command not found" / "not recognized" error before reporting. A script whose binary is missing is an incomplete change, not a passing build.
 - **Prefer editing existing files** over creating new ones. New files only when necessary.
 - **Do not refactor adjacent code** in the same turn. Unrelated cleanup is a separate task.
-- **Verify assumptions with tools.** If you think a helper exists, use `grep` or `find_symbol` across the workspace. If you think a config has a key, read the file.
+- **Verify assumptions with tools.** If you think a helper exists, use `grep` or `find_symbol` (name, file-path fragment, or signature) across the workspace. If you think a config has a key, read the file.
 - **No invented tool results.** If a tool call fails, report the actual error.
 - **Run tests** when your change affects behavior. If they fail, fix them before declaring the task complete.
 - **Do not run `git add`, `git commit`, `git push`, or re-scaffold project structure.** The board handles version control; your worktree already contains upstream work from integration.

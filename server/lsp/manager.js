@@ -33,6 +33,8 @@ const LSP_SCOPE_AGENT = 'agent';
 const DEFAULT_DIAG_QUIET_PERIOD_MS = 150;
 const DEFAULT_DIAG_EMPTY_QUIET_PERIOD_MS = 500;
 const DEFAULT_DIAG_TOTAL_TIMEOUT_MS = 15_000;
+/** Default timeout for indexing/search LSP requests (workspace/symbol, documentSymbol). */
+const DEFAULT_LSP_REQUEST_TIMEOUT_MS = 6000;
 
 /** @type {Record<string, { processes: Map<string, object>, pendingConnections: Map<string, Promise<object>>, documentSync: Map<string, { version: number, text: string }>, diagnosticSnapshots: Map<string, { revision: string, formatted: string }> }>} */
 const scopeStores = {
@@ -459,7 +461,23 @@ function isSkippableWorkspaceSymbolError(message) {
   const text = String(message ?? '');
   if (/Unhandled method workspace\/symbol/i.test(text)) return true;
   if (/connection got disposed/i.test(text)) return true;
+  if (/timed out after \d+ms/i.test(text)) return true;
   return false;
+}
+
+/**
+ * Reject a promise when it exceeds the time budget (prevents silent hangs during indexing).
+ * @template T
+ * @param {Promise<T>} promise
+ * @param {number} [ms]
+ */
+function withRequestTimeout(promise, ms = DEFAULT_LSP_REQUEST_TIMEOUT_MS) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`LSP request timed out after ${ms}ms`)), ms);
+    }),
+  ]);
 }
 
 /** User-facing hint when TypeScript has no loaded project for workspace search. */
@@ -1233,9 +1251,11 @@ export async function getLspDocumentSymbols(relativePath) {
   for (const { id, config } of ctx.matchers) {
     try {
       const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
-      const result = await state.connection.sendRequest('textDocument/documentSymbol', {
-        textDocument: { uri: ctx.fileUri },
-      });
+      const result = await withRequestTimeout(
+        state.connection.sendRequest('textDocument/documentSymbol', {
+          textDocument: { uri: ctx.fileUri },
+        }),
+      );
       const raw = Array.isArray(result) ? result : [];
       const symbols = raw.map(normalizeDocumentSymbol).filter(Boolean);
       return { symbols };
@@ -1266,9 +1286,11 @@ export async function getLspWorkspaceSymbols(query) {
       if (!serverSupportsWorkspaceSymbols(id, config, state.serverCapabilities)) {
         continue;
       }
-      const result = await state.connection.sendRequest('workspace/symbol', {
-        query: q,
-      });
+      const result = await withRequestTimeout(
+        state.connection.sendRequest('workspace/symbol', {
+          query: q,
+        }),
+      );
       const raw = Array.isArray(result) ? result : [];
       for (const sym of raw) {
         const normalized = normalizeWorkspaceSymbol(sym);
