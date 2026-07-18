@@ -214,7 +214,7 @@ export function closeDesktopExpertsLab(): void {
   setDesktopExpertsHubActive(false);
 
   void import('../ui/experts/experts-hub').then((m) =>
-    m.closeExpertsHub({ skipNavigate: true }),
+    m.dismissExpertsHubUi(),
   );
 
   if (isDesktopExpertsActive()) {
@@ -240,7 +240,7 @@ export function teardownDesktopExperts(): void {
   selectedHeroExpertId = null;
 
   void import('../ui/experts/experts-hub').then((m) =>
-    m.closeExpertsHub({ skipNavigate: true }),
+    m.dismissExpertsHubUi(),
   );
 }
 

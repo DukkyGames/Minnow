@@ -5,7 +5,7 @@
 import { expertsPageOpen, streamingChatIds } from '../app-state';
 import { getActiveChat } from '../state/sessions';
 import { isOrchestratePlanScreenSuppressingChatDom } from '../ui/orchestrate-plan-screen';
-import { isChatAppForeground } from '../ui/chat-mount';
+import { isChatAppForeground, shouldPaintDesktopChatSurface } from '../ui/chat-mount';
 import { isMainColumnOverlaySuppressingChatDom } from '../ui/main-column-overlay';
 import { isBoardViewActive } from '../ui/view-mode-toggle';
 import { reportBackgroundError } from '../boot/report-background-error';
@@ -88,6 +88,8 @@ export function isBackgroundStreamBlockingSend(): boolean {
 export function isStreamDomVisible(chatId: string): boolean {
   const active = getActiveChat();
   if (active.id !== chatId) return false;
+  // Desktop chat owns its transcript — do not let Code board/plan overlays suppress it.
+  if (shouldPaintDesktopChatSurface()) return true;
   if (isOrchestratePlanScreenSuppressingChatDom(chatId)) return false;
   if (isMainColumnOverlaySuppressingChatDom()) return false;
   if (active.kind === 'expert-lab' && expertsPageOpen) return false;
