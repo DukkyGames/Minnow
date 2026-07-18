@@ -101,6 +101,14 @@ async function runGoalEvalRequest(
   return gated;
 }
 
+/**
+ * True when a completed turn should run the goal evaluator.
+ * Covers persisted /goal loops after reload (goalDriven flag is in-memory only).
+ */
+export function shouldEvaluateGoalAfterTurn(chat: Chat, goalDriven: boolean): boolean {
+  return goalDriven || isGoalLoopActive(chat);
+}
+
 /** Call the configured goal-eval model once after a goal-driven turn. */
 export async function evaluateGoal(chat: Chat): Promise<GoalEvaluationResult> {
   const goal = getActiveGoal(chat);
