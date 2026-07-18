@@ -3,6 +3,7 @@
  */
 
 import DOMPurify from 'isomorphic-dompurify';
+import { blockRemoteContentHook } from './remote-content.js';
 
 /** Skip caching very large HTML bodies; plain text fallback remains. */
 const MAX_HTML_CHARS = 512_000;
@@ -32,23 +33,47 @@ const PURIFY_CONFIG = {
 
 /**
  * @param {string | undefined | null} html
+ * @param {{ blockRemoteContent?: boolean }} [options]
  * @returns {string | undefined}
  */
-export function sanitizeEmailHtml(html) {
+export function sanitizeEmailHtml(html, options = {}) {
   const raw = String(html ?? '').trim();
   if (!raw || raw.length > MAX_HTML_CHARS) {
     return undefined;
   }
 
-  let clean = DOMPurify.sanitize(raw, PURIFY_CONFIG);
-  for (let i = 0; i < 3; i += 1) {
-    const next = DOMPurify.sanitize(clean, PURIFY_CONFIG);
-    if (next === clean) {
-      break;
-    }
-    clean = next;
+  // Hooks are global to the DOMPurify instance, so they are installed only for
+  // the duration of this (synchronous) call — otherwise outbound mail composed
+  // in a later call would get its own images stripped too.
+  if (options.blockRemoteContent) {
+    DOMPurify.addHook('afterSanitizeAttributes', blockRemoteContentHook);
   }
+  try {
+    let clean = DOMPurify.sanitize(raw, PURIFY_CONFIG);
+    for (let i = 0; i < 3; i += 1) {
+      const next = DOMPurify.sanitize(clean, PURIFY_CONFIG);
+      if (next === clean) {
+        break;
+      }
+      clean = next;
+    }
 
-  const trimmed = String(clean).trim();
-  return trimmed || undefined;
+    const trimmed = String(clean).trim();
+    return trimmed || undefined;
+  } finally {
+    if (options.blockRemoteContent) {
+      DOMPurify.removeHook('afterSanitizeAttributes', blockRemoteContentHook);
+    }
+  }
+}
+
+/**
+ * Sanitize a body that arrived from the network. Identical to
+ * {@link sanitizeEmailHtml} but with remote content parked, so a stored body
+ * can never beacon on render. Use this for anything inbound.
+ * @param {string | undefined | null} html
+ * @returns {string | undefined}
+ */
+export function sanitizeInboundEmailHtml(html) {
+  return sanitizeEmailHtml(html, { blockRemoteContent: true });
 }

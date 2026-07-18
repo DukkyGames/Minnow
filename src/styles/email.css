@@ -252,38 +252,60 @@
   word-break: break-word;
 }
 
+/*
+ * Formatted bodies live inside a sandboxed iframe, so the app stylesheet can no
+ * longer reach their contents — the typography and image rules that used to sit
+ * here now ship as the frame's own reset (MAIL_RESET_CSS in email-body.ts).
+ * Only the frame element itself is styled from out here.
+ */
 .email-thread-body.html-body {
   white-space: normal;
+  overflow-x: hidden;
 }
 
-.email-thread-body.html-body img {
-  max-width: 100%;
-  height: auto;
+.email-body-frame {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  border: 0;
+  /* The frame paints its own light surface; a matching backdrop keeps the
+     edges from flashing dark before load. */
+  background: #ffffff;
+  border-radius: 6px;
+  color-scheme: light;
 }
 
-.email-thread-body.html-body table {
-  max-width: 100%;
-  border-collapse: collapse;
-}
-
-.email-thread-body.html-body a {
-  color: var(--mn-accent);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.email-thread-body.html-body blockquote {
-  margin: 0.75em 0;
-  padding-left: 12px;
-  border-left: 1px solid var(--mn-border);
+.email-remote-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--mn-accent) 8%, transparent);
+  font-size: 12.5px;
   color: var(--mn-fg-muted);
 }
 
-.email-thread-body.html-body pre {
-  white-space: pre-wrap;
-  overflow-x: auto;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 13px;
+.email-remote-notice-text {
+  flex: 1 1 auto;
+}
+
+.email-remote-notice button {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border: 1px solid var(--mn-border);
+  border-radius: 6px;
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.email-remote-notice button:hover {
+  border-color: var(--mn-accent);
 }
 
 .email-thread-triage {
@@ -2043,4 +2065,50 @@
   .email-reader-primary-actions .email-btn-icon {
     padding: 8px;
   }
+}
+
+/*
+ * Undo toast for queued sends. Fixed to the viewport rather than the mail
+ * layout so it survives the composer unmounting the moment a send is queued.
+ */
+.email-undo-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 60;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--mn-border);
+  border-radius: 10px;
+  background: var(--mn-bg-elevated, var(--mn-bg));
+  color: var(--mn-fg);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 28%);
+  font-size: 13px;
+}
+
+.email-undo-toast-text {
+  white-space: nowrap;
+}
+
+.email-undo-toast-btn {
+  padding: 4px 12px;
+  border: 1px solid var(--mn-accent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mn-accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.email-undo-toast-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
+}
+
+.email-undo-toast-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }

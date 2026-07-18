@@ -83,6 +83,8 @@ export const PATH_RUNNER_RULES = [
   { pattern: 'test/ui/orchestrate-finish-dashboard.test.mjs', runner: 'tsx-mocks-loader' },
   // Mocks server/email/{accounts,imap-session}.js to drive sync against a fake server.
   { pattern: 'test/email/incremental-sync.test.mjs', runner: 'tsx-mocks' },
+  // Mocks server/email/smtp.js so the undo window is exercised without SMTP.
+  { pattern: 'test/email/outbox.test.mjs', runner: 'tsx-mocks' },
   { pattern: 'test/server/**/*.test.mjs', runner: 'tsx-mocks' },
   { pattern: 'test/workspace/*.test.js', runner: 'tsx-mocks' },
   { pattern: 'test/terminal/shell-profiles.test.mjs', runner: 'tsx-mocks' },

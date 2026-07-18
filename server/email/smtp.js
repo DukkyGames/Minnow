@@ -103,14 +103,16 @@ export async function draftReply(input) {
 }
 
 /**
- * Send an email after explicit user confirmation.
- * @param {{ accountId: string, to: string, subject: string, body: string, bodyHtml?: string, cc?: string, bcc?: string, inReplyTo?: string, references?: string, confirmed: boolean }} input
+ * Deliver an email over SMTP.
+ *
+ * Not the user-facing entry point: callers go through `enqueueSend` in
+ * `outbox.js`, whose undo window is the actual send gate. This used to demand a
+ * `confirmed: true` field, which proved nothing — any caller that could reach
+ * the function could set it.
+ *
+ * @param {{ accountId: string, to: string, subject: string, body: string, bodyHtml?: string, cc?: string, bcc?: string, inReplyTo?: string, references?: string }} input
  */
 export async function sendEmail(input) {
-  if (!input.confirmed) {
-    throw new Error('Send requires explicit user confirmation (confirmed: true)');
-  }
-
   const account = await getEmailAccount(input.accountId);
   if (!account) {
     throw new Error('Email account not found');
@@ -157,14 +159,14 @@ export async function sendEmail(input) {
 }
 
 /**
- * Send a pre-generated reply variant after explicit confirmation.
- * @param {{ accountId: string, threadId: string, messageKey: string, variantId: string, confirmed: boolean }} input
+ * Resolve a pre-generated reply variant into a ready-to-send payload.
+ *
+ * Kept separate from delivery so the caller can hand the payload to the outbox
+ * and give the user an undo window, rather than sending straight away.
+ *
+ * @param {{ accountId: string, threadId: string, messageKey: string, variantId: string }} input
  */
-export async function sendReplyVariant(input) {
-  if (!input.confirmed) {
-    throw new Error('Send requires explicit user confirmation (confirmed: true)');
-  }
-
+export async function resolveReplyVariantSend(input) {
   const account = await getEmailAccount(input.accountId);
   if (!account) {
     throw new Error('Email account not found');
@@ -188,13 +190,12 @@ export async function sendReplyVariant(input) {
 
   const headers = computeReplyHeaders(thread, account);
 
-  return sendEmail({
+  return {
     accountId: input.accountId,
     to: headers.to,
     subject: headers.subject,
     body: String(variant.body ?? ''),
     inReplyTo: headers.inReplyTo,
     references: headers.references,
-    confirmed: true,
-  });
+  };
 }
