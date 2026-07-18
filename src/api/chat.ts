@@ -81,6 +81,7 @@ import {
 } from './sse-parse';
 import { setStatus } from '../ui/status';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
+import { createStreamingStatsPublisher } from '../chat/streaming-stats';
 
 export { parseSsePayloads } from './sse-parse';
 
@@ -537,6 +538,7 @@ export async function sendMessage(): Promise<void> {
   let streamMeta: StreamMetaAccumulator = {};
   const t0 = performance.now();
   let tFirst: number | null = null;
+  const streamingStatsPublisher = createStreamingStatsPublisher(chat);
   const inlineRouter = new InlineContentThinkingRouter({
     thinkingModel: modelLikelyUsesInlineThinking(modelId),
   });
@@ -615,6 +617,15 @@ export async function sendMessage(): Promise<void> {
       if (contentDelta) {
         routeContentDelta(contentDelta);
       }
+      streamingStatsPublisher.schedule({
+        streamMeta,
+        t0,
+        tFirst,
+        partialText: fullText,
+        partialThinking: thoughtController.getSegments().join('\n\n'),
+        modelId,
+        modelInfo: chat.modelInfo ?? undefined,
+      });
       if (isStreamDomVisible(chat.id)) {
         scrollChatIfPinned();
       }
@@ -777,6 +788,7 @@ export async function sendMessage(): Promise<void> {
     thoughtController.abort();
     thinkingTracker.abort();
   } finally {
+    streamingStatsPublisher.reset();
     thoughtController.abort();
     setStreaming(false, chat.id);
     setSidebarStreamPhase(null, chat.id);
