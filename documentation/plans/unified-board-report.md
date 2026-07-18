@@ -60,6 +60,41 @@ All board-linked chats (builder, tester, merge fixer, env fixer, final integrati
 - **`fixerEarlyFinalizeInFlight`** (git-poll early-finalize race guard)
 - Env-fixer **stop-only** stall branch (env fixers now get the same nudge/self-heal path as other chats)
 
+### 4b. Missing-report nudge before failure (added 2026-07-18)
+
+A chat that finished its turn **cleanly** but never called `board_report` is usually an
+agent that forgot the tool, not a failed task. Before routing a missing report into
+self-heal, the finalizer re-prompts the same chat:
+
+| Constant | Value | Role |
+|----------|-------|------|
+| `MISSING_REPORT_NUDGE_CAP` | 2 | Max `board_report` reminders per board chat |
+
+`tryNudgeForMissingBoardReport` in [`orchestrate-board-actions.ts`](../../src/state/orchestrate-board-actions.ts)
+dispatches `runTaskChatNudge(…, { missingReport: true })` on the ended chat and returns
+early, leaving the task's status, chat linkage, worktree, and phase attempt budget
+untouched. Once the cap is hit the finalizer falls through to its existing
+self-heal → quarantine routing.
+
+| Finalizer | Behaviour on missing report |
+|-----------|-----------------------------|
+| `finalizeBoardTaskOnStreamEnd` | Nudge (task stays `in_progress`), then self-heal `build` |
+| `finalizeTaskTestingOnStreamEnd` | Nudge after the `VERDICT:` fallback fails (task stays `testing`), then self-heal `test` |
+| `finalizeEnvFixerOnStreamEnd` | Nudge before the linkage is cleared, then self-heal `infra` |
+| `finalizeMergeFixerOnStreamEnd` | **Unchanged** — the git fallback + bounded re-merge retry is already recovery, not a hard fail |
+
+Gates (all must hold to nudge):
+
+- `isBoardRunning(group)` — a paused/stopped board records the failure and lets the resume sweep re-drive it.
+- `resolveTaskChatStreamOutcome(chat) === 'completed'` — **`stopped`** (user Stop, stall kill) and
+  **`failed`** (provider error, `Maximum tool turns reached`) keep their existing park / retry /
+  quarantine owners. Max-turn and cancel paths are therefore unaffected.
+
+The per-chat counter is deliberately **not** cleared by `stopTaskChatSupervision`: every nudge
+produces another stream-end and the subscriber stops supervision before the finalizer runs, so
+clearing there would reset the budget each pass and nudge forever. It resets only in
+`getOrCreateBoardChat`, i.e. when a genuinely new phase run is launched.
+
 ### 5. Report-driven `reconcileMergingTasks` for dead fixers
 
 [`reconcileMergingTasks`](../../src/state/orchestrate-board-actions.ts) remains the live safety net for `merging` tasks:
@@ -103,7 +138,8 @@ Fixer seed still assumes merge in progress; agents finish with `git commit --no-
 
 ## Tests
 
-- `test/orchestrate/task-stream-end.test.mts` — build/test report routing
+- `test/orchestrate/task-stream-end.test.mts` — build/test report routing, missing-report nudge → quarantine
+- `test/orchestrate/task-testing.test.mts` — Tester nudge before a verdict-less fail
 - `test/orchestrate/merge-fixer-finalize.test.mts` — report-driven merge finalize
 - `test/orchestrate/merge-fixer-stall.test.mts` — unified stall + MERGE_HEAD preflight
 - `test/orchestrate/board-task-chat-stall.test.mts` — 3× stall nudge/self-heal across chat roles
