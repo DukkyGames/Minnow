@@ -456,6 +456,10 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  max-height: min(48vh, 400px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 :is(#researchView, .mn-os-desktop-research, .research-library-window-body) .dr-feed-row {

@@ -1334,6 +1334,48 @@
   color: var(--os-text-dim);
 }
 
+/* Progress card fills the stage; the live source feed scrolls inside the card */
+#osDesktopLayer.is-research-active #desktopResearchProgressMount:has(.dr-prog) {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#osDesktopLayer.is-research-active .mn-os-research-progress-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#osDesktopLayer.is-research-active #desktopResearchProgressMount .dr-prog {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#osDesktopLayer.is-research-active #desktopResearchProgressMount .dr-prog-head,
+#osDesktopLayer.is-research-active #desktopResearchProgressMount .dr-stepper,
+#osDesktopLayer.is-research-active #desktopResearchProgressMount .dr-stepper-labels,
+#osDesktopLayer.is-research-active #desktopResearchProgressMount .dr-current {
+  flex-shrink: 0;
+}
+
+#osDesktopLayer.is-research-active #desktopResearchProgressMount .dr-feed {
+  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 #osDesktopLayer.is-research-active .mn-os-desk-stage {
   align-items: stretch;
   justify-content: flex-start;
