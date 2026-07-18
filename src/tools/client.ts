@@ -140,10 +140,13 @@ export interface ExecuteToolContext {
   benchmarkAutonomous?: boolean;
 }
 
+// run_python is intentionally excluded: the streaming path can only spawn a single
+// hardcoded interpreter, whereas the server handler probes python/py/python3 in order.
+// Routing it through the server keeps behavior identical with and without a chatId
+// (e.g. on Windows machines that only ship the `py` launcher).
 const STREAMING_TOOL_NAMES = new Set([
   'execute_command',
   'run_javascript',
-  'run_python',
 ]);
 
 /** Plan alias: readable flag after detectLocalServer(). */

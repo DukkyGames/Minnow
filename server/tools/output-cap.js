@@ -11,6 +11,12 @@ export const DEFAULT_MAX_OUTPUT_CHARS = 32_000;
 /** Max characters per emitted line before ellipsis. */
 export const DEFAULT_MAX_LINE_CHARS = 400;
 
+/**
+ * Hard ceiling for reading a whole file into memory (read_file / read_file_range).
+ * Larger files are refused so a single call cannot OOM the host on a huge/binary blob.
+ */
+export const MAX_READ_FILE_BYTES = 25 * 1024 * 1024;
+
 /** Stop accumulating subprocess stdout/stderr beyond this byte budget. */
 export const PROCESS_MAX_ACCUMULATE_BYTES = 5 * 1024 * 1024;
 
@@ -73,22 +79,23 @@ export function appendWithByteCap(current, chunk, maxBytes = PROCESS_MAX_ACCUMUL
 export function capTextOutput(text, options = {}) {
   const maxOutputChars = options.maxOutputChars ?? DEFAULT_MAX_OUTPUT_CHARS;
   const maxLineChars = options.maxLineChars ?? DEFAULT_MAX_LINE_CHARS;
-  const originalChars = text.length;
 
+  // Baseline is the EOL-normalized length: output is always \n-joined, so measuring
+  // truncation against the raw (possibly CRLF) input would flag every Windows command
+  // result as truncated even when nothing was dropped.
   const lines = text.split(/\r?\n/);
+  const originalChars =
+    lines.reduce((sum, line) => sum + line.length, 0) +
+    (lines.length > 0 ? lines.length - 1 : 0);
+
   let capped = lines.map((line) => capLineLength(line, maxLineChars)).join('\n');
-  let truncated = capped.length < text.length;
 
   if (capped.length > maxOutputChars) {
     capped = capped.slice(0, maxOutputChars);
-    truncated = true;
   }
-
-  const beforeUtf8 = capped;
   capped = truncateUtf8(capped, maxOutputChars * 4);
-  if (capped !== beforeUtf8) {
-    truncated = true;
-  }
+
+  const truncated = capped.length < originalChars;
 
   if (truncated) {
     const kept = capped.length;
@@ -121,6 +128,19 @@ export function capReadFileOutput(content, relPath, maxChars = DEFAULT_MAX_OUTPU
     }
     kept.push(line);
     totalChars += added;
+  }
+
+  // A single line longer than the budget (e.g. minified bundle) keeps zero lines and
+  // would otherwise point back at read_file_range for the same oversized line. Emit a
+  // hard-truncated head instead so the caller sees something actionable.
+  if (kept.length === 0 && lines.length > 0) {
+    const head = lines[0].slice(0, maxChars);
+    const text = [
+      head,
+      '',
+      `[truncated — line 1 exceeds ${maxChars} chars; use grep or execute_command to inspect specific content]`,
+    ].join('\n');
+    return { text, truncated: true, totalLines: lines.length };
   }
 
   const endLine = kept.length;

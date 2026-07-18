@@ -217,7 +217,8 @@
 .mn-os-dock-shell {
   position: absolute;
   inset: 0;
-  z-index: 35;
+  /* Match #osDockLayer — stay below popout windows and side panels. */
+  z-index: 12;
   pointer-events: none;
 }
 
@@ -549,9 +550,9 @@
   transition: opacity 280ms var(--os-ease-out);
 }
 
-/* Expanded session drawer should sit above floating windows. */
+/* Expanded session drawer stays with desktop chat chrome (below windows + side panels). */
 .mn-os-chat-rail.is-expanded {
-  z-index: 20;
+  z-index: 12;
 }
 
 #osDesktopLayer.is-chat-active .mn-os-chat-rail {
@@ -737,7 +738,7 @@
 
 #osDesktopLayer.is-research-mode .mn-os-composer-dock {
   opacity: 1;
-  z-index: 40;
+  z-index: 12;
 }
 
 .mn-os-desktop-composer {
@@ -1565,7 +1566,7 @@
 
 #osDesktopLayer.is-experts-mode .mn-os-composer-dock {
   opacity: 1;
-  z-index: 40;
+  z-index: 12;
 }
 
 #desktopExpertsMount .experts-page {
@@ -1890,7 +1891,7 @@
     display: none;
     position: fixed;
     inset: 0;
-    z-index: 17;
+    z-index: 12;
     margin: 0;
     padding: 0;
     border: none;
@@ -1914,7 +1915,7 @@
     top: calc(var(--os-menubar-h) + env(safe-area-inset-top, 0px));
     left: 0;
     bottom: 0;
-    z-index: 18;
+    z-index: 12;
     width: min(280px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 20px)) !important;
     max-width: 100%;
     padding-left: env(safe-area-inset-left, 0px);

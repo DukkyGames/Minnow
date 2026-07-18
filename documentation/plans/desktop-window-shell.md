@@ -88,7 +88,7 @@ flowchart TB
   AppsLayer --> CodeLayer[Code fullscreen only]
 ```
 
-**Z-index stacking (bottom → top):** wallpaper → transcript → windows → side panel → composer dock → menubar.
+**Z-index stacking (bottom → top):** wallpaper → transcript → desktop chat + dock (`12`) → windows (`15`) → workspace drawer (`20`) → side panels (`25`) → menubar (`40`).
 
 **Key modules**
 
