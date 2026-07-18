@@ -56,7 +56,7 @@ export async function toolRepoMap(args) {
 }
 
 /**
- * Find a symbol definition by name (FTS5 + LSP workspace fallback).
+ * Find a symbol definition by name, file-path fragment, or signature (SQLite index; LSP when cold).
  * @param {Record<string, unknown>} args
  */
 export async function toolFindSymbol(args) {
@@ -67,11 +67,16 @@ export async function toolFindSymbol(args) {
   if (!query) return 'Error: query is required.';
 
   const limit = typeof args?.limit === 'number' ? args.limit : 15;
-  const { matches, error } = await findSymbol(query, limit);
+  const { matches, indexCold, lspError, error } = await findSymbol(query, limit);
+  if (error) return `Error: ${error}`;
   if (!matches.length) {
-    return error
-      ? `No symbols matched "${query}" (${error}). Try grep for exact strings.`
-      : `No symbols matched "${query}". Index may be cold — call repo_map first or use grep.`;
+    if (indexCold && lspError) {
+      return `Code index is cold and LSP is unavailable (${lspError}). Run repo_map to build the index, or use grep.`;
+    }
+    if (indexCold) {
+      return 'Code index is cold. Run repo_map first, then retry, or use grep.';
+    }
+    return `No symbols matched "${query}" in the warm index. Try a shorter/exact name, a file-path fragment, repo_map with focus:"<term>", or grep for raw strings.`;
   }
 
   const lines = matches.map((m) => {
@@ -93,7 +98,12 @@ export async function toolWhoCalls(args) {
   if (!symbol) return 'Error: symbol is required (id or name).';
 
   const { symbol: row, callers, error } = await whoCalls(symbol);
-  if (!row) return error ?? `Symbol not found: ${symbol}`;
+  if (!row) {
+    return (
+      error ??
+      `Not found: "${symbol}". Pass a symbol id (repo:Qualified.Name from find_symbol), a bare name, or a file path.`
+    );
+  }
 
   if (!callers.length) {
     return `No indexed callers for ${row.id} (${row.signature}). Use grep if the index is stale.`;
@@ -117,7 +127,12 @@ export async function toolReadSymbol(args) {
   if (!symbol) return 'Error: symbol is required (id or name).';
 
   const { symbol: row, text, error } = await readSymbol(symbol);
-  if (!row) return error ?? `Symbol not found: ${symbol}`;
+  if (!row) {
+    return (
+      error ??
+      `Not found: "${symbol}". Pass a symbol id (repo:Qualified.Name from find_symbol), a bare name, or a file path.`
+    );
+  }
 
   return [`# ${row.signature}`, `id: ${row.id}`, `file: ${row.file}:${row.line_start}-${row.line_end}`, '', text].join(
     '\n',
