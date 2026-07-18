@@ -469,7 +469,13 @@
   --os-dock-panel-inset: var(--os-dock-reveal-height, 22px);
   --os-dock-block-height: 6.25rem;
   --os-composer-dock-gap: 10px;
+  /* Column gap between research toolbar and composer in .mn-os-composer-dock */
+  --os-composer-dock-flex-gap: 8px;
   --os-composer-row-height: 4.75rem;
+  /* Model trigger row above the input (min-height + margin-bottom) */
+  --os-composer-model-row-height: 1.5rem;
+  /* Vertical margins on .mn-os-desktop-input-row (15px top + 15px bottom) */
+  --os-composer-input-margin-block: 1.875rem;
   --os-composer-dock-bottom: calc(
     var(--os-dock-panel-inset) + var(--os-dock-block-height) + var(--os-composer-dock-gap) +
       var(--os-safe-bottom, env(safe-area-inset-bottom, 0px))
@@ -484,8 +490,12 @@
   --os-chat-message-gap: 14px;
   /* Research dock adds Library row above the composer input */
   --os-research-toolbar-row: 1.75rem;
+  /* Full dock stack: toolbar + composer model row + input (incl. margins) + breathing room */
   --os-research-composer-reserve: calc(
-    var(--os-chat-composer-reserve) + var(--os-research-toolbar-row) + var(--os-composer-dock-gap)
+    var(--os-composer-dock-bottom) + var(--os-research-toolbar-row) +
+      var(--os-composer-dock-flex-gap) + var(--os-composer-model-row-height) +
+      var(--os-composer-row-height) + var(--os-composer-input-margin-block) +
+      var(--os-composer-dock-gap)
   );
 }
 
@@ -711,7 +721,7 @@
   transition: opacity 280ms var(--os-ease-out);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--os-composer-dock-flex-gap);
 }
 
 .mn-os-composer-research-actions {
@@ -1076,6 +1086,7 @@
   flex: 1 1 auto;
   width: 100%;
   max-width: 100%;
+  max-height: 100%;
   padding: 0 8px;
   justify-content: flex-start;
   align-items: center;
@@ -1800,6 +1811,10 @@
     padding-top: 6px;
     padding-inline: max(10px, env(safe-area-inset-left, 0px))
       max(10px, env(safe-area-inset-right, 0px));
+  }
+
+  #osDesktopLayer.is-research-active .mn-os-desk-stage {
+    padding-bottom: var(--os-research-composer-reserve);
   }
 
   .mn-os-greet-time {
