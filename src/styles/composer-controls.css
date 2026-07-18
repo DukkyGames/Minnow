@@ -93,6 +93,24 @@
   display: none;
 }
 
+.composer-goal-active-hint--evaluating {
+  animation: goal-eval-hint-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes goal-eval-hint-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.goal-eval-status {
+  margin: 8px 0 12px;
+}
+
 .composer-todo-panel {
   margin: 0 0 8px;
   border: 1px solid var(--mn-border-subtle);

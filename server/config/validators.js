@@ -19,7 +19,7 @@ import {
 
 const PLACEHOLDER_CHAT_NAME = 'New chat';
 const MAX_CHATS = 50;
-const SESSION_SCHEMA_VERSION = 5;
+const SESSION_SCHEMA_VERSION = 6;
 const MAX_GOAL_CONDITION_CHARS = 4000;
 
 /** Normalize workspace paths for stable keys (mirror src/lib/normalize-workspace-path.ts). */
@@ -82,6 +82,73 @@ function ensureExpertSelection(raw) {
       ? row.expertId.trim()
       : null;
   return { mode, expertId };
+}
+
+/** Coerce expert runtime snapshot (mirror src/state/sessions.ts ensureExpertRuntime). */
+function ensureExpertRuntime(raw) {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const row = /** @type {Record<string, unknown>} */ (raw);
+  const modelId = typeof row.modelId === 'string' ? row.modelId : '';
+  const modeId = normalizeModeId(typeof row.modeId === 'string' ? row.modeId : undefined);
+  const toolDenylist = Array.isArray(row.toolDenylist)
+    ? row.toolDenylist.filter((t) => typeof t === 'string')
+    : [];
+  const enabledToolNames = Array.isArray(row.enabledToolNames)
+    ? row.enabledToolNames.filter((t) => typeof t === 'string')
+    : [];
+  const warnings = Array.isArray(row.warnings)
+    ? row.warnings.filter((t) => typeof t === 'string')
+    : [];
+  const toolAllowlist =
+    row.toolAllowlist === null
+      ? null
+      : Array.isArray(row.toolAllowlist)
+        ? row.toolAllowlist.filter((t) => typeof t === 'string')
+        : null;
+  return {
+    ...(typeof row.providerId === 'string' && row.providerId.trim()
+      ? { providerId: row.providerId.trim() }
+      : {}),
+    modelId,
+    modeId,
+    toolAllowlist,
+    toolDenylist,
+    enabledToolNames,
+    memoryEnabled: row.memoryEnabled !== false,
+    warnings,
+    profileSource: row.profileSource === 'override' ? 'override' : 'inherit',
+  };
+}
+
+/** Experts overhaul: expertId + runtime snapshot; drop legacy picker (mirror src/state/sessions.ts). */
+function migrateSessionV5ToV6(state) {
+  for (const chat of state.chats) {
+    const selection = chat.expertSelection;
+    if (chat.kind === 'expert') {
+      if (
+        !chat.expertId?.trim() &&
+        selection?.mode === 'manual' &&
+        selection.expertId?.trim()
+      ) {
+        chat.expertId = selection.expertId.trim();
+      }
+      if (!chat.expertRuntime) {
+        chat.expertRuntime = {
+          ...(chat.providerId?.trim() ? { providerId: chat.providerId.trim() } : {}),
+          modelId: chat.modelId ?? '',
+          modeId: normalizeModeId(chat.modeId),
+          toolAllowlist: null,
+          toolDenylist: [],
+          enabledToolNames: [],
+          memoryEnabled: true,
+          warnings: [],
+          profileSource: 'inherit',
+        };
+      }
+    }
+    delete chat.expertSelection;
+  }
+  state.version = SESSION_SCHEMA_VERSION;
 }
 
 function newChatId() {
@@ -705,8 +772,6 @@ function ensureChatShape(raw) {
       workspacePath: '',
       modelId: '',
       modeId: DEFAULT_MODE_ID,
-      expertSelection: defaultExpertSelection(),
-      lastResolvedExpertId: null,
       history: [],
       lastStats: null,
       modelInfo: {},
@@ -743,6 +808,7 @@ function ensureChatShape(raw) {
       : undefined;
   const activeGoal = ensureActiveGoal(row.activeGoal);
   const superPlan = ensureSuperPlanPersisted(row.superPlan);
+  const expertRuntime = ensureExpertRuntime(row.expertRuntime);
 
   return {
     id: typeof row.id === 'string' && row.id ? row.id : newChatId(),
@@ -758,7 +824,9 @@ function ensureChatShape(raw) {
     modeId: normalizeModeId(
       typeof row.modeId === 'string' ? row.modeId : undefined,
     ),
-    expertSelection: ensureExpertSelection(row.expertSelection),
+    ...(row.expertSelection && typeof row.expertSelection === 'object'
+      ? { expertSelection: ensureExpertSelection(row.expertSelection) }
+      : {}),
     ...(orchestratePlanPath ? { orchestratePlanPath } : {}),
     ...(typeof row.groupId === 'string' && row.groupId.trim()
       ? { groupId: row.groupId.trim() }
@@ -788,6 +856,12 @@ function ensureChatShape(raw) {
     ...(currentGenerationId ? { currentGenerationId } : {}),
     ...(activeGoal ? { activeGoal } : {}),
     ...(superPlan ? { superPlan } : {}),
+    ...(row.kind === 'expert' ? { kind: 'expert' } : {}),
+    ...(row.kind === 'expert-lab' ? { kind: 'expert-lab' } : {}),
+    ...(typeof row.expertId === 'string' && row.expertId.trim()
+      ? { expertId: row.expertId.trim() }
+      : {}),
+    ...(expertRuntime ? { expertRuntime } : {}),
     ...(row.unread === true ? { unread: true } : {}),
     ...(typeof row.lastAssistantAt === 'number' &&
     Number.isFinite(row.lastAssistantAt) &&
@@ -840,7 +914,14 @@ export function validateSessionState(raw) {
 
   const parsed = /** @type {Record<string, unknown>} */ (raw);
   const version = parsed.version;
-  if (version !== 1 && version !== 2 && version !== 3 && version !== 4 && version !== 5) {
+  if (
+    version !== 1 &&
+    version !== 2 &&
+    version !== 3 &&
+    version !== 4 &&
+    version !== 5 &&
+    version !== 6
+  ) {
     throw new Error('Invalid session version');
   }
 
@@ -876,6 +957,10 @@ export function validateSessionState(raw) {
 
   if (!state.chats.length) {
     throw new Error('Session must have at least one chat');
+  }
+
+  if (version < SESSION_SCHEMA_VERSION) {
+    migrateSessionV5ToV6(state);
   }
 
   return state;
