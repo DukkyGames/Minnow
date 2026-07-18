@@ -369,7 +369,7 @@ export class PlanProgressPanel {
     if (this.wiredResearchId === researchId) return;
     this.wiredResearchId = researchId;
     this.stopResearchStream();
-    this.researchPanel = new ResearchProgressPanel(this.researchMount);
+    this.researchPanel = new ResearchProgressPanel(this.researchMount, { embedded: true });
     this.researchPanel.reset();
     this.researchUnsubscribe = subscribeToResearchStream(researchId, {
       onProgress: (event) => {

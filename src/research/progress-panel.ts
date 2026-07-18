@@ -139,9 +139,15 @@ export function inferSourceType(url: string): string {
   return 'blog';
 }
 
+export interface ResearchProgressPanelOptions {
+  /** Flat embed inside Super Plan — hides duplicate headline, uses compact chrome. */
+  embedded?: boolean;
+}
+
 /** Live run progress panel driven by SSE events. */
 export class ResearchProgressPanel {
   private readonly mount: HTMLElement;
+  private readonly embedded: boolean;
   private root: HTMLElement | null = null;
   private timerInterval: ReturnType<typeof setInterval> | null = null;
   private timerStart = 0;
@@ -165,8 +171,9 @@ export class ResearchProgressPanel {
   /** Auto-detected report category. */
   private category = '';
 
-  constructor(mount: HTMLElement) {
+  constructor(mount: HTMLElement, options: ResearchProgressPanelOptions = {}) {
     this.mount = mount;
+    this.embedded = options.embedded === true;
   }
 
   reset(): void {
@@ -187,6 +194,9 @@ export class ResearchProgressPanel {
     this.timerStart = performance.now();
     this.root = document.createElement('div');
     this.root.className = 'dr-prog';
+    if (this.embedded) {
+      this.root.classList.add('dr-prog--embedded');
+    }
     if (prefersReducedMotion()) {
       this.root.classList.add('dr-prog--reduced-motion');
     }
@@ -377,7 +387,7 @@ export class ResearchProgressPanel {
         metaParts.push(`${this.searchQueries.length} queries`);
       }
 
-      return `<div class="dr-workspace" aria-live="polite">
+      return `<div class="dr-workspace${this.embedded ? ' dr-workspace--embedded' : ''}" aria-live="polite">
         <div class="dr-workspace-hero">
           <span class="dr-spinner" aria-hidden="true"></span>
           <div class="dr-workspace-copy">
@@ -420,7 +430,7 @@ export class ResearchProgressPanel {
       metaParts.push(this.category);
     }
 
-    return `<div class="dr-workspace" aria-live="polite">
+    return `<div class="dr-workspace${this.embedded ? ' dr-workspace--embedded' : ''}" aria-live="polite">
       <div class="dr-workspace-hero">
         <span class="dr-spinner" aria-hidden="true"></span>
         <div class="dr-workspace-copy">
@@ -448,6 +458,8 @@ export class ResearchProgressPanel {
         : this.status === 'cancelled'
           ? 'Research cancelled'
           : step.label;
+    const embeddedPhase =
+      this.status === 'error' ? 'Error' : this.status === 'cancelled' ? 'Stopped' : step.short;
 
     const stepperHtml = STEPS.map((s, i) => {
       const st = i < this.stepIndex ? 'done' : i === this.stepIndex ? 'active' : 'todo';
@@ -501,13 +513,23 @@ export class ResearchProgressPanel {
             .join('')}</div>`
         : '';
 
+    const headHtml = this.embedded
+      ? `<div class="dr-embedded-bar">
+          <div class="dr-embedded-bar__copy">
+            <span class="dr-embedded-eyebrow research-mono">Deep research</span>
+            <span class="dr-embedded-phase">${escapeHtml(embeddedPhase)}</span>
+          </div>
+          <div class="dr-timer research-mono" data-dr-timer>${formatClock(this.getElapsedMs())}</div>
+        </div>`
+      : `<div class="dr-prog-head">
+          <div class="dr-prog-title"><span class="dr-dot"></span> ${escapeHtml(label)}</div>
+          <div class="dr-timer research-mono" data-dr-timer>${formatClock(this.getElapsedMs())}</div>
+        </div>`;
+
     this.root.innerHTML = `
-      <div class="dr-prog-head">
-        <div class="dr-prog-title"><span class="dr-dot"></span> ${escapeHtml(label)}</div>
-        <div class="dr-timer research-mono" data-dr-timer>${formatClock(this.getElapsedMs())}</div>
-      </div>
-      <div class="dr-stepper">${stepperHtml}</div>
-      <div class="dr-stepper-labels">${labelsHtml}</div>
+      ${headHtml}
+      <div class="dr-stepper${this.embedded ? ' dr-stepper--embedded' : ''}">${stepperHtml}</div>
+      <div class="dr-stepper-labels${this.embedded ? ' dr-stepper-labels--embedded' : ''}">${labelsHtml}</div>
       ${workspaceHtml}
       ${currentHtml}
       ${feedHtml}
