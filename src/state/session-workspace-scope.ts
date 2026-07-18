@@ -8,9 +8,9 @@ import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Chat, SessionState } from '../types';
 
-/** Expert threads and legacy Expert Lab chats stay out of the main sidebar. */
+/** Legacy Expert Lab sessions stay out of the main sidebar; expert threads are listed normally. */
 export function isSidebarVisibleChat(chat: Chat): boolean {
-  return chat.kind !== 'expert-lab' && chat.kind !== 'expert';
+  return chat.kind !== 'expert-lab';
 }
 
 /** True when the chat has unsent composer text persisted on the session row. */

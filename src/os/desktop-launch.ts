@@ -62,7 +62,7 @@ export async function restoreDesktopSessionOnForeground(): Promise<void> {
   const active = getActiveChat();
   const activeIsDesktop = isDesktopWorkspacePath(active.workspacePath ?? '', desktopPath);
 
-  if (activeIsDesktop) {
+  if (active.kind === 'expert' || activeIsDesktop) {
     await refreshDesktopChatSurface();
     return;
   }

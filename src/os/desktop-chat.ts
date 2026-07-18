@@ -241,17 +241,6 @@ export async function bootstrapDesktopChat(options?: DesktopChatActivateOptions)
         if (chat) {
           state.activeId = chat.id;
           acknowledgeChatViewed(chat.id);
-          if (isExpertChat(chat)) {
-            const expertId =
-              chat.expertId?.trim() || chat.expertSelection?.expertId?.trim() || '';
-            if (expertId) {
-              const scope = await import('../ui/experts/experts-scope');
-              scope.setExpertScopeId(expertId);
-              scope.syncExpertScopeChromeDataset();
-              scope.setExpertScopeSidebarVisible(true);
-              scope.renderExpertScopeHeader(expertId);
-            }
-          }
         } else {
           await ensureActiveDesktopAssistantChat();
         }

@@ -25,6 +25,8 @@ function stubSharedDom(doc: Document): void {
 
 describe('restoreDesktopSessionOnForeground', () => {
   beforeEach(async () => {
+    const { resetDesktopWorkspacePathCache } = await import('../../src/lib/desktop-workspace.ts');
+    resetDesktopWorkspacePathCache();
     const { Window } = await import('happy-dom');
     const win = new Window();
     const g = globalThis as typeof globalThis & {
@@ -115,5 +117,48 @@ describe('restoreDesktopSessionOnForeground', () => {
     activateDesktopAssistantChatForApp(DESKTOP_WS);
     assert.equal(getActiveChat().id, 'desktop-chat');
     assert.match(getActiveChat().history[1]?.content ?? '', /Hi from desktop/);
+  });
+
+  test('keeps expert chat active when workspace is not the desktop sandbox', async () => {
+    setSessionStateForTests({
+      version: 5,
+      activeId: 'expert-chat',
+      sidebarCollapsed: false,
+      lastActiveChatIdByWorkspace: { [CODE_WS]: 'orchestrator-chat' },
+      lastActiveChatIdByApp: { desktop: 'desktop-chat' },
+      chats: [
+        {
+          ...createEmptyChatObject('model-a'),
+          id: 'expert-chat',
+          kind: 'expert',
+          expertId: 'software-engineer',
+          expertSelection: { mode: 'manual', expertId: 'software-engineer' },
+          name: 'Expert thread',
+          workspacePath: CODE_WS,
+          modeId: 'general',
+          history: [{ role: 'assistant', content: 'Expert hello' }],
+        },
+        {
+          ...createEmptyChatObject('model-a'),
+          id: 'desktop-chat',
+          name: 'Desktop hello',
+          workspacePath: DESKTOP_WS,
+          modeId: 'desktop',
+          history: [{ role: 'user', content: 'Hello desktop' }],
+        },
+      ],
+    });
+
+    const { restoreDesktopSessionOnForeground } = await import('../../src/os/desktop-launch.ts');
+    const { getActiveChat } = await import('../../src/state/sessions.ts');
+
+    assert.equal(getActiveChat().kind, 'expert', 'fixture must be an expert thread');
+    try {
+      await restoreDesktopSessionOnForeground();
+    } catch (err) {
+      // happy-dom lacks a full DOMPurify implementation; the guard runs before render.
+      assert.match(String(err), /DOMPurify|sanitize/);
+    }
+    assert.equal(getActiveChat().id, 'expert-chat', 'restore must not switch away from expert chat');
   });
 });

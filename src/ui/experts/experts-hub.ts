@@ -23,14 +23,17 @@ import type { ExpertAccent, ExpertMeta } from '../../chat/experts/types';
 import { EXPERT_ACCENT_VALUES } from '../../chat/experts/types';
 import { isExpertsPageOpen, setExpertsPageOpen } from '../../app-state';
 import { loadExpertsConfig } from '../../config/experts-config';
+import { getDesktopWorkspacePath } from '../../lib/desktop-workspace';
 import {
   activateChatById,
   createExpertChat,
+  getActiveChat,
   getExpertChats,
   recordChatMessage,
   scheduleSaveSessions,
   sessionState,
 } from '../../state/sessions';
+import { getWorkspacePath } from '../../state/workspace';
 import { closeBenchmark } from '../benchmark-page';
 import { closeGlobalBugs } from '../global-bugs-page';
 import { closeSettings } from '../settings-page';
@@ -432,7 +435,12 @@ export async function startExpertChat(expertId: string): Promise<void> {
   const signal = summonAbort.signal;
 
   showExpertsSummon(expertId);
-  const chat = createExpertChat(expertId);
+  let chatsWorkspace = getWorkspacePath();
+  if (isOsEmbedded()) {
+    const desktopPath = await getDesktopWorkspacePath();
+    if (desktopPath) chatsWorkspace = desktopPath;
+  }
+  const chat = createExpertChat(expertId, '', chatsWorkspace);
   activateChatById(chat.id);
 
   try {
@@ -667,6 +675,18 @@ export function abandonExpertsHubSavedChat(): void {
   savedActiveChatId = null;
 }
 
+/** Hide Experts' Lab UI only — no session restore or expert-scope teardown (desktop chat handoff). */
+export function dismissExpertsHubUi(): void {
+  const root = getRoot();
+  if (!root) return;
+
+  summonAbort?.abort();
+  summonAbort = null;
+  hideExpertsSummon();
+  setExpertsPageOpen(false);
+  root.classList.remove('is-open');
+}
+
 export function closeExpertsHub(options?: { skipNavigate?: boolean }): void {
   const root = getRoot();
   const shell = getChatShell();
@@ -695,15 +715,16 @@ export function closeExpertsHub(options?: { skipNavigate?: boolean }): void {
     m.syncElectronPreviewHostVisibility(),
   );
 
-  // Desktop expert chat calls deactivateDesktopExperts → async closeExpertsHub while
-  // chatActive; do not tear down scope or restore the pre-hub chat in that case.
-  const preserveDesktopExpertChat = isOsEmbedded() && isDesktopChatActive();
+  const activeChat = sessionState ? getActiveChat() : null;
+  const preserveActiveExpertChat =
+    activeChat?.kind === 'expert' ||
+    (isOsEmbedded() && isDesktopChatActive());
 
-  if (isExpertScopeActive() && !preserveDesktopExpertChat) {
+  if (isExpertScopeActive() && !preserveActiveExpertChat) {
     teardownExpertScopeShell();
   }
 
-  if (savedActiveChatId && sessionState && !preserveDesktopExpertChat) {
+  if (savedActiveChatId && sessionState && !preserveActiveExpertChat) {
     const prev = savedActiveChatId;
     savedActiveChatId = null;
     if (sessionState.chats.some((c) => c.id === prev)) {
@@ -717,10 +738,12 @@ export function closeExpertsHub(options?: { skipNavigate?: boolean }): void {
         });
       }
     }
+  } else if (preserveActiveExpertChat) {
+    savedActiveChatId = null;
   }
 
   setStep('browse');
-  if (!preserveDesktopExpertChat) {
+  if (!preserveActiveExpertChat) {
     selectedExpertId = null;
   }
   editExpertId = null;

@@ -115,11 +115,6 @@ export async function openExpertChatInShell(chat: Chat): Promise<void> {
   const shell = document.getElementById('appBody');
   if (!root || !shell) return;
 
-  setExpertScopeId(expertId);
-  syncExpertScopeChromeDataset();
-  setExpertScopeSidebarVisible(true);
-  renderExpertScopeHeader(expertId);
-
   setExpertsPageOpen(false);
   root.classList.remove('is-open');
 
@@ -139,9 +134,13 @@ export async function openExpertChatInShell(chat: Chat): Promise<void> {
     const { activateDesktopChat } = await import('../../os/desktop-state');
     await activateDesktopChat({ chatId: chat.id });
     renderChatFromHistory(chat, '#desktopChatCol');
-    const { renderDesktopExpertScopeRail } = await import('../desktop-chat-rail');
-    renderDesktopExpertScopeRail(expertId, chat.id);
+    const { refreshDesktopChatRail } = await import('../desktop-chat-rail');
+    await refreshDesktopChatRail();
   } else {
+    setExpertScopeId(expertId);
+    syncExpertScopeChromeDataset();
+    setExpertScopeSidebarVisible(true);
+    renderExpertScopeHeader(expertId);
     shell.classList.remove('hidden');
     document.querySelector('header.topbar')?.classList.remove('hidden');
     renderChatFromHistory(chat);

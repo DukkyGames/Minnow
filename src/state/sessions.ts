@@ -1338,16 +1338,23 @@ export function isExpertChat(chat: Chat): boolean {
   return chat.kind === 'expert';
 }
 
-/** Expert threads and legacy Expert Lab sessions are omitted from the main sidebar. */
+/** Legacy Expert Lab sessions are omitted from the main sidebar. */
 export function isHiddenFromMainSidebar(chat: Chat): boolean {
-  return chat.kind === 'expert' || chat.kind === 'expert-lab';
+  return chat.kind === 'expert-lab';
 }
 
 /** Create a new expert-scoped chat thread and persist session state. */
-export function createExpertChat(expertId: string, modelId = ''): Chat {
+export function createExpertChat(
+  expertId: string,
+  modelId = '',
+  workspacePath?: string,
+): Chat {
   const state = requireSessionState();
   const trimmedId = expertId.trim();
-  const chat = createEmptyChatObject(modelId, getWorkspacePath());
+  const chat = createEmptyChatObject(
+    modelId,
+    workspacePath?.trim() || getWorkspacePath(),
+  );
   chat.kind = 'expert';
   chat.expertId = trimmedId;
   chat.expertSelection = { mode: 'manual', expertId: trimmedId };
