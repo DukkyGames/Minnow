@@ -306,6 +306,13 @@ export function showViewerSplit(): void {
 
 /** Hide split viewer pane; switches to preview tabs when available. */
 export function hideViewerSplit(options?: { skipPreviewFallback?: boolean }): void {
+  // Worktree/chat sync clears viewer tabs without closing an already-open browser split.
+  if (getFilePanelState().rightPaneMode === 'preview') {
+    hideViewerPaneDom();
+    applyFileSidebarVisuals();
+    return;
+  }
+
   const fallback = options?.skipPreviewFallback
     ? null
     : fallbackRightPaneModeAfterClose('viewer');

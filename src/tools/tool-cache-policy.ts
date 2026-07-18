@@ -22,7 +22,7 @@ const CACHE_POLICY: Record<string, ToolCachePolicy> = {
   git_status: { cacheable: true, ttlMs: 0 },
   git_diff: { cacheable: true, ttlMs: 0 },
   git_log: { cacheable: true, ttlMs: 0 },
-  get_lsp_diagnostics: { cacheable: true, ttlMs: 30_000 },
+  get_lsp_diagnostics: { cacheable: false, ttlMs: 0 },
   list_lsp_servers: { cacheable: true, ttlMs: 60_000 },
   load_impeccable_context: { cacheable: true, ttlMs: 300_000 },
   load_aesthetics_reference: { cacheable: true, ttlMs: 300_000 },

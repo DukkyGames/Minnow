@@ -21,9 +21,16 @@ export interface EditorAiCompletionConfig {
   includeImportContext: boolean;
   /** Fetch LSP hover at cursor for prompt context (no-op when unavailable). */
   includeLspHover: boolean;
-  /** Use Qwen native FIM tokens when the model id matches. */
+  /** Fetch LSP document symbols and nearby diagnostics for prompt context. */
+  includeLspContext: boolean;
+  /** Total character budget for optional prompt context blocks. */
+  contextBudgetChars: number;
+  /**
+   * Legacy native-FIM toggle — retained for config migration; chat messages are always used.
+   * @deprecated Ignored at runtime (Phase 6).
+   */
   useNativeFim: boolean;
-  /** Cache completions by file path + prefix/suffix hash. */
+  /** Cache completions by provider/model/prompt/settings/path/context hash. */
   enableCompletionCache: boolean;
 }
 
@@ -46,6 +53,8 @@ export const DEFAULT_EDITOR_AI_COMPLETION: EditorAiCompletionConfig = {
   modelId: '',
   includeImportContext: true,
   includeLspHover: true,
+  includeLspContext: true,
+  contextBudgetChars: 4000,
   useNativeFim: true,
   enableCompletionCache: true,
 };
@@ -71,7 +80,7 @@ export function parseEditorAiCompletionBlock(raw: unknown): EditorAiCompletionCo
   }
   const block = raw as Record<string, unknown>;
   return {
-    enabled: block.enabled === true,
+    enabled: block.enabled !== false,
     debounceMs: clampInt(block.debounceMs, 200, 2000, DEFAULT_EDITOR_AI_COMPLETION.debounceMs),
     maxPrefixLines: clampInt(
       block.maxPrefixLines,
@@ -109,6 +118,13 @@ export function parseEditorAiCompletionBlock(raw: unknown): EditorAiCompletionCo
     modelId: typeof block.modelId === 'string' ? block.modelId : '',
     includeImportContext: block.includeImportContext !== false,
     includeLspHover: block.includeLspHover !== false,
+    includeLspContext: block.includeLspContext !== false,
+    contextBudgetChars: clampInt(
+      block.contextBudgetChars,
+      500,
+      12_000,
+      DEFAULT_EDITOR_AI_COMPLETION.contextBudgetChars,
+    ),
     useNativeFim: block.useNativeFim !== false,
     enableCompletionCache: block.enableCompletionCache !== false,
   };
@@ -206,6 +222,19 @@ export async function saveEditorAiCompletionConfig(
         : current.includeImportContext,
     includeLspHover:
       patch.includeLspHover !== undefined ? patch.includeLspHover : current.includeLspHover,
+    includeLspContext:
+      patch.includeLspContext !== undefined
+        ? patch.includeLspContext
+        : current.includeLspContext,
+    contextBudgetChars:
+      patch.contextBudgetChars !== undefined
+        ? clampInt(
+            patch.contextBudgetChars,
+            500,
+            12_000,
+            current.contextBudgetChars,
+          )
+        : current.contextBudgetChars,
     useNativeFim:
       patch.useNativeFim !== undefined ? patch.useNativeFim : current.useNativeFim,
     enableCompletionCache:

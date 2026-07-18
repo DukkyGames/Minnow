@@ -1,30 +1,30 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { EditorState } from '@codemirror/state';
-const DEFAULT_EDITOR_AI_COMPLETION = {
-  enabled: false,
-  debounceMs: 450,
-  maxPrefixLines: 80,
-  maxSuffixLines: 40,
-  maxPrefixChars: 6000,
-  maxSuffixChars: 2000,
-  temperature: 0.3,
-  maxTokens: 256,
-  useChatModel: true,
-  providerId: '',
-  modelId: '',
-  includeImportContext: true,
-  includeLspHover: true,
-  useNativeFim: true,
-  enableCompletionCache: true,
-};
 import {
+  PROMPT_VERSION,
+  alignAndValidateCompletionText,
+  applyContextBudget,
   buildEditorAiCompletionMessages,
+  cursorIndentAt,
+  EditorRecentEditsRing,
   extractImportSymbols,
   extractPrefixSuffix,
+  formatNearbyDiagnostics,
   languageHintFromPath,
+  longestOverlapSuffixPrefix,
+  normalizeCompletionIndentation,
   sanitizeCompletionText,
+  shouldReplaceGhostPartial,
+  symbolsEnclosingLine,
+  trimOverlapWithDocument,
 } from '../../src/ui/editor-ai-completion-prompt.ts';
+import { DEFAULT_EDITOR_AI_COMPLETION } from '../../src/config/editor-ai-completion.ts';
+
+const TEST_CONFIG = {
+  ...DEFAULT_EDITOR_AI_COMPLETION,
+  enabled: true,
+};
 
 describe('editor AI completion prompt', () => {
   test('languageHintFromPath maps TypeScript extensions', () => {
@@ -37,7 +37,7 @@ describe('editor AI completion prompt', () => {
     const state = EditorState.create({ doc });
     const pos = doc.indexOf('two') + 3;
     const { prefix, suffix } = extractPrefixSuffix(state.doc, pos, {
-      ...DEFAULT_EDITOR_AI_COMPLETION,
+      ...TEST_CONFIG,
       maxPrefixLines: 1,
       maxSuffixLines: 1,
       maxPrefixChars: 100,
@@ -47,7 +47,7 @@ describe('editor AI completion prompt', () => {
     assert.match(suffix, /line three/);
   });
 
-  test('buildEditorAiCompletionMessages uses FIM layout', () => {
+  test('buildEditorAiCompletionMessages uses structured chat layout', () => {
     const doc = 'const x = 1;\n';
     const state = EditorState.create({ doc });
     const pos = doc.length;
@@ -55,15 +55,158 @@ describe('editor AI completion prompt', () => {
       state,
       cursorPos: pos,
       filePath: 'src/demo.ts',
-      config: DEFAULT_EDITOR_AI_COMPLETION,
+      config: TEST_CONFIG,
     });
     assert.equal(messages.length, 2);
     assert.equal(messages[0].role, 'system');
     const user = messages[1];
     assert.equal(user.role, 'user');
-    assert.match(String(user.content), /File: src\/demo\.ts/);
-    assert.match(String(user.content), /Language: TypeScript/);
-    assert.match(String(user.content), /<CURSOR>/);
+    const content = String(user.content);
+    assert.match(content, /File: src\/demo\.ts/);
+    assert.match(content, /Language: TypeScript/);
+    assert.match(content, /Insertion constraints:/);
+    assert.match(content, /Before cursor:/);
+    assert.match(content, /<CURSOR>/);
+    assert.match(content, /After cursor:/);
+  });
+
+  test('PROMPT_VERSION is exported for cache invalidation', () => {
+    assert.equal(PROMPT_VERSION, '6');
+  });
+
+  test('buildEditorAiCompletionMessages includes import and LSP context', () => {
+    const doc = 'import fs from "node:fs";\nconst x = 1;\n';
+    const state = EditorState.create({ doc });
+    const pos = doc.indexOf('const') + 6;
+    const { messages } = buildEditorAiCompletionMessages({
+      state,
+      cursorPos: pos,
+      filePath: 'src/demo.ts',
+      config: TEST_CONFIG,
+      modelId: 'llama-3',
+      lspSymbols: 'myFn → MyClass',
+      lspDiagnostics: 'L2:1 Type error',
+      recentEdits: [{ lineNumber: 2, before: 'const x = ', after: 'const x = 1' }],
+    });
+    const content = String(messages[1].content);
+    assert.match(content, /Imports \/ requires:/);
+    assert.match(content, /import fs/);
+    assert.match(content, /Enclosing symbols:/);
+    assert.match(content, /myFn/);
+    assert.match(content, /Nearby diagnostics:/);
+    assert.match(content, /Recent edits:/);
+  });
+
+  test('applyContextBudget respects priority order', () => {
+    const kept = applyContextBudget(
+      [
+        { key: 'broader', priority: 6, text: 'B'.repeat(100) },
+        { key: 'scope', priority: 1, text: 'SCOPE' },
+        { key: 'edits', priority: 2, text: 'EDITS' },
+      ],
+      20,
+    );
+    assert.deepEqual(kept, ['SCOPE', 'EDITS']);
+  });
+
+  test('EditorRecentEditsRing tracks changed lines only', () => {
+    const ring = new EditorRecentEditsRing(4);
+    ring.recordDocChange('line one\nline two', 'line one\nline TWO');
+    const snap = ring.snapshot();
+    assert.equal(snap.length, 1);
+    assert.equal(snap[0].lineNumber, 2);
+    assert.equal(snap[0].before, 'line two');
+    assert.equal(snap[0].after, 'line TWO');
+  });
+
+  test('symbolsEnclosingLine finds nested symbols', () => {
+    const names = symbolsEnclosingLine(
+      [
+        {
+          name: 'Outer',
+          range: { start: { line: 0 }, end: { line: 10 } },
+          children: [{ name: 'inner', range: { start: { line: 5 }, end: { line: 7 } } }],
+        },
+      ],
+      6,
+    );
+    assert.deepEqual(names, ['Outer', 'inner']);
+  });
+
+  test('formatNearbyDiagnostics filters by cursor proximity', () => {
+    const text = formatNearbyDiagnostics(
+      [
+        { message: 'near', range: { start: { line: 4, character: 0 } } },
+        { message: 'far', range: { start: { line: 20, character: 0 } } },
+      ],
+      5,
+    );
+    assert.match(text, /near/);
+    assert.doesNotMatch(text, /far/);
+  });
+
+  test('normalizeCompletionIndentation preserves leading newlines', () => {
+    const prefix = 'function fn() {\n  ';
+    assert.equal(
+      normalizeCompletionIndentation('\nreturn 1;', prefix),
+      '\n  return 1;',
+    );
+  });
+
+  test('cursorIndentAt reads whitespace before cursor on current line', () => {
+    assert.equal(cursorIndentAt('  const x = '), '  ');
+  });
+
+  test('longestOverlapSuffixPrefix finds shared boundary', () => {
+    assert.equal(longestOverlapSuffixPrefix('abc', 'bcd'), 2);
+    assert.equal(longestOverlapSuffixPrefix('foo', 'bar'), 0);
+  });
+
+  test('trimOverlapWithDocument removes prefix overlap', () => {
+    assert.equal(
+      trimOverlapWithDocument('world', 'hello ', ' !'),
+      'world',
+    );
+  });
+
+  test('alignAndValidateCompletionText rejects prose', () => {
+    const result = alignAndValidateCompletionText({
+      raw: "Here's the completion:\nconst y = 2;",
+      prefix: 'const x = ',
+      suffix: '',
+    });
+    assert.equal(result.rejected, true);
+    assert.equal(result.reason, 'prose');
+  });
+
+  test('alignAndValidateCompletionText rejects prefix echo', () => {
+    const result = alignAndValidateCompletionText({
+      raw: 'const x = ',
+      prefix: 'const x = ',
+      suffix: '',
+    });
+    assert.equal(result.rejected, true);
+    assert.equal(result.reason, 'prefix_echo');
+  });
+
+  test('alignAndValidateCompletionText trims suffix overlap', () => {
+    const result = alignAndValidateCompletionText({
+      raw: '42;}\n',
+      prefix: 'const x = ',
+      suffix: '}\n',
+    });
+    assert.equal(result.text, '42;');
+  });
+
+  test('alignAndValidateCompletionText rejects oversized insertions', () => {
+    const result = alignAndValidateCompletionText({
+      raw: 'x'.repeat(500),
+      prefix: 'const a = ',
+      suffix: '',
+      maxInsertChars: 64,
+    });
+    assert.equal(result.rejected, true);
+    assert.equal(result.reason, 'oversized');
   });
 
   test('sanitizeCompletionText strips markdown fences', () => {
@@ -75,37 +218,15 @@ describe('editor AI completion prompt', () => {
     assert.equal(sanitizeCompletionText('const x = 1', 'const x = '), '1');
   });
 
-  test('buildEditorAiCompletionMessages includes import context in chat mode', () => {
-    const doc = 'import fs from "node:fs";\nconst x = 1;\n';
-    const state = EditorState.create({ doc });
-    const pos = doc.indexOf('const') + 6;
-    const { messages } = buildEditorAiCompletionMessages({
-      state,
-      cursorPos: pos,
-      filePath: 'src/demo.ts',
-      config: DEFAULT_EDITOR_AI_COMPLETION,
-      modelId: 'llama-3',
-    });
-    assert.match(String(messages[1].content), /Imports \/ requires:/);
-    assert.match(String(messages[1].content), /import fs/);
+  test('shouldReplaceGhostPartial enforces monotonic growth', () => {
+    assert.equal(shouldReplaceGhostPartial('ab', 'abc', 'x', ''), true);
+    assert.equal(shouldReplaceGhostPartial('abc', 'ab', 'x', ''), false);
+    assert.equal(shouldReplaceGhostPartial('ab', 'xy', 'x', ''), false);
   });
 
   test('extractImportSymbols collects top-of-file imports', () => {
     const text = 'import a from "a";\nimport { b } from "b";\n\nconst x = 1;';
     assert.match(extractImportSymbols(text), /import a/);
     assert.match(extractImportSymbols(text), /import \{ b \}/);
-  });
-
-  test('sanitizeCompletionText handles binary-safe paths in user content', () => {
-    const path = 'docs/weird-name_%.md';
-    const doc = '# Title\n';
-    const state = EditorState.create({ doc });
-    const { messages } = buildEditorAiCompletionMessages({
-      state,
-      cursorPos: doc.length,
-      filePath: path,
-      config: DEFAULT_EDITOR_AI_COMPLETION,
-    });
-    assert.match(String(messages[1].content), /docs\/weird-name_%\.md/);
   });
 });

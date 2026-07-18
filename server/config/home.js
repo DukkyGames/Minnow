@@ -273,6 +273,8 @@ const DEFAULT_META = {
     modelId: '',
     includeImportContext: true,
     includeLspHover: true,
+    includeLspContext: true,
+    contextBudgetChars: 4000,
     useNativeFim: true,
     enableCompletionCache: true,
   },

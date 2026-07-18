@@ -42,13 +42,19 @@ describe('LSP spawn ENOENT', () => {
       `${JSON.stringify(lspJson, null, 2)}\n`,
       'utf8',
     );
+    await fs.writeFile(
+      path.join(__dirname, '../../sample.missinglsp'),
+      'placeholder\n',
+      'utf8',
+    );
   });
 
-  after(() => {
+  after(async () => {
     shutdownAllLsp();
     delete process.env.MINNOW_HOME;
     resetMinnowHomeCache();
     invalidateLspConfigCache();
+    await fs.rm(path.join(__dirname, '../../sample.missinglsp'), { force: true });
   });
 
   test('getLspDiagnostics returns install hint instead of throwing', async () => {

@@ -425,7 +425,9 @@ async function toggleDesignModeFromToolbar(): Promise<void> {
     },
     onClearAll: () => void refreshAnnotationsPanel(),
   });
-  await syncDesignModeElectronGuest();
+  // Guest sync already ran via onArmedToolChange during enable (before the Select picker binds).
+  // A second sync here re-bound the picker while CDP enable was still in flight →
+  // "target closed while handling command".
 }
 
 /**
@@ -457,7 +459,6 @@ export async function openPreviewPageAndEnableDesignMode(pageUrl: string): Promi
     },
     onClearAll: () => void refreshAnnotationsPanel(),
   });
-  await syncDesignModeElectronGuest();
 }
 
 function getAutoReloadCheckbox(): HTMLInputElement | null {

@@ -221,6 +221,41 @@ describe('Select design tool (MIN-366)', () => {
     tool.disarm();
   });
 
+  test('rapid refreshGuestBinding serializes picker teardown and re-enable', async () => {
+    let enableCount = 0;
+    let disableCount = 0;
+    const cdp = {
+      enable: async () => {
+        enableCount += 1;
+        return { ok: true };
+      },
+      disable: async () => {
+        disableCount += 1;
+      },
+      onPick: () => () => {},
+      onError: () => () => {},
+    };
+    Object.assign(globalThis.window, {
+      minnow: { preview: { cdpPicker: cdp, execJs: async () => ({}) } },
+    });
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      previewSource: { kind: 'url', url: 'https://example.com/pricing' },
+    });
+
+    const tool = createSelectDesignTool();
+    const ctx = makeCtx();
+    tool.arm(ctx);
+    await flush();
+    tool.refreshGuestBinding();
+    await flush();
+
+    assert.equal(enableCount, 2, 'refresh should re-enable the CDP picker after the first bind');
+    assert.equal(disableCount, 1, 'refresh should tear down exactly one prior picker session');
+    tool.disarm();
+    Object.assign(globalThis.window, { minnow: undefined });
+  });
+
   test('disarm clears overlay markers and disables the picker', async () => {
     const tool = createSelectDesignTool();
     const ctx = makeCtx();

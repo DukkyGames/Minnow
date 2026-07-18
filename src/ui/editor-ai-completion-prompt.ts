@@ -1,5 +1,6 @@
 /**
- * FIM-style prompt builder for editor AI inline completions (POLISH-006, Phase 4).
+ * FIM-style prompt builder and output alignment for editor AI inline completions.
+ * Phase 6: structured context, LSP signals, cursor-aware alignment.
  */
 
 import type { EditorState } from '@codemirror/state';
@@ -7,65 +8,89 @@ import type { ApiMessage } from '../types';
 import type { EditorAiCompletionConfig } from '../config/editor-ai-completion';
 import { stripEditorModelOutput } from './editor-model-output';
 
+/** Bump when prompt layout or validation rules change (cache invalidation). */
+export const PROMPT_VERSION = '6';
+
 export const EDITOR_AI_COMPLETION_SYSTEM =
   'You are a code completion engine. Output only the text that should appear at the cursor. ' +
   'No explanations, markdown fences, thinking tags, or comments unless they belong at the insertion point. ' +
   'Never wrap output in reasoning or thinking markup.';
 
-/** Qwen Coder native fill-in-the-middle token markers. */
-export const QWEN_FIM_PREFIX = '<|fim_prefix|>';
-export const QWEN_FIM_SUFFIX = '<|fim_suffix|>';
-export const QWEN_FIM_MIDDLE = '<|fim_middle|>';
+/** Default total character budget for optional prompt context blocks. */
+export const DEFAULT_CONTEXT_BUDGET_CHARS = 4000;
+
+/** Timeout for optional LSP context fetches (symbols, diagnostics, hover). */
+export const DEFAULT_LSP_CONTEXT_TIMEOUT_MS = 350;
+
+/** Maximum characters for a single validated inline insertion. */
+export const DEFAULT_MAX_INSERT_CHARS = 800;
 
 export interface EditorAiPromptInput {
   state: EditorState;
   cursorPos: number;
   filePath: string;
   config: EditorAiCompletionConfig;
-  /** Active model id — used to pick native FIM when supported. */
+  /** Active model id (chat transport only — native FIM is not used). */
   modelId?: string;
   /** Optional LSP hover markdown/plain text for the cursor symbol. */
   lspHover?: string | null;
+  /** Enclosing document symbols near the cursor. */
+  lspSymbols?: string | null;
+  /** Diagnostics near the cursor. */
+  lspDiagnostics?: string | null;
+  /** Recent changed lines from the editor ring buffer. */
+  recentEdits?: RecentEditLine[];
 }
 
 export interface EditorAiPromptResult {
   messages: ApiMessage[];
   prefix: string;
   suffix: string;
-  /** When true, client should send `prompt` (native FIM) instead of chat messages. */
-  useNativeFim: boolean;
-  /** Native FIM prompt string for Qwen-style models. */
-  fimPrompt?: string;
 }
 
-/** Infer a language label from the file path extension. */
-export function languageHintFromPath(filePath: string): string {
-  const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
-  const map: Record<string, string> = {
-    ts: 'TypeScript',
-    tsx: 'TypeScript React',
-    mts: 'TypeScript',
-    js: 'JavaScript',
-    mjs: 'JavaScript',
-    cjs: 'JavaScript',
-    json: 'JSON',
-    md: 'Markdown',
-    markdown: 'Markdown',
-    css: 'CSS',
-    html: 'HTML',
-    htm: 'HTML',
-    py: 'Python',
-    rs: 'Rust',
-    go: 'Go',
-    java: 'Java',
-    cpp: 'C++',
-    c: 'C',
-    h: 'C/C++ header',
-    sh: 'Shell',
-    yml: 'YAML',
-    yaml: 'YAML',
-  };
-  return map[ext] ?? (ext || 'plain text');
+/** One line that changed in a recent edit (before/after snapshots). */
+export interface RecentEditLine {
+  lineNumber: number;
+  before: string;
+  after: string;
+}
+
+/** Tracks a bounded ring of recently changed lines for prompt context. */
+export class EditorRecentEditsRing {
+  private readonly entries: RecentEditLine[] = [];
+
+  constructor(private readonly maxEntries = 8) {}
+
+  /** Compare old and new documents and record changed lines only. */
+  recordDocChange(oldText: string, newText: string): void {
+    const oldLines = oldText.split('\n');
+    const newLines = newText.split('\n');
+    const maxLine = Math.max(oldLines.length, newLines.length);
+    for (let i = 0; i < maxLine; i += 1) {
+      const before = oldLines[i] ?? '';
+      const after = newLines[i] ?? '';
+      if (before === after) continue;
+      this.push({ lineNumber: i + 1, before, after });
+    }
+  }
+
+  private push(entry: RecentEditLine): void {
+    const idx = this.entries.findIndex((e) => e.lineNumber === entry.lineNumber);
+    if (idx >= 0) this.entries.splice(idx, 1);
+    this.entries.push(entry);
+    while (this.entries.length > this.maxEntries) {
+      this.entries.shift();
+    }
+  }
+
+  /** Most recent changed lines (newest last). */
+  snapshot(): RecentEditLine[] {
+    return [...this.entries];
+  }
+
+  clear(): void {
+    this.entries.length = 0;
+  }
 }
 
 /** Map file extension to a fenced-code language tag. */
@@ -96,23 +121,34 @@ export function fenceLangFromPath(filePath: string): string {
   return map[ext] ?? ext;
 }
 
-/** True when the model id suggests Qwen Coder native FIM support. */
-export function isQwenFimModel(modelId: string): boolean {
-  const id = modelId.toLowerCase();
-  if (!id.includes('qwen')) return false;
-  return (
-    id.includes('coder') ||
-    id.includes('code') ||
-    id.includes('2.5') ||
-    id.includes('2-5') ||
-    id.includes('3-coder') ||
-    id.includes('3coder')
-  );
-}
-
-/** Build Qwen native FIM prompt (prefix + suffix around cursor). */
-export function buildQwenFimPrompt(prefix: string, suffix: string): string {
-  return `${QWEN_FIM_PREFIX}${prefix}${QWEN_FIM_SUFFIX}${suffix}${QWEN_FIM_MIDDLE}`;
+/** Infer a language label from the file path extension. */
+export function languageHintFromPath(filePath: string): string {
+  const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
+  const map: Record<string, string> = {
+    ts: 'TypeScript',
+    tsx: 'TypeScript React',
+    mts: 'TypeScript',
+    js: 'JavaScript',
+    mjs: 'JavaScript',
+    cjs: 'JavaScript',
+    json: 'JSON',
+    md: 'Markdown',
+    markdown: 'Markdown',
+    css: 'CSS',
+    html: 'HTML',
+    htm: 'HTML',
+    py: 'Python',
+    rs: 'Rust',
+    go: 'Go',
+    java: 'Java',
+    cpp: 'C++',
+    c: 'C',
+    h: 'C/C++ header',
+    sh: 'Shell',
+    yml: 'YAML',
+    yaml: 'YAML',
+  };
+  return map[ext] ?? (ext || 'plain text');
 }
 
 /** Collect import / require lines from the top of a file for prompt context. */
@@ -152,8 +188,6 @@ export function extractPrefixSuffix(
 ): { prefix: string; suffix: string } {
   const clampedPos = Math.max(0, Math.min(cursorPos, doc.length));
   const line = doc.lineAt(clampedPos);
-  const lineIndex = line.number - 1;
-
   const prefixStartLine = Math.max(1, line.number - config.maxPrefixLines);
   const suffixEndLine = Math.min(
     doc.lines,
@@ -173,6 +207,60 @@ export function extractPrefixSuffix(
   return { prefix, suffix };
 }
 
+/** Indentation string at the cursor (whitespace from line start to cursor). */
+export function cursorIndentAt(prefix: string): string {
+  const lineStart = prefix.lastIndexOf('\n') + 1;
+  const linePrefix = prefix.slice(lineStart);
+  const match = linePrefix.match(/^[\t ]*/);
+  return match ? match[0] : '';
+}
+
+/** Longest suffix of `a` that equals a prefix of `b`. */
+export function longestOverlapSuffixPrefix(a: string, b: string): number {
+  const max = Math.min(a.length, b.length);
+  for (let len = max; len > 0; len -= 1) {
+    if (a.slice(-len) === b.slice(0, len)) return len;
+  }
+  return 0;
+}
+
+interface ContextSection {
+  key: string;
+  priority: number;
+  text: string;
+}
+
+/** Apply deterministic context budget: scope, edits, suffix, imports, diagnostics, broader. */
+export function applyContextBudget(
+  sections: ContextSection[],
+  budgetChars: number,
+): string[] {
+  const sorted = [...sections]
+    .filter((s) => s.text.trim())
+    .sort((a, b) => a.priority - b.priority);
+  const kept: string[] = [];
+  let used = 0;
+  for (const section of sorted) {
+    const remaining = budgetChars - used;
+    if (remaining <= 0) break;
+    // Lower-priority sections are omitted when they do not fit entirely.
+    if (section.text.length > remaining) continue;
+    kept.push(section.text);
+    used += section.text.length;
+  }
+  return kept;
+}
+
+function formatRecentEdits(edits: RecentEditLine[]): string {
+  if (!edits.length) return '';
+  return edits
+    .map(
+      (e) =>
+        `L${e.lineNumber} before: ${e.before}\nL${e.lineNumber} after: ${e.after}`,
+    )
+    .join('\n');
+}
+
 /** Build chat messages for a fill-in-the-middle completion request. */
 export function buildEditorAiCompletionMessages(
   input: EditorAiPromptInput,
@@ -184,37 +272,89 @@ export function buildEditorAiCompletionMessages(
   );
   const language = languageHintFromPath(input.filePath);
   const pathLine = input.filePath.trim() || 'untitled';
-  const modelId = input.modelId?.trim() ?? '';
-  const useNativeFim =
-    input.config.useNativeFim !== false && isQwenFimModel(modelId);
+  const indent = cursorIndentAt(prefix);
+  const currentLineStart = prefix.lastIndexOf('\n') + 1;
+  const currentLineBefore = prefix.slice(currentLineStart);
 
-  if (useNativeFim) {
-    return {
-      messages: [],
-      prefix,
-      suffix,
-      useNativeFim: true,
-      fimPrompt: buildQwenFimPrompt(prefix, suffix),
-    };
-  }
+  const contextSections: ContextSection[] = [
+    {
+      key: 'scope',
+      priority: 1,
+      text: `Current line before cursor:\n${currentLineBefore}`,
+    },
+    {
+      key: 'edits',
+      priority: 2,
+      text: input.recentEdits?.length
+        ? `Recent edits:\n${formatRecentEdits(input.recentEdits)}`
+        : '',
+    },
+    {
+      key: 'suffix',
+      priority: 3,
+      text: suffix.trim() ? `Text after cursor:\n${suffix}` : '',
+    },
+  ];
 
-  const contextBlocks: string[] = [];
   if (input.config.includeImportContext !== false) {
     const imports = extractImportSymbols(input.state.doc.toString());
     if (imports.trim()) {
-      contextBlocks.push('Imports / requires:\n' + imports);
+      contextSections.push({
+        key: 'imports',
+        priority: 4,
+        text: `Imports / requires:\n${imports}`,
+      });
     }
   }
-  if (input.config.includeLspHover !== false && input.lspHover?.trim()) {
-    contextBlocks.push('Symbol at cursor (LSP hover):\n' + input.lspHover.trim());
+
+  const lspParts: string[] = [];
+  if (input.lspSymbols?.trim()) {
+    lspParts.push(`Enclosing symbols:\n${input.lspSymbols.trim()}`);
   }
+  if (input.lspDiagnostics?.trim()) {
+    lspParts.push(`Nearby diagnostics:\n${input.lspDiagnostics.trim()}`);
+  }
+  if (input.lspHover?.trim()) {
+    lspParts.push(`Symbol at cursor:\n${input.lspHover.trim()}`);
+  }
+  if (lspParts.length > 0) {
+    contextSections.push({
+      key: 'lsp',
+      priority: 5,
+      text: lspParts.join('\n\n'),
+    });
+  }
+
+  contextSections.push({
+    key: 'broader',
+    priority: 6,
+    text: prefix.length > currentLineBefore.length
+      ? `Broader context before cursor:\n${prefix.slice(0, -currentLineBefore.length)}`
+      : '',
+  });
+
+  const budget = input.config.contextBudgetChars ?? DEFAULT_CONTEXT_BUDGET_CHARS;
+  const contextBlocks = applyContextBudget(contextSections, budget);
+
+  const constraints = [
+    'Insertion constraints:',
+    '- Output only text to insert at <CURSOR>; no surrounding code already in the file.',
+    '- Preserve required leading newlines and match indentation when continuing a block.',
+    indent ? `- Cursor indentation: ${JSON.stringify(indent)}` : '- Cursor indentation: (none)',
+    '- Do not repeat text already before or after the cursor.',
+    '- No explanations, markdown fences, or full-file rewrites.',
+  ].join('\n');
 
   const userBody = [
     `File: ${pathLine}`,
     `Language: ${language}`,
+    '---',
+    constraints,
     ...(contextBlocks.length > 0 ? ['---', ...contextBlocks, '---'] : ['---']),
+    'Before cursor:',
     prefix,
     '<CURSOR>',
+    'After cursor:',
     suffix,
   ].join('\n');
 
@@ -223,40 +363,259 @@ export function buildEditorAiCompletionMessages(
     { role: 'user', content: userBody },
   ];
 
-  return { messages, prefix, suffix, useNativeFim: false };
+  return { messages, prefix, suffix };
+}
+
+/** Race a promise against a timeout; returns null on timeout or error. */
+export async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), timeoutMs);
+      }),
+    ]);
+  } catch {
+    return null;
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+export interface LspDocumentSymbolNode {
+  name: string;
+  kind?: number;
+  range?: { start?: { line?: number }; end?: { line?: number } };
+  children?: LspDocumentSymbolNode[];
+}
+
+/** Find symbols whose range encloses the cursor line (0-based). */
+export function symbolsEnclosingLine(
+  symbols: LspDocumentSymbolNode[],
+  line: number,
+  depth = 0,
+  maxDepth = 4,
+): string[] {
+  const names: string[] = [];
+  for (const sym of symbols) {
+    const start = sym.range?.start?.line ?? 0;
+    const end = sym.range?.end?.line ?? start;
+    if (line < start || line > end) continue;
+    if (sym.name) names.push(sym.name);
+    if (sym.children?.length && depth < maxDepth) {
+      names.push(...symbolsEnclosingLine(sym.children, line, depth + 1, maxDepth));
+    }
+  }
+  return names;
+}
+
+/** Format diagnostics near the cursor (within a few lines). */
+export function formatNearbyDiagnostics(
+  diagnostics: Array<{
+    message: string;
+    severity?: number;
+    range?: { start?: { line?: number; character?: number } };
+  }>,
+  cursorLine: number,
+  windowLines = 3,
+): string {
+  const nearby = diagnostics.filter((d) => {
+    const line = d.range?.start?.line ?? 0;
+    return Math.abs(line - cursorLine) <= windowLines;
+  });
+  if (!nearby.length) return '';
+  return nearby
+    .slice(0, 8)
+    .map((d) => {
+      const line = (d.range?.start?.line ?? 0) + 1;
+      const col = (d.range?.start?.character ?? 0) + 1;
+      return `L${line}:${col} ${d.message}`;
+    })
+    .join('\n');
+}
+
+/** Fetch optional LSP context in parallel with strict timeouts. */
+export async function fetchEditorAiLspContext(
+  filePath: string,
+  cursorLine: number,
+  cursorCharacter: number,
+  editorText: string,
+  config: EditorAiCompletionConfig,
+  deps?: {
+    fetchDocumentSymbols?: typeof import('../lsp/completion-client').fetchLspDocumentSymbols;
+    fetchDiagnostics?: typeof import('../lsp/completion-client').fetchLspDiagnostics;
+    fetchHover?: typeof import('../lsp/hover-client').fetchLspHover;
+    timeoutMs?: number;
+  },
+): Promise<{ symbols: string | null; diagnostics: string | null; hover: string | null }> {
+  const includeContext =
+    config.includeLspContext !== false || config.includeLspHover !== false;
+  if (!includeContext) {
+    return { symbols: null, diagnostics: null, hover: null };
+  }
+
+  const timeoutMs = deps?.timeoutMs ?? DEFAULT_LSP_CONTEXT_TIMEOUT_MS;
+  const { fetchLspDocumentSymbols, fetchLspDiagnostics } = await import(
+    '../lsp/completion-client'
+  );
+  const { fetchLspHover } = await import('../lsp/hover-client');
+
+  const fetchSymbols = deps?.fetchDocumentSymbols ?? fetchLspDocumentSymbols;
+  const fetchDiags = deps?.fetchDiagnostics ?? fetchLspDiagnostics;
+  const fetchHoverFn = deps?.fetchHover ?? fetchLspHover;
+
+  const [symbolsResult, diagnosticsResult, hoverResult] = await Promise.all([
+    config.includeLspContext !== false
+      ? withTimeout(fetchSymbols(filePath), timeoutMs)
+      : Promise.resolve(null),
+    config.includeLspContext !== false
+      ? withTimeout(fetchDiags(filePath, editorText), timeoutMs)
+      : Promise.resolve(null),
+    config.includeLspHover !== false
+      ? withTimeout(
+          fetchHoverFn(filePath, cursorLine, cursorCharacter),
+          timeoutMs,
+        )
+      : Promise.resolve(null),
+  ]);
+
+  let symbols: string | null = null;
+  if (symbolsResult?.symbols?.length) {
+    const names = symbolsEnclosingLine(symbolsResult.symbols, cursorLine);
+    if (names.length) symbols = names.join(' → ');
+  }
+
+  let diagnostics: string | null = null;
+  if (diagnosticsResult?.length) {
+    const formatted = formatNearbyDiagnostics(diagnosticsResult, cursorLine);
+    if (formatted) diagnostics = formatted;
+  }
+
+  return {
+    symbols,
+    diagnostics,
+    hover: hoverResult,
+  };
 }
 
 /**
- * Build prompt payload with optional async LSP hover (try/catch — never throws).
+ * Build prompt payload with optional async LSP context (try/catch — never throws).
  */
 export async function buildEditorAiCompletionMessagesAsync(
   input: EditorAiPromptInput,
 ): Promise<EditorAiPromptResult> {
-  let lspHover: string | null = null;
-  if (input.config.includeLspHover !== false) {
-    try {
-      const { fetchLspHover } = await import('../lsp/hover-client');
-      const lineInfo = input.state.doc.lineAt(input.cursorPos);
-      lspHover = await fetchLspHover(
-        input.filePath,
-        lineInfo.number - 1,
-        input.cursorPos - lineInfo.from,
-      );
-    } catch {
-      lspHover = null;
-    }
+  const lineInfo = input.state.doc.lineAt(input.cursorPos);
+  const cursorLine = lineInfo.number - 1;
+  const cursorCharacter = input.cursorPos - lineInfo.from;
+
+  let lspHover: string | null = input.lspHover ?? null;
+  let lspSymbols: string | null = null;
+  let lspDiagnostics: string | null = null;
+
+  try {
+    const lsp = await fetchEditorAiLspContext(
+      input.filePath,
+      cursorLine,
+      cursorCharacter,
+      input.state.doc.toString(),
+      input.config,
+    );
+    lspSymbols = lsp.symbols;
+    lspDiagnostics = lsp.diagnostics;
+    if (!lspHover) lspHover = lsp.hover;
+  } catch {
+    /* degrade gracefully */
   }
-  return buildEditorAiCompletionMessages({ ...input, lspHover });
+
+  return buildEditorAiCompletionMessages({
+    ...input,
+    lspHover,
+    lspSymbols,
+    lspDiagnostics,
+  });
 }
 
-/**
- * Normalize model output for inline insertion (strip fences / chatter).
- * When `docPrefix` is set, drop a leading copy of text already before the cursor.
- */
-export function sanitizeCompletionText(raw: string, docPrefix?: string): string {
-  let text = stripEditorModelOutput(raw);
-  text = text.replace(/^\s+/, '');
+export interface AlignCompletionInput {
+  raw: string;
+  prefix: string;
+  suffix: string;
+  maxInsertChars?: number;
+}
+
+export interface AlignCompletionResult {
+  text: string;
+  rejected: boolean;
+  reason?: string;
+}
+
+const PROSE_RE =
+  /^(?:here(?:'s| is)|the following|this (?:code|snippet|completion)|sure[,!]?|certainly)/i;
+
+/** True when model output only repeats text already present before the cursor. */
+export function isUnchangedPrefixEcho(text: string, prefix: string): boolean {
+  const trimmed = text.trimEnd();
+  if (!trimmed) return true;
+  const prefixTail = prefix.trimEnd();
+  return prefixTail.endsWith(trimmed) || trimmed === prefixTail;
+}
+  /^(?:here(?:'s| is)|the following|this (?:code|snippet|completion)|sure[,!]?|certainly)/i;
+
+/** True when output looks like explanatory prose rather than insertable code. */
+export function looksLikeProse(text: string): boolean {
+  const firstLine = text.trim().split('\n')[0] ?? '';
+  if (PROSE_RE.test(firstLine)) return true;
+  if (/^(?:I |Let me |Note:|Explanation:)/i.test(firstLine)) return true;
+  return false;
+}
+
+/** Normalize model indentation to match the cursor line without stripping required newlines. */
+export function normalizeCompletionIndentation(text: string, prefix: string): string {
   if (!text) return '';
+  const leadingNewlines = text.match(/^\n+/)?.[0] ?? '';
+  const body = text.slice(leadingNewlines.length);
+  if (!body) return leadingNewlines;
+
+  const cursorIndent = cursorIndentAt(prefix);
+  const bodyLeading = body.match(/^[\t ]*/)?.[0] ?? '';
+  const bodyRest = body.slice(bodyLeading.length);
+
+  if (!cursorIndent) return leadingNewlines + body;
+  if (!bodyLeading && bodyRest) {
+    return leadingNewlines + cursorIndent + bodyRest;
+  }
+  return leadingNewlines + body;
+}
+
+/** Remove longest overlaps with document prefix and suffix. */
+export function trimOverlapWithDocument(
+  text: string,
+  prefix: string,
+  suffix: string,
+): string {
+  let result = text;
+  const prefixOverlap = longestOverlapSuffixPrefix(prefix, result);
+  if (prefixOverlap > 0) {
+    result = result.slice(prefixOverlap);
+  }
+  const suffixOverlap = longestOverlapSuffixPrefix(result, suffix);
+  if (suffixOverlap > 0) {
+    result = result.slice(0, result.length - suffixOverlap);
+  }
+  return result;
+}
+
+/** Align, validate, and trim model output for inline insertion. */
+export function alignAndValidateCompletionText(
+  input: AlignCompletionInput,
+): AlignCompletionResult {
+  let text = stripEditorModelOutput(input.raw);
+  if (!text.trim()) {
+    return { text: '', rejected: true, reason: 'empty' };
+  }
 
   if (text.startsWith('```')) {
     const lines = text.split('\n');
@@ -279,20 +638,73 @@ export function sanitizeCompletionText(raw: string, docPrefix?: string): string 
   }
 
   text = text.replace(/\r\n/g, '\n');
+  text = normalizeCompletionIndentation(text, input.prefix);
 
-  if (docPrefix && docPrefix.length > 0) {
-    const tailLen = Math.min(docPrefix.length, 200);
-    const tail = docPrefix.slice(-tailLen);
-    if (text.startsWith(docPrefix)) {
-      const stripped = text.slice(docPrefix.length);
-      if (stripped.trim().length > 0) text = stripped;
-    } else if (tail.length > 0 && text.startsWith(tail)) {
+  if (input.prefix && text.startsWith(input.prefix)) {
+    const stripped = text.slice(input.prefix.length);
+    if (!stripped.trim()) {
+      return { text: '', rejected: true, reason: 'prefix_echo' };
+    }
+    text = stripped;
+  } else if (input.prefix) {
+    const tailLen = Math.min(input.prefix.length, 200);
+    const tail = input.prefix.slice(-tailLen);
+    if (tail.length > 0 && text.startsWith(tail)) {
       const stripped = text.slice(tail.length);
       if (stripped.trim().length > 0) text = stripped;
     }
   }
 
-  return text.trimEnd();
+  text = trimOverlapWithDocument(text, input.prefix, input.suffix);
+
+  if (!text.trim()) {
+    return { text: '', rejected: true, reason: 'empty_after_trim' };
+  }
+  if (isUnchangedPrefixEcho(text, input.prefix)) {
+    return { text: '', rejected: true, reason: 'prefix_echo' };
+  }
+  if (looksLikeProse(text)) {
+    return { text: '', rejected: true, reason: 'prose' };
+  }
+
+  const maxChars = input.maxInsertChars ?? DEFAULT_MAX_INSERT_CHARS;
+  if (text.length > maxChars) {
+    return { text: '', rejected: true, reason: 'oversized' };
+  }
+
+  const combined = input.prefix + text + input.suffix;
+  const docLen = input.prefix.length + input.suffix.length;
+  if (text.length > docLen * 0.85 && combined.length > 400) {
+    return { text: '', rejected: true, reason: 'full_rewrite' };
+  }
+
+  return { text: text.trimEnd(), rejected: false };
+}
+
+/**
+ * @deprecated Use {@link alignAndValidateCompletionText}.
+ */
+export function sanitizeCompletionText(raw: string, docPrefix?: string): string {
+  return alignAndValidateCompletionText({
+    raw,
+    prefix: docPrefix ?? '',
+    suffix: '',
+  }).text;
+}
+
+/** True when a streamed partial should replace the current ghost (monotonic + valid). */
+export function shouldReplaceGhostPartial(
+  current: string,
+  next: string,
+  prefix: string,
+  suffix: string,
+): boolean {
+  if (!next) return false;
+  const aligned = alignAndValidateCompletionText({ raw: next, prefix, suffix });
+  if (aligned.rejected || !aligned.text) return false;
+  if (!current) return true;
+  if (aligned.text.length < current.length) return false;
+  return aligned.text.startsWith(current);
 }
 
 /** Next chunk for partial ghost accept (word or first line). */

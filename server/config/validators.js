@@ -1929,17 +1929,23 @@ export function mergeConfigMeta(existing, patch) {
       base.editorAiCompletion && typeof base.editorAiCompletion === 'object'
         ? { .../** @type {Record<string, unknown>} */ (base.editorAiCompletion) }
         : {
-            enabled: false,
+            enabled: true,
             debounceMs: 450,
             maxPrefixLines: 80,
             maxSuffixLines: 40,
             maxPrefixChars: 6000,
             maxSuffixChars: 2000,
             temperature: 0.3,
-            maxTokens: 128,
+            maxTokens: 256,
             useChatModel: true,
             providerId: '',
             modelId: '',
+            includeImportContext: true,
+            includeLspHover: true,
+            includeLspContext: true,
+            contextBudgetChars: 4000,
+            useNativeFim: true,
+            enableCompletionCache: true,
           };
     const e = /** @type {Record<string, unknown>} */ (p.editorAiCompletion);
     if (typeof e.enabled === 'boolean') existing.enabled = e.enabled;
@@ -1962,11 +1968,25 @@ export function mergeConfigMeta(existing, patch) {
       existing.temperature = Math.min(1, Math.max(0, e.temperature));
     }
     if (typeof e.maxTokens === 'number' && Number.isFinite(e.maxTokens)) {
-      existing.maxTokens = Math.min(512, Math.max(16, Math.round(e.maxTokens)));
+      existing.maxTokens = Math.min(1024, Math.max(16, Math.round(e.maxTokens)));
     }
     if (typeof e.useChatModel === 'boolean') existing.useChatModel = e.useChatModel;
     if (typeof e.providerId === 'string') existing.providerId = e.providerId;
     if (typeof e.modelId === 'string') existing.modelId = e.modelId;
+    if (typeof e.includeImportContext === 'boolean') {
+      existing.includeImportContext = e.includeImportContext;
+    }
+    if (typeof e.includeLspHover === 'boolean') existing.includeLspHover = e.includeLspHover;
+    if (typeof e.includeLspContext === 'boolean') {
+      existing.includeLspContext = e.includeLspContext;
+    }
+    if (typeof e.contextBudgetChars === 'number' && Number.isFinite(e.contextBudgetChars)) {
+      existing.contextBudgetChars = Math.min(12_000, Math.max(500, Math.round(e.contextBudgetChars)));
+    }
+    if (typeof e.useNativeFim === 'boolean') existing.useNativeFim = e.useNativeFim;
+    if (typeof e.enableCompletionCache === 'boolean') {
+      existing.enableCompletionCache = e.enableCompletionCache;
+    }
     base.editorAiCompletion = existing;
   }
 

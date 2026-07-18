@@ -89,6 +89,7 @@ describe('cache hit/miss', () => {
 
     assert.equal(calls, 2);
     assert.equal(getCachePolicyForTool('execute_command').cacheable, false);
+    assert.equal(getCachePolicyForTool('get_lsp_diagnostics').cacheable, false);
   });
 });
 
@@ -226,7 +227,7 @@ describe('invalidateCachedDirectoryListings', () => {
 describe('TTL and scope clear', () => {
   test('TTL expiry causes miss after ttlMs', () => {
     const policy = { cacheable: true, ttlMs: 100 };
-    const key = buildCacheKey('get_lsp_diagnostics', normalizeToolArgs('get_lsp_diagnostics', { path: 'x.ts' }));
+    const key = buildCacheKey('list_lsp_servers', normalizeToolArgs('list_lsp_servers', {}));
 
     setResultCacheNowForTests(1_000);
     const scope = testScope();
