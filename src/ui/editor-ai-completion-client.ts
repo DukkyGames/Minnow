@@ -1,5 +1,5 @@
 /**
- * Debounced LLM client for editor inline completions (POLISH-006, Phase 4).
+ * Debounced LLM client for editor inline completions (POLISH-006, Phase 6).
  */
 
 import { extractMessageText } from '../api/chat';
@@ -23,11 +23,15 @@ import { catalogCapabilitiesFromRow } from '../providers/model-capabilities';
 import { getActiveChat } from '../state/sessions';
 import { resolveProvider } from '../providers/store';
 import type { ApiMessage, ChatCompletionChunk } from '../types';
-import { buildCompletionCacheKey } from './editor-ai-completion-cache';
 import {
+  buildCompletionCacheKey,
+  editorAiCompletionCache,
+  resetEditorAiCompletionCache,
+} from './editor-ai-completion-cache';
+import {
+  alignAndValidateCompletionText,
   buildEditorAiCompletionMessages,
   buildEditorAiCompletionMessagesAsync,
-  sanitizeCompletionText,
   type EditorAiPromptInput,
 } from './editor-ai-completion-prompt';
 import { stripEditorModelOutput, extractEditorCodeFromReasoning } from './editor-model-output';
@@ -57,6 +61,16 @@ export interface EditorAiCompletionResult {
 export type EditorAiBindingValidation =
   | { ok: true }
   | { ok: false; message: string };
+
+/** Injectable seams for deterministic tests. */
+export interface EditorAiCompletionDeps {
+  createGeneration?: typeof createGeneration;
+  subscribeToGeneration?: typeof subscribeToGeneration;
+  cancelGeneration?: typeof cancelGeneration;
+  resolveProvider?: typeof resolveProvider;
+  buildMessagesAsync?: typeof buildEditorAiCompletionMessagesAsync;
+  cache?: typeof editorAiCompletionCache;
+}
 
 /** Require a provider and model before editor AI requests (inline completion, Quick Edit). */
 export function validateEditorAiBinding(
@@ -118,35 +132,51 @@ export interface FetchEditorAiCompletionInput extends EditorAiPromptInput {
   signal: AbortSignal;
   /** Called as streamed text arrives (already sanitized). */
   onPartial?: (text: string) => void;
+  deps?: EditorAiCompletionDeps;
 }
-
-/** In-memory completion cache (cleared on full page reload). */
-const completionCache = new Map<string, string>();
 
 /** Clear completion cache (tests). */
-export function resetEditorAiCompletionCache(): void {
-  completionCache.clear();
-}
+export { resetEditorAiCompletionCache };
 
 /** Read cached completion when enabled. */
 export function getCachedEditorAiCompletion(
+  binding: EditorAiBinding,
+  config: EditorAiCompletionConfig,
   filePath: string,
   prefix: string,
   suffix: string,
+  cache = editorAiCompletionCache,
 ): string | undefined {
-  const key = buildCompletionCacheKey(filePath, prefix, suffix);
-  return completionCache.get(key);
+  const key = buildCompletionCacheKey({
+    providerId: binding.providerId,
+    modelId: binding.modelId,
+    config,
+    filePath,
+    prefix,
+    suffix,
+  });
+  return cache.get(key);
 }
 
-/** Store a completion in cache when enabled. */
+/** Store a final validated completion in cache when enabled. */
 export function setCachedEditorAiCompletion(
+  binding: EditorAiBinding,
+  config: EditorAiCompletionConfig,
   filePath: string,
   prefix: string,
   suffix: string,
   text: string,
+  cache = editorAiCompletionCache,
 ): void {
-  const key = buildCompletionCacheKey(filePath, prefix, suffix);
-  completionCache.set(key, text);
+  const key = buildCompletionCacheKey({
+    providerId: binding.providerId,
+    modelId: binding.modelId,
+    config,
+    filePath,
+    prefix,
+    suffix,
+  });
+  cache.set(key, text);
 }
 
 /** Prefer main `content`; never stream reasoning-channel partials as ghost text. */
@@ -193,19 +223,43 @@ export function resolveEditorCompletionRawText(
   return stripEditorModelOutput(extractMessageText(message).trim());
 }
 
+/** Align raw model output for insertion at the cursor. */
+export function alignCompletionForInsert(
+  raw: string,
+  prefix: string,
+  suffix: string,
+): string {
+  return alignAndValidateCompletionText({ raw, prefix, suffix }).text;
+}
+
 /** Stream a single inline completion via /api/generations (parsed SSE chunks). */
 export async function fetchEditorAiCompletion(
   input: FetchEditorAiCompletionInput,
 ): Promise<EditorAiCompletionResult> {
+  const deps = input.deps ?? {};
+  const createGen = deps.createGeneration ?? createGeneration;
+  const subscribeGen = deps.subscribeToGeneration ?? subscribeToGeneration;
+  const cancelGen = deps.cancelGeneration ?? cancelGeneration;
+  const resolveProv = deps.resolveProvider ?? resolveProvider;
+  const buildMessages = deps.buildMessagesAsync ?? buildEditorAiCompletionMessagesAsync;
+  const cache = deps.cache ?? editorAiCompletionCache;
+
   const modelId = input.binding.modelId.trim();
-  const promptResult = await buildEditorAiCompletionMessagesAsync({
+  const promptResult = await buildMessages({
     ...input,
     modelId,
   });
-  const { prefix, suffix, messages, useNativeFim, fimPrompt } = promptResult;
+  const { prefix, suffix, messages } = promptResult;
 
   if (input.config.enableCompletionCache !== false) {
-    const cached = getCachedEditorAiCompletion(input.filePath, prefix, suffix);
+    const cached = getCachedEditorAiCompletion(
+      input.binding,
+      input.config,
+      input.filePath,
+      prefix,
+      suffix,
+      cache,
+    );
     if (cached !== undefined) {
       if (cached) input.onPartial?.(cached);
       return cached.length > 0
@@ -214,19 +268,14 @@ export async function fetchEditorAiCompletion(
     }
   }
 
-  const provider = await resolveProvider(input.binding.providerId);
+  const provider = await resolveProv(input.binding.providerId);
   const body: Record<string, unknown> = {
     model: modelId || undefined,
     temperature: input.config.temperature,
     max_tokens: input.config.maxTokens,
     stream: true,
+    messages,
   };
-
-  if (useNativeFim && fimPrompt) {
-    body.prompt = fimPrompt;
-  } else {
-    body.messages = messages;
-  }
 
   const modelRow = modelId
     ? modelCache.get(encodeModelSelectKey(provider.id, modelId))
@@ -244,7 +293,7 @@ export async function fetchEditorAiCompletion(
 
   let generationId: string;
   try {
-    ({ generationId } = await createGeneration(provider.id, body, { persist: false }));
+    ({ generationId } = await createGen(provider.id, body, { persist: false }));
   } catch (err) {
     return { text: null, error: createGenerationErrorMessage(err) };
   }
@@ -258,7 +307,7 @@ export async function fetchEditorAiCompletion(
       reasoningAcc.getText(),
       { reasoningFallback },
     );
-    return sanitizeCompletionText(raw, prefix);
+    return alignCompletionForInsert(raw, prefix, suffix);
   };
 
   return new Promise<EditorAiCompletionResult>((resolve) => {
@@ -267,12 +316,21 @@ export async function fetchEditorAiCompletion(
       if (settled) return;
       settled = true;
       if (result.text && input.config.enableCompletionCache !== false) {
-        setCachedEditorAiCompletion(input.filePath, prefix, suffix, result.text);
+        setCachedEditorAiCompletion(
+          input.binding,
+          input.config,
+          input.filePath,
+          prefix,
+          suffix,
+          result.text,
+          cache,
+        );
       }
       resolve(result);
     };
 
-    const unsubscribe = subscribeToGeneration(generationId, {
+    let unsubscribe: (() => void) | null = null;
+    unsubscribe = subscribeGen(generationId, {
       signal: input.signal,
       onChunk: (chunk) => {
         contentAcc.ingestChoice(chunk.choices?.[0]);
@@ -281,7 +339,7 @@ export async function fetchEditorAiCompletion(
         if (cleaned) input.onPartial?.(cleaned);
       },
       onEnd: (event?: GenerationEndEvent) => {
-        unsubscribe();
+        unsubscribe?.();
         if (event?.status === 'error') {
           finish({ text: null, error: generationEndErrorMessage(event) });
           return;
@@ -294,7 +352,7 @@ export async function fetchEditorAiCompletion(
         );
       },
       onTransportError: (err) => {
-        unsubscribe();
+        unsubscribe?.();
         finish({ text: null, error: createGenerationErrorMessage(err) });
       },
     });
@@ -302,8 +360,8 @@ export async function fetchEditorAiCompletion(
     input.signal.addEventListener(
       'abort',
       () => {
-        unsubscribe();
-        void cancelGeneration(generationId).catch(() => {
+        unsubscribe?.();
+        void cancelGen(generationId).catch(() => {
           /* best-effort */
         });
         finish({ text: null });

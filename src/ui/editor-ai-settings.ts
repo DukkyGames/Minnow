@@ -18,6 +18,8 @@ import { isLocalServerAvailable } from '../tools/config';
 import { appendEditorFundamentalsSettings } from './editor-fundamentals-settings';
 import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
+import { getActiveModelIdFromDom } from './editor-ai-completion-client';
+import { decodeModelSelectKey } from '../lib/model-select-key';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -85,9 +87,10 @@ function isPinnedModelSource(config: EditorAiCompletionConfig): boolean {
 
 function formatEffectiveModel(config: EditorAiCompletionConfig): string {
   if (!isPinnedModelSource(config)) {
-    const chat = getActiveChat();
-    const provider = chat.providerId?.trim() || '—';
-    const model = chat.modelId?.trim() || '—';
+    const raw = getActiveModelIdFromDom();
+    const parsed = decodeModelSelectKey(raw);
+    const provider = parsed?.providerId?.trim() || getActiveChat().providerId?.trim() || '—';
+    const model = parsed?.modelId?.trim() || raw.trim() || getActiveChat().modelId?.trim() || '—';
     return `${provider} / ${model}`;
   }
   const provider = config.providerId.trim() || '—';
@@ -268,7 +271,9 @@ function renderEditorSettingsBody(
   const overview = appendSettingsGroup(
     mount,
     'Overview',
-    'Inline suggestions in the file viewer. Symbol completion (Ctrl+Space) comes from language servers and does not require a chat model.',
+    'LSP symbol completion (Ctrl+Space) runs first and wins Tab while its menu is open. ' +
+      'AI ghost text appears only after a meaningful idle pause when LSP is not busy. ' +
+      'Use a coder model (e.g. Qwen Coder, Codestral, DeepSeek Coder) for best inline suggestions.',
   );
 
   appendSummaryKv(overview, [
@@ -370,14 +375,15 @@ function renderEditorSettingsBody(
   const advanced = appendSettingsGroup(
     mount,
     'Prompt context',
-    'Extra signals for inline completion requests (Quick Edit always uses chat).',
+    'Extra signals for inline completion requests (Quick Edit always uses chat). ' +
+      'LSP symbols and diagnostics are preferred over hover at empty cursors.',
   );
 
   const contextToggles: Array<{
     label: string;
     key: keyof Pick<
       EditorAiCompletionConfig,
-      'includeImportContext' | 'includeLspHover' | 'useNativeFim' | 'enableCompletionCache'
+      'includeImportContext' | 'includeLspHover' | 'includeLspContext' | 'enableCompletionCache'
     >;
     aria: string;
   }> = [
@@ -387,19 +393,19 @@ function renderEditorSettingsBody(
       aria: 'Include import and require lines in completion prompt',
     },
     {
+      label: 'Include LSP symbols and diagnostics',
+      key: 'includeLspContext',
+      aria: 'Fetch LSP document symbols and nearby diagnostics for completion context',
+    },
+    {
       label: 'Include LSP hover at cursor',
       key: 'includeLspHover',
       aria: 'Fetch LSP hover text for the symbol at the cursor when available',
     },
     {
-      label: 'Qwen native FIM when supported',
-      key: 'useNativeFim',
-      aria: 'Use Qwen fill-in-the-middle tokens for matching models',
-    },
-    {
       label: 'Cache completions',
       key: 'enableCompletionCache',
-      aria: 'Cache inline completions by file and surrounding context hash',
+      aria: 'Cache inline completions by provider, model, and surrounding context hash',
     },
   ];
 

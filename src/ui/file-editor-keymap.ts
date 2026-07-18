@@ -13,6 +13,7 @@ import {
 import { indentLess, indentMore } from '@codemirror/commands';
 import { Prec, type Extension } from '@codemirror/state';
 import { keymap, type EditorView, type KeyBinding } from '@codemirror/view';
+import { shouldLspTabTakePrecedence } from './editor-completion-policy';
 
 /**
  * LSP dropdown navigation (Tab accept is on {@link fileEditorTabBinding}).
@@ -29,14 +30,17 @@ export const lspCompletionKeymapBindings: KeyBinding[] = [
   { key: 'PageUp', run: moveCompletionSelection(false, 'page') },
 ];
 
-/** Tab accepts an open LSP menu; otherwise indents. AI ghost Tab runs at higher precedence. */
+/** Tab accepts an open LSP menu; blocks indent while LSP is pending. AI ghost Tab runs at higher precedence. */
 export const fileEditorTabBinding: KeyBinding = {
   key: 'Tab',
   run: (view: EditorView) => {
-    if (completionStatus(view.state) === 'active') {
-      return acceptCompletion(view);
+    if (!shouldLspTabTakePrecedence(view.state)) {
+      return indentMore(view);
     }
-    return indentMore(view);
+    if (completionStatus(view.state) === 'active') {
+      acceptCompletion(view);
+    }
+    return true;
   },
   shift: indentLess,
 };

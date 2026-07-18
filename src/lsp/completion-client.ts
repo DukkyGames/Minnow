@@ -4,6 +4,12 @@
 
 import { isLocalServerAvailable } from '../tools/config';
 
+/** Completion context forwarded to the LSP bridge. */
+export interface LspCompletionContext {
+  triggerKind: number;
+  triggerCharacter?: string;
+}
+
 /** Completion item returned by POST /api/lsp/completion */
 export interface LspCompletionItem {
   label: string;
@@ -20,6 +26,17 @@ export interface LspCompletionItem {
   textEditInsertRange?: LspRange;
   /** InsertReplaceEdit — used when the selection is non-empty. */
   textEditReplaceRange?: LspRange;
+  sortText?: string;
+  filterText?: string;
+  preselect?: boolean;
+  commitCharacters?: string[];
+}
+
+/** Response payload from POST /api/lsp/completion */
+export interface LspCompletionResponse {
+  items: LspCompletionItem[];
+  isIncomplete?: boolean;
+  triggerCharacters?: string[];
 }
 
 export interface LspPosition {
@@ -98,18 +115,37 @@ export async function notifyLspDocument(
   }
 }
 
+export interface FetchCompletionsOptions {
+  editorText?: string;
+  context?: LspCompletionContext;
+}
+
 /** Fetch completion items at a 0-based line/character (LSP positions). */
 export async function fetchCompletions(
   path: string,
   line: number,
   character: number,
-): Promise<LspCompletionItem[]> {
-  const data = await postLspJson<{ items?: LspCompletionItem[] }>('/api/lsp/completion', {
-    path,
-    line,
-    character,
-  });
-  return Array.isArray(data?.items) ? data.items : [];
+  options?: FetchCompletionsOptions,
+): Promise<LspCompletionResponse> {
+  const body: Record<string, unknown> = { path, line, character };
+  if (options?.editorText !== undefined) {
+    body.text = options.editorText;
+  }
+  if (options?.context) {
+    body.context = options.context;
+  }
+  const data = await postLspJson<{
+    items?: LspCompletionItem[];
+    isIncomplete?: boolean;
+    triggerCharacters?: string[];
+  }>('/api/lsp/completion', body);
+  return {
+    items: Array.isArray(data?.items) ? data.items : [],
+    isIncomplete: data?.isIncomplete === true,
+    triggerCharacters: Array.isArray(data?.triggerCharacters)
+      ? data.triggerCharacters.map(String)
+      : undefined,
+  };
 }
 
 /** Resolve a completion item (documentation, additionalTextEdits). */
@@ -178,4 +214,26 @@ export async function fetchLspDiagnostics(
     body,
   );
   return Array.isArray(data?.diagnostics) ? data.diagnostics : [];
+}
+
+/** Document symbol tree node from POST /api/lsp/document-symbols. */
+export interface LspDocumentSymbol {
+  name: string;
+  kind?: number;
+  range?: LspRange;
+  selectionRange?: LspRange;
+  children?: LspDocumentSymbol[];
+}
+
+/** Fetch document symbols for editor AI context (graceful empty on failure). */
+export async function fetchLspDocumentSymbols(
+  path: string,
+): Promise<{ symbols: LspDocumentSymbol[] }> {
+  const data = await postLspJson<{ symbols?: LspDocumentSymbol[] }>(
+    '/api/lsp/document-symbols',
+    { path },
+  );
+  return {
+    symbols: Array.isArray(data?.symbols) ? data.symbols : [],
+  };
 }
