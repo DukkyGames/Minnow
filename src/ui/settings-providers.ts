@@ -11,6 +11,10 @@ import {
 import { getDefaultPaths, pathsForProvider } from '../providers/paths';
 import type { ApiKind, AuthStyle, ProviderPublic } from '../providers/types';
 import {
+  listSettingsProviderPresets,
+  type ProviderPreset,
+} from '../providers/presets';
+import {
   probeProviderCapabilities,
   readProviderCapabilities,
   structuredOutputBadge,
@@ -230,39 +234,10 @@ function syncGatewayFieldVisibility(form: ParentNode): void {
   if (messagesField) messagesField.classList.toggle('hidden', !showMessages);
 }
 
-interface GatewayPreset {
-  id: string;
-  label: string;
-  baseUrl: string;
-  modelsPath: string;
-  chatCompletionsPath: string;
-  messagesPath: string;
-  authStyle: AuthStyle;
-}
-
-const GATEWAY_PRESETS: GatewayPreset[] = [
-  {
-    id: 'opencode-zen',
-    label: 'OpenCode Zen',
-    baseUrl: 'https://opencode.ai/zen',
-    modelsPath: '/v1/models',
-    chatCompletionsPath: '/v1/chat/completions',
-    messagesPath: '/v1/messages',
-    authStyle: 'bearer',
-  },
-  {
-    id: 'openrouter',
-    label: 'OpenRouter',
-    baseUrl: 'https://openrouter.ai/api',
-    modelsPath: '/v1/models',
-    chatCompletionsPath: '/v1/chat/completions',
-    messagesPath: '/v1/messages',
-    authStyle: 'bearer',
-  },
-];
-
-/** Apply a quick-add gateway preset to the add-provider form. */
-function applyGatewayPreset(form: ParentNode, preset: GatewayPreset): void {
+/** Apply a one-click provider preset to the add-provider form. */
+function applyProviderPreset(form: ParentNode, preset: ProviderPreset): void {
+  const apiKind = preset.apiKind ?? 'openai-v1';
+  const paths = getDefaultPaths(apiKind);
   const idInput = form.querySelector<HTMLInputElement>('input[name="id"]');
   const labelInput = form.querySelector<HTMLInputElement>('input[name="label"]');
   const baseUrlInput = form.querySelector<HTMLInputElement>('input[name="baseUrl"]');
@@ -272,20 +247,49 @@ function applyGatewayPreset(form: ParentNode, preset: GatewayPreset): void {
   if (idInput && !idInput.value.trim()) idInput.value = preset.id;
   if (labelInput) labelInput.value = preset.label;
   if (baseUrlInput) baseUrlInput.value = preset.baseUrl;
-  if (apiKindSel) apiKindSel.value = 'openai-v1';
-  if (authSel) authSel.value = preset.authStyle;
-  if (autoApiInput) autoApiInput.checked = true;
+  if (apiKindSel) apiKindSel.value = apiKind;
+  if (authSel) authSel.value = preset.authStyle ?? 'bearer';
+  if (autoApiInput) autoApiInput.checked = preset.autoApi === true;
   const modelsInput = form.querySelector<HTMLInputElement>('input[name="modelsPath"]');
   const chatInput = form.querySelector<HTMLInputElement>('input[name="chatCompletionsPath"]');
   const messagesInput = form.querySelector<HTMLInputElement>('input[name="messagesPath"]');
-  if (modelsInput) modelsInput.value = preset.modelsPath;
-  if (chatInput) chatInput.value = preset.chatCompletionsPath;
-  if (messagesInput) messagesInput.value = preset.messagesPath;
+  if (modelsInput) modelsInput.value = paths.modelsPath;
+  if (chatInput) chatInput.value = paths.chatCompletionsPath;
+  if (messagesInput && paths.messagesPath) messagesInput.value = paths.messagesPath;
+  applyAuthStyleDefaultForApiKind(form, apiKind);
   syncGatewayFieldVisibility(form);
-  updatePathFieldLabels(form, 'openai-v1');
+  updatePathFieldLabels(form, apiKind);
+
+  const hintEl = form.querySelector<HTMLElement>('[data-provider-preset-auth-hint]');
+  if (hintEl) {
+    if (preset.authHint) {
+      hintEl.textContent = preset.authHint;
+      hintEl.classList.remove('hidden');
+    } else {
+      hintEl.textContent = '';
+      hintEl.classList.add('hidden');
+    }
+  }
 }
 
-/** Gateway auto-routing controls for mixed OpenAI + Anthropic catalogs. */
+/** Quick-add preset chips for common cloud providers. */
+function appendProviderPresetButtons(parent: HTMLElement, form: ParentNode): void {
+  const block = el('div', 'settings-providers-preset-block');
+  block.append(el('p', 'field-hint', 'One-click presets — fill the form below, then add your API key.'));
+  const chipRow = el('div', 'settings-providers-preset-chips');
+  for (const preset of listSettingsProviderPresets()) {
+    const btn = el('button', 'settings-inline-btn settings-providers-preset-chip', preset.label);
+    btn.type = 'button';
+    if (preset.authHint) btn.title = preset.authHint;
+    btn.addEventListener('click', () => applyProviderPreset(form, preset));
+    chipRow.append(btn);
+  }
+  block.append(chipRow);
+  const authHint = el('p', 'field-hint hidden');
+  authHint.dataset.providerPresetAuthHint = '';
+  block.append(authHint);
+  parent.insertBefore(block, parent.querySelector('.settings-providers-form-actions'));
+}
 function appendGatewayFields(parent: HTMLElement, provider?: ProviderPublic): void {
   const block = el('div', 'settings-providers-gateway-fields');
   block.dataset.providerGatewayFields = '';
@@ -344,14 +348,7 @@ function appendGatewayFields(parent: HTMLElement, provider?: ProviderPublic): vo
 
 /** Quick-add preset buttons for common mixed gateways. */
 function appendGatewayPresetButtons(parent: HTMLElement, form: ParentNode): void {
-  const row = el('div', 'settings-providers-form-actions');
-  for (const preset of GATEWAY_PRESETS) {
-    const btn = el('button', 'settings-inline-btn', `Preset: ${preset.label}`);
-    btn.type = 'button';
-    btn.addEventListener('click', () => applyGatewayPreset(form, preset));
-    row.append(btn);
-  }
-  parent.insertBefore(row, parent.querySelector('.settings-providers-form-actions'));
+  appendProviderPresetButtons(parent, form);
 }
 
 /** When API style changes, refresh paths if they still match the previous kind's defaults. */

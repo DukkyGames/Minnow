@@ -2026,6 +2026,22 @@ label.settings-action-btn {
   align-items: center;
 }
 
+.settings-providers-preset-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-providers-preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-providers-preset-chip {
+  font-size: 12px;
+}
+
 .settings-providers-form-error {
   margin: 0;
   font-size: 13px;

@@ -324,6 +324,8 @@ Design reference: [`DESIGN.md`](../DESIGN.md), [`documentation/design-system/`](
 
 Multi-provider registry: `~/.minnow/providers/`. UI: Models app → Providers. Chat uses composite model keys (`providerId` + model id) in [`src/lib/model-select-key.ts`](../src/lib/model-select-key.ts).
 
+**One-click presets:** shared catalog in [`src/providers/presets.ts`](../src/providers/presets.ts) — OpenCode Go/Zen, Anthropic, DeepSeek, GitHub Copilot, plus OpenRouter/OpenAI/Groq/Mistral. Used by onboarding cloud setup and Settings → Providers quick-add chips (base URL, auth style, and model-discovery paths pre-wired).
+
 `fetchModels()` loads all enabled providers. Main chat streams via generations API; `postChatCompletions` shim for headless/sub-agents.
 
 **Fallback chains:** `config.json` → `fallbackChains` — sequential retry before first upstream byte ([`server/generations/fallback.js`](../server/generations/fallback.js)).
