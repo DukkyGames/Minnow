@@ -1433,11 +1433,11 @@ Types in [`src/types.ts`](../src/types.ts). The UI and `localStorage` use the `M
 
 ## Multi-chat sessions
 
-The app supports **multiple chat sessions** with a **collapsible left sidebar**. Persisted in **`sessions/state.json`** when `npm start`, else `minnow-sessions-v1` in `localStorage` (key name unchanged; blob **`version`** is **5**).
+The app supports **multiple chat sessions** with a **collapsible left sidebar**. Persisted in **`sessions/state.json`** when `npm start`, else `minnow-sessions-v1` in `localStorage` (key name unchanged; blob **`version`** is **6**).
 
 | Concern | Location |
 |---------|----------|
-| Schema + migration | `src/types.ts` (`SESSION_SCHEMA_VERSION = 5`), `src/state/sessions.ts`, `src/state/session-workspace-scope.ts` |
+| Schema + migration | `src/types.ts` (`SESSION_SCHEMA_VERSION = 6`), `src/state/sessions.ts`, `src/state/session-workspace-scope.ts`; server mirror in `server/config/validators.js` |
 | Server validate / migrate | `server/config/validators.js` (accepts v1–v5 input, persists v5; includes `groups`, `activeBoardGroupId`, `boardGroupId`) |
 | Sidebar filter + Unassigned | `src/ui/sidebar.ts`, `src/styles/sidebar.css`; board-group member rows show build/test/fix category icons (MIN-250) via [`board-category-icons.ts`](../src/ui/board-category-icons.ts) |
 | Workspace switch hook | `onWorkspaceChanged()` in `sessions.ts`; `applyWorkspaceScopedSession()` in `sidebar.ts`; `applyWorkspaceSwitch()` in `workspace-button.ts` (B1 recent menu uses same path) |
@@ -1910,7 +1910,8 @@ While the loop is active (`activeGoal` and not `achieved`), **tool approvals aut
 | Evaluator | [`src/chat/goal/evaluate.ts`](../src/chat/goal/evaluate.ts), [`eval-agent.ts`](../src/chat/goal/eval-agent.ts), `fallbackRole: goal-eval` — agentic verifier with tools; resolves provider from `config.goalEval.providerId` then `chat.providerId`; reads `content` and reasoning/thinking channels for thinking models |
 | Eval tools / gates | [`src/chat/goal/eval-tools.ts`](../src/chat/goal/eval-tools.ts) — allowlist, min turns, min verification tool calls |
 | State helpers | [`src/state/sessions.ts`](../src/state/sessions.ts) — `setActiveGoal`, `clearActiveGoal`, `getActiveGoal` |
-| Composer hint | [`src/ui/goal-active-hint.ts`](../src/ui/goal-active-hint.ts) — `◎ goal active · N turns` |
+| Composer hint | [`src/ui/goal-active-hint.ts`](../src/ui/goal-active-hint.ts) — `◎ goal active · N turns`; pulses `· evaluating…` while the post-turn evaluator runs |
+| Evaluating UI | [`src/ui/goal-eval-status.ts`](../src/ui/goal-eval-status.ts) — transcript status row + sidebar thinking phase between turns |
 | Model routing | Settings → Models → **Goal evaluator** (`config.goalEval`) |
 
 **Tests:** `test/chat/goal-parse-response.test.mts`, `test/chat/goal-parse-command.test.mts`, `test/chat/goal-command.test.mts`, `test/chat/goal-evaluate.test.mts`, `test/chat/goal-eval-agent.test.mts`, `test/chat/goal-pass-gates.test.mts`, `test/chat/goal-prompt.test.mts`, `test/chat/goal-completion-text.test.mts`, `test/server/validate-sessions-v2.test.mjs` (activeGoal round-trip).

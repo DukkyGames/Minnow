@@ -3,6 +3,7 @@
  */
 
 import { getActiveGoal, isGoalLoopActive } from '../state/sessions';
+import { isGoalEvaluating } from '../chat/goal/evaluating-state';
 import { getActiveChat } from '../state/sessions';
 
 /** Show or hide the active-goal strip above the composer. */
@@ -35,7 +36,10 @@ export function syncGoalActiveHint(): void {
   }
 
   const suffix = goal.achieved ? ' · achieved' : '';
-  el.textContent = `◎ goal active${suffix} · ${goal.turnCount} turn(s)`;
+  const evaluating = isGoalEvaluating(chat.id);
+  const phase = evaluating ? ' · evaluating…' : '';
+  el.textContent = `◎ goal active${suffix}${phase} · ${goal.turnCount} turn(s)`;
+  el.classList.toggle('composer-goal-active-hint--evaluating', evaluating);
   if (goal.lastReason) {
     el.title = goal.lastReason;
   } else {

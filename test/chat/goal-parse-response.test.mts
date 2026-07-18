@@ -34,4 +34,24 @@ describe('parseGoalEvalResponse', () => {
     assert.equal(result.met, true);
     assert.equal(result.reason, 'all unit tests pass.');
   });
+
+  test('parses markdown-bold YES verdict', () => {
+    const result = parseGoalEvalResponse('**YES**: all unit tests pass.');
+    assert.equal(result.met, true);
+    assert.equal(result.reason, 'all unit tests pass.');
+  });
+
+  test('parses Answer: NO embedded verdict', () => {
+    const result = parseGoalEvalResponse('After review, Answer: NO - tests still failing.');
+    assert.equal(result.met, false);
+    assert.equal(result.reason, 'tests still failing.');
+  });
+
+  test('parses JSON met/reason payload', () => {
+    const result = parseGoalEvalResponse(
+      '{"met": true, "reason": "All checks passed."}',
+    );
+    assert.equal(result.met, true);
+    assert.equal(result.reason, 'All checks passed.');
+  });
 });

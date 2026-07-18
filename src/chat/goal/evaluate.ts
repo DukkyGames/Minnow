@@ -23,6 +23,8 @@ import {
   MIN_GOAL_EVAL_VERIFICATION_TOOL_CALLS,
   MIN_GOAL_TURNS_BEFORE_PASS,
 } from './eval-tools';
+import { syncGoalEvalUi } from '../../ui/goal-eval-status';
+import { setGoalEvaluating } from './evaluating-state';
 import { parseGoalEvalResponse } from './parse-response';
 import type { ParsedGoalEvalResponse } from './parse-response';
 
@@ -150,7 +152,15 @@ export async function maybeContinueGoalAfterTurn(chat: Chat): Promise<void> {
   touchChat(chat);
   scheduleSaveSessions();
 
-  const result = await evaluateGoal(chat);
+  setGoalEvaluating(chat.id, true);
+  syncGoalEvalUi(chat.id);
+  let result: GoalEvaluationResult;
+  try {
+    result = await evaluateGoal(chat);
+  } finally {
+    setGoalEvaluating(chat.id, false);
+    syncGoalEvalUi(chat.id);
+  }
   goal.lastReason = result.reason;
 
   if (result.met) {
