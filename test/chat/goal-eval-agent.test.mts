@@ -122,4 +122,40 @@ describe('runGoalEvalAgent', () => {
     const result = await runGoalEvalAgent(chat, CONDITION, controller.signal);
     assert.match(result.raw, /^YES: condition satisfied\./);
   });
+
+  test('re-prompts when evaluator returns analysis without YES or NO', async () => {
+    const chat = seedChat('chat-provider');
+    setGoalEvalConfigForTests({
+      modelId: 'eval-model',
+      providerId: '',
+      maxTokens: 512,
+      temperature: 0.1,
+    });
+
+    let calls = 0;
+    setGoalEvalPortFactoryForTests(() => ({
+      async complete(_body: ChatCompletionBody, _signal?: AbortSignal) {
+        calls += 1;
+        if (calls === 1) {
+          return {
+            choices: [
+              {
+                message: {
+                  role: 'assistant',
+                  content:
+                    '- Nav: `h-[52px]` (matches `topbar-h: "52px"`), `bg-[var(--mn-bg)]`',
+                },
+              },
+            ],
+          };
+        }
+        return YES_CHUNK;
+      },
+    }));
+
+    const controller = new AbortController();
+    const result = await runGoalEvalAgent(chat, CONDITION, controller.signal);
+    assert.equal(calls, 2);
+    assert.match(result.raw, /^YES:/);
+  });
 });

@@ -12,8 +12,13 @@ import { executeTool } from '../../tools/client';
 import { runHeadlessToolBatch } from '../../tools/headless-tool-batch';
 import type { ChatCompletionBody } from '../../api/chat';
 import { extractGoalEvalCompletionText } from './completion-text';
-import { getGoalEvalToolDefinitions, isGoalEvalVerificationTool } from './eval-tools';
-import { buildGoalEvalMessages } from './prompt';
+import {
+  getGoalEvalToolDefinitions,
+  isGoalEvalVerificationTool,
+  MAX_GOAL_EVAL_VERDICT_RETRIES,
+} from './eval-tools';
+import { buildGoalEvalMessages, GOAL_EVAL_VERDICT_NUDGE } from './prompt';
+import { isGoalEvalVerdictResponse } from './parse-response';
 import { createGoalEvalProviderPort } from './provider-port';
 import { patchGoalEvalSession } from './eval-session';
 
@@ -102,6 +107,7 @@ async function runGoalEvalAgentInner(
     resolveChatToolWorkspaceRoot(chat, sessionState?.groups ?? undefined) ?? undefined;
 
   let verificationToolCalls = 0;
+  let verdictRetries = 0;
 
   const syncSession = (liveCurrentToolName?: string): void => {
     patchGoalEvalSession(chat.id, {
@@ -164,14 +170,34 @@ async function runGoalEvalAgentInner(
       }
 
       const raw = extractGoalEvalCompletionText(message);
-      if (raw.trim()) {
+      const trimmed = raw.trim();
+      if (trimmed) {
+        if (!isGoalEvalVerdictResponse(trimmed)) {
+          if (verdictRetries < MAX_GOAL_EVAL_VERDICT_RETRIES) {
+            verdictRetries += 1;
+            messages.push({ role: 'assistant', content: trimmed });
+            messages.push({ role: 'user', content: GOAL_EVAL_VERDICT_NUDGE });
+            syncSession();
+            continue;
+          }
+
+          const fallback = `NO: Evaluator did not return a YES/NO verdict after ${MAX_GOAL_EVAL_VERDICT_RETRIES} attempts.`;
+          patchGoalEvalSession(chat.id, {
+            messages: [...messages, { role: 'assistant', content: fallback }],
+            verificationToolCalls,
+            liveCurrentToolName: undefined,
+            rawVerdict: fallback,
+          });
+          return { raw: fallback, verificationToolCalls };
+        }
+
         patchGoalEvalSession(chat.id, {
-          messages: [...messages, { role: 'assistant', content: raw.trim() }],
+          messages: [...messages, { role: 'assistant', content: trimmed }],
           verificationToolCalls,
           liveCurrentToolName: undefined,
-          rawVerdict: raw.trim(),
+          rawVerdict: trimmed,
         });
-        return { raw: raw.trim(), verificationToolCalls };
+        return { raw: trimmed, verificationToolCalls };
       }
 
       return {

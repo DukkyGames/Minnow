@@ -33,6 +33,9 @@ export type GoalEvalToolName = (typeof GOAL_EVAL_TOOL_ALLOWLIST)[number];
 /** Cannot mark the goal achieved on the first evaluator pass after setting /goal. */
 export const MIN_GOAL_TURNS_BEFORE_PASS = 2;
 
+/** Max times to re-prompt when the evaluator omits a YES/NO verdict line. */
+export const MAX_GOAL_EVAL_VERDICT_RETRIES = 3;
+
 /** Minimum independent verification tool calls before YES can stand. */
 export const MIN_GOAL_EVAL_VERIFICATION_TOOL_CALLS = 4;
 

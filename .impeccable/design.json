@@ -1,84 +1,96 @@
 {
-  "schemaVersion": 2,
-  "generatedAt": "2026-05-19T00:00:00.000Z",
+  "schemaVersion": 3,
+  "generatedAt": "2026-07-18T00:00:00.000Z",
   "title": "Design System: Minnow",
+  "canonicalTheme": "swamp-dark",
+  "tokenPrefix": "--mn-",
+  "coreTokenKeys": [
+    "bg",
+    "surface-0",
+    "surface-1",
+    "surface-2",
+    "border",
+    "border-strong",
+    "fg",
+    "fg-muted",
+    "fg-subtle",
+    "fg-on-accent",
+    "accent",
+    "accent-soft",
+    "accent-border",
+    "accent-ink",
+    "success",
+    "success-soft",
+    "success-border",
+    "success-ink",
+    "warning",
+    "danger",
+    "danger-soft",
+    "danger-border",
+    "danger-ink",
+    "focus-ring",
+    "shadow",
+    "folder"
+  ],
+  "themeFamilies": [
+    "swamp",
+    "desert",
+    "ocean",
+    "coral",
+    "mono",
+    "matrix",
+    "human",
+    "mint"
+  ],
+  "themeModes": ["dark", "light"],
   "extensions": {
     "colorMeta": {
-      "bg": {
-        "role": "neutral",
-        "displayName": "Sheet White",
-        "canonical": "oklch(100% 0.00011 271.152)",
-        "tonalRamp": [
-          "oklch(15% 0.01 271)",
-          "oklch(25% 0.008 271)",
-          "oklch(35% 0.006 271)",
-          "oklch(45% 0.005 271)",
-          "oklch(55% 0.004 271)",
-          "oklch(70% 0.003 271)",
-          "oklch(85% 0.002 271)",
-          "oklch(100% 0.00011 271.152)"
-        ]
-      },
       "accent": {
         "role": "primary",
-        "displayName": "Ink Black",
-        "canonical": "oklch(0% 0 0)",
-        "tonalRamp": [
-          "oklch(0% 0 0)",
-          "oklch(12% 0.01 271)",
-          "oklch(22% 0.012 271)",
-          "oklch(32% 0.014 271)",
-          "oklch(42% 0.016 271)",
-          "oklch(52% 0.018 271)",
-          "oklch(62% 0.02 271)",
-          "oklch(72% 0.022 271)"
-        ]
+        "displayName": "Family Accent",
+        "canonical": "#9ec5a7",
+        "note": "Varies per theme family; swamp-dark reference shown."
       },
-      "user-bg": {
-        "role": "secondary",
-        "displayName": "Bench Green",
-        "canonical": "oklch(88.769% 0.2563 138.508 / 0.336)",
-        "tonalRamp": [
-          "oklch(25% 0.12 138)",
-          "oklch(35% 0.14 138)",
-          "oklch(45% 0.16 138)",
-          "oklch(55% 0.18 138)",
-          "oklch(65% 0.2 138)",
-          "oklch(75% 0.22 138)",
-          "oklch(85% 0.24 138)",
-          "oklch(95% 0.26 138)"
-        ]
+      "bg": {
+        "role": "neutral",
+        "displayName": "Shell Background",
+        "canonical": "#0f1216",
+        "note": "swamp-dark reference."
       },
       "success": {
         "role": "tertiary",
         "displayName": "Metric Green",
-        "canonical": "oklch(0.72 0.14 155)",
-        "tonalRamp": [
-          "oklch(20% 0.08 155)",
-          "oklch(30% 0.1 155)",
-          "oklch(40% 0.11 155)",
-          "oklch(50% 0.12 155)",
-          "oklch(60% 0.13 155)",
-          "oklch(70% 0.14 155)",
-          "oklch(80% 0.14 155)",
-          "oklch(90% 0.12 155)"
-        ]
+        "canonical": "#9ec5a7",
+        "purpose": "Instrumentation only; not navigation chrome."
       }
     },
     "typographyMeta": {
       "body": {
         "displayName": "UI Body",
-        "purpose": "Default UI copy, messages, drawer fields."
+        "purpose": "Default UI copy, messages, drawer fields.",
+        "fontFamily": "var(--font-ui)",
+        "fontSize": "14px"
       },
       "mono": {
         "displayName": "Instrumentation Mono",
-        "purpose": "Stats strip, chips, code blocks, token counts."
+        "purpose": "Stats strip, chips, code blocks, token counts.",
+        "fontFamily": "var(--font-mono)",
+        "fontSize": "13px"
       }
+    },
+    "layoutTokens": {
+      "topbar-h": "52px",
+      "sidebar-w": "300px",
+      "sidebar-rail": "48px",
+      "touch-min": "44px",
+      "radius-sm": "6px",
+      "radius-md": "10px",
+      "radius-lg": "14px"
     },
     "shadows": [
       {
         "name": "sidebar-mobile",
-        "value": "4px 0 24px oklch(0.1 0.02 250 / 0.4)",
+        "value": "4px 0 24px var(--mn-shadow)",
         "purpose": "Mobile session list overlay only."
       }
     ],
@@ -87,77 +99,79 @@
         "name": "ease-out",
         "value": "cubic-bezier(0.16, 1, 0.3, 1)",
         "purpose": "Default UI transitions (color, border, opacity)."
+      },
+      {
+        "name": "duration-fast",
+        "value": "0.15s"
+      },
+      {
+        "name": "duration-normal",
+        "value": "0.22s"
       }
     ],
     "breakpoints": [
       { "name": "compact", "value": "600px" },
       { "name": "mobile", "value": "640px" },
-      { "name": "tablet", "value": "641px–899px sidebar 200px" },
-      { "name": "wide", "value": "900px" },
-      { "name": "narrow", "value": "380px top bar trims actions" }
+      { "name": "wide", "value": "900px" }
     ]
   },
   "components": [
     {
       "name": "Send Button",
       "kind": "button",
-      "refersTo": "send-btn",
-      "description": "Primary message submit; black square with light icon.",
-      "html": "<button type=\"button\" class=\"ds-send-btn\" aria-label=\"Send message\"><svg class=\"ds-icon\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M22 2L11 13\" /><path d=\"M22 2L15 22L11 13L2 9L22 2Z\" /></svg></button>",
-      "css": ".ds-send-btn { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; background: oklch(0% 0 0); border: none; border-radius: 10px; color: oklch(100% 0.00011 271.152); cursor: pointer; transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.15s cubic-bezier(0.16, 1, 0.3, 1); } .ds-send-btn:hover:not(:disabled) { background: oklch(100% 0.00011 271.152); border: 1px solid oklch(0% 0 0); } .ds-send-btn:active:not(:disabled) { transform: scale(0.97); } .ds-send-btn:disabled { opacity: 0.4; cursor: not-allowed; } .ds-icon { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }"
+      "cssClass": "send-btn",
+      "source": "src/styles/input.css",
+      "description": "Primary message submit; accent fill, 44×44px."
     },
     {
       "name": "Icon Button",
       "kind": "button",
-      "refersTo": "icon-btn",
-      "description": "Top bar and sidebar chrome control.",
-      "html": "<button type=\"button\" class=\"ds-icon-btn\" aria-label=\"Settings\"><svg class=\"ds-icon\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"3\" /><path d=\"M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42\" /></svg></button>",
-      "css": ".ds-icon-btn { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; background: transparent; border: 1px solid oklch(28.094% 0.00003 271.152); border-radius: 6px; color: oklch(31.714% 0.00004 271.152); cursor: pointer; transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1), background 0.2s cubic-bezier(0.16, 1, 0.3, 1); } .ds-icon-btn:hover { border-color: oklch(0.34 0.028 250); color: oklch(100% 0.00011 271.152); background: oklch(0% 0 0); } .ds-icon-btn:focus-visible { outline: 2px solid oklch(0% 0 0); outline-offset: 2px; } .ds-icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }"
-    },
-    {
-      "name": "Message Input",
-      "kind": "input",
-      "refersTo": "body",
-      "description": "Composer textarea in the input bar.",
-      "html": "<textarea class=\"ds-msg-input\" rows=\"1\" placeholder=\"Message…\" aria-label=\"Message\"></textarea>",
-      "css": ".ds-msg-input { width: 100%; background: oklch(100% 0.00011 271.152); border: 1px solid oklch(28.094% 0.00003 271.152); border-radius: 10px; color: oklch(31.714% 0.00004 271.152); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 14px; padding: 11px 14px; outline: none; resize: none; line-height: 1.55; min-height: 44px; transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1); } .ds-msg-input:focus { border-color: oklch(0% 0 0); } .ds-msg-input::placeholder { color: oklch(0.62 0.025 250); }"
+      "cssClass": "icon-btn",
+      "source": "src/styles/topbar.css",
+      "description": "Top bar and sidebar chrome; 40×40px, hover inverts to accent."
     },
     {
       "name": "Stat Chip",
       "kind": "chip",
-      "refersTo": "success",
-      "description": "Per-message inference metric chip.",
-      "html": "<span class=\"ds-stat-chip ds-stat-chip--g\"><span>TPS</span> 42.1</span>",
-      "css": ".ds-stat-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 9px; letter-spacing: 0.06em; padding: 2px 7px; border-radius: 2px; border: 1px solid oklch(0.34 0.028 250); color: oklch(0.62 0.025 250); font-family: 'JetBrains Mono', ui-monospace, monospace; text-transform: uppercase; } .ds-stat-chip span { font-weight: 700; } .ds-stat-chip--g { color: oklch(0.72 0.14 155); border-color: oklch(0.72 0.14 155 / 0.35); }"
+      "cssClass": "stat-chip",
+      "source": "src/styles/messages.css",
+      "description": "Per-message inference metric; variants .c .g .y .r"
+    },
+    {
+      "name": "Settings Row",
+      "kind": "form",
+      "cssClass": "settings-row",
+      "source": "src/ui/settings-controls.ts",
+      "description": "Canonical settings label + control factory."
     },
     {
       "name": "User Message Bubble",
       "kind": "card",
-      "refersTo": "user-bg",
-      "description": "User turn in the chat column.",
-      "html": "<div class=\"ds-msg ds-msg--user\"><div class=\"ds-bubble\">Hello from the bench.</div></div>",
-      "css": ".ds-msg { display: flex; flex-direction: column; align-items: flex-end; max-width: 100%; } .ds-bubble { padding: 12px 16px; border-radius: 14px; line-height: 1.65; font-size: 14px; background: oklch(88.769% 0.2563 138.508 / 0.336); color: oklch(31.714% 0.00004 271.152); border-bottom-right-radius: 6px; }"
+      "source": "src/styles/messages.css",
+      "description": "User turn; background var(--mn-accent-soft)."
     }
   ],
   "narrative": {
-    "northStar": "The Bench Instrument",
-    "overview": "Minnow reads like a light workbench: white surfaces, ink-black controls, and borders instead of stacked cards. Conversation is the focus; stats are instrumentation underneath. Depth uses borders and subtle gray fills, not decorative shadows.",
+    "northStar": "Calm local instrument",
+    "overview": "Minnow is a CSS-token-driven local AI workspace: conversation first, metrics as instrumentation, borders instead of card stacks. Sixteen palette themes share one --mn-* vocabulary. No React component library; primitives are CSS classes plus DOM factories in src/ui/.",
     "keyCharacteristics": [
-      "Light OKLCH neutrals with ink-black accent",
-      "Soft green user message wash",
+      "16 themes (8 families × dark/light); swamp-dark default",
+      "Hex/rgba only in tokens.css; --mn-* everywhere else",
+      "Family accent on send, links, user bubbles (--mn-accent-soft)",
       "JetBrains Mono for metrics and code",
       "Flat chrome; mobile sidebar shadow only",
       "Semantic metric colors never used for navigation chrome"
     ],
+    "documentation": "documentation/design-system/README.md",
     "rules": [
       {
-        "name": "The Ink Accent Rule",
-        "body": "Black accent appears on primary actions, selection, and links. It does not tint large backgrounds except the logo mark and send button.",
+        "name": "The Accent Rule",
+        "body": "Family accent appears on primary actions, selection, and links. It does not wash large backgrounds except logo mark and send button.",
         "section": "colors"
       },
       {
         "name": "The Metric Color Rule",
-        "body": "Green, amber, and red are for measurement only. Never use them for navigation chrome or decorative gradients.",
+        "body": "Success, warning, and danger are for measurement only. Never use them for navigation chrome or decorative gradients.",
         "section": "colors"
       },
       {
@@ -172,7 +186,7 @@
       }
     ],
     "dos": [
-      "Do use OKLCH tokens from :root in index.html",
+      "Do use --mn-* tokens from tokens.css",
       "Do respect prefers-reduced-motion",
       "Do use (hover: hover) and (pointer: fine) for hover-heavy styles",
       "Do treat stats as instrumentation with mono and tabular nums"
@@ -183,7 +197,7 @@
       "Don't build hero-metric dashboards with colored top stripes",
       "Don't use glassmorphism or gradient text",
       "Don't add colored border-left stripes on cards or alerts",
-      "Don't assume a dark theme for new screens"
+      "Don't put hex literals outside tokens.css"
     ]
   }
 }

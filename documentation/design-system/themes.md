@@ -1,0 +1,68 @@
+# Themes
+
+Sixteen composed themes on `<html data-theme="{family}-{mode}">`.
+
+## Families × modes
+
+| Family | Dark | Light | Accent character |
+|--------|------|-------|------------------|
+| **swamp** (default) | `swamp-dark` | `swamp-light` | Muted green on cool neutrals |
+| **desert** | `desert-dark` | `desert-light` | Warm amber on taupe |
+| **ocean** | `ocean-dark` | `ocean-light` | Soft cyan on blue-tinted neutrals |
+| **coral** | `coral-dark` | `coral-light` | Warm coral on graphite |
+| **mono** | `mono-dark` | `mono-light` | Grayscale only |
+| **matrix** | `matrix-dark` | `matrix-light` | Phosphor green on CRT black |
+| **human** | `human-dark` | `human-light` | Burnt orange on near-black |
+| **mint** | `mint-dark` | `mint-light` | Mint phosphor on cool charcoal |
+
+Default when storage is empty: **`swamp-dark`** ([`DEFAULT_THEME_ID`](../../src/theme.ts)).
+
+Family metadata (names, blurbs): [`THEME_FAMILY_META`](../../src/theme.ts).
+
+## Storage keys
+
+| Key | Purpose |
+|-----|---------|
+| `minnow.theme` | Explicit `ThemeId` when not following OS |
+| `minnow.theme.followSystem` | `'1'` when mode tracks `prefers-color-scheme` |
+| `minnow.theme.family` | Active family while follow-system is on |
+
+Legacy values (`light`, `dark`, `system`, pre-rename families like `sage`→`swamp`) migrate on read in [`src/theme.ts`](../../src/theme.ts).
+
+## Runtime pipeline
+
+1. **FOUC boot** — inline script in [`index.html`](../../index.html) sets `data-theme` before paint.
+2. **`applyTheme()`** — [`src/theme.ts`](../../src/theme.ts) sets `data-theme`, updates `theme-color` meta.
+3. **`initTheme()`** — [`src/ui/theme.ts`](../../src/ui/theme.ts) wires hljs, xterm, custom tokens, fonts; adds `theme-ready`.
+4. **Transitions** — [`theme-transitions.css`](../../src/styles/theme-transitions.css) guards first paint; caret-safe (no `color` transition on text inputs).
+
+## Custom appearance
+
+| Key | Purpose |
+|-----|---------|
+| `minnow.appearance.customEnabled` | Inline `--mn-*` overrides active |
+| `minnow.appearance.customTokens` | JSON map of 26 core keys → color |
+| `minnow.appearance.customAdvanced` | Per-token editor vs simplified seeds |
+| `minnow.appearance.fonts` | UI + mono preset or upload refs |
+
+Simplified mode derives full palettes via [`theme-derive.ts`](../../src/appearance/theme-derive.ts).
+
+**Agent tools (desktop only):** `get_appearance`, `update_appearance`, `upload_appearance_asset` in [`appearance-tools.ts`](../../src/tools/appearance-tools.ts).
+
+## Downstream consumers
+
+| Consumer | File |
+|----------|------|
+| CodeMirror | [`codemirror-theme.ts`](../../src/ui/codemirror-theme.ts) |
+| xterm PTY | [`terminal-xterm-theme.ts`](../../src/ui/terminal-xterm-theme.ts) |
+| Reef iframes | [`theme-forward.ts`](../../src/chat/reef/theme-forward.ts) |
+| Research HTML reports | [`server/research/report-theme.js`](../../server/research/report-theme.js) |
+| Settings preview | [`settings-appearance-theme.ts`](../../src/ui/settings-appearance-theme.ts) |
+
+## Adding or editing a theme
+
+1. Add a `:root[data-theme="family-mode"]` block in [`tokens.css`](../../src/styles/tokens.css) with all core `--mn-*` keys.
+2. Copy derived tokens (`--mn-selection-bg`, shadows, tool-call, syntax) from an existing block.
+3. Add wallpaper tints in [`minnowos-tokens.css`](../../src/styles/minnowos-tokens.css) if the desktop shell is used.
+4. Register family in `THEME_FAMILIES` / `THEME_FAMILY_META` in [`theme.ts`](../../src/theme.ts).
+5. Run `test/theme.test.mts` and `test/theme-contrast.test.mts`.

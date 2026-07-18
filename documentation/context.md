@@ -91,7 +91,7 @@ Shipped on branch `cursor/minnowos-redesign-30a6`. **Desktop window shell (Phase
 
 ## Theme system (palette tokens)
 
-Sixteen composed themes on `<html data-theme="{family}-{mode}">` (families: **swamp**, **desert**, **ocean**, **coral**, **mono**, **matrix**, **human**, **mint**; modes: **dark**, **light**). Palette hex/rgba lives only in [`src/styles/tokens.css`](../src/styles/tokens.css); the rest of the app uses **`--mn-*`** CSS variables (22 core tokens per theme plus extended semantics derived with `color-mix`). Renamed families (e.g. `sage`→`swamp`) are migrated on read in [`src/theme.ts`](../src/theme.ts).
+Sixteen composed themes on `<html data-theme="{family}-{mode}">` (families: **swamp**, **desert**, **ocean**, **coral**, **mono**, **matrix**, **human**, **mint**; modes: **dark**, **light**). Palette hex/rgba lives only in [`src/styles/tokens.css`](../src/styles/tokens.css); the rest of the app uses **`--mn-*`** CSS variables (26 core tokens per theme in [`CORE_THEME_TOKEN_KEYS`](../src/appearance/types.ts) plus extended semantics derived with `color-mix`). Full inventory: [`documentation/design-system/`](design-system/README.md). Renamed families (e.g. `sage`→`swamp`) are migrated on read in [`src/theme.ts`](../src/theme.ts).
 
 | Key | Purpose |
 |-----|---------|
@@ -1796,9 +1796,9 @@ Registration in [`src/main.ts`](../src/main.ts): `navigator.serviceWorker.regist
 
 ## Design context
 
-[`PRODUCT.md`](../PRODUCT.md), [`DESIGN.md`](../DESIGN.md), [`.impeccable/design.json`](../.impeccable/design.json).
+[`PRODUCT.md`](../PRODUCT.md), [`DESIGN.md`](../DESIGN.md), [`.impeccable/design.json`](../.impeccable/design.json), [`documentation/design-system/`](design-system/README.md) (extracted token/primitive inventory).
 
-**Theme:** OKLCH light surfaces, ink `--accent`, soft green user bubbles, JetBrains Mono for code/metrics ([`fonts.css`](../src/styles/fonts.css)). Light `--text-muted` is `oklch(0.52 0.028 250)` for WCAG AA labels/placeholders on sheet white. Markdown blockquotes use a light fill + hairline border (no side-stripe). Boot loader in [`index.html`](../index.html) uses the same OKLCH values as [`tokens.css`](../src/styles/tokens.css). Tool bubbles: `.tool-call-*` in [`messages.css`](../src/styles/messages.css); settings tools UI in [`settings.css`](../src/styles/settings.css).
+**Theme:** 16 palette themes (`{family}-{mode}`) on `<html data-theme>`; hex/rgba only in [`tokens.css`](../src/styles/tokens.css), consumers use `--mn-*`. Default **swamp-dark**; family accent on send, links, and user bubbles (`--mn-accent-soft`). JetBrains Mono for code/metrics ([`fonts.css`](../src/styles/fonts.css)). Markdown blockquotes use a light fill + hairline border (no side-stripe). Tool bubbles: `.tool-call-*` in [`messages.css`](../src/styles/messages.css); settings primitives in [`settings-controls.css`](../src/styles/settings-controls.css).
 
 **Motion:** Product UI timing in [`tokens.css`](../src/styles/tokens.css) (`--duration-fast` 150ms, `--duration-normal` 220ms, `--duration-slow` 350ms, `--ease-out`). Shared panel reveal in [`motion.css`](../src/styles/motion.css). State feedback only: drawer/sidebar scrims fade, mobile sidebars slide on `transform`, metrics bars use `scaleX`, tool/question strips use `minnow-panel-reveal`. No width layout animation on desktop rails. Global `prefers-reduced-motion` in [`global.css`](../src/styles/global.css).
 
@@ -1894,7 +1894,7 @@ Users can **`switchChat`** / **`createChat`** while a reply runs in a different 
 
 Claude Code–style **single-chat** finish line: `/goal <condition>` stores a completion condition on **`Chat.activeGoal`**, runs goal-driven turns until a separate **goal-eval** agent independently verifies completion (read-only tools + tests + optional browser checks), then auto-clears the loop on **YES** or resumes via **`resumeParentChatWithMessage`** with evaluator guidance on **NO**. Distinct from Grok-style **Orchestrate** board / sub-agent orchestration.
 
-**Agentic evaluator:** Unbounded tool loop per pass via [`eval-agent.ts`](../src/chat/goal/eval-agent.ts) — `read_file`, `git_diff`, `execute_command`, browser tools, etc. ([`eval-tools.ts`](../src/chat/goal/eval-tools.ts) allowlist). Default **NO** prompt in [`prompt.ts`](../src/chat/goal/prompt.ts). Programmatic pass gates in [`evaluate.ts`](../src/chat/goal/evaluate.ts): minimum **2** goal turns and **4** verification tool calls before YES stands. Browser checks are encouraged in the prompt but not a hard gate. Each eval cycle costs multiple LLM + tool calls (acceptable for `/goal` autonomy).
+**Agentic evaluator:** Unbounded tool loop per pass via [`eval-agent.ts`](../src/chat/goal/eval-agent.ts) — `read_file`, `git_diff`, `execute_command`, browser tools, etc. ([`eval-tools.ts`](../src/chat/goal/eval-tools.ts) allowlist). Default **NO** prompt in [`prompt.ts`](../src/chat/goal/prompt.ts). When the model replies with analysis instead of a `YES:` / `NO:` line, the agent re-prompts up to **3** times (`MAX_GOAL_EVAL_VERDICT_RETRIES`) before returning a synthetic **NO**. Programmatic pass gates in [`evaluate.ts`](../src/chat/goal/evaluate.ts): minimum **2** goal turns and **4** verification tool calls before YES stands. Browser checks are encouraged in the prompt but not a hard gate. Each eval cycle costs multiple LLM + tool calls (acceptable for `/goal` autonomy).
 
 | Command | Behavior |
 |---------|----------|
