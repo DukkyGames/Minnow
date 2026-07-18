@@ -408,8 +408,8 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
     lastForegroundApp = null;
     void import('./desktop-state').then(async (m) => {
       if (m.isDesktopChatActive()) {
-        const chat = await import('./desktop-chat');
-        chat.renderDesktopChatMessages();
+        const { restoreDesktopSessionOnForeground } = await import('./desktop-launch');
+        await restoreDesktopSessionOnForeground();
       }
     });
     return;

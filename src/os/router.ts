@@ -208,6 +208,13 @@ function applyRoute(route: OsRoute, options?: LaunchOptions): void {
     const pendingChat = consumePendingDesktopChatActivation();
     if (pendingChat !== null) {
       void activateDesktopChat(pendingChat);
+    } else {
+      void import('./desktop-state').then(async (m) => {
+        if (m.isDesktopChatActive()) {
+          const { restoreDesktopSessionOnForeground } = await import('./desktop-launch');
+          await restoreDesktopSessionOnForeground();
+        }
+      });
     }
     return;
   }
