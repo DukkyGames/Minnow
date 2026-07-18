@@ -21,6 +21,7 @@ import {
   resolvePagePath,
 } from './paths.js';
 import { DEFAULT_BRAIN_CODE_CONFIG, normalizeBrainCodeConfig } from './code/config.js';
+import { DEFAULT_LINKING_CONFIG, normalizeLinkingConfig } from './linking-config.js';
 import {
   deleteAnchorsForPage,
   syncAnchorsForPage,
@@ -40,6 +41,7 @@ const VALID_STATUS = new Set(['current', 'stale', 'orphan']);
 /** Default brain section in config.json when missing. */
 export const DEFAULT_BRAIN_STORE_CONFIG = {
   ...DEFAULT_BRAIN_CONFIG,
+  linking: { ...DEFAULT_LINKING_CONFIG },
 };
 
 async function ensurePagesLayout() {
@@ -72,6 +74,7 @@ export async function loadBrainConfig() {
       raw.maxInjectCharsLite ?? memory.maxInjectCharsLite ?? 800,
     embeddings,
     code: { ...DEFAULT_BRAIN_CODE_CONFIG, ...codeRaw },
+    linking: normalizeLinkingConfig(raw.linking),
   };
 }
 
@@ -115,11 +118,17 @@ export async function saveBrainConfig(partial) {
     ? normalizeBrainCodeConfig({ ...existingCode, ...partialCode })
     : existingCode;
 
+  const nextLinking = normalizeLinkingConfig(
+    partial?.linking,
+    existing.linking && typeof existing.linking === 'object' ? existing.linking : {},
+  );
+
   config.brain = {
     ...existing,
     ...partial,
     embeddings: nextEmb,
     code: nextCode,
+    linking: nextLinking,
   };
 
   if (partialEmb) {

@@ -154,7 +154,17 @@ async function main() {
   console.log(`Workspace: ${workspacePath}`);
   console.log(`Minnow data: ${homePath}`);
 
+  // Warm editor deps before publishing dev-host state (avoids missing dist-*.js chunk URLs).
   await vite.listen();
+  for (const url of [
+    '/src/main.ts',
+    '/src/ui/file-viewer.ts',
+    '/src/ui/editor-language.ts',
+  ]) {
+    await vite.warmupRequest(url);
+  }
+  await vite.environments.client.waitForRequestsIdle();
+
   const urls = vite.resolvedUrls?.local ?? [`http://localhost:${PORT}/`];
   const localUrl = urls[0];
   const boundPort = Number(new URL(localUrl).port) || PORT;

@@ -1929,17 +1929,23 @@ export function mergeConfigMeta(existing, patch) {
       base.editorAiCompletion && typeof base.editorAiCompletion === 'object'
         ? { .../** @type {Record<string, unknown>} */ (base.editorAiCompletion) }
         : {
-            enabled: false,
+            enabled: true,
             debounceMs: 450,
             maxPrefixLines: 80,
             maxSuffixLines: 40,
             maxPrefixChars: 6000,
             maxSuffixChars: 2000,
             temperature: 0.3,
-            maxTokens: 128,
+            maxTokens: 256,
             useChatModel: true,
             providerId: '',
             modelId: '',
+            includeImportContext: true,
+            includeLspHover: true,
+            includeLspContext: true,
+            contextBudgetChars: 4000,
+            useNativeFim: true,
+            enableCompletionCache: true,
           };
     const e = /** @type {Record<string, unknown>} */ (p.editorAiCompletion);
     if (typeof e.enabled === 'boolean') existing.enabled = e.enabled;
@@ -1962,11 +1968,25 @@ export function mergeConfigMeta(existing, patch) {
       existing.temperature = Math.min(1, Math.max(0, e.temperature));
     }
     if (typeof e.maxTokens === 'number' && Number.isFinite(e.maxTokens)) {
-      existing.maxTokens = Math.min(512, Math.max(16, Math.round(e.maxTokens)));
+      existing.maxTokens = Math.min(1024, Math.max(16, Math.round(e.maxTokens)));
     }
     if (typeof e.useChatModel === 'boolean') existing.useChatModel = e.useChatModel;
     if (typeof e.providerId === 'string') existing.providerId = e.providerId;
     if (typeof e.modelId === 'string') existing.modelId = e.modelId;
+    if (typeof e.includeImportContext === 'boolean') {
+      existing.includeImportContext = e.includeImportContext;
+    }
+    if (typeof e.includeLspHover === 'boolean') existing.includeLspHover = e.includeLspHover;
+    if (typeof e.includeLspContext === 'boolean') {
+      existing.includeLspContext = e.includeLspContext;
+    }
+    if (typeof e.contextBudgetChars === 'number' && Number.isFinite(e.contextBudgetChars)) {
+      existing.contextBudgetChars = Math.min(12_000, Math.max(500, Math.round(e.contextBudgetChars)));
+    }
+    if (typeof e.useNativeFim === 'boolean') existing.useNativeFim = e.useNativeFim;
+    if (typeof e.enableCompletionCache === 'boolean') {
+      existing.enableCompletionCache = e.enableCompletionCache;
+    }
     base.editorAiCompletion = existing;
   }
 
@@ -3053,12 +3073,15 @@ export function normalizeMemoryConfig(raw, existing = {}) {
 export function normalizeSynthesisConfig(raw, existing = {}) {
   const base = {
     enabled: true,
-    requireConfirmation: true,
+    requireConfirmation: false,
     confidenceThreshold: 0.6,
+    autoWriteConfidence: 0.85,
     maxProposalsPerTurn: 3,
     throttleMessagePairs: 4,
     skillMinRounds: 2,
     skillMinToolCalls: 2,
+    skillMinOccurrences: 2,
+    skillObservationRetentionDays: 45,
     utilityProviderId: '',
     utilityModelId: '',
     maxPendingProposals: 100,
@@ -3076,6 +3099,9 @@ export function normalizeSynthesisConfig(raw, existing = {}) {
   if (typeof row.confidenceThreshold === 'number' && Number.isFinite(row.confidenceThreshold)) {
     base.confidenceThreshold = Math.min(1, Math.max(0, row.confidenceThreshold));
   }
+  if (typeof row.autoWriteConfidence === 'number' && Number.isFinite(row.autoWriteConfidence)) {
+    base.autoWriteConfidence = Math.min(1, Math.max(0, row.autoWriteConfidence));
+  }
   if (typeof row.maxProposalsPerTurn === 'number' && Number.isFinite(row.maxProposalsPerTurn)) {
     base.maxProposalsPerTurn = Math.min(10, Math.max(1, Math.floor(row.maxProposalsPerTurn)));
   }
@@ -3087,6 +3113,18 @@ export function normalizeSynthesisConfig(raw, existing = {}) {
   }
   if (typeof row.skillMinToolCalls === 'number' && Number.isFinite(row.skillMinToolCalls)) {
     base.skillMinToolCalls = Math.min(20, Math.max(1, Math.floor(row.skillMinToolCalls)));
+  }
+  if (typeof row.skillMinOccurrences === 'number' && Number.isFinite(row.skillMinOccurrences)) {
+    base.skillMinOccurrences = Math.min(5, Math.max(1, Math.floor(row.skillMinOccurrences)));
+  }
+  if (
+    typeof row.skillObservationRetentionDays === 'number' &&
+    Number.isFinite(row.skillObservationRetentionDays)
+  ) {
+    base.skillObservationRetentionDays = Math.min(
+      365,
+      Math.max(7, Math.floor(row.skillObservationRetentionDays)),
+    );
   }
   if (typeof row.utilityProviderId === 'string') {
     base.utilityProviderId = row.utilityProviderId.trim();

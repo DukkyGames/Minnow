@@ -8,6 +8,7 @@ import { isImageFilePath } from '../attachments/image-path';
 import { setAssistantBubbleContent } from '../markdown/renderer';
 import { executeTool, getLocalServerAvailable } from '../tools/client';
 import { resolvePreviewLoadUrl } from './preview-load-url';
+import { getFileTreeListingWorkspaceRoot } from './file-tree-listing-root';
 import { getActivePreviewTabId, listPreviewTabs } from './preview-tab-store';
 import { fetchLspConfig } from '../lsp/config-client';
 import { notifyLspDocument } from '../lsp/completion-client';
@@ -41,7 +42,7 @@ import { loadLanguageExtensionsForPath } from './editor-language';
 import { fileEditorKeymapExtensions } from './file-editor-keymap';
 import { lspEditorExtensions } from './file-editor-extensions';
 import { setLspDiagnosticsChromeListener } from './lsp-editor';
-import { editorAiCompletionExtensions } from './file-editor-ai-extensions';
+import { editorAiCompletionExtensions, editorAiCompletionCompartmentExtension, reconfigureEditorAiCompletion, type EditorAiExtensionOptions } from './file-editor-ai-extensions';
 import {
   editorIntentModeExtensions,
   mountIntentModeEditor,
@@ -106,6 +107,8 @@ let editorIntentToggleEl: HTMLButtonElement | null = null;
 /** Per-document Intent mode enabled flag (session only). */
 const intentModeEnabledByPath = new Map<string, boolean>();
 let editorAiModelSelectListener: (() => void) | null = null;
+/** Live AI extension options for hot-reload without remounting the editor. */
+let editorAiOpts: EditorAiExtensionOptions | null = null;
 let diagnosticsBadgeEl: HTMLElement | null = null;
 
 /** Strip "N: " prefixes from read_file_range output. */
@@ -414,8 +417,9 @@ function mountEditor(tab: ViewerTabState, content: string): void {
     const lspExts = useLsp ? lspEditorExtensions(path) : [];
     const useEditorAi =
       editorAiConfig.enabled && !tab.readOnlyExcerpt && getLocalServerAvailable();
-    const aiExts = useEditorAi
-      ? editorAiCompletionExtensions({
+    const canMountEditorAi = !tab.readOnlyExcerpt && getLocalServerAvailable();
+    editorAiOpts = canMountEditorAi
+      ? {
           filePath: path,
           getConfig: getEditorAiCompletionConfigSync,
           canRequest: () => getLocalServerAvailable(),
@@ -428,7 +432,16 @@ function mountEditor(tab: ViewerTabState, content: string): void {
               editorAiStatusEl.hidden = true;
             }
           },
-        })
+        }
+      : null;
+    const aiExts = canMountEditorAi
+      ? [
+          editorAiCompletionCompartmentExtension(
+            useEditorAi && editorAiOpts
+              ? editorAiCompletionExtensions(editorAiOpts)
+              : [],
+          ),
+        ]
       : [];
     if (useEditorAi) attachEditorAiModelSelectListener();
     const quickEditExts =
@@ -652,7 +665,7 @@ async function loadFileContent(path: string): Promise<LoadedFileContent> {
     };
   }
 
-  const content = await readWorkspaceTextFile(path);
+  const content = await readWorkspaceTextFile(path, toolContext.workspaceRoot);
   return { content, readOnlyExcerpt: false };
 }
 
@@ -711,7 +724,11 @@ export function renderActiveViewerTab(): void {
     if (tab.kind === 'attachment') {
       mountImagePreview(tab, content);
     } else {
-      const src = resolvePreviewLoadUrl({ kind: 'workspace', path: tab.path });
+      const src = resolvePreviewLoadUrl(
+        { kind: 'workspace', path: tab.path },
+        undefined,
+        getFileTreeListingWorkspaceRoot(),
+      );
       mountImagePreview(tab, src, () => {
         setViewerError(
           'Could not load image preview. Is the tool server running (npm start)?',
@@ -978,9 +995,19 @@ export function bindFileViewerControls(): void {
   }
 
   window.addEventListener(EDITOR_AI_CONFIG_CHANGED_EVENT, () => {
-    const tab = getActiveViewerTab();
-    if (!tab || tab.viewMode !== 'editor' || tab.loadStatus !== 'ready') return;
-    renderActiveViewerTab();
+    void (async () => {
+      await loadEditorAiCompletionConfig();
+      const tab = getActiveViewerTab();
+      if (!tab || tab.viewMode !== 'editor' || tab.loadStatus !== 'ready') return;
+      if (!editorView || !editorAiOpts) return;
+      reconfigureEditorAiCompletion(editorView, editorAiOpts);
+      const config = getEditorAiCompletionConfigSync();
+      if (config.enabled && getLocalServerAvailable()) {
+        attachEditorAiModelSelectListener();
+      } else {
+        detachEditorAiModelSelectListener();
+      }
+    })();
   });
 }
 

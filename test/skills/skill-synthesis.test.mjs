@@ -5,11 +5,15 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
+  SKILL_GENERALIZE_PROMPT,
+  SKILL_OBSERVE_PROMPT,
   buildSkillMdDraft,
+  isDuplicateSkillCandidate,
   parseSkillExtractionJson,
   slugifySkillId,
   validateSkillMdDraft,
 } from '../../server/memory/skill-synthesis.js';
+import { DEFAULT_SYNTHESIS_CONFIG } from '../../server/brain/synthesis-config.js';
 
 describe('skill synthesis', () => {
   test('parses JSON object from clean response', () => {
@@ -49,5 +53,68 @@ describe('skill synthesis', () => {
   test('slugify produces stable skill ids', () => {
     assert.equal(slugifySkillId('Hello World!'), 'hello-world');
     assert.equal(slugifySkillId(''), 'learned-skill');
+  });
+});
+
+describe('skill recurrence gate config', () => {
+  test('defaults require a second session before proposing', () => {
+    assert.equal(DEFAULT_SYNTHESIS_CONFIG.skillMinOccurrences, 2);
+  });
+
+  test('observations are retained long enough to span sessions', () => {
+    assert.equal(DEFAULT_SYNTHESIS_CONFIG.skillObservationRetentionDays, 45);
+  });
+
+  test('round and tool-call bars are both present', () => {
+    assert.equal(DEFAULT_SYNTHESIS_CONFIG.skillMinRounds, 2);
+    assert.equal(DEFAULT_SYNTHESIS_CONFIG.skillMinToolCalls, 2);
+  });
+});
+
+describe('isDuplicateSkillCandidate', () => {
+  test('exact title match (case-insensitive) is a duplicate', () => {
+    assert.equal(
+      isDuplicateSkillCandidate('Pin Dev Server Port', ['pin dev server port']),
+      true,
+    );
+  });
+
+  test('near-identical phrasing is a duplicate', () => {
+    assert.equal(
+      isDuplicateSkillCandidate('Pin the dev server port', ['Pin dev server port']),
+      true,
+    );
+  });
+
+  test('a rejected proposal title still blocks re-proposal (regression)', () => {
+    // The old check only looked at merged skills, so rejecting a proposal never
+    // stopped the same skill being proposed again on the next session.
+    const rejectedTitles = ['Pin dev server port'];
+    assert.equal(isDuplicateSkillCandidate('Pin dev server port', rejectedTitles), true);
+  });
+
+  test('unrelated title is not a duplicate', () => {
+    assert.equal(
+      isDuplicateSkillCandidate('Rotate database credentials', ['Pin dev server port']),
+      false,
+    );
+  });
+
+  test('empty title or empty catalog is never a duplicate', () => {
+    assert.equal(isDuplicateSkillCandidate('', ['Anything']), false);
+    assert.equal(isDuplicateSkillCandidate('Anything', []), false);
+    assert.equal(isDuplicateSkillCandidate('Anything', undefined), false);
+  });
+});
+
+describe('skill prompts', () => {
+  test('observe prompt asks the model to judge recurrence', () => {
+    assert.match(SKILL_OBSERVE_PROMPT, /same kind of problem again/i);
+  });
+
+  test('generalize prompt demands parameterization and problem-class titles', () => {
+    assert.match(SKILL_GENERALIZE_PROMPT, /PARAMETERIZE/);
+    assert.match(SKILL_GENERALIZE_PROMPT, /PROBLEM CLASS/);
+    assert.match(SKILL_GENERALIZE_PROMPT, /existingSkills/);
   });
 });

@@ -993,7 +993,14 @@ export function createCdpElementPicker(
  * with a cross-origin preview page where script injection is undesirable/blocked.
  */
 export function shouldUseCdpPicker(): boolean {
-  return Boolean(window.minnow?.preview?.cdpPicker) && isCrossOriginPreview();
+  // CDP inspect runs on the native WebContentsView. When Design Mode drives the iframe guest
+  // (same-origin pages, or Draw/Comment on cross-origin), the native view is hidden — execJs/
+  // iframe injection is the correct path instead.
+  return (
+    Boolean(window.minnow?.preview?.cdpPicker) &&
+    isCrossOriginPreview() &&
+    !isDesignModeUsingIframeGuest()
+  );
 }
 
 /**

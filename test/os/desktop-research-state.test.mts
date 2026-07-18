@@ -108,6 +108,9 @@ describe('desktop research state', () => {
     assert.ok(document.getElementById('btnDesktopResearchClose'));
     assert.ok(document.getElementById('desktopResearchMaxRounds'));
     assert.ok(document.getElementById('desktopResearchScope'));
+    assert.ok(document.getElementById('desktopResearchWorkspace'));
+    assert.ok(document.getElementById('desktopResearchWorkspaceLabel'));
+    assert.ok(document.getElementById('btnDesktopResearchWorkspaceBrowse'));
   });
 
   test('resolveLegacyHash redirects research routes to desktop', () => {

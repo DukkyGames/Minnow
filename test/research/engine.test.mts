@@ -307,6 +307,45 @@ describe('DeepResearcher', () => {
     assert.ok(researcher.findings.some((f) => f.url.includes('server/research/')));
   });
 
+  test('codebase scope passes workspaceRoot to searchCodebase', async () => {
+    originalLlmCall = engineDeps.llmCall;
+    originalSearch = engineDeps.searchStructured;
+    originalExtract = engineDeps.fetchAndExtract;
+    originalCodebaseSearch = engineDeps.searchCodebase;
+    originalExtractFromFile = engineDeps.extractFromFile;
+
+    /** @type {string[]} */
+    const roots = [];
+    engineDeps.searchStructured = async () => [];
+    engineDeps.fetchAndExtract = async () => null;
+    engineDeps.searchCodebase = async (_query, opts = {}) => {
+      roots.push(String(opts.root ?? ''));
+      return [];
+    };
+    engineDeps.extractFromFile = async () => null;
+
+    engineDeps.llmCall = mockLlmCall({
+      'research strategist': '{"sub_questions":["a"],"key_topics":["engine"],"success_criteria":"ok"}',
+      'local codebase searches': '["DeepResearcher"]',
+      'evolving research report': '## Draft\n\nCode-grounded body.',
+      'comprehensive enough': 'YES — enough coverage.',
+      'long, detailed, comprehensive': '# Final\n\nCodebase final report.',
+    });
+
+    const researcher = new DeepResearcher({
+      providerId: 'p1',
+      model: 'm1',
+      scope: 'codebase',
+      workspaceRoot: '/tmp/custom-workspace',
+      minRounds: 1,
+      maxRounds: 1,
+      maxEmptyRounds: 2,
+    });
+
+    await researcher.research({ question: 'Where is DeepResearcher defined?' });
+    assert.ok(roots.some((root) => root.includes('custom-workspace')));
+  });
+
   test('web scope keeps existing web-only behavior', async () => {
     originalLlmCall = engineDeps.llmCall;
     originalSearch = engineDeps.searchStructured;

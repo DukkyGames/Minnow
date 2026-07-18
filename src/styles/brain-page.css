@@ -100,6 +100,17 @@
   text-overflow: ellipsis;
 }
 
+/* This week's read/write counts — secondary to the lead, hidden while zero. */
+.brain-page-header__usage {
+  margin: 1px 0 0;
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .brain-page-header__actions {
   display: flex;
   flex-wrap: wrap;

@@ -52,10 +52,15 @@ export interface SynthesisConfig {
   enabled: boolean;
   requireConfirmation: boolean;
   confidenceThreshold: number;
+  /** Facts at or above this confidence are written directly; below it they queue as proposals. */
+  autoWriteConfidence: number;
   maxProposalsPerTurn: number;
   throttleMessagePairs: number;
   skillMinRounds: number;
   skillMinToolCalls: number;
+  /** Distinct sessions that must hit the same problem class before a skill is proposed. */
+  skillMinOccurrences: number;
+  skillObservationRetentionDays: number;
   utilityProviderId: string;
   utilityModelId: string;
   maxPendingProposals: number;

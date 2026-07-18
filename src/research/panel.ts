@@ -4,10 +4,8 @@
 
 import '../styles/research-page.css';
 
-import { decodeModelSelectKey } from '../lib/model-select-key';
 import { wrapUntrusted } from '../lib/untrusted.mjs';
-import { getActiveModelIdFromDom } from '../benchmark/resolve-binding';
-import { loadResearchConfig } from '../config/research-config';
+import { resolveResearchModelBinding } from './resolve-binding';
 import { pushNotification } from '../notifications/push';
 import {
   cancelResearch,
@@ -23,6 +21,10 @@ import { renderResearchLibrary } from './library';
 import { ResearchProgressPanel } from './progress-panel';
 import { renderResearchResultFromMarkdown } from './report-view';
 import type { ResearchCategory, ResearchScope, ResearchStartRequest } from './types';
+import {
+  readResearchWorkspaceRoot,
+  wireResearchWorkspaceScopeControls,
+} from './workspace-scope-ui';
 import { closeBenchmark } from '../ui/benchmark-page';
 import { closeCompare } from '../ui/compare-page';
 import { closeGlobalBugs } from '../ui/global-bugs-page';
@@ -122,8 +124,10 @@ function setRunningState(isRunning: boolean): void {
   if (queryInput) {
     queryInput.disabled = isRunning;
   }
-  for (const el of document.querySelectorAll<HTMLInputElement | HTMLSelectElement>(
-    '#researchView .dr-controls input, #researchView .dr-controls select',
+  for (const el of document.querySelectorAll<
+    HTMLInputElement | HTMLSelectElement | HTMLButtonElement
+  >(
+    '#researchView .dr-controls input, #researchView .dr-controls select, #researchView .dr-controls button:not(#btnResearchStart):not(#btnResearchCancel)',
   )) {
     el.disabled = isRunning;
   }
@@ -184,7 +188,6 @@ async function refreshLibraryPanel(): Promise<void> {
 }
 
 async function resolveResearchBinding(): Promise<{ providerId: string; model: string }> {
-  const config = await loadResearchConfig();
   const overrideProvider = (
     document.getElementById('researchProviderOverride') as HTMLSelectElement | null
   )?.value?.trim();
@@ -192,23 +195,7 @@ async function resolveResearchBinding(): Promise<{ providerId: string; model: st
     document.getElementById('researchModelOverride') as HTMLInputElement | null
   )?.value?.trim();
 
-  if (overrideProvider && overrideModel) {
-    return { providerId: overrideProvider, model: overrideModel };
-  }
-
-  const fromConfig = config.model;
-  if (fromConfig.providerId?.trim() && fromConfig.model?.trim()) {
-    return {
-      providerId: fromConfig.providerId.trim(),
-      model: fromConfig.model.trim(),
-    };
-  }
-
-  const raw = getActiveModelIdFromDom();
-  const parsed = decodeModelSelectKey(raw);
-  const model = parsed?.modelId ?? raw;
-  const providerId = parsed?.providerId ?? getActiveChat().providerId?.trim() ?? '';
-  return { providerId, model };
+  return resolveResearchModelBinding({ overrideProvider, overrideModel });
 }
 
 function readStartOptions(): Omit<ResearchStartRequest, 'query' | 'continueFrom'> {
@@ -225,10 +212,15 @@ function readStartOptions(): Omit<ResearchStartRequest, 'query' | 'continueFrom'
   const scope = (
     (document.getElementById('researchScope') as HTMLSelectElement | null)?.value ?? 'web'
   ) as ResearchScope;
+  const workspaceRoot = readResearchWorkspaceRoot(
+    document.getElementById('researchWorkspace') as HTMLSelectElement | null,
+    scope,
+  );
   return {
     maxRounds: Number.isFinite(maxRounds) ? maxRounds : 0,
     category,
     scope,
+    ...(workspaceRoot ? { workspaceRoot } : {}),
     ...(searchProvider ? { searchProvider } : {}),
   };
 }
@@ -601,6 +593,21 @@ function bindStaticControls(): void {
   document.getElementById('btnResearchSettingsLink')?.addEventListener('click', () => {
     void import('../ui/settings-page').then((m) => m.openSettings('deep-research'));
   });
+
+  const scopeSelect = document.getElementById('researchScope') as HTMLSelectElement | null;
+  const workspaceSelect = document.getElementById('researchWorkspace') as HTMLSelectElement | null;
+  const workspaceField = document.getElementById('researchWorkspaceField');
+  const workspaceBrowse = document.getElementById(
+    'btnResearchWorkspaceBrowse',
+  ) as HTMLButtonElement | null;
+  if (scopeSelect && workspaceSelect && workspaceField) {
+    wireResearchWorkspaceScopeControls({
+      scopeSelect,
+      workspaceField,
+      workspaceSelect,
+      browseBtn: workspaceBrowse,
+    });
+  }
 }
 
 /** Wire hash routing and controls (call once from main). */

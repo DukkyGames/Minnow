@@ -22,6 +22,7 @@ import {
   updatePage,
 } from '../brain/store.js';
 import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
+import { recordBrainUsage } from '../brain/usage.js';
 
 /** Resolve workspace key for scoped wiki retrieve/write. */
 function activeWorkspaceKey() {
@@ -70,6 +71,7 @@ export async function toolBrainSearch(args) {
     .filter(Boolean);
   const pathLine = paths.length ? `\n\nMatched page paths: ${paths.join(', ')}` : '';
   const idLine = ids.length ? `\nMatched page ids: ${ids.join(', ')}` : '';
+  void recordBrainUsage('agent-read');
   return `${block.trim()}${pathLine}${idLine}`;
 }
 
@@ -92,6 +94,7 @@ export async function toolBrainReadPage(args) {
   const relPath = await resolvePageLookup(lookup);
   const page = await readPage(relPath);
   const tags = (page.meta.tags ?? []).join(', ') || 'none';
+  void recordBrainUsage('agent-read');
   return [
     `# ${page.meta.title}`,
     `path: ${page.path}`,
@@ -157,6 +160,7 @@ export async function toolBrainWritePage(args) {
 
   if (exists) {
     const updated = await updatePage(relPath, { title, body, tags, summary, source: 'agent' });
+    void recordBrainUsage('agent-write');
     return `Updated wiki page "${updated.meta.title}" at ${updated.path} (id: ${updated.meta.id}).`;
   }
 
@@ -168,6 +172,7 @@ export async function toolBrainWritePage(args) {
     summary,
     source: 'agent',
   });
+  void recordBrainUsage('agent-write');
   return `Created wiki page "${created.meta.title}" at ${created.path} (id: ${created.meta.id}).`;
 }
 
@@ -188,6 +193,7 @@ export async function toolBrainAppendLog(args) {
   }
 
   await appendLog(entry);
+  void recordBrainUsage('agent-write');
   return 'Appended to brain log.md.';
 }
 

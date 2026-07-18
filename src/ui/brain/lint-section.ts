@@ -2,8 +2,8 @@
  * Brain app — Lint section: run POST /lint and render the health report.
  */
 
-import { lintBrainWiki } from '../../brain/client';
-import type { BrainLintReport } from '../../brain/types';
+import { lintBrainWiki, pruneBrainWeakLinks } from '../../brain/client';
+import type { BrainLintReport, BrainPruneLinksReport } from '../../brain/types';
 import { renderBrainEmptyState, renderBrainLoading } from './empty-state';
 import { navigateBrainGraphPage, setGraphOrphanPaths } from './graph-section';
 import { openBrain } from '../brain-page';
@@ -106,7 +106,83 @@ function renderAppliedSummary(mount: HTMLElement, applied: Array<{ path: string;
   mount.append(section);
 }
 
-function renderLintReport(mount: HTMLElement, report: BrainLintReport): void {
+/**
+ * Weak-link cleanup: report first, then confirm. Pages linked before the
+ * similarity floors existed carry `similarTo` edges built from a single shared
+ * title word, so this always shows what it would drop before dropping it.
+ */
+function renderWeakLinksGroup(mount: HTMLElement, report: BrainPruneLinksReport | null): void {
+  const section = document.createElement('section');
+  section.className = 'brain-lint-group';
+  section.dataset.lintGroup = 'weak-links';
+
+  const heading = document.createElement('h4');
+  heading.className = 'brain-section-subtitle';
+  heading.textContent = 'Weak links';
+  section.append(heading);
+
+  if (!report) {
+    const hint = document.createElement('p');
+    hint.className = 'brain-muted';
+    hint.textContent =
+      'Re-score existing similar-page links against the current similarity thresholds.';
+    section.append(hint);
+
+    const checkBtn = document.createElement('button');
+    checkBtn.type = 'button';
+    checkBtn.className = 'brain-action-btn';
+    checkBtn.textContent = 'Check weak links';
+    checkBtn.addEventListener('click', () => {
+      void runPrune(false);
+    });
+    section.append(checkBtn);
+    mount.append(section);
+    return;
+  }
+
+  const meta = document.createElement('p');
+  meta.className = 'brain-muted';
+  const droppedCount = report.removals.reduce((sum, row) => sum + row.dropped.length, 0);
+  meta.textContent = report.dryRun
+    ? `${droppedCount} of ${report.edgesScanned} links on ${report.removals.length} pages fall below the threshold.`
+    : `Removed ${droppedCount} links across ${report.applied.length} pages.`;
+  section.append(meta);
+
+  if (report.removals.length > 0) {
+    const list = document.createElement('ul');
+    list.className = 'brain-lint-list';
+    for (const row of report.removals) {
+      const li = document.createElement('li');
+      li.textContent = `${row.path} — drops ${row.dropped.join(', ')}${
+        row.kept.length > 0 ? ` (keeps ${row.kept.join(', ')})` : ''
+      }`;
+      list.append(li);
+    }
+    section.append(list);
+  }
+
+  if (report.dryRun && report.removals.length > 0) {
+    const applyBtn = document.createElement('button');
+    applyBtn.type = 'button';
+    applyBtn.className = 'brain-action-btn';
+    applyBtn.textContent = 'Remove weak links';
+    applyBtn.addEventListener('click', () => {
+      const ok = confirm(
+        `Remove ${droppedCount} similar-page links from ${report.removals.length} pages? This rewrites page frontmatter.`,
+      );
+      if (ok) void runPrune(true);
+    });
+    section.append(applyBtn);
+  }
+
+  mount.append(section);
+}
+
+function renderLintReport(
+  mount: HTMLElement,
+  report: BrainLintReport,
+  pruneReport: BrainPruneLinksReport | null = null,
+): void {
   mount.replaceChildren();
 
   if (report.applied) {
@@ -135,6 +211,7 @@ function renderLintReport(mount: HTMLElement, report: BrainLintReport): void {
     report.contradictions,
     'No contradictions flagged.',
   );
+  renderWeakLinksGroup(mount, pruneReport);
 
   const hasActionable =
     report.orphans.length > 0 || report.stale.length > 0 || report.contradictions.length > 0;
@@ -198,6 +275,42 @@ async function runCleanup(): Promise<void> {
 
   renderLintReport(mount, report);
   mount.dataset.lintRan = '1';
+}
+
+/**
+ * Run the weak-link pass and swap the result into the existing report in place,
+ * so checking links doesn't re-trigger the LLM contradiction scan.
+ */
+async function runPrune(apply: boolean): Promise<void> {
+  const mount = document.getElementById('brainLintBody');
+  const existing = mount?.querySelector<HTMLElement>('[data-lint-group="weak-links"]');
+  if (!mount || !existing) return;
+
+  const busy = document.createElement('section');
+  busy.className = 'brain-lint-group';
+  busy.dataset.lintGroup = 'weak-links';
+  const busyText = document.createElement('p');
+  busyText.className = 'brain-muted';
+  busyText.textContent = apply ? 'Removing weak links…' : 'Scoring links…';
+  busy.append(busyText);
+  existing.replaceWith(busy);
+
+  const report = await pruneBrainWeakLinks({ apply });
+
+  const holder = document.createElement('div');
+  if (report) {
+    renderWeakLinksGroup(holder, report);
+  } else {
+    const err = document.createElement('section');
+    err.className = 'brain-lint-group';
+    err.dataset.lintGroup = 'weak-links';
+    const msg = document.createElement('p');
+    msg.className = 'brain-error';
+    msg.textContent = 'Link check failed. Start npm start and try again.';
+    err.append(msg);
+    holder.append(err);
+  }
+  busy.replaceWith(...holder.children);
 }
 
 /** Show lint intro; empty-state CTA runs the health check. */

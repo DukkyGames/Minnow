@@ -165,12 +165,22 @@ export function createLspMiddleware(resolveProjectRoot) {
           sendJson(res, posCheck.status, { error: posCheck.error });
           return;
         }
-        const { items, error } = await getLspCompletions(
+        const editorText =
+          typeof body.text === 'string' ? body.text : undefined;
+        const lspContext =
+          body.context && typeof body.context === 'object' ? body.context : undefined;
+        const { items, error, isIncomplete, triggerCharacters } = await getLspCompletions(
           pathCheck.rel,
           posCheck.line,
           posCheck.character,
+          { text: editorText, context: lspContext },
         );
-        sendJson(res, 200, { items, ...(error ? { error } : {}) });
+        sendJson(res, 200, {
+          items,
+          isIncomplete,
+          triggerCharacters,
+          ...(error ? { error } : {}),
+        });
         return;
       }
 

@@ -137,4 +137,33 @@ describe('stream-chat-dom remount', { concurrency: false }, () => {
       ?.querySelector('.stream-status__label');
     assert.equal(label?.textContent, STREAM_LABEL_THINKING);
   });
+
+  test('double remount leaves a single Generating response… row', () => {
+    setupDom();
+    const streaming = createEmptyChatObject('');
+    streaming.id = 'chat-streaming';
+    streaming.history.push({ role: 'user', content: 'hi' });
+
+    setSessionStateForTests({
+      version: 2,
+      activeId: streaming.id,
+      sidebarCollapsed: false,
+      chats: [streaming],
+    });
+
+    appState.setStreaming(true, streaming.id);
+    setSidebarStreamPhase('generating', streaming.id);
+    registerStreamDomRemount(streaming.id, () => {});
+
+    remountStreamDomForChat(streaming.id);
+    remountStreamDomForChat(streaming.id);
+
+    const area = document.getElementById('chatArea');
+    assert.equal(area?.querySelectorAll('.stream-status').length, 1);
+    assert.equal(area?.querySelectorAll('.msg--awaiting-prose').length, 1);
+    assert.equal(
+      area?.querySelector('.stream-status__label')?.textContent,
+      STREAM_LABEL_GENERATING,
+    );
+  });
 });

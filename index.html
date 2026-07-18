@@ -1008,6 +1008,23 @@
                 </select>
               </div>
             </label>
+            <label class="dr-field" id="researchWorkspaceField" hidden>
+              <span class="dr-flabel research-mono">WORKSPACE</span>
+              <div class="dr-research-workspace-row">
+                <div class="dr-select">
+                  <select id="researchWorkspace" class="research-select" aria-label="Research workspace">
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  id="btnResearchWorkspaceBrowse"
+                  class="settings-inline-btn"
+                  aria-label="Browse for research workspace folder"
+                >
+                  Browse…
+                </button>
+              </div>
+            </label>
             <label class="dr-field">
               <span class="dr-flabel research-mono">CATEGORY</span>
               <div class="dr-select">
@@ -1240,6 +1257,7 @@
     <div class="brain-page-header__main">
       <h1 class="brain-page-header__title" id="brainPageHeaderTitle">Knowledge graph</h1>
       <p class="brain-page-header__lead" id="brainPageHeaderLead">Explore wiki pages, tags, and wikilinks on an interactive canvas.</p>
+      <p class="brain-page-header__usage brain-muted hidden" id="brainPageHeaderUsage"></p>
     </div>
     <div class="brain-page-header__actions" id="brainPageHeaderActions"></div>
   </header>
@@ -1307,7 +1325,7 @@
             </div>
             <div class="brain-graph-toolbar__group brain-graph-toolbar__toggles" role="group" aria-label="View options">
               <button type="button" class="brain-action-btn" id="brainGraphLayoutToggle" aria-pressed="false">Tree</button>
-              <button type="button" class="brain-action-btn" id="brainGraphTagToggle" aria-pressed="true">Tags</button>
+              <button type="button" class="brain-action-btn" id="brainGraphTagToggle" aria-pressed="false">Tags</button>
               <button type="button" class="brain-action-btn" id="brainGraphOrphanToggle" aria-pressed="false">Orphans</button>
               <button type="button" class="brain-action-btn" id="brainGraphArchiveToggle" aria-pressed="false" title="Show per-chat archive pages in graph and tree">Archives</button>
             </div>
@@ -1555,6 +1573,20 @@
                 <input type="number" id="brainSynthesisThrottle" class="settings-input settings-input--narrow" min="1" value="4">
               </label>
               <p id="brainSynthesisThrottleHint" class="brain-muted">Runs after every 4 completed user+assistant turns.</p>
+              <label>Auto-write confidence
+                <input type="number" id="brainSynthesisAutoWrite" class="settings-input settings-input--narrow" min="0" max="1" step="0.05" value="0.85">
+              </label>
+              <p class="brain-muted">Facts at or above this confidence are written to the wiki directly. Below it, they queue as proposals for review.</p>
+              <label>Skill: minimum rounds
+                <input type="number" id="brainSkillMinRounds" class="settings-input settings-input--narrow" min="1" max="10" value="2">
+              </label>
+              <label>Skill: minimum tool calls
+                <input type="number" id="brainSkillMinToolCalls" class="settings-input settings-input--narrow" min="1" max="20" value="2">
+              </label>
+              <label>Skill: sessions before proposing
+                <input type="number" id="brainSkillMinOccurrences" class="settings-input settings-input--narrow" min="1" max="5" value="2">
+              </label>
+              <p class="brain-muted">A skill is only proposed once this many separate sessions hit the same kind of problem. Set to 1 to propose from a single session.</p>
               <div class="brain-field-row">
                 <button type="button" class="brain-action-btn is-primary" id="brainSynthesisSave">Save synthesis settings</button>
               </div>

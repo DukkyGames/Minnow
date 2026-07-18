@@ -318,32 +318,74 @@ export async function indexSingleFile(db, repo, relFile, absFile, globalByFileLi
   return { file: relFile, symbols: flat.length, edges: edgeCount };
 }
 
+/** Max symbols to grep for usage_count augmentation per reindex pass. */
+const USAGE_AUGMENT_MAX_SYMBOLS = 1500;
+/** Concurrent ripgrep workers during usage_count augmentation. */
+const USAGE_AUGMENT_CONCURRENCY = 8;
+/** Wall-clock budget for usage_count augmentation (ms). */
+const USAGE_AUGMENT_TIME_BUDGET_MS = 30_000;
+
+/**
+ * Run async work over items with bounded concurrency.
+ * @template T
+ * @param {T[]} items
+ * @param {number} concurrency
+ * @param {(item: T) => Promise<void>} fn
+ * @param {() => boolean} shouldContinue
+ */
+async function runBoundedPool(items, concurrency, fn, shouldContinue) {
+  let nextIdx = 0;
+  async function worker() {
+    while (nextIdx < items.length && shouldContinue()) {
+      const idx = nextIdx++;
+      await fn(items[idx]);
+    }
+  }
+  const workers = Math.min(concurrency, items.length);
+  await Promise.all(Array.from({ length: workers }, () => worker()));
+}
+
 /**
  * Augment usage_count via ripgrep name hits (ranking input).
+ * Bounded by symbol cap, concurrency pool, and wall-clock budget.
  * @param {import('better-sqlite3').Database} db
  * @param {string} repo
  * @param {ReturnType<typeof getWorkspaceRoot>} root
  */
 async function augmentUsageCounts(db, repo, root) {
   const symbols = db
-    .prepare('SELECT id, name FROM symbols WHERE repo = ?')
-    .all(repo);
+    .prepare(
+      `SELECT id, name FROM symbols WHERE repo = ?
+       ORDER BY usage_count DESC, pagerank DESC
+       LIMIT ?`,
+    )
+    .all(repo, USAGE_AUGMENT_MAX_SYMBOLS);
   const deps = {
     resolveSafePath: (p) => path.resolve(root, p),
     toRelativePath: (abs) => path.relative(root, abs).replace(/\\/g, '/'),
     getWorkspaceRoot: () => root,
   };
-  for (const sym of symbols) {
-    const name = String(sym.name ?? '');
-    if (!name || name.length < 3) continue;
-    const out = await runGrepSearch(
-      { pattern: `\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, head_limit: 50, literal: false },
-      deps,
-    );
-    if (out.startsWith('Error:')) continue;
-    const count = out.split(/\r?\n/).filter((line) => /:\d+:/.test(line)).length;
-    db.prepare('UPDATE symbols SET usage_count = ? WHERE id = ?').run(count, sym.id);
-  }
+  const started = Date.now();
+  const shouldContinue = () => Date.now() - started < USAGE_AUGMENT_TIME_BUDGET_MS;
+  const updateStmt = db.prepare('UPDATE symbols SET usage_count = ? WHERE id = ?');
+
+  await runBoundedPool(
+    symbols,
+    USAGE_AUGMENT_CONCURRENCY,
+    async (sym) => {
+      if (!shouldContinue()) return;
+      const name = String(sym.name ?? '');
+      if (!name || name.length < 3) return;
+      const out = await runGrepSearch(
+        { pattern: `\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, head_limit: 50, literal: false },
+        deps,
+      );
+      if (out.startsWith('Error:')) return;
+      const count = out.split(/\r?\n/).filter((line) => /:\d+:/.test(line)).length;
+      updateStmt.run(count, sym.id);
+    },
+    shouldContinue,
+  );
 }
 
 /**

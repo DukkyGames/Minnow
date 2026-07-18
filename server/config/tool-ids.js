@@ -69,6 +69,7 @@ export const ALL_TOOL_IDS = [
   'git_add',
   'git_commit',
   'git_checkout',
+  'git_branch',
   'execute_command',
   'read_command_log',
   'list_running_commands',

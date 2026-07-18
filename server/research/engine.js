@@ -118,6 +118,7 @@ export function normalizeResearchScope(value) {
  * @property {string} providerId
  * @property {string} model
  * @property {ResearchScope} [scope]
+ * @property {string} [workspaceRoot]
  * @property {number} [maxRounds]
  * @property {number} [maxTimeSeconds]
  * @property {number} [maxUrlsPerRound]
@@ -145,6 +146,8 @@ export class DeepResearcher {
     this.searchProviderOverride = options.searchProvider?.trim() ?? '';
     this.category = normalizeResearchCategory(options.category?.trim() ?? '');
     this.scope = normalizeResearchScope(options.scope);
+    this.workspaceRoot =
+      typeof options.workspaceRoot === 'string' ? options.workspaceRoot.trim() : '';
     this.maxRounds =
       options.maxRounds && options.maxRounds > 0 ? options.maxRounds : AUTO_MAX_ROUNDS;
     this.maxTime = options.maxTimeSeconds ?? 300;
@@ -828,7 +831,10 @@ export class DeepResearcher {
 
     const searchResults = await Promise.all(
       queries.map((q) =>
-        engineDeps.searchCodebase(q, { maxFiles: this.maxUrlsPerRound }).catch(() => []),
+        engineDeps.searchCodebase(q, {
+          maxFiles: this.maxUrlsPerRound,
+          ...(this.workspaceRoot ? { root: this.workspaceRoot } : {}),
+        }).catch(() => []),
       ),
     );
 

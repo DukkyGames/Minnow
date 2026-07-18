@@ -52,7 +52,9 @@ export async function runEmailPollTick() {
           synced += 1;
 
           const incoming = Array.isArray(result.messages) ? result.messages : [];
-          await runAgentHooksAfterFolderSync(account.id, folder, incoming, prevHighest);
+          await runAgentHooksAfterFolderSync(account.id, folder, incoming, prevHighest, {
+            background: true,
+          });
         } catch (err) {
           console.warn(
             `[email] poll failed for ${account.id}/${folder}:`,

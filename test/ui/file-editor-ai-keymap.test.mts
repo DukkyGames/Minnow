@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 import { indentMore } from '@codemirror/commands';
 import { EditorState } from '@codemirror/state';
@@ -18,6 +18,8 @@ const DEFAULT_EDITOR_AI_COMPLETION = {
   modelId: '',
   includeImportContext: true,
   includeLspHover: true,
+  includeLspContext: true,
+  contextBudgetChars: 4000,
   useNativeFim: true,
   enableCompletionCache: true,
 };
@@ -43,12 +45,8 @@ import {
 } from '../../src/ui/editor-ai-completion-cache.ts';
 import {
   buildEditorAiCompletionMessages,
-  buildQwenFimPrompt,
-  isQwenFimModel,
   nextPartialGhostChunk,
-  QWEN_FIM_MIDDLE,
-  QWEN_FIM_PREFIX,
-  QWEN_FIM_SUFFIX,
+  PROMPT_VERSION,
 } from '../../src/ui/editor-ai-completion-prompt.ts';
 import {
   getCachedEditorAiCompletion,
@@ -59,8 +57,11 @@ import { applyReplacementInRange } from '../../src/ui/editor-quick-edit/diff-app
 import { buildFileViewerContextMenuItems } from '../../src/ui/editor-quick-edit/context-menu.ts';
 import { formatSelectionFence } from '../../src/ui/editor-quick-edit/selection-fence.ts';
 
+let domWindow: Window | null = null;
+
 function setupDom(): void {
   const window = new Window();
+  domWindow = window;
   globalThis.window = window;
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
@@ -68,6 +69,12 @@ function setupDom(): void {
   globalThis.MutationObserver = window.MutationObserver;
   globalThis.ResizeObserver = window.ResizeObserver;
 }
+
+afterEach(() => {
+  domWindow?.close();
+  domWindow = null;
+  document.body.innerHTML = '';
+});
 
 function mountEditorWithAi(doc: string): EditorView {
   const parent = document.createElement('div');
@@ -178,15 +185,11 @@ describe('file editor AI keymap', () => {
     assert.equal(view.state.doc.toString(), 'abc ');
     assert.equal(hasEditorAiGhost(view.state), true);
   });
+
 });
 
-describe('editor AI prompt FIM + cache', () => {
-  test('isQwenFimModel detects Qwen Coder ids', () => {
-    assert.equal(isQwenFimModel('qwen2.5-coder-7b'), true);
-    assert.equal(isQwenFimModel('llama-3'), false);
-  });
-
-  test('buildEditorAiCompletionMessages uses native FIM for Qwen', () => {
+describe('editor AI prompt + cache (Phase 6)', () => {
+  test('buildEditorAiCompletionMessages always uses chat messages', () => {
     const doc = 'import x from "y";\nconst a = ';
     const state = EditorState.create({ doc });
     const pos = doc.length;
@@ -197,13 +200,12 @@ describe('editor AI prompt FIM + cache', () => {
       config: DEFAULT_EDITOR_AI_COMPLETION,
       modelId: 'qwen2.5-coder-7b',
     });
-    assert.equal(result.useNativeFim, true);
-    assert.match(result.fimPrompt ?? '', new RegExp(`${QWEN_FIM_PREFIX}.+${QWEN_FIM_SUFFIX}`, 's'));
-    assert.equal(result.fimPrompt?.endsWith(QWEN_FIM_MIDDLE), true);
-    assert.equal(result.messages.length, 0);
+    assert.equal(result.messages.length, 2);
+    assert.match(String(result.messages[1].content), /<CURSOR>/);
+    assert.match(String(result.messages[1].content), /Insertion constraints:/);
   });
 
-  test('buildEditorAiCompletionMessages falls back to chat for non-Qwen', () => {
+  test('buildEditorAiCompletionMessages includes structured sections for non-Qwen', () => {
     const doc = 'const a = ';
     const state = EditorState.create({ doc });
     const result = buildEditorAiCompletionMessages({
@@ -213,13 +215,8 @@ describe('editor AI prompt FIM + cache', () => {
       config: DEFAULT_EDITOR_AI_COMPLETION,
       modelId: 'llama-3',
     });
-    assert.equal(result.useNativeFim, false);
     assert.equal(result.messages.length, 2);
     assert.match(String(result.messages[1].content), /<CURSOR>/);
-  });
-
-  test('buildQwenFimPrompt wraps prefix and suffix', () => {
-    assert.equal(buildQwenFimPrompt('pre', 'suf'), `${QWEN_FIM_PREFIX}pre${QWEN_FIM_SUFFIX}suf${QWEN_FIM_MIDDLE}`);
   });
 
   test('nextPartialGhostChunk accepts word or line', () => {
@@ -227,26 +224,56 @@ describe('editor AI prompt FIM + cache', () => {
     assert.equal(nextPartialGhostChunk('\nline'), '\n');
   });
 
-  test('completion cache key uses prefix tail and suffix head', () => {
+  test('completion cache key isolates provider and prompt version', () => {
+    const config = DEFAULT_EDITOR_AI_COMPLETION;
     const prefixTail = `${'a'.repeat(508)}TAIL`;
     const suffixHead = `HEAD${'b'.repeat(508)}`;
-    const key = buildCompletionCacheKey('src/a.ts', prefixTail, suffixHead);
-    const keySame = buildCompletionCacheKey(
-      'src/a.ts',
-      `ignored${prefixTail}`,
-      `${suffixHead}ignored`,
-    );
+    const key = buildCompletionCacheKey({
+      providerId: 'p1',
+      modelId: 'm1',
+      promptVersion: PROMPT_VERSION,
+      config,
+      filePath: 'src/a.ts',
+      prefix: prefixTail,
+      suffix: suffixHead,
+    });
+    const keySame = buildCompletionCacheKey({
+      providerId: 'p1',
+      modelId: 'm1',
+      promptVersion: PROMPT_VERSION,
+      config,
+      filePath: 'src/a.ts',
+      prefix: `ignored${prefixTail}`,
+      suffix: `${suffixHead}ignored`,
+    });
     assert.equal(key, keySame);
-    assert.notEqual(key, buildCompletionCacheKey('src/b.ts', prefixTail, suffixHead));
+    assert.notEqual(
+      key,
+      buildCompletionCacheKey({
+        providerId: 'p2',
+        modelId: 'm1',
+        config,
+        filePath: 'src/a.ts',
+        prefix: prefixTail,
+        suffix: suffixHead,
+      }),
+    );
     assert.equal(typeof hashCompletionContext('test'), 'string');
   });
 
-  test('completion cache stores and reads sanitized text', () => {
+  test('completion cache stores and reads validated text', () => {
     resetEditorAiCompletionCache();
-    setCachedEditorAiCompletion('f.ts', 'pre', 'suf', 'done');
-    assert.equal(getCachedEditorAiCompletion('f.ts', 'pre', 'suf'), 'done');
+    const binding = { providerId: 'p', modelId: 'm' };
+    setCachedEditorAiCompletion(binding, DEFAULT_EDITOR_AI_COMPLETION, 'f.ts', 'pre', 'suf', 'done');
+    assert.equal(
+      getCachedEditorAiCompletion(binding, DEFAULT_EDITOR_AI_COMPLETION, 'f.ts', 'pre', 'suf'),
+      'done',
+    );
     resetEditorAiCompletionCache();
-    assert.equal(getCachedEditorAiCompletion('f.ts', 'pre', 'suf'), undefined);
+    assert.equal(
+      getCachedEditorAiCompletion(binding, DEFAULT_EDITOR_AI_COMPLETION, 'f.ts', 'pre', 'suf'),
+      undefined,
+    );
   });
 });
 

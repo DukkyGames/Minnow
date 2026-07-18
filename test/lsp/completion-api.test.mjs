@@ -19,7 +19,17 @@ const PROJECT_ROOT = path.resolve(__dirname, '../..');
 const SAMPLE_PATH = 'test/fixtures/sample.fake';
 const SAMPLE_TEXT = 'let x = 1\n';
 
-const EXPECTED_ITEMS_JSON = `{"items":[{"label":"fakeKeyword","insertText":"fakeKeyword","kind":14,"detail":"Fake LSP keyword"},{"label":"console.log","insertText":"console.log($0)","kind":3,"detail":"Log to console"},{"label":"importHelper","insertText":"importHelper","kind":3,"detail":"Needs resolve"},{"label":"rangeEdit","insertText":"edited","kind":14},{"label":"insertReplace","insertText":"replaced","kind":14}]}`;
+const EXPECTED_ITEM_LABELS = [
+  'rankedFirst',
+  'rankedSecond',
+  'console.log',
+  'fakeKeyword',
+  'importHelper',
+  'insertReplace',
+  'overload',
+  'overload',
+  'rangeEdit',
+];
 
 function httpRequest(baseUrl, method, pathname, body) {
   return new Promise((resolve, reject) => {
@@ -129,18 +139,20 @@ describe('LSP completion API', () => {
       path: SAMPLE_PATH,
       line: 0,
       character: 4,
+      text: SAMPLE_TEXT,
     });
     assert.equal(completion.status, 200);
 
-    const normalized = JSON.stringify({
-      items: completion.json.items.map((item) => ({
-        label: item.label,
-        insertText: item.insertText,
-        kind: item.kind,
-        detail: item.detail,
-      })),
-    });
-    assert.equal(normalized, EXPECTED_ITEMS_JSON);
+    const labels = completion.json.items.map((item) => item.label);
+    assert.deepEqual(labels, EXPECTED_ITEM_LABELS);
+    assert.equal(completion.json.isIncomplete, false);
+    assert.ok(Array.isArray(completion.json.triggerCharacters));
+    assert.ok(completion.json.triggerCharacters.includes('.'));
+
+    const rankedFirst = completion.json.items.find((i) => i.label === 'rankedFirst');
+    assert.equal(rankedFirst.sortText, '0000');
+    assert.equal(rankedFirst.preselect, true);
+    assert.deepEqual(rankedFirst.commitCharacters, [';', '.']);
 
     const close = await httpRequest(baseUrl, 'POST', '/api/lsp/notify', {
       path: SAMPLE_PATH,
@@ -148,6 +160,22 @@ describe('LSP completion API', () => {
     });
     assert.equal(close.status, 200);
     assert.equal(close.json.ok, true);
+  });
+
+  test('completion forwards LSP context and returns trigger item', async () => {
+    if (process.env.MINNOW_LSP_ENABLED === 'false') {
+      return;
+    }
+
+    const completion = await httpRequest(baseUrl, 'POST', '/api/lsp/completion', {
+      path: SAMPLE_PATH,
+      line: 0,
+      character: 8,
+      text: 'console.',
+      context: { triggerKind: 2, triggerCharacter: '.' },
+    });
+    assert.equal(completion.status, 200);
+    assert.ok(completion.json.items.some((i) => i.label === 'triggerDot'));
   });
 
   test('notify rejects invalid event', async () => {

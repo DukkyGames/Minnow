@@ -217,7 +217,8 @@
 .mn-os-dock-shell {
   position: absolute;
   inset: 0;
-  z-index: 35;
+  /* Match #osDockLayer — stay below popout windows and side panels. */
+  z-index: 12;
   pointer-events: none;
 }
 
@@ -468,7 +469,13 @@
   --os-dock-panel-inset: var(--os-dock-reveal-height, 22px);
   --os-dock-block-height: 6.25rem;
   --os-composer-dock-gap: 10px;
+  /* Column gap between research toolbar and composer in .mn-os-composer-dock */
+  --os-composer-dock-flex-gap: 8px;
   --os-composer-row-height: 4.75rem;
+  /* Model trigger row above the input (min-height + margin-bottom) */
+  --os-composer-model-row-height: 1.5rem;
+  /* Vertical margins on .mn-os-desktop-input-row (15px top + 15px bottom) */
+  --os-composer-input-margin-block: 1.875rem;
   --os-composer-dock-bottom: calc(
     var(--os-dock-panel-inset) + var(--os-dock-block-height) + var(--os-composer-dock-gap) +
       var(--os-safe-bottom, env(safe-area-inset-bottom, 0px))
@@ -483,8 +490,12 @@
   --os-chat-message-gap: 14px;
   /* Research dock adds Library row above the composer input */
   --os-research-toolbar-row: 1.75rem;
+  /* Full dock stack: toolbar + composer model row + input (incl. margins) + breathing room */
   --os-research-composer-reserve: calc(
-    var(--os-chat-composer-reserve) + var(--os-research-toolbar-row) + var(--os-composer-dock-gap)
+    var(--os-composer-dock-bottom) + var(--os-research-toolbar-row) +
+      var(--os-composer-dock-flex-gap) + var(--os-composer-model-row-height) +
+      var(--os-composer-row-height) + var(--os-composer-input-margin-block) +
+      var(--os-composer-dock-gap)
   );
 }
 
@@ -549,9 +560,9 @@
   transition: opacity 280ms var(--os-ease-out);
 }
 
-/* Expanded session drawer should sit above floating windows. */
+/* Expanded session drawer stays with desktop chat chrome (below windows + side panels). */
 .mn-os-chat-rail.is-expanded {
-  z-index: 20;
+  z-index: 12;
 }
 
 #osDesktopLayer.is-chat-active .mn-os-chat-rail {
@@ -710,7 +721,7 @@
   transition: opacity 280ms var(--os-ease-out);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--os-composer-dock-flex-gap);
 }
 
 .mn-os-composer-research-actions {
@@ -737,7 +748,7 @@
 
 #osDesktopLayer.is-research-mode .mn-os-composer-dock {
   opacity: 1;
-  z-index: 40;
+  z-index: 12;
 }
 
 .mn-os-desktop-composer {
@@ -1075,6 +1086,7 @@
   flex: 1 1 auto;
   width: 100%;
   max-width: 100%;
+  max-height: 100%;
   padding: 0 8px;
   justify-content: flex-start;
   align-items: center;
@@ -1152,6 +1164,11 @@
   gap: 8px;
 }
 
+/* `display: inline-flex` overrides the native [hidden] rule */
+.mn-os-research-toolbar-scope[hidden] {
+  display: none !important;
+}
+
 .mn-os-research-toolbar-scope__label {
   font-size: 11px;
   letter-spacing: 0.06em;
@@ -1166,6 +1183,17 @@
   background: color-mix(in srgb, var(--os-surface-2) 88%, transparent);
   color: var(--os-text);
   font-size: 12px;
+}
+
+.mn-os-research-workspace-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mn-os-research-workspace-row .mn-os-research-toolbar-select {
+  max-width: min(180px, 32vw);
 }
 
 .mn-os-research-card {
@@ -1331,6 +1359,56 @@
 
 #desktopResearchProgressMount.mn-os-research-progress .dr-slabel.did {
   color: var(--os-text-dim);
+}
+
+/* Progress card fills the stage; the live source feed scrolls inside the card */
+#osDesktopLayer.is-research-active #desktopResearchProgressMount:has(.dr-prog) {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#osDesktopLayer.is-research-active .mn-os-research-progress-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#osDesktopLayer.is-research-active #desktopResearchProgressMount .dr-prog {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#osDesktopLayer.is-research-active #desktopResearchProgressMount .dr-prog-head,
+#osDesktopLayer.is-research-active #desktopResearchProgressMount .dr-stepper,
+#osDesktopLayer.is-research-active #desktopResearchProgressMount .dr-stepper-labels,
+#osDesktopLayer.is-research-active #desktopResearchProgressMount .dr-current,
+#osDesktopLayer.is-research-active #desktopResearchProgressMount .dr-workspace {
+  flex-shrink: 0;
+}
+
+#osDesktopLayer.is-research-active #desktopResearchProgressMount .dr-workspace {
+  flex: 1 1 auto;
+  min-height: 120px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+#osDesktopLayer.is-research-active #desktopResearchProgressMount .dr-feed {
+  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 #osDesktopLayer.is-research-active .mn-os-desk-stage {
@@ -1565,7 +1643,7 @@
 
 #osDesktopLayer.is-experts-mode .mn-os-composer-dock {
   opacity: 1;
-  z-index: 40;
+  z-index: 12;
 }
 
 #desktopExpertsMount .experts-page {
@@ -1759,6 +1837,10 @@
       max(10px, env(safe-area-inset-right, 0px));
   }
 
+  #osDesktopLayer.is-research-active .mn-os-desk-stage {
+    padding-bottom: var(--os-research-composer-reserve);
+  }
+
   .mn-os-greet-time {
     font-size: 11px;
     margin-bottom: 12px;
@@ -1890,7 +1972,7 @@
     display: none;
     position: fixed;
     inset: 0;
-    z-index: 17;
+    z-index: 12;
     margin: 0;
     padding: 0;
     border: none;
@@ -1914,7 +1996,7 @@
     top: calc(var(--os-menubar-h) + env(safe-area-inset-top, 0px));
     left: 0;
     bottom: 0;
-    z-index: 18;
+    z-index: 12;
     width: min(280px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 20px)) !important;
     max-width: 100%;
     padding-left: env(safe-area-inset-left, 0px);

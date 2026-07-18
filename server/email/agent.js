@@ -23,6 +23,7 @@ import {
 import { triageMessage } from './triage.js';
 import { emitEmailEvent } from './events.js';
 import { evaluateAutomationsForMessage } from './automations.js';
+import { shouldDeferBackgroundEmailTriage } from './background-triage-guard.js';
 
 /** Max messages triaged/varianted per folder sync (newest first). */
 export const MAX_AGENT_MESSAGES_PER_SYNC = 8;
@@ -338,13 +339,21 @@ export function filterMessagesForAgentProcessing(
  * @param {string} folder
  * @param {Array<Record<string, unknown>>} incoming
  * @param {number} prevHighestUid
+ * @param {{ background?: boolean }} [options]
  */
 export async function runAgentHooksAfterFolderSync(
   accountId,
   folder,
   incoming,
   prevHighestUid,
+  options = {},
 ) {
+  if (options.background && shouldDeferBackgroundEmailTriage().defer) {
+    await buildInboxSummary(accountId);
+    emitEmailEvent('summary_updated', { accountId });
+    return { processed: 0, deferred: true };
+  }
+
   if (!Array.isArray(incoming) || incoming.length === 0) {
     await buildInboxSummary(accountId);
     emitEmailEvent('summary_updated', { accountId });
@@ -382,7 +391,7 @@ export async function runAgentHooksAfterFolderSync(
   );
 
   if (toProcess.length > 0) {
-    return onNewMessages(accountId, toProcess, account);
+    return onNewMessages(accountId, toProcess, account, options);
   }
 
   await buildInboxSummary(accountId);
@@ -395,10 +404,15 @@ export async function runAgentHooksAfterFolderSync(
  * @param {string} accountId
  * @param {Array<Record<string, unknown>>} newMessages
  * @param {import('./accounts.js').EmailAccount} account
+ * @param {{ background?: boolean }} [options]
  */
-export async function onNewMessages(accountId, newMessages, account) {
+export async function onNewMessages(accountId, newMessages, account, options = {}) {
   if (!Array.isArray(newMessages) || newMessages.length === 0) {
     return { processed: 0 };
+  }
+
+  if (options.background && shouldDeferBackgroundEmailTriage().defer) {
+    return { processed: 0, deferred: true };
   }
 
   const autoTriage = account.autoTriage !== false;
@@ -407,6 +421,10 @@ export async function onNewMessages(accountId, newMessages, account) {
   let processed = 0;
 
   for (const row of batch) {
+    if (options.background && shouldDeferBackgroundEmailTriage().defer) {
+      break;
+    }
+
     const messageKey = String(row.id ?? `${row.folder}:${row.uid}`);
     try {
       if (autoTriage) {

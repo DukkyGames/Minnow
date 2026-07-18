@@ -2332,6 +2332,32 @@
     ]
   },
   {
+    "key": "integrations.tools.permission.git_branch",
+    "label": "Tool permission: git_branch",
+    "description": "Permission mode for the git_branch tool (off, ask, or full).",
+    "keywords": [
+      "git_branch",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.git_branch",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
     "key": "integrations.tools.permission.execute_command",
     "label": "Tool permission: execute_command",
     "description": "Permission mode for the execute_command tool (off, ask, or full).",

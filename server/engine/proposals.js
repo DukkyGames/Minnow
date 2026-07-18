@@ -19,6 +19,7 @@ import { randomUUID } from 'node:crypto';
  * @property {string} body
  * @property {string[]} tags
  * @property {MemoryCategory} category
+ * @property {'personal' | 'workspace'} scope
  * @property {number} confidence
  * @property {string} rationale
  * @property {ProposalStatus} status
@@ -29,13 +30,22 @@ import { randomUUID } from 'node:crypto';
  */
 
 const VALID_CATEGORIES = new Set([
+  // Personal track.
   'identity',
   'preference',
   'fact',
   'contact',
   'project',
   'goal',
+  // Project track — knowledge about the codebase being worked on.
+  'decision',
+  'gotcha',
+  'convention',
+  'environment',
+  'reference',
 ]);
+
+const VALID_SCOPES = new Set(['personal', 'workspace']);
 
 const VALID_STATUSES = new Set(['pending', 'accepted', 'rejected']);
 
@@ -133,6 +143,9 @@ export function createProposals(getPaths, deps) {
       body: String(input.body ?? '').slice(0, 32_000),
       tags,
       category,
+      // Carried through so accepting a workspace-scoped proposal writes it into
+      // the workspace pages, not the shared facts/ tree.
+      scope: VALID_SCOPES.has(input.scope) ? input.scope : 'personal',
       confidence,
       rationale: String(input.rationale ?? '').slice(0, 500),
       status: 'pending',

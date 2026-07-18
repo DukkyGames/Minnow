@@ -14,6 +14,9 @@ import {
 } from './store.js';
 import { loadSynthesisConfig, resolveSynthesisModel } from './synthesis-config.js';
 import { detectAndApplyAnchorDrift } from './code/anchors.js';
+import { loadAllPagesWithBodies } from './retrieve.js';
+import { scorePagesByCosine, titleKeywords } from './synthesis.js';
+import { normalizeLinkingConfig } from './linking-config.js';
 
 const LINT_SYSTEM_PROMPT = `You review a personal wiki for contradictions and broken wikilinks.
 
@@ -60,6 +63,104 @@ export function findMissingLinkTargets(pages) {
     }
   }
   return missing;
+}
+
+/**
+ * Re-score every existing `similarTo` edge against the current linking floors and
+ * strip the ones that no longer qualify.
+ *
+ * Cleanup for wikis written before the floors existed, when linking took the top
+ * three pages with no minimum score at all. Pages marked `stale` are left alone:
+ * their `similarTo` is a supersede pointer written by retirement, not a
+ * similarity edge, and dropping it would lose the trail to the newer page.
+ *
+ * @param {{ dryRun?: boolean }} [opts] defaults to a dry run — pass `dryRun: false` to write
+ * @returns {Promise<{ generatedAt: string, dryRun: boolean, pagesScanned: number, edgesScanned: number, removals: Array<{ path: string, dropped: string[], kept: string[] }>, applied: string[] }>}
+ */
+export async function pruneWeakSimilarLinks(opts = {}) {
+  const dryRun = opts.dryRun !== false;
+  const brainConfig = await loadBrainConfig();
+  const { minSharedTitleKeywords, minCosine, maxLinks } = normalizeLinkingConfig(
+    brainConfig.linking,
+  );
+
+  const pages = await loadAllPagesWithBodies();
+  /** @type {Array<{ path: string, dropped: string[], kept: string[] }>} */
+  const removals = [];
+  /** @type {string[]} */
+  const applied = [];
+  let edgesScanned = 0;
+
+  for (const row of pages) {
+    const relPath = row.meta?.path;
+    const similarTo = Array.isArray(row.meta?.similarTo) ? row.meta.similarTo : [];
+    if (!relPath || similarTo.length === 0) continue;
+    if (row.meta.status === 'stale') continue;
+
+    edgesScanned += similarTo.length;
+
+    const targets = pages.filter(
+      (p) => p.meta?.path && p.meta.path !== relPath && similarTo.includes(p.meta.path),
+    );
+    const cosines = await scorePagesByCosine(
+      `${row.meta.title ?? ''} ${row.body ?? ''}`.trim(),
+      targets,
+      brainConfig,
+    );
+
+    const kNew = titleKeywords(row.meta.title);
+    /** @type {Array<{ path: string, score: number }>} */
+    const qualified = [];
+    /** @type {string[]} */
+    const dropped = [];
+
+    for (const target of similarTo) {
+      const match = targets.find((p) => p.meta.path === target);
+      if (!match) {
+        // Points at a page that no longer exists (or at itself).
+        dropped.push(target);
+        continue;
+      }
+      const kOld = titleKeywords(match.meta.title);
+      let shared = 0;
+      for (const k of kNew) if (kOld.has(k)) shared++;
+      const cosine = cosines.get(match.meta.id) ?? 0;
+      if (shared < minSharedTitleKeywords && cosine < minCosine) {
+        dropped.push(target);
+        continue;
+      }
+      qualified.push({ path: target, score: shared + 2 * cosine });
+    }
+
+    const kept = qualified
+      .sort((a, b) => b.score - a.score)
+      .slice(0, maxLinks)
+      .map((entry) => entry.path);
+    for (const entry of qualified) {
+      if (!kept.includes(entry.path)) dropped.push(entry.path);
+    }
+
+    if (dropped.length === 0) continue;
+    removals.push({ path: relPath, dropped, kept });
+
+    if (!dryRun) {
+      try {
+        await updatePage(relPath, { similarTo: kept });
+        applied.push(relPath);
+      } catch {
+        /* best-effort */
+      }
+    }
+  }
+
+  return {
+    generatedAt: new Date().toISOString(),
+    dryRun,
+    pagesScanned: pages.length,
+    edgesScanned,
+    removals,
+    applied,
+  };
 }
 
 /**
