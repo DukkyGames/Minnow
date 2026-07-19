@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from './app-dialog';
 /**
  * Confirm checkout when the working tree has uncommitted changes.
  */
@@ -16,5 +17,5 @@ export async function confirmDirtyCheckout(cwd?: string): Promise<boolean> {
     0;
 
   if (!dirty) return true;
-  return window.confirm('Working tree has uncommitted changes. Checkout anyway?');
+  return await appConfirm('Working tree has uncommitted changes. Checkout anyway?');
 }

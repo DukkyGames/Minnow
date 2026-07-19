@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from '../app-dialog';
 /**
  * Email inbox + thread panel for the MinnowOS Email app.
  */
@@ -80,7 +81,7 @@ async function signOutEmailAccount(
   accountCount: number,
   options: EmailPanelOptions,
 ): Promise<boolean> {
-  if (!window.confirm(signOutConfirmMessage(account, accountCount))) {
+  if (!await appConfirm(signOutConfirmMessage(account, accountCount))) {
     return false;
   }
   try {

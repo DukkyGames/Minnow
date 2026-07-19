@@ -54,3 +54,42 @@ export function resolvePanelBrowseRunTargetSeed(
     gitBranch: match?.branch,
   };
 }
+
+/**
+ * Pick a worktree path that exists in `worktrees`, falling back to the workspace root entry.
+ */
+export function resolveKnownWorktreePath(
+  worktrees: PanelWorktreeBranchEntry[],
+  desiredPath: string | undefined,
+  workspaceRoot: string,
+): string {
+  const ws = workspaceRoot.trim();
+  const desired = (desiredPath?.trim() || ws).trim();
+  if (!desired) return worktrees[0]?.path ?? '';
+
+  const exact = worktrees.find((wt) => panelPathsEqual(wt.path, desired));
+  if (exact) return exact.path;
+
+  const main = worktrees.find((wt) => panelPathsEqual(wt.path, ws));
+  if (main) return main.path;
+
+  return worktrees[0]?.path ?? ws;
+}
+
+/**
+ * Reset panel cwd when it no longer appears in the worktree list (e.g. after removal).
+ */
+export function normalizePanelCwdAfterWorktreeListChange(
+  panelCwd: string | undefined,
+  worktrees: PanelWorktreeBranchEntry[],
+  workspaceRoot: string,
+): string | undefined {
+  const ws = workspaceRoot.trim();
+  if (!ws) return panelCwd;
+  const desired = panelCwd?.trim();
+  if (desired && worktrees.some((wt) => panelPathsEqual(wt.path, desired))) {
+    return panelCwd;
+  }
+  const resolved = resolveKnownWorktreePath(worktrees, ws, ws);
+  return panelPathsEqual(resolved, ws) ? undefined : resolved;
+}

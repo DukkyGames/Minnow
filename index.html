@@ -2054,6 +2054,15 @@
     <div class="chat-sidebar-header">
       <span class="chat-sidebar-title">Chats</span>
       <div class="chat-sidebar-header-actions">
+        <!-- Keep the sidebar toggle nearest the sidebar edge for predictable navigation. -->
+        <button
+          class="icon-btn"
+          type="button"
+          id="btnSidebarCollapse"
+          aria-label="Collapse sidebar"
+        >
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
         <button
           class="icon-btn"
           type="button"
@@ -2063,14 +2072,6 @@
           aria-expanded="false"
         >
           <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-        </button>
-        <button
-          class="icon-btn"
-          type="button"
-          id="btnSidebarCollapse"
-          aria-label="Collapse sidebar"
-        >
-          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
         <button
           type="button"

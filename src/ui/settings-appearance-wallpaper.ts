@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from './app-dialog';
 /**
  * Settings → Appearance: desktop wallpaper catalog and custom image upload.
  */
@@ -151,7 +152,7 @@ export function appendAppearanceWallpaper(
       refreshActive();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      window.alert(msg);
+      await appAlert(msg);
     }
   });
   uploadLabel.appendChild(fileInput);

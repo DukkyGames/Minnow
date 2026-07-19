@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from './app-dialog';
 /**
  * Settings → Evals: packs, suite composer, results leaderboard.
  */
@@ -282,7 +283,7 @@ async function renderRunPanel(body: HTMLElement): Promise<void> {
       const pack = packs.find((p) => p.id === selectedPackId);
       const cellEstimate = (pack?.taskCount ?? 0) * selectedTargets.length;
       if (cellEstimate > 20) {
-        const ok = window.confirm(
+        const ok = await appConfirm(
           `This suite will run ${cellEstimate} cells (tasks × models). Continue?`,
         );
         if (!ok) return;

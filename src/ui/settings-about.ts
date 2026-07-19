@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from './app-dialog';
 /**
  * Settings → About — local build info, health probes, and diagnostics viewer.
  */
@@ -275,7 +276,7 @@ export async function renderAboutSettingsSection(): Promise<void> {
         onClick: () => {
           void (async () => {
             if (
-              !window.confirm(
+              !await appConfirm(
                 'Clear all captured diagnostic errors and log tail?\n\nThis deletes local JSONL files under ~/.minnow/logs/ and cannot be undone.',
               )
             ) {

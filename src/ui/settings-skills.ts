@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from './app-dialog';
 /**
  * Skills settings section: catalog list, enable toggles, custom skill authoring.
  */
@@ -204,14 +205,14 @@ function buildCavemanDefaultsPanel(): HTMLDivElement {
   return panel;
 }
 
-function promptNewSkillId(): string | null {
-  const raw = window.prompt(
+async function promptNewSkillId(): Promise<string | null> {
+  const raw = await appPrompt(
     'Custom skill id (lowercase letters, numbers, hyphens):\nExample: my-workflow',
   );
   if (raw === null) return null;
   const id = raw.trim().toLowerCase();
   if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) {
-    window.alert('Invalid id. Use lowercase letters, numbers, and hyphens only.');
+    await appAlert('Invalid id. Use lowercase letters, numbers, and hyphens only.');
     return null;
   }
   return id;
@@ -262,16 +263,19 @@ export async function renderSkillsSettingsSection(mount: HTMLElement): Promise<v
   };
 
   addBtn.addEventListener('click', () => {
-    const id = promptNewSkillId();
-    if (!id) return;
-
-    const labelRaw = window.prompt('Display label (optional):', id
-      .split('-')
-      .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
-      .join(' '));
-    if (labelRaw === null) return;
-
     void (async () => {
+      const id = await promptNewSkillId();
+      if (!id) return;
+
+      const labelRaw = await appPrompt(
+        'Display label (optional):',
+        id
+          .split('-')
+          .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+          .join(' '),
+      );
+      if (labelRaw === null) return;
+
       try {
         await createCustomSkill(id, labelRaw.trim() || undefined);
         setStatus('ok', `Custom skill "${id}" created. Expand to edit SKILL.md.`);

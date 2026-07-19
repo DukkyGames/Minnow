@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from '../app-dialog';
 /**
  * In-app Calendar Settings modal — display prefs, calendar CRUD, and reset.
  */
@@ -206,7 +207,7 @@ export async function openCalendarSettings(options: CalendarSettingsOptions): Pr
         deleteCalBtn.className = 'calendar-btn calendar-btn--danger calendar-btn--sm';
         deleteCalBtn.textContent = 'Delete';
         deleteCalBtn.addEventListener('click', async () => {
-          if (!window.confirm(`Delete calendar "${cal.name}" and all its events?`)) {
+          if (!await appConfirm(`Delete calendar "${cal.name}" and all its events?`)) {
             return;
           }
           try {
@@ -232,7 +233,7 @@ export async function openCalendarSettings(options: CalendarSettingsOptions): Pr
   renderCalendarRows();
 
   addCalendarBtn.addEventListener('click', async () => {
-    const name = window.prompt('New calendar name');
+    const name = await appPrompt('New calendar name');
     if (!name?.trim()) {
       return;
     }
@@ -278,7 +279,7 @@ export async function openCalendarSettings(options: CalendarSettingsOptions): Pr
     if (confirmInput.value.trim() !== 'RESET') {
       return;
     }
-    if (!window.confirm('This cannot be undone. Reset all calendar data?')) {
+    if (!await appConfirm('This cannot be undone. Reset all calendar data?')) {
       return;
     }
     try {

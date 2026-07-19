@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from '../app-dialog';
 /**
  * Calendar event editor — child window for creating and editing events.
  */
@@ -149,7 +150,7 @@ function mountEditor(mount: HTMLElement, options: EventEditorWindowOptions & { e
     deleteBtn.addEventListener('click', () => {
       void (async () => {
         const baseId = event.recurrenceId ?? event.id.split('::')[0];
-        if (!window.confirm('Delete this event?')) {
+        if (!await appConfirm('Delete this event?')) {
           return;
         }
         try {

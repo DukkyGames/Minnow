@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from './app-dialog';
 /**
  * Editable file viewer (CodeMirror 6) with multi-tab strip and per-tab in-memory state.
  */
@@ -1022,7 +1023,7 @@ export async function saveCurrentFile(): Promise<boolean> {
     return true;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    window.alert(message || 'Could not save file');
+    await appAlert(message || 'Could not save file');
     return false;
   } finally {
     isSaving = false;

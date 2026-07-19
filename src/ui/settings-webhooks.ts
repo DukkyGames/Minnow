@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from './app-dialog';
 /**
  * Settings → Webhooks — outgoing HMAC-signed event subscriptions.
  */
@@ -196,8 +197,8 @@ async function renderSubscriptionList(
     const deleteBtn = el('button', 'settings-inline-btn settings-inline-btn--danger', 'Delete');
     deleteBtn.type = 'button';
     deleteBtn.addEventListener('click', () => {
-      if (!window.confirm(`Delete webhook "${sub.label}"?`)) return;
       void (async () => {
+        if (!await appConfirm(`Delete webhook "${sub.label}"?`)) return;
         try {
           const res = await fetch(`/api/webhooks/subscriptions/${sub.id}`, {
             method: 'DELETE',

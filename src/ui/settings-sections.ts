@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from './app-dialog';
 /**
  * Populate full settings page sections from Step 02–18 APIs (no placeholder stubs).
  */
@@ -1716,7 +1717,7 @@ async function renderToolsSection(): Promise<void> {
   const persistFs = async (): Promise<void> => {
     const next = getFsValue() === 'full' ? 'full' : 'workspace';
     if (next === 'full') {
-      const ok = window.confirm(
+      const ok = await appConfirm(
         'Enable full filesystem access?\n\nFile and git tools will be able to resolve paths outside your current workspace. A malicious or mistaken model could read or modify sensitive files anywhere on this computer.\n\nOnly continue if you understand and accept this risk.',
       );
       if (!ok) {
@@ -1761,11 +1762,11 @@ async function renderToolsSection(): Promise<void> {
   await appendPluginToolsToList('settingsToolsList');
 
   allFullBtn.addEventListener('click', () => {
-    const ok = window.confirm(
-      'Grant full permission to all tools?\n\nEvery built-in tool will run without the approval prompt. Paths outside the workspace are blocked when filesystem access is workspace-only.\n\nThis does not change “Filesystem access” below (workspace vs full disk). Only use this if you accept that risk.',
-    );
-    if (!ok) return;
     void (async () => {
+      const ok = await appConfirm(
+        'Grant full permission to all tools?\n\nEvery built-in tool will run without the approval prompt. Paths outside the workspace are blocked when filesystem access is workspace-only.\n\nThis does not change “Filesystem access” below (workspace vs full disk). Only use this if you accept that risk.',
+      );
+      if (!ok) return;
       try {
         await setAllBuiltInToolPermissions('full', list);
         setStatus('ok', 'All tools set to full permission');
@@ -1776,11 +1777,11 @@ async function renderToolsSection(): Promise<void> {
   });
 
   resetDefaultsBtn.addEventListener('click', () => {
-    const ok = window.confirm(
-      'Reset all tool permissions to defaults?\n\nBuilt-in tools will return to factory on/off and ask settings.',
-    );
-    if (!ok) return;
     void (async () => {
+      const ok = await appConfirm(
+        'Reset all tool permissions to defaults?\n\nBuilt-in tools will return to factory on/off and ask settings.',
+      );
+      if (!ok) return;
       try {
         await resetBuiltInToolPermissionsToDefaults(list);
         setStatus('ok', 'Tool permissions reset to defaults');

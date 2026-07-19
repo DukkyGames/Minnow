@@ -376,7 +376,8 @@ export function computeGraphLayout(
           ? lanes.findIndex((l) => l !== null && isMainByHash.get(l.expecting) === true)
           : -1;
       if (mainlineLane >= 0) {
-        // Branch bottoms out on the mainline: bend into main's lane here.
+        // Branch bottoms out on the mainline: bend from the branch dot into
+        // main's lane at dot height (mirror of a merge-row out, joins: true).
         curves.push({
           kind: 'out',
           fromLane: lane,
@@ -549,12 +550,9 @@ function appendCurve(svg: SVGSVGElement, curve: GraphCurve, step: number): void 
     path.setAttribute('d', `M ${from} 0 Q ${from} ${DOT_CENTER_Y} ${to} ${DOT_CENTER_Y}`);
   } else {
     // Leave the dot sideways and straighten downward. When the target lane has
-    // its own rail this row the curve just merges into it; otherwise run a
-    // tail down to the row bottom.
-    path.setAttribute(
-      'd',
-      `M ${from} ${DOT_CENTER_Y} Q ${to} ${DOT_CENTER_Y} ${to} ${DOT_CENTER_Y + CURVE_DROP}`,
-    );
+    // its own rail this row the curve bends into it at dot height only.
+    const endY = curve.joins ? DOT_CENTER_Y : DOT_CENTER_Y + CURVE_DROP;
+    path.setAttribute('d', `M ${from} ${DOT_CENTER_Y} Q ${to} ${DOT_CENTER_Y} ${to} ${endY}`);
     if (!curve.joins) {
       svg.appendChild(svgLine(to, String(DOT_CENTER_Y + CURVE_DROP), '100%', curve.colorIndex));
     }
