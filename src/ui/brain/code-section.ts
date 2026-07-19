@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from '../app-dialog';
 /**
  * Brain app — Code section: repo map, symbol search, index status (MIN-B8).
  */
@@ -532,7 +533,7 @@ async function remapCodeRepo(): Promise<void> {
 /** Drop the SQLite code index for the active workspace. */
 async function runResetIndex(): Promise<void> {
   const btn = document.getElementById('brainCodeResetIndex') as HTMLButtonElement | null;
-  const ok = window.confirm('Reset the code index for this workspace? You can reindex afterward.');
+  const ok = await appConfirm('Reset the code index for this workspace? You can reindex afterward.');
   if (!ok) return;
   if (btn) btn.disabled = true;
   setActionStatus('spin', 'Resetting code index…');

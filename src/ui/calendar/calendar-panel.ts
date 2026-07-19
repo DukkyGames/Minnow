@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from '../app-dialog';
 /**
  * Calendar panel — month/week views, event CRUD, ICS import/export, CalDAV sync.
  */
@@ -474,7 +475,7 @@ export async function renderCalendarPanel(
       removeBtn.className = 'calendar-btn calendar-btn--danger calendar-btn--sm';
       removeBtn.textContent = 'Remove';
       removeBtn.addEventListener('click', async () => {
-        if (!window.confirm(`Remove CalDAV account "${account.label}"?`)) {
+        if (!await appConfirm(`Remove CalDAV account "${account.label}"?`)) {
           return;
         }
         try {

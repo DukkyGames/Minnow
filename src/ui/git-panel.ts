@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from './app-dialog';
 /**
 
  * Git source control view inside the file sidebar (MIN-198 P1/P3).
@@ -414,12 +415,12 @@ async function deleteBranchByName(name: string): Promise<void> {
       showToast('Cannot delete the checked-out branch', 'error');
       return;
     }
-    if (!window.confirm(`Switch to "${trunk}" and delete "${branch}"?`)) return;
+    if (!await appConfirm(`Switch to "${trunk}" and delete "${branch}"?`)) return;
     const switched = await runGitOp(() => gitCheckout({ branch: trunk, cwd }), {
       successMessage: `Switched to ${trunk}`,
     });
     if (!switched) return;
-  } else if (!window.confirm(`Delete branch "${branch}"?`)) {
+  } else if (!await appConfirm(`Delete branch "${branch}"?`)) {
     return;
   }
 
@@ -428,7 +429,7 @@ async function deleteBranchByName(name: string): Promise<void> {
   });
   if (ok) return;
 
-  if (!window.confirm(`Branch "${branch}" is not fully merged. Force delete?`)) return;
+  if (!await appConfirm(`Branch "${branch}" is not fully merged. Force delete?`)) return;
   await runGitOp(() => gitDeleteBranch({ branch, force: true, cwd }), {
     successMessage: `Deleted branch ${branch}`,
   });
@@ -493,7 +494,7 @@ async function handleMergeToMain(): Promise<void> {
 
   const { resolveTrunkBranchName } = await import('../lib/git-trunk-branch');
   const trunk = resolveTrunkBranchName(localBranches, remoteBranches, lockedLocalBranches);
-  if (!window.confirm(`Merge branch "${sourceBranch}" into ${trunk}?`)) return;
+  if (!await appConfirm(`Merge branch "${sourceBranch}" into ${trunk}?`)) return;
 
   setStatus('Merging…');
   const result = await runMergeToMain(ctx);
@@ -520,7 +521,7 @@ async function handleDeleteWorktree(): Promise<void> {
   if (!cwdSelect) return;
   const targetPath = cwdSelect.value;
   if (!targetPath || isMainWorktreePath(targetPath)) return;
-  if (!window.confirm(`Remove worktree at ${targetPath}?`)) return;
+  if (!await appConfirm(`Remove worktree at ${targetPath}?`)) return;
 
   const removeCwd = getEffectiveCwdArg();
   const ws = getWorkspacePath().trim();
@@ -531,7 +532,7 @@ async function handleDeleteWorktree(): Promise<void> {
   });
   if (ok) return;
 
-  if (!window.confirm('Worktree has uncommitted changes. Force remove?')) return;
+  if (!await appConfirm('Worktree has uncommitted changes. Force remove?')) return;
   await runGitOp(
     () => gitWorktreeRemove({ path: targetPath, force: true, cwd: removeCwd }),
     { successMessage: 'Worktree removed' },
@@ -1451,13 +1452,12 @@ function buildFileRow(entry: GitFileEntry, staged: boolean): HTMLElement {
   discardBtn.title = 'Discard changes';
 
   discardBtn.addEventListener('click', () => {
-
-    if (!window.confirm(`Discard changes to ${entry.path}?`)) return;
-
-    void runGitOp(() => gitDiscard({ paths: [entry.path], cwd: getEffectiveCwdArg() }), {
-      successMessage: `Discarded changes to ${entry.path}`,
-    });
-
+    void (async () => {
+      if (!await appConfirm(`Discard changes to ${entry.path}?`)) return;
+      await runGitOp(() => gitDiscard({ paths: [entry.path], cwd: getEffectiveCwdArg() }), {
+        successMessage: `Discarded changes to ${entry.path}`,
+      });
+    })();
   });
 
 

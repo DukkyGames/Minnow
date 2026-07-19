@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from './app-dialog';
 /**
  * Block workspace switches while orchestrator boards are running (MIN-344).
  */
@@ -80,7 +81,7 @@ export async function confirmAndStopBoardsForWorkspaceSwitch(
   }
 
   const blockers = getBlockingBoardsForWorkspace();
-  const proceed = window.confirm(formatWorkspaceSwitchBoardConfirmMessage(blockers));
+  const proceed = await appConfirm(formatWorkspaceSwitchBoardConfirmMessage(blockers));
   if (!proceed) {
     return false;
   }

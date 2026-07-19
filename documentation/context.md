@@ -376,7 +376,7 @@ Multi-provider registry: `~/.minnow/providers/`. UI: Models app → Providers. C
 - **Package:** `npm run package` → `release/` (NSIS on Windows).
 - **Preview browser:** requires Electron (`window.minnow.preview`); hidden in plain browser tabs.
 - **Auto-update:** GitHub Releases via `electron-updater` (packaged installs); Settings → General → App updates.
-- **Windows native-dialog focus recovery:** [`src/ui/native-dialog-focus.ts`](../src/ui/native-dialog-focus.ts) wraps blocking `alert` / `confirm` / `prompt` calls in the Electron renderer. After each dialog, `window.minnow.window.restoreFocus()` asks the main process to focus both the owning `BrowserWindow` and its `webContents`, preventing inputs and native selects from becoming unresponsive.
+- **In-app dialogs:** [`src/ui/app-dialog.ts`](../src/ui/app-dialog.ts) replaces blocking native `alert` / `confirm` / `prompt` in the Electron shell with Minnow-styled modals (`installAppDialogs()` at boot; call sites use `await appConfirm()` / `appAlert()` / `appPrompt()`). Overlay z-index `100030` keeps dialogs above shell chrome. Do not use synchronous `window.confirm()` in Electron — it cannot block on custom UI without freezing the renderer.
 
 ---
 

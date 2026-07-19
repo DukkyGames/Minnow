@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from './app-dialog';
 /**
  * Right-click context menu for git history graph commit rows.
  */
@@ -251,10 +252,10 @@ async function runCheckoutDetach(ctx: GitGraphContextMenuCtx, sha: string): Prom
 
 async function runDeleteBranch(ctx: GitGraphContextMenuCtx, name: string): Promise<void> {
   if (isProtectedBranchName(name)) return;
-  if (!window.confirm(`Delete branch "${name}"?`)) return;
+  if (!await appConfirm(`Delete branch "${name}"?`)) return;
   let result = await gitDeleteBranch({ branch: name, cwd: ctx.cwd });
   if (!result.ok) {
-    if (!window.confirm(`Branch "${name}" is not fully merged. Force delete?`)) return;
+    if (!await appConfirm(`Branch "${name}" is not fully merged. Force delete?`)) return;
     result = await gitDeleteBranch({ branch: name, force: true, cwd: ctx.cwd });
   }
   if (!result.ok) {

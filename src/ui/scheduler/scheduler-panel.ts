@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from '../app-dialog';
 /**
  * Scheduler job list panel (shared by full-page and OS side-panel surfaces).
  */
@@ -456,8 +457,8 @@ export async function renderSchedulerPanel(
     const deleteBtn = el('button', 'settings-inline-btn scheduler-job__delete', 'Delete');
     deleteBtn.type = 'button';
     deleteBtn.addEventListener('click', () => {
-      if (!window.confirm(`Delete scheduled job "${job.label}"?`)) return;
       void (async () => {
+        if (!await appConfirm(`Delete scheduled job "${job.label}"?`)) return;
         try {
           await deleteSchedulerJob(job.id);
           notify('ok', 'Job deleted');

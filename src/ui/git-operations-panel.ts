@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from './app-dialog';
 /**
  * Shared git operations UI: changes, commit, history graph, branches tab.
  * Used by the sidebar git panel and the Git Center lightbox.
@@ -450,11 +451,13 @@ export function createGitOperationsPanel(
     discardBtn.textContent = '↩';
     discardBtn.title = 'Discard changes';
     discardBtn.addEventListener('click', () => {
-      if (!window.confirm(`Discard changes to ${entry.path}?`)) return;
-      void runGitOp(
-        () => gitDiscard({ paths: [entry.path], cwd: getEffectiveCwd() }),
-        `Discarded changes to ${entry.path}`,
-      );
+      void (async () => {
+        if (!await appConfirm(`Discard changes to ${entry.path}?`)) return;
+        await runGitOp(
+          () => gitDiscard({ paths: [entry.path], cwd: getEffectiveCwd() }),
+          `Discarded changes to ${entry.path}`,
+        );
+      })();
     });
     actions.append(diffBtn, stageBtn, discardBtn);
     row.append(badge, path, actions);
@@ -686,11 +689,11 @@ export function createGitOperationsPanel(
 
   async function handleDeleteBranch(name: string): Promise<void> {
     if (!name || name === currentBranchName || isProtectedBranchName(name)) return;
-    if (!window.confirm(`Delete branch "${name}"?`)) return;
+    if (!await appConfirm(`Delete branch "${name}"?`)) return;
     const cwd = getEffectiveCwd();
     const ok = await runGitOp(() => gitDeleteBranch({ branch: name, cwd }), `Deleted branch ${name}`);
     if (ok) return;
-    if (!window.confirm(`Branch "${name}" is not fully merged. Force delete?`)) return;
+    if (!await appConfirm(`Branch "${name}" is not fully merged. Force delete?`)) return;
     await runGitOp(() => gitDeleteBranch({ branch: name, force: true, cwd }), `Deleted branch ${name}`);
   }
 

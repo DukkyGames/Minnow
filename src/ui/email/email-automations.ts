@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from '../app-dialog';
 /**
  * Email automation rules list and simple builder.
  */
@@ -78,7 +79,7 @@ export async function renderEmailAutomations(
     const remove = el('button', 'email-btn email-btn-danger', 'Delete') as HTMLButtonElement;
     remove.type = 'button';
     remove.addEventListener('click', async () => {
-      if (!window.confirm(`Delete rule "${rule.name}"?`)) return;
+      if (!await appConfirm(`Delete rule "${rule.name}"?`)) return;
       await deleteAutomationRule(rule.id);
       options.onStatus?.('ok', 'Rule deleted');
       void renderEmailAutomations(mount, options);
