@@ -7,6 +7,12 @@
   max-width: min(42rem, 100%);
 }
 
+.settings-general__content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .settings-general .settings-section-lead {
   margin-bottom: 4px;
 }

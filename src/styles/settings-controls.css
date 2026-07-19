@@ -446,6 +446,10 @@
   padding-bottom: 0;
 }
 
+.settings-toggle-row:has(+ .settings-inline-row) {
+  border-bottom: none;
+}
+
 .settings-row--textarea {
   align-items: flex-start;
 }
