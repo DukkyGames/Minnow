@@ -58,8 +58,8 @@ interface PreviewHostEntry {
   visible: boolean;
   /** Embedded DevTools view — non-null while docked DevTools is open for this tab. */
   devtools: WebContentsView | null;
-  /** True while DevTools is open in an Electron-managed popout window. */
-  devtoolsPopoutOpen: boolean;
+  /** Separate DevTools window for popout mode. */
+  devtoolsPopout: BrowserWindow | null;
 }
 
 interface WindowPreviewState {
@@ -97,7 +97,7 @@ function normalizeDevToolsDock(dock: unknown): DevToolsDockPosition {
 }
 
 function isEntryDevToolsOpen(entry: PreviewHostEntry): boolean {
-  return Boolean(entry.devtools) || entry.devtoolsPopoutOpen;
+  return Boolean(entry.devtools) || Boolean(entry.devtoolsPopout);
 }
 
 function relayoutAllVisibleEntries(win: BrowserWindow): void {
@@ -186,8 +186,11 @@ function attachPermissionHandler(wc: WebContents): void {
 
 /** Close and detach a tab's DevTools (embedded or popout). Safe when already gone. */
 function teardownEntryDevTools(win: BrowserWindow | null, entry: PreviewHostEntry): void {
-  if (entry.devtoolsPopoutOpen) {
-    entry.devtoolsPopoutOpen = false;
+  const popout = entry.devtoolsPopout;
+  if (popout && !popout.isDestroyed()) {
+    entry.devtoolsPopout = null;
+    popout.removeAllListeners('closed');
+    popout.close();
     const wc = entry.view.webContents;
     if (!wc.isDestroyed()) {
       try {
@@ -198,6 +201,7 @@ function teardownEntryDevTools(win: BrowserWindow | null, entry: PreviewHostEntr
     }
     return;
   }
+  entry.devtoolsPopout = null;
 
   const dt = entry.devtools;
   if (!dt) return;
@@ -244,6 +248,62 @@ function relayoutInstanceEntry(win: BrowserWindow, entry: PreviewHostEntry, inst
   applyPreviewViewBounds(entry, bounds, hostZoomFactor(win), resolveDevToolsDock(win));
 }
 
+/** Place a popout DevTools window beside the Minnow shell without covering the preview. */
+function positionPopoutDevToolsWindow(parent: BrowserWindow, popout: BrowserWindow): void {
+  const parentBounds = parent.getBounds();
+  popout.setBounds({
+    x: parentBounds.x + Math.min(parentBounds.width - 200, 80),
+    y: parentBounds.y + 48,
+    width: Math.max(640, Math.round(parentBounds.width * 0.55)),
+    height: Math.max(480, Math.round(parentBounds.height * 0.7)),
+  });
+}
+
+/** Open DevTools in a dedicated BrowserWindow (popout mode). */
+function openPopoutEntryDevTools(
+  win: BrowserWindow,
+  tabId: string,
+  entry: PreviewHostEntry,
+  instanceId: string,
+): void {
+  const wc = entry.view.webContents;
+  const popout = new BrowserWindow({
+    show: false,
+    title: 'DevTools',
+    autoHideMenuBar: true,
+    webPreferences: {
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  entry.devtoolsPopout = popout;
+  positionPopoutDevToolsWindow(win, popout);
+
+  popout.on('closed', () => {
+    if (entry.devtoolsPopout !== popout) return;
+    entry.devtoolsPopout = null;
+    if (!wc.isDestroyed()) {
+      try {
+        wc.closeDevTools();
+      } catch {
+        /* guest already gone */
+      }
+    }
+    relayoutInstanceEntry(win, entry, instanceId);
+    if (!win.isDestroyed()) {
+      sendToRenderer(win, channels.PREVIEW_DEVTOOLS_STATE, tabId, false, instanceId);
+    }
+  });
+
+  // Route DevTools into the popout window — undocked on WebContentsView guests is unreliable.
+  wc.setDevToolsWebContents(popout.webContents);
+  wc.openDevTools({ mode: 'detach', activate: true });
+  popout.show();
+  relayoutInstanceEntry(win, entry, instanceId);
+  sendToRenderer(win, channels.PREVIEW_DEVTOOLS_STATE, tabId, true, instanceId);
+}
+
 /** Open DevTools for one tab guest (embedded bottom/side or popout window). */
 function openEntryDevTools(
   win: BrowserWindow,
@@ -258,10 +318,7 @@ function openEntryDevTools(
   const dock = resolveDevToolsDock(win);
 
   if (dock === 'popout') {
-    wc.openDevTools({ mode: 'undocked', activate: false });
-    entry.devtoolsPopoutOpen = true;
-    relayoutInstanceEntry(win, entry, id);
-    sendToRenderer(win, channels.PREVIEW_DEVTOOLS_STATE, tabId, true, id);
+    openPopoutEntryDevTools(win, tabId, entry, id);
     return;
   }
 
@@ -581,7 +638,7 @@ function createTabGuest(win: BrowserWindow, tabId: string, instanceId: string): 
   view.setBackgroundColor('#ffffff');
   view.setVisible(false);
   attachPermissionHandler(view.webContents);
-  const entry: PreviewHostEntry = { view, visible: false, devtools: null, devtoolsPopoutOpen: false };
+  const entry: PreviewHostEntry = { view, visible: false, devtools: null, devtoolsPopout: null };
   wirePreviewGuestEvents(win, tabId, entry, instanceId);
   return entry;
 }
