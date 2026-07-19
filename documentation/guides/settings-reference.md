@@ -52,7 +52,6 @@ Open via **Settings** (`#/settings/<category>`) or legacy `#/settings/<area>`.
 | Network access | `config.server.networkAccess` | `local` (loopback) vs `lan` (Wi‑Fi). Override: `MINNOW_NETWORK` |
 | Terminal behavior | — | Info only: commands run in background |
 | Constrained tool calls | `config.toolCalls.useConstrainedDecoding` | JSON Schema on tool turns |
-| Connection summary | — | Read-only provider/storage summary |
 
 ### General → Notifications
 

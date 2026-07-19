@@ -1,10 +1,26 @@
 /* Settings → General → App updates (MIN-384): status strip, progress, release notes. */
 
+.settings-updates {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.settings-updates__head {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-updates__head .settings-kv {
+  margin: 0;
+}
+
 .settings-updates-strip {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 4px 0 14px;
+  margin: 0;
   padding: 10px 12px;
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
@@ -66,16 +82,60 @@
   font-size: 13px;
 }
 
+.settings-updates__callout {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--mn-fg) 2%, var(--mn-bg));
+}
+
+.settings-updates__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.settings-updates__controls[hidden] {
+  display: none;
+}
+
+.settings-updates__channel .settings-row {
+  padding: 0;
+  border-bottom: none;
+}
+
+.settings-updates__channel .settings-field-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
 .settings-updates-beta-hint {
   color: var(--mn-warning);
 }
 
+.settings-updates__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-updates__actions .settings-actions {
+  margin-top: 0;
+}
+
 .settings-updates-restart-warning {
-  margin-top: 4px;
+  margin: 0;
+  font-size: 12px;
 }
 
 .settings-updates-notes {
-  margin: 10px 0 4px;
+  margin: 0;
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
   background: var(--mn-surface-2);
@@ -105,6 +165,8 @@
   overflow-y: auto;
 }
 
-.settings-updates-unsupported {
-  margin-top: 6px;
+@media (prefers-reduced-motion: reduce) {
+  .settings-updates-progress__bar {
+    transition: none;
+  }
 }

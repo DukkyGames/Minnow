@@ -101,13 +101,6 @@ export async function renderNetworkAccessSettings(mount: HTMLElement): Promise<v
   const section = el('section', 'settings-network');
   section.dataset.settingsSearchKey = 'general.network';
 
-  const hint = el(
-    'p',
-    'settings-field-hint',
-    'Choose who can reach this Minnow dev server. The Electron shell on this PC always uses localhost.',
-  );
-  section.appendChild(hint);
-
   const segmentGroup = el('div', 'settings-network-segments');
   segmentGroup.setAttribute('role', 'group');
   segmentGroup.setAttribute('aria-label', 'Network access');
@@ -124,6 +117,13 @@ export async function renderNetworkAccessSettings(mount: HTMLElement): Promise<v
 
   setActiveSegment(segmentGroup, selectedMode);
   section.appendChild(segmentGroup);
+  section.appendChild(
+    el(
+      'p',
+      'settings-field-hint',
+      'The Electron shell on this PC always uses localhost.',
+    ),
+  );
 
   const warning = warningBanner(
     'Local network mode exposes chat, files, git, terminal, and ~/.minnow data to anyone on your Wi‑Fi. There is no login — use only on networks you trust. Windows Firewall may block inbound connections until you allow Node.',

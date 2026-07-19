@@ -53,7 +53,6 @@ import {
   type AutopilotIsolationMode,
 } from '../config/autopilot-meta';
 import { listProviders } from '../providers/store';
-import { getActiveChat } from '../state/sessions';
 import { renderProvidersSettingsSection } from './settings-providers';
 import { renderUsageSettingsSection } from './settings-usage';
 import { renderAudioSettingsSection } from './settings-audio';
@@ -99,7 +98,11 @@ import { renderLspSection } from './lsp-settings';
 import { renderEditorSection } from './settings-editor';
 import { setStatus } from './status';
 import type { SettingsSectionId } from './settings-page-types';
-import { appendSettingsCrosslinks, appendSettingsGroup, linkToSettingsSection } from './settings-layout';
+import {
+  appendSettingsGroup,
+  linkToSettingsSection,
+} from './settings-layout';
+import '../styles/settings-general.css';
 import {
   appendSettingsOfflineHint,
   createSettingsActionsRow,
@@ -200,7 +203,7 @@ async function appendTerminalControls(mount: HTMLElement): Promise<void> {
       ariaLabel: 'Open terminal when agent runs a command',
       searchKey: 'general.chat.terminal.autoOpenOnAgentRun',
       description:
-        'Raises the console panel when an agent starts execute_command. Off by default so your own shell session stays uninterrupted.',
+        'Raises the console when an agent runs execute_command. Off by default so your shell stays uninterrupted.',
     },
   );
   mount.appendChild(autoOpenRow);
@@ -212,7 +215,7 @@ async function appendTerminalControls(mount: HTMLElement): Promise<void> {
       ariaLabel: 'Switch to Agent tab when agent runs a command',
       searchKey: 'general.chat.terminal.autoFollowAgentTab',
       description:
-        'When the console is already open, jump to the Agent output tab at run start. Off by default — a pulse on the Terminal button (panel closed) or Agent tab (panel open) still signals activity.',
+        'Jump to the Agent tab when the console is already open. Off by default; a pulse still signals activity on the Terminal button or Agent tab.',
     },
   );
   mount.appendChild(autoFollowRow);
@@ -287,50 +290,74 @@ async function renderNotificationsSection(): Promise<void> {
   renderNotificationsSettingsSection(mount);
 }
 
+function appendGeneralSectionLead(shell: HTMLElement): void {
+  const lead = el('p', 'settings-section-lead');
+  lead.append(
+    'Terminals, LAN access, and where settings are saved. For theme, open ',
+    linkToSettingsSection('Appearance', 'appearance'),
+    '. For alerts, open ',
+    linkToSettingsSection('Notifications', 'notifications'),
+    '.',
+  );
+  shell.appendChild(lead);
+}
+
 async function renderGeneralSection(): Promise<void> {
+  const generation = beginAsyncSectionRender('general');
   const mount = clearMount('settingsGeneralBody');
   if (!mount) return;
 
+  const shell = el('div', 'settings-general');
+  mount.appendChild(shell);
+  appendGeneralSectionLead(shell);
+
   const serverUp = await detectConfigServer();
+  if (isAsyncSectionRenderStale('general', generation)) return;
   if (!serverUp) {
     appendSettingsOfflineHint(
-      mount,
+      shell,
       'File-backed settings require <code>npm start</code>. Values below use browser storage until then.',
     );
   }
 
   // App updates leads the section: it is about the installed shell, not chat behavior.
   const updates = appendSettingsGroup(
-    mount,
+    shell,
     'App updates',
     'Stay on the latest build. Downloads run in the background; restart when you are ready.',
     'general.updates',
+    { emphasis: true },
   );
   updates.id = 'settingsAppUpdates';
   renderAppUpdatesSettings(updates);
 
   const chat = appendSettingsGroup(
-    mount,
+    shell,
     'Chat & terminal',
     'How the main thread and background shells behave.',
     'general.chat.terminal',
+    { emphasis: true },
   );
   await appendTerminalControls(chat);
+  if (isAsyncSectionRenderStale('general', generation)) return;
 
   const network = appendSettingsGroup(
-    mount,
+    shell,
     'Network access',
     'Let other devices on your Wi‑Fi open Minnow in a browser while this PC runs npm start.',
     'general.network',
+    { emphasis: true },
   );
   network.id = 'settingsNetworkAccess';
   await renderNetworkAccessSettings(network);
+  if (isAsyncSectionRenderStale('general', generation)) return;
 
   const setup = appendSettingsGroup(
-    mount,
+    shell,
     'Setup wizard',
     'Re-run the first-launch setup flow (theme, provider, permissions).',
     'general.onboarding',
+    { emphasis: true },
   );
   setup.appendChild(
     createSettingsActionsRow(
@@ -347,55 +374,6 @@ async function renderGeneralSection(): Promise<void> {
     ),
   );
 
-  const crossAppearance = el('div', 'settings-crosslinks');
-  crossAppearance.appendChild(el('span', 'settings-crosslinks__label', 'Related'));
-  crossAppearance.append(linkToSettingsSection('Appearance', 'appearance'));
-  mount.appendChild(crossAppearance);
-
-  const { providers } = await listProviders();
-  const enabled = providers.filter((p) => p.enabled !== false);
-  const activeChat = getActiveChat();
-  const chatProv =
-    enabled.find((p) => p.id === activeChat.providerId?.trim()) ?? null;
-
-  const connection = appendSettingsGroup(
-    mount,
-    'Connection summary',
-    'Registered LLM backends. Pick provider and model in the top bar; edit profiles under Providers.',
-  );
-
-  connection.appendChild(
-    createSettingsKvList([
-      { term: 'Enabled providers', value: String(enabled.length) },
-      {
-        term: 'This chat’s provider',
-        value: chatProv ? `${chatProv.label} (${chatProv.id})` : '—',
-      },
-      { term: 'Storage', value: serverUp ? '~/.minnow' : 'Browser (localStorage)' },
-    ]),
-  );
-
-  const cross = el('div', 'settings-crosslinks');
-  cross.appendChild(el('span', 'settings-crosslinks__label', 'Related'));
-  cross.append(
-    linkToSettingsSection('Providers', 'providers'),
-    linkToSettingsSection('Models', 'model-routing'),
-    linkToSettingsSection('Tools', 'tools'),
-  );
-  connection.appendChild(cross);
-
-  const drawerHint = appendSettingsGroup(
-    mount,
-    'Quick drawer',
-    'Temperature and max tokens are still in the chat gear drawer for now.',
-  );
-  drawerHint.appendChild(
-    el(
-      'p',
-      'settings-field-hint',
-      'Open the gear icon in the top bar while chatting to adjust sampling without leaving the thread.',
-    ),
-  );
 }
 
 function defaultCustomConfig(id: string, label: string): PromptConfig {

@@ -451,8 +451,12 @@ function onHashChange(): void {
     if (!getSettingsRoot()?.classList.contains('is-open')) {
       openSettings(route.scrollArea);
     } else if (route.scrollArea) {
+      // Skip when the hash was just written by setActiveArea (avoids double refresh on first open).
+      if (route.scrollArea === activeArea && !pendingSearchKey) return;
       setActiveArea(route.scrollArea, { skipHash: true });
     } else {
+      const defaultArea = SETTINGS_CATEGORY_AREAS[route.category][0];
+      if (defaultArea === activeArea && !pendingSearchKey) return;
       setActiveCategory(route.category);
     }
     return;

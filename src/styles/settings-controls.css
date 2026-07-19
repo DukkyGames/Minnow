@@ -74,6 +74,16 @@
   background: color-mix(in srgb, var(--mn-fg) 1.5%, var(--mn-bg));
 }
 
+.settings-group--emphasis .settings-toggle-row:hover {
+  background: transparent;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .settings-group--emphasis .settings-toggle-row:hover {
+    background: color-mix(in srgb, var(--mn-fg) 2%, transparent);
+  }
+}
+
 .settings-group--flat {
   padding: 0;
   border: none;
