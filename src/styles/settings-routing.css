@@ -197,6 +197,10 @@
   max-width: 65ch;
 }
 
+.settings-fallback-global-chain > .settings-action-btn {
+  margin-top: 10px;
+}
+
 .settings-fallback-health {
   margin-top: 4px;
   padding-top: 14px;
