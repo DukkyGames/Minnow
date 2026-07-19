@@ -32,6 +32,9 @@ const FILE_TREE_MUTATING_TOOLS = new Set([
   'move_file',
   'copy_file',
   'delete_path',
+  'create_pdf',
+  'create_spreadsheet',
+  'create_word_document',
 ]);
 
 /** Max entries per scope before LRU eviction of oldest keys. */
@@ -92,6 +95,9 @@ const saveFileInvalidation: InvalidationRule = {
 
 const INVALIDATION_MAP: Record<string, InvalidationRule> = {
   save_file: saveFileInvalidation,
+  create_pdf: saveFileInvalidation,
+  create_spreadsheet: saveFileInvalidation,
+  create_word_document: saveFileInvalidation,
   append_file: saveFileInvalidation,
   insert_at_line: saveFileInvalidation,
   replace_text_in_file: saveFileInvalidation,
@@ -181,6 +187,9 @@ function getPathArgKeysForTool(toolName: string): string[] {
     read_file: ['path'],
     read_file_range: ['path'],
     save_file: ['path'],
+    create_pdf: ['path'],
+    create_spreadsheet: ['path'],
+    create_word_document: ['path'],
     append_file: ['path'],
     insert_at_line: ['path'],
     replace_text_in_file: ['path'],

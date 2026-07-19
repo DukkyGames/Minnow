@@ -30,3 +30,32 @@ export function fileExtension(name) {
 export function isOfficeExtension(filename) {
   return OFFICE_EXTENSIONS.has(fileExtension(filename));
 }
+
+const SPREADSHEET_EXTENSIONS = new Set(['xlsx', 'xls', 'xlsm', 'ods', 'csv']);
+const WORD_EXTENSIONS = new Set(['docx', 'doc', 'odt', 'rtf']);
+
+/** @param {string} pathOrName */
+export function isPdfFilePath(pathOrName) {
+  return fileExtension(pathOrName) === 'pdf';
+}
+
+/** @param {string} pathOrName */
+export function isSpreadsheetFilePath(pathOrName) {
+  return SPREADSHEET_EXTENSIONS.has(fileExtension(pathOrName));
+}
+
+/** @param {string} pathOrName */
+export function isWordFilePath(pathOrName) {
+  return WORD_EXTENSIONS.has(fileExtension(pathOrName));
+}
+
+/**
+ * @param {string} pathOrName
+ * @returns {'pdf' | 'spreadsheet' | 'word' | null}
+ */
+export function getDocumentPreviewKind(pathOrName) {
+  if (isPdfFilePath(pathOrName)) return 'pdf';
+  if (isSpreadsheetFilePath(pathOrName)) return 'spreadsheet';
+  if (isWordFilePath(pathOrName)) return 'word';
+  return null;
+}

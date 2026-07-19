@@ -4,7 +4,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  getDocumentPreviewKind,
   isOfficeExtension,
+  isPdfFilePath,
+  isSpreadsheetFilePath,
+  isWordFilePath,
   OFFICE_EXTENSIONS,
 } from '../../src/attachments/document-extensions.mjs';
 
@@ -20,5 +24,15 @@ describe('document-extensions', () => {
   it('detects office paths by extension', () => {
     assert.equal(isOfficeExtension('reports/Q1.xlsx'), true);
     assert.equal(isOfficeExtension('readme.md'), false);
+  });
+
+  it('classifies document preview kinds', () => {
+    assert.equal(isPdfFilePath('report.pdf'), true);
+    assert.equal(isSpreadsheetFilePath('budget.xlsx'), true);
+    assert.equal(isWordFilePath('memo.docx'), true);
+    assert.equal(getDocumentPreviewKind('report.pdf'), 'pdf');
+    assert.equal(getDocumentPreviewKind('budget.xlsx'), 'spreadsheet');
+    assert.equal(getDocumentPreviewKind('memo.docx'), 'word');
+    assert.equal(getDocumentPreviewKind('notes.md'), null);
   });
 });

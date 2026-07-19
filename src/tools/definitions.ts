@@ -645,6 +645,97 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'create_pdf',
+    label: 'Create PDF',
+    description: 'Creates a PDF file from a title and plain-text body.',
+    category: 'files',
+    serverRequired: true,
+    definition: toolSchema(
+      'create_pdf',
+      'Create a PDF document in the workspace. Use \\n\\n between paragraphs. Path must end with .pdf.',
+      {
+        path: { type: 'string', description: 'Relative output path ending in .pdf' },
+        title: { type: 'string', description: 'Optional document title' },
+        body: {
+          type: 'string',
+          description: 'Plain-text body (use blank lines between paragraphs)',
+        },
+      },
+      ['path', 'body'],
+    ),
+  },
+  {
+    id: 'create_spreadsheet',
+    label: 'Create spreadsheet',
+    description: 'Creates an Excel .xlsx workbook from sheet data.',
+    category: 'files',
+    serverRequired: true,
+    definition: toolSchema(
+      'create_spreadsheet',
+      'Create an Excel .xlsx spreadsheet. Each sheet has a name and rows (array of cell arrays). Path must end with .xlsx.',
+      {
+        path: { type: 'string', description: 'Relative output path ending in .xlsx' },
+        sheets: {
+          type: 'array',
+          description:
+            'Workbook sheets: [{ name?: string, rows: (string|number|boolean|null)[][] }]',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', description: 'Sheet tab name (default Sheet1, Sheet2, …)' },
+              rows: {
+                type: 'array',
+                description: 'Rows of cell values (first row is often headers)',
+                items: {
+                  type: 'array',
+                  items: {},
+                },
+              },
+            },
+            required: ['rows'],
+          },
+        },
+      },
+      ['path', 'sheets'],
+    ),
+  },
+  {
+    id: 'create_word_document',
+    label: 'Create Word document',
+    description: 'Creates a Word .docx file from structured sections.',
+    category: 'files',
+    serverRequired: true,
+    definition: toolSchema(
+      'create_word_document',
+      'Create a Word .docx document from headings and paragraphs. Path must end with .docx.',
+      {
+        path: { type: 'string', description: 'Relative output path ending in .docx' },
+        title: { type: 'string', description: 'Optional document title' },
+        sections: {
+          type: 'array',
+          description: 'Document blocks in order',
+          items: {
+            type: 'object',
+            properties: {
+              type: {
+                type: 'string',
+                enum: ['heading', 'paragraph'],
+                description: 'Block type (default paragraph)',
+              },
+              text: { type: 'string', description: 'Block text' },
+              level: {
+                type: 'integer',
+                description: 'Heading level 1–6 when type is heading',
+              },
+            },
+            required: ['text'],
+          },
+        },
+      },
+      ['path', 'sections'],
+    ),
+  },
+  {
     id: 'git_status',
     label: 'Git status',
     description: 'Shows porcelain git status for the repository.',
