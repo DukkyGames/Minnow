@@ -98,6 +98,7 @@ import {
   buildSynthesisMessages,
 } from '../synthesis/post-turn';
 import { buildTurnSnapshot, resolveForkHistoryIndex } from '../chat/turn-snapshot';
+import { createStreamingStatsPublisher } from '../chat/streaming-stats';
 import type { ForkOverrides } from '../chat/fork-from-run';
 import {
   createRun,
@@ -120,6 +121,7 @@ import type {
   ToolCallAccumulator,
   TurnRunId,
   TurnSnapshot,
+  Usage,
   UserMessage,
 } from '../types';
 import { markMessageStopped } from '../ui/stopped-affordance';
@@ -711,6 +713,14 @@ interface StreamCompletionTurnOptions {
   thinkingBudgetTracker?: ThinkingBudgetTracker | null;
   /** Strip provider echo of prefilled thinking on the first content delta. */
   prefillEchoPartial?: string;
+  /** Fired on each SSE chunk so metrics can update mid-stream (MIN-413). */
+  onStreamProgress?: (state: {
+    streamMeta: StreamMetaAccumulator;
+    t0: number;
+    tFirst: number | null;
+    partialText: string;
+    partialThinking: string;
+  }) => void;
 }
 
 /**
@@ -828,6 +838,16 @@ async function streamCompletionTurn(
     processRoutedParts(inlineRouter.flush());
   }
 
+  function emitStreamProgress(): void {
+    streamOptions?.onStreamProgress?.({
+      streamMeta,
+      t0,
+      tFirst,
+      partialText: fullText,
+      partialThinking: thoughtController?.getSegments().join('\n\n') ?? '',
+    });
+  }
+
   function handleChunk(chunk: ChatCompletionChunk): void {
     streamMeta = mergeStreamMeta(streamMeta, chunk);
     toolAcc = mergeToolCallDelta(toolAcc, chunk);
@@ -858,6 +878,7 @@ async function streamCompletionTurn(
       }
       routeContentDelta(routedDelta);
     }
+    emitStreamProgress();
     if (domVisible) {
       scrollChatIfPinned();
     }
@@ -1369,6 +1390,22 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     }
   }
   let livePartialText = '';
+  const streamingStatsPublisher = createStreamingStatsPublisher(chat);
+  const turnUsageSegments: Usage[] = [];
+  const pushLiveStreamingStats = (state: {
+    streamMeta: StreamMetaAccumulator;
+    t0: number;
+    tFirst: number | null;
+    partialText: string;
+    partialThinking: string;
+  }): void => {
+    streamingStatsPublisher.schedule({
+      ...state,
+      priorSegments: turnUsageSegments,
+      modelId: sendModelId,
+      modelInfo: chat.modelInfo ?? undefined,
+    });
+  };
   if (isStreamDomVisible(chat.id)) {
     setStatus(
       'spin',
@@ -1750,7 +1787,13 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             notifyChatStreamActivity(chat.id);
           },
           turnRunId,
-          streamOpts,
+          {
+            ...streamOpts,
+            onStreamProgress: (state) => {
+              pushLiveStreamingStats(state);
+              streamOpts?.onStreamProgress?.(state);
+            },
+          },
         );
 
       const runStreamTurnWithThinkingBudget = async (): Promise<StreamTurnResult> => {
@@ -1895,6 +1938,25 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           tEnd: turnResult.tEnd,
           workAgentId: activeWorkAgent?.id ?? null,
         });
+        const toolRoundMeta = finalizeResponseMeta(
+          turnResult.streamMeta,
+          turnResult.t0,
+          turnResult.tFirst ?? turnResult.tEnd,
+          turnResult.tEnd,
+        );
+        if (toolRoundMeta.usage && Object.keys(toolRoundMeta.usage).length > 0) {
+          turnUsageSegments.push(toolRoundMeta.usage);
+          streamingStatsPublisher.schedule({
+            streamMeta: turnResult.streamMeta,
+            t0: turnResult.t0,
+            tFirst: turnResult.tFirst,
+            partialText: '',
+            partialThinking: '',
+            priorSegments: turnUsageSegments,
+            modelId: sendModelId,
+            modelInfo: chat.modelInfo ?? undefined,
+          });
+        }
 
         const toolProse = turnResult.fullText.trim();
         const hasToolProse = Boolean(toolProse);
@@ -2399,6 +2461,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       setStatus('err', statusMsg);
     }
   } finally {
+    streamingStatsPublisher.reset();
     setContextInFlightOverlay(null);
     scheduleContextUsageRefresh();
     registerStreamDomRemount(chat.id, null);
