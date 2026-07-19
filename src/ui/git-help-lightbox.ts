@@ -247,7 +247,7 @@ function createMinnowTips(): HTMLElement {
     },
     {
       term: 'Branch dropdown',
-      detail: 'Switch the branch checked out in the selected worktree. Create or delete branches with + and −.',
+      detail: 'Switch the branch checked out in the selected worktree. Create branches with +; delete the selected branch with − (main and master cannot be deleted).',
     },
     {
       term: 'Composer run target',

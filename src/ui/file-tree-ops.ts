@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from './app-dialog';
 /**
  * File tree CRUD — executes workspace tools, updates panel state, syncs viewer.
  */
@@ -145,7 +146,7 @@ async function confirmRenameIfDirty(path: string): Promise<boolean> {
   const tabStore = await import('./file-viewer-tab-store');
   const norm = normalizeTreePath(path);
   if (tabStore.isViewerTabDirty(norm)) {
-    return window.confirm(
+    return await appConfirm(
       'This file has unsaved changes. Rename anyway? The editor will follow the new path.',
     );
   }
@@ -156,17 +157,17 @@ async function confirmDelete(path: string, kind: FileTreeEntryKind): Promise<boo
   const tabStore = await import('./file-viewer-tab-store');
   const norm = normalizeTreePath(path);
   if (tabStore.isViewerTabDirty(norm)) {
-    const ok = window.confirm(
+    const ok = await appConfirm(
       'This file has unsaved changes. Delete anyway? Changes will be lost.',
     );
     if (!ok) return false;
   }
   if (kind === 'dir') {
-    return window.confirm(
+    return await appConfirm(
       `Delete folder "${basename(path)}" and everything inside it? This cannot be undone.`,
     );
   }
-  return window.confirm(`Delete "${basename(path)}"?`);
+  return await appConfirm(`Delete "${basename(path)}"?`);
 }
 
 /** Delete a file or directory via delete_path. */

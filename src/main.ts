@@ -68,6 +68,7 @@ import './styles/minnowos-apps.css';
 import './styles/chat-app.css';
 import './styles/models-page.css';
 import './styles/onboarding.css';
+import './styles/app-dialog.css';
 
 import 'highlight.js/styles/github.min.css';
 
@@ -207,6 +208,7 @@ import { initNotificationAudioUnlock } from './notifications/sound';
 import { initOsPageBridge, isOsShellEnabled } from './os/page-bridge';
 import { initOsRouter } from './os/router';
 import { initOsShell } from './os/shell';
+import { installAppDialogs } from './ui/app-dialog';
 
 /** Register PWA service worker (shell cache); failures are ignored. */
 function registerServiceWorker(): void {
@@ -217,6 +219,7 @@ function registerServiceWorker(): void {
 
 /** Boot app: sessions, settings, sidebar, models, first paint. */
 export async function initApp(): Promise<void> {
+  installAppDialogs();
   bindAskQuestionPlanScreenHooks({
     resolveQuestionHost: (chatId) =>
       resolveOrchestratePlanScreenQuestionHost(chatId) ??

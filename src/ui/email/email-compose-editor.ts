@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from '../app-dialog';
 /**
  * Rich-text body editor for the email compose footer (toolbar + contenteditable).
  */
@@ -67,7 +68,7 @@ function readEditorSelection(editor: HTMLElement): {
   return { text, range: range.cloneRange() };
 }
 
-function insertLink(editor: HTMLElement): void {
+async function insertLink(editor: HTMLElement): Promise<void> {
   const selection = window.getSelection();
   let range: Range | null = null;
   if (selection?.rangeCount) {
@@ -78,7 +79,7 @@ function insertLink(editor: HTMLElement): void {
   }
 
   const selectedText = range?.toString() ?? "";
-  const urlInput = window.prompt("Link URL", "https://");
+  const urlInput = await appPrompt("Link URL", "https://");
   if (urlInput === null) {
     editor.focus();
     return;
@@ -93,7 +94,7 @@ function insertLink(editor: HTMLElement): void {
     url = `https://${url}`;
   }
 
-  const labelInput = window.prompt("Link text (optional)", selectedText || url);
+  const labelInput = await appPrompt("Link text (optional)", selectedText || url);
   if (labelInput === null) {
     editor.focus();
     return;
@@ -367,7 +368,7 @@ export function createComposeBodyEditor(
     button.addEventListener("click", () => {
       editor.focus();
       if (action === "link") {
-        insertLink(editor);
+        void insertLink(editor);
         syncToolbarState(editor, buttons);
         return;
       }

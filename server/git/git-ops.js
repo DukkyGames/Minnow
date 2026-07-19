@@ -7,7 +7,7 @@ import path from 'node:path';
 import { runProcess } from '../process-runner.js';
 import { isGitRepository } from '../tools/git-change-stats.js';
 import { invalidateRegisteredWorktreeCache } from '../worktree/allowlist.js';
-import { getWorkspaceRoot } from '../workspace/root.js';
+import { getWorkspaceRoot, normalizeWorkspacePathKey } from '../workspace/root.js';
 
 const GIT_TIMEOUT_MS = 120_000;
 
@@ -108,6 +108,7 @@ export function parsePorcelainStatus(text) {
 export function parseBranchList(text) {
   let current = '';
   const local = [];
+  const lockedLocal = [];
   const remote = [];
 
   for (const rawLine of String(text ?? '').split('\n')) {
@@ -123,12 +124,14 @@ export function parseBranchList(text) {
     }
     if (name.startsWith('remotes/')) {
       remote.push(name);
-    } else if (!checkedOutElsewhere) {
+    } else if (checkedOutElsewhere) {
+      lockedLocal.push(name);
+    } else {
       local.push(name);
     }
   }
 
-  return { current, local, remote };
+  return { current, local, lockedLocal, remote };
 }
 
 /** Minnow orchestration branches (board worktrees) — not user checkout targets. */
@@ -548,6 +551,7 @@ export async function branches({ cwd } = {}) {
       ? parseWorktreeLockedBranches(wtResult.stdout ?? '', repoRoot)
       : new Set();
   parsed.local = filterUserFacingBranches(parsed.local, lockedElsewhere);
+  parsed.lockedLocal = (parsed.lockedLocal ?? []).filter((b) => !isMinnowBoardBranch(b));
 
   return { ok: true, ...parsed };
 }
@@ -562,6 +566,10 @@ export async function deleteBranch({ cwd, branch, force } = {}) {
   }
 
   const name = branch.trim();
+  if (name === 'main' || name === 'master') {
+    return { ok: false, error: 'Cannot delete the main or master branch' };
+  }
+
   const currentResult = await git(['branch', '--show-current'], repo.cwd);
   if (currentResult.code === 0 && (currentResult.stdout ?? '').trim() === name) {
     return { ok: false, error: 'Cannot delete the current branch' };
@@ -611,6 +619,25 @@ export async function worktreeAdd({ cwd, branch, path: worktreePath, baseRef } =
   return { ok: true, path: targetPath, branch: branchName };
 }
 
+/**
+ * Principal worktree for the repo (first entry in `git worktree list --porcelain`).
+ * Linked worktrees must not be compared via `rev-parse --show-toplevel` from their cwd —
+ * that returns the linked path, not the main worktree.
+ * @param {string} repoCwd
+ * @returns {Promise<string | null>}
+ */
+async function resolveMainWorktreePath(repoCwd) {
+  const result = await git(['worktree', 'list', '--porcelain'], repoCwd);
+  if (result.code !== 0) return null;
+  for (const rawLine of String(result.stdout ?? '').split('\n')) {
+    const line = rawLine.trimEnd();
+    if (line.startsWith('worktree ')) {
+      return line.slice('worktree '.length).trim();
+    }
+  }
+  return null;
+}
+
 /** `git worktree remove [--force] <path>` */
 export async function worktreeRemove({ cwd, path: worktreePath, force } = {}) {
   const repo = await requireGitRepo(cwd);
@@ -621,13 +648,11 @@ export async function worktreeRemove({ cwd, path: worktreePath, force } = {}) {
   }
 
   const targetPath = worktreePath.trim();
-  const rootResult = await git(['rev-parse', '--show-toplevel'], repo.cwd);
-  if (rootResult.code !== 0) {
-    return { ok: false, error: processError(rootResult) };
-  }
-  const repoRoot = (rootResult.stdout ?? '').trim();
-  const norm = (p) => p.replace(/\\/g, '/').replace(/\/+$/, '');
-  if (norm(targetPath) === norm(repoRoot)) {
+  const mainWorktreePath = await resolveMainWorktreePath(repo.cwd);
+  if (
+    mainWorktreePath &&
+    normalizeWorkspacePathKey(targetPath) === normalizeWorkspacePathKey(mainWorktreePath)
+  ) {
     return { ok: false, error: 'Cannot remove the main worktree' };
   }
 
@@ -635,7 +660,9 @@ export async function worktreeRemove({ cwd, path: worktreePath, force } = {}) {
   if (force) args.push('--force');
   args.push(targetPath);
 
-  const result = await git(args, repo.cwd);
+  // Run from the principal worktree so removal works when cwd is the linked worktree.
+  const gitCwd = mainWorktreePath ?? repo.cwd;
+  const result = await git(args, gitCwd);
   if (result.code !== 0) {
     return { ok: false, error: processError(result) };
   }

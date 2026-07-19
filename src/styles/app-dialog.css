@@ -1,0 +1,101 @@
+/* Global in-app alert / confirm / prompt dialogs */
+
+.app-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100030;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: var(--mn-overlay);
+}
+
+.app-dialog-overlay.hidden,
+.app-dialog-overlay[hidden] {
+  display: none;
+}
+
+.app-dialog-panel {
+  width: min(28rem, calc(100vw - 1.5rem));
+  max-height: min(80dvh, calc(100dvh - 1.5rem));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  color: var(--mn-fg);
+  box-shadow: var(--shadow-popover-soft);
+  outline: none;
+  animation: minnow-panel-reveal var(--duration-normal) var(--ease-out);
+}
+
+.app-dialog-panel__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.app-dialog-panel__message {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+  white-space: pre-wrap;
+}
+
+.app-dialog-panel__input {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+}
+
+.app-dialog-panel__input:focus {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -1px;
+}
+
+.app-dialog-panel__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.app-dialog-panel__btn {
+  min-width: 72px;
+  padding: 7px 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .app-dialog-panel__btn:hover:not(:disabled) {
+    background: var(--mn-accent-soft);
+  }
+}
+
+.app-dialog-panel__btn--primary {
+  border-color: color-mix(in oklch, var(--mn-accent) 55%, var(--mn-border));
+  background: var(--mn-accent);
+  color: var(--mn-accent-fg, var(--mn-bg));
+}
+
+.app-dialog-panel__btn--danger {
+  border-color: color-mix(in oklch, var(--mn-danger, #ef4444) 55%, var(--mn-border));
+  background: color-mix(in oklch, var(--mn-danger, #ef4444) 18%, var(--mn-bg));
+  color: var(--mn-fg);
+}

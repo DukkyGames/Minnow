@@ -2,7 +2,12 @@
  * Shared git-panel / file-tree worktree cwd resolution (avoids circular imports).
  */
 
+import {
+  resolveBoardIntegrationWorktreePath,
+  resolveChatWorktreeRoot,
+} from '../state/worktree-isolation';
 import { getWorkspacePath } from '../state/workspace';
+import type { Chat, ChatGroup } from '../types';
 
 /** Normalize path separators and trailing slashes for panel comparisons. */
 export function normalizePanelPath(p: string): string {
@@ -53,4 +58,65 @@ export function resolvePanelBrowseRunTargetSeed(
     worktreeRoot: root,
     gitBranch: match?.branch,
   };
+}
+
+/**
+ * Resolve git-panel browse cwd from the active chat and optional board view context.
+ * Board view with isolation prefers the integration worktree (MIN-464).
+ */
+export function resolvePanelBrowseCwd(input: {
+  chat: Chat;
+  groups?: ChatGroup[];
+  activeBoardGroup?: ChatGroup;
+  chats?: Chat[];
+}): string {
+  const { chat, groups, activeBoardGroup, chats } = input;
+  let worktreeRoot: string | undefined;
+
+  if (activeBoardGroup?.viewMode === 'board') {
+    worktreeRoot = resolveBoardIntegrationWorktreePath(activeBoardGroup, chats);
+  }
+
+  if (!worktreeRoot) {
+    worktreeRoot = resolveChatWorktreeRoot(chat, groups);
+  }
+
+  if (worktreeRoot) return worktreeRoot;
+  return getWorkspacePath().trim() || '.';
+ * Pick a worktree path that exists in `worktrees`, falling back to the workspace root entry.
+ */
+export function resolveKnownWorktreePath(
+  worktrees: PanelWorktreeBranchEntry[],
+  desiredPath: string | undefined,
+  workspaceRoot: string,
+): string {
+  const ws = workspaceRoot.trim();
+  const desired = (desiredPath?.trim() || ws).trim();
+  if (!desired) return worktrees[0]?.path ?? '';
+
+  const exact = worktrees.find((wt) => panelPathsEqual(wt.path, desired));
+  if (exact) return exact.path;
+
+  const main = worktrees.find((wt) => panelPathsEqual(wt.path, ws));
+  if (main) return main.path;
+
+  return worktrees[0]?.path ?? ws;
+}
+
+/**
+ * Reset panel cwd when it no longer appears in the worktree list (e.g. after removal).
+ */
+export function normalizePanelCwdAfterWorktreeListChange(
+  panelCwd: string | undefined,
+  worktrees: PanelWorktreeBranchEntry[],
+  workspaceRoot: string,
+): string | undefined {
+  const ws = workspaceRoot.trim();
+  if (!ws) return panelCwd;
+  const desired = panelCwd?.trim();
+  if (desired && worktrees.some((wt) => panelPathsEqual(wt.path, desired))) {
+    return panelCwd;
+  }
+  const resolved = resolveKnownWorktreePath(worktrees, ws, ws);
+  return panelPathsEqual(resolved, ws) ? undefined : resolved;
 }
