@@ -37,7 +37,7 @@ export const SETTINGS_CATEGORY_LABELS: Record<SettingsCategoryId, string> = {
 
 /** Category descriptions (search keywords / future catalog hints; not shown in UI). */
 export const SETTINGS_CATEGORY_DESCRIPTIONS: Record<SettingsCategoryId, string> = {
-  general: 'Terminal behavior, LAN access, notifications, audio devices, and where settings are saved.',
+  general: 'Terminal behavior, filesystem and LAN access, notifications, audio devices, and where settings are saved.',
   appearance: 'Theme, wallpaper, fonts, and custom accent colors.',
   models: 'LLM backends, per-role model picks, sampling, reasoning, and usage.',
   agents: 'System prompts, standing rules, composer modes, personas, workers, and tool policies.',
@@ -53,16 +53,17 @@ export const SETTINGS_CATEGORY_AREAS: Record<
   general: ['general', 'notifications', 'audio', 'about'],
   appearance: ['appearance'],
   models: ['providers', 'model-routing', 'sampler', 'thinking', 'usage'],
-  agents: ['agent-center', 'rules', 'agent-packs', 'autopilot'],
+  agents: ['agent-center', 'rules', 'agent-packs', 'autopilot', 'watchdog'],
   integrations: [
     'search',
     'deep-research',
     'servers',
     'tools',
+    'skills',
+    'browser',
     'mcp',
     'lsp',
     'editor',
-    'skills',
     'webhooks',
   ],
   advanced: ['features', 'diagnostics', 'evals'],
@@ -148,6 +149,10 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
     keywords: ['lan', 'wifi', 'local network', 'remote', 'phone', 'tablet', '0.0.0.0'],
     description: 'Let other devices on your Wi-Fi open Minnow in a browser while this PC runs npm start.',
   }),
+  field('general.filesystem', 'Filesystem access', 'general', 'general', {
+    keywords: ['workspace', 'full disk', 'path', 'sandbox', 'file tools', 'git', 'TOOLS_ALLOW_ALL_PATHS'],
+    description: 'Limit file and git tools to the open project folder, or allow paths anywhere on this computer.',
+  }),
   field('general.onboarding', 'Run setup again', 'general', 'general', {
     keywords: ['wizard', 'onboarding', 'first run', 'setup'],
     description: 'Re-open the first-run setup wizard.',
@@ -159,7 +164,6 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
     keywords: ['json schema', 'structured output'],
     description: 'Validate tool arguments with JSON Schema when the provider supports structured output.',
   }),
-  field('general.generation.timeout', 'Generation timeout', 'general', 'general'),
   field('audio.devices', 'Audio devices', 'general', 'audio', {
     keywords: ['microphone', 'speaker', 'input', 'output'],
   }),
@@ -260,6 +264,15 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   field('agents.autopilot.isolation', 'Default isolation mode', 'agents', 'autopilot'),
   field('agents.autopilot.concurrency', 'Max concurrent tasks', 'agents', 'autopilot'),
   field('agents.autopilot.plannerModel', 'Default planner model', 'agents', 'autopilot'),
+  field('agents.watchdog', 'Watchdog', 'agents', 'watchdog', {
+    keywords: ['timeout', 'stall', 'generation', 'streaming', 'heartbeat', 'recovery'],
+    description: 'Server-side generation limits while models and agents stream.',
+  }),
+  field('agents.watchdog.generation', 'Generation timeouts', 'agents', 'watchdog', {
+    keywords: ['idle timeout', 'max duration', 'streaming', 'upstream'],
+    description:
+      'Idle and max-duration limits while streaming from the model. Idle timeout resets when new tokens arrive.',
+  }),
   field('agents.autopilot.selfHeal', 'Self-heal & provisioning', 'agents', 'autopilot', {
     keywords: ['self-heal', 'provision', 'quarantine', 'infra', 'worktree', 'stall'],
     description: 'Configure AFK self-heal rounds, infra provisioning, and worktree cd-guard.',
@@ -304,6 +317,12 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   field('integrations.deepResearch', 'Deep Research', 'integrations', 'deep-research', {
     keywords: ['research engine', 'iterresearch'],
   }),
+  field('integrations.deepResearch.model', 'Research model', 'integrations', 'deep-research'),
+  field('integrations.deepResearch.searchOverride', 'Research search override', 'integrations', 'deep-research'),
+  field('integrations.deepResearch.loop', 'Research loop limits', 'integrations', 'deep-research'),
+  field('integrations.deepResearch.extraction', 'Research extraction', 'integrations', 'deep-research'),
+  field('integrations.deepResearch.report', 'Research final report', 'integrations', 'deep-research'),
+  field('integrations.deepResearch.save', 'Save Deep Research settings', 'integrations', 'deep-research'),
   field('integrations.servers', 'Managed servers', 'integrations', 'servers', {
     keywords: ['searxng', 'local search'],
   }),
@@ -311,14 +330,17 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
     keywords: ['allow', 'deny', 'security'],
   }),
   field('integrations.tools.cache', 'Tool result cache', 'integrations', 'tools'),
+  field('integrations.tools.bulk', 'Bulk tool permissions', 'integrations', 'tools', {
+    keywords: ['reset defaults', 'all full permissions'],
+  }),
   field('integrations.mcp', 'MCP servers', 'integrations', 'mcp', {
-    keywords: ['model context protocol', 'dev stack'],
+    keywords: ['model context protocol', 'context7'],
   }),
   field('integrations.lsp', 'Language servers', 'integrations', 'lsp', {
-    keywords: ['diagnostics', 'typescript', 'dev stack'],
+    keywords: ['diagnostics', 'typescript', 'lsp.json'],
   }),
   field('integrations.editor', 'Editor copilot', 'integrations', 'editor', {
-    keywords: ['ghost text', 'inline completion', 'dev stack'],
+    keywords: ['ghost text', 'inline completion', 'codemirror'],
   }),
   field('integrations.skills', 'Skills', 'integrations', 'skills', {
     keywords: ['slash command', 'skill pack'],
@@ -326,9 +348,13 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   field('integrations.webhooks', 'Webhooks', 'integrations', 'webhooks', {
     keywords: ['hmac', 'outgoing events'],
   }),
-  field('integrations.browser', 'Browser allowlist', 'integrations', 'tools', {
-    keywords: ['cdp', 'automation'],
+  field('integrations.browser', 'Browser automation', 'integrations', 'browser', {
+    keywords: ['cdp', 'automation', 'allowlist', 'preview'],
   }),
+  field('integrations.browser.allowNavigate', 'Allow browser navigation', 'integrations', 'browser'),
+  field('integrations.browser.restoreTabs', 'Restore browser tabs', 'integrations', 'browser'),
+  field('integrations.browser.patterns', 'Allowed origin patterns', 'integrations', 'browser'),
+  field('integrations.browser.devtoolsDock', 'DevTools dock', 'integrations', 'browser'),
 
   // —— Advanced ——
   field('advanced.orchestration', 'Orchestration supervisor', 'advanced', 'features', {

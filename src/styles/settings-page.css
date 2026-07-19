@@ -1161,16 +1161,16 @@ label.settings-action-btn {
   border-radius: var(--radius-sm);
 }
 
-.settings-search-url-managed__head {
+.settings-search-url-managed__title {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 10px;
-  margin-bottom: 4px;
 }
 
-.settings-search-url-managed__head .settings-field-label {
-  margin-bottom: 0;
+.settings-search-url-managed .settings-row__desc .settings-inline-link {
+  display: inline;
+  margin: 0 0.15em;
 }
 
 .settings-search-managed-url {
@@ -1192,11 +1192,6 @@ label.settings-action-btn {
   line-height: 1.35;
   color: var(--mn-fg);
   word-break: break-all;
-}
-
-.settings-search-url-managed .settings-field-hint .settings-inline-link {
-  display: inline;
-  margin: 0 0.15em;
 }
 
 .settings-mcp-row,
@@ -1775,26 +1770,10 @@ label.settings-action-btn {
   display: none;
 }
 
-/* Tools page: bench panel (list + Brave key), filesystem radios, subsection titles */
+/* Tools page: catalog list inside general-style emphasis groups */
 
-.settings-tools-bulk-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0 0 16px;
-}
-
-.settings-tools-bulk-actions .settings-inline-btn {
-  margin-top: 0;
-}
-
-.settings-tools-bulk-all-full {
-  border-color: color-mix(in srgb, var(--mn-accent) 35%, var(--mn-border));
-}
-
-.settings-tools-bulk-all-full:hover {
-  background: color-mix(in srgb, var(--mn-accent) 12%, var(--mn-bg));
-  color: var(--mn-fg);
+.settings-tools-toolbar {
+  margin-bottom: 16px;
 }
 
 .settings-subheading {
@@ -1805,116 +1784,213 @@ label.settings-action-btn {
   color: var(--mn-fg);
 }
 
-.settings-tool-filesystem {
-  margin-bottom: 16px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--mn-border);
-}
-
-.settings-tool-filesystem > .settings-field-hint {
-  margin-bottom: 10px;
-}
-
-.settings-filesystem-radios {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.settings-radio-option {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin: 0;
-  cursor: pointer;
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--mn-fg);
-}
-
-.settings-radio-option input {
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  margin-top: 2px;
-  accent-color: var(--mn-accent);
-}
-
-.settings-radio-option__text {
-  flex: 1;
-  min-width: 0;
-}
-
-.settings-tools-panel {
-  border: 1px solid var(--mn-border);
-  border-radius: var(--radius-md);
-  background: var(--mn-bg);
-  overflow: hidden;
-}
-
-.settings-tools-panel .tool-list-toolbar {
+.settings-general .settings-tools-list .tool-list-toolbar {
   margin-bottom: 0;
-  padding: 10px 12px;
+  padding: 0 2px 12px;
   border: none;
   border-bottom: 1px solid var(--mn-border);
   border-radius: 0;
   background: transparent;
 }
 
-.settings-tools-panel .settings-tools-list {
-  margin-top: 0;
+.settings-general .settings-tools-list .tool-list-toolbar .tool-select-all {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mn-fg-muted);
 }
 
-.settings-tools-list .tool-group {
-  padding: 0 10px;
+.settings-general .settings-tools-list .tool-group--collapsible {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--mn-border);
+  background: transparent;
 }
 
-.settings-tools-list .tool-group-head {
-  /* Extra top padding so category labels (e.g. WEB) clear the toolbar divider. */
-  padding-top: 10px;
-  padding-left: 2px;
-  padding-right: 2px;
+.settings-general .settings-tools-list .tool-group--collapsible:last-child {
+  margin-bottom: 0;
+  border-bottom: none;
 }
 
-.settings-tools-list .tool-row {
-  padding: 10px 2px;
+.settings-general .settings-tools-list .tool-group-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px 16px;
+  min-height: 44px;
+  padding: 8px 2px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  border-radius: var(--radius-sm);
+  transition: background 0.2s var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .settings-general .settings-tools-list .tool-group-summary:hover {
+    background: color-mix(in srgb, var(--mn-fg) 2.5%, transparent);
+  }
+}
+
+.settings-general .settings-tools-list .tool-group-summary:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -2px;
+}
+
+.settings-general .settings-tools-list .tool-group-summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-general .settings-tools-list .tool-group-summary__main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.settings-general .settings-tools-list .tool-group-summary__chevron {
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--mn-fg-subtle);
+  flex-shrink: 0;
+  transition: transform 0.2s var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-general .settings-tools-list .tool-group-summary__chevron {
+    transition: none;
+  }
+}
+
+.settings-general .settings-tools-list .tool-group--collapsible[open] > .tool-group-summary .tool-group-summary__chevron {
+  transform: rotate(90deg);
+}
+
+.settings-general .settings-tools-list .tool-group--collapsible[open] > .tool-group-summary .tool-group-header {
+  color: var(--mn-fg);
+}
+
+.settings-general .settings-tools-list .tool-group-summary .tool-group-header {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: var(--mn-fg);
+  line-height: 1.3;
+}
+
+.settings-general .settings-tools-list .tool-group-count {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: var(--mn-fg-muted);
+  white-space: nowrap;
+}
+
+.settings-general .settings-tools-list .tool-select-all--category {
+  justify-self: end;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--mn-fg-muted);
+  transition:
+    background 0.2s var(--ease-out),
+    border-color 0.2s var(--ease-out),
+    color 0.2s var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .settings-general .settings-tools-list .tool-select-all--category:hover {
+    border-color: var(--mn-border);
+    background: color-mix(in srgb, var(--mn-fg) 2%, var(--mn-bg));
+    color: var(--mn-fg);
+  }
+}
+
+.settings-general .settings-tools-list .tool-select-all--category input {
+  width: 14px;
+  height: 14px;
+}
+
+.settings-general .settings-tools-list .tool-group-body {
+  padding: 0 2px 10px 24px;
+  border-top: 1px solid var(--mn-border);
+}
+
+@media (max-width: 520px) {
+  .settings-general .settings-tools-list .tool-group-summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 8px;
+  }
+
+  .settings-general .settings-tools-list .tool-select-all--category {
+    grid-column: 1 / -1;
+    justify-self: start;
+    margin-left: 24px;
+  }
+
+  .settings-general .settings-tools-list .tool-group-body {
+    padding-left: 16px;
+  }
+}
+
+.settings-general .settings-tools-list .tool-group-body .tool-group-hint {
+  margin: 8px 0;
+}
+
+.settings-general .settings-tools-list .tool-group {
+  padding: 0 2px;
+}
+
+.settings-general .settings-tools-list .tool-group-head {
+  padding-top: 8px;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.settings-general .settings-tools-list .tool-group-body .tool-row {
+  padding: 10px 0;
   border-radius: 0;
   border: none;
   border-bottom: 1px solid var(--mn-border);
 }
 
-.settings-tools-list .tool-group .tool-row:last-child {
+.settings-general .settings-tools-list .tool-group-body .tool-row:last-child {
   border-bottom: none;
 }
 
-.settings-tools-list .tool-row:hover:not(.is-server-unavailable) {
+.settings-general .settings-tools-list .tool-group-body .tool-row:hover:not(.is-server-unavailable):not(.is-preview-unavailable) {
   background: var(--mn-surface-elevated);
 }
 
-.settings-tools-list .tool-row:hover:not(.is-server-unavailable) .tool-permission-wrap .tool-label,
-.settings-tools-list .tool-row:hover:not(.is-server-unavailable) .tool-permission-wrap .tool-permission-select,
-.settings-tools-list .tool-permission-wrap:hover .tool-label,
-.settings-tools-list .tool-permission-wrap:hover .tool-permission-select {
+.settings-general .settings-tools-list .tool-group-body .tool-row:hover:not(.is-server-unavailable):not(.is-preview-unavailable) .tool-permission-wrap .tool-label,
+.settings-general .settings-tools-list .tool-group-body .tool-row:hover:not(.is-server-unavailable):not(.is-preview-unavailable) .tool-permission-wrap .tool-permission-select,
+.settings-general .settings-tools-list .tool-permission-wrap:hover .tool-label,
+.settings-general .settings-tools-list .tool-permission-wrap:hover .tool-permission-select {
   color: var(--mn-fg);
 }
 
-.settings-tools-list .tool-row:hover:not(.is-server-unavailable) .tool-permission-wrap .tool-permission-select,
-.settings-tools-list .tool-permission-wrap:hover .tool-permission-select {
+.settings-general .settings-tools-list .tool-group-body .tool-row:hover:not(.is-server-unavailable):not(.is-preview-unavailable) .tool-permission-wrap .tool-permission-select,
+.settings-general .settings-tools-list .tool-permission-wrap:hover .tool-permission-select {
   background: transparent;
   border-color: color-mix(in srgb, var(--mn-fg) 35%, transparent);
 }
 
-.settings-tools-list .tool-desc {
-  margin-left: 26px;
+.settings-general .settings-tools-list .tool-group-body .tool-desc {
+  margin-left: 0;
 }
 
-.settings-tools-panel .settings-tool-key-row {
-  margin-top: 0;
-  padding: 14px 14px 12px;
-  border: none;
-  border-top: 1px solid var(--mn-border);
-  border-radius: 0;
-  background: var(--mn-surface-1);
+.settings-general .settings-tools-list .settings-plugin-scaffold-row {
+  margin: 0 0 8px;
 }
 
 .settings-tool-key-row label {

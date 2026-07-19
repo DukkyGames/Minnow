@@ -2,13 +2,16 @@
  * Settings UI for editor AI inline completion (POLISH-006).
  */
 
+import '../styles/settings-general.css';
+
 import {
   loadEditorAiCompletionConfig,
   saveEditorAiCompletionConfig,
   type EditorAiCompletionConfig,
 } from '../config/editor-ai-completion';
 import { getActiveChat } from '../state/sessions';
-import { appendSettingsGroup, linkToSettingsSection } from './settings-layout';
+import { appendSettingsCrosslinks, appendSettingsGroup, linkToSettingsSection } from './settings-layout';
+import { appendSettingsOfflineHint } from './settings-controls';
 import {
   appendProviderModelFields,
   fillModelSelect,
@@ -31,13 +34,6 @@ function el<K extends keyof HTMLElementTagNameMap>(
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
-}
-
-function serverBanner(message: string): HTMLElement {
-  const p = el('p', 'settings-server-banner');
-  p.setAttribute('role', 'status');
-  p.innerHTML = message;
-  return p;
 }
 
 function appendSummaryKv(
@@ -105,17 +101,6 @@ function appendModelWarning(mount: HTMLElement): void {
   warning.textContent =
     'No model assigned — editor AI and Quick Edit will show an error until you select a model in the chat bar or pin one below.';
   mount.append(warning);
-}
-
-function appendCrosslinks(mount: HTMLElement): void {
-  const cross = el('div', 'settings-crosslinks');
-  cross.append(el('span', 'settings-crosslinks__label', 'Related'));
-  cross.append(
-    linkToSettingsSection('Providers', 'providers'),
-    linkToSettingsSection('Language servers', 'lsp'),
-    linkToSettingsSection('Models', 'model-routing'),
-  );
-  mount.append(cross);
 }
 
 function mountModelSourceBlock(
@@ -253,7 +238,7 @@ function mountModelSourceBlock(
 }
 
 function renderEditorSettingsBody(
-  mount: HTMLElement,
+  content: HTMLElement,
   config: EditorAiCompletionConfig,
   online: boolean,
 ): void {
@@ -262,19 +247,20 @@ function renderEditorSettingsBody(
   };
 
   if (!online) {
-    mount.append(
-      serverBanner(
-        'Start with <code>npm start</code> to sync settings to <code>~/.minnow/config.json</code>. Changes below are stored in the browser until then.',
-      ),
+    appendSettingsOfflineHint(
+      content,
+      'Start with <code>npm start</code> to sync settings to <code>~/.minnow/config.json</code>. Changes below use browser storage until then.',
     );
   }
 
   const overview = appendSettingsGroup(
-    mount,
+    content,
     'Overview',
     'LSP symbol completion (Ctrl+Space) runs first and wins Tab while its menu is open. ' +
       'AI ghost text appears only after a meaningful idle pause when LSP is not busy. ' +
       'Use a coder model (e.g. Qwen Coder, Codestral, DeepSeek Coder) for best inline suggestions.',
+    'integrations.editor',
+    { emphasis: true },
   );
 
   appendSummaryKv(overview, [
@@ -292,9 +278,14 @@ function renderEditorSettingsBody(
       value: online ? '~/.minnow/config.json' : 'Browser (until npm start)',
     },
   ]);
-  appendCrosslinks(overview);
 
-  const ghost = appendSettingsGroup(mount, 'Ghost text');
+  const ghost = appendSettingsGroup(
+    content,
+    'Ghost text',
+    undefined,
+    'integrations.editor',
+    { emphasis: true },
+  );
   if (!config.enabled) {
     ghost.append(
       el(
@@ -374,10 +365,12 @@ function renderEditorSettingsBody(
   ghost.append(debounceKv);
 
   const advanced = appendSettingsGroup(
-    mount,
+    content,
     'Prompt context',
     'Extra signals for inline completion requests (Quick Edit always uses chat). ' +
       'LSP symbols and diagnostics are preferred over hover at empty cursors.',
+    'integrations.editor',
+    { emphasis: true },
   );
 
   const contextToggles: Array<{
@@ -453,9 +446,11 @@ function renderEditorSettingsBody(
   advanced.append(tokensKv);
 
   const modelGroup = appendSettingsGroup(
-    mount,
+    content,
     'Model source',
     'Uses the top-bar provider and model for this chat unless you pin a different pair.',
+    'integrations.editor',
+    { emphasis: true },
   );
   if (isEffectiveModelMissing(config)) {
     appendModelWarning(modelGroup);
@@ -474,17 +469,38 @@ export async function renderEditorSettingsSection(): Promise<void> {
   const generation = ++editorSettingsRenderGeneration;
   mount.replaceChildren();
 
+  const shell = el('div', 'settings-general');
+  mount.appendChild(shell);
+
+  const lead = el('p', 'settings-section-lead');
+  lead.append(
+    'CodeMirror defaults, LSP-first completions, and AI ghost text for the Code file viewer. Symbol diagnostics live under ',
+    linkToSettingsSection('Language servers', 'lsp'),
+    '.',
+  );
+  shell.appendChild(lead);
+
+  const content = el('div', 'settings-general__content');
+  shell.appendChild(content);
+
   const online = isLocalServerAvailable();
   const config = await loadEditorAiCompletionConfig();
   if (generation !== editorSettingsRenderGeneration) return;
 
-  await appendEditorFundamentalsSettings(mount);
+  await appendEditorFundamentalsSettings(content);
   if (generation !== editorSettingsRenderGeneration) return;
 
-  renderEditorSettingsBody(mount, config, online);
+  renderEditorSettingsBody(content, config, online);
   if (generation !== editorSettingsRenderGeneration) return;
 
-  await appendEditorIntentSettings(mount, () => {
+  await appendEditorIntentSettings(content, () => {
     void renderEditorSettingsSection();
   });
+  if (generation !== editorSettingsRenderGeneration) return;
+
+  appendSettingsCrosslinks(content, [
+    { label: 'Language servers', sectionId: 'lsp' },
+    { label: 'Providers', sectionId: 'providers' },
+    { label: 'Routing', sectionId: 'model-routing' },
+  ]);
 }

@@ -37,13 +37,71 @@ const TOOL_CATEGORY_LABELS: Record<ToolCategory, string> = {
   lsp: 'LSP',
 };
 
-export type ToolsListVariant = 'default' | 'composer';
+export type ToolsListVariant = 'default' | 'composer' | 'settings';
 
 export type FillToolsSectionOptions = {
   variant?: ToolsListVariant;
 };
 
 let toolHandlersRegistered = false;
+
+/** Keep category bulk toggles from opening or closing the group summary. */
+function stopSummaryToggle(event: Event): void {
+  event.stopPropagation();
+}
+
+/** Build a collapsed-by-default category panel for Settings → Tools. */
+function wrapCollapsibleToolGroup(
+  category: ToolCategory,
+  toolCount: number,
+  head: HTMLElement,
+  bodyNodes: HTMLElement[],
+): HTMLDetailsElement {
+  const details = document.createElement('details');
+  details.className = 'tool-group tool-group--collapsible';
+  details.setAttribute('data-tool-category', category);
+  details.dataset.settingsSearchKey = `tools.category.${category}`;
+
+  const summary = document.createElement('summary');
+  summary.className = 'tool-group-summary';
+
+  const main = document.createElement('span');
+  main.className = 'tool-group-summary__main';
+
+  const chevron = document.createElement('span');
+  chevron.className = 'tool-group-summary__chevron';
+  chevron.setAttribute('aria-hidden', 'true');
+
+  const title = document.createElement('span');
+  title.className = 'tool-group-header';
+  title.textContent =
+    head.querySelector('.tool-group-header')?.textContent ??
+    TOOL_CATEGORY_LABELS[category];
+
+  main.append(chevron, title);
+
+  const count = document.createElement('span');
+  count.className = 'tool-group-count';
+  count.textContent = `${toolCount} tool${toolCount === 1 ? '' : 's'}`;
+
+  summary.append(main, count);
+
+  const selectAll = head.querySelector('.tool-select-all');
+  if (selectAll instanceof HTMLLabelElement) {
+    selectAll.classList.add('tool-select-all--category');
+    const labelText = selectAll.querySelector('span');
+    if (labelText) labelText.textContent = 'Enable all';
+    selectAll.addEventListener('click', stopSummaryToggle);
+    summary.appendChild(selectAll);
+  }
+
+  const body = document.createElement('div');
+  body.className = 'tool-group-body';
+  for (const node of bodyNodes) body.appendChild(node);
+
+  details.append(summary, body);
+  return details;
+}
 
 /** Build a per-category or global "select all" control. */
 function createToolSelectAllControl(
@@ -125,6 +183,7 @@ export function fillToolsSection(
   const variant = options.variant ?? 'default';
   container.replaceChildren();
   container.classList.toggle('tools-list--composer', variant === 'composer');
+  container.classList.toggle('tools-list--settings', variant === 'settings');
 
   const toolbar = document.createElement('div');
   toolbar.className = 'tool-list-toolbar';
@@ -135,11 +194,6 @@ export function fillToolsSection(
     const tools = BUILT_IN_TOOLS.filter((tool) => tool.category === category);
     if (tools.length === 0) continue;
 
-    const group = document.createElement('section');
-    group.className = 'tool-group';
-    group.setAttribute('data-tool-category', category);
-    group.dataset.settingsSearchKey = `tools.category.${category}`;
-
     const head = document.createElement('div');
     head.className = 'tool-group-head';
 
@@ -148,14 +202,15 @@ export function fillToolsSection(
     header.textContent = TOOL_CATEGORY_LABELS[category];
 
     head.append(header, createToolSelectAllControl(category, 'All'));
-    group.appendChild(head);
+
+    const bodyNodes: HTMLElement[] = [];
 
     if (category === 'browser') {
       const hint = document.createElement('p');
       hint.className = 'tool-group-hint';
       hint.textContent =
         'Requires the Minnow desktop shell (Electron) and npm start for allowlist config.';
-      group.appendChild(hint);
+      bodyNodes.push(hint);
     }
 
     for (const tool of tools) {
@@ -206,9 +261,22 @@ export function fillToolsSection(
         row.appendChild(desc);
       }
 
-      group.appendChild(row);
+      bodyNodes.push(row);
     }
 
+    if (variant === 'settings') {
+      container.appendChild(
+        wrapCollapsibleToolGroup(category, tools.length, head, bodyNodes),
+      );
+      continue;
+    }
+
+    const group = document.createElement('section');
+    group.className = 'tool-group';
+    group.setAttribute('data-tool-category', category);
+    group.dataset.settingsSearchKey = `tools.category.${category}`;
+    group.appendChild(head);
+    for (const node of bodyNodes) group.appendChild(node);
     container.appendChild(group);
   }
 

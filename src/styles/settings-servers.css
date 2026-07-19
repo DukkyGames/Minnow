@@ -1,0 +1,64 @@
+/**
+ * Settings → Servers — emphasis panels inside settings-general shell.
+ */
+
+.settings-servers.settings-general {
+  max-width: min(42rem, 100%);
+}
+
+.settings-general .settings-group--emphasis .settings-servers-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px 20px;
+  margin-bottom: 4px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.settings-general .settings-group--emphasis .settings-servers-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 4.5rem;
+}
+
+.settings-general .settings-group--emphasis .settings-servers-stat__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.settings-general .settings-group--emphasis .settings-servers-stat__value {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  color: var(--mn-fg);
+}
+
+.settings-general .settings-group--emphasis .settings-servers-stat__value--ok {
+  color: var(--mn-success);
+}
+
+.settings-general .settings-group--emphasis .settings-servers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+}
+
+.settings-general .settings-group--emphasis .settings-servers-list .settings-mcp-row {
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+}
+
+.settings-servers-empty {
+  margin: 0;
+  padding: 4px 2px;
+  font-size: 13px;
+  color: var(--mn-fg-muted);
+}

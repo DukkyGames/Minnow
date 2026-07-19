@@ -2,6 +2,9 @@
  * Settings → Servers — managed local servers (SearXNG install, lifecycle, logs).
  */
 
+import '../styles/settings-general.css';
+import '../styles/settings-servers.css';
+
 import {
   fetchManagedServerLogs,
   fetchManagedServers,
@@ -25,7 +28,12 @@ import {
   stopModelServe,
   type ServeRecord,
 } from '../models/api-client';
-import { appendSettingsCrosslinks } from './settings-layout';
+import {
+  appendSettingsCrosslinks,
+  appendSettingsGroup,
+  linkToSettingsSection,
+} from './settings-layout';
+import { appendSettingsOfflineHint } from './settings-controls';
 import { createSettingsSwitch } from './settings-switch';
 import { setStatus } from './status';
 import { isLocalServerAvailable } from '../tools/config';
@@ -536,44 +544,122 @@ function createServerRow(
   return row;
 }
 
+/** Compact status strip above the server list (matches LSP / Usage instrumentation). */
+function appendServersStats(
+  group: HTMLElement,
+  servers: ManagedServerSummary[],
+): HTMLElement {
+  const stats = el('div', 'settings-servers-stats');
+  stats.setAttribute('role', 'status');
+
+  const running = servers.filter((s) => s.running).length;
+  const installed = servers.filter((s) => s.installed).length;
+
+  const addStat = (label: string, value: string, ok = false): void => {
+    const stat = el('div', 'settings-servers-stat');
+    stat.append(
+      el('span', 'settings-servers-stat__label', label),
+      el(
+        'span',
+        `settings-servers-stat__value${ok ? ' settings-servers-stat__value--ok' : ''}`,
+        value,
+      ),
+    );
+    stats.appendChild(stat);
+  };
+
+  addStat('Catalog', String(servers.length));
+  addStat('Installed', String(installed));
+  addStat('Running', String(running), running > 0);
+
+  group.insertBefore(stats, group.firstChild);
+  return stats;
+}
+
 /** Render Settings → Servers into the section mount. */
 export async function renderServersSettingsSection(mount: HTMLElement): Promise<void> {
   mount.replaceChildren();
 
-  const offlineBanner = el(
-    'p',
-    'settings-server-banner',
-    'Start with npm start to install, start, and configure managed servers.',
-  );
-  offlineBanner.id = 'settingsServersOffline';
-  if (isLocalServerAvailable()) {
-    offlineBanner.classList.add('hidden');
-  }
-  mount.appendChild(offlineBanner);
+  const shell = el('div', 'settings-general settings-servers');
+  mount.appendChild(shell);
 
-  const list = el('div', 'settings-mcp-list');
+  const lead = el('p', 'settings-section-lead');
+  const storageCode = el('code', undefined, '~/.minnow/servers/');
+  lead.append(
+    'Install and lifecycle-manage local services under ',
+    storageCode,
+    '. SearXNG powers ',
+    linkToSettingsSection('Search', 'search'),
+    ' and ',
+    linkToSettingsSection('Deep Research', 'deep-research'),
+    ' when running.',
+  );
+  shell.appendChild(lead);
+
+  const offlineBanner = appendSettingsOfflineHint(
+    shell,
+    'Start with <code>npm start</code> to install, start, and configure managed servers.',
+    {
+      id: 'settingsServersOffline',
+      searchKey: 'integrations.servers',
+      hidden: isLocalServerAvailable(),
+    },
+  );
+
+  const content = el('div', 'settings-general__content');
+  shell.appendChild(content);
+
+  const servicesGroup = appendSettingsGroup(
+    content,
+    'Managed services',
+    'Enable, set ports, auto-start, and view logs for bundled local servers.',
+    'integrations.servers',
+    { emphasis: true },
+  );
+
+  const list = el('div', 'settings-servers-list');
   list.id = 'settingsManagedServerList';
   list.setAttribute('role', 'list');
   list.setAttribute('aria-label', 'Managed servers');
-  mount.appendChild(list);
+  servicesGroup.appendChild(list);
+
+  appendSettingsCrosslinks(shell, [
+    { label: 'Search provider', sectionId: 'search' },
+    { label: 'Deep Research', sectionId: 'deep-research' },
+  ]);
+
+  let statsEl: HTMLElement | null = null;
 
   const refresh = async (): Promise<void> => {
-    if (!isLocalServerAvailable()) {
-      list.replaceChildren();
-      offlineBanner.classList.remove('hidden');
+    const online = isLocalServerAvailable();
+    offlineBanner.classList.toggle('hidden', online);
+    statsEl?.remove();
+    statsEl = null;
+    list.replaceChildren();
+
+    if (!online) {
+      list.appendChild(
+        el(
+          'p',
+          'settings-servers-empty',
+          'Start the tool server to load managed services.',
+        ),
+      );
       return;
     }
-    offlineBanner.classList.add('hidden');
+
     const servers = await fetchManagedServers();
-    list.replaceChildren();
     if (servers === null) {
-      list.appendChild(el('p', 'settings-field-hint', 'Could not load servers.'));
+      list.appendChild(el('p', 'settings-servers-empty', 'Could not load servers.'));
       return;
     }
     if (servers.length === 0) {
-      list.appendChild(el('p', 'settings-field-hint', 'No managed servers in catalog.'));
+      list.appendChild(el('p', 'settings-servers-empty', 'No managed servers in catalog.'));
       return;
     }
+
+    statsEl = appendServersStats(servicesGroup, servers);
+
     for (const server of servers) {
       list.appendChild(
         server.id === 'llama-cpp'
@@ -584,9 +670,4 @@ export async function renderServersSettingsSection(mount: HTMLElement): Promise<
   };
 
   await refresh();
-
-  appendSettingsCrosslinks(mount, [
-    { label: 'Search provider', sectionId: 'search' },
-    { label: 'Deep Research', sectionId: 'deep-research' },
-  ]);
 }

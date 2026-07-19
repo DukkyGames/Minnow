@@ -270,6 +270,16 @@
   border-radius: var(--radius-sm);
 }
 
+.settings-filesystem-warning {
+  margin: 12px 0;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--mn-danger-fg, var(--mn-fg));
+  background: color-mix(in oklch, var(--mn-danger) 10%, var(--mn-surface-0));
+  border: 1px solid color-mix(in oklch, var(--mn-danger) 32%, var(--mn-border));
+  border-radius: var(--radius-sm);
+}
+
 .settings-network-restart {
   margin: 0 0 12px;
   padding: 10px 12px;

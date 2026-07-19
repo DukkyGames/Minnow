@@ -38,35 +38,26 @@ export async function appendPluginToolsToList(
 
   if (plugins.length === 0) return;
 
-  const group = document.createElement('section');
-  group.className = 'tool-group';
-  group.setAttribute('data-tool-category', 'plugins');
-
-  const head = document.createElement('div');
-  head.className = 'tool-group-head';
-  const header = document.createElement('h3');
-  header.className = 'tool-group-header';
-  header.textContent = 'Plugins';
-  head.appendChild(header);
-  group.appendChild(head);
+  const isSettingsList = container.classList.contains('tools-list--settings');
+  const bodyNodes: HTMLElement[] = [];
 
   const hint = document.createElement('p');
   hint.className = 'tool-group-hint';
   hint.innerHTML =
     'Drop-in tools under <code>~/.minnow/tools/&lt;id&gt;/</code>. See <a href="documentation/plugins/tool-authoring.md" target="_blank" rel="noopener">tool authoring</a>.';
-  group.appendChild(hint);
+  bodyNodes.push(hint);
 
   const scaffoldRow = document.createElement('div');
   scaffoldRow.className = 'settings-plugin-scaffold-row';
   const scaffoldBtn = document.createElement('button');
   scaffoldBtn.type = 'button';
-  scaffoldBtn.className = 'settings-inline-btn';
+  scaffoldBtn.className = 'settings-action-btn';
   scaffoldBtn.textContent = 'Scaffold new plugin…';
   scaffoldBtn.addEventListener('click', () => {
     void scaffoldPluginFromPrompt(listId);
   });
   scaffoldRow.appendChild(scaffoldBtn);
-  group.appendChild(scaffoldRow);
+  bodyNodes.push(scaffoldRow);
 
   const config = loadToolConfig();
 
@@ -111,8 +102,60 @@ export async function appendPluginToolsToList(
     desc.textContent = `${plugin.description} (${plugin.namespacedName})`;
     row.appendChild(desc);
 
-    group.appendChild(row);
+    bodyNodes.push(row);
   }
+
+  if (isSettingsList) {
+    const details = document.createElement('details');
+    details.className = 'tool-group tool-group--collapsible';
+    details.setAttribute('data-tool-category', 'plugins');
+    details.dataset.settingsSearchKey = 'tools.category.plugins';
+
+    const summary = document.createElement('summary');
+    summary.className = 'tool-group-summary';
+
+    const main = document.createElement('span');
+    main.className = 'tool-group-summary__main';
+
+    const chevron = document.createElement('span');
+    chevron.className = 'tool-group-summary__chevron';
+    chevron.setAttribute('aria-hidden', 'true');
+
+    const title = document.createElement('span');
+    title.className = 'tool-group-header';
+    title.textContent = 'Plugins';
+
+    main.append(chevron, title);
+
+    const count = document.createElement('span');
+    count.className = 'tool-group-count';
+    count.textContent = `${plugins.length} tool${plugins.length === 1 ? '' : 's'}`;
+
+    summary.append(main, count);
+    details.append(summary);
+
+    const body = document.createElement('div');
+    body.className = 'tool-group-body';
+    for (const node of bodyNodes) body.appendChild(node);
+    details.appendChild(body);
+    container.appendChild(details);
+    bindToolsListChange(container);
+    return;
+  }
+
+  const group = document.createElement('section');
+  group.className = 'tool-group';
+  group.setAttribute('data-tool-category', 'plugins');
+
+  const head = document.createElement('div');
+  head.className = 'tool-group-head';
+  const header = document.createElement('h3');
+  header.className = 'tool-group-header';
+  header.textContent = 'Plugins';
+  head.appendChild(header);
+  group.appendChild(head);
+
+  for (const node of bodyNodes) group.appendChild(node);
 
   container.appendChild(group);
   bindToolsListChange(container);

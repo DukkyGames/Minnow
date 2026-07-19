@@ -10,9 +10,13 @@ describe('settings integrations hubs', () => {
     assert.equal(hubForArea('search'), 'web-research');
     assert.equal(hubForArea('deep-research'), 'deep-research');
     assert.equal(hubForArea('servers'), 'servers');
-    assert.equal(hubForArea('mcp'), 'dev-stack');
+    assert.equal(hubForArea('tools'), 'tools');
+    assert.equal(hubForArea('skills'), 'skills');
+    assert.equal(hubForArea('browser'), 'browser');
+    assert.equal(hubForArea('mcp'), 'mcp');
+    assert.equal(hubForArea('lsp'), 'lsp');
+    assert.equal(hubForArea('editor'), 'editor');
     assert.equal(hubForArea('webhooks'), 'external');
-    assert.equal(hubForArea('skills'), 'tools-skills');
   });
 
   test('every integration area belongs to exactly one hub', () => {
@@ -22,6 +26,7 @@ describe('settings integrations hubs', () => {
       'servers',
       'tools',
       'skills',
+      'browser',
       'mcp',
       'lsp',
       'editor',

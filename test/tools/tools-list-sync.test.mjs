@@ -47,7 +47,7 @@ function setupThreeToolLists() {
   `;
 
   fillToolsSection('toolsList');
-  fillToolsSection('settingsToolsList');
+  fillToolsSection('settingsToolsList', { variant: 'settings' });
   fillToolsSection('composerToolsList', { variant: 'composer' });
   fillToolsSection('chatAppToolsList', { variant: 'composer' });
 }
@@ -88,7 +88,10 @@ describe('tools list sync contract', () => {
   test('tools-list supports composer variant without descriptions', () => {
     const src = readFileSync(join(root, 'src/ui/tools-list.ts'), 'utf8');
     assert.match(src, /variant === 'composer'/);
+    assert.match(src, /variant === 'settings'/);
     assert.match(src, /tools-list--composer/);
+    assert.match(src, /tools-list--settings/);
+    assert.match(src, /tool-group--collapsible/);
   });
 });
 

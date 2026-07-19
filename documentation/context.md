@@ -116,7 +116,7 @@ Browser / Electron (same origin, default :9473)
 
 **Auth:** Per-boot session token in `~/.minnow/session-token`; injected as `window.__MINNOW_SESSION_TOKEN__` and sent as `X-Minnow-Token` ([`server/runtime/auth-middleware.js`](../server/runtime/auth-middleware.js)). No blanket CORS.
 
-**Path policy:** Default workspace-only via `resolveSafePath()` ([`server/runtime/path-access.js`](../server/runtime/path-access.js)). Full disk when `toolSecurity.filesystemAccess` is `full` or `TOOLS_ALLOW_ALL_PATHS=1`.
+**Path policy:** Default workspace-only via `resolveSafePath()` ([`server/runtime/path-access.js`](../server/runtime/path-access.js)). Full disk when `toolSecurity.filesystemAccess` is `full` (Settings → General → Filesystem access) or `TOOLS_ALLOW_ALL_PATHS=1`.
 
 **LAN:** Opt-in (`MINNOW_NETWORK=lan` or Settings → General → Network access); restart required.
 
@@ -253,6 +253,8 @@ Per-role prompts and optional provider/model binding. Shipped: `default`, `build
 
 [`src/agents/sub-agent-runner.ts`](../src/agents/sub-agent-runner.ts) — nested loops, concurrency cap in `sub-agents.json`. Tools: `spawn_sub_agent`, `get_sub_agent_status`, `cancel_sub_agent`.
 
+**Generation timeouts:** Settings → **Watchdog** (`config.json` → `chat.generationIdleTimeoutMs`, `chat.generationMaxDurationMs`) — upstream idle and max-duration limits while streaming from the model.
+
 ### Orchestrate boards
 
 Kanban delivery from plans under `documentation/plans/`. Tools: `board_init`, `board_update_task`, `board_get_state`, `board_report`, `delegate_tasks`. Board member chats get role-scoped tool filters ([`src/chat/modes/orchestrate-tool-filter.ts`](../src/chat/modes/orchestrate-tool-filter.ts)).
@@ -319,7 +321,7 @@ Design reference: [`DESIGN.md`](../DESIGN.md), [`documentation/design-system/`](
 | **Calendar** | `#/app/calendar` | `server/calendar/`, SQLite `calendar.db`, CalDAV |
 | **Email** | `#/app/email` | `server/email/`, IMAP/SMTP, encrypted accounts, SQLite `mail-<accountId>.db` |
 | **Voice** | Models → Voice | `server/voice/`, local Whisper + Qwen TTS option |
-| **Settings** | `#/app/settings` | Full config via `/api/config/*`; General category includes General, Notifications, Audio, About; Appearance, Models (Providers, **Routing**, Usage & cost, Sampler, Thinking) use the emphasis-panel layout; Integrations uses six hub pages (**Search**, **Deep Research**, **Servers**, Tools & skills, Dev stack, External); Advanced includes Health & diagnostics |
+| **Settings** | `#/app/settings` | Full config via `/api/config/*`; General category includes General, Notifications, Audio, About; Appearance, Models (Providers, **Routing**, Usage & cost, Sampler, Thinking) use the emphasis-panel layout; Integrations hubs **Search**, **Servers**, **Tools** (collapsible category groups in the tool catalog), **Skills**, **Browser**, **MCP servers**, **Language servers**, and **Editor** match the General emphasis-panel pattern (`settings-general` shell, offline banner, emphasis groups, related links); other Integrations hubs (**Deep Research**, External); Advanced includes Health & diagnostics |
 
 **Deep Research** is a dedicated panel (not a composer mode). **Compare** runs 2–6 blind model slots. **Bench** runs integration + academic packs; distinct from eval harness task packs.
 

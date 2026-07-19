@@ -62,7 +62,7 @@ describe('toolInvocationWouldPrompt', () => {
   test('outsideWorkspaceBlockMessage matches server copy', () => {
     assert.equal(
       outsideWorkspaceBlockMessage('/'),
-      'Error: Path "/" resolves outside the workspace directory. Enable full filesystem access in Settings (dangerous) or set TOOLS_ALLOW_ALL_PATHS=1 for automation.',
+      'Error: Path "/" resolves outside the workspace directory. Enable full disk access in Settings → General → Filesystem access (dangerous) or set TOOLS_ALLOW_ALL_PATHS=1 for automation.',
     );
   });
 });

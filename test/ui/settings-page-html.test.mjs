@@ -22,14 +22,16 @@ const SETTINGS_SECTION_IDS = [
   'rules',
   'agent-packs',
   'autopilot',
+  'watchdog',
   'search',
   'deep-research',
   'servers',
   'tools',
+  'skills',
+  'browser',
   'mcp',
   'lsp',
   'editor',
-  'skills',
   'webhooks',
   'features',
   'diagnostics',
@@ -47,11 +49,13 @@ const DYNAMIC_SECTION_BODY_IDS = [
   'settingsAgentCenterBody',
   'settingsRulesBody',
   'settingsAgentPacksBody',
+  'settingsWatchdogBody',
   'settingsSearchBody',
   'settingsDeepResearchBody',
   'settingsServersBody',
   'settingsToolsBody',
   'settingsSkillsBody',
+  'settingsBrowserBody',
   'settingsWebhooksBody',
   'settingsUsageBody',
   'settingsProvidersBody',
@@ -77,10 +81,9 @@ describe('settings page HTML', () => {
     assert.match(html, /id="settingsSection-providers"/);
   });
 
-  test('MCP add-server form exists in index.html', () => {
-    assert.match(html, /id="settingsMcpAddForm"/);
-    assert.match(html, /id="settingsMcpAddId"/);
-    assert.match(html, /id="settingsMcpAddCommand"/);
+  test('MCP section uses body mount (add-server form rendered in JS)', () => {
+    assert.match(html, /id="settingsMcpBody"/);
+    assert.doesNotMatch(html, /id="settingsMcpAddForm"/);
   });
 
   test('memory UI moved to Brain app (not in settings)', () => {
@@ -118,7 +121,7 @@ describe('settings page HTML', () => {
   });
 
   test('SETTINGS_SECTION_IDS matches canonical section count', () => {
-    assert.equal(SETTINGS_SECTION_IDS.length, 26);
+    assert.equal(SETTINGS_SECTION_IDS.length, 28);
   });
 
   test('agents center mount exists in index.html', () => {
@@ -191,23 +194,38 @@ describe('settings page HTML', () => {
     assert.match(html, /class="tools-list tools-list--composer"/);
   });
 
-  test('integrations category uses six hub containers', () => {
+  test('integrations category uses ten hub containers', () => {
     assert.match(html, /id="settingsHub-web-research"/);
     assert.match(html, /id="settingsHub-deep-research"/);
     assert.match(html, /id="settingsHub-servers"/);
-    assert.match(html, /id="settingsHub-tools-skills"/);
-    assert.match(html, /id="settingsHub-dev-stack"/);
+    assert.match(html, /id="settingsHub-tools"/);
+    assert.match(html, /id="settingsHub-skills"/);
+    assert.match(html, /id="settingsHub-browser"/);
+    assert.match(html, /id="settingsHub-mcp"/);
+    assert.match(html, /id="settingsHub-lsp"/);
+    assert.match(html, /id="settingsHub-editor"/);
     assert.match(html, /id="settingsHub-external"/);
     assert.match(html, /data-hub-jump="web-research"/);
     assert.match(html, /data-hub-jump="deep-research"/);
     assert.match(html, /data-hub-jump="servers"/);
+    assert.match(html, /data-hub-jump="tools"/);
+    assert.match(html, /data-hub-jump="skills"/);
+    assert.match(html, /data-hub-jump="browser"/);
+    assert.match(html, /data-hub-jump="mcp"/);
+    assert.match(html, /data-hub-jump="lsp"/);
+    assert.match(html, /data-hub-jump="editor"/);
     assert.match(html, /settings-hub is-active[^"]*" id="settingsHub-web-research"/);
     assert.match(html, /class="settings-hub__lead"/);
     assert.doesNotMatch(html, /settings-hub__title/);
     assert.doesNotMatch(html, /data-area-jump="mcp"/);
-    assert.match(html, /data-settings-nav-hub="dev-stack"/);
+    assert.match(html, /data-settings-nav-hub="mcp"/);
+    assert.match(html, /data-settings-nav-hub="lsp"/);
+    assert.match(html, /data-settings-nav-hub="editor"/);
     assert.match(html, /data-settings-nav-hub="servers"/);
     assert.match(html, /data-settings-nav-hub="deep-research"/);
+    assert.match(html, /id="settingsMcpBody"/);
+    assert.match(html, /id="settingsLspBody"/);
+    assert.match(html, /id="settingsEditorBody"/);
   });
 
   test('general section suppresses duplicate section title', () => {

@@ -33,11 +33,11 @@ Open via **Settings** (`#/settings/<category>`) or legacy `#/settings/<area>`.
 | **General** | General, Notifications, Audio, About |
 | **Appearance** | Appearance |
 | **Models** | Providers, Routing, Sampler, Thinking, Usage & cost |
-| **Agents** | Prompts, Rules, Modes, Work agents, Agent packs, Sub-agents, Autopilot |
-| **Integrations** | Search, Deep Research, Servers, Tools, Skills, MCP, LSP, Editor, Webhooks, OAuth |
+| **Agents** | Prompts, Rules, Modes, Work agents, Agent packs, Sub-agents, Autopilot, Watchdog |
+| **Integrations** | Search, Deep Research, Servers, Tools, Skills, Browser, MCP, LSP, Editor, Webhooks, OAuth |
 | **Advanced** | Orchestration, Evals |
 
-**Integrations hubs** (6 sub-tabs): Search · Deep Research · Servers · Tools & skills · Dev stack · External.
+**Integrations hubs** (10 sub-tabs): Search · Deep Research · Servers · Tools · Skills · Browser · MCP servers · Language servers · Editor · External.
 
 **Voice** settings moved to **Models app → Voice** (`#/app/models/voice`). Device routing remains under **Settings → Audio**.
 
@@ -49,6 +49,7 @@ Open via **Settings** (`#/settings/<category>`) or legacy `#/settings/<area>`.
 
 | Setting | Persistence | Notes |
 |---------|-------------|-------|
+| Filesystem access | `config.toolSecurity.filesystemAccess` | `workspace` (project folder only) vs `full` (entire disk). Override: `TOOLS_ALLOW_ALL_PATHS=1` |
 | Network access | `config.server.networkAccess` | `local` (loopback) vs `lan` (Wi‑Fi). Override: `MINNOW_NETWORK` |
 | Terminal behavior | — | Info only: commands run in background |
 | Constrained tool calls | `config.toolCalls.useConstrainedDecoding` | JSON Schema on tool turns |
@@ -273,6 +274,17 @@ Per type: enabled, max concurrent, timeout, max input tokens, context policy, su
 | Planner model fallback | Provider + model |
 | Self-heal & provisioning | Max self-heal rounds, infra provision timeout, auto-provision infra, auto-restart stalled tasks, guard `cd` outside worktree |
 
+### Watchdog (`config.json` → `chat`)
+
+Settings → **Agents → Watchdog** — server-side limits while streaming from the model.
+
+| Setting | Key |
+|---------|-----|
+| Idle timeout (minutes) | `chat.generationIdleTimeoutMs` |
+| Max duration (minutes) | `chat.generationMaxDurationMs` |
+
+Idle timeout resets when new tokens arrive; applies to the next generation without restart.
+
 ---
 
 ## 5. Integrations
@@ -308,14 +320,20 @@ Managed **SearXNG** install/start/stop (`~/.minnow/servers/`).
 | Setting | Key |
 |---------|-----|
 | Constrained tool calls | `toolCalls.useConstrainedDecoding` |
-| Idle timeout (minutes) | `chat.generationIdleTimeoutMs` |
-| Max duration (minutes) | `chat.generationMaxDurationMs` |
 | Tool result cache | Session-scoped |
-| Filesystem access | `toolSecurity.filesystemAccess`: `workspace` / `full` |
-
-**Browser automation** (`config.browser`): enabled, allow navigate, allowed origin patterns.
 
 **Per-tool permissions:** each of **89 built-in tools** is `off` / `ask` / `full`, plus any `mcp__…` tools from MCP servers.
+
+### Browser (`config.json` → `browser`)
+
+| Setting | Key |
+|---------|-----|
+| Allow navigation | `browser.allowNavigate` |
+| Restore browser tabs | `browser.restoreBrowserTabs` |
+| Allowed origin patterns | `browser.allowedOriginPatterns` |
+| DevTools dock | `filePanel.previewDevToolsDock` (session state) |
+
+Preview panel automation for `browser_*` tools (Electron desktop shell only).
 
 #### Built-in tools (89)
 

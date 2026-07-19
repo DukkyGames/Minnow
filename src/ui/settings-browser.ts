@@ -1,6 +1,8 @@
 /**
- * Settings UI for built-in preview browser navigation allowlist (`config.json` → `browser`).
+ * Settings → Browser — preview panel automation allowlist (`config.json` → `browser`).
  */
+
+import '../styles/settings-general.css';
 
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
 import {
@@ -11,6 +13,11 @@ import {
   type BrowserMeta,
 } from '../config/browser-meta';
 import { normalizeAllowlistPatterns } from '../tools/browser-allowlist-match';
+import {
+  appendSettingsCrosslinks,
+  appendSettingsGroup,
+  linkToSettingsSection,
+} from './settings-layout';
 import { createSettingsToggleRow } from './settings-switch';
 import {
   appendSettingsOfflineHint,
@@ -44,17 +51,25 @@ function parsePatternsText(raw: string): string[] {
     .filter((line) => line.length > 0);
 }
 
-/**
- * Renders browser allowlist controls into the tools settings mount node.
- */
-export async function renderBrowserAllowlistSettings(
-  mount: HTMLElement,
-  initialMeta?: BrowserMeta,
-): Promise<void> {
+/** Mount browser automation controls into #settingsBrowserBody. */
+export async function renderBrowserSettingsSection(mount: HTMLElement): Promise<void> {
+  mount.replaceChildren();
+
+  const shell = el('div', 'settings-general');
+  mount.appendChild(shell);
+
+  const lead = el('p', 'settings-section-lead');
+  lead.append(
+    'Built-in preview panel for browser_* tools in the Electron desktop shell. Tool permissions live under ',
+    linkToSettingsSection('Tools', 'tools'),
+    '.',
+  );
+  shell.appendChild(lead);
+
   if (!isServerStorageMode()) {
     appendSettingsOfflineHint(
-      mount,
-      'Browser allowlist settings require <code>npm start</code> (config.json on disk).',
+      shell,
+      'Browser settings require <code>npm start</code> (config.json on disk).',
     );
     return;
   }
@@ -62,44 +77,53 @@ export async function renderBrowserAllowlistSettings(
   const mode = await detectConfigServer();
   if (mode !== 'server') {
     appendSettingsOfflineHint(
-      mount,
-      'Connect with <code>npm start</code> to edit the browser allowlist.',
+      shell,
+      'Connect with <code>npm start</code> to edit browser settings.',
     );
     return;
   }
 
-  const meta = initialMeta ?? (await loadBrowserMeta());
+  const meta = await loadBrowserMeta();
+  const content = el('div', 'settings-general__content');
+  shell.appendChild(content);
 
-  const section = el('section', 'settings-tool-browser');
-  const heading = el('h3', 'settings-subheading', 'Built-in browser automation');
-  section.appendChild(heading);
-  section.appendChild(
-    el(
-      'p',
-      'settings-field-hint',
-      'The built-in preview panel (Electron desktop shell) is used for browser_* tools. browser_navigate only opens URLs matching these glob-like origin patterns (* = any characters). Localhost dev hosts are included by default.',
-    ),
+  const behaviorGroup = appendSettingsGroup(
+    content,
+    'Navigation & tabs',
+    'browser_navigate only opens URLs matching your allowlist. Localhost dev hosts are included by default.',
+    'integrations.browser',
+    { emphasis: true },
   );
 
   const { row: allowNavRow, input: allowNavCb } = createSettingsToggleRow('Allow navigation', {
     id: 'settingsBrowserAllowNavigate',
     checked: meta.allowNavigate,
+    searchKey: 'integrations.browser.allowNavigate',
   });
-  section.appendChild(allowNavRow);
+  behaviorGroup.appendChild(allowNavRow);
 
   const { row: restoreTabsRow, input: restoreTabsCb } = createSettingsToggleRow(
     'Restore browser tabs',
     {
       id: 'settingsBrowserRestoreTabs',
       checked: meta.restoreBrowserTabs,
+      searchKey: 'integrations.browser.restoreTabs',
     },
   );
-  section.appendChild(restoreTabsRow);
+  behaviorGroup.appendChild(restoreTabsRow);
+
+  const devToolsGroup = appendSettingsGroup(
+    content,
+    'DevTools dock',
+    'Where Chromium DevTools opens in the preview browser (Electron desktop shell only).',
+    'integrations.browser.devtoolsDock',
+    { emphasis: true },
+  );
 
   const { row: devToolsDockRow, inputs: devToolsDockInputs, setValue: setDevToolsDockValue } =
-    createSettingsRadioRow('DevTools dock', {
+    createSettingsRadioRow('DevTools dock position', {
       name: 'minnow-preview-devtools-dock',
-      searchKey: 'browser.devtoolsDock',
+      searchKey: 'integrations.browser.devtoolsDock',
       options: [
         { value: 'bottom', label: 'Bottom' },
         { value: 'side', label: 'Side' },
@@ -111,14 +135,7 @@ export async function renderBrowserAllowlistSettings(
   dockSide.id = 'settingsBrowserDevToolsDockSide';
   dockPopout.id = 'settingsBrowserDevToolsDockPopout';
   setDevToolsDockValue(getFilePanelState().previewDevToolsDock);
-  section.appendChild(devToolsDockRow);
-  section.appendChild(
-    el(
-      'p',
-      'settings-field-hint',
-      'Where Chromium DevTools opens in the preview browser: docked below, docked beside, or in a separate window (Electron desktop shell only).',
-    ),
-  );
+  devToolsGroup.appendChild(devToolsDockRow);
 
   for (const input of devToolsDockInputs) {
     input.addEventListener('change', () => {
@@ -131,22 +148,31 @@ export async function renderBrowserAllowlistSettings(
     });
   }
 
+  const allowlistGroup = appendSettingsGroup(
+    content,
+    'Allowed origin patterns',
+    'One origin per line, such as http://localhost:* or https://*.example.com. Use * as a wildcard.',
+    'integrations.browser.patterns',
+    { emphasis: true },
+  );
+
   const patternsArea = document.createElement('textarea');
   patternsArea.id = 'settingsBrowserAllowlistPatterns';
   patternsArea.rows = 6;
   patternsArea.spellcheck = false;
   patternsArea.value = patternsToText(meta.allowedOriginPatterns);
-  section.appendChild(
-    createSettingsTextareaRow('Allowed origin patterns (one per line)', {
+  allowlistGroup.appendChild(
+    createSettingsTextareaRow('Origin patterns', {
       textarea: patternsArea,
+      searchKey: 'integrations.browser.patterns',
     }).row,
   );
 
-  section.appendChild(
+  allowlistGroup.appendChild(
     createSettingsActionsRow([
       {
         label: 'Save browser settings',
-        className: 'settings-inline-btn',
+        variant: 'primary',
         onClick: () => {
           void (async () => {
             const patterns = normalizeAllowlistPatterns(parsePatternsText(patternsArea.value));
@@ -163,17 +189,15 @@ export async function renderBrowserAllowlistSettings(
               });
               invalidateBrowserMetaCache();
               await loadBrowserMeta();
-              setStatus('ok', 'Browser allowlist saved');
+              setStatus('ok', 'Browser settings saved');
             } catch {
-              setStatus('err', 'Could not save browser allowlist');
+              setStatus('err', 'Could not save browser settings');
             }
           })();
         },
       },
     ]),
   );
-
-  mount.appendChild(section);
 
   allowNavCb.addEventListener('change', () => {
     void (async () => {
@@ -198,9 +222,23 @@ export async function renderBrowserAllowlistSettings(
       }
     })();
   });
+
+  appendSettingsCrosslinks(content, [
+    { label: 'Tool permissions', sectionId: 'tools' },
+    { label: 'Skills catalog', sectionId: 'skills' },
+  ]);
 }
 
-/** Cached meta for tools section render (after loadBrowserMeta). */
+/** Cached meta for settings consumers (after loadBrowserMeta). */
 export function getBrowserSettingsMeta(): BrowserMeta {
   return getBrowserMetaCached();
+}
+
+/** @deprecated Use renderBrowserSettingsSection. */
+export async function renderBrowserAllowlistSettings(
+  mount: HTMLElement,
+  initialMeta?: BrowserMeta,
+): Promise<void> {
+  void initialMeta;
+  await renderBrowserSettingsSection(mount);
 }

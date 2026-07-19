@@ -36,6 +36,17 @@ const TARGET_FLASH_CLASS = 'settings-search-target-flash';
 
 const FLASH_MS = 1800;
 
+/** Open ancestor disclosure panels so a search hit is visible. */
+function expandSettingsDetailsForTarget(node: HTMLElement): void {
+  let current: HTMLElement | null = node;
+  while (current) {
+    if (current instanceof HTMLDetailsElement) {
+      current.open = true;
+    }
+    current = current.parentElement;
+  }
+}
+
 
 
 function getSectionRoot(sectionId: SettingsSectionId): HTMLElement | null {
@@ -157,11 +168,9 @@ export function ensureSettingsAreaVisible(sectionId: SettingsSectionId): void {
 
 
   sectionRoot.querySelectorAll('details:not([open])').forEach((details) => {
-
+    if (details.classList.contains('tool-group--collapsible')) return;
     const keyed = details.querySelector('[data-settings-search-key]');
-
     if (keyed) details.setAttribute('open', '');
-
   });
 
 }
@@ -310,7 +319,10 @@ export function resolveSettingsSearchDomTarget(
 
     );
 
-    if (keyed instanceof HTMLElement) return keyed;
+    if (keyed instanceof HTMLElement) {
+      expandSettingsDetailsForTarget(keyed);
+      return keyed;
+    }
 
   }
 

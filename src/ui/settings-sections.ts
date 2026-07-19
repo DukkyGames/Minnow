@@ -46,6 +46,7 @@ import { renderUsageSettingsSection } from './settings-usage';
 import { renderAudioSettingsSection } from './settings-audio';
 import { renderNotificationsSettingsSection } from './settings-notifications';
 import { renderNetworkAccessSettings } from './settings-network';
+import { renderFilesystemAccessSettings } from './settings-filesystem';
 import { renderAppUpdatesSettings } from './settings-updates';
 import { renderAgentPacksSettingsSection } from './settings-agent-packs';
 import { renderAutopilotSettingsSection } from './settings-autopilot';
@@ -74,15 +75,7 @@ import {
   saveToolConfig,
   setAllBuiltInToolPermissions,
 } from '../tools/config';
-import type { ToolSecurityMeta } from '../config/tool-security-meta';
-import {
-  getToolSecurityMetaCached,
-  isToolSecurityMetaLoaded,
-  loadToolSecurityMeta,
-  saveToolSecurityMeta,
-} from '../config/tool-security-meta';
-import { loadBrowserMeta } from '../config/browser-meta';
-import { renderBrowserAllowlistSettings } from './settings-browser';
+import { renderBrowserSettingsSection } from './settings-browser';
 import { renderLspSection } from './lsp-settings';
 import { renderEditorSection } from './settings-editor';
 import { setStatus } from './status';
@@ -99,7 +92,6 @@ import {
   createSettingsActionsRow,
   createSettingsInputRow,
   createSettingsKvList,
-  createSettingsRadioRow,
   createSettingsSelectRow,
 } from './settings-controls';
 import { renderAboutSettingsSection } from './settings-about';
@@ -361,6 +353,17 @@ async function renderGeneralSection(): Promise<void> {
     { emphasis: true },
   );
   await appendTerminalControls(chat);
+  if (isAsyncSectionRenderStale('general', generation)) return;
+
+  const filesystem = appendSettingsGroup(
+    shell,
+    'Filesystem access',
+    'Choose whether file and git tools stay inside your open project or can reach anywhere on this computer.',
+    'general.filesystem',
+    { emphasis: true },
+  );
+  filesystem.id = 'settingsFilesystemAccess';
+  await renderFilesystemAccessSettings(filesystem);
   if (isAsyncSectionRenderStale('general', generation)) return;
 
   const network = appendSettingsGroup(
@@ -1141,14 +1144,19 @@ async function renderAutopilotSection(): Promise<void> {
   await renderAutopilotSettingsSection(mount);
 }
 
-/** Generation upstream timeouts (Settings → Tools). */
-async function appendGenerationTimeoutsSection(mount: HTMLElement): Promise<void> {
+/** Generation upstream timeouts (Settings → Agents → Watchdog). */
+async function appendGenerationTimeoutsSection(
+  mount: HTMLElement,
+  options?: { emphasis?: boolean },
+): Promise<void> {
   await loadChatMeta();
 
   const timeoutSection = appendSettingsGroup(
     mount,
     'Generation timeouts',
     'Server-side limits while streaming from the model. Idle timeout resets when new tokens arrive. Applies to the next generation; no restart needed.',
+    'agents.watchdog.generation',
+    options?.emphasis ? { emphasis: true } : undefined,
   );
 
   const idleInput = document.createElement('input');
@@ -1211,10 +1219,25 @@ async function appendGenerationTimeoutsSection(mount: HTMLElement): Promise<void
   });
 }
 
-let toolsSectionInitialized = false;
+async function renderWatchdogSection(): Promise<void> {
+  const mount = clearMount('settingsWatchdogBody');
+  if (!mount) return;
 
-/** Bumped on each render so stale async work cannot hydrate a replaced DOM. */
-let toolsSectionRenderGeneration = 0;
+  const shell = el('div', 'settings-general settings-general--wide');
+  mount.appendChild(shell);
+
+  const lead = el('p', 'settings-section-lead');
+  lead.textContent =
+    'Server-side limits while models and agents stream. Applies to the next generation; no restart needed.';
+  shell.appendChild(lead);
+
+  const content = el('div', 'settings-general__content');
+  shell.appendChild(content);
+
+  await appendGenerationTimeoutsSection(content, { emphasis: true });
+}
+
+let toolsSectionInitialized = false;
 
 const asyncSectionRenderGeneration: Partial<Record<SettingsSectionId, number>> =
   {};
@@ -1233,195 +1256,139 @@ function isAsyncSectionRenderStale(
 }
 
 async function renderToolsSection(): Promise<void> {
+  const generation = beginAsyncSectionRender('tools');
   const mount = clearMount('settingsToolsBody');
   if (!mount) return;
 
-  const generation = ++toolsSectionRenderGeneration;
+  const shell = el('div', 'settings-general');
+  mount.appendChild(shell);
 
-  const toolDefaults = appendSettingsGroup(
-    mount,
-    'Structured tool arguments',
-    'Optional JSON Schema on tool turns when the active provider supports it.',
+  const lead = el('p', 'settings-section-lead');
+  lead.append(
+    'Built-in tool permissions and session cache. Browser automation lives under ',
+    linkToSettingsSection('Browser', 'browser'),
+    '. Slash commands live under ',
+    linkToSettingsSection('Skills', 'skills'),
+    '. Web search keys live under ',
+    linkToSettingsSection('Search', 'search'),
+    '.',
   );
-  await appendToolCallDefaults(toolDefaults);
-  if (generation !== toolsSectionRenderGeneration) return;
+  shell.appendChild(lead);
 
-  await appendGenerationTimeoutsSection(mount);
-  if (generation !== toolsSectionRenderGeneration) return;
-
-  let toolSecurity: ToolSecurityMeta;
-  if (isToolConfigReadyForSettingsUi() && isToolSecurityMetaLoaded()) {
-    toolSecurity = getToolSecurityMetaCached();
-  } else {
-    const loaded = await Promise.all([
-      loadToolSecurityMeta().catch(
-        (): ToolSecurityMeta => ({ filesystemAccess: 'workspace' }),
-      ),
-      loadToolConfigForSettingsUi(),
-      loadBrowserMeta().catch(() => undefined),
-    ]);
-    toolSecurity = loaded[0];
-    if (generation !== toolsSectionRenderGeneration) return;
-  }
-
-  appendSettingsOfflineHint(mount, 'Server tools need npm start (not npm run dev).', {
+  appendSettingsOfflineHint(shell, 'Server tools need <code>npm start</code> (not npm run dev).', {
     id: 'settingsToolsServerBanner',
     hidden: true,
   });
   appendSettingsOfflineHint(
-    mount,
+    shell,
     'Browser tools only work in the Minnow desktop app window (from npm start), not in a separate browser tab.',
     { id: 'settingsToolsPreviewBanner', hidden: true },
   );
 
-  const permissions = appendSettingsGroup(
-    mount,
-    'Permissions & cache',
-    'Each tool can be off, ask before run, or full permission. File and git tools need npm start.',
+  const content = el('div', 'settings-general__content');
+  shell.appendChild(content);
+
+  const structuredGroup = appendSettingsGroup(
+    content,
+    'Structured tool arguments',
+    'Optional JSON Schema on tool turns when the active provider supports it.',
+    'integrations.tools',
+    { emphasis: true },
+  );
+  await appendToolCallDefaults(structuredGroup);
+  if (isAsyncSectionRenderStale('tools', generation)) return;
+
+  if (!isToolConfigReadyForSettingsUi()) {
+    await loadToolConfigForSettingsUi();
+    if (isAsyncSectionRenderStale('tools', generation)) return;
+  }
+
+  const cacheGroup = appendSettingsGroup(
+    content,
+    'Session cache',
+    'Speed up repeated read-only tool calls for the current workspace session.',
+    'integrations.tools.cache',
+    { emphasis: true },
   );
 
-  const cacheRow = document.createElement('div');
-  cacheRow.className = 'settings-tool-cache-row field';
   const { row: cacheToggle, input: cacheCheckbox } = createSettingsToggleRow(
     'Cache repeated read-only tool results in this session',
-    { id: 'settingsToolCacheEnabled' },
+    {
+      id: 'settingsToolCacheEnabled',
+      searchKey: 'integrations.tools.cache',
+    },
   );
-  cacheRow.appendChild(cacheToggle);
-  cacheRow.appendChild(
+  cacheGroup.appendChild(cacheToggle);
+  cacheGroup.appendChild(
     el(
       'p',
       'settings-field-hint',
-      'Speeds up duplicate read_file and similar calls until the workspace changes or a write invalidates the path. Cleared on workspace switch.',
+      'Applies to duplicate read_file and similar calls until the workspace changes or a write invalidates the path. Cleared on workspace switch.',
     ),
   );
-  permissions.appendChild(cacheRow);
 
-  const bulkActions = document.createElement('div');
-  bulkActions.className = 'settings-tools-bulk-actions';
-  const allFullBtn = document.createElement('button');
-  allFullBtn.type = 'button';
-  allFullBtn.id = 'settingsToolsAllFull';
-  allFullBtn.className = 'settings-inline-btn settings-tools-bulk-all-full';
-  allFullBtn.textContent = 'All full permissions';
-  const resetDefaultsBtn = document.createElement('button');
-  resetDefaultsBtn.type = 'button';
-  resetDefaultsBtn.id = 'settingsToolsResetDefaults';
-  resetDefaultsBtn.className = 'settings-inline-btn settings-tools-bulk-reset';
-  resetDefaultsBtn.textContent = 'Reset to defaults';
-  bulkActions.append(allFullBtn, resetDefaultsBtn);
-  permissions.appendChild(bulkActions);
-
-  const fsGroup = appendSettingsGroup(
-    mount,
-    'Filesystem access',
-    'When restricted, file tools cannot resolve paths outside the workspace. Full access is dangerous on untrusted models.',
+  const catalog = appendSettingsGroup(
+    content,
+    'Tool catalog',
+    'Each tool can be off, ask before run, or full permission. File and git tools need npm start. Plugin tools appear at the bottom when the server is running.',
+    'integrations.tools',
+    { emphasis: true },
   );
-  const { row: fsRow, inputs: fsInputs, getValue: getFsValue, setValue: setFsValue } =
-    createSettingsRadioRow(
-    'Path resolution',
-    {
-      name: 'minnow-fs-access-settings',
-      searchKey: 'tools.filesystem.access',
-      options: [
-        { value: 'workspace', label: 'Workspace only' },
-        { value: 'full', label: 'Full disk' },
-      ],
-    },
-  );
-  const [rWorkspace, rFull] = fsInputs;
-  rWorkspace.id = 'fsAccessWorkspaceSettings';
-  rFull.id = 'fsAccessFullSettings';
-  fsGroup.appendChild(fsRow);
-
-  const browserGroup = appendSettingsGroup(
-    mount,
-    'Browser automation',
-    'Allowlisted origins for built-in preview browser tools when automation is enabled.',
-  );
-  const browserMount = el('div', 'settings-tool-browser-mount');
-  browserGroup.appendChild(browserMount);
-  await renderBrowserAllowlistSettings(browserMount);
-
-  const applyFsRadios = (meta: ToolSecurityMeta = getToolSecurityMetaCached()): void => {
-    setFsValue(meta.filesystemAccess === 'full' ? 'full' : 'workspace');
-  };
-
-  const persistFs = async (): Promise<void> => {
-    const next = getFsValue() === 'full' ? 'full' : 'workspace';
-    if (next === 'full') {
-      const ok = await appConfirm(
-        'Enable full filesystem access?\n\nFile and git tools will be able to resolve paths outside your current workspace. A malicious or mistaken model could read or modify sensitive files anywhere on this computer.\n\nOnly continue if you understand and accept this risk.',
-      );
-      if (!ok) {
-        applyFsRadios();
-        return;
-      }
-    }
-    try {
-      await saveToolSecurityMeta({ filesystemAccess: next });
-      setStatus('ok', 'Filesystem access setting saved');
-    } catch {
-      setStatus('err', 'Could not save — use npm start');
-      applyFsRadios();
-    }
-  };
-
-  applyFsRadios(toolSecurity);
-
-  rWorkspace.addEventListener('change', () => {
-    if (rWorkspace.checked) void persistFs();
-  });
-  rFull.addEventListener('change', () => {
-    if (rFull.checked) void persistFs();
-  });
 
   const list = document.createElement('div');
   list.id = 'settingsToolsList';
   list.className = 'tools-list settings-tools-list';
 
-  const catalog = appendSettingsGroup(
-    mount,
-    'Tool catalog',
-    'Toggle and set permission per built-in tool. Web search provider and API keys live under Search.',
+  catalog.appendChild(
+    createSettingsActionsRow(
+      [
+        {
+          id: 'settingsToolsAllFull',
+          label: 'All full permissions',
+          variant: 'danger',
+          onClick: () => {
+            void (async () => {
+              const ok = await appConfirm(
+                'Grant full permission to all tools?\n\nEvery built-in tool will run without the approval prompt. Paths outside the workspace stay blocked unless you enable full disk access under Settings → General → Filesystem access.\n\nOnly use this if you accept that risk.',
+              );
+              if (!ok) return;
+              try {
+                await setAllBuiltInToolPermissions('full', list);
+                setStatus('ok', 'All tools set to full permission');
+              } catch {
+                setStatus('err', 'Could not save — use npm start');
+              }
+            })();
+          },
+        },
+        {
+          id: 'settingsToolsResetDefaults',
+          label: 'Reset to defaults',
+          onClick: () => {
+            void (async () => {
+              const ok = await appConfirm(
+                'Reset all tool permissions to defaults?\n\nBuilt-in tools will return to factory on/off and ask settings.',
+              );
+              if (!ok) return;
+              try {
+                await resetBuiltInToolPermissionsToDefaults(list);
+                setStatus('ok', 'Tool permissions reset to defaults');
+              } catch {
+                setStatus('err', 'Could not save — use npm start');
+              }
+            })();
+          },
+        },
+      ],
+      { searchKey: 'integrations.tools.bulk', className: 'settings-tools-toolbar' },
+    ),
   );
+  catalog.appendChild(list);
 
-  const toolsPanel = el('div', 'settings-tools-panel');
-  toolsPanel.appendChild(list);
-  catalog.appendChild(toolsPanel);
-
-  fillToolsSection('settingsToolsList');
+  fillToolsSection('settingsToolsList', { variant: 'settings' });
   const { appendPluginToolsToList } = await import('./settings-plugins');
   await appendPluginToolsToList('settingsToolsList');
-
-  allFullBtn.addEventListener('click', () => {
-    void (async () => {
-      const ok = await appConfirm(
-        'Grant full permission to all tools?\n\nEvery built-in tool will run without the approval prompt. Paths outside the workspace are blocked when filesystem access is workspace-only.\n\nThis does not change “Filesystem access” below (workspace vs full disk). Only use this if you accept that risk.',
-      );
-      if (!ok) return;
-      try {
-        await setAllBuiltInToolPermissions('full', list);
-        setStatus('ok', 'All tools set to full permission');
-      } catch {
-        setStatus('err', 'Could not save — use npm start');
-      }
-    })();
-  });
-
-  resetDefaultsBtn.addEventListener('click', () => {
-    void (async () => {
-      const ok = await appConfirm(
-        'Reset all tool permissions to defaults?\n\nBuilt-in tools will return to factory on/off and ask settings.',
-      );
-      if (!ok) return;
-      try {
-        await resetBuiltInToolPermissionsToDefaults(list);
-        setStatus('ok', 'Tool permissions reset to defaults');
-      } catch {
-        setStatus('err', 'Could not save — use npm start');
-      }
-    })();
-  });
+  if (isAsyncSectionRenderStale('tools', generation)) return;
 
   if (!toolsSectionInitialized) {
     toolsSectionInitialized = true;
@@ -1435,8 +1402,6 @@ async function renderToolsSection(): Promise<void> {
   };
   cacheCheckbox.addEventListener('change', persistToolCache);
 
-  if (generation !== toolsSectionRenderGeneration) return;
-
   const config = getToolConfig();
   cacheCheckbox.checked = config.toolCache?.enabled !== false;
   loadToolConfigIntoDrawer(list);
@@ -1445,6 +1410,12 @@ async function renderToolsSection(): Promise<void> {
     'hidden',
     isLocalServerAvailable(),
   );
+
+  appendSettingsCrosslinks(content, [
+    { label: 'Browser automation', sectionId: 'browser' },
+    { label: 'Skills catalog', sectionId: 'skills' },
+    { label: 'Web search', sectionId: 'search' },
+  ]);
 }
 
 /** Test fixture server — hidden from settings UI. */
@@ -1600,6 +1571,227 @@ function createMcpSettingsRow(
 
 let mcpToggleHandlerBound = false;
 let mcpAddFormBound = false;
+let mcpSettingsShellReady = false;
+
+/** Build the add-server disclosure form (mounted once inside the MCP settings shell). */
+function buildMcpAddPanel(): HTMLDetailsElement {
+  const panel = document.createElement('details');
+  panel.id = 'settingsMcpAddPanel';
+  panel.className = 'settings-mcp-add-panel hidden';
+
+  const summary = document.createElement('summary');
+  summary.className = 'settings-mcp-add-summary';
+  summary.textContent = 'Add MCP server';
+  panel.appendChild(summary);
+
+  const form = document.createElement('form');
+  form.id = 'settingsMcpAddForm';
+  form.className = 'settings-mcp-form';
+  form.noValidate = true;
+
+  const idRow = el('div', 'field-row');
+  const idField = el('div', 'field');
+  idField.append(
+    Object.assign(document.createElement('label'), {
+      htmlFor: 'settingsMcpAddId',
+      textContent: 'Server id',
+    }),
+    Object.assign(document.createElement('input'), {
+      type: 'text',
+      id: 'settingsMcpAddId',
+      name: 'id',
+      required: true,
+      pattern: '[a-z0-9][a-z0-9_-]*',
+      autocomplete: 'off',
+      spellcheck: false,
+      placeholder: 'my-docs-mcp',
+    }),
+    el('p', 'field-hint', 'Lowercase letters, numbers, hyphens, underscores.'),
+  );
+  const labelField = el('div', 'field');
+  labelField.append(
+    Object.assign(document.createElement('label'), {
+      htmlFor: 'settingsMcpAddLabel',
+      textContent: 'Display name',
+    }),
+    Object.assign(document.createElement('input'), {
+      type: 'text',
+      id: 'settingsMcpAddLabel',
+      name: 'label',
+      required: true,
+      autocomplete: 'off',
+      placeholder: 'My docs MCP',
+    }),
+  );
+  idRow.append(idField, labelField);
+
+  const descField = el('div', 'field');
+  descField.append(
+    Object.assign(document.createElement('label'), {
+      htmlFor: 'settingsMcpAddDescription',
+      textContent: 'Description (optional)',
+    }),
+    Object.assign(document.createElement('input'), {
+      type: 'text',
+      id: 'settingsMcpAddDescription',
+      name: 'description',
+      autocomplete: 'off',
+      placeholder: 'What this server provides',
+    }),
+  );
+
+  const cmdRow = el('div', 'field-row');
+  const cmdField = el('div', 'field');
+  cmdField.append(
+    Object.assign(document.createElement('label'), {
+      htmlFor: 'settingsMcpAddCommand',
+      textContent: 'Command',
+    }),
+    Object.assign(document.createElement('input'), {
+      type: 'text',
+      id: 'settingsMcpAddCommand',
+      name: 'command',
+      required: true,
+      autocomplete: 'off',
+      spellcheck: false,
+      placeholder: 'npx',
+    }),
+  );
+  const enabledField = el('div', 'field');
+  const enabledLabel = el('label', undefined, 'Enabled on add');
+  const enabledToggle = el('label', 'settings-toggle-row');
+  const enabledInput = Object.assign(document.createElement('input'), {
+    type: 'checkbox',
+    id: 'settingsMcpAddEnabled',
+    name: 'enabled',
+    checked: true,
+  });
+  enabledToggle.append(enabledInput, el('span', undefined, 'Connect after saving'));
+  enabledField.append(enabledLabel, enabledToggle);
+  cmdRow.append(cmdField, enabledField);
+
+  const argsField = el('div', 'field');
+  argsField.append(
+    Object.assign(document.createElement('label'), {
+      htmlFor: 'settingsMcpAddArgs',
+      textContent: 'Arguments (one per line)',
+    }),
+    Object.assign(document.createElement('textarea'), {
+      id: 'settingsMcpAddArgs',
+      name: 'args',
+      rows: 4,
+      spellcheck: false,
+      placeholder: '-y\n@modelcontextprotocol/server-filesystem\n/path/to/allowed/dir',
+    }),
+  );
+
+  const envField = el('div', 'field');
+  envField.append(
+    Object.assign(document.createElement('label'), {
+      htmlFor: 'settingsMcpAddEnv',
+      textContent: 'Environment variables (optional, KEY=value per line)',
+    }),
+    Object.assign(document.createElement('textarea'), {
+      id: 'settingsMcpAddEnv',
+      name: 'env',
+      rows: 3,
+      spellcheck: false,
+      placeholder: 'API_KEY=your-key-here',
+    }),
+  );
+
+  const errEl = el('p', 'settings-mcp-form-error hidden');
+  errEl.id = 'settingsMcpAddError';
+  errEl.setAttribute('role', 'alert');
+
+  const actions = el('div', 'settings-mcp-form-actions');
+  const submitBtn = Object.assign(document.createElement('button'), {
+    type: 'submit',
+    className: 'settings-action-btn',
+    textContent: 'Add server',
+  });
+  const resetBtn = Object.assign(document.createElement('button'), {
+    type: 'button',
+    id: 'settingsMcpAddReset',
+    className: 'settings-inline-btn',
+    textContent: 'Clear form',
+  });
+  actions.append(submitBtn, resetBtn);
+
+  form.append(idRow, descField, cmdRow, argsField, envField, errEl, actions);
+  panel.appendChild(form);
+  return panel;
+}
+
+/** Mount the MCP settings shell once (emphasis-panel layout like Browser / Servers). */
+function ensureMcpSettingsShell(mount: HTMLElement): {
+  listEl: HTMLElement;
+  offlineEl: HTMLElement;
+  addPanel: HTMLDetailsElement;
+} {
+  if (mcpSettingsShellReady) {
+    return {
+      listEl: document.getElementById('settingsMcpServerList')!,
+      offlineEl: document.getElementById('settingsMcpOffline')!,
+      addPanel: document.getElementById('settingsMcpAddPanel') as HTMLDetailsElement,
+    };
+  }
+
+  mount.replaceChildren();
+
+  const shell = el('div', 'settings-general');
+  mount.appendChild(shell);
+
+  const lead = el('p', 'settings-section-lead');
+  lead.append(
+    'External tool servers connect over stdio and register as ',
+    el('code', undefined, 'mcp__server__tool'),
+    '. Language-server diagnostics live under ',
+    linkToSettingsSection('Language servers', 'lsp'),
+    '; AI ghost text lives under ',
+    linkToSettingsSection('Editor', 'editor'),
+    '.',
+  );
+  shell.appendChild(lead);
+
+  const offlineEl = appendSettingsOfflineHint(
+    shell,
+    'Start with <code>npm start</code> to load, toggle, and add MCP servers.',
+    { id: 'settingsMcpOffline', searchKey: 'integrations.mcp', hidden: true },
+  );
+  offlineEl.classList.add('settings-mcp-offline');
+
+  const content = el('div', 'settings-general__content');
+  shell.appendChild(content);
+
+  const catalog = appendSettingsGroup(
+    content,
+    'Configured servers',
+    'Built-in servers ship with Minnow. Custom entries persist in ~/.minnow/mcp.json.',
+    'integrations.mcp',
+    { emphasis: true },
+  );
+
+  const listEl = el('div', 'settings-mcp-list');
+  listEl.id = 'settingsMcpServerList';
+  listEl.setAttribute('role', 'list');
+  listEl.setAttribute('aria-label', 'Configured MCP servers');
+  catalog.appendChild(listEl);
+
+  const addPanel = buildMcpAddPanel();
+  catalog.appendChild(addPanel);
+
+  appendSettingsCrosslinks(content, [
+    { label: 'Language servers', sectionId: 'lsp' },
+    { label: 'Editor', sectionId: 'editor' },
+    { label: 'Tool permissions', sectionId: 'tools' },
+  ]);
+
+  mcpSettingsShellReady = true;
+  bindMcpAddForm();
+
+  return { listEl, offlineEl, addPanel };
+}
 
 /** Split textarea lines into trimmed non-empty strings. */
 function parseMultilineField(raw: string): string[] {
@@ -1697,16 +1889,14 @@ function bindMcpAddForm(): void {
 }
 
 async function renderMcpSection(): Promise<void> {
-  const listEl = document.getElementById('settingsMcpServerList');
-  const offlineEl = document.getElementById('settingsMcpOffline');
-  const addPanel = document.getElementById('settingsMcpAddPanel');
-  if (!listEl) return;
+  const mount = document.getElementById('settingsMcpBody');
+  if (!mount) return;
 
-  bindMcpAddForm();
+  const { listEl, offlineEl, addPanel } = ensureMcpSettingsShell(mount);
 
   const online = isLocalServerAvailable();
-  offlineEl?.classList.toggle('hidden', online);
-  addPanel?.classList.toggle('hidden', !online);
+  offlineEl.classList.toggle('hidden', online);
+  addPanel.classList.toggle('hidden', !online);
 
   if (!online) {
     listEl.replaceChildren();
@@ -1806,12 +1996,44 @@ async function renderAgentPacksSection(): Promise<void> {
 async function renderSkillsSection(): Promise<void> {
   const mount = clearMount('settingsSkillsBody');
   if (!mount) return;
-  const body = appendSettingsGroup(
-    mount,
-    'Skills catalog',
-    'Built-in and custom slash commands. Edit SKILL.md bodies from each row.',
+
+  const shell = el('div', 'settings-general');
+  mount.appendChild(shell);
+
+  const lead = el('p', 'settings-section-lead');
+  lead.append(
+    'Slash commands the agent can load with /skill-name. Tool permissions live under ',
+    linkToSettingsSection('Tools', 'tools'),
+    '. Browser automation lives under ',
+    linkToSettingsSection('Browser', 'browser'),
+    '.',
   );
-  await renderSkillsSettingsSection(body);
+  shell.appendChild(lead);
+
+  const content = el('div', 'settings-general__content');
+  shell.appendChild(content);
+
+  const catalog = appendSettingsGroup(
+    content,
+    'Skills catalog',
+    'Built-in skills ship with Minnow. Custom skills live under ~/.minnow/skills/ when npm start is running.',
+    'integrations.skills',
+    { emphasis: true },
+  );
+  await renderSkillsSettingsSection(catalog);
+
+  appendSettingsCrosslinks(content, [
+    { label: 'Tool permissions', sectionId: 'tools' },
+    { label: 'Browser automation', sectionId: 'browser' },
+  ]);
+}
+
+async function renderBrowserSection(): Promise<void> {
+  const mount = clearMount('settingsBrowserBody');
+  if (!mount) return;
+  const generation = beginAsyncSectionRender('browser');
+  await renderBrowserSettingsSection(mount);
+  if (isAsyncSectionRenderStale('browser', generation)) return;
 }
 
 async function renderWebhooksSection(): Promise<void> {
@@ -1916,6 +2138,9 @@ export async function refreshSettingsSection(
     case 'autopilot':
       await renderAutopilotSection();
       break;
+    case 'watchdog':
+      await renderWatchdogSection();
+      break;
     case 'features':
       await renderFeaturesSection();
       break;
@@ -1930,6 +2155,9 @@ export async function refreshSettingsSection(
       break;
     case 'tools':
       await renderToolsSection();
+      break;
+    case 'browser':
+      await renderBrowserSection();
       break;
     case 'mcp':
       await renderMcpSection();
