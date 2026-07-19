@@ -101,17 +101,40 @@
 .preview-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
+  gap: 4px;
+  padding: 4px 6px;
   border-bottom: 1px solid var(--mn-border);
   flex-shrink: 0;
+}
+
+/* Compact toolbar — smaller than the global 40px .icon-btn */
+.preview-header .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+
+.preview-header .icon-btn .icon-svg {
+  width: 15px;
+  height: 15px;
 }
 
 /* .icon-btn sets display:flex, which overrides the native [hidden] rule */
 #btnPreviewDesignToggle[hidden],
 #btnPreviewAnnotationsToggle[hidden],
-#btnPreviewDevTools[hidden] {
+#btnPreviewDevTools[hidden],
+#btnPreviewDevToolsDock[hidden] {
   display: none;
+}
+
+/* Side-dock mode: emphasize the vertical split glyph on the dock toggle. */
+#btnPreviewDevToolsDock[data-dock='side'] svg line:last-child {
+  opacity: 1;
+}
+
+/* Popout mode: hide both split guides — DevTools lives in its own window. */
+#btnPreviewDevToolsDock[data-dock='popout'] svg line:last-child,
+#btnPreviewDevToolsDock[data-dock='popout'] svg line:nth-child(2) {
+  opacity: 0.25;
 }
 
 /* DevTools toggle lights up while the dock is open (same treatment as Design Mode). */
@@ -123,8 +146,8 @@
 .preview-url {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 6px 8px;
-  font-size: 0.8125rem;
+  padding: 4px 6px;
+  font-size: 0.75rem;
   font-family: var(--mn-font-mono, ui-monospace, monospace);
   border: 1px solid var(--mn-border);
   border-radius: var(--mn-radius-sm, 4px);
@@ -139,8 +162,8 @@
 
 .preview-go {
   flex-shrink: 0;
-  padding: 6px 10px;
-  font-size: 0.8125rem;
+  padding: 4px 8px;
+  font-size: 0.75rem;
   border: 1px solid var(--mn-border);
   border-radius: var(--mn-radius-sm, 4px);
   background: var(--mn-surface-2);
@@ -155,8 +178,8 @@
 .preview-autoreload {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 0.75rem;
+  gap: 3px;
+  font-size: 0.6875rem;
   color: var(--mn-fg-muted);
   white-space: nowrap;
   flex-shrink: 0;

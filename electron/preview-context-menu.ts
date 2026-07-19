@@ -35,6 +35,7 @@ export interface PreviewContextMenuEntry {
   view: WebContentsView;
   visible: boolean;
   devtools: WebContentsView | null;
+  devtoolsPopoutOpen: boolean;
 }
 
 /** Dependencies injected from preview-host (keeps entry maps private there). */
@@ -152,7 +153,7 @@ async function dispatchContextMenuRole(
   }
 
   if (role === 'inspect') {
-    if (!entry.devtools) {
+    if (!entry.devtools && !entry.devtoolsPopoutOpen) {
       host.openDevTools(win, tabId, entry, instanceId);
     }
     const wc = entry.view.webContents;
@@ -345,8 +346,8 @@ export function registerPreviewContextMenuIpc(host: PreviewContextMenuHost): voi
         return { ok: false, error: 'Invalid inspect coordinates' };
       }
 
-      // Open docked DevTools when closed, then select the element under the click.
-      if (!entry.devtools) {
+      // Open DevTools when closed, then select the element under the click.
+      if (!entry.devtools && !entry.devtoolsPopoutOpen) {
         host.openDevTools(win, tabId, entry, instanceId);
       }
       try {

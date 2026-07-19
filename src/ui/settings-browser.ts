@@ -12,8 +12,15 @@ import {
 } from '../config/browser-meta';
 import { normalizeAllowlistPatterns } from '../tools/browser-allowlist-match';
 import { createSettingsToggleRow } from './settings-switch';
-import { appendSettingsOfflineHint, createSettingsActionsRow, createSettingsTextareaRow } from './settings-controls';
+import {
+  appendSettingsOfflineHint,
+  createSettingsActionsRow,
+  createSettingsRadioRow,
+  createSettingsTextareaRow,
+} from './settings-controls';
 import { setStatus } from './status';
+import { getFilePanelState, patchFilePanelState } from '../state/file-panel';
+import { syncPreviewDevToolsDockToHost } from './preview-panel';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -88,6 +95,41 @@ export async function renderBrowserAllowlistSettings(
     },
   );
   section.appendChild(restoreTabsRow);
+
+  const { row: devToolsDockRow, inputs: devToolsDockInputs, setValue: setDevToolsDockValue } =
+    createSettingsRadioRow('DevTools dock', {
+      name: 'minnow-preview-devtools-dock',
+      searchKey: 'browser.devtoolsDock',
+      options: [
+        { value: 'bottom', label: 'Bottom' },
+        { value: 'side', label: 'Side' },
+        { value: 'popout', label: 'Pop out' },
+      ],
+    });
+  const [dockBottom, dockSide, dockPopout] = devToolsDockInputs;
+  dockBottom.id = 'settingsBrowserDevToolsDockBottom';
+  dockSide.id = 'settingsBrowserDevToolsDockSide';
+  dockPopout.id = 'settingsBrowserDevToolsDockPopout';
+  setDevToolsDockValue(getFilePanelState().previewDevToolsDock);
+  section.appendChild(devToolsDockRow);
+  section.appendChild(
+    el(
+      'p',
+      'settings-field-hint',
+      'Where Chromium DevTools opens in the preview browser: docked below, docked beside, or in a separate window (Electron desktop shell only).',
+    ),
+  );
+
+  for (const input of devToolsDockInputs) {
+    input.addEventListener('change', () => {
+      if (!input.checked) return;
+      const dock =
+        input.value === 'side' ? 'side' : input.value === 'popout' ? 'popout' : 'bottom';
+      patchFilePanelState({ previewDevToolsDock: dock });
+      void syncPreviewDevToolsDockToHost();
+      setStatus('ok', `DevTools dock: ${dock}`);
+    });
+  }
 
   const patternsArea = document.createElement('textarea');
   patternsArea.id = 'settingsBrowserAllowlistPatterns';

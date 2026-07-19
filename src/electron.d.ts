@@ -94,6 +94,8 @@ export interface MinnowCdpPickedElement {
 export interface MinnowPreviewDevToolsApi {
   toggle(tabId?: string, instanceId?: string): Promise<{ open: boolean }>;
   isOpen(tabId?: string, instanceId?: string): Promise<boolean>;
+  setDock(dock: 'bottom' | 'side' | 'popout'): Promise<{ dock: 'bottom' | 'side' | 'popout' }>;
+  getDock(): Promise<'bottom' | 'side' | 'popout'>;
   onState(
     callback: (open: boolean, tabId?: string, instanceId?: string) => void,
   ): () => void;

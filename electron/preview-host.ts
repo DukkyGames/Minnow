@@ -36,7 +36,7 @@ import {
   handleGuestContextMenu,
   registerPreviewContextMenuIpc,
 } from './preview-context-menu.js';
-import { splitPreviewBounds } from './preview-devtools-layout.js';
+import { splitPreviewBounds, type DevToolsDockPosition } from './preview-devtools-layout.js';
 
 export interface PreviewBounds {
   x: number;
@@ -56,8 +56,10 @@ export interface PreviewLoadSourcePayload {
 interface PreviewHostEntry {
   view: WebContentsView;
   visible: boolean;
-  /** Docked DevTools view (MIN-177) — non-null while DevTools is open for this tab. */
+  /** Embedded DevTools view — non-null while docked DevTools is open for this tab. */
   devtools: WebContentsView | null;
+  /** True while DevTools is open in an Electron-managed popout window. */
+  devtoolsPopoutOpen: boolean;
 }
 
 interface WindowPreviewState {
@@ -81,6 +83,37 @@ const cdpPickSessions = new Map<number, CdpPickSession>();
 
 /** Last renderer-supplied bounds per (window, instance) — reused when navigating without a fresh show(). */
 const lastBoundsByInstance = new Map<string, PreviewBounds>();
+
+/** Per-window DevTools dock preference (renderer sets via IPC). */
+const devtoolsDockByWindow = new Map<number, DevToolsDockPosition>();
+
+function resolveDevToolsDock(win: BrowserWindow): DevToolsDockPosition {
+  return devtoolsDockByWindow.get(win.id) ?? 'bottom';
+}
+
+function normalizeDevToolsDock(dock: unknown): DevToolsDockPosition {
+  if (dock === 'side' || dock === 'popout') return dock;
+  return 'bottom';
+}
+
+function isEntryDevToolsOpen(entry: PreviewHostEntry): boolean {
+  return Boolean(entry.devtools) || entry.devtoolsPopoutOpen;
+}
+
+function relayoutAllVisibleEntries(win: BrowserWindow): void {
+  if (win.isDestroyed()) return;
+  const zoom = hostZoomFactor(win);
+  for (const instanceId of previewInstances.listInstanceIds(win.id)) {
+    const state = previewInstances.get(win.id, instanceId);
+    if (!state) continue;
+    const bounds = lastBoundsByInstance.get(boundsKey(win.id, instanceId));
+    if (!isValidPreviewBounds(bounds)) continue;
+    for (const entry of state.tabs.values()) {
+      if (!entry.visible) continue;
+      applyPreviewViewBounds(entry, bounds, zoom, resolveDevToolsDock(win));
+    }
+  }
+}
 
 function boundsKey(windowId: number, instanceId: string): string {
   return `${windowId}::${instanceId}`;
@@ -151,8 +184,21 @@ function attachPermissionHandler(wc: WebContents): void {
   });
 }
 
-/** Close and detach a tab's docked DevTools view, if any. Safe when already gone. */
+/** Close and detach a tab's DevTools (embedded or popout). Safe when already gone. */
 function teardownEntryDevTools(win: BrowserWindow | null, entry: PreviewHostEntry): void {
+  if (entry.devtoolsPopoutOpen) {
+    entry.devtoolsPopoutOpen = false;
+    const wc = entry.view.webContents;
+    if (!wc.isDestroyed()) {
+      try {
+        wc.closeDevTools();
+      } catch {
+        /* guest tearing down */
+      }
+    }
+    return;
+  }
+
   const dt = entry.devtools;
   if (!dt) return;
   entry.devtools = null;
@@ -182,7 +228,7 @@ function closeEntryDevTools(
   entry: PreviewHostEntry,
   instanceId?: string,
 ): void {
-  if (!entry.devtools) return;
+  if (!isEntryDevToolsOpen(entry)) return;
   const id = PreviewInstanceRegistry.resolveInstanceId(instanceId);
   teardownEntryDevTools(win.isDestroyed() ? null : win, entry);
   relayoutInstanceEntry(win, entry, id);
@@ -195,20 +241,30 @@ function relayoutInstanceEntry(win: BrowserWindow, entry: PreviewHostEntry, inst
   const id = PreviewInstanceRegistry.resolveInstanceId(instanceId);
   const bounds = lastBoundsByInstance.get(boundsKey(win.id, id));
   if (!isValidPreviewBounds(bounds)) return;
-  applyPreviewViewBounds(entry, bounds, hostZoomFactor(win));
+  applyPreviewViewBounds(entry, bounds, hostZoomFactor(win), resolveDevToolsDock(win));
 }
 
-/** Open DevTools docked to the bottom of the preview bounds for one tab guest. */
+/** Open DevTools for one tab guest (embedded bottom/side or popout window). */
 function openEntryDevTools(
   win: BrowserWindow,
   tabId: string,
   entry: PreviewHostEntry,
   instanceId?: string,
 ): void {
-  if (entry.devtools) return;
+  if (isEntryDevToolsOpen(entry)) return;
   const wc = entry.view.webContents;
   if (wc.isDestroyed() || win.isDestroyed()) return;
   const id = PreviewInstanceRegistry.resolveInstanceId(instanceId);
+  const dock = resolveDevToolsDock(win);
+
+  if (dock === 'popout') {
+    wc.openDevTools({ mode: 'undocked', activate: false });
+    entry.devtoolsPopoutOpen = true;
+    relayoutInstanceEntry(win, entry, id);
+    sendToRenderer(win, channels.PREVIEW_DEVTOOLS_STATE, tabId, true, id);
+    return;
+  }
+
   const devtoolsView = new WebContentsView();
   devtoolsView.setVisible(false);
   entry.devtools = devtoolsView;
@@ -294,7 +350,7 @@ function wirePreviewGuestEvents(win: BrowserWindow, tabId: string, entry: Previe
       (input.meta && input.alt && key === 'i');
     if (!combo) return;
     event.preventDefault();
-    if (entry.devtools) {
+    if (isEntryDevToolsOpen(entry)) {
       closeEntryDevTools(win, tabId, entry, instanceId);
     } else {
       openEntryDevTools(win, tabId, entry, instanceId);
@@ -303,7 +359,7 @@ function wirePreviewGuestEvents(win: BrowserWindow, tabId: string, entry: Previe
 
   // Fallback for DevTools closed from inside its own UI; toggle/shortcut close directly.
   wc.on('devtools-closed', () => {
-    if (!entry.devtools) return;
+    if (!isEntryDevToolsOpen(entry)) return;
     teardownEntryDevTools(win.isDestroyed() ? null : win, entry);
     relayoutInstanceEntry(win, entry, instanceId);
     sendToRenderer(win, channels.PREVIEW_DEVTOOLS_STATE, tabId, false, instanceId);
@@ -392,6 +448,7 @@ function destroyHostForWindow(win: BrowserWindow): void {
     if (key.startsWith(`${win.id}::`)) lastBoundsByInstance.delete(key);
   }
   wiredWindowIds.delete(win.id);
+  devtoolsDockByWindow.delete(win.id);
 }
 
 async function loadSourceInGuest(
@@ -441,6 +498,7 @@ function applyPreviewViewBounds(
   entry: PreviewHostEntry,
   bounds: PreviewBounds,
   zoomFactor: number,
+  dock: DevToolsDockPosition = 'bottom',
 ): boolean {
   const rounded = roundBounds({
     x: bounds.x * zoomFactor,
@@ -454,7 +512,7 @@ function applyPreviewViewBounds(
     entry.devtools?.setVisible(false);
     return false;
   }
-  const split = splitPreviewBounds(rounded, Boolean(entry.devtools));
+  const split = splitPreviewBounds(rounded, Boolean(entry.devtools), dock);
   entry.view.setBounds(split.guest);
   entry.visible = true;
   entry.view.setVisible(true);
@@ -523,7 +581,7 @@ function createTabGuest(win: BrowserWindow, tabId: string, instanceId: string): 
   view.setBackgroundColor('#ffffff');
   view.setVisible(false);
   attachPermissionHandler(view.webContents);
-  const entry: PreviewHostEntry = { view, visible: false, devtools: null };
+  const entry: PreviewHostEntry = { view, visible: false, devtools: null, devtoolsPopoutOpen: false };
   wirePreviewGuestEvents(win, tabId, entry, instanceId);
   return entry;
 }
@@ -548,7 +606,7 @@ function showActiveTab(win: BrowserWindow, bounds?: PreviewBounds, instanceId?: 
   const effectiveBounds = isValidPreviewBounds(bounds) ? bounds : lastBoundsByInstance.get(key);
   const hasBounds = isValidPreviewBounds(effectiveBounds);
   if (hasBounds) {
-    applyPreviewViewBounds(entry, effectiveBounds!, hostZoomFactor(win));
+    applyPreviewViewBounds(entry, effectiveBounds!, hostZoomFactor(win), resolveDevToolsDock(win));
     rememberPreviewBounds(win, effectiveBounds!, id);
   } else {
     entry.visible = false;
@@ -580,6 +638,18 @@ function getActiveEntry(event: IpcMainInvokeEvent, tabId?: string, instanceId?: 
   const resolved = resolveTabId(win, undefined, instanceId);
   if (!resolved) return null;
   return getOrCreateTab(win, resolved, instanceId);
+}
+
+function reopenOpenDevToolsForDockChange(win: BrowserWindow): void {
+  for (const instanceId of previewInstances.listInstanceIds(win.id)) {
+    const state = previewInstances.get(win.id, instanceId);
+    if (!state) continue;
+    for (const [tabId, entry] of state.tabs) {
+      if (!isEntryDevToolsOpen(entry)) continue;
+      closeEntryDevTools(win, tabId, entry, instanceId);
+      openEntryDevTools(win, tabId, entry, instanceId);
+    }
+  }
 }
 
 /** Register preview IPC handlers (replaces main.ts stubs). */
@@ -771,7 +841,7 @@ export function registerPreviewHostIpc(): void {
         }
         return;
       }
-      applyPreviewViewBounds(entry, bounds, hostZoomFactor(win));
+      applyPreviewViewBounds(entry, bounds, hostZoomFactor(win), resolveDevToolsDock(win));
       rememberPreviewBounds(win, bounds, instanceId);
     },
   );
@@ -874,12 +944,12 @@ export function registerPreviewHostIpc(): void {
       const resolved = resolveTabId(win, tabId, instanceId);
       if (!resolved) return { open: false };
       const entry = getOrCreateTab(win, resolved, instanceId);
-      if (entry.devtools) {
+      if (isEntryDevToolsOpen(entry)) {
         closeEntryDevTools(win, resolved, entry, instanceId);
         return { open: false };
       }
       openEntryDevTools(win, resolved, entry, instanceId);
-      return { open: Boolean(entry.devtools) };
+      return { open: isEntryDevToolsOpen(entry) };
     },
   );
 
@@ -892,9 +962,29 @@ export function registerPreviewHostIpc(): void {
       if (!state) return false;
       const id = typeof tabId === 'string' && tabId.trim() ? tabId.trim() : state.activeTabId;
       const entry = id ? state.tabs.get(id) : undefined;
-      return Boolean(entry?.devtools);
+      return Boolean(entry && isEntryDevToolsOpen(entry));
     },
   );
+
+  ipcMain.handle(channels.PREVIEW_DEVTOOLS_SET_DOCK, (event, dock: unknown) => {
+    const win = windowFromInvoke(event);
+    if (!win) return { dock: 'bottom' as DevToolsDockPosition };
+    const prev = resolveDevToolsDock(win);
+    const next = normalizeDevToolsDock(dock);
+    devtoolsDockByWindow.set(win.id, next);
+    if (prev !== next) {
+      reopenOpenDevToolsForDockChange(win);
+    } else {
+      relayoutAllVisibleEntries(win);
+    }
+    return { dock: next };
+  });
+
+  ipcMain.handle(channels.PREVIEW_DEVTOOLS_GET_DOCK, (event) => {
+    const win = windowFromInvoke(event);
+    if (!win) return 'bottom' as DevToolsDockPosition;
+    return resolveDevToolsDock(win);
+  });
 
   ipcMain.handle(
     channels.PREVIEW_CDP_PICK_DISABLE,

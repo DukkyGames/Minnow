@@ -1831,6 +1831,13 @@ export function mergeConfigMeta(existing, patch) {
     if (typeof fp.previewAutoReload === 'boolean') {
       existingPanel.previewAutoReload = fp.previewAutoReload;
     }
+    if (
+      fp.previewDevToolsDock === 'bottom' ||
+      fp.previewDevToolsDock === 'side' ||
+      fp.previewDevToolsDock === 'popout'
+    ) {
+      existingPanel.previewDevToolsDock = fp.previewDevToolsDock;
+    }
     if (fp.previewSource === null) {
       existingPanel.previewSource = null;
     } else if (fp.previewSource && typeof fp.previewSource === 'object') {

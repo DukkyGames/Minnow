@@ -56,6 +56,10 @@ export const PREVIEW_CDP_PICK_ERROR = 'minnow:preview:cdp-pick-error';
 export const PREVIEW_DEVTOOLS_TOGGLE = 'minnow:preview:devtools-toggle';
 /** Renderer → main: is docked DevTools open for a preview tab guest? */
 export const PREVIEW_DEVTOOLS_GET_STATE = 'minnow:preview:devtools-get-state';
+/** Renderer → main: dock DevTools below or beside the preview guest. */
+export const PREVIEW_DEVTOOLS_SET_DOCK = 'minnow:preview:devtools-set-dock';
+/** Renderer → main: read the current DevTools dock position for this window. */
+export const PREVIEW_DEVTOOLS_GET_DOCK = 'minnow:preview:devtools-get-dock';
 /** Main → renderer: docked DevTools opened/closed (guest shortcut, tab close, crash). */
 export const PREVIEW_DEVTOOLS_STATE = 'minnow:preview:devtools-state';
 /** Main → renderer: open Minnow-styled preview guest context menu (legacy DOM path). */

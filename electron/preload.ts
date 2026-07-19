@@ -120,6 +120,10 @@ const preview = {
       ipcRenderer.invoke(channels.PREVIEW_DEVTOOLS_TOGGLE, tabId, instanceId),
     isOpen: (tabId?: string, instanceId?: string): Promise<boolean> =>
       ipcRenderer.invoke(channels.PREVIEW_DEVTOOLS_GET_STATE, tabId, instanceId),
+    setDock: (dock: 'bottom' | 'side' | 'popout'): Promise<{ dock: 'bottom' | 'side' | 'popout' }> =>
+      ipcRenderer.invoke(channels.PREVIEW_DEVTOOLS_SET_DOCK, dock),
+    getDock: (): Promise<'bottom' | 'side' | 'popout'> =>
+      ipcRenderer.invoke(channels.PREVIEW_DEVTOOLS_GET_DOCK),
     onState: (
       callback: (open: boolean, tabId?: string, instanceId?: string) => void,
     ): (() => void) => {
