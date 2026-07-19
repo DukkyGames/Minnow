@@ -216,6 +216,10 @@ import {
 } from '../config/tool-calls-meta';
 import { setStatus } from '../ui/status';
 import { applyOrchestrateAggregatedStatsToChat } from '../chat/orchestrate/stats-aggregate';
+import {
+  refreshMetricsStripForChat,
+  shouldUseBoardAggregateStats,
+} from '../chat/orchestrate/board-stats-aggregate';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
 import { resolveOutboundSystemMessages } from '../chat/prompts/compose-context';
 import { estimateTokensFromText } from '../chat/prompts/token-estimate';
@@ -2258,6 +2262,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       }
       renderSidebar();
       scheduleSaveSessions();
+      if (shouldUseBoardAggregateStats()) {
+        refreshMetricsStripForChat(getActiveChat());
+      }
 
       // Push-now during final prose: inject steer and run another model round in this turn.
       if (chat.pendingSteerMessage?.trim()) {
