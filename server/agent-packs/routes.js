@@ -15,6 +15,11 @@ import {
   BUILTIN_AGENT_PACK_ZIP_FILENAME,
   buildBuiltinAgentPackZip,
 } from './builtin-pack.js';
+import {
+  AGENT_PACK_ZIP_MAX_BYTES,
+  installAgentPackFromZip,
+} from './install.js';
+import { parseMultipartFile } from '../stt/multipart.js';
 import { builtinWorkAgentsDir } from '../work-agents/paths.js';
 import fs from 'node:fs/promises';
 
@@ -129,6 +134,30 @@ export async function handleAgentPacksRequest(req, res, pathname) {
       );
       res.setHeader('Content-Length', String(zip.length));
       res.end(zip);
+      return true;
+    }
+
+    if (pathname === '/api/agent-packs/upload' && req.method === 'POST') {
+      const file = await parseMultipartFile(req, AGENT_PACK_ZIP_MAX_BYTES);
+      const filename = String(file.filename || '').toLowerCase();
+      if (!filename.endsWith('.zip')) {
+        sendJson(res, 400, { error: 'Upload must be a .zip file' });
+        return true;
+      }
+      const installed = await installAgentPackFromZip(file.buffer);
+      await refreshAgentPackCache(PROJECT_ROOT, builtinIds);
+      const pack = getCachedAgentPackList().find((p) => p.id === installed.packId);
+      if (!pack) {
+        sendJson(res, 500, { error: 'Pack installed but could not be scanned' });
+        return true;
+      }
+      sendJson(res, 200, {
+        ok: true,
+        packId: installed.packId,
+        filesWritten: installed.filesWritten,
+        packRoot: installed.packRoot,
+        pack: packListResponse([pack])[0],
+      });
       return true;
     }
 

@@ -78,3 +78,41 @@ export async function downloadBuiltinAgentPack(): Promise<true | Error> {
     'minnow-default-agent-pack.zip',
   );
 }
+
+export type AgentPackUploadResult =
+  | { ok: true; pack: AgentPackListItem; filesWritten: number; packRoot: string }
+  | { ok: false; error: string };
+
+/** POST /api/agent-packs/upload — install a pack from a zip archive. */
+export async function uploadAgentPackZip(file: File): Promise<AgentPackUploadResult> {
+  const form = new FormData();
+  form.append('file', file, file.name);
+
+  try {
+    const res = await fetch('/api/agent-packs/upload', {
+      method: 'POST',
+      body: form,
+    });
+    const body = (await res.json()) as {
+      error?: string;
+      pack?: AgentPackListItem;
+      filesWritten?: number;
+      packRoot?: string;
+    };
+    if (!res.ok) {
+      return { ok: false, error: body.error ?? 'Could not install agent pack' };
+    }
+    if (!body.pack || typeof body.filesWritten !== 'number' || !body.packRoot) {
+      return { ok: false, error: 'Invalid install response from server' };
+    }
+    return {
+      ok: true,
+      pack: body.pack,
+      filesWritten: body.filesWritten,
+      packRoot: body.packRoot,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: message };
+  }
+}

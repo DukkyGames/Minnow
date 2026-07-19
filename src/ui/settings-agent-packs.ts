@@ -9,6 +9,7 @@ import {
   downloadBuiltinAgentPack,
   fetchAgentPacksList,
   patchAgentPackEnabled,
+  uploadAgentPackZip,
 } from '../agents/pack-api';
 import type { AgentPackListItem } from '../agents/pack-types';
 import { isLocalServerAvailable } from '../tools/config';
@@ -159,9 +160,13 @@ function appendAuthoringSteps(mount: HTMLElement): void {
       '.',
     ],
     [
-      'Place the pack in ',
+      'Upload a ',
+      codeText('.zip'),
+      ' with ',
+      codeText('Upload pack'),
+      ' below, or place the folder in ',
       codeText('~/.minnow/agent-packs/<pack-id>/'),
-      ' and click Refresh below.',
+      ' and click Refresh.',
     ],
     [
       'Enable the pack here. Agents appear in ',
@@ -190,6 +195,9 @@ function appendAuthoringSteps(mount: HTMLElement): void {
 /** Render Agent packs content into a settings-general content column. */
 export async function renderAgentPacksSettingsSection(content: HTMLElement): Promise<void> {
   content.replaceChildren();
+
+  /** Refreshes the installed pack list when upload completes. */
+  let refreshPackList: (() => void) | null = null;
 
   const authorBody = appendSettingsGroup(
     content,
@@ -258,6 +266,67 @@ export async function renderAgentPacksSettingsSection(content: HTMLElement): Pro
   );
   authorBody.appendChild(defaultPackHint);
 
+  const uploadInput = document.createElement('input');
+  uploadInput.type = 'file';
+  uploadInput.accept = '.zip,application/zip';
+  uploadInput.className = 'settings-agent-packs-upload-input';
+  uploadInput.setAttribute('aria-hidden', 'true');
+  uploadInput.tabIndex = -1;
+
+  authorBody.appendChild(uploadInput);
+
+  authorBody.appendChild(
+    createSettingsActionsRow(
+      [
+        {
+          label: 'Upload pack',
+          variant: 'primary',
+          disabled: !isLocalServerAvailable(),
+          onClick: () => uploadInput.click(),
+        },
+      ],
+      { searchKey: 'agents.agentPacks.upload' },
+    ),
+  );
+
+  const uploadHint = el('p', 'settings-agent-pack-card__path');
+  uploadHint.append(
+    'Zip a pack folder (or use a downloaded template). The server reads ',
+    codeText('manifest.json'),
+    ', installs to ',
+    codeText('~/.minnow/agent-packs/<id>/'),
+    ', and validates on upload.',
+  );
+  authorBody.appendChild(uploadHint);
+
+  uploadInput.addEventListener('change', () => {
+    const file = uploadInput.files?.[0];
+    uploadInput.value = '';
+    if (!file) return;
+
+    void (async () => {
+      setStatus('spin', `Installing ${file.name}…`);
+      const result = await uploadAgentPackZip(file);
+      if (result.ok === false) {
+        setStatus('err', result.error);
+        return;
+      }
+      const { pack, filesWritten } = result;
+      if (pack.valid) {
+        setStatus(
+          'ok',
+          `Installed "${pack.label}" (${filesWritten} files). Enable it below when ready.`,
+        );
+      } else {
+        setStatus(
+          'ok',
+          `Installed "${pack.label}" with validation issues — fix errors below before enabling.`,
+        );
+      }
+      refreshPackList?.();
+    })();
+  });
+
   if (!isLocalServerAvailable()) {
     appendSettingsOfflineHint(
       authorBody,
@@ -290,8 +359,8 @@ export async function renderAgentPacksSettingsSection(content: HTMLElement): Pro
       if (!packs.length) {
         const empty = el('li', 'settings-agent-packs-empty');
         empty.append(
-          'No packs installed yet. Download the template above, copy it to ',
-          codeText('~/.minnow/agent-packs/<your-pack-id>/'),
+          'No packs installed yet. Download the template above or upload a ',
+          codeText('.zip'),
           ', then refresh.',
         );
         list.appendChild(empty);
@@ -308,6 +377,9 @@ export async function renderAgentPacksSettingsSection(content: HTMLElement): Pro
 
   listBody.appendChild(list);
   await renderList();
+  refreshPackList = () => {
+    void renderList();
+  };
 
   listBody.appendChild(
     createSettingsActionsRow(

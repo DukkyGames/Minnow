@@ -245,7 +245,7 @@ Per agent: **enabled**, **max input tokens**, **context policy** (`slide` / `tru
 
 ### Agent packs
 
-Drop-in work agent bundles under `~/.minnow/agent-packs/<pack-id>/` (`manifest.json` + `prompts/`). Settings → **Agent packs** lists installed packs, validates manifests, toggles enablement (`PATCH /api/agent-packs/:id`), and offers **Download template** (`GET /api/agent-packs/template`) and **Download default pack** (`GET /api/agent-packs/builtin` → `minnow-default-agent-pack.zip` with shipped work agents). On first `npm start`, `~/.minnow/agent-packs/_template/` is also created for local copying. Enabled pack agents merge into work agents as `packId.agentKey`. Authoring: [`documentation/agent-packs/README.md`](../agent-packs/README.md).
+Drop-in work agent bundles under `~/.minnow/agent-packs/<pack-id>/` (`manifest.json` + `prompts/`). Settings → **Agent packs** lists installed packs, validates manifests, toggles enablement (`PATCH /api/agent-packs/:id`), and offers **Download template** (`GET /api/agent-packs/template`), **Download default pack** (`GET /api/agent-packs/builtin` → `minnow-default-agent-pack.zip` with shipped work agents), and **Upload pack** (`POST /api/agent-packs/upload`, multipart `.zip`). On first `npm start`, `~/.minnow/agent-packs/_template/` is also created for local copying. Enabled pack agents merge into work agents as `packId.agentKey`. Authoring: [`documentation/agent-packs/README.md`](../agent-packs/README.md).
 
 ### Sub-agents
 
