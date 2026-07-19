@@ -6,6 +6,7 @@
 import {
   filterUserFacingBranches,
 } from '../lib/worktree-list-parse';
+import { isProtectedBranchName } from '../lib/git-trunk-branch';
 import {
   gitBranches,
   gitCheckout,
@@ -640,7 +641,7 @@ export function createGitOperationsPanel(
       }
       const actions = document.createElement('div');
       actions.className = 'git-ops-panel__branch-actions';
-      if (branch !== currentBranchName) {
+      if (branch !== currentBranchName && !isProtectedBranchName(branch)) {
         const checkoutBtn = document.createElement('button');
         checkoutBtn.type = 'button';
         checkoutBtn.className = 'git-panel-action-btn';
@@ -684,7 +685,7 @@ export function createGitOperationsPanel(
   }
 
   async function handleDeleteBranch(name: string): Promise<void> {
-    if (!name || name === currentBranchName) return;
+    if (!name || name === currentBranchName || isProtectedBranchName(name)) return;
     if (!window.confirm(`Delete branch "${name}"?`)) return;
     const cwd = getEffectiveCwd();
     const ok = await runGitOp(() => gitDeleteBranch({ branch: name, cwd }), `Deleted branch ${name}`);

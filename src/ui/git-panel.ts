@@ -105,6 +105,7 @@ import {
   isMissingGitRepositoryError,
   renderGitNoRepositoryState,
 } from './git-no-repo-state';
+import { isProtectedBranchName } from '../lib/git-trunk-branch';
 import {
   mergeToMainButtonVisible,
   runMergeToMain,
@@ -172,6 +173,9 @@ let bound = false;
 let panelOpen = false;
 
 let refreshing = false;
+
+/** When true, run another refresh after the current one finishes. */
+let refreshPending = false;
 
 let refreshBtn: HTMLButtonElement | null = null;
 
@@ -327,9 +331,8 @@ function isMainWorktreePath(worktreePath: string): boolean {
 
 function syncBranchDeleteButton(): void {
   if (!branchDeleteBtn || !branchSelect) return;
-  const selected = branchSelect.value;
-  const canDelete = Boolean(selected && selected !== currentBranchName);
-  branchDeleteBtn.disabled = !canDelete;
+  const selected = branchSelect.value.trim();
+  branchDeleteBtn.disabled = !selected || isProtectedBranchName(selected);
 }
 
 function syncWorktreeDeleteButton(): void {
@@ -394,22 +397,46 @@ function openAddBranchPopover(anchor: HTMLButtonElement): void {
   });
 }
 
-async function handleDeleteBranch(): Promise<void> {
-  if (!branchSelect) return;
-  const name = branchSelect.value;
-  if (!name || name === currentBranchName) return;
-  if (!window.confirm(`Delete branch "${name}"?`)) return;
+async function deleteBranchByName(name: string): Promise<void> {
+  const branch = name.trim();
+  if (!branch || isProtectedBranchName(branch)) return;
 
   const cwd = getEffectiveCwdArg();
-  const ok = await runGitOp(() => gitDeleteBranch({ branch: name, cwd }), {
-    successMessage: `Deleted branch ${name}`,
+
+  if (branch === currentBranchName) {
+    const { resolveTrunkBranchName } = await import('../lib/git-trunk-branch');
+    const trunk = resolveTrunkBranchName(
+      cachedMergeBranchLists.local,
+      cachedMergeBranchLists.remote,
+      cachedMergeBranchLists.lockedLocal,
+    );
+    if (!trunk || trunk === branch) {
+      showToast('Cannot delete the checked-out branch', 'error');
+      return;
+    }
+    if (!window.confirm(`Switch to "${trunk}" and delete "${branch}"?`)) return;
+    const switched = await runGitOp(() => gitCheckout({ branch: trunk, cwd }), {
+      successMessage: `Switched to ${trunk}`,
+    });
+    if (!switched) return;
+  } else if (!window.confirm(`Delete branch "${branch}"?`)) {
+    return;
+  }
+
+  const ok = await runGitOp(() => gitDeleteBranch({ branch, cwd }), {
+    successMessage: `Deleted branch ${branch}`,
   });
   if (ok) return;
 
-  if (!window.confirm(`Branch "${name}" is not fully merged. Force delete?`)) return;
-  await runGitOp(() => gitDeleteBranch({ branch: name, force: true, cwd }), {
-    successMessage: `Deleted branch ${name}`,
+  if (!window.confirm(`Branch "${branch}" is not fully merged. Force delete?`)) return;
+  await runGitOp(() => gitDeleteBranch({ branch, force: true, cwd }), {
+    successMessage: `Deleted branch ${branch}`,
   });
+}
+
+async function handleDeleteBranch(): Promise<void> {
+  if (!branchSelect) return;
+  await deleteBranchByName(branchSelect.value);
 }
 
 function openAddWorktreePopover(anchor: HTMLButtonElement): void {
@@ -813,11 +840,8 @@ function ensurePanelDom(): HTMLElement {
   branchSelect.title = 'Current branch';
 
   branchSelect.addEventListener('change', () => {
-
     syncBranchDeleteButton();
-
     void handleBranchChange();
-
   });
 
   const branchAddBtn = createToolbarIconBtn('+', 'New branch');
@@ -1091,17 +1115,19 @@ async function syncFileTreeGitPollCwd(force?: boolean): Promise<void> {
 
 
 async function handleBranchChange(): Promise<void> {
-
   if (!branchSelect) return;
 
-  const value = branchSelect.value;
+  const value = branchSelect.value.trim();
+  if (!value || value === currentBranchName) return;
 
-  if (!value) return;
-
-  await runGitOp(() => gitCheckout({ branch: value, cwd: getEffectiveCwdArg() }), {
+  const ok = await runGitOp(() => gitCheckout({ branch: value, cwd: getEffectiveCwdArg() }), {
     successMessage: `Switched to ${value}`,
   });
 
+  if (!ok && branchSelect && currentBranchName) {
+    branchSelect.value = currentBranchName;
+    syncBranchDeleteButton();
+  }
 }
 
 
@@ -1777,15 +1803,42 @@ function renderAheadBehind(status: GitOpResult): void {
 
 
 
-async function refreshBranchSelect(): Promise<void> {
+function branchDropdownMatches(
+  select: HTMLSelectElement,
+  branches: string[],
+  selectedBranch: string,
+): boolean {
+  if (select.options.length !== branches.length) return false;
+  for (let i = 0; i < branches.length; i++) {
+    if (select.options[i]?.value !== branches[i]) return false;
+  }
+  return select.value === selectedBranch;
+}
 
+/** Rebuild a native select after its option set has changed. */
+function rebuildNativeSelect(
+  select: HTMLSelectElement,
+  options: { value: string; label: string }[],
+  selectedValue: string,
+): void {
+  select.replaceChildren();
+
+  for (const { value, label } of options) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
+    if (value === selectedValue) opt.selected = true;
+    select.appendChild(opt);
+  }
+
+  select.value = selectedValue;
+}
+
+async function refreshBranchSelect(): Promise<void> {
   if (!branchSelect) return;
 
+  const previousSelection = branchSelect.value.trim();
   const result = await gitBranches(getEffectiveCwdArg());
-
-  branchSelect.replaceChildren();
-
-
 
   if (!result.ok) return;
 
@@ -1799,25 +1852,27 @@ async function refreshBranchSelect(): Promise<void> {
 
   if (branches.length === 0) return;
 
-  const selectedBranch = branches.includes(currentBranchName)
-    ? currentBranchName
-    : branches[0]!;
+  const selectedBranch = branches.includes(previousSelection)
+    ? previousSelection
+    : branches.includes(currentBranchName)
+      ? currentBranchName
+      : branches[0]!;
 
-  for (const branch of branches) {
-
-    const opt = document.createElement('option');
-
-    opt.value = branch;
-
-    opt.textContent = branch;
-
-    if (branch === selectedBranch) opt.selected = true;
-
-    branchSelect.appendChild(opt);
-
+  if (branchDropdownMatches(branchSelect, branches, selectedBranch)) {
+    syncBranchDeleteButton();
+    syncMergeToMainButton(
+      filterUserFacingBranches(result.local ?? []),
+      result.remote ?? [],
+      result.lockedLocal ?? [],
+    );
+    return;
   }
 
-  branchSelect.value = selectedBranch;
+  rebuildNativeSelect(
+    branchSelect,
+    branches.map((branch) => ({ value: branch, label: branch })),
+    selectedBranch,
+  );
 
   syncBranchDeleteButton();
   syncMergeToMainButton(
@@ -1825,7 +1880,6 @@ async function refreshBranchSelect(): Promise<void> {
     result.remote ?? [],
     result.lockedLocal ?? [],
   );
-
 }
 
 
@@ -1864,21 +1918,13 @@ async function refreshWorktreeDropdown(): Promise<void> {
     cwdWrap.hidden = knownWorktrees.length === 0;
 
     if (knownWorktrees.length > 0) {
-
-      cwdSelect.replaceChildren();
-
-      const opt = document.createElement('option');
-
-      opt.value = knownWorktrees[0].path;
-
-      opt.textContent = formatWorktreeOptionLabel(knownWorktrees[0], ws);
-
-      opt.selected = true;
-
-      cwdSelect.appendChild(opt);
-
+      const wt = knownWorktrees[0]!;
+      rebuildNativeSelect(
+        cwdSelect,
+        [{ value: wt.path, label: formatWorktreeOptionLabel(wt, ws) }],
+        wt.path,
+      );
       syncWorktreeDeleteButton();
-
     }
 
     return;
@@ -1901,29 +1947,14 @@ async function refreshWorktreeDropdown(): Promise<void> {
     return;
   }
 
-  cwdSelect.replaceChildren();
-
-
-
-  for (const wt of knownWorktrees) {
-
-    const opt = document.createElement('option');
-
-    opt.value = wt.path;
-
-    opt.textContent = formatWorktreeOptionLabel(wt, ws);
-
-    if (pathsEqual(wt.path, selectedPath)) {
-
-      opt.selected = true;
-
-    }
-
-    cwdSelect.appendChild(opt);
-
-  }
-
-  cwdSelect.value = selectedPath;
+  rebuildNativeSelect(
+    cwdSelect,
+    knownWorktrees.map((wt) => ({
+      value: wt.path,
+      label: formatWorktreeOptionLabel(wt, ws),
+    })),
+    selectedPath,
+  );
   panelCwd = panelPathsEqual(selectedPath, ws) ? undefined : selectedPath;
 
   syncWorktreeDeleteButton();
@@ -1951,13 +1982,16 @@ function setGitPanelNoRepoState(active: boolean): void {
 
 
 export async function refreshGitPanel(): Promise<void> {
+  if (!panelOpen) return;
 
-  if (!panelOpen || refreshing) return;
+  if (refreshing) {
+    refreshPending = true;
+    return;
+  }
 
   refreshing = true;
 
   try {
-
     await refreshWorktreeDropdown();
 
     const status = await gitStatus(getEffectiveCwdArg());
@@ -1970,7 +2004,9 @@ export async function refreshGitPanel(): Promise<void> {
 
         setGitPanelNoRepoState(true);
 
-        if (bodyMount) bodyMount.replaceChildren();
+        if (bodyMount) {
+          bodyMount.replaceChildren();
+        }
 
         return;
 
@@ -2019,11 +2055,12 @@ export async function refreshGitPanel(): Promise<void> {
     await graphHandle?.refresh();
 
   } finally {
-
     refreshing = false;
-
+    if (refreshPending) {
+      refreshPending = false;
+      void refreshGitPanel();
+    }
   }
-
 }
 
 
@@ -2239,6 +2276,8 @@ export function resetGitPanelForTests(): void {
   currentBranchName = '';
 
   stopPolling();
+
+  refreshPending = false;
 
   closeGitPanelNamePopover();
 

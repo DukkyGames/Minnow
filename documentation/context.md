@@ -285,6 +285,8 @@ Presentation modes: `fullscreen` | `window` | `desktop` | `sidePanel` ([`src/os/
 
 **Desktop chat** is the primary chat surface (`#desktopChatCol`); legacy `#chatView` retained for deep links. **Code** reparents `#appBody` into `#osAppsLayer`.
 
+The Code chat sidebar header keeps its navigation controls ordered as **collapse sidebar**, **search chats**, then **Code overview**.
+
 Router: [`src/os/router.ts`](../src/os/router.ts). Boot: `initOsPageBridge()` → `initOsShell()` → `initOsRouter()`.
 
 ---
@@ -374,6 +376,7 @@ Multi-provider registry: `~/.minnow/providers/`. UI: Models app → Providers. C
 - **Package:** `npm run package` → `release/` (NSIS on Windows).
 - **Preview browser:** requires Electron (`window.minnow.preview`); hidden in plain browser tabs.
 - **Auto-update:** GitHub Releases via `electron-updater` (packaged installs); Settings → General → App updates.
+- **Windows native-dialog focus recovery:** [`src/ui/native-dialog-focus.ts`](../src/ui/native-dialog-focus.ts) wraps blocking `alert` / `confirm` / `prompt` calls in the Electron renderer. After each dialog, `window.minnow.window.restoreFocus()` asks the main process to focus both the owning `BrowserWindow` and its `webContents`, preventing inputs and native selects from becoming unresponsive.
 
 ---
 

@@ -2,6 +2,14 @@
  * Resolve the repository trunk branch name (main/master) for merge-to-main flows.
  */
 
+/** Branch names that must never be deleted from the UI or git API. */
+const PROTECTED_BRANCH_NAMES = new Set(['main', 'master']);
+
+/** Whether a branch name is protected from deletion (main or master). */
+export function isProtectedBranchName(name: string): boolean {
+  return PROTECTED_BRANCH_NAMES.has(name.trim());
+}
+
 export interface TrunkBranchLists {
   localBranches: readonly string[];
   remoteBranches?: readonly string[];

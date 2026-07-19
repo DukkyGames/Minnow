@@ -566,6 +566,10 @@ export async function deleteBranch({ cwd, branch, force } = {}) {
   }
 
   const name = branch.trim();
+  if (name === 'main' || name === 'master') {
+    return { ok: false, error: 'Cannot delete the main or master branch' };
+  }
+
   const currentResult = await git(['branch', '--show-current'], repo.cwd);
   if (currentResult.code === 0 && (currentResult.stdout ?? '').trim() === name) {
     return { ok: false, error: 'Cannot delete the current branch' };

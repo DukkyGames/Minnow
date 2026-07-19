@@ -219,6 +219,19 @@ describe('git API', () => {
     assert.ok(!after.local?.includes('to-delete'));
   });
 
+  test('deleteBranch rejects main and master', async () => {
+    const mainResult = await deleteBranch({ cwd: repoDir, branch: 'main' });
+    assert.equal(mainResult.ok, false);
+    assert.match(mainResult.error ?? '', /main or master/i);
+
+    const branchList = await branches({ cwd: repoDir });
+    if (branchList.local?.includes('master')) {
+      const masterResult = await deleteBranch({ cwd: repoDir, branch: 'master' });
+      assert.equal(masterResult.ok, false);
+      assert.match(masterResult.error ?? '', /main or master/i);
+    }
+  });
+
   test('worktreeAdd and worktreeRemove manage linked worktrees', async () => {
     const added = await worktreeAdd({
       cwd: repoDir,
