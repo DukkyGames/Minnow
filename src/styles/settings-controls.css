@@ -920,8 +920,7 @@ label.settings-action-btn {
 
 .settings-memory-offline.hidden,
 .settings-providers-offline.hidden,
-.settings-mcp-offline.hidden,
-.settings-rules-offline.hidden {
+.settings-mcp-offline.hidden {
   display: none;
 }
 

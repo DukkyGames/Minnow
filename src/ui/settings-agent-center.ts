@@ -3,6 +3,9 @@
  * Opens a lightbox with prompt, model binding, and entity-specific settings.
  */
 
+import '../styles/settings-general.css';
+import '../styles/settings-agent-center.css';
+
 import { fetchWorkAgentsList } from '../agents/work-agent-prompt-api';
 import type { WorkAgentDefinition } from '../agents/work-agent-types';
 import {
@@ -15,7 +18,7 @@ import { listModes } from '../chat/modes/registry';
 import { createModeMaskIcon } from './mode-icons';
 import { getActiveChat } from '../state/sessions';
 import { isServerStorageMode } from '../config/storage-mode';
-import { appendSettingsGroup } from './settings-layout';
+import { appendSettingsGroup, linkToSettingsSection } from './settings-layout';
 import { appendSettingsOfflineHint, createSettingsKvList, createSettingsSelectRow } from './settings-controls';
 import {
   mountPromptFileEditor,
@@ -359,7 +362,7 @@ function cardMatchesQuery(card: AgentCenterCard, query: string): boolean {
   return hay.includes(query);
 }
 
-const AGENT_CENTER_SECTIONS: {
+const AGENT_CENTER_CARD_SECTIONS: {
   id: AgentCenterSectionId;
   title: string;
   hint: string;
@@ -379,12 +382,13 @@ const AGENT_CENTER_SECTIONS: {
   },
   {
     id: 'sub-agents',
-    title: 'Sub-agents',
+    title: 'Sub-agent types',
     hint: 'Background workers spawned from parent chats.',
     searchKey: 'agents.subAgents',
   },
 ];
 
+/** Mount global sub-agent limits as an emphasis panel (matches General settings groups). */
 async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
   const config = await loadSubAgentConfig();
   const groupBody = appendSettingsGroup(
@@ -392,9 +396,8 @@ async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
     'Sub-agent limits',
     'Global concurrency, timeouts, check-in nudges, and watchdog repetition limits for all sub-agent types.',
     'agents.subAgents.limits',
+    { emphasis: true },
   );
-  const group = groupBody.closest('.settings-group');
-  group?.classList.add('settings-agent-center__global');
 
   const persistGlobal = async (
     patch: Partial<
@@ -508,16 +511,36 @@ async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
   });
 }
 
+/** Reparent the base prompt disclosure into the agents shell content column. */
+export function attachAgentCenterBasePromptPanel(shellContent: HTMLElement | null): void {
+  const basePanel = document.getElementById('settingsBasePromptPanel');
+  if (!shellContent || !basePanel || basePanel.parentElement === shellContent) return;
+  shellContent.appendChild(basePanel);
+}
+
 /** Render the agents center card grid into the settings mount. */
 export async function renderAgentCenterPanel(
   mount: HTMLElement | null,
-): Promise<void> {
-  if (!mount) return;
+): Promise<HTMLElement | null> {
+  if (!mount) return null;
   mount.replaceChildren();
+
+  const shell = el('div', 'settings-general settings-agent-center');
+  mount.appendChild(shell);
+
+  const lead = el('p', 'settings-section-lead');
+  lead.append(
+    'Composer modes, work agents, and sub-agents. Click a card to edit prompts, model routing, and options. Standing rules live under ',
+    linkToSettingsSection('Rules', 'rules'),
+    '; per-role models under ',
+    linkToSettingsSection('Routing', 'model-routing'),
+    '.',
+  );
+  shell.appendChild(lead);
 
   if (!isServerStorageMode()) {
     appendSettingsOfflineHint(
-      mount,
+      shell,
       'Agent editing requires <code>npm start</code>. Cards are read-only until the server is running.',
     );
   }
@@ -532,57 +555,59 @@ export async function renderAgentCenterPanel(
   filterCount.setAttribute('aria-live', 'polite');
   filterCount.hidden = true;
   toolbar.append(search, filterCount);
-  mount.appendChild(toolbar);
+  shell.appendChild(toolbar);
 
-  const sectionsHost = el('div', 'settings-agent-center__sections');
-  mount.appendChild(sectionsHost);
+  const content = el('div', 'settings-general__content settings-agent-center__content');
+  shell.appendChild(content);
 
   const remote = await fetchWorkAgentsList();
   const agents = remote?.agents ?? [];
   const allCards = await loadAgentCenterCards(agents);
 
+  await mountGlobalSubAgentLimits(content);
+
   const sectionGrids = new Map<AgentCenterSectionId, HTMLUListElement>();
   const sectionGroups = new Map<AgentCenterSectionId, HTMLElement>();
   const sectionCountEls = new Map<AgentCenterSectionId, HTMLElement>();
 
-  for (const def of AGENT_CENTER_SECTIONS) {
-    const group = document.createElement('section');
-    group.className = 'settings-group settings-agent-center__section-group';
-    if (def.searchKey) {
-      group.dataset.settingsSearchKey = def.searchKey;
-    }
+  for (const def of AGENT_CENTER_CARD_SECTIONS) {
+    const groupBody = appendSettingsGroup(
+      content,
+      def.title,
+      def.hint,
+      def.searchKey,
+      { emphasis: true },
+    );
+    const group = groupBody.closest('.settings-group');
+    if (!(group instanceof HTMLElement)) continue;
 
-    const headingRow = el('div', 'settings-agent-center__section-head');
-    const heading = el('h3', 'settings-group__title', def.title);
+    group.classList.add('settings-agent-center__section-group');
+
+    const heading = group.querySelector('.settings-group__title');
     const count = el('span', 'settings-agent-center__section-count');
     count.setAttribute('aria-hidden', 'true');
-    headingRow.append(heading, count);
-    group.appendChild(headingRow);
-
-    if (def.hint) {
-      group.appendChild(el('p', 'settings-group__lead', def.hint));
+    if (heading) {
+      heading.appendChild(document.createTextNode(' '));
+      heading.appendChild(count);
     }
 
-    const groupBody = el('div', 'settings-group__body settings-agent-center__section');
-    group.appendChild(groupBody);
-    sectionsHost.appendChild(group);
-
-    if (def.id === 'sub-agents') {
-      await mountGlobalSubAgentLimits(groupBody);
-    }
+    const gridHost = el('div', 'settings-agent-center__section');
+    groupBody.appendChild(gridHost);
 
     const grid = createAgentCenterGrid(def.id);
-    groupBody.appendChild(grid);
+    gridHost.appendChild(grid);
     sectionGrids.set(def.id, grid);
     sectionGroups.set(def.id, group);
     sectionCountEls.set(def.id, count);
   }
 
+  attachAgentCenterBasePromptPanel(content);
+
   const applyFilter = (): void => {
     const query = search.value.trim().toLowerCase();
     let visibleTotal = 0;
 
-    for (const def of AGENT_CENTER_SECTIONS) {
+    for (const def of AGENT_CENTER_CARD_SECTIONS) {
       const grid = sectionGrids.get(def.id);
       const group = sectionGroups.get(def.id);
       const countEl = sectionCountEls.get(def.id);
@@ -592,23 +617,18 @@ export async function renderAgentCenterPanel(
       const sectionCards = allCards.filter((card) => card.kind === def.id);
       const filtered = sectionCards.filter((card) => cardMatchesQuery(card, query));
 
-      const keepSectionVisible = def.id === 'sub-agents';
-
       if (countEl) {
         countEl.textContent = String(filtered.length);
-        countEl.hidden = !filtered.length && !keepSectionVisible;
+        countEl.hidden = filtered.length === 0;
       }
 
       if (!filtered.length) {
-        if (keepSectionVisible) {
+        group.hidden = true;
+        if (def.id === 'sub-agents' && query) {
           group.hidden = false;
-          if (query) {
-            grid.appendChild(
-              el('li', 'settings-agent-center__empty', 'No sub-agent types match this search.'),
-            );
-          }
-        } else {
-          group.hidden = true;
+          grid.appendChild(
+            el('li', 'settings-agent-center__empty', 'No sub-agent types match this search.'),
+          );
         }
         continue;
       }
@@ -633,4 +653,6 @@ export async function renderAgentCenterPanel(
 
   search.addEventListener('input', applyFilter);
   applyFilter();
+
+  return content;
 }

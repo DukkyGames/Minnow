@@ -142,7 +142,7 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   // —— Agents ——
   'agents.center': section(['agent-center']),
   'agents.modes': section(['agent-center']),
-  'agents.experts': section(['experts']),
+  'agents.experts': section(['agent-center']),
   'agents.workAgents': section(['agent-center']),
   'agents.agentPacks': section(['agent-packs']),
   'agents.subAgents': section(['agent-center']),

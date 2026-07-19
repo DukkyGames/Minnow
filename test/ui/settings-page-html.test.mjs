@@ -20,7 +20,6 @@ const SETTINGS_SECTION_IDS = [
   'thinking',
   'agent-center',
   'rules',
-  'experts',
   'agent-packs',
   'autopilot',
   'search',
@@ -46,7 +45,7 @@ const DYNAMIC_SECTION_BODY_IDS = [
   'settingsModelRoutingBody',
   'settingsSamplerBody',
   'settingsAgentCenterBody',
-  'settingsExpertsBody',
+  'settingsRulesBody',
   'settingsAgentPacksBody',
   'settingsSearchBody',
   'settingsDeepResearchBody',
@@ -119,7 +118,7 @@ describe('settings page HTML', () => {
   });
 
   test('SETTINGS_SECTION_IDS matches canonical section count', () => {
-    assert.equal(SETTINGS_SECTION_IDS.length, 27);
+    assert.equal(SETTINGS_SECTION_IDS.length, 26);
   });
 
   test('agents center mount exists in index.html', () => {
@@ -127,12 +126,14 @@ describe('settings page HTML', () => {
     assert.match(html, /data-settings-nav-area="agent-center"/);
   });
 
-  test('user rules section controls exist in index.html', () => {
-    assert.match(html, /id="settingsSection-rules"/);
-    assert.match(html, /id="settingsRulesEnabled"/);
-    assert.match(html, /id="settingsRulesText"/);
-    assert.match(html, /id="settingsRulesSave"/);
-    assert.match(html, /data-settings-search-key="agents\.rules\.enabled"/);
+  test('user rules section matches other general-style settings mounts', () => {
+    const rulesBlock = html.slice(
+      html.indexOf('id="settingsSection-rules"'),
+      html.indexOf('id="settingsSection-experts"'),
+    );
+    assert.match(rulesBlock, /id="settingsRulesBody"/);
+    assert.doesNotMatch(rulesBlock, /class="settings-lead"/);
+    assert.doesNotMatch(rulesBlock, /id="settingsRulesEnabled"/);
   });
 
   test('notifications settings section exists in index.html', () => {
