@@ -247,7 +247,7 @@ Tools: `brain_search`, `brain_read_page`, `brain_write_page`, `save_memory`, `re
 
 Per-role prompts and optional provider/model binding. Shipped: `default`, `builder`, `planner`, `reviewer`, `researcher`, `ui-designer`, …
 
-[`src/agents/work-agent-registry.ts`](../src/agents/work-agent-registry.ts), overrides `~/.minnow/work-agents.json`. API: `/api/work-agents`, `/api/agent-packs` (list/toggle + `GET /api/agent-packs/template` zip + `GET /api/agent-packs/builtin` default pack export). Settings → **Agent packs**: authoring steps, template/default downloads, installed pack list.
+[`src/agents/work-agent-registry.ts`](../src/agents/work-agent-registry.ts), overrides `~/.minnow/work-agents.json`. API: `/api/work-agents`, `/api/agent-packs` (list/toggle + `GET /api/agent-packs/template` zip + `GET /api/agent-packs/builtin` default pack export + `POST /api/agent-packs/upload` zip install). Settings → **Agent packs**: authoring steps, template/default downloads, zip upload, installed pack list.
 
 ### Sub-agents
 
