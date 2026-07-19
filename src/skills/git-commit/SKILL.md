@@ -19,16 +19,38 @@ disable-model-invocation: true
 2. Run `git_diff` with `staged: true` (or equivalent args) — read the real patch.
 3. If nothing is staged, tell the user to stage files with `git_add` first; do not invent a message for unstaged work.
 4. Draft a **conventional commit** subject (≤72 chars) and optional body:
-   - Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
+   - Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `perf`, `build`, `ci`
    - Subject: imperative mood, no trailing period
-   - Body: explain *why*, not file lists
+   - Scope: primary module or area (e.g. `git`, `ui`, `api`)
+   - Body: explain **why** — motivation, user impact, trade-offs — not a file list
 5. If the user asked you to commit, run `git_commit` with the agreed message only after explicit approval unless they already said "commit it".
+
+## Gitmoji (when team uses them)
+
+Prefix the subject with one emoji when the project convention calls for it:
+
+| Emoji | Type |
+|-------|------|
+| ✨ | feat |
+| 🐛 | fix |
+| 📝 | docs |
+| 💄 | style |
+| ♻️ | refactor |
+| ✅ | test |
+| 🔧 | chore |
+| ⚡ | perf |
+| 👷 | build |
+| 🎨 | ui |
+
+Example: `✨ feat(git): add AI commit message generator`
 
 ## Quality checks
 
-- Message matches the diff (no unrelated scope)
+- Message matches **only** the staged diff scope (ignore unstaged paths)
+- Body explains *why*, not *what files changed*
 - No secrets, `.env`, or credentials in committed files — warn if diff shows them
-- Breaking changes called out in body with `BREAKING CHANGE:`
+- Breaking changes called out in body with `BREAKING CHANGE: description`
+- Use `git_log` for recent message style reference when unsure
 
 ## Tools
 

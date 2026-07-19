@@ -289,6 +289,9 @@ const DEFAULT_META = {
     useNativeFim: true,
     enableCompletionCache: true,
   },
+  gitCommitMessage: {
+    useGitmoji: true,
+  },
   editorIntentMode: {
     enabledByDefault: false,
     autoRecheckDefault: false,
