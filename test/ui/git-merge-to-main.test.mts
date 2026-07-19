@@ -21,6 +21,13 @@ describe('resolveTrunkBranchName', () => {
     assert.equal(resolveTrunkBranchName(['feature']), 'main');
   });
 
+  it('uses locked local master when trunk is checked out in another worktree', () => {
+    assert.equal(
+      resolveTrunkBranchName(['feature/foo'], [], ['master']),
+      'master',
+    );
+  });
+
   it('uses remote master when trunk is checked out in another worktree', () => {
     assert.equal(
       resolveTrunkBranchName(['feature/foo'], ['remotes/origin/master']),
@@ -47,6 +54,10 @@ describe('resolveTrunkBranchName', () => {
 });
 
 describe('trunkBranchExists', () => {
+  it('accepts a locked local trunk branch', () => {
+    assert.equal(trunkBranchExists('master', ['feature/foo'], [], ['master']), true);
+  });
+
   it('accepts a remote-only trunk branch', () => {
     assert.equal(
       trunkBranchExists('master', ['feature/foo'], ['remotes/origin/master']),
@@ -135,6 +146,19 @@ describe('mergeToMainButtonVisible', () => {
         onMainWorktree: false,
         localBranches: ['feature/bar'],
         remoteBranches: ['remotes/origin/master'],
+      }),
+      true,
+    );
+  });
+
+  it('shows when trunk is checked out in another worktree', () => {
+    assert.equal(
+      mergeToMainButtonVisible({
+        sourceBranch: 'feature/bar',
+        mainWorkspaceCwd: '/repo',
+        onMainWorktree: false,
+        localBranches: ['feature/bar'],
+        lockedLocalBranches: ['master'],
       }),
       true,
     );

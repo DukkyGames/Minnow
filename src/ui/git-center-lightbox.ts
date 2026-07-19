@@ -526,6 +526,7 @@ export function closeGitCenterLightbox(): void {
   }
   previousFocus?.focus();
   previousFocus = null;
+  void refreshGitPanel();
 }
 
 /** Wire the header button entry point. */

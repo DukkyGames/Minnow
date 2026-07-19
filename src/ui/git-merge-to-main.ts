@@ -19,14 +19,14 @@ export interface MergeToMainContext {
   onMainWorktree: boolean;
   localBranches: readonly string[];
   remoteBranches?: readonly string[];
+  lockedLocalBranches?: readonly string[];
 }
 
 /** Resolve trunk name and whether the merge-to-main button should be visible. */
 export function mergeToMainButtonVisible(ctx: MergeToMainContext): boolean {
-  const trunk = resolveTrunkBranchName(ctx.localBranches, ctx.remoteBranches ?? []);
-  if (!trunkBranchExists(trunk, ctx.localBranches, ctx.remoteBranches ?? [])) {
-    return false;
-  }
+  const lockedLocal = ctx.lockedLocalBranches ?? [];
+  const remote = ctx.remoteBranches ?? [];
+  const trunk = resolveTrunkBranchName(ctx.localBranches, remote, lockedLocal);
   return shouldShowMergeToMain({
     currentBranch: ctx.sourceBranch,
     trunkBranch: trunk,
@@ -53,12 +53,13 @@ export async function runMergeToMain(ctx: MergeToMainContext): Promise<GitOpResu
 
   const localAtMain = branchesAtMain.local ?? [];
   const remoteAtMain = branchesAtMain.remote ?? [];
-  const trunk = resolveTrunkBranchName(localAtMain, remoteAtMain);
+  const lockedAtMain = branchesAtMain.lockedLocal ?? [];
+  const trunk = resolveTrunkBranchName(localAtMain, remoteAtMain, lockedAtMain);
 
   if (sourceBranch === trunk) {
     return { ok: false, error: 'Nothing to merge into main' };
   }
-  if (!trunkBranchExists(trunk, localAtMain, remoteAtMain)) {
+  if (!trunkBranchExists(trunk, localAtMain, remoteAtMain, lockedAtMain)) {
     return { ok: false, error: 'Could not find main or master branch' };
   }
 

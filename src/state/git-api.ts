@@ -34,6 +34,7 @@ export interface GitOpResult {
   commits?: GitCommitEntry[];
   current?: string;
   local?: string[];
+  lockedLocal?: string[];
   remote?: string[];
   stat?: string;
   path?: string;

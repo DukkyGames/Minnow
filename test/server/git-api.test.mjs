@@ -174,6 +174,7 @@ describe('git API', () => {
     );
     assert.equal(parsed.current, 'develop');
     assert.deepEqual(parsed.local, ['main', 'develop']);
+    assert.deepEqual(parsed.lockedLocal, ['feature/other-worktree']);
     assert.deepEqual(parsed.remote, ['remotes/origin/main']);
   });
 
@@ -240,6 +241,25 @@ describe('git API', () => {
     const afterRemove = await branches({ cwd: repoDir });
     assert.equal(afterRemove.ok, true);
     assert.ok(afterRemove.local?.includes('wt-feature'));
+  });
+
+  test('worktreeRemove allows deleting the selected linked worktree when cwd is that path', async () => {
+    const wtPath = path.join(repoDir, '.worktrees', 'wt-remove-self');
+    const added = await worktreeAdd({
+      cwd: repoDir,
+      branch: 'wt-remove-self',
+      path: wtPath,
+    });
+    assert.equal(added.ok, true);
+
+    const removed = await worktreeRemove({ cwd: wtPath, path: wtPath });
+    assert.equal(removed.ok, true);
+  });
+
+  test('worktreeRemove rejects removing the principal worktree', async () => {
+    const removed = await worktreeRemove({ cwd: repoDir, path: repoDir });
+    assert.equal(removed.ok, false);
+    assert.match(removed.error ?? '', /Cannot remove the main worktree/i);
   });
 
   test('POST /api/git status honors cwd', async () => {

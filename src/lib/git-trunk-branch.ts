@@ -5,6 +5,7 @@
 export interface TrunkBranchLists {
   localBranches: readonly string[];
   remoteBranches?: readonly string[];
+  lockedLocalBranches?: readonly string[];
 }
 
 /** Strip `remotes/<remote>/<branch>` to a short branch name when possible. */
@@ -27,12 +28,20 @@ function collectRemoteShortNames(remoteBranches: readonly string[]): Set<string>
   return names;
 }
 
+function allResolvableLocalBranches(
+  localBranches: readonly string[],
+  lockedLocalBranches: readonly string[] = [],
+): Set<string> {
+  return new Set([...localBranches, ...lockedLocalBranches]);
+}
+
 /** Prefer `main`, then `master`, using local names first, then remotes. */
 export function resolveTrunkBranchName(
   localBranches: readonly string[],
   remoteBranches: readonly string[] = [],
+  lockedLocalBranches: readonly string[] = [],
 ): string {
-  const local = new Set(localBranches);
+  const local = allResolvableLocalBranches(localBranches, lockedLocalBranches);
   if (local.has('main')) return 'main';
   if (local.has('master')) return 'master';
 
@@ -48,8 +57,11 @@ export function trunkBranchExists(
   trunk: string,
   localBranches: readonly string[],
   remoteBranches: readonly string[] = [],
+  lockedLocalBranches: readonly string[] = [],
 ): boolean {
-  if (localBranches.includes(trunk)) return true;
+  if (allResolvableLocalBranches(localBranches, lockedLocalBranches).has(trunk)) {
+    return true;
+  }
   return collectRemoteShortNames(remoteBranches).has(trunk);
 }
 

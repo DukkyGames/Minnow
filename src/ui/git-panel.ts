@@ -74,6 +74,8 @@ import {
   panelPathsEqual,
   resolvePanelWorktreeCwd,
   resolvePanelBrowseRunTargetSeed,
+  normalizePanelCwdAfterWorktreeListChange,
+  resolveKnownWorktreePath,
   type PanelBrowseRunTargetSeed,
 } from './panel-worktree-cwd';
 
@@ -183,6 +185,11 @@ let panelCwdUserOverride = false;
 
 let knownWorktrees: ParsedWorktree[] = [];
 let currentBranchName = '';
+let cachedMergeBranchLists = {
+  local: [] as string[],
+  remote: [] as string[],
+  lockedLocal: [] as string[],
+};
 
 
 
@@ -334,10 +341,27 @@ function syncWorktreeDeleteButton(): void {
 }
 
 function syncMergeToMainButton(
-  localBranches: string[] = [],
-  remoteBranches: string[] = [],
+  localBranches?: string[],
+  remoteBranches?: string[],
+  lockedLocalBranches?: string[],
 ): void {
   if (!mergeToMainBtn) return;
+
+  if (localBranches) {
+    cachedMergeBranchLists = {
+      local: localBranches,
+      remote: remoteBranches ?? [],
+      lockedLocal: lockedLocalBranches ?? [],
+    };
+  }
+
+  const lists = localBranches
+    ? {
+        local: localBranches,
+        remote: remoteBranches ?? [],
+        lockedLocal: lockedLocalBranches ?? [],
+      }
+    : cachedMergeBranchLists;
 
   const ws = getWorkspacePath().trim();
   const panelPath = panelCwd ?? ws;
@@ -346,8 +370,9 @@ function syncMergeToMainButton(
     sourceBranch,
     mainWorkspaceCwd: ws,
     onMainWorktree: Boolean(ws && pathsEqual(panelPath, ws)),
-    localBranches,
-    remoteBranches,
+    localBranches: lists.local,
+    remoteBranches: lists.remote,
+    lockedLocalBranches: lists.lockedLocal,
   });
 
   mergeToMainBtn.hidden = !visible;
@@ -424,6 +449,7 @@ async function handleMergeToMain(): Promise<void> {
   const branchResult = await gitBranches(getEffectiveCwdArg());
   const localBranches = branchResult.ok ? (branchResult.local ?? []) : [];
   const remoteBranches = branchResult.ok ? (branchResult.remote ?? []) : [];
+  const lockedLocalBranches = branchResult.ok ? (branchResult.lockedLocal ?? []) : [];
   const sourceBranch = currentBranchName || branchSelect?.value || '';
   const panelPath = panelCwd ?? ws;
 
@@ -433,12 +459,13 @@ async function handleMergeToMain(): Promise<void> {
     onMainWorktree: pathsEqual(panelPath, ws),
     localBranches,
     remoteBranches,
+    lockedLocalBranches,
   };
 
   if (!mergeToMainButtonVisible(ctx)) return;
 
   const { resolveTrunkBranchName } = await import('../lib/git-trunk-branch');
-  const trunk = resolveTrunkBranchName(localBranches, remoteBranches);
+  const trunk = resolveTrunkBranchName(localBranches, remoteBranches, lockedLocalBranches);
   if (!window.confirm(`Merge branch "${sourceBranch}" into ${trunk}?`)) return;
 
   setStatus('Merging…');
@@ -456,7 +483,7 @@ async function handleMergeToMain(): Promise<void> {
 
   setStatus('');
   showToast(`Merged ${sourceBranch} into ${trunk}`, 'success');
-  panelCwd = ws || undefined;
+  panelCwd = undefined;
   panelCwdUserOverride = true;
   await refreshGitPanel();
   void syncFileTreeGitPollCwd();
@@ -468,25 +495,20 @@ async function handleDeleteWorktree(): Promise<void> {
   if (!targetPath || isMainWorktreePath(targetPath)) return;
   if (!window.confirm(`Remove worktree at ${targetPath}?`)) return;
 
-  const cwd = getEffectiveCwdArg();
-  const ok = await runGitOp(() => gitWorktreeRemove({ path: targetPath, cwd }), {
+  const removeCwd = getEffectiveCwdArg();
+  const ws = getWorkspacePath().trim();
+  panelCwd = ws || undefined;
+
+  const ok = await runGitOp(() => gitWorktreeRemove({ path: targetPath, cwd: removeCwd }), {
     successMessage: 'Worktree removed',
   });
-  if (ok) {
-    const ws = getWorkspacePath().trim();
-    panelCwd = ws || undefined;
-    return;
-  }
+  if (ok) return;
 
   if (!window.confirm('Worktree has uncommitted changes. Force remove?')) return;
-  const forced = await runGitOp(
-    () => gitWorktreeRemove({ path: targetPath, force: true, cwd }),
+  await runGitOp(
+    () => gitWorktreeRemove({ path: targetPath, force: true, cwd: removeCwd }),
     { successMessage: 'Worktree removed' },
   );
-  if (forced) {
-    const ws = getWorkspacePath().trim();
-    panelCwd = ws || undefined;
-  }
 }
 
 
@@ -1769,7 +1791,19 @@ async function refreshBranchSelect(): Promise<void> {
 
   currentBranchName = result.current ?? '';
 
-  for (const branch of filterUserFacingBranches(result.local ?? [])) {
+  const visible = filterUserFacingBranches(result.local ?? []);
+  const branches =
+    currentBranchName && !visible.includes(currentBranchName)
+      ? [currentBranchName, ...visible]
+      : visible;
+
+  if (branches.length === 0) return;
+
+  const selectedBranch = branches.includes(currentBranchName)
+    ? currentBranchName
+    : branches[0]!;
+
+  for (const branch of branches) {
 
     const opt = document.createElement('option');
 
@@ -1777,16 +1811,19 @@ async function refreshBranchSelect(): Promise<void> {
 
     opt.textContent = branch;
 
-    if (branch === result.current) opt.selected = true;
+    if (branch === selectedBranch) opt.selected = true;
 
     branchSelect.appendChild(opt);
 
   }
 
+  branchSelect.value = selectedBranch;
+
   syncBranchDeleteButton();
   syncMergeToMainButton(
     filterUserFacingBranches(result.local ?? []),
     result.remote ?? [],
+    result.lockedLocal ?? [],
   );
 
 }
@@ -1803,13 +1840,10 @@ function worktreeDropdownMatches(select: HTMLSelectElement, worktrees: ParsedWor
 
 function syncCwdSelectValue(): void {
   if (!cwdSelect) return;
-  const target = panelCwd ?? getWorkspacePath();
-  for (const opt of cwdSelect.options) {
-    if (pathsEqual(opt.value, target)) {
-      if (cwdSelect.value !== opt.value) cwdSelect.value = opt.value;
-      break;
-    }
-  }
+  const ws = getWorkspacePath().trim();
+  const selectedPath = resolveKnownWorktreePath(knownWorktrees, panelCwd ?? ws, ws);
+  cwdSelect.value = selectedPath;
+  panelCwd = panelPathsEqual(selectedPath, ws) ? undefined : selectedPath;
   syncWorktreeDeleteButton();
 }
 
@@ -1859,7 +1893,8 @@ async function refreshWorktreeDropdown(): Promise<void> {
 
   if (knownWorktrees.length === 0) return;
 
-  const selected = panelCwd ?? ws;
+  panelCwd = normalizePanelCwdAfterWorktreeListChange(panelCwd, knownWorktrees, ws);
+  const selectedPath = resolveKnownWorktreePath(knownWorktrees, panelCwd ?? ws, ws);
 
   if (worktreeDropdownMatches(cwdSelect, knownWorktrees)) {
     syncCwdSelectValue();
@@ -1878,7 +1913,7 @@ async function refreshWorktreeDropdown(): Promise<void> {
 
     opt.textContent = formatWorktreeOptionLabel(wt, ws);
 
-    if (selected && pathsEqual(wt.path, selected)) {
+    if (pathsEqual(wt.path, selectedPath)) {
 
       opt.selected = true;
 
@@ -1887,6 +1922,9 @@ async function refreshWorktreeDropdown(): Promise<void> {
     cwdSelect.appendChild(opt);
 
   }
+
+  cwdSelect.value = selectedPath;
+  panelCwd = panelPathsEqual(selectedPath, ws) ? undefined : selectedPath;
 
   syncWorktreeDeleteButton();
 
