@@ -37,7 +37,7 @@ export const SETTINGS_CATEGORY_LABELS: Record<SettingsCategoryId, string> = {
 
 /** Category descriptions (search keywords / future catalog hints; not shown in UI). */
 export const SETTINGS_CATEGORY_DESCRIPTIONS: Record<SettingsCategoryId, string> = {
-  general: 'Notifications, terminal behavior, LAN access, audio devices, and where settings are saved.',
+  general: 'Terminal behavior, LAN access, notifications, audio devices, and where settings are saved.',
   appearance: 'Theme, wallpaper, fonts, and custom accent colors.',
   models: 'LLM backends, per-role model picks, sampling, reasoning, and usage.',
   agents: 'System prompts, standing rules, composer modes, personas, workers, and tool policies.',
@@ -50,7 +50,7 @@ export const SETTINGS_CATEGORY_AREAS: Record<
   SettingsCategoryId,
   SettingsSectionId[]
 > = {
-  general: ['general', 'audio', 'about'],
+  general: ['general', 'notifications', 'audio', 'about'],
   appearance: ['appearance'],
   models: ['providers', 'model-routing', 'sampler', 'thinking', 'usage'],
   agents: ['agent-center', 'rules', 'experts', 'agent-packs', 'autopilot'],
@@ -128,21 +128,21 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
     keywords: ['beta', 'stable', 'prerelease', 'channel'],
     description: 'Choose Stable releases or Beta pre-releases for auto-update.',
   }),
-  field('general.notifications', 'Notifications', 'general', 'general', {
+  field('general.notifications', 'Notifications', 'general', 'notifications', {
     keywords: ['bell', 'alert', 'sound', 'menubar'],
     description: 'Menubar bell when background chats, tasks, or jobs need attention.',
   }),
-  field('general.notifications.enabled', 'Enable notifications', 'general', 'general', {
+  field('general.notifications.enabled', 'Enable notifications', 'general', 'notifications', {
     keywords: ['master toggle', 'bell'],
   }),
-  field('general.notifications.chat', 'Chat notifications', 'general', 'general'),
-  field('general.notifications.tasks', 'Task notifications', 'general', 'general', {
+  field('general.notifications.chat', 'Chat notifications', 'general', 'notifications'),
+  field('general.notifications.tasks', 'Task notifications', 'general', 'notifications', {
     keywords: ['orchestrate', 'sub-agent'],
   }),
-  field('general.notifications.background', 'Background job notifications', 'general', 'general', {
+  field('general.notifications.background', 'Background job notifications', 'general', 'notifications', {
     keywords: ['scheduler', 'research', 'synthesis'],
   }),
-  field('general.notifications.sound', 'Notification sounds', 'general', 'general'),
+  field('general.notifications.sound', 'Notification sounds', 'general', 'notifications'),
   field('general.network', 'Network access', 'general', 'general', {
     keywords: ['lan', 'wifi', 'local network', 'remote', 'phone', 'tablet', '0.0.0.0'],
     description: 'Let other devices on your Wi-Fi open Minnow in a browser while this PC runs npm start.',

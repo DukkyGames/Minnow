@@ -10,6 +10,7 @@ const html = readFileSync(join(root, 'index.html'), 'utf8');
 /** Nav section ids must match panels in index.html (settings-page-types SETTINGS_SECTIONS). */
 const SETTINGS_SECTION_IDS = [
   'general',
+  'notifications',
   'appearance',
   'audio',
   'providers',
@@ -38,6 +39,7 @@ const SETTINGS_SECTION_IDS = [
 /** Sections populated by refreshSettingsSection via clearMount(). */
 const DYNAMIC_SECTION_BODY_IDS = [
   'settingsGeneralBody',
+  'settingsNotificationsBody',
   'settingsModelRoutingBody',
   'settingsSamplerBody',
   'settingsAgentCenterBody',
@@ -117,7 +119,7 @@ describe('settings page HTML', () => {
   });
 
   test('SETTINGS_SECTION_IDS matches canonical section count', () => {
-    assert.equal(SETTINGS_SECTION_IDS.length, 24);
+    assert.equal(SETTINGS_SECTION_IDS.length, 25);
   });
 
   test('agents center mount exists in index.html', () => {
@@ -131,6 +133,13 @@ describe('settings page HTML', () => {
     assert.match(html, /id="settingsRulesText"/);
     assert.match(html, /id="settingsRulesSave"/);
     assert.match(html, /data-settings-search-key="agents\.rules\.enabled"/);
+  });
+
+  test('notifications settings section exists in index.html', () => {
+    assert.match(html, /id="settingsSection-notifications"/);
+    assert.match(html, /id="settingsNotificationsBody"/);
+    assert.match(html, /data-settings-nav-area="notifications"/);
+    assert.match(html, /data-area="notifications"/);
   });
 
   test('audio settings panel exists in index.html', () => {

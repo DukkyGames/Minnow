@@ -280,6 +280,12 @@ async function appendToolCallDefaults(mount: HTMLElement): Promise<void> {
   });
 }
 
+async function renderNotificationsSection(): Promise<void> {
+  const mount = clearMount('settingsNotificationsBody');
+  if (!mount) return;
+  renderNotificationsSettingsSection(mount);
+}
+
 async function renderGeneralSection(): Promise<void> {
   const mount = clearMount('settingsGeneralBody');
   if (!mount) return;
@@ -309,14 +315,6 @@ async function renderGeneralSection(): Promise<void> {
     'general.chat.terminal',
   );
   await appendTerminalControls(chat);
-
-  const notifications = appendSettingsGroup(
-    mount,
-    'Notifications',
-    'Menubar bell alerts when something finishes or fails in the background.',
-    'general.notifications',
-  );
-  renderNotificationsSettingsSection(notifications);
 
   const network = appendSettingsGroup(
     mount,
@@ -2258,6 +2256,9 @@ export async function refreshSettingsSection(
   switch (section) {
     case 'general':
       await renderGeneralSection();
+      break;
+    case 'notifications':
+      await renderNotificationsSection();
       break;
     case 'appearance':
       await renderAppearanceSection();

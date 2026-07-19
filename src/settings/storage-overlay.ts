@@ -64,14 +64,14 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   // not in config.json, so both keys are section-only for agent tools.
   'general.updates': section(['general']),
   'general.updates.channel': section(['general']),
-  'general.notifications': section(['general']),
-  'general.notifications.enabled': browser('enabled', 'boolean', { refreshAreas: ['general'] }),
-  'general.notifications.chat': browser('chatEnabled', 'boolean', { refreshAreas: ['general'] }),
-  'general.notifications.tasks': browser('tasksEnabled', 'boolean', { refreshAreas: ['general'] }),
+  'general.notifications': section(['notifications']),
+  'general.notifications.enabled': browser('enabled', 'boolean', { refreshAreas: ['notifications'] }),
+  'general.notifications.chat': browser('chatEnabled', 'boolean', { refreshAreas: ['notifications'] }),
+  'general.notifications.tasks': browser('tasksEnabled', 'boolean', { refreshAreas: ['notifications'] }),
   'general.notifications.background': browser('backgroundEnabled', 'boolean', {
-    refreshAreas: ['general'],
+    refreshAreas: ['notifications'],
   }),
-  'general.notifications.sound': browser('soundEnabled', 'boolean', { refreshAreas: ['general'] }),
+  'general.notifications.sound': browser('soundEnabled', 'boolean', { refreshAreas: ['notifications'] }),
   'general.network': meta('server.networkAccess', 'enum', {
     allowedValues: ['local', 'lan'],
     sensitivity: 'dangerous',

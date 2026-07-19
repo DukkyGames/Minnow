@@ -1,5 +1,5 @@
 /**
- * Settings → General: notification prefs (master toggle, sounds, per-group toggles).
+ * Settings → Notifications: bell alerts, per-group toggles, and sounds.
  */
 
 import {
