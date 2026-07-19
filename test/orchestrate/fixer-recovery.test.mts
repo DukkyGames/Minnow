@@ -18,9 +18,11 @@ import {
 } from '../../src/agents/controller/report.ts';
 import {
   autoDelegateNext,
+  clearMissingReportNudgesForTests,
   clearStallStoppedChatIdsForTests,
   clearTaskChatStallRestartsForTests,
   continueBoardTask,
+  getMissingReportNudgeCountForTests,
   isStallStoppedChatForTests,
   enqueueMergeCompletedTaskWorktreeForTests,
   finalizeBoardTaskOnStreamEnd,
@@ -633,6 +635,27 @@ describe('Env-fixer pass board_report routing', () => {
       process.env.MINNOW_TEST = prevMinnowTest;
     }
     setSessionStateForTests(null);
+  });
+
+  test('clean env-fixer end without board_report nudges instead of burning an attempt', async () => {
+    clearMissingReportNudgesForTests();
+    const group = makeGroup();
+    const { planner, fixerChat } = seedEnvFixerTask(group);
+    // A clean turn end (trailing assistant message) with no board_report.
+    fixerChat.history = [
+      { role: 'user', content: 'Fix missing deps' },
+      { role: 'assistant', content: 'Installed the missing packages.' },
+    ];
+
+    await triggerFixerStallReconcileForTests(group, planner, TASK_ID);
+
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === TASK_ID)!;
+    // Linkage intact and no env-fix attempt spent — the fixer can still report.
+    assert.equal(task.fixerChatId, FIXER_CHAT_ID);
+    assert.equal(task.fixerKind, 'env');
+    assert.equal(task.envFixPhase, 'build');
+    assert.equal(task.envFixAttempts, undefined);
+    assert.equal(getMissingReportNudgeCountForTests(FIXER_CHAT_ID), 1);
   });
 
   test('test-phase pass moves task to testing and clears fixer linkage', async () => {

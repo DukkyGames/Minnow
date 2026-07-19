@@ -61,7 +61,7 @@ import {
   getPlannerChatForGroup,
 } from './chat-groups.ts';
 import { emitBoardChange } from './orchestrate-board-events.ts';
-import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, syncOrchestrateBoardTimer, updateTask, logTaskStatus, logBuildVerdict, logTestVerdict, logMergeResult, logWorktreeAllocated, logTaskRetry, logModeChange, logAutoStart, logAutoStop, logFinalTestStarted, logFinalTestVerdict, quarantineTaskAndDependents } from './orchestrate-board-store.ts';
+import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, syncOrchestrateBoardTimer, updateTask, logTaskStatus, logBoardReportNudge, logBuildVerdict, logTestVerdict, logMergeResult, logWorktreeAllocated, logTaskRetry, logModeChange, logAutoStart, logAutoStop, logFinalTestStarted, logFinalTestVerdict, quarantineTaskAndDependents } from './orchestrate-board-store.ts';
 import {
   isIsolationActive,
   resolveIsolationMode,
@@ -376,6 +376,18 @@ const taskChatStallRestarts = new Map<string, number>();
  */
 const stallStoppedChatIds = new Set<string>();
 
+/** Max `board_report` reminders per board chat before falling through to self-heal. */
+export const MISSING_REPORT_NUDGE_CAP = 2;
+
+/**
+ * Per-chatId count of missing-report nudges. Deliberately NOT cleared by
+ * `stopTaskChatSupervision`: every nudge produces another stream-end, and the
+ * subscriber stops supervision before the finalizer runs — clearing there would
+ * reset the budget on each pass and nudge forever. Reset only when a genuinely
+ * new phase run is launched (see `getOrCreateBoardChat`).
+ */
+const missingReportNudges = new Map<string, number>();
+
 /** Test-only: capture stall-path nudge/self-heal calls from heartbeat supervision. */
 let taskChatNudgeCallsForTests: string[] | null = null;
 let taskChatNudgeChatIdsForTests: string[] | null = null;
@@ -672,6 +684,46 @@ function handleTaskChatLaunchFailure(
 }
 
 /**
+ * A board chat that finished its turn cleanly but never called `board_report`
+ * has usually just forgotten the tool — the work itself is intact. Re-prompt the
+ * same chat (context and worktree preserved) instead of treating the missing
+ * report as a phase failure, which would burn an attempt and, on the test path,
+ * restart the Builder from scratch.
+ *
+ * Bounded by {@link MISSING_REPORT_NUDGE_CAP} per chat; once exhausted the
+ * caller falls through to its normal self-heal → quarantine routing.
+ *
+ * Returns true when a nudge was dispatched and the caller must not finalize.
+ */
+function tryNudgeForMissingBoardReport(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+  chat: Chat,
+): boolean {
+  // A paused/stopped board must not launch turns; the resume sweep re-drives it.
+  if (!isBoardRunning(group)) return false;
+
+  // Only a clean end is recoverable by re-prompting. `stopped` (user Stop, stall
+  // kill) and `failed` (provider error, max tool turns) have their own owners and
+  // keep their existing park / retry / quarantine routing.
+  if (resolveTaskChatStreamOutcome(chat) !== 'completed') return false;
+
+  const chatId = chat.id;
+  const sent = missingReportNudges.get(chatId) ?? 0;
+  if (sent >= MISSING_REPORT_NUDGE_CAP) return false;
+
+  const attempt = sent + 1;
+  missingReportNudges.set(chatId, attempt);
+  logBoardReportNudge(group, task.id, attempt, MISSING_REPORT_NUDGE_CAP);
+  void runTaskChatNudge(group, task.id, plannerChat, undefined, {
+    chatId,
+    missingReport: true,
+  }).catch((err) => reportBackgroundError('missing-board-report-nudge', err));
+  return true;
+}
+
+/**
  * Advance board task status when its linked **Builder** chat finishes streaming.
  * Successful builds move to testing; auto-pilot launches the Tester.
  */
@@ -830,6 +882,12 @@ export function finalizeBoardTaskOnStreamEnd(
       moveTaskStatus(group, task.id, 'blocked', plannerChat);
       updateTask(group, task.id, { error: summary }, plannerChat);
     }
+    return;
+  }
+
+  // No report at all: re-prompt the Builder before spending a build attempt.
+  // The task stays `in_progress` with its chat and worktree intact.
+  if (!report && tryNudgeForMissingBoardReport(group, freshTask, plannerChat, chat)) {
     return;
   }
 
@@ -1018,6 +1076,10 @@ function getOrCreateBoardChat(input: {
   if (existingId) {
     const existing = findChatById(existingId);
     if (existing) {
+      // A fresh phase launch (build / test / fixer) is a new attempt, so it gets
+      // a full missing-report nudge budget. Nudge continuations go through
+      // runTaskChatNudge instead and deliberately keep the running count.
+      missingReportNudges.delete(existing.id);
       if (input.taskId) existing.boardTaskId = input.taskId;
       if (input.role === 'tester') existing.workAgentId = 'tester';
       if (input.role === 'fixer') existing.workAgentId = null;
@@ -1573,12 +1635,18 @@ function boardReportNudgeLine(
 export function buildContinueNudgeMessage(
   task: BoardTask,
   priorError?: string,
-  options?: { stalledChatId?: string },
+  options?: { stalledChatId?: string; missingReport?: boolean },
 ): string {
   const lines = [
     `Continue the orchestrate task ${task.id} — ${task.title} where you left off.`,
     "Pick up from your last step; don't restart from scratch.",
   ];
+  if (options?.missingReport) {
+    lines.push(
+      'Your last turn ended without calling board_report, so the board cannot advance.',
+      'If the work is already done, call board_report now with the outcome; otherwise finish it first.',
+    );
+  }
   const err = priorError?.trim();
   if (err) {
     lines.push(`The prior attempt errored mid-way: ${err}`);
@@ -1751,7 +1819,7 @@ export async function runTaskChatNudge(
   taskId: string,
   plannerChat: Chat,
   priorError?: string,
-  options?: { chatId?: string },
+  options?: { chatId?: string; missingReport?: boolean },
 ): Promise<void> {
   const board = group.orchestrateBoard;
   if (!board) return;
@@ -1806,7 +1874,10 @@ export async function runTaskChatNudge(
       }
     }
 
-    const nudge = buildContinueNudgeMessage(task, priorError, { stalledChatId: targetChatId });
+    const nudge = buildContinueNudgeMessage(task, priorError, {
+      stalledChatId: targetChatId,
+      missingReport: options?.missingReport,
+    });
     refreshHeartbeatThresholds();
     startTaskChatSupervision(taskChat.id);
 
@@ -2876,6 +2947,12 @@ async function finalizeEnvFixerOnStreamEnd(
       return;
     }
 
+    // No report: re-prompt this fixer before burning an env-fix attempt. Nudge
+    // first — clearing the linkage below is what makes the failure terminal.
+    if (!report && endedChat && tryNudgeForMissingBoardReport(group, fresh, plannerChat, endedChat)) {
+      return;
+    }
+
     updateTask(
       group,
       fresh.id,
@@ -3306,15 +3383,15 @@ export async function finalizeTaskTestingOnStreamEnd(
   // and leave the task in `testing` — the resume sweep (isTaskStalledForRestart)
   // restarts the tester when the board runs again.
   const testChatId = fresh.testChatId?.trim();
-  const stoppedTestChat = testChatId ? findChatById(testChatId) : undefined;
-  if (stoppedTestChat && resolveTaskChatStreamOutcome(stoppedTestChat) === 'stopped') {
+  const endedTestChat = testChatId ? findChatById(testChatId) : undefined;
+  if (endedTestChat && resolveTaskChatStreamOutcome(endedTestChat) === 'stopped') {
     const board = group.orchestrateBoard;
-    const stopReason = resolveTaskChatStopReason(stoppedTestChat, board);
+    const stopReason = resolveTaskChatStopReason(endedTestChat, board);
     const neutralStop =
       stopReason === 'user' || board?.userStopped === true || !isBoardRunning(group);
     if (neutralStop) {
       updateTask(group, fresh.id, { testChatId: undefined }, plannerChat);
-      teardownBoardTaskChatResources(stoppedTestChat, sessionState?.groups);
+      teardownBoardTaskChatResources(endedTestChat, sessionState?.groups);
       return;
     }
   }
@@ -3332,6 +3409,13 @@ export async function finalizeTaskTestingOnStreamEnd(
         plannerChat,
       );
     }
+  }
+
+  // No report and no VERDICT marker: re-prompt the Tester before recording a
+  // fail. Without this the missing tool call is routed as a test failure, which
+  // burns a test attempt and reseeds the Builder for work that may well be sound.
+  if (!report && endedTestChat && tryNudgeForMissingBoardReport(group, fresh, plannerChat, endedTestChat)) {
+    return;
   }
 
   const outcome = report?.outcome;
@@ -4323,6 +4407,14 @@ export function clearTaskChatStallRestartsForTests(): void {
 
 export function getTaskChatStallRestartCountForTests(chatId: string): number {
   return taskChatStallRestarts.get(chatId) ?? 0;
+}
+
+export function clearMissingReportNudgesForTests(): void {
+  missingReportNudges.clear();
+}
+
+export function getMissingReportNudgeCountForTests(chatId: string): number {
+  return missingReportNudges.get(chatId) ?? 0;
 }
 
 /** Enable/disable capture of stall-path nudge and self-heal calls from heartbeat ticks. */
