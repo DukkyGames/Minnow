@@ -7,12 +7,13 @@ import { findChatById } from '../state/sessions';
 import type { Chat, Message, TurnRunRecord } from '../types';
 import { appIdForChat } from './app-for-chat';
 import { shouldNotifyForChatTurn } from './background';
+import { loadNotificationPrefs } from './prefs';
 import {
   formatToolFailurePreview,
   lastAssistantPreview,
   truncatePreview,
 } from './preview';
-import { pushNotification } from './push';
+import { pushNotificationOrActiveChatSound } from './push';
 
 function runOutputMessages(chat: Chat, run: TurnRunRecord): Message[] {
   if (run.outputMessages?.length) {
@@ -45,7 +46,7 @@ export function notifyChatTurnEnded(chatId: string, runId: string): void {
   if (run.status === 'stopped') return;
 
   if (run.status === 'failed') {
-    if (!background) return;
+    if (!background && !loadNotificationPrefs().soundOnActiveChat) return;
     const errPreview =
       run.errorMessage?.trim() ||
       lastAssistantPreview(output) ||
@@ -53,7 +54,7 @@ export function notifyChatTurnEnded(chatId: string, runId: string): void {
         (run.outputMessages?.find((m) => m.role === 'assistant')?.content as string) ??
           'Turn failed',
       );
-    pushNotification({
+    pushNotificationOrActiveChatSound({
       kind: 'chat_turn_error',
       title,
       preview: errPreview || 'Turn failed',
@@ -67,7 +68,7 @@ export function notifyChatTurnEnded(chatId: string, runId: string): void {
   if (run.status === 'completed') {
     const toolPreview = formatToolFailurePreview(output);
     if (toolPreview) {
-      pushNotification({
+      pushNotificationOrActiveChatSound({
         kind: 'chat_tool_failure',
         title,
         preview: toolPreview,
@@ -77,10 +78,10 @@ export function notifyChatTurnEnded(chatId: string, runId: string): void {
       });
     }
 
-    if (!background) return;
+    if (!background && !loadNotificationPrefs().soundOnActiveChat) return;
 
     const preview = lastAssistantPreview(output) || 'Turn finished';
-    pushNotification({
+    pushNotificationOrActiveChatSound({
       kind: 'chat_turn_complete',
       title,
       preview,

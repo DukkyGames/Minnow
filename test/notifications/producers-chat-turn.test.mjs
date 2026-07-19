@@ -7,6 +7,7 @@ describe('chat turn notification producer', () => {
   let store;
   let sessions;
   let instances;
+  let prefs;
 
   beforeEach(async () => {
     const { Window } = await import('happy-dom');
@@ -20,8 +21,10 @@ describe('chat turn notification producer', () => {
     background = await import('../../src/notifications/background.ts');
     sessions = await import('../../src/state/sessions.ts');
     instances = await import('../../src/os/instances.ts');
+    prefs = await import('../../src/notifications/prefs.ts');
 
     store.resetNotificationStoreForTests();
+    prefs.resetNotificationPrefsForTests();
     instances.resetInstancesForTests();
     sessions.setSessionStateForTests({
       version: 5,
@@ -33,6 +36,7 @@ describe('chat turn notification producer', () => {
 
   afterEach(() => {
     store.resetNotificationStoreForTests();
+    prefs.resetNotificationPrefsForTests();
     instances.resetInstancesForTests();
     sessions.setSessionStateForTests(null);
   });
@@ -92,6 +96,50 @@ describe('chat turn notification producer', () => {
     chatTurn.notifyChatTurnEnded('chat-a', 'run-1');
     assert.equal(store.getUnreadNotificationCount(), 1);
     assert.match(store.getNotifications()[0]?.preview ?? '', /Hello/);
+  });
+
+  test('plays turn-complete sound on active chat without bell alert when enabled', () => {
+    const chat = sessions.createEmptyChatObject('model-a');
+    chat.id = 'chat-a';
+    chat.name = 'Alpha';
+    chat.history = [
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'Hello there' },
+    ];
+    chat.runs = [
+      {
+        runId: 'run-active',
+        branchId: 'b1',
+        forkHistoryIndex: 0,
+        status: 'completed',
+        createdAt: 1,
+        endedAt: 2,
+        snapshot: {
+          forkHistoryIndex: 0,
+          providerId: 'p',
+          modelId: 'm',
+          temperature: 0.7,
+          maxTokens: 100,
+          maxToolTurns: 8,
+          historyPrefixHash: 'abc',
+        },
+        outputHistoryStart: 1,
+        outputHistoryEnd: 1,
+      },
+    ];
+    sessions.setSessionStateForTests({
+      version: 5,
+      activeId: 'chat-a',
+      chats: [chat],
+      groups: [],
+    });
+    instances.launchInstance('code');
+    prefs.saveNotificationPref('soundOnActiveChat', true);
+
+    chatTurn.notifyChatTurnEnded('chat-a', 'run-active');
+
+    assert.equal(store.getUnreadNotificationCount(), 0);
+    assert.equal(store.getNotifications().length, 0);
   });
 
   test('pushes tool failure notification at end of completed turn', () => {

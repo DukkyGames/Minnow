@@ -122,3 +122,18 @@ export function linkToSettingsSection(
   });
   return btn;
 }
+
+/** Jump to a Models app section (e.g. Voice). */
+export function linkToModelsSection(
+  label: string,
+  sectionId: import('./models-page').ModelsSectionId = 'voice',
+): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'settings-inline-link';
+  btn.textContent = label;
+  btn.addEventListener('click', () => {
+    void import('./models-page').then((m) => m.openModels(sectionId));
+  });
+  return btn;
+}

@@ -37,8 +37,13 @@ export async function applySettingsClientPatches(
       saveNotificationPref('backgroundEnabled', Boolean(value));
     } else if (patchKey === 'notifications.soundEnabled') {
       saveNotificationPref('soundEnabled', Boolean(value));
+    } else if (patchKey === 'notifications.soundOnActiveChat') {
+      saveNotificationPref('soundOnActiveChat', Boolean(value));
+    } else if (patchKey === 'notifications.soundPackId' && typeof value === 'string') {
+      saveNotificationPref('soundPackId', value);
     } else if (patchKey === 'notifications.soundId' && typeof value === 'string') {
-      saveNotificationPref('soundId', value);
+      // Legacy patch key: map single-sound ids to pack ids.
+      saveNotificationPref('soundPackId', value === 'none' ? 'none' : 'default');
     } else if (patchKey === 'theme.family' && typeof value === 'string') {
       setThemeFamily(value as ThemeFamily);
     } else if (patchKey === 'theme.mode') {
@@ -110,6 +115,7 @@ function readBrowserFieldValue(key: string): unknown {
       'general.notifications.tasks': prefs.tasksEnabled,
       'general.notifications.background': prefs.backgroundEnabled,
       'general.notifications.sound': prefs.soundEnabled,
+      'general.notifications.soundOnActiveChat': prefs.soundOnActiveChat,
     };
     return map[key] ?? null;
   }

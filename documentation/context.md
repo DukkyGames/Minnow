@@ -291,6 +291,8 @@ The Code chat sidebar header keeps its navigation controls ordered as **collapse
 
 Router: [`src/os/router.ts`](../src/os/router.ts). Boot: `initOsPageBridge()` → `initOsShell()` → `initOsRouter()`.
 
+**Notifications:** menubar bell inbox ([`src/os/notifications-menu.ts`](../src/os/notifications-menu.ts), [`src/notifications/`](../src/notifications/)). Sounds use **packs** under `public/sounds/packs/<packId>/` ([`src/notifications/sound-packs.ts`](../src/notifications/sound-packs.ts)): each pack maps three cues — `turn_complete`, `question`, `tool_turn` — to audio files; notification kinds resolve to a cue at playback time. Default pack **Minnow** ships `turn-complete.wav`, `question.wav`, `tool-turn.mp3`. Prefs: `minnow.notifications.soundPackId` (`default` | `none`), `minnow.notifications.soundOnActiveChat` (play cues while watching the active chat in Code without bell rows). Settings → General → Notifications.
+
 ---
 
 ## Theme and appearance

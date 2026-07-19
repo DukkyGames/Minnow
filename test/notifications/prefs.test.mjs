@@ -23,18 +23,34 @@ describe('notification prefs', () => {
     const loaded = prefs.loadNotificationPrefs();
     assert.equal(loaded.enabled, true);
     assert.equal(loaded.muted, false);
-    assert.equal(loaded.soundId, 'chime');
+    assert.equal(loaded.soundPackId, 'default');
+    assert.equal(loaded.soundOnActiveChat, false);
     assert.equal(loaded.chatEnabled, true);
   });
 
   test('persists and reloads toggles', () => {
     prefs.saveNotificationPref('enabled', false);
     prefs.saveNotificationPref('muted', true);
-    prefs.saveNotificationPref('soundId', 'ping');
+    prefs.saveNotificationPref('soundPackId', 'none');
     const loaded = prefs.loadNotificationPrefs();
     assert.equal(loaded.enabled, false);
     assert.equal(loaded.muted, true);
-    assert.equal(loaded.soundId, 'ping');
+    assert.equal(loaded.soundPackId, 'none');
+  });
+
+  test('migrates legacy soundId none to soundPackId none and disables playback', () => {
+    localStorage.setItem('minnow.notifications.soundId', 'none');
+    prefs.resetNotificationPrefsForTests();
+    const loaded = prefs.loadNotificationPrefs();
+    assert.equal(loaded.soundPackId, 'none');
+    assert.equal(loaded.soundEnabled, false);
+  });
+
+  test('migrates legacy soundId chime to default pack', () => {
+    localStorage.setItem('minnow.notifications.soundId', 'chime');
+    prefs.resetNotificationPrefsForTests();
+    const loaded = prefs.loadNotificationPrefs();
+    assert.equal(loaded.soundPackId, 'default');
   });
 
   test('kind group gating respects master enable', () => {
@@ -42,7 +58,8 @@ describe('notification prefs', () => {
       enabled: false,
       muted: false,
       soundEnabled: true,
-      soundId: 'chime',
+      soundOnActiveChat: false,
+      soundPackId: 'default',
       chatEnabled: true,
       tasksEnabled: true,
       backgroundEnabled: true,
@@ -55,7 +72,8 @@ describe('notification prefs', () => {
       enabled: true,
       muted: true,
       soundEnabled: true,
-      soundId: 'chime',
+      soundOnActiveChat: false,
+      soundPackId: 'default',
       chatEnabled: true,
       tasksEnabled: true,
       backgroundEnabled: true,

@@ -7,9 +7,10 @@ import {
   saveNotificationPref,
   saveNotificationPrefs,
 } from '../notifications/prefs';
+import { NOTIFICATION_SOUND_PACK_OPTIONS } from '../notifications/sound-packs';
 import {
-  NOTIFICATION_SOUNDS,
-  previewNotificationSound,
+  NOTIFICATION_SOUND_CUES,
+  previewNotificationSoundCue,
 } from '../notifications/sound';
 import { appendSettingsGroup } from './settings-layout';
 import { createSettingsToggleRow } from './settings-switch';
@@ -73,40 +74,56 @@ export function renderNotificationsSettingsSection(mount: HTMLElement): void {
 
   const sound = appendSettingsGroup(
     mount,
-    'Notification sound',
-    'Play a sound when Minnow is open but another window has focus.',
+    'Notification sounds',
+    'Each alert type plays its own cue from the selected sound pack when Minnow is open but unfocused.',
     'general.notifications.sound',
     { emphasis: true },
   );
 
-  const { row: soundRow } = createSettingsToggleRow('Play sound', {
+  const { row: soundRow } = createSettingsToggleRow('Play sounds', {
     checked: prefs.soundEnabled,
     onChange: (next) => saveNotificationPref('soundEnabled', next),
   });
   sound.appendChild(soundRow);
 
-  const pickerRow = el('div', 'settings-inline-row');
-  const select = document.createElement('select');
-  select.className = 'settings-select';
-  for (const soundOption of NOTIFICATION_SOUNDS) {
+  const { row: activeChatSoundRow } = createSettingsToggleRow('Sounds in active chat', {
+    checked: prefs.soundOnActiveChat,
+    description:
+      'Play turn and tool cues while you watch the chat in Code, without adding bell alerts.',
+    searchKey: 'general.notifications.soundOnActiveChat',
+    onChange: (next) => saveNotificationPref('soundOnActiveChat', next),
+  });
+  sound.appendChild(activeChatSoundRow);
+
+  const packRow = el('div', 'settings-inline-row');
+  const packLabel = el('label', 'settings-inline-label', 'Sound pack');
+  const packSelect = document.createElement('select');
+  packSelect.className = 'settings-select';
+  for (const packOption of NOTIFICATION_SOUND_PACK_OPTIONS) {
     const opt = document.createElement('option');
-    opt.value = soundOption.id;
-    opt.textContent = soundOption.label;
-    select.appendChild(opt);
+    opt.value = packOption.id;
+    opt.textContent = packOption.label;
+    packSelect.appendChild(opt);
   }
-  select.value = prefs.soundId;
-  select.addEventListener('change', () => {
-    saveNotificationPref('soundId', select.value);
+  packSelect.value = prefs.soundPackId;
+  packSelect.addEventListener('change', () => {
+    saveNotificationPref('soundPackId', packSelect.value);
   });
+  packRow.append(packLabel, packSelect);
+  sound.appendChild(packRow);
 
-  const previewBtn = el('button', 'settings-action-btn', 'Preview') as HTMLButtonElement;
-  previewBtn.type = 'button';
-  previewBtn.addEventListener('click', () => {
-    previewNotificationSound(select.value);
-  });
-
-  pickerRow.append(select, previewBtn);
-  sound.appendChild(pickerRow);
+  const previewRow = el('div', 'settings-inline-row settings-inline-row--wrap');
+  const previewLabel = el('span', 'settings-inline-label', 'Preview');
+  previewRow.appendChild(previewLabel);
+  for (const cue of NOTIFICATION_SOUND_CUES) {
+    const previewBtn = el('button', 'settings-action-btn', cue.label) as HTMLButtonElement;
+    previewBtn.type = 'button';
+    previewBtn.addEventListener('click', () => {
+      previewNotificationSoundCue(packSelect.value, cue.id);
+    });
+    previewRow.appendChild(previewBtn);
+  }
+  sound.appendChild(previewRow);
 
   const resetActions = createSettingsActionsRow([
     {
@@ -116,7 +133,8 @@ export function renderNotificationsSettingsSection(mount: HTMLElement): void {
           enabled: true,
           muted: false,
           soundEnabled: true,
-          soundId: 'chime',
+          soundOnActiveChat: false,
+          soundPackId: 'default',
           chatEnabled: true,
           tasksEnabled: true,
           backgroundEnabled: true,

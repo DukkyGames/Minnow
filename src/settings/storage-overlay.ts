@@ -72,6 +72,9 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
     refreshAreas: ['notifications'],
   }),
   'general.notifications.sound': browser('soundEnabled', 'boolean', { refreshAreas: ['notifications'] }),
+  'general.notifications.soundOnActiveChat': browser('soundOnActiveChat', 'boolean', {
+    refreshAreas: ['notifications'],
+  }),
   'general.network': meta('server.networkAccess', 'enum', {
     allowedValues: ['local', 'lan'],
     sensitivity: 'dangerous',

@@ -1,4 +1,5 @@
 /**
+ * @deprecated Legacy synthetic tones — use bundled sound packs under `public/sounds/packs/`.
  * Generate short synthetic WAV notification tones for `public/sounds/notifications/`.
  * Run: node scripts/gen-notification-sounds.mjs
  */

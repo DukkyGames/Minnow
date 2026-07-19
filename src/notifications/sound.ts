@@ -1,28 +1,29 @@
 /**
- * Play notification sounds via bundled assets under `public/sounds/notifications/`.
+ * Play notification sounds via bundled sound packs under `public/sounds/packs/`.
  */
 
 import { isMinnowElectronShell } from '../tools/minnow-shell';
+import { shouldNotifyForChatTurn } from './background';
 import { loadNotificationPrefs } from './prefs';
-import type { NotificationKind, NotificationSoundOption } from './types';
+import {
+  NONE_SOUND_PACK_ID,
+  NOTIFICATION_SOUND_PACKS,
+  resolveNotificationCueUrl,
+  resolveNotificationSoundUrl,
+  type NotificationSoundCue,
+} from './sound-packs';
+import type { NotificationKind } from './types';
 
-/** Available notification sounds for settings + playback. */
-export const NOTIFICATION_SOUNDS: readonly NotificationSoundOption[] = [
-  { id: 'none', label: 'None' },
-  { id: 'chime', label: 'Chime', url: './sounds/notifications/chime.wav' },
-  { id: 'ping', label: 'Ping', url: './sounds/notifications/ping.wav' },
-  { id: 'soft', label: 'Soft', url: './sounds/notifications/soft.wav' },
-  { id: 'pop', label: 'Pop', url: './sounds/notifications/pop.wav' },
+/** Per-cue preview labels for the settings UI. */
+export const NOTIFICATION_SOUND_CUES: readonly { id: NotificationSoundCue; label: string }[] = [
+  { id: 'turn_complete', label: 'Turn complete' },
+  { id: 'question', label: 'Question' },
+  { id: 'tool_turn', label: 'Tool turn' },
 ];
 
 let audioUnlocked = false;
 let notificationAudio: HTMLAudioElement | null = null;
 let unlockListenersInstalled = false;
-
-/** Resolve sound option by id. */
-export function getNotificationSound(id: string): NotificationSoundOption | undefined {
-  return NOTIFICATION_SOUNDS.find((s) => s.id === id);
-}
 
 function getOrCreateNotificationAudio(): HTMLAudioElement {
   if (!notificationAudio) {
@@ -37,9 +38,10 @@ export function unlockNotificationAudio(): void {
   audioUnlocked = true;
   try {
     const audio = getOrCreateNotificationAudio();
-    const chime = getNotificationSound('chime');
-    if (!chime?.url) return;
-    audio.src = chime.url;
+    const defaultPack = NOTIFICATION_SOUND_PACKS[0];
+    const url = defaultPack?.cues.turn_complete;
+    if (!url) return;
+    audio.src = url;
     audio.volume = 0;
     void audio
       .play()
@@ -69,30 +71,38 @@ export function initNotificationAudioUnlock(): void {
 }
 
 /** True when sound should play for a new notification. */
-export function shouldPlayNotificationSound(kind?: NotificationKind): boolean {
+export function shouldPlayNotificationSound(
+  kind?: NotificationKind,
+  chatId?: string,
+): boolean {
   const prefs = loadNotificationPrefs();
   if (!prefs.enabled || prefs.muted || !prefs.soundEnabled) return false;
-  if (prefs.soundId === 'none') return false;
+  if (prefs.soundPackId === NONE_SOUND_PACK_ID) return false;
   if (typeof document === 'undefined') return false;
-  // Agent questions need attention even when this window is focused.
-  if (kind !== 'chat_question' && document.hasFocus()) return false;
+
+  const onActiveChat =
+    prefs.soundOnActiveChat && Boolean(chatId && !shouldNotifyForChatTurn(chatId));
+
+  if (!onActiveChat) {
+    // Agent questions need attention even when this window is focused.
+    if (kind !== 'chat_question' && document.hasFocus()) return false;
+  }
+
   // Electron: chime whenever the desktop window loses focus (another app, minimized, etc.).
   if (isMinnowElectronShell()) return true;
   // Browser tab: skip hidden background tabs; allow visible-but-unfocused edge cases.
   return document.visibilityState === 'visible';
 }
 
-/** Play the selected notification sound (respects prefs). */
-export function playNotificationSound(forceSoundId?: string): void {
+/** Play the cue for a notification kind from the active sound pack. */
+export function playNotificationSound(kind: NotificationKind): void {
   const prefs = loadNotificationPrefs();
-  const soundId = forceSoundId ?? prefs.soundId;
-  if (soundId === 'none') return;
-  const sound = getNotificationSound(soundId);
-  if (!sound?.url) return;
+  const url = resolveNotificationSoundUrl(prefs.soundPackId, kind);
+  if (!url) return;
 
   try {
     const audio = getOrCreateNotificationAudio();
-    audio.src = sound.url;
+    audio.src = url;
     audio.volume = 0.65;
     void audio.play().catch(() => {
       /* autoplay blocked until user interacts */
@@ -102,16 +112,15 @@ export function playNotificationSound(forceSoundId?: string): void {
   }
 }
 
-/** Preview sound from settings (always attempts playback). */
-export function previewNotificationSound(soundId: string): void {
+/** Preview one cue from a pack in settings (always attempts playback). */
+export function previewNotificationSoundCue(packId: string, cue: NotificationSoundCue): void {
   unlockNotificationAudio();
-  if (soundId === 'none') return;
-  const sound = getNotificationSound(soundId);
-  if (!sound?.url) return;
+  const url = resolveNotificationCueUrl(packId, cue);
+  if (!url) return;
 
   try {
     const audio = getOrCreateNotificationAudio();
-    audio.src = sound.url;
+    audio.src = url;
     audio.volume = 0.75;
     void audio.play().catch(() => {
       /* user may need another gesture */

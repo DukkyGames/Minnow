@@ -63,7 +63,8 @@ Open via **Settings** (`#/settings/<category>`) or legacy `#/settings/<area>`.
 | Task & sub-agent notifications | notification prefs | Orchestrate board + sub-agent events |
 | Background job notifications | notification prefs | Scheduler, research, memory/skill proposals |
 | Play notification sound | notification prefs | When Minnow is unfocused (Electron: includes alt-tab / minimized) |
-| Notification sound | notification prefs | `none`, `chime`, `ping`, `soft`, `pop` |
+| Sounds in active chat | `minnow.notifications.soundOnActiveChat` | Play cues while watching the chat in Code (no bell alerts) |
+| Sound pack | `minnow.notifications.soundPackId` | `default` (Minnow cues) or `none` |
 
 ### General → Audio
 

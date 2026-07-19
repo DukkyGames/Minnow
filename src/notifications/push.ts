@@ -4,6 +4,7 @@
 
 import { randomUUID } from '../lib/random-id.ts';
 import { noteAgentMessage } from '../os/instances';
+import { shouldNotifyForChatTurn } from './background';
 import { isNotificationKindEnabled, loadNotificationPrefs } from './prefs';
 import { playNotificationSound, shouldPlayNotificationSound } from './sound';
 import {
@@ -71,11 +72,40 @@ export function pushNotification(input: PushNotificationInput): NotificationReco
 
   notifyNew(record);
 
-  if (shouldPlayNotificationSound(input.kind)) {
-    playNotificationSound();
+  if (shouldPlayNotificationSound(input.kind, input.chatId)) {
+    playNotificationSound(input.kind);
   }
 
   return record;
+}
+
+/**
+ * Push a bell alert, or play a sound only when the user is watching this chat in Code.
+ * Turn-complete and error events stay silent on the active chat unless
+ * {@link NotificationPrefs.soundOnActiveChat} is enabled.
+ */
+export function pushNotificationOrActiveChatSound(
+  input: PushNotificationInput,
+): NotificationRecord | null {
+  const onActiveChat = Boolean(input.chatId && !shouldNotifyForChatTurn(input.chatId));
+  const prefs = loadNotificationPrefs();
+
+  if (onActiveChat && prefs.soundOnActiveChat) {
+    if (!isNotificationKindEnabled(input.kind)) return null;
+    if (shouldPlayNotificationSound(input.kind, input.chatId)) {
+      playNotificationSound(input.kind);
+    }
+    return null;
+  }
+
+  if (
+    onActiveChat &&
+    (input.kind === 'chat_turn_complete' || input.kind === 'chat_turn_error')
+  ) {
+    return null;
+  }
+
+  return pushNotification(input);
 }
 
 /** Convenience wrapper matching legacy `noteAgentMessage` signature. */

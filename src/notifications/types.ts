@@ -3,6 +3,7 @@
  */
 
 import type { AppId } from '../os/types';
+import type { NotificationSoundCue } from './sound-packs';
 
 /** Event kinds surfaced in the notification popover. */
 export type NotificationKind =
@@ -56,17 +57,17 @@ export interface NotificationPrefs {
   /** Quick mute from the menubar dropdown; blocks new notifications until cleared. */
   muted: boolean;
   soundEnabled: boolean;
-  /** Sound asset id (`none` disables playback). */
-  soundId: string;
+  /** Play cues while watching the active chat in Code (no bell alerts). */
+  soundOnActiveChat: boolean;
+  /** Active sound pack id (`none` disables playback). */
+  soundPackId: string;
   chatEnabled: boolean;
   tasksEnabled: boolean;
   backgroundEnabled: boolean;
 }
 
-/** Catalog entry for the settings sound picker. */
-export interface NotificationSoundOption {
-  id: string;
+/** Labels for per-cue preview buttons in settings. */
+export interface NotificationSoundCueOption {
+  id: NotificationSoundCue;
   label: string;
-  /** Relative URL under `public/`; omitted for `none`. */
-  url?: string;
 }

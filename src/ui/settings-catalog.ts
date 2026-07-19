@@ -143,6 +143,7 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
     keywords: ['scheduler', 'research', 'synthesis'],
   }),
   field('general.notifications.sound', 'Notification sounds', 'general', 'notifications'),
+  field('general.notifications.soundOnActiveChat', 'Sounds in active chat', 'general', 'notifications'),
   field('general.network', 'Network access', 'general', 'general', {
     keywords: ['lan', 'wifi', 'local network', 'remote', 'phone', 'tablet', '0.0.0.0'],
     description: 'Let other devices on your Wi-Fi open Minnow in a browser while this PC runs npm start.',

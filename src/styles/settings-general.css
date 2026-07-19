@@ -39,6 +39,11 @@
   padding-right: 2px;
 }
 
+.settings-general .settings-row {
+  padding-left: 2px;
+  padding-right: 2px;
+}
+
 .settings-general .settings-network-segments {
   margin-top: 0;
 }
