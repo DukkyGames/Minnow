@@ -1,0 +1,70 @@
+/**
+ * Settings → Sampler — responsive field grid inside emphasis panels.
+ */
+
+.settings-general .settings-group--emphasis .settings-sampler-grid {
+  margin-bottom: 0;
+}
+
+.settings-general .settings-group--emphasis .settings-actions {
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.settings-sampler-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13.5rem, 1fr));
+  gap: 14px 16px;
+  margin: 0;
+}
+
+.settings-sampler-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.settings-sampler-field__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--mn-fg-muted);
+}
+
+.settings-sampler-field__input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-sampler-field__input::placeholder {
+  color: var(--mn-fg-subtle);
+}
+
+.settings-sampler-field__input:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
+  border-color: var(--mn-border-strong);
+}
+
+/* Routing overrides keep legacy single-column stack */
+.settings-model-row.settings-sampler-row:not(.settings-sampler-grid) {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 640px) {
+  .settings-sampler-grid {
+    grid-template-columns: 1fr;
+  }
+}

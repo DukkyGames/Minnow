@@ -1,0 +1,45 @@
+/**
+ * Settings → Thinking — budget field layout inside emphasis panels.
+ */
+
+.settings-general .settings-group--emphasis .settings-thinking-budget-row {
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.settings-general .settings-group--emphasis .settings-actions {
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.settings-general .settings-thinking-budget-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.settings-general .settings-thinking-budget-row .settings-field-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--mn-fg-muted);
+}
+
+.settings-general .settings-thinking-budget-row .settings-input {
+  width: 100%;
+  max-width: 12rem;
+  box-sizing: border-box;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-general .settings-thinking-budget-row .settings-field-hint {
+  margin: 0;
+  max-width: 72ch;
+}

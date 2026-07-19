@@ -13,10 +13,18 @@ export interface ThinkingBudgetFieldInputs {
 /** Numeric input for thinking budget; blank = inherit, 0 = off. */
 export function buildThinkingBudgetFieldInputs(
   initial: number | null | undefined,
-  options?: { label?: string; hint?: string; placeholder?: string },
+  options?: {
+    label?: string;
+    hint?: string;
+    placeholder?: string;
+    searchKey?: string;
+  },
 ): ThinkingBudgetFieldInputs {
   const root = document.createElement('div');
   root.className = 'settings-model-row settings-thinking-budget-row';
+  if (options?.searchKey) {
+    root.dataset.settingsSearchKey = options.searchKey;
+  }
 
   const label = document.createElement('label');
   label.className = 'settings-field-label';
