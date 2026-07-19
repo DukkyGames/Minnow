@@ -377,6 +377,9 @@ function activateBoardGroupView(groupId: string, group: ChatGroup): void {
       const chat = state.chats.find((c) => c.id === state.activeId);
       if (chat) m.renderChatFromHistory(chat);
     });
+    void import('../ui/git-panel').then((m) =>
+      m.syncPanelFromActiveChat({ forceFileTree: true }),
+    );
   });
 }
 

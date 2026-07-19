@@ -230,6 +230,9 @@ export function setOrchestrateViewMode(next: 'chat' | 'board'): void {
     }
     void import('./sidebar').then((m) => m.renderSidebar());
     syncViewModeToggleFromActiveChat();
+    void import('./git-panel').then((m) =>
+      m.syncPanelFromActiveChat({ forceFileTree: true }),
+    );
     void import('./orchestrate-plan-selector').then((m) =>
       m.syncOrchestratePlanStripFromActiveChat(),
     );
@@ -241,6 +244,9 @@ export function setOrchestrateViewMode(next: 'chat' | 'board'): void {
   if (activeGroup.viewMode === 'chat') return;
   closeBoardGroupView(activeGroup);
   syncViewModeToggleFromActiveChat();
+  void import('./git-panel').then((m) =>
+    m.syncPanelFromActiveChat({ forceFileTree: true }),
+  );
   void import('./orchestrate-plan-selector').then((m) =>
     m.syncOrchestratePlanStripFromActiveChat(),
   );
