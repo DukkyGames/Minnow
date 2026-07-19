@@ -259,15 +259,8 @@ function positionPopoutDevToolsWindow(parent: BrowserWindow, popout: BrowserWind
   });
 }
 
-/** Open DevTools in a dedicated BrowserWindow (popout mode). */
-function openPopoutEntryDevTools(
-  win: BrowserWindow,
-  tabId: string,
-  entry: PreviewHostEntry,
-  instanceId: string,
-): void {
-  const wc = entry.view.webContents;
-  const popout = new BrowserWindow({
+function createPopoutDevToolsWindow(): BrowserWindow {
+  return new BrowserWindow({
     show: false,
     title: 'DevTools',
     autoHideMenuBar: true,
@@ -277,9 +270,17 @@ function openPopoutEntryDevTools(
       nodeIntegration: false,
     },
   });
-  entry.devtoolsPopout = popout;
-  positionPopoutDevToolsWindow(win, popout);
+}
 
+/** When the user closes the popout shell, tear down DevTools and sync renderer state. */
+function wirePopoutDevToolsClosed(
+  win: BrowserWindow,
+  tabId: string,
+  entry: PreviewHostEntry,
+  instanceId: string,
+  popout: BrowserWindow,
+): void {
+  const wc = entry.view.webContents;
   popout.on('closed', () => {
     if (entry.devtoolsPopout !== popout) return;
     entry.devtoolsPopout = null;
@@ -295,6 +296,20 @@ function openPopoutEntryDevTools(
       sendToRenderer(win, channels.PREVIEW_DEVTOOLS_STATE, tabId, false, instanceId);
     }
   });
+}
+
+/** Open DevTools in a dedicated BrowserWindow (popout mode). */
+function openPopoutEntryDevTools(
+  win: BrowserWindow,
+  tabId: string,
+  entry: PreviewHostEntry,
+  instanceId: string,
+): void {
+  const wc = entry.view.webContents;
+  const popout = createPopoutDevToolsWindow();
+  entry.devtoolsPopout = popout;
+  positionPopoutDevToolsWindow(win, popout);
+  wirePopoutDevToolsClosed(win, tabId, entry, instanceId, popout);
 
   // Route DevTools into the popout window — undocked on WebContentsView guests is unreliable.
   wc.setDevToolsWebContents(popout.webContents);
@@ -302,6 +317,77 @@ function openPopoutEntryDevTools(
   popout.show();
   relayoutInstanceEntry(win, entry, instanceId);
   sendToRenderer(win, channels.PREVIEW_DEVTOOLS_STATE, tabId, true, instanceId);
+}
+
+/** Retarget already-open DevTools when dock preference changes (avoids close/reopen + stale events). */
+function migrateEntryDevToolsDock(
+  win: BrowserWindow,
+  tabId: string,
+  entry: PreviewHostEntry,
+  instanceId: string,
+  dock: DevToolsDockPosition,
+): void {
+  if (!isEntryDevToolsOpen(entry)) return;
+  const wc = entry.view.webContents;
+  if (wc.isDestroyed() || win.isDestroyed()) return;
+
+  if (dock === 'popout') {
+    if (entry.devtoolsPopout) return;
+    if (!entry.devtools) {
+      openPopoutEntryDevTools(win, tabId, entry, instanceId);
+      return;
+    }
+
+    const embedded = entry.devtools;
+    const popout = createPopoutDevToolsWindow();
+    entry.devtoolsPopout = popout;
+    positionPopoutDevToolsWindow(win, popout);
+    wirePopoutDevToolsClosed(win, tabId, entry, instanceId, popout);
+
+    // Retarget before tearing down the embedded shell so the DevTools session stays open.
+    wc.setDevToolsWebContents(popout.webContents);
+    entry.devtools = null;
+    try {
+      win.contentView.removeChildView(embedded);
+    } catch {
+      /* not attached */
+    }
+    try {
+      if (!embedded.webContents.isDestroyed()) {
+        embedded.webContents.close();
+      }
+    } catch {
+      /* view already torn down */
+    }
+    popout.show();
+    relayoutInstanceEntry(win, entry, instanceId);
+    return;
+  }
+
+  if (entry.devtools && !entry.devtoolsPopout) {
+    relayoutInstanceEntry(win, entry, instanceId);
+    return;
+  }
+
+  const popout = entry.devtoolsPopout;
+  if (!popout) return;
+
+  const devtoolsView = new WebContentsView();
+  devtoolsView.setVisible(false);
+  entry.devtools = devtoolsView;
+  try {
+    win.contentView.addChildView(devtoolsView);
+  } catch {
+    /* window tearing down */
+  }
+
+  wc.setDevToolsWebContents(devtoolsView.webContents);
+  entry.devtoolsPopout = null;
+  popout.removeAllListeners('closed');
+  if (!popout.isDestroyed()) {
+    popout.close();
+  }
+  relayoutInstanceEntry(win, entry, instanceId);
 }
 
 /** Open DevTools for one tab guest (embedded bottom/side or popout window). */
@@ -416,6 +502,9 @@ function wirePreviewGuestEvents(win: BrowserWindow, tabId: string, entry: Previe
 
   // Fallback for DevTools closed from inside its own UI; toggle/shortcut close directly.
   wc.on('devtools-closed', () => {
+    // Destroying an embedded DevTools view during dock migration emits a stale close after
+    // DevTools has already been retargeted to a popout or new embedded shell.
+    if (!wc.isDestroyed() && wc.isDevToolsOpened()) return;
     if (!isEntryDevToolsOpen(entry)) return;
     teardownEntryDevTools(win.isDestroyed() ? null : win, entry);
     relayoutInstanceEntry(win, entry, instanceId);
@@ -698,13 +787,12 @@ function getActiveEntry(event: IpcMainInvokeEvent, tabId?: string, instanceId?: 
 }
 
 function reopenOpenDevToolsForDockChange(win: BrowserWindow): void {
+  const dock = resolveDevToolsDock(win);
   for (const instanceId of previewInstances.listInstanceIds(win.id)) {
     const state = previewInstances.get(win.id, instanceId);
     if (!state) continue;
     for (const [tabId, entry] of state.tabs) {
-      if (!isEntryDevToolsOpen(entry)) continue;
-      closeEntryDevTools(win, tabId, entry, instanceId);
-      openEntryDevTools(win, tabId, entry, instanceId);
+      migrateEntryDevToolsDock(win, tabId, entry, instanceId, dock);
     }
   }
 }

@@ -5,6 +5,9 @@
 
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 
+/** Thicker Orchestrate glyph for hub intent chips and sidebar chat list (board folders + planner rows). */
+export const ORCHESTRATE_PROMINENT_ICON_SRC = '/icons/Orchestrate-thick.svg';
+
 /** Public URL for each mode icon under /public/icons. */
 export const MODE_ICON_SRC: Record<ModeId, string> = {
   general: '/icons/mode-general.png',
@@ -21,6 +24,13 @@ export const MODE_ICON_SRC: Record<ModeId, string> = {
 /** Resolve icon path for a persisted or unknown mode id. */
 export function modeIconSrc(modeId: string | null | undefined): string {
   return MODE_ICON_SRC[normalizeModeId(modeId)];
+}
+
+/** Sidebar `#chatList` rows: thicker Orchestrate glyph at compact sizes. */
+export function chatListModeIconSrc(modeId: string | null | undefined): string {
+  const normalized = normalizeModeId(modeId);
+  if (normalized === 'orchestrate') return ORCHESTRATE_PROMINENT_ICON_SRC;
+  return MODE_ICON_SRC[normalized];
 }
 
 /** Create a masked span that tints via currentColor (sidebar rail + compact rows). */
@@ -58,7 +68,7 @@ export function syncModeIconInDom(
   chatId: string,
   modeId: ModeId | string | null | undefined,
 ): void {
-  const src = modeIconSrc(modeId);
+  const src = chatListModeIconSrc(modeId);
   const normalized = normalizeModeId(modeId);
   document
     .querySelectorAll<HTMLElement>(`.chat-item-row[data-chat-id="${chatId}"] .chat-item-icon`)

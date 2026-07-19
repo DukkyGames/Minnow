@@ -114,7 +114,7 @@ import {
   syncChatItemDotsInDom,
 } from './chat-item-dot';
 import { acknowledgeChatViewed } from '../notifications/acknowledge';
-import { createModeMaskIcon, applyModeMaskIcon } from './mode-icons';
+import { createModeMaskIcon, chatListModeIconSrc } from './mode-icons';
 import { hasComposerDraft } from '../state/session-workspace-scope';
 import {
   flushActiveComposerDraftBeforeNewChat,
@@ -470,7 +470,7 @@ export function appendChatRow(
 
   // Mode glyph: collapsed rail icon + compact marker beside name when expanded.
   const icon = createModeMaskIcon(chat.modeId, 'chat-item-icon mode-mask-icon');
-  applyModeMaskIcon(icon, chat.modeId);
+  icon.style.setProperty('--mode-icon-url', `url('${chatListModeIconSrc(chat.modeId)}')`);
   titleRow.appendChild(icon);
 
   const dotCtx = getChatItemDotContext(sessionState?.activeId ?? null);
