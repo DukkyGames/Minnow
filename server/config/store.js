@@ -274,6 +274,9 @@ export async function readResource(resource) {
     if (!data?.editorAiCompletion) {
       patch.editorAiCompletion = DEFAULT_META.editorAiCompletion;
     }
+    if (!data?.gitCommitMessage) {
+      patch.gitCommitMessage = DEFAULT_META.gitCommitMessage;
+    }
     if (!data?.editorIntentMode) {
       patch.editorIntentMode = DEFAULT_META.editorIntentMode;
     }
