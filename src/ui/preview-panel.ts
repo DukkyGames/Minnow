@@ -9,6 +9,7 @@ import type { MinnowPreviewApi } from '../electron';
 import {
   getFilePanelState,
   patchFilePanelState,
+  type PreviewDevToolsDock,
   type PreviewSource,
 } from '../state/file-panel';
 import { onFileSaved } from '../state/preview-events';
@@ -111,6 +112,7 @@ let unsubscribeLoading: (() => void) | null = null;
 let unsubscribeLoadFailed: (() => void) | null = null;
 let unsubscribePageTitle: (() => void) | null = null;
 let unsubscribeGuestCrashed: (() => void) | null = null;
+let unsubscribeDevToolsState: (() => void) | null = null;
 const iframesByTabId = new Map<string, HTMLIFrameElement>();
 const loadedTabGuests = new Set<string>();
 
@@ -257,6 +259,21 @@ function getAnnotationsToggleButton(): HTMLButtonElement | null {
   return document.getElementById('btnPreviewAnnotationsToggle') as HTMLButtonElement | null;
 }
 
+/** Annotations panel toggle is shown only while Design Mode (browser tools) is active. */
+function syncAnnotationsToggleVisibility(available: boolean): void {
+  const annotationsBtn = getAnnotationsToggleButton();
+  const visible = available && isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID);
+  if (annotationsBtn) annotationsBtn.hidden = !visible;
+
+  if (visible) return;
+
+  if (!annotationsPanel) return;
+  annotationsPanel.destroy();
+  annotationsPanel = null;
+  annotationsBtn?.setAttribute('aria-pressed', 'false');
+  annotationsBtn?.classList.remove('is-active');
+}
+
 let annotationsPanel: AnnotationsPanelHandle | null = null;
 
 /** Refresh the mounted annotations panel from the annotation store for the current page. */
@@ -378,19 +395,12 @@ async function isPreviewDesignModeAvailable(): Promise<boolean> {
 export async function syncPreviewDesignToolbarForSurface(): Promise<void> {
   const available = await isPreviewDesignModeAvailable();
   const designBtn = getDesignToggleButton();
-  const annotationsBtn = getAnnotationsToggleButton();
 
   if (designBtn) designBtn.hidden = !available;
-  if (annotationsBtn) annotationsBtn.hidden = !available;
+  syncAnnotationsToggleVisibility(available);
 
   if (available) return;
 
-  if (annotationsPanel) {
-    annotationsPanel.destroy();
-    annotationsPanel = null;
-    annotationsBtn?.setAttribute('aria-pressed', 'false');
-    annotationsBtn?.classList.remove('is-active');
-  }
   if (!isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID)) return;
 
   disableDesignMode(DESIGN_MODE_INSTANCE_ID);
@@ -410,6 +420,7 @@ async function toggleDesignModeFromToolbar(): Promise<void> {
     disableDesignMode(DESIGN_MODE_INSTANCE_ID);
     getDesignToggleButton()?.setAttribute('aria-pressed', 'false');
     getDesignToggleButton()?.classList.remove('is-active');
+    syncAnnotationsToggleVisibility(true);
     await syncDesignModeElectronGuest();
     return;
   }
@@ -425,6 +436,7 @@ async function toggleDesignModeFromToolbar(): Promise<void> {
     },
     onClearAll: () => void refreshAnnotationsPanel(),
   });
+  syncAnnotationsToggleVisibility(true);
   // Guest sync already ran via onArmedToolChange during enable (before the Select picker binds).
   // A second sync here re-bound the picker while CDP enable was still in flight →
   // "target closed while handling command".
@@ -459,6 +471,92 @@ export async function openPreviewPageAndEnableDesignMode(pageUrl: string): Promi
     },
     onClearAll: () => void refreshAnnotationsPanel(),
   });
+  syncAnnotationsToggleVisibility(true);
+}
+
+function getDevToolsButton(): HTMLButtonElement | null {
+  return document.getElementById('btnPreviewDevTools') as HTMLButtonElement | null;
+}
+
+function setDevToolsButtonPressed(open: boolean): void {
+  getDevToolsButton()?.setAttribute('aria-pressed', open ? 'true' : 'false');
+  const dockBtn = getDevToolsDockButton();
+  if (!dockBtn) return;
+  dockBtn.hidden = !open;
+  if (open) syncDevToolsDockButton();
+}
+
+function getDevToolsDockButton(): HTMLButtonElement | null {
+  return document.getElementById('btnPreviewDevToolsDock') as HTMLButtonElement | null;
+}
+
+function devToolsDockLabel(dock: PreviewDevToolsDock): string {
+  if (dock === 'bottom') return 'Dock DevTools to side';
+  if (dock === 'side') return 'Pop out DevTools';
+  return 'Dock DevTools to bottom';
+}
+
+function nextDevToolsDock(dock: PreviewDevToolsDock): PreviewDevToolsDock {
+  if (dock === 'bottom') return 'side';
+  if (dock === 'side') return 'popout';
+  return 'bottom';
+}
+
+function syncDevToolsDockButton(dock: PreviewDevToolsDock = getFilePanelState().previewDevToolsDock): void {
+  const btn = getDevToolsDockButton();
+  if (!btn) return;
+  btn.title = devToolsDockLabel(dock);
+  btn.setAttribute('aria-label', devToolsDockLabel(dock));
+  btn.dataset.dock = dock;
+}
+
+/** Push the persisted dock preference to the Electron preview host. */
+export async function syncPreviewDevToolsDockToHost(): Promise<void> {
+  const api = getPreviewApi();
+  if (!api?.devtools?.setDock) return;
+  try {
+    await api.devtools.setDock(getFilePanelState().previewDevToolsDock);
+  } catch {
+    /* guest not ready */
+  }
+  syncDevToolsDockButton();
+}
+
+function toggleDevToolsDockFromToolbar(): void {
+  const next = nextDevToolsDock(getFilePanelState().previewDevToolsDock);
+  patchFilePanelState({ previewDevToolsDock: next });
+  void syncPreviewDevToolsDockToHost();
+}
+
+/** Reflect the active tab's docked-DevTools state on the toolbar toggle (Electron only). */
+async function syncDevToolsButtonState(): Promise<void> {
+  const api = getPreviewApi();
+  if (!api?.devtools) return;
+  const tabId = getActivePreviewTabId() ?? undefined;
+  try {
+    setDevToolsButtonPressed(await api.devtools.isOpen(tabId));
+  } catch {
+    /* stale guest during teardown */
+  }
+}
+
+/** Toggle Chromium DevTools docked under the preview guest (MIN-177). */
+async function toggleDevToolsFromToolbar(): Promise<void> {
+  const api = getPreviewApi();
+  if (!api?.devtools) return;
+  const tabId = getActivePreviewTabId() ?? undefined;
+  try {
+    const { open } = await api.devtools.toggle(tabId);
+    setDevToolsButtonPressed(open);
+  } catch {
+    /* guest not ready yet */
+  }
+}
+
+/** F12 or Ctrl+Shift+I toggles preview DevTools while the preview pane is on screen. */
+function isDevToolsShortcut(e: KeyboardEvent): boolean {
+  if (e.key === 'F12') return true;
+  return (e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'i';
 }
 
 function getAutoReloadCheckbox(): HTMLInputElement | null {
@@ -951,6 +1049,7 @@ export async function activatePreviewTabGuest(tabId: string, options?: { forceLo
       loadedTabGuests.add(tabId);
     }
     await showPreviewHost();
+    void syncDevToolsButtonState();
     return;
   }
 
@@ -1152,6 +1251,7 @@ export function closePreviewPanel(): void {
     disableDesignMode(DESIGN_MODE_INSTANCE_ID);
     getDesignToggleButton()?.setAttribute('aria-pressed', 'false');
     getDesignToggleButton()?.classList.remove('is-active');
+    syncAnnotationsToggleVisibility(true);
     void syncDesignModeElectronGuest();
   }
   if (usesElectronPreview()) {
@@ -1374,6 +1474,12 @@ function bindPreviewIpcListeners(): void {
   unsubscribeGuestCrashed = api.onGuestCrashed?.((detail, tabId) => {
     onPreviewGuestCrashed(detail, tabId);
   }) ?? null;
+  unsubscribeDevToolsState?.();
+  unsubscribeDevToolsState = api.devtools?.onState((open, tabId, instanceId) => {
+    if (instanceId && instanceId !== 'workspace-preview') return;
+    if (resolveTabId(tabId) !== getActivePreviewTabId()) return;
+    setDevToolsButtonPressed(open);
+  }) ?? null;
 }
 
 function goBackInFrame(): void {
@@ -1425,6 +1531,23 @@ function bindPreviewControls(): void {
   document
     .getElementById('btnPreviewAnnotationsToggle')
     ?.addEventListener('click', () => void toggleAnnotationsPanel());
+
+  // Docked DevTools is a WebContentsView feature — the button stays hidden in the plain browser build.
+  const devToolsBtn = getDevToolsButton();
+  if (devToolsBtn && getPreviewApi()?.devtools) {
+    devToolsBtn.hidden = false;
+    devToolsBtn.addEventListener('click', () => void toggleDevToolsFromToolbar());
+    const dockBtn = getDevToolsDockButton();
+    if (dockBtn) {
+      dockBtn.addEventListener('click', () => toggleDevToolsDockFromToolbar());
+    }
+    document.addEventListener('keydown', (e) => {
+      if (!isDevToolsShortcut(e)) return;
+      if (!isPreviewPaneDomVisible()) return;
+      e.preventDefault();
+      void toggleDevToolsFromToolbar();
+    });
+  }
 
   getUrlInput()?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
@@ -1610,7 +1733,10 @@ export async function initPreviewPanel(): Promise<void> {
   }
 
   bindPreviewControls();
+  // Electron guest right-click → Minnow DOM menu (no-op outside desktop shell).
+  void import('./preview-context-menu-handler').then((m) => m.initPreviewContextMenuHandler());
   await syncPreviewDesignToolbarForSurface();
+  await syncPreviewDevToolsDockToHost();
 
   if (shouldAutoRestorePreviewPanel()) {
     await restorePreviewPanelFromPrefs();

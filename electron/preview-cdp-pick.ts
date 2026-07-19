@@ -12,7 +12,8 @@
  */
 
 import type { WebContents } from 'electron';
-import { adaptCdpRawPick, type CdpPickedElement } from './preview-cdp-adapt.js';
+import type { CdpPickedElement } from './preview-cdp-adapt.js';
+import { fetchCdpNodeAsPicked, type DebuggerLike } from './preview-cdp-element-at-point.js';
 
 export interface CdpPickSession {
   disable(): Promise<void>;
@@ -56,12 +57,8 @@ const CLEAR_SELECTION_SCRIPT = `(() => {
   return true;
 })()`;
 
-/** Minimal shape of the Electron `Debugger` API this module drives. */
-interface DebuggerLike {
-  isAttached(): boolean;
-  attach(protocolVersion?: string): void;
-  detach(): void;
-  sendCommand(method: string, commandParams?: Record<string, unknown>): Promise<any>;
+/** Debugger plus message subscription used by the persistent pick session. */
+interface PickDebuggerLike extends DebuggerLike {
   on(event: 'message', listener: (event: unknown, method: string, params: any) => void): unknown;
   removeListener(event: 'message', listener: (...args: unknown[]) => void): unknown;
 }
@@ -79,7 +76,7 @@ export async function enableCdpPicking(
   if (wc.isDestroyed()) {
     throw new Error('Preview guest is not available');
   }
-  const dbg = wc.debugger as unknown as DebuggerLike;
+  const dbg = wc.debugger as unknown as PickDebuggerLike;
   if (!dbg.isAttached()) {
     dbg.attach('1.3');
   }
@@ -134,62 +131,13 @@ export async function enableCdpPicking(
   /** Resolve + forward a clicked node. Returns the pick's uid, or null when nothing was picked. */
   async function handleInspectNode(backendNodeId: number): Promise<number | null> {
     try {
-      const dprEval = await dbg.sendCommand('Runtime.evaluate', {
-        expression: 'window.devicePixelRatio',
-      });
-      const devicePixelRatio =
-        typeof dprEval?.result?.value === 'number' && dprEval.result.value > 0
-          ? dprEval.result.value
-          : 1;
-
-      const boxModelResult = await dbg.sendCommand('DOM.getBoxModel', { backendNodeId });
-      if (!boxModelResult?.model?.content) {
+      const uid = nextUid;
+      nextUid += 1;
+      const picked = await fetchCdpNodeAsPicked(dbg, backendNodeId, uid);
+      if (!picked) {
         onError?.('picked node has no box model (non-rendered element)');
         return null;
       }
-
-      const pushed = await dbg.sendCommand('DOM.pushNodesByBackendIdsToFrontend', {
-        backendNodeIds: [backendNodeId],
-      });
-      const nodeId = pushed?.nodeIds?.[0];
-
-      const described = await dbg.sendCommand('DOM.describeNode', { backendNodeId });
-      const outerHtmlResult = await dbg
-        .sendCommand('DOM.getOuterHTML', { backendNodeId })
-        .catch(() => ({ outerHTML: '' }));
-      const computedStyleResult = nodeId
-        ? await dbg
-            .sendCommand('CSS.getComputedStyleForNode', { nodeId })
-            .catch(() => ({ computedStyle: [] }))
-        : { computedStyle: [] };
-
-      const uid = nextUid;
-      nextUid += 1;
-      if (nodeId) {
-        await dbg
-          .sendCommand('DOM.setAttributeValue', {
-            nodeId,
-            name: 'data-mn-uid',
-            value: String(uid),
-          })
-          .catch(() => {
-            /* best-effort — picking still works without the persisted uid attribute */
-          });
-      }
-
-      const picked = adaptCdpRawPick(
-        {
-          attributes: described?.node?.attributes,
-          nodeName: described?.node?.nodeName ?? 'element',
-          localName: described?.node?.localName,
-          boxModel: boxModelResult.model,
-          outerHTML: outerHtmlResult?.outerHTML ?? '',
-          computedStyle: computedStyleResult?.computedStyle ?? [],
-          devicePixelRatio,
-          shiftKey: false,
-        },
-        uid,
-      );
       onPick(picked);
       return uid;
     } catch (err) {

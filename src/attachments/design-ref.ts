@@ -6,6 +6,7 @@
 
 import { designRefHistoryBlock, formatDesignRefLabel, structuredIntentForShape } from './design-ref-format';
 export { designRefHistoryBlock, formatDesignRefLabel, structuredIntentForShape } from './design-ref-format';
+import { getActiveComposerSurface } from '../ui/composer-surface';
 import { pushAttachment } from './store';
 import type { Attachment } from './types';
 import type { DesignShape } from '../design/shape-model';
@@ -44,8 +45,9 @@ export function addDesignRefToComposer(input: DesignRefInput): Attachment | null
   return attachment;
 }
 
+/** Focus the foreground composer (Code / Chat / desktop), not a hardcoded #msgInput. */
 function focusComposerInput(): void {
-  document.getElementById('msgInput')?.focus();
+  getActiveComposerSurface().inputEl?.focus();
 }
 
 /** True when attachment is a queued Design Mode drawn shape. */

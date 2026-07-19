@@ -29,6 +29,32 @@ test('mergeConfigMeta persists preview browser fields', () => {
   assert.equal(panel.activeViewerTab, null);
 });
 
+test('mergeConfigMeta persists preview DevTools dock position', () => {
+  const merged = mergeConfigMeta(
+    {},
+    {
+      filePanel: {
+        previewDevToolsDock: 'side',
+      },
+    },
+  );
+  const panel = /** @type {Record<string, unknown>} */ (merged.filePanel);
+  assert.equal(panel.previewDevToolsDock, 'side');
+});
+
+test('mergeConfigMeta persists preview DevTools popout dock position', () => {
+  const merged = mergeConfigMeta(
+    {},
+    {
+      filePanel: {
+        previewDevToolsDock: 'popout',
+      },
+    },
+  );
+  const panel = /** @type {Record<string, unknown>} */ (merged.filePanel);
+  assert.equal(panel.previewDevToolsDock, 'popout');
+});
+
 test('mergeConfigMeta persists workspace viewer tabs', () => {
   const merged = mergeConfigMeta(
     {},

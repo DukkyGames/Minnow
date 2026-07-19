@@ -12,6 +12,9 @@ export type PreviewSource =
 /** Which pane occupies the right split (null = closed). */
 export type RightPaneMode = 'viewer' | 'preview' | null;
 
+/** Where DevTools attaches relative to the preview guest. */
+export type PreviewDevToolsDock = 'bottom' | 'side' | 'popout';
+
 /** Max workspace file tabs persisted and open at once in the viewer strip. */
 export const MAX_OPEN_VIEWER_TABS = 20;
 
@@ -35,6 +38,8 @@ export interface FilePanelState {
   /** @deprecated Migrated into previewTabs; kept in sync with active tab source. */
   previewSource: PreviewSource | null;
   previewAutoReload: boolean;
+  /** Docked DevTools position in the preview guest (Electron only). */
+  previewDevToolsDock: PreviewDevToolsDock;
   splitRatio: number;
   expandedDirs: string[];
   selectedPath: string | null;
@@ -55,6 +60,7 @@ export const DEFAULT_FILE_PANEL_STATE: FilePanelState = {
   rightPaneMode: null,
   previewSource: null,
   previewAutoReload: true,
+  previewDevToolsDock: 'bottom',
   splitRatio: 0.55,
   expandedDirs: [],
   selectedPath: null,
@@ -225,6 +231,12 @@ function normalizeFilePanelBlock(raw: unknown): FilePanelState {
     rightPaneMode,
     previewSource: syncedPreviewSource,
     previewAutoReload: row.previewAutoReload !== false,
+    previewDevToolsDock:
+      row.previewDevToolsDock === 'side'
+        ? 'side'
+        : row.previewDevToolsDock === 'popout'
+          ? 'popout'
+          : 'bottom',
     splitRatio: clampSplitRatio(
       typeof row.splitRatio === 'number' ? row.splitRatio : DEFAULT_FILE_PANEL_STATE.splitRatio,
     ),

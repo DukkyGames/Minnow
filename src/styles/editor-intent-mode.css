@@ -75,9 +75,9 @@
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  font-size: 11px;
+  gap: 4px;
+  padding: 3px 6px;
+  font-size: 0.6875rem;
   font-family: var(--font-ui);
   border: 1px solid var(--mn-border);
   border-radius: 6px;

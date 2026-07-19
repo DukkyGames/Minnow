@@ -418,11 +418,11 @@
   -webkit-mask-position: center;
 }
 
-/* Orchestrate board folders: checklist glyph (expanded + collapsed rail). */
+/* Orchestrate board folders: thick checklist glyph (expanded + collapsed rail). */
 .chat-group-header--has-board .chat-group-header__icon {
   display: block;
-  mask-image: url('/icons/board-group.png');
-  -webkit-mask-image: url('/icons/board-group.png');
+  mask-image: url('/icons/Orchestrate-thick.svg');
+  -webkit-mask-image: url('/icons/Orchestrate-thick.svg');
 }
 
 .chat-group-header__caret {
