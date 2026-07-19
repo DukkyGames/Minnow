@@ -533,10 +533,6 @@
         <span class="settings-nav__item-label">Rules</span>
         <span class="settings-nav__count" hidden aria-hidden="true"></span>
       </button>
-      <button type="button" class="settings-nav__item" data-area-jump="experts" data-settings-nav-area="experts">
-        <span class="settings-nav__item-label">Experts</span>
-        <span class="settings-nav__count" hidden aria-hidden="true"></span>
-      </button>
       <button type="button" class="settings-nav__item" data-area-jump="agent-packs" data-settings-nav-area="agent-packs">
         <span class="settings-nav__item-label">Agent packs</span>
         <span class="settings-nav__count" hidden aria-hidden="true"></span>
@@ -640,7 +636,6 @@
 
       <section id="settingsSection-agent-center" class="settings-section settings-section--wide settings-area settings-area--title-suppressed" data-area="agent-center">
         <h2>Agents</h2>
-        <p class="settings-lead">Modes, work agents, and sub-agents in one place. Click a card to edit its prompt, model, and options.</p>
         <div id="settingsAgentCenterBody" class="settings-section-body settings-agent-center-body"></div>
         <details class="settings-agent-base-prompt" id="settingsBasePromptPanel" data-settings-search-key="agents.prompting">
           <summary class="settings-agent-base-prompt__summary">Base system prompt</summary>
@@ -669,27 +664,7 @@
       </section>
       <section id="settingsSection-rules" class="settings-section settings-area settings-area--title-suppressed" data-area="rules">
         <h2>Rules</h2>
-        <p class="settings-lead">Standing instructions added to every parent chat send, after the built-in system prompt. Does not apply to sub-agents.</p>
-        <label class="settings-toggle-row" data-settings-search-key="agents.rules.enabled">
-          <span>Enable user rules</span>
-          <input type="checkbox" id="settingsRulesEnabled">
-        </label>
-        <p id="settingsRulesOffline" class="field-hint settings-rules-offline hidden">
-          Start with <code>npm start</code> to persist rules to <code>~/.minnow/rules.json</code>. Edits are kept in this browser until then.
-        </p>
-        <div class="field settings-rules-field" data-settings-search-key="agents.rules.text">
-          <label for="settingsRulesText">Instructions</label>
-          <textarea id="settingsRulesText" class="settings-rules-textarea" rows="12" spellcheck="true"
-            placeholder="e.g. Always use TypeScript strict mode. Prefer small diffs."></textarea>
-        </div>
-        <div class="settings-rules-actions">
-          <button type="button" id="settingsRulesSave" class="btn-primary">Save rules</button>
-        </div>
-      </section>
-      <section id="settingsSection-experts" class="settings-section settings-area settings-area--title-suppressed" data-area="experts">
-        <h2>Experts</h2>
-        <p class="settings-lead">Personas you pick in the composer. Edit prompts in <strong>Agents</strong>; try them in Expert Lab.</p>
-        <div id="settingsExpertsBody" class="settings-section-body"></div>
+        <div id="settingsRulesBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-agent-packs" class="settings-section settings-area settings-area--title-suppressed" data-area="agent-packs">
         <h2>Agent packs</h2>

@@ -40,7 +40,6 @@ export type SettingsSectionId =
   | 'prompting'
   | 'rules'
   | 'modes'
-  | 'experts'
   | 'work-agents'
   | 'agent-packs'
   | 'sub-agents'
@@ -74,7 +73,6 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   prompting: 'Prompts',
   rules: 'Rules',
   modes: 'Modes',
-  experts: 'Experts',
   'work-agents': 'Work agents',
   'agent-packs': 'Agent packs',
   'sub-agents': 'Sub-agents',
@@ -115,7 +113,6 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
     sections: [
       'agent-center',
       'rules',
-      'experts',
       'agent-packs',
       'autopilot',
     ],

@@ -214,11 +214,11 @@ function expertEntries(): SettingsSearchEntry[] {
   return listExperts().map((expert) => ({
     id: `expert:${expert.meta.id}`,
     label: expert.meta.label,
-    sectionId: 'experts' as const,
+    sectionId: 'agent-center' as const,
     kind: 'expert' as const,
     searchKey: `experts.${expert.meta.id}`,
     keywords: [expert.meta.id, 'expert', 'persona'],
-    hint: 'Expert',
+    hint: 'Agents',
   }));
 }
 

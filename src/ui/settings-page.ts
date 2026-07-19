@@ -56,6 +56,7 @@ const CATEGORIES = SETTINGS_CATEGORIES;
 const LEGACY_AGENT_AREA_ALIASES: Partial<Record<string, SettingsSectionId>> = {
   prompting: 'agent-center',
   modes: 'agent-center',
+  experts: 'agent-center',
   'work-agents': 'agent-center',
   'sub-agents': 'agent-center',
 };

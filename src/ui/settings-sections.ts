@@ -33,17 +33,11 @@ import type {
   PromptPartId,
   PromptProfile,
 } from '../chat/prompts/types';
-import { listExperts } from '../chat/experts/registry';
 import { listModes } from '../chat/modes/registry';
 import {
   loadPromptMetaSettings,
   savePromptMetaSettings,
 } from '../config/prompt-meta';
-import {
-  loadUserRules,
-  MAX_USER_RULES_BYTES,
-  saveUserRules,
-} from '../config/user-rules';
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
 import {
   loadAutopilotMeta,
@@ -116,6 +110,7 @@ import { renderAboutSettingsSection } from './settings-about';
 import { renderDiagnosticsSettingsSection } from './settings-diagnostics';
 import { renderAppearanceSettingsSection } from './settings-appearance';
 import { renderAgentCenterPanel } from './settings-agent-center';
+import { renderRulesSettingsSection } from './settings-rules';
 import {
   createSettingsSwitch,
   createSettingsToggleRow,
@@ -864,37 +859,6 @@ async function renderModesSection(): Promise<void> {
       }
     },
   );
-}
-
-async function renderExpertsSection(): Promise<void> {
-  const mount = clearMount('settingsExpertsBody');
-  if (!mount) return;
-
-  appendSettingsCrosslinks(mount, [{ label: 'Edit prompts in Agents', sectionId: 'agent-center' }]);
-
-  const labBody = appendSettingsGroup(mount, 'Expert Lab', 'Try personas outside the main composer.');
-  const labLink = document.createElement('button');
-  labLink.type = 'button';
-  labLink.className = 'settings-action-btn';
-  labLink.textContent = 'Open Expert Lab';
-  labLink.addEventListener('click', () => {
-    void import('./experts/experts-hub').then((m) => m.openExpertLabFromTopbar());
-  });
-  labBody.appendChild(labLink);
-
-  const rosterBody = appendSettingsGroup(
-    mount,
-    'Roster',
-    `${listExperts().length} built-in personas. Prompt overrides live in ~/.minnow/prompts/experts/.`,
-  );
-  const list = el('ul', 'settings-entity-list');
-  for (const expert of listExperts()) {
-    const item = el('li', 'settings-entity-list__item settings-entity-list__item--flat');
-    item.dataset.settingsSearchKey = `experts.${expert.meta.id}`;
-    item.textContent = `${expert.meta.label}${expert.meta.description ? `: ${expert.meta.description}` : ''}`;
-    list.appendChild(item);
-  }
-  rosterBody.appendChild(list);
 }
 
 async function renderModelRoutingSettingsSection(): Promise<void> {
@@ -2197,61 +2161,24 @@ async function renderEvalsSection(): Promise<void> {
     '<p><a href="#/app/bench/tests" class="settings-link">Open Benchmark → Tests</a></p>';
 }
 
-let rulesSectionBindingsDone = false;
-
-function bindRulesSection(): void {
-  if (rulesSectionBindingsDone) return;
-  rulesSectionBindingsDone = true;
-
-  const saveBtn = document.getElementById('settingsRulesSave');
-  saveBtn?.addEventListener('click', () => {
-    void (async () => {
-      const enabledEl = document.getElementById('settingsRulesEnabled') as HTMLInputElement | null;
-      const textEl = document.getElementById('settingsRulesText') as HTMLTextAreaElement | null;
-      if (!enabledEl || !textEl) return;
-
-      const text = textEl.value;
-      const bytes = new TextEncoder().encode(text).length;
-      if (bytes > MAX_USER_RULES_BYTES) {
-        setStatus('err', `Rules text exceeds ${MAX_USER_RULES_BYTES} bytes`);
-        return;
-      }
-
-      try {
-        await saveUserRules({
-          version: 1,
-          enabled: enabledEl.checked,
-          text,
-        });
-        const mode = await detectConfigServer();
-        setStatus(
-          'ok',
-          mode === 'server'
-            ? 'User rules saved'
-            : 'Saved locally — start npm start to persist to disk',
-        );
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Save failed';
-        setStatus('err', message);
-      }
-    })();
-  });
-}
-
 async function renderRulesSection(): Promise<void> {
-  const enabledEl = document.getElementById('settingsRulesEnabled') as HTMLInputElement | null;
-  const textEl = document.getElementById('settingsRulesText') as HTMLTextAreaElement | null;
-  const offlineEl = document.getElementById('settingsRulesOffline');
-  if (!enabledEl || !textEl) return;
+  const mount = clearMount('settingsRulesBody');
+  if (!mount) return;
 
-  bindRulesSection();
+  const shell = el('div', 'settings-general');
+  mount.appendChild(shell);
 
-  const rules = await loadUserRules();
-  enabledEl.checked = rules.enabled;
-  textEl.value = rules.text;
+  const lead = el('p', 'settings-section-lead');
+  lead.append(
+    'Standing instructions added to every parent chat send, after the built-in system prompt. Does not apply to sub-agents. Mode and agent prompts live under ',
+    linkToSettingsSection('Agents', 'agent-center'),
+    '.',
+  );
+  shell.appendChild(lead);
 
-  const storageMode = await detectConfigServer();
-  offlineEl?.classList.toggle('hidden', storageMode === 'server');
+  const content = el('div', 'settings-general__content');
+  shell.appendChild(content);
+  await renderRulesSettingsSection(content, setStatus);
 }
 
 async function renderFeaturesSection(): Promise<void> {
@@ -2315,9 +2242,6 @@ export async function refreshSettingsSection(
       break;
     case 'rules':
       await renderRulesSection();
-      break;
-    case 'experts':
-      await renderExpertsSection();
       break;
     case 'agent-packs':
       await renderAgentPacksSection();

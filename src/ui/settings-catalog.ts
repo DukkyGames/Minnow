@@ -53,7 +53,7 @@ export const SETTINGS_CATEGORY_AREAS: Record<
   general: ['general', 'notifications', 'audio', 'about'],
   appearance: ['appearance'],
   models: ['providers', 'model-routing', 'sampler', 'thinking', 'usage'],
-  agents: ['agent-center', 'rules', 'experts', 'agent-packs', 'autopilot'],
+  agents: ['agent-center', 'rules', 'agent-packs', 'autopilot'],
   integrations: [
     'search',
     'deep-research',
@@ -242,8 +242,8 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   field('agents.modes.planGranularity', 'Plan granularity', 'agents', 'modes', {
     keywords: ['large', 'medium', 'small', 'planner tasks'],
   }),
-  field('agents.experts', 'Experts', 'agents', 'experts', {
-    keywords: ['persona', 'specialist'],
+  field('agents.experts', 'Experts', 'agents', 'agent-center', {
+    keywords: ['persona', 'specialist', 'expert lab'],
   }),
   field('agents.workAgents', 'Work agents', 'agents', 'agent-center'),
   field('agents.agentPacks', 'Agent packs', 'agents', 'agent-packs'),

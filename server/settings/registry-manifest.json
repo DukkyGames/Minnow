@@ -53,13 +53,13 @@
       "menubar"
     ],
     "category": "general",
-    "area": "general",
+    "area": "notifications",
     "storage": "section",
     "type": "string",
     "sensitivity": "normal",
     "writable": false,
     "refreshAreas": [
-      "general"
+      "notifications"
     ]
   },
   {
@@ -70,28 +70,28 @@
       "bell"
     ],
     "category": "general",
-    "area": "general",
+    "area": "notifications",
     "storage": "browser",
     "path": "enabled",
     "type": "boolean",
     "sensitivity": "normal",
     "writable": true,
     "refreshAreas": [
-      "general"
+      "notifications"
     ]
   },
   {
     "key": "general.notifications.chat",
     "label": "Chat notifications",
     "category": "general",
-    "area": "general",
+    "area": "notifications",
     "storage": "browser",
     "path": "chatEnabled",
     "type": "boolean",
     "sensitivity": "normal",
     "writable": true,
     "refreshAreas": [
-      "general"
+      "notifications"
     ]
   },
   {
@@ -102,14 +102,14 @@
       "sub-agent"
     ],
     "category": "general",
-    "area": "general",
+    "area": "notifications",
     "storage": "browser",
     "path": "tasksEnabled",
     "type": "boolean",
     "sensitivity": "normal",
     "writable": true,
     "refreshAreas": [
-      "general"
+      "notifications"
     ]
   },
   {
@@ -121,28 +121,42 @@
       "synthesis"
     ],
     "category": "general",
-    "area": "general",
+    "area": "notifications",
     "storage": "browser",
     "path": "backgroundEnabled",
     "type": "boolean",
     "sensitivity": "normal",
     "writable": true,
     "refreshAreas": [
-      "general"
+      "notifications"
     ]
   },
   {
     "key": "general.notifications.sound",
     "label": "Notification sounds",
     "category": "general",
-    "area": "general",
+    "area": "notifications",
     "storage": "browser",
     "path": "soundEnabled",
     "type": "boolean",
     "sensitivity": "normal",
     "writable": true,
     "refreshAreas": [
-      "general"
+      "notifications"
+    ]
+  },
+  {
+    "key": "general.notifications.soundOnActiveChat",
+    "label": "Sounds in active chat",
+    "category": "general",
+    "area": "notifications",
+    "storage": "browser",
+    "path": "soundOnActiveChat",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "notifications"
     ]
   },
   {
@@ -675,6 +689,36 @@
     ]
   },
   {
+    "key": "models.thinking.mode",
+    "label": "Default thinking",
+    "category": "models",
+    "area": "thinking",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "thinking"
+    ]
+  },
+  {
+    "key": "models.thinking.budget",
+    "label": "Thinking budget",
+    "keywords": [
+      "reasoning tokens",
+      "cot budget"
+    ],
+    "category": "models",
+    "area": "thinking",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "thinking"
+    ]
+  },
+  {
     "key": "models.usage",
     "label": "Usage & cost",
     "keywords": [
@@ -682,6 +726,50 @@
       "billing",
       "inference"
     ],
+    "category": "models",
+    "area": "usage",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "usage"
+    ]
+  },
+  {
+    "key": "models.usage.pricing",
+    "label": "Model pricing",
+    "keywords": [
+      "usd",
+      "per million",
+      "rates"
+    ],
+    "category": "models",
+    "area": "usage",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "usage"
+    ]
+  },
+  {
+    "key": "models.usage.active",
+    "label": "Active chat usage",
+    "category": "models",
+    "area": "usage",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "usage"
+    ]
+  },
+  {
+    "key": "models.usage.session",
+    "label": "Workspace session usage",
     "category": "models",
     "area": "usage",
     "storage": "section",
@@ -770,16 +858,17 @@
     "label": "Experts",
     "keywords": [
       "persona",
-      "specialist"
+      "specialist",
+      "expert lab"
     ],
     "category": "agents",
-    "area": "experts",
+    "area": "agent-center",
     "storage": "section",
     "type": "string",
     "sensitivity": "normal",
     "writable": false,
     "refreshAreas": [
-      "experts"
+      "agent-center"
     ]
   },
   {
@@ -1378,6 +1467,67 @@
     ]
   },
   {
+    "key": "advanced.diagnostics",
+    "label": "Health & diagnostics",
+    "description": "Subsystem probes, grouped errors, and a local log tail. Nothing is sent off-device.",
+    "keywords": [
+      "errors",
+      "logs",
+      "crash",
+      "report",
+      "health strip",
+      "subsystem"
+    ],
+    "category": "advanced",
+    "area": "diagnostics",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "diagnostics"
+    ]
+  },
+  {
+    "key": "advanced.diagnostics.health",
+    "label": "Health probes",
+    "keywords": [
+      "server",
+      "memory",
+      "brain",
+      "lsp",
+      "pty",
+      "status strip"
+    ],
+    "category": "advanced",
+    "area": "diagnostics",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "diagnostics"
+    ]
+  },
+  {
+    "key": "advanced.diagnostics.actions",
+    "label": "Diagnostic actions",
+    "keywords": [
+      "copy report",
+      "refresh",
+      "clear logs"
+    ],
+    "category": "advanced",
+    "area": "diagnostics",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "diagnostics"
+    ]
+  },
+  {
     "key": "advanced.evals",
     "label": "Eval harness",
     "keywords": [
@@ -1393,6 +1543,38 @@
     "writable": false,
     "refreshAreas": [
       "evals"
+    ]
+  },
+  {
+    "key": "about.info",
+    "label": "Build info",
+    "keywords": [
+      "version",
+      "platform",
+      "node",
+      "electron"
+    ],
+    "category": "general",
+    "area": "about",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "about"
+    ]
+  },
+  {
+    "key": "about.version",
+    "label": "App version",
+    "category": "general",
+    "area": "about",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "about"
     ]
   },
   {
@@ -2163,6 +2345,84 @@
     "storage": "resource",
     "resource": "tools",
     "path": "permissions.default.get_file_metadata",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.create_pdf",
+    "label": "Tool permission: create_pdf",
+    "description": "Permission mode for the create_pdf tool (off, ask, or full).",
+    "keywords": [
+      "create_pdf",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.create_pdf",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.create_spreadsheet",
+    "label": "Tool permission: create_spreadsheet",
+    "description": "Permission mode for the create_spreadsheet tool (off, ask, or full).",
+    "keywords": [
+      "create_spreadsheet",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.create_spreadsheet",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.create_word_document",
+    "label": "Tool permission: create_word_document",
+    "description": "Permission mode for the create_word_document tool (off, ask, or full).",
+    "keywords": [
+      "create_word_document",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.create_word_document",
     "type": "enum",
     "allowedValues": [
       "off",
