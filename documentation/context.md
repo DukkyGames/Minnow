@@ -252,6 +252,8 @@ Kanban delivery from plans under `documentation/plans/`. Tools: `board_init`, `b
 
 State: `Chat.orchestratePlanPath`, `ChatGroup.orchestrateBoard`, [`src/ui/orchestrate-board.ts`](../src/ui/orchestrate-board.ts).
 
+**Board metrics strip (MIN-414):** When the main column is in board view, the bottom inference metrics panel rolls up **all planner + member chat** token totals (ledger-first per chat) and averages per-chat tok/s (completion-weighted via [`averageStatsSegments`](../src/chat/orchestrate/stats-math.ts)). Implementation: [`src/chat/orchestrate/board-stats-aggregate.ts`](../src/chat/orchestrate/board-stats-aggregate.ts); refreshed on board live updates and chat switches so focusing a member chat does not reset totals.
+
 ### Experts
 
 Personas under `src/chat/prompts/experts/<id>/`. Chats: `Chat.kind === 'expert'`, memory under `pages/experts/<id>/facts/`. UI: Experts' Lab on desktop + `#/experts`.

@@ -90,6 +90,7 @@ import {
   type OrchestrateBoardTimerContext,
 } from '../state/orchestrate-board-store';
 import { normalizeModeId } from '../chat/modes/types';
+import { refreshMetricsStripForChat } from '../chat/orchestrate/board-stats-aggregate';
 import { subscribeBoardChanges, emitBoardChange } from '../state/orchestrate-board-events';
 import {
   countBoardLogAlerts,
@@ -3265,6 +3266,7 @@ export function refreshActiveBoardIfMounted(): void {
   const root = mount.querySelector(':scope > .board-root') as HTMLElement | null;
   if (root && board && root.querySelector('.board-main')) {
     refreshBoardDom(root, group, plannerChat, board);
+    refreshMetricsStripForChat(plannerChat);
     return;
   }
   if (root && !board) return;
