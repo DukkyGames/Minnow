@@ -596,39 +596,7 @@
       </section>
       <section id="settingsSection-audio" class="settings-section settings-area settings-area--title-suppressed" data-area="audio">
         <h2>Audio</h2>
-        <p class="settings-lead">Microphone and speaker for dictation and read-aloud. Speech-to-text and text-to-speech models are under <strong>Models → Voice</strong>.</p>
-        <section class="settings-group settings-group--flat" id="settingsAudioPanel" data-settings-search-key="audio.devices">
-          <p id="settingsAudioOffline" class="field-hint settings-memory-offline hidden">
-            Start with <code>npm start</code> to persist audio device settings.
-          </p>
-          <div class="settings-group__body">
-            <div class="field">
-              <label for="settingsAudioInputDevice">Input device</label>
-              <select id="settingsAudioInputDevice" class="settings-select"></select>
-            </div>
-            <div class="field">
-              <label for="settingsAudioOutputDevice">Output device</label>
-              <select id="settingsAudioOutputDevice" class="settings-select"></select>
-              <p class="field-hint">Output routing uses <code>setSinkId</code> when supported (Chrome / Electron).</p>
-            </div>
-            <label class="settings-toggle-row" data-settings-search-key="audio.echoCancellation">
-              <span>Echo cancellation</span>
-              <input type="checkbox" id="settingsAudioEchoCancellation" checked>
-            </label>
-            <label class="settings-toggle-row" data-settings-search-key="audio.noiseSuppression">
-              <span>Noise suppression</span>
-              <input type="checkbox" id="settingsAudioNoiseSuppression" checked>
-            </label>
-            <label class="settings-toggle-row" data-settings-search-key="audio.autoGainControl">
-              <span>Auto gain control</span>
-              <input type="checkbox" id="settingsAudioAutoGainControl" checked>
-            </label>
-            <div class="settings-form-actions">
-              <button type="button" class="settings-action-btn" id="settingsAudioSave">Save audio settings</button>
-              <button type="button" class="settings-inline-btn" id="settingsAudioRefreshDevices">Refresh devices</button>
-            </div>
-          </div>
-        </section>
+        <div id="settingsAudioBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-about" class="settings-section settings-area settings-area--title-suppressed" data-area="about">
         <h2>About</h2>

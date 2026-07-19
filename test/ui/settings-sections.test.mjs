@@ -110,6 +110,7 @@ describe('settings-sections', () => {
     const window = new Window();
     globalThis.window = window;
     globalThis.document = window.document;
+    globalThis.localStorage = window.localStorage;
 
     document.body.innerHTML = `
       <div id="settingsNotificationsBody" class="settings-section-body"></div>
@@ -131,6 +132,67 @@ describe('settings-sections', () => {
       'Alerts and sound groups should be bordered panels',
     );
 
+    document.body.innerHTML = '';
+  });
+
+  test("refreshSettingsSection('audio') uses constrained shell and emphasis groups", async () => {
+    const { Window } = await import('happy-dom');
+    const window = new Window();
+    globalThis.window = window;
+    globalThis.document = window.document;
+    globalThis.localStorage = window.localStorage;
+
+    document.body.innerHTML = `
+      <div id="settingsAudioBody" class="settings-section-body"></div>
+    `;
+
+    const { setStorageModeForTests } = await import('../../src/config/storage-mode.ts');
+    const { resetVoiceMetaCache } = await import('../../src/config/voice-meta.ts');
+    setStorageModeForTests('server');
+    resetVoiceMetaCache();
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes('/api/config/ping')) {
+        return { ok: true, json: async () => ({ ok: true }) };
+      }
+      if (url.includes('/api/config/meta')) {
+        return {
+          ok: true,
+          json: async () => ({
+            voice: {
+              audio: {
+                inputDeviceId: '',
+                outputDeviceId: '',
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+              },
+            },
+          }),
+        };
+      }
+      return { ok: false, json: async () => ({}) };
+    };
+
+    const { refreshSettingsSection } = await import('../../src/ui/settings-sections.ts');
+    await refreshSettingsSection('audio');
+
+    const mount = document.getElementById('settingsAudioBody');
+    assert.ok(mount);
+    assert.ok(mount.querySelector('.settings-general'), 'Audio section uses constrained shell');
+    assert.equal(
+      mount.querySelectorAll('.settings-group--emphasis').length,
+      2,
+      'Devices and processing groups should be bordered panels',
+    );
+    assert.ok(document.getElementById('settingsAudioInputDevice'));
+    assert.ok(document.getElementById('settingsAudioEchoCancellation'));
+
+    globalThis.fetch = originalFetch;
+    setStorageModeForTests('localStorage');
+    resetVoiceMetaCache();
     document.body.innerHTML = '';
   });
 });

@@ -4,10 +4,15 @@
 
 import { detectConfigServer } from '../config/storage-mode';
 import { loadVoiceMeta, saveVoiceMeta } from '../config/voice-meta';
+import { appendSettingsGroup } from './settings-layout';
+import {
+  appendSettingsOfflineHint,
+  createSettingsActionsRow,
+  createSettingsSelectRow,
+} from './settings-controls';
+import { createSettingsToggleRow } from './settings-switch';
 
 type StatusFn = (kind: 'ok' | 'err' | 'spin', message: string) => void;
-
-let bindingsDone = false;
 
 /** Request mic permission so device labels are populated. */
 async function primeAudioDeviceLabels(): Promise<void> {
@@ -48,141 +53,144 @@ async function populateDeviceSelect(
   if (selectedId) select.value = selectedId;
 }
 
-async function saveAudioSettingsFromForm(): Promise<boolean> {
-  const inputDeviceId =
-    (document.getElementById('settingsAudioInputDevice') as HTMLSelectElement | null)?.value ??
-    '';
-  const outputDeviceId =
-    (document.getElementById('settingsAudioOutputDevice') as HTMLSelectElement | null)?.value ??
-    '';
-  const echoCancellation =
-    (document.getElementById('settingsAudioEchoCancellation') as HTMLInputElement | null)
-      ?.checked ?? true;
-  const noiseSuppression =
-    (document.getElementById('settingsAudioNoiseSuppression') as HTMLInputElement | null)
-      ?.checked ?? true;
-  const autoGainControl =
-    (document.getElementById('settingsAudioAutoGainControl') as HTMLInputElement | null)
-      ?.checked ?? true;
-
+async function saveAudioSettings(
+  inputSelect: HTMLSelectElement,
+  outputSelect: HTMLSelectElement,
+  echoCb: HTMLInputElement,
+  noiseCb: HTMLInputElement,
+  agcCb: HTMLInputElement,
+): Promise<boolean> {
   const saved = await saveVoiceMeta({
     audio: {
-      inputDeviceId,
-      outputDeviceId,
-      echoCancellation,
-      noiseSuppression,
-      autoGainControl,
+      inputDeviceId: inputSelect.value,
+      outputDeviceId: outputSelect.value,
+      echoCancellation: echoCb.checked,
+      noiseSuppression: noiseCb.checked,
+      autoGainControl: agcCb.checked,
     },
   });
   return saved != null;
 }
 
-function bindAudioSettingsControls(setStatus: StatusFn): void {
-  document.getElementById('settingsAudioSave')?.addEventListener('click', () => {
-    void (async () => {
-      const ok = await saveAudioSettingsFromForm();
-      if (!ok) {
-        setStatus('err', 'Could not save audio settings. Use npm start.');
-        return;
-      }
-      setStatus('ok', 'Audio settings saved');
-    })();
-  });
+/** Render Settings → Audio controls into a settings mount. */
+export async function renderAudioSettingsSection(
+  mount: HTMLElement,
+  setStatus: StatusFn,
+): Promise<void> {
+  mount.replaceChildren();
 
-  document.getElementById('settingsAudioRefreshDevices')?.addEventListener('click', () => {
-    void (async () => {
-      setStatus('spin', 'Refreshing devices…');
-      await primeAudioDeviceLabels();
-      const config = await loadVoiceMeta();
-      const inputSelect = document.getElementById(
-        'settingsAudioInputDevice',
-      ) as HTMLSelectElement | null;
-      const outputSelect = document.getElementById(
-        'settingsAudioOutputDevice',
-      ) as HTMLSelectElement | null;
-      if (inputSelect) {
-        await populateDeviceSelect(inputSelect, 'audioinput', config.audio.inputDeviceId);
-      }
-      if (outputSelect) {
-        await populateDeviceSelect(outputSelect, 'audiooutput', config.audio.outputDeviceId);
-      }
-      setStatus('ok', 'Device list refreshed');
-    })();
-  });
-}
-
-async function refreshAudioSettingsPanel(container: HTMLElement): Promise<void> {
   const serverUp = await detectConfigServer();
-  const offlineEl = document.getElementById('settingsAudioOffline');
-  const fieldIds = [
-    'settingsAudioInputDevice',
-    'settingsAudioOutputDevice',
-    'settingsAudioEchoCancellation',
-    'settingsAudioNoiseSuppression',
-    'settingsAudioAutoGainControl',
-    'settingsAudioSave',
-    'settingsAudioRefreshDevices',
-  ];
-
-  for (const id of fieldIds) {
-    const field = document.getElementById(id) as HTMLInputElement | null;
-    if (field) field.disabled = !serverUp;
-  }
-
   if (!serverUp) {
-    offlineEl?.classList.remove('hidden');
-    container.classList.add('settings-audio--offline');
-    return;
+    appendSettingsOfflineHint(
+      mount,
+      'Start with <code>npm start</code> to persist audio device settings.',
+    );
   }
 
-  offlineEl?.classList.add('hidden');
-  container.classList.remove('settings-audio--offline');
+  const devices = appendSettingsGroup(
+    mount,
+    'Devices',
+    'Choose the microphone and speaker used for dictation and read-aloud.',
+    'audio.devices',
+    { emphasis: true },
+  );
+
+  const inputSelect = document.createElement('select');
+  inputSelect.id = 'settingsAudioInputDevice';
+  inputSelect.className = 'settings-select';
+  inputSelect.disabled = !serverUp;
+  const { row: inputRow } = createSettingsSelectRow('Input device', {
+    select: inputSelect,
+    searchKey: 'audio.inputDevice',
+  });
+  devices.appendChild(inputRow);
+
+  const outputSelect = document.createElement('select');
+  outputSelect.id = 'settingsAudioOutputDevice';
+  outputSelect.className = 'settings-select';
+  outputSelect.disabled = !serverUp;
+  const { row: outputRow } = createSettingsSelectRow('Output device', {
+    select: outputSelect,
+    searchKey: 'audio.outputDevice',
+    description: 'Output routing uses setSinkId when supported (Chrome / Electron).',
+  });
+  devices.appendChild(outputRow);
+
+  const processing = appendSettingsGroup(
+    mount,
+    'Microphone processing',
+    'WebRTC capture constraints applied when recording audio.',
+    undefined,
+    { emphasis: true },
+  );
+
+  const { row: echoRow, input: echoCb } = createSettingsToggleRow('Echo cancellation', {
+    id: 'settingsAudioEchoCancellation',
+    checked: true,
+    disabled: !serverUp,
+    searchKey: 'audio.echoCancellation',
+  });
+  processing.appendChild(echoRow);
+
+  const { row: noiseRow, input: noiseCb } = createSettingsToggleRow('Noise suppression', {
+    id: 'settingsAudioNoiseSuppression',
+    checked: true,
+    disabled: !serverUp,
+    searchKey: 'audio.noiseSuppression',
+  });
+  processing.appendChild(noiseRow);
+
+  const { row: agcRow, input: agcCb } = createSettingsToggleRow('Auto gain control', {
+    id: 'settingsAudioAutoGainControl',
+    checked: true,
+    disabled: !serverUp,
+    searchKey: 'audio.autoGainControl',
+  });
+  processing.appendChild(agcRow);
+
+  const actions = createSettingsActionsRow(
+    [
+      {
+        label: 'Save audio settings',
+        variant: 'primary',
+        disabled: !serverUp,
+        onClick: () => {
+          void (async () => {
+            const ok = await saveAudioSettings(inputSelect, outputSelect, echoCb, noiseCb, agcCb);
+            if (!ok) {
+              setStatus('err', 'Could not save audio settings. Use npm start.');
+              return;
+            }
+            setStatus('ok', 'Audio settings saved');
+          })();
+        },
+      },
+      {
+        label: 'Refresh devices',
+        disabled: !serverUp,
+        onClick: () => {
+          void (async () => {
+            setStatus('spin', 'Refreshing devices…');
+            await primeAudioDeviceLabels();
+            const config = await loadVoiceMeta();
+            await populateDeviceSelect(inputSelect, 'audioinput', config.audio.inputDeviceId);
+            await populateDeviceSelect(outputSelect, 'audiooutput', config.audio.outputDeviceId);
+            setStatus('ok', 'Device list refreshed');
+          })();
+        },
+      },
+    ],
+    { searchKey: 'audio.devices' },
+  );
+  mount.appendChild(actions);
+
+  if (!serverUp) return;
 
   await primeAudioDeviceLabels();
   const config = await loadVoiceMeta();
-
-  const inputSelect = document.getElementById(
-    'settingsAudioInputDevice',
-  ) as HTMLSelectElement | null;
-  const outputSelect = document.getElementById(
-    'settingsAudioOutputDevice',
-  ) as HTMLSelectElement | null;
-  if (inputSelect) {
-    await populateDeviceSelect(inputSelect, 'audioinput', config.audio.inputDeviceId);
-  }
-  if (outputSelect) {
-    await populateDeviceSelect(outputSelect, 'audiooutput', config.audio.outputDeviceId);
-  }
-
-  const echoCb = document.getElementById(
-    'settingsAudioEchoCancellation',
-  ) as HTMLInputElement | null;
-  const noiseCb = document.getElementById(
-    'settingsAudioNoiseSuppression',
-  ) as HTMLInputElement | null;
-  const agcCb = document.getElementById(
-    'settingsAudioAutoGainControl',
-  ) as HTMLInputElement | null;
-  if (echoCb) echoCb.checked = config.audio.echoCancellation;
-  if (noiseCb) noiseCb.checked = config.audio.noiseSuppression;
-  if (agcCb) agcCb.checked = config.audio.autoGainControl;
-}
-
-/** Wire audio settings panel controls. */
-export function mountAudioSettingsPanel(
-  container: HTMLElement,
-  setStatus: StatusFn,
-): void {
-  if (!bindingsDone) {
-    bindingsDone = true;
-    bindAudioSettingsControls(setStatus);
-  }
-  void refreshAudioSettingsPanel(container);
-}
-
-/** Render Settings → Audio section. */
-export async function renderAudioSettingsSection(setStatus: StatusFn): Promise<void> {
-  const panel = document.getElementById('settingsAudioPanel');
-  if (!panel) return;
-  mountAudioSettingsPanel(panel, setStatus);
+  await populateDeviceSelect(inputSelect, 'audioinput', config.audio.inputDeviceId);
+  await populateDeviceSelect(outputSelect, 'audiooutput', config.audio.outputDeviceId);
+  echoCb.checked = config.audio.echoCancellation;
+  noiseCb.checked = config.audio.noiseSuppression;
+  agcCb.checked = config.audio.autoGainControl;
 }

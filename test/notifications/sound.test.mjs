@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 describe('notification sound gating', () => {
   let prefs;
   let sound;
+  let sessions;
+  let instances;
   let win;
   let doc;
 
@@ -17,8 +19,17 @@ describe('notification sound gating', () => {
     g.localStorage = win.localStorage;
     prefs = await import('../../src/notifications/prefs.ts');
     sound = await import('../../src/notifications/sound.ts');
+    sessions = await import('../../src/state/sessions.ts');
+    instances = await import('../../src/os/instances.ts');
     prefs.resetNotificationPrefsForTests();
     sound.resetNotificationSoundForTests();
+    instances.resetInstancesForTests();
+    sessions.setSessionStateForTests({
+      version: 5,
+      activeId: 'chat-a',
+      chats: [{ ...sessions.createEmptyChatObject('model-a'), id: 'chat-a' }],
+      groups: [],
+    });
     win.localStorage.clear();
     delete win.minnow;
   });
@@ -26,6 +37,8 @@ describe('notification sound gating', () => {
   afterEach(() => {
     prefs.resetNotificationPrefsForTests();
     sound.resetNotificationSoundForTests();
+    instances.resetInstancesForTests();
+    sessions.setSessionStateForTests(null);
   });
 
   function setFocusState({ hasFocus, visibilityState }) {
@@ -76,5 +89,30 @@ describe('notification sound gating', () => {
     setFocusState({ hasFocus: true, visibilityState: 'visible' });
     assert.equal(sound.shouldPlayNotificationSound(), false);
     assert.equal(sound.shouldPlayNotificationSound('chat_question'), true);
+  });
+
+  test('does not play when sound pack is none', () => {
+    setFocusState({ hasFocus: false, visibilityState: 'visible' });
+    prefs.saveNotificationPref('soundPackId', 'none');
+    assert.equal(sound.shouldPlayNotificationSound(), false);
+  });
+
+  test('active chat: plays when focused and soundOnActiveChat is enabled', () => {
+    instances.launchInstance('code');
+    prefs.saveNotificationPref('soundOnActiveChat', true);
+    setFocusState({ hasFocus: true, visibilityState: 'visible' });
+    assert.equal(
+      sound.shouldPlayNotificationSound('chat_turn_complete', 'chat-a'),
+      true,
+    );
+  });
+
+  test('active chat: does not play when focused without soundOnActiveChat', () => {
+    instances.launchInstance('code');
+    setFocusState({ hasFocus: true, visibilityState: 'visible' });
+    assert.equal(
+      sound.shouldPlayNotificationSound('chat_turn_complete', 'chat-a'),
+      false,
+    );
   });
 });

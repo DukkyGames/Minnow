@@ -101,6 +101,7 @@ import type { SettingsSectionId } from './settings-page-types';
 import {
   appendSettingsGroup,
   linkToSettingsSection,
+  linkToModelsSection,
 } from './settings-layout';
 import '../styles/settings-general.css';
 import {
@@ -302,6 +303,26 @@ async function renderNotificationsSection(): Promise<void> {
   const content = el('div', 'settings-general__content');
   shell.appendChild(content);
   renderNotificationsSettingsSection(content);
+}
+
+async function renderAudioSection(): Promise<void> {
+  const mount = clearMount('settingsAudioBody');
+  if (!mount) return;
+
+  const shell = el('div', 'settings-general');
+  mount.appendChild(shell);
+
+  const lead = el('p', 'settings-section-lead');
+  lead.append(
+    'Microphone and speaker for dictation and read-aloud. Speech-to-text and text-to-speech models are under ',
+    linkToModelsSection('Models → Voice', 'voice'),
+    '.',
+  );
+  shell.appendChild(lead);
+
+  const content = el('div', 'settings-general__content');
+  shell.appendChild(content);
+  await renderAudioSettingsSection(content, setStatus);
 }
 
 function appendGeneralSectionLead(shell: HTMLElement): void {
@@ -2257,7 +2278,7 @@ export async function refreshSettingsSection(
       await renderAppearanceSection();
       break;
     case 'audio':
-      await renderAudioSettingsSection(setStatus);
+      await renderAudioSection();
       break;
     case 'about':
       await renderAboutSettingsSection();

@@ -40,6 +40,7 @@ const SETTINGS_SECTION_IDS = [
 const DYNAMIC_SECTION_BODY_IDS = [
   'settingsGeneralBody',
   'settingsNotificationsBody',
+  'settingsAudioBody',
   'settingsModelRoutingBody',
   'settingsSamplerBody',
   'settingsAgentCenterBody',
@@ -142,11 +143,9 @@ describe('settings page HTML', () => {
     assert.match(html, /data-area="notifications"/);
   });
 
-  test('audio settings panel exists in index.html', () => {
+  test('audio settings section exists in index.html', () => {
     assert.match(html, /id="settingsSection-audio"/);
-    assert.match(html, /id="settingsAudioPanel"/);
-    assert.match(html, /id="settingsAudioInputDevice"/);
-    assert.match(html, /id="settingsAudioOutputDevice"/);
+    assert.match(html, /id="settingsAudioBody"/);
     assert.match(html, /data-area="audio"/);
   });
 

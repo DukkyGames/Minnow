@@ -2,6 +2,7 @@
  * Notification prefs persisted in localStorage (`minnow.notifications.*`).
  */
 
+import { NONE_SOUND_PACK_ID } from './sound-packs';
 import type { NotificationKind, NotificationKindGroup, NotificationPrefs } from './types';
 
 const STORAGE_PREFIX = 'minnow.notifications.';
@@ -10,6 +11,9 @@ export const NOTIFICATION_PREFS_KEYS = {
   enabled: `${STORAGE_PREFIX}enabled`,
   muted: `${STORAGE_PREFIX}muted`,
   soundEnabled: `${STORAGE_PREFIX}soundEnabled`,
+  soundOnActiveChat: `${STORAGE_PREFIX}soundOnActiveChat`,
+  soundPackId: `${STORAGE_PREFIX}soundPackId`,
+  /** @deprecated Migrated to `soundPackId` on read. */
   soundId: `${STORAGE_PREFIX}soundId`,
   chatEnabled: `${STORAGE_PREFIX}chatEnabled`,
   tasksEnabled: `${STORAGE_PREFIX}tasksEnabled`,
@@ -20,7 +24,8 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   enabled: true,
   muted: false,
   soundEnabled: true,
-  soundId: 'chime',
+  soundOnActiveChat: false,
+  soundPackId: 'default',
   chatEnabled: true,
   tasksEnabled: true,
   backgroundEnabled: true,
@@ -68,18 +73,41 @@ function writeString(key: string, value: string): void {
   }
 }
 
+/** Migrate legacy single-sound `soundId` to `soundPackId`. */
+function readSoundPackId(): string {
+  const packId = readString(
+    NOTIFICATION_PREFS_KEYS.soundPackId,
+    DEFAULT_NOTIFICATION_PREFS.soundPackId,
+  );
+  if (localStorage.getItem(NOTIFICATION_PREFS_KEYS.soundPackId)) {
+    return packId;
+  }
+
+  const legacySoundId = readString(NOTIFICATION_PREFS_KEYS.soundId, '');
+  if (legacySoundId === 'none') return NONE_SOUND_PACK_ID;
+  if (legacySoundId) return 'default';
+  return DEFAULT_NOTIFICATION_PREFS.soundPackId;
+}
+
 /** Load notification prefs (cached after first read). */
 export function loadNotificationPrefs(): NotificationPrefs {
   if (cachedPrefs) return { ...cachedPrefs };
 
+  const legacySoundId = readString(NOTIFICATION_PREFS_KEYS.soundId, '');
+  const soundPackId = readSoundPackId();
+  const legacySoundWasNone = legacySoundId === 'none' && !localStorage.getItem(NOTIFICATION_PREFS_KEYS.soundPackId);
+
   const prefs: NotificationPrefs = {
     enabled: readBool(NOTIFICATION_PREFS_KEYS.enabled, DEFAULT_NOTIFICATION_PREFS.enabled),
     muted: readBool(NOTIFICATION_PREFS_KEYS.muted, DEFAULT_NOTIFICATION_PREFS.muted),
-    soundEnabled: readBool(
-      NOTIFICATION_PREFS_KEYS.soundEnabled,
-      DEFAULT_NOTIFICATION_PREFS.soundEnabled,
+    soundEnabled: legacySoundWasNone
+      ? false
+      : readBool(NOTIFICATION_PREFS_KEYS.soundEnabled, DEFAULT_NOTIFICATION_PREFS.soundEnabled),
+    soundOnActiveChat: readBool(
+      NOTIFICATION_PREFS_KEYS.soundOnActiveChat,
+      DEFAULT_NOTIFICATION_PREFS.soundOnActiveChat,
     ),
-    soundId: readString(NOTIFICATION_PREFS_KEYS.soundId, DEFAULT_NOTIFICATION_PREFS.soundId),
+    soundPackId,
     chatEnabled: readBool(
       NOTIFICATION_PREFS_KEYS.chatEnabled,
       DEFAULT_NOTIFICATION_PREFS.chatEnabled,
@@ -113,7 +141,8 @@ export function saveNotificationPrefs(prefs: NotificationPrefs): void {
   writeBool(NOTIFICATION_PREFS_KEYS.enabled, prefs.enabled);
   writeBool(NOTIFICATION_PREFS_KEYS.muted, prefs.muted);
   writeBool(NOTIFICATION_PREFS_KEYS.soundEnabled, prefs.soundEnabled);
-  writeString(NOTIFICATION_PREFS_KEYS.soundId, prefs.soundId);
+  writeBool(NOTIFICATION_PREFS_KEYS.soundOnActiveChat, prefs.soundOnActiveChat);
+  writeString(NOTIFICATION_PREFS_KEYS.soundPackId, prefs.soundPackId);
   writeBool(NOTIFICATION_PREFS_KEYS.chatEnabled, prefs.chatEnabled);
   writeBool(NOTIFICATION_PREFS_KEYS.tasksEnabled, prefs.tasksEnabled);
   writeBool(NOTIFICATION_PREFS_KEYS.backgroundEnabled, prefs.backgroundEnabled);
