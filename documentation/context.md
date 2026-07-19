@@ -217,7 +217,7 @@ Invoke via **`/`** slash picker ([`src/ui/skill-picker.ts`](../src/ui/skill-pick
 
 API: `GET /api/skills`, `GET/PUT /api/skills/:id`, `GET/PUT /api/config/skills`.
 
-**Git commit messages (MIN-412):** The Code git panel and `/git-commit` skill share conventions — conventional commits with optional gitmoji (`config.json` → `gitCommitMessage.useGitmoji`, default on), imperative subject (≤72 chars), body explaining *why*, staged-vs-unstaged scope, and `BREAKING CHANGE:` footers. UI generation: [`src/ui/git-commit-message-client.ts`](../src/ui/git-commit-message-client.ts) (diff filtering, reasoning-chain extraction, prompt builder).
+**Git commit messages (MIN-412):** The Code git panel and `/git-commit` skill share conventions — conventional commits with optional gitmoji (`config.json` → `gitCommitMessage.useGitmoji`, default on), imperative subject (≤72 chars), body explaining *why*, staged-vs-unstaged scope, and `BREAKING CHANGE:` footers. UI generation: [`src/ui/git-commit-message-client.ts`](../src/ui/git-commit-message-client.ts) (diff filtering, reasoning-chain extraction, prompt builder). During streaming, only high-confidence conventional commit lines are shown in the input; heuristic/plain-text extraction and reasoning-channel fallback run on completion. Markdown diff walkthroughs (numbered steps, `Removed/Updated` bullets, `**Identify Key Changes**` headers) from local/LM Studio models are rejected as non-commit output.
 
 ---
 

@@ -8,6 +8,7 @@ import {
   buildGitCommitMessagePrompt,
   extractCommitMessageFromChain,
   filterCommitMessagePatch,
+  looksLikeDiffAnalysisText,
   normalizeCommitMessageOutput,
   resolveCommitMessageDisplayText,
   resolveGitCommitMessageBinding,
@@ -204,6 +205,55 @@ describe('extractCommitMessageFromChain', () => {
       '',
     );
   });
+
+  test('skips heuristic fallback in strict mode', () => {
+    assert.equal(
+      extractCommitMessageFromChain('Fix git auto commit message generation', {
+        allowHeuristicFallback: false,
+      }),
+      '',
+    );
+  });
+
+  test('rejects markdown diff analysis without a conventional subject', () => {
+    const analysis = [
+      '2.  **Identify Key Changes & Intent:**',
+      '   - Removed the "Not sure which to pick?" auto-detection note from the download page (UI/UX cleanup).',
+      '   - Updated platform icons to official logos (Windows, macOS, Linux) for better visual fidelity.',
+      '   - Removed "Continue.dev" from the comparison table on features page (likely no longer relevant).',
+      '   - Removed `<base>` tag from index.html (likely fixing a',
+    ].join('\n');
+
+    assert.equal(extractCommitMessageFromChain(analysis), '');
+    assert.equal(
+      resolveCommitMessageDisplayText(analysis, '', { reasoningFallback: true }),
+      '',
+    );
+    assert.equal(
+      resolveCommitMessageDisplayText(analysis, '', { reasoningFallback: false }),
+      '',
+    );
+  });
+
+  test('extracts conventional commit after markdown diff analysis', () => {
+    const mixed = [
+      '2. **Identify Key Changes & Intent:**',
+      '- Removed stale copy from the download page.',
+      '',
+      'feat(site): refresh download page icons and copy',
+      '',
+      'Align platform branding with current marketing assets.',
+    ].join('\n');
+
+    assert.match(extractCommitMessageFromChain(mixed), /^feat\(site\):/);
+  });
+});
+
+describe('looksLikeDiffAnalysisText', () => {
+  test('detects numbered markdown diff walkthroughs', () => {
+    const sample = '2. **Identify Key Changes & Intent:**\n- Removed stale copy.';
+    assert.equal(looksLikeDiffAnalysisText(sample), true);
+  });
 });
 
 describe('resolveCommitMessageDisplayText', () => {
@@ -235,6 +285,45 @@ describe('resolveCommitMessageDisplayText', () => {
     assert.equal(
       resolveCommitMessageDisplayText(partial, partial, { reasoningFallback: false }),
       '',
+    );
+  });
+
+  test('does not stream heuristic reasoning paragraphs before a conventional subject', () => {
+    const partial = [
+      'Need to focus on the git module changes.',
+      'The diff updates commit message extraction.',
+    ].join('\n');
+    assert.equal(
+      resolveCommitMessageDisplayText(partial, '', { reasoningFallback: false }),
+      '',
+    );
+  });
+
+  test('streams partial conventional commit subjects while generation is in flight', () => {
+    const partial = [
+      'The user wants a commit message.',
+      'fix(git): extract commit message from reasoning',
+    ].join('\n');
+    assert.equal(
+      resolveCommitMessageDisplayText(partial, '', { reasoningFallback: false }),
+      'fix(git): extract commit message from reasoning',
+    );
+  });
+
+  test('prefers reasoning channel over heuristic content false positives', () => {
+    const content = [
+      'Need to focus on the git module changes.',
+      'The diff updates commit message extraction.',
+    ].join('\n');
+    const reasoning = [
+      'Let me analyze the diff.',
+      '',
+      'fix(git): ignore reasoning paragraphs during streaming',
+    ].join('\n');
+
+    assert.equal(
+      resolveCommitMessageDisplayText(content, reasoning, { reasoningFallback: true }),
+      'fix(git): ignore reasoning paragraphs during streaming',
     );
   });
 

@@ -41,7 +41,19 @@ const CONVENTIONAL_COMMIT_LINE_RE = new RegExp(
 
 /** Lines that are model reasoning / meta commentary, not commit body text. */
 const REASONING_LINE_RE =
-  /^\s*(?:the user |i need |i should |i will |let me |thinking(?:\s+process)?\s*:|looking at |based on |(?:okay|alright|hmm|right|so|well|first|next|now)[,.]?\s+(?:the|i|let|this|that)|looks good|that should|this looks|the diff |the changes |this diff |these changes |analy(?:s|z)(?:e|ing)|i(?:'ll| will) (?:use|write|draft|create|choose|pick|go with))/i;
+  /^\s*(?:the user |they are |the question |i can |i need |i should |i will |i(?:'m| am) going |let me |thinking(?:\s+process)?\s*:|looking at |based on |(?:okay|alright|hmm|right|so|well|first|next|now)[,.]?\s+(?:the|i|let|this|that|so|now|here)|looks good|that should|this looks|the diff |the changes |this diff |these changes |analy(?:s|z)(?:e|ing)|i(?:'ll| will) (?:use|write|draft|create|choose|pick|go with)|need to |focus on |to draft |to write )/i;
+
+/** LM Studio / local models often emit markdown diff walkthroughs before (or instead of) a commit. */
+const DIFF_ANALYSIS_LINE_RE =
+  /^\s*(?:\d+\.\s+(?:\*\*)?|[-*]\s+(?:Removed|Updated|Added|Changed|Fixed|Deleted|Replaced|Modified|Introduced)\b|\*\*[^*]+:\*\*)/i;
+
+const DIFF_ANALYSIS_TEXT_RE =
+  /\bidentify key changes\b|\bkey changes\s*&\s*intent\b|\(likely\b|\(probably\b|\(possibly\b|ui\/ux cleanup\b/i;
+
+export interface CommitMessageExtractOptions {
+  /** When false, only explicit prefixes and conventional commit lines qualify. */
+  allowHeuristicFallback?: boolean;
+}
 
 const MAX_PATCH_CHARS = 12_000;
 const MAX_FILE_HUNK_CHARS = 4_000;
@@ -75,6 +87,7 @@ function buildCommitMessageSystemPrompt(useGitmoji: boolean): string {
   const lines = [
     'You write high-quality git commit messages from git diffs.',
     'Output ONLY the commit message — no markdown fences, explanations, or prefixes like "Commit message:".',
+    'Never output numbered steps, bullet analyses, diff walkthroughs, or markdown headers — go straight to the commit text.',
     '',
     'Subject line:',
     '- Imperative mood, ≤72 characters, no trailing period',
@@ -183,7 +196,25 @@ export function buildGitCommitMessagePrompt(
 function looksLikeReasoningLine(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return false;
+  if (DIFF_ANALYSIS_LINE_RE.test(trimmed)) return true;
   return REASONING_LINE_RE.test(trimmed);
+}
+
+/** True when text is a markdown diff analysis / thinking walkthrough, not a commit message. */
+export function looksLikeDiffAnalysisText(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  if (DIFF_ANALYSIS_TEXT_RE.test(trimmed)) return true;
+
+  const lines = trimmed.split('\n').map((line) => line.trim()).filter(Boolean);
+  if (lines.length === 0) return false;
+
+  const analysisLines = lines.filter(
+    (line) => DIFF_ANALYSIS_LINE_RE.test(line) || DIFF_ANALYSIS_TEXT_RE.test(line),
+  ).length;
+  if (analysisLines === 0) return false;
+  if (lines.some((line) => CONVENTIONAL_COMMIT_LINE_RE.test(line))) return false;
+  return analysisLines >= 1;
 }
 
 function hasUnclosedThinkingTag(text: string): boolean {
@@ -255,6 +286,7 @@ export function stripReasoningFraming(text: string): string {
 }
 
 function looksLikeCommitMessageSegment(segment: string): boolean {
+  if (looksLikeDiffAnalysisText(segment)) return false;
   const lines = segment.trim().split('\n').filter((line) => line.trim());
   if (lines.length === 0) return false;
   const firstLine = lines[0].trim();
@@ -265,11 +297,37 @@ function looksLikeCommitMessageSegment(segment: string): boolean {
   }
   if (firstLine.length <= 72 && !firstLine.endsWith('?')) {
     const words = firstLine.split(/\s+/);
-    if (words.length >= 2 && words.length <= 12 && !/^(this|these|the|that|there|it|strip)\s/i.test(firstLine)) {
+    if (
+      words.length >= 2 &&
+      words.length <= 12 &&
+      !/^(this|these|the|that|there|it|strip|need|focus|\d+\.)\s*/i.test(firstLine)
+    ) {
       return true;
     }
   }
   return false;
+}
+
+/** True when buffered text is mostly model reasoning with no commit subject yet. */
+function looksLikeReasoningChain(text: string): boolean {
+  if (looksLikeDiffAnalysisText(text)) return true;
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length < 2) return false;
+  if (lines.some((line) => CONVENTIONAL_COMMIT_LINE_RE.test(line))) return false;
+  const reasoningLines = lines.filter((line) => looksLikeReasoningLine(line)).length;
+  return reasoningLines > 0;
+}
+
+function rejectDiffAnalysis(candidate: string): string {
+  return looksLikeDiffAnalysisText(candidate) ? '' : candidate;
+}
+
+function isHighConfidenceCommitMessage(text: string): boolean {
+  const firstLine = text.split('\n')[0]?.trim() ?? '';
+  return CONVENTIONAL_COMMIT_LINE_RE.test(firstLine);
 }
 
 function extractExplicitCommitMessagePrefix(text: string): string {
@@ -291,17 +349,10 @@ function collectCommitBlockFromLine(lines: string[], subjectIdx: number): string
   return kept.join('\n').trim();
 }
 
-/**
- * Pull the commit message out of a reasoning chain. Prefer the last conventional
- * commit block; otherwise the last paragraph that looks like a commit message.
- */
-export function extractCommitMessageFromChain(raw: string): string {
-  const stripped = stripThinkingFromCommitOutput(raw);
-  if (!stripped) return '';
-
+function extractHighConfidenceCommitMessage(stripped: string): string {
   const prefixed = extractExplicitCommitMessagePrefix(stripped);
   if (prefixed) {
-    const candidate = sanitizeCommitMessage(stripReasoningFraming(prefixed));
+    const candidate = rejectDiffAnalysis(sanitizeCommitMessage(stripReasoningFraming(prefixed)));
     if (candidate) return candidate;
   }
 
@@ -310,20 +361,39 @@ export function extractCommitMessageFromChain(raw: string): string {
     const trimmed = lines[i].trim();
     if (!trimmed || looksLikeReasoningLine(trimmed)) continue;
     if (CONVENTIONAL_COMMIT_LINE_RE.test(trimmed)) {
-      return sanitizeCommitMessage(collectCommitBlockFromLine(lines, i));
+      return rejectDiffAnalysis(sanitizeCommitMessage(collectCommitBlockFromLine(lines, i)));
     }
   }
+
+  return '';
+}
+
+/**
+ * Pull the commit message out of a reasoning chain. Prefer the last conventional
+ * commit block; otherwise the last paragraph that looks like a commit message.
+ */
+export function extractCommitMessageFromChain(
+  raw: string,
+  options?: CommitMessageExtractOptions,
+): string {
+  const stripped = stripThinkingFromCommitOutput(raw);
+  if (!stripped) return '';
+
+  const highConfidence = extractHighConfidenceCommitMessage(stripped);
+  if (highConfidence) return highConfidence;
+
+  if (options?.allowHeuristicFallback === false) return '';
 
   const segments = splitThinkingSegments(stripped);
   for (let i = segments.length - 1; i >= 0; i -= 1) {
     if (!looksLikeCommitMessageSegment(segments[i])) continue;
-    const candidate = sanitizeCommitMessage(stripReasoningFraming(segments[i]));
+    const candidate = rejectDiffAnalysis(sanitizeCommitMessage(stripReasoningFraming(segments[i])));
     if (candidate) return candidate;
   }
 
   const framed = stripReasoningFraming(stripped);
   if (framed && looksLikeCommitMessageSegment(framed)) {
-    return sanitizeCommitMessage(framed);
+    return rejectDiffAnalysis(sanitizeCommitMessage(framed));
   }
 
   return '';
@@ -346,30 +416,45 @@ export function resolveCommitMessageDisplayText(
   const content = contentText.trim();
   const reasoning = reasoningText.trim();
   const mirrored = content.length > 0 && reasoning.length > 0 && content === reasoning;
+  const allowHeuristicFallback = options?.reasoningFallback === true;
+  const extractOpts: CommitMessageExtractOptions = { allowHeuristicFallback };
+
+  const tryExtract = (text: string): string => extractCommitMessageFromChain(text, extractOpts);
 
   if (content.length > 0) {
-    const fromContent = extractCommitMessageFromChain(contentText);
-    if (fromContent) return fromContent;
+    const fromContent = tryExtract(contentText);
+    if (fromContent) {
+      const reasoningChain = looksLikeReasoningChain(content);
+      if (!reasoningChain || isHighConfidenceCommitMessage(fromContent)) {
+        return fromContent;
+      }
+    }
 
-    // Fast path: clean one-shot content with no reasoning markers.
-    if (!mirrored && content.split('\n').length <= 4) {
+    // Fast path: clean one-shot content with no reasoning markers (final pass only).
+    if (
+      allowHeuristicFallback &&
+      !mirrored &&
+      !looksLikeReasoningChain(content) &&
+      !looksLikeDiffAnalysisText(content) &&
+      content.split('\n').length <= 4
+    ) {
       const firstLine = content.split('\n')[0]?.trim() ?? '';
       if (firstLine && !looksLikeReasoningLine(firstLine)) {
-        const direct = sanitizeCommitMessage(content);
+        const direct = rejectDiffAnalysis(sanitizeCommitMessage(content));
         if (direct) return direct;
       }
     }
   }
 
-  if (!options?.reasoningFallback) return '';
+  if (!allowHeuristicFallback) return '';
 
   if (reasoning.length > 0 && !mirrored) {
-    const fromReasoning = extractCommitMessageFromChain(reasoningText);
+    const fromReasoning = tryExtract(reasoningText);
     if (fromReasoning) return fromReasoning;
   }
 
   if (content.length > 0) {
-    return extractCommitMessageFromChain(contentText);
+    return tryExtract(contentText);
   }
 
   return '';
@@ -456,7 +541,7 @@ export async function fetchGitCommitMessage(
     model: binding.modelId || undefined,
     messages,
     temperature: Math.min(config.temperature + 0.1, 0.7),
-    max_tokens: Math.max(config.maxTokens, 384),
+    max_tokens: Math.max(config.maxTokens, 768),
     stream: true,
   };
 
