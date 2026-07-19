@@ -21,7 +21,7 @@ describe('buildLiveStreamUsage', () => {
     assert.equal(usage.total_tokens, 100);
   });
 
-  test('includes thinking text in the completion estimate', () => {
+  test('does not estimate completion from thinking text (provider reports it)', () => {
     const usage = buildLiveStreamUsage({
       streamMeta: {},
       t0: 0,
@@ -30,7 +30,7 @@ describe('buildLiveStreamUsage', () => {
       partialThinking: 'efgh',
     });
 
-    assert.equal(usage.completion_tokens, 2);
+    assert.equal(usage.completion_tokens, 1);
   });
 
   test('prefers provider usage from stream meta when present', () => {
@@ -62,6 +62,25 @@ describe('buildLiveStreamUsage', () => {
     assert.equal(usage.prompt_tokens, 500);
     assert.equal(usage.completion_tokens, 81);
     assert.equal(usage.total_tokens, 581);
+  });
+
+  test('does not sum prompt tokens across completed tool-loop rounds', () => {
+    const usage = buildLiveStreamUsage({
+      streamMeta: {
+        usage: { prompt_tokens: 12_000, completion_tokens: 40, total_tokens: 12_040 },
+      },
+      t0: 0,
+      tFirst: 10,
+      partialText: '',
+      priorSegments: [
+        { prompt_tokens: 10_000, completion_tokens: 80, total_tokens: 10_080 },
+        { prompt_tokens: 11_000, completion_tokens: 60, total_tokens: 11_060 },
+      ],
+    });
+
+    assert.equal(usage.prompt_tokens, 12_000);
+    assert.equal(usage.completion_tokens, 180);
+    assert.equal(usage.total_tokens, 12_180);
   });
 });
 

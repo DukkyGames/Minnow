@@ -10,6 +10,37 @@ export interface SubAgentStatsSlice {
   stats?: Stats;
 }
 
+/**
+ * Roll up usage across tool-loop rounds in one user turn.
+ * Each API call reports the full prompt size (not a delta), so only the latest
+ * prompt is kept; completion tokens are summed across rounds.
+ */
+export function aggregateTurnUsageSegments(segments: Usage[]): Usage {
+  if (segments.length === 0) return {};
+
+  let completion = 0;
+  let hasCompletion = false;
+  let latestPrompt: number | undefined;
+
+  for (const u of segments) {
+    if (u.prompt_tokens != null && Number.isFinite(u.prompt_tokens)) {
+      latestPrompt = u.prompt_tokens;
+    }
+    if (u.completion_tokens != null && Number.isFinite(u.completion_tokens)) {
+      completion += u.completion_tokens;
+      hasCompletion = true;
+    }
+  }
+
+  const out: Usage = {};
+  if (latestPrompt != null) out.prompt_tokens = latestPrompt;
+  if (hasCompletion) out.completion_tokens = completion;
+  if (out.prompt_tokens != null || out.completion_tokens != null) {
+    out.total_tokens = (out.prompt_tokens ?? 0) + (out.completion_tokens ?? 0);
+  }
+  return out;
+}
+
 /** Sum numeric usage fields across segments (missing treated as zero). */
 export function sumUsageSegments(segments: Usage[]): Usage {
   let prompt = 0;
