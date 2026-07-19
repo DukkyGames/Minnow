@@ -8,6 +8,8 @@ const { SETTINGS_INTEGRATIONS_HUBS, hubForArea } = await import(
 describe('settings integrations hubs', () => {
   test('hubForArea maps legacy integration areas', () => {
     assert.equal(hubForArea('search'), 'web-research');
+    assert.equal(hubForArea('deep-research'), 'deep-research');
+    assert.equal(hubForArea('servers'), 'servers');
     assert.equal(hubForArea('mcp'), 'dev-stack');
     assert.equal(hubForArea('webhooks'), 'external');
     assert.equal(hubForArea('skills'), 'tools-skills');

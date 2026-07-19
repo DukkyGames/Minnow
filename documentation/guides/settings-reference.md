@@ -37,7 +37,7 @@ Open via **Settings** (`#/settings/<category>`) or legacy `#/settings/<area>`.
 | **Integrations** | Search, Deep Research, Servers, Tools, Skills, MCP, LSP, Editor, Webhooks, OAuth |
 | **Advanced** | Orchestration, Evals |
 
-**Integrations hubs** (4 sub-tabs): Web & research · Tools & skills · Dev stack · External.
+**Integrations hubs** (6 sub-tabs): Search · Deep Research · Servers · Tools & skills · Dev stack · External.
 
 **Voice** settings moved to **Models app → Voice** (`#/app/models/voice`). Device routing remains under **Settings → Audio**.
 
