@@ -110,6 +110,24 @@ Stored primarily in browser `localStorage` (custom token overrides may sync via 
 
 Also: `config.activeProviderId`.
 
+#### One-click provider presets
+
+Catalog: [`src/providers/presets.ts`](../../src/providers/presets.ts). Presets appear as chips in **onboarding → Cloud API** and as a preset grid in **Settings → Models → Providers → Add provider** (choose a preset or **Add custom provider** for the full form).
+
+| Preset | Base URL | API kind | Auth | Notes |
+|--------|----------|----------|------|-------|
+| OpenCode Go | `https://opencode.ai/zen/go` | OpenAI v1 | Bearer | Gateway auto-API for mixed catalogs |
+| OpenCode Zen | `https://opencode.ai/zen` | OpenAI v1 | Bearer | Gateway auto-API |
+| Anthropic | `https://api.anthropic.com` | Anthropic Messages | X-Api-Key | |
+| DeepSeek | `https://api.deepseek.com` | OpenAI v1 | Bearer | |
+| GitHub Copilot | `https://api.githubcopilot.com` | OpenAI v1 | Bearer | Gateway auto-API; OAuth Bearer token |
+
+Also available: OpenRouter, OpenAI, Groq, Mistral (same catalog).
+
+**GitHub Copilot account variants:** edit the base URL after applying the preset — Business: `https://api.business.githubcopilot.com`, Enterprise: `https://api.enterprise.githubcopilot.com`.
+
+**Env overrides:** there are no dedicated environment variables for preset base URLs. Provider profiles are stored under `~/.minnow/providers/<id>/` (override data dir with `MINNOW_HOME`). Network bind mode uses `MINNOW_NETWORK` (`local` / `lan`).
+
 ### Routing
 
 Per routing row: **provider**, **model**, **sampler override**, **thinking mode**, **fallback chain**.
