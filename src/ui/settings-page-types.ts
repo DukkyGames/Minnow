@@ -133,12 +133,22 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
 export const SETTINGS_SECTIONS: SettingsSectionId[] =
   SETTINGS_NAV_GROUPS.flatMap((group) => group.sections);
 
-/** Integrations hub groupings (4 subnav tabs instead of 10 area tabs). */
+/** Integrations hub groupings (6 subnav tabs instead of 10 area tabs). */
 export const SETTINGS_INTEGRATIONS_HUBS = [
   {
     id: 'web-research',
-    label: 'Web & research',
-    areas: ['search', 'deep-research', 'servers'],
+    label: 'Search',
+    areas: ['search'],
+  },
+  {
+    id: 'deep-research',
+    label: 'Deep Research',
+    areas: ['deep-research'],
+  },
+  {
+    id: 'servers',
+    label: 'Servers',
+    areas: ['servers'],
   },
   {
     id: 'tools-skills',

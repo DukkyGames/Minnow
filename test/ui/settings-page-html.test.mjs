@@ -191,17 +191,23 @@ describe('settings page HTML', () => {
     assert.match(html, /class="tools-list tools-list--composer"/);
   });
 
-  test('integrations category uses four hub containers', () => {
+  test('integrations category uses six hub containers', () => {
     assert.match(html, /id="settingsHub-web-research"/);
+    assert.match(html, /id="settingsHub-deep-research"/);
+    assert.match(html, /id="settingsHub-servers"/);
     assert.match(html, /id="settingsHub-tools-skills"/);
     assert.match(html, /id="settingsHub-dev-stack"/);
     assert.match(html, /id="settingsHub-external"/);
     assert.match(html, /data-hub-jump="web-research"/);
+    assert.match(html, /data-hub-jump="deep-research"/);
+    assert.match(html, /data-hub-jump="servers"/);
     assert.match(html, /settings-hub is-active[^"]*" id="settingsHub-web-research"/);
     assert.match(html, /class="settings-hub__lead"/);
     assert.doesNotMatch(html, /settings-hub__title/);
     assert.doesNotMatch(html, /data-area-jump="mcp"/);
     assert.match(html, /data-settings-nav-hub="dev-stack"/);
+    assert.match(html, /data-settings-nav-hub="servers"/);
+    assert.match(html, /data-settings-nav-hub="deep-research"/);
   });
 
   test('general section suppresses duplicate section title', () => {
