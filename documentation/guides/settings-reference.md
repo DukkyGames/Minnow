@@ -13,7 +13,7 @@ For storage layout and `config.json` overview, see [configuration.md](configurat
 | Item | Count |
 |------|------:|
 | Settings sidebar categories | 6 |
-| Settings sections (areas) | 27 |
+| Settings sections (areas) | 28 |
 | Cataloged searchable fields | ~100 |
 | Built-in tools (per-tool permissions) | 89 |
 | Composer modes | 6 |
@@ -30,7 +30,7 @@ Open via **Settings** (`#/settings/<category>`) or legacy `#/settings/<area>`.
 
 | Category | Sections |
 |----------|----------|
-| **General** | General, Audio |
+| **General** | General, Notifications, Audio, About |
 | **Appearance** | Appearance |
 | **Models** | Providers, Routing, Sampler, Thinking, Usage & cost |
 | **Agents** | Prompts, Rules, Modes, Experts, Work agents, Agent packs, Sub-agents, Autopilot |
@@ -49,6 +49,15 @@ Open via **Settings** (`#/settings/<category>`) or legacy `#/settings/<area>`.
 
 | Setting | Persistence | Notes |
 |---------|-------------|-------|
+| Network access | `config.server.networkAccess` | `local` (loopback) vs `lan` (Wi‑Fi). Override: `MINNOW_NETWORK` |
+| Terminal behavior | — | Info only: commands run in background |
+| Constrained tool calls | `config.toolCalls.useConstrainedDecoding` | JSON Schema on tool turns |
+| Connection summary | — | Read-only provider/storage summary |
+
+### General → Notifications
+
+| Setting | Persistence | Notes |
+|---------|-------------|-------|
 | Enable notifications | `localStorage` (`notification prefs`) | Master bell toggle |
 | Silence notifications (dropdown) | `minnow.notifications.muted` | Quick mute from menubar bell popover; blocks new alerts until cleared |
 | Chat notifications | notification prefs | Background chat finish/error |
@@ -56,10 +65,6 @@ Open via **Settings** (`#/settings/<category>`) or legacy `#/settings/<area>`.
 | Background job notifications | notification prefs | Scheduler, research, memory/skill proposals |
 | Play notification sound | notification prefs | When Minnow is unfocused (Electron: includes alt-tab / minimized) |
 | Notification sound | notification prefs | `none`, `chime`, `ping`, `soft`, `pop` |
-| Network access | `config.server.networkAccess` | `local` (loopback) vs `lan` (Wi‑Fi). Override: `MINNOW_NETWORK` |
-| Terminal behavior | — | Info only: commands run in background |
-| Constrained tool calls | `config.toolCalls.useConstrainedDecoding` | JSON Schema on tool turns |
-| Connection summary | — | Read-only provider/storage summary |
 
 ### General → Audio
 

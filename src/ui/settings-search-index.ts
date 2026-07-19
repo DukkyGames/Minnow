@@ -38,7 +38,8 @@ const TOOL_CATEGORY_LABELS: Record<ToolCategory, string> = {
 const SECTION_SEARCH_ALIASES: Partial<
   Record<SettingsSectionId, string[]>
 > = {
-  general: ['notifications', 'bell', 'sound', 'alert', 'background chat', 'network', 'lan', 'wifi', 'remote'],
+  general: ['network', 'lan', 'wifi', 'remote', 'terminal', 'updates'],
+  notifications: ['notifications', 'bell', 'sound', 'alert', 'background chat', 'menubar'],
   features: ['orchestration', 'orchestrate', 'orchestrator', 'hub', 'board'],
   'agent-center': ['prompts', 'prompt', 'profile', 'system prompt', 'modes', 'work agents', 'sub-agents'],
   rules: ['user rules', 'cursor rules', 'rule'],

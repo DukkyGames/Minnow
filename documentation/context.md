@@ -310,7 +310,7 @@ Design reference: [`DESIGN.md`](../DESIGN.md), [`documentation/design-system/`](
 | **Calendar** | `#/app/calendar` | `server/calendar/`, SQLite `calendar.db`, CalDAV |
 | **Email** | `#/app/email` | `server/email/`, IMAP/SMTP, encrypted accounts, SQLite `mail-<accountId>.db` |
 | **Voice** | Models → Voice | `server/voice/`, local Whisper + Qwen TTS option |
-| **Settings** | `#/app/settings` | Full config via `/api/config/*` |
+| **Settings** | `#/app/settings` | Full config via `/api/config/*`; General category includes General, Notifications, Audio, About |
 
 **Deep Research** is a dedicated panel (not a composer mode). **Compare** runs 2–6 blind model slots. **Bench** runs integration + academic packs; distinct from eval harness task packs.
 
