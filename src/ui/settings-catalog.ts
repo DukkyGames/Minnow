@@ -219,6 +219,11 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   field('models.usage', 'Usage & cost', 'models', 'usage', {
     keywords: ['tokens', 'billing', 'inference'],
   }),
+  field('models.usage.pricing', 'Model pricing', 'models', 'usage', {
+    keywords: ['usd', 'per million', 'rates'],
+  }),
+  field('models.usage.active', 'Active chat usage', 'models', 'usage'),
+  field('models.usage.session', 'Workspace session usage', 'models', 'usage'),
 
   // —— Agents ——
   field('agents.center', 'Agents center', 'agents', 'agent-center', {
