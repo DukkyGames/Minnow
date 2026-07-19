@@ -65,14 +65,12 @@ function appendNumberSetting(
 }
 
 /** Append Intent mode settings group into an existing Editor settings mount. */
-export function appendEditorIntentSettings(
+export async function appendEditorIntentSettings(
   mount: HTMLElement,
   refresh: () => void,
-): void {
-  void (async () => {
-    const config = await loadEditorIntentModeConfig();
-    renderIntentSettingsGroup(mount, config, refresh);
-  })();
+): Promise<void> {
+  const config = await loadEditorIntentModeConfig();
+  renderIntentSettingsGroup(mount, config, refresh);
 }
 
 function renderIntentSettingsGroup(

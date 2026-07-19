@@ -83,6 +83,9 @@ export function resolvePanelBrowseCwd(input: {
 
   if (worktreeRoot) return worktreeRoot;
   return getWorkspacePath().trim() || '.';
+}
+
+/**
  * Pick a worktree path that exists in `worktrees`, falling back to the workspace root entry.
  */
 export function resolveKnownWorktreePath(

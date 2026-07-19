@@ -16,6 +16,7 @@ import {
 } from './settings-model-binding';
 import { isLocalServerAvailable } from '../tools/config';
 import { appendEditorFundamentalsSettings } from './editor-fundamentals-settings';
+import { appendEditorIntentSettings } from './editor-intent-settings';
 import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
 import { getActiveModelIdFromDom } from './editor-ai-completion-client';
@@ -462,14 +463,28 @@ function renderEditorSettingsBody(
   mountModelSourceBlock(modelGroup, config, refresh);
 }
 
+/** Bumped on each render so stale async work cannot append to a replaced DOM. */
+let editorSettingsRenderGeneration = 0;
+
 /** Render the full Editor settings section into #settingsEditorBody. */
 export async function renderEditorSettingsSection(): Promise<void> {
   const mount = document.getElementById('settingsEditorBody');
   if (!mount) return;
+
+  const generation = ++editorSettingsRenderGeneration;
   mount.replaceChildren();
 
   const online = isLocalServerAvailable();
   const config = await loadEditorAiCompletionConfig();
+  if (generation !== editorSettingsRenderGeneration) return;
+
   await appendEditorFundamentalsSettings(mount);
+  if (generation !== editorSettingsRenderGeneration) return;
+
   renderEditorSettingsBody(mount, config, online);
+  if (generation !== editorSettingsRenderGeneration) return;
+
+  await appendEditorIntentSettings(mount, () => {
+    void renderEditorSettingsSection();
+  });
 }
