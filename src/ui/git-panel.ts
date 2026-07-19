@@ -104,6 +104,10 @@ import {
   renderGitNoRepositoryState,
 } from './git-no-repo-state';
 import {
+  mergeToMainButtonVisible,
+  runMergeToMain,
+} from './git-merge-to-main';
+import {
   renderGitStatusWithSendToChat,
   type GitErrorChatContext,
   type GitErrorChatKind,
@@ -125,6 +129,7 @@ let bodyMount: HTMLElement | null = null;
 
 let branchSelect: HTMLSelectElement | null = null;
 let branchDeleteBtn: HTMLButtonElement | null = null;
+let mergeToMainBtn: HTMLButtonElement | null = null;
 
 let cwdSelect: HTMLSelectElement | null = null;
 let worktreeDeleteBtn: HTMLButtonElement | null = null;
@@ -325,6 +330,24 @@ function syncWorktreeDeleteButton(): void {
   const selected = cwdSelect.value;
   const canDelete = Boolean(selected && !isMainWorktreePath(selected));
   worktreeDeleteBtn.disabled = !canDelete;
+  syncMergeToMainButton();
+}
+
+function syncMergeToMainButton(localBranches: string[] = []): void {
+  if (!mergeToMainBtn) return;
+
+  const ws = getWorkspacePath().trim();
+  const panelPath = panelCwd ?? ws;
+  const sourceBranch = currentBranchName || branchSelect?.value || '';
+  const visible = mergeToMainButtonVisible({
+    sourceBranch,
+    mainWorkspaceCwd: ws,
+    onMainWorktree: Boolean(ws && pathsEqual(panelPath, ws)),
+    localBranches,
+  });
+
+  mergeToMainBtn.hidden = !visible;
+  mergeToMainBtn.disabled = !visible;
 }
 
 function openAddBranchPopover(anchor: HTMLButtonElement): void {
@@ -385,6 +408,52 @@ function openAddWorktreePopover(anchor: HTMLButtonElement): void {
       void syncFileTreeGitPollCwd();
     },
   });
+}
+
+async function handleMergeToMain(): Promise<void> {
+  const ws = getWorkspacePath().trim();
+  if (!ws) {
+    setStatus('No workspace open', true);
+    return;
+  }
+
+  const branchResult = await gitBranches(getEffectiveCwdArg());
+  const localBranches = branchResult.ok ? (branchResult.local ?? []) : [];
+  const sourceBranch = currentBranchName || branchSelect?.value || '';
+  const panelPath = panelCwd ?? ws;
+
+  const ctx = {
+    sourceBranch,
+    mainWorkspaceCwd: ws,
+    onMainWorktree: pathsEqual(panelPath, ws),
+    localBranches,
+  };
+
+  if (!mergeToMainButtonVisible(ctx)) return;
+
+  const { resolveTrunkBranchName } = await import('../lib/git-trunk-branch');
+  const trunk = resolveTrunkBranchName(localBranches);
+  if (!window.confirm(`Merge branch "${sourceBranch}" into ${trunk}?`)) return;
+
+  setStatus('Merging…');
+  const result = await runMergeToMain(ctx);
+  if (!result.ok) {
+    if (result.error === 'cancelled') {
+      setStatus('');
+      return;
+    }
+    const error = result.error ?? 'Merge failed';
+    setStatus(error, true, result.conflict || /merge/i.test(error) ? 'merge' : undefined);
+    showToast(error, 'error');
+    return;
+  }
+
+  setStatus('');
+  showToast(`Merged ${sourceBranch} into ${trunk}`, 'success');
+  panelCwd = ws || undefined;
+  panelCwdUserOverride = true;
+  await refreshGitPanel();
+  void syncFileTreeGitPollCwd();
 }
 
 async function handleDeleteWorktree(): Promise<void> {
@@ -777,9 +846,14 @@ function ensurePanelDom(): HTMLElement {
     void runGitOp(() => gitPush({ cwd: getEffectiveCwdArg() }), { successMessage: 'Pushed changes' }),
   );
 
+  mergeToMainBtn = document.createElement('button');
+  mergeToMainBtn.type = 'button';
+  mergeToMainBtn.className = 'git-panel-action-btn git-panel-action-btn--merge-main';
+  mergeToMainBtn.hidden = true;
+  decorateGitSourceControlButton(mergeToMainBtn, 'Merge to main');
+  mergeToMainBtn.addEventListener('click', () => void handleMergeToMain());
 
-
-  branchRow.append(aheadBehindEl, pullBtn, pushBtn);
+  branchRow.append(aheadBehindEl, pullBtn, pushBtn, mergeToMainBtn);
 
   toolbar.append(cwdWrap, branchWrap, branchRow);
 
@@ -1704,6 +1778,7 @@ async function refreshBranchSelect(): Promise<void> {
   }
 
   syncBranchDeleteButton();
+  syncMergeToMainButton(filterUserFacingBranches(result.local ?? []));
 
 }
 
@@ -2132,6 +2207,7 @@ export function resetGitPanelForTests(): void {
 
   branchSelect = null;
   branchDeleteBtn = null;
+  mergeToMainBtn = null;
 
   cwdSelect = null;
   worktreeDeleteBtn = null;
