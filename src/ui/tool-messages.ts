@@ -18,6 +18,9 @@ const FILE_MUTATION_TOOLS = new Set([
   'insert_at_line',
   'move_file',
   'delete_path',
+  'create_pdf',
+  'create_spreadsheet',
+  'create_word_document',
 ]);
 
 /** Shell tools that expose a user-facing Stop control while a run is active. */

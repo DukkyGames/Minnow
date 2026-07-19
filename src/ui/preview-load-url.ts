@@ -6,6 +6,7 @@ import type { PreviewSource } from '../state/file-panel';
 import { withSessionToken } from '../api/session-token.ts';
 
 const PREVIEW_FILE_API = '/api/preview/file/';
+const PREVIEW_DOCUMENT_HTML_API = '/api/preview/document-html/';
 
 function normalizeWorkspacePath(input: string): string {
   return input.replace(/^\/+/, '').trim();
@@ -35,11 +36,40 @@ export function workspacePreviewUrl(
   return withSessionToken(url);
 }
 
+/** Build HTML preview URL for spreadsheet/Word workspace files. */
+export function workspaceDocumentHtmlUrl(
+  relativePath: string,
+  cacheBust?: number,
+  workspaceRoot?: string,
+): string {
+  const normalized = normalizeWorkspacePath(relativePath);
+  const encoded = normalized.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+  let url = `${PREVIEW_DOCUMENT_HTML_API}${encoded}`;
+  if (cacheBust !== undefined) {
+    url = appendQueryParam(url, 'v', String(cacheBust));
+  }
+  const root = workspaceRoot?.trim();
+  if (root) {
+    url = appendQueryParam(url, 'workspaceRoot', root);
+  }
+  return withSessionToken(url);
+}
+
 function resolveRootRelativeUrl(url: string): string {
   if (url.startsWith('/') && !url.startsWith('//')) {
     return `${window.location.origin}${url}`;
   }
   return url;
+}
+
+/** Absolute URL for spreadsheet/Word HTML preview in the file viewer. */
+export function resolveDocumentHtmlLoadUrl(
+  relativePath: string,
+  cacheBust?: number,
+  workspaceRoot?: string,
+): string {
+  const path = workspaceDocumentHtmlUrl(relativePath, cacheBust, workspaceRoot);
+  return `${window.location.origin}${path}`;
 }
 
 /** Absolute URL passed to the preview guest (Electron or iframe with full origin). */

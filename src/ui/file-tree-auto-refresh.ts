@@ -19,6 +19,9 @@ export const FILE_TREE_MUTATING_TOOLS = new Set<string>([
   'move_file',
   'copy_file',
   'delete_path',
+  'create_pdf',
+  'create_spreadsheet',
+  'create_word_document',
 ]);
 
 /**
