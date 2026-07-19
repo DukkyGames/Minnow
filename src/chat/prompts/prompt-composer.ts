@@ -21,8 +21,8 @@ import type {
 /** Mandatory concatenation order for system message parts. */
 export const PART_ORDER: PromptPartId[] = [
   'base',
-  'expert',
   'mode',
+  'expert',
   'work-agent',
   'tool-usage',
   'info',

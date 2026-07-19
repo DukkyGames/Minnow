@@ -73,7 +73,7 @@ export async function enableCdpPicking(
   onPick: (picked: CdpPickedElement) => void,
   onError?: (message: string) => void,
 ): Promise<CdpPickSession> {
-  if (wc.isDestroyed()) {
+  if (typeof wc.isDestroyed === 'function' && wc.isDestroyed()) {
     throw new Error('Preview guest is not available');
   }
   const dbg = wc.debugger as unknown as PickDebuggerLike;

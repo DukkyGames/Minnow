@@ -66,9 +66,14 @@ function getChatShell(): HTMLElement | null {
 
 function resolveResearchReportUrl(researchId: string): string {
   const path = researchReportUrl(researchId);
-  return path.startsWith('/') && !path.startsWith('//')
-    ? `${window.location.origin}${path}`
-    : path;
+  if (!path.startsWith('/') || path.startsWith('//')) {
+    return path;
+  }
+  const origin = window.location?.origin;
+  if (!origin || origin === 'null') {
+    return path;
+  }
+  return `${origin}${path}`;
 }
 
 /**

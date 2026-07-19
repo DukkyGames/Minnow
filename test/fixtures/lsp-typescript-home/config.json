@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "createdAt": "2026-07-17T04:02:32.105Z",
+  "createdAt": "2026-07-19T03:09:49.951Z",
   "migratedFromLocalStorage": false,
   "migratedAt": null,
   "localStorageKeysMigrated": [],
@@ -111,14 +111,25 @@
       "reindexNeeded": false
     }
   },
+  "brain": {
+    "linking": {
+      "minSharedTitleKeywords": 2,
+      "minCosine": 0.75,
+      "retireMinCosine": 0.85,
+      "maxLinks": 3
+    }
+  },
   "synthesis": {
     "enabled": true,
-    "requireConfirmation": true,
+    "requireConfirmation": false,
     "confidenceThreshold": 0.6,
+    "autoWriteConfidence": 0.85,
     "maxProposalsPerTurn": 3,
     "throttleMessagePairs": 4,
     "skillMinRounds": 2,
     "skillMinToolCalls": 2,
+    "skillMinOccurrences": 2,
+    "skillObservationRetentionDays": 45,
     "utilityProviderId": "",
     "utilityModelId": "",
     "maxPendingProposals": 100,
@@ -184,6 +195,9 @@
     "useNativeFim": true,
     "enableCompletionCache": true
   },
+  "gitCommitMessage": {
+    "useGitmoji": true
+  },
   "editorIntentMode": {
     "enabledByDefault": false,
     "autoRecheckDefault": false,
@@ -220,9 +234,9 @@
     }
   },
   "workspace": {
-    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-LLFS8y",
+    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-nx4YDE",
     "recentPaths": [
-      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-LLFS8y"
+      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-nx4YDE"
     ]
   }
 }

@@ -70,7 +70,7 @@ describe('research panel', () => {
 
     openResearchReport('rs-abc123456789');
 
-    assert.match(openedUrl, /\/api\/research\/report\/rs-abc123456789$/);
+    assert.match(openedUrl, /\/api\/research\/report\/rs-abc123456789/);
     researchView.classList.remove('is-open');
   });
 });

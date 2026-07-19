@@ -1,7 +1,0 @@
-{"ts":"2026-07-18T17:18:36.039Z","pid":17784,"source":"server","kind":"lsp-exit","message":"LSP server fake exited on signal SIGTERM","extra":{"serverId":"fake","signal":"SIGTERM","scope":"editor"}}
-{"ts":"2026-07-18T17:18:36.039Z","pid":17784,"source":"server","kind":"lsp-exit","message":"LSP server dockerfile exited on signal SIGTERM","extra":{"serverId":"dockerfile","signal":"SIGTERM","scope":"editor"}}
-{"ts":"2026-07-18T17:18:36.039Z","pid":17784,"source":"server","kind":"lsp-exit","message":"LSP server css exited on signal SIGTERM","extra":{"serverId":"css","signal":"SIGTERM","scope":"editor"}}
-{"ts":"2026-07-18T17:18:36.040Z","pid":17784,"source":"server","kind":"lsp-exit","message":"LSP server yaml-ls exited on signal SIGTERM","extra":{"serverId":"yaml-ls","signal":"SIGTERM","scope":"editor"}}
-{"ts":"2026-07-18T17:18:36.040Z","pid":17784,"source":"server","kind":"lsp-exit","message":"LSP server html exited on signal SIGTERM","extra":{"serverId":"html","signal":"SIGTERM","scope":"editor"}}
-{"ts":"2026-07-18T17:18:36.040Z","pid":17784,"source":"server","kind":"lsp-exit","message":"LSP server pyright exited on signal SIGTERM","extra":{"serverId":"pyright","signal":"SIGTERM","scope":"editor"}}
-{"ts":"2026-07-18T17:18:36.040Z","pid":17784,"source":"server","kind":"lsp-exit","message":"LSP server bash exited on signal SIGTERM","extra":{"serverId":"bash","signal":"SIGTERM","scope":"editor"}}

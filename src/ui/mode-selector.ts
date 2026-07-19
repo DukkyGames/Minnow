@@ -125,6 +125,11 @@ function attachModeSelectorCompactObserver(root: HTMLElement): void {
   const row = getComposerControlsRow(root) ?? root.parentElement;
   if (!row) return;
 
+  if (typeof ResizeObserver === 'undefined') {
+    syncModeSelectorCompact(root);
+    return;
+  }
+
   modeSelectorCompactObserver = new ResizeObserver(() => {
     syncModeSelectorCompact(root);
   });

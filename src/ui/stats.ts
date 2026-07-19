@@ -142,7 +142,8 @@ export function updateStrip(
   const m = modelInfo || {};
 
   function set(id: string, html: string, blank: boolean): void {
-    const el = document.getElementById(id)!;
+    const el = document.getElementById(id);
+    if (!el) return;
     el.innerHTML = html;
     el.classList.toggle('blank', blank);
   }
@@ -186,21 +187,28 @@ export function updateStrip(
   const p = u.prompt_tokens ?? 0;
   const c = u.completion_tokens ?? 0;
   const t = p + c || 1;
-  document.getElementById('barPrompt')!.style.setProperty('--fill-scale', String(p / t || 0));
-  document.getElementById('barCompletion')!.style.setProperty('--fill-scale', String(c / t || 0));
-  document.getElementById('cntPrompt')!.textContent = p ? String(p) : '—';
-  document.getElementById('cntCompletion')!.textContent = c ? String(c) : '—';
+  const barPrompt = document.getElementById('barPrompt');
+  const barCompletion = document.getElementById('barCompletion');
+  const cntPrompt = document.getElementById('cntPrompt');
+  const cntCompletion = document.getElementById('cntCompletion');
+  if (barPrompt && barCompletion && cntPrompt && cntCompletion) {
+    barPrompt.style.setProperty('--fill-scale', String(p / t || 0));
+    barCompletion.style.setProperty('--fill-scale', String(c / t || 0));
+    cntPrompt.textContent = p ? String(p) : '—';
+    cntCompletion.textContent = c ? String(c) : '—';
+  }
 
-  document.getElementById('iArch')!.textContent = m.arch ?? '—';
-  document.getElementById('iQuant')!.textContent = m.quant ?? '—';
-  document.getElementById('iCtx')!.textContent =
-    m.context_length != null ? String(m.context_length) : '—';
-  document.getElementById('iStop')!.textContent = s.stop_reason ?? '—';
-
-  const archEl = document.getElementById('iArch')!;
-  const quantEl = document.getElementById('iQuant')!;
-  const ctxEl = document.getElementById('iCtx')!;
-  const stopEl = document.getElementById('iStop')!;
+  const archEl = document.getElementById('iArch');
+  const quantEl = document.getElementById('iQuant');
+  const ctxEl = document.getElementById('iCtx');
+  const stopEl = document.getElementById('iStop');
+  if (!archEl || !quantEl || !ctxEl || !stopEl) {
+    return;
+  }
+  archEl.textContent = m.arch ?? '—';
+  quantEl.textContent = m.quant ?? '—';
+  ctxEl.textContent = m.context_length != null ? String(m.context_length) : '—';
+  stopEl.textContent = s.stop_reason ?? '—';
   [archEl, quantEl, ctxEl].forEach((el) => {
     el.classList.toggle('lit', el.textContent !== '—');
   });

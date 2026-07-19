@@ -76,7 +76,8 @@ export const DEFAULT_RUNNER_BY_EXT = {
 export const PATH_RUNNER_RULES = [
   { pattern: 'test/headless/preflight.test.mts', runner: 'tsx' },
   { pattern: 'test/sub-agents/scheduler-drain-reject.test.mts', runner: 'tsx-mocks' },
-  { pattern: 'test/research/*.test.mts', runner: 'tsx-mocks' },
+  { pattern: 'test/research/*.test.mts', runner: 'tsx-mocks-loader' },
+  { pattern: 'test/config/*.test.js', runner: 'tsx-mocks' },
   // Both use mock.module and transitively pull in UI code that imports CSS.
   { pattern: 'test/chat/super-plan/stages.test.mts', runner: 'tsx-mocks-loader' },
   { pattern: 'test/super-plan/controller-lifecycle.test.mts', runner: 'tsx-mocks-loader' },

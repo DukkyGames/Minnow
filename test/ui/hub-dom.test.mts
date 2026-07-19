@@ -18,9 +18,11 @@ let domWindow: Window | null = null;
 function setupDom(): void {
   const window = new Window();
   domWindow = window;
+  globalThis.window = window as unknown as Window & typeof globalThis.window;
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
   globalThis.Node = window.Node;
+  globalThis.getComputedStyle = window.getComputedStyle.bind(window);
 
   document.body.innerHTML = `
     <div id="mainColumn">

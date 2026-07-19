@@ -16,13 +16,13 @@ export function scopeIncludesCodebase(scope: ResearchScope): boolean {
 /** Display name for a workspace path in the research picker. */
 export function researchWorkspaceBasename(absPath: string): string {
   const normalized = absPath.replace(/\\/g, '/').replace(/\/+$/, '');
+  if (/^[A-Za-z]:$/.test(normalized)) {
+    return `${normalized.toUpperCase()}\\`;
+  }
   const parts = normalized.split('/').filter(Boolean);
   const last = parts[parts.length - 1];
   if (last) {
     return last;
-  }
-  if (/^[A-Za-z]:$/.test(normalized)) {
-    return `${normalized.toUpperCase()}\\`;
   }
   return absPath || 'Folder';
 }
@@ -47,6 +47,7 @@ export function ensureResearchWorkspaceOption(
   opt.textContent = label?.trim() || researchWorkspaceBasename(path);
   opt.selected = true;
   select.appendChild(opt);
+  select.value = path;
 }
 
 /** Populate a workspace <select> from the server workspace MRU list. */
