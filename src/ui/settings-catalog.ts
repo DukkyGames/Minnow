@@ -246,7 +246,9 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
     keywords: ['persona', 'specialist', 'expert lab'],
   }),
   field('agents.workAgents', 'Work agents', 'agents', 'agent-center'),
-  field('agents.agentPacks', 'Agent packs', 'agents', 'agent-packs'),
+  field('agents.agentPacks', 'Agent packs', 'agents', 'agent-packs', {
+    keywords: ['template', 'download', 'default pack', 'builtin', 'manifest', 'work agent'],
+  }),
   field('agents.subAgents', 'Sub-agents', 'agents', 'agent-center', {
     keywords: ['spawn', 'subagent'],
   }),
@@ -288,7 +290,10 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
     keywords: ['cursor rules', 'instructions'],
   }),
   field('agents.rules.enabled', 'Enable user rules', 'agents', 'rules'),
-  field('agents.rules.text', 'Rules text', 'agents', 'rules'),
+  field('agents.rules.items', 'Rule list', 'agents', 'rules', {
+    keywords: ['cursor rules', 'instructions', 'groups'],
+  }),
+  field('agents.rules.addGroup', 'Add rule group', 'agents', 'rules'),
 
   // —— Integrations ——
   field('integrations.search', 'Web search provider', 'integrations', 'search', {

@@ -107,7 +107,12 @@ export function defaultToolConfig(): ToolConfig {
 
 /** Default ~/.minnow/rules.json contents. */
 export function defaultUserRulesSettings(): UserRulesSettings {
-  return { version: 1, enabled: false, text: '' };
+  return {
+    version: 2,
+    enabled: false,
+    groups: [{ id: 'general', name: 'General' }],
+    rules: [],
+  };
 }
 
 /** Default system prompt file contents. */

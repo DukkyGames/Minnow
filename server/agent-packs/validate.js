@@ -78,7 +78,7 @@ export function validatePackManifest(manifest, packRoot, builtinAgentIds) {
     }
 
     const workId = `${packId}.${key}`;
-    if (builtinAgentIds.has(workId) || builtinAgentIds.has(key)) {
+    if (builtinAgentIds.has(workId)) {
       errors.push(`Agent "${workId}" collides with a built-in work agent`);
     }
 

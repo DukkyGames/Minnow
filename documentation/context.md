@@ -91,6 +91,7 @@ Full directory map: [`guides/configuration.md`](guides/configuration.md). Notabl
 | `providers/<id>/` | `profile.json`, encrypted `secrets.json`, `capabilities.json` |
 | `prompts/`, `prompt-configs/`, `profiles/` | User prompt overrides and setup bundles |
 | `work-agents.json`, `sub-agents.json` | Agent overrides and sub-agent types |
+| `rules.json` | Grouped user rules (v2: enable flags, groups, per-rule text); legacy v1 `text` migrates on read/write |
 | `brain/` | Wiki pages, vectors, code index DBs, proposals |
 | `skills/`, `skills.json` | User skills and enable flags |
 | `scheduler.json`, `calendar/`, `email/` | Scheduler, calendar DB, email accounts + `mail-<accountId>.db` |
@@ -246,7 +247,7 @@ Tools: `brain_search`, `brain_read_page`, `brain_write_page`, `save_memory`, `re
 
 Per-role prompts and optional provider/model binding. Shipped: `default`, `builder`, `planner`, `reviewer`, `researcher`, `ui-designer`, …
 
-[`src/agents/work-agent-registry.ts`](../src/agents/work-agent-registry.ts), overrides `~/.minnow/work-agents.json`. API: `/api/work-agents`, `/api/agent-packs`.
+[`src/agents/work-agent-registry.ts`](../src/agents/work-agent-registry.ts), overrides `~/.minnow/work-agents.json`. API: `/api/work-agents`, `/api/agent-packs` (list/toggle + `GET /api/agent-packs/template` zip + `GET /api/agent-packs/builtin` default pack export). Settings → **Agent packs**: authoring steps, template/default downloads, installed pack list.
 
 ### Sub-agents
 

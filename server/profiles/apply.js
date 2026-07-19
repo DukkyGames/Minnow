@@ -2,17 +2,36 @@
  * Capture live Minnow settings into a profile bundle and apply a bundle to disk.
  */
 
+import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { readConfigJson, writeConfigJson } from '../config/store.js';
-import { mergeConfigMeta, normalizeSubAgentsConfig, normalizeToolConfig } from '../config/validators.js';
+import { mergeConfigMeta, normalizeSubAgentsConfig, normalizeToolConfig, validateUserRulesSettings } from '../config/validators.js';
 import { ALL_TOOL_IDS } from '../config/tool-ids.js';
 import { getMinnowHome } from '../config/home.js';
 import { loadPromptConfigFile, savePromptConfigFile } from '../prompt-configs/handlers.js';
 import { workAgentsOverridesPath } from '../work-agents/paths.js';
 
 /**
- * Flatten tools.json permissions.default for portable bundle export.
+ * Flatten rules.json into legacy profile text for portable bundles.
+ * @param {unknown} rulesRaw
+ */
+function composeUserRulesLegacyTextFromRaw(rulesRaw) {
+  try {
+    const normalized = validateUserRulesSettings(rulesRaw);
+    return normalized.rules
+      .filter((rule) => rule.enabled && rule.text.trim())
+      .map((rule) => rule.text.trim())
+      .join('\n\n');
+  } catch {
+    if (rulesRaw && typeof rulesRaw === 'object' && typeof rulesRaw.text === 'string') {
+      return rulesRaw.text;
+    }
+    return '';
+  }
+}
+
+/**
  * @param {object} toolsConfig
  */
 export function flattenToolPermissionsForBundle(toolsConfig) {
@@ -113,7 +132,7 @@ export async function captureCurrentSettings(id, label, description) {
     },
     rules: {
       enabled: rulesRaw?.enabled === true,
-      text: typeof rulesRaw?.text === 'string' ? rulesRaw.text : '',
+      text: composeUserRulesLegacyTextFromRaw(rulesRaw),
     },
     skills: {
       enabled:
@@ -262,12 +281,47 @@ export async function applyProfileBundle(bundle) {
   await writeConfigJson('sub-agents.json', subNormalized);
 
   if (bundle.rules && typeof bundle.rules === 'object') {
-    const rulesExisting = (await readConfigJson('rules.json')) ?? { version: 1, enabled: false, text: '' };
-    await writeConfigJson('rules.json', {
-      ...rulesExisting,
-      enabled: bundle.rules.enabled === true,
-      text: typeof bundle.rules.text === 'string' ? bundle.rules.text : rulesExisting.text,
-    });
+    const rulesExisting = validateUserRulesSettings(
+      (await readConfigJson('rules.json')) ?? {
+        version: 2,
+        enabled: false,
+        groups: [{ id: 'general', name: 'General' }],
+        rules: [],
+      },
+    );
+    let next = { ...rulesExisting, enabled: bundle.rules.enabled === true };
+
+    if (typeof bundle.rules.text === 'string') {
+      const generalGroup =
+        next.groups.find((group) => group.id === 'general') ?? next.groups[0];
+      if (generalGroup) {
+        const existing = next.rules.find((rule) => rule.groupId === generalGroup.id);
+        if (existing) {
+          next = {
+            ...next,
+            rules: next.rules.map((rule) =>
+              rule.id === existing.id ? { ...rule, text: bundle.rules.text } : rule,
+            ),
+          };
+        } else if (bundle.rules.text.trim()) {
+          next = {
+            ...next,
+            rules: [
+              ...next.rules,
+              {
+                id: crypto.randomUUID(),
+                title: 'Profile rule',
+                text: bundle.rules.text,
+                enabled: true,
+                groupId: generalGroup.id,
+              },
+            ],
+          };
+        }
+      }
+    }
+
+    await writeConfigJson('rules.json', validateUserRulesSettings(next));
   }
 
   if (bundle.skills?.enabled && typeof bundle.skills.enabled === 'object') {

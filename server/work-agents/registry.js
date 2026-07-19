@@ -235,6 +235,11 @@ async function loadBuiltinAgents(projectRoot) {
   return { ids, agents };
 }
 
+/** Shipped built-in work agents (for pack export and tests). */
+export async function loadBuiltinWorkAgents(projectRoot) {
+  return loadBuiltinAgents(projectRoot);
+}
+
 async function loadUserOverrides() {
   const filePath = workAgentsOverridesPath();
   try {

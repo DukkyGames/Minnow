@@ -4,6 +4,7 @@
 
 import { getSystemPrompt } from '../config/api-client';
 import { getUserRulesPayloadForSend, loadUserRules } from '../config/user-rules';
+import { defaultUserRulesSettings } from '../config/defaults';
 import { resolveActiveWorkAgentId } from '../agents/resolve-work-agent';
 import type { Chat } from '../types';
 import { headlessApiUrl } from './server-context';
@@ -53,11 +54,7 @@ export async function resolveHeadlessOutboundSystemMessages(
   }
 
   await loadUserRules().catch(() => undefined);
-  const rulesSettings = await loadUserRules().catch(() => ({
-    version: 1 as const,
-    enabled: false,
-    text: '',
-  }));
+  const rulesSettings = await loadUserRules().catch(() => defaultUserRulesSettings());
   const userRules = getUserRulesPayloadForSend(rulesSettings);
 
   return { composed: composed.trim() || legacySysPrompt, userRules };

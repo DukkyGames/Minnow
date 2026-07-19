@@ -93,6 +93,7 @@ import { renderEditorSection } from './settings-editor';
 import { setStatus } from './status';
 import type { SettingsSectionId } from './settings-page-types';
 import {
+  appendSettingsCrosslinks,
   appendSettingsGroup,
   linkToSettingsSection,
   linkToModelsSection,
@@ -2128,12 +2129,23 @@ async function renderMcpSection(): Promise<void> {
 async function renderAgentPacksSection(): Promise<void> {
   const mount = clearMount('settingsAgentPacksBody');
   if (!mount) return;
-  const body = appendSettingsGroup(
-    mount,
-    'Installed packs',
-    'Enable bundled agent definitions for this workspace.',
+
+  const shell = el('div', 'settings-general');
+  mount.appendChild(shell);
+
+  const lead = el('p', 'settings-section-lead');
+  lead.append(
+    'Install drop-in bundles of work agents with prompts and tool allowlists. Pack agents merge with built-ins and appear in ',
+    linkToSettingsSection('Agents', 'agent-center'),
+    '. Per-agent models live under ',
+    linkToSettingsSection('Routing', 'model-routing'),
+    '.',
   );
-  await renderAgentPacksSettingsSection(body);
+  shell.appendChild(lead);
+
+  const content = el('div', 'settings-general__content');
+  shell.appendChild(content);
+  await renderAgentPacksSettingsSection(content);
 }
 
 async function renderSkillsSection(): Promise<void> {

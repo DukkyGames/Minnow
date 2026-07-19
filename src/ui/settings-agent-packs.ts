@@ -1,10 +1,25 @@
 /**
- * Agent packs settings: list ~/.minnow/agent-packs, enable toggles, validation status.
+ * Agent packs settings: authoring guide, template download, installed pack list.
  */
 
-import { fetchAgentPacksList, patchAgentPackEnabled } from '../agents/pack-api';
+import '../styles/settings-general.css';
+import '../styles/settings-agent-packs.css';
+import {
+  downloadAgentPackTemplate,
+  downloadBuiltinAgentPack,
+  fetchAgentPacksList,
+  patchAgentPackEnabled,
+} from '../agents/pack-api';
 import type { AgentPackListItem } from '../agents/pack-types';
 import { isLocalServerAvailable } from '../tools/config';
+import {
+  appendSettingsGroup,
+  linkToSettingsSection,
+} from './settings-layout';
+import {
+  appendSettingsOfflineHint,
+  createSettingsActionsRow,
+} from './settings-controls';
 import { createSettingsSwitch } from './settings-switch';
 import { setStatus } from './status';
 
@@ -19,6 +34,13 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+/** Inline monospace path or id in settings copy. */
+function codeText(text: string): HTMLElement {
+  const code = document.createElement('code');
+  code.textContent = text;
+  return code;
+}
+
 function createSwitch(
   checked: boolean,
   disabled: boolean,
@@ -31,30 +53,38 @@ function buildPackRow(
   pack: AgentPackListItem,
   onChange: () => void,
 ): HTMLLIElement {
-  const item = el('li', 'settings-skill-card');
+  const item = el('li', 'settings-agent-pack-card');
   item.dataset.packId = pack.id;
 
-  const head = el('div', 'settings-skill-card__head');
-  const meta = el('div', 'settings-skill-card__meta');
-  meta.appendChild(el('span', 'settings-skill-card__title', pack.label));
+  const head = el('div', 'settings-agent-pack-card__head');
+  const meta = el('div', 'settings-agent-pack-card__meta');
+
+  const titleRow = el('div', 'settings-agent-pack-card__title-row');
+  titleRow.appendChild(el('span', 'settings-agent-pack-card__title', pack.label));
+  titleRow.appendChild(
+    el(
+      'span',
+      pack.valid
+        ? 'settings-agent-pack-card__status settings-agent-pack-card__status--ok'
+        : 'settings-agent-pack-card__status settings-agent-pack-card__status--warn',
+      pack.valid ? 'Valid' : 'Needs fixes',
+    ),
+  );
+  meta.appendChild(titleRow);
+
   meta.appendChild(
     el(
       'span',
-      'settings-skill-card__id',
-      `${pack.id} · v${pack.version} · ${pack.agents.length} agent(s)`,
+      'settings-agent-pack-card__meta-line',
+      `${pack.id} · v${pack.version} · ${pack.agents.length} agent${pack.agents.length === 1 ? '' : 's'}`,
     ),
   );
-  if (pack.description) {
-    meta.appendChild(el('p', 'settings-field-hint', pack.description));
-  }
-  head.appendChild(meta);
 
-  const badge = el(
-    'span',
-    pack.valid ? 'settings-badge settings-badge--ok' : 'settings-badge settings-badge--warn',
-    pack.valid ? 'Valid' : 'Invalid',
-  );
-  head.appendChild(badge);
+  if (pack.description) {
+    meta.appendChild(el('p', 'settings-agent-pack-card__desc', pack.description));
+  }
+
+  head.appendChild(meta);
 
   const canToggle = pack.valid && isLocalServerAvailable();
   head.appendChild(
@@ -66,7 +96,7 @@ function buildPackRow(
             setStatus('err', 'Could not update pack (npm start required)');
             return;
           }
-          setStatus('ok', `Pack "${pack.id}" ${enabled ? 'enabled' : 'disabled'}`);
+          setStatus('ok', `Pack "${pack.label}" ${enabled ? 'enabled' : 'disabled'}`);
           onChange();
         } catch (err) {
           const message = err instanceof Error ? err.message : 'Update failed';
@@ -79,80 +109,218 @@ function buildPackRow(
   item.appendChild(head);
 
   if (!pack.valid && pack.errors.length) {
-    const errList = el('ul', 'settings-pack-errors');
+    const errList = el('ul', 'settings-agent-pack-card__errors');
     for (const msg of pack.errors) {
       errList.appendChild(el('li', undefined, msg));
     }
     item.appendChild(errList);
   }
 
-  const pathHint = el(
-    'p',
-    'settings-field-hint',
-    `Folder: ${pack.packRoot}`,
-  );
+  const pathHint = el('p', 'settings-agent-pack-card__path');
+  pathHint.append('Folder: ', codeText(pack.packRoot));
   item.appendChild(pathHint);
 
   return item;
 }
 
-/** Render Agent packs section into the settings panel body. */
-export async function renderAgentPacksSettingsSection(body: HTMLElement): Promise<void> {
-  body.replaceChildren();
+/** Step list for creating a pack from the downloadable template. */
+function appendAuthoringSteps(mount: HTMLElement): void {
+  const steps = el('ol', 'settings-agent-packs-steps');
+  steps.setAttribute('aria-label', 'How to create an agent pack');
 
-  const intro = el(
-    'p',
-    'settings-section-intro',
-    'Drop-in agent packs live under ~/.minnow/agent-packs/<id>/ with a manifest.json. Enabled packs add work agents (id: packId.agentKey) to the composer and Work agents settings. Requires npm start.',
+  const stepItems = [
+    [
+      'Download the starter template, or export the ',
+      linkToSettingsSection('built-in work agents', 'agent-center'),
+      ' as a pack with ',
+      codeText('Download default pack'),
+      '. You can also copy ',
+      codeText('~/.minnow/agent-packs/_template'),
+      ' after your first ',
+      codeText('npm start'),
+      '.',
+    ],
+    [
+      'Rename the folder and set the same id in ',
+      codeText('manifest.json'),
+      ' (pattern ',
+      codeText('^[a-z][a-z0-9-]{0,63}$'),
+      '). Folders starting with ',
+      codeText('_'),
+      ' are ignored.',
+    ],
+    [
+      'Edit prompts under ',
+      codeText('prompts/'),
+      ', adjust ',
+      codeText('allowedTools'),
+      ', and add more agents in ',
+      codeText('manifest.json'),
+      '.',
+    ],
+    [
+      'Place the pack in ',
+      codeText('~/.minnow/agent-packs/<pack-id>/'),
+      ' and click Refresh below.',
+    ],
+    [
+      'Enable the pack here. Agents appear in ',
+      linkToSettingsSection('Agents', 'agent-center'),
+      ' as ',
+      codeText('packId.agentKey'),
+      ' work agents.',
+    ],
+  ];
+
+  for (const parts of stepItems) {
+    const li = document.createElement('li');
+    for (const part of parts) {
+      if (typeof part === 'string') {
+        li.appendChild(document.createTextNode(part));
+      } else {
+        li.appendChild(part);
+      }
+    }
+    steps.appendChild(li);
+  }
+
+  mount.appendChild(steps);
+}
+
+/** Render Agent packs content into a settings-general content column. */
+export async function renderAgentPacksSettingsSection(content: HTMLElement): Promise<void> {
+  content.replaceChildren();
+
+  const authorBody = appendSettingsGroup(
+    content,
+    'Create a pack',
+    'Bundle custom work agents with prompts and tool allowlists. Packs install under ~/.minnow and merge into the work-agent registry.',
+    'agents.agentPacks.author',
+    { emphasis: true },
   );
-  body.appendChild(intro);
 
-  body.appendChild(
-    el(
-      'p',
-      'settings-field-hint',
-      'Author guide: documentation/agent-packs/README.md — copy _template from ~/.minnow/agent-packs/ after first npm start.',
+  appendAuthoringSteps(authorBody);
+
+  const schemaHint = el('p', 'settings-agent-pack-card__path');
+  schemaHint.append(
+    'Manifest fields are validated at scan time. See ',
+    codeText('documentation/agent-packs/README.md'),
+    ' and ',
+    codeText('src/agents/schema/agent-pack.schema.json'),
+    '.',
+  );
+  authorBody.appendChild(schemaHint);
+
+  authorBody.appendChild(
+    createSettingsActionsRow(
+      [
+        {
+          label: 'Download template',
+          variant: 'primary',
+          disabled: !isLocalServerAvailable(),
+          onClick: () => {
+            void (async () => {
+              const result = await downloadAgentPackTemplate();
+              if (result === true) {
+                setStatus('ok', 'Agent pack template downloaded');
+                return;
+              }
+              setStatus('err', result.message);
+            })();
+          },
+        },
+        {
+          label: 'Download default pack',
+          disabled: !isLocalServerAvailable(),
+          onClick: () => {
+            void (async () => {
+              const result = await downloadBuiltinAgentPack();
+              if (result === true) {
+                setStatus('ok', 'Default Minnow agent pack downloaded');
+                return;
+              }
+              setStatus('err', result.message);
+            })();
+          },
+        },
+      ],
+      { searchKey: 'agents.agentPacks.download' },
     ),
   );
 
+  const defaultPackHint = el('p', 'settings-agent-pack-card__path');
+  defaultPackHint.append(
+    'Default pack exports all shipped work agents (Builder, Planner, Reviewer, etc.) as ',
+    codeText('minnow/<agent-key>/'),
+    ' prompts. Install to ',
+    codeText('~/.minnow/agent-packs/minnow/'),
+    ' to customize without losing upstream updates.',
+  );
+  authorBody.appendChild(defaultPackHint);
+
   if (!isLocalServerAvailable()) {
-    body.appendChild(
-      el(
-        'p',
-        'settings-offline-hint',
-        'Start the dev server (npm start) to scan packs and toggle enablement.',
-      ),
+    appendSettingsOfflineHint(
+      authorBody,
+      'Start the dev server (<code>npm start</code>) to download the template, scan packs, and toggle enablement.',
+    );
+  }
+
+  const listBody = appendSettingsGroup(
+    content,
+    'Installed packs',
+    'Drop folders into ~/.minnow/agent-packs/. Enabled, valid packs add work agents to the composer.',
+    'agents.agentPacks.installed',
+    { emphasis: true },
+  );
+
+  if (!isLocalServerAvailable()) {
+    appendSettingsOfflineHint(
+      listBody,
+      'Pack list requires <code>npm start</code>.',
     );
     return;
   }
 
-  const list = el('ul', 'settings-skill-list');
+  const list = el('ul', 'settings-agent-packs-list');
 
   const renderList = async (): Promise<void> => {
     list.replaceChildren();
-    const packs = await fetchAgentPacksList();
-    if (!packs.length) {
-      list.appendChild(
-        el(
-          'li',
-          'settings-empty-hint',
-          'No packs found. Copy documentation/agent-packs/_template to ~/.minnow/agent-packs/<your-id>/ and refresh.',
-        ),
-      );
-      return;
-    }
-    for (const pack of packs) {
-      list.appendChild(buildPackRow(pack, () => void renderList()));
+    try {
+      const packs = await fetchAgentPacksList();
+      if (!packs.length) {
+        const empty = el('li', 'settings-agent-packs-empty');
+        empty.append(
+          'No packs installed yet. Download the template above, copy it to ',
+          codeText('~/.minnow/agent-packs/<your-pack-id>/'),
+          ', then refresh.',
+        );
+        list.appendChild(empty);
+        return;
+      }
+      for (const pack of packs) {
+        list.appendChild(buildPackRow(pack, () => void renderList()));
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not load packs';
+      list.appendChild(el('li', 'settings-agent-packs-empty', message));
     }
   };
 
-  body.appendChild(list);
+  listBody.appendChild(list);
   await renderList();
 
-  const refreshBtn = el('button', 'settings-action-btn', 'Refresh pack list');
-  refreshBtn.type = 'button';
-  refreshBtn.addEventListener('click', () => void renderList());
-  const actions = el('div', 'settings-actions');
-  actions.appendChild(refreshBtn);
-  body.appendChild(actions);
+  listBody.appendChild(
+    createSettingsActionsRow(
+      [
+        {
+          label: 'Refresh pack list',
+          onClick: () => {
+            void renderList();
+            setStatus('ok', 'Agent pack list refreshed');
+          },
+        },
+      ],
+      { searchKey: 'agents.agentPacks.refresh' },
+    ),
+  );
 }

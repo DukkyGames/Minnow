@@ -6,27 +6,189 @@ import { detectConfigServer } from './storage-mode';
 import { getRules, putRules } from './api-client';
 import { defaultUserRulesSettings } from './defaults';
 
-export interface UserRulesSettings {
-  version: 1;
-  enabled: boolean;
+/** Default group id for migrated and new rules. */
+export const DEFAULT_USER_RULES_GROUP_ID = 'general';
+
+export interface UserRuleGroup {
+  id: string;
+  name: string;
+}
+
+export interface UserRuleItem {
+  id: string;
+  title: string;
   text: string;
+  enabled: boolean;
+  groupId: string;
+}
+
+export interface UserRulesSettings {
+  version: 2;
+  enabled: boolean;
+  groups: UserRuleGroup[];
+  rules: UserRuleItem[];
 }
 
 const USER_RULES_STORAGE_KEY = 'minnow.userRules';
 
-/** Max UTF-8 bytes for rules text (matches server validator). */
+/** Max UTF-8 bytes for combined rule text (matches server validator). */
 export const MAX_USER_RULES_BYTES = 16 * 1024;
 
 let cachedRules: UserRulesSettings | null = null;
 
-function normalizeUserRules(raw: Partial<UserRulesSettings> | null | undefined): UserRulesSettings {
+function newRuleId(): string {
+  return crypto.randomUUID();
+}
+
+function newGroupId(): string {
+  return crypto.randomUUID();
+}
+
+/** Empty v2 settings with a General group. */
+export function createDefaultUserRulesGroups(): UserRuleGroup[] {
+  return [{ id: DEFAULT_USER_RULES_GROUP_ID, name: 'General' }];
+}
+
+/** Create a group row for the rules editor. */
+export function createUserRuleGroup(name: string): UserRuleGroup {
+  return { id: newGroupId(), name: name.trim() || 'Untitled group' };
+}
+
+/** Create a rule row bound to a group. */
+export function createUserRuleItem(
+  groupId: string,
+  partial: Partial<Pick<UserRuleItem, 'title' | 'text' | 'enabled'>> = {},
+): UserRuleItem {
+  return {
+    id: newRuleId(),
+    title: partial.title?.trim() ?? 'New rule',
+    text: partial.text ?? '',
+    enabled: partial.enabled !== false,
+    groupId,
+  };
+}
+
+function migrateLegacyUserRules(
+  raw: Record<string, unknown>,
+): UserRulesSettings {
+  const enabled = raw.enabled === true;
+  const legacyText = typeof raw.text === 'string' ? raw.text.trim() : '';
+  const groups = createDefaultUserRulesGroups();
+  const rules: UserRuleItem[] = [];
+
+  if (legacyText) {
+    rules.push({
+      id: newRuleId(),
+      title: 'Imported rule',
+      text: legacyText,
+      enabled: true,
+      groupId: DEFAULT_USER_RULES_GROUP_ID,
+    });
+  }
+
+  return { version: 2, enabled, groups, rules };
+}
+
+function normalizeUserRuleGroup(raw: unknown, index: number): UserRuleGroup | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  const id = typeof row.id === 'string' && row.id.trim() ? row.id.trim() : `group-${index}`;
+  const name = typeof row.name === 'string' && row.name.trim() ? row.name.trim() : 'Untitled group';
+  return { id, name };
+}
+
+function normalizeUserRuleItem(
+  raw: unknown,
+  groups: UserRuleGroup[],
+  index: number,
+): UserRuleItem | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  const fallbackGroupId = groups[0]?.id ?? DEFAULT_USER_RULES_GROUP_ID;
+  const groupId =
+    typeof row.groupId === 'string' && groups.some((g) => g.id === row.groupId)
+      ? row.groupId
+      : fallbackGroupId;
+  const id = typeof row.id === 'string' && row.id.trim() ? row.id.trim() : `rule-${index}`;
+  const title = typeof row.title === 'string' ? row.title : 'Untitled rule';
+  const text = typeof row.text === 'string' ? row.text : '';
+  const enabled = row.enabled !== false;
+  return { id, title, text, enabled, groupId };
+}
+
+/** Normalize persisted or API payload into v2 settings. */
+export function normalizeUserRules(
+  raw: Partial<UserRulesSettings> | Record<string, unknown> | null | undefined,
+): UserRulesSettings {
   const base = defaultUserRulesSettings();
   if (!raw || typeof raw !== 'object') return base;
-  return {
-    version: 1,
-    enabled: raw.enabled === true,
-    text: typeof raw.text === 'string' ? raw.text : '',
-  };
+
+  const parsed = raw as Record<string, unknown>;
+  if (parsed.version !== 2 || !Array.isArray(parsed.groups) || !Array.isArray(parsed.rules)) {
+    return migrateLegacyUserRules(parsed);
+  }
+
+  const enabled = parsed.enabled === true;
+  const groupsRaw = parsed.groups as unknown[];
+  let groups = groupsRaw
+    .map((group, index) => normalizeUserRuleGroup(group, index))
+    .filter((group): group is UserRuleGroup => group != null);
+
+  if (!groups.length) {
+    groups = createDefaultUserRulesGroups();
+  }
+
+  const rules = (parsed.rules as unknown[])
+    .map((rule, index) => normalizeUserRuleItem(rule, groups, index))
+    .filter((rule): rule is UserRuleItem => rule != null);
+
+  return { version: 2, enabled, groups, rules };
+}
+
+/** Total UTF-8 bytes across all rule bodies (for save validation). */
+export function computeUserRulesTotalBytes(settings: UserRulesSettings): number {
+  return new TextEncoder().encode(
+    settings.rules.map((rule) => rule.text).join('\n'),
+  ).length;
+}
+
+/** Compose markdown-ish payload from enabled rules for the second system message. */
+export function composeUserRulesPayload(settings: UserRulesSettings): string {
+  const groupOrder = new Map(settings.groups.map((group, index) => [group.id, index]));
+  const activeRules = settings.rules.filter((rule) => rule.enabled && rule.text.trim());
+
+  activeRules.sort((a, b) => {
+    const groupDelta =
+      (groupOrder.get(a.groupId) ?? 999) - (groupOrder.get(b.groupId) ?? 999);
+    if (groupDelta !== 0) return groupDelta;
+    return settings.rules.indexOf(a) - settings.rules.indexOf(b);
+  });
+
+  const parts: string[] = [];
+  let currentGroupId: string | null = null;
+
+  for (const rule of activeRules) {
+    const group = settings.groups.find((row) => row.id === rule.groupId);
+    if (rule.groupId !== currentGroupId) {
+      currentGroupId = rule.groupId;
+      if (group?.name) parts.push(`## ${group.name}`);
+    }
+
+    const title = rule.title.trim();
+    const text = rule.text.trim();
+    if (title) {
+      parts.push(`### ${title}\n${text}`);
+    } else {
+      parts.push(text);
+    }
+  }
+
+  return parts.join('\n\n');
+}
+
+/** Legacy single-string export for setup profiles. */
+export function exportUserRulesLegacyText(settings: UserRulesSettings): string {
+  return composeUserRulesPayload(settings);
 }
 
 function readLocalUserRules(): UserRulesSettings {
@@ -71,7 +233,7 @@ export function getUserRulesSync(): UserRulesSettings {
 /** Persist user rules to server and localStorage mirror. */
 export async function saveUserRules(settings: UserRulesSettings): Promise<void> {
   const normalized = normalizeUserRules(settings);
-  const bytes = new TextEncoder().encode(normalized.text).length;
+  const bytes = computeUserRulesTotalBytes(normalized);
   if (bytes > MAX_USER_RULES_BYTES) {
     throw new Error(`User rules text exceeds ${MAX_USER_RULES_BYTES} bytes`);
   }
@@ -96,6 +258,6 @@ export function resetUserRulesCache(): void {
  */
 export function getUserRulesPayloadForSend(settings: UserRulesSettings): string | null {
   if (!settings.enabled) return null;
-  const trimmed = settings.text.trim();
-  return trimmed || null;
+  const composed = composeUserRulesPayload(settings).trim();
+  return composed || null;
 }

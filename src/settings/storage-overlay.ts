@@ -180,7 +180,8 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   'agents.prompting.hub': section(['agent-center']),
   'agents.rules': section(['rules']),
   'agents.rules.enabled': resource('rules', 'enabled', 'boolean', { refreshAreas: ['rules'] }),
-  'agents.rules.text': resource('rules', 'text', 'string', { refreshAreas: ['rules'] }),
+  'agents.rules.items': section(['rules']),
+  'agents.rules.addGroup': section(['rules']),
 
   // —— Integrations ——
   'integrations.search': section(['search']),

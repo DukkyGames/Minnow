@@ -2,6 +2,8 @@
  * Validate session, tool, and system-prompt payloads before writing to disk.
  */
 
+import crypto from 'node:crypto';
+
 import { ALL_TOOL_IDS, ARCHIVE_RECALL_TOOL_IDS, BRAIN_DESTRUCTIVE_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_ID_SET } from './tool-ids.js';
 import { normalizeOrchestratePlanPath } from './orchestrate-plan-path.js';
 import { normalizeSamplerPreset } from '../agents/sampler.js';
@@ -1270,10 +1272,11 @@ export function validateSystemPromptSettings(raw) {
 }
 
 const MAX_USER_RULES_BYTES = 16 * 1024;
+const DEFAULT_USER_RULES_GROUP_ID = 'general';
 
 /**
  * @param {unknown} raw
- * @returns {{ version: 1, enabled: boolean, text: string }}
+ * @returns {{ version: 2, enabled: boolean, groups: Array<{ id: string, name: string }>, rules: Array<{ id: string, title: string, text: string, enabled: boolean, groupId: string }> }}
  */
 export function validateUserRulesSettings(raw) {
   if (!raw || typeof raw !== 'object') {
@@ -1283,17 +1286,89 @@ export function validateUserRulesSettings(raw) {
   }
 
   const parsed = /** @type {Record<string, unknown>} */ (raw);
-  const version = parsed.version === 1 ? 1 : 1;
+  if (parsed.version !== 2 || !Array.isArray(parsed.groups) || !Array.isArray(parsed.rules)) {
+    return validateUserRulesSettings(migrateLegacyUserRulesSettings(parsed));
+  }
+
   const enabled = parsed.enabled === true;
-  const text = typeof parsed.text === 'string' ? parsed.text : '';
-  const bytes = Buffer.byteLength(text, 'utf8');
+  /** @type {Array<{ id: string, name: string }>} */
+  let groups = parsed.groups
+    .map((group, index) => normalizeUserRuleGroupRow(group, index))
+    .filter(Boolean);
+
+  if (!groups.length) {
+    groups = [{ id: DEFAULT_USER_RULES_GROUP_ID, name: 'General' }];
+  }
+
+  /** @type {Array<{ id: string, title: string, text: string, enabled: boolean, groupId: string }>} */
+  const rules = parsed.rules
+    .map((rule, index) => normalizeUserRuleItemRow(rule, groups, index))
+    .filter(Boolean);
+
+  const bytes = Buffer.byteLength(rules.map((rule) => rule.text).join('\n'), 'utf8');
   if (bytes > MAX_USER_RULES_BYTES) {
     const err = new Error(`User rules text exceeds ${MAX_USER_RULES_BYTES} bytes`);
     err.statusCode = 413;
     throw err;
   }
 
-  return { version, enabled, text };
+  return { version: 2, enabled, groups, rules };
+}
+
+/**
+ * @param {Record<string, unknown>} parsed
+ */
+function migrateLegacyUserRulesSettings(parsed) {
+  const enabled = parsed.enabled === true;
+  const legacyText = typeof parsed.text === 'string' ? parsed.text.trim() : '';
+  const groups = [{ id: DEFAULT_USER_RULES_GROUP_ID, name: 'General' }];
+  /** @type {Array<{ id: string, title: string, text: string, enabled: boolean, groupId: string }>} */
+  const rules = [];
+
+  if (legacyText) {
+    rules.push({
+      id: crypto.randomUUID(),
+      title: 'Imported rule',
+      text: legacyText,
+      enabled: true,
+      groupId: DEFAULT_USER_RULES_GROUP_ID,
+    });
+  }
+
+  return { version: 2, enabled, groups, rules };
+}
+
+/**
+ * @param {unknown} raw
+ * @param {number} index
+ */
+function normalizeUserRuleGroupRow(raw, index) {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = /** @type {Record<string, unknown>} */ (raw);
+  const id = typeof row.id === 'string' && row.id.trim() ? row.id.trim() : `group-${index}`;
+  const name =
+    typeof row.name === 'string' && row.name.trim() ? row.name.trim() : 'Untitled group';
+  return { id, name };
+}
+
+/**
+ * @param {unknown} raw
+ * @param {Array<{ id: string, name: string }>} groups
+ * @param {number} index
+ */
+function normalizeUserRuleItemRow(raw, groups, index) {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = /** @type {Record<string, unknown>} */ (raw);
+  const fallbackGroupId = groups[0]?.id ?? DEFAULT_USER_RULES_GROUP_ID;
+  const groupId =
+    typeof row.groupId === 'string' && groups.some((group) => group.id === row.groupId)
+      ? row.groupId
+      : fallbackGroupId;
+  const id = typeof row.id === 'string' && row.id.trim() ? row.id.trim() : `rule-${index}`;
+  const title = typeof row.title === 'string' ? row.title : 'Untitled rule';
+  const text = typeof row.text === 'string' ? row.text : '';
+  const enabled = row.enabled !== false;
+  return { id, title, text, enabled, groupId };
 }
 
 const SUPERVISOR_DEFAULTS = {

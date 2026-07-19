@@ -10,6 +10,11 @@ import {
   setPackEnabled,
 } from './registry.js';
 import { assertValidPackId } from './paths.js';
+import { buildAgentPackTemplateZip } from './template.js';
+import {
+  BUILTIN_AGENT_PACK_ZIP_FILENAME,
+  buildBuiltinAgentPackZip,
+} from './builtin-pack.js';
 import { builtinWorkAgentsDir } from '../work-agents/paths.js';
 import fs from 'node:fs/promises';
 
@@ -101,6 +106,29 @@ export async function handleAgentPacksRequest(req, res, pathname) {
 
     if (pathname === '/api/agent-packs/ping' && req.method === 'GET') {
       sendJson(res, 200, { ok: true });
+      return true;
+    }
+
+    if (pathname === '/api/agent-packs/template' && req.method === 'GET') {
+      const zip = buildAgentPackTemplateZip();
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', 'attachment; filename="minnow-agent-pack-template.zip"');
+      res.setHeader('Content-Length', String(zip.length));
+      res.end(zip);
+      return true;
+    }
+
+    if (pathname === '/api/agent-packs/builtin' && req.method === 'GET') {
+      const zip = await buildBuiltinAgentPackZip(PROJECT_ROOT);
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${BUILTIN_AGENT_PACK_ZIP_FILENAME}"`,
+      );
+      res.setHeader('Content-Length', String(zip.length));
+      res.end(zip);
       return true;
     }
 
