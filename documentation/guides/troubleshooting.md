@@ -21,7 +21,7 @@ Minnow captures errors **locally only** — nothing is sent off-device.
 
 | What | Where |
 |------|--------|
-| In-app viewer | **Settings → About** — health strip, grouped recent errors, log tail, **Copy report** (redacted markdown) |
+| In-app viewer | **Settings → Advanced → Health & diagnostics** — health strip, grouped recent errors, log tail, **Copy report** (redacted markdown) |
 | Log files | `~/.minnow/logs/diagnostics.jsonl` (server/child-process), `~/.minnow/logs/crash.jsonl` (Electron/renderer) |
 | Health API | `GET /api/diagnostics/health`, `GET /api/diagnostics/errors`, `GET /api/diagnostics/report` |
 | Debug agent tool | `read_diagnostics` (permission `ask` by default; available in **Debug** mode) |
@@ -30,8 +30,8 @@ Minnow captures errors **locally only** — nothing is sent off-device.
 
 | Problem | Fix |
 |---------|-----|
-| Errors not showing in About | Run `npm start` so the tool server can read `~/.minnow/logs/`. Renderer errors in Electron also land in `crash.jsonl` via the desktop shell. |
-| Empty health strip | Server offline — start with `npm start` and open **Settings → About** again. |
+| Errors not showing in Health & diagnostics | Run `npm start` so the tool server can read `~/.minnow/logs/`. Renderer errors in Electron also land in `crash.jsonl` via the desktop shell. |
+| Empty health strip | Server offline — start with `npm start` and open **Settings → Advanced → Health & diagnostics** again. |
 | Agent cannot read diagnostics | Enable **read_diagnostics** under Settings → Tools; switch chat to **Debug** mode; approve the tool when prompted (`ask` permission). |
 
 ## Models & chat

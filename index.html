@@ -577,6 +577,10 @@
         <span class="settings-nav__item-label">Orchestration</span>
         <span class="settings-nav__count" hidden aria-hidden="true"></span>
       </button>
+      <button type="button" class="settings-nav__item" data-area-jump="diagnostics" data-settings-nav-area="diagnostics">
+        <span class="settings-nav__item-label">Health &amp; diagnostics</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
       <button type="button" class="settings-nav__item" data-area-jump="evals" data-settings-nav-area="evals">
         <span class="settings-nav__item-label">Evals</span>
         <span class="settings-nav__count" hidden aria-hidden="true"></span>
@@ -600,7 +604,6 @@
       </section>
       <section id="settingsSection-about" class="settings-section settings-area settings-area--title-suppressed" data-area="about">
         <h2>About</h2>
-        <p class="settings-lead">Version info, local health probes, and a privacy-first diagnostics viewer. Nothing is sent off-device.</p>
         <div id="settingsAboutBody" class="settings-section-body"></div>
       </section>
       </div>
@@ -894,6 +897,10 @@
         <h2>Orchestration</h2>
         <p class="settings-lead">How the Orchestrate supervisor recovers from stalls and repeated failures. Replaces older <code>selfHealing</code> settings.</p>
         <div id="settingsSupervisorBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-diagnostics" class="settings-section settings-area settings-area--title-suppressed" data-area="diagnostics">
+        <h2>Health &amp; diagnostics</h2>
+        <div id="settingsDiagnosticsBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-evals" class="settings-section settings-area settings-area--title-suppressed" data-area="evals">
         <h2>Evals</h2>
