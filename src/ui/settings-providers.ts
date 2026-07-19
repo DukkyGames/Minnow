@@ -2,6 +2,9 @@
  * Settings → Providers: list, add, edit, and remove LLM backends.
  */
 
+import '../styles/settings-general.css';
+import '../styles/settings-providers.css';
+
 import { isServerStorageMode } from '../config/storage-mode';
 import { fetchModels } from '../api/models';
 import {
@@ -11,7 +14,9 @@ import {
 import { getDefaultPaths, pathsForProvider } from '../providers/paths';
 import type { ApiKind, AuthStyle, ProviderPublic } from '../providers/types';
 import {
-  listSettingsProviderPresets,
+  listSettingsFeaturedPresets,
+  listSettingsLocalPresets,
+  listSettingsMorePresets,
   type ProviderPreset,
 } from '../providers/presets';
 import {
@@ -31,12 +36,44 @@ import {
 import { normalizeModelPricingRates, normalizeProviderPricing } from '../usage/pricing';
 import type { ProviderPricing } from '../usage/types';
 import {
+  appendSettingsOfflineHint,
   createSettingsActionsRow,
   createSettingsSelectRow,
 } from './settings-controls';
 import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
 import { readDefaultModelBinding, resolveEffectiveChatModelBinding } from './default-model';
+import {
+  appendSettingsCrosslinks,
+  appendSettingsGroup,
+  linkToSettingsSection,
+} from './settings-layout';
+
+const API_KIND_LABELS: Record<ApiKind, string> = {
+  'lm-studio-v0': 'LM Studio v0',
+  'openai-v1': 'OpenAI v1',
+  'anthropic-v1': 'Anthropic Messages',
+};
+
+/** Status pill matching LSP/server instrumentation (semantic green only when positive). */
+function createProviderStatusPill(
+  label: string,
+  tone: 'ok' | 'muted' | 'warn',
+): HTMLElement {
+  const className =
+    tone === 'ok'
+      ? 'settings-lsp-pill settings-lsp-pill--running'
+      : tone === 'warn'
+        ? 'settings-lsp-pill settings-lsp-pill--off'
+        : 'settings-lsp-pill';
+  const pill = el('span', className, label);
+  pill.setAttribute('aria-label', label);
+  return pill;
+}
+
+function formatApiKindLabel(apiKind: ApiKind): string {
+  return API_KIND_LABELS[apiKind] ?? apiKind;
+}
 
 /** Prefer the top-bar #modelSelect model for this provider, then the active chat binding. */
 function resolveProbePreferredModelId(providerId: string): string | undefined {
@@ -305,6 +342,28 @@ function showProvidersAddForm(form: ParentNode, mode: ProviderPreset | 'custom')
   apiKeyInput?.focus();
 }
 
+/** Append a titled preset button grid to the add-provider picker. */
+function appendPresetSection(
+  parent: HTMLElement,
+  title: string,
+  presets: ProviderPreset[],
+  form: ParentNode,
+): void {
+  if (presets.length === 0) return;
+  const section = el('div', 'settings-providers-preset-section');
+  section.append(el('h3', 'settings-providers-preset-section-title', title));
+  const grid = el('div', 'settings-providers-preset-grid');
+  for (const preset of presets) {
+    const btn = el('button', 'settings-providers-preset-btn', preset.label);
+    btn.type = 'button';
+    if (preset.authHint) btn.title = preset.authHint;
+    btn.addEventListener('click', () => showProvidersAddForm(form, preset));
+    grid.append(btn);
+  }
+  section.append(grid);
+  parent.append(section);
+}
+
 /** Build preset grid and custom entry for the first step of add-provider. */
 function renderProvidersAddPicker(form: ParentNode): void {
   const picker = document.getElementById('settingsProvidersAddPicker');
@@ -315,24 +374,24 @@ function renderProvidersAddPicker(form: ParentNode): void {
     el(
       'p',
       'settings-providers-add-picker-hint field-hint',
-      'Pick a hosted API preset or configure a local or custom endpoint.',
+      'Choose a local server or hosted API preset. You can fine-tune paths and auth on the next step.',
     ),
   );
 
-  const grid = el('div', 'settings-providers-preset-grid');
-  for (const preset of listSettingsProviderPresets()) {
-    const btn = el('button', 'settings-providers-preset-btn', preset.label);
-    btn.type = 'button';
-    if (preset.authHint) btn.title = preset.authHint;
-    btn.addEventListener('click', () => showProvidersAddForm(form, preset));
-    grid.append(btn);
-  }
-  picker.append(grid);
+  appendPresetSection(picker, 'Local servers', listSettingsLocalPresets(), form);
+  appendPresetSection(picker, 'Featured APIs', listSettingsFeaturedPresets(), form);
+  appendPresetSection(picker, 'More cloud APIs', listSettingsMorePresets(), form);
 
   const customBtn = el('button', 'settings-providers-add-custom');
   customBtn.type = 'button';
   customBtn.append(el('span', 'settings-providers-add-custom-label', 'Add custom provider'));
-  customBtn.append(el('span', 'settings-providers-add-custom-desc', 'Local server or any OpenAI-compatible base URL'));
+  customBtn.append(
+    el(
+      'span',
+      'settings-providers-add-custom-desc',
+      'Any OpenAI-compatible base URL not listed above',
+    ),
+  );
   customBtn.addEventListener('click', () => showProvidersAddForm(form, 'custom'));
   picker.append(customBtn);
 }
@@ -341,6 +400,222 @@ function renderProvidersAddPicker(form: ParentNode): void {
 function resetProvidersAddFlow(): void {
   clearProvidersAddForm();
   showProvidersAddPicker();
+}
+
+/** Build the add-provider form (picker is rendered separately on first bind). */
+function buildProvidersAddForm(): HTMLFormElement {
+  const form = document.createElement('form');
+  form.id = 'settingsProvidersAddForm';
+  form.className = 'settings-providers-form hidden';
+  form.noValidate = true;
+  form.dataset.settingsSearchKey = 'models.providers.add';
+
+  const head = el('div', 'settings-providers-add-form-head');
+  const backBtn = el('button', 'settings-inline-btn settings-providers-add-back', 'Back to presets');
+  backBtn.type = 'button';
+  backBtn.id = 'settingsProvidersAddBack';
+  const modeLabel = el('p', 'settings-providers-add-mode-label field-hint');
+  modeLabel.id = 'settingsProvidersAddModeLabel';
+  modeLabel.setAttribute('aria-live', 'polite');
+  const authHint = el('p', 'field-hint hidden');
+  authHint.id = 'settingsProvidersAddPresetAuthHint';
+  authHint.dataset.providerPresetAuthHint = '';
+  head.append(backBtn, modeLabel, authHint);
+  form.append(head);
+
+  const idRow = el('div', 'field-row');
+  const idField = el('div', 'field');
+  idField.append(el('label', undefined, 'Provider id'));
+  const idInput = document.createElement('input');
+  idInput.type = 'text';
+  idInput.id = 'settingsProvidersAddId';
+  idInput.name = 'id';
+  idInput.required = true;
+  idInput.pattern = '[a-z0-9][a-z0-9_-]*';
+  idInput.autocomplete = 'off';
+  idInput.spellcheck = false;
+  idInput.placeholder = 'ollama-local';
+  idInput.className = 'settings-input';
+  idField.append(idInput, el('p', 'field-hint', 'Lowercase letters, numbers, hyphens, underscores.'));
+  idRow.append(idField);
+
+  const labelField = el('div', 'field');
+  labelField.append(el('label', undefined, 'Display name'));
+  const labelInput = document.createElement('input');
+  labelInput.type = 'text';
+  labelInput.id = 'settingsProvidersAddLabel';
+  labelInput.name = 'label';
+  labelInput.required = true;
+  labelInput.autocomplete = 'off';
+  labelInput.placeholder = 'Ollama (local)';
+  labelInput.className = 'settings-input';
+  labelField.append(labelInput);
+  idRow.append(labelField);
+  form.append(idRow);
+
+  const urlField = el('div', 'field');
+  urlField.append(el('label', undefined, 'Base URL'));
+  const baseUrlInput = document.createElement('input');
+  baseUrlInput.type = 'url';
+  baseUrlInput.id = 'settingsProvidersAddBaseUrl';
+  baseUrlInput.name = 'baseUrl';
+  baseUrlInput.required = true;
+  baseUrlInput.autocomplete = 'off';
+  baseUrlInput.spellcheck = false;
+  baseUrlInput.placeholder = 'http://localhost:11434';
+  baseUrlInput.className = 'settings-input';
+  urlField.append(
+    baseUrlInput,
+    el(
+      'p',
+      'field-hint',
+      'Origin only (no trailing path). Example: LM Studio http://localhost:1234, OpenAI-compatible https://api.openai.com.',
+    ),
+  );
+  form.append(urlField);
+
+  const kindSel = appendApiFields(form, 'lm-studio-v0', 'bearer');
+  kindSel.id = 'settingsProvidersAddApiKind';
+  const authSel = form.querySelector<HTMLSelectElement>('select[name="authStyle"]');
+  if (authSel) authSel.id = 'settingsProvidersAddAuthStyle';
+
+  const defaultPaths = getDefaultPaths('lm-studio-v0');
+  appendPathFields(form, defaultPaths.modelsPath, defaultPaths.chatCompletionsPath, 'lm-studio-v0');
+  const modelsInput = form.querySelector<HTMLInputElement>('input[name="modelsPath"]');
+  const chatInput = form.querySelector<HTMLInputElement>('input[name="chatCompletionsPath"]');
+  if (modelsInput) modelsInput.id = 'settingsProvidersAddModelsPath';
+  if (chatInput) chatInput.id = 'settingsProvidersAddChatPath';
+
+  const keyField = el('div', 'field');
+  keyField.append(el('label', undefined, 'API key (optional)'));
+  const apiKeyInput = document.createElement('input');
+  apiKeyInput.type = 'password';
+  apiKeyInput.id = 'settingsProvidersAddApiKey';
+  apiKeyInput.name = 'apiKey';
+  apiKeyInput.autocomplete = 'off';
+  apiKeyInput.spellcheck = false;
+  apiKeyInput.placeholder = 'Leave empty if the server needs no key';
+  apiKeyInput.className = 'settings-input';
+  keyField.append(
+    apiKeyInput,
+    el(
+      'p',
+      'field-hint',
+      'Stored encrypted on the server only. Deleting ~/.minnow/.key makes saved keys unrecoverable.',
+    ),
+  );
+  form.append(keyField);
+
+  appendGatewayFields(form);
+
+  const enabledLabel = el('label', 'settings-toggle-row');
+  const enabledInput = document.createElement('input');
+  enabledInput.type = 'checkbox';
+  enabledInput.id = 'settingsProvidersAddEnabled';
+  enabledInput.name = 'enabled';
+  enabledInput.checked = true;
+  enabledLabel.append(enabledInput, el('span', undefined, 'Enabled after adding'));
+  form.append(enabledLabel);
+
+  const err = el('p', 'settings-providers-form-error hidden');
+  err.id = 'settingsProvidersAddError';
+  err.setAttribute('role', 'alert');
+  form.append(err);
+
+  form.append(
+    createSettingsActionsRow(
+      [
+        { label: 'Add provider', type: 'submit', variant: 'primary' },
+        { label: 'Clear form', type: 'button', id: 'settingsProvidersAddReset' },
+      ],
+      { className: 'settings-providers-form-actions' },
+    ),
+  );
+
+  return form;
+}
+
+let providersShellReady = false;
+let providersListEl: HTMLElement | null = null;
+let providersOfflineEl: HTMLElement | null = null;
+let providersAddGroupEl: HTMLElement | null = null;
+let providersAddFormBound = false;
+let providersListActionsBound = false;
+
+/** Build the settings-general shell once (matches Usage / Thinking layout). */
+function ensureProvidersShell(): HTMLElement {
+  const mount = document.getElementById('settingsProvidersBody');
+  if (!mount) {
+    throw new Error('settingsProvidersBody mount missing');
+  }
+  if (providersShellReady && providersListEl) {
+    return providersListEl;
+  }
+
+  mount.replaceChildren();
+  providersAddFormBound = false;
+  providersListActionsBound = false;
+
+  const shell = el('div', 'settings-general settings-providers');
+  mount.appendChild(shell);
+
+  const lead = el('p', 'settings-section-lead');
+  const storageCode = document.createElement('code');
+  storageCode.textContent = '~/.minnow/providers/';
+  lead.append(
+    'Connect local servers and cloud APIs. Profiles live in ',
+    storageCode,
+    '. Assign models per role under ',
+    linkToSettingsSection('Routing', 'model-routing'),
+    '.',
+  );
+  shell.appendChild(lead);
+
+  providersOfflineEl = appendSettingsOfflineHint(
+    shell,
+    'Run <code>npm start</code> to add or edit providers.',
+    { id: 'settingsProvidersOffline', searchKey: 'models.providers', hidden: true },
+  );
+
+  const content = el('div', 'settings-general__content');
+  shell.appendChild(content);
+
+  const listGroupBody = appendSettingsGroup(
+    content,
+    'Configured providers',
+    'Enabled providers appear in the top-bar model list.',
+    'models.providers',
+    { emphasis: true },
+  );
+  const list = el('div', 'settings-providers-list');
+  list.id = 'settingsProvidersList';
+  list.setAttribute('role', 'list');
+  list.setAttribute('aria-label', 'Configured LLM providers');
+  listGroupBody.appendChild(list);
+  providersListEl = list;
+
+  const addGroupBody = appendSettingsGroup(
+    content,
+    'Add provider',
+    'Pick a preset or enter a custom OpenAI-compatible endpoint.',
+    'models.providers.add',
+    { emphasis: true },
+  );
+  providersAddGroupEl = addGroupBody.parentElement;
+
+  const picker = el('div', 'settings-providers-add-picker');
+  picker.id = 'settingsProvidersAddPicker';
+  picker.setAttribute('role', 'group');
+  picker.setAttribute('aria-label', 'Provider presets');
+  addGroupBody.append(picker, buildProvidersAddForm());
+
+  appendSettingsCrosslinks(shell, [
+    { label: 'Per-role model bindings', sectionId: 'model-routing' },
+    { label: 'Usage and cost estimates', sectionId: 'usage' },
+  ]);
+
+  providersShellReady = true;
+  return list;
 }
 function appendGatewayFields(parent: HTMLElement, provider?: ProviderPublic): void {
   const block = el('div', 'settings-providers-gateway-fields');
@@ -371,8 +646,17 @@ function appendGatewayFields(parent: HTMLElement, provider?: ProviderPublic): vo
   messagesField.append(messagesInput);
   block.append(messagesField);
 
+  const hasOverrides =
+    provider?.modelApiOverrides != null &&
+    Object.keys(provider.modelApiOverrides).length > 0;
+  const overridesPanel = document.createElement('details');
+  overridesPanel.className = 'settings-providers-gateway-overrides-panel';
+  overridesPanel.open = hasOverrides;
+  const overridesSummary = document.createElement('summary');
+  overridesSummary.textContent = 'Per-model API overrides (JSON)';
+  overridesPanel.append(overridesSummary);
+
   const overridesField = el('div', 'field');
-  overridesField.append(el('label', undefined, 'Per-model API overrides (JSON)'));
   const overridesArea = document.createElement('textarea');
   overridesArea.className = 'settings-input settings-providers-pricing-json';
   overridesArea.name = 'modelApiOverridesJson';
@@ -380,11 +664,12 @@ function appendGatewayFields(parent: HTMLElement, provider?: ProviderPublic): vo
   overridesArea.spellcheck = false;
   overridesArea.placeholder =
     '{"claude-sonnet-4-5":"anthropic-v1","gpt-4o-mini":"openai-v1"}';
-  if (provider?.modelApiOverrides && Object.keys(provider.modelApiOverrides).length > 0) {
+  if (hasOverrides && provider?.modelApiOverrides) {
     overridesArea.value = JSON.stringify(provider.modelApiOverrides, null, 2);
   }
   overridesField.append(overridesArea);
-  block.append(overridesField);
+  overridesPanel.append(overridesField);
+  block.append(overridesPanel);
 
   const hint = el(
     'p',
@@ -647,6 +932,12 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
 
   const resolved = pathsForProvider(provider);
 
+  const { row: enabledLabel, input: enabledInput } = createSettingsToggleRow('Enabled', {
+    name: 'enabled',
+    checked: provider.enabled !== false,
+  });
+  form.append(enabledLabel);
+
   const idField = el('div', 'field');
   idField.append(el('label', undefined, 'Provider id'));
   const idInput = document.createElement('input');
@@ -685,8 +976,6 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
 
   const kindSel = appendApiFields(form, provider.apiKind, provider.authStyle ?? 'bearer');
   appendPathFields(form, resolved.modelsPath, resolved.chatCompletionsPath, provider.apiKind);
-  appendGatewayFields(form, provider);
-  wirePathSyncOnApiKindChange(form, kindSel);
 
   const keyField = el('div', 'field');
   keyField.append(el('label', undefined, 'API key'));
@@ -709,11 +998,8 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
   keyField.append(keyHint);
   form.append(keyField);
 
-  const { row: enabledLabel, input: enabledInput } = createSettingsToggleRow('Enabled', {
-    name: 'enabled',
-    checked: provider.enabled !== false,
-  });
-  form.append(enabledLabel);
+  appendGatewayFields(form, provider);
+  wirePathSyncOnApiKindChange(form, kindSel);
 
   const constrainedValue =
     provider.constrainedToolCalls === true
@@ -797,12 +1083,12 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
 function formatStructuredOutputBadge(
   caps: ProviderCapabilities | null,
   providerId?: string,
-): string {
+): { label: string; tone: 'ok' | 'muted' | 'warn' } {
   const modelId = providerId ? resolveProbePreferredModelId(providerId) : undefined;
   const badge = structuredOutputBadge(caps, modelId);
-  if (badge === 'yes') return 'Structured output: yes';
-  if (badge === 'no') return 'Structured output: no';
-  return 'Structured output: unknown';
+  if (badge === 'yes') return { label: 'Structured output', tone: 'ok' };
+  if (badge === 'no') return { label: 'No structured output', tone: 'warn' };
+  return { label: 'Structured output unknown', tone: 'muted' };
 }
 
 /** Build one provider row in the settings list. */
@@ -818,57 +1104,62 @@ function createProviderSettingsRow(
   const resolved = pathsForProvider(provider);
 
   const head = el('div', 'settings-providers-row-head');
-  const title = el('span', 'settings-providers-name');
-  title.textContent = provider.label;
-  head.append(title);
 
-  const idMeta = el('span', 'settings-providers-id', provider.id);
-  head.append(idMeta);
+  const identity = el('div', 'settings-providers-row-identity');
+  identity.append(el('span', 'settings-providers-name', provider.label));
+  identity.append(el('span', 'settings-providers-id', provider.id));
+  head.append(identity);
 
-  if (provider.enabled === false) {
-    head.append(el('span', 'settings-badge settings-badge--muted', 'Disabled'));
-  }
-
-  head.append(
-    el(
-      'span',
-      'settings-badge settings-badge--muted',
-      formatStructuredOutputBadge(capabilities, provider.id),
+  const headMeta = el('div', 'settings-providers-row-head-meta');
+  headMeta.append(
+    createProviderStatusPill(
+      provider.enabled === false ? 'Disabled' : 'Enabled',
+      provider.enabled === false ? 'muted' : 'ok',
     ),
   );
+  headMeta.append(
+    createProviderStatusPill(
+      provider.hasApiKey ? 'Key saved' : 'No key',
+      provider.hasApiKey ? 'ok' : 'muted',
+    ),
+  );
+  const structured = formatStructuredOutputBadge(capabilities, provider.id);
+  headMeta.append(createProviderStatusPill(structured.label, structured.tone));
 
   if (canRemove) {
     const removeBtn = el('button', 'settings-inline-btn settings-providers-remove', 'Remove');
     removeBtn.type = 'button';
     removeBtn.dataset.providerRemove = provider.id;
     removeBtn.setAttribute('aria-label', `Remove ${provider.label}`);
-    head.append(removeBtn);
+    headMeta.append(removeBtn);
   }
 
+  head.append(headMeta);
   row.append(head);
 
-  const detail = el('div', 'settings-providers-detail');
-  detail.append(el('p', 'settings-field-hint', provider.baseUrl));
-  detail.append(
+  const body = el('div', 'settings-providers-row-body');
+  body.append(el('code', 'settings-providers-endpoint', provider.baseUrl));
+  body.append(
     el(
       'p',
-      'settings-field-hint',
+      'settings-providers-meta-line',
       provider.autoApi
-        ? `${resolved.modelsPath} · ${resolved.chatCompletionsPath} · ${resolved.messagesPath ?? '/v1/messages'} (auto API)`
+        ? `${resolved.modelsPath} · ${resolved.chatCompletionsPath} · ${resolved.messagesPath ?? '/v1/messages'} · auto API`
         : `${resolved.modelsPath} · ${resolved.chatCompletionsPath}`,
     ),
   );
-  const kindLine = el(
-    'p',
-    'settings-field-hint',
-    `API: ${provider.apiKind}${provider.hasApiKey ? ' · API key set' : ''}`,
+  body.append(
+    el(
+      'p',
+      'settings-providers-meta-line',
+      `API ${formatApiKindLabel(provider.apiKind)}`,
+    ),
   );
-  detail.append(kindLine);
-  row.append(detail);
+  row.append(body);
 
   const editPanel = document.createElement('details');
   editPanel.className = 'settings-providers-edit-panel';
-  const editSummary = el('summary', 'settings-providers-edit-summary', 'Edit provider');
+  const editSummary = el('summary', 'settings-providers-edit-summary', 'Edit connection');
   editPanel.append(editSummary);
   editPanel.append(buildProviderEditForm(provider));
   row.append(editPanel);
@@ -892,9 +1183,6 @@ function clearProvidersAddForm(): void {
   if (err) err.textContent = '';
 }
 
-let providersAddFormBound = false;
-let providersListActionsBound = false;
-
 /** Wire add-provider form submit once. */
 function bindProvidersAddForm(): void {
   if (providersAddFormBound) return;
@@ -907,18 +1195,13 @@ function bindProvidersAddForm(): void {
 
   if (form && apiKindInput) {
     fillPathInputs(form, parseApiKind(apiKindInput));
-    appendGatewayFields(form);
     wirePathSyncOnApiKindChange(form, apiKindInput);
     renderProvidersAddPicker(form);
     showProvidersAddPicker();
   }
 
   const backBtn = document.getElementById('settingsProvidersAddBack');
-  const addPanel = document.getElementById('settingsProvidersAddPanel') as HTMLDetailsElement | null;
   backBtn?.addEventListener('click', () => resetProvidersAddFlow());
-  addPanel?.addEventListener('toggle', () => {
-    if (!addPanel.open) resetProvidersAddFlow();
-  });
 
   resetBtn?.addEventListener('click', () => clearProvidersAddForm());
 
@@ -1203,28 +1486,26 @@ function bindProvidersListActions(listEl: HTMLElement): void {
 
 /** Refresh Settings → Providers list and offline/add panel visibility. */
 export async function renderProvidersSettingsSection(): Promise<void> {
-  const listEl = document.getElementById('settingsProvidersList');
-  const offlineEl = document.getElementById('settingsProvidersOffline');
-  const addPanel = document.getElementById('settingsProvidersAddPanel');
-  if (!listEl) return;
-
-  listEl.dataset.settingsSearchKey = 'models.providers';
-  const addForm = document.getElementById('settingsProvidersAddForm');
-  if (addForm) addForm.dataset.settingsSearchKey = 'models.providers.add';
+  let listEl: HTMLElement;
+  try {
+    listEl = ensureProvidersShell();
+  } catch {
+    return;
+  }
 
   bindProvidersAddForm();
   bindProvidersListActions(listEl);
   listEl.replaceChildren();
 
   const online = isServerStorageMode() && isProvidersApiAvailable();
-  offlineEl?.classList.toggle('hidden', online);
-  addPanel?.classList.toggle('hidden', !online);
+  providersOfflineEl?.classList.toggle('hidden', online);
+  providersAddGroupEl?.classList.toggle('hidden', !online);
 
   if (!online) {
     listEl.appendChild(
       el(
         'p',
-        'settings-section-note',
+        'settings-providers-empty',
         'Run npm start to add OpenAI-compatible and LM Studio backends.',
       ),
     );
@@ -1241,7 +1522,13 @@ export async function renderProvidersSettingsSection(): Promise<void> {
   const canRemove = providers.length > 1;
 
   if (providers.length === 0) {
-    listEl.appendChild(el('p', 'settings-section-note', 'No providers yet. Add one below.'));
+    listEl.appendChild(
+      el(
+        'p',
+        'settings-providers-empty',
+        'No providers yet. Use Add provider below to connect LM Studio, Ollama, or a cloud API.',
+      ),
+    );
     return;
   }
 

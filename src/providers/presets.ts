@@ -76,16 +76,47 @@ export const SETTINGS_FEATURED_PRESET_IDS: string[] = [
   'github-copilot',
 ];
 
+/** Local server quick-add entries for Settings → Providers picker. */
+export const SETTINGS_LOCAL_PRESETS: ProviderPreset[] = [
+  {
+    id: 'lm-studio',
+    label: 'LM Studio',
+    baseUrl: 'http://localhost:1234',
+    apiKind: 'lm-studio-v0',
+    authHint: 'LM Studio local server (default port 1234).',
+  },
+  {
+    id: 'ollama',
+    label: 'Ollama',
+    baseUrl: 'http://localhost:11434',
+    apiKind: 'openai-v1',
+    authHint: 'Ollama OpenAI-compatible API (default port 11434).',
+  },
+];
+
 export function getProviderPreset(id: string): ProviderPreset | undefined {
   return PROVIDER_PRESETS.find((preset) => preset.id === id);
 }
 
-/** Presets for Settings quick-add, featured entries first then the rest. */
-export function listSettingsProviderPresets(): ProviderPreset[] {
-  const featured = SETTINGS_FEATURED_PRESET_IDS.map((id) => getProviderPreset(id)).filter(
+/** Local server quick-add entries for Settings → Providers picker. */
+export function listSettingsLocalPresets(): ProviderPreset[] {
+  return [...SETTINGS_LOCAL_PRESETS];
+}
+
+/** Featured cloud presets for the Settings picker grid. */
+export function listSettingsFeaturedPresets(): ProviderPreset[] {
+  return SETTINGS_FEATURED_PRESET_IDS.map((id) => getProviderPreset(id)).filter(
     (preset): preset is ProviderPreset => preset !== undefined,
   );
-  const featuredIds = new Set(featured.map((preset) => preset.id));
-  const rest = PROVIDER_PRESETS.filter((preset) => !featuredIds.has(preset.id));
-  return [...featured, ...rest];
+}
+
+/** Remaining cloud presets after featured entries. */
+export function listSettingsMorePresets(): ProviderPreset[] {
+  const featuredIds = new Set(SETTINGS_FEATURED_PRESET_IDS);
+  return PROVIDER_PRESETS.filter((preset) => !featuredIds.has(preset.id));
+}
+
+/** Presets for Settings quick-add, featured entries first then the rest. */
+export function listSettingsProviderPresets(): ProviderPreset[] {
+  return [...listSettingsFeaturedPresets(), ...listSettingsMorePresets()];
 }

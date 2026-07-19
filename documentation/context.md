@@ -318,7 +318,7 @@ Design reference: [`DESIGN.md`](../DESIGN.md), [`documentation/design-system/`](
 | **Calendar** | `#/app/calendar` | `server/calendar/`, SQLite `calendar.db`, CalDAV |
 | **Email** | `#/app/email` | `server/email/`, IMAP/SMTP, encrypted accounts, SQLite `mail-<accountId>.db` |
 | **Voice** | Models → Voice | `server/voice/`, local Whisper + Qwen TTS option |
-| **Settings** | `#/app/settings` | Full config via `/api/config/*`; General category includes General, Notifications, Audio, About; Appearance, Usage & cost, Sampler, and Thinking use the emphasis-panel layout; Advanced includes Health & diagnostics |
+| **Settings** | `#/app/settings` | Full config via `/api/config/*`; General category includes General, Notifications, Audio, About; Appearance, Models (Providers, **Routing**, Usage & cost, Sampler, Thinking) use the emphasis-panel layout; Advanced includes Health & diagnostics |
 
 **Deep Research** is a dedicated panel (not a composer mode). **Compare** runs 2–6 blind model slots. **Bench** runs integration + academic packs; distinct from eval harness task packs.
 
@@ -346,7 +346,7 @@ Design reference: [`DESIGN.md`](../DESIGN.md), [`documentation/design-system/`](
 
 Multi-provider registry: `~/.minnow/providers/`. UI: Models app → Providers. Chat uses composite model keys (`providerId` + model id) in [`src/lib/model-select-key.ts`](../src/lib/model-select-key.ts).
 
-**One-click presets:** shared catalog in [`src/providers/presets.ts`](../src/providers/presets.ts) — OpenCode Go/Zen, Anthropic, DeepSeek, GitHub Copilot, plus OpenRouter/OpenAI/Groq/Mistral. Used by onboarding cloud setup (chips) and **Settings → Providers → Add provider** (preset grid first, then form; **Add custom provider** opens the full field set for local or arbitrary endpoints).
+**One-click presets:** shared catalog in [`src/providers/presets.ts`](../src/providers/presets.ts) — OpenCode Go/Zen, Anthropic, DeepSeek, GitHub Copilot, plus OpenRouter/OpenAI/Groq/Mistral. **Settings → Providers** uses the `settings-general` emphasis-panel layout (like Routing and Usage): grouped picker (local servers, featured APIs, more cloud APIs, then custom), flat provider rows inside the configured panel, and related links to Routing and Usage. Styles: [`src/styles/settings-providers.css`](../src/styles/settings-providers.css).
 
 `fetchModels()` loads all enabled providers. Main chat streams via generations API; `postChatCompletions` shim for headless/sub-agents.
 

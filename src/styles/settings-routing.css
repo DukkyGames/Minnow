@@ -1,0 +1,238 @@
+/**
+ * Settings → Routing — role bindings and fallback chains inside emphasis panels.
+ */
+
+.settings-routing.settings-general {
+  max-width: min(48rem, 100%);
+}
+
+.settings-routing__content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-general .settings-routing-group__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.settings-general .settings-group--emphasis .settings-routing-role + .settings-routing-role {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.settings-routing-role__head {
+  margin-bottom: 12px;
+}
+
+.settings-routing-role__title {
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.35;
+  color: var(--mn-fg);
+}
+
+.settings-routing-role__desc {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+  max-width: 65ch;
+}
+
+.settings-routing-role__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.settings-routing-role__chat {
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.settings-routing-row__selects {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(180px, 1.35fr);
+  gap: 10px 14px;
+  max-width: none;
+}
+
+.settings-routing-row__extras {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-routing-row__extras .settings-toggle-row--compact:last-child {
+  padding-bottom: 0;
+}
+
+.settings-routing-effective {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--mn-fg-muted);
+}
+
+.settings-routing-effective__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.settings-routing-effective__value {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--mn-fg);
+  word-break: break-word;
+}
+
+  margin-top: 12px;
+  border-top: 1px solid var(--mn-border);
+  padding-top: 8px;
+}
+
+.settings-routing-advanced__summary {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  list-style: none;
+}
+
+.settings-routing-advanced__summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-routing-advanced__body {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-routing-fallback {
+  margin-top: 12px;
+  border-top: 1px solid var(--mn-border);
+  padding-top: 12px;
+}
+
+.settings-routing-fallback__summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mn-fg-muted);
+  list-style: none;
+}
+
+.settings-routing-fallback__summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-routing-fallback__body {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-routing-fallback__hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+  max-width: 65ch;
+}
+
+.settings-routing-fallback__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-fallback-candidate {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-fallback-candidate .settings-routing-row__selects {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-fallback-global-chain {
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.settings-fallback-global-chain__title {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mn-fg);
+}
+
+.settings-fallback-global-chain__hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+  max-width: 65ch;
+}
+
+.settings-fallback-health {
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.settings-fallback-health__title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mn-fg);
+}
+
+.settings-fallback-health__empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
+.settings-fallback-health__list {
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--mn-fg);
+  list-style: none;
+}
+
+.settings-general .settings-group--emphasis > .settings-actions {
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--mn-border);
+}
+
+@media (max-width: 640px) {
+  .settings-routing-row__selects {
+    grid-template-columns: 1fr;
+  }
+}
