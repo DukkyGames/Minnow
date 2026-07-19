@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from './app-dialog';
 /**
  * Advanced git action dialogs: merge, rebase, stash, cherry-pick (Git Center lightbox).
  */
@@ -136,8 +137,8 @@ async function runAdvancedOp(
   ctx.onSuccess();
 }
 
-function pickBranch(branches: string[], prompt: string): string | null {
-  const value = window.prompt(prompt, branches[0] ?? '');
+async function pickBranch(branches: string[], prompt: string): Promise<string | null> {
+  const value = await appPrompt(prompt, branches[0] ?? '');
   if (value === null) return null;
   const trimmed = value.trim();
   return trimmed || null;
@@ -149,9 +150,9 @@ export async function openMergeDialog(
   ctx: AdvancedGitContext,
   conflictHost: HTMLElement,
 ): Promise<void> {
-  const branch = pickBranch(branches, 'Merge branch into current:');
+  const branch = await pickBranch(branches, 'Merge branch into current:');
   if (!branch) return;
-  const noFf = window.confirm('Use --no-ff (always create merge commit)?');
+  const noFf = await appConfirm('Use --no-ff (always create merge commit)?');
   const result = await gitMerge({ branch, noFf, cwd: ctx.cwd });
   if (!result.ok) {
     const err = result.error ?? 'Merge failed';
@@ -174,7 +175,7 @@ export async function openRebaseDialog(
   ctx: AdvancedGitContext,
   conflictHost: HTMLElement,
 ): Promise<void> {
-  const onto = pickBranch(branches, 'Rebase current branch onto:');
+  const onto = await pickBranch(branches, 'Rebase current branch onto:');
   if (!onto) return;
   const result = await gitRebase({ onto, cwd: ctx.cwd });
   if (!result.ok) {
@@ -193,7 +194,7 @@ export async function openRebaseDialog(
 
 /** Stash push with optional message. */
 export async function openStashPushDialog(ctx: AdvancedGitContext): Promise<void> {
-  const message = window.prompt('Stash message (optional):', '');
+  const message = await appPrompt('Stash message (optional):', '');
   if (message === null) return;
   const result = await gitStashPush({ message: message.trim() || undefined, cwd: ctx.cwd });
   if (!result.ok) {
@@ -220,7 +221,7 @@ export async function openStashMenuDialog(
     return;
   }
   const menu = stashes.map((s, i) => `${i}: ${s}`).join('\n');
-  const pick = window.prompt(`Stash index and action (pop/apply/drop):\n${menu}\n\nEnter e.g. "0 pop":`, '0 pop');
+  const pick = await appPrompt(`Stash index and action (pop/apply/drop):\n${menu}\n\nEnter e.g. "0 pop":`, '0 pop');
   if (!pick) return;
   const match = pick.trim().match(/^(\d+)\s+(pop|apply|drop)$/i);
   if (!match) {
@@ -253,7 +254,7 @@ export async function openCherryPickDialog(
   conflictHost: HTMLElement,
   presetSha?: string,
 ): Promise<void> {
-  const sha = presetSha ?? window.prompt('Cherry-pick commit SHA:', '');
+  const sha = presetSha ?? await appPrompt('Cherry-pick commit SHA:', '');
   if (!sha?.trim()) return;
   const result = await gitCherryPick({ sha: sha.trim(), cwd: ctx.cwd });
   if (!result.ok) {

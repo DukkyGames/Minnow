@@ -29,6 +29,7 @@ const LABEL_TO_ACTION: Record<string, GitSourceControlAction> = {
   Fetch: 'fetch',
   'Fetch all': 'fetch',
   Merge: 'merge',
+  'Merge to main': 'merge',
   Rebase: 'rebase',
   Stash: 'stash',
   'Cherry-pick': 'cherry-pick',

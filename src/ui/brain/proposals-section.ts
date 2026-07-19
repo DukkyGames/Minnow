@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from '../app-dialog';
 /**
  * Brain app — Proposals section: reuse memory/skill synthesis review panel.
  */
@@ -26,7 +27,7 @@ export async function renderProposalsSection(): Promise<void> {
     clearPendingBound = true;
     document.getElementById('brainProposalsClearPending')?.addEventListener('click', () => {
       void (async () => {
-        const ok = window.confirm('Clear all pending memory and skill proposals?');
+        const ok = await appConfirm('Clear all pending memory and skill proposals?');
         if (!ok) return;
         setProposalsStatus('spin', 'Clearing…');
         const { clearBrainProposals } = await import('../../brain/client');

@@ -9,8 +9,13 @@ import { createReadStream } from 'node:fs';
 import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
 import { runWithToolContext } from '../runtime/path-access.js';
 import { contentTypeForPreviewPath } from './mime-types.js';
+import {
+  isDocumentHtmlPreviewPath,
+  renderDocumentPreviewHtml,
+} from './document-html.js';
 
 const PREVIEW_FILE_PREFIX = '/api/preview/file/';
+const PREVIEW_DOCUMENT_HTML_PREFIX = '/api/preview/document-html/';
 
 /** Heavy trees — block early so HTML cannot fan out thousands of preview requests. */
 const BLOCKED_PATH_SEGMENTS = new Set([
@@ -83,6 +88,22 @@ function decodePreviewRelativePath(pathname) {
 }
 
 /**
+ * Decode the path segment after /api/preview/document-html/ (may contain slashes).
+ * @param {string} pathname
+ * @returns {string | null}
+ */
+function decodeDocumentHtmlRelativePath(pathname) {
+  if (!pathname.startsWith(PREVIEW_DOCUMENT_HTML_PREFIX)) return null;
+  const encoded = pathname.slice(PREVIEW_DOCUMENT_HTML_PREFIX.length);
+  if (!encoded) return null;
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * @param {import('http').IncomingMessage} req
  * @param {import('http').ServerResponse} res
  * @param {string} pathname
@@ -109,6 +130,54 @@ export async function handlePreviewRequest(req, res, pathname, searchParams, dep
   if (pathname === '/api/preview/ping') {
     sendJson(res, 200, { ok: true });
     return true;
+  }
+
+  const documentHtmlPath = decodeDocumentHtmlRelativePath(pathname);
+  if (documentHtmlPath !== null) {
+    if (isBlockedPreviewPath(documentHtmlPath)) {
+      sendJson(res, 403, {
+        error:
+          'Preview blocked for dependency/build paths (node_modules, dist, .git, .vite, .minnow).',
+      });
+      return true;
+    }
+    if (!isDocumentHtmlPreviewPath(documentHtmlPath)) {
+      sendJson(res, 400, {
+        error: 'document-html preview supports spreadsheet and Word document paths only',
+      });
+      return true;
+    }
+
+    const workspaceRootParam = searchParams?.get('workspaceRoot')?.trim() || undefined;
+    let workspaceRoot;
+    if (workspaceRootParam) {
+      try {
+        workspaceRoot = await validateAllowedWorkspaceRoot(workspaceRootParam);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        sendJson(res, 400, { error: message });
+        return true;
+      }
+    }
+
+    try {
+      const absPath = workspaceRoot
+        ? await runWithToolContext(async () => deps.resolveSafePath(documentHtmlPath), {
+            workspaceRoot,
+          })
+        : await deps.runWithPathAccess(async () => deps.resolveSafePath(documentHtmlPath));
+      const buffer = await fsp.readFile(absPath);
+      const html = await renderDocumentPreviewHtml(absPath, buffer);
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
+      res.end(html);
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      sendJson(res, 400, { error: message });
+      return true;
+    }
   }
 
   const relativePath = decodePreviewRelativePath(pathname);

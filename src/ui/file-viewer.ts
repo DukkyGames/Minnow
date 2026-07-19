@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from './app-dialog';
 /**
  * Editable file viewer (CodeMirror 6) with multi-tab strip and per-tab in-memory state.
  */
@@ -5,9 +6,13 @@
 import { EditorSelection, EditorState, type Extension } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { isImageFilePath } from '../attachments/image-path';
+import {
+  documentPreviewViewMode,
+  getDocumentPreviewKind,
+} from '../attachments/document-path';
 import { setAssistantBubbleContent } from '../markdown/renderer';
 import { executeTool, getLocalServerAvailable } from '../tools/client';
-import { resolvePreviewLoadUrl } from './preview-load-url';
+import { resolveDocumentHtmlLoadUrl, resolvePreviewLoadUrl } from './preview-load-url';
 import { getFileTreeListingWorkspaceRoot } from './file-tree-listing-root';
 import { getActivePreviewTabId, listPreviewTabs } from './preview-tab-store';
 import { fetchLspConfig } from '../lsp/config-client';
@@ -110,6 +115,14 @@ let editorAiModelSelectListener: (() => void) | null = null;
 /** Live AI extension options for hot-reload without remounting the editor. */
 let editorAiOpts: EditorAiExtensionOptions | null = null;
 let diagnosticsBadgeEl: HTMLElement | null = null;
+/** Blob URL for the active PDF preview; revoked when the tab unmounts. */
+let activePdfPreviewBlobUrl: string | null = null;
+
+function revokeActivePdfPreviewBlob(): void {
+  if (!activePdfPreviewBlobUrl) return;
+  URL.revokeObjectURL(activePdfPreviewBlobUrl);
+  activePdfPreviewBlobUrl = null;
+}
 
 /** Strip "N: " prefixes from read_file_range output. */
 export function parseReadFileRangeBody(raw: string): string {
@@ -291,6 +304,7 @@ function destroyEditor(): void {
   snapshotOutgoingEditorTab();
   closeLspDocument();
   detachEditorAiModelSelectListener();
+  revokeActivePdfPreviewBlob();
   if (editorView) {
     editorView.destroy();
     editorView = null;
@@ -598,6 +612,76 @@ function mountImagePreview(tab: ViewerTabState, src: string, onImageError?: () =
   updateViewerChrome();
 }
 
+/** Embed spreadsheet/Word HTML previews (same-origin, server-rendered). */
+function mountDocumentHtmlPreview(
+  tab: ViewerTabState,
+  src: string,
+  title: string,
+  onFrameError?: () => void,
+): void {
+  const host = getViewerHost();
+  if (!host) return;
+  destroyEditor();
+  host.innerHTML = '';
+
+  const banner = document.createElement('p');
+  banner.id = 'fileViewerReadOnlyBanner';
+  banner.className = 'file-viewer-readonly-banner';
+  banner.textContent = readOnlyBannerMessage(tab);
+  host.appendChild(banner);
+
+  const frame = document.createElement('iframe');
+  frame.className = 'file-viewer-document-preview';
+  frame.title = title;
+  frame.src = src;
+  if (onFrameError) {
+    frame.onerror = onFrameError;
+  }
+  host.appendChild(frame);
+  updateViewerChrome();
+}
+
+/**
+ * PDF preview via blob URL + embed.
+ * Chromium blocks PDFs inside sandboxed iframes (ERR_BLOCKED_BY_CLIENT).
+ */
+async function mountPdfPreview(tab: ViewerTabState, src: string): Promise<void> {
+  const host = getViewerHost();
+  if (!host) return;
+  destroyEditor();
+  host.innerHTML = '<p class="file-viewer-status">Loading PDF…</p>';
+
+  try {
+    const response = await fetch(src);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const blob = await response.blob();
+    revokeActivePdfPreviewBlob();
+    activePdfPreviewBlobUrl = URL.createObjectURL(blob);
+
+    host.innerHTML = '';
+
+    const banner = document.createElement('p');
+    banner.id = 'fileViewerReadOnlyBanner';
+    banner.className = 'file-viewer-readonly-banner';
+    banner.textContent = readOnlyBannerMessage(tab);
+    host.appendChild(banner);
+
+    const embed = document.createElement('embed');
+    embed.className = 'file-viewer-document-preview file-viewer-pdf-preview';
+    embed.type = 'application/pdf';
+    embed.src = activePdfPreviewBlobUrl;
+    embed.title = tab.displayName;
+    host.appendChild(embed);
+    updateViewerChrome();
+  } catch {
+    setViewerError(
+      'Could not load PDF preview. Is the tool server running (npm start)?',
+    );
+  }
+}
+
 export function setViewerLoading(_path: string): void {
   const host = getViewerHost();
   if (host) {
@@ -681,6 +765,17 @@ async function ensureActiveTabLoaded(): Promise<void> {
       renderActiveViewerTab();
       return;
     }
+    const documentKind = getDocumentPreviewKind(tab.path);
+    if (documentKind) {
+      setActiveTabLoadState('ready', {
+        viewMode: documentPreviewViewMode(documentKind),
+        readOnlyExcerpt: true,
+        readOnlyBannerText:
+          'Document preview (read-only). Use create_pdf, create_spreadsheet, or create_word_document to generate files.',
+      });
+      renderActiveViewerTab();
+      return;
+    }
     const loaded = await loadFileContent(tab.path);
     const viewMode = tab.viewMode === 'markdown-preview' ? 'markdown-preview' : 'editor';
     setActiveTabLoadState('ready', {
@@ -735,6 +830,31 @@ export function renderActiveViewerTab(): void {
         );
       });
     }
+    return;
+  }
+
+  if (tab.viewMode === 'pdf') {
+    const src = resolvePreviewLoadUrl(
+      { kind: 'workspace', path: tab.path },
+      undefined,
+      getFileTreeListingWorkspaceRoot(),
+    );
+    void mountPdfPreview(tab, src);
+    return;
+  }
+
+  if (tab.viewMode === 'spreadsheet' || tab.viewMode === 'word') {
+    const src = resolveDocumentHtmlLoadUrl(
+      tab.path,
+      undefined,
+      getFileTreeListingWorkspaceRoot(),
+    );
+    const label = tab.viewMode === 'spreadsheet' ? 'Spreadsheet preview' : 'Word document preview';
+    mountDocumentHtmlPreview(tab, src, label, () => {
+      setViewerError(
+        'Could not load document preview. Is the tool server running (npm start)?',
+      );
+    });
     return;
   }
 
@@ -903,7 +1023,7 @@ export async function saveCurrentFile(): Promise<boolean> {
     return true;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    window.alert(message || 'Could not save file');
+    await appAlert(message || 'Could not save file');
     return false;
   } finally {
     isSaving = false;
@@ -1163,6 +1283,40 @@ export async function openFileInViewer(
 ): Promise<void> {
   if (isImageFilePath(relativePath)) {
     openWorkspaceImageInViewer(relativePath);
+    return;
+  }
+
+  const documentKind = getDocumentPreviewKind(relativePath);
+  if (documentKind) {
+    const result = await openViewerTab(relativePath, {
+      ...openTabOptionsFromViewerOptions(options),
+      viewMode: documentPreviewViewMode(documentKind),
+      readOnlyExcerpt: true,
+      readOnlyBannerText:
+        'Document preview (read-only). Use create_pdf, create_spreadsheet, or create_word_document to generate files.',
+      confirmUnsaved: options?.skipUnsavedGuard ? undefined : confirmLeaveDirtyActiveTab,
+      skipUnsavedGuard: options?.skipUnsavedGuard,
+      beforeActivate: snapshotOutgoingEditorTab,
+    });
+
+    if (!result) {
+      if (listViewerTabs().length >= MAX_OPEN_VIEWER_TABS) {
+        setStatus('err', `At most ${MAX_OPEN_VIEWER_TABS} files can be open in the viewer.`);
+      }
+      return;
+    }
+
+    showViewerSplit();
+
+    const mounts = await import('../os/desktop-workspace-mounts');
+    if (mounts.isDesktopWorkspaceHostingActive()) {
+      mounts.openDesktopWorkspaceTab('viewer');
+      await mounts.syncDesktopWorkspaceMounts();
+    }
+
+    renderFileTreeViaBridge();
+    result.tab.loadStatus = 'loading';
+    renderActiveViewerTab();
     return;
   }
 

@@ -31,6 +31,9 @@ const PLAN_BLOCKED_WRITE_TOOLS = new Set([
   'delete_path',
   'move_file',
   'copy_file',
+  'create_pdf',
+  'create_spreadsheet',
+  'create_word_document',
 ]);
 
 /**

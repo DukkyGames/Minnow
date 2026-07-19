@@ -94,10 +94,12 @@ export const UPDATER_SET_CHANNEL = 'minnow:updater:set-channel';
 /** Main → renderer: updater status changed. */
 export const UPDATER_STATUS_CHANGED = 'minnow:updater:status-changed';
 
-/** Renderer → main: shell window minimize / maximize / close / query maximized. */
+/** Renderer → main: shell window controls and focus recovery. */
 export const WINDOW_MINIMIZE = 'minnow:window:minimize';
 export const WINDOW_MAXIMIZE = 'minnow:window:maximize';
 export const WINDOW_CLOSE = 'minnow:window:close';
 export const WINDOW_IS_MAXIMIZED = 'minnow:window:is-maximized';
+/** Restore BrowserWindow + renderer focus after a blocking native JavaScript dialog. */
+export const WINDOW_RESTORE_FOCUS = 'minnow:window:restore-focus';
 /** Main → renderer: shell window maximized state changed. */
 export const WINDOW_MAXIMIZED_CHANGED = 'minnow:window:maximized-changed';

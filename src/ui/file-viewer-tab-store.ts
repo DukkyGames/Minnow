@@ -10,7 +10,7 @@ import {
 import { basename, isAncestorPath, normalizeTreePath } from './file-tree-path';
 
 export type ViewerTabKind = 'workspace' | 'attachment';
-export type ViewerViewMode = 'editor' | 'markdown-preview' | 'image';
+export type ViewerViewMode = 'editor' | 'markdown-preview' | 'image' | 'pdf' | 'spreadsheet' | 'word';
 export type ViewerLoadStatus = 'loading' | 'ready' | 'error';
 
 export interface ViewerTabInitialSelection {
@@ -201,6 +201,7 @@ export function setActiveTabLoadState(
   payload?: {
     content?: string;
     readOnlyExcerpt?: boolean;
+    readOnlyBannerText?: string | null;
     viewMode?: ViewerViewMode;
     error?: string;
   },
@@ -215,6 +216,9 @@ export function setActiveTabLoadState(
   }
   if (payload?.readOnlyExcerpt !== undefined) {
     tab.readOnlyExcerpt = payload.readOnlyExcerpt;
+  }
+  if (payload?.readOnlyBannerText !== undefined) {
+    tab.readOnlyBannerText = payload.readOnlyBannerText;
   }
   if (payload?.viewMode !== undefined) {
     tab.viewMode = payload.viewMode;

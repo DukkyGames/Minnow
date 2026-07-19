@@ -70,6 +70,11 @@ import {
 } from '../tools/code-tools.js';
 import { toolSaveMemory } from '../tools/memory-tools.js';
 import { toolReadDocument } from '../tools/read-document.js';
+import {
+  toolCreatePdf,
+  toolCreateSpreadsheet,
+  toolCreateWordDocument,
+} from '../tools/create-document.js';
 import { toolBoardProvisionInfra } from '../workspace/board-infra-provision.js';
 import {
   toolFetchWebContent,
@@ -1284,6 +1289,9 @@ const SERVER_TOOL_HANDLERS = {
   run_python: toolRunPython,
   send_notification: toolSendNotification,
   read_document: toolReadDocument,
+  create_pdf: toolCreatePdf,
+  create_spreadsheet: toolCreateSpreadsheet,
+  create_word_document: toolCreateWordDocument,
   run_impeccable: (args) =>
     toolRunImpeccable(args, getAppRoot(), getEffectiveWorkspaceRoot()),
   load_impeccable_context: () =>

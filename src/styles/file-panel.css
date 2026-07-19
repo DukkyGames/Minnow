@@ -848,6 +848,20 @@
   border: 1px solid var(--mn-border);
 }
 
+.file-viewer-document-preview {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-surface-1);
+}
+
+.file-viewer-pdf-preview {
+  display: block;
+  height: 100%;
+}
+
 /* Chat bubbles cap prose width; file viewer preview uses the full pane */
 .file-viewer-body .file-viewer-markdown-preview.msg-bubble--md {
   max-width: none;

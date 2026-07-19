@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from './app-dialog';
 /**
 
  * Settings → Appearance: UI and monospace font presets + uploads.
@@ -140,7 +141,7 @@ function appendFontRow(
 
       const msg = err instanceof Error ? err.message : String(err);
 
-      window.alert(msg);
+      await appAlert(msg);
 
     }
 

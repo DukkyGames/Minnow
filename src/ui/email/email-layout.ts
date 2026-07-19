@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from '../app-dialog';
 /**
 
  * Three-pane mail layout — folders, message list, reading pane.
@@ -962,7 +963,7 @@ export async function renderEmailLayout(
       deleteBtn.classList.add("email-icon-btn--danger");
 
       deleteBtn.addEventListener("click", async () => {
-        if (!window.confirm("Move to trash?")) return;
+        if (!await appConfirm("Move to trash?")) return;
 
         await deleteEmailMessage(options.account.id, selected.id);
 

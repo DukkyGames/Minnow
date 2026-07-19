@@ -219,6 +219,8 @@ API: `GET /api/skills`, `GET/PUT /api/skills/:id`, `GET/PUT /api/config/skills`.
 
 **Git commit messages (MIN-412):** The Code git panel and `/git-commit` skill share conventions — conventional commits with optional gitmoji (`config.json` → `gitCommitMessage.useGitmoji`, default on), imperative subject (≤72 chars), body explaining *why*, staged-vs-unstaged scope, and `BREAKING CHANGE:` footers. UI generation: [`src/ui/git-commit-message-client.ts`](../src/ui/git-commit-message-client.ts) (diff filtering, reasoning-chain extraction, prompt builder). During streaming, only high-confidence conventional commit lines are shown in the input; heuristic/plain-text extraction and reasoning-channel fallback run on completion. Markdown diff walkthroughs (numbered steps, `Removed/Updated` bullets, `**Identify Key Changes**` headers) from local/LM Studio models are rejected as non-commit output.
 
+**Merge to main (MIN-465):** When the Source Control panel is on a feature branch (main or secondary worktree), a **Merge to main** toolbar button appears beside Pull/Push. It checks out `main`/`master` on the main workspace (with dirty-tree confirmation when needed), merges the current branch, switches the panel back to the workspace worktree, and surfaces merge failures via toast + optional **Send to chat**. Trunk resolution prefers local `main`/`master`, then `origin/main`/`origin/master` (needed when trunk is checked out in another worktree and omitted from the local branch list). Logic: [`src/lib/git-trunk-branch.ts`](../src/lib/git-trunk-branch.ts), [`src/ui/git-merge-to-main.ts`](../src/ui/git-merge-to-main.ts).
+
 ---
 
 ## Memory and Brain
@@ -284,6 +286,8 @@ Stage layers in `#osStage` ([`src/os/shell.ts`](../src/os/shell.ts)):
 Presentation modes: `fullscreen` | `window` | `desktop` | `sidePanel` ([`src/os/presentation-mode.ts`](../src/os/presentation-mode.ts)).
 
 **Desktop chat** is the primary chat surface (`#desktopChatCol`); legacy `#chatView` retained for deep links. **Code** reparents `#appBody` into `#osAppsLayer`.
+
+The Code chat sidebar header keeps its navigation controls ordered as **collapse sidebar**, **search chats**, then **Code overview**.
 
 Router: [`src/os/router.ts`](../src/os/router.ts). Boot: `initOsPageBridge()` → `initOsShell()` → `initOsRouter()`.
 
@@ -366,6 +370,8 @@ Multi-provider registry: `~/.minnow/providers/`. UI: Models app → Providers. C
 
 [`src/attachments/`](../src/attachments/) — composer chips, max **10 MB**. Images → VLM `image_url` parts when model supports vision. PDF/office → server `read_document` when `npm start`.
 
+**Document creation (agents):** `create_pdf`, `create_spreadsheet` (.xlsx), and `create_word_document` (.docx) write binary files via the tool server (`pdf-lib`, `xlsx`, `docx` optional deps). **File viewer preview:** PDFs embed via `/api/preview/file/*`; spreadsheets and Word docs render HTML via `/api/preview/document-html/*` (uses `xlsx` / `mammoth` / `officeparser` when installed).
+
 ---
 
 ## Electron and packaging
@@ -374,6 +380,7 @@ Multi-provider registry: `~/.minnow/providers/`. UI: Models app → Providers. C
 - **Package:** `npm run package` → `release/` (NSIS on Windows).
 - **Preview browser:** requires Electron (`window.minnow.preview`); hidden in plain browser tabs.
 - **Auto-update:** GitHub Releases via `electron-updater` (packaged installs); Settings → General → App updates.
+- **In-app dialogs:** [`src/ui/app-dialog.ts`](../src/ui/app-dialog.ts) replaces blocking native `alert` / `confirm` / `prompt` in the Electron shell with Minnow-styled modals (`installAppDialogs()` at boot; call sites use `await appConfirm()` / `appAlert()` / `appPrompt()`). Overlay z-index `100030` keeps dialogs above shell chrome. Do not use synchronous `window.confirm()` in Electron — it cannot block on custom UI without freezing the renderer.
 
 ---
 
