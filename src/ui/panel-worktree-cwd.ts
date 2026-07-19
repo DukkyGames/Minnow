@@ -2,7 +2,12 @@
  * Shared git-panel / file-tree worktree cwd resolution (avoids circular imports).
  */
 
+import {
+  resolveBoardIntegrationWorktreePath,
+  resolveChatWorktreeRoot,
+} from '../state/worktree-isolation';
 import { getWorkspacePath } from '../state/workspace';
+import type { Chat, ChatGroup } from '../types';
 
 /** Normalize path separators and trailing slashes for panel comparisons. */
 export function normalizePanelPath(p: string): string {
@@ -56,6 +61,28 @@ export function resolvePanelBrowseRunTargetSeed(
 }
 
 /**
+ * Resolve git-panel browse cwd from the active chat and optional board view context.
+ * Board view with isolation prefers the integration worktree (MIN-464).
+ */
+export function resolvePanelBrowseCwd(input: {
+  chat: Chat;
+  groups?: ChatGroup[];
+  activeBoardGroup?: ChatGroup;
+  chats?: Chat[];
+}): string {
+  const { chat, groups, activeBoardGroup, chats } = input;
+  let worktreeRoot: string | undefined;
+
+  if (activeBoardGroup?.viewMode === 'board') {
+    worktreeRoot = resolveBoardIntegrationWorktreePath(activeBoardGroup, chats);
+  }
+
+  if (!worktreeRoot) {
+    worktreeRoot = resolveChatWorktreeRoot(chat, groups);
+  }
+
+  if (worktreeRoot) return worktreeRoot;
+  return getWorkspacePath().trim() || '.';
  * Pick a worktree path that exists in `worktrees`, falling back to the workspace root entry.
  */
 export function resolveKnownWorktreePath(
