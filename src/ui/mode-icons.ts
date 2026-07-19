@@ -12,7 +12,7 @@ export const MODE_ICON_SRC: Record<ModeId, string> = {
   build: '/icons/mode-build.png',
   plan: '/icons/mode-plan.png',
   'super-plan': '/icons/mode-super-plan.png',
-  orchestrate: '/icons/mode-orchestrate.svg',
+  orchestrate: '/icons/Orchestrate.svg',
   reef: '/icons/mode-reef.svg',
   debug: '/icons/mode-debug.png',
   onboarding: '/icons/mode-general.png',
@@ -66,12 +66,4 @@ export function syncModeIconInDom(
       icon.dataset.modeId = normalized;
       icon.style.setProperty('--mode-icon-url', `url('${src}')`);
     });
-}
-
-/** Wire static chrome slots (sidebar footer Orchestrate, etc.). */
-export function initModeChromeIcons(): void {
-  const orchestrateIcon = document.querySelector<HTMLElement>(
-    '#btnOrchestrate .chat-sidebar-footer-btn__mode-icon',
-  );
-  if (orchestrateIcon) applyModeMaskIcon(orchestrateIcon, 'orchestrate');
 }

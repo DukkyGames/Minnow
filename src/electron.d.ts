@@ -109,6 +109,108 @@ export interface MinnowCdpPickerApi {
   onError(callback: (message: string, tabId?: string, instanceId?: string) => void): () => void;
 }
 
+export type MinnowPreviewContextMenuRole =
+  | 'goBack'
+  | 'goForward'
+  | 'reload'
+  | 'openLinkInNewTab'
+  | 'copyLink'
+  | 'openExternal'
+  | 'copyImage'
+  | 'copyImageAddress'
+  | 'saveImage'
+  | 'cut'
+  | 'copy'
+  | 'paste'
+  | 'selectAll'
+  | 'replaceMisspelling'
+  | 'addToDictionary'
+  | 'inspect'
+  | 'sendToChat';
+
+export type MinnowPreviewContextMenuItem =
+  | { type: 'separator' }
+  | {
+      type: 'item';
+      role: MinnowPreviewContextMenuRole;
+      label: string;
+      enabled: boolean;
+      suggestion?: string;
+    };
+
+export interface MinnowPreviewContextMenuParams {
+  linkURL?: string;
+  srcURL?: string;
+  mediaType?: string;
+  isEditable?: boolean;
+  selectionText?: string;
+  misspelledWord?: string;
+  dictionarySuggestions?: string[];
+  editFlags?: {
+    canCut?: boolean;
+    canCopy?: boolean;
+    canPaste?: boolean;
+    canSelectAll?: boolean;
+  };
+}
+
+export interface MinnowPreviewContextMenuOpenPayload {
+  tabId: string;
+  instanceId: string;
+  x: number;
+  y: number;
+  params: MinnowPreviewContextMenuParams;
+  items: MinnowPreviewContextMenuItem[];
+  canGoBack: boolean;
+  canGoForward: boolean;
+  pageUrl: string;
+}
+
+/** Right-click context menu for the Electron preview guest. */
+export interface MinnowPreviewContextMenuApi {
+  /** Legacy DOM menu path — main process uses native Menu.popup instead. */
+  onOpen(callback: (payload: MinnowPreviewContextMenuOpenPayload) => void): () => void;
+  /** Renderer-owned actions after the user picks Send to chat / Open in new tab. */
+  onSelect(
+    callback: (
+      payload: MinnowPreviewContextMenuOpenPayload & {
+        role: MinnowPreviewContextMenuRole;
+        suggestion?: string;
+      },
+    ) => void,
+  ): () => void;
+  inspect(
+    tabId: string,
+    x: number,
+    y: number,
+    instanceId?: string,
+  ): Promise<{ ok: boolean; error?: string }>;
+  resolveElement(
+    tabId: string,
+    x: number,
+    y: number,
+    instanceId?: string,
+  ): Promise<{
+    ok: boolean;
+    picked?: MinnowCdpPickedElement;
+    pageUrl?: string;
+    error?: string;
+  }>;
+  action(
+    tabId: string,
+    role: MinnowPreviewContextMenuRole,
+    payload?: {
+      x?: number;
+      y?: number;
+      linkURL?: string;
+      srcURL?: string;
+      suggestion?: string;
+      misspelledWord?: string;
+    },
+    instanceId?: string,
+  ): Promise<{ ok: boolean; error?: string }>;
+}
+
 export interface MinnowPreviewApi {
   // Every method takes an optional trailing `instanceId`; omitting it targets the default
   // 'workspace-preview' instance, so every pre-MIN-364 call site keeps working unchanged.
@@ -139,6 +241,8 @@ export interface MinnowPreviewApi {
   /** Optional: packaged shells older than MIN-177 lack the devtools bridge. */
   devtools?: MinnowPreviewDevToolsApi;
   cdpPicker: MinnowCdpPickerApi;
+  /** Optional: packaged shells older than the context-menu bridge lack this. */
+  contextMenu?: MinnowPreviewContextMenuApi;
   onNavigation(callback: (url: string, tabId?: string, instanceId?: string) => void): () => void;
   onLoading(callback: (loading: boolean, tabId?: string, instanceId?: string) => void): () => void;
   onPageTitle(callback: (title: string, tabId?: string, instanceId?: string) => void): () => void;

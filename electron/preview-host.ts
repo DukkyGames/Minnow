@@ -32,6 +32,10 @@ import {
 import { PreviewInstanceRegistry, DEFAULT_PREVIEW_INSTANCE_ID } from './preview-instance-registry.js';
 import { configurePreviewSession, PREVIEW_SESSION_PARTITION } from './preview-session.js';
 import { enableCdpPicking, type CdpPickSession } from './preview-cdp-pick.js';
+import {
+  handleGuestContextMenu,
+  registerPreviewContextMenuIpc,
+} from './preview-context-menu.js';
 import { splitPreviewBounds } from './preview-devtools-layout.js';
 
 export interface PreviewBounds {
@@ -304,6 +308,12 @@ function wirePreviewGuestEvents(win: BrowserWindow, tabId: string, entry: Previe
     relayoutInstanceEntry(win, entry, instanceId);
     sendToRenderer(win, channels.PREVIEW_DEVTOOLS_STATE, tabId, false, instanceId);
   });
+
+  // Right-click → Minnow-styled DOM menu in the renderer (suppress Chromium default).
+  wc.on('context-menu', (event, params) => {
+    event.preventDefault();
+    handleGuestContextMenu(win, tabId, instanceId, entry, params);
+  });
 }
 
 /** Detach a guest view from its window and close its WebContents. Safe to call on an already-torn-down window. */
@@ -574,6 +584,13 @@ function getActiveEntry(event: IpcMainInvokeEvent, tabId?: string, instanceId?: 
 
 /** Register preview IPC handlers (replaces main.ts stubs). */
 export function registerPreviewHostIpc(): void {
+  registerPreviewContextMenuIpc({
+    windowFromEvent: windowFromInvoke,
+    getEntry: getActiveEntry,
+    openDevTools: openEntryDevTools,
+    isCdpPickActive: (webContentsId) => cdpPickSessions.has(webContentsId),
+  });
+
   ipcMain.handle(channels.PREVIEW_TAB_CREATE, (event, tabId?: string, instanceId?: string) => {
     const win = windowFromInvoke(event);
     if (!win) return null;

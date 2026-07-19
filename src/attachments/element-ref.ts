@@ -4,6 +4,7 @@
 
 import { formatElementRefLabel } from './element-ref-format';
 export { elementRefHistoryBlock, formatElementRefLabel } from './element-ref-format';
+import { getActiveComposerSurface } from '../ui/composer-surface';
 import { pushAttachment, getPendingAttachments } from './store';
 import type { Attachment } from './types';
 
@@ -84,8 +85,9 @@ export function addElementRefToComposer(input: ElementRefInput): Attachment | nu
   return attachment;
 }
 
+/** Focus the foreground composer (Code / Chat / desktop), not a hardcoded #msgInput. */
 function focusComposerInput(): void {
-  document.getElementById('msgInput')?.focus();
+  getActiveComposerSurface().inputEl?.focus();
 }
 
 /** True when attachment is a queued Design Mode element reference. */

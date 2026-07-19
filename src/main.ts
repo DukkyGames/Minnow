@@ -169,7 +169,6 @@ import {
   syncViewModeToggleFromActiveChat,
 } from './ui/view-mode-toggle';
 import { initModeSelector, syncModeSelectorFromActiveChat } from './ui/mode-selector';
-import { initModeChromeIcons } from './ui/mode-icons';
 import { initThinkingControl } from './ui/composer-thinking';
 import {
   initComposerReasoningEffort,
@@ -260,7 +259,6 @@ export async function initApp(): Promise<void> {
   initAttachments();
   initContextUsageRing();
   initModeSelector();
-  initModeChromeIcons();
   initThinkingControl();
   initComposerReasoningEffort();
   initOrchestratePlanSelector();

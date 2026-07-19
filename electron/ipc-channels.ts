@@ -58,6 +58,16 @@ export const PREVIEW_DEVTOOLS_TOGGLE = 'minnow:preview:devtools-toggle';
 export const PREVIEW_DEVTOOLS_GET_STATE = 'minnow:preview:devtools-get-state';
 /** Main → renderer: docked DevTools opened/closed (guest shortcut, tab close, crash). */
 export const PREVIEW_DEVTOOLS_STATE = 'minnow:preview:devtools-state';
+/** Main → renderer: open Minnow-styled preview guest context menu (legacy DOM path). */
+export const PREVIEW_CONTEXT_MENU_OPEN = 'minnow:preview:context-menu-open';
+/** Main → renderer: user picked a renderer-owned context-menu item (Send to chat, Open in new tab). */
+export const PREVIEW_CONTEXT_MENU_SELECT = 'minnow:preview:context-menu-select';
+/** Renderer → main: open DevTools + inspectElement at guest coords. */
+export const PREVIEW_CONTEXT_INSPECT = 'minnow:preview:context-inspect';
+/** Renderer → main: one-shot CDP resolve element at guest coords (Send to chat). */
+export const PREVIEW_CONTEXT_RESOLVE_ELEMENT = 'minnow:preview:context-resolve-element';
+/** Renderer → main: guest context-menu action (nav / edit / link / image / spellcheck). */
+export const PREVIEW_CONTEXT_ACTION = 'minnow:preview:context-action';
 
 export const APP_OPEN_EXTERNAL = 'minnow:app:open-external';
 /** Renderer → main: forward renderer errors to crash.jsonl (fire-and-forget). */

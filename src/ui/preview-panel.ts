@@ -1668,6 +1668,8 @@ export async function initPreviewPanel(): Promise<void> {
   }
 
   bindPreviewControls();
+  // Electron guest right-click → Minnow DOM menu (no-op outside desktop shell).
+  void import('./preview-context-menu-handler').then((m) => m.initPreviewContextMenuHandler());
   await syncPreviewDesignToolbarForSurface();
 
   if (shouldAutoRestorePreviewPanel()) {
