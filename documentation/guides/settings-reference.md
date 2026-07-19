@@ -112,7 +112,7 @@ Also: `config.activeProviderId`.
 
 #### One-click provider presets
 
-Catalog: [`src/providers/presets.ts`](../../src/providers/presets.ts). Presets appear as chips in **onboarding → Cloud API** and in **Settings → Models → Providers → Add provider**.
+Catalog: [`src/providers/presets.ts`](../../src/providers/presets.ts). Presets appear as chips in **onboarding → Cloud API** and as a preset grid in **Settings → Models → Providers → Add provider** (choose a preset or **Add custom provider** for the full form).
 
 | Preset | Base URL | API kind | Auth | Notes |
 |--------|----------|----------|------|-------|
