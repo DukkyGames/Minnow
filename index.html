@@ -644,7 +644,13 @@
         <div id="settingsProvidersList" class="settings-providers-list" role="list" aria-label="Configured LLM providers"></div>
         <details id="settingsProvidersAddPanel" class="settings-providers-add-panel hidden">
           <summary class="settings-providers-add-summary">Add provider</summary>
-          <form id="settingsProvidersAddForm" class="settings-providers-form" novalidate>
+          <div id="settingsProvidersAddPicker" class="settings-providers-add-picker" role="group" aria-label="Provider presets"></div>
+          <form id="settingsProvidersAddForm" class="settings-providers-form hidden" novalidate>
+            <div class="settings-providers-add-form-head">
+              <button type="button" id="settingsProvidersAddBack" class="settings-inline-btn settings-providers-add-back">Back to presets</button>
+              <p id="settingsProvidersAddModeLabel" class="settings-providers-add-mode-label field-hint" aria-live="polite"></p>
+              <p id="settingsProvidersAddPresetAuthHint" class="field-hint hidden" data-provider-preset-auth-hint></p>
+            </div>
             <div class="field-row">
               <div class="field">
                 <label for="settingsProvidersAddId">Provider id</label>

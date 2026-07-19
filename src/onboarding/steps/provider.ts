@@ -17,7 +17,7 @@ import {
   probeLocalProviders,
   type ProviderProbeResult,
 } from '../provider-probe';
-import type { ApiKind, AuthStyle } from '../../providers/types';
+import { ONBOARDING_CLOUD_PRESETS } from '../../providers/presets';
 import type { OnboardingContext, OnboardingStep, OnboardingStepActions } from '../types';
 import { recordStepProgress } from '../state-core';
 
@@ -30,44 +30,6 @@ let cloudBaseUrl = 'https://openrouter.ai/api';
 let cloudApiKey = '';
 let connectionStatus: 'idle' | 'ok' | 'err' = 'idle';
 let connectionError = '';
-
-interface CloudPreset {
-  id: string;
-  label: string;
-  baseUrl: string;
-  apiKind?: ApiKind;
-  authStyle?: AuthStyle;
-  /** Route Claude models to the messages path on mixed OpenAI gateways. */
-  autoApi?: boolean;
-}
-
-/** Gateway origin only; `/v1/models` etc. come from getDefaultPaths(apiKind). */
-const CLOUD_PRESETS: CloudPreset[] = [
-  { id: 'openrouter', label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api' },
-  { id: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com' },
-  { id: 'groq', label: 'Groq', baseUrl: 'https://api.groq.com/openai' },
-  { id: 'mistral', label: 'Mistral', baseUrl: 'https://api.mistral.ai' },
-  {
-    id: 'opencode-zen',
-    label: 'OpenCode Zen',
-    baseUrl: 'https://opencode.ai/zen',
-    autoApi: true,
-  },
-  {
-    id: 'opencode-go',
-    label: 'OpenCode Go',
-    baseUrl: 'https://opencode.ai/zen/go',
-    autoApi: true,
-  },
-  {
-    id: 'anthropic',
-    label: 'Anthropic',
-    baseUrl: 'https://api.anthropic.com',
-    apiKind: 'anthropic-v1',
-    authStyle: 'x-api-key',
-  },
-  { id: 'custom', label: 'Custom', baseUrl: '' },
-];
 
 export const providerChoiceStep: OnboardingStep = {
   id: 'provider-choice',
@@ -248,10 +210,11 @@ export const providerCloudStep: OnboardingStep = {
     );
 
     const presetRow = el('div', 'mn-onboarding-chip-row');
-    CLOUD_PRESETS.forEach((preset) => {
+    ONBOARDING_CLOUD_PRESETS.forEach((preset) => {
       const chip = el('button', 'mn-onboarding-wallpaper-chip', preset.label);
       chip.type = 'button';
       if (preset.id === cloudPreset) chip.classList.add('is-selected');
+      if (preset.authHint) chip.title = preset.authHint;
       chip.addEventListener('click', () => {
         cloudPreset = preset.id;
         if (preset.baseUrl) cloudBaseUrl = preset.baseUrl;
@@ -262,6 +225,11 @@ export const providerCloudStep: OnboardingStep = {
       presetRow.appendChild(chip);
     });
     container.appendChild(presetRow);
+
+    const selectedPreset = ONBOARDING_CLOUD_PRESETS.find((preset) => preset.id === cloudPreset);
+    if (selectedPreset?.authHint) {
+      container.appendChild(el('p', 'mn-onboarding-muted', selectedPreset.authHint));
+    }
 
     const urlInput = el('input', 'mn-onboarding-field') as HTMLInputElement;
     urlInput.type = 'url';
@@ -417,7 +385,7 @@ async function testCloudConnection(
     return;
   }
 
-  const preset = CLOUD_PRESETS.find((p) => p.id === cloudPreset);
+  const preset = ONBOARDING_CLOUD_PRESETS.find((p) => p.id === cloudPreset);
   const apiKind = preset?.apiKind ?? 'openai-v1';
   const paths = getDefaultPaths(apiKind);
   const id = `onboarding-cloud-${cloudPreset}`;
