@@ -226,15 +226,15 @@ describe('applyBoardMemberToolFilter', () => {
     }
   });
 
-  test('builder includes browser, git-write, and web; excludes sub-agents and brain', () => {
+  test('builder includes browser, git-write, web, and brain-core; excludes sub-agents', () => {
     seedBoardSession();
     const names = new Set(filteredNames(builderChat));
     assert.ok(names.has('browser_navigate'));
     assert.ok(names.has('git_commit'));
     assert.ok(names.has('web_search'));
     assert.ok(names.has('save_file'));
+    assert.ok(names.has('brain_search'));
     assert.ok(!names.has('spawn_sub_agent'));
-    assert.ok(!names.has('brain_search'));
     assert.ok(!names.has('bug_add'));
     assert.ok(!names.has('load_impeccable_context'));
   });

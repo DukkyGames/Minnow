@@ -33,7 +33,7 @@ function resolveSurfaceKey(): keyof typeof SURFACES {
   if (isDesktopChatActive()) return 'desktop';
   if (isChatAppForeground()) return 'chat';
   if (getOsView() === 'desktop' && document.getElementById('desktopContextRing')) return 'desktop';
-  return foregroundAppId ?? 'code';
+  return 'code';
 }
 
 /** Ring + breakdown ids for the foreground chat surface. */

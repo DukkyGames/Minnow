@@ -2,7 +2,7 @@
  * Deep Research workspace scope UI helpers.
  */
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { afterEach, beforeEach, describe, test } from 'node:test';
 
 import {
   ensureResearchWorkspaceOption,
@@ -14,6 +14,18 @@ import {
 } from '../../src/research/workspace-scope-ui.ts';
 
 describe('research workspace-scope-ui', () => {
+  beforeEach(async () => {
+    const { Window } = await import('happy-dom');
+    const win = new Window();
+    globalThis.window = win as unknown as Window & typeof globalThis.window;
+    globalThis.document = win.document;
+    globalThis.HTMLElement = win.HTMLElement;
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
   test('scopeIncludesCodebase is true for codebase and both', () => {
     assert.equal(scopeIncludesCodebase('codebase'), true);
     assert.equal(scopeIncludesCodebase('both'), true);

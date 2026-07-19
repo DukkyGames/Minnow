@@ -70,7 +70,7 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 describe('enableCdpPicking lifecycle', () => {
   test('requests the document before arming inspect mode', async () => {
     const { dbg, calls } = makeDebugger();
-    await enableCdpPicking({ debugger: dbg }, () => {});
+    await enableCdpPicking({ debugger: dbg, isDestroyed: () => false }, () => {});
     const methods = methodsOf(calls);
     const docIdx = methods.indexOf('DOM.getDocument');
     const inspectIdx = methods.indexOf('Overlay.setInspectMode');
@@ -83,7 +83,7 @@ describe('enableCdpPicking lifecycle', () => {
     const { dbg, calls } = makeDebugger();
     const picks = [];
     const errors = [];
-    await enableCdpPicking({ debugger: dbg }, (p) => picks.push(p), (e) => errors.push(e));
+    await enableCdpPicking({ debugger: dbg, isDestroyed: () => false }, (p) => picks.push(p), (e) => errors.push(e));
 
     calls.length = 0;
     dbg.emit('Overlay.inspectNodeRequested', { backendNodeId: 42 });
@@ -97,7 +97,7 @@ describe('enableCdpPicking lifecycle', () => {
 
   test('outlines the picked node in-page as the selection indicator', async () => {
     const { dbg, calls } = makeDebugger();
-    await enableCdpPicking({ debugger: dbg }, () => {});
+    await enableCdpPicking({ debugger: dbg, isDestroyed: () => false }, () => {});
 
     calls.length = 0;
     dbg.emit('Overlay.inspectNodeRequested', { backendNodeId: 42 });
@@ -114,7 +114,7 @@ describe('enableCdpPicking lifecycle', () => {
 
   test('clears in-page selection outlines on disable', async () => {
     const { dbg, calls } = makeDebugger();
-    const session = await enableCdpPicking({ debugger: dbg }, () => {});
+    const session = await enableCdpPicking({ debugger: dbg, isDestroyed: () => false }, () => {});
 
     calls.length = 0;
     await session.disable();
@@ -127,7 +127,7 @@ describe('enableCdpPicking lifecycle', () => {
 
   test('re-arms inspect mode after each pick (searchForNode is one-shot)', async () => {
     const { dbg, calls } = makeDebugger();
-    await enableCdpPicking({ debugger: dbg }, () => {});
+    await enableCdpPicking({ debugger: dbg, isDestroyed: () => false }, () => {});
 
     calls.length = 0;
     dbg.emit('Overlay.inspectNodeRequested', { backendNodeId: 42 });
@@ -140,7 +140,7 @@ describe('enableCdpPicking lifecycle', () => {
 
   test('re-requests the document when it is invalidated (SPA route swap)', async () => {
     const { dbg, calls } = makeDebugger();
-    await enableCdpPicking({ debugger: dbg }, () => {});
+    await enableCdpPicking({ debugger: dbg, isDestroyed: () => false }, () => {});
 
     calls.length = 0;
     dbg.emit('DOM.documentUpdated', {});
@@ -154,7 +154,7 @@ describe('enableCdpPicking lifecycle', () => {
 
   test('disable turns off inspect mode and detaches', async () => {
     const { dbg, calls } = makeDebugger();
-    const session = await enableCdpPicking({ debugger: dbg }, () => {});
+    const session = await enableCdpPicking({ debugger: dbg, isDestroyed: () => false }, () => {});
 
     calls.length = 0;
     await session.disable();

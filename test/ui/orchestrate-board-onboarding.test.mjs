@@ -215,8 +215,10 @@ describe('orchestrate board onboarding (MIN-5)', () => {
 
   test('setChatMode orchestrate defaults viewMode to board when no board store', async () => {
     const window = new Window();
+    globalThis.window = window;
     globalThis.document = window.document;
     globalThis.HTMLElement = window.HTMLElement;
+    globalThis.getComputedStyle = window.getComputedStyle.bind(window);
 
     const chatArea = document.createElement('div');
     chatArea.id = 'chatArea';

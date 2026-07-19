@@ -26,7 +26,7 @@ describe('load_impeccable_context tool', () => {
     assert.ok(!result.startsWith('Error:'), result.slice(0, 200));
     const payload = parseToolResult(result);
     assert.equal(payload.hasDesignJson, true);
-    assert.equal(payload.designJson.schemaVersion, 2);
+    assert.equal(payload.designJson.schemaVersion, 3);
     assert.equal(payload.hasProduct, true);
     assert.equal(payload.hasDesign, true);
   });

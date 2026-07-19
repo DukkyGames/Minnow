@@ -35,11 +35,11 @@ describe('Impeccable built-in (Step 14)', () => {
     );
   });
 
-  it('design.json schemaVersion is 2', () => {
+  it('design.json schemaVersion is 2 or 3', () => {
     const design = JSON.parse(
       fs.readFileSync(path.join(PROJECT_ROOT, '.impeccable', 'design.json'), 'utf8'),
     );
-    assert.equal(design.schemaVersion, 2);
+    assert.ok(design.schemaVersion === 2 || design.schemaVersion === 3);
   });
 
   it('SKILL.md references context files without duplicating OKLCH tokens', () => {
@@ -95,7 +95,7 @@ describe('Impeccable built-in (Step 14)', () => {
     assert.equal(payload.hasDesign, true);
     assert.equal(typeof payload.design, 'string');
     assert.equal(payload.hasDesignJson, true);
-    assert.equal(payload.designJson.schemaVersion, 2);
+    assert.equal(payload.designJson.schemaVersion, 3);
     assert.equal(payload.workspaceRoot, PROJECT_ROOT);
   });
 

@@ -914,7 +914,7 @@ function bindProvidersAddForm(): void {
   }
 
   const backBtn = document.getElementById('settingsProvidersAddBack');
-  const addPanel = document.getElementById('settingsProvidersAddPanel');
+  const addPanel = document.getElementById('settingsProvidersAddPanel') as HTMLDetailsElement | null;
   backBtn?.addEventListener('click', () => resetProvidersAddFlow());
   addPanel?.addEventListener('toggle', () => {
     if (!addPanel.open) resetProvidersAddFlow();
