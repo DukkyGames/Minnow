@@ -27,7 +27,7 @@ Two separate roots:
 - **New chat** (`createChatWithMode`, desktop fresh chat) seeds composer run-target from browse override via [`new-chat-run-target-seed.ts`](../src/ui/new-chat-run-target-seed.ts) when override is on (worktree → attach; main workspace → Local), then clears browse override and syncs file tree from the new chat.
 - Chat switch, composer run-target change, and workspace switch call `clearPanelCwdUserOverride()` then `syncPanelFromActiveChat({ forceFileTree: true })`.
 - Composer **This PC** clears `worktreeRoot` and resets `gitBranch` to the main workspace checkout.
-- Board events no longer reset panel cwd during runs (`subscribeAllBoardChanges` sync removed).
+- Board events no longer reset panel cwd during runs (`subscribeAllBoardChanges` sync removed), except when board view is active — then browse cwd tracks the integration worktree as tasks allocate worktrees (MIN-464).
 - Registered git worktree paths + repo-local `.worktrees/` are allowed `workspaceRoot` overrides without Full disk ([`server/worktree/allowlist.js`](../server/worktree/allowlist.js)).
 
 ## Todos

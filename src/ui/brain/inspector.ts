@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from '../app-dialog';
 /**
  * Brain graph inspector: title, tags, summary, backlinks, body preview, actions.
  */
@@ -153,14 +154,14 @@ export async function renderBrainInspector(
   deleteBtn.className = 'brain-action-btn brain-action-btn--danger';
   deleteBtn.textContent = 'Delete page';
   deleteBtn.addEventListener('click', () => {
-    const ok = window.confirm(
-      `Delete wiki page "${page.meta.title}"?\n\nPath: ${page.path}\n\nThis cannot be undone.`,
-    );
-    if (!ok) return;
     void (async () => {
+      const ok = await appConfirm(
+        `Delete wiki page "${page.meta.title}"?\n\nPath: ${page.path}\n\nThis cannot be undone.`,
+      );
+      if (!ok) return;
       const result = await deleteBrainPage(page.path);
       if (!result.ok) {
-        window.alert(result.error ?? 'Delete failed.');
+        await appAlert(result.error ?? 'Delete failed.');
         return;
       }
       closeBrainInspector(mount);
@@ -176,17 +177,17 @@ export async function renderBrainInspector(
     archiveBtn.className = 'brain-action-btn brain-action-btn--danger';
     archiveBtn.textContent = 'Delete entire chat archive';
     archiveBtn.addEventListener('click', () => {
-      const ok = window.confirm(
-        `Delete the entire chat archive for "${archiveInfo.chatId}"?\n\nAll pages under this chat folder will be removed.`,
-      );
-      if (!ok) return;
       void (async () => {
+        const ok = await appConfirm(
+          `Delete the entire chat archive for "${archiveInfo.chatId}"?\n\nAll pages under this chat folder will be removed.`,
+        );
+        if (!ok) return;
         const result = await deleteBrainArchive(
           archiveInfo.chatId,
           archiveInfo.workspaceKey,
         );
         if (!result.ok) {
-          window.alert(result.error ?? 'Archive delete failed.');
+          await appAlert(result.error ?? 'Archive delete failed.');
           return;
         }
         closeBrainInspector(mount);

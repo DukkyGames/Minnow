@@ -9,7 +9,9 @@ import {
   allocateDevPort,
   allocateTaskPorts,
   boardIntegrationBranch,
+  integrationWorktreePathFromSlotPath,
   isIsolationActive,
+  resolveBoardIntegrationWorktreePath,
   resolveChatToolWorkspaceRoot,
   resolveChatWorktreeRoot,
   resolveIsolationMode,
@@ -21,7 +23,7 @@ import {
   worktreeBranchFor,
   worktreeSlotId,
 } from '../../src/state/worktree-isolation.ts';
-import type { BoardTask, OrchestrateBoardState } from '../../src/types.ts';
+import type { BoardTask, ChatGroup, OrchestrateBoardState } from '../../src/types.ts';
 
 function board(patch: Partial<OrchestrateBoardState>): OrchestrateBoardState {
   return {
@@ -98,6 +100,23 @@ describe('ref/slot naming', () => {
     assert.equal(waveWorktreeBranch('grp1', 'W1'), 'minnow/board/grp1/wave/W1');
   });
 
+  test('integrationWorktreePathFromSlotPath derives integration slot path', () => {
+    const boardDir = 'C:/repo/.minnow/worktrees/minnow-abc/board-1';
+    assert.equal(
+      integrationWorktreePathFromSlotPath(`${boardDir}/task-T1`),
+      `${boardDir}/integration`,
+    );
+    assert.equal(
+      integrationWorktreePathFromSlotPath(`${boardDir}/wave-W1`),
+      `${boardDir}/integration`,
+    );
+    assert.equal(
+      integrationWorktreePathFromSlotPath(`${boardDir}/integration`),
+      `${boardDir}/integration`,
+    );
+    assert.equal(integrationWorktreePathFromSlotPath('C:/other/path'), undefined);
+  });
+
   test('worktreeSlotId / worktreeBranchFor follow the mode', () => {
     const t = task({ id: 'T-2', wave: 'W1' });
     assert.equal(worktreeSlotId('per-task', t), 'task-T-2');
@@ -123,6 +142,71 @@ describe('tasksSharingSlot', () => {
   });
   test('off shares with nothing', () => {
     assert.deepEqual(tasksSharingSlot('off', a, all), []);
+  });
+});
+
+describe('resolveBoardIntegrationWorktreePath', () => {
+  const integrationBranch = 'minnow/board/g/integration';
+  const boardDir = 'C:/repo/.minnow/worktrees/minnow-abc/g';
+  const integrationPath = `${boardDir}/integration`;
+  const taskPath = `${boardDir}/task-T1`;
+
+  function boardGroup(tasks: BoardTask[]): ChatGroup {
+    return {
+      id: 'g',
+      name: 'Board',
+      workspacePath: 'C:/repo',
+      collapsed: false,
+      order: 0,
+      createdAt: 0,
+      viewMode: 'board',
+      orchestrateBoard: board({
+        executionMode: 'auto',
+        integrationBranch,
+        tasks,
+      }),
+    };
+  }
+
+  test('returns integration path from task worktree when isolation is active', () => {
+    const group = boardGroup([
+      task({
+        id: 'T1',
+        wave: 1,
+        status: 'in_progress',
+        worktreePath: taskPath,
+      }),
+    ]);
+    assert.equal(resolveBoardIntegrationWorktreePath(group), integrationPath);
+  });
+
+  test('returns undefined when isolation is off or integration is not provisioned', () => {
+    const group = boardGroup([
+      task({ id: 'T1', wave: 1, status: 'planned', worktreePath: taskPath }),
+    ]);
+    group.orchestrateBoard!.executionMode = 'manual';
+    assert.equal(resolveBoardIntegrationWorktreePath(group), undefined);
+
+    group.orchestrateBoard!.executionMode = 'auto';
+    delete group.orchestrateBoard!.integrationBranch;
+    assert.equal(resolveBoardIntegrationWorktreePath(group), undefined);
+  });
+
+  test('falls back to chat worktreeRoot on integration branch', () => {
+    const group = boardGroup([]);
+    assert.equal(
+      resolveBoardIntegrationWorktreePath(group, [
+        {
+          id: 'fixer',
+          model: 'm',
+          history: [],
+          boardGroupId: 'g',
+          worktreeRoot: integrationPath,
+          gitBranch: integrationBranch,
+        },
+      ]),
+      integrationPath,
+    );
   });
 });
 

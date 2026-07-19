@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from './app-dialog';
 /**
  * Settings → Tools: native plugin packs (Feature #17).
  */
@@ -118,7 +119,7 @@ export async function appendPluginToolsToList(
 }
 
 async function scaffoldPluginFromPrompt(listId: string): Promise<void> {
-  const id = window.prompt(
+  const id = await appPrompt(
     'Plugin id (lowercase letters, numbers, hyphens):',
     'my-plugin',
   );
@@ -132,7 +133,7 @@ async function scaffoldPluginFromPrompt(listId: string): Promise<void> {
     });
     const body = (await response.json()) as { error?: string; path?: string };
     if (!response.ok) {
-      window.alert(body.error ?? `Scaffold failed (HTTP ${response.status})`);
+      await appAlert(body.error ?? `Scaffold failed (HTTP ${response.status})`);
       return;
     }
     await fetch('/api/plugins/reload', { method: 'POST' });
@@ -141,10 +142,10 @@ async function scaffoldPluginFromPrompt(listId: string): Promise<void> {
     await appendPluginToolsToList(listId);
     const { loadToolConfigIntoDrawer } = await import('../tools/config');
     loadToolConfigIntoDrawer();
-    window.alert(`Plugin created at ${body.path ?? id.trim()}`);
+    await appAlert(`Plugin created at ${body.path ?? id.trim()}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    window.alert(`Scaffold failed: ${message}`);
+    await appAlert(`Scaffold failed: ${message}`);
   }
 }
 

@@ -331,6 +331,7 @@ const minnowBridge = {
     maximize: (): Promise<void> => ipcRenderer.invoke(channels.WINDOW_MAXIMIZE),
     close: (): Promise<void> => ipcRenderer.invoke(channels.WINDOW_CLOSE),
     isMaximized: (): Promise<boolean> => ipcRenderer.invoke(channels.WINDOW_IS_MAXIMIZED),
+    restoreFocus: (): Promise<void> => ipcRenderer.invoke(channels.WINDOW_RESTORE_FOCUS),
     onMaximizedChanged: (callback: (maximized: boolean) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, maximized: boolean) => callback(maximized);
       ipcRenderer.on(channels.WINDOW_MAXIMIZED_CHANGED, handler);

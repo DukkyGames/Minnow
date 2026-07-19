@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from '../app-dialog';
 /**
  * Brain app — Settings: synthesis, embeddings, and code index (config.brain.*).
  */
@@ -338,7 +339,7 @@ function bindSettingsSection(): void {
         'brainDangerWikiBackup',
       ) as HTMLInputElement | null;
       const archive = backupEl?.checked === true;
-      const ok = window.confirm(
+      const ok = await appConfirm(
         `Clear every wiki page${archive ? ' (after backup)' : ''}? This cannot be undone.`,
       );
       if (!ok) return;
@@ -356,7 +357,7 @@ function bindSettingsSection(): void {
 
   document.getElementById('brainDangerClearProposals')?.addEventListener('click', () => {
     void (async () => {
-      const ok = window.confirm('Clear all pending memory and skill proposals?');
+      const ok = await appConfirm('Clear all pending memory and skill proposals?');
       if (!ok) return;
       setStatus('spin', 'Clearing proposals…');
       const result = await clearBrainProposals('pending');
@@ -375,7 +376,7 @@ function bindSettingsSection(): void {
         'brainDangerSourcesBackup',
       ) as HTMLInputElement | null;
       const archive = backupEl?.checked === true;
-      const ok = window.confirm(
+      const ok = await appConfirm(
         `Delete all raw ingest source files${archive ? ' (after backup)' : ''}? Wiki pages are kept.`,
       );
       if (!ok) return;
@@ -392,7 +393,7 @@ function bindSettingsSection(): void {
 
   document.getElementById('brainDangerClearCode')?.addEventListener('click', () => {
     void (async () => {
-      const ok = window.confirm('Reset the code index for this workspace?');
+      const ok = await appConfirm('Reset the code index for this workspace?');
       if (!ok) return;
       setStatus('spin', 'Resetting code index…');
       const result = await clearBrainCodeIndex();
@@ -427,7 +428,7 @@ function bindSettingsSection(): void {
         setStatus('err', 'Type CLEAR in the confirmation field first.');
         return;
       }
-      const ok = window.confirm('Reset code indexes for every workspace?');
+      const ok = await appConfirm('Reset code indexes for every workspace?');
       if (!ok) return;
       setStatus('spin', 'Resetting all code indexes…');
       const result = await clearBrainCodeIndex({ all: true });

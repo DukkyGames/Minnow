@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from './app-dialog';
 /**
  * Orchestrate Board View: Kanban, plan panel, controls.
  */
@@ -1057,13 +1058,13 @@ function releaseBoardHeaderFocus(): void {
 }
 
 /** User-selected execution mode — AFK goes through the shared confirm + activate path. */
-function selectBoardExecutionModeFromUi(
+async function selectBoardExecutionModeFromUi(
   group: ChatGroup,
   mode: (typeof BOARD_EXECUTION_MODES)[number],
   plannerChat: Chat,
-): void {
+): Promise<void> {
   if (mode === 'afk') {
-    if (!window.confirm(BOARD_AFK_CONFIRM_MESSAGE)) return;
+    if (!await appConfirm(BOARD_AFK_CONFIRM_MESSAGE)) return;
     activateAfk(group, plannerChat);
     return;
   }
@@ -1202,7 +1203,7 @@ function onBoardExecModeSegmentKeydown(
   }
 
   const nextMode = segments[nextIndex] ?? 'manual';
-  selectBoardExecutionModeFromUi(group, nextMode, plannerChat);
+  void selectBoardExecutionModeFromUi(group, nextMode, plannerChat);
   refreshActiveBoardIfMounted();
   releaseBoardHeaderFocus();
   const root = document.querySelector('.board-root');
@@ -1249,7 +1250,7 @@ function wireBoardHeaderControls(
     segment.title = meta.title;
 
     segment.addEventListener('click', () => {
-      selectBoardExecutionModeFromUi(group, meta.id, plannerChat);
+      void selectBoardExecutionModeFromUi(group, meta.id, plannerChat);
       refreshActiveBoardIfMounted();
       releaseBoardHeaderFocus();
     });

@@ -10,6 +10,7 @@ import { resetDesktopWorkspaceMountsForTests } from '../../src/os/desktop-worksp
 import {
   panelPathsEqual,
   resolvePanelWorktreeCwd,
+  resolvePanelBrowseCwd,
   resolvePanelBrowseRunTargetSeed,
 } from '../../src/ui/panel-worktree-cwd.ts';
 import {
@@ -236,6 +237,74 @@ describe('file tree tool context merge', () => {
     setFileTreeListingWorkspaceRoot(WORKTREE);
     const merged = { ...buildFileTreeToolContext(), chatId: 'chat-1' };
     assert.deepEqual(merged, { workspaceRoot: WORKTREE, chatId: 'chat-1' });
+  });
+});
+
+describe('resolvePanelBrowseCwd', () => {
+  test('board view prefers integration worktree over task chat worktree', () => {
+    setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
+    const boardDir = `${MAIN_WS}/.minnow/worktrees/minnow-abc/board-1`;
+    const integrationPath = `${boardDir}/integration`;
+    const taskPath = `${boardDir}/task-T1`;
+    const integrationBranch = 'minnow/board/board-1/integration';
+    const group = {
+      id: 'board-1',
+      name: 'Board',
+      workspacePath: MAIN_WS,
+      collapsed: false,
+      order: 0,
+      createdAt: 0,
+      viewMode: 'board' as const,
+      orchestrateBoard: {
+        planPath: 'documentation/plans/p.md',
+        executionMode: 'auto' as const,
+        integrationBranch,
+        tasks: [
+          {
+            id: 'T1',
+            title: 'Task',
+            wave: 1,
+            category: 'code' as const,
+            status: 'in_progress' as const,
+            worktreePath: taskPath,
+          },
+        ],
+        waves: [{ id: 1, status: 'in_progress' as const }],
+        startedAt: 0,
+        lastUpdatedAt: 0,
+      },
+    };
+    const chat = {
+      id: 'task-chat',
+      model: 'model',
+      history: [],
+      boardGroupId: 'board-1',
+      boardTaskId: 'T1',
+      worktreeRoot: taskPath,
+    };
+    assert.equal(
+      resolvePanelBrowseCwd({
+        chat,
+        groups: [group],
+        activeBoardGroup: group,
+        chats: [chat],
+      }),
+      integrationPath,
+    );
+  });
+
+  test('chat view follows active chat worktree', () => {
+    setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
+    const chat = {
+      id: 'chat-1',
+      model: 'model',
+      history: [],
+      worktreeRoot: WORKTREE,
+    };
+    assert.equal(
+      resolvePanelBrowseCwd({ chat, groups: [] }),
+      WORKTREE,
+    );
   });
 });
 

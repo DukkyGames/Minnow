@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from '../ui/app-dialog';
 /**
  * Deep Research library — card grid with compact toolbar and overflow menus.
  */
@@ -136,10 +137,13 @@ function showCardMenu(
       return;
     }
     if (action === 'delete') {
-      if (!window.confirm('Delete this research run permanently?')) {
-        return;
-      }
-      void deleteResearch(item.id).then(() => reload());
+      void (async () => {
+        if (!await appConfirm('Delete this research run permanently?')) {
+          return;
+        }
+        await deleteResearch(item.id);
+        reload();
+      })();
     }
   });
 }

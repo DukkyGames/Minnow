@@ -219,6 +219,8 @@ API: `GET /api/skills`, `GET/PUT /api/skills/:id`, `GET/PUT /api/config/skills`.
 
 **Git commit messages (MIN-412):** The Code git panel and `/git-commit` skill share conventions — conventional commits with optional gitmoji (`config.json` → `gitCommitMessage.useGitmoji`, default on), imperative subject (≤72 chars), body explaining *why*, staged-vs-unstaged scope, and `BREAKING CHANGE:` footers. UI generation: [`src/ui/git-commit-message-client.ts`](../src/ui/git-commit-message-client.ts) (diff filtering, reasoning-chain extraction, prompt builder). During streaming, only high-confidence conventional commit lines are shown in the input; heuristic/plain-text extraction and reasoning-channel fallback run on completion. Markdown diff walkthroughs (numbered steps, `Removed/Updated` bullets, `**Identify Key Changes**` headers) from local/LM Studio models are rejected as non-commit output.
 
+**Merge to main (MIN-465):** When the Source Control panel is on a feature branch (main or secondary worktree), a **Merge to main** toolbar button appears beside Pull/Push. It checks out `main`/`master` on the main workspace (with dirty-tree confirmation when needed), merges the current branch, switches the panel back to the workspace worktree, and surfaces merge failures via toast + optional **Send to chat**. Trunk resolution prefers local `main`/`master`, then `origin/main`/`origin/master` (needed when trunk is checked out in another worktree and omitted from the local branch list). Logic: [`src/lib/git-trunk-branch.ts`](../src/lib/git-trunk-branch.ts), [`src/ui/git-merge-to-main.ts`](../src/ui/git-merge-to-main.ts).
+
 ---
 
 ## Memory and Brain
@@ -258,6 +260,8 @@ State: `Chat.orchestratePlanPath`, `ChatGroup.orchestrateBoard`, [`src/ui/orches
 
 **Board metrics strip (MIN-414):** When the main column is in board view, the bottom inference metrics panel rolls up **all planner + member chat** token totals (ledger-first per chat) and averages per-chat tok/s (completion-weighted via [`averageStatsSegments`](../src/chat/orchestrate/stats-math.ts)). Implementation: [`src/chat/orchestrate/board-stats-aggregate.ts`](../src/chat/orchestrate/board-stats-aggregate.ts); refreshed on board live updates and chat switches so focusing a member chat does not reset totals.
 
+**Board view browse root (MIN-464):** When board view is active and worktree isolation is on, the file explorer, terminal, and Source Control browse cwd follow the board **integration worktree** (not per-task chat worktrees). Chat view continues to sync browse cwd from the active chat's composer run-target. Helpers: [`resolveBoardIntegrationWorktreePath`](../src/state/worktree-isolation.ts), [`syncPanelFromActiveChat`](../src/ui/git-panel.ts).
+
 ### Experts
 
 Personas under `src/chat/prompts/experts/<id>/`. Chats: `Chat.kind === 'expert'`, memory under `pages/experts/<id>/facts/`. UI: Experts' Lab on desktop + `#/experts`.
@@ -282,6 +286,8 @@ Stage layers in `#osStage` ([`src/os/shell.ts`](../src/os/shell.ts)):
 Presentation modes: `fullscreen` | `window` | `desktop` | `sidePanel` ([`src/os/presentation-mode.ts`](../src/os/presentation-mode.ts)).
 
 **Desktop chat** is the primary chat surface (`#desktopChatCol`); legacy `#chatView` retained for deep links. **Code** reparents `#appBody` into `#osAppsLayer`.
+
+The Code chat sidebar header keeps its navigation controls ordered as **collapse sidebar**, **search chats**, then **Code overview**.
 
 Router: [`src/os/router.ts`](../src/os/router.ts). Boot: `initOsPageBridge()` → `initOsShell()` → `initOsRouter()`.
 
@@ -374,6 +380,7 @@ Multi-provider registry: `~/.minnow/providers/`. UI: Models app → Providers. C
 - **Package:** `npm run package` → `release/` (NSIS on Windows).
 - **Preview browser:** requires Electron (`window.minnow.preview`); hidden in plain browser tabs.
 - **Auto-update:** GitHub Releases via `electron-updater` (packaged installs); Settings → General → App updates.
+- **In-app dialogs:** [`src/ui/app-dialog.ts`](../src/ui/app-dialog.ts) replaces blocking native `alert` / `confirm` / `prompt` in the Electron shell with Minnow-styled modals (`installAppDialogs()` at boot; call sites use `await appConfirm()` / `appAlert()` / `appPrompt()`). Overlay z-index `100030` keeps dialogs above shell chrome. Do not use synchronous `window.confirm()` in Electron — it cannot block on custom UI without freezing the renderer.
 
 ---
 
