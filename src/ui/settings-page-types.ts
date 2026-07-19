@@ -56,6 +56,7 @@ export type SettingsSectionId =
   | 'webhooks'
   | 'features'
   | 'evals'
+  | 'diagnostics'
   | 'about';
 
 /** Sidebar label (hash id stays stable for bookmarks). */
@@ -89,6 +90,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   webhooks: 'Webhooks',
   features: 'Orchestration',
   evals: 'Evals',
+  diagnostics: 'Health & diagnostics',
   about: 'About',
 };
 
@@ -126,7 +128,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     id: 'advanced',
     label: 'Advanced',
-    sections: ['features', 'evals'],
+    sections: ['features', 'diagnostics', 'evals'],
   },
 ];
 

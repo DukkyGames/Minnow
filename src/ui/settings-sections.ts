@@ -113,6 +113,7 @@ import {
   createSettingsSelectRow,
 } from './settings-controls';
 import { renderAboutSettingsSection } from './settings-about';
+import { renderDiagnosticsSettingsSection } from './settings-diagnostics';
 import { renderAppearanceSettingsSection } from './settings-appearance';
 import { renderAgentCenterPanel } from './settings-agent-center';
 import {
@@ -2282,6 +2283,9 @@ export async function refreshSettingsSection(
       break;
     case 'about':
       await renderAboutSettingsSection();
+      break;
+    case 'diagnostics':
+      await renderDiagnosticsSettingsSection();
       break;
     case 'providers':
       refreshProvidersBanner();

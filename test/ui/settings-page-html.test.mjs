@@ -33,7 +33,9 @@ const SETTINGS_SECTION_IDS = [
   'skills',
   'webhooks',
   'features',
+  'diagnostics',
   'evals',
+  'about',
 ];
 
 /** Sections populated by refreshSettingsSection via clearMount(). */
@@ -54,6 +56,7 @@ const DYNAMIC_SECTION_BODY_IDS = [
   'settingsWebhooksBody',
   'settingsUsageBody',
   'settingsEditorBody',
+  'settingsDiagnosticsBody',
 ];
 
 describe('settings page HTML', () => {
@@ -120,7 +123,7 @@ describe('settings page HTML', () => {
   });
 
   test('SETTINGS_SECTION_IDS matches canonical section count', () => {
-    assert.equal(SETTINGS_SECTION_IDS.length, 25);
+    assert.equal(SETTINGS_SECTION_IDS.length, 27);
   });
 
   test('agents center mount exists in index.html', () => {
@@ -147,6 +150,32 @@ describe('settings page HTML', () => {
     assert.match(html, /id="settingsSection-audio"/);
     assert.match(html, /id="settingsAudioBody"/);
     assert.match(html, /data-area="audio"/);
+  });
+
+  test('health and diagnostics section exists under advanced in index.html', () => {
+    assert.match(html, /id="settingsSection-diagnostics"/);
+    assert.match(html, /id="settingsDiagnosticsBody"/);
+    assert.match(html, /data-area="diagnostics"/);
+    assert.match(html, /data-settings-nav-area="diagnostics"/);
+    assert.match(html, /Health &amp; diagnostics/);
+  });
+
+  test('diagnostics section matches other general-style settings mounts', () => {
+    const diagnosticsBlock = html.slice(
+      html.indexOf('id="settingsSection-diagnostics"'),
+      html.indexOf('id="settingsSection-evals"'),
+    );
+    assert.match(diagnosticsBlock, /id="settingsDiagnosticsBody"/);
+    assert.doesNotMatch(diagnosticsBlock, /class="settings-lead"/);
+  });
+
+  test('about section matches other general settings mounts', () => {
+    const aboutBlock = html.slice(
+      html.indexOf('id="settingsSection-about"'),
+      html.indexOf('id="settingsSection-appearance"'),
+    );
+    assert.match(aboutBlock, /id="settingsAboutBody"/);
+    assert.doesNotMatch(aboutBlock, /class="settings-lead"/);
   });
 
   test('voice settings redirect notice in index.html', () => {

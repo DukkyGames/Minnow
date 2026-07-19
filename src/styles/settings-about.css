@@ -1,5 +1,5 @@
 /**
- * Settings → About — build info, health probes, diagnostics viewer.
+ * Settings → About / Health & diagnostics — build info, health probes, diagnostics viewer.
  * Flat instrument layout: borders and type hierarchy, not nested cards.
  */
 
@@ -15,6 +15,37 @@
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
+}
+
+/* Flatten nested instrument chrome inside General-style emphasis panels. */
+.settings-general .settings-group--emphasis .diagnostics-health-strip {
+  padding: 0;
+  border: none;
+  background: transparent;
+  gap: 10px;
+}
+
+.settings-general .settings-group--emphasis .diagnostics-empty {
+  padding: 10px 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+}
+
+.settings-general .settings-group--emphasis .diagnostics-filter-host {
+  margin-bottom: 0;
+}
+
+.settings-general .settings-group--emphasis .diagnostics-subsection + .diagnostics-subsection {
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.settings-general .settings-group--emphasis .settings-actions {
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--mn-border);
 }
 
 /* ── Health strip ───────────────────────────────────────────────────────── */

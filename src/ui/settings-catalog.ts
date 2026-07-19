@@ -42,7 +42,7 @@ export const SETTINGS_CATEGORY_DESCRIPTIONS: Record<SettingsCategoryId, string> 
   models: 'LLM backends, per-role model picks, sampling, reasoning, and usage.',
   agents: 'System prompts, standing rules, composer modes, personas, workers, and tool policies.',
   integrations: 'Web search, dev tools, permissions, skills, and external hooks.',
-  advanced: 'Orchestrate supervisor tuning and local eval runs.',
+  advanced: 'Orchestrate supervisor tuning, local health probes, diagnostics, and eval runs.',
 };
 
 /** Category → ordered areas (render units). */
@@ -65,7 +65,7 @@ export const SETTINGS_CATEGORY_AREAS: Record<
     'skills',
     'webhooks',
   ],
-  advanced: ['features', 'evals'],
+  advanced: ['features', 'diagnostics', 'evals'],
 };
 
 /** Flat category list in sidebar order. */
@@ -320,7 +320,23 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   field('advanced.orchestration', 'Orchestration supervisor', 'advanced', 'features', {
     keywords: ['orchestrate', 'heartbeat', 'board'],
   }),
+  field('advanced.diagnostics', 'Health & diagnostics', 'advanced', 'diagnostics', {
+    keywords: ['errors', 'logs', 'crash', 'report', 'health strip', 'subsystem'],
+    description: 'Subsystem probes, grouped errors, and a local log tail. Nothing is sent off-device.',
+  }),
+  field('advanced.diagnostics.health', 'Health probes', 'advanced', 'diagnostics', {
+    keywords: ['server', 'memory', 'brain', 'lsp', 'pty', 'status strip'],
+  }),
+  field('advanced.diagnostics.actions', 'Diagnostic actions', 'advanced', 'diagnostics', {
+    keywords: ['copy report', 'refresh', 'clear logs'],
+  }),
   field('advanced.evals', 'Eval harness', 'advanced', 'evals', {
     keywords: ['benchmark', 'rubric', 'task pack'],
   }),
+
+  // —— About (General) ——
+  field('about.info', 'Build info', 'general', 'about', {
+    keywords: ['version', 'platform', 'node', 'electron'],
+  }),
+  field('about.version', 'App version', 'general', 'about'),
 ];
