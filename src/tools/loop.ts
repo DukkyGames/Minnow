@@ -1947,7 +1947,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         if (toolRoundMeta.usage && Object.keys(toolRoundMeta.usage).length > 0) {
           turnUsageSegments.push(toolRoundMeta.usage);
           streamingStatsPublisher.schedule({
-            streamMeta: turnResult.streamMeta,
+            streamMeta: {},
             t0: turnResult.t0,
             tFirst: turnResult.tFirst,
             partialText: '',

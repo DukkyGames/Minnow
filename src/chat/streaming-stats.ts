@@ -9,7 +9,7 @@ import {
   type StreamMetaAccumulator,
 } from '../api/chat';
 import { resolveModelInfo } from '../api/models';
-import { sumUsageSegments } from './orchestrate/stats-math';
+import { aggregateTurnUsageSegments } from './orchestrate/stats-math';
 import { estimateTokensFromText } from './prompts/token-estimate-core';
 import { getActiveChat } from '../state/sessions';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
@@ -30,14 +30,12 @@ export interface StreamingStatsSnapshot {
   modelInfo?: ModelInfo;
 }
 
-function hasMeasurableUsage(usage: Usage | undefined): boolean {
+function hasLiveCompletionUsage(usage: Usage | undefined): boolean {
   if (!usage) return false;
   return (
-    (usage.prompt_tokens != null && Number.isFinite(usage.prompt_tokens) && usage.prompt_tokens > 0) ||
-    (usage.completion_tokens != null &&
-      Number.isFinite(usage.completion_tokens) &&
-      usage.completion_tokens > 0) ||
-    (usage.total_tokens != null && Number.isFinite(usage.total_tokens) && usage.total_tokens > 0)
+    usage.completion_tokens != null &&
+    Number.isFinite(usage.completion_tokens) &&
+    usage.completion_tokens > 0
   );
 }
 
@@ -46,24 +44,27 @@ export function buildLiveStreamUsage(
   input: StreamingStatsSnapshot,
   _now = performance.now(),
 ): Usage {
-  const { streamMeta, partialText, partialThinking, priorSegments } = input;
-  const prior = priorSegments?.length ? sumUsageSegments(priorSegments) : {};
+  const { streamMeta, partialText, priorSegments } = input;
+  const priorSegmentsList = priorSegments ?? [];
+  const priorAgg = priorSegmentsList.length
+    ? aggregateTurnUsageSegments(priorSegmentsList)
+    : {};
 
-  const roundEstimate =
-    estimateTokensFromText(partialText) + estimateTokensFromText(partialThinking ?? '');
+  // Estimate visible assistant prose only; reasoning tokens arrive via provider usage.
+  const roundEstimate = estimateTokensFromText(partialText);
 
-  if (hasMeasurableUsage(streamMeta.usage)) {
-    const live = { ...streamMeta.usage! };
-    if (!priorSegments?.length) return live;
-    return sumUsageSegments([prior, live]);
+  const live = streamMeta.usage;
+  if (hasLiveCompletionUsage(live)) {
+    if (!priorSegmentsList.length) return { ...live! };
+    return aggregateTurnUsageSegments([...priorSegmentsList, live!]);
   }
 
-  const completion = (prior.completion_tokens ?? 0) + roundEstimate;
-  const prompt = streamMeta.usage?.prompt_tokens ?? prior.prompt_tokens;
+  const completion = (priorAgg.completion_tokens ?? 0) + roundEstimate;
+  const prompt = live?.prompt_tokens ?? priorAgg.prompt_tokens;
 
   const out: Usage = {};
   if (prompt != null && Number.isFinite(prompt)) out.prompt_tokens = prompt;
-  if (roundEstimate > 0 || prior.completion_tokens != null) {
+  if (roundEstimate > 0 || priorAgg.completion_tokens != null) {
     out.completion_tokens = completion;
   }
   if (out.prompt_tokens != null || out.completion_tokens != null) {

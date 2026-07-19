@@ -16,7 +16,7 @@ import {
   shouldUseBoardAggregateStats,
 } from './board-stats-aggregate';
 
-export { aggregateOrchestrateTurnMeta, averageStatsSegments, sumUsageSegments } from './stats-math';
+export { aggregateOrchestrateTurnMeta, aggregateTurnUsageSegments, averageStatsSegments, sumUsageSegments } from './stats-math';
 
 /** Whether this chat should roll up sub-agent usage into lastStats / stats strip. */
 export function shouldAggregateOrchestrateStats(chat: Chat): boolean {
