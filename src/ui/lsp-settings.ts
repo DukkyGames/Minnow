@@ -34,13 +34,11 @@ import { detectLocalServer } from '../tools/client';
 
 import { isLocalServerAvailable } from '../tools/config';
 
-import { appendSettingsCrosslinks, appendSettingsGroup } from './settings-layout';
-
+import { appendSettingsCrosslinks, appendSettingsGroup, linkToSettingsSection } from './settings-layout';
 import { createSettingsSwitch } from './settings-switch';
-
 import { appendSettingsOfflineHint } from './settings-controls';
-
 import { setStatus } from './status';
+import '../styles/settings-general.css';
 
 
 
@@ -1248,6 +1246,32 @@ export async function renderLspSection(): Promise<void> {
 
   mount.replaceChildren();
 
+  const shell = el('div', 'settings-general settings-general--wide');
+
+  mount.appendChild(shell);
+
+  const lead = el('p', 'settings-section-lead');
+
+  lead.append(
+
+    'Bundled and custom analyzers for the Code file viewer. Config persists in ',
+
+    el('code', undefined, '~/.minnow/lsp.json'),
+
+    '. AI inline completion is configured under ',
+
+    linkToSettingsSection('Editor', 'editor'),
+
+    '.',
+
+  );
+
+  shell.appendChild(lead);
+
+  const content = el('div', 'settings-general__content');
+
+  shell.appendChild(content);
+
 
 
   await detectLocalServer();
@@ -1258,7 +1282,7 @@ export async function renderLspSection(): Promise<void> {
 
     appendSettingsOfflineHint(
 
-      mount,
+      content,
 
       'Start with <code>npm start</code> to load server status, toggle analyzers, and save <code>~/.minnow/lsp.json</code>.',
 
@@ -1278,7 +1302,7 @@ export async function renderLspSection(): Promise<void> {
 
     appendSettingsOfflineHint(
 
-      mount,
+      content,
 
       'Could not load language server config. Confirm <code>npm start</code> is running.',
 
@@ -1300,7 +1324,11 @@ export async function renderLspSection(): Promise<void> {
 
 
 
-  const statusGroup = appendSettingsGroup(mount, 'Status', undefined, 'integrations.lsp');
+  const statusGroup = appendSettingsGroup(content, 'Status', undefined, 'integrations.lsp', {
+
+    emphasis: true,
+
+  });
 
   appendLspToolbar(statusGroup, {
 
@@ -1392,13 +1420,15 @@ export async function renderLspSection(): Promise<void> {
 
   const catalog = appendSettingsGroup(
 
-    mount,
+    content,
 
     'Language servers',
 
     'Installed toggles download optional binaries to ~/.minnow/lsp-servers. Enabled toggles start analyzers when npm start is running.',
 
     'integrations.lsp',
+
+    { emphasis: true },
 
   );
 
@@ -1426,7 +1456,7 @@ export async function renderLspSection(): Promise<void> {
 
   const customGroup = appendSettingsGroup(
 
-    mount,
+    content,
 
     'Custom server',
 
@@ -1434,13 +1464,15 @@ export async function renderLspSection(): Promise<void> {
 
     'integrations.lsp.custom',
 
+    { emphasis: true },
+
   );
 
   appendCustomServerPanel(customGroup, refresh);
 
 
 
-  appendSettingsCrosslinks(mount, [
+  appendSettingsCrosslinks(content, [
 
     { label: 'Editor', sectionId: 'editor' },
 

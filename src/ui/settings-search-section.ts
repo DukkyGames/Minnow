@@ -2,6 +2,8 @@
  * Settings → Search — provider, SearXNG URL, API keys, fallback chain, result count.
  */
 
+import '../styles/settings-general.css';
+
 import {
   DEFAULT_SEARCH_CONFIG,
   loadSearchConfig,
@@ -10,6 +12,7 @@ import {
   type SearchFallbackProvider,
   type SearchProvider,
 } from '../config/search-config';
+import { detectConfigServer } from '../config/storage-mode';
 import {
   fetchManagedServers,
   getManagedSearxngActiveUrl,
@@ -19,7 +22,12 @@ import {
   appendSettingsGroup,
   linkToSettingsSection,
 } from './settings-layout';
-import { createSettingsInputRow, createSettingsSelectRow } from './settings-controls';
+import {
+  appendSettingsOfflineHint,
+  createSettingsActionsRow,
+  createSettingsInputRow,
+  createSettingsSelectRow,
+} from './settings-controls';
 import { setStatus } from './status';
 import { isLocalServerAvailable } from '../tools/config';
 
@@ -48,48 +56,33 @@ const FALLBACK_OPTIONS: { value: SearchFallbackProvider; label: string }[] = [
   { value: 'duckduckgo', label: 'DuckDuckGo' },
 ];
 
-/** Render Settings → Search into the section mount. */
-export async function renderSearchSettingsSection(mount: HTMLElement): Promise<void> {
-  mount.replaceChildren();
+/** Managed SearXNG row: canonical label column + status panel in the control column. */
+function appendManagedSearxngRow(container: HTMLElement): {
+  managedWrap: HTMLElement;
+  endpoint: HTMLElement;
+} {
+  const managedWrap = el('div', 'settings-search-url-managed hidden');
 
-  const providerGroup = appendSettingsGroup(
-    mount,
-    'Provider',
-    'Preferred backend for web_search. No silent fallback when the selected provider cannot run.',
-  );
+  const row = el('div', 'settings-row');
+  row.dataset.settingsSearchKey = 'integrations.search.searxngUrl';
 
-  const providerSelect = document.createElement('select');
-  providerSelect.id = 'settingsSearchProvider';
-  providerSelect.className = 'settings-select';
-  for (const opt of PROVIDER_OPTIONS) {
-    const option = document.createElement('option');
-    option.value = opt.value;
-    option.textContent = opt.label;
-    providerSelect.appendChild(option);
-  }
-  providerGroup.appendChild(
-    createSettingsSelectRow('Search provider', { select: providerSelect }).row,
-  );
-
-  const searxngField = el('div', 'settings-field settings-search-url-field');
-
-  const searxngEditable = el('div', 'settings-search-url-editable');
-  const searxngLabel = el('label', 'settings-field-label', 'SearXNG base URL');
-  searxngLabel.htmlFor = 'settingsSearxngUrl';
-  const searxngInput = document.createElement('input');
-  searxngInput.type = 'url';
-  searxngInput.id = 'settingsSearxngUrl';
-  searxngInput.className = 'settings-input';
-  searxngInput.placeholder = 'http://localhost:8080';
-  searxngInput.autocomplete = 'off';
-  searxngEditable.append(searxngLabel, searxngInput);
-
-  const searxngManaged = el('div', 'settings-search-url-managed hidden');
-  const managedHead = el('div', 'settings-search-url-managed__head');
-  managedHead.append(
-    el('span', 'settings-field-label', 'SearXNG base URL'),
+  const label = el('div', 'settings-row__label');
+  const titleRow = el('div', 'settings-search-url-managed__title');
+  titleRow.append(
+    el('span', 'settings-row__title', 'SearXNG base URL'),
     el('span', 'settings-mcp-badge settings-mcp-badge--builtin', 'Managed'),
   );
+  label.appendChild(titleRow);
+
+  const desc = el('span', 'settings-row__desc');
+  desc.append(
+    document.createTextNode('Search and Deep Research use the loopback instance from '),
+    linkToSettingsSection('Servers', 'servers'),
+    document.createTextNode('. Saved URL in search.json applies when managed SearXNG stops.'),
+  );
+  label.appendChild(desc);
+
+  const control = el('div', 'settings-row__control');
   const managedUrlPanel = el('div', 'settings-search-managed-url');
   managedUrlPanel.setAttribute('role', 'status');
   const managedStatus = el('span', 'settings-mcp-status settings-mcp-status--ok');
@@ -97,58 +90,136 @@ export async function renderSearchSettingsSection(mount: HTMLElement): Promise<v
     el('span', 'settings-mcp-status-dot'),
     el('span', 'settings-mcp-status-text', 'Running'),
   );
-  const managedEndpoint = el('code', 'settings-search-managed-url__endpoint');
-  managedUrlPanel.append(managedStatus, managedEndpoint);
-  const managedHint = el('p', 'settings-field-hint');
-  managedHint.append(
-    document.createTextNode(
-      'Search and Deep Research use the loopback instance from ',
-    ),
-    linkToSettingsSection('Settings → Servers', 'servers'),
-    document.createTextNode('. Saved URL in search.json applies when managed SearXNG stops.'),
-  );
-  searxngManaged.append(managedHead, managedUrlPanel, managedHint);
+  const endpoint = el('code', 'settings-search-managed-url__endpoint');
+  managedUrlPanel.append(managedStatus, endpoint);
+  control.appendChild(managedUrlPanel);
 
-  searxngField.append(searxngEditable, searxngManaged);
-  providerGroup.appendChild(searxngField);
+  row.append(label, control);
+  managedWrap.appendChild(row);
+  container.appendChild(managedWrap);
+
+  return { managedWrap, endpoint };
+}
+
+/** Render Settings → Search into the section mount. */
+export async function renderSearchSettingsSection(mount: HTMLElement): Promise<void> {
+  mount.replaceChildren();
+
+  const shell = el('div', 'settings-general');
+  mount.appendChild(shell);
+
+  const lead = el('p', 'settings-section-lead');
+  lead.append(
+    'Configure the ',
+    el('code', undefined, 'web_search'),
+    ' tool backend and API keys. Managed SearXNG from ',
+    linkToSettingsSection('Servers', 'servers'),
+    ' takes precedence when running. Loop limits and model binding for research live under ',
+    linkToSettingsSection('Deep Research', 'deep-research'),
+    '.',
+  );
+  shell.appendChild(lead);
+
+  const serverUp = await detectConfigServer();
+  if (!serverUp) {
+    appendSettingsOfflineHint(
+      shell,
+      'Start with <code>npm start</code> to load and save search settings (<code>search.json</code>).',
+    );
+  }
+
+  const content = el('div', 'settings-general__content');
+  shell.appendChild(content);
+
+  const providerGroup = appendSettingsGroup(
+    content,
+    'Provider',
+    'Preferred backend for web_search. No silent fallback when the selected provider cannot run.',
+    'integrations.search.provider',
+    { emphasis: true },
+  );
+
+  const providerSelect = document.createElement('select');
+  providerSelect.id = 'settingsSearchProvider';
+  providerSelect.className = 'settings-select';
+  providerSelect.disabled = !serverUp;
+  for (const opt of PROVIDER_OPTIONS) {
+    const option = document.createElement('option');
+    option.value = opt.value;
+    option.textContent = opt.label;
+    providerSelect.appendChild(option);
+  }
+  providerGroup.appendChild(
+    createSettingsSelectRow('Search provider', {
+      select: providerSelect,
+      searchKey: 'integrations.search.provider',
+    }).row,
+  );
+
+  const searxngEditable = el('div', 'settings-search-url-editable');
+  const searxngInput = document.createElement('input');
+  searxngInput.type = 'url';
+  searxngInput.id = 'settingsSearxngUrl';
+  searxngInput.className = 'settings-input';
+  searxngInput.placeholder = 'http://localhost:8080';
+  searxngInput.autocomplete = 'off';
+  searxngInput.disabled = !serverUp;
+  searxngEditable.appendChild(
+    createSettingsInputRow('SearXNG base URL', {
+      input: searxngInput,
+      searchKey: 'integrations.search.searxngUrl',
+      description: 'Used when SearXNG is the primary provider and no managed instance is running.',
+    }).row,
+  );
+  providerGroup.appendChild(searxngEditable);
+
+  const { managedWrap: searxngManaged, endpoint: managedEndpoint } =
+    appendManagedSearxngRow(providerGroup);
 
   const keysGroup = appendSettingsGroup(
-    mount,
+    content,
     'API keys',
     'Brave and Tavily keys are stored in search.json (tools.json keys remain as a read fallback).',
+    'integrations.search.apiKeys',
+    { emphasis: true },
   );
 
-  const braveField = el('div', 'settings-field');
-  const braveLabel = el('label', 'settings-field-label', 'Brave Search API key');
-  braveLabel.htmlFor = 'settingsSearchBraveApiKey';
   const braveInput = document.createElement('input');
   braveInput.type = 'password';
   braveInput.id = 'settingsSearchBraveApiKey';
   braveInput.className = 'settings-input';
   braveInput.autocomplete = 'off';
-  braveField.append(braveLabel, braveInput);
-  keysGroup.appendChild(braveField);
+  braveInput.disabled = !serverUp;
+  keysGroup.appendChild(
+    createSettingsInputRow('Brave Search API key', {
+      input: braveInput,
+      searchKey: 'integrations.search.braveApiKey',
+    }).row,
+  );
 
-  const tavilyField = el('div', 'settings-field');
-  const tavilyLabel = el('label', 'settings-field-label', 'Tavily API key');
-  tavilyLabel.htmlFor = 'settingsSearchTavilyApiKey';
   const tavilyInput = document.createElement('input');
   tavilyInput.type = 'password';
   tavilyInput.id = 'settingsSearchTavilyApiKey';
   tavilyInput.className = 'settings-input';
   tavilyInput.autocomplete = 'off';
-  tavilyField.append(tavilyLabel, tavilyInput);
-  keysGroup.appendChild(tavilyField);
+  tavilyInput.disabled = !serverUp;
+  keysGroup.appendChild(
+    createSettingsInputRow('Tavily API key', {
+      input: tavilyInput,
+      searchKey: 'integrations.search.tavilyApiKey',
+    }).row,
+  );
 
   const chainGroup = appendSettingsGroup(
-    mount,
+    content,
     'Research fallback chain',
     'If the primary search provider fails, Deep Research tries these providers in order. Check each provider to include it.',
+    'integrations.search.fallback',
+    { emphasis: true },
   );
   const chainList = el('div', 'settings-checklist');
   chainList.setAttribute('role', 'group');
   chainList.setAttribute('aria-label', 'Research fallback providers');
-  chainList.dataset.settingsSearchKey = 'integrations.search.fallback';
   const chainCheckboxes = new Map<SearchFallbackProvider, HTMLInputElement>();
   for (const opt of FALLBACK_OPTIONS) {
     const row = el('label', 'settings-checklist__option');
@@ -156,6 +227,7 @@ export async function renderSearchSettingsSection(mount: HTMLElement): Promise<v
     cb.type = 'checkbox';
     cb.value = opt.value;
     cb.dataset.fallbackProvider = opt.value;
+    cb.disabled = !serverUp;
     chainCheckboxes.set(opt.value, cb);
     row.append(cb, el('span', 'settings-checklist__label-text', opt.label));
     chainList.appendChild(row);
@@ -163,9 +235,11 @@ export async function renderSearchSettingsSection(mount: HTMLElement): Promise<v
   chainGroup.appendChild(chainList);
 
   const limitsGroup = appendSettingsGroup(
-    mount,
+    content,
     'Results',
     'Maximum structured results per query (1–50).',
+    'integrations.search.resultCount',
+    { emphasis: true },
   );
   const countInput = document.createElement('input');
   countInput.type = 'number';
@@ -173,17 +247,13 @@ export async function renderSearchSettingsSection(mount: HTMLElement): Promise<v
   countInput.className = 'settings-input';
   countInput.min = '1';
   countInput.max = '50';
+  countInput.disabled = !serverUp;
   limitsGroup.appendChild(
-    createSettingsInputRow('Result count', { input: countInput }).row,
+    createSettingsInputRow('Result count', {
+      input: countInput,
+      searchKey: 'integrations.search.resultCount',
+    }).row,
   );
-
-  const saveBtn = el('button', 'settings-action-btn settings-action-btn--primary', 'Save search settings');
-  saveBtn.type = 'button';
-  const footer = el('div', 'settings-section-footer');
-  const actions = el('div', 'settings-actions');
-  actions.appendChild(saveBtn);
-  footer.appendChild(actions);
-  mount.appendChild(footer);
 
   let current: SearchConfig = { ...DEFAULT_SEARCH_CONFIG };
   /** search.json URL (unchanged when managed SearXNG overrides display). */
@@ -249,19 +319,31 @@ export async function renderSearchSettingsSection(mount: HTMLElement): Promise<v
     };
   };
 
-  saveBtn.addEventListener('click', () => {
-    void (async () => {
-      try {
-        const saved = await saveSearchConfig(readForm());
-        applyToForm(saved);
-        setStatus('ok', 'Search settings saved');
-      } catch {
-        setStatus('err', 'Could not save search settings — use npm start');
-      }
-    })();
-  });
+  content.appendChild(
+    createSettingsActionsRow(
+      [
+        {
+          label: 'Save search settings',
+          variant: 'primary',
+          disabled: !serverUp,
+          onClick: () => {
+            void (async () => {
+              try {
+                const saved = await saveSearchConfig(readForm());
+                applyToForm(saved);
+                setStatus('ok', 'Search settings saved');
+              } catch {
+                setStatus('err', 'Could not save search settings — use npm start');
+              }
+            })();
+          },
+        },
+      ],
+      { searchKey: 'integrations.search.save' },
+    ),
+  );
 
-  appendSettingsCrosslinks(mount, [
+  appendSettingsCrosslinks(content, [
     { label: 'Managed servers (SearXNG)', sectionId: 'servers' },
     { label: 'Deep Research engine', sectionId: 'deep-research' },
     { label: 'Tool permissions', sectionId: 'tools' },

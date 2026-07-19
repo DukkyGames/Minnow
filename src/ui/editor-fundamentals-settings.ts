@@ -30,6 +30,8 @@ export async function appendEditorFundamentalsSettings(mount: HTMLElement): Prom
     mount,
     'Code editing',
     'CodeMirror defaults for the file viewer: wrap, indentation, and whitespace guides.',
+    'integrations.editor',
+    { emphasis: true },
   );
 
   const { row: wrapRow } = createSettingsToggleRow('Word wrap', {

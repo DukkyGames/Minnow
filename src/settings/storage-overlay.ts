@@ -84,8 +84,9 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   'general.toolCalls.constrained': meta('toolCalls.useConstrainedDecoding', 'boolean', {
     refreshAreas: ['general', 'tools'],
   }),
-  'general.generation.timeout': meta('chat.generationIdleTimeoutMs', 'number', {
-    refreshAreas: ['tools'],
+  'agents.watchdog': section(['watchdog']),
+  'agents.watchdog.generation': meta('chat.generationIdleTimeoutMs', 'number', {
+    refreshAreas: ['watchdog'],
   }),
   'audio.devices': section(['audio']),
   'audio.inputDevice': meta('voice.audio.inputDeviceId', 'string', { refreshAreas: ['audio'] }),
@@ -196,10 +197,10 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   'integrations.deepResearch': section(['deep-research']),
   'integrations.servers': section(['servers']),
   'integrations.tools': section(['tools']),
-  'integrations.tools.filesystem': meta('toolSecurity.filesystemAccess', 'enum', {
+  'general.filesystem': meta('toolSecurity.filesystemAccess', 'enum', {
     allowedValues: ['workspace', 'full'],
     sensitivity: 'dangerous',
-    refreshAreas: ['tools'],
+    refreshAreas: ['general'],
   }),
   'integrations.mcp': section(['mcp']),
   'integrations.lsp': section(['lsp']),
@@ -209,7 +210,7 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   'integrations.tools.cache': resource('tools', 'toolCache.enabled', 'boolean', {
     refreshAreas: ['tools'],
   }),
-  'integrations.browser': meta('browser.enabled', 'boolean', { refreshAreas: ['tools'] }),
+  'integrations.browser': meta('browser.enabled', 'boolean', { refreshAreas: ['browser'] }),
   'advanced.orchestration': section(['features']),
   'advanced.evals': section(['evals']),
 };

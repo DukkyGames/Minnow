@@ -541,6 +541,10 @@
         <span class="settings-nav__item-label">Autopilot</span>
         <span class="settings-nav__count" hidden aria-hidden="true"></span>
       </button>
+      <button type="button" class="settings-nav__item" data-area-jump="watchdog" data-settings-nav-area="watchdog">
+        <span class="settings-nav__item-label">Watchdog</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
     </div>
     <div class="settings-nav-group" data-settings-nav-group="integrations">
       <p class="settings-nav-group__label" data-settings-category="integrations">
@@ -559,12 +563,28 @@
         <span class="settings-nav__item-label">Servers</span>
         <span class="settings-nav__count" hidden aria-hidden="true"></span>
       </button>
-      <button type="button" class="settings-nav__item" data-hub-jump="tools-skills" data-settings-nav-hub="tools-skills">
-        <span class="settings-nav__item-label">Tools & skills</span>
+      <button type="button" class="settings-nav__item" data-hub-jump="tools" data-settings-nav-hub="tools">
+        <span class="settings-nav__item-label">Tools</span>
         <span class="settings-nav__count" hidden aria-hidden="true"></span>
       </button>
-      <button type="button" class="settings-nav__item" data-hub-jump="dev-stack" data-settings-nav-hub="dev-stack">
-        <span class="settings-nav__item-label">Dev stack</span>
+      <button type="button" class="settings-nav__item" data-hub-jump="skills" data-settings-nav-hub="skills">
+        <span class="settings-nav__item-label">Skills</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+      <button type="button" class="settings-nav__item" data-hub-jump="browser" data-settings-nav-hub="browser">
+        <span class="settings-nav__item-label">Browser</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+      <button type="button" class="settings-nav__item" data-hub-jump="mcp" data-settings-nav-hub="mcp">
+        <span class="settings-nav__item-label">MCP servers</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+      <button type="button" class="settings-nav__item" data-hub-jump="lsp" data-settings-nav-hub="lsp">
+        <span class="settings-nav__item-label">Language servers</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
+      <button type="button" class="settings-nav__item" data-hub-jump="editor" data-settings-nav-hub="editor">
+        <span class="settings-nav__item-label">Editor</span>
         <span class="settings-nav__count" hidden aria-hidden="true"></span>
       </button>
       <button type="button" class="settings-nav__item" data-hub-jump="external" data-settings-nav-hub="external">
@@ -683,6 +703,10 @@
         <h2>Autopilot</h2>
         <div id="settingsAutopilotBody" class="settings-section-body"></div>
       </section>
+      <section id="settingsSection-watchdog" class="settings-section settings-area settings-area--title-suppressed" data-area="watchdog">
+        <h2>Watchdog</h2>
+        <div id="settingsWatchdogBody" class="settings-section-body"></div>
+      </section>
       </div>
       <div class="settings-category" data-category="integrations">
 
@@ -690,7 +714,6 @@
         <p class="settings-hub__lead">Web search providers and API keys for <code>web_search</code>.</p>
       <section id="settingsSection-search" class="settings-section settings-area settings-area--title-suppressed" data-area="search">
         <h2>Search</h2>
-        <p class="settings-lead">Provider, API keys, and SearXNG URL for <code>web_search</code>.</p>
         <div id="settingsSearchBody" class="settings-section-body"></div>
       </section>
       </div>
@@ -698,7 +721,6 @@
         <p class="settings-hub__lead">Model and loop limits for the Research app (<code>research.json</code>).</p>
       <section id="settingsSection-deep-research" class="settings-section settings-area settings-area--title-suppressed" data-area="deep-research">
         <h2>Deep Research</h2>
-        <p class="settings-lead">Model and loop limits for the Research app (<code>research.json</code>).</p>
         <div id="settingsDeepResearchBody" class="settings-section-body"></div>
       </section>
       </div>
@@ -706,87 +728,48 @@
         <p class="settings-hub__lead">Install and run managed local services from <code>~/.minnow/servers/</code>.</p>
       <section id="settingsSection-servers" class="settings-section settings-area settings-area--title-suppressed" data-area="servers">
         <h2>Servers</h2>
-        <p class="settings-lead">Install and run local SearXNG from <code>~/.minnow/servers/</code>.</p>
         <div id="settingsServersBody" class="settings-section-body"></div>
       </section>
       </div>
-      <div class="settings-hub" id="settingsHub-tools-skills" data-hub="tools-skills">
-        <p class="settings-hub__lead">Built-in tool policy, cache, and slash-command skills.</p>
-      <section id="settingsSection-tools" class="settings-section settings-area settings-area--title-suppressed" data-area="tools">
+      <div class="settings-hub" id="settingsHub-tools" data-hub="tools">
+        <p class="settings-hub__lead">Built-in tool permissions and session cache.</p>
+      <section id="settingsSection-tools" class="settings-section settings-section--wide settings-area settings-area--title-suppressed" data-area="tools">
         <h2>Tools</h2>
-        <p class="settings-lead">Permissions, filesystem policy, and browser allowlist. Server tools need <code>npm start</code>.</p>
         <div id="settingsToolsBody" class="settings-section-body"></div>
       </section>
+      </div>
+      <div class="settings-hub" id="settingsHub-skills" data-hub="skills">
+        <p class="settings-hub__lead">Slash commands and SKILL.md packs the agent can load.</p>
       <section id="settingsSection-skills" class="settings-section settings-area settings-area--title-suppressed" data-area="skills">
         <h2>Skills</h2>
-        <p class="settings-lead">Slash commands and SKILL packs the agent can load.</p>
         <div id="settingsSkillsBody" class="settings-section-body"></div>
       </section>
       </div>
-      <div class="settings-hub" id="settingsHub-dev-stack" data-hub="dev-stack">
-        <p class="settings-hub__lead">MCP servers, language servers, and editor ghost text.</p>
+      <div class="settings-hub" id="settingsHub-browser" data-hub="browser">
+        <p class="settings-hub__lead">Preview panel automation for browser_* tools (Electron desktop shell).</p>
+      <section id="settingsSection-browser" class="settings-section settings-area settings-area--title-suppressed" data-area="browser">
+        <h2>Browser</h2>
+        <div id="settingsBrowserBody" class="settings-section-body"></div>
+      </section>
+      </div>
+      <div class="settings-hub" id="settingsHub-mcp" data-hub="mcp">
+        <p class="settings-hub__lead">Model Context Protocol servers in <code>~/.minnow/mcp/</code>. Tools appear as <code>mcp__…</code> when <code>npm start</code> is running.</p>
       <section id="settingsSection-mcp" class="settings-section settings-area settings-area--title-suppressed" data-area="mcp">
         <h2>MCP servers</h2>
-        <p class="settings-lead">Model Context Protocol servers in <code>~/.minnow/mcp/</code>. Tools appear as <code>mcp__…</code> when <code>npm start</code> is running.</p>
-        <div class="settings-section-body">
-        <p id="settingsMcpOffline" class="field-hint settings-mcp-offline hidden">Start with <code>npm start</code> to load and toggle MCP servers.</p>
-        <div id="settingsMcpServerList" class="settings-mcp-list" role="list" aria-label="Configured MCP servers"></div>
-        <details id="settingsMcpAddPanel" class="settings-mcp-add-panel hidden">
-          <summary class="settings-mcp-add-summary">Add MCP server</summary>
-          <form id="settingsMcpAddForm" class="settings-mcp-form" novalidate>
-            <div class="field-row">
-              <div class="field">
-                <label for="settingsMcpAddId">Server id</label>
-                <input type="text" id="settingsMcpAddId" name="id" required pattern="[a-z0-9][a-z0-9_-]*" autocomplete="off" spellcheck="false" placeholder="my-docs-mcp">
-                <p class="field-hint">Lowercase letters, numbers, hyphens, underscores.</p>
-              </div>
-              <div class="field">
-                <label for="settingsMcpAddLabel">Display name</label>
-                <input type="text" id="settingsMcpAddLabel" name="label" required autocomplete="off" placeholder="My docs MCP">
-              </div>
-            </div>
-            <div class="field">
-              <label for="settingsMcpAddDescription">Description (optional)</label>
-              <input type="text" id="settingsMcpAddDescription" name="description" autocomplete="off" placeholder="What this server provides">
-            </div>
-            <div class="field-row">
-              <div class="field">
-                <label for="settingsMcpAddCommand">Command</label>
-                <input type="text" id="settingsMcpAddCommand" name="command" required autocomplete="off" spellcheck="false" placeholder="npx">
-              </div>
-              <div class="field">
-                <label for="settingsMcpAddEnabled">Enabled on add</label>
-                <label class="settings-toggle-row">
-                  <input type="checkbox" id="settingsMcpAddEnabled" name="enabled" checked>
-                  <span>Connect after saving</span>
-                </label>
-              </div>
-            </div>
-            <div class="field">
-              <label for="settingsMcpAddArgs">Arguments (one per line)</label>
-              <textarea id="settingsMcpAddArgs" name="args" rows="4" spellcheck="false" placeholder="-y&#10;@modelcontextprotocol/server-filesystem&#10;/path/to/allowed/dir"></textarea>
-            </div>
-            <div class="field">
-              <label for="settingsMcpAddEnv">Environment variables (optional, KEY=value per line)</label>
-              <textarea id="settingsMcpAddEnv" name="env" rows="3" spellcheck="false" placeholder="API_KEY=your-key-here"></textarea>
-            </div>
-            <p id="settingsMcpAddError" class="settings-mcp-form-error hidden" role="alert"></p>
-            <div class="settings-mcp-form-actions">
-              <button type="submit" class="settings-action-btn">Add server</button>
-              <button type="button" id="settingsMcpAddReset" class="settings-inline-btn">Clear form</button>
-            </div>
-          </form>
-        </details>
-        </div>
+        <div id="settingsMcpBody" class="settings-section-body" aria-live="polite"></div>
       </section>
+      </div>
+      <div class="settings-hub" id="settingsHub-lsp" data-hub="lsp">
+        <p class="settings-hub__lead">Diagnostics and symbol completions in the Code file viewer. Config at <code>~/.minnow/lsp.json</code>.</p>
       <section id="settingsSection-lsp" class="settings-section settings-section--wide settings-section--lsp settings-area settings-area--title-suppressed" data-area="lsp">
         <h2>Language servers</h2>
-        <p class="settings-lead">Diagnostics and completions in the file viewer. Config at <code>~/.minnow/lsp.json</code>.</p>
         <div id="settingsLspBody" class="settings-section-body" aria-live="polite"></div>
       </section>
+      </div>
+      <div class="settings-hub" id="settingsHub-editor" data-hub="editor">
+        <p class="settings-hub__lead">CodeMirror defaults, AI ghost text, and Intent mode for the file viewer.</p>
       <section id="settingsSection-editor" class="settings-section settings-area settings-area--title-suppressed" data-area="editor">
         <h2>Editor</h2>
-        <p class="settings-lead">Ghost-text completions: <kbd class="settings-editor-kbd">Tab</kbd> accepts, <kbd class="settings-editor-kbd">Esc</kbd> dismisses.</p>
         <div id="settingsEditorBody" class="settings-section-body" aria-live="polite"></div>
       </section>
       </div>

@@ -188,6 +188,34 @@
     ]
   },
   {
+    "key": "general.filesystem",
+    "label": "Filesystem access",
+    "description": "Limit file and git tools to the open project folder, or allow paths anywhere on this computer.",
+    "keywords": [
+      "workspace",
+      "full disk",
+      "path",
+      "sandbox",
+      "file tools",
+      "git",
+      "TOOLS_ALLOW_ALL_PATHS"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "meta",
+    "path": "toolSecurity.filesystemAccess",
+    "type": "enum",
+    "allowedValues": [
+      "workspace",
+      "full"
+    ],
+    "sensitivity": "dangerous",
+    "writable": true,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
     "key": "general.onboarding",
     "label": "Run setup again",
     "description": "Re-open the first-run setup wizard.",
@@ -241,20 +269,6 @@
     "writable": true,
     "refreshAreas": [
       "general",
-      "tools"
-    ]
-  },
-  {
-    "key": "general.generation.timeout",
-    "label": "Generation timeout",
-    "category": "general",
-    "area": "general",
-    "storage": "meta",
-    "path": "chat.generationIdleTimeoutMs",
-    "type": "number",
-    "sensitivity": "normal",
-    "writable": true,
-    "refreshAreas": [
       "tools"
     ]
   },
@@ -887,6 +901,14 @@
   {
     "key": "agents.agentPacks",
     "label": "Agent packs",
+    "keywords": [
+      "template",
+      "download",
+      "default pack",
+      "builtin",
+      "manifest",
+      "work agent"
+    ],
     "category": "agents",
     "area": "agent-packs",
     "storage": "section",
@@ -1000,6 +1022,49 @@
     "writable": false,
     "refreshAreas": [
       "autopilot"
+    ]
+  },
+  {
+    "key": "agents.watchdog",
+    "label": "Watchdog",
+    "description": "Server-side generation limits while models and agents stream.",
+    "keywords": [
+      "timeout",
+      "stall",
+      "generation",
+      "streaming",
+      "heartbeat",
+      "recovery"
+    ],
+    "category": "agents",
+    "area": "watchdog",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "watchdog"
+    ]
+  },
+  {
+    "key": "agents.watchdog.generation",
+    "label": "Generation timeouts",
+    "description": "Idle and max-duration limits while streaming from the model. Idle timeout resets when new tokens arrive.",
+    "keywords": [
+      "idle timeout",
+      "max duration",
+      "streaming",
+      "upstream"
+    ],
+    "category": "agents",
+    "area": "watchdog",
+    "storage": "meta",
+    "path": "chat.generationIdleTimeoutMs",
+    "type": "number",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "watchdog"
     ]
   },
   {
@@ -1310,6 +1375,84 @@
     ]
   },
   {
+    "key": "integrations.deepResearch.model",
+    "label": "Research model",
+    "category": "integrations",
+    "area": "deep-research",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "deep-research"
+    ]
+  },
+  {
+    "key": "integrations.deepResearch.searchOverride",
+    "label": "Research search override",
+    "category": "integrations",
+    "area": "deep-research",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "deep-research"
+    ]
+  },
+  {
+    "key": "integrations.deepResearch.loop",
+    "label": "Research loop limits",
+    "category": "integrations",
+    "area": "deep-research",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "deep-research"
+    ]
+  },
+  {
+    "key": "integrations.deepResearch.extraction",
+    "label": "Research extraction",
+    "category": "integrations",
+    "area": "deep-research",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "deep-research"
+    ]
+  },
+  {
+    "key": "integrations.deepResearch.report",
+    "label": "Research final report",
+    "category": "integrations",
+    "area": "deep-research",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "deep-research"
+    ]
+  },
+  {
+    "key": "integrations.deepResearch.save",
+    "label": "Save Deep Research settings",
+    "category": "integrations",
+    "area": "deep-research",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "deep-research"
+    ]
+  },
+  {
     "key": "integrations.servers",
     "label": "Managed servers",
     "keywords": [
@@ -1364,7 +1507,7 @@
     "label": "MCP servers",
     "keywords": [
       "model context protocol",
-      "dev stack"
+      "context7"
     ],
     "category": "integrations",
     "area": "mcp",
@@ -1382,7 +1525,7 @@
     "keywords": [
       "diagnostics",
       "typescript",
-      "dev stack"
+      "lsp.json"
     ],
     "category": "integrations",
     "area": "lsp",
@@ -1400,7 +1543,7 @@
     "keywords": [
       "ghost text",
       "inline completion",
-      "dev stack"
+      "codemirror"
     ],
     "category": "integrations",
     "area": "editor",
@@ -1448,20 +1591,74 @@
   },
   {
     "key": "integrations.browser",
-    "label": "Browser allowlist",
+    "label": "Browser automation",
     "keywords": [
       "cdp",
-      "automation"
+      "automation",
+      "allowlist",
+      "preview"
     ],
     "category": "integrations",
-    "area": "tools",
+    "area": "browser",
     "storage": "meta",
     "path": "browser.enabled",
     "type": "boolean",
     "sensitivity": "normal",
     "writable": true,
     "refreshAreas": [
-      "tools"
+      "browser"
+    ]
+  },
+  {
+    "key": "integrations.browser.allowNavigate",
+    "label": "Allow browser navigation",
+    "category": "integrations",
+    "area": "browser",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "browser"
+    ]
+  },
+  {
+    "key": "integrations.browser.restoreTabs",
+    "label": "Restore browser tabs",
+    "category": "integrations",
+    "area": "browser",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "browser"
+    ]
+  },
+  {
+    "key": "integrations.browser.patterns",
+    "label": "Allowed origin patterns",
+    "category": "integrations",
+    "area": "browser",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "browser"
+    ]
+  },
+  {
+    "key": "integrations.browser.devtoolsDock",
+    "label": "DevTools dock",
+    "category": "integrations",
+    "area": "browser",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "browser"
     ]
   },
   {

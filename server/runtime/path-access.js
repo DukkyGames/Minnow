@@ -83,7 +83,7 @@ export function resolveSafePath(userPath, options = {}) {
   }
 
   throw new Error(
-    `Path "${userPath}" resolves outside the workspace directory. Enable full filesystem access in Settings (dangerous) or set TOOLS_ALLOW_ALL_PATHS=1 for automation.`,
+    `Path "${userPath}" resolves outside the workspace directory. Enable full disk access in Settings → General → Filesystem access (dangerous) or set TOOLS_ALLOW_ALL_PATHS=1 for automation.`,
   );
 }
 

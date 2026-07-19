@@ -51,7 +51,7 @@ export function formatGenerationErrorMessage(message: string): string {
     lower.includes('und_err_body_timeout') ||
     lower.includes('und_err_headers_timeout')
   ) {
-    return 'The model stopped sending data for several minutes (connection timed out). Try again, shorten context, or adjust Generation timeouts in Settings → Tools.';
+    return 'The model stopped sending data for several minutes (connection timed out). Try again, shorten context, or adjust Generation timeouts in Settings → Agents → Watchdog.';
   }
   if (
     lower.includes('upstream http 503') ||

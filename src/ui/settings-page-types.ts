@@ -44,10 +44,12 @@ export type SettingsSectionId =
   | 'agent-packs'
   | 'sub-agents'
   | 'autopilot'
+  | 'watchdog'
   | 'search'
   | 'deep-research'
   | 'servers'
   | 'tools'
+  | 'browser'
   | 'mcp'
   | 'lsp'
   | 'editor'
@@ -77,10 +79,12 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   'agent-packs': 'Agent packs',
   'sub-agents': 'Sub-agents',
   autopilot: 'Autopilot',
+  watchdog: 'Watchdog',
   search: 'Search',
   'deep-research': 'Deep Research',
   servers: 'Servers',
   tools: 'Tools',
+  browser: 'Browser',
   mcp: 'MCP servers',
   lsp: 'Language servers',
   editor: 'Editor',
@@ -115,12 +119,13 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
       'rules',
       'agent-packs',
       'autopilot',
+      'watchdog',
     ],
   },
   {
     id: 'integrations',
     label: 'Tools & integrations',
-    sections: ['search', 'deep-research', 'servers', 'tools', 'mcp', 'lsp', 'editor', 'skills', 'webhooks'],
+    sections: ['search', 'deep-research', 'servers', 'tools', 'skills', 'browser', 'mcp', 'lsp', 'editor', 'webhooks'],
   },
   {
     id: 'advanced',
@@ -133,7 +138,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
 export const SETTINGS_SECTIONS: SettingsSectionId[] =
   SETTINGS_NAV_GROUPS.flatMap((group) => group.sections);
 
-/** Integrations hub groupings (6 subnav tabs instead of 10 area tabs). */
+/** Integrations hub groupings (one hub per integration area). */
 export const SETTINGS_INTEGRATIONS_HUBS = [
   {
     id: 'web-research',
@@ -151,14 +156,34 @@ export const SETTINGS_INTEGRATIONS_HUBS = [
     areas: ['servers'],
   },
   {
-    id: 'tools-skills',
-    label: 'Tools & skills',
-    areas: ['tools', 'skills'],
+    id: 'tools',
+    label: 'Tools',
+    areas: ['tools'],
   },
   {
-    id: 'dev-stack',
-    label: 'Dev stack',
-    areas: ['mcp', 'lsp', 'editor'],
+    id: 'skills',
+    label: 'Skills',
+    areas: ['skills'],
+  },
+  {
+    id: 'browser',
+    label: 'Browser',
+    areas: ['browser'],
+  },
+  {
+    id: 'mcp',
+    label: 'MCP servers',
+    areas: ['mcp'],
+  },
+  {
+    id: 'lsp',
+    label: 'Language servers',
+    areas: ['lsp'],
+  },
+  {
+    id: 'editor',
+    label: 'Editor',
+    areas: ['editor'],
   },
   {
     id: 'external',

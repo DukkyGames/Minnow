@@ -218,16 +218,9 @@ async function promptNewSkillId(): Promise<string | null> {
   return id;
 }
 
-/** Render the Skills settings section into #settingsSkillsBody. */
+/** Render the skills catalog into a settings group body. */
 export async function renderSkillsSettingsSection(mount: HTMLElement): Promise<void> {
   mount.replaceChildren();
-
-  const intro = el(
-    'p',
-    'settings-field-hint',
-    'Skills extend the assistant via /slash commands. Built-in skills ship with Minnow; custom skills live under ~/.minnow/skills/ when npm start is running.',
-  );
-  mount.appendChild(intro);
 
   if (!isLocalServerAvailable()) {
     mount.appendChild(
