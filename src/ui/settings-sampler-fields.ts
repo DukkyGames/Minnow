@@ -16,7 +16,19 @@ export interface BuildSamplerFieldInputsOptions {
   includeMaxTokens?: boolean;
   /** Placeholder when empty (e.g. "Inherit" for per-agent overrides). */
   emptyPlaceholder?: string;
+  /** Prefix for data-settings-search-key on each field (e.g. models.sampler). */
+  searchKeyPrefix?: string;
 }
+
+const SEARCH_KEY_BY_FIELD: Record<keyof SamplerPreset, string> = {
+  temperature: 'temperature',
+  topP: 'topP',
+  topK: 'topK',
+  minP: 'minP',
+  repetitionPenalty: 'repetitionPenalty',
+  presencePenalty: 'presencePenalty',
+  maxTokens: 'maxTokens',
+};
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -34,7 +46,11 @@ export function buildSamplerFieldInputs(
   initial: SamplerPreset | null | undefined,
   options: BuildSamplerFieldInputsOptions = {},
 ): SamplerFieldInputs {
-  const root = el('div', 'settings-model-row settings-sampler-row');
+  const useGrid = Boolean(options.searchKeyPrefix);
+  const root = el(
+    'div',
+    useGrid ? 'settings-sampler-grid' : 'settings-model-row settings-sampler-row',
+  );
   const placeholder = options.emptyPlaceholder ?? 'Inherit';
 
   const fields: Array<{
@@ -85,16 +101,36 @@ export function buildSamplerFieldInputs(
   };
 
   for (const field of fields) {
-    root.appendChild(el('label', 'settings-field-label', field.label));
+    const inputId = options.searchKeyPrefix ? `sampler-${field.key}` : undefined;
+
+    let mount: HTMLElement = root;
+
+    if (useGrid) {
+      const wrap = el('div', 'settings-sampler-field');
+      if (options.searchKeyPrefix) {
+        wrap.dataset.settingsSearchKey = `${options.searchKeyPrefix}.${SEARCH_KEY_BY_FIELD[field.key]}`;
+      }
+      const labelEl = el('label', 'settings-sampler-field__label', field.label);
+      if (inputId) labelEl.htmlFor = inputId;
+      mount = wrap;
+      root.appendChild(wrap);
+      mount.appendChild(labelEl);
+    } else {
+      root.appendChild(el('label', 'settings-field-label', field.label));
+    }
+
     const input = document.createElement('input');
     input.type = 'number';
-    input.className = 'settings-select settings-kv-input';
+    input.className = useGrid
+      ? 'settings-sampler-field__input'
+      : 'settings-select settings-kv-input';
+    if (inputId) input.id = inputId;
     input.step = field.step;
     input.min = field.min;
     input.max = field.max;
     input.placeholder = placeholder;
     inputs.set(field.key, input);
-    root.appendChild(input);
+    mount.appendChild(input);
   }
 
   applyInitial(initial);

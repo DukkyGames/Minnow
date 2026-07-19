@@ -1,53 +1,94 @@
 /**
- * Settings → Sampler — global defaults and per-agent overrides.
+ * Settings → Sampler — global defaults (emphasis panels, responsive field grid).
  */
 
+import '../styles/settings-general.css';
+import '../styles/settings-sampler.css';
+
+import { isServerStorageMode } from '../config/storage-mode';
 import { loadSamplerMeta, saveSamplerMeta } from '../config/sampler-meta';
-import { appendSettingsCrosslinks, appendSettingsGroup } from './settings-layout';
-import { createSettingsActionsRow } from './settings-controls';
+import { detectLocalServer } from '../tools/client';
+import { appendSettingsGroup, linkToSettingsSection } from './settings-layout';
+import { appendSettingsOfflineHint, createSettingsActionsRow } from './settings-controls';
 import { buildSamplerFieldInputs } from './settings-sampler-fields';
 import { setStatus } from './status';
 
-async function mountGlobalSamplerBlock(mount: HTMLElement): Promise<void> {
+function el<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  className?: string,
+  text?: string,
+): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+/** Render Settings → Sampler section. */
+export async function renderSamplerSettingsSection(mount: HTMLElement): Promise<void> {
+  mount.replaceChildren();
+
+  const shell = el('div', 'settings-general');
+  mount.appendChild(shell);
+
+  const lead = el('p', 'settings-section-lead');
+  lead.append(
+    'Temperature, penalties, and token limits for main chat. Per-role overrides live under ',
+    linkToSettingsSection('Routing', 'model-routing'),
+    '.',
+  );
+  shell.appendChild(lead);
+
+  const serverUp = await detectLocalServer();
+  if (!isServerStorageMode() || !serverUp) {
+    appendSettingsOfflineHint(
+      shell,
+      'Start with <code>npm start</code> to persist sampler defaults to <code>~/.minnow/config.json</code>. Values below use browser storage until then.',
+      { searchKey: 'models.sampler' },
+    );
+  }
+
+  const content = el('div', 'settings-general__content');
+  shell.appendChild(content);
+
   const body = appendSettingsGroup(
-    mount,
+    content,
     'Global defaults',
-    'Baseline temperature, penalties, and token limits for main chat. Override per role in Routing.',
-    'sampler.global',
+    'Baseline sampling for new chats and roles that inherit global settings.',
+    'models.sampler',
+    { emphasis: true },
   );
 
   const meta = await loadSamplerMeta();
   const globalFields = buildSamplerFieldInputs(meta, {
     includeMaxTokens: true,
     emptyPlaceholder: '',
+    searchKeyPrefix: 'models.sampler',
   });
 
   body.appendChild(globalFields.root);
 
   body.appendChild(
-    createSettingsActionsRow([
-      {
-        label: 'Save global defaults',
-        onClick: () => {
-          void (async () => {
-            const patch = globalFields.readPatch();
-            if (!patch) {
-              setStatus('err', 'Enter at least one global sampler value');
-              return;
-            }
-            const next = await saveSamplerMeta(patch);
-            globalFields.setValues(next);
-            setStatus('ok', 'Global sampler defaults saved');
-          })();
+    createSettingsActionsRow(
+      [
+        {
+          label: 'Save global defaults',
+          variant: 'primary',
+          onClick: () => {
+            void (async () => {
+              const patch = globalFields.readPatch();
+              if (!patch) {
+                setStatus('err', 'Enter at least one global sampler value');
+                return;
+              }
+              const next = await saveSamplerMeta(patch);
+              globalFields.setValues(next);
+              setStatus('ok', 'Global sampler defaults saved');
+            })();
+          },
         },
-      },
-    ]),
+      ],
+      { searchKey: 'models.sampler' },
+    ),
   );
-}
-
-/** Render Settings → Sampler section. */
-export async function renderSamplerSettingsSection(mount: HTMLElement): Promise<void> {
-  mount.replaceChildren();
-  await mountGlobalSamplerBlock(mount);
-  appendSettingsCrosslinks(mount, [{ label: 'Per-role overrides in Routing', sectionId: 'model-routing' }]);
 }

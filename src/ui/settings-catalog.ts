@@ -216,6 +216,10 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   field('models.thinking', 'Thinking defaults', 'models', 'thinking', {
     keywords: ['reasoning', 'chain of thought'],
   }),
+  field('models.thinking.mode', 'Default thinking', 'models', 'thinking'),
+  field('models.thinking.budget', 'Thinking budget', 'models', 'thinking', {
+    keywords: ['reasoning tokens', 'cot budget'],
+  }),
   field('models.usage', 'Usage & cost', 'models', 'usage', {
     keywords: ['tokens', 'billing', 'inference'],
   }),
