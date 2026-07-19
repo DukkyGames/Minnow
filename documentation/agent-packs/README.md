@@ -45,3 +45,5 @@ Pack agents are merged into `GET /api/work-agents` with `source: "pack"`.
 ## Template
 
 On first `npm start`, `~/.minnow/agent-packs/_template/` is created (ignored by the scanner). Copy it to a new id without the leading underscore.
+
+In the app: **Settings → Agents → Agent packs → Download template** (`GET /api/agent-packs/template`) saves `minnow-agent-pack-template.zip` with a starter `manifest.json` and example prompts. **Download default pack** (`GET /api/agent-packs/builtin`) exports the shipped work agents as `minnow-default-agent-pack.zip` (`minnow/` folder, agents appear as `minnow.<key>` when installed).

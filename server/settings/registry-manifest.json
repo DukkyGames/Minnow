@@ -1205,16 +1205,32 @@
     ]
   },
   {
-    "key": "agents.rules.text",
-    "label": "Rules text",
+    "key": "agents.rules.items",
+    "label": "Rule list",
+    "keywords": [
+      "cursor rules",
+      "instructions",
+      "groups"
+    ],
     "category": "agents",
     "area": "rules",
-    "storage": "resource",
-    "path": "text",
-    "resource": "rules",
+    "storage": "section",
     "type": "string",
     "sensitivity": "normal",
-    "writable": true,
+    "writable": false,
+    "refreshAreas": [
+      "rules"
+    ]
+  },
+  {
+    "key": "agents.rules.addGroup",
+    "label": "Add rule group",
+    "category": "agents",
+    "area": "rules",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
     "refreshAreas": [
       "rules"
     ]

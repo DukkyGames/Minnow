@@ -335,9 +335,10 @@ const DEFAULT_SYSTEM_PROMPT = {
 };
 
 const DEFAULT_RULES = {
-  version: 1,
+  version: 2,
   enabled: false,
-  text: '',
+  groups: [{ id: 'general', name: 'General' }],
+  rules: [],
 };
 
 /** Tool ids enabled on first run (matches client defaultToolConfig). */

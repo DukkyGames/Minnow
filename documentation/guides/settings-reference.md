@@ -33,7 +33,7 @@ Open via **Settings** (`#/settings/<category>`) or legacy `#/settings/<area>`.
 | **General** | General, Notifications, Audio, About |
 | **Appearance** | Appearance |
 | **Models** | Providers, Routing, Sampler, Thinking, Usage & cost |
-| **Agents** | Prompts, Rules, Modes, Experts, Work agents, Agent packs, Sub-agents, Autopilot |
+| **Agents** | Prompts, Rules, Modes, Work agents, Agent packs, Sub-agents, Autopilot |
 | **Integrations** | Search, Deep Research, Servers, Tools, Skills, MCP, LSP, Editor, Webhooks, OAuth |
 | **Advanced** | Orchestration, Evals |
 
@@ -198,8 +198,11 @@ See [`src/config/voice-meta.ts`](../../src/config/voice-meta.ts) and [`src/voice
 
 | Setting | Description |
 |---------|-------------|
-| Enable user rules | |
-| Rules text | Global standing instructions |
+| Enable user rules | Master toggle for all standing instructions |
+| Rule groups | Named sections (e.g. General, Git, Style) |
+| Rules | Per-rule title, instructions, enabled flag, and group assignment |
+
+Settings UI: **Agents → Rules** — grouped list with per-rule enable switches; add/edit via anchored popover ([`src/ui/settings-rules.ts`](../src/ui/settings-rules.ts), [`src/ui/settings-rules-popover.ts`](../src/ui/settings-rules-popover.ts)). Enabled rules compose into a second system message on parent chat send ([`src/config/user-rules.ts`](../src/config/user-rules.ts)). Legacy v1 `{ text }` blobs migrate automatically.
 
 ### Modes (6)
 
@@ -232,7 +235,7 @@ Persistence: `config.json` → `planning.superPlan`; client mirror in `localStor
 
 `general` · `software-engineer` · `data-analyst` · `creative-writer` · `security-reviewer` · `technical-writer`
 
-Roster in Settings; prompts in `~/.minnow/prompts/experts/`. User-created experts supported.
+Prompt overrides in **Agents → Prompts → Experts** (`~/.minnow/prompts/experts/`). User-created experts supported. Use the **Experts** desktop app for Expert Lab.
 
 ### Work agents (7 built-in)
 
@@ -242,7 +245,7 @@ Per agent: **enabled**, **max input tokens**, **context policy** (`slide` / `tru
 
 ### Agent packs
 
-Enable/disable bundled agent definition packs.
+Drop-in work agent bundles under `~/.minnow/agent-packs/<pack-id>/` (`manifest.json` + `prompts/`). Settings → **Agent packs** lists installed packs, validates manifests, toggles enablement (`PATCH /api/agent-packs/:id`), and offers **Download template** (`GET /api/agent-packs/template`) and **Download default pack** (`GET /api/agent-packs/builtin` → `minnow-default-agent-pack.zip` with shipped work agents). On first `npm start`, `~/.minnow/agent-packs/_template/` is also created for local copying. Enabled pack agents merge into work agents as `packId.agentKey`. Authoring: [`documentation/agent-packs/README.md`](../agent-packs/README.md).
 
 ### Sub-agents
 
