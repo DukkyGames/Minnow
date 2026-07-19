@@ -15,12 +15,15 @@ import {
   listBoardGroupChatIds,
   openBoardGroup,
   renameGroup,
+  resolveBoardRestoreGroupOnSwitch,
   toggleGroupCollapsed,
 } from '../state/chat-groups';
 import { createBoardCategoryIcon } from './board-category-icons';
 import { isChatAppForeground, shouldPaintDesktopChatSurface } from './chat-mount';
 import { syncComposerFromStreamingState } from './composer-send';
 import { syncGoalActiveHint } from './goal-active-hint';
+import { syncGoalEvalUi } from './goal-eval-status';
+import { isGoalEvaluating } from '../chat/goal/evaluating-state';
 import { syncTodoPanel } from './todo-panel';
 import {
   createEmptyChatObject,
@@ -1110,6 +1113,22 @@ export function switchChat(id: string): void {
     return;
   }
 
+  const boardRestoreGroup = resolveBoardRestoreGroupOnSwitch(id);
+  if (boardRestoreGroup) {
+    const prevActiveId = sessionState.activeId;
+    if (prevActiveId !== id) {
+      const leaving = sessionState.chats.find((c) => c.id === prevActiveId);
+      if (leaving) maybeMarkChatUnreadAfterLeave(leaving);
+    }
+    acknowledgeChatViewed(id);
+    openBoardGroup(boardRestoreGroup.id);
+    syncViewModeToggleFromActiveChat();
+    syncComposerFromStreamingState();
+    closeMobileSidebar();
+    applySidebarVisuals();
+    return;
+  }
+
   const boardWasOpen = exitBoardViewForNavigation();
 
   if (id === sessionState.activeId) {
@@ -1168,6 +1187,9 @@ export function switchChat(id: string): void {
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
   syncGoalActiveHint();
+  if (isGoalEvaluating(chat.id)) {
+    syncGoalEvalUi(chat.id);
+  }
   syncTodoPanel();
   onModelRoutingActiveChatChanged(chat.id);
   void import('./terminal-panel').then((m) => m.refreshTerminalHistoryForActiveChat());

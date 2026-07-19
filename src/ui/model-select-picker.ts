@@ -22,6 +22,10 @@ import {
 } from '../providers/model-producer';
 import { isModelLoaded, resolveModelState, type ModelLoadState } from './model-state-dot';
 import { isModelLoadUnloadBusy, setModelLoadUnloadIconButtonIdle, setModelLoadUnloadIconButtonUnsupported } from './model-load-unload-button';
+import {
+  registerChromePopover,
+  unregisterChromePopover,
+} from './preview-electron-visibility';
 
 /** Stroke icon reused for compact refresh controls in model picker filter bars. */
 const MODEL_REFRESH_ICON_HTML =
@@ -60,6 +64,8 @@ const HOST_FILTER_CHOICES: { id: ModelHostFilter; label: string }[] = [
 
 let pickerBound = false;
 let open = false;
+let chromePopoverRegistered = false;
+let auxiliaryChromePopoverRegistered = false;
 let hostFilter: ModelHostFilter = loadModelHostFilter();
 let localLoadFilter: ModelLocalLoadFilter = loadModelLocalLoadFilter();
 let modelSearchQuery = '';
@@ -527,6 +533,10 @@ export function closeModelSelectMenu(): void {
   getTopBarModelPopover()?.classList.add('hidden');
   menu?.classList.add('hidden');
   trigger?.setAttribute('aria-expanded', 'false');
+  if (chromePopoverRegistered) {
+    unregisterChromePopover();
+    chromePopoverRegistered = false;
+  }
 }
 
 function openModelSelectMenu(): void {
@@ -539,6 +549,10 @@ function openModelSelectMenu(): void {
   getTopBarModelPopover()?.classList.remove('hidden');
   menu.classList.remove('hidden');
   trigger.setAttribute('aria-expanded', 'true');
+  if (!chromePopoverRegistered) {
+    registerChromePopover();
+    chromePopoverRegistered = true;
+  }
   void import('../api/models').then(({ updateModelLoadUnloadButtons }) => {
     updateModelLoadUnloadButtons();
   });
@@ -624,6 +638,10 @@ function closeAuxiliaryModelSelectMenu(): void {
   openAuxiliaryPicker.menu.classList.add('hidden');
   openAuxiliaryPicker.trigger.setAttribute('aria-expanded', 'false');
   openAuxiliaryPicker = null;
+  if (auxiliaryChromePopoverRegistered) {
+    unregisterChromePopover();
+    auxiliaryChromePopoverRegistered = false;
+  }
 }
 
 function ensureAuxiliaryPickerGlobals(): void {
@@ -740,6 +758,10 @@ export function mountAuxiliaryModelSelectCombobox(select: HTMLSelectElement): vo
     picker.root.classList.add('is-open');
     picker.menu.classList.remove('hidden');
     picker.trigger.setAttribute('aria-expanded', 'true');
+    if (!auxiliaryChromePopoverRegistered) {
+      registerChromePopover();
+      auxiliaryChromePopoverRegistered = true;
+    }
     syncAuxiliaryModelSelectCombobox(select);
   });
 

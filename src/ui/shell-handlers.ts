@@ -18,7 +18,7 @@ import {
 } from './layout';
 import { closeMobileFileSidebar, toggleFileSidebarLayout } from './file-layout';
 import { createChat, onModelSelectChange } from './sidebar';
-import { autoResize, handleComposerPrimaryAction, handleKey } from './input';
+import { handleComposerPrimaryAction } from './input';
 import { toggleStatsPanel } from './stats';
 
 let shellHandlersBound = false;
@@ -111,20 +111,18 @@ export function initShellHandlers(): void {
   wireClick('fileSidebarBackdrop', closeMobileFileSidebar);
 
   // Chat sidebar
+  wireClick('btnChatSearch', () => {
+    const btn = document.getElementById('btnChatSearch');
+    if (!btn) return;
+    void import('./chat-search-popover').then((m) => m.toggleChatSearchPopover(btn));
+  });
   wireClick('btnSidebarCollapse', toggleSidebarCollapsed);
   wireClickAll('.chat-new-wide, .chat-new-compact', createChat);
   wireClick('btnOrchestrate', () => {
     void import('./orchestrate-hub').then((m) => m.toggleOrchestrateHubFromTopbar());
   });
 
-  // Composer
-  const msgInput = document.getElementById('msgInput') as HTMLTextAreaElement | null;
-  if (msgInput && msgInput.dataset.shellWired !== '1') {
-    msgInput.dataset.shellWired = '1';
-    msgInput.addEventListener('keydown', handleKey);
-    msgInput.addEventListener('input', () => autoResize(msgInput));
-  }
-
+  // Composer — #msgInput keydown/input wired in initComposerInput() from main.ts
   wireClick('sendBtn', handleComposerPrimaryAction);
 
   // Stats strip expand control

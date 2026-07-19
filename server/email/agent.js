@@ -13,9 +13,10 @@ import {
 import { getEmailAccount } from './accounts.js';
 import {
   getCachedMessage,
+  getInboxSummary,
+  getSyncState,
   listCachedMessages,
   listCachedThread,
-  readMessageCache,
   updateInboxSummary,
   updateMessageTriage,
   updateReplyVariants,
@@ -23,6 +24,7 @@ import {
 import { triageMessage } from './triage.js';
 import { emitEmailEvent } from './events.js';
 import { evaluateAutomationsForMessage } from './automations.js';
+import { shouldDeferBackgroundEmailTriage } from './background-triage-guard.js';
 
 /** Max messages triaged/varianted per folder sync (newest first). */
 export const MAX_AGENT_MESSAGES_PER_SYNC = 8;
@@ -107,8 +109,12 @@ export function parseReplyVariantsJson(raw) {
  * @param {string} accountId
  */
 export async function buildInboxSummary(accountId) {
-  const cache = await readMessageCache(accountId);
-  const inboxRows = cache.messages.filter((row) => String(row.folder) === 'INBOX');
+  // The digest covers the most recent inbox page rather than the whole store —
+  // older mail contributes nothing to a "what needs me today" summary.
+  const { messages: inboxRows } = await listCachedMessages(accountId, {
+    folder: 'INBOX',
+    limit: 200,
+  });
 
   /** @type {{ high: number, normal: number, low: number }} */
   const stats = { high: 0, normal: 0, low: 0 };
@@ -338,13 +344,21 @@ export function filterMessagesForAgentProcessing(
  * @param {string} folder
  * @param {Array<Record<string, unknown>>} incoming
  * @param {number} prevHighestUid
+ * @param {{ background?: boolean }} [options]
  */
 export async function runAgentHooksAfterFolderSync(
   accountId,
   folder,
   incoming,
   prevHighestUid,
+  options = {},
 ) {
+  if (options.background && shouldDeferBackgroundEmailTriage().defer) {
+    await buildInboxSummary(accountId);
+    emitEmailEvent('summary_updated', { accountId });
+    return { processed: 0, deferred: true };
+  }
+
   if (!Array.isArray(incoming) || incoming.length === 0) {
     await buildInboxSummary(accountId);
     emitEmailEvent('summary_updated', { accountId });
@@ -382,7 +396,7 @@ export async function runAgentHooksAfterFolderSync(
   );
 
   if (toProcess.length > 0) {
-    return onNewMessages(accountId, toProcess, account);
+    return onNewMessages(accountId, toProcess, account, options);
   }
 
   await buildInboxSummary(accountId);
@@ -395,10 +409,15 @@ export async function runAgentHooksAfterFolderSync(
  * @param {string} accountId
  * @param {Array<Record<string, unknown>>} newMessages
  * @param {import('./accounts.js').EmailAccount} account
+ * @param {{ background?: boolean }} [options]
  */
-export async function onNewMessages(accountId, newMessages, account) {
+export async function onNewMessages(accountId, newMessages, account, options = {}) {
   if (!Array.isArray(newMessages) || newMessages.length === 0) {
     return { processed: 0 };
+  }
+
+  if (options.background && shouldDeferBackgroundEmailTriage().defer) {
+    return { processed: 0, deferred: true };
   }
 
   const autoTriage = account.autoTriage !== false;
@@ -407,6 +426,10 @@ export async function onNewMessages(accountId, newMessages, account) {
   let processed = 0;
 
   for (const row of batch) {
+    if (options.background && shouldDeferBackgroundEmailTriage().defer) {
+      break;
+    }
+
     const messageKey = String(row.id ?? `${row.folder}:${row.uid}`);
     try {
       if (autoTriage) {
@@ -460,9 +483,8 @@ export async function onNewMessages(accountId, newMessages, account) {
  * @param {Array<Record<string, unknown>>} incoming
  */
 export async function diffNewMessages(accountId, folder, incoming) {
-  const cache = await readMessageCache(accountId);
-  const prevHighest = cache.folderCursors?.[folder]?.highestUid ?? 0;
-  return incoming.filter((row) => Number(row.uid) > prevHighest);
+  const { highestUid } = await getSyncState(accountId, folder);
+  return incoming.filter((row) => Number(row.uid) > highestUid);
 }
 
 /**
@@ -470,7 +492,7 @@ export async function diffNewMessages(accountId, folder, incoming) {
  * @param {string} accountId
  */
 export async function getOrBuildInboxSummary(accountId) {
-  const existing = (await readMessageCache(accountId)).inboxSummary;
+  const existing = await getInboxSummary(accountId);
   if (existing?.generatedAt) {
     const ageMs = Date.now() - new Date(String(existing.generatedAt)).getTime();
     if (ageMs < 5 * 60_000) {

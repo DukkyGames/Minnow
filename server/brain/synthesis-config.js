@@ -69,10 +69,16 @@ export const DEFAULT_SYNTHESIS_CONFIG = {
   enabled: true,
   requireConfirmation: false,
   confidenceThreshold: 0.6,
+  /** At or above this confidence a fact is written straight to the wiki; below it, queued as a proposal. */
+  autoWriteConfidence: 0.85,
   maxProposalsPerTurn: 3,
   throttleMessagePairs: 4,
   skillMinRounds: 2,
   skillMinToolCalls: 2,
+  /** Distinct sessions that must hit the same problem class before a skill is proposed (1 = legacy one-shot). */
+  skillMinOccurrences: 2,
+  /** How long an unproposed skill observation stays eligible to count toward recurrence. */
+  skillObservationRetentionDays: 45,
   utilityProviderId: '',
   utilityModelId: '',
   maxPendingProposals: 100,
@@ -81,6 +87,14 @@ export const DEFAULT_SYNTHESIS_CONFIG = {
 
 /**
  * Load merged synthesis config from config.json.
+ *
+ * Legacy migration: older installs were *seeded* with `requireConfirmation: true`
+ * (the default disagreed with the seed and the validator, so nobody chose it).
+ * A config carrying that seed but no `autoWriteConfidence` predates the
+ * confidence split, so it is read as `false` and routed by confidence instead.
+ * This is an in-memory reinterpretation only — the next settings save pins both
+ * keys explicitly, and an install that opts back in afterwards keeps `true`.
+ *
  * @returns {Promise<typeof DEFAULT_SYNTHESIS_CONFIG>}
  */
 export async function loadSynthesisConfig() {
@@ -89,10 +103,17 @@ export async function loadSynthesisConfig() {
     config.synthesis && typeof config.synthesis === 'object'
       ? config.synthesis
       : {};
-  return {
+
+  const merged = {
     ...DEFAULT_SYNTHESIS_CONFIG,
     ...raw,
   };
+
+  if (raw.autoWriteConfidence === undefined && raw.requireConfirmation === true) {
+    merged.requireConfirmation = false;
+  }
+
+  return merged;
 }
 
 /**

@@ -206,30 +206,74 @@
   margin-bottom: 8px;
 }
 
-/* Super Plan build-spec / final-plan checkpoints — wider column, taller scroll region */
-.orchestrate-plan-screen--super-plan-artifact .orchestrate-plan-screen__inner {
-  max-width: 760px;
+/* Plan / build-spec preview: top-align and fill remaining column height so long
+   artifacts scroll inside the panel instead of clipping under flex centering. */
+.chat-area.chat-area--plan-screen:has(.orchestrate-plan-screen__preview-wrap) {
+  justify-content: flex-start;
 }
 
+.orchestrate-plan-screen:has(.orchestrate-plan-screen__preview-wrap) {
+  justify-content: flex-start;
+  align-items: stretch;
+  padding: 12px 12px 24px;
+}
+
+.orchestrate-plan-screen:has(.orchestrate-plan-screen__preview-wrap) .orchestrate-plan-screen__inner {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: none;
+}
+
+.orchestrate-plan-screen:has(.orchestrate-plan-screen__preview-wrap) .orchestrate-plan-screen__header,
+.orchestrate-plan-screen:has(.orchestrate-plan-screen__preview-wrap) .orchestrate-plan-screen__path,
+.orchestrate-plan-screen:has(.orchestrate-plan-screen__preview-wrap) .orchestrate-plan-screen__popout,
+.orchestrate-plan-screen:has(.orchestrate-plan-screen__preview-wrap) .orchestrate-plan-screen__actions {
+  flex-shrink: 0;
+}
+
+.orchestrate-plan-screen:has(.orchestrate-plan-screen__preview-wrap) .orchestrate-plan-screen__preview-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.orchestrate-plan-screen:has(.orchestrate-plan-screen__preview-wrap) .orchestrate-plan-screen__preview {
+  flex: 1;
+  min-height: 160px;
+  max-height: none;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Super Plan build-spec / final-plan checkpoints — full column when previewing */
+.orchestrate-plan-screen--super-plan-artifact:has(.orchestrate-plan-screen__preview-wrap) {
+  padding-left: 40px;
+  padding-right: 40px;
+}
+
+.orchestrate-plan-screen--super-plan-artifact:has(.orchestrate-plan-screen__preview-wrap) .orchestrate-plan-screen__inner {
+  max-width: none;
+}
+
+/* Hub + other embeds without the plan-screen flex column (see orchestrate-hub.css). */
 .orchestrate-plan-screen__preview {
   margin: 0;
   padding: 0;
   max-height: min(48vh, 420px);
-  overflow: auto;
+  overflow-y: auto;
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-md);
   background: var(--mn-bg);
 }
 
-.orchestrate-plan-screen--super-plan-artifact .orchestrate-plan-screen__preview {
-  max-height: min(62vh, 560px);
-}
-
-.orchestrate-plan-screen__preview .plan-preview__body {
+.orchestrate-plan-screen__preview .plan-preview__body.msg-bubble.msg-bubble--md {
   padding: 14px 16px;
   border: none;
   background: transparent;
   max-width: none;
+  width: 100%;
 }
 
 .orchestrate-plan-screen__preview-empty {

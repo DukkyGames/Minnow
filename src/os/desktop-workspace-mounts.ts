@@ -129,12 +129,22 @@ function restoreToCode(record: ReparentRecord): void {
 }
 
 /** Point the file tree at the desktop sandbox or Code workspace; true when root changed. */
-async function applyListingRootForSurface(surface: MountSurface): Promise<boolean> {
+async function applyListingRootForSurface(
+  surface: MountSurface,
+  generation: number,
+): Promise<boolean> {
   const prev = getFileTreeListingWorkspaceRoot();
   if (surface === 'desktop') {
     const desktopPath = await getDesktopWorkspacePath();
+    // Re-check after await — a stale desktop sync must not overwrite Code listing root.
+    if (generation !== syncGeneration) return false;
+    const liveSurface: MountSurface = shouldHostOnDesktop() ? 'desktop' : 'code';
+    if (liveSurface !== surface) return false;
     setFileTreeListingWorkspaceRoot(desktopPath ?? undefined);
   } else {
+    if (generation !== syncGeneration) return false;
+    const liveSurface: MountSurface = shouldHostOnDesktop() ? 'desktop' : 'code';
+    if (liveSurface !== surface) return false;
     const main = getWorkspacePath().trim();
     setFileTreeListingWorkspaceRoot(main || undefined);
   }
@@ -240,7 +250,7 @@ export async function syncDesktopWorkspaceMounts(): Promise<void> {
   captureRecords();
   const nextSurface: MountSurface = shouldHostOnDesktop() ? 'desktop' : 'code';
   const surfaceChanged = nextSurface !== mountSurface;
-  const listingRootChanged = await applyListingRootForSurface(nextSurface);
+  const listingRootChanged = await applyListingRootForSurface(nextSurface, generation);
   if (generation !== syncGeneration) return;
 
   if (surfaceChanged) {

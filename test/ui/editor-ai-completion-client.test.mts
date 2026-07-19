@@ -1,22 +1,30 @@
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import type { ChatCompletionChunk } from '../../src/types.ts';
 import {
+  alignCompletionForInsert,
+  getCachedEditorAiCompletion,
   resolveEditorCompletionRawText,
   mergeEditorStreamText,
   resolveEditorCompletionDisplayText,
   validateEditorAiBinding,
   preflightEditorAiBinding,
   resolveEditorAiBinding,
+  setCachedEditorAiCompletion,
   EDITOR_AI_NO_MODEL_MESSAGE,
+  fetchEditorAiCompletion,
+  buildMessagesForEditorAiCompletion,
 } from '../../src/ui/editor-ai-completion-client.ts';
 import { extractEditorCodeFromReasoning } from '../../src/ui/editor-model-output.ts';
 import { encodeModelSelectKey } from '../../src/lib/model-select-key.ts';
 import { setSessionStateForTests, createEmptyChatObject } from '../../src/state/sessions.ts';
-import { setEditorAiCompletionConfigForTests } from '../../src/config/editor-ai-completion.ts';
+import {
+  DEFAULT_EDITOR_AI_COMPLETION,
+  setEditorAiCompletionConfigForTests,
+} from '../../src/config/editor-ai-completion.ts';
 import { StreamingContentAccumulator } from '../../src/api/message-content.ts';
 import { BenchmarkStreamReasoningAccumulator } from '../../src/benchmark/stream-text.ts';
 import {
@@ -25,6 +33,19 @@ import {
   setEditorAiGhostForTest,
 } from '../../src/ui/file-editor-ai-extensions.ts';
 import { fileEditorKeymapExtensions } from '../../src/ui/file-editor-keymap.ts';
+import {
+  EditorAiCompletionCache,
+  buildCompletionCacheKey,
+  resetEditorAiCompletionCache,
+} from '../../src/ui/editor-ai-completion-cache.ts';
+import { PROMPT_VERSION } from '../../src/ui/editor-ai-completion-prompt.ts';
+
+let domWindow: Window | null = null;
+
+afterEach(() => {
+  domWindow?.close();
+  domWindow = null;
+});
 
 describe('validateEditorAiBinding', () => {
   test('rejects empty provider', () => {
@@ -100,6 +121,178 @@ describe('resolveEditorCompletionDisplayText', () => {
   });
 });
 
+describe('editor AI completion cache (Phase 6)', () => {
+  test('cache key includes provider, model, and prompt version', () => {
+    const config = { ...DEFAULT_EDITOR_AI_COMPLETION };
+    const keyA = buildCompletionCacheKey({
+      providerId: 'p1',
+      modelId: 'm1',
+      config,
+      filePath: 'a.ts',
+      prefix: 'const ',
+      suffix: '',
+    });
+    const keyB = buildCompletionCacheKey({
+      providerId: 'p2',
+      modelId: 'm1',
+      config,
+      filePath: 'a.ts',
+      prefix: 'const ',
+      suffix: '',
+    });
+    assert.notEqual(keyA, keyB);
+    assert.match(keyA, /^[a-z0-9]+$/);
+    assert.equal(PROMPT_VERSION, '6');
+  });
+
+  test('LRU cache evicts oldest entry at capacity', () => {
+    const cache = new EditorAiCompletionCache(2, 60_000);
+    const binding = { providerId: 'p', modelId: 'm' };
+    const config = { ...DEFAULT_EDITOR_AI_COMPLETION };
+    setCachedEditorAiCompletion(binding, config, 'a.ts', '1', '', 'one', cache);
+    setCachedEditorAiCompletion(binding, config, 'b.ts', '2', '', 'two', cache);
+    setCachedEditorAiCompletion(binding, config, 'c.ts', '3', '', 'three', cache);
+    assert.equal(cache.size, 2);
+    assert.equal(
+      getCachedEditorAiCompletion(binding, config, 'a.ts', '1', '', cache),
+      undefined,
+    );
+    assert.equal(
+      getCachedEditorAiCompletion(binding, config, 'c.ts', '3', '', cache),
+      'three',
+    );
+  });
+
+  test('cache does not store empty text', () => {
+    resetEditorAiCompletionCache();
+    const cache = new EditorAiCompletionCache();
+    const binding = { providerId: 'p', modelId: 'm' };
+    const config = { ...DEFAULT_EDITOR_AI_COMPLETION };
+    setCachedEditorAiCompletion(binding, config, 'a.ts', 'x', '', '', cache);
+    assert.equal(
+      getCachedEditorAiCompletion(binding, config, 'a.ts', 'x', '', cache),
+      undefined,
+    );
+  });
+});
+
+describe('fetchEditorAiCompletion transport', () => {
+  test('sends structured chat messages, not raw prompt', async () => {
+    const doc = 'const x = ';
+    const state = EditorState.create({ doc });
+    let capturedBody: Record<string, unknown> | null = null;
+
+    const result = await fetchEditorAiCompletion({
+      state,
+      cursorPos: doc.length,
+      filePath: 'demo.ts',
+      config: { ...DEFAULT_EDITOR_AI_COMPLETION, enableCompletionCache: false },
+      binding: { providerId: 'test-provider', modelId: 'coder-1' },
+      signal: new AbortController().signal,
+      deps: {
+        resolveProvider: async () => ({
+          id: 'test-provider',
+          apiKind: 'openai-v1',
+        }),
+        buildMessagesAsync: async (input) => ({
+          messages: buildMessagesForEditorAiCompletion(input),
+          prefix: 'const x = ',
+          suffix: '',
+        }),
+        createGeneration: async (_providerId, body) => {
+          capturedBody = body;
+          return { generationId: 'gen-1' };
+        },
+        subscribeToGeneration: (_id, handlers) => {
+          handlers.onChunk?.({
+            choices: [{ delta: { content: '42;' } }],
+          });
+          handlers.onEnd?.({ status: 'complete' });
+          return () => {};
+        },
+        cancelGeneration: async () => {},
+      },
+    });
+
+    assert.equal(result.text, '42;');
+    assert.ok(capturedBody);
+    assert.ok(Array.isArray(capturedBody.messages));
+    assert.equal('prompt' in capturedBody, false);
+    const messages = capturedBody.messages as Array<{ role: string; content: string }>;
+    assert.equal(messages.length, 2);
+    assert.equal(messages[0].role, 'system');
+    assert.equal(messages[1].role, 'user');
+    assert.match(messages[1].content, /<CURSOR>/);
+  });
+});
+
+describe('alignCompletionForInsert', () => {
+  test('aligns streamed text against prefix and suffix', () => {
+    assert.equal(
+      alignCompletionForInsert('42;}', 'const x = ', '}'),
+      '42;',
+    );
+  });
+});
+
+describe('mergeEditorStreamText', () => {
+  test('returns trimmed content channel text', () => {
+    assert.equal(mergeEditorStreamText('  const y = 2;  '), 'const y = 2;');
+  });
+
+  test('returns empty for reasoning-only monologue', () => {
+    assert.equal(
+      mergeEditorStreamText('The user wants me to complete this function.'),
+      '',
+    );
+  });
+});
+
+describe('fetchEditorAiCompletion abort', () => {
+  test('returns null text and cancels generation when aborted', async () => {
+    const doc = 'const x = ';
+    const state = EditorState.create({ doc });
+    const controller = new AbortController();
+    let cancelCalled = false;
+    let subscribed = false;
+
+    const promise = fetchEditorAiCompletion({
+      state,
+      cursorPos: doc.length,
+      filePath: 'demo.ts',
+      config: { ...DEFAULT_EDITOR_AI_COMPLETION, enableCompletionCache: false },
+      binding: { providerId: 'test-provider', modelId: 'coder-1' },
+      signal: controller.signal,
+      deps: {
+        resolveProvider: async () => ({
+          id: 'test-provider',
+          apiKind: 'openai-v1',
+        }),
+        buildMessagesAsync: async (input) => ({
+          messages: buildMessagesForEditorAiCompletion(input),
+          prefix: 'const x = ',
+          suffix: '',
+        }),
+        createGeneration: async () => ({ generationId: 'gen-abort' }),
+        subscribeToGeneration: () => {
+          subscribed = true;
+          return () => {};
+        },
+        cancelGeneration: async () => {
+          cancelCalled = true;
+        },
+      },
+    });
+
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(subscribed, true);
+    controller.abort();
+    const result = await promise;
+    assert.equal(result.text, null);
+    assert.equal(cancelCalled, true);
+  });
+});
+
 describe('editor AI model binding (MIN-133)', () => {
   test('preflight fails when model id is empty', () => {
     assert.equal(
@@ -114,6 +307,7 @@ describe('editor AI model binding (MIN-133)', () => {
 
   test('resolveEditorAiBinding uses top-bar model when following chat', async () => {
     const window = new Window();
+    domWindow = window;
     globalThis.window = window;
     globalThis.document = window.document;
     globalThis.HTMLElement = window.HTMLElement;
@@ -132,21 +326,10 @@ describe('editor AI model binding (MIN-133)', () => {
     document.body.appendChild(select);
 
     setEditorAiCompletionConfigForTests({
-      enabled: true,
-      debounceMs: 450,
-      maxPrefixLines: 80,
-      maxSuffixLines: 40,
-      maxPrefixChars: 6000,
-      maxSuffixChars: 2000,
-      temperature: 0.3,
-      maxTokens: 256,
+      ...DEFAULT_EDITOR_AI_COMPLETION,
       useChatModel: true,
       providerId: '',
       modelId: '',
-      includeImportContext: true,
-      includeLspHover: true,
-      useNativeFim: true,
-      enableCompletionCache: true,
     });
 
     const { getEditorAiCompletionConfigSync } = await import(
@@ -162,21 +345,10 @@ describe('editor AI model binding (MIN-133)', () => {
     setSessionStateForTests({ chats: [chat], activeId: chat.id });
 
     setEditorAiCompletionConfigForTests({
-      enabled: true,
-      debounceMs: 450,
-      maxPrefixLines: 80,
-      maxSuffixLines: 40,
-      maxPrefixChars: 6000,
-      maxSuffixChars: 2000,
-      temperature: 0.3,
-      maxTokens: 256,
+      ...DEFAULT_EDITOR_AI_COMPLETION,
       useChatModel: false,
       providerId: 'lm-studio-local',
       modelId: '',
-      includeImportContext: true,
-      includeLspHover: true,
-      useNativeFim: true,
-      enableCompletionCache: true,
     });
 
     const { getEditorAiCompletionConfigSync } = await import(
@@ -192,6 +364,7 @@ describe('editor AI model binding (MIN-133)', () => {
 describe('editor AI ghost DOM', () => {
   test('ghost widget renders in the editor', () => {
     const window = new Window();
+    domWindow = window;
     globalThis.window = window;
     globalThis.document = window.document;
     globalThis.HTMLElement = window.HTMLElement;
@@ -208,23 +381,7 @@ describe('editor AI ghost DOM', () => {
           ...fileEditorKeymapExtensions(),
           ...editorAiCompletionExtensions({
             filePath: 'test.ts',
-            config: {
-              enabled: true,
-              debounceMs: 450,
-              maxPrefixLines: 80,
-              maxSuffixLines: 40,
-              maxPrefixChars: 6000,
-              maxSuffixChars: 2000,
-              temperature: 0.3,
-              maxTokens: 256,
-              useChatModel: true,
-              providerId: '',
-              modelId: '',
-              includeImportContext: true,
-              includeLspHover: true,
-              useNativeFim: true,
-              enableCompletionCache: true,
-            },
+            config: DEFAULT_EDITOR_AI_COMPLETION,
             canRequest: () => false,
           }),
         ],

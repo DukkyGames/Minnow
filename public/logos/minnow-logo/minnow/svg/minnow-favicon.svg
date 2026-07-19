@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
-  <title>Minnow</title>
-  <rect width="32" height="32" rx="7" fill="#0f0f10"/>
-  <path d="M 7 16 C 9 12.8, 13.3 11.8, 16.2 14 L 19 16 L 16.2 18 C 13.3 20.2, 9 19.2, 7 16 Z" fill="#ffffff"/>
-  <path d="M 19 16 L 22.5 13.6 L 21.8 16 L 22.5 18.4 Z" fill="#ffffff"/>
-</svg>

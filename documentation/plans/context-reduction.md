@@ -64,7 +64,8 @@ group allowlist. Group → token cost (JSON):
 | mode-mgmt | 668 | set_chat_mode, create_chat_with_mode, launch_minnow_app, propose_mode_switch |
 | ask | 655 | ask_question |
 | browser | 603 | browser_list/navigate/snapshot/click/fill/eval/screenshot, request_browser_origin_access |
-| brain | 1,161 | brain_search/read_page/list/write_page/append_log/ingest_source, manage_brain, save_memory |
+| brain-core | ~570 | brain_search, brain_read_page, brain_list, save_memory |
+| brain-admin | ~590 | brain_write_page, brain_append_log, brain_ingest_source, manage_brain |
 | recall | 271 | recall_chat_context, recall_turn_full |
 | email | 624 | list_mail, draft_reply, summarize_inbox, generate_reply_variants, email_action |
 | calendar | 429 | manage_calendar |
@@ -93,7 +94,8 @@ group allowlist. Group → token cost (JSON):
 | mode-mgmt (668) | ● | ●³ | ● | ● | ●³ | ● |
 | ask (655) | ● | ● | ● | ● | ● | ● |
 | browser (603) | ● | ●⁴ | ● | ○ | ● | ● |
-| brain (1,161) | ● | ● | ● | ● | ● | ● |
+| brain-core (~570) | ● | ● | ● | ● | ● | ● |
+| brain-admin (~590) | ● | ● | ● | ● | ● | ● |
 | recall (271) | ● | ● | ● | ● | ○ | ● |
 | email (624) | ○ | ○ | ○ | ○ | ○ | ○ |
 | calendar (429) | ○ | ○ | ○ | ○ | ○ | ○ |
@@ -173,7 +175,8 @@ Same groups as the mode matrix above. ● keep · ○ drop · ◐ subset (see no
 | mode-mgmt (668) | ○ | ○ | ○ |
 | ask (655) | ○ᵈ | ○ᵈ | ○ᵈ |
 | browser (603) | ● | ● | ○  |
-| brain (1,161) | ○ | ○ | ○ |
+| brain-core (~570) | ● | ● | ● |
+| brain-admin (~590) | ○ | ○ | ○ |
 | recall (271) | ○ | ○ | ○ |
 | email (624) | ○ | ○ | ○ |
 | calendar (429) | ○ | ○ | ○ |
@@ -196,7 +199,10 @@ Resolved (see MIN-333):
 - **All three roles** get web + git-write + code-exec + code-intel + lsp per the matrix.
 - **Fixer** — single scope for both `merge` and `env` fixers; same as Builder **but no browser**.
 - **Builder / Tester** keep browser (verification); board mutate tools, sub-agents, bug,
-  mode-mgmt, ask, brain, recall, email, calendar, reef, impeccable excluded from all roles.
+  mode-mgmt, ask, brain-admin, recall, email, calendar, reef, impeccable excluded from all roles.
+- **brain-core (added post-MIN-333)** — all three roles can `brain_search`/`brain_read_page`/
+  `brain_list`/`save_memory`. Workers hold the discovery context; routing writes through the
+  orchestrator would lose the detail worth saving. `brain-admin` stays excluded.
 
 **Saves:** builder + fixer tool payloads drop from ~10.7K to ~4.6–5.2K each. Combined with
 Wave 1's prompt trims and the shorter builder mode prompt, a builder turn goes ~20K → ~9.8K.
@@ -288,8 +294,10 @@ Interactive Build ≈ **20.6K → ~11.7K (−43%)**; a scoped builder board agen
 ## Resolved decisions
 
 1. **General mode = broad** — keeps files-write + code-exec (matrix `?` cells → ●).
-2. **Brain = left as-is** — no read-subset split; brain gating unchanged by this work
-   (● everywhere it currently resolves).
+2. **Brain = split (revised).** Originally left as-is. The `brain` group is now `brain-core`
+   (search/read/list/save_memory) + `brain-admin` (write_page/append_log/ingest_source/
+   manage_brain). Every mode that had `brain` gets both, so mode behavior is unchanged;
+   the split exists so board roles can take `brain-core` alone.
 3. **Fixer = single scope for merge + env**, and the fixer gets **git-write** so the merge
    fixer can commit conflict resolutions. Builder stays web-off and brain-write-off.
 4. **Bug tools = General + Debug only** — drop the global `bug_*` force-allow

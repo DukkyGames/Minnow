@@ -73,6 +73,9 @@ export async function enableCdpPicking(
   onPick: (picked: CdpPickedElement) => void,
   onError?: (message: string) => void,
 ): Promise<CdpPickSession> {
+  if (wc.isDestroyed()) {
+    throw new Error('Preview guest is not available');
+  }
   const dbg = wc.debugger as unknown as PickDebuggerLike;
   if (!dbg.isAttached()) {
     dbg.attach('1.3');
@@ -167,6 +170,8 @@ export async function enableCdpPicking(
   return {
     async disable(): Promise<void> {
       disabled = true;
+      dbg.removeListener('message', messageHandler as (...args: unknown[]) => void);
+      if (wc.isDestroyed()) return;
       try {
         await dbg.sendCommand('Overlay.setInspectMode', {
           mode: 'none',
@@ -178,7 +183,7 @@ export async function enableCdpPicking(
       } catch {
         /* guest may already be gone */
       }
-      dbg.removeListener('message', messageHandler as (...args: unknown[]) => void);
+      if (wc.isDestroyed()) return;
       if (dbg.isAttached()) {
         try {
           dbg.detach();

@@ -205,6 +205,30 @@ describe('syncFileTreeToPanelWorktree', () => {
     assert.deepEqual(getFilePanelState().expandedDirs, []);
     assert.equal(getFilePanelState().selectedPath, null);
   });
+
+  test('force refresh keeps browser split open when preview is active', async () => {
+    setupDom();
+    launchInstance('code');
+    setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
+    setFileTreeListingWorkspaceRoot(undefined);
+    patchFilePanelState({
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+      previewTabs: [{ id: 'tab-1', source: { kind: 'url', url: 'http://localhost:3000' } }],
+      activePreviewTab: 'tab-1',
+      expandedDirs: ['docs'],
+      selectedPath: 'docs/readme.md',
+    });
+
+    const { syncFileTreeToPanelWorktree } = await import('../../src/ui/file-tree.ts');
+    await syncFileTreeToPanelWorktree(MAIN_WS, { force: true });
+
+    assert.equal(getFilePanelState().rightPaneMode, 'preview');
+    assert.deepEqual(getFilePanelState().previewTabs, [
+      { id: 'tab-1', source: { kind: 'url', url: 'http://localhost:3000' } },
+    ]);
+    assert.equal(getFilePanelState().activePreviewTab, 'tab-1');
+  });
 });
 
 describe('file tree tool context merge', () => {

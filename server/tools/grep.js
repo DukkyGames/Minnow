@@ -201,7 +201,9 @@ export function formatGroupedGrepOutput(cappedText) {
  * }} opts
  */
 function buildRipgrepArgs(opts) {
-  const rgArgs = ['--max-filesize', GREP_MAX_FILE_BYTES];
+  // --path-separator / forces forward slashes in output on Windows so match paths match
+  // the workspace-relative style used everywhere else.
+  const rgArgs = ['--max-filesize', GREP_MAX_FILE_BYTES, '--path-separator', '/'];
 
   if (opts.outputMode === 'content') {
     rgArgs.push('-n', '--no-heading');
@@ -286,7 +288,17 @@ export async function runGrepSearch(args, deps) {
   }
 
   const displayRoot = deps.toRelativePath(stat.isDirectory() ? resolved : path.dirname(resolved));
-  const searchTarget = resolved;
+
+  // Pass a target relative to the rg cwd (workspace root) so match lines are emitted as
+  // workspace-relative paths rather than absolute host paths — smaller output, consistent
+  // with other tools, and avoids the drive-letter colon confusing grouped-mode parsing.
+  const relTarget = path.relative(workspaceRoot, resolved);
+  const searchTarget =
+    relTarget === ''
+      ? '.'
+      : !relTarget.startsWith('..') && !path.isAbsolute(relTarget)
+        ? relTarget
+        : resolved;
   const rgPattern = literal ? escapeRegexLiteral(pattern) : pattern;
 
   const ripgrepMode = outputMode === 'grouped' ? 'content' : outputMode;
@@ -296,8 +308,13 @@ export async function runGrepSearch(args, deps) {
     caseInsensitive,
     context: ripgrepMode === 'content' ? context : 0,
     glob,
-    maxCount: headLimit + offset,
+    // --max-count limits matches per file; only meaningful when returning content lines.
+    // In count / files_with_matches mode it would silently under-report per-file totals.
+    maxCount: ripgrepMode === 'content' ? headLimit + offset : 0,
   });
+  // Always pass an explicit path target. `rg pattern` with no path reads from stdin when
+  // stdin is a pipe (as it is under execFile), which would hang forever — the "./" prefix
+  // that `rg pattern .` adds is stripped from the output below instead.
   rgArgs.push(rgPattern, searchTarget);
 
   let stdout = '';
@@ -322,7 +339,9 @@ export async function runGrepSearch(args, deps) {
     }
   }
 
-  const trimmed = stdout.trim();
+  // Strip the leading "./" that `rg pattern .` prefixes onto each path so match lines are
+  // plain workspace-relative paths. Only lines that begin with a path carry the prefix.
+  const trimmed = stdout.replace(/^\.\//gm, '').trim();
   if (!trimmed) {
     return `No matches for "${pattern}" under ${displayRoot}`;
   }
@@ -339,4 +358,92 @@ export async function runGrepSearch(args, deps) {
   }
 
   return text;
+}
+
+/**
+ * List files matching a glob via ripgrep's `--files` walker.
+ * Respects .gitignore, skips .git and hidden files, and tolerates unreadable
+ * directories mid-walk (rg logs and continues instead of aborting the whole call).
+ * Returns workspace-relative paths.
+ * @param {Record<string, unknown>} args { pattern, path? }
+ * @param {{
+ *   resolveSafePath: (p: string, opts?: { write?: boolean }) => string,
+ *   toRelativePath: (abs: string) => string,
+ *   getWorkspaceRoot: () => string,
+ * }} deps
+ * @param {{ maxResults?: number }} [options]
+ */
+export async function runFindFilesSearch(args, deps, options = {}) {
+  const pattern = typeof args?.pattern === 'string' ? args.pattern.trim() : '';
+  if (!pattern) {
+    return 'Error: pattern is required';
+  }
+  const maxResults = options.maxResults ?? 500;
+
+  const resolved = deps.resolveSafePath(
+    typeof args?.path === 'string' && args.path.trim() ? args.path.trim() : '.',
+  );
+  const workspaceRoot = deps.getWorkspaceRoot();
+  let stat;
+  try {
+    stat = await fs.stat(resolved);
+  } catch {
+    return `Error: path not found: ${deps.toRelativePath(resolved)}`;
+  }
+  const searchDir = stat.isDirectory() ? resolved : path.dirname(resolved);
+  const displayRoot = deps.toRelativePath(searchDir);
+
+  const relTarget = path.relative(workspaceRoot, searchDir);
+  const target =
+    relTarget === ''
+      ? '.'
+      : !relTarget.startsWith('..') && !path.isAbsolute(relTarget)
+        ? relTarget
+        : searchDir;
+
+  const globNorm = pattern.replace(/\\/g, '/');
+  const rgArgs = ['--files', '--path-separator', '/', '-g', globNorm];
+  // Omit a "." target so output paths are not prefixed with "./".
+  if (target !== '.') {
+    rgArgs.push(target);
+  }
+
+  let stdout = '';
+  try {
+    const result = await execFileAsync(rgPath, rgArgs, {
+      cwd: workspaceRoot,
+      encoding: 'utf8',
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    stdout = result.stdout ?? '';
+  } catch (err) {
+    const code = err && typeof err === 'object' && 'code' in err ? err.code : undefined;
+    const partial =
+      err && typeof err === 'object' && 'stdout' in err ? String(err.stdout) : '';
+    if (code === 1 && !partial.trim()) {
+      return `No files matching "${pattern}" under ${displayRoot}`;
+    }
+    if ((code === 1 || code === 2) && partial.trim()) {
+      // Exit 2 = partial results with a warning (e.g. one unreadable dir); keep what we got.
+      stdout = partial;
+    } else {
+      const message = err instanceof Error ? err.message : String(err);
+      return `Error running find: ${message}`;
+    }
+  }
+
+  const files = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((p) => p.replace(/\\/g, '/'));
+
+  if (files.length === 0) {
+    return `No files matching "${pattern}" under ${displayRoot}`;
+  }
+
+  const limited = files.slice(0, maxResults);
+  const suffix =
+    files.length > maxResults ? `\n(truncated at ${maxResults} results)` : '';
+  return `${limited.join('\n')}${suffix}`;
 }

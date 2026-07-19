@@ -9,8 +9,11 @@ import {
   setAutopilotMetaForTests,
 } from '../../src/config/autopilot-meta.ts';
 import {
+  clearMissingReportNudgesForTests,
   clearTaskQueuesForTests,
   countRunningTaskChats,
+  getMissingReportNudgeCountForTests,
+  MISSING_REPORT_NUDGE_CAP,
   drainTaskQueueForTests,
   enqueueTaskForTests,
   finalizeBoardTaskOnStreamEnd,
@@ -140,6 +143,7 @@ describe('task stream end finalization', () => {
     releaseLaunchSlotForTests(TASK_CHAT_ID);
     releaseLaunchSlotForTests(TASK_B_CHAT_ID);
     resetAutopilotMetaCache();
+    clearMissingReportNudgesForTests();
     setAutopilotMetaForTests({ maxBuildAttempts: 1 });
   });
 
@@ -351,6 +355,100 @@ describe('task stream end finalization', () => {
     // Phase 2: exhausted build attempts are quarantined via self-heal (not left as failed).
     assert.equal(updated.status, 'quarantined');
     assert.match(updated.quarantine?.summary ?? updated.error ?? '', /board_report/i);
+  });
+
+  test('clean build end without board_report nudges instead of burning an attempt', () => {
+    const prevMinnowTest = process.env.MINNOW_TEST;
+    process.env.MINNOW_TEST = '1';
+    try {
+      const group = makeGroup('auto');
+      const planner = makePlanner();
+      const task = group.orchestrateBoard!.tasks[0]!;
+      finalizeBoardTaskOnStreamEnd(group, task, planner);
+
+      const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+      // Recoverable: the task keeps its chat and its build budget.
+      assert.equal(updated.status, 'in_progress');
+      assert.equal(updated.chatId, TASK_CHAT_ID);
+      assert.equal(updated.buildAttempts, undefined);
+      assert.equal(updated.quarantine, undefined);
+      assert.equal(updated.endedAt, undefined);
+      assert.equal(getMissingReportNudgeCountForTests(TASK_CHAT_ID), 1);
+    } finally {
+      if (prevMinnowTest === undefined) delete process.env.MINNOW_TEST;
+      else process.env.MINNOW_TEST = prevMinnowTest;
+    }
+  });
+
+  test('board_report after a nudge advances the board normally', () => {
+    const prevMinnowTest = process.env.MINNOW_TEST;
+    process.env.MINNOW_TEST = '1';
+    try {
+      const group = makeGroup('auto');
+      const planner = makePlanner();
+      finalizeBoardTaskOnStreamEnd(group, group.orchestrateBoard!.tasks[0]!, planner);
+      assert.equal(getMissingReportNudgeCountForTests(TASK_CHAT_ID), 1);
+
+      // The nudged turn calls board_report, then ends.
+      updateTask(
+        group,
+        'W1-A',
+        { boardReport: { outcome: 'pass', summary: 'Build verified' } },
+        planner,
+      );
+      finalizeBoardTaskOnStreamEnd(group, group.orchestrateBoard!.tasks[0]!, planner);
+
+      const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+      assert.equal(updated.status, 'testing');
+      assert.ok(updated.endedAt);
+    } finally {
+      if (prevMinnowTest === undefined) delete process.env.MINNOW_TEST;
+      else process.env.MINNOW_TEST = prevMinnowTest;
+    }
+  });
+
+  test('missing board_report quarantines once the nudge budget is exhausted', () => {
+    const prevMinnowTest = process.env.MINNOW_TEST;
+    process.env.MINNOW_TEST = '1';
+    try {
+      setAutopilotMetaForTests({ maxBuildAttempts: 1 });
+      const group = makeGroup('auto');
+      const planner = makePlanner();
+      updateTask(group, 'W1-A', { buildAttempts: 1 }, planner);
+
+      for (let i = 0; i < MISSING_REPORT_NUDGE_CAP; i++) {
+        finalizeBoardTaskOnStreamEnd(group, group.orchestrateBoard!.tasks[0]!, planner);
+        assert.equal(
+          group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!.status,
+          'in_progress',
+        );
+      }
+      finalizeBoardTaskOnStreamEnd(group, group.orchestrateBoard!.tasks[0]!, planner);
+
+      const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+      assert.equal(updated.status, 'quarantined');
+      assert.match(updated.quarantine?.summary ?? updated.error ?? '', /board_report/i);
+    } finally {
+      if (prevMinnowTest === undefined) delete process.env.MINNOW_TEST;
+      else process.env.MINNOW_TEST = prevMinnowTest;
+    }
+  });
+
+  test('a paused board records the missing report instead of nudging', () => {
+    const prevMinnowTest = process.env.MINNOW_TEST;
+    process.env.MINNOW_TEST = '1';
+    try {
+      const group = makeGroup('manual');
+      const planner = makePlanner();
+      finalizeBoardTaskOnStreamEnd(group, group.orchestrateBoard!.tasks[0]!, planner);
+
+      const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+      assert.equal(getMissingReportNudgeCountForTests(TASK_CHAT_ID), 0);
+      assert.equal(updated.status, 'failed');
+    } finally {
+      if (prevMinnowTest === undefined) delete process.env.MINNOW_TEST;
+      else process.env.MINNOW_TEST = prevMinnowTest;
+    }
   });
 
   test('markBoardTaskInProgressFromChat sets in_progress when stream starts', () => {

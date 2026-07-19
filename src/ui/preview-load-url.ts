@@ -11,13 +11,28 @@ function normalizeWorkspacePath(input: string): string {
   return input.replace(/^\/+/, '').trim();
 }
 
+function appendQueryParam(url: string, key: string, value: string): string {
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}${key}=${encodeURIComponent(value)}`;
+}
+
 /** Build preview URL for a workspace-relative path (path only; use resolvePreviewLoadUrl for absolute). */
-export function workspacePreviewUrl(relativePath: string, cacheBust?: number): string {
+export function workspacePreviewUrl(
+  relativePath: string,
+  cacheBust?: number,
+  workspaceRoot?: string,
+): string {
   const normalized = normalizeWorkspacePath(relativePath);
   const encoded = normalized.split('/').map((segment) => encodeURIComponent(segment)).join('/');
-  const base = `${PREVIEW_FILE_API}${encoded}`;
-  const withCacheBust = cacheBust === undefined ? base : `${base}${base.includes('?') ? '&' : '?'}v=${cacheBust}`;
-  return withSessionToken(withCacheBust);
+  let url = `${PREVIEW_FILE_API}${encoded}`;
+  if (cacheBust !== undefined) {
+    url = appendQueryParam(url, 'v', String(cacheBust));
+  }
+  const root = workspaceRoot?.trim();
+  if (root) {
+    url = appendQueryParam(url, 'workspaceRoot', root);
+  }
+  return withSessionToken(url);
 }
 
 function resolveRootRelativeUrl(url: string): string {
@@ -28,8 +43,12 @@ function resolveRootRelativeUrl(url: string): string {
 }
 
 /** Absolute URL passed to the preview guest (Electron or iframe with full origin). */
-export function resolvePreviewLoadUrl(source: PreviewSource, cacheBust?: number): string {
+export function resolvePreviewLoadUrl(
+  source: PreviewSource,
+  cacheBust?: number,
+  workspaceRoot?: string,
+): string {
   if (source.kind === 'url') return resolveRootRelativeUrl(source.url);
-  const path = workspacePreviewUrl(source.path, cacheBust);
+  const path = workspacePreviewUrl(source.path, cacheBust, workspaceRoot);
   return `${window.location.origin}${path}`;
 }

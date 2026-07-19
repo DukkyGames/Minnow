@@ -278,6 +278,22 @@ export function dismissActiveBoardView(): boolean {
   return true;
 }
 
+/**
+ * When leaving a board task chat for the planner row, reopen the kanban instead of chat view.
+ * External chats and non-task folder members are unchanged.
+ */
+export function resolveBoardRestoreGroupOnSwitch(targetChatId: string): ChatGroup | undefined {
+  const state = sessionState;
+  if (!state) return undefined;
+  const group = findBoardGroupForPlanner(targetChatId);
+  if (!group?.orchestrateBoard) return undefined;
+  const leaving = state.chats.find((c) => c.id === state.activeId);
+  if (!leaving?.boardTaskId?.trim()) return undefined;
+  const folderId = group.id;
+  if (leaving.boardGroupId !== folderId && leaving.groupId !== folderId) return undefined;
+  return group;
+}
+
 /** Board folder linked from a planner or task chat. */
 export function getBoardGroupForChat(chat: Chat): ChatGroup | undefined {
   const boardGroupId = chat.boardGroupId?.trim();

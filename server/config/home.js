@@ -214,14 +214,25 @@ const DEFAULT_META = {
       reindexNeeded: false,
     },
   },
+  brain: {
+    linking: {
+      minSharedTitleKeywords: 2,
+      minCosine: 0.75,
+      retireMinCosine: 0.85,
+      maxLinks: 3,
+    },
+  },
   synthesis: {
     enabled: true,
-    requireConfirmation: true,
+    requireConfirmation: false,
     confidenceThreshold: 0.6,
+    autoWriteConfidence: 0.85,
     maxProposalsPerTurn: 3,
     throttleMessagePairs: 4,
     skillMinRounds: 2,
     skillMinToolCalls: 2,
+    skillMinOccurrences: 2,
+    skillObservationRetentionDays: 45,
     utilityProviderId: '',
     utilityModelId: '',
     maxPendingProposals: 100,
@@ -273,6 +284,8 @@ const DEFAULT_META = {
     modelId: '',
     includeImportContext: true,
     includeLspHover: true,
+    includeLspContext: true,
+    contextBudgetChars: 4000,
     useNativeFim: true,
     enableCompletionCache: true,
   },
@@ -393,7 +406,7 @@ function defaultSkillsJson() {
 function defaultSessionStateJson() {
   const chatId = '00000000-0000-0000-0000-000000000001';
   return {
-    version: 5,
+    version: 6,
     activeId: chatId,
     sidebarCollapsed: false,
     lastActiveChatIdByWorkspace: {},

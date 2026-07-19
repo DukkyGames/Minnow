@@ -27,6 +27,25 @@ describe('output-cap', () => {
     assert.match(capped, /\[truncated — \d+ of \d+ chars;/);
   });
 
+  it('capTextOutput does not flag CRLF text under the cap as truncated', () => {
+    // Dropping \r on EOL normalization must not be mistaken for dropped content —
+    // this is the common case for Windows execute_command output.
+    const crlf = Array.from({ length: 50 }, (_, i) => `line ${i}`).join('\r\n');
+    const { text, truncated } = capTextOutput(crlf);
+    assert.equal(truncated, false);
+    assert.doesNotMatch(text, /\[truncated/);
+  });
+
+  it('capReadFileOutput hard-truncates a single oversized line', () => {
+    // A minified bundle on one line kept zero lines before, pointing read_file_range at
+    // the same oversized line; now it returns a bounded head with guidance.
+    const oneLine = 'x'.repeat(500);
+    const { text, truncated } = capReadFileOutput(oneLine, 'bundle.min.js', 80);
+    assert.equal(truncated, true);
+    assert.doesNotMatch(text, /read_file_range/);
+    assert.match(text, /line 1 exceeds 80 chars/);
+  });
+
   it('appendWithByteCap stops at byte budget', () => {
     const chunk = 'ü'.repeat(10);
     const first = appendWithByteCap('', chunk, 4);

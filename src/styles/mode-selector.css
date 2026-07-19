@@ -29,12 +29,16 @@
   flex-shrink: 0;
 }
 
+/* Submenu drops below the Plan segment into the textarea row — elevate the
+   whole controls strip so the menu paints above .input-row / send stack. */
 .composer-controls:has(.is-submenu-open) {
   overflow: visible;
+  position: relative;
+  z-index: 30;
 }
 
 .mode-segment-wrap--plan.is-submenu-open {
-  z-index: 5;
+  z-index: 30;
 }
 
 /* Hug labelled content; shrink (and scroll / go compact) when the row is tight. */
@@ -58,8 +62,13 @@
   -webkit-overflow-scrolling: touch;
 }
 
+/* Must beat `#modeSelector.mode-segmented { overflow-x: auto }` (ID specificity),
+   or the Plan/Super Plan menu is clipped inside the strip. */
+#modeSelector.mode-segmented:has(.is-submenu-open),
 .mode-segmented:has(.is-submenu-open) {
   overflow: visible;
+  overflow-x: visible;
+  overflow-y: visible;
 }
 
 .mode-segmented::-webkit-scrollbar {
@@ -186,7 +195,7 @@
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  z-index: 20;
+  z-index: 40;
   background: var(--mn-bg);
   border: 1px solid var(--mn-border);
   border-radius: 10px;

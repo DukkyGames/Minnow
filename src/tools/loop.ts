@@ -22,6 +22,7 @@ import {
   appendSuperPlanStageFailureNotice,
   superPlanPipelineUserMessage,
 } from '../chat/super-plan/hidden-user-messages';
+import { isSuperPlanPipelineOwningChatTurns } from '../chat/super-plan/state';
 import type { SuperPlanStageId } from '../chat/super-plan/types';
 import {
   clearPendingSteer,
@@ -33,8 +34,8 @@ import {
   flushPendingMessageQueue,
 } from '../chat/message-queue';
 import { handleGoalCommand } from '../chat/goal/command';
-import { maybeContinueGoalAfterTurn } from '../chat/goal/evaluate';
-import { getActiveGoal } from '../state/sessions';
+import { maybeContinueGoalAfterTurn, shouldEvaluateGoalAfterTurn } from '../chat/goal/evaluate';
+import { getActiveGoal, isGoalLoopActive } from '../state/sessions';
 import {
   clearAttachments,
   getPendingAttachments,
@@ -97,6 +98,7 @@ import {
   buildSynthesisMessages,
 } from '../synthesis/post-turn';
 import { buildTurnSnapshot, resolveForkHistoryIndex } from '../chat/turn-snapshot';
+import { createStreamingStatsPublisher } from '../chat/streaming-stats';
 import type { ForkOverrides } from '../chat/fork-from-run';
 import {
   createRun,
@@ -119,6 +121,7 @@ import type {
   ToolCallAccumulator,
   TurnRunId,
   TurnSnapshot,
+  Usage,
   UserMessage,
 } from '../types';
 import { markMessageStopped } from '../ui/stopped-affordance';
@@ -215,6 +218,10 @@ import {
 } from '../config/tool-calls-meta';
 import { setStatus } from '../ui/status';
 import { applyOrchestrateAggregatedStatsToChat } from '../chat/orchestrate/stats-aggregate';
+import {
+  refreshMetricsStripForChat,
+  shouldUseBoardAggregateStats,
+} from '../chat/orchestrate/board-stats-aggregate';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
 import { resolveOutboundSystemMessages } from '../chat/prompts/compose-context';
 import { estimateTokensFromText } from '../chat/prompts/token-estimate';
@@ -706,6 +713,14 @@ interface StreamCompletionTurnOptions {
   thinkingBudgetTracker?: ThinkingBudgetTracker | null;
   /** Strip provider echo of prefilled thinking on the first content delta. */
   prefillEchoPartial?: string;
+  /** Fired on each SSE chunk so metrics can update mid-stream (MIN-413). */
+  onStreamProgress?: (state: {
+    streamMeta: StreamMetaAccumulator;
+    t0: number;
+    tFirst: number | null;
+    partialText: string;
+    partialThinking: string;
+  }) => void;
 }
 
 /**
@@ -823,6 +838,16 @@ async function streamCompletionTurn(
     processRoutedParts(inlineRouter.flush());
   }
 
+  function emitStreamProgress(): void {
+    streamOptions?.onStreamProgress?.({
+      streamMeta,
+      t0,
+      tFirst,
+      partialText: fullText,
+      partialThinking: thoughtController?.getSegments().join('\n\n') ?? '',
+    });
+  }
+
   function handleChunk(chunk: ChatCompletionChunk): void {
     streamMeta = mergeStreamMeta(streamMeta, chunk);
     toolAcc = mergeToolCallDelta(toolAcc, chunk);
@@ -853,6 +878,7 @@ async function streamCompletionTurn(
       }
       routeContentDelta(routedDelta);
     }
+    emitStreamProgress();
     if (domVisible) {
       scrollChatIfPinned();
     }
@@ -1364,6 +1390,22 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     }
   }
   let livePartialText = '';
+  const streamingStatsPublisher = createStreamingStatsPublisher(chat);
+  const turnUsageSegments: Usage[] = [];
+  const pushLiveStreamingStats = (state: {
+    streamMeta: StreamMetaAccumulator;
+    t0: number;
+    tFirst: number | null;
+    partialText: string;
+    partialThinking: string;
+  }): void => {
+    streamingStatsPublisher.schedule({
+      ...state,
+      priorSegments: turnUsageSegments,
+      modelId: sendModelId,
+      modelInfo: chat.modelInfo ?? undefined,
+    });
+  };
   if (isStreamDomVisible(chat.id)) {
     setStatus(
       'spin',
@@ -1745,7 +1787,13 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             notifyChatStreamActivity(chat.id);
           },
           turnRunId,
-          streamOpts,
+          {
+            ...streamOpts,
+            onStreamProgress: (state) => {
+              pushLiveStreamingStats(state);
+              streamOpts?.onStreamProgress?.(state);
+            },
+          },
         );
 
       const runStreamTurnWithThinkingBudget = async (): Promise<StreamTurnResult> => {
@@ -1890,6 +1938,25 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           tEnd: turnResult.tEnd,
           workAgentId: activeWorkAgent?.id ?? null,
         });
+        const toolRoundMeta = finalizeResponseMeta(
+          turnResult.streamMeta,
+          turnResult.t0,
+          turnResult.tFirst ?? turnResult.tEnd,
+          turnResult.tEnd,
+        );
+        if (toolRoundMeta.usage && Object.keys(toolRoundMeta.usage).length > 0) {
+          turnUsageSegments.push(toolRoundMeta.usage);
+          streamingStatsPublisher.schedule({
+            streamMeta: {},
+            t0: turnResult.t0,
+            tFirst: turnResult.tFirst,
+            partialText: '',
+            partialThinking: '',
+            priorSegments: turnUsageSegments,
+            modelId: sendModelId,
+            modelInfo: chat.modelInfo ?? undefined,
+          });
+        }
 
         const toolProse = turnResult.fullText.trim();
         const hasToolProse = Boolean(toolProse);
@@ -2257,6 +2324,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       }
       renderSidebar();
       scheduleSaveSessions();
+      if (shouldUseBoardAggregateStats()) {
+        refreshMetricsStripForChat(getActiveChat());
+      }
 
       // Push-now during final prose: inject steer and run another model round in this turn.
       if (chat.pendingSteerMessage?.trim()) {
@@ -2391,6 +2461,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       setStatus('err', statusMsg);
     }
   } finally {
+    streamingStatsPublisher.reset();
     setContextInFlightOverlay(null);
     scheduleContextUsageRefresh();
     registerStreamDomRemount(chat.id, null);
@@ -2436,6 +2507,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           toolCount: synthesisToolCount,
           sourceExcerpt: buildSynthesisExcerpt(chat),
           assistantText,
+          ...(chat.kind === 'expert' && chat.expertId?.trim()
+            ? { expertId: chat.expertId.trim() }
+            : {}),
         });
       }
     }
@@ -2458,12 +2532,18 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       } else {
         syncComposerFromStreamingState();
       }
-      if (completedNormally && !goalDriven && !chat.pendingSteerMessage?.trim()) {
+      const runGoalEvalAfterTurn = shouldEvaluateGoalAfterTurn(chat, goalDriven);
+      if (
+        completedNormally &&
+        !runGoalEvalAfterTurn &&
+        !chat.pendingSteerMessage?.trim() &&
+        !isSuperPlanPipelineOwningChatTurns(chat)
+      ) {
         void flushPendingMessageQueue(chat).then(() => {
           syncComposerMessageQueue();
         });
       }
-      if (completedNormally && goalDriven) {
+      if (completedNormally && runGoalEvalAfterTurn) {
         void maybeContinueGoalAfterTurn(chat);
       }
       if (completedNormally && isPartyModePinned(chat.pinnedSkill) && isStreamDomVisible(chat.id)) {
@@ -2609,7 +2689,7 @@ export async function sendMessageWithTools(
     return;
   }
 
-  let goalDriven = false;
+  let goalDriven = isGoalLoopActive(chat);
   let effectiveRawText = rawText;
   if (goalDispatch === 'set') {
     goalDriven = true;

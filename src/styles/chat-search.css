@@ -1,0 +1,117 @@
+/* Chat search popover (sidebar + desktop rail search buttons) */
+
+.chat-search-popover {
+  position: fixed;
+  z-index: 60;
+  width: min(340px, calc(100vw - 1rem));
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  gap: 8px;
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-popover-tall);
+  color: var(--mn-fg);
+}
+
+.chat-search-input {
+  width: 100%;
+  padding: 7px 10px;
+  background: var(--mn-surface-1);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  color: var(--mn-fg);
+  font-size: 0.85rem;
+}
+
+.chat-search-input:focus {
+  outline: none;
+  border-color: var(--mn-border-strong);
+}
+
+.chat-search-scope-toggle {
+  padding: 4px 2px 2px;
+  border-bottom: none;
+  gap: 10px;
+}
+
+.chat-search-scope-toggle .settings-toggle-row__title {
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.chat-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: min(48vh, 380px);
+  overflow-y: auto;
+}
+
+.chat-search-empty {
+  padding: 10px 8px;
+  color: var(--mn-fg-muted);
+  font-size: 0.8rem;
+}
+
+.chat-search-result {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.chat-search-result.is-active {
+  background: var(--mn-surface-1);
+}
+
+.chat-search-result__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chat-search-result__badge {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--mn-border);
+  color: var(--mn-fg-muted);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.chat-search-result__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+  font-weight: 550;
+}
+
+.chat-search-result__workspace {
+  flex-shrink: 0;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--mn-fg-muted);
+  font-size: 0.7rem;
+}
+
+.chat-search-result__snippet {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  color: var(--mn-fg-muted);
+  font-size: 0.74rem;
+  line-height: 1.35;
+}

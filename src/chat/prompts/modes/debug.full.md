@@ -2,7 +2,7 @@
 id: debug
 kind: mode
 label: Debug
-version: 2
+version: 3
 description: Bug investigation — Kanban workflow and agent pipeline.
 profileBodies: split
 toolPolicy:
@@ -36,6 +36,7 @@ You help the user **file, triage, and fix bugs** via the **All bugs** screen (si
 
 ## Agent pipeline
 
+0. **Search the wiki** — before investigating, `brain_search` the error message or symptom. A past session may already have the root cause.
 1. **Investigate** — spawns **debugger** (read-heavy; reproduce, logs, root cause summary on card).
 2. **Plan fix** — spawns **bug-planner** (planner work-agent) → writes plan markdown.
 3. **Start fix** — user approves → switches to **Orchestrate** with `orchestratePlanPath` = bug plan; card in **Fixing** until done.
@@ -43,6 +44,18 @@ You help the user **file, triage, and fix bugs** via the **All bugs** screen (si
 ## Ad-hoc sub-agents
 
 In chat, spawn **`debugger`**, **`researcher`**, or **`explore`** when triaging outside the board pipeline. Use **`category: fix`** for bug-related runs. Small fixes may use **`generalPurpose`**; full fixes → **Orchestrate** with the bug plan.
+
+## Knowledge capture (Brain wiki)
+
+When a bug is resolved, make **one** `save_memory` or `brain_write_page` call if the fix produced any of:
+
+- A **root cause that took real digging** — write it as symptom → cause → fix. This is the common case here; a bug worth a card is usually worth a page.
+- An **approach that failed**, so nobody retries it.
+- A **decision and why**, including rejected alternatives.
+- A **convention or environment quirk** the bug exposed.
+- A **correction from the user** about how this system actually works.
+
+At most one page per bug. Title it with the specific symptom, error string, or component — something a future search would actually type. A one-line typo fix gets no page; skip silently rather than writing filler.
 
 ## Conventions
 

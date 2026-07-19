@@ -34,7 +34,7 @@ export const TOOL_GROUP_IDS = {
     'copy_file',
     'delete_path',
   ],
-  'git-read': ['git_status', 'git_diff', 'git_log'],
+  'git-read': ['git_status', 'git_diff', 'git_log', 'git_branch'],
   'git-write': ['git_add', 'git_commit', 'git_checkout'],
   'code-exec': [
     'execute_command',
@@ -83,15 +83,14 @@ export const TOOL_GROUP_IDS = {
     'browser_screenshot',
     'request_browser_origin_access',
   ],
-  brain: [
-    'brain_search',
-    'brain_read_page',
-    'brain_list',
+  // Split so board workers can read the wiki and save what they learn without
+  // also getting page rewrites, ingest, or destructive brain management.
+  'brain-core': ['brain_search', 'brain_read_page', 'brain_list', 'save_memory'],
+  'brain-admin': [
     'brain_write_page',
     'brain_append_log',
     'brain_ingest_source',
     'manage_brain',
-    'save_memory',
   ],
   recall: ['recall_chat_context', 'recall_turn_full'],
   settings: ['search_settings', 'get_settings', 'update_settings'],
@@ -145,7 +144,8 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'mode-mgmt',
     'ask',
     'browser',
-    'brain',
+    'brain-core',
+    'brain-admin',
     'recall',
     'settings',
     'impeccable',
@@ -164,7 +164,8 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'mode-mgmt',
     'ask',
     'browser',
-    'brain',
+    'brain-core',
+    'brain-admin',
     'recall',
     'impeccable',
     'todo',
@@ -181,7 +182,8 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'mode-mgmt',
     'ask',
     'browser',
-    'brain',
+    'brain-core',
+    'brain-admin',
     'recall',
     'impeccable',
   ],
@@ -196,7 +198,8 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'mode-mgmt',
     'ask',
     'browser',
-    'brain',
+    'brain-core',
+    'brain-admin',
     'recall',
     'impeccable',
   ],
@@ -209,7 +212,8 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'board',
     'mode-mgmt',
     'ask',
-    'brain',
+    'brain-core',
+    'brain-admin',
     'recall',
   ],
   reef: [
@@ -219,7 +223,8 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'mode-mgmt',
     'ask',
     'browser',
-    'brain',
+    'brain-core',
+    'brain-admin',
     'reef',
     'impeccable',
   ],
@@ -238,14 +243,15 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'mode-mgmt',
     'ask',
     'browser',
-    'brain',
+    'brain-core',
+    'brain-admin',
     'recall',
     'impeccable',
     'todo',
     'diagnostics',
   ],
   /** First-run wizard tour guide — safe demo set: no shell, no writes, no email/calendar. */
-  onboarding: ['util-basic', 'web', 'files-read', 'brain', 'ask'],
+  onboarding: ['util-basic', 'web', 'files-read', 'brain-core', 'brain-admin', 'ask'],
 };
 
 /** Per-mode explicit deny overrides applied after group expansion. */
@@ -320,6 +326,10 @@ export const BOARD_ROLE_BOARD_SUBSET = ['board_get_state', 'board_report'] as co
 /**
  * Per-role group matrix for orchestrator board chats (MIN-333). Build and fix differ
  * only by browser (build ●, fix ○). Tester omits files-write.
+ *
+ * All three get `brain-core`: workers hold the discovery context, so they must be
+ * able to look up prior findings and record new ones themselves. Routing writes
+ * through the orchestrator instead would strip the detail worth saving.
  */
 export const BOARD_ROLE_ALLOWED_GROUPS: Record<BoardMemberRole, readonly ToolGroupId[]> = {
   build: [
@@ -333,6 +343,7 @@ export const BOARD_ROLE_ALLOWED_GROUPS: Record<BoardMemberRole, readonly ToolGro
     'code-intel',
     'lsp',
     'browser',
+    'brain-core',
   ],
   test: [
     'util-basic',
@@ -344,6 +355,7 @@ export const BOARD_ROLE_ALLOWED_GROUPS: Record<BoardMemberRole, readonly ToolGro
     'code-intel',
     'lsp',
     'browser',
+    'brain-core',
   ],
   fix: [
     'util-basic',
@@ -355,6 +367,7 @@ export const BOARD_ROLE_ALLOWED_GROUPS: Record<BoardMemberRole, readonly ToolGro
     'code-exec',
     'code-intel',
     'lsp',
+    'brain-core',
   ],
 };
 

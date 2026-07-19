@@ -14,6 +14,10 @@ import {
   type PickedElement,
 } from '../../src/design/element-picker.ts';
 import {
+  resetDesignModeIframeGuestForTests,
+  setDesignModeUsingIframeGuest,
+} from '../../src/ui/preview-design-mode-guest.ts';
+import {
   DEFAULT_FILE_PANEL_STATE,
   resetFilePanelStateForTests,
   setFilePanelState,
@@ -70,10 +74,12 @@ describe('CDP picking routing + lifecycle (MIN-370)', () => {
     globalThis.window = win as unknown as Window & typeof globalThis;
     globalThis.document = win.document;
     resetFilePanelStateForTests();
+    resetDesignModeIframeGuestForTests();
   });
 
   afterEach(() => {
     resetFilePanelStateForTests();
+    resetDesignModeIframeGuestForTests();
     (globalThis.window as unknown as { minnow?: unknown }).minnow = undefined;
   });
 
@@ -110,6 +116,16 @@ describe('CDP picking routing + lifecycle (MIN-370)', () => {
       previewSource: { kind: 'url', url: 'https://example.com/pricing' },
     });
     assert.equal(shouldUseCdpPicker(), true);
+  });
+
+  test('shouldUseCdpPicker is false while Design Mode uses the iframe guest (Draw/Comment on cross-origin)', () => {
+    (globalThis.window as any).minnow = { preview: { cdpPicker: mockCdpPicker() } };
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      previewSource: { kind: 'url', url: 'https://example.com/pricing' },
+    });
+    setDesignModeUsingIframeGuest(true);
+    assert.equal(shouldUseCdpPicker(), false);
   });
 
   test('createCdpElementPicker: enable subscribes and forwards picks to onPick', async () => {

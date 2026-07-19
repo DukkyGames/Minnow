@@ -97,6 +97,26 @@ describe('file-layout right split reconcile (MIN-342)', () => {
     assert.equal(preview.parentElement, column);
   });
 
+  test('hideViewerSplit skipPreviewFallback keeps browser open when preview is active', async () => {
+    const { hideViewerSplit } = await import('../../src/ui/file-layout.ts');
+    patchFilePanelState({
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+      previewTabs: [{ id: 'tab-1', source: { kind: 'url', url: 'http://localhost:3000' } }],
+      activePreviewTab: 'tab-1',
+    });
+    document.getElementById('rightPaneColumn')?.classList.remove('hidden');
+    document.getElementById('previewPane')?.classList.remove('hidden');
+    document.getElementById('fileViewerPane')?.classList.remove('hidden');
+
+    hideViewerSplit({ skipPreviewFallback: true });
+
+    assert.equal(getFilePanelState().rightPaneMode, 'preview');
+    assert.equal(document.getElementById('previewPane')?.classList.contains('hidden'), false);
+    assert.equal(document.getElementById('rightPaneColumn')?.classList.contains('hidden'), false);
+    assert.equal(document.getElementById('fileViewerPane')?.classList.contains('hidden'), true);
+  });
+
   test('hideViewerSplit skipPreviewFallback keeps split closed when preview tabs exist', async () => {
     const { hideViewerSplit } = await import('../../src/ui/file-layout.ts');
     patchFilePanelState({

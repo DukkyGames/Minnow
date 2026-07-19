@@ -13,6 +13,7 @@
   grid-template-columns: var(--onboarding-aside-w) 1fr;
   background: var(--mn-bg, var(--bg));
   color: var(--mn-fg, var(--text));
+  overflow: hidden;
 }
 
 html.onboarding-active .app-body,
@@ -54,13 +55,15 @@ html.onboarding-active .mn-os-shell {
   border-right: 1px solid var(--mn-border, var(--border));
   background: var(--mn-surface-1, var(--mn-bg, var(--bg)));
   box-sizing: border-box;
-  overflow-y: auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .mn-onboarding__brand {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 .mn-onboarding__brand-glyph {
@@ -80,6 +83,9 @@ html.onboarding-active .mn-os-shell {
   flex-direction: column;
   gap: 0;
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .mn-onboarding__phase {
@@ -148,6 +154,7 @@ html.onboarding-active .mn-os-shell {
   flex-direction: column;
   gap: 8px;
   margin-top: auto;
+  flex-shrink: 0;
 }
 
 .mn-onboarding__progress-track {
@@ -203,8 +210,9 @@ html.onboarding-active .mn-os-shell {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 100%;
+  min-height: 0;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .mn-onboarding__mobile-progress {
@@ -220,8 +228,10 @@ html.onboarding-active .mn-os-shell {
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 12px 20px;
   max-width: 640px;
   width: 100%;
@@ -372,6 +382,7 @@ html.onboarding-active .mn-os-shell {
   max-width: 520px;
   text-align: center;
   align-items: center;
+  justify-content: center;
 }
 
 .mn-onboarding-welcome-hero {

@@ -1,6 +1,6 @@
 ---
 name: Minnow
-description: Light-first LM Studio chat client with optional dark mode (OKLCH token inversion), black/paper accent, semantic metric colors.
+description: Multi-family palette themes (8× dark/light) on --mn-* tokens; swamp-dark default; family accent, semantic metric colors, flat chrome.
 colors:
   bg: "oklch(100% 0.00011 271.152)"
   surface: "oklch(100% 0.00011 271.152)"
@@ -49,7 +49,7 @@ rounded:
   lg: "14px"
 spacing:
   topbar-h: "52px"
-  sidebar-w: "240px"
+  sidebar-w: "300px"
   sidebar-rail: "48px"
   touch-min: "44px"
 components:
@@ -73,7 +73,7 @@ components:
 
 ## Palette themes
 
-`<html data-theme="{family}-{mode}">` (e.g. `swamp-dark`, `coral-light`) is set from **Settings → Appearance → Theme**, the inline boot script in `index.html`, or `initTheme()` in [`src/theme.ts`](src/theme.ts). Eight families: **Swamp**, **Desert**, **Ocean**, **Coral**, **Mono** (grayscale), **Matrix** (phosphor green), **Human**, **Mint**, each with dark and light variants. Hex and rgba literals exist only in [`src/styles/tokens.css`](src/styles/tokens.css); application CSS uses **`--mn-*`** tokens (22 core variables per theme plus extended semantics via `color-mix`).
+`<html data-theme="{family}-{mode}">` (e.g. `swamp-dark`, `coral-light`) is set from **Settings → Appearance → Theme**, the inline boot script in `index.html`, or `initTheme()` in [`src/theme.ts`](src/theme.ts). Eight families: **Swamp**, **Desert**, **Ocean**, **Coral**, **Mono** (grayscale), **Matrix** (phosphor green), **Human**, **Mint**, each with dark and light variants. Default: **swamp-dark**. Hex and rgba literals exist only in [`src/styles/tokens.css`](src/styles/tokens.css); application CSS uses **`--mn-*`** tokens (26 core variables in [`CORE_THEME_TOKEN_KEYS`](src/appearance/types.ts) plus extended semantics via `color-mix`). Extracted inventory: [`documentation/design-system/`](documentation/design-system/README.md).
 
 Storage: `minnow.theme` (explicit id), `minnow.theme.followSystem`, `minnow.theme.family`. Default theme: **swamp-dark**. Legacy `light` / `dark` / `system` values and pre-rename family ids (e.g. `sage`→`swamp`) migrate on read.
 
@@ -93,34 +93,34 @@ Minnow is a long-session chat bench: conversation first, metrics as instrumentat
 
 ## Colors
 
-A restrained light palette: cool near-white grounds, graphite text, black accent, semantic metrics unchanged.
+Palette is **family-dependent** (hex in `tokens.css`). The YAML frontmatter above documents **swamp-light** as a reference snapshot; other families swap accent and neutrals while keeping the same token roles.
 
-### Primary
+### Primary (accent family)
 
-- **Ink Black** (`oklch(0% 0 0)`): Logo mark fill, send button, active chat row border, streaming cursor, focus outlines, markdown links. Hover on icon buttons inverts to black fill with white icon stroke.
+- **`--mn-accent`**: Send button, active chat row border, streaming cursor, focus outlines, markdown links. Varies per family (e.g. swamp green `#9ec5a7`, mono near-white, matrix phosphor).
+- **`--mn-accent-ink`**: High-contrast accent text on syntax and badges.
 
 ### Secondary
 
-- **Bench Green (user trace)** (`oklch(88.769% 0.2563 138.508 / 0.336)`): User message bubble background only; keeps the thread readable without a second "brand" color fighting the accent.
+- **`--mn-accent-soft`**: User message bubble background (`messages.css`). Keeps the thread readable without a second brand color fighting the accent.
 
-### Tertiary
+### Tertiary (metrics only)
 
-- **Metric semantics** (success `oklch(0.72 0.14 155)`, warning `oklch(0.8 0.12 85)`, danger `oklch(0.62 0.18 15)`): Stats strip values, stat chips (`.c` / `.g` / `.y` / `.r`), status dot ok/err, token fill bars. Do not use for chrome or marketing blocks.
+- **`--mn-success`**, **`--mn-warning`**, **`--mn-danger`**: Stats strip, stat chips (`.c` / `.g` / `.y` / `.r`), status dots, token fill bars. Never navigation chrome or decorative gradients.
 
-### Neutral
+### Neutrals
 
-- **Sheet White** (`oklch(100% 0.00011 271.152)`): `--bg`, `--surface`, top bar, sidebar, input bar, stats strip, drawer.
-- **Graphite** (`oklch(31.714% 0.00004 271.152)`): Primary body text.
-- **Ash Label** (`oklch(0.52 0.028 250)`): Muted labels, placeholders, stat names, sidebar section title (tuned for WCAG AA on sheet white).
-- **Hairline** (`oklch(28.094% 0.00003 271.152)` / `oklch(0.34 0.028 250)`): `--border` and `--border-strong` dividers, assistant bubble outline, table cells.
-- **Hover Veil** (`oklch(0% 0 0 / 0.84)`): `--surface-elevated` for sidebar row hover and stats expand hover (dark wash on light UI).
-- **Scrim** (`oklch(0.12 0.02 250 / 0.65)`): Settings drawer and mobile sidebar backdrop.
+- **`--mn-bg`**, **`--mn-surface-*`**: Top bar, sidebar, input bar, stats strip, drawer.
+- **`--mn-fg`**, **`--mn-fg-muted`**, **`--mn-fg-subtle`**: Body, labels, placeholders.
+- **`--mn-border`**, **`--mn-border-strong`**: Dividers, assistant bubble outline, table cells.
+- **`--mn-surface-elevated`**: Sidebar row hover, stats expand hover (`color-mix` on fg).
+- **`--mn-overlay`**: Settings drawer and mobile sidebar scrim.
 
 ### Named Rules
 
-**The Ink Accent Rule.** Black accent appears on primary actions, selection, and links. It does not tint large backgrounds except the logo mark and send button.
+**The Accent Rule.** Family accent appears on primary actions, selection, and links. It does not wash large backgrounds except logo mark and send button.
 
-**The Metric Color Rule.** Green, amber, and red are for measurement only (TPS, TTFT, tokens, errors). Never use them for navigation chrome or decorative gradients.
+**The Metric Color Rule.** Success, warning, and danger are for measurement only (TPS, TTFT, tokens, errors). Never use them for navigation chrome or decorative gradients.
 
 ## Typography
 
@@ -188,7 +188,7 @@ Flat-by-default. Surfaces share `--surface` / `--bg`; separation is borders, not
 ### Navigation
 
 - **Top bar:** 52px, border-bottom, model select embedded with custom chevron.
-- **Session sidebar:** 240px / 48px rail; 200px at 641–899px; mobile overlay with scrim.
+- **Session sidebar:** 300px (`--sidebar-w`) / 48px rail; mobile overlay with scrim at ≤640px.
 - **Settings drawer:** Right sheet `min(420px, 100vw - 16px)`, slide-in 0.22s `--ease-out`.
 
 ### Stats strip (signature)

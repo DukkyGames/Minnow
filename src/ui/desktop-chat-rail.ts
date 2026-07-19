@@ -4,7 +4,7 @@
 
 import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
-import { CHAT_APP_ID, createDesktopChat } from '../state/session-workspace-scope';
+import { DESKTOP_APP_ID, createDesktopChat } from '../state/session-workspace-scope';
 import {
   getActiveChat,
   getAssistantChats,
@@ -15,6 +15,10 @@ import {
   scheduleSaveSessions,
   sessionState,
 } from '../state/sessions';
+import {
+  getChatLastMessageAt,
+  isSidebarListedChat,
+} from '../state/session-workspace-scope';
 import {
   flushActiveComposerDraftBeforeNewChat,
   resetComposerForEphemeralReuse,
@@ -27,6 +31,7 @@ import {
 } from './experts/experts-scope';
 import { appendChatRow } from './sidebar';
 import { syncChatItemDotsInDom } from './chat-item-dot';
+import type { Chat } from '../types';
 
 const MOBILE_DESKTOP_MQ = '(max-width: 640px)';
 
@@ -193,7 +198,7 @@ export async function createNewDesktopChat(): Promise<void> {
   sessionState.chats.unshift(chat);
   pruneEphemeralEmptyChats(sessionState, chat.id);
   sessionState.activeId = chat.id;
-  rememberActiveChatForApp(CHAT_APP_ID, chat.id);
+  rememberActiveChatForApp(DESKTOP_APP_ID, chat.id);
   scheduleSaveSessions();
 
   const { isDesktopChatActive, activateDesktopChat } = await import('../os/desktop-state');
@@ -212,18 +217,30 @@ export async function createNewDesktopChat(): Promise<void> {
   input?.focus();
 }
 
+/** Chats shown in the desktop session rail (sandbox assistants + expert threads). */
+function getDesktopRailChats(
+  desktopWorkspacePath: string,
+  state: NonNullable<typeof sessionState>,
+): Chat[] {
+  const assistant = getAssistantChats(desktopWorkspacePath, state);
+  const experts = state.chats.filter(
+    (c) => c.kind === 'expert' && isSidebarListedChat(c),
+  );
+  const seen = new Set<string>();
+  const merged: Chat[] = [];
+  for (const chat of [...assistant, ...experts]) {
+    if (seen.has(chat.id)) continue;
+    seen.add(chat.id);
+    merged.push(chat);
+  }
+  merged.sort((a, b) => getChatLastMessageAt(b) - getChatLastMessageAt(a));
+  return merged;
+}
+
 /** Paint session rows for the desktop workspace sandbox. */
 export function renderDesktopChatRail(desktopWorkspacePath?: string | null): void {
   const list = getRailList();
   if (!list || !sessionState) return;
-
-  if (isExpertScopeActive()) {
-    const expertId = getExpertScopeId();
-    if (expertId) {
-      renderDesktopExpertScopeRail(expertId, sessionState.activeId);
-    }
-    return;
-  }
 
   mountExpertScopeInRail(false);
   list.replaceChildren();
@@ -231,7 +248,7 @@ export function renderDesktopChatRail(desktopWorkspacePath?: string | null): voi
   const path = desktopWorkspacePath ?? null;
   if (!path) return;
 
-  const chats = getAssistantChats(path, sessionState);
+  const chats = getDesktopRailChats(path, sessionState);
   const activeId = sessionState.activeId;
   for (const chat of chats) {
     appendChatRow(list, chat, activeId, {
@@ -267,6 +284,14 @@ export function wireDesktopChatRail(): void {
   if (collapse && collapse.dataset.bound !== '1') {
     collapse.dataset.bound = '1';
     collapse.addEventListener('click', () => collapseDesktopChatRail());
+  }
+
+  const search = document.getElementById('btnDesktopChatSearch');
+  if (search && search.dataset.bound !== '1') {
+    search.dataset.bound = '1';
+    search.addEventListener('click', () => {
+      void import('./chat-search-popover').then((m) => m.toggleChatSearchPopover(search));
+    });
   }
 
   const backdrop = getRailBackdrop();

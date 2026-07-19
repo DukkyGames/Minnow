@@ -30,7 +30,18 @@ export function emailCacheMessagesPath(accountId) {
   return path.join(emailCacheDir(accountId), 'messages.json');
 }
 
+/** SQLite mail store for one account (~/.minnow/email/mail-<accountId>.db). */
+export function emailDbPath(accountId) {
+  const slug = String(accountId ?? '').trim().replace(/[^A-Za-z0-9._-]/g, '_') || 'account';
+  return path.join(emailRootDir(), `mail-${slug}.db`);
+}
+
 /** Automation rules registry. */
 export function emailAutomationsPath() {
   return path.join(emailRootDir(), 'automations.json');
+}
+
+/** Senders whose remote images load without asking. */
+export function emailImageAllowlistPath() {
+  return path.join(emailRootDir(), 'image-allowlist.json');
 }

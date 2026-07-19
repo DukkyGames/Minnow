@@ -45,61 +45,169 @@ export async function queryCodeStatus() {
 }
 
 /**
- * FTS5 + workspace-symbol fallback symbol search.
+ * Extract lowercase alphanumeric tokens from a user query (safe for FTS5 MATCH).
+ * @param {string} query
+ */
+function tokenizeSymbolQuery(query) {
+  const raw = String(query ?? '').toLowerCase().match(/[a-z0-9_]+/gi) ?? [];
+  return [...new Set(raw)];
+}
+
+/**
+ * Build an FTS5 OR query so multi-word searches match any token (bm25 ranks AND hits higher).
+ * @param {string[]} tokens
+ */
+function buildFtsMatchQuery(tokens) {
+  if (!tokens.length) return null;
+  return tokens.map((t) => t.replace(/"/g, '""')).join(' OR ');
+}
+
+/**
+ * FTS5 search over name, file, signature, and doc.
+ * @param {import('better-sqlite3').Database} db
+ * @param {string} repo
+ * @param {string | null} ftsQuery
+ * @param {number} max
+ */
+function searchSymbolsFts(db, repo, ftsQuery, max) {
+  if (!ftsQuery) return [];
+  try {
+    return db
+      .prepare(
+        `SELECT s.id, s.repo, s.kind, s.name, s.file, s.line_start, s.line_end, s.signature
+         FROM symbols_fts f
+         JOIN symbols s ON s.id = f.symbol_id
+         WHERE s.repo = ? AND symbols_fts MATCH ?
+         ORDER BY bm25(symbols_fts)
+         LIMIT ?`,
+      )
+      .all(repo, ftsQuery, max);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * LIKE fallback when FTS misses (path fragments, porter-stem edge cases).
+ * @param {import('better-sqlite3').Database} db
+ * @param {string} repo
+ * @param {string[]} tokens
+ * @param {number} max
+ * @param {Set<string>} excludeIds
+ */
+function searchSymbolsLike(db, repo, tokens, max, excludeIds) {
+  if (!tokens.length || max <= 0) return [];
+  const conditions = tokens
+    .map(() => '(name LIKE ? OR file LIKE ? OR signature LIKE ?)')
+    .join(' OR ');
+  const params = [repo];
+  for (const token of tokens) {
+    const pat = `%${token}%`;
+    params.push(pat, pat, pat);
+  }
+  params.push(max + excludeIds.size);
+  const rows = db
+    .prepare(
+      `SELECT id, repo, kind, name, file, line_start, line_end, signature
+       FROM symbols
+       WHERE repo = ? AND (${conditions})
+       ORDER BY pagerank DESC, usage_count DESC
+       LIMIT ?`,
+    )
+    .all(...params);
+  const out = [];
+  for (const row of rows) {
+    if (excludeIds.has(row.id)) continue;
+    out.push(row);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+/** Known source extensions for file-path symbol resolution. */
+const CODE_FILE_EXT_RE =
+  /\.(tsx?|jsx?|mjs|cjs|vue|svelte|py|rs|go|java|kt|cs|cpp|h|hpp|fake|md)$/i;
+
+/** Heuristic: ref looks like a file path rather than a bare symbol name. */
+function looksLikeFilePath(ref) {
+  if (ref.includes('/') || ref.includes('\\')) return true;
+  return CODE_FILE_EXT_RE.test(ref);
+}
+
+/** Normalize a file path ref to posix separators. */
+function normalizeFileRef(ref) {
+  return String(ref).trim().replace(/\\/g, '/');
+}
+
+/**
+ * FTS5 + cold-index LSP fallback symbol search.
  * @param {string} query
  * @param {number} [limit]
+ * @returns {Promise<{ matches: object[], indexCold: boolean, lspError?: string, error?: string }>}
  */
 export async function findSymbol(query, limit = 20) {
   await ensureIndexFreshForQuery();
   const q = String(query ?? '').trim();
-  if (!q) return { matches: [], error: 'query is required' };
+  if (!q) return { matches: [], indexCold: false, error: 'query is required' };
   const repo = activeRepoKey();
   const db = getCodeDb(repo);
   const max = Math.min(50, Math.max(1, Math.floor(limit)));
+  const { symbolCount } = getIndexStats(db);
+  const indexCold = symbolCount === 0;
 
-  const ftsMatches = db
-    .prepare(
-      `SELECT s.id, s.repo, s.kind, s.name, s.file, s.line_start, s.line_end, s.signature
-       FROM symbols_fts f
-       JOIN symbols s ON s.id = f.symbol_id
-       WHERE symbols_fts MATCH ?
-       ORDER BY bm25(symbols_fts)
-       LIMIT ?`,
-    )
-    .all(q, max);
+  const tokens = tokenizeSymbolQuery(q);
+  const ftsQuery = buildFtsMatchQuery(tokens);
+  const ftsMatches = searchSymbolsFts(db, repo, ftsQuery, max);
 
+  /** @type {Array<Record<string, unknown>>} */
   const matches = ftsMatches.map((row) => ({ ...row, source: 'index' }));
+  const seen = new Set(matches.map((m) => m.id));
 
-  if (matches.length < max) {
-    const code = await loadBrainCodeConfig();
-    await ensureBrainLspProjectReady(getEffectiveWorkspaceRoot(), {
-      enabled: code.autoScaffoldIndexConfig !== false,
-    });
-    const { symbols, error } = await getLspWorkspaceSymbols(q);
-    const seen = new Set(matches.map((m) => m.id));
-    for (const sym of symbols ?? []) {
-      const id = `${repo}:${sym.name}`;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      matches.push({
-        id,
-        repo,
-        kind: String(sym.kind ?? 'symbol'),
-        name: sym.name,
-        file: sym.path,
-        line_start: (sym.range?.start?.line ?? 0) + 1,
-        line_end: (sym.range?.end?.line ?? sym.range?.start?.line ?? 0) + 1,
-        signature: sym.containerName ? `${sym.name} in ${sym.containerName}` : sym.name,
-        source: 'lsp',
-      });
+  if (matches.length < max && tokens.length > 0) {
+    const likeMatches = searchSymbolsLike(db, repo, tokens, max - matches.length, seen);
+    for (const row of likeMatches) {
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      matches.push({ ...row, source: 'index' });
       if (matches.length >= max) break;
-    }
-    if (matches.length === 0 && error) {
-      return { matches: [], error };
     }
   }
 
-  return { matches };
+  if (!indexCold) {
+    return { matches, indexCold: false };
+  }
+
+  let lspError;
+  const code = await loadBrainCodeConfig();
+  await ensureBrainLspProjectReady(getEffectiveWorkspaceRoot(), {
+    enabled: code.autoScaffoldIndexConfig !== false,
+  });
+  const { symbols, error } = await getLspWorkspaceSymbols(q);
+  if (error) lspError = error;
+
+  for (const sym of symbols ?? []) {
+    const id = `${repo}:${sym.name}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    matches.push({
+      id,
+      repo,
+      kind: String(sym.kind ?? 'symbol'),
+      name: sym.name,
+      file: sym.path,
+      line_start: (sym.range?.start?.line ?? 0) + 1,
+      line_end: (sym.range?.end?.line ?? sym.range?.start?.line ?? 0) + 1,
+      signature: sym.containerName ? `${sym.name} in ${sym.containerName}` : sym.name,
+      source: 'lsp',
+    });
+    if (matches.length >= max) break;
+  }
+
+  return {
+    matches,
+    indexCold: true,
+    ...(lspError ? { lspError } : {}),
+  };
 }
 
 /**
@@ -243,10 +351,27 @@ function resolveSymbolId(db, repo, symbolRef) {
   if (exact) return exact.id;
   const byName = db
     .prepare(
-      `SELECT id FROM symbols WHERE repo = ? AND name = ? ORDER BY pagerank DESC LIMIT 1`,
+      `SELECT id FROM symbols WHERE repo = ? AND name = ? ORDER BY pagerank DESC, usage_count DESC LIMIT 1`,
     )
     .get(repo, ref);
-  return byName?.id ?? null;
+  if (byName) return byName.id;
+
+  if (!looksLikeFilePath(ref)) return null;
+
+  const normPath = normalizeFileRef(ref);
+  const byExactFile = db
+    .prepare(
+      `SELECT id FROM symbols WHERE repo = ? AND file = ? ORDER BY pagerank DESC, usage_count DESC LIMIT 1`,
+    )
+    .get(repo, normPath);
+  if (byExactFile) return byExactFile.id;
+
+  const byFileSubstring = db
+    .prepare(
+      `SELECT id FROM symbols WHERE repo = ? AND file LIKE ? ORDER BY pagerank DESC, usage_count DESC LIMIT 1`,
+    )
+    .get(repo, `%${normPath}%`);
+  return byFileSubstring?.id ?? null;
 }
 
 export { reindexCode } from './indexer.js';

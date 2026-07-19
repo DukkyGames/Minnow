@@ -262,6 +262,26 @@ export function logTaskRetry(
   });
 }
 
+/**
+ * A board chat ended without calling `board_report` and was re-prompted.
+ * Distinct from {@link logTaskRetry}: no phase attempt is burned and the chat
+ * keeps its context — the task stays recoverable.
+ */
+export function logBoardReportNudge(
+  group: ChatGroup,
+  taskId: string,
+  attempt: number,
+  max: number,
+): void {
+  appendBoardLog(group, {
+    type: 'task_retry',
+    level: 'warn',
+    taskId,
+    message: `${taskId}: ended without board_report — nudge ${attempt}/${max}`,
+    detail: { attempt },
+  });
+}
+
 export function logFinalTestStarted(group: ChatGroup, chatId: string): void {
   appendBoardLog(group, {
     type: 'final_test_started',

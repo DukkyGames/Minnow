@@ -8,9 +8,9 @@ import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Chat, SessionState } from '../types';
 
-/** Expert threads and legacy Expert Lab chats stay out of the main sidebar. */
+/** Legacy Expert Lab sessions stay out of the main sidebar; expert threads are listed normally. */
 export function isSidebarVisibleChat(chat: Chat): boolean {
-  return chat.kind !== 'expert-lab' && chat.kind !== 'expert';
+  return chat.kind !== 'expert-lab';
 }
 
 /** True when the chat has unsent composer text persisted on the session row. */
@@ -71,6 +71,9 @@ export function getChatLastMessageAt(chat: Chat): number {
 /** MinnowOS Chat app id stored in `lastActiveChatIdByApp`. */
 export const CHAT_APP_ID = 'chat';
 
+/** MinnowOS desktop chat id stored in `lastActiveChatIdByApp` (separate from legacy Chat app). */
+export const DESKTOP_APP_ID = 'desktop';
+
 /** Raw session JSON from disk or API (may be schema v1 or v2). */
 export type RawSessionJson = {
   version?: number;
@@ -114,7 +117,7 @@ export function migrateSessionStateV1ToV2(
     ? parsed.chats.map((c) => coerceChat(c)).filter(Boolean)
     : [];
   const state: SessionState = {
-    version: 5,
+    version: 6,
     activeId: typeof parsed.activeId === 'string' ? parsed.activeId : '',
     sidebarCollapsed: !!parsed.sidebarCollapsed,
     lastActiveChatIdByWorkspace: ensureLastActiveMap(parsed.lastActiveChatIdByWorkspace),
@@ -254,6 +257,7 @@ export function resolveActiveAssistantChatId(
   chatsWorkspacePath: string,
   state: SessionState,
   createScopedAssistantChat: (chatsWorkspacePath: string) => Chat,
+  appId: string = CHAT_APP_ID,
 ): string {
   const key = normalizeWorkspacePath(chatsWorkspacePath);
   if (!key) {
@@ -265,7 +269,7 @@ export function resolveActiveAssistantChatId(
     return fresh.id;
   }
 
-  const remembered = getLastActiveChatIdForApp(state, CHAT_APP_ID);
+  const remembered = getLastActiveChatIdForApp(state, appId);
   if (remembered) {
     const chat = state.chats.find(
       (c) => c.id === remembered && isAssistantChat(c, key),

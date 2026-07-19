@@ -19,6 +19,9 @@ const dbCacheLru = [];
 /** Cap in-memory SQLite handles so many MRU workspaces do not leak file descriptors. */
 export const MAX_OPEN_CODE_DBS = 8;
 
+/** Bump when schema migrations require FTS rebuild or similar (stored in PRAGMA user_version). */
+export const CODE_SCHEMA_VERSION = 1;
+
 /** Absolute path for a workspace code-index database file. */
 export function codeDbPath(workspaceKey) {
   const slug = String(workspaceKey ?? '').trim() || 'workspace';
@@ -76,20 +79,51 @@ function initSchema(database) {
     CREATE INDEX IF NOT EXISTS idx_edges_dst ON edges(dst_symbol);
   `);
 
-  // FTS5 over symbol name + doc for lexical find_symbol queries.
-  const ftsTables = database
+  migrateSymbolsFts(database);
+}
+
+/** Create the FTS5 mirror with name, file path, signature, and doc columns. */
+function createSymbolsFtsTable(database) {
+  database.exec(`
+    CREATE VIRTUAL TABLE symbols_fts USING fts5(
+      symbol_id UNINDEXED,
+      name,
+      file,
+      signature,
+      doc,
+      tokenize='porter unicode61'
+    );
+  `);
+}
+
+/**
+ * Migrate legacy 2-column symbols_fts to the 5-column layout via user_version.
+ * Repopulates from the persistent symbols table — no full reindex required.
+ * @param {import('better-sqlite3').Database} database
+ */
+function migrateSymbolsFts(database) {
+  const version = database.pragma('user_version', { simple: true });
+  const ftsExists = database
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='symbols_fts'")
-    .all();
-  if (ftsTables.length === 0) {
-    database.exec(`
-      CREATE VIRTUAL TABLE symbols_fts USING fts5(
-        symbol_id UNINDEXED,
-        name,
-        doc,
-        tokenize='porter unicode61'
-      );
-    `);
+    .get();
+
+  if (version >= CODE_SCHEMA_VERSION) {
+    if (!ftsExists) createSymbolsFtsTable(database);
+    return;
   }
+
+  const tx = database.transaction(() => {
+    if (ftsExists) {
+      database.exec('DROP TABLE symbols_fts');
+    }
+    createSymbolsFtsTable(database);
+    database.exec(`
+      INSERT INTO symbols_fts (symbol_id, name, file, signature, doc)
+      SELECT id, name, file, signature, doc FROM symbols;
+    `);
+    database.pragma(`user_version = ${CODE_SCHEMA_VERSION}`);
+  });
+  tx();
 }
 
 /** Cache key combines MINNOW_HOME + workspace slug so parallel tests do not share handles. */
@@ -263,11 +297,9 @@ export function upsertSymbol(db, row) {
       usage_count = excluded.usage_count`,
   ).run(row);
   db.prepare('DELETE FROM symbols_fts WHERE symbol_id = ?').run(row.id);
-  db.prepare('INSERT INTO symbols_fts (symbol_id, name, doc) VALUES (?, ?, ?)').run(
-    row.id,
-    row.name,
-    row.doc ?? '',
-  );
+  db.prepare(
+    'INSERT INTO symbols_fts (symbol_id, name, file, signature, doc) VALUES (?, ?, ?, ?, ?)',
+  ).run(row.id, row.name, row.file, row.signature ?? '', row.doc ?? '');
 }
 
 /** Upsert a directed graph edge (calls, imports, extends, uses). */

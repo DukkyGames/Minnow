@@ -2,13 +2,11 @@
  * HTTP handlers for memory/skill synthesis and proposal review APIs.
  */
 
-import { createPage } from './store.js';
-import { slugifyFactTitle } from './synthesis.js';
 import { createUserSkill, saveUserSkillContent } from '../skills/user-skills.js';
 import { parseSkillFrontmatter } from '../skills/parse-frontmatter.js';
 import { getAppRoot } from '../workspace/root.js';
 import { loadSynthesisConfig, saveSynthesisConfig } from './synthesis-config.js';
-import { runMemorySynthesis } from './synthesis.js';
+import { runMemorySynthesis, writeSynthesisFactPage } from './synthesis.js';
 import { runSkillSynthesis } from './skill-synthesis.js';
 import { incrementMessagePairs } from './synthesis-state.js';
 import {
@@ -151,6 +149,8 @@ export async function handleSynthesisRequest(req, res, pathname) {
         typeof body.providerId === 'string' ? body.providerId.trim() : undefined;
       const explicitModelId =
         typeof body.modelId === 'string' ? body.modelId.trim() : undefined;
+      const expertId =
+        typeof body.expertId === 'string' ? body.expertId.trim() : undefined;
 
       const memoryResult = await runMemorySynthesis({
         messages,
@@ -158,6 +158,7 @@ export async function handleSynthesisRequest(req, res, pathname) {
         sourceExcerpt,
         providerId: explicitProviderId,
         modelId: explicitModelId,
+        ...(expertId ? { expertId } : {}),
       });
 
       const skillResult = await runSkillSynthesis({
@@ -182,8 +183,10 @@ export async function handleSynthesisRequest(req, res, pathname) {
     if (pathname === '/api/memory/proposals' && req.method === 'GET') {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1');
       const status = url.searchParams.get('status') ?? undefined;
+      const expertId = url.searchParams.get('expertId') ?? undefined;
       const proposals = await listMemoryProposals(
         /** @type {'pending' | 'accepted' | 'rejected' | undefined} */ (status),
+        expertId,
       );
       sendJson(res, 200, { proposals });
       return true;
@@ -223,14 +226,23 @@ export async function handleSynthesisRequest(req, res, pathname) {
         tags: body.tags,
       });
       const row = edited ?? existing;
-      const slug = slugifyFactTitle(row.title);
-      const page = await createPage({
-        relPath: `facts/${slug}.md`,
-        title: row.title,
-        body: row.body,
-        tags: row.tags,
-        source: 'agent',
-      });
+      const expertId =
+        typeof row.expertId === 'string' ? row.expertId.trim() : '';
+      const writeOpts = { source: 'agent' };
+      if (expertId && /^[a-z][a-z0-9-]{0,63}$/.test(expertId)) {
+        writeOpts.dir = `experts/${expertId}/facts`;
+      }
+      const { page } = await writeSynthesisFactPage(
+        {
+          title: row.title,
+          body: row.body,
+          tags: row.tags,
+          category: row.category,
+          scope: row.scope,
+        },
+        [],
+        writeOpts,
+      );
       await updateMemoryProposalStatus(id, 'accepted');
       sendJson(res, 200, { ok: true, entry: pageMetaToEntry(page.meta), proposalId: id });
       return true;

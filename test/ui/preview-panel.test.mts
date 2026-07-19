@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { resolvePreviewLoadUrl, workspacePreviewUrl } from '../../src/ui/preview-panel.ts';
+import { resolvePreviewLoadUrl, workspacePreviewUrl } from '../../src/ui/preview-load-url.ts';
 
 describe('preview panel helpers', () => {
   test('workspacePreviewUrl encodes path segments', () => {
@@ -15,6 +15,17 @@ describe('preview panel helpers', () => {
     assert.equal(
       workspacePreviewUrl('app.js', 12345),
       '/api/preview/file/app.js?v=12345',
+    );
+  });
+
+  test('workspacePreviewUrl adds workspaceRoot query', () => {
+    assert.equal(
+      workspacePreviewUrl('note.txt', undefined, 'C:/Users/me/.minnow/workspace'),
+      '/api/preview/file/note.txt?workspaceRoot=C%3A%2FUsers%2Fme%2F.minnow%2Fworkspace',
+    );
+    assert.equal(
+      workspacePreviewUrl('app.js', 9, 'C:/alt'),
+      '/api/preview/file/app.js?v=9&workspaceRoot=C%3A%2Falt',
     );
   });
 

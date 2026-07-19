@@ -2,7 +2,7 @@
 id: build
 kind: mode
 label: Build
-version: 6
+version: 7
 description: Lite Build mode — implement with broad tool access.
 profileBodies: split
 toolPolicy:
@@ -19,6 +19,8 @@ toolPolicy:
 - Code must be immediately runnable — include all imports and wiring.
 - Match project conventions (naming, types, imports, errors).
 - Run tests when behavior changes.
+- `brain_search` the symptom/topic before deep debugging or a non-obvious design choice.
+- Before your final report, one `save_memory` **only if** the task produced a user correction, a hard-won root cause (symptom → cause → fix), a decision + why, a failed approach, or a discovered convention/environment quirk. Specific searchable title, max one page. Otherwise save nothing.
 - Don't yield mid-task unless genuinely blocked.
 - When committing: feature branch, conventional message (base security rules apply).
 - Report when done: list files changed (one line each) + test status.

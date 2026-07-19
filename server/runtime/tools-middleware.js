@@ -7,7 +7,12 @@ import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { COMMAND_TIMEOUT_MS, formatProcessOutput, runProcess } from '../process-runner.js';
-import { DEFAULT_MAX_OUTPUT_CHARS, capReadFileOutput } from '../tools/output-cap.js';
+import {
+  DEFAULT_MAX_OUTPUT_CHARS,
+  MAX_READ_FILE_BYTES,
+  capReadFileOutput,
+  capTextOutput,
+} from '../tools/output-cap.js';
 import { truncateGitDiff } from '../tools/git-diff-truncate.js';
 import {
   createBackgroundRun,
@@ -109,7 +114,7 @@ import {
   readHeuristicFileSnapshot,
   resolveExecuteCommandCodeChange,
 } from '../tools/workspace-change-snapshot.js';
-import { runGrepSearch } from '../tools/grep.js';
+import { runFindFilesSearch, runGrepSearch } from '../tools/grep.js';
 import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
 import { getAppRoot, getWorkspaceRoot } from '../workspace/root.js';
 import { wrapServerToolResult } from '../security/untrusted.js';
@@ -263,11 +268,19 @@ async function toolListDirectory(args) {
   return lines.length ? lines.join('\n') : '(empty directory)';
 }
 
+/** Human-readable megabyte figure for size-guard messages. */
+function formatMb(bytes) {
+  return `${(bytes / (1024 * 1024)).toFixed(0)}MB`;
+}
+
 async function toolReadFile(args) {
   const filePath = resolveSafePath(args?.path);
   const stat = await fs.stat(filePath);
   if (!stat.isFile()) {
     return `Error: "${args.path}" is not a file`;
+  }
+  if (stat.size > MAX_READ_FILE_BYTES) {
+    return `Error: file is ${formatMb(stat.size)} (limit ${formatMb(MAX_READ_FILE_BYTES)}). Use grep to search it or read_file_range for a bounded line range.`;
   }
   const content = await fs.readFile(filePath, 'utf8');
   const rel = toRelativePath(filePath);
@@ -284,6 +297,27 @@ async function readUtf8OrEmpty(filePath) {
     if (code === 'ENOENT') return '';
     throw err;
   }
+}
+
+/**
+ * Skip computing line-diff stats for files above this size. Reading a multi-GB or binary
+ * file into memory as UTF-8 just to count added/removed lines wastes memory and produces
+ * garbage stats; move/copy/delete stay correct, they just omit the codeChange payload.
+ */
+const MAX_DIFF_STAT_BYTES = 5 * 1024 * 1024;
+
+/** File size in bytes, or null when the path is missing/unstatable. */
+async function statSizeOrNull(filePath) {
+  try {
+    return (await fs.stat(filePath)).size;
+  } catch {
+    return null;
+  }
+}
+
+/** True when a size (null = missing) is small enough to diff as text. */
+function isDiffableSize(size) {
+  return size === null || size <= MAX_DIFF_STAT_BYTES;
 }
 
 /** Attach codeChange when line stats are non-zero. */
@@ -309,12 +343,21 @@ async function toolReadFileRange(args) {
   if (!Number.isInteger(startLine) || !Number.isInteger(endLine) || startLine < 1 || endLine < startLine) {
     return 'Error: start_line and end_line must be valid integers (1-based, start <= end)';
   }
+  const stat = await fs.stat(filePath);
+  if (stat.size > MAX_READ_FILE_BYTES) {
+    return `Error: file is ${formatMb(stat.size)} (limit ${formatMb(MAX_READ_FILE_BYTES)}). Use grep to locate specific content instead.`;
+  }
   const content = await fs.readFile(filePath, 'utf8');
   const lines = content.split(/\r?\n/);
   const slice = lines.slice(startLine - 1, endLine);
-  return slice
-    .map((line, idx) => `${startLine + idx}: ${line}`)
-    .join('\n');
+  const rendered = slice.map((line, idx) => `${startLine + idx}: ${line}`).join('\n');
+  // Cap total output but keep a high per-line ceiling so a legitimate long-line range
+  // is not chopped at 400 chars.
+  const { text } = capTextOutput(rendered, {
+    maxLineChars: DEFAULT_MAX_OUTPUT_CHARS,
+    footerHint: 'request a smaller line range',
+  });
+  return text;
 }
 
 async function toolSaveFile(args) {
@@ -344,7 +387,12 @@ async function toolSaveFile(args) {
   await fs.writeFile(filePath, normalizedContent, 'utf8');
   const eolNote =
     converted && eol ? `, preserved ${eol === '\r\n' ? 'CRLF' : 'LF'} line endings` : '';
-  const message = `Saved ${rel} (${normalizedContent.length} bytes${eolNote})`;
+  // Signal a blind overwrite so the model notices it replaced existing content (it may
+  // not have read the file first).
+  const overwriteNote = before
+    ? `, overwrote ${countLinesInText(before)} existing line(s)`
+    : '';
+  const message = `Saved ${rel} (${normalizedContent.length} bytes${eolNote}${overwriteNote})`;
   return withCodeChange(message, codeChangeFromDiff(before, normalizedContent, rel));
 }
 
@@ -459,6 +507,14 @@ async function toolReplaceTextInFile(args) {
     const hint = result.hint ?? 'No occurrences of search text';
     return `${hint} in ${rel}`;
   }
+  // Optional safety check: refuse the edit when the match count differs from what the
+  // caller expected, so an over-broad search string does not silently rewrite N sites.
+  if (args?.expected_count !== undefined && args?.expected_count !== null) {
+    const expected = Number(args.expected_count);
+    if (Number.isInteger(expected) && expected >= 0 && result.count !== expected) {
+      return `Error: expected ${expected} occurrence(s) but found ${result.count} in ${rel}. No changes written — refine the search text or set expected_count=${result.count}.`;
+    }
+  }
   const after = result.output;
   await fs.writeFile(filePath, after, 'utf8');
   const modeSuffix = matchModeLabel(result.mode);
@@ -469,27 +525,21 @@ async function toolReplaceTextInFile(args) {
 }
 
 async function toolSearchInFile(args) {
-  const filePath = resolveSafePath(args?.path);
   const pattern = args?.pattern;
   if (!pattern || typeof pattern !== 'string') {
     return 'Error: pattern is required';
   }
-  let regex;
-  try {
-    regex = new RegExp(pattern);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return `Error: invalid regex: ${message}`;
-  }
-  const content = await fs.readFile(filePath, 'utf8');
-  const lines = content.split(/\r?\n/);
-  const matches = [];
-  lines.forEach((line, idx) => {
-    if (line.match(regex)) {
-      matches.push(`${idx + 1}: ${line}`);
-    }
-  });
-  return matches.length ? matches.join('\n') : `No matches in ${toRelativePath(filePath)}`;
+  // Route through ripgrep (subprocess, linear-time Rust regex) instead of running a
+  // model-supplied regex per line on the event loop — a catastrophic-backtracking
+  // pattern would otherwise freeze the whole host. Also inherits grep's output caps.
+  return runGrepSearch(
+    { pattern, path: args?.path, output_mode: 'content' },
+    {
+      resolveSafePath,
+      toRelativePath,
+      getWorkspaceRoot: getEffectiveWorkspaceRoot,
+    },
+  );
 }
 
 async function toolGrep(args) {
@@ -510,21 +560,49 @@ async function toolMoveFile(args) {
   const source = resolveSafePath(args?.source);
   const destination = resolveSafePath(args?.destination, { write: true });
   const destRel = toRelativePath(destination);
-  const destBefore = await readUtf8OrEmpty(destination);
+
+  const srcSize = await statSizeOrNull(source);
+  const destSize = await statSizeOrNull(destination);
+  const canDiff = isDiffableSize(srcSize) && isDiffableSize(destSize);
+
+  let destBefore = '';
   let sourceContent = '';
-  try {
-    const srcStat = await fs.stat(source);
-    if (srcStat.isFile()) {
-      sourceContent = await fs.readFile(source, 'utf8');
+  if (canDiff) {
+    destBefore = await readUtf8OrEmpty(destination);
+    try {
+      const srcStat = await fs.stat(source);
+      if (srcStat.isFile()) {
+        sourceContent = await fs.readFile(source, 'utf8');
+      }
+    } catch {
+      /* Non-file or missing source — stats omitted below. */
     }
-  } catch {
-    /* Non-file or missing source — stats omitted below. */
   }
+
+  const finish = () => {
+    const message = `Moved ${toRelativePath(source)} -> ${destRel}`;
+    return canDiff
+      ? withCodeChange(message, codeChangeFromDiff(destBefore, sourceContent, destRel))
+      : message;
+  };
+
   await fs.mkdir(path.dirname(destination), { recursive: true });
   try {
     await fs.rename(source, destination);
   } catch (err) {
     const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : '';
+    if (code === 'EXDEV') {
+      // Cross-device move (e.g. C: -> D: on Windows): rename cannot span volumes,
+      // so fall back to copy + remove.
+      try {
+        await fs.cp(source, destination, { recursive: true, force: true });
+        await fs.rm(source, { recursive: true, force: true });
+      } catch (copyErr) {
+        const msg = copyErr instanceof Error ? copyErr.message : String(copyErr);
+        return `Error: cross-device move failed (${msg})`;
+      }
+      return finish();
+    }
     if (code === 'EBUSY' || code === 'EPERM') {
       const hint =
         code === 'EBUSY'
@@ -534,8 +612,7 @@ async function toolMoveFile(args) {
     }
     throw err;
   }
-  const message = `Moved ${toRelativePath(source)} -> ${destRel}`;
-  return withCodeChange(message, codeChangeFromDiff(destBefore, sourceContent, destRel));
+  return finish();
 }
 
 async function toolCopyFile(args) {
@@ -546,12 +623,16 @@ async function toolCopyFile(args) {
     return `Error: source "${args.source}" is not a file (use move for directories)`;
   }
   const destRel = toRelativePath(destination);
-  const destBefore = await readUtf8OrEmpty(destination);
-  const sourceContent = await fs.readFile(source, 'utf8');
+  const destSize = await statSizeOrNull(destination);
+  const canDiff = isDiffableSize(stat.size) && isDiffableSize(destSize);
+  const destBefore = canDiff ? await readUtf8OrEmpty(destination) : '';
+  const sourceContent = canDiff ? await fs.readFile(source, 'utf8') : '';
   await fs.mkdir(path.dirname(destination), { recursive: true });
   await fs.copyFile(source, destination);
   const message = `Copied ${toRelativePath(source)} -> ${destRel}`;
-  return withCodeChange(message, codeChangeFromDiff(destBefore, sourceContent, destRel));
+  return canDiff
+    ? withCodeChange(message, codeChangeFromDiff(destBefore, sourceContent, destRel))
+    : message;
 }
 
 /** Max bytes for UI drag-import (matches client attachment cap). */
@@ -592,6 +673,11 @@ async function toolDeletePath(args) {
     await fs.rm(target, { recursive: true, force: true });
     return `Deleted ${rel}`;
   }
+  if (stat.size > MAX_DIFF_STAT_BYTES) {
+    // Too large to load for line-diff stats — delete without the codeChange payload.
+    await fs.unlink(target);
+    return `Deleted ${rel}`;
+  }
   const content = await fs.readFile(target, 'utf8');
   const deletions = countLinesInText(content);
   const { lines, truncated } = buildRemoveOnlyDiffLines(content);
@@ -625,7 +711,25 @@ async function toolFindFiles(args) {
       ? null
       : tryResolveReefWidgetsFindRoot(pattern, args?.path ?? '.');
   const reefRoot = reefModulesRoot ?? reefArtifactsRoot ?? reefWidgetsRoot;
-  const root = reefRoot ?? resolveSafePath(args?.path ?? '.');
+
+  // Normal workspace: use ripgrep's file walker — respects .gitignore (so node_modules
+  // and build output do not eat the result budget), skips .git, and tolerates unreadable
+  // directories instead of aborting the whole call.
+  if (!reefRoot) {
+    return runFindFilesSearch(
+      args,
+      {
+        resolveSafePath,
+        toRelativePath,
+        getWorkspaceRoot: getEffectiveWorkspaceRoot,
+      },
+      { maxResults: FIND_FILES_MAX },
+    );
+  }
+
+  // Reef roots live outside the workspace and may not be git repositories, so walk them
+  // directly. The tree is small and curated; just tolerate unreadable directories.
+  const root = reefRoot;
   const patternNorm = pattern.replace(/\\/g, '/');
   const matcher = globToRegExp(
     reefModulesRoot && patternNorm.includes('reef/modules')
@@ -641,14 +745,9 @@ async function toolFindFiles(args) {
     ? '@minnow/reef/modules'
     : reefArtifactsRoot
       ? '@minnow/reef/artifacts'
-      : reefWidgetsRoot
-        ? '@minnow/reef/widgets'
-        : toRelativePath(root);
+      : '@minnow/reef/widgets';
 
   function formatMatch(absPath) {
-    if (!reefRoot) {
-      return toRelativePath(absPath).replace(/\\/g, '/');
-    }
     const rel = path.relative(reefRoot, absPath).replace(/\\/g, '/');
     if (reefModulesRoot) {
       return rel ? `@minnow/reef/modules/${rel}` : '@minnow/reef/modules';
@@ -663,7 +762,12 @@ async function toolFindFiles(args) {
     if (matches.length >= FIND_FILES_MAX) {
       return;
     }
-    const entries = await fs.readdir(currentDir, { withFileTypes: true });
+    let entries;
+    try {
+      entries = await fs.readdir(currentDir, { withFileTypes: true });
+    } catch {
+      return; // skip unreadable directories instead of failing the whole call
+    }
     for (const ent of entries) {
       if (matches.length >= FIND_FILES_MAX) {
         break;
@@ -700,7 +804,18 @@ async function toolGetFileMetadata(args) {
   ];
   if (stat.isFile() && stat.size > 0) {
     try {
-      const sample = await fs.readFile(target, 'utf8');
+      // Sample only the first 64KB for EOL detection — reading a whole large/binary file
+      // into memory just to classify line endings is wasteful.
+      const sampleBytes = Math.min(stat.size, 64 * 1024);
+      const handle = await fs.open(target, 'r');
+      let sample;
+      try {
+        const buffer = Buffer.alloc(sampleBytes);
+        await handle.read(buffer, 0, sampleBytes, 0);
+        sample = buffer.toString('utf8');
+      } finally {
+        await handle.close();
+      }
       const crlf = (sample.match(/\r\n/g) || []).length;
       const lf = (sample.match(/(?<!\r)\n/g) || []).length;
       if (crlf === 0 && lf === 0) {
@@ -776,7 +891,8 @@ async function toolGitAdd(args) {
   if (!Array.isArray(paths) || paths.length === 0) {
     return 'Error: paths array is required';
   }
-  return runGit(['add', ...paths.map(String)]);
+  // `--` stops a path like "--force" or "-A" from being parsed as a git flag.
+  return runGit(['add', '--', ...paths.map(String)]);
 }
 
 async function toolGitCommit(args) {
@@ -797,7 +913,21 @@ async function toolGitCheckout(args) {
   if (!branch || typeof branch !== 'string') {
     return 'Error: branch is required';
   }
+  // A ref name starting with "-" would be parsed as a git flag (e.g. -f, --detach).
+  // Git ref names cannot legally start with "-", so reject rather than smuggle a flag.
+  if (branch.startsWith('-')) {
+    return `Error: invalid branch name "${branch}" (cannot start with "-")`;
+  }
   const gitArgs = args?.create ? ['checkout', '-b', branch] : ['checkout', branch];
+  return runGit(gitArgs);
+}
+
+async function toolGitBranch(args) {
+  const gitArgs = ['branch', '--no-color'];
+  if (args?.all === true) {
+    gitArgs.push('--all');
+  }
+  gitArgs.push('--sort=-committerdate');
   return runGit(gitArgs);
 }
 
@@ -1143,6 +1273,7 @@ const SERVER_TOOL_HANDLERS = {
   git_add: toolGitAdd,
   git_commit: toolGitCommit,
   git_checkout: toolGitCheckout,
+  git_branch: toolGitBranch,
   execute_command: toolExecuteCommand,
   read_command_log: toolReadCommandLog,
   list_running_commands: toolListRunningCommands,

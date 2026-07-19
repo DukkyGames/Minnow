@@ -4,7 +4,10 @@
  */
 
 import { findLastPlanSavePath } from '../chat/orchestrate/plan-from-history';
-import { mountPlanPreviewContent } from '../chat/orchestrate/plan-preview';
+import {
+  mountPlanPreviewContent,
+  readPlanArtifactMarkdown,
+} from '../chat/orchestrate/plan-preview';
 import {
   isExecutableOrchestratePlan,
 } from '../chat/orchestrate/plan-path';
@@ -35,6 +38,7 @@ import { stopGeneration } from '../chat/stop-generation';
 import {
   findChatById,
   getActiveChat,
+  scheduleSaveSessions,
   sessionState,
 } from '../state/sessions';
 import type { Chat } from '../types';
@@ -42,7 +46,7 @@ import {
   buildHistoryUserContent,
   runChatTurn,
 } from '../tools/loop';
-import { detectLocalServer, executeTool } from '../tools/client';
+import { detectLocalServer } from '../tools/client';
 import { setChatMode } from './mode-selector';
 import { teardownHub } from './hub';
 import {
@@ -53,6 +57,8 @@ import {
 } from './orchestrate-hub';
 import { shortPlanLabel } from './orchestrate-plan-picker';
 import { launchBoardFromPlan } from './orchestrate-launch';
+import { applyComposerDraftForChat, persistComposerDraftOnChat } from './composer-draft';
+import { getActiveComposerSurface } from './composer-surface';
 import { createChatWithMode, switchChat } from './sidebar';
 import { renderChatFromHistory } from './messages';
 import {
@@ -132,18 +138,6 @@ let superPlanUnsubscribe: (() => void) | null = null;
 let planProgressPanel: PlanProgressPanel | null = null;
 let planActivitySession: ResearchActivitySession | null = null;
 let planActivityCollector: PlanActivityCollector | null = null;
-
-/** Read a plan or build-spec artifact for the plan screen preview panel. */
-async function readPlanScreenArtifactMarkdown(path: string): Promise<string> {
-  const trimmed = path.trim();
-  if (!trimmed) return '';
-  try {
-    const result = await executeTool('read_file', { path: trimmed });
-    return result.content;
-  } catch {
-    return '';
-  }
-}
 
 function ensureStreamEndListener(): void {
   if (streamEndUnsubscribe) return;
@@ -635,7 +629,7 @@ async function syncPlanScreenFromSuperPlan(chat: Chat): Promise<void> {
       refreshSuspendedPlanBanner(chat);
       return;
     }
-    const previewMarkdown = specPath ? await readPlanScreenArtifactMarkdown(specPath) : '';
+    const previewMarkdown = specPath ? await readPlanArtifactMarkdown(specPath) : '';
     renderOrchestratePlanScreen({
       phase: 'spec_confirm',
       chatId: chat.id,
@@ -659,7 +653,7 @@ async function syncPlanScreenFromSuperPlan(chat: Chat): Promise<void> {
       return;
     }
     const previewMarkdown = planPath
-      ? await readPlanScreenArtifactMarkdown(planPath)
+      ? await readPlanArtifactMarkdown(planPath)
       : '';
     renderOrchestratePlanScreen({
       phase: 'preview',
@@ -747,13 +741,7 @@ async function onPlanSessionStreamEnd(chatId: string): Promise<void> {
 
   const planPath = findLastPlanSavePath(chat.history);
   if (planPath) {
-    let previewMarkdown = '';
-    try {
-      const result = await executeTool('read_file', { path: planPath });
-      previewMarkdown = result.content;
-    } catch {
-      previewMarkdown = '';
-    }
+    const previewMarkdown = await readPlanArtifactMarkdown(planPath);
     if (planSession) {
       planSession.planPath = planPath;
       planSession.phase = 'preview';
@@ -876,36 +864,52 @@ function suspendToViewChat(chat: Chat): void {
   }
 }
 
+/** Composer draft prefilled when opening a new Plan chat to revise an existing artifact. */
+export function buildRevisePlanComposerDraft(planPath: string, savedPrompt?: string): string {
+  const trimmed = planPath.trim();
+  let draft = `Revise the plan at ${trimmed}:\n\n`;
+  const saved = savedPrompt?.trim();
+  if (saved) {
+    draft += `(Original planning request: ${saved})\n`;
+  }
+  return draft;
+}
+
+/** Tear down the preview screen and open a normal Plan chat with an editable revise draft. */
+function startRevisePlanFromPath(
+  planPath: string,
+  options: { savedPrompt?: string } = {},
+): void {
+  const trimmed = planPath.trim();
+  if (!trimmed) return;
+
+  teardownOrchestratePlanScreen();
+
+  const created = createChatWithMode({
+    modeId: 'plan',
+    orchestratePlanPath: trimmed,
+  });
+  if (!created.ok || !created.chatId || !sessionState) return;
+
+  const chat = sessionState.chats.find((c) => c.id === created.chatId);
+  if (!chat) return;
+
+  const draft = buildRevisePlanComposerDraft(trimmed, options.savedPrompt);
+  persistComposerDraftOnChat(chat, draft);
+  applyComposerDraftForChat(chat);
+  scheduleSaveSessions();
+  getActiveComposerSurface().inputEl?.focus();
+}
+
 function buildPlanPreviewActionHandlers(
   opts: RenderOrchestratePlanScreenOptions,
   planPath: string,
 ): import('./plan-progress-screen').PlanPreviewActionHandlers {
-  const chat = findChatById(opts.chatId);
-  const isSuperPlan = normalizeModeId(chat?.modeId) === 'super-plan';
-
   return {
     onRevise: () => {
-      if (!chat) return;
-      if (isSuperPlan) {
-        if (planSession) planSession.phase = 'super-plan-working';
-        renderOrchestratePlanScreen({
-          phase: 'super-plan-working',
-          chatId: opts.chatId,
-          savedPrompt: opts.savedPrompt,
-        });
-        void resumeSuperPlanAfterUser(chat, 'revise');
-        return;
-      }
+      if (!planPath.trim()) return;
       const saved = opts.savedPrompt?.trim() ?? planSession?.savedPrompt?.trim();
-      if (saved) {
-        void startPlanningFromPrompt(saved);
-        return;
-      }
-      renderOrchestratePlanScreen({
-        phase: 'prompt',
-        chatId: opts.chatId,
-        savedPrompt: opts.savedPrompt,
-      });
+      void startRevisePlanFromPath(planPath, { savedPrompt: saved });
     },
     onStartOrchestrator: () => {
       if (planPath) openBoardWithPlan(planPath);
@@ -918,9 +922,6 @@ function buildPlanPreviewActionHandlers(
         orchestratePlanPath: planPath,
         initialUserMessage: `Implement the plan at ${planPath}.`,
       });
-    },
-    onClose: () => {
-      teardownOrchestratePlanScreen();
     },
   };
 }
@@ -1611,7 +1612,7 @@ export function showOrchestratePlanScreenSuspendedBanner(
         (session.phase === 'preview' || session.phase === 'spec_confirm') &&
         session.planPath
       ) {
-        previewMarkdown = await readPlanScreenArtifactMarkdown(session.planPath);
+        previewMarkdown = await readPlanArtifactMarkdown(session.planPath);
       }
       session.planScreenSuspended = false;
       renderOrchestratePlanScreen({

@@ -3,14 +3,16 @@
  */
 
 import { PLACEHOLDER_CHAT_NAME } from '../constants';
-import { mountPlanPreviewContent } from '../chat/orchestrate/plan-preview';
+import {
+  mountPlanPreviewContent,
+  readPlanArtifactMarkdown,
+} from '../chat/orchestrate/plan-preview';
 import {
   boardSetupStatusLabel,
 } from '../chat/orchestrate/board-setup';
 import {
   isExecutableOrchestratePlan,
 } from '../chat/orchestrate/plan-path';
-import { executeTool } from '../tools/client';
 import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
 import { normalizeModeId } from '../chat/modes/types';
 import {
@@ -78,9 +80,9 @@ export async function refreshOrchestrateHubPlanPreview(
   elements.previewMount.appendChild(loading);
 
   try {
-    const result = await executeTool('read_file', { path: trimmed });
+    const markdown = await readPlanArtifactMarkdown(trimmed);
     if (requestId !== hubPlanPreviewRequestId) return;
-    mountPlanPreviewContent(elements.previewMount, result.content, { modeId: 'plan' });
+    mountPlanPreviewContent(elements.previewMount, markdown, { modeId: 'plan' });
   } catch {
     if (requestId !== hubPlanPreviewRequestId) return;
     elements.previewMount.replaceChildren();

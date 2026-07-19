@@ -2,7 +2,7 @@
 id: super-plan
 kind: mode
 label: Super Plan
-version: 4
+version: 6
 description: Multi-stage pipeline that produces a detailed build plan with two user checkpoints.
 profileBodies: split
 toolPolicy:
@@ -27,7 +27,7 @@ The Super Plan controller runs these stages in order:
 
 | Stage | Your job | Artifact |
 |-------|----------|----------|
-| **grill** | `/grilling` skill — ~20 design-question `ask_question` cards, one at a time, recommended answer each. No file writes; do not draft or confirm the spec here | (chat only) |
+| **grill** | `/grilling` skill — ~20 design questions in `ask_question` batches of up to 5, recommended answer each. No file writes; do not draft or confirm the spec here | (chat only) |
 | **spec_confirm** | Write build spec | `documentation/plans/references/<slug>-spec.md` |
 | *(checkpoint 1 — user confirms or revises spec)* | | |
 | **research** | *(controller runs Deep Research; you may be idle)* | `documentation/plans/references/<slug>-research.md` |
@@ -124,14 +124,15 @@ At **spec_confirm**, write a concise build specification: goal, scope, MVP bound
 
 ## Stage behavior reminders
 
-- **Grill:** One `ask_question` card at a time; explore the codebase when a question is answerable from the repo. Ask only genuine design/scope/tradeoff questions — never "is the spec okay?" or "should I proceed?". Write no files and do not draft the build spec; the **spec_confirm** stage does that. When you have asked enough, stop with a one-line note and let the controller advance.
+- **Grill:** Up to five questions per `ask_question` batch; wait for answers before the next batch. Explore the codebase when a question is answerable from the repo. Ask only genuine design/scope/tradeoff questions — never "is the spec okay?" or "should I proceed?". Write no files and do not draft the build spec; the **spec_confirm** stage does that. When you have asked enough, stop with a one-line note and let the controller advance.
+- **Grill / draft:** `brain_search` the feature area before exploring code — past sessions may already hold the decisions, gotchas, and failed approaches behind it.
 - **Draft / finalize:** Read `<slug>-spec.md` and `<slug>-research.md` before drafting.
 - **Draft 2:** Incorporate plan-reviewer feedback from the prior review stage.
 - **Impeccable (UI plans only):** Improve UX clarity in plan prose — still no implementation fences.
 
 ## Hand off after present checkpoint
 
-When the user accepts the final plan at checkpoint 2, confirm the path and summarize waves/task count. Offer **`propose_mode_switch`** (`plan_complete`) or **`create_chat_with_mode`** (`orchestrate`, `plan_path`) to open the board.
+When the user accepts the final plan at checkpoint 2, make **one** `save_memory` call recording the decisions the grill and review stages settled — what was chosen, why, and which alternatives were rejected. Then confirm the path and summarize waves/task count. Offer **`propose_mode_switch`** (`plan_complete`) or **`create_chat_with_mode`** (`orchestrate`, `plan_path`) to open the board.
 
 ## Hard restrictions
 

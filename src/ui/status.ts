@@ -3,6 +3,7 @@ import { closeMobileFileSidebar } from './file-layout';
 import { closeMobileSidebar } from './layout';
 import { closeModelSelectMenu } from './model-select-picker';
 import { closeSubAgentDrawer } from './sub-agent-drawer';
+import { closeGoalEvalDrawer } from './goal-eval-drawer';
 import { closeBoardTimelineDrawer } from './board-timeline-drawer';
 
 /** Legacy settings field; when #serverUrl is absent, default LM Studio port for Vite-only mode. */
@@ -69,6 +70,7 @@ export function setReadyStatus(): void {
 export function dismissOpenLayers(): void {
   closeModelSelectMenu();
   closeSubAgentDrawer();
+  closeGoalEvalDrawer();
   closeBoardTimelineDrawer();
   void import('./code-brain-map').then((m) => {
     if (m.isCodeBrainMapOpen()) m.closeCodeBrainMap();

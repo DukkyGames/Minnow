@@ -19,7 +19,7 @@ import {
 
 const PLACEHOLDER_CHAT_NAME = 'New chat';
 const MAX_CHATS = 50;
-const SESSION_SCHEMA_VERSION = 5;
+const SESSION_SCHEMA_VERSION = 6;
 const MAX_GOAL_CONDITION_CHARS = 4000;
 
 /** Normalize workspace paths for stable keys (mirror src/lib/normalize-workspace-path.ts). */
@@ -82,6 +82,73 @@ function ensureExpertSelection(raw) {
       ? row.expertId.trim()
       : null;
   return { mode, expertId };
+}
+
+/** Coerce expert runtime snapshot (mirror src/state/sessions.ts ensureExpertRuntime). */
+function ensureExpertRuntime(raw) {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const row = /** @type {Record<string, unknown>} */ (raw);
+  const modelId = typeof row.modelId === 'string' ? row.modelId : '';
+  const modeId = normalizeModeId(typeof row.modeId === 'string' ? row.modeId : undefined);
+  const toolDenylist = Array.isArray(row.toolDenylist)
+    ? row.toolDenylist.filter((t) => typeof t === 'string')
+    : [];
+  const enabledToolNames = Array.isArray(row.enabledToolNames)
+    ? row.enabledToolNames.filter((t) => typeof t === 'string')
+    : [];
+  const warnings = Array.isArray(row.warnings)
+    ? row.warnings.filter((t) => typeof t === 'string')
+    : [];
+  const toolAllowlist =
+    row.toolAllowlist === null
+      ? null
+      : Array.isArray(row.toolAllowlist)
+        ? row.toolAllowlist.filter((t) => typeof t === 'string')
+        : null;
+  return {
+    ...(typeof row.providerId === 'string' && row.providerId.trim()
+      ? { providerId: row.providerId.trim() }
+      : {}),
+    modelId,
+    modeId,
+    toolAllowlist,
+    toolDenylist,
+    enabledToolNames,
+    memoryEnabled: row.memoryEnabled !== false,
+    warnings,
+    profileSource: row.profileSource === 'override' ? 'override' : 'inherit',
+  };
+}
+
+/** Experts overhaul: expertId + runtime snapshot; drop legacy picker (mirror src/state/sessions.ts). */
+function migrateSessionV5ToV6(state) {
+  for (const chat of state.chats) {
+    const selection = chat.expertSelection;
+    if (chat.kind === 'expert') {
+      if (
+        !chat.expertId?.trim() &&
+        selection?.mode === 'manual' &&
+        selection.expertId?.trim()
+      ) {
+        chat.expertId = selection.expertId.trim();
+      }
+      if (!chat.expertRuntime) {
+        chat.expertRuntime = {
+          ...(chat.providerId?.trim() ? { providerId: chat.providerId.trim() } : {}),
+          modelId: chat.modelId ?? '',
+          modeId: normalizeModeId(chat.modeId),
+          toolAllowlist: null,
+          toolDenylist: [],
+          enabledToolNames: [],
+          memoryEnabled: true,
+          warnings: [],
+          profileSource: 'inherit',
+        };
+      }
+    }
+    delete chat.expertSelection;
+  }
+  state.version = SESSION_SCHEMA_VERSION;
 }
 
 function newChatId() {
@@ -705,8 +772,6 @@ function ensureChatShape(raw) {
       workspacePath: '',
       modelId: '',
       modeId: DEFAULT_MODE_ID,
-      expertSelection: defaultExpertSelection(),
-      lastResolvedExpertId: null,
       history: [],
       lastStats: null,
       modelInfo: {},
@@ -743,6 +808,7 @@ function ensureChatShape(raw) {
       : undefined;
   const activeGoal = ensureActiveGoal(row.activeGoal);
   const superPlan = ensureSuperPlanPersisted(row.superPlan);
+  const expertRuntime = ensureExpertRuntime(row.expertRuntime);
 
   return {
     id: typeof row.id === 'string' && row.id ? row.id : newChatId(),
@@ -758,7 +824,9 @@ function ensureChatShape(raw) {
     modeId: normalizeModeId(
       typeof row.modeId === 'string' ? row.modeId : undefined,
     ),
-    expertSelection: ensureExpertSelection(row.expertSelection),
+    ...(row.expertSelection && typeof row.expertSelection === 'object'
+      ? { expertSelection: ensureExpertSelection(row.expertSelection) }
+      : {}),
     ...(orchestratePlanPath ? { orchestratePlanPath } : {}),
     ...(typeof row.groupId === 'string' && row.groupId.trim()
       ? { groupId: row.groupId.trim() }
@@ -788,6 +856,12 @@ function ensureChatShape(raw) {
     ...(currentGenerationId ? { currentGenerationId } : {}),
     ...(activeGoal ? { activeGoal } : {}),
     ...(superPlan ? { superPlan } : {}),
+    ...(row.kind === 'expert' ? { kind: 'expert' } : {}),
+    ...(row.kind === 'expert-lab' ? { kind: 'expert-lab' } : {}),
+    ...(typeof row.expertId === 'string' && row.expertId.trim()
+      ? { expertId: row.expertId.trim() }
+      : {}),
+    ...(expertRuntime ? { expertRuntime } : {}),
     ...(row.unread === true ? { unread: true } : {}),
     ...(typeof row.lastAssistantAt === 'number' &&
     Number.isFinite(row.lastAssistantAt) &&
@@ -840,7 +914,14 @@ export function validateSessionState(raw) {
 
   const parsed = /** @type {Record<string, unknown>} */ (raw);
   const version = parsed.version;
-  if (version !== 1 && version !== 2 && version !== 3 && version !== 4 && version !== 5) {
+  if (
+    version !== 1 &&
+    version !== 2 &&
+    version !== 3 &&
+    version !== 4 &&
+    version !== 5 &&
+    version !== 6
+  ) {
     throw new Error('Invalid session version');
   }
 
@@ -876,6 +957,10 @@ export function validateSessionState(raw) {
 
   if (!state.chats.length) {
     throw new Error('Session must have at least one chat');
+  }
+
+  if (version < SESSION_SCHEMA_VERSION) {
+    migrateSessionV5ToV6(state);
   }
 
   return state;
@@ -1936,17 +2021,23 @@ export function mergeConfigMeta(existing, patch) {
       base.editorAiCompletion && typeof base.editorAiCompletion === 'object'
         ? { .../** @type {Record<string, unknown>} */ (base.editorAiCompletion) }
         : {
-            enabled: false,
+            enabled: true,
             debounceMs: 450,
             maxPrefixLines: 80,
             maxSuffixLines: 40,
             maxPrefixChars: 6000,
             maxSuffixChars: 2000,
             temperature: 0.3,
-            maxTokens: 128,
+            maxTokens: 256,
             useChatModel: true,
             providerId: '',
             modelId: '',
+            includeImportContext: true,
+            includeLspHover: true,
+            includeLspContext: true,
+            contextBudgetChars: 4000,
+            useNativeFim: true,
+            enableCompletionCache: true,
           };
     const e = /** @type {Record<string, unknown>} */ (p.editorAiCompletion);
     if (typeof e.enabled === 'boolean') existing.enabled = e.enabled;
@@ -1969,11 +2060,25 @@ export function mergeConfigMeta(existing, patch) {
       existing.temperature = Math.min(1, Math.max(0, e.temperature));
     }
     if (typeof e.maxTokens === 'number' && Number.isFinite(e.maxTokens)) {
-      existing.maxTokens = Math.min(512, Math.max(16, Math.round(e.maxTokens)));
+      existing.maxTokens = Math.min(1024, Math.max(16, Math.round(e.maxTokens)));
     }
     if (typeof e.useChatModel === 'boolean') existing.useChatModel = e.useChatModel;
     if (typeof e.providerId === 'string') existing.providerId = e.providerId;
     if (typeof e.modelId === 'string') existing.modelId = e.modelId;
+    if (typeof e.includeImportContext === 'boolean') {
+      existing.includeImportContext = e.includeImportContext;
+    }
+    if (typeof e.includeLspHover === 'boolean') existing.includeLspHover = e.includeLspHover;
+    if (typeof e.includeLspContext === 'boolean') {
+      existing.includeLspContext = e.includeLspContext;
+    }
+    if (typeof e.contextBudgetChars === 'number' && Number.isFinite(e.contextBudgetChars)) {
+      existing.contextBudgetChars = Math.min(12_000, Math.max(500, Math.round(e.contextBudgetChars)));
+    }
+    if (typeof e.useNativeFim === 'boolean') existing.useNativeFim = e.useNativeFim;
+    if (typeof e.enableCompletionCache === 'boolean') {
+      existing.enableCompletionCache = e.enableCompletionCache;
+    }
     base.editorAiCompletion = existing;
   }
 
@@ -2176,7 +2281,57 @@ export function mergeConfigMeta(existing, patch) {
     );
   }
 
+  if (p.experts && typeof p.experts === 'object') {
+    base.experts = normalizeExpertsConfigBlock(p.experts);
+  }
+
   return base;
+}
+
+/** Normalize experts.enabled and experts.profiles from config.json meta. */
+function normalizeExpertsConfigBlock(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return { enabled: true, profiles: {} };
+  }
+  const row = /** @type {Record<string, unknown>} */ (raw);
+  const profiles = {};
+  if (row.profiles && typeof row.profiles === 'object') {
+    for (const [key, value] of Object.entries(
+      /** @type {Record<string, unknown>} */ (row.profiles),
+    )) {
+      const id = String(key).trim().slice(0, 64);
+      if (!id || !value || typeof value !== 'object') continue;
+      const src = /** @type {Record<string, unknown>} */ (value);
+      const prof = {};
+      if (typeof src.providerId === 'string' && src.providerId.trim()) {
+        prof.providerId = src.providerId.trim().slice(0, 64);
+      }
+      if (typeof src.modelId === 'string' && src.modelId.trim()) {
+        prof.modelId = src.modelId.trim().slice(0, 64);
+      }
+      if (typeof src.modeId === 'string' && MODE_IDS.includes(src.modeId)) {
+        prof.modeId = src.modeId;
+      }
+      if (Array.isArray(src.toolAllowlist)) {
+        const list = src.toolAllowlist
+          .filter((t) => typeof t === 'string' && t.trim())
+          .map((t) => String(t).trim().slice(0, 128))
+          .slice(0, 128);
+        if (list.length) prof.toolAllowlist = list;
+      }
+      if (Array.isArray(src.toolDenylist)) {
+        const list = src.toolDenylist
+          .filter((t) => typeof t === 'string' && t.trim())
+          .map((t) => String(t).trim().slice(0, 128))
+          .slice(0, 128);
+        if (list.length) prof.toolDenylist = list;
+      }
+      if (src.memoryEnabled === false) prof.memoryEnabled = false;
+      else if (src.memoryEnabled === true) prof.memoryEnabled = true;
+      if (Object.keys(prof).length) profiles[id] = prof;
+    }
+  }
+  return { enabled: row.enabled !== false, profiles };
 }
 
 /**
@@ -3060,12 +3215,15 @@ export function normalizeMemoryConfig(raw, existing = {}) {
 export function normalizeSynthesisConfig(raw, existing = {}) {
   const base = {
     enabled: true,
-    requireConfirmation: true,
+    requireConfirmation: false,
     confidenceThreshold: 0.6,
+    autoWriteConfidence: 0.85,
     maxProposalsPerTurn: 3,
     throttleMessagePairs: 4,
     skillMinRounds: 2,
     skillMinToolCalls: 2,
+    skillMinOccurrences: 2,
+    skillObservationRetentionDays: 45,
     utilityProviderId: '',
     utilityModelId: '',
     maxPendingProposals: 100,
@@ -3083,6 +3241,9 @@ export function normalizeSynthesisConfig(raw, existing = {}) {
   if (typeof row.confidenceThreshold === 'number' && Number.isFinite(row.confidenceThreshold)) {
     base.confidenceThreshold = Math.min(1, Math.max(0, row.confidenceThreshold));
   }
+  if (typeof row.autoWriteConfidence === 'number' && Number.isFinite(row.autoWriteConfidence)) {
+    base.autoWriteConfidence = Math.min(1, Math.max(0, row.autoWriteConfidence));
+  }
   if (typeof row.maxProposalsPerTurn === 'number' && Number.isFinite(row.maxProposalsPerTurn)) {
     base.maxProposalsPerTurn = Math.min(10, Math.max(1, Math.floor(row.maxProposalsPerTurn)));
   }
@@ -3094,6 +3255,18 @@ export function normalizeSynthesisConfig(raw, existing = {}) {
   }
   if (typeof row.skillMinToolCalls === 'number' && Number.isFinite(row.skillMinToolCalls)) {
     base.skillMinToolCalls = Math.min(20, Math.max(1, Math.floor(row.skillMinToolCalls)));
+  }
+  if (typeof row.skillMinOccurrences === 'number' && Number.isFinite(row.skillMinOccurrences)) {
+    base.skillMinOccurrences = Math.min(5, Math.max(1, Math.floor(row.skillMinOccurrences)));
+  }
+  if (
+    typeof row.skillObservationRetentionDays === 'number' &&
+    Number.isFinite(row.skillObservationRetentionDays)
+  ) {
+    base.skillObservationRetentionDays = Math.min(
+      365,
+      Math.max(7, Math.floor(row.skillObservationRetentionDays)),
+    );
   }
   if (typeof row.utilityProviderId === 'string') {
     base.utilityProviderId = row.utilityProviderId.trim();

@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 import {
@@ -11,6 +14,7 @@ import {
   isOrchestratePlanScreenSuspended,
   isSuperPlanPipelineResumable,
   isSuperPlanPlanScreenRestorable,
+  buildRevisePlanComposerDraft,
   openOrchestratePlanScreen,
   renderOrchestratePlanScreen,
   resetOrchestratePlanScreenForTests,
@@ -134,6 +138,37 @@ describe('orchestrate plan screen', () => {
     const session = getOrchestratePlanScreenSession();
     assert.equal(session?.phase, 'spec_confirm');
     assert.equal(session?.planPath, 'documentation/plans/references/oauth-spec.md');
+  });
+
+  test('buildRevisePlanComposerDraft references the plan file and leaves room to edit', () => {
+    assert.equal(
+      buildRevisePlanComposerDraft('documentation/plans/oauth.md'),
+      'Revise the plan at documentation/plans/oauth.md:\n\n',
+    );
+    assert.equal(
+      buildRevisePlanComposerDraft('documentation/plans/oauth.md', 'Add OAuth login'),
+      'Revise the plan at documentation/plans/oauth.md:\n\n(Original planning request: Add OAuth login)\n',
+    );
+  });
+
+  test('plan preview CSS fills column height and scrolls long artifacts', () => {
+    const cssPath = join(
+      dirname(fileURLToPath(import.meta.url)),
+      '../../src/styles/orchestrate-plan-screen.css',
+    );
+    const css = readFileSync(cssPath, 'utf8');
+    assert.match(
+      css,
+      /\.orchestrate-plan-screen:has\(\.orchestrate-plan-screen__preview-wrap\)[\s\S]*justify-content:\s*flex-start/,
+    );
+    assert.match(
+      css,
+      /\.orchestrate-plan-screen:has\(\.orchestrate-plan-screen__preview-wrap\)[\s\S]*\.orchestrate-plan-screen__preview[\s\S]*max-height:\s*none/,
+    );
+    assert.match(
+      css,
+      /\.orchestrate-plan-screen:has\(\.orchestrate-plan-screen__preview-wrap\)[\s\S]*\.orchestrate-plan-screen__preview[\s\S]*overflow-y:\s*auto/,
+    );
   });
 
   test('restore session from spec_confirm checkpoint keeps spec path for resume', () => {

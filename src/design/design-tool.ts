@@ -141,20 +141,33 @@ export function createSelectDesignTool(): SelectDesignTool {
     ctx?.overlay.clear();
   }
 
-  function teardownPicker(): void {
-    void picker?.disable();
-    picker?.destroy();
+  /** Bumped on disarm/rebind so an in-flight bindPicker cannot win after a newer bind starts. */
+  let bindGeneration = 0;
+
+  async function teardownPicker(): Promise<void> {
+    const current = picker;
     picker = null;
     transport = null;
+    if (!current) return;
+    try {
+      await current.disable();
+    } catch {
+      /* guest may already be gone (CDP detach races hide/swap) */
+    }
+    current.destroy();
   }
 
   async function bindPicker(): Promise<void> {
+    const generation = ++bindGeneration;
     if (!ctx) return;
-    teardownPicker();
-    transport = createPickerTransport();
-    picker = createBestElementPicker({
+    await teardownPicker();
+    if (!ctx || generation !== bindGeneration) return;
+
+    const armedTransport = createPickerTransport();
+    const nextPicker = createBestElementPicker({
       onPick: (picked) => void handlePick(picked),
       onError: (message) => {
+        if (generation !== bindGeneration) return;
         const friendly = /cross-origin/i.test(message)
           ? 'Element selection is unavailable on a cross-origin preview. Use Draw or Comment to mark a region instead.'
           : `Element picker unavailable: ${message}`;
@@ -162,10 +175,21 @@ export function createSelectDesignTool(): SelectDesignTool {
       },
     });
     try {
-      await picker.enable();
+      await nextPicker.enable();
     } catch {
       /* guest may still be loading — preview-panel re-binds on iframe load */
     }
+    if (!ctx || generation !== bindGeneration) {
+      try {
+        await nextPicker.disable();
+      } catch {
+        /* superseded bind — ignore teardown errors */
+      }
+      nextPicker.destroy();
+      return;
+    }
+    transport = armedTransport;
+    picker = nextPicker;
   }
 
   async function handlePick(picked: PickedElement): Promise<void> {
@@ -236,7 +260,8 @@ export function createSelectDesignTool(): SelectDesignTool {
       void bindPicker();
     },
     disarm() {
-      teardownPicker();
+      bindGeneration += 1;
+      void teardownPicker();
       resetSelection();
       ctx = null;
     },

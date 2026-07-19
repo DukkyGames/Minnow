@@ -23,6 +23,7 @@ import { listViewerTabs } from './file-viewer-tab-store';
 import { withSessionToken } from '../api/session-token.ts';
 import { detectEmbedBlockedFrame } from './preview-embed-detect';
 import { resolvePreviewLoadUrl, workspacePreviewUrl } from './preview-load-url';
+import { getFileTreeListingWorkspaceRoot } from './file-tree-listing-root';
 import {
   isFullscreenOverlayObscuringWorkspace,
   isPreviewPaneDomVisible,
@@ -436,7 +437,9 @@ async function toggleDesignModeFromToolbar(): Promise<void> {
     onClearAll: () => void refreshAnnotationsPanel(),
   });
   syncAnnotationsToggleVisibility(true);
-  await syncDesignModeElectronGuest();
+  // Guest sync already ran via onArmedToolChange during enable (before the Select picker binds).
+  // A second sync here re-bound the picker while CDP enable was still in flight →
+  // "target closed while handling command".
 }
 
 /**
@@ -469,7 +472,6 @@ export async function openPreviewPageAndEnableDesignMode(pageUrl: string): Promi
     onClearAll: () => void refreshAnnotationsPanel(),
   });
   syncAnnotationsToggleVisibility(true);
-  await syncDesignModeElectronGuest();
 }
 
 function getDevToolsButton(): HTMLButtonElement | null {
@@ -835,7 +837,7 @@ async function loadSourceInPreview(
   if (!api) return;
   const id = resolveTabId(tabId);
   setPreviewLoading(true, id ?? undefined);
-  const url = resolvePreviewLoadUrl(source, cacheBust);
+  const url = resolvePreviewLoadUrl(source, cacheBust, getFileTreeListingWorkspaceRoot());
   if (api.loadSource) {
     await api.loadSource({ kind: 'url', url, cacheBust }, id);
   } else {
@@ -960,7 +962,7 @@ function applySourceToFrame(tabId: string, source: PreviewSource, cacheBust?: nu
     return;
   }
 
-  frame.src = workspacePreviewUrl(source.path, cacheBust);
+  frame.src = workspacePreviewUrl(source.path, cacheBust, getFileTreeListingWorkspaceRoot());
 }
 
 function applySourceToPreview(source: PreviewSource, cacheBust?: number, tabId?: string): void {

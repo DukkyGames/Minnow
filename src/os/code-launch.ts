@@ -13,6 +13,15 @@ import { executeWorkspaceSwitch } from '../ui/workspace-switch-guard';
 import { createChatWithMode } from '../ui/sidebar';
 import { syncComposerFromStreamingState } from '../ui/composer-send';
 
+/** Repoint file tree / git panel to the Code project workspace (not desktop sandbox). */
+async function syncCodeFileTreeChrome(): Promise<void> {
+  const { syncDesktopWorkspaceMounts } = await import('./desktop-workspace-mounts');
+  const { clearPanelCwdUserOverride, syncPanelFromActiveChat } = await import('../ui/git-panel');
+  clearPanelCwdUserOverride();
+  await syncDesktopWorkspaceMounts();
+  syncPanelFromActiveChat({ forceFileTree: true });
+}
+
 /** Re-render the Code transcript and sync chrome for the active workspace chat. */
 async function refreshCodeChatSurface(): Promise<void> {
   const { ensureSessionsReady, getActiveChat } = await import('../state/sessions');
@@ -33,6 +42,7 @@ async function refreshCodeChatSurface(): Promise<void> {
   syncComposerFromStreamingState();
   renderSidebar();
   refreshChatJumpChipVisibility();
+  await syncCodeFileTreeChrome();
   void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(chat.id));
 }
 
@@ -79,11 +89,13 @@ export async function restoreCodeSessionOnForeground(): Promise<void> {
 
   if (targetId !== sessionState.activeId) {
     switchChat(targetId);
+    await syncCodeFileTreeChrome();
     return;
   }
 
   if (activeIsAssistant) {
     switchChat(targetId);
+    await syncCodeFileTreeChrome();
     return;
   }
 

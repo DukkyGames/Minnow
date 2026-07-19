@@ -76,6 +76,7 @@ const {
   markSuperPlanStageStatus,
   resetSuperPlanStage,
   rewindSuperPlanStages,
+  setSuperPlanActiveStage,
 } = await import('../../src/chat/super-plan/state.ts');
 const { createEmptyChatObject, setSessionStateForTests } = await import(
   '../../src/state/sessions.ts'
@@ -430,5 +431,67 @@ describe('skipSuperPlanStage during grill (MIN-442)', () => {
     assert.equal(chat.superPlan!.paused, false);
     assert.equal(chat.superPlan!.stages.grill.status, 'done');
     assert.equal(chat.superPlan!.stages.spec_confirm.status, 'running');
+  });
+});
+
+describe('advanceSuperPlan post-interview recovery', () => {
+  test.after(() => resetSuperPlanControllerForTests());
+
+  test('does not pause when a newer stopped follow-up run races the grill stage', async () => {
+    runSuperPlanStageImpl = async (chatArg, stageId) => {
+      const chat = chatArg as ReturnType<typeof makeChat>;
+      if (stageId === 'grill') {
+        chat.history.push({ role: 'user', content: 'grill' });
+        const now = Date.now();
+        chat.runs = [
+          {
+            runId: 'run-grill',
+            branchId: 'branch-grill',
+            forkHistoryIndex: 0,
+            status: 'completed',
+            createdAt: now - 100,
+            snapshot: {} as unknown as import('../../src/types.ts').TurnSnapshot,
+            outputHistoryStart: chat.history.length - 1,
+            outputHistoryEnd: chat.history.length - 1,
+          },
+          {
+            runId: 'run-flush',
+            branchId: 'branch-flush',
+            forkHistoryIndex: 0,
+            status: 'stopped',
+            createdAt: now,
+            snapshot: {} as unknown as import('../../src/types.ts').TurnSnapshot,
+          },
+        ];
+        return { kind: 'await_stream' };
+      }
+      return { kind: 'blocked_user' };
+    };
+    finalizeStreamStageImpl = async (_chat, stageId) =>
+      stageId === 'grill' ? { kind: 'done' } : { kind: 'blocked_user' };
+
+    const chat = makeChat('grill');
+    await advanceSuperPlan(chat);
+
+    assert.ok(!chat.superPlan!.paused);
+    assert.equal(chat.superPlan!.stages.grill.status, 'done');
+    assert.equal(chat.superPlan!.activeStage, 'spec_confirm');
+  });
+
+  test('onSuperPlanStreamEnd advances when grill finished and spec_confirm is still pending', async () => {
+    runSuperPlanStageImpl = async () => ({ kind: 'blocked_user' });
+
+    const chat = makeChat('grill');
+    markSuperPlanStageStatus(chat, 'grill', 'done');
+    setSuperPlanActiveStage(chat, 'spec_confirm');
+    registerChatForLookup(chat);
+
+    await onSuperPlanStreamEnd(chat.id);
+    await settle(30);
+
+    assert.equal(chat.superPlan!.stages.grill.status, 'done');
+    assert.equal(chat.superPlan!.activeStage, 'spec_confirm');
+    assert.notEqual(chat.superPlan!.stages.spec_confirm.status, 'pending');
+    assert.ok(!chat.superPlan!.paused);
   });
 });

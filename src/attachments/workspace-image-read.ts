@@ -24,8 +24,8 @@ export interface WorkspaceImagePayload {
 }
 
 /** Fetches a workspace image through GET /api/preview/file/… */
-export async function readWorkspaceImage(path: string): Promise<WorkspaceImagePayload> {
-  const url = resolvePreviewLoadUrl({ kind: 'workspace', path });
+export async function readWorkspaceImage(path: string, workspaceRoot?: string): Promise<WorkspaceImagePayload> {
+  const url = resolvePreviewLoadUrl({ kind: 'workspace', path }, undefined, workspaceRoot);
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`Could not read image (HTTP ${res.status})`);

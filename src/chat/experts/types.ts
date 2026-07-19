@@ -1,6 +1,8 @@
 /**
- * Expert system types: metadata, selection, and config.
+ * Expert system types: metadata, runtime profiles, and config.
  */
+
+import type { ModeId } from '../modes/types';
 
 export type ExpertAccent =
   | 'sage'
@@ -37,17 +39,46 @@ export interface ExpertRecord {
   source: 'builtin' | 'user';
 }
 
-export type ExpertSelectionMode = 'auto' | 'manual';
+/** User-controlled runtime defaults per expert (config.json → experts.profiles). */
+export interface ExpertRuntimeProfile {
+  providerId?: string;
+  modelId?: string;
+  modeId?: ModeId;
+  toolAllowlist?: string[];
+  toolDenylist?: string[];
+  /** When false, expert long-term memory is disabled for new chats. */
+  memoryEnabled?: boolean;
+}
 
-export interface ExpertSelection {
-  mode: ExpertSelectionMode;
-  expertId: string | null;
+/** Effective runtime captured when an expert chat is created. */
+export interface ExpertRuntimeSnapshot {
+  providerId?: string;
+  modelId: string;
+  modeId: ModeId;
+  /** Null means inherit all mode-allowed tools; otherwise intersect with allowlist. */
+  toolAllowlist: string[] | null;
+  toolDenylist: string[];
+  enabledToolNames: string[];
+  memoryEnabled: boolean;
+  warnings: string[];
+  profileSource: 'inherit' | 'override';
 }
 
 export interface ExpertsConfig {
   enabled: boolean;
+  profiles: Record<string, ExpertRuntimeProfile>;
 }
 
 export const DEFAULT_EXPERTS_CONFIG: ExpertsConfig = {
   enabled: true,
+  profiles: {},
 };
+
+/** @deprecated Legacy picker — migrated to chat.expertId; read-only for hydration. */
+export type ExpertSelectionMode = 'auto' | 'manual';
+
+/** @deprecated Legacy picker — migrated to chat.expertId; read-only for hydration. */
+export interface ExpertSelection {
+  mode: ExpertSelectionMode;
+  expertId: string | null;
+}

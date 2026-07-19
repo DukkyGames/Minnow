@@ -24,4 +24,18 @@ describe('extractGoalEvalCompletionText', () => {
     });
     assert.equal(text, 'YES: goal met.');
   });
+
+  test('strips inline thinking tags and keeps reply verdict', () => {
+    const text = extractGoalEvalCompletionText({
+      content: '<thinking>I reviewed the code and tests.</thinking>\nYES: tests pass.',
+    });
+    assert.equal(text, 'YES: tests pass.');
+  });
+
+  test('uses thinking block when reply is empty', () => {
+    const text = extractGoalEvalCompletionText({
+      content: '<thinking>NO: tests still failing.</thinking>',
+    });
+    assert.equal(text, 'NO: tests still failing.');
+  });
 });

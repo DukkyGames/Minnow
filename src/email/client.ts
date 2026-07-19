@@ -186,6 +186,72 @@ export async function fetchEmailThread(
   return parseJson(res);
 }
 
+export interface EmailThreadSummary {
+  threadId: string;
+  subject: string;
+  participants: string[];
+  messageCount: number;
+  unreadCount: number;
+  flagged: boolean;
+  hasAttachments: boolean;
+  lastDate: string;
+  folders: string[];
+  snippet: string;
+  summary: string | null;
+}
+
+/** Conversation rollups for the thread list. */
+export async function fetchEmailThreads(
+  accountId: string,
+  query?: { folder?: string; offset?: number; limit?: number; filter?: string; query?: string },
+): Promise<{ threads: EmailThreadSummary[]; total: number }> {
+  const params = new URLSearchParams();
+  if (query?.folder) params.set('folder', query.folder);
+  if (query?.offset !== undefined) params.set('offset', String(query.offset));
+  if (query?.limit !== undefined) params.set('limit', String(query.limit));
+  if (query?.filter) params.set('filter', query.filter);
+  if (query?.query) params.set('query', query.query);
+  const qs = params.toString();
+  const res = await fetch(
+    `/api/email/accounts/${encodeURIComponent(accountId)}/threads${qs ? `?${qs}` : ''}`,
+  );
+  return parseJson(res);
+}
+
+/** Full-text search across folders (all accounts when accountId is omitted). */
+export async function searchEmail(query: {
+  q: string;
+  accountId?: string;
+  folder?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ messages: Array<EmailMessage & { accountId: string }>; total: number }> {
+  const params = new URLSearchParams({ q: query.q });
+  if (query.accountId) params.set('accountId', query.accountId);
+  if (query.folder) params.set('folder', query.folder);
+  if (query.limit !== undefined) params.set('limit', String(query.limit));
+  if (query.offset !== undefined) params.set('offset', String(query.offset));
+  const res = await fetch(`/api/email/search?${params.toString()}`);
+  return parseJson(res);
+}
+
+/**
+ * Load the full body for a message. Sync stores headers plus a text preview,
+ * so the HTML part arrives on first open.
+ */
+export async function fetchEmailMessageBody(
+  accountId: string,
+  messageId: string,
+  options?: { force?: boolean },
+): Promise<{ message: EmailMessage }> {
+  const params = new URLSearchParams({ accountId });
+  if (options?.force) params.set('force', '1');
+  const res = await fetch(
+    `/api/email/messages/${encodeURIComponent(messageId)}/body?${params.toString()}`,
+  );
+  return parseJson(res);
+}
+
 export async function triageEmailMessage(
   accountId: string,
   messageId: string,
@@ -230,6 +296,22 @@ export async function improveEmailText(input: {
   return parseJson(res);
 }
 
+/** A send parked in the outbox during its undo window. */
+export interface OutboxEntry {
+  id: string;
+  accountId: string;
+  to: string;
+  subject: string;
+  status: 'queued' | 'sending' | 'sent' | 'failed' | 'cancelled';
+  queuedAt: string;
+  sendAt: string;
+  error: string | null;
+}
+
+/**
+ * Queue a message. It is not delivered immediately — the returned entry can be
+ * recalled with {@link cancelOutboxSend} until `sendAt`.
+ */
 export async function sendEmailMessage(input: {
   accountId: string;
   to: string;
@@ -240,12 +322,58 @@ export async function sendEmailMessage(input: {
   bcc?: string;
   inReplyTo?: string;
   references?: string;
-  confirmed: boolean;
-}): Promise<{ ok: boolean; messageId?: string }> {
+}): Promise<{ queued: boolean; entry: OutboxEntry }> {
   const res = await fetch('/api/email/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
   return parseJson(res);
+}
+
+export async function fetchOutbox(): Promise<{ entries: OutboxEntry[] }> {
+  const res = await fetch('/api/email/outbox');
+  return parseJson(res);
+}
+
+/** Recall a queued send. Fails once the undo window has closed. */
+export async function cancelOutboxSend(id: string): Promise<{ entry: OutboxEntry }> {
+  const res = await fetch(`/api/email/outbox/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  return parseJson(res);
+}
+
+/**
+ * Reduce a From header to a bare, comparable address.
+ * Mirrors `normalizeSender` in `server/email/image-allowlist.js`.
+ */
+export function normalizeSender(from: string | null | undefined): string {
+  const raw = String(from ?? '').trim();
+  const angled = /<([^>]+)>/.exec(raw);
+  return (angled ? angled[1] : raw).trim().toLowerCase();
+}
+
+/** Senders whose remote images load without asking. */
+export async function fetchImageAllowlist(): Promise<string[]> {
+  const res = await fetch('/api/email/image-allowlist');
+  const data = await parseJson<{ senders: string[] }>(res);
+  return data.senders;
+}
+
+export async function allowImagesFromSender(sender: string): Promise<string[]> {
+  const res = await fetch('/api/email/image-allowlist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sender }),
+  });
+  const data = await parseJson<{ senders: string[] }>(res);
+  return data.senders;
+}
+
+export async function blockImagesFromSender(sender: string): Promise<string[]> {
+  const res = await fetch(
+    `/api/email/image-allowlist?sender=${encodeURIComponent(sender)}`,
+    { method: 'DELETE' },
+  );
+  const data = await parseJson<{ senders: string[] }>(res);
+  return data.senders;
 }

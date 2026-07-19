@@ -11,6 +11,7 @@ import './styles/motion.css';
 import './styles/topbar.css';
 import './styles/model-select.css';
 import './styles/sidebar.css';
+import './styles/chat-search.css';
 import './styles/messages.css';
 import './styles/message-actions.css';
 import './styles/voice.css';
@@ -178,6 +179,7 @@ import { loadThinkingMeta } from './config/thinking-meta';
 import { syncReefWidgetSettingsFromActiveChat } from './ui/reef-widget-settings';
 import { initWorkAgentDevUi, syncWorkAgentDevFromActiveChat } from './ui/work-agent-dev';
 import { initSubAgentUi } from './ui/sub-agent-cards';
+import { initGoalEvalUi } from './ui/goal-eval-status';
 import { initAgentActivityPanel } from './ui/agent-activity-panel';
 import {
   closeComposerToolsPopover,
@@ -245,6 +247,7 @@ export async function initApp(): Promise<void> {
     await migrateBugsFromChats(sessionState.chats);
   }
   initSubAgentUi();
+  initGoalEvalUi();
   initAgentActivityPanel();
   fillSystemPromptPresetSelect();
   await loadSystemPromptSettings();

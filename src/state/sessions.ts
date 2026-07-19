@@ -18,6 +18,7 @@ import { decodeModelSelectKey } from '../lib/model-select-key';
 import { isSuperPlanStageId, type SuperPlanStageId, type SuperPlanState } from '../chat/super-plan/types';
 import {
   CHAT_APP_ID,
+  DESKTOP_APP_ID,
   createAssistantChat,
   createDesktopChat,
   getAssistantChats as filterAssistantChats,
@@ -38,7 +39,7 @@ import {
   type RawSessionJson,
 } from './session-workspace-scope';
 import { getForegroundAppId } from '../os/instances';
-import { isChatAppForeground } from '../ui/chat-mount';
+import { isChatAppForeground, shouldPaintDesktopChatSurface } from '../ui/chat-mount';
 import { setStatus } from '../ui/status';
 import { ensureTokenLedger } from '../usage/token-ledger';
 import { getWorkspacePath } from './workspace';
@@ -52,6 +53,8 @@ import {
   ensureChatCodeChangeBackfillOnSwitch,
   runSessionCodeChangeBackfill,
 } from '../usage/code-change-backfill';
+import type { ExpertChatSeed } from '../chat/experts/runtime-profile';
+import type { ExpertRuntimeSnapshot } from '../chat/experts/types';
 const GENERATION_ID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -239,13 +242,13 @@ function ensureActiveBranchByFork(raw: unknown): Record<string, string> | undefi
   return Object.keys(out).length ? out : undefined;
 }
 
-/** Default expert picker when missing on older chats. */
+/** @deprecated Legacy default — expert chats use chat.expertId directly. */
 export function defaultExpertSelection(): ExpertSelection {
-  return { mode: 'auto', expertId: null };
+  return { mode: 'manual', expertId: null };
 }
 
-function ensureExpertSelection(raw: unknown): ExpertSelection {
-  if (!raw || typeof raw !== 'object') return defaultExpertSelection();
+function ensureExpertSelection(raw: unknown): ExpertSelection | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
   const row = raw as Partial<ExpertSelection>;
   const mode = row.mode === 'manual' ? 'manual' : 'auto';
   const expertId =
@@ -253,6 +256,41 @@ function ensureExpertSelection(raw: unknown): ExpertSelection {
       ? row.expertId.trim()
       : null;
   return { mode, expertId };
+}
+
+function ensureExpertRuntime(raw: unknown): ExpertRuntimeSnapshot | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const row = raw as Partial<ExpertRuntimeSnapshot>;
+  const modelId = typeof row.modelId === 'string' ? row.modelId : '';
+  const modeId = normalizeModeId(row.modeId);
+  const toolDenylist = Array.isArray(row.toolDenylist)
+    ? row.toolDenylist.filter((t): t is string => typeof t === 'string')
+    : [];
+  const enabledToolNames = Array.isArray(row.enabledToolNames)
+    ? row.enabledToolNames.filter((t): t is string => typeof t === 'string')
+    : [];
+  const warnings = Array.isArray(row.warnings)
+    ? row.warnings.filter((t): t is string => typeof t === 'string')
+    : [];
+  const toolAllowlist =
+    row.toolAllowlist === null
+      ? null
+      : Array.isArray(row.toolAllowlist)
+        ? row.toolAllowlist.filter((t): t is string => typeof t === 'string')
+        : null;
+  return {
+    ...(typeof row.providerId === 'string' && row.providerId.trim()
+      ? { providerId: row.providerId.trim() }
+      : {}),
+    modelId,
+    modeId,
+    toolAllowlist,
+    toolDenylist,
+    enabledToolNames,
+    memoryEnabled: row.memoryEnabled !== false,
+    warnings,
+    profileSource: row.profileSource === 'override' ? 'override' : 'inherit',
+  };
 }
 
 /** In-memory session blob mirrored to ~/.minnow or localStorage fallback. */
@@ -1068,7 +1106,34 @@ export function migrateSessionV4ToV5(state: SessionState): void {
     delete chat.viewMode;
   }
 
-  state.version = 5;
+  (state as { version: number }).version = 5;
+}
+
+/** Experts overhaul: expertId as sole identity, runtime snapshots, drop Auto picker state. */
+export function migrateSessionV5ToV6(state: SessionState): void {
+  for (const chat of state.chats) {
+    const selection = chat.expertSelection;
+    if (chat.kind === 'expert') {
+      if (!chat.expertId?.trim() && selection?.mode === 'manual' && selection.expertId?.trim()) {
+        chat.expertId = selection.expertId.trim();
+      }
+      if (!chat.expertRuntime) {
+        chat.expertRuntime = {
+          ...(chat.providerId?.trim() ? { providerId: chat.providerId.trim() } : {}),
+          modelId: chat.modelId ?? '',
+          modeId: normalizeModeId(chat.modeId),
+          toolAllowlist: null,
+          toolDenylist: [],
+          enabledToolNames: [],
+          memoryEnabled: true,
+          warnings: [],
+          profileSource: 'inherit',
+        };
+      }
+    }
+    delete chat.expertSelection;
+  }
+  state.version = 6;
 }
 
 function ensureViewMode(raw: unknown): 'chat' | 'board' | undefined {
@@ -1245,7 +1310,9 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
       typeof raw.reefWidgetProviderId === 'string' ? raw.reefWidgetProviderId : undefined,
     reefWidgetModelId:
       typeof raw.reefWidgetModelId === 'string' ? raw.reefWidgetModelId : undefined,
-    expertSelection: ensureExpertSelection(raw.expertSelection),
+    ...(raw.expertSelection && typeof raw.expertSelection === 'object'
+      ? { expertSelection: ensureExpertSelection(raw.expertSelection) }
+      : {}),
     workAgentId:
       typeof raw.workAgentId === 'string' && raw.workAgentId.trim()
         ? raw.workAgentId.trim()
@@ -1318,6 +1385,9 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
     ...(typeof raw.expertId === 'string' && raw.expertId.trim()
       ? { expertId: raw.expertId.trim() }
       : {}),
+    ...(raw.expertRuntime && typeof raw.expertRuntime === 'object'
+      ? { expertRuntime: ensureExpertRuntime(raw.expertRuntime) }
+      : {}),
     ...(pinnedSkill ? { pinnedSkill } : {}),
     ...(activeGoal ? { activeGoal } : {}),
     ...(superPlan ? { superPlan } : {}),
@@ -1337,20 +1407,53 @@ export function isExpertChat(chat: Chat): boolean {
   return chat.kind === 'expert';
 }
 
-/** Expert threads and legacy Expert Lab sessions are omitted from the main sidebar. */
+/** Legacy Expert Lab sessions are omitted from the main sidebar. */
 export function isHiddenFromMainSidebar(chat: Chat): boolean {
-  return chat.kind === 'expert' || chat.kind === 'expert-lab';
+  return chat.kind === 'expert-lab';
 }
 
-/** Create a new expert-scoped chat thread and persist session state. */
-export function createExpertChat(expertId: string, modelId = ''): Chat {
+/** Create a new expert-scoped chat from a resolved seed (runtime + greeting). */
+export function createExpertChatFromSeed(seed: ExpertChatSeed): Chat {
+  const state = requireSessionState();
+  const chat = createEmptyChatObject(seed.modelId, seed.workspacePath);
+  chat.kind = 'expert';
+  chat.expertId = seed.expertId;
+  if (seed.providerId?.trim()) chat.providerId = seed.providerId.trim();
+  chat.modeId = seed.modeId;
+  chat.expertRuntime = { ...seed.runtimeSnapshot };
+  chat.name = PLACEHOLDER_CHAT_NAME;
+  chat.history.push({ role: 'assistant', content: seed.greeting });
+  state.chats.push(chat);
+  touchChat(chat);
+  scheduleSaveSessions();
+  return chat;
+}
+
+/** @deprecated Use createExpertChatFromSeed with resolveExpertChatSeed. */
+export function createExpertChat(
+  expertId: string,
+  modelId = '',
+  workspacePath?: string,
+): Chat {
   const state = requireSessionState();
   const trimmedId = expertId.trim();
-  const chat = createEmptyChatObject(modelId, getWorkspacePath());
+  const chat = createEmptyChatObject(
+    modelId,
+    workspacePath?.trim() || getWorkspacePath(),
+  );
   chat.kind = 'expert';
   chat.expertId = trimmedId;
-  chat.expertSelection = { mode: 'manual', expertId: trimmedId };
   chat.modeId = 'general';
+  chat.expertRuntime = {
+    modelId: modelId || '',
+    modeId: 'general',
+    toolAllowlist: null,
+    toolDenylist: [],
+    enabledToolNames: [],
+    memoryEnabled: true,
+    warnings: [],
+    profileSource: 'inherit',
+  };
   chat.name = PLACEHOLDER_CHAT_NAME;
   state.chats.push(chat);
   touchChat(chat);
@@ -1377,9 +1480,12 @@ export function activateChatById(id: string): void {
   scheduleSaveSessions();
 }
 
-/** Read expert selection for a chat (defaults to Auto). */
+/** Read legacy expert selection when still present on disk (pre-v6). */
 export function getExpertSelection(chat: Chat): ExpertSelection {
-  return chat.expertSelection ?? defaultExpertSelection();
+  if (chat.expertSelection) return chat.expertSelection;
+  const expertId = chat.expertId?.trim();
+  if (expertId) return { mode: 'manual', expertId };
+  return defaultExpertSelection();
 }
 
 /** Upgrade v1/v2 session JSON to canonical schema v2 in memory. */
@@ -1398,7 +1504,7 @@ function parseSessionStateFromJson(parsed: RawSessionJson | null): SessionState 
     return defaultSessionState();
   }
   const ver = parsed.version;
-  if (ver !== 1 && ver !== 2 && ver !== 3 && ver !== 4 && ver !== 5) {
+  if (ver !== 1 && ver !== 2 && ver !== 3 && ver !== 4 && ver !== 5 && ver !== 6) {
     return defaultSessionState();
   }
   const state = migrateSessionStateV1ToV2(parsed);
@@ -1412,8 +1518,13 @@ function parseSessionStateFromJson(parsed: RawSessionJson | null): SessionState 
   }
   if (ver < 5 || state.chats.some((c) => c.orchestrateBoard)) {
     migrateSessionV4ToV5(state);
+  } else if (ver >= 5) {
+    (state as { version: number }).version = ver;
+  }
+  if (ver < 6) {
+    migrateSessionV5ToV6(state);
   } else {
-    state.version = 5;
+    state.version = 6;
   }
   repairPlannerChatFolderMembership(state);
   repairBoardChatWorktreeRoots(state);
@@ -1467,11 +1578,15 @@ function repairPlannerChatFolderMembership(state: SessionState): void {
   }
 }
 
-/** When the Chat app is foreground, persist its active chat id. */
+/** When a foreground chat surface is active, persist its last active chat id per app. */
 function maybeRememberActiveChatForForegroundApp(
   state: SessionState,
   chat: Chat,
 ): void {
+  if (shouldPaintDesktopChatSurface()) {
+    rememberActiveChatForAppInState(state, DESKTOP_APP_ID, chat.id);
+    return;
+  }
   if (getForegroundAppId() !== CHAT_APP_ID && !isChatAppForeground()) return;
   rememberActiveChatForAppInState(state, CHAT_APP_ID, chat.id);
 }
@@ -1577,13 +1692,34 @@ export function activateAssistantChatForApp(chatsWorkspacePath: string): Chat {
  */
 export function activateDesktopAssistantChatForApp(desktopWorkspacePath: string): Chat {
   const state = requireSessionState();
-  const nextId = resolveActiveAssistantChatId(desktopWorkspacePath, state, (workspaceKey) => {
-    const fresh = createDesktopChat(workspaceKey, newChatId());
-    touchChat(fresh);
-    return fresh;
-  });
+  const key = normalizeWorkspacePath(desktopWorkspacePath);
+  const nextId = resolveActiveAssistantChatId(
+    desktopWorkspacePath,
+    state,
+    (workspaceKey) => {
+      const fresh = createDesktopChat(workspaceKey, newChatId());
+      touchChat(fresh);
+      return fresh;
+    },
+    DESKTOP_APP_ID,
+  );
+  // Migrate legacy `lastActiveChatIdByApp.chat` entries that pointed at desktop threads.
+  if (
+    key &&
+    !getLastActiveChatIdForApp(state, DESKTOP_APP_ID) &&
+    getLastActiveChatIdForApp(state, CHAT_APP_ID)
+  ) {
+    const legacy = state.chats.find(
+      (c) =>
+        c.id === getLastActiveChatIdForApp(state, CHAT_APP_ID) &&
+        normalizeWorkspacePath(c.workspacePath ?? '') === key,
+    );
+    if (legacy) {
+      rememberActiveChatForAppInState(state, DESKTOP_APP_ID, legacy.id);
+    }
+  }
   state.activeId = nextId;
-  rememberActiveChatForAppInState(state, CHAT_APP_ID, nextId);
+  rememberActiveChatForAppInState(state, DESKTOP_APP_ID, nextId);
   scheduleSaveSessions();
   return getActiveChat();
 }

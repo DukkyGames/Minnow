@@ -11,14 +11,27 @@ import {
   redactAccount,
   updateEmailAccount,
 } from './accounts.js';
-import { listCachedMessages, listCachedThread, readMessageCache } from './cache.js';
+import {
+  listCachedMessages,
+  listCachedThread,
+  listCachedThreads,
+  searchCachedMessages,
+} from './cache.js';
 import {
   listEmailFolders,
+  loadMessageBody,
   syncFolderMessages,
   testEmailConnection,
 } from './transport.js';
 import { triageMessage } from './triage.js';
-import { draftReply, sendEmail, sendReplyVariant } from './smtp.js';
+import { draftReply, resolveReplyVariantSend } from './smtp.js';
+import { cancelSend, enqueueSend, listOutbox } from './outbox.js';
+import { fetchRemoteImage } from './image-proxy.js';
+import {
+  allowImagesFromSender,
+  blockImagesFromSender,
+  listImageAllowlist,
+} from './image-allowlist.js';
 import { improveComposeText } from './compose-ai.js';
 import {
   setMessageFlags,
@@ -27,11 +40,8 @@ import {
   deleteMessage,
   bulkMessageAction,
 } from './mail-actions.js';
-import {
-  getOrBuildInboxSummary,
-  generateReplyVariants,
-  runAgentHooksAfterFolderSync,
-} from './agent.js';
+import { getOrBuildInboxSummary, generateReplyVariants } from './agent.js';
+import { syncFolderWithHooks } from './poller.js';
 import { handleEmailEventsSse } from './events.js';
 import {
   listAutomations,
@@ -116,6 +126,39 @@ export function createEmailMiddleware() {
         return;
       }
 
+      // Remote images are fetched server-side so the renderer never contacts
+      // the sender's host directly (no Referer, no cookies, no fingerprint).
+      if (url === '/api/email/image-proxy' && req.method === 'GET') {
+        const params = parseQuery(req.url ?? '');
+        const target = String(params.get('url') ?? '');
+        const image = await fetchRemoteImage(target);
+        res.statusCode = 200;
+        res.setHeader('Content-Type', image.contentType);
+        res.setHeader('Cache-Control', 'private, max-age=3600');
+        res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+        res.end(image.body);
+        return;
+      }
+
+      if (url === '/api/email/image-allowlist' && req.method === 'GET') {
+        sendJson(res, 200, { senders: await listImageAllowlist() });
+        return;
+      }
+
+      if (url === '/api/email/image-allowlist' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const senders = await allowImagesFromSender(String(body.sender ?? ''));
+        sendJson(res, 200, { senders });
+        return;
+      }
+
+      if (url === '/api/email/image-allowlist' && req.method === 'DELETE') {
+        const params = parseQuery(req.url ?? '');
+        const senders = await blockImagesFromSender(String(params.get('sender') ?? ''));
+        sendJson(res, 200, { senders });
+        return;
+      }
+
       if (url === '/api/email/automations' && req.method === 'GET') {
         const rules = await listAutomations();
         sendJson(res, 200, { rules });
@@ -143,6 +186,38 @@ export function createEmailMiddleware() {
           sendJson(res, 200, { deleted: true });
           return;
         }
+      }
+
+      if (url === '/api/email/search' && req.method === 'GET') {
+        const params = parseQuery(req.url ?? '');
+        const query = String(params.get('q') ?? params.get('query') ?? '').trim();
+        if (!query) {
+          sendJson(res, 400, { error: 'q is required' });
+          return;
+        }
+        const offset = Number(params.get('offset') ?? 0);
+        const limit = Number(params.get('limit') ?? 50);
+        const folder = params.get('folder') ?? undefined;
+        const accountId = String(params.get('accountId') ?? '').trim();
+
+        const accountIds = accountId
+          ? [accountId]
+          : (await listEmailAccounts()).map((account) => account.id);
+
+        const perAccount = await Promise.all(
+          accountIds.map(async (id) => {
+            const result = await searchCachedMessages(id, { query, folder, offset, limit });
+            return result.messages.map((message) => ({ ...message, accountId: id }));
+          }),
+        );
+
+        const messages = perAccount
+          .flat()
+          .sort((a, b) => new Date(String(b.date)).getTime() - new Date(String(a.date)).getTime())
+          .slice(0, Math.min(200, Math.max(1, limit || 50)));
+
+        sendJson(res, 200, { messages, total: messages.length, query });
+        return;
       }
 
       if (url === '/api/email/messages/bulk' && req.method === 'POST') {
@@ -222,11 +297,23 @@ export function createEmailMiddleware() {
           const body = await readJsonBody(req);
           const account = await getEmailAccount(accountId);
           const folder = String(body.folder ?? account?.folders?.[0] ?? 'INBOX');
-          const before = await readMessageCache(accountId);
-          const prevHighest = before.folderCursors?.[folder]?.highestUid ?? 0;
-          const result = await syncFolderMessages(accountId, body);
-          const incoming = Array.isArray(result.messages) ? result.messages : [];
-          await runAgentHooksAfterFolderSync(accountId, folder, incoming, prevHighest);
+          const result = await syncFolderWithHooks(accountId, folder, {
+            limit: body.limit,
+            full: body.full === true,
+          });
+          sendJson(res, 200, result);
+          return;
+        }
+
+        if (tail === 'threads' && req.method === 'GET') {
+          const params = parseQuery(req.url ?? '');
+          const result = await listCachedThreads(accountId, {
+            folder: params.get('folder') ?? undefined,
+            offset: Number(params.get('offset') ?? 0),
+            limit: Number(params.get('limit') ?? 50),
+            filter: params.get('filter') ?? undefined,
+            query: params.get('query') ?? undefined,
+          });
           sendJson(res, 200, result);
           return;
         }
@@ -248,6 +335,22 @@ export function createEmailMiddleware() {
           sendJson(res, 200, { account: redactAccount(account) });
           return;
         }
+      }
+
+      const bodyMatch = url.match(/^\/api\/email\/messages\/([^/]+)\/body$/);
+      if (bodyMatch && req.method === 'GET') {
+        const messageKey = decodeURIComponent(bodyMatch[1]);
+        const params = parseQuery(req.url ?? '');
+        const accountId = String(params.get('accountId') ?? '').trim();
+        if (!accountId) {
+          sendJson(res, 400, { error: 'accountId query param is required' });
+          return;
+        }
+        const message = await loadMessageBody(accountId, messageKey, {
+          force: params.get('force') === '1',
+        });
+        sendJson(res, 200, { message });
+        return;
       }
 
       const triageMatch = url.match(/^\/api\/email\/messages\/([^/]+)\/triage$/);
@@ -341,18 +444,14 @@ export function createEmailMiddleware() {
           sendJson(res, 400, { error: 'accountId and threadId are required' });
           return;
         }
-        if (!body.confirmed) {
-          sendJson(res, 400, { error: 'Send requires explicit user confirmation (confirmed: true)' });
-          return;
-        }
-        const result = await sendReplyVariant({
+        const payload = await resolveReplyVariantSend({
           accountId,
           threadId,
           messageKey,
           variantId,
-          confirmed: true,
         });
-        sendJson(res, 200, result);
+        const entry = enqueueSend(payload);
+        sendJson(res, 202, { queued: true, entry });
         return;
       }
 
@@ -385,17 +484,40 @@ export function createEmailMiddleware() {
         return;
       }
 
+      // Send queues into the outbox rather than delivering inline; the undo
+      // window is the send gate. Returns the queued entry, not a receipt.
       if (url === '/api/email/send' && req.method === 'POST') {
         const body = await readJsonBody(req);
-        const result = await sendEmail(body);
-        sendJson(res, 200, result);
+        const entry = enqueueSend(body);
+        sendJson(res, 202, { queued: true, entry });
+        return;
+      }
+
+      if (url === '/api/email/outbox' && req.method === 'GET') {
+        sendJson(res, 200, { entries: listOutbox() });
+        return;
+      }
+
+      const outboxMatch = url.match(/^\/api\/email\/outbox\/([^/]+)$/);
+      if (outboxMatch && req.method === 'DELETE') {
+        const entry = cancelSend(decodeURIComponent(outboxMatch[1]));
+        sendJson(res, 200, { entry });
         return;
       }
 
       sendJson(res, 404, { error: 'Not found' });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Email request failed';
-      sendJson(res, 400, { error: message });
+      // Rate limiting reports 429 so the client can distinguish "slow down"
+      // from "malformed request".
+      const status = Number(/** @type {{ status?: number }} */ (err)?.status) || 400;
+      if (status === 429) {
+        const retryAfterMs = Number(/** @type {{ retryAfterMs?: number }} */ (err)?.retryAfterMs);
+        if (Number.isFinite(retryAfterMs)) {
+          res.setHeader('Retry-After', String(Math.ceil(retryAfterMs / 1000)));
+        }
+      }
+      sendJson(res, status, { error: message });
     }
   };
 }

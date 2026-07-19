@@ -47,27 +47,42 @@ function measureComposerGapPx(parent: HTMLElement): number {
   return Number.isFinite(gap) ? gap : 0;
 }
 
+function getComposerControlsRow(root: HTMLElement): HTMLElement | null {
+  return root.closest('#composerControls') as HTMLElement | null;
+}
+
+function isHubComposerModeSelector(root: HTMLElement): boolean {
+  return Boolean(root.closest('.input-bar--hub'));
+}
+
 /** Space left in #composerControls for the mode strip (not its current icon-only width). */
 function availableModeSelectorWidth(root: HTMLElement): number {
-  const parent = root.parentElement;
-  if (!parent) return root.clientWidth;
+  const row = getComposerControlsRow(root) ?? root.parentElement;
+  if (!row) return root.clientWidth;
 
-  const gap = measureComposerGapPx(parent);
-  const childCount = parent.children.length;
+  const gap = measureComposerGapPx(row);
+  const childCount = row.children.length;
   let siblingsWidth = 0;
 
-  for (const child of parent.children) {
+  for (const child of row.children) {
     if (child === root) continue;
     siblingsWidth += (child as HTMLElement).getBoundingClientRect().width;
   }
 
   const totalGap = childCount > 1 ? gap * (childCount - 1) : 0;
-  return Math.max(0, parent.clientWidth - siblingsWidth - totalGap);
+  return Math.max(0, row.clientWidth - siblingsWidth - totalGap);
 }
 
 /** Hide segment labels when labelled content cannot fit the space left in the composer row. */
 function syncModeSelectorCompact(root: HTMLElement): void {
   if (root.querySelector('.is-submenu-open')) return;
+
+  // Hub keeps labelled segments on the composer row (scroll horizontally when tight).
+  if (isHubComposerModeSelector(root)) {
+    root.classList.remove('mode-segmented--compact');
+    syncPlanSegmentCompactAffordance(root);
+    return;
+  }
 
   root.classList.remove('mode-segmented--compact');
   // Measure natural labelled width, not the shrunken icon-only box.
@@ -107,15 +122,15 @@ function syncPlanSegmentCompactAffordance(root: HTMLElement): void {
 
 function attachModeSelectorCompactObserver(root: HTMLElement): void {
   if (modeSelectorCompactObserver) return;
-  const parent = root.parentElement;
-  if (!parent) return;
+  const row = getComposerControlsRow(root) ?? root.parentElement;
+  if (!row) return;
 
   modeSelectorCompactObserver = new ResizeObserver(() => {
     syncModeSelectorCompact(root);
   });
   modeSelectorCompactObserver.observe(root);
-  modeSelectorCompactObserver.observe(parent);
-  for (const child of parent.children) {
+  modeSelectorCompactObserver.observe(row);
+  for (const child of row.children) {
     if (child !== root) modeSelectorCompactObserver.observe(child);
   }
   syncModeSelectorCompact(root);
@@ -217,10 +232,6 @@ export function syncModeSelectorFromActiveChat(): void {
   if (!root || !sessionState) return;
 
   const chat = getActiveChat();
-  if (isExpertChat(chat) && chat.modeId !== 'general') {
-    setChatMode('general');
-  }
-
   const activeId = normalizeModeId(getActiveChat().modeId);
   const buttons = root.querySelectorAll<HTMLButtonElement>('[data-mode-id]');
   let index = 0;
@@ -289,11 +300,6 @@ export function setChatMode(modeId: ModeId): SetChatModeResult {
   }
 
   const chat = getActiveChat();
-  if (isExpertChat(chat)) {
-    if (modeId !== 'general') {
-      return { ok: false, error: 'Expert chats use General mode' };
-    }
-  }
 
   const normalized = modeId;
   if (chat.modeId === normalized) {

@@ -67,12 +67,7 @@
 }
 
 .experts-summon-spinner {
-  width: 18px;
-  height: 18px;
-  border: 2px solid var(--mn-border);
-  border-top-color: var(--mn-accent);
-  border-radius: 50%;
-  animation: experts-summon-spin 0.75s linear infinite;
+  display: none;
 }
 
 @keyframes experts-summon-pulse {

@@ -3,6 +3,7 @@
  */
 
 import {
+  Compartment,
   EditorSelection,
   Prec,
   StateEffect,
@@ -21,6 +22,7 @@ import {
   type KeyBinding,
   type ViewUpdate,
 } from '@codemirror/view';
+import { pickedCompletion } from '@codemirror/autocomplete';
 import {
   getEditorAiCompletionConfigSync,
   type EditorAiCompletionConfig,
@@ -30,7 +32,13 @@ import {
   resolveEditorAiBinding,
   validateEditorAiBinding,
 } from './editor-ai-completion-client';
-import { nextPartialGhostChunk } from './editor-ai-completion-prompt';
+import { nextPartialGhostChunk, EditorRecentEditsRing, shouldReplaceGhostPartial, extractPrefixSuffix } from './editor-ai-completion-prompt';
+import {
+  didLspCloseWithoutAccept,
+  isLspBusy,
+  shouldAiTabYieldToLsp,
+  shouldScheduleAi,
+} from './editor-completion-policy';
 
 export interface EditorAiExtensionOptions {
   filePath: string;
@@ -49,6 +57,9 @@ interface AiGhostValue {
 }
 
 const setAiGhost = StateEffect.define<AiGhostValue | null>();
+
+/** Compartment for hot-reloading AI completion without remounting the editor. */
+export const editorAiCompletionCompartment = new Compartment();
 
 /** Resolve ghost value for a transaction (effects + doc/selection invalidation). */
 function resolveGhostAfterTransaction(
@@ -184,6 +195,7 @@ export const editorAiGhostKeymapBindings: KeyBinding[] = [
     key: 'Tab',
     preventDefault: true,
     run: (view) => {
+      if (shouldAiTabYieldToLsp(view.state)) return false;
       if (!hasEditorAiGhost(view.state)) return false;
       return acceptEditorAiGhost(view);
     },
@@ -215,6 +227,13 @@ class EditorAiCompletionPlugin {
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private abortController: AbortController | null = null;
   private requestPos = -1;
+  /** Epoch ms when an LSP completion item was last accepted (cooldown for AI). */
+  private completionAcceptedAt = 0;
+  /** Ring buffer of recently changed lines for prompt context. */
+  private readonly recentEdits = new EditorRecentEditsRing();
+  /** Prefix/suffix from the active request (for monotonic partial validation). */
+  private requestPrefix = '';
+  private requestSuffix = '';
 
   constructor(
     private readonly view: EditorView,
@@ -227,21 +246,68 @@ class EditorAiCompletionPlugin {
   }
 
   update(update: ViewUpdate): void {
-    if (!update.docChanged && !update.selectionSet) return;
-    const tr = update.transactions[0];
-    this.cancelInFlight(update.docChanged, tr);
-    if (update.state.readOnly) return;
+    const { state } = update;
+    const config = this.resolveConfig();
+    if (!config.enabled) return;
+
+    if (isLspBusy(state)) {
+      this.cancelInFlight(true, update.transactions[0]);
+      return;
+    }
+
+    for (const tr of update.transactions) {
+      if (tr.annotation(pickedCompletion) != null) {
+        this.completionAcceptedAt = Date.now();
+      }
+      if (tr.docChanged) {
+        this.recentEdits.recordDocChange(
+          tr.startState.doc.toString(),
+          tr.state.doc.toString(),
+        );
+      }
+    }
+
+    const lspClosedWithoutAccept = didLspCloseWithoutAccept(
+      update.startState,
+      state,
+      update.transactions,
+    );
+
+    if (!update.docChanged && !update.selectionSet && !lspClosedWithoutAccept) {
+      return;
+    }
+
+    if (update.docChanged) {
+      this.cancelInFlight(true, update.transactions[0]);
+    }
+
+    if (state.readOnly) return;
     if (!this.opts.canRequest()) {
       this.opts.onStatus?.('AI completion unavailable (start npm start and configure a provider).');
       return;
     }
     this.opts.onStatus?.(null);
 
-    if (update.selectionSet && !update.docChanged) {
+    if (
+      !shouldScheduleAi(
+        {
+          docChanged: update.docChanged,
+          selectionSet: update.selectionSet,
+          readOnly: state.readOnly,
+          state,
+          transactions: update.transactions,
+          lspClosedWithoutAccept,
+        },
+        {
+          isComposing: this.view.composing,
+          completionAcceptedAt: this.completionAcceptedAt,
+        },
+      )
+    ) {
       return;
     }
 
-    const pos = update.state.selection.main.head;
+    const pos = state.selection.main.head;
     this.schedule(pos);
   }
 
@@ -281,11 +347,22 @@ class EditorAiCompletionPlugin {
   }
 
   private showGhostAt(pos: number, text: string): void {
+    if (isLspBusy(this.view.state)) return;
     if (!text) {
       this.view.dispatch({ effects: setAiGhost.of(null) });
       return;
     }
     if (this.view.state.selection.main.head !== pos) return;
+
+    const row = this.view.state.field(aiGhostField, false);
+    const current = row?.ghost?.text ?? '';
+    if (
+      current &&
+      !shouldReplaceGhostPartial(current, text, this.requestPrefix, this.requestSuffix)
+    ) {
+      return;
+    }
+
     this.view.dispatch({
       effects: setAiGhost.of({ text, pos }),
     });
@@ -293,7 +370,10 @@ class EditorAiCompletionPlugin {
 
   private async requestCompletion(pos: number): Promise<void> {
     const { state } = this.view;
+    const config = this.resolveConfig();
+    if (!config.enabled) return;
     if (state.readOnly) return;
+    if (isLspBusy(state)) return;
     if (state.selection.main.head !== pos) return;
 
     const controller = new AbortController();
@@ -308,6 +388,11 @@ class EditorAiCompletionPlugin {
         this.opts.onStatus?.(validation.message);
         return;
       }
+
+      const { prefix, suffix } = extractPrefixSuffix(state.doc, pos, config);
+      this.requestPrefix = prefix;
+      this.requestSuffix = suffix;
+
       const result = await fetchEditorAiCompletion({
         state,
         cursorPos: pos,
@@ -315,14 +400,17 @@ class EditorAiCompletionPlugin {
         config,
         binding,
         signal: controller.signal,
+        recentEdits: this.recentEdits.snapshot(),
         onPartial: (partial) => {
           if (controller.signal.aborted) return;
+          if (isLspBusy(this.view.state)) return;
           if (this.requestPos !== pos) return;
           this.showGhostAt(pos, partial);
         },
       });
 
       if (controller.signal.aborted) return;
+      if (isLspBusy(this.view.state)) return;
       if (this.view.state.selection.main.head !== pos) return;
       if (this.requestPos !== pos) return;
 
@@ -355,4 +443,28 @@ export function editorAiCompletionExtensions(
     ViewPlugin.define((view) => new EditorAiCompletionPlugin(view, opts)),
     Prec.highest(keymap.of(editorAiGhostKeymapBindings)),
   ];
+}
+
+/** Wrap AI extensions in a compartment for hot configuration reload. */
+export function editorAiCompletionCompartmentExtension(
+  active: Extension[],
+): Extension {
+  return editorAiCompletionCompartment.of(active);
+}
+
+/** Hot-apply editor AI settings without remounting CodeMirror. */
+export function reconfigureEditorAiCompletion(
+  view: EditorView,
+  opts: EditorAiExtensionOptions,
+): void {
+  const config = opts.getConfig?.() ?? opts.config ?? getEditorAiCompletionConfigSync();
+  const enabled = config.enabled && opts.canRequest();
+  view.dispatch({
+    effects: editorAiCompletionCompartment.reconfigure(
+      enabled ? editorAiCompletionExtensions(opts) : [],
+    ),
+  });
+  if (!enabled && hasEditorAiGhost(view.state)) {
+    dismissEditorAiGhost(view);
+  }
 }

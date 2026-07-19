@@ -153,7 +153,10 @@ describe('per-mode matrix groups', () => {
 
 describe('cross-mode policy invariants', () => {
   const BUG_TOOLS = TOOL_GROUP_IDS['bug-board'];
-  const BRAIN_TOOLS = TOOL_GROUP_IDS.brain;
+  const BRAIN_TOOLS = [
+    ...TOOL_GROUP_IDS['brain-core'],
+    ...TOOL_GROUP_IDS['brain-admin'],
+  ];
   const EMAIL_TOOLS = TOOL_GROUP_IDS.email;
   const CALENDAR_TOOLS = TOOL_GROUP_IDS.calendar;
   const APPEARANCE_TOOLS = TOOL_GROUP_IDS.appearance;

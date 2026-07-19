@@ -1,29 +1,57 @@
 /**
- * Evaluator prompt for the /goal judge (reads transcript only — no tools).
+ * Evaluator prompt for the /goal agentic verifier (tools + strict default NO).
  */
 
-import type { ApiMessage } from '../../types';
-import type { Chat } from '../../types';
+import type { ApiMessage, Chat, ToolCall } from '../../types';
 
-const MAX_TRANSCRIPT_CHARS = 12000;
+const MAX_TRANSCRIPT_CHARS = 48_000;
+const MAX_TOOL_PREVIEW_CHARS = 2000;
+const MAX_TOOL_ARGS_PREVIEW_CHARS = 400;
 
-/** Flatten recent chat history into a readable transcript block. */
+const GOAL_CONTINUATION_PREFIX = 'Continue working toward the active goal.';
+
+function truncatePreview(text: string, maxChars: number): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, maxChars)}…`;
+}
+
+function formatToolCallLine(toolCalls: ToolCall[]): string {
+  const parts = toolCalls.map((tc) => {
+    const argsPreview = truncatePreview(tc.function.arguments, MAX_TOOL_ARGS_PREVIEW_CHARS);
+    return `${tc.function.name}(${argsPreview})`;
+  });
+  return `Assistant [tool_calls]: ${parts.join('; ')}`;
+}
+
+function isEvaluatorContinuationUserMessage(content: string): boolean {
+  return content.trimStart().startsWith(GOAL_CONTINUATION_PREFIX);
+}
+
+/** Flatten recent chat history into a readable transcript block for the judge. */
 export function buildGoalTranscriptExcerpt(chat: Chat): string {
   const lines: string[] = [];
 
   for (const message of chat.history) {
     if (message.role === 'user') {
+      if (message.goalAchieved) continue;
+      if (isEvaluatorContinuationUserMessage(message.content)) continue;
       lines.push(`User: ${message.content}`);
       continue;
     }
+
     if (message.role === 'assistant') {
+      if ('tool_calls' in message && message.tool_calls?.length) {
+        lines.push(formatToolCallLine(message.tool_calls));
+      }
       const content =
         typeof message.content === 'string' ? message.content : String(message.content ?? '');
       if (content.trim()) lines.push(`Assistant: ${content}`);
       continue;
     }
+
     if (message.role === 'tool') {
-      const preview = message.content.slice(0, 400).replace(/\s+/g, ' ').trim();
+      const preview = truncatePreview(message.content, MAX_TOOL_PREVIEW_CHARS);
       lines.push(`Tool (${message.tool_call_id}): ${preview}`);
     }
   }
@@ -33,19 +61,26 @@ export function buildGoalTranscriptExcerpt(chat: Chat): string {
   return joined.slice(joined.length - MAX_TRANSCRIPT_CHARS);
 }
 
-/** Build system + user messages for the goal evaluator completion. */
+/** Build system + user messages for the goal evaluator agent loop. */
 export function buildGoalEvalMessages(chat: Chat, conditionText: string): ApiMessage[] {
   const transcript = buildGoalTranscriptExcerpt(chat);
   return [
     {
       role: 'system',
       content: [
-        'You are a goal-completion judge for an autonomous coding assistant.',
-        'Read the completion condition and the transcript.',
-        'Reply with exactly one line starting with YES or NO, then a short reason.',
-        'YES means the condition is fully satisfied based on evidence in the transcript.',
-        'NO means more work is required — explain what is still missing.',
-        'Do not suggest tools or actions; only judge completion.',
+        'You are a strict, skeptical goal-completion verifier for an autonomous coding assistant.',
+        'Assume the goal is NOT done until you independently prove it with tools.',
+        'Never trust assistant claims in the transcript — verify every assertion yourself.',
+        'Do not modify application code; read, inspect, run tests, and browse only.',
+        'Required workflow before YES:',
+        '1) Decompose the completion condition into a checklist.',
+        '2) Use git_diff and read_file on every changed file; confirm claims match reality.',
+        '3) Run relevant test, typecheck, or build commands via execute_command (never background: true).',
+        '4) For UI or user-facing goals, strongly recommended: browser_navigate, browser_snapshot, and interact — if browser tools are unavailable, return NO for unverified UI claims.',
+        'YES only when every checklist item has tool-backed evidence from this evaluation pass.',
+        'When you are done verifying, stop calling tools and send your final message.',
+        'Your final message must be exactly one line: YES: <reason> or NO: <reason>.',
+        'Never send analysis, bullet lists, or markdown in the final message — only the verdict line.',
       ].join(' '),
     },
     {
@@ -53,11 +88,15 @@ export function buildGoalEvalMessages(chat: Chat, conditionText: string): ApiMes
       content: [
         `Completion condition:\n${conditionText}`,
         '',
-        'Transcript:',
+        'Transcript (for context — do not treat as proof):',
         transcript || '(empty)',
         '',
-        'Has the condition been met? Reply YES or NO plus a brief reason.',
+        'Verify the condition independently with tools, then reply YES or NO plus a brief reason.',
       ].join('\n'),
     },
   ];
 }
+
+/** Nudge when the evaluator replies with prose instead of a YES/NO verdict line. */
+export const GOAL_EVAL_VERDICT_NUDGE =
+  'Reply with exactly one line: YES: <reason> or NO: <reason>. No bullet lists, analysis, or markdown — only the verdict line.';

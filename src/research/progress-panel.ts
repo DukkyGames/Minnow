@@ -12,6 +12,37 @@ const STEPS = [
   { key: 'write', label: 'Synthesizing the brief', short: 'Synthesizing' },
 ] as const;
 
+/** Early-phase checklist rows — active index advances with elapsed time. */
+const PLANNING_CHECKLIST = [
+  'Parse the research question',
+  'Identify topics and angles',
+  'Draft the investigation plan',
+] as const;
+
+/** Rotating status line while the model is still planning (no plan text yet). */
+const PLANNING_STATUS_LINES = [
+  'Breaking down your question…',
+  'Choosing what evidence to gather…',
+  'Mapping search angles…',
+  'Preparing the investigation plan…',
+] as const;
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true
+  );
+}
+
+function planningChecklistIndex(elapsedMs: number): number {
+  const step = Math.floor(elapsedMs / 2800);
+  return Math.min(PLANNING_CHECKLIST.length - 1, step);
+}
+
+function planningStatusIndex(elapsedMs: number): number {
+  return Math.floor(elapsedMs / 3200) % PLANNING_STATUS_LINES.length;
+}
+
 export type ProgressStepIndex = 0 | 1 | 2 | 3 | 4;
 
 /** Map SSE phase to stepper index. */
@@ -108,9 +139,15 @@ export function inferSourceType(url: string): string {
   return 'blog';
 }
 
+export interface ResearchProgressPanelOptions {
+  /** Flat embed inside Super Plan — hides duplicate headline, uses compact chrome. */
+  embedded?: boolean;
+}
+
 /** Live run progress panel driven by SSE events. */
 export class ResearchProgressPanel {
   private readonly mount: HTMLElement;
+  private readonly embedded: boolean;
   private root: HTMLElement | null = null;
   private timerInterval: ReturnType<typeof setInterval> | null = null;
   private timerStart = 0;
@@ -121,9 +158,22 @@ export class ResearchProgressPanel {
   private feedKeys = new Set<string>();
   private status: 'running' | 'done' | 'error' | 'cancelled' = 'running';
   private statusMessage = '';
+  /** Latest SSE phase — drives whether the source feed shows an active read. */
+  private currentPhase = 'probing';
+  /** Optional server message for analyzing / writing phases. */
+  private phaseMessage = '';
+  /** Model id from probing SSE — shown during early planning. */
+  private model = '';
+  /** Truncated plan from planning SSE. */
+  private planSummary = '';
+  /** Latest search queries from searching SSE. */
+  private searchQueries: string[] = [];
+  /** Auto-detected report category. */
+  private category = '';
 
-  constructor(mount: HTMLElement) {
+  constructor(mount: HTMLElement, options: ResearchProgressPanelOptions = {}) {
     this.mount = mount;
+    this.embedded = options.embedded === true;
   }
 
   reset(): void {
@@ -135,9 +185,21 @@ export class ResearchProgressPanel {
     this.feedKeys.clear();
     this.status = 'running';
     this.statusMessage = '';
+    this.currentPhase = 'probing';
+    this.phaseMessage = '';
+    this.model = '';
+    this.planSummary = '';
+    this.searchQueries = [];
+    this.category = '';
     this.timerStart = performance.now();
     this.root = document.createElement('div');
     this.root.className = 'dr-prog';
+    if (this.embedded) {
+      this.root.classList.add('dr-prog--embedded');
+    }
+    if (prefersReducedMotion()) {
+      this.root.classList.add('dr-prog--reduced-motion');
+    }
     this.mount.replaceChildren(this.root);
     this.startTimer();
     this.paint();
@@ -162,11 +224,26 @@ export class ResearchProgressPanel {
     }
     if (event.phase === 'warning') {
       this.statusMessage = event.message;
+    } else {
+      this.currentPhase = event.phase;
     }
     this.stepIndex = progressPhaseToStep(event.phase);
+    if (event.phase === 'probing' && event.model?.trim()) {
+      this.model = event.model.trim();
+    }
+    if (event.phase === 'planning' && event.planSummary?.trim()) {
+      this.planSummary = event.planSummary.trim();
+    }
+    if (event.phase === 'category' && event.category?.trim()) {
+      this.category = event.category.trim();
+    }
     if (event.phase === 'searching') {
       this.round = event.round || 1;
       this.scanned = event.totalSources ?? this.scanned;
+      const queries = event.queryList ?? [];
+      if (queries.length) {
+        this.searchQueries = queries.slice(0, 8);
+      }
     }
     if (event.phase === 'reading') {
       if (event.round) {
@@ -189,9 +266,11 @@ export class ResearchProgressPanel {
     if (event.phase === 'analyzing') {
       this.round = event.round ?? this.round;
       this.scanned = event.totalSources ?? this.scanned;
+      this.phaseMessage = event.message?.trim() || `Synthesizing round ${this.round}…`;
     }
     if (event.phase === 'writing') {
       this.scanned = event.totalSources ?? this.scanned;
+      this.phaseMessage = event.message?.trim() || 'Composing final report…';
     }
     this.paint();
   }
@@ -237,6 +316,135 @@ export class ResearchProgressPanel {
     if (el) {
       el.textContent = formatClock(this.getElapsedMs());
     }
+    // Rotate early-phase hints while the run is still in planning/probing.
+    if (
+      this.status === 'running' &&
+      (this.currentPhase === 'probing' || this.currentPhase === 'planning') &&
+      !this.planSummary
+    ) {
+      this.updateWorkspaceLead();
+    }
+  }
+
+  /** Update rotating status text without rebuilding the whole panel. */
+  private updateWorkspaceLead(): void {
+    const lead = this.root?.querySelector('[data-dr-workspace-lead]');
+    if (lead) {
+      lead.textContent = PLANNING_STATUS_LINES[planningStatusIndex(this.getElapsedMs())];
+    }
+    const checklist = this.root?.querySelector('.dr-workspace-checklist');
+    if (checklist) {
+      const activeIdx = planningChecklistIndex(this.getElapsedMs());
+      checklist.querySelectorAll('.dr-workspace-step').forEach((node, i) => {
+        const step = node as HTMLElement;
+        const state = i < activeIdx ? 'done' : i === activeIdx ? 'active' : 'todo';
+        step.classList.remove('done', 'active', 'todo');
+        step.classList.add(state);
+      });
+    }
+  }
+
+  /** Whether the main workspace (pre-feed activity) should show. */
+  private showWorkspace(): boolean {
+    if (this.status !== 'running') {
+      return false;
+    }
+    if (this.feed.length > 0) {
+      return false;
+    }
+    return (
+      this.currentPhase === 'probing' ||
+      this.currentPhase === 'planning' ||
+      this.currentPhase === 'searching' ||
+      this.currentPhase === 'category'
+    );
+  }
+
+  private buildWorkspaceHtml(): string {
+    const elapsed = this.getElapsedMs();
+    const checklistIdx = planningChecklistIndex(elapsed);
+
+    if (this.currentPhase === 'searching') {
+      const queryRows =
+        this.searchQueries.length > 0
+          ? `<ul class="dr-workspace-queries">${this.searchQueries
+              .map(
+                (q) =>
+                  `<li class="dr-workspace-query research-mono">${escapeHtml(q)}</li>`,
+              )
+              .join('')}</ul>`
+          : `<div class="dr-workspace-wait">
+              <span class="dr-workspace-pulse" aria-hidden="true"></span>
+              <span class="dr-workspace-pulse" aria-hidden="true"></span>
+              <span class="dr-workspace-pulse" aria-hidden="true"></span>
+            </div>`;
+
+      const metaParts = [`Round ${this.round}`];
+      if (this.scanned > 0) {
+        metaParts.push(`${this.scanned} sources found`);
+      }
+      if (this.searchQueries.length) {
+        metaParts.push(`${this.searchQueries.length} queries`);
+      }
+
+      return `<div class="dr-workspace${this.embedded ? ' dr-workspace--embedded' : ''}" aria-live="polite">
+        <div class="dr-workspace-hero">
+          <span class="dr-spinner" aria-hidden="true"></span>
+          <div class="dr-workspace-copy">
+            <div class="dr-workspace-lead">Searching for sources…</div>
+            <div class="dr-workspace-meta research-mono">${escapeHtml(metaParts.join(' · '))}</div>
+          </div>
+        </div>
+        ${queryRows}
+      </div>`;
+    }
+
+    const statusLine =
+      this.planSummary.trim() !== ''
+        ? 'Investigation plan ready'
+        : PLANNING_STATUS_LINES[planningStatusIndex(elapsed)];
+
+    const checklistHtml = PLANNING_CHECKLIST.map((label, i) => {
+      const state = i < checklistIdx ? 'done' : i === checklistIdx ? 'active' : 'todo';
+      const icon =
+        state === 'done'
+          ? '<span class="dr-workspace-icon done" aria-hidden="true">✓</span>'
+          : state === 'active'
+            ? '<span class="dr-spinner sm" aria-hidden="true"></span>'
+            : '<span class="dr-workspace-icon todo" aria-hidden="true"></span>';
+      return `<li class="dr-workspace-step ${state}">${icon}<span>${escapeHtml(label)}</span></li>`;
+    }).join('');
+
+    const planBlock = this.planSummary
+      ? `<div class="dr-workspace-plan">
+          <div class="dr-workspace-plan-label research-mono">Plan</div>
+          <p class="dr-workspace-plan-text">${escapeHtml(this.planSummary)}</p>
+        </div>`
+      : '';
+
+    const metaParts: string[] = [];
+    if (this.model) {
+      metaParts.push(this.model);
+    }
+    if (this.category) {
+      metaParts.push(this.category);
+    }
+
+    return `<div class="dr-workspace${this.embedded ? ' dr-workspace--embedded' : ''}" aria-live="polite">
+      <div class="dr-workspace-hero">
+        <span class="dr-spinner" aria-hidden="true"></span>
+        <div class="dr-workspace-copy">
+          <div class="dr-workspace-lead" data-dr-workspace-lead>${escapeHtml(statusLine)}</div>
+          ${
+            metaParts.length
+              ? `<div class="dr-workspace-meta research-mono">${escapeHtml(metaParts.join(' · '))}</div>`
+              : ''
+          }
+        </div>
+      </div>
+      <ul class="dr-workspace-checklist">${checklistHtml}</ul>
+      ${planBlock}
+    </div>`;
   }
 
   private paint(): void {
@@ -250,6 +458,8 @@ export class ResearchProgressPanel {
         : this.status === 'cancelled'
           ? 'Research cancelled'
           : step.label;
+    const embeddedPhase =
+      this.status === 'error' ? 'Error' : this.status === 'cancelled' ? 'Stopped' : step.short;
 
     const stepperHtml = STEPS.map((s, i) => {
       const st = i < this.stepIndex ? 'done' : i === this.stepIndex ? 'active' : 'todo';
@@ -269,19 +479,30 @@ export class ResearchProgressPanel {
         `<span class="dr-slabel research-mono ${i === this.stepIndex ? 'on' : i < this.stepIndex ? 'did' : ''}">${escapeHtml(s.short)}</span>`,
     ).join('');
 
+    const isReadingPhase = this.status === 'running' && this.currentPhase === 'reading';
+    const isSynthesisPhase =
+      this.status === 'running' &&
+      (this.currentPhase === 'analyzing' || this.currentPhase === 'writing');
     const latest = this.feed.length ? this.feed[this.feed.length - 1] : null;
-    const currentHtml = latest
+    const currentHtml = isSynthesisPhase
       ? `<div class="dr-current">
+          <div class="dr-cur-link">${escapeHtml(this.phaseMessage)}</div>
+          <div class="dr-cur-meta research-mono">Round ${this.round} · ${this.scanned} sources scanned · ${this.feed.length} read</div>
+        </div>`
+      : latest && isReadingPhase
+        ? `<div class="dr-current">
           <div class="dr-cur-link">${escapeHtml(latest.title)} <span class="dr-cur-dim">| ${escapeHtml(latest.host)}</span></div>
           <div class="dr-cur-meta research-mono">Round ${this.round} · ${this.scanned} sources scanned · ${this.feed.length} read</div>
         </div>`
-      : '';
+        : '';
+
+    const workspaceHtml = this.showWorkspace() ? this.buildWorkspaceHtml() : '';
 
     const feedHtml =
       this.feed.length > 0
         ? `<div class="dr-feed">${this.feed
             .map((s, i) => {
-              const isLast = i === this.feed.length - 1 && this.status === 'running';
+              const isLast = i === this.feed.length - 1 && isReadingPhase;
               return `<div class="dr-feed-row ${isLast ? 'reading' : 'read'}">
                 <span class="dr-stype research-mono t-${escapeHtml(s.type)}">${escapeHtml(s.type)}</span>
                 <a class="dr-feed-title" href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(s.url)}">${escapeHtml(s.title)}</a>
@@ -292,15 +513,32 @@ export class ResearchProgressPanel {
             .join('')}</div>`
         : '';
 
+    const headHtml = this.embedded
+      ? `<div class="dr-embedded-bar">
+          <div class="dr-embedded-bar__copy">
+            <span class="dr-embedded-eyebrow research-mono">Deep research</span>
+            <span class="dr-embedded-phase">${escapeHtml(embeddedPhase)}</span>
+          </div>
+          <div class="dr-timer research-mono" data-dr-timer>${formatClock(this.getElapsedMs())}</div>
+        </div>`
+      : `<div class="dr-prog-head">
+          <div class="dr-prog-title"><span class="dr-dot"></span> ${escapeHtml(label)}</div>
+          <div class="dr-timer research-mono" data-dr-timer>${formatClock(this.getElapsedMs())}</div>
+        </div>`;
+
     this.root.innerHTML = `
-      <div class="dr-prog-head">
-        <div class="dr-prog-title"><span class="dr-dot"></span> ${escapeHtml(label)}</div>
-        <div class="dr-timer research-mono" data-dr-timer>${formatClock(this.getElapsedMs())}</div>
-      </div>
-      <div class="dr-stepper">${stepperHtml}</div>
-      <div class="dr-stepper-labels">${labelsHtml}</div>
+      ${headHtml}
+      <div class="dr-stepper${this.embedded ? ' dr-stepper--embedded' : ''}">${stepperHtml}</div>
+      <div class="dr-stepper-labels${this.embedded ? ' dr-stepper-labels--embedded' : ''}">${labelsHtml}</div>
+      ${workspaceHtml}
       ${currentHtml}
       ${feedHtml}
     `;
+
+    // Keep the newest source in view as the feed grows during a run.
+    const feed = this.root.querySelector('.dr-feed');
+    if (feed) {
+      feed.scrollTop = feed.scrollHeight;
+    }
   }
 }

@@ -483,11 +483,16 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'replace_text_in_file',
-      'Replace all occurrences of search text with replacement text in a file. Matching tolerates line-ending differences (CRLF vs LF) and trailing-whitespace drift on each line.',
+      'Replace all occurrences of search text with replacement text in a file. Matching tolerates line-ending differences (CRLF vs LF) and trailing-whitespace drift on each line. Pass expected_count to abort (no write) when the match count differs — a guard against an over-broad search rewriting more sites than intended.',
       {
         path: { type: 'string', description: 'Relative file path' },
         search: { type: 'string', description: 'Text to find' },
         replace: { type: 'string', description: 'Replacement text' },
+        expected_count: {
+          type: 'integer',
+          description:
+            'Optional: expected number of occurrences. If the actual count differs, the edit is refused and the real count is reported.',
+        },
       },
       ['path', 'search', 'replace'],
     ),
@@ -517,7 +522,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'grep',
-      'Search file contents (ripgrep-style). path:line:snippet; respects .gitignore. Returns at most head_limit match lines per call (default 200, max 200) and 32k total chars — truncated output includes offset= for the next page. Prefer output_mode files_with_matches or count for overview scans; use path/glob to narrow scope before paging.',
+      'Search file contents (ripgrep-style). path:line:snippet, workspace-relative; respects .gitignore. Returns at most head_limit output lines per call (matches plus any surrounding context lines; default 200, max 200) and 32k total chars — truncated output includes offset= for the next page. Prefer output_mode files_with_matches or count for overview scans (count reports true per-file totals); use path/glob to narrow scope before paging.',
       {
         pattern: { type: 'string', description: 'Regex or literal search pattern' },
         path: { type: 'string', description: 'Directory or file to search (default workspace root)' },
@@ -527,7 +532,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         context: { type: 'number', description: 'Lines of context around each match (0–5)' },
         head_limit: {
           type: 'number',
-          description: 'Max match lines per page (default 200, max 200)',
+          description: 'Max output lines per page — matches plus context (default 200, max 200)',
         },
         offset: {
           type: 'number',
@@ -737,6 +742,23 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         },
       },
       ['branch'],
+    ),
+  },
+  {
+    id: 'git_branch',
+    label: 'Git branch',
+    description: 'Lists branches (most recently committed first); optionally includes remotes.',
+    category: 'git',
+    serverRequired: true,
+    definition: toolSchema(
+      'git_branch',
+      'List git branches, most recent commit first. The current branch is marked with *. Pass all=true to include remote-tracking branches.',
+      {
+        all: {
+          type: 'boolean',
+          description: 'If true, include remote-tracking branches (git branch --all)',
+        },
+      },
     ),
   },
   {

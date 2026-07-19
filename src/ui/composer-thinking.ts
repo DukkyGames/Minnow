@@ -26,8 +26,10 @@ import {
 import { resolveSendCapabilities } from '../providers/model-capabilities';
 import { resolveActiveWorkAgent } from '../agents/resolve-work-agent';
 import {
+  ensureSessionsReady,
   getActiveChat,
   scheduleSaveSessions,
+  sessionState,
   touchChat,
 } from '../state/sessions';
 import { syncComposerReasoningEffortFromActiveChat } from './composer-reasoning-effort';
@@ -56,6 +58,7 @@ function formatBudgetHint(budget: ReturnType<typeof resolveThinkingBudgetTokens>
 }
 
 function effectiveCapabilities(): ReturnType<typeof resolveSendCapabilities> {
+  if (!sessionState) return undefined;
   const chat = getActiveChat();
   const modelId = chat.modelId?.trim();
   const providerId = chat.providerId?.trim();
@@ -152,11 +155,12 @@ export function initThinkingControl(): void {
 
   toggleBtn.appendChild(icon);
   rootEl.appendChild(toggleBtn);
-  syncThinkingControlFromActiveChat();
+  void ensureSessionsReady().then(() => syncThinkingControlFromActiveChat());
 }
 
 /** Sync brain toggle from active chat, inheritance, and model capabilities. */
 export function syncThinkingControlFromActiveChat(): void {
+  if (!sessionState) return;
   const caps = effectiveCapabilities();
   const thinkingWrap = document.getElementById('composerThinkingWrap');
   const dropdownMode = modelUsesComposerReasoningDropdown(caps);

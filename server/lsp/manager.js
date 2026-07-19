@@ -3,6 +3,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
@@ -20,17 +21,52 @@ import {
 } from '../../src/lsp/merge-config.mjs';
 import { formatDiagnostics } from '../../src/lsp/format-diagnostics.mjs';
 import { getWorkspaceRoot } from '../workspace/root.js';
+import { normalizeFileUri } from './file-uri.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(__dirname, '../..');
 
-const processes = new Map();
+/** Editor scope — live buffer / UI; agent scope — saved-disk tool diagnostics. */
+const LSP_SCOPE_EDITOR = 'editor';
+const LSP_SCOPE_AGENT = 'agent';
 
-/** In-flight connect attempts (dedupe parallel spawns for the same server id). */
-const pendingConnections = new Map();
+const DEFAULT_DIAG_QUIET_PERIOD_MS = 150;
+const DEFAULT_DIAG_EMPTY_QUIET_PERIOD_MS = 500;
+const DEFAULT_DIAG_TOTAL_TIMEOUT_MS = 15_000;
+/** Default timeout for indexing/search LSP requests (workspace/symbol, documentSymbol). */
+const DEFAULT_LSP_REQUEST_TIMEOUT_MS = 6000;
 
-/** Per-fileUri sync state: LSP version + latest full text. */
-const documentSync = new Map();
+/** @type {Record<string, { processes: Map<string, object>, pendingConnections: Map<string, Promise<object>>, documentSync: Map<string, { version: number, text: string }>, diagnosticSnapshots: Map<string, { revision: string, formatted: string }> }>} */
+const scopeStores = {
+  [LSP_SCOPE_EDITOR]: {
+    processes: new Map(),
+    pendingConnections: new Map(),
+    documentSync: new Map(),
+    diagnosticSnapshots: new Map(),
+  },
+  [LSP_SCOPE_AGENT]: {
+    processes: new Map(),
+    pendingConnections: new Map(),
+    documentSync: new Map(),
+    diagnosticSnapshots: new Map(),
+  },
+};
+
+/** Active diagnostic waiters keyed by `${scope}::${serverId}::${fileUri}`. */
+const diagnosticWaiters = new Map();
+
+/** Tunable via setLspDiagnosticWaitForTest in unit tests. */
+let diagQuietPeriodMs = DEFAULT_DIAG_QUIET_PERIOD_MS;
+let diagEmptyQuietPeriodMs = DEFAULT_DIAG_EMPTY_QUIET_PERIOD_MS;
+let diagTotalTimeoutMs = DEFAULT_DIAG_TOTAL_TIMEOUT_MS;
+
+function getScopeStore(scope) {
+  return scopeStores[scope] ?? scopeStores[LSP_SCOPE_EDITOR];
+}
+
+function contentRevision(text) {
+  return createHash('sha256').update(text, 'utf8').digest('hex');
+}
 
 function workspaceRootUri() {
   return pathToFileURL(getWorkspaceRoot()).href;
@@ -38,7 +74,7 @@ function workspaceRootUri() {
 
 function toFileUri(relativePath) {
   const abs = path.resolve(getWorkspaceRoot(), relativePath);
-  return pathToFileURL(abs).href;
+  return normalizeFileUri(pathToFileURL(abs).href);
 }
 
 /** Map file extension to LSP languageId for didOpen. */
@@ -135,7 +171,7 @@ function normalizeLspRange(range) {
 function fileUriToRelativePath(uri) {
   if (!uri || typeof uri !== 'string') return '';
   try {
-    const abs = fileURLToPath(uri);
+    const abs = fileURLToPath(normalizeFileUri(uri));
     const root = path.resolve(getWorkspaceRoot());
     const rel = path.relative(root, abs);
     if (!rel.startsWith('..') && !path.isAbsolute(rel)) {
@@ -271,6 +307,25 @@ function extractCompletionInsertFields(item) {
   return { insertText, textEditRange, textEditInsertRange, textEditReplaceRange };
 }
 
+/** Composite dedup key — distinct overloads may share a label. */
+function completionDedupKey(item) {
+  return `${item.sortText ?? ''}\0${item.label}\0${item.detail ?? ''}\0${item.insertText}`;
+}
+
+/** Stable sort by LSP sortText (falls back to label). */
+function stableSortCompletionItems(items) {
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const sa = a.item.sortText ?? a.item.label;
+      const sb = b.item.sortText ?? b.item.label;
+      if (sa < sb) return -1;
+      if (sa > sb) return 1;
+      return a.index - b.index;
+    })
+    .map(({ item }) => item);
+}
+
 function normalizeCompletionItems(result) {
   const raw = Array.isArray(result) ? result : (result?.items ?? []);
   const out = [];
@@ -298,9 +353,23 @@ function normalizeCompletionItems(result) {
     if (Array.isArray(item.additionalTextEdits) && item.additionalTextEdits.length > 0) {
       entry.additionalTextEdits = item.additionalTextEdits;
     }
+    if (item.sortText != null) entry.sortText = String(item.sortText);
+    if (item.filterText != null) entry.filterText = String(item.filterText);
+    if (item.preselect === true) entry.preselect = true;
+    if (Array.isArray(item.commitCharacters) && item.commitCharacters.length > 0) {
+      entry.commitCharacters = item.commitCharacters.map(String);
+    }
     out.push(entry);
   }
   return out;
+}
+
+/** Parse LSP completion list + isIncomplete flag. */
+function parseCompletionResult(result) {
+  const isIncomplete = Boolean(
+    result && typeof result === 'object' && !Array.isArray(result) && result.isIncomplete,
+  );
+  return { items: normalizeCompletionItems(result), isIncomplete };
 }
 
 function normalizeStructuredDiagnostics(diagnostics) {
@@ -392,7 +461,23 @@ function isSkippableWorkspaceSymbolError(message) {
   const text = String(message ?? '');
   if (/Unhandled method workspace\/symbol/i.test(text)) return true;
   if (/connection got disposed/i.test(text)) return true;
+  if (/timed out after \d+ms/i.test(text)) return true;
   return false;
+}
+
+/**
+ * Reject a promise when it exceeds the time budget (prevents silent hangs during indexing).
+ * @template T
+ * @param {Promise<T>} promise
+ * @param {number} [ms]
+ */
+function withRequestTimeout(promise, ms = DEFAULT_LSP_REQUEST_TIMEOUT_MS) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`LSP request timed out after ${ms}ms`)), ms);
+    }),
+  ]);
 }
 
 /** User-facing hint when TypeScript has no loaded project for workspace search. */
@@ -404,8 +489,8 @@ function formatWorkspaceSymbolErrors(errors) {
   return joined;
 }
 
-function discardLspState(serverId, state) {
-  processes.delete(serverId);
+function discardLspState(scope, serverId, state) {
+  getScopeStore(scope).processes.delete(serverId);
   try {
     state.connection?.dispose?.();
   } catch {
@@ -418,10 +503,10 @@ function discardLspState(serverId, state) {
   }
 }
 
-function bindLspProcessLifecycle(serverId, state) {
+function bindLspProcessLifecycle(scope, serverId, state) {
   state.child.on('error', (err) => {
     console.error(`[lsp] ${serverId}:`, err instanceof Error ? err.message : err);
-    discardLspState(serverId, state);
+    discardLspState(scope, serverId, state);
   });
   state.child.on('exit', (code, signal) => {
     if (code !== 0 && code != null) {
@@ -433,21 +518,100 @@ function bindLspProcessLifecycle(serverId, state) {
         kind: 'lsp-exit',
         message: `LSP server ${serverId} exited with code ${code}`,
         stack: detail || undefined,
-        extra: { serverId, exitCode: code },
+        extra: { serverId, exitCode: code, scope },
       });
     } else if (signal) {
       console.error(`[lsp] ${serverId} exited on signal ${signal}`);
       void logChildProcessDiagnostic({
         kind: 'lsp-exit',
         message: `LSP server ${serverId} exited on signal ${signal}`,
-        extra: { serverId, signal },
+        extra: { serverId, signal, scope },
       });
     }
-    discardLspState(serverId, state);
+    discardLspState(scope, serverId, state);
   });
 }
 
-async function connectLspServer(serverId, config) {
+function diagnosticWaiterKey(scope, serverId, fileUri) {
+  return `${scope}::${serverId}::${fileUri}`;
+}
+
+function notifyDiagnosticWaiters(scope, serverId, fileUri, diagnostics) {
+  const waiter = diagnosticWaiters.get(diagnosticWaiterKey(scope, serverId, fileUri));
+  if (waiter) {
+    waiter.onPublication(diagnostics);
+  }
+}
+
+/**
+ * Event-driven waiter for publishDiagnostics — register before didOpen/didChange.
+ * @returns {{ promise: Promise<{ receivedAny: boolean, diagnostics: unknown[], reason: string }>, cancel: () => void }}
+ */
+function createDiagnosticWaiter(scope, serverId, fileUri) {
+  const key = diagnosticWaiterKey(scope, serverId, fileUri);
+  let receivedAny = false;
+  let settled = false;
+  let quietTimer = null;
+  let totalTimer = null;
+  let latestDiagnostics = [];
+  /** @type {(value: { receivedAny: boolean, diagnostics: unknown[], reason: string }) => void} */
+  let resolveSettled;
+
+  const promise = new Promise((resolve) => {
+    resolveSettled = resolve;
+  });
+
+  const settle = (reason) => {
+    if (settled) return;
+    settled = true;
+    if (quietTimer) clearTimeout(quietTimer);
+    if (totalTimer) clearTimeout(totalTimer);
+    diagnosticWaiters.delete(key);
+    resolveSettled({
+      receivedAny,
+      diagnostics: latestDiagnostics,
+      reason,
+    });
+  };
+
+  const waiter = {
+    onPublication(diagnostics) {
+      if (settled) return;
+      receivedAny = true;
+      latestDiagnostics = Array.isArray(diagnostics) ? diagnostics : [];
+      if (quietTimer) clearTimeout(quietTimer);
+      const quietMs =
+        latestDiagnostics.length === 0
+          ? Math.max(diagQuietPeriodMs, diagEmptyQuietPeriodMs)
+          : diagQuietPeriodMs;
+      quietTimer = setTimeout(() => settle('quiet'), quietMs);
+    },
+    cancel() {
+      settle('cancelled');
+    },
+  };
+
+  totalTimer = setTimeout(() => {
+    if (!receivedAny) {
+      settle('timeout');
+    } else {
+      settle('total-timeout');
+    }
+  }, diagTotalTimeoutMs);
+
+  diagnosticWaiters.set(key, waiter);
+
+  return { promise, cancel: () => waiter.cancel() };
+}
+
+function cancelAllDiagnosticWaiters() {
+  for (const [, waiter] of diagnosticWaiters) {
+    waiter.cancel?.();
+  }
+  diagnosticWaiters.clear();
+}
+
+async function connectLspServer(scope, serverId, config) {
   const command = config.command;
   if (!Array.isArray(command) || command.length === 0) {
     throw new Error(
@@ -479,15 +643,18 @@ async function connectLspServer(serverId, config) {
     diagnostics: new Map(),
     ready: false,
     serverCapabilities: {},
+    completionTriggerCharacters: [],
   };
 
   connection.onNotification('textDocument/publishDiagnostics', (params) => {
-    if (params?.uri) {
-      state.diagnostics.set(params.uri, params.diagnostics ?? []);
+    const uri = normalizeFileUri(params?.uri);
+    if (uri) {
+      state.diagnostics.set(uri, params.diagnostics ?? []);
+      notifyDiagnosticWaiters(scope, serverId, uri, params.diagnostics ?? []);
     }
   });
 
-  bindLspProcessLifecycle(serverId, state);
+  bindLspProcessLifecycle(scope, serverId, state);
 
   try {
     connection.listen();
@@ -533,39 +700,45 @@ async function connectLspServer(serverId, config) {
       initResult && typeof initResult === 'object' && initResult.capabilities
         ? initResult.capabilities
         : {};
+    const completionProvider = state.serverCapabilities.completionProvider ?? {};
+    state.completionTriggerCharacters = Array.isArray(completionProvider.triggerCharacters)
+      ? completionProvider.triggerCharacters.map(String)
+      : [];
     connection.sendNotification('initialized', {});
     state.ready = true;
     return state;
   } catch (err) {
-    discardLspState(serverId, state);
+    discardLspState(scope, serverId, state);
     throw err;
   }
 }
 
-async function getConnection(serverId, config) {
-  if (processes.has(serverId)) {
-    return processes.get(serverId);
+async function getConnection(scope, serverId, config) {
+  const store = getScopeStore(scope);
+  if (store.processes.has(serverId)) {
+    return store.processes.get(serverId);
   }
-  if (pendingConnections.has(serverId)) {
-    return pendingConnections.get(serverId);
+  if (store.pendingConnections.has(serverId)) {
+    return store.pendingConnections.get(serverId);
   }
 
-  const connectPromise = connectLspServer(serverId, config).then((state) => {
-    processes.set(serverId, state);
+  const connectPromise = connectLspServer(scope, serverId, config).then((state) => {
+    store.processes.set(serverId, state);
     return state;
   });
-  pendingConnections.set(serverId, connectPromise);
+  store.pendingConnections.set(serverId, connectPromise);
   try {
     return await connectPromise;
   } finally {
-    pendingConnections.delete(serverId);
+    store.pendingConnections.delete(serverId);
   }
 }
 
 /**
  * Sync document lifecycle with LSP servers (didOpen / didChange / didClose).
+ * @param {string} scope - {@link LSP_SCOPE_EDITOR} or {@link LSP_SCOPE_AGENT}
  */
-export async function notifyLspDocument(relativePath, event, text) {
+async function notifyLspDocumentForScope(scope, relativePath, event, text) {
   const merged = await loadMergedLspConfig();
   if (merged.enabled === false) {
     return { ok: false, error: 'LSP is disabled' };
@@ -576,6 +749,7 @@ export async function notifyLspDocument(relativePath, event, text) {
   }
 
   const fileUri = toFileUri(relativePath);
+  const store = getScopeStore(scope);
   const matchers = matchServersForPath(merged, relativePath);
   if (matchers.length === 0) {
     return { ok: false, error: `No LSP server configured for ${relativePath}` };
@@ -583,15 +757,15 @@ export async function notifyLspDocument(relativePath, event, text) {
 
   if (event === 'open') {
     const body = text ?? '';
-    const existing = documentSync.get(fileUri);
+    const existing = store.documentSync.get(fileUri);
     if (existing) {
       if (existing.text === body) {
         return { ok: true };
       }
       const nextVersion = existing.version + 1;
-      documentSync.set(fileUri, { version: nextVersion, text: body });
+      store.documentSync.set(fileUri, { version: nextVersion, text: body });
       for (const { id, config } of matchers) {
-        const state = await getConnection(id, config);
+        const state = await getConnection(scope, id, config);
         await state.connection.sendNotification('textDocument/didChange', {
           textDocument: { uri: fileUri, version: nextVersion },
           contentChanges: [{ text: body }],
@@ -599,9 +773,9 @@ export async function notifyLspDocument(relativePath, event, text) {
       }
       return { ok: true };
     }
-    documentSync.set(fileUri, { version: 1, text: body });
+    store.documentSync.set(fileUri, { version: 1, text: body });
     for (const { id, config } of matchers) {
-      const state = await getConnection(id, config);
+      const state = await getConnection(scope, id, config);
       await state.connection.sendNotification('textDocument/didOpen', {
         textDocument: {
           uri: fileUri,
@@ -615,12 +789,12 @@ export async function notifyLspDocument(relativePath, event, text) {
   }
 
   if (event === 'change') {
-    const prev = documentSync.get(fileUri) ?? { version: 0, text: '' };
+    const prev = store.documentSync.get(fileUri) ?? { version: 0, text: '' };
     const nextVersion = prev.version + 1;
     const nextText = text ?? prev.text;
-    documentSync.set(fileUri, { version: nextVersion, text: nextText });
+    store.documentSync.set(fileUri, { version: nextVersion, text: nextText });
     for (const { id, config } of matchers) {
-      const state = await getConnection(id, config);
+      const state = await getConnection(scope, id, config);
       await state.connection.sendNotification('textDocument/didChange', {
         textDocument: { uri: fileUri, version: nextVersion },
         contentChanges: [{ text: nextText }],
@@ -630,9 +804,9 @@ export async function notifyLspDocument(relativePath, event, text) {
   }
 
   if (event === 'close') {
-    documentSync.delete(fileUri);
+    store.documentSync.delete(fileUri);
     for (const { id, config } of matchers) {
-      const state = await getConnection(id, config);
+      const state = await getConnection(scope, id, config);
       await state.connection.sendNotification('textDocument/didClose', {
         textDocument: { uri: fileUri },
       });
@@ -644,27 +818,43 @@ export async function notifyLspDocument(relativePath, event, text) {
 }
 
 /**
- * Ensure the LSP has the latest buffer for a path.
- * @param {string} relativePath
- * @param {{ editorText?: string }} [options] - When set (e.g. from CM6), never fall back to disk.
+ * Sync document lifecycle with LSP servers (didOpen / didChange / didClose).
  */
-async function ensureDocumentSynced(relativePath, options = {}) {
+export async function notifyLspDocument(relativePath, event, text) {
+  return notifyLspDocumentForScope(LSP_SCOPE_EDITOR, relativePath, event, text);
+}
+
+async function ensureDocumentSyncedForScope(scope, relativePath, options = {}) {
+  const store = getScopeStore(scope);
   const fileUri = toFileUri(relativePath);
-  const synced = documentSync.get(fileUri);
+  const synced = store.documentSync.get(fileUri);
   if (synced) {
-    if (options.editorText !== undefined && options.editorText !== synced.text) {
-      await notifyLspDocument(relativePath, 'change', options.editorText);
+    if (options.diskText !== undefined && options.diskText !== synced.text) {
+      await notifyLspDocumentForScope(scope, relativePath, 'change', options.diskText);
+    } else if (options.editorText !== undefined && options.editorText !== synced.text) {
+      await notifyLspDocumentForScope(scope, relativePath, 'change', options.editorText);
+    } else if (options.forceChange === true) {
+      await notifyLspDocumentForScope(scope, relativePath, 'change', synced.text);
     }
     return fileUri;
   }
-  let body = options.editorText;
+  let body = options.diskText ?? options.editorText;
   if (body === undefined) {
     const fs = await import('node:fs/promises');
     const abs = path.resolve(getWorkspaceRoot(), relativePath);
     body = await fs.readFile(abs, 'utf8').catch(() => '');
   }
-  await notifyLspDocument(relativePath, 'open', body);
+  await notifyLspDocumentForScope(scope, relativePath, 'open', body);
   return fileUri;
+}
+
+/**
+ * Ensure the LSP has the latest buffer for a path.
+ * @param {string} relativePath
+ * @param {{ editorText?: string }} [options] - When set (e.g. from CM6), never fall back to disk.
+ */
+async function ensureDocumentSynced(relativePath, options = {}) {
+  return ensureDocumentSyncedForScope(LSP_SCOPE_EDITOR, relativePath, options);
 }
 
 /** Brief wait for publishDiagnostics after the document is already synced. */
@@ -710,8 +900,12 @@ async function withAllLspServers(handler) {
 
 /**
  * Request completion items at a 0-based line/character position.
+ * @param {string} relativePath
+ * @param {number} line
+ * @param {number} character
+ * @param {{ text?: string, context?: { triggerKind?: number, triggerCharacter?: string } }} [options]
  */
-export async function getLspCompletions(relativePath, line, character) {
+export async function getLspCompletions(relativePath, line, character, options = {}) {
   const merged = await loadMergedLspConfig();
   if (merged.enabled === false) {
     return { items: [], error: 'LSP is disabled' };
@@ -721,40 +915,72 @@ export async function getLspCompletions(relativePath, line, character) {
     return { items: [], error: 'Invalid path' };
   }
 
-  const fileUri = toFileUri(relativePath);
   const matchers = matchServersForPath(merged, relativePath);
   if (matchers.length === 0) {
     return { items: [], error: `No LSP server configured for ${relativePath}` };
   }
 
-  await ensureDocumentSynced(relativePath);
+  const syncOpts =
+    typeof options.text === 'string' ? { editorText: options.text } : {};
+  const fileUri = await ensureDocumentSynced(relativePath, syncOpts);
+
+  const completionParams = {
+    textDocument: { uri: fileUri },
+    position: { line, character },
+  };
+  const ctx = options.context;
+  if (ctx && typeof ctx === 'object' && ctx.triggerKind != null) {
+    completionParams.context = {
+      triggerKind: Number(ctx.triggerKind),
+      ...(ctx.triggerCharacter != null
+        ? { triggerCharacter: String(ctx.triggerCharacter) }
+        : {}),
+    };
+  }
 
   const seen = new Set();
   const items = [];
+  const triggerCharacters = new Set();
+  let isIncomplete = false;
 
   for (const { id, config } of matchers) {
     try {
-      const state = await getConnection(id, config);
-      const result = await state.connection.sendRequest('textDocument/completion', {
-        textDocument: { uri: fileUri },
-        position: { line, character },
-      });
-      for (const item of normalizeCompletionItems(result)) {
-        if (seen.has(item.label)) continue;
-        seen.add(item.label);
+      const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
+      for (const ch of state.completionTriggerCharacters ?? []) {
+        triggerCharacters.add(ch);
+      }
+      const result = await state.connection.sendRequest(
+        'textDocument/completion',
+        completionParams,
+      );
+      const parsed = parseCompletionResult(result);
+      if (parsed.isIncomplete) isIncomplete = true;
+      for (const item of parsed.items) {
+        const key = completionDedupKey(item);
+        if (seen.has(key)) continue;
+        seen.add(key);
         items.push(item);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return { items, error: `[${id}] ${message}` };
+      return {
+        items,
+        isIncomplete,
+        triggerCharacters: [...triggerCharacters],
+        error: `[${id}] ${message}`,
+      };
     }
   }
 
-  return { items };
+  return {
+    items: stableSortCompletionItems(items),
+    isIncomplete,
+    triggerCharacters: [...triggerCharacters],
+  };
 }
 
 /**
- * Fetch formatted diagnostics for a project-relative path.
+ * Fetch formatted diagnostics for a project-relative path (saved disk only, agent scope).
  */
 export async function getLspDiagnostics(relativePath) {
   const merged = await loadMergedLspConfig();
@@ -762,33 +988,66 @@ export async function getLspDiagnostics(relativePath) {
     return 'Error: LSP is disabled in settings.';
   }
 
-  const fileUri = toFileUri(relativePath);
+  if (!relativePath || relativePath.includes('..')) {
+    return 'Error: Invalid path.';
+  }
+
   const matchers = matchServersForPath(merged, relativePath);
   if (matchers.length === 0) {
     return `No LSP server configured for ${relativePath}.`;
   }
 
+  const fs = await import('node:fs/promises');
+  const abs = path.resolve(getWorkspaceRoot(), relativePath);
+  let diskText;
   try {
-    await ensureDocumentSynced(relativePath);
+    diskText = await fs.readFile(abs, 'utf8');
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return `Error: ${message}`;
   }
 
+  const revision = contentRevision(diskText);
+  const fileUri = toFileUri(relativePath);
+  const agentStore = getScopeStore(LSP_SCOPE_AGENT);
+  const cached = agentStore.diagnosticSnapshots.get(fileUri);
+  if (cached && cached.revision === revision) {
+    return cached.formatted;
+  }
+
   const parts = [];
   for (const { id, config } of matchers) {
+    const { promise, cancel } = createDiagnosticWaiter(LSP_SCOPE_AGENT, id, fileUri);
     try {
-      const state = await getConnection(id, config);
-      await awaitPublishedDiagnostics();
-      const diags = state.diagnostics.get(fileUri) ?? [];
-      const formatted = formatDiagnostics(`${relativePath} (${id})`, diags);
-      parts.push(formatted);
+      await getConnection(LSP_SCOPE_AGENT, id, config);
+      await ensureDocumentSyncedForScope(LSP_SCOPE_AGENT, relativePath, {
+        diskText,
+        forceChange: true,
+      });
+      const settled = await promise;
+      if (!settled.receivedAny) {
+        parts.push(
+          `[${id}] Diagnostics unavailable: no publishDiagnostics received within ${diagTotalTimeoutMs}ms. ` +
+            'The language server may still be starting or does not publish diagnostics for this file.',
+        );
+        continue;
+      }
+      const diags = settled.diagnostics;
+      if (diags.length === 0) {
+        parts.push(`No LSP diagnostics for ${relativePath} (${id}).`);
+      } else {
+        parts.push(formatDiagnostics(`${relativePath} (${id})`, diags));
+      }
     } catch (err) {
+      cancel();
       const message = err instanceof Error ? err.message : String(err);
       parts.push(`[${id}] Error: ${message}`);
     }
   }
-  return parts.join('\n\n');
+
+  const formatted = parts.join('\n\n');
+  agentStore.diagnosticSnapshots.set(fileUri, { revision, formatted });
+  return formatted;
 }
 
 /**
@@ -815,7 +1074,7 @@ export async function getLspStructuredDiagnostics(relativePath, editorText) {
   const parts = [];
   for (const { id, config } of ctx.matchers) {
     try {
-      const state = await getConnection(id, config);
+      const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
       await awaitPublishedDiagnostics();
       const diags = state.diagnostics.get(ctx.fileUri) ?? [];
       parts.push(...normalizeStructuredDiagnostics(diags));
@@ -842,7 +1101,7 @@ export async function getLspHover(relativePath, line, character) {
 
   for (const { id, config } of ctx.matchers) {
     try {
-      const state = await getConnection(id, config);
+      const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
       const hover = await state.connection.sendRequest('textDocument/hover', {
         textDocument: { uri: ctx.fileUri },
         position: { line, character },
@@ -871,7 +1130,7 @@ export async function getLspDefinition(relativePath, line, character) {
 
   for (const { id, config } of ctx.matchers) {
     try {
-      const state = await getConnection(id, config);
+      const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
       const result = await state.connection.sendRequest('textDocument/definition', {
         textDocument: { uri: ctx.fileUri },
         position: { line, character },
@@ -900,7 +1159,7 @@ export async function getLspTypeDefinition(relativePath, line, character) {
 
   for (const { id, config } of ctx.matchers) {
     try {
-      const state = await getConnection(id, config);
+      const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
       const result = await state.connection.sendRequest('textDocument/typeDefinition', {
         textDocument: { uri: ctx.fileUri },
         position: { line, character },
@@ -929,7 +1188,7 @@ export async function getLspReferences(relativePath, line, character) {
 
   for (const { id, config } of ctx.matchers) {
     try {
-      const state = await getConnection(id, config);
+      const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
       const result = await state.connection.sendRequest('textDocument/references', {
         textDocument: { uri: ctx.fileUri },
         position: { line, character },
@@ -959,7 +1218,7 @@ export async function getLspSignatureHelp(relativePath, line, character) {
 
   for (const { id, config } of ctx.matchers) {
     try {
-      const state = await getConnection(id, config);
+      const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
       const signatureHelp = await state.connection.sendRequest(
         'textDocument/signatureHelp',
         {
@@ -991,10 +1250,12 @@ export async function getLspDocumentSymbols(relativePath) {
 
   for (const { id, config } of ctx.matchers) {
     try {
-      const state = await getConnection(id, config);
-      const result = await state.connection.sendRequest('textDocument/documentSymbol', {
-        textDocument: { uri: ctx.fileUri },
-      });
+      const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
+      const result = await withRequestTimeout(
+        state.connection.sendRequest('textDocument/documentSymbol', {
+          textDocument: { uri: ctx.fileUri },
+        }),
+      );
       const raw = Array.isArray(result) ? result : [];
       const symbols = raw.map(normalizeDocumentSymbol).filter(Boolean);
       return { symbols };
@@ -1021,13 +1282,15 @@ export async function getLspWorkspaceSymbols(query) {
   const errors = [];
   for (const { id, config } of ctx.servers) {
     try {
-      const state = await getConnection(id, config);
+      const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
       if (!serverSupportsWorkspaceSymbols(id, config, state.serverCapabilities)) {
         continue;
       }
-      const result = await state.connection.sendRequest('workspace/symbol', {
-        query: q,
-      });
+      const result = await withRequestTimeout(
+        state.connection.sendRequest('workspace/symbol', {
+          query: q,
+        }),
+      );
       const raw = Array.isArray(result) ? result : [];
       for (const sym of raw) {
         const normalized = normalizeWorkspaceSymbol(sym);
@@ -1069,7 +1332,7 @@ export async function getLspCallHierarchy(relativePath, line, character) {
 
   for (const { id, config } of ctx.matchers) {
     try {
-      const state = await getConnection(id, config);
+      const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
       const prepared = await state.connection.sendRequest(
         'textDocument/prepareCallHierarchy',
         {
@@ -1126,7 +1389,7 @@ export async function resolveLspCompletion(relativePath, item) {
 
   for (const { id, config } of ctx.matchers) {
     try {
-      const state = await getConnection(id, config);
+      const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
       const resolved = await state.connection.sendRequest('completionItem/resolve', item);
       const [normalized] = normalizeCompletionItems([resolved]);
       return { item: normalized ?? null };
@@ -1179,7 +1442,9 @@ export async function listLspServers() {
   return Object.entries(merged.lsp ?? {}).map(([id, cfg]) => {
     const disabled = cfg.disabled === true;
     const hasCommand = Array.isArray(cfg.command) && cfg.command.length > 0;
-    const running = processes.has(id);
+    const running =
+      getScopeStore(LSP_SCOPE_EDITOR).processes.has(id) ||
+      getScopeStore(LSP_SCOPE_AGENT).processes.has(id);
     const requirements =
       cfg.requirements && typeof cfg.requirements === 'object'
         ? cfg.requirements
@@ -1200,32 +1465,54 @@ export async function listLspServers() {
 }
 
 /** @internal Test-only — in-memory sync state for a project-relative path. */
-export function getLspDocumentSyncForTest(relativePath) {
+export function getLspDocumentSyncForTest(relativePath, scope = LSP_SCOPE_EDITOR) {
   const fileUri = toFileUri(relativePath);
-  const entry = documentSync.get(fileUri);
+  const entry = getScopeStore(scope).documentSync.get(fileUri);
   if (!entry) return null;
   return { version: entry.version, text: entry.text };
+}
+
+/** @internal Test-only — tune diagnostic waiter timeouts. */
+export function setLspDiagnosticWaitForTest({
+  quietPeriodMs,
+  emptyQuietPeriodMs,
+  totalTimeoutMs,
+} = {}) {
+  if (quietPeriodMs != null) diagQuietPeriodMs = quietPeriodMs;
+  if (emptyQuietPeriodMs != null) diagEmptyQuietPeriodMs = emptyQuietPeriodMs;
+  if (totalTimeoutMs != null) diagTotalTimeoutMs = totalTimeoutMs;
+}
+
+/** @internal Test-only — restore default diagnostic waiter timeouts. */
+export function resetLspDiagnosticWaitForTest() {
+  diagQuietPeriodMs = DEFAULT_DIAG_QUIET_PERIOD_MS;
+  diagEmptyQuietPeriodMs = DEFAULT_DIAG_EMPTY_QUIET_PERIOD_MS;
+  diagTotalTimeoutMs = DEFAULT_DIAG_TOTAL_TIMEOUT_MS;
 }
 
 /** Stop specific language servers (e.g. after scaffolded tsconfig so tsserver reloads). */
 export function shutdownLspServers(serverIds) {
   const ids = new Set(serverIds.map((id) => String(id)));
-  for (const id of ids) {
-    pendingConnections.delete(id);
-    const state = processes.get(id);
-    if (state) discardLspState(id, state);
+  for (const scope of [LSP_SCOPE_EDITOR, LSP_SCOPE_AGENT]) {
+    const store = getScopeStore(scope);
+    for (const id of ids) {
+      store.pendingConnections.delete(id);
+      const state = store.processes.get(id);
+      if (state) discardLspState(scope, id, state);
+    }
   }
 }
 
 export function shutdownAllLsp() {
-  pendingConnections.clear();
-  for (const [, state] of processes) {
-    try {
-      state.child.kill();
-    } catch {
-      /* ignore */
+  cancelAllDiagnosticWaiters();
+  for (const scope of [LSP_SCOPE_EDITOR, LSP_SCOPE_AGENT]) {
+    const store = getScopeStore(scope);
+    store.pendingConnections.clear();
+    for (const [id, state] of store.processes) {
+      discardLspState(scope, id, state);
     }
+    store.processes.clear();
+    store.documentSync.clear();
+    store.diagnosticSnapshots.clear();
   }
-  processes.clear();
-  documentSync.clear();
 }

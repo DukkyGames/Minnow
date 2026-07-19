@@ -12,6 +12,7 @@ import {
   readMessageCache,
   writeMessageCache,
 } from '../../server/email/cache.js';
+import { closeMailDbs } from '../../server/email/store.js';
 
 const ACCOUNT_ID = 'acct-triage-failure-test';
 const MESSAGE_KEY = 'INBOX:42';
@@ -46,6 +47,8 @@ before(async () => {
 });
 
 after(async () => {
+  // Windows will not unlink an open SQLite file.
+  closeMailDbs();
   if (savedHome === undefined) {
     delete process.env.MINNOW_HOME;
   } else {

@@ -134,4 +134,11 @@ describe('diagnostics middleware', () => {
     assert.equal(after.status, 200);
     assert.equal(after.json.errors.length, 0);
   });
+
+  test('GET /api/diagnostics/health marks idle on-demand LSP as ok', async () => {
+    const res = await httpRequest(baseUrl, 'GET', '/api/diagnostics/health');
+    assert.equal(res.status, 200);
+    assert.equal(res.json.components.lsp.ok, true);
+    assert.equal(typeof res.json.components.lsp.running, 'number');
+  });
 });

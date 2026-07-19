@@ -56,7 +56,7 @@ import {
 import { isBoardViewActive } from './view-mode-toggle';
 import { closeDrawer } from './settings';
 import { setStatus } from './status';
-import { updateStrip } from './stats';
+import { refreshMetricsStripForChat } from '../chat/orchestrate/board-stats-aggregate';
 import { refreshContextUsageRing } from './context-usage-ring';
 import { resetCodeChangeTotals, recomputeWorkspaceCodeChangeTotals } from '../usage/code-change-ledger';
 import { sessionState } from '../state/sessions';
@@ -123,30 +123,7 @@ export { resolveModelInfo, showCachedModelInfo } from '../api/models';
 let suppressBubbleScroll = false;
 
 export function renderStatsForChat(chat: Chat): void {
-  const mid = chat.modelId?.trim() || '';
-  const ls = chat.lastStats;
-  const hasNumeric =
-    ls &&
-    (ls.tokens_per_second != null ||
-      ls.time_to_first_token != null ||
-      ls.generation_time != null ||
-      ls.total_tokens != null);
-  if (hasNumeric) {
-    const stats: Stats = {
-      tokens_per_second: ls!.tokens_per_second ?? undefined,
-      time_to_first_token: ls!.time_to_first_token ?? undefined,
-      generation_time: ls!.generation_time ?? undefined,
-      stop_reason: ls!.stop_reason ?? undefined,
-    };
-    const usage: Usage = {
-      total_tokens: ls!.total_tokens ?? undefined,
-      prompt_tokens: ls!.prompt_tokens ?? undefined,
-      completion_tokens: ls!.completion_tokens ?? undefined,
-    };
-    updateStrip(stats, usage, resolveModelInfo(mid, chat.modelInfo || {}));
-  } else {
-    updateStrip({}, {}, resolveModelInfo(mid, chat.modelInfo || {}));
-  }
+  refreshMetricsStripForChat(chat);
   refreshContextUsageRing();
   if (isHubMounted()) refreshHubLiveData();
 }
@@ -619,6 +596,13 @@ function streamingAssistantRowStub(): StreamingAssistantRow {
   };
 }
 
+/** Drop orphaned in-flight assistant shells before mounting a fresh stream row. */
+function removeStaleLiveStreamingRows(mount: HTMLElement): void {
+  for (const row of mount.querySelectorAll('.msg.assistant.msg--awaiting-prose')) {
+    row.remove();
+  }
+}
+
 export function appendStreamingAssistantRow(forChatId?: string): StreamingAssistantRow {
   const active = getActiveChat();
   const targetId = forChatId ?? active.id;
@@ -639,6 +623,9 @@ export function appendStreamingAssistantRow(forChatId?: string): StreamingAssist
     teardownHub();
   }
 
+  const mount = getActiveChatMountElement();
+  removeStaleLiveStreamingRows(mount);
+
   const wrap = document.createElement('div');
   wrap.className = 'msg assistant msg--awaiting-prose';
 
@@ -657,7 +644,7 @@ export function appendStreamingAssistantRow(forChatId?: string): StreamingAssist
   const streamStatus = attachStreamStatus(wrap);
   wrap.appendChild(bubble);
   bubble.appendChild(cursor);
-  getActiveChatMountElement().appendChild(wrap);
+  mount.appendChild(wrap);
   // Respect scroll pin: only follow the tail when the user is already near bottom.
   scrollChatIfPinned();
   return { wrap, bubble, cursor, streamStatus };

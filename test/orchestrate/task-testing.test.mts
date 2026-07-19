@@ -7,8 +7,11 @@ import { beforeEach, describe, test } from 'node:test';
 import {
   applyFinalTestFailureReopens,
   applyTaskTestFailureState,
+  clearMissingReportNudgesForTests,
   finalizeFinalTestOnStreamEnd,
   finalizeTaskTestingOnStreamEnd,
+  getMissingReportNudgeCountForTests,
+  MISSING_REPORT_NUDGE_CAP,
   tryTriggerFinalIntegrationTest,
 } from '../../src/state/orchestrate-board-actions.ts';
 import { isOrchestratePlanComplete } from '../../src/chat/orchestrate/plan-complete.ts';
@@ -70,6 +73,24 @@ function makeGroup(taskStatuses: Record<string, 'complete' | 'testing' | 'in_pro
     activeChatId: PLANNER_ID,
   });
   return group;
+}
+
+/** Tester chat that finished its turn cleanly but never reported a verdict. */
+function makeNoVerdictTesterChat(): Chat {
+  return {
+    id: TEST_CHAT_ID,
+    name: 'Test',
+    workspacePath: '/tmp/ws',
+    modeId: 'build',
+    modelId: 'm1',
+    workAgentId: 'tester',
+    history: [{ role: 'assistant', content: 'Looks fine to me, everything works.' }],
+    lastStats: null,
+    modelInfo: {},
+    updatedAt: 1,
+    boardGroupId: GROUP_ID,
+    boardTaskId: 'W1-A',
+  };
 }
 
 describe('board_report validation', () => {
@@ -180,7 +201,10 @@ describe('board_report tolerant inputs', () => {
 });
 
 describe('finalizeTaskTestingOnStreamEnd', () => {
-  beforeEach(() => setSessionStateForTests(null));
+  beforeEach(() => {
+    setSessionStateForTests(null);
+    clearMissingReportNudgesForTests();
+  });
 
   test('pass moves task to complete', async () => {
     const group = makeGroup({ 'W1-A': 'testing' });
@@ -260,33 +284,63 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
     assert.equal(group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!.status, 'complete');
   });
 
-  test('no marker and no verdict still fails', async () => {
-    const group = makeGroup({ 'W1-A': 'testing' });
-    const planner = makePlanner();
-    // Fail-routing goes through runSelfHeal, which requires a running board.
-    group.orchestrateBoard!.executionMode = 'afk';
-    group.orchestrateBoard!.autoRunning = true;
-    const testChat: Chat = {
-      id: TEST_CHAT_ID,
-      name: 'Test',
-      workspacePath: '/tmp/ws',
-      modeId: 'build',
-      modelId: 'm1',
-      workAgentId: 'tester',
-      history: [{ role: 'assistant', content: 'Looks fine to me, everything works.' }],
-      lastStats: null,
-      modelInfo: {},
-      updatedAt: 1,
-      boardGroupId: GROUP_ID,
-      boardTaskId: 'W1-A',
-    };
-    updateTask(group, 'W1-A', { testChatId: TEST_CHAT_ID }, planner);
-    setSessionStateForTests({ chats: [planner, testChat], groups: [group], activeChatId: PLANNER_ID });
-    const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
-    await finalizeTaskTestingOnStreamEnd(group, task, planner);
-    const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
-    assert.equal(updated.status, 'in_progress');
-    assert.equal(updated.testAttempts, 1);
+  test('no marker and no verdict nudges the Tester instead of failing the task', async () => {
+    const prevMinnowTest = process.env.MINNOW_TEST;
+    process.env.MINNOW_TEST = '1';
+    try {
+      const group = makeGroup({ 'W1-A': 'testing' });
+      const planner = makePlanner();
+      // Nudging (like fail-routing) only happens on a running board.
+      group.orchestrateBoard!.executionMode = 'afk';
+      group.orchestrateBoard!.autoRunning = true;
+      const testChat = makeNoVerdictTesterChat();
+      updateTask(group, 'W1-A', { testChatId: TEST_CHAT_ID }, planner);
+      setSessionStateForTests({ chats: [planner, testChat], groups: [group], activeChatId: PLANNER_ID });
+      const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+      await finalizeTaskTestingOnStreamEnd(group, task, planner);
+
+      const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+      // Task stays in testing and keeps its chat — no attempt burned, no reseed.
+      assert.equal(updated.status, 'testing');
+      assert.equal(updated.testAttempts, undefined);
+      assert.equal(updated.testChatId, TEST_CHAT_ID);
+      assert.equal(updated.pendingBuildSeed, undefined);
+      assert.equal(getMissingReportNudgeCountForTests(TEST_CHAT_ID), 1);
+    } finally {
+      if (prevMinnowTest === undefined) delete process.env.MINNOW_TEST;
+      else process.env.MINNOW_TEST = prevMinnowTest;
+    }
+  });
+
+  test('no verdict fails the task once the nudge budget is exhausted', async () => {
+    const prevMinnowTest = process.env.MINNOW_TEST;
+    process.env.MINNOW_TEST = '1';
+    try {
+      const group = makeGroup({ 'W1-A': 'testing' });
+      const planner = makePlanner();
+      group.orchestrateBoard!.executionMode = 'afk';
+      group.orchestrateBoard!.autoRunning = true;
+      const testChat = makeNoVerdictTesterChat();
+      updateTask(group, 'W1-A', { testChatId: TEST_CHAT_ID }, planner);
+      setSessionStateForTests({ chats: [planner, testChat], groups: [group], activeChatId: PLANNER_ID });
+
+      // Every nudge ends in another report-less stream end; the last one falls
+      // through to the existing self-heal fail routing.
+      for (let i = 0; i < MISSING_REPORT_NUDGE_CAP; i++) {
+        const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+        await finalizeTaskTestingOnStreamEnd(group, task, planner);
+        assert.equal(group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!.status, 'testing');
+      }
+      const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+      await finalizeTaskTestingOnStreamEnd(group, task, planner);
+
+      const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+      assert.equal(updated.status, 'in_progress');
+      assert.equal(updated.testAttempts, 1);
+    } finally {
+      if (prevMinnowTest === undefined) delete process.env.MINNOW_TEST;
+      else process.env.MINNOW_TEST = prevMinnowTest;
+    }
   });
 
   test('retry persists the failure-aware builder seed on the task', async () => {

@@ -13,7 +13,72 @@ function send(msg) {
 }
 
 function isFakeUri(uri) {
-  return uri.includes('sample.fake') || uri.endsWith('.fake');
+  return uri.includes('.fake');
+}
+
+function fakeFileBaseName(uri) {
+  try {
+    const decoded = decodeURIComponent(uri.split('/').pop() ?? '');
+    return decoded;
+  } catch {
+    return uri.split('/').pop() ?? '';
+  }
+}
+
+function publishDiagnostics(uri, diagnostics) {
+  send({
+    jsonrpc: '2.0',
+    method: 'textDocument/publishDiagnostics',
+    params: { uri, diagnostics },
+  });
+}
+
+/** Diagnostic publication modes for agent-scope integration tests. */
+function publishDiagnosticsForFixture(uri) {
+  const base = fakeFileBaseName(uri);
+
+  if (base === 'delayed-empty-then-error.fake') {
+    publishDiagnostics(uri, []);
+    setTimeout(() => {
+      publishDiagnostics(uri, [
+        {
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 1 },
+          },
+          severity: 1,
+          message: 'Delayed semantic error.',
+          source: 'fake',
+        },
+      ]);
+    }, 350);
+    return;
+  }
+
+  if (base === 'confirmed-clean.fake') {
+    setTimeout(() => {
+      publishDiagnostics(uri, []);
+    }, 100);
+    return;
+  }
+
+  if (base === 'never-publishes.fake') {
+    return;
+  }
+
+  if (base === 'sample.fake' || uri.includes('sample.fake')) {
+    publishDiagnostics(uri, [
+      {
+        range: {
+          start: { line: 0, character: 0 },
+          end: { line: 0, character: 1 },
+        },
+        severity: 1,
+        message: "';' expected.",
+        source: 'fake',
+      },
+    ]);
+  }
 }
 
 function fakeCallHierarchyItem(uri, name, line = 0) {
@@ -193,9 +258,38 @@ function handleMessage(msg) {
 
   if (msg.method === 'textDocument/completion') {
     const uri = msg.params?.textDocument?.uri ?? '';
-    const items =
+    const lspContext = msg.params?.context;
+    const baseItems =
       isFakeUri(uri)
         ? [
+            {
+              label: 'rankedFirst',
+              kind: 14,
+              sortText: '0000',
+              filterText: 'rankedFirst',
+              preselect: true,
+              commitCharacters: [';', '.'],
+              insertText: 'rankedFirst',
+            },
+            {
+              label: 'rankedSecond',
+              kind: 14,
+              sortText: '9999',
+              filterText: 'rankedSecondFilter',
+              insertText: 'rankedSecond',
+            },
+            {
+              label: 'overload',
+              kind: 3,
+              detail: '(): void',
+              insertText: 'overload()',
+            },
+            {
+              label: 'overload',
+              kind: 3,
+              detail: '(x: number): void',
+              insertText: 'overload(x)',
+            },
             {
               label: 'fakeKeyword',
               kind: 14,
@@ -244,10 +338,33 @@ function handleMessage(msg) {
             },
           ]
         : [];
+
+    const items = [...baseItems];
+    if (
+      isFakeUri(uri) &&
+      lspContext?.triggerKind === 2 &&
+      lspContext?.triggerCharacter === '.'
+    ) {
+      items.unshift({
+        label: 'triggerDot',
+        kind: 14,
+        detail: `triggerKind=${lspContext.triggerKind}`,
+        insertText: 'triggerDot',
+      });
+    }
+    if (isFakeUri(uri) && lspContext?.triggerKind === 3) {
+      items.unshift({
+        label: 'incompleteRefetch',
+        kind: 14,
+        insertText: 'incompleteRefetch',
+      });
+    }
+
+    const isIncomplete = isFakeUri(uri) && lspContext?.triggerKind === 3;
     send({
       jsonrpc: '2.0',
       id: msg.id,
-      result: { isIncomplete: false, items },
+      result: { isIncomplete, items },
     });
     return;
   }
@@ -341,27 +458,10 @@ function handleMessage(msg) {
     return;
   }
 
-  if (msg.method === 'textDocument/didOpen') {
+  if (msg.method === 'textDocument/didOpen' || msg.method === 'textDocument/didChange') {
     const uri = msg.params?.textDocument?.uri ?? '';
-    if (uri.includes('sample.fake')) {
-      send({
-        jsonrpc: '2.0',
-        method: 'textDocument/publishDiagnostics',
-        params: {
-          uri,
-          diagnostics: [
-            {
-              range: {
-                start: { line: 0, character: 0 },
-                end: { line: 0, character: 1 },
-              },
-              severity: 1,
-              message: "';' expected.",
-              source: 'fake',
-            },
-          ],
-        },
-      });
+    if (isFakeUri(uri)) {
+      publishDiagnosticsForFixture(uri);
     }
     return;
   }

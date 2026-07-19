@@ -2,9 +2,7 @@
  * Desktop research surface — composer-driven runs with floating progress/result cards.
  */
 
-import { decodeModelSelectKey } from '../lib/model-select-key';
-import { getActiveModelIdFromDom } from '../benchmark/resolve-binding';
-import { loadResearchConfig } from '../config/research-config';
+import { resolveResearchModelBinding } from '../research/resolve-binding';
 import { pushNotification } from '../notifications/push';
 import {
   cancelResearch,
@@ -23,7 +21,11 @@ import {
 import { ResearchProgressPanel } from '../research/progress-panel';
 import { renderResearchResultFromMarkdown } from '../research/report-view';
 import type { ResearchScope, ResearchStartRequest } from '../research/types';
-import { getActiveChat } from '../state/sessions';
+import {
+  readResearchWorkspaceRoot,
+  syncResearchWorkspaceFieldVisibility,
+  wireResearchWorkspaceScopeControls,
+} from '../research/workspace-scope-ui';
 import { setStatus } from '../ui/status';
 import type { DesktopResearchActivateOptions } from './desktop-state';
 import {
@@ -68,33 +70,33 @@ function syncResearchToolbar(): void {
     'desktopResearchMaxRounds',
   ) as HTMLSelectElement | null;
   const scopeSelect = document.getElementById('desktopResearchScope') as HTMLSelectElement | null;
+  const workspaceSelect = document.getElementById(
+    'desktopResearchWorkspace',
+  ) as HTMLSelectElement | null;
+  const workspaceLabel = document.getElementById('desktopResearchWorkspaceLabel');
   if (roundsSelect) {
     roundsSelect.disabled = running;
   }
   if (scopeSelect) {
     scopeSelect.disabled = running;
+    syncResearchWorkspaceFieldVisibility(
+      (scopeSelect.value ?? 'web') as ResearchScope,
+      workspaceLabel,
+    );
+  }
+  if (workspaceSelect) {
+    workspaceSelect.disabled = running;
+  }
+  const workspaceBrowse = document.getElementById(
+    'btnDesktopResearchWorkspaceBrowse',
+  ) as HTMLButtonElement | null;
+  if (workspaceBrowse) {
+    workspaceBrowse.disabled = running;
   }
 }
 
 function getComposerInput(): HTMLTextAreaElement | null {
   return document.getElementById('desktopInput') as HTMLTextAreaElement | null;
-}
-
-async function resolveResearchBinding(): Promise<{ providerId: string; model: string }> {
-  const config = await loadResearchConfig();
-  const fromConfig = config.model;
-  if (fromConfig.providerId?.trim() && fromConfig.model?.trim()) {
-    return {
-      providerId: fromConfig.providerId.trim(),
-      model: fromConfig.model.trim(),
-    };
-  }
-
-  const raw = getActiveModelIdFromDom();
-  const parsed = decodeModelSelectKey(raw);
-  const model = parsed?.modelId ?? raw;
-  const providerId = parsed?.providerId ?? getActiveChat().providerId?.trim() ?? '';
-  return { providerId, model };
 }
 
 function readDefaultStartOptions(): Omit<ResearchStartRequest, 'query' | 'continueFrom'> {
@@ -105,10 +107,15 @@ function readDefaultStartOptions(): Omit<ResearchStartRequest, 'query' | 'contin
   const scope = (
     (document.getElementById('desktopResearchScope') as HTMLSelectElement | null)?.value ?? 'web'
   ) as ResearchScope;
+  const workspaceRoot = readResearchWorkspaceRoot(
+    document.getElementById('desktopResearchWorkspace') as HTMLSelectElement | null,
+    scope,
+  );
   return {
     maxRounds: Number.isFinite(maxRounds) ? maxRounds : 0,
     category: '',
     scope,
+    ...(workspaceRoot ? { workspaceRoot } : {}),
   };
 }
 
@@ -285,7 +292,7 @@ export async function startDesktopResearchRun(
   syncResearchResultChrome();
 
   try {
-    const binding = await resolveResearchBinding();
+    const binding = await resolveResearchModelBinding();
     const body: ResearchStartRequest = {
       query,
       ...readDefaultStartOptions(),
@@ -459,6 +466,23 @@ export function wireDesktopResearchControls(): void {
   document.getElementById('btnDesktopResearchLibrary')?.addEventListener('click', () => {
     void showDesktopResearchLibrary();
   });
+
+  const scopeSelect = document.getElementById('desktopResearchScope') as HTMLSelectElement | null;
+  const workspaceSelect = document.getElementById(
+    'desktopResearchWorkspace',
+  ) as HTMLSelectElement | null;
+  const workspaceLabel = document.getElementById('desktopResearchWorkspaceLabel');
+  const workspaceBrowse = document.getElementById(
+    'btnDesktopResearchWorkspaceBrowse',
+  ) as HTMLButtonElement | null;
+  if (scopeSelect && workspaceSelect && workspaceLabel) {
+    wireResearchWorkspaceScopeControls({
+      scopeSelect,
+      workspaceField: workspaceLabel,
+      workspaceSelect,
+      browseBtn: workspaceBrowse,
+    });
+  }
 }
 
 /** Whether a desktop research run is in progress. */

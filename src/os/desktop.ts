@@ -11,7 +11,7 @@ import {
 import { isDesktopExpertsActive, isDesktopResearchActive, subscribeDesktopState } from './desktop-state';
 import { wireDesktopResearchControls } from './research-desktop';
 import { createOsIcon } from './icons';
-import { ICON_CHEVRON_LEFT } from '../constants';
+import { ICON_CHEVRON_LEFT, ICON_SEARCH } from '../constants';
 import type { DesktopPrefs } from './types';
 
 function greetingFor(d: Date): string {
@@ -121,6 +121,15 @@ export function renderDesktop(root: HTMLElement): () => void {
   railTitle.className = 'chat-sidebar-title';
   railTitle.textContent = 'Chats';
 
+  const railSearch = document.createElement('button');
+  railSearch.type = 'button';
+  railSearch.id = 'btnDesktopChatSearch';
+  railSearch.className = 'icon-btn';
+  railSearch.setAttribute('aria-label', 'Search chats');
+  railSearch.title = 'Search chats';
+  railSearch.setAttribute('aria-expanded', 'false');
+  railSearch.innerHTML = ICON_SEARCH;
+
   const railCollapse = document.createElement('button');
   railCollapse.type = 'button';
   railCollapse.id = 'btnDesktopChatRailCollapse';
@@ -128,7 +137,7 @@ export function renderDesktop(root: HTMLElement): () => void {
   railCollapse.setAttribute('aria-label', 'Collapse chat sessions');
   railCollapse.innerHTML = ICON_CHEVRON_LEFT;
 
-  railHeader.append(railTitle, railCollapse);
+  railHeader.append(railTitle, railSearch, railCollapse);
 
   const railNewChat = document.createElement('button');
   railNewChat.type = 'button';
@@ -285,13 +294,46 @@ export function renderDesktop(root: HTMLElement): () => void {
 
   researchScopeLabel.append(researchScopeText, researchScope);
 
+  const researchWorkspaceLabel = document.createElement('label');
+  researchWorkspaceLabel.className = 'mn-os-research-toolbar-scope';
+  researchWorkspaceLabel.id = 'desktopResearchWorkspaceLabel';
+  researchWorkspaceLabel.htmlFor = 'desktopResearchWorkspace';
+  researchWorkspaceLabel.hidden = true;
+
+  const researchWorkspaceText = document.createElement('span');
+  researchWorkspaceText.className = 'mn-os-research-toolbar-scope__label';
+  researchWorkspaceText.textContent = 'Workspace';
+
+  const researchWorkspace = document.createElement('select');
+  researchWorkspace.id = 'desktopResearchWorkspace';
+  researchWorkspace.className = 'mn-os-research-toolbar-select';
+  researchWorkspace.setAttribute('aria-label', 'Research workspace');
+
+  const researchWorkspaceBrowse = document.createElement('button');
+  researchWorkspaceBrowse.type = 'button';
+  researchWorkspaceBrowse.id = 'btnDesktopResearchWorkspaceBrowse';
+  researchWorkspaceBrowse.className = 'mn-os-research-toolbar-btn';
+  researchWorkspaceBrowse.textContent = 'Browse…';
+  researchWorkspaceBrowse.setAttribute('aria-label', 'Browse for research workspace folder');
+
+  const researchWorkspaceRow = document.createElement('span');
+  researchWorkspaceRow.className = 'mn-os-research-workspace-row';
+  researchWorkspaceRow.append(researchWorkspace, researchWorkspaceBrowse);
+
+  researchWorkspaceLabel.append(researchWorkspaceText, researchWorkspaceRow);
+
   const researchLibrary = document.createElement('button');
   researchLibrary.type = 'button';
   researchLibrary.id = 'btnDesktopResearchLibrary';
   researchLibrary.className = 'mn-os-research-toolbar-btn';
   researchLibrary.textContent = 'Library';
 
-  researchComposerActions.append(researchRoundsLabel, researchScopeLabel, researchLibrary);
+  researchComposerActions.append(
+    researchRoundsLabel,
+    researchScopeLabel,
+    researchWorkspaceLabel,
+    researchLibrary,
+  );
   composerDock.appendChild(researchComposerActions);
   root.appendChild(composerDock);
 

@@ -247,7 +247,7 @@ export async function loadModelRoutingCatalog(
     id: 'goal-eval',
     group: 'background',
     label: 'Goal evaluator',
-    description: '/goal loop judge — reads transcript only (no tools).',
+    description: '/goal loop agentic verifier — independently reads code, runs tests, and checks UI.',
     providerId: goalEvalConfig.providerId,
     modelId: goalEvalConfig.modelId,
     usesChatDefault: goalEvalEffective.usesChatDefault,

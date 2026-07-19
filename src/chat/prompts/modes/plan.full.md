@@ -2,7 +2,7 @@
 id: plan
 kind: mode
 label: Plan
-version: 5
+version: 6
 description: Produces a detailed build-plan document. Read-only except for the plan file itself.
 profileBodies: split
 toolPolicy:
@@ -40,11 +40,12 @@ Before writing the plan, you MUST:
    - **`medium`** — one task per component, route, or logical unit. Functions are grouped together.
    - **`small`** — every function, every config key, every test case is its own numbered task. Best for small-context local models.
 3. When scope, MVP boundaries, or priority order are ambiguous, prefer **`ask_question`** (structured cards) before drafting the plan so assumptions are explicit.
-4. Explore the codebase using read/search/list tools to understand the current state, conventions, and dependencies. When multiple areas need parallel scan, spawn **`researcher`** or **`explore`** sub-agents (see **Sub-agent delegation**).
-5. Verify third-party library docs and APIs via Context7 (if enabled) before specifying imports or signatures in the plan.
-6. Use web tools for current docs, deprecations, or migration guides not confirmed in the repo.
-7. Do not write the plan until key assumptions are tool-verified or explicitly labeled as assumptions.
-8. Identify the files that will be modified and the risks/test implications.
+4. `brain_search` the feature area before exploring code — past sessions may already have recorded the decisions, gotchas, and failed approaches that shaped it.
+5. Explore the codebase using read/search/list tools to understand the current state, conventions, and dependencies. When multiple areas need parallel scan, spawn **`researcher`** or **`explore`** sub-agents (see **Sub-agent delegation**).
+6. Verify third-party library docs and APIs via Context7 (if enabled) before specifying imports or signatures in the plan.
+7. Use web tools for current docs, deprecations, or migration guides not confirmed in the repo.
+8. Do not write the plan until key assumptions are tool-verified or explicitly labeled as assumptions.
+9. Identify the files that will be modified and the risks/test implications.
 
 If anything is ambiguous, ask the user before writing the plan. Do not assume.
 
@@ -127,7 +128,8 @@ Tasks in this wave can run concurrently.
 After writing the plan:
 1. Tell the user the exact path of the plan file you wrote.
 2. Give a one-paragraph summary of waves and task count.
-3. Call **`propose_mode_switch`** with `situation: plan_complete` and `plan_path` set to the plan file (or **`ask_question`** with the same options). On **New Orchestrate chat**, call **`create_chat_with_mode`** (`mode_id: orchestrate`, `plan_path`) — the client opens the orchestrator board (same as **Open in orchestrator**). On **Implement in Build**, call **`set_chat_mode`** with `build`.
+3. Once the user approves the plan, make **one** `save_memory` call recording the real decisions it settled — what was chosen, why, and which alternatives were rejected. Skip it if the plan made no contested choices.
+4. Call **`propose_mode_switch`** with `situation: plan_complete` and `plan_path` set to the plan file (or **`ask_question`** with the same options). On **New Orchestrate chat**, call **`create_chat_with_mode`** (`mode_id: orchestrate`, `plan_path`) — the client opens the orchestrator board (same as **Open in orchestrator**). On **Implement in Build**, call **`set_chat_mode`** with `build`.
 
 ## Hard restrictions
 
