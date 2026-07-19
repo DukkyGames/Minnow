@@ -287,7 +287,21 @@ async function appendToolCallDefaults(mount: HTMLElement): Promise<void> {
 async function renderNotificationsSection(): Promise<void> {
   const mount = clearMount('settingsNotificationsBody');
   if (!mount) return;
-  renderNotificationsSettingsSection(mount);
+
+  const shell = el('div', 'settings-general');
+  mount.appendChild(shell);
+
+  const lead = el('p', 'settings-section-lead');
+  lead.append(
+    'Menubar bell alerts when something finishes or fails in the background. Terminal and network options live under ',
+    linkToSettingsSection('General', 'general'),
+    '.',
+  );
+  shell.appendChild(lead);
+
+  const content = el('div', 'settings-general__content');
+  shell.appendChild(content);
+  renderNotificationsSettingsSection(content);
 }
 
 function appendGeneralSectionLead(shell: HTMLElement): void {

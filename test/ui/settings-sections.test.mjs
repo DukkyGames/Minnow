@@ -104,4 +104,33 @@ describe('settings-sections', () => {
     globalThis.fetch = originalFetch;
     document.body.innerHTML = '';
   });
+
+  test("refreshSettingsSection('notifications') uses constrained shell and emphasis groups", async () => {
+    const { Window } = await import('happy-dom');
+    const window = new Window();
+    globalThis.window = window;
+    globalThis.document = window.document;
+
+    document.body.innerHTML = `
+      <div id="settingsNotificationsBody" class="settings-section-body"></div>
+    `;
+
+    const { refreshSettingsSection } = await import('../../src/ui/settings-sections.ts');
+    await refreshSettingsSection('notifications');
+
+    const mount = document.getElementById('settingsNotificationsBody');
+    assert.ok(mount);
+    assert.ok(mount.querySelector('.settings-general'), 'Notifications section uses constrained shell');
+    assert.ok(
+      mount.querySelector('.settings-group--emphasis'),
+      'Notifications section uses emphasis panels',
+    );
+    assert.equal(
+      mount.querySelectorAll('.settings-group--emphasis').length,
+      2,
+      'Alerts and sound groups should be bordered panels',
+    );
+
+    document.body.innerHTML = '';
+  });
 });
