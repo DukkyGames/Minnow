@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from '../../ui/app-dialog';
 /**
  * Host-side bridge: postMessage from reef widget iframes → composer / LLM / links.
  */
@@ -452,10 +453,10 @@ function handleSendPrompt(text: string): void {
   input.focus();
 }
 
-function handleOpenLink(url: string): void {
+async function handleOpenLink(url: string): Promise<void> {
   const trimmed = url.trim();
   if (!trimmed) return;
-  const ok = window.confirm(`Open this link in a new tab?\n\n${trimmed}`);
+  const ok = await appConfirm(`Open this link in a new tab?\n\n${trimmed}`);
   if (!ok) return;
   window.open(trimmed, '_blank', 'noopener,noreferrer');
 }
@@ -613,7 +614,7 @@ function onReefMessage(event: MessageEvent): void {
       break;
     }
     case 'openLink':
-      handleOpenLink(typeof data.url === 'string' ? data.url : '');
+      void handleOpenLink(typeof data.url === 'string' ? data.url : '');
       break;
     case 'editArtifact':
       editArtifactFromWidget(data.widgetId, {

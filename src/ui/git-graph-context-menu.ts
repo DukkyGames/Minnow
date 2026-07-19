@@ -1,8 +1,10 @@
+import { appAlert, appConfirm, appPrompt } from './app-dialog';
 /**
  * Right-click context menu for git history graph commit rows.
  */
 
 import { commitUrl } from '../lib/git-remote-url';
+import { isProtectedBranchName } from '../lib/git-trunk-branch';
 import { filterUserFacingBranches } from '../lib/worktree-list-parse';
 import {
   gitCheckout,
@@ -249,10 +251,11 @@ async function runCheckoutDetach(ctx: GitGraphContextMenuCtx, sha: string): Prom
 }
 
 async function runDeleteBranch(ctx: GitGraphContextMenuCtx, name: string): Promise<void> {
-  if (!window.confirm(`Delete branch "${name}"?`)) return;
+  if (isProtectedBranchName(name)) return;
+  if (!await appConfirm(`Delete branch "${name}"?`)) return;
   let result = await gitDeleteBranch({ branch: name, cwd: ctx.cwd });
   if (!result.ok) {
-    if (!window.confirm(`Branch "${name}" is not fully merged. Force delete?`)) return;
+    if (!await appConfirm(`Branch "${name}" is not fully merged. Force delete?`)) return;
     result = await gitDeleteBranch({ branch: name, force: true, cwd: ctx.cwd });
   }
   if (!result.ok) {
@@ -305,7 +308,9 @@ async function buildMenuItems(
   const sha = commit.hash;
   const currentBranch = ctx.getCurrentBranch?.() ?? '';
   const localBranches = filterUserFacingBranches(extractLocalBranchRefs(commit.refs));
-  const deletableBranches = localBranches.filter((b) => b !== currentBranch);
+  const deletableBranches = localBranches.filter(
+    (b) => b !== currentBranch && !isProtectedBranchName(b),
+  );
 
   const remoteResult = await gitRemoteUrl(ctx.cwd);
   const webCommitUrl =

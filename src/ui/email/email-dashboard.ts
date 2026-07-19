@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from '../app-dialog';
 /**
  * Inbox dashboard — digest headline, instrumentation strip, attention queue, reply chips.
  */
@@ -89,7 +90,7 @@ function renderVariantChips(
   const reprompt = el('button', 'email-dash-variant-reprompt', 'Reprompt') as HTMLButtonElement;
   reprompt.type = 'button';
   reprompt.addEventListener('click', async () => {
-    const instructions = window.prompt('How should the reply variants change?');
+    const instructions = await appPrompt('How should the reply variants change?');
     if (!instructions?.trim()) return;
     try {
       await regenerateReplyVariants({

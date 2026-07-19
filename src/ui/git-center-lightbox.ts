@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from './app-dialog';
 /**
  * Source Control Center lightbox: repo topology tree + full git operations.
  */
@@ -331,7 +332,7 @@ async function openRebaseFromToolbar(): Promise<void> {
 
 async function openStashFromToolbar(): Promise<void> {
   const ctx = { cwd: getEffectiveCwd(), onSuccess: () => void refreshAll() };
-  const action = window.confirm('OK = Stash changes, Cancel = Stash list (pop/apply/drop)');
+  const action = await appConfirm('OK = Stash changes, Cancel = Stash list (pop/apply/drop)');
   if (action) await openStashPushDialog(ctx);
   else await openStashMenuDialog(ctx, conflictHost!);
 }
@@ -526,6 +527,7 @@ export function closeGitCenterLightbox(): void {
   }
   previousFocus?.focus();
   previousFocus = null;
+  void refreshGitPanel();
 }
 
 /** Wire the header button entry point. */

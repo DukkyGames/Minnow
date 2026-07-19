@@ -201,8 +201,13 @@ describe('computeGraphLayout', () => {
     // feature/b takes the next free lane and immediately bends back into main.
     assert.equal(rows[2].lane, 1);
     assert.deepEqual(
-      rows[2].curves.map((c) => ({ kind: c.kind, fromLane: c.fromLane, toLane: c.toLane })),
-      [{ kind: 'out', fromLane: 1, toLane: 0 }],
+      rows[2].curves.map((c) => ({
+        kind: c.kind,
+        fromLane: c.fromLane,
+        toLane: c.toLane,
+        ...(c.joins ? { joins: true } : {}),
+      })),
+      [{ kind: 'out', fromLane: 1, toLane: 0, joins: true }],
     );
     assert.equal(rows[3].lane, 0);
     assert.deepEqual(rows[3].curves, []);
@@ -251,8 +256,13 @@ describe('computeSquashLinks', () => {
     assert.equal(rows[1].lane, 1);
     assert.ok(rows[1].rails.some((r) => r.lane === 1 && r.kind === 'up'));
     assert.deepEqual(
-      rows[2].curves.map((c) => ({ kind: c.kind, fromLane: c.fromLane, toLane: c.toLane })),
-      [{ kind: 'out', fromLane: 1, toLane: 0 }],
+      rows[2].curves.map((c) => ({
+        kind: c.kind,
+        fromLane: c.fromLane,
+        toLane: c.toLane,
+        ...(c.joins ? { joins: true } : {}),
+      })),
+      [{ kind: 'out', fromLane: 1, toLane: 0, joins: true }],
     );
   });
 });

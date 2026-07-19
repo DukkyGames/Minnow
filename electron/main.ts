@@ -150,6 +150,14 @@ function registerIpcHandlers(): void {
     const win = BrowserWindow.fromWebContents(event.sender);
     return win?.isMaximized() ?? false;
   });
+
+  ipcMain.handle(channels.WINDOW_RESTORE_FOCUS, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    restoreShellWindowFocus(win);
+    // Chromium can restore stale dialog focus after the IPC turn on Windows.
+    setTimeout(() => restoreShellWindowFocus(win), 0);
+  });
 }
 
 /** Push shell maximize state to the renderer for menubar control icons. */
@@ -197,11 +205,17 @@ async function prepareQuitForUpdate(): Promise<void> {
   await shutdownRuntime();
 }
 
+function restoreShellWindowFocus(win: BrowserWindow): void {
+  if (win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  win.webContents.focus();
+}
+
 function focusMainWindow(): void {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  mainWindow.show();
-  mainWindow.focus();
+  if (!mainWindow) return;
+  restoreShellWindowFocus(mainWindow);
 }
 
 async function createMainWindow(): Promise<BrowserWindow> {

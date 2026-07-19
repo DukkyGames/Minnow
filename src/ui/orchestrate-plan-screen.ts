@@ -1,3 +1,4 @@
+import { appAlert, appConfirm, appPrompt } from './app-dialog';
 /**
  * Orchestrate planning screen — full #chatArea overlay for Plan-mode authoring.
  * Suppresses chat stream DOM while mounted; supports suspend/resume via sidebar.
@@ -453,19 +454,16 @@ function resolvePlanScreenWorkingPhase(chat: Chat): 'working' | 'super-plan-work
 }
 
 /** Confirm + rewind when the user clicks a completed stepper node. */
-function handleSuperPlanStepRework(chatId: string, stepIndex: number): void {
+async function handleSuperPlanStepRework(chatId: string, stepIndex: number): Promise<void> {
   const chat = findChatById(chatId);
   if (!chat?.superPlan || chat.superPlan.cancelled) return;
   const stageId = SUPER_PLAN_STEP_TO_STAGE[stepIndex as SuperPlanDisplayStepIndex];
   if (!stageId) return;
   const stepLabel =
     SUPER_PLAN_DISPLAY_STEPS[stepIndex]?.label ?? SUPER_PLAN_STAGE_LABELS[stageId];
-  const confirmed =
-    typeof window === 'undefined' ||
-    typeof window.confirm !== 'function' ||
-    window.confirm(
-      `Rework the pipeline from "${stepLabel}"? Later stages will run again.`,
-    );
+  const confirmed = await appConfirm(
+    `Rework the pipeline from "${stepLabel}"? Later stages will run again.`,
+  );
   if (!confirmed) return;
   if (planSession?.chatId === chat.id) {
     planSession.phase = 'super-plan-working';
@@ -489,7 +487,7 @@ function mountPlanProgressPanel(chat: Chat): void {
     variant,
     reducedMotion: prefersReducedMotion(),
     ...(variant === 'super-plan'
-      ? { onStepClick: (stepIndex: number) => handleSuperPlanStepRework(chat.id, stepIndex) }
+      ? { onStepClick: (stepIndex: number) => void handleSuperPlanStepRework(chat.id, stepIndex) }
       : {}),
   });
   planProgressPanel.reset();
