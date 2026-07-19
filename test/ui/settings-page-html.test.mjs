@@ -129,7 +129,7 @@ describe('settings page HTML', () => {
   test('user rules section matches other general-style settings mounts', () => {
     const rulesBlock = html.slice(
       html.indexOf('id="settingsSection-rules"'),
-      html.indexOf('id="settingsSection-experts"'),
+      html.indexOf('id="settingsSection-agent-packs"'),
     );
     assert.match(rulesBlock, /id="settingsRulesBody"/);
     assert.doesNotMatch(rulesBlock, /class="settings-lead"/);
