@@ -85,12 +85,15 @@ afterEach(() => {
 });
 
 describe('renderAppUpdatesSettings', () => {
-  test('without the bridge, shows the dev/browser hint only', () => {
+  test('without the bridge, shows dev session strip and callout', () => {
     const mount = setupDom();
     renderAppUpdatesSettings(mount);
-    const hint = mount.querySelector('.settings-field-hint');
-    assert.ok(hint?.textContent?.includes('installed Minnow app'));
-    assert.equal(mount.querySelector('.settings-updates-strip'), null);
+    const strip = mount.querySelector('.settings-updates-strip');
+    assert.ok(strip);
+    assert.ok(strip?.textContent?.includes('Dev session'));
+    const callout = mount.querySelector('.settings-updates__callout');
+    assert.ok(callout?.textContent?.includes('installed Minnow app'));
+    assert.equal(mount.querySelector('.settings-updates__controls'), null);
   });
 
   test('idle status renders up-to-date strip, version, and hidden restart', async () => {
@@ -199,7 +202,7 @@ describe('renderAppUpdatesSettings', () => {
     assert.equal(betaHint?.hidden, false);
   });
 
-  test('unsupported macOS install disables controls and shows signing note', async () => {
+  test('unsupported macOS install hides controls and shows signing callout', async () => {
     const mount = setupDom();
     const { api } = makeFakeApi(
       baseStatus({
@@ -213,15 +216,32 @@ describe('renderAppUpdatesSettings', () => {
     renderAppUpdatesSettings(mount);
     await flush();
 
-    assert.equal(
-      mount.querySelector<HTMLButtonElement>('#settingsUpdatesCheckBtn')?.disabled,
-      true,
-    );
+    assert.equal(mount.querySelector('.settings-updates__controls')?.hidden, true);
+    const callout = mount.querySelector('.settings-updates__callout');
+    assert.ok(callout?.textContent?.includes('macOS auto-update requires code signing'));
+    assert.equal(mount.querySelector('#settingsUpdatesCheckBtn'), null);
     const channelInputs = mount.querySelectorAll<HTMLInputElement>(
       'input[name="settings-update-channel"]',
     );
-    assert.ok(channelInputs.length === 2);
-    for (const input of channelInputs) assert.equal(input.disabled, true);
-    assert.ok(mount.textContent?.includes('macOS auto-update requires code signing'));
+    assert.equal(channelInputs.length, 0);
+  });
+
+  test('unsupported dev install hides channel and check controls', async () => {
+    const mount = setupDom();
+    const { api } = makeFakeApi(
+      baseStatus({
+        state: 'unsupported',
+        supported: false,
+        unsupportedReason: 'dev',
+      }),
+    );
+    (window as unknown as { minnow: unknown }).minnow = { updater: api };
+
+    renderAppUpdatesSettings(mount);
+    await flush();
+
+    assert.equal(mount.querySelector('.settings-updates__controls')?.hidden, true);
+    assert.ok(mount.querySelector('.settings-updates__callout')?.textContent?.includes('dev session'));
+    assert.equal(mount.querySelector('#settingsUpdatesCheckBtn'), null);
   });
 });

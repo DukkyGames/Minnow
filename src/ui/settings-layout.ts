@@ -35,15 +35,24 @@ export function createSettingsField(opts: SettingsFieldOptions): HTMLElement {
   return row;
 }
 
+export type SettingsGroupOptions = {
+  /** Bordered panel surface (used on General settings groups). */
+  emphasis?: boolean;
+};
+
 /** Wrap related controls in a titled panel for scanability. */
 export function appendSettingsGroup(
   mount: HTMLElement,
   title: string,
   hint?: string,
   searchKey?: string,
+  options?: SettingsGroupOptions,
 ): HTMLElement {
   const group = document.createElement('section');
   group.className = 'settings-group';
+  if (options?.emphasis) {
+    group.classList.add('settings-group--emphasis');
+  }
   if (searchKey) {
     group.dataset.settingsSearchKey = searchKey;
   }
