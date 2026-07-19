@@ -248,11 +248,27 @@
 .file-viewer-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 4px;
+  padding: 4px 6px;
   border-bottom: 1px solid var(--mn-border);
   flex-shrink: 0;
   min-width: 0;
+}
+
+/* Compact toolbar — smaller than the global 40px .icon-btn */
+.file-viewer-header .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+
+.file-viewer-header .icon-btn .icon-svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* Diagnostics/status stay left; Intent + save/close align to the trailing edge */
+.file-viewer-header .file-viewer-intent-toggle {
+  margin-left: auto;
 }
 
 .file-viewer-tabs {

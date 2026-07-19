@@ -84,10 +84,12 @@
 
 .icon-btn .mode-mask-icon--lg {
   opacity: 0.88;
+  color: oklch(0% 0 0);
 }
 
 html[data-theme$='-dark'] .icon-btn .mode-mask-icon--lg {
   opacity: 0.92;
+  color: oklch(100% 0.00011 271.152);
 }
 
 @media (hover: hover) and (pointer: fine) {

@@ -101,23 +101,53 @@
 .preview-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
+  gap: 4px;
+  padding: 4px 6px;
   border-bottom: 1px solid var(--mn-border);
   flex-shrink: 0;
 }
 
+/* Compact toolbar — smaller than the global 40px .icon-btn */
+.preview-header .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+
+.preview-header .icon-btn .icon-svg {
+  width: 15px;
+  height: 15px;
+}
+
 /* .icon-btn sets display:flex, which overrides the native [hidden] rule */
 #btnPreviewDesignToggle[hidden],
-#btnPreviewAnnotationsToggle[hidden] {
+#btnPreviewAnnotationsToggle[hidden],
+#btnPreviewDevTools[hidden],
+#btnPreviewDevToolsDock[hidden] {
   display: none;
+}
+
+/* Side-dock mode: emphasize the vertical split glyph on the dock toggle. */
+#btnPreviewDevToolsDock[data-dock='side'] svg line:last-child {
+  opacity: 1;
+}
+
+/* Popout mode: hide both split guides — DevTools lives in its own window. */
+#btnPreviewDevToolsDock[data-dock='popout'] svg line:last-child,
+#btnPreviewDevToolsDock[data-dock='popout'] svg line:nth-child(2) {
+  opacity: 0.25;
+}
+
+/* DevTools toggle lights up while the dock is open (same treatment as Design Mode). */
+#btnPreviewDevTools[aria-pressed='true'] {
+  background: var(--mn-accent-soft);
+  color: var(--mn-accent);
 }
 
 .preview-url {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 6px 8px;
-  font-size: 0.8125rem;
+  padding: 4px 6px;
+  font-size: 0.75rem;
   font-family: var(--mn-font-mono, ui-monospace, monospace);
   border: 1px solid var(--mn-border);
   border-radius: var(--mn-radius-sm, 4px);
@@ -132,8 +162,8 @@
 
 .preview-go {
   flex-shrink: 0;
-  padding: 6px 10px;
-  font-size: 0.8125rem;
+  padding: 4px 8px;
+  font-size: 0.75rem;
   border: 1px solid var(--mn-border);
   border-radius: var(--mn-radius-sm, 4px);
   background: var(--mn-surface-2);
@@ -148,8 +178,8 @@
 .preview-autoreload {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 0.75rem;
+  gap: 3px;
+  font-size: 0.6875rem;
   color: var(--mn-fg-muted);
   white-space: nowrap;
   flex-shrink: 0;
@@ -268,6 +298,62 @@
 
 .preview-status__open-external.hidden {
   display: none;
+}
+
+/* Preview guest right-click menu (Electron) — mirrors .file-tree-context-menu tokens */
+.preview-context-menu {
+  position: fixed;
+  z-index: 200;
+  min-width: 188px;
+  padding: 4px 0;
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-popover-soft);
+  color: var(--mn-fg);
+  font-family: var(--font-ui);
+}
+
+.preview-context-menu__item {
+  display: block;
+  box-sizing: border-box;
+  width: calc(100% - 8px);
+  margin: 0 4px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--mn-fg);
+  cursor: pointer;
+  transition: background 0.2s var(--ease-out);
+}
+
+.preview-context-menu__item:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .preview-context-menu__item:hover:not(:disabled) {
+    background: var(--mn-surface-0);
+  }
+}
+
+.preview-context-menu__item--disabled,
+.preview-context-menu__item:disabled {
+  color: var(--mn-fg-muted);
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.preview-context-menu__separator {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--mn-border);
 }
 
 @media (max-width: 640px) {

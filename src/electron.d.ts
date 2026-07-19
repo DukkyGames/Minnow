@@ -90,6 +90,17 @@ export interface MinnowCdpPickedElement {
   computedStyles: Record<string, string>;
 }
 
+/** Docked Chromium DevTools for the preview guest (MIN-177). Electron only. */
+export interface MinnowPreviewDevToolsApi {
+  toggle(tabId?: string, instanceId?: string): Promise<{ open: boolean }>;
+  isOpen(tabId?: string, instanceId?: string): Promise<boolean>;
+  setDock(dock: 'bottom' | 'side' | 'popout'): Promise<{ dock: 'bottom' | 'side' | 'popout' }>;
+  getDock(): Promise<'bottom' | 'side' | 'popout'>;
+  onState(
+    callback: (open: boolean, tabId?: string, instanceId?: string) => void,
+  ): () => void;
+}
+
 /** Native (script-free) element picking over CDP for cross-origin preview guests (MIN-370). */
 export interface MinnowCdpPickerApi {
   enable(tabId?: string, instanceId?: string): Promise<{ ok: boolean; error?: string }>;
@@ -98,6 +109,108 @@ export interface MinnowCdpPickerApi {
     callback: (picked: MinnowCdpPickedElement, tabId?: string, instanceId?: string) => void,
   ): () => void;
   onError(callback: (message: string, tabId?: string, instanceId?: string) => void): () => void;
+}
+
+export type MinnowPreviewContextMenuRole =
+  | 'goBack'
+  | 'goForward'
+  | 'reload'
+  | 'openLinkInNewTab'
+  | 'copyLink'
+  | 'openExternal'
+  | 'copyImage'
+  | 'copyImageAddress'
+  | 'saveImage'
+  | 'cut'
+  | 'copy'
+  | 'paste'
+  | 'selectAll'
+  | 'replaceMisspelling'
+  | 'addToDictionary'
+  | 'inspect'
+  | 'sendToChat';
+
+export type MinnowPreviewContextMenuItem =
+  | { type: 'separator' }
+  | {
+      type: 'item';
+      role: MinnowPreviewContextMenuRole;
+      label: string;
+      enabled: boolean;
+      suggestion?: string;
+    };
+
+export interface MinnowPreviewContextMenuParams {
+  linkURL?: string;
+  srcURL?: string;
+  mediaType?: string;
+  isEditable?: boolean;
+  selectionText?: string;
+  misspelledWord?: string;
+  dictionarySuggestions?: string[];
+  editFlags?: {
+    canCut?: boolean;
+    canCopy?: boolean;
+    canPaste?: boolean;
+    canSelectAll?: boolean;
+  };
+}
+
+export interface MinnowPreviewContextMenuOpenPayload {
+  tabId: string;
+  instanceId: string;
+  x: number;
+  y: number;
+  params: MinnowPreviewContextMenuParams;
+  items: MinnowPreviewContextMenuItem[];
+  canGoBack: boolean;
+  canGoForward: boolean;
+  pageUrl: string;
+}
+
+/** Right-click context menu for the Electron preview guest. */
+export interface MinnowPreviewContextMenuApi {
+  /** Legacy DOM menu path — main process uses native Menu.popup instead. */
+  onOpen(callback: (payload: MinnowPreviewContextMenuOpenPayload) => void): () => void;
+  /** Renderer-owned actions after the user picks Send to chat / Open in new tab. */
+  onSelect(
+    callback: (
+      payload: MinnowPreviewContextMenuOpenPayload & {
+        role: MinnowPreviewContextMenuRole;
+        suggestion?: string;
+      },
+    ) => void,
+  ): () => void;
+  inspect(
+    tabId: string,
+    x: number,
+    y: number,
+    instanceId?: string,
+  ): Promise<{ ok: boolean; error?: string }>;
+  resolveElement(
+    tabId: string,
+    x: number,
+    y: number,
+    instanceId?: string,
+  ): Promise<{
+    ok: boolean;
+    picked?: MinnowCdpPickedElement;
+    pageUrl?: string;
+    error?: string;
+  }>;
+  action(
+    tabId: string,
+    role: MinnowPreviewContextMenuRole,
+    payload?: {
+      x?: number;
+      y?: number;
+      linkURL?: string;
+      srcURL?: string;
+      suggestion?: string;
+      misspelledWord?: string;
+    },
+    instanceId?: string,
+  ): Promise<{ ok: boolean; error?: string }>;
 }
 
 export interface MinnowPreviewApi {
@@ -127,7 +240,11 @@ export interface MinnowPreviewApi {
   ): Promise<MinnowPreviewNavigateAwaitResult>;
   tabs: MinnowPreviewTabsApi;
   instances: MinnowPreviewInstancesApi;
+  /** Optional: packaged shells older than MIN-177 lack the devtools bridge. */
+  devtools?: MinnowPreviewDevToolsApi;
   cdpPicker: MinnowCdpPickerApi;
+  /** Optional: packaged shells older than the context-menu bridge lack this. */
+  contextMenu?: MinnowPreviewContextMenuApi;
   onNavigation(callback: (url: string, tabId?: string, instanceId?: string) => void): () => void;
   onLoading(callback: (loading: boolean, tabId?: string, instanceId?: string) => void): () => void;
   onPageTitle(callback: (title: string, tabId?: string, instanceId?: string) => void): () => void;

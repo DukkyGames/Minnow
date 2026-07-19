@@ -5,6 +5,8 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import * as channels from './ipc-channels.js';
 import type { CdpPickedElement } from './preview-cdp-adapt.js';
+import type { PreviewContextMenuOpenPayload } from './preview-context-menu.js';
+import type { PreviewContextMenuRole } from './preview-context-menu-items.js';
 import type { UpdaterChannel, UpdaterStatus } from './updater-core.js';
 
 /** Preview bounds in CSS pixels relative to the host window content area. */
@@ -112,6 +114,31 @@ const preview = {
       ipcRenderer.invoke(channels.PREVIEW_INSTANCE_DESTROY, instanceId),
     list: (): Promise<string[]> => ipcRenderer.invoke(channels.PREVIEW_INSTANCE_LIST),
   },
+  /** Docked Chromium DevTools for the preview guest (MIN-177). Electron only. */
+  devtools: {
+    toggle: (tabId?: string, instanceId?: string): Promise<{ open: boolean }> =>
+      ipcRenderer.invoke(channels.PREVIEW_DEVTOOLS_TOGGLE, tabId, instanceId),
+    isOpen: (tabId?: string, instanceId?: string): Promise<boolean> =>
+      ipcRenderer.invoke(channels.PREVIEW_DEVTOOLS_GET_STATE, tabId, instanceId),
+    setDock: (dock: 'bottom' | 'side' | 'popout'): Promise<{ dock: 'bottom' | 'side' | 'popout' }> =>
+      ipcRenderer.invoke(channels.PREVIEW_DEVTOOLS_SET_DOCK, dock),
+    getDock: (): Promise<'bottom' | 'side' | 'popout'> =>
+      ipcRenderer.invoke(channels.PREVIEW_DEVTOOLS_GET_DOCK),
+    onState: (
+      callback: (open: boolean, tabId?: string, instanceId?: string) => void,
+    ): (() => void) => {
+      const handler = (
+        _event: IpcRendererEvent,
+        tabId: string,
+        open: boolean,
+        instanceId?: string,
+      ) => callback(open, tabId, instanceId);
+      ipcRenderer.on(channels.PREVIEW_DEVTOOLS_STATE, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.PREVIEW_DEVTOOLS_STATE, handler);
+      };
+    },
+  },
   /**
    * CDP-backed element picking for cross-origin guests (MIN-370): native hover/click via
    * `webContents.debugger`, no script injected into the page. Electron only.
@@ -149,6 +176,72 @@ const preview = {
         ipcRenderer.removeListener(channels.PREVIEW_CDP_PICK_ERROR, handler);
       };
     },
+  },
+  /** Right-click menu for the preview guest (Electron WebContentsView only). */
+  contextMenu: {
+    onOpen: (callback: (payload: PreviewContextMenuOpenPayload) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, payload: PreviewContextMenuOpenPayload) => {
+        callback(payload);
+      };
+      ipcRenderer.on(channels.PREVIEW_CONTEXT_MENU_OPEN, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.PREVIEW_CONTEXT_MENU_OPEN, handler);
+      };
+    },
+    onSelect: (
+      callback: (
+        payload: PreviewContextMenuOpenPayload & {
+          role: PreviewContextMenuRole;
+          suggestion?: string;
+        },
+      ) => void,
+    ): (() => void) => {
+      const handler = (
+        _event: IpcRendererEvent,
+        payload: PreviewContextMenuOpenPayload & {
+          role: PreviewContextMenuRole;
+          suggestion?: string;
+        },
+      ) => {
+        callback(payload);
+      };
+      ipcRenderer.on(channels.PREVIEW_CONTEXT_MENU_SELECT, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.PREVIEW_CONTEXT_MENU_SELECT, handler);
+      };
+    },
+    inspect: (
+      tabId: string,
+      x: number,
+      y: number,
+      instanceId?: string,
+    ): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke(channels.PREVIEW_CONTEXT_INSPECT, tabId, instanceId, x, y),
+    resolveElement: (
+      tabId: string,
+      x: number,
+      y: number,
+      instanceId?: string,
+    ): Promise<{
+      ok: boolean;
+      picked?: CdpPickedElement;
+      pageUrl?: string;
+      error?: string;
+    }> => ipcRenderer.invoke(channels.PREVIEW_CONTEXT_RESOLVE_ELEMENT, tabId, instanceId, x, y),
+    action: (
+      tabId: string,
+      role: PreviewContextMenuRole,
+      payload?: {
+        x?: number;
+        y?: number;
+        linkURL?: string;
+        srcURL?: string;
+        suggestion?: string;
+        misspelledWord?: string;
+      },
+      instanceId?: string,
+    ): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke(channels.PREVIEW_CONTEXT_ACTION, tabId, instanceId, role, payload ?? {}),
   },
   onNavigation: (callback: (url: string, tabId?: string, instanceId?: string) => void): (() => void) => {
     const handler = (_event: IpcRendererEvent, tabId: string, url: string, instanceId?: string) => {

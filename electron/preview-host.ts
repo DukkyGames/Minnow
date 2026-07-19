@@ -32,6 +32,11 @@ import {
 import { PreviewInstanceRegistry, DEFAULT_PREVIEW_INSTANCE_ID } from './preview-instance-registry.js';
 import { configurePreviewSession, PREVIEW_SESSION_PARTITION } from './preview-session.js';
 import { enableCdpPicking, type CdpPickSession } from './preview-cdp-pick.js';
+import {
+  handleGuestContextMenu,
+  registerPreviewContextMenuIpc,
+} from './preview-context-menu.js';
+import { splitPreviewBounds, type DevToolsDockPosition } from './preview-devtools-layout.js';
 
 export interface PreviewBounds {
   x: number;
@@ -51,6 +56,10 @@ export interface PreviewLoadSourcePayload {
 interface PreviewHostEntry {
   view: WebContentsView;
   visible: boolean;
+  /** Embedded DevTools view — non-null while docked DevTools is open for this tab. */
+  devtools: WebContentsView | null;
+  /** Separate DevTools window for popout mode. */
+  devtoolsPopout: BrowserWindow | null;
 }
 
 interface WindowPreviewState {
@@ -74,6 +83,37 @@ const cdpPickSessions = new Map<number, CdpPickSession>();
 
 /** Last renderer-supplied bounds per (window, instance) — reused when navigating without a fresh show(). */
 const lastBoundsByInstance = new Map<string, PreviewBounds>();
+
+/** Per-window DevTools dock preference (renderer sets via IPC). */
+const devtoolsDockByWindow = new Map<number, DevToolsDockPosition>();
+
+function resolveDevToolsDock(win: BrowserWindow): DevToolsDockPosition {
+  return devtoolsDockByWindow.get(win.id) ?? 'bottom';
+}
+
+function normalizeDevToolsDock(dock: unknown): DevToolsDockPosition {
+  if (dock === 'side' || dock === 'popout') return dock;
+  return 'bottom';
+}
+
+function isEntryDevToolsOpen(entry: PreviewHostEntry): boolean {
+  return Boolean(entry.devtools) || Boolean(entry.devtoolsPopout);
+}
+
+function relayoutAllVisibleEntries(win: BrowserWindow): void {
+  if (win.isDestroyed()) return;
+  const zoom = hostZoomFactor(win);
+  for (const instanceId of previewInstances.listInstanceIds(win.id)) {
+    const state = previewInstances.get(win.id, instanceId);
+    if (!state) continue;
+    const bounds = lastBoundsByInstance.get(boundsKey(win.id, instanceId));
+    if (!isValidPreviewBounds(bounds)) continue;
+    for (const entry of state.tabs.values()) {
+      if (!entry.visible) continue;
+      applyPreviewViewBounds(entry, bounds, zoom, resolveDevToolsDock(win));
+    }
+  }
+}
 
 function boundsKey(windowId: number, instanceId: string): string {
   return `${windowId}::${instanceId}`;
@@ -144,8 +184,248 @@ function attachPermissionHandler(wc: WebContents): void {
   });
 }
 
+/** Close and detach a tab's DevTools (embedded or popout). Safe when already gone. */
+function teardownEntryDevTools(win: BrowserWindow | null, entry: PreviewHostEntry): void {
+  const popout = entry.devtoolsPopout;
+  if (popout && !popout.isDestroyed()) {
+    entry.devtoolsPopout = null;
+    popout.removeAllListeners('closed');
+    popout.close();
+    const wc = entry.view.webContents;
+    if (!wc.isDestroyed()) {
+      try {
+        wc.closeDevTools();
+      } catch {
+        /* guest tearing down */
+      }
+    }
+    return;
+  }
+  entry.devtoolsPopout = null;
+
+  const dt = entry.devtools;
+  if (!dt) return;
+  entry.devtools = null;
+  if (win && !win.isDestroyed()) {
+    try {
+      win.contentView.removeChildView(dt);
+    } catch {
+      /* not attached */
+    }
+  }
+  try {
+    // Destroying the devtools WebContents is what actually closes DevTools:
+    // guest.closeDevTools() is a silent no-op when DevTools renders into a
+    // custom WebContents via setDevToolsWebContents (verified by probe).
+    if (!dt.webContents.isDestroyed()) {
+      dt.webContents.close();
+    }
+  } catch {
+    /* view already torn down — accessing .webContents on a destroyed view throws */
+  }
+}
+
+/** Close docked DevTools now and tell the renderer. Single close path for toggle + shortcut. */
+function closeEntryDevTools(
+  win: BrowserWindow,
+  tabId: string,
+  entry: PreviewHostEntry,
+  instanceId?: string,
+): void {
+  if (!isEntryDevToolsOpen(entry)) return;
+  const id = PreviewInstanceRegistry.resolveInstanceId(instanceId);
+  teardownEntryDevTools(win.isDestroyed() ? null : win, entry);
+  relayoutInstanceEntry(win, entry, id);
+  sendToRenderer(win, channels.PREVIEW_DEVTOOLS_STATE, tabId, false, id);
+}
+
+/** Re-apply the last known bounds so the guest/DevTools split updates without a renderer round-trip. */
+function relayoutInstanceEntry(win: BrowserWindow, entry: PreviewHostEntry, instanceId?: string): void {
+  if (!entry.visible || win.isDestroyed()) return;
+  const id = PreviewInstanceRegistry.resolveInstanceId(instanceId);
+  const bounds = lastBoundsByInstance.get(boundsKey(win.id, id));
+  if (!isValidPreviewBounds(bounds)) return;
+  applyPreviewViewBounds(entry, bounds, hostZoomFactor(win), resolveDevToolsDock(win));
+}
+
+/** Place a popout DevTools window beside the Minnow shell without covering the preview. */
+function positionPopoutDevToolsWindow(parent: BrowserWindow, popout: BrowserWindow): void {
+  const parentBounds = parent.getBounds();
+  popout.setBounds({
+    x: parentBounds.x + Math.min(parentBounds.width - 200, 80),
+    y: parentBounds.y + 48,
+    width: Math.max(640, Math.round(parentBounds.width * 0.55)),
+    height: Math.max(480, Math.round(parentBounds.height * 0.7)),
+  });
+}
+
+function createPopoutDevToolsWindow(): BrowserWindow {
+  return new BrowserWindow({
+    show: false,
+    title: 'DevTools',
+    autoHideMenuBar: true,
+    webPreferences: {
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+}
+
+/** When the user closes the popout shell, tear down DevTools and sync renderer state. */
+function wirePopoutDevToolsClosed(
+  win: BrowserWindow,
+  tabId: string,
+  entry: PreviewHostEntry,
+  instanceId: string,
+  popout: BrowserWindow,
+): void {
+  const wc = entry.view.webContents;
+  popout.on('closed', () => {
+    if (entry.devtoolsPopout !== popout) return;
+    entry.devtoolsPopout = null;
+    if (!wc.isDestroyed()) {
+      try {
+        wc.closeDevTools();
+      } catch {
+        /* guest already gone */
+      }
+    }
+    relayoutInstanceEntry(win, entry, instanceId);
+    if (!win.isDestroyed()) {
+      sendToRenderer(win, channels.PREVIEW_DEVTOOLS_STATE, tabId, false, instanceId);
+    }
+  });
+}
+
+/** Open DevTools in a dedicated BrowserWindow (popout mode). */
+function openPopoutEntryDevTools(
+  win: BrowserWindow,
+  tabId: string,
+  entry: PreviewHostEntry,
+  instanceId: string,
+): void {
+  const wc = entry.view.webContents;
+  const popout = createPopoutDevToolsWindow();
+  entry.devtoolsPopout = popout;
+  positionPopoutDevToolsWindow(win, popout);
+  wirePopoutDevToolsClosed(win, tabId, entry, instanceId, popout);
+
+  // Route DevTools into the popout window — undocked on WebContentsView guests is unreliable.
+  wc.setDevToolsWebContents(popout.webContents);
+  wc.openDevTools({ mode: 'detach', activate: true });
+  popout.show();
+  relayoutInstanceEntry(win, entry, instanceId);
+  sendToRenderer(win, channels.PREVIEW_DEVTOOLS_STATE, tabId, true, instanceId);
+}
+
+/** Retarget already-open DevTools when dock preference changes (avoids close/reopen + stale events). */
+function migrateEntryDevToolsDock(
+  win: BrowserWindow,
+  tabId: string,
+  entry: PreviewHostEntry,
+  instanceId: string,
+  dock: DevToolsDockPosition,
+): void {
+  if (!isEntryDevToolsOpen(entry)) return;
+  const wc = entry.view.webContents;
+  if (wc.isDestroyed() || win.isDestroyed()) return;
+
+  if (dock === 'popout') {
+    if (entry.devtoolsPopout) return;
+    if (!entry.devtools) {
+      openPopoutEntryDevTools(win, tabId, entry, instanceId);
+      return;
+    }
+
+    const embedded = entry.devtools;
+    const popout = createPopoutDevToolsWindow();
+    entry.devtoolsPopout = popout;
+    positionPopoutDevToolsWindow(win, popout);
+    wirePopoutDevToolsClosed(win, tabId, entry, instanceId, popout);
+
+    // Retarget before tearing down the embedded shell so the DevTools session stays open.
+    wc.setDevToolsWebContents(popout.webContents);
+    entry.devtools = null;
+    try {
+      win.contentView.removeChildView(embedded);
+    } catch {
+      /* not attached */
+    }
+    try {
+      if (!embedded.webContents.isDestroyed()) {
+        embedded.webContents.close();
+      }
+    } catch {
+      /* view already torn down */
+    }
+    popout.show();
+    relayoutInstanceEntry(win, entry, instanceId);
+    return;
+  }
+
+  if (entry.devtools && !entry.devtoolsPopout) {
+    relayoutInstanceEntry(win, entry, instanceId);
+    return;
+  }
+
+  const popout = entry.devtoolsPopout;
+  if (!popout) return;
+
+  const devtoolsView = new WebContentsView();
+  devtoolsView.setVisible(false);
+  entry.devtools = devtoolsView;
+  try {
+    win.contentView.addChildView(devtoolsView);
+  } catch {
+    /* window tearing down */
+  }
+
+  wc.setDevToolsWebContents(devtoolsView.webContents);
+  entry.devtoolsPopout = null;
+  popout.removeAllListeners('closed');
+  if (!popout.isDestroyed()) {
+    popout.close();
+  }
+  relayoutInstanceEntry(win, entry, instanceId);
+}
+
+/** Open DevTools for one tab guest (embedded bottom/side or popout window). */
+function openEntryDevTools(
+  win: BrowserWindow,
+  tabId: string,
+  entry: PreviewHostEntry,
+  instanceId?: string,
+): void {
+  if (isEntryDevToolsOpen(entry)) return;
+  const wc = entry.view.webContents;
+  if (wc.isDestroyed() || win.isDestroyed()) return;
+  const id = PreviewInstanceRegistry.resolveInstanceId(instanceId);
+  const dock = resolveDevToolsDock(win);
+
+  if (dock === 'popout') {
+    openPopoutEntryDevTools(win, tabId, entry, id);
+    return;
+  }
+
+  const devtoolsView = new WebContentsView();
+  devtoolsView.setVisible(false);
+  entry.devtools = devtoolsView;
+  try {
+    win.contentView.addChildView(devtoolsView);
+  } catch {
+    /* window tearing down */
+  }
+  // setDevToolsWebContents must run before openDevTools; 'detach' renders into our view.
+  wc.setDevToolsWebContents(devtoolsView.webContents);
+  wc.openDevTools({ mode: 'detach', activate: false });
+  relayoutInstanceEntry(win, entry, id);
+  sendToRenderer(win, channels.PREVIEW_DEVTOOLS_STATE, tabId, true, id);
+}
+
 /** Forward guest navigation / load lifecycle to the Minnow renderer (instanceId lets multi-surface listeners filter). */
-function wirePreviewGuestEvents(win: BrowserWindow, tabId: string, wc: WebContents, instanceId: string): void {
+function wirePreviewGuestEvents(win: BrowserWindow, tabId: string, entry: PreviewHostEntry, instanceId: string): void {
+  const wc = entry.view.webContents;
   let suppressNavigationUntilFailHandled = false;
 
   const emitNavigation = (url: string): void => {
@@ -202,10 +482,45 @@ function wirePreviewGuestEvents(win: BrowserWindow, tabId: string, wc: WebConten
   wc.on('render-process-gone', (_event, details) => {
     handleTabGuestCrash(win, tabId, details.reason, details.exitCode, instanceId);
   });
+
+  // F12 / Ctrl+Shift+I / Cmd+Opt+I inside the page toggles docked DevTools (MIN-177).
+  wc.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return;
+    const key = input.key.toLowerCase();
+    const combo =
+      input.key === 'F12' ||
+      (input.control && input.shift && key === 'i') ||
+      (input.meta && input.alt && key === 'i');
+    if (!combo) return;
+    event.preventDefault();
+    if (isEntryDevToolsOpen(entry)) {
+      closeEntryDevTools(win, tabId, entry, instanceId);
+    } else {
+      openEntryDevTools(win, tabId, entry, instanceId);
+    }
+  });
+
+  // Fallback for DevTools closed from inside its own UI; toggle/shortcut close directly.
+  wc.on('devtools-closed', () => {
+    // Destroying an embedded DevTools view during dock migration emits a stale close after
+    // DevTools has already been retargeted to a popout or new embedded shell.
+    if (!wc.isDestroyed() && wc.isDevToolsOpened()) return;
+    if (!isEntryDevToolsOpen(entry)) return;
+    teardownEntryDevTools(win.isDestroyed() ? null : win, entry);
+    relayoutInstanceEntry(win, entry, instanceId);
+    sendToRenderer(win, channels.PREVIEW_DEVTOOLS_STATE, tabId, false, instanceId);
+  });
+
+  // Right-click → Minnow-styled DOM menu in the renderer (suppress Chromium default).
+  wc.on('context-menu', (event, params) => {
+    event.preventDefault();
+    handleGuestContextMenu(win, tabId, instanceId, entry, params);
+  });
 }
 
 /** Detach a guest view from its window and close its WebContents. Safe to call on an already-torn-down window. */
 function destroyGuestEntry(win: BrowserWindow | null, entry: PreviewHostEntry): void {
+  teardownEntryDevTools(win, entry);
   if (win && !win.isDestroyed()) {
     try {
       win.contentView.removeChildView(entry.view);
@@ -279,6 +594,7 @@ function destroyHostForWindow(win: BrowserWindow): void {
     if (key.startsWith(`${win.id}::`)) lastBoundsByInstance.delete(key);
   }
   wiredWindowIds.delete(win.id);
+  devtoolsDockByWindow.delete(win.id);
 }
 
 async function loadSourceInGuest(
@@ -328,6 +644,7 @@ function applyPreviewViewBounds(
   entry: PreviewHostEntry,
   bounds: PreviewBounds,
   zoomFactor: number,
+  dock: DevToolsDockPosition = 'bottom',
 ): boolean {
   const rounded = roundBounds({
     x: bounds.x * zoomFactor,
@@ -338,11 +655,23 @@ function applyPreviewViewBounds(
   if (rounded.width <= 0 || rounded.height <= 0) {
     entry.visible = false;
     entry.view.setVisible(false);
+    entry.devtools?.setVisible(false);
     return false;
   }
-  entry.view.setBounds(rounded);
+  const split = splitPreviewBounds(rounded, Boolean(entry.devtools), dock);
+  entry.view.setBounds(split.guest);
   entry.visible = true;
   entry.view.setVisible(true);
+  if (entry.devtools) {
+    if (split.devtools) {
+      entry.devtools.setBounds(split.devtools);
+      entry.devtools.setVisible(true);
+    } else {
+      // Pane too short to dock usefully — DevTools stays open, reappears when it grows.
+      entry.devtools.setVisible(false);
+      entry.devtools.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+    }
+  }
   return true;
 }
 
@@ -350,6 +679,10 @@ function hidePreviewHostEntry(entry: PreviewHostEntry): void {
   entry.visible = false;
   entry.view.setVisible(false);
   entry.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+  if (entry.devtools) {
+    entry.devtools.setVisible(false);
+    entry.devtools.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+  }
 }
 
 /** Hide + detach every tab view belonging to a single instance. */
@@ -362,6 +695,13 @@ function detachAllTabViews(win: BrowserWindow, instanceId?: string): void {
       win.contentView.removeChildView(entry.view);
     } catch {
       /* not attached */
+    }
+    if (entry.devtools) {
+      try {
+        win.contentView.removeChildView(entry.devtools);
+      } catch {
+        /* not attached */
+      }
     }
   }
 }
@@ -387,8 +727,9 @@ function createTabGuest(win: BrowserWindow, tabId: string, instanceId: string): 
   view.setBackgroundColor('#ffffff');
   view.setVisible(false);
   attachPermissionHandler(view.webContents);
-  wirePreviewGuestEvents(win, tabId, view.webContents, instanceId);
-  return { view, visible: false };
+  const entry: PreviewHostEntry = { view, visible: false, devtools: null, devtoolsPopout: null };
+  wirePreviewGuestEvents(win, tabId, entry, instanceId);
+  return entry;
 }
 
 function getOrCreateTab(win: BrowserWindow, tabId: string, instanceId?: string): PreviewHostEntry {
@@ -411,7 +752,7 @@ function showActiveTab(win: BrowserWindow, bounds?: PreviewBounds, instanceId?: 
   const effectiveBounds = isValidPreviewBounds(bounds) ? bounds : lastBoundsByInstance.get(key);
   const hasBounds = isValidPreviewBounds(effectiveBounds);
   if (hasBounds) {
-    applyPreviewViewBounds(entry, effectiveBounds!, hostZoomFactor(win));
+    applyPreviewViewBounds(entry, effectiveBounds!, hostZoomFactor(win), resolveDevToolsDock(win));
     rememberPreviewBounds(win, effectiveBounds!, id);
   } else {
     entry.visible = false;
@@ -421,6 +762,13 @@ function showActiveTab(win: BrowserWindow, bounds?: PreviewBounds, instanceId?: 
     win.contentView.addChildView(entry.view);
   } catch {
     /* already attached */
+  }
+  if (entry.devtools) {
+    try {
+      win.contentView.addChildView(entry.devtools);
+    } catch {
+      /* already attached */
+    }
   }
   state.activeTabId = tabId;
   previewInstances.setVisible(win.id, id, hasBounds);
@@ -438,8 +786,26 @@ function getActiveEntry(event: IpcMainInvokeEvent, tabId?: string, instanceId?: 
   return getOrCreateTab(win, resolved, instanceId);
 }
 
+function reopenOpenDevToolsForDockChange(win: BrowserWindow): void {
+  const dock = resolveDevToolsDock(win);
+  for (const instanceId of previewInstances.listInstanceIds(win.id)) {
+    const state = previewInstances.get(win.id, instanceId);
+    if (!state) continue;
+    for (const [tabId, entry] of state.tabs) {
+      migrateEntryDevToolsDock(win, tabId, entry, instanceId, dock);
+    }
+  }
+}
+
 /** Register preview IPC handlers (replaces main.ts stubs). */
 export function registerPreviewHostIpc(): void {
+  registerPreviewContextMenuIpc({
+    windowFromEvent: windowFromInvoke,
+    getEntry: getActiveEntry,
+    openDevTools: openEntryDevTools,
+    isCdpPickActive: (webContentsId) => cdpPickSessions.has(webContentsId),
+  });
+
   ipcMain.handle(channels.PREVIEW_TAB_CREATE, (event, tabId?: string, instanceId?: string) => {
     const win = windowFromInvoke(event);
     if (!win) return null;
@@ -620,7 +986,7 @@ export function registerPreviewHostIpc(): void {
         }
         return;
       }
-      applyPreviewViewBounds(entry, bounds, hostZoomFactor(win));
+      applyPreviewViewBounds(entry, bounds, hostZoomFactor(win), resolveDevToolsDock(win));
       rememberPreviewBounds(win, bounds, instanceId);
     },
   );
@@ -714,6 +1080,56 @@ export function registerPreviewHostIpc(): void {
       }
     },
   );
+
+  ipcMain.handle(
+    channels.PREVIEW_DEVTOOLS_TOGGLE,
+    (event, tabId?: string, instanceId?: string) => {
+      const win = windowFromInvoke(event);
+      if (!win) return { open: false };
+      const resolved = resolveTabId(win, tabId, instanceId);
+      if (!resolved) return { open: false };
+      const entry = getOrCreateTab(win, resolved, instanceId);
+      if (isEntryDevToolsOpen(entry)) {
+        closeEntryDevTools(win, resolved, entry, instanceId);
+        return { open: false };
+      }
+      openEntryDevTools(win, resolved, entry, instanceId);
+      return { open: isEntryDevToolsOpen(entry) };
+    },
+  );
+
+  ipcMain.handle(
+    channels.PREVIEW_DEVTOOLS_GET_STATE,
+    (event, tabId?: string, instanceId?: string) => {
+      const win = windowFromInvoke(event);
+      if (!win) return false;
+      const state = previewInstances.get(win.id, instanceId);
+      if (!state) return false;
+      const id = typeof tabId === 'string' && tabId.trim() ? tabId.trim() : state.activeTabId;
+      const entry = id ? state.tabs.get(id) : undefined;
+      return Boolean(entry && isEntryDevToolsOpen(entry));
+    },
+  );
+
+  ipcMain.handle(channels.PREVIEW_DEVTOOLS_SET_DOCK, (event, dock: unknown) => {
+    const win = windowFromInvoke(event);
+    if (!win) return { dock: 'bottom' as DevToolsDockPosition };
+    const prev = resolveDevToolsDock(win);
+    const next = normalizeDevToolsDock(dock);
+    devtoolsDockByWindow.set(win.id, next);
+    if (prev !== next) {
+      reopenOpenDevToolsForDockChange(win);
+    } else {
+      relayoutAllVisibleEntries(win);
+    }
+    return { dock: next };
+  });
+
+  ipcMain.handle(channels.PREVIEW_DEVTOOLS_GET_DOCK, (event) => {
+    const win = windowFromInvoke(event);
+    if (!win) return 'bottom' as DevToolsDockPosition;
+    return resolveDevToolsDock(win);
+  });
 
   ipcMain.handle(
     channels.PREVIEW_CDP_PICK_DISABLE,
