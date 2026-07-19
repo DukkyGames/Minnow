@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import {
   resolveTrunkBranchName,
   shouldShowMergeToMain,
+  trunkBranchExists,
 } from '../../src/lib/git-trunk-branch.ts';
 import { mergeToMainButtonVisible } from '../../src/ui/git-merge-to-main.ts';
 
@@ -18,6 +19,43 @@ describe('resolveTrunkBranchName', () => {
 
   it('defaults to main when neither trunk exists', () => {
     assert.equal(resolveTrunkBranchName(['feature']), 'main');
+  });
+
+  it('uses remote master when trunk is checked out in another worktree', () => {
+    assert.equal(
+      resolveTrunkBranchName(['feature/foo'], ['remotes/origin/master']),
+      'master',
+    );
+  });
+
+  it('uses remote main when trunk is checked out in another worktree', () => {
+    assert.equal(
+      resolveTrunkBranchName(['feature/foo'], ['remotes/origin/main']),
+      'main',
+    );
+  });
+
+  it('follows origin HEAD when only symbolic ref is present', () => {
+    assert.equal(
+      resolveTrunkBranchName(
+        ['feature/foo'],
+        ['remotes/origin/HEAD -> origin/master'],
+      ),
+      'master',
+    );
+  });
+});
+
+describe('trunkBranchExists', () => {
+  it('accepts a remote-only trunk branch', () => {
+    assert.equal(
+      trunkBranchExists('master', ['feature/foo'], ['remotes/origin/master']),
+      true,
+    );
+  });
+
+  it('rejects a default trunk name with no matching branch', () => {
+    assert.equal(trunkBranchExists('main', ['feature/foo'], []), false);
   });
 });
 
@@ -86,6 +124,19 @@ describe('mergeToMainButtonVisible', () => {
         localBranches: ['main'],
       }),
       false,
+    );
+  });
+
+  it('shows when trunk is only visible on the remote', () => {
+    assert.equal(
+      mergeToMainButtonVisible({
+        sourceBranch: 'feature/bar',
+        mainWorkspaceCwd: '/repo',
+        onMainWorktree: false,
+        localBranches: ['feature/bar'],
+        remoteBranches: ['remotes/origin/master'],
+      }),
+      true,
     );
   });
 });

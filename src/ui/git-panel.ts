@@ -333,7 +333,10 @@ function syncWorktreeDeleteButton(): void {
   syncMergeToMainButton();
 }
 
-function syncMergeToMainButton(localBranches: string[] = []): void {
+function syncMergeToMainButton(
+  localBranches: string[] = [],
+  remoteBranches: string[] = [],
+): void {
   if (!mergeToMainBtn) return;
 
   const ws = getWorkspacePath().trim();
@@ -344,6 +347,7 @@ function syncMergeToMainButton(localBranches: string[] = []): void {
     mainWorkspaceCwd: ws,
     onMainWorktree: Boolean(ws && pathsEqual(panelPath, ws)),
     localBranches,
+    remoteBranches,
   });
 
   mergeToMainBtn.hidden = !visible;
@@ -419,6 +423,7 @@ async function handleMergeToMain(): Promise<void> {
 
   const branchResult = await gitBranches(getEffectiveCwdArg());
   const localBranches = branchResult.ok ? (branchResult.local ?? []) : [];
+  const remoteBranches = branchResult.ok ? (branchResult.remote ?? []) : [];
   const sourceBranch = currentBranchName || branchSelect?.value || '';
   const panelPath = panelCwd ?? ws;
 
@@ -427,12 +432,13 @@ async function handleMergeToMain(): Promise<void> {
     mainWorkspaceCwd: ws,
     onMainWorktree: pathsEqual(panelPath, ws),
     localBranches,
+    remoteBranches,
   };
 
   if (!mergeToMainButtonVisible(ctx)) return;
 
   const { resolveTrunkBranchName } = await import('../lib/git-trunk-branch');
-  const trunk = resolveTrunkBranchName(localBranches);
+  const trunk = resolveTrunkBranchName(localBranches, remoteBranches);
   if (!window.confirm(`Merge branch "${sourceBranch}" into ${trunk}?`)) return;
 
   setStatus('Merging…');
@@ -1778,7 +1784,10 @@ async function refreshBranchSelect(): Promise<void> {
   }
 
   syncBranchDeleteButton();
-  syncMergeToMainButton(filterUserFacingBranches(result.local ?? []));
+  syncMergeToMainButton(
+    filterUserFacingBranches(result.local ?? []),
+    result.remote ?? [],
+  );
 
 }
 
