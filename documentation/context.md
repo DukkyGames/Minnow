@@ -164,6 +164,8 @@ Main chat: `POST /api/generations` + `GET .../stream` with replay. Client stores
 
 SSE parsing: [`src/api/sse-parse.ts`](../src/api/sse-parse.ts) — event boundaries and glued JSON chunks; do not `Response.json()` on the generations shim.
 
+**Live metrics (MIN-413):** [`src/chat/streaming-stats.ts`](../src/chat/streaming-stats.ts) updates `chat.lastStats` and the bottom metrics strip during SSE (throttled ~100ms). Provider `usage` from chunks is preferred; otherwise completion tokens are estimated from partial assistant + thinking text (`chars ÷ 4`). Tool-loop rounds sum prior segments so per-chat totals rise across multi-step turns.
+
 **Turn runs** (`chat.runs`): semantic branches for replay/fork ([`src/state/runs-store.ts`](../src/state/runs-store.ts)), separate from transport generations.
 
 ### Tool loop
