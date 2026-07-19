@@ -1,42 +1,51 @@
-/* Settings → Appearance: theme, fonts, wallpaper pickers */
+/* Settings → Appearance: theme, fonts, wallpaper pickers (General page shell) */
 
-
-
-.settings-appearance {
-
-  display: flex;
-
-  flex-direction: column;
-
-  gap: 4px;
-
+.settings-general .settings-appearance-preview {
+  margin: 0 0 16px;
 }
 
-
-
-.settings-section-lead {
-
-  margin: 0 0 20px;
-
-  font-size: 13px;
-
-  color: var(--mn-fg-muted);
-
-  line-height: 1.5;
-
-  max-width: 72ch;
-
+.settings-general .settings-group--emphasis .settings-appearance-preview__bench {
+  border: none;
+  background: var(--mn-surface-1);
 }
 
+.settings-general .settings-theme-toolbar {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+}
 
+.settings-general .settings-theme-block {
+  margin-bottom: 0;
+}
+
+.settings-general .settings-appearance-wallpaper-grid {
+  margin-top: 0;
+}
+
+.settings-general .settings-appearance-wallpaper-custom {
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.settings-general .settings-appearance-simplified,
+.settings-general .settings-appearance-color-grid {
+  margin-top: 0;
+}
+
+.settings-general .settings-appearance-font-specimen {
+  margin-bottom: 12px;
+}
+
+.settings-general .settings-group--emphasis .settings-appearance-wallpaper-card,
+.settings-general .settings-group--emphasis .settings-theme-family {
+  background: var(--mn-bg);
+}
+
+.settings-general .settings-group--emphasis .settings-appearance-font-preview {
+  background: var(--mn-surface-1);
+}
 
 /* Live bench preview — vertical miniature of chat thread + composer */
-
-.settings-appearance-preview {
-
-  margin: 0 0 28px;
-
-}
 
 
 
@@ -235,120 +244,6 @@
   text-transform: uppercase;
 
   color: var(--mn-success);
-
-}
-
-
-
-/* Advanced custom colors disclosure */
-
-.settings-appearance-advanced {
-
-  margin-top: 8px;
-
-  border: 1px solid var(--mn-border);
-
-  border-radius: var(--radius-md);
-
-  background: var(--mn-surface-0);
-
-}
-
-
-
-.settings-appearance-advanced__summary {
-
-  display: flex;
-
-  flex-wrap: wrap;
-
-  align-items: baseline;
-
-  gap: 6px 12px;
-
-  padding: 14px 16px;
-
-  cursor: pointer;
-
-  list-style: none;
-
-}
-
-
-
-.settings-appearance-advanced__summary::-webkit-details-marker {
-
-  display: none;
-
-}
-
-
-
-.settings-appearance-advanced__summary::before {
-
-  content: '';
-
-  width: 0;
-
-  height: 0;
-
-  margin-right: 2px;
-
-  border-top: 5px solid transparent;
-
-  border-bottom: 5px solid transparent;
-
-  border-left: 6px solid var(--mn-fg-muted);
-
-  transition: transform var(--duration-fast) var(--ease-out);
-
-}
-
-
-
-.settings-appearance-advanced[open] .settings-appearance-advanced__summary::before {
-
-  transform: rotate(90deg);
-
-}
-
-
-
-.settings-appearance-advanced__title {
-
-  font-size: 13px;
-
-  font-weight: 600;
-
-  letter-spacing: -0.01em;
-
-  color: var(--mn-fg);
-
-}
-
-
-
-.settings-appearance-advanced__hint {
-
-  flex: 1 1 100%;
-
-  font-size: 13px;
-
-  color: var(--mn-fg-muted);
-
-  line-height: 1.45;
-
-  max-width: 72ch;
-
-}
-
-
-
-.settings-appearance-advanced__body {
-
-  padding: 0 16px 16px;
-
-  border-top: 1px solid var(--mn-border);
 
 }
 
