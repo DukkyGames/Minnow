@@ -1056,23 +1056,24 @@ async function handleGenerateCommitMessage(): Promise<void> {
       return;
     }
 
+    const changedPaths = useStagedOnly
+      ? staged.map((file) => file.path)
+      : allChanges.map((file) => file.path);
+    const excludedPaths = useStagedOnly
+      ? [...unstaged, ...untracked].map((file) => file.path)
+      : [];
+
     setStatus('Generating commit message…');
 
     const result = await fetchGitCommitMessage({
-      stagedPaths: useStagedOnly
-        ? staged.map((file) => file.path)
-        : allChanges.map((file) => file.path),
-
+      changedPaths,
+      excludedPaths,
+      scope: useStagedOnly ? 'staged' : 'working-tree',
       patch: diffResult.patch,
-
       signal: controller.signal,
-
       onPartial: (text) => {
-
         commitInput!.value = text;
-
       },
-
     });
 
     if (controller.signal.aborted) return;

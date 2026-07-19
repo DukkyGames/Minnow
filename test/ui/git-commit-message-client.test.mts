@@ -6,8 +6,14 @@ import { DEFAULT_EDITOR_AI_COMPLETION } from '../../src/config/editor-ai-complet
 import { createEmptyChatObject, setSessionStateForTests } from '../../src/state/sessions.ts';
 import {
   buildGitCommitMessagePrompt,
+  extractCommitMessageFromChain,
+  filterCommitMessagePatch,
+  normalizeCommitMessageOutput,
+  resolveCommitMessageDisplayText,
   resolveGitCommitMessageBinding,
   sanitizeCommitMessage,
+  stripReasoningFraming,
+  stripThinkingFromCommitOutput,
   truncateStagedPatch,
 } from '../../src/ui/git-commit-message-client.ts';
 
@@ -15,6 +21,10 @@ describe('truncateStagedPatch', () => {
   test('returns patch unchanged when under limit', () => {
     const patch = 'diff --git a/foo.ts b/foo.ts\n+hello';
     assert.equal(truncateStagedPatch(patch, 100), patch);
+  });
+
+  test('returns empty patch unchanged', () => {
+    assert.equal(truncateStagedPatch(''), '');
   });
 
   test('appends truncation marker when over limit', () => {
@@ -25,16 +35,87 @@ describe('truncateStagedPatch', () => {
   });
 });
 
+describe('filterCommitMessagePatch', () => {
+  test('collapses oversized per-file hunks', () => {
+    const hunk = `diff --git a/src/big.ts b/src/big.ts\n${'+line\n'.repeat(900)}`;
+    const out = filterCommitMessagePatch(hunk);
+    assert.match(out, /file diff truncated/);
+  });
+
+  test('summarizes lock files instead of full diff', () => {
+    const patch = 'diff --git a/package-lock.json b/package-lock.json\n+  "version": "2.0.0"';
+    const out = filterCommitMessagePatch(patch);
+    assert.match(out, /lock\/generated file/);
+    assert.doesNotMatch(out, /"version": "2.0.0"/);
+  });
+
+  test('returns empty string for empty patch', () => {
+    assert.equal(filterCommitMessagePatch(''), '');
+  });
+});
+
 describe('buildGitCommitMessagePrompt', () => {
-  test('includes changed file list and diff in user message', () => {
-    const messages = buildGitCommitMessagePrompt(['src/a.ts', 'src/b.ts'], '+added line');
+  test('includes changed file list, scope, and diff in user message', () => {
+    const messages = buildGitCommitMessagePrompt({
+      changedPaths: ['src/a.ts', 'src/b.ts'],
+      patch: '+added line',
+      scope: 'staged',
+    });
     assert.equal(messages.length, 2);
     assert.equal(messages[0].role, 'system');
     assert.equal(messages[1].role, 'user');
+    const system = String(messages[0].content);
     const user = String(messages[1].content);
+    assert.match(system, /WHY the change was made/);
+    assert.match(system, /gitmoji/);
+    assert.match(user, /staged changes only/);
     assert.match(user, /src\/a\.ts/);
     assert.match(user, /src\/b\.ts/);
     assert.match(user, /\+added line/);
+  });
+
+  test('notes working-tree scope when nothing is staged', () => {
+    const messages = buildGitCommitMessagePrompt({
+      changedPaths: ['src/a.ts'],
+      patch: '+change',
+      scope: 'working-tree',
+    });
+    const user = String(messages[1].content);
+    assert.match(user, /working tree/);
+    assert.match(user, /Nothing is staged/);
+  });
+
+  test('lists excluded paths for staged-only generation', () => {
+    const messages = buildGitCommitMessagePrompt({
+      changedPaths: ['src/a.ts'],
+      excludedPaths: ['src/b.ts'],
+      patch: '+change',
+      scope: 'staged',
+    });
+    const user = String(messages[1].content);
+    assert.match(user, /Excluded from this message/);
+    assert.match(user, /src\/b\.ts/);
+  });
+
+  test('omits gitmoji guidance when disabled', () => {
+    const messages = buildGitCommitMessagePrompt({
+      changedPaths: ['src/a.ts'],
+      patch: '+change',
+      scope: 'staged',
+      useGitmoji: false,
+    });
+    const system = String(messages[0].content);
+    assert.doesNotMatch(system, /gitmoji/);
+    assert.doesNotMatch(system, /✨/);
+  });
+
+  test('includes breaking change guidance in system prompt', () => {
+    const messages = buildGitCommitMessagePrompt({
+      changedPaths: ['src/a.ts'],
+      patch: '+change',
+      scope: 'staged',
+    });
+    assert.match(String(messages[0].content), /BREAKING CHANGE/);
   });
 });
 
@@ -54,6 +135,143 @@ describe('sanitizeCommitMessage', () => {
   test('preserves multiline body', () => {
     const raw = 'feat: add panel\n\nExplain why this matters.';
     assert.equal(sanitizeCommitMessage(raw), raw);
+  });
+
+  test('preserves gitmoji prefix', () => {
+    const raw = '✨ feat(ui): add commit generator';
+    assert.equal(sanitizeCommitMessage(raw), raw);
+  });
+});
+
+describe('stripThinkingFromCommitOutput', () => {
+  test('returns reply after inline thinking tags', () => {
+    const raw = '<thinking>analyze diff</thinking>feat: add widget';
+    assert.equal(stripThinkingFromCommitOutput(raw), 'feat: add widget');
+  });
+
+  test('returns empty while thinking block is still open', () => {
+    const raw = '<thinking>still analyzing the diff';
+    assert.equal(stripThinkingFromCommitOutput(raw), '');
+  });
+});
+
+describe('extractCommitMessageFromChain', () => {
+  test('extracts the last conventional commit block from a reasoning chain', () => {
+    const chain = [
+      'The user wants a commit message for these git changes.',
+      'I need to analyze the diff carefully.',
+      'The diff shows changes to git-commit-message-client.ts.',
+      "I'll use a fix type since this is a bug fix.",
+      '',
+      'fix(git): extract commit message from reasoning chain',
+      '',
+      'Strip mirrored reasoning instead of dumping the full chain.',
+    ].join('\n');
+
+    const result = extractCommitMessageFromChain(chain);
+    assert.match(result, /^fix\(git\):/);
+    assert.match(result, /Strip mirrored reasoning/);
+  });
+
+  test('extracts gitmoji-prefixed conventional commit', () => {
+    const chain = [
+      'Let me analyze the diff.',
+      '',
+      '✨ feat(git): improve commit message prompts',
+      '',
+      'Body explains why the change matters.',
+    ].join('\n');
+
+    const result = extractCommitMessageFromChain(chain);
+    assert.match(result, /^✨ feat\(git\):/);
+    assert.match(result, /Body explains why/);
+  });
+
+  test('extracts plain commit text from trailing paragraph', () => {
+    const chain = [
+      'Let me read the diff.',
+      'The changes update git panel behavior.',
+      '',
+      'Fix git auto commit message generation',
+    ].join('\n');
+
+    assert.equal(extractCommitMessageFromChain(chain), 'Fix git auto commit message generation');
+  });
+
+  test('returns empty for reasoning-only output', () => {
+    assert.equal(
+      extractCommitMessageFromChain('Let me analyze the staged diff carefully.'),
+      '',
+    );
+  });
+});
+
+describe('resolveCommitMessageDisplayText', () => {
+  test('prefers content channel over reasoning', () => {
+    assert.equal(
+      resolveCommitMessageDisplayText('feat: from content', 'fix: from reasoning', {
+        reasoningFallback: true,
+      }),
+      'feat: from content',
+    );
+  });
+
+  test('does not surface mirrored reasoning chains in content', () => {
+    const chain = [
+      'The user wants a commit message.',
+      'I need to analyze the diff.',
+      '',
+      'feat(git): add commit generator',
+    ].join('\n');
+
+    assert.equal(
+      resolveCommitMessageDisplayText(chain, chain, { reasoningFallback: true }),
+      'feat(git): add commit generator',
+    );
+  });
+
+  test('does not stream partial reasoning while the chain is still growing', () => {
+    const partial = 'The user wants a commit message.\nI need to analyze the diff.';
+    assert.equal(
+      resolveCommitMessageDisplayText(partial, partial, { reasoningFallback: false }),
+      '',
+    );
+  });
+
+  test('falls back to reasoning channel when content is empty', () => {
+    const reasoning = [
+      'Analyzing patch.',
+      '',
+      'fix(ui): handle empty diff',
+    ].join('\n');
+
+    assert.equal(
+      resolveCommitMessageDisplayText('', reasoning, { reasoningFallback: true }),
+      'fix(ui): handle empty diff',
+    );
+  });
+
+  test('matches clean content fast path', () => {
+    assert.equal(
+      resolveCommitMessageDisplayText('✨ feat: ship it', '', { reasoningFallback: true }),
+      '✨ feat: ship it',
+    );
+  });
+});
+
+describe('normalizeCommitMessageOutput', () => {
+  test('accepts plain commit text without conventional prefix', () => {
+    assert.equal(
+      normalizeCommitMessageOutput('Fix git auto commit message generation'),
+      'Fix git auto commit message generation',
+    );
+  });
+});
+
+describe('stripReasoningFraming', () => {
+  test('removes trailing meta commentary', () => {
+    const raw = 'feat(ui): add generator\n\nLooks good.';
+    assert.equal(stripReasoningFraming(raw), 'feat(ui): add generator');
   });
 });
 

@@ -372,11 +372,17 @@ export function createGitOperationsPanel(
         setStatus(diffResult.error ?? 'Could not read diff', true);
         return;
       }
+      const changedPaths = useStagedOnly
+        ? staged.map((f) => f.path)
+        : allChanges.map((f) => f.path);
+      const excludedPaths = useStagedOnly
+        ? [...unstaged, ...untracked].map((f) => f.path)
+        : [];
       setStatus('Generating commit message…');
       const result = await fetchGitCommitMessage({
-        stagedPaths: useStagedOnly
-          ? staged.map((f) => f.path)
-          : allChanges.map((f) => f.path),
+        changedPaths,
+        excludedPaths,
+        scope: useStagedOnly ? 'staged' : 'working-tree',
         patch: diffResult.patch,
         signal: controller.signal,
         onPartial: (text) => {
