@@ -2,6 +2,9 @@
  * Settings → Model routing — consolidated per-role provider/model bindings.
  */
 
+import '../styles/settings-general.css';
+import '../styles/settings-routing.css';
+
 import { patchWorkAgentOverride } from '../agents/work-agent-prompt-api';
 import type { ThinkingTriState } from '../agents/thinking-types';
 import { saveSubAgentConfigToServer, loadSubAgentConfig } from '../agents/sub-agent-config';
@@ -36,6 +39,10 @@ import {
 } from '../state/sessions';
 import { listProviders } from '../providers/store';
 import {
+  appendSettingsGroup,
+  linkToSettingsSection,
+} from './settings-layout';
+import {
   appendProviderModelFields,
   fillModelSelect,
   fillProviderSelect,
@@ -58,13 +65,13 @@ const GROUP_LABELS: Record<ModelRoutingGroup, string> = {
   reef: 'Reef widgets',
 };
 
-const GROUP_ORDER: ModelRoutingGroup[] = [
-  'main-chat',
-  'work-agents',
-  'sub-agents',
-  'background',
-  'reef',
-];
+const GROUP_HINTS: Partial<Record<ModelRoutingGroup, string>> = {
+  'main-chat':
+    'Matches the top-bar picker for the active chat. Sampler fields here also update global defaults on save.',
+  background:
+    'Rename jobs, goal checks, and skill runtimes that run outside the composer.',
+  reef: 'Widget model for Reef mode in the active sidebar chat.',
+};
 
 /** Routing groups shown on Models → Routing (agent roles live in Agents center). */
 const ROUTING_PAGE_GROUPS: ModelRoutingGroup[] = ['main-chat', 'background', 'reef'];
@@ -341,37 +348,35 @@ async function saveRow(controls: RowControls): Promise<void> {
   }
 }
 
-function appendRoutingRow(
-  tableBody: HTMLElement,
+function appendRoutingRole(
+  groupBody: HTMLElement,
   controls: RowControls,
   bindingHost: HTMLElement,
 ): void {
   const { row } = controls;
-  const tr = el('tr', 'settings-routing-row');
-  tr.dataset.routingId = row.id;
-  tr.dataset.settingsSearchKey = `models.routing.${row.id}`;
+  const role = el('article', 'settings-routing-role');
+  role.dataset.routingId = row.id;
+  role.dataset.settingsSearchKey = `models.routing.${row.id}`;
 
-  const labelCell = el('td', 'settings-routing-row__label');
-  const title = el('div', 'settings-routing-row__title', row.label);
-  labelCell.appendChild(title);
+  const head = el('div', 'settings-routing-role__head');
+  head.appendChild(el('div', 'settings-routing-role__title', row.label));
   if (row.description) {
-    const desc = el('p', 'settings-routing-row__desc', row.description);
-    labelCell.appendChild(desc);
+    head.appendChild(el('p', 'settings-routing-role__desc', row.description));
   }
-  const meta = el('div', 'settings-routing-row__meta');
+  const meta = el('div', 'settings-routing-role__meta');
   if (row.disabled) {
     meta.appendChild(el('span', 'settings-badge', 'disabled'));
   }
   if (row.group === 'reef' && row.activeChatName) {
     meta.appendChild(
-      el('span', 'settings-routing-row__chat', `Chat: ${row.activeChatName}`),
+      el('span', 'settings-routing-role__chat', `Chat: ${row.activeChatName}`),
     );
   }
-  if (meta.childElementCount) labelCell.appendChild(meta);
-  tr.appendChild(labelCell);
+  if (meta.childElementCount) head.appendChild(meta);
+  role.appendChild(head);
 
-  const bindingCell = el('td', 'settings-routing-row__binding');
-  bindingCell.appendChild(bindingHost);
+  const fields = el('div', 'settings-routing-role__fields');
+  fields.appendChild(bindingHost);
 
   const extras = el('div', 'settings-routing-row__extras');
   if (row.persistKind === 'ui-designer') {
@@ -392,7 +397,7 @@ function appendRoutingRow(
     controls.enabledCb = enabledInput;
     extras.appendChild(enabledRow);
   }
-  if (extras.childElementCount) bindingCell.appendChild(extras);
+  if (extras.childElementCount) fields.appendChild(extras);
 
   const effective = el('p', 'settings-routing-effective');
   effective.appendChild(el('span', 'settings-routing-effective__label', 'Effective'));
@@ -400,7 +405,7 @@ function appendRoutingRow(
   effective.appendChild(document.createTextNode(' '));
   effective.appendChild(value);
   controls.effectiveEl = value;
-  bindingCell.appendChild(effective);
+  fields.appendChild(effective);
 
   if (supportsAdvancedPanel(row)) {
     const advanced = document.createElement('details');
@@ -448,25 +453,29 @@ function appendRoutingRow(
       ]),
     );
     advanced.appendChild(panel);
-    bindingCell.appendChild(advanced);
+    fields.appendChild(advanced);
   }
 
   if (loadedFallbackConfig) {
-    appendRowFallbackEditor(bindingCell, controls, loadedFallbackConfig);
+    appendRowFallbackEditor(fields, controls, loadedFallbackConfig);
   }
 
-  tr.appendChild(bindingCell);
-
-  const actionsCell = el('td', 'settings-routing-row__actions');
-  const saveBtn = el('button', 'settings-action-btn settings-action-btn--primary', 'Save');
-  saveBtn.type = 'button';
-  saveBtn.addEventListener('click', () => {
-    void saveRow(controls);
-  });
-  actionsCell.appendChild(saveBtn);
-  tr.appendChild(actionsCell);
-
-  tableBody.appendChild(tr);
+  fields.appendChild(
+    createSettingsActionsRow(
+      [
+        {
+          label: 'Save binding',
+          variant: 'primary',
+          onClick: () => {
+            void saveRow(controls);
+          },
+        },
+      ],
+      { searchKey: `models.routing.${row.id}.save` },
+    ),
+  );
+  role.appendChild(fields);
+  groupBody.appendChild(role);
 }
 
 function appendRowFallbackEditor(
@@ -517,15 +526,12 @@ async function renderGlobalFallbackBar(mount: HTMLElement): Promise<void> {
   loadedFallbackConfig = config;
   globalFallbackEditor = null;
 
-  const section = el('section', 'settings-routing-group settings-fallback-global');
-  section.dataset.settingsSearchKey = 'models.routing.fallback';
-  section.appendChild(el('h3', 'settings-routing-group__title', 'Fallback'));
-  section.appendChild(
-    el(
-      'p',
-      'settings-routing-group__lead',
-      'Try alternate models when a host fails. Role chains run first; the global chain is the last resort.',
-    ),
+  const body = appendSettingsGroup(
+    mount,
+    'Fallback',
+    'Try alternate models when a host fails. Role chains run first; the global chain is the last resort.',
+    'models.routing.fallback',
+    { emphasis: true },
   );
 
   const { row: enabledRow, input: enabledInput } = createSettingsToggleRow(
@@ -534,7 +540,7 @@ async function renderGlobalFallbackBar(mount: HTMLElement): Promise<void> {
   );
   enabledRow.classList.add('settings-toggle-row--compact');
   globalFallbackEnabledInput = enabledInput;
-  section.appendChild(enabledRow);
+  body.appendChild(enabledRow);
 
   const { row: cooldownSettingsRow, input: cooldownInput } = createSettingsInputRow(
     'Cooldown after failure (seconds)',
@@ -549,7 +555,7 @@ async function renderGlobalFallbackBar(mount: HTMLElement): Promise<void> {
     },
   );
   globalFallbackCooldownInput = cooldownInput;
-  section.appendChild(cooldownSettingsRow);
+  body.appendChild(cooldownSettingsRow);
 
   const globalChainSection = el('div', 'settings-fallback-global-chain');
   globalChainSection.appendChild(
@@ -578,13 +584,13 @@ async function renderGlobalFallbackBar(mount: HTMLElement): Promise<void> {
     renderFallbackCandidateRows(editor);
   });
   globalChainSection.appendChild(addGlobalBtn);
-  section.appendChild(globalChainSection);
+  body.appendChild(globalChainSection);
 
   const healthHost = el('div', 'settings-fallback-health');
-  section.appendChild(healthHost);
+  body.appendChild(healthHost);
   void refreshHostHealthPanel(healthHost);
 
-  section.appendChild(
+  body.appendChild(
     createSettingsActionsRow([
       {
         label: 'Save fallback settings',
@@ -614,8 +620,6 @@ async function renderGlobalFallbackBar(mount: HTMLElement): Promise<void> {
       },
     ]),
   );
-
-  mount.appendChild(section);
 }
 
 function renderFallbackCandidateRows(editor: FallbackRowEditor): void {
@@ -691,42 +695,14 @@ function renderGroup(
   group: ModelRoutingGroup,
   rows: ModelRoutingRow[],
 ): void {
-  const section = el('section', 'settings-routing-group');
-  section.appendChild(el('h3', 'settings-routing-group__title', GROUP_LABELS[group]));
-
-  if (group === 'main-chat') {
-    section.appendChild(
-      el(
-        'p',
-        'settings-routing-group__lead',
-        'Matches the top-bar picker for the active chat. Sampler fields here also update global defaults on save.',
-      ),
-    );
-  }
-
-  if (group === 'reef') {
-    section.appendChild(
-      el(
-        'p',
-        'settings-routing-group__lead',
-        'Widget model for Reef mode in the active sidebar chat.',
-      ),
-    );
-  }
-
-  const tableWrap = el('div', 'settings-routing-table-wrap');
-  const table = el('table', 'settings-routing-table');
-  const thead = el('thead');
-  const headRow = el('tr');
-  for (const label of ['Role', 'Provider & model', '']) {
-    const th = el('th', '', label);
-    if (!label) th.setAttribute('aria-label', 'Actions');
-    headRow.appendChild(th);
-  }
-  thead.appendChild(headRow);
-  table.appendChild(thead);
-  const tbody = el('tbody');
-  table.appendChild(tbody);
+  const body = appendSettingsGroup(
+    mount,
+    GROUP_LABELS[group],
+    GROUP_HINTS[group],
+    `models.routing.${group}`,
+    { emphasis: true },
+  );
+  body.classList.add('settings-routing-group__body');
 
   for (const row of rows) {
     const ids = {
@@ -743,7 +719,7 @@ function renderGroup(
     const controls: RowControls = { row, providerSelect, modelSelect };
 
     mountedRows.push(controls);
-    appendRoutingRow(tbody, controls, bindingHost);
+    appendRoutingRole(body, controls, bindingHost);
     void wireProviderModelSelects(
       controls,
       row.persistKind === 'reef-chat' ||
@@ -754,10 +730,6 @@ function renderGroup(
         row.persistKind === 'sub-agent',
     );
   }
-
-  tableWrap.appendChild(table);
-  section.appendChild(tableWrap);
-  mount.appendChild(section);
 }
 
 /** Refresh Reef row selects when the active chat changes while this section is open. */
@@ -774,7 +746,7 @@ export function syncModelRoutingReefFromActiveChat(): void {
       chat.reefWidgetProviderId ?? chat.providerId ?? reef.providerSelect.value ?? '';
     await fillModelSelect(reef.modelSelect, providerId, chat.reefWidgetModelId ?? '');
     const chatEl = document.querySelector(
-      '[data-routing-id="reef-widget"] .settings-routing-row__chat',
+      '[data-routing-id="reef-widget"] .settings-routing-role__chat',
     );
     if (chatEl) {
       chatEl.textContent = `Chat: ${chat.name?.trim() || 'Untitled chat'}`;
@@ -789,15 +761,34 @@ export async function renderModelRoutingSection(mount: HTMLElement): Promise<voi
   mount.replaceChildren();
   mount.dataset.settingsSearchKey = 'models.routing';
 
+  const shell = el('div', 'settings-general settings-routing');
+  mount.appendChild(shell);
+
+  const lead = el('p', 'settings-section-lead');
+  lead.append(
+    'Pick provider and model per role. Main chat follows the top-bar picker. Work agent and sub-agent bindings are in ',
+    linkToSettingsSection('Agents', 'agent-center'),
+    '. Global defaults live under ',
+    linkToSettingsSection('Sampler', 'sampler'),
+    ' and ',
+    linkToSettingsSection('Thinking', 'thinking'),
+    '.',
+  );
+  shell.appendChild(lead);
+
   const storageMode = await detectConfigServer();
   refreshConfigStorageBanner();
 
   if (!isConfigServerMode(storageMode)) {
     appendSettingsOfflineHint(
-      mount,
-      'Model routing needs npm start. Values below are read-only until the server is running.',
+      shell,
+      'Model routing needs <code>npm start</code>. Values below are read-only until the server is running.',
+      { searchKey: 'models.routing' },
     );
   }
+
+  const content = el('div', 'settings-general__content settings-routing__content');
+  shell.appendChild(content);
 
   try {
     const { providers } = await listProviders();
@@ -812,22 +803,27 @@ export async function renderModelRoutingSection(mount: HTMLElement): Promise<voi
     lastCatalogChatId = catalog.activeChat.id;
 
     if (catalog.offline) {
-      appendSettingsOfflineHint(mount, 'Run npm start to load bindings from ~/.minnow.');
+      appendSettingsOfflineHint(
+        shell,
+        'Run <code>npm start</code> to load bindings from <code>~/.minnow</code>.',
+        { searchKey: 'models.routing' },
+      );
       return;
     }
 
-    await renderGlobalFallbackBar(mount);
+    await renderGlobalFallbackBar(content);
 
     for (const group of ROUTING_PAGE_GROUPS) {
       const groupRows = catalog.rows.filter((r) => r.group === group);
       if (groupRows.length === 0) continue;
-      renderGroup(mount, group, groupRows);
+      renderGroup(content, group, groupRows);
     }
   } catch (err) {
     console.error('[model-routing] render failed', err);
     appendSettingsOfflineHint(
-      mount,
+      shell,
       'Could not load bindings. Switch tabs and back, or refresh the page.',
+      { searchKey: 'models.routing' },
     );
   }
 }

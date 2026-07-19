@@ -8,7 +8,11 @@ import {
   ONBOARDING_CLOUD_PRESETS,
   PROVIDER_PRESETS,
   SETTINGS_FEATURED_PRESET_IDS,
+  SETTINGS_LOCAL_PRESETS,
   getProviderPreset,
+  listSettingsFeaturedPresets,
+  listSettingsLocalPresets,
+  listSettingsMorePresets,
   listSettingsProviderPresets,
 } from '../../src/providers/presets.ts';
 
@@ -36,6 +40,20 @@ describe('provider presets catalog', () => {
       SETTINGS_FEATURED_PRESET_IDS,
     );
     assert.equal(listed.length, PROVIDER_PRESETS.length);
+  });
+
+  test('settings picker groups local, featured, and more presets', () => {
+    const local = listSettingsLocalPresets();
+    assert.equal(local.length, SETTINGS_LOCAL_PRESETS.length);
+    assert.ok(local.some((preset) => preset.id === 'lm-studio'));
+    assert.ok(local.some((preset) => preset.id === 'ollama'));
+
+    const featured = listSettingsFeaturedPresets();
+    assert.equal(featured.length, SETTINGS_FEATURED_PRESET_IDS.length);
+
+    const more = listSettingsMorePresets();
+    assert.equal(more.length, PROVIDER_PRESETS.length - SETTINGS_FEATURED_PRESET_IDS.length);
+    assert.ok(!more.some((preset) => SETTINGS_FEATURED_PRESET_IDS.includes(preset.id)));
   });
 
   test('openai-v1 preset baseUrls do not double /v1 when joined with default models path', () => {

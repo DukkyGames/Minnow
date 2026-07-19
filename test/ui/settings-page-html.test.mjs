@@ -55,6 +55,7 @@ const DYNAMIC_SECTION_BODY_IDS = [
   'settingsSkillsBody',
   'settingsWebhooksBody',
   'settingsUsageBody',
+  'settingsProvidersBody',
   'settingsEditorBody',
   'settingsDiagnosticsBody',
 ];
@@ -72,14 +73,9 @@ describe('settings page HTML', () => {
     });
   }
 
-  test('providers add form exists in index.html', () => {
-    assert.match(html, /id="settingsProvidersAddPicker"/);
-    assert.match(html, /id="settingsProvidersAddForm"/);
-    assert.match(html, /id="settingsProvidersAddId"/);
-    assert.match(html, /id="settingsProvidersAddBaseUrl"/);
-    assert.match(html, /id="settingsProvidersAddModelsPath"/);
-    assert.match(html, /id="settingsProvidersAddChatPath"/);
-    assert.match(html, /id="settingsProvidersList"/);
+  test('providers section mount exists in index.html', () => {
+    assert.match(html, /id="settingsProvidersBody"/);
+    assert.match(html, /id="settingsSection-providers"/);
   });
 
   test('MCP add-server form exists in index.html', () => {
