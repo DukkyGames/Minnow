@@ -63,16 +63,18 @@ import {
 
 import { applyFileSidebarVisuals, isMobileLayout, openMobileFileSidebar } from './file-layout';
 
-import { getActiveChat, sessionState } from '../state/sessions';
+import { subscribeAllBoardChanges } from '../state/orchestrate-board-events';
 
-import { resolveChatWorktreeRoot } from '../state/worktree-isolation';
+import { getActiveChat, sessionState } from '../state/sessions';
 
 import { listWorktrees } from '../state/worktree-service';
 
 import { getWorkspacePath } from '../state/workspace';
+import type { ChatGroup } from '../types';
 
 import {
   panelPathsEqual,
+  resolvePanelBrowseCwd,
   resolvePanelWorktreeCwd,
   resolvePanelBrowseRunTargetSeed,
   normalizePanelCwdAfterWorktreeListChange,
@@ -231,6 +233,13 @@ function getGitMount(): HTMLElement | null {
 /** Clear browse override so the next chat/composer sync can drive panel cwd. */
 export function clearPanelCwdUserOverride(): void {
   panelCwdUserOverride = false;
+}
+
+/** Board folder currently filling the main column in board view. */
+function getActiveBoardGroupFromSession(): ChatGroup | undefined {
+  const id = sessionState?.activeBoardGroupId?.trim();
+  if (!id) return undefined;
+  return sessionState?.groups?.find((group) => group.id === id);
 }
 
 /**
@@ -2192,6 +2201,8 @@ export function toggleGitSidePanel(): void {
 
 /**
  * Sync git panel browse cwd + file tree from the active chat's composer run-target.
+ * On orchestrate board view with worktree isolation, browse roots follow the board
+ * integration worktree instead of per-task chat worktrees (MIN-464).
  * Skips when the user manually picked a worktree (browse override).
  */
 export function syncPanelFromActiveChat(options?: { forceFileTree?: boolean }): void {
@@ -2199,15 +2210,15 @@ export function syncPanelFromActiveChat(options?: { forceFileTree?: boolean }): 
   if (panelCwdUserOverride) return;
 
   const chat = getActiveChat();
-  const groups = sessionState?.groups;
-  const worktreeRoot = resolveChatWorktreeRoot(chat, groups);
-
-  if (worktreeRoot) {
-    panelCwd = worktreeRoot;
-  } else {
-    const ws = getWorkspacePath().trim();
-    panelCwd = ws || undefined;
-  }
+  const nextCwd = resolvePanelBrowseCwd({
+    chat,
+    groups: sessionState.groups,
+    activeBoardGroup: getActiveBoardGroupFromSession(),
+    chats: sessionState.chats,
+  });
+  const ws = getWorkspacePath().trim();
+  const worktree = resolvePanelWorktreeCwd(nextCwd);
+  panelCwd = worktree ?? (ws || undefined);
 
   syncCwdSelectValue();
   void syncFileTreeGitPollCwd(options?.forceFileTree);
@@ -2254,7 +2265,11 @@ export function initGitPanel(): void {
 
   });
 
-
+  subscribeAllBoardChanges((groupId) => {
+    const boardGroup = getActiveBoardGroupFromSession();
+    if (!boardGroup || boardGroup.id !== groupId || boardGroup.viewMode !== 'board') return;
+    syncPanelFromActiveChat({ forceFileTree: true });
+  });
 
   syncPanelFromActiveChat();
 }

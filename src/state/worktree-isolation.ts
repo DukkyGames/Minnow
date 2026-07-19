@@ -72,6 +72,71 @@ export function boardIntegrationBranch(boardId: string): string {
   return `minnow/board/${sanitizeRefFragment(boardId)}/integration`;
 }
 
+/** Worktree slot directory name for the board integration checkout. */
+export const BOARD_INTEGRATION_SLOT = 'integration';
+
+/**
+ * Derive the integration worktree path from any board slot path
+ * (task-*, wave-*, or integration itself).
+ */
+export function integrationWorktreePathFromSlotPath(slotPath: string): string | undefined {
+  const normalized = slotPath.replace(/\\/g, '/').replace(/\/+$/, '');
+  if (!normalized) return undefined;
+  const parts = normalized.split('/');
+  const slot = parts[parts.length - 1];
+  if (!slot) return undefined;
+  if (slot === BOARD_INTEGRATION_SLOT) return normalized;
+  if (/^(task|wave)-/.test(slot)) {
+    return [...parts.slice(0, -1), BOARD_INTEGRATION_SLOT].join('/');
+  }
+  return undefined;
+}
+
+/** True when a chat belongs to the given orchestrate board folder. */
+function chatBelongsToBoardGroup(
+  chat: Pick<Chat, 'boardGroupId' | 'groupId'>,
+  groupId: string,
+): boolean {
+  const boardGroupId = chat.boardGroupId?.trim();
+  if (boardGroupId === groupId) return true;
+  const memberGroupId = chat.groupId?.trim();
+  return memberGroupId === groupId;
+}
+
+/**
+ * Absolute integration worktree path for a board using isolation, when provisioned.
+ * Returns undefined when isolation is off or no worktree paths are known yet.
+ */
+export function resolveBoardIntegrationWorktreePath(
+  group: ChatGroup,
+  chats?: Chat[],
+): string | undefined {
+  const board = group.orchestrateBoard;
+  if (!board || !isIsolationActive(board)) return undefined;
+  if (!board.integrationBranch?.trim()) return undefined;
+
+  for (const task of board.tasks) {
+    const wt = task.worktreePath?.trim();
+    if (!wt) continue;
+    const integrationPath = integrationWorktreePathFromSlotPath(wt);
+    if (integrationPath) return integrationPath;
+  }
+
+  const integrationBranch = board.integrationBranch.trim();
+  if (chats?.length) {
+    for (const chat of chats) {
+      if (!chatBelongsToBoardGroup(chat, group.id)) continue;
+      const wt = chat.worktreeRoot?.trim();
+      if (!wt) continue;
+      const integrationPath = integrationWorktreePathFromSlotPath(wt);
+      if (integrationPath) return integrationPath;
+      if (chat.gitBranch?.trim() === integrationBranch) return wt;
+    }
+  }
+
+  return undefined;
+}
+
 /** Per-task branch (per-task mode). */
 export function taskWorktreeBranch(boardId: string, taskId: string): string {
   return `minnow/board/${sanitizeRefFragment(boardId)}/task/${sanitizeRefFragment(taskId)}`;
