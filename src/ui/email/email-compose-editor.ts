@@ -274,6 +274,8 @@ function attachSelectionAiBubble(
   addAction("Improve", "improve", "Improve clarity and tone");
   addAction("Fix", "correct", "Fix grammar and spelling");
   addAction("Shorter", "shorten", "Make more concise");
+  addAction("Friendlier", "friendlier", "Warm up the tone");
+  addAction("Firmer", "firmer", "Make the tone firmer and more direct");
 
   const tuneBtn = el("button", "email-compose-selection-btn", "Tune") as HTMLButtonElement;
   tuneBtn.type = "button";

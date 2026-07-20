@@ -2369,3 +2369,215 @@
 .email-unified-pane .email-list-row {
   grid-template-columns: auto 1fr auto;
 }
+
+/* ---------------------------------------------------------------------------
+ * Phase 4 — AI layer v2 (MIN-355)
+ * ------------------------------------------------------------------------ */
+
+/* Narrative digest */
+
+.email-dash-brief.is-narrative {
+  font-size: 15px;
+}
+
+.email-dash-action-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.email-dash-action-chip {
+  padding: 5px 12px;
+  border: 1px solid var(--mn-border-strong, var(--mn-border));
+  border-radius: 999px;
+  background: var(--mn-bg);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .email-dash-action-chip:hover {
+    border-color: var(--mn-accent);
+  }
+}
+
+/* Review strip (pending actions) */
+
+.email-dash-review,
+.email-dash-waiting {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.email-dash-review-row,
+.email-dash-waiting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.email-dash-review-row:last-child,
+.email-dash-waiting-row:last-child {
+  border-bottom: none;
+}
+
+.email-dash-review-main,
+.email-dash-waiting-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.email-dash-review-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.email-dash-review-meta,
+.email-dash-waiting-when {
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+}
+
+.email-dash-review-controls,
+.email-dash-waiting-controls {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Waiting on (follow-ups) */
+
+.email-dash-waiting-who {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.email-dash-waiting-subject {
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.email-dash-waiting-row.is-overdue .email-dash-waiting-when {
+  color: var(--mn-danger, oklch(0.62 0.18 15));
+  font-weight: 600;
+}
+
+/* Category / deadline chips */
+
+.email-category-chip,
+.email-deadline-chip {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--mn-border);
+  color: var(--mn-fg-muted);
+}
+
+.email-deadline-chip {
+  color: var(--mn-warning, oklch(0.72 0.15 75));
+  border-color: color-mix(in srgb, var(--mn-warning, oklch(0.72 0.15 75)) 40%, transparent);
+}
+
+/* Priority feedback */
+
+.email-dash-feedback {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 6px;
+}
+
+.email-dash-feedback-toggle {
+  border: none;
+  background: transparent;
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+  text-decoration: underline dotted;
+}
+
+.email-dash-feedback-choices {
+  display: flex;
+  gap: 6px;
+}
+
+.email-dash-feedback-chip {
+  padding: 2px 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: 999px;
+  background: var(--mn-bg);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .email-dash-feedback-chip:hover {
+    border-color: var(--mn-accent);
+  }
+}
+
+/* Reader "Catch up" */
+
+.email-reader-catchup {
+  margin: 12px 0 0;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--mn-surface, var(--mn-bg));
+  padding: 10px 12px;
+}
+
+.email-reader-catchup-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+}
+
+.email-reader-catchup-text {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+/* Compose subject suggestion */
+
+.email-compose-subject-suggest {
+  padding: 4px 0;
+}
+
+.email-compose-suggest-btn {
+  padding: 3px 10px;
+  border: 1px dashed var(--mn-border);
+  border-radius: 999px;
+  background: transparent;
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .email-compose-suggest-btn:hover {
+    border-color: var(--mn-accent);
+    color: var(--mn-accent);
+  }
+}

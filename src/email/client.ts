@@ -16,6 +16,10 @@ export interface EmailAccount {
   folders: string[];
   /** Plain text appended below the body of a new message. */
   signature?: string;
+  /** Classify sent mail for "Waiting on" reply tracking (default on). */
+  followupTracking?: boolean;
+  /** Opt-in local writing-style profile injected into AI drafts. */
+  styleProfileEnabled?: boolean;
 }
 
 export interface EmailAttachment {
@@ -61,9 +65,21 @@ export interface EmailMessage {
     summary: string;
     tags: string[];
     urgency: 'low' | 'normal' | 'high';
+    category?: EmailTriageCategory;
+    deadline?: string;
+    people?: string[];
     cachedAt: string;
   };
 }
+
+export type EmailTriageCategory =
+  | 'needs_reply'
+  | 'fyi'
+  | 'newsletter'
+  | 'notification'
+  | 'receipt'
+  | 'calendar'
+  | 'security';
 
 export interface ReplyVariant {
   id: string;
@@ -83,10 +99,62 @@ export interface EmailInboxSummary {
     subject: string;
     from: string;
     urgency: string;
+    category?: EmailTriageCategory;
+    deadline?: string;
+    people?: string[];
+    priority?: number;
+    priorityBucket?: 'high' | 'normal' | 'low';
     summary: string;
     unseen: boolean;
     replyVariants: ReplyVariant[];
   }>;
+}
+
+export interface EmailNarrativeDigest {
+  narrative: string;
+  actionGroups: Array<{
+    id: string;
+    label: string;
+    action: 'archive' | 'read' | 'flag';
+    messageIds: string[];
+    threadIds: string[];
+  }>;
+  generatedAt: string;
+}
+
+export interface EmailPendingAction {
+  id: string;
+  source: string;
+  label: string;
+  action: string;
+  messageIds: string[];
+  threadIds: string[];
+  destFolder: string;
+  state: 'pending' | 'applied' | 'dismissed' | 'failed';
+  detail: string;
+  createdAt: string;
+  resolvedAt: string;
+}
+
+export interface EmailFollowup {
+  id: string;
+  threadId: string;
+  messageId: string;
+  to: string;
+  subject: string;
+  sentAt: string;
+  expectedBy: string;
+  state: 'waiting' | 'satisfied' | 'dismissed';
+  notified: boolean;
+  satisfiedAt: string;
+  satisfiedBy: string;
+}
+
+export interface EmailCatchupSummary {
+  text: string;
+  bodyHash: string;
+  generatedAt: string;
+  messageCount: number;
 }
 
 export interface EmailAutomation {
@@ -295,7 +363,13 @@ export async function draftEmailReply(input: {
   return data.draft;
 }
 
-export type ComposeImproveMode = 'improve' | 'correct' | 'shorten' | 'expand';
+export type ComposeImproveMode =
+  | 'improve'
+  | 'correct'
+  | 'shorten'
+  | 'expand'
+  | 'friendlier'
+  | 'firmer';
 
 export async function improveEmailText(input: {
   text: string;

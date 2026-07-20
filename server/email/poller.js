@@ -7,6 +7,7 @@
 
 import { listEmailAccounts } from './accounts.js';
 import { clearDueSnoozes, getSyncState, listDueSnoozes } from './cache.js';
+import { sweepOverdueFollowups } from './followups.js';
 import { syncFolderMessages } from './transport.js';
 import { runAgentHooksAfterFolderSync } from './agent.js';
 import { emitEmailEvent } from './events.js';
@@ -74,6 +75,15 @@ export async function runEmailPollTick() {
       // asked for the message back at a time, and that promise does not depend
       // on whether background sync happens to be on.
       woken += await wakeDueSnoozes(account.id);
+
+      // Same reasoning for overdue follow-ups — the nudge was promised at send
+      // time, not conditioned on background sync being enabled.
+      await sweepOverdueFollowups(account.id).catch((err) => {
+        console.warn(
+          `[email] follow-up sweep failed for ${account.id}:`,
+          err instanceof Error ? err.message : err,
+        );
+      });
 
       if (!account.pollingEnabled) {
         await stopIdleWatcher(account.id).catch(() => {});

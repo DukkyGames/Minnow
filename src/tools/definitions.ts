@@ -2185,6 +2185,39 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'search_mail',
+    label: 'Search mail',
+    description: 'Full-text search over cached mail, semantically reranked when embeddings are on.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'search_mail',
+      'Search cached mail (FTS over subject/from/body, semantic rerank when available). Returns message and thread ids usable with get_thread and email_action.',
+      {
+        query: { type: 'string', description: 'Search query (words, names, topics)' },
+        accountId: { type: 'string', description: 'Email account id (optional — uses default)' },
+        limit: { type: 'number', description: 'Max rows (default 20, max 20)' },
+      },
+      ['query'],
+    ),
+  },
+  {
+    id: 'get_thread',
+    label: 'Get email thread',
+    description: 'Return one full cached thread with untrusted bodies fenced.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'get_thread',
+      'Return every cached message in a thread (bodies fenced as untrusted email content). Use thread ids from search_mail/list_mail.',
+      {
+        threadId: { type: 'string', description: 'Thread id from search_mail or list_mail' },
+        accountId: { type: 'string', description: 'Email account id (optional — uses default)' },
+      },
+      ['threadId'],
+    ),
+  },
+  {
     id: 'draft_reply',
     label: 'Draft email reply',
     description: 'Compose a reply draft for a thread — does not send.',
@@ -2245,16 +2278,21 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'email_action',
-      'Perform a single mail action on a cached message id: archive, delete, read, unread, or flag.',
+      'Perform a mail action. A single messageId executes immediately; multiple messageIds are queued as a pending action the user must approve in the Email dashboard.',
       {
         accountId: { type: 'string', description: 'Email account id (optional — uses default)' },
         messageId: { type: 'string', description: 'Cached message id (folder:uid)' },
+        messageIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Multiple message ids — queued for user review, never executed directly',
+        },
         action: {
           type: 'string',
           description: 'One of: archive, delete, read, unread, flag',
         },
       },
-      ['messageId', 'action'],
+      ['action'],
     ),
   },
   {

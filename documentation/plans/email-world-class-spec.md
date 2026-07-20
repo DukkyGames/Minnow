@@ -16,7 +16,7 @@ todos:
     status: pending
   - id: phase4-ai-v2
     content: "Phase 4 — AI layer v2: narrative digest, priority model with feedback, thread summaries, semantic search, follow-up nudges, agentic batch actions with review queue"
-    status: pending
+    status: completed
   - id: phase5-automations-v2
     content: "Phase 5 — Automations v2: condition builder, mail-op + OS-notification actions, dry-run preview, audit log"
     status: pending
@@ -309,8 +309,46 @@ As built:
 ### Phase 3 — Core mail completeness
 Attachments down/up (+ compose attach UI), drafts autosave (+ IMAP Drafts APPEND), Sent APPEND, conversation list UI + virtualization + optimistic store, keyboard model, bcc, contact autocomplete, snooze, send later, signatures, unified inbox.
 
-### Phase 4 — AI v2
+### Phase 4 — AI v2 ✅ shipped (MIN-355)
 Narrative digest + action groups (+ review queue 3.7), triage v2 categories + priority + sender feedback, thread summaries, follow-up tracking, semantic search + `search_mail`/`get_thread` tools, compose intelligence (tone chips, subject suggestion, attachment nudge, style profile).
+
+As built:
+
+- **Review queue** (`server/email/pending-actions.js`): every AI batch mutation —
+  digest action groups and multi-id chat-agent `email_action` — writes a
+  `pending_actions` row; the dashboard review strip Applies/Dismisses. "Always
+  allow" is per `source:action` and can never cover `delete`.
+- **Narrative digest** (`digest.js`): LLM pass over the top 15 summary
+  highlights, cached 15 min in mail-store `meta` keyed by an input hash;
+  regenerated in the background off the summary route and swapped in via the
+  `digest_updated` SSE event. Group message ids are validated against the
+  input set, so a hallucinated id cannot reach the queue.
+- **Priority v2** (`priority.js`): heuristic score = urgency + category +
+  sender affinity (`contacts.replied_count`) + deadline proximity, then
+  `sender_overrides` (address or `@domain`) clamp the result. The dashboard
+  stat strip counts priority buckets, and "Wrong priority?" on rows writes
+  overrides via `POST …/priority-feedback`.
+- **Thread summaries** (`thread-summary.js`): stored as JSON on
+  `threads.summary` (which `recomputeThread` deliberately never touches),
+  keyed by a per-thread body hash; the reader shows a collapsible "Catch up"
+  block requested async on open.
+- **Follow-ups** (`followups.js`): one cheap classify call after SMTP accept
+  (fails open); satisfied by thread id or sender+normalized-subject; own-sent
+  mail is skipped at the agent hook so a Sent sync can't self-satisfy. The
+  poller sweeps overdue rows into scheduler notifications exactly once.
+- **Semantic search** (`semantic-search.js`): FTS candidates reranked by
+  cosine over per-thread embeddings (`thread_vectors`, hash-keyed, embedded
+  lazily only for candidates) when `brain.embeddings.enabled`; fails open to
+  FTS order. New agent tools `search_mail` and `get_thread` (fenced bodies).
+- **Compose intelligence**: friendlier/firmer improve modes + selection chips;
+  `POST /suggest-subject` behind a chip on new mail (>20 words, empty
+  subject); sender-history recall (last 2 threads) and the opt-in style
+  profile (`style-profile.js`, monthly regen, `styleProfileEnabled`) injected
+  into draft/variant prompts. The attachment nudge shipped in Phase 3.
+- **Account switches**: `followupTracking` (default on) and
+  `styleProfileEnabled` (default off) in the account edit form; the same
+  update path now also preserves `signature`, which previously blanked on
+  every account edit.
 
 ### Phase 5 — Automations v2
 Condition builder, mail-op actions through review queue, real OS notifications, dry-run, audit log + Runs UI.
