@@ -35,7 +35,11 @@ export const DEFAULT_POLLING_MINUTES = 15;
  * @property {boolean} pollingEnabled
  * @property {number} pollingIntervalMinutes
  * @property {string[]} folders
+ * @property {string} [signature] — plain text appended below new compose bodies
  */
+
+/** Ceiling on a stored signature; anything longer is a pasted document. */
+export const MAX_SIGNATURE_LENGTH = 2000;
 
 /**
  * Validate host/port/username fields for create/update.
@@ -91,6 +95,7 @@ export function validateAccountInput(input) {
     pollingEnabled: Boolean(input.pollingEnabled),
     pollingIntervalMinutes,
     folders: folders.length > 0 ? folders : DEFAULT_FOLDERS.slice(),
+    signature: String(input.signature ?? '').slice(0, MAX_SIGNATURE_LENGTH),
   };
 }
 

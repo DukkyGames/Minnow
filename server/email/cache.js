@@ -7,6 +7,7 @@
 
 import fs from 'node:fs/promises';
 import { emailCacheMessagesPath } from './paths.js';
+import { harvestMessageContacts } from './contacts.js';
 import {
   getMailDb,
   hydrateAttachments,
@@ -26,13 +27,14 @@ import {
 /** Columns needed for the metadata (no-body) message shape. */
 const MESSAGE_COLUMNS = `message_row_id, id, folder, uid, message_id, thread_id, from_addr,
   to_json, reply_to, subject, date, date_ms, body_preview, body_hash, has_attachments,
-  in_reply_to, references_json, seen, flagged, answered, triage_json, reply_variants_json`;
+  in_reply_to, references_json, seen, flagged, answered, snooze_until, triage_json,
+  reply_variants_json`;
 
 /** Same, joined with bodies for reader/agent paths that need the text. */
 const MESSAGE_COLUMNS_WITH_BODY = `m.message_row_id, m.id, m.folder, m.uid, m.message_id,
   m.thread_id, m.from_addr, m.to_json, m.reply_to, m.subject, m.date, m.date_ms,
   m.body_preview, m.body_hash, m.has_attachments, m.in_reply_to, m.references_json,
-  m.seen, m.flagged, m.answered, m.triage_json, m.reply_variants_json,
+  m.seen, m.flagged, m.answered, m.snooze_until, m.triage_json, m.reply_variants_json,
   b.body_text, b.body_html`;
 
 function nowIso() {
@@ -177,19 +179,7 @@ function upsertMessageRow(db, message) {
   }
 
   if (Array.isArray(message.attachments)) {
-    db.prepare('DELETE FROM attachments WHERE message_row_id = ?').run(rowId);
-    const insert = db.prepare(
-      'INSERT INTO attachments (message_row_id, idx, filename, content_type, size) VALUES (?, ?, ?, ?, ?)',
-    );
-    message.attachments.forEach((att, idx) => {
-      insert.run(
-        rowId,
-        idx,
-        String(att?.filename ?? 'attachment'),
-        String(att?.contentType ?? 'application/octet-stream'),
-        Number(att?.size) || 0,
-      );
-    });
+    replaceAttachmentRows(db, rowId, message.attachments);
   }
 
   if (typeof message.bodyText === 'string' || typeof message.bodyHtml === 'string') {
@@ -202,7 +192,39 @@ function upsertMessageRow(db, message) {
 
   reindexMessageFts(db, rowId);
   recomputeThread(db, values.thread_id);
+  // Every message that lands teaches the address book a little more; doing it
+  // here means autocomplete needs no separate scan over the mailbox.
+  harvestMessageContacts(db, message);
   return rowId;
+}
+
+/**
+ * Replace the attachment rows for a message.
+ *
+ * `idx` is the message's own part ordering — the download route addresses parts
+ * by it, so it must match the order `simpleParser` returns.
+ *
+ * @param {import('better-sqlite3').Database} db
+ * @param {number} rowId
+ * @param {Array<Record<string, unknown>>} attachments
+ */
+function replaceAttachmentRows(db, rowId, attachments) {
+  db.prepare('DELETE FROM attachments WHERE message_row_id = ?').run(rowId);
+  const insert = db.prepare(
+    `INSERT INTO attachments (message_row_id, idx, filename, content_type, size, content_id, inline)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  );
+  attachments.forEach((att, idx) => {
+    insert.run(
+      rowId,
+      idx,
+      String(att?.filename ?? 'attachment'),
+      String(att?.contentType ?? 'application/octet-stream'),
+      Number(att?.size) || 0,
+      String(att?.contentId ?? ''),
+      att?.inline ? 1 : 0,
+    );
+  });
 }
 
 /** Upsert the lazily-fetched body for a message row. */
@@ -358,7 +380,7 @@ export async function mergeMessagesIntoCache(accountId, incoming, folder, highes
 /**
  * List cached messages with folder filter, flag filter, FTS query, pagination.
  * @param {string} accountId
- * @param {{ folder?: string, offset?: number, limit?: number, query?: string, filter?: string }} options
+ * @param {{ folder?: string, offset?: number, limit?: number, query?: string, filter?: string, includeSnoozed?: boolean }} options
  */
 export async function listCachedMessages(accountId, options = {}) {
   const db = getMailDb(accountId);
@@ -376,6 +398,15 @@ export async function listCachedMessages(accountId, options = {}) {
     where.push('seen = 0');
   } else if (filter === 'flagged') {
     where.push('flagged = 1');
+  } else if (filter === 'snoozed') {
+    where.push("snooze_until != ''");
+  }
+
+  // A snoozed message is hidden from the ordinary list until it comes due —
+  // except in the snoozed view itself, where hiding it would be absurd.
+  if (filter !== 'snoozed' && options.includeSnoozed !== true) {
+    where.push("(snooze_until = '' OR snooze_until <= ?)");
+    params.push(new Date().toISOString());
   }
 
   const query = String(options.query ?? '').trim();
@@ -461,7 +492,7 @@ export async function searchCachedMessages(accountId, options) {
 /**
  * Conversation rollups for the thread list.
  * @param {string} accountId
- * @param {{ folder?: string, offset?: number, limit?: number, filter?: string, query?: string }} options
+ * @param {{ folder?: string, offset?: number, limit?: number, filter?: string, query?: string, includeSnoozed?: boolean }} options
  */
 export async function listCachedThreads(accountId, options = {}) {
   const db = getMailDb(accountId);
@@ -479,6 +510,18 @@ export async function listCachedThreads(accountId, options = {}) {
     where.push('t.unread_count > 0');
   } else if (filter === 'flagged') {
     where.push('t.flagged = 1');
+  } else if (filter === 'snoozed') {
+    where.push("t.thread_id IN (SELECT thread_id FROM messages WHERE snooze_until != '')");
+  }
+
+  // A conversation disappears only when every message in it is snoozed —
+  // otherwise snoozing one reply would hide the whole exchange.
+  if (filter !== 'snoozed' && options.includeSnoozed !== true) {
+    where.push(
+      `t.thread_id IN (
+         SELECT thread_id FROM messages WHERE snooze_until = '' OR snooze_until <= ?)`,
+    );
+    params.push(new Date().toISOString());
   }
 
   const query = String(options.query ?? '').trim();
@@ -695,6 +738,75 @@ export async function getFolderUnreadCounts(accountId) {
 }
 
 // ---------------------------------------------------------------------------
+// Snooze
+// ---------------------------------------------------------------------------
+
+/**
+ * Hide a message until a point in time.
+ *
+ * Snoozing is local: the message stays exactly where it is on the server, so
+ * another client still shows it and nothing is lost if the snooze is forgotten.
+ * Passing an empty `until` un-snoozes.
+ *
+ * @param {string} accountId
+ * @param {string} messageKey
+ * @param {string} until — ISO timestamp, or '' to clear
+ */
+export async function setMessageSnooze(accountId, messageKey, until) {
+  const db = getMailDb(accountId);
+  const row = findRow(db, messageKey);
+  if (!row) {
+    throw new Error('Cached message not found');
+  }
+
+  const value = String(until ?? '').trim();
+  if (value) {
+    const ms = new Date(value).getTime();
+    if (!Number.isFinite(ms)) {
+      throw new Error('snooze until must be a valid ISO timestamp');
+    }
+    if (ms <= Date.now()) {
+      throw new Error('snooze until must be in the future');
+    }
+  }
+
+  db.prepare('UPDATE messages SET snooze_until = ? WHERE message_row_id = ?').run(
+    value,
+    row.message_row_id,
+  );
+  return getCachedMessage(accountId, messageKey);
+}
+
+/**
+ * Messages whose snooze has elapsed — the poller wakes them and announces it.
+ * @param {string} accountId
+ * @param {string} [now]
+ */
+export async function listDueSnoozes(accountId, now = new Date().toISOString()) {
+  const db = getMailDb(accountId);
+  const rows = db
+    .prepare(
+      `SELECT ${MESSAGE_COLUMNS} FROM messages
+       WHERE snooze_until != '' AND snooze_until <= ?
+       ORDER BY date_ms DESC`,
+    )
+    .all(String(now));
+  return hydrateAttachments(db, rows);
+}
+
+/**
+ * Clear the snooze on every message that is now due.
+ * @param {string} accountId
+ * @param {string} [now]
+ */
+export async function clearDueSnoozes(accountId, now = new Date().toISOString()) {
+  const info = getMailDb(accountId)
+    .prepare("UPDATE messages SET snooze_until = '' WHERE snooze_until != '' AND snooze_until <= ?")
+    .run(String(now));
+  return { woken: info.changes };
+}
+
+// ---------------------------------------------------------------------------
 // Bodies (lazy fetch support)
 // ---------------------------------------------------------------------------
 
@@ -738,21 +850,12 @@ export async function saveCachedBody(accountId, messageKey, body) {
       );
     }
     if (Array.isArray(body.attachments)) {
-      db.prepare('DELETE FROM attachments WHERE message_row_id = ?').run(row.message_row_id);
-      const insert = db.prepare(
-        'INSERT INTO attachments (message_row_id, idx, filename, content_type, size) VALUES (?, ?, ?, ?, ?)',
-      );
-      body.attachments.forEach((att, idx) => {
-        insert.run(
-          row.message_row_id,
-          idx,
-          String(att?.filename ?? 'attachment'),
-          String(att?.contentType ?? 'application/octet-stream'),
-          Number(att?.size) || 0,
-        );
-      });
+      replaceAttachmentRows(db, row.message_row_id, body.attachments);
+      // Inline images (a signature logo, say) must not make a message read as
+      // "has attachments" — only real attachment dispositions count.
+      const visible = body.attachments.filter((att) => !att?.inline).length;
       db.prepare('UPDATE messages SET has_attachments = ? WHERE message_row_id = ?').run(
-        body.attachments.length ? 1 : 0,
+        visible ? 1 : 0,
         row.message_row_id,
       );
     }

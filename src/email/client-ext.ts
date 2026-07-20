@@ -37,7 +37,7 @@ export async function fetchEmailMessagesExtended(
     offset?: number;
     limit?: number;
     search?: string;
-    filter?: 'all' | 'unread' | 'flagged';
+    filter?: 'all' | 'unread' | 'flagged' | 'snoozed';
   },
 ): Promise<{ messages: EmailMessage[]; total: number; offset: number; limit: number }> {
   const params = new URLSearchParams();

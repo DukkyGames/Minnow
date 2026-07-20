@@ -147,10 +147,15 @@ export async function parseRawMessage(source, context) {
   const bodyHash = createHash('sha256').update(bodyText).digest('hex');
 
   const attachments = Array.isArray(parsed.attachments)
-    ? parsed.attachments.map((att) => ({
+    ? parsed.attachments.map((att, index) => ({
+        index,
         filename: att.filename ?? 'attachment',
         contentType: att.contentType ?? 'application/octet-stream',
         size: att.size ?? 0,
+        // `cid` is the bracket-stripped Content-ID; the reader matches
+        // `cid:` body sources against it.
+        contentId: String(att.cid ?? '').trim(),
+        inline: String(att.contentDisposition ?? '').toLowerCase() === 'inline',
       }))
     : [];
 
@@ -179,7 +184,7 @@ export async function parseRawMessage(source, context) {
     bodyHtml,
     bodyHash,
     bodyComplete: true,
-    hasAttachments: attachments.length > 0,
+    hasAttachments: attachments.some((att) => !att.inline),
     attachments,
     inReplyTo,
     references,

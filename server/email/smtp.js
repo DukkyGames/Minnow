@@ -3,7 +3,9 @@
  */
 
 import nodemailer from 'nodemailer';
+import MailComposer from 'nodemailer/lib/mail-composer/index.js';
 import { getEmailAccount, readAccountPassword } from './accounts.js';
+import { appendToSentFolder } from './imap-actions.js';
 import { getCachedMessage, listCachedThread } from './cache.js';
 import { sanitizeEmailHtml } from './sanitize-html.js';
 import { wrapUntrusted } from '../security/untrusted.js';
@@ -103,14 +105,58 @@ export async function draftReply(input) {
 }
 
 /**
- * Deliver an email over SMTP.
+ * Normalize compose attachments into nodemailer's shape.
+ *
+ * The UI uploads base64 because the compose payload is JSON; decoding here
+ * keeps the size check in one place and means a malformed part is rejected
+ * before anything is dispatched.
+ *
+ * @param {Array<Record<string, unknown>> | undefined} attachments
+ */
+export function buildOutgoingAttachments(attachments) {
+  if (!Array.isArray(attachments) || attachments.length === 0) {
+    return [];
+  }
+
+  let total = 0;
+  return attachments.map((att) => {
+    const filename = String(att?.filename ?? 'attachment').slice(0, 200);
+    const content = Buffer.from(String(att?.content ?? ''), 'base64');
+    total += content.length;
+    if (total > MAX_OUTGOING_ATTACHMENT_BYTES) {
+      throw new Error('Attachments exceed the 25MB limit');
+    }
+    /** @type {Record<string, unknown>} */
+    const entry = {
+      filename,
+      content,
+      contentType: String(att?.contentType ?? 'application/octet-stream'),
+    };
+    // An inline part needs a cid the body's <img src="cid:…"> can reference.
+    if (att?.contentId) {
+      entry.cid = String(att.contentId);
+      entry.contentDisposition = 'inline';
+    }
+    return entry;
+  });
+}
+
+/** Ceiling on one message's attachments; most providers refuse more anyway. */
+export const MAX_OUTGOING_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Deliver an email over SMTP and file a copy in Sent.
  *
  * Not the user-facing entry point: callers go through `enqueueSend` in
  * `outbox.js`, whose undo window is the actual send gate. This used to demand a
  * `confirmed: true` field, which proved nothing — any caller that could reach
  * the function could set it.
  *
- * @param {{ accountId: string, to: string, subject: string, body: string, bodyHtml?: string, cc?: string, bcc?: string, inReplyTo?: string, references?: string }} input
+ * The message is composed once, up front, and the same bytes are handed to SMTP
+ * and to the Sent APPEND. Recomposing for the Sent copy would risk filing
+ * something subtly different from what the recipient received.
+ *
+ * @param {{ accountId: string, to: string, subject: string, body: string, bodyHtml?: string, cc?: string, bcc?: string, inReplyTo?: string, references?: string, attachments?: Array<Record<string, unknown>> }} input
  */
 export async function sendEmail(input) {
   const account = await getEmailAccount(input.accountId);
@@ -138,7 +184,12 @@ export async function sendEmail(input) {
   );
 
   const from = account.fromAddress?.trim() || account.username;
-  const info = await transport.sendMail({
+  const attachments = buildOutgoingAttachments(input.attachments);
+
+  // Compile once: `getEnvelope()` carries every recipient including Bcc, while
+  // the built bytes have the Bcc header stripped — so the Sent copy does not
+  // disclose blind recipients either.
+  const compiled = new MailComposer({
     from,
     to,
     cc: cc || undefined,
@@ -148,13 +199,23 @@ export async function sendEmail(input) {
     html: bodyHtml || undefined,
     inReplyTo: input.inReplyTo || undefined,
     references: input.references || undefined,
-  });
+    attachments: attachments.length ? attachments : undefined,
+  }).compile();
+
+  const envelope = compiled.getEnvelope();
+  const raw = await compiled.build();
+
+  const info = await transport.sendMail({ envelope, raw });
+
+  // Delivery has already happened; a filing failure must not fail the send.
+  const sentCopy = await appendToSentFolder(input.accountId, raw);
 
   return {
     ok: true,
     messageId: info.messageId ?? null,
     accepted: info.accepted ?? [],
     rejected: info.rejected ?? [],
+    sentCopy,
   };
 }
 
