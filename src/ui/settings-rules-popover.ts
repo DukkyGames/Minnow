@@ -301,8 +301,7 @@ export function openUserRulePopover(options: OpenUserRulePopoverOptions): void {
     deleteBtn.addEventListener('click', () => {
       void (async () => {
         if (
-          !(await appConfirm({
-            message: 'Delete this rule?',
+          !(await appConfirm('Delete this rule?', {
             confirmLabel: 'Delete',
             danger: true,
           }))

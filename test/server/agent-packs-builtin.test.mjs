@@ -1,13 +1,11 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, test } from 'node:test';
 import {
   BUILTIN_AGENT_PACK_ID,
-  BUILTIN_AGENT_PACK_ZIP_FILENAME,
   BUILTIN_AGENT_PACK_ZIP_ROOT,
   buildBuiltinAgentPackFileMap,
   buildBuiltinAgentPackZip,
@@ -15,6 +13,7 @@ import {
 import { handleAgentPacksRequest } from '../../server/agent-packs/routes.js';
 import { validatePackManifest } from '../../server/agent-packs/validate.js';
 import { writeTemplateFiles } from '../../server/agent-packs/template.js';
+import { listZipEntries } from '../zip-entries.mjs';
 
 const projectRoot = join(fileURLToPath(new URL('../..', import.meta.url)));
 const builtinIds = new Set([
@@ -60,19 +59,16 @@ describe('agent-packs builtin export', () => {
     }
   });
 
-  test('buildBuiltinAgentPackZip extracts with system tar', async () => {
+  test('buildBuiltinAgentPackZip emits a well-formed zip', async () => {
     const zip = await buildBuiltinAgentPackZip(projectRoot);
-    const tempRoot = await mkdtemp(join(tmpdir(), 'minnow-builtin-pack-zip-'));
-    const zipPath = join(tempRoot, BUILTIN_AGENT_PACK_ZIP_FILENAME);
-    await writeFile(zipPath, zip);
+    const entries = listZipEntries(zip);
 
-    try {
-      const listing = execFileSync('tar', ['-tf', zipPath], { encoding: 'utf8' });
-      assert.match(listing, new RegExp(`${BUILTIN_AGENT_PACK_ZIP_ROOT}/manifest\\.json`));
-      assert.match(listing, new RegExp(`${BUILTIN_AGENT_PACK_ZIP_ROOT}/prompts/builder\\.full\\.md`));
-    } finally {
-      await rm(tempRoot, { recursive: true, force: true });
-    }
+    assert.ok(
+      entries.includes(`${BUILTIN_AGENT_PACK_ZIP_ROOT}/manifest.json`),
+      `manifest missing from zip; got: ${entries.slice(0, 5).join(', ')}…`,
+    );
+    assert.ok(entries.includes(`${BUILTIN_AGENT_PACK_ZIP_ROOT}/prompts/builder.full.md`));
+    assert.ok(entries.length > 2, 'the pack carries more than its manifest');
   });
 
   test('GET /api/agent-packs/builtin returns application/zip', async () => {

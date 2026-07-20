@@ -5,13 +5,20 @@ import { appAlert, appConfirm, appPrompt } from '../app-dialog';
 
  */
 
-import type { EmailAccount, EmailMessage } from "../../email/client";
+import type {
+  EmailAccount,
+  EmailMessage,
+  EmailThreadSummary,
+} from "../../email/client";
 
 import {
   allowImagesFromSender,
+  downloadEmailAttachment,
   fetchEmailThread,
+  fetchEmailThreads,
   fetchImageAllowlist,
   normalizeSender,
+  saveBlobAs,
   syncEmailFolder,
 } from "../../email/client";
 
@@ -36,6 +43,25 @@ import {
 
 import { EMAIL_ICONS } from "./email-icons";
 
+import { createMailStore } from "./email-store";
+
+import { toConversationRow } from "./email-conversation-row";
+
+import { createVirtualList } from "./email-virtual-list";
+
+import {
+  bindMailShortcuts,
+  showShortcutCheatSheet,
+} from "./email-keyboard";
+
+import { snoozeEmailMessage } from "../../email/client-drafts";
+
+/**
+ * Row height, in px. Must match `.email-list-row` in email.css — the virtual
+ * list does its arithmetic from this rather than measuring.
+ */
+const LIST_ROW_HEIGHT = 64;
+
 /**
  * Senders allowed to load remote images, cached for the session. `null` until
  * the first fetch resolves — bodies paint blocked in the meantime, so a slow
@@ -45,6 +71,14 @@ let imageAllowlist: string[] | null = null;
 
 /** Messages the user opted into for this session only ("Load images" once). */
 const imagesLoadedFor = new Set<string>();
+
+/** Attachment sizes, in the units a person reads them in. */
+function formatBytes(bytes: number): string {
+  const size = Number(bytes) || 0;
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export interface EmailLayoutOptions {
   account: EmailAccount;
@@ -100,6 +134,7 @@ function iconBtn(
 function renderBodyWithRemoteControls(
   msg: EmailMessage,
   viewMode: EmailBodyViewMode,
+  accountId: string,
   onStatus?: (state: "ok" | "err", message: string) => void,
 ): HTMLElement {
   const wrap = el("div", "email-thread-body-wrap");
@@ -116,6 +151,7 @@ function renderBodyWithRemoteControls(
     renderEmailBody(body, msg, {
       viewMode,
       loadRemoteImages: load,
+      inlineParts: { accountId, messageKey: msg.id },
       onRemoteContent: ({ blockedCount }) => {
         if (load || blockedCount === 0) return;
 
@@ -304,11 +340,24 @@ export async function renderEmailLayout(
 
   const limit = 50;
 
-  let filter: "all" | "unread" | "flagged" = "all";
+  let filter: "all" | "unread" | "flagged" | "snoozed" = "all";
+
+  /**
+   * Conversations are the default: a ten-message thread should occupy one row,
+   * not ten. Per-message stays available for folders where the distinction
+   * matters (Sent, or hunting one message in a long exchange).
+   */
+  let listMode: "threads" | "messages" = "threads";
+
+  /** Conversation rollups, populated in threads mode. */
+  let threads: EmailThreadSummary[] = [];
 
   let search = "";
 
   let selectedId: string | null = null;
+
+  /** The open conversation, so its rollup row stays highlighted. */
+  let selectedThreadId: string | null = null;
 
   let selectedThread: EmailMessage[] = [];
 
@@ -317,6 +366,20 @@ export async function renderEmailLayout(
   let bodyViewMode: EmailBodyViewMode = "html";
 
   const checked = new Set<string>();
+
+  /**
+   * Rows live here so an action can paint before the server answers. `messages`
+   * above stays as the read view of the same data for the code that only reads.
+   */
+  const store = createMailStore({
+    onError: (message) => options.onStatus?.("err", message),
+  });
+
+  /** Undo stack for `z` — the inverse of the last optimistic action. */
+  const undoStack: Array<{ label: string; run: () => Promise<void> }> = [];
+
+  /** Row the keyboard cursor is on, which is not always the open message. */
+  let cursorIndex = 0;
 
   const shell = el("div", "email-layout-grid");
 
@@ -528,6 +591,35 @@ export async function renderEmailLayout(
     }
   };
 
+  /**
+   * The message ids the current selection stands for.
+   *
+   * Conversation rows are checked by thread id, so each one expands to every
+   * message it contains before any bulk action runs.
+   */
+  const resolveCheckedMessageIds = async (): Promise<string[]> => {
+    if (listMode === "messages") {
+      return [...checked];
+    }
+
+    const expanded = await Promise.all(
+      [...checked].map(async (threadId) => {
+        try {
+          const { messages: rows } = await fetchEmailThread(
+            options.account.id,
+            threadId,
+          );
+          return rows.map((row) => row.id);
+        } catch {
+          // A thread that cannot be read is skipped rather than failing the
+          // whole batch; the others still get their action.
+          return [];
+        }
+      }),
+    );
+    return expanded.flat();
+  };
+
   const renderListToolbar = () => {
     const toolbar = el("div", "email-list-toolbar");
 
@@ -543,7 +635,11 @@ export async function renderEmailLayout(
       checked.clear();
 
       if (master.checked) {
-        for (const row of messages) checked.add(row.id);
+        if (listMode === "threads") {
+          for (const row of threads) checked.add(row.threadId);
+        } else {
+          for (const row of messages) checked.add(row.id);
+        }
       }
 
       void renderList();
@@ -571,7 +667,9 @@ export async function renderEmailLayout(
           await bulkEmailAction({
             accountId: options.account.id,
 
-            ids: [...checked],
+            // In conversation mode `checked` holds thread ids, which the bulk
+            // endpoint does not understand — expand them to their messages.
+            ids: await resolveCheckedMessageIds(),
 
             action,
           });
@@ -667,7 +765,7 @@ export async function renderEmailLayout(
 
     filterSelect.setAttribute("aria-label", "Filter messages");
 
-    for (const value of ["all", "unread", "flagged"] as const) {
+    for (const value of ["all", "unread", "flagged", "snoozed"] as const) {
       const opt = el("option") as HTMLOptionElement;
 
       opt.value = value;
@@ -691,6 +789,27 @@ export async function renderEmailLayout(
     });
 
     toolbar.appendChild(filterSelect);
+
+    // Conversation vs per-message. Selection is cleared on the way across:
+    // the two modes key their checkboxes differently (thread id vs message id).
+    const modeBtn = el(
+      "button",
+      "email-btn email-list-mode",
+      listMode === "threads" ? "Conversations" : "Messages",
+    ) as HTMLButtonElement;
+    modeBtn.type = "button";
+    modeBtn.title =
+      listMode === "threads"
+        ? "Showing conversations — switch to individual messages"
+        : "Showing individual messages — switch to conversations";
+    modeBtn.addEventListener("click", () => {
+      listMode = listMode === "threads" ? "messages" : "threads";
+      checked.clear();
+      offset = 0;
+      cursorIndex = 0;
+      void refreshMessages({ showLoading: true });
+    });
+    toolbar.appendChild(modeBtn);
 
     const pager = el("div", "email-list-pager");
 
@@ -1009,6 +1128,67 @@ export async function renderEmailLayout(
         await refreshAll();
       });
 
+      // Snooze presets cover what people actually pick; the message stays put
+      // on the server and simply drops out of the list until it is due.
+      const snoozePresets: Array<{ label: string; at: () => Date }> = [
+        {
+          label: "Later today",
+          at: () => {
+            const when = new Date();
+            when.setHours(when.getHours() + 3, 0, 0, 0);
+            return when;
+          },
+        },
+        {
+          label: "Tomorrow morning",
+          at: () => {
+            const when = new Date();
+            when.setDate(when.getDate() + 1);
+            when.setHours(9, 0, 0, 0);
+            return when;
+          },
+        },
+        {
+          label: "Next week",
+          at: () => {
+            const when = new Date();
+            when.setDate(when.getDate() + 7);
+            when.setHours(9, 0, 0, 0);
+            return when;
+          },
+        },
+      ];
+
+      if (selected.snoozeUntil) {
+        mkMenuItem("Un-snooze", async () => {
+          await snoozeEmailMessage(options.account.id, selected.id, "");
+          options.onStatus?.("ok", "Un-snoozed");
+          await refreshAll();
+        });
+      } else {
+        menu.appendChild(el("p", "email-reader-menu-label", "Snooze until"));
+        for (const preset of snoozePresets) {
+          mkMenuItem(preset.label, async () => {
+            const until = preset.at();
+            try {
+              await snoozeEmailMessage(
+                options.account.id,
+                selected.id,
+                until.toISOString(),
+              );
+              options.onStatus?.("ok", `Snoozed until ${formatWhen(until.toISOString())}`);
+              selectedId = null;
+              await refreshAll();
+            } catch (err) {
+              options.onStatus?.(
+                "err",
+                err instanceof Error ? err.message : "Could not snooze",
+              );
+            }
+          });
+        }
+      }
+
       const spamFolder = findSpamFolder(folderRows);
 
       if (spamFolder) {
@@ -1147,19 +1327,45 @@ export async function renderEmailLayout(
           block.appendChild(triage);
         }
 
-        if (msg.attachments && msg.attachments.length > 0) {
+        // Inline parts are rendered by the body iframe; listing them here would
+        // offer the reader a signature logo as a download.
+        const downloadable = (msg.attachments ?? []).filter((att) => !att.inline);
+        if (downloadable.length > 0) {
           const attRow = el("div", "email-reader-attachments");
 
           attRow.appendChild(
             el("span", "email-reader-att-label", "Attachments"),
           );
 
-          for (const att of msg.attachments) {
+          for (const att of downloadable) {
             const chip = el(
-              "span",
+              "button",
               "email-reader-att-chip",
-              `${att.filename} (${Math.round(att.size / 1024)} KB)`,
-            );
+              `${att.filename} (${formatBytes(att.size)})`,
+            ) as HTMLButtonElement;
+            chip.type = "button";
+            chip.title = `Download ${att.filename}`;
+
+            chip.addEventListener("click", () => {
+              void (async () => {
+                chip.disabled = true;
+                try {
+                  const { blob, filename } = await downloadEmailAttachment(
+                    options.account.id,
+                    msg.id,
+                    att.index,
+                  );
+                  saveBlobAs(blob, filename);
+                } catch (err) {
+                  options.onStatus?.(
+                    "err",
+                    err instanceof Error ? err.message : "Could not download the attachment",
+                  );
+                } finally {
+                  chip.disabled = false;
+                }
+              })();
+            });
 
             attRow.appendChild(chip);
           }
@@ -1168,7 +1374,12 @@ export async function renderEmailLayout(
         }
 
         block.appendChild(
-          renderBodyWithRemoteControls(msg, bodyViewMode, options.onStatus),
+          renderBodyWithRemoteControls(
+            msg,
+            bodyViewMode,
+            options.account.id,
+            options.onStatus,
+          ),
         );
 
         bodyStack.appendChild(block);
@@ -1246,158 +1457,280 @@ export async function renderEmailLayout(
     pageLabel.textContent = `${from}–${to} of ${total}`;
 
     master.checked =
-      messages.length > 0 && messages.every((row) => checked.has(row.id));
+      listMode === "threads"
+        ? threads.length > 0 && threads.every((row) => checked.has(row.threadId))
+        : messages.length > 0 && messages.every((row) => checked.has(row.id));
 
-    const list = el("div", "email-list-rows");
+    listPane.appendChild(virtualList.root);
+    virtualList.setItems(listMode === "threads" ? threads : messages);
+  };
 
-    if (messages.length === 0) {
+  /**
+   * Build one conversation row.
+   *
+   * Rendered on demand by the virtual list, so this runs for the visible
+   * window only — which is what makes a 10k-message folder scroll.
+   */
+  const renderRow = (message: EmailMessage, index: number): HTMLElement => {
+    const row = el("div", "email-list-row");
+
+    row.classList.toggle("is-unread", !message.flags?.seen);
+    row.classList.toggle("is-selected", message.id === selectedId);
+    row.classList.toggle("is-flagged", Boolean(message.flags?.flagged));
+    row.classList.toggle("is-cursor", index === cursorIndex);
+
+    // Roving tabindex: one stop for the whole list, so Tab does not walk
+    // through every conversation on the way to the reading pane.
+    row.tabIndex = index === cursorIndex ? 0 : -1;
+    row.setAttribute("role", "option");
+    row.setAttribute("aria-selected", String(message.id === selectedId));
+
+    const cb = el("input", "email-list-row-cb") as HTMLInputElement;
+    cb.type = "checkbox";
+    cb.checked = checked.has(message.id);
+    cb.setAttribute("aria-label", `Select ${message.subject || "message"}`);
+    cb.addEventListener("change", () => {
+      if (cb.checked) checked.add(message.id);
+      else checked.delete(message.id);
+    });
+    row.appendChild(cb);
+
+    row.appendChild(el("span", "email-list-avatar", senderInitials(message.from)));
+
+    const starBtn = iconBtn(
+      message.flags?.flagged ? EMAIL_ICONS.starFilled : EMAIL_ICONS.star,
+      message.flags?.flagged ? "Remove flag" : "Flag message",
+      "email-list-star",
+    );
+    starBtn.classList.toggle("is-active", Boolean(message.flags?.flagged));
+    starBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void toggleStar(message.id);
+    });
+    row.appendChild(starBtn);
+
+    const main = el("button", "email-list-row-main") as HTMLButtonElement;
+    main.type = "button";
+    main.tabIndex = -1;
+
+    main.appendChild(el("span", "email-list-from", parseSender(message.from).name));
+    main.appendChild(
+      el("span", "email-list-subject", message.subject || "(no subject)"),
+    );
+    if (message.bodyPreview) {
+      main.appendChild(el("span", "email-list-snippet", message.bodyPreview));
+    }
+
+    main.addEventListener("click", () => {
+      cursorIndex = index;
+      void openMessage(message.id);
+    });
+    row.appendChild(main);
+
+    const meta = el("div", "email-list-row-meta");
+
+    if (!message.flags?.seen) {
+      meta.appendChild(el("span", "email-list-unread-dot", ""));
+    }
+
+    meta.appendChild(el("span", "email-list-date", formatWhen(message.date)));
+
+    if (message.hasAttachments) {
+      const attach = el("span", "email-list-attach");
+      attach.innerHTML = EMAIL_ICONS.attach;
+      attach.title = "Has attachments";
+      meta.appendChild(attach);
+    }
+
+    if (message.snoozeUntil) {
+      const snoozed = el("span", "email-list-snoozed", "snoozed");
+      snoozed.title = `Hidden until ${formatWhen(message.snoozeUntil)}`;
+      meta.appendChild(snoozed);
+    }
+
+    if (message.triage?.urgency && message.triage.urgency !== "normal") {
+      const badge = el(
+        "span",
+        `email-urgency-badge ${urgencyClass(message.triage.urgency)}`,
+      );
+      badge.textContent = message.triage.urgency;
+      meta.appendChild(badge);
+    }
+
+    row.appendChild(meta);
+    return row;
+  };
+
+  /** Build one conversation-rollup row. */
+  const renderThreadRow = (thread: EmailThreadSummary, index: number): HTMLElement => {
+    const model = toConversationRow(thread);
+    const row = el("div", "email-list-row email-list-row--thread");
+
+    row.classList.toggle("is-unread", model.unread);
+    row.classList.toggle("is-selected", thread.threadId === selectedThreadId);
+    row.classList.toggle("is-flagged", model.flagged);
+    row.classList.toggle("is-cursor", index === cursorIndex);
+
+    row.tabIndex = index === cursorIndex ? 0 : -1;
+    row.setAttribute("role", "option");
+    row.setAttribute("aria-selected", String(thread.threadId === selectedThreadId));
+
+    const cb = el("input", "email-list-row-cb") as HTMLInputElement;
+    cb.type = "checkbox";
+    cb.checked = checked.has(thread.threadId);
+    cb.setAttribute("aria-label", `Select ${model.subject}`);
+    cb.addEventListener("change", () => {
+      if (cb.checked) checked.add(thread.threadId);
+      else checked.delete(thread.threadId);
+    });
+    row.appendChild(cb);
+
+    row.appendChild(
+      el("span", "email-list-avatar", senderInitials(thread.participants?.[0] ?? "")),
+    );
+
+    const main = el("button", "email-list-row-main") as HTMLButtonElement;
+    main.type = "button";
+    main.tabIndex = -1;
+
+    const senderLine = el("span", "email-list-from");
+    senderLine.appendChild(document.createTextNode(model.participants));
+    if (model.countLabel) {
+      senderLine.appendChild(el("span", "email-list-count", model.countLabel));
+    }
+    main.appendChild(senderLine);
+
+    main.appendChild(el("span", "email-list-subject", model.subject));
+    if (model.snippet) {
+      main.appendChild(el("span", "email-list-snippet", model.snippet));
+    }
+
+    main.addEventListener("click", () => {
+      cursorIndex = index;
+      void openThread(thread.threadId);
+    });
+    row.appendChild(main);
+
+    const meta = el("div", "email-list-row-meta");
+    if (model.unread) {
+      meta.appendChild(el("span", "email-list-unread-dot", ""));
+    }
+    meta.appendChild(el("span", "email-list-date", formatWhen(model.date)));
+    if (model.hasAttachments) {
+      const attach = el("span", "email-list-attach");
+      attach.innerHTML = EMAIL_ICONS.attach;
+      attach.title = "Has attachments";
+      meta.appendChild(attach);
+    }
+    row.appendChild(meta);
+
+    return row;
+  };
+
+  const virtualList = createVirtualList<EmailMessage | EmailThreadSummary>({
+    rowHeight: LIST_ROW_HEIGHT,
+    renderRow: (item, index) =>
+      listMode === "threads"
+        ? renderThreadRow(item as EmailThreadSummary, index)
+        : renderRow(item as EmailMessage, index),
+    className: "email-list-rows",
+    renderEmpty: () => {
       const empty = el("div", "email-list-empty");
-
       empty.appendChild(el("p", "email-empty-title", "No messages"));
-
       empty.appendChild(
-        el(
-          "p",
-          "email-empty-copy",
-          "Sync this folder or try a different filter.",
-        ),
+        el("p", "email-empty-copy", "Sync this folder or try a different filter."),
       );
+      return empty;
+    },
+  });
 
-      list.appendChild(empty);
+  // The store owns the rows; the list repaints whenever they change, which is
+  // what lets an action show its result before the server has answered.
+  store.subscribe((state) => {
+    messages = state.messages;
+    total = state.total;
+    // In conversation mode the list is fed by `threads`; an optimistic message
+    // edit still updates the store, it just does not repaint these rows.
+    if (listMode === "messages") {
+      virtualList.updateItems(state.messages);
+    }
+  });
+
+  /** Open a conversation from a rollup row. */
+  const openThread = async (threadId: string): Promise<void> => {
+    selectedThreadId = threadId;
+    bodyViewMode = "html";
+    composeMode = null;
+
+    // The reader is keyed by message; open the newest one in the thread.
+    try {
+      const { messages: rows } = await fetchEmailThread(options.account.id, threadId);
+      selectedId = rows[rows.length - 1]?.id ?? null;
+    } catch (err) {
+      options.onStatus?.(
+        "err",
+        err instanceof Error ? err.message : "Could not open the conversation",
+      );
+      return;
     }
 
-    for (const message of messages) {
-      const row = el("div", "email-list-row");
+    updateSelectionLayout();
+    virtualList.refresh();
+    await renderReader();
+  };
 
-      row.classList.toggle("is-unread", !message.flags?.seen);
+  /** Open a message, painting the thread before the mark-seen round trip. */
+  const openMessage = async (id: string): Promise<void> => {
+    selectedId = id;
+    bodyViewMode = "html";
+    composeMode = null;
+    updateSelectionLayout();
+    virtualList.refresh();
+    await renderReader();
+  };
 
-      row.classList.toggle("is-selected", message.id === selectedId);
+  const toggleStar = async (id: string): Promise<void> => {
+    const message = store.get(id);
+    if (!message) return;
+    const next = !message.flags?.flagged;
 
-      row.classList.toggle("is-flagged", Boolean(message.flags?.flagged));
+    await store.mutate(id, { flags: { ...message.flags, flagged: next } as EmailMessage["flags"] }, () =>
+      setEmailMessageFlags(options.account.id, id, { flagged: next }),
+    );
 
-      const cb = el("input", "email-list-row-cb") as HTMLInputElement;
-
-      cb.type = "checkbox";
-
-      cb.checked = checked.has(message.id);
-
-      cb.setAttribute("aria-label", `Select ${message.subject || "message"}`);
-
-      cb.addEventListener("change", () => {
-        if (cb.checked) checked.add(message.id);
-        else checked.delete(message.id);
-      });
-
-      row.appendChild(cb);
-
-      const avatar = el(
-        "span",
-        "email-list-avatar",
-        senderInitials(message.from),
+    pushUndo(next ? "Starred" : "Unstarred", async () => {
+      await store.mutate(
+        id,
+        { flags: { ...message.flags, flagged: !next } as EmailMessage["flags"] },
+        () => setEmailMessageFlags(options.account.id, id, { flagged: !next }),
       );
+    });
+  };
 
-      row.appendChild(avatar);
-
-      const starBtn = iconBtn(
-        message.flags?.flagged ? EMAIL_ICONS.starFilled : EMAIL_ICONS.star,
-
-        message.flags?.flagged ? "Remove flag" : "Flag message",
-
-        "email-list-star",
-      );
-
-      starBtn.classList.toggle("is-active", Boolean(message.flags?.flagged));
-
-      starBtn.addEventListener("click", async (event) => {
-        event.stopPropagation();
-
-        await setEmailMessageFlags(options.account.id, message.id, {
-          flagged: !message.flags?.flagged,
-        });
-
-        await refreshAll();
-      });
-
-      row.appendChild(starBtn);
-
-      const main = el("button", "email-list-row-main") as HTMLButtonElement;
-
-      main.type = "button";
-
-      const fromLine = el(
-        "span",
-        "email-list-from",
-        parseSender(message.from).name,
-      );
-
-      const subjectLine = el(
-        "span",
-        "email-list-subject",
-        message.subject || "(no subject)",
-      );
-
-      main.appendChild(fromLine);
-
-      main.appendChild(subjectLine);
-
-      if (message.bodyPreview) {
-        main.appendChild(el("span", "email-list-snippet", message.bodyPreview));
-      }
-
-      main.addEventListener("click", async () => {
-        selectedId = message.id;
-
-        bodyViewMode = "html";
-
-        composeMode = null;
-
-        updateSelectionLayout();
-
-        await renderList();
-
-        await renderReader();
-      });
-
-      row.appendChild(main);
-
-      const meta = el("div", "email-list-row-meta");
-
-      if (!message.flags?.seen) {
-        meta.appendChild(el("span", "email-list-unread-dot", ""));
-      }
-
-      meta.appendChild(el("span", "email-list-date", formatWhen(message.date)));
-
-      if (message.hasAttachments) {
-        const attach = el("span", "email-list-attach");
-
-        attach.innerHTML = EMAIL_ICONS.attach;
-
-        attach.title = "Has attachments";
-
-        meta.appendChild(attach);
-      }
-
-      if (message.triage?.urgency && message.triage.urgency !== "normal") {
-        const badge = el(
-          "span",
-          `email-urgency-badge ${urgencyClass(message.triage.urgency)}`,
-        );
-
-        badge.textContent = message.triage.urgency;
-
-        meta.appendChild(badge);
-      }
-
-      row.appendChild(meta);
-
-      list.appendChild(row);
-    }
-
-    listPane.appendChild(list);
+  /** Remember how to reverse the last action, for `z`. */
+  const pushUndo = (label: string, run: () => Promise<void>): void => {
+    undoStack.push({ label, run });
+    // One level deep is what people actually reach for, and a longer stack
+    // would start replaying actions against rows that have since changed.
+    if (undoStack.length > 1) undoStack.shift();
   };
 
   const loadMessages = async () => {
+    if (listMode === "threads") {
+      const result = await fetchEmailThreads(options.account.id, {
+        folder: activeFolder,
+        offset,
+        limit,
+        filter: filter === "all" ? undefined : filter,
+        query: search || undefined,
+      });
+
+      threads = result.threads;
+      total = result.total;
+      cursorIndex = Math.min(cursorIndex, Math.max(0, threads.length - 1));
+      return;
+    }
+
     const result = await fetchEmailMessagesExtended(options.account.id, {
       folder: activeFolder,
 
@@ -1410,9 +1743,11 @@ export async function renderEmailLayout(
       filter,
     });
 
-    messages = result.messages;
+    // The store is authoritative from here on; `messages`/`total` are kept in
+    // step by its subscriber above.
+    store.replace(result.messages, result.total);
 
-    total = result.total;
+    cursorIndex = Math.min(cursorIndex, Math.max(0, result.messages.length - 1));
   };
 
   const refreshMessages = async (opts?: { showLoading?: boolean }) => {
@@ -1479,6 +1814,245 @@ export async function renderEmailLayout(
       refreshSidebar(fetchRemoteFolders),
     ]);
   };
+
+  // ---------------------------------------------------------------------
+  // Keyboard model
+  // ---------------------------------------------------------------------
+
+  /** How many rows the list is currently showing, whichever mode it is in. */
+  const rowCount = (): number =>
+    listMode === "threads" ? threads.length : messages.length;
+
+  /**
+   * Message ids the cursor row stands for.
+   *
+   * In conversation mode one row is a whole thread, so an action has to apply
+   * to every message in it — archiving "the row" while leaving four of its five
+   * messages in the inbox would be worse than not offering the shortcut.
+   */
+  const cursorMessageIds = async (): Promise<string[]> => {
+    if (listMode === "messages") {
+      const message = messages[cursorIndex];
+      return message ? [message.id] : [];
+    }
+
+    const thread = threads[cursorIndex];
+    if (!thread) return [];
+    try {
+      const { messages: rows } = await fetchEmailThread(
+        options.account.id,
+        thread.threadId,
+      );
+      return rows.map((row) => row.id);
+    } catch {
+      return [];
+    }
+  };
+
+  /** Move the cursor and keep it in view without opening anything. */
+  const moveCursor = (delta: number): void => {
+    if (rowCount() === 0) return;
+    cursorIndex = Math.min(rowCount() - 1, Math.max(0, cursorIndex + delta));
+    virtualList.refresh();
+    virtualList.scrollToIndex(cursorIndex);
+    // Follow the cursor with focus so a screen reader announces the row.
+    const row = virtualList.root.querySelector<HTMLElement>(".email-list-row.is-cursor");
+    row?.focus();
+  };
+
+  const cursorMessage = (): EmailMessage | undefined =>
+    listMode === "messages" ? messages[cursorIndex] : undefined;
+
+  /** Label for the row under the cursor, in either mode. */
+  const cursorLabel = (): string =>
+    (listMode === "threads"
+      ? threads[cursorIndex]?.subject
+      : messages[cursorIndex]?.subject) || "message";
+
+  /**
+   * Apply a removing action (archive/trash) to the cursor row.
+   *
+   * In message mode this is one optimistic removal; in conversation mode the
+   * whole thread goes through the bulk endpoint, then the list reloads —
+   * a rollup row has no single id for the store to take back.
+   */
+  const removeCursor = async (
+    action: "archive" | "delete",
+    label: string,
+  ): Promise<void> => {
+    const subject = cursorLabel();
+
+    if (listMode === "messages") {
+      const message = cursorMessage();
+      if (!message) return;
+      const folder = message.folder;
+
+      const ok = await store.remove(message.id, () =>
+        action === "archive"
+          ? archiveEmailMessage(options.account.id, message.id)
+          : deleteEmailMessage(options.account.id, message.id),
+      );
+      if (!ok) return;
+
+      options.onStatus?.("ok", `${label} "${subject}"`);
+      pushUndo(label, async () => {
+        await moveEmailMessage(options.account.id, message.id, folder);
+        await refreshMessages();
+      });
+      return;
+    }
+
+    const ids = await cursorMessageIds();
+    if (ids.length === 0) return;
+
+    // Remember where each message was so the undo can put it back.
+    const origins = ids.map((id) => ({
+      id,
+      folder: store.get(id)?.folder ?? activeFolder,
+    }));
+
+    try {
+      await bulkEmailAction({ accountId: options.account.id, ids, action });
+    } catch (err) {
+      options.onStatus?.(
+        "err",
+        err instanceof Error ? err.message : `${label} failed`,
+      );
+      return;
+    }
+
+    options.onStatus?.(
+      "ok",
+      `${label} "${subject}" (${ids.length} message${ids.length === 1 ? "" : "s"})`,
+    );
+    pushUndo(label, async () => {
+      for (const origin of origins) {
+        await moveEmailMessage(options.account.id, origin.id, origin.folder);
+      }
+      await refreshMessages();
+    });
+    await refreshMessages();
+  };
+
+  const archiveCursor = (): Promise<void> => removeCursor("archive", "Archived");
+
+  // Deleting means "moved to trash", which is recoverable — so no confirm
+  // dialog, just a way back.
+  const trashCursor = (): Promise<void> => removeCursor("delete", "Trashed");
+
+  const composeIn = (mode: ComposeMode): void => {
+    composeMode = mode;
+    if (mode !== "new" && !selectedId) {
+      // Nothing is open yet, so open the cursor row first and compose into it.
+      if (listMode === "threads") {
+        const thread = threads[cursorIndex];
+        if (!thread) return;
+        void openThread(thread.threadId).then(() => {
+          composeMode = mode;
+          void renderReader();
+        });
+        return;
+      }
+
+      const message = cursorMessage();
+      if (!message) return;
+      void openMessage(message.id).then(() => {
+        composeMode = mode;
+        void renderReader();
+      });
+      return;
+    }
+    void renderReader();
+  };
+
+  const teardownShortcuts = bindMailShortcuts(mount, {
+    next: () => moveCursor(1),
+    previous: () => moveCursor(-1),
+    open: () => {
+      if (listMode === "threads") {
+        const thread = threads[cursorIndex];
+        if (thread) void openThread(thread.threadId);
+        return;
+      }
+      const message = cursorMessage();
+      if (message) void openMessage(message.id);
+    },
+    back: () => {
+      selectedId = null;
+      selectedThreadId = null;
+      composeMode = null;
+      updateSelectionLayout();
+      void renderReader();
+      virtualList.refresh();
+    },
+    archive: () => void archiveCursor(),
+    trash: () => void trashCursor(),
+    star: () => {
+      if (listMode === "threads") {
+        // Star the whole conversation, matching what the row represents.
+        void (async () => {
+          const thread = threads[cursorIndex];
+          const ids = await cursorMessageIds();
+          if (!thread || ids.length === 0) return;
+          try {
+            await bulkEmailAction({
+              accountId: options.account.id,
+              ids,
+              action: "flag",
+            });
+            await refreshMessages();
+          } catch (err) {
+            options.onStatus?.(
+              "err",
+              err instanceof Error ? err.message : "Could not flag the conversation",
+            );
+          }
+        })();
+        return;
+      }
+      const message = cursorMessage();
+      if (message) void toggleStar(message.id);
+    },
+    select: () => {
+      // Checkboxes are keyed by thread id in conversation mode and message id
+      // otherwise; the bulk actions read the same set, so they must agree.
+      const id =
+        listMode === "threads"
+          ? threads[cursorIndex]?.threadId
+          : messages[cursorIndex]?.id;
+      if (!id) return;
+      if (checked.has(id)) checked.delete(id);
+      else checked.add(id);
+      virtualList.refresh();
+    },
+    reply: () => composeIn("reply"),
+    replyAll: () => composeIn("replyAll"),
+    forward: () => composeIn("forward"),
+    compose: () => composeIn("new"),
+    search: () => {
+      listPane.querySelector<HTMLInputElement>(".email-list-search")?.focus();
+    },
+    undo: () => {
+      const entry = undoStack.pop();
+      if (!entry) {
+        options.onStatus?.("ok", "Nothing to undo");
+        return;
+      }
+      void entry.run().then(
+        () => options.onStatus?.("ok", `Undid ${entry.label.toLowerCase()}`),
+        (err: unknown) =>
+          options.onStatus?.(
+            "err",
+            err instanceof Error ? err.message : "Undo failed",
+          ),
+      );
+    },
+    help: () => showShortcutCheatSheet(mount),
+  });
+
+  // The shell is the shortcut root, so it must be able to hold focus.
+  mount.tabIndex = -1;
+  void teardownShortcuts;
 
   // Bootstrap sidebar from cached account folders so panes are not empty while fetching.
   folderRows = options.account.folders.map((path) => ({

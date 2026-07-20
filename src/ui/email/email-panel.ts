@@ -15,6 +15,7 @@ import { renderEmailDashboard } from './email-dashboard';
 import { renderEmailLayout } from './email-layout';
 import { renderEmailAutomations } from './email-automations';
 import { EMAIL_ICONS } from './email-icons';
+import { ALL_INBOXES, renderUnifiedInbox } from './email-unified';
 
 /** Unsubscribe handles for SSE listeners keyed by panel mount element. */
 const panelEventUnsubs = new WeakMap<HTMLElement, () => void>();
@@ -163,6 +164,21 @@ function renderAccountForm(mount: HTMLElement, options: AccountFormOptions): voi
     form.appendChild(row);
   }
 
+  // Signature is only offered when editing: it is noise during the initial
+  // connect, when the user is trying to get mail flowing at all.
+  if (editing) {
+    const signatureRow = el('label', 'email-field');
+    signatureRow.appendChild(el('span', 'email-field-label', 'Signature (optional)'));
+    const signatureInput = el('textarea', 'email-input email-signature-input') as HTMLTextAreaElement;
+    signatureInput.id = 'email-signature';
+    signatureInput.name = 'signature';
+    signatureInput.rows = 3;
+    signatureInput.placeholder = 'Appended below new messages';
+    signatureInput.value = existing?.signature ?? '';
+    signatureRow.appendChild(signatureInput);
+    form.appendChild(signatureRow);
+  }
+
   if (editing && existing) {
     const defaultRow = el('label', 'email-field email-field-checkbox');
     const defaultInput = el('input') as HTMLInputElement;
@@ -232,6 +248,7 @@ function renderAccountForm(mount: HTMLElement, options: AccountFormOptions): voi
             starttls: existing?.smtp?.starttls ?? true,
           }
         : undefined,
+      signature: String(data.get('signature') ?? existing?.signature ?? ''),
       folders: existing?.folders ?? ['INBOX'],
       pollingEnabled: existing?.pollingEnabled ?? false,
       pollingIntervalMinutes: existing?.pollingIntervalMinutes ?? 15,
@@ -304,6 +321,9 @@ export async function renderEmailPanel(
 
   let activeAccount = accounts.find((row) => row.isDefault) ?? accounts[0];
 
+  /** True when the list is showing every mailbox at once. */
+  let unified = false;
+
   const shell = el('div', 'email-shell email-shell-agent');
   const chrome = el('header', 'email-chrome');
   const body = el('div', 'email-body email-body-fill');
@@ -314,6 +334,15 @@ export async function renderEmailPanel(
   const accountWrap = el('div', 'email-chrome-account');
   const accountSelect = el('select', 'email-chrome-account-select') as HTMLSelectElement;
   accountSelect.setAttribute('aria-label', 'Active email account');
+
+  // Only offered when there is more than one mailbox to unify.
+  if (accounts.length > 1) {
+    const allOpt = el('option') as HTMLOptionElement;
+    allOpt.value = ALL_INBOXES;
+    allOpt.textContent = 'All inboxes';
+    accountSelect.appendChild(allOpt);
+  }
+
   for (const account of accounts) {
     const opt = el('option') as HTMLOptionElement;
     opt.value = account.id;
@@ -399,6 +428,26 @@ export async function renderEmailPanel(
       return;
     }
     if (viewMode === 'mail') {
+      if (unified) {
+        await renderUnifiedInbox(body, {
+          accounts,
+          onStatus: options.onStatus,
+          // Opening a message drops back into that mailbox's full surface,
+          // which is where reply, move and the rest actually live.
+          onOpen: (message) => {
+            const owner = accounts.find((row) => row.id === message.accountId);
+            if (!owner) return;
+            unified = false;
+            activeAccount = owner;
+            accountSelect.value = owner.id;
+            accountHint.textContent = `${accountProviderLabel(owner)} · ${owner.username}`;
+            pendingThreadId = message.threadId;
+            void renderView();
+          },
+        });
+        return;
+      }
+
       await renderEmailLayout(body, {
         account: activeAccount,
         initialThreadId: pendingThreadId,
@@ -433,8 +482,16 @@ export async function renderEmailPanel(
   });
 
   accountSelect.addEventListener('change', () => {
+    if (accountSelect.value === ALL_INBOXES) {
+      unified = true;
+      accountHint.textContent = `${accounts.length} mailboxes`;
+      void renderView();
+      return;
+    }
+
     const next = accounts.find((row) => row.id === accountSelect.value);
     if (!next) return;
+    unified = false;
     activeAccount = next;
     accountHint.textContent = `${accountProviderLabel(next)} · ${next.username}`;
     void renderView();

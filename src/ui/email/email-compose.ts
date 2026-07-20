@@ -2,6 +2,7 @@
  * Inline compose block for the reading pane footer.
  */
 
+import { appConfirm, appPrompt } from "../app-dialog";
 import type { EmailAccount, EmailMessage } from "../../email/client";
 import {
   draftEmailReply,
@@ -17,6 +18,18 @@ import {
 } from "../../email/reply-headers";
 import { createComposeBodyEditor } from "./email-compose-editor";
 import { showSendUndoToast } from "./email-undo-toast";
+import { createRecipientField } from "./email-recipient-field";
+import {
+  createAttachmentTray,
+  enableAttachmentDrop,
+} from "./email-attachment-tray";
+import { deleteEmailDraft, saveEmailDraft } from "../../email/client-drafts";
+
+/** How long after the last keystroke a draft is persisted. */
+const DRAFT_AUTOSAVE_MS = 1200;
+
+/** Regexes that suggest the writer meant to attach something. */
+const ATTACHMENT_INTENT = /\b(attach(ed|ing|ment)?s?|enclosed|see the (file|doc|deck))\b/i;
 
 export type ComposeMode = "reply" | "replyAll" | "forward" | "new";
 
@@ -30,7 +43,15 @@ export interface EmailComposeOptions {
   onSent?: () => void;
   onRefresh?: () => void;
   /** Prefilled fields, used to restore a composer after an undone send. */
-  draft?: { to?: string; cc?: string; subject?: string; body?: string };
+  draft?: {
+    to?: string;
+    cc?: string;
+    bcc?: string;
+    subject?: string;
+    body?: string;
+  };
+  /** Existing stored draft to resume, so autosave updates it in place. */
+  draftId?: string;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -184,13 +205,24 @@ export function mountEmailCompose(
     mount.appendChild(row);
   };
 
-  const toInput = el("input", "email-input") as HTMLInputElement;
-  toInput.placeholder = "Recipients";
-  toInput.name = "to";
-
-  const ccInput = el("input", "email-input") as HTMLInputElement;
-  ccInput.placeholder = "Cc (optional)";
-  ccInput.name = "cc";
+  const toField = createRecipientField({
+    accountId: options.account.id,
+    placeholder: "Recipients",
+    name: "to",
+  });
+  const ccField = createRecipientField({
+    accountId: options.account.id,
+    placeholder: "Cc (optional)",
+    name: "cc",
+  });
+  const bccField = createRecipientField({
+    accountId: options.account.id,
+    placeholder: "Bcc (optional)",
+    name: "bcc",
+  });
+  const toInput = toField.input;
+  const ccInput = ccField.input;
+  const bccInput = bccField.input;
 
   const subjectInput = el("input", "email-input") as HTMLInputElement;
   subjectInput.placeholder = "Subject";
@@ -211,10 +243,52 @@ export function mountEmailCompose(
     },
   });
 
-  fieldRow("To", toInput);
+  fieldRow("To", toField.root, { labelledBy: "email-compose-to-label" });
+
+  // Cc/Bcc stay collapsed until asked for — most messages need neither, and
+  // three always-present recipient rows push the body off a short pane.
+  const ccRow = el("div", "email-compose-optional-recipients");
+  const showCcBtn = el("button", "email-compose-head-btn", "Cc") as HTMLButtonElement;
+  showCcBtn.type = "button";
+  showCcBtn.title = "Add a Cc field";
+  const showBccBtn = el("button", "email-compose-head-btn", "Bcc") as HTMLButtonElement;
+  showBccBtn.type = "button";
+  showBccBtn.title = "Add a Bcc field";
+  ccRow.append(showCcBtn, showBccBtn);
+  mount.appendChild(ccRow);
+
+  const ccWrap = el("div", "email-compose-field");
+  ccWrap.append(el("span", "email-compose-field-label", "Cc"), ccField.root);
+  ccWrap.hidden = true;
+  mount.appendChild(ccWrap);
+
+  const bccWrap = el("div", "email-compose-field");
+  bccWrap.append(el("span", "email-compose-field-label", "Bcc"), bccField.root);
+  bccWrap.hidden = true;
+  mount.appendChild(bccWrap);
+
+  const revealCc = (): void => {
+    ccWrap.hidden = false;
+    showCcBtn.hidden = true;
+  };
+  const revealBcc = (): void => {
+    bccWrap.hidden = false;
+    showBccBtn.hidden = true;
+  };
+  showCcBtn.addEventListener("click", () => {
+    revealCc();
+    ccInput.focus();
+  });
+  showBccBtn.addEventListener("click", () => {
+    revealBcc();
+    bccInput.focus();
+  });
+
+  // Reply-all and forward normally carry a Cc, so open it up front.
   if (options.mode === "replyAll" || options.mode === "forward") {
-    fieldRow("Cc", ccInput);
+    revealCc();
   }
+
   fieldRow("Subject", subjectInput);
 
   const variantRow = el("div", "email-compose-variants");
@@ -237,13 +311,29 @@ export function mountEmailCompose(
     headStatus.textContent = message;
   };
 
+  /**
+   * Put the account signature below an empty body.
+   *
+   * Only ever applied to a blank editor, so it cannot duplicate itself or
+   * clobber a restored draft — and the `-- ` separator is the RFC 3676
+   * convention other clients use to fold it away.
+   */
+  const appendSignature = (): void => {
+    const signature = options.account.signature?.trim();
+    if (!signature || bodyEditor.getPlainText().trim()) return;
+    bodyEditor.setPlainText(`\n\n-- \n${signature}`);
+  };
+
   const applyModeDefaults = () => {
     // A restored draft is what the user actually typed, so it wins over
     // anything the reply/forward defaults would compute.
     if (options.draft) {
-      const { to, cc, subject, body } = options.draft;
+      const { to, cc, bcc, subject, body } = options.draft;
       if (to !== undefined) toInput.value = to;
       if (cc !== undefined) ccInput.value = cc;
+      if (bcc !== undefined) bccInput.value = bcc;
+      if (cc) revealCc();
+      if (bcc) revealBcc();
       if (subject !== undefined) subjectInput.value = subject;
       if (body !== undefined) bodyEditor.setPlainText(body);
       return;
@@ -256,6 +346,7 @@ export function mountEmailCompose(
     if (options.mode === "new") {
       toInput.value = "";
       subjectInput.value = "";
+      appendSignature();
       return;
     }
 
@@ -467,6 +558,92 @@ export function mountEmailCompose(
     }
   });
 
+  // ---------------------------------------------------------------------
+  // Attachments
+  // ---------------------------------------------------------------------
+
+  const attachmentTray = createAttachmentTray({
+    onStatus: options.onStatus,
+    onChange: () => scheduleDraftSave(),
+  });
+  mount.appendChild(attachmentTray.root);
+  const teardownDrop = enableAttachmentDrop(mount, attachmentTray);
+
+  // ---------------------------------------------------------------------
+  // Draft autosave
+  // ---------------------------------------------------------------------
+
+  let draftId = options.draftId ?? "";
+  let saveTimer: ReturnType<typeof setTimeout> | undefined;
+  let discarded = false;
+  // A send in flight must not be resurrected by a late autosave tick.
+  let sending = false;
+
+  const currentDraft = () => ({
+    to: toInput.value,
+    cc: ccInput.value,
+    bcc: bccInput.value,
+    subject: subjectInput.value,
+    body: bodyEditor.getPlainText(),
+    bodyHtml: bodyEditor.getHtml(),
+    attachments: attachmentTray.getAttachments().map((att) => ({
+      filename: att.filename,
+      contentType: att.contentType,
+      size: att.size,
+    })),
+  });
+
+  const isBlank = (): boolean => {
+    const draft = currentDraft();
+    return (
+      !draft.to.trim() &&
+      !draft.cc.trim() &&
+      !draft.bcc.trim() &&
+      !draft.subject.trim() &&
+      !draft.body.trim() &&
+      draft.attachments.length === 0
+    );
+  };
+
+  const saveDraftNow = async (): Promise<void> => {
+    // An untouched composer should not litter the drafts list.
+    if (discarded || sending || isBlank()) return;
+
+    try {
+      const { draft } = await saveEmailDraft({
+        accountId: options.account.id,
+        id: draftId || undefined,
+        threadId: options.threadId ?? "",
+        mode: options.mode,
+        replyToKey: options.selectedMessage?.id ?? "",
+        ...currentDraft(),
+      });
+      draftId = draft.id;
+    } catch {
+      // Autosave is a safety net, not a user-facing operation: a failed tick
+      // will be retried by the next keystroke, and shouting about it while
+      // someone is mid-sentence would be worse than staying quiet.
+    }
+  };
+
+  function scheduleDraftSave(): void {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => void saveDraftNow(), DRAFT_AUTOSAVE_MS);
+  }
+
+  for (const input of [toInput, ccInput, bccInput, subjectInput]) {
+    input.addEventListener("input", scheduleDraftSave);
+  }
+  bodyEditor.root.addEventListener("input", scheduleDraftSave);
+
+  const teardown = (): void => {
+    clearTimeout(saveTimer);
+    teardownDrop();
+    toField.destroy();
+    ccField.destroy();
+    bccField.destroy();
+  };
+
   void loadDraft();
   renderVariants();
 
@@ -475,8 +652,26 @@ export function mountEmailCompose(
   const discardBtn = el("button", "email-btn", "Discard") as HTMLButtonElement;
   discardBtn.type = "button";
   discardBtn.addEventListener("click", () => {
-    mount.replaceChildren();
-    mount.className = "email-reader-compose-mount";
+    void (async () => {
+      // Discard is only destructive once the user has confirmed it, and even
+      // then the autosaved row is what gets removed — not unsaved text.
+      if (!isBlank()) {
+        const sure = await appConfirm(
+          "Discard this draft? It will not be recoverable.",
+          { confirmLabel: "Discard", danger: true },
+        );
+        if (!sure) return;
+      }
+
+      discarded = true;
+      clearTimeout(saveTimer);
+      if (draftId) {
+        await deleteEmailDraft(options.account.id, draftId).catch(() => {});
+      }
+      teardown();
+      mount.replaceChildren();
+      mount.className = "email-reader-compose-mount";
+    })();
   });
 
   const sendBtn = el(
@@ -486,16 +681,35 @@ export function mountEmailCompose(
   ) as HTMLButtonElement;
   sendBtn.type = "button";
 
-  sendBtn.addEventListener("click", async () => {
-    const to = toInput.value.trim();
-    const cc = ccInput.value.trim();
+  /** Trailing comma from an autocomplete pick is not an empty recipient. */
+  const cleanRecipients = (value: string): string =>
+    value
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join(", ");
+
+  const dispatch = async (sendAt?: string): Promise<void> => {
+    const to = cleanRecipients(toInput.value);
+    const cc = cleanRecipients(ccInput.value);
+    const bcc = cleanRecipients(bccInput.value);
     const subject = subjectInput.value.trim();
     const body = bodyEditor.getPlainText();
     const bodyHtml = bodyEditor.getHtml();
+    const attachments = attachmentTray.getAttachments();
 
     if (!to || !subject) {
       options.onStatus?.("err", "To and subject are required");
       return;
+    }
+
+    // Catch the classic mistake before it goes out, not after.
+    if (attachments.length === 0 && ATTACHMENT_INTENT.test(body)) {
+      const anyway = await appConfirm(
+        "This message mentions an attachment but none is attached. Send anyway?",
+        { confirmLabel: "Send anyway" },
+      );
+      if (!anyway) return;
     }
 
     const latest = options.messages?.[options.messages.length - 1];
@@ -507,40 +721,103 @@ export function mountEmailCompose(
           }
         : undefined;
 
+    sending = true;
+    clearTimeout(saveTimer);
+
     try {
       // Queued, not sent: the undo window below is what confirms the send.
       const { entry } = await sendEmailMessage({
         accountId: options.account.id,
         to,
         cc: cc || undefined,
+        bcc: bcc || undefined,
         subject,
         body,
         bodyHtml,
         inReplyTo: replyHeaders?.inReplyTo,
         references: replyHeaders?.references,
+        attachments: attachments.length ? attachments : undefined,
+        sendAt,
       });
+
+      // The message is on its way, so the draft row has served its purpose.
+      if (draftId) {
+        await deleteEmailDraft(options.account.id, draftId).catch(() => {});
+        draftId = "";
+      }
 
       showSendUndoToast(entry, {
         onStatus: options.onStatus,
         // Put the draft back in front of the user rather than silently
         // discarding what they just wrote.
         onUndo: () => {
-          mountEmailCompose(mount, { ...options, draft: { to, cc, subject, body } });
+          teardown();
+          mountEmailCompose(mount, {
+            ...options,
+            draftId: undefined,
+            draft: { to, cc, bcc, subject, body },
+          });
         },
       });
 
+      teardown();
       options.onSent?.();
     } catch (err) {
+      sending = false;
       options.onStatus?.(
         "err",
         err instanceof Error ? err.message : "Send failed",
       );
     }
+  };
+
+  sendBtn.addEventListener("click", () => void dispatch());
+
+  const laterBtn = el("button", "email-btn", "Send later") as HTMLButtonElement;
+  laterBtn.type = "button";
+  laterBtn.title = "Schedule this message";
+  laterBtn.addEventListener("click", () => {
+    void (async () => {
+      const when = await appPrompt(
+        "Send this message at (e.g. 2026-07-20 09:00):",
+        defaultSendLater(),
+      );
+      if (when === null) return;
+
+      const parsed = new Date(when.trim().replace(" ", "T"));
+      if (!Number.isFinite(parsed.getTime())) {
+        options.onStatus?.("err", "That is not a time I can read");
+        return;
+      }
+      if (parsed.getTime() <= Date.now()) {
+        options.onStatus?.("err", "Pick a time in the future");
+        return;
+      }
+      await dispatch(parsed.toISOString());
+    })();
   });
 
   actions.appendChild(discardBtn);
+  actions.appendChild(laterBtn);
   actions.appendChild(sendBtn);
   mount.appendChild(actions);
+
+  // Cmd/Ctrl+Enter sends from anywhere in the composer.
+  mount.addEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      event.preventDefault();
+      void dispatch();
+    }
+  });
+}
+
+/** Tomorrow at 9am, in the local timezone, as a prompt default. */
+function defaultSendLater(): string {
+  const when = new Date();
+  when.setDate(when.getDate() + 1);
+  when.setHours(9, 0, 0, 0);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())} ${pad(when.getHours())}:${pad(when.getMinutes())}`;
 }
 
 function composeTitle(mode: ComposeMode): string {

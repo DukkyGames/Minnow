@@ -248,7 +248,7 @@ export async function renderUsageSettingsSection(): Promise<void> {
 
   const activeChat = getActiveChat();
   const activeLedger = activeChat.tokenLedger;
-  const activeTitle = activeChat.title?.trim();
+  const activeTitle = activeChat.name?.trim();
   const activeGroup = appendSettingsGroup(
     content,
     'Active chat',

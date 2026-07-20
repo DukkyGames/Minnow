@@ -28,7 +28,7 @@ export function imapFlagsToObject(flagSet) {
  * Resolve provider-specific folder names (Gmail archive/trash heuristics).
  * @param {Array<{ path: string, name: string, specialUse?: string | null }>} folders
  * @param {string} preferred
- * @param {'trash' | 'archive' | 'junk' | ''} role
+ * @param {'trash' | 'archive' | 'junk' | 'sent' | 'drafts' | ''} role
  */
 export function resolveMailFolder(folders, preferred, role = '') {
   const names = folders.map((row) => row.path);
@@ -40,6 +40,8 @@ export function resolveMailFolder(folders, preferred, role = '') {
     trash: ['\\Trash'],
     archive: ['\\Archive', '\\All'],
     junk: ['\\Junk'],
+    sent: ['\\Sent'],
+    drafts: ['\\Drafts'],
   }[role] ?? [];
 
   for (const entry of folders) {
@@ -67,6 +69,20 @@ export function resolveMailFolder(folders, preferred, role = '') {
       'All Mail',
     ],
     junk: ['Junk', 'Spam', '[Gmail]/Spam', '[Google Mail]/Spam'],
+    sent: [
+      'Sent',
+      'Sent Mail',
+      'Sent Items',
+      'Sent Messages',
+      '[Gmail]/Sent Mail',
+      '[Google Mail]/Sent Mail',
+    ],
+    drafts: [
+      'Drafts',
+      'Draft',
+      '[Gmail]/Drafts',
+      '[Google Mail]/Drafts',
+    ],
   }[role] ?? [];
 
   const lowerMap = Object.fromEntries(names.map((name) => [name.toLowerCase(), name]));
@@ -78,6 +94,65 @@ export function resolveMailFolder(folders, preferred, role = '') {
   }
 
   return preferred;
+}
+
+/**
+ * Does this provider file sent mail by itself?
+ *
+ * Gmail (and Google Workspace) copy an SMTP-submitted message into "Sent Mail"
+ * server-side. APPENDing there as well produces a visible duplicate, so the
+ * Sent copy is skipped for them. The `\All` special-use folder is the reliable
+ * marker — it is what makes a mailbox Gmail-shaped, and it does not depend on
+ * the account's hostname or the user's display language.
+ *
+ * @param {Array<{ path: string, name: string, specialUse?: string | null }>} folders
+ */
+export function providerSelfFilesSent(folders) {
+  return folders.some((entry) => String(entry.specialUse ?? '').includes('\\All'));
+}
+
+/**
+ * Copy a just-sent message into the account's Sent folder.
+ *
+ * SMTP submission alone leaves no record of what you sent: without this, every
+ * non-Gmail account loses its sent mail entirely. Failure here is reported but
+ * never thrown — the message has already been delivered by the time this runs,
+ * and turning a filing problem into a send error would be a lie.
+ *
+ * @param {string} accountId
+ * @param {Buffer} raw — the exact bytes handed to SMTP
+ * @returns {Promise<{ appended: boolean, folder?: string, reason?: string, error?: string }>}
+ */
+export async function appendToSentFolder(accountId, raw) {
+  let folders;
+  try {
+    folders = await listFoldersCached(accountId);
+  } catch (err) {
+    return { appended: false, error: err instanceof Error ? err.message : 'Folder list failed' };
+  }
+
+  if (providerSelfFilesSent(folders)) {
+    return { appended: false, reason: 'provider_self_files' };
+  }
+
+  const target = resolveMailFolder(folders, '', 'sent');
+  if (!target) {
+    return { appended: false, reason: 'no_sent_folder' };
+  }
+
+  try {
+    // No mailbox is selected for an APPEND — it names its target directly.
+    await withMailbox(accountId, null, async (client) => {
+      await client.append(target, raw, ['\\Seen']);
+    });
+    return { appended: true, folder: target };
+  } catch (err) {
+    return {
+      appended: false,
+      folder: target,
+      error: err instanceof Error ? err.message : 'APPEND failed',
+    };
+  }
 }
 
 /**

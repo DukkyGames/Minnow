@@ -1,8 +1,4 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import {
   AGENT_PACK_TEMPLATE_ZIP_ROOT,
@@ -10,6 +6,7 @@ import {
   getAgentPackTemplateFileMap,
 } from '../../server/agent-packs/template.js';
 import { handleAgentPacksRequest } from '../../server/agent-packs/routes.js';
+import { listZipEntries } from '../zip-entries.mjs';
 
 describe('agent-packs template', () => {
   test('getAgentPackTemplateFileMap includes manifest and prompts', () => {
@@ -30,19 +27,14 @@ describe('agent-packs template', () => {
     assert.match(zipText, new RegExp(`${AGENT_PACK_TEMPLATE_ZIP_ROOT}/manifest.json`));
   });
 
-  test('buildAgentPackTemplateZip extracts with system tar', async () => {
-    const zip = buildAgentPackTemplateZip();
-    const tempRoot = await mkdtemp(join(tmpdir(), 'minnow-agent-pack-zip-'));
-    const zipPath = join(tempRoot, 'template.zip');
-    await writeFile(zipPath, zip);
+  test('buildAgentPackTemplateZip lists its entries', () => {
+    const entries = listZipEntries(buildAgentPackTemplateZip());
 
-    try {
-      const listing = execFileSync('tar', ['-tf', zipPath], { encoding: 'utf8' });
-      assert.match(listing, new RegExp(`${AGENT_PACK_TEMPLATE_ZIP_ROOT}/manifest\\.json`));
-      assert.match(listing, new RegExp(`${AGENT_PACK_TEMPLATE_ZIP_ROOT}/prompts/example\\.full\\.md`));
-    } finally {
-      await rm(tempRoot, { recursive: true, force: true });
-    }
+    assert.ok(
+      entries.includes(`${AGENT_PACK_TEMPLATE_ZIP_ROOT}/manifest.json`),
+      `manifest missing from zip; got: ${entries.join(', ')}`,
+    );
+    assert.ok(entries.includes(`${AGENT_PACK_TEMPLATE_ZIP_ROOT}/prompts/example.full.md`));
   });
 
   test('GET /api/agent-packs/template returns application/zip', async () => {
