@@ -14,6 +14,20 @@ export interface EmailAccount {
   pollingEnabled: boolean;
   pollingIntervalMinutes: number;
   folders: string[];
+  /** Plain text appended below the body of a new message. */
+  signature?: string;
+}
+
+export interface EmailAttachment {
+  /** Part ordinal — how the download route addresses this attachment. */
+  index: number;
+  filename: string;
+  contentType: string;
+  size: number;
+  /** Bracket-stripped Content-ID, for parts referenced as `cid:` in the body. */
+  contentId?: string;
+  /** Inline parts render in the body; they are not offered as downloads. */
+  inline?: boolean;
 }
 
 export interface EmailMessage {
@@ -32,7 +46,9 @@ export interface EmailMessage {
   bodyHtml?: string;
   bodyHash?: string;
   hasAttachments: boolean;
-  attachments?: Array<{ filename: string; contentType: string; size: number }>;
+  attachments?: EmailAttachment[];
+  /** ISO timestamp the message is hidden until; empty when not snoozed. */
+  snoozeUntil?: string;
   inReplyTo?: string;
   references?: string[];
   flags?: {
@@ -322,6 +338,15 @@ export async function sendEmailMessage(input: {
   bcc?: string;
   inReplyTo?: string;
   references?: string;
+  /** Base64 payloads; `contentId` marks a part the body references as `cid:`. */
+  attachments?: Array<{
+    filename: string;
+    contentType: string;
+    content: string;
+    contentId?: string;
+  }>;
+  /** ISO timestamp for send-later; omit to use the ordinary undo window. */
+  sendAt?: string;
 }): Promise<{ queued: boolean; entry: OutboxEntry }> {
   const res = await fetch('/api/email/send', {
     method: 'POST',
@@ -376,4 +401,70 @@ export async function blockImagesFromSender(sender: string): Promise<string[]> {
   );
   const data = await parseJson<{ senders: string[] }>(res);
   return data.senders;
+}
+
+// ---------------------------------------------------------------------------
+// Attachments
+// ---------------------------------------------------------------------------
+
+/**
+ * Path of the attachment route for a part.
+ *
+ * `selector` is either a part index or `cid:<content-id>`; the latter is how the
+ * body iframe resolves inline images.
+ */
+export function emailAttachmentPath(
+  accountId: string,
+  messageKey: string,
+  selector: number | string,
+  options: { inline?: boolean } = {},
+): string {
+  const query = new URLSearchParams({ accountId });
+  if (options.inline) query.set('inline', '1');
+  return `/api/email/messages/${encodeURIComponent(messageKey)}/attachments/${encodeURIComponent(
+    String(selector),
+  )}?${query.toString()}`;
+}
+
+/**
+ * Download one attachment's bytes.
+ *
+ * Deliberately a `fetch` rather than an `<a href>`: the session token rides on a
+ * header added by the fetch interceptor, and a plain navigation would not carry
+ * it (nor should the token end up in a URL the browser keeps in history).
+ */
+export async function downloadEmailAttachment(
+  accountId: string,
+  messageKey: string,
+  selector: number | string,
+): Promise<{ blob: Blob; filename: string }> {
+  const res = await fetch(emailAttachmentPath(accountId, messageKey, selector));
+  if (!res.ok) {
+    let message = res.statusText;
+    try {
+      const payload = (await res.json()) as { error?: string };
+      if (payload.error) message = payload.error;
+    } catch {
+      /* a non-JSON error body is fine; the status text stands */
+    }
+    throw new Error(message || 'Attachment download failed');
+  }
+
+  const disposition = res.headers.get('Content-Disposition') ?? '';
+  const match = /filename="([^"]*)"/.exec(disposition);
+  return { blob: await res.blob(), filename: match?.[1] || 'attachment' };
+}
+
+/** Hand a downloaded attachment to the browser's save flow. */
+export function saveBlobAs(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  // Revoking immediately can race the download in some engines; one tick is
+  // enough for the click to have been dispatched.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }

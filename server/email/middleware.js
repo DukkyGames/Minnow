@@ -16,7 +16,9 @@ import {
   listCachedThread,
   listCachedThreads,
   searchCachedMessages,
+  setMessageSnooze,
 } from './cache.js';
+import { searchContacts } from './contacts.js';
 import {
   listEmailFolders,
   loadMessageBody,
@@ -27,6 +29,8 @@ import { triageMessage } from './triage.js';
 import { draftReply, resolveReplyVariantSend } from './smtp.js';
 import { cancelSend, enqueueSend, listOutbox } from './outbox.js';
 import { fetchRemoteImage } from './image-proxy.js';
+import { fetchMessageAttachment } from './attachment-fetch.js';
+import { deleteDraft, getDraft, listDrafts, saveDraft, syncDraftToImap } from './drafts.js';
 import {
   allowImagesFromSender,
   blockImagesFromSender,
@@ -305,6 +309,16 @@ export function createEmailMiddleware() {
           return;
         }
 
+        if (tail === 'contacts' && req.method === 'GET') {
+          const params = parseQuery(req.url ?? '');
+          const contacts = await searchContacts(accountId, {
+            query: params.get('q') ?? '',
+            limit: Number(params.get('limit') ?? 10),
+          });
+          sendJson(res, 200, { contacts });
+          return;
+        }
+
         if (tail === 'threads' && req.method === 'GET') {
           const params = parseQuery(req.url ?? '');
           const result = await listCachedThreads(accountId, {
@@ -353,6 +367,44 @@ export function createEmailMiddleware() {
         return;
       }
 
+      // Attachment bytes are streamed straight from the server; they are never
+      // mirrored into the store, so this re-fetches the message source.
+      const attachmentMatch = url.match(
+        /^\/api\/email\/messages\/([^/]+)\/attachments\/([^/]+)$/,
+      );
+      if (attachmentMatch && req.method === 'GET') {
+        const messageKey = decodeURIComponent(attachmentMatch[1]);
+        const selectorRaw = decodeURIComponent(attachmentMatch[2]);
+        const params = parseQuery(req.url ?? '');
+        const accountId = String(params.get('accountId') ?? '').trim();
+        if (!accountId) {
+          sendJson(res, 400, { error: 'accountId query param is required' });
+          return;
+        }
+
+        // `cid:<id>` addresses an inline part; a bare integer is a part index.
+        const selector = selectorRaw.startsWith('cid:')
+          ? { contentId: selectorRaw.slice(4) }
+          : { index: Number(selectorRaw) };
+        const attachment = await fetchMessageAttachment(accountId, messageKey, selector);
+
+        // Inline parts render inside the body iframe; everything else downloads.
+        const disposition = params.get('inline') === '1' ? 'inline' : 'attachment';
+        res.statusCode = 200;
+        res.setHeader('Content-Type', attachment.contentType);
+        res.setHeader('Content-Length', String(attachment.size));
+        res.setHeader(
+          'Content-Disposition',
+          `${disposition}; filename="${attachment.filename}"; filename*=UTF-8''${encodeURIComponent(attachment.filename)}`,
+        );
+        // Mail parts are untrusted bytes: never let one execute as a document.
+        res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Cache-Control', 'private, max-age=600');
+        res.end(attachment.content);
+        return;
+      }
+
       const triageMatch = url.match(/^\/api\/email\/messages\/([^/]+)\/triage$/);
       if (triageMatch && req.method === 'POST') {
         const messageKey = decodeURIComponent(triageMatch[1]);
@@ -381,6 +433,21 @@ export function createEmailMiddleware() {
           flagged: body.flagged,
         });
         sendJson(res, 200, result);
+        return;
+      }
+
+      const snoozeMatch = url.match(/^\/api\/email\/messages\/([^/]+)\/snooze$/);
+      if (snoozeMatch && req.method === 'POST') {
+        const messageKey = decodeURIComponent(snoozeMatch[1]);
+        const body = await readJsonBody(req);
+        const accountId = String(body.accountId ?? '').trim();
+        if (!accountId) {
+          sendJson(res, 400, { error: 'accountId is required' });
+          return;
+        }
+        // An empty `until` un-snoozes, so the same route serves both directions.
+        const message = await setMessageSnooze(accountId, messageKey, String(body.until ?? ''));
+        sendJson(res, 200, { message });
         return;
       }
 
@@ -468,6 +535,74 @@ export function createEmailMiddleware() {
         const result = await deleteMessage(accountId, messageKey, { permanent });
         sendJson(res, 200, result);
         return;
+      }
+
+      // Drafts are keyed by account, which rides in the query/body rather than
+      // the path so the route matches the shape of the other message routes.
+      if (url === '/api/email/drafts' && req.method === 'GET') {
+        const params = parseQuery(req.url ?? '');
+        const accountId = String(params.get('accountId') ?? '').trim();
+        if (!accountId) {
+          sendJson(res, 400, { error: 'accountId query param is required' });
+          return;
+        }
+        const drafts = await listDrafts(accountId, {
+          threadId: params.get('threadId') ?? undefined,
+          limit: Number(params.get('limit') ?? 50),
+        });
+        sendJson(res, 200, { drafts });
+        return;
+      }
+
+      if (url === '/api/email/drafts' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const accountId = String(body.accountId ?? '').trim();
+        if (!accountId) {
+          sendJson(res, 400, { error: 'accountId is required' });
+          return;
+        }
+        const draft = await saveDraft(accountId, body);
+
+        // Mirroring to IMAP is opt-in per request: autosave ticks stay local,
+        // and only an explicit "keep in Drafts" pays the round trip.
+        let imap;
+        if (body.syncToImap === true) {
+          imap = await syncDraftToImap(accountId, draft.id);
+        }
+        sendJson(res, 200, { draft, imap });
+        return;
+      }
+
+      const draftMatch = url.match(/^\/api\/email\/drafts\/([^/]+)$/);
+      if (draftMatch) {
+        const draftId = decodeURIComponent(draftMatch[1]);
+
+        if (req.method === 'GET') {
+          const params = parseQuery(req.url ?? '');
+          const accountId = String(params.get('accountId') ?? '').trim();
+          if (!accountId) {
+            sendJson(res, 400, { error: 'accountId query param is required' });
+            return;
+          }
+          const draft = await getDraft(accountId, draftId);
+          if (!draft) {
+            sendJson(res, 404, { error: 'Draft not found' });
+            return;
+          }
+          sendJson(res, 200, { draft });
+          return;
+        }
+
+        if (req.method === 'DELETE') {
+          const params = parseQuery(req.url ?? '');
+          const accountId = String(params.get('accountId') ?? '').trim();
+          if (!accountId) {
+            sendJson(res, 400, { error: 'accountId query param is required' });
+            return;
+          }
+          sendJson(res, 200, await deleteDraft(accountId, draftId));
+          return;
+        }
       }
 
       if (url === '/api/email/draft-reply' && req.method === 'POST') {

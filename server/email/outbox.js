@@ -17,9 +17,17 @@ import { randomUUID } from 'node:crypto';
 import { sendEmail } from './smtp.js';
 import { consumeSendAllowance } from './send-rate-limit.js';
 import { emitEmailEvent } from './events.js';
+import { recordSentRecipients } from './contacts.js';
 
 /** How long a queued send can be recalled. */
 export const UNDO_WINDOW_MS = 8_000;
+
+/**
+ * Ceiling on a scheduled send. The queue is in-memory, so a send parked for
+ * weeks would not survive a restart anyway — refusing it up front is honest,
+ * where silently dropping it later would not be.
+ */
+export const MAX_SEND_LATER_MS = 30 * 24 * 60 * 60_000;
 
 /** Effective window; only tests shorten it, so they don't sleep for real. */
 let undoWindowMs = UNDO_WINDOW_MS;
@@ -31,6 +39,7 @@ let undoWindowMs = UNDO_WINDOW_MS;
  * @property {string} to
  * @property {string} subject
  * @property {'queued' | 'sending' | 'sent' | 'failed' | 'cancelled'} status
+ * @property {boolean} scheduled — true when `sendAt` came from send-later, not the undo window
  * @property {string} queuedAt
  * @property {string} sendAt
  * @property {string | null} error
@@ -68,6 +77,18 @@ export function enqueueSend(input) {
 
   const now = Date.now();
   const id = randomUUID();
+
+  // Send later: an explicit `sendAt` in the future replaces the undo window
+  // (it is already a much longer window). Anything in the past falls back to
+  // the normal undo delay rather than dispatching instantly.
+  const requestedAt = input.sendAt ? new Date(String(input.sendAt)).getTime() : NaN;
+  const scheduled = Number.isFinite(requestedAt) && requestedAt > now + undoWindowMs;
+  const delay = scheduled ? requestedAt - now : undoWindowMs;
+
+  if (scheduled && delay > MAX_SEND_LATER_MS) {
+    throw new Error('Scheduled sends are limited to 30 days out');
+  }
+
   /** @type {OutboxEntry} */
   const entry = {
     id,
@@ -75,14 +96,15 @@ export function enqueueSend(input) {
     to,
     subject,
     status: 'queued',
+    scheduled,
     queuedAt: new Date(now).toISOString(),
-    sendAt: new Date(now + undoWindowMs).toISOString(),
+    sendAt: new Date(now + delay).toISOString(),
     error: null,
   };
 
   const timer = setTimeout(() => {
     void deliver(id);
-  }, undoWindowMs);
+  }, delay);
   // Never hold the process open for a pending send.
   timer.unref?.();
 
@@ -112,6 +134,19 @@ async function deliver(id) {
     });
     row.entry.status = 'sent';
     row.entry.error = null;
+
+    // Writing to someone is the strongest affinity signal there is; feed it
+    // back so autocomplete ranks them first next time.
+    try {
+      await recordSentRecipients(row.entry.accountId, [
+        String(row.input.to ?? ''),
+        String(row.input.cc ?? ''),
+        String(row.input.bcc ?? ''),
+      ]);
+    } catch {
+      /* a contact-book miss must never look like a send failure */
+    }
+
     emitEmailEvent('outbox_sent', { entry: { ...row.entry }, messageId: result.messageId ?? null });
   } catch (err) {
     row.entry.status = 'failed';

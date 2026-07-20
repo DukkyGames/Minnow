@@ -6,9 +6,10 @@
  */
 
 import { listEmailAccounts } from './accounts.js';
-import { getSyncState } from './cache.js';
+import { clearDueSnoozes, getSyncState, listDueSnoozes } from './cache.js';
 import { syncFolderMessages } from './transport.js';
 import { runAgentHooksAfterFolderSync } from './agent.js';
+import { emitEmailEvent } from './events.js';
 import {
   closeAllImapSessions,
   startIdleWatcher,
@@ -63,11 +64,17 @@ export async function runEmailPollTick() {
 
   polling = true;
   let synced = 0;
+  let woken = 0;
   try {
     const accounts = await listEmailAccounts();
     const now = Date.now();
 
     for (const account of accounts) {
+      // Snoozes are checked for every account, polling-enabled or not: the user
+      // asked for the message back at a time, and that promise does not depend
+      // on whether background sync happens to be on.
+      woken += await wakeDueSnoozes(account.id);
+
       if (!account.pollingEnabled) {
         await stopIdleWatcher(account.id).catch(() => {});
         continue;
@@ -99,7 +106,41 @@ export async function runEmailPollTick() {
     polling = false;
   }
 
-  return { synced };
+  return { synced, woken };
+}
+
+/**
+ * Resurface any message whose snooze has elapsed.
+ *
+ * Announced as an event so an open list can bring the row back without the
+ * user having to refresh — a snooze that silently expires is a broken promise.
+ *
+ * @param {string} accountId
+ * @returns {Promise<number>} how many messages woke
+ */
+async function wakeDueSnoozes(accountId) {
+  try {
+    const due = await listDueSnoozes(accountId);
+    if (!due.length) return 0;
+
+    await clearDueSnoozes(accountId);
+    emitEmailEvent('snooze_due', {
+      accountId,
+      messages: due.map((message) => ({
+        id: message.id,
+        threadId: message.threadId,
+        subject: message.subject,
+        from: message.from,
+      })),
+    });
+    return due.length;
+  } catch (err) {
+    console.warn(
+      `[email] snooze sweep failed for ${accountId}:`,
+      err instanceof Error ? err.message : err,
+    );
+    return 0;
+  }
 }
 
 /**

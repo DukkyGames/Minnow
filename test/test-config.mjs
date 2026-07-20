@@ -86,6 +86,11 @@ export const PATH_RUNNER_RULES = [
   { pattern: 'test/email/incremental-sync.test.mjs', runner: 'tsx-mocks' },
   // Mocks server/email/smtp.js so the undo window is exercised without SMTP.
   { pattern: 'test/email/outbox.test.mjs', runner: 'tsx-mocks' },
+  // Mock server/email/{accounts,imap-session}.js (and nodemailer) to exercise
+  // attachment download, draft mirroring, and the Sent APPEND without a server.
+  { pattern: 'test/email/attachment-fetch.test.mjs', runner: 'tsx-mocks' },
+  { pattern: 'test/email/drafts.test.mjs', runner: 'tsx-mocks' },
+  { pattern: 'test/email/sent-append.test.mjs', runner: 'tsx-mocks' },
   { pattern: 'test/server/**/*.test.mjs', runner: 'tsx-mocks' },
   { pattern: 'test/workspace/*.test.js', runner: 'tsx-mocks' },
   { pattern: 'test/terminal/shell-profiles.test.mjs', runner: 'tsx-mocks' },

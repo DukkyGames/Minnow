@@ -74,6 +74,25 @@ function initSchema(database) {
       PRIMARY KEY (message_row_id, idx)
     );
 
+    CREATE TABLE IF NOT EXISTS drafts (
+      id TEXT PRIMARY KEY,
+      thread_id TEXT NOT NULL DEFAULT '',
+      reply_to_key TEXT NOT NULL DEFAULT '',
+      mode TEXT NOT NULL DEFAULT 'new',
+      to_addr TEXT NOT NULL DEFAULT '',
+      cc TEXT NOT NULL DEFAULT '',
+      bcc TEXT NOT NULL DEFAULT '',
+      subject TEXT NOT NULL DEFAULT '',
+      body TEXT NOT NULL DEFAULT '',
+      body_html TEXT,
+      in_reply_to TEXT NOT NULL DEFAULT '',
+      references_text TEXT NOT NULL DEFAULT '',
+      attachments_json TEXT NOT NULL DEFAULT '[]',
+      imap_uid TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT ''
+    );
+
     CREATE TABLE IF NOT EXISTS threads (
       thread_id TEXT PRIMARY KEY,
       subject TEXT NOT NULL DEFAULT '',
@@ -134,9 +153,43 @@ function initSchema(database) {
     CREATE INDEX IF NOT EXISTS idx_messages_date ON messages(date_ms DESC);
     CREATE INDEX IF NOT EXISTS idx_messages_message_id ON messages(message_id);
     CREATE INDEX IF NOT EXISTS idx_automation_runs_rule ON automation_runs(rule_id);
+    CREATE INDEX IF NOT EXISTS idx_drafts_thread ON drafts(thread_id);
   `);
 
+  migrateAddedColumns(database);
   migrateMessagesFts(database);
+}
+
+/**
+ * Add a column to an existing table if it is missing.
+ *
+ * `CREATE TABLE IF NOT EXISTS` above only covers fresh databases; stores created
+ * by an earlier release need the ALTER. Kept separate from `user_version` so
+ * adding a column never triggers the (expensive) FTS rebuild below.
+ *
+ * @param {import('better-sqlite3').Database} database
+ */
+function ensureColumn(database, table, column, ddl) {
+  const columns = database.prepare(`PRAGMA table_info(${table})`).all();
+  if (columns.some((row) => row.name === column)) {
+    return;
+  }
+  database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+}
+
+/**
+ * @param {import('better-sqlite3').Database} database
+ */
+function migrateAddedColumns(database) {
+  // Inline images are addressed by Content-ID, so the reader can resolve
+  // `cid:` sources without re-parsing the whole message source.
+  ensureColumn(database, 'attachments', 'content_id', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(database, 'attachments', 'inline', 'INTEGER NOT NULL DEFAULT 0');
+  // Snoozed messages stay in the store but drop out of the list until due.
+  ensureColumn(database, 'messages', 'snooze_until', "TEXT NOT NULL DEFAULT ''");
+  database.exec(
+    'CREATE INDEX IF NOT EXISTS idx_messages_snooze ON messages(snooze_until) WHERE snooze_until != \'\';',
+  );
 }
 
 /** FTS5 mirror over subject/from/body — replaces the substring scan (D10). */
@@ -317,6 +370,7 @@ export function rowToMessage(row, extra = {}) {
     bodyHash: row.body_hash ?? '',
     hasAttachments: Boolean(row.has_attachments),
     attachments: extra.attachments ?? [],
+    snoozeUntil: row.snooze_until || '',
     inReplyTo: row.in_reply_to ?? '',
     references: parseJson(row.references_json, []),
     flags: {
@@ -349,16 +403,19 @@ export function loadAttachments(db, messageRowIds) {
   const placeholders = messageRowIds.map(() => '?').join(',');
   const rows = db
     .prepare(
-      `SELECT message_row_id, idx, filename, content_type, size
+      `SELECT message_row_id, idx, filename, content_type, size, content_id, inline
        FROM attachments WHERE message_row_id IN (${placeholders}) ORDER BY idx`,
     )
     .all(...messageRowIds);
   for (const row of rows) {
     if (!byRow.has(row.message_row_id)) byRow.set(row.message_row_id, []);
     byRow.get(row.message_row_id).push({
+      index: row.idx,
       filename: row.filename,
       contentType: row.content_type,
       size: row.size,
+      contentId: row.content_id ?? '',
+      inline: Boolean(row.inline),
     });
   }
   return byRow;

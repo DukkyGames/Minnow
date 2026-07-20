@@ -1273,6 +1273,11 @@
   padding: 10px 10px;
   border-bottom: 1px solid var(--mn-border);
   transition: background 0.12s ease-out;
+  /* Fixed height: the virtual list computes its window from LIST_ROW_HEIGHT
+     in email-layout.ts, so these two must stay in step. */
+  height: 64px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -1633,8 +1638,21 @@
   padding: 4px 8px;
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm, 6px);
+  /* `font` shorthand first — it would otherwise reset the size below. */
+  font: inherit;
   font-size: 12px;
+  color: inherit;
   background: color-mix(in oklch, var(--mn-fg) 3%, transparent);
+  cursor: pointer;
+}
+
+.email-reader-att-chip:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--mn-fg) 7%, transparent);
+}
+
+.email-reader-att-chip:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .email-reader-compose-mount {
@@ -2111,4 +2129,243 @@
 .email-undo-toast-btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* ---------------------------------------------------------------------------
+   Compose: recipient autocomplete, Cc/Bcc reveal, attachment tray (MIN-353)
+   --------------------------------------------------------------------------- */
+
+.email-recipient-field {
+  position: relative;
+  min-width: 0;
+}
+
+.email-recipient-field .email-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.email-recipient-suggestions {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 2px;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--mn-surface);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm, 6px);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 12%);
+}
+
+.email-recipient-suggestion {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.email-recipient-suggestion.is-active,
+.email-recipient-suggestion:hover {
+  background: color-mix(in oklch, var(--mn-fg) 7%, transparent);
+}
+
+.email-recipient-suggestion-name {
+  font-weight: 500;
+}
+
+.email-recipient-suggestion-address {
+  color: var(--mn-fg-muted);
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+
+.email-compose-optional-recipients {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+/* Attachment tray */
+
+.email-attach-tray {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.email-attach-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.email-attach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px 3px 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm, 6px);
+  font-size: 12px;
+  background: color-mix(in oklch, var(--mn-fg) 3%, transparent);
+}
+
+.email-attach-chip-remove {
+  border: 0;
+  background: none;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.email-attach-chip-remove:hover {
+  color: var(--mn-fg);
+}
+
+/* Drop-to-attach affordance on the whole composer. */
+.email-compose.is-drop-target {
+  outline: 2px dashed var(--mn-accent, currentColor);
+  outline-offset: -3px;
+}
+
+/* ---------------------------------------------------------------------------
+   List: keyboard cursor, snooze chip, shortcut sheet (MIN-353)
+   --------------------------------------------------------------------------- */
+
+/* The keyboard cursor is distinct from selection: j/k move it without opening. */
+.email-list-row.is-cursor {
+  box-shadow: inset 2px 0 0 var(--mn-accent, currentColor);
+}
+
+.email-list-row:focus-visible {
+  outline: 2px solid var(--mn-accent, currentColor);
+  outline-offset: -2px;
+}
+
+.email-list-row-main {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.email-list-snoozed {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+  border: 1px solid var(--mn-border);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+/* Scroll container for the virtualized rows. */
+.email-list-rows {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.email-shortcut-sheet {
+  position: absolute;
+  z-index: 40;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 320px;
+  max-width: 420px;
+  padding: 16px;
+  background: var(--mn-surface);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 8px 32px rgb(0 0 0 / 24%);
+}
+
+.email-shortcut-sheet-title {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.email-shortcut-sheet-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  margin: 0 0 14px;
+  font-size: 12px;
+}
+
+.email-shortcut-sheet-list dt {
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  color: var(--mn-fg-muted);
+  white-space: nowrap;
+}
+
+.email-shortcut-sheet-list dd {
+  margin: 0;
+}
+
+/* Conversation rollup rows (MIN-353) */
+
+.email-list-count {
+  margin-left: 6px;
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--mn-fg-muted);
+}
+
+.email-list-row--thread .email-list-from {
+  display: inline-flex;
+  align-items: baseline;
+}
+
+.email-list-mode {
+  padding: 4px 9px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Unified inbox: per-account colour dot (MIN-353).
+   Tints of the family accents — colour marks which mailbox, nothing else. */
+
+.email-account-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.email-account-dot--1 {
+  background: var(--mn-accent);
+}
+
+.email-account-dot--2 {
+  background: color-mix(in oklch, var(--mn-accent) 55%, var(--mn-fg-muted));
+}
+
+.email-account-dot--3 {
+  background: color-mix(in oklch, var(--mn-accent) 30%, var(--mn-fg-muted));
+}
+
+.email-account-dot--4 {
+  background: var(--mn-fg-muted);
+}
+
+.email-unified-pane .email-list-row {
+  grid-template-columns: auto 1fr auto;
 }

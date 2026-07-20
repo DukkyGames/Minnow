@@ -16,6 +16,7 @@
 
 import DOMPurify from 'dompurify';
 import type { EmailMessage } from '../../email/client';
+import { emailAttachmentPath } from '../../email/client';
 import { withSessionToken } from '../../api/session-token';
 
 const EMAIL_PURIFY_CONFIG = {
@@ -60,6 +61,11 @@ export interface EmailBodyRenderOptions {
   loadRemoteImages?: boolean;
   /** Reports how many remote references were withheld, for the "load images" bar. */
   onRemoteContent?: (info: { blockedCount: number }) => void;
+  /**
+   * Identifies the message so `cid:` parts can be resolved to the attachment
+   * route. Omit and inline images collapse to the withheld-image marker.
+   */
+  inlineParts?: { accountId: string; messageKey: string };
 }
 
 /** True when the message has both sanitized HTML and a plain-text alternative. */
@@ -161,6 +167,37 @@ export function applyRemoteContentPolicy(root: ParentNode, load: boolean): numbe
     if (el.tagName === 'A') secureLink(el);
   });
   return blocked;
+}
+
+/**
+ * Point `cid:` image sources at the attachment route.
+ *
+ * A `cid:` URL means "a part of this same message"; browsers cannot resolve it,
+ * so an untouched inline image renders as a broken icon. The bytes come from
+ * the local server, so unlike a remote image this leaks nothing to the sender
+ * and needs no allowlist. The token goes in the query because a sandboxed
+ * frame's subresource loads carry no headers from the fetch interceptor.
+ *
+ * @returns how many inline parts were wired up
+ */
+export function resolveInlineCidImages(
+  root: ParentNode,
+  context: { accountId: string; messageKey: string },
+): number {
+  let resolved = 0;
+  root.querySelectorAll('img[src^="cid:"], img[src^="CID:"]').forEach((el) => {
+    const raw = el.getAttribute('src') ?? '';
+    const cid = raw.slice(4).trim().replace(/^<|>$/g, '');
+    if (!cid) return;
+    el.setAttribute(
+      'src',
+      withSessionToken(
+        emailAttachmentPath(context.accountId, context.messageKey, `cid:${cid}`, { inline: true }),
+      ),
+    );
+    resolved += 1;
+  });
+  return resolved;
 }
 
 /** Harden external links so a click can't reach back into the app. */
@@ -291,6 +328,11 @@ export function renderEmailBody(
 
   const load = opts.loadRemoteImages === true;
   const blockedCount = applyRemoteContentPolicy(template.content, load);
+  // After the remote pass: `cid:` is not a remote URL, so the policy above
+  // leaves it alone, and rewriting here cannot re-expose a parked host.
+  if (opts.inlineParts) {
+    resolveInlineCidImages(template.content, opts.inlineParts);
+  }
 
   const frame = document.createElement('iframe');
   frame.className = 'email-body-frame';

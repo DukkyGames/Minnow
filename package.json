@@ -154,6 +154,7 @@
     "@types/node": "^22.10.0",
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
+    "devtools-protocol": "0.0.1638949",
     "electron": "^42.3.0",
     "electron-builder": "^26.8.1",
     "happy-dom": "^20.9.0",
