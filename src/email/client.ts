@@ -157,16 +157,79 @@ export interface EmailCatchupSummary {
   messageCount: number;
 }
 
+export type EmailAutomationTrigger = 'on_new_message' | 'on_high_urgency' | 'on_tag_match';
+
+export type EmailAutomationConditionField =
+  | 'sender'
+  | 'domain'
+  | 'subject'
+  | 'has_attachment'
+  | 'category'
+  | 'urgency';
+
+export type EmailAutomationConditionOp =
+  | 'contains'
+  | 'not_contains'
+  | 'equals'
+  | 'not_equals'
+  | 'is_true'
+  | 'is_false';
+
+export interface EmailAutomationCondition {
+  field: EmailAutomationConditionField;
+  op: EmailAutomationConditionOp;
+  value: string;
+}
+
+export type EmailAutomationActionType =
+  | 'triage'
+  | 'generate_variants'
+  | 'mark_read'
+  | 'flag'
+  | 'archive'
+  | 'move_to_folder'
+  | 'forward_to'
+  | 'os_notify'
+  | 'run_scheduler_job';
+
+export interface EmailAutomationAction {
+  type: EmailAutomationActionType;
+  folder?: string;
+  to?: string;
+  title?: string;
+  body?: string;
+  jobId?: string;
+}
+
 export interface EmailAutomation {
   id: string;
   name: string;
   enabled: boolean;
   accountId: string;
-  trigger: 'on_new_message' | 'on_high_urgency' | 'on_tag_match';
-  action: 'triage' | 'generate_variants' | 'notify' | 'run_scheduler_job';
+  trigger: EmailAutomationTrigger;
+  conditions: EmailAutomationCondition[];
+  actions: EmailAutomationAction[];
+  trusted: boolean;
   config?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface EmailAutomationRun {
+  id: number;
+  ruleId: string;
+  messageRowId: number | null;
+  action: string;
+  outcome: string;
+  detail: string;
+  ranAt: string;
+}
+
+export interface EmailAutomationDryRun {
+  days: number;
+  total: number;
+  matched: number;
+  sample: Array<{ id: string; from: string; subject: string; date: string }>;
 }
 
 export interface EmailDraft {
