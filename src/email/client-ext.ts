@@ -6,14 +6,26 @@ import type {
   EmailAccount,
   EmailAutomation,
   EmailDraft,
+  EmailFollowup,
   EmailInboxSummary,
   EmailMessage,
+  EmailNarrativeDigest,
+  EmailPendingAction,
+  EmailCatchupSummary,
   OutboxEntry,
   ReplyVariant,
 } from './client';
 import { withSessionToken } from '../api/session-token.ts';
 
-export type { EmailAutomation, EmailInboxSummary, ReplyVariant };
+export type {
+  EmailAutomation,
+  EmailFollowup,
+  EmailInboxSummary,
+  EmailNarrativeDigest,
+  EmailPendingAction,
+  EmailCatchupSummary,
+  ReplyVariant,
+};
 
 async function parseJson<T>(res: Response): Promise<T> {
   const payload = (await res.json()) as T & { error?: string };
@@ -23,10 +35,104 @@ async function parseJson<T>(res: Response): Promise<T> {
   return payload;
 }
 
-export async function fetchInboxSummary(
-  accountId: string,
-): Promise<{ summary: EmailInboxSummary; unreadByFolder: Record<string, number> }> {
+export async function fetchInboxSummary(accountId: string): Promise<{
+  summary: EmailInboxSummary;
+  unreadByFolder: Record<string, number>;
+  digest: EmailNarrativeDigest | null;
+  pendingActions: EmailPendingAction[];
+  followups: EmailFollowup[];
+}> {
   const res = await fetch(`/api/email/accounts/${encodeURIComponent(accountId)}/summary`);
+  return parseJson(res);
+}
+
+export async function queueDigestActionGroup(
+  accountId: string,
+  groupId: string,
+): Promise<{ pending: EmailPendingAction }> {
+  const res = await fetch(
+    `/api/email/accounts/${encodeURIComponent(accountId)}/digest/groups/${encodeURIComponent(groupId)}/queue`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' },
+  );
+  return parseJson(res);
+}
+
+export async function applyPendingEmailAction(
+  accountId: string,
+  actionId: string,
+  options?: { alwaysAllow?: boolean },
+): Promise<{ action: EmailPendingAction }> {
+  const res = await fetch(
+    `/api/email/accounts/${encodeURIComponent(accountId)}/pending-actions/${encodeURIComponent(actionId)}/apply`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ alwaysAllow: options?.alwaysAllow === true }),
+    },
+  );
+  return parseJson(res);
+}
+
+export async function dismissPendingEmailAction(
+  accountId: string,
+  actionId: string,
+): Promise<{ action: EmailPendingAction }> {
+  const res = await fetch(
+    `/api/email/accounts/${encodeURIComponent(accountId)}/pending-actions/${encodeURIComponent(actionId)}/dismiss`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' },
+  );
+  return parseJson(res);
+}
+
+export async function sendPriorityFeedback(
+  accountId: string,
+  sender: string,
+  level: 'high' | 'low' | '',
+): Promise<{ sender: string; level: string }> {
+  const res = await fetch(
+    `/api/email/accounts/${encodeURIComponent(accountId)}/priority-feedback`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sender, level }),
+    },
+  );
+  return parseJson(res);
+}
+
+export async function dismissEmailFollowup(
+  accountId: string,
+  followupId: string,
+): Promise<{ followup: EmailFollowup }> {
+  const res = await fetch(
+    `/api/email/accounts/${encodeURIComponent(accountId)}/followups/${encodeURIComponent(followupId)}/dismiss`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' },
+  );
+  return parseJson(res);
+}
+
+export async function requestThreadSummary(
+  accountId: string,
+  threadId: string,
+  options?: { force?: boolean },
+): Promise<{ eligible: boolean; summary: EmailCatchupSummary | null }> {
+  const res = await fetch(
+    `/api/email/accounts/${encodeURIComponent(accountId)}/threads/${encodeURIComponent(threadId)}/summary`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force: options?.force === true }),
+    },
+  );
+  return parseJson(res);
+}
+
+export async function suggestEmailSubject(body: string): Promise<{ subject: string }> {
+  const res = await fetch('/api/email/suggest-subject', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body }),
+  });
   return parseJson(res);
 }
 
@@ -210,6 +316,9 @@ export function subscribeEmailEvents(
   source.addEventListener('message_new', handler);
   source.addEventListener('flags_changed', handler);
   source.addEventListener('automation_notify', handler);
+  source.addEventListener('digest_updated', handler);
+  source.addEventListener('pending_actions_updated', handler);
+  source.addEventListener('followups_updated', handler);
 
   return () => {
     source.close();

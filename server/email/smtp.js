@@ -6,7 +6,9 @@ import nodemailer from 'nodemailer';
 import MailComposer from 'nodemailer/lib/mail-composer/index.js';
 import { getEmailAccount, readAccountPassword } from './accounts.js';
 import { appendToSentFolder } from './imap-actions.js';
-import { getCachedMessage, listCachedThread } from './cache.js';
+import { getCachedMessage, listCachedThread, listRecentMessagesFromSender } from './cache.js';
+import { splitAddressHeader } from './contacts.js';
+import { styleProfilePromptBlock } from './style-profile.js';
 import { sanitizeEmailHtml } from './sanitize-html.js';
 import { wrapUntrusted } from '../security/untrusted.js';
 import { llmCall } from '../research/llm.js';
@@ -66,13 +68,40 @@ export async function draftReply(input) {
       )
       .join('\n\n---\n\n');
 
+    // Context recall (§3.6): the last couple of exchanges with this sender
+    // outside the current thread, so the draft can keep continuity.
+    const senderAddress = splitAddressHeader(String(headers.to ?? '')).address;
+    let historyBlock = '';
+    try {
+      const history = await listRecentMessagesFromSender(input.accountId, senderAddress, {
+        excludeThreadId: input.threadId,
+        limit: 2,
+      });
+      if (history.length > 0) {
+        historyBlock = history
+          .map(
+            (row) =>
+              `- ${row.date} "${row.subject}": ${wrapUntrusted(String(row.triage?.summary ?? row.bodyPreview ?? '').slice(0, 300), { source: 'email' })}`,
+          )
+          .join('\n');
+      }
+    } catch {
+      /* history is a nicety; a store hiccup must not block drafting */
+    }
+
+    const styleBlock = await styleProfilePromptBlock(account, input.accountId).catch(() => '');
+
     const userPrompt = [
       'Thread (untrusted bodies fenced):',
       threadBlock,
+      historyBlock ? `\nRecent history with this sender (untrusted, fenced):\n${historyBlock}` : '',
+      styleBlock ? `\n${styleBlock}` : '',
       instructions
         ? `\nUser instructions:\n${instructions}`
         : '\nDraft a concise, appropriate reply for this thread.',
-    ].join('\n');
+    ]
+      .filter(Boolean)
+      .join('\n');
 
     const completion = await llmCall({
       providerId: model.providerId,
@@ -253,6 +282,7 @@ export async function resolveReplyVariantSend(input) {
 
   return {
     accountId: input.accountId,
+    threadId: input.threadId,
     to: headers.to,
     subject: headers.subject,
     body: String(variant.body ?? ''),

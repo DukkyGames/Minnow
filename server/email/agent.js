@@ -22,6 +22,10 @@ import {
   updateReplyVariants,
 } from './cache.js';
 import { triageMessage } from './triage.js';
+import { computePriorityScore, loadSenderSignals } from './priority.js';
+import { satisfyFollowupsForMessage } from './followups.js';
+import { splitAddressHeader } from './contacts.js';
+import { styleProfilePromptBlock } from './style-profile.js';
 import { emitEmailEvent } from './events.js';
 import { evaluateAutomationsForMessage } from './automations.js';
 import { shouldDeferBackgroundEmailTriage } from './background-triage-guard.js';
@@ -116,28 +120,43 @@ export async function buildInboxSummary(accountId) {
     limit: 200,
   });
 
+  const senderSignals = await loadSenderSignals(
+    accountId,
+    inboxRows.map((row) => String(row.from ?? '')),
+  );
+
   /** @type {{ high: number, normal: number, low: number }} */
   const stats = { high: 0, normal: 0, low: 0 };
   /** @type {Array<Record<string, unknown>>} */
   const highlights = [];
 
   for (const row of inboxRows) {
-    const urgency = String(row.triage?.urgency ?? 'normal').toLowerCase();
-    if (urgency === 'high') {
-      stats.high += 1;
-    } else if (urgency === 'low') {
-      stats.low += 1;
-    } else {
-      stats.normal += 1;
-    }
+    const signals = senderSignals.get(String(row.from ?? ''));
+    const priority = computePriorityScore({
+      urgency: row.triage?.urgency,
+      category: row.triage?.category,
+      deadline: row.triage?.deadline,
+      repliedCount: signals?.repliedCount,
+      override: signals?.override,
+    });
 
-    if (row.triage?.summary && highlights.length < 8) {
+    // The instrumentation strip counts priority buckets, not raw LLM urgency,
+    // so a sender pinned always-low stops inflating "high" the moment the
+    // override lands.
+    stats[priority.bucket] += 1;
+
+    if (row.triage?.summary) {
       highlights.push({
         threadId: row.threadId,
         messageId: row.id,
         subject: row.subject,
         from: row.from,
         urgency: row.triage.urgency,
+        category: row.triage.category ?? 'fyi',
+        deadline: row.triage.deadline ?? '',
+        people: row.triage.people ?? [],
+        priority: priority.score,
+        priorityBucket: priority.bucket,
         summary: row.triage.summary,
         unseen: !row.flags?.seen,
         replyVariants: row.replyVariants ?? [],
@@ -146,14 +165,12 @@ export async function buildInboxSummary(accountId) {
   }
 
   highlights.sort((a, b) => {
-    const order = { high: 0, normal: 1, low: 2 };
-    const ua = order[String(a.urgency)] ?? 1;
-    const ub = order[String(b.urgency)] ?? 1;
-    if (ua !== ub) {
-      return ua - ub;
+    if (a.priority !== b.priority) {
+      return Number(b.priority) - Number(a.priority);
     }
-    return a.unseen ? -1 : 1;
+    return a.unseen === b.unseen ? 0 : a.unseen ? -1 : 1;
   });
+  highlights.splice(16);
 
   const lines = [];
   if (stats.high > 0) {
@@ -171,12 +188,14 @@ export async function buildInboxSummary(accountId) {
       ? 'Inbox is empty. Sync to fetch new mail.'
       : `${inboxRows.length} threads in inbox (${unread} unread). ${lines.join(', ')}.`;
 
+  // Up to 16 highlights are stored: the dashboard renders the first few, and
+  // the narrative digest (digest.js) consumes the top ~15 as its LLM input.
   const summary = {
     generatedAt: new Date().toISOString(),
     text,
     stats,
     unread,
-    highlights: highlights.slice(0, 6),
+    highlights,
   };
 
   await updateInboxSummary(accountId, summary);
@@ -211,12 +230,18 @@ export async function generateReplyVariants(accountId, threadId, options = {}) {
     )
     .join('\n\n---\n\n');
 
+  const account = await getEmailAccount(accountId);
+  const styleBlock = await styleProfilePromptBlock(account, accountId).catch(() => '');
+
   const instructions = String(options.instructions ?? '').trim();
   const userPrompt = [
     'Thread (untrusted bodies fenced):',
     threadBlock,
+    styleBlock ? `\n${styleBlock}` : '',
     instructions ? `\nUser instructions for variants:\n${instructions}` : '',
-  ].join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   try {
     const variants = /** @type {NonNullable<ReturnType<typeof parseReplyVariantsJson>>} */ (
@@ -353,6 +378,10 @@ export async function runAgentHooksAfterFolderSync(
   prevHighestUid,
   options = {},
 ) {
+  // Follow-up satisfaction runs before any triage gating or deferral: a reply
+  // arriving must clear "Waiting on" even when background LLM work is paused.
+  await satisfyIncomingFollowups(accountId, incoming, prevHighestUid);
+
   if (options.background && shouldDeferBackgroundEmailTriage().defer) {
     await buildInboxSummary(accountId);
     emitEmailEvent('summary_updated', { accountId });
@@ -474,6 +503,44 @@ export async function onNewMessages(accountId, newMessages, account, options = {
   await buildInboxSummary(accountId);
   emitEmailEvent('summary_updated', { accountId });
   return { processed };
+}
+
+/**
+ * Satisfy waiting follow-ups from genuinely new inbound messages.
+ * Skips mail authored by the account itself (a Sent-folder sync must not
+ * count your own reply as the other side answering).
+ * @param {string} accountId
+ * @param {Array<Record<string, unknown>>} incoming
+ * @param {number} prevHighestUid
+ */
+async function satisfyIncomingFollowups(accountId, incoming, prevHighestUid) {
+  if (!Array.isArray(incoming) || incoming.length === 0) {
+    return;
+  }
+  try {
+    const account = await getEmailAccount(accountId);
+    const selfAddresses = new Set(
+      [account?.username, account?.fromAddress]
+        .filter(Boolean)
+        .map((addr) => splitAddressHeader(String(addr)).address),
+    );
+
+    for (const row of incoming) {
+      if (Number(row.uid) <= prevHighestUid) {
+        continue;
+      }
+      const fromAddress = splitAddressHeader(String(row.from ?? '')).address;
+      if (fromAddress && selfAddresses.has(fromAddress)) {
+        continue;
+      }
+      await satisfyFollowupsForMessage(accountId, row);
+    }
+  } catch (err) {
+    console.warn(
+      `[email/agent] follow-up satisfaction failed for ${accountId}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
 }
 
 /**

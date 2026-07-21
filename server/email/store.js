@@ -148,12 +148,58 @@ function initSchema(database) {
       value TEXT NOT NULL DEFAULT ''
     );
 
+    CREATE TABLE IF NOT EXISTS pending_actions (
+      id TEXT PRIMARY KEY,
+      source TEXT NOT NULL DEFAULT '',
+      label TEXT NOT NULL DEFAULT '',
+      action TEXT NOT NULL DEFAULT '',
+      message_ids_json TEXT NOT NULL DEFAULT '[]',
+      thread_ids_json TEXT NOT NULL DEFAULT '[]',
+      dest_folder TEXT NOT NULL DEFAULT '',
+      state TEXT NOT NULL DEFAULT 'pending',
+      detail TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT '',
+      resolved_at TEXT NOT NULL DEFAULT ''
+    );
+
+    CREATE TABLE IF NOT EXISTS sender_overrides (
+      sender TEXT PRIMARY KEY,
+      level TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT ''
+    );
+
+    CREATE TABLE IF NOT EXISTS followups (
+      id TEXT PRIMARY KEY,
+      thread_id TEXT NOT NULL DEFAULT '',
+      message_id TEXT NOT NULL DEFAULT '',
+      to_addr TEXT NOT NULL DEFAULT '',
+      subject TEXT NOT NULL DEFAULT '',
+      sent_at TEXT NOT NULL DEFAULT '',
+      expected_by TEXT NOT NULL DEFAULT '',
+      state TEXT NOT NULL DEFAULT 'waiting',
+      notified INTEGER NOT NULL DEFAULT 0,
+      satisfied_at TEXT NOT NULL DEFAULT '',
+      satisfied_by TEXT NOT NULL DEFAULT ''
+    );
+
+    CREATE TABLE IF NOT EXISTS thread_vectors (
+      thread_id TEXT PRIMARY KEY,
+      input_hash TEXT NOT NULL DEFAULT '',
+      model TEXT NOT NULL DEFAULT '',
+      dim INTEGER NOT NULL DEFAULT 0,
+      vector_json TEXT NOT NULL DEFAULT '[]',
+      updated_at TEXT NOT NULL DEFAULT ''
+    );
+
     CREATE INDEX IF NOT EXISTS idx_messages_folder_date ON messages(folder, date_ms DESC);
     CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(thread_id);
     CREATE INDEX IF NOT EXISTS idx_messages_date ON messages(date_ms DESC);
     CREATE INDEX IF NOT EXISTS idx_messages_message_id ON messages(message_id);
     CREATE INDEX IF NOT EXISTS idx_automation_runs_rule ON automation_runs(rule_id);
     CREATE INDEX IF NOT EXISTS idx_drafts_thread ON drafts(thread_id);
+    CREATE INDEX IF NOT EXISTS idx_pending_actions_state ON pending_actions(state);
+    CREATE INDEX IF NOT EXISTS idx_followups_state ON followups(state);
+    CREATE INDEX IF NOT EXISTS idx_followups_thread ON followups(thread_id);
   `);
 
   migrateAddedColumns(database);

@@ -20,6 +20,29 @@ import {
 } from './cache.js';
 import { searchContacts } from './contacts.js';
 import {
+  applyPendingAction,
+  dismissPendingAction,
+  enqueuePendingAction,
+  listAutoAllowRules,
+  listPendingActions,
+  setAutoAllowRule,
+} from './pending-actions.js';
+import {
+  getCachedDigest,
+  generateNarrativeDigest,
+  maybeRefreshDigestInBackground,
+  queueDigestActionGroup,
+} from './digest.js';
+import { listSenderOverrides, setSenderOverride } from './priority.js';
+import { getThreadSummary, summarizeThread } from './thread-summary.js';
+import { dismissFollowup, listFollowups } from './followups.js';
+import { semanticRerankMessages } from './semantic-search.js';
+import {
+  clearStyleProfile,
+  generateStyleProfile,
+  getStyleProfile,
+} from './style-profile.js';
+import {
   listEmailFolders,
   loadMessageBody,
   syncFolderMessages,
@@ -36,7 +59,7 @@ import {
   blockImagesFromSender,
   listImageAllowlist,
 } from './image-allowlist.js';
-import { improveComposeText } from './compose-ai.js';
+import { improveComposeText, suggestEmailSubject } from './compose-ai.js';
 import {
   setMessageFlags,
   moveMessage,
@@ -44,7 +67,7 @@ import {
   deleteMessage,
   bulkMessageAction,
 } from './mail-actions.js';
-import { getOrBuildInboxSummary, generateReplyVariants } from './agent.js';
+import { buildInboxSummary, getOrBuildInboxSummary, generateReplyVariants } from './agent.js';
 import { syncFolderWithHooks } from './poller.js';
 import { handleEmailEventsSse } from './events.js';
 import {
@@ -211,14 +234,26 @@ export function createEmailMiddleware() {
         const perAccount = await Promise.all(
           accountIds.map(async (id) => {
             const result = await searchCachedMessages(id, { query, folder, offset, limit });
-            return result.messages.map((message) => ({ ...message, accountId: id }));
+            // Semantic rerank applies within one account (scores are not
+            // comparable across stores); multi-account results merge by date.
+            const messages =
+              accountIds.length === 1
+                ? await semanticRerankMessages(id, query, result.messages)
+                : result.messages;
+            return messages.map((message) => ({ ...message, accountId: id }));
           }),
         );
 
-        const messages = perAccount
-          .flat()
-          .sort((a, b) => new Date(String(b.date)).getTime() - new Date(String(a.date)).getTime())
-          .slice(0, Math.min(200, Math.max(1, limit || 50)));
+        const flat = perAccount.flat();
+        // Single-account results are already relevance-ordered by the rerank;
+        // only the multi-account merge needs an ordering imposed.
+        const merged =
+          accountIds.length === 1
+            ? flat
+            : flat.sort(
+                (a, b) => new Date(String(b.date)).getTime() - new Date(String(a.date)).getTime(),
+              );
+        const messages = merged.slice(0, Math.min(200, Math.max(1, limit || 50)));
 
         sendJson(res, 200, { messages, total: messages.length, query });
         return;
@@ -293,8 +328,149 @@ export function createEmailMiddleware() {
         if (tail === 'summary' && req.method === 'GET') {
           const summary = await getOrBuildInboxSummary(accountId);
           const unreadByFolder = await getFolderUnreadCounts(accountId);
-          sendJson(res, 200, { summary, unreadByFolder });
+          // The narrative digest, review queue and "Waiting on" ride along so
+          // the dashboard paints in one round trip. A stale narrative kicks a
+          // background regeneration that lands later via `digest_updated`.
+          const digest = await getCachedDigest(accountId);
+          maybeRefreshDigestInBackground(accountId);
+          const pendingActions = await listPendingActions(accountId);
+          const followups = await listFollowups(accountId, { state: 'waiting' });
+          sendJson(res, 200, { summary, unreadByFolder, digest, pendingActions, followups });
           return;
+        }
+
+        if (tail === 'digest' && req.method === 'POST') {
+          const digest = await generateNarrativeDigest(accountId, { force: true });
+          sendJson(res, 200, { digest });
+          return;
+        }
+
+        const digestGroupMatch = tail.match(/^digest\/groups\/([^/]+)\/queue$/);
+        if (digestGroupMatch && req.method === 'POST') {
+          const pending = await queueDigestActionGroup(
+            accountId,
+            decodeURIComponent(digestGroupMatch[1]),
+          );
+          sendJson(res, 200, { pending });
+          return;
+        }
+
+        if (tail === 'pending-actions' && req.method === 'GET') {
+          const params = parseQuery(req.url ?? '');
+          const actions = await listPendingActions(accountId, {
+            state: params.get('state') ?? 'pending',
+          });
+          const autoAllow = await listAutoAllowRules(accountId);
+          sendJson(res, 200, { actions, autoAllow });
+          return;
+        }
+
+        const pendingMatch = tail.match(/^pending-actions\/([^/]+)\/(apply|dismiss)$/);
+        if (pendingMatch && req.method === 'POST') {
+          const pendingId = decodeURIComponent(pendingMatch[1]);
+          const verb = pendingMatch[2];
+          if (verb === 'apply') {
+            const body = await readJsonBody(req);
+            // "Always allow" is granted at apply time — the click that applies
+            // the batch is the same click that extends trust to the rule.
+            if (body.alwaysAllow === true) {
+              const current = (await listPendingActions(accountId)).find(
+                (row) => row.id === pendingId,
+              );
+              if (current) {
+                await setAutoAllowRule(accountId, {
+                  source: current.source,
+                  action: current.action,
+                  allow: true,
+                });
+              }
+            }
+            sendJson(res, 200, { action: await applyPendingAction(accountId, pendingId) });
+            return;
+          }
+          sendJson(res, 200, { action: await dismissPendingAction(accountId, pendingId) });
+          return;
+        }
+
+        if (tail === 'pending-allow' && req.method === 'POST') {
+          const body = await readJsonBody(req);
+          const rules = await setAutoAllowRule(accountId, {
+            source: String(body.source ?? ''),
+            action: String(body.action ?? ''),
+            allow: body.allow !== false,
+          });
+          sendJson(res, 200, { autoAllow: rules });
+          return;
+        }
+
+        if (tail === 'priority-feedback' && req.method === 'POST') {
+          const body = await readJsonBody(req);
+          const result = await setSenderOverride(
+            accountId,
+            String(body.sender ?? ''),
+            String(body.level ?? ''),
+          );
+          // Rebuild so the dashboard reflects the correction immediately.
+          await buildInboxSummary(accountId);
+          sendJson(res, 200, result);
+          return;
+        }
+
+        if (tail === 'priority-overrides' && req.method === 'GET') {
+          sendJson(res, 200, { overrides: await listSenderOverrides(accountId) });
+          return;
+        }
+
+        if (tail === 'followups' && req.method === 'GET') {
+          const params = parseQuery(req.url ?? '');
+          const followups = await listFollowups(accountId, {
+            state: params.get('state') ?? 'waiting',
+          });
+          sendJson(res, 200, { followups });
+          return;
+        }
+
+        const followupMatch = tail.match(/^followups\/([^/]+)\/dismiss$/);
+        if (followupMatch && req.method === 'POST') {
+          const followup = await dismissFollowup(accountId, decodeURIComponent(followupMatch[1]));
+          sendJson(res, 200, { followup });
+          return;
+        }
+
+        if (tail === 'style-profile') {
+          if (req.method === 'GET') {
+            sendJson(res, 200, { profile: await getStyleProfile(accountId) });
+            return;
+          }
+          if (req.method === 'POST') {
+            const body = await readJsonBody(req);
+            const profile = await generateStyleProfile(accountId, {
+              force: body.force === true,
+            });
+            sendJson(res, 200, { profile });
+            return;
+          }
+          if (req.method === 'DELETE') {
+            sendJson(res, 200, await clearStyleProfile(accountId));
+            return;
+          }
+        }
+
+        const threadSummaryMatch = tail.match(/^threads\/([^/]+)\/summary$/);
+        if (threadSummaryMatch) {
+          const threadId = decodeURIComponent(threadSummaryMatch[1]);
+          if (req.method === 'GET') {
+            sendJson(res, 200, { summary: await getThreadSummary(accountId, threadId) });
+            return;
+          }
+          if (req.method === 'POST') {
+            const body = await readJsonBody(req);
+            const result = await summarizeThread(accountId, threadId, {
+              force: body.force === true,
+            });
+            sendJson(res, 200, result);
+            return;
+          }
         }
 
         if (tail === 'sync' && req.method === 'POST') {
@@ -615,6 +791,13 @@ export function createEmailMiddleware() {
       if (url === '/api/email/improve-text' && req.method === 'POST') {
         const body = await readJsonBody(req);
         const result = await improveComposeText(body);
+        sendJson(res, 200, result);
+        return;
+      }
+
+      if (url === '/api/email/suggest-subject' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const result = await suggestEmailSubject({ body: String(body.body ?? '') });
         sendJson(res, 200, result);
         return;
       }

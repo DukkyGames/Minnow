@@ -96,6 +96,14 @@ export function validateAccountInput(input) {
     pollingIntervalMinutes,
     folders: folders.length > 0 ? folders : DEFAULT_FOLDERS.slice(),
     signature: String(input.signature ?? '').slice(0, MAX_SIGNATURE_LENGTH),
+    // Optional AI-layer switches ride through only when explicitly provided,
+    // so an update that omits them cannot silently flip a stored preference.
+    ...(input.followupTracking !== undefined
+      ? { followupTracking: Boolean(input.followupTracking) }
+      : {}),
+    ...(input.styleProfileEnabled !== undefined
+      ? { styleProfileEnabled: Boolean(input.styleProfileEnabled) }
+      : {}),
   };
 }
 
@@ -227,6 +235,9 @@ export async function updateEmailAccount(accountId, input, password) {
       pollingEnabled: input.pollingEnabled ?? existing.pollingEnabled,
       pollingIntervalMinutes: input.pollingIntervalMinutes ?? existing.pollingIntervalMinutes,
       folders: input.folders ?? existing.folders,
+      signature: input.signature ?? existing.signature,
+      followupTracking: input.followupTracking ?? existing.followupTracking,
+      styleProfileEnabled: input.styleProfileEnabled ?? existing.styleProfileEnabled,
     }),
     id: accountId,
     secretRef: existing.secretRef,
