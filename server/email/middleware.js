@@ -75,6 +75,8 @@ import {
   createAutomation,
   updateAutomation,
   deleteAutomation,
+  dryRunAutomation,
+  listAutomationRunsForRule,
 } from './automations.js';
 import { getFolderUnreadCounts } from './cache.js';
 
@@ -196,6 +198,33 @@ export function createEmailMiddleware() {
         const body = await readJsonBody(req);
         const rule = await createAutomation(body);
         sendJson(res, 201, { rule });
+        return;
+      }
+
+      // Dry-run previews an unsaved rule against the store; must be matched
+      // before the `/automations/:id` catch so "dry-run" is not read as an id.
+      if (url === '/api/email/automations/dry-run' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const accountId = String(body.accountId ?? body.rule?.accountId ?? '').trim();
+        if (!accountId) {
+          sendJson(res, 400, { error: 'accountId is required' });
+          return;
+        }
+        const preview = await dryRunAutomation(accountId, body.rule ?? body, {
+          days: Number(body.days) || undefined,
+        });
+        sendJson(res, 200, preview);
+        return;
+      }
+
+      const automationRunsMatch = url.match(/^\/api\/email\/automations\/([^/]+)\/runs$/);
+      if (automationRunsMatch && req.method === 'GET') {
+        const ruleId = decodeURIComponent(automationRunsMatch[1]);
+        const params = parseQuery(req.url ?? '');
+        const runs = await listAutomationRunsForRule(ruleId, {
+          limit: Number(params.get('limit')) || undefined,
+        });
+        sendJson(res, 200, { runs });
         return;
       }
 
