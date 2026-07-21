@@ -5,6 +5,8 @@
 import type {
   EmailAccount,
   EmailAutomation,
+  EmailAutomationDryRun,
+  EmailAutomationRun,
   EmailDraft,
   EmailFollowup,
   EmailInboxSummary,
@@ -19,6 +21,8 @@ import { withSessionToken } from '../api/session-token.ts';
 
 export type {
   EmailAutomation,
+  EmailAutomationDryRun,
+  EmailAutomationRun,
   EmailFollowup,
   EmailInboxSummary,
   EmailNarrativeDigest,
@@ -293,6 +297,24 @@ export async function deleteAutomationRule(id: string): Promise<void> {
     method: 'DELETE',
   });
   await parseJson(res);
+}
+
+export async function fetchAutomationRuns(id: string): Promise<EmailAutomationRun[]> {
+  const res = await fetch(`/api/email/automations/${encodeURIComponent(id)}/runs`);
+  const data = await parseJson<{ runs: EmailAutomationRun[] }>(res);
+  return data.runs;
+}
+
+export async function dryRunAutomation(
+  rule: Partial<EmailAutomation> & { accountId: string },
+  days?: number,
+): Promise<EmailAutomationDryRun> {
+  const res = await fetch('/api/email/automations/dry-run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accountId: rule.accountId, rule, days }),
+  });
+  return parseJson<EmailAutomationDryRun>(res);
 }
 
 /**

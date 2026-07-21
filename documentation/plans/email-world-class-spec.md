@@ -350,8 +350,37 @@ As built:
   update path now also preserves `signature`, which previously blanked on
   every account edit.
 
-### Phase 5 — Automations v2
+### Phase 5 — Automations v2 ✅ shipped (MIN-356)
 Condition builder, mail-op actions through review queue, real OS notifications, dry-run, audit log + Runs UI.
+
+As built:
+
+- **Rule schema** (`server/email/automations.js`): a rule is now
+  `{ trigger, conditions: [{ field, op, value }], actions: [...], trusted }`.
+  `normalizeRule` migrates v1 rules (bare `action` + `config`) forward on
+  read, so old files keep working and the old `notify` maps onto `os_notify`.
+- **Conditions** AND-combine over `sender`/`domain`/`subject`/`category`/
+  `urgency` (text ops) and `has_attachment` (boolean); an empty list matches
+  everything. Matching is pure and case-insensitive.
+- **Actions**: `triage`, `generate_variants`, `mark_read`, `flag`, `archive`,
+  `move_to_folder`, `forward_to`, `os_notify`, `run_scheduler_job`. Mail-ops
+  route through the Phase 4 review queue by default; a rule the user marks
+  **trusted** applies them directly. `delete` is intentionally not an action.
+- **Guardrail** (Part 7, absolute): automations never send mail. `forward_to`
+  writes a *forward draft* (`drafts` store) for the user to send by hand — it
+  never reaches SMTP, trusted or not. This is the "confirm-queue".
+- **os_notify** fixes the D9 dead-end `notify`: it enqueues a real
+  `enqueueSchedulerNotification` (the same path follow-ups use for OS
+  notifications) and still emits the in-app `automation_notify` SSE.
+- **Audit log**: every action execution writes an `automation_runs` row
+  (rule, message row, action, outcome, detail). `GET /automations/:id/runs`
+  backs a Runs view per rule; the account is resolved from the rule itself.
+- **Dry-run**: `POST /automations/dry-run` evaluates a (possibly unsaved) rule
+  against messages stored in the last N days (default 7) and returns
+  "matched M of N" plus a small sample — no actions run.
+- **UI** (`src/ui/email/email-automations.ts`): full builder with add/remove
+  condition and action rows, contextual param inputs, trusted checkbox, a
+  dry-run button, and a per-rule Runs view — replacing the two-dropdown form.
 
 ### Phase 6 — Design polish pass
 Everything remaining from Part 5: quick-reply preview cards, dashboard visual refresh, states/feedback, a11y audit (axe pass, full keyboard traversal, focus management on pane switches), responsive ≤900px two-step flow re-check.
