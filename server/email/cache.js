@@ -430,6 +430,32 @@ export async function listCachedMessages(accountId, options = {}) {
 }
 
 /**
+ * Recent messages from one sender outside a given thread — context recall for
+ * draft prompts (§3.6): "what did we last talk about with this person".
+ * @param {string} accountId
+ * @param {string} senderAddress — bare lowercased address
+ * @param {{ excludeThreadId?: string, limit?: number }} [options]
+ */
+export async function listRecentMessagesFromSender(accountId, senderAddress, options = {}) {
+  const address = String(senderAddress ?? '').trim().toLowerCase();
+  if (!address || !address.includes('@')) {
+    return [];
+  }
+  const db = getMailDb(accountId);
+  const limit = Math.min(10, Math.max(1, Number(options.limit) || 4));
+  const excludeThreadId = String(options.excludeThreadId ?? '');
+
+  const rows = db
+    .prepare(
+      `SELECT ${MESSAGE_COLUMNS} FROM messages
+       WHERE lower(from_addr) LIKE ? AND thread_id != ?
+       ORDER BY date_ms DESC LIMIT ?`,
+    )
+    .all(`%${address}%`, excludeThreadId, limit);
+  return hydrateAttachments(db, rows);
+}
+
+/**
  * Turn a user query into a safe FTS5 MATCH expression (prefix-matched terms).
  * @param {string} raw
  */
@@ -555,7 +581,15 @@ export async function listCachedThreads(accountId, options = {}) {
     lastDate: row.last_date,
     folders: JSON.parse(row.folders_json || '[]'),
     snippet: row.snippet,
-    summary: row.summary ?? null,
+    // Stored as JSON by thread-summary.js; the API exposes just the text.
+    summary: (() => {
+      if (typeof row.summary !== 'string' || !row.summary) return null;
+      try {
+        return JSON.parse(row.summary)?.text ?? null;
+      } catch {
+        return row.summary;
+      }
+    })(),
   }));
 
   return { threads, total, offset, limit };

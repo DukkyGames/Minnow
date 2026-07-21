@@ -18,6 +18,7 @@ import { sendEmail } from './smtp.js';
 import { consumeSendAllowance } from './send-rate-limit.js';
 import { emitEmailEvent } from './events.js';
 import { recordSentRecipients } from './contacts.js';
+import { trackOutboundForFollowup } from './followups.js';
 
 /** How long a queued send can be recalled. */
 export const UNDO_WINDOW_MS = 8_000;
@@ -146,6 +147,9 @@ async function deliver(id) {
     } catch {
       /* a contact-book miss must never look like a send failure */
     }
+
+    // Reply-expected classification (§3.4) — fails open inside the module.
+    await trackOutboundForFollowup(row.entry.accountId, row.input, result);
 
     emitEmailEvent('outbox_sent', { entry: { ...row.entry }, messageId: result.messageId ?? null });
   } catch (err) {

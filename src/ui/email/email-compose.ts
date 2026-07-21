@@ -9,7 +9,10 @@ import {
   improveEmailText,
   sendEmailMessage,
 } from "../../email/client";
-import { regenerateReplyVariants } from "../../email/client-ext";
+import {
+  regenerateReplyVariants,
+  suggestEmailSubject,
+} from "../../email/client-ext";
 import {
   buildReferencesChain,
   collectAccountEmails,
@@ -290,6 +293,50 @@ export function mountEmailCompose(
   }
 
   fieldRow("Subject", subjectInput);
+
+  // Subject suggestion (§3.6) — offered only for new mail once the body has
+  // enough substance to name, and only while the subject is still empty.
+  if (options.mode === "new") {
+    const suggestRow = el("div", "email-compose-subject-suggest");
+    suggestRow.hidden = true;
+    const suggestBtn = el(
+      "button",
+      "email-compose-suggest-btn",
+      "Suggest subject",
+    ) as HTMLButtonElement;
+    suggestBtn.type = "button";
+    suggestBtn.title = "Let AI name this message from the draft body";
+    suggestRow.appendChild(suggestBtn);
+    mount.appendChild(suggestRow);
+
+    const refreshSuggestVisibility = (): void => {
+      const words = bodyEditor.getPlainText().split(/\s+/).filter(Boolean).length;
+      suggestRow.hidden = subjectInput.value.trim().length > 0 || words < 20;
+    };
+    bodyEditor.root.addEventListener("input", refreshSuggestVisibility);
+    subjectInput.addEventListener("input", refreshSuggestVisibility);
+
+    suggestBtn.addEventListener("click", async () => {
+      suggestBtn.disabled = true;
+      suggestBtn.textContent = "Suggesting…";
+      try {
+        const { subject } = await suggestEmailSubject(bodyEditor.getPlainText());
+        if (!subjectInput.value.trim()) {
+          subjectInput.value = subject;
+          subjectInput.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+        suggestRow.hidden = true;
+      } catch (err) {
+        options.onStatus?.(
+          "err",
+          err instanceof Error ? err.message : "Subject suggestion failed",
+        );
+      } finally {
+        suggestBtn.disabled = false;
+        suggestBtn.textContent = "Suggest subject";
+      }
+    });
+  }
 
   const variantRow = el("div", "email-compose-variants");
   if (canAutoGenerate) {

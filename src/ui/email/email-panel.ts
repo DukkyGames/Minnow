@@ -189,6 +189,37 @@ function renderAccountForm(mount: HTMLElement, options: AccountFormOptions): voi
     defaultRow.appendChild(defaultInput);
     defaultRow.appendChild(el('span', 'email-field-label', 'Default account'));
     form.appendChild(defaultRow);
+
+    const checkboxRow = (
+      name: string,
+      label: string,
+      checked: boolean,
+      title: string,
+    ): void => {
+      const row = el('label', 'email-field email-field-checkbox');
+      row.title = title;
+      const input = el('input') as HTMLInputElement;
+      input.type = 'checkbox';
+      input.name = name;
+      input.id = `email-${name}`;
+      input.checked = checked;
+      row.appendChild(input);
+      row.appendChild(el('span', 'email-field-label', label));
+      form.appendChild(row);
+    };
+
+    checkboxRow(
+      'followupTracking',
+      'Track sent mail awaiting replies',
+      existing.followupTracking !== false,
+      'Classify sent mail that expects an answer and surface it as "Waiting on"',
+    );
+    checkboxRow(
+      'styleProfileEnabled',
+      'AI writing-style profile (opt-in)',
+      existing.styleProfileEnabled === true,
+      'Distill a local style card from mail you wrote so AI drafts sound like you',
+    );
   }
 
   const actions = el('div', 'email-actions');
@@ -255,6 +286,12 @@ function renderAccountForm(mount: HTMLElement, options: AccountFormOptions): voi
       isDefault: editing
         ? data.get('isDefault') === 'on'
         : Boolean(options.isFirstAccount),
+      ...(editing
+        ? {
+            followupTracking: data.get('followupTracking') === 'on',
+            styleProfileEnabled: data.get('styleProfileEnabled') === 'on',
+          }
+        : {}),
     };
     if (password.trim()) {
       payload.password = password;
@@ -546,7 +583,13 @@ export async function renderEmailPanel(
       if (payload.accountId && payload.accountId !== activeAccount.id) {
         return;
       }
-      if (type === 'summary_updated' || type === 'message_new') {
+      if (
+        type === 'summary_updated' ||
+        type === 'message_new' ||
+        type === 'digest_updated' ||
+        type === 'pending_actions_updated' ||
+        type === 'followups_updated'
+      ) {
         if (viewMode === 'dashboard') {
           void renderView();
         }

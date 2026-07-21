@@ -30,6 +30,7 @@ import {
   fetchEmailMessagesExtended,
   fetchInboxSummary,
   moveEmailMessage,
+  requestThreadSummary,
   setEmailMessageFlags,
 } from "../../email/client-ext";
 
@@ -1263,6 +1264,31 @@ export async function renderEmailLayout(
       header.appendChild(secondaryActions);
 
       readerPane.appendChild(header);
+
+      // "Catch up" (§3.3) — a rolling summary atop genuinely long threads.
+      // Requested async so opening the thread never waits on the LLM; the
+      // server reuses its cached summary unless new mail changed the hash.
+      if (thread.length > 3 || thread.some((msg) => (msg.bodyText?.length ?? 0) > 8000)) {
+        const catchup = el("details", "email-reader-catchup");
+        catchup.open = true;
+        const catchupLabel = el("summary", "email-reader-catchup-label", "Catch up");
+        catchup.appendChild(catchupLabel);
+        const catchupBody = el("p", "email-reader-catchup-text", "Summarizing thread…");
+        catchup.appendChild(catchupBody);
+        readerPane.appendChild(catchup);
+
+        void requestThreadSummary(options.account.id, selected.threadId)
+          .then(({ eligible, summary }) => {
+            if (eligible && summary?.text) {
+              catchupBody.textContent = summary.text;
+            } else {
+              catchup.remove();
+            }
+          })
+          .catch(() => {
+            catchup.remove();
+          });
+      }
 
       const threadHasBodyToggle = thread.some((msg) =>
         emailBodySupportsViewToggle(msg),
