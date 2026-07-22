@@ -50,7 +50,6 @@
 | `settings-appearance.css` | Appearance editor |
 | `settings-agent-center.css` | Agent center |
 | `settings-about.css` | About section |
-| `settings-evals.css` | Evals UI |
 | `settings-updates.css` | [`settings-updates.ts`](../../src/ui/settings-updates.ts) |
 
 ## Code workspace

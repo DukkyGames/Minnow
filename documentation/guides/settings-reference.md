@@ -31,11 +31,12 @@ Open via **Settings** (`#/settings/<category>`) or legacy `#/settings/<area>`.
 | Category | Sections |
 |----------|----------|
 | **General** | General, Notifications, Audio, About |
+| **Apps** | Apps |
 | **Appearance** | Appearance |
 | **Models** | Providers, Routing, Sampler, Thinking, Usage & cost |
 | **Agents** | Prompts, Rules, Modes, Work agents, Agent packs, Sub-agents, Autopilot, Watchdog |
 | **Integrations** | Search, Deep Research, Servers, Tools, Skills, Browser, MCP, LSP, Editor, Webhooks, OAuth |
-| **Advanced** | Orchestration, Evals |
+| **Advanced** | Health & diagnostics |
 
 **Integrations hubs** (10 sub-tabs): Search · Deep Research · Servers · Tools · Skills · Browser · MCP servers · Language servers · Editor · External.
 
@@ -79,7 +80,28 @@ Open via **Settings** (`#/settings/<category>`) or legacy `#/settings/<area>`.
 
 ---
 
-## 2. Appearance
+## 2. Apps
+
+Choose which MinnowOS apps appear in the dock, menubar shortcuts, notifications, and agent `launch_minnow_app` choices. Changes apply immediately (no restart).
+
+| Setting | Persistence | Notes |
+|---------|-------------|-------|
+| App visibility | `localStorage` `minnow.os.disabledApps` | JSON array of disabled **optional** app ids. Missing key = all released optional apps enabled |
+| Always included | — | Chat, Models, Brain, Settings (cannot be disabled) |
+| Optional apps | same key | Code, Research, Experts, Benchmarking, Compare, Scheduler, Email, Calendar |
+
+**Behavior**
+
+- New users and installs with no stored preference start with every released optional app selected.
+- Disabling an optional app removes it from launch surfaces and closes any running instance of that app.
+- Developer-hidden apps (`releaseState: 'hidden'` in [`src/os/app-registry.ts`](../../src/os/app-registry.ts)) are omitted from this page and from all launch paths.
+- Blocked deep links for user-disabled apps return to the desktop and point users here to restore the app.
+
+Search keys: `apps.visibility`, `apps.core.<id>`, `apps.optional.<id>`.
+
+---
+
+## 3. Appearance
 
 Stored primarily in browser `localStorage` (custom token overrides may sync via appearance modules).
 
@@ -96,7 +118,7 @@ Stored primarily in browser `localStorage` (custom token overrides may sync via 
 
 ---
 
-## 3. Models
+## 4. Models
 
 ### Providers (`~/.minnow/providers/<id>/`)
 
@@ -183,7 +205,7 @@ See [`src/config/voice-meta.ts`](../../src/config/voice-meta.ts) and [`src/voice
 
 ---
 
-## 4. Agents
+## 5. Agents
 
 ### Prompts
 
@@ -287,7 +309,7 @@ Idle timeout resets when new tokens arrive; applies to the next generation witho
 
 ---
 
-## 5. Integrations
+## 6. Integrations
 
 ### Search (`search.json`)
 
@@ -385,11 +407,15 @@ Google and Microsoft: client ID, client secret (Microsoft: tenant ID). Tokens en
 
 ---
 
-## 6. Advanced
+## 7. Advanced
+
+### Health & diagnostics
+
+Subsystem probes, grouped errors, and a local log tail. Nothing is sent off-device.
 
 ### Orchestration (`config.supervisor`)
 
-> **Gap:** Settings → Orchestration section exists in `index.html` (`#settingsSupervisorBody`) but **no full UI renderer is wired yet**. Edit `config.json` directly or use defaults from [`server/config/validators.js`](../../server/config/validators.js).
+No Settings page. Board-facing defaults live under Settings → **Autopilot**. Low-level supervisor keys are edited in `config.json` (defaults in [`server/config/validators.js`](../../server/config/validators.js)).
 
 | Setting | Default |
 |---------|---------|
@@ -419,7 +445,7 @@ Legacy `selfHealing` tier1/tier2 in config (superseded by supervisor + autopilot
 
 ### Evals (`~/.minnow/evals/`)
 
-Task packs, suite composer, results leaderboard. Link to Bench app tests from Settings.
+No Settings page. Headless task packs and runs live under `server/evals/` / `~/.minnow/evals/`. In-app model batteries use the **Bench** app (`#/app/bench`).
 
 ---
 

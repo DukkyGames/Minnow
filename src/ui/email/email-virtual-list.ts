@@ -65,6 +65,8 @@ export function createVirtualList<T>(options: {
   rowHeight: number;
   renderRow: (item: T, index: number) => HTMLElement;
   className?: string;
+  /** Accessible name for the list; rows are exposed as list items. */
+  ariaLabel?: string;
   /** Rendered instead of rows when the list is empty. */
   renderEmpty?: () => HTMLElement;
 }): VirtualListHandle<T> {
@@ -85,9 +87,16 @@ export function createVirtualList<T>(options: {
     if (items.length === 0) {
       padTop.style.height = '0px';
       padBottom.style.height = '0px';
+      // Drop the list role while empty: a role="list" may only contain list
+      // items, and the empty state is a plain block.
+      body.removeAttribute('role');
+      body.removeAttribute('aria-label');
       body.replaceChildren(options.renderEmpty?.() ?? document.createDocumentFragment());
       return;
     }
+
+    body.setAttribute('role', 'list');
+    if (options.ariaLabel) body.setAttribute('aria-label', options.ariaLabel);
 
     const window_ = computeWindow({
       scrollTop: root.scrollTop,

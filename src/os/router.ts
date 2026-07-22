@@ -13,7 +13,8 @@ import {
   queueDesktopExpertsActivation,
   queueDesktopResearchActivation,
 } from './desktop-state';
-import { isAppId } from './app-registry';
+import { getAppById, isAppId } from './app-registry';
+import { getAppUnavailableReason, isAppAvailable } from './app-preferences';
 import { ensureGlobalBugsInitialized } from './app-modules';
 import {
   closeInstance,
@@ -25,6 +26,24 @@ import {
 } from './instances';
 import { osOnAppClose, osOnAppOpen } from './page-bridge';
 import type { AppId, CodeSectionId, LaunchOptions, OsRoute } from './types';
+
+/** Explain blocked deep links for user-disabled apps; stay quiet for developer-hidden. */
+function notifyAppUnavailable(appId: AppId): void {
+  const reason = getAppUnavailableReason(appId);
+  if (reason !== 'user-disabled') return;
+  const name = getAppById(appId)?.name ?? 'That app';
+  void import('../ui/toast').then((m) => {
+    m.showToast(`${name} is turned off. Restore it in Settings → Apps.`, 'error');
+  });
+}
+
+/** Block unavailable apps: toast (when user-disabled) and return to desktop. */
+function rejectUnavailableApp(appId: AppId): boolean {
+  if (isAppAvailable(appId)) return false;
+  notifyAppUnavailable(appId);
+  navigateToDesktop();
+  return true;
+}
 
 let initialized = false;
 let applyingRoute = false;
@@ -225,6 +244,16 @@ function applyRoute(route: OsRoute, options?: LaunchOptions): void {
     return;
   }
 
+  if (!isAppAvailable(route.appId)) {
+    notifyAppUnavailable(route.appId);
+    syncForegroundLifecycle(null);
+    showDesktop();
+    if (typeof window !== 'undefined' && window.location.hash !== '#/desktop') {
+      window.location.hash = '#/desktop';
+    }
+    return;
+  }
+
   const routeFields: LaunchOptions = {};
   if (route.settingsSection) {
     routeFields.settingsSection = route.settingsSection;
@@ -306,6 +335,8 @@ export function navigateToDesktop(): void {
 
 /** Launch or foreground an app and update the hash. */
 export function launchApp(appId: AppId, options?: LaunchOptions): void {
+  if (rejectUnavailableApp(appId)) return;
+
   if (appId === 'chat') {
     queueDesktopChatActivation(options);
     navigateToDesktop();

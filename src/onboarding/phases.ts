@@ -14,6 +14,7 @@ export interface OnboardingPhase {
 export const ONBOARDING_PHASES: OnboardingPhase[] = [
   { id: 'start', label: 'Welcome', stepIds: ['welcome'] },
   { id: 'look', label: 'Appearance', stepIds: ['theme'] },
+  { id: 'apps', label: 'Apps', stepIds: ['apps'] },
   {
     id: 'models',
     label: 'Models',

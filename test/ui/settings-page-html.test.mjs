@@ -13,6 +13,8 @@ const SETTINGS_SECTION_IDS = [
   'notifications',
   'appearance',
   'audio',
+  'about',
+  'apps',
   'providers',
   'usage',
   'model-routing',
@@ -33,16 +35,14 @@ const SETTINGS_SECTION_IDS = [
   'lsp',
   'editor',
   'webhooks',
-  'features',
   'diagnostics',
-  'evals',
-  'about',
 ];
 
 /** Sections populated by refreshSettingsSection via clearMount(). */
 const DYNAMIC_SECTION_BODY_IDS = [
   'settingsGeneralBody',
   'settingsNotificationsBody',
+  'settingsAppsBody',
   'settingsAudioBody',
   'settingsModelRoutingBody',
   'settingsSamplerBody',
@@ -121,7 +121,7 @@ describe('settings page HTML', () => {
   });
 
   test('SETTINGS_SECTION_IDS matches canonical section count', () => {
-    assert.equal(SETTINGS_SECTION_IDS.length, 28);
+    assert.equal(SETTINGS_SECTION_IDS.length, 27);
   });
 
   test('agents center mount exists in index.html', () => {
@@ -163,19 +163,34 @@ describe('settings page HTML', () => {
   test('diagnostics section matches other general-style settings mounts', () => {
     const diagnosticsBlock = html.slice(
       html.indexOf('id="settingsSection-diagnostics"'),
-      html.indexOf('id="settingsSection-evals"'),
     );
     assert.match(diagnosticsBlock, /id="settingsDiagnosticsBody"/);
     assert.doesNotMatch(diagnosticsBlock, /class="settings-lead"/);
   });
 
+  test('orchestration and evals settings pages are removed', () => {
+    assert.doesNotMatch(html, /id="settingsSection-features"/);
+    assert.doesNotMatch(html, /id="settingsSection-evals"/);
+    assert.doesNotMatch(html, /data-settings-nav-area="features"/);
+    assert.doesNotMatch(html, /data-settings-nav-area="evals"/);
+    assert.doesNotMatch(html, /id="settingsSupervisorBody"/);
+    assert.doesNotMatch(html, /id="settingsEvalsBody"/);
+  });
+
   test('about section matches other general settings mounts', () => {
     const aboutBlock = html.slice(
       html.indexOf('id="settingsSection-about"'),
-      html.indexOf('id="settingsSection-appearance"'),
+      html.indexOf('id="settingsSection-apps"'),
     );
     assert.match(aboutBlock, /id="settingsAboutBody"/);
     assert.doesNotMatch(aboutBlock, /class="settings-lead"/);
+  });
+
+  test('apps section is a top-level settings category mount', () => {
+    assert.match(html, /data-settings-nav-group="apps"/);
+    assert.match(html, /id="settingsSection-apps"/);
+    assert.match(html, /id="settingsAppsBody"/);
+    assert.match(html, /data-category="apps"/);
   });
 
   test('voice settings redirect notice in index.html', () => {

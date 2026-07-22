@@ -29,6 +29,7 @@ export {
 export type SettingsSectionId =
   | 'general'
   | 'notifications'
+  | 'apps'
   | 'appearance'
   | 'audio'
   | 'providers'
@@ -55,8 +56,6 @@ export type SettingsSectionId =
   | 'editor'
   | 'skills'
   | 'webhooks'
-  | 'features'
-  | 'evals'
   | 'diagnostics'
   | 'about';
 
@@ -64,6 +63,7 @@ export type SettingsSectionId =
 export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   general: 'General',
   notifications: 'Notifications',
+  apps: 'Apps',
   appearance: 'Appearance',
   audio: 'Audio',
   providers: 'Providers',
@@ -90,14 +90,13 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   editor: 'Editor',
   skills: 'Skills',
   webhooks: 'Webhooks',
-  features: 'Orchestration',
-  evals: 'Evals',
   diagnostics: 'Health & diagnostics',
   about: 'About',
 };
 
 export type SettingsNavGroupId =
   | 'app'
+  | 'apps'
   | 'agents'
   | 'integrations'
   | 'advanced';
@@ -111,6 +110,7 @@ export type SettingsNavGroup = {
 /** Sidebar groups and nav order (must match index.html section order). */
 export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   { id: 'app', label: 'App', sections: ['general', 'notifications', 'appearance', 'audio', 'about'] },
+  { id: 'apps', label: 'Apps', sections: ['apps'] },
   {
     id: 'agents',
     label: 'Agents',
@@ -130,7 +130,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     id: 'advanced',
     label: 'Advanced',
-    sections: ['features', 'diagnostics', 'evals'],
+    sections: ['diagnostics'],
   },
 ];
 

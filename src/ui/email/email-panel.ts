@@ -423,6 +423,14 @@ export async function renderEmailPanel(
   const shell = el('div', 'email-shell email-shell-agent');
   const chrome = el('header', 'email-chrome');
   const body = el('div', 'email-body email-body-fill');
+  // The body is the tab panel; -1 lets focus land here on a view switch.
+  body.id = 'email-view-panel';
+  body.setAttribute('role', 'tabpanel');
+  body.tabIndex = -1;
+
+  // Announces the active view to assistive tech when tabs change.
+  const liveRegion = el('div', 'visually-hidden');
+  liveRegion.setAttribute('aria-live', 'polite');
 
   // A hairline progress bar under the chrome carries sync state, replacing the
   // disabled-button-as-status pattern. Ref-counted so overlapping syncs (manual
@@ -500,7 +508,11 @@ export async function renderEmailPanel(
     const btn = el('button', 'email-chrome-segment') as HTMLButtonElement;
     btn.type = 'button';
     btn.setAttribute('role', 'tab');
+    btn.id = `email-tab-${mode}`;
+    btn.setAttribute('aria-controls', 'email-view-panel');
     btn.dataset.view = mode;
+    // Roving tabindex: only the active tab is a Tab stop; arrows move within.
+    btn.tabIndex = -1;
     btn.innerHTML = `${icon}<span class="email-chrome-segment-label">${label}</span>`;
     return btn;
   };
@@ -524,18 +536,36 @@ export async function renderEmailPanel(
   shell.appendChild(chrome);
   shell.appendChild(syncBar);
   shell.appendChild(body);
+  shell.appendChild(liveRegion);
   mount.replaceChildren(shell);
+
+  const viewTabs = [dashBtn, mailBtn, autoBtn];
+  const VIEW_LABELS: Record<EmailViewMode, string> = {
+    dashboard: 'Dashboard',
+    mail: 'Mail',
+    automations: 'Automations',
+    setup: 'Account settings',
+  };
 
   const setActiveTab = (mode: EmailViewMode) => {
     viewMode = mode;
-    for (const btn of [dashBtn, mailBtn, autoBtn]) {
+    for (const btn of viewTabs) {
       const active = btn.dataset.view === mode;
       btn.classList.toggle('is-active', active);
       btn.setAttribute('aria-selected', active ? 'true' : 'false');
+      btn.tabIndex = active ? 0 : -1;
     }
+    body.setAttribute('aria-labelledby', `email-tab-${mode}`);
   };
 
   setActiveTab(viewMode);
+
+  /** Switch views from a tab: render, then announce so SR users hear it. */
+  const activateTab = (mode: EmailViewMode): void => {
+    setActiveTab(mode);
+    liveRegion.textContent = `${VIEW_LABELS[mode]} view`;
+    void renderView();
+  };
 
   const renderView = async () => {
     if (accountFormMode !== 'none') {
@@ -604,17 +634,29 @@ export async function renderEmailPanel(
     }
   };
 
-  dashBtn.addEventListener('click', () => {
-    setActiveTab('dashboard');
-    void renderView();
-  });
-  mailBtn.addEventListener('click', () => {
-    setActiveTab('mail');
-    void renderView();
-  });
-  autoBtn.addEventListener('click', () => {
-    setActiveTab('automations');
-    void renderView();
+  dashBtn.addEventListener('click', () => activateTab('dashboard'));
+  mailBtn.addEventListener('click', () => activateTab('mail'));
+  autoBtn.addEventListener('click', () => activateTab('automations'));
+
+  // Arrow / Home / End move between tabs and activate, per the WAI-ARIA tabs
+  // pattern; focus follows the roving tabindex set in setActiveTab.
+  segments.addEventListener('keydown', (event) => {
+    const current = viewTabs.findIndex((btn) => btn.dataset.view === viewMode);
+    let nextIndex = -1;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+      nextIndex = (current + 1) % viewTabs.length;
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+      nextIndex = (current - 1 + viewTabs.length) % viewTabs.length;
+    } else if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = viewTabs.length - 1;
+    }
+    if (nextIndex < 0) return;
+    event.preventDefault();
+    const nextBtn = viewTabs[nextIndex];
+    activateTab(nextBtn.dataset.view as EmailViewMode);
+    nextBtn.focus();
   });
 
   accountSelect.addEventListener('change', () => {

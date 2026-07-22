@@ -97,6 +97,7 @@ import {
 import { renderAboutSettingsSection } from './settings-about';
 import { renderDiagnosticsSettingsSection } from './settings-diagnostics';
 import { renderAppearanceSettingsSection } from './settings-appearance';
+import { renderAppsSettingsSection } from './settings-apps';
 import { renderAgentCenterPanel } from './settings-agent-center';
 import { renderRulesSettingsSection } from './settings-rules';
 import {
@@ -2042,14 +2043,6 @@ async function renderWebhooksSection(): Promise<void> {
   await renderWebhooksSettingsSection(mount);
 }
 
-async function renderEvalsSection(): Promise<void> {
-  const mount = clearMount('settingsEvalsBody');
-  if (!mount) return;
-  mount.innerHTML =
-    '<p class="settings-field-hint">Eval runs and custom task packs moved to the Benchmark app.</p>' +
-    '<p><a href="#/app/bench/tests" class="settings-link">Open Benchmark → Tests</a></p>';
-}
-
 async function renderRulesSection(): Promise<void> {
   const mount = clearMount('settingsRulesBody');
   if (!mount) return;
@@ -2070,14 +2063,16 @@ async function renderRulesSection(): Promise<void> {
   await renderRulesSettingsSection(content, setStatus);
 }
 
-async function renderFeaturesSection(): Promise<void> {
-  /* Memory injection toggle moved to Brain → Memories. */
-}
-
 async function renderAppearanceSection(): Promise<void> {
   const mount = clearMount('settingsAppearanceBody');
   if (!mount) return;
   renderAppearanceSettingsSection(mount);
+}
+
+async function renderAppsSection(): Promise<void> {
+  const mount = clearMount('settingsAppsBody');
+  if (!mount) return;
+  renderAppsSettingsSection(mount);
 }
 
 /** Load or refresh one settings section from live APIs. */
@@ -2090,6 +2085,9 @@ export async function refreshSettingsSection(
       break;
     case 'notifications':
       await renderNotificationsSection();
+      break;
+    case 'apps':
+      await renderAppsSection();
       break;
     case 'appearance':
       await renderAppearanceSection();
@@ -2141,9 +2139,6 @@ export async function refreshSettingsSection(
     case 'watchdog':
       await renderWatchdogSection();
       break;
-    case 'features':
-      await renderFeaturesSection();
-      break;
     case 'search':
       await renderSearchSettingsSectionWrapper();
       break;
@@ -2173,9 +2168,6 @@ export async function refreshSettingsSection(
       break;
     case 'webhooks':
       await renderWebhooksSection();
-      break;
-    case 'evals':
-      await renderEvalsSection();
       break;
     default:
       break;

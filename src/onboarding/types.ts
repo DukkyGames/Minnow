@@ -9,6 +9,7 @@ import type { WallpaperMode } from '../os/wallpaper';
 export type OnboardingStepId =
   | 'welcome'
   | 'theme'
+  | 'apps'
   | 'provider-choice'
   | 'provider-local'
   | 'provider-managed'

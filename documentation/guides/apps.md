@@ -30,7 +30,7 @@ Blind A/B testing (`#/app/compare`). Pick **2–6 models**, choose **Parallel** 
 
 ## Bench
 
-In-app benchmark battery for the active model with run history — complements the headless **eval harness** (Settings → Evals). Plan: `documentation/plans/benchmark-system-implementation.md`.
+In-app benchmark battery for the active model with run history — complements the headless **eval harness** (`server/evals/`, `~/.minnow/evals/`). Plan: `documentation/plans/benchmark-system-implementation.md`.
 
 ## Research
 
@@ -60,7 +60,7 @@ Local recurring agent jobs (`~/.minnow/scheduler.json`) as a side panel. Each jo
 
 ## Settings
 
-Full-page sections at `#/app/settings` (and legacy `#/settings/<section>` redirects): General (appearance, notifications), Tools, Modes, Skills, MCP, LSP, Sub-agents, Work agents, Rules, Prompting (profiles + diffing), Providers/Models, Webhooks, Evals, Audio, and more. **Memory** settings live in the **Brain** app. A search box indexes settings (memory-related queries open Brain).
+Full-page sections at `#/app/settings` (and legacy `#/settings/<section>` redirects): General (appearance, notifications), Tools, Modes, Skills, MCP, LSP, Sub-agents, Work agents, Rules, Prompting (profiles + diffing), Providers/Models, Webhooks, Audio, Health & diagnostics, and more. **Memory** settings live in the **Brain** app. A search box indexes settings (memory-related queries open Brain).
 
 ---
 

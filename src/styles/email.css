@@ -129,7 +129,10 @@
 .email-btn-primary {
   background: var(--mn-accent);
   border-color: var(--mn-accent);
-  color: var(--mn-accent-fg, #fff);
+  /* --mn-fg-on-accent is the per-theme high-contrast ink for the accent; the
+     old --mn-accent-fg was undefined and fell back to white, which is 1.9:1 on
+     the light-green accent. */
+  color: var(--mn-fg-on-accent, #0b1410);
 }
 
 .email-btn-danger {
@@ -1244,7 +1247,7 @@
   border: 1px solid var(--mn-accent);
   border-radius: var(--radius-md, 10px);
   background: var(--mn-accent);
-  color: var(--mn-accent-fg, var(--mn-bg));
+  color: var(--mn-fg-on-accent, var(--mn-bg));
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -1317,7 +1320,7 @@
   padding: 1px 6px;
   border-radius: 999px;
   background: var(--mn-accent);
-  color: var(--mn-accent-fg, var(--mn-bg));
+  color: var(--mn-fg-on-accent, var(--mn-bg));
   font-size: 10px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;

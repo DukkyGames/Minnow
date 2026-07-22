@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { initDockLauncher } from '../../src/os/dock-launcher.ts';
+import {
+  resetAppPreferencesForTests,
+  setAppEnabled,
+} from '../../src/os/app-preferences.ts';
 import { resetDesktopStateForTests } from '../../src/os/desktop-state.ts';
 import {
   launchInstance,
@@ -34,7 +38,9 @@ describe('dock launcher open highlights', () => {
     g.document = win.document;
     g.HTMLElement = win.HTMLElement;
     g.localStorage = win.localStorage;
+    win.localStorage.clear();
     win.document.body.innerHTML = '<div id="osDockLayer"></div>';
+    resetAppPreferencesForTests();
     resetInstancesForTests();
     resetDesktopStateForTests();
     resetWindowManagerForTests();
@@ -44,6 +50,7 @@ describe('dock launcher open highlights', () => {
   afterEach(() => {
     cleanup?.();
     cleanup = undefined;
+    resetAppPreferencesForTests();
   });
 
   test('marks window apps open when an instance exists', () => {
@@ -72,5 +79,14 @@ describe('dock launcher open highlights', () => {
     assert.equal(models.classList.contains('is-active'), true);
     assert.equal(dockOpenDot('settings')?.hidden, false);
     assert.equal(dockOpenDot('models')?.hidden, false);
+  });
+
+  test('removes disabled optional apps from the dock immediately', () => {
+    assert.ok(dockTile('compare'));
+    setAppEnabled('compare', false);
+    assert.equal(dockTile('compare'), null);
+    assert.ok(dockTile('settings'));
+    setAppEnabled('compare', true);
+    assert.ok(dockTile('compare'));
   });
 });
