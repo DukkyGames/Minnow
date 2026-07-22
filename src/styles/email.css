@@ -915,6 +915,82 @@
   }
 }
 
+/* An active chip/reprompt is the one whose panel is open below. */
+.email-dash-variant-chip.is-active,
+.email-dash-variant-reprompt.is-active {
+  border-style: solid;
+  border-color: var(--mn-accent);
+  color: var(--mn-fg);
+  background: color-mix(in srgb, var(--mn-accent) 8%, var(--mn-bg));
+}
+
+/* Inline preview / reprompt area under the chips — borders, never a modal. */
+.email-dash-reply-panel {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md, 10px);
+  background: var(--mn-bg-elevated, var(--mn-bg));
+  animation: email-dash-reply-in 0.16s var(--ease-out, ease-out);
+}
+
+@keyframes email-dash-reply-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.email-dash-reply-preview {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--mn-fg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 12em;
+  overflow-y: auto;
+}
+
+.email-dash-reply-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.email-dash-reply-cancel {
+  color: var(--mn-fg-muted);
+}
+
+.email-dash-reprompt-field {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.email-dash-reprompt-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.email-dash-reprompt-input {
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .email-dash-reply-panel {
+    animation: none;
+  }
+}
+
 .email-dash-empty {
   padding: 20px 10px 8px;
   max-width: 42ch;
@@ -2022,6 +2098,78 @@
   justify-content: flex-end;
   gap: 8px;
   padding-top: 4px;
+}
+
+/* Inline compose notices sit above the action row instead of interrupting
+   with a dialog: the attachment warning and the send-later scheduler. */
+.email-compose-warning,
+.email-compose-schedule {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md, 10px);
+  background: var(--mn-bg-elevated, var(--mn-bg));
+  animation: email-compose-notice-in 0.16s var(--ease-out, ease-out);
+}
+
+.email-compose-warning {
+  border-color: color-mix(in srgb, var(--mn-warning, oklch(0.8 0.12 85)) 45%, var(--mn-border));
+  background: color-mix(in srgb, var(--mn-warning, oklch(0.8 0.12 85)) 8%, var(--mn-bg-elevated, var(--mn-bg)));
+}
+
+.email-compose-warning-text {
+  font-size: 13px;
+  color: var(--mn-fg);
+}
+
+.email-compose-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.email-compose-schedule-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.email-compose-schedule-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.email-compose-schedule-input {
+  max-width: 260px;
+}
+
+.email-btn.is-active {
+  border-color: var(--mn-accent);
+  color: var(--mn-fg);
+}
+
+@keyframes email-compose-notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .email-compose-warning,
+  .email-compose-schedule {
+    animation: none;
+  }
 }
 
 .email-automations-head {
