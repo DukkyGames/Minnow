@@ -78,7 +78,7 @@ export function renderDesktop(root: HTMLElement): () => void {
 
   const greetSub = document.createElement('p');
   greetSub.className = 'mn-os-greet-sub';
-  greetSub.textContent = "What should we get into? Tell me below — we'll start in chat.";
+  greetSub.textContent = "What should we get into today?";
 
   hero.append(greetTime, greet, greetSub);
 

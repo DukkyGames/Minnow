@@ -72,13 +72,10 @@ export function initShellHandlers(): void {
     void import('./settings-page').then((m) => m.openSettingsFromTopbar());
   });
 
-  for (const el of document.querySelectorAll<HTMLButtonElement>('.settings-inline-link')) {
-    if (el.dataset.shellWired === '1') continue;
-    el.dataset.shellWired = '1';
-    el.addEventListener('click', () => {
-      void import('../ui/experts/experts-hub').then((m) => m.openExpertLabFromTopbar());
-    });
-  }
+  // Drawer-only Experts hint — do not bind every .settings-inline-link (settings cross-links).
+  wireClick('drawerExpertsLink', () => {
+    void import('../ui/experts/experts-hub').then((m) => m.openExpertLabFromTopbar());
+  });
 
   // Settings drawer
   wireClick('drawerOverlay', closeDrawer);
