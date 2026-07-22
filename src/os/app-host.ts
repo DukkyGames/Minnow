@@ -38,6 +38,8 @@ const APP_LAYER_IDS: Record<AppId, string> = {
 
 let initialized = false;
 let lastForegroundApp: AppId | null = null;
+/** Last Settings section applied via openAppPage (window deep-links). */
+let lastAppliedSettingsSection: string | undefined;
 const mountedWindowInstances = new Set<string>();
 
 function getAppsLayer(): HTMLElement | null {
@@ -341,7 +343,22 @@ async function ensureWindowSurface(
     const layer = layerForApp(appId);
     if (!layer?.classList.contains('is-open')) {
       await openAppPage(appId, options);
+      if (appId === 'settings') {
+        lastAppliedSettingsSection =
+          options?.settingsSection ?? getCurrentRoute().settingsSection ?? 'general';
+      }
     }
+    return;
+  }
+
+  // Settings hash stays `#/app/settings` — re-open when the section deep-link changes.
+  if (
+    appId === 'settings' &&
+    options?.settingsSection &&
+    options.settingsSection !== lastAppliedSettingsSection
+  ) {
+    lastAppliedSettingsSection = options.settingsSection;
+    await openAppPage(appId, options);
   }
 }
 
@@ -351,6 +368,9 @@ function teardownWindowSurface(instanceId: string, appId: AppId): void {
 
   layerForApp(appId)?.classList.remove('is-open');
   runWindowTeardown(appId);
+  if (appId === 'settings') {
+    lastAppliedSettingsSection = undefined;
+  }
 
   stashWindowContent(appId);
   const win = windowManager.findWindowByInstance(instanceId);
@@ -481,6 +501,7 @@ export function initAppHost(): void {
 export function resetAppHostForTests(): void {
   initialized = false;
   lastForegroundApp = null;
+  lastAppliedSettingsSection = undefined;
   mountedWindowInstances.clear();
   const appsLayer = getAppsLayer();
   if (appsLayer) delete appsLayer.dataset.mounted;

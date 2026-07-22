@@ -102,7 +102,7 @@ const MODELS_APP_SECTION_BY_SETTINGS: Partial<Record<string, string>> = {
   usage: 'usage',
 };
 
-/** Jump to another settings section via hash (works before page is open). */
+/** Jump to another settings (or Models) section. Uses open APIs, not hash-only. */
 export function linkToSettingsSection(
   label: string,
   sectionId: string,
@@ -112,13 +112,19 @@ export function linkToSettingsSection(
   btn.className = 'settings-inline-link';
   btn.textContent = label;
   btn.addEventListener('click', () => {
+    // Models-owned areas always open the Models app (legacy #/settings redirects).
     const modelsSection = MODELS_APP_SECTION_BY_SETTINGS[sectionId];
-    const modelsOpen = document.getElementById('modelsView')?.classList.contains('is-open');
-    if (modelsSection && modelsOpen) {
-      void import('./models-page').then((m) => m.openModels(modelsSection as import('./models-page').ModelsSectionId));
+    if (modelsSection) {
+      void import('./models-page').then((m) =>
+        m.openModels(modelsSection as import('./models-page').ModelsSectionId),
+      );
       return;
     }
-    window.location.hash = `#/settings/${sectionId}`;
+    // Call openSettings directly so MinnowOS re-applies the section when the
+    // Settings window is already open (hash → #/app/settings is a no-op then).
+    void import('./settings-page').then((m) => {
+      m.openSettings(sectionId as import('./settings-page-types').SettingsSectionId);
+    });
   });
   return btn;
 }
