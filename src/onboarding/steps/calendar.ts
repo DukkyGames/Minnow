@@ -7,6 +7,7 @@ import {
   fetchCalendars,
   importIcsFromUrl,
 } from '../../calendar/client';
+import { isAppEnabled } from '../../os/app-preferences';
 import { el, renderStepHeader } from '../ui-helpers';
 import type { OnboardingStep } from '../types';
 import { recordStepProgress } from '../state-core';
@@ -21,7 +22,8 @@ export const calendarStep: OnboardingStep = {
   id: 'calendar',
   title: 'Calendar',
   canSkip: true,
-  isApplicable: (ctx) => ctx.serverAvailable,
+  // Skip when the Calendar app is off (Choose your apps / Settings → Apps).
+  isApplicable: (ctx) => ctx.serverAvailable && isAppEnabled('calendar'),
 
   render(container, _ctx, actions) {
     container.innerHTML = '';

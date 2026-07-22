@@ -9,8 +9,8 @@ import {
   listCoreReleasedApps,
   listOptionalReleasedApps,
 } from '../os/app-registry';
-import { isAppEnabled, setAppEnabled } from '../os/app-preferences';
-import { appendAppPickerGroup } from '../os/app-picker-ui';
+import { isAppEnabled, setAppEnabled, setEnabledOptionalApps } from '../os/app-preferences';
+import { appendAppPickerCoreNote, appendAppPickerGroup } from '../os/app-picker-ui';
 import { appendSettingsGroup } from './settings-layout';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -31,42 +31,35 @@ export function renderAppsSettingsSection(mount: HTMLElement): void {
   const shell = el('div', 'settings-general');
   mount.appendChild(shell);
 
-  const lead = el(
-    'p',
-    'settings-section-lead',
-    'Choose which apps appear in the dock and launchers. Core apps stay on. Changes apply immediately.',
-  );
-  shell.appendChild(lead);
-
   const content = el('div', 'settings-general__content');
   shell.appendChild(content);
 
   const visibility = appendSettingsGroup(
     content,
     'App visibility',
-    'Optional apps can be turned off without uninstalling them. Restore them here anytime.',
+    'Hide optional apps from the dock and launchers. Restore anytime.',
     'apps.visibility',
     { emphasis: true },
   );
 
-  appendAppPickerGroup(visibility, {
-    title: 'Always included',
-    description: 'Chat, Models, Brain, and Settings stay available.',
+  appendAppPickerCoreNote(visibility, {
     apps: listCoreReleasedApps(),
-    mode: 'always-on',
-    isSelected: () => true,
     searchKeyFor: (id) => `apps.core.${id}`,
   });
 
+  const optionalApps = listOptionalReleasedApps();
+
   appendAppPickerGroup(visibility, {
     title: 'Optional apps',
-    description: 'Turn apps off to hide them from the dock, shortcuts, and agent launch choices.',
-    apps: listOptionalReleasedApps(),
+    apps: optionalApps,
     mode: 'selectable',
     isSelected: (id) => isAppEnabled(id),
     searchKeyFor: (id) => `apps.optional.${id}`,
     onToggle: (id, selected) => {
       setAppEnabled(id, selected);
+    },
+    onBulkSet: (selected) => {
+      setEnabledOptionalApps(selected ? optionalApps.map((app) => app.id) : []);
     },
   });
 }

@@ -11,6 +11,10 @@ const {
   createDefaultOnboardingState,
 } = await import('../../src/onboarding/state-core.ts');
 const { mountStepSidebar } = await import('../../src/onboarding/step-sidebar.ts');
+const {
+  resetAppPreferencesForTests,
+  setAppEnabled,
+} = await import('../../src/os/app-preferences.ts');
 
 /** happy-dom windows keep the event loop alive unless closed. */
 let testWindow = null;
@@ -21,6 +25,9 @@ function setupDom() {
   globalThis.document = testWindow.document;
   globalThis.HTMLElement = testWindow.HTMLElement;
   globalThis.matchMedia = testWindow.matchMedia.bind(testWindow);
+  globalThis.localStorage = testWindow.localStorage;
+  testWindow.localStorage.clear();
+  resetAppPreferencesForTests();
 }
 
 function ctxWith(overrides = {}) {
@@ -33,6 +40,7 @@ function ctxWith(overrides = {}) {
 
 describe('onboarding step count (MIN-438)', () => {
   afterEach(() => {
+    resetAppPreferencesForTests();
     testWindow?.close();
     testWindow = null;
   });
@@ -51,6 +59,24 @@ describe('onboarding step count (MIN-438)', () => {
     assert.equal(steps.some((step) => step.id === 'provider-local'), true);
     assert.equal(steps.some((step) => step.id === 'model-pick'), true);
     assert.equal(steps.some((step) => step.id === 'context7'), true);
+  });
+
+  test('disabled email and calendar apps drop their setup steps', () => {
+    setupDom();
+    setAppEnabled('email', false);
+    setAppEnabled('calendar', false);
+
+    const steps = getApplicableSteps(ctxWith({ providerPath: 'local' }));
+    assert.equal(steps.some((step) => step.id === 'email'), false);
+    assert.equal(steps.some((step) => step.id === 'calendar'), false);
+    assert.equal(steps.length, 12);
+  });
+
+  test('enabled email and calendar apps keep setup steps when server is up', () => {
+    setupDom();
+    const steps = getApplicableSteps(ctxWith({ providerPath: 'local' }));
+    assert.equal(steps.some((step) => step.id === 'email'), true);
+    assert.equal(steps.some((step) => step.id === 'calendar'), true);
   });
 
   test('sidebar progress label updates when filtered steps grow', () => {

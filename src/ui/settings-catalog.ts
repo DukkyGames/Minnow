@@ -184,8 +184,8 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
 
   // —— Apps ——
   field('apps.visibility', 'App visibility', 'apps', 'apps', {
-    keywords: ['dock', 'launcher', 'enable', 'disable', 'hide apps', 'optional apps'],
-    description: 'Choose which MinnowOS apps appear in the dock and launchers.',
+    keywords: ['dock', 'launcher', 'enable', 'disable', 'hide apps', 'optional apps', 'enable all'],
+    description: 'Hide optional apps from the dock and launchers.',
   }),
   field('apps.core.chat', 'Chat app', 'apps', 'apps', {
     keywords: ['always on', 'core'],

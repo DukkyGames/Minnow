@@ -9,11 +9,10 @@ import {
   listOptionalReleasedApps,
 } from '../../os/app-registry';
 import {
-  isAppEnabled,
   listEnabledOptionalAppIds,
   setEnabledOptionalApps,
 } from '../../os/app-preferences';
-import { appendAppPickerGroup } from '../../os/app-picker-ui';
+import { appendAppPickerCoreNote, appendAppPickerGroup } from '../../os/app-picker-ui';
 import { el, renderStepHeader, settingsLink } from '../ui-helpers';
 import type { OnboardingContext, OnboardingStep } from '../types';
 import { recordStepProgress } from '../state-core';
@@ -44,30 +43,30 @@ export const appsStep: OnboardingStep = {
 
     renderStepHeader(container, appsStep, actions.stepIndex, actions.totalSteps);
     container.appendChild(
-      el(
-        'p',
-        'mn-onboarding-step-desc',
-        'Pick the apps you want in the dock. You can change this anytime in Settings.',
-      ),
+      el('p', 'mn-onboarding-step-desc', 'Pick optional apps for the dock. Change anytime in Settings.'),
     );
 
-    appendAppPickerGroup(container, {
-      title: 'Always included',
-      description: 'These stay available. They cannot be turned off.',
+    appendAppPickerCoreNote(container, {
       apps: listCoreReleasedApps(),
-      mode: 'always-on',
-      isSelected: () => true,
     });
+
+    const optionalApps = listOptionalReleasedApps();
 
     appendAppPickerGroup(container, {
       title: 'Optional apps',
-      description: 'Selected apps appear in the dock and launchers.',
-      apps: listOptionalReleasedApps(),
+      apps: optionalApps,
       mode: 'selectable',
       isSelected: (id) => selectedOptional.has(id),
       onToggle: (id, selected) => {
         if (selected) selectedOptional.add(id);
         else selectedOptional.delete(id);
+      },
+      onBulkSet: (selected) => {
+        if (selected) {
+          for (const app of optionalApps) selectedOptional.add(app.id);
+        } else {
+          selectedOptional.clear();
+        }
       },
     });
 
@@ -98,9 +97,5 @@ export const appsStep: OnboardingStep = {
 
 /** Reset step selection cache (tests). */
 export function resetAppsStepState(): void {
-  selectedOptional = new Set(
-    listOptionalReleasedApps()
-      .map((app) => app.id)
-      .filter((id) => isAppEnabled(id)),
-  );
+  selectedOptional = new Set();
 }
