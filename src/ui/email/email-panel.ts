@@ -44,6 +44,25 @@ function accountProviderLabel(account: EmailAccount): string {
   return account.imap.host;
 }
 
+/**
+ * Map an IMAP/connection error to the account-form field worth highlighting.
+ *
+ * The messages come from `server/email/imap-errors.js`; this only needs to be
+ * good enough to point at the field the user can actually fix — credentials
+ * versus reachability — so an auth failure lands them on the password, not a
+ * toast they have to decode.
+ */
+function classifyAccountFieldError(message: string): { field: string } | null {
+  const text = message.toLowerCase();
+  if (/authentication failed|app password|basic authentication|rejected the login|password|credential/.test(text)) {
+    return { field: 'password' };
+  }
+  if (/could not connect|could not reach|was reset|refused|etimedout|enotfound|econnrefused|check host/.test(text)) {
+    return { field: 'imapHost' };
+  }
+  return null;
+}
+
 /** Icon-only chrome control with accessible name. */
 function chromeIconBtn(icon: string, label: string): HTMLButtonElement {
   const btn = el('button', 'email-chrome-icon-btn') as HTMLButtonElement;
@@ -62,6 +81,10 @@ interface AccountFormOptions extends EmailPanelOptions {
   isFirstAccount?: boolean;
   /** Total configured accounts — used for sign-out confirmation copy. */
   accountCount?: number;
+  /** Deep-link target: field id (e.g. 'password') to mark invalid on open. */
+  highlightField?: string;
+  /** The error to show against the highlighted field. */
+  errorMessage?: string;
   onSaved: () => void;
   onCancel?: () => void;
   onSignedOut?: () => void;
@@ -317,6 +340,25 @@ function renderAccountForm(mount: HTMLElement, options: AccountFormOptions): voi
 
   card.appendChild(form);
   mount.appendChild(card);
+
+  // Deep-link from a connection error: mark the offending field, explain why,
+  // and put the cursor on it so the fix is one keystroke away.
+  if (options.highlightField) {
+    const input = card.querySelector<HTMLInputElement>(`#email-${options.highlightField}`);
+    const row = input?.closest('.email-field');
+    if (input && row) {
+      row.classList.add('is-error');
+      if (options.errorMessage) {
+        const msg = el('p', 'email-field-error', options.errorMessage);
+        msg.id = `email-${options.highlightField}-error`;
+        input.setAttribute('aria-describedby', msg.id);
+        input.setAttribute('aria-invalid', 'true');
+        row.appendChild(msg);
+      }
+      input.focus();
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
 }
 
 type EmailViewMode = 'dashboard' | 'mail' | 'automations' | 'setup';
@@ -361,9 +403,36 @@ export async function renderEmailPanel(
   /** True when the list is showing every mailbox at once. */
   let unified = false;
 
+  /**
+   * Status pass-through that also deep-links auth/connection failures to the
+   * account form with the offending field highlighted — the difference between
+   * a dead-end toast and a one-step fix.
+   */
+  const handleStatus = (state: 'ok' | 'err', message: string): void => {
+    options.onStatus?.(state, message);
+    if (state !== 'err' || unified || accountFormMode !== 'none') return;
+    const hit = classifyAccountFieldError(message);
+    if (hit) openAccountSetup('edit', { highlightField: hit.field, errorMessage: message });
+  };
+
   const shell = el('div', 'email-shell email-shell-agent');
   const chrome = el('header', 'email-chrome');
   const body = el('div', 'email-body email-body-fill');
+
+  // A hairline progress bar under the chrome carries sync state, replacing the
+  // disabled-button-as-status pattern. Ref-counted so overlapping syncs (manual
+  // + background) keep it lit until the last one finishes.
+  const syncBar = el('div', 'email-sync-bar');
+  syncBar.setAttribute('role', 'progressbar');
+  syncBar.setAttribute('aria-label', 'Syncing mail');
+  syncBar.setAttribute('aria-hidden', 'true');
+  let syncDepth = 0;
+  const setSyncing = (active: boolean): void => {
+    syncDepth = Math.max(0, syncDepth + (active ? 1 : -1));
+    const on = syncDepth > 0;
+    syncBar.classList.toggle('is-active', on);
+    syncBar.setAttribute('aria-hidden', on ? 'false' : 'true');
+  };
 
   const identity = el('div', 'email-chrome-identity');
   identity.appendChild(el('p', 'email-chrome-kicker', 'Email'));
@@ -427,6 +496,7 @@ export async function renderEmailPanel(
   chrome.appendChild(utils);
 
   shell.appendChild(chrome);
+  shell.appendChild(syncBar);
   shell.appendChild(body);
   mount.replaceChildren(shell);
 
@@ -449,7 +519,8 @@ export async function renderEmailPanel(
     if (viewMode === 'dashboard') {
       await renderEmailDashboard(body, {
         account: activeAccount,
-        onStatus: options.onStatus,
+        onStatus: handleStatus,
+        onSyncActivity: setSyncing,
         onRefresh: () => void renderView(),
         onOpenThread: (threadId) => {
           pendingThreadId = threadId;
@@ -468,7 +539,7 @@ export async function renderEmailPanel(
       if (unified) {
         await renderUnifiedInbox(body, {
           accounts,
-          onStatus: options.onStatus,
+          onStatus: handleStatus,
           // Opening a message drops back into that mailbox's full surface,
           // which is where reply, move and the rest actually live.
           onOpen: (message) => {
@@ -488,7 +559,8 @@ export async function renderEmailPanel(
       await renderEmailLayout(body, {
         account: activeAccount,
         initialThreadId: pendingThreadId,
-        onStatus: options.onStatus,
+        onStatus: handleStatus,
+        onSyncActivity: setSyncing,
       });
       pendingThreadId = undefined;
       return;
@@ -496,7 +568,7 @@ export async function renderEmailPanel(
     if (viewMode === 'automations') {
       await renderEmailAutomations(body, {
         account: activeAccount,
-        onStatus: options.onStatus,
+        onStatus: handleStatus,
         onClose: () => {
           setActiveTab('dashboard');
           void renderView();
@@ -534,7 +606,10 @@ export async function renderEmailPanel(
     void renderView();
   });
 
-  const openAccountSetup = (mode: 'add' | 'edit') => {
+  const openAccountSetup = (
+    mode: 'add' | 'edit',
+    deepLink?: { highlightField?: string; errorMessage?: string },
+  ) => {
     accountFormMode = mode;
     body.replaceChildren();
     if (mode === 'add') {
@@ -550,11 +625,16 @@ export async function renderEmailPanel(
       });
       return;
     }
+    // The settings button reads as active whenever the edit form is open,
+    // including when a connection error opened it.
+    settingsBtn.classList.add('is-active');
     renderAccountForm(body, {
       ...options,
       title: 'Edit email account',
       existing: activeAccount,
       accountCount: accounts.length,
+      highlightField: deepLink?.highlightField,
+      errorMessage: deepLink?.errorMessage,
       onSaved: () => void renderEmailPanel(mount, options),
       onSignedOut: () => void renderEmailPanel(mount, options),
       onCancel: () => {

@@ -368,6 +368,19 @@
   color: var(--mn-fg-muted);
 }
 
+/* Deep-linked error field, opened from a connection failure. */
+.email-field.is-error .email-input {
+  border-color: var(--mn-danger, oklch(0.62 0.18 15));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mn-danger, oklch(0.62 0.18 15)) 18%, transparent);
+}
+
+.email-field-error {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--mn-danger, oklch(0.62 0.18 15));
+}
+
 .email-actions {
   display: flex;
   gap: 8px;
@@ -412,6 +425,72 @@
   min-height: 44px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--mn-border);
+}
+
+/* Hairline sync progress under the chrome. Indeterminate: a short segment
+   sweeps across while a sync is in flight — the status surface that replaces
+   the disabled sync button. */
+.email-sync-bar {
+  height: 2px;
+  flex-shrink: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.2s var(--ease-out, ease-out);
+}
+
+.email-sync-bar.is-active {
+  opacity: 1;
+  background: color-mix(in srgb, var(--mn-accent) 16%, transparent);
+}
+
+.email-sync-bar.is-active::before {
+  content: "";
+  display: block;
+  height: 100%;
+  width: 40%;
+  border-radius: 2px;
+  background: var(--mn-accent);
+  animation: email-sync-sweep 1.1s ease-in-out infinite;
+}
+
+@keyframes email-sync-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
+}
+
+/* Subtle rotation on the sync icon while its request is in flight. */
+.email-icon-btn.is-syncing svg {
+  animation: email-sync-spin 0.9s linear infinite;
+}
+
+@keyframes email-sync-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* "Updated 2m ago" — mono, quiet, instrumentation not chrome. */
+.email-list-updated {
+  font-family: var(--mn-font-mono, "JetBrains Mono", ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+  white-space: nowrap;
+  align-self: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .email-sync-bar.is-active::before {
+    animation: none;
+    width: 100%;
+    opacity: 0.6;
+  }
+  .email-icon-btn.is-syncing svg {
+    animation: none;
+  }
 }
 
 .email-chrome-identity {
@@ -2831,6 +2910,78 @@
   margin: 8px 0 0;
   font-size: 13px;
   line-height: 1.55;
+}
+
+/* Opacity-pulse skeleton (no shimmer sweep) for AI-busy waits. */
+.email-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.email-skeleton-line {
+  height: 9px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--mn-fg) 12%, transparent);
+  animation: email-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.email-skeleton-line:nth-child(1) {
+  width: 92%;
+}
+.email-skeleton-line:nth-child(2) {
+  width: 100%;
+}
+.email-skeleton-line:nth-child(3) {
+  width: 68%;
+}
+
+@keyframes email-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.email-reader-catchup-busy {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.email-reader-catchup-skeleton {
+  flex: 1;
+  min-width: 0;
+}
+
+.email-reader-catchup-cancel {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  font-size: 11px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .email-reader-catchup-cancel:hover {
+    color: var(--mn-fg);
+    border-color: var(--mn-border-strong, var(--mn-border));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .email-skeleton-line {
+    animation: none;
+    opacity: 0.6;
+  }
 }
 
 /* Compose subject suggestion */
