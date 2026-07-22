@@ -408,11 +408,14 @@ function buildConditionRow(
   const rowEl = el('div', 'email-automation-row-edit');
 
   const fieldSelect = el('select', 'email-select') as HTMLSelectElement;
+  fieldSelect.setAttribute('aria-label', 'Condition field');
   for (const f of CONDITION_FIELDS) option(fieldSelect, f.value, f.label);
   fieldSelect.value = cond.field;
 
   const opSelect = el('select', 'email-select') as HTMLSelectElement;
+  opSelect.setAttribute('aria-label', 'Condition operator');
   const valueInput = el('input', 'email-input') as HTMLInputElement;
+  valueInput.setAttribute('aria-label', 'Condition value');
   valueInput.placeholder = 'value';
   valueInput.value = cond.value;
 
@@ -466,10 +469,12 @@ function buildActionRow(
   const rowEl = el('div', 'email-automation-row-edit');
 
   const typeSelect = el('select', 'email-select') as HTMLSelectElement;
+  typeSelect.setAttribute('aria-label', 'Action type');
   for (const a of ACTIONS) option(typeSelect, a.value, a.label);
   typeSelect.value = action.type;
 
   const paramInput = el('input', 'email-input') as HTMLInputElement;
+  paramInput.setAttribute('aria-label', 'Action value');
 
   const syncParam = () => {
     switch (action.type) {

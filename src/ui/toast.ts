@@ -33,7 +33,13 @@ export function showToast(
   document.body.appendChild(el);
   toastEl = el;
 
-  requestAnimationFrame(() => el.classList.add('mn-toast--visible'));
+  // Prefer rAF for the enter transition; fall back for test / non-browser hosts.
+  const reveal = () => el.classList.add('mn-toast--visible');
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(reveal);
+  } else {
+    reveal();
+  }
 
   hideTimer = window.setTimeout(() => {
     el.classList.remove('mn-toast--visible');

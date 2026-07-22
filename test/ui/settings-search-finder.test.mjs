@@ -106,9 +106,9 @@ describe('settings-search-finder', () => {
   test('ranking drives result list on input', () => {
     const { input, results } = setupSettingsHeaderDom();
     initSettingsSearchFinder();
-    input.value = 'orchestration';
+    input.value = 'diagnostics';
     input.dispatchEvent(new window.Event('input', { bubbles: true }));
-    const ranked = rankSettingsSearch('orchestration', buildSettingsSearchIndex());
+    const ranked = rankSettingsSearch('diagnostics', buildSettingsSearchIndex());
     assert.ok(ranked.length > 0);
     assert.ok(results.querySelector('.settings-search-finder__option'));
     assert.equal(results.hidden, false);

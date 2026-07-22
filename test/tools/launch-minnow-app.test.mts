@@ -4,6 +4,10 @@
 
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
+import {
+  resetAppPreferencesForTests,
+  setAppEnabled,
+} from '../../src/os/app-preferences.ts';
 import { resetInstancesForTests } from '../../src/os/instances.ts';
 import { resetOsRouterForTests } from '../../src/os/router.ts';
 import { resetOsPageBridgeForTests } from '../../src/os/page-bridge.ts';
@@ -12,6 +16,23 @@ import { toolLaunchMinnowApp } from '../../src/tools/os-launch-tool.ts';
 import type { AppId, LaunchOptions } from '../../src/os/types.ts';
 
 describe('launch_minnow_app', () => {
+  beforeEach(async () => {
+    const { Window } = await import('happy-dom');
+    const win = new Window();
+    const g = globalThis as typeof globalThis & {
+      window: Window;
+      localStorage: Storage;
+    };
+    g.window = win as unknown as Window & typeof globalThis.window;
+    g.localStorage = win.localStorage;
+    win.localStorage.clear();
+    resetAppPreferencesForTests();
+  });
+
+  afterEach(() => {
+    resetAppPreferencesForTests();
+  });
+
   test('executor returns ok JSON and calls launchApp with app_id and seed', () => {
     const calls: Array<{ appId: AppId; options?: { seed?: string } }> = [];
     const launchApp = (appId: AppId, options?: { seed?: string }) => {
@@ -50,6 +71,16 @@ describe('launch_minnow_app', () => {
   test('rejects invalid app_id', () => {
     const result = toolLaunchMinnowApp({ app_id: 'unknown' }, () => {});
     assert.match(result, /^Error: invalid app_id/);
+  });
+
+  test('rejects user-disabled optional apps', () => {
+    setAppEnabled('research', false);
+    const calls: AppId[] = [];
+    const result = toolLaunchMinnowApp({ app_id: 'research' }, (appId) => {
+      calls.push(appId);
+    });
+    assert.match(result, /turned off/i);
+    assert.deepEqual(calls, []);
   });
 
   test('requires app_id', () => {
@@ -91,11 +122,15 @@ describe('executeBrowserTool launch_minnow_app', () => {
       window: Window;
       document: Document;
       HTMLElement: typeof HTMLElement;
+      localStorage: Storage;
     };
     g.window = win as unknown as Window & typeof globalThis.window;
     g.document = win.document;
     g.HTMLElement = win.HTMLElement;
+    g.localStorage = win.localStorage;
+    win.localStorage.clear();
     win.location.hash = '#/desktop';
+    resetAppPreferencesForTests();
     resetInstancesForTests();
     resetOsRouterForTests();
     resetOsPageBridgeForTests();
@@ -105,6 +140,7 @@ describe('executeBrowserTool launch_minnow_app', () => {
     resetOsRouterForTests();
     resetInstancesForTests();
     resetOsPageBridgeForTests();
+    resetAppPreferencesForTests();
   });
 
   test('routes launch_minnow_app and updates the OS hash', async () => {

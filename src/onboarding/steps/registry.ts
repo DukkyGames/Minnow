@@ -5,6 +5,7 @@
 import type { OnboardingStep } from '../types';
 import { welcomeStep } from './welcome';
 import { themeStep } from './theme';
+import { appsStep } from './apps';
 import {
   providerChoiceStep,
   providerLocalStep,
@@ -24,6 +25,7 @@ import { permissionsStep, memoryStep, doneStep } from './remaining';
 export const ONBOARDING_STEPS: OnboardingStep[] = [
   welcomeStep,
   themeStep,
+  appsStep,
   providerChoiceStep,
   providerLocalStep,
   providerManagedStep,

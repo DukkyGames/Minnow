@@ -5,9 +5,10 @@
 
 import type { SettingsSectionId } from './settings-page-types';
 
-/** Top-level sidebar categories (6 merged groups). */
+/** Top-level sidebar categories. */
 export type SettingsCategoryId =
   | 'general'
+  | 'apps'
   | 'appearance'
   | 'models'
   | 'agents'
@@ -25,9 +26,10 @@ export interface SettingsFieldEntry {
   description?: string;
 }
 
-/** Sidebar labels for the six categories. */
+/** Sidebar labels for settings categories. */
 export const SETTINGS_CATEGORY_LABELS: Record<SettingsCategoryId, string> = {
   general: 'General',
+  apps: 'Apps',
   appearance: 'Appearance',
   models: 'Models',
   agents: 'Agents',
@@ -38,11 +40,12 @@ export const SETTINGS_CATEGORY_LABELS: Record<SettingsCategoryId, string> = {
 /** Category descriptions (search keywords / future catalog hints; not shown in UI). */
 export const SETTINGS_CATEGORY_DESCRIPTIONS: Record<SettingsCategoryId, string> = {
   general: 'Terminal behavior, filesystem and LAN access, notifications, audio devices, and where settings are saved.',
+  apps: 'Choose which MinnowOS apps appear in the dock and launchers.',
   appearance: 'Theme, wallpaper, fonts, and custom accent colors.',
   models: 'LLM backends, per-role model picks, sampling, reasoning, and usage.',
   agents: 'System prompts, standing rules, composer modes, personas, workers, and tool policies.',
   integrations: 'Web search, dev tools, permissions, skills, and external hooks.',
-  advanced: 'Orchestrate supervisor tuning, local health probes, diagnostics, and eval runs.',
+  advanced: 'Local health probes and diagnostics.',
 };
 
 /** Category → ordered areas (render units). */
@@ -51,6 +54,7 @@ export const SETTINGS_CATEGORY_AREAS: Record<
   SettingsSectionId[]
 > = {
   general: ['general', 'notifications', 'audio', 'about'],
+  apps: ['apps'],
   appearance: ['appearance'],
   models: ['providers', 'model-routing', 'sampler', 'thinking', 'usage'],
   agents: ['agent-center', 'rules', 'agent-packs', 'autopilot', 'watchdog'],
@@ -66,12 +70,13 @@ export const SETTINGS_CATEGORY_AREAS: Record<
     'editor',
     'webhooks',
   ],
-  advanced: ['features', 'diagnostics', 'evals'],
+  advanced: ['diagnostics'],
 };
 
 /** Flat category list in sidebar order. */
 export const SETTINGS_CATEGORIES: SettingsCategoryId[] = [
   'general',
+  'apps',
   'appearance',
   'models',
   'agents',
@@ -176,6 +181,34 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   field('audio.echoCancellation', 'Echo cancellation', 'general', 'audio'),
   field('audio.noiseSuppression', 'Noise suppression', 'general', 'audio'),
   field('audio.autoGainControl', 'Auto gain control', 'general', 'audio'),
+
+  // —— Apps ——
+  field('apps.visibility', 'App visibility', 'apps', 'apps', {
+    keywords: ['dock', 'launcher', 'enable', 'disable', 'hide apps', 'optional apps'],
+    description: 'Choose which MinnowOS apps appear in the dock and launchers.',
+  }),
+  field('apps.core.chat', 'Chat app', 'apps', 'apps', {
+    keywords: ['always on', 'core'],
+  }),
+  field('apps.core.models', 'Models app', 'apps', 'apps', {
+    keywords: ['always on', 'core'],
+  }),
+  field('apps.core.brain', 'Brain app', 'apps', 'apps', {
+    keywords: ['always on', 'core'],
+  }),
+  field('apps.core.settings', 'Settings app', 'apps', 'apps', {
+    keywords: ['always on', 'core'],
+  }),
+  field('apps.optional.code', 'Code app', 'apps', 'apps'),
+  field('apps.optional.research', 'Research app', 'apps', 'apps'),
+  field('apps.optional.experts', 'Experts app', 'apps', 'apps'),
+  field('apps.optional.bench', 'Benchmarking app', 'apps', 'apps', {
+    keywords: ['bench', 'benchmark'],
+  }),
+  field('apps.optional.compare', 'Compare app', 'apps', 'apps'),
+  field('apps.optional.scheduler', 'Scheduler app', 'apps', 'apps'),
+  field('apps.optional.email', 'Email app', 'apps', 'apps'),
+  field('apps.optional.calendar', 'Calendar app', 'apps', 'apps'),
 
   // —— Appearance ——
   field('appearance.theme', 'Theme presets', 'appearance', 'appearance', {
@@ -357,9 +390,6 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   field('integrations.browser.devtoolsDock', 'DevTools dock', 'integrations', 'browser'),
 
   // —— Advanced ——
-  field('advanced.orchestration', 'Orchestration supervisor', 'advanced', 'features', {
-    keywords: ['orchestrate', 'heartbeat', 'board'],
-  }),
   field('advanced.diagnostics', 'Health & diagnostics', 'advanced', 'diagnostics', {
     keywords: ['errors', 'logs', 'crash', 'report', 'health strip', 'subsystem'],
     description: 'Subsystem probes, grouped errors, and a local log tail. Nothing is sent off-device.',
@@ -369,9 +399,6 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   }),
   field('advanced.diagnostics.actions', 'Diagnostic actions', 'advanced', 'diagnostics', {
     keywords: ['copy report', 'refresh', 'clear logs'],
-  }),
-  field('advanced.evals', 'Eval harness', 'advanced', 'evals', {
-    keywords: ['benchmark', 'rubric', 'task pack'],
   }),
 
   // —— About (General) ——

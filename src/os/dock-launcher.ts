@@ -1,4 +1,5 @@
-import { APPS } from './app-registry';
+import type { AppDefinition } from './app-registry';
+import { listDockApps, subscribeAppPreferences } from './app-preferences';
 import { isDesktopExpertsActive, isDesktopResearchActive, subscribeDesktopState } from './desktop-state';
 import { createAppIcon, createOsIcon } from './icons';
 import {
@@ -49,7 +50,7 @@ function isDockAppActive(appId: AppId): boolean {
 
 /** Build one dock launcher tile for an app. */
 function buildDockTile(
-  app: (typeof APPS)[number],
+  app: AppDefinition,
   onLaunch: (appId: AppId) => void,
 ): HTMLButtonElement {
   const btn = document.createElement('button');
@@ -123,11 +124,16 @@ export function initDockLauncher(root: HTMLElement): () => void {
     }
   };
 
-  for (const app of APPS) {
-    if (app.id === 'chat') continue;
-    const tile = buildDockTile(app, onLaunch);
-    tileByAppId.set(app.id, tile);
-    dock.appendChild(tile);
+  /** Rebuild dock tiles from the current availability set. */
+  function rebuildDockTiles(): void {
+    dock.replaceChildren();
+    tileByAppId.clear();
+    for (const app of listDockApps()) {
+      const tile = buildDockTile(app, onLaunch);
+      tileByAppId.set(app.id, tile);
+      dock.appendChild(tile);
+    }
+    syncDockTiles();
   }
 
   panel.append(hideBtn, dock);
@@ -147,6 +153,8 @@ export function initDockLauncher(root: HTMLElement): () => void {
       }
     }
   }
+
+  rebuildDockTiles();
 
   function syncShellState(): void {
     const immersive = shouldSuppressDesktopChrome();
@@ -201,6 +209,7 @@ export function initDockLauncher(root: HTMLElement): () => void {
     syncShellState();
     syncDockTiles();
   });
+  const unsubPrefs = subscribeAppPreferences(rebuildDockTiles);
 
   syncShellState();
   syncDockTiles();
@@ -209,6 +218,7 @@ export function initDockLauncher(root: HTMLElement): () => void {
     unsubInstances();
     unsubDesktop();
     unsubWindows();
+    unsubPrefs();
     document.removeEventListener('keydown', onKeyDown);
   };
 }

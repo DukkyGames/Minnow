@@ -1,4 +1,5 @@
 import { getAppById } from './app-registry';
+import { isAppAvailable, subscribeAppPreferences } from './app-preferences';
 import {
   getForegroundAppId,
   getOsView,
@@ -230,6 +231,9 @@ export function renderMenubar(root: HTMLElement): () => void {
       chatToggle.removeAttribute('aria-pressed');
     }
 
+    // Scheduler shortcut follows the same availability rule as the dock.
+    schedulerBtn.hidden = !isAppAvailable('scheduler');
+
     void import('./workspace-menubar').then((m) => m.syncWorkspaceMenubarPlacement());
 
     const unread = getUnreadNotificationCount();
@@ -254,6 +258,7 @@ export function renderMenubar(root: HTMLElement): () => void {
   syncMenubar();
   const unsub = subscribeInstances(syncMenubar);
   const unsubInbox = subscribeNotifications(syncMenubar);
+  const unsubPrefs = subscribeAppPreferences(syncMenubar);
   const unsubNotif = onNewNotification((record) => {
     syncMenubar();
     if (!record.read) ringBell();
@@ -264,6 +269,7 @@ export function renderMenubar(root: HTMLElement): () => void {
   return () => {
     unsub();
     unsubInbox();
+    unsubPrefs();
     unsubNotif();
     stopClock();
     cleanupModelChip();

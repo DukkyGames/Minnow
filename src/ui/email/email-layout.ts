@@ -1695,8 +1695,11 @@ export async function renderEmailLayout(
     // Roving tabindex: one stop for the whole list, so Tab does not walk
     // through every conversation on the way to the reading pane.
     row.tabIndex = index === cursorIndex ? 0 : -1;
-    row.setAttribute("role", "option");
-    row.setAttribute("aria-selected", String(message.id === selectedId));
+    // A list item, not an option: the row carries interactive controls (open,
+    // star, select), which a listbox option may not. aria-current marks the
+    // open message.
+    row.setAttribute("role", "listitem");
+    if (message.id === selectedId) row.setAttribute("aria-current", "true");
 
     const cb = el("input", "email-list-row-cb") as HTMLInputElement;
     cb.type = "checkbox";
@@ -1785,8 +1788,8 @@ export async function renderEmailLayout(
     row.classList.toggle("is-cursor", index === cursorIndex);
 
     row.tabIndex = index === cursorIndex ? 0 : -1;
-    row.setAttribute("role", "option");
-    row.setAttribute("aria-selected", String(thread.threadId === selectedThreadId));
+    row.setAttribute("role", "listitem");
+    if (thread.threadId === selectedThreadId) row.setAttribute("aria-current", "true");
 
     const cb = el("input", "email-list-row-cb") as HTMLInputElement;
     cb.type = "checkbox";
@@ -1847,6 +1850,7 @@ export async function renderEmailLayout(
         ? renderThreadRow(item as EmailThreadSummary, index)
         : renderRow(item as EmailMessage, index),
     className: "email-list-rows",
+    ariaLabel: "Messages",
     renderEmpty: () => {
       const empty = el("div", "email-list-empty");
       empty.appendChild(el("p", "email-empty-title", "No messages"));

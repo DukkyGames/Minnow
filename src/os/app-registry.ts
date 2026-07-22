@@ -1,5 +1,14 @@
 import type { AppId, PresentationMode } from './types';
 
+/** Whether users may turn the app off (optional) or it is always on (core). */
+export type AppAvailability = 'core' | 'optional';
+
+/**
+ * Developer release gate. Hidden apps stay in the codebase but are omitted from
+ * onboarding, Settings, dock, shortcuts, notifications, and launches.
+ */
+export type AppReleaseState = 'released' | 'hidden';
+
 /** Launcher metadata for each MinnowOS app. */
 export interface AppDefinition {
   id: AppId;
@@ -8,6 +17,8 @@ export interface AppDefinition {
   tag: string;
   description: string;
   presentationMode: PresentationMode;
+  availability: AppAvailability;
+  releaseState: AppReleaseState;
 }
 
 /** Canonical app list — ported from MinnowOS prototype `data.jsx`. */
@@ -19,6 +30,8 @@ export const APPS: readonly AppDefinition[] = [
     tag: 'Build & ship in a live workspace',
     description: 'Reef-side editor, dev server, files',
     presentationMode: 'fullscreen',
+    availability: 'optional',
+    releaseState: 'released',
   },
   {
     id: 'chat',
@@ -27,6 +40,8 @@ export const APPS: readonly AppDefinition[] = [
     tag: 'Just talk to your model',
     description: 'General assistant — tools, files, and app routing',
     presentationMode: 'desktop',
+    availability: 'core',
+    releaseState: 'released',
   },
   {
     id: 'research',
@@ -35,14 +50,18 @@ export const APPS: readonly AppDefinition[] = [
     tag: 'Send a sub-agent to dig deep',
     description: 'Multi-step web + source synthesis',
     presentationMode: 'desktop',
+    availability: 'optional',
+    releaseState: 'released',
   },
   {
     id: 'experts',
-    name: "Experts",
+    name: 'Experts',
     icon: 'flask',
     tag: 'Compose & test expert agents',
     description: 'Personas, tools, eval harness',
     presentationMode: 'desktop',
+    availability: 'optional',
+    releaseState: 'released',
   },
   {
     id: 'bench',
@@ -51,6 +70,8 @@ export const APPS: readonly AppDefinition[] = [
     tag: 'Measure models head-to-head',
     description: 'Throughput, latency, quality',
     presentationMode: 'window',
+    availability: 'optional',
+    releaseState: 'released',
   },
   {
     id: 'compare',
@@ -59,6 +80,8 @@ export const APPS: readonly AppDefinition[] = [
     tag: 'Blind A/B model preference',
     description: 'Side-by-side votes, reveal, win rates',
     presentationMode: 'window',
+    availability: 'optional',
+    releaseState: 'released',
   },
   {
     id: 'models',
@@ -67,6 +90,8 @@ export const APPS: readonly AppDefinition[] = [
     tag: 'Download, run & tune models',
     description: 'Local runtimes, providers, recommendations',
     presentationMode: 'window',
+    availability: 'core',
+    releaseState: 'released',
   },
   {
     id: 'brain',
@@ -75,6 +100,8 @@ export const APPS: readonly AppDefinition[] = [
     tag: 'Wiki, memory & knowledge graph',
     description: 'Browse and maintain the CORTEX wiki',
     presentationMode: 'window',
+    availability: 'core',
+    releaseState: 'released',
   },
   {
     id: 'scheduler',
@@ -83,6 +110,8 @@ export const APPS: readonly AppDefinition[] = [
     tag: 'Recurring agent jobs & reminders',
     description: 'Interval and cron schedules while Minnow is running',
     presentationMode: 'sidePanel',
+    availability: 'optional',
+    releaseState: 'released',
   },
   {
     id: 'calendar',
@@ -91,6 +120,8 @@ export const APPS: readonly AppDefinition[] = [
     tag: 'Local events, ICS, and CalDAV',
     description: 'Month and week views with agent-assisted scheduling',
     presentationMode: 'window',
+    availability: 'optional',
+    releaseState: 'released',
   },
   {
     id: 'email',
@@ -99,6 +130,8 @@ export const APPS: readonly AppDefinition[] = [
     tag: 'IMAP triage and draft replies',
     description: 'Read-only inbox sync, AI summaries, and explicit-send SMTP',
     presentationMode: 'fullscreen',
+    availability: 'optional',
+    releaseState: 'released',
   },
   {
     id: 'settings',
@@ -107,6 +140,8 @@ export const APPS: readonly AppDefinition[] = [
     tag: 'Appearance, prompts, agents',
     description: 'App, prompting, and integration settings',
     presentationMode: 'window',
+    availability: 'core',
+    releaseState: 'released',
   },
 ] as const;
 
@@ -125,6 +160,36 @@ export function getAppById(id: AppId): AppDefinition | undefined {
 /** Shell presentation mode for an app (defaults to fullscreen when unknown). */
 export function getPresentationMode(id: AppId): PresentationMode {
   return getAppById(id)?.presentationMode ?? 'fullscreen';
+}
+
+/** Core apps cannot be disabled by the user. */
+export function isCoreApp(id: AppId): boolean {
+  return getAppById(id)?.availability === 'core';
+}
+
+/** Optional apps may be toggled in onboarding / Settings → Apps. */
+export function isOptionalApp(id: AppId): boolean {
+  return getAppById(id)?.availability === 'optional';
+}
+
+/** Developer-released apps may appear in product surfaces. */
+export function isDeveloperReleased(id: AppId): boolean {
+  return getAppById(id)?.releaseState === 'released';
+}
+
+/** All apps marked released (ignores user preference). */
+export function listReleasedApps(): AppDefinition[] {
+  return APPS.filter((app) => app.releaseState === 'released');
+}
+
+/** Released core apps (always-on group for pickers). */
+export function listCoreReleasedApps(): AppDefinition[] {
+  return listReleasedApps().filter((app) => app.availability === 'core');
+}
+
+/** Released optional apps (selectable group for pickers). */
+export function listOptionalReleasedApps(): AppDefinition[] {
+  return listReleasedApps().filter((app) => app.availability === 'optional');
 }
 
 type AppModuleLoader = () => Promise<{ init: () => void | Promise<void> }>;

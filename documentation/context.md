@@ -34,6 +34,8 @@ Registry: [`src/chat/modes/registry.ts`](../src/chat/modes/registry.ts). Tool al
 
 Chat (desktop), **Code**, **Models**, **Compare**, **Bench**, **Research**, **Experts**, **Brain**, **Calendar**, **Email**, **Scheduler**, **Settings** — routes `#/desktop`, `#/app/{id}`, registry in [`src/os/app-registry.ts`](../src/os/app-registry.ts).
 
+**Availability:** each app is `core` (always on: Chat, Models, Brain, Settings) or `optional`, plus a developer `releaseState` (`released` | `hidden`). User preferences store disabled optional ids in `localStorage` key `minnow.os.disabledApps` ([`src/os/app-preferences.ts`](../src/os/app-preferences.ts)). Missing key = all released optional apps enabled. Dock, menubar shortcuts, hash routes, notifications, and `launch_minnow_app` all consult the same selectors. First-run **Choose your apps** (after Appearance) and **Settings → Apps** edit the same preference.
+
 ### Scale
 
 - **~88 built-in tools** — [`src/tools/definitions.ts`](../src/tools/definitions.ts)
@@ -296,6 +298,8 @@ Router: [`src/os/router.ts`](../src/os/router.ts). Boot: `initOsPageBridge()` �
 
 **Notifications:** menubar bell inbox ([`src/os/notifications-menu.ts`](../src/os/notifications-menu.ts), [`src/notifications/`](../src/notifications/)). Sounds use **packs** under `public/sounds/packs/<packId>/` ([`src/notifications/sound-packs.ts`](../src/notifications/sound-packs.ts)): each pack maps three cues — `turn_complete`, `question`, `tool_turn` — to audio files; notification kinds resolve to a cue at playback time. Default pack **Minnow** ships `turn-complete.wav`, `question.wav`, `tool-turn.mp3`. Prefs: `minnow.notifications.soundPackId` (`default` | `none`), `minnow.notifications.soundOnActiveChat` (play cues while watching the active chat in Code without bell rows). Settings → General → Notifications.
 
+**Desktop prefs** (`minnow.os.*`): wallpaper / layout via [`src/os/desktop-prefs.ts`](../src/os/desktop-prefs.ts); **disabled apps** via `minnow.os.disabledApps` ([`src/os/app-preferences.ts`](../src/os/app-preferences.ts)).
+
 ---
 
 ## Theme and appearance
@@ -315,13 +319,13 @@ Design reference: [`DESIGN.md`](../DESIGN.md), [`documentation/design-system/`](
 | **Models** | `#/app/models` | `/api/models/*`, `/api/system/hardware`, downloads, serve |
 | **Compare** | `#/app/compare` | `server/compare/`, `~/.minnow/compare/` |
 | **Bench** | `#/app/bench` | `src/benchmark/`, `~/.minnow/benchmarks/` |
-| **Evals** | Settings → Evals | `server/evals/`, `~/.minnow/evals/` |
+| **Evals** | Headless API / `~/.minnow/evals/` (no Settings page; Bench covers in-app runs) | `server/evals/`, `~/.minnow/evals/` |
 | **Research** | Desktop / `#/research` | `server/research/`, `~/.minnow/research/` |
 | **Scheduler** | `#/app/scheduler` | `server/scheduler/`, `scheduler.json` (jobs only run while app open) |
 | **Calendar** | `#/app/calendar` | `server/calendar/`, SQLite `calendar.db`, CalDAV |
 | **Email** | `#/app/email` | `server/email/`, IMAP/SMTP, encrypted accounts, SQLite `mail-<accountId>.db` |
 | **Voice** | Models → Voice | `server/voice/`, local Whisper + Qwen TTS option |
-| **Settings** | `#/app/settings` | Full config via `/api/config/*`; General category includes General, Notifications, Audio, About; Appearance, Models (Providers, **Routing**, Usage & cost, Sampler, Thinking) use the emphasis-panel layout; Integrations hubs **Search**, **Servers**, **Tools** (collapsible category groups in the tool catalog), **Skills**, **Browser**, **MCP servers**, **Language servers**, and **Editor** match the General emphasis-panel pattern (`settings-general` shell, offline banner, emphasis groups, related links); other Integrations hubs (**Deep Research**, External); Advanced includes Health & diagnostics |
+| **Settings** | `#/app/settings` | Full config via `/api/config/*`; General category includes General, Notifications, Audio, About; Appearance, Models (Providers, **Routing**, Usage & cost, Sampler, Thinking) use the emphasis-panel layout; Integrations hubs **Search**, **Servers**, **Tools** (collapsible category groups in the tool catalog), **Skills**, **Browser**, **MCP servers**, **Language servers**, and **Editor** match the General emphasis-panel pattern (`settings-general` shell, offline banner, emphasis groups, related links); other Integrations hubs (**Deep Research**, External); Advanced is Health & diagnostics only (Orchestration and Evals Settings pages removed — supervisor tuning lives under Autopilot / `config.supervisor`) |
 
 **Deep Research** is a dedicated panel (not a composer mode). **Compare** runs 2–6 blind model slots. **Bench** runs integration + academic packs; distinct from eval harness task packs.
 

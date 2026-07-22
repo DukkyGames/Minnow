@@ -23,7 +23,6 @@ import './styles/input.css';
 import './styles/code-ref-link.css';
 import './styles/context-usage.css';
 import './styles/settings.css';
-import './styles/settings-evals.css';
 import './styles/stats.css';
 import './styles/agent-activity-panel.css';
 import './styles/responsive.css';
@@ -68,6 +67,7 @@ import './styles/minnowos-apps.css';
 import './styles/chat-app.css';
 import './styles/models-page.css';
 import './styles/onboarding.css';
+import './styles/app-picker.css';
 import './styles/app-dialog.css';
 
 import 'highlight.js/styles/github.min.css';

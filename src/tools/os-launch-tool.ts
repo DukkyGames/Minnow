@@ -7,7 +7,8 @@ import { resolveBrainMemoryRoute } from '../ui/brain-memory-routing';
 import { categoryForArea, type SettingsSectionId } from '../ui/settings-page-types';
 import { buildSettingsSearchIndex } from '../ui/settings-search-index';
 import { rankSettingsSearch } from '../ui/settings-search-rank';
-import { isAppId } from '../os/app-registry';
+import { getAppById, isAppId } from '../os/app-registry';
+import { getAppUnavailableReason, isAppAvailable } from '../os/app-preferences';
 import { launchApp as defaultLaunchApp } from '../os/router';
 import type { AppId, LaunchOptions } from '../os/types';
 
@@ -64,7 +65,16 @@ export function toolLaunchMinnowApp(
 
   const appId = rawAppId.trim();
   if (!isAppId(appId)) {
-    return `Error: invalid app_id "${appId}" (expected code, chat, research, experts, bench, or settings)`;
+    return `Error: invalid app_id "${appId}" (expected a MinnowOS app id)`;
+  }
+
+  if (!isAppAvailable(appId)) {
+    const reason = getAppUnavailableReason(appId);
+    const name = getAppById(appId)?.name ?? appId;
+    if (reason === 'user-disabled') {
+      return `Error: ${name} is turned off. Enable it in Settings → Apps, then try again.`;
+    }
+    return `Error: ${name} is not available`;
   }
 
   const options: LaunchOptions = {};

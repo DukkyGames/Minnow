@@ -37,16 +37,17 @@ describe('onboarding step count (MIN-438)', () => {
     testWindow = null;
   });
 
-  test('before provider path is chosen, branch steps are excluded (11 with server)', () => {
+  test('before provider path is chosen, branch steps are excluded (12 with server)', () => {
     const steps = getApplicableSteps(ctxWith());
-    assert.equal(steps.length, 11);
+    assert.equal(steps.length, 12);
+    assert.equal(steps.some((step) => step.id === 'apps'), true);
     assert.equal(steps.some((step) => step.id === 'provider-local'), false);
     assert.equal(steps.some((step) => step.id === 'model-pick'), false);
   });
 
-  test('local provider path includes branch + model pick (13 with server, no api-keys)', () => {
+  test('local provider path includes branch + model pick (14 with server, no api-keys)', () => {
     const steps = getApplicableSteps(ctxWith({ providerPath: 'local' }));
-    assert.equal(steps.length, 13);
+    assert.equal(steps.length, 14);
     assert.equal(steps.some((step) => step.id === 'provider-local'), true);
     assert.equal(steps.some((step) => step.id === 'model-pick'), true);
     assert.equal(steps.some((step) => step.id === 'context7'), true);
@@ -63,16 +64,16 @@ describe('onboarding step count (MIN-438)', () => {
 
     assert.equal(
       aside.querySelector('.mn-onboarding__progress-label')?.textContent,
-      'Step 1 of 11',
+      'Step 1 of 12',
     );
 
     const expanded = getApplicableSteps(ctxWith({ providerPath: 'local' }));
     handle.setSteps(expanded);
-    handle.setActiveStep('provider-local', 3);
+    handle.setActiveStep('provider-local', 4);
 
     assert.equal(
       aside.querySelector('.mn-onboarding__progress-label')?.textContent,
-      'Step 4 of 13',
+      'Step 5 of 14',
     );
 
     handle.destroy();

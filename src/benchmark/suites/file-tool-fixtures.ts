@@ -29,6 +29,9 @@ const FILE_TOOL_MIDDLE_ORDER = [
   'make_directory',
   'copy_file',
   'move_file',
+  'create_pdf',
+  'create_spreadsheet',
+  'create_word_document',
 ] as const;
 
 /** Serial probe order: create → verify read → mutate → delete. */

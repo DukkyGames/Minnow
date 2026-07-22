@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { resetChatsWorkspacePathCache } from '../../src/lib/chats-workspace.ts';
 import { initAppHost, resetAppHostForTests } from '../../src/os/app-host.ts';
+import {
+  resetAppPreferencesForTests,
+  setAppEnabled,
+} from '../../src/os/app-preferences.ts';
 import { getInstanceSnapshot, resetInstancesForTests } from '../../src/os/instances.ts';
 import { initOsPageBridge, resetOsPageBridgeForTests } from '../../src/os/page-bridge.ts';
 import {
@@ -117,15 +121,19 @@ describe('os router navigation', () => {
       window: Window;
       document: Document;
       HTMLElement: typeof HTMLElement;
+      localStorage: Storage;
     };
     g.window = win as unknown as Window & typeof globalThis.window;
     g.document = win.document;
     g.HTMLElement = win.HTMLElement;
+    g.localStorage = win.localStorage;
+    win.localStorage.clear();
     win.document.body.innerHTML = `
       <header class="topbar"></header>
       <div id="appBody"></div>
     `;
     win.location.hash = '#/desktop';
+    resetAppPreferencesForTests();
     resetInstancesForTests();
     resetOsRouterForTests();
     resetOsPageBridgeForTests();
@@ -136,6 +144,7 @@ describe('os router navigation', () => {
     resetOsRouterForTests();
     resetInstancesForTests();
     resetOsPageBridgeForTests();
+    resetAppPreferencesForTests();
   });
 
   test('getCurrentRoute reflects desktop hash', () => {
@@ -151,6 +160,24 @@ describe('os router navigation', () => {
     const route = getCurrentRoute();
     assert.equal(route.view, 'app');
     assert.equal(route.appId, 'code');
+  });
+
+  test('launchApp blocks user-disabled optional apps and returns to desktop', () => {
+    setAppEnabled('compare', false);
+    launchApp('compare');
+    assert.equal(window.location.hash, '#/desktop');
+    assert.equal(
+      getInstanceSnapshot().instances.some((inst) => inst.appId === 'compare'),
+      false,
+    );
+  });
+
+  test('hash route for a disabled app falls back to desktop', () => {
+    setAppEnabled('bench', false);
+    window.location.hash = '#/app/bench';
+    syncOsRouteFromHashForTests();
+    assert.equal(window.location.hash, '#/desktop');
+    assert.equal(getInstanceSnapshot().view, 'desktop');
   });
 
   test('applyRouteFromHash preserves Code foreground on #/bugs (MIN-156)', () => {

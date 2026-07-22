@@ -3,6 +3,7 @@
  */
 
 import { APP_MODULE_LOADERS, isAppId } from './app-registry';
+import { isAppAvailable } from './app-preferences';
 import type { AppId } from './types';
 
 const initializedApps = new Set<AppId>();
@@ -11,6 +12,8 @@ let globalBugsInitialized = false;
 /** Initialize a single app page module once. */
 export async function ensureAppInitialized(appId: AppId): Promise<void> {
   if (initializedApps.has(appId)) return;
+  // Do not lazy-init apps the user (or developer gate) has made unavailable.
+  if (!isAppAvailable(appId)) return;
   const loader = APP_MODULE_LOADERS[appId];
   if (!loader) return;
   const mod = await loader();
@@ -38,7 +41,7 @@ export async function ensureBootAppsInitialized(): Promise<void> {
   await ensureGlobalBugsInitialized();
 
   const appId = bootAppIdFromHash(window.location.hash);
-  if (appId) {
+  if (appId && isAppAvailable(appId)) {
     await ensureAppInitialized(appId);
   }
 }

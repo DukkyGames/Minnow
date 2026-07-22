@@ -23,11 +23,11 @@ describe('settings-search-index', () => {
     }
   });
 
-  test('orchestration alias maps to features section', () => {
+  test('diagnostics aliases include health keywords', () => {
     const index = buildSettingsSearchIndex();
-    const features = index.find((e) => e.id === 'section:features');
-    assert.ok(features);
-    assert.ok(features.keywords?.includes('orchestration'));
+    const diagnostics = index.find((e) => e.id === 'section:diagnostics');
+    assert.ok(diagnostics);
+    assert.ok(diagnostics.keywords?.includes('health'));
   });
 
   test('voice keywords route to Models app entry', () => {

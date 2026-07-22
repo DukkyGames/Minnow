@@ -7,11 +7,11 @@ const { rankSettingsSearch } = await import(
 
 const SAMPLE = [
   {
-    id: 'section:features',
-    label: 'Orchestration',
-    sectionId: 'features',
+    id: 'section:diagnostics',
+    label: 'Health & diagnostics',
+    sectionId: 'diagnostics',
     kind: 'section',
-    keywords: ['orchestration', 'orchestrate'],
+    keywords: ['health', 'errors', 'logs'],
     hint: 'Section',
   },
   {
@@ -38,9 +38,9 @@ describe('settings-search-rank', () => {
     assert.equal(ranked[0]?.id, 'section:general');
   });
 
-  test('orchestration matches features via keyword', () => {
-    const ranked = rankSettingsSearch('orchestration', SAMPLE);
-    assert.equal(ranked[0]?.id, 'section:features');
+  test('health matches diagnostics via keyword', () => {
+    const ranked = rankSettingsSearch('health', SAMPLE);
+    assert.equal(ranked[0]?.id, 'section:diagnostics');
   });
 
   test('tool id substring matches tool entry', () => {
