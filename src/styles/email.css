@@ -275,6 +275,43 @@
   color-scheme: light;
 }
 
+/* "Match theme" inverts the content to near-black; the backdrop follows. */
+.email-body-frame--dark {
+  background: #0b0b0b;
+  color-scheme: dark;
+}
+
+/* Per-message body controls (the Light / Match theme toggle). */
+.email-body-controls {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}
+
+.email-body-theme-toggle {
+  padding: 3px 9px;
+  font-size: 11px;
+  font-family: inherit;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+}
+
+.email-body-theme-toggle.is-active {
+  border-color: var(--mn-accent);
+  color: var(--mn-fg);
+  background: color-mix(in srgb, var(--mn-accent) 10%, transparent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .email-body-theme-toggle:hover {
+    color: var(--mn-fg);
+    border-color: var(--mn-border-strong, var(--mn-border));
+  }
+}
+
 .email-remote-notice {
   display: flex;
   align-items: center;
@@ -1808,6 +1845,57 @@
 .email-reader-att-chip:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+.email-reader-att-chip.is-active {
+  border-color: var(--mn-accent);
+  background: color-mix(in srgb, var(--mn-accent) 10%, transparent);
+}
+
+/* Inline attachment preview (image / PDF) below the chips. */
+.email-reader-att-preview {
+  margin: 0 0 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md, 10px);
+  overflow: hidden;
+  background: var(--mn-bg-elevated, var(--mn-bg));
+}
+
+.email-reader-att-preview-bar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.email-reader-att-loading {
+  margin: 0;
+  padding: 16px;
+  font-size: 13px;
+  color: var(--mn-fg-muted);
+}
+
+.email-reader-att-frame {
+  display: flex;
+  justify-content: center;
+  padding: 8px;
+  background: #ffffff;
+  color-scheme: light;
+}
+
+.email-reader-att-image {
+  max-width: 100%;
+  max-height: 60vh;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
+.email-reader-att-pdf {
+  width: 100%;
+  height: 60vh;
+  border: 0;
+  background: #ffffff;
 }
 
 .email-reader-compose-mount {

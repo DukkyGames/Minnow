@@ -74,6 +74,14 @@ let imageAllowlist: string[] | null = null;
 /** Messages the user opted into for this session only ("Load images" once). */
 const imagesLoadedFor = new Set<string>();
 
+/** Attachments we can show inline rather than only offer as a download. */
+function previewKind(contentType: string, filename: string): "image" | "pdf" | null {
+  const ct = (contentType || "").toLowerCase();
+  if (ct.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(filename)) return "image";
+  if (ct === "application/pdf" || /\.pdf$/i.test(filename)) return "pdf";
+  return null;
+}
+
 /** Attachment sizes, in the units a person reads them in. */
 function formatBytes(bytes: number): string {
   const size = Number(bytes) || 0;
@@ -144,21 +152,30 @@ function renderBodyWithRemoteControls(
 ): HTMLElement {
   const wrap = el("div", "email-thread-body-wrap");
   const sender = normalizeSender(msg.from);
+  const hasHtml = Boolean(msg.bodyHtml?.trim());
 
-  const paint = (load: boolean): void => {
-    wrap.replaceChildren();
+  // Per-message state: whether remote images have been let through, and whether
+  // the body is recoloured to fit a dark theme. Both feed one repaint.
+  let loaded = imagesLoadedFor.has(msg.id) || (imageAllowlist?.includes(sender) ?? false);
+  let dark = false;
+
+  const bodyRegion = el("div", "email-thread-body-region");
+
+  const paint = (): void => {
+    bodyRegion.replaceChildren();
 
     const notice = el("div", "email-remote-notice");
     notice.hidden = true;
     const body = el("div", "email-thread-body");
-    wrap.append(notice, body);
+    bodyRegion.append(notice, body);
 
     renderEmailBody(body, msg, {
       viewMode,
-      loadRemoteImages: load,
+      loadRemoteImages: loaded,
+      matchTheme: dark,
       inlineParts: { accountId, messageKey: msg.id },
       onRemoteContent: ({ blockedCount }) => {
-        if (load || blockedCount === 0) return;
+        if (loaded || blockedCount === 0) return;
 
         const label = blockedCount === 1 ? "1 remote image" : `${blockedCount} remote images`;
         const text = el(
@@ -171,7 +188,8 @@ function renderBodyWithRemoteControls(
         loadOnce.type = "button";
         loadOnce.addEventListener("click", () => {
           imagesLoadedFor.add(msg.id);
-          paint(true);
+          loaded = true;
+          paint();
         });
 
         notice.replaceChildren(text, loadOnce);
@@ -182,7 +200,8 @@ function renderBodyWithRemoteControls(
           always.addEventListener("click", async () => {
             try {
               imageAllowlist = await allowImagesFromSender(sender);
-              paint(true);
+              loaded = true;
+              paint();
             } catch (err) {
               onStatus?.(
                 "err",
@@ -198,15 +217,40 @@ function renderBodyWithRemoteControls(
     });
   };
 
-  const trusted = imagesLoadedFor.has(msg.id) || (imageAllowlist?.includes(sender) ?? false);
-  paint(trusted);
+  // Mail is drawn for white, so Light is the default; "Match theme" recolours
+  // text-dominant mail to fit dark via a safe smart-invert.
+  if (hasHtml && viewMode === "html") {
+    const controls = el("div", "email-body-controls");
+    const toggle = el(
+      "button",
+      "email-body-theme-toggle",
+      "Match theme",
+    ) as HTMLButtonElement;
+    toggle.type = "button";
+    toggle.setAttribute("aria-pressed", "false");
+    toggle.title = "Recolour this message to fit the dark theme";
+    toggle.addEventListener("click", () => {
+      dark = !dark;
+      toggle.classList.toggle("is-active", dark);
+      toggle.setAttribute("aria-pressed", dark ? "true" : "false");
+      paint();
+    });
+    controls.appendChild(toggle);
+    wrap.appendChild(controls);
+  }
+
+  wrap.appendChild(bodyRegion);
+  paint();
 
   // Prime the allowlist once, then repaint if this sender turns out to be on it.
   if (imageAllowlist === null) {
     void fetchImageAllowlist()
       .then((senders) => {
         imageAllowlist = senders;
-        if (!trusted && senders.includes(sender)) paint(true);
+        if (!loaded && senders.includes(sender)) {
+          loaded = true;
+          paint();
+        }
       })
       .catch(() => {
         imageAllowlist = [];
@@ -1423,10 +1467,101 @@ export async function renderEmailLayout(
         const downloadable = (msg.attachments ?? []).filter((att) => !att.inline);
         if (downloadable.length > 0) {
           const attRow = el("div", "email-reader-attachments");
+          attRow.appendChild(el("span", "email-reader-att-label", "Attachments"));
 
-          attRow.appendChild(
-            el("span", "email-reader-att-label", "Attachments"),
-          );
+          // One shared preview slot below the chips: image/PDF attachments open
+          // here; everything else downloads on click.
+          const previewMount = el("div", "email-reader-att-preview");
+          previewMount.hidden = true;
+
+          let openIndex: number | null = null;
+          let previewUrl: string | null = null;
+
+          const clearPreview = (): void => {
+            previewMount.hidden = true;
+            previewMount.replaceChildren();
+            openIndex = null;
+            if (previewUrl) {
+              URL.revokeObjectURL(previewUrl);
+              previewUrl = null;
+            }
+            for (const other of attRow.querySelectorAll(".email-reader-att-chip")) {
+              other.classList.remove("is-active");
+              other.setAttribute("aria-expanded", "false");
+            }
+          };
+
+          const downloadAttachment = async (index: number, chip: HTMLButtonElement): Promise<void> => {
+            chip.disabled = true;
+            try {
+              const { blob, filename } = await downloadEmailAttachment(options.account.id, msg.id, index);
+              saveBlobAs(blob, filename);
+            } catch (err) {
+              options.onStatus?.(
+                "err",
+                err instanceof Error ? err.message : "Could not download the attachment",
+              );
+            } finally {
+              chip.disabled = false;
+            }
+          };
+
+          const openPreview = async (
+            att: { index: number; filename: string; contentType: string },
+            kind: "image" | "pdf",
+            chip: HTMLButtonElement,
+          ): Promise<void> => {
+            if (openIndex === att.index) {
+              clearPreview();
+              return;
+            }
+            clearPreview();
+            openIndex = att.index;
+            chip.classList.add("is-active");
+            chip.setAttribute("aria-expanded", "true");
+            previewMount.replaceChildren(el("p", "email-reader-att-loading", "Loading preview…"));
+            previewMount.hidden = false;
+
+            let blob: Blob;
+            let filename: string;
+            try {
+              ({ blob, filename } = await downloadEmailAttachment(options.account.id, msg.id, att.index));
+            } catch (err) {
+              if (openIndex !== att.index) return;
+              previewMount.replaceChildren(
+                el("p", "email-empty is-err", err instanceof Error ? err.message : "Could not load the preview"),
+              );
+              return;
+            }
+            if (openIndex !== att.index) return; // superseded by another click
+
+            previewUrl = URL.createObjectURL(blob);
+
+            const bar = el("div", "email-reader-att-preview-bar");
+            const dl = el("button", "email-btn", "Download") as HTMLButtonElement;
+            dl.type = "button";
+            dl.addEventListener("click", () => saveBlobAs(blob, filename));
+            const close = el("button", "email-btn", "Close") as HTMLButtonElement;
+            close.type = "button";
+            close.addEventListener("click", clearPreview);
+            bar.append(dl, close);
+
+            const frame = el("div", "email-reader-att-frame");
+            if (kind === "image") {
+              const img = el("img", "email-reader-att-image") as HTMLImageElement;
+              img.src = previewUrl;
+              img.alt = att.filename;
+              img.loading = "lazy";
+              frame.appendChild(img);
+            } else {
+              const pdf = el("iframe", "email-reader-att-pdf") as HTMLIFrameElement;
+              pdf.src = previewUrl;
+              pdf.title = att.filename;
+              frame.appendChild(pdf);
+            }
+
+            previewMount.replaceChildren(bar, frame);
+          };
 
           for (const att of downloadable) {
             const chip = el(
@@ -1435,33 +1570,20 @@ export async function renderEmailLayout(
               `${att.filename} (${formatBytes(att.size)})`,
             ) as HTMLButtonElement;
             chip.type = "button";
-            chip.title = `Download ${att.filename}`;
-
-            chip.addEventListener("click", () => {
-              void (async () => {
-                chip.disabled = true;
-                try {
-                  const { blob, filename } = await downloadEmailAttachment(
-                    options.account.id,
-                    msg.id,
-                    att.index,
-                  );
-                  saveBlobAs(blob, filename);
-                } catch (err) {
-                  options.onStatus?.(
-                    "err",
-                    err instanceof Error ? err.message : "Could not download the attachment",
-                  );
-                } finally {
-                  chip.disabled = false;
-                }
-              })();
-            });
-
+            const kind = previewKind(att.contentType, att.filename);
+            if (kind) {
+              chip.title = `Preview ${att.filename}`;
+              chip.setAttribute("aria-expanded", "false");
+              chip.addEventListener("click", () => void openPreview(att, kind, chip));
+            } else {
+              chip.title = `Download ${att.filename}`;
+              chip.addEventListener("click", () => void downloadAttachment(att.index, chip));
+            }
             attRow.appendChild(chip);
           }
 
           block.appendChild(attRow);
+          block.appendChild(previewMount);
         }
 
         block.appendChild(
