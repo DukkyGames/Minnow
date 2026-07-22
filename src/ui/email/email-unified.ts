@@ -186,6 +186,23 @@ export async function renderUnifiedInbox(
   );
   pane.appendChild(header);
 
+  // A legend so the row dots are decodable, not a guessing game about which
+  // colour is which mailbox.
+  const legend = el('div', 'email-unified-legend');
+  legend.setAttribute('role', 'list');
+  legend.setAttribute('aria-label', 'Mailbox colours');
+  for (const account of options.accounts) {
+    const idx = accountColorIndex(options.accounts, account.id);
+    const item = el('span', 'email-unified-legend-item');
+    item.setAttribute('role', 'listitem');
+    const dot = el('span', `email-account-dot ${ACCOUNT_DOT_CLASSES[idx]}`);
+    dot.setAttribute('aria-hidden', 'true');
+    item.appendChild(dot);
+    item.appendChild(el('span', 'email-unified-legend-label', account.label));
+    legend.appendChild(item);
+  }
+  pane.appendChild(legend);
+
   // A mailbox that failed is named rather than silently missing — otherwise an
   // expired password looks like an empty inbox.
   for (const failure of result.failures) {

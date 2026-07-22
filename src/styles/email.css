@@ -475,7 +475,7 @@
 
 /* "Updated 2m ago" — mono, quiet, instrumentation not chrome. */
 .email-list-updated {
-  font-family: var(--mn-font-mono, "JetBrains Mono", ui-monospace, monospace);
+  font-family: var(--font-mono, "JetBrains Mono", ui-monospace, monospace);
   font-size: 11px;
   color: var(--mn-fg-muted);
   white-space: nowrap;
@@ -2718,6 +2718,33 @@
 
 .email-account-dot--4 {
   background: var(--mn-fg-muted);
+}
+
+/* Per-account dots echoed in the chrome, so a mailbox reads the same there. */
+.email-chrome-account-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  align-self: center;
+}
+
+/* Legend that makes the unified row dots decodable. */
+.email-unified-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 6px 12px 2px;
+}
+
+.email-unified-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.email-unified-legend-label {
+  font-size: 11px;
+  color: var(--mn-fg-muted);
 }
 
 .email-unified-pane .email-list-row {
