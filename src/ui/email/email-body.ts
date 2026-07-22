@@ -59,6 +59,12 @@ export interface EmailBodyRenderOptions {
   viewMode?: EmailBodyViewMode;
   /** Re-attach parked images through the local proxy. */
   loadRemoteImages?: boolean;
+  /**
+   * Recolour the mail to sit in a dark theme via a safe smart-invert (images
+   * are re-inverted so they stay right-way-round). Off by default: mail is
+   * authored for a white canvas, so Light is the readable default.
+   */
+  matchTheme?: boolean;
   /** Reports how many remote references were withheld, for the "load images" bar. */
   onRemoteContent?: (info: { blockedCount: number }) => void;
   /**
@@ -226,6 +232,9 @@ const MAIL_RESET_CSS = `
     padding: 0;
     background: #ffffff;
     color: #1a1a1a;
+    /* Mail is drawn for a white page; keep UA controls and scrollbars light
+       even when the app around this frame is dark. */
+    color-scheme: light;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     font-size: 14px;
     line-height: 1.5;
@@ -252,6 +261,23 @@ const MAIL_RESET_CSS = `
     border: 1px dashed #c8c8c8;
     border-radius: 2px;
   }
+  /* "Match theme": a safe smart-invert for dark reading — the root inverts, then
+     media is inverted back so photos and logos stay right-way-round. Best for
+     text-dominant mail; the reader defaults to Light. */
+  html.mn-dark {
+    background: #ffffff;
+    filter: invert(1) hue-rotate(180deg);
+  }
+  html.mn-dark img,
+  html.mn-dark video,
+  html.mn-dark picture,
+  html.mn-dark svg,
+  html.mn-dark [background],
+  html.mn-dark [style*="background-image"],
+  html.mn-dark [style*="background: url"],
+  html.mn-dark [style*="background:url"] {
+    filter: invert(1) hue-rotate(180deg);
+  }
 `;
 
 /**
@@ -261,7 +287,7 @@ const MAIL_RESET_CSS = `
  * parking above missed an attribute, `img-src` permits only same-origin (the
  * proxy) and inline data, so the sender's host is unreachable from here.
  */
-function buildSrcdoc(bodyHtml: string): string {
+function buildSrcdoc(bodyHtml: string, dark: boolean): string {
   const csp = [
     "default-src 'none'",
     "img-src 'self' data: cid:",
@@ -271,7 +297,7 @@ function buildSrcdoc(bodyHtml: string): string {
   ].join('; ');
 
   return [
-    '<!doctype html><html><head>',
+    `<!doctype html><html${dark ? ' class="mn-dark"' : ''}><head>`,
     `<meta http-equiv="Content-Security-Policy" content="${csp}">`,
     '<meta name="referrer" content="no-referrer">',
     `<style>${MAIL_RESET_CSS}</style>`,
@@ -336,13 +362,15 @@ export function renderEmailBody(
 
   const frame = document.createElement('iframe');
   frame.className = 'email-body-frame';
+  // Match the inverted canvas so the frame edges don't flash white in dark mode.
+  if (opts.matchTheme) frame.classList.add('email-body-frame--dark');
   // No allow-scripts, ever. allow-same-origin is what lets us measure the
   // content height; on its own it grants no script execution, but the two
   // together would let the frame reach out of the sandbox.
   frame.setAttribute('sandbox', 'allow-same-origin allow-popups allow-popups-to-escape-sandbox');
   frame.setAttribute('referrerpolicy', 'no-referrer');
   frame.setAttribute('title', 'Message body');
-  frame.srcdoc = buildSrcdoc(template.innerHTML);
+  frame.srcdoc = buildSrcdoc(template.innerHTML, opts.matchTheme === true);
   frame.addEventListener('load', () => fitFrameToContent(frame));
 
   mount.appendChild(frame);
