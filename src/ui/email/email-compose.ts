@@ -2,7 +2,7 @@
  * Inline compose block for the reading pane footer.
  */
 
-import { appConfirm, appPrompt } from "../app-dialog";
+import { appConfirm } from "../app-dialog";
 import type { EmailAccount, EmailMessage } from "../../email/client";
 import {
   draftEmailReply,
@@ -696,6 +696,15 @@ export function mountEmailCompose(
 
   const actions = el("div", "email-compose-actions");
 
+  // Inline notices that sit just above the action row instead of interrupting
+  // with a dialog: an attachment warning and the send-later scheduler.
+  const warnRow = el("div", "email-compose-warning");
+  warnRow.hidden = true;
+  warnRow.setAttribute("role", "alert");
+
+  const scheduleRow = el("div", "email-compose-schedule");
+  scheduleRow.hidden = true;
+
   const discardBtn = el("button", "email-btn", "Discard") as HTMLButtonElement;
   discardBtn.type = "button";
   discardBtn.addEventListener("click", () => {
@@ -736,7 +745,7 @@ export function mountEmailCompose(
       .filter(Boolean)
       .join(", ");
 
-  const dispatch = async (sendAt?: string): Promise<void> => {
+  const dispatch = async (sendAt?: string, force = false): Promise<void> => {
     const to = cleanRecipients(toInput.value);
     const cc = cleanRecipients(ccInput.value);
     const bcc = cleanRecipients(bccInput.value);
@@ -750,14 +759,13 @@ export function mountEmailCompose(
       return;
     }
 
-    // Catch the classic mistake before it goes out, not after.
-    if (attachments.length === 0 && ATTACHMENT_INTENT.test(body)) {
-      const anyway = await appConfirm(
-        "This message mentions an attachment but none is attached. Send anyway?",
-        { confirmLabel: "Send anyway" },
-      );
-      if (!anyway) return;
+    // Catch the classic mistake before it goes out — an inline warning, not a
+    // dialog. "Send anyway" re-dispatches with force set.
+    if (attachments.length === 0 && ATTACHMENT_INTENT.test(body) && !force) {
+      showAttachmentWarning(sendAt);
+      return;
     }
+    hideComposeNotices();
 
     const latest = options.messages?.[options.messages.length - 1];
     const replyHeaders =
@@ -823,30 +831,123 @@ export function mountEmailCompose(
   const laterBtn = el("button", "email-btn", "Send later") as HTMLButtonElement;
   laterBtn.type = "button";
   laterBtn.title = "Schedule this message";
-  laterBtn.addEventListener("click", () => {
-    void (async () => {
-      const when = await appPrompt(
-        "Send this message at (e.g. 2026-07-20 09:00):",
-        defaultSendLater(),
-      );
-      if (when === null) return;
+  laterBtn.setAttribute("aria-expanded", "false");
+  laterBtn.addEventListener("click", () => openSchedule());
 
-      const parsed = new Date(when.trim().replace(" ", "T"));
+  /** Collapse the schedule row and clear its active marker. */
+  const closeSchedule = (): void => {
+    scheduleRow.hidden = true;
+    scheduleRow.replaceChildren();
+    laterBtn.classList.remove("is-active");
+    laterBtn.setAttribute("aria-expanded", "false");
+  };
+
+  /** Clear both inline notices once a send actually goes through. */
+  const hideComposeNotices = (): void => {
+    warnRow.hidden = true;
+    warnRow.replaceChildren();
+    closeSchedule();
+  };
+
+  /** Inline "no attachment" warning with a Send anyway escape hatch. */
+  const showAttachmentWarning = (sendAt?: string): void => {
+    warnRow.replaceChildren();
+    warnRow.appendChild(
+      el(
+        "span",
+        "email-compose-warning-text",
+        "This message mentions an attachment, but none is attached.",
+      ),
+    );
+    const anyway = el(
+      "button",
+      "email-btn email-btn-primary",
+      "Send anyway",
+    ) as HTMLButtonElement;
+    anyway.type = "button";
+    anyway.addEventListener("click", () => {
+      warnRow.hidden = true;
+      void dispatch(sendAt, true);
+    });
+    const keep = el("button", "email-btn", "Keep editing") as HTMLButtonElement;
+    keep.type = "button";
+    keep.addEventListener("click", () => {
+      warnRow.hidden = true;
+      warnRow.replaceChildren();
+    });
+    const row = el("div", "email-compose-notice-actions");
+    row.append(anyway, keep);
+    warnRow.appendChild(row);
+    warnRow.hidden = false;
+    anyway.focus();
+  };
+
+  /** Inline datetime picker for send-later, replacing the free-text prompt. */
+  const openSchedule = (): void => {
+    if (!scheduleRow.hidden) {
+      closeSchedule();
+      return;
+    }
+    warnRow.hidden = true;
+    scheduleRow.replaceChildren();
+    laterBtn.classList.add("is-active");
+    laterBtn.setAttribute("aria-expanded", "true");
+
+    const field = el("label", "email-compose-schedule-field");
+    field.appendChild(el("span", "email-compose-schedule-label", "Send at"));
+    const input = el("input", "email-input email-compose-schedule-input") as HTMLInputElement;
+    input.type = "datetime-local";
+    input.value = defaultSendLater();
+    field.appendChild(input);
+
+    const go = el("button", "email-btn email-btn-primary", "Schedule") as HTMLButtonElement;
+    go.type = "button";
+    const cancel = el("button", "email-btn", "Cancel") as HTMLButtonElement;
+    cancel.type = "button";
+
+    const schedule = (): void => {
+      const value = input.value.trim();
+      if (!value) {
+        input.focus();
+        return;
+      }
+      const parsed = new Date(value);
       if (!Number.isFinite(parsed.getTime())) {
         options.onStatus?.("err", "That is not a time I can read");
         return;
       }
       if (parsed.getTime() <= Date.now()) {
         options.onStatus?.("err", "Pick a time in the future");
+        input.focus();
         return;
       }
-      await dispatch(parsed.toISOString());
-    })();
-  });
+      closeSchedule();
+      void dispatch(parsed.toISOString());
+    };
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        schedule();
+      } else if (event.key === "Escape") {
+        closeSchedule();
+      }
+    });
+    go.addEventListener("click", schedule);
+    cancel.addEventListener("click", closeSchedule);
+
+    const scheduleActions = el("div", "email-compose-notice-actions");
+    scheduleActions.append(go, cancel);
+    scheduleRow.append(field, scheduleActions);
+    scheduleRow.hidden = false;
+    input.focus();
+  };
 
   actions.appendChild(discardBtn);
   actions.appendChild(laterBtn);
   actions.appendChild(sendBtn);
+  mount.appendChild(scheduleRow);
+  mount.appendChild(warnRow);
   mount.appendChild(actions);
 
   // Cmd/Ctrl+Enter sends from anywhere in the composer.
@@ -858,13 +959,13 @@ export function mountEmailCompose(
   });
 }
 
-/** Tomorrow at 9am, in the local timezone, as a prompt default. */
+/** Tomorrow at 9am, local time, as a `datetime-local` input value. */
 function defaultSendLater(): string {
   const when = new Date();
   when.setDate(when.getDate() + 1);
   when.setHours(9, 0, 0, 0);
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())} ${pad(when.getHours())}:${pad(when.getMinutes())}`;
+  return `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}T${pad(when.getHours())}:${pad(when.getMinutes())}`;
 }
 
 function composeTitle(mode: ComposeMode): string {

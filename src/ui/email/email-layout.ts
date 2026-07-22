@@ -1,4 +1,3 @@
-import { appAlert, appConfirm, appPrompt } from '../app-dialog';
 /**
 
  * Three-pane mail layout — folders, message list, reading pane.
@@ -54,6 +53,8 @@ import {
   bindMailShortcuts,
   showShortcutCheatSheet,
 } from "./email-keyboard";
+
+import { showActionUndoToast } from "./email-undo-toast";
 
 import { snoozeEmailMessage } from "../../email/client-drafts";
 
@@ -938,7 +939,9 @@ export async function renderEmailLayout(
     }
 
     const selected =
-      messages.find((row) => row.id === selectedId) ?? selectedThread[0];
+      messages.find((row) => row.id === selectedId) ??
+      selectedThread.find((row) => row.id === selectedId) ??
+      selectedThread[0];
 
     if (!selected) return;
 
@@ -1068,29 +1071,19 @@ export async function renderEmailLayout(
 
       const archiveBtn = iconBtn(EMAIL_ICONS.archive, "Archive");
 
-      archiveBtn.addEventListener("click", async () => {
-        await archiveEmailMessage(options.account.id, selected.id);
-
-        options.onStatus?.("ok", "Archived");
-
-        selectedId = null;
-
-        await refreshAll();
-      });
+      archiveBtn.addEventListener("click", () =>
+        void removeOpenMessage(selected, "archive", "Archived"),
+      );
 
       const deleteBtn = iconBtn(EMAIL_ICONS.trash, "Delete");
 
       deleteBtn.classList.add("email-icon-btn--danger");
 
-      deleteBtn.addEventListener("click", async () => {
-        if (!await appConfirm("Move to trash?")) return;
-
-        await deleteEmailMessage(options.account.id, selected.id);
-
-        selectedId = null;
-
-        await refreshAll();
-      });
+      // No confirm: trash is recoverable, so the reader closes at once and an
+      // Undo toast is the safety net (see removeOpenMessage).
+      deleteBtn.addEventListener("click", () =>
+        void removeOpenMessage(selected, "delete", "Trashed"),
+      );
 
       const moreWrap = el("div", "email-reader-more");
 
@@ -1691,6 +1684,10 @@ export async function renderEmailLayout(
     // The reader is keyed by message; open the newest one in the thread.
     try {
       const { messages: rows } = await fetchEmailThread(options.account.id, threadId);
+      // Seed the thread so the reader can resolve the open message in
+      // conversation mode, where the per-message store stays empty. Without
+      // this the reading pane opens blank on every conversation click.
+      selectedThread = rows;
       selectedId = rows[rows.length - 1]?.id ?? null;
     } catch (err) {
       options.onStatus?.(
@@ -1841,6 +1838,56 @@ export async function renderEmailLayout(
     ]);
   };
 
+  /**
+   * Archive or trash the open message with no confirm.
+   *
+   * Both are recoverable (Trash is a folder; Archive is a move), so the reader
+   * closes at once — the message feels gone — and an Undo toast, plus `z`, is
+   * the only safety net. A failure restores the reader so nothing is lost.
+   */
+  const removeOpenMessage = async (
+    message: EmailMessage,
+    action: "archive" | "delete",
+    label: string,
+  ): Promise<void> => {
+    const subject = message.subject || "message";
+    const folder = message.folder;
+
+    if (selectedId === message.id) {
+      selectedId = null;
+      composeMode = null;
+      void renderList();
+      void renderReader();
+    }
+
+    const undo = async () => {
+      await moveEmailMessage(options.account.id, message.id, folder);
+      await refreshAll();
+    };
+
+    try {
+      await (action === "archive"
+        ? archiveEmailMessage(options.account.id, message.id)
+        : deleteEmailMessage(options.account.id, message.id));
+      pushUndo(label, undo);
+      showActionUndoToast(`${label} "${subject}"`, {
+        onUndo: undo,
+        onStatus: options.onStatus,
+      });
+      await refreshAll();
+    } catch (err) {
+      options.onStatus?.(
+        "err",
+        err instanceof Error
+          ? err.message
+          : `Couldn't ${action === "archive" ? "archive" : "move to Trash"} — nothing changed`,
+      );
+      selectedId = message.id;
+      await refreshAll();
+      await renderReader();
+    }
+  };
+
   // ---------------------------------------------------------------------
   // Keyboard model
   // ---------------------------------------------------------------------
@@ -1920,10 +1967,15 @@ export async function renderEmailLayout(
       );
       if (!ok) return;
 
-      options.onStatus?.("ok", `${label} "${subject}"`);
-      pushUndo(label, async () => {
+      const undo = async () => {
         await moveEmailMessage(options.account.id, message.id, folder);
         await refreshMessages();
+      };
+      pushUndo(label, undo);
+      // The toast is the feedback and the way back; `z` mirrors it.
+      showActionUndoToast(`${label} "${subject}"`, {
+        onUndo: undo,
+        onStatus: options.onStatus,
       });
       return;
     }
@@ -1947,16 +1999,17 @@ export async function renderEmailLayout(
       return;
     }
 
-    options.onStatus?.(
-      "ok",
-      `${label} "${subject}" (${ids.length} message${ids.length === 1 ? "" : "s"})`,
-    );
-    pushUndo(label, async () => {
+    const undo = async () => {
       for (const origin of origins) {
         await moveEmailMessage(options.account.id, origin.id, origin.folder);
       }
       await refreshMessages();
-    });
+    };
+    pushUndo(label, undo);
+    showActionUndoToast(
+      `${label} "${subject}" (${ids.length} message${ids.length === 1 ? "" : "s"})`,
+      { onUndo: undo, onStatus: options.onStatus },
+    );
     await refreshMessages();
   };
 

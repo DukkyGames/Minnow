@@ -1,11 +1,15 @@
 /**
- * Undo affordance for queued sends.
+ * Undo affordances.
  *
- * This is the replacement for the pre-send `window.confirm`. A modal asking
+ * These are the replacement for the pre-action `window.confirm`. A modal asking
  * "are you sure?" is answered reflexively after the third time and stops being
- * a real check; a few seconds during which the send is visibly recallable
- * catches the mistakes people actually make — wrong recipient, missing
- * attachment, sent-too-soon — without gating the common case behind a click.
+ * a real check; a few seconds during which the action is visibly recallable
+ * catches the mistakes people actually make — wrong recipient, wrong message,
+ * fat-fingered delete — without gating the common case behind a click.
+ *
+ * Two shapes share one slot at the bottom of the screen (a second toast
+ * replaces the first): a live countdown for a queued send, and a fixed-window
+ * "Undo" for an already-applied mutation such as trash or archive.
  */
 
 import { cancelOutboxSend, type OutboxEntry } from '../../email/client';
@@ -15,6 +19,34 @@ let activeToast: HTMLElement | null = null;
 function dismiss(): void {
   activeToast?.remove();
   activeToast = null;
+}
+
+/** Build the shared toast shell: a status line and one trailing action button. */
+function buildToast(buttonLabel: string): {
+  toast: HTMLElement;
+  label: HTMLElement;
+  button: HTMLButtonElement;
+} {
+  // Only one recallable action is ever pending; a new one replaces the old.
+  dismiss();
+
+  const toast = document.createElement('div');
+  toast.className = 'email-undo-toast';
+  toast.setAttribute('role', 'status');
+
+  const label = document.createElement('span');
+  label.className = 'email-undo-toast-text';
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'email-undo-toast-btn';
+  button.textContent = buttonLabel;
+
+  toast.append(label, button);
+  document.body.appendChild(toast);
+  activeToast = toast;
+
+  return { toast, label, button };
 }
 
 export interface SendUndoToastOptions {
@@ -31,24 +63,7 @@ export function showSendUndoToast(
   entry: OutboxEntry,
   options: SendUndoToastOptions = {},
 ): () => void {
-  // Only one send is ever in flight from the composer; a second replaces the first.
-  dismiss();
-
-  const toast = document.createElement('div');
-  toast.className = 'email-undo-toast';
-  toast.setAttribute('role', 'status');
-
-  const label = document.createElement('span');
-  label.className = 'email-undo-toast-text';
-
-  const undoBtn = document.createElement('button');
-  undoBtn.type = 'button';
-  undoBtn.className = 'email-undo-toast-btn';
-  undoBtn.textContent = 'Undo';
-
-  toast.append(label, undoBtn);
-  document.body.appendChild(toast);
-  activeToast = toast;
+  const { toast, label, button: undoBtn } = buildToast('Undo');
 
   const deadline = new Date(entry.sendAt).getTime();
   let timer = 0;
@@ -90,5 +105,49 @@ export function showSendUndoToast(
   tick();
   timer = window.setInterval(tick, 250);
 
+  return stop;
+}
+
+export interface ActionUndoToastOptions {
+  /** Reverse the action. Rejections surface through `onStatus`. */
+  onUndo: () => void | Promise<void>;
+  /** How long the Undo stays offered. */
+  durationMs?: number;
+  onStatus?: (state: 'ok' | 'err', message: string) => void;
+}
+
+/**
+ * Show "{message} · Undo" for an action that already applied optimistically
+ * (trash, archive, move). The window is fixed rather than a countdown: the work
+ * is done, this is only the grace period to take it back.
+ *
+ * @returns a function that dismisses the toast early
+ */
+export function showActionUndoToast(
+  message: string,
+  options: ActionUndoToastOptions,
+): () => void {
+  const { toast, label, button: undoBtn } = buildToast('Undo');
+  label.textContent = message;
+
+  let timer = 0;
+  const stop = (): void => {
+    window.clearTimeout(timer);
+    if (activeToast === toast) dismiss();
+  };
+
+  undoBtn.addEventListener('click', async () => {
+    undoBtn.disabled = true;
+    try {
+      await options.onUndo();
+      options.onStatus?.('ok', `Undid ${message.toLowerCase()}`);
+    } catch (err) {
+      options.onStatus?.('err', err instanceof Error ? err.message : 'Undo failed');
+    } finally {
+      stop();
+    }
+  });
+
+  timer = window.setTimeout(stop, options.durationMs ?? 6000);
   return stop;
 }

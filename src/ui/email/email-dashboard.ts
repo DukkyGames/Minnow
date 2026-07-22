@@ -1,4 +1,3 @@
-import { appAlert, appConfirm, appPrompt } from '../app-dialog';
 /**
  * Inbox dashboard — digest headline, instrumentation strip, attention queue, reply chips.
  */
@@ -9,6 +8,7 @@ import type {
   EmailInboxSummary,
   EmailNarrativeDigest,
   EmailPendingAction,
+  ReplyVariant,
 } from '../../email/client';
 import { syncEmailFolder } from '../../email/client';
 import {
@@ -62,7 +62,14 @@ function formatDigestTime(iso: string): string {
   return date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
-/** Build quick-reply chip row for one highlight thread. */
+/**
+ * Quick-reply block for one highlight thread.
+ *
+ * A chip is a label, not a trigger: clicking it opens an inline preview of the
+ * whole reply (the one-line label can't show what you're about to send), and
+ * only Send actually queues it. Reprompt opens an inline input row rather than
+ * a `prompt()` dialog. One panel is open at a time.
+ */
 function renderVariantChips(
   mount: HTMLElement,
   account: EmailAccount,
@@ -76,12 +83,48 @@ function renderVariantChips(
   block.appendChild(el('span', 'email-dash-replies-label', 'Quick replies'));
 
   const row = el('div', 'email-dash-variants');
-  for (const variant of variants) {
-    const chip = el('button', 'email-dash-variant-chip') as HTMLButtonElement;
-    chip.type = 'button';
-    chip.textContent = variant.label;
-    chip.title = variant.body.slice(0, 120);
-    chip.addEventListener('click', async () => {
+  const panel = el('div', 'email-dash-reply-panel');
+  panel.hidden = true;
+
+  const reprompt = el('button', 'email-dash-variant-reprompt', 'Reprompt') as HTMLButtonElement;
+  reprompt.type = 'button';
+  reprompt.setAttribute('aria-expanded', 'false');
+
+  const chips: HTMLButtonElement[] = [];
+
+  /** Collapse the panel and clear every open/active marker. */
+  const closePanel = (): void => {
+    panel.hidden = true;
+    panel.replaceChildren();
+    for (const chip of chips) {
+      chip.classList.remove('is-active');
+      chip.setAttribute('aria-expanded', 'false');
+    }
+    reprompt.classList.remove('is-active');
+    reprompt.setAttribute('aria-expanded', 'false');
+  };
+
+  const openPreview = (variant: ReplyVariant, chip: HTMLButtonElement): void => {
+    const alreadyOpen = chip.classList.contains('is-active');
+    closePanel();
+    if (alreadyOpen) return;
+
+    chip.classList.add('is-active');
+    chip.setAttribute('aria-expanded', 'true');
+
+    const body = el('p', 'email-dash-reply-preview', variant.body);
+
+    const actions = el('div', 'email-dash-reply-actions');
+    const sendBtn = el('button', 'email-btn email-btn-primary', 'Send') as HTMLButtonElement;
+    sendBtn.type = 'button';
+    const editBtn = el('button', 'email-btn', 'Edit') as HTMLButtonElement;
+    editBtn.type = 'button';
+    editBtn.title = 'Open the conversation to edit before sending';
+    const cancelBtn = el('button', 'email-btn email-dash-reply-cancel', 'Cancel') as HTMLButtonElement;
+    cancelBtn.type = 'button';
+
+    sendBtn.addEventListener('click', async () => {
+      sendBtn.disabled = true;
       try {
         // Queued rather than sent — the undo toast is the confirmation step.
         const { entry } = await sendReplyVariant({
@@ -91,34 +134,100 @@ function renderVariantChips(
           variantId: variant.id,
         });
         showSendUndoToast(entry, { onStatus: options.onStatus });
+        closePanel();
       } catch (err) {
+        sendBtn.disabled = false;
         options.onStatus?.('err', err instanceof Error ? err.message : 'Send failed');
       }
     });
+    editBtn.addEventListener('click', () => {
+      closePanel();
+      options.onOpenThread(highlight.threadId);
+    });
+    cancelBtn.addEventListener('click', closePanel);
+
+    actions.append(sendBtn, editBtn, cancelBtn);
+    panel.replaceChildren(body, actions);
+    panel.hidden = false;
+    sendBtn.focus();
+  };
+
+  const openReprompt = (): void => {
+    const alreadyOpen = reprompt.classList.contains('is-active');
+    closePanel();
+    if (alreadyOpen) return;
+
+    reprompt.classList.add('is-active');
+    reprompt.setAttribute('aria-expanded', 'true');
+
+    const field = el('label', 'email-dash-reprompt-field');
+    field.appendChild(el('span', 'email-dash-reprompt-label', 'Adjust the replies'));
+    const input = el('input', 'email-input email-dash-reprompt-input') as HTMLInputElement;
+    input.type = 'text';
+    input.placeholder = 'e.g. warmer, shorter, ask for a date';
+    field.appendChild(input);
+
+    const actions = el('div', 'email-dash-reply-actions');
+    const applyBtn = el('button', 'email-btn email-btn-primary', 'Regenerate') as HTMLButtonElement;
+    applyBtn.type = 'button';
+    const cancelBtn = el('button', 'email-btn email-dash-reply-cancel', 'Cancel') as HTMLButtonElement;
+    cancelBtn.type = 'button';
+
+    const submit = async (): Promise<void> => {
+      const instructions = input.value.trim();
+      if (!instructions) {
+        input.focus();
+        return;
+      }
+      applyBtn.disabled = true;
+      try {
+        await regenerateReplyVariants({
+          accountId: account.id,
+          messageId: highlight.messageId,
+          threadId: highlight.threadId,
+          instructions,
+        });
+        options.onStatus?.('ok', 'Variants regenerated');
+        closePanel();
+        options.onRefresh?.();
+      } catch (err) {
+        applyBtn.disabled = false;
+        options.onStatus?.('err', err instanceof Error ? err.message : 'Reprompt failed');
+      }
+    };
+
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        void submit();
+      } else if (event.key === 'Escape') {
+        closePanel();
+      }
+    });
+    applyBtn.addEventListener('click', () => void submit());
+    cancelBtn.addEventListener('click', closePanel);
+
+    actions.append(applyBtn, cancelBtn);
+    panel.replaceChildren(field, actions);
+    panel.hidden = false;
+    input.focus();
+  };
+
+  for (const variant of variants) {
+    const chip = el('button', 'email-dash-variant-chip') as HTMLButtonElement;
+    chip.type = 'button';
+    chip.textContent = variant.label;
+    chip.title = 'Preview this reply';
+    chip.setAttribute('aria-expanded', 'false');
+    chip.addEventListener('click', () => openPreview(variant, chip));
+    chips.push(chip);
     row.appendChild(chip);
   }
 
-  const reprompt = el('button', 'email-dash-variant-reprompt', 'Reprompt') as HTMLButtonElement;
-  reprompt.type = 'button';
-  reprompt.addEventListener('click', async () => {
-    const instructions = await appPrompt('How should the reply variants change?');
-    if (!instructions?.trim()) return;
-    try {
-      await regenerateReplyVariants({
-        accountId: account.id,
-        messageId: highlight.messageId,
-        threadId: highlight.threadId,
-        instructions: instructions.trim(),
-      });
-      options.onStatus?.('ok', 'Variants regenerated');
-      options.onRefresh?.();
-    } catch (err) {
-      options.onStatus?.('err', err instanceof Error ? err.message : 'Reprompt failed');
-    }
-  });
+  reprompt.addEventListener('click', openReprompt);
   row.appendChild(reprompt);
 
-  block.appendChild(row);
+  block.append(row, panel);
   mount.appendChild(block);
 }
 
