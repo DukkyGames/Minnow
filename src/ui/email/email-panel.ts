@@ -15,7 +15,12 @@ import { renderEmailDashboard } from './email-dashboard';
 import { renderEmailLayout } from './email-layout';
 import { renderEmailAutomations } from './email-automations';
 import { EMAIL_ICONS } from './email-icons';
-import { ALL_INBOXES, renderUnifiedInbox } from './email-unified';
+import {
+  ACCOUNT_DOT_CLASSES,
+  ALL_INBOXES,
+  accountColorIndex,
+  renderUnifiedInbox,
+} from './email-unified';
 
 /** Unsubscribe handles for SSE listeners keyed by panel mount element. */
 const panelEventUnsubs = new WeakMap<HTMLElement, () => void>();
@@ -438,6 +443,25 @@ export async function renderEmailPanel(
   identity.appendChild(el('p', 'email-chrome-kicker', 'Email'));
 
   const accountWrap = el('div', 'email-chrome-account');
+
+  // A colour dot mirrors the per-account dots in the unified list, so a mailbox
+  // reads the same in the chrome as it does in "All inboxes". Only meaningful
+  // once there is more than one mailbox.
+  const accountDots = el('div', 'email-chrome-account-dots');
+  const paintAccountDots = (): void => {
+    accountDots.replaceChildren();
+    if (accounts.length < 2) return;
+    const ids = unified ? accounts.map((row) => row.id) : [activeAccount.id];
+    for (const id of ids) {
+      const dot = el(
+        'span',
+        `email-account-dot ${ACCOUNT_DOT_CLASSES[accountColorIndex(accounts, id)]}`,
+      );
+      dot.title = accounts.find((row) => row.id === id)?.label ?? '';
+      accountDots.appendChild(dot);
+    }
+  };
+
   const accountSelect = el('select', 'email-chrome-account-select') as HTMLSelectElement;
   accountSelect.setAttribute('aria-label', 'Active email account');
 
@@ -461,9 +485,11 @@ export async function renderEmailPanel(
     'email-chrome-account-hint',
     `${accountProviderLabel(activeAccount)} · ${activeAccount.username}`,
   );
+  accountWrap.appendChild(accountDots);
   accountWrap.appendChild(accountSelect);
   accountWrap.appendChild(accountHint);
   identity.appendChild(accountWrap);
+  paintAccountDots();
 
   const nav = el('nav', 'email-chrome-nav');
   nav.setAttribute('role', 'tablist');
@@ -549,6 +575,7 @@ export async function renderEmailPanel(
             activeAccount = owner;
             accountSelect.value = owner.id;
             accountHint.textContent = `${accountProviderLabel(owner)} · ${owner.username}`;
+            paintAccountDots();
             pendingThreadId = message.threadId;
             void renderView();
           },
@@ -594,6 +621,7 @@ export async function renderEmailPanel(
     if (accountSelect.value === ALL_INBOXES) {
       unified = true;
       accountHint.textContent = `${accounts.length} mailboxes`;
+      paintAccountDots();
       void renderView();
       return;
     }
@@ -603,6 +631,7 @@ export async function renderEmailPanel(
     unified = false;
     activeAccount = next;
     accountHint.textContent = `${accountProviderLabel(next)} · ${next.username}`;
+    paintAccountDots();
     void renderView();
   });
 
