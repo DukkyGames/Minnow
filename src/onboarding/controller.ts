@@ -254,7 +254,8 @@ async function goNext(): Promise<void> {
     ctx.searxngSkipped = Boolean(ctx.state.steps.extras?.data?.searxngSkipped);
   }
 
-  if (step.id === 'provider-choice' || step.id === 'extras') {
+  // Apps selection can drop email/calendar; provider/extras unlock path-dependent steps.
+  if (step.id === 'apps' || step.id === 'provider-choice' || step.id === 'extras') {
     refreshApplicableSteps();
   }
 

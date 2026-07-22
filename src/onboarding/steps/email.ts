@@ -7,6 +7,7 @@ import {
   fetchEmailAccounts,
   testEmailAccount,
 } from '../../email/client';
+import { isAppEnabled } from '../../os/app-preferences';
 import { createStatusPill, el, renderStepHeader } from '../ui-helpers';
 import type { OnboardingStep } from '../types';
 import { recordStepProgress } from '../state-core';
@@ -54,7 +55,8 @@ export const emailStep: OnboardingStep = {
   id: 'email',
   title: 'Email',
   canSkip: true,
-  isApplicable: (ctx) => ctx.serverAvailable,
+  // Skip when the Email app is off (Choose your apps / Settings → Apps).
+  isApplicable: (ctx) => ctx.serverAvailable && isAppEnabled('email'),
 
   render(container, _ctx, actions) {
     container.innerHTML = '';

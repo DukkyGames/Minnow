@@ -87,8 +87,8 @@ Choose which MinnowOS apps appear in the dock, menubar shortcuts, notifications,
 | Setting | Persistence | Notes |
 |---------|-------------|-------|
 | App visibility | `localStorage` `minnow.os.disabledApps` | JSON array of disabled **optional** app ids. Missing key = all released optional apps enabled |
-| Always included | — | Chat, Models, Brain, Settings (cannot be disabled) |
-| Optional apps | same key | Code, Research, Experts, Benchmarking, Compare, Scheduler, Email, Calendar |
+| Always included | — | One-line note: Chat, Models, Brain, Settings (cannot be disabled) |
+| Optional apps | same key | Quiet toggle cards + Enable all / Disable all. Off apps stay visible and dimmed |
 
 **Behavior**
 
@@ -96,8 +96,9 @@ Choose which MinnowOS apps appear in the dock, menubar shortcuts, notifications,
 - Disabling an optional app removes it from launch surfaces and closes any running instance of that app.
 - Developer-hidden apps (`releaseState: 'hidden'` in [`src/os/app-registry.ts`](../../src/os/app-registry.ts)) are omitted from this page and from all launch paths.
 - Blocked deep links for user-disabled apps return to the desktop and point users here to restore the app.
+- Shared UI with onboarding: [`src/os/app-picker-ui.ts`](../../src/os/app-picker-ui.ts).
 
-Search keys: `apps.visibility`, `apps.core.<id>`, `apps.optional.<id>`.
+Search keys: `apps.visibility`, `apps.core.<id>` (on the core note names), `apps.optional.<id>`.
 
 ---
 

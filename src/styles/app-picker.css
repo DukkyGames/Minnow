@@ -1,16 +1,29 @@
 /**
- * Shared selectable app cards (onboarding Choose your apps + Settings → Apps).
+ * Shared app picker (onboarding Choose your apps + Settings → Apps).
+ * Quiet cards: no accent wash when on; dimmed when off.
  */
 
 .mn-app-picker-group {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-bottom: 22px;
+  gap: 12px;
+  margin-bottom: 0;
 }
 
-.mn-app-picker-group:last-child {
-  margin-bottom: 0;
+.mn-app-picker-group__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.mn-app-picker-group__titles {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 12rem;
 }
 
 .mn-app-picker-group__title {
@@ -25,6 +38,51 @@
   font-size: 13px;
   line-height: 1.45;
   color: var(--mn-fg-muted, var(--text-muted));
+}
+
+/* Collapsed core apps — one calm line, not a card grid. */
+.mn-app-picker-core {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted, var(--text-muted));
+}
+
+.mn-app-picker-core__name {
+  color: var(--mn-fg, var(--text));
+  font-weight: 500;
+}
+
+.mn-app-picker-toolbar {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.mn-app-picker-toolbar__btn {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--mn-border, var(--border));
+  border-radius: var(--mn-radius-sm, 6px);
+  background: transparent;
+  color: var(--mn-fg, var(--text));
+  font: 500 12px/1.2 var(--mn-font, system-ui, sans-serif);
+  cursor: pointer;
+  appearance: none;
+  transition: border-color 0.18s ease-out, background-color 0.18s ease-out, color 0.18s ease-out;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mn-app-picker-toolbar__btn:hover {
+    border-color: var(--mn-border-strong, var(--border-strong));
+    background: color-mix(in srgb, var(--mn-fg) 6%, transparent);
+  }
+}
+
+.mn-app-picker-toolbar__btn:focus-visible {
+  outline: 2px solid var(--mn-focus-ring, var(--mn-accent));
+  outline-offset: 2px;
 }
 
 .mn-app-picker-grid {
@@ -47,28 +105,45 @@
   cursor: pointer;
   appearance: none;
   color: inherit;
-  transition: border-color 0.18s ease-out, background-color 0.18s ease-out;
+  opacity: 1;
+  transition:
+    border-color 0.18s ease-out,
+    background-color 0.18s ease-out,
+    opacity 0.18s ease-out;
 }
 
 .mn-app-picker-card.is-always-on {
   cursor: default;
 }
 
+/* On: full opacity, neutral chrome (no accent wash). */
+.mn-app-picker-card.is-selected {
+  border-color: var(--mn-border-strong, var(--border-strong));
+  background: var(--mn-surface-1, var(--mn-bg, var(--bg)));
+  opacity: 1;
+}
+
+/* Off: stay in place, dimmed. */
+.mn-app-picker-card.is-off {
+  opacity: 0.48;
+  border-color: var(--mn-border, var(--border));
+  background: var(--mn-surface-1, var(--mn-bg, var(--bg)));
+}
+
 @media (hover: hover) and (pointer: fine) {
-  .mn-app-picker-card:hover:not(.is-always-on):not(.is-selected) {
+  .mn-app-picker-card:hover:not(.is-always-on) {
     border-color: var(--mn-border-strong, var(--border-strong));
-    background: var(--mn-surface-2, var(--mn-bg, var(--bg)));
+    background: color-mix(in srgb, var(--mn-fg) 4%, var(--mn-surface-1, var(--mn-bg, var(--bg))));
+  }
+
+  .mn-app-picker-card.is-off:hover {
+    opacity: 0.72;
   }
 }
 
 .mn-app-picker-card:focus-visible {
   outline: 2px solid var(--mn-focus-ring, var(--mn-accent));
   outline-offset: 2px;
-}
-
-.mn-app-picker-card.is-selected {
-  border-color: var(--mn-accent-border, var(--mn-accent));
-  background: color-mix(in srgb, var(--mn-accent) 12%, var(--mn-surface-1, var(--mn-bg, var(--bg))));
 }
 
 .mn-app-picker-card__icon {
@@ -84,6 +159,10 @@
   color: var(--mn-fg, var(--text));
 }
 
+.mn-app-picker-card.is-off .mn-app-picker-card__icon {
+  color: var(--mn-fg-muted, var(--text-muted));
+}
+
 .mn-app-picker-card__copy {
   flex: 1 1 auto;
   min-width: 0;
@@ -92,29 +171,13 @@
   gap: 4px;
 }
 
-.mn-app-picker-card__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-}
-
 .mn-app-picker-card__title {
   font: 600 14px/1.3 var(--mn-font, system-ui, sans-serif);
   color: var(--mn-fg, var(--text));
 }
 
-.mn-app-picker-card__state {
-  flex: 0 0 auto;
-  font: 600 10px/1 var(--mn-font-mono, ui-monospace, monospace);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.mn-app-picker-card.is-off .mn-app-picker-card__title {
   color: var(--mn-fg-muted, var(--text-muted));
-}
-
-.mn-app-picker-card.is-selected .mn-app-picker-card__state,
-.mn-app-picker-card.is-always-on .mn-app-picker-card__state {
-  color: var(--mn-accent-ink, var(--mn-accent));
 }
 
 .mn-app-picker-card__desc {
@@ -125,7 +188,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mn-app-picker-card {
+  .mn-app-picker-card,
+  .mn-app-picker-toolbar__btn {
     transition: none;
   }
 }
