@@ -26,6 +26,8 @@ import { showSendUndoToast } from './email-undo-toast';
 export interface EmailDashboardOptions {
   account: EmailAccount;
   onStatus?: (state: 'ok' | 'err', message: string) => void;
+  /** Toggle the chrome sync progress bar (ref-counted by the panel). */
+  onSyncActivity?: (active: boolean) => void;
   onOpenThread: (threadId: string) => void;
   onOpenMail: () => void;
   onRefresh?: () => void;
@@ -544,6 +546,7 @@ export async function renderEmailDashboard(
     // Empty cache — sync once so agent triage/variants can run server-side.
     if (payload.summary.text.includes('Sync to fetch new mail')) {
       mount.replaceChildren(el('p', 'email-loading', 'Syncing inbox…'));
+      options.onSyncActivity?.(true);
       try {
         await syncEmailFolder(options.account.id, 'INBOX');
         payload = await fetchInboxSummary(options.account.id);
@@ -552,6 +555,8 @@ export async function renderEmailDashboard(
           'err',
           syncErr instanceof Error ? syncErr.message : 'Inbox sync failed',
         );
+      } finally {
+        options.onSyncActivity?.(false);
       }
     }
 

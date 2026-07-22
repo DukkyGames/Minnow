@@ -88,6 +88,9 @@ export interface EmailLayoutOptions {
   initialThreadId?: string;
 
   onStatus?: (state: "ok" | "err", message: string) => void;
+
+  /** Toggle the chrome sync progress bar (ref-counted by the panel). */
+  onSyncActivity?: (active: boolean) => void;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -235,6 +238,18 @@ function formatWhen(iso?: string): string {
   }
 
   return date.toLocaleString(undefined, { month: "short", day: "numeric" });
+}
+
+/** Relative freshness for the list toolbar, e.g. "Updated 2m ago". */
+function formatUpdatedAgo(ts: number): string {
+  if (!ts) return "";
+  const delta = Date.now() - ts;
+  if (delta < 45_000) return "Updated just now";
+  const minutes = Math.floor(delta / 60_000);
+  if (minutes < 60) return `Updated ${minutes}m ago`;
+  const hoursAgo = Math.floor(minutes / 60);
+  if (hoursAgo < 24) return `Updated ${hoursAgo}h ago`;
+  return `Updated ${Math.floor(hoursAgo / 24)}d ago`;
 }
 
 function urgencyClass(urgency?: string): string {
@@ -406,6 +421,12 @@ export async function renderEmailLayout(
   let sidebarBuilt = false;
 
   let refreshSeq = 0;
+
+  /** When the list last pulled from the server, for the "Updated" label. */
+  let lastSyncedAt = Date.now();
+
+  /** Single interval that keeps the relative "Updated" label current. */
+  let updatedTimer = 0;
 
   /** Show a lightweight overlay while fetching a new folder's messages. */
   const setListLoading = (loading: boolean) => {
@@ -707,10 +728,15 @@ export async function renderEmailLayout(
     const syncBtn = iconBtn(EMAIL_ICONS.sync, "Sync folder");
 
     syncBtn.addEventListener("click", async () => {
-      syncBtn.disabled = true;
+      // No disabled-as-status: the chrome progress bar carries sync state.
+      syncBtn.classList.add("is-syncing");
+      options.onSyncActivity?.(true);
 
       try {
         const result = await syncEmailFolder(options.account.id, activeFolder);
+
+        lastSyncedAt = Date.now();
+        paintUpdated();
 
         options.onStatus?.("ok", `Synced ${result.synced} messages`);
 
@@ -721,11 +747,29 @@ export async function renderEmailLayout(
           err instanceof Error ? err.message : "Sync failed",
         );
       } finally {
-        syncBtn.disabled = false;
+        syncBtn.classList.remove("is-syncing");
+        options.onSyncActivity?.(false);
       }
     });
 
     toolbar.appendChild(syncBtn);
+
+    // "Updated 2m ago" — the freshness readout that pairs with the sync bar.
+    const updated = el("span", "email-list-updated");
+    updated.setAttribute("role", "status");
+    const paintUpdated = (): void => {
+      if (!mount.isConnected) {
+        window.clearInterval(updatedTimer);
+        return;
+      }
+      updated.textContent = formatUpdatedAgo(lastSyncedAt);
+      updated.title = `Last synced ${new Date(lastSyncedAt).toLocaleString()}`;
+    };
+    paintUpdated();
+    window.clearInterval(updatedTimer);
+    updatedTimer = window.setInterval(paintUpdated, 30_000);
+
+    toolbar.appendChild(updated);
 
     const searchWrap = el("div", "email-list-search-wrap");
 
@@ -1266,20 +1310,48 @@ export async function renderEmailLayout(
         catchup.open = true;
         const catchupLabel = el("summary", "email-reader-catchup-label", "Catch up");
         catchup.appendChild(catchupLabel);
-        const catchupBody = el("p", "email-reader-catchup-text", "Summarizing thread…");
-        catchup.appendChild(catchupBody);
+
+        // Busy state: opacity-pulse skeleton lines plus a cancel, until the
+        // summary lands. Cancel abandons the wait rather than the request —
+        // there is nothing to abort server-side — and drops the block.
+        const busy = el("div", "email-reader-catchup-busy");
+        busy.setAttribute("aria-busy", "true");
+        busy.appendChild(el("span", "visually-hidden", "Summarizing thread…"));
+        const skeleton = el("div", "email-skeleton email-reader-catchup-skeleton");
+        skeleton.setAttribute("aria-hidden", "true");
+        for (let line = 0; line < 3; line += 1) {
+          skeleton.appendChild(el("span", "email-skeleton-line"));
+        }
+        const cancelBusy = el(
+          "button",
+          "email-reader-catchup-cancel",
+          "Cancel",
+        ) as HTMLButtonElement;
+        cancelBusy.type = "button";
+        busy.append(skeleton, cancelBusy);
+        catchup.appendChild(busy);
         readerPane.appendChild(catchup);
+
+        let cancelled = false;
+        cancelBusy.addEventListener("click", () => {
+          cancelled = true;
+          catchup.remove();
+        });
 
         void requestThreadSummary(options.account.id, selected.threadId)
           .then(({ eligible, summary }) => {
+            if (cancelled) return;
             if (eligible && summary?.text) {
-              catchupBody.textContent = summary.text;
+              catchup.replaceChildren(
+                catchupLabel,
+                el("p", "email-reader-catchup-text", summary.text),
+              );
             } else {
               catchup.remove();
             }
           })
           .catch(() => {
-            catchup.remove();
+            if (!cancelled) catchup.remove();
           });
       }
 
