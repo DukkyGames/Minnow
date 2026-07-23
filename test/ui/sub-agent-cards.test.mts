@@ -17,6 +17,9 @@ const { setSessionStateForTests, createEmptyChatObject } = await import(
 const { upsertSubAgentCardForRun, clearSubAgentCardDomRegistry } = await import(
   '../../src/ui/sub-agent-cards.ts',
 );
+const { openSubAgentDrawer, closeSubAgentDrawer } = await import(
+  '../../src/ui/sub-agent-drawer.ts',
+);
 
 function setupCodeDom() {
   const window = new Window();
@@ -31,9 +34,14 @@ function setupCodeDom() {
 
 function setupDesktopDom(win: Window) {
   win.document.body.innerHTML = `
-    <div id="osDesktopLayer" class="mn-os-desktop-layer"></div>
+    <div id="osDesktopLayer" class="mn-os-desktop-layer is-chat-active">
+      <div class="mn-os-desktop-chat">
+        <div class="mn-os-chat-transcript">
+          <div id="desktopChatCol" class="mn-os-chat-col"></div>
+        </div>
+      </div>
+    </div>
     <main id="chatView" class="chat-app-page is-open"></main>
-    <div id="desktopChatCol"></div>
     <textarea id="msgInput"></textarea>
     <textarea id="desktopInput"></textarea>
     <button id="sendBtn"></button>
@@ -144,6 +152,79 @@ describe('sub-agent cards', { concurrency: false }, () => {
     assert.equal(desktopCol.querySelector('.sub-agent-card'), el);
     assert.equal(document.getElementById('chatArea'), null);
 
+    clearSubAgentCardDomRegistry();
+  });
+
+  test('openSubAgentDrawer mounts overlay on desktop chat shell, not #mainColumn', async () => {
+    const win = new Window();
+    const g = globalThis as typeof globalThis & {
+      window: Window;
+      document: Document;
+      HTMLElement: typeof HTMLElement;
+      Node: typeof Node;
+      fetch: typeof fetch;
+    };
+    g.window = win as unknown as Window & typeof globalThis.window;
+    g.document = win.document;
+    g.HTMLElement = win.HTMLElement;
+    g.Node = win.Node;
+    setupDesktopDom(win);
+    resetInstancesForTests();
+    resetDesktopStateForTests();
+    resetOsPageBridgeForTests();
+    initOsPageBridge();
+
+    g.fetch = (async (input: string | URL) => {
+      const url = String(input);
+      if (url.includes('/api/chats-workspace')) {
+        return {
+          ok: true,
+          json: async () => ({ ok: true, path: '/home/user/.minnow/chats', fileCount: 0 }),
+        } as Response;
+      }
+      return { ok: false, status: 404, json: async () => ({}) } as Response;
+    }) as typeof fetch;
+
+    const chat = createEmptyChatObject('model-a');
+    chat.id = 'chat-desktop-drawer';
+    const run = sampleRun(chat.id);
+    chat.subAgentRuns = [
+      {
+        runId: run.runId,
+        type: run.type,
+        task: run.task,
+        status: 'completed',
+        parentChatId: chat.id,
+        parentToolCallId: null,
+        parentTurnId: run.parentTurnId,
+        summary: 'Found 12 files under src/.',
+        error: null,
+        startedAt: run.startedAt,
+        endedAt: '2026-05-20T12:05:00.000Z',
+        toolTurns: 2,
+        cancelled: false,
+        messages: [],
+      },
+    ];
+    setSessionStateForTests({
+      version: 5,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      lastActiveChatIdByWorkspace: {},
+      lastActiveChatIdByApp: { chat: chat.id },
+      chats: [chat],
+    });
+
+    await activateDesktopChat({ chatId: chat.id });
+
+    openSubAgentDrawer(run.runId, chat.id);
+
+    const desktopShell = document.querySelector('.mn-os-desktop-chat');
+    assert.ok(desktopShell);
+    assert.ok(desktopShell?.querySelector('.sub-agent-overlay.is-open'));
+    assert.equal(document.getElementById('mainColumn'), null);
+
+    closeSubAgentDrawer();
     clearSubAgentCardDomRegistry();
   });
 });
