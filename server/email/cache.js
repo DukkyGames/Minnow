@@ -35,7 +35,7 @@ const MESSAGE_COLUMNS_WITH_BODY = `m.message_row_id, m.id, m.folder, m.uid, m.me
   m.thread_id, m.from_addr, m.to_json, m.reply_to, m.subject, m.date, m.date_ms,
   m.body_preview, m.body_hash, m.has_attachments, m.in_reply_to, m.references_json,
   m.seen, m.flagged, m.answered, m.snooze_until, m.triage_json, m.reply_variants_json,
-  b.body_text, b.body_html`;
+  b.body_text, b.body_html, b.complete AS body_complete`;
 
 function nowIso() {
   return new Date().toISOString();

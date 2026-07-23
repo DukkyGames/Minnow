@@ -13,6 +13,7 @@ import type {
 import { syncEmailFolder } from '../../email/client';
 import {
   applyPendingEmailAction,
+  dismissAttentionHighlight,
   dismissEmailFollowup,
   dismissPendingEmailAction,
   fetchInboxSummary,
@@ -21,6 +22,7 @@ import {
   sendPriorityFeedback,
   sendReplyVariant,
 } from '../../email/client-ext';
+import { EMAIL_ICONS } from './email-icons';
 import { showSendUndoToast } from './email-undo-toast';
 
 export interface EmailDashboardOptions {
@@ -497,6 +499,28 @@ export function renderHighlightRow(
   if (highlight.unseen) {
     row.classList.add('is-unread');
   }
+
+  const dismissBtn = el('button', 'email-icon-btn email-dash-row-dismiss') as HTMLButtonElement;
+  dismissBtn.type = 'button';
+  dismissBtn.title = 'Dismiss from needs attention';
+  dismissBtn.setAttribute('aria-label', 'Dismiss from needs attention');
+  dismissBtn.innerHTML = EMAIL_ICONS.close;
+  dismissBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    dismissBtn.disabled = true;
+    void (async () => {
+      try {
+        await dismissAttentionHighlight(account.id, highlight.messageId);
+        row.remove();
+        options.onStatus?.('ok', 'Dismissed');
+        options.onRefresh?.();
+      } catch (err) {
+        dismissBtn.disabled = false;
+        options.onStatus?.('err', err instanceof Error ? err.message : 'Dismiss failed');
+      }
+    })();
+  });
+  row.appendChild(dismissBtn);
 
   const main = el('button', 'email-dash-row-main') as HTMLButtonElement;
   main.type = 'button';

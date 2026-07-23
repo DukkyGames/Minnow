@@ -187,7 +187,12 @@ describe('bodyStructure helpers', () => {
       ],
     };
 
-    assert.deepEqual(pickPreviewPart(multipart), { part: '2', type: 'text/plain', size: 120 });
+    assert.deepEqual(pickPreviewPart(multipart), {
+      part: '2',
+      type: 'text/plain',
+      size: 120,
+      encoding: undefined,
+    });
     assert.equal(structureHasAttachments(multipart), true);
   });
 
@@ -224,6 +229,25 @@ describe('syncFolderMessages', () => {
     assert.equal(first.subject, 'First');
     assert.equal(first.bodyText, 'Body text for message 1.');
     assert.equal(first.bodyHtml, undefined, 'sync stores text only — HTML loads lazily');
+    assert.equal(first.bodyComplete, false);
+  });
+
+  test('sync decodes base64 preview parts instead of storing raw encoding', async () => {
+    const { syncFolderMessages } = await import('../../server/email/imap.js');
+    const { getCachedMessage } = await import('../../server/email/cache.js');
+
+    const html = '<p>Security alert</p>';
+    seed(1, {
+      subject: 'Security alert',
+      parts: { 1: Buffer.from(html, 'utf8').toString('base64') },
+      structure: { type: 'text/html', part: '1', size: html.length, encoding: 'BASE64' },
+    });
+
+    await syncFolderMessages(ACCOUNT_ID, { folder: 'INBOX' });
+
+    const message = await getCachedMessage(ACCOUNT_ID, 'INBOX:1');
+    assert.match(message.bodyText, /Security alert/);
+    assert.doesNotMatch(message.bodyPreview, /^[A-Za-z0-9+/=]{40,}$/);
   });
 
   test('second sync fetches only UIDs above the cursor', async () => {
@@ -347,6 +371,7 @@ describe('ensureMessageBody', () => {
 
     const loaded = await ensureMessageBody(ACCOUNT_ID, 'INBOX:1');
     assert.equal(loaded.cached, false);
+    assert.equal(loaded.bodyComplete, true);
     assert.match(loaded.bodyHtml, /<b>html<\/b>/);
     assert.match(loaded.bodyText, /Full/);
 

@@ -33,6 +33,43 @@ export function buildBodyPreview(text, maxLen = 240) {
 }
 
 /**
+ * Decode a MIME body part buffer according to Content-Transfer-Encoding.
+ *
+ * IMAP `BODY[n]` returns the raw part bytes — still base64 or quoted-printable
+ * when that is how the sender encoded it. Sync must decode before storing a
+ * preview or the reader shows garbled text.
+ *
+ * @param {Buffer | string | null | undefined} raw
+ * @param {string | undefined} encoding — from bodyStructure.encoding
+ */
+export function decodeBodyPart(raw, encoding) {
+  if (raw == null) return '';
+  const buffer = Buffer.isBuffer(raw) ? raw : Buffer.from(String(raw), 'binary');
+  const enc = String(encoding ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '');
+
+  if (enc === 'base64' || enc === 'b') {
+    try {
+      const stripped = buffer.toString('ascii').replace(/\s+/g, '');
+      if (!stripped) return '';
+      return Buffer.from(stripped, 'base64').toString('utf8');
+    } catch {
+      return buffer.toString('utf8');
+    }
+  }
+
+  if (enc === 'quoted-printable' || enc === 'qp' || enc === 'q') {
+    const text = buffer.toString('binary');
+    return text
+      .replace(/=\r?\n/g, '')
+      .replace(/=([0-9A-Fa-f]{2})/g, (_match, hex) => String.fromCharCode(parseInt(hex, 16)));
+  }
+
+  return buffer.toString('utf8');
+}
+
+/**
  * Decode RFC 2047 encoded words in a header value.
  * @param {string | undefined} value
  */

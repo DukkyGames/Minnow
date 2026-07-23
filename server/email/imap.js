@@ -15,6 +15,7 @@ import { computeThreadId, normalizeMessageId } from './threads.js';
 import { imapFlagsToObject } from './imap-actions.js';
 import {
   buildBodyPreview,
+  decodeBodyPart,
   decodeMimeHeader,
   formatAddressList,
   formatFromAddress,
@@ -218,11 +219,12 @@ export function pickPreviewPart(node) {
     if (disposition === 'attachment' || size > MAX_PREVIEW_PART_BYTES) {
       continue;
     }
+    const encoding = current?.encoding ? String(current.encoding) : undefined;
     if (type === 'text/plain') {
-      return { part, type, size };
+      return { part, type, size, encoding };
     }
     if (type === 'text/html' && !htmlFallback) {
-      htmlFallback = { part, type, size };
+      htmlFallback = { part, type, size, encoding };
     }
   }
 
@@ -309,12 +311,13 @@ export async function parseEnvelopeMessage(input, previewSource = '') {
  * Decode one bodyPart buffer to text.
  * @param {Map<string, Buffer> | undefined} bodyParts
  * @param {string} part
+ * @param {string | undefined} encoding
  */
-function readBodyPart(bodyParts, part) {
+function readBodyPart(bodyParts, part, encoding) {
   if (!bodyParts) return '';
   const value = bodyParts instanceof Map ? bodyParts.get(part) : bodyParts?.[part];
   if (!value) return '';
-  return Buffer.isBuffer(value) ? value.toString('utf8') : String(value);
+  return decodeBodyPart(value, encoding);
 }
 
 /**
@@ -358,7 +361,7 @@ async function fetchEnvelopeRange(client, folder, range, max) {
           { uid: true, bodyParts: [preview.part] },
           { uid: true },
         );
-        previewText = readBodyPart(fetched?.bodyParts, preview.part);
+        previewText = readBodyPart(fetched?.bodyParts, preview.part, preview.encoding);
       } catch {
         // A missing part must not abort the whole sync — the body loads lazily.
       }

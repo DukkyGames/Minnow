@@ -115,6 +115,17 @@ export async function dismissEmailFollowup(
   return parseJson(res);
 }
 
+export async function dismissAttentionHighlight(
+  accountId: string,
+  messageId: string,
+): Promise<{ messageId: string; dismissed: boolean }> {
+  const res = await fetch(
+    `/api/email/accounts/${encodeURIComponent(accountId)}/highlights/${encodeURIComponent(messageId)}/dismiss`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' },
+  );
+  return parseJson(res);
+}
+
 export async function requestThreadSummary(
   accountId: string,
   threadId: string,

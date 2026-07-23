@@ -662,6 +662,10 @@ route('POST', /\/priority-feedback$/, (_m, init) => {
   return json({ sender: String(body.sender ?? ''), level: String(body.level ?? '') });
 });
 route('POST', /\/followups\/[^/]+\/dismiss$/, () => json({ followup: { ...followups[0], state: 'dismissed' } }));
+route('POST', /\/highlights\/[^/]+\/dismiss$/, (_m, init) => {
+  const messageId = decodeURIComponent(String(_m[0]).match(/\/highlights\/([^/]+)\/dismiss$/)?.[1] ?? '');
+  return json({ messageId, dismissed: true });
+});
 
 route('POST', /\/improve-text$/, (_m, init) => {
   const body = readBody(init);
