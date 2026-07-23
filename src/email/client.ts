@@ -299,11 +299,22 @@ export async function testEmailAccount(id: string): Promise<{ ok: boolean }> {
 export async function syncEmailFolder(
   accountId: string,
   folder?: string,
-): Promise<{ synced: number; folder: string }> {
+  options?: { untilComplete?: boolean; full?: boolean },
+): Promise<{
+  synced: number;
+  folder: string;
+  cached?: number;
+  folderTotal?: number;
+  backfillComplete?: boolean;
+}> {
   const res = await fetch(`/api/email/accounts/${encodeURIComponent(accountId)}/sync`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ folder }),
+    body: JSON.stringify({
+      folder,
+      untilComplete: options?.untilComplete !== false,
+      full: options?.full === true,
+    }),
   });
   return parseJson(res);
 }

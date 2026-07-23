@@ -8,6 +8,7 @@
 import { listEmailAccounts } from './accounts.js';
 import { clearDueSnoozes, getSyncState, listDueSnoozes } from './cache.js';
 import { sweepOverdueFollowups } from './followups.js';
+import { MAX_SYNC_BATCH } from './imap.js';
 import { syncFolderMessages } from './transport.js';
 import { runAgentHooksAfterFolderSync } from './agent.js';
 import { emitEmailEvent } from './events.js';
@@ -45,8 +46,10 @@ export async function syncFolderWithHooks(accountId, folder, options = {}) {
   const before = await getSyncState(accountId, folder);
   const result = await syncFolderMessages(accountId, {
     folder,
-    limit: options.limit ?? 50,
+    limit: options.limit ?? MAX_SYNC_BATCH,
     full: options.full === true,
+    untilComplete: options.untilComplete === true,
+    onProgress: options.onProgress,
   });
   const incoming = Array.isArray(result.messages) ? result.messages : [];
   await runAgentHooksAfterFolderSync(accountId, folder, incoming, before.highestUid, {

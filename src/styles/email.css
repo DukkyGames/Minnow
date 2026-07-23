@@ -3433,12 +3433,139 @@
 }
 
 .email-rail-foot {
-  margin-top: auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.email-rail-bottom {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: auto;
   padding-top: 12px;
   border-top: 1px solid var(--mn-border);
+}
+
+.email-rail-sync {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 14px;
+  margin-top: 10px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.email-rail-sync .email-rail-group-label {
+  margin-bottom: 2px;
+}
+
+.email-rail-sync-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.email-rail-sync-btn.email-icon-btn {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border: none;
+  color: var(--mn-fg-subtle, var(--mn-fg-muted));
+}
+
+.email-rail-sync-btn.email-icon-btn .icon-svg,
+.email-rail-sync-btn.email-icon-btn .email-icon {
+  width: 15px;
+  height: 15px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .email-rail-sync-btn.email-icon-btn:not(:disabled):hover {
+    color: var(--mn-fg);
+    background: color-mix(in oklch, var(--mn-fg) 6%, transparent);
+  }
+}
+
+.email-rail-sync-btn.email-icon-btn:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
+}
+
+.email-rail-sync-btn.email-icon-btn:disabled,
+.email-rail-sync-btn.email-icon-btn.is-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.email-rail-sync-status {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-fg-subtle, var(--mn-fg-muted));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.email-rail-sync-status.is-synced::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mn-accent);
+}
+
+.email-rail-sync.is-active .email-rail-sync-status {
+  color: var(--mn-fg);
+}
+
+.email-rail-sync-track {
+  position: relative;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--mn-fg) 8%, transparent);
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.18s var(--ease-out, ease-out);
+}
+
+.email-rail-sync.is-active .email-rail-sync-track {
+  opacity: 1;
+}
+
+.email-rail-sync-fill {
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: var(--mn-accent);
+  transition: width 0.22s var(--ease-out, ease-out);
+}
+
+.email-rail-sync-track.is-indeterminate .email-rail-sync-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 35%;
+  transition: none;
+  animation: email-sync-sweep 1.1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .email-rail-sync-track.is-indeterminate .email-rail-sync-fill {
+    animation: none;
+    width: 100%;
+    opacity: 0.45;
+  }
 }
 
 /* ---- The workspace ----------------------------------------------------- */

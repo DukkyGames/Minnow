@@ -352,6 +352,7 @@ export function subscribeEmailEvents(
   source.addEventListener('digest_updated', handler);
   source.addEventListener('pending_actions_updated', handler);
   source.addEventListener('followups_updated', handler);
+  source.addEventListener('sync_progress', handler);
 
   return () => {
     source.close();

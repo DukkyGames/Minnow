@@ -907,18 +907,27 @@ export async function saveCachedBody(accountId, messageKey, body) {
 function setSyncStateRow(db, folder, patch) {
   const existing = db.prepare('SELECT * FROM sync_state WHERE folder = ?').get(folder);
   db.prepare(
-    `INSERT INTO sync_state (folder, uid_validity, highest_uid, highest_modseq, updated_at)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO sync_state (
+       folder, uid_validity, highest_uid, highest_modseq, lowest_uid, backfill_complete, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(folder) DO UPDATE SET
        uid_validity = excluded.uid_validity,
        highest_uid = excluded.highest_uid,
        highest_modseq = excluded.highest_modseq,
+       lowest_uid = excluded.lowest_uid,
+       backfill_complete = excluded.backfill_complete,
        updated_at = excluded.updated_at`,
   ).run(
     folder,
     patch.uidValidity !== undefined ? String(patch.uidValidity) : (existing?.uid_validity ?? ''),
     patch.highestUid !== undefined ? Number(patch.highestUid) || 0 : (existing?.highest_uid ?? 0),
     patch.highestModseq !== undefined ? String(patch.highestModseq) : (existing?.highest_modseq ?? ''),
+    patch.lowestUid !== undefined ? Number(patch.lowestUid) || 0 : (existing?.lowest_uid ?? 0),
+    patch.backfillComplete !== undefined
+      ? patch.backfillComplete
+        ? 1
+        : 0
+      : (existing?.backfill_complete ?? 0),
     nowIso(),
   );
 }
@@ -935,6 +944,8 @@ export async function getSyncState(accountId, folder) {
     uidValidity: row?.uid_validity ?? '',
     highestUid: row?.highest_uid ?? 0,
     highestModseq: row?.highest_modseq ?? '',
+    lowestUid: row?.lowest_uid ?? 0,
+    backfillComplete: Boolean(row?.backfill_complete),
     updatedAt: row?.updated_at ?? '',
   };
 }
@@ -942,11 +953,30 @@ export async function getSyncState(accountId, folder) {
 /**
  * @param {string} accountId
  * @param {string} folder
- * @param {{ uidValidity?: string | number, highestUid?: number, highestModseq?: string | number }} patch
+ * @param {{
+ *   uidValidity?: string | number,
+ *   highestUid?: number,
+ *   highestModseq?: string | number,
+ *   lowestUid?: number,
+ *   backfillComplete?: boolean,
+ * }} patch
  */
 export async function setSyncState(accountId, folder, patch) {
   setSyncStateRow(getMailDb(accountId), folder, patch ?? {});
   return getSyncState(accountId, folder);
+}
+
+/**
+ * Lowest UID cached for a folder — used to resume a partial backfill.
+ * @param {string} accountId
+ * @param {string} folder
+ */
+export async function getMinCachedUid(accountId, folder) {
+  const row = getMailDb(accountId)
+    .prepare('SELECT MIN(CAST(uid AS INTEGER)) AS uid FROM messages WHERE folder = ?')
+    .get(String(folder ?? ''));
+  const uid = Number(row?.uid);
+  return Number.isFinite(uid) ? uid : 0;
 }
 
 /**
@@ -967,7 +997,7 @@ export async function resetFolderCache(accountId, folder) {
     for (const threadId of new Set(rows.map((row) => row.thread_id))) {
       recomputeThread(db, threadId);
     }
-    setSyncStateRow(db, folder, { highestUid: 0, highestModseq: '' });
+    setSyncStateRow(db, folder, { highestUid: 0, highestModseq: '', lowestUid: 0, backfillComplete: false });
   });
   tx();
   return { removed: true };

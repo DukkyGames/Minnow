@@ -520,6 +520,7 @@ export function createEmailMiddleware() {
           const result = await syncFolderWithHooks(accountId, folder, {
             limit: body.limit,
             full: body.full === true,
+            untilComplete: body.untilComplete !== false,
           });
           sendJson(res, 200, result);
           return;

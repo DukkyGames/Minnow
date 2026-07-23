@@ -7,6 +7,7 @@ import {
   createEmailAccount,
   deleteEmailAccount,
   fetchEmailAccounts,
+  syncEmailFolder,
   updateEmailAccount,
   type EmailAccount,
 } from '../../email/client';
@@ -20,9 +21,25 @@ import { ALL_INBOXES, renderUnifiedInbox } from './email-unified';
 
 /** Unsubscribe handles for SSE listeners keyed by panel mount element. */
 const panelEventUnsubs = new WeakMap<HTMLElement, () => void>();
+/** Accounts that already received an automatic backfill kick this session. */
+const autoSyncAccounts = new Set<string>();
 
 export interface EmailPanelOptions {
   onStatus?: (state: 'ok' | 'err', message: string) => void;
+}
+
+/** IMAP folder for the active rail selection (Views default to INBOX). */
+function navFolder(navId: string): string {
+  return navId.startsWith('folder:') ? navId.slice('folder:'.length) : 'INBOX';
+}
+
+/** Human label for sync progress in the rail. */
+function syncProgressLabel(cached: number, folderTotal: number, folder: string): string {
+  const name = folderLabel(folder);
+  if (folderTotal > 0) {
+    return `Syncing ${name} · ${cached}/${folderTotal}`;
+  }
+  return `Syncing ${name}…`;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -387,6 +404,8 @@ export async function renderEmailPanel(
   /** One-shot intents consumed by the next inbox render. */
   let pendingComposeNew = false;
   let pendingThreadId: string | undefined;
+  /** SSE/sync wanted a refresh while the reader was open — run it on close. */
+  let pendingInboxRefresh = false;
 
   /**
    * Status pass-through that also deep-links auth/connection failures to the
@@ -411,6 +430,25 @@ export async function renderEmailPanel(
   syncBar.setAttribute('aria-label', 'Syncing mail');
   syncBar.setAttribute('aria-hidden', 'true');
   let syncDepth = 0;
+  let manualSyncDepth = 0;
+  let lastSyncProgress: { cached: number; folderTotal: number; folder: string; active: boolean } | null =
+    null;
+  let rail!: ReturnType<typeof createEmailRail>;
+
+  const applyRailSyncProgress = (): void => {
+    if (!lastSyncProgress?.active) {
+      rail.setSyncProgress({ active: false, label: 'Up to date' });
+      return;
+    }
+    const { cached, folderTotal, folder } = lastSyncProgress;
+    const percent = folderTotal > 0 ? Math.round((cached / folderTotal) * 100) : undefined;
+    rail.setSyncProgress({
+      active: true,
+      label: syncProgressLabel(cached, folderTotal, folder),
+      percent,
+    });
+  };
+
   const setSyncing = (active: boolean): void => {
     syncDepth = Math.max(0, syncDepth + (active ? 1 : -1));
     const on = syncDepth > 0;
@@ -422,7 +460,7 @@ export async function renderEmailPanel(
   surface.id = 'email-view-panel';
   workspace.append(syncBar, surface);
 
-  const rail = createEmailRail({
+  rail = createEmailRail({
     accounts,
     activeAccountId: activeAccount.id,
     unified,
@@ -449,6 +487,10 @@ export async function renderEmailPanel(
       renderSurface();
     },
     onSelectNav: (navId) => applyNav(navId),
+    onSync: () => {
+      if (unified) return;
+      void runManualSync(navFolder(activeNav));
+    },
     onOpenAutomations: () => {
       surfaceMode = 'automations';
       accountFormMode = 'none';
@@ -493,6 +535,43 @@ export async function renderEmailPanel(
     }
   }
 
+  /** Sync the active account folder until the local store matches the mailbox. */
+  async function runManualSync(folder: string): Promise<void> {
+    if (manualSyncDepth > 0) return;
+    manualSyncDepth += 1;
+    lastSyncProgress = { cached: 0, folderTotal: 0, folder, active: true };
+    applyRailSyncProgress();
+    setSyncing(true);
+    try {
+      const result = await syncEmailFolder(activeAccount.id, folder);
+      const cached = Number(result.cached ?? result.synced ?? 0);
+      const folderTotal = Number(result.folderTotal ?? cached);
+      lastSyncProgress = {
+        cached,
+        folderTotal,
+        folder,
+        active: false,
+      };
+      applyRailSyncProgress();
+      handleStatus(
+        'ok',
+        result.backfillComplete
+          ? `Synced ${result.synced} messages (${cached} cached)`
+          : `Synced ${result.synced} messages — backfill continuing in background`,
+      );
+      if (surfaceMode === 'inbox' && !unified) {
+        requestInboxRefresh(true);
+      }
+    } catch (err) {
+      lastSyncProgress = null;
+      applyRailSyncProgress();
+      handleStatus('err', err instanceof Error ? err.message : 'Sync failed');
+    } finally {
+      manualSyncDepth = Math.max(0, manualSyncDepth - 1);
+      setSyncing(false);
+    }
+  }
+
   /** Open the account-settings form in the workspace. */
   function openSettings(deepLink?: { highlightField?: string; errorMessage?: string }): void {
     surfaceMode = 'setup';
@@ -513,6 +592,34 @@ export async function renderEmailPanel(
       onSignedOut: () => void renderEmailPanel(mount, options),
       onCancel: () => applyNav('attn'),
     });
+  }
+
+  /** True when the inbox reader dock is showing a message or compose form. */
+  function inboxReaderOpen(): boolean {
+    return surface.classList.contains('has-reader');
+  }
+
+  /**
+   * Refresh the inbox stream without tearing down an open reader. Background
+   * sync and SSE can land while the user is reading; remounting the surface
+   * mid-open leaves the dock attached to detached DOM nodes.
+   */
+  function requestInboxRefresh(allowAnyScope = false): void {
+    if (surfaceMode !== 'inbox' || unified) return;
+    if (!allowAnyScope && scope.kind !== 'triage') return;
+    if (inboxReaderOpen()) {
+      pendingInboxRefresh = true;
+      return;
+    }
+    pendingInboxRefresh = false;
+    renderSurface();
+  }
+
+  /** Flush a refresh that was deferred while the reader was open. */
+  function onInboxReaderClosed(): void {
+    if (!pendingInboxRefresh) return;
+    pendingInboxRefresh = false;
+    renderSurface();
   }
 
   /** Mount whichever surface the current state calls for. */
@@ -571,6 +678,7 @@ export async function renderEmailPanel(
       onCounts: (counts) => rail.setCounts(counts),
       openComposeNew,
       initialThreadId,
+      onReaderClosed: onInboxReaderClosed,
     });
   }
 
@@ -578,6 +686,27 @@ export async function renderEmailPanel(
   panelEventUnsubs.set(
     mount,
     subscribeEmailEvents((type, payload) => {
+      if (type === 'sync_progress') {
+        if (payload.accountId && payload.accountId !== activeAccount.id) {
+          return;
+        }
+        const folder = String(payload.folder ?? 'INBOX');
+        const cached = Number(payload.cached ?? 0);
+        const folderTotal = Number(payload.folderTotal ?? 0);
+        const complete = payload.backfillComplete === true;
+        lastSyncProgress = {
+          cached,
+          folderTotal,
+          folder,
+          active: !complete,
+        };
+        applyRailSyncProgress();
+        if (complete && surfaceMode === 'inbox' && !unified) {
+          requestInboxRefresh(true);
+        }
+        return;
+      }
+
       if (payload.accountId && payload.accountId !== activeAccount.id) {
         return;
       }
@@ -588,15 +717,19 @@ export async function renderEmailPanel(
         type === 'pending_actions_updated' ||
         type === 'followups_updated'
       ) {
-        // Only refresh the live triage stream. Re-rendering while a folder view
-        // or the reader is open would yank the surface out from under the user.
-        if (surfaceMode === 'inbox' && !unified && scope.kind === 'triage') {
-          renderSurface();
-        }
+        // Only refresh the live triage stream; skip while the reader is open.
+        requestInboxRefresh(false);
       }
     }),
   );
 
   await loadFolders();
   renderSurface();
+
+  // Resume a partial backfill as soon as the panel opens — older caches only
+  // stored the newest page and need no user action to catch up.
+  if (!unified && !autoSyncAccounts.has(activeAccount.id)) {
+    autoSyncAccounts.add(activeAccount.id);
+    void runManualSync(navFolder(activeNav));
+  }
 }

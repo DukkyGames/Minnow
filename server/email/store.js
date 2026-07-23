@@ -242,6 +242,10 @@ function migrateAddedColumns(database) {
   database.exec(
     'CREATE INDEX IF NOT EXISTS idx_messages_snooze ON messages(snooze_until) WHERE snooze_until != \'\';',
   );
+  // Tracks how far a folder backfill has reached (newest-first) so sync can
+  // continue fetching older mail after the initial page lands.
+  ensureColumn(database, 'sync_state', 'lowest_uid', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(database, 'sync_state', 'backfill_complete', 'INTEGER NOT NULL DEFAULT 0');
 }
 
 /** FTS5 mirror over subject/from/body — replaces the substring scan (D10). */
