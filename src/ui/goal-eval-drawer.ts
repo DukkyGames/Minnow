@@ -8,6 +8,7 @@ import {
   type GoalEvalSession,
 } from '../chat/goal/eval-session';
 import { findChatById } from '../state/sessions';
+import { resolveSubAgentOverlayMount } from './chat-mount';
 import { humanizeToolName } from './tool-messages';
 import { renderTranscriptView } from './transcript-view.ts';
 
@@ -217,7 +218,7 @@ export function openGoalEvalDrawer(chatId: string): void {
   const returnFocus = (document.activeElement as HTMLElement | null) ?? null;
   closeGoalEvalDrawer();
 
-  const main = document.getElementById('mainColumn');
+  const main = resolveSubAgentOverlayMount();
   if (!main) return;
 
   const root = document.createElement('div');

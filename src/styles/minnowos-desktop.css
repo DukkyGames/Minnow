@@ -524,6 +524,7 @@
 }
 
 #osDesktopLayer.is-chat-active .mn-os-desktop-chat {
+  position: relative;
   opacity: 1;
   pointer-events: auto;
   margin-inline: auto;

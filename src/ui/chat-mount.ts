@@ -59,6 +59,26 @@ function getChatAppMessageCol(): HTMLElement | null {
   return document.getElementById('chatAppMessageCol');
 }
 
+/**
+ * Column shell for inset overlays (sub-agent drawer, goal eval) on the active chat surface.
+ * Code uses #mainColumn; desktop chat and the Chat app use their own shells — not #mainColumn.
+ */
+export function resolveSubAgentOverlayMount(): HTMLElement | null {
+  if (shouldPaintDesktopChatSurface()) {
+    return (
+      document.querySelector<HTMLElement>('.mn-os-desktop-chat') ??
+      document.getElementById('osDesktopLayer')
+    );
+  }
+  if (isChatAppForeground()) {
+    return (
+      document.querySelector<HTMLElement>('.chat-app-main') ??
+      document.getElementById('chatView')
+    );
+  }
+  return document.getElementById('mainColumn');
+}
+
 /** Active transcript root: override, desktop column, Chat app column, or Code orchestrate mount. */
 export function getActiveChatMountElement(): HTMLElement {
   if (mountOverride) return mountOverride;

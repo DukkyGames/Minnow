@@ -17,6 +17,7 @@ import { findChatById } from '../state/sessions';
 import { legacyOutcomeFromSummary } from '../agents/sub-agent-structured-outcome';
 import type { SubAgentStructuredOutcome } from '../agents/sub-agent-structured-outcome';
 import type { PersistedSubAgentRun } from '../types';
+import { resolveSubAgentOverlayMount } from './chat-mount';
 import { humanizeToolName } from './tool-messages';
 import { renderTranscriptView } from './transcript-view.ts';
 
@@ -424,7 +425,7 @@ export function openSubAgentDrawer(runId: string, chatId: string): void {
   closeSubAgentDrawer();
   if (!resolveRunSnapshot(runId, chatId)) return;
 
-  const main = document.getElementById('mainColumn');
+  const main = resolveSubAgentOverlayMount();
   if (!main) return;
 
   const root = document.createElement('div');
