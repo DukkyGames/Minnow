@@ -562,7 +562,7 @@ export function recomputeThread(db, threadId) {
     last_date: last.date ?? '',
     last_date_ms: last.date_ms ?? 0,
     folders_json: JSON.stringify(folders),
-    snippet: last.body_preview ?? '',
+    snippet: sanitizePreviewText(last.body_preview ?? ''),
   });
 }
 

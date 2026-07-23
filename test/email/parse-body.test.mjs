@@ -56,6 +56,20 @@ describe('sanitizePreviewText', () => {
     );
   });
 
+  test('strips marketing preview padding with orphan UTF-8 lead bytes', () => {
+    const corrupt =
+      'Innovation and reliability at an amazing price. ' +
+      '\u00cd\u008f \u00e2\u0080\u008c \u00c2 \u00e2\u0080\u0087 \u00c2 '.repeat(5);
+    assert.equal(
+      sanitizePreviewText(corrupt),
+      'Innovation and reliability at an amazing price.',
+    );
+  });
+
+  test('does not corrupt already-valid UTF-8 figure spaces', () => {
+    assert.equal(sanitizePreviewText('Hello\u2007World'), 'HelloWorld');
+  });
+
   test('buildBodyPreview truncates after sanitization', () => {
     const html = `<p>${'word '.repeat(80)}&#8203;</p>`;
     const preview = buildBodyPreview(stripHtmlToText(html), 40);

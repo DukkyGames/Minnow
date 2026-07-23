@@ -86,8 +86,13 @@ describe('Email assistant panel', () => {
       },
     });
 
+    const toggleSlot = document.createElement('div');
+    toggleSlot.className = 'email-readout-actions';
+    workspace.appendChild(toggleSlot);
+    controller.mountToggle(toggleSlot);
+
     const dock = shell.querySelector<HTMLElement>('.email-assistant-dock');
-    const toggle = workspace.querySelector<HTMLButtonElement>('.email-assistant-toggle');
+    const toggle = toggleSlot.querySelector<HTMLButtonElement>('.email-assistant-toggle');
     assert.ok(dock);
     assert.ok(toggle);
     assert.equal(controller.isOpen(), false);

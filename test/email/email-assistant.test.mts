@@ -181,4 +181,60 @@ describe('Email digest review UI', () => {
     assert.deepEqual(controls, ['Apply', 'Always allow', 'Dismiss']);
     assert.doesNotMatch(mount.textContent ?? '', /Already applied/);
   });
+
+  test('Apply keeps working after the review mount replaces its children', async () => {
+    const mount = document.createElement('div');
+    const pending: EmailPendingAction = {
+      id: 'pending-1',
+      source: 'digest',
+      label: 'Archive newsletters',
+      action: 'archive',
+      messageIds: ['message-1', 'message-2'],
+      threadIds: ['thread-1', 'thread-2'],
+      destFolder: '',
+      state: 'pending',
+      detail: '',
+      createdAt: '2026-07-22T10:00:00.000Z',
+      resolvedAt: '',
+    };
+
+    let refreshed = false;
+    const options: EmailDashboardOptions = {
+      ...DASHBOARD_OPTIONS,
+      onRefresh: () => {
+        refreshed = true;
+      },
+    };
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/pending-actions/pending-1/apply')) {
+        return new Response(
+          JSON.stringify({
+            action: { ...pending, state: 'applied', resolvedAt: '2026-07-22T10:01:00.000Z' },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    try {
+      renderPendingActions(mount, ACCOUNT, [pending], options);
+      mount.replaceChildren();
+      renderPendingActions(mount, ACCOUNT, [pending], options);
+
+      const applyBtn = mount.querySelector<HTMLButtonElement>(
+        '.email-dash-review-controls .email-btn-primary',
+      );
+      assert.ok(applyBtn);
+      applyBtn.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      assert.equal(refreshed, true);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

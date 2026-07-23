@@ -73,6 +73,8 @@ export interface EmailAssistantPanelController {
   open: () => Promise<void>;
   close: () => void;
   isOpen: () => boolean;
+  /** Mount the open toggle beside the inbox readout; pass null to detach. */
+  mountToggle: (container: HTMLElement | null) => void;
   setAccount: (account: EmailAccount | null) => void;
   setContext: (context: EmailAssistantContextSnapshot) => void;
   refreshReview: () => Promise<void>;
@@ -141,7 +143,10 @@ export function mountEmailAssistantPanel(
   let chatsWorkspacePath = '';
   let disposed = false;
 
-  const toggle = el('button', 'email-assistant-toggle') as HTMLButtonElement;
+  const toggle = el(
+    'button',
+    'email-assistant-toggle email-icon-btn email-readout-assistant',
+  ) as HTMLButtonElement;
   toggle.type = 'button';
   toggle.appendChild(createModeMaskIcon('general', 'email-assistant-toggle-icon'));
   toggle.setAttribute('aria-label', 'Open Email assistant');
@@ -236,8 +241,19 @@ export function mountEmailAssistantPanel(
   composer.append(toolApprovalHost, questionHost, attachPreview, inputRow);
 
   dock.append(header, scroll, composer);
-  workspace.appendChild(toggle);
   shell.appendChild(dock);
+
+  /** Keep the toggle in the readout row when the inbox surface is active. */
+  const mountToggle = (container: HTMLElement | null): void => {
+    if (disposed) return;
+    if (container) {
+      if (toggle.parentElement !== container) {
+        container.appendChild(toggle);
+      }
+      return;
+    }
+    toggle.remove();
+  };
   mountEmailAssistantDockResizer(dock, shell);
 
   const historyMenu = el('div', 'email-assistant-history');
@@ -568,6 +584,7 @@ export function mountEmailAssistantPanel(
     open,
     close,
     isOpen: () => dock.classList.contains('is-open'),
+    mountToggle,
     setAccount: (nextAccount) => {
       account = nextAccount;
       void refreshReview();

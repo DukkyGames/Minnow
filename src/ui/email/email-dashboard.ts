@@ -320,6 +320,66 @@ export function renderDigestActionGroups(
   mount.appendChild(row);
 }
 
+/** Latest dashboard options per review mount (updated on every render). */
+const pendingReviewOptions = new WeakMap<HTMLElement, EmailDashboardOptions>();
+
+/**
+ * One delegated click handler per mount so Apply/Dismiss survive
+ * `replaceChildren()` on the mount's descendants.
+ */
+function ensurePendingReviewDelegation(mount: HTMLElement): void {
+  if (mount.dataset.pendingReviewDelegated === '1') return;
+  mount.dataset.pendingReviewDelegated = '1';
+
+  mount.addEventListener('click', (event) => {
+    const options = pendingReviewOptions.get(mount);
+    const accountId = mount.dataset.pendingReviewAccountId;
+    if (!options || !accountId) return;
+
+    const btn = (event.target as HTMLElement).closest<HTMLButtonElement>(
+      '.email-dash-review-controls button[data-pending-verb]',
+    );
+    if (!btn || btn.disabled) return;
+
+    const row = btn.closest('.email-dash-review-row');
+    const actionId = row?.getAttribute('data-pending-id');
+    const label = row?.getAttribute('data-pending-label') ?? 'action';
+    const verb = btn.dataset.pendingVerb;
+    if (!actionId || !verb) return;
+
+    const controls = btn.closest('.email-dash-review-controls');
+    if (!controls) return;
+    const rowButtons = [...controls.querySelectorAll<HTMLButtonElement>('button')];
+
+    const run = async (fn: () => Promise<unknown>, okMessage: string) => {
+      for (const control of rowButtons) control.disabled = true;
+      try {
+        await fn();
+        options.onStatus?.('ok', okMessage);
+        options.onRefresh?.();
+      } catch (err) {
+        for (const control of rowButtons) control.disabled = false;
+        options.onStatus?.('err', err instanceof Error ? err.message : 'Action failed');
+      }
+    };
+
+    if (verb === 'apply') {
+      void run(() => applyPendingEmailAction(accountId, actionId), `Applied: ${label}`);
+      return;
+    }
+    if (verb === 'always') {
+      void run(
+        () => applyPendingEmailAction(accountId, actionId, { alwaysAllow: true }),
+        `Applied — future ${row?.getAttribute('data-pending-action') ?? 'matching'} suggestions run automatically`,
+      );
+      return;
+    }
+    if (verb === 'dismiss') {
+      void run(() => dismissPendingEmailAction(accountId, actionId), 'Dismissed');
+    }
+  });
+}
+
 /** Review strip for AI-suggested batches awaiting Apply/Dismiss (§3.7). */
 export function renderPendingActions(
   mount: HTMLElement,
@@ -330,11 +390,19 @@ export function renderPendingActions(
   const pending = pendingActions.filter((row) => row.state === 'pending');
   if (pending.length === 0) return;
 
+  ensurePendingReviewDelegation(mount);
+  pendingReviewOptions.set(mount, options);
+  mount.dataset.pendingReviewAccountId = account.id;
+
   const section = el('section', 'email-dash-review');
   section.appendChild(el('h3', 'email-dash-section-label', 'Ready for review'));
 
   for (const action of pending) {
     const row = el('div', 'email-dash-review-row');
+    row.setAttribute('data-pending-id', action.id);
+    row.setAttribute('data-pending-label', action.label);
+    row.setAttribute('data-pending-action', action.action);
+
     const main = el('div', 'email-dash-review-main');
     main.appendChild(el('span', 'email-dash-review-label', action.label));
     main.appendChild(
@@ -350,36 +418,16 @@ export function renderPendingActions(
 
     const applyBtn = el('button', 'email-btn email-btn-primary', 'Apply') as HTMLButtonElement;
     applyBtn.type = 'button';
+    applyBtn.dataset.pendingVerb = 'apply';
+
     const dismissBtn = el('button', 'email-btn', 'Dismiss') as HTMLButtonElement;
     dismissBtn.type = 'button';
+    dismissBtn.dataset.pendingVerb = 'dismiss';
+
     const alwaysBtn = el('button', 'email-btn', 'Always allow') as HTMLButtonElement;
     alwaysBtn.type = 'button';
+    alwaysBtn.dataset.pendingVerb = 'always';
     alwaysBtn.title = `Apply now and auto-apply future "${action.action}" suggestions from this source`;
-
-    const run = async (fn: () => Promise<unknown>, okMessage: string) => {
-      applyBtn.disabled = dismissBtn.disabled = alwaysBtn.disabled = true;
-      try {
-        await fn();
-        options.onStatus?.('ok', okMessage);
-        options.onRefresh?.();
-      } catch (err) {
-        applyBtn.disabled = dismissBtn.disabled = alwaysBtn.disabled = false;
-        options.onStatus?.('err', err instanceof Error ? err.message : 'Action failed');
-      }
-    };
-
-    applyBtn.addEventListener('click', () =>
-      void run(() => applyPendingEmailAction(account.id, action.id), `Applied: ${action.label}`),
-    );
-    dismissBtn.addEventListener('click', () =>
-      void run(() => dismissPendingEmailAction(account.id, action.id), 'Dismissed'),
-    );
-    alwaysBtn.addEventListener('click', () =>
-      void run(
-        () => applyPendingEmailAction(account.id, action.id, { alwaysAllow: true }),
-        `Applied — future ${action.action} suggestions run automatically`,
-      ),
-    );
 
     controls.appendChild(applyBtn);
     if (action.action !== 'delete') {

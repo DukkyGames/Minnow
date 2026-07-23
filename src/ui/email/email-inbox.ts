@@ -86,6 +86,14 @@ export interface EmailInboxOptions {
   onReaderClosed?: () => void;
   /** Publish identifiers and short labels for the Email assistant prompt. */
   onContextChange?: (snapshot: EmailAssistantContextSnapshot) => void;
+  /** Mount the assistant open toggle beside the readout or stream marker. */
+  onAssistantToggleMount?: (slot: HTMLElement) => void;
+  /** Called once the inbox surface is live so SSE can refresh without remounting. */
+  onReady?: (handle: { refresh: () => Promise<void> }) => void;
+}
+
+export interface EmailInboxHandle {
+  refresh: () => Promise<void>;
 }
 
 /** Bumped on every full inbox remount; stale openThread calls bail after this changes. */
@@ -200,6 +208,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   const markerMount = el('div', 'email-stream-marker');
   const markerLabel = el('span', '', scopeMarker(scope));
   const markerTools = el('div', 'email-stream-tools');
+  const markerAssistantSlot = el('div', 'email-readout-actions');
   markerMount.append(markerLabel, markerTools);
   const pager = el('div', 'email-stream-pager');
   pager.hidden = true;
@@ -213,6 +222,11 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       // Already on the inbox surface; nothing to route to.
     },
     onRefresh: () => void reload({ showLoading: false }),
+  };
+
+  /** Prefer the readout freshness row; fall back to the stream marker toolbar. */
+  const mountAssistantToggle = (preferred: HTMLElement | null): void => {
+    options.onAssistantToggleMount?.(preferred ?? markerAssistantSlot);
   };
 
   /** Publish metadata only; full bodies remain behind fenced mail tools. */
@@ -368,6 +382,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     const synced = el('span', 'email-readout-synced', relativeTime(summary.generatedAt));
     synced.title = `Last synced ${new Date(summary.generatedAt).toLocaleString()}`;
     freshness.appendChild(synced);
+    freshness.appendChild(el('div', 'email-readout-actions'));
     readout.appendChild(freshness);
     return readout;
   };
@@ -482,19 +497,30 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       }, 300);
     });
     searchWrap.appendChild(input);
-    markerTools.replaceChildren(searchWrap);
+    markerTools.replaceChildren(markerAssistantSlot, searchWrap);
   };
   wireScopeMarkerSearch();
+  mountAssistantToggle(markerAssistantSlot);
 
   const renderHead = (): void => {
     headMount.replaceChildren();
 
     // The instrument readout and triage queue lead the first page only; deeper
     // pages are a plain conversation list.
-    if (page !== 0 || !scopeShowsHead(scope) || !summary) return;
+    if (page !== 0 || !scopeShowsHead(scope) || !summary) {
+      mountAssistantToggle(markerAssistantSlot);
+      return;
+    }
 
     const readout = renderReadout();
-    if (readout) headMount.appendChild(readout);
+    if (readout) {
+      headMount.appendChild(readout);
+      mountAssistantToggle(
+        readout.querySelector<HTMLElement>('.email-readout-actions'),
+      );
+    } else {
+      mountAssistantToggle(markerAssistantSlot);
+    }
 
     // Narrative digest leads when available; the heuristic template is the
     // instant fallback until the LLM pass lands via `digest_updated` SSE.
@@ -855,13 +881,16 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   };
 
   const reload = async (opts?: { showLoading?: boolean; keepFocus?: 'search' }): Promise<void> => {
+    const reloadSession = session;
     if (opts?.showLoading) {
       loadingBanner.hidden = false;
       loadingBanner.textContent = 'Loading…';
     }
     try {
       await loadSummary();
+      if (reloadSession !== emailInboxSession) return;
       await loadThreadsForPage();
+      if (reloadSession !== emailInboxSession) return;
       renderStream();
       if (opts?.showLoading) stream.scrollTop = 0;
       if (opts?.keepFocus === 'search') {
@@ -869,6 +898,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       }
       loadingBanner.hidden = true;
     } catch (err) {
+      if (reloadSession !== emailInboxSession) return;
       loadingBanner.hidden = false;
       loadingBanner.textContent = err instanceof Error ? err.message : 'Load failed';
     }
@@ -877,6 +907,8 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   // ---- Boot ------------------------------------------------------------
   loadingBanner.hidden = false;
   await reload({ showLoading: false });
+  if (session !== emailInboxSession) return;
+  options.onReady?.({ refresh: () => reload({ showLoading: false }) });
 
   if (options.openComposeNew) {
     dockBody.replaceChildren();
