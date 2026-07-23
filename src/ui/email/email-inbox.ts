@@ -18,6 +18,7 @@ import type {
   EmailFollowup,
   EmailInboxSummary,
   EmailMessage,
+  EmailNarrativeDigest,
   EmailThreadSummary,
 } from '../../email/client';
 import {
@@ -54,6 +55,7 @@ import {
   mountEmailReaderDockResizer,
   syncEmailReaderDockResizer,
 } from './email-panel-resize';
+import { createVirtualList } from './email-virtual-list';
 
 /** What the stream is scoped to, driven by the rail's Views and Folders. */
 export type InboxScope =
@@ -77,6 +79,14 @@ export interface EmailInboxOptions {
 }
 
 const PAGE = 40;
+/** Must match `.email-stream-row { height }` in email.css. */
+const STREAM_ROW_HEIGHT = 64;
+/** Max threads kept in memory while scrolling down. */
+const MAX_LOADED_THREADS = 120;
+/** Drop this many from the head when trimming the sliding window. */
+const TRIM_BATCH = 40;
+/** Trim only after the viewport has moved this far into the loaded window. */
+const TRIM_LEAD_ROWS = 50;
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -151,16 +161,31 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   scrim.addEventListener('click', () => closeReader());
 
   // ---- State -----------------------------------------------------------
-  let offset = 0;
+  /** Server offset of `threads[0]` once the sliding window trims from the top. */
+  let loadedOffset = 0;
   let search = '';
   let threads: EmailThreadSummary[] = [];
   let total = 0;
+  let loadingMore = false;
+  let listGeneration = 0;
   let summary: EmailInboxSummary | null = null;
+  let digest: EmailNarrativeDigest | null = null;
   let followups: EmailFollowup[] = [];
   let selectedThreadId: string | null = null;
   let composeMode: ComposeMode | null = null;
   /** Assigned after `reload` is defined; the readout refresh button calls this. */
   let syncAndReload: () => Promise<void> = async () => {};
+
+  const loadingBanner = el('p', 'email-stream-loading', 'Loading…');
+  loadingBanner.hidden = true;
+  const headMount = el('div', 'email-stream-head');
+  const followupsMount = el('div', 'email-stream-followups');
+  const markerMount = el('div', 'email-stream-marker');
+  const markerLabel = el('span', '', scopeMarker(scope));
+  const markerTools = el('div', 'email-stream-tools');
+  markerMount.append(markerLabel, markerTools);
+  const loadFooter = el('div', 'email-stream-load-more', 'Loading more…');
+  loadFooter.hidden = true;
 
   const dashOptions: EmailDashboardOptions = {
     account,
@@ -190,12 +215,13 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     options.onCounts?.(counts);
   };
 
-  const loadData = async (): Promise<void> => {
+  const loadSummary = async (): Promise<void> => {
     // The summary feeds both the triage head and the rail counts; it is cached
     // server-side, so fetching it for every scope is cheap.
     try {
       const payload = await fetchInboxSummary(account.id);
       summary = payload.summary;
+      digest = payload.digest ?? null;
       followups = payload.followups ?? [];
       reportCounts(payload);
 
@@ -206,6 +232,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
           await syncEmailFolder(account.id, 'INBOX');
           const fresh = await fetchInboxSummary(account.id);
           summary = fresh.summary;
+          digest = fresh.digest ?? null;
           followups = fresh.followups ?? [];
           reportCounts(fresh);
         } catch (err) {
@@ -216,15 +243,11 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       }
     } catch {
       summary = null;
+      digest = null;
     }
+  };
 
-    // "Waiting on" is followup-only; it has no conversation stream of its own.
-    if (scope.kind === 'waiting') {
-      threads = [];
-      total = 0;
-      return;
-    }
-
+  const fetchThreadsPage = async (offset: number): Promise<void> => {
     const result = await fetchEmailThreads(account.id, {
       folder: scopeFolder(scope),
       offset,
@@ -232,8 +255,68 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       filter: scopeFilter(scope),
       query: search || undefined,
     });
-    threads = result.threads;
     total = result.total;
+    if (offset === 0) {
+      threads = result.threads;
+    } else {
+      threads = threads.concat(result.threads);
+    }
+  };
+
+  const resetThreadWindow = (): void => {
+    loadedOffset = 0;
+    threads = [];
+    total = 0;
+    listGeneration += 1;
+  };
+
+  const loadInitialThreads = async (): Promise<void> => {
+    if (scope.kind === 'waiting') {
+      threads = [];
+      total = 0;
+      return;
+    }
+    resetThreadWindow();
+    await fetchThreadsPage(0);
+  };
+
+  const loadMoreThreads = async (): Promise<void> => {
+    if (scope.kind === 'waiting') return;
+    if (loadingMore || loadedOffset + threads.length >= total) return;
+
+    loadingMore = true;
+    loadFooter.hidden = false;
+    const generation = listGeneration;
+    try {
+      await fetchThreadsPage(loadedOffset + threads.length);
+      if (generation !== listGeneration) return;
+      virtualList.updateItems(threads);
+    } catch (err) {
+      options.onStatus?.('err', err instanceof Error ? err.message : 'Could not load more mail');
+    } finally {
+      loadingMore = false;
+      loadFooter.hidden = true;
+    }
+  };
+
+  const maybeTrimThreads = (firstVisible: number): void => {
+    if (threads.length <= MAX_LOADED_THREADS) return;
+    if (firstVisible < loadedOffset + TRIM_LEAD_ROWS) return;
+
+    threads = threads.slice(TRIM_BATCH);
+    loadedOffset += TRIM_BATCH;
+    stream.scrollTop = Math.max(0, stream.scrollTop - TRIM_BATCH * STREAM_ROW_HEIGHT);
+    virtualList.updateItems(threads);
+  };
+
+  const onViewportChange = (viewport: {
+    firstVisible: number;
+    nearBottom: boolean;
+  }): void => {
+    maybeTrimThreads(viewport.firstVisible);
+    if (viewport.nearBottom) {
+      void loadMoreThreads();
+    }
   };
 
   // ---- Stream rendering ------------------------------------------------
@@ -268,7 +351,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     return readout;
   };
 
-  const renderStreamRow = (thread: EmailThreadSummary): HTMLElement => {
+  const renderStreamRow = (thread: EmailThreadSummary, _index: number): HTMLElement => {
     const model = toConversationRow(thread);
     const row = el('button', 'email-stream-row') as HTMLButtonElement;
     row.type = 'button';
@@ -307,79 +390,30 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     return row;
   };
 
-  const renderStream = (): void => {
-    streamCol.replaceChildren();
+  let virtualList!: ReturnType<typeof createVirtualList<EmailThreadSummary>>;
 
-    // --- Triage head (default view only) ---
-    if (scopeShowsHead(scope) && summary) {
-      const readout = renderReadout();
-      if (readout) streamCol.appendChild(readout);
-
-      const brief = (summary.text ?? '').trim();
-      if (brief) {
-        streamCol.appendChild(el('p', 'email-stream-brief', brief));
-      }
-
-      if (summary.highlights.length > 0) {
-        const marker = el('div', 'email-stream-marker', 'Needs attention');
-        streamCol.appendChild(marker);
-        const attn = el('div', 'email-dash-rows');
-        for (const highlight of summary.highlights.slice(0, 5)) {
-          renderHighlightRow(attn, highlight, account, dashOptions);
-        }
-        streamCol.appendChild(attn);
-      }
-    }
-
-    // --- Waiting on (followups) ---
-    if (scope.kind === 'waiting') {
-      streamCol.appendChild(buildScopeMarker());
-      streamCol.appendChild(renderFollowups());
-      return;
-    }
-
-    // --- The conversation stream ---
-    streamCol.appendChild(buildScopeMarker());
-
-    const rows = el('div', 'email-stream-rows');
-    if (threads.length === 0) {
+  virtualList = createVirtualList<EmailThreadSummary>({
+    rowHeight: STREAM_ROW_HEIGHT,
+    renderRow: renderStreamRow,
+    className: 'email-stream-rows',
+    ariaLabel: 'Conversations',
+    scrollRoot: stream,
+    listOffset: () => virtualList.root.offsetTop,
+    totalCount: () => total,
+    indexOffset: () => loadedOffset,
+    onViewportChange,
+    renderEmpty: () => {
       const empty = el('div', 'email-stream-empty');
       empty.appendChild(el('p', 'email-empty-title', emptyTitle()));
       empty.appendChild(el('p', 'email-empty-copy', emptyCopy()));
-      rows.appendChild(empty);
-    } else {
-      for (const thread of threads) rows.appendChild(renderStreamRow(thread));
-    }
-    streamCol.appendChild(rows);
+      return empty;
+    },
+  });
 
-    if (total > offset + PAGE || offset > 0) {
-      const pager = el('div', 'email-stream-more');
-      if (offset > 0) {
-        const prev = el('button', 'email-btn', 'Newer') as HTMLButtonElement;
-        prev.type = 'button';
-        prev.addEventListener('click', () => {
-          offset = Math.max(0, offset - PAGE);
-          void reload({ showLoading: true });
-        });
-        pager.appendChild(prev);
-      }
-      if (total > offset + PAGE) {
-        const next = el('button', 'email-btn', 'Older') as HTMLButtonElement;
-        next.type = 'button';
-        next.addEventListener('click', () => {
-          offset += PAGE;
-          void reload({ showLoading: true });
-        });
-        pager.appendChild(next);
-      }
-      streamCol.appendChild(pager);
-    }
-  };
+  streamCol.append(loadingBanner, headMount, followupsMount, markerMount, virtualList.root, loadFooter);
 
-  const buildScopeMarker = (): HTMLElement => {
-    const marker = el('div', 'email-stream-marker', scopeMarker(scope));
-    // A slim inline search sits with the "everything else" marker.
-    const tools = el('div', 'email-stream-tools');
+  /** Wire the scope marker search once; input survives reloads. */
+  const wireScopeMarkerSearch = (): void => {
     const searchWrap = el('label', 'email-stream-search');
     searchWrap.innerHTML = EMAIL_ICONS.search;
     const input = el('input') as HTMLInputElement;
@@ -392,14 +426,63 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       if (timer) window.clearTimeout(timer);
       timer = window.setTimeout(() => {
         search = input.value.trim();
-        offset = 0;
         void reload({ showLoading: true, keepFocus: 'search' });
       }, 300);
     });
     searchWrap.appendChild(input);
-    tools.appendChild(searchWrap);
-    marker.appendChild(tools);
-    return marker;
+    markerTools.replaceChildren(searchWrap);
+  };
+  wireScopeMarkerSearch();
+
+  const renderHead = (): void => {
+    headMount.replaceChildren();
+
+    if (!scopeShowsHead(scope) || !summary) return;
+
+    const readout = renderReadout();
+    if (readout) headMount.appendChild(readout);
+
+    // Narrative digest leads when available; the heuristic template is the
+    // instant fallback until the LLM pass lands via `digest_updated` SSE.
+    const narrative = (digest?.narrative ?? '').trim();
+    const brief = narrative || (summary.text ?? '').trim();
+    if (brief) {
+      const briefNode = el('p', 'email-stream-brief', brief);
+      if (narrative) briefNode.classList.add('is-narrative');
+      headMount.appendChild(briefNode);
+    }
+
+    if (summary.highlights.length > 0) {
+      const marker = el('div', 'email-stream-marker', 'Needs attention');
+      headMount.appendChild(marker);
+      const attn = el('div', 'email-dash-rows');
+      for (const highlight of summary.highlights.slice(0, 5)) {
+        renderHighlightRow(attn, highlight, account, dashOptions);
+      }
+      headMount.appendChild(attn);
+    }
+  };
+
+  const renderStream = (resetScroll = true): void => {
+    markerLabel.textContent = scopeMarker(scope);
+    renderHead();
+
+    const isWaiting = scope.kind === 'waiting';
+    followupsMount.hidden = !isWaiting;
+    virtualList.root.hidden = isWaiting;
+    markerMount.hidden = isWaiting;
+    loadFooter.hidden = isWaiting || !loadingMore;
+
+    if (isWaiting) {
+      followupsMount.replaceChildren(renderFollowups());
+      return;
+    }
+
+    if (resetScroll) {
+      virtualList.setItems(threads);
+    } else {
+      virtualList.updateItems(threads);
+    }
   };
 
   const renderFollowups = (): HTMLElement => {
@@ -458,10 +541,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     composeMode = null;
     surface.classList.remove('has-reader');
     syncEmailReaderDockResizer(surface);
-    // Reflect the cleared selection in the stream rows.
-    for (const row of streamCol.querySelectorAll('.email-stream-row.is-selected')) {
-      row.classList.remove('is-selected');
-    }
+    virtualList.refresh();
   };
 
   const openCompose = (mode: ComposeMode, thread: EmailMessage[], selected: EmailMessage): void => {
@@ -511,10 +591,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   const openThread = async (threadId: string): Promise<void> => {
     selectedThreadId = threadId;
     composeMode = null;
-    // Reflect selection in the stream immediately.
-    for (const row of streamCol.querySelectorAll('.email-stream-row')) {
-      row.classList.remove('is-selected');
-    }
+    virtualList.refresh();
 
     let thread: EmailMessage[];
     try {
@@ -678,6 +755,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     try {
       const payload = await fetchInboxSummary(account.id);
       summary = payload.summary;
+      digest = payload.digest ?? null;
       followups = payload.followups ?? [];
       reportCounts(payload);
     } catch {
@@ -688,7 +766,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   // ---- Reload ----------------------------------------------------------
   syncAndReload = async (): Promise<void> => {
     const folder = scopeFolder(scope);
-    const refreshBtn = streamCol.querySelector<HTMLButtonElement>('.email-readout-refresh');
+    const refreshBtn = headMount.querySelector<HTMLButtonElement>('.email-readout-refresh');
     refreshBtn?.classList.add('is-syncing');
     options.onSyncActivity?.(true);
     try {
@@ -709,23 +787,25 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
 
   const reload = async (opts?: { showLoading?: boolean; keepFocus?: 'search' }): Promise<void> => {
     if (opts?.showLoading) {
-      streamCol.replaceChildren(el('p', 'email-stream-loading', 'Loading…'));
+      loadingBanner.hidden = false;
+      loadingBanner.textContent = 'Loading…';
     }
     try {
-      await loadData();
-      renderStream();
+      await loadSummary();
+      await loadInitialThreads();
+      renderStream(Boolean(opts?.showLoading));
       if (opts?.keepFocus === 'search') {
-        streamCol.querySelector<HTMLInputElement>('.email-stream-search input')?.focus();
+        markerTools.querySelector<HTMLInputElement>('.email-stream-search input')?.focus();
       }
+      loadingBanner.hidden = true;
     } catch (err) {
-      streamCol.replaceChildren(
-        el('p', 'email-stream-loading', err instanceof Error ? err.message : 'Load failed'),
-      );
+      loadingBanner.hidden = false;
+      loadingBanner.textContent = err instanceof Error ? err.message : 'Load failed';
     }
   };
 
   // ---- Boot ------------------------------------------------------------
-  streamCol.replaceChildren(el('p', 'email-stream-loading', 'Loading inbox…'));
+  loadingBanner.hidden = false;
   await reload({ showLoading: false });
 
   if (options.openComposeNew) {
