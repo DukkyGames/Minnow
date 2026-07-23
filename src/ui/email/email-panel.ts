@@ -14,6 +14,7 @@ import { fetchEmailFolders, subscribeEmailEvents } from '../../email/client-ext'
 import { renderEmailAutomations } from './email-automations';
 import { createEmailRail } from './email-rail';
 import { renderEmailInbox, type InboxScope } from './email-inbox';
+import { mountEmailRailResizer, syncEmailShellWidthVars } from './email-panel-resize';
 import { folderLabel } from './email-layout';
 import { ALL_INBOXES, renderUnifiedInbox } from './email-unified';
 
@@ -459,6 +460,8 @@ export async function renderEmailPanel(
   });
 
   shell.append(rail.root, workspace);
+  syncEmailShellWidthVars(shell);
+  mountEmailRailResizer(rail.root, shell);
   mount.replaceChildren(shell);
   rail.setActiveNav(activeNav);
 

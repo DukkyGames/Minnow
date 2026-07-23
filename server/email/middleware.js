@@ -34,6 +34,7 @@ import {
   queueDigestActionGroup,
 } from './digest.js';
 import { listSenderOverrides, setSenderOverride } from './priority.js';
+import { dismissAttentionHighlight } from './attention.js';
 import { getThreadSummary, summarizeThread } from './thread-summary.js';
 import { dismissFollowup, listFollowups } from './followups.js';
 import { semanticRerankMessages } from './semantic-search.js';
@@ -441,6 +442,16 @@ export function createEmailMiddleware() {
           );
           // Rebuild so the dashboard reflects the correction immediately.
           await buildInboxSummary(accountId);
+          sendJson(res, 200, result);
+          return;
+        }
+
+        const highlightDismissMatch = tail.match(/^highlights\/([^/]+)\/dismiss$/);
+        if (highlightDismissMatch && req.method === 'POST') {
+          const result = await dismissAttentionHighlight(
+            accountId,
+            decodeURIComponent(highlightDismissMatch[1]),
+          );
           sendJson(res, 200, result);
           return;
         }

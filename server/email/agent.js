@@ -22,6 +22,7 @@ import {
   updateReplyVariants,
 } from './cache.js';
 import { triageMessage } from './triage.js';
+import { loadDismissedMessageIds } from './attention.js';
 import { computePriorityScore, loadSenderSignals } from './priority.js';
 import { satisfyFollowupsForMessage } from './followups.js';
 import { splitAddressHeader } from './contacts.js';
@@ -124,6 +125,7 @@ export async function buildInboxSummary(accountId) {
     accountId,
     inboxRows.map((row) => String(row.from ?? '')),
   );
+  const dismissedIds = loadDismissedMessageIds(accountId);
 
   /** @type {{ high: number, normal: number, low: number }} */
   const stats = { high: 0, normal: 0, low: 0 };
@@ -145,7 +147,7 @@ export async function buildInboxSummary(accountId) {
     // override lands.
     stats[priority.bucket] += 1;
 
-    if (row.triage?.summary) {
+    if (row.triage?.summary && !dismissedIds.has(String(row.id))) {
       highlights.push({
         threadId: row.threadId,
         messageId: row.id,

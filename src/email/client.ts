@@ -48,6 +48,8 @@ export interface EmailMessage {
   bodyPreview: string;
   bodyText?: string;
   bodyHtml?: string;
+  /** False until the full RFC822 source has been parsed on first open. */
+  bodyComplete?: boolean;
   bodyHash?: string;
   hasAttachments: boolean;
   attachments?: EmailAttachment[];
@@ -397,6 +399,32 @@ export async function fetchEmailMessageBody(
     `/api/email/messages/${encodeURIComponent(messageId)}/body?${params.toString()}`,
   );
   return parseJson(res);
+}
+
+/** True when the reader should download the full MIME source before rendering. */
+export function messageNeedsBodyFetch(message: EmailMessage): boolean {
+  return message.bodyComplete !== true;
+}
+
+/**
+ * Download full bodies for messages opened in the reader. Sync stores headers
+ * plus a transfer-encoded preview only — HTML and attachments arrive here.
+ */
+export async function hydrateThreadBodies(
+  accountId: string,
+  messages: EmailMessage[],
+): Promise<EmailMessage[]> {
+  const pending = messages.filter((message) => messageNeedsBodyFetch(message));
+  if (!pending.length) return messages;
+
+  const loaded = await Promise.all(
+    pending.map(async (message) => {
+      const { message: full } = await fetchEmailMessageBody(accountId, message.id);
+      return full;
+    }),
+  );
+  const byId = new Map(loaded.map((message) => [message.id, message]));
+  return messages.map((message) => byId.get(message.id) ?? message);
 }
 
 export async function triageEmailMessage(

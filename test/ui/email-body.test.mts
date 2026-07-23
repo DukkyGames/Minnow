@@ -193,6 +193,15 @@ describe('email-body renderer', () => {
     assert.equal(mount.innerHTML, 'Hello team');
   });
 
+  test('matchTheme applies the dark smart-invert class in the frame document', () => {
+    const mount = document.createElement('div');
+    emailBody.renderEmailBody(mount, { bodyHtml: '<p>Hi</p>' }, { matchTheme: true });
+
+    const frame = mount.querySelector('iframe');
+    assert.equal(frame?.classList.contains('email-body-frame--dark'), true);
+    assert.match(frameDoc(mount), /class="mn-dark"/);
+  });
+
   test('falls back to plain text when HTML is missing', () => {
     const mount = document.createElement('div');
     emailBody.renderEmailBody(mount, {

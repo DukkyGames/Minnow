@@ -24,6 +24,7 @@ import {
   downloadEmailAttachment,
   fetchEmailThread,
   fetchEmailThreads,
+  hydrateThreadBodies,
   saveBlobAs,
   syncEmailFolder,
 } from '../../email/client';
@@ -49,6 +50,10 @@ import {
 import { toConversationRow } from './email-conversation-row';
 import { EMAIL_ICONS } from './email-icons';
 import { showActionUndoToast } from './email-undo-toast';
+import {
+  mountEmailReaderDockResizer,
+  syncEmailReaderDockResizer,
+} from './email-panel-resize';
 
 /** What the stream is scoped to, driven by the rail's Views and Folders. */
 export type InboxScope =
@@ -135,11 +140,14 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
 
   const scrim = el('div', 'email-reader-scrim');
   const dock = el('div', 'email-reader-dock');
+  const dockBody = el('div', 'email-reader-dock-body');
+  dock.appendChild(dockBody);
   dock.setAttribute('role', 'dialog');
   dock.setAttribute('aria-modal', 'false');
   dock.setAttribute('aria-label', 'Message');
 
   surface.append(stream, scrim, dock);
+  mountEmailReaderDockResizer(surface);
   scrim.addEventListener('click', () => closeReader());
 
   // ---- State -----------------------------------------------------------
@@ -151,6 +159,8 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   let followups: EmailFollowup[] = [];
   let selectedThreadId: string | null = null;
   let composeMode: ComposeMode | null = null;
+  /** Assigned after `reload` is defined; the readout refresh button calls this. */
+  let syncAndReload: () => Promise<void> = async () => {};
 
   const dashOptions: EmailDashboardOptions = {
     account,
@@ -242,8 +252,19 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     metric('is-wait', followups.length, ' waiting');
     metric('is-unread', summary.unread, ' unread');
 
+    const freshness = el('div', 'email-readout-freshness');
+    freshness.setAttribute('role', 'status');
+    const refreshBtn = iconBtn(
+      EMAIL_ICONS.sync,
+      'Refresh inbox',
+      'email-icon-btn email-readout-refresh',
+    );
+    refreshBtn.addEventListener('click', () => void syncAndReload());
+    freshness.appendChild(refreshBtn);
     const synced = el('span', 'email-readout-synced', relativeTime(summary.generatedAt));
-    readout.appendChild(synced);
+    synced.title = `Last synced ${new Date(summary.generatedAt).toLocaleString()}`;
+    freshness.appendChild(synced);
+    readout.appendChild(freshness);
     return readout;
   };
 
@@ -436,6 +457,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     selectedThreadId = null;
     composeMode = null;
     surface.classList.remove('has-reader');
+    syncEmailReaderDockResizer(surface);
     // Reflect the cleared selection in the stream rows.
     for (const row of streamCol.querySelectorAll('.email-stream-row.is-selected')) {
       row.classList.remove('is-selected');
@@ -496,7 +518,8 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
 
     let thread: EmailMessage[];
     try {
-      ({ messages: thread } = await fetchEmailThread(account.id, threadId));
+      thread = (await fetchEmailThread(account.id, threadId)).messages;
+      thread = await hydrateThreadBodies(account.id, thread);
     } catch (err) {
       options.onStatus?.('err', err instanceof Error ? err.message : 'Could not open the conversation');
       return;
@@ -511,13 +534,13 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       );
     }
 
-    dock.replaceChildren();
-    const close = iconBtn(EMAIL_ICONS.back, 'Close', 'email-icon-btn email-reader-dock-close');
+    dockBody.replaceChildren();
+    const close = iconBtn(EMAIL_ICONS.close, 'Close', 'email-icon-btn email-reader-dock-close');
     close.addEventListener('click', () => closeReader());
-    dock.appendChild(close);
+    dockBody.appendChild(close);
 
     const scrollArea = el('div', 'email-reader-dock-scroll');
-    dock.appendChild(scrollArea);
+    dockBody.appendChild(scrollArea);
 
     // --- Header ---
     const header = el('header', 'email-reader-head');
@@ -647,6 +670,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     composeMount.appendChild(collapsed);
 
     surface.classList.add('has-reader');
+    syncEmailReaderDockResizer(surface);
   };
 
   /** After marking a message seen, nudge the rail's unread badge down. */
@@ -662,6 +686,27 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   };
 
   // ---- Reload ----------------------------------------------------------
+  syncAndReload = async (): Promise<void> => {
+    const folder = scopeFolder(scope);
+    const refreshBtn = streamCol.querySelector<HTMLButtonElement>('.email-readout-refresh');
+    refreshBtn?.classList.add('is-syncing');
+    options.onSyncActivity?.(true);
+    try {
+      const result = await syncEmailFolder(account.id, folder);
+      options.onStatus?.('ok', `Synced ${result.synced} messages`);
+      const openThreadId = selectedThreadId;
+      await reload({ showLoading: false });
+      if (openThreadId) {
+        void openThread(openThreadId);
+      }
+    } catch (err) {
+      options.onStatus?.('err', err instanceof Error ? err.message : 'Sync failed');
+    } finally {
+      refreshBtn?.classList.remove('is-syncing');
+      options.onSyncActivity?.(false);
+    }
+  };
+
   const reload = async (opts?: { showLoading?: boolean; keepFocus?: 'search' }): Promise<void> => {
     if (opts?.showLoading) {
       streamCol.replaceChildren(el('p', 'email-stream-loading', 'Loading…'));
@@ -684,8 +729,8 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   await reload({ showLoading: false });
 
   if (options.openComposeNew) {
-    dock.replaceChildren();
-    const close = iconBtn(EMAIL_ICONS.back, 'Close', 'email-icon-btn email-reader-dock-close');
+    dockBody.replaceChildren();
+    const close = iconBtn(EMAIL_ICONS.close, 'Close', 'email-icon-btn email-reader-dock-close');
     close.addEventListener('click', () => closeReader());
     const scrollArea = el('div', 'email-reader-dock-scroll');
     const header = el('header', 'email-reader-head');
@@ -693,7 +738,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     scrollArea.appendChild(header);
     const composeMount = el('div', 'email-reader-compose-mount');
     scrollArea.appendChild(composeMount);
-    dock.append(close, scrollArea);
+    dockBody.append(close, scrollArea);
     mountEmailCompose(composeMount, {
       account,
       mode: 'new',
@@ -704,6 +749,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       },
     });
     surface.classList.add('has-reader');
+    syncEmailReaderDockResizer(surface);
   } else if (options.initialThreadId) {
     void openThread(options.initialThreadId);
   }

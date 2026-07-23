@@ -61,8 +61,8 @@ export interface EmailBodyRenderOptions {
   loadRemoteImages?: boolean;
   /**
    * Recolour the mail to sit in a dark theme via a safe smart-invert (images
-   * are re-inverted so they stay right-way-round). Off by default: mail is
-   * authored for a white canvas, so Light is the readable default.
+   * are re-inverted so they stay right-way-round). The reader enables this
+   * automatically when the app theme is dark; callers may also set it directly.
    */
   matchTheme?: boolean;
   /** Reports how many remote references were withheld, for the "load images" bar. */

@@ -16,6 +16,7 @@ import {
   fetchEmailThread,
   fetchEmailThreads,
   fetchImageAllowlist,
+  hydrateThreadBodies,
   normalizeSender,
   saveBlobAs,
   syncEmailFolder,
@@ -57,6 +58,13 @@ import {
 import { showActionUndoToast } from "./email-undo-toast";
 
 import { snoozeEmailMessage } from "../../email/client-drafts";
+
+import { getMode, getStoredTheme } from "../../theme";
+
+/** True when the resolved app palette is a dark theme. */
+function isAppDarkTheme(): boolean {
+  return getMode(getStoredTheme()) === "dark";
+}
 
 /**
  * Row height, in px. Must match `.email-list-row` in email.css — the virtual
@@ -155,9 +163,12 @@ export function renderBodyWithRemoteControls(
   const hasHtml = Boolean(msg.bodyHtml?.trim());
 
   // Per-message state: whether remote images have been let through, and whether
-  // the body is recoloured to fit a dark theme. Both feed one repaint.
+  // the user has opted out of dark-theme recolouring. Both feed one repaint.
   let loaded = imagesLoadedFor.has(msg.id) || (imageAllowlist?.includes(sender) ?? false);
-  let dark = false;
+  // When true, keep the sender's original light canvas even while the app is dark.
+  let forceOriginalColors = false;
+
+  const matchTheme = (): boolean => !forceOriginalColors && isAppDarkTheme();
 
   const bodyRegion = el("div", "email-thread-body-region");
 
@@ -172,7 +183,7 @@ export function renderBodyWithRemoteControls(
     renderEmailBody(body, msg, {
       viewMode,
       loadRemoteImages: loaded,
-      matchTheme: dark,
+      matchTheme: matchTheme(),
       inlineParts: { accountId, messageKey: msg.id },
       onRemoteContent: ({ blockedCount }) => {
         if (loaded || blockedCount === 0) return;
@@ -217,30 +228,63 @@ export function renderBodyWithRemoteControls(
     });
   };
 
-  // Mail is drawn for white, so Light is the default; "Match theme" recolours
-  // text-dominant mail to fit dark via a safe smart-invert.
+  // HTML mail is authored on a white canvas. In a dark app theme we smart-invert
+  // by default; the toggle below lets the reader opt back into original colors.
+  let themeToggle: HTMLButtonElement | null = null;
+  let themeControls: HTMLElement | null = null;
+
+  const syncThemeToggle = (): void => {
+    if (!themeToggle || !themeControls) return;
+    const on = matchTheme();
+    themeToggle.classList.toggle("is-active", on);
+    themeToggle.setAttribute("aria-pressed", on ? "true" : "false");
+    themeControls.hidden = !isAppDarkTheme();
+  };
+
   if (hasHtml && viewMode === "html") {
-    const controls = el("div", "email-body-controls");
-    const toggle = el(
+    themeControls = el("div", "email-body-controls");
+    themeToggle = el(
       "button",
       "email-body-theme-toggle",
       "Match theme",
     ) as HTMLButtonElement;
-    toggle.type = "button";
-    toggle.setAttribute("aria-pressed", "false");
-    toggle.title = "Recolour this message to fit the dark theme";
-    toggle.addEventListener("click", () => {
-      dark = !dark;
-      toggle.classList.toggle("is-active", dark);
-      toggle.setAttribute("aria-pressed", dark ? "true" : "false");
+    themeToggle.type = "button";
+    themeToggle.title = "Adapt this message for the dark theme";
+    themeToggle.addEventListener("click", () => {
+      forceOriginalColors = !forceOriginalColors;
+      syncThemeToggle();
       paint();
     });
-    controls.appendChild(toggle);
-    wrap.appendChild(controls);
+    themeControls.appendChild(themeToggle);
+    wrap.appendChild(themeControls);
+    syncThemeToggle();
   }
 
   wrap.appendChild(bodyRegion);
   paint();
+
+  // Repaint when the app theme changes so open messages follow light/dark mode.
+  const themeRoot = document.documentElement;
+  let lastThemeId = themeRoot.getAttribute("data-theme") ?? "";
+  const themeObserver = new MutationObserver(() => {
+    const nextThemeId = themeRoot.getAttribute("data-theme") ?? "";
+    if (nextThemeId === lastThemeId) return;
+    lastThemeId = nextThemeId;
+    syncThemeToggle();
+    paint();
+  });
+  themeObserver.observe(themeRoot, {
+    attributes: true,
+    attributeFilter: ["data-theme"],
+  });
+
+  const detachObserver = new MutationObserver(() => {
+    if (!wrap.isConnected) {
+      themeObserver.disconnect();
+      detachObserver.disconnect();
+    }
+  });
+  detachObserver.observe(document.body, { childList: true, subtree: true });
 
   // Prime the allowlist once, then repaint if this sender turns out to be on it.
   if (imageAllowlist === null) {
@@ -1034,11 +1078,11 @@ export async function renderEmailLayout(
     if (!selected) return;
 
     try {
-      const { messages: thread } = await fetchEmailThread(
-        options.account.id,
-        selected.threadId,
-      );
+      let thread = (
+        await fetchEmailThread(options.account.id, selected.threadId)
+      ).messages;
 
+      thread = await hydrateThreadBodies(options.account.id, thread);
       selectedThread = thread;
 
       if (!selected.flags?.seen) {

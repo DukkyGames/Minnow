@@ -182,6 +182,11 @@ function initSchema(database) {
       satisfied_by TEXT NOT NULL DEFAULT ''
     );
 
+    CREATE TABLE IF NOT EXISTS attention_dismissals (
+      message_id TEXT PRIMARY KEY,
+      dismissed_at TEXT NOT NULL DEFAULT ''
+    );
+
     CREATE TABLE IF NOT EXISTS thread_vectors (
       thread_id TEXT PRIMARY KEY,
       input_hash TEXT NOT NULL DEFAULT '',
@@ -431,6 +436,9 @@ export function rowToMessage(row, extra = {}) {
   }
   if (row.body_html !== undefined && row.body_html !== null) {
     message.bodyHtml = row.body_html;
+  }
+  if (row.body_complete !== undefined && row.body_complete !== null) {
+    message.bodyComplete = Boolean(row.body_complete);
   }
   if (row.triage_json) {
     message.triage = parseJson(row.triage_json, undefined);
