@@ -374,6 +374,10 @@
   background: var(--mn-bg-elevated, var(--mn-bg));
 }
 
+.email-settings-privacy {
+  margin-bottom: 1rem;
+}
+
 .email-setup-title {
   margin: 0 0 8px;
 }

@@ -45,3 +45,8 @@ export function emailAutomationsPath() {
 export function emailImageAllowlistPath() {
   return path.join(emailRootDir(), 'image-allowlist.json');
 }
+
+/** Global email reader/privacy preferences. */
+export function emailPreferencesPath() {
+  return path.join(emailRootDir(), 'preferences.json');
+}

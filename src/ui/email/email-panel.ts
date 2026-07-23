@@ -7,14 +7,17 @@ import {
   createEmailAccount,
   deleteEmailAccount,
   fetchEmailAccounts,
+  fetchEmailPreferences,
   syncEmailFolder,
   updateEmailAccount,
+  updateEmailPreferences,
   type EmailAccount,
 } from '../../email/client';
 import { fetchEmailFolders, subscribeEmailEvents } from '../../email/client-ext';
 import { renderEmailAutomations } from './email-automations';
 import { createEmailRail } from './email-rail';
 import { renderEmailInbox, type InboxScope } from './email-inbox';
+import { setAlwaysLoadRemoteImages } from './email-layout';
 import { mountEmailRailResizer, syncEmailShellWidthVars } from './email-panel-resize';
 import { folderLabel } from './email-layout';
 import { ALL_INBOXES, renderUnifiedInbox } from './email-unified';
@@ -360,6 +363,69 @@ function renderAccountForm(mount: HTMLElement, options: AccountFormOptions): voi
   }
 }
 
+/** Privacy and reader preferences (global, not per account). */
+async function renderEmailPrivacySettings(
+  mount: HTMLElement,
+  options: EmailPanelOptions,
+): Promise<void> {
+  const card = el('section', 'email-setup-card email-settings-privacy');
+  card.appendChild(el('h3', 'email-setup-title', 'Privacy'));
+  card.appendChild(
+    el(
+      'p',
+      'email-setup-note',
+      'Remote images can reveal your IP address and when you read a message. Load them only when you choose, or opt in globally below.',
+    ),
+  );
+
+  const row = el('label', 'email-field email-field-checkbox');
+  const input = el('input') as HTMLInputElement;
+  input.type = 'checkbox';
+  input.id = 'email-alwaysLoadRemoteImages';
+  input.name = 'alwaysLoadRemoteImages';
+  input.disabled = true;
+  row.appendChild(input);
+  row.appendChild(el('span', 'email-field-label', 'Always load remote images'));
+  card.appendChild(row);
+  mount.appendChild(card);
+
+  try {
+    const prefs = await fetchEmailPreferences();
+    input.checked = prefs.alwaysLoadRemoteImages;
+    setAlwaysLoadRemoteImages(prefs.alwaysLoadRemoteImages);
+  } catch (err) {
+    options.onStatus?.(
+      'err',
+      err instanceof Error ? err.message : 'Could not load email preferences',
+    );
+  } finally {
+    input.disabled = false;
+  }
+
+  input.addEventListener('change', async () => {
+    const next = input.checked;
+    input.disabled = true;
+    try {
+      const prefs = await updateEmailPreferences({ alwaysLoadRemoteImages: next });
+      setAlwaysLoadRemoteImages(prefs.alwaysLoadRemoteImages);
+      options.onStatus?.(
+        'ok',
+        prefs.alwaysLoadRemoteImages
+          ? 'Remote images will load automatically'
+          : 'Remote images blocked until you choose to load them',
+      );
+    } catch (err) {
+      input.checked = !next;
+      options.onStatus?.(
+        'err',
+        err instanceof Error ? err.message : 'Could not save email preferences',
+      );
+    } finally {
+      input.disabled = false;
+    }
+  });
+}
+
 /** Main panel entry — one spine rail, one workspace surface (MIN-358). */
 export async function renderEmailPanel(
   mount: HTMLElement,
@@ -581,6 +647,7 @@ export async function renderEmailPanel(
     surface.classList.remove('has-reader');
     const wrap = el('div', 'email-setup-shell email-surface-scroll');
     surface.replaceChildren(wrap);
+    void renderEmailPrivacySettings(wrap, options);
     renderAccountForm(wrap, {
       ...options,
       title: 'Edit email account',
