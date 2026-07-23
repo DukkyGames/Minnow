@@ -1,3 +1,68 @@
+/** Named HTML entities that appear in marketing mail (invisible / spacing). */
+const NAMED_HTML_ENTITIES = {
+  nbsp: ' ',
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  shy: '',
+  zwnj: '',
+  zwj: '',
+};
+
+/** Invisible / format characters marketing HTML uses to break spam filters. */
+const INVISIBLE_PREVIEW_CHARS =
+  /[\u200B-\u200D\uFEFF\u00AD\u2060\u034F\u061C\u115F\u1160\u17B4\u17B5\u180E\u200E\u200F\u202A-\u202E\u2061-\u2064\u2066-\u2069\u3164]/g;
+
+/**
+ * Decode numeric and common named HTML entities left after tag stripping.
+ * @param {string} text
+ */
+export function decodeHtmlEntities(text) {
+  return String(text ?? '')
+    .replace(/&#x([0-9a-f]+);/gi, (_match, hex) => {
+      const cp = parseInt(hex, 16);
+      return cp >= 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : _match;
+    })
+    .replace(/&#(\d+);/g, (_match, dec) => {
+      const cp = parseInt(dec, 10);
+      return cp >= 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : _match;
+    })
+    .replace(/&([a-z]+);/gi, (match, name) => NAMED_HTML_ENTITIES[name.toLowerCase()] ?? match);
+}
+
+/**
+ * Repair UTF-8 bytes that were stored as Latin-1 code units (common after a
+ * byte-wise quoted-printable decode of UTF-8 marketing mail).
+ * @param {string} text
+ */
+export function repairUtf8Mojibake(text) {
+  const raw = String(text ?? '');
+  if (!raw) return '';
+  try {
+    const repaired = Buffer.from(raw, 'latin1').toString('utf8');
+    if (repaired !== raw && !repaired.includes('\uFFFD')) {
+      return repaired;
+    }
+  } catch {
+    /* keep original */
+  }
+  return raw;
+}
+
+/**
+ * Normalize preview/snippet text for list rows: repair mojibake, drop invisible
+ * characters, collapse whitespace.
+ * @param {string} text
+ */
+export function sanitizePreviewText(text) {
+  let clean = repairUtf8Mojibake(String(text ?? ''));
+  clean = decodeHtmlEntities(clean);
+  clean = clean.replace(INVISIBLE_PREVIEW_CHARS, '');
+  return clean.replace(/\s+/g, ' ').trim();
+}
+
 /**
  * Strip HTML tags and collapse whitespace for email body previews.
  * @param {string} html
@@ -9,14 +74,8 @@ export function stripHtmlToText(html) {
   text = text.replace(/<br\s*\/?>/gi, '\n');
   text = text.replace(/<\/p>/gi, '\n');
   text = text.replace(/<[^>]+>/g, ' ');
-  text = text
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/g, "'");
-  return text.replace(/\s+/g, ' ').trim();
+  text = decodeHtmlEntities(text);
+  return sanitizePreviewText(text);
 }
 
 /**
@@ -25,7 +84,7 @@ export function stripHtmlToText(html) {
  * @param {number} [maxLen]
  */
 export function buildBodyPreview(text, maxLen = 240) {
-  const clean = String(text ?? '').replace(/\s+/g, ' ').trim();
+  const clean = sanitizePreviewText(text);
   if (clean.length <= maxLen) {
     return clean;
   }
@@ -61,9 +120,11 @@ export function decodeBodyPart(raw, encoding) {
 
   if (enc === 'quoted-printable' || enc === 'qp' || enc === 'q') {
     const text = buffer.toString('binary');
-    return text
+    const decoded = text
       .replace(/=\r?\n/g, '')
       .replace(/=([0-9A-Fa-f]{2})/g, (_match, hex) => String.fromCharCode(parseInt(hex, 16)));
+    // QP gives raw bytes — reassemble as UTF-8 instead of Latin-1 code units.
+    return Buffer.from(decoded, 'binary').toString('utf8');
   }
 
   return buffer.toString('utf8');
