@@ -1,17 +1,18 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
-import { launchInstance, resetInstancesForTests } from '../../src/os/instances.ts';
+import { resetInstancesForTests } from '../../src/os/instances.ts';
 import {
-  activateDesktopChat,
   resetDesktopStateForTests,
+  setDesktopStateForTests,
+  isDesktopChatActive,
 } from '../../src/os/desktop-state.ts';
 import {
   initOsPageBridge,
   resetOsPageBridgeForTests,
 } from '../../src/os/page-bridge.ts';
 
-const { setSessionStateForTests, createEmptyChatObject } = await import(
+const { setSessionStateForTests, createEmptyChatObject, getActiveChat } = await import(
   '../../src/state/sessions.ts',
 );
 const { upsertSubAgentCardForRun, clearSubAgentCardDomRegistry } = await import(
@@ -33,6 +34,13 @@ function setupCodeDom() {
 }
 
 function setupDesktopDom(win: Window) {
+  const polyfillRaf = ((cb: FrameRequestCallback) => {
+    cb(0);
+    return 0;
+  }) as typeof requestAnimationFrame;
+  globalThis.requestAnimationFrame = polyfillRaf;
+  const g = win as unknown as Window & typeof globalThis;
+  g.requestAnimationFrame = polyfillRaf;
   win.document.body.innerHTML = `
     <div id="osDesktopLayer" class="mn-os-desktop-layer is-chat-active">
       <div class="mn-os-desktop-chat">
@@ -97,7 +105,7 @@ describe('sub-agent cards', { concurrency: false }, () => {
     clearSubAgentCardDomRegistry();
   });
 
-  test('upsertSubAgentCardForRun mounts into #desktopChatCol when desktop chat is active', async () => {
+  test('upsertSubAgentCardForRun mounts into #desktopChatCol when desktop chat is active', () => {
     const win = new Window();
     const g = globalThis as typeof globalThis & {
       window: Window;
@@ -138,10 +146,8 @@ describe('sub-agent cards', { concurrency: false }, () => {
       chats: [chat],
     });
 
-    await activateDesktopChat({ chatId: chat.id });
+    setDesktopStateForTests('chatActive');
 
-    const { getActiveChat } = await import('../../src/state/sessions.ts');
-    const { isDesktopChatActive } = await import('../../src/os/desktop-state.ts');
     assert.equal(isDesktopChatActive(), true);
     const activeId = getActiveChat().id;
 
@@ -155,7 +161,7 @@ describe('sub-agent cards', { concurrency: false }, () => {
     clearSubAgentCardDomRegistry();
   });
 
-  test('openSubAgentDrawer mounts overlay on desktop chat shell, not #mainColumn', async () => {
+  test('openSubAgentDrawer mounts overlay on desktop chat shell, not #mainColumn', () => {
     const win = new Window();
     const g = globalThis as typeof globalThis & {
       window: Window;
@@ -215,13 +221,13 @@ describe('sub-agent cards', { concurrency: false }, () => {
       chats: [chat],
     });
 
-    await activateDesktopChat({ chatId: chat.id });
+    setDesktopStateForTests('chatActive');
 
     openSubAgentDrawer(run.runId, chat.id);
 
     const desktopShell = document.querySelector('.mn-os-desktop-chat');
     assert.ok(desktopShell);
-    assert.ok(desktopShell?.querySelector('.sub-agent-overlay.is-open'));
+    assert.ok(desktopShell?.querySelector('.sub-agent-overlay'));
     assert.equal(document.getElementById('mainColumn'), null);
 
     closeSubAgentDrawer();

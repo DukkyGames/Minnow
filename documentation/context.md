@@ -253,7 +253,7 @@ Per-role prompts and optional provider/model binding. Shipped: `default`, `build
 
 ### Sub-agents
 
-[`src/agents/sub-agent-runner.ts`](../src/agents/sub-agent-runner.ts) — nested loops, concurrency cap in `sub-agents.json`. Tools: `spawn_sub_agent`, `get_sub_agent_status`, `cancel_sub_agent`.
+[`src/agents/sub-agent-runner.ts`](../src/agents/sub-agent-runner.ts) — nested loops, concurrency cap in `sub-agents.json`. Tools: `spawn_sub_agent`, `get_sub_agent_status`, `cancel_sub_agent`. Background completion pushes a hidden user resume row to the parent (`sub-agent-completion-push.ts` + [`hidden-transcript-user-messages.ts`](../src/chat/hidden-transcript-user-messages.ts)) — the model sees it; the transcript does not.
 
 **Generation timeouts:** Settings → **Watchdog** (`config.json` → `chat.generationIdleTimeoutMs`, `chat.generationMaxDurationMs`) — upstream idle and max-duration limits while streaming from the model.
 
@@ -290,7 +290,7 @@ Stage layers in `#osStage` ([`src/os/shell.ts`](../src/os/shell.ts)):
 
 Presentation modes: `fullscreen` | `window` | `desktop` | `sidePanel` ([`src/os/presentation-mode.ts`](../src/os/presentation-mode.ts)).
 
-**Desktop chat** is the primary chat surface (`#desktopChatCol`); legacy `#chatView` retained for deep links. **Code** reparents `#appBody` into `#osAppsLayer`.
+**Desktop chat** is the primary chat surface (`#desktopChatCol`); legacy `#chatView` retained for deep links. **Code** reparents `#appBody` into `#osAppsLayer`. Chat transcript mount + inset overlay routing (sub-agent drawer, goal eval) live in [`src/ui/chat-mount.ts`](../src/ui/chat-mount.ts): Code → `#mainColumn`, desktop → `.mn-os-desktop-chat`, Chat app → `.chat-app-main`.
 
 The Code chat sidebar header keeps its navigation controls ordered as **collapse sidebar**, **search chats**, then **Code overview**.
 

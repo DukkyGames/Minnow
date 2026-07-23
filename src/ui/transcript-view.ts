@@ -3,6 +3,7 @@
  */
 
 import { apiMessageContentToText } from '../api/message-content.ts';
+import { isHiddenTranscriptUserMessage } from '../chat/hidden-transcript-user-messages.ts';
 import type {
   ApiMessageContent,
   CodeChangeStats,
@@ -137,6 +138,12 @@ export function renderTranscriptView(body: HTMLElement, messages: unknown[]): vo
       continue;
     }
     if (role === 'user') {
+      if (
+        typeof msg.content === 'string' &&
+        isHiddenTranscriptUserMessage({ role: 'user', content: msg.content })
+      ) {
+        continue;
+      }
       appendUserTranscriptRow(body, msg.content as ApiMessageContent);
       continue;
     }

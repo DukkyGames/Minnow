@@ -18,6 +18,7 @@ import {
   notifyChatStreamActivity,
 } from '../chat/streaming-state';
 import { flushPendingMode } from '../chat/pending-mode';
+import { hiddenTranscriptUserMessage } from '../chat/hidden-transcript-user-messages';
 import {
   appendSuperPlanStageFailureNotice,
   superPlanPipelineUserMessage,
@@ -1195,7 +1196,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     chat.history.push(
       superPlanStage
         ? superPlanPipelineUserMessage(modelUserContent, superPlanStage)
-        : { role: 'user', content: modelUserContent },
+        : hideUserEcho
+          ? hiddenTranscriptUserMessage(modelUserContent)
+          : { role: 'user', content: modelUserContent },
     );
     recordChatMessage(chat);
     scheduleSaveSessions();
