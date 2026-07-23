@@ -10,7 +10,7 @@ import type { Chat, SessionState } from '../types';
 
 /** Legacy Expert Lab sessions stay out of the main sidebar; expert threads are listed normally. */
 export function isSidebarVisibleChat(chat: Chat): boolean {
-  return chat.kind !== 'expert-lab';
+  return chat.kind !== 'expert-lab' && chat.appScope !== 'email';
 }
 
 /** True when the chat has unsent composer text persisted on the session row. */
@@ -73,6 +73,9 @@ export const CHAT_APP_ID = 'chat';
 
 /** MinnowOS desktop chat id stored in `lastActiveChatIdByApp` (separate from legacy Chat app). */
 export const DESKTOP_APP_ID = 'desktop';
+
+/** MinnowOS Email assistant id stored in `lastActiveChatIdByApp`. */
+export const EMAIL_APP_ID = 'email';
 
 /** Raw session JSON from disk or API (may be schema v1 or v2). */
 export type RawSessionJson = {
@@ -155,7 +158,7 @@ export function getSidebarListedChatsForWorkspace(
 export function isAssistantChat(chat: Chat, chatsWorkspacePath: string): boolean {
   const key = normalizeWorkspacePath(chatsWorkspacePath);
   if (!key) return false;
-  return normalizeWorkspacePath(chat.workspacePath ?? '') === key;
+  return chat.appScope == null && normalizeWorkspacePath(chat.workspacePath ?? '') === key;
 }
 
 /** Chats bound to the chats workspace (newest first). */
@@ -166,7 +169,11 @@ export function getChatsForChatsWorkspace(
   const key = normalizeWorkspacePath(chatsWorkspacePath);
   if (!key) return [];
   return [...state.chats]
-    .filter((c) => normalizeWorkspacePath(c.workspacePath ?? '') === key)
+    .filter(
+      (c) =>
+        c.appScope == null &&
+        normalizeWorkspacePath(c.workspacePath ?? '') === key,
+    )
     .sort((a, b) => getChatLastMessageAt(b) - getChatLastMessageAt(a));
 }
 
@@ -247,6 +254,83 @@ export function createDesktopChat(
     updatedAt: now,
     lastMessageAt: now,
   };
+}
+
+/** New Email assistant chat defaults for the chats workspace sandbox. */
+export function createEmailAssistantChat(
+  chatsWorkspacePath: string,
+  chatId: string,
+  modelId = '',
+): Chat {
+  const now = Date.now();
+  return {
+    id: chatId,
+    name: PLACEHOLDER_CHAT_NAME,
+    appScope: 'email',
+    workspacePath: normalizeWorkspacePath(chatsWorkspacePath),
+    modelId: modelId || '',
+    modeId: 'email',
+    workAgentAuto: true,
+    history: [],
+    lastStats: null,
+    modelInfo: {},
+    updatedAt: now,
+    lastMessageAt: now,
+  };
+}
+
+/** True when a chat belongs to the Email app and its workspace sandbox. */
+export function isEmailAssistantChat(chat: Chat, chatsWorkspacePath: string): boolean {
+  const key = normalizeWorkspacePath(chatsWorkspacePath);
+  if (!key) return false;
+  return (
+    chat.appScope === 'email' &&
+    normalizeWorkspacePath(chat.workspacePath ?? '') === key
+  );
+}
+
+/** All Email-scoped chats in activity order, including the active empty chat. */
+export function getEmailAssistantChats(
+  state: SessionState,
+  chatsWorkspacePath: string,
+): Chat[] {
+  return [...state.chats]
+    .filter((chat) => isEmailAssistantChat(chat, chatsWorkspacePath))
+    .sort((a, b) => getChatLastMessageAt(b) - getChatLastMessageAt(a));
+}
+
+/** Email history rows with committed turns or a persisted composer draft. */
+export function getListedEmailAssistantChats(
+  state: SessionState,
+  chatsWorkspacePath: string,
+): Chat[] {
+  return getEmailAssistantChats(state, chatsWorkspacePath).filter(
+    (chat) => chat.history.length > 0 || hasComposerDraft(chat),
+  );
+}
+
+/** Restore the remembered Email chat, else the newest scoped chat, else create one. */
+export function resolveActiveEmailAssistantChatId(
+  chatsWorkspacePath: string,
+  state: SessionState,
+  createScopedEmailChat: (chatsWorkspacePath: string) => Chat,
+): string {
+  const key = normalizeWorkspacePath(chatsWorkspacePath);
+  const remembered = getLastActiveChatIdForApp(state, EMAIL_APP_ID);
+  if (remembered) {
+    const chat = state.chats.find(
+      (candidate) =>
+        candidate.id === remembered && isEmailAssistantChat(candidate, key),
+    );
+    if (chat) return chat.id;
+  }
+
+  const scoped = getEmailAssistantChats(state, key);
+  if (scoped.length) return scoped[0]!.id;
+
+  const fresh = createScopedEmailChat(key);
+  state.chats.unshift(fresh);
+  return fresh.id;
 }
 
 /**
@@ -359,6 +443,7 @@ export function coerceChatWorkspaceFields(raw: unknown): Chat {
       typeof row.workspacePath === 'string'
         ? normalizeWorkspacePath(row.workspacePath)
         : '',
+    ...(row.appScope === 'email' ? { appScope: 'email' as const } : {}),
     modelId: typeof row.modelId === 'string' ? row.modelId : '',
     modeId: normalizeModeId(row.modeId),
     history: [],

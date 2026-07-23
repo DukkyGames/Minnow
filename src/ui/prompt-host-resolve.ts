@@ -46,6 +46,15 @@ export function isPromptHostShellVisible(host: HTMLElement): boolean {
     return fg === 'code' || fg == null;
   }
 
+  const emailDock = host.closest('.email-assistant-dock');
+  if (emailDock) {
+    return (
+      getForegroundAppId() === 'email' &&
+      emailDock.classList.contains('is-open') &&
+      emailDock.getAttribute('aria-hidden') !== 'true'
+    );
+  }
+
   return true;
 }
 
@@ -70,8 +79,12 @@ export function resolveToolApprovalHost(): HTMLElement | null {
   const codeHost = document.getElementById('toolApprovalHost');
   const chatHost = document.getElementById('chatAppToolApprovalHost');
   const desktopHost = document.getElementById('desktopToolApprovalHost');
+  const emailHost = document.getElementById('emailAssistantToolApprovalHost');
   const globalHost = document.getElementById('globalToolApprovalHost');
 
+  if (getForegroundAppId() === 'email') {
+    return pickPromptHost([emailHost, globalHost, codeHost, chatHost, desktopHost]);
+  }
   if (shouldPaintDesktopChatSurface()) {
     return pickPromptHost([desktopHost, globalHost, codeHost, chatHost]);
   }
@@ -86,8 +99,12 @@ export function resolveQuestionHost(): HTMLElement | null {
   const codeHost = document.getElementById('questionHost');
   const chatHost = document.getElementById('chatAppQuestionHost');
   const desktopHost = document.getElementById('desktopQuestionHost');
+  const emailHost = document.getElementById('emailAssistantQuestionHost');
   const globalHost = document.getElementById('globalQuestionHost');
 
+  if (getForegroundAppId() === 'email') {
+    return pickPromptHost([emailHost, globalHost, codeHost, chatHost, desktopHost]);
+  }
   if (shouldPaintDesktopChatSurface()) {
     return pickPromptHost([desktopHost, globalHost, codeHost, chatHost]);
   }
@@ -99,6 +116,9 @@ export function resolveQuestionHost(): HTMLElement | null {
 
 /** Composer shell that should hide its input row while a prompt strip is open. */
 export function resolvePromptComposerShell(): HTMLElement | null {
+  if (getForegroundAppId() === 'email') {
+    return document.querySelector('.email-assistant-composer');
+  }
   if (shouldPaintDesktopChatSurface()) {
     return (
       document.querySelector('.mn-os-composer-dock') ??

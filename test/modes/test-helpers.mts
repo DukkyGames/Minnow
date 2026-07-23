@@ -25,6 +25,7 @@ export async function loadBuiltinModePromptMap(): Promise<Record<string, string>
   const ids = [
     'general',
     'desktop',
+    'email',
     'build',
     'plan',
     'super-plan',

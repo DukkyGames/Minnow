@@ -19,6 +19,7 @@ import type {
   EmailInboxSummary,
   EmailMessage,
   EmailNarrativeDigest,
+  EmailPendingAction,
   EmailThreadSummary,
 } from '../../email/client';
 import {
@@ -38,7 +39,12 @@ import {
   setEmailMessageFlags,
 } from '../../email/client-ext';
 import { mountEmailCompose, type ComposeMode } from './email-compose';
-import { renderHighlightRow, type EmailDashboardOptions } from './email-dashboard';
+import {
+  renderDigestActionGroups,
+  renderHighlightRow,
+  renderPendingActions,
+  type EmailDashboardOptions,
+} from './email-dashboard';
 import {
   folderLabel,
   formatBytes,
@@ -55,6 +61,7 @@ import {
   mountEmailReaderDockResizer,
   syncEmailReaderDockResizer,
 } from './email-panel-resize';
+import type { EmailAssistantContextSnapshot } from './email-assistant-context';
 
 /** What the stream is scoped to, driven by the rail's Views and Folders. */
 export type InboxScope =
@@ -77,6 +84,8 @@ export interface EmailInboxOptions {
   initialThreadId?: string;
   /** Fired when the reader dock closes so the panel can flush a deferred refresh. */
   onReaderClosed?: () => void;
+  /** Publish identifiers and short labels for the Email assistant prompt. */
+  onContextChange?: (snapshot: EmailAssistantContextSnapshot) => void;
 }
 
 /** Bumped on every full inbox remount; stale openThread calls bail after this changes. */
@@ -134,6 +143,12 @@ function scopeMarker(scope: InboxScope): string {
   }
 }
 
+/** Current rail view label for assistant context, distinct from stream markers. */
+function scopeContextLabel(scope: InboxScope): string {
+  if (scope.kind === 'triage') return 'Needs attention';
+  return scopeMarker(scope);
+}
+
 export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOptions): Promise<void> {
   const session = ++emailInboxSession;
   const surface = mount;
@@ -169,8 +184,11 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   let listGeneration = 0;
   let summary: EmailInboxSummary | null = null;
   let digest: EmailNarrativeDigest | null = null;
+  let pendingActions: EmailPendingAction[] = [];
   let followups: EmailFollowup[] = [];
   let selectedThreadId: string | null = null;
+  let selectedThreadSubject = '';
+  let selectedMessageId = '';
   let composeMode: ComposeMode | null = null;
   /** Assigned after `reload` is defined; the readout refresh button calls this. */
   let syncAndReload: () => Promise<void> = async () => {};
@@ -197,6 +215,20 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     onRefresh: () => void reload({ showLoading: false }),
   };
 
+  /** Publish metadata only; full bodies remain behind fenced mail tools. */
+  const publishContext = (): void => {
+    options.onContextChange?.({
+      accountId: account.id,
+      accountLabel: account.label,
+      view: scopeContextLabel(scope),
+      folder: scopeFolder(scope),
+      ...(selectedThreadId ? { threadId: selectedThreadId } : {}),
+      ...(selectedThreadSubject ? { threadSubject: selectedThreadSubject } : {}),
+      ...(selectedMessageId ? { messageId: selectedMessageId } : {}),
+    });
+  };
+  publishContext();
+
   // ---- Data ------------------------------------------------------------
   const reportCounts = (payload: {
     summary: EmailInboxSummary;
@@ -221,6 +253,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       const payload = await fetchInboxSummary(account.id);
       summary = payload.summary;
       digest = payload.digest ?? null;
+      pendingActions = payload.pendingActions ?? [];
       followups = payload.followups ?? [];
       reportCounts(payload);
 
@@ -232,6 +265,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
           const fresh = await fetchInboxSummary(account.id);
           summary = fresh.summary;
           digest = fresh.digest ?? null;
+          pendingActions = fresh.pendingActions ?? [];
           followups = fresh.followups ?? [];
           reportCounts(fresh);
         } catch (err) {
@@ -243,6 +277,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     } catch {
       summary = null;
       digest = null;
+      pendingActions = [];
     }
   };
 
@@ -470,6 +505,10 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       if (narrative) briefNode.classList.add('is-narrative');
       headMount.appendChild(briefNode);
     }
+    if (digest) {
+      renderDigestActionGroups(headMount, account, digest, dashOptions);
+    }
+    renderPendingActions(headMount, account, pendingActions, dashOptions);
 
     if (summary.highlights.length > 0) {
       const marker = el('div', 'email-stream-marker', 'Needs attention');
@@ -554,10 +593,13 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   // ---- Reader dock -----------------------------------------------------
   const closeReader = (): void => {
     selectedThreadId = null;
+    selectedThreadSubject = '';
+    selectedMessageId = '';
     composeMode = null;
     surface.classList.remove('has-reader');
     syncEmailReaderDockResizer(surface);
     renderRows();
+    publishContext();
     options.onReaderClosed?.();
   };
 
@@ -607,8 +649,11 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
 
   const openThread = async (threadId: string): Promise<void> => {
     selectedThreadId = threadId;
+    selectedThreadSubject = '';
+    selectedMessageId = '';
     composeMode = null;
     renderRows();
+    publishContext();
 
     let thread: EmailMessage[];
     try {
@@ -623,6 +668,9 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     }
     const selected = thread[thread.length - 1];
     if (!selected || session !== emailInboxSession) return;
+    selectedThreadSubject = selected.subject || '(no subject)';
+    selectedMessageId = selected.id;
+    publishContext();
 
     if (!selected.flags?.seen) {
       void setEmailMessageFlags(account.id, selected.id, { seen: true }).then(
@@ -776,6 +824,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       const payload = await fetchInboxSummary(account.id);
       summary = payload.summary;
       digest = payload.digest ?? null;
+      pendingActions = payload.pendingActions ?? [];
       followups = payload.followups ?? [];
       reportCounts(payload);
     } catch {

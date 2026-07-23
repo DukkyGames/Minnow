@@ -12,6 +12,7 @@ export const ORCHESTRATE_PROMINENT_ICON_SRC = '/icons/Orchestrate-thick.svg';
 export const MODE_ICON_SRC: Record<ModeId, string> = {
   general: '/icons/mode-general.png',
   desktop: '/icons/mode-general.png',
+  email: '/icons/mode-general.png',
   build: '/icons/mode-build.png',
   plan: '/icons/mode-plan.png',
   'super-plan': '/icons/mode-super-plan.png',

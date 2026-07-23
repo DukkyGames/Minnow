@@ -1,5 +1,5 @@
 /**
- * Resolve which MinnowOS app owns a chat session (Code vs Chat app).
+ * Resolve which MinnowOS app owns a chat session.
  */
 
 import {
@@ -33,6 +33,9 @@ function isDesktopSandboxPath(workspacePath: string): boolean {
  * Chat app when scoped to ~/.minnow/chats, else Code.
  */
 export function appIdForChat(chat: Chat): AppId {
+  if (chat.appScope === 'email') {
+    return 'email';
+  }
   const workspacePath = chat.workspacePath ?? '';
   const cachedDesktopPath = getCachedDesktopWorkspacePath();
   if (cachedDesktopPath && isDesktopWorkspacePath(workspacePath, cachedDesktopPath)) {

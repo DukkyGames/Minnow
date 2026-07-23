@@ -49,10 +49,23 @@ function ensureLastActiveMap(raw) {
   return out;
 }
 
+/** Preserve app-scoped active chat ids without treating app ids as file paths. */
+function ensureLastActiveAppMap(raw) {
+  if (!raw || typeof raw !== 'object') return {};
+  const out = {};
+  for (const [key, value] of Object.entries(raw)) {
+    const appId = typeof key === 'string' ? key.trim() : '';
+    const chatId = typeof value === 'string' ? value.trim() : '';
+    if (appId && chatId) out[appId] = chatId;
+  }
+  return out;
+}
+
 /** Valid operating mode ids (mirror src/chat/modes/types.ts). */
 const MODE_IDS = [
   'general',
   'desktop',
+  'email',
   'build',
   'plan',
   'super-plan',
@@ -818,6 +831,7 @@ function ensureChatShape(raw) {
       typeof row.name === 'string' && row.name.trim()
         ? row.name.trim()
         : PLACEHOLDER_CHAT_NAME,
+    ...(row.appScope === 'email' ? { appScope: 'email' } : {}),
     workspacePath,
     modelId: typeof row.modelId === 'string' ? row.modelId : '',
     ...(typeof row.providerId === 'string' && row.providerId.trim()
@@ -938,6 +952,7 @@ export function validateSessionState(raw) {
     activeId: typeof parsed.activeId === 'string' ? parsed.activeId : '',
     sidebarCollapsed: !!parsed.sidebarCollapsed,
     lastActiveChatIdByWorkspace: ensureLastActiveMap(parsed.lastActiveChatIdByWorkspace),
+    lastActiveChatIdByApp: ensureLastActiveAppMap(parsed.lastActiveChatIdByApp),
     groups,
     chats: chats.length ? chats : [ensureChatShape(null)],
   };

@@ -5,6 +5,7 @@
 
 const STORAGE_KEY = 'minnow.email.panelWidths';
 const MOBILE_LAYOUT_MQ = '(max-width: 640px)';
+const ASSISTANT_OVERLAY_MQ = '(max-width: 900px)';
 
 export const DEFAULT_EMAIL_RAIL_W = 244;
 export const EMAIL_RAIL_MIN_W = 180;
@@ -14,15 +15,24 @@ export const DEFAULT_EMAIL_READER_DOCK_W = 600;
 export const EMAIL_READER_DOCK_MIN_W = 320;
 export const EMAIL_READER_DOCK_MAX_W = 960;
 
+export const DEFAULT_EMAIL_ASSISTANT_DOCK_W = 440;
+export const EMAIL_ASSISTANT_DOCK_MIN_W = 340;
+export const EMAIL_ASSISTANT_DOCK_MAX_W = 720;
+
 interface StoredPanelWidths {
   rail?: number;
   readerDock?: number;
+  assistantDock?: number;
 }
 
 let storedWidths: StoredPanelWidths | null = null;
 
 function isMobileLayout(): boolean {
   return window.matchMedia(MOBILE_LAYOUT_MQ).matches;
+}
+
+function isAssistantOverlayLayout(): boolean {
+  return window.matchMedia(ASSISTANT_OVERLAY_MQ).matches;
 }
 
 function readStored(): StoredPanelWidths {
@@ -56,6 +66,14 @@ export function clampEmailReaderDockWidth(px: number): number {
   return Math.min(EMAIL_READER_DOCK_MAX_W, Math.max(EMAIL_READER_DOCK_MIN_W, Math.round(px)));
 }
 
+export function clampEmailAssistantDockWidth(px: number): number {
+  if (!Number.isFinite(px)) return DEFAULT_EMAIL_ASSISTANT_DOCK_W;
+  return Math.min(
+    EMAIL_ASSISTANT_DOCK_MAX_W,
+    Math.max(EMAIL_ASSISTANT_DOCK_MIN_W, Math.round(px)),
+  );
+}
+
 export function resolvedEmailRailWidth(): number {
   return clampEmailRailWidth(readStored().rail ?? DEFAULT_EMAIL_RAIL_W);
 }
@@ -64,10 +82,17 @@ export function resolvedEmailReaderDockWidth(): number {
   return clampEmailReaderDockWidth(readStored().readerDock ?? DEFAULT_EMAIL_READER_DOCK_W);
 }
 
+export function resolvedEmailAssistantDockWidth(): number {
+  return clampEmailAssistantDockWidth(
+    readStored().assistantDock ?? DEFAULT_EMAIL_ASSISTANT_DOCK_W,
+  );
+}
+
 /** Push persisted panel widths onto the shell as CSS variables. */
 export function syncEmailShellWidthVars(shell: HTMLElement): void {
   shell.style.setProperty('--email-rail-w', `${resolvedEmailRailWidth()}px`);
   shell.style.setProperty('--email-reader-dock-w', `${resolvedEmailReaderDockWidth()}px`);
+  shell.style.setProperty('--email-assistant-dock-w', `${resolvedEmailAssistantDockWidth()}px`);
 }
 
 function maxWidthForContainer(containerRect: DOMRect, minWidth: number, hardMax: number): number {
@@ -253,6 +278,72 @@ export function syncEmailReaderDockResizer(surface: HTMLElement): void {
   const sync = (surface as HTMLElement & { syncEmailReaderResizer?: () => void })
     .syncEmailReaderResizer;
   sync?.();
+}
+
+/** Mount the assistant dock's left-edge drag handle once per panel. */
+export function mountEmailAssistantDockResizer(
+  dock: HTMLElement,
+  shell: HTMLElement,
+): void {
+  if (dock.querySelector('.email-panel-resizer--assistant')) return;
+
+  const resizer = createResizer(
+    'email-panel-resizer email-panel-resizer--assistant',
+    'Resize Email assistant',
+  );
+  dock.appendChild(resizer);
+  syncEmailShellWidthVars(shell);
+
+  const syncEnabled = (): void => {
+    setResizerEnabled(
+      resizer,
+      dock.classList.contains('is-open') && !isAssistantOverlayLayout(),
+    );
+  };
+
+  bindPanelResizer({
+    resizer,
+    container: shell,
+    side: 'end',
+    minWidth: EMAIL_ASSISTANT_DOCK_MIN_W,
+    hardMaxWidth: EMAIL_ASSISTANT_DOCK_MAX_W,
+    readWidth: resolvedEmailAssistantDockWidth,
+    writeWidth: (width) => writeStored({ assistantDock: width }),
+    onWidthChange: () => syncEmailShellWidthVars(shell),
+    isEnabled: () =>
+      dock.classList.contains('is-open') && !isAssistantOverlayLayout(),
+    onDragEnd: () => {
+      writeStored({ assistantDock: resolvedEmailAssistantDockWidth() });
+    },
+  });
+
+  syncEnabled();
+  window.addEventListener('resize', syncEnabled);
+  const extendedDock = dock as HTMLElement & {
+    syncEmailAssistantResizer?: () => void;
+    disposeEmailAssistantResizer?: () => void;
+  };
+  extendedDock.syncEmailAssistantResizer = syncEnabled;
+  extendedDock.disposeEmailAssistantResizer = () => {
+    window.removeEventListener('resize', syncEnabled);
+    delete extendedDock.syncEmailAssistantResizer;
+    delete extendedDock.disposeEmailAssistantResizer;
+  };
+}
+
+/** Enable or hide the assistant resizer when its dock opens or closes. */
+export function syncEmailAssistantDockResizer(dock: HTMLElement): void {
+  const sync = (dock as HTMLElement & { syncEmailAssistantResizer?: () => void })
+    .syncEmailAssistantResizer;
+  sync?.();
+}
+
+/** Release the assistant resizer's window listener before a panel remount. */
+export function disposeEmailAssistantDockResizer(dock: HTMLElement): void {
+  const dispose = (
+    dock as HTMLElement & { disposeEmailAssistantResizer?: () => void }
+  ).disposeEmailAssistantResizer;
+  dispose?.();
 }
 
 /** Test helper — reset cached widths and clear persisted storage. */

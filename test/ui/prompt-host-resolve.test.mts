@@ -32,6 +32,11 @@ function setupDom(win: import('happy-dom').Window): void {
     </div>
     <textarea id="desktopInput"></textarea>
     <button id="desktopSendBtn"></button>
+    <aside class="email-assistant-dock is-open" aria-hidden="false">
+      <div id="emailAssistantQuestionHost" class="question-host" hidden></div>
+      <div id="emailAssistantToolApprovalHost" class="tool-approval-host" hidden></div>
+      <footer class="email-assistant-composer"></footer>
+    </aside>
   `;
 }
 
@@ -98,5 +103,18 @@ describe('prompt-host-resolve', () => {
 
     const host = resolveQuestionHost();
     assert.equal(host?.id, 'globalQuestionHost');
+  });
+
+  test('Email foreground routes prompts and composer hiding to the assistant dock', async () => {
+    launchInstance('email');
+    const {
+      resolvePromptComposerShell,
+      resolveQuestionHost,
+      resolveToolApprovalHost,
+    } = await import('../../src/ui/prompt-host-resolve.ts');
+
+    assert.equal(resolveQuestionHost()?.id, 'emailAssistantQuestionHost');
+    assert.equal(resolveToolApprovalHost()?.id, 'emailAssistantToolApprovalHost');
+    assert.equal(resolvePromptComposerShell()?.className, 'email-assistant-composer');
   });
 });

@@ -30,6 +30,12 @@ function resolveComposerInputFromDropTarget(target: HTMLElement): HTMLTextAreaEl
   if (target.id === 'chatAppInput' || target.closest('.chat-app-composer')) {
     return byId('chatAppInput');
   }
+  if (
+    target.id === 'emailAssistantInput' ||
+    target.closest('.email-assistant-composer')
+  ) {
+    return byId('emailAssistantInput');
+  }
   if (target.id === 'msgInput' || target.closest('.input-bar, .input-bar-composer')) {
     return byId('msgInput');
   }
@@ -71,6 +77,8 @@ function bindDropTarget(
   element: HTMLElement,
   dropTargets: HTMLElement[],
 ): void {
+  if (element.dataset.composerDropBound === '1') return;
+  element.dataset.composerDropBound = '1';
   let dragDepth = 0;
 
   element.addEventListener('dragenter', (event) => {
@@ -134,6 +142,8 @@ export function initComposerDrop(): void {
     '.input-bar-composer',
     '#chatAppInput',
     '.chat-app-composer',
+    '#emailAssistantInput',
+    '.email-assistant-composer',
     '#desktopInput',
     '.mn-os-desktop-composer',
     '.mn-os-desktop-input-row',

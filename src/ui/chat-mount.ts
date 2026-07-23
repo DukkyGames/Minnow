@@ -23,6 +23,13 @@ export function isChatAppForeground(): boolean {
   return document.getElementById('chatView')?.classList.contains('is-open') ?? false;
 }
 
+/** True when the foreground Email app currently exposes its assistant transcript. */
+export function isEmailAssistantForeground(): boolean {
+  if (getForegroundAppId() !== 'email') return false;
+  const dock = document.querySelector<HTMLElement>('.email-assistant-dock.is-open');
+  return Boolean(dock && dock.getAttribute('aria-hidden') !== 'true');
+}
+
 let mountOverride: HTMLElement | null = null;
 
 /**
@@ -88,6 +95,10 @@ export function getActiveChatMountElement(): HTMLElement {
   const onboardingCol = document.getElementById('onboardingChatCol');
   if (onboardingCol) return onboardingCol;
   const codeForeground = getForegroundAppId() === 'code';
+  if (isEmailAssistantForeground()) {
+    const emailCol = document.getElementById('emailAssistantMessageCol');
+    if (emailCol) return emailCol;
+  }
   if (!codeForeground && isDesktopChatActive()) {
     const desktopCol = document.getElementById('desktopChatCol');
     if (desktopCol) return desktopCol;

@@ -2245,7 +2245,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'summarize_inbox',
-      'Return inbox summary text and top triaged highlights from the local cache. Sync inbox first.',
+      'Return the active inbox narrative, validated suggested action groups, and top triaged highlights from the local cache. Sync inbox first.',
       {
         accountId: { type: 'string', description: 'Email account id (optional — uses default)' },
       },
@@ -2278,7 +2278,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'email_action',
-      'Perform a mail action. A single messageId executes immediately; multiple messageIds are queued as a pending action the user must approve in the Email dashboard.',
+      'Perform a mail action. A single messageId executes immediately; multiple messageIds are queued as a pending action the user must approve in the Email app.',
       {
         accountId: { type: 'string', description: 'Email account id (optional — uses default)' },
         messageId: { type: 'string', description: 'Cached message id (folder:uid)' },

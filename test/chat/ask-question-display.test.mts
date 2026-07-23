@@ -28,6 +28,9 @@ function setupDom(win: import('happy-dom').Window): void {
     <div id="desktopComposerRoot" class="mn-os-desktop-composer">
       <div id="desktopQuestionHost" class="question-host" hidden></div>
     </div>
+    <aside class="email-assistant-dock is-open" aria-hidden="false">
+      <div id="emailAssistantQuestionHost" class="question-host" hidden></div>
+    </aside>
   `;
 }
 
@@ -100,6 +103,23 @@ describe('ask-question-display', () => {
     const { isAskQuestionDomVisible } = await import('../../src/chat/ask-question-display.ts');
 
     assert.equal(isAskQuestionDomVisible('chat-a'), true);
+  });
+
+  test('Email questions are visible only for an Email-scoped chat with an open dock', async () => {
+    const { isAskQuestionDomVisible } = await import('../../src/chat/ask-question-display.ts');
+    const { sessionState } = await import('../../src/state/sessions.ts');
+    const chat = sessionState?.chats[0];
+    assert.ok(chat);
+    chat.appScope = 'email';
+    chat.modeId = 'email';
+    launchInstance('email');
+
+    assert.equal(isAskQuestionDomVisible('chat-a'), true);
+
+    const dock = document.querySelector<HTMLElement>('.email-assistant-dock');
+    dock?.classList.remove('is-open');
+    dock?.setAttribute('aria-hidden', 'true');
+    assert.equal(isAskQuestionDomVisible('chat-a'), false);
   });
 
   test('waitForAskQuestionDisplayContext resolves when chat becomes active surface', async () => {

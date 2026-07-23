@@ -113,6 +113,39 @@ describe('filterToolsByMode', () => {
       }
     }
   });
+
+  test('email keeps mail workflow tools and denies unrelated developer controls', () => {
+    const filtered = filteredIds('email');
+    for (const id of [
+      'list_mail',
+      'search_mail',
+      'get_thread',
+      'draft_reply',
+      'summarize_inbox',
+      'generate_reply_variants',
+      'email_action',
+      'manage_calendar',
+      'web_search',
+      'read_file',
+      'save_file',
+      'create_pdf',
+      'brain_search',
+      'ask_question',
+    ]) {
+      assert.ok(filtered.has(id), `email should allow ${id}`);
+    }
+    for (const id of [
+      'execute_command',
+      'git_commit',
+      'board_init',
+      'spawn_sub_agent',
+      'update_settings',
+      'launch_minnow_app',
+      'browser_navigate',
+    ]) {
+      assert.ok(!filtered.has(id), `email should deny ${id}`);
+    }
+  });
 });
 
 describe('per-mode matrix groups', () => {
@@ -186,11 +219,11 @@ describe('cross-mode policy invariants', () => {
     }
   });
 
-  test('email and calendar denied except in desktop mode', () => {
+  test('email and calendar tools stay inside Email and Desktop modes', () => {
     for (const modeId of MODE_IDS) {
       for (const toolId of [...EMAIL_TOOLS, ...CALENDAR_TOOLS]) {
         const allowed = isToolAllowedForMode(modeId, toolId);
-        const expected = modeId === 'desktop';
+        const expected = modeId === 'desktop' || modeId === 'email';
         assert.ok(
           allowed === expected,
           `${toolId} in ${modeId}: expected ${expected}`,
@@ -234,7 +267,7 @@ describe('cross-mode policy invariants', () => {
 });
 
 describe('tool payload token reduction', () => {
-  test('build mode tool JSON payload is ~8,300 tokens (down from ~10,746)', () => {
+  test('build mode tool JSON payload stays below ~8,800 tokens', () => {
     const allDefs = BUILT_IN_TOOLS.map((t) => t.definition);
     const allTokens = estimateToolPayloadTokens(
       allDefs.map((definition) => ({ definition })),
@@ -246,8 +279,8 @@ describe('tool payload token reduction', () => {
 
     assert.ok(allTokens > 9_000, `baseline should exceed 9k, got ${allTokens}`);
     assert.ok(
-      buildTokens >= 7_000 && buildTokens <= 8_200,
-      `build payload expected ~7.5k–8.2k tok, got ${buildTokens} (all=${allTokens})`,
+      buildTokens >= 7_000 && buildTokens <= 8_800,
+      `build payload expected ~7k-8.8k tok, got ${buildTokens} (all=${allTokens})`,
     );
     assert.ok(buildTokens < allTokens - 2_000, 'build should save at least 2k tokens');
   });

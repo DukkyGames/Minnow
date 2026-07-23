@@ -3,8 +3,8 @@ import {
   buildApiMessages,
   runChatTurn,
   sendMessageWithTools,
+  type ComposerSendOptions,
 } from '../tools/loop';
-import type { ComposerSurface } from '../ui/composer-surface';
 
 export {
   buildApiMessages,
@@ -12,6 +12,7 @@ export {
   sendMessageWithTools,
 };
 export type { ComposerSurface } from '../ui/composer-surface';
+export type { ComposerSendOptions } from '../tools/loop';
 export { resendFromIndex } from './resend-from-index';
 export {
   truncateChatHistory,
@@ -22,7 +23,7 @@ export { sendMessage as sendMessagePlain } from '../api/chat';
 
 /** Send with optional composer surface override (defaults to foreground app). */
 export async function sendMessage(
-  composer?: Partial<ComposerSurface>,
+  composer?: ComposerSendOptions,
 ): Promise<void> {
   return sendMessageWithTools(composer);
 }
