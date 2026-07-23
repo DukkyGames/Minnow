@@ -15,6 +15,24 @@ const NAMED_HTML_ENTITIES = {
 const INVISIBLE_PREVIEW_CHARS =
   /[\u200B-\u200D\uFEFF\u00AD\u2060\u034F\u061C\u115F\u1160\u17B4\u17B5\u180E\u200E\u200F\u202A-\u202E\u2061-\u2064\u2066-\u2069\u3164]/g;
 
+/** UTF-8 bytes for invisible/format chars, stored as Latin-1 code units. */
+const MOJIBAKE_INVISIBLE_SEQUENCES =
+  /\u00e2\u0080[\u0080-\u00bf]|\u00cd\u008f|\u00c2[\u0080-\u00bf]/g;
+
+/** Control chars that leak from partial MIME / QP decodes. */
+const C0_CONTROL_CHARS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g;
+
+/** Unicode spaces/format chars used to pad marketing preview text. */
+const UNICODE_FORMAT_SPACES = /[\u2000-\u200F\u2028-\u202F\u205F-\u206F]/g;
+
+/**
+ * True when the string still looks like UTF-8 that was read byte-wise as Latin-1.
+ * @param {string} text
+ */
+function looksLikeUtf8Mojibake(text) {
+  return /[\u00c2-\u00df\u00e0-\u00ef\u00f0-\u00f4][\u0080-\u00bf]/.test(text);
+}
+
 /**
  * Decode numeric and common named HTML entities left after tag stripping.
  * @param {string} text
@@ -57,9 +75,20 @@ export function repairUtf8Mojibake(text) {
  * @param {string} text
  */
 export function sanitizePreviewText(text) {
-  let clean = repairUtf8Mojibake(String(text ?? ''));
+  let clean = String(text ?? '');
+  // Orphan UTF-8 lead bytes (e.g. lone 0xC2 from broken NBSP / figure-space runs).
+  clean = clean.replace(/\u00c2(?=\s|\u00e2|$)/g, '');
+  clean = clean.replace(MOJIBAKE_INVISIBLE_SEQUENCES, '');
+  if (looksLikeUtf8Mojibake(clean)) {
+    const repaired = repairUtf8Mojibake(clean);
+    if (repaired !== clean && !repaired.includes('\uFFFD')) {
+      clean = repaired;
+    }
+  }
   clean = decodeHtmlEntities(clean);
   clean = clean.replace(INVISIBLE_PREVIEW_CHARS, '');
+  clean = clean.replace(UNICODE_FORMAT_SPACES, '');
+  clean = clean.replace(C0_CONTROL_CHARS, '');
   return clean.replace(/\s+/g, ' ').trim();
 }
 

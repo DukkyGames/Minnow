@@ -16,7 +16,7 @@ import {
 import { fetchEmailFolders, subscribeEmailEvents } from '../../email/client-ext';
 import { renderEmailAutomations } from './email-automations';
 import { createEmailRail } from './email-rail';
-import { renderEmailInbox, type InboxScope } from './email-inbox';
+import { renderEmailInbox, type EmailInboxHandle, type InboxScope } from './email-inbox';
 import { setAlwaysLoadRemoteImages } from './email-layout';
 import { mountEmailRailResizer, syncEmailShellWidthVars } from './email-panel-resize';
 import { folderLabel } from './email-layout';
@@ -691,6 +691,7 @@ export async function renderEmailPanel(
     rail.setActiveNav('settings');
     syncAssistantScope();
     surface.classList.remove('has-reader');
+    assistantPanel?.mountToggle(null);
     const wrap = el('div', 'email-setup-shell email-surface-scroll');
     surface.replaceChildren(wrap);
     void renderEmailPrivacySettings(wrap, options);
@@ -712,6 +713,9 @@ export async function renderEmailPanel(
     return surface.classList.contains('has-reader');
   }
 
+  /** Live inbox instance — SSE refreshes reuse it instead of remounting. */
+  let inboxHandle: EmailInboxHandle | null = null;
+
   /**
    * Refresh the inbox stream without tearing down an open reader. Background
    * sync and SSE can land while the user is reading; remounting the surface
@@ -725,6 +729,10 @@ export async function renderEmailPanel(
       return;
     }
     pendingInboxRefresh = false;
+    if (inboxHandle) {
+      void inboxHandle.refresh();
+      return;
+    }
     renderSurface();
   }
 
@@ -732,6 +740,10 @@ export async function renderEmailPanel(
   function onInboxReaderClosed(): void {
     if (!pendingInboxRefresh) return;
     pendingInboxRefresh = false;
+    if (inboxHandle) {
+      void inboxHandle.refresh();
+      return;
+    }
     renderSurface();
   }
 
@@ -743,6 +755,7 @@ export async function renderEmailPanel(
     }
     if (surfaceMode === 'automations') {
       surface.classList.remove('has-reader');
+      assistantPanel?.mountToggle(null);
       const wrap = el('div', 'email-surface-scroll');
       surface.replaceChildren(wrap);
       void renderEmailAutomations(wrap, {
@@ -756,6 +769,7 @@ export async function renderEmailPanel(
     // Inbox surface. Unified keeps the simple all-mailboxes list for now.
     if (unified) {
       surface.classList.remove('has-reader');
+      assistantPanel?.mountToggle(null);
       const streamWrap = el('div', 'email-stream');
       const col = el('div', 'email-stream-col');
       streamWrap.appendChild(col);
@@ -783,6 +797,7 @@ export async function renderEmailPanel(
     pendingComposeNew = false;
     const initialThreadId = pendingThreadId;
     pendingThreadId = undefined;
+    inboxHandle = null;
     void renderEmailInbox(surface, {
       account: activeAccount,
       scope,
@@ -793,6 +808,10 @@ export async function renderEmailPanel(
       initialThreadId,
       onReaderClosed: onInboxReaderClosed,
       onContextChange: (snapshot) => assistantPanel?.setContext(snapshot),
+      onAssistantToggleMount: (slot) => assistantPanel?.mountToggle(slot),
+      onReady: (handle) => {
+        inboxHandle = handle;
+      },
     });
   }
 
