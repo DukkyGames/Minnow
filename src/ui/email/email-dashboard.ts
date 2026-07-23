@@ -484,7 +484,7 @@ function renderPriorityFeedback(
 }
 
 /** One attention-queue row for a triaged highlight thread. */
-function renderHighlightRow(
+export function renderHighlightRow(
   list: HTMLElement,
   highlight: EmailInboxSummary['highlights'][0],
   account: EmailAccount,

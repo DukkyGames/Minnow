@@ -75,7 +75,7 @@ let imageAllowlist: string[] | null = null;
 const imagesLoadedFor = new Set<string>();
 
 /** Attachments we can show inline rather than only offer as a download. */
-function previewKind(contentType: string, filename: string): "image" | "pdf" | null {
+export function previewKind(contentType: string, filename: string): "image" | "pdf" | null {
   const ct = (contentType || "").toLowerCase();
   if (ct.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(filename)) return "image";
   if (ct === "application/pdf" || /\.pdf$/i.test(filename)) return "pdf";
@@ -83,7 +83,7 @@ function previewKind(contentType: string, filename: string): "image" | "pdf" | n
 }
 
 /** Attachment sizes, in the units a person reads them in. */
-function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number): string {
   const size = Number(bytes) || 0;
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
@@ -144,7 +144,7 @@ function iconBtn(
  * trusted the sender — see `server/email/remote-content.js` for why they are
  * blocked in the first place.
  */
-function renderBodyWithRemoteControls(
+export function renderBodyWithRemoteControls(
   msg: EmailMessage,
   viewMode: EmailBodyViewMode,
   accountId: string,
@@ -260,7 +260,7 @@ function renderBodyWithRemoteControls(
   return wrap;
 }
 
-function formatWhen(iso?: string): string {
+export function formatWhen(iso?: string): string {
   if (!iso) return "—";
 
   const date = new Date(iso);
@@ -306,7 +306,7 @@ function urgencyClass(urgency?: string): string {
 
 /** Parse display name from a From header like "Name <email@x.com>". */
 
-function parseSender(from: string): { name: string; email: string } {
+export function parseSender(from: string): { name: string; email: string } {
   const match = from.match(/^(.+?)\s*<([^>]+)>$/);
 
   if (match) {
@@ -325,7 +325,7 @@ function parseSender(from: string): { name: string; email: string } {
 
 /** Two-letter avatar initials from a sender string. */
 
-function senderInitials(from: string): string {
+export function senderInitials(from: string): string {
   const { name, email } = parseSender(from);
 
   const parts = name.split(/\s+/).filter(Boolean);
@@ -341,7 +341,7 @@ function senderInitials(from: string): string {
 
 /** Human label for common IMAP folder paths. */
 
-function folderLabel(path: string): string {
+export function folderLabel(path: string): string {
   const lower = path.toLowerCase();
 
   if (lower === "inbox") return "Inbox";
