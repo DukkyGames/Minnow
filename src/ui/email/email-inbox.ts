@@ -408,6 +408,9 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     totalCount: () => total,
     indexOffset: () => loadedOffset,
     onViewportChange,
+    // Prefetch the next page well before the loaded edge so a fast flick lands
+    // on rows, not on the blank space the sliding window reserves below them.
+    loadAheadPx: STREAM_ROW_HEIGHT * 8,
     renderEmpty: () => {
       const empty = el('div', 'email-stream-empty');
       empty.appendChild(el('p', 'email-empty-title', emptyTitle()));

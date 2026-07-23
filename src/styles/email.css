@@ -24,7 +24,6 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  padding: 12px 20px 20px;
 }
 
 .email-panel-mount {
@@ -3160,6 +3159,11 @@
   background: var(--mn-surface-0, color-mix(in oklch, var(--mn-fg) 2%, var(--mn-bg)));
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.email-rail::-webkit-scrollbar {
+  display: none;
 }
 
 /* Account switcher — a real button that opens the account menu. The colour

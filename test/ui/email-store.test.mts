@@ -7,7 +7,11 @@ import { describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 
 import { createMailStore } from '../../src/ui/email/email-store';
-import { computeWindow, OVERSCAN_ROWS } from '../../src/ui/email/email-virtual-list';
+import {
+  computeWindow,
+  isNearLoadedBottom,
+  OVERSCAN_ROWS,
+} from '../../src/ui/email/email-virtual-list';
 import {
   applyRecipientChoice,
   splitRecipients,
@@ -219,6 +223,73 @@ describe('virtual list windowing', () => {
       computeWindow({ scrollTop: 0, viewportHeight: 640, rowHeight: 64, itemCount: 0 }),
       { start: 0, end: 0, padTop: 0, padBottom: 0 },
     );
+  });
+});
+
+describe('sliding-window infinite load', () => {
+  const rowHeight = 64;
+  const viewportHeight = 640;
+  const loadAheadPx = rowHeight * 8;
+
+  // First page loaded (40 of 500), reserved height is huge. The old trigger
+  // keyed off total*rowHeight, so it never fired here — the user scrolled past
+  // the loaded rows into blank space. It must fire near the loaded edge.
+  test('does not fire while parked at the top', () => {
+    assert.equal(
+      isNearLoadedBottom({
+        scrollTop: 0,
+        viewportHeight,
+        rowHeight,
+        loadedEnd: 40,
+        totalCount: 500,
+        loadAheadPx,
+      }),
+      false,
+    );
+  });
+
+  test('fires as the viewport nears the loaded edge, not the total bottom', () => {
+    // Loaded edge is at 40 * 64 = 2560px; with 640 viewport and 512 look-ahead
+    // the trigger point is scrollTop >= 2560 - 640 - 512 = 1408px — nowhere near
+    // the full 500 * 64 = 32000px reserved height.
+    assert.equal(
+      isNearLoadedBottom({
+        scrollTop: 1408,
+        viewportHeight,
+        rowHeight,
+        loadedEnd: 40,
+        totalCount: 500,
+        loadAheadPx,
+      }),
+      true,
+    );
+  });
+
+  test('stops firing once every row is loaded', () => {
+    assert.equal(
+      isNearLoadedBottom({
+        scrollTop: 500 * rowHeight,
+        viewportHeight,
+        rowHeight,
+        loadedEnd: 500,
+        totalCount: 500,
+        loadAheadPx,
+      }),
+      false,
+    );
+  });
+
+  test('accounts for a window that has trimmed from the head', () => {
+    // Head trimmed: indexOffset 40, 120 loaded -> loadedEnd 160, edge at 10240px.
+    const nearEdge = isNearLoadedBottom({
+      scrollTop: 10240 - viewportHeight - loadAheadPx,
+      viewportHeight,
+      rowHeight,
+      loadedEnd: 160,
+      totalCount: 500,
+      loadAheadPx,
+    });
+    assert.equal(nearEdge, true);
   });
 });
 

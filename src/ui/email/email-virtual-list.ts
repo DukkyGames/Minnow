@@ -68,6 +68,33 @@ export function computeWindow(options: {
   };
 }
 
+/**
+ * Whether the viewport is close enough to the bottom of the *loaded* rows to
+ * ask for the next page.
+ *
+ * Exported for tests. With a sliding window the list reserves the full
+ * `totalCount * rowHeight` height, but only the loaded slice renders — the
+ * region below the loaded edge is blank until fetched. Infinite load must key
+ * off that loaded edge, not the total reserved height; otherwise it only fires
+ * once the user has already scrolled deep into the blank space, and pages that
+ * fill from the top never reach where the viewport actually is.
+ */
+export function isNearLoadedBottom(options: {
+  scrollTop: number;
+  viewportHeight: number;
+  rowHeight: number;
+  /** One past the last loaded global index (`indexOffset + loaded length`). */
+  loadedEnd: number;
+  /** Full row count backing the reserved scroll height. */
+  totalCount: number;
+  loadAheadPx: number;
+}): boolean {
+  const { scrollTop, viewportHeight, rowHeight, loadedEnd, totalCount, loadAheadPx } = options;
+  if (loadedEnd >= totalCount) return false;
+  const loadedBottom = loadedEnd * rowHeight;
+  return scrollTop + viewportHeight >= loadedBottom - loadAheadPx;
+}
+
 export function createVirtualList<T>(options: {
   rowHeight: number;
   renderRow: (item: T, index: number) => HTMLElement;
@@ -183,8 +210,14 @@ export function createVirtualList<T>(options: {
       globalCount - 1,
       Math.ceil((scrollTop + viewportHeight) / options.rowHeight),
     );
-    const listHeight = globalCount * options.rowHeight;
-    const nearBottom = scrollTop + viewportHeight >= listHeight - loadAheadPx;
+    const nearBottom = isNearLoadedBottom({
+      scrollTop,
+      viewportHeight,
+      rowHeight: options.rowHeight,
+      loadedEnd: baseIndex + items.length,
+      totalCount: globalCount,
+      loadAheadPx,
+    });
     options.onViewportChange?.({ firstVisible, lastVisible, nearBottom });
   };
 

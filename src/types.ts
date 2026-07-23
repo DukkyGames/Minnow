@@ -72,6 +72,8 @@ export interface UserMessage {
   goalAchieved?: boolean;
   /** Super Plan controller stage prompt — hidden from the chat transcript UI. */
   superPlanStage?: SuperPlanStageId;
+  /** Programmatic resume prompt (sub-agent completion, onboarding kickoff, etc.). */
+  hiddenFromTranscript?: boolean;
 }
 
 /** One build-agent progress item (todo_write). */
