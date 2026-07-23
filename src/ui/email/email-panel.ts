@@ -10,17 +10,12 @@ import {
   updateEmailAccount,
   type EmailAccount,
 } from '../../email/client';
-import { subscribeEmailEvents } from '../../email/client-ext';
-import { renderEmailDashboard } from './email-dashboard';
-import { renderEmailLayout } from './email-layout';
+import { fetchEmailFolders, subscribeEmailEvents } from '../../email/client-ext';
 import { renderEmailAutomations } from './email-automations';
-import { EMAIL_ICONS } from './email-icons';
-import {
-  ACCOUNT_DOT_CLASSES,
-  ALL_INBOXES,
-  accountColorIndex,
-  renderUnifiedInbox,
-} from './email-unified';
+import { createEmailRail } from './email-rail';
+import { renderEmailInbox, type InboxScope } from './email-inbox';
+import { folderLabel } from './email-layout';
+import { ALL_INBOXES, renderUnifiedInbox } from './email-unified';
 
 /** Unsubscribe handles for SSE listeners keyed by panel mount element. */
 const panelEventUnsubs = new WeakMap<HTMLElement, () => void>();
@@ -40,15 +35,6 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-/** Human provider label for the active account chip in the chrome header. */
-function accountProviderLabel(account: EmailAccount): string {
-  const host = account.imap.host.toLowerCase();
-  if (host.includes('gmail') || host.includes('google')) return 'Gmail';
-  if (host.includes('outlook') || host.includes('office365')) return 'Outlook';
-  if (host.includes('fastmail')) return 'Fastmail';
-  return account.imap.host;
-}
-
 /**
  * Map an IMAP/connection error to the account-form field worth highlighting.
  *
@@ -66,16 +52,6 @@ function classifyAccountFieldError(message: string): { field: string } | null {
     return { field: 'imapHost' };
   }
   return null;
-}
-
-/** Icon-only chrome control with accessible name. */
-function chromeIconBtn(icon: string, label: string): HTMLButtonElement {
-  const btn = el('button', 'email-chrome-icon-btn') as HTMLButtonElement;
-  btn.type = 'button';
-  btn.title = label;
-  btn.setAttribute('aria-label', label);
-  btn.innerHTML = icon;
-  return btn;
 }
 
 interface AccountFormOptions extends EmailPanelOptions {
@@ -366,9 +342,7 @@ function renderAccountForm(mount: HTMLElement, options: AccountFormOptions): voi
   }
 }
 
-type EmailViewMode = 'dashboard' | 'mail' | 'automations' | 'setup';
-
-/** Main panel entry — dashboard default, mail view, automations. */
+/** Main panel entry — one spine rail, one workspace surface (MIN-358). */
 export async function renderEmailPanel(
   mount: HTMLElement,
   options: EmailPanelOptions = {},
@@ -400,13 +374,18 @@ export async function renderEmailPanel(
   }
 
   let accountFormMode: 'none' | 'add' | 'edit' = 'none';
-  let viewMode: EmailViewMode = 'dashboard';
-  let pendingThreadId: string | undefined;
-
   let activeAccount = accounts.find((row) => row.isDefault) ?? accounts[0];
-
-  /** True when the list is showing every mailbox at once. */
+  /** True when the stream is showing every mailbox at once. */
   let unified = false;
+  /** Which workspace surface is mounted right now. */
+  let surfaceMode: 'inbox' | 'automations' | 'setup' = 'inbox';
+  /** What the inbox stream is scoped to (driven by the rail's Views/Folders). */
+  let scope: InboxScope = { kind: 'triage' };
+  /** The rail nav id that reads as active. */
+  let activeNav = 'attn';
+  /** One-shot intents consumed by the next inbox render. */
+  let pendingComposeNew = false;
+  let pendingThreadId: string | undefined;
 
   /**
    * Status pass-through that also deep-links auth/connection failures to the
@@ -417,24 +396,15 @@ export async function renderEmailPanel(
     options.onStatus?.(state, message);
     if (state !== 'err' || unified || accountFormMode !== 'none') return;
     const hit = classifyAccountFieldError(message);
-    if (hit) openAccountSetup('edit', { highlightField: hit.field, errorMessage: message });
+    if (hit) openSettings({ highlightField: hit.field, errorMessage: message });
   };
 
-  const shell = el('div', 'email-shell email-shell-agent');
-  const chrome = el('header', 'email-chrome');
-  const body = el('div', 'email-body email-body-fill');
-  // The body is the tab panel; -1 lets focus land here on a view switch.
-  body.id = 'email-view-panel';
-  body.setAttribute('role', 'tabpanel');
-  body.tabIndex = -1;
+  // ---- Shell: spine rail + workspace ----------------------------------
+  const shell = el('div', 'email-shell email-shell-a');
+  const workspace = el('div', 'email-workspace');
 
-  // Announces the active view to assistive tech when tabs change.
-  const liveRegion = el('div', 'visually-hidden');
-  liveRegion.setAttribute('aria-live', 'polite');
-
-  // A hairline progress bar under the chrome carries sync state, replacing the
-  // disabled-button-as-status pattern. Ref-counted so overlapping syncs (manual
-  // + background) keep it lit until the last one finishes.
+  // A hairline progress bar above the surface carries sync state, ref-counted
+  // so overlapping syncs (manual + background) keep it lit until the last ends.
   const syncBar = el('div', 'email-sync-bar');
   syncBar.setAttribute('role', 'progressbar');
   syncBar.setAttribute('aria-label', 'Syncing mail');
@@ -447,259 +417,89 @@ export async function renderEmailPanel(
     syncBar.setAttribute('aria-hidden', on ? 'false' : 'true');
   };
 
-  const identity = el('div', 'email-chrome-identity');
-  identity.appendChild(el('p', 'email-chrome-kicker', 'Email'));
+  const surface = el('div', 'email-surface');
+  surface.id = 'email-view-panel';
+  workspace.append(syncBar, surface);
 
-  const accountWrap = el('div', 'email-chrome-account');
-
-  // A colour dot mirrors the per-account dots in the unified list, so a mailbox
-  // reads the same in the chrome as it does in "All inboxes". Only meaningful
-  // once there is more than one mailbox.
-  const accountDots = el('div', 'email-chrome-account-dots');
-  const paintAccountDots = (): void => {
-    accountDots.replaceChildren();
-    if (accounts.length < 2) return;
-    const ids = unified ? accounts.map((row) => row.id) : [activeAccount.id];
-    for (const id of ids) {
-      const dot = el(
-        'span',
-        `email-account-dot ${ACCOUNT_DOT_CLASSES[accountColorIndex(accounts, id)]}`,
-      );
-      dot.title = accounts.find((row) => row.id === id)?.label ?? '';
-      accountDots.appendChild(dot);
-    }
-  };
-
-  const accountSelect = el('select', 'email-chrome-account-select') as HTMLSelectElement;
-  accountSelect.setAttribute('aria-label', 'Active email account');
-
-  // Only offered when there is more than one mailbox to unify.
-  if (accounts.length > 1) {
-    const allOpt = el('option') as HTMLOptionElement;
-    allOpt.value = ALL_INBOXES;
-    allOpt.textContent = 'All inboxes';
-    accountSelect.appendChild(allOpt);
-  }
-
-  for (const account of accounts) {
-    const opt = el('option') as HTMLOptionElement;
-    opt.value = account.id;
-    opt.textContent = account.label;
-    opt.selected = account.id === activeAccount.id;
-    accountSelect.appendChild(opt);
-  }
-  const accountHint = el(
-    'span',
-    'email-chrome-account-hint',
-    `${accountProviderLabel(activeAccount)} · ${activeAccount.username}`,
-  );
-  accountWrap.appendChild(accountDots);
-  accountWrap.appendChild(accountSelect);
-  accountWrap.appendChild(accountHint);
-  identity.appendChild(accountWrap);
-  paintAccountDots();
-
-  const nav = el('nav', 'email-chrome-nav');
-  nav.setAttribute('role', 'tablist');
-  nav.setAttribute('aria-label', 'Email views');
-  const segments = el('div', 'email-chrome-segments');
-
-  const mkViewTab = (mode: EmailViewMode, label: string, icon: string) => {
-    const btn = el('button', 'email-chrome-segment') as HTMLButtonElement;
-    btn.type = 'button';
-    btn.setAttribute('role', 'tab');
-    btn.id = `email-tab-${mode}`;
-    btn.setAttribute('aria-controls', 'email-view-panel');
-    btn.dataset.view = mode;
-    // Roving tabindex: only the active tab is a Tab stop; arrows move within.
-    btn.tabIndex = -1;
-    btn.innerHTML = `${icon}<span class="email-chrome-segment-label">${label}</span>`;
-    return btn;
-  };
-
-  const dashBtn = mkViewTab('dashboard', 'Dashboard', EMAIL_ICONS.dashboard);
-  const mailBtn = mkViewTab('mail', 'Mail', EMAIL_ICONS.mail);
-  const autoBtn = mkViewTab('automations', 'Automations', EMAIL_ICONS.automations);
-  segments.appendChild(dashBtn);
-  segments.appendChild(mailBtn);
-  segments.appendChild(autoBtn);
-  nav.appendChild(segments);
-
-  const utils = el('div', 'email-chrome-utils');
-  const settingsBtn = chromeIconBtn(EMAIL_ICONS.settings, 'Account settings');
-  utils.appendChild(settingsBtn);
-
-  chrome.appendChild(identity);
-  chrome.appendChild(nav);
-  chrome.appendChild(utils);
-
-  shell.appendChild(chrome);
-  shell.appendChild(syncBar);
-  shell.appendChild(body);
-  shell.appendChild(liveRegion);
-  mount.replaceChildren(shell);
-
-  const viewTabs = [dashBtn, mailBtn, autoBtn];
-  const VIEW_LABELS: Record<EmailViewMode, string> = {
-    dashboard: 'Dashboard',
-    mail: 'Mail',
-    automations: 'Automations',
-    setup: 'Account settings',
-  };
-
-  const setActiveTab = (mode: EmailViewMode) => {
-    viewMode = mode;
-    for (const btn of viewTabs) {
-      const active = btn.dataset.view === mode;
-      btn.classList.toggle('is-active', active);
-      btn.setAttribute('aria-selected', active ? 'true' : 'false');
-      btn.tabIndex = active ? 0 : -1;
-    }
-    body.setAttribute('aria-labelledby', `email-tab-${mode}`);
-  };
-
-  setActiveTab(viewMode);
-
-  /** Switch views from a tab: render, then announce so SR users hear it. */
-  const activateTab = (mode: EmailViewMode): void => {
-    setActiveTab(mode);
-    liveRegion.textContent = `${VIEW_LABELS[mode]} view`;
-    void renderView();
-  };
-
-  const renderView = async () => {
-    if (accountFormMode !== 'none') {
-      return;
-    }
-    body.replaceChildren(el('p', 'email-loading', 'Loading…'));
-    if (viewMode === 'dashboard') {
-      await renderEmailDashboard(body, {
-        account: activeAccount,
-        onStatus: handleStatus,
-        onSyncActivity: setSyncing,
-        onRefresh: () => void renderView(),
-        onOpenThread: (threadId) => {
-          pendingThreadId = threadId;
-          setActiveTab('mail');
-          void renderView();
-        },
-        onOpenMail: () => {
-          pendingThreadId = undefined;
-          setActiveTab('mail');
-          void renderView();
-        },
-      });
-      return;
-    }
-    if (viewMode === 'mail') {
-      if (unified) {
-        await renderUnifiedInbox(body, {
-          accounts,
-          onStatus: handleStatus,
-          // Opening a message drops back into that mailbox's full surface,
-          // which is where reply, move and the rest actually live.
-          onOpen: (message) => {
-            const owner = accounts.find((row) => row.id === message.accountId);
-            if (!owner) return;
-            unified = false;
-            activeAccount = owner;
-            accountSelect.value = owner.id;
-            accountHint.textContent = `${accountProviderLabel(owner)} · ${owner.username}`;
-            paintAccountDots();
-            pendingThreadId = message.threadId;
-            void renderView();
-          },
-        });
-        return;
+  const rail = createEmailRail({
+    accounts,
+    activeAccountId: activeAccount.id,
+    unified,
+    onSelectAccount: (id) => {
+      if (id === ALL_INBOXES) {
+        unified = true;
+      } else {
+        const next = accounts.find((row) => row.id === id);
+        if (!next) return;
+        unified = false;
+        activeAccount = next;
       }
-
-      await renderEmailLayout(body, {
-        account: activeAccount,
-        initialThreadId: pendingThreadId,
-        onStatus: handleStatus,
-        onSyncActivity: setSyncing,
-      });
-      pendingThreadId = undefined;
-      return;
-    }
-    if (viewMode === 'automations') {
-      await renderEmailAutomations(body, {
-        account: activeAccount,
-        onStatus: handleStatus,
-        onClose: () => {
-          setActiveTab('dashboard');
-          void renderView();
-        },
-      });
-    }
-  };
-
-  dashBtn.addEventListener('click', () => activateTab('dashboard'));
-  mailBtn.addEventListener('click', () => activateTab('mail'));
-  autoBtn.addEventListener('click', () => activateTab('automations'));
-
-  // Arrow / Home / End move between tabs and activate, per the WAI-ARIA tabs
-  // pattern; focus follows the roving tabindex set in setActiveTab.
-  segments.addEventListener('keydown', (event) => {
-    const current = viewTabs.findIndex((btn) => btn.dataset.view === viewMode);
-    let nextIndex = -1;
-    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-      nextIndex = (current + 1) % viewTabs.length;
-    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-      nextIndex = (current - 1 + viewTabs.length) % viewTabs.length;
-    } else if (event.key === 'Home') {
-      nextIndex = 0;
-    } else if (event.key === 'End') {
-      nextIndex = viewTabs.length - 1;
-    }
-    if (nextIndex < 0) return;
-    event.preventDefault();
-    const nextBtn = viewTabs[nextIndex];
-    activateTab(nextBtn.dataset.view as EmailViewMode);
-    nextBtn.focus();
+      rail.setAccount(unified ? ALL_INBOXES : activeAccount.id, unified, accounts);
+      surfaceMode = 'inbox';
+      accountFormMode = 'none';
+      void loadFolders();
+      renderSurface();
+    },
+    onCompose: () => {
+      unified = false;
+      surfaceMode = 'inbox';
+      accountFormMode = 'none';
+      pendingComposeNew = true;
+      renderSurface();
+    },
+    onSelectNav: (navId) => applyNav(navId),
+    onOpenAutomations: () => {
+      surfaceMode = 'automations';
+      accountFormMode = 'none';
+      activeNav = 'automations';
+      rail.setActiveNav('automations');
+      renderSurface();
+    },
+    onOpenSettings: () => openSettings(),
   });
 
-  accountSelect.addEventListener('change', () => {
-    if (accountSelect.value === ALL_INBOXES) {
-      unified = true;
-      accountHint.textContent = `${accounts.length} mailboxes`;
-      paintAccountDots();
-      void renderView();
-      return;
-    }
+  shell.append(rail.root, workspace);
+  mount.replaceChildren(shell);
+  rail.setActiveNav(activeNav);
 
-    const next = accounts.find((row) => row.id === accountSelect.value);
-    if (!next) return;
-    unified = false;
-    activeAccount = next;
-    accountHint.textContent = `${accountProviderLabel(next)} · ${next.username}`;
-    paintAccountDots();
-    void renderView();
-  });
-
-  const openAccountSetup = (
-    mode: 'add' | 'edit',
-    deepLink?: { highlightField?: string; errorMessage?: string },
-  ) => {
-    accountFormMode = mode;
-    body.replaceChildren();
-    if (mode === 'add') {
-      renderAccountForm(body, {
-        ...options,
-        title: 'Add email account',
-        isFirstAccount: false,
-        onSaved: () => void renderEmailPanel(mount, options),
-        onCancel: () => {
-          accountFormMode = 'none';
-          void renderView();
-        },
-      });
-      return;
+  /** Map a rail nav id onto an inbox scope, then render. */
+  function applyNav(navId: string): void {
+    surfaceMode = 'inbox';
+    accountFormMode = 'none';
+    activeNav = navId;
+    rail.setActiveNav(navId);
+    if (navId === 'waiting') {
+      scope = { kind: 'waiting' };
+    } else if (navId === 'unread' || navId === 'flagged' || navId === 'snoozed') {
+      scope = { kind: 'filter', filter: navId };
+    } else if (navId.startsWith('folder:')) {
+      scope = { kind: 'folder', path: navId.slice('folder:'.length) };
+    } else {
+      scope = { kind: 'triage' };
     }
-    // The settings button reads as active whenever the edit form is open,
-    // including when a connection error opened it.
-    settingsBtn.classList.add('is-active');
-    renderAccountForm(body, {
+    renderSurface();
+  }
+
+  /** Pull the folder list into the rail; fall back to the cached account list. */
+  async function loadFolders(): Promise<void> {
+    try {
+      const rows = await fetchEmailFolders(activeAccount.id);
+      rail.setFolders(rows.map((row) => ({ path: row.path, label: folderLabel(row.path) })));
+    } catch {
+      rail.setFolders(activeAccount.folders.map((path) => ({ path, label: folderLabel(path) })));
+    }
+  }
+
+  /** Open the account-settings form in the workspace. */
+  function openSettings(deepLink?: { highlightField?: string; errorMessage?: string }): void {
+    surfaceMode = 'setup';
+    accountFormMode = 'edit';
+    activeNav = 'settings';
+    rail.setActiveNav('settings');
+    surface.classList.remove('has-reader');
+    const wrap = el('div', 'email-setup-shell email-surface-scroll');
+    surface.replaceChildren(wrap);
+    renderAccountForm(wrap, {
       ...options,
       title: 'Edit email account',
       existing: activeAccount,
@@ -708,24 +508,68 @@ export async function renderEmailPanel(
       errorMessage: deepLink?.errorMessage,
       onSaved: () => void renderEmailPanel(mount, options),
       onSignedOut: () => void renderEmailPanel(mount, options),
-      onCancel: () => {
-        accountFormMode = 'none';
-        settingsBtn.classList.remove('is-active');
-        void renderView();
-      },
+      onCancel: () => applyNav('attn'),
     });
-  };
+  }
 
-  settingsBtn.addEventListener('click', () => {
-    if (accountFormMode === 'edit') {
-      accountFormMode = 'none';
-      settingsBtn.classList.remove('is-active');
-      void renderView();
+  /** Mount whichever surface the current state calls for. */
+  function renderSurface(): void {
+    if (surfaceMode === 'setup') {
+      // openSettings owns this surface; nothing to redraw here.
       return;
     }
-    openAccountSetup('edit');
-    settingsBtn.classList.add('is-active');
-  });
+    if (surfaceMode === 'automations') {
+      surface.classList.remove('has-reader');
+      const wrap = el('div', 'email-surface-scroll');
+      surface.replaceChildren(wrap);
+      void renderEmailAutomations(wrap, {
+        account: activeAccount,
+        onStatus: handleStatus,
+        onClose: () => applyNav('attn'),
+      });
+      return;
+    }
+
+    // Inbox surface. Unified keeps the simple all-mailboxes list for now.
+    if (unified) {
+      surface.classList.remove('has-reader');
+      const streamWrap = el('div', 'email-stream');
+      const col = el('div', 'email-stream-col');
+      streamWrap.appendChild(col);
+      surface.replaceChildren(streamWrap);
+      void renderUnifiedInbox(col, {
+        accounts,
+        onStatus: handleStatus,
+        // Opening a message drops into that mailbox's own inbox surface, where
+        // reply, archive and the rest actually live.
+        onOpen: (message) => {
+          const owner = accounts.find((row) => row.id === message.accountId);
+          if (!owner) return;
+          unified = false;
+          activeAccount = owner;
+          rail.setAccount(owner.id, false, accounts);
+          pendingThreadId = message.threadId;
+          void loadFolders();
+          applyNav('attn');
+        },
+      });
+      return;
+    }
+
+    const openComposeNew = pendingComposeNew;
+    pendingComposeNew = false;
+    const initialThreadId = pendingThreadId;
+    pendingThreadId = undefined;
+    void renderEmailInbox(surface, {
+      account: activeAccount,
+      scope,
+      onStatus: handleStatus,
+      onSyncActivity: setSyncing,
+      onCounts: (counts) => rail.setCounts(counts),
+      openComposeNew,
+      initialThreadId,
+    });
+  }
 
   panelEventUnsubs.get(mount)?.();
   panelEventUnsubs.set(
@@ -741,12 +585,15 @@ export async function renderEmailPanel(
         type === 'pending_actions_updated' ||
         type === 'followups_updated'
       ) {
-        if (viewMode === 'dashboard') {
-          void renderView();
+        // Only refresh the live triage stream. Re-rendering while a folder view
+        // or the reader is open would yank the surface out from under the user.
+        if (surfaceMode === 'inbox' && !unified && scope.kind === 'triage') {
+          renderSurface();
         }
       }
     }),
   );
 
-  await renderView();
+  await loadFolders();
+  renderSurface();
 }
