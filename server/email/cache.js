@@ -16,6 +16,7 @@ import {
   reindexMessageFts,
   writeMeta,
 } from './store.js';
+import { sanitizePreviewText } from './parse-body.js';
 
 /**
  * @typedef {object} EmailMessageFlags
@@ -580,7 +581,7 @@ export async function listCachedThreads(accountId, options = {}) {
     hasAttachments: Boolean(row.has_attachments),
     lastDate: row.last_date,
     folders: JSON.parse(row.folders_json || '[]'),
-    snippet: row.snippet,
+    snippet: sanitizePreviewText(row.snippet ?? ''),
     // Stored as JSON by thread-summary.js; the API exposes just the text.
     summary: (() => {
       if (typeof row.summary !== 'string' || !row.summary) return null;

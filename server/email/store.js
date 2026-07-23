@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import Database from 'better-sqlite3';
 import { emailDbPath, emailRootDir } from './paths.js';
 import { getMinnowHome } from '../config/home.js';
+import { sanitizePreviewText } from './parse-body.js';
 
 /** @type {Map<string, import('better-sqlite3').Database>} */
 const dbByCacheKey = new Map();
@@ -417,7 +418,7 @@ export function rowToMessage(row, extra = {}) {
     replyTo: row.reply_to ?? '',
     subject: row.subject ?? '',
     date: row.date ?? '',
-    bodyPreview: row.body_preview ?? '',
+    bodyPreview: sanitizePreviewText(row.body_preview ?? ''),
     bodyHash: row.body_hash ?? '',
     hasAttachments: Boolean(row.has_attachments),
     attachments: extra.attachments ?? [],

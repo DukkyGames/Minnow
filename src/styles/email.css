@@ -3599,6 +3599,9 @@
   gap: 6px;
   text-transform: none;
   letter-spacing: 0;
+  flex: 1 1 280px;
+  min-width: 200px;
+  max-width: 420px;
 }
 
 /* Raw conversation rows — purpose-built for the stream, reusing the list's
@@ -3744,6 +3747,8 @@
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm, 6px);
   background: var(--mn-bg);
+  flex: 1;
+  min-width: 0;
 }
 
 .email-stream-search .icon-svg,
@@ -3761,7 +3766,7 @@
   font: inherit;
   font-size: 12px;
   padding: 3px 0;
-  width: 130px;
+  flex: 1;
   min-width: 0;
 }
 
