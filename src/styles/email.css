@@ -2040,28 +2040,6 @@
   letter-spacing: 0.02em;
 }
 
-.email-compose-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.email-compose-tab {
-  padding: 5px 10px;
-  border: 1px solid var(--mn-border);
-  border-radius: var(--radius-sm, 6px);
-  background: transparent;
-  font-size: 12px;
-  cursor: pointer;
-  color: inherit;
-}
-
-.email-compose-tab.is-active {
-  font-weight: 600;
-  background: color-mix(in oklch, var(--mn-fg) 6%, transparent);
-  border-color: var(--mn-border-strong, var(--mn-border));
-}
-
 .email-compose-field {
   display: flex;
   flex-direction: column;
@@ -3184,32 +3162,6 @@
   overscroll-behavior: contain;
 }
 
-.email-rail-head {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 0 4px;
-}
-
-.email-rail-mark {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
-  background: var(--mn-accent);
-  color: var(--mn-fg-on-accent, #0b1410);
-  font-weight: 700;
-  font-size: 13px;
-  flex-shrink: 0;
-}
-
-.email-rail-word {
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
 /* Account switcher — a real button that opens the account menu. The colour
    dots mirror the unified-inbox legend so a mailbox reads the same here. */
 .email-rail-account {
@@ -3608,7 +3560,7 @@
 .email-stream-brief {
   margin: 0;
   padding: 18px 0 20px;
-  max-width: 68ch;
+  width: 100%;
   font-size: 14.5px;
   line-height: 1.6;
   color: var(--mn-fg);
@@ -3671,6 +3623,11 @@
   text-align: left;
   font: inherit;
   cursor: pointer;
+  /* Fixed height: the inbox virtual list computes its window from
+     STREAM_ROW_HEIGHT in email-inbox.ts — keep these in step. */
+  height: 64px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .email-stream-row:last-child {
@@ -3765,6 +3722,17 @@
   display: flex;
   justify-content: center;
   padding: 16px 0 4px;
+}
+
+.email-stream-load-more {
+  padding: 12px 4px 4px;
+  text-align: center;
+  color: var(--mn-fg-muted);
+  font-size: 12px;
+}
+
+.email-stream-load-more[hidden] {
+  display: none;
 }
 
 /* Slim search/sync controls beside the "Everything else" marker. */

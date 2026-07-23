@@ -169,22 +169,6 @@ export function mountEmailCompose(
     mount.appendChild(repromptRow);
   }
 
-  const tabs = el("div", "email-compose-tabs");
-  for (const mode of ["reply", "replyAll", "forward", "new"] as ComposeMode[]) {
-    const tab = el("button", "email-compose-tab") as HTMLButtonElement;
-    tab.type = "button";
-    tab.textContent =
-      mode === "replyAll"
-        ? "Reply all"
-        : mode.charAt(0).toUpperCase() + mode.slice(1);
-    tab.classList.toggle("is-active", mode === options.mode);
-    tab.addEventListener("click", () => {
-      mountEmailCompose(mount, { ...options, mode });
-    });
-    tabs.appendChild(tab);
-  }
-  mount.appendChild(tabs);
-
   const fieldRow = (
     label: string,
     input: HTMLElement,

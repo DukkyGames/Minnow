@@ -83,12 +83,6 @@ export function createEmailRail(options: EmailRailOptions): EmailRailHandle {
   const root = el('aside', 'email-rail');
   root.setAttribute('aria-label', 'Email navigation');
 
-  // ---- Brand -----------------------------------------------------------
-  const head = el('div', 'email-rail-head');
-  const mark = el('span', 'email-rail-mark', 'm');
-  mark.setAttribute('aria-hidden', 'true');
-  head.append(mark, el('span', 'email-rail-word', 'Email'));
-
   // ---- Account switcher ------------------------------------------------
   const accountBtn = el('button', 'email-rail-account') as HTMLButtonElement;
   accountBtn.type = 'button';
@@ -250,7 +244,7 @@ export function createEmailRail(options: EmailRailOptions): EmailRailHandle {
   });
   foot.append(autoBtn, settingsBtn);
 
-  root.append(head, accountBtn, accountMenu, composeBtn, nav, foot);
+  root.append(accountBtn, accountMenu, composeBtn, nav, foot);
 
   paintAccountFace();
 
