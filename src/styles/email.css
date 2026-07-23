@@ -3130,3 +3130,697 @@
     color: var(--mn-accent);
   }
 }
+
+/* ===========================================================================
+   Direction A — "One Stream" shell (MIN-358 IA rethink)
+
+   One navigation spine on the left, one workspace on the right. The old top
+   tabs and the three-pane folder rail both collapse into `.email-rail`; the
+   Dashboard and Mail surfaces merge into one `.email-stream`. Reader docks
+   in from the right rather than living as a permanent third pane.
+   =========================================================================== */
+
+.email-shell-a {
+  flex-direction: row;
+  gap: 0;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ---- The spine rail ---------------------------------------------------- */
+.email-rail {
+  flex: 0 0 244px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+  padding: 16px 12px 14px;
+  border-right: 1px solid var(--mn-border);
+  background: var(--mn-surface-0, color-mix(in oklch, var(--mn-fg) 2%, var(--mn-bg)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.email-rail-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 4px;
+}
+
+.email-rail-mark {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: var(--mn-accent);
+  color: var(--mn-fg-on-accent, #0b1410);
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.email-rail-word {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Account switcher — a real button that opens the account menu. The colour
+   dots mirror the unified-inbox legend so a mailbox reads the same here. */
+.email-rail-account {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md, 10px);
+  background: var(--mn-bg);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s var(--ease-out, ease-out);
+}
+
+.email-rail-account:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .email-rail-account:hover {
+    border-color: var(--mn-border-strong, var(--mn-border));
+  }
+}
+
+.email-rail-account-dots {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.email-rail-account-text {
+  min-width: 0;
+}
+
+.email-rail-account-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.email-rail-account-hint {
+  display: block;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  color: var(--mn-fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.email-rail-account-caret {
+  color: var(--mn-fg-subtle);
+  flex-shrink: 0;
+}
+
+.email-rail-account-caret .icon-svg,
+.email-rail-account-caret .email-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* The account menu (accounts + "All inboxes") — a popover, not a native select,
+   so the dots render inside it. */
+.email-rail-account-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: -8px 0 0;
+  padding: 5px;
+  border: 1px solid var(--mn-border-strong, var(--mn-border));
+  border-radius: var(--radius-md, 10px);
+  background: var(--mn-surface-1, var(--mn-bg));
+  box-shadow: var(--mn-shadow, 0 8px 24px rgba(0, 0, 0, 0.35));
+  animation: email-pop-in 0.14s var(--ease-out-quart, cubic-bezier(0.25, 1, 0.5, 1));
+}
+
+.email-rail-account-menu[hidden] {
+  display: none;
+}
+
+.email-rail-account-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.email-rail-account-opt .email-account-dot {
+  flex-shrink: 0;
+}
+
+.email-rail-account-opt.is-active {
+  background: var(--mn-accent-soft, color-mix(in srgb, var(--mn-accent) 14%, transparent));
+  color: var(--mn-fg);
+  font-weight: 600;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .email-rail-account-opt:hover {
+    background: var(--mn-surface-elevated, color-mix(in oklch, var(--mn-fg) 8%, transparent));
+  }
+}
+
+@keyframes email-pop-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Compose — the one accent-filled action in the rail. */
+.email-rail-compose {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--mn-accent);
+  border-radius: var(--radius-md, 10px);
+  background: var(--mn-accent);
+  color: var(--mn-fg-on-accent, #0b1410);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s var(--ease-out, ease-out);
+}
+
+.email-rail-compose .icon-svg,
+.email-rail-compose .email-icon {
+  width: 16px;
+  height: 16px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .email-rail-compose:hover {
+    filter: brightness(1.06);
+  }
+}
+
+.email-rail-compose:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+/* Navigation groups: Views, then Folders. */
+.email-rail-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.email-rail-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.email-rail-group-label {
+  margin: 0 0 4px;
+  padding: 0 8px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mn-fg-subtle, var(--mn-fg-muted));
+}
+
+.email-rail-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.14s var(--ease-out, ease-out),
+    color 0.14s var(--ease-out, ease-out);
+}
+
+.email-rail-item-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A leading tick carries the view's tone (danger for "Needs attention"). */
+.email-rail-item-tick {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--mn-fg-subtle, var(--mn-fg-muted));
+}
+
+.email-rail-item-tick.is-attn { background: var(--mn-danger, #e07a6f); }
+.email-rail-item-tick.is-wait { background: var(--mn-warning, #d4a574); }
+
+.email-rail-item-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--mn-fg-subtle, var(--mn-fg-muted));
+}
+
+.email-rail-item-icon .icon-svg,
+.email-rail-item-icon .email-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.email-rail-item-count {
+  margin-left: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-fg-subtle, var(--mn-fg-muted));
+  flex-shrink: 0;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .email-rail-item:hover {
+    background: var(--mn-surface-elevated, color-mix(in oklch, var(--mn-fg) 5%, transparent));
+    color: var(--mn-fg);
+  }
+}
+
+.email-rail-item.is-active {
+  background: var(--mn-accent-soft, color-mix(in srgb, var(--mn-accent) 14%, transparent));
+  color: var(--mn-fg);
+  font-weight: 600;
+}
+
+.email-rail-item.is-active .email-rail-item-count {
+  color: var(--mn-accent);
+}
+
+.email-rail-item.is-active .email-rail-item-icon {
+  color: var(--mn-accent);
+}
+
+.email-rail-item:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
+}
+
+.email-rail-foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 12px;
+  border-top: 1px solid var(--mn-border);
+}
+
+/* ---- The workspace ----------------------------------------------------- */
+.email-workspace {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.email-surface {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Scroll wrapper for the non-stream surfaces (Automations, account settings)
+   so they scroll inside the workspace rather than pushing the shell. */
+.email-surface-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 22px 24px;
+}
+
+/* ---- The single stream ------------------------------------------------- */
+.email-stream {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.email-stream-col {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 22px 28px 48px;
+}
+
+@media (max-width: 720px) {
+  .email-stream-col { padding: 16px 16px 40px; }
+}
+
+/* The quiet mono readout that replaces the boxed 4-cell KPI strip. */
+.email-readout {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--mn-border);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
+.email-readout-metric {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.email-readout-metric b {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-fg);
+}
+
+.email-readout-metric.is-attn b { color: var(--mn-danger, #e07a6f); }
+.email-readout-metric.is-wait b { color: var(--mn-fg); }
+.email-readout-metric.is-unread b { color: var(--mn-warning, #d4a574); }
+
+.email-readout-synced {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mn-fg-subtle, var(--mn-fg-muted));
+}
+
+.email-readout-synced::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mn-accent);
+}
+
+/* The agent's read of the inbox. Narrative gets a hair more presence. */
+.email-stream-brief {
+  margin: 0;
+  padding: 18px 0 20px;
+  max-width: 68ch;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--mn-fg);
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.email-stream-brief.is-narrative {
+  color: var(--mn-fg);
+}
+
+/* Section markers inside the stream ("Needs attention", "Everything else"). */
+.email-stream-marker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 22px 0 6px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.email-stream-marker::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--mn-border);
+}
+
+/* A slim toolbar tucked beside the "Everything else" marker. */
+.email-stream-marker .email-stream-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Raw conversation rows — purpose-built for the stream, reusing the list's
+   inner text classes so type and colour stay consistent with the reader. */
+.email-stream-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.email-stream-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 11px;
+  align-items: center;
+  width: 100%;
+  padding: 11px 6px;
+  border: none;
+  border-bottom: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.email-stream-row:last-child {
+  border-bottom: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .email-stream-row:hover {
+    background: var(--mn-surface-elevated, color-mix(in oklch, var(--mn-fg) 4%, transparent));
+  }
+}
+
+.email-stream-row.is-selected {
+  background: var(--mn-accent-soft, color-mix(in srgb, var(--mn-accent) 8%, transparent));
+}
+
+.email-stream-row-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.email-stream-row-from {
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.email-stream-row.is-unread .email-stream-row-from,
+.email-stream-row.is-unread .email-stream-row-subject {
+  color: var(--mn-fg);
+  font-weight: 600;
+}
+
+.email-stream-row-subject {
+  font-size: 13.5px;
+  color: var(--mn-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.email-stream-row-snippet {
+  font-weight: 400;
+  color: var(--mn-fg-subtle, var(--mn-fg-muted));
+}
+
+.email-stream-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.email-stream-row-date {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--mn-fg-subtle, var(--mn-fg-muted));
+  white-space: nowrap;
+}
+
+.email-stream-row-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mn-accent);
+  flex-shrink: 0;
+}
+
+.email-stream-row-attach {
+  color: var(--mn-fg-subtle, var(--mn-fg-muted));
+  display: inline-flex;
+}
+
+.email-stream-row-attach .icon-svg,
+.email-stream-row-attach .email-icon {
+  width: 13px;
+  height: 13px;
+}
+
+.email-stream-empty,
+.email-stream-loading {
+  padding: 28px 4px;
+  color: var(--mn-fg-muted);
+  font-size: 13px;
+}
+
+.email-stream-more {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0 4px;
+}
+
+/* Slim search/sync controls beside the "Everything else" marker. */
+.email-stream-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--mn-bg);
+}
+
+.email-stream-search .icon-svg,
+.email-stream-search .email-icon {
+  width: 13px;
+  height: 13px;
+  color: var(--mn-fg-muted);
+  flex-shrink: 0;
+}
+
+.email-stream-search input {
+  border: none;
+  background: transparent;
+  color: var(--mn-fg);
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 0;
+  width: 130px;
+  min-width: 0;
+}
+
+.email-stream-search input:focus {
+  outline: none;
+}
+
+/* The reader dock's own header/actions reuse .email-reader-* from the mail
+   client; only the dock chrome differs. */
+.email-reader-dock .email-reader-head {
+  padding-right: 40px;
+}
+
+/* ---- The reader dock --------------------------------------------------- */
+.email-reader-dock {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(600px, 88%);
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--mn-border-strong, var(--mn-border));
+  background: var(--mn-bg);
+  box-shadow: -18px 0 40px -24px rgba(0, 0, 0, 0.55);
+  transform: translateX(100%);
+  transition: transform 0.28s var(--ease-out-quart, cubic-bezier(0.25, 1, 0.5, 1));
+  z-index: 3;
+  overflow: hidden;
+}
+
+.email-surface.has-reader .email-reader-dock {
+  transform: translateX(0);
+}
+
+/* A dim scrim over the stream while the dock is open, so focus lands on the
+   reader without the stream disappearing. */
+.email-reader-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: var(--mn-overlay, rgba(0, 0, 0, 0.35));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.24s var(--ease-out, ease-out);
+}
+
+.email-surface.has-reader .email-reader-scrim {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.email-reader-dock-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 22px 28px;
+}
+
+.email-reader-dock-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 1;
+}
+
+@media (max-width: 640px) {
+  .email-reader-dock { width: 100%; }
+  .email-rail { flex-basis: 208px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .email-reader-dock { transition: none; }
+  .email-rail-account-menu { animation: none; }
+}
+
