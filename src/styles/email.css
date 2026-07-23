@@ -3852,21 +3852,35 @@
   font-size: 13px;
 }
 
-.email-stream-more {
+/* Prev / Next pager beneath the conversation list. */
+.email-stream-pager {
   display: flex;
+  align-items: center;
   justify-content: center;
-  padding: 16px 0 4px;
+  gap: 14px;
+  padding: 18px 0 4px;
 }
 
-.email-stream-load-more {
-  padding: 12px 4px 4px;
-  text-align: center;
-  color: var(--mn-fg-muted);
-  font-size: 12px;
-}
-
-.email-stream-load-more[hidden] {
+.email-stream-pager[hidden] {
   display: none;
+}
+
+.email-stream-pager[aria-busy="true"] {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.email-stream-pager-label {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+  min-width: 8ch;
+  text-align: center;
+}
+
+.email-stream-pager-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 /* Slim search/sync controls beside the "Everything else" marker. */
