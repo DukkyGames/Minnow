@@ -8,7 +8,6 @@
 import { listEmailAccounts } from './accounts.js';
 import { clearDueSnoozes, getSyncState, listDueSnoozes } from './cache.js';
 import { sweepOverdueFollowups } from './followups.js';
-import { MAX_SYNC_BATCH } from './imap.js';
 import { syncFolderMessages } from './transport.js';
 import { runAgentHooksAfterFolderSync } from './agent.js';
 import { emitEmailEvent } from './events.js';
@@ -25,8 +24,32 @@ export const POLL_TICK_MS = 60_000;
 /** Debounce window for IDLE-triggered syncs (servers fire bursts). */
 export const IDLE_DEBOUNCE_MS = 2_000;
 
+/**
+ * Page size for one sync batch. Kept modest so a single pass never holds the
+ * shared IMAP connection long enough to stall an open-message request.
+ */
+export const SYNC_BATCH = 200;
+
+/** Pause between background backfill passes so foreground IMAP work interleaves. */
+export const BACKFILL_PASS_DELAY_MS = 350;
+
+/** Safety cap on backfill passes (each fetches up to SYNC_BATCH real UIDs). */
+const MAX_BACKFILL_PASSES = 5_000;
+
 /** @type {Map<string, number>} */
 const lastPolledAt = new Map();
+
+/** Folders with a live backfill driver, so we never run two at once. */
+/** @type {Set<string>} */
+const backfillDrivers = new Set();
+
+/** @param {number} ms */
+function delay(ms) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    timer.unref?.();
+  });
+}
 
 /** @type {NodeJS.Timeout | null} */
 let pollTimer = null;
@@ -38,24 +61,76 @@ const idleDebounce = new Map();
 
 /**
  * Sync one folder and run the agent hooks for genuinely new mail.
+ *
+ * This performs a single batch (new mail + one backfill page) and returns
+ * promptly. When `untilComplete` is set and the folder is not yet fully
+ * backfilled, it kicks off a paced background driver to finish the history
+ * without blocking the caller or monopolizing the shared IMAP connection.
+ *
  * @param {string} accountId
  * @param {string} folder
- * @param {{ background?: boolean, limit?: number, full?: boolean }} [options]
+ * @param {{
+ *   background?: boolean,
+ *   limit?: number,
+ *   full?: boolean,
+ *   untilComplete?: boolean,
+ *   onProgress?: (detail: Record<string, unknown>) => void,
+ * }} [options]
  */
 export async function syncFolderWithHooks(accountId, folder, options = {}) {
   const before = await getSyncState(accountId, folder);
   const result = await syncFolderMessages(accountId, {
     folder,
-    limit: options.limit ?? MAX_SYNC_BATCH,
+    limit: options.limit ?? SYNC_BATCH,
     full: options.full === true,
-    untilComplete: options.untilComplete === true,
     onProgress: options.onProgress,
   });
   const incoming = Array.isArray(result.messages) ? result.messages : [];
   await runAgentHooksAfterFolderSync(accountId, folder, incoming, before.highestUid, {
     background: options.background === true,
   });
+  if (options.untilComplete === true && !result.backfillComplete) {
+    ensureBackfill(accountId, folder);
+  }
   return result;
+}
+
+/**
+ * Drive a folder's history backfill to completion in the background, one paced
+ * batch at a time. Idempotent — a second call while a driver is live is a no-op.
+ * Runs detached so the connection is released (and yielded to foreground work)
+ * between passes.
+ *
+ * @param {string} accountId
+ * @param {string} folder
+ */
+export function ensureBackfill(accountId, folder) {
+  const key = `${accountId}\0${folder}`;
+  if (backfillDrivers.has(key)) {
+    return;
+  }
+  backfillDrivers.add(key);
+  void (async () => {
+    try {
+      for (let pass = 0; pass < MAX_BACKFILL_PASSES; pass += 1) {
+        const result = await syncFolderWithHooks(accountId, folder, {
+          background: true,
+          limit: SYNC_BATCH,
+        });
+        if (result.backfillComplete) {
+          break;
+        }
+        await delay(BACKFILL_PASS_DELAY_MS);
+      }
+    } catch (err) {
+      console.warn(
+        `[email] backfill failed for ${accountId}/${folder}:`,
+        err instanceof Error ? err.message : err,
+      );
+    } finally {
+      backfillDrivers.delete(key);
+    }
+  })();
 }
 
 /**
@@ -241,5 +316,6 @@ export function stopEmailPollLoop() {
 export function resetEmailPollForTests() {
   stopEmailPollLoop();
   lastPolledAt.clear();
+  backfillDrivers.clear();
   polling = false;
 }

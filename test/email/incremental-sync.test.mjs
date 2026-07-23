@@ -259,6 +259,31 @@ describe('syncFolderMessages', () => {
     assert.equal(state.highestUid, MAX_SYNC_BATCH + 25);
   });
 
+  test('backfill walks past UID gaps left by deleted mail without stalling', async () => {
+    const { syncFolderMessages } = await import('../../server/email/imap.js');
+    const { countCachedMessages, getSyncState } = await import('../../server/email/cache.js');
+
+    // Two dense blocks with a wide gap between them (UIDs 11–99 never existed —
+    // e.g. bulk-deleted). A numeric `start:end` walk stalls on the empty gap;
+    // walking the real UID list must skip it.
+    for (let uid = 1; uid <= 10; uid += 1) seed(uid);
+    for (let uid = 100; uid <= 110; uid += 1) seed(uid);
+
+    let last;
+    let passes = 0;
+    for (; passes < 30; passes += 1) {
+      last = await syncFolderMessages(ACCOUNT_ID, { folder: 'INBOX', limit: 5 });
+      if (last.backfillComplete) break;
+    }
+
+    assert.equal(last?.backfillComplete, true, 'backfill terminates instead of spinning on the gap');
+    assert.ok(passes < 10, `walks the 21 UIDs in a handful of passes (took ${passes + 1})`);
+    assert.equal(await countCachedMessages(ACCOUNT_ID, 'INBOX'), 21);
+    const state = await getSyncState(ACCOUNT_ID, 'INBOX');
+    assert.equal(state.lowestUid, 1);
+    assert.equal(state.highestUid, 110);
+  });
+
   test('sync decodes base64 preview parts instead of storing raw encoding', async () => {
     const { syncFolderMessages } = await import('../../server/email/imap.js');
     const { getCachedMessage } = await import('../../server/email/cache.js');
