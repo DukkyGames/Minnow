@@ -6,6 +6,7 @@
 export type ModeId =
   | 'general'
   | 'desktop'
+  | 'email'
   | 'build'
   | 'plan'
   | 'super-plan'
@@ -19,6 +20,7 @@ export const DEFAULT_MODE_ID: ModeId = 'build';
 export const MODE_IDS: readonly ModeId[] = [
   'general',
   'desktop',
+  'email',
   'build',
   'plan',
   'super-plan', // Phase 0 plan-mode overhaul — sub-item of Plan segment (not composer top-level)

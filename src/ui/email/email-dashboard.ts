@@ -277,7 +277,7 @@ function categoryLabel(category?: string): string {
 }
 
 /** Digest action-group chips — queue into the review strip on click (§3.7). */
-function renderDigestActionGroups(
+export function renderDigestActionGroups(
   mount: HTMLElement,
   account: EmailAccount,
   digest: EmailNarrativeDigest,
@@ -290,7 +290,16 @@ function renderDigestActionGroups(
   for (const group of groups) {
     const chip = el('button', 'email-dash-action-chip') as HTMLButtonElement;
     chip.type = 'button';
-    chip.textContent = group.label;
+    const copy = el('span', 'email-dash-action-copy');
+    copy.append(
+      el('span', 'email-dash-action-label', group.label),
+      el(
+        'span',
+        'email-dash-action-meta',
+        `${group.messageIds.length} message${group.messageIds.length === 1 ? '' : 's'} · queues for review`,
+      ),
+    );
+    chip.append(copy, el('span', 'email-dash-action-cta', 'Review'));
     chip.title = `${group.messageIds.length} messages — queues for review before anything runs`;
     chip.addEventListener('click', async () => {
       chip.disabled = true;
@@ -312,7 +321,7 @@ function renderDigestActionGroups(
 }
 
 /** Review strip for AI-suggested batches awaiting Apply/Dismiss (§3.7). */
-function renderPendingActions(
+export function renderPendingActions(
   mount: HTMLElement,
   account: EmailAccount,
   pendingActions: EmailPendingAction[],
@@ -322,7 +331,7 @@ function renderPendingActions(
   if (pending.length === 0) return;
 
   const section = el('section', 'email-dash-review');
-  section.appendChild(el('h3', 'email-dash-section-label', 'Suggested actions'));
+  section.appendChild(el('h3', 'email-dash-section-label', 'Ready for review'));
 
   for (const action of pending) {
     const row = el('div', 'email-dash-review-row');

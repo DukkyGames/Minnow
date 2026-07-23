@@ -9,15 +9,20 @@ import { isChatsWorkspacePath } from '../../src/lib/chats-workspace.ts';
 import { normalizeWorkspacePath } from '../../src/lib/normalize-workspace-path.ts';
 import {
   CHAT_APP_ID,
+  EMAIL_APP_ID,
   createAssistantChat,
   createDesktopChat,
+  createEmailAssistantChat,
   getAssistantChats,
   getChatsForChatsWorkspace,
+  getEmailAssistantChats,
+  getListedEmailAssistantChats,
   getLastActiveChatIdForApp,
   isAssistantChat,
   migrateSessionStateV1ToV2,
   rememberActiveChatForApp,
   resolveActiveAssistantChatId,
+  resolveActiveEmailAssistantChatId,
   coerceChatWorkspaceFields,
 } from '../../src/state/session-workspace-scope.ts';
 import type { Chat, SessionState } from '../../src/types.ts';
@@ -28,6 +33,7 @@ const CODE_WS = 'C:/Projects/Minnow';
 const ASSISTANT_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const ASSISTANT_B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 const CODE_CHAT = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+const EMAIL_CHAT = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
 
 function chatRow(
   id: string,
@@ -81,6 +87,27 @@ describe('assistant vs code chat filters', () => {
     const codeOnly = getChatsForChatsWorkspace(state, CODE_WS);
     assert.equal(codeOnly.length, 1);
     assert.equal(codeOnly[0].id, CODE_CHAT);
+  });
+
+  test('Chat app lists exclude Email-scoped conversations in the same sandbox', () => {
+    const state = seedState({
+      chats: [
+        chatRow(ASSISTANT_A, CHATS_WS, 300),
+        chatRow(EMAIL_CHAT, CHATS_WS, 250, {
+          appScope: 'email',
+          modeId: 'email',
+        }),
+      ],
+    });
+
+    assert.deepEqual(
+      getChatsForChatsWorkspace(state, CHATS_WS).map((chat) => chat.id),
+      [ASSISTANT_A],
+    );
+    assert.deepEqual(
+      getAssistantChats(state, CHATS_WS).map((chat) => chat.id),
+      [ASSISTANT_A],
+    );
   });
 
   test('getAssistantChats includes expert threads in the chats workspace', () => {
@@ -191,5 +218,54 @@ describe('createAssistantChat', () => {
     assert.ok(created);
     assert.equal(created?.modeId, 'general');
     assert.equal(created?.workAgentAuto, true);
+  });
+});
+
+describe('Email assistant chats', () => {
+  test('factory uses Email mode and an explicit app scope', () => {
+    const chat = createEmailAssistantChat(CHATS_WS, EMAIL_CHAT, 'model-x');
+    assert.equal(chat.id, EMAIL_CHAT);
+    assert.equal(chat.appScope, 'email');
+    assert.equal(chat.modeId, 'email');
+    assert.equal(chat.workAgentAuto, true);
+    assert.equal(chat.modelId, 'model-x');
+    assert.equal(normalizeWorkspacePath(chat.workspacePath), normalizeWorkspacePath(CHATS_WS));
+  });
+
+  test('resolver restores the remembered Email chat without selecting Chat app rows', () => {
+    const state = seedState({
+      chats: [
+        chatRow(ASSISTANT_A, CHATS_WS, 400),
+        chatRow(EMAIL_CHAT, CHATS_WS, 300, {
+          appScope: 'email',
+          modeId: 'email',
+        }),
+      ],
+      lastActiveChatIdByApp: { [EMAIL_APP_ID]: EMAIL_CHAT },
+    });
+
+    const resolved = resolveActiveEmailAssistantChatId(CHATS_WS, state, (path) =>
+      createEmailAssistantChat(path, 'unused'),
+    );
+    assert.equal(resolved, EMAIL_CHAT);
+    assert.deepEqual(
+      getEmailAssistantChats(state, CHATS_WS).map((chat) => chat.id),
+      [EMAIL_CHAT],
+    );
+    assert.deepEqual(
+      getListedEmailAssistantChats(state, CHATS_WS).map((chat) => chat.id),
+      [EMAIL_CHAT],
+    );
+  });
+
+  test('new Email chats remain history-hidden until they have a turn or draft', () => {
+    const state = seedState({ chats: [chatRow(CODE_CHAT, CODE_WS, 100)] });
+    const resolved = resolveActiveEmailAssistantChatId(CHATS_WS, state, (path) =>
+      createEmailAssistantChat(path, EMAIL_CHAT),
+    );
+
+    assert.equal(resolved, EMAIL_CHAT);
+    assert.equal(getEmailAssistantChats(state, CHATS_WS).length, 1);
+    assert.equal(getListedEmailAssistantChats(state, CHATS_WS).length, 0);
   });
 });

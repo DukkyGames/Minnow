@@ -19,6 +19,14 @@ describe('resolveModePromptPath', () => {
     );
   });
 
+  test('email full', () => {
+    assert.ok(resolveModePromptPath('email', 'full').endsWith('modes/email.full.md'));
+  });
+
+  test('email lite', () => {
+    assert.ok(resolveModePromptPath('email', 'lite').endsWith('modes/email.lite.md'));
+  });
+
   test('build full', () => {
     assert.ok(resolveModePromptPath('build', 'full').endsWith('modes/build.full.md'));
   });

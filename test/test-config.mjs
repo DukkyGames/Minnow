@@ -150,7 +150,11 @@ export const SCOPED_SUITES = {
     patterns: ['test/calendar/**/*.test.mjs', 'test/os/calendar-app.test.mts'],
   },
   email: {
-    patterns: ['test/email/**/*.test.mjs', 'test/os/email-app.test.mts'],
+    patterns: [
+      'test/email/**/*.test.mjs',
+      'test/email/**/*.test.mts',
+      'test/os/email-app.test.mts',
+    ],
   },
   memory: {
     patterns: ['test/memory/**/*.test.mjs'],

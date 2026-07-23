@@ -4,22 +4,22 @@ overview: Add actionable inbox suggestions and a persistent, resizable Email ass
 todos:
   - id: actionable-digest
     content: Render digest action groups and pending-action review controls in the active One Stream inbox
-    status: pending
+    status: completed
   - id: email-mode
     content: Add an Email mode and work-agent prompt with email, calendar, web, document, file, Brain, and question tools
-    status: pending
+    status: completed
   - id: assistant-session
     content: Add persistent Email-scoped assistant chats with new-chat and history controls
-    status: pending
+    status: completed
   - id: assistant-dock
     content: Add a resizable right-side assistant dock using the General chat icon and shared chat UI
-    status: pending
+    status: completed
   - id: email-context
     content: Inject lightweight current account, view, and selected-thread identifiers without copying message bodies
-    status: pending
+    status: completed
   - id: verification
     content: Cover tool policy, action rendering, panel lifecycle, persistence, accessibility, and responsive behavior
-    status: pending
+    status: completed
 isProject: true
 ---
 
@@ -65,3 +65,12 @@ isProject: true
 - The prompt knows the active account/view/thread identifiers but does not contain raw message bodies.
 - The dock is keyboard accessible, returns focus on close, can be resized, and becomes a full-width overlay on narrow screens.
 - Existing Email reader dock, virtual list, sync, and compose behavior remain functional.
+
+## Shipped implementation
+
+- One Stream renders validated digest suggestions as counted rows and shows pending mutations under **Ready for review**.
+- Email chats persist with an app scope and dedicated Email mode, with New and History controls in the assistant header.
+- The assistant dock reuses the shared transcript, composer, attachments, generation stream, tool approvals, and question UI.
+- Account, view, folder, thread, subject, and message identifiers are sanitized and fenced in an ephemeral system message. Raw bodies and HTML are never injected.
+- The dock is drag-resizable on desktop, becomes a full-surface overlay at the narrow breakpoint, restores focus when closed, and respects reduced motion.
+- Focused Email, mode-policy, session, prompt-routing, server-validation, and TypeScript checks cover the implementation. Browser review covered dark and light themes plus desktop and narrow layouts, followed by a composer-density and compact-rail correction pass.

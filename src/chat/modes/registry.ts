@@ -32,6 +32,14 @@ const MODE_DEFINITIONS: ModeDefinition[] = [
     toolPolicy: allowGroupsToolPolicy('desktop', MODE_ALLOWED_GROUPS.desktop),
   },
   {
+    id: 'email',
+    label: 'Email',
+    description:
+      'Email assistant with review-first mail actions plus calendar, web, document, and Brain tools.',
+    promptId: 'email',
+    toolPolicy: allowGroupsToolPolicy('email', MODE_ALLOWED_GROUPS.email),
+  },
+  {
     id: 'build',
     label: 'Build',
     description: 'Default development mode with broad tool access.',
@@ -99,6 +107,7 @@ export function listComposerModes(): ModeDefinition[] {
       m.id !== 'reef' &&
       m.id !== 'super-plan' &&
       m.id !== 'desktop' &&
+      m.id !== 'email' &&
       m.id !== 'onboarding',
   );
 }

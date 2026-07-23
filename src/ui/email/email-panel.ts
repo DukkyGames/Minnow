@@ -21,9 +21,16 @@ import { setAlwaysLoadRemoteImages } from './email-layout';
 import { mountEmailRailResizer, syncEmailShellWidthVars } from './email-panel-resize';
 import { folderLabel } from './email-layout';
 import { ALL_INBOXES, renderUnifiedInbox } from './email-unified';
+import {
+  mountEmailAssistantPanel,
+  type EmailAssistantPanelController,
+} from './email-assistant-panel';
+import type { EmailAssistantContextSnapshot } from './email-assistant-context';
 
 /** Unsubscribe handles for SSE listeners keyed by panel mount element. */
 const panelEventUnsubs = new WeakMap<HTMLElement, () => void>();
+/** Assistant controllers keyed by panel mount so remounts release global listeners. */
+const panelAssistantControllers = new WeakMap<HTMLElement, EmailAssistantPanelController>();
 /** Accounts that already received an automatic backfill kick this session. */
 const autoSyncAccounts = new Set<string>();
 
@@ -431,6 +438,10 @@ export async function renderEmailPanel(
   mount: HTMLElement,
   options: EmailPanelOptions = {},
 ): Promise<void> {
+  panelEventUnsubs.get(mount)?.();
+  panelEventUnsubs.delete(mount);
+  panelAssistantControllers.get(mount)?.dispose();
+  panelAssistantControllers.delete(mount);
   mount.replaceChildren(el('p', 'email-loading', 'Loading…'));
 
   let accounts: EmailAccount[];
@@ -472,6 +483,36 @@ export async function renderEmailPanel(
   let pendingThreadId: string | undefined;
   /** SSE/sync wanted a refresh while the reader was open — run it on close. */
   let pendingInboxRefresh = false;
+  let assistantPanel: EmailAssistantPanelController | null = null;
+
+  /** Base metadata published before the inbox supplies a selected thread. */
+  const baseAssistantContext = (): EmailAssistantContextSnapshot => ({
+    ...(unified ? {} : { accountId: activeAccount.id }),
+    accountLabel: unified ? 'All inboxes' : activeAccount.label,
+    view:
+      surfaceMode === 'automations'
+        ? 'Automations'
+        : surfaceMode === 'setup'
+          ? 'Account settings'
+          : activeNav.startsWith('folder:')
+            ? folderLabel(activeNav.slice('folder:'.length))
+            : activeNav === 'waiting'
+              ? 'Waiting on'
+              : activeNav === 'unread'
+                ? 'Unread'
+                : activeNav === 'flagged'
+                  ? 'Flagged'
+                  : activeNav === 'snoozed'
+                    ? 'Snoozed'
+                    : 'Needs attention',
+    ...(surfaceMode === 'inbox' ? { folder: navFolder(activeNav) } : {}),
+  });
+
+  /** Keep the assistant account, review queue, and short context in sync. */
+  const syncAssistantScope = (): void => {
+    assistantPanel?.setAccount(unified ? null : activeAccount);
+    assistantPanel?.setContext(baseAssistantContext());
+  };
 
   /**
    * Status pass-through that also deep-links auth/connection failures to the
@@ -542,6 +583,7 @@ export async function renderEmailPanel(
       rail.setAccount(unified ? ALL_INBOXES : activeAccount.id, unified, accounts);
       surfaceMode = 'inbox';
       accountFormMode = 'none';
+      syncAssistantScope();
       void loadFolders();
       renderSurface();
     },
@@ -550,6 +592,7 @@ export async function renderEmailPanel(
       surfaceMode = 'inbox';
       accountFormMode = 'none';
       pendingComposeNew = true;
+      syncAssistantScope();
       renderSurface();
     },
     onSelectNav: (navId) => applyNav(navId),
@@ -562,6 +605,7 @@ export async function renderEmailPanel(
       accountFormMode = 'none';
       activeNav = 'automations';
       rail.setActiveNav('automations');
+      syncAssistantScope();
       renderSurface();
     },
     onOpenSettings: () => openSettings(),
@@ -588,6 +632,7 @@ export async function renderEmailPanel(
     } else {
       scope = { kind: 'triage' };
     }
+    syncAssistantScope();
     renderSurface();
   }
 
@@ -644,6 +689,7 @@ export async function renderEmailPanel(
     accountFormMode = 'edit';
     activeNav = 'settings';
     rail.setActiveNav('settings');
+    syncAssistantScope();
     surface.classList.remove('has-reader');
     const wrap = el('div', 'email-setup-shell email-surface-scroll');
     surface.replaceChildren(wrap);
@@ -746,10 +792,18 @@ export async function renderEmailPanel(
       openComposeNew,
       initialThreadId,
       onReaderClosed: onInboxReaderClosed,
+      onContextChange: (snapshot) => assistantPanel?.setContext(snapshot),
     });
   }
 
-  panelEventUnsubs.get(mount)?.();
+  assistantPanel = mountEmailAssistantPanel(shell, workspace, {
+    account: activeAccount,
+    context: baseAssistantContext(),
+    onStatus: handleStatus,
+    onMailRefresh: () => requestInboxRefresh(true),
+  });
+  panelAssistantControllers.set(mount, assistantPanel);
+
   panelEventUnsubs.set(
     mount,
     subscribeEmailEvents((type, payload) => {
@@ -784,6 +838,9 @@ export async function renderEmailPanel(
         type === 'pending_actions_updated' ||
         type === 'followups_updated'
       ) {
+        if (type === 'pending_actions_updated') {
+          void assistantPanel?.refreshReview();
+        }
         // Only refresh the live triage stream; skip while the reader is open.
         requestInboxRefresh(false);
       }

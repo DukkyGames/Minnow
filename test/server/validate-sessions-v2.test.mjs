@@ -65,6 +65,31 @@ describe('validateSessionState workspace schema', () => {
     assert.equal(out.chats[0].boardGroupId, 'grp-1');
   });
 
+  it('preserves Email mode and app scope for Email-owned conversations', () => {
+    const out = validateSessionState({
+      version: 6,
+      activeId: 'email-chat-1',
+      sidebarCollapsed: false,
+      lastActiveChatIdByApp: { email: 'email-chat-1' },
+      chats: [
+        {
+          id: 'email-chat-1',
+          name: 'Inbox help',
+          appScope: 'email',
+          workspacePath: 'C:/Users/test/.minnow/chats',
+          modelId: 'test-model',
+          modeId: 'email',
+          history: [{ role: 'user', content: 'Summarize this thread' }],
+          updatedAt: 1,
+        },
+      ],
+    });
+
+    assert.equal(out.chats[0].modeId, 'email');
+    assert.equal(out.chats[0].appScope, 'email');
+    assert.equal(out.lastActiveChatIdByApp.email, 'email-chat-1');
+  });
+
   it('preserves MIN-275 worktree isolation fields on chats and board tasks', () => {
     const worktreeRoot =
       'C:/Users/test/.minnow/worktrees/repo-abc/grp-1/task-W5-A';

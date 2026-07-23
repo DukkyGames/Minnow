@@ -2,7 +2,10 @@
  * Chat viewport scroll: stick-to-bottom while streaming (80px threshold; terminal uses 24px).
  */
 
-import { isChatAppForeground } from './chat-mount';
+import {
+  isChatAppForeground,
+  isEmailAssistantForeground,
+} from './chat-mount';
 import { isDesktopChatActive } from '../os/desktop-state';
 import { getForegroundAppId } from '../os/instances';
 
@@ -33,6 +36,9 @@ export function getChatScrollRoot(): HTMLElement | null {
     `[data-testid="${BOARD_INIT_SPLIT_CHAT_TESTID}"]`,
   ) as HTMLElement | null;
   if (splitPane) return splitPane;
+  if (isEmailAssistantForeground()) {
+    return document.querySelector<HTMLElement>('.email-assistant-scroll');
+  }
   if (isDesktopChatActive() && getForegroundAppId() !== 'code') {
     return document.querySelector('.mn-os-chat-transcript') ?? chatAreaEl;
   }
@@ -77,6 +83,7 @@ function isBoardViewChromeActive(): boolean {
 
 /** Jump chip for the active transcript surface (Code vs Chat app). */
 function getActiveJumpChip(): HTMLButtonElement | null {
+  if (isEmailAssistantForeground()) return null;
   if (isChatAppForeground()) return chatAppJumpChipEl;
   return jumpChipEl;
 }

@@ -10,7 +10,10 @@ import {
 } from '../os/desktop-state';
 import { getForegroundAppId, subscribeInstances } from '../os/instances';
 import { getActiveChat } from '../state/sessions';
-import { isChatAppForeground } from '../ui/chat-mount';
+import {
+  isChatAppForeground,
+  isEmailAssistantForeground,
+} from '../ui/chat-mount';
 import { isMainColumnOverlaySuppressingChatDom } from '../ui/main-column-overlay';
 import { isBoardViewActive } from '../ui/view-mode-toggle';
 
@@ -83,6 +86,9 @@ export function isAskQuestionDomVisible(chatId: string): boolean {
 
   const active = getActiveChat();
   if (active.id !== trimmed) return false;
+  if (getForegroundAppId() === 'email') {
+    return active.appScope === 'email' && isEmailAssistantForeground();
+  }
   if (planScreenHooks.isSuppressingChatDom?.(trimmed)) return false;
   if (isMainColumnOverlaySuppressingChatDom()) return false;
   if (active.kind === 'expert-lab' && expertsPageOpen) return false;

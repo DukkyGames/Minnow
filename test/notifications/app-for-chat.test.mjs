@@ -19,6 +19,25 @@ describe('appIdForChat', () => {
     );
   });
 
+  test('returns email for Email-scoped chats in the shared chats workspace', async () => {
+    const { appIdForChat } = await import('../../src/notifications/app-for-chat.ts');
+    assert.equal(
+      appIdForChat({
+        id: 'email-chat-1',
+        name: 'Inbox help',
+        appScope: 'email',
+        workspacePath: 'C:/Users/me/.minnow/chats',
+        modelId: '',
+        modeId: 'email',
+        history: [],
+        lastStats: null,
+        modelInfo: {},
+        updatedAt: 1,
+      }),
+      'email',
+    );
+  });
+
   test('returns code for project workspace chats', async () => {
     const { appIdForChat } = await import('../../src/notifications/app-for-chat.ts');
     assert.equal(

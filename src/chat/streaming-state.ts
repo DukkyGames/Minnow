@@ -4,8 +4,13 @@
 
 import { expertsPageOpen, streamingChatIds } from '../app-state';
 import { getActiveChat } from '../state/sessions';
+import { getForegroundAppId } from '../os/instances';
 import { isOrchestratePlanScreenSuppressingChatDom } from '../ui/orchestrate-plan-screen';
-import { isChatAppForeground, shouldPaintDesktopChatSurface } from '../ui/chat-mount';
+import {
+  isChatAppForeground,
+  isEmailAssistantForeground,
+  shouldPaintDesktopChatSurface,
+} from '../ui/chat-mount';
 import { isMainColumnOverlaySuppressingChatDom } from '../ui/main-column-overlay';
 import { isBoardViewActive } from '../ui/view-mode-toggle';
 import { reportBackgroundError } from '../boot/report-background-error';
@@ -88,6 +93,11 @@ export function isBackgroundStreamBlockingSend(): boolean {
 export function isStreamDomVisible(chatId: string): boolean {
   const active = getActiveChat();
   if (active.id !== chatId) return false;
+  // Email owns chat DOM only while its assistant dock is visible. Closing the
+  // dock leaves the generation running as a background stream.
+  if (getForegroundAppId() === 'email') {
+    return active.appScope === 'email' && isEmailAssistantForeground();
+  }
   // Desktop chat owns its transcript — do not let Code board/plan overlays suppress it.
   if (shouldPaintDesktopChatSurface()) return true;
   if (isOrchestratePlanScreenSuppressingChatDom(chatId)) return false;

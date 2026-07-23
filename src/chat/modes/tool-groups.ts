@@ -101,6 +101,8 @@ export const TOOL_GROUP_IDS = {
   diagnostics: ['read_diagnostics'],
   email: [
     'list_mail',
+    'search_mail',
+    'get_thread',
     'draft_reply',
     'summarize_inbox',
     'generate_reply_variants',
@@ -132,6 +134,17 @@ export const DESKTOP_ALLOWED_GROUPS: readonly ToolGroupId[] = TOOL_GROUP_ID_LIST
 
 export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
   desktop: DESKTOP_ALLOWED_GROUPS,
+  email: [
+    'util-basic',
+    'web',
+    'files-read',
+    'files-write',
+    'ask',
+    'brain-core',
+    'brain-admin',
+    'email',
+    'calendar',
+  ],
   general: [
     'util-basic',
     'web',

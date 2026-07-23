@@ -8,6 +8,7 @@ import {
   getActiveComposerSurface,
 } from './composer-surface';
 import { isDesktopChatActive } from '../os/desktop-state';
+import { getForegroundAppId } from '../os/instances';
 import { isChatAppForeground, shouldPaintDesktopChatSurface } from './chat-mount';
 import { setStatus } from './status';
 import { refreshActiveBoardIfMounted } from './orchestrate-board';
@@ -71,6 +72,14 @@ function syncChatAppStopButton(streaming: boolean): void {
   stopBtn.disabled = !streaming;
 }
 
+/** Show or hide the Email dock's dedicated stop control. */
+function syncEmailAssistantStopButton(streaming: boolean): void {
+  const stopBtn = document.getElementById('emailAssistantStopBtn') as HTMLButtonElement | null;
+  if (!stopBtn) return;
+  stopBtn.hidden = !streaming;
+  stopBtn.disabled = !streaming;
+}
+
 /** Toggle send vs stop affordance on the composer primary button. */
 export function setComposerStreamingMode(mode: ComposerStreamingMode): void {
   const { sendBtnEl: sendBtn, inputEl: input } = getActiveComposerSurface();
@@ -78,9 +87,11 @@ export function setComposerStreamingMode(mode: ComposerStreamingMode): void {
 
   const isStreaming = mode === 'streaming';
   const chatApp = isChatAppForeground() && !isDesktopChatActive();
+  const emailAssistant = getForegroundAppId() === 'email';
 
-  if (chatApp) {
-    syncChatAppStopButton(isStreaming);
+  if (chatApp || emailAssistant) {
+    if (chatApp) syncChatAppStopButton(isStreaming);
+    if (emailAssistant) syncEmailAssistantStopButton(isStreaming);
     sendBtn.disabled = isStreaming ? false : recoveryBlocked;
     sendBtn.setAttribute('aria-busy', isStreaming ? 'true' : 'false');
     sendBtn.dataset.mode = 'send';

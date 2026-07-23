@@ -337,6 +337,8 @@ export interface BuildApiMessagesOptions {
   userRulesContent?: string;
   /** Ephemeral user line after an empty post-tool model reply (not stored in history). */
   ephemeralContinueInstruction?: string;
+  /** Surface-owned context injected as a system message without persisting in history. */
+  ephemeralContext?: string;
 }
 
 interface ChatCompletionBody extends CompletionBodyWithResponseFormat {
@@ -619,6 +621,8 @@ export interface RunChatTurnOptions {
   goalDriven?: boolean;
   /** Composer input/send override (defaults to foreground app surface). */
   composerSurface?: Partial<ComposerSurface>;
+  /** Surface-owned context reused across every round of this turn only. */
+  ephemeralContext?: string;
 }
 
 /**
@@ -637,6 +641,10 @@ export function buildApiMessages(
     legacySysPrompt: sysPrompt,
     userRulesContent: options?.userRulesContent,
   });
+  const ephemeralContext = options?.ephemeralContext?.trim();
+  if (ephemeralContext) {
+    messages.push({ role: 'system', content: ephemeralContext });
+  }
 
   const pending = getPendingAttachments().filter((a) => a.kind !== 'error');
   const outboundHistory = copyHistoryForOutboundApi(chat.history);
@@ -1110,6 +1118,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     suppressUserEcho = false,
     superPlanStage,
     goalDriven = false,
+    ephemeralContext,
   } = options;
 
   const hideUserEcho = suppressUserEcho || Boolean(superPlanStage);
@@ -1644,6 +1653,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         composedSystemPrompt: sysPrompt,
         userRulesContent: userRulesContent ?? undefined,
         ephemeralContinueInstruction: ephemeralPostToolInstruction,
+        ephemeralContext,
       });
 
       let preMessages = rawMessages;
@@ -2637,8 +2647,13 @@ export async function resumeParentChatWithMessage(
 }
 
 /** Send the composer text with tool calling (SSE loop until final answer or user cancel). */
+export interface ComposerSendOptions extends Partial<ComposerSurface> {
+  /** Surface-owned context injected for this turn without adding it to chat history. */
+  ephemeralContext?: string;
+}
+
 export async function sendMessageWithTools(
-  composer?: Partial<ComposerSurface>,
+  composer?: ComposerSendOptions,
 ): Promise<void> {
   const { inputEl: input } = resolveComposerSurface(composer);
   if (!input) {
@@ -2863,5 +2878,6 @@ export async function sendMessageWithTools(
     skillBody,
     composerSurface: composer,
     goalDriven,
+    ephemeralContext: composer?.ephemeralContext,
   });
 }

@@ -45,3 +45,11 @@ describe('super-plan tool policy', () => {
     assert.equal(isToolAllowedForMode('super-plan', 'save_file'), true);
   });
 });
+
+describe('Email surface mode', () => {
+  test('is registered but hidden from the Code composer strip', () => {
+    assert.equal(getMode('email').label, 'Email');
+    assert.ok(listModes().some((mode) => mode.id === 'email'));
+    assert.ok(!listComposerModes().some((mode) => mode.id === 'email'));
+  });
+});

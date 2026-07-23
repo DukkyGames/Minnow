@@ -268,8 +268,13 @@ function createAttachChip(attachment: Attachment): HTMLElement {
   return chip;
 }
 
-/** Composer preview strip ids (Code + Chat app + desktop share one pending list). */
-const ATTACH_PREVIEW_IDS = ['attachPreview', 'chatAppAttachPreview', 'desktopAttachPreview'] as const;
+/** Composer preview strip ids shared by Code and MinnowOS chat surfaces. */
+const ATTACH_PREVIEW_IDS = [
+  'attachPreview',
+  'chatAppAttachPreview',
+  'desktopAttachPreview',
+  'emailAssistantAttachPreview',
+] as const;
 
 /** Renders chips into composer preview strips when markup exists (SA-15). */
 export function renderAttachPreview(): void {

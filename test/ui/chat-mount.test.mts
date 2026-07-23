@@ -26,6 +26,12 @@ function setupDom(win: import('happy-dom').Window): void {
     <button id="sendBtn"></button>
     <button id="chatAppSendBtn"></button>
     <button id="desktopSendBtn"></button>
+    <aside class="email-assistant-dock is-open" aria-hidden="false">
+      <div id="emailAssistantMessageCol"></div>
+      <div class="email-assistant-scroll"></div>
+      <textarea id="emailAssistantInput"></textarea>
+      <button id="emailAssistantSendBtn"></button>
+    </aside>
   `;
 }
 
@@ -111,5 +117,33 @@ describe('chat-mount foreground', () => {
     const { isChatAppForeground } = await import('../../src/ui/chat-mount.ts');
 
     assert.equal(isChatAppForeground(), true);
+  });
+
+  test('Email foreground routes to the assistant mount and registered composer only while open', async () => {
+    const {
+      getActiveChatMountElement,
+      isEmailAssistantForeground,
+    } = await import('../../src/ui/chat-mount.ts');
+    const {
+      getActiveComposerSurface,
+      registerComposerSurface,
+    } = await import('../../src/ui/composer-surface.ts');
+    const { getChatScrollRoot } = await import('../../src/ui/chat-scroll.ts');
+    const emailInput = document.getElementById('emailAssistantInput') as HTMLTextAreaElement;
+    const emailSend = document.getElementById('emailAssistantSendBtn') as HTMLButtonElement;
+    registerComposerSurface('email', { inputEl: emailInput, sendBtnEl: emailSend });
+
+    launchInstance('email');
+
+    assert.equal(isEmailAssistantForeground(), true);
+    assert.equal(getActiveChatMountElement().id, 'emailAssistantMessageCol');
+    assert.equal(getActiveComposerSurface().inputEl?.id, 'emailAssistantInput');
+    assert.equal(getChatScrollRoot()?.className, 'email-assistant-scroll');
+
+    const dock = document.querySelector<HTMLElement>('.email-assistant-dock');
+    dock?.classList.remove('is-open');
+    dock?.setAttribute('aria-hidden', 'true');
+    assert.equal(isEmailAssistantForeground(), false);
+    registerComposerSurface('email', { inputEl: null, sendBtnEl: null });
   });
 });

@@ -19,10 +19,14 @@ import { isSuperPlanStageId, type SuperPlanStageId, type SuperPlanState } from '
 import {
   CHAT_APP_ID,
   DESKTOP_APP_ID,
+  EMAIL_APP_ID,
   createAssistantChat,
   createDesktopChat,
+  createEmailAssistantChat,
   getAssistantChats as filterAssistantChats,
   getChatsForChatsWorkspace as filterChatsForChatsWorkspace,
+  getEmailAssistantChats as filterEmailAssistantChats,
+  getListedEmailAssistantChats as filterListedEmailAssistantChats,
   getChatLastMessageAt,
   getChatsForWorkspace as filterChatsForWorkspace,
   getSidebarListedChatsForWorkspace as filterSidebarListedChatsForWorkspace,
@@ -35,6 +39,7 @@ import {
   migrateSessionStateV1ToV2 as migrateSessionJsonToV2,
   rememberActiveChatForApp as rememberActiveChatForAppInState,
   resolveActiveAssistantChatId,
+  resolveActiveEmailAssistantChatId,
   resolveActiveChatIdForWorkspace as pickActiveChatIdForWorkspace,
   type RawSessionJson,
 } from './session-workspace-scope';
@@ -1302,6 +1307,7 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
       typeof raw.name === 'string' && raw.name.trim()
         ? raw.name.trim()
         : PLACEHOLDER_CHAT_NAME,
+    ...(raw.appScope === 'email' ? { appScope: 'email' as const } : {}),
     workspacePath,
     modelId: typeof raw.modelId === 'string' ? raw.modelId : '',
     providerId: typeof raw.providerId === 'string' ? raw.providerId : undefined,
@@ -1587,6 +1593,10 @@ function maybeRememberActiveChatForForegroundApp(
     rememberActiveChatForAppInState(state, DESKTOP_APP_ID, chat.id);
     return;
   }
+  if (getForegroundAppId() === EMAIL_APP_ID && chat.appScope === 'email') {
+    rememberActiveChatForAppInState(state, EMAIL_APP_ID, chat.id);
+    return;
+  }
   if (getForegroundAppId() !== CHAT_APP_ID && !isChatAppForeground()) return;
   rememberActiveChatForAppInState(state, CHAT_APP_ID, chat.id);
 }
@@ -1657,6 +1667,22 @@ export function getChatsForChatsWorkspace(
   return filterChatsForChatsWorkspace(state, chatsWorkspacePath);
 }
 
+/** All Email-scoped chats for the chats workspace sandbox. */
+export function getEmailAssistantChats(
+  chatsWorkspacePath: string,
+  state: SessionState = requireSessionState(),
+): Chat[] {
+  return filterEmailAssistantChats(state, chatsWorkspacePath);
+}
+
+/** Email history rows with a committed turn or unsent draft. */
+export function getListedEmailAssistantChats(
+  chatsWorkspacePath: string,
+  state: SessionState = requireSessionState(),
+): Chat[] {
+  return filterListedEmailAssistantChats(state, chatsWorkspacePath);
+}
+
 /** Persist last active chat id for a MinnowOS app. */
 export function rememberActiveChatForApp(appId: string, chatId: string): void {
   const state = requireSessionState();
@@ -1684,6 +1710,40 @@ export function activateAssistantChatForApp(chatsWorkspacePath: string): Chat {
   rememberActiveChatForAppInState(state, CHAT_APP_ID, nextId);
   scheduleSaveSessions();
   return getActiveChat();
+}
+
+/** Activate the remembered Email assistant chat or create one in Email mode. */
+export function activateEmailAssistantChatForApp(chatsWorkspacePath: string): Chat {
+  const state = requireSessionState();
+  const nextId = resolveActiveEmailAssistantChatId(
+    chatsWorkspacePath,
+    state,
+    (workspaceKey) => createEmailAssistantChat(workspaceKey, newChatId()),
+  );
+  state.activeId = nextId;
+  rememberActiveChatForAppInState(state, EMAIL_APP_ID, nextId);
+  scheduleSaveSessions();
+  return getActiveChat();
+}
+
+/** Create, activate, and persist a fresh Email-scoped assistant chat. */
+export function createEmailAssistantChatForApp(
+  chatsWorkspacePath: string,
+  fallbackModelId = '',
+): Chat {
+  const state = requireSessionState();
+  const chat = createEmailAssistantChat(
+    chatsWorkspacePath,
+    newChatId(),
+    fallbackModelId,
+  );
+  state.chats.unshift(chat);
+  state.activeId = chat.id;
+  pruneEphemeralEmptyChats(state, chat.id);
+  rememberActiveChatForAppInState(state, EMAIL_APP_ID, chat.id);
+  scheduleSaveSessions();
+  notifySessionCreated(chat.id, chat.workspacePath);
+  return chat;
 }
 
 /**
