@@ -60,6 +60,7 @@ import {
   blockImagesFromSender,
   listImageAllowlist,
 } from './image-allowlist.js';
+import { getEmailPreferences, updateEmailPreferences } from './preferences.js';
 import { improveComposeText, suggestEmailSubject } from './compose-ai.js';
 import {
   setMessageFlags,
@@ -186,6 +187,23 @@ export function createEmailMiddleware() {
         const params = parseQuery(req.url ?? '');
         const senders = await blockImagesFromSender(String(params.get('sender') ?? ''));
         sendJson(res, 200, { senders });
+        return;
+      }
+
+      if (url === '/api/email/preferences' && req.method === 'GET') {
+        sendJson(res, 200, await getEmailPreferences());
+        return;
+      }
+
+      if (url === '/api/email/preferences' && req.method === 'PATCH') {
+        const body = await readJsonBody(req);
+        const prefs = await updateEmailPreferences({
+          alwaysLoadRemoteImages:
+            body.alwaysLoadRemoteImages === undefined
+              ? undefined
+              : body.alwaysLoadRemoteImages === true,
+        });
+        sendJson(res, 200, prefs);
         return;
       }
 

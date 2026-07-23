@@ -588,6 +588,11 @@ route('GET', /\/accounts\/[^/]+\/contacts$/, () => json({ contacts: [] }));
 route('GET', /\/image-allowlist$/, () => json({ senders: [] }));
 route('POST', /\/image-allowlist$/, (_m, init) => json({ senders: [String(readBody(init).sender ?? '')] }));
 route('DELETE', /\/image-allowlist/, () => json({ senders: [] }));
+route('GET', /\/preferences$/, () => json({ alwaysLoadRemoteImages: false }));
+route('PATCH', /\/preferences$/, (_m, init) => {
+  const body = readBody(init);
+  return json({ alwaysLoadRemoteImages: body.alwaysLoadRemoteImages === true });
+});
 
 route('POST', /\/messages\/[^/]+\/flags$/, () => json({ ok: true }));
 route('POST', /\/messages\/([^/]+)\/archive$/, (m) => {

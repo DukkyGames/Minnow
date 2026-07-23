@@ -579,6 +579,33 @@ export async function blockImagesFromSender(sender: string): Promise<string[]> {
   return data.senders;
 }
 
+export interface EmailPreferences {
+  alwaysLoadRemoteImages: boolean;
+}
+
+/** Global email reader/privacy preferences. */
+export async function fetchEmailPreferences(): Promise<EmailPreferences> {
+  const res = await fetch('/api/email/preferences');
+  const data = await parseJson<EmailPreferences>(res);
+  return {
+    alwaysLoadRemoteImages: data.alwaysLoadRemoteImages === true,
+  };
+}
+
+export async function updateEmailPreferences(
+  patch: Partial<EmailPreferences>,
+): Promise<EmailPreferences> {
+  const res = await fetch('/api/email/preferences', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  const data = await parseJson<EmailPreferences>(res);
+  return {
+    alwaysLoadRemoteImages: data.alwaysLoadRemoteImages === true,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Attachments
 // ---------------------------------------------------------------------------

@@ -13,6 +13,7 @@ import type {
 import {
   allowImagesFromSender,
   downloadEmailAttachment,
+  fetchEmailPreferences,
   fetchEmailThread,
   fetchEmailThreads,
   fetchImageAllowlist,
@@ -78,6 +79,17 @@ const LIST_ROW_HEIGHT = 64;
  * request can never cause images to load before the allowlist is known.
  */
 let imageAllowlist: string[] | null = null;
+
+/**
+ * Global "always load remote images" preference. `null` until the first fetch
+ * resolves so we never flash images before the stored choice is known.
+ */
+let alwaysLoadRemoteImages: boolean | null = null;
+
+/** Update the cached global image preference (e.g. after a settings toggle). */
+export function setAlwaysLoadRemoteImages(enabled: boolean): void {
+  alwaysLoadRemoteImages = enabled;
+}
 
 /** Messages the user opted into for this session only ("Load images" once). */
 const imagesLoadedFor = new Set<string>();
@@ -164,7 +176,10 @@ export function renderBodyWithRemoteControls(
 
   // Per-message state: whether remote images have been let through, and whether
   // the user has opted out of dark-theme recolouring. Both feed one repaint.
-  let loaded = imagesLoadedFor.has(msg.id) || (imageAllowlist?.includes(sender) ?? false);
+  let loaded =
+    alwaysLoadRemoteImages === true ||
+    imagesLoadedFor.has(msg.id) ||
+    (imageAllowlist?.includes(sender) ?? false);
   // When true, keep the sender's original light canvas even while the app is dark.
   let forceOriginalColors = false;
 
@@ -286,7 +301,7 @@ export function renderBodyWithRemoteControls(
   });
   detachObserver.observe(document.body, { childList: true, subtree: true });
 
-  // Prime the allowlist once, then repaint if this sender turns out to be on it.
+  // Prime the allowlist and global image preference once, then repaint if needed.
   if (imageAllowlist === null) {
     void fetchImageAllowlist()
       .then((senders) => {
@@ -298,6 +313,20 @@ export function renderBodyWithRemoteControls(
       })
       .catch(() => {
         imageAllowlist = [];
+      });
+  }
+
+  if (alwaysLoadRemoteImages === null) {
+    void fetchEmailPreferences()
+      .then((prefs) => {
+        alwaysLoadRemoteImages = prefs.alwaysLoadRemoteImages;
+        if (!loaded && prefs.alwaysLoadRemoteImages) {
+          loaded = true;
+          paint();
+        }
+      })
+      .catch(() => {
+        alwaysLoadRemoteImages = false;
       });
   }
 
