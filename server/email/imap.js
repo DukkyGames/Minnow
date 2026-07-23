@@ -26,6 +26,7 @@ import {
   countCachedMessages,
   getCachedBody,
   getCachedMessage,
+  getMinCachedUid,
   getSyncState,
   listCachedUids,
   mergeMessagesIntoCache,
@@ -35,11 +36,15 @@ import {
   saveCachedBody,
   setSyncState,
 } from './cache.js';
+import { emitEmailEvent } from './events.js';
 import { listFoldersCached, withMailbox } from './imap-session.js';
 import { withImapErrors } from './imap-errors.js';
 
-/** Default page size for the initial folder fill. */
+/** Default page size for one backfill/incremental batch. */
 export const DEFAULT_FETCH_LIMIT = 50;
+
+/** Maximum messages fetched in a single sync batch. */
+export const MAX_SYNC_BATCH = 500;
 
 /** Maximum messages per agent/tool request. */
 export const MAX_TOOL_LIMIT = 20;
@@ -47,8 +52,8 @@ export const MAX_TOOL_LIMIT = 20;
 /** How many recent UIDs the FLAGS reconcile pass covers. */
 export const FLAGS_RECONCILE_WINDOW = 200;
 
-/** Cap on new messages ingested in one sync pass (protects a cold 5k mailbox). */
-export const MAX_NEW_PER_SYNC = 500;
+/** Cap on new messages ingested in one incremental pass (protects a cold 5k mailbox). */
+export const MAX_NEW_PER_SYNC = MAX_SYNC_BATCH;
 
 /** Skip inline text-part download above this size; the body loads lazily instead. */
 const MAX_PREVIEW_PART_BYTES = 256 * 1024;
@@ -390,10 +395,156 @@ async function fetchFlagsForUids(client, uids) {
 }
 
 /**
+ * Emit a sync progress event for SSE subscribers.
+ * @param {string} accountId
+ * @param {string} folder
+ * @param {Record<string, unknown>} detail
+ */
+function emitSyncProgress(accountId, folder, detail) {
+  emitEmailEvent('sync_progress', { accountId, folder, ...detail });
+}
+
+/**
+ * Resolve the lowest UID the backfill has reached, inferring from cache when
+ * older stores never recorded the column (pre-backfill migration).
+ * @param {string} accountId
+ * @param {string} folder
+ * @param {{ lowestUid?: number, backfillComplete?: boolean }} state
+ */
+async function resolveBackfillCursor(accountId, folder, state) {
+  if (state.backfillComplete) {
+    return { lowestUid: state.lowestUid ?? 0, backfillComplete: true };
+  }
+  let lowestUid = Number(state.lowestUid) || 0;
+  if (lowestUid <= 0) {
+    lowestUid = await getMinCachedUid(accountId, folder);
+  }
+  return { lowestUid, backfillComplete: false };
+}
+
+/**
+ * Run one incremental + backfill batch inside an open mailbox session.
+ * @param {import('imapflow').ImapFlow} client
+ * @param {string} accountId
+ * @param {string} folder
+ * @param {{
+ *   state: Awaited<ReturnType<typeof getSyncState>>,
+ *   batchSize: number,
+ *   reset: boolean,
+ * }} ctx
+ */
+async function syncFolderBatch(client, accountId, folder, ctx) {
+  const mailbox = client.mailbox;
+  const uidValidity = String(mailbox?.uidValidity ?? '');
+  const modseq = mailbox?.highestModseq ? String(mailbox.highestModseq) : '';
+
+  if (!mailbox?.exists) {
+    return {
+      rows: [],
+      highestUid: 0,
+      lowestUid: 0,
+      backfillComplete: true,
+      uidValidity,
+      modseq,
+      reset: ctx.reset,
+      folderTotal: 0,
+    };
+  }
+
+  const folderTotal = Number(mailbox.exists) || 0;
+  let { lowestUid, backfillComplete } = await resolveBackfillCursor(accountId, folder, ctx.state);
+  let highestUid = Number(ctx.state.highestUid) || 0;
+  /** @type {Array<Record<string, unknown>>} */
+  const rows = [];
+
+  // New mail above the cursor lands first so the inbox feels live while older
+  // pages trickle in below.
+  if (highestUid > 0 && !ctx.reset) {
+    const { rows: incoming, highestUid: batchHigh } = await fetchEnvelopeRange(
+      client,
+      folder,
+      `${highestUid + 1}:*`,
+      MAX_NEW_PER_SYNC,
+    );
+    const fresh = incoming.filter((row) => Number(row.uid) > highestUid);
+    rows.push(...fresh);
+    if (fresh.length) {
+      highestUid = Math.max(highestUid, batchHigh);
+    }
+  }
+
+  if (!backfillComplete) {
+    const search = await client.search({ all: true }, { uid: true });
+    const allUids = Array.isArray(search) ? search.slice().sort((a, b) => a - b) : [];
+    const minUid = allUids[0] ?? 0;
+    const maxUid = allUids[allUids.length - 1] ?? 0;
+
+    if (!allUids.length) {
+      backfillComplete = true;
+    } else if (lowestUid <= 0) {
+      // Cold start: grab the newest page, then walk downward on later batches.
+      const pageUids = allUids.slice(-ctx.batchSize);
+      const { rows: backfillRows, highestUid: batchHigh } = await fetchEnvelopeRange(
+        client,
+        folder,
+        pageUids.join(','),
+        ctx.batchSize,
+      );
+      rows.push(...backfillRows);
+      if (backfillRows.length) {
+        const batchLow = Math.min(...backfillRows.map((row) => Number(row.uid)));
+        const batchHighResolved = Math.max(...backfillRows.map((row) => Number(row.uid)));
+        lowestUid = batchLow;
+        highestUid = Math.max(highestUid, batchHighResolved, batchHigh);
+      }
+      backfillComplete = lowestUid > 0 && lowestUid <= minUid;
+    } else if (lowestUid > minUid) {
+      const end = lowestUid - 1;
+      const start = Math.max(minUid, end - ctx.batchSize + 1);
+      const { rows: backfillRows } = await fetchEnvelopeRange(
+        client,
+        folder,
+        `${start}:${end}`,
+        ctx.batchSize,
+      );
+      rows.push(...backfillRows);
+      if (backfillRows.length) {
+        lowestUid = Math.min(...backfillRows.map((row) => Number(row.uid)));
+      }
+      backfillComplete = lowestUid <= minUid;
+    } else {
+      backfillComplete = true;
+    }
+
+    if (backfillComplete) {
+      highestUid = Math.max(highestUid, maxUid);
+    }
+  }
+
+  return {
+    rows,
+    highestUid,
+    lowestUid,
+    backfillComplete,
+    uidValidity,
+    modseq,
+    reset: ctx.reset,
+    folderTotal,
+  };
+}
+
+/**
  * Incrementally sync one folder into the mail store.
  *
  * @param {string} accountId
- * @param {{ folder?: string, limit?: number, offset?: number, full?: boolean }} options
+ * @param {{
+ *   folder?: string,
+ *   limit?: number,
+ *   offset?: number,
+ *   full?: boolean,
+ *   untilComplete?: boolean,
+ *   onProgress?: (detail: Record<string, unknown>) => void,
+ * }} [options]
  */
 export async function syncFolderMessages(accountId, options = {}) {
   const account = await getEmailAccount(accountId);
@@ -404,72 +555,102 @@ export async function syncFolderMessages(accountId, options = {}) {
   await migrateJsonCacheIfNeeded(accountId);
 
   const folder = String(options.folder ?? account.folders[0] ?? 'INBOX');
-  const limit = Math.min(200, Math.max(1, Number(options.limit) || DEFAULT_FETCH_LIMIT));
+  const batchSize = Math.min(
+    MAX_SYNC_BATCH,
+    Math.max(1, Number(options.limit) || DEFAULT_FETCH_LIMIT),
+  );
+  const untilComplete = options.untilComplete === true;
+  const onProgress =
+    typeof options.onProgress === 'function' ? options.onProgress : null;
 
-  const state = await getSyncState(accountId, folder);
-  /** @type {{ rows: Array<Record<string, unknown>>, highestUid: number, uidValidity: string, modseq: string, reset: boolean }} */
-  const result = await withMailbox(accountId, folder, async (client) => {
-    const mailbox = client.mailbox;
-    const uidValidity = String(mailbox?.uidValidity ?? '');
-    const modseq = mailbox?.highestModseq ? String(mailbox.highestModseq) : '';
-    const reset = Boolean(state.uidValidity) && Boolean(uidValidity) && state.uidValidity !== uidValidity;
+  let state = await getSyncState(accountId, folder);
+  let totalSynced = 0;
+  let lastResult = /** @type {Record<string, unknown> | null} */ (null);
+  let pass = 0;
 
-    if (!mailbox?.exists) {
-      return { rows: [], highestUid: 0, uidValidity, modseq, reset };
-    }
+  do {
+    pass += 1;
 
-    const cursor = reset || options.full ? 0 : state.highestUid;
+    const batch = await withMailbox(accountId, folder, async (client) => {
+      const uidValidity = String(client.mailbox?.uidValidity ?? '');
+      const uidReset =
+        Boolean(state.uidValidity) && Boolean(uidValidity) && state.uidValidity !== uidValidity;
 
-    if (cursor > 0) {
-      const { rows, highestUid } = await fetchEnvelopeRange(
-        client,
-        folder,
-        `${cursor + 1}:*`,
-        MAX_NEW_PER_SYNC,
-      );
-      // `uid:N:*` always returns at least the highest existing UID even when
-      // nothing is newer, so drop anything at or below the cursor.
-      const fresh = rows.filter((row) => Number(row.uid) > cursor);
-      return { rows: fresh, highestUid: Math.max(highestUid, cursor), uidValidity, modseq, reset };
-    }
+      if (uidReset || (options.full === true && pass === 1)) {
+        await resetFolderCache(accountId, folder);
+        state = await getSyncState(accountId, folder);
+      }
 
-    // Cold start (or uidvalidity reset): newest `limit` messages.
-    const search = await client.search({ all: true }, { uid: true });
-    const uids = Array.isArray(search) ? search.slice().sort((a, b) => b - a) : [];
-    const pageUids = uids.slice(0, limit);
-    if (!pageUids.length) {
-      return { rows: [], highestUid: 0, uidValidity, modseq, reset };
-    }
-    const { rows, highestUid } = await fetchEnvelopeRange(
-      client,
+      return syncFolderBatch(client, accountId, folder, {
+        state,
+        batchSize,
+        reset: uidReset || (options.full === true && pass === 1),
+      });
+    });
+
+    await mergeMessagesIntoCache(accountId, batch.rows, folder, batch.highestUid || undefined);
+    await setSyncState(accountId, folder, {
+      uidValidity: batch.uidValidity,
+      highestModseq: batch.modseq,
+      highestUid: batch.highestUid,
+      lowestUid: batch.lowestUid,
+      backfillComplete: batch.backfillComplete,
+    });
+
+    const cachedTotal = await countCachedMessages(accountId, folder);
+    totalSynced += batch.rows.length;
+    const progress = {
+      accountId,
       folder,
-      pageUids.slice().sort((a, b) => a - b).join(','),
-      limit,
-    );
-    return { rows, highestUid, uidValidity, modseq, reset };
-  });
+      synced: batch.rows.length,
+      totalSynced,
+      cached: cachedTotal,
+      folderTotal: batch.folderTotal,
+      backfillComplete: batch.backfillComplete,
+      done: batch.backfillComplete && batch.rows.length === 0,
+    };
 
-  if (result.reset) {
-    await resetFolderCache(accountId, folder);
-  }
+    emitSyncProgress(accountId, folder, progress);
+    onProgress?.(progress);
 
-  await mergeMessagesIntoCache(accountId, result.rows, folder, result.highestUid);
-  await setSyncState(accountId, folder, {
-    uidValidity: result.uidValidity,
-    highestModseq: result.modseq,
-  });
+    const reconciled = await reconcileFolder(accountId, folder, {
+      changedSince: batch.reset ? '' : state.highestModseq,
+    });
 
-  const reconciled = await reconcileFolder(accountId, folder, {
-    changedSince: result.reset ? '' : state.highestModseq,
-  });
+    lastResult = {
+      messages: batch.rows,
+      total: cachedTotal,
+      folder,
+      synced: totalSynced,
+      batchSynced: batch.rows.length,
+      reconciled,
+      uidValidityReset: batch.reset,
+      folderTotal: batch.folderTotal,
+      backfillComplete: batch.backfillComplete,
+      cached: cachedTotal,
+    };
 
-  return {
-    messages: result.rows,
+    state = await getSyncState(accountId, folder);
+
+    if (!untilComplete) {
+      break;
+    }
+    if (batch.backfillComplete && batch.rows.length === 0) {
+      break;
+    }
+  } while (pass < 500);
+
+  return lastResult ?? {
+    messages: [],
     total: await countCachedMessages(accountId, folder),
     folder,
-    synced: result.rows.length,
-    reconciled,
-    uidValidityReset: result.reset,
+    synced: 0,
+    batchSynced: 0,
+    reconciled: { updated: 0, removed: 0, checked: 0 },
+    uidValidityReset: false,
+    folderTotal: 0,
+    backfillComplete: state.backfillComplete,
+    cached: await countCachedMessages(accountId, folder),
   };
 }
 

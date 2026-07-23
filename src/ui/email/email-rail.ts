@@ -27,8 +27,17 @@ export interface EmailRailOptions {
   onCompose(): void;
   /** A view id ('attn' | 'waiting' | ...) or `folder:<path>`. */
   onSelectNav(navId: string): void;
+  /** Manual sync for the active mailbox (disabled in unified mode). */
+  onSync?(): void;
   onOpenAutomations(): void;
   onOpenSettings(): void;
+}
+
+export interface EmailRailSyncProgress {
+  active: boolean;
+  label?: string;
+  /** 0–100 when folderTotal is known; undefined for indeterminate. */
+  percent?: number;
 }
 
 export interface EmailRailHandle {
@@ -38,6 +47,8 @@ export interface EmailRailHandle {
   setCounts(counts: Record<string, number | undefined>): void;
   setActiveNav(navId: string): void;
   setAccount(accountId: string, unified: boolean, accounts: EmailAccount[]): void;
+  setSyncProgress(progress: EmailRailSyncProgress): void;
+  setSyncEnabled(enabled: boolean): void;
 }
 
 interface RailView {
@@ -230,7 +241,9 @@ export function createEmailRail(options: EmailRailOptions): EmailRailHandle {
 
   nav.append(viewsGroup, foldersGroup);
 
-  // ---- Foot ------------------------------------------------------------
+  // ---- Bottom stack: utilities, then mailbox sync ----------------------
+  const bottom = el('div', 'email-rail-bottom');
+
   const foot = el('div', 'email-rail-foot');
   const autoBtn = mkItem('automations', 'Automations', {
     icon: EMAIL_ICONS.automations,
@@ -244,7 +257,30 @@ export function createEmailRail(options: EmailRailOptions): EmailRailHandle {
   });
   foot.append(autoBtn, settingsBtn);
 
-  root.append(accountBtn, accountMenu, composeBtn, nav, foot);
+  const syncDock = el('div', 'email-rail-sync');
+  syncDock.appendChild(el('p', 'email-rail-group-label', 'Mailbox'));
+
+  const syncRow = el('div', 'email-rail-sync-row');
+  const syncStatus = el('span', 'email-rail-sync-status is-synced', 'Up to date');
+  const syncBtn = el('button', 'email-rail-sync-btn email-icon-btn') as HTMLButtonElement;
+  syncBtn.type = 'button';
+  syncBtn.innerHTML = EMAIL_ICONS.sync;
+  syncBtn.setAttribute('aria-label', 'Sync mail');
+  syncBtn.title = 'Sync mail';
+  syncBtn.addEventListener('click', () => options.onSync?.());
+  syncRow.append(syncStatus, syncBtn);
+
+  const syncTrack = el('div', 'email-rail-sync-track');
+  syncTrack.setAttribute('role', 'progressbar');
+  syncTrack.setAttribute('aria-label', 'Mail sync progress');
+  syncTrack.setAttribute('aria-hidden', 'true');
+  const syncFill = el('div', 'email-rail-sync-fill');
+  syncTrack.appendChild(syncFill);
+  syncDock.append(syncRow, syncTrack);
+
+  bottom.append(foot, syncDock);
+
+  root.append(accountBtn, accountMenu, composeBtn, nav, bottom);
 
   paintAccountFace();
 
@@ -276,12 +312,41 @@ export function createEmailRail(options: EmailRailOptions): EmailRailHandle {
     }
   };
 
+  const setSyncEnabled = (enabled: boolean): void => {
+    syncBtn.disabled = !enabled || !options.onSync;
+    syncBtn.classList.toggle('is-disabled', syncBtn.disabled);
+  };
+
+  const setSyncProgress = (progress: EmailRailSyncProgress): void => {
+    syncDock.classList.toggle('is-active', progress.active);
+    syncBtn.classList.toggle('is-syncing', progress.active);
+    syncStatus.classList.toggle('is-synced', !progress.active);
+    syncStatus.textContent = progress.label ?? (progress.active ? 'Syncing…' : 'Up to date');
+
+    const hasPercent = typeof progress.percent === 'number' && Number.isFinite(progress.percent);
+    syncTrack.classList.toggle('is-indeterminate', progress.active && !hasPercent);
+    syncTrack.setAttribute('aria-hidden', progress.active ? 'false' : 'true');
+    if (hasPercent) {
+      const clamped = Math.max(0, Math.min(100, Math.round(progress.percent ?? 0)));
+      syncFill.style.width = `${clamped}%`;
+      syncTrack.setAttribute('aria-valuenow', String(clamped));
+      syncTrack.setAttribute('aria-valuemin', '0');
+      syncTrack.setAttribute('aria-valuemax', '100');
+    } else {
+      syncFill.style.width = progress.active ? '35%' : '0%';
+      syncTrack.removeAttribute('aria-valuenow');
+    }
+  };
+
   const setAccount = (accountId: string, nextUnified: boolean, nextAccounts: EmailAccount[]): void => {
     accounts = nextAccounts;
     activeAccountId = accountId;
     unified = nextUnified;
     paintAccountFace();
+    setSyncEnabled(!nextUnified);
   };
 
-  return { root, setFolders, setCounts, setActiveNav, setAccount };
+  setSyncEnabled(!unified);
+
+  return { root, setFolders, setCounts, setActiveNav, setAccount, setSyncProgress, setSyncEnabled };
 }

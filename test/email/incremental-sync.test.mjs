@@ -211,7 +211,7 @@ describe('bodyStructure helpers', () => {
 describe('syncFolderMessages', () => {
   test('cold start fills the newest page and records uidvalidity', async () => {
     const { syncFolderMessages } = await import('../../server/email/imap.js');
-    const { getSyncState, getCachedMessage } = await import('../../server/email/cache.js');
+    const { getSyncState, getCachedMessage, countCachedMessages } = await import('../../server/email/cache.js');
 
     seed(1, { subject: 'First' });
     seed(2, { subject: 'Second' });
@@ -220,9 +220,12 @@ describe('syncFolderMessages', () => {
 
     assert.equal(result.synced, 2);
     assert.equal(result.uidValidityReset, false);
+    assert.equal(result.backfillComplete, true);
 
     const state = await getSyncState(ACCOUNT_ID, 'INBOX');
     assert.equal(state.highestUid, 2);
+    assert.equal(state.lowestUid, 1);
+    assert.equal(state.backfillComplete, true);
     assert.equal(state.uidValidity, '100');
 
     const first = await getCachedMessage(ACCOUNT_ID, 'INBOX:1');
@@ -230,6 +233,30 @@ describe('syncFolderMessages', () => {
     assert.equal(first.bodyText, 'Body text for message 1.');
     assert.equal(first.bodyHtml, undefined, 'sync stores text only — HTML loads lazily');
     assert.equal(first.bodyComplete, false);
+    assert.equal(await countCachedMessages(ACCOUNT_ID, 'INBOX'), 2);
+  });
+
+  test('backfill walks the whole folder in batches', async () => {
+    const { syncFolderMessages, MAX_SYNC_BATCH } = await import('../../server/email/imap.js');
+    const { countCachedMessages, getSyncState } = await import('../../server/email/cache.js');
+
+    for (let uid = 1; uid <= MAX_SYNC_BATCH + 25; uid += 1) {
+      seed(uid, { subject: `Message ${uid}` });
+    }
+
+    let total = 0;
+    let last;
+    for (let pass = 0; pass < 20; pass += 1) {
+      last = await syncFolderMessages(ACCOUNT_ID, { folder: 'INBOX', limit: MAX_SYNC_BATCH });
+      total = await countCachedMessages(ACCOUNT_ID, 'INBOX');
+      if (last.backfillComplete) break;
+    }
+
+    assert.equal(total, MAX_SYNC_BATCH + 25);
+    assert.equal(last?.backfillComplete, true);
+    const state = await getSyncState(ACCOUNT_ID, 'INBOX');
+    assert.equal(state.lowestUid, 1);
+    assert.equal(state.highestUid, MAX_SYNC_BATCH + 25);
   });
 
   test('sync decodes base64 preview parts instead of storing raw encoding', async () => {

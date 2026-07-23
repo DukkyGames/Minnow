@@ -76,7 +76,12 @@ export interface EmailInboxOptions {
   openComposeNew?: boolean;
   /** Open straight into a thread (e.g. from a digest deep-link). */
   initialThreadId?: string;
+  /** Fired when the reader dock closes so the panel can flush a deferred refresh. */
+  onReaderClosed?: () => void;
 }
+
+/** Bumped on every full inbox remount; stale openThread calls bail after this changes. */
+let emailInboxSession = 0;
 
 const PAGE = 40;
 /** Must match `.email-stream-row { height }` in email.css. */
@@ -138,6 +143,7 @@ function scopeMarker(scope: InboxScope): string {
 }
 
 export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOptions): Promise<void> {
+  const session = ++emailInboxSession;
   const surface = mount;
   const { account, scope } = options;
 
@@ -542,6 +548,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     surface.classList.remove('has-reader');
     syncEmailReaderDockResizer(surface);
     virtualList.refresh();
+    options.onReaderClosed?.();
   };
 
   const openCompose = (mode: ComposeMode, thread: EmailMessage[], selected: EmailMessage): void => {
@@ -596,13 +603,16 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     let thread: EmailMessage[];
     try {
       thread = (await fetchEmailThread(account.id, threadId)).messages;
+      if (session !== emailInboxSession) return;
       thread = await hydrateThreadBodies(account.id, thread);
+      if (session !== emailInboxSession) return;
     } catch (err) {
+      if (session !== emailInboxSession) return;
       options.onStatus?.('err', err instanceof Error ? err.message : 'Could not open the conversation');
       return;
     }
     const selected = thread[thread.length - 1];
-    if (!selected) return;
+    if (!selected || session !== emailInboxSession) return;
 
     if (!selected.flags?.seen) {
       void setEmailMessageFlags(account.id, selected.id, { seen: true }).then(
