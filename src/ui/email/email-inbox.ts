@@ -55,7 +55,6 @@ import {
   mountEmailReaderDockResizer,
   syncEmailReaderDockResizer,
 } from './email-panel-resize';
-import { createVirtualList } from './email-virtual-list';
 
 /** What the stream is scoped to, driven by the rail's Views and Folders. */
 export type InboxScope =
@@ -83,15 +82,8 @@ export interface EmailInboxOptions {
 /** Bumped on every full inbox remount; stale openThread calls bail after this changes. */
 let emailInboxSession = 0;
 
+/** Conversations shown per page. */
 const PAGE = 40;
-/** Must match `.email-stream-row { height }` in email.css. */
-const STREAM_ROW_HEIGHT = 64;
-/** Max threads kept in memory while scrolling down. */
-const MAX_LOADED_THREADS = 120;
-/** Drop this many from the head when trimming the sliding window. */
-const TRIM_BATCH = 40;
-/** Trim only after the viewport has moved this far into the loaded window. */
-const TRIM_LEAD_ROWS = 50;
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -167,12 +159,13 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   scrim.addEventListener('click', () => closeReader());
 
   // ---- State -----------------------------------------------------------
-  /** Server offset of `threads[0]` once the sliding window trims from the top. */
-  let loadedOffset = 0;
   let search = '';
+  /** Conversations for the page currently on screen. */
   let threads: EmailThreadSummary[] = [];
   let total = 0;
-  let loadingMore = false;
+  /** Zero-based index of the page on screen. */
+  let page = 0;
+  /** Bumped on every fetch so a slow page load can't clobber a newer one. */
   let listGeneration = 0;
   let summary: EmailInboxSummary | null = null;
   let digest: EmailNarrativeDigest | null = null;
@@ -190,8 +183,8 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   const markerLabel = el('span', '', scopeMarker(scope));
   const markerTools = el('div', 'email-stream-tools');
   markerMount.append(markerLabel, markerTools);
-  const loadFooter = el('div', 'email-stream-load-more', 'Loading more…');
-  loadFooter.hidden = true;
+  const pager = el('div', 'email-stream-pager');
+  pager.hidden = true;
 
   const dashOptions: EmailDashboardOptions = {
     account,
@@ -253,75 +246,62 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     }
   };
 
-  const fetchThreadsPage = async (offset: number): Promise<void> => {
-    const result = await fetchEmailThreads(account.id, {
+  const queryThreads = (offset: number): ReturnType<typeof fetchEmailThreads> =>
+    fetchEmailThreads(account.id, {
       folder: scopeFolder(scope),
       offset,
       limit: PAGE,
       filter: scopeFilter(scope),
       query: search || undefined,
     });
+
+  /** Total pages for the current result set (at least one, even when empty). */
+  const pageCount = (): number => Math.max(1, Math.ceil(total / PAGE));
+
+  const fetchThreadsPage = async (pageIndex: number): Promise<void> => {
+    const result = await queryThreads(pageIndex * PAGE);
     total = result.total;
-    if (offset === 0) {
-      threads = result.threads;
-    } else {
-      threads = threads.concat(result.threads);
-    }
+    threads = result.threads;
   };
 
-  const resetThreadWindow = (): void => {
-    loadedOffset = 0;
-    threads = [];
-    total = 0;
-    listGeneration += 1;
-  };
-
-  const loadInitialThreads = async (): Promise<void> => {
+  /** Load the page tracked by `page`, clamping if the folder shrank under us. */
+  const loadThreadsForPage = async (): Promise<void> => {
     if (scope.kind === 'waiting') {
       threads = [];
       total = 0;
+      page = 0;
       return;
     }
-    resetThreadWindow();
-    await fetchThreadsPage(0);
-  };
-
-  const loadMoreThreads = async (): Promise<void> => {
-    if (scope.kind === 'waiting') return;
-    if (loadingMore || loadedOffset + threads.length >= total) return;
-
-    loadingMore = true;
-    loadFooter.hidden = false;
-    const generation = listGeneration;
-    try {
-      await fetchThreadsPage(loadedOffset + threads.length);
-      if (generation !== listGeneration) return;
-      virtualList.updateItems(threads);
-    } catch (err) {
-      options.onStatus?.('err', err instanceof Error ? err.message : 'Could not load more mail');
-    } finally {
-      loadingMore = false;
-      loadFooter.hidden = true;
+    listGeneration += 1;
+    await fetchThreadsPage(page);
+    // A deletion elsewhere can shrink the folder; if the page we asked for now
+    // sits past the end, drop back to the last real page.
+    if (page > pageCount() - 1) {
+      page = pageCount() - 1;
+      await fetchThreadsPage(page);
     }
   };
 
-  const maybeTrimThreads = (firstVisible: number): void => {
-    if (threads.length <= MAX_LOADED_THREADS) return;
-    if (firstVisible < loadedOffset + TRIM_LEAD_ROWS) return;
+  /** Jump to another page, commit only if still the latest request, top the list. */
+  const goToPage = async (target: number): Promise<void> => {
+    const clamped = Math.max(0, Math.min(target, pageCount() - 1));
+    if (clamped === page) return;
 
-    threads = threads.slice(TRIM_BATCH);
-    loadedOffset += TRIM_BATCH;
-    stream.scrollTop = Math.max(0, stream.scrollTop - TRIM_BATCH * STREAM_ROW_HEIGHT);
-    virtualList.updateItems(threads);
-  };
-
-  const onViewportChange = (viewport: {
-    firstVisible: number;
-    nearBottom: boolean;
-  }): void => {
-    maybeTrimThreads(viewport.firstVisible);
-    if (viewport.nearBottom) {
-      void loadMoreThreads();
+    const generation = ++listGeneration;
+    pager.setAttribute('aria-busy', 'true');
+    try {
+      const result = await queryThreads(clamped * PAGE);
+      if (generation !== listGeneration) return;
+      total = result.total;
+      threads = result.threads;
+      page = clamped;
+      // Full re-render so the triage head shows on page 1 and hides beyond it.
+      renderStream();
+      stream.scrollTop = 0;
+    } catch (err) {
+      options.onStatus?.('err', err instanceof Error ? err.message : 'Could not load that page');
+    } finally {
+      pager.removeAttribute('aria-busy');
     }
   };
 
@@ -396,30 +376,57 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     return row;
   };
 
-  let virtualList!: ReturnType<typeof createVirtualList<EmailThreadSummary>>;
+  const listMount = el('div', 'email-stream-rows');
 
-  virtualList = createVirtualList<EmailThreadSummary>({
-    rowHeight: STREAM_ROW_HEIGHT,
-    renderRow: renderStreamRow,
-    className: 'email-stream-rows',
-    ariaLabel: 'Conversations',
-    scrollRoot: stream,
-    listOffset: () => virtualList.root.offsetTop,
-    totalCount: () => total,
-    indexOffset: () => loadedOffset,
-    onViewportChange,
-    // Prefetch the next page well before the loaded edge so a fast flick lands
-    // on rows, not on the blank space the sliding window reserves below them.
-    loadAheadPx: STREAM_ROW_HEIGHT * 8,
-    renderEmpty: () => {
-      const empty = el('div', 'email-stream-empty');
-      empty.appendChild(el('p', 'email-empty-title', emptyTitle()));
-      empty.appendChild(el('p', 'email-empty-copy', emptyCopy()));
-      return empty;
-    },
-  });
+  const renderEmpty = (): HTMLElement => {
+    const empty = el('div', 'email-stream-empty');
+    empty.appendChild(el('p', 'email-empty-title', emptyTitle()));
+    empty.appendChild(el('p', 'email-empty-copy', emptyCopy()));
+    return empty;
+  };
 
-  streamCol.append(loadingBanner, headMount, followupsMount, markerMount, virtualList.root, loadFooter);
+  const renderRows = (): void => {
+    if (threads.length === 0) {
+      listMount.removeAttribute('role');
+      listMount.removeAttribute('aria-label');
+      listMount.replaceChildren(renderEmpty());
+      return;
+    }
+    listMount.setAttribute('role', 'list');
+    listMount.setAttribute('aria-label', 'Conversations');
+    const fragment = document.createDocumentFragment();
+    threads.forEach((thread, index) => fragment.appendChild(renderStreamRow(thread, index)));
+    listMount.replaceChildren(fragment);
+  };
+
+  const renderPager = (): void => {
+    const pages = pageCount();
+    if (scope.kind === 'waiting' || total === 0 || pages <= 1) {
+      pager.hidden = true;
+      pager.replaceChildren();
+      return;
+    }
+    pager.hidden = false;
+
+    const prev = el('button', 'email-btn email-stream-pager-btn', 'Previous') as HTMLButtonElement;
+    prev.type = 'button';
+    prev.disabled = page <= 0;
+    prev.addEventListener('click', () => void goToPage(page - 1));
+
+    const start = page * PAGE + 1;
+    const end = Math.min((page + 1) * PAGE, total);
+    const label = el('span', 'email-stream-pager-label', `${start}–${end} of ${total}`);
+    label.setAttribute('role', 'status');
+
+    const next = el('button', 'email-btn email-stream-pager-btn', 'Next') as HTMLButtonElement;
+    next.type = 'button';
+    next.disabled = page >= pages - 1;
+    next.addEventListener('click', () => void goToPage(page + 1));
+
+    pager.replaceChildren(prev, label, next);
+  };
+
+  streamCol.append(loadingBanner, headMount, followupsMount, markerMount, listMount, pager);
 
   /** Wire the scope marker search once; input survives reloads. */
   const wireScopeMarkerSearch = (): void => {
@@ -435,6 +442,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       if (timer) window.clearTimeout(timer);
       timer = window.setTimeout(() => {
         search = input.value.trim();
+        page = 0;
         void reload({ showLoading: true, keepFocus: 'search' });
       }, 300);
     });
@@ -446,7 +454,9 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   const renderHead = (): void => {
     headMount.replaceChildren();
 
-    if (!scopeShowsHead(scope) || !summary) return;
+    // The instrument readout and triage queue lead the first page only; deeper
+    // pages are a plain conversation list.
+    if (page !== 0 || !scopeShowsHead(scope) || !summary) return;
 
     const readout = renderReadout();
     if (readout) headMount.appendChild(readout);
@@ -472,26 +482,23 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     }
   };
 
-  const renderStream = (resetScroll = true): void => {
+  const renderStream = (): void => {
     markerLabel.textContent = scopeMarker(scope);
     renderHead();
 
     const isWaiting = scope.kind === 'waiting';
     followupsMount.hidden = !isWaiting;
-    virtualList.root.hidden = isWaiting;
+    listMount.hidden = isWaiting;
     markerMount.hidden = isWaiting;
-    loadFooter.hidden = isWaiting || !loadingMore;
 
     if (isWaiting) {
+      pager.hidden = true;
       followupsMount.replaceChildren(renderFollowups());
       return;
     }
 
-    if (resetScroll) {
-      virtualList.setItems(threads);
-    } else {
-      virtualList.updateItems(threads);
-    }
+    renderRows();
+    renderPager();
   };
 
   const renderFollowups = (): HTMLElement => {
@@ -550,7 +557,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     composeMode = null;
     surface.classList.remove('has-reader');
     syncEmailReaderDockResizer(surface);
-    virtualList.refresh();
+    renderRows();
     options.onReaderClosed?.();
   };
 
@@ -601,7 +608,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   const openThread = async (threadId: string): Promise<void> => {
     selectedThreadId = threadId;
     composeMode = null;
-    virtualList.refresh();
+    renderRows();
 
     let thread: EmailMessage[];
     try {
@@ -805,8 +812,9 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     }
     try {
       await loadSummary();
-      await loadInitialThreads();
-      renderStream(Boolean(opts?.showLoading));
+      await loadThreadsForPage();
+      renderStream();
+      if (opts?.showLoading) stream.scrollTop = 0;
       if (opts?.keepFocus === 'search') {
         markerTools.querySelector<HTMLInputElement>('.email-stream-search input')?.focus();
       }
