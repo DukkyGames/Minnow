@@ -374,8 +374,72 @@
   background: var(--mn-bg-elevated, var(--mn-bg));
 }
 
-.email-settings-privacy {
-  margin-bottom: 1rem;
+.email-settings-shell {
+  max-width: 520px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.email-settings-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.email-settings-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-bg);
+  align-self: flex-start;
+}
+
+.email-settings-tab {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-md, 10px) - 2px);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .email-settings-tab:hover:not(.is-active) {
+    color: var(--mn-fg);
+    background: color-mix(in oklch, var(--mn-fg) 5%, transparent);
+    border-color: var(--mn-border);
+  }
+}
+
+.email-settings-tab.is-active,
+.email-settings-tab[aria-selected='true'] {
+  color: var(--mn-fg);
+  font-weight: 600;
+  background: color-mix(in oklch, var(--mn-fg) 8%, transparent);
+  border-color: var(--mn-border-strong, var(--mn-border));
+}
+
+.email-settings-tab:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.email-settings-panel[hidden] {
+  display: none;
+}
+
+.email-settings-panel .email-setup-card {
+  max-width: none;
 }
 
 .email-setup-title {

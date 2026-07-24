@@ -84,6 +84,8 @@ function classifyAccountFieldError(message: string): { field: string } | null {
 
 interface AccountFormOptions extends EmailPanelOptions {
   title?: string;
+  /** When true, skip the card heading (used inside tabbed settings). */
+  embedded?: boolean;
   /** When set, form edits this account instead of creating a new one. */
   existing?: EmailAccount;
   /** First account becomes default automatically when none exist yet. */
@@ -132,13 +134,15 @@ function renderAccountForm(mount: HTMLElement, options: AccountFormOptions): voi
   const editing = Boolean(options.existing);
   mount.replaceChildren();
   const card = el('section', 'email-setup-card');
-  card.appendChild(
-    el(
-      'h3',
-      'email-setup-title',
-      options.title ?? (editing ? 'Edit email account' : 'Connect an email account'),
-    ),
-  );
+  if (!options.embedded) {
+    card.appendChild(
+      el(
+        'h3',
+        'email-setup-title',
+        options.title ?? (editing ? 'Edit email account' : 'Connect an email account'),
+      ),
+    );
+  }
   card.appendChild(
     el(
       'p',
@@ -374,9 +378,13 @@ function renderAccountForm(mount: HTMLElement, options: AccountFormOptions): voi
 async function renderEmailPrivacySettings(
   mount: HTMLElement,
   options: EmailPanelOptions,
+  embedded = false,
 ): Promise<void> {
-  const card = el('section', 'email-setup-card email-settings-privacy');
-  card.appendChild(el('h3', 'email-setup-title', 'Privacy'));
+  mount.replaceChildren();
+  const card = el('section', 'email-setup-card');
+  if (!embedded) {
+    card.appendChild(el('h3', 'email-setup-title', 'Privacy'));
+  }
   card.appendChild(
     el(
       'p',
@@ -431,6 +439,89 @@ async function renderEmailPrivacySettings(
       input.disabled = false;
     }
   });
+}
+
+type EmailSettingsTab = 'privacy' | 'account';
+
+interface EmailSettingsOptions extends EmailPanelOptions {
+  account: EmailAccount;
+  accountCount: number;
+  highlightField?: string;
+  errorMessage?: string;
+  onSaved: () => void;
+  onSignedOut: () => void;
+  onCancel: () => void;
+}
+
+/** Tabbed Email settings — Privacy vs active account connection. */
+function renderEmailSettings(
+  mount: HTMLElement,
+  options: EmailSettingsOptions,
+  initialTab: EmailSettingsTab = 'privacy',
+): void {
+  mount.replaceChildren();
+
+  const shell = el('div', 'email-settings-shell');
+  shell.appendChild(el('h2', 'email-settings-title', 'Settings'));
+
+  const tablist = el('div', 'email-settings-tabs');
+  tablist.setAttribute('role', 'tablist');
+  tablist.setAttribute('aria-label', 'Email settings');
+
+  const privacyPanel = el('div', 'email-settings-panel');
+  privacyPanel.id = 'email-settings-panel-privacy';
+  privacyPanel.setAttribute('role', 'tabpanel');
+  privacyPanel.setAttribute('aria-labelledby', 'email-settings-tab-privacy');
+
+  const accountPanel = el('div', 'email-settings-panel');
+  accountPanel.id = 'email-settings-panel-account';
+  accountPanel.setAttribute('role', 'tabpanel');
+  accountPanel.setAttribute('aria-labelledby', 'email-settings-tab-account');
+
+  const tabs: Record<EmailSettingsTab, HTMLButtonElement> = {
+    privacy: el('button', 'email-settings-tab', 'Privacy') as HTMLButtonElement,
+    account: el('button', 'email-settings-tab', 'Account') as HTMLButtonElement,
+  };
+
+  for (const [id, btn] of Object.entries(tabs) as Array<[EmailSettingsTab, HTMLButtonElement]>) {
+    btn.type = 'button';
+    btn.id = `email-settings-tab-${id}`;
+    btn.setAttribute('role', 'tab');
+    btn.setAttribute('aria-controls', `email-settings-panel-${id}`);
+    tablist.appendChild(btn);
+  }
+
+  const showTab = (tab: EmailSettingsTab): void => {
+    for (const [id, btn] of Object.entries(tabs) as Array<[EmailSettingsTab, HTMLButtonElement]>) {
+      const active = id === tab;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+      btn.tabIndex = active ? 0 : -1;
+    }
+    privacyPanel.hidden = tab !== 'privacy';
+    accountPanel.hidden = tab !== 'account';
+  };
+
+  for (const [id, btn] of Object.entries(tabs) as Array<[EmailSettingsTab, HTMLButtonElement]>) {
+    btn.addEventListener('click', () => showTab(id));
+  }
+
+  shell.append(tablist, privacyPanel, accountPanel);
+  mount.appendChild(shell);
+
+  void renderEmailPrivacySettings(privacyPanel, options, true);
+  renderAccountForm(accountPanel, {
+    ...options,
+    embedded: true,
+    existing: options.account,
+    highlightField: options.highlightField,
+    errorMessage: options.errorMessage,
+    onSaved: options.onSaved,
+    onSignedOut: options.onSignedOut,
+    onCancel: options.onCancel,
+  });
+
+  showTab(initialTab);
 }
 
 /** Main panel entry — one spine rail, one workspace surface (MIN-358). */
@@ -694,18 +785,20 @@ export async function renderEmailPanel(
     assistantPanel?.mountToggle(null);
     const wrap = el('div', 'email-setup-shell email-surface-scroll');
     surface.replaceChildren(wrap);
-    void renderEmailPrivacySettings(wrap, options);
-    renderAccountForm(wrap, {
-      ...options,
-      title: 'Edit email account',
-      existing: activeAccount,
-      accountCount: accounts.length,
-      highlightField: deepLink?.highlightField,
-      errorMessage: deepLink?.errorMessage,
-      onSaved: () => void renderEmailPanel(mount, options),
-      onSignedOut: () => void renderEmailPanel(mount, options),
-      onCancel: () => applyNav('attn'),
-    });
+    renderEmailSettings(
+      wrap,
+      {
+        ...options,
+        account: activeAccount,
+        accountCount: accounts.length,
+        highlightField: deepLink?.highlightField,
+        errorMessage: deepLink?.errorMessage,
+        onSaved: () => void renderEmailPanel(mount, options),
+        onSignedOut: () => void renderEmailPanel(mount, options),
+        onCancel: () => applyNav('attn'),
+      },
+      deepLink?.highlightField ? 'account' : 'privacy',
+    );
   }
 
   /** True when the inbox reader dock is showing a message or compose form. */
