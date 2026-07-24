@@ -245,13 +245,6 @@ describe('cross-mode policy invariants', () => {
     }
   });
 
-  test('reef widget tool only in reef and desktop modes', () => {
-    for (const modeId of MODE_IDS) {
-      const allowed = isToolAllowedForMode(modeId, 'check_reef_widget');
-      assert.equal(allowed, modeId === 'reef' || modeId === 'desktop', `check_reef_widget in ${modeId}`);
-    }
-  });
-
   test('board tools only in orchestrate and desktop modes', () => {
     for (const modeId of MODE_IDS) {
       for (const toolId of TOOL_GROUP_IDS.board) {

@@ -28,7 +28,7 @@ export const APPS: readonly AppDefinition[] = [
     name: 'Code',
     icon: 'code',
     tag: 'Build & ship in a live workspace',
-    description: 'Reef-side editor, dev server, files',
+    description: 'IDE-side editor, dev server, files',
     presentationMode: 'fullscreen',
     availability: 'core',
     releaseState: 'released',

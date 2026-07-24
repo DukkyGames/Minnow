@@ -46,7 +46,6 @@ const BROWSER_ONLY_TOOLS = new Set([
   'board_get_state',
   'board_report',
   'delegate_tasks',
-  'check_reef_widget',
   'request_browser_origin_access',
 ]);
 

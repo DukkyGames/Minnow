@@ -8,7 +8,7 @@ import type { SubAgentStructuredOutcome } from './sub-agent-structured-outcome';
 export const DEFAULT_SUB_AGENT_SUMMARY_SCHEMA = 'minnow.sub-agent.v1';
 
 const VALID_SEVERITIES = new Set(['info', 'warn', 'blocker']);
-const VALID_ARTIFACT_KINDS = new Set(['path', 'url', 'reef-widget', 'note']);
+const VALID_ARTIFACT_KINDS = new Set(['path', 'url', 'note']);
 
 export interface SummarySchemaPreset {
   id: string;
@@ -131,7 +131,7 @@ export function validateStructuredOutcomeForPreset(
     const ref = readString(item.ref, 1024);
     if (!label || !ref) return null;
     const artifact: SubAgentStructuredOutcome['artifacts'][number] = {
-      kind: kind as 'path' | 'url' | 'reef-widget' | 'note',
+      kind: kind as 'path' | 'url' | 'note',
       label,
       ref,
     };

@@ -107,25 +107,6 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
-    id: 'check_reef_widget',
-    label: 'Check reef widget',
-    description:
-      'Validate a reef-widget fence body (static lint + optional off-DOM iframe probe). Returns JSON { ok, errors, warnings }.',
-    category: 'utility',
-    serverRequired: false,
-    definition: toolSchema(
-      'check_reef_widget',
-      'Validate reef-widget HTML before finishing. Pass the fence body (not markdown delimiters). Returns JSON with ok, errors, and warnings.',
-      {
-        html: {
-          type: 'string',
-          description: 'reef-widget fence body HTML/CSS/JS fragment',
-        },
-      },
-      ['html'],
-    ),
-  },
-  {
     id: 'web_search',
     label: 'Web search',
     description:
@@ -256,7 +237,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'set_chat_mode',
     label: 'Set chat mode',
     description:
-      'Switch the active chat operating mode (General, Desktop, Build, Plan, Orchestrate, Reef, Debug) after the user chooses a handoff option.',
+      'Switch the active chat operating mode (General, Desktop, Build, Plan, Orchestrate, Debug) after the user chooses a handoff option.',
     category: 'utility',
     serverRequired: false,
     definition: toolSchema(
@@ -265,7 +246,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       {
         mode_id: {
           type: 'string',
-          enum: ['general', 'desktop', 'build', 'plan', 'orchestrate', 'reef', 'debug'],
+          enum: ['general', 'desktop', 'build', 'plan', 'orchestrate', 'debug'],
           description: 'Target operating mode for the active chat',
         },
       },
@@ -285,7 +266,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       {
         mode_id: {
           type: 'string',
-          enum: ['general', 'desktop', 'build', 'plan', 'orchestrate', 'reef', 'debug'],
+          enum: ['general', 'desktop', 'build', 'plan', 'orchestrate', 'debug'],
           description: 'Operating mode for the new chat',
         },
         plan_path: {

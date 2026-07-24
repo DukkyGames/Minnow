@@ -147,10 +147,7 @@ async function main() {
     ],
   });
 
-  const { workspacePath, homePath, reefSyncCount } = await bootstrapMinnowRuntime();
-  if (reefSyncCount > 0) {
-    console.log(`Reef widgets: synced ${reefSyncCount} template(s)`);
-  }
+  const { workspacePath, homePath } = await bootstrapMinnowRuntime();
   console.log(`Workspace: ${workspacePath}`);
   console.log(`Minnow data: ${homePath}`);
 

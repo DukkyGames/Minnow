@@ -62,7 +62,6 @@ const GROUP_LABELS: Record<ModelRoutingGroup, string> = {
   'work-agents': 'Work agents',
   'sub-agents': 'Sub-agents',
   background: 'Background jobs',
-  reef: 'Reef widgets',
 };
 
 const GROUP_HINTS: Partial<Record<ModelRoutingGroup, string>> = {
@@ -70,11 +69,10 @@ const GROUP_HINTS: Partial<Record<ModelRoutingGroup, string>> = {
     'Matches the top-bar picker for the active chat. Sampler fields here also update global defaults on save.',
   background:
     'Rename jobs, goal checks, and skill runtimes that run outside the composer.',
-  reef: 'Widget model for Reef mode in the active sidebar chat.',
 };
 
 /** Routing groups shown on Models → Routing (agent roles live in Agents center). */
-const ROUTING_PAGE_GROUPS: ModelRoutingGroup[] = ['main-chat', 'background', 'reef'];
+const ROUTING_PAGE_GROUPS: ModelRoutingGroup[] = ['main-chat', 'background'];
 
 interface RowControls {
   row: ModelRoutingRow;
@@ -321,18 +319,6 @@ async function saveRow(controls: RowControls): Promise<void> {
       void refreshModelRoutingSectionMount();
       break;
     }
-    case 'reef-chat': {
-      const chat = getActiveChat();
-      chat.reefWidgetProviderId = providerId || undefined;
-      chat.reefWidgetModelId = modelId || undefined;
-      if (!chat.reefWidgetProviderId) chat.reefWidgetProviderId = undefined;
-      if (!chat.reefWidgetModelId) chat.reefWidgetModelId = undefined;
-      touchChat(chat);
-      scheduleSaveSessions();
-      setStatus('ok', 'Reef widget binding saved for active chat');
-      syncModelRoutingReefFromActiveChat();
-      break;
-    }
     case 'main-chat': {
       const chat = getActiveChat();
       chat.providerId = providerId || chat.providerId;
@@ -366,11 +352,6 @@ function appendRoutingRole(
   const meta = el('div', 'settings-routing-role__meta');
   if (row.disabled) {
     meta.appendChild(el('span', 'settings-badge', 'disabled'));
-  }
-  if (row.group === 'reef' && row.activeChatName) {
-    meta.appendChild(
-      el('span', 'settings-routing-role__chat', `Chat: ${row.activeChatName}`),
-    );
   }
   if (meta.childElementCount) head.appendChild(meta);
   role.appendChild(head);
@@ -722,37 +703,13 @@ function renderGroup(
     appendRoutingRole(body, controls, bindingHost);
     void wireProviderModelSelects(
       controls,
-      row.persistKind === 'reef-chat' ||
-        row.persistKind === 'titles' ||
+      row.persistKind === 'titles' ||
         row.persistKind === 'goal-eval' ||
         row.persistKind === 'main-chat' ||
         row.persistKind === 'work-agent' ||
         row.persistKind === 'sub-agent',
     );
   }
-}
-
-/** Refresh Reef row selects when the active chat changes while this section is open. */
-export function syncModelRoutingReefFromActiveChat(): void {
-  const reef = mountedRows.find((r) => r.row.persistKind === 'reef-chat');
-  if (!reef) return;
-  const chat = getActiveChat();
-  lastCatalogChatId = chat.id;
-  void (async () => {
-    await fillProviderSelect(reef.providerSelect, chat.reefWidgetProviderId ?? '', {
-      includeEmptyOption: true,
-    });
-    const providerId =
-      chat.reefWidgetProviderId ?? chat.providerId ?? reef.providerSelect.value ?? '';
-    await fillModelSelect(reef.modelSelect, providerId, chat.reefWidgetModelId ?? '');
-    const chatEl = document.querySelector(
-      '[data-routing-id="reef-widget"] .settings-routing-role__chat',
-    );
-    if (chatEl) {
-      chatEl.textContent = `Chat: ${chat.name?.trim() || 'Untitled chat'}`;
-    }
-    setEffectiveText(reef);
-  })();
 }
 
 /** Render the model routing settings section into #settingsModelRoutingBody. */
@@ -953,7 +910,6 @@ export async function refreshModelRoutingSectionMount(): Promise<void> {
 export function onModelRoutingActiveChatChanged(chatId: string): void {
   if (chatId === lastCatalogChatId) return;
   lastCatalogChatId = chatId;
-  syncModelRoutingReefFromActiveChat();
   const mount = document.getElementById('settingsModelRoutingBody');
   if (mount?.childElementCount) void refreshModelRoutingSectionMount();
 }

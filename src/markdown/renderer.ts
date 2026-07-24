@@ -6,7 +6,6 @@ import {
   assistantRenderDebounceTimer,
   setAssistantRenderDebounceTimer,
 } from '../app-state';
-import { mountReefWidgets } from '../chat/reef/index.ts';
 import { scrollBottom } from '../ui/input';
 
 let minnowMarkedConfigured = false;
@@ -38,7 +37,6 @@ function ensureMarkedOptionsConfigured(): void {
 export interface AssistantBubbleOptions {
   streaming?: boolean;
   streamCursor?: HTMLElement | null;
-  /** Chat mode for reef widget mounting (history render passes explicit mode). */
   modeId?: string;
 }
 
@@ -91,12 +89,7 @@ export function setAssistantBubbleContent(
     else pre.removeAttribute('data-lang');
   });
 
-  /* Mount widgets before highlight so reef fences never hit hljs (unknown language). */
-  mountReefWidgets(bubble, { bubbleStreaming: streaming, modeId: options.modeId });
-
   bubble.querySelectorAll('pre code').forEach((block) => {
-    const langMatch = /\blanguage-([\w-]+)\b/.exec(block.className || '');
-    if (langMatch?.[1] === 'reef-widget') return;
     try {
       if (!block.classList.contains('hljs')) hljs.highlightElement(block as HTMLElement);
     } catch {

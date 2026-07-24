@@ -55,14 +55,6 @@ describe('resolveModePromptPath', () => {
     );
   });
 
-  test('reef full', () => {
-    assert.ok(resolveModePromptPath('reef', 'full').endsWith('modes/reef.full.md'));
-  });
-
-  test('reef lite', () => {
-    assert.ok(resolveModePromptPath('reef', 'lite').endsWith('modes/reef.lite.md'));
-  });
-
   test('debug full', () => {
     assert.ok(resolveModePromptPath('debug', 'full').endsWith('modes/debug.full.md'));
   });

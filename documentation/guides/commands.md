@@ -38,7 +38,7 @@ Flags (`minnow run --help` for the authoritative list):
 | `--prompt <text>` / `--stdin` | The user message (or read from stdin). |
 | `--workspace <dir>` | Workspace root for file/git tools. |
 | `--agent <id>` | Work agent to use. |
-| `--mode <id>` | `general` / `build` / `plan` / `orchestrate` / `reef` / `debug`. |
+| `--mode <id>` | `general` / `build` / `plan` / `orchestrate` / `debug`. |
 | `--model <id>` / `--provider <id>` | Override model / provider. |
 | `--profile <id>` | Prompt profile / setup bundle. |
 | `--base-url <url>` | Server origin (default detected; e.g. `http://127.0.0.1:5173`). |

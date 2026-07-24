@@ -59,7 +59,7 @@ The **Code** app is Minnow's main product surface today — an IDE-style workspa
 - **Integrated terminal** — xterm.js PTY tabs wired to the same workspace root as file/git tools.
 - **Git-aware** — status, graph, commits; orchestrator boards can initialize repos and merge isolated worktrees when you ship in parallel.
 - **Code map** — open Brain's symbol graph inside Code without leaving the app (repo map, find symbol, call graph).
-- **Six operating modes** — General, Build, Plan, Orchestrate, Reef (inline widgets), Debug (bug tracker) — each with tuned prompts and tool policy.
+- **Five operating modes** — General, Build, Plan, Orchestrate, Debug (bug tracker) — each with tuned prompts and tool policy.
 
 Open Code from the dock, pick a project folder, and the agent layer has the same filesystem, terminal, LSP, browser preview, and MCP tools you would expect from a dedicated coding agent — except it shares memory, Brain, and orchestration with the rest of Minnow.
 

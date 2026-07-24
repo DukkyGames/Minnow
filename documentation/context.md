@@ -22,7 +22,7 @@ Minnow is a **local-first AI workspace**: a **Vite + TypeScript SPA**, a **Node 
 
 ### Operating modes
 
-Six composer modes: **General**, **Build**, **Plan**, **Orchestrate**, **Reef**, **Debug**. **Super Plan** is a Plan sub-mode. **Desktop**, **Email**, and **Onboarding** are surface-bound (not in the Code composer strip). **Orchestrate** opens from the sidebar hub; chat agents are not prompted to suggest Reef.
+Five composer modes: **General**, **Build**, **Plan**, **Orchestrate**, **Debug**. **Super Plan** is a Plan sub-mode. **Desktop**, **Email**, and **Onboarding** are surface-bound (not in the Code composer strip). **Orchestrate** opens from the sidebar hub.
 
 Registry: [`src/chat/modes/registry.ts`](../src/chat/modes/registry.ts). Tool allowlists: [`src/chat/modes/tool-groups.ts`](../src/chat/modes/tool-groups.ts). Prompts: [`src/chat/prompts/modes/`](../src/chat/prompts/modes/).
 
@@ -55,7 +55,7 @@ Minnow/
 ├── src/
 │   ├── main.ts             # Boot: theme, OS shell, initApp
 │   ├── os/                 # MinnowOS shell, router, windows, dock
-│   ├── chat/               # Modes, prompts, orchestrate, reef, titles
+│   ├── chat/               # Modes, prompts, orchestrate, titles
 │   ├── tools/              # definitions, loop, client, permission gate
 │   ├── agents/             # Sub-agents, work agents, UI Designer
 │   ├── api/                # models, chat, generations, sse-parse
@@ -98,7 +98,6 @@ Full directory map: [`guides/configuration.md`](guides/configuration.md). Notabl
 | `skills/`, `skills.json` | User skills and enable flags |
 | `scheduler.json`, `calendar/`, `email/` | Scheduler, calendar DB, email accounts + `mail-<accountId>.db` |
 | `compare/`, `benchmarks/`, `evals/` | Compare history, bench runs, eval harness |
-| `reef/widgets/`, `reef/modules/`, `reef/artifacts/` | Reef templates and user widgets |
 
 **Vite-only (`npm run dev`):** falls back to `localStorage` for sessions (`minnow-sessions-v1`) and tools (`minnow.tools`); server features disabled.
 
@@ -272,10 +271,6 @@ State: `Chat.orchestratePlanPath`, `ChatGroup.orchestrateBoard`, [`src/ui/orches
 
 Personas under `src/chat/prompts/experts/<id>/`. Chats: `Chat.kind === 'expert'`, memory under `pages/experts/<id>/facts/`. UI: Experts' Lab on desktop + `#/experts`.
 
-### Reef widgets
-
-` ```reef-widget ` fences → sandboxed iframes ([`src/chat/reef/`](../src/chat/reef/)). Bridge: `window.minnow` (`sendPrompt`, `callLLM`, `editArtifact`). Templates: `src/chat/reef/widgets/`; user modules: `~/.minnow/reef/modules/`.
-
 ---
 
 ## MinnowOS shell
@@ -307,7 +302,7 @@ Router: [`src/os/router.ts`](../src/os/router.ts). Boot: `initOsPageBridge()` �
 
 16 themes: `<html data-theme="{family}-{mode}">` (8 families × dark/light). **All hex/rgba only in** [`src/styles/tokens.css`](../src/styles/tokens.css); app code uses `--mn-*`.
 
-Runtime: [`src/theme.ts`](../src/theme.ts), Settings → Appearance, desktop wallpaper ([`src/os/wallpaper.ts`](../src/os/wallpaper.ts)). Reef iframes receive forwarded tokens ([`src/chat/reef/theme-forward.ts`](../src/chat/reef/theme-forward.ts)).
+Runtime: [`src/theme.ts`](../src/theme.ts), Settings → Appearance, desktop wallpaper ([`src/os/wallpaper.ts`](../src/os/wallpaper.ts)).
 
 Design reference: [`DESIGN.md`](../DESIGN.md), [`documentation/design-system/`](design-system/README.md).
 

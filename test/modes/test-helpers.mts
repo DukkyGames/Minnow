@@ -30,7 +30,6 @@ export async function loadBuiltinModePromptMap(): Promise<Record<string, string>
     'plan',
     'super-plan',
     'orchestrate',
-    'reef',
     'debug',
     'onboarding',
   ] as const;

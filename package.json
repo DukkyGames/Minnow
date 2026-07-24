@@ -191,7 +191,6 @@
       "server/**",
       "src/skills/**",
       "src/chat/prompts/**",
-      "src/chat/reef/**",
       "src/lsp/**",
       "src/lib/**",
       "src/attachments/document-extensions.mjs",

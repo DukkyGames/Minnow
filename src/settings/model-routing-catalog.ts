@@ -7,7 +7,6 @@
  * - UI Designer: config.json uiDesigner → resolveUiDesignerModel
  * - Chat titles: config.json titles → resolveTitleGenerationOptions (schedule.ts)
  * - Goal evaluator: config.json goalEval → evaluateGoal (goal/evaluate.ts)
- * - Reef widget LLM: per-chat reefWidget* → run-widget-completion
  */
 
 import { fetchWorkAgentsList } from '../agents/work-agent-prompt-api';
@@ -37,8 +36,7 @@ export type ModelRoutingGroup =
   | 'main-chat'
   | 'work-agents'
   | 'sub-agents'
-  | 'background'
-  | 'reef';
+  | 'background';
 
 /** How a row is persisted when the user saves from Models hub. */
 export type ModelRoutingPersistKind =
@@ -47,8 +45,7 @@ export type ModelRoutingPersistKind =
   | 'sub-agent'
   | 'ui-designer'
   | 'titles'
-  | 'goal-eval'
-  | 'reef-chat';
+  | 'goal-eval';
 
 /**
  * One editable routing row in Settings → Model routing.
@@ -68,7 +65,7 @@ export interface ModelRoutingRow {
   advancedSettingsHash: string;
   effectiveProviderId: string;
   effectiveModelId: string;
-  /** Reef-only: active chat display name. */
+  /** Main chat: active chat display name. */
   activeChatName?: string;
   /** UI Designer: fallbackToChatModel flag from config. */
   fallbackToChatModel?: boolean;
@@ -255,27 +252,6 @@ export async function loadModelRoutingCatalog(
     advancedSettingsHash: '#/settings/model-routing',
     effectiveProviderId: goalEvalEffective.providerId,
     effectiveModelId: goalEvalEffective.modelId,
-  });
-
-  const reefProvider = activeChat.reefWidgetProviderId ?? '';
-  const reefModel = activeChat.reefWidgetModelId ?? '';
-  const reefEffectiveProvider =
-    reefProvider.trim() || chatCtx.providerId;
-  const reefEffectiveModel = reefModel.trim() || chatCtx.modelId;
-
-  rows.push({
-    id: 'reef-widget',
-    group: 'reef',
-    label: 'Reef widget LLM',
-    description: 'callLLM inside Reef iframes for the active chat only.',
-    providerId: reefProvider,
-    modelId: reefModel,
-    usesChatDefault: !reefModel.trim(),
-    persistKind: 'reef-chat',
-    advancedSettingsHash: '#/settings/modes',
-    effectiveProviderId: reefEffectiveProvider,
-    effectiveModelId: reefEffectiveModel,
-    activeChatName,
   });
 
   return { rows, offline: false, activeChat, activeChatName };

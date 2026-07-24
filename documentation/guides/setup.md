@@ -91,7 +91,7 @@ curl http://localhost:5173/api/tools/ping   # {"ok":true}
 
 1. **Provider** — Settings → Models → Providers: confirm the base URL and that the provider is reachable.
 2. **Model** — pick one from the menubar model chip (use refresh if empty). Vision tasks need a **VLM** model; many tools work better with a tool-calling-capable model.
-3. **Mode** — choose in the composer: General / Build / Plan / Orchestrate / Reef / Debug.
+3. **Mode** — choose in the composer: General / Build / Plan / Orchestrate / Debug.
 4. **Tools** — Settings → Tools: enable the capabilities you want, set per-tool permission (`full` / `ask` / `off`). Server tools need `npm start` and a healthy tools ping.
 5. **Workspace** — open the **Code** app and pick a project folder; file/git tools resolve under this root.
 

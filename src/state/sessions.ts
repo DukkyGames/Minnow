@@ -1312,10 +1312,6 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
     modelId: typeof raw.modelId === 'string' ? raw.modelId : '',
     providerId: typeof raw.providerId === 'string' ? raw.providerId : undefined,
     modeId: normalizeModeId(raw.modeId),
-    reefWidgetProviderId:
-      typeof raw.reefWidgetProviderId === 'string' ? raw.reefWidgetProviderId : undefined,
-    reefWidgetModelId:
-      typeof raw.reefWidgetModelId === 'string' ? raw.reefWidgetModelId : undefined,
     ...(raw.expertSelection && typeof raw.expertSelection === 'object'
       ? { expertSelection: ensureExpertSelection(raw.expertSelection) }
       : {}),

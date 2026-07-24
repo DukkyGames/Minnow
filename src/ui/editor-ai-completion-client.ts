@@ -102,7 +102,7 @@ export function preflightEditorAiBinding(binding: EditorAiBinding): string | nul
   return EDITOR_AI_NO_MODEL_MESSAGE;
 }
 
-/** Resolve provider/model from config + active chat (mirrors reef widget binding). */
+/** Resolve provider/model from config + active chat. */
 export async function resolveEditorAiBinding(
   config: EditorAiCompletionConfig,
 ): Promise<EditorAiBinding> {
