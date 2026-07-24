@@ -130,6 +130,7 @@ export const SCOPED_SUITES = {
       'test/skills-library-registry.test.mts',
       'test/skills-library-index.test.mjs',
       'test/skills-library-index-files.test.mts',
+      'test/skills/library-api.test.mjs',
     ],
   },
   attachments: {
