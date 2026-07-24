@@ -118,9 +118,9 @@ describe('app-gated tool catalog filtering', () => {
     assert.equal(names.has('read_file'), true);
   });
 
-  test('disabling scheduler does not hide unrelated utility tools', () => {
+  test('core scheduler stays enabled and does not hide unrelated utility tools', () => {
     setAppEnabled('scheduler', false);
-    assert.equal(isAppEnabled('scheduler'), false);
+    assert.equal(isAppEnabled('scheduler'), true);
 
     const ids = catalogIds();
     assert.equal(ids.has('calculate'), true);

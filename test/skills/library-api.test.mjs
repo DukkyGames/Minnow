@@ -275,4 +275,24 @@ describe('Skills Library API', () => {
     const skillPath = path.join(homeDir, 'skills', 'grill-me', 'SKILL.md');
     await assert.rejects(() => fs.access(skillPath));
   });
+
+  test('POST /api/skills/library/remove supports remove all from pack', async () => {
+    const installRes = await httpRequest(baseUrl, 'POST', '/api/skills/library/install', {
+      pack: 'matt-pocock',
+      skillIds: ['grill-me', 'ask-minnow'],
+    });
+    assert.equal(installRes.status, 201);
+
+    const { status, json } = await httpRequest(baseUrl, 'POST', '/api/skills/library/remove', {
+      pack: 'matt-pocock',
+      all: true,
+    });
+    assert.equal(status, 200);
+    assert.equal(json.ok, true);
+    assert.equal(json.removed.length, 2);
+
+    const provenance = await readProvenance();
+    assert.equal(provenance['grill-me'], undefined);
+    assert.equal(provenance['ask-minnow'], undefined);
+  });
 });

@@ -73,14 +73,14 @@ describe('launch_minnow_app', () => {
     assert.match(result, /^Error: invalid app_id/);
   });
 
-  test('rejects user-disabled optional apps', () => {
+  test('core research stays launchable even if disable is attempted', () => {
     setAppEnabled('research', false);
     const calls: AppId[] = [];
     const result = toolLaunchMinnowApp({ app_id: 'research' }, (appId) => {
       calls.push(appId);
     });
-    assert.match(result, /turned off/i);
-    assert.deepEqual(calls, []);
+    assert.doesNotMatch(result, /^Error:/);
+    assert.deepEqual(calls, ['research']);
   });
 
   test('rejects developer-hidden apps', () => {

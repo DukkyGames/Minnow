@@ -461,8 +461,12 @@
     ]
   },
   {
-    "key": "apps.optional.code",
+    "key": "apps.core.code",
     "label": "Code app",
+    "keywords": [
+      "always on",
+      "core"
+    ],
     "category": "apps",
     "area": "apps",
     "storage": "section",
@@ -474,8 +478,42 @@
     ]
   },
   {
-    "key": "apps.optional.research",
+    "key": "apps.core.research",
     "label": "Research app",
+    "keywords": [
+      "always on",
+      "core"
+    ],
+    "category": "apps",
+    "area": "apps",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "apps"
+    ]
+  },
+  {
+    "key": "apps.core.scheduler",
+    "label": "Scheduler app",
+    "keywords": [
+      "always on",
+      "core"
+    ],
+    "category": "apps",
+    "area": "apps",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "apps"
+    ]
+  },
+  {
+    "key": "apps.optional.code",
+    "label": "Code app",
     "category": "apps",
     "area": "apps",
     "storage": "section",
@@ -519,19 +557,6 @@
   {
     "key": "apps.optional.compare",
     "label": "Compare app",
-    "category": "apps",
-    "area": "apps",
-    "storage": "section",
-    "type": "string",
-    "sensitivity": "normal",
-    "writable": false,
-    "refreshAreas": [
-      "apps"
-    ]
-  },
-  {
-    "key": "apps.optional.scheduler",
-    "label": "Scheduler app",
     "category": "apps",
     "area": "apps",
     "storage": "section",
@@ -1786,6 +1811,27 @@
     "writable": false,
     "refreshAreas": [
       "skills"
+    ]
+  },
+  {
+    "key": "integrations.skills-library",
+    "label": "Skills Library",
+    "description": "Browse curated third-party skill packs, install from GitHub, and manage provenance.",
+    "keywords": [
+      "curated packs",
+      "matt pocock",
+      "install skill",
+      "github url",
+      "browse skills"
+    ],
+    "category": "integrations",
+    "area": "skills-library",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "skills-library"
     ]
   },
   {

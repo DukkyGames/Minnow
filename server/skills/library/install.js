@@ -14,7 +14,7 @@ import {
   parseGitHubRepoUrl,
   resolveCommitSha,
 } from './github-fetch.js';
-import { recordProvenance, removeProvenanceEntry } from './provenance.js';
+import { readProvenance, recordProvenance, removeProvenanceEntry } from './provenance.js';
 import { runPostInstallPatch } from './post-install.js';
 
 /**
@@ -192,4 +192,21 @@ export async function removeInstalledSkill(skillId) {
   const skillDir = path.join(getUserSkillsRoot(), skillId);
   await fs.rm(skillDir, { recursive: true, force: true });
   return { skillId, removed: true };
+}
+
+/**
+ * Remove every skill installed from a curated pack (provenance.pack match).
+ * @param {string} packId
+ */
+export async function removePackInstalledSkills(packId) {
+  const provenance = await readProvenance();
+  const skillIds = Object.entries(provenance)
+    .filter(([, entry]) => entry.pack === packId)
+    .map(([id]) => id);
+
+  const removed = [];
+  for (const skillId of skillIds) {
+    removed.push(await removeInstalledSkill(skillId));
+  }
+  return removed;
 }

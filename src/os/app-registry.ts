@@ -50,7 +50,7 @@ export const APPS: readonly AppDefinition[] = [
     tag: 'Send a sub-agent to dig deep',
     description: 'Multi-step web + source synthesis',
     presentationMode: 'desktop',
-    availability: 'optional',
+    availability: 'core',
     releaseState: 'released',
   },
   {
@@ -110,7 +110,7 @@ export const APPS: readonly AppDefinition[] = [
     tag: 'Recurring agent jobs & reminders',
     description: 'Interval and cron schedules while Minnow is running',
     presentationMode: 'sidePanel',
-    availability: 'optional',
+    availability: 'core',
     releaseState: 'released',
   },
   {

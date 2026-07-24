@@ -11,6 +11,7 @@ import {
   installPackSkills,
   installSkillFromGitHubUrl,
   removeInstalledLibrarySkill,
+  removePackSkills,
   searchLibrarySkills,
   type LibraryPackSummary,
   type LibrarySearchHit,
@@ -365,7 +366,14 @@ export async function renderSkillsLibrarySettingsSection(mount: HTMLElement): Pr
     );
     installAllBtn.type = 'button';
     installAllBtn.disabled = !isLocalServerAvailable();
-    toolbar.append(installSelectedBtn, installAllBtn);
+    const removeAllBtn = el(
+      'button',
+      'settings-action-btn settings-action-btn--danger settings-skills-library__remove-all',
+      'Remove all',
+    );
+    removeAllBtn.type = 'button';
+    removeAllBtn.disabled = !isLocalServerAvailable() || pack.installedCount === 0;
+    toolbar.append(installSelectedBtn, installAllBtn, removeAllBtn);
     detailPanel.appendChild(toolbar);
 
     const list = el('ul', 'settings-skills-library__skill-list');
@@ -450,6 +458,18 @@ export async function renderSkillsLibrarySettingsSection(mount: HTMLElement): Pr
           await refreshAfterMutation();
         } catch (err) {
           setStatus('err', err instanceof Error ? err.message : 'Install failed');
+        }
+      })();
+    });
+
+    removeAllBtn.addEventListener('click', () => {
+      void (async () => {
+        try {
+          const removed = await removePackSkills(pack.id);
+          setStatus('ok', `Removed ${removed.length} skill(s) from ${pack.label}`);
+          await refreshAfterMutation();
+        } catch (err) {
+          setStatus('err', err instanceof Error ? err.message : 'Remove failed');
         }
       })();
     });

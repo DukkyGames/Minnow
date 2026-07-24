@@ -3,10 +3,15 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import { resetChatsWorkspacePathCache } from '../../src/lib/chats-workspace.ts';
 import { initAppHost, resetAppHostForTests } from '../../src/os/app-host.ts';
 import {
+  isAppEnabled,
   resetAppPreferencesForTests,
   setAppEnabled,
 } from '../../src/os/app-preferences.ts';
-import { getInstanceSnapshot, resetInstancesForTests } from '../../src/os/instances.ts';
+import {
+  getForegroundAppId,
+  getInstanceSnapshot,
+  resetInstancesForTests,
+} from '../../src/os/instances.ts';
 import { initOsPageBridge, resetOsPageBridgeForTests } from '../../src/os/page-bridge.ts';
 import {
   getCurrentRoute,
@@ -162,22 +167,21 @@ describe('os router navigation', () => {
     assert.equal(route.appId, 'code');
   });
 
-  test('launchApp blocks user-disabled optional apps and returns to desktop', () => {
+  test('launchApp keeps core scheduler available when disable is attempted', () => {
     setAppEnabled('scheduler', false);
     launchApp('scheduler');
-    assert.equal(window.location.hash, '#/desktop');
-    assert.equal(
-      getInstanceSnapshot().instances.some((inst) => inst.appId === 'scheduler'),
-      false,
-    );
+    syncOsRouteFromHashForTests();
+    assert.equal(getForegroundAppId(), 'scheduler');
+    assert.equal(isAppEnabled('scheduler'), true);
   });
 
-  test('hash route for a disabled app falls back to desktop', () => {
+  test('hash route for core research stays available when disable is attempted', () => {
     setAppEnabled('research', false);
     window.location.hash = '#/app/research';
     syncOsRouteFromHashForTests();
+    // Research deep-links onto the desktop research surface.
     assert.equal(window.location.hash, '#/desktop');
-    assert.equal(getInstanceSnapshot().view, 'desktop');
+    assert.equal(isAppEnabled('research'), true);
   });
 
   test('hash route for a developer-hidden app falls back to desktop', () => {

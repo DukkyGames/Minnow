@@ -140,6 +140,27 @@
   margin: 8px 0;
 }
 
+.settings-skills-library__detail-toolbar .settings-skills-library__remove-all {
+  margin-left: auto;
+}
+
+.settings-action-btn--danger {
+  color: var(--mn-danger, var(--danger));
+  border-color: color-mix(in oklch, var(--mn-danger, var(--danger)) 40%, transparent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .settings-action-btn--danger:hover:not(:disabled) {
+    background: var(--mn-danger, var(--danger));
+    border-color: var(--mn-danger, var(--danger));
+    color: var(--mn-fg-on-accent);
+  }
+}
+
+.settings-action-btn--danger:active:not(:disabled) {
+  filter: brightness(0.95);
+}
+
 .settings-skills-library__skill-list {
   display: flex;
   flex-direction: column;
@@ -158,12 +179,14 @@
   border: 1px solid var(--mn-border);
   border-radius: var(--mn-radius-md, 8px);
   background: var(--mn-bg-elevated, var(--mn-bg));
+  min-width: 0;
 }
 
 .settings-skills-library__skill-check {
   display: flex;
   align-items: center;
   padding-top: 2px;
+  grid-column: 1;
 }
 
 .settings-skills-library__skill-meta {
@@ -171,6 +194,7 @@
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+  grid-column: 2;
 }
 
 .settings-skills-library__skill-provenance {
@@ -182,6 +206,8 @@
 .settings-skills-library__skill-actions {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
+  grid-column: 3;
 }
 
 .settings-skills-library__search-header {

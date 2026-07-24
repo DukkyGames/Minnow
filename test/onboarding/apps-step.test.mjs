@@ -12,11 +12,13 @@ const {
   buildOnboardingContext,
   createDefaultOnboardingState,
 } = await import('../../src/onboarding/state-core.ts');
-const { listOptionalReleasedApps } = await import('../../src/os/app-registry.ts');
+const {
+  listCoreReleasedApps,
+  listOptionalReleasedApps,
+} = await import('../../src/os/app-registry.ts');
 const {
   isAppEnabled,
   resetAppPreferencesForTests,
-  setAppEnabled,
 } = await import('../../src/os/app-preferences.ts');
 
 let testWindow = null;
@@ -67,7 +69,7 @@ describe('onboarding apps step', () => {
     assert.deepEqual(ONBOARDING_PHASES[apps].stepIds, ['apps']);
   });
 
-  test('render shows core note and selectable optional cards', () => {
+  test('render shows core note and Coming soon when no optional apps', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const ctx = buildOnboardingContext(createDefaultOnboardingState(), {
@@ -77,18 +79,20 @@ describe('onboarding apps step', () => {
 
     appsStep.render(container, ctx, makeActions());
 
-    const cards = [...container.querySelectorAll('.mn-app-picker-card')];
-    assert.equal(cards.length, listOptionalReleasedApps().length);
-    assert.equal(container.querySelectorAll('.mn-app-picker-card.is-always-on').length, 0);
+    assert.equal(listOptionalReleasedApps().length, 0);
+    assert.equal(container.querySelectorAll('.mn-app-picker-card').length, 0);
     assert.ok(container.querySelector('.mn-app-picker-core'));
-    assert.equal(
-      container.querySelectorAll('.mn-app-picker-card[aria-pressed]').length,
-      listOptionalReleasedApps().length,
+    assert.match(container.querySelector('.mn-app-picker-core')?.textContent ?? '', /Research/);
+    assert.match(container.querySelector('.mn-app-picker-core')?.textContent ?? '', /Scheduler/);
+    assert.ok(container.querySelector('.mn-app-picker-coming-soon'));
+    assert.match(
+      container.querySelector('.mn-app-picker-coming-soon__title')?.textContent ?? '',
+      /Coming soon/i,
     );
-    assert.ok(container.querySelector('.mn-app-picker-toolbar'));
+    assert.equal(container.querySelector('.mn-app-picker-toolbar'), null);
   });
 
-  test('commit persists deselected optional apps', () => {
+  test('commit records core apps and empty optional selection', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const ctx = buildOnboardingContext(createDefaultOnboardingState(), {
@@ -97,55 +101,15 @@ describe('onboarding apps step', () => {
     });
 
     appsStep.render(container, ctx, makeActions());
-
-    const schedulerCard = container.querySelector('.mn-app-picker-card[data-app-id="scheduler"]');
-    assert.ok(schedulerCard);
-    schedulerCard.click();
     appsStep.commit(ctx);
 
-    assert.equal(isAppEnabled('scheduler'), false);
     assert.equal(ctx.state.steps.apps?.done, true);
-    assert.ok(Array.isArray(ctx.state.steps.apps?.data?.enabledAppIds));
-    assert.equal(ctx.state.steps.apps.data.enabledAppIds.includes('scheduler'), false);
-  });
-
-  test('render resumes from current preferences', () => {
-    setAppEnabled('research', false);
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const ctx = buildOnboardingContext(createDefaultOnboardingState(), {
-      serverAvailable: true,
-      configServerAvailable: true,
-    });
-
-    appsStep.render(container, ctx, makeActions());
-
-    const researchCard = container.querySelector('.mn-app-picker-card[data-app-id="research"]');
-    assert.ok(researchCard);
-    assert.equal(researchCard.classList.contains('is-selected'), false);
-    assert.equal(researchCard.classList.contains('is-off'), true);
-    assert.equal(researchCard.getAttribute('aria-pressed'), 'false');
-  });
-
-  test('disable all clears working selection before commit', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const ctx = buildOnboardingContext(createDefaultOnboardingState(), {
-      serverAvailable: true,
-      configServerAvailable: true,
-    });
-
-    appsStep.render(container, ctx, makeActions());
-    const disableAll = [...container.querySelectorAll('.mn-app-picker-toolbar__btn')].find(
-      (btn) => btn.textContent === 'Disable all',
-    );
-    assert.ok(disableAll);
-    disableAll.click();
-    appsStep.commit(ctx);
-
     assert.deepEqual(ctx.state.steps.apps?.data?.enabledAppIds, []);
-    for (const app of listOptionalReleasedApps()) {
-      assert.equal(isAppEnabled(app.id), false);
-    }
+    assert.deepEqual(
+      ctx.state.steps.apps?.data?.coreAppIds,
+      listCoreReleasedApps().map((app) => app.id),
+    );
+    assert.equal(isAppEnabled('research'), true);
+    assert.equal(isAppEnabled('scheduler'), true);
   });
 });

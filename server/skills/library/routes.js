@@ -12,6 +12,7 @@ import {
   installPackSkill,
   installSkillFromRepoUrl,
   removeInstalledSkill,
+  removePackInstalledSkills,
 } from './install.js';
 
 /**
@@ -166,9 +167,24 @@ export async function handleSkillsLibraryRequest(req, res, pathname) {
 
     if (pathname === '/api/skills/library/remove' && req.method === 'POST') {
       const body = await readJsonBody(req);
+      const packId = typeof body.pack === 'string' ? body.pack.trim() : '';
+      const removeAll = body.all === true;
+
+      if (packId && removeAll) {
+        const pack = getSkillsLibraryPack(packId);
+        if (!pack) {
+          sendJson(res, 404, { error: `Unknown pack: ${packId}` });
+          return true;
+        }
+
+        const removed = await removePackInstalledSkills(packId);
+        sendJson(res, 200, { ok: true, removed });
+        return true;
+      }
+
       const skillId = typeof body.skillId === 'string' ? body.skillId.trim() : '';
       if (!skillId) {
-        sendJson(res, 400, { error: 'skillId is required' });
+        sendJson(res, 400, { error: 'skillId or pack+all is required' });
         return true;
       }
 

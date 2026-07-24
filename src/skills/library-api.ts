@@ -79,6 +79,7 @@ interface InstallResponse {
 interface RemoveResponse {
   ok?: boolean;
   skillId?: string;
+  removed?: Array<{ skillId: string; removed: boolean }> | boolean;
   error?: string;
 }
 
@@ -242,4 +243,24 @@ export async function removeInstalledLibrarySkill(skillId: string): Promise<void
   if (!res.ok) {
     throw new Error(data.error ?? `Remove failed (${res.status})`);
   }
+}
+
+/** Remove every skill installed from a curated pack. */
+export async function removePackSkills(packId: string): Promise<string[]> {
+  if (!isLocalServerAvailable()) {
+    throw new Error('Remove needs npm start — start the tool server and try again.');
+  }
+
+  const res = await fetch('/api/skills/library/remove', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ pack: packId, all: true }),
+  });
+  const data = (await res.json().catch(() => ({}))) as RemoveResponse;
+  if (!res.ok) {
+    throw new Error(data.error ?? `Remove failed (${res.status})`);
+  }
+
+  const rows = Array.isArray(data.removed) ? data.removed : [];
+  return rows.map((row) => row.skillId);
 }

@@ -1,5 +1,6 @@
 /**
  * Settings → Apps: toggle which optional MinnowOS apps appear in launchers.
+ * When none are released yet, shows Always included + Coming soon.
  */
 
 import '../styles/settings-general.css';
@@ -10,7 +11,11 @@ import {
   listOptionalReleasedApps,
 } from '../os/app-registry';
 import { isAppEnabled, setAppEnabled, setEnabledOptionalApps } from '../os/app-preferences';
-import { appendAppPickerCoreNote, appendAppPickerGroup } from '../os/app-picker-ui';
+import {
+  appendAppPickerComingSoon,
+  appendAppPickerCoreNote,
+  appendAppPickerGroup,
+} from '../os/app-picker-ui';
 import { appendSettingsGroup } from './settings-layout';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -34,10 +39,15 @@ export function renderAppsSettingsSection(mount: HTMLElement): void {
   const content = el('div', 'settings-general__content');
   shell.appendChild(content);
 
+  const optionalApps = listOptionalReleasedApps();
+  const hasOptional = optionalApps.length > 0;
+
   const visibility = appendSettingsGroup(
     content,
     'App visibility',
-    'Hide optional apps from the dock and launchers. Restore anytime.',
+    hasOptional
+      ? 'Hide optional apps from the dock and launchers. Restore anytime.'
+      : 'Core apps stay on the dock. Optional apps will appear here when they ship.',
     'apps.visibility',
     { emphasis: true },
   );
@@ -47,19 +57,23 @@ export function renderAppsSettingsSection(mount: HTMLElement): void {
     searchKeyFor: (id) => `apps.core.${id}`,
   });
 
-  const optionalApps = listOptionalReleasedApps();
-
-  appendAppPickerGroup(visibility, {
-    title: 'Optional apps',
-    apps: optionalApps,
-    mode: 'selectable',
-    isSelected: (id) => isAppEnabled(id),
-    searchKeyFor: (id) => `apps.optional.${id}`,
-    onToggle: (id, selected) => {
-      setAppEnabled(id, selected);
-    },
-    onBulkSet: (selected) => {
-      setEnabledOptionalApps(selected ? optionalApps.map((app) => app.id) : []);
-    },
-  });
+  if (hasOptional) {
+    appendAppPickerGroup(visibility, {
+      title: 'Optional apps',
+      apps: optionalApps,
+      mode: 'selectable',
+      isSelected: (id) => isAppEnabled(id),
+      searchKeyFor: (id) => `apps.optional.${id}`,
+      onToggle: (id, selected) => {
+        setAppEnabled(id, selected);
+      },
+      onBulkSet: (selected) => {
+        setEnabledOptionalApps(selected ? optionalApps.map((app) => app.id) : []);
+      },
+    });
+  } else {
+    appendAppPickerComingSoon(visibility, {
+      searchKey: 'apps.visibility',
+    });
+  }
 }

@@ -19,11 +19,7 @@ const { SETTINGS_SECTION_LABELS, SETTINGS_SECTIONS } = await import(
   '../../src/ui/settings-page-types.ts'
 );
 const { renderAppsSettingsSection } = await import('../../src/ui/settings-apps.ts');
-const {
-  isAppEnabled,
-  resetAppPreferencesForTests,
-  setAppEnabled,
-} = await import('../../src/os/app-preferences.ts');
+const { resetAppPreferencesForTests } = await import('../../src/os/app-preferences.ts');
 const { listOptionalReleasedApps } = await import('../../src/os/app-registry.ts');
 
 let testWindow = null;
@@ -46,6 +42,8 @@ describe('settings apps catalog + html', () => {
     assert.ok(SETTINGS_SECTIONS.includes('apps'));
     assert.equal(categoryForArea('apps'), 'apps');
     assert.ok(fieldByKey('apps.visibility'));
+    assert.ok(fieldByKey('apps.core.research'));
+    assert.ok(fieldByKey('apps.core.scheduler'));
     assert.ok(fieldByKey('apps.optional.code'));
   });
 
@@ -69,64 +67,19 @@ describe('settings apps renderer', () => {
     testWindow = null;
   });
 
-  test('renders optional cards, core note, and bulk actions', () => {
+  test('renders core note and Coming soon when no optional apps', () => {
     const mount = document.getElementById('settingsAppsBody');
     renderAppsSettingsSection(mount);
-    assert.equal(
-      mount.querySelectorAll('.mn-app-picker-card').length,
-      listOptionalReleasedApps().length,
-    );
-    assert.equal(mount.querySelectorAll('.mn-app-picker-card.is-always-on').length, 0);
+    assert.equal(listOptionalReleasedApps().length, 0);
+    assert.equal(mount.querySelectorAll('.mn-app-picker-card').length, 0);
     assert.ok(mount.querySelector('.mn-app-picker-core'));
     assert.match(mount.querySelector('.mn-app-picker-core')?.textContent ?? '', /Always included/);
+    assert.match(mount.querySelector('.mn-app-picker-core')?.textContent ?? '', /Research/);
+    assert.match(mount.querySelector('.mn-app-picker-core')?.textContent ?? '', /Scheduler/);
     assert.ok(mount.querySelector('[data-settings-search-key="apps.core.chat"]'));
+    assert.ok(mount.querySelector('[data-settings-search-key="apps.core.research"]'));
     assert.ok(mount.querySelector('[data-settings-search-key="apps.visibility"]'));
-    assert.ok(mount.querySelector('.mn-app-picker-toolbar'));
-  });
-
-  test('toggling an optional card updates preferences immediately', () => {
-    const mount = document.getElementById('settingsAppsBody');
-    renderAppsSettingsSection(mount);
-    const card = mount.querySelector('.mn-app-picker-card[data-app-id="scheduler"]');
-    assert.ok(card);
-    assert.equal(isAppEnabled('scheduler'), true);
-    card.click();
-    assert.equal(isAppEnabled('scheduler'), false);
-    assert.equal(card.classList.contains('is-off'), true);
-    card.click();
-    assert.equal(isAppEnabled('scheduler'), true);
-    assert.equal(card.classList.contains('is-selected'), true);
-  });
-
-  test('disable all and enable all update preferences', () => {
-    const mount = document.getElementById('settingsAppsBody');
-    renderAppsSettingsSection(mount);
-    const buttons = [...mount.querySelectorAll('.mn-app-picker-toolbar__btn')];
-    const disableAll = buttons.find((btn) => btn.textContent === 'Disable all');
-    const enableAll = buttons.find((btn) => btn.textContent === 'Enable all');
-    assert.ok(disableAll);
-    assert.ok(enableAll);
-
-    disableAll.click();
-    for (const app of listOptionalReleasedApps()) {
-      assert.equal(isAppEnabled(app.id), false);
-    }
-    assert.equal(mount.querySelectorAll('.mn-app-picker-card.is-off').length, listOptionalReleasedApps().length);
-
-    enableAll.click();
-    for (const app of listOptionalReleasedApps()) {
-      assert.equal(isAppEnabled(app.id), true);
-    }
-    assert.equal(mount.querySelectorAll('.mn-app-picker-card.is-selected').length, listOptionalReleasedApps().length);
-  });
-
-  test('disabled optional apps still render so they can be restored', () => {
-    setAppEnabled('research', false);
-    const mount = document.getElementById('settingsAppsBody');
-    renderAppsSettingsSection(mount);
-    const research = mount.querySelector('.mn-app-picker-card[data-app-id="research"]');
-    assert.ok(research);
-    assert.equal(research.classList.contains('is-selected'), false);
-    assert.equal(research.classList.contains('is-off'), true);
+    assert.ok(mount.querySelector('.mn-app-picker-coming-soon'));
+    assert.equal(mount.querySelector('.mn-app-picker-toolbar'), null);
   });
 });

@@ -2184,6 +2184,22 @@ label.settings-action-btn {
   cursor: pointer;
 }
 
+.settings-skill-card__caveman-defaults {
+  margin-top: 10px;
+  padding-top: 2px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.settings-skill-card__caveman-defaults .settings-toggle-row,
+.settings-skill-card__caveman-defaults .settings-row {
+  padding: 10px 0;
+  gap: 16px;
+}
+
+.settings-skill-card__caveman-defaults .settings-row__control {
+  max-width: 200px;
+}
+
 /* Toggle switch (settings-wide; skills/packs alias legacy class names) */
 
 .settings-area .field {
