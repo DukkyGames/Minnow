@@ -21,6 +21,10 @@ export interface EmailSelectionState {
   selected: Set<string>;
   /** Anchor for Shift-click range selection. */
   anchorId: string | null;
+  /** True when every conversation in the folder/view (not just this page) is selected. */
+  allInFolder?: boolean;
+  /** Total conversations in the folder when `allInFolder` is true. */
+  folderTotal?: number;
 }
 
 /** Create an empty selection state. */
@@ -32,6 +36,8 @@ export function createEmailSelection(): EmailSelectionState {
 export function clearEmailSelection(state: EmailSelectionState): void {
   state.selected.clear();
   state.anchorId = null;
+  state.allInFolder = false;
+  state.folderTotal = undefined;
 }
 
 /**
@@ -93,6 +99,40 @@ export function selectEmailPage(state: EmailSelectionState, pageIds: string[]): 
     if (id) state.selected.add(id);
   }
   state.anchorId = pageIds[pageIds.length - 1] ?? null;
+  state.allInFolder = false;
+  state.folderTotal = undefined;
+}
+
+/** Select every conversation in the folder/view (all pages). */
+export function selectEmailFolder(
+  state: EmailSelectionState,
+  threadIds: string[],
+  folderTotal: number,
+): void {
+  state.selected.clear();
+  for (const id of threadIds) {
+    if (id) state.selected.add(id);
+  }
+  state.anchorId = threadIds[threadIds.length - 1] ?? null;
+  state.allInFolder = true;
+  state.folderTotal = folderTotal;
+}
+
+/** Count label for the toolbar when folder-wide selection is active. */
+export function selectionDisplayCount(state: EmailSelectionState): number {
+  if (state.allInFolder && state.folderTotal != null) return state.folderTotal;
+  return state.selected.size;
+}
+
+/** Offer expanding page selection to the whole folder/view. */
+export function shouldOfferFolderSelect(
+  state: EmailSelectionState,
+  pageIds: string[],
+  folderTotal: number,
+): boolean {
+  if (state.allInFolder) return false;
+  if (folderTotal <= pageIds.length) return false;
+  return masterCheckboxState(state.selected, pageIds) === 'all';
 }
 
 /**

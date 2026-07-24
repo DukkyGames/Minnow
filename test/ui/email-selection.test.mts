@@ -17,9 +17,12 @@ import {
   resolveActionTargetIds,
   resolveDragThreadIds,
   selectEmailPage,
+  selectEmailFolder,
   selectEmailShiftRange,
+  selectionDisplayCount,
   selectionReadAction,
   selectionStarAction,
+  shouldOfferFolderSelect,
   toggleEmailSelection,
 } from '../../src/ui/email/email-selection';
 
@@ -39,9 +42,29 @@ describe('email selection helpers', () => {
     selectEmailPage(state, ['a', 'b', 'c']);
     assert.equal(state.selected.size, 3);
     assert.equal(state.anchorId, 'c');
+    assert.equal(state.allInFolder, false);
     clearEmailSelection(state);
     assert.equal(state.selected.size, 0);
     assert.equal(state.anchorId, null);
+    assert.equal(state.allInFolder, false);
+  });
+
+  test('select folder marks all-in-folder scope', () => {
+    const state = createEmailSelection();
+    selectEmailFolder(state, ['a', 'b', 'c', 'd'], 120);
+    assert.equal(state.selected.size, 4);
+    assert.equal(state.allInFolder, true);
+    assert.equal(state.folderTotal, 120);
+    assert.equal(selectionDisplayCount(state), 120);
+  });
+
+  test('folder select banner appears only when the page is fully selected', () => {
+    const state = createEmailSelection();
+    assert.equal(shouldOfferFolderSelect(state, ['a', 'b'], 50), false);
+    selectEmailPage(state, ['a', 'b']);
+    assert.equal(shouldOfferFolderSelect(state, ['a', 'b'], 50), true);
+    selectEmailFolder(state, ['a', 'b'], 50);
+    assert.equal(shouldOfferFolderSelect(state, ['a', 'b'], 50), false);
   });
 
   test('shift range uses page order from the anchor', () => {
