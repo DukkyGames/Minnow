@@ -182,7 +182,7 @@ Tool approval: [`src/tools/permission-gate.ts`](../src/tools/permission-gate.ts)
 
 ## Built-in tools
 
-Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts). Config UI: Settings → Tools; persistence `tools.json` / `minnow.tools`.
+Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts). Config UI: Settings → Tools; persistence `tools.json` / `minnow.tools`. Optional `appId` on a catalog entry gates exposure through [`getEnabledToolCatalogEntries()`](../src/tools/client.ts) and [`fillToolsSection()`](../src/ui/tools-list.ts): email and calendar tools appear only when `isAppEnabled` for that app (developer `releaseState` plus user `disabledApps`).
 
 | Category | Examples | Runs on |
 |----------|----------|---------|

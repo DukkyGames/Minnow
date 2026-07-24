@@ -9,6 +9,7 @@ import {
   setToolsEnabled,
   getToolIdsForCategory,
 } from '../tools/config';
+import { isAppEnabled } from '../os/app-preferences';
 import {
   BUILT_IN_TOOLS,
   type ToolCategory,
@@ -191,7 +192,9 @@ export function fillToolsSection(
   container.appendChild(toolbar);
 
   for (const category of TOOL_CATEGORY_ORDER) {
-    const tools = BUILT_IN_TOOLS.filter((tool) => tool.category === category);
+    const tools = BUILT_IN_TOOLS.filter(
+      (tool) => tool.category === category && (!tool.appId || isAppEnabled(tool.appId)),
+    );
     if (tools.length === 0) continue;
 
     const head = document.createElement('div');

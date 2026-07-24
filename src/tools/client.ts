@@ -74,6 +74,7 @@ import {
   augmentGetSettingsResult,
 } from '../settings/client-sync';
 import { isKillableShellTool } from '../ui/tool-messages';
+import { isAppEnabled } from '../os/app-preferences';
 
 /** Ping timeout for local dev server detection (ms). */
 const PING_TIMEOUT_MS = 2500;
@@ -514,6 +515,9 @@ async function executeToolBodyAfterGates(
 /** User + server gating only (no mode filter). */
 export function getEnabledToolCatalogEntries(): ToolDefinition[] {
   return BUILT_IN_TOOLS.filter((tool) => {
+    if (tool.appId && !isAppEnabled(tool.appId)) {
+      return false;
+    }
     if (!isToolEnabled(tool.id)) {
       return false;
     }
