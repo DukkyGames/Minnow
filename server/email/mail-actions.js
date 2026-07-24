@@ -2,10 +2,13 @@
  * Mail mutation router — IMAP flag, move, archive, and delete actions.
  */
 
+import { listUnreadMessageIds } from './cache.js';
+import { listFoldersCached } from './imap-session.js';
 import {
   archiveImapMessage,
   deleteImapMessage,
   moveImapMessage,
+  resolveMailFolder,
   setImapMessageFlags,
   setImapMessageFlagsBulk,
 } from './imap-actions.js';
@@ -17,6 +20,9 @@ const BULK_FLAG_ACTIONS = {
   flag: { flagged: true },
   unflag: { flagged: false },
 };
+
+/** Chunk size for mark-all-read STORE batches (matches the bulk endpoint limit). */
+const MARK_ALL_READ_CHUNK = 100;
 
 /**
  * @param {string} accountId
@@ -77,12 +83,24 @@ export async function bulkMessageAction(accountId, input) {
 
   const results = [];
 
+  // Resolve junk once for the whole batch (provider special-use / name heuristics).
+  let junkFolder = '';
+  if (action === 'spam') {
+    const folders = await listFoldersCached(accountId);
+    junkFolder = resolveMailFolder(folders, 'Junk', 'junk');
+  }
+
   for (const messageKey of ids) {
     try {
       if (action === 'archive') {
         results.push({ id: messageKey, ...(await archiveMessage(accountId, messageKey)) });
       } else if (action === 'delete') {
         results.push({ id: messageKey, ...(await deleteMessage(accountId, messageKey)) });
+      } else if (action === 'spam') {
+        results.push({
+          id: messageKey,
+          ...(await moveImapMessage(accountId, messageKey, junkFolder, 'junk')),
+        });
       } else if (action === 'move') {
         const dest = String(input.destFolder ?? '').trim();
         if (!dest) {
@@ -103,4 +121,38 @@ export async function bulkMessageAction(accountId, input) {
 
   const failed = results.filter((row) => row.ok === false);
   return { ok: failed.length === 0, results, failed: failed.length };
+}
+
+/**
+ * Mark every unseen message in a folder (optional FTS query) as read.
+ * Processes ids in bounded chunks and reports attempted / updated / failed.
+ *
+ * @param {string} accountId
+ * @param {{ folder?: string, query?: string }} [input]
+ */
+export async function markAllMessagesRead(accountId, input = {}) {
+  const folder = String(input.folder ?? '').trim();
+  const query = String(input.query ?? '').trim();
+  const ids = listUnreadMessageIds(accountId, { folder, query });
+  if (ids.length === 0) {
+    return { ok: true, attempted: 0, updated: 0, failed: 0 };
+  }
+
+  let updated = 0;
+  let failed = 0;
+  for (let offset = 0; offset < ids.length; offset += MARK_ALL_READ_CHUNK) {
+    const chunk = ids.slice(offset, offset + MARK_ALL_READ_CHUNK);
+    const results = await setImapMessageFlagsBulk(accountId, chunk, { seen: true });
+    for (const row of results) {
+      if (row.ok === false) failed += 1;
+      else updated += 1;
+    }
+  }
+
+  return {
+    ok: failed === 0,
+    attempted: ids.length,
+    updated,
+    failed,
+  };
 }

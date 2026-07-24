@@ -68,6 +68,7 @@ import {
   archiveMessage,
   deleteMessage,
   bulkMessageAction,
+  markAllMessagesRead,
 } from './mail-actions.js';
 import { buildInboxSummary, getOrBuildInboxSummary, generateReplyVariants } from './agent.js';
 import { syncFolderWithHooks } from './poller.js';
@@ -369,6 +370,17 @@ export function createEmailMiddleware() {
           const query = params.get('query') ?? undefined;
           const filter = params.get('filter') ?? undefined;
           const result = await listCachedMessages(accountId, { folder, offset, limit, query, filter });
+          sendJson(res, 200, result);
+          return;
+        }
+
+        // Mark every unread message in a folder (optional FTS query) as read.
+        if (tail === 'messages/mark-all-read' && req.method === 'POST') {
+          const body = await readJsonBody(req);
+          const result = await markAllMessagesRead(accountId, {
+            folder: String(body.folder ?? '').trim() || 'INBOX',
+            query: String(body.query ?? '').trim(),
+          });
           sendJson(res, 200, result);
           return;
         }

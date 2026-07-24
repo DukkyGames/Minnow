@@ -190,7 +190,7 @@ export async function setEmailMessageFlags(
 export async function bulkEmailAction(input: {
   accountId: string;
   ids: string[];
-  action: 'read' | 'unread' | 'flag' | 'unflag' | 'archive' | 'delete' | 'move';
+  action: 'read' | 'unread' | 'flag' | 'unflag' | 'archive' | 'delete' | 'move' | 'spam';
   destFolder?: string;
 }): Promise<{ ok: boolean; failed: number }> {
   const res = await fetch('/api/email/messages/bulk', {
@@ -198,6 +198,25 @@ export async function bulkEmailAction(input: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
+  return parseJson(res);
+}
+
+/** Mark every unread message in a folder (optional search) as read. */
+export async function markAllEmailRead(
+  accountId: string,
+  input: { folder: string; query?: string },
+): Promise<{ ok: boolean; attempted: number; updated: number; failed: number }> {
+  const res = await fetch(
+    `/api/email/accounts/${encodeURIComponent(accountId)}/messages/mark-all-read`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        folder: input.folder,
+        query: input.query ?? '',
+      }),
+    },
+  );
   return parseJson(res);
 }
 

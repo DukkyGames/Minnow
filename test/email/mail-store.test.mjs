@@ -18,6 +18,7 @@ import {
   listCachedThread,
   listCachedThreads,
   listCachedUids,
+  listUnreadMessageIds,
   mergeMessagesIntoCache,
   migrateJsonCacheIfNeeded,
   reconcileFolderFlags,
@@ -258,6 +259,87 @@ describe('mail store queries', () => {
     const unread = await listCachedMessages(ACCOUNT_ID, { folder: 'INBOX', filter: 'unread' });
     assert.equal(unread.total, 1);
     assert.equal(await countCachedMessages(ACCOUNT_ID, 'Archive'), 1);
+  });
+
+  test('thread summaries expose folder-scoped messageIds', async () => {
+    const threadId = '<thread-shared@example.com>';
+    await mergeMessagesIntoCache(
+      ACCOUNT_ID,
+      [
+        message({ uid: '1', threadId, messageId: '<s1@x>' }),
+        message({
+          uid: '2',
+          threadId,
+          messageId: '<s2@x>',
+          date: '2026-07-02T10:00:00.000Z',
+          flags: { seen: true, flagged: false, answered: false },
+        }),
+      ],
+      'INBOX',
+      2,
+    );
+    // A Sent copy of the same thread must not appear in INBOX action ids.
+    await mergeMessagesIntoCache(
+      ACCOUNT_ID,
+      [
+        message({
+          uid: '9',
+          folder: 'Sent',
+          threadId,
+          messageId: '<s9@x>',
+          flags: { seen: true, flagged: false, answered: false },
+        }),
+      ],
+      'Sent',
+      9,
+    );
+
+    const inbox = await listCachedThreads(ACCOUNT_ID, { folder: 'INBOX' });
+    assert.equal(inbox.threads.length, 1);
+    assert.deepEqual(inbox.threads[0].messageIds, ['INBOX:1', 'INBOX:2']);
+
+    const sent = await listCachedThreads(ACCOUNT_ID, { folder: 'Sent' });
+    assert.deepEqual(sent.threads[0].messageIds, ['Sent:9']);
+  });
+
+  test('listUnreadMessageIds respects folder and FTS query', async () => {
+    await mergeMessagesIntoCache(
+      ACCOUNT_ID,
+      [
+        message({
+          uid: '1',
+          subject: 'UniqueZebra contract',
+          bodyText: 'UniqueZebra contract body',
+          bodyPreview: 'UniqueZebra contract',
+        }),
+        message({
+          uid: '2',
+          messageId: '<b@x>',
+          threadId: '<thread-b@x>',
+          subject: 'Ordinary note',
+          bodyText: 'Ordinary note body',
+          bodyPreview: 'Ordinary note',
+        }),
+        message({
+          uid: '3',
+          messageId: '<c@x>',
+          threadId: '<thread-c@x>',
+          subject: 'Read already',
+          flags: { seen: true, flagged: false, answered: false },
+        }),
+      ],
+      'INBOX',
+      3,
+    );
+
+    assert.deepEqual(listUnreadMessageIds(ACCOUNT_ID, { folder: 'INBOX' }).sort(), [
+      'INBOX:1',
+      'INBOX:2',
+    ]);
+    assert.deepEqual(listUnreadMessageIds(ACCOUNT_ID, { folder: 'INBOX', query: 'UniqueZebra' }), [
+      'INBOX:1',
+    ]);
+    assert.deepEqual(listUnreadMessageIds(ACCOUNT_ID, { folder: 'Archive' }), []);
   });
 });
 

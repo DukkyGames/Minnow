@@ -4,22 +4,22 @@ overview: Add familiar inbox selection, bulk actions, context menus, and drag-to
 todos:
   - id: selection-state
     content: Add deterministic thread selection and action-target helpers.
-    status: pending
+    status: completed
   - id: bulk-api
     content: Expose folder-scoped message ids on thread summaries and add a safe mark-all-read endpoint.
-    status: pending
+    status: completed
   - id: toolbar
     content: Add the inbox master checkbox, standard mail actions, move and snooze menus, and unread-scope Read all.
-    status: pending
+    status: completed
   - id: row-interactions
     content: Add row checkboxes, quick star, keyboard focus, right-click menus, and drag payloads.
-    status: pending
+    status: completed
   - id: folder-drop
     content: Turn rail folders into accessible drag targets and route drops back to the active inbox.
-    status: pending
+    status: completed
   - id: verification
     content: Add deterministic tests, run the Email suite and build, then verify all flows in the browser.
-    status: pending
+    status: completed
 isProject: true
 ---
 
