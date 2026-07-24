@@ -22,6 +22,7 @@ import { createBoardCategoryIcon } from './board-category-icons';
 import { isChatAppForeground, shouldPaintDesktopChatSurface } from './chat-mount';
 import { syncComposerFromStreamingState } from './composer-send';
 import { syncGoalActiveHint } from './goal-active-hint';
+import { syncLoopActiveHint } from './loop-active-hint';
 import { syncGoalEvalUi } from './goal-eval-status';
 import { isGoalEvaluating } from '../chat/goal/evaluating-state';
 import { syncTodoPanel } from './todo-panel';
@@ -1187,6 +1188,7 @@ export function switchChat(id: string): void {
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
   syncGoalActiveHint();
+  syncLoopActiveHint();
   if (isGoalEvaluating(chat.id)) {
     syncGoalEvalUi(chat.id);
   }

@@ -55,7 +55,7 @@ Minnow/
 ├── src/
 │   ├── main.ts             # Boot: theme, OS shell, initApp
 │   ├── os/                 # MinnowOS shell, router, windows, dock
-│   ├── chat/               # Modes, prompts, orchestrate, reef, titles
+│   ├── chat/               # Modes, prompts, orchestrate, reef, goal/loop, titles
 │   ├── tools/              # definitions, loop, client, permission gate
 │   ├── agents/             # Sub-agents, work agents, UI Designer
 │   ├── api/                # models, chat, generations, sse-parse
@@ -177,6 +177,19 @@ SSE parsing: [`src/api/sse-parse.ts`](../src/api/sse-parse.ts) — event boundar
 [`sendMessageWithTools`](../src/tools/loop.ts) → `composeSystemPrompt()` → enabled tools for mode → stream → tool batch → repeat.
 
 Tool approval: [`src/tools/permission-gate.ts`](../src/tools/permission-gate.ts) (`full` / `ask` / `off`). `ask_question` uses its own UI queue ([`src/tools/ask-question-queue.ts`](../src/tools/ask-question-queue.ts)).
+
+### `/goal` and `/loop` (stateful slash commands)
+
+Built-in non-skill slash commands live in [`src/chat/slash-commands/registry.ts`](../src/chat/slash-commands/registry.ts) (picker) and dispatch inside `sendMessageWithTools` **before** skill resolution.
+
+| Command | Role | Persistence |
+|---------|------|-------------|
+| **`/goal`** | Work until a completion condition; post-turn evaluator continues the chat | `chat.activeGoal` ([`src/chat/goal/`](../src/chat/goal/)) |
+| **`/loop`** | Re-run a prompt on a fixed interval or self-paced delay while the app is open and the chat is idle | `chat.activeLoops[]` ([`src/chat/loop/`](../src/chat/loop/)) |
+
+**`/loop` modes:** `/loop 5m <prompt>` (interval; units `s`/`m`/`h`/`d`, sub-minute rounds up to 1m); `/loop <prompt>` (auto delay 1–60m from output change); bare `/loop` (maintenance: `<workspace>/.minnow/loop.md` or built-in checklist); `/loop list`; `/loop stop [n\|all]`. Loops expire after 7 days. A global 15s ticker in [`src/chat/loop/ticker.ts`](../src/chat/loop/ticker.ts) (started from [`src/main.ts`](../src/main.ts)) scans persisted `dueAt` so reload/sleep survive. Fires go through [`sendProgrammaticChatText`](../src/tools/loop.ts) so looped text gets full slash/skill resolution. `/goal` and `/loop` are mutually exclusive on a chat. `/clear` clears both. Composer chip: [`src/ui/loop-active-hint.ts`](../src/ui/loop-active-hint.ts).
+
+Naming: `src/tools/loop.ts` is the tool-call/send loop — unrelated to `/loop`. Do not rename it when touching session loops.
 
 ---
 

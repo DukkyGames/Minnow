@@ -97,6 +97,35 @@
   animation: goal-eval-hint-pulse 1.4s ease-in-out infinite;
 }
 
+.composer-loop-active-hint {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: 0.72rem;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--mn-fg-muted);
+  background: transparent;
+  border: 0;
+  margin: 0 0 6px;
+  padding: 0 2px;
+  cursor: pointer;
+}
+
+.composer-loop-active-hint:hover,
+.composer-loop-active-hint:focus-visible {
+  color: var(--mn-accent);
+}
+
+.composer-loop-active-hint.hidden {
+  display: none;
+}
+
+.composer-loop-active-hint:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
 @keyframes goal-eval-hint-pulse {
   0%,
   100% {

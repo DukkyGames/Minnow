@@ -14,6 +14,7 @@ import { setStatus } from './status';
 import { refreshActiveBoardIfMounted } from './orchestrate-board';
 import { syncBackgroundStreamHint } from './composer-stream-hint';
 import { syncGoalActiveHint } from './goal-active-hint';
+import { syncLoopActiveHint } from './loop-active-hint';
 import { syncTodoPanel } from './todo-panel';
 import {
   syncComposerFollowUpPlaceholder,
@@ -153,6 +154,7 @@ export function syncComposerFromStreamingState(): void {
   syncComposerMessageQueue();
   syncComposerFollowUpPlaceholder(isActiveChatStreaming());
   syncGoalActiveHint();
+  syncLoopActiveHint();
   syncTodoPanel();
   refreshActiveBoardIfMounted();
   void import('./composer-run-target').then((m) => m.refreshComposerRunTargetDisabled());
