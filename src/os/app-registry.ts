@@ -30,7 +30,7 @@ export const APPS: readonly AppDefinition[] = [
     tag: 'Build & ship in a live workspace',
     description: 'Reef-side editor, dev server, files',
     presentationMode: 'fullscreen',
-    availability: 'optional',
+    availability: 'core',
     releaseState: 'released',
   },
   {
@@ -61,7 +61,7 @@ export const APPS: readonly AppDefinition[] = [
     description: 'Personas, tools, eval harness',
     presentationMode: 'desktop',
     availability: 'optional',
-    releaseState: 'released',
+    releaseState: 'hidden',
   },
   {
     id: 'bench',
@@ -71,7 +71,7 @@ export const APPS: readonly AppDefinition[] = [
     description: 'Throughput, latency, quality',
     presentationMode: 'window',
     availability: 'optional',
-    releaseState: 'released',
+    releaseState: 'hidden',
   },
   {
     id: 'compare',
@@ -81,7 +81,7 @@ export const APPS: readonly AppDefinition[] = [
     description: 'Side-by-side votes, reveal, win rates',
     presentationMode: 'window',
     availability: 'optional',
-    releaseState: 'released',
+    releaseState: 'hidden',
   },
   {
     id: 'models',
@@ -121,7 +121,7 @@ export const APPS: readonly AppDefinition[] = [
     description: 'Month and week views with agent-assisted scheduling',
     presentationMode: 'window',
     availability: 'optional',
-    releaseState: 'released',
+    releaseState: 'hidden',
   },
   {
     id: 'email',
@@ -131,7 +131,7 @@ export const APPS: readonly AppDefinition[] = [
     description: 'Read-only inbox sync, AI summaries, and explicit-send SMTP',
     presentationMode: 'fullscreen',
     availability: 'optional',
-    releaseState: 'released',
+    releaseState: 'hidden',
   },
   {
     id: 'settings',

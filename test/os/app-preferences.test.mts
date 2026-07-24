@@ -46,32 +46,23 @@ function setupDom(): void {
 }
 
 describe('app registry availability invariants', () => {
-  test('core apps are chat, models, brain, settings', () => {
+  test('core apps are chat, code, models, brain, settings', () => {
     const coreIds = listCoreReleasedApps().map((app) => app.id).sort();
-    assert.deepEqual(coreIds, ['brain', 'chat', 'models', 'settings']);
+    assert.deepEqual(coreIds, ['brain', 'chat', 'code', 'models', 'settings']);
     for (const id of coreIds) {
       assert.equal(isCoreApp(id), true);
       assert.equal(isOptionalApp(id), false);
     }
   });
 
-  test('optional released apps are the eight selectable apps', () => {
+  test('optional released apps are research and scheduler', () => {
     const optionalIds = listOptionalReleasedApps().map((app) => app.id).sort();
-    assert.deepEqual(optionalIds, [
-      'bench',
-      'calendar',
-      'code',
-      'compare',
-      'email',
-      'experts',
-      'research',
-      'scheduler',
-    ]);
+    assert.deepEqual(optionalIds, ['research', 'scheduler']);
   });
 
-  test('every app has availability + releaseState; all current apps are released', () => {
+  test('every app has availability + releaseState; five apps are hidden', () => {
     assert.equal(APPS.length, 12);
-    assert.equal(listReleasedApps().length, 12);
+    assert.equal(listReleasedApps().length, 7);
     for (const app of APPS) {
       assert.ok(app.availability === 'core' || app.availability === 'optional');
       assert.ok(app.releaseState === 'released' || app.releaseState === 'hidden');
@@ -98,52 +89,54 @@ describe('app preferences', () => {
     assert.equal(isAppAvailable('settings'), true);
   });
 
-  test('normalizeDisabledAppIds drops core, unknown, and duplicates', () => {
+  test('normalizeDisabledAppIds drops core, hidden, unknown, and duplicates', () => {
     assert.deepEqual(
-      normalizeDisabledAppIds(['code', 'chat', 'code', 'not-an-app', 12, 'bench']),
-      ['code', 'bench'],
+      normalizeDisabledAppIds(['code', 'chat', 'code', 'not-an-app', 12, 'bench', 'email']),
+      [],
     );
   });
 
   test('setAppEnabled cannot disable core apps', () => {
     setAppEnabled('chat', false);
+    setAppEnabled('code', false);
     setAppEnabled('settings', false);
     assert.equal(isAppEnabled('chat'), true);
+    assert.equal(isAppEnabled('code'), true);
     assert.equal(isAppEnabled('settings'), true);
     assert.equal(loadDisabledAppIds().size, 0);
   });
 
   test('disabling an optional app removes it from dock list and persists', () => {
-    setAppEnabled('compare', false);
-    assert.equal(isAppEnabled('compare'), false);
-    assert.equal(getAppUnavailableReason('compare'), 'user-disabled');
+    setAppEnabled('scheduler', false);
+    assert.equal(isAppEnabled('scheduler'), false);
+    assert.equal(getAppUnavailableReason('scheduler'), 'user-disabled');
     assert.equal(
-      listDockApps().some((app) => app.id === 'compare'),
+      listDockApps().some((app) => app.id === 'scheduler'),
       false,
     );
-    assert.equal(localStorage.getItem('minnow.os.disabledApps'), JSON.stringify(['compare']));
+    assert.equal(localStorage.getItem('minnow.os.disabledApps'), JSON.stringify(['scheduler']));
 
     resetAppPreferencesForTests();
-    assert.equal(isAppEnabled('compare'), false);
+    assert.equal(isAppEnabled('scheduler'), false);
   });
 
   test('setEnabledOptionalApps writes the inverse disabled set', () => {
-    setEnabledOptionalApps(['code', 'research']);
+    setEnabledOptionalApps(['research']);
     const disabled = [...loadDisabledAppIds()].sort();
-    assert.deepEqual(disabled, [
-      'bench',
-      'calendar',
-      'compare',
-      'email',
-      'experts',
-      'scheduler',
-    ]);
+    assert.deepEqual(disabled, ['scheduler']);
   });
 
   test('re-enabling clears storage when nothing remains disabled', () => {
-    saveDisabledAppIds(['email']);
-    setAppEnabled('email', true);
+    saveDisabledAppIds(['scheduler']);
+    setAppEnabled('scheduler', true);
     assert.equal(localStorage.getItem('minnow.os.disabledApps'), null);
+  });
+
+  test('developer-hidden apps cannot be toggled or persisted as disabled', () => {
+    setAppEnabled('email', false);
+    assert.equal(isAppEnabled('email'), false);
+    assert.equal(getAppUnavailableReason('email'), 'developer-hidden');
+    assert.equal(loadDisabledAppIds().size, 0);
   });
 
   test('subscribers fire on preference changes', () => {
@@ -151,10 +144,10 @@ describe('app preferences', () => {
     const unsub = subscribeAppPreferences(() => {
       calls += 1;
     });
-    setAppEnabled('bench', false);
+    setAppEnabled('research', false);
     assert.equal(calls, 1);
     unsub();
-    setAppEnabled('bench', true);
+    setAppEnabled('research', true);
     assert.equal(calls, 1);
   });
 });

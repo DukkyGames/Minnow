@@ -163,21 +163,32 @@ describe('os router navigation', () => {
   });
 
   test('launchApp blocks user-disabled optional apps and returns to desktop', () => {
-    setAppEnabled('compare', false);
-    launchApp('compare');
+    setAppEnabled('scheduler', false);
+    launchApp('scheduler');
     assert.equal(window.location.hash, '#/desktop');
     assert.equal(
-      getInstanceSnapshot().instances.some((inst) => inst.appId === 'compare'),
+      getInstanceSnapshot().instances.some((inst) => inst.appId === 'scheduler'),
       false,
     );
   });
 
   test('hash route for a disabled app falls back to desktop', () => {
-    setAppEnabled('bench', false);
-    window.location.hash = '#/app/bench';
+    setAppEnabled('research', false);
+    window.location.hash = '#/app/research';
     syncOsRouteFromHashForTests();
     assert.equal(window.location.hash, '#/desktop');
     assert.equal(getInstanceSnapshot().view, 'desktop');
+  });
+
+  test('hash route for a developer-hidden app falls back to desktop', () => {
+    window.location.hash = '#/app/email';
+    syncOsRouteFromHashForTests();
+    assert.equal(window.location.hash, '#/desktop');
+    assert.equal(getInstanceSnapshot().view, 'desktop');
+    assert.equal(
+      getInstanceSnapshot().instances.some((inst) => inst.appId === 'email'),
+      false,
+    );
   });
 
   test('applyRouteFromHash preserves Code foreground on #/bugs (MIN-156)', () => {
@@ -221,7 +232,7 @@ describe('os router navigation', () => {
     assert.equal(isDesktopResearchActive(), true);
   });
 
-  test('launchApp(experts) redirects to desktop experts', async () => {
+  test('launchApp(experts) blocks hidden app and returns to desktop', async () => {
     const { isDesktopExpertsActive, resetDesktopStateForTests } = await import(
       '../../src/os/desktop-state.ts'
     );
@@ -232,7 +243,7 @@ describe('os router navigation', () => {
     const snap = getInstanceSnapshot();
     assert.equal(snap.view, 'desktop');
     assert.equal(snap.instances.find((i) => i.appId === 'experts'), undefined);
-    assert.equal(isDesktopExpertsActive(), true);
+    assert.equal(isDesktopExpertsActive(), false);
   });
 
   test('navigateToDesktop returns to desktop view', () => {

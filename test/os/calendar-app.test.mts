@@ -175,22 +175,21 @@ describe('calendar window shell', () => {
     assert.equal(content?.parentElement, frameBody);
   });
 
-  test('launchApp(calendar) focuses an existing calendar window', async () => {
+  test('launchApp(calendar) blocks hidden app and returns to desktop', async () => {
     initOsRouter();
     markCalendarOpen();
-    launchApp('calendar');
-    syncAppHostForTests();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    const firstId = windowManager.getWindows()[0]?.id;
-    assert.ok(firstId);
-
-    launchApp('calendar');
+    launchInstance('calendar');
     syncAppHostForTests();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     assert.equal(windowManager.getWindows().length, 1);
-    assert.equal(windowManager.getFocusedWindowId(), firstId);
+
+    launchApp('calendar');
+    syncAppHostForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(window.location.hash, '#/desktop');
+    assert.equal(getInstanceSnapshot().view, 'desktop');
   });
 
   test('openEventEditorWindow opens a child editor window', async () => {
