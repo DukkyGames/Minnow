@@ -276,14 +276,33 @@ function categoryLabel(category?: string): string {
   return labels[category ?? ''] ?? '';
 }
 
+/**
+ * Hide digest chips whose messages are already sitting in the review queue so
+ * Refresh cannot stack duplicate pending rows for the same suggestion.
+ */
+export function filterDigestActionGroups(
+  digest: EmailNarrativeDigest,
+  pendingActions: EmailPendingAction[] = [],
+): EmailNarrativeDigest['actionGroups'] {
+  const pendingMessageIds = new Set(
+    pendingActions
+      .filter((row) => row.state === 'pending')
+      .flatMap((row) => row.messageIds.map(String)),
+  );
+  return (digest.actionGroups ?? []).filter(
+    (group) => !group.messageIds.some((id) => pendingMessageIds.has(String(id))),
+  );
+}
+
 /** Digest action-group chips — queue into the review strip on click (§3.7). */
 export function renderDigestActionGroups(
   mount: HTMLElement,
   account: EmailAccount,
   digest: EmailNarrativeDigest,
   options: EmailDashboardOptions,
+  pendingActions: EmailPendingAction[] = [],
 ): void {
-  const groups = digest.actionGroups ?? [];
+  const groups = filterDigestActionGroups(digest, pendingActions);
   if (groups.length === 0) return;
 
   const row = el('div', 'email-dash-action-groups');
@@ -305,6 +324,9 @@ export function renderDigestActionGroups(
       chip.disabled = true;
       try {
         const { pending } = await queueDigestActionGroup(account.id, group.id);
+        // Drop the chip immediately; refresh confirms server-side consumption.
+        chip.remove();
+        if (row.childElementCount === 0) row.remove();
         options.onStatus?.(
           'ok',
           pending.state === 'applied' ? `Applied: ${pending.label}` : `Queued for review: ${pending.label}`,
@@ -355,6 +377,12 @@ function ensurePendingReviewDelegation(mount: HTMLElement): void {
       for (const control of rowButtons) control.disabled = true;
       try {
         await fn();
+        // Remove the review row before refresh so Apply/Dismiss never looks stuck.
+        row?.remove();
+        const section = mount.querySelector('.email-dash-review');
+        if (section && section.querySelectorAll('.email-dash-review-row').length === 0) {
+          section.remove();
+        }
         options.onStatus?.('ok', okMessage);
         options.onRefresh?.();
       } catch (err) {
@@ -673,7 +701,7 @@ export async function renderEmailDashboard(
       mount.appendChild(briefNode);
     }
     if (digest) {
-      renderDigestActionGroups(mount, options.account, digest, options);
+      renderDigestActionGroups(mount, options.account, digest, options, pendingActions ?? []);
     }
 
     renderPendingActions(mount, options.account, pendingActions ?? [], options);

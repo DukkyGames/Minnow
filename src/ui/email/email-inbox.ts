@@ -1258,7 +1258,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       headMount.appendChild(briefNode);
     }
     if (digest) {
-      renderDigestActionGroups(headMount, account, digest, dashOptions);
+      renderDigestActionGroups(headMount, account, digest, dashOptions, pendingActions);
     }
     renderPendingActions(headMount, account, pendingActions, dashOptions);
 

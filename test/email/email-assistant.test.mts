@@ -19,6 +19,7 @@ import {
   sanitizeEmailAssistantContext,
 } from '../../src/ui/email/email-assistant-context.ts';
 import {
+  filterDigestActionGroups,
   renderDigestActionGroups,
   renderPendingActions,
   type EmailDashboardOptions,
@@ -141,6 +142,56 @@ describe('Email digest review UI', () => {
     assert.equal(row.querySelector('.email-dash-action-cta')?.textContent, 'Review');
   });
 
+  test('hides digest chips already covered by a pending review row', () => {
+    const mount = document.createElement('div');
+    const digest: EmailNarrativeDigest = {
+      narrative: 'Three newsletters can be archived.',
+      generatedAt: '2026-07-22T10:00:00.000Z',
+      actionGroups: [
+        {
+          id: 'group-1',
+          label: 'Archive newsletters',
+          action: 'archive',
+          messageIds: ['message-1', 'message-2', 'message-3'],
+          threadIds: ['thread-1', 'thread-2', 'thread-3'],
+        },
+        {
+          id: 'group-2',
+          label: 'Mark receipts read',
+          action: 'read',
+          messageIds: ['message-4'],
+          threadIds: ['thread-4'],
+        },
+      ],
+    };
+    const pending: EmailPendingAction[] = [
+      {
+        id: 'pending-1',
+        source: 'digest',
+        label: 'Archive newsletters',
+        action: 'archive',
+        messageIds: ['message-1', 'message-2', 'message-3'],
+        threadIds: ['thread-1', 'thread-2', 'thread-3'],
+        destFolder: '',
+        state: 'pending',
+        detail: '',
+        createdAt: '2026-07-22T10:00:00.000Z',
+        resolvedAt: '',
+      },
+    ];
+
+    assert.deepEqual(
+      filterDigestActionGroups(digest, pending).map((group) => group.id),
+      ['group-2'],
+    );
+    renderDigestActionGroups(mount, ACCOUNT, digest, DASHBOARD_OPTIONS, pending);
+    assert.equal(mount.querySelectorAll('.email-dash-action-chip').length, 1);
+    assert.equal(
+      mount.querySelector('.email-dash-action-label')?.textContent,
+      'Mark receipts read',
+    );
+  });
+
   test('shows only pending actions with explicit Apply and Dismiss controls', () => {
     const mount = document.createElement('div');
     const actions: EmailPendingAction[] = [
@@ -233,6 +284,61 @@ describe('Email digest review UI', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       assert.equal(refreshed, true);
+      assert.equal(mount.querySelectorAll('.email-dash-review-row').length, 0);
+      assert.equal(mount.querySelector('.email-dash-review'), null);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('Dismiss removes the review row before refresh completes', async () => {
+    const mount = document.createElement('div');
+    const pending: EmailPendingAction = {
+      id: 'pending-1',
+      source: 'digest',
+      label: 'Archive newsletters',
+      action: 'archive',
+      messageIds: ['message-1', 'message-2'],
+      threadIds: ['thread-1', 'thread-2'],
+      destFolder: '',
+      state: 'pending',
+      detail: '',
+      createdAt: '2026-07-22T10:00:00.000Z',
+      resolvedAt: '',
+    };
+
+    let refreshed = false;
+    const options: EmailDashboardOptions = {
+      ...DASHBOARD_OPTIONS,
+      onRefresh: () => {
+        refreshed = true;
+      },
+    };
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/pending-actions/pending-1/dismiss')) {
+        return new Response(
+          JSON.stringify({
+            action: { ...pending, state: 'dismissed', resolvedAt: '2026-07-22T10:01:00.000Z' },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    try {
+      renderPendingActions(mount, ACCOUNT, [pending], options);
+      const dismissBtn = [...mount.querySelectorAll<HTMLButtonElement>('.email-dash-review-controls button')]
+        .find((button) => button.textContent === 'Dismiss');
+      assert.ok(dismissBtn);
+      dismissBtn.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      assert.equal(refreshed, true);
+      assert.equal(mount.querySelectorAll('.email-dash-review-row').length, 0);
     } finally {
       globalThis.fetch = originalFetch;
     }
