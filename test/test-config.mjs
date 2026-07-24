@@ -127,6 +127,11 @@ export const SCOPED_SUITES = {
       'test/skills-loader.test.ts',
       'test/skills/**/*.test.mts',
       'test/skills-matt-pocock.test.mjs',
+      'test/skills-library-registry.test.mts',
+      'test/skills-library-index.test.mjs',
+      'test/skills-library-index-files.test.mts',
+      'test/skills/library-api.test.mjs',
+      'test/skills/library-client.test.mjs',
     ],
   },
   attachments: {

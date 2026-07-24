@@ -1,5 +1,5 @@
 /**
- * Operating mode types (General / Build / Plan / Orchestrate / Reef / Debug).
+ * Operating mode types (General / Build / Plan / Orchestrate / Debug).
  */
 
 /** Stable ids — do not rename without migration. */
@@ -11,7 +11,6 @@ export type ModeId =
   | 'plan'
   | 'super-plan'
   | 'orchestrate'
-  | 'reef'
   | 'debug'
   | 'onboarding';
 
@@ -25,7 +24,6 @@ export const MODE_IDS: readonly ModeId[] = [
   'plan',
   'super-plan', // Phase 0 plan-mode overhaul — sub-item of Plan segment (not composer top-level)
   'orchestrate',
-  'reef',
   'debug',
   'onboarding',
 ] as const;

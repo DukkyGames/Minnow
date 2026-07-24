@@ -1,19 +1,14 @@
 /**
- * Unified snapshot of all in-flight agent-like work (main turn, sub-agents, title, Reef LLM).
+ * Unified snapshot of all in-flight agent-like work (main turn, sub-agents, title).
  */
 
 import type { MainTurnActivity } from '../chat/main-turn-activity';
-import type { ReefWidgetLlmActivity } from '../chat/reef/activity-events';
 import type { TitleJobActivity } from '../chat/titles/activity-events';
 import { formatModelLabel } from '../lib/format-model-label';
 import type { SubAgentRun } from '../agents/types';
 import type { Chat } from '../types';
 
-export type AgentActivityKind =
-  | 'main_turn'
-  | 'sub_agent'
-  | 'title_job'
-  | 'reef_widget_llm';
+export type AgentActivityKind = 'main_turn' | 'sub_agent' | 'title_job';
 
 export type AgentActivityStatus = 'queued' | 'running' | 'generating' | 'tools';
 
@@ -35,8 +30,6 @@ export interface AgentActivityRow {
   elapsedMs: number;
   runId?: string;
   parentToolCallId?: string | null;
-  widgetId?: string;
-  requestId?: string;
 }
 
 export interface AgentActivityContextFill {
@@ -50,7 +43,6 @@ export interface BuildAgentActivitySnapshotInput {
   mainTurns: MainTurnActivity[];
   subAgents: SubAgentRun[];
   titleJobs: TitleJobActivity[];
-  reefRequests: ReefWidgetLlmActivity[];
   contextByChatId?: Map<string, AgentActivityContextFill>;
   resolveSubAgentLabel?: (type: string) => string;
 }
@@ -183,32 +175,12 @@ function buildTitleRows(input: BuildAgentActivitySnapshotInput): AgentActivityRo
   });
 }
 
-function buildReefRows(input: BuildAgentActivitySnapshotInput): AgentActivityRow[] {
-  return input.reefRequests.map((req) => ({
-    id: `reef:${req.requestId}`,
-    kind: 'reef_widget_llm',
-    chatId: req.chatId,
-    chatTitle: chatTitleFor(input.chats, req.chatId),
-    label: `Widget ${req.widgetId.slice(0, 8)}`,
-    status: 'generating' as const,
-    modelDisplay: modelDisplayFromId(req.modelId),
-    modelId: req.modelId,
-    contextPercent: null,
-    contextIsEstimate: true,
-    startedAtMs: req.startedAtMs,
-    elapsedMs: Math.max(0, input.nowMs - req.startedAtMs),
-    widgetId: req.widgetId,
-    requestId: req.requestId,
-  }));
-}
-
 /** Sort: main turns first, then by startedAtMs ascending. */
 export function sortAgentActivityRows(rows: AgentActivityRow[]): AgentActivityRow[] {
   const kindRank: Record<AgentActivityKind, number> = {
     main_turn: 0,
     sub_agent: 1,
     title_job: 2,
-    reef_widget_llm: 3,
   };
   return [...rows].sort((a, b) => {
     const ka = kindRank[a.kind];
@@ -226,7 +198,6 @@ export function buildAgentActivitySnapshot(
     ...buildMainTurnRows(input),
     ...buildSubAgentRows(input),
     ...buildTitleRows(input),
-    ...buildReefRows(input),
   ];
   return sortAgentActivityRows(rows);
 }
@@ -247,7 +218,6 @@ export function formatAgentActivityStatusLine(row: AgentActivityRow): string {
   if (row.status === 'queued') return 'Queued';
   if (row.status === 'tools') return 'Running tools';
   if (row.kind === 'title_job') return 'Naming chat';
-  if (row.kind === 'reef_widget_llm') return 'Widget LLM';
   if (row.status === 'generating') return 'Generating';
   return 'Running';
 }

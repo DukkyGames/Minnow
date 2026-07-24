@@ -2,12 +2,40 @@
  * S5, S6, S12 — permissions, memory, and finish steps.
  */
 
+import { fetchMemoryEnabled } from '../../memory/client';
+import {
+  fetchMemoryInjectionEnabled,
+  saveMemorySettings,
+} from '../../memory/config';
 import { setAllBuiltInToolPermissions } from '../../tools/config';
 import { el, createChoiceCard, renderStepHeader } from '../ui-helpers';
 import type { OnboardingContext, OnboardingStep } from '../types';
 import { recordStepProgress } from '../state-core';
 
 let permissionPreset: 'full' | 'ask' | 'minimal' = 'full';
+let memoryStoreEnabled = true;
+let memoryInjectionEnabled = true;
+
+/** Toggle row for onboarding brain/memory preferences. */
+function createMemoryToggleRow(options: {
+  title: string;
+  description: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}): HTMLLabelElement {
+  const row = el('label', 'mn-onboarding-toggle-row');
+  const copy = el('div', 'mn-onboarding-toggle-row__copy');
+  copy.appendChild(el('span', 'mn-onboarding-toggle-row__title', options.title));
+  copy.appendChild(el('span', 'mn-onboarding-toggle-row__desc', options.description));
+  const input = el('input', 'mn-onboarding-toggle-row__input') as HTMLInputElement;
+  input.type = 'checkbox';
+  input.checked = options.checked;
+  input.addEventListener('change', () => {
+    options.onChange(input.checked);
+  });
+  row.append(copy, input);
+  return row;
+}
 
 export const permissionsStep: OnboardingStep = {
   id: 'permissions',
@@ -95,21 +123,67 @@ export const memoryStep: OnboardingStep = {
     );
 
     const card = el('div', 'mn-onboarding-info-card');
-    card.appendChild(el('p', null, 'Semantic recall improves answers across chats.'));
-    card.appendChild(el('p', null, 'View and edit memories anytime in the Brain app.'));
+    const toggles = el('div', 'mn-onboarding-toggle-list');
+
+    const storeToggle = createMemoryToggleRow({
+      title: 'Enable memory store',
+      description: 'Save facts locally under ~/.minnow for recall across chats.',
+      checked: memoryStoreEnabled,
+      onChange: (checked) => {
+        memoryStoreEnabled = checked;
+      },
+    });
+    const injectionToggle = createMemoryToggleRow({
+      title: 'Semantic recall on send',
+      description: 'Inject matching memories into new messages when relevant.',
+      checked: memoryInjectionEnabled,
+      onChange: (checked) => {
+        memoryInjectionEnabled = checked;
+      },
+    });
+    toggles.append(storeToggle, injectionToggle);
+    card.appendChild(toggles);
+    card.appendChild(
+      el(
+        'p',
+        'mn-onboarding-toggle-footnote',
+        'View and edit memories anytime in the Brain app.',
+      ),
+    );
     container.appendChild(card);
 
     if (!ctx.configServerAvailable) {
       container.appendChild(
         el('p', 'mn-onboarding-notice', 'Full memory features need npm start.'),
       );
+    } else {
+      void (async () => {
+        memoryStoreEnabled = await fetchMemoryEnabled();
+        memoryInjectionEnabled = await fetchMemoryInjectionEnabled();
+        const storeInput = storeToggle.querySelector('input') as HTMLInputElement | null;
+        const injectionInput = injectionToggle.querySelector('input') as HTMLInputElement | null;
+        if (storeInput) storeInput.checked = memoryStoreEnabled;
+        if (injectionInput) injectionInput.checked = memoryInjectionEnabled;
+      })();
     }
 
     actions.setPrimaryLabel('Continue');
     actions.setPrimaryEnabled(true);
   },
-  commit(ctx) {
-    ctx.state = recordStepProgress(ctx.state, 'memory', { done: true, data: { enabled: true } });
+  async commit(ctx) {
+    if (ctx.configServerAvailable) {
+      await saveMemorySettings({
+        storeEnabled: memoryStoreEnabled,
+        injectionEnabled: memoryInjectionEnabled,
+      });
+    }
+    ctx.state = recordStepProgress(ctx.state, 'memory', {
+      done: true,
+      data: {
+        memoryStore: memoryStoreEnabled,
+        memoryInjection: memoryInjectionEnabled,
+      },
+    });
   },
 };
 
@@ -148,8 +222,6 @@ export const doneStep: OnboardingStep = {
       ['Extras', Boolean(ctx.state.steps.extras?.done)],
       ['Tool permissions', Boolean(ctx.state.steps.permissions?.done)],
       ['Memory and Brain', Boolean(ctx.state.steps.memory?.done)],
-      ['Email', Boolean(ctx.state.steps.email?.done)],
-      ['Calendar', Boolean(ctx.state.steps.calendar?.done)],
       ['Context7 library docs', Boolean(ctx.state.steps.context7?.done)],
       ['Guided tour chat', Boolean(ctx.state.steps.explainer?.done)],
     ];

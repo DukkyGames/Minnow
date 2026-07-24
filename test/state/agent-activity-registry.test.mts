@@ -5,7 +5,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import type { MainTurnActivity } from '../../src/chat/main-turn-activity.ts';
-import type { ReefWidgetLlmActivity } from '../../src/chat/reef/activity-events.ts';
 import type { TitleJobActivity } from '../../src/chat/titles/activity-events.ts';
 import type { SubAgentRun } from '../../src/agents/types.ts';
 import type { Chat } from '../../src/types.ts';
@@ -73,13 +72,6 @@ describe('agent-activity-registry', () => {
       modelId: 'test/title-model',
       startedAtMs: STARTED_MS + 1000,
     };
-    const reef: ReefWidgetLlmActivity = {
-      requestId: 'req-1',
-      widgetId: 'widget-abc',
-      chatId: CHAT_A,
-      modelId: 'test/widget-model',
-      startedAtMs: STARTED_MS + 2000,
-    };
 
     const rows = buildAgentActivitySnapshot({
       nowMs: NOW_MS,
@@ -95,12 +87,11 @@ describe('agent-activity-registry', () => {
       mainTurns: [mainTurn],
       subAgents: [subAgentFixture()],
       titleJobs: [titleJob],
-      reefRequests: [reef],
       contextByChatId: new Map([[CHAT_A, { percent: 42, isEstimate: false }]]),
       resolveSubAgentLabel: () => 'Explore',
     });
 
-    assert.equal(rows.length, 4);
+    assert.equal(rows.length, 3);
     assert.equal(rows[0]?.kind, 'main_turn');
     assert.equal(rows[0]?.elapsedMs, 65_000);
     assert.equal(rows[0]?.contextPercent, 42);

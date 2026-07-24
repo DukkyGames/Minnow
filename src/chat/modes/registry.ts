@@ -70,13 +70,6 @@ const MODE_DEFINITIONS: ModeDefinition[] = [
     toolPolicy: allowGroupsToolPolicy('orchestrate', MODE_ALLOWED_GROUPS.orchestrate),
   },
   {
-    id: 'reef',
-    label: 'Reef',
-    description: 'Build interactive widgets inline in chat.',
-    promptId: 'reef',
-    toolPolicy: allowGroupsToolPolicy('reef', MODE_ALLOWED_GROUPS.reef),
-  },
-  {
     id: 'debug',
     label: 'Debug',
     description:
@@ -99,12 +92,11 @@ export function listModes(): ModeDefinition[] {
   return [...MODE_DEFINITIONS];
 }
 
-/** Composer mode strip (excludes Orchestrate, Reef, Super Plan, Desktop, and Onboarding). */
+/** Composer mode strip (excludes Orchestrate, Super Plan, Desktop, and Onboarding). */
 export function listComposerModes(): ModeDefinition[] {
   return MODE_DEFINITIONS.filter(
     (m) =>
       m.id !== 'orchestrate' &&
-      m.id !== 'reef' &&
       m.id !== 'super-plan' &&
       m.id !== 'desktop' &&
       m.id !== 'email' &&

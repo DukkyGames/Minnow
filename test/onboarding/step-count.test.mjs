@@ -13,7 +13,6 @@ const {
 const { mountStepSidebar } = await import('../../src/onboarding/step-sidebar.ts');
 const {
   resetAppPreferencesForTests,
-  setAppEnabled,
 } = await import('../../src/os/app-preferences.ts');
 
 /** happy-dom windows keep the event loop alive unless closed. */
@@ -45,38 +44,29 @@ describe('onboarding step count (MIN-438)', () => {
     testWindow = null;
   });
 
-  test('before provider path is chosen, branch steps are excluded (12 with server)', () => {
+  test('before provider path is chosen, branch steps are excluded (10 with server)', () => {
     const steps = getApplicableSteps(ctxWith());
-    assert.equal(steps.length, 12);
+    assert.equal(steps.length, 10);
     assert.equal(steps.some((step) => step.id === 'apps'), true);
     assert.equal(steps.some((step) => step.id === 'provider-local'), false);
     assert.equal(steps.some((step) => step.id === 'model-pick'), false);
   });
 
-  test('local provider path includes branch + model pick (14 with server, no api-keys)', () => {
+  test('local provider path includes branch + model pick (12 with server, no api-keys)', () => {
     const steps = getApplicableSteps(ctxWith({ providerPath: 'local' }));
-    assert.equal(steps.length, 14);
+    assert.equal(steps.length, 12);
     assert.equal(steps.some((step) => step.id === 'provider-local'), true);
     assert.equal(steps.some((step) => step.id === 'model-pick'), true);
     assert.equal(steps.some((step) => step.id === 'context7'), true);
+    assert.equal(steps.some((step) => step.id === 'email'), false);
+    assert.equal(steps.some((step) => step.id === 'calendar'), false);
   });
 
-  test('disabled email and calendar apps drop their setup steps', () => {
+  test('hidden email and calendar apps omit setup steps even when server is up', () => {
     setupDom();
-    setAppEnabled('email', false);
-    setAppEnabled('calendar', false);
-
     const steps = getApplicableSteps(ctxWith({ providerPath: 'local' }));
     assert.equal(steps.some((step) => step.id === 'email'), false);
     assert.equal(steps.some((step) => step.id === 'calendar'), false);
-    assert.equal(steps.length, 12);
-  });
-
-  test('enabled email and calendar apps keep setup steps when server is up', () => {
-    setupDom();
-    const steps = getApplicableSteps(ctxWith({ providerPath: 'local' }));
-    assert.equal(steps.some((step) => step.id === 'email'), true);
-    assert.equal(steps.some((step) => step.id === 'calendar'), true);
   });
 
   test('sidebar progress label updates when filtered steps grow', () => {
@@ -90,7 +80,7 @@ describe('onboarding step count (MIN-438)', () => {
 
     assert.equal(
       aside.querySelector('.mn-onboarding__progress-label')?.textContent,
-      'Step 1 of 12',
+      'Step 1 of 10',
     );
 
     const expanded = getApplicableSteps(ctxWith({ providerPath: 'local' }));
@@ -99,7 +89,7 @@ describe('onboarding step count (MIN-438)', () => {
 
     assert.equal(
       aside.querySelector('.mn-onboarding__progress-label')?.textContent,
-      'Step 5 of 14',
+      'Step 5 of 12',
     );
 
     handle.destroy();

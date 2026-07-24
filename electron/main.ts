@@ -346,14 +346,10 @@ async function resolveLoadUrl(): Promise<string> {
     bootstrapMinnowRuntime: () => Promise<{
       workspacePath: string;
       homePath: string;
-      reefSyncCount: number;
     }>;
   }>('runtime/bootstrap.js');
   setAppRoot(resolveElectronAppRoot());
-  const { workspacePath, homePath, reefSyncCount } = await bootstrapMinnowRuntime();
-  if (reefSyncCount > 0) {
-    console.log(`Reef widgets: synced ${reefSyncCount} template(s)`);
-  }
+  const { workspacePath, homePath } = await bootstrapMinnowRuntime();
   console.log(`Workspace: ${workspacePath}`);
   console.log(`Minnow data: ${homePath}`);
 

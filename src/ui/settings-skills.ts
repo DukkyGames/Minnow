@@ -21,7 +21,8 @@ import { isCavemanIntensity } from '../skills/caveman-client';
 import { createCustomSkill, saveSkillContent } from '../skills/skill-settings-api';
 import type { SkillListItem, SkillSource } from '../skills/types';
 import { isLocalServerAvailable } from '../tools/config';
-import { createSettingsSwitch } from './settings-switch';
+import { createSettingsSelectRow } from './settings-controls';
+import { createSettingsSwitch, createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -165,19 +166,20 @@ function buildCavemanDefaultsPanel(): HTMLDivElement {
   const panel = el('div', 'settings-skill-card__caveman-defaults');
   const caveman = getCavemanSettings();
 
-  const pinRow = el('div', 'settings-skill-card__caveman-row');
-  const pinLabel = document.createElement('label');
-  const pinCheckbox = document.createElement('input');
-  pinCheckbox.type = 'checkbox';
-  pinCheckbox.checked = caveman.pinByDefault;
-  pinLabel.appendChild(pinCheckbox);
-  pinLabel.append(' Pin caveman on new chats');
-  pinRow.appendChild(pinLabel);
+  const { row: pinRow } = createSettingsToggleRow('Pin on new chats', {
+    id: 'settingsCavemanPinDefault',
+    checked: caveman.pinByDefault,
+    searchKey: 'skills.caveman.pinDefault',
+    description: 'Automatically pin caveman when you start a new chat.',
+    onChange: (enabled) => {
+      saveCavemanSettings({ pinByDefault: enabled });
+      setStatus('ok', enabled ? 'New chats will pin caveman' : 'Caveman pin default off');
+    },
+  });
 
-  const intensityRow = el('div', 'settings-skill-card__caveman-row');
-  const intensityLabel = document.createElement('label');
-  intensityLabel.textContent = 'Default intensity';
   const intensitySelect = document.createElement('select');
+  intensitySelect.id = 'settingsCavemanDefaultIntensity';
+  intensitySelect.className = 'settings-select';
   for (const level of listCavemanIntensityOptions()) {
     const opt = document.createElement('option');
     opt.value = level;
@@ -185,23 +187,19 @@ function buildCavemanDefaultsPanel(): HTMLDivElement {
     intensitySelect.appendChild(opt);
   }
   intensitySelect.value = caveman.defaultIntensity;
-  intensityLabel.appendChild(intensitySelect);
-  intensityRow.appendChild(intensityLabel);
 
-  pinCheckbox.addEventListener('change', () => {
-    saveCavemanSettings({ pinByDefault: pinCheckbox.checked });
-    setStatus('ok', pinCheckbox.checked ? 'New chats will pin caveman' : 'Caveman pin default off');
+  const { row: intensityRow } = createSettingsSelectRow('Default intensity', {
+    select: intensitySelect,
+    searchKey: 'skills.caveman.defaultIntensity',
+    description: 'Intensity used when caveman is pinned by default.',
+    onChange: (value) => {
+      if (!isCavemanIntensity(value)) return;
+      saveCavemanSettings({ defaultIntensity: value });
+      setStatus('ok', `Default caveman intensity: ${value}`);
+    },
   });
 
-  intensitySelect.addEventListener('change', () => {
-    const value = intensitySelect.value;
-    if (!isCavemanIntensity(value)) return;
-    saveCavemanSettings({ defaultIntensity: value });
-    setStatus('ok', `Default caveman intensity: ${value}`);
-  });
-
-  panel.appendChild(pinRow);
-  panel.appendChild(intensityRow);
+  panel.append(pinRow, intensityRow);
   return panel;
 }
 

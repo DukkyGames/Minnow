@@ -29,7 +29,7 @@ export function buildSubAgentOutcomeResponseFormat(
   const artifactItem: Record<string, unknown> = {
     type: 'object',
     properties: {
-      kind: { type: 'string', enum: ['path', 'url', 'reef-widget', 'note'] },
+      kind: { type: 'string', enum: ['path', 'url', 'note'] },
       label: { type: 'string' },
       ref: { type: 'string' },
       mime: { type: 'string' },

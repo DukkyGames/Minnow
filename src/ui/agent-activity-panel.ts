@@ -13,10 +13,6 @@ import {
   subscribeMainTurnActivity,
 } from '../chat/main-turn-activity';
 import {
-  listReefWidgetLlmActivity,
-  subscribeReefWidgetLlmActivity,
-} from '../chat/reef/activity-events';
-import {
   listTitleJobActivity,
   subscribeTitleJobActivity,
   type TitleJobActivity,
@@ -133,7 +129,6 @@ async function refreshAgentActivityBadgeOnly(): Promise<void> {
     mainTurns: listMainTurnActivity(),
     subAgents: listActiveSubAgentRuns(),
     titleJobs: mergeTitleJobActivity(),
-    reefRequests: listReefWidgetLlmActivity(),
     resolveSubAgentLabel: (type) => subAgentLabelCache.get(type) ?? type,
   });
   updateBadgeCount(rows.length);
@@ -266,7 +261,7 @@ function buildRowElement(row: AgentActivityRow): HTMLElement {
   const ctxBar = renderContextBar(row);
   if (ctxBar) li.appendChild(ctxBar);
 
-  if (row.kind === 'title_job' || row.kind === 'reef_widget_llm') {
+  if (row.kind === 'title_job') {
     const badge = document.createElement('span');
     badge.className = 'agent-activity-row__bg-badge';
     badge.textContent = 'Background';
@@ -292,11 +287,6 @@ async function handleRowActivate(row: AgentActivityRow): Promise<void> {
   }
   if (row.kind === 'sub_agent' && row.runId && row.chatId) {
     openSubAgentDrawer(row.runId, row.chatId);
-    return;
-  }
-  if (row.kind === 'reef_widget_llm' && row.widgetId) {
-    const anchor = document.querySelector(`[data-reef-widget-id="${row.widgetId}"]`);
-    anchor?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 }
 
@@ -349,7 +339,6 @@ export async function refreshAgentActivityPanel(forceContext = false): Promise<v
     mainTurns: listMainTurnActivity(),
     subAgents,
     titleJobs: mergeTitleJobActivity(),
-    reefRequests: listReefWidgetLlmActivity(),
     contextByChatId: contextCache,
     resolveSubAgentLabel: resolveSubAgentLabelSync,
   });
@@ -377,7 +366,6 @@ function bindActivitySubscriptions(): void {
   subscribeSubAgentRuns(() => scheduleRefresh());
   subscribeMainTurnActivity(() => scheduleRefresh());
   subscribeTitleJobActivity(() => scheduleRefresh());
-  subscribeReefWidgetLlmActivity(() => scheduleRefresh());
 }
 
 function bindPanelChrome(): void {

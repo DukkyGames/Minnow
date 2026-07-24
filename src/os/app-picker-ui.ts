@@ -110,6 +110,38 @@ export function appendAppPickerCoreNote(
   return note;
 }
 
+/**
+ * Empty-state note when no optional released apps are available to toggle yet.
+ * Used by onboarding Choose your apps and Settings → Apps.
+ */
+export function appendAppPickerComingSoon(
+  host: HTMLElement,
+  options?: {
+    title?: string;
+    message?: string;
+    searchKey?: string;
+  },
+): HTMLElement {
+  const panel = el('div', 'mn-app-picker-coming-soon');
+  panel.setAttribute('role', 'status');
+  if (options?.searchKey) panel.dataset.settingsSearchKey = options.searchKey;
+
+  panel.appendChild(
+    el('p', 'mn-app-picker-coming-soon__title', options?.title ?? 'Coming soon'),
+  );
+  panel.appendChild(
+    el(
+      'p',
+      'mn-app-picker-coming-soon__message',
+      options?.message ??
+        'More optional apps for the dock are on the way. You can turn them on here when they ship.',
+    ),
+  );
+
+  host.appendChild(panel);
+  return panel;
+}
+
 /** Sync every selectable card in a grid to match a selection predicate. */
 function syncGridSelection(
   grid: HTMLElement,

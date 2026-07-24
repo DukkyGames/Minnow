@@ -1,0 +1,13 @@
+{
+  "packId": "last30days",
+  "commit": "01aef34ca49db1ccc9caaee72913760f4468f6c1",
+  "generatedAt": "2026-07-24T07:31:21.859Z",
+  "skills": [
+    {
+      "skillId": "last30days",
+      "label": "Last30days",
+      "description": "Research what people actually say about any topic in the last 30 days. Pulls posts and engagement from Reddit, X, YouTube, TikTok, Hacker News, Polymarket, GitHub, and the web. Includes a doctor health check to diagnose broken or missing sources.",
+      "subpath": "skills/last30days"
+    }
+  ]
+}

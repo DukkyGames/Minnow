@@ -109,7 +109,6 @@ export const TOOL_GROUP_IDS = {
     'email_action',
   ],
   calendar: ['manage_calendar'],
-  reef: ['check_reef_widget'],
   impeccable: ['load_impeccable_context', 'load_aesthetics_reference', 'run_impeccable'],
   todo: ['todo_write'],
 } as const;
@@ -231,18 +230,6 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'brain-core',
     'brain-admin',
     'recall',
-  ],
-  reef: [
-    'util-basic',
-    'files-read',
-    'files-write',
-    'mode-mgmt',
-    'ask',
-    'browser',
-    'brain-core',
-    'brain-admin',
-    'reef',
-    'impeccable',
   ],
   debug: [
     'util-basic',

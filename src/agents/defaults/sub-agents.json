@@ -286,49 +286,6 @@
         "topP": 0.9,
         "topK": 20
       }
-    },
-    "reef-widget": {
-      "label": "Reef widget",
-      "enabled": true,
-      "providerId": "",
-      "modelId": "",
-      "maxConcurrent": 1,
-      "timeoutMs": 300000,
-      "workAgentId": null,
-      "allowedTools": [
-        "read_file",
-        "read_file_range",
-        "find_files",
-        "search_in_file",
-        "grep",
-        "get_file_metadata",
-        "list_directory",
-        "web_search",
-        "wikipedia_search",
-        "fetch_web_content",
-        "check_reef_widget"
-      ],
-      "deniedTools": [
-        "spawn_sub_agent",
-        "cancel_sub_agent",
-        "execute_command",
-        "save_file",
-        "append_file",
-        "insert_at_line",
-        "replace_text_in_file",
-        "delete_path",
-        "move_file",
-        "git_commit",
-        "git_add",
-        "git_push"
-      ],
-      "systemPromptPath": null,
-      "summarySchema": "minnow.sub-agent.lite",
-      "sampler": {
-        "temperature": 0.6,
-        "topP": 0.95,
-        "topK": 20
-      }
     }
   }
 }

@@ -169,7 +169,6 @@ Per routing row: **provider**, **model**, **sampler override**, **thinking mode*
 | UI Designer (skill/runtime) | `config.uiDesigner` |
 | Chat title jobs | `config.titles` |
 | Goal evaluator | `config.goalEval` |
-| Reef widget LLM | Per active chat session |
 
 **Global fallback** (`config.fallbackChains`):
 
@@ -228,16 +227,15 @@ See [`src/config/voice-meta.ts`](../../src/config/voice-meta.ts) and [`src/voice
 
 Settings UI: **Agents → Rules** — grouped list with per-rule enable switches; add/edit via anchored popover ([`src/ui/settings-rules.ts`](../src/ui/settings-rules.ts), [`src/ui/settings-rules-popover.ts`](../src/ui/settings-rules-popover.ts)). Enabled rules compose into a second system message on parent chat send ([`src/config/user-rules.ts`](../src/config/user-rules.ts)). Legacy v1 `{ text }` blobs migrate automatically.
 
-### Modes (6)
+### Modes (5)
 
-`general` · `build` · `plan` · `orchestrate` · `reef` · `debug`
+`general` · `build` · `plan` · `orchestrate` · `debug`
 
 | Per-mode | Notes |
 |----------|-------|
 | Tool policy | Default allow/deny (prompts in Prompts hub) |
 | Plan granularity | `large` / `medium` / `small` — `config.planning.granularity` |
 | Super Plan pipeline | Settings → Modes → Super Plan — `config.planning.superPlan` |
-| Reef widget LLM | Provider/model for active chat |
 
 #### Super Plan (`config.planning.superPlan`)
 
@@ -283,7 +281,7 @@ Drop-in work agent bundles under `~/.minnow/agent-packs/<pack-id>/` (`manifest.j
 | Check-in nudge | ms (0 = off) |
 | Duplicate tool limit | Identical tool+args calls before watchdog repetition recovery (`0` = off, max 256; default 5) |
 
-**Types (9):** `generalPurpose`, `explore`, `researcher`, `shell`, `explorer`, `debugger`, `bug-planner`, `plan-reviewer`, `reef-widget`
+**Types (8):** `generalPurpose`, `explore`, `researcher`, `shell`, `explorer`, `debugger`, `bug-planner`, `plan-reviewer`
 
 Per type: enabled, max concurrent, timeout, max input tokens, context policy, summary schema, allowed/denied tools, sampler, thinking, provider/model.
 
@@ -358,12 +356,12 @@ Managed **SearXNG** install/start/stop (`~/.minnow/servers/`).
 
 Preview panel automation for `browser_*` tools (Electron desktop shell only).
 
-#### Built-in tools (89)
+#### Built-in tools (88)
 
 | Category | Tools |
 |----------|-------|
 | **Web** | Web search, Wikipedia, Fetch page, Web RAG |
-| **Utility** | Date & time, Calculate, Read/write clipboard, System info, Ask question, Set chat mode, Create chat with mode, Launch Minnow app, Propose mode switch, Check reef widget, Save memory, Recall chat context, Recall turn full |
+| **Utility** | Date & time, Calculate, Read/write clipboard, System info, Ask question, Set chat mode, Create chat with mode, Launch Minnow app, Propose mode switch, Save memory, Recall chat context, Recall turn full |
 | **Files** | List directory, Read file, Read file lines, Save file, Append file, Insert at line, Replace in file, Search in file, Grep, Make directory, Move/rename, Copy file, Delete path, Find files, File metadata |
 | **Git** | Status, Diff, Log, Add, Commit, Checkout |
 | **Code** | Run command, Read command log, List/stop running commands, Start/stop background command, Run JavaScript, Run Python, Repo map, Find symbol, Who calls, Read symbol, Explain symbol |
@@ -461,7 +459,6 @@ No Settings page. Headless task packs and runs live under `server/evals/` / `~/.
 | **Email app** | Account management |
 | **Scheduler app** | Per-job: schedule, prompt, model, enabled |
 | **Research app (run panel)** | Per-run: rounds, category, search provider, model |
-| **Reef widgets** | Per-widget settings |
 | **Welcome screen** | Workspace path, recent workspaces |
 
 ---

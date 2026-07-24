@@ -81,12 +81,10 @@ describe('dock launcher open highlights', () => {
     assert.equal(dockOpenDot('models')?.hidden, false);
   });
 
-  test('removes disabled optional apps from the dock immediately', () => {
-    assert.ok(dockTile('compare'));
-    setAppEnabled('compare', false);
-    assert.equal(dockTile('compare'), null);
+  test('core scheduler stays on the dock when disable is attempted', () => {
+    assert.ok(dockTile('scheduler'));
+    setAppEnabled('scheduler', false);
+    assert.ok(dockTile('scheduler'));
     assert.ok(dockTile('settings'));
-    setAppEnabled('compare', true);
-    assert.ok(dockTile('compare'));
   });
 });

@@ -91,7 +91,6 @@ import {
 } from './orchestrate-plan-screen';
 import { exitBoardViewForNavigation } from './exit-board-view';
 import { onModelRoutingActiveChatChanged } from './settings-model-routing';
-import { syncReefWidgetSettingsFromActiveChat } from './reef-widget-settings';
 import { syncWorkAgentDevFromActiveChat, workAgentSidebarAbbrev } from './work-agent-dev';
 import { updateModelLoadUnloadButtons } from '../api/models';
 import { restoreChatColumnOnChatSelect } from './workspace-split-resize';
@@ -323,7 +322,6 @@ export function applyWorkspaceScopedSession(newPath: string, previousPath?: stri
     clearPanelCwdUserOverride();
     syncPanelFromActiveChat({ forceFileTree: true });
     syncWorkAgentDevFromActiveChat();
-    syncReefWidgetSettingsFromActiveChat();
     onModelRoutingActiveChatChanged(activeChat.id);
     void import('./terminal-panel').then((m) => m.refreshTerminalHistoryForActiveChat());
   }
@@ -1185,7 +1183,6 @@ export function switchChat(id: string): void {
   clearPanelCwdUserOverride();
   syncPanelFromActiveChat({ forceFileTree: true });
   syncWorkAgentDevFromActiveChat();
-  syncReefWidgetSettingsFromActiveChat();
   syncGoalActiveHint();
   if (isGoalEvaluating(chat.id)) {
     syncGoalEvalUi(chat.id);
@@ -1231,7 +1228,6 @@ function syncCreateChatChrome(chatId: string): void {
   syncComposerRunTargetFromActiveChat();
   syncViewModeToggleFromActiveChat();
   syncWorkAgentDevFromActiveChat();
-  syncReefWidgetSettingsFromActiveChat();
   onModelRoutingActiveChatChanged(chatId);
 }
 

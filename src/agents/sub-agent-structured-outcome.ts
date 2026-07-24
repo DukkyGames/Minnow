@@ -19,7 +19,7 @@ export interface SubAgentFinding {
 
 /** Reference artifact produced by a sub-agent (refs only, no embedded bodies). */
 export interface SubAgentArtifact {
-  kind: 'path' | 'url' | 'reef-widget' | 'note';
+  kind: 'path' | 'url' | 'note';
   label: string;
   ref: string;
   mime?: string;
@@ -114,7 +114,7 @@ Your task is complete. Respond with **only** valid JSON (no markdown outside a j
 {
   "summary": "1-3 sentences for the parent agent",
   "findings": [{ "title": "...", "detail": "...", "severity": "info|warn|blocker", "paths": ["optional/path"] }],
-  "artifacts": [{ "kind": "path|url|reef-widget|note", "label": "...", "ref": "..." }]
+  "artifacts": [{ "kind": "path|url|note", "label": "...", "ref": "..." }]
 }
 
 Rules:

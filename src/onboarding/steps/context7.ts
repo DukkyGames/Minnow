@@ -32,16 +32,6 @@ export const context7Step: OnboardingStep = {
       ),
     );
 
-    const ladder = el('div', 'mn-onboarding-info-card');
-    ladder.appendChild(
-      el(
-        'p',
-        null,
-        'Fact-verification ladder: (1) search the codebase, (2) Brain wiki, (3) Context7 for third-party APIs, (4) web search for release notes and issues.',
-      ),
-    );
-    container.appendChild(ladder);
-
     const notice = el('p', 'mn-onboarding-notice');
     notice.appendChild(
       document.createTextNode('Get a free API key at '),

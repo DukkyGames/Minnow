@@ -74,5 +74,4 @@ Modes change the system prompt and tool policy ([`src/chat/modes/registry.ts`](.
 | **Build** | Default development mode; broad tool access. |
 | **Plan** | Analyze and plan with destructive tools denied (no shell, writes, deletes, moves, or git mutations). |
 | **Orchestrate** | Coordinate multi-step work; board + plans under `documentation/plans/`. Opened from the top bar (not the composer strip). |
-| **Reef** | Build sandboxed interactive widgets inline in chat (`reef-widget` fences). |
 | **Debug** | Investigate bugs; file/triage via the **All bugs** board and `bug_*` tools. |
