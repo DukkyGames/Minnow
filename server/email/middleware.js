@@ -12,6 +12,8 @@ import {
   updateEmailAccount,
 } from './accounts.js';
 import {
+  getCategoryUnreadCounts,
+  getFolderUnreadCounts,
   listCachedMessages,
   listCachedThread,
   listCachedThreads,
@@ -34,6 +36,7 @@ import {
   queueDigestActionGroup,
 } from './digest.js';
 import { listSenderOverrides, setSenderOverride } from './priority.js';
+import { setThreadCategory } from './categorize.js';
 import { dismissAttentionHighlight } from './attention.js';
 import { getThreadSummary, summarizeThread } from './thread-summary.js';
 import { dismissFollowup, listFollowups } from './followups.js';
@@ -81,7 +84,6 @@ import {
   dryRunAutomation,
   listAutomationRunsForRule,
 } from './automations.js';
-import { getFolderUnreadCounts } from './cache.js';
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -568,12 +570,32 @@ export function createEmailMiddleware() {
 
         if (tail === 'threads' && req.method === 'GET') {
           const params = parseQuery(req.url ?? '');
+          const offset = Number(params.get('offset') ?? 0);
           const result = await listCachedThreads(accountId, {
             folder: params.get('folder') ?? undefined,
-            offset: Number(params.get('offset') ?? 0),
+            offset,
             limit: Number(params.get('limit') ?? 50),
             filter: params.get('filter') ?? undefined,
             query: params.get('query') ?? undefined,
+            category: params.get('category') ?? undefined,
+          });
+          // Badge counts only on the first page so paging stays cheap.
+          if (params.get('categoryCounts') === '1' && offset === 0) {
+            result.categoryCounts = await getCategoryUnreadCounts(accountId, {
+              folder: params.get('folder') ?? undefined,
+            });
+          }
+          sendJson(res, 200, result);
+          return;
+        }
+
+        const threadCategoryMatch = tail.match(/^threads\/([^/]+)\/category$/);
+        if (threadCategoryMatch && req.method === 'POST') {
+          const threadId = decodeURIComponent(threadCategoryMatch[1]);
+          const body = await readJsonBody(req);
+          const result = await setThreadCategory(accountId, threadId, String(body.category ?? ''), {
+            rememberSender: body.rememberSender === true,
+            sender: body.sender ? String(body.sender) : undefined,
           });
           sendJson(res, 200, result);
           return;

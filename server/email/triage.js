@@ -12,6 +12,7 @@ import {
 } from '../memory/synthesis-config.js';
 import { getCachedMessage, updateMessageTriage } from './cache.js';
 import { getAttachmentSummaryForMessage } from './attachments.js';
+import { reclassifyWithAiBucket } from './categorize.js';
 
 /** Triage v2 categories — closed set so the priority model stays explainable. */
 export const TRIAGE_CATEGORIES = [
@@ -30,6 +31,7 @@ Return ONLY valid JSON with fields:
 - tags: string array (1-5 short labels, lowercase)
 - urgency: one of "low", "normal", "high"
 - category: one of "needs_reply", "fyi", "newsletter", "notification", "receipt", "calendar", "security"
+- bucket: one of "primary", "social", "other" — inbox tab hint (person-to-person → primary; social networks → social; promotions/newsletters/receipts/notifications → other)
 - deadline: concrete deadline as "YYYY-MM-DD" if the email states one, otherwise null
 - people: array of names of people who matter for acting on this email (max 5, may be empty)
 
@@ -101,11 +103,15 @@ export function parseTriageJson(raw) {
     ? parsed.people.map((name) => String(name).trim()).filter(Boolean).slice(0, 5)
     : [];
 
+  // Inbox tab hint — unknown / missing collapses to '' so deterministic rules win.
+  const bucketRaw = String(parsed.bucket ?? '').trim().toLowerCase();
+  const bucket = ['primary', 'social', 'other'].includes(bucketRaw) ? bucketRaw : '';
+
   if (!summary) {
     return null;
   }
 
-  return { summary, tags, urgency, category, deadline, people };
+  return { summary, tags, urgency, category, bucket, deadline, people };
 }
 
 /**
@@ -172,6 +178,10 @@ export async function triageMessage(accountId, messageKey) {
     };
 
     await updateMessageTriage(accountId, messageKey, triage);
+    // Refine the local inbox tab when the deterministic pass left it ambiguous.
+    if (triage.bucket) {
+      await reclassifyWithAiBucket(accountId, messageKey, triage.bucket);
+    }
     return triage;
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);

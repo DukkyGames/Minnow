@@ -246,6 +246,20 @@ function migrateAddedColumns(database) {
   // continue fetching older mail after the initial page lands.
   ensureColumn(database, 'sync_state', 'lowest_uid', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn(database, 'sync_state', 'backfill_complete', 'INTEGER NOT NULL DEFAULT 0');
+  // Local-only inbox tabs (Primary / Social / Other) — never round-trip to IMAP.
+  ensureColumn(database, 'messages', 'category', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(database, 'messages', 'category_source', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(database, 'threads', 'category', "TEXT NOT NULL DEFAULT ''");
+  database.exec(
+    "CREATE INDEX IF NOT EXISTS idx_threads_category ON threads(category) WHERE category != ''",
+  );
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS sender_category_overrides (
+      sender TEXT PRIMARY KEY,
+      category TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT ''
+    );
+  `);
 }
 
 /** FTS5 mirror over subject/from/body — replaces the substring scan (D10). */
@@ -427,6 +441,9 @@ export function rowToMessage(row, extra = {}) {
     hasAttachments: Boolean(row.has_attachments),
     attachments: extra.attachments ?? [],
     snoozeUntil: row.snooze_until || '',
+    // Local inbox tab label (primary / social / other); empty until classified.
+    category: row.category || '',
+    categorySource: row.category_source || '',
     inReplyTo: row.in_reply_to ?? '',
     references: parseJson(row.references_json, []),
     flags: {
@@ -514,7 +531,7 @@ export function recomputeThread(db, threadId) {
   const rows = db
     .prepare(
       `SELECT folder, subject, from_addr, date, date_ms, seen, flagged,
-              has_attachments, body_preview
+              has_attachments, body_preview, category
        FROM messages WHERE thread_id = ? ORDER BY date_ms ASC`,
     )
     .all(id);
@@ -527,18 +544,30 @@ export function recomputeThread(db, threadId) {
   const last = rows[rows.length - 1];
   const participants = [];
   const folders = [];
+  // primary > social > other so a personal reply promotes a promo thread.
+  const rank = { primary: 3, social: 2, other: 1 };
+  let category = '';
+  let categoryRank = 0;
   for (const row of rows) {
     if (row.from_addr && !participants.includes(row.from_addr)) participants.push(row.from_addr);
     if (row.folder && !folders.includes(row.folder)) folders.push(row.folder);
+    const cat = String(row.category ?? '').toLowerCase();
+    const r = rank[cat] ?? 0;
+    if (r > categoryRank) {
+      categoryRank = r;
+      category = cat;
+    }
   }
 
   db.prepare(
     `INSERT INTO threads (
        thread_id, subject, participants_json, message_count, unread_count,
-       flagged, has_attachments, last_date, last_date_ms, folders_json, snippet
+       flagged, has_attachments, last_date, last_date_ms, folders_json, snippet,
+       category
      ) VALUES (
        @thread_id, @subject, @participants_json, @message_count, @unread_count,
-       @flagged, @has_attachments, @last_date, @last_date_ms, @folders_json, @snippet
+       @flagged, @has_attachments, @last_date, @last_date_ms, @folders_json, @snippet,
+       @category
      )
      ON CONFLICT(thread_id) DO UPDATE SET
        subject = excluded.subject,
@@ -550,7 +579,8 @@ export function recomputeThread(db, threadId) {
        last_date = excluded.last_date,
        last_date_ms = excluded.last_date_ms,
        folders_json = excluded.folders_json,
-       snippet = excluded.snippet`,
+       snippet = excluded.snippet,
+       category = excluded.category`,
   ).run({
     thread_id: id,
     subject: rows.find((row) => row.subject)?.subject ?? '',
@@ -563,6 +593,7 @@ export function recomputeThread(db, threadId) {
     last_date_ms: last.date_ms ?? 0,
     folders_json: JSON.stringify(folders),
     snippet: sanitizePreviewText(last.body_preview ?? ''),
+    category,
   });
 }
 

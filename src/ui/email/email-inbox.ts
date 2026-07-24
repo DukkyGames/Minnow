@@ -15,7 +15,9 @@
 
 import type {
   EmailAccount,
+  EmailCategoryCounts,
   EmailFollowup,
+  EmailInboxCategory,
   EmailInboxSummary,
   EmailMessage,
   EmailNarrativeDigest,
@@ -40,6 +42,7 @@ import {
   moveEmailMessage,
   requestThreadSummary,
   setEmailMessageFlags,
+  setEmailThreadCategory,
 } from '../../email/client-ext';
 import { snoozeEmailMessage } from '../../email/client-drafts';
 import { mountEmailCompose, type ComposeMode } from './email-compose';
@@ -171,6 +174,18 @@ function scopeShowsHead(scope: InboxScope): boolean {
   return scope.kind === 'triage';
 }
 
+/** Category tabs show on the Inbox folder (not Needs attention / other views). */
+function scopeShowsCategoryTabs(scope: InboxScope, account: EmailAccount): boolean {
+  if (account.categoryTabsEnabled === false) return false;
+  return scope.kind === 'folder' && scope.path.toUpperCase() === 'INBOX';
+}
+
+const INBOX_CATEGORY_TABS: Array<{ id: EmailInboxCategory; label: string }> = [
+  { id: 'primary', label: 'Primary' },
+  { id: 'social', label: 'Social' },
+  { id: 'other', label: 'Other' },
+];
+
 /** Human title for the current scope, shown as the "everything else" marker. */
 function scopeMarker(scope: InboxScope): string {
   switch (scope.kind) {
@@ -217,6 +232,10 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
 
   // ---- State -----------------------------------------------------------
   let search = '';
+  /** Active inbox tab — internal state via reload(), never applyNav (avoids remount). */
+  let category: EmailInboxCategory = 'primary';
+  /** Unread conversation counts per tab (from the offset-0 fetch). */
+  let categoryCounts: EmailCategoryCounts = { primary: 0, social: 0, other: 0 };
   /** Conversations for the page currently on screen. */
   let threads: EmailThreadSummary[] = [];
   let total = 0;
@@ -261,6 +280,9 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   const loadingBanner = el('p', 'email-stream-loading', 'Loading…');
   loadingBanner.hidden = true;
   const headMount = el('div', 'email-stream-head');
+  const tabsMount = el('div', 'email-stream-tabs');
+  tabsMount.setAttribute('role', 'tablist');
+  tabsMount.setAttribute('aria-label', 'Inbox categories');
   const followupsMount = el('div', 'email-stream-followups');
   const markerMount = el('div', 'email-stream-marker');
   const markerLabel = el('span', '', scopeMarker(scope));
@@ -375,13 +397,19 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     }
   };
 
-  const queryThreads = (offset: number): ReturnType<typeof fetchEmailThreads> =>
+  const queryThreads = (
+    offset: number,
+    opts?: { categoryCounts?: boolean },
+  ): ReturnType<typeof fetchEmailThreads> =>
     fetchEmailThreads(account.id, {
       folder: scopeFolder(scope),
       offset,
       limit: PAGE,
       filter: scopeFilter(scope),
       query: search || undefined,
+      // Tab filter only on the Inbox folder when the account toggle is on.
+      ...(scopeShowsCategoryTabs(scope, account) ? { category } : {}),
+      ...(opts?.categoryCounts ? { categoryCounts: true } : {}),
     });
 
   /** Load every conversation in the current folder/view for folder-wide selection. */
@@ -401,6 +429,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
           limit,
           filter: scopeFilter(scope),
           query: search || undefined,
+          ...(scopeShowsCategoryTabs(scope, account) ? { category } : {}),
         });
         collected.push(...result.threads);
         offset += result.threads.length;
@@ -436,9 +465,14 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   let paintSelectBanner: () => void = () => {};
 
   const fetchThreadsPage = async (pageIndex: number): Promise<void> => {
-    const result = await queryThreads(pageIndex * PAGE);
+    const result = await queryThreads(pageIndex * PAGE, {
+      categoryCounts: pageIndex === 0 && scopeShowsCategoryTabs(scope, account),
+    });
     total = result.total;
     threads = result.threads;
+    if (result.categoryCounts) {
+      categoryCounts = result.categoryCounts;
+    }
   };
 
   /** Load the page tracked by `page`, clamping if the folder shrank under us. */
@@ -724,6 +758,88 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     });
   };
 
+  /**
+   * File conversation(s) into a local inbox tab.
+   * Local label only — never creates IMAP folders or server labels.
+   */
+  const fileThreadsAs = async (
+    threadIds: string[],
+    next: EmailInboxCategory,
+    rememberSender: boolean,
+  ): Promise<void> => {
+    if (bulkBusy || threadIds.length === 0) return;
+    bulkBusy = true;
+    paintToolbar();
+    try {
+      let failed = 0;
+      for (const threadId of threadIds) {
+        const thread = threads.find((row) => row.threadId === threadId);
+        const sender = thread?.participants?.[0] ?? '';
+        try {
+          await setEmailThreadCategory(account.id, threadId, next, {
+            rememberSender,
+            sender: rememberSender ? sender : undefined,
+          });
+        } catch {
+          failed += 1;
+        }
+      }
+      if (failed > 0) {
+        options.onStatus?.('err', `${failed} of ${threadIds.length} failed to file`);
+      } else {
+        const label = INBOX_CATEGORY_TABS.find((tab) => tab.id === next)?.label ?? next;
+        options.onStatus?.(
+          'ok',
+          rememberSender ? `Filed as ${label} (sender remembered)` : `Filed as ${label}`,
+        );
+      }
+      resetSelection();
+      await reload({ showLoading: false });
+    } finally {
+      bulkBusy = false;
+      paintToolbar();
+    }
+  };
+
+  /** Pick Primary / Social / Other, then optionally remember the sender. */
+  const openFileAsMenu = (
+    anchor: HTMLElement,
+    threadIds: string[],
+    clientX?: number,
+    clientY?: number,
+  ): void => {
+    const rect = anchor.getBoundingClientRect();
+    openEmailContextMenu({
+      clientX: clientX ?? rect.left,
+      clientY: clientY ?? rect.bottom + 4,
+      restoreFocus: anchor,
+      items: INBOX_CATEGORY_TABS.map((tab) => ({
+        id: tab.id,
+        label: tab.label,
+        onSelect: () => {
+          // Second step: this conversation only vs pin the sender.
+          openEmailContextMenu({
+            clientX: clientX ?? rect.left,
+            clientY: clientY ?? rect.bottom + 4,
+            restoreFocus: anchor,
+            items: [
+              {
+                id: `${tab.id}-once`,
+                label: `Just this conversation → ${tab.label}`,
+                onSelect: () => void fileThreadsAs(threadIds, tab.id, false),
+              },
+              {
+                id: `${tab.id}-always`,
+                label: `Always from this sender → ${tab.label}`,
+                onSelect: () => void fileThreadsAs(threadIds, tab.id, true),
+              },
+            ],
+          });
+        },
+      })),
+    });
+  };
+
   /** Pop snooze presets near an anchor button. */
   const openSnoozeMenu = (anchor: HTMLElement, threadIds: string[]): void => {
     const rect = anchor.getBoundingClientRect();
@@ -796,6 +912,15 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
           label: 'Move to…',
           onSelect: () => openMoveMenu(restoreFocus, targets),
         },
+        ...(scopeShowsCategoryTabs(scope, account)
+          ? [
+              {
+                id: 'file-as',
+                label: 'File as…',
+                onSelect: () => openFileAsMenu(restoreFocus, targets, clientX, clientY),
+              },
+            ]
+          : []),
         {
           id: 'spam',
           label: 'Report spam',
@@ -1032,7 +1157,53 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     pager.replaceChildren(prev, label, next);
   };
 
-  streamCol.append(loadingBanner, headMount, followupsMount, markerMount, selectBannerMount, listMount, pager);
+  /** Paint Primary / Social / Other tabs (Inbox folder only). */
+  const renderTabs = (): void => {
+    tabsMount.replaceChildren();
+    if (!scopeShowsCategoryTabs(scope, account)) {
+      tabsMount.hidden = true;
+      return;
+    }
+    tabsMount.hidden = false;
+    const segments = el('div', 'email-chrome-segments');
+    for (const tab of INBOX_CATEGORY_TABS) {
+      const btn = el('button', 'email-chrome-segment') as HTMLButtonElement;
+      btn.type = 'button';
+      btn.setAttribute('role', 'tab');
+      btn.setAttribute('aria-selected', tab.id === category ? 'true' : 'false');
+      btn.classList.toggle('is-active', tab.id === category);
+      btn.dataset.category = tab.id;
+      const label = el('span', 'email-chrome-segment-label', tab.label);
+      btn.appendChild(label);
+      const count = categoryCounts[tab.id] ?? 0;
+      if (count > 0) {
+        const badge = el('span', 'email-chrome-segment-count', String(count));
+        badge.setAttribute('aria-label', `${count} unread`);
+        btn.appendChild(badge);
+      }
+      btn.addEventListener('click', () => {
+        if (category === tab.id) return;
+        category = tab.id;
+        page = 0;
+        resetSelection();
+        renderTabs();
+        void reload({ showLoading: true });
+      });
+      segments.appendChild(btn);
+    }
+    tabsMount.appendChild(segments);
+  };
+
+  streamCol.append(
+    loadingBanner,
+    headMount,
+    tabsMount,
+    followupsMount,
+    markerMount,
+    selectBannerMount,
+    listMount,
+    pager,
+  );
 
   /**
    * Scope-marker toolbar: master checkbox, selection actions or idle tools
@@ -1126,6 +1297,9 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       );
       mkAction(EMAIL_ICONS.snooze, 'Snooze', (btn) => openSnoozeMenu(btn, selectedIds));
       mkAction(EMAIL_ICONS.move, 'Move to folder', (btn) => openMoveMenu(btn, selectedIds));
+      if (scopeShowsCategoryTabs(scope, account)) {
+        mkAction(EMAIL_ICONS.move, 'File as…', (btn) => openFileAsMenu(btn, selectedIds));
+      }
       mkAction(EMAIL_ICONS.close, 'Clear selection', () => {
         resetSelection();
         paintToolbar();
@@ -1279,6 +1453,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       pruneEmailSelection(selection, pageIds());
     }
     renderHead();
+    renderTabs();
     paintToolbar();
     paintSelectBanner();
 
@@ -1286,6 +1461,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     followupsMount.hidden = !isWaiting;
     listMount.hidden = isWaiting;
     markerMount.hidden = isWaiting;
+    if (isWaiting) tabsMount.hidden = true;
 
     if (isWaiting) {
       pager.hidden = true;

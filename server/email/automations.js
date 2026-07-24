@@ -309,7 +309,8 @@ function fieldValue(field, message) {
     case 'subject':
       return String(message.subject ?? '').toLowerCase();
     case 'category':
-      return String(message.triage?.category ?? '').toLowerCase();
+      // Prefer local inbox tab when set; fall back to triage category.
+      return String(message.category || message.triage?.category || '').toLowerCase();
     case 'urgency':
       return String(message.triage?.urgency ?? '').toLowerCase();
     case 'has_attachment':
@@ -320,12 +321,44 @@ function fieldValue(field, message) {
 }
 
 /**
+ * Match a category condition against either the inbox tab or triage category
+ * so rules like `equals newsletter` and `equals other` both keep working.
+ * @param {string} op
+ * @param {string} value
+ * @param {Record<string, any>} message
+ */
+function matchCategoryCondition(op, value, message) {
+  const candidates = [
+    String(message.category ?? '').toLowerCase(),
+    String(message.triage?.category ?? '').toLowerCase(),
+  ].filter(Boolean);
+  const any = (pred) => candidates.some(pred);
+  const every = (pred) => candidates.length > 0 && candidates.every(pred);
+  switch (op) {
+    case 'contains':
+      return value.length > 0 && any((c) => c.includes(value));
+    case 'not_contains':
+      return value.length === 0 || every((c) => !c.includes(value));
+    case 'equals':
+      return any((c) => c === value);
+    case 'not_equals':
+      return candidates.length === 0 || every((c) => c !== value);
+    default:
+      return false;
+  }
+}
+
+/**
  * @param {AutomationCondition} cond
  * @param {Record<string, any>} message
  */
 export function matchCondition(cond, message) {
   const value = String(cond?.value ?? '').trim().toLowerCase();
-  const actual = fieldValue(String(cond?.field ?? ''), message);
+  const field = String(cond?.field ?? '');
+  if (field === 'category') {
+    return matchCategoryCondition(cond?.op, value, message);
+  }
+  const actual = fieldValue(field, message);
   switch (cond?.op) {
     case 'contains':
       return value.length > 0 && actual.includes(value);
