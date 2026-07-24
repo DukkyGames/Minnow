@@ -104,6 +104,10 @@ export function validateAccountInput(input) {
     ...(input.styleProfileEnabled !== undefined
       ? { styleProfileEnabled: Boolean(input.styleProfileEnabled) }
       : {}),
+    // Inbox Primary/Social/Other tabs — default on; toggle only hides the UI.
+    ...(input.categoryTabsEnabled !== undefined
+      ? { categoryTabsEnabled: Boolean(input.categoryTabsEnabled) }
+      : {}),
   };
 }
 
@@ -238,6 +242,7 @@ export async function updateEmailAccount(accountId, input, password) {
       signature: input.signature ?? existing.signature,
       followupTracking: input.followupTracking ?? existing.followupTracking,
       styleProfileEnabled: input.styleProfileEnabled ?? existing.styleProfileEnabled,
+      categoryTabsEnabled: input.categoryTabsEnabled ?? existing.categoryTabsEnabled,
     }),
     id: accountId,
     secretRef: existing.secretRef,

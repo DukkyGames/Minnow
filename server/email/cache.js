@@ -16,6 +16,7 @@ import {
   reindexMessageFts,
   writeMeta,
 } from './store.js';
+import { applyMessageCategory, isInboxCategory } from './categorize.js';
 import { sanitizePreviewText } from './parse-body.js';
 
 /**
@@ -28,14 +29,15 @@ import { sanitizePreviewText } from './parse-body.js';
 /** Columns needed for the metadata (no-body) message shape. */
 const MESSAGE_COLUMNS = `message_row_id, id, folder, uid, message_id, thread_id, from_addr,
   to_json, reply_to, subject, date, date_ms, body_preview, body_hash, has_attachments,
-  in_reply_to, references_json, seen, flagged, answered, snooze_until, triage_json,
-  reply_variants_json`;
+  in_reply_to, references_json, seen, flagged, answered, snooze_until, category,
+  category_source, triage_json, reply_variants_json`;
 
 /** Same, joined with bodies for reader/agent paths that need the text. */
 const MESSAGE_COLUMNS_WITH_BODY = `m.message_row_id, m.id, m.folder, m.uid, m.message_id,
   m.thread_id, m.from_addr, m.to_json, m.reply_to, m.subject, m.date, m.date_ms,
   m.body_preview, m.body_hash, m.has_attachments, m.in_reply_to, m.references_json,
-  m.seen, m.flagged, m.answered, m.snooze_until, m.triage_json, m.reply_variants_json,
+  m.seen, m.flagged, m.answered, m.snooze_until, m.category, m.category_source,
+  m.triage_json, m.reply_variants_json,
   b.body_text, b.body_html, b.complete AS body_complete`;
 
 function nowIso() {
@@ -190,6 +192,13 @@ function upsertMessageRow(db, message) {
       complete: message.bodyComplete,
     });
   }
+
+  // Deterministic inbox tab — runs for every envelope, independent of AI triage.
+  applyMessageCategory(db, rowId, {
+    fromHeader: values.from_addr,
+    bulkSignals: message.categorySignals ?? null,
+    triage: message.triage,
+  });
 
   reindexMessageFts(db, rowId);
   recomputeThread(db, values.thread_id);
@@ -519,7 +528,7 @@ export async function searchCachedMessages(accountId, options) {
 /**
  * Conversation rollups for the thread list.
  * @param {string} accountId
- * @param {{ folder?: string, offset?: number, limit?: number, filter?: string, query?: string, includeSnoozed?: boolean }} options
+ * @param {{ folder?: string, offset?: number, limit?: number, filter?: string, query?: string, includeSnoozed?: boolean, category?: string }} options
  */
 export async function listCachedThreads(accountId, options = {}) {
   const db = getMailDb(accountId);
@@ -530,6 +539,13 @@ export async function listCachedThreads(accountId, options = {}) {
   if (folder) {
     where.push('t.thread_id IN (SELECT thread_id FROM messages WHERE folder = ?)');
     params.push(folder);
+  }
+
+  // Inbox tab filter (Primary / Social / Other) — ANDs with folder/filter/query.
+  const category = String(options.category ?? '').trim().toLowerCase();
+  if (isInboxCategory(category)) {
+    where.push('t.category = ?');
+    params.push(category);
   }
 
   const filter = String(options.filter ?? '').trim().toLowerCase();
@@ -594,6 +610,8 @@ export async function listCachedThreads(accountId, options = {}) {
       lastDate: row.last_date,
       folders: JSON.parse(row.folders_json || '[]'),
       snippet: sanitizePreviewText(row.snippet ?? ''),
+      // Local inbox tab rolled up from messages (primary > social > other).
+      category: row.category || '',
       messageIds,
       // Stored as JSON by thread-summary.js; the API exposes just the text.
       summary: (() => {
@@ -817,6 +835,49 @@ export async function getFolderUnreadCounts(accountId) {
     .prepare('SELECT folder, COUNT(*) AS n FROM messages WHERE seen = 0 GROUP BY folder')
     .all()) {
     counts[row.folder] = row.n;
+  }
+  return counts;
+}
+
+/**
+ * Count conversations with unread mail, grouped by inbox tab.
+ * Scoped to a folder (typically INBOX) so Sent/Archive stay out of the badges.
+ *
+ * @param {string} accountId
+ * @param {{ folder?: string }} [options]
+ * @returns {Promise<{ primary: number, social: number, other: number }>}
+ */
+export async function getCategoryUnreadCounts(accountId, options = {}) {
+  const db = getMailDb(accountId);
+  const folder = options.folder ? String(options.folder) : '';
+  /** @type {{ primary: number, social: number, other: number }} */
+  const counts = { primary: 0, social: 0, other: 0 };
+
+  let rows;
+  if (folder) {
+    rows = db
+      .prepare(
+        `SELECT t.category AS category, COUNT(*) AS n
+         FROM threads t
+         WHERE t.unread_count > 0
+           AND t.category IN ('primary', 'social', 'other')
+           AND t.thread_id IN (SELECT thread_id FROM messages WHERE folder = ?)
+         GROUP BY t.category`,
+      )
+      .all(folder);
+  } else {
+    rows = db
+      .prepare(
+        `SELECT category, COUNT(*) AS n FROM threads
+         WHERE unread_count > 0 AND category IN ('primary', 'social', 'other')
+         GROUP BY category`,
+      )
+      .all();
+  }
+
+  for (const row of rows) {
+    const key = String(row.category ?? '').toLowerCase();
+    if (key in counts) counts[key] = Number(row.n) || 0;
   }
   return counts;
 }

@@ -747,6 +747,49 @@
   outline-offset: 2px;
 }
 
+/* Unread conversation count on inbox category tabs. */
+.email-chrome-segment-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  padding: 0 5px;
+  border-radius: var(--radius-sm, 6px);
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  color: var(--mn-fg-muted);
+  background: color-mix(in oklch, var(--mn-fg) 10%, transparent);
+}
+
+.email-chrome-segment.is-active .email-chrome-segment-count,
+.email-chrome-segment[aria-selected='true'] .email-chrome-segment-count {
+  color: var(--mn-fg-on-accent);
+  background: color-mix(in oklch, var(--mn-fg-on-accent) 22%, transparent);
+}
+
+/* Primary / Social / Other tab bar under the triage head. */
+.email-stream-tabs {
+  display: flex;
+  align-items: center;
+  padding: 0 12px 10px;
+}
+
+.email-stream-tabs[hidden] {
+  display: none;
+}
+
+.email-stream-tabs .email-chrome-segments {
+  width: 100%;
+}
+
+.email-stream-tabs .email-chrome-segment {
+  flex: 1;
+  justify-content: center;
+}
+
 .email-chrome-utils {
   display: flex;
   align-items: center;

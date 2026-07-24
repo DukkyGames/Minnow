@@ -9,6 +9,7 @@ import type {
   EmailAutomationRun,
   EmailDraft,
   EmailFollowup,
+  EmailInboxCategory,
   EmailInboxSummary,
   EmailMessage,
   EmailNarrativeDigest,
@@ -99,6 +100,32 @@ export async function sendPriorityFeedback(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sender, level }),
+    },
+  );
+  return parseJson(res);
+}
+
+/** File a conversation into a local inbox tab (Primary / Social / Other). */
+export async function setEmailThreadCategory(
+  accountId: string,
+  threadId: string,
+  category: EmailInboxCategory,
+  options?: { rememberSender?: boolean; sender?: string },
+): Promise<{
+  threadId: string;
+  category: EmailInboxCategory;
+  override: { sender: string; category: string } | null;
+}> {
+  const res = await fetch(
+    `/api/email/accounts/${encodeURIComponent(accountId)}/threads/${encodeURIComponent(threadId)}/category`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        category,
+        rememberSender: options?.rememberSender === true,
+        sender: options?.sender,
+      }),
     },
   );
   return parseJson(res);

@@ -38,6 +38,7 @@ import {
 } from './cache.js';
 import { emitEmailEvent } from './events.js';
 import { listFoldersCached, withMailbox } from './imap-session.js';
+import { backfillCategoriesIfNeeded, deriveBulkSignals } from './categorize.js';
 import { withImapErrors } from './imap-errors.js';
 
 /** Default page size for one backfill/incremental batch. */
@@ -288,6 +289,9 @@ export async function parseEnvelopeMessage(input, previewSource = '') {
   const bodyHash = createHash('sha256').update(bodyText).digest('hex');
   const date = parsed.date ? parsed.date.toISOString() : new Date().toISOString();
 
+  // Bulk-mail signals for local inbox tabs — derived only, never stored raw.
+  const categorySignals = deriveBulkSignals(parsed.headers);
+
   return {
     id: `${input.folder}:${input.uid}`,
     uid: String(input.uid),
@@ -309,6 +313,7 @@ export async function parseEnvelopeMessage(input, previewSource = '') {
     inReplyTo,
     references,
     flags: imapFlagsToObject(input.flags),
+    categorySignals,
   };
 }
 
@@ -550,6 +555,8 @@ export async function syncFolderMessages(accountId, options = {}) {
   }
 
   await migrateJsonCacheIfNeeded(accountId);
+  // One-time local tab labels for mail that predated the category columns.
+  await backfillCategoriesIfNeeded(accountId);
 
   const folder = String(options.folder ?? account.folders[0] ?? 'INBOX');
   const batchSize = Math.min(
