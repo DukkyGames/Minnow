@@ -4,6 +4,7 @@
 
 @import './settings-controls.css';
 @import './settings-agent-packs.css';
+@import './settings-skills-library.css';
 
 .settings-page {
   display: none;

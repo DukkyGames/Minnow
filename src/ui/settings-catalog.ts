@@ -64,6 +64,7 @@ export const SETTINGS_CATEGORY_AREAS: Record<
     'servers',
     'tools',
     'skills',
+    'skills-library',
     'browser',
     'mcp',
     'lsp',
@@ -377,6 +378,10 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   }),
   field('integrations.skills', 'Skills', 'integrations', 'skills', {
     keywords: ['slash command', 'skill pack'],
+  }),
+  field('integrations.skills-library', 'Skills Library', 'integrations', 'skills-library', {
+    keywords: ['curated packs', 'matt pocock', 'install skill', 'github url', 'browse skills'],
+    description: 'Browse curated third-party skill packs, install from GitHub, and manage provenance.',
   }),
   field('integrations.webhooks', 'Webhooks', 'integrations', 'webhooks', {
     keywords: ['hmac', 'outgoing events'],

@@ -131,6 +131,7 @@ export const SCOPED_SUITES = {
       'test/skills-library-index.test.mjs',
       'test/skills-library-index-files.test.mts',
       'test/skills/library-api.test.mjs',
+      'test/skills/library-client.test.mjs',
     ],
   },
   attachments: {

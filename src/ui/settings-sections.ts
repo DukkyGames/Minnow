@@ -51,6 +51,7 @@ import { renderAppUpdatesSettings } from './settings-updates';
 import { renderAgentPacksSettingsSection } from './settings-agent-packs';
 import { renderAutopilotSettingsSection } from './settings-autopilot';
 import { renderSkillsSettingsSection } from './settings-skills';
+import { renderSkillsLibrarySettingsSection } from './settings-skills-library';
 import {
   fillToolsSection,
   refreshProvidersBanner,
@@ -2020,8 +2021,45 @@ async function renderSkillsSection(): Promise<void> {
   await renderSkillsSettingsSection(catalog);
 
   appendSettingsCrosslinks(content, [
+    { label: 'Skills Library', sectionId: 'skills-library' },
     { label: 'Tool permissions', sectionId: 'tools' },
     { label: 'Browser automation', sectionId: 'browser' },
+  ]);
+}
+
+async function renderSkillsLibrarySection(): Promise<void> {
+  const mount = clearMount('settingsSkillsLibraryBody');
+  if (!mount) return;
+
+  const shell = el('div', 'settings-general');
+  mount.appendChild(shell);
+
+  const lead = el('p', 'settings-section-lead');
+  lead.append(
+    'Browse curated third-party SKILL.md packs, install skills into ',
+    document.createElement('code'),
+    ', or add from a GitHub URL. Enable/disable installed skills in ',
+    linkToSettingsSection('Skills catalog', 'skills'),
+    '.',
+  );
+  (lead.querySelector('code') as HTMLElement).textContent = '~/.minnow/skills/';
+  shell.appendChild(lead);
+
+  const content = el('div', 'settings-general__content');
+  shell.appendChild(content);
+
+  const library = appendSettingsGroup(
+    content,
+    'Curated packs',
+    'Matt Pocock, Addy Osmani, Superpowers, last30days, and Browserbase ship offline indexes for browse.',
+    'integrations.skills-library',
+    { emphasis: true },
+  );
+  await renderSkillsLibrarySettingsSection(library);
+
+  appendSettingsCrosslinks(content, [
+    { label: 'Skills catalog', sectionId: 'skills' },
+    { label: 'Tool permissions', sectionId: 'tools' },
   ]);
 }
 
@@ -2161,6 +2199,9 @@ export async function refreshSettingsSection(
       break;
     case 'skills':
       await renderSkillsSection();
+      break;
+    case 'skills-library':
+      await renderSkillsLibrarySection();
       break;
     case 'webhooks':
       await renderWebhooksSection();
