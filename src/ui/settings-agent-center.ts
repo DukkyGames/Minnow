@@ -31,7 +31,6 @@ import {
   appendAgentCenterSection,
   openAgentCenterLightbox,
 } from './settings-agent-center-lightbox';
-import { mountReefWidgetLlmSettings } from './reef-widget-settings';
 import {
   loadPromptMetaSettings,
   savePromptMetaSettings,
@@ -190,15 +189,14 @@ function openModeLightbox(modeId: string, agents: WorkAgentDefinition[]): void {
           el(
             'p',
             'agent-center-section__lead',
-            'Modes use the active chat model from the top-bar picker. Reef widget LLM is configured below when applicable.',
+            'Modes use the active chat model from the top-bar picker.',
           ),
         );
       });
 
-      if (modeId === 'plan' || modeId === 'reef') {
+      if (modeId === 'plan') {
         appendAgentCenterSection(body, 'Mode options', (panel) => {
-          if (modeId === 'plan') void mountPlanGranularityField(panel);
-          if (modeId === 'reef') mountReefWidgetLlmSettings(panel);
+          void mountPlanGranularityField(panel);
         });
       }
 

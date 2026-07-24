@@ -178,7 +178,6 @@ import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bub
 import { ThinkingDurationTracker } from '../ui/thinking-duration';
 import type { StreamingStatusHandle } from '../ui/stream-status';
 import { scheduleContextUsageRefresh } from '../ui/context-usage-ring';
-import { consumeReefArtifactEditsForPrompt } from '../chat/reef/artifact-context.ts';
 import {
   markChatTurnError,
   recordAssistantReplyOnChat,
@@ -1198,16 +1197,12 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       scheduleSaveSessions();
     }
     clearComposerDraftOnChat(chat);
-    const artifactAppendix = consumeReefArtifactEditsForPrompt(chat);
-    const modelUserContent = artifactAppendix
-      ? `${historyContent}${artifactAppendix}`
-      : historyContent;
     chat.history.push(
       superPlanStage
-        ? superPlanPipelineUserMessage(modelUserContent, superPlanStage)
+        ? superPlanPipelineUserMessage(historyContent, superPlanStage)
         : hideUserEcho
-          ? hiddenTranscriptUserMessage(modelUserContent)
-          : { role: 'user', content: modelUserContent },
+          ? hiddenTranscriptUserMessage(historyContent)
+          : { role: 'user', content: historyContent },
     );
     recordChatMessage(chat);
     scheduleSaveSessions();

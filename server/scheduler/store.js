@@ -19,7 +19,7 @@ import { schedulerJobsPath } from './paths.js';
 export const MAX_SCHEDULER_JOBS = 50;
 
 const VALID_CHANNELS = new Set(['in_app', 'email', 'webhook']);
-const VALID_MODES = new Set(['general', 'build', 'plan', 'reef', 'debug']);
+const VALID_MODES = new Set(['general', 'build', 'plan', 'debug']);
 
 /** Serialize writes so tick + API cannot clobber each other. */
 let writeQueue = Promise.resolve();

@@ -15,7 +15,7 @@ const SUPER_PLAN_REFERENCE_BASENAMES = new Set([
 
 const SUPER_PLAN_REFERENCE_SUFFIX_RE = /-(?:spec|research)\.md$/i;
 
-const MODE_IDS = new Set(['build', 'plan', 'super-plan', 'orchestrate', 'reef']);
+const MODE_IDS = new Set(['build', 'plan', 'super-plan', 'orchestrate']);
 
 const PLAN_SCOPED_WRITE_TOOLS = new Set(['save_file', 'make_directory']);
 
@@ -45,7 +45,7 @@ const TOOL_PATH_ARG_KEYS = {
 
 /**
  * @param {string | null | undefined} value
- * @returns {'build' | 'plan' | 'super-plan' | 'orchestrate' | 'reef'}
+ * @returns {'build' | 'plan' | 'super-plan' | 'orchestrate'}
  */
 export function normalizeModeId(value) {
   if (typeof value === 'string' && MODE_IDS.has(value)) {

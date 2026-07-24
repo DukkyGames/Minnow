@@ -159,23 +159,6 @@ describe('composeSystemPrompt mode part', () => {
     assert.doesNotMatch(out, /MINNOW_MODE_MARKER/);
   });
 
-  test('reef full includes reef-widget guidance', async () => {
-    registerPromptFilesFromRaw(await loadBaseAndModeFixtures());
-    const out = composeSystemPrompt({
-      profile: 'full',
-      cwd: '/test',
-      modeId: 'reef',
-      expertId: null,
-      workAgentId: null,
-      skillBody: null,
-      memoryBlock: null,
-      enabledToolIds: [],
-      infoPresetId: null,
-    });
-    assert.match(out, /reef-widget/);
-    assert.doesNotMatch(out, /MINNOW_MODE_MARKER/);
-  });
-
   test('lite profile uses lite mode body without marker comments', async () => {
     registerPromptFilesFromRaw(await loadBaseAndModeFixtures());
     const out = composeSystemPrompt({

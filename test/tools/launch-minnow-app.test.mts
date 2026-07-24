@@ -73,13 +73,22 @@ describe('launch_minnow_app', () => {
     assert.match(result, /^Error: invalid app_id/);
   });
 
-  test('rejects user-disabled optional apps', () => {
+  test('core research stays launchable even if disable is attempted', () => {
     setAppEnabled('research', false);
     const calls: AppId[] = [];
     const result = toolLaunchMinnowApp({ app_id: 'research' }, (appId) => {
       calls.push(appId);
     });
-    assert.match(result, /turned off/i);
+    assert.doesNotMatch(result, /^Error:/);
+    assert.deepEqual(calls, ['research']);
+  });
+
+  test('rejects developer-hidden apps', () => {
+    const calls: AppId[] = [];
+    const result = toolLaunchMinnowApp({ app_id: 'bench' }, (appId) => {
+      calls.push(appId);
+    });
+    assert.match(result, /not available/i);
     assert.deepEqual(calls, []);
   });
 
@@ -144,12 +153,12 @@ describe('executeBrowserTool launch_minnow_app', () => {
   });
 
   test('routes launch_minnow_app and updates the OS hash', async () => {
-    const result = await executeBrowserTool('launch_minnow_app', { app_id: 'bench' });
+    const result = await executeBrowserTool('launch_minnow_app', { app_id: 'scheduler' });
     const parsed = JSON.parse(result) as { ok: boolean; appId: string; hash: string };
 
     assert.equal(parsed.ok, true);
-    assert.equal(parsed.appId, 'bench');
-    assert.equal(parsed.hash, '#/app/bench');
-    assert.equal(window.location.hash, '#/app/bench');
+    assert.equal(parsed.appId, 'scheduler');
+    assert.equal(parsed.hash, '#/app/scheduler');
+    assert.equal(window.location.hash, '#/app/scheduler');
   });
 });

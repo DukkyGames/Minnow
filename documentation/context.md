@@ -22,7 +22,7 @@ Minnow is a **local-first AI workspace**: a **Vite + TypeScript SPA**, a **Node 
 
 ### Operating modes
 
-Six composer modes: **General**, **Build**, **Plan**, **Orchestrate**, **Reef**, **Debug**. **Super Plan** is a Plan sub-mode. **Desktop**, **Email**, and **Onboarding** are surface-bound (not in the Code composer strip). **Orchestrate** opens from the sidebar hub; chat agents are not prompted to suggest Reef.
+Five composer modes: **General**, **Build**, **Plan**, **Orchestrate**, **Debug**. **Super Plan** is a Plan sub-mode. **Desktop**, **Email**, and **Onboarding** are surface-bound (not in the Code composer strip). **Orchestrate** opens from the sidebar hub.
 
 Registry: [`src/chat/modes/registry.ts`](../src/chat/modes/registry.ts). Tool allowlists: [`src/chat/modes/tool-groups.ts`](../src/chat/modes/tool-groups.ts). Prompts: [`src/chat/prompts/modes/`](../src/chat/prompts/modes/).
 
@@ -34,7 +34,7 @@ Registry: [`src/chat/modes/registry.ts`](../src/chat/modes/registry.ts). Tool al
 
 Chat (desktop), **Code**, **Models**, **Compare**, **Bench**, **Research**, **Experts**, **Brain**, **Calendar**, **Email**, **Scheduler**, **Settings** — routes `#/desktop`, `#/app/{id}`, registry in [`src/os/app-registry.ts`](../src/os/app-registry.ts).
 
-**Availability:** each app is `core` (always on: Chat, Models, Brain, Settings) or `optional`, plus a developer `releaseState` (`released` | `hidden`). User preferences store disabled optional ids in `localStorage` key `minnow.os.disabledApps` ([`src/os/app-preferences.ts`](../src/os/app-preferences.ts)). Missing key = all released optional apps enabled. Dock, menubar shortcuts, hash routes, notifications, and `launch_minnow_app` all consult the same selectors. First-run **Choose your apps** (after Appearance) and **Settings → Apps** share [`src/os/app-picker-ui.ts`](../src/os/app-picker-ui.ts): core apps collapse to a read-only “Always included” line; optional apps use quiet toggle cards (dimmed when off, no accent wash when on) with Enable all / Disable all. Onboarding **Email** and **Calendar** setup steps are applicable only when the matching app is enabled (`isAppEnabled`) and the tool server is up — disabling those apps in Choose your apps (or Settings) skips their wizard steps.
+**Availability:** each app is `core` (always on: Chat, Code, Research, Models, Brain, Scheduler, Settings) or `optional`, plus a developer `releaseState` (`released` | `hidden`). User preferences store disabled optional ids in `localStorage` key `minnow.os.disabledApps` ([`src/os/app-preferences.ts`](../src/os/app-preferences.ts)). Missing key = all released optional apps enabled. Dock, menubar shortcuts, hash routes, notifications, and `launch_minnow_app` all consult the same selectors. First-run **Choose your apps** (after Appearance) and **Settings → Apps** share [`src/os/app-picker-ui.ts`](../src/os/app-picker-ui.ts): core apps collapse to a read-only “Always included” line; optional apps use quiet toggle cards (dimmed when off, no accent wash when on) with Enable all / Disable all. When no optional apps are released yet, both surfaces show a **Coming soon** empty state instead of an empty card grid. Onboarding **Email** and **Calendar** setup steps are applicable only when the matching app is enabled (`isAppEnabled`) and the tool server is up — disabling those apps in Choose your apps (or Settings) skips their wizard steps.
 
 ### Scale
 
@@ -55,7 +55,7 @@ Minnow/
 ├── src/
 │   ├── main.ts             # Boot: theme, OS shell, initApp
 │   ├── os/                 # MinnowOS shell, router, windows, dock
-│   ├── chat/               # Modes, prompts, orchestrate, reef, titles
+│   ├── chat/               # Modes, prompts, orchestrate, titles
 │   ├── tools/              # definitions, loop, client, permission gate
 │   ├── agents/             # Sub-agents, work agents, UI Designer
 │   ├── api/                # models, chat, generations, sse-parse
@@ -98,7 +98,6 @@ Full directory map: [`guides/configuration.md`](guides/configuration.md). Notabl
 | `skills/`, `skills.json` | User skills and enable flags |
 | `scheduler.json`, `calendar/`, `email/` | Scheduler, calendar DB, email accounts + `mail-<accountId>.db` |
 | `compare/`, `benchmarks/`, `evals/` | Compare history, bench runs, eval harness |
-| `reef/widgets/`, `reef/modules/`, `reef/artifacts/` | Reef templates and user widgets |
 
 **Vite-only (`npm run dev`):** falls back to `localStorage` for sessions (`minnow-sessions-v1`) and tools (`minnow.tools`); server features disabled.
 
@@ -182,7 +181,7 @@ Tool approval: [`src/tools/permission-gate.ts`](../src/tools/permission-gate.ts)
 
 ## Built-in tools
 
-Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts). Config UI: Settings → Tools; persistence `tools.json` / `minnow.tools`.
+Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts). Config UI: Settings → Tools; persistence `tools.json` / `minnow.tools`. Optional `appId` on a catalog entry gates exposure through [`getEnabledToolCatalogEntries()`](../src/tools/client.ts) and [`fillToolsSection()`](../src/ui/tools-list.ts): email and calendar tools appear only when `isAppEnabled` for that app (developer `releaseState` plus user `disabledApps`).
 
 | Category | Examples | Runs on |
 |----------|----------|---------|
@@ -217,7 +216,13 @@ API: `GET/PUT /api/prompts/...` when server running.
 
 Cursor-style **SKILL.md** (YAML front matter + body). Built-in: `src/skills/<id>/`; user: `~/.minnow/skills/<id>/` (user wins on name clash).
 
-Invoke via **`/`** slash picker ([`src/ui/skill-picker.ts`](../src/ui/skill-picker.ts)). Built-ins include `git-commit`, `code-review`, `impeccable`, `ui-designer`, `caveman`, `partymode`, and **19 Matt Pocock skills** (sync: `npm run matt-pocock-skills:sync`).
+Invoke via **`/`** slash picker ([`src/ui/skill-picker.ts`](../src/ui/skill-picker.ts)). Built-ins include `git-commit`, `code-review`, `impeccable` (default-on), `ui-designer`, `caveman`, and `partymode`. Only installed skills appear in the picker — remote library packs are absent until installed.
+
+**Matt Pocock pack (MIN-476):** No longer bundled. Install from **Settings → Skills Library** (`matt-pocock` pack, 19 skills: `ask-minnow`, `triage`, `implement`, `handoff`, …). Post-install hook [`server/skills/library/post-install.js`](../server/skills/library/post-install.js) runs [`scripts/matt-pocock-preserves/apply-minnow-patches.mjs`](../scripts/matt-pocock-preserves/apply-minnow-patches.mjs) to apply Minnow renames (`ask-matt` → `ask-minnow`, `/review` → `/code-review`, `/compact` guidance, etc.). Lock file: `skills-lock.json` (`matt-pocock-skills` section). Maintainer sync (hashes only, not bundled): `npm run matt-pocock-skills:sync`.
+
+**Skills Library (MIN-474/475/477):** Curated third-party SKILL.md packs for browse/install from **Settings → Integrations → Skills Library** ([`src/ui/settings-skills-library.ts`](../src/ui/settings-skills-library.ts), section id `skills-library`). Pack registry data: [`src/skills/library/registry.mjs`](../src/skills/library/registry.mjs) (shared with server); types in [`registry.ts`](../src/skills/library/registry.ts) — five curated packs (Matt Pocock, Addy Osmani, Superpowers, last30days, Browserbase); Antigravity and AWS Agent Toolkit are excluded from the curated list. Each pack pins a GitHub `commit` SHA plus `skillsGlobs` for discovery. Prebuilt offline indexes ship at `src/skills/library/index/<pack>.json` (metadata only: `skillId`, `label`, `description`, `subpath`). Regenerate: `npm run skills-library:index` (also runs in `prebuild` via `scripts/generate-skills-library-index.mjs`). Matt Pocock pack declares `postInstallPatch: 'matt-pocock'` for Minnow adaptations on install. Client API: [`src/skills/library-api.ts`](../src/skills/library-api.ts) — fetches library routes when `npm start` is running, falls back to shipped indexes for offline browse.
+
+Skills Library API (`server/skills/library/`, routes in [`middleware.js`](../server/skills/middleware.js)): `GET /api/skills/library/packs` (registry + installed counts), `GET /api/skills/library/packs/:id/index` (offline shipped index), `GET /api/skills/library/search?q=`, `POST /api/skills/library/install` (`{ pack, skillIds[] | all }` or `{ repoUrl, subpath? }`), `POST /api/skills/library/remove` (`{ skillId }` or `{ pack, all: true }`). Installs write to `~/.minnow/skills/<id>/`, record provenance in `~/.minnow/skills/installed-skills.json`, and enable the skill immediately. Network fetches are SSRF-guarded and GitHub-host-only (`api.github.com`, `codeload.github.com`, `raw.githubusercontent.com`). **Skills catalog** (`settings.skills`) remains the enable/disable + custom authoring surface; cross-links between the two sections.
 
 API: `GET /api/skills`, `GET/PUT /api/skills/:id`, `GET/PUT /api/config/skills`.
 
@@ -272,10 +277,6 @@ State: `Chat.orchestratePlanPath`, `ChatGroup.orchestrateBoard`, [`src/ui/orches
 
 Personas under `src/chat/prompts/experts/<id>/`. Chats: `Chat.kind === 'expert'`, memory under `pages/experts/<id>/facts/`. UI: Experts' Lab on desktop + `#/experts`.
 
-### Reef widgets
-
-` ```reef-widget ` fences → sandboxed iframes ([`src/chat/reef/`](../src/chat/reef/)). Bridge: `window.minnow` (`sendPrompt`, `callLLM`, `editArtifact`). Templates: `src/chat/reef/widgets/`; user modules: `~/.minnow/reef/modules/`.
-
 ---
 
 ## MinnowOS shell
@@ -307,7 +308,7 @@ Router: [`src/os/router.ts`](../src/os/router.ts). Boot: `initOsPageBridge()` �
 
 16 themes: `<html data-theme="{family}-{mode}">` (8 families × dark/light). **All hex/rgba only in** [`src/styles/tokens.css`](../src/styles/tokens.css); app code uses `--mn-*`.
 
-Runtime: [`src/theme.ts`](../src/theme.ts), Settings → Appearance, desktop wallpaper ([`src/os/wallpaper.ts`](../src/os/wallpaper.ts)). Reef iframes receive forwarded tokens ([`src/chat/reef/theme-forward.ts`](../src/chat/reef/theme-forward.ts)).
+Runtime: [`src/theme.ts`](../src/theme.ts), Settings → Appearance, desktop wallpaper ([`src/os/wallpaper.ts`](../src/os/wallpaper.ts)).
 
 Design reference: [`DESIGN.md`](../DESIGN.md), [`documentation/design-system/`](design-system/README.md).
 

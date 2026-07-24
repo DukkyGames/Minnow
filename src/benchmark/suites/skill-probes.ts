@@ -152,34 +152,6 @@ export function divide(a: number, b: number) {
     passKind: 'regex',
     pattern: /deterministic|hardcoded|fixture|node --test|repeatable|static expected/i,
   },
-  'ask-minnow': {
-    skillId: 'ask-minnow',
-    prompt:
-      'I have a pile of bug reports and a vague feature idea. Which Minnow skill or flow should I start with, and why?',
-    passKind: 'regex',
-    pattern: /triage|grill|implement|flow|skill|\/[a-z-]+/i,
-  },
-  'codebase-design': {
-    skillId: 'codebase-design',
-    prompt:
-      'A module exposes twenty functions and callers reach through three layers. How would codebase-design vocabulary describe the fix?',
-    passKind: 'regex',
-    pattern: /deep module|interface|abstraction|seam|narrow|surface area/i,
-  },
-  'diagnosing-bugs': {
-    skillId: 'diagnosing-bugs',
-    prompt:
-      'A flaky test fails only in CI. Outline the diagnosing-bugs loop you would run before changing production code.',
-    passKind: 'regex',
-    pattern: /reproduce|hypothesis|bisect|isolate|root cause|narrow|instrument/i,
-  },
-  'domain-modeling': {
-    skillId: 'domain-modeling',
-    prompt:
-      'The team uses "order", "cart", and "checkout" inconsistently. What domain-modeling artifacts would you create first?',
-    passKind: 'regex',
-    pattern: /domain|ubiquitous|glossary|terminology|ADR|language|model/i,
-  },
   'git-setup': {
     skillId: 'git-setup',
     prompt:
@@ -187,117 +159,12 @@ export function divide(a: number, b: number) {
     passKind: 'regex',
     pattern: /git init|remote|GitHub|repository|version control|branch/i,
   },
-  'grill-me': {
-    skillId: 'grill-me',
-    prompt:
-      'I want to build a collaborative whiteboard. Grill my plan with sharp questions before I write code.',
-    passKind: 'regex',
-    pattern: /\?|assumption|clarify|challenge|risk|scope|why|how/i,
-  },
-  'grill-with-docs': {
-    skillId: 'grill-with-docs',
-    prompt:
-      'We are designing a billing module. Start grilling and tell me which docs you will update as we go.',
-    passKind: 'regex',
-    pattern: /CONTEXT\.md|ADR|glossary|interview|question|document/i,
-  },
-  grilling: {
-    skillId: 'grilling',
-    prompt:
-      'Stress-test this design before we build: a single JSON file stores all user settings. What do you challenge first?',
-    passKind: 'regex',
-    pattern: /grill|question|assumption|risk|plan|design|clarify/i,
-  },
-  handoff: {
-    skillId: 'handoff',
-    prompt:
-      'Compact this thread for a fresh agent who will continue the refactor. What sections must the handoff include?',
-    passKind: 'regex',
-    pattern: /handoff|next session|suggested skills|temporary|summary|context/i,
-  },
-  implement: {
-    skillId: 'implement',
-    prompt:
-      'You have a PRD and one tracer-bullet issue. How does the implement skill sequence work from branch to verification?',
-    passKind: 'regex',
-    pattern: /implement|issue|PRD|branch|test|verify|commit|slice/i,
-  },
-  'improve-codebase-architecture': {
-    skillId: 'improve-codebase-architecture',
-    prompt:
-      'Scan this repo for deepening opportunities. What deliverable does improve-codebase-architecture produce before grilling?',
-    passKind: 'regex',
-    pattern: /HTML|report|deepen|architecture|scan|grill|opportunit/i,
-  },
   partymode: {
     skillId: 'partymode',
     prompt:
       'Party mode on: explain why async iterators are cool. Stay in Bird Man persona with maximum vibes.',
     passKind: 'regex',
     pattern: /Bird Man|party|vibes|dude|bro|async|iterator/i,
-  },
-  prototype: {
-    skillId: 'prototype',
-    prompt:
-      'I cannot decide between two state machines for checkout. How would the prototype skill answer that without shipping production code?',
-    passKind: 'regex',
-    pattern: /prototype|throwaway|runnable|terminal|toggle|variation|experiment/i,
-  },
-  'resolving-merge-conflicts': {
-    skillId: 'resolving-merge-conflicts',
-    prompt:
-      'I am mid-rebase and see conflict markers in auth.ts. What resolving-merge-conflicts steps do you take?',
-    passKind: 'regex',
-    pattern: /conflict|merge|<<<<|rebase|ours|theirs|marker|resolve/i,
-  },
-  'setup-minnow-skills': {
-    skillId: 'setup-minnow-skills',
-    prompt:
-      'First time using Matt Pocock engineering skills in this repo. What does setup-minnow-skills configure?',
-    passKind: 'regex',
-    pattern: /issue tracker|triage|label|domain doc|setup|vocabulary|configure/i,
-  },
-  tdd: {
-    skillId: 'tdd',
-    prompt:
-      'Add a feature to parse ISO dates. Describe the red-green-refactor loop you would follow.',
-    passKind: 'regex',
-    pattern: /red|green|refactor|test-first|TDD|failing test|write.*test/i,
-  },
-  teach: {
-    skillId: 'teach',
-    prompt:
-      'Teach me how git rebase works in this workspace with a short exercise.',
-    passKind: 'regex',
-    pattern: /teach|learn|exercise|concept|explain|practice|step/i,
-  },
-  'to-issues': {
-    skillId: 'to-issues',
-    prompt:
-      'We have a PRD for notifications. How does to-issues split it into independently grabbable work?',
-    passKind: 'regex',
-    pattern: /issue|tracer|vertical slice|independent|tracker|slice|grabbable/i,
-  },
-  'to-prd': {
-    skillId: 'to-prd',
-    prompt:
-      'Turn our discussion into a PRD on the issue tracker. What does to-prd synthesize without re-interviewing me?',
-    passKind: 'regex',
-    pattern: /PRD|issue tracker|synthesis|publish|requirements|document/i,
-  },
-  triage: {
-    skillId: 'triage',
-    prompt:
-      'An external bug report says "export crashes sometimes". What triage states and roles do you apply?',
-    passKind: 'regex',
-    pattern: /triage|ready-for-agent|needs-info|bug|enhancement|needs-triage|role/i,
-  },
-  'writing-great-skills': {
-    skillId: 'writing-great-skills',
-    prompt:
-      'I am drafting a new agent skill. What principles from writing-great-skills make it predictable?',
-    passKind: 'regex',
-    pattern: /skill|predictable|vocabulary|principle|structure|trigger|instruction/i,
   },
 };
 

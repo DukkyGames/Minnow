@@ -55,7 +55,6 @@ Simplified mode derives full palettes via [`theme-derive.ts`](../../src/appearan
 |----------|------|
 | CodeMirror | [`codemirror-theme.ts`](../../src/ui/codemirror-theme.ts) |
 | xterm PTY | [`terminal-xterm-theme.ts`](../../src/ui/terminal-xterm-theme.ts) |
-| Reef iframes | [`theme-forward.ts`](../../src/chat/reef/theme-forward.ts) |
 | Research HTML reports | [`server/research/report-theme.js`](../../server/research/report-theme.js) |
 | Settings preview | [`settings-appearance-theme.ts`](../../src/ui/settings-appearance-theme.ts) |
 

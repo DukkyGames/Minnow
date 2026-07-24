@@ -12,22 +12,17 @@ describe('chat modeId persistence', () => {
     assert.equal(chat.modeId, 'build');
   });
 
-  test('round-trip preserves reef widget LLM overrides', () => {
+  test('unknown modeId normalizes to build on load', () => {
     const raw = {
       id: '22222222-2222-2222-2222-222222222222',
-      name: 'Reef',
+      name: 'Legacy reef chat',
       modelId: 'm1',
       modeId: 'reef',
-      reefWidgetProviderId: 'prov-reef',
-      reefWidgetModelId: 'model-reef',
       history: [],
       updatedAt: 1710000000000,
     };
     const chat = ensureChatShape(raw);
-    assert.equal(chat.reefWidgetProviderId, 'prov-reef');
-    assert.equal(chat.reefWidgetModelId, 'model-reef');
-    const parsed = ensureChatShape(JSON.parse(JSON.stringify(chat)));
-    assert.equal(parsed.reefWidgetModelId, 'model-reef');
+    assert.equal(chat.modeId, 'build');
   });
 
   test('round-trip preserves debug mode', () => {

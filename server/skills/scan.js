@@ -29,8 +29,12 @@ export function getUserSkillsRoot() {
  * @param {string} dirName
  * @returns {boolean}
  */
+/** Non-skill infrastructure folders under src/skills (not user skill installs). */
+const NON_SKILL_DIRS = new Set(['library']);
+
 export function shouldExposeSkillDir(dirName) {
   if (dirName.startsWith('_')) return false;
+  if (NON_SKILL_DIRS.has(dirName)) return false;
   return true;
 }
 

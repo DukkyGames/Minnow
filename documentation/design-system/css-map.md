@@ -84,7 +84,6 @@
 | `scheduler-page.css`, `scheduler-side-panel.css`, `scheduler-editor-window.css` | Scheduler |
 | `experts-hub.css`, `experts-summon.css` | Experts |
 | `global-bugs-page.css`, `bug-board.css` | Debug / bugs |
-| `reef-widgets.css` | Reef inline widgets |
 
 ## Orchestrate
 

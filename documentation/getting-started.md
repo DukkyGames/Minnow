@@ -91,7 +91,7 @@ $env:PORT=3000; npm start
 2. The desktop **is** the chat surface — type in the concierge composer, or open an app from the **dock**.
 3. Confirm your **provider** and server URL in **Settings → Models → Providers** (default LM Studio `http://localhost:1234`).
 4. Pick a **model** from the menubar model chip (refresh if the list is empty).
-5. Choose a **mode** in the composer (General / Build / Plan / Orchestrate / Reef / Debug).
+5. Choose a **mode** in the composer (General / Build / Plan / Orchestrate / Debug).
 6. Enable the capabilities you want under **Settings → Tools** (server tools need `npm start` and a healthy tools ping).
 
 Verify the server is healthy:
@@ -258,7 +258,7 @@ Minnow/
 ├── electron/               # Electron main + preload + preview host
 ├── src/                    # TypeScript SPA
 │   ├── os/                 # MinnowOS shell (desktop, dock, windows, apps)
-│   ├── chat/               # Chat, modes, prompts, reef
+│   ├── chat/               # Chat, modes, prompts
 │   ├── agents/             # Sub-agents, work agents, UI designer
 │   ├── tools/              # Tool catalog + executors + permissions
 │   ├── ui/ styles/ markdown/ theme.ts   # Views, CSS tokens, rendering

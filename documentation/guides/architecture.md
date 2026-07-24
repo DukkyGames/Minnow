@@ -40,7 +40,7 @@ A high-level map of how Minnow fits together. For the exhaustive, file-by-file r
 No UI framework — direct TypeScript + DOM with CSS tokens. Boot order in [`src/main.ts`](../../src/main.ts): page bridge → OS shell → router. Key areas:
 
 - **`src/os/`** — the desktop shell: stage layers, window manager, dock, menubar, app host/registry, concierge agent + intent routing, per-app desktop integration.
-- **`src/chat/`** — chat orchestration, the six **modes** (`modes/registry.ts`), prompt composition (`prompts/`), and Reef widgets.
+- **`src/chat/`** — chat orchestration, the five **modes** (`modes/registry.ts`), prompt composition (`prompts/`).
 - **`src/tools/`** — the tool catalog ([`definitions.ts`](../../src/tools/definitions.ts), ~88 tools), executors, permission gating, and the agent loop ([`loop.ts`](../../src/tools/loop.ts)).
 - **`src/agents/`** — sub-agent runner/controller, work agents, sampler resolution, UI Designer.
 - **`src/api/`** — provider/model fetching, SSE parsing (`sse-parse.ts`), generations client.

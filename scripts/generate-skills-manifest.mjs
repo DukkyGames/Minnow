@@ -15,6 +15,7 @@ const OUT_FILE = path.join(SKILLS_ROOT, 'builtin-manifest.json');
 
 function shouldExposeSkillDir(dirName) {
   if (dirName.startsWith('_')) return false;
+  if (dirName === 'library') return false;
   return true;
 }
 

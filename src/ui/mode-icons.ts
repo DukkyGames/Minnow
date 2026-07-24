@@ -17,7 +17,6 @@ export const MODE_ICON_SRC: Record<ModeId, string> = {
   plan: '/icons/mode-plan.png',
   'super-plan': '/icons/mode-super-plan.png',
   orchestrate: '/icons/Orchestrate.svg',
-  reef: '/icons/mode-reef.svg',
   debug: '/icons/mode-debug.png',
   onboarding: '/icons/mode-general.png',
 };

@@ -6,12 +6,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import path from 'node:path';
 import { getFilesystemAccessFromConfig } from '../config/tool-security.js';
-import { tryResolveReefArtifactPath } from '../reef/artifact-paths.js';
-import {
-  isReefWidgetPathAlias,
-  tryResolveReefModulePath,
-  tryResolveReefWidgetReadPath,
-} from '../reef/widget-paths.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
 import { isResolvedPathUnderRoot } from '../workspace/safe-path.js';
 
@@ -43,27 +37,6 @@ export function getEffectiveWorkspaceRoot() {
 export function resolveSafePath(userPath, options = {}) {
   if (!userPath || typeof userPath !== 'string') {
     throw new Error('Path is required');
-  }
-
-  const reefModule = tryResolveReefModulePath(userPath);
-  if (reefModule) {
-    return reefModule;
-  }
-
-  const reefArtifact = tryResolveReefArtifactPath(userPath);
-  if (reefArtifact) {
-    return reefArtifact;
-  }
-
-  if (options.write && isReefWidgetPathAlias(userPath)) {
-    throw new Error(
-      'Reef widget templates under @minnow/reef/widgets are read-only. Save custom Reef modules to @minnow/reef/modules/<slug>.md.',
-    );
-  }
-
-  const reefRead = tryResolveReefWidgetReadPath(userPath);
-  if (reefRead) {
-    return reefRead;
   }
 
   const workspaceRoot = getEffectiveWorkspaceRoot();

@@ -15,14 +15,13 @@ import { initServersApi } from '../servers/index.js';
 import { initMemoryApi } from '../memory/routes.js';
 import { initBrainApi } from '../brain/routes.js';
 import { ensureProviderRegistry } from '../providers/store.js';
-import { syncReefWidgetTemplates } from '../reef/sync-widgets.js';
 import { initPluginsApi } from '../tools/middleware.js';
 import { initWorkspaceRoot } from '../workspace/root.js';
 import { recomputeAllNextRuns } from '../scheduler/store.js';
 
 /**
- * Ensure ~/.minnow layout, sync Reef widgets, load workspace and API registries.
- * @returns {Promise<{ workspacePath: string, homePath: string, reefSyncCount: number }>}
+ * Ensure ~/.minnow layout, load workspace and API registries.
+ * @returns {Promise<{ workspacePath: string, homePath: string }>}
  */
 export async function bootstrapMinnowRuntime() {
   await ensureMinnowLayout();
@@ -31,7 +30,6 @@ export async function bootstrapMinnowRuntime() {
   await ensureBenchmarkWorkspace();
   await ensureSchedulerWorkspace();
   await ensureAgentPacksLayout();
-  const reefSync = await syncReefWidgetTemplates();
   const workspacePath = await initWorkspaceRoot();
   await ensureProviderRegistry();
   await initMemoryApi();
@@ -45,6 +43,5 @@ export async function bootstrapMinnowRuntime() {
   return {
     workspacePath,
     homePath,
-    reefSyncCount: reefSync.copied,
   };
 }

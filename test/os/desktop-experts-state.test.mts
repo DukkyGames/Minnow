@@ -170,13 +170,12 @@ describe('desktop experts state', () => {
     });
   });
 
-  test('launchApp(experts) stays on desktop in experts-idle', async () => {
+  test('launchApp(experts) blocks hidden app on desktop', async () => {
     launchApp('experts');
     assert.equal(window.location.hash, '#/desktop');
     await import('../../src/ui/experts/experts-hub.ts').then((m) => m.refreshExpertsEnabledState());
     await new Promise((r) => setTimeout(r, 50));
-    assert.equal(isDesktopExpertsActive(), true);
-    assert.equal(getDesktopState(), 'expertsIdle');
+    assert.equal(isDesktopExpertsActive(), false);
     const snap = await import('../../src/os/instances.ts').then((m) => m.getInstanceSnapshot());
     assert.equal(snap.instances.find((i) => i.appId === 'experts'), undefined);
   });
