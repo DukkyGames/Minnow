@@ -571,29 +571,78 @@ export async function listCachedThreads(accountId, options = {}) {
     .prepare(`SELECT t.* FROM threads t ${clause} ORDER BY t.last_date_ms DESC LIMIT ? OFFSET ?`)
     .all(...params, limit, offset);
 
-  const threads = rows.map((row) => ({
-    threadId: row.thread_id,
-    subject: row.subject,
-    participants: JSON.parse(row.participants_json || '[]'),
-    messageCount: row.message_count,
-    unreadCount: row.unread_count,
-    flagged: Boolean(row.flagged),
-    hasAttachments: Boolean(row.has_attachments),
-    lastDate: row.last_date,
-    folders: JSON.parse(row.folders_json || '[]'),
-    snippet: sanitizePreviewText(row.snippet ?? ''),
-    // Stored as JSON by thread-summary.js; the API exposes just the text.
-    summary: (() => {
-      if (typeof row.summary !== 'string' || !row.summary) return null;
-      try {
-        return JSON.parse(row.summary)?.text ?? null;
-      } catch {
-        return row.summary;
-      }
-    })(),
-  }));
+  // Folder-scoped action ids so bulk ops never touch Sent/Archive copies that
+  // share a thread id with the active mailbox folder.
+  const messageIdsStmt = folder
+    ? db.prepare(
+        'SELECT id FROM messages WHERE thread_id = ? AND folder = ? ORDER BY date_ms ASC',
+      )
+    : db.prepare('SELECT id FROM messages WHERE thread_id = ? ORDER BY date_ms ASC');
+
+  const threads = rows.map((row) => {
+    const messageIds = folder
+      ? messageIdsStmt.all(row.thread_id, folder).map((entry) => entry.id)
+      : messageIdsStmt.all(row.thread_id).map((entry) => entry.id);
+    return {
+      threadId: row.thread_id,
+      subject: row.subject,
+      participants: JSON.parse(row.participants_json || '[]'),
+      messageCount: row.message_count,
+      unreadCount: row.unread_count,
+      flagged: Boolean(row.flagged),
+      hasAttachments: Boolean(row.has_attachments),
+      lastDate: row.last_date,
+      folders: JSON.parse(row.folders_json || '[]'),
+      snippet: sanitizePreviewText(row.snippet ?? ''),
+      messageIds,
+      // Stored as JSON by thread-summary.js; the API exposes just the text.
+      summary: (() => {
+        if (typeof row.summary !== 'string' || !row.summary) return null;
+        try {
+          return JSON.parse(row.summary)?.text ?? null;
+        } catch {
+          return row.summary;
+        }
+      })(),
+    };
+  });
 
   return { threads, total, offset, limit };
+}
+
+/**
+ * Stable message ids for unseen mail in a folder (optional FTS query).
+ * Used by mark-all-read so Unread "Read all" is not limited to the visible page.
+ *
+ * @param {string} accountId
+ * @param {{ folder?: string, query?: string }} [options]
+ * @returns {string[]}
+ */
+export function listUnreadMessageIds(accountId, options = {}) {
+  const db = getMailDb(accountId);
+  const where = ['seen = 0', "(snooze_until = '' OR snooze_until <= ?)"];
+  const params = [new Date().toISOString()];
+
+  const folder = options.folder ? String(options.folder) : '';
+  if (folder) {
+    where.push('folder = ?');
+    params.push(folder);
+  }
+
+  const query = String(options.query ?? '').trim();
+  if (query) {
+    where.push(
+      `message_row_id IN (SELECT message_row_id FROM messages_fts WHERE messages_fts MATCH ?)`,
+    );
+    params.push(toFtsQuery(query));
+  }
+
+  const rows = db
+    .prepare(
+      `SELECT id FROM messages WHERE ${where.join(' AND ')} ORDER BY date_ms ASC`,
+    )
+    .all(...params);
+  return rows.map((row) => String(row.id));
 }
 
 /**

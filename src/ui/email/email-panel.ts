@@ -632,6 +632,8 @@ export async function renderEmailPanel(
   let lastSyncProgress: { cached: number; folderTotal: number; folder: string; active: boolean } | null =
     null;
   let rail!: ReturnType<typeof createEmailRail>;
+  /** Live inbox instance — SSE refreshes and folder drops reuse it. */
+  let inboxHandle: EmailInboxHandle | null = null;
 
   const applyRailSyncProgress = (): void => {
     if (!lastSyncProgress?.active) {
@@ -700,6 +702,10 @@ export async function renderEmailPanel(
       renderSurface();
     },
     onOpenSettings: () => openSettings(),
+    // Folder drops route through the live inbox so undo + reload stay consistent.
+    onThreadsDrop: (destFolder, payload) => {
+      void inboxHandle?.applyFolderDrop(destFolder, payload);
+    },
   });
 
   shell.append(rail.root, workspace);
@@ -805,9 +811,6 @@ export async function renderEmailPanel(
   function inboxReaderOpen(): boolean {
     return surface.classList.contains('has-reader');
   }
-
-  /** Live inbox instance — SSE refreshes reuse it instead of remounting. */
-  let inboxHandle: EmailInboxHandle | null = null;
 
   /**
    * Refresh the inbox stream without tearing down an open reader. Background

@@ -10,6 +10,12 @@
 
 import type { EmailAccount } from '../../email/client';
 import { EMAIL_ICONS } from './email-icons';
+import {
+  canAcceptEmailDrop,
+  EMAIL_DRAG_MIME,
+  parseEmailDragPayload,
+  type EmailDragPayload,
+} from './email-selection';
 import { ACCOUNT_DOT_CLASSES, ALL_INBOXES, accountColorIndex } from './email-unified';
 
 export interface RailFolder {
@@ -31,6 +37,8 @@ export interface EmailRailOptions {
   onSync?(): void;
   onOpenAutomations(): void;
   onOpenSettings(): void;
+  /** Drop conversations onto a folder (mailbox mode only). */
+  onThreadsDrop?(destFolder: string, payload: EmailDragPayload): void;
 }
 
 export interface EmailRailSyncProgress {
@@ -306,9 +314,44 @@ export function createEmailRail(options: EmailRailOptions): EmailRailHandle {
       if (key.startsWith('folder:')) navItems.delete(key);
     }
     for (const folder of folders) {
-      foldersItems.appendChild(
-        mkItem(`folder:${folder.path}`, folder.label, { icon: EMAIL_ICONS.folder }),
-      );
+      const btn = mkItem(`folder:${folder.path}`, folder.label, {
+        icon: EMAIL_ICONS.folder,
+      });
+      // Folders accept Minnow Email drag payloads when the account matches.
+      btn.addEventListener('dragenter', (event) => {
+        if (!options.onThreadsDrop || unified) return;
+        event.preventDefault();
+      });
+      btn.addEventListener('dragover', (event) => {
+        if (!options.onThreadsDrop || unified) return;
+        const types = event.dataTransfer?.types;
+        if (!types || ![...types].includes(EMAIL_DRAG_MIME)) return;
+        event.preventDefault();
+        if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+        btn.classList.add('is-drop-target');
+      });
+      btn.addEventListener('dragleave', (event) => {
+        if (btn.contains(event.relatedTarget as Node)) return;
+        btn.classList.remove('is-drop-target');
+      });
+      btn.addEventListener('drop', (event) => {
+        btn.classList.remove('is-drop-target');
+        if (!options.onThreadsDrop || unified) return;
+        event.preventDefault();
+        const raw = event.dataTransfer?.getData(EMAIL_DRAG_MIME) ?? '';
+        const payload = parseEmailDragPayload(raw);
+        if (!payload) return;
+        if (
+          !canAcceptEmailDrop(payload, {
+            accountId: activeAccountId,
+            folderPath: folder.path,
+          })
+        ) {
+          return;
+        }
+        options.onThreadsDrop(folder.path, payload);
+      });
+      foldersItems.appendChild(btn);
     }
   };
 

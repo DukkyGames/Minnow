@@ -358,6 +358,8 @@ export interface EmailThreadSummary {
   folders: string[];
   snippet: string;
   summary: string | null;
+  /** Message ids scoped to the requested list folder (for bulk actions). */
+  messageIds?: string[];
 }
 
 /** Conversation rollups for the thread list. */

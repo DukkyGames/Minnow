@@ -32,12 +32,16 @@ import {
 } from '../../email/client';
 import {
   archiveEmailMessage,
+  bulkEmailAction,
   deleteEmailMessage,
+  fetchEmailFolders,
   fetchInboxSummary,
+  markAllEmailRead,
   moveEmailMessage,
   requestThreadSummary,
   setEmailMessageFlags,
 } from '../../email/client-ext';
+import { snoozeEmailMessage } from '../../email/client-drafts';
 import { mountEmailCompose, type ComposeMode } from './email-compose';
 import {
   renderDigestActionGroups,
@@ -62,6 +66,26 @@ import {
   syncEmailReaderDockResizer,
 } from './email-panel-resize';
 import type { EmailAssistantContextSnapshot } from './email-assistant-context';
+import { bindMailShortcuts, showShortcutCheatSheet } from './email-keyboard';
+import { openEmailContextMenu, closeEmailContextMenu } from './email-context-menu';
+import {
+  canAcceptEmailDrop,
+  clearEmailSelection,
+  collectMessageIdsForThreads,
+  createEmailSelection,
+  EMAIL_DRAG_MIME,
+  encodeEmailDragPayload,
+  masterCheckboxState,
+  pruneEmailSelection,
+  resolveActionTargetIds,
+  resolveDragThreadIds,
+  selectEmailPage,
+  selectEmailShiftRange,
+  selectionReadAction,
+  selectionStarAction,
+  toggleEmailSelection,
+  type EmailDragPayload,
+} from './email-selection';
 
 /** What the stream is scoped to, driven by the rail's Views and Folders. */
 export type InboxScope =
@@ -89,15 +113,19 @@ export interface EmailInboxOptions {
   /** Mount the assistant open toggle beside the readout or stream marker. */
   onAssistantToggleMount?: (slot: HTMLElement) => void;
   /** Called once the inbox surface is live so SSE can refresh without remounting. */
-  onReady?: (handle: { refresh: () => Promise<void> }) => void;
+  onReady?: (handle: EmailInboxHandle) => void;
 }
 
 export interface EmailInboxHandle {
   refresh: () => Promise<void>;
+  /** Move dragged (or selected) conversations into a rail folder. */
+  applyFolderDrop: (destFolder: string, payload: EmailDragPayload) => Promise<void>;
 }
 
 /** Bumped on every full inbox remount; stale openThread calls bail after this changes. */
 let emailInboxSession = 0;
+/** Tear down the previous mount's shortcut binder before attaching a new one. */
+let emailInboxShortcutTeardown: (() => void) | null = null;
 
 /** Conversations shown per page. */
 const PAGE = 40;
@@ -198,6 +226,14 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   let selectedThreadSubject = '';
   let selectedMessageId = '';
   let composeMode: ComposeMode | null = null;
+  /** Checkbox selection for bulk actions (distinct from the open reader thread). */
+  const selection = createEmailSelection();
+  /** Keyboard focus index within the current page (-1 = none). */
+  let focusIndex = -1;
+  /** True while a bulk request is in flight (disables the action bar). */
+  let bulkBusy = false;
+  /** Cached folder list for Move / drop destination menus. */
+  let folderRows: Array<{ path: string; name: string }> = [];
   /** Assigned after `reload` is defined; the readout refresh button calls this. */
   let syncAndReload: () => Promise<void> = async () => {};
 
@@ -212,6 +248,13 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   markerMount.append(markerLabel, markerTools);
   const pager = el('div', 'email-stream-pager');
   pager.hidden = true;
+
+  /** Page thread ids in list order (for Shift-range and master checkbox). */
+  const pageIds = (): string[] => threads.map((row) => row.threadId);
+
+  /** Resolve folder-scoped message ids for a set of thread ids. */
+  const messageIdsFor = (threadIds: Iterable<string>): string[] =>
+    collectMessageIdsForThreads(threads, threadIds);
 
   const dashOptions: EmailDashboardOptions = {
     account,
@@ -344,6 +387,10 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       total = result.total;
       threads = result.threads;
       page = clamped;
+      // Page changes clear selection so actions never silently hit a stale page.
+      clearEmailSelection(selection);
+      focusIndex = -1;
+      closeEmailContextMenu();
       // Full re-render so the triage head shows on page 1 and hides beyond it.
       renderStream();
       stream.scrollTop = 0;
@@ -353,6 +400,330 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       pager.removeAttribute('aria-busy');
     }
   };
+
+  /** Deterministic snooze presets from the productivity plan. */
+  const snoozePresets = (): Array<{ label: string; at: () => Date }> => [
+    {
+      label: 'Later today',
+      at: () => {
+        const when = new Date();
+        when.setHours(when.getHours() + 3, 0, 0, 0);
+        return when;
+      },
+    },
+    {
+      label: 'Tomorrow morning',
+      at: () => {
+        const when = new Date();
+        when.setDate(when.getDate() + 1);
+        when.setHours(9, 0, 0, 0);
+        return when;
+      },
+    },
+    {
+      label: 'Next Monday',
+      at: () => {
+        const when = new Date();
+        const day = when.getDay();
+        const daysUntil = ((1 - day + 7) % 7) || 7;
+        when.setDate(when.getDate() + daysUntil);
+        when.setHours(9, 0, 0, 0);
+        return when;
+      },
+    },
+    {
+      label: 'In one week',
+      at: () => {
+        const when = new Date();
+        when.setDate(when.getDate() + 7);
+        when.setHours(9, 0, 0, 0);
+        return when;
+      },
+    },
+  ];
+
+  /** Run a bulk action against folder-scoped message ids, with undo where possible. */
+  const runBulk = async (
+    threadIds: string[],
+    action: 'read' | 'unread' | 'flag' | 'unflag' | 'archive' | 'delete' | 'move' | 'spam',
+    label: string,
+    destFolder?: string,
+  ): Promise<void> => {
+    const ids = messageIdsFor(threadIds);
+    if (ids.length === 0) {
+      options.onStatus?.('err', 'No messages to update in this folder');
+      return;
+    }
+    if (bulkBusy) return;
+    bulkBusy = true;
+    paintToolbar();
+    try {
+      const result = await bulkEmailAction({
+        accountId: account.id,
+        ids,
+        action,
+        destFolder,
+      });
+      if (result.failed > 0) {
+        options.onStatus?.(
+          'err',
+          `${result.failed} of ${ids.length} failed — reloading`,
+        );
+        await reload({ showLoading: false });
+        return;
+      }
+      clearEmailSelection(selection);
+      focusIndex = -1;
+      options.onStatus?.('ok', label);
+      if (
+        action === 'archive' ||
+        action === 'delete' ||
+        action === 'move' ||
+        action === 'spam'
+      ) {
+        const undoIds = [...ids];
+        showActionUndoToast(label, {
+          onUndo: async () => {
+            await bulkEmailAction({
+              accountId: account.id,
+              ids: undoIds,
+              action: 'move',
+              destFolder: scopeFolder(scope),
+            });
+            await reload({ showLoading: false });
+          },
+          onStatus: options.onStatus,
+        });
+      }
+      await loadSummary();
+      await loadThreadsForPage();
+      pruneEmailSelection(selection, pageIds());
+      renderStream();
+    } catch (err) {
+      options.onStatus?.(
+        'err',
+        err instanceof Error ? err.message : 'Bulk action failed',
+      );
+    } finally {
+      bulkBusy = false;
+      paintToolbar();
+    }
+  };
+
+  /** Move thread ids to a destination folder (toolbar, menu, or drop). */
+  const moveThreads = async (threadIds: string[], destFolder: string): Promise<void> => {
+    if (!destFolder || destFolder === scopeFolder(scope)) return;
+    await runBulk(
+      threadIds,
+      'move',
+      `Moved ${threadIds.length} conversation${threadIds.length === 1 ? '' : 's'}`,
+      destFolder,
+    );
+  };
+
+  /** Apply a rail folder drop using the same move path as the toolbar. */
+  const applyFolderDrop = async (
+    destFolder: string,
+    payload: EmailDragPayload,
+  ): Promise<void> => {
+    if (
+      !canAcceptEmailDrop(payload, {
+        accountId: account.id,
+        folderPath: destFolder,
+      })
+    ) {
+      return;
+    }
+    await moveThreads(payload.threadIds, destFolder);
+  };
+
+  /** Snooze every folder-scoped message in the given threads. */
+  const snoozeThreads = async (threadIds: string[], until: Date): Promise<void> => {
+    const ids = messageIdsFor(threadIds);
+    if (ids.length === 0) {
+      options.onStatus?.('err', 'No messages to snooze in this folder');
+      return;
+    }
+    if (bulkBusy) return;
+    bulkBusy = true;
+    paintToolbar();
+    try {
+      let failed = 0;
+      for (const id of ids) {
+        try {
+          await snoozeEmailMessage(account.id, id, until.toISOString());
+        } catch {
+          failed += 1;
+        }
+      }
+      if (failed > 0) {
+        options.onStatus?.('err', `${failed} of ${ids.length} failed to snooze`);
+        await reload({ showLoading: false });
+        return;
+      }
+      clearEmailSelection(selection);
+      options.onStatus?.('ok', `Snoozed until ${formatWhen(until.toISOString())}`);
+      await reload({ showLoading: false });
+    } finally {
+      bulkBusy = false;
+      paintToolbar();
+    }
+  };
+
+  /** Mark all unread in the current Unread scope (not only the visible page). */
+  const markAllRead = async (): Promise<void> => {
+    if (bulkBusy) return;
+    bulkBusy = true;
+    paintToolbar();
+    try {
+      const result = await markAllEmailRead(account.id, {
+        folder: scopeFolder(scope),
+        query: search || undefined,
+      });
+      if (result.attempted === 0) {
+        options.onStatus?.('ok', 'No unread mail');
+      } else if (result.failed > 0) {
+        options.onStatus?.(
+          'err',
+          `${result.failed} of ${result.attempted} failed — reloading`,
+        );
+      } else {
+        options.onStatus?.(
+          'ok',
+          `Marked ${result.updated} message${result.updated === 1 ? '' : 's'} read`,
+        );
+      }
+      clearEmailSelection(selection);
+      await reload({ showLoading: false });
+    } catch (err) {
+      options.onStatus?.(
+        'err',
+        err instanceof Error ? err.message : 'Could not mark all as read',
+      );
+    } finally {
+      bulkBusy = false;
+      paintToolbar();
+    }
+  };
+
+  /** Pop a lightweight menu of folder destinations near an anchor button. */
+  const openMoveMenu = (
+    anchor: HTMLElement,
+    threadIds: string[],
+  ): void => {
+    const destinations = folderRows.filter((row) => row.path !== scopeFolder(scope));
+    const rect = anchor.getBoundingClientRect();
+    openEmailContextMenu({
+      clientX: rect.left,
+      clientY: rect.bottom + 4,
+      restoreFocus: anchor,
+      items:
+        destinations.length === 0
+          ? [
+              {
+                id: 'empty',
+                label: 'No folders available',
+                disabled: true,
+                onSelect: () => undefined,
+              },
+            ]
+          : destinations.map((row) => ({
+              id: row.path,
+              label: folderLabel(row.path),
+              onSelect: () => void moveThreads(threadIds, row.path),
+            })),
+    });
+  };
+
+  /** Pop snooze presets near an anchor button. */
+  const openSnoozeMenu = (anchor: HTMLElement, threadIds: string[]): void => {
+    const rect = anchor.getBoundingClientRect();
+    openEmailContextMenu({
+      clientX: rect.left,
+      clientY: rect.bottom + 4,
+      restoreFocus: anchor,
+      items: snoozePresets().map((preset) => ({
+        id: preset.label,
+        label: preset.label,
+        onSelect: () => void snoozeThreads(threadIds, preset.at()),
+      })),
+    });
+  };
+
+  /** Open the row context menu for one conversation (or its selection group). */
+  const openRowMenu = (
+    thread: EmailThreadSummary,
+    clientX: number,
+    clientY: number,
+    restoreFocus: HTMLElement,
+  ): void => {
+    // Unselected row → act on that row alone without rewriting the checkbox set.
+    const targets = resolveActionTargetIds(selection.selected, thread.threadId);
+    const targetSet = new Set(targets);
+    const readAction = selectionReadAction(threads, targetSet);
+    const starAction = selectionStarAction(threads, targetSet);
+    openEmailContextMenu({
+      clientX,
+      clientY,
+      restoreFocus,
+      items: [
+        {
+          id: 'open',
+          label: 'Open',
+          onSelect: () => void openThread(thread.threadId),
+        },
+        {
+          id: 'read',
+          label: readAction === 'read' ? 'Mark read' : 'Mark unread',
+          onSelect: () =>
+            void runBulk(
+              targets,
+              readAction,
+              readAction === 'read' ? 'Marked read' : 'Marked unread',
+            ),
+        },
+        {
+          id: 'star',
+          label: starAction === 'flag' ? 'Star' : 'Unstar',
+          onSelect: () =>
+            void runBulk(
+              targets,
+              starAction,
+              starAction === 'flag' ? 'Starred' : 'Unstarred',
+            ),
+        },
+        {
+          id: 'archive',
+          label: 'Archive',
+          onSelect: () => void runBulk(targets, 'archive', 'Archived'),
+        },
+        {
+          id: 'snooze',
+          label: 'Snooze…',
+          onSelect: () => openSnoozeMenu(restoreFocus, targets),
+        },
+        {
+          id: 'move',
+          label: 'Move to…',
+          onSelect: () => openMoveMenu(restoreFocus, targets),
+        },
+        {
+          id: 'spam',
+          label: 'Report spam',
+          onSelect: () => void runBulk(targets, 'spam', 'Reported as spam'),
+        },
+        {
+          id: 'trash',
+          label: 'Trash',
+          danger: true,
+          onSelect: () => void runBulk(targets, 'delete', 'Trashed'),
+        },
+      ],
+    });
+  };
+
+  /** Keep the master checkbox + action buttons in sync with selection. */
+  let paintToolbar: () => void = () => {};
 
   // ---- Stream rendering ------------------------------------------------
   const renderReadout = (): HTMLElement | null => {
@@ -387,17 +758,44 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     return readout;
   };
 
-  const renderStreamRow = (thread: EmailThreadSummary, _index: number): HTMLElement => {
+  const renderStreamRow = (thread: EmailThreadSummary, index: number): HTMLElement => {
     const model = toConversationRow(thread);
-    const row = el('button', 'email-stream-row') as HTMLButtonElement;
-    row.type = 'button';
+    const checked = selection.selected.has(thread.threadId);
+    const row = el('div', 'email-stream-row');
+    row.setAttribute('role', 'option');
+    row.setAttribute('aria-selected', checked ? 'true' : 'false');
+    row.dataset.threadId = thread.threadId;
+    row.tabIndex = focusIndex === index ? 0 : -1;
     row.classList.toggle('is-unread', model.unread);
-    row.classList.toggle('is-selected', thread.threadId === selectedThreadId);
+    row.classList.toggle('is-checked', checked);
+    row.classList.toggle('is-open', thread.threadId === selectedThreadId);
+    row.classList.toggle('is-focus', focusIndex === index);
+    row.draggable = true;
 
-    row.appendChild(
+    const checkbox = el('input', 'email-stream-row-cb') as HTMLInputElement;
+    checkbox.type = 'checkbox';
+    checkbox.checked = checked;
+    checkbox.setAttribute('aria-label', `Select ${model.subject}`);
+    checkbox.addEventListener('click', (event) => {
+      event.stopPropagation();
+      // Handle selection on click so Shift/Ctrl modifiers are available.
+      event.preventDefault();
+      if (event.shiftKey) {
+        selectEmailShiftRange(selection, pageIds(), thread.threadId);
+      } else {
+        toggleEmailSelection(selection, thread.threadId, { additive: true });
+      }
+      paintToolbar();
+      renderRows();
+    });
+    row.appendChild(checkbox);
+
+    const openBtn = el('button', 'email-stream-row-open') as HTMLButtonElement;
+    openBtn.type = 'button';
+    openBtn.setAttribute('aria-label', `Open ${model.subject}`);
+    openBtn.appendChild(
       el('span', 'email-list-avatar', senderInitials(thread.participants?.[0] ?? '')),
     );
-
     const main = el('div', 'email-stream-row-main');
     const from = el('span', 'email-stream-row-from');
     from.textContent = model.participants + (model.countLabel ? `  ${model.countLabel}` : '');
@@ -409,9 +807,42 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       subject.appendChild(snip);
     }
     main.appendChild(subject);
-    row.appendChild(main);
+    openBtn.appendChild(main);
+    openBtn.addEventListener('click', (event) => {
+      if (event.shiftKey) {
+        event.preventDefault();
+        selectEmailShiftRange(selection, pageIds(), thread.threadId);
+        paintToolbar();
+        renderRows();
+        return;
+      }
+      if (event.metaKey || event.ctrlKey) {
+        event.preventDefault();
+        toggleEmailSelection(selection, thread.threadId, { additive: true });
+        paintToolbar();
+        renderRows();
+        return;
+      }
+      void openThread(thread.threadId);
+    });
+    row.appendChild(openBtn);
 
     const meta = el('div', 'email-stream-row-meta');
+    const starBtn = iconBtn(
+      model.flagged ? EMAIL_ICONS.starFilled : EMAIL_ICONS.star,
+      model.flagged ? 'Unstar' : 'Star',
+      'email-icon-btn email-stream-row-star',
+    );
+    starBtn.classList.toggle('is-active', model.flagged);
+    starBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      void runBulk(
+        [thread.threadId],
+        model.flagged ? 'unflag' : 'flag',
+        model.flagged ? 'Unstarred' : 'Starred',
+      );
+    });
+    meta.appendChild(starBtn);
     if (model.unread) meta.appendChild(el('span', 'email-stream-row-dot'));
     if (model.hasAttachments) {
       const attach = el('span', 'email-stream-row-attach');
@@ -422,7 +853,41 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     meta.appendChild(el('span', 'email-stream-row-date', formatWhen(model.date)));
     row.appendChild(meta);
 
-    row.addEventListener('click', () => void openThread(thread.threadId));
+    row.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      openRowMenu(thread, event.clientX, event.clientY, openBtn);
+    });
+    row.addEventListener('keydown', (event) => {
+      if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+        event.preventDefault();
+        const rect = openBtn.getBoundingClientRect();
+        openRowMenu(thread, rect.left + 8, rect.bottom + 4, openBtn);
+      }
+    });
+
+    row.addEventListener('dragstart', (event) => {
+      const dragIds = resolveDragThreadIds(selection.selected, thread.threadId);
+      const payload = encodeEmailDragPayload({
+        accountId: account.id,
+        sourceFolder: scopeFolder(scope),
+        threadIds: dragIds,
+      });
+      event.dataTransfer?.setData(EMAIL_DRAG_MIME, payload);
+      event.dataTransfer?.setData('text/plain', `${dragIds.length} conversation(s)`);
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+      row.classList.add('is-dragging');
+      for (const id of dragIds) {
+        listMount
+          .querySelector(`[data-thread-id="${CSS.escape(id)}"]`)
+          ?.classList.add('is-dragging');
+      }
+    });
+    row.addEventListener('dragend', () => {
+      listMount
+        .querySelectorAll('.email-stream-row.is-dragging')
+        .forEach((node) => node.classList.remove('is-dragging'));
+    });
+
     return row;
   };
 
@@ -442,8 +907,9 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       listMount.replaceChildren(renderEmpty());
       return;
     }
-    listMount.setAttribute('role', 'list');
+    listMount.setAttribute('role', 'listbox');
     listMount.setAttribute('aria-label', 'Conversations');
+    listMount.setAttribute('aria-multiselectable', 'true');
     const fragment = document.createDocumentFragment();
     threads.forEach((thread, index) => fragment.appendChild(renderStreamRow(thread, index)));
     listMount.replaceChildren(fragment);
@@ -478,8 +944,120 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
 
   streamCol.append(loadingBanner, headMount, followupsMount, markerMount, listMount, pager);
 
-  /** Wire the scope marker search once; input survives reloads. */
-  const wireScopeMarkerSearch = (): void => {
+  /**
+   * Scope-marker toolbar: master checkbox, selection actions or idle tools
+   * (refresh / Read all / search / help), plus the assistant mount slot.
+   */
+  paintToolbar = (): void => {
+    const tools = el('div', 'email-stream-toolbar');
+    tools.classList.toggle('is-busy', bulkBusy);
+
+    const master = el('input', 'email-stream-master-cb') as HTMLInputElement;
+    master.type = 'checkbox';
+    master.title = 'Select all on this page';
+    master.setAttribute('aria-label', 'Select all conversations on this page');
+    const masterState = masterCheckboxState(selection.selected, pageIds());
+    master.checked = masterState === 'all';
+    master.indeterminate = masterState === 'some';
+    master.disabled = bulkBusy || threads.length === 0;
+    master.addEventListener('change', () => {
+      if (master.checked) selectEmailPage(selection, pageIds());
+      else clearEmailSelection(selection);
+      paintToolbar();
+      renderRows();
+    });
+    tools.appendChild(master);
+
+    const actions = el('div', 'email-stream-actions');
+    const hasSelection = selection.selected.size > 0;
+
+    if (hasSelection) {
+      const count = el(
+        'span',
+        'email-stream-selection-count',
+        `${selection.selected.size} selected`,
+      );
+      count.setAttribute('role', 'status');
+      actions.appendChild(count);
+
+      const selectedIds = [...selection.selected];
+      const readAction = selectionReadAction(threads, selection.selected);
+      const starAction = selectionStarAction(threads, selection.selected);
+
+      const mkAction = (
+        svg: string,
+        label: string,
+        onClick: (btn: HTMLButtonElement) => void,
+        danger = false,
+      ): void => {
+        const btn = iconBtn(svg, label);
+        if (danger) btn.classList.add('email-icon-btn--danger');
+        btn.disabled = bulkBusy;
+        btn.addEventListener('click', () => onClick(btn));
+        actions.appendChild(btn);
+      };
+
+      mkAction(
+        readAction === 'read' ? EMAIL_ICONS.mailOpen : EMAIL_ICONS.mail,
+        readAction === 'read' ? 'Mark read' : 'Mark unread',
+        () =>
+          void runBulk(
+            selectedIds,
+            readAction,
+            readAction === 'read' ? 'Marked read' : 'Marked unread',
+          ),
+      );
+      mkAction(
+        starAction === 'flag' ? EMAIL_ICONS.star : EMAIL_ICONS.starFilled,
+        starAction === 'flag' ? 'Star' : 'Unstar',
+        () =>
+          void runBulk(
+            selectedIds,
+            starAction,
+            starAction === 'flag' ? 'Starred' : 'Unstarred',
+          ),
+      );
+      mkAction(EMAIL_ICONS.archive, 'Archive', () =>
+        void runBulk(selectedIds, 'archive', 'Archived'),
+      );
+      mkAction(EMAIL_ICONS.spam, 'Report spam', () =>
+        void runBulk(selectedIds, 'spam', 'Reported as spam'),
+      );
+      mkAction(
+        EMAIL_ICONS.trash,
+        'Trash',
+        () => void runBulk(selectedIds, 'delete', 'Trashed'),
+        true,
+      );
+      mkAction(EMAIL_ICONS.snooze, 'Snooze', (btn) => openSnoozeMenu(btn, selectedIds));
+      mkAction(EMAIL_ICONS.move, 'Move to folder', (btn) => openMoveMenu(btn, selectedIds));
+      mkAction(EMAIL_ICONS.close, 'Clear selection', () => {
+        clearEmailSelection(selection);
+        paintToolbar();
+        renderRows();
+      });
+    } else {
+      const refreshBtn = iconBtn(EMAIL_ICONS.sync, 'Refresh');
+      refreshBtn.disabled = bulkBusy;
+      refreshBtn.addEventListener('click', () => void syncAndReload());
+      actions.appendChild(refreshBtn);
+
+      if (scope.kind === 'filter' && scope.filter === 'unread') {
+        const readAll = el('button', 'email-btn email-stream-read-all', 'Read all') as HTMLButtonElement;
+        readAll.type = 'button';
+        readAll.title = 'Mark all unread in this view as read';
+        readAll.disabled = bulkBusy;
+        readAll.addEventListener('click', () => void markAllRead());
+        actions.appendChild(readAll);
+      }
+
+      const helpBtn = iconBtn(EMAIL_ICONS.help, 'Keyboard shortcuts');
+      helpBtn.addEventListener('click', () => showShortcutCheatSheet(surface));
+      actions.appendChild(helpBtn);
+    }
+
+    tools.appendChild(actions);
+
     const searchWrap = el('label', 'email-stream-search');
     searchWrap.innerHTML = EMAIL_ICONS.search;
     const input = el('input') as HTMLInputElement;
@@ -487,19 +1065,23 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     input.value = search;
     input.placeholder = 'Search';
     input.setAttribute('aria-label', 'Search mail');
+    input.disabled = bulkBusy;
     let timer: number | undefined;
     input.addEventListener('input', () => {
       if (timer) window.clearTimeout(timer);
       timer = window.setTimeout(() => {
         search = input.value.trim();
         page = 0;
+        clearEmailSelection(selection);
+        focusIndex = -1;
         void reload({ showLoading: true, keepFocus: 'search' });
       }, 300);
     });
     searchWrap.appendChild(input);
-    markerTools.replaceChildren(markerAssistantSlot, searchWrap);
+
+    markerTools.replaceChildren(tools, markerAssistantSlot, searchWrap);
   };
-  wireScopeMarkerSearch();
+  paintToolbar();
   mountAssistantToggle(markerAssistantSlot);
 
   const renderHead = (): void => {
@@ -549,7 +1131,9 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
 
   const renderStream = (): void => {
     markerLabel.textContent = scopeMarker(scope);
+    pruneEmailSelection(selection, pageIds());
     renderHead();
+    paintToolbar();
 
     const isWaiting = scope.kind === 'waiting';
     followupsMount.hidden = !isWaiting;
@@ -904,11 +1488,88 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     }
   };
 
+  // ---- Keyboard shortcuts (Gmail-compatible; suppressed while typing) ----
+  const focusedThread = (): EmailThreadSummary | null =>
+    focusIndex >= 0 && focusIndex < threads.length ? threads[focusIndex]! : null;
+
+  const moveFocus = (delta: number): void => {
+    if (threads.length === 0) return;
+    focusIndex = Math.max(0, Math.min(threads.length - 1, (focusIndex < 0 ? 0 : focusIndex) + delta));
+    renderRows();
+    listMount
+      .querySelector<HTMLElement>(`.email-stream-row.is-focus`)
+      ?.focus();
+  };
+
+  emailInboxShortcutTeardown?.();
+  emailInboxShortcutTeardown = bindMailShortcuts(surface, {
+    next: () => moveFocus(1),
+    previous: () => moveFocus(-1),
+    open: () => {
+      const thread = focusedThread();
+      if (thread) void openThread(thread.threadId);
+    },
+    back: () => closeReader(),
+    archive: () => {
+      const ids =
+        selection.selected.size > 0
+          ? [...selection.selected]
+          : focusedThread()
+            ? [focusedThread()!.threadId]
+            : [];
+      if (ids.length) void runBulk(ids, 'archive', 'Archived');
+    },
+    trash: () => {
+      const ids =
+        selection.selected.size > 0
+          ? [...selection.selected]
+          : focusedThread()
+            ? [focusedThread()!.threadId]
+            : [];
+      if (ids.length) void runBulk(ids, 'delete', 'Trashed');
+    },
+    star: () => {
+      const thread = focusedThread();
+      if (!thread) return;
+      void runBulk(
+        selection.selected.has(thread.threadId)
+          ? [...selection.selected]
+          : [thread.threadId],
+        thread.flagged ? 'unflag' : 'flag',
+        thread.flagged ? 'Unstarred' : 'Starred',
+      );
+    },
+    select: () => {
+      const thread = focusedThread();
+      if (!thread) return;
+      toggleEmailSelection(selection, thread.threadId, { additive: true });
+      paintToolbar();
+      renderRows();
+    },
+    reply: () => undefined,
+    replyAll: () => undefined,
+    forward: () => undefined,
+    compose: () => undefined,
+    search: () => {
+      markerTools.querySelector<HTMLInputElement>('.email-stream-search input')?.focus();
+    },
+    undo: () => undefined,
+    help: () => showShortcutCheatSheet(surface),
+  });
+
   // ---- Boot ------------------------------------------------------------
   loadingBanner.hidden = false;
+  try {
+    folderRows = await fetchEmailFolders(account.id);
+  } catch {
+    folderRows = (account.folders ?? []).map((path) => ({ path, name: path }));
+  }
   await reload({ showLoading: false });
   if (session !== emailInboxSession) return;
-  options.onReady?.({ refresh: () => reload({ showLoading: false }) });
+  options.onReady?.({
+    refresh: () => reload({ showLoading: false }),
+    applyFolderDrop,
+  });
 
   if (options.openComposeNew) {
     dockBody.replaceChildren();
