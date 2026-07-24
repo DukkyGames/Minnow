@@ -20,11 +20,29 @@ description: Practice explaining ideas out loud with focused follow-up questions
 ---
 
 # Grill Me
+
+Try /review after grilling.
+`;
+
+const FIXTURE_ASK_MINNOW_MD = `---
+name: ask-matt
+description: Router over skills.
+---
+
+# Ask Matt
+
+Use /setup-matt-pocock-skills and ask-matt.
+- **\`/compact\`** (built-in) — between phases.
 `;
 
 const FIXTURE_TREE = [
   { path: 'skills/productivity/grill-me/SKILL.md', type: 'blob', size: FIXTURE_SKILL_MD.length },
   { path: 'skills/productivity/grill-me/notes.md', type: 'blob', size: 12 },
+  {
+    path: 'skills/engineering/ask-matt/SKILL.md',
+    type: 'blob',
+    size: FIXTURE_ASK_MINNOW_MD.length,
+  },
 ];
 
 /**
@@ -74,6 +92,13 @@ function createMockFetch(input) {
     return Promise.resolve(
       new Response(JSON.stringify({ tree: FIXTURE_TREE }), { status: 200 }),
     );
+  }
+
+  if (
+    url.includes('raw.githubusercontent.com') &&
+    url.includes('skills/engineering/ask-matt/SKILL.md')
+  ) {
+    return Promise.resolve(new Response(FIXTURE_ASK_MINNOW_MD, { status: 200 }));
   }
 
   if (url.includes('raw.githubusercontent.com') && url.endsWith('SKILL.md')) {
@@ -188,6 +213,8 @@ describe('Skills Library API', () => {
     const skillPath = path.join(homeDir, 'skills', 'grill-me', 'SKILL.md');
     const content = await fs.readFile(skillPath, 'utf8');
     assert.match(content, /name: grill-me/);
+    assert.match(content, /\/code-review/);
+    assert.equal(/\b\/review\b/.test(content), false);
 
     const provenance = await readProvenance();
     assert.equal(provenance['grill-me']?.pack, 'matt-pocock');
@@ -216,6 +243,23 @@ describe('Skills Library API', () => {
     const provenance = await readProvenance();
     assert.equal(provenance['grill-me']?.repo, 'mattpocock/skills');
     assert.ok(!provenance['grill-me']?.pack);
+  });
+
+  test('POST /api/skills/library/install applies matt-pocock post-install patch', async () => {
+    const { status, json } = await httpRequest(baseUrl, 'POST', '/api/skills/library/install', {
+      pack: 'matt-pocock',
+      skillIds: ['ask-minnow'],
+    });
+    assert.equal(status, 201);
+    assert.equal(json.installed[0].skillId, 'ask-minnow');
+
+    const skillPath = path.join(homeDir, 'skills', 'ask-minnow', 'SKILL.md');
+    const content = await fs.readFile(skillPath, 'utf8');
+    assert.match(content, /name: ask-minnow/);
+    assert.match(content, /\/setup-minnow-skills/);
+    assert.match(content, /Minnow has no `\/compact` command/);
+    assert.equal(/\bname:\s*ask-matt\b/.test(content), false);
+    assert.match(content, /Upstream: https:\/\/github.com\/mattpocock\/skills @ skills\/engineering\/ask-matt\/SKILL.md/);
   });
 
   test('POST /api/skills/library/remove deletes installed skill and provenance', async () => {

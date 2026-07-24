@@ -101,7 +101,7 @@ export function resolveSkillIdFromFiles(files) {
 export async function installSkillTree(options) {
   const { skillId, repo, commit, subpath, pack, postInstallPatch, files } = options;
   const resolvedId = resolveSkillIdFromFiles(files);
-  if (resolvedId !== skillId) {
+  if (!postInstallPatch && resolvedId !== skillId) {
     throw new Error(`Skill id mismatch: index says "${skillId}" but SKILL.md name is "${resolvedId}"`);
   }
 
@@ -109,6 +109,16 @@ export async function installSkillTree(options) {
 
   if (postInstallPatch) {
     await runPostInstallPatch(postInstallPatch, skillDir, { skillId, subpath });
+    const patchedSkillMd = await fs.readFile(path.join(skillDir, 'SKILL.md'), 'utf8');
+    const { meta } = parseSkillFrontmatter(patchedSkillMd);
+    const patchedId = meta.name.trim();
+    if (patchedId !== skillId) {
+      throw new Error(
+        `Post-install patch "${postInstallPatch}" left SKILL.md name "${patchedId}" (expected "${skillId}")`,
+      );
+    }
+  } else if (resolvedId !== skillId) {
+    throw new Error(`Skill id mismatch: index says "${skillId}" but SKILL.md name is "${resolvedId}"`);
   }
 
   const sha256 = computeSkillSha256(files);

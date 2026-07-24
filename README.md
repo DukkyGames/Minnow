@@ -149,7 +149,7 @@ Invoke with `/` in the composer. Includes:
 - **Core** — `git-commit`, `code-review`, `ask-user`, `debug-error`, `explain-code`, `browser-automation`, …
 - **Impeccable** — UI design shape/critique/polish workflow (vendored on install).
 - **Caveman** — ultra-compressed replies when token budget matters.
-- **Matt Pocock engineering pack** (19 skills) — `triage`, `implement`, `handoff`, `domain-modeling`, `diagnosing-bugs`, `setup-minnow-skills`, and more (`npm run matt-pocock-skills:sync`).
+- **Matt Pocock pack** (19 skills) — `triage`, `implement`, `handoff`, `domain-modeling`, `diagnosing-bugs`, `setup-minnow-skills`, and more. Install from **Settings → Skills Library** (not bundled by default).
 
 Add your own `SKILL.md` packs under `~/.minnow/skills/`. Post-turn synthesis can propose new memories and skills into a review queue — nothing auto-saves without your OK.
 

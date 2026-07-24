@@ -1,11 +1,11 @@
 /**
- * Vendors Matt Pocock productivity + engineering skills into src/skills/<id>/.
- * Writes unpatched SKILL.upstream.md; applies Minnow patches to vendored tree.
+ * Maintains skills-lock.json hashes for the Matt Pocock Skills Library pack.
+ * No longer vendors into src/skills — install via Settings → Skills Library (MIN-476).
  *
  * Env:
  *   MATT_POCOCK_SKILLS_REF=main     — upstream git ref (default main)
  *   MATT_POCOCK_SKILLS_SYNC_STRICT=1 — exit non-zero on failure (CI)
- *   MATT_POCOCK_SKILLS_TARGET       — override skills root (default src/skills)
+ *   MATT_POCOCK_SKILLS_TARGET       — override cache root (default .cache/matt-pocock-skills)
  */
 
 import { createHash } from 'node:crypto';
@@ -21,7 +21,7 @@ const PROJECT_ROOT = path.resolve(__dirname, '..');
 const STRICT = process.env.MATT_POCOCK_SKILLS_SYNC_STRICT === '1';
 const SKILLS_ROOT = path.resolve(
   PROJECT_ROOT,
-  process.env.MATT_POCOCK_SKILLS_TARGET || 'src/skills',
+  process.env.MATT_POCOCK_SKILLS_TARGET || '.cache/matt-pocock-skills',
 );
 const LOCK_FILE = path.join(PROJECT_ROOT, 'skills-lock.json');
 const CATALOG_FILE = path.join(

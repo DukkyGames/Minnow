@@ -201,6 +201,7 @@
       "scripts/generate-skills-manifest.mjs",
       "scripts/generate-skills-library-index.mjs",
       "scripts/skills-library-index-lib.mjs",
+      "scripts/matt-pocock-preserves/**",
       "package.json",
       "skills-lock.json",
       "!**/*.map",

@@ -1,6 +1,6 @@
 /**
- * Post-sync Minnow patches for vendored Matt Pocock skills.
- * Idempotent: safe to run after every matt-pocock-skills:sync.
+ * Post-install Minnow patches for Matt Pocock Skills Library installs.
+ * Idempotent: safe to run after every library install or matt-pocock-skills:sync.
  * Does not modify SKILL.upstream.md snapshots.
  */
 
@@ -98,7 +98,7 @@ function isTextSkillFile(filePath) {
 }
 
 /**
- * @param {string} skillDir Absolute path to src/skills/<id>
+ * @param {string} skillDir Absolute path to installed skill directory (~/.minnow/skills/<id>)
  * @param {{ id: string, category: string, upstreamId: string }} entry
  */
 export function applyMinnowPatchesToSkillDir(skillDir, entry) {

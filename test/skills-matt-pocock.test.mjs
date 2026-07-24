@@ -1,14 +1,17 @@
 /**
- * Matt Pocock productivity + engineering built-in skills (vendored).
+ * Matt Pocock Skills Library pack — catalog, patches, and install behavior (MIN-476).
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
-import { getSkillById, listMergedSkills } from '../server/skills/scan.js';
-import { parseSkillFrontmatter } from '../server/skills/parse-frontmatter.js';
-import { applyMinnowTextPatches } from '../scripts/matt-pocock-preserves/apply-minnow-patches.mjs';
+import { listMergedSkills } from '../server/skills/scan.js';
+import {
+  applyMinnowPatchesToSkillDir,
+  applyMinnowTextPatches,
+} from '../scripts/matt-pocock-preserves/apply-minnow-patches.mjs';
+import { runPostInstallPatch } from '../server/skills/library/post-install.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -41,105 +44,23 @@ const MATT_POCOCK_IDS = [
   'triage',
 ];
 
-/**
- * @param {string} dir
- * @param {(relPath: string, content: string) => void} onFile
- */
-function walkVendoredTextFiles(dir, onFile) {
-  for (const name of fs.readdirSync(dir)) {
-    const full = path.join(dir, name);
-    const stat = fs.statSync(full);
-    if (stat.isDirectory()) {
-      walkVendoredTextFiles(full, onFile);
-      continue;
-    }
-    if (name === 'SKILL.upstream.md') continue;
-    const rel = path.relative(SKILLS_ROOT, full).replace(/\\/g, '/');
-    const ext = path.extname(name).toLowerCase();
-    if (!['.md', '.sh', '.mjs', '.js', '.ts', '.json', '.txt', '.yaml', '.yml'].includes(ext)) {
-      continue;
-    }
-    onFile(rel, fs.readFileSync(full, 'utf8'));
-  }
-}
-
-describe('Matt Pocock built-in skills', () => {
-  it('all 19 skill directories exist with valid SKILL.md front matter', () => {
+describe('Matt Pocock Skills Library pack', () => {
+  it('Matt Pocock skill dirs are not bundled under src/skills', () => {
     for (const id of MATT_POCOCK_IDS) {
-      const skillMd = path.join(SKILLS_ROOT, id, 'SKILL.md');
-      assert.equal(fs.existsSync(skillMd), true, `missing ${id}/SKILL.md`);
-      const { meta } = parseSkillFrontmatter(fs.readFileSync(skillMd, 'utf8'));
-      assert.equal(meta.name.trim(), id, `name mismatch for ${id}`);
-      assert.ok(meta.description?.trim(), `description required for ${id}`);
+      assert.equal(
+        fs.existsSync(path.join(SKILLS_ROOT, id)),
+        false,
+        `expected ${id} to be unbundled`,
+      );
     }
   });
 
-  it('renamed ids exist and upstream folder names do not', () => {
-    assert.equal(fs.existsSync(path.join(SKILLS_ROOT, 'ask-minnow', 'SKILL.md')), true);
-    assert.equal(fs.existsSync(path.join(SKILLS_ROOT, 'ask-matt')), false);
-    assert.equal(fs.existsSync(path.join(SKILLS_ROOT, 'setup-minnow-skills', 'SKILL.md')), true);
-    assert.equal(fs.existsSync(path.join(SKILLS_ROOT, 'setup-matt-pocock-skills')), false);
-  });
-
-  it('setup-minnow-skills ships seed templates', () => {
-    const setupDir = path.join(SKILLS_ROOT, 'setup-minnow-skills');
-    for (const file of [
-      'domain.md',
-      'issue-tracker-github.md',
-      'triage-labels.md',
-    ]) {
-      assert.equal(fs.existsSync(path.join(setupDir, file)), true, `missing ${file}`);
-    }
-  });
-
-  it('supplementary reference files are vendored', () => {
-    assert.equal(
-      fs.existsSync(path.join(SKILLS_ROOT, 'triage', 'AGENT-BRIEF.md')),
-      true,
-    );
-    assert.equal(fs.existsSync(path.join(SKILLS_ROOT, 'tdd', 'tests.md')), true);
-  });
-
-  it('listMergedSkills returns Matt Pocock ids', async () => {
+  it('listMergedSkills does not include Matt Pocock ids as builtins', async () => {
     const skills = await listMergedSkills(PROJECT_ROOT);
     for (const id of MATT_POCOCK_IDS) {
       const row = skills.find((s) => s.id === id);
-      assert.ok(row, `missing ${id} in merged catalog`);
-      assert.equal(row.source, 'builtin');
+      assert.equal(row, undefined, `${id} should not appear until library install`);
     }
-  });
-
-  it('implement references /code-review not /review', () => {
-    const body = fs.readFileSync(path.join(SKILLS_ROOT, 'implement', 'SKILL.md'), 'utf8');
-    assert.match(body, /\/code-review/);
-    assert.equal(/\b\/review\b/.test(body), false);
-  });
-
-  it('ask-minnow replaces Cursor /compact guidance', () => {
-    const body = fs.readFileSync(path.join(SKILLS_ROOT, 'ask-minnow', 'SKILL.md'), 'utf8');
-    assert.match(body, /Minnow has no `\/compact` command/);
-    assert.equal(body.includes('`/compact` (built-in)'), false);
-  });
-
-  it('vendored tree has no stale rename strings outside upstream snapshots', () => {
-    /** @type {string[]} */
-    const hits = [];
-    for (const id of MATT_POCOCK_IDS) {
-      const skillDir = path.join(SKILLS_ROOT, id);
-      walkVendoredTextFiles(skillDir, (rel, content) => {
-        if (content.includes('setup-matt-pocock-skills')) {
-          if (!content.includes('skills/engineering/setup-matt-pocock-skills/')) {
-            hits.push(`${rel}: setup-matt-pocock-skills`);
-          }
-        }
-        if (/\bask-matt\b/.test(content) && !rel.endsWith('SKILL.upstream.md')) {
-          if (!content.includes('skills/engineering/ask-matt/')) {
-            hits.push(`${rel}: ask-matt`);
-          }
-        }
-      });
-    }
-    assert.deepEqual(hits, []);
   });
 
   it('skills-lock.json records matt-pocock-skills commit SHA', () => {
@@ -152,27 +73,83 @@ describe('Matt Pocock built-in skills', () => {
     assert.equal(Object.keys(entry.skills).length, MATT_POCOCK_IDS.length);
   });
 
-  it('catalog lists 19 skills matching vendored ids', () => {
+  it('catalog lists 19 skills with Minnow install ids', () => {
     const catalog = JSON.parse(fs.readFileSync(CATALOG_FILE, 'utf8'));
     assert.equal(catalog.skills.length, 19);
     const ids = catalog.skills.map((s) => s.id).sort();
     assert.deepEqual(ids, [...MATT_POCOCK_IDS].sort());
+    const askMatt = catalog.skills.find((s) => s.upstreamId === 'ask-matt');
+    assert.equal(askMatt?.id, 'ask-minnow');
+    const setup = catalog.skills.find((s) => s.upstreamId === 'setup-matt-pocock-skills');
+    assert.equal(setup?.id, 'setup-minnow-skills');
   });
 
-  it('loadSkill returns ask-minnow body', async () => {
-    const skill = await getSkillById(PROJECT_ROOT, 'ask-minnow');
-    assert.ok(skill);
-    assert.equal(skill.id, 'ask-minnow');
-    assert.match(skill.body, /\/setup-minnow-skills/);
-  });
-
-  it('text patches are idempotent', () => {
+  it('text patches rename upstream ids and replace /compact guidance', () => {
     const sample =
-      'Run /setup-matt-pocock-skills then /review and ask-matt. **`/compact`** (built-in) — stay.';
+      'Run /setup-matt-pocock-skills then /review and ask-matt.\n- **`/compact`** (built-in) — stay between phases.\n';
     const once = applyMinnowTextPatches(sample);
     const twice = applyMinnowTextPatches(once);
     assert.equal(twice, once);
     assert.match(twice, /setup-minnow-skills/);
     assert.match(twice, /\/code-review/);
+    assert.match(twice, /ask-minnow/);
+    assert.match(twice, /Minnow has no `\/compact` command/);
+  });
+
+  it('applyMinnowPatchesToSkillDir patches ask-minnow content', () => {
+    const tmpDir = fs.mkdtempSync(path.join(PROJECT_ROOT, '.tmp-ask-minnow-'));
+    try {
+      const catalog = JSON.parse(fs.readFileSync(CATALOG_FILE, 'utf8'));
+      const entry = catalog.skills.find((s) => s.id === 'ask-minnow');
+      assert.ok(entry);
+
+      const upstreamBody = `---
+name: ask-matt
+description: Router skill.
+---
+
+# Ask Matt
+
+Use /setup-matt-pocock-skills and ask-matt. Call /review when done.
+- **\`/compact\`** (built-in) — use between phases.
+`;
+      fs.writeFileSync(path.join(tmpDir, 'SKILL.md'), upstreamBody, 'utf8');
+
+      applyMinnowPatchesToSkillDir(tmpDir, entry);
+      const patched = fs.readFileSync(path.join(tmpDir, 'SKILL.md'), 'utf8');
+      assert.match(patched, /name: ask-minnow/);
+      assert.match(patched, /label: Ask Minnow/);
+      assert.match(patched, /\/setup-minnow-skills/);
+      assert.match(patched, /\/code-review/);
+      assert.match(patched, /Minnow has no `\/compact` command/);
+      assert.match(patched, /Upstream: https:\/\/github.com\/mattpocock\/skills/);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('runPostInstallPatch applies matt-pocock hook by skill id', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(PROJECT_ROOT, '.tmp-post-install-'));
+    try {
+      const upstreamBody = `---
+name: implement
+description: Ship tracer bullets.
+---
+
+Run /review after each slice.
+`;
+      fs.writeFileSync(path.join(tmpDir, 'SKILL.md'), upstreamBody, 'utf8');
+
+      await runPostInstallPatch('matt-pocock', tmpDir, {
+        skillId: 'implement',
+        subpath: 'skills/engineering/implement',
+      });
+
+      const patched = fs.readFileSync(path.join(tmpDir, 'SKILL.md'), 'utf8');
+      assert.match(patched, /\/code-review/);
+      assert.equal(/\b\/review\b/.test(patched), false);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });

@@ -8,7 +8,7 @@ Minnow is a **Vite + TypeScript SPA** plus a **Node tool server** (`server.js`) 
 
 - **Five operating modes** (four in the Code composer strip): General, Build, Plan (no-destructive guard), Orchestrate, Debug. Orchestrate is not in the composer picker — it opens from the sidebar hub. Modes are defined in [`src/chat/modes/registry.ts`](src/chat/modes/registry.ts); prompts in [`src/chat/prompts/modes/`](src/chat/prompts/modes/).
 - **~87 built-in tools** across web / utility / files / git / code / agents / browser / lsp ([`src/tools/definitions.ts`](src/tools/definitions.ts)).
-- **Built-in slash skills** (~33): core helpers (`git-commit`, `code-review`, `ask-user`, …), `impeccable`, `caveman`, `ui-designer`, and **19 Matt Pocock productivity/engineering skills** (`ask-minnow`, `triage`, `implement`, `handoff`, … — see [`documentation/context.md`](documentation/context.md) § Skills → Matt Pocock). Sync: `npm run matt-pocock-skills:sync`.
+- **Built-in slash skills** (~15): core helpers (`git-commit`, `code-review`, `ask-user`, …), `impeccable` (default-on), `caveman`, `ui-designer`, `partymode`. **Matt Pocock pack** (19 skills) installs from **Settings → Skills Library** — see [`documentation/context.md`](documentation/context.md) § Skills.
 - **MinnowOS apps:** Chat (desktop), Code, Models, Compare, Bench, Research, Experts, Brain, Calendar, Email, Scheduler, Settings ([`src/os/`](src/os/)).
 - **Persistence** lives under `~/.minnow` when the tool server runs.
 
