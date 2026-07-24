@@ -10,7 +10,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, beforeEach, describe, test } from 'node:test';
 
-import { closeMailDbs, getMailDb } from '../../server/email/store.js';
+import { closeMailDbs, getMailDb, writeMeta } from '../../server/email/store.js';
+import {
+  getCachedDigest,
+  queueDigestActionGroup,
+} from '../../server/email/digest.js';
 import {
   AUTO_ALLOWABLE_ACTIONS,
   dismissPendingAction,
@@ -56,7 +60,7 @@ after(async () => {
 beforeEach(() => {
   const db = getMailDb(ACCOUNT_ID);
   db.exec('DELETE FROM pending_actions; DELETE FROM followups; DELETE FROM sender_overrides;');
-  db.exec("DELETE FROM meta WHERE key = 'pending_auto_allow'");
+  db.exec("DELETE FROM meta WHERE key IN ('pending_auto_allow', 'narrative_digest')");
 });
 
 function insertFollowup(overrides = {}) {
@@ -133,6 +137,75 @@ describe('pending-actions review queue', () => {
     assert.equal(dismissed.state, 'dismissed');
     assert.equal((await listPendingActions(ACCOUNT_ID)).length, 0);
     await assert.rejects(dismissPendingAction(ACCOUNT_ID, pending.id), /already/);
+  });
+
+  test('enqueue reuses an identical open pending row instead of stacking duplicates', async () => {
+    const first = await enqueuePendingAction(ACCOUNT_ID, {
+      source: 'digest',
+      label: 'Archive 2 newsletters',
+      action: 'archive',
+      messageIds: ['INBOX:1', 'INBOX:2'],
+    });
+    const second = await enqueuePendingAction(ACCOUNT_ID, {
+      source: 'digest',
+      label: 'Archive 2 newsletters again',
+      action: 'archive',
+      messageIds: ['INBOX:2', 'INBOX:1'],
+    });
+    assert.equal(second.id, first.id);
+    assert.equal((await listPendingActions(ACCOUNT_ID)).length, 1);
+  });
+
+  test('queueing a digest group consumes its Review chip from the cached digest', async () => {
+    const db = getMailDb(ACCOUNT_ID);
+    writeMeta(db, 'narrative_digest', {
+      narrative: 'Three newsletters can be archived.',
+      generatedAt: '2026-07-22T10:00:00.000Z',
+      actionGroups: [
+        {
+          id: 'group-1',
+          label: 'Archive 3 newsletters',
+          action: 'archive',
+          messageIds: ['INBOX:1', 'INBOX:2', 'INBOX:3'],
+          threadIds: ['t-1', 't-2', 't-3'],
+        },
+      ],
+    });
+
+    const pending = await queueDigestActionGroup(ACCOUNT_ID, 'group-1');
+    assert.equal(pending.state, 'pending');
+    assert.equal(pending.label, 'Archive 3 newsletters');
+
+    const cached = await getCachedDigest(ACCOUNT_ID);
+    assert.deepEqual(cached?.actionGroups ?? [], []);
+  });
+
+  test('dismissing a digest pending row also removes overlapping digest chips', async () => {
+    const db = getMailDb(ACCOUNT_ID);
+    writeMeta(db, 'narrative_digest', {
+      narrative: 'Three newsletters can be archived.',
+      generatedAt: '2026-07-22T10:00:00.000Z',
+      actionGroups: [
+        {
+          id: 'group-1',
+          label: 'Archive 3 newsletters',
+          action: 'archive',
+          messageIds: ['INBOX:1', 'INBOX:2', 'INBOX:3'],
+          threadIds: ['t-1', 't-2', 't-3'],
+        },
+      ],
+    });
+
+    const pending = await enqueuePendingAction(ACCOUNT_ID, {
+      source: 'digest',
+      label: 'Archive 3 newsletters',
+      action: 'archive',
+      messageIds: ['INBOX:1', 'INBOX:2', 'INBOX:3'],
+    });
+    await dismissPendingAction(ACCOUNT_ID, pending.id);
+
+    const cached = await getCachedDigest(ACCOUNT_ID);
+    assert.deepEqual(cached?.actionGroups ?? [], []);
   });
 
   test('always-allow rules persist per source:action and never cover delete', async () => {

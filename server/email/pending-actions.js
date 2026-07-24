@@ -17,6 +17,17 @@ import { getMailDb, readMeta, writeMeta } from './store.js';
 import { bulkMessageAction } from './mail-actions.js';
 import { emitEmailEvent } from './events.js';
 
+/** Drop overlapping digest Review chips after a digest-sourced resolve. */
+async function scrubDigestChipsForPending(accountId, row) {
+  if (row.source !== 'digest') return;
+  const { removeDigestActionGroupsForMessages } = await import('./digest.js');
+  await removeDigestActionGroupsForMessages(
+    accountId,
+    parseJson(row.message_ids_json, []),
+  );
+}
+
+
 /** Actions a pending row may carry; anything else is refused at enqueue. */
 export const PENDING_ACTIONS = ['archive', 'delete', 'read', 'unread', 'flag', 'unflag', 'move'];
 
@@ -36,6 +47,15 @@ function parseJson(raw, fallback) {
   } catch {
     return fallback;
   }
+}
+
+/** True when both arrays contain the same ids (order-insensitive). */
+function sameMessageIdSet(left, right) {
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+    return false;
+  }
+  const set = new Set(left.map(String));
+  return right.every((id) => set.has(String(id)));
 }
 
 /** @param {Record<string, any>} row */
@@ -119,6 +139,19 @@ export async function enqueuePendingAction(accountId, input) {
   }
 
   const db = getMailDb(accountId);
+  const destFolder = String(input.destFolder ?? '').trim();
+  // Reuse an identical open review row instead of stacking duplicates.
+  const openRows = db
+    .prepare(
+      "SELECT * FROM pending_actions WHERE state = 'pending' AND source = ? AND action = ? AND dest_folder = ?",
+    )
+    .all(source, action, destFolder);
+  for (const open of openRows) {
+    if (sameMessageIdSet(parseJson(open.message_ids_json, []), messageIds)) {
+      return rowToPendingAction(open);
+    }
+  }
+
   const row = {
     id: randomUUID(),
     source,
@@ -128,7 +161,7 @@ export async function enqueuePendingAction(accountId, input) {
     thread_ids_json: JSON.stringify(
       Array.isArray(input.threadIds) ? input.threadIds.map(String).filter(Boolean) : [],
     ),
-    dest_folder: String(input.destFolder ?? '').trim(),
+    dest_folder: destFolder,
     state: 'pending',
     detail: String(input.detail ?? ''),
     created_at: nowIso(),
@@ -211,6 +244,7 @@ export async function applyPendingAction(accountId, id) {
     'UPDATE pending_actions SET state = ?, detail = ?, resolved_at = ? WHERE id = ?',
   ).run(state, detail, nowIso(), row.id);
   emitEmailEvent('pending_actions_updated', { accountId });
+  await scrubDigestChipsForPending(accountId, row);
 
   const updated = db.prepare('SELECT * FROM pending_actions WHERE id = ?').get(row.id);
   return rowToPendingAction(updated);
@@ -234,6 +268,7 @@ export async function dismissPendingAction(accountId, id) {
     "UPDATE pending_actions SET state = 'dismissed', resolved_at = ? WHERE id = ?",
   ).run(nowIso(), row.id);
   emitEmailEvent('pending_actions_updated', { accountId });
+  await scrubDigestChipsForPending(accountId, row);
 
   const updated = db.prepare('SELECT * FROM pending_actions WHERE id = ?').get(row.id);
   return rowToPendingAction(updated);
