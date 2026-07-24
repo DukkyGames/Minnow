@@ -18,7 +18,10 @@ export const EMAIL_ICONS = {
   replyAll: `${SVG_OPEN}${paths(["M9 17l-5-5 5-5", "M4 12h6a6 6 0 0 1 6 6v1", "M20 17l-5-5 5-5", "M15 12h2a6 6 0 0 0-6-6v-1"])}${SVG_CLOSE}`,
   forward: `${SVG_OPEN}${paths("M15 17l5-5-5-5M20 12H10a6 6 0 0 0-6 6v1")}${SVG_CLOSE}`,
   star: `${SVG_OPEN}${paths("M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01Z")}${SVG_CLOSE}`,
-  starFilled: `${SVG_OPEN.replace(">", ' fill="currentColor">')}${paths("M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01Z")}${SVG_CLOSE}`,
+  starFilled: `${SVG_OPEN.replace(
+    'icon-svg email-icon',
+    'icon-svg email-icon email-icon--filled',
+  )}${paths("M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01Z")}${SVG_CLOSE}`,
   archive: `${SVG_OPEN}${paths("M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8M1 3h22v5H1zM10 12h4")}${SVG_CLOSE}`,
   trash: `${SVG_OPEN}${paths(["M3 6h18", "M8 6V4h8v2", "M19 6l-1 14H6L5 6", "M10 11v6", "M14 11v6"])}${SVG_CLOSE}`,
   mail: `${SVG_OPEN}${paths(["M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z", "M22 6l-10 7L2 6"])}${SVG_CLOSE}`,

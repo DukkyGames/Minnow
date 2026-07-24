@@ -80,9 +80,12 @@ import {
   resolveActionTargetIds,
   resolveDragThreadIds,
   selectEmailPage,
+  selectEmailFolder,
   selectEmailShiftRange,
+  selectionDisplayCount,
   selectionReadAction,
   selectionStarAction,
+  shouldOfferFolderSelect,
   toggleEmailSelection,
   type EmailDragPayload,
 } from './email-selection';
@@ -157,7 +160,10 @@ function scopeFolder(scope: InboxScope): string {
 
 /** Server-side filter for the scope, if any. */
 function scopeFilter(scope: InboxScope): 'unread' | 'flagged' | 'snoozed' | undefined {
-  return scope.kind === 'filter' ? scope.filter : undefined;
+  if (scope.kind === 'filter') return scope.filter;
+  // The triage "Everything else" list is unread-only; highlights cover urgent mail.
+  if (scope.kind === 'triage') return 'unread';
+  return undefined;
 }
 
 /** Only the default triage view leads with the agent's read of the inbox. */
@@ -228,6 +234,21 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   let composeMode: ComposeMode | null = null;
   /** Checkbox selection for bulk actions (distinct from the open reader thread). */
   const selection = createEmailSelection();
+  /** Folder-scoped message ids for threads not on the current page (folder-wide select). */
+  const folderThreadCache = new Map<string, string[]>();
+  /** Thread summaries loaded for folder-wide selection (read/star toolbar labels). */
+  let folderThreadSummaries: EmailThreadSummary[] = [];
+  /** True while every thread id in the folder is being resolved for selection. */
+  let folderSelectBusy = false;
+
+  const resetSelection = (): void => {
+    clearEmailSelection(selection);
+    folderThreadCache.clear();
+    folderThreadSummaries = [];
+  };
+
+  const threadsForSelectionActions = (): EmailThreadSummary[] =>
+    selection.allInFolder && folderThreadSummaries.length > 0 ? folderThreadSummaries : threads;
   /** Keyboard focus index within the current page (-1 = none). */
   let focusIndex = -1;
   /** True while a bulk request is in flight (disables the action bar). */
@@ -244,17 +265,33 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   const markerMount = el('div', 'email-stream-marker');
   const markerLabel = el('span', '', scopeMarker(scope));
   const markerTools = el('div', 'email-stream-tools');
-  const markerAssistantSlot = el('div', 'email-readout-actions');
-  markerMount.append(markerLabel, markerTools);
+  // Sit outside the tools cluster so CSS can pin it past the marker hairline.
+  const markerAssistantSlot = el('div', 'email-readout-actions email-stream-assistant');
+  markerMount.append(markerLabel, markerTools, markerAssistantSlot);
   const pager = el('div', 'email-stream-pager');
   pager.hidden = true;
+  const selectBannerMount = el('div', 'email-stream-select-banner-mount');
 
   /** Page thread ids in list order (for Shift-range and master checkbox). */
   const pageIds = (): string[] => threads.map((row) => row.threadId);
 
   /** Resolve folder-scoped message ids for a set of thread ids. */
-  const messageIdsFor = (threadIds: Iterable<string>): string[] =>
-    collectMessageIdsForThreads(threads, threadIds);
+  const messageIdsFor = (threadIds: Iterable<string>): string[] => {
+    if (!selection.allInFolder) {
+      return collectMessageIdsForThreads(threads, threadIds);
+    }
+    const ids: string[] = [];
+    for (const threadId of threadIds) {
+      const onPage = threads.find((row) => row.threadId === threadId);
+      if (onPage?.messageIds?.length) {
+        ids.push(...onPage.messageIds);
+        continue;
+      }
+      const cached = folderThreadCache.get(threadId);
+      if (cached?.length) ids.push(...cached);
+    }
+    return ids;
+  };
 
   const dashOptions: EmailDashboardOptions = {
     account,
@@ -347,8 +384,56 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       query: search || undefined,
     });
 
+  /** Load every conversation in the current folder/view for folder-wide selection. */
+  const selectAllInFolder = async (): Promise<void> => {
+    if (folderSelectBusy || bulkBusy || total === 0) return;
+    folderSelectBusy = true;
+    paintSelectBanner();
+    paintToolbar();
+    try {
+      const collected: EmailThreadSummary[] = [];
+      let offset = 0;
+      const limit = 200;
+      while (offset < total) {
+        const result = await fetchEmailThreads(account.id, {
+          folder: scopeFolder(scope),
+          offset,
+          limit,
+          filter: scopeFilter(scope),
+          query: search || undefined,
+        });
+        collected.push(...result.threads);
+        offset += result.threads.length;
+        if (result.threads.length === 0) break;
+      }
+      folderThreadCache.clear();
+      const ids: string[] = [];
+      for (const row of collected) {
+        ids.push(row.threadId);
+        if (row.messageIds?.length) folderThreadCache.set(row.threadId, row.messageIds);
+      }
+      folderThreadSummaries = collected;
+      selectEmailFolder(selection, ids, total);
+      paintToolbar();
+      paintSelectBanner();
+      renderRows();
+    } catch (err) {
+      options.onStatus?.(
+        'err',
+        err instanceof Error ? err.message : 'Could not select every conversation',
+      );
+    } finally {
+      folderSelectBusy = false;
+      paintSelectBanner();
+      paintToolbar();
+    }
+  };
+
   /** Total pages for the current result set (at least one, even when empty). */
   const pageCount = (): number => Math.max(1, Math.ceil(total / PAGE));
+
+  /** Gmail-style banner: expand page selection to the whole folder, or undo. */
+  let paintSelectBanner: () => void = () => {};
 
   const fetchThreadsPage = async (pageIndex: number): Promise<void> => {
     const result = await queryThreads(pageIndex * PAGE);
@@ -387,8 +472,10 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       total = result.total;
       threads = result.threads;
       page = clamped;
-      // Page changes clear selection so actions never silently hit a stale page.
-      clearEmailSelection(selection);
+      // Page changes clear page-only selection; folder-wide selection persists.
+      if (!selection.allInFolder) {
+        resetSelection();
+      }
       focusIndex = -1;
       closeEmailContextMenu();
       // Full re-render so the triage head shows on page 1 and hides beyond it.
@@ -472,7 +559,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
         await reload({ showLoading: false });
         return;
       }
-      clearEmailSelection(selection);
+      resetSelection();
       focusIndex = -1;
       options.onStatus?.('ok', label);
       if (
@@ -497,7 +584,9 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       }
       await loadSummary();
       await loadThreadsForPage();
-      pruneEmailSelection(selection, pageIds());
+      if (!selection.allInFolder) {
+        pruneEmailSelection(selection, pageIds());
+      }
       renderStream();
     } catch (err) {
       options.onStatus?.(
@@ -561,7 +650,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
         await reload({ showLoading: false });
         return;
       }
-      clearEmailSelection(selection);
+      resetSelection();
       options.onStatus?.('ok', `Snoozed until ${formatWhen(until.toISOString())}`);
       await reload({ showLoading: false });
     } finally {
@@ -593,7 +682,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
           `Marked ${result.updated} message${result.updated === 1 ? '' : 's'} read`,
         );
       }
-      clearEmailSelection(selection);
+      resetSelection();
       await reload({ showLoading: false });
     } catch (err) {
       options.onStatus?.(
@@ -753,8 +842,9 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     const synced = el('span', 'email-readout-synced', relativeTime(summary.generatedAt));
     synced.title = `Last synced ${new Date(summary.generatedAt).toLocaleString()}`;
     freshness.appendChild(synced);
-    freshness.appendChild(el('div', 'email-readout-actions'));
-    readout.appendChild(freshness);
+    // Keep the assistant on the far right of the readout row, past freshness.
+    const assistantSlot = el('div', 'email-readout-actions email-readout-assistant-slot');
+    readout.append(freshness, assistantSlot);
     return readout;
   };
 
@@ -942,7 +1032,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     pager.replaceChildren(prev, label, next);
   };
 
-  streamCol.append(loadingBanner, headMount, followupsMount, markerMount, listMount, pager);
+  streamCol.append(loadingBanner, headMount, followupsMount, markerMount, selectBannerMount, listMount, pager);
 
   /**
    * Scope-marker toolbar: master checkbox, selection actions or idle tools
@@ -950,20 +1040,24 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
    */
   paintToolbar = (): void => {
     const tools = el('div', 'email-stream-toolbar');
-    tools.classList.toggle('is-busy', bulkBusy);
+    tools.classList.toggle('is-busy', bulkBusy || folderSelectBusy);
 
     const master = el('input', 'email-stream-master-cb') as HTMLInputElement;
     master.type = 'checkbox';
-    master.title = 'Select all on this page';
-    master.setAttribute('aria-label', 'Select all conversations on this page');
+    master.title = selection.allInFolder ? 'Clear selection' : 'Select all on this page';
+    master.setAttribute(
+      'aria-label',
+      selection.allInFolder ? 'Clear conversation selection' : 'Select all conversations on this page',
+    );
     const masterState = masterCheckboxState(selection.selected, pageIds());
-    master.checked = masterState === 'all';
-    master.indeterminate = masterState === 'some';
-    master.disabled = bulkBusy || threads.length === 0;
+    master.checked = selection.allInFolder || masterState === 'all';
+    master.indeterminate = !selection.allInFolder && masterState === 'some';
+    master.disabled = bulkBusy || folderSelectBusy || threads.length === 0;
     master.addEventListener('change', () => {
       if (master.checked) selectEmailPage(selection, pageIds());
-      else clearEmailSelection(selection);
+      else resetSelection();
       paintToolbar();
+      paintSelectBanner();
       renderRows();
     });
     tools.appendChild(master);
@@ -975,14 +1069,15 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       const count = el(
         'span',
         'email-stream-selection-count',
-        `${selection.selected.size} selected`,
+        `${selectionDisplayCount(selection)} selected`,
       );
       count.setAttribute('role', 'status');
       actions.appendChild(count);
 
       const selectedIds = [...selection.selected];
-      const readAction = selectionReadAction(threads, selection.selected);
-      const starAction = selectionStarAction(threads, selection.selected);
+      const actionThreads = threadsForSelectionActions();
+      const readAction = selectionReadAction(actionThreads, selection.selected);
+      const starAction = selectionStarAction(actionThreads, selection.selected);
 
       const mkAction = (
         svg: string,
@@ -1032,8 +1127,9 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       mkAction(EMAIL_ICONS.snooze, 'Snooze', (btn) => openSnoozeMenu(btn, selectedIds));
       mkAction(EMAIL_ICONS.move, 'Move to folder', (btn) => openMoveMenu(btn, selectedIds));
       mkAction(EMAIL_ICONS.close, 'Clear selection', () => {
-        clearEmailSelection(selection);
+        resetSelection();
         paintToolbar();
+        paintSelectBanner();
         renderRows();
       });
     } else {
@@ -1072,16 +1168,64 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       timer = window.setTimeout(() => {
         search = input.value.trim();
         page = 0;
-        clearEmailSelection(selection);
+        resetSelection();
         focusIndex = -1;
         void reload({ showLoading: true, keepFocus: 'search' });
       }, 300);
     });
     searchWrap.appendChild(input);
 
-    markerTools.replaceChildren(tools, markerAssistantSlot, searchWrap);
+    markerTools.replaceChildren(tools, searchWrap);
   };
+
+  paintSelectBanner = (): void => {
+    selectBannerMount.replaceChildren();
+    if (scope.kind === 'waiting' || total === 0) return;
+
+    const scopeName = scopeMarker(scope);
+    const pageCountOnScreen = pageIds().length;
+
+    if (selection.allInFolder) {
+      const banner = el('div', 'email-stream-select-banner');
+      banner.setAttribute('role', 'status');
+      banner.append(
+        `${selection.folderTotal ?? total} conversation${(selection.folderTotal ?? total) === 1 ? '' : 's'} in ${scopeName} selected. `,
+      );
+      const undo = el('button', 'email-stream-select-banner-action', 'Clear selection') as HTMLButtonElement;
+      undo.type = 'button';
+      undo.disabled = bulkBusy || folderSelectBusy;
+      undo.addEventListener('click', () => {
+        resetSelection();
+        paintToolbar();
+        paintSelectBanner();
+        renderRows();
+      });
+      banner.appendChild(undo);
+      selectBannerMount.appendChild(banner);
+      return;
+    }
+
+    if (!shouldOfferFolderSelect(selection, pageIds(), total)) return;
+
+    const banner = el('div', 'email-stream-select-banner');
+    banner.setAttribute('role', 'status');
+    banner.append(
+      `All ${pageCountOnScreen} conversation${pageCountOnScreen === 1 ? '' : 's'} on this page ${pageCountOnScreen === 1 ? 'is' : 'are'} selected. `,
+    );
+    const expand = el(
+      'button',
+      'email-stream-select-banner-action',
+      `Select all ${total} in ${scopeName}`,
+    ) as HTMLButtonElement;
+    expand.type = 'button';
+    expand.disabled = bulkBusy || folderSelectBusy;
+    expand.addEventListener('click', () => void selectAllInFolder());
+    banner.appendChild(expand);
+    selectBannerMount.appendChild(banner);
+  };
+
   paintToolbar();
+  paintSelectBanner();
   mountAssistantToggle(markerAssistantSlot);
 
   const renderHead = (): void => {
@@ -1098,7 +1242,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     if (readout) {
       headMount.appendChild(readout);
       mountAssistantToggle(
-        readout.querySelector<HTMLElement>('.email-readout-actions'),
+        readout.querySelector<HTMLElement>('.email-readout-assistant-slot'),
       );
     } else {
       mountAssistantToggle(markerAssistantSlot);
@@ -1131,9 +1275,12 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
 
   const renderStream = (): void => {
     markerLabel.textContent = scopeMarker(scope);
-    pruneEmailSelection(selection, pageIds());
+    if (!selection.allInFolder) {
+      pruneEmailSelection(selection, pageIds());
+    }
     renderHead();
     paintToolbar();
+    paintSelectBanner();
 
     const isWaiting = scope.kind === 'waiting';
     followupsMount.hidden = !isWaiting;
@@ -1191,12 +1338,14 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
 
   const emptyTitle = (): string => {
     if (search) return 'No matches';
-    if (scope.kind === 'filter' && scope.filter === 'unread') return "You're all caught up";
+    if (scopeFilter(scope) === 'unread') return "You're all caught up";
     return 'Nothing here';
   };
   const emptyCopy = (): string => {
     if (search) return 'No conversations match that search. Try fewer words.';
-    if (scope.kind === 'filter') return 'Nothing matches this view right now.';
+    if (scope.kind === 'filter' || scope.kind === 'triage') {
+      return 'Nothing matches this view right now.';
+    }
     return 'Sync this mailbox or pick another view.';
   };
 

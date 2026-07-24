@@ -29,7 +29,7 @@ isProject: true
 
 Make Minnow Email feel complete for daily inbox triage:
 
-- Select one, several, or every conversation on the current page.
+- Select one, several, every conversation on the current page, or every conversation in the folder/view (via the post–select-all banner).
 - Use a familiar action toolbar for archive, spam, trash, read state, snooze, star, and move.
 - Mark every result in the Unread view as read without selecting page by page.
 - Open the same actions from a row context menu.
@@ -58,7 +58,7 @@ Interaction hierarchy:
 
 ### Selection semantics
 
-- The master checkbox selects every conversation loaded on the current page.
+- The master checkbox selects every conversation on the current page. When the folder holds more than one page, a banner offers selecting the whole folder or clearing folder-wide selection.
 - A page change, search change, account change, or rail scope change clears selection.
 - Shift-click selects the contiguous range from the last selection anchor.
 - Right-clicking an unselected row makes that row the action target. Right-clicking a selected row preserves the current group.

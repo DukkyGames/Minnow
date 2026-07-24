@@ -103,11 +103,16 @@ export function bindMailShortcuts(
 
 /** Render the `?` cheat sheet as a dismissible overlay. */
 export function showShortcutCheatSheet(mount: HTMLElement): () => void {
+  const existingBackdrop = mount.querySelector('.email-shortcut-backdrop');
   const existing = mount.querySelector('.email-shortcut-sheet');
-  if (existing) {
-    existing.remove();
+  if (existingBackdrop || existing) {
+    existingBackdrop?.remove();
+    existing?.remove();
     return () => {};
   }
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'email-shortcut-backdrop';
 
   const sheet = document.createElement('div');
   sheet.className = 'email-shortcut-sheet';
@@ -133,8 +138,11 @@ export function showShortcutCheatSheet(mount: HTMLElement): () => void {
 
   const close = (): void => {
     sheet.remove();
+    backdrop.remove();
     document.removeEventListener('keydown', onEscape);
   };
+
+  backdrop.addEventListener('click', close);
 
   const onEscape = (event: KeyboardEvent): void => {
     if (event.key === 'Escape' || event.key === '?') {
@@ -151,7 +159,7 @@ export function showShortcutCheatSheet(mount: HTMLElement): () => void {
   dismiss.addEventListener('click', close);
   sheet.appendChild(dismiss);
 
-  mount.appendChild(sheet);
+  mount.append(backdrop, sheet);
   sheet.focus();
   return close;
 }
