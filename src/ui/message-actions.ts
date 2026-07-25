@@ -1,5 +1,5 @@
 /**
- * Per-message ⋮ menu: copy, edit, delete, regenerate, remake (Epic C2).
+ * Per-message ⋮ menu: copy, edit, delete, regenerate, remake, undo (Epic C2 / MIN-409).
  */
 
 import { isActiveChatStreaming } from '../chat/streaming-state';
@@ -9,6 +9,12 @@ import {
   updateUserMessageAt,
 } from '../chat/history-truncate';
 import { forkFromUserIndex } from '../chat/fork-from-run';
+import {
+  getUndoEligibility,
+  undoBlockMessage,
+  undoLastAgentTurn,
+  UNDO_STATUS,
+} from '../chat/undo-turn';
 import { openForkModelDialog } from './fork-model-dialog';
 import { getActiveRun } from '../state/runs-store';
 import { stripSkillTagFromHistory } from '../skills/history-content';
@@ -66,17 +72,56 @@ function shouldConfirmDelete(historyIndex: number): boolean {
   return remaining > 1;
 }
 
-function buildMenuButton(label: string, action: () => void): HTMLButtonElement {
+function buildMenuButton(
+  label: string,
+  action: () => void,
+  options?: { disabled?: boolean; title?: string },
+): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'message-actions__item';
   btn.textContent = label;
+  if (options?.title) btn.title = options.title;
+  if (options?.disabled) {
+    btn.disabled = true;
+    btn.classList.add('message-actions__item--disabled');
+    return btn;
+  }
   btn.addEventListener('click', (ev) => {
     ev.stopPropagation();
     closeMessageActionsMenu();
     action();
   });
   return btn;
+}
+
+/** Undo last agent turn from the ⋮ menu; re-render + focus composer on success. */
+async function runUndoFromMenu(chatId: string): Promise<void> {
+  const result = await undoLastAgentTurn(chatId);
+  if (!result.ok) {
+    if (result.error === 'cancelled') {
+      setStatus('ok', UNDO_STATUS.cancelled);
+      return;
+    }
+    const msg =
+      result.error === 'streaming'
+        ? undoBlockMessage('streaming')
+        : UNDO_STATUS.failed;
+    setStatus(result.error === 'streaming' ? 'spin' : 'err', msg);
+    return;
+  }
+  const chat = getActiveChat();
+  renderChatFromHistory(chat);
+  renderStatsForChat(chat);
+  renderSidebar();
+  // Dynamic import avoids a messages ↔ message-actions ↔ composer-undo cycle.
+  void import('./composer-undo').then((m) => m.syncComposerUndoFromActiveChat());
+  const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
+  input?.focus();
+  setStatus(
+    'ok',
+    result.filesRestored ? UNDO_STATUS.successFiles : UNDO_STATUS.successChat,
+  );
 }
 
 function openMenuAt(trigger: HTMLButtonElement, items: HTMLButtonElement[]): void {
@@ -191,6 +236,35 @@ export function attachMessageActions(
           void forkFromUserIndex(target.chatId, userIdx);
         }),
       );
+    }
+
+    // Undo last agent turn (chat rewind). Always on assistant rows (disabled +
+    // tooltip when blocked); also on the user row that is the undo target fork.
+    {
+      const chat = getActiveChat();
+      const eligibility = getUndoEligibility(chat);
+      const isAssistantRow =
+        target.turnKind === 'assistant' || target.turnKind === 'assistant-tools';
+      const isTargetUserFork =
+        target.turnKind === 'user' &&
+        eligibility.ok &&
+        eligibility.target?.forkHistoryIndex === target.historyIndex;
+      if (isAssistantRow || isTargetUserFork) {
+        items.push(
+          buildMenuButton(
+            'Undo turn',
+            () => {
+              void runUndoFromMenu(target.chatId);
+            },
+            eligibility.ok
+              ? { title: 'Undo last agent turn (rewind chat; restore files if snapshotted)' }
+              : {
+                  disabled: true,
+                  title: eligibility.message ?? 'Undo unavailable',
+                },
+          ),
+        );
+      }
     }
 
     items.push(

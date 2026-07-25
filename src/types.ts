@@ -751,6 +751,17 @@ export interface TurnRunRecord {
   endReason?: 'max_tool_turns';
   /** User-facing failure detail when {@link status} is `failed` (survives history rollback). */
   errorMessage?: string;
+  /**
+   * MIN-409: dangling git commit of the working tree before this turn started.
+   * Used by Undo to restore files without moving HEAD.
+   */
+  preTurnSnapshotSha?: string;
+  /** Dangling git commit of the working tree after the turn settled. */
+  postTurnSnapshotSha?: string;
+  /** HEAD tip when the pre-turn snapshot was taken (divergence guard). */
+  headShaAtTurn?: string;
+  /** Absolute cwd used for snapshots (workspace root tools mutate). */
+  snapshotCwd?: string;
 }
 
 /** Expert thread or legacy Expert Lab session (hidden from main sidebar). */
