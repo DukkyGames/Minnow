@@ -75,7 +75,7 @@ Tools are either **browser-native** (run in the page — utilities, sub-agent/bo
 
 ## Persistence
 
-All durable state lives under `~/.minnow` (override with `MINNOW_HOME`). See [configuration.md](configuration.md) for the full layout. The session blob (`sessions/state.json`) holds all chats; markdown stores (Brain wiki, memory) keep frontmatter files as the source of truth with rebuildable caches.
+All durable state lives under `~/.minnow` (override with `MINNOW_HOME`). See [configuration.md](configuration.md) for the full layout. Sessions live in `sessions/sessions.db` (SQLite; HTTP still exchanges the whole blob); markdown stores (Brain wiki, memory) keep frontmatter files as the source of truth with rebuildable caches.
 
 ## Where to dig deeper
 

@@ -21,6 +21,7 @@ import {
   SESSIONS_DB_SCHEMA_VERSION,
 } from './sessions-schema.js';
 import { importJsonSessionsIfNeeded } from './sessions-import.js';
+import { flushSessionsJsonMirror } from './sessions-json-mirror.js';
 
 /** @type {Map<string, import('better-sqlite3').Database>} */
 const dbByCacheKey = new Map();
@@ -106,11 +107,17 @@ export function getSessionsDb() {
   return db;
 }
 
-/** Close the cached sessions DB handle (tests, shutdown). */
+/** Close the cached sessions DB handle (tests, shutdown). Flushes JSON mirror first. */
 export function closeSessionsDb() {
   const cacheKey = sessionsDbCacheKey();
   const db = dbByCacheKey.get(cacheKey);
   if (!db) return false;
+  // Flush rotating state.json.backup while the handle is still open.
+  try {
+    flushSessionsJsonMirror();
+  } catch {
+    /* best-effort */
+  }
   db.close();
   dbByCacheKey.delete(cacheKey);
   return true;

@@ -14,9 +14,9 @@ describe('resolveConfigPath', () => {
     await rmTestHome(homeDir);
   });
 
-  test('allows sessions/state.json', () => {
-    const full = resolveConfigPath('sessions/state.json');
-    assert.match(full, /sessions[\\/]state\.json$/);
+  test('rejects sessions/state.json (SQLite bypasses allowlist)', () => {
+    // A.2: sessions live in sessions.db via sessions-paths.js, not ALLOWED_CONFIG_FILES.
+    assert.throws(() => resolveConfigPath('sessions/state.json'), /Invalid config path/);
   });
 
   test('rejects parent traversal', () => {

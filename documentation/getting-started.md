@@ -172,7 +172,7 @@ Everything persists under your Minnow home — `~/.minnow` (`%USERPROFILE%\.minn
 |------|---------|
 | `config.json` | Active provider, workspace, feature flags, voice/synthesis/oauth/webhooks settings. |
 | `.key` | AES-256-GCM key for encrypted secrets (`0o600` on Unix). **Deleting it makes encrypted secrets unrecoverable.** |
-| `sessions/state.json` | All chats and history (single blob). |
+| `sessions/sessions.db` | All chats and history (SQLite; HTTP still GET/PUT whole blob). |
 | `chats/` | Assistant/desktop chat workspaces. |
 | `tools.json` | Tool permissions. |
 | `providers/` | Provider profiles + encrypted secrets + capability probes. |

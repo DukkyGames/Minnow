@@ -3,6 +3,7 @@
   "activeId": "11111111-1111-1111-1111-111111111111",
   "sidebarCollapsed": false,
   "lastActiveChatIdByWorkspace": {},
+  "lastActiveChatIdByApp": {},
   "groups": [],
   "chats": [
     {
@@ -11,6 +12,8 @@
       "workspacePath": "",
       "modelId": "test-model",
       "modeId": "build",
+      "workAgentId": null,
+      "workAgentAuto": true,
       "history": [
         {
           "role": "user",

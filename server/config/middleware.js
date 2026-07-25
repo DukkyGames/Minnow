@@ -2,6 +2,7 @@
  * Express-style middleware for /api/config/* (Vite configureServer).
  */
 
+import fs from 'node:fs';
 import { ensureMinnowLayout, getMinnowHome } from './home.js';
 import { readResource, writeResource, readConfigJson, writeConfigJson, configFileExists } from './store.js';
 import {
@@ -12,6 +13,9 @@ import {
 } from './validators.js';
 import { resolveConfigPath, ALLOWED_CONFIG_FILES } from './paths.js';
 import { handleRunsConfigRequest } from '../runs/middleware.js';
+import { exportSessionStateToJson, useJsonSessionsStore } from './sessions-repo.js';
+import { getSessionsDb, readSessionMeta } from './sessions-db.js';
+import { sessionsDbPath } from './sessions-paths.js';
 
 const MAX_MIGRATE_BYTES = 10 * 1024 * 1024;
 
@@ -65,20 +69,38 @@ async function handleMigrate(body) {
     {
       key: 'sessions',
       raw: ls.sessions,
-      file: 'sessions/state.json',
+      file: useJsonSessionsStore() ? 'sessions/state.json' : 'sessions/sessions.db',
       parse: (str) => validateSessionState(JSON.parse(str)),
+      // Sessions write through writeResource so SQLite cutover stays consistent.
+      write: async (parsed) => {
+        await writeResource('sessions', parsed);
+      },
+      exists: async () => {
+        if (useJsonSessionsStore()) {
+          return configFileExists('sessions/state.json');
+        }
+        return fs.existsSync(sessionsDbPath());
+      },
     },
     {
       key: 'tools',
       raw: ls.tools,
       file: 'tools.json',
       parse: (str) => normalizeToolConfig(JSON.parse(str)),
+      write: async (parsed) => {
+        await writeConfigJson('tools.json', parsed);
+      },
+      exists: async () => configFileExists('tools.json'),
     },
     {
       key: 'systemPrompt',
       raw: ls.systemPrompt,
       file: 'system-prompt.json',
       parse: (str) => validateSystemPromptSettings(JSON.parse(str)),
+      write: async (parsed) => {
+        await writeConfigJson('system-prompt.json', parsed);
+      },
+      exists: async () => configFileExists('system-prompt.json'),
     },
   ];
 
@@ -89,11 +111,11 @@ async function handleMigrate(body) {
 
     try {
       const parsed = item.parse(item.raw);
-      if (force === false && (await configFileExists(item.file)) && meta.migratedFromLocalStorage) {
+      if (force === false && (await item.exists()) && meta.migratedFromLocalStorage) {
         warnings.push(`${item.file} already exists; skipped`);
         continue;
       }
-      await writeConfigJson(item.file, parsed);
+      await item.write(parsed);
       written.push(item.file);
       if (item.key === 'sessions') keysMigrated.push(STORAGE_KEYS.sessions);
       if (item.key === 'tools') keysMigrated.push(STORAGE_KEYS.tools);
@@ -160,12 +182,33 @@ export async function handleConfigRequest(req, res, pathname) {
     if (pathname === '/api/config/status' && req.method === 'GET') {
       await ensureMinnowLayout();
       const meta = (await readConfigJson('config.json')) ?? {};
-      sendJson(res, 200, {
+      /** @type {Record<string, unknown>} */
+      const status = {
         ok: true,
         storage: 'home',
         migrated: meta.migratedFromLocalStorage === true,
         schemaVersion: meta.schemaVersion ?? 1,
-      });
+        sessionsStore: useJsonSessionsStore() ? 'json' : 'sqlite',
+      };
+      if (!useJsonSessionsStore()) {
+        try {
+          const db = getSessionsDb();
+          const failedAt = readSessionMeta(db, 'jsonImportFailedAt');
+          if (failedAt) status.jsonImportFailedAt = failedAt;
+        } catch {
+          /* status should still succeed if DB is unavailable */
+        }
+      }
+      sendJson(res, 200, status);
+      return true;
+    }
+
+    if (pathname === '/api/config/sessions/export-json' && req.method === 'POST') {
+      await ensureMinnowLayout();
+      const data = useJsonSessionsStore()
+        ? ((await readConfigJson('sessions/state.json')) ?? (await readResource('sessions')))
+        : exportSessionStateToJson();
+      sendJson(res, 200, { ok: true, data });
       return true;
     }
 

@@ -82,9 +82,9 @@ Minnow/
 
 **Secrets:** AES-256-GCM at rest; key file `~/.minnow/.key` (`0o600`). Rotating or deleting `.key` makes encrypted secrets unrecoverable.
 
-**Canonical session store (HTTP):** `sessions/state.json` — single blob for all chats (not per-chat files). Server `validateSessionState` / client `ensureChatShape` keep the full Chat allowlist (including todos, token ledger, pending queues, etc. via named passthrough on the server); there is no `MAX_CHATS` hard-trim on save. Kitchen-sink contract: [`test/fixtures/migration/kitchen-sink-sessions-state.json`](../test/fixtures/migration/kitchen-sink-sessions-state.json).
+**Canonical session store (HTTP):** `sessions/sessions.db` (SQLite) — GET/PUT `/api/config/sessions` still exchange the whole SessionState blob (client unchanged). Server `validateSessionState` / client `ensureChatShape` keep the full Chat allowlist (including todos, token ledger, pending queues, etc. via named passthrough on the server); there is no `MAX_CHATS` hard-trim on save. Kitchen-sink contract: [`test/fixtures/migration/kitchen-sink-sessions-state.json`](../test/fixtures/migration/kitchen-sink-sessions-state.json).
 
-**Sessions SQLite (Phase A.1, not product-facing yet):** `sessions/sessions.db` is created on first `getSessionsDb()` with a one-time import from `state.json` (renamed to `state.json.migrated` after integrity checks). HTTP `/api/config/sessions` still reads/writes `state.json` until Phase A.2 cutover — see [`plans/sessions-sqlite-migration.md`](plans/sessions-sqlite-migration.md).
+**Sessions SQLite (Phase A.2 cutover):** On first open, legacy `sessions/state.json` is imported once and renamed to `state.json.migrated`. Whole-blob R/W lives in [`server/config/sessions-repo.js`](../server/config/sessions-repo.js); `terminalHistory` is server-owned on PUT (only `appendTerminalRun` writes it). A rotating `state.json.backup` mirror flushes on a 5-minute dirty debounce and on `closeSessionsDb()`. Rollback: `MINNOW_SESSIONS_STORE=json`. Export: `POST /api/config/sessions/export-json`. Narrow consumer queries are Phase A.3 — see [`plans/sessions-sqlite-migration.md`](plans/sessions-sqlite-migration.md).
 
 Full directory map: [`guides/configuration.md`](guides/configuration.md). Notable paths:
 
