@@ -5,6 +5,7 @@ import { Window } from 'happy-dom';
 const { ThoughtBubbleController, renderThoughtsToggle } = await import(
   '../../src/ui/thought-bubbles.ts'
 );
+const { ThinkingDurationTracker } = await import('../../src/ui/thinking-duration.ts');
 
 function setupDom() {
   const window = new Window();
@@ -101,6 +102,38 @@ describe('ThoughtBubbleController', { concurrency: false }, () => {
     assert.equal(label?.textContent, 'Thinking… 5.0s');
 
     ctrl.endReasoningPhase();
+  });
+
+  test('endReasoningPhase is idempotent and stops thinking timer for tool calls', () => {
+    let now = 0;
+    const original = performance.now;
+    performance.now = () => now;
+
+    setupDom();
+    const wrap = assistantWrap();
+    let reasoningEndedCount = 0;
+    const tracker = new ThinkingDurationTracker();
+    const ctrl = new ThoughtBubbleController(wrap, {
+      onThinkingStart: () => tracker.startSegment(),
+      onReasoningEnded: () => {
+        reasoningEndedCount += 1;
+        tracker.endSegment();
+      },
+    });
+
+    ctrl.appendReasoningDelta('Plan the tool call');
+    now += 250;
+    ctrl.endReasoningPhase();
+
+    now += 8000;
+    assert.equal(reasoningEndedCount, 1);
+    assert.equal(tracker.getElapsedMs(), 250);
+
+    ctrl.endReasoningPhase();
+    assert.equal(reasoningEndedCount, 1);
+    assert.equal(tracker.getElapsedMs(), 250);
+
+    performance.now = original;
   });
 
   test('consumePersistedSegments returns segments and clears state for the next response', () => {
