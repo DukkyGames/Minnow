@@ -1,5 +1,6 @@
 /**
  * Choose your apps — pick which optional MinnowOS apps appear in the dock.
+ * When no optional apps are released yet, shows Always included + Coming soon.
  */
 
 import '../../styles/app-picker.css';
@@ -12,7 +13,11 @@ import {
   listEnabledOptionalAppIds,
   setEnabledOptionalApps,
 } from '../../os/app-preferences';
-import { appendAppPickerCoreNote, appendAppPickerGroup } from '../../os/app-picker-ui';
+import {
+  appendAppPickerComingSoon,
+  appendAppPickerCoreNote,
+  appendAppPickerGroup,
+} from '../../os/app-picker-ui';
 import { el, renderStepHeader, settingsLink } from '../ui-helpers';
 import type { OnboardingContext, OnboardingStep } from '../types';
 import { recordStepProgress } from '../state-core';
@@ -42,33 +47,46 @@ export const appsStep: OnboardingStep = {
     syncSelectionFromPrefs();
 
     renderStepHeader(container, appsStep, actions.stepIndex, actions.totalSteps);
+
+    const optionalApps = listOptionalReleasedApps();
+    const hasOptional = optionalApps.length > 0;
+
     container.appendChild(
-      el('p', 'mn-onboarding-step-desc', 'Pick optional apps for the dock. Change anytime in Settings.'),
+      el(
+        'p',
+        'mn-onboarding-step-desc',
+        hasOptional
+          ? 'Pick optional apps for the dock. Change anytime in Settings.'
+          : 'Core apps are ready for the dock. More optional apps are coming soon.',
+      ),
     );
 
     appendAppPickerCoreNote(container, {
       apps: listCoreReleasedApps(),
     });
 
-    const optionalApps = listOptionalReleasedApps();
-
-    appendAppPickerGroup(container, {
-      title: 'Optional apps',
-      apps: optionalApps,
-      mode: 'selectable',
-      isSelected: (id) => selectedOptional.has(id),
-      onToggle: (id, selected) => {
-        if (selected) selectedOptional.add(id);
-        else selectedOptional.delete(id);
-      },
-      onBulkSet: (selected) => {
-        if (selected) {
-          for (const app of optionalApps) selectedOptional.add(app.id);
-        } else {
-          selectedOptional.clear();
-        }
-      },
-    });
+    if (hasOptional) {
+      appendAppPickerGroup(container, {
+        title: 'Optional apps',
+        apps: optionalApps,
+        mode: 'selectable',
+        isSelected: (id) => selectedOptional.has(id),
+        onToggle: (id, selected) => {
+          if (selected) selectedOptional.add(id);
+          else selectedOptional.delete(id);
+        },
+        onBulkSet: (selected) => {
+          if (selected) {
+            for (const app of optionalApps) selectedOptional.add(app.id);
+          } else {
+            selectedOptional.clear();
+          }
+        },
+      });
+    } else {
+      // No selectable apps yet — keep the step useful with a clear empty state.
+      appendAppPickerComingSoon(container);
+    }
 
     const foot = el('p', 'mn-onboarding-footnote');
     foot.append('Change anytime in ');

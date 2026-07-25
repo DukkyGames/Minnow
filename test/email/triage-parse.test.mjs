@@ -39,6 +39,34 @@ describe('parseTriageJson', () => {
   test('returns null for invalid payload', () => {
     assert.equal(parseTriageJson('not json'), null);
   });
+
+  test('coerces inbox bucket (valid / unknown / missing)', () => {
+    const withBucket = parseTriageJson(`{
+      "summary": "LinkedIn connection request",
+      "tags": ["social"],
+      "urgency": "low",
+      "category": "notification",
+      "bucket": "social"
+    }`);
+    assert.equal(withBucket.bucket, 'social');
+
+    const unknown = parseTriageJson(`{
+      "summary": "Odd bucket",
+      "tags": ["x"],
+      "urgency": "low",
+      "category": "fyi",
+      "bucket": "promotions"
+    }`);
+    assert.equal(unknown.bucket, '');
+
+    const missing = parseTriageJson(`{
+      "summary": "No bucket field",
+      "tags": ["x"],
+      "urgency": "normal",
+      "category": "fyi"
+    }`);
+    assert.equal(missing.bucket, '');
+  });
 });
 
 describe('buildTriagePrompt', () => {

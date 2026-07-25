@@ -30,6 +30,7 @@ const SETTINGS_SECTION_IDS = [
   'servers',
   'tools',
   'skills',
+  'skills-library',
   'browser',
   'mcp',
   'lsp',
@@ -55,6 +56,7 @@ const DYNAMIC_SECTION_BODY_IDS = [
   'settingsServersBody',
   'settingsToolsBody',
   'settingsSkillsBody',
+  'settingsSkillsLibraryBody',
   'settingsBrowserBody',
   'settingsWebhooksBody',
   'settingsUsageBody',
@@ -121,7 +123,7 @@ describe('settings page HTML', () => {
   });
 
   test('SETTINGS_SECTION_IDS matches canonical section count', () => {
-    assert.equal(SETTINGS_SECTION_IDS.length, 27);
+    assert.equal(SETTINGS_SECTION_IDS.length, 28);
   });
 
   test('agents center mount exists in index.html', () => {

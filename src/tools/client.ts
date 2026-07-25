@@ -74,6 +74,7 @@ import {
   augmentGetSettingsResult,
 } from '../settings/client-sync';
 import { isKillableShellTool } from '../ui/tool-messages';
+import { isAppEnabled } from '../os/app-preferences';
 
 /** Ping timeout for local dev server detection (ms). */
 const PING_TIMEOUT_MS = 2500;
@@ -232,28 +233,6 @@ async function executeToolInner(
       subAgentType: context.subAgentType,
     });
     return { content };
-  }
-
-  if (name === 'check_reef_widget') {
-    if (!isToolEnabled('check_reef_widget')) {
-      return {
-        content:
-          'Error: tool "check_reef_widget" is disabled in Settings (enable it to validate Reef widgets).',
-      };
-    }
-    const { checkReefWidgetFenceHtml } = await import('./reef-widget-check.ts');
-    const html = typeof args.html === 'string' ? args.html : '';
-    if (!html.trim()) {
-      return {
-        content: JSON.stringify({
-          ok: false,
-          errors: ['"html" is required'],
-          warnings: [],
-        }),
-      };
-    }
-    const result = await checkReefWidgetFenceHtml(html);
-    return { content: JSON.stringify(result) };
   }
 
   if (name === 'ask_question') {
@@ -514,6 +493,9 @@ async function executeToolBodyAfterGates(
 /** User + server gating only (no mode filter). */
 export function getEnabledToolCatalogEntries(): ToolDefinition[] {
   return BUILT_IN_TOOLS.filter((tool) => {
+    if (tool.appId && !isAppEnabled(tool.appId)) {
+      return false;
+    }
     if (!isToolEnabled(tool.id)) {
       return false;
     }

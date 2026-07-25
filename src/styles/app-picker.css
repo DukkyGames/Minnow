@@ -53,6 +53,32 @@
   font-weight: 500;
 }
 
+/* Empty optional list — calm placeholder until more apps ship. */
+.mn-app-picker-coming-soon {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 16px 0 4px;
+  border-top: 1px solid var(--mn-border, var(--border));
+}
+
+.mn-app-picker-coming-soon__title {
+  margin: 0;
+  font: 600 13px/1.3 var(--mn-font, system-ui, sans-serif);
+  letter-spacing: 0.02em;
+  color: var(--mn-fg, var(--text));
+}
+
+.mn-app-picker-coming-soon__message {
+  margin: 0;
+  max-width: 48ch;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted, var(--text-muted));
+  text-wrap: pretty;
+}
+
 .mn-app-picker-toolbar {
   display: inline-flex;
   flex-wrap: wrap;

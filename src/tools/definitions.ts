@@ -6,6 +6,7 @@
 import {
   ASK_QUESTION_TOOL_DESCRIPTION,
 } from './ask-question-schema';
+import type { AppId } from '../os/types';
 
 /** Tool grouping for settings UI and documentation. */
 export type ToolCategory =
@@ -43,6 +44,8 @@ export interface ToolDefinition {
   previewRequired?: boolean;
   requiresKey?: boolean;
   keyId?: string;
+  /** When set, the tool is exposed only while the bound MinnowOS app is released and enabled. */
+  appId?: AppId;
   definition: OpenAIFunctionDefinition;
 }
 
@@ -101,25 +104,6 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         },
       },
       ['expression'],
-    ),
-  },
-  {
-    id: 'check_reef_widget',
-    label: 'Check reef widget',
-    description:
-      'Validate a reef-widget fence body (static lint + optional off-DOM iframe probe). Returns JSON { ok, errors, warnings }.',
-    category: 'utility',
-    serverRequired: false,
-    definition: toolSchema(
-      'check_reef_widget',
-      'Validate reef-widget HTML before finishing. Pass the fence body (not markdown delimiters). Returns JSON with ok, errors, and warnings.',
-      {
-        html: {
-          type: 'string',
-          description: 'reef-widget fence body HTML/CSS/JS fragment',
-        },
-      },
-      ['html'],
     ),
   },
   {
@@ -253,7 +237,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'set_chat_mode',
     label: 'Set chat mode',
     description:
-      'Switch the active chat operating mode (General, Desktop, Build, Plan, Orchestrate, Reef, Debug) after the user chooses a handoff option.',
+      'Switch the active chat operating mode (General, Desktop, Build, Plan, Orchestrate, Debug) after the user chooses a handoff option.',
     category: 'utility',
     serverRequired: false,
     definition: toolSchema(
@@ -262,7 +246,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       {
         mode_id: {
           type: 'string',
-          enum: ['general', 'desktop', 'build', 'plan', 'orchestrate', 'reef', 'debug'],
+          enum: ['general', 'desktop', 'build', 'plan', 'orchestrate', 'debug'],
           description: 'Target operating mode for the active chat',
         },
       },
@@ -282,7 +266,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       {
         mode_id: {
           type: 'string',
-          enum: ['general', 'desktop', 'build', 'plan', 'orchestrate', 'reef', 'debug'],
+          enum: ['general', 'desktop', 'build', 'plan', 'orchestrate', 'debug'],
           description: 'Operating mode for the new chat',
         },
         plan_path: {
@@ -2137,6 +2121,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     description:
       'List, create, update, or delete local calendar events. Requires npm start.',
     category: 'utility',
+    appId: 'calendar',
     serverRequired: true,
     definition: toolSchema(
       'manage_calendar',
@@ -2171,6 +2156,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     label: 'List mail',
     description: 'List recent cached email summaries from a configured IMAP account.',
     category: 'utility',
+    appId: 'email',
     serverRequired: true,
     definition: toolSchema(
       'list_mail',
@@ -2189,6 +2175,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     label: 'Search mail',
     description: 'Full-text search over cached mail, semantically reranked when embeddings are on.',
     category: 'utility',
+    appId: 'email',
     serverRequired: true,
     definition: toolSchema(
       'search_mail',
@@ -2206,6 +2193,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     label: 'Get email thread',
     description: 'Return one full cached thread with untrusted bodies fenced.',
     category: 'utility',
+    appId: 'email',
     serverRequired: true,
     definition: toolSchema(
       'get_thread',
@@ -2222,6 +2210,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     label: 'Draft email reply',
     description: 'Compose a reply draft for a thread — does not send.',
     category: 'utility',
+    appId: 'email',
     serverRequired: true,
     definition: toolSchema(
       'draft_reply',
@@ -2242,6 +2231,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     label: 'Summarize inbox',
     description: 'Return the rolling inbox digest with urgency stats and highlight threads.',
     category: 'utility',
+    appId: 'email',
     serverRequired: true,
     definition: toolSchema(
       'summarize_inbox',
@@ -2257,6 +2247,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     label: 'Generate reply variants',
     description: 'Create 2–3 labeled reply drafts for a thread (does not send).',
     category: 'utility',
+    appId: 'email',
     serverRequired: true,
     definition: toolSchema(
       'generate_reply_variants',
@@ -2275,6 +2266,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     label: 'Email action',
     description: 'Archive, delete, or flag a cached message (non-destructive flags only via agent).',
     category: 'utility',
+    appId: 'email',
     serverRequired: true,
     definition: toolSchema(
       'email_action',

@@ -65,31 +65,3 @@
   opacity: 1;
   background: var(--surface-hover, rgba(255, 255, 255, 0.08));
 }
-
-.settings-skill-card__caveman-defaults {
-  margin-top: 0.65rem;
-  padding-top: 0.65rem;
-  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.settings-skill-card__caveman-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 0.75rem;
-}
-
-.settings-skill-card__caveman-row label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.875rem;
-}
-
-.settings-skill-card__caveman-row select {
-  font-size: 0.875rem;
-  padding: 0.2rem 0.35rem;
-}

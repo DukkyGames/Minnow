@@ -256,6 +256,12 @@ function renderAccountForm(mount: HTMLElement, options: AccountFormOptions): voi
       existing.styleProfileEnabled === true,
       'Distill a local style card from mail you wrote so AI drafts sound like you',
     );
+    checkboxRow(
+      'categoryTabsEnabled',
+      'Inbox category tabs (Primary / Social / Other)',
+      existing.categoryTabsEnabled !== false,
+      'Show Gmail-style tabs on Inbox. Classification still runs when hidden.',
+    );
   }
 
   const actions = el('div', 'email-actions');
@@ -326,6 +332,7 @@ function renderAccountForm(mount: HTMLElement, options: AccountFormOptions): voi
         ? {
             followupTracking: data.get('followupTracking') === 'on',
             styleProfileEnabled: data.get('styleProfileEnabled') === 'on',
+            categoryTabsEnabled: data.get('categoryTabsEnabled') === 'on',
           }
         : {}),
     };

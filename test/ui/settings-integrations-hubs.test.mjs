@@ -12,6 +12,7 @@ describe('settings integrations hubs', () => {
     assert.equal(hubForArea('servers'), 'servers');
     assert.equal(hubForArea('tools'), 'tools');
     assert.equal(hubForArea('skills'), 'skills');
+    assert.equal(hubForArea('skills-library'), 'skills');
     assert.equal(hubForArea('browser'), 'browser');
     assert.equal(hubForArea('mcp'), 'mcp');
     assert.equal(hubForArea('lsp'), 'lsp');
@@ -26,6 +27,7 @@ describe('settings integrations hubs', () => {
       'servers',
       'tools',
       'skills',
+      'skills-library',
       'browser',
       'mcp',
       'lsp',

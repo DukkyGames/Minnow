@@ -1,5 +1,5 @@
 /**
- * Shared provider/model &lt;select&gt; helpers for Settings (work agents, sub-agents, model routing, Reef).
+ * Shared provider/model &lt;select&gt; helpers for Settings (work agents, sub-agents, model routing).
  */
 
 import { fetchModelsForProvider } from '../providers/fetch-models';

@@ -30,7 +30,6 @@ import { createProviderMiddleware } from '../providers/routes.js';
 import { createSttMiddleware } from '../stt/middleware.js';
 import { createTtsMiddleware } from '../tts/middleware.js';
 import { createVoiceRuntimeMiddleware } from '../voice/routes.js';
-import { createReefMiddleware } from '../reef/middleware.js';
 import { createSkillsMiddleware } from '../skills/middleware.js';
 import { createPluginsMiddleware } from '../tools/middleware.js';
 import { createTerminalMiddleware } from '../terminal/middleware.js';
@@ -97,7 +96,6 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   connectApp.use(createMemoryMiddleware());
   connectApp.use(createBrainMiddleware());
   connectApp.use(createWebhooksMiddleware());
-  connectApp.use(createReefMiddleware());
   connectApp.use(createLspMiddleware(() => getWorkspaceRoot()));
   connectApp.use(createMcpMiddleware());
   connectApp.use(createServersMiddleware());

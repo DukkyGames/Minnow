@@ -74,7 +74,6 @@ const MODE_IDS = [
   'plan',
   'super-plan',
   'orchestrate',
-  'reef',
   'debug',
   'onboarding',
 ];

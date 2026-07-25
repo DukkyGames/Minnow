@@ -1,12 +1,12 @@
 /**
- * Lazy initialization for Code workspace modules (editor, terminal, reef, orchestrate hub).
+ * Lazy initialization for Code workspace modules (editor, terminal, orchestrate hub).
  * Deferred on MinnowOS desktop cold start so the entry chunk stays smaller.
  */
 
 let initialized = false;
 let initPromise: Promise<void> | null = null;
 
-/** Wire file panel, terminal, reef widgets, and code overview once Code workspace is needed. */
+/** Wire file panel, terminal, and code overview once Code workspace is needed. */
 export function ensureCodeWorkspaceModules(): Promise<void> {
   if (initialized) return Promise.resolve();
   if (!initPromise) {
@@ -27,9 +27,6 @@ export function ensureCodeWorkspaceModules(): Promise<void> {
 
       const { initCodeOverview } = await import('../ui/code-overview');
       initCodeOverview();
-
-      const reef = await import('../chat/reef/index.ts');
-      reef.initReefBridge();
 
       const { initOrchestrateHub } = await import('../ui/orchestrate-hub');
       initOrchestrateHub();

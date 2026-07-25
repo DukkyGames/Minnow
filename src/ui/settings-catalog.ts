@@ -64,6 +64,7 @@ export const SETTINGS_CATEGORY_AREAS: Record<
     'servers',
     'tools',
     'skills',
+    'skills-library',
     'browser',
     'mcp',
     'lsp',
@@ -199,14 +200,21 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   field('apps.core.settings', 'Settings app', 'apps', 'apps', {
     keywords: ['always on', 'core'],
   }),
+  field('apps.core.code', 'Code app', 'apps', 'apps', {
+    keywords: ['always on', 'core'],
+  }),
+  field('apps.core.research', 'Research app', 'apps', 'apps', {
+    keywords: ['always on', 'core'],
+  }),
+  field('apps.core.scheduler', 'Scheduler app', 'apps', 'apps', {
+    keywords: ['always on', 'core'],
+  }),
   field('apps.optional.code', 'Code app', 'apps', 'apps'),
-  field('apps.optional.research', 'Research app', 'apps', 'apps'),
   field('apps.optional.experts', 'Experts app', 'apps', 'apps'),
   field('apps.optional.bench', 'Benchmarking app', 'apps', 'apps', {
     keywords: ['bench', 'benchmark'],
   }),
   field('apps.optional.compare', 'Compare app', 'apps', 'apps'),
-  field('apps.optional.scheduler', 'Scheduler app', 'apps', 'apps'),
   field('apps.optional.email', 'Email app', 'apps', 'apps'),
   field('apps.optional.calendar', 'Calendar app', 'apps', 'apps'),
 
@@ -377,6 +385,10 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   }),
   field('integrations.skills', 'Skills', 'integrations', 'skills', {
     keywords: ['slash command', 'skill pack'],
+  }),
+  field('integrations.skills-library', 'Skills Library', 'integrations', 'skills-library', {
+    keywords: ['curated packs', 'matt pocock', 'install skill', 'github url', 'browse skills'],
+    description: 'Browse curated third-party skill packs, install from GitHub, and manage provenance.',
   }),
   field('integrations.webhooks', 'Webhooks', 'integrations', 'webhooks', {
     keywords: ['hmac', 'outgoing events'],

@@ -9,6 +9,7 @@ import { createUserSkill, saveUserSkillContent } from './user-skills.js';
 import { handleImpeccableReferenceRequest } from '../impeccable/reference-handler.js';
 import { handleImpeccableUpstreamRequest } from '../impeccable/upstream-handler.js';
 import { handleSynthesisRequest } from '../brain/synthesis-routes.js';
+import { handleSkillsLibraryRequest } from './library/routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
@@ -56,6 +57,11 @@ export async function handleSkillsRequest(req, res, pathname) {
 
   const synthesisHandled = await handleSynthesisRequest(req, res, pathname);
   if (synthesisHandled) {
+    return true;
+  }
+
+  const libraryHandled = await handleSkillsLibraryRequest(req, res, pathname);
+  if (libraryHandled) {
     return true;
   }
 

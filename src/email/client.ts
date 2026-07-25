@@ -20,6 +20,8 @@ export interface EmailAccount {
   followupTracking?: boolean;
   /** Opt-in local writing-style profile injected into AI drafts. */
   styleProfileEnabled?: boolean;
+  /** Show Primary / Social / Other inbox tabs (default on). Classification always runs. */
+  categoryTabsEnabled?: boolean;
 }
 
 export interface EmailAttachment {
@@ -32,6 +34,15 @@ export interface EmailAttachment {
   contentId?: string;
   /** Inline parts render in the body; they are not offered as downloads. */
   inline?: boolean;
+}
+
+/** Local inbox tab labels (Primary / Social / Other). */
+export type EmailInboxCategory = 'primary' | 'social' | 'other';
+
+export interface EmailCategoryCounts {
+  primary: number;
+  social: number;
+  other: number;
 }
 
 export interface EmailMessage {
@@ -55,6 +66,9 @@ export interface EmailMessage {
   attachments?: EmailAttachment[];
   /** ISO timestamp the message is hidden until; empty when not snoozed. */
   snoozeUntil?: string;
+  /** Local inbox tab (primary / social / other); empty until classified. */
+  category?: EmailInboxCategory | '';
+  categorySource?: string;
   inReplyTo?: string;
   references?: string[];
   flags?: {
@@ -358,6 +372,8 @@ export interface EmailThreadSummary {
   folders: string[];
   snippet: string;
   summary: string | null;
+  /** Local inbox tab (primary / social / other); empty when unclassified. */
+  category?: EmailInboxCategory | '';
   /** Message ids scoped to the requested list folder (for bulk actions). */
   messageIds?: string[];
 }
@@ -365,14 +381,28 @@ export interface EmailThreadSummary {
 /** Conversation rollups for the thread list. */
 export async function fetchEmailThreads(
   accountId: string,
-  query?: { folder?: string; offset?: number; limit?: number; filter?: string; query?: string },
-): Promise<{ threads: EmailThreadSummary[]; total: number }> {
+  query?: {
+    folder?: string;
+    offset?: number;
+    limit?: number;
+    filter?: string;
+    query?: string;
+    category?: EmailInboxCategory;
+    categoryCounts?: boolean;
+  },
+): Promise<{
+  threads: EmailThreadSummary[];
+  total: number;
+  categoryCounts?: EmailCategoryCounts;
+}> {
   const params = new URLSearchParams();
   if (query?.folder) params.set('folder', query.folder);
   if (query?.offset !== undefined) params.set('offset', String(query.offset));
   if (query?.limit !== undefined) params.set('limit', String(query.limit));
   if (query?.filter) params.set('filter', query.filter);
   if (query?.query) params.set('query', query.query);
+  if (query?.category) params.set('category', query.category);
+  if (query?.categoryCounts) params.set('categoryCounts', '1');
   const qs = params.toString();
   const res = await fetch(
     `/api/email/accounts/${encodeURIComponent(accountId)}/threads${qs ? `?${qs}` : ''}`,

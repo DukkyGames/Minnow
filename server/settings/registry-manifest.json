@@ -370,6 +370,230 @@
     ]
   },
   {
+    "key": "apps.visibility",
+    "label": "App visibility",
+    "description": "Hide optional apps from the dock and launchers.",
+    "keywords": [
+      "dock",
+      "launcher",
+      "enable",
+      "disable",
+      "hide apps",
+      "optional apps",
+      "enable all"
+    ],
+    "category": "apps",
+    "area": "apps",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "apps"
+    ]
+  },
+  {
+    "key": "apps.core.chat",
+    "label": "Chat app",
+    "keywords": [
+      "always on",
+      "core"
+    ],
+    "category": "apps",
+    "area": "apps",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "apps"
+    ]
+  },
+  {
+    "key": "apps.core.models",
+    "label": "Models app",
+    "keywords": [
+      "always on",
+      "core"
+    ],
+    "category": "apps",
+    "area": "apps",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "apps"
+    ]
+  },
+  {
+    "key": "apps.core.brain",
+    "label": "Brain app",
+    "keywords": [
+      "always on",
+      "core"
+    ],
+    "category": "apps",
+    "area": "apps",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "apps"
+    ]
+  },
+  {
+    "key": "apps.core.settings",
+    "label": "Settings app",
+    "keywords": [
+      "always on",
+      "core"
+    ],
+    "category": "apps",
+    "area": "apps",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "apps"
+    ]
+  },
+  {
+    "key": "apps.core.code",
+    "label": "Code app",
+    "keywords": [
+      "always on",
+      "core"
+    ],
+    "category": "apps",
+    "area": "apps",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "apps"
+    ]
+  },
+  {
+    "key": "apps.core.research",
+    "label": "Research app",
+    "keywords": [
+      "always on",
+      "core"
+    ],
+    "category": "apps",
+    "area": "apps",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "apps"
+    ]
+  },
+  {
+    "key": "apps.core.scheduler",
+    "label": "Scheduler app",
+    "keywords": [
+      "always on",
+      "core"
+    ],
+    "category": "apps",
+    "area": "apps",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "apps"
+    ]
+  },
+  {
+    "key": "apps.optional.code",
+    "label": "Code app",
+    "category": "apps",
+    "area": "apps",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "apps"
+    ]
+  },
+  {
+    "key": "apps.optional.experts",
+    "label": "Experts app",
+    "category": "apps",
+    "area": "apps",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "apps"
+    ]
+  },
+  {
+    "key": "apps.optional.bench",
+    "label": "Benchmarking app",
+    "keywords": [
+      "bench",
+      "benchmark"
+    ],
+    "category": "apps",
+    "area": "apps",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "apps"
+    ]
+  },
+  {
+    "key": "apps.optional.compare",
+    "label": "Compare app",
+    "category": "apps",
+    "area": "apps",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "apps"
+    ]
+  },
+  {
+    "key": "apps.optional.email",
+    "label": "Email app",
+    "category": "apps",
+    "area": "apps",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "apps"
+    ]
+  },
+  {
+    "key": "apps.optional.calendar",
+    "label": "Calendar app",
+    "category": "apps",
+    "area": "apps",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "apps"
+    ]
+  },
+  {
     "key": "appearance.theme",
     "label": "Theme presets",
     "keywords": [
@@ -1503,6 +1727,23 @@
     ]
   },
   {
+    "key": "integrations.tools.bulk",
+    "label": "Bulk tool permissions",
+    "keywords": [
+      "reset defaults",
+      "all full permissions"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
     "key": "integrations.mcp",
     "label": "MCP servers",
     "keywords": [
@@ -1570,6 +1811,27 @@
     "writable": false,
     "refreshAreas": [
       "skills"
+    ]
+  },
+  {
+    "key": "integrations.skills-library",
+    "label": "Skills Library",
+    "description": "Browse curated third-party skill packs, install from GitHub, and manage provenance.",
+    "keywords": [
+      "curated packs",
+      "matt pocock",
+      "install skill",
+      "github url",
+      "browse skills"
+    ],
+    "category": "integrations",
+    "area": "skills-library",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "skills-library"
     ]
   },
   {
@@ -1662,24 +1924,6 @@
     ]
   },
   {
-    "key": "advanced.orchestration",
-    "label": "Orchestration supervisor",
-    "keywords": [
-      "orchestrate",
-      "heartbeat",
-      "board"
-    ],
-    "category": "advanced",
-    "area": "features",
-    "storage": "section",
-    "type": "string",
-    "sensitivity": "normal",
-    "writable": false,
-    "refreshAreas": [
-      "features"
-    ]
-  },
-  {
     "key": "advanced.diagnostics",
     "label": "Health & diagnostics",
     "description": "Subsystem probes, grouped errors, and a local log tail. Nothing is sent off-device.",
@@ -1738,24 +1982,6 @@
     "writable": false,
     "refreshAreas": [
       "diagnostics"
-    ]
-  },
-  {
-    "key": "advanced.evals",
-    "label": "Eval harness",
-    "keywords": [
-      "benchmark",
-      "rubric",
-      "task pack"
-    ],
-    "category": "advanced",
-    "area": "evals",
-    "storage": "section",
-    "type": "string",
-    "sensitivity": "normal",
-    "writable": false,
-    "refreshAreas": [
-      "evals"
     ]
   },
   {
@@ -1830,32 +2056,6 @@
     "storage": "resource",
     "resource": "tools",
     "path": "permissions.default.calculate",
-    "type": "enum",
-    "allowedValues": [
-      "off",
-      "ask",
-      "full"
-    ],
-    "sensitivity": "normal",
-    "writable": true,
-    "refreshAreas": [
-      "tools"
-    ]
-  },
-  {
-    "key": "integrations.tools.permission.check_reef_widget",
-    "label": "Tool permission: check_reef_widget",
-    "description": "Permission mode for the check_reef_widget tool (off, ask, or full).",
-    "keywords": [
-      "check_reef_widget",
-      "permission",
-      "tools"
-    ],
-    "category": "integrations",
-    "area": "tools",
-    "storage": "resource",
-    "resource": "tools",
-    "path": "permissions.default.check_reef_widget",
     "type": "enum",
     "allowedValues": [
       "off",
@@ -4378,6 +4578,58 @@
     "storage": "resource",
     "resource": "tools",
     "path": "permissions.default.list_mail",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.search_mail",
+    "label": "Tool permission: search_mail",
+    "description": "Permission mode for the search_mail tool (off, ask, or full).",
+    "keywords": [
+      "search_mail",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.search_mail",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.get_thread",
+    "label": "Tool permission: get_thread",
+    "description": "Permission mode for the get_thread tool (off, ask, or full).",
+    "keywords": [
+      "get_thread",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.get_thread",
     "type": "enum",
     "allowedValues": [
       "off",

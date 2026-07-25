@@ -45,7 +45,6 @@ import './styles/git-center-lightbox.css';
 import './styles/git-help-lightbox.css';
 import './styles/tool-approval.css';
 import './styles/question-cards.css';
-import './styles/reef-widgets.css';
 import './styles/sub-agent-drawer.css';
 import './styles/orchestrate-plan-selector.css';
 import './styles/composer-pinned-skill.css';
@@ -178,7 +177,6 @@ import {
   syncComposerReasoningEffortFromActiveChat,
 } from './ui/composer-reasoning-effort';
 import { loadThinkingMeta } from './config/thinking-meta';
-import { syncReefWidgetSettingsFromActiveChat } from './ui/reef-widget-settings';
 import { initWorkAgentDevUi, syncWorkAgentDevFromActiveChat } from './ui/work-agent-dev';
 import { initSubAgentUi } from './ui/sub-agent-cards';
 import { initGoalEvalUi } from './ui/goal-eval-status';
@@ -354,7 +352,6 @@ export async function initApp(): Promise<void> {
   syncModeSelectorFromActiveChat();
   syncComposerReasoningEffortFromActiveChat();
   syncWorkAgentDevFromActiveChat();
-  syncReefWidgetSettingsFromActiveChat();
   void syncOrchestratePlanStripFromActiveChat();
   syncComposerPinnedSkillFromActiveChat();
   syncViewModeToggleFromActiveChat();

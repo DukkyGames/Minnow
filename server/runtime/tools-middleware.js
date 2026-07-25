@@ -93,21 +93,6 @@ import { getFilesystemAccessFromConfig } from '../config/tool-security.js';
 import { callMcpTool, isMcpToolName } from '../mcp/registry.js';
 import { callPluginTool, isPluginToolName } from '../tools/loader.js';
 import {
-  getHomeReefModulesDir,
-  isAllowedReefModulePath,
-  tryResolveReefModulesFindRoot,
-  tryResolveReefWidgetsFindRoot,
-} from '../reef/widget-paths.js';
-import {
-  getHomeReefArtifactsDir,
-  isAllowedReefArtifactPath,
-  tryResolveReefArtifactsFindRoot,
-} from '../reef/artifact-paths.js';
-import {
-  appendArtifactVersionFromSave,
-  getArtifactWithCurrentBody,
-} from '../reef/artifact-store.js';
-import {
   buildAddOnlyDiffLines,
   buildCodeChangePayload,
   buildRemoveOnlyDiffLines,
@@ -160,22 +145,6 @@ async function isGuardCdEnabled() {
 
 /** Path relative to workspace root for display in tool output. */
 function toRelativePath(absPath) {
-  if (isAllowedReefModulePath(absPath)) {
-    const rel = path.relative(getHomeReefModulesDir(), absPath).replace(/\\/g, '/');
-    return rel ? `@minnow/reef/modules/${rel}` : '@minnow/reef/modules';
-  }
-  if (isAllowedReefArtifactPath(absPath)) {
-    const rel = path.relative(getHomeReefArtifactsDir(), absPath).replace(/\\/g, '/');
-    if (!rel) return '@minnow/reef/artifacts';
-    const segments = rel.split('/');
-    if (segments.length === 1 && segments[0].match(/^v\d+\.md$/)) {
-      return `@minnow/reef/artifacts/${path.basename(path.dirname(absPath))}`;
-    }
-    if (segments[1] === 'manifest.json') {
-      return `@minnow/reef/artifacts/${segments[0]}/manifest.json`;
-    }
-    return rel ? `@minnow/reef/artifacts/${rel}` : '@minnow/reef/artifacts';
-  }
   const rel = path.relative(getEffectiveWorkspaceRoot(), absPath);
   return rel === '' ? '.' : rel.replace(/\\/g, '/');
 }
@@ -335,14 +304,6 @@ function withCodeChange(message, codeChange) {
   return message;
 }
 
-/** Reef artifact id from an absolute artifact body path. */
-function artifactIdFromAbsPath(absPath) {
-  const root = path.resolve(getHomeReefArtifactsDir());
-  const rel = path.relative(root, path.resolve(absPath)).replace(/\\/g, '/');
-  const segments = rel.split('/').filter(Boolean);
-  return segments[0] ?? null;
-}
-
 async function toolReadFileRange(args) {
   const filePath = resolveSafePath(args?.path);
   const startLine = Number(args?.start_line);
@@ -374,17 +335,6 @@ async function toolSaveFile(args) {
   }
   const rel = toRelativePath(filePath);
   const nextContent = String(args.content);
-  if (isAllowedReefArtifactPath(filePath)) {
-    let before = '';
-    const artifactId = artifactIdFromAbsPath(filePath);
-    if (artifactId) {
-      const current = await getArtifactWithCurrentBody(artifactId);
-      before = current?.body ?? '';
-    }
-    const result = await appendArtifactVersionFromSave(filePath, nextContent, 'agent');
-    const message = `Saved reef artifact ${result.manifest.id} v${result.version} (${nextContent.length} bytes)`;
-    return withCodeChange(message, codeChangeFromDiff(before, nextContent, rel));
-  }
   const before = await readUtf8OrEmpty(filePath);
   const { content: normalizedContent, converted, eol } = coerceContentToFileEol(
     nextContent,
@@ -709,94 +659,16 @@ async function toolFindFiles(args) {
   if (!pattern || typeof pattern !== 'string') {
     return 'Error: pattern is required';
   }
-  const reefModulesRoot = tryResolveReefModulesFindRoot(pattern, args?.path ?? '.');
-  const reefArtifactsRoot = reefModulesRoot
-    ? null
-    : tryResolveReefArtifactsFindRoot(pattern, args?.path ?? '.');
-  const reefWidgetsRoot =
-    reefModulesRoot || reefArtifactsRoot
-      ? null
-      : tryResolveReefWidgetsFindRoot(pattern, args?.path ?? '.');
-  const reefRoot = reefModulesRoot ?? reefArtifactsRoot ?? reefWidgetsRoot;
 
-  // Normal workspace: use ripgrep's file walker — respects .gitignore (so node_modules
-  // and build output do not eat the result budget), skips .git, and tolerates unreadable
-  // directories instead of aborting the whole call.
-  if (!reefRoot) {
-    return runFindFilesSearch(
-      args,
-      {
-        resolveSafePath,
-        toRelativePath,
-        getWorkspaceRoot: getEffectiveWorkspaceRoot,
-      },
-      { maxResults: FIND_FILES_MAX },
-    );
-  }
-
-  // Reef roots live outside the workspace and may not be git repositories, so walk them
-  // directly. The tree is small and curated; just tolerate unreadable directories.
-  const root = reefRoot;
-  const patternNorm = pattern.replace(/\\/g, '/');
-  const matcher = globToRegExp(
-    reefModulesRoot && patternNorm.includes('reef/modules')
-      ? patternNorm.replace(/^.*reef\/modules\//, '')
-      : reefArtifactsRoot && patternNorm.includes('reef/artifacts')
-        ? patternNorm.replace(/^.*reef\/artifacts\//, '')
-        : reefWidgetsRoot && patternNorm.includes('reef/widgets')
-          ? patternNorm.replace(/^.*reef\/widgets\//, '')
-          : patternNorm,
+  return runFindFilesSearch(
+    args,
+    {
+      resolveSafePath,
+      toRelativePath,
+      getWorkspaceRoot: getEffectiveWorkspaceRoot,
+    },
+    { maxResults: FIND_FILES_MAX },
   );
-  const matches = [];
-  const displayRoot = reefModulesRoot
-    ? '@minnow/reef/modules'
-    : reefArtifactsRoot
-      ? '@minnow/reef/artifacts'
-      : '@minnow/reef/widgets';
-
-  function formatMatch(absPath) {
-    const rel = path.relative(reefRoot, absPath).replace(/\\/g, '/');
-    if (reefModulesRoot) {
-      return rel ? `@minnow/reef/modules/${rel}` : '@minnow/reef/modules';
-    }
-    if (reefArtifactsRoot) {
-      return rel ? `@minnow/reef/artifacts/${rel}` : '@minnow/reef/artifacts';
-    }
-    return rel ? `@minnow/reef/widgets/${rel}` : '@minnow/reef/widgets';
-  }
-
-  async function walk(currentDir) {
-    if (matches.length >= FIND_FILES_MAX) {
-      return;
-    }
-    let entries;
-    try {
-      entries = await fs.readdir(currentDir, { withFileTypes: true });
-    } catch {
-      return; // skip unreadable directories instead of failing the whole call
-    }
-    for (const ent of entries) {
-      if (matches.length >= FIND_FILES_MAX) {
-        break;
-      }
-      const full = path.join(currentDir, ent.name);
-      const rel = path.relative(root, full).replace(/\\/g, '/');
-      if (matcher.test(rel) || matcher.test(ent.name)) {
-        matches.push(formatMatch(full));
-      }
-      if (ent.isDirectory()) {
-        await walk(full);
-      }
-    }
-  }
-
-  await walk(root);
-  if (matches.length === 0) {
-    return `No files matching "${pattern}" under ${displayRoot}`;
-  }
-  const suffix =
-    matches.length >= FIND_FILES_MAX ? `\n(truncated at ${FIND_FILES_MAX} results)` : '';
-  return `${matches.join('\n')}${suffix}`;
 }
 
 async function toolGetFileMetadata(args) {

@@ -39,6 +39,42 @@ export async function fetchMemoryInjectionEnabled(): Promise<boolean> {
   }
 }
 
+/** Persist memory store + injection toggles (Settings / onboarding). */
+export async function saveMemorySettings(options: {
+  storeEnabled?: boolean;
+  injectionEnabled?: boolean;
+}): Promise<boolean> {
+  try {
+    const res = await fetch('/api/config/file?key=config.json');
+    if (!res.ok) return false;
+    const config = (await res.json()) as {
+      memory?: { enabled?: boolean };
+      features?: Record<string, boolean>;
+    };
+
+    if (typeof options.storeEnabled === 'boolean') {
+      config.memory = { ...(config.memory ?? {}), enabled: options.storeEnabled };
+    }
+    if (typeof options.injectionEnabled === 'boolean') {
+      const features =
+        config.features && typeof config.features === 'object'
+          ? { ...config.features }
+          : {};
+      features.memoryInjection = options.injectionEnabled;
+      config.features = features;
+    }
+
+    const put = await fetch('/api/config/file?key=config.json', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+    return put.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** Resolve whether memory retrieval should run for this send. */
 export async function shouldInjectMemory(chat: Chat): Promise<boolean> {
   const injectionOn = await fetchMemoryInjectionEnabled();

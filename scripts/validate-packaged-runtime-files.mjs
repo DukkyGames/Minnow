@@ -29,7 +29,6 @@ const REQUIRED_RUNTIME_PATHS = [
 const REQUIRED_RUNTIME_DIRS = [
   'src/skills',
   'src/chat/prompts',
-  'src/chat/reef',
   'src/evals/packs',
 ];
 

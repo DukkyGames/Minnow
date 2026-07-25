@@ -786,10 +786,6 @@ export interface Chat {
   groupId?: string;
   /** Workspace-relative plan path for Orchestrate mode (documentation/plans/*.md). */
   orchestratePlanPath?: string;
-  /** Reef widget LLM provider override (Reef mode callLLM). */
-  reefWidgetProviderId?: string;
-  /** Reef widget LLM model override; empty = chat default. */
-  reefWidgetModelId?: string;
   /** @deprecated Legacy picker — use expertId on expert chats. */
   expertSelection?: ExpertSelection;
   /** Frozen runtime profile applied when this expert chat was created. */
@@ -880,10 +876,6 @@ export interface Chat {
   composerDraft?: string;
   /** Sticky slash skill for this chat (persists until cleared or replaced). */
   pinnedSkill?: PinnedSkillState | null;
-  /** Pending user edits from Reef widgets; consumed on next send. */
-  pendingReefArtifactEdits?: ReefArtifactEditEvent[];
-  /** Artifact ids bound to this chat (sidebar / history hints). */
-  reefArtifactIds?: string[];
   /** Cumulative token usage and optional USD cost (Feature #14). */
   tokenLedger?: ChatTokenLedger;
   /** Cumulative line add/delete from agent mutations in this chat. */
@@ -906,15 +898,6 @@ export type {
   TokenLedgerSource,
   TokenLedgerTotals,
 } from './usage/types';
-
-/** User co-edit on a versioned reef artifact (widget bridge). */
-export interface ReefArtifactEditEvent {
-  artifactId: string;
-  version: number;
-  summary: string;
-  path: string;
-  at: string;
-}
 
 export interface SessionState {
   version: SessionSchemaVersion;

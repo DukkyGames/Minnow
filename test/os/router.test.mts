@@ -3,10 +3,15 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import { resetChatsWorkspacePathCache } from '../../src/lib/chats-workspace.ts';
 import { initAppHost, resetAppHostForTests } from '../../src/os/app-host.ts';
 import {
+  isAppEnabled,
   resetAppPreferencesForTests,
   setAppEnabled,
 } from '../../src/os/app-preferences.ts';
-import { getInstanceSnapshot, resetInstancesForTests } from '../../src/os/instances.ts';
+import {
+  getForegroundAppId,
+  getInstanceSnapshot,
+  resetInstancesForTests,
+} from '../../src/os/instances.ts';
 import { initOsPageBridge, resetOsPageBridgeForTests } from '../../src/os/page-bridge.ts';
 import {
   getCurrentRoute,
@@ -162,22 +167,32 @@ describe('os router navigation', () => {
     assert.equal(route.appId, 'code');
   });
 
-  test('launchApp blocks user-disabled optional apps and returns to desktop', () => {
-    setAppEnabled('compare', false);
-    launchApp('compare');
-    assert.equal(window.location.hash, '#/desktop');
-    assert.equal(
-      getInstanceSnapshot().instances.some((inst) => inst.appId === 'compare'),
-      false,
-    );
+  test('launchApp keeps core scheduler available when disable is attempted', () => {
+    setAppEnabled('scheduler', false);
+    launchApp('scheduler');
+    syncOsRouteFromHashForTests();
+    assert.equal(getForegroundAppId(), 'scheduler');
+    assert.equal(isAppEnabled('scheduler'), true);
   });
 
-  test('hash route for a disabled app falls back to desktop', () => {
-    setAppEnabled('bench', false);
-    window.location.hash = '#/app/bench';
+  test('hash route for core research stays available when disable is attempted', () => {
+    setAppEnabled('research', false);
+    window.location.hash = '#/app/research';
+    syncOsRouteFromHashForTests();
+    // Research deep-links onto the desktop research surface.
+    assert.equal(window.location.hash, '#/desktop');
+    assert.equal(isAppEnabled('research'), true);
+  });
+
+  test('hash route for a developer-hidden app falls back to desktop', () => {
+    window.location.hash = '#/app/email';
     syncOsRouteFromHashForTests();
     assert.equal(window.location.hash, '#/desktop');
     assert.equal(getInstanceSnapshot().view, 'desktop');
+    assert.equal(
+      getInstanceSnapshot().instances.some((inst) => inst.appId === 'email'),
+      false,
+    );
   });
 
   test('applyRouteFromHash preserves Code foreground on #/bugs (MIN-156)', () => {
@@ -221,7 +236,7 @@ describe('os router navigation', () => {
     assert.equal(isDesktopResearchActive(), true);
   });
 
-  test('launchApp(experts) redirects to desktop experts', async () => {
+  test('launchApp(experts) blocks hidden app and returns to desktop', async () => {
     const { isDesktopExpertsActive, resetDesktopStateForTests } = await import(
       '../../src/os/desktop-state.ts'
     );
@@ -232,7 +247,7 @@ describe('os router navigation', () => {
     const snap = getInstanceSnapshot();
     assert.equal(snap.view, 'desktop');
     assert.equal(snap.instances.find((i) => i.appId === 'experts'), undefined);
-    assert.equal(isDesktopExpertsActive(), true);
+    assert.equal(isDesktopExpertsActive(), false);
   });
 
   test('navigateToDesktop returns to desktop view', () => {

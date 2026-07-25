@@ -55,6 +55,7 @@ export type SettingsSectionId =
   | 'lsp'
   | 'editor'
   | 'skills'
+  | 'skills-library'
   | 'webhooks'
   | 'diagnostics'
   | 'about';
@@ -89,6 +90,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   lsp: 'Language servers',
   editor: 'Editor',
   skills: 'Skills',
+  'skills-library': 'Skills Library',
   webhooks: 'Webhooks',
   diagnostics: 'Health & diagnostics',
   about: 'About',
@@ -125,7 +127,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     id: 'integrations',
     label: 'Tools & integrations',
-    sections: ['search', 'deep-research', 'servers', 'tools', 'skills', 'browser', 'mcp', 'lsp', 'editor', 'webhooks'],
+    sections: ['search', 'deep-research', 'servers', 'tools', 'skills', 'skills-library', 'browser', 'mcp', 'lsp', 'editor', 'webhooks'],
   },
   {
     id: 'advanced',
@@ -163,7 +165,7 @@ export const SETTINGS_INTEGRATIONS_HUBS = [
   {
     id: 'skills',
     label: 'Skills',
-    areas: ['skills'],
+    areas: ['skills', 'skills-library'],
   },
   {
     id: 'browser',

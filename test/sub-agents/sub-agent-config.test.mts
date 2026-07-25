@@ -112,7 +112,6 @@ describe('sub-agent config', () => {
   test('merge applies default summarySchema to types', () => {
     const merged = mergeSubAgentConfig(DEFAULTS as never, null);
     assert.equal(merged.types.explore.summarySchema, 'minnow.sub-agent.explore');
-    assert.equal(merged.types['reef-widget'].summarySchema, 'minnow.sub-agent.lite');
     assert.equal(merged.defaultSummarySchema, 'minnow.sub-agent.v1');
   });
 
