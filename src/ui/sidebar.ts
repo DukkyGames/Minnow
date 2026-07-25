@@ -22,6 +22,7 @@ import { createBoardCategoryIcon } from './board-category-icons';
 import { isChatAppForeground, shouldPaintDesktopChatSurface } from './chat-mount';
 import { syncComposerFromStreamingState } from './composer-send';
 import { syncGoalActiveHint } from './goal-active-hint';
+import { syncLoopActiveHint } from './loop-active-hint';
 import { syncGoalEvalUi } from './goal-eval-status';
 import { isGoalEvaluating } from '../chat/goal/evaluating-state';
 import { syncTodoPanel } from './todo-panel';
@@ -115,6 +116,12 @@ import {
   resolveGroupHeaderDotState,
   syncChatItemDotsInDom,
 } from './chat-item-dot';
+import {
+  applyChatItemLoopIcon,
+  createChatItemLoopIcon,
+  resolveChatItemLoopIconState,
+  syncChatItemLoopIconsInDom,
+} from './chat-item-loop-icon';
 import { acknowledgeChatViewed } from '../notifications/acknowledge';
 import { createModeMaskIcon, chatListModeIconSrc } from './mode-icons';
 import { hasComposerDraft } from '../state/session-workspace-scope';
@@ -500,6 +507,10 @@ export function appendChatRow(
   }
   titleRow.appendChild(nameSpan);
 
+  const loopIcon = createChatItemLoopIcon();
+  applyChatItemLoopIcon(loopIcon, resolveChatItemLoopIconState(chat), chat);
+  titleRow.appendChild(loopIcon);
+
   if (!inGroup) {
     const agentAbbrev = workAgentSidebarAbbrev(chat.workAgentId);
     if (agentAbbrev) {
@@ -808,6 +819,7 @@ export function renderSidebar(): void {
     .filter(excludeAssistantChats);
   appendChatListSection(list, 'Unassigned', unassigned, highlightChatId);
   syncChatItemDotsInDom();
+  syncChatItemLoopIconsInDom();
   void import('./global-bugs-page').then((m) => m.refreshGlobalBugsSidebarBadge());
 }
 
@@ -1184,6 +1196,7 @@ export function switchChat(id: string): void {
   syncPanelFromActiveChat({ forceFileTree: true });
   syncWorkAgentDevFromActiveChat();
   syncGoalActiveHint();
+  syncLoopActiveHint();
   if (isGoalEvaluating(chat.id)) {
     syncGoalEvalUi(chat.id);
   }

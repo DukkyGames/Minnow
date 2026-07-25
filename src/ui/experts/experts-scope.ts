@@ -10,6 +10,7 @@ import { setExpertsPageOpen } from '../../app-state';
 import { activateChatById, getExpertChats } from '../../state/sessions';
 import type { Chat } from '../../types';
 import { recordChatOpened, syncChatItemDotsInDom } from '../chat-item-dot';
+import { syncChatItemLoopIconsInDom } from '../chat-item-loop-icon';
 import { appendChatRow } from '../sidebar';
 import { renderChatFromHistory, renderStatsForChat } from '../messages';
 import { syncComposerFromStreamingState } from '../composer-send';
@@ -103,6 +104,7 @@ export function renderExpertScopeChatList(expertId: string, activeChatId: string
     appendChatRow(list, chat, activeChatId, { draggable: false });
   }
   syncChatItemDotsInDom();
+  syncChatItemLoopIconsInDom();
 }
 
 /** Activate chat in expert-scoped shell (sidebar + main column). */

@@ -31,6 +31,7 @@ import {
 } from './experts/experts-scope';
 import { appendChatRow } from './sidebar';
 import { syncChatItemDotsInDom } from './chat-item-dot';
+import { syncChatItemLoopIconsInDom } from './chat-item-loop-icon';
 import type { Chat } from '../types';
 
 const MOBILE_DESKTOP_MQ = '(max-width: 640px)';
@@ -269,6 +270,7 @@ export function renderDesktopChatRail(desktopWorkspacePath?: string | null): voi
     });
   }
   syncChatItemDotsInDom();
+  syncChatItemLoopIconsInDom();
   syncRailClasses();
 }
 

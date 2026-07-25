@@ -7,9 +7,11 @@ import { ensureTokenLedger } from '../../usage/token-ledger';
 import {
   clearActiveGoal,
   getActiveGoal,
+  hasActiveLoops,
   setActiveGoal,
 } from '../../state/sessions';
 import { syncGoalActiveHint } from '../../ui/goal-active-hint';
+import { syncLoopActiveHint } from '../../ui/loop-active-hint';
 import { parseGoalSlashInput } from './parse-command';
 
 export type GoalCommandDispatch = 'handled' | 'set' | null;
@@ -54,6 +56,7 @@ export function handleGoalCommand(
   if (parsed.kind === 'clear') {
     clearActiveGoal(chat);
     syncGoalActiveHint();
+    syncLoopActiveHint();
     reportStatus('ok', 'Goal cleared');
     return 'handled';
   }
@@ -68,8 +71,14 @@ export function handleGoalCommand(
     return 'handled';
   }
 
+  if (hasActiveLoops(chat)) {
+    reportStatus('err', 'Stop active loops first (/loop stop) before starting a goal');
+    return 'handled';
+  }
+
   setActiveGoal(chat, parsed.conditionText);
   syncGoalActiveHint();
+  syncLoopActiveHint();
   reportStatus('ok', 'Goal active — working toward completion…');
   return 'set';
 }

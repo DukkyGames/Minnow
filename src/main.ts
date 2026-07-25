@@ -160,6 +160,7 @@ import { initStatsStrip, updateStatsExpandPreview } from './ui/stats';
 import { bindExpertsSettingsCheckbox } from './ui/experts-settings';
 import { syncComposerPinnedSkillFromActiveChat } from './ui/composer-pinned-skill';
 import { syncGoalActiveHint } from './ui/goal-active-hint';
+import { syncLoopActiveHint } from './ui/loop-active-hint';
 import { syncTodoPanel } from './ui/todo-panel';
 import {
   initOrchestratePlanSelector,
@@ -179,6 +180,7 @@ import { loadThinkingMeta } from './config/thinking-meta';
 import { initWorkAgentDevUi, syncWorkAgentDevFromActiveChat } from './ui/work-agent-dev';
 import { initSubAgentUi } from './ui/sub-agent-cards';
 import { initGoalEvalUi } from './ui/goal-eval-status';
+import { initLoopStatusUi } from './ui/loop-active-hint';
 import { initAgentActivityPanel } from './ui/agent-activity-panel';
 import {
   closeComposerToolsPopover,
@@ -249,6 +251,7 @@ export async function initApp(): Promise<void> {
   }
   initSubAgentUi();
   initGoalEvalUi();
+  initLoopStatusUi();
   initAgentActivityPanel();
   fillSystemPromptPresetSelect();
   await loadSystemPromptSettings();
@@ -353,9 +356,17 @@ export async function initApp(): Promise<void> {
   syncComposerPinnedSkillFromActiveChat();
   syncViewModeToggleFromActiveChat();
   syncGoalActiveHint();
+  syncLoopActiveHint();
   syncTodoPanel();
   renderSidebar();
   bootstrapActiveChatOpenedTimestamp();
+
+  // Session-scoped /loop ticker (15s safety scan + dueAt wake timer)
+  const { startLoopTicker } = await import('./chat/loop/ticker');
+  const { sendProgrammaticChatText } = await import('./tools/loop');
+  startLoopTicker({
+    send: (chat, text) => sendProgrammaticChatText(chat, text),
+  });
 
   window.addEventListener('resize', () => {
     if (!isMobileLayout()) {

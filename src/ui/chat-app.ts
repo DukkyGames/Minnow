@@ -32,6 +32,7 @@ import { refreshContextUsageRing } from './context-usage-ring';
 import { closeBenchmark } from './benchmark-page';
 import { closeCompare } from './compare-page';
 import { syncChatItemDotsInDom } from './chat-item-dot';
+import { syncChatItemLoopIconsInDom } from './chat-item-loop-icon';
 import {
   handleComposerPrimaryAction,
   initComposerSteerInputListener,
@@ -186,6 +187,7 @@ function renderSessionRail(): void {
     });
   }
   syncChatItemDotsInDom();
+  syncChatItemLoopIconsInDom();
 }
 
 function syncComposerSendState(): void {

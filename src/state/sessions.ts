@@ -49,6 +49,11 @@ import { setStatus } from '../ui/status';
 import { ensureTokenLedger } from '../usage/token-ledger';
 import { getWorkspacePath } from './workspace';
 import { MAX_GOAL_CONDITION_CHARS } from '../chat/goal/parse-command';
+import {
+  INITIAL_LOOP_AUTO_DELAY_MS,
+  MAX_LOOP_PROMPT_CHARS,
+  MIN_LOOP_INTERVAL_MS,
+} from '../chat/loop/parse-command';
 import { ensurePinnedSkill } from '../skills/pinned-skill';
 import { resolveActiveWorkAgent } from '../agents/resolve-work-agent';
 import { cleanupChatArchiveOnDelete } from '../chat/archive/cleanup';
@@ -104,6 +109,7 @@ import type {
   BoardTaskStatus,
   BoardWave,
   ActiveGoalState,
+  ActiveLoopState,
   Chat,
   ChatGroup,
   ChatTodo,
@@ -1257,6 +1263,97 @@ function ensureActiveGoal(raw: unknown): ActiveGoalState | undefined {
   };
 }
 
+function ensureActiveLoopRow(raw: unknown): ActiveLoopState | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const row = raw as Record<string, unknown>;
+  const id =
+    typeof row.id === 'number' && Number.isFinite(row.id)
+      ? Math.max(1, Math.floor(row.id))
+      : 0;
+  if (id < 1) return undefined;
+
+  const kind = row.kind === 'interval' || row.kind === 'auto' ? row.kind : null;
+  if (!kind) return undefined;
+
+  const promptText =
+    typeof row.promptText === 'string'
+      ? row.promptText.slice(0, MAX_LOOP_PROMPT_CHARS)
+      : '';
+
+  const dueAt =
+    typeof row.dueAt === 'number' && Number.isFinite(row.dueAt)
+      ? row.dueAt
+      : Date.now();
+  const createdAt =
+    typeof row.createdAt === 'number' && Number.isFinite(row.createdAt)
+      ? row.createdAt
+      : Date.now();
+  const expiresAt =
+    typeof row.expiresAt === 'number' && Number.isFinite(row.expiresAt)
+      ? row.expiresAt
+      : createdAt + 7 * 24 * 60 * 60 * 1000;
+  const runCount =
+    typeof row.runCount === 'number' && Number.isFinite(row.runCount)
+      ? Math.max(0, Math.floor(row.runCount))
+      : 0;
+
+  const loop: ActiveLoopState = {
+    id,
+    promptText,
+    kind,
+    dueAt,
+    createdAt,
+    expiresAt,
+    runCount,
+  };
+
+  if (kind === 'interval') {
+    const intervalMs =
+      typeof row.intervalMs === 'number' && Number.isFinite(row.intervalMs)
+        ? Math.max(MIN_LOOP_INTERVAL_MS, Math.floor(row.intervalMs))
+        : MIN_LOOP_INTERVAL_MS;
+    loop.intervalMs = intervalMs;
+  } else {
+    const currentDelayMs =
+      typeof row.currentDelayMs === 'number' && Number.isFinite(row.currentDelayMs)
+        ? Math.min(
+            3_600_000,
+            Math.max(MIN_LOOP_INTERVAL_MS, Math.floor(row.currentDelayMs)),
+          )
+        : INITIAL_LOOP_AUTO_DELAY_MS;
+    loop.currentDelayMs = currentDelayMs;
+  }
+
+  if (typeof row.lastOutputDigest === 'string' && row.lastOutputDigest.trim()) {
+    loop.lastOutputDigest = row.lastOutputDigest.trim();
+  }
+
+  if (row.paused === true) {
+    loop.paused = true;
+    if (
+      typeof row.pausedRemainingMs === 'number' &&
+      Number.isFinite(row.pausedRemainingMs)
+    ) {
+      loop.pausedRemainingMs = Math.max(0, Math.floor(row.pausedRemainingMs));
+    }
+  }
+
+  return loop;
+}
+
+function ensureActiveLoops(raw: unknown): ActiveLoopState[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: ActiveLoopState[] = [];
+  const seen = new Set<number>();
+  for (const entry of raw) {
+    const loop = ensureActiveLoopRow(entry);
+    if (!loop || seen.has(loop.id)) continue;
+    seen.add(loop.id);
+    out.push(loop);
+  }
+  return out.length ? out : undefined;
+}
+
 function ensureSuperPlanPersisted(raw: unknown): SuperPlanState | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const sp = raw as Partial<SuperPlanState>;
@@ -1288,6 +1385,13 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
   }
   const pinnedSkill = ensurePinnedSkill(raw.pinnedSkill);
   const activeGoal = ensureActiveGoal(raw.activeGoal);
+  const activeLoops = ensureActiveLoops(raw.activeLoops);
+  const nextLoopId =
+    typeof raw.nextLoopId === 'number' && Number.isFinite(raw.nextLoopId)
+      ? Math.max(1, Math.floor(raw.nextLoopId))
+      : activeLoops?.length
+        ? Math.max(...activeLoops.map((loop) => loop.id)) + 1
+        : undefined;
   const superPlan = ensureSuperPlanPersisted(raw.superPlan);
   const todos = ensureChatTodos(raw.todos);
   const todosUpdatedAt =
@@ -1392,6 +1496,8 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
       : {}),
     ...(pinnedSkill ? { pinnedSkill } : {}),
     ...(activeGoal ? { activeGoal } : {}),
+    ...(activeLoops ? { activeLoops } : {}),
+    ...(nextLoopId ? { nextLoopId } : {}),
     ...(superPlan ? { superPlan } : {}),
     ...(todos ? { todos } : {}),
     ...(todos && todosUpdatedAt ? { todosUpdatedAt } : {}),
@@ -1960,6 +2066,123 @@ export function getActiveGoal(chat: Chat): ActiveGoalState | undefined {
 export function isGoalLoopActive(chat: Chat): boolean {
   const goal = chat.activeGoal;
   return Boolean(goal && !goal.achieved);
+}
+
+export interface AddActiveLoopInput {
+  promptText: string;
+  kind: 'interval' | 'auto';
+  intervalMs?: number;
+  currentDelayMs?: number;
+  dueAt: number;
+  createdAt: number;
+  expiresAt: number;
+}
+
+/** Ask loop ticker to reschedule its next wake after dueAt changes. */
+function notifyLoopTickerScheduleChanged(): void {
+  void import('../chat/loop/ticker')
+    .then((mod) => mod.notifyLoopScheduleChanged())
+    .catch(() => {
+      // Ticker not started yet (tests / headless) — ignore.
+    });
+}
+
+/** Arm a new /loop on the chat; returns the stored row. */
+export function addActiveLoop(chat: Chat, input: AddActiveLoopInput): ActiveLoopState {
+  const id = chat.nextLoopId && chat.nextLoopId > 0
+    ? chat.nextLoopId
+    : (chat.activeLoops?.reduce((max, loop) => Math.max(max, loop.id), 0) ?? 0) + 1;
+
+  const loop: ActiveLoopState = {
+    id,
+    promptText: input.promptText.slice(0, MAX_LOOP_PROMPT_CHARS),
+    kind: input.kind,
+    dueAt: input.dueAt,
+    createdAt: input.createdAt,
+    expiresAt: input.expiresAt,
+    runCount: 0,
+  };
+
+  if (input.kind === 'interval') {
+    loop.intervalMs = Math.max(
+      MIN_LOOP_INTERVAL_MS,
+      Math.floor(input.intervalMs ?? MIN_LOOP_INTERVAL_MS),
+    );
+  } else {
+    loop.currentDelayMs = Math.min(
+      3_600_000,
+      Math.max(
+        MIN_LOOP_INTERVAL_MS,
+        Math.floor(input.currentDelayMs ?? INITIAL_LOOP_AUTO_DELAY_MS),
+      ),
+    );
+  }
+
+  chat.activeLoops = [...(chat.activeLoops ?? []), loop];
+  chat.nextLoopId = id + 1;
+  touchChat(chat);
+  scheduleSaveSessions();
+  notifyLoopTickerScheduleChanged();
+  return loop;
+}
+
+/** Remove one loop by id, or all loops when target is `all`. */
+export function removeActiveLoop(chat: Chat, target: number | 'all'): void {
+  if (!chat.activeLoops?.length) return;
+  if (target === 'all') {
+    chat.activeLoops = undefined;
+    touchChat(chat);
+    scheduleSaveSessions();
+    notifyLoopTickerScheduleChanged();
+    return;
+  }
+  const next = chat.activeLoops.filter((loop) => loop.id !== target);
+  if (next.length === chat.activeLoops.length) return;
+  chat.activeLoops = next.length ? next : undefined;
+  touchChat(chat);
+  scheduleSaveSessions();
+  notifyLoopTickerScheduleChanged();
+}
+
+/** Patch fields on a single active loop (schedule / pacing). */
+export function updateActiveLoop(
+  chat: Chat,
+  id: number,
+  patch: Partial<ActiveLoopState>,
+): void {
+  if (!chat.activeLoops?.length) return;
+  const index = chat.activeLoops.findIndex((loop) => loop.id === id);
+  if (index < 0) return;
+  chat.activeLoops[index] = { ...chat.activeLoops[index], ...patch, id };
+  touchChat(chat);
+  scheduleSaveSessions();
+  notifyLoopTickerScheduleChanged();
+}
+
+/** Persist after in-place loop mutations that already updated the array. */
+export function touchActiveLoops(chat: Chat): void {
+  touchChat(chat);
+  scheduleSaveSessions();
+  notifyLoopTickerScheduleChanged();
+}
+
+/** Read active loops (empty array when none). */
+export function getActiveLoops(chat: Chat): ActiveLoopState[] {
+  return chat.activeLoops?.length ? [...chat.activeLoops] : [];
+}
+
+/** True when the chat has at least one armed loop. */
+export function hasActiveLoops(chat: Chat): boolean {
+  return Boolean(chat.activeLoops?.length);
+}
+
+/** Clear all loops (/clear, etc.). */
+export function clearActiveLoops(chat: Chat): void {
+  if (!chat.activeLoops?.length && chat.nextLoopId == null) return;
+  chat.activeLoops = undefined;
+  // Keep nextLoopId so ids stay unique across clear/re-arm in the same chat
+  touchChat(chat);
+  scheduleSaveSessions();
 }
 
 /** Bump sidebar sort time when user or assistant history is committed. */

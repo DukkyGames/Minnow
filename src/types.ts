@@ -97,6 +97,34 @@ export interface ActiveGoalState {
   achieved?: boolean;
 }
 
+/**
+ * Persistent /loop timer on a chat (session-scoped repeating prompt).
+ * Distinct from {@link ActiveGoalState} and from `src/tools/loop.ts` (tool-call loop).
+ */
+export interface ActiveLoopState {
+  /** Per-chat counter for loop panel stop controls. */
+  id: number;
+  /** Raw prompt including slash skills; empty string = maintenance loop. */
+  promptText: string;
+  kind: 'interval' | 'auto';
+  /** Fixed interval when kind is interval. */
+  intervalMs?: number;
+  /** Self-paced delay when kind is auto; clamped [60_000, 3_600_000]. */
+  currentDelayMs?: number;
+  /** Epoch ms of next fire (persisted so reload/sleep survive). */
+  dueAt: number;
+  createdAt: number;
+  /** createdAt + 7 days. */
+  expiresAt: number;
+  runCount: number;
+  /** Auto-pacing comparison digest of last assistant output. */
+  lastOutputDigest?: string;
+  /** When true, ticker skips until resumed from the loop panel. */
+  paused?: boolean;
+  /** Ms until next fire, frozen while paused. */
+  pausedRemainingMs?: number;
+}
+
 /** Assistant history entry; may include per-bubble metric chips when restored. */
 export interface AssistantMessage {
   role: 'assistant';
@@ -815,6 +843,10 @@ export interface Chat {
   pendingMessageQueue?: QueuedComposerMessage[];
   /** Active /goal completion loop; persists across reload until cleared. */
   activeGoal?: ActiveGoalState;
+  /** Active /loop timers; persists across reload until stopped or expired (7 days). */
+  activeLoops?: ActiveLoopState[];
+  /** Next per-chat /loop id (monotonic). */
+  nextLoopId?: number;
   /** Super Plan pipeline controller state (Plan mode overhaul Phase 3). */
   superPlan?: SuperPlanState;
   /** Build-agent progress checklist (todo_write); replace-all, cleared on /clear. */

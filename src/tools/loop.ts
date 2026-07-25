@@ -36,6 +36,8 @@ import {
 } from '../chat/message-queue';
 import { handleGoalCommand } from '../chat/goal/command';
 import { maybeContinueGoalAfterTurn, shouldEvaluateGoalAfterTurn } from '../chat/goal/evaluate';
+import { handleLoopCommand } from '../chat/loop/command';
+import { maybeRescheduleLoopsAfterTurn } from '../chat/loop/pacing';
 import { getActiveGoal, isGoalLoopActive } from '../state/sessions';
 import {
   clearAttachments,
@@ -134,6 +136,7 @@ import {
 } from '../ui/composer-send';
 import { syncComposerMessageQueue } from '../ui/composer-message-queue';
 import { syncGoalActiveHint } from '../ui/goal-active-hint';
+import { syncLoopActiveHint } from '../ui/loop-active-hint';
 import { syncTodoPanel } from '../ui/todo-panel';
 import {
   clearComposerInput,
@@ -2554,6 +2557,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       if (completedNormally && runGoalEvalAfterTurn) {
         void maybeContinueGoalAfterTurn(chat);
       }
+      if (completedNormally) {
+        // Self-paced /loop backoff after the fired turn settles
+        maybeRescheduleLoopsAfterTurn(chat);
+      }
       if (completedNormally && isPartyModePinned(chat.pinnedSkill) && isStreamDomVisible(chat.id)) {
         burstPartyConfetti();
       }
@@ -2615,7 +2622,8 @@ export interface ResumeParentChatOptions {
 
 /**
  * Programmatic parent turn (e.g. sub-agent completion push). Uses the chat's stored model when
- * it is not the active sidebar chat.
+ * it is not the active sidebar chat. Skips slash/skill resolution — prefer
+ * {@link sendProgrammaticChatText} when the text may include `/skills`.
  */
 export async function resumeParentChatWithMessage(
   chat: Chat,
@@ -2638,6 +2646,156 @@ export async function resumeParentChatWithMessage(
     validAttachments: [],
     ownsGlobalStreaming: chat.id === getActiveChat().id,
     goalDriven: options.goalDriven ?? false,
+  });
+}
+
+/** Options for {@link sendProgrammaticChatText}. */
+export interface SendProgrammaticChatTextOptions {
+  goalDriven?: boolean;
+  suppressUserEcho?: boolean;
+  ephemeralContext?: string;
+  validAttachments?: Attachment[];
+  composerSurface?: Partial<ComposerSurface>;
+  /**
+   * When true (default), always run {@link parseSlashCommand}.
+   * Composer path passes false unless the skill picker confirmed a skill.
+   */
+  parseSlash?: boolean;
+  /** Pre-adjusted slash input (orchestrate plan injection); defaults to `text`. */
+  slashInput?: string;
+  titleSeed?: string;
+  deferTitleUntilTurnEnd?: boolean;
+  ownsGlobalStreaming?: boolean;
+  /** Report status errors (defaults to setStatus). */
+  reportStatus?: (level: 'ok' | 'err', message: string) => void;
+}
+
+/**
+ * Slash/skill-resolving programmatic send used by /loop fires and the composer path.
+ * Resolves skills the same way as a user send so looped prompts can be any `/skill`.
+ */
+export async function sendProgrammaticChatText(
+  chat: Chat,
+  text: string,
+  options: SendProgrammaticChatTextOptions = {},
+): Promise<void> {
+  if (isChatStreaming(chat.id)) return;
+  if (isChatTurnSetupPending(chat.id)) return;
+
+  const report = options.reportStatus ?? setStatus;
+  const rawText = text;
+  const slashInput = options.slashInput ?? rawText;
+  const validAttachments = options.validAttachments ?? [];
+  const parseSlash = options.parseSlash !== false;
+
+  const { skillId: slashSkillId, userText: slashUserText } = parseSlash
+    ? parseSlashCommand(slashInput)
+    : { skillId: null, userText: slashInput.trim() };
+
+  const turnSkill = resolveTurnSkill({
+    slashSkillId,
+    userText: slashUserText,
+    pinned: chat.pinnedSkill,
+    isSkillEnabled,
+  });
+  chat.pinnedSkill = turnSkill.nextPinned;
+  const skillId = turnSkill.skillId;
+  const userText = normalizeCavemanUserText(skillId, slashSkillId, slashUserText);
+  const hasUserText = Boolean(userText.trim());
+
+  if (!rawText.trim() && validAttachments.length === 0 && !slashInput.trim()) return;
+  if (!skillId && !hasUserText && validAttachments.length === 0) return;
+
+  const binding = resolveEffectiveChatModelBinding(chat);
+  const modelId = binding.modelId;
+  if (binding.selectValue && !chat.modelId?.trim()) {
+    applyModelSelectValueToChat(chat, binding.selectValue);
+    touchChat(chat);
+  }
+  if (!modelId && !chat.modelId?.trim()) {
+    report('err', 'Select a model first');
+    return;
+  }
+
+  await detectLocalServer();
+
+  let skillBody: string | null = null;
+  if (skillId) {
+    const skill = await resolveActiveSkill(skillId);
+    if (!skill?.body?.trim()) {
+      report('err', `Unknown skill: ${skillId}`);
+      return;
+    }
+    skillBody = skill.body;
+    if (shouldComposeImpeccableBody(skillId, userText)) {
+      skillBody = await composeImpeccableSkillBody(skillBody, userText);
+    }
+    if (skillId === CAVEMAN_SKILL_ID) {
+      skillBody = augmentCavemanSkillBody(skillBody, {
+        userText,
+        pinnedIntensity: chat.pinnedSkill?.intensity,
+      });
+    }
+    if (skillId === PARTYMODE_SKILL_ID) {
+      skillBody = augmentPartyModeSkillBody(skillBody);
+    }
+  }
+
+  const uiDesignerCtx = prepareUiDesignerTurn(chat, {
+    skillId,
+    userText,
+    workAgentId: chat.workAgentId,
+  });
+  const savedWorkAgentId = chat.workAgentId;
+  if (uiDesignerCtx.active) {
+    chat.workAgentId = UI_DESIGNER_AGENT_ID;
+  }
+  if (skillBody && uiDesignerCtx.active) {
+    skillBody = augmentSkillBodyForUiDesigner(skillBody, uiDesignerCtx);
+  }
+
+  if (!hasUserText && validAttachments.length === 0 && !skillBody?.trim()) {
+    report('err', 'Add a message or attachment');
+    if (uiDesignerCtx.active) {
+      chat.workAgentId = savedWorkAgentId;
+    }
+    return;
+  }
+
+  const displayText = skillId
+    ? formatHistoryWithSkillTag(userText, skillId)
+    : userText || rawText;
+  const historyContent = buildHistoryUserContent(displayText, validAttachments);
+  const titleSeed =
+    options.titleSeed ??
+    (userText || rawText || validAttachments[0]?.name || 'Attachment');
+  const deferTitleUntilTurnEnd =
+    options.deferTitleUntilTurnEnd ?? isFirstUserMessagePending(chat);
+
+  syncComposerPinnedSkillFromActiveChat();
+  scheduleSaveSessions();
+  syncGoalActiveHint();
+  syncLoopActiveHint();
+  syncTodoPanel();
+
+  await runChatTurn({
+    chat,
+    pushUser: true,
+    suppressUserEcho: options.suppressUserEcho ?? false,
+    rawText,
+    userText,
+    skillId,
+    displayText,
+    historyContent,
+    validAttachments,
+    titleSeed,
+    deferTitleUntilTurnEnd,
+    skillBody,
+    composerSurface: options.composerSurface,
+    goalDriven: options.goalDriven ?? false,
+    ephemeralContext: options.ephemeralContext,
+    ownsGlobalStreaming:
+      options.ownsGlobalStreaming ?? chat.id === getActiveChat().id,
   });
 }
 
@@ -2696,6 +2854,13 @@ export async function sendMessageWithTools(
   const pendingWithoutErrors = pending.filter((a) => a.kind !== 'error');
   const chat = getActiveChat();
 
+  // /loop before /goal so both stateful commands settle without skill resolution
+  const loopDispatch = handleLoopCommand(chat, rawText, setStatus);
+  if (loopDispatch === 'handled') {
+    clearComposerInput(input);
+    return;
+  }
+
   const goalDispatch = handleGoalCommand(chat, rawText, setStatus);
   if (goalDispatch === 'handled') {
     clearComposerInput(input);
@@ -2728,120 +2893,56 @@ export async function sendMessageWithTools(
     effectiveRawText,
   );
   const pickerSkillId = goalDriven ? null : getPickerAppliedSkillId(input);
-  const { skillId: slashSkillId, userText: slashUserText } = pickerSkillId
+
+  // Composer sampler UI checks (programmatic path uses runChatTurn's sampler reader)
+  const tempEl = document.getElementById('temperature') as HTMLInputElement | null;
+  const maxTokEl = document.getElementById('maxTokens') as HTMLInputElement | null;
+  if (tempEl && maxTokEl) {
+    const temp = parseFloat(tempEl.value);
+    const maxTok = parseInt(maxTokEl.value, 10);
+    if (!Number.isFinite(temp) || temp < 0 || temp > 2) {
+      setStatus('err', 'Temperature must be 0 to 2');
+      return;
+    }
+    if (!Number.isFinite(maxTok) || maxTok < 1) {
+      setStatus('err', 'Max tokens must be at least 1');
+      return;
+    }
+  }
+
+  // Peek skill resolution for Super Plan routing / empty checks before attachments resolve
+  const peekSlash = pickerSkillId
     ? parseSlashCommand(slashInput)
-    : { skillId: null, userText: slashInput.trim() };
-  const turnSkill = resolveTurnSkill({
-    slashSkillId,
-    userText: slashUserText,
+    : { skillId: null as string | null, userText: slashInput.trim() };
+  const peekTurn = resolveTurnSkill({
+    slashSkillId: peekSlash.skillId,
+    userText: peekSlash.userText,
     pinned: chat.pinnedSkill,
     isSkillEnabled,
   });
-  chat.pinnedSkill = turnSkill.nextPinned;
-  const skillId = turnSkill.skillId;
-  let userText = normalizeCavemanUserText(skillId, slashSkillId, slashUserText);
-  const hasUserText = Boolean(userText.trim());
+  const peekSkillId = peekTurn.skillId;
+  const peekUserText = normalizeCavemanUserText(
+    peekSkillId,
+    peekSlash.skillId,
+    peekSlash.userText,
+  );
+  const hasUserText = Boolean(peekUserText.trim());
   if (!effectiveRawText && pendingWithoutErrors.length === 0 && !slashInput.trim()) return;
-  if (!skillId && !hasUserText && pendingWithoutErrors.length === 0) return;
-
-  const binding = resolveEffectiveChatModelBinding(chat);
-  const modelId = binding.modelId;
-  if (binding.selectValue && !chat.modelId?.trim()) {
-    applyModelSelectValueToChat(chat, binding.selectValue);
-    touchChat(chat);
-  }
-  const temp = parseFloat((document.getElementById('temperature') as HTMLInputElement).value);
-  const maxTok = parseInt((document.getElementById('maxTokens') as HTMLInputElement).value, 10);
-  const legacySysPrompt = (
-    document.getElementById('systemPrompt') as HTMLTextAreaElement
-  ).value.trim();
-
-  if (!modelId) {
-    setStatus('err', 'Select a model first');
-    return;
-  }
-  if (!Number.isFinite(temp) || temp < 0 || temp > 2) {
-    setStatus('err', 'Temperature must be 0 to 2');
-    return;
-  }
-  if (!Number.isFinite(maxTok) || maxTok < 1) {
-    setStatus('err', 'Max tokens must be at least 1');
-    return;
-  }
-  await detectLocalServer();
-
-  let skillBody: string | null = null;
-  if (skillId) {
-    const skill = await resolveActiveSkill(skillId);
-    if (!skill?.body?.trim()) {
-      setStatus('err', `Unknown skill: ${skillId}`);
-      return;
-    }
-    skillBody = skill.body;
-    if (shouldComposeImpeccableBody(skillId, userText)) {
-      skillBody = await composeImpeccableSkillBody(skillBody, userText);
-    }
-    if (skillId === CAVEMAN_SKILL_ID) {
-      skillBody = augmentCavemanSkillBody(skillBody, {
-        userText,
-        pinnedIntensity: chat.pinnedSkill?.intensity,
-      });
-    }
-    if (skillId === PARTYMODE_SKILL_ID) {
-      skillBody = augmentPartyModeSkillBody(skillBody);
-    }
-  }
-
-  const uiDesignerCtx = prepareUiDesignerTurn(chat, {
-    skillId,
-    userText,
-    workAgentId: chat.workAgentId,
-  });
-  const savedWorkAgentId = chat.workAgentId;
-  if (uiDesignerCtx.active) {
-    chat.workAgentId = UI_DESIGNER_AGENT_ID;
-  }
-  if (skillBody && uiDesignerCtx.active) {
-    skillBody = augmentSkillBodyForUiDesigner(skillBody, uiDesignerCtx);
-  }
-
-  if (!hasUserText && pendingWithoutErrors.length === 0 && !skillBody?.trim()) {
-    setStatus('err', 'Add a message or attachment');
-    if (uiDesignerCtx.active) {
-      chat.workAgentId = savedWorkAgentId;
-    }
-    return;
-  }
+  if (!peekSkillId && !hasUserText && pendingWithoutErrors.length === 0) return;
 
   const resolvedAttachments = await resolveWorkspaceReferences(pending);
   const validAttachments = resolvedAttachments.filter((a) => a.kind !== 'error');
-  if (validAttachments.length === 0 && !hasUserText && !skillBody?.trim()) {
+  if (validAttachments.length === 0 && !hasUserText && pendingWithoutErrors.length > 0) {
     replacePendingAttachments(resolvedAttachments);
     setStatus('err', 'Could not read attached workspace file(s)');
-    if (uiDesignerCtx.active) {
-      chat.workAgentId = savedWorkAgentId;
-    }
     return;
   }
   replacePendingAttachments(resolvedAttachments);
 
-  const displayText = skillId
-    ? formatHistoryWithSkillTag(userText, skillId)
-    : userText || effectiveRawText;
-  const historyContent = buildHistoryUserContent(displayText, validAttachments);
-  const titleSeed = userText || effectiveRawText || validAttachments[0]?.name || 'Attachment';
-  const firstUserPending = isFirstUserMessagePending(chat);
-  const deferTitleUntilTurnEnd = firstUserPending;
-
-  syncComposerPinnedSkillFromActiveChat();
-  scheduleSaveSessions();
-  syncGoalActiveHint();
-  syncTodoPanel();
-
   const { shouldRouteComposerSendToSuperPlan, startPlanningFromComposer } = await import(
     '../ui/orchestrate-plan-screen'
   );
-  if (normalizeModeId(chat.modeId) === 'super-plan' && hasUserText && !skillId) {
+  if (normalizeModeId(chat.modeId) === 'super-plan' && hasUserText && !peekSkillId) {
     if (validAttachments.length > 0) {
       setStatus('err', 'Super Plan starts from text only — remove attachments first');
       return;
@@ -2849,30 +2950,28 @@ export async function sendMessageWithTools(
   }
   if (
     shouldRouteComposerSendToSuperPlan(chat, {
-      userText,
-      skillId,
+      userText: peekUserText,
+      skillId: peekSkillId,
       attachmentCount: validAttachments.length,
     })
   ) {
     clearComposerInput(input);
-    await startPlanningFromComposer(userText || effectiveRawText);
+    await startPlanningFromComposer(peekUserText || effectiveRawText);
     return;
   }
 
-  await runChatTurn({
-    chat,
-    pushUser: true,
-    rawText: effectiveRawText,
-    userText,
-    skillId,
-    displayText,
-    historyContent,
-    validAttachments,
-    titleSeed,
-    deferTitleUntilTurnEnd,
-    skillBody,
-    composerSurface: composer,
+  if (!goalDispatch) {
+    clearComposerInput(input);
+  }
+
+  await sendProgrammaticChatText(chat, effectiveRawText, {
     goalDriven,
+    validAttachments,
+    composerSurface: composer,
+    // Preserve prior composer behavior: only parse /skills when the picker confirmed one
+    parseSlash: Boolean(pickerSkillId),
+    slashInput,
     ephemeralContext: composer?.ephemeralContext,
+    ownsGlobalStreaming: true,
   });
 }
