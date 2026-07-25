@@ -1,10 +1,20 @@
-/* Cumulative file line stats above the composer */
+/* Cumulative file line stats above the composer (+ undo control, MIN-409) */
 
 .code-change-strip-wrap {
   position: relative;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
   margin: 0 12px 10px;
+}
+
+/* Strip pill + undo icon share one centered row. */
+.code-change-strip-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  max-width: 100%;
 }
 
 .code-change-strip {
@@ -25,6 +35,74 @@
 
 .code-change-strip.hidden {
   display: none;
+}
+
+/* Undo last agent turn — sits beside the Code changes pill (hidden without git). */
+.code-change-strip__undo[hidden] {
+  display: none;
+}
+
+.code-change-strip__undo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 27px;
+  padding: 0;
+  margin: 0;
+  color: var(--mn-fg-muted);
+  background: var(--mn-surface-1);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-sm, 8px);
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color var(--duration-normal) var(--ease-out),
+    color var(--duration-normal) var(--ease-out),
+    background var(--duration-normal) var(--ease-out),
+    opacity var(--duration-normal) var(--ease-out);
+}
+
+.code-change-strip__undo:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .code-change-strip__undo:hover:not(:disabled) {
+    border-color: var(--mn-border-strong);
+    color: var(--mn-fg);
+    background: color-mix(in oklch, var(--mn-fg) 6%, transparent);
+  }
+}
+
+.code-change-strip__undo:disabled,
+.code-change-strip__undo[aria-disabled='true'] {
+  opacity: 0.4;
+  cursor: not-allowed;
+  color: var(--mn-fg-subtle);
+}
+
+/* Masked undo-alt.svg so the glyph inherits button color. */
+.code-change-strip__undo-icon {
+  display: block;
+  width: 14px;
+  height: 14px;
+  background-color: currentColor;
+  mask-image: url('/icons/undo-alt.svg');
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-image: url('/icons/undo-alt.svg');
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .code-change-strip__undo {
+    transition: none;
+  }
 }
 
 .code-change-strip__label {
@@ -60,6 +138,7 @@
 
 .code-change-panel {
   position: absolute;
+  /* Anchor above the strip row (not the full wrap height). */
   bottom: calc(100% + 6px);
   left: 50%;
   transform: translateX(-50%);
