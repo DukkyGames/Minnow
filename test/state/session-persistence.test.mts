@@ -10,12 +10,14 @@ import { defaultSessionState } from '../../src/config/defaults.ts';
 import { putSessionsKeepalive } from '../../src/config/api-client.ts';
 import {
   flushPendingSessionSaveOnShutdown,
+  getSessionDirtyTrackingForTests,
   isSessionsHydratedFromServerForTests,
   loadSessionsFromStorage,
   resetSessionPersistenceForTests,
   saveSessionsNow,
   sessionState,
   setSessionStateForTests,
+  touchChat,
 } from '../../src/state/sessions.ts';
 
 const SAVED_CHAT_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -56,6 +58,9 @@ describe('session persistence (MIN-408)', () => {
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     };
 
+    // Dirty telemetry must not bypass the MIN-408 hydration guard.
+    if (sessionState?.chats[0]) touchChat(sessionState.chats[0]);
+    assert.ok(getSessionDirtyTrackingForTests().dirtyChatIds.length >= 1);
     saveSessionsNow();
     assert.equal(putCalled, false);
   });

@@ -195,6 +195,7 @@
       "src/lsp/**",
       "src/lib/**",
       "src/attachments/document-extensions.mjs",
+      "src/state/session-schema.mjs",
       "src/evals/packs/**",
       "build/icon.ico",
       "public/logos/minnow-logo/minnow/png/minnow-1024.png",

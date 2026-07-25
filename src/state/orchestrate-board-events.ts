@@ -4,6 +4,7 @@
  */
 
 import { reportBackgroundError } from '../boot/report-background-error.ts';
+import { markGroupDirty } from './sessions.ts';
 
 type BoardChangeListener = (groupId: string) => void;
 
@@ -37,6 +38,8 @@ export function subscribeAllBoardChanges(listener: BoardChangeListener): () => v
 
 /** Notify subscribers that board state changed for a folder. */
 export function emitBoardChange(groupId: string): void {
+  // Board UI/state mutations feed dirtyGroupIds for B.2 PATCH telemetry.
+  markGroupDirty(groupId);
   for (const fn of globalListeners) {
     try {
       fn(groupId);

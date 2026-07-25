@@ -183,8 +183,9 @@ function extractServiceNames(testSpec: string): string[] {
 import {
   createEmptyChatObject,
   findChatById,
-  saveSessionsNow,
-  scheduleSaveSessions,
+  markGroupDirty,
+  saveSessionsNow as saveSessionsNowRaw,
+  scheduleSaveSessions as scheduleSaveSessionsRaw,
   sessionState,
   touchChat,
 } from './sessions.ts';
@@ -192,6 +193,19 @@ import {
 function requireSession(): NonNullable<typeof sessionState> {
   if (!sessionState) throw new Error('Session not loaded');
   return sessionState;
+}
+
+/** Board mutations mark dirtyGroupIds (B.1 telemetry; still full PUT). */
+function scheduleSaveSessions(group?: ChatGroup | string | null): void {
+  const id = typeof group === 'string' ? group : group?.id;
+  if (id) markGroupDirty(id);
+  scheduleSaveSessionsRaw();
+}
+
+function saveSessionsNow(group?: ChatGroup | string | null): void {
+  const id = typeof group === 'string' ? group : group?.id;
+  if (id) markGroupDirty(id);
+  saveSessionsNowRaw();
 }
 
 const DEFAULT_MAX_CONCURRENT = 3;
@@ -3967,9 +3981,9 @@ export function setBoardExecutionMode(
   board.lastUpdatedAt = Date.now();
   // Flush stop state immediately so reload cannot resurrect auto execution.
   if (mode === 'manual') {
-    saveSessionsNow();
+    saveSessionsNow(group);
   } else {
-    scheduleSaveSessions();
+    scheduleSaveSessions(group);
   }
   if (prevMode !== mode) {
     logModeChange(group, mode);
@@ -4221,7 +4235,7 @@ export function stopBoardAutoRun(
       .catch((err) => reportBackgroundError('stop-board-cancel-runs', err));
   }
   // Flush stop state immediately so reload cannot resurrect auto execution.
-  saveSessionsNow();
+  saveSessionsNow(group);
   emitBoardChange(group.id);
 }
 

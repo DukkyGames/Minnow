@@ -26,7 +26,13 @@ import type {
 } from '../types.ts';
 import { getBoardGroupForChat, getPlannerChatForGroup, linkPlannerChatToBoardFolder } from './chat-groups.ts';
 import { emitBoardChange } from './orchestrate-board-events.ts';
-import { scheduleSaveSessions, sessionState, touchChat } from './sessions.ts';
+import { markGroupDirty, scheduleSaveSessions, sessionState, touchChat } from './sessions.ts';
+
+/** Persist a board-store mutation with dirtyGroupIds telemetry. */
+function persistBoardGroup(group: ChatGroup): void {
+  markGroupDirty(group.id);
+  scheduleSaveSessions();
+}
 
 /** Injectable clock for deterministic tests. */
 let boardNowMs = (): number => Date.now();
@@ -81,7 +87,7 @@ export function appendBoardLog(
   } catch (err) {
     reportBackgroundError('board-log-disk', err);
   }
-  scheduleSaveSessions();
+  persistBoardGroup(group);
   emitBoardChange(group.id);
   return full;
 }
@@ -424,7 +430,7 @@ export function syncOrchestrateBoardTimer(
   if (!changed) return;
   board.lastUpdatedAt = nowMs;
   touchChat(plannerChat);
-  scheduleSaveSessions();
+  persistBoardGroup(group);
 }
 
 const ACTIVE_WAVE_STATUSES = new Set<BoardTaskStatus>([
@@ -708,7 +714,7 @@ export function applyOpenBoardWaveCollapse(group: ChatGroup): void {
   }
   if (!changed) return;
   board.lastUpdatedAt = boardNowMs();
-  scheduleSaveSessions();
+  persistBoardGroup(group);
   emitBoardChange(group.id);
 }
 
@@ -821,7 +827,7 @@ export function initBoard(
       }
     }
   }
-  scheduleSaveSessions();
+  persistBoardGroup(group);
   return board;
 }
 
@@ -871,7 +877,7 @@ export type UpdateTaskPatch = Partial<
 
 function touchBoardGroup(group: ChatGroup, plannerChat?: Chat): void {
   if (plannerChat) touchChat(plannerChat);
-  scheduleSaveSessions();
+  persistBoardGroup(group);
 }
 
 /** Append a sub-agent run id to a task's history (deduped, newest last). */

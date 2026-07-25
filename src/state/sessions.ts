@@ -7,15 +7,12 @@ import { getSessions, putSessions, putSessionsKeepalive } from '../config/api-cl
 import { defaultSessionState } from '../config/defaults';
 import { randomUUID } from '../lib/random-id.ts';
 import { isServerStorageMode } from '../config/storage-mode';
-import { DEFAULT_MODE_ID, isModeId, normalizeModeId } from '../chat/modes/types';
-import { normalizeThinkingTriState } from '../agents/thinking-types';
+import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
 import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
 import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
-import { ensurePendingMessageQueue } from '../chat/message-queue';
 import { notifySessionCreated } from '../webhooks/client';
 import { decodeModelSelectKey } from '../lib/model-select-key';
-import { isSuperPlanStageId, type SuperPlanStageId, type SuperPlanState } from '../chat/super-plan/types';
 import {
   CHAT_APP_ID,
   DESKTOP_APP_ID,
@@ -54,17 +51,18 @@ import {
   MAX_LOOP_PROMPT_CHARS,
   MIN_LOOP_INTERVAL_MS,
 } from '../chat/loop/parse-command';
-import { ensurePinnedSkill } from '../skills/pinned-skill';
 import { resolveActiveWorkAgent } from '../agents/resolve-work-agent';
 import { cleanupChatArchiveOnDelete } from '../chat/archive/cleanup';
-import { normalizeCodeChangePayload } from '../usage/code-change-payload';
 import { resolveChatWorktreeRoot } from './worktree-isolation';
 import {
   ensureChatCodeChangeBackfillOnSwitch,
   runSessionCodeChangeBackfill,
 } from '../usage/code-change-backfill';
 import type { ExpertChatSeed } from '../chat/experts/runtime-profile';
-import type { ExpertRuntimeSnapshot } from '../chat/experts/types';
+import {
+  normalizeChatRow,
+  normalizeGroupRow,
+} from './session-schema.mjs';
 const GENERATION_ID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -98,220 +96,23 @@ export function clearStaleGenerationIdsOnLoad(chats: Chat[]): void {
   }
 }
 import type {
-  AssistantMessage,
-  AssistantToolCallMessage,
-  BoardCategory,
-  BoardLogDetail,
-  BoardLogEvent,
-  BoardLogEventType,
-  BoardLogLevel,
-  BoardTask,
-  BoardTaskStatus,
-  BoardWave,
   ActiveGoalState,
   ActiveLoopState,
   Chat,
   ChatGroup,
   ChatTodo,
   ExpertSelection,
-  Message,
-  OrchestrateBoardState,
-  PersistedSubAgentRun,
-  PersistedSubAgentStatus,
-  ReasoningEffortOption,
   SessionState,
-  TerminalRunRecord,
-  ToolCall,
-  ToolResultMessage,
-  TurnRunRecord,
-  TurnRunStatus,
-  TurnSnapshot,
-  UserMessage,
 } from '../types';
 
-const REASONING_EFFORT_OPTIONS = new Set<ReasoningEffortOption>([
-  'off',
-  'on',
-  'low',
-  'medium',
-  'high',
-]);
+const MAX_CHAT_TODO_ITEMS = 20;
+const MAX_CHAT_TODO_TEXT_CHARS = 140;
 
-const TURN_RUN_STATUSES = new Set<TurnRunStatus>([
-  'running',
-  'completed',
-  'stopped',
-  'failed',
-  'superseded',
-]);
-
-function ensureTurnSnapshot(raw: unknown): TurnSnapshot | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const row = raw as Partial<TurnSnapshot>;
-  if (typeof row.forkHistoryIndex !== 'number' || !Number.isFinite(row.forkHistoryIndex)) {
-    return null;
-  }
-  if (typeof row.userContent !== 'string') return null;
-  if (typeof row.providerId !== 'string' || typeof row.modelId !== 'string') return null;
-  if (typeof row.composedSystemPrompt !== 'string') return null;
-  if (!Array.isArray(row.enabledToolNames)) return null;
-  return {
-    forkHistoryIndex: row.forkHistoryIndex,
-    userContent: row.userContent,
-    skillId: typeof row.skillId === 'string' ? row.skillId : null,
-    providerId: row.providerId,
-    modelId: row.modelId,
-    temperature: typeof row.temperature === 'number' ? row.temperature : 0.7,
-    maxTokens: typeof row.maxTokens === 'number' ? row.maxTokens : 4096,
-    thinkingMode:
-      row.thinkingMode === 'on' || row.thinkingMode === 'off' ? row.thinkingMode : 'on',
-    ...(row.reasoningEffort === 'off' ||
-    row.reasoningEffort === 'on' ||
-    row.reasoningEffort === 'low' ||
-    row.reasoningEffort === 'medium' ||
-    row.reasoningEffort === 'high'
-      ? { reasoningEffort: row.reasoningEffort }
-      : {}),
-    modeId: normalizeModeId(row.modeId),
-    workAgentId:
-      typeof row.workAgentId === 'string' && row.workAgentId.trim()
-        ? row.workAgentId.trim()
-        : null,
-    workAgentAuto: row.workAgentAuto !== false,
-    ...(row.expertSelection && typeof row.expertSelection === 'object'
-      ? { expertSelection: ensureExpertSelection(row.expertSelection) }
-      : {}),
-    ...(row.uiDesignerMode === 'plan' || row.uiDesignerMode === 'implement'
-      ? { uiDesignerMode: row.uiDesignerMode }
-      : {}),
-    composedSystemPrompt: row.composedSystemPrompt,
-    ...(typeof row.userRulesContent === 'string'
-      ? { userRulesContent: row.userRulesContent }
-      : {}),
-    enabledToolNames: row.enabledToolNames.filter((n) => typeof n === 'string'),
-    historyPrefixHash:
-      typeof row.historyPrefixHash === 'string' ? row.historyPrefixHash : '',
-    ...(typeof row.orchestratePlanPath === 'string'
-      ? { orchestratePlanPath: row.orchestratePlanPath }
-      : {}),
-  };
+function normalizeChatTodoStatus(raw: unknown): ChatTodo['status'] {
+  if (raw === 'completed' || raw === 'in_progress' || raw === 'pending') return raw;
+  return 'pending';
 }
 
-function ensureTurnRuns(raw: unknown): TurnRunRecord[] | undefined {
-  if (!Array.isArray(raw) || raw.length === 0) return undefined;
-  const out: TurnRunRecord[] = [];
-  for (const item of raw) {
-    if (!item || typeof item !== 'object') continue;
-    const row = item as Partial<TurnRunRecord>;
-    const snapshot = ensureTurnSnapshot(row.snapshot);
-    const runId = typeof row.runId === 'string' ? row.runId.trim() : '';
-    const branchId = typeof row.branchId === 'string' ? row.branchId.trim() : '';
-    const status =
-      typeof row.status === 'string' && TURN_RUN_STATUSES.has(row.status as TurnRunStatus)
-        ? (row.status as TurnRunStatus)
-        : null;
-    if (!runId || !branchId || !snapshot || !status) continue;
-    out.push({
-      runId,
-      branchId,
-      forkHistoryIndex: snapshot.forkHistoryIndex,
-      ...(typeof row.parentRunId === 'string' ? { parentRunId: row.parentRunId } : {}),
-      status,
-      createdAt: typeof row.createdAt === 'number' ? row.createdAt : Date.now(),
-      ...(typeof row.endedAt === 'number' ? { endedAt: row.endedAt } : {}),
-      snapshot,
-      ...(typeof row.outputHistoryStart === 'number'
-        ? { outputHistoryStart: row.outputHistoryStart }
-        : {}),
-      ...(typeof row.outputHistoryEnd === 'number'
-        ? { outputHistoryEnd: row.outputHistoryEnd }
-        : {}),
-      ...(Array.isArray(row.outputMessages)
-        ? {
-            outputMessages: row.outputMessages
-              .map((m) => ensureMessageEntry(m))
-              .filter((m): m is Message => Boolean(m)),
-          }
-        : {}),
-      ...(Array.isArray(row.generationIds)
-        ? { generationIds: row.generationIds.filter((g) => typeof g === 'string') }
-        : {}),
-      ...(typeof row.parentTurnId === 'string' ? { parentTurnId: row.parentTurnId } : {}),
-      ...(row.stopReason === 'user' ||
-      row.stopReason === 'timeout' ||
-      row.stopReason === 'system'
-        ? { stopReason: row.stopReason }
-        : {}),
-      ...(row.endReason === 'max_tool_turns' ? { endReason: row.endReason } : {}),
-      ...(typeof row.errorMessage === 'string' && row.errorMessage.trim()
-        ? { errorMessage: row.errorMessage.trim() }
-        : {}),
-    });
-  }
-  return out.length ? out : undefined;
-}
-
-function ensureActiveBranchByFork(raw: unknown): Record<string, string> | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (typeof key === 'string' && typeof value === 'string' && value.trim()) {
-      out[key] = value.trim();
-    }
-  }
-  return Object.keys(out).length ? out : undefined;
-}
-
-/** @deprecated Legacy default — expert chats use chat.expertId directly. */
-export function defaultExpertSelection(): ExpertSelection {
-  return { mode: 'manual', expertId: null };
-}
-
-function ensureExpertSelection(raw: unknown): ExpertSelection | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const row = raw as Partial<ExpertSelection>;
-  const mode = row.mode === 'manual' ? 'manual' : 'auto';
-  const expertId =
-    mode === 'manual' && typeof row.expertId === 'string' && row.expertId.trim()
-      ? row.expertId.trim()
-      : null;
-  return { mode, expertId };
-}
-
-function ensureExpertRuntime(raw: unknown): ExpertRuntimeSnapshot | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const row = raw as Partial<ExpertRuntimeSnapshot>;
-  const modelId = typeof row.modelId === 'string' ? row.modelId : '';
-  const modeId = normalizeModeId(row.modeId);
-  const toolDenylist = Array.isArray(row.toolDenylist)
-    ? row.toolDenylist.filter((t): t is string => typeof t === 'string')
-    : [];
-  const enabledToolNames = Array.isArray(row.enabledToolNames)
-    ? row.enabledToolNames.filter((t): t is string => typeof t === 'string')
-    : [];
-  const warnings = Array.isArray(row.warnings)
-    ? row.warnings.filter((t): t is string => typeof t === 'string')
-    : [];
-  const toolAllowlist =
-    row.toolAllowlist === null
-      ? null
-      : Array.isArray(row.toolAllowlist)
-        ? row.toolAllowlist.filter((t): t is string => typeof t === 'string')
-        : null;
-  return {
-    ...(typeof row.providerId === 'string' && row.providerId.trim()
-      ? { providerId: row.providerId.trim() }
-      : {}),
-    modelId,
-    modeId,
-    toolAllowlist,
-    toolDenylist,
-    enabledToolNames,
-    memoryEnabled: row.memoryEnabled !== false,
-    warnings,
-    profileSource: row.profileSource === 'override' ? 'override' : 'inherit',
-  };
-}
 
 /** In-memory session blob mirrored to ~/.minnow or localStorage fallback. */
 export let sessionState: SessionState | null = null;
@@ -321,6 +122,111 @@ export let sessionState: SessionState | null = null;
  * localStorage fallback cannot clobber on-disk sessions (MIN-408).
  */
 let sessionsHydratedFromServer = false;
+
+/** Dirty chat ids since last flush (telemetry for B.2 PATCH; B.1 still PUTs whole blob). */
+const dirtyChatIds = new Set<string>();
+/** Explicit chat deletes since last flush. */
+const deletedChatIds = new Set<string>();
+/** Dirty sidebar/board group ids since last flush. */
+const dirtyGroupIds = new Set<string>();
+/** Session scalars (activeId, sidebar, maps, …) changed since last flush. */
+let sessionScalarsDirty = false;
+/**
+ * Shadow JSON of chats after last load/flush — used by the B.1 dev verifier to
+ * catch mutations that bypassed {@link touchChat}.
+ */
+let dirtyTrackingShadowChatsJson: string | null = null;
+/** When true, flush runs the unmarked-mutation verifier (tests / Vite DEV). */
+let dirtyTrackingVerifierForced = false;
+
+function isDirtyTrackingVerifierEnabled(): boolean {
+  if (dirtyTrackingVerifierForced) return true;
+  try {
+    // Vite sets import.meta.env.DEV; Node/tsx tests leave it undefined.
+    return Boolean((import.meta as { env?: { DEV?: boolean } }).env?.DEV);
+  } catch {
+    return false;
+  }
+}
+
+function captureDirtyTrackingShadow(state: SessionState | null): void {
+  dirtyTrackingShadowChatsJson = state ? JSON.stringify(state.chats) : null;
+}
+
+function clearSessionDirtySets(): void {
+  dirtyChatIds.clear();
+  deletedChatIds.clear();
+  dirtyGroupIds.clear();
+  sessionScalarsDirty = false;
+}
+
+/** Mark session-level scalars dirty for upcoming PATCH telemetry. */
+export function markSessionScalarsDirty(): void {
+  sessionScalarsDirty = true;
+}
+
+/** Mark a sidebar/board group dirty for upcoming PATCH telemetry. */
+export function markGroupDirty(groupId: string): void {
+  const id = typeof groupId === 'string' ? groupId.trim() : '';
+  if (id) dirtyGroupIds.add(id);
+}
+
+/**
+ * Dev/test verifier: warn when a chat stringified differently without touchChat.
+ * Still does not change the PUT payload (whole blob).
+ */
+function verifyDirtyChatTracking(state: SessionState): void {
+  if (!isDirtyTrackingVerifierEnabled()) return;
+  if (dirtyTrackingShadowChatsJson == null) return;
+  let shadow: unknown;
+  try {
+    shadow = JSON.parse(dirtyTrackingShadowChatsJson);
+  } catch {
+    return;
+  }
+  if (!Array.isArray(shadow)) return;
+  const shadowById = new Map(
+    shadow
+      .filter((c) => c && typeof c === 'object' && typeof (c as Chat).id === 'string')
+      .map((c) => [(c as Chat).id, JSON.stringify(c)]),
+  );
+  for (const chat of state.chats) {
+    const prev = shadowById.get(chat.id);
+    if (prev === undefined) continue; // new chats are marked via touchChat on create
+    const next = JSON.stringify(chat);
+    if (prev !== next && !dirtyChatIds.has(chat.id)) {
+      console.warn(
+        `[sessions dirty-tracking] chat ${chat.id} changed without touchChat()`,
+      );
+    }
+  }
+}
+
+/** Test helper: dirty set snapshot (B.1 still PUTs the full blob). */
+export function getSessionDirtyTrackingForTests(): {
+  dirtyChatIds: string[];
+  deletedChatIds: string[];
+  dirtyGroupIds: string[];
+  sessionScalarsDirty: boolean;
+} {
+  return {
+    dirtyChatIds: [...dirtyChatIds].sort(),
+    deletedChatIds: [...deletedChatIds].sort(),
+    dirtyGroupIds: [...dirtyGroupIds].sort(),
+    sessionScalarsDirty,
+  };
+}
+
+/** Test helper: force verifier on/off regardless of import.meta.env.DEV. */
+export function setDirtyTrackingVerifierForcedForTests(forced: boolean): void {
+  dirtyTrackingVerifierForced = forced;
+}
+
+/** Test helper: re-capture shadow without flushing. */
+export function captureDirtyTrackingShadowForTests(): void {
+  captureDirtyTrackingShadow(sessionState);
+}
+
 
 let sessionPersistenceShutdownRegistered = false;
 
@@ -343,6 +249,8 @@ function markSessionsReady(): void {
 /** Replace in-memory session blob (unit tests). */
 export function setSessionStateForTests(state: SessionState | null): void {
   sessionState = state;
+  clearSessionDirtySets();
+  captureDirtyTrackingShadow(state);
   if (state) {
     markSessionsReady();
     sessionsHydratedFromServer = true;
@@ -355,6 +263,14 @@ export function setSessionStateForTests(state: SessionState | null): void {
 export function resetSessionPersistenceForTests(): void {
   sessionsHydratedFromServer = false;
   sessionPersistenceShutdownRegistered = false;
+  clearSessionDirtySets();
+  dirtyTrackingShadowChatsJson = null;
+  dirtyTrackingVerifierForced = false;
+  // Clear debounce timer so Node test runners can exit.
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    setSaveTimer(null);
+  }
 }
 
 /** Expose hydration guard for persistence unit tests. */
@@ -404,655 +320,12 @@ export function createEmptyChatObject(modelId: string, workspacePath?: string): 
   };
 }
 
-function ensureToolCall(raw: unknown): ToolCall | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const row = raw as Record<string, unknown>;
-  const id = typeof row.id === 'string' ? row.id : '';
-  const fn = row.function;
-  if (!id || !fn || typeof fn !== 'object') return null;
-  const func = fn as Record<string, unknown>;
-  const name = typeof func.name === 'string' ? func.name : '';
-  if (!name) return null;
-  const args = typeof func.arguments === 'string' ? func.arguments : '';
-  return { id, type: 'function', function: { name, arguments: args } };
-}
-
-function ensureToolCalls(raw: unknown): ToolCall[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map(ensureToolCall).filter((tc): tc is ToolCall => Boolean(tc));
-}
-
-function ensureMessageEntry(m: Partial<Message> | null | undefined): Message | null {
-  if (!m || !m.role) return null;
-
-  if (m.role === 'tool') {
-    const toolMsg = m as Partial<ToolResultMessage>;
-    const toolCallId =
-      typeof toolMsg.tool_call_id === 'string' ? toolMsg.tool_call_id.trim() : '';
-    if (!toolCallId) return null;
-    const content = toolMsg.content != null ? String(toolMsg.content) : '';
-    const attachments = Array.isArray(toolMsg.attachments)
-      ? toolMsg.attachments.filter(
-          (a) =>
-            a &&
-            typeof a === 'object' &&
-            a.type === 'image' &&
-            typeof a.url === 'string',
-        )
-      : undefined;
-    const codeChange = normalizeCodeChangePayload(toolMsg.codeChange);
-    return {
-      role: 'tool',
-      tool_call_id: toolCallId,
-      content,
-      ...(attachments?.length ? { attachments } : {}),
-      ...(codeChange ? { codeChange } : {}),
-    };
-  }
-
-  if (m.role === 'user') {
-    const content = m.content != null ? String(m.content) : '';
-    const user = m as Partial<UserMessage>;
-    let superPlanStage: SuperPlanStageId | undefined;
-    if (typeof user.superPlanStage === 'string') {
-      const candidate = user.superPlanStage.trim();
-      if (isSuperPlanStageId(candidate)) {
-        superPlanStage = candidate;
-      }
-    }
-    return {
-      role: 'user',
-      content,
-      ...(user.steer === true ? { steer: true } : {}),
-      ...(user.goalAchieved === true ? { goalAchieved: true } : {}),
-      ...(superPlanStage ? { superPlanStage } : {}),
-    };
-  }
-
-  if (m.role !== 'assistant') return null;
-
-  const toolCalls = ensureToolCalls((m as Partial<AssistantToolCallMessage>).tool_calls);
-  if (toolCalls.length) {
-    const withTools: AssistantToolCallMessage = {
-      role: 'assistant',
-      content: m.content == null ? null : String(m.content),
-      tool_calls: toolCalls,
-    };
-    if (m.stats && typeof m.stats === 'object') withTools.stats = m.stats;
-    if (m.usage && typeof m.usage === 'object') withTools.usage = m.usage;
-    return withTools;
-  }
-
-  const assistant: AssistantMessage = {
-    role: 'assistant',
-    content: m.content != null ? String(m.content) : '',
-  };
-  if (m.stats && typeof m.stats === 'object') assistant.stats = m.stats;
-  if (m.usage && typeof m.usage === 'object') assistant.usage = m.usage;
-  return assistant;
-}
-
-function ensureTerminalHistory(raw: unknown): TerminalRunRecord[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  const rows = raw
-    .filter((r) => r && typeof r === 'object')
-    .map((r) => {
-      const row = r as Partial<TerminalRunRecord>;
-      if (typeof row.id !== 'string' || typeof row.command !== 'string') return null;
-      return {
-        id: row.id,
-        command: row.command,
-        cwd: typeof row.cwd === 'string' ? row.cwd : '.',
-        source: row.source === 'user' ? 'user' : 'agent',
-        ...(row.toolCallId ? { toolCallId: row.toolCallId } : {}),
-        startedAt: typeof row.startedAt === 'number' ? row.startedAt : 0,
-        finishedAt: typeof row.finishedAt === 'number' ? row.finishedAt : 0,
-        exitCode: typeof row.exitCode === 'number' ? row.exitCode : null,
-        timedOut: row.timedOut === true,
-        logPath: typeof row.logPath === 'string' ? row.logPath : '',
-      } satisfies TerminalRunRecord;
-    })
-    .filter((x): x is TerminalRunRecord => Boolean(x));
-  return rows.length ? rows : undefined;
-}
-
-const PERSISTED_SUB_AGENT_STATUSES = new Set<PersistedSubAgentStatus>([
-  'queued',
-  'running',
-  'completed',
-  'failed',
-  'cancelled',
-]);
-
-const BOARD_TASK_STATUSES = new Set<BoardTaskStatus>([
-  'planned',
-  'in_progress',
-  'testing',
-  'merging',
-  'complete',
-  'failed',
-  'blocked',
-  'quarantined',
-]);
-
-const BOARD_CATEGORIES = new Set<BoardCategory>(['build', 'fix', 'test', 'research']);
-
-/** Keep in sync with {@link BOARD_LOG_MAX} in orchestrate-board-store and server validators. */
-const BOARD_LOG_MAX = 100;
-const BOARD_LOG_LEVELS = new Set<BoardLogLevel>(['info', 'warn', 'error']);
-const BOARD_LOG_TYPES = new Set<BoardLogEventType>([
-  'board_init',
-  'mode_change',
-  'auto_start',
-  'auto_stop',
-  'task_status',
-  'task_started',
-  'build_verdict',
-  'test_verdict',
-  'merge_result',
-  'worktree_allocated',
-  'task_retry',
-  'task_error',
-  'tool_call',
-  'terminal_run',
-  'dev_server',
-  'final_test_started',
-  'final_test_verdict',
-]);
-const BOARD_LOG_DETAIL_STRING_KEYS = new Set<keyof BoardLogDetail>([
-  'branch',
-  'toolName',
-  'argsPreview',
-  'resultPreview',
-  'command',
-  'runId',
-  'chatId',
-  'error',
-  'summary',
-]);
-const BOARD_LOG_DETAIL_NUMBER_KEYS = new Set<keyof BoardLogDetail>([
-  'attempt',
-  'devPort',
-  'apiPort',
-  'exitCode',
-]);
-const BOARD_LOG_DETAIL_STATUS_KEYS = new Set<keyof BoardLogDetail>(['from', 'to']);
-const BOARD_LOG_DETAIL_ENUMS: Record<string, Set<string>> = {
-  verdict: new Set(['pass', 'fail']),
-  attemptKind: new Set(['build', 'test', 'fixer']),
-  mode: new Set(['manual', 'auto', 'sequential', 'afk']),
-  outcome: new Set(['merged', 'conflict', 'error', 'skipped']),
-};
-const BOARD_LOG_STRING_MAX = 2000;
-
-function truncateBoardLogString(value: string, max = BOARD_LOG_STRING_MAX): string {
-  if (value.length <= max) return value;
-  return `${value.slice(0, max)}…`;
-}
-
-function ensureBoardLogDetail(raw: unknown): BoardLogDetail | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const r = raw as Record<string, unknown>;
-  const out: BoardLogDetail = {};
-  for (const key of BOARD_LOG_DETAIL_STRING_KEYS) {
-    if (typeof r[key] === 'string' && (r[key] as string).trim()) {
-      (out as Record<string, string>)[key] = truncateBoardLogString(r[key] as string);
-    }
-  }
-  for (const key of BOARD_LOG_DETAIL_NUMBER_KEYS) {
-    if (typeof r[key] === 'number' && Number.isFinite(r[key])) {
-      (out as Record<string, number>)[key] = r[key] as number;
-    }
-  }
-  for (const key of BOARD_LOG_DETAIL_STATUS_KEYS) {
-    const val = typeof r[key] === 'string' ? r[key] : '';
-    if (BOARD_TASK_STATUSES.has(val as BoardTaskStatus)) {
-      (out as Record<string, BoardTaskStatus>)[key] = val as BoardTaskStatus;
-    }
-  }
-  for (const [key, allowed] of Object.entries(BOARD_LOG_DETAIL_ENUMS)) {
-    if (typeof r[key] === 'string' && allowed.has(r[key] as string)) {
-      (out as Record<string, string>)[key] = r[key] as string;
-    }
-  }
-  if (Array.isArray(r.failingTaskIds)) {
-    const failingTaskIds: string[] = [];
-    for (const item of r.failingTaskIds) {
-      if (typeof item === 'string' && item.trim()) failingTaskIds.push(item.trim());
-    }
-    if (failingTaskIds.length) out.failingTaskIds = failingTaskIds;
-  }
-  return Object.keys(out).length ? out : undefined;
-}
-
-function ensureBoardLogEvent(raw: unknown): BoardLogEvent | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const r = raw as Record<string, unknown>;
-  const id = typeof r.id === 'string' ? r.id.trim() : '';
-  const ts = typeof r.ts === 'number' && Number.isFinite(r.ts) ? r.ts : null;
-  const typeRaw = typeof r.type === 'string' ? r.type.trim() : '';
-  if (!id || ts === null || !BOARD_LOG_TYPES.has(typeRaw as BoardLogEventType)) return null;
-  const levelRaw = typeof r.level === 'string' ? r.level.trim() : 'info';
-  const level = BOARD_LOG_LEVELS.has(levelRaw as BoardLogLevel)
-    ? (levelRaw as BoardLogLevel)
-    : 'info';
-  const message =
-    typeof r.message === 'string' ? truncateBoardLogString(r.message, BOARD_LOG_STRING_MAX) : '';
-  const out: BoardLogEvent = {
-    id,
-    ts,
-    type: typeRaw as BoardLogEventType,
-    level,
-    message,
-  };
-  if (typeof r.taskId === 'string' && r.taskId.trim()) {
-    out.taskId = r.taskId.trim();
-  }
-  const detail = ensureBoardLogDetail(r.detail);
-  if (detail) out.detail = detail;
-  return out;
-}
-
-function ensureBoardWaveId(raw: unknown): number | string | null {
-  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
-  if (typeof raw === 'string' && raw.trim()) return raw.trim();
-  return null;
-}
-
-function ensureBoardCategory(raw: unknown): BoardCategory | null {
-  return typeof raw === 'string' && BOARD_CATEGORIES.has(raw as BoardCategory)
-    ? (raw as BoardCategory)
-    : null;
-}
-
-function ensureBoardTask(raw: unknown): BoardTask | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const r = raw as Record<string, unknown>;
-  const id = typeof r.id === 'string' ? r.id.trim() : '';
-  const title = typeof r.title === 'string' ? r.title : '';
-  const wave = ensureBoardWaveId(r.wave);
-  const category = ensureBoardCategory(r.category);
-  const statusRaw = typeof r.status === 'string' ? r.status : '';
-  if (!id || wave === null || !category || !BOARD_TASK_STATUSES.has(statusRaw as BoardTaskStatus)) {
-    return null;
-  }
-  const status = statusRaw as BoardTaskStatus;
-  const assignedRunId =
-    typeof r.assignedRunId === 'string' && r.assignedRunId.trim()
-      ? r.assignedRunId.trim()
-      : undefined;
-  const lastRunId =
-    typeof r.lastRunId === 'string' && r.lastRunId.trim()
-      ? r.lastRunId.trim()
-      : undefined;
-  const runHistory: string[] = [];
-  if (Array.isArray(r.runHistory)) {
-    for (const item of r.runHistory) {
-      if (typeof item === 'string' && item.trim()) {
-        const id = item.trim();
-        if (!runHistory.includes(id)) runHistory.push(id);
-      }
-    }
-  }
-  const filesChanged =
-    typeof r.filesChanged === 'number' && Number.isFinite(r.filesChanged)
-      ? r.filesChanged
-      : undefined;
-  const chatId =
-    typeof r.chatId === 'string' && r.chatId.trim() ? r.chatId.trim() : undefined;
-  const testChatId =
-    typeof r.testChatId === 'string' && r.testChatId.trim() ? r.testChatId.trim() : undefined;
-  const fixerChatId =
-    typeof r.fixerChatId === 'string' && r.fixerChatId.trim() ? r.fixerChatId.trim() : undefined;
-  const buildSpec =
-    typeof r.buildSpec === 'string' && r.buildSpec.trim() ? r.buildSpec.trim() : undefined;
-  const testSpec =
-    typeof r.testSpec === 'string' && r.testSpec.trim() ? r.testSpec.trim() : undefined;
-  const dependsOn: string[] = [];
-  if (Array.isArray(r.dependsOn)) {
-    for (const item of r.dependsOn) {
-      if (typeof item === 'string' && item.trim()) dependsOn.push(item.trim());
-    }
-  }
-  const testAttempts =
-    typeof r.testAttempts === 'number' && Number.isFinite(r.testAttempts)
-      ? r.testAttempts
-      : undefined;
-  const buildAttempts =
-    typeof r.buildAttempts === 'number' && Number.isFinite(r.buildAttempts)
-      ? r.buildAttempts
-      : undefined;
-  const fixerAttempts =
-    typeof r.fixerAttempts === 'number' && Number.isFinite(r.fixerAttempts)
-      ? r.fixerAttempts
-      : undefined;
-  const mergePreSha =
-    typeof r.mergePreSha === 'string' && r.mergePreSha.trim() ? r.mergePreSha.trim() : undefined;
-  const testVerdict =
-    r.testVerdict === 'pass' || r.testVerdict === 'fail' ? r.testVerdict : undefined;
-  const testSummary =
-    typeof r.testSummary === 'string' && r.testSummary.trim()
-      ? r.testSummary.trim()
-      : undefined;
-  let prevFailure: BoardTask['prevFailure'];
-  if (r.prevFailure && typeof r.prevFailure === 'object') {
-    const pf = r.prevFailure as Record<string, unknown>;
-    const at = typeof pf.at === 'number' && Number.isFinite(pf.at) ? pf.at : undefined;
-    if (at != null) {
-      const pfError =
-        typeof pf.error === 'string' && pf.error.trim() ? pf.error.trim() : undefined;
-      const pfSummary =
-        typeof pf.testSummary === 'string' && pf.testSummary.trim()
-          ? pf.testSummary.trim()
-          : undefined;
-      const pfVerdict =
-        pf.testVerdict === 'pass' || pf.testVerdict === 'fail' ? pf.testVerdict : undefined;
-      prevFailure = {
-        at,
-        ...(pfError ? { error: pfError } : {}),
-        ...(pfSummary ? { testSummary: pfSummary } : {}),
-        ...(pfVerdict ? { testVerdict: pfVerdict } : {}),
-      };
-    }
-  }
-  const pendingBuildSeed =
-    typeof r.pendingBuildSeed === 'string' && r.pendingBuildSeed.trim()
-      ? r.pendingBuildSeed.trim()
-      : undefined;
-  const worktreePath =
-    typeof r.worktreePath === 'string' && r.worktreePath.trim()
-      ? r.worktreePath.trim()
-      : undefined;
-  const worktreeBranch =
-    typeof r.worktreeBranch === 'string' && r.worktreeBranch.trim()
-      ? r.worktreeBranch.trim()
-      : undefined;
-  const devPort =
-    typeof r.devPort === 'number' && Number.isFinite(r.devPort) ? r.devPort : undefined;
-  const apiPort =
-    typeof r.apiPort === 'number' && Number.isFinite(r.apiPort) ? r.apiPort : undefined;
-  const stopRetries =
-    typeof r.stopRetries === 'number' && Number.isFinite(r.stopRetries)
-      ? r.stopRetries
-      : undefined;
-  const lifecycleRun =
-    typeof r.lifecycleRun === 'number' && Number.isFinite(r.lifecycleRun) && r.lifecycleRun >= 0
-      ? r.lifecycleRun
-      : undefined;
-  let quarantine: BoardTask['quarantine'];
-  if (r.quarantine && typeof r.quarantine === 'object') {
-    const q = r.quarantine as Record<string, unknown>;
-    const QUARANTINE_CATEGORIES = new Set(['infra', 'code', 'merge', 'stall', 'unknown']);
-    const qCategory =
-      typeof q.category === 'string' && QUARANTINE_CATEGORIES.has(q.category)
-        ? (q.category as NonNullable<BoardTask['quarantine']>['category'])
-        : null;
-    const summary = typeof q.summary === 'string' ? q.summary : null;
-    const at = typeof q.at === 'number' && Number.isFinite(q.at) ? q.at : null;
-    if (qCategory && summary !== null && at !== null) {
-      const resolutionSteps: string[] = [];
-      if (Array.isArray(q.resolutionSteps)) {
-        for (const step of q.resolutionSteps) {
-          if (typeof step === 'string') resolutionSteps.push(step);
-        }
-      }
-      quarantine = {
-        category: qCategory,
-        summary,
-        resolutionSteps,
-        at,
-        ...(typeof q.logRef === 'string' && q.logRef.trim() ? { logRef: q.logRef.trim() } : {}),
-      };
-    }
-  }
-  return {
-    id,
-    title,
-    wave,
-    category,
-    status,
-    ...(assignedRunId ? { assignedRunId } : {}),
-    ...(lastRunId ? { lastRunId } : {}),
-    ...(runHistory.length ? { runHistory } : {}),
-    ...(typeof r.startedAt === 'number' ? { startedAt: r.startedAt } : {}),
-    ...(typeof r.endedAt === 'number' ? { endedAt: r.endedAt } : {}),
-    ...(filesChanged !== undefined ? { filesChanged } : {}),
-    ...(typeof r.notes === 'string' ? { notes: r.notes } : {}),
-    ...(typeof r.error === 'string' ? { error: r.error } : {}),
-    ...(chatId ? { chatId } : {}),
-    ...(testChatId ? { testChatId } : {}),
-    ...(fixerChatId ? { fixerChatId } : {}),
-    ...(buildSpec ? { buildSpec } : {}),
-    ...(testSpec ? { testSpec } : {}),
-    ...(dependsOn.length ? { dependsOn } : {}),
-    ...(testAttempts !== undefined ? { testAttempts } : {}),
-    ...(buildAttempts !== undefined ? { buildAttempts } : {}),
-    ...(fixerAttempts !== undefined ? { fixerAttempts } : {}),
-    ...(mergePreSha ? { mergePreSha } : {}),
-    ...(testVerdict ? { testVerdict } : {}),
-    ...(testSummary ? { testSummary } : {}),
-    ...(prevFailure ? { prevFailure } : {}),
-    ...(pendingBuildSeed ? { pendingBuildSeed } : {}),
-    ...(worktreePath ? { worktreePath } : {}),
-    ...(worktreeBranch ? { worktreeBranch } : {}),
-    ...(devPort !== undefined ? { devPort } : {}),
-    ...(apiPort !== undefined ? { apiPort } : {}),
-    ...(stopRetries !== undefined ? { stopRetries } : {}),
-    ...(lifecycleRun !== undefined ? { lifecycleRun } : {}),
-    ...(quarantine ? { quarantine } : {}),
-  };
-}
-
-function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const r = raw as Record<string, unknown>;
-  const planPath = typeof r.planPath === 'string' ? r.planPath.trim() : '';
-  if (!planPath || !Array.isArray(r.tasks) || !Array.isArray(r.waves)) return undefined;
-  const tasks: BoardTask[] = [];
-  for (const item of r.tasks) {
-    const task = ensureBoardTask(item);
-    if (task) tasks.push(task);
-  }
-  if (!tasks.length) return undefined;
-  const waves: BoardWave[] = [];
-  for (const item of r.waves) {
-    if (!item || typeof item !== 'object') continue;
-    const w = item as Record<string, unknown>;
-    const id = ensureBoardWaveId(w.id);
-    const statusRaw = typeof w.status === 'string' ? w.status : 'planned';
-    const status = BOARD_TASK_STATUSES.has(statusRaw as BoardTaskStatus)
-      ? (statusRaw as BoardTaskStatus)
-      : 'planned';
-    if (id === null) continue;
-    waves.push({
-      id,
-      status,
-      ...(typeof w.taskCount === 'number' ? { taskCount: w.taskCount } : {}),
-      ...(typeof w.completeCount === 'number' ? { completeCount: w.completeCount } : {}),
-      ...(w.collapsed === true ? { collapsed: true } : {}),
-    });
-  }
-  if (!waves.length) return undefined;
-  const startedAt = typeof r.startedAt === 'number' ? r.startedAt : Date.now();
-  const lastUpdatedAt = typeof r.lastUpdatedAt === 'number' ? r.lastUpdatedAt : startedAt;
-  const activeParentTurnId =
-    typeof r.activeParentTurnId === 'string' && r.activeParentTurnId.trim()
-      ? r.activeParentTurnId.trim()
-      : undefined;
-  const timerAccumulatedMs =
-    typeof r.timerAccumulatedMs === 'number' ? r.timerAccumulatedMs : undefined;
-  const timerSegmentStartedAt =
-    typeof r.timerSegmentStartedAt === 'number' ? r.timerSegmentStartedAt : undefined;
-  const maxConcurrentTasks =
-    typeof r.maxConcurrentTasks === 'number' && r.maxConcurrentTasks > 0
-      ? r.maxConcurrentTasks
-      : undefined;
-  const completionShownAt =
-    typeof r.completionShownAt === 'number' ? r.completionShownAt : undefined;
-  const terminalBlocked = r.terminalBlocked === true ? true : undefined;
-  const executionModeRaw =
-    typeof r.executionMode === 'string' ? r.executionMode.trim() : '';
-  const executionMode =
-    executionModeRaw === 'auto' ||
-    executionModeRaw === 'manual' ||
-    executionModeRaw === 'sequential' ||
-    executionModeRaw === 'afk'
-      ? executionModeRaw
-      : 'manual';
-  const finalTest = ensureOrchestrateFinalTest(r.finalTest);
-  let log: BoardLogEvent[] | undefined;
-  if (Array.isArray(r.log)) {
-    const parsed: BoardLogEvent[] = [];
-    for (const item of r.log) {
-      const event = ensureBoardLogEvent(item);
-      if (event) parsed.push(event);
-    }
-    if (parsed.length) log = parsed.slice(-BOARD_LOG_MAX);
-  }
-  return {
-    planPath,
-    tasks,
-    waves,
-    startedAt,
-    lastUpdatedAt,
-    executionMode,
-    ...(r.autoRunning === true ? { autoRunning: true } : {}),
-    ...(r.pendingAfk === true ? { pendingAfk: true } : {}),
-    ...(activeParentTurnId ? { activeParentTurnId } : {}),
-    ...(timerAccumulatedMs !== undefined ? { timerAccumulatedMs } : {}),
-    ...(timerSegmentStartedAt !== undefined ? { timerSegmentStartedAt } : {}),
-    ...(maxConcurrentTasks !== undefined ? { maxConcurrentTasks } : {}),
-    ...(completionShownAt !== undefined ? { completionShownAt } : {}),
-    ...(terminalBlocked ? { terminalBlocked } : {}),
-    ...(r.dashboardDismissed === true ? { dashboardDismissed: true } : {}),
-    ...(typeof r.integrationLandedAt === 'number' ? { integrationLandedAt: r.integrationLandedAt } : {}),
-    ...(typeof r.worktreesClearedAt === 'number' ? { worktreesClearedAt: r.worktreesClearedAt } : {}),
-    ...(typeof r.finishReport === 'string' && r.finishReport.trim()
-      ? { finishReport: r.finishReport.trim() }
-      : {}),
-    ...(finalTest ? { finalTest } : {}),
-    ...(typeof r.isolationMode === 'string' &&
-    (r.isolationMode === 'off' ||
-      r.isolationMode === 'per-task' ||
-      r.isolationMode === 'per-wave')
-      ? { isolationMode: r.isolationMode }
-      : {}),
-    ...(typeof r.integrationBranch === 'string' && r.integrationBranch.trim()
-      ? { integrationBranch: r.integrationBranch.trim() }
-      : {}),
-    ...(r.userStopped === true ? { userStopped: true } : {}),
-    ...(r.systemPaused === true ? { systemPaused: true } : {}),
-    ...(typeof r.isolationBaseRef === 'string' && r.isolationBaseRef.trim()
-      ? { isolationBaseRef: r.isolationBaseRef.trim() }
-      : {}),
-    ...(log ? { log } : {}),
-    ...(() => {
-      if (!Array.isArray(r.unresolvedIssues)) return {};
-      const UNRESOLVED_ISSUES_MAX = 200;
-      const issues = [];
-      for (const item of r.unresolvedIssues) {
-        if (!item || typeof item !== 'object') continue;
-        const u = item as Record<string, unknown>;
-        if (
-          typeof u.taskId === 'string' && u.taskId.trim() &&
-          typeof u.title === 'string' &&
-          typeof u.category === 'string' &&
-          typeof u.summary === 'string' &&
-          Array.isArray(u.resolutionSteps) &&
-          typeof u.createdAt === 'number'
-        ) {
-          issues.push({
-            taskId: u.taskId.trim(),
-            title: typeof u.title === 'string' ? u.title : '',
-            category: u.category as 'infra' | 'code' | 'merge' | 'stall',
-            summary: typeof u.summary === 'string' ? u.summary : '',
-            resolutionSteps: (u.resolutionSteps as unknown[]).filter((s): s is string => typeof s === 'string'),
-            ...(typeof u.logRef === 'string' && u.logRef.trim() ? { logRef: u.logRef.trim() } : {}),
-            createdAt: u.createdAt as number,
-            ...(typeof u.attempts === 'number' ? { attempts: u.attempts } : {}),
-          });
-        }
-      }
-      if (!issues.length) return {};
-      return { unresolvedIssues: issues.slice(-UNRESOLVED_ISSUES_MAX) };
-    })(),
-  };
-}
-
-function ensureOrchestrateFinalTest(
-  raw: unknown,
-): OrchestrateBoardState['finalTest'] | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const r = raw as Record<string, unknown>;
-  const statusRaw = typeof r.status === 'string' ? r.status.trim() : '';
-  const status =
-    statusRaw === 'pending' ||
-    statusRaw === 'in_progress' ||
-    statusRaw === 'passed' ||
-    statusRaw === 'failed'
-      ? statusRaw
-      : undefined;
-  if (!status) return undefined;
-  const chatId =
-    typeof r.chatId === 'string' && r.chatId.trim() ? r.chatId.trim() : undefined;
-  const attempts = typeof r.attempts === 'number' ? r.attempts : undefined;
-  const recordedVerdict =
-    r.recordedVerdict === 'pass' || r.recordedVerdict === 'fail'
-      ? r.recordedVerdict
-      : undefined;
-  const failingTaskIds: string[] = [];
-  if (Array.isArray(r.failingTaskIds)) {
-    for (const item of r.failingTaskIds) {
-      if (typeof item === 'string' && item.trim()) failingTaskIds.push(item.trim());
-    }
-  }
-  const summary = typeof r.summary === 'string' ? r.summary : undefined;
-  return {
-    status,
-    ...(chatId ? { chatId } : {}),
-    ...(attempts !== undefined ? { attempts } : {}),
-    ...(recordedVerdict ? { recordedVerdict } : {}),
-    ...(failingTaskIds.length ? { failingTaskIds } : {}),
-    ...(summary ? { summary } : {}),
-  };
-}
-
-function ensureChatGroup(raw: unknown): ChatGroup | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const r = raw as Record<string, unknown>;
-  const id = typeof r.id === 'string' ? r.id.trim() : '';
-  const name = typeof r.name === 'string' ? r.name.trim() : '';
-  const workspacePath =
-    typeof r.workspacePath === 'string'
-      ? normalizeWorkspacePath(r.workspacePath)
-      : '';
-  if (!id || !name) return null;
-  const orchestrateBoard = ensureOrchestrateBoard(r.orchestrateBoard);
-  const orchestratePlanPath = normalizeOrchestratePlanPath(r.orchestratePlanPath);
-  const viewMode = ensureViewMode(r.viewMode);
-  const plannerChatId =
-    typeof r.plannerChatId === 'string' && r.plannerChatId.trim()
-      ? r.plannerChatId.trim()
-      : undefined;
-  return {
-    id,
-    name,
-    workspacePath,
-    collapsed: r.collapsed === true,
-    order: typeof r.order === 'number' ? r.order : 0,
-    createdAt: typeof r.createdAt === 'number' ? r.createdAt : Date.now(),
-    ...(orchestrateBoard ? { orchestrateBoard } : {}),
-    ...(orchestratePlanPath ? { orchestratePlanPath } : {}),
-    ...(viewMode ? { viewMode } : {}),
-    ...(plannerChatId ? { plannerChatId } : {}),
-  };
-}
 
 function ensureGroupsFromRaw(raw: unknown): ChatGroup[] {
   if (!Array.isArray(raw)) return [];
   const out: ChatGroup[] = [];
   for (const item of raw) {
-    const group = ensureChatGroup(item);
+    const group = normalizeGroupRow(item) as ChatGroup | null;
     if (group) out.push(group);
   }
   return out;
@@ -1156,379 +429,10 @@ export function migrateSessionV5ToV6(state: SessionState): void {
   state.version = 6;
 }
 
-function ensureViewMode(raw: unknown): 'chat' | 'board' | undefined {
-  return raw === 'chat' || raw === 'board' ? raw : undefined;
-}
-
-function ensurePersistedSubAgentRuns(
-  raw: unknown,
-): PersistedSubAgentRun[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  const out: PersistedSubAgentRun[] = [];
-  for (const item of raw) {
-    if (!item || typeof item !== 'object') continue;
-    const r = item as Record<string, unknown>;
-    const runId = typeof r.runId === 'string' ? r.runId.trim() : '';
-    const parentTurnId = typeof r.parentTurnId === 'string' ? r.parentTurnId : '';
-    const type = typeof r.type === 'string' ? r.type : '';
-    const task = typeof r.task === 'string' ? r.task : '';
-    const statusRaw = typeof r.status === 'string' ? r.status : '';
-    if (!runId || !PERSISTED_SUB_AGENT_STATUSES.has(statusRaw as PersistedSubAgentStatus)) {
-      continue;
-    }
-    const status = statusRaw as PersistedSubAgentStatus;
-    const messages = Array.isArray(r.messages) ? r.messages : [];
-    const parentToolCallId =
-      typeof r.parentToolCallId === 'string' && r.parentToolCallId.trim()
-        ? r.parentToolCallId.trim()
-        : undefined;
-    const err = r.error;
-    const category = ensureBoardCategory(r.category);
-    const boardTaskId =
-      r.boardTaskId === null || typeof r.boardTaskId === 'string'
-        ? (r.boardTaskId as string | null)
-        : undefined;
-    const structuredOutcome =
-      r.structuredOutcome &&
-      typeof r.structuredOutcome === 'object' &&
-      !Array.isArray(r.structuredOutcome)
-        ? (r.structuredOutcome as PersistedSubAgentRun['structuredOutcome'])
-        : undefined;
-    const budgetEvents = Array.isArray(r.budgetEvents)
-      ? (r.budgetEvents as PersistedSubAgentRun['budgetEvents'])
-      : undefined;
-    out.push({
-      runId,
-      parentTurnId,
-      ...(parentToolCallId ? { parentToolCallId } : {}),
-      type,
-      task,
-      status,
-      summary: typeof r.summary === 'string' ? r.summary : '',
-      ...(structuredOutcome ? { structuredOutcome } : {}),
-      ...(budgetEvents?.length ? { budgetEvents } : {}),
-      ...(err === null || typeof err === 'string' ? { error: err as string | null } : {}),
-      startedAt: typeof r.startedAt === 'string' ? r.startedAt : null,
-      endedAt: typeof r.endedAt === 'string' ? r.endedAt : null,
-      toolTurns: typeof r.toolTurns === 'number' ? r.toolTurns : 0,
-      messages,
-      ...(category ? { category } : {}),
-      ...(boardTaskId !== undefined ? { boardTaskId } : {}),
-    });
-  }
-  return out.length ? out : undefined;
-}
-
-const MAX_CHAT_TODO_ITEMS = 20;
-const MAX_CHAT_TODO_TEXT_CHARS = 140;
-
-function normalizeChatTodoStatus(raw: unknown): ChatTodo['status'] {
-  if (raw === 'completed' || raw === 'in_progress' || raw === 'pending') return raw;
-  return 'pending';
-}
-
-/** Sanitize persisted todos — drop malformed rows and cap length. */
-function ensureChatTodos(raw: unknown): ChatTodo[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  const out: ChatTodo[] = [];
-  for (const item of raw) {
-    if (!item || typeof item !== 'object') continue;
-    const row = item as Record<string, unknown>;
-    const text = typeof row.text === 'string' ? row.text.trim().slice(0, MAX_CHAT_TODO_TEXT_CHARS) : '';
-    if (!text) continue;
-    out.push({
-      text,
-      status: normalizeChatTodoStatus(row.status),
-    });
-    if (out.length >= MAX_CHAT_TODO_ITEMS) break;
-  }
-  return out.length ? out : undefined;
-}
-
-function ensureActiveGoal(raw: unknown): ActiveGoalState | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const goal = raw as Record<string, unknown>;
-  const conditionText =
-    typeof goal.conditionText === 'string' ? goal.conditionText.trim() : '';
-  if (!conditionText) return undefined;
-  return {
-    conditionText: conditionText.slice(0, MAX_GOAL_CONDITION_CHARS),
-    startedAt:
-      typeof goal.startedAt === 'number' && Number.isFinite(goal.startedAt)
-        ? goal.startedAt
-        : Date.now(),
-    turnCount:
-      typeof goal.turnCount === 'number' && Number.isFinite(goal.turnCount)
-        ? Math.max(0, Math.floor(goal.turnCount))
-        : 0,
-    tokenBaseline:
-      typeof goal.tokenBaseline === 'number' && Number.isFinite(goal.tokenBaseline)
-        ? Math.max(0, Math.floor(goal.tokenBaseline))
-        : 0,
-    ...(typeof goal.lastReason === 'string' && goal.lastReason.trim()
-      ? { lastReason: goal.lastReason.trim() }
-      : {}),
-    ...(goal.achieved === true ? { achieved: true } : {}),
-  };
-}
-
-function ensureActiveLoopRow(raw: unknown): ActiveLoopState | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const row = raw as Record<string, unknown>;
-  const id =
-    typeof row.id === 'number' && Number.isFinite(row.id)
-      ? Math.max(1, Math.floor(row.id))
-      : 0;
-  if (id < 1) return undefined;
-
-  const kind = row.kind === 'interval' || row.kind === 'auto' ? row.kind : null;
-  if (!kind) return undefined;
-
-  const promptText =
-    typeof row.promptText === 'string'
-      ? row.promptText.slice(0, MAX_LOOP_PROMPT_CHARS)
-      : '';
-
-  const dueAt =
-    typeof row.dueAt === 'number' && Number.isFinite(row.dueAt)
-      ? row.dueAt
-      : Date.now();
-  const createdAt =
-    typeof row.createdAt === 'number' && Number.isFinite(row.createdAt)
-      ? row.createdAt
-      : Date.now();
-  const expiresAt =
-    typeof row.expiresAt === 'number' && Number.isFinite(row.expiresAt)
-      ? row.expiresAt
-      : createdAt + 7 * 24 * 60 * 60 * 1000;
-  const runCount =
-    typeof row.runCount === 'number' && Number.isFinite(row.runCount)
-      ? Math.max(0, Math.floor(row.runCount))
-      : 0;
-
-  const loop: ActiveLoopState = {
-    id,
-    promptText,
-    kind,
-    dueAt,
-    createdAt,
-    expiresAt,
-    runCount,
-  };
-
-  if (kind === 'interval') {
-    const intervalMs =
-      typeof row.intervalMs === 'number' && Number.isFinite(row.intervalMs)
-        ? Math.max(MIN_LOOP_INTERVAL_MS, Math.floor(row.intervalMs))
-        : MIN_LOOP_INTERVAL_MS;
-    loop.intervalMs = intervalMs;
-  } else {
-    const currentDelayMs =
-      typeof row.currentDelayMs === 'number' && Number.isFinite(row.currentDelayMs)
-        ? Math.min(
-            3_600_000,
-            Math.max(MIN_LOOP_INTERVAL_MS, Math.floor(row.currentDelayMs)),
-          )
-        : INITIAL_LOOP_AUTO_DELAY_MS;
-    loop.currentDelayMs = currentDelayMs;
-  }
-
-  if (typeof row.lastOutputDigest === 'string' && row.lastOutputDigest.trim()) {
-    loop.lastOutputDigest = row.lastOutputDigest.trim();
-  }
-
-  if (row.paused === true) {
-    loop.paused = true;
-    if (
-      typeof row.pausedRemainingMs === 'number' &&
-      Number.isFinite(row.pausedRemainingMs)
-    ) {
-      loop.pausedRemainingMs = Math.max(0, Math.floor(row.pausedRemainingMs));
-    }
-  }
-
-  return loop;
-}
-
-function ensureActiveLoops(raw: unknown): ActiveLoopState[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  const out: ActiveLoopState[] = [];
-  const seen = new Set<number>();
-  for (const entry of raw) {
-    const loop = ensureActiveLoopRow(entry);
-    if (!loop || seen.has(loop.id)) continue;
-    seen.add(loop.id);
-    out.push(loop);
-  }
-  return out.length ? out : undefined;
-}
-
-function ensureSuperPlanPersisted(raw: unknown): SuperPlanState | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const sp = raw as Partial<SuperPlanState>;
-  if (typeof sp.slug !== 'string' || !sp.slug.trim()) return undefined;
-  if (typeof sp.prompt !== 'string') return undefined;
-  if (typeof sp.activeStage !== 'string' || !sp.activeStage.trim()) return undefined;
-  if (!sp.stages || typeof sp.stages !== 'object') return undefined;
-  return sp as SuperPlanState;
-}
-
+/** Coerce a chat row via the shared server/client schema (Phase B.1). */
 export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
-  if (!raw || typeof raw !== 'object') return createEmptyChatObject('');
-  const history = Array.isArray(raw.history)
-    ? raw.history.map(ensureMessageEntry).filter((x): x is Message => Boolean(x))
-    : [];
-  const subAgentRuns = ensurePersistedSubAgentRuns(raw.subAgentRuns);
-  const currentGenerationId = ensureCurrentGenerationId(raw.currentGenerationId);
-  const workspacePath =
-    typeof raw.workspacePath === 'string'
-      ? normalizeWorkspacePath(raw.workspacePath)
-      : '';
-  const orchestratePlanPath = normalizeOrchestratePlanPath(raw.orchestratePlanPath);
-  const orchestrateBoard = ensureOrchestrateBoard(raw.orchestrateBoard);
-  const runs = ensureTurnRuns(raw.runs);
-  const activeBranchByFork = ensureActiveBranchByFork(raw.activeBranchByFork);
-  let viewMode = ensureViewMode(raw.viewMode);
-  if (raw.modeId === 'debug' && viewMode === 'board') {
-    viewMode = 'chat';
-  }
-  const pinnedSkill = ensurePinnedSkill(raw.pinnedSkill);
-  const activeGoal = ensureActiveGoal(raw.activeGoal);
-  const activeLoops = ensureActiveLoops(raw.activeLoops);
-  const nextLoopId =
-    typeof raw.nextLoopId === 'number' && Number.isFinite(raw.nextLoopId)
-      ? Math.max(1, Math.floor(raw.nextLoopId))
-      : activeLoops?.length
-        ? Math.max(...activeLoops.map((loop) => loop.id)) + 1
-        : undefined;
-  const superPlan = ensureSuperPlanPersisted(raw.superPlan);
-  const todos = ensureChatTodos(raw.todos);
-  const todosUpdatedAt =
-    typeof raw.todosUpdatedAt === 'number' &&
-    Number.isFinite(raw.todosUpdatedAt) &&
-    raw.todosUpdatedAt > 0
-      ? raw.todosUpdatedAt
-      : undefined;
-  const pendingMessageQueue = ensurePendingMessageQueue(raw.pendingMessageQueue);
-  const pendingSteerMessage =
-    typeof raw.pendingSteerMessage === 'string' && raw.pendingSteerMessage.trim()
-      ? raw.pendingSteerMessage.trim()
-      : undefined;
-  const chat: Chat = {
-    id: typeof raw.id === 'string' && raw.id ? raw.id : newChatId(),
-    name:
-      typeof raw.name === 'string' && raw.name.trim()
-        ? raw.name.trim()
-        : PLACEHOLDER_CHAT_NAME,
-    ...(raw.appScope === 'email' ? { appScope: 'email' as const } : {}),
-    workspacePath,
-    modelId: typeof raw.modelId === 'string' ? raw.modelId : '',
-    providerId: typeof raw.providerId === 'string' ? raw.providerId : undefined,
-    modeId: normalizeModeId(raw.modeId),
-    ...(raw.expertSelection && typeof raw.expertSelection === 'object'
-      ? { expertSelection: ensureExpertSelection(raw.expertSelection) }
-      : {}),
-    workAgentId:
-      typeof raw.workAgentId === 'string' && raw.workAgentId.trim()
-        ? raw.workAgentId.trim()
-        : null,
-    workAgentAuto: raw.workAgentAuto !== false,
-    ...(raw.thinkingMode !== undefined
-      ? { thinkingMode: normalizeThinkingTriState(raw.thinkingMode) }
-      : {}),
-    ...(typeof raw.reasoningEffort === 'string' &&
-    REASONING_EFFORT_OPTIONS.has(raw.reasoningEffort as ReasoningEffortOption)
-      ? { reasoningEffort: raw.reasoningEffort as ReasoningEffortOption }
-      : {}),
-    ...(raw.uiDesignerMode === 'plan' || raw.uiDesignerMode === 'implement'
-      ? { uiDesignerMode: raw.uiDesignerMode }
-      : {}),
-    ...(typeof raw.pendingModeId === 'string' && isModeId(raw.pendingModeId)
-      ? { pendingModeId: raw.pendingModeId }
-      : {}),
-    ...(orchestratePlanPath ? { orchestratePlanPath } : {}),
-    ...(typeof raw.groupId === 'string' && raw.groupId.trim()
-      ? { groupId: raw.groupId.trim() }
-      : {}),
-    ...(typeof raw.boardGroupId === 'string' && raw.boardGroupId.trim()
-      ? { boardGroupId: raw.boardGroupId.trim() }
-      : {}),
-    ...(typeof raw.boardTaskId === 'string' && raw.boardTaskId.trim()
-      ? { boardTaskId: raw.boardTaskId.trim() }
-      : {}),
-    ...(typeof raw.worktreeRoot === 'string' && raw.worktreeRoot.trim()
-      ? { worktreeRoot: raw.worktreeRoot.trim() }
-      : {}),
-    ...(typeof raw.gitBranch === 'string' && raw.gitBranch.trim()
-      ? { gitBranch: raw.gitBranch.trim() }
-      : {}),
-    ...(raw.chatWorktreeManaged === true ? { chatWorktreeManaged: true } : {}),
-    ...(orchestrateBoard ? { orchestrateBoard } : {}),
-    ...(viewMode ? { viewMode } : {}),
-    terminalHistory: ensureTerminalHistory(raw.terminalHistory),
-    ...(subAgentRuns ? { subAgentRuns } : {}),
-    ...(runs ? { runs } : {}),
-    ...(activeBranchByFork ? { activeBranchByFork } : {}),
-    ...(currentGenerationId ? { currentGenerationId } : {}),
-    ...(raw.unread === true ? { unread: true } : {}),
-    ...(raw.turnError === true ? { turnError: true } : {}),
-    ...(typeof raw.lastAssistantAt === 'number' &&
-    Number.isFinite(raw.lastAssistantAt) &&
-    raw.lastAssistantAt > 0
-      ? { lastAssistantAt: raw.lastAssistantAt }
-      : {}),
-    history,
-    lastStats: raw.lastStats && typeof raw.lastStats === 'object' ? raw.lastStats : null,
-    modelInfo: raw.modelInfo && typeof raw.modelInfo === 'object' ? raw.modelInfo : {},
-    updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : Date.now(),
-    lastMessageAt:
-      typeof raw.lastMessageAt === 'number'
-        ? raw.lastMessageAt
-        : typeof raw.updatedAt === 'number'
-          ? raw.updatedAt
-          : Date.now(),
-    ...(raw.tokenLedger && typeof raw.tokenLedger === 'object'
-      ? { tokenLedger: raw.tokenLedger }
-      : {}),
-    ...(raw.kind === 'expert' ? { kind: 'expert' as const } : {}),
-    ...(raw.codeChangeTotals &&
-    typeof raw.codeChangeTotals === 'object' &&
-    Number.isFinite(Number(raw.codeChangeTotals.additions)) &&
-    Number.isFinite(Number(raw.codeChangeTotals.deletions))
-      ? {
-          codeChangeTotals: {
-            additions: Number(raw.codeChangeTotals.additions),
-            deletions: Number(raw.codeChangeTotals.deletions),
-          },
-        }
-      : {}),
-    ...(typeof raw.codeChangeBackfillAt === 'number' &&
-    Number.isFinite(raw.codeChangeBackfillAt)
-      ? { codeChangeBackfillAt: raw.codeChangeBackfillAt }
-      : {}),
-    ...(raw.kind === 'expert-lab' ? { kind: 'expert-lab' as const } : {}),
-    ...(typeof raw.expertId === 'string' && raw.expertId.trim()
-      ? { expertId: raw.expertId.trim() }
-      : {}),
-    ...(raw.expertRuntime && typeof raw.expertRuntime === 'object'
-      ? { expertRuntime: ensureExpertRuntime(raw.expertRuntime) }
-      : {}),
-    ...(pinnedSkill ? { pinnedSkill } : {}),
-    ...(activeGoal ? { activeGoal } : {}),
-    ...(activeLoops ? { activeLoops } : {}),
-    ...(nextLoopId ? { nextLoopId } : {}),
-    ...(superPlan ? { superPlan } : {}),
-    ...(todos ? { todos } : {}),
-    ...(todos && todosUpdatedAt ? { todosUpdatedAt } : {}),
-    ...(pendingMessageQueue ? { pendingMessageQueue } : {}),
-    ...(pendingSteerMessage ? { pendingSteerMessage } : {}),
-    ...(typeof raw.composerDraft === 'string' && raw.composerDraft
-      ? { composerDraft: raw.composerDraft }
-      : {}),
-    ...(raw.lastContextTrim && typeof raw.lastContextTrim === 'object'
-      ? { lastContextTrim: raw.lastContextTrim as Chat['lastContextTrim'] }
-      : {}),
-  };
+  // Shared allowlist — no client-only twin that can drift from validators.
+  const chat = normalizeChatRow(raw) as Chat;
   ensureTokenLedger(chat);
   return chat;
 }
@@ -1606,6 +510,7 @@ export function activateChatById(id: string): void {
   const chat = state.chats.find((c) => c.id === id);
   if (!chat) return;
   state.activeId = id;
+  markSessionScalarsDirty();
   maybeRememberActiveChatForForegroundApp(state, chat);
   scheduleSaveSessions();
 }
@@ -1734,6 +639,7 @@ function rememberActiveChatForWorkspaceKey(workspaceKey: string): void {
     state.lastActiveChatIdByWorkspace = {};
   }
   state.lastActiveChatIdByWorkspace[workspaceKey] = state.activeId;
+  markSessionScalarsDirty();
 }
 
 /** Persist the active chat when it belongs to the given project workspace (before desktop chat). */
@@ -1812,6 +718,7 @@ export function getListedEmailAssistantChats(
 export function rememberActiveChatForApp(appId: string, chatId: string): void {
   const state = requireSessionState();
   rememberActiveChatForAppInState(state, appId, chatId);
+  markSessionScalarsDirty();
   scheduleSaveSessions();
 }
 
@@ -1832,6 +739,7 @@ export function activateAssistantChatForApp(chatsWorkspacePath: string): Chat {
     return fresh;
   });
   state.activeId = nextId;
+  markSessionScalarsDirty();
   rememberActiveChatForAppInState(state, CHAT_APP_ID, nextId);
   scheduleSaveSessions();
   return getActiveChat();
@@ -1846,6 +754,7 @@ export function activateEmailAssistantChatForApp(chatsWorkspacePath: string): Ch
     (workspaceKey) => createEmailAssistantChat(workspaceKey, newChatId()),
   );
   state.activeId = nextId;
+  markSessionScalarsDirty();
   rememberActiveChatForAppInState(state, EMAIL_APP_ID, nextId);
   scheduleSaveSessions();
   return getActiveChat();
@@ -1864,6 +773,8 @@ export function createEmailAssistantChatForApp(
   );
   state.chats.unshift(chat);
   state.activeId = chat.id;
+  markSessionScalarsDirty();
+  touchChat(chat);
   pruneEphemeralEmptyChats(state, chat.id);
   rememberActiveChatForAppInState(state, EMAIL_APP_ID, chat.id);
   scheduleSaveSessions();
@@ -1904,6 +815,7 @@ export function activateDesktopAssistantChatForApp(desktopWorkspacePath: string)
     }
   }
   state.activeId = nextId;
+  markSessionScalarsDirty();
   rememberActiveChatForAppInState(state, DESKTOP_APP_ID, nextId);
   scheduleSaveSessions();
   return getActiveChat();
@@ -1952,6 +864,7 @@ export function onWorkspaceChanged(
   const nextId = resolveActiveChatIdForWorkspace(newPath, state, fallbackModelId);
   const activeChanged = state.activeId !== nextId;
   state.activeId = nextId;
+  markSessionScalarsDirty();
   rememberActiveChatForWorkspaceKey(normalizeWorkspacePath(newPath));
   scheduleSaveSessions();
   return { activeChat: getActiveChat(), activeChanged };
@@ -2001,6 +914,8 @@ export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Pr
       sessionState = defaultSessionState();
     }
   } finally {
+    clearSessionDirtySets();
+    captureDirtyTrackingShadow(sessionState);
     markSessionsReady();
   }
 }
@@ -2030,6 +945,8 @@ export function getActiveChat(): Chat {
 
 export function touchChat(chat: Chat): void {
   chat.updatedAt = Date.now();
+  // Entire chat dirty mechanism for B.2 PATCH telemetry (B.1 still PUTs whole blob).
+  dirtyChatIds.add(chat.id);
 }
 
 /** Store a new /goal completion condition on the chat. */
@@ -2212,6 +1129,8 @@ export function clearActiveLoops(chat: Chat): void {
 export function recordChatMessage(chat: Chat): void {
   const now = Date.now();
   chat.lastMessageAt = now;
+  // touchChat sets updatedAt + dirtyChatIds (do not bypass dirty tracking).
+  touchChat(chat);
   chat.updatedAt = now;
 }
 
@@ -2222,6 +1141,9 @@ export type SaveSessionsOptions = {
 
 export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResult {
   if (!sessionState) return 'ok';
+
+  // B.1 telemetry: detect unmarked chat mutations in DEV (still PUT whole blob).
+  verifyDirtyChatTracking(sessionState);
 
   if (isServerStorageMode()) {
     if (!sessionsHydratedFromServer) {
@@ -2234,12 +1156,16 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
         setStatus('err', 'Could not save sessions to ~/.minnow');
       });
     }
+    clearSessionDirtySets();
+    captureDirtyTrackingShadow(sessionState);
     void import('../ui/hub').then((m) => m.refreshHubLiveData());
     return 'ok';
   }
 
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sessionState));
+    clearSessionDirtySets();
+    captureDirtyTrackingShadow(sessionState);
     void import('../ui/hub').then((m) => m.refreshHubLiveData());
     return 'ok';
   } catch (e) {
@@ -2251,7 +1177,10 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
   }
 }
 
-export function scheduleSaveSessions(): void {
+export function scheduleSaveSessions(hint?: { chatId?: string; groupId?: string }): void {
+  // Opportunistic dirty hints for callers that know what changed (B.2-ready).
+  if (hint?.chatId?.trim()) dirtyChatIds.add(hint.chatId.trim());
+  if (hint?.groupId?.trim()) dirtyGroupIds.add(hint.groupId.trim());
   if (saveTimer) clearTimeout(saveTimer);
   setSaveTimer(
     setTimeout(() => {
@@ -2293,6 +1222,7 @@ export function createAndActivateChat(modelId: string): Chat {
   const chat = createEmptyChatObject(modelId);
   state.chats.unshift(chat);
   state.activeId = chat.id;
+  markSessionScalarsDirty();
   touchChat(chat);
   rememberActiveChatForWorkspaceKey(normalizeWorkspacePath(chat.workspacePath));
   maybeRememberActiveChatForForegroundApp(state, chat);
@@ -2310,6 +1240,7 @@ export function switchActiveChat(id: string): Chat | null {
   const chat = state.chats.find((c) => c.id === id);
   if (!chat) return null;
   state.activeId = id;
+  markSessionScalarsDirty();
   rememberActiveChatForWorkspaceKey(normalizeWorkspacePath(chat.workspacePath ?? ''));
   maybeRememberActiveChatForForegroundApp(state, chat);
   scheduleSaveSessions();
@@ -2338,6 +1269,7 @@ export function setActiveChatModelId(modelId: string): void {
 export function toggleSidebarCollapsedState(): boolean {
   const state = requireSessionState();
   state.sidebarCollapsed = !state.sidebarCollapsed;
+  markSessionScalarsDirty();
   scheduleSaveSessions();
   return state.sidebarCollapsed;
 }
@@ -2345,6 +1277,7 @@ export function toggleSidebarCollapsedState(): boolean {
 export function setSidebarCollapsed(collapsed: boolean): void {
   const state = requireSessionState();
   state.sidebarCollapsed = collapsed;
+  markSessionScalarsDirty();
   scheduleSaveSessions();
 }
 
@@ -2381,6 +1314,10 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
   }
 
   state.chats.splice(idx, 1);
+  deletedChatIds.add(chatId);
+  if (boardGroup) {
+    markGroupDirty(boardGroup.id);
+  }
 
   const victimWorkspace = normalizeWorkspacePath(victim.workspacePath ?? '');
   let activeChanged = wasActive;
@@ -2388,16 +1325,19 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
     const fresh = createEmptyChatObject(fallbackModelId, victimWorkspace);
     state.chats.push(fresh);
     state.activeId = fresh.id;
+    markSessionScalarsDirty();
     touchChat(fresh);
     activeChanged = true;
   } else if (wasActive) {
     const inWorkspace = getSidebarListedChatsForWorkspace(victimWorkspace, state);
     if (inWorkspace.length) {
       state.activeId = inWorkspace[0]!.id;
+      markSessionScalarsDirty();
     } else {
       const fresh = createEmptyChatObject(fallbackModelId, victimWorkspace);
       state.chats.push(fresh);
       state.activeId = fresh.id;
+      markSessionScalarsDirty();
       touchChat(fresh);
     }
     activeChanged = true;
@@ -2422,5 +1362,6 @@ export function applyGeneratedChatTitle(chatId: string, title: string): boolean 
   const trimmed = title.trim();
   if (!trimmed) return false;
   chat.name = trimmed;
+  touchChat(chat);
   return true;
 }

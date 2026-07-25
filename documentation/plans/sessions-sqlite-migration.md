@@ -13,7 +13,7 @@
 - [x] **A.2** — `sessions-repo.js` whole-blob R/W + `store.js` cutover + allowlist removal + export-json + JSON mirror
 - [x] **A.3** — Eight server consumers → narrow queries
 - [x] **B.0** — Validator decomposition + `PATCH /api/config/sessions` + headless convert
-- [ ] **B.1** — Shared `session-schema.mjs` + dirty tracking (telemetry only)
+- [x] **B.1** — Shared `session-schema.mjs` + dirty tracking (telemetry only)
 - [ ] **B.2** — Flip to PATCH + beacon size branch
 - [ ] **C.1** — Summaries + `ensureChatHistoryLoaded` + dev trap (flag off)
 - [ ] **C.2** — FTS5 search route, delete `task-history-trim.ts`, flip flag
