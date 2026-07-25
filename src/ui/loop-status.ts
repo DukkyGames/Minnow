@@ -332,5 +332,6 @@ export function syncLoopStatusUi(chatId?: string): void {
 
 /** Back-compat alias used across boot, ticker, and composer paths. */
 export function syncLoopActiveHint(): void {
+  if (typeof document === 'undefined') return;
   syncLoopStatusUi(getActiveChat().id);
 }

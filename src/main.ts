@@ -364,7 +364,7 @@ export async function initApp(): Promise<void> {
   renderSidebar();
   bootstrapActiveChatOpenedTimestamp();
 
-  // Session-scoped /loop ticker (15s scan; survives reload via persisted dueAt)
+  // Session-scoped /loop ticker (15s safety scan + dueAt wake timer)
   const { startLoopTicker } = await import('./chat/loop/ticker');
   const { sendProgrammaticChatText } = await import('./tools/loop');
   startLoopTicker({

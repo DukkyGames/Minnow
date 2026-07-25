@@ -2,9 +2,12 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import {
   advanceLoopSchedule,
+  computeLoopWakeDelayMs,
+  findNextLoopWakeAt,
   isLoopDue,
   isLoopExpired,
   runLoopTick,
+  startLoopTicker,
   stopLoopTicker,
 } from '../../src/chat/loop/ticker.ts';
 import { clearLoopAwaitingPace } from '../../src/chat/loop/pacing.ts';
@@ -247,5 +250,70 @@ describe('loop ticker', () => {
     });
 
     assert.equal(result.fired, 0);
+  });
+
+  test('findNextLoopWakeAt ignores paused and expired loops', () => {
+    const chat = makeChat(CHAT_A);
+    addActiveLoop(chat, {
+      promptText: 'paused',
+      kind: 'interval',
+      intervalMs: 60_000,
+      dueAt: FIXED_NOW + 5_000,
+      createdAt: FIXED_NOW,
+      expiresAt: FIXED_NOW + 7 * 86_400_000,
+    });
+    addActiveLoop(chat, {
+      promptText: 'due soon',
+      kind: 'interval',
+      intervalMs: 60_000,
+      dueAt: FIXED_NOW + 2_000,
+      createdAt: FIXED_NOW,
+      expiresAt: FIXED_NOW + 7 * 86_400_000,
+    });
+    addActiveLoop(chat, {
+      promptText: 'expired',
+      kind: 'interval',
+      intervalMs: 60_000,
+      dueAt: FIXED_NOW - 1,
+      createdAt: FIXED_NOW - 8 * 86_400_000,
+      expiresAt: FIXED_NOW - 100,
+    });
+    getActiveLoops(chat)[0].paused = true;
+
+    assert.equal(findNextLoopWakeAt([chat], FIXED_NOW), FIXED_NOW + 2_000);
+  });
+
+  test('computeLoopWakeDelayMs returns retry when overdue', () => {
+    assert.equal(computeLoopWakeDelayMs(FIXED_NOW + 5_000, FIXED_NOW), 5_000);
+    assert.equal(computeLoopWakeDelayMs(FIXED_NOW - 1, FIXED_NOW), 1_000);
+  });
+
+  test('wake timer fires when dueAt arrives (not only on 15s poll)', async () => {
+    const chat = makeChat(CHAT_A);
+    const dueAt = Date.now() + 200;
+    addActiveLoop(chat, {
+      promptText: 'wake me',
+      kind: 'interval',
+      intervalMs: 60_000,
+      dueAt,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 7 * 86_400_000,
+    });
+    seedChats(chat);
+
+    const sent: string[] = [];
+    startLoopTicker({
+      intervalMs: 60_000,
+      send: async (_c, text) => {
+        sent.push(text);
+      },
+    });
+
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 500);
+    });
+
+    stopLoopTicker();
+    assert.deepEqual(sent, ['wake me']);
   });
 });

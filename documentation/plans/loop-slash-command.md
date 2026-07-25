@@ -6,7 +6,7 @@ Session-scoped repeating prompts in the live chat (complement to `/goal` and the
 
 - [x] Parser + `ActiveLoopState` + session accessors + `/loop` dispatch
 - [x] `sendProgrammaticChatText` refactor (slash/skill resolution for fires)
-- [x] Fixed-interval ticker (15s scan, idle gate, expiry, one-fire-per-chat)
+- [x] Fixed-interval ticker (dueAt wake timer + 15s safety scan, idle gate, expiry, one-fire-per-chat)
 - [x] Self-pacing (`maybeRescheduleLoopsAfterTurn`)
 - [x] Maintenance `/loop` + `.minnow/loop.md` fallback
 - [x] Slash registry + composer hint + `/clear` + goal exclusivity
@@ -28,7 +28,7 @@ Session-scoped repeating prompts in the live chat (complement to `/goal` and the
 
 ## Manual verification
 
-1. `/loop 1m say the current time` — arms, fires within ~15s, then ~every minute while idle
+1. `/loop 1m say the current time` — arms, fires when countdown hits zero, then ~every minute while idle
 2. Manual message mid-interval — loop defers until idle
 3. Loop panel in chat — countdown, edit interval, stop with ×; list/stop slash removed
 4. Auto loop — `currentDelayMs` doubles when output unchanged

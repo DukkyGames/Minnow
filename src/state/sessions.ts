@@ -2082,6 +2082,15 @@ export interface AddActiveLoopInput {
   expiresAt: number;
 }
 
+/** Ask loop ticker to reschedule its next wake after dueAt changes. */
+function notifyLoopTickerScheduleChanged(): void {
+  void import('../chat/loop/ticker')
+    .then((mod) => mod.notifyLoopScheduleChanged())
+    .catch(() => {
+      // Ticker not started yet (tests / headless) — ignore.
+    });
+}
+
 /** Arm a new /loop on the chat; returns the stored row. */
 export function addActiveLoop(chat: Chat, input: AddActiveLoopInput): ActiveLoopState {
   const id = chat.nextLoopId && chat.nextLoopId > 0
@@ -2117,6 +2126,7 @@ export function addActiveLoop(chat: Chat, input: AddActiveLoopInput): ActiveLoop
   chat.nextLoopId = id + 1;
   touchChat(chat);
   scheduleSaveSessions();
+  notifyLoopTickerScheduleChanged();
   return loop;
 }
 
@@ -2127,6 +2137,7 @@ export function removeActiveLoop(chat: Chat, target: number | 'all'): void {
     chat.activeLoops = undefined;
     touchChat(chat);
     scheduleSaveSessions();
+    notifyLoopTickerScheduleChanged();
     return;
   }
   const next = chat.activeLoops.filter((loop) => loop.id !== target);
@@ -2134,6 +2145,7 @@ export function removeActiveLoop(chat: Chat, target: number | 'all'): void {
   chat.activeLoops = next.length ? next : undefined;
   touchChat(chat);
   scheduleSaveSessions();
+  notifyLoopTickerScheduleChanged();
 }
 
 /** Patch fields on a single active loop (schedule / pacing). */
@@ -2148,12 +2160,14 @@ export function updateActiveLoop(
   chat.activeLoops[index] = { ...chat.activeLoops[index], ...patch, id };
   touchChat(chat);
   scheduleSaveSessions();
+  notifyLoopTickerScheduleChanged();
 }
 
 /** Persist after in-place loop mutations that already updated the array. */
 export function touchActiveLoops(chat: Chat): void {
   touchChat(chat);
   scheduleSaveSessions();
+  notifyLoopTickerScheduleChanged();
 }
 
 /** Read active loops (empty array when none). */

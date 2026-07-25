@@ -28,13 +28,18 @@ import {
   markLoopAwaitingPace,
 } from './pacing';
 
-/** Poll interval matching the server scheduler tick. */
+/** Poll interval matching the server scheduler tick (safety net). */
 export const LOOP_TICK_INTERVAL_MS = 15_000;
+
+/** Retry when a loop is past due but the chat is still busy. */
+const OVERDUE_LOOP_RETRY_MS = 1_000;
 
 export type LoopSendFn = (chat: Chat, text: string) => Promise<void>;
 
 let tickTimer: ReturnType<typeof setInterval> | null = null;
+let wakeTimer: ReturnType<typeof setTimeout> | null = null;
 let ticking = false;
+let tickerStarted = false;
 let sendFn: LoopSendFn | null = null;
 
 /** Inject send implementation (tests / boot wiring). */
@@ -59,6 +64,70 @@ export function isLoopExpired(loop: ActiveLoopState, now: number): boolean {
 /** True when a loop's dueAt has arrived. */
 export function isLoopDue(loop: ActiveLoopState, now: number): boolean {
   return loop.dueAt <= now;
+}
+
+/** Earliest dueAt among active, unpaused, unexpired loops (null when none). */
+export function findNextLoopWakeAt(
+  chats: Chat[],
+  now = Date.now(),
+): number | null {
+  let next: number | null = null;
+
+  for (const chat of chats) {
+    for (const loop of getActiveLoops(chat)) {
+      if (isLoopPaused(loop)) continue;
+      if (isLoopExpired(loop, now)) continue;
+      if (next == null || loop.dueAt < next) {
+        next = loop.dueAt;
+      }
+    }
+  }
+
+  return next;
+}
+
+/** Delay until the next wake; overdue loops retry quickly while waiting for idle. */
+export function computeLoopWakeDelayMs(
+  nextDueAt: number,
+  now = Date.now(),
+): number {
+  const untilDue = nextDueAt - now;
+  if (untilDue > 0) return untilDue;
+  return OVERDUE_LOOP_RETRY_MS;
+}
+
+function clearLoopWakeTimer(): void {
+  if (wakeTimer != null) {
+    clearTimeout(wakeTimer);
+    wakeTimer = null;
+  }
+}
+
+function scheduleLoopWake(): void {
+  clearLoopWakeTimer();
+  if (!tickerStarted) return;
+
+  const chats = sessionState?.chats ? [...sessionState.chats] : [];
+  const now = Date.now();
+  const nextDueAt = findNextLoopWakeAt(chats, now);
+  if (nextDueAt == null) return;
+
+  const delayMs = computeLoopWakeDelayMs(nextDueAt, now);
+  wakeTimer = setTimeout(() => {
+    wakeTimer = null;
+    void runLoopTick().catch((err) => {
+      console.warn(
+        '[loop] wake tick failed:',
+        err instanceof Error ? err.message : err,
+      );
+    });
+  }, delayMs);
+}
+
+/** Reschedule the precise wake timer after loop dueAt changes. */
+export function notifyLoopScheduleChanged(): void {
+  if (!tickerStarted) return;
+  scheduleLoopWake();
 }
 
 /**
@@ -195,6 +264,7 @@ export async function runLoopTick(options: {
     }
   } finally {
     ticking = false;
+    notifyLoopScheduleChanged();
   }
 
   return { fired, expired, skipped: null };
@@ -210,6 +280,7 @@ export function startLoopTicker(options: {
   }
   if (tickTimer != null) return;
 
+  tickerStarted = true;
   const intervalMs = options.intervalMs ?? LOOP_TICK_INTERVAL_MS;
   const tick = () => {
     void runLoopTick().catch((err) => {
@@ -222,6 +293,7 @@ export function startLoopTicker(options: {
   tickTimer = setInterval(tick, intervalMs);
   // Catch up soon after boot without waiting a full interval
   tick();
+  scheduleLoopWake();
 }
 
 /** Stop the ticker (tests / shutdown). */
@@ -230,5 +302,7 @@ export function stopLoopTicker(): void {
     clearInterval(tickTimer);
     tickTimer = null;
   }
+  clearLoopWakeTimer();
+  tickerStarted = false;
   ticking = false;
 }

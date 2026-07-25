@@ -77,7 +77,7 @@ export function handleLoopCommand(
     intervalMs: parsed.intervalMs,
     currentDelayMs:
       parsed.loopKind === 'auto' ? INITIAL_LOOP_AUTO_DELAY_MS : undefined,
-    // First fire on the next ticker scan (~15s)
+    // First fire when dueAt arrives (wake timer; 15s poll is a safety net)
     dueAt: now,
     createdAt: now,
     expiresAt: now + LOOP_TTL_MS,
