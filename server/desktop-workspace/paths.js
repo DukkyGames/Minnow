@@ -5,8 +5,11 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { readConfigJson, writeConfigJson } from '../config/store.js';
+import { mergeConfigMeta } from '../config/validators.js';
 import { getMinnowHome } from '../config/home.js';
 import { isResolvedPathUnderRoot } from '../workspace/safe-path.js';
+import { touchRecentWorkspacePath, validateWorkspacePath } from '../workspace/root.js';
 
 const DESKTOP_DIR_NAME = 'workspace';
 
@@ -19,9 +22,71 @@ This directory is the sandbox for MinnowOS desktop chat — attachments, notes, 
 - Do not store secrets here if you sync or share ~/.minnow.
 `;
 
-/** Absolute path to ~/.minnow/workspace (created on bootstrap). */
-export function getDesktopWorkspacePath() {
+/** Default sandbox under ~/.minnow/workspace (created on bootstrap). */
+function getDefaultDesktopWorkspacePath() {
   return path.join(getMinnowHome(), DESKTOP_DIR_NAME);
+}
+
+/** Active desktop chat workspace root (lazy — set on init or first read). */
+let desktopWorkspaceRoot = null;
+
+/** Reset in-memory desktop workspace path (tests only). */
+export function resetDesktopWorkspacePathForTests() {
+  desktopWorkspaceRoot = null;
+}
+
+/** Absolute path to the default desktop sandbox directory. */
+export function getDefaultDesktopSandboxPath() {
+  return getDefaultDesktopWorkspacePath();
+}
+
+/** Absolute path to the active desktop chat workspace. */
+export function getDesktopWorkspacePath() {
+  return desktopWorkspaceRoot ?? getDefaultDesktopWorkspacePath();
+}
+
+/**
+ * Load persisted desktop workspace from ~/.minnow/config.json (falls back to sandbox).
+ * @returns {Promise<string>}
+ */
+export async function initDesktopWorkspacePath() {
+  const meta = (await readConfigJson('config.json')) ?? {};
+  const saved =
+    meta.desktopWorkspace &&
+    typeof meta.desktopWorkspace === 'object' &&
+    typeof meta.desktopWorkspace.path === 'string'
+      ? meta.desktopWorkspace.path
+      : null;
+
+  if (saved && saved.trim()) {
+    try {
+      desktopWorkspaceRoot = await validateWorkspacePath(saved);
+      return desktopWorkspaceRoot;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[desktop-workspace] Ignoring invalid saved path: ${message}`);
+    }
+  }
+
+  desktopWorkspaceRoot = getDefaultDesktopWorkspacePath();
+  return desktopWorkspaceRoot;
+}
+
+/**
+ * Set desktop chat workspace root in memory and persist to config.json.
+ * @param {string} userPath
+ * @returns {Promise<string>} absolute path
+ */
+export async function setDesktopWorkspacePath(userPath) {
+  const resolved = await validateWorkspacePath(userPath);
+  desktopWorkspaceRoot = resolved;
+  const meta = (await readConfigJson('config.json')) ?? {};
+  const merged = mergeConfigMeta(meta, {
+    desktopWorkspace: { path: resolved },
+  });
+  await writeConfigJson('config.json', merged);
+  await touchRecentWorkspacePath(resolved);
+  return resolved;
 }
 
 /**
@@ -29,7 +94,7 @@ export function getDesktopWorkspacePath() {
  * @returns {Promise<string>} absolute desktop workspace path
  */
 export async function ensureDesktopWorkspace() {
-  const root = getDesktopWorkspacePath();
+  const root = getDefaultDesktopWorkspacePath();
   await fs.mkdir(root, { recursive: true });
 
   const readmePath = path.join(root, 'README.md');
