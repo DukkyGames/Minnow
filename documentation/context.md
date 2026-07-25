@@ -288,6 +288,8 @@ State: `Chat.orchestratePlanPath`, `ChatGroup.orchestrateBoard`, [`src/ui/orches
 
 **Board view browse root (MIN-464):** When board view is active and worktree isolation is on, the file explorer, terminal, and Source Control browse cwd follow the board **integration worktree** (not per-task chat worktrees). Chat view continues to sync browse cwd from the active chat's composer run-target. Helpers: [`resolveBoardIntegrationWorktreePath`](../src/state/worktree-isolation.ts), [`syncPanelFromActiveChat`](../src/ui/git-panel.ts).
 
+**Pipeline holds (MIN-409):** Non-streaming merge/fixer phases occupy a concurrency slot via ref-counted holds in [`src/state/orchestrate-pipeline-holds.ts`](../src/state/orchestrate-pipeline-holds.ts) (WeakMap keyed by board object identity; TTL-on-read + sweep). `countRunningTaskChats` counts chat slots plus hold-only tasks; `isTaskStalledForRestart` treats held tasks as not stalled. The running-tasks strip shows a non-interactive **Merging** chip for hold-only slots. Sequential → AFK pins `maxConcurrentTasks` to 1 when unset (`setBoardExecutionMode`).
+
 ### Experts
 
 Personas under `src/chat/prompts/experts/<id>/`. Chats: `Chat.kind === 'expert'`, memory under `pages/experts/<id>/facts/`. UI: Experts' Lab on desktop + `#/experts`.

@@ -17,6 +17,8 @@ import {
   drainTaskQueueForTests,
   enqueueTaskForTests,
   finalizeBoardTaskOnStreamEnd,
+  finalizeTaskTestingOnStreamEnd,
+  getPipelineHoldsForTests,
   getTaskQueueForTests,
   MAX_STOP_RETRY_ATTEMPTS,
   releaseLaunchSlotForTests,
@@ -24,9 +26,13 @@ import {
   resolveTaskChatStopReason,
   resolveTaskChatStreamOutcome,
   trackDrainResumeCallsForTests,
+  autoDelegateNext,
+  isTaskChatActiveForStallCheck,
 } from '../../src/state/orchestrate-board-actions.ts';
 import { initBoard, isTaskStalledForRestart, markBoardTaskInProgressFromChat, updateTask } from '../../src/state/orchestrate-board-store.ts';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
+import { setLocalServerAvailableForTests } from '../../src/tools/config.ts';
+import { cleanMergeMocks, mockWorktreeOpsGated } from './_board-flow-helpers.mts';
 import type { Chat, ChatGroup } from '../../src/types.ts';
 
 const PLANNER_ID = '11111111-1111-1111-1111-111111111111';
@@ -684,5 +690,154 @@ describe('build→test handoff slot accounting', () => {
     const resumed = trackDrainResumeCallsForTests(false);
     assert.deepEqual(resumed, ['W1-B']);
     assert.deepEqual(getTaskQueueForTests(GROUP_ID), []);
+  });
+});
+
+describe('pipeline merge hold blocks queue drain', () => {
+  let restoreFetch: (() => void) | undefined;
+  let releaseMerge: (() => void) | undefined;
+
+  beforeEach(() => {
+    setSessionStateForTests(null);
+    clearTaskQueuesForTests();
+    releaseLaunchSlotForTests(TEST_CHAT_ID);
+    releaseLaunchSlotForTests(TASK_CHAT_ID);
+    setLocalServerAvailableForTests(true);
+    const gated = mockWorktreeOpsGated(cleanMergeMocks(), ['merge']);
+    restoreFetch = gated.restore;
+    releaseMerge = () => gated.release('merge');
+  });
+
+  afterEach(() => {
+    restoreFetch?.();
+    restoreFetch = undefined;
+    releaseMerge = undefined;
+    setLocalServerAvailableForTests(false);
+    clearTaskQueuesForTests();
+  });
+
+  function makeSequentialMergeGroup(): { group: ChatGroup; planner: Chat } {
+    const planner = makePlanner();
+    const group: ChatGroup = {
+      id: GROUP_ID,
+      name: 'Board',
+      workspacePath: '/tmp/ws',
+      collapsed: false,
+      order: 0,
+      plannerChatId: PLANNER_ID,
+      orchestratePlanPath: 'documentation/plans/test.md',
+      viewMode: 'board',
+    };
+    initBoard(group, planner, {
+      planPath: 'documentation/plans/test.md',
+      tasks: [
+        { id: 'W1-A', title: 'First', wave: 'W1', category: 'build' },
+        { id: 'W1-B', title: 'Second', wave: 'W1', category: 'build' },
+      ],
+      waves: [{ id: 'W1', status: 'in_progress' }],
+    });
+    const board = group.orchestrateBoard!;
+    board.executionMode = 'sequential';
+    board.autoRunning = true;
+    board.maxConcurrentTasks = 1;
+    board.integrationBranch = 'minnow/integration/grp_11111111';
+    updateTask(
+      group,
+      'W1-A',
+      {
+        status: 'testing',
+        chatId: TASK_CHAT_ID,
+        testChatId: TEST_CHAT_ID,
+        worktreeBranch: 'minnow/board/W1-A',
+        boardReport: { outcome: 'pass', summary: 'ok' },
+      },
+      planner,
+    );
+    updateTask(group, 'W1-B', { status: 'planned' }, planner);
+    enqueueTaskForTests(GROUP_ID, 'W1-B');
+    setSessionStateForTests({ chats: [planner], groups: [group], activeChatId: PLANNER_ID });
+    return { group, planner };
+  }
+
+  test('gated merge blocks T2 until T1 completes', async () => {
+    const { group, planner } = makeSequentialMergeGroup();
+    const board = group.orchestrateBoard!;
+    const task = board.tasks.find((t) => t.id === 'W1-A')!;
+    reserveLaunchSlotForTests(TEST_CHAT_ID);
+
+    trackDrainResumeCallsForTests(true);
+    const finalizePromise = finalizeTaskTestingOnStreamEnd(group, task, planner);
+    assert.equal(countRunningTaskChats(board), 1);
+
+    releaseLaunchSlotForTests(TEST_CHAT_ID);
+    await drainTaskQueueForTests(group, planner);
+    const resumedWhileGated = trackDrainResumeCallsForTests(false);
+    assert.deepEqual(resumedWhileGated, []);
+    assert.deepEqual(getTaskQueueForTests(GROUP_ID), ['W1-B']);
+    assert.equal(board.tasks.find((t) => t.id === 'W1-A')!.status, 'testing');
+
+    releaseMerge!();
+    await finalizePromise;
+    assert.equal(board.tasks.find((t) => t.id === 'W1-A')!.status, 'complete');
+    assert.equal(getPipelineHoldsForTests(board).length, 0);
+
+    trackDrainResumeCallsForTests(true);
+    await drainTaskQueueForTests(group, planner);
+    const resumedAfter = trackDrainResumeCallsForTests(false);
+    assert.deepEqual(resumedAfter, ['W1-B']);
+  });
+
+  test('countRunningTaskChats is 1 while merge gated, 0 after settle', async () => {
+    const { group, planner } = makeSequentialMergeGroup();
+    const board = group.orchestrateBoard!;
+    const task = board.tasks.find((t) => t.id === 'W1-A')!;
+    reserveLaunchSlotForTests(TEST_CHAT_ID);
+
+    const finalizePromise = finalizeTaskTestingOnStreamEnd(group, task, planner);
+    assert.equal(countRunningTaskChats(board), 1);
+    releaseLaunchSlotForTests(TEST_CHAT_ID);
+    assert.equal(countRunningTaskChats(board), 1);
+
+    releaseMerge!();
+    await finalizePromise;
+    assert.equal(countRunningTaskChats(board), 0);
+  });
+
+  test('autoDelegateNext does not relaunch Tester mid-merge', async () => {
+    const { group, planner } = makeSequentialMergeGroup();
+    const board = group.orchestrateBoard!;
+    const task = board.tasks.find((t) => t.id === 'W1-A')!;
+    reserveLaunchSlotForTests(TEST_CHAT_ID);
+
+    const finalizePromise = finalizeTaskTestingOnStreamEnd(group, task, planner);
+    releaseLaunchSlotForTests(TEST_CHAT_ID);
+    assert.equal(
+      isTaskStalledForRestart(board, task, isTaskChatActiveForStallCheck),
+      false,
+    );
+    await autoDelegateNext(group, planner);
+    assert.equal(board.tasks.find((t) => t.id === 'W1-A')!.status, 'testing');
+
+    releaseMerge!();
+    await finalizePromise;
+  });
+
+  test('merge error early return releases hold', async () => {
+    restoreFetch?.();
+    restoreFetch = undefined;
+    const saved = globalThis.fetch;
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({ ok: false, error: 'merge_failed' }),
+    });
+    const { group, planner } = makeSequentialMergeGroup();
+    const board = group.orchestrateBoard!;
+    const task = board.tasks.find((t) => t.id === 'W1-A')!;
+    await finalizeTaskTestingOnStreamEnd(group, task, planner);
+    assert.equal(
+      getPipelineHoldsForTests(board).filter((h) => h.reason === 'merge').length,
+      0,
+    );
+    globalThis.fetch = saved;
   });
 });
