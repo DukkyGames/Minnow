@@ -82,7 +82,9 @@ Minnow/
 
 **Secrets:** AES-256-GCM at rest; key file `~/.minnow/.key` (`0o600`). Rotating or deleting `.key` makes encrypted secrets unrecoverable.
 
-**Canonical session store:** `sessions/state.json` — single blob for all chats (not per-chat files). Server `validateSessionState` / client `ensureChatShape` keep the full Chat allowlist (including todos, token ledger, pending queues, etc. via named passthrough on the server); there is no `MAX_CHATS` hard-trim on save. Kitchen-sink contract: [`test/fixtures/migration/kitchen-sink-sessions-state.json`](../test/fixtures/migration/kitchen-sink-sessions-state.json).
+**Canonical session store (HTTP):** `sessions/state.json` — single blob for all chats (not per-chat files). Server `validateSessionState` / client `ensureChatShape` keep the full Chat allowlist (including todos, token ledger, pending queues, etc. via named passthrough on the server); there is no `MAX_CHATS` hard-trim on save. Kitchen-sink contract: [`test/fixtures/migration/kitchen-sink-sessions-state.json`](../test/fixtures/migration/kitchen-sink-sessions-state.json).
+
+**Sessions SQLite (Phase A.1, not product-facing yet):** `sessions/sessions.db` is created on first `getSessionsDb()` with a one-time import from `state.json` (renamed to `state.json.migrated` after integrity checks). HTTP `/api/config/sessions` still reads/writes `state.json` until Phase A.2 cutover — see [`plans/sessions-sqlite-migration.md`](plans/sessions-sqlite-migration.md).
 
 Full directory map: [`guides/configuration.md`](guides/configuration.md). Notable paths:
 
