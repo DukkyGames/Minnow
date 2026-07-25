@@ -766,6 +766,56 @@ export interface QueuedComposerMessage {
   createdAt: number;
 }
 
+/**
+ * Sidebar / list row for a chat without message bodies (Phase C.1).
+ * Every field maps to a `chats` column; `messageCount` and `lastMessagePreview`
+ * are denormalized on write so list queries avoid a correlated subquery.
+ * Do not make {@link Chat.history} optional — inflate with `history: []` + `historyLoaded: false`.
+ */
+export interface ChatSummary {
+  id: string;
+  name: string;
+  kind?: ChatKind;
+  appScope?: ChatAppScope;
+  expertId?: string;
+  workspacePath: string;
+  providerId?: string;
+  modelId: string;
+  modeId?: ModeId;
+  groupId?: string;
+  boardGroupId?: string;
+  boardTaskId?: string;
+  worktreeRoot?: string;
+  gitBranch?: string;
+  updatedAt: number;
+  lastMessageAt?: number;
+  lastAssistantAt?: number;
+  unread?: boolean;
+  turnError?: boolean;
+  /** Denormalized COUNT of messages rows for this chat. */
+  messageCount: number;
+  /** Denormalized preview of the last message body (truncated). */
+  lastMessagePreview: string;
+  /** Sidebar order column (`chats.sort_index`). */
+  sortIndex?: number;
+  /** SHA-256 digest of message row hashes (skip sync when unchanged). */
+  historyDigest?: string;
+}
+
+/** Session blob from GET /api/config/sessions/summaries (chats omit `history`). */
+export interface SessionSummariesState {
+  version: SessionSchemaVersion;
+  activeId: string | null;
+  sidebarCollapsed: boolean;
+  sidebarWidth?: number;
+  chats: ChatSummary[];
+  groups?: ChatGroup[];
+  activeBoardGroupId?: string;
+  lastActiveChatIdByWorkspace?: Record<string, string>;
+  lastActiveChatIdByApp?: Record<string, string>;
+  codeChangeTotalsByWorkspace?: Record<string, ChatCodeChangeTotals>;
+}
+
 export interface Chat {
   id: string;
   name: string;
@@ -861,7 +911,17 @@ export interface Chat {
   turnError?: boolean;
   /** Epoch ms of last assistant message committed while this chat was active (unread baseline). */
   lastAssistantAt?: number;
+  /**
+   * Transcript messages. Always present (never optional) — unloaded chats use `[]`
+   * with `historyLoaded: false` until `ensureChatHistoryLoaded` runs.
+   */
   history: Message[];
+  /**
+   * When `false`, `history` is a placeholder and must be loaded via
+   * `ensureChatHistoryLoaded` before read/mutate. Omitted/`true` means loaded
+   * (whole-blob boot path, or after lazy fetch / local create).
+   */
+  historyLoaded?: boolean;
   lastStats: LastStats | null;
   modelInfo: ModelInfo;
   /** Epoch ms of last committed user/assistant/tool history entry (sidebar sort). */

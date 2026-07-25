@@ -3,7 +3,14 @@
  */
 
 import type { BugsState } from '../state/bug-board-store.ts';
-import type { Chat, ChatGroup, SessionState, SystemPromptSettings } from '../types';
+import type {
+  Chat,
+  ChatGroup,
+  Message,
+  SessionState,
+  SessionSummariesState,
+  SystemPromptSettings,
+} from '../types';
 import type { SkillConfig } from '../skills/config';
 import type { ToolConfig } from '../tools/tool-settings-types';
 import type { SearchConfig } from './search-config';
@@ -92,6 +99,37 @@ export async function fetchConfigStatus(): Promise<ConfigStatusResponse> {
 export async function getSessions(): Promise<SessionState> {
   const res = await fetch('/api/config/sessions', { cache: 'no-store' });
   return parseJsonResponse<SessionState>(res);
+}
+
+/** GET /api/config/sessions/summaries?workspace=… — chats omit `history` (Phase C.1). */
+export async function getSessionSummaries(workspace?: string): Promise<SessionSummariesState> {
+  const params = new URLSearchParams();
+  if (workspace != null && workspace !== '') {
+    params.set('workspace', workspace);
+  }
+  const qs = params.toString();
+  const res = await fetch(`/api/config/sessions/summaries${qs ? `?${qs}` : ''}`, {
+    cache: 'no-store',
+  });
+  return parseJsonResponse<SessionSummariesState>(res);
+}
+
+/**
+ * GET /api/config/sessions/history/:chatId — full message list for one chat.
+ * Callers that compute absolute history indices must omit offset/limit.
+ */
+export async function getChatHistory(
+  chatId: string,
+  opts?: { offset?: number; limit?: number },
+): Promise<Message[]> {
+  const params = new URLSearchParams();
+  if (opts?.offset != null) params.set('offset', String(opts.offset));
+  if (opts?.limit != null) params.set('limit', String(opts.limit));
+  const qs = params.toString();
+  const path = `/api/config/sessions/history/${encodeURIComponent(chatId)}${qs ? `?${qs}` : ''}`;
+  const res = await fetch(path, { cache: 'no-store' });
+  const body = await parseJsonResponse<{ chatId: string; history: Message[] }>(res);
+  return Array.isArray(body.history) ? body.history : [];
 }
 
 /** GET /api/config/bugs */

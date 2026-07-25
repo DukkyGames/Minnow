@@ -6,6 +6,7 @@ import {
   getActiveGoal,
   isGoalLoopActive,
   recordChatMessage,
+  requireHistory,
   scheduleSaveSessions,
   touchChat,
 } from '../../state/sessions';
@@ -143,14 +144,16 @@ export function buildGoalContinuationMessage(
 /** Persist and optionally render the achieved marker row. */
 export function recordGoalAchieved(chat: Chat, reason: string): void {
   const content = `Goal achieved: ${reason}`;
-  chat.history.push({ role: 'user', content, goalAchieved: true });
+  // C.2: await ensureChatHistoryLoaded(chat.id) for non-active chats when lazy flag flips on.
+  const history = requireHistory(chat);
+  history.push({ role: 'user', content, goalAchieved: true });
   recordChatMessage(chat);
   touchChat(chat);
   scheduleSaveSessions();
 
   if (!isStreamDomVisible(chat.id)) return;
 
-  const historyIndex = chat.history.length - 1;
+  const historyIndex = history.length - 1;
   const { wrap } = appendBubble('user', content, {
     historyIndex,
     turnKind: 'user',

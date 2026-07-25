@@ -39,6 +39,7 @@ import {
   normalizeChatRow,
   normalizeGroupRow,
   normalizeSessionScalars,
+  normalizeWorkspacePath,
   SESSION_SCHEMA_VERSION,
   validateSessionState,
 } from './validators.js';
@@ -806,6 +807,173 @@ export function readActiveChatModelBinding() {
 export function readAllChatIds() {
   const db = getSessionsDb();
   return getReadStmts(db).chatIds.all().map((row) => row.id);
+}
+
+/**
+ * Map a `chats` row to a ChatSummary (column fields only — never includes `history`).
+ * @param {Record<string, any>} row
+ */
+function chatRowToSummary(row) {
+  /** @type {Record<string, unknown>} */
+  const summary = {
+    id: typeof row.id === 'string' ? row.id : '',
+    name: typeof row.name === 'string' ? row.name : '',
+    workspacePath: typeof row.workspace_path === 'string' ? row.workspace_path : '',
+    modelId: typeof row.model_id === 'string' ? row.model_id : '',
+    updatedAt: typeof row.updated_at === 'number' ? row.updated_at : 0,
+    messageCount: typeof row.message_count === 'number' ? row.message_count : 0,
+    lastMessagePreview:
+      typeof row.last_message_preview === 'string' ? row.last_message_preview : '',
+  };
+  if (typeof row.sort_index === 'number') summary.sortIndex = row.sort_index;
+  if (row.kind) summary.kind = row.kind;
+  if (row.app_scope) summary.appScope = row.app_scope;
+  if (row.expert_id) summary.expertId = row.expert_id;
+  if (row.provider_id) summary.providerId = row.provider_id;
+  if (row.mode_id) summary.modeId = row.mode_id;
+  if (row.group_id) summary.groupId = row.group_id;
+  if (row.board_group_id) summary.boardGroupId = row.board_group_id;
+  if (row.board_task_id) summary.boardTaskId = row.board_task_id;
+  if (row.worktree_root) summary.worktreeRoot = row.worktree_root;
+  if (row.git_branch) summary.gitBranch = row.git_branch;
+  if (typeof row.last_message_at === 'number' && row.last_message_at > 0) {
+    summary.lastMessageAt = row.last_message_at;
+  }
+  if (typeof row.last_assistant_at === 'number' && row.last_assistant_at > 0) {
+    summary.lastAssistantAt = row.last_assistant_at;
+  }
+  if (row.unread === 1) summary.unread = true;
+  if (row.turn_error === 1) summary.turnError = true;
+  if (typeof row.history_digest === 'string' && row.history_digest) {
+    summary.historyDigest = row.history_digest;
+  }
+  return summary;
+}
+
+/**
+ * List chat summaries (no message bodies) for sidebar / lazy boot.
+ * @param {{ workspace?: string }} [filter]  When `workspace` is set, only that path.
+ * @returns {Record<string, unknown>[]}
+ */
+export function readChatSummaries(filter = {}) {
+  const db = getSessionsDb();
+  const workspaceRaw = typeof filter.workspace === 'string' ? filter.workspace : '';
+  const workspace = normalizeWorkspacePath(workspaceRaw);
+  const rows = workspace
+    ? db
+        .prepare(
+          'SELECT * FROM chats WHERE workspace_path = ? ORDER BY sort_index ASC, id ASC',
+        )
+        .all(workspace)
+    : getReadStmts(db).chats.all();
+  return rows.map(chatRowToSummary);
+}
+
+/**
+ * Load message payloads for one chat.
+ *
+ * CRITICAL: Chat consumers that compute absolute indices into `chat.history`
+ * (archive `startIndex`/`endIndex`, `TurnSnapshot.historyPrefixHash`,
+ * `TurnRunRecord.outputHistoryStart`/`End`) MUST load the ENTIRE history.
+ * Never feed a paged slice into those pipelines — it corrupts indices/hashes.
+ *
+ * `offset` / `limit` exist only for a future virtualized renderer and must
+ * never feed anything computing absolute indices.
+ *
+ * @param {string} chatId
+ * @param {{ offset?: number, limit?: number }} [opts]
+ * @returns {Record<string, unknown>[]}
+ */
+export function readChatHistory(chatId, opts = {}) {
+  const trimmed = typeof chatId === 'string' ? chatId.trim() : '';
+  if (!trimmed) return [];
+
+  const db = getSessionsDb();
+  const offset =
+    typeof opts.offset === 'number' && Number.isFinite(opts.offset) && opts.offset > 0
+      ? Math.floor(opts.offset)
+      : 0;
+  const limit =
+    typeof opts.limit === 'number' && Number.isFinite(opts.limit) && opts.limit > 0
+      ? Math.floor(opts.limit)
+      : null;
+
+  let sql =
+    'SELECT payload_json FROM messages WHERE chat_id = ? ORDER BY seq ASC';
+  /** @type {unknown[]} */
+  const params = [trimmed];
+  if (limit != null) {
+    sql += ' LIMIT ?';
+    params.push(limit);
+    if (offset > 0) {
+      sql += ' OFFSET ?';
+      params.push(offset);
+    }
+  } else if (offset > 0) {
+    // OFFSET without LIMIT is unusual; still honor for the virtualized path.
+    sql += ' LIMIT -1 OFFSET ?';
+    params.push(offset);
+  }
+
+  const rows = db.prepare(sql).all(...params);
+  return rows
+    .map((row) => parseJson(row.payload_json, null))
+    .filter((message) => message && typeof message === 'object');
+}
+
+/**
+ * Session scalars + groups + chat summaries (no `history` on chats).
+ * Used by GET /api/config/sessions/summaries.
+ * @param {{ workspace?: string }} [filter]
+ */
+export function readSessionSummariesState(filter = {}) {
+  const db = getSessionsDb();
+  const stmts = getReadStmts(db);
+  const workspaceRaw = typeof filter.workspace === 'string' ? filter.workspace : '';
+  const workspace = normalizeWorkspacePath(workspaceRaw);
+
+  const groupRows = stmts.groups.all();
+  const boardTaskRows = stmts.boardTasks.all();
+  const boardLogRows = stmts.boardLog.all();
+  const tasksByGroup = bucketBy(boardTaskRows, (r) => r.group_id);
+  const logByGroup = bucketBy(boardLogRows, (r) => r.group_id);
+
+  let groups = groupRows.map((row) => {
+    const tasks = (tasksByGroup.get(row.id) ?? [])
+      .map((t) => parseJson(t.payload_json, null))
+      .filter((t) => t && typeof t === 'object');
+    const log = (logByGroup.get(row.id) ?? []).map(boardLogRowToEvent);
+    return stitchGroup(row, tasks, log);
+  });
+  if (workspace) {
+    groups = groups.filter(
+      (g) => normalizeWorkspacePath(String(g.workspacePath ?? '')) === workspace,
+    );
+  }
+
+  /** @type {Record<string, unknown>} */
+  const raw = {
+    version: readSessionMeta(db, 'schemaVersion') ?? SESSION_SCHEMA_VERSION,
+    activeId: readSessionMeta(db, 'activeId') ?? '',
+    sidebarCollapsed: !!readSessionMeta(db, 'sidebarCollapsed'),
+    lastActiveChatIdByWorkspace: readSessionMeta(db, 'lastActiveChatIdByWorkspace') ?? {},
+    lastActiveChatIdByApp: readSessionMeta(db, 'lastActiveChatIdByApp') ?? {},
+    groups,
+    chats: readChatSummaries(filter),
+  };
+
+  const sidebarWidth = readSessionMeta(db, 'sidebarWidth');
+  if (typeof sidebarWidth === 'number') raw.sidebarWidth = sidebarWidth;
+  const activeBoardGroupId = readSessionMeta(db, 'activeBoardGroupId');
+  if (typeof activeBoardGroupId === 'string' && activeBoardGroupId) {
+    raw.activeBoardGroupId = activeBoardGroupId;
+  }
+  const codeChangeTotalsByWorkspace = readSessionMeta(db, 'codeChangeTotalsByWorkspace');
+  if (codeChangeTotalsByWorkspace && typeof codeChangeTotalsByWorkspace === 'object') {
+    raw.codeChangeTotalsByWorkspace = codeChangeTotalsByWorkspace;
+  }
+
+  return raw;
 }
 
 /** Export the current SessionState (POST /api/config/sessions/export-json). */

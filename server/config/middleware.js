@@ -20,7 +20,12 @@ import {
 } from './validators.js';
 import { resolveConfigPath, ALLOWED_CONFIG_FILES } from './paths.js';
 import { handleRunsConfigRequest } from '../runs/middleware.js';
-import { exportSessionStateToJson, useJsonSessionsStore } from './sessions-repo.js';
+import {
+  exportSessionStateToJson,
+  readChatHistory,
+  readSessionSummariesState,
+  useJsonSessionsStore,
+} from './sessions-repo.js';
 import { getSessionsDb, readSessionMeta } from './sessions-db.js';
 import { sessionsDbPath } from './sessions-paths.js';
 
@@ -216,6 +221,76 @@ export async function handleConfigRequest(req, res, pathname) {
         ? ((await readConfigJson('sessions/state.json')) ?? (await readResource('sessions')))
         : exportSessionStateToJson();
       sendJson(res, 200, { ok: true, data });
+      return true;
+    }
+
+    // Phase C.1: chat list without message bodies (lazy history boot when flag on).
+    if (pathname === '/api/config/sessions/summaries' && req.method === 'GET') {
+      await ensureMinnowLayout();
+      if (useJsonSessionsStore()) {
+        // JSON rollback store has no summary projection — return whole blob chats
+        // stripped of history so the client shape stays consistent.
+        const full = (await readConfigJson('sessions/state.json')) ?? (await readResource('sessions'));
+        const url = new URL(req.url ?? '', 'http://localhost');
+        const workspace = url.searchParams.get('workspace') ?? '';
+        const chats = Array.isArray(full?.chats) ? full.chats : [];
+        const summaries = chats
+          .filter((chat) => {
+            if (!workspace) return true;
+            const wp = typeof chat.workspacePath === 'string' ? chat.workspacePath : '';
+            return wp === workspace;
+          })
+          .map((chat) => {
+            const history = Array.isArray(chat.history) ? chat.history : [];
+            const last = history.length ? history[history.length - 1] : null;
+            let lastMessagePreview = '';
+            if (last && typeof last === 'object' && typeof last.content === 'string') {
+              lastMessagePreview = last.content.slice(0, 240);
+            }
+            const { history: _drop, ...rest } = chat;
+            return {
+              ...rest,
+              messageCount: history.length,
+              lastMessagePreview,
+            };
+          });
+        sendJson(res, 200, { ...full, chats: summaries });
+        return true;
+      }
+      const url = new URL(req.url ?? '', 'http://localhost');
+      const workspace = url.searchParams.get('workspace') ?? undefined;
+      sendJson(res, 200, readSessionSummariesState({ workspace }));
+      return true;
+    }
+
+    // Phase C.1: full (or optionally paged) message history for one chat.
+    const historyMatch = pathname.match(/^\/api\/config\/sessions\/history\/([^/]+)$/);
+    if (historyMatch && req.method === 'GET') {
+      await ensureMinnowLayout();
+      const chatId = decodeURIComponent(historyMatch[1] ?? '').trim();
+      const url = new URL(req.url ?? '', 'http://localhost');
+      const offsetRaw = url.searchParams.get('offset');
+      const limitRaw = url.searchParams.get('limit');
+      const opts = {};
+      if (offsetRaw != null && offsetRaw !== '') opts.offset = Number(offsetRaw);
+      if (limitRaw != null && limitRaw !== '') opts.limit = Number(limitRaw);
+
+      if (useJsonSessionsStore()) {
+        const full = (await readConfigJson('sessions/state.json')) ?? (await readResource('sessions'));
+        const chat = Array.isArray(full?.chats)
+          ? full.chats.find((c) => c && c.id === chatId)
+          : null;
+        let history = Array.isArray(chat?.history) ? chat.history : [];
+        const offset = typeof opts.offset === 'number' && opts.offset > 0 ? Math.floor(opts.offset) : 0;
+        const limit = typeof opts.limit === 'number' && opts.limit > 0 ? Math.floor(opts.limit) : null;
+        if (offset || limit != null) {
+          history = limit != null ? history.slice(offset, offset + limit) : history.slice(offset);
+        }
+        sendJson(res, 200, { chatId, history });
+        return true;
+      }
+
+      sendJson(res, 200, { chatId, history: readChatHistory(chatId, opts) });
       return true;
     }
 

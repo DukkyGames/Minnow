@@ -5,7 +5,9 @@ import { isPlaceholderChatName } from '../chat/titles/placeholder';
 import { setSaveTimer, saveTimer } from '../app-state';
 import {
   flushSessionsOnShutdown,
+  getChatHistory,
   getSessions,
+  getSessionSummaries,
   patchSessions,
   putSessions,
   type SessionsPatchDelta,
@@ -106,9 +108,12 @@ import type {
   ActiveLoopState,
   Chat,
   ChatGroup,
+  ChatSummary,
   ChatTodo,
   ExpertSelection,
+  Message,
   SessionState,
+  SessionSummariesState,
 } from '../types';
 import { SESSION_SCHEMA_VERSION } from '../types';
 
@@ -153,19 +158,37 @@ let dirtyTrackingVerifierForced = false;
  */
 let sessionsClientPatchEnabled = true;
 /**
+ * C.1 flag: when true, boot loads chat summaries and fetches history on demand.
+ * Default OFF — whole-blob GET until C.2 flips this.
+ */
+let sessionsLazyHistoryEnabled = false;
+/**
  * False after load / verifier miss — next successful full PUT establishes a trusted baseline
  * so subsequent flushes may PATCH.
  */
 let sessionPatchDirtySetsReady = false;
 
-function isDirtyTrackingVerifierEnabled(): boolean {
-  if (dirtyTrackingVerifierForced) return true;
+/** In-flight `ensureChatHistoryLoaded` promises keyed by chat id (concurrent dedupe). */
+const historyLoadInflight = new Map<string, Promise<void>>();
+/** When true, install the unloaded-history DEV trap even outside Vite DEV (unit tests). */
+let historyTrapForcedForTests = false;
+
+function isViteDevBuild(): boolean {
   try {
     // Vite sets import.meta.env.DEV; Node/tsx tests leave it undefined.
     return Boolean((import.meta as { env?: { DEV?: boolean } }).env?.DEV);
   } catch {
     return false;
   }
+}
+
+function shouldInstallHistoryTrap(): boolean {
+  return sessionsLazyHistoryEnabled && (historyTrapForcedForTests || isViteDevBuild());
+}
+
+function isDirtyTrackingVerifierEnabled(): boolean {
+  if (dirtyTrackingVerifierForced) return true;
+  return isViteDevBuild();
 }
 
 function captureDirtyTrackingShadow(state: SessionState | null): void {
@@ -331,6 +354,30 @@ export function setSessionsClientPatchEnabledForTests(enabled: boolean): void {
   sessionsClientPatchEnabled = enabled;
 }
 
+/** Test helper: toggle C.1 lazy-history flag (`sessionsLazyHistoryEnabled`, default OFF). */
+export function setSessionsLazyHistoryEnabledForTests(enabled: boolean): void {
+  sessionsLazyHistoryEnabled = enabled;
+}
+
+/** Whether lazy history loading is enabled (C.1; default false until C.2). */
+export function isSessionsLazyHistoryEnabled(): boolean {
+  return sessionsLazyHistoryEnabled;
+}
+
+/** Test helper: force the unloaded-history DEV trap on/off (tsx has no import.meta.env.DEV). */
+export function setHistoryTrapForcedForTests(forced: boolean): void {
+  historyTrapForcedForTests = forced;
+}
+
+/**
+ * Test helper: mark a chat unloaded and attach the DEV history trap (requires flag + trap force).
+ */
+export function attachUnloadedHistoryTrapForTests(chat: Chat): void {
+  chat.historyLoaded = false;
+  if (!Array.isArray(chat.history)) chat.history = [];
+  installUnloadedHistoryTrap(chat);
+}
+
 /** Test helper: mark dirty sets trusted (or force full-PUT fallback). */
 export function setSessionPatchDirtySetsReadyForTests(ready: boolean): void {
   sessionPatchDirtySetsReady = ready;
@@ -391,8 +438,11 @@ export function resetSessionPersistenceForTests(): void {
   dirtyTrackingShadowChatsJson = null;
   dirtyTrackingVerifierForced = false;
   sessionsClientPatchEnabled = true;
+  sessionsLazyHistoryEnabled = false;
+  historyTrapForcedForTests = false;
   sessionPatchDirtySetsReady = false;
   inFlightSessionSave = null;
+  historyLoadInflight.clear();
   // Clear debounce timer so Node test runners can exit.
   if (saveTimer) {
     clearTimeout(saveTimer);
@@ -445,11 +495,176 @@ export function createEmptyChatObject(modelId: string, workspacePath?: string): 
     workAgentId: null,
     workAgentAuto: true,
     history: [],
+    // Locally created chats own their (empty) transcript immediately.
+    historyLoaded: true,
     lastStats: null,
     modelInfo: {},
     updatedAt: Date.now(),
     lastMessageAt: Date.now(),
   };
+}
+
+/** True when `history` is safe to read/mutate without a lazy fetch. */
+export function isChatHistoryLoaded(chat: Chat): boolean {
+  return chat.historyLoaded !== false;
+}
+
+/**
+ * Throw when history is not loaded — use at highest-risk mutators (category-3).
+ * Prefer {@link ensureChatHistoryLoaded} before calling this on the flag-on path.
+ */
+export function requireHistory(chat: Chat): Message[] {
+  if (chat.historyLoaded === false) {
+    throw new Error(
+      `Chat history not loaded for ${chat.id}; await ensureChatHistoryLoaded(chatId) first`,
+    );
+  }
+  return chat.history;
+}
+
+/** Inflate a {@link ChatSummary} into a Chat placeholder (empty history). */
+export function chatSummaryToChat(summary: ChatSummary): Chat {
+  const chat: Chat = {
+    id: summary.id,
+    name: summary.name || PLACEHOLDER_CHAT_NAME,
+    workspacePath: summary.workspacePath ?? '',
+    modelId: summary.modelId ?? '',
+    history: [],
+    historyLoaded: false,
+    lastStats: null,
+    modelInfo: {},
+    updatedAt: typeof summary.updatedAt === 'number' ? summary.updatedAt : Date.now(),
+  };
+  if (summary.kind) chat.kind = summary.kind;
+  if (summary.appScope) chat.appScope = summary.appScope;
+  if (summary.expertId) chat.expertId = summary.expertId;
+  if (summary.providerId) chat.providerId = summary.providerId;
+  if (summary.modeId) chat.modeId = summary.modeId;
+  if (summary.groupId) chat.groupId = summary.groupId;
+  if (summary.boardGroupId) chat.boardGroupId = summary.boardGroupId;
+  if (summary.boardTaskId) chat.boardTaskId = summary.boardTaskId;
+  if (summary.worktreeRoot) chat.worktreeRoot = summary.worktreeRoot;
+  if (summary.gitBranch) chat.gitBranch = summary.gitBranch;
+  if (typeof summary.lastMessageAt === 'number') chat.lastMessageAt = summary.lastMessageAt;
+  if (typeof summary.lastAssistantAt === 'number') chat.lastAssistantAt = summary.lastAssistantAt;
+  if (summary.unread) chat.unread = true;
+  if (summary.turnError) chat.turnError = true;
+  return chat;
+}
+
+/**
+ * Dev-only trap: first `history` read while unloaded logs an error + stack, then returns [].
+ * Active when lazy-history flag is on and Vite DEV (or {@link setHistoryTrapForcedForTests}).
+ */
+function installUnloadedHistoryTrap(chat: Chat): void {
+  if (!shouldInstallHistoryTrap()) return;
+  if (chat.historyLoaded !== false) return;
+
+  let store: Message[] = Array.isArray(chat.history) ? chat.history : [];
+  let warned = false;
+  Object.defineProperty(chat, 'history', {
+    configurable: true,
+    enumerable: true,
+    get() {
+      if (chat.historyLoaded === false && !warned) {
+        warned = true;
+        console.error(
+          `[sessions] chat.history read before ensureChatHistoryLoaded (${chat.id})`,
+          new Error().stack,
+        );
+      }
+      return store;
+    },
+    set(value: Message[]) {
+      store = Array.isArray(value) ? value : [];
+    },
+  });
+}
+
+/** Replace placeholder history with the full transcript and clear the unload marker. */
+function materializeChatHistory(chat: Chat, messages: Message[]): void {
+  const desc = Object.getOwnPropertyDescriptor(chat, 'history');
+  if (desc && (desc.get || desc.set)) {
+    // Drop the dev trap getter so subsequent access is a plain data property.
+    delete (chat as { history?: Message[] }).history;
+  }
+  chat.history = Array.isArray(messages) ? messages : [];
+  chat.historyLoaded = true;
+}
+
+/** Mark every chat as fully loaded (whole-blob boot / flag-off path). */
+function markAllHistoriesLoaded(chats: Chat[]): void {
+  for (const chat of chats) {
+    chat.historyLoaded = true;
+  }
+}
+
+/**
+ * Build SessionState from GET /api/config/sessions/summaries (flag-on boot).
+ * Chats start with `history: []` and `historyLoaded: false`.
+ */
+function sessionStateFromSummaries(remote: SessionSummariesState): SessionState {
+  const inflatedChats = remote.chats.map((summary) => chatSummaryToChat(summary));
+  // RawSessionJson is the wire shape; groups / totals are read via Partial<SessionState> inside parse.
+  const raw = {
+    version: remote.version ?? SESSION_SCHEMA_VERSION,
+    activeId: remote.activeId,
+    sidebarCollapsed: remote.sidebarCollapsed,
+    chats: inflatedChats,
+    groups: remote.groups,
+    activeBoardGroupId: remote.activeBoardGroupId,
+    lastActiveChatIdByWorkspace: remote.lastActiveChatIdByWorkspace,
+    lastActiveChatIdByApp: remote.lastActiveChatIdByApp,
+    sidebarWidth: remote.sidebarWidth,
+    codeChangeTotalsByWorkspace: remote.codeChangeTotalsByWorkspace,
+  } as RawSessionJson;
+  const state = parseSessionStateFromJson(raw);
+  // parse/ensureChatShape may drop historyLoaded — re-apply unload markers + traps.
+  for (const chat of state.chats) {
+    const fromSummary = remote.chats.some((s) => s.id === chat.id);
+    if (!fromSummary) {
+      chat.historyLoaded = true;
+      continue;
+    }
+    chat.historyLoaded = false;
+    if (!Array.isArray(chat.history)) chat.history = [];
+    installUnloadedHistoryTrap(chat);
+  }
+  return state;
+}
+
+/**
+ * Idempotent lazy history fetch. Concurrent callers for the same id share one in-flight Promise.
+ * No-op when the lazy-history flag is off or the chat is already loaded / missing.
+ */
+export async function ensureChatHistoryLoaded(chatId: string): Promise<void> {
+  const id = typeof chatId === 'string' ? chatId.trim() : '';
+  if (!id) return;
+  if (!sessionsLazyHistoryEnabled) return;
+
+  const chat = findChatById(id);
+  if (!chat || chat.historyLoaded !== false) return;
+
+  const existing = historyLoadInflight.get(id);
+  if (existing) return existing;
+
+  const loadPromise = (async () => {
+    if (!isServerStorageMode()) {
+      // localStorage boot always has full history; treat as loaded.
+      const local = findChatById(id);
+      if (local) local.historyLoaded = true;
+      return;
+    }
+    const messages = await getChatHistory(id);
+    const target = findChatById(id);
+    if (!target || target.historyLoaded !== false) return;
+    materializeChatHistory(target, messages);
+  })().finally(() => {
+    historyLoadInflight.delete(id);
+  });
+
+  historyLoadInflight.set(id, loadPromise);
+  return loadPromise;
 }
 
 
@@ -644,6 +859,8 @@ export function activateChatById(id: string): void {
   state.activeId = id;
   markSessionScalarsDirty();
   maybeRememberActiveChatForForegroundApp(state, chat);
+  // C.1: kick off history hydrate when switching (no-op with flag off).
+  void ensureChatHistoryLoaded(id);
   scheduleSaveSessions();
 }
 
@@ -998,6 +1215,8 @@ export function onWorkspaceChanged(
   state.activeId = nextId;
   markSessionScalarsDirty();
   rememberActiveChatForWorkspaceKey(normalizeWorkspacePath(newPath));
+  // C.1: hydrate the chat that becomes active after a workspace switch.
+  void ensureChatHistoryLoaded(nextId);
   scheduleSaveSessions();
   return { activeChat: getActiveChat(), activeChanged };
 }
@@ -1015,9 +1234,22 @@ export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Pr
   try {
     if (isServerStorageMode()) {
       try {
-        const remote = await getSessions();
-        sessionState = parseSessionStateFromJson(remote);
-        await runSessionCodeChangeBackfill(sessionState);
+        if (sessionsLazyHistoryEnabled) {
+          // C.1 flag-on: summaries first; history loads via ensureChatHistoryLoaded.
+          const remote = await getSessionSummaries();
+          sessionState = sessionStateFromSummaries(remote);
+          // Backfill needs full histories — skip until C.2 wires per-chat ensure.
+          // Active chat is hydrated immediately so the first paint has a transcript.
+          if (sessionState.activeId) {
+            await ensureChatHistoryLoaded(sessionState.activeId);
+          }
+        } else {
+          // Default (flag off): whole-blob GET — every chat is fully loaded.
+          const remote = await getSessions();
+          sessionState = parseSessionStateFromJson(remote);
+          markAllHistoriesLoaded(sessionState.chats);
+          await runSessionCodeChangeBackfill(sessionState);
+        }
         sessionsHydratedFromServer = true;
         return;
       } catch {
@@ -1028,6 +1260,7 @@ export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Pr
         // empty blob would later overwrite ~/.minnow on save (MIN-408).
         if (!sessionState) {
           sessionState = defaultSessionState();
+          markAllHistoriesLoaded(sessionState.chats);
         }
         return;
       }
@@ -1038,12 +1271,15 @@ export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Pr
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) {
         sessionState = defaultSessionState();
+        markAllHistoriesLoaded(sessionState.chats);
         return;
       }
       sessionState = parseSessionStateFromJson(JSON.parse(raw) as Partial<SessionState>);
+      markAllHistoriesLoaded(sessionState.chats);
       await runSessionCodeChangeBackfill(sessionState);
     } catch {
       sessionState = defaultSessionState();
+      markAllHistoriesLoaded(sessionState.chats);
     }
   } finally {
     clearSessionDirtySets();
@@ -1436,6 +1672,8 @@ export function switchActiveChat(id: string): Chat | null {
   markSessionScalarsDirty();
   rememberActiveChatForWorkspaceKey(normalizeWorkspacePath(chat.workspacePath ?? ''));
   maybeRememberActiveChatForForegroundApp(state, chat);
+  // C.1: kick off history hydrate when switching (no-op with flag off).
+  void ensureChatHistoryLoaded(id);
   scheduleSaveSessions();
   return chat;
 }

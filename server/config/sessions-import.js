@@ -42,6 +42,12 @@ const CHAT_HOT_KEYS = new Set([
   'unread',
   'turnError',
   'history',
+  // Client-only lazy-history markers / denormalized summary fields — not meta_json
+  'historyLoaded',
+  'messageCount',
+  'lastMessagePreview',
+  'sortIndex',
+  'historyDigest',
   // Child tables — excluded from meta_json
   'terminalHistory',
   'runs',

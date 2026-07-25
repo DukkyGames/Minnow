@@ -1,0 +1,159 @@
+/**
+ * Phase C.1: ensureChatHistoryLoaded idempotency/dedupe + DEV history trap.
+ */
+
+import assert from 'node:assert/strict';
+import { afterEach, describe, test } from 'node:test';
+
+import { setStorageModeForTests } from '../../src/config/storage-mode.ts';
+import { defaultSessionState } from '../../src/config/defaults.ts';
+import {
+  attachUnloadedHistoryTrapForTests,
+  ensureChatHistoryLoaded,
+  isSessionsLazyHistoryEnabled,
+  requireHistory,
+  resetSessionPersistenceForTests,
+  setHistoryTrapForcedForTests,
+  setSessionStateForTests,
+  setSessionsLazyHistoryEnabledForTests,
+  sessionState,
+} from '../../src/state/sessions.ts';
+import type { Chat, Message, SessionState } from '../../src/types.ts';
+
+const CHAT_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+const CHAT_B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+
+function makeChat(id: string, extra: Partial<Chat> = {}): Chat {
+  return {
+    id,
+    name: id.slice(0, 4),
+    workspacePath: '',
+    modelId: '',
+    modeId: 'build',
+    history: [],
+    historyLoaded: true,
+    lastStats: null,
+    modelInfo: {},
+    updatedAt: 1_700_000_000_000,
+    lastMessageAt: 1_700_000_000_000,
+    ...extra,
+  };
+}
+
+function makeState(chats: Chat[]): SessionState {
+  const base = defaultSessionState();
+  return {
+    ...base,
+    version: 6,
+    activeId: chats[0]?.id ?? null,
+    chats,
+  };
+}
+
+describe('lazy history (C.1)', () => {
+  afterEach(() => {
+    // @ts-expect-error test cleanup
+    delete globalThis.fetch;
+    setStorageModeForTests('localStorage');
+    resetSessionPersistenceForTests();
+    setSessionStateForTests(null);
+  });
+
+  test('lazy-history flag defaults OFF', () => {
+    assert.equal(isSessionsLazyHistoryEnabled(), false);
+  });
+
+  test('ensureChatHistoryLoaded is a no-op when flag is off', async () => {
+    setStorageModeForTests('server');
+    const chat = makeChat(CHAT_A, { historyLoaded: false });
+    setSessionStateForTests(makeState([chat]));
+
+    let fetchCalls = 0;
+    globalThis.fetch = async () => {
+      fetchCalls += 1;
+      return new Response(JSON.stringify({ chatId: CHAT_A, history: [] }), { status: 200 });
+    };
+
+    await ensureChatHistoryLoaded(CHAT_A);
+    assert.equal(fetchCalls, 0);
+    assert.equal(chat.historyLoaded, false);
+  });
+
+  test('ensureChatHistoryLoaded is idempotent and dedupes concurrent callers', async () => {
+    setStorageModeForTests('server');
+    setSessionsLazyHistoryEnabledForTests(true);
+
+    const chat = makeChat(CHAT_A, { historyLoaded: false, history: [] });
+    setSessionStateForTests(makeState([chat]));
+
+    let fetchCalls = 0;
+    let resolveFetch!: (value: Response) => void;
+    const fetchGate = new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    });
+
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      assert.ok(url.includes(`/api/config/sessions/history/${CHAT_A}`));
+      fetchCalls += 1;
+      return fetchGate;
+    };
+
+    const messages: Message[] = [
+      { role: 'user', content: 'one' },
+      { role: 'assistant', content: 'two' },
+    ];
+
+    const p1 = ensureChatHistoryLoaded(CHAT_A);
+    const p2 = ensureChatHistoryLoaded(CHAT_A);
+    assert.equal(fetchCalls, 1, 'concurrent callers share one in-flight fetch');
+
+    resolveFetch(
+      new Response(JSON.stringify({ chatId: CHAT_A, history: messages }), { status: 200 }),
+    );
+    await Promise.all([p1, p2]);
+
+    assert.equal(fetchCalls, 1);
+    assert.equal(chat.historyLoaded, true);
+    assert.equal(chat.history.length, 2);
+    assert.equal(chat.history[0]?.content, 'one');
+
+    // Second wave after load completes — still no extra fetch.
+    await ensureChatHistoryLoaded(CHAT_A);
+    assert.equal(fetchCalls, 1);
+  });
+
+  test('requireHistory throws while unloaded', () => {
+    const chat = makeChat(CHAT_B, { historyLoaded: false });
+    assert.throws(() => requireHistory(chat), /history not loaded/);
+    chat.historyLoaded = true;
+    assert.equal(requireHistory(chat), chat.history);
+  });
+
+  test('dev trap fires once on first history read when flag on', () => {
+    setSessionsLazyHistoryEnabledForTests(true);
+    setHistoryTrapForcedForTests(true);
+
+    const chat = makeChat(CHAT_A, { history: [], historyLoaded: false });
+    setSessionStateForTests(makeState([chat]));
+    attachUnloadedHistoryTrapForTests(chat);
+
+    const errors: unknown[][] = [];
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => {
+      errors.push(args);
+    };
+    try {
+      const first = chat.history;
+      assert.deepEqual(first, []);
+      assert.equal(errors.length, 1);
+      assert.match(String(errors[0]?.[0]), /ensureChatHistoryLoaded/);
+
+      // Second read while still unloaded must not re-warn.
+      void chat.history;
+      assert.equal(errors.length, 1);
+    } finally {
+      console.error = originalError;
+    }
+  });
+});

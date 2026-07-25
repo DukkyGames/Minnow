@@ -15,10 +15,19 @@
 - [x] **B.0** — Validator decomposition + `PATCH /api/config/sessions` + headless convert
 - [x] **B.1** — Shared `session-schema.mjs` + dirty tracking (telemetry only)
 - [x] **B.2** — Flip to PATCH + beacon size branch
-- [ ] **C.1** — Summaries + `ensureChatHistoryLoaded` + dev trap (flag off)
-- [ ] **C.2** — FTS5 search route, delete `task-history-trim.ts`, flip flag
+- [x] **C.1** — Summaries + `ensureChatHistoryLoaded` + dev trap (flag off)
+- [ ] **C.2** — FTS5 search route, delete `task-history-trim.ts`, flip flag (`sessionsLazyHistoryEnabled`)
 - [ ] **Docs** — Update `context.md`, architecture/configuration guides, `server-session-engine.md`
 - [ ] **Verify** — Full test suite + e2e reload survival checks
+
+### C.1 notes (flag OFF by default)
+
+- Flag: `sessionsLazyHistoryEnabled` (default **false**). Test setter: `setSessionsLazyHistoryEnabledForTests`.
+- When off: boot still uses whole-blob `GET /api/config/sessions`; all chats get `historyLoaded: true`.
+- When on (tests / C.2): boot uses `GET /api/config/sessions/summaries`; `ensureChatHistoryLoaded` fetches `GET /api/config/sessions/history/:chatId`.
+- DEV trap logs on first `history` read while `historyLoaded === false` (flag on + DEV).
+- `requireHistory(chat)` exported; category-3 stubs in goal evaluate / loop ticker / orchestrator report.
+- Do **not** page history into archive / turn-run index consumers — load entire history.
 
 ## Context (summary)
 
