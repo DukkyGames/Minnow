@@ -35,15 +35,10 @@ function runInWorkspace(fn) {
   return pathAccessStore.run({ workspaceRootOverride: tempRoot }, fn);
 }
 
-/** Build a minimal valid xlsx workbook in memory when xlsx is installed. */
+/** Build an xlsx buffer for extraction tests. */
 async function buildSampleXlsxBuffer() {
-  let XLSX;
-  try {
-    const mod = await import('xlsx');
-    XLSX = mod.default ?? mod;
-  } catch {
-    return null;
-  }
+  const mod = await import('xlsx');
+  const XLSX = mod.default ?? mod;
 
   const sheet = XLSX.utils.aoa_to_sheet([
     ['Name', 'Count'],
@@ -65,12 +60,8 @@ describe('read-document extensions', () => {
 });
 
 describe('extractDocumentText spreadsheet', () => {
-  it('extracts sheet rows from xlsx when xlsx is installed', async () => {
+  it('extracts sheet rows from xlsx', async () => {
     const buffer = await buildSampleXlsxBuffer();
-    if (!buffer) {
-      console.log('skip: xlsx optional dependency not installed');
-      return;
-    }
 
     const result = await extractDocumentText(buffer, 'sample.xlsx');
     assert.match(result, /--- sample\.xlsx/);
@@ -110,11 +101,6 @@ describe('toolReadDocument', () => {
       }),
     );
 
-    if (/requires the optional "xlsx"/i.test(sheetOut)) {
-      console.log('skip: xlsx optional dependency not installed');
-      return;
-    }
-
     assert.match(sheetOut, /Created spreadsheet/);
 
     const out = await runInWorkspace(() => toolReadDocument({ path: 'read-by-path/table.xlsx' }));
@@ -131,13 +117,9 @@ describe('toolReadDocument', () => {
       }),
     );
 
-    if (/requires the optional "pdf-lib"/i.test(pdfOut)) {
-      console.log('skip: pdf-lib optional dependency not installed');
-    } else {
-      assert.match(pdfOut, /Created PDF/);
-      const pdfRead = await runInWorkspace(() => toolReadDocument({ path: 'roundtrip/report.pdf' }));
-      assert.match(pdfRead, /PDF body text/);
-    }
+    assert.match(pdfOut, /Created PDF/);
+    const pdfRead = await runInWorkspace(() => toolReadDocument({ path: 'roundtrip/report.pdf' }));
+    assert.match(pdfRead, /PDF body text/);
 
     const wordOut = await runInWorkspace(() =>
       toolCreateWordDocument({
@@ -146,25 +128,14 @@ describe('toolReadDocument', () => {
       }),
     );
 
-    if (/requires the optional "docx"/i.test(wordOut)) {
-      console.log('skip: docx optional dependency not installed');
-      return;
-    }
-
     assert.match(wordOut, /Created Word document/);
     const wordRead = await runInWorkspace(() => toolReadDocument({ path: 'roundtrip/memo.docx' }));
     assert.match(wordRead, /Word paragraph content/);
   });
 
   it('caps output for very wide spreadsheets', async () => {
-    let XLSX;
-    try {
-      const mod = await import('xlsx');
-      XLSX = mod.default ?? mod;
-    } catch {
-      console.log('skip: xlsx optional dependency not installed');
-      return;
-    }
+    const mod = await import('xlsx');
+    const XLSX = mod.default ?? mod;
 
     const wideRow = Array.from({ length: 800 }, (_, index) => `cell-${index}-data`);
     const sheetOut = await runInWorkspace(() =>

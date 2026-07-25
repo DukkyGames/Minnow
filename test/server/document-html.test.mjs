@@ -11,16 +11,11 @@ const EVIL_SHEET_NAME = '"><svg onload=alert(1)>';
 /**
  * Build an xlsx buffer whose sheet name cannot be set via book_append_sheet.
  *
- * @returns {Promise<Buffer | null>}
+ * @returns {Promise<Buffer>}
  */
 async function buildEvilSheetNameXlsxBuffer() {
-  let XLSX;
-  try {
-    const mod = await import('xlsx');
-    XLSX = mod.default ?? mod;
-  } catch {
-    return null;
-  }
+  const mod = await import('xlsx');
+  const XLSX = mod.default ?? mod;
 
   const sheet = XLSX.utils.aoa_to_sheet([['safe', 'value']]);
   const book = {
@@ -33,16 +28,10 @@ async function buildEvilSheetNameXlsxBuffer() {
 /**
  * Build a docx buffer containing a javascript: hyperlink.
  *
- * @returns {Promise<Buffer | null>}
+ * @returns {Promise<Buffer>}
  */
 async function buildJavascriptHyperlinkDocxBuffer() {
-  let docx;
-  try {
-    docx = await import('docx');
-  } catch {
-    return null;
-  }
-
+  const docx = await import('docx');
   const { Document, ExternalHyperlink, Packer, Paragraph, TextRun } = docx;
   const document = new Document({
     sections: [
@@ -76,10 +65,6 @@ function countHtmlRootElements(html) {
 describe('renderDocumentPreviewHtml security', () => {
   it('strips XSS from spreadsheet sheet names and nested SheetJS markup', async () => {
     const buffer = await buildEvilSheetNameXlsxBuffer();
-    if (!buffer) {
-      console.log('skip: xlsx optional dependency not installed');
-      return;
-    }
 
     const html = await renderDocumentPreviewHtml('evil.xlsx', buffer);
 
@@ -91,10 +76,6 @@ describe('renderDocumentPreviewHtml security', () => {
 
   it('strips javascript: hyperlinks from docx preview HTML', async () => {
     const buffer = await buildJavascriptHyperlinkDocxBuffer();
-    if (!buffer) {
-      console.log('skip: docx optional dependency not installed');
-      return;
-    }
 
     const html = await renderDocumentPreviewHtml('evil.docx', buffer);
 

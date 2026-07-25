@@ -36,16 +36,6 @@ function runInWorkspace(fn) {
   return pathAccessStore.run({ workspaceRootOverride: tempRoot }, fn);
 }
 
-async function pdfLibAvailable() {
-  try {
-    await import('pdf-lib');
-    await import('@pdf-lib/fontkit');
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 describe('create document tools', () => {
   it('rejects paths with wrong extensions', async () => {
     const pdf = await runInWorkspace(() => toolCreatePdf({ path: 'a.txt', body: 'hi' }));
@@ -70,11 +60,6 @@ describe('create document tools', () => {
       }),
     );
 
-    if (/Internal error: xlsx module unavailable/i.test(sheetOut)) {
-      console.log('skip: xlsx dependency not installed');
-      return;
-    }
-
     assert.match(sheetOut, /Created spreadsheet data\/quarters\.xlsx/);
     const extracted = await extractDocumentText(
       await fs.readFile(path.join(tempRoot, 'data', 'quarters.xlsx')),
@@ -83,7 +68,7 @@ describe('create document tools', () => {
     assert.match(extracted, /## Sheet: Q1Q2/);
   });
 
-  it('creates pdf, spreadsheet, and word files when optional deps are installed', async () => {
+  it('creates pdf, spreadsheet, and word files', async () => {
     const pdfOut = await runInWorkspace(() =>
       toolCreatePdf({
         path: 'reports/summary.pdf',
@@ -92,13 +77,9 @@ describe('create document tools', () => {
       }),
     );
 
-    if (/requires the optional "pdf-lib"/i.test(pdfOut)) {
-      console.log('skip: pdf-lib optional dependency not installed');
-    } else {
-      assert.match(pdfOut, /Created PDF reports\/summary\.pdf/);
-      const pdfBytes = await fs.readFile(path.join(tempRoot, 'reports', 'summary.pdf'));
-      assert.ok(pdfBytes.subarray(0, 5).toString('ascii') === '%PDF-');
-    }
+    assert.match(pdfOut, /Created PDF reports\/summary\.pdf/);
+    const pdfBytes = await fs.readFile(path.join(tempRoot, 'reports', 'summary.pdf'));
+    assert.ok(pdfBytes.subarray(0, 5).toString('ascii') === '%PDF-');
 
     const sheetOut = await runInWorkspace(() =>
       toolCreateSpreadsheet({
@@ -107,13 +88,9 @@ describe('create document tools', () => {
       }),
     );
 
-    if (/requires the optional "xlsx"/i.test(sheetOut)) {
-      console.log('skip: xlsx optional dependency not installed');
-    } else {
-      assert.match(sheetOut, /Created spreadsheet data\/table\.xlsx/);
-      const xlsxStat = await fs.stat(path.join(tempRoot, 'data', 'table.xlsx'));
-      assert.ok(xlsxStat.size > 0);
-    }
+    assert.match(sheetOut, /Created spreadsheet data\/table\.xlsx/);
+    const xlsxStat = await fs.stat(path.join(tempRoot, 'data', 'table.xlsx'));
+    assert.ok(xlsxStat.size > 0);
 
     const wordOut = await runInWorkspace(() =>
       toolCreateWordDocument({
@@ -126,21 +103,12 @@ describe('create document tools', () => {
       }),
     );
 
-    if (/requires the optional "docx"/i.test(wordOut)) {
-      console.log('skip: docx optional dependency not installed');
-    } else {
-      assert.match(wordOut, /Created Word document docs\/note\.docx/);
-      const docxStat = await fs.stat(path.join(tempRoot, 'docs', 'note.docx'));
-      assert.ok(docxStat.size > 0);
-    }
+    assert.match(wordOut, /Created Word document docs\/note\.docx/);
+    const docxStat = await fs.stat(path.join(tempRoot, 'docs', 'note.docx'));
+    assert.ok(docxStat.size > 0);
   });
 
   it('round-trips mixed Unicode PDF body text through extractDocumentText', async () => {
-    if (!(await pdfLibAvailable())) {
-      console.log('skip: pdf-lib or @pdf-lib/fontkit not installed');
-      return;
-    }
-
     const sample = 'Café ✅ 日本語 Привет';
     const pdfOut = await runInWorkspace(() =>
       toolCreatePdf({ path: 'unicode/mixed.pdf', body: sample }),
@@ -155,11 +123,6 @@ describe('create document tools', () => {
   });
 
   it('paginates long PDF bodies and keeps line baselines above the margin', async () => {
-    if (!(await pdfLibAvailable())) {
-      console.log('skip: pdf-lib or @pdf-lib/fontkit not installed');
-      return;
-    }
-
     await preloadPdfFonts();
     const pdfLib = await import('pdf-lib');
     const doc = await pdfLib.PDFDocument.create();
@@ -194,24 +157,13 @@ describe('create document tools', () => {
     );
     assert.match(pdfOut, /Created PDF unicode\/long\.pdf/);
     const pdfBytes = await fs.readFile(path.join(tempRoot, 'unicode', 'long.pdf'));
-    let pdfParse;
-    try {
-      const mod = await import('pdf-parse');
-      pdfParse = mod.default ?? mod;
-    } catch {
-      console.log('skip: pdf-parse not installed for page count check');
-      return;
-    }
+    const pdfParseMod = await import('pdf-parse');
+    const pdfParse = pdfParseMod.default ?? pdfParseMod;
     const parsed = await pdfParse(pdfBytes);
     assert.ok((parsed?.numpages ?? 0) > 1, 'expected generated PDF to have multiple pages');
   });
 
   it('wraps a 300-character unbroken token instead of overflowing', async () => {
-    if (!(await pdfLibAvailable())) {
-      console.log('skip: pdf-lib or @pdf-lib/fontkit not installed');
-      return;
-    }
-
     await preloadPdfFonts();
     const pdfLib = await import('pdf-lib');
     const doc = await pdfLib.PDFDocument.create();
@@ -250,11 +202,6 @@ describe('create document tools', () => {
   });
 
   it('splits mixed-script lines into latin, emoji, and CJK runs', async () => {
-    if (!(await pdfLibAvailable())) {
-      console.log('skip: pdf-lib or @pdf-lib/fontkit not installed');
-      return;
-    }
-
     await preloadPdfFonts();
     const sample = 'Café✅日本語Привет';
     const { runs } = splitRuns(sample);
