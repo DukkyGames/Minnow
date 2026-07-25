@@ -52,6 +52,9 @@ export class ThoughtBubbleController {
 
   private thinkingStartNotified = false;
 
+  /** True after `endReasoningPhase` fires `onReasoningEnded` for the current stream. */
+  private reasoningPhaseEnded = false;
+
   /** Anthropic thinking signature for the current reasoning block (tool-loop replay). */
   private anthropicThinkingSignature: string | null = null;
 
@@ -63,6 +66,7 @@ export class ThoughtBubbleController {
   /** Reset phase callbacks for a new streaming shell in the same user send (e.g. after tools). */
   resetStreamPhaseHints(): void {
     this.thinkingStartNotified = false;
+    this.reasoningPhaseEnded = false;
     this.anthropicThinkingSignature = null;
   }
 
@@ -140,7 +144,8 @@ export class ThoughtBubbleController {
    * flushes any open reasoning, removes the live stage from the DOM.
    */
   endReasoningPhase(): void {
-    if (this.disposed) return;
+    if (this.disposed || this.reasoningPhaseEnded) return;
+    this.reasoningPhaseEnded = true;
     const tail = this.openBuffer.trim();
     this.openBuffer = '';
     if (tail) {
@@ -180,6 +185,7 @@ export class ThoughtBubbleController {
     this.openBuffer = '';
     this.teardownStage();
     this.thinkingStartNotified = false;
+    this.reasoningPhaseEnded = false;
     this.expanded = false;
     this.elapsedMs = null;
     return segments;

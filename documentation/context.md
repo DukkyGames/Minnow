@@ -148,7 +148,7 @@ Loader dismiss: [`src/boot/app-ready.ts`](../src/boot/app-ready.ts) on `DOMConte
 | Role | Shape | Notes |
 |------|--------|-------|
 | `user` | `{ role, content: string }` | Attachments as `[image: …]` / `<file name="…">` in content |
-| `assistant` | `{ role, content, thinking?, tool_calls?, stats? }` | Markdown UI; optional `thinking[]` |
+| `assistant` | `{ role, content, thinking?, thinkingDurationMs?, tool_calls?, stats? }` | Markdown UI; optional `thinking[]` and wall-clock reasoning duration |
 | `tool` | `{ role, tool_call_id, content }` | Paired to `tool_calls` in UI |
 
 Wire format may use multimodal `ContentPart[]` for VLMs; built in [`src/tools/loop.ts`](../src/tools/loop.ts) (`buildApiMessages`).
@@ -168,6 +168,8 @@ Main chat: `POST /api/generations` + `GET .../stream` with replay. Client stores
 SSE parsing: [`src/api/sse-parse.ts`](../src/api/sse-parse.ts) — event boundaries and glued JSON chunks; do not `Response.json()` on the generations shim.
 
 **Live metrics (MIN-413):** [`src/chat/streaming-stats.ts`](../src/chat/streaming-stats.ts) updates `chat.lastStats` and the bottom metrics strip during SSE (throttled ~100ms). Provider `usage` from chunks is preferred when `completion_tokens` is present; otherwise completion tokens are estimated from partial assistant prose only (`chars ÷ 4`). Tool-loop rounds roll up via [`aggregateTurnUsageSegments`](../src/chat/orchestrate/stats-math.ts) — sum completions, keep the latest prompt (each API call reports full context, not a delta).
+
+**Thinking duration (MIN-467):** [`ThinkingDurationTracker`](../src/ui/thinking-duration.ts) accumulates wall time only while reasoning SSE is active. [`streamCompletionTurn`](../src/tools/loop.ts) ends the reasoning phase when the first `tool_calls` delta arrives so the live “Thinking…” timer and persisted `thinkingDurationMs` do not include tool-call streaming or execution.
 
 **Turn runs** (`chat.runs`): semantic branches for replay/fork ([`src/state/runs-store.ts`](../src/state/runs-store.ts)), separate from transport generations. Branch picker ([`src/ui/branch-picker.ts`](../src/ui/branch-picker.ts)) calls `activateBranch`, which snapshots the active branch’s continuation into `outputMessages` before swapping so follow-up turns survive switching between branches; it also calls `switchActiveChat` so the next composer send stays on that chat (desktop/chat-app send no longer re-resolves a different sandbox chat when history is already present). After fork/replay turns settle, `loop.ts` calls `refreshBranchPickerAtFork` so the picker appears without reloading the chat.
 

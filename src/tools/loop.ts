@@ -863,13 +863,6 @@ async function streamCompletionTurn(
   function handleChunk(chunk: ChatCompletionChunk): void {
     streamMeta = mergeStreamMeta(streamMeta, chunk);
     toolAcc = mergeToolCallDelta(toolAcc, chunk);
-    if (domVisible && onToolCallStreaming) {
-      const streamingName = getLatestStreamingToolName(toolAcc);
-      if (streamingName && streamingName !== lastAnnouncedToolName) {
-        lastAnnouncedToolName = streamingName;
-        onToolCallStreaming(streamingName);
-      }
-    }
     const reasoning = extractReasoningDelta(chunk);
     if (reasoning) {
       feedThinkingBudget(reasoning);
@@ -889,6 +882,17 @@ async function streamCompletionTurn(
         prefillEchoPartial = '';
       }
       routeContentDelta(routedDelta);
+    }
+    // Reasoning ends before tool_calls JSON streams; stop the thinking timer here (MIN-467).
+    if (Object.keys(toolAcc).length > 0) {
+      thoughtController?.endReasoningPhase();
+    }
+    if (domVisible && onToolCallStreaming) {
+      const streamingName = getLatestStreamingToolName(toolAcc);
+      if (streamingName && streamingName !== lastAnnouncedToolName) {
+        lastAnnouncedToolName = streamingName;
+        onToolCallStreaming(streamingName);
+      }
     }
     emitStreamProgress();
     if (domVisible) {
