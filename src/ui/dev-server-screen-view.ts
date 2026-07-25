@@ -1,0 +1,382 @@
+/**
+ * Pure view models for the Dev Servers Code screen (and shared hub helpers).
+ * Hub re-exports formatters from here so existing tests stay green.
+ */
+
+import {
+  DEFAULT_DEV_SERVER_PORT,
+  type DevServerLifecycleStatus,
+  type DevServerNetwork,
+} from '../config/startup-api';
+import type { DevServerListItem, ListeningPortRow } from '../config/dev-servers-api';
+
+export type HubDevServerUiState =
+  | 'offline'
+  | 'setup'
+  | 'stopped'
+  | 'starting'
+  | 'running'
+  | 'stopping'
+  | 'error';
+
+export type DevServerRowUiState = HubDevServerUiState | 'port-conflict';
+
+export interface HubDevServerViewModel {
+  uiState: HubDevServerUiState;
+  label: string;
+  meta: string;
+  openUrl: string | null;
+  primaryDisabled: boolean;
+  showConsole: boolean;
+  settingsDisabled: boolean;
+  port: number;
+  network: DevServerNetwork;
+}
+
+export interface DevServerRowViewModel {
+  id: string;
+  name: string;
+  uiState: DevServerRowUiState;
+  command: string;
+  meta: string;
+  openUrl: string | null;
+  port: number;
+  network: DevServerNetwork;
+  canStart: boolean;
+  canStop: boolean;
+  canRestart: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  portConflict: boolean;
+  warning: string | null;
+}
+
+export interface HubDevServersSummaryView {
+  uiState: HubDevServerUiState;
+  label: string;
+  meta: string;
+  primaryDisabled: boolean;
+}
+
+function formatNetworkLabel(network: DevServerNetwork): string {
+  return network === 'lan' ? 'network' : 'this PC';
+}
+
+function formatPortMeta(port: number | null | undefined, network: DevServerNetwork): string {
+  if (port == null) return formatNetworkLabel(network);
+  return `:${port} · ${formatNetworkLabel(network)}`;
+}
+
+/** User-facing URL for open-in-preview (localhost + configured port). */
+export function formatHubDevServerOpenUrl(
+  healthUrl: string | null | undefined,
+  port: number,
+  _network: DevServerNetwork = 'local',
+): string {
+  if (healthUrl) {
+    try {
+      const u = new URL(healthUrl);
+      u.hostname = 'localhost';
+      u.port = String(port);
+      return u.toString();
+    } catch {
+      /* fall through */
+    }
+  }
+  return `http://localhost:${port}/`;
+}
+
+/** Status line under a single-server label (legacy hub helpers). */
+export function formatHubDevServerMeta(
+  status: DevServerLifecycleStatus,
+  error: string | null | undefined,
+  port: number | null | undefined,
+  network: DevServerNetwork,
+): string {
+  if (status === 'starting') return `starting… ${formatPortMeta(port, network)} · click to stop`;
+  if (status === 'running') return `running ${formatPortMeta(port, network)}`;
+  if (status === 'stopping') return 'stopping…';
+  if (status === 'error') {
+    const short =
+      error && error.length > 36 ? `${error.slice(0, 33)}…` : (error ?? 'start failed');
+    return short;
+  }
+  if (status === 'stopped') return `stopped ${formatPortMeta(port, network)}`;
+  return 'stopped';
+}
+
+function openUrlForStatus(
+  status: DevServerLifecycleStatus,
+  healthUrl: string | null | undefined,
+  port: number,
+  network: DevServerNetwork,
+): string | null {
+  if (status !== 'starting' && status !== 'running') return null;
+  return formatHubDevServerOpenUrl(healthUrl, port, network);
+}
+
+/** Map API status + server availability to legacy hub cell presentation. */
+export function deriveHubDevServerView(
+  serverOnline: boolean,
+  status: DevServerLifecycleStatus,
+  error?: string | null,
+  _runId?: string | null,
+  port: number = DEFAULT_DEV_SERVER_PORT,
+  network: DevServerNetwork = 'local',
+  healthUrl?: string | null,
+): HubDevServerViewModel {
+  const settingsDisabled =
+    !serverOnline ||
+    status === 'starting' ||
+    status === 'running' ||
+    status === 'stopping';
+  const openUrl = openUrlForStatus(status, healthUrl, port, network);
+
+  if (!serverOnline) {
+    return {
+      uiState: 'offline',
+      label: 'Dev server',
+      meta: 'server offline',
+      openUrl: null,
+      primaryDisabled: true,
+      showConsole: false,
+      settingsDisabled: true,
+      port,
+      network,
+    };
+  }
+
+  if (status === 'no_guide') {
+    return {
+      uiState: 'setup',
+      label: 'Set up',
+      meta: 'no startup guide',
+      openUrl: null,
+      primaryDisabled: false,
+      showConsole: false,
+      settingsDisabled: false,
+      port,
+      network,
+    };
+  }
+
+  if (status === 'starting') {
+    return {
+      uiState: 'starting',
+      label: 'Dev server',
+      meta: formatHubDevServerMeta(status, error, port, network),
+      openUrl,
+      primaryDisabled: false,
+      showConsole: true,
+      settingsDisabled: true,
+      port,
+      network,
+    };
+  }
+
+  if (status === 'running') {
+    return {
+      uiState: 'running',
+      label: 'Dev server',
+      meta: formatHubDevServerMeta(status, error, port, network),
+      openUrl,
+      primaryDisabled: false,
+      showConsole: true,
+      settingsDisabled: true,
+      port,
+      network,
+    };
+  }
+
+  if (status === 'stopping') {
+    return {
+      uiState: 'stopping',
+      label: 'Dev server',
+      meta: formatHubDevServerMeta(status, error, port, network),
+      openUrl: null,
+      primaryDisabled: true,
+      showConsole: true,
+      settingsDisabled: true,
+      port,
+      network,
+    };
+  }
+
+  if (status === 'error') {
+    return {
+      uiState: 'error',
+      label: 'Dev server',
+      meta: formatHubDevServerMeta(status, error, port, network),
+      openUrl: null,
+      primaryDisabled: false,
+      showConsole: true,
+      settingsDisabled: false,
+      port,
+      network,
+    };
+  }
+
+  return {
+    uiState: 'stopped',
+    label: 'Dev server',
+    meta: formatHubDevServerMeta('stopped', error, port, network),
+    openUrl: null,
+    primaryDisabled: false,
+    showConsole: false,
+    settingsDisabled: false,
+    port,
+    network,
+  };
+}
+
+function formatElapsed(startedAt: number | null): string {
+  if (startedAt == null) return '';
+  const sec = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m`;
+  return `${Math.floor(min / 60)}h`;
+}
+
+/** Per-row state machine for the Dev Servers screen. */
+export function deriveDevServerRowView(
+  serverOnline: boolean,
+  item: DevServerListItem,
+): DevServerRowViewModel {
+  const port = item.port ?? item.def?.port ?? DEFAULT_DEV_SERVER_PORT;
+  const network = item.network ?? item.def?.network ?? 'local';
+  const command = item.command ?? item.def?.command ?? '';
+  const name = item.name || item.def?.name || item.id;
+  const base = deriveHubDevServerView(
+    serverOnline,
+    item.status,
+    item.error,
+    item.runId,
+    port,
+    network,
+    item.healthUrl,
+  );
+
+  const stoppedLike =
+    item.status === 'stopped' || item.status === 'error' || item.status === 'no_guide';
+  const portConflict =
+    serverOnline && stoppedLike && item.portInUse && item.status !== 'no_guide';
+
+  let uiState: DevServerRowUiState = base.uiState;
+  let warning: string | null = null;
+  if (portConflict) {
+    uiState = 'port-conflict';
+    warning = `port in use`;
+  } else if (
+    (item.status === 'running' || item.status === 'starting') &&
+    item.port != null &&
+    item.pid == null &&
+    item.portInUse
+  ) {
+    warning = 'listening port may not match configured port';
+  }
+
+  const elapsed =
+    item.status === 'running' || item.status === 'starting'
+      ? formatElapsed(item.startedAt)
+      : '';
+  const metaParts = [base.meta];
+  if (elapsed) metaParts.push(elapsed);
+  if (warning) metaParts.push(warning);
+
+  return {
+    id: item.id,
+    name,
+    uiState,
+    command,
+    meta: metaParts.join(' · '),
+    openUrl: base.openUrl,
+    port,
+    network,
+    canStart:
+      serverOnline &&
+      (item.status === 'stopped' || item.status === 'error' || item.status === 'no_guide'),
+    canStop:
+      serverOnline &&
+      (item.status === 'starting' || item.status === 'running' || item.status === 'stopping'),
+    canRestart: serverOnline && (item.status === 'running' || item.status === 'error'),
+    canEdit: serverOnline && item.status !== 'starting' && item.status !== 'stopping',
+    canDelete: serverOnline && item.def?.source !== 'startup.md',
+    portConflict,
+    warning,
+  };
+}
+
+/** Compact hub strip summary for the multi-server list. */
+export function deriveHubDevServersSummary(
+  serverOnline: boolean,
+  servers: DevServerListItem[],
+): HubDevServersSummaryView {
+  if (!serverOnline) {
+    return {
+      uiState: 'offline',
+      label: 'Dev servers',
+      meta: 'server offline',
+      primaryDisabled: true,
+    };
+  }
+
+  const real = servers.filter((s) => s.status !== 'no_guide' || s.def != null);
+  if (real.length === 0 || servers.every((s) => s.status === 'no_guide' && !s.def)) {
+    return {
+      uiState: 'setup',
+      label: 'Dev servers',
+      meta: 'no servers yet',
+      primaryDisabled: false,
+    };
+  }
+
+  const running = servers.filter((s) => s.status === 'running' || s.status === 'starting');
+  const errored = servers.filter((s) => s.status === 'error');
+  const ports = running
+    .map((s) => s.port)
+    .filter((p): p is number => typeof p === 'number')
+    .slice(0, 2);
+  const portBit = ports.length ? ports.map((p) => `:${p}`).join(' ') : '';
+
+  if (errored.length && !running.length) {
+    return {
+      uiState: 'error',
+      label: 'Dev servers',
+      meta: `${errored.length} error${errored.length === 1 ? '' : 's'}`,
+      primaryDisabled: false,
+    };
+  }
+
+  if (running.length) {
+    return {
+      uiState: running.some((s) => s.status === 'starting') ? 'starting' : 'running',
+      label: 'Dev servers',
+      meta: `${running.length} running${portBit ? ` · ${portBit}` : ''}`,
+      primaryDisabled: false,
+    };
+  }
+
+  return {
+    uiState: 'stopped',
+    label: 'Dev servers',
+    meta: `${servers.length} stopped`,
+    primaryDisabled: false,
+  };
+}
+
+/** Attribute a listening port to a named registry server when possible. */
+export function labelPortAttribution(
+  row: ListeningPortRow,
+  servers: DevServerListItem[],
+): string | null {
+  for (const s of servers) {
+    if (s.port === row.port && (s.status === 'running' || s.status === 'starting')) {
+      return s.name || s.id;
+    }
+    if (s.pid != null && s.pid === row.pid) {
+      return s.name || s.id;
+    }
+  }
+  return null;
+}

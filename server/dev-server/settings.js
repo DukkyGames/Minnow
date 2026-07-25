@@ -117,10 +117,37 @@ export async function writeDevServerSettings(workspaceRoot, patch) {
   byPath[key] = { port: next.port, network: next.network };
   existingWs.devServerSettingsByPath = byPath;
 
+  // Keep the multi-server primary registry row in sync with legacy hub settings.
+  const serversByPath =
+    existingWs.devServersByPath && typeof existingWs.devServersByPath === 'object'
+      ? { .../** @type {Record<string, unknown>} */ (existingWs.devServersByPath) }
+      : {};
+  const bucket = serversByPath[key];
+  if (bucket && typeof bucket === 'object') {
+    const servers = /** @type {Record<string, unknown>} */ (bucket).servers;
+    if (Array.isArray(servers)) {
+      serversByPath[key] = {
+        servers: servers.map((row) => {
+          if (!row || typeof row !== 'object') return row;
+          const rec = /** @type {Record<string, unknown>} */ (row);
+          if (rec.id === 'primary' || rec.source === 'startup.md') {
+            return { ...rec, port: next.port, network: next.network };
+          }
+          return row;
+        }),
+      };
+      existingWs.devServersByPath = serversByPath;
+    }
+  }
+
   const merged = mergeConfigMeta(meta, { workspace: existingWs });
   if (merged.workspace && typeof merged.workspace === 'object') {
     /** @type {Record<string, unknown>} */ (merged.workspace).devServerSettingsByPath =
       byPath;
+    if (existingWs.devServersByPath) {
+      /** @type {Record<string, unknown>} */ (merged.workspace).devServersByPath =
+        existingWs.devServersByPath;
+    }
   }
   await writeConfigJson('config.json', merged);
   return next;

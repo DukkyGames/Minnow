@@ -1988,6 +1988,9 @@
       <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnCodeBrainMap" aria-label="Code map" title="Code map" aria-pressed="false" aria-expanded="false">
         <img class="icon-img" src="/icons/code-brain-map.png" width="18" height="18" alt="" aria-hidden="true">
       </button>
+      <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnDevServers" aria-label="Dev servers" title="Dev servers" aria-pressed="false">
+        <img class="icon-img" src="/icons/dev-server.png" width="18" height="18" alt="" aria-hidden="true">
+      </button>
       <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnOrchestrate" aria-label="Orchestrate boards" title="Orchestrate boards" aria-pressed="false" aria-expanded="false">
         <img class="icon-img" src="/icons/Orchestrate.svg" width="18" height="18" alt="" aria-hidden="true">
       </button>
@@ -2223,7 +2226,6 @@
         <div class="terminal-tab-bar" id="terminalTabBar"></div>
         <div class="terminal-header-actions">
           <button type="button" class="terminal-header-btn hidden" id="btnTerminalAgentStop">Stop command</button>
-          <button type="button" class="terminal-header-btn hidden" id="btnTerminalDevServerStop">Stop dev server</button>
           <button type="button" class="terminal-header-btn hidden" id="btnTerminalClear">Clear agent output</button>
           <button type="button" class="terminal-header-btn" id="btnTerminalCollapse" aria-label="Hide terminal">Hide</button>
         </div>
@@ -2239,9 +2241,6 @@
             </select>
           </div>
           <pre class="terminal-output terminal-agent-output" id="terminalOutput" aria-live="polite"></pre>
-        </div>
-        <div class="terminal-pane terminal-dev-server-pane hidden" id="terminalDevServerPane" role="tabpanel" aria-label="Dev server output">
-          <pre class="terminal-output terminal-dev-server-output" id="terminalDevServerOutput" aria-live="polite"></pre>
         </div>
         <div class="terminal-pane terminal-pty-pane" id="terminalPtyPane" role="tabpanel" aria-label="Interactive shell">
           <div class="terminal-xterm-host" id="terminalXtermHost"></div>

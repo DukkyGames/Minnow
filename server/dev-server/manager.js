@@ -1,8 +1,8 @@
 /**
- * Workspace dev-server lifecycle (startup.md → detached process).
+ * Workspace dev-server lifecycle — multi-server Map keyed by (workspace, serverId).
+ * Primary-id wrappers keep hub / agent-tool / existing tests working.
  */
 
-import fs from 'node:fs/promises';
 import path from 'node:path';
 import { readConfigJson, writeConfigJson } from '../config/store.js';
 import { mergeConfigMeta } from '../config/validators.js';
@@ -16,14 +16,16 @@ import {
 } from '../terminal-runner.js';
 import { resolveSafePath } from '../runtime/path-access.js';
 import { getWorkspaceRoot, normalizeWorkspacePathKey } from '../workspace/root.js';
-import { parseStartupMarkdown, startupFilePath } from './parse-startup.js';
 import {
   buildDevServerSpawnEnv,
   resolveEffectiveGuide,
 } from './effective-guide.js';
+import { PRIMARY_DEV_SERVER_ID, getDevServerDefinition, readDevServers } from './registry.js';
 import { readDevServerSettings } from './settings.js';
+import { readStartupGuide } from './startup-guide.js';
 import { assessHostKillCommand } from '../tools/host-kill-guard.js';
 import { assessHostPortBindCommand } from '../tools/host-port-bind-guard.js';
+import { probePort } from './ports.js';
 
 /** @typedef {'no_guide' | 'stopped' | 'starting' | 'running' | 'stopping' | 'error'} DevServerStatus */
 
@@ -31,6 +33,7 @@ import { assessHostPortBindCommand } from '../tools/host-port-bind-guard.js';
  * @typedef {object} ManagedDevServer
  * @property {string} workspaceKey
  * @property {string} workspaceRoot
+ * @property {string} serverId
  * @property {DevServerStatus} status
  * @property {string} [runId]
  * @property {number | null} [pid]
@@ -41,7 +44,7 @@ import { assessHostPortBindCommand } from '../tools/host-port-bind-guard.js';
  * @property {number} [startedAt]
  */
 
-/** @type {Map<string, ManagedDevServer>} */
+/** @type {Map<string, Map<string, ManagedDevServer>>} */
 const byWorkspaceKey = new Map();
 
 const HEALTH_TIMEOUT_MS = 4_000;
@@ -57,9 +60,9 @@ function workspaceKey(workspaceRoot) {
 
 /**
  * @param {string} key
- * @returns {Promise<Record<string, unknown> | null>}
+ * @returns {Promise<Record<string, Record<string, unknown>>>}
  */
-async function readPersistedRecord(key) {
+async function readPersistedServers(key) {
   const meta = (await readConfigJson('config.json')) ?? {};
   const ws =
     meta.workspace && typeof meta.workspace === 'object'
@@ -70,14 +73,25 @@ async function readPersistedRecord(key) {
       ? /** @type {Record<string, unknown>} */ (ws.devServerByPath)
       : null;
   const row = byPath?.[key];
-  return row && typeof row === 'object' ? /** @type {Record<string, unknown>} */ (row) : null;
+  if (!row || typeof row !== 'object') return {};
+
+  const obj = /** @type {Record<string, unknown>} */ (row);
+  // Nested shape: { servers: { [serverId]: row } }
+  if (obj.servers && typeof obj.servers === 'object' && !Array.isArray(obj.servers)) {
+    return /** @type {Record<string, Record<string, unknown>>>} */ (obj.servers);
+  }
+  // Legacy flat row (has status, no servers) → adopt as primary.
+  if (typeof obj.status === 'string') {
+    return { [PRIMARY_DEV_SERVER_ID]: obj };
+  }
+  return {};
 }
 
 /**
  * @param {string} key
- * @param {Record<string, unknown>} record
+ * @param {Record<string, Record<string, unknown>>} servers
  */
-async function persistRecord(key, record) {
+async function persistServers(key, servers) {
   const meta = (await readConfigJson('config.json')) ?? {};
   const existingWs =
     meta.workspace && typeof meta.workspace === 'object'
@@ -87,7 +101,7 @@ async function persistRecord(key, record) {
     existingWs.devServerByPath && typeof existingWs.devServerByPath === 'object'
       ? { .../** @type {Record<string, unknown>} */ (existingWs.devServerByPath) }
       : {};
-  byPath[key] = record;
+  byPath[key] = { servers };
   existingWs.devServerByPath = byPath;
   const merged = mergeConfigMeta(meta, { workspace: existingWs });
   if (merged.workspace && typeof merged.workspace === 'object') {
@@ -100,33 +114,51 @@ async function persistRecord(key, record) {
  * @param {ManagedDevServer} row
  */
 async function saveState(row) {
-  byWorkspaceKey.set(row.workspaceKey, row);
-  await persistRecord(row.workspaceKey, {
-    status: row.status,
-    runId: row.runId ?? null,
-    pid: row.pid ?? null,
-    command: row.command ?? null,
-    healthUrl: row.healthUrl ?? null,
-    port: row.port ?? null,
-    error: row.error ?? null,
-    startedAt: row.startedAt ?? null,
-  });
+  let wsMap = byWorkspaceKey.get(row.workspaceKey);
+  if (!wsMap) {
+    wsMap = new Map();
+    byWorkspaceKey.set(row.workspaceKey, wsMap);
+  }
+  wsMap.set(row.serverId, row);
+
+  const servers = {};
+  for (const [id, r] of wsMap) {
+    servers[id] = {
+      status: r.status,
+      runId: r.runId ?? null,
+      pid: r.pid ?? null,
+      command: r.command ?? null,
+      healthUrl: r.healthUrl ?? null,
+      port: r.port ?? null,
+      error: r.error ?? null,
+      startedAt: r.startedAt ?? null,
+    };
+  }
+  await persistServers(row.workspaceKey, servers);
 }
 
 /**
  * @param {string} root
+ * @param {string} serverId
  * @returns {Promise<ManagedDevServer>}
  */
-async function getOrInitRow(root) {
+async function getOrInitRow(root, serverId = PRIMARY_DEV_SERVER_ID) {
   const key = workspaceKey(root);
-  const existing = byWorkspaceKey.get(key);
+  let wsMap = byWorkspaceKey.get(key);
+  if (!wsMap) {
+    wsMap = new Map();
+    byWorkspaceKey.set(key, wsMap);
+  }
+  const existing = wsMap.get(serverId);
   if (existing) return existing;
 
-  const persisted = await readPersistedRecord(key);
+  const persistedMap = await readPersistedServers(key);
+  const persisted = persistedMap[serverId] ?? null;
   /** @type {ManagedDevServer} */
   const row = {
     workspaceKey: key,
     workspaceRoot: path.resolve(root),
+    serverId,
     status: 'stopped',
     runId: typeof persisted?.runId === 'string' ? persisted.runId : undefined,
     pid: typeof persisted?.pid === 'number' ? persisted.pid : null,
@@ -141,7 +173,7 @@ async function getOrInitRow(root) {
     row.status = /** @type {DevServerStatus} */ (persisted.status);
   }
 
-  byWorkspaceKey.set(key, row);
+  wsMap.set(serverId, row);
   return row;
 }
 
@@ -241,46 +273,34 @@ function shouldRegisterDevServerFromTool(args, guide) {
 }
 
 /**
- * @param {string} [workspaceRoot]
+ * Build effective guide for a registry definition (or startup.md primary).
+ * @param {import('./registry.js').DevServerDefinition | null} def
+ * @param {{ command: string, cwd?: string, healthUrl?: string, port?: number, stop?: { command?: string } } | null} startupGuide
+ * @param {{ port: number, network: 'local' | 'lan' }} settings
  */
-export async function readStartupGuide(workspaceRoot = getWorkspaceRoot()) {
-  const filePath = startupFilePath(workspaceRoot);
-  try {
-    const content = await fs.readFile(filePath, 'utf8');
-    const parsed = parseStartupMarkdown(content);
-    return {
-      exists: true,
-      path: filePath,
-      guide: parsed.guide,
-      parseError: parsed.error,
-      body: parsed.body,
-    };
-  } catch (err) {
-    const code = err && typeof err === 'object' && 'code' in err ? err.code : null;
-    if (code === 'ENOENT') {
-      return { exists: false, path: filePath, guide: null, parseError: undefined, body: '' };
-    }
-    const message = err instanceof Error ? err.message : String(err);
-    return { exists: false, path: filePath, guide: null, parseError: message, body: '' };
-  }
+function effectiveFromDefinition(def, startupGuide, settings) {
+  if (!def && !startupGuide) return null;
+  const guide = {
+    command: def?.command ?? startupGuide?.command ?? '',
+    cwd: def?.cwd ?? startupGuide?.cwd,
+    healthUrl: def?.healthUrl ?? startupGuide?.healthUrl,
+    port: def?.port ?? startupGuide?.port,
+    stop: startupGuide?.stop,
+  };
+  if (!guide.command) return null;
+  return resolveEffectiveGuide(guide, {
+    port: def?.port ?? settings.port,
+    network: def?.network ?? settings.network,
+  });
 }
 
 /**
- * @param {string} [workspaceRoot]
+ * Promote starting→running / timeout error for a row.
+ * @param {ManagedDevServer} row
+ * @param {string | undefined} healthUrl
  */
-export async function getDevServerStatus(workspaceRoot = getWorkspaceRoot()) {
-  const root = path.resolve(workspaceRoot);
-  const startup = await readStartupGuide(root);
-  const settings = await readDevServerSettings(root);
-  const effective =
-    startup.guide != null
-      ? resolveEffectiveGuide(startup.guide, settings)
-      : null;
-  let row = await getOrInitRow(root);
-  row = await reconcileRow(row);
-
+async function reconcileHealth(row, healthUrl) {
   let healthOk = null;
-  const healthUrl = row.healthUrl ?? effective?.healthUrl ?? startup.guide?.healthUrl;
   if ((row.status === 'running' || row.status === 'starting') && healthUrl) {
     healthOk = await probeHealth(healthUrl);
     if (row.status === 'starting' && healthOk) {
@@ -310,23 +330,53 @@ export async function getDevServerStatus(workspaceRoot = getWorkspaceRoot()) {
       await saveState(row);
     }
   }
+  return healthOk;
+}
+
+/**
+ * @param {string} [workspaceRoot]
+ * @param {string} [serverId]
+ */
+export async function getDevServerStatusById(
+  workspaceRoot = getWorkspaceRoot(),
+  serverId = PRIMARY_DEV_SERVER_ID,
+) {
+  const root = path.resolve(workspaceRoot);
+  const startup = await readStartupGuide(root);
+  const settings = await readDevServerSettings(root);
+  const def = await getDevServerDefinition(root, serverId);
+  const effective = effectiveFromDefinition(def, startup.guide, settings);
+  let row = await getOrInitRow(root, serverId);
+  row = await reconcileRow(row);
+
+  const healthUrl = row.healthUrl ?? effective?.healthUrl ?? def?.healthUrl ?? startup.guide?.healthUrl;
+  const healthOk = await reconcileHealth(row, healthUrl);
+
+  const hasGuide = Boolean(def?.command || (serverId === PRIMARY_DEV_SERVER_ID && startup.guide));
+  const portInUse =
+    (row.port ?? effective?.port) != null
+      ? (await probePort(row.port ?? effective?.port ?? 0)) === 'in-use'
+      : false;
 
   return {
+    id: serverId,
+    def: def,
     workspacePath: root,
     startupExists: startup.exists,
     guide: startup.guide,
     effectiveGuide: effective,
     settings,
     parseError: startup.parseError,
-    status: startup.exists && startup.guide ? row.status : 'no_guide',
+    status: hasGuide ? row.status : 'no_guide',
     runId: row.runId ?? null,
     pid: row.pid ?? null,
-    port: row.port ?? effective?.port ?? startup.guide?.port ?? null,
-    network: effective?.network ?? settings.network ?? null,
-    healthUrl: row.healthUrl ?? effective?.healthUrl ?? startup.guide?.healthUrl ?? null,
+    port: row.port ?? effective?.port ?? def?.port ?? startup.guide?.port ?? null,
+    network: effective?.network ?? def?.network ?? settings.network ?? null,
+    healthUrl: healthUrl ?? null,
     healthOk,
+    portInUse,
     error: row.error ?? startup.parseError ?? null,
-    command: row.command ?? effective?.command ?? startup.guide?.command ?? null,
+    command: row.command ?? effective?.command ?? def?.command ?? startup.guide?.command ?? null,
     startedAt: row.startedAt ?? null,
   };
 }
@@ -334,20 +384,98 @@ export async function getDevServerStatus(workspaceRoot = getWorkspaceRoot()) {
 /**
  * @param {string} [workspaceRoot]
  */
-export async function startDevServer(workspaceRoot = getWorkspaceRoot()) {
+export async function listDevServerStatuses(workspaceRoot = getWorkspaceRoot()) {
+  const root = path.resolve(workspaceRoot);
+  const defs = await readDevServers(root);
+  if (defs.length === 0) {
+    // Empty registry: still surface primary status for hub/legacy (no_guide).
+    const primary = await getDevServerStatusById(root, PRIMARY_DEV_SERVER_ID);
+    return {
+      servers: [
+        {
+          def: null,
+          status: primary.status,
+          runId: primary.runId,
+          pid: primary.pid,
+          healthOk: primary.healthOk,
+          startedAt: primary.startedAt,
+          portInUse: primary.portInUse,
+          port: primary.port,
+          network: primary.network,
+          command: primary.command,
+          healthUrl: primary.healthUrl,
+          error: primary.error,
+          id: PRIMARY_DEV_SERVER_ID,
+          name: 'primary',
+        },
+      ],
+    };
+  }
+
+  const servers = [];
+  for (const def of defs) {
+    const st = await getDevServerStatusById(root, def.id);
+    servers.push({
+      def,
+      status: st.status,
+      runId: st.runId,
+      pid: st.pid,
+      healthOk: st.healthOk,
+      startedAt: st.startedAt,
+      portInUse: st.portInUse,
+      port: st.port,
+      network: st.network,
+      command: st.command,
+      healthUrl: st.healthUrl,
+      error: st.error,
+      id: def.id,
+      name: def.name,
+    });
+  }
+  return { servers };
+}
+
+/**
+ * @param {string} [workspaceRoot]
+ */
+export async function getDevServerStatus(workspaceRoot = getWorkspaceRoot()) {
+  return getDevServerStatusById(workspaceRoot, PRIMARY_DEV_SERVER_ID);
+}
+
+/**
+ * @param {string} [workspaceRoot]
+ * @param {string} [serverId]
+ */
+export async function startDevServerById(
+  workspaceRoot = getWorkspaceRoot(),
+  serverId = PRIMARY_DEV_SERVER_ID,
+) {
   const root = path.resolve(workspaceRoot);
   const startup = await readStartupGuide(root);
-  if (!startup.exists) {
-    return { ok: false, error: 'startup.md not found in workspace root' };
-  }
-  if (!startup.guide) {
-    return { ok: false, error: startup.parseError ?? 'Invalid startup.md' };
-  }
-
   const settings = await readDevServerSettings(root);
-  const effective = resolveEffectiveGuide(startup.guide, settings);
+  let def = await getDevServerDefinition(root, serverId);
 
-  let row = await getOrInitRow(root);
+  // Ensure registry is seeded for primary when startup.md exists.
+  if (!def && serverId === PRIMARY_DEV_SERVER_ID) {
+    await readDevServers(root);
+    def = await getDevServerDefinition(root, serverId);
+  }
+
+  if (!def?.command) {
+    if (!startup.exists) {
+      return { ok: false, error: 'startup.md not found in workspace root' };
+    }
+    if (!startup.guide) {
+      return { ok: false, error: startup.parseError ?? 'Invalid startup.md' };
+    }
+  }
+
+  const effective = effectiveFromDefinition(def, startup.guide, settings);
+  if (!effective) {
+    return { ok: false, error: 'No command configured for this server' };
+  }
+
+  let row = await getOrInitRow(root, serverId);
   row = await reconcileRow(row);
 
   if (row.status === 'running' && row.runId && getRun(row.runId) && !getRun(row.runId)?.finished) {
@@ -396,13 +524,27 @@ export async function startDevServer(workspaceRoot = getWorkspaceRoot()) {
 /**
  * @param {string} [workspaceRoot]
  */
-export async function stopDevServer(workspaceRoot = getWorkspaceRoot()) {
+export async function startDevServer(workspaceRoot = getWorkspaceRoot()) {
+  return startDevServerById(workspaceRoot, PRIMARY_DEV_SERVER_ID);
+}
+
+/**
+ * @param {string} [workspaceRoot]
+ * @param {string} [serverId]
+ */
+export async function stopDevServerById(
+  workspaceRoot = getWorkspaceRoot(),
+  serverId = PRIMARY_DEV_SERVER_ID,
+) {
   const root = path.resolve(workspaceRoot);
   const startup = await readStartupGuide(root);
-  let row = await getOrInitRow(root);
+  const def = await getDevServerDefinition(root, serverId);
+  let row = await getOrInitRow(root, serverId);
+
+  const hasGuide = Boolean(def?.command || (serverId === PRIMARY_DEV_SERVER_ID && startup.guide));
 
   if (!row.runId && row.status !== 'running' && row.status !== 'starting') {
-    row.status = startup.exists && startup.guide ? 'stopped' : 'no_guide';
+    row.status = hasGuide ? 'stopped' : 'no_guide';
     await saveState(row);
     return { ok: true, status: row.status };
   }
@@ -410,15 +552,16 @@ export async function stopDevServer(workspaceRoot = getWorkspaceRoot()) {
   row.status = 'stopping';
   await saveState(row);
 
-  const stopCmd = startup.guide?.stop?.command;
+  const stopCmd =
+    serverId === PRIMARY_DEV_SERVER_ID || def?.source === 'startup.md'
+      ? startup.guide?.stop?.command
+      : undefined;
   if (stopCmd) {
     try {
-      const cwd = resolveSafePath(startup.guide?.cwd ?? '.', { write: false });
+      const cwd = resolveSafePath(startup.guide?.cwd ?? def?.cwd ?? '.', { write: false });
       await runProcess(
         process.platform === 'win32' ? 'cmd.exe' : 'sh',
-        process.platform === 'win32'
-          ? ['/d', '/s', '/c', stopCmd]
-          : ['-c', stopCmd],
+        process.platform === 'win32' ? ['/d', '/s', '/c', stopCmd] : ['-c', stopCmd],
         { cwd, timeout: COMMAND_TIMEOUT_MS, shell: false },
       );
     } catch {
@@ -435,13 +578,50 @@ export async function stopDevServer(workspaceRoot = getWorkspaceRoot()) {
     }
   }
 
-  row.status = startup.exists && startup.guide ? 'stopped' : 'no_guide';
+  row.status = hasGuide ? 'stopped' : 'no_guide';
   row.runId = undefined;
   row.pid = null;
   row.error = undefined;
   await saveState(row);
 
   return { ok: true, status: row.status };
+}
+
+/**
+ * @param {string} [workspaceRoot]
+ */
+export async function stopDevServer(workspaceRoot = getWorkspaceRoot()) {
+  return stopDevServerById(workspaceRoot, PRIMARY_DEV_SERVER_ID);
+}
+
+/**
+ * @param {string} [workspaceRoot]
+ * @param {string} [serverId]
+ */
+export async function restartDevServerById(
+  workspaceRoot = getWorkspaceRoot(),
+  serverId = PRIMARY_DEV_SERVER_ID,
+) {
+  await stopDevServerById(workspaceRoot, serverId);
+  return startDevServerById(workspaceRoot, serverId);
+}
+
+/**
+ * Clear a managed row when its runId is stopped via agent tools.
+ * @param {string} runId
+ */
+async function clearRowForRunId(runId) {
+  for (const wsMap of byWorkspaceKey.values()) {
+    for (const row of wsMap.values()) {
+      if (row.runId === runId) {
+        row.status = 'stopped';
+        row.runId = undefined;
+        row.pid = null;
+        await saveState(row);
+        return;
+      }
+    }
+  }
 }
 
 /**
@@ -492,8 +672,9 @@ export async function toolStartBackgroundCommand(args) {
     const startup = await readStartupGuide(root);
     if (startup.guide && shouldRegisterDevServerFromTool(args, startup.guide)) {
       const settings = await readDevServerSettings(root);
+      await readDevServers(root); // seed registry
       const effective = resolveEffectiveGuide(startup.guide, settings);
-      const row = await getOrInitRow(root);
+      const row = await getOrInitRow(root, PRIMARY_DEV_SERVER_ID);
       row.command = effective.command;
       row.healthUrl = effective.healthUrl;
       row.port = effective.port;
@@ -530,14 +711,7 @@ export async function toolStopBackgroundCommand(args) {
     return `Error: ${stopped.error}`;
   }
 
-  const key = workspaceKey(getWorkspaceRoot());
-  const row = byWorkspaceKey.get(key);
-  if (row?.runId === runId) {
-    row.status = 'stopped';
-    row.runId = undefined;
-    row.pid = null;
-    await saveState(row);
-  }
+  await clearRowForRunId(runId);
 
   return JSON.stringify(
     { ok: true, runId, ...(stopped.alreadyStopped ? { alreadyStopped: true } : {}) },
@@ -556,14 +730,7 @@ export async function toolStopCommand(args) {
     return `Error: ${stopped.error}`;
   }
 
-  const key = workspaceKey(getWorkspaceRoot());
-  const row = byWorkspaceKey.get(key);
-  if (row?.runId === runId) {
-    row.status = 'stopped';
-    row.runId = undefined;
-    row.pid = null;
-    await saveState(row);
-  }
+  await clearRowForRunId(runId);
 
   return JSON.stringify(
     { ok: true, runId, ...(stopped.alreadyStopped ? { alreadyStopped: true } : {}) },
@@ -576,3 +743,5 @@ export async function toolStopCommand(args) {
 export function resetDevServerManagerForTests() {
   byWorkspaceKey.clear();
 }
+
+export { readStartupGuide };

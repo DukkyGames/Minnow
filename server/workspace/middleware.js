@@ -19,10 +19,20 @@ import { pickWorkspaceFolder } from './pick-folder.js';
 import { countWorkspaceLoc } from './loc.js';
 import {
   getDevServerStatus,
+  listDevServerStatuses,
   readStartupGuide,
+  restartDevServerById,
   startDevServer,
+  startDevServerById,
   stopDevServer,
+  stopDevServerById,
 } from '../dev-server/manager.js';
+import {
+  createDevServer,
+  deleteDevServer,
+  updateDevServer,
+} from '../dev-server/registry.js';
+import { findFreePort, killPortOwner, listListeningPorts } from '../dev-server/ports.js';
 import { readDevServerSettings, writeDevServerSettings } from '../dev-server/settings.js';
 import { getWorkspaceGitStatus } from './git-status.js';
 import { ensureBaselineGitignore } from './baseline-gitignore.js';
@@ -31,6 +41,24 @@ function sendJson(res, status, payload) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
   res.end(JSON.stringify(payload));
+}
+
+/**
+ * Match `/api/workspace/dev-servers/:id` or `/api/workspace/dev-servers/:id/<action>`.
+ * @param {string} pathname
+ * @returns {{ id: string, action: string | null } | null}
+ */
+function matchDevServerIdRoute(pathname) {
+  const prefix = '/api/workspace/dev-servers/';
+  if (!pathname.startsWith(prefix)) return null;
+  const rest = pathname.slice(prefix.length);
+  if (!rest) return null;
+  const slash = rest.indexOf('/');
+  if (slash < 0) return { id: decodeURIComponent(rest), action: null };
+  const id = decodeURIComponent(rest.slice(0, slash));
+  const action = rest.slice(slash + 1);
+  if (!id || !action || action.includes('/')) return null;
+  return { id, action };
 }
 
 function readJsonBody(req) {
@@ -181,6 +209,99 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
       });
       sendJson(res, 200, { ok: true, settings });
       return true;
+    }
+
+    // Multi-server registry + ports (MIN-500). Legacy /dev-server/* routes stay as primary aliases.
+    if (pathname === '/api/workspace/dev-servers' && req.method === 'GET') {
+      const listed = await listDevServerStatuses();
+      sendJson(res, 200, { ok: true, ...listed });
+      return true;
+    }
+
+    if (pathname === '/api/workspace/dev-servers' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      try {
+        const created = await createDevServer(getWorkspaceRoot(), {
+          name: typeof body?.name === 'string' ? body.name : 'server',
+          command: typeof body?.command === 'string' ? body.command : '',
+          cwd: typeof body?.cwd === 'string' ? body.cwd : undefined,
+          port: body?.port,
+          network: body?.network,
+          healthUrl: typeof body?.healthUrl === 'string' ? body.healthUrl : undefined,
+          autoStart: Boolean(body?.autoStart),
+        });
+        sendJson(res, 201, { ok: true, server: created });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        sendJson(res, 400, { ok: false, error: message });
+      }
+      return true;
+    }
+
+    if (pathname === '/api/workspace/ports' && req.method === 'GET') {
+      const ports = await listListeningPorts();
+      sendJson(res, 200, { ok: true, ports });
+      return true;
+    }
+
+    if (pathname === '/api/workspace/ports/kill' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const result = await killPortOwner(body?.pid, body?.port);
+      sendJson(res, result.ok ? 200 : 400, result);
+      return true;
+    }
+
+    if (pathname === '/api/workspace/ports/next-free' && req.method === 'GET') {
+      const base = Number(searchParams.get('base') || 3000);
+      const ports = await listListeningPorts();
+      const used = ports.map((p) => p.port);
+      const port = findFreePort(Number.isFinite(base) ? base : 3000, used);
+      sendJson(res, 200, { ok: true, port });
+      return true;
+    }
+
+    {
+      const matched = matchDevServerIdRoute(pathname);
+      if (matched) {
+        const root = getWorkspaceRoot();
+        if (matched.action == null && req.method === 'PUT') {
+          const body = await readJsonBody(req);
+          try {
+            const updated = await updateDevServer(root, matched.id, body ?? {});
+            sendJson(res, 200, { ok: true, server: updated });
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { ok: false, error: message });
+          }
+          return true;
+        }
+        if (matched.action == null && req.method === 'DELETE') {
+          try {
+            await stopDevServerById(root, matched.id).catch(() => undefined);
+            const result = await deleteDevServer(root, matched.id);
+            sendJson(res, 200, { ok: true, ...result });
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { ok: false, error: message });
+          }
+          return true;
+        }
+        if (matched.action === 'start' && req.method === 'POST') {
+          const result = await startDevServerById(root, matched.id);
+          sendJson(res, result.ok ? 200 : 400, result);
+          return true;
+        }
+        if (matched.action === 'stop' && req.method === 'POST') {
+          const result = await stopDevServerById(root, matched.id);
+          sendJson(res, 200, result);
+          return true;
+        }
+        if (matched.action === 'restart' && req.method === 'POST') {
+          const result = await restartDevServerById(root, matched.id);
+          sendJson(res, result.ok ? 200 : 400, result);
+          return true;
+        }
+      }
     }
 
     if (pathname === '/api/workspace' && req.method === 'GET') {

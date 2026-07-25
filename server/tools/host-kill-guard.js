@@ -72,6 +72,35 @@ function hostKillError(port) {
 }
 
 /**
+ * Whether a PID / port pair belongs to the live Minnow host (UI disables kill).
+ * @param {number} pid
+ * @param {number} [port]
+ */
+export function isProtectedPortOwner(pid, port) {
+  const pidStr = String(Math.floor(Number(pid)));
+  if (protectedPids().has(pidStr)) return true;
+  const live = Number(liveDevPort());
+  if (port != null && Number.isFinite(Number(port)) && Number(port) === live) return true;
+  return false;
+}
+
+/**
+ * Refuse killing a PID that would take down Minnow (ports screen + API).
+ * @param {number} pid
+ * @param {number} [port]
+ * @returns {string | null} Error message when refused, else null.
+ */
+export function assessPortOwnerKill(pid, port) {
+  if (!Number.isFinite(Number(pid)) || Number(pid) <= 0) {
+    return 'Error: pid is required';
+  }
+  if (isProtectedPortOwner(pid, port)) {
+    return hostKillError(liveDevPort());
+  }
+  return null;
+}
+
+/**
  * Returns an error message when a command would kill the Minnow host, else null.
  *
  * @param {string} command Raw shell command an agent wants to run.

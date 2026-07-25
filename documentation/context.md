@@ -288,6 +288,8 @@ State: `Chat.orchestratePlanPath`, `ChatGroup.orchestrateBoard`, [`src/ui/orches
 
 **Board view browse root (MIN-464):** When board view is active and worktree isolation is on, the file explorer, terminal, and Source Control browse cwd follow the board **integration worktree** (not per-task chat worktrees). Chat view continues to sync browse cwd from the active chat's composer run-target. Helpers: [`resolveBoardIntegrationWorktreePath`](../src/state/worktree-isolation.ts), [`syncPanelFromActiveChat`](../src/ui/git-panel.ts).
 
+**Terminal panel (MIN-500):** Bottom dock tabs are Agent (command output) + interactive PTY sessions only ([`src/ui/terminal-tabs.ts`](../src/ui/terminal-tabs.ts), [`src/ui/terminal-panel.ts`](../src/ui/terminal-panel.ts)). The former Dev Server virtual tab / log stream bridge was removed; workspace server logs move to the Dev Servers Code screen.
+
 ### Experts
 
 Personas under `src/chat/prompts/experts/<id>/`. Chats: `Chat.kind === 'expert'`, memory under `pages/experts/<id>/facts/`. UI: Experts' Lab on desktop + `#/experts`.
@@ -310,6 +312,8 @@ Presentation modes: `fullscreen` | `window` | `desktop` | `sidePanel` ([`src/os/
 **Desktop chat** is the primary chat surface (`#desktopChatCol`); legacy `#chatView` retained for deep links. **Code** reparents `#appBody` into `#osAppsLayer`. Chat transcript mount + inset overlay routing (sub-agent drawer, goal eval) live in [`src/ui/chat-mount.ts`](../src/ui/chat-mount.ts): Code → `#mainColumn`, desktop → `.mn-os-desktop-chat`, Chat app → `.chat-app-main`.
 
 The Code chat sidebar header keeps its navigation controls ordered as **collapse sidebar**, **search chats**, then **Code overview**.
+
+**Dev Servers screen (MIN-500):** First-class Code section at `#/app/code/dev-server` ([`src/ui/dev-server-screen.ts`](../src/ui/dev-server-screen.ts), [`src/styles/dev-server-screen.css`](../src/styles/dev-server-screen.css)). Sidebar footer rail button `#btnDevServers`. Multi-server registry in `config.json` → `workspace.devServersByPath` ([`server/dev-server/registry.js`](../server/dev-server/registry.js)); runtime state nested under `workspace.devServerByPath[<key>].servers` with legacy flat-row → `servers.primary` migration ([`server/dev-server/manager.js`](../server/dev-server/manager.js)). APIs: `GET/POST /api/workspace/dev-servers`, `PUT/DELETE …/dev-servers/:id`, `POST …/:id/start|stop|restart`, `GET /api/workspace/ports`, `POST /api/workspace/ports/kill` ([`server/workspace/middleware.js`](../server/workspace/middleware.js), [`server/dev-server/ports.js`](../server/dev-server/ports.js)). Log pane backfills via `fetchTerminalLog` then tails SSE ([`src/ui/dev-server-log-view.ts`](../src/ui/dev-server-log-view.ts)). Hub strip cell is status + open-screen only ([`src/ui/hub-dev-server.ts`](../src/ui/hub-dev-server.ts)). Legacy `/api/workspace/dev-server/*` routes remain primary-server aliases.
 
 Router: [`src/os/router.ts`](../src/os/router.ts). Boot: `initOsPageBridge()` → `initOsShell()` → `initOsRouter()`.
 

@@ -168,7 +168,9 @@ export function parseOsHash(hash: string): OsRoute {
       route.codeSection =
         seg === 'overview'
           ? 'overview'
-          : (pendingCodeSection ?? 'chat');
+          : seg === 'dev-server'
+            ? 'dev-server'
+            : (pendingCodeSection ?? 'chat');
     }
     return route;
   }
@@ -194,7 +196,9 @@ function hashForRoute(route: OsRoute): string {
   }
   if (route.appId === 'code') {
     const section = route.codeSection ?? 'chat';
-    return section === 'overview' ? '#/app/code/overview' : '#/app/code/chat';
+    if (section === 'overview') return '#/app/code/overview';
+    if (section === 'dev-server') return '#/app/code/dev-server';
+    return '#/app/code/chat';
   }
   if (route.appId) return `#/app/${route.appId}`;
   return '#/desktop';
@@ -408,7 +412,9 @@ export function launchApp(appId: AppId, options?: LaunchOptions): void {
         : appId === 'code'
           ? codeSection === 'chat'
             ? '#/app/code/chat'
-            : '#/app/code/overview'
+            : codeSection === 'dev-server'
+              ? '#/app/code/dev-server'
+              : '#/app/code/overview'
           : `#/app/${appId}`;
   if (window.location.hash !== next) {
     pendingLaunchOptions = options;
@@ -500,6 +506,17 @@ export function navigateToCodeChat(): void {
     return;
   }
   applyRoute({ view: 'app', appId: 'code', codeSection: 'chat' });
+}
+
+/** Navigate to the Code app Dev Servers screen. */
+export function navigateToCodeDevServers(): void {
+  const next = '#/app/code/dev-server';
+  if (window.location.hash !== next) {
+    pendingCodeSection = 'dev-server';
+    window.location.hash = next;
+    return;
+  }
+  applyRoute({ view: 'app', appId: 'code', codeSection: 'dev-server' });
 }
 
 export { hashForRoute };
