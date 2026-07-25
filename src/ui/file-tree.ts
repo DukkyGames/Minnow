@@ -232,14 +232,47 @@ export function invalidateFileTreeCache(): void {
   }
 }
 
+/** Reload the file tree after the effective listing root changes. */
+async function refreshFileTreeForListingRootChange(
+  nextRoot: string | undefined,
+  prevRoot: string | undefined,
+): Promise<void> {
+  invalidateListingCacheScopes(prevRoot, nextRoot, getWorkspacePath().trim() || undefined);
+  setFileTreeListingWorkspaceRoot(nextRoot);
+
+  patchFilePanelState({
+    expandedDirs: [],
+    selectedPath: null,
+    openViewerTabs: [],
+    activeViewerTab: null,
+  });
+
+  const { closeFileViewerForce } = await import('./file-viewer');
+  closeFileViewerForce();
+
+  listingCache.clear();
+  invalidateFileTreeIndex();
+
+  await refreshFileTree();
+}
+
 /** Sync file tree listing root with git panel worktree cwd; reload when root changes. */
 export async function syncFileTreeToPanelWorktree(
   panelCwd?: string,
   options?: { force?: boolean },
 ): Promise<void> {
-  // Desktop drawer scopes the tree to ~/.minnow/workspace — ignore Code git-panel cwd.
+  // Desktop drawer scopes the tree to the selected desktop workspace folder.
   if (isDesktopWorkspaceHostingActive()) {
-    startFileTreeGitStatusPoll(getFileTreeListingWorkspaceRoot());
+    const { getDesktopWorkspacePath } = await import('../lib/desktop-workspace');
+    const desktopPath = await getDesktopWorkspacePath();
+    const nextRoot = desktopPath ?? undefined;
+    const prevRoot = getFileTreeListingWorkspaceRoot();
+
+    if (!fileTreeListingRootsEqual(prevRoot, nextRoot) || options?.force) {
+      await refreshFileTreeForListingRootChange(nextRoot, prevRoot);
+    }
+
+    startFileTreeGitStatusPoll(nextRoot ?? getFileTreeListingWorkspaceRoot());
     syncFileSidebarTitleFromFileTree();
     return;
   }
@@ -248,23 +281,7 @@ export async function syncFileTreeToPanelWorktree(
   const prevRoot = getFileTreeListingWorkspaceRoot();
 
   if (!fileTreeListingRootsEqual(prevRoot, nextRoot) || options?.force) {
-    invalidateListingCacheScopes(prevRoot, nextRoot, getWorkspacePath().trim() || undefined);
-    setFileTreeListingWorkspaceRoot(nextRoot);
-
-    patchFilePanelState({
-      expandedDirs: [],
-      selectedPath: null,
-      openViewerTabs: [],
-      activeViewerTab: null,
-    });
-
-    const { closeFileViewerForce } = await import('./file-viewer');
-    closeFileViewerForce();
-
-    listingCache.clear();
-    invalidateFileTreeIndex();
-
-    await refreshFileTree();
+    await refreshFileTreeForListingRootChange(nextRoot, prevRoot);
   }
 
   startFileTreeGitStatusPoll(nextRoot ?? getWorkspacePath());

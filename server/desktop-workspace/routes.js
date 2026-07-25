@@ -9,8 +9,26 @@ import { countDesktopWorkspaceFiles, listDesktopWorkspaceDirectory } from './lis
 import {
   getDesktopWorkspacePath,
   resolveSafeDesktopPath,
+  setDesktopWorkspacePath,
   toDesktopRelativePath,
 } from './paths.js';
+import { workspaceLabel } from '../workspace/root.js';
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', (chunk) => chunks.push(chunk));
+    req.on('end', () => {
+      try {
+        const raw = Buffer.concat(chunks).toString('utf8');
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch {
+        reject(new Error('Invalid JSON body'));
+      }
+    });
+    req.on('error', reject);
+  });
+}
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -64,7 +82,30 @@ export async function handleDesktopWorkspaceRequest(req, res, pathname, searchPa
     if (pathname === '/api/desktop-workspace' && req.method === 'GET') {
       const desktopPath = getDesktopWorkspacePath();
       const fileCount = await countDesktopWorkspaceFiles();
-      sendJson(res, 200, { ok: true, path: desktopPath, fileCount });
+      sendJson(res, 200, {
+        ok: true,
+        path: desktopPath,
+        label: workspaceLabel(desktopPath),
+        fileCount,
+      });
+      return true;
+    }
+
+    if (pathname === '/api/desktop-workspace' && req.method === 'PUT') {
+      const body = await readJsonBody(req);
+      const userPath = body?.path;
+      if (typeof userPath !== 'string' || !userPath.trim()) {
+        sendJson(res, 400, { error: 'path is required' });
+        return true;
+      }
+      const resolved = await setDesktopWorkspacePath(userPath);
+      const fileCount = await countDesktopWorkspaceFiles();
+      sendJson(res, 200, {
+        ok: true,
+        path: resolved,
+        label: workspaceLabel(resolved),
+        fileCount,
+      });
       return true;
     }
 

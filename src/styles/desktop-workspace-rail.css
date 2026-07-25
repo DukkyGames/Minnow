@@ -215,6 +215,48 @@
 
 .mn-os-workspace-rail-drawer-hdr-meta {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mn-os-workspace-rail-drawer-meta-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mn-os-workspace-rail-drawer-select {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 0.75rem;
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  color: var(--os-text);
+  background: var(--os-surface-2, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--os-border, rgba(255, 255, 255, 0.08));
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+.mn-os-workspace-rail-drawer-folder-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--os-border, rgba(255, 255, 255, 0.08));
+  background: var(--os-surface-2, rgba(255, 255, 255, 0.04));
+  color: var(--os-text-dim);
+  cursor: pointer;
+}
+
+.mn-os-workspace-rail-drawer-folder-btn:hover {
+  color: var(--os-text);
+  background: var(--os-surface-3, rgba(255, 255, 255, 0.08));
 }
 
 .mn-os-workspace-rail-drawer-path {

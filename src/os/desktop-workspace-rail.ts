@@ -277,12 +277,30 @@ export function renderDesktopWorkspaceRail(root: HTMLElement): void {
   metaRow.className = 'mn-os-workspace-rail-drawer-hdr-meta';
   metaRow.hidden = true;
 
+  const metaTop = document.createElement('div');
+  metaTop.className = 'mn-os-workspace-rail-drawer-meta-top';
+
+  const workspaceSelect = document.createElement('select');
+  workspaceSelect.id = 'desktopWorkspaceSelect';
+  workspaceSelect.className = 'mn-os-workspace-rail-drawer-select';
+  workspaceSelect.setAttribute('aria-label', 'Desktop workspace folder');
+
+  const folderBtn = document.createElement('button');
+  folderBtn.type = 'button';
+  folderBtn.id = 'btnDesktopWorkspaceFolder';
+  folderBtn.className = 'mn-os-workspace-rail-drawer-folder-btn';
+  folderBtn.setAttribute('aria-label', 'Change workspace folder');
+  folderBtn.title = 'Change workspace folder';
+  folderBtn.appendChild(createOsIcon('folder', { size: 14 }));
+
+  metaTop.append(workspaceSelect, folderBtn);
+
   const drawerPath = document.createElement('span');
   drawerPath.id = 'desktopWorkspaceDrawerPath';
   drawerPath.className = 'mn-os-workspace-rail-drawer-path';
   drawerPath.textContent = '~/.minnow/workspace';
 
-  metaRow.appendChild(drawerPath);
+  metaRow.append(metaTop, drawerPath);
   drawerHeader.append(headerTop, metaRow);
 
   const drawerBody = document.createElement('div');
@@ -387,7 +405,7 @@ export function wireDesktopWorkspaceRail(): void {
   });
 
   syncRailChrome();
-  void refreshDesktopWorkspaceDrawerPath();
+  void import('../ui/desktop-workspace-folder').then((m) => m.initDesktopWorkspaceFolderControls());
   void syncDesktopWorkspaceMounts();
 }
 
@@ -397,7 +415,16 @@ export async function refreshDesktopWorkspaceDrawerPath(): Promise<void> {
   if (!el) return;
   const { getDesktopWorkspacePath } = await import('../lib/desktop-workspace');
   const path = await getDesktopWorkspacePath();
-  if (path) el.textContent = path;
+  if (path) {
+    el.textContent = path;
+    el.title = path;
+  }
+  const { refreshDesktopWorkspaceFolderUi, refreshDesktopWorkspaceSelect } = await import(
+    '../ui/desktop-workspace-folder'
+  );
+  refreshDesktopWorkspaceFolderUi();
+  const select = document.getElementById('desktopWorkspaceSelect') as HTMLSelectElement | null;
+  await refreshDesktopWorkspaceSelect(select);
 }
 
 /** Reset rail bindings (tests). */
