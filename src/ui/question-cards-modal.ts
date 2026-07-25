@@ -26,6 +26,7 @@ import { setComposerStreamingMode } from './composer-send';
 import { setSidebarInputPendingChatId } from './chat-item-dot';
 import { resolveOrchestratePlanScreenQuestionHost } from './orchestrate-plan-screen';
 import { resolveBoardOnboardingQuestionHost } from './orchestrate-board-onboarding-questions';
+import { resolveOnboardingGuideQuestionHost } from '../onboarding/guide-questions';
 import { resolvePromptComposerShell, resolveQuestionHost } from './prompt-host-resolve';
 import {
   acquireUserPromptLock,
@@ -65,10 +66,12 @@ let activeQuestionModal: ActiveQuestionModalState | null = null;
 
 const PLAN_SCREEN_QUESTIONS_HOST_ID = 'orchestratePlanScreenQuestions';
 const BOARD_ONBOARDING_QUESTIONS_HOST_ID = 'boardOnboardingQuestions';
+const ONBOARDING_GUIDE_QUESTIONS_HOST_ID = 'onboardingGuideQuestions';
 
 const EMBEDDED_QUESTIONS_HOST_IDS = new Set([
   PLAN_SCREEN_QUESTIONS_HOST_ID,
   BOARD_ONBOARDING_QUESTIONS_HOST_ID,
+  ONBOARDING_GUIDE_QUESTIONS_HOST_ID,
 ]);
 
 function isEmbeddedQuestionsHost(host: HTMLElement): boolean {
@@ -166,6 +169,13 @@ function unparkActiveQuestionModal(): void {
   const planHost = resolveOrchestratePlanScreenQuestionHost(state.chatId);
   if (planHost) {
     migrateActiveQuestionModalToHost(planHost);
+    activateEmbeddedQuestionChrome(state);
+    return;
+  }
+
+  const guideHost = resolveOnboardingGuideQuestionHost(state.chatId);
+  if (guideHost) {
+    migrateActiveQuestionModalToHost(guideHost);
     activateEmbeddedQuestionChrome(state);
     return;
   }
@@ -319,10 +329,16 @@ export function showQuestionCardsModal(
         host = planHost;
         embedded = true;
       } else {
-        const boardHost = resolveBoardOnboardingQuestionHost(options.chatId);
-        if (boardHost) {
-          host = boardHost;
+        const guideHost = resolveOnboardingGuideQuestionHost(options.chatId);
+        if (guideHost) {
+          host = guideHost;
           embedded = true;
+        } else {
+          const boardHost = resolveBoardOnboardingQuestionHost(options.chatId);
+          if (boardHost) {
+            host = boardHost;
+            embedded = true;
+          }
         }
       }
     }

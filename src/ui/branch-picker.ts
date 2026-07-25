@@ -8,8 +8,17 @@ import {
   getActiveRun,
   listSelectableBranchesAtFork,
 } from '../state/runs-store';
-import { findChatById, getActiveChat, scheduleSaveSessions, touchChat } from '../state/sessions';
+import {
+  findChatById,
+  getActiveChat,
+  scheduleSaveSessions,
+  sessionState,
+  switchActiveChat,
+  touchChat,
+} from '../state/sessions';
 import type { Chat, TurnRunRecord } from '../types';
+import { getActiveChatMountElement } from './chat-mount';
+import { switchComposerDraft } from './composer-draft';
 import { renderChatInForegroundShell, renderStatsForChat } from './messages';
 import { renderSidebar } from './sidebar';
 import { setStatus } from './status';
@@ -34,6 +43,35 @@ const BRANCH_CHEVRON_SVG =
 function closeBranchMenu(menu: HTMLElement | null): void {
   if (!menu) return;
   menu.remove();
+}
+
+function findUserMessageRow(chatId: string, historyIndex: number): HTMLElement | null {
+  const root = getActiveChatMountElement();
+  for (const row of root.querySelectorAll<HTMLElement>('.msg.user[data-history-index]')) {
+    if (
+      row.dataset.chatId === chatId &&
+      row.dataset.historyIndex === String(historyIndex)
+    ) {
+      return row;
+    }
+  }
+  return null;
+}
+
+function removeBranchPickerFromRow(wrap: HTMLElement): void {
+  wrap.querySelector('.branch-picker__trigger')?.remove();
+  wrap.classList.remove('msg--has-branch-picker');
+}
+
+/**
+ * Re-attach the branch picker on an existing user row after a fork/replay turn
+ * completes (history render happens earlier, before the second branch exists).
+ */
+export function refreshBranchPickerAtFork(chat: Chat, forkHistoryIndex: number): void {
+  const wrap = findUserMessageRow(chat.id, forkHistoryIndex);
+  if (!wrap) return;
+  removeBranchPickerFromRow(wrap);
+  attachBranchPicker(wrap, chat.id, forkHistoryIndex);
 }
 
 /** Attach branch pill to a user message row when multiple branches exist. */
@@ -160,6 +198,12 @@ function switchBranch(chat: Chat, forkHistoryIndex: number, branchId: string): v
   }
   touchChat(chat);
   scheduleSaveSessions();
+  // Keep session activeId aligned with the chat whose branch we switched so the
+  // next composer send does not land in a different (or newly created) chat.
+  const prevActiveId = sessionState?.activeId;
+  if (switchActiveChat(chat.id)) {
+    void switchComposerDraft(prevActiveId, chat);
+  }
   renderChatInForegroundShell(chat);
   renderStatsForChat(chat);
   renderSidebar();

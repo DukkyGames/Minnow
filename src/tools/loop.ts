@@ -176,6 +176,7 @@ import {
   renderChatFromHistory,
   setAssistantErrorBubbleWithRecovery,
 } from '../ui/messages';
+import { refreshBranchPickerAtFork } from '../ui/branch-picker';
 import { setContextInFlightOverlay } from '../chat/context-in-flight';
 import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
 import { ThinkingDurationTracker } from '../ui/thinking-duration';
@@ -2600,6 +2601,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         errorMessage: turnErrorMessage,
       });
       scheduleSaveSessions();
+      if (isStreamDomVisible(chat.id) && run) {
+        refreshBranchPickerAtFork(chat, run.forkHistoryIndex);
+      }
       if (ownsGlobalStreaming) {
         void import('../notifications/chat-turn.js').then((mod) => {
           mod.notifyChatTurnEnded(chat.id, turnRunId);
