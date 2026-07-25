@@ -20,8 +20,30 @@ import {
 } from '../generations/timeouts.js';
 
 const PLACEHOLDER_CHAT_NAME = 'New chat';
-const MAX_CHATS = 50;
 const SESSION_SCHEMA_VERSION = 6;
+/**
+ * Chat fields rebuilt by {@link ensureChatShape}'s explicit allowlist that still must
+ * survive PUT/validate. Named keys only — never `{...row, ...out}` (that would reopen
+ * the injection surface for unknown/prototype-polluting properties).
+ */
+const CHAT_PASSTHROUGH_KEYS = new Set([
+  'subAgentRuns',
+  'todos',
+  'todosUpdatedAt',
+  'tokenLedger',
+  'codeChangeTotals',
+  'codeChangeBackfillAt',
+  'lastContextTrim',
+  'composerDraft',
+  'pinnedSkill',
+  'thinkingMode',
+  'reasoningEffort',
+  'uiDesignerMode',
+  'pendingSteerMessage',
+  'pendingMessageQueue',
+  'pendingModeId',
+  'turnError',
+]);
 const MAX_GOAL_CONDITION_CHARS = 4000;
 const MAX_LOOP_PROMPT_CHARS = 4000;
 const MIN_LOOP_INTERVAL_MS = 60_000;
@@ -928,7 +950,7 @@ function ensureChatShape(raw) {
   const superPlan = ensureSuperPlanPersisted(row.superPlan);
   const expertRuntime = ensureExpertRuntime(row.expertRuntime);
 
-  return {
+  const out = {
     id: typeof row.id === 'string' && row.id ? row.id : newChatId(),
     name:
       typeof row.name === 'string' && row.name.trim()
@@ -963,10 +985,12 @@ function ensureChatShape(raw) {
       ? { gitBranch: row.gitBranch.trim() }
       : {}),
     ...(row.chatWorktreeManaged === true ? { chatWorktreeManaged: true } : {}),
-    ...(typeof row.workAgentId === 'string' && row.workAgentId.trim()
-      ? { workAgentId: row.workAgentId.trim() }
-      : {}),
-    ...(row.workAgentAuto === false ? { workAgentAuto: false } : {}),
+    // Match client ensureChatShape defaults so load/validate stay symmetric.
+    workAgentId:
+      typeof row.workAgentId === 'string' && row.workAgentId.trim()
+        ? row.workAgentId.trim()
+        : null,
+    workAgentAuto: row.workAgentAuto !== false,
     ...(orchestrateBoard ? { orchestrateBoard } : {}),
     ...(viewMode ? { viewMode } : {}),
     ...(runs?.length ? { runs } : {}),
@@ -1000,28 +1024,15 @@ function ensureChatShape(raw) {
           ? row.updatedAt
           : Date.now(),
   };
-}
 
-function getChatLastMessageAt(chat) {
-  const last = chat.lastMessageAt;
-  if (typeof last === 'number' && Number.isFinite(last) && last > 0) return last;
-  const updated = chat.updatedAt;
-  return typeof updated === 'number' && Number.isFinite(updated) ? updated : 0;
-}
-
-function trimChatsIfNeeded(state) {
-  if (!state.chats || state.chats.length <= MAX_CHATS) return;
-  const activeId = state.activeId;
-  const sortedOldestFirst = [...state.chats].sort(
-    (a, b) => getChatLastMessageAt(a) - getChatLastMessageAt(b),
-  );
-  let toDrop = state.chats.length - MAX_CHATS;
-  for (const c of sortedOldestFirst) {
-    if (toDrop <= 0) break;
-    if (c.id === activeId) continue;
-    state.chats = state.chats.filter((x) => x.id !== c.id);
-    toDrop -= 1;
+  // Copy only allowlisted keys that were previously dropped by the rebuilder.
+  for (const key of CHAT_PASSTHROUGH_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(row, key) && row[key] !== undefined) {
+      out[key] = row[key];
+    }
   }
+
+  return out;
 }
 
 /**
@@ -1070,12 +1081,18 @@ export function validateSessionState(raw) {
   ) {
     state.activeBoardGroupId = parsed.activeBoardGroupId.trim();
   }
+  // Session-level workspace rollup — same named-key rule as chat passthrough.
+  if (
+    parsed.codeChangeTotalsByWorkspace &&
+    typeof parsed.codeChangeTotalsByWorkspace === 'object' &&
+    !Array.isArray(parsed.codeChangeTotalsByWorkspace)
+  ) {
+    state.codeChangeTotalsByWorkspace = parsed.codeChangeTotalsByWorkspace;
+  }
 
   if (!state.chats.some((c) => c.id === state.activeId)) {
     state.activeId = state.chats[0].id;
   }
-
-  trimChatsIfNeeded(state);
 
   if (!state.chats.length) {
     throw new Error('Session must have at least one chat');

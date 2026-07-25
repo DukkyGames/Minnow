@@ -82,7 +82,7 @@ Minnow/
 
 **Secrets:** AES-256-GCM at rest; key file `~/.minnow/.key` (`0o600`). Rotating or deleting `.key` makes encrypted secrets unrecoverable.
 
-**Canonical session store:** `sessions/state.json` — single blob for all chats (not per-chat files).
+**Canonical session store:** `sessions/state.json` — single blob for all chats (not per-chat files). Server `validateSessionState` / client `ensureChatShape` keep the full Chat allowlist (including todos, token ledger, pending queues, etc. via named passthrough on the server); there is no `MAX_CHATS` hard-trim on save. Kitchen-sink contract: [`test/fixtures/migration/kitchen-sink-sessions-state.json`](../test/fixtures/migration/kitchen-sink-sessions-state.json).
 
 Full directory map: [`guides/configuration.md`](guides/configuration.md). Notable paths:
 

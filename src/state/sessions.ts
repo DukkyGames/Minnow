@@ -1,4 +1,4 @@
-import { MAX_CHATS, PLACEHOLDER_CHAT_NAME, SAVE_DEBOUNCE_MS, STORAGE_KEY } from '../constants';
+import { PLACEHOLDER_CHAT_NAME, SAVE_DEBOUNCE_MS, STORAGE_KEY } from '../constants';
 import { abortChatTitleGeneration } from '../chat/titles/inflight';
 import { cleanupChatWorktreeOnDelete } from './chat-worktree';
 import { isPlaceholderChatName } from '../chat/titles/placeholder';
@@ -7,7 +7,7 @@ import { getSessions, putSessions, putSessionsKeepalive } from '../config/api-cl
 import { defaultSessionState } from '../config/defaults';
 import { randomUUID } from '../lib/random-id.ts';
 import { isServerStorageMode } from '../config/storage-mode';
-import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
+import { DEFAULT_MODE_ID, isModeId, normalizeModeId } from '../chat/modes/types';
 import { normalizeThinkingTriState } from '../agents/thinking-types';
 import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
 import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title';
@@ -118,6 +118,7 @@ import type {
   OrchestrateBoardState,
   PersistedSubAgentRun,
   PersistedSubAgentStatus,
+  ReasoningEffortOption,
   SessionState,
   TerminalRunRecord,
   ToolCall,
@@ -127,6 +128,14 @@ import type {
   TurnSnapshot,
   UserMessage,
 } from '../types';
+
+const REASONING_EFFORT_OPTIONS = new Set<ReasoningEffortOption>([
+  'off',
+  'on',
+  'low',
+  'medium',
+  'high',
+]);
 
 const TURN_RUN_STATUSES = new Set<TurnRunStatus>([
   'running',
@@ -1427,6 +1436,16 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
     ...(raw.thinkingMode !== undefined
       ? { thinkingMode: normalizeThinkingTriState(raw.thinkingMode) }
       : {}),
+    ...(typeof raw.reasoningEffort === 'string' &&
+    REASONING_EFFORT_OPTIONS.has(raw.reasoningEffort as ReasoningEffortOption)
+      ? { reasoningEffort: raw.reasoningEffort as ReasoningEffortOption }
+      : {}),
+    ...(raw.uiDesignerMode === 'plan' || raw.uiDesignerMode === 'implement'
+      ? { uiDesignerMode: raw.uiDesignerMode }
+      : {}),
+    ...(typeof raw.pendingModeId === 'string' && isModeId(raw.pendingModeId)
+      ? { pendingModeId: raw.pendingModeId }
+      : {}),
     ...(orchestratePlanPath ? { orchestratePlanPath } : {}),
     ...(typeof raw.groupId === 'string' && raw.groupId.trim()
       ? { groupId: raw.groupId.trim() }
@@ -1505,6 +1524,9 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
     ...(pendingSteerMessage ? { pendingSteerMessage } : {}),
     ...(typeof raw.composerDraft === 'string' && raw.composerDraft
       ? { composerDraft: raw.composerDraft }
+      : {}),
+    ...(raw.lastContextTrim && typeof raw.lastContextTrim === 'object'
+      ? { lastContextTrim: raw.lastContextTrim as Chat['lastContextTrim'] }
       : {}),
   };
   ensureTokenLedger(chat);
@@ -1607,7 +1629,8 @@ export function migrateSessionStateV1ToV2(parsed: RawSessionJson): SessionState 
   return state;
 }
 
-function parseSessionStateFromJson(parsed: RawSessionJson | null): SessionState {
+/** Parse persisted session JSON (client load path; parity with server validateSessionState). */
+export function parseSessionStateFromJson(parsed: RawSessionJson | null): SessionState {
   if (!parsed || !Array.isArray(parsed.chats)) {
     return defaultSessionState();
   }
@@ -2192,29 +2215,12 @@ export function recordChatMessage(chat: Chat): void {
   chat.updatedAt = now;
 }
 
-function trimChatsIfNeeded(): void {
-  const state = sessionState;
-  if (!state || state.chats.length <= MAX_CHATS) return;
-  const activeId = state.activeId;
-  const sortedOldestFirst = [...state.chats].sort(
-    (a, b) => getChatLastMessageAt(a) - getChatLastMessageAt(b),
-  );
-  let toDrop = state.chats.length - MAX_CHATS;
-  for (const c of sortedOldestFirst) {
-    if (toDrop <= 0) break;
-    if (c.id === activeId) continue;
-    state.chats = state.chats.filter((x) => x.id !== c.id);
-    toDrop -= 1;
-  }
-}
-
 export type SaveSessionsOptions = {
   /** Use fetch keepalive for unload handlers (fire-and-forget). */
   keepalive?: boolean;
 };
 
 export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResult {
-  trimChatsIfNeeded();
   if (!sessionState) return 'ok';
 
   if (isServerStorageMode()) {
