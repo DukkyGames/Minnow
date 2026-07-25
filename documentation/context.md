@@ -376,7 +376,7 @@ Design reference: [`DESIGN.md`](../DESIGN.md), [`documentation/design-system/`](
 
 Multi-provider registry: `~/.minnow/providers/`. UI: Models app → Providers. Chat uses composite model keys (`providerId` + model id) in [`src/lib/model-select-key.ts`](../src/lib/model-select-key.ts).
 
-**One-click presets:** shared catalog in [`src/providers/presets.ts`](../src/providers/presets.ts) — OpenCode Go/Zen, Anthropic, DeepSeek, GitHub Copilot, plus OpenRouter/OpenAI/Groq/Mistral. **Settings → Providers** uses the `settings-general` emphasis-panel layout (like Routing and Usage): grouped picker (local servers, featured APIs, more cloud APIs, then custom), flat provider rows inside the configured panel, and related links to Routing and Usage. Styles: [`src/styles/settings-providers.css`](../src/styles/settings-providers.css).
+**One-click presets:** shared catalog in [`src/providers/presets.ts`](../src/providers/presets.ts) — OpenCode Go/Zen, Anthropic, DeepSeek, GitHub Copilot, plus OpenRouter/OpenAI/Groq/Mistral. **Onboarding → Cloud API** shows preset chips with a green check when that provider already has a saved API key (`onboarding-cloud-<preset>` ids in the registry). **Settings → Providers** uses the `settings-general` emphasis-panel layout (like Routing and Usage): grouped picker (local servers, featured APIs, more cloud APIs, then custom), flat provider rows inside the configured panel, and related links to Routing and Usage. Styles: [`src/styles/settings-providers.css`](../src/styles/settings-providers.css).
 
 `fetchModels()` loads all enabled providers. Main chat streams via generations API; `postChatCompletions` shim for headless/sub-agents.
 
