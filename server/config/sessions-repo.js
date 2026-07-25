@@ -34,7 +34,14 @@ import {
   markSessionsJsonMirrorDirty,
   registerSessionsJsonMirrorSource,
 } from './sessions-json-mirror.js';
-import { validateSessionState } from './validators.js';
+import {
+  migrateChatRowV5ToV6,
+  normalizeChatRow,
+  normalizeGroupRow,
+  normalizeSessionScalars,
+  SESSION_SCHEMA_VERSION,
+  validateSessionState,
+} from './validators.js';
 
 /** Cap matches server/terminal-runner.js MAX_TERMINAL_HISTORY. */
 const MAX_TERMINAL_HISTORY = 50;
@@ -807,11 +814,208 @@ export function exportSessionStateToJson() {
 }
 
 /**
- * Phase B PATCH helper — not wired yet.
- * @param {unknown} _delta
+ * Apply a partial SessionState delta in one transaction (Phase B.0).
+ * Absent keys mean unchanged; deletes are explicit id lists.
+ * Does NOT apply chat.terminalHistory (server-owned — same rule as whole-blob PUT).
+ *
+ * @param {unknown} delta
+ * @returns {{ ok: true, applied: {
+ *   chats: number, deletedChats: number, groups: number, deletedGroups: number, scalars: boolean
+ * } }}
  */
-export function patchSessionState(_delta) {
-  throw new Error('not implemented');
+export function patchSessionState(delta) {
+  if (!delta || typeof delta !== 'object') {
+    const err = new Error('Invalid session patch');
+    /** @type {Error & { statusCode?: number }} */ (err).statusCode = 400;
+    throw err;
+  }
+
+  const body = /** @type {Record<string, unknown>} */ (delta);
+  const baseVersion = body.baseVersion;
+  if (
+    baseVersion !== undefined &&
+    baseVersion !== 1 &&
+    baseVersion !== 2 &&
+    baseVersion !== 3 &&
+    baseVersion !== 4 &&
+    baseVersion !== 5 &&
+    baseVersion !== 6
+  ) {
+    const err = new Error('Invalid session baseVersion');
+    /** @type {Error & { statusCode?: number }} */ (err).statusCode = 400;
+    throw err;
+  }
+  // Older baseVersion is accepted; rows are normalized to SESSION_SCHEMA_VERSION.
+  void SESSION_SCHEMA_VERSION;
+
+  const applied = {
+    chats: 0,
+    deletedChats: 0,
+    groups: 0,
+    deletedGroups: 0,
+    scalars: false,
+  };
+
+  const db = getSessionsDb();
+  const tx = db.transaction(() => {
+    // Explicit deletes first (CASCADE clears child rows).
+    if (Array.isArray(body.deleteChatIds)) {
+      const delChat = db.prepare('DELETE FROM chats WHERE id = ?');
+      for (const id of body.deleteChatIds) {
+        if (typeof id !== 'string' || !id.trim()) continue;
+        const result = delChat.run(id.trim());
+        if (result.changes > 0) applied.deletedChats += 1;
+      }
+    }
+
+    if (Array.isArray(body.deleteGroupIds)) {
+      const delGroup = db.prepare('DELETE FROM groups WHERE id = ?');
+      for (const id of body.deleteGroupIds) {
+        if (typeof id !== 'string' || !id.trim()) continue;
+        const result = delGroup.run(id.trim());
+        if (result.changes > 0) applied.deletedGroups += 1;
+      }
+    }
+
+    // Upsert full dirty chat objects (unknown ids insert at end of sidebar order).
+    if (Array.isArray(body.chats)) {
+      for (const raw of body.chats) {
+        if (!raw || typeof raw !== 'object') continue;
+        const chat = normalizeChatRow(raw);
+        // PATCH always lands v6 chat rows (strip legacy expertSelection if present).
+        migrateChatRowV5ToV6(chat);
+        const chatId = String(chat.id);
+        const existing = db
+          .prepare('SELECT sort_index FROM chats WHERE id = ?')
+          .get(chatId);
+        let sortIndex;
+        if (existing && typeof existing.sort_index === 'number') {
+          sortIndex = existing.sort_index;
+        } else {
+          const maxRow = db
+            .prepare('SELECT COALESCE(MAX(sort_index), -1) AS m FROM chats')
+            .get();
+          sortIndex = (maxRow?.m ?? -1) + 1;
+        }
+
+        const history = Array.isArray(chat.history) ? chat.history : [];
+        upsertChatRow(db, chat, sortIndex, {
+          messageCount: history.length,
+          lastMessagePreview: '',
+          historyDigest: '',
+        });
+        const derived = syncMessages(db, chatId, history);
+        upsertChatRow(db, chat, sortIndex, derived);
+        syncChatRuns(db, chatId, Array.isArray(chat.runs) ? chat.runs : []);
+        syncSubAgentRuns(
+          db,
+          chatId,
+          Array.isArray(chat.subAgentRuns) ? chat.subAgentRuns : [],
+        );
+        syncChatLoops(
+          db,
+          chatId,
+          Array.isArray(chat.activeLoops) ? chat.activeLoops : [],
+        );
+        // Intentionally skip chat.terminalHistory — preserve existing terminal rows.
+        applied.chats += 1;
+      }
+    }
+
+    // Upsert full dirty group objects.
+    if (Array.isArray(body.groups)) {
+      for (const raw of body.groups) {
+        const group = normalizeGroupRow(raw);
+        if (!group?.id) continue;
+        upsertGroupRow(db, group);
+        const board = group.orchestrateBoard;
+        syncBoardTasks(db, group.id, Array.isArray(board?.tasks) ? board.tasks : []);
+        syncBoardLog(db, group.id, Array.isArray(board?.log) ? board.log : []);
+        applied.groups += 1;
+      }
+    }
+
+    // Partial scalars — only keys present on body.scalars are written.
+    if (body.scalars && typeof body.scalars === 'object') {
+      const scalars = normalizeSessionScalars(body.scalars, { mode: 'partial' });
+      applyPartialScalars(db, scalars);
+      applied.scalars = Object.keys(scalars).length > 0;
+    }
+
+    const countRow = db.prepare('SELECT COUNT(*) AS n FROM chats').get();
+    if (!countRow?.n) {
+      const err = new Error('Session must have at least one chat');
+      /** @type {Error & { statusCode?: number }} */ (err).statusCode = 400;
+      throw err;
+    }
+
+    // Keep activeId pointing at a real chat after deletes.
+    const activeId = readSessionMeta(db, 'activeId');
+    const activeOk =
+      typeof activeId === 'string' &&
+      activeId &&
+      db.prepare('SELECT id FROM chats WHERE id = ?').get(activeId);
+    if (!activeOk) {
+      const first = db
+        .prepare('SELECT id FROM chats ORDER BY sort_index ASC, id ASC')
+        .get();
+      if (first?.id) writeSessionMeta(db, 'activeId', first.id);
+    }
+
+    // Keep schemaVersion meta aligned with wire version.
+    writeSessionMeta(db, 'schemaVersion', SESSION_SCHEMA_VERSION);
+  });
+  tx();
+  markSessionsJsonMirrorDirty();
+  return { ok: true, applied };
+}
+
+/**
+ * Write only the scalar keys present in a partial normalizeSessionScalars result.
+ * @param {import('better-sqlite3').Database} db
+ * @param {Record<string, unknown>} scalars
+ */
+function applyPartialScalars(db, scalars) {
+  if (Object.prototype.hasOwnProperty.call(scalars, 'version')) {
+    writeSessionMeta(db, 'schemaVersion', scalars.version ?? SESSION_SCHEMA_VERSION);
+  }
+  if (Object.prototype.hasOwnProperty.call(scalars, 'activeId')) {
+    writeSessionMeta(db, 'activeId', typeof scalars.activeId === 'string' ? scalars.activeId : '');
+  }
+  if (Object.prototype.hasOwnProperty.call(scalars, 'sidebarCollapsed')) {
+    writeSessionMeta(db, 'sidebarCollapsed', !!scalars.sidebarCollapsed);
+  }
+  if (Object.prototype.hasOwnProperty.call(scalars, 'sidebarWidth')) {
+    writeSessionMeta(
+      db,
+      'sidebarWidth',
+      typeof scalars.sidebarWidth === 'number' ? scalars.sidebarWidth : null,
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(scalars, 'activeBoardGroupId')) {
+    writeSessionMeta(
+      db,
+      'activeBoardGroupId',
+      typeof scalars.activeBoardGroupId === 'string' ? scalars.activeBoardGroupId : null,
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(scalars, 'lastActiveChatIdByWorkspace')) {
+    writeSessionMeta(
+      db,
+      'lastActiveChatIdByWorkspace',
+      scalars.lastActiveChatIdByWorkspace ?? {},
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(scalars, 'lastActiveChatIdByApp')) {
+    writeSessionMeta(db, 'lastActiveChatIdByApp', scalars.lastActiveChatIdByApp ?? {});
+  }
+  if (Object.prototype.hasOwnProperty.call(scalars, 'codeChangeTotalsByWorkspace')) {
+    writeSessionMeta(
+      db,
+      'codeChangeTotalsByWorkspace',
+      scalars.codeChangeTotalsByWorkspace ?? null,
+    );
+  }
 }
 
 /** Whether the process should use the legacy JSON sessions path. */

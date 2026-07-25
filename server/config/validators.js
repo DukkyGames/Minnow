@@ -20,10 +20,11 @@ import {
 } from '../generations/timeouts.js';
 
 const PLACEHOLDER_CHAT_NAME = 'New chat';
-const SESSION_SCHEMA_VERSION = 6;
+/** Wire SessionState.version (not SQLite PRAGMA user_version). */
+export const SESSION_SCHEMA_VERSION = 6;
 /**
- * Chat fields rebuilt by {@link ensureChatShape}'s explicit allowlist that still must
- * survive PUT/validate. Named keys only — never `{...row, ...out}` (that would reopen
+ * Chat fields rebuilt by {@link normalizeChatRow}'s explicit allowlist that still must
+ * survive PUT/validate/PATCH. Named keys only — never `{...row, ...out}` (that would reopen
  * the injection surface for unknown/prototype-polluting properties).
  */
 const CHAT_PASSTHROUGH_KEYS = new Set([
@@ -160,35 +161,36 @@ function ensureExpertRuntime(raw) {
   };
 }
 
-/** Experts overhaul: expertId + runtime snapshot; drop legacy picker (mirror src/state/sessions.ts). */
-function migrateSessionV5ToV6(state) {
-  for (const chat of state.chats) {
-    const selection = chat.expertSelection;
-    if (chat.kind === 'expert') {
-      if (
-        !chat.expertId?.trim() &&
-        selection?.mode === 'manual' &&
-        selection.expertId?.trim()
-      ) {
-        chat.expertId = selection.expertId.trim();
-      }
-      if (!chat.expertRuntime) {
-        chat.expertRuntime = {
-          ...(chat.providerId?.trim() ? { providerId: chat.providerId.trim() } : {}),
-          modelId: chat.modelId ?? '',
-          modeId: normalizeModeId(chat.modeId),
-          toolAllowlist: null,
-          toolDenylist: [],
-          enabledToolNames: [],
-          memoryEnabled: true,
-          warnings: [],
-          profileSource: 'inherit',
-        };
-      }
+/**
+ * Experts overhaul on one chat: expertId + runtime snapshot; drop legacy picker.
+ * Whole-blob PUT applies this when version &lt; 6; PATCH applies it per dirty chat.
+ * @param {Record<string, any>} chat
+ */
+export function migrateChatRowV5ToV6(chat) {
+  const selection = chat.expertSelection;
+  if (chat.kind === 'expert') {
+    if (
+      !chat.expertId?.trim() &&
+      selection?.mode === 'manual' &&
+      selection.expertId?.trim()
+    ) {
+      chat.expertId = selection.expertId.trim();
     }
-    delete chat.expertSelection;
+    if (!chat.expertRuntime) {
+      chat.expertRuntime = {
+        ...(chat.providerId?.trim() ? { providerId: chat.providerId.trim() } : {}),
+        modelId: chat.modelId ?? '',
+        modeId: normalizeModeId(chat.modeId),
+        toolAllowlist: null,
+        toolDenylist: [],
+        enabledToolNames: [],
+        memoryEnabled: true,
+        warnings: [],
+        profileSource: 'inherit',
+      };
+    }
   }
-  state.version = SESSION_SCHEMA_VERSION;
+  delete chat.expertSelection;
 }
 
 function newChatId() {
@@ -626,8 +628,13 @@ function ensureOrchestrateBoard(raw) {
   return out;
 }
 
-/** Sidebar chat folder (schema v4+). */
-function ensureChatGroup(raw) {
+/**
+ * Normalize one ChatGroup row (sidebar folder / board). Returns null when invalid.
+ * Shared by whole-blob PUT and PATCH /api/config/sessions.
+ * @param {unknown} raw
+ * @returns {object | null}
+ */
+export function normalizeGroupRow(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const r = /** @type {Record<string, unknown>} */ (raw);
   const id = typeof r.id === 'string' ? r.id.trim() : '';
@@ -663,7 +670,7 @@ function ensureGroupsFromRaw(raw) {
   if (!Array.isArray(raw)) return [];
   const out = [];
   for (const item of raw) {
-    const group = ensureChatGroup(item);
+    const group = normalizeGroupRow(item);
     if (group) out.push(group);
   }
   return out;
@@ -897,7 +904,13 @@ function ensureActiveLoops(raw) {
   return out.length ? out : undefined;
 }
 
-function ensureChatShape(raw) {
+/**
+ * Normalize one Chat row for persistence (whole-blob PUT and PATCH).
+ * Null/invalid input yields a placeholder chat (same as historical ensureChatShape).
+ * @param {unknown} raw
+ * @returns {object}
+ */
+export function normalizeChatRow(raw) {
   if (!raw || typeof raw !== 'object') {
     return {
       id: newChatId(),
@@ -1036,6 +1049,107 @@ function ensureChatShape(raw) {
 }
 
 /**
+ * Normalize session-level scalars (everything except chats/groups).
+ *
+ * - `mode: 'full'` (default): whole-blob PUT — fill defaults for required keys.
+ * - `mode: 'partial'`: PATCH scalars — only include keys present on `raw`
+ *   (absent keys mean unchanged; never delete by omission).
+ *
+ * @param {unknown} raw
+ * @param {{ mode?: 'full' | 'partial' }} [options]
+ * @returns {Record<string, unknown>}
+ */
+export function normalizeSessionScalars(raw, options = {}) {
+  const mode = options.mode === 'partial' ? 'partial' : 'full';
+  if (!raw || typeof raw !== 'object') {
+    if (mode === 'partial') return {};
+    throw new Error('Invalid session scalars');
+  }
+
+  const parsed = /** @type {Record<string, unknown>} */ (raw);
+  const has = (key) => Object.prototype.hasOwnProperty.call(parsed, key);
+
+  /** @type {Record<string, unknown>} */
+  const out = {};
+
+  if (mode === 'full' || has('version')) {
+    // Wire schema version is always bumped to current on write.
+    out.version = SESSION_SCHEMA_VERSION;
+  }
+
+  if (mode === 'full' || has('activeId')) {
+    out.activeId = typeof parsed.activeId === 'string' ? parsed.activeId : '';
+  }
+
+  if (mode === 'full' || has('sidebarCollapsed')) {
+    out.sidebarCollapsed = !!parsed.sidebarCollapsed;
+  }
+
+  if (mode === 'full' || has('lastActiveChatIdByWorkspace')) {
+    out.lastActiveChatIdByWorkspace = ensureLastActiveMap(
+      parsed.lastActiveChatIdByWorkspace,
+    );
+  }
+
+  if (mode === 'full' || has('lastActiveChatIdByApp')) {
+    out.lastActiveChatIdByApp = ensureLastActiveAppMap(parsed.lastActiveChatIdByApp);
+  }
+
+  if (mode === 'full') {
+    if (typeof parsed.sidebarWidth === 'number' && Number.isFinite(parsed.sidebarWidth)) {
+      out.sidebarWidth = Math.min(520, Math.max(200, Math.round(parsed.sidebarWidth)));
+    }
+    if (
+      typeof parsed.activeBoardGroupId === 'string' &&
+      parsed.activeBoardGroupId.trim()
+    ) {
+      out.activeBoardGroupId = parsed.activeBoardGroupId.trim();
+    }
+    if (
+      parsed.codeChangeTotalsByWorkspace &&
+      typeof parsed.codeChangeTotalsByWorkspace === 'object' &&
+      !Array.isArray(parsed.codeChangeTotalsByWorkspace)
+    ) {
+      out.codeChangeTotalsByWorkspace = parsed.codeChangeTotalsByWorkspace;
+    }
+  } else {
+    // Partial PATCH: normalize present optional keys; allow explicit null to clear.
+    if (has('sidebarWidth')) {
+      if (typeof parsed.sidebarWidth === 'number' && Number.isFinite(parsed.sidebarWidth)) {
+        out.sidebarWidth = Math.min(520, Math.max(200, Math.round(parsed.sidebarWidth)));
+      } else if (parsed.sidebarWidth == null) {
+        out.sidebarWidth = null;
+      }
+    }
+    if (has('activeBoardGroupId')) {
+      if (
+        typeof parsed.activeBoardGroupId === 'string' &&
+        parsed.activeBoardGroupId.trim()
+      ) {
+        out.activeBoardGroupId = parsed.activeBoardGroupId.trim();
+      } else {
+        out.activeBoardGroupId = null;
+      }
+    }
+    if (has('codeChangeTotalsByWorkspace')) {
+      if (
+        parsed.codeChangeTotalsByWorkspace &&
+        typeof parsed.codeChangeTotalsByWorkspace === 'object' &&
+        !Array.isArray(parsed.codeChangeTotalsByWorkspace)
+      ) {
+        out.codeChangeTotalsByWorkspace = parsed.codeChangeTotalsByWorkspace;
+      } else {
+        out.codeChangeTotalsByWorkspace = null;
+      }
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Whole-blob SessionState validation (PUT / migrate / JSON fallback).
+ * Composes {@link normalizeChatRow}, {@link normalizeGroupRow}, {@link normalizeSessionScalars}.
  * @param {unknown} raw
  * @returns {object}
  */
@@ -1061,34 +1175,15 @@ export function validateSessionState(raw) {
     throw new Error('Invalid session state');
   }
 
-  const chats = parsed.chats.map(ensureChatShape).filter(Boolean);
+  const chats = parsed.chats.map(normalizeChatRow).filter(Boolean);
   const groups = ensureGroupsFromRaw(parsed.groups);
+  const scalars = normalizeSessionScalars(parsed, { mode: 'full' });
+
   const state = {
-    version: SESSION_SCHEMA_VERSION,
-    activeId: typeof parsed.activeId === 'string' ? parsed.activeId : '',
-    sidebarCollapsed: !!parsed.sidebarCollapsed,
-    lastActiveChatIdByWorkspace: ensureLastActiveMap(parsed.lastActiveChatIdByWorkspace),
-    lastActiveChatIdByApp: ensureLastActiveAppMap(parsed.lastActiveChatIdByApp),
+    ...scalars,
     groups,
-    chats: chats.length ? chats : [ensureChatShape(null)],
+    chats: chats.length ? chats : [normalizeChatRow(null)],
   };
-  if (typeof parsed.sidebarWidth === 'number' && Number.isFinite(parsed.sidebarWidth)) {
-    state.sidebarWidth = Math.min(520, Math.max(200, Math.round(parsed.sidebarWidth)));
-  }
-  if (
-    typeof parsed.activeBoardGroupId === 'string' &&
-    parsed.activeBoardGroupId.trim()
-  ) {
-    state.activeBoardGroupId = parsed.activeBoardGroupId.trim();
-  }
-  // Session-level workspace rollup — same named-key rule as chat passthrough.
-  if (
-    parsed.codeChangeTotalsByWorkspace &&
-    typeof parsed.codeChangeTotalsByWorkspace === 'object' &&
-    !Array.isArray(parsed.codeChangeTotalsByWorkspace)
-  ) {
-    state.codeChangeTotalsByWorkspace = parsed.codeChangeTotalsByWorkspace;
-  }
 
   if (!state.chats.some((c) => c.id === state.activeId)) {
     state.activeId = state.chats[0].id;
@@ -1098,8 +1193,12 @@ export function validateSessionState(raw) {
     throw new Error('Session must have at least one chat');
   }
 
+  // Whole-blob ladder: only migrate chats when the incoming blob is pre-v6
+  // (matches client parseSessionStateFromJson — A.0.3 parity).
   if (version < SESSION_SCHEMA_VERSION) {
-    migrateSessionV5ToV6(state);
+    for (const chat of state.chats) {
+      migrateChatRowV5ToV6(chat);
+    }
   }
 
   return state;

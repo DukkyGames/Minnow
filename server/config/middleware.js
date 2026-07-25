@@ -4,7 +4,14 @@
 
 import fs from 'node:fs';
 import { ensureMinnowLayout, getMinnowHome } from './home.js';
-import { readResource, writeResource, readConfigJson, writeConfigJson, configFileExists } from './store.js';
+import {
+  readResource,
+  writeResource,
+  patchResource,
+  readConfigJson,
+  writeConfigJson,
+  configFileExists,
+} from './store.js';
 import {
   validateSessionState,
   normalizeToolConfig,
@@ -240,6 +247,18 @@ export async function handleConfigRequest(req, res, pathname) {
         const body = await readJsonBody(req);
         const saved = await writeResource(resource, body);
         sendJson(res, 200, { ok: true, data: saved });
+        return true;
+      }
+
+      // Partial sessions write (Phase B.0). Other config resources stay PUT-only.
+      if (req.method === 'PATCH') {
+        if (resource !== 'sessions') {
+          sendJson(res, 405, { error: 'Method not allowed' });
+          return true;
+        }
+        const body = await readJsonBody(req);
+        const result = await patchResource(resource, body);
+        sendJson(res, 200, result);
         return true;
       }
     }

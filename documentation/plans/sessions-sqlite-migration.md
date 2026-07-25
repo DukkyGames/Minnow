@@ -12,7 +12,7 @@
 - [x] **A.1** — Schema + `sessions-db.js` + `sessions-import.js` + import tests (nothing reads DB yet)
 - [x] **A.2** — `sessions-repo.js` whole-blob R/W + `store.js` cutover + allowlist removal + export-json + JSON mirror
 - [x] **A.3** — Eight server consumers → narrow queries
-- [ ] **B.0** — Validator decomposition + `PATCH /api/config/sessions` + headless convert
+- [x] **B.0** — Validator decomposition + `PATCH /api/config/sessions` + headless convert
 - [ ] **B.1** — Shared `session-schema.mjs` + dirty tracking (telemetry only)
 - [ ] **B.2** — Flip to PATCH + beacon size branch
 - [ ] **C.1** — Summaries + `ensureChatHistoryLoaded` + dev trap (flag off)
