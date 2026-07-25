@@ -91,6 +91,10 @@ export function syncLegacyChromeVisibility(): void {
 
   void import('./desktop-workspace-mounts').then((m) => m.syncDesktopWorkspaceMounts());
 
+  void import('../ui/loop-active-hint').then(({ syncLoopActiveHint }) => {
+    syncLoopActiveHint();
+  });
+
   syncDesktopLayerSuppression();
 }
 

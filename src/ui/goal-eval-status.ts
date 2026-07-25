@@ -9,6 +9,7 @@ import { setSidebarStreamPhase, syncChatItemDotsInDom } from './chat-item-dot';
 import { getActiveChatMountElement } from './chat-mount';
 import { scrollChatIfPinned } from './chat-scroll';
 import { syncGoalActiveHint } from './goal-active-hint';
+import { syncLoopActiveHint } from './loop-active-hint';
 import { openGoalEvalDrawer, initGoalEvalDrawerLiveUpdates } from './goal-eval-drawer';
 
 const GOAL_EVAL_STATUS_CLASS = 'goal-eval-status';
@@ -101,5 +102,6 @@ export function syncGoalEvalUi(chatId: string): void {
   }
 
   syncGoalActiveHint();
+  syncLoopActiveHint();
   syncChatItemDotsInDom();
 }

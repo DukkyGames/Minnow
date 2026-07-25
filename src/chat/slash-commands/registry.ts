@@ -26,6 +26,12 @@ const SLASH_COMMANDS: SlashCommandListItem[] = [
     description: 'Stop the active goal loop (aliases: stop, off, reset)',
     insertion: '/goal clear',
   },
+  {
+    id: 'loop',
+    label: 'Loop',
+    description: 'Re-run a prompt on an interval (5m) or self-paced; bare /loop uses .minnow/loop.md',
+    insertion: '/loop ',
+  },
 ];
 
 /** All built-in slash commands for the picker. */

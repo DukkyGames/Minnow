@@ -23,6 +23,10 @@ const PLACEHOLDER_CHAT_NAME = 'New chat';
 const MAX_CHATS = 50;
 const SESSION_SCHEMA_VERSION = 6;
 const MAX_GOAL_CONDITION_CHARS = 4000;
+const MAX_LOOP_PROMPT_CHARS = 4000;
+const MIN_LOOP_INTERVAL_MS = 60_000;
+const INITIAL_LOOP_AUTO_DELAY_MS = 120_000;
+const LOOP_INTERVAL_TOKEN_RE = /^(\d+)(s|m|h|d)$/i;
 
 /** Normalize workspace paths for stable keys (mirror src/lib/normalize-workspace-path.ts). */
 export function normalizeWorkspacePath(fsPath) {
@@ -778,6 +782,99 @@ function ensureActiveGoal(raw) {
   };
 }
 
+/** Coerce one /loop row (mirror src/state/sessions.ts ensureActiveLoopRow). */
+function ensureActiveLoopRow(raw) {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const row = /** @type {Record<string, unknown>} */ (raw);
+  const id =
+    typeof row.id === 'number' && Number.isFinite(row.id)
+      ? Math.max(1, Math.floor(row.id))
+      : 0;
+  if (id < 1) return undefined;
+
+  const kind = row.kind === 'interval' || row.kind === 'auto' ? row.kind : null;
+  if (!kind) return undefined;
+
+  const promptText =
+    typeof row.promptText === 'string'
+      ? row.promptText.slice(0, MAX_LOOP_PROMPT_CHARS)
+      : '';
+
+  const dueAt =
+    typeof row.dueAt === 'number' && Number.isFinite(row.dueAt)
+      ? row.dueAt
+      : Date.now();
+  const createdAt =
+    typeof row.createdAt === 'number' && Number.isFinite(row.createdAt)
+      ? row.createdAt
+      : Date.now();
+  const expiresAt =
+    typeof row.expiresAt === 'number' && Number.isFinite(row.expiresAt)
+      ? row.expiresAt
+      : createdAt + 7 * 24 * 60 * 60 * 1000;
+  const runCount =
+    typeof row.runCount === 'number' && Number.isFinite(row.runCount)
+      ? Math.max(0, Math.floor(row.runCount))
+      : 0;
+
+  const loop = {
+    id,
+    promptText,
+    kind,
+    dueAt,
+    createdAt,
+    expiresAt,
+    runCount,
+  };
+
+  if (kind === 'interval') {
+    const intervalMs =
+      typeof row.intervalMs === 'number' && Number.isFinite(row.intervalMs)
+        ? Math.max(MIN_LOOP_INTERVAL_MS, Math.floor(row.intervalMs))
+        : MIN_LOOP_INTERVAL_MS;
+    loop.intervalMs = intervalMs;
+  } else {
+    const currentDelayMs =
+      typeof row.currentDelayMs === 'number' && Number.isFinite(row.currentDelayMs)
+        ? Math.min(
+            3_600_000,
+            Math.max(MIN_LOOP_INTERVAL_MS, Math.floor(row.currentDelayMs)),
+          )
+        : INITIAL_LOOP_AUTO_DELAY_MS;
+    loop.currentDelayMs = currentDelayMs;
+  }
+
+  if (typeof row.lastOutputDigest === 'string' && row.lastOutputDigest.trim()) {
+    loop.lastOutputDigest = row.lastOutputDigest.trim();
+  }
+
+  if (row.paused === true) {
+    loop.paused = true;
+    if (
+      typeof row.pausedRemainingMs === 'number' &&
+      Number.isFinite(row.pausedRemainingMs)
+    ) {
+      loop.pausedRemainingMs = Math.max(0, Math.floor(row.pausedRemainingMs));
+    }
+  }
+
+  return loop;
+}
+
+/** Coerce active /loop rows on a chat. */
+function ensureActiveLoops(raw) {
+  if (!Array.isArray(raw)) return undefined;
+  const out = [];
+  const seen = new Set();
+  for (const entry of raw) {
+    const loop = ensureActiveLoopRow(entry);
+    if (!loop || seen.has(loop.id)) continue;
+    seen.add(loop.id);
+    out.push(loop);
+  }
+  return out.length ? out : undefined;
+}
+
 function ensureChatShape(raw) {
   if (!raw || typeof raw !== 'object') {
     return {
@@ -821,6 +918,13 @@ function ensureChatShape(raw) {
       ? row.activeBranchByFork
       : undefined;
   const activeGoal = ensureActiveGoal(row.activeGoal);
+  const activeLoops = ensureActiveLoops(row.activeLoops);
+  const nextLoopId =
+    typeof row.nextLoopId === 'number' && Number.isFinite(row.nextLoopId)
+      ? Math.max(1, Math.floor(row.nextLoopId))
+      : activeLoops?.length
+        ? Math.max(...activeLoops.map((loop) => loop.id)) + 1
+        : undefined;
   const superPlan = ensureSuperPlanPersisted(row.superPlan);
   const expertRuntime = ensureExpertRuntime(row.expertRuntime);
 
@@ -870,6 +974,8 @@ function ensureChatShape(raw) {
     ...(terminalHistory?.length ? { terminalHistory } : {}),
     ...(currentGenerationId ? { currentGenerationId } : {}),
     ...(activeGoal ? { activeGoal } : {}),
+    ...(activeLoops ? { activeLoops } : {}),
+    ...(nextLoopId != null ? { nextLoopId } : {}),
     ...(superPlan ? { superPlan } : {}),
     ...(row.kind === 'expert' ? { kind: 'expert' } : {}),
     ...(row.kind === 'expert-lab' ? { kind: 'expert-lab' } : {}),

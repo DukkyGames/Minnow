@@ -26,6 +26,7 @@ import { setAssistantBubbleContent } from '../markdown/renderer';
 import { getActiveBoardGroup } from '../state/chat-groups';
 import {
   clearActiveGoal,
+  clearActiveLoops,
   clearChatTodos,
   getActiveChat,
   touchChat,
@@ -384,6 +385,9 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   }
   } finally {
     suppressBubbleScroll = false;
+    void import('./loop-active-hint').then(({ syncLoopStatusUi }) => {
+      syncLoopStatusUi(chat.id);
+    });
   }
   });
 }
@@ -747,6 +751,7 @@ export function clearChat(): void {
   if (!confirm('Clear all messages in this chat? The chat stays in your sidebar.')) return;
   const chat = getActiveChat();
   clearActiveGoal(chat);
+  clearActiveLoops(chat);
   clearChatTodos(chat);
   chat.history = [];
   resetTokenLedger(chat);
@@ -765,5 +770,11 @@ export function clearChat(): void {
   renderSidebar();
   scheduleSaveSessions();
   syncTodoPanel();
+  void import('./loop-active-hint').then(({ syncLoopActiveHint }) => {
+    syncLoopActiveHint();
+  });
+  void import('./goal-active-hint').then(({ syncGoalActiveHint }) => {
+    syncGoalActiveHint();
+  });
   closeDrawer();
 }
