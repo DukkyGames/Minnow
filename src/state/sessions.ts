@@ -3,7 +3,13 @@ import { abortChatTitleGeneration } from '../chat/titles/inflight';
 import { cleanupChatWorktreeOnDelete } from './chat-worktree';
 import { isPlaceholderChatName } from '../chat/titles/placeholder';
 import { setSaveTimer, saveTimer } from '../app-state';
-import { getSessions, putSessions, putSessionsKeepalive } from '../config/api-client';
+import {
+  flushSessionsOnShutdown,
+  getSessions,
+  patchSessions,
+  putSessions,
+  type SessionsPatchDelta,
+} from '../config/api-client';
 import { defaultSessionState } from '../config/defaults';
 import { randomUUID } from '../lib/random-id.ts';
 import { isServerStorageMode } from '../config/storage-mode';
@@ -104,6 +110,7 @@ import type {
   ExpertSelection,
   SessionState,
 } from '../types';
+import { SESSION_SCHEMA_VERSION } from '../types';
 
 const MAX_CHAT_TODO_ITEMS = 20;
 const MAX_CHAT_TODO_TEXT_CHARS = 140;
@@ -123,21 +130,33 @@ export let sessionState: SessionState | null = null;
  */
 let sessionsHydratedFromServer = false;
 
-/** Dirty chat ids since last flush (telemetry for B.2 PATCH; B.1 still PUTs whole blob). */
+/** Dirty chat ids since last successful flush (B.2 PATCH payload). */
 const dirtyChatIds = new Set<string>();
-/** Explicit chat deletes since last flush. */
+/** Explicit chat deletes since last successful flush. */
 const deletedChatIds = new Set<string>();
-/** Dirty sidebar/board group ids since last flush. */
+/** Dirty sidebar/board group ids since last successful flush. */
 const dirtyGroupIds = new Set<string>();
-/** Session scalars (activeId, sidebar, maps, …) changed since last flush. */
+/** Explicit group deletes since last successful flush (PATCH deleteGroupIds). */
+const deletedGroupIds = new Set<string>();
+/** Session scalars (activeId, sidebar, maps, …) changed since last successful flush. */
 let sessionScalarsDirty = false;
 /**
- * Shadow JSON of chats after last load/flush — used by the B.1 dev verifier to
+ * Shadow JSON of chats after last load/flush — used by the B.1/B.2 DEV verifier to
  * catch mutations that bypassed {@link touchChat}.
  */
 let dirtyTrackingShadowChatsJson: string | null = null;
 /** When true, flush runs the unmarked-mutation verifier (tests / Vite DEV). */
 let dirtyTrackingVerifierForced = false;
+/**
+ * B.2 flag: when true (default), server-mode flush uses PATCH once dirty sets are trusted.
+ * Full-PUT fallback when dirty sets are unavailable (first save after load, or verifier miss).
+ */
+let sessionsClientPatchEnabled = true;
+/**
+ * False after load / verifier miss — next successful full PUT establishes a trusted baseline
+ * so subsequent flushes may PATCH.
+ */
+let sessionPatchDirtySetsReady = false;
 
 function isDirtyTrackingVerifierEnabled(): boolean {
   if (dirtyTrackingVerifierForced) return true;
@@ -157,64 +176,164 @@ function clearSessionDirtySets(): void {
   dirtyChatIds.clear();
   deletedChatIds.clear();
   dirtyGroupIds.clear();
+  deletedGroupIds.clear();
   sessionScalarsDirty = false;
 }
 
-/** Mark session-level scalars dirty for upcoming PATCH telemetry. */
+/** True when any dirty marker would produce a non-empty PATCH. */
+function hasSessionDirtyWork(): boolean {
+  return (
+    dirtyChatIds.size > 0 ||
+    deletedChatIds.size > 0 ||
+    dirtyGroupIds.size > 0 ||
+    deletedGroupIds.size > 0 ||
+    sessionScalarsDirty
+  );
+}
+
+/** Mark session-level scalars dirty for the next PATCH. */
 export function markSessionScalarsDirty(): void {
   sessionScalarsDirty = true;
 }
 
-/** Mark a sidebar/board group dirty for upcoming PATCH telemetry. */
+/** Mark a sidebar/board group dirty for the next PATCH upsert. */
 export function markGroupDirty(groupId: string): void {
   const id = typeof groupId === 'string' ? groupId.trim() : '';
-  if (id) dirtyGroupIds.add(id);
+  if (!id) return;
+  // A resurrected/upserted group is not a delete.
+  deletedGroupIds.delete(id);
+  dirtyGroupIds.add(id);
+}
+
+/** Mark a group deleted for PATCH `deleteGroupIds` (not a dirty upsert). */
+export function markGroupDeleted(groupId: string): void {
+  const id = typeof groupId === 'string' ? groupId.trim() : '';
+  if (!id) return;
+  dirtyGroupIds.delete(id);
+  deletedGroupIds.add(id);
 }
 
 /**
  * Dev/test verifier: warn when a chat stringified differently without touchChat.
- * Still does not change the PUT payload (whole blob).
+ * @returns true when an unmarked mutation was detected (dirty sets untrusted → full PUT).
  */
-function verifyDirtyChatTracking(state: SessionState): void {
-  if (!isDirtyTrackingVerifierEnabled()) return;
-  if (dirtyTrackingShadowChatsJson == null) return;
+function verifyDirtyChatTracking(state: SessionState): boolean {
+  if (!isDirtyTrackingVerifierEnabled()) return false;
+  if (dirtyTrackingShadowChatsJson == null) return false;
   let shadow: unknown;
   try {
     shadow = JSON.parse(dirtyTrackingShadowChatsJson);
   } catch {
-    return;
+    return false;
   }
-  if (!Array.isArray(shadow)) return;
+  if (!Array.isArray(shadow)) return false;
   const shadowById = new Map(
     shadow
       .filter((c) => c && typeof c === 'object' && typeof (c as Chat).id === 'string')
       .map((c) => [(c as Chat).id, JSON.stringify(c)]),
   );
+  let missed = false;
   for (const chat of state.chats) {
     const prev = shadowById.get(chat.id);
     if (prev === undefined) continue; // new chats are marked via touchChat on create
     const next = JSON.stringify(chat);
     if (prev !== next && !dirtyChatIds.has(chat.id)) {
+      missed = true;
       console.warn(
         `[sessions dirty-tracking] chat ${chat.id} changed without touchChat()`,
       );
     }
   }
+  return missed;
 }
 
-/** Test helper: dirty set snapshot (B.1 still PUTs the full blob). */
+/** Build a PATCH delta from the current dirty sets (full dirty chats/groups). */
+export function buildSessionsPatchDelta(state: SessionState): SessionsPatchDelta {
+  const delta: SessionsPatchDelta = {
+    baseVersion: state.version ?? SESSION_SCHEMA_VERSION,
+  };
+
+  if (dirtyChatIds.size > 0) {
+    const byId = new Map(state.chats.map((c) => [c.id, c]));
+    const chats: Chat[] = [];
+    for (const id of dirtyChatIds) {
+      // Skip ids that were also deleted in the same window.
+      if (deletedChatIds.has(id)) continue;
+      const chat = byId.get(id);
+      if (chat) chats.push(chat);
+    }
+    if (chats.length) delta.chats = chats;
+  }
+
+  if (deletedChatIds.size > 0) {
+    delta.deleteChatIds = [...deletedChatIds];
+  }
+
+  if (dirtyGroupIds.size > 0) {
+    const byId = new Map((state.groups ?? []).map((g) => [g.id, g]));
+    const groups: ChatGroup[] = [];
+    for (const id of dirtyGroupIds) {
+      if (deletedGroupIds.has(id)) continue;
+      const group = byId.get(id);
+      if (group) groups.push(group);
+    }
+    if (groups.length) delta.groups = groups;
+  }
+
+  if (deletedGroupIds.size > 0) {
+    delta.deleteGroupIds = [...deletedGroupIds];
+  }
+
+  if (sessionScalarsDirty) {
+    // Partial scalars — only keys we always track as a session-level bundle.
+    const scalars: Record<string, unknown> = {
+      version: state.version ?? SESSION_SCHEMA_VERSION,
+      activeId: typeof state.activeId === 'string' ? state.activeId : '',
+      sidebarCollapsed: !!state.sidebarCollapsed,
+      lastActiveChatIdByWorkspace: state.lastActiveChatIdByWorkspace ?? {},
+      lastActiveChatIdByApp: state.lastActiveChatIdByApp ?? {},
+    };
+    // Optional keys: send explicit null so PATCH can clear them.
+    scalars.sidebarWidth = state.sidebarWidth ?? null;
+    scalars.activeBoardGroupId = state.activeBoardGroupId ?? null;
+    if (state.codeChangeTotalsByWorkspace) {
+      scalars.codeChangeTotalsByWorkspace = state.codeChangeTotalsByWorkspace;
+    }
+    delta.scalars = scalars;
+  }
+
+  return delta;
+}
+
+/** Test helper: dirty set snapshot for B.2 PATCH. */
 export function getSessionDirtyTrackingForTests(): {
   dirtyChatIds: string[];
   deletedChatIds: string[];
   dirtyGroupIds: string[];
+  deletedGroupIds: string[];
   sessionScalarsDirty: boolean;
+  sessionPatchDirtySetsReady: boolean;
+  sessionsClientPatchEnabled: boolean;
 } {
   return {
     dirtyChatIds: [...dirtyChatIds].sort(),
     deletedChatIds: [...deletedChatIds].sort(),
     dirtyGroupIds: [...dirtyGroupIds].sort(),
+    deletedGroupIds: [...deletedGroupIds].sort(),
     sessionScalarsDirty,
+    sessionPatchDirtySetsReady,
+    sessionsClientPatchEnabled,
   };
+}
+
+/** Test helper: toggle B.2 client PATCH flag (`sessionsClientPatchEnabled`, default ON). */
+export function setSessionsClientPatchEnabledForTests(enabled: boolean): void {
+  sessionsClientPatchEnabled = enabled;
+}
+
+/** Test helper: mark dirty sets trusted (or force full-PUT fallback). */
+export function setSessionPatchDirtySetsReadyForTests(ready: boolean): void {
+  sessionPatchDirtySetsReady = ready;
 }
 
 /** Test helper: force verifier on/off regardless of import.meta.env.DEV. */
@@ -229,6 +348,8 @@ export function captureDirtyTrackingShadowForTests(): void {
 
 
 let sessionPersistenceShutdownRegistered = false;
+/** In-flight server PATCH/PUT so tests can await dirty-set clear after success. */
+let inFlightSessionSave: Promise<void> | null = null;
 
 /** Resolves once `loadSessionsFromStorage()` has populated `sessionState`. */
 let resolveSessionsReady: () => void = () => undefined;
@@ -254,8 +375,11 @@ export function setSessionStateForTests(state: SessionState | null): void {
   if (state) {
     markSessionsReady();
     sessionsHydratedFromServer = true;
+    // Tests start past the post-load full-PUT baseline so PATCH can be exercised directly.
+    sessionPatchDirtySetsReady = true;
   } else {
     sessionsHydratedFromServer = false;
+    sessionPatchDirtySetsReady = false;
   }
 }
 
@@ -266,11 +390,19 @@ export function resetSessionPersistenceForTests(): void {
   clearSessionDirtySets();
   dirtyTrackingShadowChatsJson = null;
   dirtyTrackingVerifierForced = false;
+  sessionsClientPatchEnabled = true;
+  sessionPatchDirtySetsReady = false;
+  inFlightSessionSave = null;
   // Clear debounce timer so Node test runners can exit.
   if (saveTimer) {
     clearTimeout(saveTimer);
     setSaveTimer(null);
   }
+}
+
+/** Await the in-flight server PATCH/PUT started by {@link saveSessionsNow} (tests). */
+export async function waitForSessionSaveForTests(): Promise<void> {
+  if (inFlightSessionSave) await inFlightSessionSave;
 }
 
 /** Expose hydration guard for persistence unit tests. */
@@ -915,6 +1047,8 @@ export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Pr
     }
   } finally {
     clearSessionDirtySets();
+    // First save after load must full-PUT until a successful baseline flush.
+    sessionPatchDirtySetsReady = false;
     captureDirtyTrackingShadow(sessionState);
     markSessionsReady();
   }
@@ -945,7 +1079,7 @@ export function getActiveChat(): Chat {
 
 export function touchChat(chat: Chat): void {
   chat.updatedAt = Date.now();
-  // Entire chat dirty mechanism for B.2 PATCH telemetry (B.1 still PUTs whole blob).
+  // Entire-chat dirty marker for the next PATCH upsert.
   dirtyChatIds.add(chat.id);
 }
 
@@ -1135,29 +1269,88 @@ export function recordChatMessage(chat: Chat): void {
 }
 
 export type SaveSessionsOptions = {
-  /** Use fetch keepalive for unload handlers (fire-and-forget). */
+  /** Use fetch keepalive / sendBeacon for unload handlers (fire-and-forget). */
   keepalive?: boolean;
 };
 
+/**
+ * Persist session state. In server mode (B.2):
+ * - MIN-408: no network write until hydrated from ~/.minnow
+ * - PATCH when `sessionsClientPatchEnabled` (default ON) and dirty sets are trusted
+ * - full PUT on first save after load, or after a dirty-tracking verifier miss
+ * - dirty sets clear only after a successful PATCH/PUT (or accepted shutdown beacon)
+ */
 export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResult {
   if (!sessionState) return 'ok';
 
-  // B.1 telemetry: detect unmarked chat mutations in DEV (still PUT whole blob).
-  verifyDirtyChatTracking(sessionState);
+  // Detect unmarked chat mutations in DEV; a miss forces full-PUT fallback.
+  const verifierMiss = verifyDirtyChatTracking(sessionState);
+  if (verifierMiss) {
+    sessionPatchDirtySetsReady = false;
+  }
 
   if (isServerStorageMode()) {
+    // MIN-408: never PATCH/PUT before a successful server hydrate.
     if (!sessionsHydratedFromServer) {
       return 'ok';
     }
-    if (options?.keepalive) {
-      putSessionsKeepalive(sessionState);
-    } else {
-      void putSessions(sessionState).catch(() => {
-        setStatus('err', 'Could not save sessions to ~/.minnow');
-      });
+
+    const usePatch =
+      sessionsClientPatchEnabled && sessionPatchDirtySetsReady && !verifierMiss;
+
+    if (usePatch && !hasSessionDirtyWork()) {
+      // Nothing changed since the last successful flush.
+      captureDirtyTrackingShadow(sessionState);
+      void import('../ui/hub').then((m) => m.refreshHubLiveData());
+      return 'ok';
     }
-    clearSessionDirtySets();
-    captureDirtyTrackingShadow(sessionState);
+
+    if (options?.keepalive) {
+      // Shutdown: small PATCH delta → sendBeacon (POST alias); else keepalive whole-blob PUT.
+      const delta = usePatch && hasSessionDirtyWork() ? buildSessionsPatchDelta(sessionState) : null;
+      const { clearedOk } = flushSessionsOnShutdown(delta, sessionState);
+      if (clearedOk) {
+        clearSessionDirtySets();
+        // Keepalive PUT also re-establishes a trusted baseline when we were not patching.
+        if (!usePatch) sessionPatchDirtySetsReady = true;
+      }
+      captureDirtyTrackingShadow(sessionState);
+      void import('../ui/hub').then((m) => m.refreshHubLiveData());
+      return 'ok';
+    }
+
+    const reportSaveError = (): void => {
+      if (typeof document !== 'undefined') {
+        setStatus('err', 'Could not save sessions to ~/.minnow');
+      }
+    };
+
+    if (usePatch) {
+      const delta = buildSessionsPatchDelta(sessionState);
+      inFlightSessionSave = patchSessions(delta)
+        .then(() => {
+          clearSessionDirtySets();
+          captureDirtyTrackingShadow(sessionState);
+        })
+        .catch(reportSaveError)
+        .finally(() => {
+          inFlightSessionSave = null;
+        });
+      void import('../ui/hub').then((m) => m.refreshHubLiveData());
+      return 'ok';
+    }
+
+    // Full-PUT fallback (first save after load, verifier miss, or flag off).
+    inFlightSessionSave = putSessions(sessionState)
+      .then(() => {
+        clearSessionDirtySets();
+        sessionPatchDirtySetsReady = true;
+        captureDirtyTrackingShadow(sessionState);
+      })
+      .catch(reportSaveError)
+      .finally(() => {
+        inFlightSessionSave = null;
+      });
     void import('../ui/hub').then((m) => m.refreshHubLiveData());
     return 'ok';
   }
@@ -1178,9 +1371,9 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
 }
 
 export function scheduleSaveSessions(hint?: { chatId?: string; groupId?: string }): void {
-  // Opportunistic dirty hints for callers that know what changed (B.2-ready).
+  // Opportunistic dirty hints for callers that know what changed.
   if (hint?.chatId?.trim()) dirtyChatIds.add(hint.chatId.trim());
-  if (hint?.groupId?.trim()) dirtyGroupIds.add(hint.groupId.trim());
+  if (hint?.groupId?.trim()) markGroupDirty(hint.groupId.trim());
   if (saveTimer) clearTimeout(saveTimer);
   setSaveTimer(
     setTimeout(() => {

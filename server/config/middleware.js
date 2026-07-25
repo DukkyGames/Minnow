@@ -251,7 +251,8 @@ export async function handleConfigRequest(req, res, pathname) {
       }
 
       // Partial sessions write (Phase B.0). Other config resources stay PUT-only.
-      if (req.method === 'PATCH') {
+      // POST is a sendBeacon alias for PATCH (beacons cannot use the PATCH method).
+      if (req.method === 'PATCH' || req.method === 'POST') {
         if (resource !== 'sessions') {
           sendJson(res, 405, { error: 'Method not allowed' });
           return true;

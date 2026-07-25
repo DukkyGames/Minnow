@@ -28,7 +28,7 @@ import { getBoardGroupForChat, getPlannerChatForGroup, linkPlannerChatToBoardFol
 import { emitBoardChange } from './orchestrate-board-events.ts';
 import { markGroupDirty, scheduleSaveSessions, sessionState, touchChat } from './sessions.ts';
 
-/** Persist a board-store mutation with dirtyGroupIds telemetry. */
+/** Persist a board-store mutation with dirtyGroupIds for B.2 PATCH. */
 function persistBoardGroup(group: ChatGroup): void {
   markGroupDirty(group.id);
   scheduleSaveSessions();

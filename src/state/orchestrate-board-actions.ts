@@ -195,7 +195,7 @@ function requireSession(): NonNullable<typeof sessionState> {
   return sessionState;
 }
 
-/** Board mutations mark dirtyGroupIds (B.1 telemetry; still full PUT). */
+/** Board mutations mark dirtyGroupIds for B.2 PATCH. */
 function scheduleSaveSessions(group?: ChatGroup | string | null): void {
   const id = typeof group === 'string' ? group : group?.id;
   if (id) markGroupDirty(id);

@@ -14,7 +14,7 @@
 - [x] **A.3** — Eight server consumers → narrow queries
 - [x] **B.0** — Validator decomposition + `PATCH /api/config/sessions` + headless convert
 - [x] **B.1** — Shared `session-schema.mjs` + dirty tracking (telemetry only)
-- [ ] **B.2** — Flip to PATCH + beacon size branch
+- [x] **B.2** — Flip to PATCH + beacon size branch
 - [ ] **C.1** — Summaries + `ensureChatHistoryLoaded` + dev trap (flag off)
 - [ ] **C.2** — FTS5 search route, delete `task-history-trim.ts`, flip flag
 - [ ] **Docs** — Update `context.md`, architecture/configuration guides, `server-session-engine.md`

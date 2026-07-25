@@ -11,6 +11,7 @@ import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Chat, ChatGroup } from '../types';
 import { getChatLastMessageAt } from './session-workspace-scope';
 import {
+  markGroupDeleted,
   markGroupDirty,
   markSessionScalarsDirty,
   newChatId,
@@ -21,7 +22,7 @@ import {
   type RemoveChatResult,
 } from './sessions';
 
-/** Persist a group mutation (marks dirtyGroupIds for B.2 PATCH telemetry). */
+/** Persist a group mutation (marks dirtyGroupIds for B.2 PATCH upsert). */
 function persistGroupChange(groupId: string): void {
   markGroupDirty(groupId);
   scheduleSaveSessions();
@@ -220,7 +221,9 @@ export function deleteGroup(
         if (result.activeChanged) activeChanged = true;
       }
     }
-    persistGroupChange(id);
+    // Group row is gone — PATCH must deleteGroupIds, not a dirty upsert of a missing id.
+    markGroupDeleted(id);
+    scheduleSaveSessions();
     return { ok: true, activeChanged, chatRemoval: lastRemoval };
   }
 
@@ -239,7 +242,8 @@ export function deleteGroup(
       touchChat(chat);
     }
   }
-  persistGroupChange(id);
+  markGroupDeleted(id);
+  scheduleSaveSessions();
   return { ok: true, activeChanged: false };
 }
 

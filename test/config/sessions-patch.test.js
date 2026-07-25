@@ -250,4 +250,21 @@ describe('PATCH /api/config/sessions', () => {
     assert.equal(after.activeId, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
     assert.deepEqual(after.chats, before.chats);
   });
+
+  test('POST is a sendBeacon alias for PATCH', async () => {
+    const patched = makeChat('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Alpha via POST', {
+      history: [{ role: 'user', content: 'alpha-msg' }],
+    });
+    const post = await httpRequest(baseUrl, 'POST', '/api/config/sessions', {
+      baseVersion: 6,
+      chats: [patched],
+    });
+    assert.equal(post.status, 200);
+    assert.equal(post.json.ok, true);
+    assert.equal(post.json.applied.chats, 1);
+
+    const after = (await httpRequest(baseUrl, 'GET', '/api/config/sessions')).json;
+    const alpha = after.chats.find((c) => c.id.startsWith('aaaa'));
+    assert.equal(alpha.name, 'Alpha via POST');
+  });
 });

@@ -38,7 +38,7 @@ export function subscribeAllBoardChanges(listener: BoardChangeListener): () => v
 
 /** Notify subscribers that board state changed for a folder. */
 export function emitBoardChange(groupId: string): void {
-  // Board UI/state mutations feed dirtyGroupIds for B.2 PATCH telemetry.
+  // Board UI/state mutations feed dirtyGroupIds for B.2 PATCH.
   markGroupDirty(groupId);
   for (const fn of globalListeners) {
     try {

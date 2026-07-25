@@ -1,6 +1,5 @@
 /**
- * Phase B.1: dirty-tracking telemetry (touchChat / dirty sets / DEV verifier).
- * Persistence protocol is unchanged — flush still PUTs the whole SessionState blob.
+ * Phase B.1/B.2: dirty-tracking + PATCH flush once dirty sets are trusted.
  */
 
 import assert from 'node:assert/strict';
@@ -18,6 +17,7 @@ import {
   setSessionStateForTests,
   setSidebarCollapsed,
   touchChat,
+  waitForSessionSaveForTests,
 } from '../../src/state/sessions.ts';
 import type { Chat, SessionState } from '../../src/types.ts';
 
@@ -56,7 +56,7 @@ function baseState(): SessionState {
   return state;
 }
 
-describe('session dirty tracking (B.1)', () => {
+describe('session dirty tracking (B.1/B.2)', () => {
   afterEach(() => {
     // @ts-expect-error test cleanup
     delete globalThis.fetch;
@@ -75,16 +75,20 @@ describe('session dirty tracking (B.1)', () => {
     assert.equal(dirty.sessionScalarsDirty, false);
   });
 
-  test('flush clears dirty sets even though PUT is still whole-blob', () => {
+  test('flush PATCHes dirty chats/scalars and clears dirty sets after success', async () => {
     setStorageModeForTests('server');
     const state = baseState();
     setSessionStateForTests(state);
 
-    let putBodies: unknown[] = [];
+    let patchBodies: unknown[] = [];
+    let putCount = 0;
     globalThis.fetch = async (input, init) => {
       const url = String(input);
+      if (url.includes('/api/config/sessions') && init?.method === 'PATCH') {
+        patchBodies.push(JSON.parse(String(init.body)));
+      }
       if (url.includes('/api/config/sessions') && init?.method === 'PUT') {
-        putBodies.push(JSON.parse(String(init.body)));
+        putCount += 1;
       }
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     };
@@ -94,17 +98,26 @@ describe('session dirty tracking (B.1)', () => {
     assert.deepEqual(getSessionDirtyTrackingForTests().dirtyChatIds, [CHAT_A]);
     assert.equal(getSessionDirtyTrackingForTests().sessionScalarsDirty, true);
 
-    // B.1: dirty set contents describe a future PATCH, but the wire call is still full PUT.
     saveSessionsNow();
-    assert.equal(putBodies.length, 1);
-    const body = putBodies[0] as SessionState;
-    assert.equal(body.chats.length, 2);
-    assert.equal(body.activeId, CHAT_A);
+    await waitForSessionSaveForTests();
+
+    assert.equal(putCount, 0);
+    assert.equal(patchBodies.length, 1);
+    const body = patchBodies[0] as {
+      chats?: Chat[];
+      scalars?: { sidebarCollapsed?: boolean };
+    };
+    assert.equal(body.chats?.length, 1);
+    assert.equal(body.chats?.[0]?.id, CHAT_A);
+    assert.equal(body.scalars?.sidebarCollapsed, true);
     assert.deepEqual(getSessionDirtyTrackingForTests(), {
       dirtyChatIds: [],
       deletedChatIds: [],
       dirtyGroupIds: [],
+      deletedGroupIds: [],
       sessionScalarsDirty: false,
+      sessionPatchDirtySetsReady: true,
+      sessionsClientPatchEnabled: true,
     });
   });
 
@@ -141,11 +154,15 @@ describe('session dirty tracking (B.1)', () => {
     );
   });
 
-  test('verifier stays quiet when mutation goes through touchChat', () => {
+  test('verifier stays quiet when mutation goes through touchChat', async () => {
+    setStorageModeForTests('server');
     const state = baseState();
     setSessionStateForTests(state);
     captureDirtyTrackingShadowForTests();
     setDirtyTrackingVerifierForcedForTests(true);
+
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ ok: true }), { status: 200 });
 
     const warnings: string[] = [];
     const originalWarn = console.warn;
@@ -157,6 +174,7 @@ describe('session dirty tracking (B.1)', () => {
       chat.name = 'renamed via touch';
       touchChat(chat);
       saveSessionsNow();
+      await waitForSessionSaveForTests();
     } finally {
       console.warn = originalWarn;
     }
