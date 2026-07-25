@@ -62,6 +62,27 @@ describe('create document tools', () => {
     assert.match(word, /must end with \.docx/i);
   });
 
+  it('sanitizes forbidden Excel sheet name characters', async () => {
+    const sheetOut = await runInWorkspace(() =>
+      toolCreateSpreadsheet({
+        path: 'data/quarters.xlsx',
+        sheets: [{ name: 'Q1/Q2', rows: [['Quarter', 'Revenue'], ['Q1', 100]] }],
+      }),
+    );
+
+    if (/Internal error: xlsx module unavailable/i.test(sheetOut)) {
+      console.log('skip: xlsx dependency not installed');
+      return;
+    }
+
+    assert.match(sheetOut, /Created spreadsheet data\/quarters\.xlsx/);
+    const extracted = await extractDocumentText(
+      await fs.readFile(path.join(tempRoot, 'data', 'quarters.xlsx')),
+      'quarters.xlsx',
+    );
+    assert.match(extracted, /## Sheet: Q1Q2/);
+  });
+
   it('creates pdf, spreadsheet, and word files when optional deps are installed', async () => {
     const pdfOut = await runInWorkspace(() =>
       toolCreatePdf({

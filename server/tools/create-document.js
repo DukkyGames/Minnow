@@ -49,9 +49,7 @@ async function buildPdfBuffer(input) {
   try {
     pdfLib = await import('pdf-lib');
   } catch {
-    throw new Error(
-      'PDF creation requires the optional "pdf-lib" package. Install with: npm install pdf-lib',
-    );
+    throw new Error('Internal error: pdf-lib module unavailable');
   }
 
   await preloadPdfFonts();
@@ -113,9 +111,7 @@ async function buildSpreadsheetBuffer(sheets) {
     const mod = await import('xlsx');
     XLSX = mod.default ?? mod;
   } catch {
-    throw new Error(
-      'Spreadsheet creation requires the optional "xlsx" package. Install with: npm install xlsx',
-    );
+    throw new Error('Internal error: xlsx module unavailable');
   }
 
   if (!Array.isArray(sheets) || sheets.length === 0) {
@@ -133,6 +129,9 @@ async function buildSpreadsheetBuffer(sheets) {
 
     let name =
       typeof sheet.name === 'string' && sheet.name.trim() ? sheet.name.trim() : `Sheet${index + 1}`;
+    // Excel forbids : \ / ? * [ ] in sheet names.
+    name = name.replace(/[:\\/?*[\]]/g, '');
+    if (!name) name = `Sheet${index + 1}`;
     name = name.slice(0, 31);
     let uniqueName = name;
     let suffix = 2;
@@ -179,9 +178,7 @@ async function buildWordBuffer(input) {
   try {
     docx = await import('docx');
   } catch {
-    throw new Error(
-      'Word document creation requires the optional "docx" package. Install with: npm install docx',
-    );
+    throw new Error('Internal error: docx module unavailable');
   }
 
   const { Document, HeadingLevel, Packer, Paragraph, TextRun } = docx;

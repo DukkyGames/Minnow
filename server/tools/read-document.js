@@ -107,10 +107,7 @@ async function extractPdf(buffer, filename) {
     const mod = await import('pdf-parse');
     pdfParse = mod.default ?? mod;
   } catch {
-    throw new Error(
-      'PDF text extraction requires the optional "pdf-parse" package. ' +
-        'Install with: npm install pdf-parse',
-    );
+    throw new Error('Internal error: pdf-parse module unavailable');
   }
 
   const parsed = await pdfParse(buffer);
@@ -130,10 +127,7 @@ async function extractSpreadsheet(buffer, filename) {
     const mod = await import('xlsx');
     XLSX = mod.default ?? mod;
   } catch {
-    throw new Error(
-      'Spreadsheet extraction requires the optional "xlsx" package. ' +
-        'Install with: npm install xlsx',
-    );
+    throw new Error('Internal error: xlsx module unavailable');
   }
 
   assertSpreadsheetMagic(buffer, filename);
@@ -165,10 +159,7 @@ async function extractDocx(buffer, filename) {
     const mod = await import('mammoth');
     mammoth = mod.default ?? mod;
   } catch {
-    throw new Error(
-      'Word document extraction requires the optional "mammoth" package. ' +
-        'Install with: npm install mammoth',
-    );
+    throw new Error('Internal error: mammoth module unavailable');
   }
 
   const result = await mammoth.extractRawText({ buffer });
@@ -194,10 +185,7 @@ async function extractOfficeParser(buffer, filename) {
       mod.default?.parseOffice ??
       mod.default;
   } catch {
-    throw new Error(
-      'Presentation and legacy Office formats require the optional "officeparser" package. ' +
-        'Install with: npm install officeparser',
-    );
+    throw new Error('Internal error: officeparser module unavailable');
   }
 
   if (typeof parseOffice !== 'function') {

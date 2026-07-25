@@ -153,9 +153,7 @@ async function spreadsheetBufferToHtml(buffer, filename) {
     const mod = await import('xlsx');
     XLSX = mod.default ?? mod;
   } catch {
-    throw new Error(
-      'Spreadsheet preview requires the optional "xlsx" package. Install with: npm install xlsx',
-    );
+    throw new Error('Internal error: xlsx module unavailable');
   }
 
   const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
@@ -210,9 +208,7 @@ async function wordBufferToHtml(buffer, filename) {
       const mod = await import('mammoth');
       mammoth = mod.default ?? mod;
     } catch {
-      throw new Error(
-        'Word preview requires the optional "mammoth" package. Install with: npm install mammoth',
-      );
+      throw new Error('Internal error: mammoth module unavailable');
     }
 
     const result = await mammoth.convertToHtml({ buffer });
@@ -233,9 +229,7 @@ async function wordBufferToHtml(buffer, filename) {
       mod.default?.parseOffice ??
       mod.default;
   } catch {
-    throw new Error(
-      'Legacy Word preview requires the optional "officeparser" package. Install with: npm install officeparser',
-    );
+    throw new Error('Internal error: officeparser module unavailable');
   }
 
   if (typeof parseOffice !== 'function') {
