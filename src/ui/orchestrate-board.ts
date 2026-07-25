@@ -1736,7 +1736,8 @@ function sumChatTotalTokens(chat: Chat | undefined): number | null {
 }
 
 function resolveRunningSlotElapsedMs(slot: RunningBoardTaskSlot, chat?: Chat): number {
-  const mainTurn = getMainTurnActivity(slot.chatId);
+  const chatId = slot.chatId?.trim();
+  const mainTurn = chatId ? getMainTurnActivity(chatId) : undefined;
   if (mainTurn?.startedAtMs) return Math.max(0, Date.now() - mainTurn.startedAtMs);
   if (slot.task?.startedAt) return Math.max(0, Date.now() - slot.task.startedAt);
   if (chat?.updatedAt) return Math.max(0, Date.now() - chat.updatedAt);
@@ -1747,20 +1748,22 @@ function runningSlotShowsContinue(
   board: BoardState,
   slot: RunningBoardTaskSlot,
 ): boolean {
-  if (slot.isFinalTest || !slot.task) return false;
-  if (isChatStreaming(slot.chatId)) return false;
+  if (slot.isFinalTest || !slot.task || !slot.chatId?.trim()) return false;
+  const chatId = slot.chatId.trim();
+  if (isChatStreaming(chatId)) return false;
   return (
     isTaskStalledForRestart(board, slot.task, isTaskChatActiveForStallCheck) ||
-    isTaskChatActive(slot.chatId)
+    isTaskChatActive(chatId)
   );
 }
 
-type RunningTaskIconKind = 'build' | 'test' | 'fix' | 'final';
+type RunningTaskIconKind = 'build' | 'test' | 'fix' | 'merge' | 'final';
 
 const RUNNING_TASK_ICON_PATHS: Record<RunningTaskIconKind, readonly string[]> = {
   build: [BOARD_CATEGORY_ICON_PATHS.build!],
   test: [BOARD_CATEGORY_ICON_PATHS.test!],
   fix: [BOARD_CATEGORY_ICON_PATHS.fix!],
+  merge: ['M6 3v12', 'M18 9V3', 'M6 15l6-6 6 6'],
   final: ['M12 2v20', 'M2 12h20', 'M5 5l14 14', 'M19 5 5 19'],
 };
 
@@ -1817,25 +1820,30 @@ function buildRunningTaskChip(
   group: ChatGroup,
   plannerChat: Chat,
 ): HTMLElement {
-  const chat = findChatById(slot.chatId);
+  const chatId = slot.chatId?.trim();
+  const chat = chatId ? findChatById(chatId) : undefined;
   const chip = document.createElement('article');
   chip.className = `board-running-tasks__chip board-running-tasks__chip--${slot.phase}`;
-  chip.dataset.boardRunningChatId = slot.chatId;
+  if (chatId) chip.dataset.boardRunningChatId = chatId;
   chip.dataset.boardRunningTaskId = slot.taskId;
+  chip.dataset.boardRunningSlotKey = chatId || `hold:${slot.taskId}`;
   chip.setAttribute('role', 'listitem');
-  const streaming = isChatStreaming(slot.chatId);
+  const streaming = chatId ? isChatStreaming(chatId) : false;
   if (streaming) chip.classList.add('board-running-tasks__chip--streaming');
-  chip.setAttribute(
-    'aria-label',
-    `${slot.taskId} ${slot.title}, ${streaming ? 'running' : 'starting'}`,
-  );
+  const statusLabel =
+    slot.phase === 'merge' ? 'merging' : streaming ? 'running' : 'starting';
+  chip.setAttribute('aria-label', `${slot.taskId} ${slot.title}, ${statusLabel}`);
 
   const icon = document.createElement('span');
   icon.className = `board-running-tasks__phase board-running-tasks__phase--${slot.phase}`;
   icon.appendChild(
     createRunningTaskIcon(slot.phase, 'icon-svg board-running-tasks__phase-icon'),
   );
-  icon.title = slot.phase === 'final' ? 'Final integration test' : slot.phase;
+  icon.title = slot.phase === 'final'
+    ? 'Final integration test'
+    : slot.phase === 'merge'
+      ? 'Merging'
+      : slot.phase;
   chip.appendChild(icon);
 
   const dot = document.createElement('span');
@@ -1868,55 +1876,58 @@ function buildRunningTaskChip(
   stats.appendChild(tokens);
   chip.appendChild(stats);
 
-  const controls = document.createElement('div');
-  controls.className = 'board-running-tasks__controls';
-  controls.appendChild(
-    createRunningTaskControlButton('stop', `Stop ${slot.taskId}`, () => {
-      void stopRunningBoardSlot(group, slot, plannerChat).then(() =>
-        refreshActiveBoardIfMounted(),
+  if (chatId) {
+    const controls = document.createElement('div');
+    controls.className = 'board-running-tasks__controls';
+    controls.appendChild(
+      createRunningTaskControlButton('stop', `Stop ${slot.taskId}`, () => {
+        void stopRunningBoardSlot(group, slot, plannerChat).then(() =>
+          refreshActiveBoardIfMounted(),
+        );
+      }),
+    );
+    const mergingSlot =
+      !slot.isFinalTest && slot.task && slot.task.status === 'merging';
+    if (!mergingSlot) {
+      controls.appendChild(
+        createRunningTaskControlButton('restart', `Restart ${slot.taskId}`, () => {
+          if (slot.isFinalTest) {
+            void stopRunningBoardSlot(group, slot, plannerChat)
+              .then(() => startFinalIntegrationTestForPlannerChat(plannerChat))
+              .then(() => refreshActiveBoardIfMounted());
+            return;
+          }
+          void restartBoardTask(group, slot.taskId, plannerChat).then(() =>
+            refreshActiveBoardIfMounted(),
+          );
+        }),
       );
-    }),
-  );
-  const mergingSlot = !slot.isFinalTest && slot.task.status === 'merging';
-  if (!mergingSlot) {
+    }
+    if (!mergingSlot && runningSlotShowsContinue(board, slot)) {
+      controls.appendChild(
+        createRunningTaskControlButton('continue', `Continue ${slot.taskId}`, () => {
+          void continueBoardTask(group, slot.taskId, plannerChat).then(() =>
+            refreshActiveBoardIfMounted(),
+          );
+        }),
+      );
+    }
+    if (!slot.isFinalTest && !mergingSlot) {
+      controls.appendChild(
+        createRunningTaskControlButton('move', `Move ${slot.taskId} to new chat`, () => {
+          void moveTaskToNewChat(group, slot.taskId, plannerChat).then(() =>
+            refreshActiveBoardIfMounted(),
+          );
+        }),
+      );
+    }
     controls.appendChild(
-      createRunningTaskControlButton('restart', `Restart ${slot.taskId}`, () => {
-        if (slot.isFinalTest) {
-          void stopRunningBoardSlot(group, slot, plannerChat)
-            .then(() => startFinalIntegrationTestForPlannerChat(plannerChat))
-            .then(() => refreshActiveBoardIfMounted());
-          return;
-        }
-        void restartBoardTask(group, slot.taskId, plannerChat).then(() =>
-          refreshActiveBoardIfMounted(),
-        );
+      createRunningTaskControlButton('open', `Open chat for ${slot.taskId}`, () => {
+        if (chat) switchChat(chat.id);
       }),
     );
+    chip.appendChild(controls);
   }
-  if (!mergingSlot && runningSlotShowsContinue(board, slot)) {
-    controls.appendChild(
-      createRunningTaskControlButton('continue', `Continue ${slot.taskId}`, () => {
-        void continueBoardTask(group, slot.taskId, plannerChat).then(() =>
-          refreshActiveBoardIfMounted(),
-        );
-      }),
-    );
-  }
-  if (!slot.isFinalTest && !mergingSlot) {
-    controls.appendChild(
-      createRunningTaskControlButton('move', `Move ${slot.taskId} to new chat`, () => {
-        void moveTaskToNewChat(group, slot.taskId, plannerChat).then(() =>
-          refreshActiveBoardIfMounted(),
-        );
-      }),
-    );
-  }
-  controls.appendChild(
-    createRunningTaskControlButton('open', `Open chat for ${slot.taskId}`, () => {
-      if (chat) switchChat(chat.id);
-    }),
-  );
-  chip.appendChild(controls);
   return chip;
 }
 
@@ -1926,13 +1937,14 @@ function buildRunningTasksStripKey(
 ): string {
   return slots
     .map((slot) => {
-      const chat = findChatById(slot.chatId);
+      const chatId = slot.chatId?.trim();
+      const chat = chatId ? findChatById(chatId) : undefined;
       const tokens = sumChatTotalTokens(chat);
-      const streaming = isChatStreaming(slot.chatId) ? 1 : 0;
+      const streaming = chatId && isChatStreaming(chatId) ? 1 : 0;
       const continueVisible = runningSlotShowsContinue(board, slot) ? 1 : 0;
-      const moveVisible = slot.isFinalTest ? 0 : 1;
+      const moveVisible = slot.isFinalTest || !chatId ? 0 : 1;
       return [
-        slot.chatId,
+        chatId || `hold:${slot.taskId}`,
         slot.taskId,
         slot.phase,
         slot.title,
@@ -2002,11 +2014,13 @@ function syncBoardRunningTasksStrip(
   }
 
   for (const slot of slots) {
+    const slotKey = slot.chatId?.trim() || `hold:${slot.taskId}`;
     const chip = existing.querySelector(
-      `[data-board-running-chat-id="${slot.chatId}"]`,
+      `[data-board-running-slot-key="${slotKey}"]`,
     ) as HTMLElement | null;
     if (!chip) continue;
-    const chat = findChatById(slot.chatId);
+    const chatId = slot.chatId?.trim();
+    const chat = chatId ? findChatById(chatId) : undefined;
     const elapsedEl = chip.querySelector('[data-board-running-elapsed="true"]');
     if (elapsedEl) {
       elapsedEl.textContent = formatElapsed(resolveRunningSlotElapsedMs(slot, chat));
@@ -2015,7 +2029,9 @@ function syncBoardRunningTasksStrip(
     if (tokensEl) {
       tokensEl.textContent = formatRunningTaskTokens(sumChatTotalTokens(chat));
     }
-    chip.classList.toggle('board-running-tasks__chip--streaming', isChatStreaming(slot.chatId));
+    if (chatId) {
+      chip.classList.toggle('board-running-tasks__chip--streaming', isChatStreaming(chatId));
+    }
   }
 }
 

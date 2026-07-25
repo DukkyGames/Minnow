@@ -194,6 +194,46 @@ export function mockWorktreeOps(responses: Record<string, unknown>): () => void 
   };
 }
 
+/**
+ * Like mockWorktreeOps, but listed ops block until release(op) is called.
+ * Gives deterministic slow merges without production seams.
+ */
+export function mockWorktreeOpsGated(
+  responses: Record<string, unknown>,
+  gatedOps: string[],
+): { restore: () => void; release: (op: string) => void } {
+  const gates = new Map<string, { resolve: () => void; promise: Promise<void> }>();
+  for (const op of gatedOps) {
+    let resolve!: () => void;
+    const promise = new Promise<void>((r) => {
+      resolve = r;
+    });
+    gates.set(op, { resolve, promise });
+  }
+  const saved = globalThis.fetch;
+  // @ts-ignore — test-only replacement
+  globalThis.fetch = async (_url: unknown, opts?: { body?: unknown }) => {
+    let op = '';
+    try {
+      op = (JSON.parse(opts?.body as string) as { op?: string }).op ?? '';
+    } catch {
+      /* ignore */
+    }
+    const gate = gates.get(op);
+    if (gate) await gate.promise;
+    const payload = op in responses ? responses[op] : { ok: false, error: 'not_mocked' };
+    return { ok: true, json: async () => payload };
+  };
+  return {
+    restore: () => {
+      globalThis.fetch = saved;
+    },
+    release: (op: string) => {
+      gates.get(op)?.resolve();
+    },
+  };
+}
+
 export function cleanMergeMocks(integrationSha = 'cafebabe'): Record<string, unknown> {
   return {
     merge: { ok: true, integrationSha },
