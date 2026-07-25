@@ -12,6 +12,7 @@ import type {
 } from '../ui/question-cards-modal';
 import { resolveOrchestratePlanScreenQuestionHost } from '../ui/orchestrate-plan-screen';
 import { resolveBoardOnboardingQuestionHost } from '../ui/orchestrate-board-onboarding-questions';
+import { resolveOnboardingGuideQuestionHost } from '../onboarding/guide-questions';
 import { applyBrowserAllowlistFromAskQuestion } from './browser-navigation-gate';
 import type { AskQuestionArgs } from './ask-question-types';
 import { stringifyAskQuestionResult } from './ask-question-types';
@@ -50,8 +51,9 @@ async function drainQueue(): Promise<void> {
     const abortSignal = chatId ? getChatAbort(chatId)?.signal : undefined;
     await waitForAskQuestionDisplayContext(chatId, abortSignal);
     const planHost = resolveOrchestratePlanScreenQuestionHost(chatId);
-    const boardHost = planHost ? null : resolveBoardOnboardingQuestionHost(chatId);
-    const embedHost = planHost ?? boardHost;
+    const guideHost = planHost ? null : resolveOnboardingGuideQuestionHost(chatId);
+    const boardHost = planHost || guideHost ? null : resolveBoardOnboardingQuestionHost(chatId);
+    const embedHost = planHost ?? guideHost ?? boardHost;
     const modalOptions: QuestionCardsModalOptions = embedHost
       ? { host: embedHost, embedded: true, chatId }
       : { chatId };

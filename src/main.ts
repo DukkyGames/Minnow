@@ -124,6 +124,10 @@ import {
   isBoardOnboardingSuppressingChatDom,
   resolveBoardOnboardingQuestionHost,
 } from './ui/orchestrate-board-onboarding-questions';
+import {
+  isOnboardingGuideSuppressingChatDom,
+  resolveOnboardingGuideQuestionHost,
+} from './onboarding/guide-questions';
 import { subscribeInstances } from './os/instances';
 import { bootOrchestrateBoardResume } from './chat/orchestrate/board-boot-resume';
 import { initBoardLogDiskSink } from './state/board-log-disk.ts';
@@ -223,9 +227,11 @@ export async function initApp(): Promise<void> {
   bindAskQuestionPlanScreenHooks({
     resolveQuestionHost: (chatId) =>
       resolveOrchestratePlanScreenQuestionHost(chatId) ??
+      resolveOnboardingGuideQuestionHost(chatId) ??
       resolveBoardOnboardingQuestionHost(chatId),
     isSuppressingChatDom: (chatId) =>
       isOrchestratePlanScreenSuppressingChatDom(chatId) ||
+      isOnboardingGuideSuppressingChatDom(chatId) ||
       isBoardOnboardingSuppressingChatDom(chatId),
   });
   subscribeInstances(() => {

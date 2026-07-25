@@ -27,6 +27,10 @@ import {
 import { renderChatFromHistory } from '../../ui/messages';
 import { el, renderStepHeader } from '../ui-helpers';
 import type { OnboardingContext, OnboardingStep } from '../types';
+import {
+  ONBOARDING_GUIDE_QUESTIONS_ID,
+  registerOnboardingGuideChatId,
+} from '../guide-questions';
 import { recordStepProgress } from '../state-core';
 
 const GUIDE_CHAT_NAME = 'Welcome to Minnow';
@@ -50,6 +54,7 @@ function ensureGuideChat(ctx: OnboardingContext): Chat {
   const existing = findGuideChat();
   if (existing) {
     activateChatById(existing.id);
+    registerOnboardingGuideChatId(existing.id);
     return existing;
   }
   const chat = createAndActivateChat(ctx.modelId ?? '');
@@ -59,6 +64,7 @@ function ensureGuideChat(ctx: OnboardingContext): Chat {
   touchChat(chat);
   scheduleSaveSessions();
   guideChatId = chat.id;
+  registerOnboardingGuideChatId(chat.id);
   return chat;
 }
 
@@ -147,6 +153,11 @@ export const guideStep: OnboardingStep = {
     col.id = 'onboardingChatCol';
     surface.appendChild(col);
 
+    const questionsHost = el('div', 'mn-onboarding-guide__questions');
+    questionsHost.id = ONBOARDING_GUIDE_QUESTIONS_ID;
+    questionsHost.hidden = true;
+    surface.appendChild(questionsHost);
+
     const composer = el('div', 'mn-onboarding-guide__composer');
     const input = el('textarea', 'mn-onboarding-guide__input') as HTMLTextAreaElement;
     input.id = 'onboardingChatInput';
@@ -195,4 +206,5 @@ export const guideStep: OnboardingStep = {
 export function resetGuideChatState(): void {
   guideChatId = null;
   kickoffStarted = false;
+  registerOnboardingGuideChatId(null);
 }

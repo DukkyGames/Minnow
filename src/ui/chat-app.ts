@@ -305,7 +305,10 @@ async function ensureChatsWorkspaceReady(): Promise<boolean> {
 /** Ensure an assistant chat is active before send (General mode, chats workspace). */
 async function ensureReadyForSend(): Promise<boolean> {
   try {
-    await ensureActiveAssistantChat();
+    const chat = getActiveChat();
+    if (isEphemeralEmptyChat(chat)) {
+      await ensureActiveAssistantChat();
+    }
     if (!chatsWorkspacePath) {
       chatsWorkspacePath = await getChatsWorkspacePath();
     }

@@ -17,6 +17,7 @@ import type { DesktopChatActivateOptions } from './desktop-state';
 import {
   ensureSessionsReady,
   getActiveChat,
+  isEphemeralEmptyChat,
   isExpertChat,
   newChatId,
   rememberActiveChatForApp,
@@ -108,7 +109,9 @@ async function ensureDesktopWorkspaceReady(): Promise<boolean> {
 async function ensureReadyForSend(): Promise<boolean> {
   try {
     const chat = getActiveChat();
-    if (!isExpertChat(chat)) {
+    // Only bootstrap a sandbox chat when nothing is active yet — do not replace a
+    // branched (or other in-progress) project chat after branch switching.
+    if (!isExpertChat(chat) && isEphemeralEmptyChat(chat)) {
       await ensureActiveDesktopAssistantChat();
     }
     if (!desktopWorkspacePath) {
