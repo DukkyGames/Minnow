@@ -381,6 +381,32 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'read_document',
+    label: 'Read document',
+    description: 'Extracts plain text from PDF and office documents in the workspace.',
+    category: 'files',
+    serverRequired: true,
+    definition: toolSchema(
+      'read_document',
+      'Extract plain text from a PDF or office document (Excel, Word, PowerPoint, OpenDocument, RTF). Prefer path for files already in the workspace; use content (base64 bytes) only for attachment-style payloads.',
+      {
+        path: {
+          type: 'string',
+          description: 'Workspace-relative path to the document (preferred for project files)',
+        },
+        filename: {
+          type: 'string',
+          description:
+            'Filename hint when using content (e.g. report.pdf). Ignored when path is set.',
+        },
+        content: {
+          type: 'string',
+          description: 'Base64-encoded file bytes (use when the file is not on disk in the workspace)',
+        },
+      },
+    ),
+  },
+  {
     id: 'read_file_range',
     label: 'Read file lines',
     description: 'Reads a line range from a text file (1-based line numbers).',

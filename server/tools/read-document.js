@@ -8,13 +8,52 @@ import {
   isOfficeExtension,
   OFFICE_EXTENSIONS,
 } from '../../src/attachments/document-extensions.mjs';
+import fs from 'node:fs/promises';
 import path from 'node:path';
+import { resolveSafePath } from '../runtime/path-access.js';
 import { wrapUntrusted } from '../security/untrusted.js';
+import { capTextOutput } from './output-cap.js';
 
 export { OFFICE_EXTENSIONS, isOfficeExtension };
 
 /** Max decoded bytes (aligns with MAX_ATTACHMENT_BYTES in reader.ts). */
 export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
+
+/** ZIP local-file header (xlsx, xlsm, ods). */
+const ZIP_MAGIC = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+
+/** OLE compound document header (legacy .xls). */
+const OLE_MAGIC = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+
+/**
+ * @param {Buffer} buffer
+ * @param {Buffer} magic
+ * @returns {boolean}
+ */
+function bufferStartsWith(buffer, magic) {
+  return buffer.length >= magic.length && buffer.subarray(0, magic.length).equals(magic);
+}
+
+/**
+ * Reject corrupt spreadsheet binaries before xlsx parses opaque garbage as text.
+ *
+ * @param {Buffer} buffer
+ * @param {string} filename
+ */
+function assertSpreadsheetMagic(buffer, filename) {
+  const ext = extensionOf(filename);
+  if (ext === 'xlsx' || ext === 'xlsm' || ext === 'ods') {
+    if (!bufferStartsWith(buffer, ZIP_MAGIC)) {
+      throw new Error(`file does not look like a valid ${ext} workbook (missing ZIP signature)`);
+    }
+    return;
+  }
+  if (ext === 'xls') {
+    if (!bufferStartsWith(buffer, OLE_MAGIC)) {
+      throw new Error('file does not look like a valid xls workbook (missing OLE signature)');
+    }
+  }
+}
 
 /**
  * @param {string} filename
@@ -96,6 +135,8 @@ async function extractSpreadsheet(buffer, filename) {
         'Install with: npm install xlsx',
     );
   }
+
+  assertSpreadsheetMagic(buffer, filename);
 
   const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
   const parts = [];
@@ -208,22 +249,41 @@ export async function extractDocumentText(buffer, filename) {
 }
 
 /**
- * read_document tool handler body (after base64 decode and size checks).
- *
- * @param {{ filename?: string, content?: string }} args
- * @returns {Promise<string>}
+ * @param {string} relPath
+ * @param {string} [filenameOverride]
+ * @returns {Promise<{ buffer: Buffer, filename: string } | string>}
  */
-export async function toolReadDocument(args) {
-  const contentB64 = args?.content;
-  if (!contentB64 || typeof contentB64 !== 'string') {
-    return 'Error: content (base64 file bytes) is required';
+async function loadDocumentFromPath(relPath, filenameOverride) {
+  try {
+    const absPath = resolveSafePath(relPath);
+    const stat = await fs.stat(absPath);
+    if (!stat.isFile()) {
+      return `Error: "${relPath}" is not a file`;
+    }
+    if (stat.size > MAX_DOCUMENT_BYTES) {
+      return `Error: document exceeds ${MAX_DOCUMENT_BYTES / (1024 * 1024)}MB limit`;
+    }
+    const buffer = await fs.readFile(absPath);
+    const filename =
+      typeof filenameOverride === 'string' && filenameOverride.trim()
+        ? filenameOverride.trim()
+        : path.basename(absPath);
+    return { buffer, filename };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.startsWith('Error:')) {
+      return message;
+    }
+    return `Error: failed to read "${relPath}": ${message}`;
   }
+}
 
-  const filename =
-    typeof args?.filename === 'string' && args.filename.trim()
-      ? args.filename.trim()
-      : 'document.bin';
-
+/**
+ * @param {string} contentB64
+ * @param {string} filename
+ * @returns {{ buffer: Buffer, filename: string } | string}
+ */
+function decodeDocumentContent(contentB64, filename) {
   let buffer;
   try {
     buffer = Buffer.from(contentB64, 'base64');
@@ -239,6 +299,38 @@ export async function toolReadDocument(args) {
     return `Error: document exceeds ${MAX_DOCUMENT_BYTES / (1024 * 1024)}MB limit`;
   }
 
+  return { buffer, filename };
+}
+
+/**
+ * read_document tool handler — workspace path or base64 attachment bytes.
+ *
+ * @param {{ path?: string, filename?: string, content?: string }} args
+ * @returns {Promise<string>}
+ */
+export async function toolReadDocument(args) {
+  const relPath = typeof args?.path === 'string' ? args.path.trim() : '';
+  const contentB64 = typeof args?.content === 'string' ? args.content : '';
+  const filenameArg =
+    typeof args?.filename === 'string' && args.filename.trim() ? args.filename.trim() : '';
+
+  if (!relPath && !contentB64) {
+    return 'Error: path (workspace-relative) or content (base64 file bytes) is required';
+  }
+
+  let loaded;
+  if (relPath) {
+    loaded = await loadDocumentFromPath(relPath, filenameArg || undefined);
+  } else {
+    const filename = filenameArg || 'document.bin';
+    loaded = decodeDocumentContent(contentB64, filename);
+  }
+
+  if (typeof loaded === 'string') {
+    return loaded;
+  }
+
+  const { buffer, filename } = loaded;
   const ext = extensionOf(filename);
   const supported =
     looksLikePdf(filename, buffer) ||
@@ -254,7 +346,10 @@ export async function toolReadDocument(args) {
 
   try {
     const text = await extractDocumentText(buffer, filename);
-    return wrapUntrusted(text, { source: `document:${path.basename(filename)}` });
+    const { text: capped } = capTextOutput(text, {
+      footerHint: 'narrow the document scope or read a smaller section',
+    });
+    return wrapUntrusted(capped, { source: `document:${path.basename(filename)}` });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (message.startsWith('Error:')) {
