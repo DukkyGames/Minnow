@@ -28,6 +28,9 @@ import {
   stashList,
   stashPush,
   status,
+  snapshotCreate,
+  snapshotDiff,
+  snapshotRestore,
   worktreeAdd,
   worktreeRemove,
 } from '../../server/git/git-ops.js';
@@ -393,5 +396,98 @@ describe('git API', () => {
     });
     assert.equal(viaApi.status, 200);
     assert.equal(viaApi.json?.ok, true);
+  });
+
+  test('snapshotCreate makes a dangling commit without touching HEAD or index', async () => {
+    const headBefore = (
+      await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: repoDir, windowsHide: true })
+    ).stdout.trim();
+
+    await fs.writeFile(path.join(repoDir, 'snap-a.txt'), 'before\n', 'utf8');
+    await execFileAsync('git', ['add', 'snap-a.txt'], { cwd: repoDir, windowsHide: true });
+    const cachedBefore = (
+      await execFileAsync('git', ['diff', '--cached'], { cwd: repoDir, windowsHide: true })
+    ).stdout;
+
+    await fs.writeFile(path.join(repoDir, 'snap-a.txt'), 'after\n', 'utf8');
+    await fs.writeFile(path.join(repoDir, 'snap-untracked.txt'), 'new\n', 'utf8');
+
+    const created = await snapshotCreate({
+      cwd: repoDir,
+      message: 'minnow test snapshot',
+    });
+    assert.equal(created.ok, true);
+    assert.match(created.sha ?? '', /^[0-9a-f]{40}$/i);
+    assert.equal(created.headSha, headBefore);
+
+    const headAfter = (
+      await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: repoDir, windowsHide: true })
+    ).stdout.trim();
+    assert.equal(headAfter, headBefore);
+
+    const cachedAfter = (
+      await execFileAsync('git', ['diff', '--cached'], { cwd: repoDir, windowsHide: true })
+    ).stdout;
+    assert.equal(cachedAfter, cachedBefore);
+
+    // Dangling: not reachable from HEAD tip.
+    const contains = await execFileAsync(
+      'git',
+      ['merge-base', '--is-ancestor', created.sha, 'HEAD'],
+      { cwd: repoDir, windowsHide: true },
+    ).then(
+      () => true,
+      () => false,
+    );
+    assert.equal(contains, false);
+  });
+
+  test('snapshotRestore rewrites WT without moving HEAD and cleans untracked', async () => {
+    const headBefore = (
+      await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: repoDir, windowsHide: true })
+    ).stdout.trim();
+
+    await fs.writeFile(path.join(repoDir, 'snap-restore.txt'), 'v1\n', 'utf8');
+    const pre = await snapshotCreate({ cwd: repoDir, message: 'pre' });
+    assert.equal(pre.ok, true);
+
+    await fs.writeFile(path.join(repoDir, 'snap-restore.txt'), 'v2\n', 'utf8');
+    await fs.writeFile(path.join(repoDir, 'snap-restore-extra.txt'), 'extra\n', 'utf8');
+    const post = await snapshotCreate({ cwd: repoDir, message: 'post' });
+    assert.equal(post.ok, true);
+
+    const changed = await snapshotDiff({
+      cwd: repoDir,
+      fromSha: pre.sha,
+      toSha: post.sha,
+    });
+    assert.equal(changed.ok, true);
+    assert.ok(changed.files?.some((f) => f.path === 'snap-restore.txt'));
+
+    const restored = await snapshotRestore({ cwd: repoDir, sha: pre.sha });
+    assert.equal(restored.ok, true);
+    assert.match(restored.safetySha ?? '', /^[0-9a-f]{40}$/i);
+
+    const headAfter = (
+      await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: repoDir, windowsHide: true })
+    ).stdout.trim();
+    assert.equal(headAfter, headBefore);
+
+    const content = await fs.readFile(path.join(repoDir, 'snap-restore.txt'), 'utf8');
+    // Normalize CRLF from core.autocrlf on Windows.
+    assert.equal(content.replace(/\r\n/g, '\n'), 'v1\n');
+
+    await assert.rejects(() => fs.access(path.join(repoDir, 'snap-restore-extra.txt')));
+  });
+
+  test('POST /api/git snapshotCreate honors cwd', async () => {
+    const viaApi = await httpRequest(baseUrl, 'POST', '/api/git', {
+      op: 'snapshotCreate',
+      cwd: repoDir,
+      message: 'via http',
+    });
+    assert.equal(viaApi.status, 200);
+    assert.equal(viaApi.json?.ok, true);
+    assert.match(viaApi.json?.sha ?? '', /^[0-9a-f]{40}$/i);
   });
 });

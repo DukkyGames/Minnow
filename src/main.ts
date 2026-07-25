@@ -193,6 +193,7 @@ import {
   initComposerToolsPopover,
 } from './ui/composer-tools-popover';
 import { initComposerVoice } from './ui/composer-voice';
+import { initComposerUndo } from './ui/composer-undo';
 import { initVoiceStatus } from './ui/voice-controls';
 import { dismissOpenLayers } from './ui/status';
 import { clearMobileFileSidebarOverlay, closeMobileFileSidebar } from './ui/file-layout';
@@ -268,6 +269,7 @@ export async function initApp(): Promise<void> {
   initComposerToolsPopover();
   initChatAppToolsPopover();
   initComposerVoice();
+  initComposerUndo();
   void initVoiceStatus();
   initAttachments();
   initContextUsageRing();

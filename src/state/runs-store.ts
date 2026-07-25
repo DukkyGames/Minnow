@@ -89,6 +89,15 @@ export function setActiveBranch(
   chat.activeBranchByFork[String(forkHistoryIndex)] = branchId;
 }
 
+/** Clear the active-branch pointer for a fork (e.g. after undo leaves no reply). */
+export function clearActiveBranch(chat: Chat, forkHistoryIndex: number): void {
+  if (!chat.activeBranchByFork) return;
+  delete chat.activeBranchByFork[String(forkHistoryIndex)];
+  if (Object.keys(chat.activeBranchByFork).length === 0) {
+    delete chat.activeBranchByFork;
+  }
+}
+
 export interface CreateRunOptions {
   parentRunId?: TurnRunId;
   parentTurnId?: string;
@@ -150,6 +159,36 @@ export function createRun(
 
 export function findRunById(chat: Chat, runId: TurnRunId): TurnRunRecord | undefined {
   return (chat.runs ?? []).find((r) => r.runId === runId);
+}
+
+/** Optional git snapshot fields written by the tool loop (MIN-409). */
+export interface RunSnapshotAnnotation {
+  preTurnSnapshotSha?: string;
+  postTurnSnapshotSha?: string;
+  headShaAtTurn?: string;
+  snapshotCwd?: string;
+}
+
+/** Attach pre/post turn git snapshot metadata onto a run (best-effort; never throws). */
+export function annotateRunSnapshots(
+  chat: Chat,
+  runId: TurnRunId,
+  fields: RunSnapshotAnnotation,
+): void {
+  const run = findRunById(chat, runId);
+  if (!run) return;
+  if (fields.preTurnSnapshotSha?.trim()) {
+    run.preTurnSnapshotSha = fields.preTurnSnapshotSha.trim();
+  }
+  if (fields.postTurnSnapshotSha?.trim()) {
+    run.postTurnSnapshotSha = fields.postTurnSnapshotSha.trim();
+  }
+  if (fields.headShaAtTurn?.trim()) {
+    run.headShaAtTurn = fields.headShaAtTurn.trim();
+  }
+  if (fields.snapshotCwd?.trim()) {
+    run.snapshotCwd = fields.snapshotCwd.trim();
+  }
 }
 
 export function noteRunGeneration(chat: Chat, runId: TurnRunId, generationId: string): void {
@@ -228,20 +267,31 @@ export function newestRun(chat: Chat): TurnRunRecord | undefined {
 /**
  * After truncate at cutIndex (inclusive user row kept):
  * mark runs whose outputs extended past the cut as superseded.
+ * Keep outputMessages so the undone reply stays redoable via activateBranch.
  */
 export function pruneSupersededRunsAfterTruncate(chat: Chat, cutIndex: number): void {
   const runs = chat.runs ?? [];
   for (const run of runs) {
     const outStart = run.outputHistoryStart;
+    const outEnd = run.outputHistoryEnd;
+    // Indices past the cut no longer point into history — drop them but keep
+    // the message payload so the branch picker can restore the reply.
     if (outStart !== undefined && outStart > cutIndex) {
       run.status = 'superseded';
-      delete run.outputMessages;
+      delete run.outputHistoryStart;
+      delete run.outputHistoryEnd;
       if (!run.endedAt) {
         run.endedAt = Date.now();
       }
+    } else if (outEnd !== undefined && outEnd > cutIndex) {
+      // Partial overlap: clamp end or clear stale range; keep messages for redo.
+      delete run.outputHistoryStart;
+      delete run.outputHistoryEnd;
     }
     if (run.forkHistoryIndex > cutIndex) {
       run.status = 'superseded';
+      delete run.outputHistoryStart;
+      delete run.outputHistoryEnd;
       if (!run.endedAt) {
         run.endedAt = Date.now();
       }
@@ -253,6 +303,8 @@ export function pruneSupersededRunsAfterTruncate(chat: Chat, cutIndex: number): 
   for (const [forkKey, branchId] of Object.entries(chat.activeBranchByFork)) {
     const fork = Number(forkKey);
     if (!Number.isFinite(fork) || fork > cutIndex) continue;
+    // No materialized reply after the fork → transcript has no active branch.
+    if (chat.history.length <= fork + 1) continue;
     const run = runs.find((r) => r.branchId === branchId);
     if (run && isBranchActivatable(chat, run)) {
       next[forkKey] = branchId;
