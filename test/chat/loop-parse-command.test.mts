@@ -69,33 +69,29 @@ describe('parseLoopSlashInput', () => {
     });
   });
 
-  test('list and status subcommands', () => {
-    assert.deepEqual(parseLoopSlashInput('/loop list'), { kind: 'list' });
-    assert.deepEqual(parseLoopSlashInput('/loop status'), { kind: 'list' });
-  });
-
-  test('stop aliases with optional id or all', () => {
+  test('reserved subcommands point users to chat panel', () => {
+    assert.deepEqual(parseLoopSlashInput('/loop list'), {
+      kind: 'invalid',
+      message: 'Use the loop panel in chat to list, stop, or edit timers',
+    });
+    assert.deepEqual(parseLoopSlashInput('/loop status'), {
+      kind: 'invalid',
+      message: 'Use the loop panel in chat to list, stop, or edit timers',
+    });
     for (const alias of ['stop', 'clear', 'off', 'cancel']) {
       assert.deepEqual(parseLoopSlashInput(`/loop ${alias}`), {
-        kind: 'stop',
-        target: 'all',
+        kind: 'invalid',
+        message: 'Use the loop panel in chat to list, stop, or edit timers',
       });
       assert.deepEqual(parseLoopSlashInput(`/loop ${alias} all`), {
-        kind: 'stop',
-        target: 'all',
+        kind: 'invalid',
+        message: 'Use the loop panel in chat to list, stop, or edit timers',
       });
       assert.deepEqual(parseLoopSlashInput(`/loop ${alias} 2`), {
-        kind: 'stop',
-        target: 2,
+        kind: 'invalid',
+        message: 'Use the loop panel in chat to list, stop, or edit timers',
       });
     }
-  });
-
-  test('invalid stop target yields usage error', () => {
-    assert.deepEqual(parseLoopSlashInput('/loop stop xyz'), {
-      kind: 'invalid',
-      message: 'Usage: /loop stop [n | all]',
-    });
   });
 
   test('truncates very long prompts', () => {

@@ -17,15 +17,19 @@ export const INITIAL_LOOP_AUTO_DELAY_MS = 120_000;
 /** Loops expire this long after creation. */
 export const LOOP_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-const LOOP_STOP_ALIASES = new Set(['stop', 'clear', 'off', 'cancel']);
-const LOOP_LIST_ALIASES = new Set(['list', 'status']);
+const LOOP_RESERVED_SUBCOMMANDS = new Set([
+  'stop',
+  'clear',
+  'off',
+  'cancel',
+  'list',
+  'status',
+]);
 
 /** Interval token like `5m`, `30s`, `2h`, `1d`. */
 const INTERVAL_TOKEN_RE = /^(\d+)(s|m|h|d)$/i;
 
 export type ParsedLoopSlash =
-  | { kind: 'list' }
-  | { kind: 'stop'; target: number | 'all' }
   | { kind: 'invalid'; message: string }
   | {
       kind: 'arm';
@@ -70,7 +74,8 @@ export function isNestedLoopOrGoalPrompt(promptText: string): boolean {
 }
 
 /**
- * Parse `/loop`, `/loop 5m <prompt>`, `/loop list`, `/loop stop [n|all]`, etc.
+ * Parse `/loop`, `/loop 5m <prompt>`, etc.
+ * List/stop are handled in the chat loop panel, not slash subcommands.
  * Returns null when the text is not a loop command.
  */
 export function parseLoopSlashInput(text: string): ParsedLoopSlash | null {
@@ -91,24 +96,11 @@ export function parseLoopSlashInput(text: string): ParsedLoopSlash | null {
   const tokens = rest.split(/\s+/);
   const first = (tokens[0] ?? '').toLowerCase();
 
-  if (LOOP_LIST_ALIASES.has(first)) {
-    return { kind: 'list' };
-  }
-
-  if (LOOP_STOP_ALIASES.has(first)) {
-    const secondRaw = tokens[1];
-    if (!secondRaw) {
-      return { kind: 'stop', target: 'all' };
-    }
-    const second = secondRaw.toLowerCase();
-    if (second === 'all') {
-      return { kind: 'stop', target: 'all' };
-    }
-    const id = Number.parseInt(secondRaw, 10);
-    if (!Number.isFinite(id) || id < 1 || String(id) !== secondRaw) {
-      return { kind: 'invalid', message: 'Usage: /loop stop [n | all]' };
-    }
-    return { kind: 'stop', target: id };
+  if (LOOP_RESERVED_SUBCOMMANDS.has(first)) {
+    return {
+      kind: 'invalid',
+      message: 'Use the loop panel in chat to list, stop, or edit timers',
+    };
   }
 
   const intervalMs = parseLoopIntervalToken(tokens[0] ?? '');

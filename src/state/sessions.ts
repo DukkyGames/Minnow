@@ -1328,6 +1328,16 @@ function ensureActiveLoopRow(raw: unknown): ActiveLoopState | undefined {
     loop.lastOutputDigest = row.lastOutputDigest.trim();
   }
 
+  if (row.paused === true) {
+    loop.paused = true;
+    if (
+      typeof row.pausedRemainingMs === 'number' &&
+      Number.isFinite(row.pausedRemainingMs)
+    ) {
+      loop.pausedRemainingMs = Math.max(0, Math.floor(row.pausedRemainingMs));
+    }
+  }
+
   return loop;
 }
 

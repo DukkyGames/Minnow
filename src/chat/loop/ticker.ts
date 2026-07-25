@@ -21,6 +21,7 @@ import {
   INITIAL_LOOP_AUTO_DELAY_MS,
   MIN_LOOP_INTERVAL_MS,
 } from './parse-command';
+import { isLoopPaused } from './pause';
 import { resolveLoopPromptText } from './maintenance';
 import {
   clearLoopAwaitingPace,
@@ -153,7 +154,7 @@ export async function runLoopTick(options: {
       if (!idleCheck(chat)) continue;
 
       const due = remaining
-        .filter((loop) => isLoopDue(loop, now))
+        .filter((loop) => !isLoopPaused(loop) && isLoopDue(loop, now))
         .sort((a, b) => a.dueAt - b.dueAt || a.id - b.id);
       const loop = due[0];
       if (!loop) continue;

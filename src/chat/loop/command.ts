@@ -1,14 +1,12 @@
 /**
- * /loop command dispatch — arm, list, and stop handlers.
+ * /loop command dispatch — arm handler.
  */
 
 import type { Chat } from '../../types';
 import {
   addActiveLoop,
-  getActiveLoops,
   hasActiveLoops,
   isGoalLoopActive,
-  removeActiveLoop,
 } from '../../state/sessions';
 import { syncGoalActiveHint } from '../../ui/goal-active-hint';
 import { syncLoopActiveHint } from '../../ui/loop-active-hint';
@@ -33,26 +31,6 @@ function formatDuration(ms: number): string {
   return `${days}d`;
 }
 
-function formatLoopList(chat: Chat, now = Date.now()): string {
-  const loops = getActiveLoops(chat);
-  if (!loops.length) {
-    return 'No active loops. Use /loop 5m <prompt>, /loop <prompt>, or /loop for maintenance.';
-  }
-
-  const lines = loops.map((loop) => {
-    const kindLabel =
-      loop.kind === 'interval'
-        ? `every ${formatDuration(loop.intervalMs ?? 0)}`
-        : `auto (~${formatDuration(loop.currentDelayMs ?? INITIAL_LOOP_AUTO_DELAY_MS)})`;
-    const prompt =
-      loop.promptText.trim() || '(maintenance · .minnow/loop.md or built-in)';
-    const nextMs = Math.max(0, loop.dueAt - now);
-    const nextLabel = nextMs <= 0 ? 'due now' : `next in ${formatDuration(nextMs)}`;
-    return `#${loop.id} · ${kindLabel} · ${nextLabel} · ${loop.runCount} run(s) · ${prompt}`;
-  });
-  return `Active loops (${loops.length}):\n${lines.join('\n')}`;
-}
-
 function syncLoopHints(): void {
   syncLoopActiveHint();
   // Goal hint shares composer strip space; refresh both so neither goes stale.
@@ -61,7 +39,7 @@ function syncLoopHints(): void {
 
 /**
  * Handle `/loop` before slash-skill resolution and before `/goal`.
- * Arm/list/stop always return `handled` (composer cleared by caller).
+ * Arm always returns `handled` (composer cleared by caller).
  */
 export function handleLoopCommand(
   chat: Chat,
@@ -72,37 +50,8 @@ export function handleLoopCommand(
   const parsed = parseLoopSlashInput(rawText);
   if (!parsed) return null;
 
-  if (parsed.kind === 'list') {
-    reportStatus('ok', formatLoopList(chat, now));
-    return 'handled';
-  }
-
   if (parsed.kind === 'invalid') {
     reportStatus('err', parsed.message);
-    return 'handled';
-  }
-
-  if (parsed.kind === 'stop') {
-    if (!hasActiveLoops(chat)) {
-      reportStatus('ok', 'No active loops to stop');
-      return 'handled';
-    }
-    if (parsed.target === 'all') {
-      const count = getActiveLoops(chat).length;
-      removeActiveLoop(chat, 'all');
-      syncLoopHints();
-      reportStatus('ok', count === 1 ? 'Loop stopped' : `Stopped ${count} loops`);
-      return 'handled';
-    }
-    const before = getActiveLoops(chat).length;
-    removeActiveLoop(chat, parsed.target);
-    const after = getActiveLoops(chat).length;
-    if (after === before) {
-      reportStatus('err', `No loop #${parsed.target}`);
-      return 'handled';
-    }
-    syncLoopHints();
-    reportStatus('ok', `Loop #${parsed.target} stopped`);
     return 'handled';
   }
 

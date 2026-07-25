@@ -385,6 +385,9 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   }
   } finally {
     suppressBubbleScroll = false;
+    void import('./loop-active-hint').then(({ syncLoopStatusUi }) => {
+      syncLoopStatusUi(chat.id);
+    });
   }
   });
 }

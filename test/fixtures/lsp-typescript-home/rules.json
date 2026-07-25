@@ -1,5 +1,11 @@
 {
-  "version": 1,
+  "version": 2,
   "enabled": false,
-  "text": ""
+  "groups": [
+    {
+      "id": "general",
+      "name": "General"
+    }
+  ],
+  "rules": []
 }

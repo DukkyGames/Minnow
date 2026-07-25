@@ -182,6 +182,7 @@ import { syncReefWidgetSettingsFromActiveChat } from './ui/reef-widget-settings'
 import { initWorkAgentDevUi, syncWorkAgentDevFromActiveChat } from './ui/work-agent-dev';
 import { initSubAgentUi } from './ui/sub-agent-cards';
 import { initGoalEvalUi } from './ui/goal-eval-status';
+import { initLoopStatusUi } from './ui/loop-active-hint';
 import { initAgentActivityPanel } from './ui/agent-activity-panel';
 import {
   closeComposerToolsPopover,
@@ -252,6 +253,7 @@ export async function initApp(): Promise<void> {
   }
   initSubAgentUi();
   initGoalEvalUi();
+  initLoopStatusUi();
   initAgentActivityPanel();
   fillSystemPromptPresetSelect();
   await loadSystemPromptSettings();

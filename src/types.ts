@@ -102,7 +102,7 @@ export interface ActiveGoalState {
  * Distinct from {@link ActiveGoalState} and from `src/tools/loop.ts` (tool-call loop).
  */
 export interface ActiveLoopState {
-  /** Per-chat counter for /loop list & stop. */
+  /** Per-chat counter for loop panel stop controls. */
   id: number;
   /** Raw prompt including slash skills; empty string = maintenance loop. */
   promptText: string;
@@ -119,6 +119,10 @@ export interface ActiveLoopState {
   runCount: number;
   /** Auto-pacing comparison digest of last assistant output. */
   lastOutputDigest?: string;
+  /** When true, ticker skips until resumed from the loop panel. */
+  paused?: boolean;
+  /** Ms until next fire, frozen while paused. */
+  pausedRemainingMs?: number;
 }
 
 /** Assistant history entry; may include per-bubble metric chips when restored. */

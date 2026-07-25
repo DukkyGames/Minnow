@@ -74,41 +74,39 @@ describe('handleLoopCommand', () => {
     assert.match(messages[0] ?? '', /Loop #1 armed/);
   });
 
-  test('list reports active loops', () => {
+  test('list and stop subcommands are rejected for chat UI', () => {
     const chat = seedChat();
     handleLoopCommand(chat, '/loop 1m a', () => undefined, FIXED_NOW);
-    const messages: string[] = [];
+
+    const listMessages: string[] = [];
     assert.equal(
       handleLoopCommand(
         chat,
         '/loop list',
         (_level, message) => {
-          messages.push(message);
+          listMessages.push(message);
         },
         FIXED_NOW,
       ),
       'handled',
     );
-    assert.match(messages[0] ?? '', /Active loops/);
-    assert.match(messages[0] ?? '', /#1/);
-  });
-
-  test('stop removes loops', () => {
-    const chat = seedChat();
-    handleLoopCommand(chat, '/loop 1m a', () => undefined, FIXED_NOW);
-    handleLoopCommand(chat, '/loop 1m b', () => undefined, FIXED_NOW);
-    assert.equal(getActiveLoops(chat).length, 2);
-    assert.equal(
-      handleLoopCommand(chat, '/loop stop 1', () => undefined, FIXED_NOW),
-      'handled',
-    );
+    assert.match(listMessages[0] ?? '', /loop panel in chat/);
     assert.equal(getActiveLoops(chat).length, 1);
-    assert.equal(getActiveLoops(chat)[0].id, 2);
+
+    const stopMessages: string[] = [];
     assert.equal(
-      handleLoopCommand(chat, '/loop stop', () => undefined, FIXED_NOW),
+      handleLoopCommand(
+        chat,
+        '/loop stop',
+        (_level, message) => {
+          stopMessages.push(message);
+        },
+        FIXED_NOW,
+      ),
       'handled',
     );
-    assert.equal(hasActiveLoops(chat), false);
+    assert.match(stopMessages[0] ?? '', /loop panel in chat/);
+    assert.equal(getActiveLoops(chat).length, 1);
   });
 
   test('rejects nested /loop or /goal prompt', () => {

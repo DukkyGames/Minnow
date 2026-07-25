@@ -84,6 +84,9 @@ export function renderDesktopChatMessages(): void {
 
   if (!chat.history.length) {
     renderDesktopEmptyState(col);
+    void import('../ui/loop-active-hint').then(({ syncLoopStatusUi }) => {
+      syncLoopStatusUi(chat.id);
+    });
     return;
   }
 
