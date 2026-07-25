@@ -2033,18 +2033,34 @@
       <div id="codeChangePanel" class="code-change-panel" hidden aria-label="Files changed in this chat">
         <div id="codeChangePanelList" class="code-change-panel__list"></div>
       </div>
-      <button
-        type="button"
-        id="codeChangeStrip"
-        class="code-change-strip hidden"
-        aria-live="polite"
-        aria-expanded="false"
-        aria-haspopup="listbox"
-        aria-label="Code changes in this chat"
-      >
-        <span class="code-change-strip__label">Code changes</span>
-        <span id="codeChangeStripStats" class="code-change-strip__stats"></span>
-      </button>
+      <div class="code-change-strip-row">
+        <button
+          type="button"
+          id="codeChangeStrip"
+          class="code-change-strip hidden"
+          aria-live="polite"
+          aria-expanded="false"
+          aria-haspopup="listbox"
+          aria-label="Code changes in this chat"
+        >
+          <span class="code-change-strip__label">Code changes</span>
+          <span id="codeChangeStripStats" class="code-change-strip__stats"></span>
+        </button>
+        <!-- Undo last agent turn — lives with code-change chrome (MIN-409); icon: /icons/undo-alt.svg.
+             Hidden until the workspace is a git repo (snapshots require git). -->
+        <button
+          type="button"
+          id="btnCodeChangeUndo"
+          class="code-change-strip__undo"
+          aria-label="Undo last agent turn"
+          title="Undo last agent turn"
+          aria-disabled="true"
+          disabled
+          hidden
+        >
+          <span class="code-change-strip__undo-icon" aria-hidden="true"></span>
+        </button>
+      </div>
     </div>
 
     <!-- Input bar -->

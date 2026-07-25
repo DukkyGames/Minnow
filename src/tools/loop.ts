@@ -110,6 +110,10 @@ import {
   noteRunGeneration,
   noteRunOutputIndex,
 } from '../state/runs-store';
+import {
+  capturePostTurnSnapshot,
+  capturePreTurnSnapshot,
+} from '../chat/turn-snapshots';
 import type {
   ApiMessage,
   ApiMessageContent,
@@ -1584,6 +1588,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       });
       turnRunId = run.runId;
     }
+    // MIN-409: dangling WT snapshot before tools mutate files (best-effort).
+    if (turnRunId) {
+      await capturePreTurnSnapshot(chat, turnRunId);
+    }
     scheduleSaveSessions();
   }
 
@@ -2604,6 +2612,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         endReason: turnEndReason,
         errorMessage: turnErrorMessage,
       });
+      // MIN-409: post-turn snapshot after history suffix is known (best-effort).
+      await capturePostTurnSnapshot(chat, turnRunId);
       scheduleSaveSessions();
       if (isStreamDomVisible(chat.id) && run) {
         refreshBranchPickerAtFork(chat, run.forkHistoryIndex);

@@ -111,4 +111,146 @@ describe('branch-picker', { concurrency: false }, () => {
       /Branch 2 of 2/,
     );
   });
+
+  test('attachBranchPicker shows with 1 branch when history ends at fork', async () => {
+    setupDom();
+    const { attachBranchPicker } = await import('../../src/ui/branch-picker.ts');
+    const { createRun, finalizeRun, pruneSupersededRunsAfterTruncate } = await import(
+      '../../src/state/runs-store.ts'
+    );
+    const { setSessionStateForTests } = await import('../../src/state/sessions.ts');
+
+    const chat = {
+      id: 'chat-branch-undo',
+      name: 'Test',
+      workspacePath: '',
+      modelId: 'model-a',
+      history: [{ role: 'user', content: 'hello' }],
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: 1,
+      lastMessageAt: 1,
+      runs: [],
+    };
+
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      lastActiveChatIdByWorkspace: {},
+      chats: [chat],
+      chatGroups: [],
+      activeBoardGroupId: null,
+    });
+
+    const snap = {
+      forkHistoryIndex: 0,
+      userContent: 'hello',
+      skillId: null,
+      providerId: 'lm-studio-local',
+      modelId: 'model-a',
+      temperature: 0.7,
+      maxTokens: 4096,
+      modeId: 'build',
+      workAgentId: null,
+      workAgentAuto: true,
+      composedSystemPrompt: 'You are helpful.',
+      enabledToolNames: ['read_file'],
+      maxToolTurns: 25,
+      historyPrefixHash: 'abc123',
+    };
+
+    const run = createRun(chat, snap);
+    finalizeRun(chat, run.runId, {
+      status: 'completed',
+      outputHistoryStart: 1,
+      outputHistoryEnd: 1,
+      outputMessages: [{ role: 'assistant', content: 'reply A' }],
+    });
+    // Simulate post-undo prune: history ends at user, run stays selectable.
+    pruneSupersededRunsAfterTruncate(chat, 0);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'msg user';
+    wrap.dataset.chatId = chat.id;
+    wrap.dataset.historyIndex = '0';
+    wrap.dataset.turnKind = 'user';
+    document.getElementById('chatArea').appendChild(wrap);
+
+    attachBranchPicker(wrap, chat.id, 0);
+
+    const trigger = wrap.querySelector('.branch-picker__trigger');
+    assert.ok(trigger, 'picker should appear for single-branch redo');
+    assert.match(
+      wrap.querySelector('.branch-picker__trigger-label')?.textContent ?? '',
+      /Restore branch/,
+    );
+  });
+
+  test('attachBranchPicker hides with 1 branch when reply is still active', async () => {
+    setupDom();
+    const { attachBranchPicker } = await import('../../src/ui/branch-picker.ts');
+    const { createRun, finalizeRun } = await import('../../src/state/runs-store.ts');
+    const { setSessionStateForTests } = await import('../../src/state/sessions.ts');
+
+    const chat = {
+      id: 'chat-branch-single-active',
+      name: 'Test',
+      workspacePath: '',
+      modelId: 'model-a',
+      history: [
+        { role: 'user', content: 'hello' },
+        { role: 'assistant', content: 'reply A' },
+      ],
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: 1,
+      lastMessageAt: 1,
+      runs: [],
+    };
+
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      lastActiveChatIdByWorkspace: {},
+      chats: [chat],
+      chatGroups: [],
+      activeBoardGroupId: null,
+    });
+
+    const snap = {
+      forkHistoryIndex: 0,
+      userContent: 'hello',
+      skillId: null,
+      providerId: 'lm-studio-local',
+      modelId: 'model-a',
+      temperature: 0.7,
+      maxTokens: 4096,
+      modeId: 'build',
+      workAgentId: null,
+      workAgentAuto: true,
+      composedSystemPrompt: 'You are helpful.',
+      enabledToolNames: ['read_file'],
+      maxToolTurns: 25,
+      historyPrefixHash: 'abc123',
+    };
+
+    const run = createRun(chat, snap);
+    finalizeRun(chat, run.runId, {
+      status: 'completed',
+      outputHistoryStart: 1,
+      outputHistoryEnd: 1,
+      outputMessages: [{ role: 'assistant', content: 'reply A' }],
+    });
+
+    const wrap = document.createElement('div');
+    wrap.className = 'msg user';
+    wrap.dataset.chatId = chat.id;
+    wrap.dataset.historyIndex = '0';
+    document.getElementById('chatArea').appendChild(wrap);
+
+    attachBranchPicker(wrap, chat.id, 0);
+    assert.equal(wrap.querySelector('.branch-picker__trigger'), null);
+  });
 });

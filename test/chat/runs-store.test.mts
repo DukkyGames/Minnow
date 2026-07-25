@@ -142,7 +142,7 @@ describe('runs-store', () => {
     assert.equal(chat.activeBranchByFork?.['0'], runA.branchId);
   });
 
-  test('pruneSupersededRunsAfterTruncate marks runs past cut', () => {
+  test('pruneSupersededRunsAfterTruncate keeps outputMessages for redo', () => {
     const chat = makeChat();
     const snap = baseSnapshot(0);
     const run = createRun(chat, snap);
@@ -155,7 +155,33 @@ describe('runs-store', () => {
     chat.history = [{ role: 'user', content: 'hello' }];
     pruneSupersededRunsAfterTruncate(chat, 0);
     assert.equal(run.status, 'superseded');
-    assert.equal(listSelectableBranchesAtFork(chat, 0).length, 0);
+    // Indices are stale after truncate; payload must remain for activateBranch.
+    assert.equal(run.outputHistoryStart, undefined);
+    assert.equal(run.outputHistoryEnd, undefined);
+    assert.equal(run.outputMessages?.length, 1);
+    assert.equal(listSelectableBranchesAtFork(chat, 0).length, 1);
+    // No reply in history → fork is not kept as active.
+    assert.equal(chat.activeBranchByFork?.['0'], undefined);
+  });
+
+  test('truncate then activateBranch restores undone reply (undo/redo)', () => {
+    const chat = makeChat();
+    const snap = baseSnapshot(0);
+    const run = createRun(chat, snap);
+    finalizeRun(chat, run.runId, {
+      status: 'completed',
+      outputHistoryStart: 1,
+      outputHistoryEnd: 1,
+      outputMessages: [{ role: 'assistant', content: 'reply A' }],
+    });
+    chat.history = [{ role: 'user', content: 'hello' }];
+    pruneSupersededRunsAfterTruncate(chat, 0);
+
+    const ok = activateBranch(chat, 0, run.branchId);
+    assert.equal(ok, true);
+    assert.equal(chat.history.length, 2);
+    assert.equal((chat.history[1] as { content: string }).content, 'reply A');
+    assert.equal(chat.activeBranchByFork?.['0'], run.branchId);
   });
 
   test('finalizeRun stores errorMessage on failed runs', () => {
