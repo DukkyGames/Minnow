@@ -15,11 +15,22 @@ import { renderStatsForChat } from './messages';
 import { renderSidebar } from './sidebar';
 import { setStatus } from './status';
 
-function branchLabel(run: TurnRunRecord, index: number): string {
+function branchIndexLabel(index: number, total: number): string {
+  return `Branch ${index + 1} of ${total}`;
+}
+
+function branchMeta(run: TurnRunRecord): string {
   const model = run.snapshot.modelId || 'model';
   const provider = run.snapshot.providerId || 'provider';
-  return `Branch ${index + 1} — ${model} @ ${provider}`;
+  return `${model} · ${provider}`;
 }
+
+function buildTriggerLabel(activeIndex: number, total: number): string {
+  return `Branch ${activeIndex + 1} of ${total}`;
+}
+
+const BRANCH_CHEVRON_SVG =
+  '<svg class="branch-picker__trigger-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z" fill="currentColor"/></svg>';
 
 function closeBranchMenu(menu: HTMLElement | null): void {
   if (!menu) return;
@@ -41,12 +52,22 @@ export function attachBranchPicker(
   if (branches.length < 2) return;
 
   const active = getActiveRun(chat, forkHistoryIndex);
+  const sorted = [...branches].sort((a, b) => a.createdAt - b.createdAt);
+  const activeIndex = Math.max(
+    0,
+    sorted.findIndex((run) => run.branchId === active?.branchId),
+  );
+
   const pill = document.createElement('button');
   pill.type = 'button';
   pill.className = 'branch-picker__trigger';
   pill.setAttribute('aria-haspopup', 'menu');
   pill.setAttribute('aria-expanded', 'false');
-  pill.textContent = `▾ ${branches.length} branches`;
+  pill.setAttribute(
+    'aria-label',
+    `Switch reply branch, ${branches.length} alternatives`,
+  );
+  pill.innerHTML = `${BRANCH_CHEVRON_SVG}<span class="branch-picker__trigger-label">${buildTriggerLabel(activeIndex, branches.length)}</span>`;
 
   let openMenu: HTMLElement | null = null;
 
@@ -71,14 +92,23 @@ export function attachBranchPicker(
     menu.className = 'branch-picker__menu';
     menu.setAttribute('role', 'menu');
 
-    const sorted = [...branches].sort((a, b) => a.createdAt - b.createdAt);
     for (let i = 0; i < sorted.length; i += 1) {
       const run = sorted[i]!;
       const item = document.createElement('button');
       item.type = 'button';
       item.className = 'branch-picker__item';
       item.setAttribute('role', 'menuitem');
-      item.textContent = branchLabel(run, i);
+
+      const label = document.createElement('span');
+      label.className = 'branch-picker__item-label';
+      label.textContent = branchIndexLabel(i, sorted.length);
+
+      const meta = document.createElement('span');
+      meta.className = 'branch-picker__item-meta';
+      meta.textContent = branchMeta(run);
+
+      item.append(label, meta);
+
       if (active?.branchId === run.branchId) {
         item.classList.add('branch-picker__item--active');
         item.setAttribute('aria-current', 'true');
