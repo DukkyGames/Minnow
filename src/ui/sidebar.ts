@@ -333,9 +333,6 @@ export function applyWorkspaceScopedSession(newPath: string, previousPath?: stri
     void import('./terminal-panel').then((m) => m.refreshTerminalHistoryForActiveChat());
   }
   renderSidebar();
-  if (document.getElementById('globalBugsView')?.classList.contains('is-open')) {
-    void import('./global-bugs-page').then((m) => m.renderGlobalBugsList());
-  }
 }
 
 interface AppendChatRowOptions {
@@ -766,7 +763,7 @@ export function renderSidebar(): void {
       renderExpertScopeHeader(expertId);
       renderExpertScopeChatList(expertId, getActiveChat().id);
     }
-    void import('./global-bugs-page').then((m) => m.refreshGlobalBugsSidebarBadge());
+    void import('./issues-page').then((m) => m.refreshIssuesSidebarBadge());
     return;
   }
 
@@ -820,7 +817,7 @@ export function renderSidebar(): void {
   appendChatListSection(list, 'Unassigned', unassigned, highlightChatId);
   syncChatItemDotsInDom();
   syncChatItemLoopIconsInDom();
-  void import('./global-bugs-page').then((m) => m.refreshGlobalBugsSidebarBadge());
+  void import('./issues-page').then((m) => m.refreshIssuesSidebarBadge());
 }
 
 function showMultiSelectContextMenu(x: number, y: number, chatIds: string[]): void {

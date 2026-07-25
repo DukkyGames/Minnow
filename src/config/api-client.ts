@@ -2,8 +2,7 @@
  * HTTP client for ~/.minnow config API (npm start only).
  */
 
-import type { BugsState } from '../state/bug-board-store.ts';
-import type { SessionState, SystemPromptSettings } from '../types';
+import type { BugsState, IssuesState, SessionState, SystemPromptSettings } from '../types';
 import type { SkillConfig } from '../skills/config';
 import type { ToolConfig } from '../tools/tool-settings-types';
 import type { SearchConfig } from './search-config';
@@ -67,15 +66,28 @@ export async function getSessions(): Promise<SessionState> {
   return parseJsonResponse<SessionState>(res);
 }
 
-/** GET /api/config/bugs */
+/**
+ * GET /api/config/bugs — read-only migration source for Issues (MIN-261).
+ * Leftover bugs/state.json is left on disk after migration.
+ */
 export async function getBugs(): Promise<BugsState> {
   const res = await fetch('/api/config/bugs', { cache: 'no-store' });
   return parseJsonResponse<BugsState>(res);
 }
 
-/** PUT /api/config/bugs */
-export async function putBugs(state: BugsState): Promise<void> {
-  const res = await fetch('/api/config/bugs', {
+/**
+ * GET /api/config/issues
+ * Returns null when the issues file has never been written (triggers migration).
+ */
+export async function getIssues(): Promise<IssuesState | null> {
+  const res = await fetch('/api/config/issues', { cache: 'no-store' });
+  if (res.status === 404) return null;
+  return parseJsonResponse<IssuesState>(res);
+}
+
+/** PUT /api/config/issues */
+export async function putIssues(state: IssuesState): Promise<void> {
+  const res = await fetch('/api/config/issues', {
     method: 'PUT',
     headers: JSON_HEADERS,
     body: JSON.stringify(state),

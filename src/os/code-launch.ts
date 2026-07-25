@@ -102,12 +102,17 @@ export async function restoreCodeSessionOnForeground(): Promise<void> {
   await refreshCodeChatSurface();
 }
 
-/** Switch workspace, create a mode-scoped chat, and auto-send the seed message. */
-export async function applyCodeLaunchOptions(options: LaunchOptions): Promise<void> {
+/**
+ * Switch workspace, create a mode-scoped chat, and auto-send the seed message.
+ * Returns the created chat id when a seeded send was attempted.
+ */
+export async function applyCodeLaunchOptions(
+  options: LaunchOptions,
+): Promise<{ chatId?: string }> {
   const seed = options.seed?.trim();
   const shouldSend = options.autoRun === true && Boolean(seed);
 
-  if (!shouldSend && !options.modeId && !options.workspacePath?.trim()) return;
+  if (!shouldSend && !options.modeId && !options.workspacePath?.trim()) return {};
 
   const welcome = await import('../ui/welcome-page');
   if (welcome.isWelcomePageOpen()) {
@@ -123,14 +128,30 @@ export async function applyCodeLaunchOptions(options: LaunchOptions): Promise<vo
     }
   }
 
-  if (!shouldSend) return;
+  if (!shouldSend) return {};
 
   const modeId = normalizeModeId(options.modeId ?? DEFAULT_MODE_ID);
   const created = createChatWithMode({ modeId });
-  if (!created.ok || !seed) return;
+  if (!created.ok || !seed) return {};
+
+  // Attach issue code refs synchronously when possible so they ride with the send.
+  const { addCodeReferenceToComposer } = await import('../attachments/code-ref');
+  for (const ref of options.codeRefs ?? []) {
+    const path = ref.path?.trim().replace(/\\/g, '/');
+    if (!path) continue;
+    const startLine = Math.max(1, ref.startLine ?? 1);
+    const endLine = Math.max(startLine, ref.endLine ?? startLine);
+    const text = ref.text?.trim() || `(code reference: ${path})`;
+    addCodeReferenceToComposer({
+      workspacePath: path,
+      startLine,
+      endLine,
+      text,
+    });
+  }
 
   const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
-  if (!input) return;
+  if (!input) return { chatId: created.chatId };
 
   input.value = seed;
   input.dispatchEvent(new window.Event('input', { bubbles: true }));
@@ -144,4 +165,6 @@ export async function applyCodeLaunchOptions(options: LaunchOptions): Promise<vo
   } finally {
     syncComposerFromStreamingState();
   }
+
+  return { chatId: created.chatId };
 }

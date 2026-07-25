@@ -381,43 +381,6 @@
 <button type="button" class="sidebar-backdrop" id="sidebarBackdrop" aria-label="Close chat list" aria-hidden="true"></button>
 <button type="button" class="file-sidebar-backdrop" id="fileSidebarBackdrop" aria-label="Close file tree" aria-hidden="true"></button>
 
-<main id="globalBugsView" class="global-bugs-page" aria-label="All bugs">
-  <header class="global-bugs-page-header">
-    <button type="button" class="icon-btn" id="btnGlobalBugsBack" aria-label="Back to chat">
-      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-    </button>
-    <h1>All bugs</h1>
-    <span id="globalBugsSummary" class="global-bugs-summary" aria-live="polite"></span>
-  </header>
-  <div class="global-bugs-page-body">
-    <div class="global-bugs-filters" role="search">
-      <label>
-        Workspace
-        <select id="globalBugsScope" aria-label="Workspace scope">
-          <option value="current_workspace">Current workspace</option>
-          <option value="all">All workspaces</option>
-        </select>
-      </label>
-      <label>
-        Column
-        <select id="globalBugsColumn" aria-label="Bug column">
-          <option value="all">All columns</option>
-          <option value="reported">Reported</option>
-          <option value="investigating">Investigating</option>
-          <option value="planned">Planned</option>
-          <option value="fixing">Fixing</option>
-          <option value="complete">Complete</option>
-        </select>
-      </label>
-      <label class="global-bugs-toggle">
-        <input type="checkbox" id="globalBugsHideComplete" checked>
-        <span>Hide complete</span>
-      </label>
-    </div>
-    <div id="globalBugsList" class="global-bugs-list-mount" role="region" aria-label="Bug list"></div>
-  </div>
-</main>
-
 <main id="settingsView" class="settings-page" aria-label="Settings">
   <header class="settings-page-header">
     <button type="button" class="icon-btn" id="btnSettingsPageBack" aria-label="Back to chat">
@@ -1819,6 +1782,108 @@
   </div>
 </main>
 
+<main id="issuesView" class="issues-page" aria-label="Issues">
+  <header class="issues-header">
+    <div class="issues-header__brand">
+      <span id="issuesPageIcon" aria-hidden="true"></span>
+      <h1>Issues</h1>
+    </div>
+    <div class="issues-header__toolbar">
+      <label class="visually-hidden" for="issuesScope">Workspace scope</label>
+      <select id="issuesScope" class="issues-filter" aria-label="Workspace scope">
+        <option value="current_workspace">Current workspace</option>
+        <option value="all">All workspaces</option>
+      </select>
+      <div class="issues-view-toggle" role="group" aria-label="View mode">
+        <button type="button" id="issuesViewList" class="is-active" aria-pressed="true">List</button>
+        <button type="button" id="issuesViewBoard" aria-pressed="false">Board</button>
+      </div>
+      <label class="visually-hidden" for="issuesType">Type</label>
+      <select id="issuesType" class="issues-filter" aria-label="Type filter">
+        <option value="all">All types</option>
+        <option value="bug">Bug</option>
+        <option value="task">Task</option>
+        <option value="idea">Idea</option>
+        <option value="note">Note</option>
+      </select>
+      <label class="visually-hidden" for="issuesStatus">Status</label>
+      <select id="issuesStatus" class="issues-filter" aria-label="Status filter">
+        <option value="all">All statuses</option>
+        <option value="triage">Triage</option>
+        <option value="backlog">Backlog</option>
+        <option value="todo">Todo</option>
+        <option value="planned">Planned</option>
+        <option value="in_progress">In progress</option>
+        <option value="review">Review</option>
+        <option value="done">Done</option>
+        <option value="canceled">Canceled</option>
+      </select>
+      <label class="visually-hidden" for="issuesPriority">Priority</label>
+      <select id="issuesPriority" class="issues-filter" aria-label="Priority filter">
+        <option value="all">All priorities</option>
+        <option value="urgent">Urgent</option>
+        <option value="high">High</option>
+        <option value="medium">Medium</option>
+        <option value="low">Low</option>
+        <option value="none">None</option>
+      </select>
+      <label class="issues-hide-done">
+        <input type="checkbox" id="issuesHideDone" checked>
+        <span>Hide done</span>
+      </label>
+      <label class="visually-hidden" for="issuesSearch">Search issues</label>
+      <input type="search" id="issuesSearch" class="issues-search" placeholder="Search…" autocomplete="off">
+    </div>
+    <div class="issues-header__actions">
+      <div class="issues-quick-capture">
+        <label class="visually-hidden" for="issuesQuickCapture">Quick capture</label>
+        <input
+          type="text"
+          id="issuesQuickCapture"
+          placeholder="Jot an idea, bug, or note…"
+          autocomplete="off"
+        >
+      </div>
+      <button type="button" class="issues-btn issues-btn--primary" id="btnIssuesNew">New issue</button>
+    </div>
+  </header>
+  <form id="issuesNewForm" class="issues-new-form" aria-label="New issue">
+    <label>
+      Title
+      <input type="text" id="issuesNewTitle" required autocomplete="off">
+    </label>
+    <label>
+      Type
+      <select id="issuesNewType">
+        <option value="task">Task</option>
+        <option value="bug">Bug</option>
+        <option value="idea">Idea</option>
+        <option value="note">Note</option>
+      </select>
+    </label>
+    <label>
+      Priority
+      <select id="issuesNewPriority">
+        <option value="none">None</option>
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+        <option value="urgent">Urgent</option>
+      </select>
+    </label>
+    <label>
+      Description
+      <textarea id="issuesNewDescription" rows="2" placeholder="Optional details"></textarea>
+    </label>
+    <button type="submit" class="issues-btn issues-btn--primary">Create</button>
+    <button type="button" class="issues-btn" id="btnIssuesNewCancel">Cancel</button>
+  </form>
+  <div class="issues-body">
+    <p id="issuesSummary" class="issues-summary" aria-live="polite"></p>
+    <div id="issuesPanelMount" class="issues-main" role="region" aria-label="Issues"></div>
+  </div>
+</main>
+
 <main id="expertsView" class="experts-page" data-step="browse" aria-label="Experts' Lab">
   <header class="experts-hdr">
     <span class="experts-hdr-ico" aria-hidden="true">
@@ -1972,7 +2037,7 @@
     <div class="chat-list" id="chatList" role="list"></div>
     </div>
     <div class="chat-sidebar-footer">
-      <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnAllBugs" aria-label="All bugs" title="All bugs">
+      <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnAllBugs" aria-label="Issues" title="Issues">
         <img class="icon-img" src="/icons/bugs.png" width="18" height="18" alt="" aria-hidden="true">
         <span class="chat-all-bugs-count" id="btnAllBugsCount" hidden aria-hidden="true"></span>
       </button>

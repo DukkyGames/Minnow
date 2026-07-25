@@ -242,6 +242,51 @@
         "topK": 20
       }
     },
+    "issue-writer": {
+      "label": "Issue writer",
+      "thinkingMode": "off",
+      "enabled": true,
+      "providerId": "",
+      "modelId": "",
+      "maxConcurrent": 2,
+      "timeoutMs": 300000,
+      "workAgentId": null,
+      "allowedTools": [
+        "list_directory",
+        "read_file",
+        "read_file_range",
+        "find_files",
+        "search_in_file",
+        "grep",
+        "get_file_metadata",
+        "git_status",
+        "git_log",
+        "issue_get_state",
+        "issue_update",
+        "issue_link"
+      ],
+      "deniedTools": [
+        "spawn_sub_agent",
+        "cancel_sub_agent",
+        "execute_command",
+        "save_file",
+        "append_file",
+        "insert_at_line",
+        "replace_text_in_file",
+        "delete_path",
+        "move_file",
+        "git_commit",
+        "git_add",
+        "git_push"
+      ],
+      "systemPromptPath": null,
+      "summarySchema": "minnow.sub-agent.v1",
+      "sampler": {
+        "temperature": 0.5,
+        "topP": 0.9,
+        "topK": 20
+      }
+    },
     "plan-reviewer": {
       "label": "Plan reviewer",
       "thinkingMode": "on",

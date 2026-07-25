@@ -36,7 +36,6 @@ import {
 } from '../../state/sessions';
 import { getWorkspacePath } from '../../state/workspace';
 import { closeBenchmark } from '../benchmark-page';
-import { closeGlobalBugs } from '../global-bugs-page';
 import { closeSettings } from '../settings-page';
 import {
   isExpertScopeActive,
@@ -691,7 +690,6 @@ export function openExperts(options?: OpenExpertsOptions): void {
   if (!root || !shell) return;
 
   closeSettings({ skipNavigate: true });
-  closeGlobalBugs();
   closeBenchmark({ skipNavigate: true });
   void import('../welcome-page').then((m) => {
     if (m.isWelcomePageOpen()) m.closeWelcome({ skipHash: true });

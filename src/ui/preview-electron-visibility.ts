@@ -9,7 +9,7 @@ import { isDesignModeUsingIframeGuest } from './preview-design-mode-guest';
 import { getFilePanelState } from '../state/file-panel';
 
 const FULLSCREEN_OVERLAY_IDS = [
-  'globalBugsView',
+  'issuesView',
   'settingsView',
   'benchmarkView',
   'expertsView',
@@ -23,7 +23,7 @@ function usesElectronPreview(): boolean {
   return Boolean(window.minnow?.preview);
 }
 
-/** True when a full-screen route covers the workspace (bugs, settings, etc.). */
+/** True when a full-screen app covers the workspace (Issues, settings, etc.). */
 export function isFullscreenOverlayObscuringWorkspace(): boolean {
   for (const id of FULLSCREEN_OVERLAY_IDS) {
     const el = document.getElementById(id);

@@ -134,7 +134,6 @@ textarea,
 .settings-page { display: none; }
 .benchmark-page { display: none; }
 .research-page { display: none; }
-.global-bugs-page { display: none; }
 .experts-page { display: none; }
 .brain-page { display: none; }
 .brain-page.is-open { display: flex; }

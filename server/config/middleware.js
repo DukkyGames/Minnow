@@ -182,13 +182,18 @@ export async function handleConfigRequest(req, res, pathname) {
     }
 
     const resourceMatch = pathname.match(
-      /^\/api\/config\/(sessions|tools|search|servers|research|skills|system-prompt|rules|sub-agents|bugs|meta)$/,
+      /^\/api\/config\/(sessions|tools|search|servers|research|skills|system-prompt|rules|sub-agents|bugs|issues|meta)$/,
     );
     if (resourceMatch) {
       const resource = resourceMatch[1];
 
       if (req.method === 'GET') {
         const data = await readResource(resource);
+        // Absent issues file → 404 so the client can migrate from bugs once.
+        if (resource === 'issues' && data === null) {
+          sendJson(res, 404, { error: 'Not found' });
+          return true;
+        }
         sendJson(res, 200, data);
         return true;
       }

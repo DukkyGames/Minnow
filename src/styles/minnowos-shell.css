@@ -761,14 +761,6 @@ html.minnow-os-enabled #osAppsLayer .chat-app-page.is-open {
   width: 100%;
 }
 
-/* All bugs overlay lives in the Code layer (POLISH-015 / MIN-411). */
-html.minnow-os-enabled .mn-os-code-layer .global-bugs-page.is-open {
-  display: flex !important;
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-}
-
 /* In-app dock reveal tab sits over the stage bottom — lift the composer clear of it. */
 html.minnow-os-enabled:has(.mn-os-dock-shell[data-shell-view='app']) .chat-app-composer {
   padding-bottom: calc(max(18px, var(--os-safe-bottom)) + var(--os-dock-reveal-height) + 4px);

@@ -43,6 +43,7 @@ export function isOtherFullPageHash(hash: string): boolean {
   return (
     hash.startsWith('#/settings') ||
     hash.startsWith('#/bugs') ||
+    hash.startsWith('#/app/issues') ||
     hash.startsWith('#/benchmark') ||
     hash.startsWith('#/expert-lab') ||
     hash.startsWith('#/experts') ||
@@ -385,11 +386,6 @@ function closePeerFullPageViews(): void {
   void import('./settings-page').then((m) => {
     if (document.getElementById('settingsView')?.classList.contains('is-open')) {
       m.closeSettings();
-    }
-  });
-  void import('./global-bugs-page').then((m) => {
-    if (m.isGlobalBugsPageOpen()) {
-      m.closeGlobalBugs();
     }
   });
   void import('./benchmark-page').then((m) => {

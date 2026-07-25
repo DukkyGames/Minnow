@@ -1180,6 +1180,24 @@ export function bindFileViewerContextMenu(): void {
         if (!editorView || tab.readOnlyExcerpt) return;
         openQuickEditPanel(editorView, tab.path);
       },
+      onLinkToIssue: () => {
+        if (!editorView || tab.readOnlyExcerpt) return;
+        const sel = editorView.state.selection.main;
+        const text = editorView.state.doc.sliceString(sel.from, sel.to);
+        const { fromLine, toLine } = lineNumbersForRange(
+          editorView.state.doc,
+          sel.from,
+          sel.to,
+        );
+        void import('./issue-link-from-editor').then((m) => {
+          m.linkSelectionToIssue({
+            path: tab.path,
+            startLine: fromLine,
+            endLine: toLine,
+            text,
+          });
+        });
+      },
       onSwitchToCode: () => switchMarkdownViewerToCode(),
       onSwitchToPreview: () => {
         void switchMarkdownViewerToPreview();

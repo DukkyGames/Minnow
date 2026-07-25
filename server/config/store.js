@@ -22,6 +22,7 @@ import {
   validateSystemPromptSettings,
   validateUserRulesSettings,
   validateBugsState,
+  validateIssuesState,
 } from './validators.js';
 import {
   DEFAULT_META,
@@ -299,6 +300,10 @@ export async function readResource(resource) {
     const data = await readConfigJson(key);
     return data ?? { version: 1, bugs: [] };
   }
+  if (resource === 'issues') {
+    // null when file missing — client migrates from bugs on first load.
+    return readConfigJson(key);
+  }
 
   return readConfigJson(key);
 }
@@ -372,6 +377,11 @@ export async function writeResource(resource, body) {
   }
   if (resource === 'bugs') {
     const validated = validateBugsState(body);
+    await writeConfigJson(key, validated);
+    return validated;
+  }
+  if (resource === 'issues') {
+    const validated = validateIssuesState(body);
     await writeConfigJson(key, validated);
     return validated;
   }

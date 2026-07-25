@@ -351,9 +351,6 @@ export function openSettings(
   const shell = getChatShell();
   if (!root || !shell) return;
 
-  void import('./global-bugs-page').then((m) => {
-    if (m.isGlobalBugsPageOpen()) m.closeGlobalBugs();
-  });
   void import('./experts/experts-hub').then((m) => {
     if (m.isExpertsPageOpen()) m.closeExpertLab();
   });
@@ -434,20 +431,11 @@ export function closeSettings(options?: { skipNavigate?: boolean }): void {
 
 function onHashChange(): void {
   const hash = window.location.hash;
-  if (hash.startsWith('#/bugs')) {
-    if (getSettingsRoot()?.classList.contains('is-open')) {
-      closeSettings();
-    }
-    return;
-  }
   if (hash.startsWith('#/settings')) {
     if (hash === '#/settings/voice' || hash.startsWith('#/settings/voice/')) {
       void import('./models-page').then((m) => m.openModels('voice'));
       return;
     }
-    void import('./global-bugs-page').then((m) => {
-      if (m.isGlobalBugsPageOpen()) m.closeGlobalBugs();
-    });
     const route = parseHashRoute();
     if (!getSettingsRoot()?.classList.contains('is-open')) {
       openSettings(route.scrollArea);

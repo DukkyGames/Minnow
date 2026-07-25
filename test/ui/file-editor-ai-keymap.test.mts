@@ -311,6 +311,26 @@ describe('quick edit diff + context menu', () => {
     assert.deepEqual(labels, ['add', 'edit']);
   });
 
+  test('buildFileViewerContextMenuItems includes Link to issue when hooked', () => {
+    let linked = false;
+    const items = buildFileViewerContextMenuItems({
+      path: 'src/a.ts',
+      hasEditorSelection: true,
+      isMarkdown: false,
+      isMarkdownPreview: false,
+      onAddSelectionToChat: () => {},
+      onQuickEdit: () => {},
+      onLinkToIssue: () => {
+        linked = true;
+      },
+      onSwitchToCode: () => {},
+      onSwitchToPreview: () => {},
+    });
+    assert.ok(items.some((i) => i.label === 'Link to issue…'));
+    items.find((i) => i.label === 'Link to issue…')?.action?.();
+    assert.equal(linked, true);
+  });
+
   test('buildFileViewerContextMenuItems keeps markdown preview when no selection', () => {
     const items = buildFileViewerContextMenuItems({
       path: 'readme.md',

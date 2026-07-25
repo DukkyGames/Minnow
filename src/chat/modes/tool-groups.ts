@@ -66,6 +66,7 @@ export const TOOL_GROUP_IDS = {
     'delegate_tasks',
   ],
   'bug-board': ['bug_add', 'bug_update', 'bug_get_state'],
+  issues: ['issue_add', 'issue_update', 'issue_link', 'issue_get_state'],
   'mode-mgmt': [
     'set_chat_mode',
     'create_chat_with_mode',
@@ -156,6 +157,7 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'lsp',
     'sub-agents',
     'bug-board',
+    'issues',
     'mode-mgmt',
     'ask',
     'browser',
@@ -243,6 +245,7 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'lsp',
     'sub-agents',
     'bug-board',
+    'issues',
     'mode-mgmt',
     'ask',
     'browser',

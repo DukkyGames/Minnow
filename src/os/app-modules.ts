@@ -7,7 +7,6 @@ import { isAppAvailable } from './app-preferences';
 import type { AppId } from './types';
 
 const initializedApps = new Set<AppId>();
-let globalBugsInitialized = false;
 
 /** Initialize a single app page module once. */
 export async function ensureAppInitialized(appId: AppId): Promise<void> {
@@ -21,14 +20,6 @@ export async function ensureAppInitialized(appId: AppId): Promise<void> {
   initializedApps.add(appId);
 }
 
-/** Legacy `#/bugs` overlay — not a dock app but still code-split. */
-export async function ensureGlobalBugsInitialized(): Promise<void> {
-  if (globalBugsInitialized) return;
-  const mod = await import('../ui/global-bugs-page');
-  mod.initGlobalBugsPage();
-  globalBugsInitialized = true;
-}
-
 function bootAppIdFromHash(hash: string): AppId | null {
   if (!hash.startsWith('#/app/')) return null;
   const segment = hash.slice('#/app/'.length).split('/')[0] ?? '';
@@ -37,11 +28,11 @@ function bootAppIdFromHash(hash: string): AppId | null {
 
 /** Initialize app modules required for the current hash route at cold boot. */
 export async function ensureBootAppsInitialized(): Promise<void> {
-  // Sidebar #btnAllBugs and #/bugs routing need listeners on every boot.
-  await ensureGlobalBugsInitialized();
+  // Sidebar Issues button + badge need listeners on every boot.
+  await ensureAppInitialized('issues');
 
   const appId = bootAppIdFromHash(window.location.hash);
-  if (appId && isAppAvailable(appId)) {
+  if (appId && isAppAvailable(appId) && appId !== 'issues') {
     await ensureAppInitialized(appId);
   }
 }
@@ -49,5 +40,4 @@ export async function ensureBootAppsInitialized(): Promise<void> {
 /** Reset lazy-init state (tests). */
 export function resetAppModulesForTests(): void {
   initializedApps.clear();
-  globalBugsInitialized = false;
 }

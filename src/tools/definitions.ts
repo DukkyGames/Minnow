@@ -295,7 +295,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       {
         app_id: {
           type: 'string',
-          enum: ['code', 'chat', 'research', 'experts', 'bench', 'settings'],
+          enum: ['code', 'chat', 'research', 'experts', 'bench', 'issues', 'settings'],
           description: 'MinnowOS app to open',
         },
         seed: {
@@ -1210,23 +1210,168 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'issue_add',
+    label: 'Issue add',
+    description: 'Create an issue in the Issues app (works from any chat).',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'issue_add',
+      'File a new issue (bug, task, idea, or note) in the Issues tracker.',
+      {
+        title: { type: 'string', description: 'Short issue title' },
+        description: { type: 'string', description: 'Markdown description' },
+        type: {
+          type: 'string',
+          enum: ['bug', 'task', 'idea', 'note'],
+          description: 'Issue type (default task)',
+        },
+        priority: {
+          type: 'string',
+          enum: ['urgent', 'high', 'medium', 'low', 'none'],
+          description: 'Priority (default none)',
+        },
+        labels: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional labels',
+        },
+        issue_id: {
+          type: 'string',
+          description: 'Optional stable id such as ISS-12 (auto-generated if omitted)',
+        },
+      },
+      ['title'],
+    ),
+  },
+  {
+    id: 'issue_update',
+    label: 'Issue update',
+    description: 'Update an issue status, priority, title, or notes.',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'issue_update',
+      'Patch one issue by issue_id.',
+      {
+        issue_id: { type: 'string', description: 'Issue id (ISS-n) or legacy bug id' },
+        title: { type: 'string' },
+        description: { type: 'string' },
+        type: {
+          type: 'string',
+          enum: ['bug', 'task', 'idea', 'note'],
+        },
+        status: {
+          type: 'string',
+          enum: [
+            'triage',
+            'backlog',
+            'todo',
+            'planned',
+            'in_progress',
+            'review',
+            'done',
+            'canceled',
+          ],
+        },
+        priority: {
+          type: 'string',
+          enum: ['urgent', 'high', 'medium', 'low', 'none'],
+        },
+        labels: { type: 'array', items: { type: 'string' } },
+        notes: { type: 'string' },
+        plan_path: { type: 'string', description: 'Workspace-relative plan path' },
+      },
+      ['issue_id'],
+    ),
+  },
+  {
+    id: 'issue_get_state',
+    label: 'Issue get state',
+    description: 'Return issues snapshot (scoped to current workspace by default).',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'issue_get_state',
+      'Read issues from ~/.minnow/issues/state.json with optional filters.',
+      {
+        workspace_scope: {
+          type: 'string',
+          enum: ['current_workspace', 'all'],
+          description: 'Workspace filter (default current_workspace)',
+        },
+        status: {
+          type: 'string',
+          description: 'Optional status filter, or "all"',
+        },
+      },
+      [],
+    ),
+  },
+  {
+    id: 'issue_link',
+    label: 'Issue link',
+    description: 'Append code refs, git links, or a chat id to an issue (append-only).',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'issue_link',
+      'Append links to an issue: code_refs (file/line), git_links, and/or chat_id.',
+      {
+        issue_id: { type: 'string', description: 'Issue id (ISS-n) or legacy bug id' },
+        code_refs: {
+          type: 'array',
+          description: 'File/line links to append',
+          items: {
+            type: 'object',
+            properties: {
+              path: { type: 'string', description: 'Workspace-relative path' },
+              start_line: { type: 'number', description: '1-based start line' },
+              end_line: { type: 'number', description: '1-based end line' },
+              snippet: { type: 'string', description: 'Captured text at link time' },
+              note: { type: 'string' },
+            },
+          },
+        },
+        git_links: {
+          type: 'array',
+          description: 'Git/GitHub link chips to append',
+          items: {
+            type: 'object',
+            properties: {
+              kind: {
+                type: 'string',
+                enum: ['commit', 'branch', 'pr', 'github-issue'],
+              },
+              ref: { type: 'string', description: 'Sha, branch name, or number' },
+              url: { type: 'string' },
+              title: { type: 'string' },
+            },
+          },
+        },
+        chat_id: { type: 'string', description: 'Chat id to append to chatIds' },
+      },
+      ['issue_id'],
+    ),
+  },
+  {
     id: 'bug_add',
     label: 'Bug add',
-    description: 'Add a bug card to the Reported column (All bugs screen).',
+    description: 'Alias: create a bug-type issue (Issues store).',
     category: 'agents',
     serverRequired: false,
     definition: toolSchema(
       'bug_add',
-      'File a new bug on the bug tracker board.',
+      'File a new bug as an Issues app card (compatibility alias for issue_add).',
       {
         title: { type: 'string', description: 'Short bug title' },
         description: { type: 'string', description: 'Reproduction steps and context' },
         severity: {
           type: 'string',
           enum: ['low', 'medium', 'high', 'critical'],
-          description: 'Triage severity',
+          description: 'Triage severity (maps to issue priority)',
         },
-        bug_id: { type: 'string', description: 'Optional stable id (auto-generated if omitted)' },
+        bug_id: { type: 'string', description: 'Optional stable legacy bug id' },
       },
       ['title'],
     ),
@@ -1234,14 +1379,14 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'bug_update',
     label: 'Bug update',
-    description: 'Update bug column, notes, or plan path (All bugs screen).',
+    description: 'Alias: update an issue via legacy bug column fields.',
     category: 'agents',
     serverRequired: false,
     definition: toolSchema(
       'bug_update',
-      'Patch one bug card by bug_id.',
+      'Patch one issue by bug_id / legacyBugId (compatibility alias for issue_update).',
       {
-        bug_id: { type: 'string', description: 'Bug card id' },
+        bug_id: { type: 'string', description: 'Legacy bug id or ISS-n' },
         column: {
           type: 'string',
           enum: ['reported', 'investigating', 'planned', 'fixing', 'complete'],
@@ -1257,10 +1402,15 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'bug_get_state',
     label: 'Bug get state',
-    description: 'Return full bug board JSON (All bugs screen).',
+    description: 'Alias: return issues projected as legacy bug cards.',
     category: 'agents',
     serverRequired: false,
-    definition: toolSchema('bug_get_state', 'Read all bugs from ~/.minnow/bugs/state.json.', {}, []),
+    definition: toolSchema(
+      'bug_get_state',
+      'Read issues projected into the legacy bugs JSON shape.',
+      {},
+      [],
+    ),
   },
   {
     id: 'cancel_sub_agent',

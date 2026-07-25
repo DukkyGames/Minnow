@@ -104,9 +104,6 @@ function closeOtherFullPages(): void {
   void import('./experts/experts-hub').then((m) => {
     if (m.isExpertsPageOpen()) m.closeExpertsHub({ skipNavigate: true });
   });
-  void import('./global-bugs-page').then((m) => {
-    if (m.isGlobalBugsPageOpen()) m.closeGlobalBugs();
-  });
   void import('./welcome-page').then((m) => {
     if (m.isWelcomePageOpen()) m.closeWelcome({ skipHash: true });
   });

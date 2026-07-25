@@ -52,7 +52,6 @@ import './styles/composer-model-trigger.css';
 import './styles/view-mode-toggle.css';
 import './styles/orchestrate-board.css';
 import './styles/toast.css';
-import './styles/bug-board.css';
 import './styles/hub.css';
 import './styles/code-overview.css';
 import './styles/orchestrate-hub.css';
@@ -248,12 +247,17 @@ export async function initApp(): Promise<void> {
   await loadSessionsFromStorage(isServerStorageMode() ? { force: true } : undefined);
   registerOrchestrateBoardShutdownHandler();
   registerSessionPersistenceShutdownHandler();
-  const { loadBugsFromStorage, migrateBugsFromChats } = await import(
-    './state/bug-board-store.ts'
+  // Issues store migrates leftover bugs/state.json / minnow-bugs-v1 on first load.
+  const { loadIssuesFromStorage, migrateLegacyBugBoardsFromChats } = await import(
+    './state/issues-store.ts'
   );
-  await loadBugsFromStorage();
+  await loadIssuesFromStorage();
   if (sessionState) {
-    await migrateBugsFromChats(sessionState.chats);
+    const chatsChanged = await migrateLegacyBugBoardsFromChats(sessionState.chats);
+    if (chatsChanged) {
+      const { scheduleSaveSessions } = await import('./state/sessions.ts');
+      scheduleSaveSessions();
+    }
   }
   initSubAgentUi();
   initGoalEvalUi();
@@ -336,9 +340,8 @@ export async function initApp(): Promise<void> {
   await refreshTerminalHistoryForActiveChat();
   const { ensureBootAppsInitialized } = await import('./os/app-modules');
   await ensureBootAppsInitialized();
-  const globalBugsPage = await import('./ui/global-bugs-page');
-  globalBugsPage.initGlobalBugsPage();
-  globalBugsPage.refreshGlobalBugsSidebarBadge();
+  const issuesPage = await import('./ui/issues-page');
+  issuesPage.refreshIssuesSidebarBadge();
   await fetchModels();
   syncModelSelectForActiveChat();
   syncModelSelectPicker();

@@ -1,11 +1,11 @@
 /**
- * bug_add / bug_update / bug_get_state validation + happy path.
+ * bug_add / bug_update / bug_get_state — Issues store aliases (MIN-261).
  */
 
 import assert from 'node:assert/strict';
 import { beforeEach, describe, test } from 'node:test';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
-import { setBugsStateForTests } from '../../src/state/bug-board-store.ts';
+import { setIssuesStateForTests } from '../../src/state/issues-store.ts';
 import {
   executeBugBoardTool,
   setBugBoardExecutorContext,
@@ -33,7 +33,7 @@ function makeChat(): Chat {
 
 describe('bug-board-tools', () => {
   beforeEach(() => {
-    setBugsStateForTests({ version: 1, bugs: [] });
+    setIssuesStateForTests({ version: 1, nextId: 1, issues: [] });
     setSessionStateForTests({
       version: 2,
       activeId: CHAT_ID,
@@ -75,12 +75,12 @@ describe('bug-board-tools', () => {
     assert.match(updateResult, /"column": "planned"/);
   });
 
-  test('executeBugBoardTool fails when All bugs screen is closed', async () => {
+  test('executeBugBoardTool works when All bugs screen is closed', async () => {
     setGlobalBugsPageOpenForTests(false);
     const out = await executeBugBoardTool('bug_add', {
       title: 'x',
       severity: 'low',
     });
-    assert.match(out, /All bugs screen/i);
+    assert.match(out, /"column": "reported"/);
   });
 });

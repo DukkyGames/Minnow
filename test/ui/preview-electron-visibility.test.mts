@@ -102,7 +102,7 @@ describe('preview-electron-visibility', () => {
     });
     elements.set('previewPane', { classList: new Set(['hidden']) });
     elements.set('previewBody', { classList: new Set() });
-    elements.set('globalBugsView', { classList: new Set() });
+    elements.set('issuesView', { classList: new Set() });
     elements.set('appBody', { classList: new Set(['hidden']) });
   });
 
@@ -148,20 +148,20 @@ describe('preview-electron-visibility', () => {
     assert.equal(isPreviewPaneDomVisible(), true);
   });
 
-  test('isFullscreenOverlayObscuringWorkspace detects global bugs route', () => {
+  test('isFullscreenOverlayObscuringWorkspace detects Issues app open', () => {
     assert.equal(isFullscreenOverlayObscuringWorkspace(), false);
-    elements.get('globalBugsView')!.classList.add('is-open');
+    elements.get('issuesView')!.classList.add('is-open');
     assert.equal(isFullscreenOverlayObscuringWorkspace(), true);
   });
 
-  test('shouldShowElectronPreviewHost is false when bugs overlay is open', () => {
+  test('shouldShowElectronPreviewHost is false when Issues app is open', () => {
     setFilePanelState({
       ...DEFAULT_FILE_PANEL_STATE,
       rightPaneMode: 'preview',
       viewerOpen: true,
     });
     elements.get('previewPane')!.classList.delete('hidden');
-    elements.get('globalBugsView')!.classList.add('is-open');
+    elements.get('issuesView')!.classList.add('is-open');
     assert.equal(shouldShowElectronPreviewHost(), false);
   });
 

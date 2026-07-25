@@ -170,6 +170,18 @@ export async function maybeEmitOrchestratePlanComplete(groupId: string): Promise
     allQuarantined ? 'Orchestrate plan blocked' : 'Orchestrate plan complete',
   );
 
+  // Issues app: board finish → linked issue status `review` (MIN-261 Phase 3).
+  const boardPlanPath =
+    planner.orchestratePlanPath?.trim() || board.planPath?.trim() || '';
+  void import('../issues/board-review.ts')
+    .then((m) =>
+      m.markIssuesReviewForBoardComplete({
+        plannerChatId: planner.id,
+        planPath: boardPlanPath,
+      }),
+    )
+    .catch((err) => reportBackgroundError('issues-board-complete-review', err));
+
   void firePlanCompleteWrapUpTurn(planner, board).catch((err) =>
     reportBackgroundError('orchestrate-plan-complete-wrap-up', err),
   );

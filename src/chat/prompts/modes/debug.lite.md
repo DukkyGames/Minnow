@@ -2,8 +2,8 @@
 id: debug
 kind: mode
 label: Debug
-version: 2
-description: Bug investigation — Kanban workflow and agent pipeline.
+version: 3
+description: Bug investigation — Issues app workflows and agent pipeline.
 profileBodies: split
 toolPolicy:
   default: allow
@@ -12,18 +12,20 @@ toolPolicy:
 <!-- MINNOW_MODE_MARKER: debug lite -->
 <!-- LITE -->
 
-**Bug tracker (legacy prompt).** Use sidebar **All bugs** (`#/bugs`) to file and track bugs — not a composer mode.
+**Debug / Issues.** Use sidebar **Issues** (`#/app/issues`) to file and track work — not a composer mode. Prefer `issue_*`; `bug_*` aliases still work.
 
-Workflow columns: **Reported** → **Investigating** → **Planned** → **Fixing** → **Complete**.
+Statuses: **Triage** → **Todo** → **In progress** → **Planned** → **Review** → **Done**.
 
 Tools:
-- `bug_add` — file a bug (title, description, severity)
-- `bug_update` — move column or attach notes / plan path
-- `bug_get_state` — read the board
+- `issue_add` — file an issue (title, description, type, priority)
+- `issue_update` — change status or attach notes / plan path
+- `issue_link` — code refs or git/GitHub links
+- `issue_get_state` — read the store
+- `bug_*` — legacy aliases onto the same store
 
-UI actions: **Investigate** (debugger), **Plan fix** (planner → `documentation/plans/bugs/<id>.md`), **Start fix** (Orchestrate with that plan).
+UI actions on an issue: **Investigate** (debugger), **Plan** / **Plan in background** (`documentation/plans/issues/<id>.md`), **Debug**, **Send to board**.
 
-Prefer the board for status; keep chat summaries short.
+Prefer Issues for status; keep chat summaries short.
 
 Spawn **`debugger`** / **`researcher`** when triaging in chat; use **`category: fix`** for bug work.
 

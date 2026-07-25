@@ -1,30 +1,27 @@
 /**
- * Bug tracker tools: bug_add, bug_update, bug_get_state (All bugs screen).
+ * Bug tracker tools — compatibility aliases to the Issues store (MIN-261).
+ * Screen-gating removed; bug_* maps onto issue_* with column/severity translation.
  */
 
 import {
-  addBug,
-  getBugsSnapshot,
+  addIssue,
+  bugColumnToIssueStatus,
+  bugSeverityToIssuePriority,
+  getIssuesSnapshot,
   isBugColumn,
   isBugSeverity,
-  updateBug,
-} from '../state/bug-board-store.ts';
+  issueToBugCard,
+  updateIssue,
+} from '../state/issues-store.ts';
 import { getWorkspacePath } from '../state/workspace.ts';
-import { randomUUID } from '../lib/random-id.ts';
-import { isGlobalBugsPageOpen } from '../ui/global-bugs-page.ts';
 import type { BugCard } from '../types.ts';
 
-/** Test override for global bugs page visibility (no DOM in node tests). */
+/** @deprecated No longer screen-gated; kept for test API compatibility. */
 let globalBugsPageOpenOverride: boolean | null = null;
 
-/** Force All bugs screen open/closed in unit tests. */
+/** @deprecated Force All bugs screen open/closed in unit tests (ignored). */
 export function setGlobalBugsPageOpenForTests(value: boolean | null): void {
   globalBugsPageOpenOverride = value;
-}
-
-function isBugToolScreenActive(): boolean {
-  if (globalBugsPageOpenOverride !== null) return globalBugsPageOpenOverride;
-  return isGlobalBugsPageOpen();
 }
 
 export interface BugBoardExecutorContext {
@@ -33,13 +30,9 @@ export interface BugBoardExecutorContext {
 
 let executorContext: BugBoardExecutorContext | null = null;
 
-/** Set parent chat context for bug_* tools (from tool loop; used for linked chat only). */
+/** Set parent chat context for bug_* tools (linked chat only). */
 export function setBugBoardExecutorContext(ctx: BugBoardExecutorContext | null): void {
   executorContext = ctx;
-}
-
-function newBugId(): string {
-  return `bug-${randomUUID().slice(0, 8)}`;
 }
 
 export type ValidateBugAddResult =
@@ -59,7 +52,17 @@ export function validateBugAddArgs(args: Record<string, unknown>): ValidateBugAd
 }
 
 export type ValidateBugUpdateResult =
-  | { ok: true; bugId: string; patch: Parameters<typeof updateBug>[1] }
+  | {
+      ok: true;
+      bugId: string;
+      patch: {
+        column?: BugCard['column'];
+        notes?: string;
+        planPath?: string;
+        investigateRunId?: string;
+        planRunId?: string;
+      };
+    }
   | { ok: false; error: string };
 
 /** Validate bug_update arguments (exported for tests). */
@@ -72,7 +75,13 @@ export function validateBugUpdateArgs(args: Record<string, unknown>): ValidateBu
         : '';
   if (!bugId) return { ok: false, error: 'Error: bug_update requires "bug_id"' };
 
-  const patch: Parameters<typeof updateBug>[1] = {};
+  const patch: {
+    column?: BugCard['column'];
+    notes?: string;
+    planPath?: string;
+    investigateRunId?: string;
+    planRunId?: string;
+  } = {};
   const columnRaw = typeof args.column === 'string' ? args.column.trim() : '';
   if (columnRaw) {
     if (!isBugColumn(columnRaw)) {
@@ -88,15 +97,6 @@ export function validateBugUpdateArgs(args: Record<string, unknown>): ValidateBu
   if (typeof args.plan_path === 'string' && args.plan_path.trim()) {
     patch.planPath = args.plan_path.trim();
   }
-  if (
-    !patch.column &&
-    patch.notes === undefined &&
-    patch.planPath === undefined &&
-    typeof args.investigate_run_id !== 'string' &&
-    typeof args.plan_run_id !== 'string'
-  ) {
-    return { ok: false, error: 'Error: bug_update requires at least one field to change' };
-  }
   if (typeof args.investigate_run_id === 'string' && args.investigate_run_id.trim()) {
     patch.investigateRunId = args.investigate_run_id.trim();
   }
@@ -104,45 +104,71 @@ export function validateBugUpdateArgs(args: Record<string, unknown>): ValidateBu
     patch.planRunId = args.plan_run_id.trim();
   }
 
+  if (
+    !patch.column &&
+    patch.notes === undefined &&
+    patch.planPath === undefined &&
+    patch.investigateRunId === undefined &&
+    patch.planRunId === undefined
+  ) {
+    return { ok: false, error: 'Error: bug_update requires at least one field to change' };
+  }
+
   return { ok: true, bugId, patch };
 }
 
-/** Execute bug_add / bug_update / bug_get_state. */
+/** Execute bug_add / bug_update / bug_get_state via the Issues store (no screen gate). */
 export async function executeBugBoardTool(
   name: string,
   args: Record<string, unknown>,
 ): Promise<string> {
-  if (!isBugToolScreenActive()) {
-    return 'Error: bug board tools require the All bugs screen (#/bugs)';
-  }
+  // Keep override readable so unused-var lint stays quiet in tests that still set it.
+  void globalBugsPageOpenOverride;
+  void executorContext;
 
   if (name === 'bug_add') {
     const validated = validateBugAddArgs(args);
     if (validated.ok === false) return validated.error;
-    const bugId =
+    const legacyBugId =
       typeof args.bug_id === 'string' && args.bug_id.trim()
         ? args.bug_id.trim()
-        : newBugId();
-    const card = addBug(
-      {
-        ...validated,
-        workspacePath: getWorkspacePath(),
-      },
-      bugId,
-    );
-    return JSON.stringify(card, null, 2);
+        : undefined;
+    const card = addIssue({
+      title: validated.title,
+      description: validated.description,
+      type: 'bug',
+      status: 'triage',
+      priority: bugSeverityToIssuePriority(validated.severity),
+      severity: validated.severity,
+      legacyBugId,
+      workspacePath: getWorkspacePath(),
+    });
+    return JSON.stringify(issueToBugCard(card), null, 2);
   }
 
   if (name === 'bug_update') {
     const validated = validateBugUpdateArgs(args);
     if (validated.ok === false) return validated.error;
-    const updated = updateBug(validated.bugId, validated.patch);
+    const updated = updateIssue(validated.bugId, {
+      status: validated.patch.column
+        ? bugColumnToIssueStatus(validated.patch.column)
+        : undefined,
+      notes: validated.patch.notes,
+      planPath: validated.patch.planPath,
+      investigateRunId: validated.patch.investigateRunId,
+      planRunId: validated.patch.planRunId,
+    });
     if (!updated) return `Error: unknown bug_id "${validated.bugId}"`;
-    return JSON.stringify(updated, null, 2);
+    return JSON.stringify(issueToBugCard(updated), null, 2);
   }
 
   if (name === 'bug_get_state') {
-    return JSON.stringify(getBugsSnapshot(), null, 2);
+    const snap = getIssuesSnapshot();
+    return JSON.stringify(
+      { version: 1, bugs: snap.issues.map((issue) => issueToBugCard(issue)) },
+      null,
+      2,
+    );
   }
 
   return `Error: unknown bug board tool "${name}"`;

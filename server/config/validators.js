@@ -729,6 +729,102 @@ export function validateBugsState(raw) {
   return { version: 1, bugs };
 }
 
+const ISSUE_TYPES = new Set(['bug', 'task', 'idea', 'note']);
+const ISSUE_STATUSES = new Set([
+  'triage',
+  'backlog',
+  'todo',
+  'planned',
+  'in_progress',
+  'review',
+  'done',
+  'canceled',
+]);
+const ISSUE_PRIORITIES = new Set(['urgent', 'high', 'medium', 'low', 'none']);
+
+function ensureIssueCard(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = /** @type {Record<string, unknown>} */ (raw);
+  const id = typeof r.id === 'string' ? r.id.trim() : '';
+  const title = typeof r.title === 'string' ? r.title.trim() : '';
+  if (!id || !title) return null;
+  const typeRaw = typeof r.type === 'string' ? r.type : 'task';
+  const statusRaw = typeof r.status === 'string' ? r.status : 'triage';
+  const priorityRaw = typeof r.priority === 'string' ? r.priority : 'none';
+  if (!ISSUE_TYPES.has(typeRaw) || !ISSUE_STATUSES.has(statusRaw) || !ISSUE_PRIORITIES.has(priorityRaw)) {
+    return null;
+  }
+  const createdAt = typeof r.createdAt === 'number' ? r.createdAt : Date.now();
+  const updatedAt = typeof r.updatedAt === 'number' ? r.updatedAt : createdAt;
+  const labels = Array.isArray(r.labels)
+    ? r.labels.filter((l) => typeof l === 'string' && l.trim()).map((l) => String(l).trim())
+    : [];
+  const out = {
+    id,
+    type: typeRaw,
+    title,
+    description: typeof r.description === 'string' ? r.description : '',
+    status: statusRaw,
+    priority: priorityRaw,
+    labels,
+    workspacePath:
+      typeof r.workspacePath === 'string' ? normalizeWorkspacePath(r.workspacePath) : '',
+    createdAt,
+    updatedAt,
+  };
+  if (typeof r.notes === 'string') out.notes = r.notes;
+  if (typeof r.planPath === 'string' && r.planPath.trim()) out.planPath = r.planPath.trim();
+  if (typeof r.boardChatId === 'string' && r.boardChatId.trim()) {
+    out.boardChatId = r.boardChatId.trim();
+  }
+  if (typeof r.investigateRunId === 'string' && r.investigateRunId.trim()) {
+    out.investigateRunId = r.investigateRunId.trim();
+  }
+  if (typeof r.planRunId === 'string' && r.planRunId.trim()) {
+    out.planRunId = r.planRunId.trim();
+  }
+  if (typeof r.legacyBugId === 'string' && r.legacyBugId.trim()) {
+    out.legacyBugId = r.legacyBugId.trim();
+  }
+  if (
+    typeof r.severity === 'string' &&
+    BUG_SEVERITIES.has(r.severity)
+  ) {
+    out.severity = r.severity;
+  }
+  if (Array.isArray(r.chatIds)) {
+    out.chatIds = r.chatIds.filter((c) => typeof c === 'string' && c.trim());
+  }
+  if (Array.isArray(r.codeRefs)) out.codeRefs = r.codeRefs;
+  if (Array.isArray(r.gitLinks)) out.gitLinks = r.gitLinks;
+  return out;
+}
+
+/** Validate ~/.minnow/issues/state.json */
+export function validateIssuesState(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return { version: 1, nextId: 1, issues: [] };
+  }
+  const row = /** @type {Record<string, unknown>} */ (raw);
+  if (row.version !== 1 || !Array.isArray(row.issues)) {
+    return { version: 1, nextId: 1, issues: [] };
+  }
+  const issues = [];
+  for (const item of row.issues) {
+    const card = ensureIssueCard(item);
+    if (card) issues.push(card);
+  }
+  let nextId =
+    typeof row.nextId === 'number' && Number.isFinite(row.nextId) && row.nextId >= 1
+      ? Math.floor(row.nextId)
+      : 1;
+  for (const issue of issues) {
+    const m = /^ISS-(\d+)$/.exec(issue.id);
+    if (m) nextId = Math.max(nextId, Number(m[1]) + 1);
+  }
+  return { version: 1, nextId, issues };
+}
+
 function ensureViewMode(raw) {
   return raw === 'chat' || raw === 'board' ? raw : undefined;
 }

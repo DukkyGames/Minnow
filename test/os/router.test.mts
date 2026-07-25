@@ -16,7 +16,6 @@ import { initOsPageBridge, resetOsPageBridgeForTests } from '../../src/os/page-b
 import {
   getCurrentRoute,
   initOsRouter,
-  isLegacyOverlayHash,
   launchApp,
   navigateToDesktop,
   parseOsHash,
@@ -45,15 +44,6 @@ function setupChatAppDom(win: import('happy-dom').Window): void {
     <div id="appBody"></div>
   `;
 }
-
-describe('isLegacyOverlayHash', () => {
-  test('matches global bugs route', () => {
-    assert.equal(isLegacyOverlayHash('#/bugs'), true);
-    assert.equal(isLegacyOverlayHash('#/bugs/open'), true);
-    assert.equal(isLegacyOverlayHash('#/app/code'), false);
-    assert.equal(isLegacyOverlayHash('#/desktop'), false);
-  });
-});
 
 describe('resolveLegacyHash', () => {
   test('redirects settings paths to the settings app', () => {
@@ -195,17 +185,23 @@ describe('os router navigation', () => {
     );
   });
 
-  test('applyRouteFromHash preserves Code foreground on #/bugs (MIN-156)', () => {
-    launchApp('code');
-    syncOsRouteFromHashForTests();
-    const codeForeground = getInstanceSnapshot().foregroundId;
+  test('resolveLegacyHash redirects #/bugs to Issues (MIN-261)', () => {
+    assert.deepEqual(resolveLegacyHash('#/bugs'), { hash: '#/app/issues' });
+    assert.deepEqual(resolveLegacyHash('#/bugs/open'), { hash: '#/app/issues' });
+  });
+
+  test('parseOsHash prepares Issues deep-link issueId', () => {
+    const route = parseOsHash('#/app/issues/ISS-42');
+    assert.equal(route.view, 'app');
+    assert.equal(route.appId, 'issues');
+    assert.equal(route.issueId, 'ISS-42');
+  });
+
+  test('applyRouteFromHash rewrites #/bugs to #/app/issues (MIN-261)', () => {
     window.location.hash = '#/bugs';
     syncOsRouteFromHashForTests();
-    assert.equal(window.location.hash, '#/bugs');
-    const snap = getInstanceSnapshot();
-    assert.equal(snap.view, 'app');
-    assert.equal(snap.foregroundId, codeForeground);
-    assert.equal(snap.instances.find((i) => i.appId === 'code')?.id, codeForeground);
+    // First pass only rewrites the legacy hash (app launch is a separate sync).
+    assert.equal(window.location.hash, '#/app/issues');
   });
 
   test('launchApp(chat) redirects to desktop chat', async () => {

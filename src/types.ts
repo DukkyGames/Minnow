@@ -650,7 +650,11 @@ export type BugColumn =
 /** Bug severity for triage. */
 export type BugSeverity = 'low' | 'medium' | 'high' | 'critical';
 
-/** One bug card on the global bug tracker Kanban. */
+/**
+ * Legacy bug-card shape (MIN-16).
+ * Kept for one-time migration from `bugs/state.json` / `minnow-bugs-v1`
+ * and for `bug_*` tool aliases that project Issues → this shape.
+ */
 export interface BugCard {
   id: string;
   title: string;
@@ -673,11 +677,85 @@ export interface BugCard {
   fixRunId?: string;
 }
 
-/** @deprecated Legacy per-chat board; migrated to bugs/state.json. */
+/** Persisted legacy bugs file shape (`~/.minnow/bugs/state.json`). */
+export type BugsState = {
+  version: 1;
+  bugs: BugCard[];
+};
+
+/** @deprecated Legacy per-chat board; migrated to bugs/state.json then Issues. */
 export interface BugBoardState {
   bugs: BugCard[];
   startedAt: number;
   lastUpdatedAt: number;
+}
+
+/** Issues app card kind (MIN-261). */
+export type IssueType = 'bug' | 'task' | 'idea' | 'note';
+
+/** Issues workflow status (MIN-261). */
+export type IssueStatus =
+  | 'triage'
+  | 'backlog'
+  | 'todo'
+  | 'planned'
+  | 'in_progress'
+  | 'review'
+  | 'done'
+  | 'canceled';
+
+/** Issues priority (MIN-261). */
+export type IssuePriority = 'urgent' | 'high' | 'medium' | 'low' | 'none';
+
+/** File/line link; click opens the editor at the range. */
+export interface IssueCodeRef {
+  path: string;
+  startLine?: number;
+  endLine?: number;
+  snippet?: string;
+  note?: string;
+}
+
+/** Git/GitHub linkage chip on an issue. */
+export interface IssueGitLink {
+  kind: 'commit' | 'branch' | 'pr' | 'github-issue';
+  ref: string;
+  url?: string;
+  title?: string;
+  addedAt: number;
+}
+
+/** One issue card in the Issues app (Linear-style tracker). */
+export interface IssueCard {
+  id: string;
+  type: IssueType;
+  title: string;
+  description: string;
+  status: IssueStatus;
+  priority: IssuePriority;
+  labels: string[];
+  workspacePath: string;
+  createdAt: number;
+  updatedAt: number;
+  codeRefs?: IssueCodeRef[];
+  gitLinks?: IssueGitLink[];
+  chatIds?: string[];
+  planPath?: string;
+  boardChatId?: string;
+  investigateRunId?: string;
+  planRunId?: string;
+  notes?: string;
+  /** Preserved bug id after bugs→issues migration. */
+  legacyBugId?: string;
+  /** Preserved bug severity after migration (shown as a label). */
+  severity?: BugSeverity;
+}
+
+/** Persisted Issues app state under ~/.minnow/issues/state.json. */
+export interface IssuesState {
+  version: 1;
+  nextId: number;
+  issues: IssueCard[];
 }
 
 /** Stable id for one execution from a fork point (branch). */
