@@ -26,6 +26,7 @@ import type {
 } from '../types.ts';
 import { getBoardGroupForChat, getPlannerChatForGroup, linkPlannerChatToBoardFolder } from './chat-groups.ts';
 import { emitBoardChange } from './orchestrate-board-events.ts';
+import { hasPipelineHold } from './orchestrate-pipeline-holds.ts';
 import { scheduleSaveSessions, sessionState, touchChat } from './sessions.ts';
 
 /** Injectable clock for deterministic tests. */
@@ -627,6 +628,9 @@ export function isTaskStalledForRestart(
   // builder/tester chat is intentionally idle, so this is not a stuck slot.
   const fixerId = task.fixerChatId?.trim();
   if (fixerId && isChatActive(fixerId)) return false;
+  // A live pipeline hold (integration merge, fixer handoff, phase re-run) owns the
+  // task; its chat is intentionally idle. Mirrors the fixer-active guard above.
+  if (hasPipelineHold(board, task.id)) return false;
   const chatId =
     task.status === 'testing'
       ? task.testChatId?.trim() || task.chatId?.trim()
