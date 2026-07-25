@@ -10,8 +10,7 @@ import {
 } from '../state/runs-store';
 import { findChatById, getActiveChat, scheduleSaveSessions, touchChat } from '../state/sessions';
 import type { Chat, TurnRunRecord } from '../types';
-import { renderChatFromHistory } from './messages';
-import { renderStatsForChat } from './messages';
+import { renderChatInForegroundShell, renderStatsForChat } from './messages';
 import { renderSidebar } from './sidebar';
 import { setStatus } from './status';
 
@@ -161,7 +160,7 @@ function switchBranch(chat: Chat, forkHistoryIndex: number, branchId: string): v
   }
   touchChat(chat);
   scheduleSaveSessions();
-  renderChatFromHistory(chat);
+  renderChatInForegroundShell(chat);
   renderStatsForChat(chat);
   renderSidebar();
   setStatus('ok', 'Branch switched');

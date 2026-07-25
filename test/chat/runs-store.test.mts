@@ -72,6 +72,45 @@ describe('runs-store', () => {
     assert.equal(chat.activeBranchByFork?.['0'], second.branchId);
   });
 
+  test('activateBranch persists continuation before switching away', () => {
+    const chat = makeChat();
+    const snap = baseSnapshot(0);
+    const runA = createRun(chat, snap);
+    finalizeRun(chat, runA.runId, {
+      status: 'completed',
+      outputHistoryStart: 1,
+      outputHistoryEnd: 1,
+      outputMessages: [{ role: 'assistant', content: 'reply A' }],
+    });
+
+    const runB = createRun(chat, { ...snap, modelId: 'model-b' });
+    finalizeRun(chat, runB.runId, {
+      status: 'completed',
+      outputHistoryStart: 1,
+      outputHistoryEnd: 1,
+      outputMessages: [{ role: 'assistant', content: 'reply B' }],
+    });
+
+    chat.history = [
+      { role: 'user', content: 'hello' },
+      { role: 'assistant', content: 'reply A' },
+      { role: 'user', content: 'follow up on A' },
+      { role: 'assistant', content: 'continuation A' },
+    ];
+    chat.activeBranchByFork = { '0': runA.branchId };
+
+    const switchedToB = activateBranch(chat, 0, runB.branchId);
+    assert.equal(switchedToB, true);
+    assert.equal((chat.history[1] as { content: string }).content, 'reply B');
+
+    const switchedBackToA = activateBranch(chat, 0, runA.branchId);
+    assert.equal(switchedBackToA, true);
+    assert.equal(chat.history.length, 4);
+    assert.equal((chat.history[2] as { content: string }).content, 'follow up on A');
+    assert.equal((chat.history[3] as { content: string }).content, 'continuation A');
+    assert.equal(runA.outputMessages?.length, 3);
+  });
+
   test('activateBranch swaps suffix from stored outputMessages', () => {
     const chat = makeChat();
     const snap = baseSnapshot(0);

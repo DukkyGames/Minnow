@@ -262,6 +262,35 @@ export function pruneSupersededRunsAfterTruncate(chat: Chat, cutIndex: number): 
 }
 
 /**
+ * Snapshot the materialized transcript tail for the active branch at a fork so
+ * later branch switches can restore messages sent after the initial reply.
+ */
+export function persistActiveBranchSuffix(
+  chat: Chat,
+  forkHistoryIndex: number,
+): boolean {
+  const active = getActiveRun(chat, forkHistoryIndex);
+  if (!active || !isBranchActivatable(chat, active)) {
+    return false;
+  }
+
+  const prefixEnd = forkHistoryIndex;
+  if (prefixEnd < 0 || prefixEnd >= chat.history.length) {
+    return false;
+  }
+
+  const suffix = chat.history.slice(prefixEnd + 1);
+  if (suffix.length === 0) {
+    return false;
+  }
+
+  active.outputMessages = suffix.map((m) => ({ ...m }));
+  active.outputHistoryStart = prefixEnd + 1;
+  active.outputHistoryEnd = chat.history.length - 1;
+  return true;
+}
+
+/**
  * Rebuild chat.history from shared prefix through fork + selected branch output.
  */
 export function activateBranch(
@@ -269,6 +298,14 @@ export function activateBranch(
   forkHistoryIndex: number,
   branchId: string,
 ): boolean {
+  const currentActive = getActiveRun(chat, forkHistoryIndex);
+  if (currentActive?.branchId === branchId) {
+    persistActiveBranchSuffix(chat, forkHistoryIndex);
+    return true;
+  }
+
+  persistActiveBranchSuffix(chat, forkHistoryIndex);
+
   const run = (chat.runs ?? []).find((r) => r.branchId === branchId);
   if (!run || !isBranchActivatable(chat, run)) {
     return false;

@@ -50,9 +50,11 @@ import {
 } from './chat-scroll';
 import {
   getActiveChatMountElement,
+  isChatAppForeground,
   isCodeChatMount,
   resolveChatMount,
   runWithChatMount,
+  shouldPaintDesktopChatSurface,
 } from './chat-mount';
 import { isBoardViewActive } from './view-mode-toggle';
 import { closeDrawer } from './settings';
@@ -390,6 +392,19 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
     });
   }
   });
+}
+
+/** Re-render the chat transcript in whichever shell is currently foreground. */
+export function renderChatInForegroundShell(chat: Chat): void {
+  if (shouldPaintDesktopChatSurface()) {
+    void import('../os/desktop-chat').then((m) => m.activateDesktopChatSession(chat.id));
+    return;
+  }
+  if (isChatAppForeground()) {
+    renderChatFromHistory(chat, '#chatAppMessageCol');
+    return;
+  }
+  renderChatFromHistory(chat);
 }
 
 /** Optional history index for message action menus. */
