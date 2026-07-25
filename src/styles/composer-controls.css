@@ -228,44 +228,56 @@
   margin-left: auto;
 }
 
-.loop-status__pause-play {
+/* Compact ghost controls — override global .icon-btn fill hover (accent bg + accent text). */
+.loop-status__actions .icon-btn {
+  width: 28px;
+  height: 28px;
   min-width: 28px;
   min-height: 28px;
   padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.loop-status__pause-play {
   font-size: 12px;
   line-height: 1;
   color: var(--mn-fg-muted);
-}
-
-.loop-status__pause-play:hover,
-.loop-status__pause-play:focus-visible {
-  color: var(--mn-accent);
 }
 
 .loop-status__skip {
-  min-width: 28px;
-  min-height: 28px;
-  padding: 0;
   font-size: 12px;
   line-height: 1;
   color: var(--mn-fg-muted);
 }
 
-.loop-status__skip:hover,
-.loop-status__skip:focus-visible {
-  color: var(--mn-accent);
-}
-
 .loop-status__stop {
-  min-width: 28px;
-  min-height: 28px;
-  padding: 0;
   font-size: 18px;
   line-height: 1;
   color: var(--mn-fg-muted);
 }
 
-.loop-status__stop:hover,
+@media (hover: hover) and (pointer: fine) {
+  .loop-status__actions .icon-btn:hover {
+    background: var(--mn-surface-elevated);
+    border-color: transparent;
+  }
+
+  .loop-status__pause-play:hover,
+  .loop-status__skip:hover {
+    color: var(--mn-accent);
+  }
+
+  .loop-status__stop:hover {
+    color: var(--mn-danger);
+  }
+}
+
+.loop-status__pause-play:focus-visible,
+.loop-status__skip:focus-visible {
+  color: var(--mn-accent);
+}
+
 .loop-status__stop:focus-visible {
   color: var(--mn-danger);
 }

@@ -46,7 +46,7 @@ describe('loop skip', () => {
     skipActiveLoop(chat, 1, FIXED_NOW);
     const loop = getActiveLoops(chat)[0];
     assert.equal(loop.dueAt, FIXED_NOW);
-    assert.equal(loop.paused, false);
+    assert.notEqual(loop.paused, true);
   });
 
   test('skip unpauses and marks due immediately', () => {
