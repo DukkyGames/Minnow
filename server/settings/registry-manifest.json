@@ -2433,6 +2433,32 @@
     ]
   },
   {
+    "key": "integrations.tools.permission.read_document",
+    "label": "Tool permission: read_document",
+    "description": "Permission mode for the read_document tool (off, ask, or full).",
+    "keywords": [
+      "read_document",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.read_document",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
     "key": "integrations.tools.permission.read_file_range",
     "label": "Tool permission: read_file_range",
     "description": "Permission mode for the read_file_range tool (off, ask, or full).",
