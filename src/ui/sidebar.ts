@@ -117,6 +117,12 @@ import {
   resolveGroupHeaderDotState,
   syncChatItemDotsInDom,
 } from './chat-item-dot';
+import {
+  applyChatItemLoopIcon,
+  createChatItemLoopIcon,
+  resolveChatItemLoopIconState,
+  syncChatItemLoopIconsInDom,
+} from './chat-item-loop-icon';
 import { acknowledgeChatViewed } from '../notifications/acknowledge';
 import { createModeMaskIcon, chatListModeIconSrc } from './mode-icons';
 import { hasComposerDraft } from '../state/session-workspace-scope';
@@ -503,6 +509,10 @@ export function appendChatRow(
   }
   titleRow.appendChild(nameSpan);
 
+  const loopIcon = createChatItemLoopIcon();
+  applyChatItemLoopIcon(loopIcon, resolveChatItemLoopIconState(chat), chat);
+  titleRow.appendChild(loopIcon);
+
   if (!inGroup) {
     const agentAbbrev = workAgentSidebarAbbrev(chat.workAgentId);
     if (agentAbbrev) {
@@ -811,6 +821,7 @@ export function renderSidebar(): void {
     .filter(excludeAssistantChats);
   appendChatListSection(list, 'Unassigned', unassigned, highlightChatId);
   syncChatItemDotsInDom();
+  syncChatItemLoopIconsInDom();
   void import('./global-bugs-page').then((m) => m.refreshGlobalBugsSidebarBadge());
 }
 

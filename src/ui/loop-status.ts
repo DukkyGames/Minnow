@@ -9,6 +9,8 @@ import {
   parseLoopIntervalToken,
 } from '../chat/loop/parse-command';
 import { pauseActiveLoop, resumeActiveLoop } from '../chat/loop/pause';
+import { skipActiveLoop } from '../chat/loop/skip';
+import { runLoopTick } from '../chat/loop/ticker';
 import { isStreamDomVisible } from '../chat/streaming-state';
 import type { ActiveLoopState, Chat } from '../types';
 import {
@@ -21,6 +23,7 @@ import {
 } from '../state/sessions';
 import { getActiveChatMountElement } from './chat-mount';
 import { scrollChatIfPinned } from './chat-scroll';
+import { syncChatItemLoopIconsInDom } from './chat-item-loop-icon';
 
 const LOOP_STATUS_CLASS = 'loop-status';
 const panelByChatId = new Map<string, HTMLElement>();
@@ -119,6 +122,21 @@ function buildPausePlayButton(chat: Chat, loop: ActiveLoopState): HTMLButtonElem
   return btn;
 }
 
+function buildSkipButton(chat: Chat, loop: ActiveLoopState): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'loop-status__skip icon-btn';
+  btn.textContent = '⏭';
+  btn.setAttribute('aria-label', `Skip wait for loop #${loop.id}`);
+  btn.title = 'Run next loop now';
+  btn.addEventListener('click', () => {
+    skipActiveLoop(chat, loop.id);
+    syncLoopStatusUi(chat.id);
+    void runLoopTick().catch(() => undefined);
+  });
+  return btn;
+}
+
 function buildStopButton(chat: Chat, loopId: number): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -205,6 +223,7 @@ function buildLoopItem(chat: Chat, loop: ActiveLoopState): HTMLElement {
   const actions = document.createElement('div');
   actions.className = 'loop-status__actions';
   actions.appendChild(buildPausePlayButton(chat, loop));
+  actions.appendChild(buildSkipButton(chat, loop));
   actions.appendChild(buildStopButton(chat, loop.id));
 
   controls.appendChild(intervalWrap);
@@ -334,4 +353,5 @@ export function syncLoopStatusUi(chatId?: string): void {
 export function syncLoopActiveHint(): void {
   if (typeof document === 'undefined') return;
   syncLoopStatusUi(getActiveChat().id);
+  syncChatItemLoopIconsInDom();
 }

@@ -242,6 +242,20 @@
   color: var(--mn-accent);
 }
 
+.loop-status__skip {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--mn-fg-muted);
+}
+
+.loop-status__skip:hover,
+.loop-status__skip:focus-visible {
+  color: var(--mn-accent);
+}
+
 .loop-status__stop {
   min-width: 28px;
   min-height: 28px;

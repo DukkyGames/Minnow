@@ -987,6 +987,62 @@
   }
 }
 
+/* /loop timer indicator (see src/ui/chat-item-loop-icon.ts) */
+.chat-item-loop-icon {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  background-color: var(--mn-accent);
+  opacity: 0.9;
+  mask-image: url('/icons/loop.svg');
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-image: url('/icons/loop.svg');
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+}
+
+.chat-item-loop-icon[hidden],
+.chat-item-loop-icon[data-loop-state='hidden'] {
+  display: none;
+}
+
+.chat-item-loop-icon[data-loop-state='running'] {
+  animation: chat-item-loop-spin 2.4s linear infinite;
+}
+
+.chat-item-loop-icon[data-loop-state='paused'] {
+  opacity: 0.5;
+}
+
+@keyframes chat-item-loop-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-item-loop-icon[data-loop-state='running'] {
+    animation: none;
+  }
+}
+
+.chat-sidebar.collapsed:not(.mobile-open) .chat-item-loop-icon {
+  position: absolute;
+  bottom: 1px;
+  right: 2px;
+  z-index: 2;
+  width: 10px;
+  height: 10px;
+}
+
 .chat-sidebar.collapsed .chat-item-model,
 .chat-sidebar.collapsed .chat-item-stats,
 .chat-sidebar.collapsed .chat-item-name {
