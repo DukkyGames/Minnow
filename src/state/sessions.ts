@@ -237,9 +237,43 @@ function ensureTurnRuns(raw: unknown): TurnRunRecord[] | undefined {
       ...(typeof row.errorMessage === 'string' && row.errorMessage.trim()
         ? { errorMessage: row.errorMessage.trim() }
         : {}),
+      // MIN-409: keep snapshot SHAs so undo/redo can restore files after reload.
+      ...persistTurnSnapshotFields(row),
     });
   }
   return out.length ? out : undefined;
+}
+
+/** Pick allowlisted snapshot fields from a raw TurnRunRecord for session load. */
+function persistTurnSnapshotFields(
+  row: Partial<TurnRunRecord>,
+): Partial<
+  Pick<
+    TurnRunRecord,
+    'preTurnSnapshotSha' | 'postTurnSnapshotSha' | 'headShaAtTurn' | 'snapshotCwd'
+  >
+> {
+  const pre = optionalGitSha(row.preTurnSnapshotSha);
+  const post = optionalGitSha(row.postTurnSnapshotSha);
+  const head = optionalGitSha(row.headShaAtTurn);
+  const snapCwd =
+    typeof row.snapshotCwd === 'string' && row.snapshotCwd.trim()
+      ? row.snapshotCwd.trim()
+      : undefined;
+  return {
+    ...(pre ? { preTurnSnapshotSha: pre } : {}),
+    ...(post ? { postTurnSnapshotSha: post } : {}),
+    ...(head ? { headShaAtTurn: head } : {}),
+    ...(snapCwd ? { snapshotCwd: snapCwd } : {}),
+  };
+}
+
+/** Accept short or full git object ids for TurnRunRecord snapshot fields. */
+function optionalGitSha(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const sha = value.trim();
+  if (!/^[0-9a-f]{7,40}$/i.test(sha)) return undefined;
+  return sha;
 }
 
 function ensureActiveBranchByFork(raw: unknown): Record<string, string> | undefined {

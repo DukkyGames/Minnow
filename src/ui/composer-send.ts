@@ -158,6 +158,7 @@ export function syncComposerFromStreamingState(): void {
   syncTodoPanel();
   refreshActiveBoardIfMounted();
   void import('./composer-run-target').then((m) => m.refreshComposerRunTargetDisabled());
+  void import('./composer-undo').then((m) => m.refreshComposerUndoDisabled());
 }
 
 function submitQueueFromComposer(): void {
