@@ -22,6 +22,7 @@ const REQUIRED_RUNTIME_PATHS = [
   'src/attachments/document-extensions.mjs',
   'src/skills/builtin-manifest.json',
   'src/chat/prompts/work-agents/registry.json',
+  'src/state/session-schema.mjs',
   'build/icon.ico',
 ];
 

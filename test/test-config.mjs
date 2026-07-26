@@ -75,8 +75,12 @@ export const DEFAULT_RUNNER_BY_EXT = {
  */
 export const PATH_RUNNER_RULES = [
   { pattern: 'test/headless/preflight.test.mts', runner: 'tsx' },
+  // persist-chat imports server config helpers + headless TS (no CSS).
+  { pattern: 'test/headless/persist-chat.test.mts', runner: 'tsx' },
   { pattern: 'test/sub-agents/scheduler-drain-reject.test.mts', runner: 'tsx-mocks' },
   { pattern: 'test/research/*.test.mts', runner: 'tsx-mocks-loader' },
+  // Parity imports src/state/sessions.ts (CSS/@xterm via UI); other config tests stay on tsx-mocks.
+  { pattern: 'test/config/session-shape-parity.test.js', runner: 'tsx-mocks-loader' },
   { pattern: 'test/config/*.test.js', runner: 'tsx-mocks' },
   // Both use mock.module and transitively pull in UI code that imports CSS.
   { pattern: 'test/chat/super-plan/stages.test.mts', runner: 'tsx-mocks-loader' },

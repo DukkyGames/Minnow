@@ -34,7 +34,6 @@ export const EMPTY_STATE_HTML =
 
 /** @deprecated Use config API / ~/.minnow — kept for migration and Vite-only fallback. */
 export const STORAGE_KEY = 'minnow-sessions-v1';
-export const MAX_CHATS = 50;
 export const SAVE_DEBOUNCE_MS = 300;
 export const PLACEHOLDER_CHAT_NAME = 'New chat';
 export const AUTO_TITLE_MAX_LEN = 40;

@@ -11,6 +11,9 @@ import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Chat, ChatGroup } from '../types';
 import { getChatLastMessageAt } from './session-workspace-scope';
 import {
+  markGroupDeleted,
+  markGroupDirty,
+  markSessionScalarsDirty,
   newChatId,
   removeChatById,
   scheduleSaveSessions,
@@ -18,6 +21,12 @@ import {
   touchChat,
   type RemoveChatResult,
 } from './sessions';
+
+/** Persist a group mutation (marks dirtyGroupIds for B.2 PATCH upsert). */
+function persistGroupChange(groupId: string): void {
+  markGroupDirty(groupId);
+  scheduleSaveSessions();
+}
 
 function newGroupId(): string {
   return `grp_${newChatId().slice(5)}`;
@@ -122,7 +131,7 @@ export function createGroup(name: string, workspacePath: string): ChatGroup {
     createdAt: Date.now(),
   };
   groups.push(group);
-  scheduleSaveSessions();
+  persistGroupChange(group.id);
   return group;
 }
 
@@ -132,7 +141,7 @@ export function renameGroup(id: string, name: string): void {
   if (!g) return;
   const trimmed = name.trim();
   if (trimmed) g.name = trimmed;
-  scheduleSaveSessions();
+  persistGroupChange(id);
 }
 
 export interface DeleteGroupResult {
@@ -212,6 +221,8 @@ export function deleteGroup(
         if (result.activeChanged) activeChanged = true;
       }
     }
+    // Group row is gone — PATCH must deleteGroupIds, not a dirty upsert of a missing id.
+    markGroupDeleted(id);
     scheduleSaveSessions();
     return { ok: true, activeChanged, chatRemoval: lastRemoval };
   }
@@ -219,15 +230,19 @@ export function deleteGroup(
   groups.splice(idx, 1);
   if (state.activeBoardGroupId === id) {
     delete state.activeBoardGroupId;
+    markSessionScalarsDirty();
   }
   for (const chat of state.chats) {
     if (chat.groupId === id) {
       delete chat.groupId;
+      touchChat(chat);
     }
     if (chat.boardGroupId === id) {
       delete chat.boardGroupId;
+      touchChat(chat);
     }
   }
+  markGroupDeleted(id);
   scheduleSaveSessions();
   return { ok: true, activeChanged: false };
 }
@@ -240,9 +255,12 @@ export function assignChatToGroup(chatId: string, groupId: string | null): void 
     const group = (state.groups ?? []).find((g) => g.id === groupId);
     if (!group) return;
     chat.groupId = groupId;
-  } else {
-    delete chat.groupId;
+    touchChat(chat);
+    persistGroupChange(groupId);
+    return;
   }
+  delete chat.groupId;
+  touchChat(chat);
   scheduleSaveSessions();
 }
 
@@ -251,7 +269,7 @@ export function toggleGroupCollapsed(id: string): void {
   const g = groups.find((x) => x.id === id);
   if (!g) return;
   g.collapsed = !g.collapsed;
-  scheduleSaveSessions();
+  persistGroupChange(id);
 }
 
 export function findGroupById(id: string): ChatGroup | undefined {
@@ -272,8 +290,10 @@ export function dismissActiveBoardView(): boolean {
   const openGroup = getActiveBoardGroup();
   if (openGroup) {
     openGroup.viewMode = 'chat';
+    markGroupDirty(openGroup.id);
   }
   delete state.activeBoardGroupId;
+  markSessionScalarsDirty();
   scheduleSaveSessions();
   return true;
 }
@@ -329,7 +349,7 @@ export function linkPlannerChatToBoardFolder(plannerChat: Chat, group: ChatGroup
     plannerChat.orchestratePlanPath ?? group.orchestratePlanPath,
   );
   touchChat(plannerChat);
-  scheduleSaveSessions();
+  persistGroupChange(group.id);
 }
 
 /** Create or return the board folder for an Orchestrate planner chat. */
@@ -361,8 +381,9 @@ export function getPlannerChatForGroup(group: ChatGroup): Chat | undefined {
 function activateBoardGroupView(groupId: string, group: ChatGroup): void {
   const state = requireSession();
   state.activeBoardGroupId = groupId;
+  markSessionScalarsDirty();
   group.viewMode = 'board';
-  scheduleSaveSessions();
+  persistGroupChange(groupId);
   void import('../ui/code-overview')
     .then(({ dismissCodeOverviewForNavigation }) => {
       dismissCodeOverviewForNavigation();
@@ -419,8 +440,9 @@ export function closeBoardGroupView(group: ChatGroup): void {
   group.viewMode = 'chat';
   if (state.activeBoardGroupId === group.id) {
     delete state.activeBoardGroupId;
+    markSessionScalarsDirty();
   }
-  scheduleSaveSessions();
+  persistGroupChange(group.id);
   const plannerId = group.plannerChatId?.trim();
   if (plannerId) {
     void import('../ui/sidebar').then(async (sidebar) => {

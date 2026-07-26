@@ -8,9 +8,11 @@ import {
   searchChats,
   type ChatSearchResult,
 } from '../chat/chat-search';
+import { searchSessions } from '../config/api-client';
+import { isServerStorageMode } from '../config/storage-mode';
 import { getChatsWorkspacePath, isChatsWorkspacePath } from '../lib/chats-workspace';
 import { getDesktopWorkspacePath, isDesktopWorkspacePath } from '../lib/desktop-workspace';
-import { sessionState } from '../state/sessions';
+import { findChatById, sessionState } from '../state/sessions';
 import { getWorkspacePath } from '../state/workspace';
 import type { Chat } from '../types';
 import { createSettingsToggleRow } from './settings-switch';
@@ -187,13 +189,36 @@ function syncSearchInputPlaceholder(): void {
   inputEl.setAttribute('aria-label', placeholder);
 }
 
-function renderResults(query: string): void {
+/** Map server FTS hits onto in-memory Chat rows (summary placeholders are enough to open). */
+function mapServerHitsToResults(
+  hits: Awaited<ReturnType<typeof searchSessions>>,
+): ChatSearchResult[] {
+  const scoped = new Set(chatsForCurrentScope().map((c) => c.id));
+  const out: ChatSearchResult[] = [];
+  for (const hit of hits) {
+    if (!scoped.has(hit.chatId)) continue;
+    const chat = findChatById(hit.chatId);
+    if (!chat) continue;
+    out.push({
+      chat,
+      score: hit.score,
+      matchedIn: hit.matchedIn,
+      role: hit.role,
+      snippet: hit.snippet ?? '',
+    });
+  }
+  return out;
+}
+
+let searchSeq = 0;
+
+function paintResults(query: string, next: ChatSearchResult[]): void {
   if (!resultsEl) return;
   resultsEl.replaceChildren();
   activeIndex = -1;
+  results = next;
 
   if (!query.trim()) {
-    results = [];
     const hint = document.createElement('div');
     hint.className = 'chat-search-empty';
     hint.textContent = emptyQueryHint();
@@ -201,7 +226,6 @@ function renderResults(query: string): void {
     return;
   }
 
-  results = searchChats(chatsForCurrentScope(), query);
   if (!results.length) {
     const empty = document.createElement('div');
     empty.className = 'chat-search-empty';
@@ -259,6 +283,47 @@ function renderResults(query: string): void {
     row.addEventListener('pointerenter', () => setActiveIndex(index));
     resultsEl?.appendChild(row);
   });
+}
+
+/** Run search — server FTS when file-backed; pure scorer for localStorage fallback. */
+function renderResults(query: string): void {
+  const trimmed = query.trim();
+  if (!trimmed) {
+    paintResults(query, []);
+    return;
+  }
+
+  // localStorage / Vite-only: full histories are in memory — keep the pure scorer.
+  if (!isServerStorageMode()) {
+    paintResults(query, searchChats(chatsForCurrentScope(), query));
+    return;
+  }
+
+  const seq = ++searchSeq;
+  const workspace = searchAllWorkspaces
+    ? undefined
+    : searchContext === 'desktop'
+      ? undefined
+      : getWorkspacePath();
+
+  void searchSessions(trimmed, {
+    workspace: searchAllWorkspaces || searchContext === 'desktop' ? undefined : workspace,
+    limit: 30,
+  })
+    .then((hits) => {
+      if (seq !== searchSeq || !resultsEl) return;
+      // Desktop scope filters client-side (server has no desktop-path notion).
+      let mapped = mapServerHitsToResults(hits);
+      if (searchContext === 'desktop' && !searchAllWorkspaces) {
+        mapped = mapped.filter((r) => isDesktopSurfaceChat(r.chat));
+      }
+      paintResults(query, mapped);
+    })
+    .catch(() => {
+      if (seq !== searchSeq || !resultsEl) return;
+      // Network blip — fall back to in-memory titles / loaded histories.
+      paintResults(query, searchChats(chatsForCurrentScope(), query));
+    });
 }
 
 function onInputKeydown(e: KeyboardEvent): void {

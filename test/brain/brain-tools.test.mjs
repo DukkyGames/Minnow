@@ -8,6 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
+import { closeSessionsDb } from '../../server/config/sessions-db.js';
 import { closeCodeDbForTests } from '../../server/brain/code/schema.js';
 import { initBrainApi } from '../../server/brain/routes.js';
 import { shutdownAllLsp } from '../../server/lsp/manager.js';
@@ -35,6 +36,8 @@ describe('brain wiki tools', () => {
   after(async () => {
     shutdownAllLsp();
     closeCodeDbForTests();
+    // initBrainApi opens sessions.db via readAllChatIds — close before rm (Windows EBUSY).
+    closeSessionsDb();
     delete process.env.MINNOW_HOME;
     resetMinnowHomeCache();
     await fs.rm(homeDir, { recursive: true, force: true });

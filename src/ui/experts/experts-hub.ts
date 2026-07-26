@@ -376,7 +376,7 @@ export async function startExpertChat(expertId: string): Promise<void> {
 
   try {
     const chat = createExpertChatFromSeed(seedResult);
-    activateChatById(chat.id);
+    await activateChatById(chat.id);
     recordChatMessage(chat);
     scheduleSaveSessions();
     hideExpertsSummon();
@@ -657,15 +657,17 @@ export function closeExpertsHub(options?: { skipNavigate?: boolean }): void {
     const prev = savedActiveChatId;
     savedActiveChatId = null;
     if (sessionState.chats.some((c) => c.id === prev)) {
-      activateChatById(prev);
-      void import('../sidebar').then((m) => m.renderSidebar());
-      const chat = sessionState.chats.find((c) => c.id === prev);
-      if (chat) {
-        void import('../messages').then((mod) => {
-          mod.renderChatFromHistory(chat);
-          mod.renderStatsForChat(chat);
-        });
-      }
+      // Hydrate before restore-paint so lazy-boot transcripts are not empty.
+      void activateChatById(prev).then(() => {
+        void import('../sidebar').then((m) => m.renderSidebar());
+        const chat = sessionState?.chats.find((c) => c.id === prev);
+        if (chat) {
+          void import('../messages').then((mod) => {
+            mod.renderChatFromHistory(chat);
+            mod.renderStatsForChat(chat);
+          });
+        }
+      });
     }
   } else if (preserveActiveExpertChat) {
     savedActiveChatId = null;

@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
+import { resetMinnowHomeCache } from '../../server/config/home.js';
+import { closeSessionsDb } from '../../server/config/sessions-db.js';
+import { readResource } from '../../server/config/store.js';
 import {
   createConfigTestServer,
   httpRequest,
@@ -19,8 +22,11 @@ describe('config migration', () => {
   let homeDir;
   let server;
   let baseUrl;
+  let savedStore;
 
   before(async () => {
+    savedStore = process.env.MINNOW_SESSIONS_STORE;
+    delete process.env.MINNOW_SESSIONS_STORE;
     homeDir = setTestHome(process.env, 'minnow-test-migrate');
     server = createConfigTestServer();
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -30,6 +36,9 @@ describe('config migration', () => {
 
   after(async () => {
     await new Promise((resolve) => server.close(resolve));
+    closeSessionsDb();
+    if (savedStore === undefined) delete process.env.MINNOW_SESSIONS_STORE;
+    else process.env.MINNOW_SESSIONS_STORE = savedStore;
     await rmTestHome(homeDir);
   });
 
@@ -51,7 +60,8 @@ describe('config migration', () => {
     const expectedTools = JSON.parse(await readFixture('expected-tools.json'));
     const expectedPrompt = JSON.parse(await readFixture('expected-system-prompt.json'));
 
-    assert.deepEqual(await readJsonFile(homeDir, 'sessions/state.json'), expectedSessions);
+    // Sessions live in SQLite — assert via the resource API, not state.json on disk.
+    assert.deepEqual(await readResource('sessions'), expectedSessions);
     assert.deepEqual(await readJsonFile(homeDir, 'tools.json'), expectedTools);
     assert.deepEqual(await readJsonFile(homeDir, 'system-prompt.json'), expectedPrompt);
 
@@ -69,7 +79,7 @@ describe('config migration', () => {
     assert.equal(res.status, 200);
     assert.equal(res.json.skipped, true);
 
-    const sessions = await readJsonFile(homeDir, 'sessions/state.json');
+    const sessions = await readResource('sessions');
     assert.equal(sessions.chats[0].name, 'Fixture chat');
   });
 
@@ -91,11 +101,14 @@ describe('config migration', () => {
       assert.ok(Array.isArray(res.json.warnings));
       assert.ok(res.json.warnings.some((w) => w.startsWith('tools:')));
 
-      const sessions = await readJsonFile(freshHome, 'sessions/state.json');
+      const sessions = await readResource('sessions');
       assert.equal(sessions.activeId, '11111111-1111-1111-1111-111111111111');
     } finally {
       await new Promise((resolve) => partialServer.close(resolve));
+      closeSessionsDb();
       await rmTestHome(freshHome);
+      process.env.MINNOW_HOME = homeDir;
+      resetMinnowHomeCache();
     }
   });
 });

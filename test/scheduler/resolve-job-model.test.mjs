@@ -8,21 +8,29 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
+import { closeSessionsDb } from '../../server/config/sessions-db.js';
 import { writeResource } from '../../server/config/store.js';
 import { resolveJobRunModel } from '../../server/scheduler/resolve-job-model.js';
 
 describe('resolveJobRunModel', () => {
   /** @type {string} */
   let homeDir;
+  /** @type {string | undefined} */
+  let savedStore;
 
   before(async () => {
     homeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-resolve-job-model-'));
     process.env.MINNOW_HOME = homeDir;
+    savedStore = process.env.MINNOW_SESSIONS_STORE;
+    delete process.env.MINNOW_SESSIONS_STORE;
     resetMinnowHomeCache();
   });
 
   after(async () => {
+    closeSessionsDb();
     delete process.env.MINNOW_HOME;
+    if (savedStore === undefined) delete process.env.MINNOW_SESSIONS_STORE;
+    else process.env.MINNOW_SESSIONS_STORE = savedStore;
     resetMinnowHomeCache();
     await fs.rm(homeDir, { recursive: true, force: true });
   });

@@ -18,9 +18,22 @@ export function hasComposerDraft(chat: Chat): boolean {
   return Boolean(chat.composerDraft?.trim());
 }
 
+/**
+ * Whether a chat belongs in session rails (desktop / Code / Chat app).
+ * Lazy-boot chats keep `history: []` until hydrate — use denormalized `messageCount`
+ * so rails are not empty after restart.
+ */
+export function chatHasListableContent(chat: Chat): boolean {
+  if (hasComposerDraft(chat)) return true;
+  if (Array.isArray(chat.history) && chat.history.length > 0) return true;
+  // C.2 summaries: unloaded rows still report server message count.
+  if (chat.historyLoaded === false && (chat.messageCount ?? 0) > 0) return true;
+  return false;
+}
+
 /** Empty chat with no committed history and no unsent draft (hidden from sidebar lists). */
 export function isEphemeralEmptyChat(chat: Chat): boolean {
-  return chat.history.length === 0 && !hasComposerDraft(chat);
+  return !chatHasListableContent(chat);
 }
 
 /**
@@ -28,7 +41,7 @@ export function isEphemeralEmptyChat(chat: Chat): boolean {
  * Ephemeral empty chats stay out until the user types or sends.
  */
 export function isSidebarListedChat(chat: Chat): boolean {
-  return isSidebarVisibleChat(chat) && (chat.history.length > 0 || hasComposerDraft(chat));
+  return isSidebarVisibleChat(chat) && chatHasListableContent(chat);
 }
 
 /** Sidebar label for draft-only chats (first line of unsent text, capped). */
@@ -304,9 +317,7 @@ export function getListedEmailAssistantChats(
   state: SessionState,
   chatsWorkspacePath: string,
 ): Chat[] {
-  return getEmailAssistantChats(state, chatsWorkspacePath).filter(
-    (chat) => chat.history.length > 0 || hasComposerDraft(chat),
-  );
+  return getEmailAssistantChats(state, chatsWorkspacePath).filter(chatHasListableContent);
 }
 
 /** Restore the remembered Email chat, else the newest scoped chat, else create one. */

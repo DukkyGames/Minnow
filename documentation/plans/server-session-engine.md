@@ -16,7 +16,7 @@ Minnow server). No per-user isolation; a shared bearer token guards the new endp
 |---|---|---|
 | Model generation | **Server** — durable, replayable, multi-subscriber | `server/generations/store.js` (`Set<ServerResponse>` subscribers, byte-buffer replay), `src/api/generations.ts` |
 | Tool side-effects | **Server** | `executeTool` → `POST /api/tools` (`src/tools/client.ts:719`) |
-| Session persistence | **Server** | `GET/PUT /api/config/sessions` → `writeResource` (`server/config/middleware.js:192`) |
+| Session persistence | **Server** | `GET/PUT/PATCH /api/config/sessions` → `sessions-repo.js` (SQLite seam; summaries/history/search routes). Optimistic `rev` / `If-Match` is **this** plan — not the JSON→SQLite migration. |
 | DOM-less chat loop | **Exists** | `src/headless/runner.ts` ("generations + server tools, no DOM") |
 | Hosting | Standalone Node (`server.js`, `npm start`); Vite in dev; Electron wraps it | `package.json` scripts |
 

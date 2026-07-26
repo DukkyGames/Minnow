@@ -3,9 +3,11 @@
  */
 
 import {
+  ensureChatHistoryLoaded,
   getActiveGoal,
   isGoalLoopActive,
   recordChatMessage,
+  requireHistory,
   scheduleSaveSessions,
   touchChat,
 } from '../../state/sessions';
@@ -141,16 +143,18 @@ export function buildGoalContinuationMessage(
 }
 
 /** Persist and optionally render the achieved marker row. */
-export function recordGoalAchieved(chat: Chat, reason: string): void {
+export async function recordGoalAchieved(chat: Chat, reason: string): Promise<void> {
   const content = `Goal achieved: ${reason}`;
-  chat.history.push({ role: 'user', content, goalAchieved: true });
+  await ensureChatHistoryLoaded(chat.id);
+  const history = requireHistory(chat);
+  history.push({ role: 'user', content, goalAchieved: true });
   recordChatMessage(chat);
   touchChat(chat);
   scheduleSaveSessions();
 
   if (!isStreamDomVisible(chat.id)) return;
 
-  const historyIndex = chat.history.length - 1;
+  const historyIndex = history.length - 1;
   const { wrap } = appendBubble('user', content, {
     historyIndex,
     turnKind: 'user',
@@ -188,7 +192,7 @@ export async function maybeContinueGoalAfterTurn(chat: Chat): Promise<void> {
 
   if (result.met) {
     goal.achieved = true;
-    recordGoalAchieved(chat, result.reason);
+    await recordGoalAchieved(chat, result.reason);
     touchChat(chat);
     scheduleSaveSessions();
     syncGoalActiveHint();

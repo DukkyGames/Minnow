@@ -3,7 +3,6 @@
  */
 
 import fs from 'node:fs/promises';
-import path from 'node:path';
 import { getMinnowHome } from '../config/home.js';
 import { getEmbedder, embedTexts, EMBEDDINGS_WARMUP_TIMEOUT_MS } from '../engine/embeddings.js';
 import { BrainPathError, getBrainDir, getBrainLogPath, getBrainSchemaPath } from './paths.js';
@@ -644,19 +643,33 @@ export async function handleBrainAndSynthesisRequest(req, res, pathname) {
 export async function initBrainApi() {
   await ensureBrainStore();
   try {
-    const sessionsPath = path.join(getMinnowHome(), 'sessions', 'state.json');
-    const raw = await fs.readFile(sessionsPath, 'utf8');
-    const state = JSON.parse(raw);
-    const ids = new Set(
-      (Array.isArray(state?.chats) ? state.chats : [])
-        .map((c) => String(c?.id ?? '').trim())
-        .filter(Boolean),
+    // Narrow SELECT id FROM chats — avoid raw state.json / whole-blob parse.
+    const { readAllChatIds, useJsonSessionsStore } = await import(
+      '../config/sessions-repo.js'
     );
+    /** @type {Set<string>} */
+    let ids;
+    if (!useJsonSessionsStore()) {
+      ids = new Set(
+        readAllChatIds()
+          .map((id) => String(id ?? '').trim())
+          .filter(Boolean),
+      );
+    } else {
+      // JSON rollback: whole-blob resource read.
+      const { readResource } = await import('../config/store.js');
+      const sessions = await readResource('sessions');
+      ids = new Set(
+        (Array.isArray(sessions?.chats) ? sessions.chats : [])
+          .map((c) => String(c?.id ?? '').trim())
+          .filter(Boolean),
+      );
+    }
     if (ids.size > 0) {
       void reconcileOrphanArchives(ids);
     }
   } catch {
-    /* no sessions file yet */
+    /* sessions unavailable yet */
   }
   const { warmRecentWorkspaceCodeIndexes } = await import('./code/workspace-cache.js');
   void warmRecentWorkspaceCodeIndexes();

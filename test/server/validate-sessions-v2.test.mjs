@@ -280,4 +280,105 @@ describe('validateSessionState workspace schema', () => {
       /Invalid session version/,
     );
   });
+
+  it('preserves previously dropped Chat fields and codeChangeTotalsByWorkspace', () => {
+    const out = validateSessionState({
+      version: 6,
+      activeId: 'chat-drop',
+      sidebarCollapsed: false,
+      codeChangeTotalsByWorkspace: {
+        'C:/demo': { additions: 9, deletions: 2 },
+      },
+      chats: [
+        {
+          id: 'chat-drop',
+          name: 'Drop test',
+          workspacePath: 'C:/demo',
+          modelId: 'm',
+          history: [],
+          updatedAt: 1,
+          subAgentRuns: [
+            {
+              runId: 'r1',
+              parentTurnId: 't1',
+              type: 'explore',
+              task: 'x',
+              status: 'completed',
+              summary: 'ok',
+              toolTurns: 0,
+              messages: [],
+            },
+          ],
+          todos: [{ text: 'one', status: 'pending' }],
+          todosUpdatedAt: 42,
+          tokenLedger: {
+            entries: [],
+            totals: {
+              promptTokens: 1,
+              completionTokens: 2,
+              totalTokens: 3,
+              costUsd: 0,
+              completionCount: 1,
+            },
+            bySource: {},
+          },
+          codeChangeTotals: { additions: 4, deletions: 1 },
+          codeChangeBackfillAt: 99,
+          lastContextTrim: { archived: 1, recalled: 0, recallTokens: 10 },
+          composerDraft: 'draft',
+          pinnedSkill: { id: 'caveman', intensity: 'full' },
+          thinkingMode: 'off',
+          reasoningEffort: 'high',
+          uiDesignerMode: 'implement',
+          pendingSteerMessage: 'steer',
+          pendingMessageQueue: [{ id: 'q1', text: 'next', createdAt: 7 }],
+          pendingModeId: 'plan',
+          turnError: true,
+        },
+      ],
+    });
+
+    const chat = out.chats[0];
+    assert.equal(chat.todos[0].text, 'one');
+    assert.equal(chat.todosUpdatedAt, 42);
+    assert.equal(chat.tokenLedger.totals.totalTokens, 3);
+    assert.deepEqual(chat.codeChangeTotals, { additions: 4, deletions: 1 });
+    assert.equal(chat.codeChangeBackfillAt, 99);
+    assert.deepEqual(chat.lastContextTrim, { archived: 1, recalled: 0, recallTokens: 10 });
+    assert.equal(chat.composerDraft, 'draft');
+    assert.deepEqual(chat.pinnedSkill, { id: 'caveman', intensity: 'full' });
+    assert.equal(chat.thinkingMode, 'off');
+    assert.equal(chat.reasoningEffort, 'high');
+    assert.equal(chat.uiDesignerMode, 'implement');
+    assert.equal(chat.pendingSteerMessage, 'steer');
+    assert.equal(chat.pendingMessageQueue[0].text, 'next');
+    assert.equal(chat.pendingModeId, 'plan');
+    assert.equal(chat.turnError, true);
+    assert.equal(chat.subAgentRuns[0].runId, 'r1');
+    assert.deepEqual(out.codeChangeTotalsByWorkspace['C:/demo'], {
+      additions: 9,
+      deletions: 2,
+    });
+  });
+
+  it('does not trim chats above the former MAX_CHATS limit', () => {
+    const chats = [];
+    for (let i = 0; i < 55; i += 1) {
+      chats.push({
+        id: `chat-${i}`,
+        name: `Chat ${i}`,
+        modelId: '',
+        history: [],
+        updatedAt: i + 1,
+        lastMessageAt: i + 1,
+      });
+    }
+    const out = validateSessionState({
+      version: 6,
+      activeId: 'chat-54',
+      sidebarCollapsed: false,
+      chats,
+    });
+    assert.equal(out.chats.length, 55);
+  });
 });
