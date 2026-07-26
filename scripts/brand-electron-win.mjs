@@ -60,12 +60,16 @@ function brandWindowsExecutable(exePath, iconPath, metadata) {
     const [major, minor, patch, build] = parseVersionTuple(metadata.version);
     versionInfo.setFileVersion(major, minor, patch, build, 1033);
     versionInfo.setProductVersion(major, minor, patch, build, 1033);
+    // FileVersion uses the Windows 4-part tuple; ProductVersion must stay semver (e.g. 1.0.2)
+    // so Electron's app.getVersion() and electron-updater accept it.
     versionInfo.setStringValues(
       { lang: 1033, codepage: 1200 },
       {
         CompanyName: metadata.company,
         FileDescription: metadata.productName,
         ProductName: metadata.productName,
+        ProductVersion: metadata.version,
+        FileVersion: `${major}.${minor}.${patch}.${build}`,
         LegalCopyright: metadata.copyright,
       },
     );

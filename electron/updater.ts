@@ -9,7 +9,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { app, BrowserWindow, ipcMain } from 'electron';
-import electronUpdater from 'electron-updater';
+import {
+  AppImageUpdater,
+  MacUpdater,
+  NsisUpdater,
+  type AppUpdater,
+} from 'electron-updater';
+import { ElectronAppAdapter } from 'electron-updater/out/ElectronAppAdapter.js';
 import * as channels from './ipc-channels.js';
 import {
   createInitialUpdaterStatus,
@@ -23,7 +29,29 @@ import {
   type UpdaterUnsupportedReason,
 } from './updater-core.js';
 
-const { autoUpdater } = electronUpdater;
+/**
+ * Windows dev branding may stamp electron.exe with a 4-part product version (e.g. 1.0.2.0).
+ * electron-updater requires semver, so coerce before AppUpdater validates app.version.
+ */
+function normalizeExeProductVersion(raw: string): string {
+  const match = /^(\d+)\.(\d+)\.(\d+)\.0$/.exec(raw);
+  return match ? `${match[1]}.${match[2]}.${match[3]}` : raw;
+}
+
+class SemverCoercedAppAdapter extends ElectronAppAdapter {
+  override get version(): string {
+    return normalizeExeProductVersion(super.version);
+  }
+}
+
+function createAutoUpdater(): AppUpdater {
+  const appAdapter = new SemverCoercedAppAdapter();
+  if (process.platform === 'win32') return new NsisUpdater(undefined, appAdapter);
+  if (process.platform === 'darwin') return new MacUpdater(undefined, appAdapter);
+  return new AppImageUpdater(undefined, appAdapter);
+}
+
+const autoUpdater = createAutoUpdater();
 
 const CHANNEL_FILE = 'updater.json';
 const FIRST_CHECK_DELAY_MS = 15_000;
