@@ -274,6 +274,30 @@ function verifyDirtyChatTracking(state: SessionState): boolean {
   return missed;
 }
 
+/**
+ * Serialize one chat for PATCH/PUT when history may still be lazy-unloaded (C.2).
+ * Omits `history` so the server preserves existing message rows instead of syncing [].
+ */
+export function chatForSessionsWire(chat: Chat): Chat {
+  if (chat.historyLoaded === false) {
+    const { history: _history, historyLoaded: _loaded, ...rest } = chat;
+    void _history;
+    void _loaded;
+    return rest as Chat;
+  }
+  const { historyLoaded: _loaded, ...rest } = chat;
+  void _loaded;
+  return rest as Chat;
+}
+
+/** Clone session state for wire I/O, stripping unloaded chat histories. */
+export function sessionStateForSessionsWire(state: SessionState): SessionState {
+  return {
+    ...state,
+    chats: state.chats.map(chatForSessionsWire),
+  };
+}
+
 /** Build a PATCH delta from the current dirty sets (full dirty chats/groups). */
 export function buildSessionsPatchDelta(state: SessionState): SessionsPatchDelta {
   const delta: SessionsPatchDelta = {
@@ -287,7 +311,7 @@ export function buildSessionsPatchDelta(state: SessionState): SessionsPatchDelta
       // Skip ids that were also deleted in the same window.
       if (deletedChatIds.has(id)) continue;
       const chat = byId.get(id);
-      if (chat) chats.push(chat);
+      if (chat) chats.push(chatForSessionsWire(chat));
     }
     if (chats.length) delta.chats = chats;
   }
@@ -1554,7 +1578,8 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
     if (options?.keepalive) {
       // Shutdown: small PATCH delta → sendBeacon (POST alias); else keepalive whole-blob PUT.
       const delta = usePatch && hasSessionDirtyWork() ? buildSessionsPatchDelta(sessionState) : null;
-      const { clearedOk } = flushSessionsOnShutdown(delta, sessionState);
+      const wireState = sessionStateForSessionsWire(sessionState);
+      const { clearedOk } = flushSessionsOnShutdown(delta, wireState);
       if (clearedOk) {
         clearSessionDirtySets();
         // Keepalive PUT also re-establishes a trusted baseline when we were not patching.
@@ -1587,7 +1612,7 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
     }
 
     // Full-PUT fallback (first save after load, verifier miss, or flag off).
-    inFlightSessionSave = putSessions(sessionState)
+    inFlightSessionSave = putSessions(sessionStateForSessionsWire(sessionState))
       .then(() => {
         clearSessionDirtySets();
         sessionPatchDirtySetsReady = true;

@@ -391,7 +391,11 @@ export async function writeResource(resource, body) {
       return validated;
     }
     await ensureMinnowLayout();
-    writeWholeSessionState(validated);
+    const rawChats =
+      body && typeof body === 'object' && Array.isArray(/** @type {Record<string, unknown>} */ (body).chats)
+        ? /** @type {Record<string, unknown>} */ (body).chats
+        : undefined;
+    writeWholeSessionState(validated, { rawChats });
     return validated;
   }
   if (resource === 'tools') {

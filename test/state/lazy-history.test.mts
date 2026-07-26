@@ -9,6 +9,8 @@ import { setStorageModeForTests } from '../../src/config/storage-mode.ts';
 import { defaultSessionState } from '../../src/config/defaults.ts';
 import {
   attachUnloadedHistoryTrapForTests,
+  buildSessionsPatchDelta,
+  chatForSessionsWire,
   ensureChatHistoryLoaded,
   isSessionsLazyHistoryEnabled,
   requireHistory,
@@ -17,6 +19,7 @@ import {
   setSessionStateForTests,
   setSessionsLazyHistoryEnabledForTests,
   sessionState,
+  touchChat,
 } from '../../src/state/sessions.ts';
 import type { Chat, Message, SessionState } from '../../src/types.ts';
 
@@ -157,6 +160,43 @@ describe('lazy history (C.2)', () => {
     } finally {
       console.error = originalError;
     }
+  });
+
+  test('chatForSessionsWire omits history when lazy-unloaded', () => {
+    const chat = makeChat(CHAT_A, {
+      history: [],
+      historyLoaded: false,
+      name: 'Unloaded',
+    });
+    const wire = chatForSessionsWire(chat) as Chat & { history?: Message[] };
+    assert.equal('history' in wire, false);
+    assert.equal('historyLoaded' in wire, false);
+    assert.equal(wire.name, 'Unloaded');
+
+    const loaded = makeChat(CHAT_B, {
+      history: [{ role: 'user', content: 'hi' }],
+      historyLoaded: true,
+    });
+    const wireLoaded = chatForSessionsWire(loaded);
+    assert.equal(wireLoaded.history.length, 1);
+  });
+
+  test('buildSessionsPatchDelta omits history for unloaded dirty chats', () => {
+    const unloaded = makeChat(CHAT_A, { historyLoaded: false, name: 'A' });
+    const loaded = makeChat(CHAT_B, {
+      history: [{ role: 'user', content: 'b' }],
+      historyLoaded: true,
+    });
+    setSessionStateForTests(makeState([unloaded, loaded]));
+    touchChat(unloaded);
+    touchChat(loaded);
+
+    const delta = buildSessionsPatchDelta(makeState([unloaded, loaded]));
+    assert.equal(delta.chats?.length, 2);
+    const wireA = delta.chats?.find((c) => c.id === CHAT_A) as Chat & { history?: Message[] };
+    const wireB = delta.chats?.find((c) => c.id === CHAT_B);
+    assert.equal('history' in (wireA ?? {}), false);
+    assert.equal(wireB?.history.length, 1);
   });
 
   test('resetSessionPersistenceForTests restores flag default ON', () => {

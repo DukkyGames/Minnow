@@ -251,6 +251,33 @@ describe('PATCH /api/config/sessions', () => {
     assert.deepEqual(after.chats, before.chats);
   });
 
+  test('metadata-only PATCH without history preserves existing messages', async () => {
+    const betaId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+    const metaOnly = {
+      id: betaId,
+      name: 'Beta renamed',
+      workspacePath: '',
+      modelId: '',
+      modeId: 'build',
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: 1_700_000_000_200,
+      lastMessageAt: 1_700_000_000_200,
+    };
+
+    const patch = await httpRequest(baseUrl, 'PATCH', '/api/config/sessions', {
+      baseVersion: 6,
+      chats: [metaOnly],
+    });
+    assert.equal(patch.status, 200);
+
+    const after = (await httpRequest(baseUrl, 'GET', '/api/config/sessions')).json;
+    const beta = after.chats.find((c) => c.id === betaId);
+    assert.equal(beta.name, 'Beta renamed');
+    assert.equal(beta.history.length, 1);
+    assert.equal(beta.history[0].content, 'beta-msg');
+  });
+
   test('POST is a sendBeacon alias for PATCH', async () => {
     const patched = makeChat('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Alpha via POST', {
       history: [{ role: 'user', content: 'alpha-msg' }],

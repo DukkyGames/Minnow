@@ -354,6 +354,85 @@ export function readWholeSessionState() {
 registerSessionsJsonMirrorSource(() => readWholeSessionState());
 
 /**
+ * Whether the wire chat object included an explicit `history` key.
+ * Lazy-load metadata-only saves omit it so existing messages are preserved.
+ * @param {unknown} raw
+ */
+function wireChatIncludesHistory(raw) {
+  return (
+    raw &&
+    typeof raw === 'object' &&
+    Object.prototype.hasOwnProperty.call(raw, 'history')
+  );
+}
+
+/**
+ * @param {unknown[]} rawChats
+ * @returns {Map<string, Record<string, unknown>>}
+ */
+function indexRawWireChats(rawChats) {
+  /** @type {Map<string, Record<string, unknown>>} */
+  const map = new Map();
+  if (!Array.isArray(rawChats)) return map;
+  for (const raw of rawChats) {
+    if (!raw || typeof raw !== 'object') continue;
+    const id = /** @type {Record<string, unknown>} */ (raw).id;
+    if (typeof id === 'string' && id) {
+      map.set(id, /** @type {Record<string, unknown>} */ (raw));
+    }
+  }
+  return map;
+}
+
+/**
+ * Read stored message summary columns when the wire payload omitted history.
+ * @param {import('better-sqlite3').Database} db
+ * @param {string} chatId
+ */
+function readChatMessageDerived(db, chatId) {
+  const row = db
+    .prepare(
+      'SELECT message_count, last_message_preview, history_digest FROM chats WHERE id = ?',
+    )
+    .get(chatId);
+  if (!row) {
+    return { messageCount: 0, lastMessagePreview: '', historyDigest: '' };
+  }
+  return {
+    messageCount: row.message_count ?? 0,
+    lastMessagePreview: row.last_message_preview ?? '',
+    historyDigest: row.history_digest ?? '',
+  };
+}
+
+/**
+ * Upsert chat metadata and optionally sync message rows.
+ * @param {import('better-sqlite3').Database} db
+ * @param {Record<string, any>} chat
+ * @param {number} sortIndex
+ * @param {boolean} syncHistory
+ */
+function upsertChatWithOptionalHistory(db, chat, sortIndex, syncHistory) {
+  const chatId = String(chat.id);
+  if (syncHistory) {
+    const history = Array.isArray(chat.history) ? chat.history : [];
+    upsertChatRow(db, chat, sortIndex, {
+      messageCount: history.length,
+      lastMessagePreview: '',
+      historyDigest: '',
+    });
+    const derived = syncMessages(db, chatId, history);
+    upsertChatRow(db, chat, sortIndex, derived);
+  } else {
+    const derived = readChatMessageDerived(db, chatId);
+    upsertChatRow(db, chat, sortIndex, derived);
+  }
+  syncChatRuns(db, chatId, Array.isArray(chat.runs) ? chat.runs : []);
+  syncSubAgentRuns(db, chatId, Array.isArray(chat.subAgentRuns) ? chat.subAgentRuns : []);
+  syncChatLoops(db, chatId, Array.isArray(chat.activeLoops) ? chat.activeLoops : []);
+}
+
+/**
  * Tail-diff sync for a chat's message rows.
  * (1) length + history_digest match → skip
  * (2) else find first differing seq k; DELETE seq>=k; insert tail
@@ -560,11 +639,13 @@ function writeScalars(db, state) {
  * Does NOT apply chat.terminalHistory from the client blob (server-owned).
  *
  * @param {Record<string, any>} state  Already validated SessionState
+ * @param {{ rawChats?: unknown[] }} [options]  Unvalidated wire chats (history-key detection)
  */
-export function writeWholeSessionState(state) {
+export function writeWholeSessionState(state, options = {}) {
   const db = getSessionsDb();
   const chats = Array.isArray(state.chats) ? state.chats : [];
   const groups = Array.isArray(state.groups) ? state.groups : [];
+  const rawById = indexRawWireChats(options.rawChats);
 
   const tx = db.transaction(() => {
     writeScalars(db, state);
@@ -590,21 +671,10 @@ export function writeWholeSessionState(state) {
       if (!chat?.id) return;
       const chatId = String(chat.id);
       chatIds.push(chatId);
-      const history = Array.isArray(chat.history) ? chat.history : [];
+      const hasHistoryKey =
+        rawById.size === 0 || wireChatIncludesHistory(rawById.get(chatId) ?? {});
 
-      // Parent row first (FK), with a provisional digest; syncMessages refreshes it.
-      upsertChatRow(db, chat, sortIndex, {
-        messageCount: history.length,
-        lastMessagePreview: '',
-        historyDigest: '',
-      });
-
-      const derived = syncMessages(db, chatId, history);
-      upsertChatRow(db, chat, sortIndex, derived);
-
-      syncChatRuns(db, chatId, Array.isArray(chat.runs) ? chat.runs : []);
-      syncSubAgentRuns(db, chatId, Array.isArray(chat.subAgentRuns) ? chat.subAgentRuns : []);
-      syncChatLoops(db, chatId, Array.isArray(chat.activeLoops) ? chat.activeLoops : []);
+      upsertChatWithOptionalHistory(db, chat, sortIndex, hasHistoryKey);
       // Intentionally skip chat.terminalHistory — preserve existing terminal rows.
     });
 
@@ -1215,25 +1285,8 @@ export function patchSessionState(delta) {
           sortIndex = (maxRow?.m ?? -1) + 1;
         }
 
-        const history = Array.isArray(chat.history) ? chat.history : [];
-        upsertChatRow(db, chat, sortIndex, {
-          messageCount: history.length,
-          lastMessagePreview: '',
-          historyDigest: '',
-        });
-        const derived = syncMessages(db, chatId, history);
-        upsertChatRow(db, chat, sortIndex, derived);
-        syncChatRuns(db, chatId, Array.isArray(chat.runs) ? chat.runs : []);
-        syncSubAgentRuns(
-          db,
-          chatId,
-          Array.isArray(chat.subAgentRuns) ? chat.subAgentRuns : [],
-        );
-        syncChatLoops(
-          db,
-          chatId,
-          Array.isArray(chat.activeLoops) ? chat.activeLoops : [],
-        );
+        const hasHistoryKey = wireChatIncludesHistory(raw);
+        upsertChatWithOptionalHistory(db, chat, sortIndex, hasHistoryKey);
         // Intentionally skip chat.terminalHistory — preserve existing terminal rows.
         applied.chats += 1;
       }
