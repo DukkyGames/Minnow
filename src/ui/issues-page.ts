@@ -75,8 +75,8 @@ let issuesUnsub: (() => void) | null = null;
 let pendingIssueId: string | undefined;
 /** Multiselect: checked issue ids for bulk actions. */
 const selectedIssueIds = new Set<string>();
-/** Last list row index used for Shift-range selection. */
-let lastListSelectionIndex = -1;
+/** Anchor issue id for Shift-range selection. */
+let lastSelectionAnchorId: string | undefined;
 
 const ISSUE_DRAG_MIME = 'application/x-minnow-issue-id';
 
@@ -125,7 +125,7 @@ function typeChipLetter(type: IssueType): string {
 /** Build a type badge for list rows. */
 function createTypeChip(type: IssueType): HTMLElement {
   const chip = document.createElement('span');
-  chip.className = `issues-type-chip issues-type-chip--${type}`;
+  chip.className = `issues-type-chip issues-type-chip--${type} issues-row__type`;
   chip.textContent = typeChipLetter(type);
   chip.title = type;
   return chip;
@@ -183,13 +183,78 @@ function setIssueChecked(issueId: string, checked: boolean): void {
 
 function clearIssueSelection(): void {
   selectedIssueIds.clear();
-  lastListSelectionIndex = -1;
+  lastSelectionAnchorId = undefined;
+}
+
+type IssueSelectionInput = {
+  shiftKey: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  /** When set (checkbox), use this checked state instead of toggling. */
+  checked?: boolean;
+};
+
+/** Apply multiselect from checkbox or modifier-click on a row/card. */
+function handleIssueSelection(
+  issue: IssueCard,
+  orderedIssues: IssueCard[],
+  index: number,
+  input: IssueSelectionInput,
+): void {
+  const modifier = input.ctrlKey || input.metaKey;
+  const explicitChecked = input.checked;
+
+  if (
+    input.shiftKey &&
+    lastSelectionAnchorId &&
+    lastSelectionAnchorId !== issue.id
+  ) {
+    const anchorIndex = orderedIssues.findIndex((row) => row.id === lastSelectionAnchorId);
+    if (anchorIndex >= 0) {
+      const checked = explicitChecked ?? true;
+      const start = Math.min(anchorIndex, index);
+      const end = Math.max(anchorIndex, index);
+      for (let i = start; i <= end; i += 1) {
+        setIssueChecked(orderedIssues[i].id, checked);
+      }
+      return;
+    }
+  }
+
+  if (modifier || explicitChecked !== undefined || input.shiftKey) {
+    if (explicitChecked !== undefined) {
+      setIssueChecked(issue.id, explicitChecked);
+    } else if (modifier) {
+      setIssueChecked(issue.id, !selectedIssueIds.has(issue.id));
+    } else {
+      setIssueChecked(issue.id, true);
+    }
+    lastSelectionAnchorId = issue.id;
+  }
+}
+
+function isIssueMultiSelectClick(event: MouseEvent): boolean {
+  return event.shiftKey || event.ctrlKey || event.metaKey;
+}
+
+/** Board visual order: left-to-right columns, top-to-bottom within each column. */
+function buildBoardOrderedIssues(
+  issues: IssueCard[],
+  columns: Array<{ id: IssueStatus; label: string }>,
+): IssueCard[] {
+  const ordered: IssueCard[] = [];
+  for (const col of columns) {
+    for (const issue of issues.filter((row) => row.status === col.id)) {
+      ordered.push(issue);
+    }
+  }
+  return ordered;
 }
 
 /** Create a row/card checkbox that does not open the detail panel. */
 function createIssueSelectCheckbox(
   issue: IssueCard,
-  options?: { listIndex?: number; issues?: IssueCard[] },
+  options: { orderedIssues: IssueCard[]; index: number },
 ): HTMLInputElement {
   const checkbox = document.createElement('input');
   checkbox.type = 'checkbox';
@@ -199,28 +264,36 @@ function createIssueSelectCheckbox(
   checkbox.addEventListener('click', (event) => event.stopPropagation());
   checkbox.addEventListener('change', (event) => {
     event.stopPropagation();
-    const listIndex = options?.listIndex;
-    const issues = options?.issues;
-    const shiftKey = (event as MouseEvent).shiftKey;
-    if (
-      shiftKey &&
-      listIndex != null &&
-      issues &&
-      lastListSelectionIndex >= 0 &&
-      lastListSelectionIndex !== listIndex
-    ) {
-      const start = Math.min(lastListSelectionIndex, listIndex);
-      const end = Math.max(lastListSelectionIndex, listIndex);
-      for (let i = start; i <= end; i += 1) {
-        setIssueChecked(issues[i].id, checkbox.checked);
-      }
-    } else {
-      setIssueChecked(issue.id, checkbox.checked);
-      if (listIndex != null) lastListSelectionIndex = listIndex;
-    }
+    const mouse = event as MouseEvent;
+    handleIssueSelection(issue, options.orderedIssues, options.index, {
+      shiftKey: mouse.shiftKey,
+      ctrlKey: mouse.ctrlKey,
+      metaKey: mouse.metaKey,
+      checked: checkbox.checked,
+    });
     renderIssuesPanel();
   });
   return checkbox;
+}
+
+function onIssueItemClick(
+  event: MouseEvent,
+  issue: IssueCard,
+  orderedIssues: IssueCard[],
+  index: number,
+): void {
+  if ((event.target as HTMLElement).closest('.issues-select-cell, button')) return;
+  if (!isIssueMultiSelectClick(event)) {
+    navigateToIssueDetail(issue.id);
+    return;
+  }
+  event.preventDefault();
+  handleIssueSelection(issue, orderedIssues, index, {
+    shiftKey: event.shiftKey,
+    ctrlKey: event.ctrlKey,
+    metaKey: event.metaKey,
+  });
+  renderIssuesPanel();
 }
 
 async function confirmAndDeleteIssues(issueIds: string[]): Promise<void> {
@@ -263,7 +336,7 @@ function renderList(mount: HTMLElement, issues: IssueCard[]): void {
     const selectCell = document.createElement('label');
     selectCell.className = 'issues-select-cell';
     selectCell.appendChild(
-      createIssueSelectCheckbox(issue, { listIndex: index, issues }),
+      createIssueSelectCheckbox(issue, { orderedIssues: issues, index }),
     );
 
     const id = document.createElement('span');
@@ -319,8 +392,7 @@ function renderList(mount: HTMLElement, issues: IssueCard[]): void {
 
     row.append(selectCell, id, type, title, status, priority, labels, updated, actions);
     row.addEventListener('click', (event) => {
-      if ((event.target as HTMLElement).closest('.issues-select-cell')) return;
-      navigateToIssueDetail(issue.id);
+      onIssueItemClick(event, issue, issues, index);
     });
     row.classList.toggle('is-selected', getSelectedIssueId() === issue.id);
     row.tabIndex = 0;
@@ -380,6 +452,7 @@ function renderBoard(mount: HTMLElement, issues: IssueCard[]): void {
   const columns = filters.hideDone
     ? PRIMARY_BOARD_STATUSES.filter((c) => c.id !== 'done' && c.id !== 'canceled')
     : PRIMARY_BOARD_STATUSES;
+  const boardOrderedIssues = buildBoardOrderedIssues(issues, columns);
 
   for (const col of columns) {
     const columnEl = document.createElement('section');
@@ -396,6 +469,7 @@ function renderBoard(mount: HTMLElement, issues: IssueCard[]): void {
     list.className = 'issues-column__list';
 
     for (const issue of issues.filter((i) => i.status === col.id)) {
+      const boardIndex = boardOrderedIssues.findIndex((row) => row.id === issue.id);
       const card = document.createElement('article');
       card.className = 'issues-card';
       card.dataset.issueId = issue.id;
@@ -406,7 +480,12 @@ function renderBoard(mount: HTMLElement, issues: IssueCard[]): void {
 
       const selectCell = document.createElement('label');
       selectCell.className = 'issues-select-cell issues-card__select';
-      selectCell.appendChild(createIssueSelectCheckbox(issue));
+      selectCell.appendChild(
+        createIssueSelectCheckbox(issue, {
+          orderedIssues: boardOrderedIssues,
+          index: boardIndex,
+        }),
+      );
 
       const id = document.createElement('div');
       id.className = 'issues-card__id';
@@ -438,8 +517,7 @@ function renderBoard(mount: HTMLElement, issues: IssueCard[]): void {
       }
       card.classList.toggle('is-selected', getSelectedIssueId() === issue.id);
       card.addEventListener('click', (event) => {
-        if ((event.target as HTMLElement).closest('button, .issues-select-cell')) return;
-        navigateToIssueDetail(issue.id);
+        onIssueItemClick(event, issue, boardOrderedIssues, boardIndex);
       });
       bindCardDrag(card, issue.id);
       list.appendChild(card);

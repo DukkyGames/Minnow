@@ -303,10 +303,20 @@
   overflow: hidden;
 }
 
-.issues-main {
+/* Shared scrollport so list header and rows stay column-aligned (incl. scrollbar). */
+.issues-list-pane {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.issues-main {
+  flex: 1 0 auto;
+  min-height: 0;
+  overflow: visible;
   padding: 0;
 }
 
@@ -325,10 +335,10 @@
   display: none;
 }
 
-/* Shared list grid columns */
+/* Shared list grid columns (fixed actions width keeps header/rows aligned). */
 .issues-list-head,
 .issues-row {
-  --issues-list-cols: 2rem 4.25rem 2.25rem minmax(0, 1fr) 5.5rem 4.5rem 5.5rem 4.5rem auto;
+  --issues-list-cols: 2rem 4.25rem 2.25rem minmax(0, 1fr) 5.5rem 4.5rem 5.5rem 4.5rem 5.75rem;
   display: grid;
   grid-template-columns: var(--issues-list-cols);
   gap: 8px 10px;
@@ -385,6 +395,9 @@
 /* ---------- list header ---------- */
 
 .issues-list-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   min-height: 32px;
   padding-top: 8px;
   padding-bottom: 6px;
@@ -711,7 +724,7 @@
 .issues-page.has-detail .issues-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto 1fr;
 }
 
 .issues-page.has-detail .issues-selection-bar {
@@ -719,14 +732,15 @@
   grid-row: 1;
 }
 
-.issues-page.has-detail .issues-list-head {
+.issues-page.has-detail .issues-list-pane {
   grid-column: 1;
   grid-row: 2;
+  min-height: 0;
 }
 
-.issues-page.has-detail .issues-main {
-  grid-column: 1;
-  grid-row: 3;
+.issues-page.has-detail .issues-list-head {
+  grid-column: auto;
+  grid-row: auto;
 }
 
 .issues-detail-host {
@@ -744,7 +758,7 @@
 
 .issues-page.has-detail .issues-detail-host {
   grid-column: 2;
-  grid-row: 1 / span 3;
+  grid-row: 1 / span 2;
 }
 
 .issues-detail {
@@ -1087,8 +1101,7 @@
     grid-template-columns: 1fr;
   }
 
-  .issues-page.has-detail .issues-list-head,
-  .issues-page.has-detail .issues-main {
+  .issues-page.has-detail .issues-list-pane {
     display: none;
   }
 
@@ -1100,7 +1113,7 @@
 
   .issues-list-head,
   .issues-row {
-    --issues-list-cols: 2rem 3.5rem 1fr 4.5rem auto;
+    --issues-list-cols: 2rem 3.5rem 1fr 4.5rem 5.75rem;
   }
 
   .issues-list-head__type,

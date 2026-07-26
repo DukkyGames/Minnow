@@ -2,6 +2,7 @@
  * Renderer global error handlers — surface crashes visibly and forward to main log.
  */
 
+import { isFileErrorsToIssuesEnabled } from '../diagnostics/prefs.ts';
 import { pushNotification } from '../notifications/push';
 import {
   addIssue,
@@ -114,7 +115,7 @@ function report(kind: string, message: string, stack?: string): void {
 
   setStatus('err', truncateStatus(message));
 
-  if (!isIssuesStoreLoaded()) return;
+  if (!isIssuesStoreLoaded() || !isFileErrorsToIssuesEnabled()) return;
 
   if (decision.rollSuppressionCard) {
     const count = surfaceState.suppressedCount;

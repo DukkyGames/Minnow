@@ -74,6 +74,7 @@ const BROWSER_PATCH_MAP = {
   themeFamily: 'theme.family',
   themeMode: 'theme.mode',
   wallpaper: 'theme.wallpaper',
+  fileErrorsToIssues: 'diagnostics.fileErrorsToIssues',
 };
 
 /**

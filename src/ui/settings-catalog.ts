@@ -412,6 +412,17 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   field('advanced.diagnostics.actions', 'Diagnostic actions', 'advanced', 'diagnostics', {
     keywords: ['copy report', 'refresh', 'clear logs'],
   }),
+  field(
+    'advanced.diagnostics.fileErrorsToIssues',
+    'File renderer errors to Issues',
+    'advanced',
+    'diagnostics',
+    {
+      keywords: ['issues', 'bug', 'crash', 'auto-file', 'tracker', 'renderer'],
+      description:
+        'When enabled, uncaught renderer errors create bug cards in the Issues app (off by default).',
+    },
+  ),
 
   // —— About (General) ——
   field('about.info', 'Build info', 'general', 'about', {

@@ -211,6 +211,11 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
     refreshAreas: ['tools'],
   }),
   'integrations.browser': meta('browser.enabled', 'boolean', { refreshAreas: ['browser'] }),
+
+  // —— Advanced ——
+  'advanced.diagnostics.fileErrorsToIssues': browser('fileErrorsToIssues', 'boolean', {
+    refreshAreas: ['diagnostics'],
+  }),
 };
 
 /** Default overlay for keys without explicit mapping. */
