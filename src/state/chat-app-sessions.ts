@@ -12,9 +12,9 @@ import {
 
 export { CHAT_APP_ID, createAssistantChat };
 
-/** True when the chat is scoped to the chats workspace sandbox. */
-export function isAssistantChat(chat: Chat, chatsWorkspacePath: string): boolean {
-  return isAssistantChatForPath(chat, chatsWorkspacePath);
+/** True when the chat belongs to the Chat app. */
+export function isAssistantChat(chat: Chat, _chatsWorkspacePath?: string): boolean {
+  return isAssistantChatForPath(chat);
 }
 
 /** True when the chat workspace path matches the cached or provided chats sandbox path. */

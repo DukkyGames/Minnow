@@ -242,12 +242,20 @@ export function resolveChatWorktreeRoot(
 
 /**
  * Tool workspace root for a chat: isolated worktree when present, otherwise the
- * chat's bound sandbox (~/.minnow/workspace or ~/.minnow/chats) or board project
- * workspace. Plain Code chats without a worktree return undefined so callers fall
- * back to the live top-bar workspace.
+ * chat's own bound folder. Plain Code chats without a worktree return undefined so
+ * callers fall back to the live top-bar workspace.
+ *
+ * App-scoped chats (Chat, Desktop, Email) always return their bound folder. They
+ * used to be gated on {@link isMinnowSandboxWorkspacePath}, which only matched the
+ * literal `~/.minnow/chats` and `~/.minnow/workspace` defaults — so as soon as the
+ * desktop workspace was pointed at a real project, every desktop chat lost its
+ * binding and its tools silently fell through to the Code workspace.
  */
 export function resolveChatToolWorkspaceRoot(
-  chat: Pick<Chat, 'worktreeRoot' | 'boardTaskId' | 'boardGroupId' | 'workspacePath'>,
+  chat: Pick<
+    Chat,
+    'worktreeRoot' | 'boardTaskId' | 'boardGroupId' | 'workspacePath' | 'appScope'
+  >,
   groups: ChatGroup[] | undefined,
 ): string | undefined {
   const worktree = resolveChatWorktreeRoot(chat, groups);
@@ -257,7 +265,9 @@ export function resolveChatToolWorkspaceRoot(
   if (!ws) return undefined;
   const normalized = normalizeWorkspacePath(ws);
 
+  if (chat.appScope) return normalized;
   if (chat.boardGroupId?.trim()) return normalized;
+  // Legacy rows written before `appScope` existed still bind by sandbox path.
   if (isMinnowSandboxWorkspacePath(normalized)) return normalized;
   return undefined;
 }

@@ -699,6 +699,29 @@ function ensureViewMode(raw) {
   return raw === 'chat' || raw === 'board' ? raw : undefined;
 }
 
+const CHAT_APP_SCOPES = new Set(['chat', 'desktop', 'email']);
+
+/**
+ * Owning app for a persisted chat row.
+ *
+ * App membership used to be inferred by comparing `workspacePath` against the
+ * live Chat/Desktop workspace, so a Code chat whose workspace happened to match
+ * a sandbox path was listed as an app chat (and vice versa). Scope is explicit
+ * now; rows written before that only get inferred from an unambiguous signal —
+ * `desktop` mode is desktop-only, while `general` is shared with Code chats and
+ * so stays unscoped rather than guessing.
+ *
+ * @param {Record<string, unknown>} row
+ * @returns {'chat' | 'desktop' | 'email' | undefined}
+ */
+function ensureChatAppScope(row) {
+  if (typeof row.appScope === 'string' && CHAT_APP_SCOPES.has(row.appScope)) {
+    return /** @type {'chat' | 'desktop' | 'email'} */ (row.appScope);
+  }
+  if (row.appScope == null && row.modeId === 'desktop') return 'desktop';
+  return undefined;
+}
+
 const GENERATION_ID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -899,6 +922,7 @@ export function normalizeChatRow(raw) {
         : undefined;
   const superPlan = ensureSuperPlanPersisted(row.superPlan);
   const expertRuntime = ensureExpertRuntime(row.expertRuntime);
+  const appScope = ensureChatAppScope(row);
 
   const out = {
     id: typeof row.id === 'string' && row.id ? row.id : newChatId(),
@@ -906,7 +930,7 @@ export function normalizeChatRow(raw) {
       typeof row.name === 'string' && row.name.trim()
         ? row.name.trim()
         : PLACEHOLDER_CHAT_NAME,
-    ...(row.appScope === 'email' ? { appScope: 'email' } : {}),
+    ...(appScope ? { appScope } : {}),
     workspacePath,
     modelId: typeof row.modelId === 'string' ? row.modelId : '',
     ...(typeof row.providerId === 'string' && row.providerId.trim()

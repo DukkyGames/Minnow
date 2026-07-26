@@ -210,6 +210,13 @@ export async function activateDesktopChatSession(chatId: string): Promise<void> 
   }
   sessionState.activeId = chatId;
   markSessionScalarsDirty();
+  // Threads span folders: move the desktop workspace (and with it the file
+  // explorer) to this thread's folder before painting.
+  const { alignDesktopWorkspaceToChat } = await import('../ui/desktop-workspace-folder');
+  if (await alignDesktopWorkspaceToChat(chat)) {
+    desktopWorkspacePath = await getDesktopWorkspacePath();
+  }
+  if (!sessionState || sessionState.activeId !== chatId) return;
   // Lazy history: wait before paint so restart+switch does not show empty state.
   await ensureChatHistoryLoaded(chatId);
   if (!sessionState || sessionState.activeId !== chatId) return;
@@ -274,6 +281,15 @@ export async function bootstrapDesktopChat(options?: DesktopChatActivateOptions)
         await ensureActiveDesktopAssistantChat();
       } catch {
         /* server offline — still show shell */
+      }
+    }
+    // The restored thread may have been created in another folder — move the
+    // desktop workspace to match before the first paint.
+    const restored = state.chats.find((c) => c.id === state.activeId);
+    if (restored) {
+      const { alignDesktopWorkspaceToChat } = await import('../ui/desktop-workspace-folder');
+      if (await alignDesktopWorkspaceToChat(restored)) {
+        desktopWorkspacePath = await getDesktopWorkspacePath();
       }
     }
     // Lazy history: hydrate the active desktop thread before the first paint.

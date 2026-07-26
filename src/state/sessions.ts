@@ -31,6 +31,7 @@ import {
   createEmailAssistantChat,
   getAssistantChats as filterAssistantChats,
   getChatsForChatsWorkspace as filterChatsForChatsWorkspace,
+  getSidebarListedDesktopChats as filterListedDesktopChats,
   getEmailAssistantChats as filterEmailAssistantChats,
   getListedEmailAssistantChats as filterListedEmailAssistantChats,
   getChatLastMessageAt,
@@ -45,6 +46,7 @@ import {
   migrateSessionStateV1ToV2 as migrateSessionJsonToV2,
   rememberActiveChatForApp as rememberActiveChatForAppInState,
   resolveActiveAssistantChatId,
+  resolveActiveDesktopChatId,
   resolveActiveEmailAssistantChatId,
   resolveActiveChatIdForWorkspace as pickActiveChatIdForWorkspace,
   type RawSessionJson,
@@ -1178,36 +1180,47 @@ export function getUnassignedChats(state: SessionState = requireSessionState()):
   return filterUnassignedChats(state);
 }
 
-/** Assistant chats for the chats workspace sandbox (sidebar-visible, newest first). */
+/**
+ * Chat app threads (newest first).
+ *
+ * `chatsWorkspacePath` is accepted for call-site compatibility but no longer
+ * selects the rows — membership comes from `chat.appScope`, so a Code chat that
+ * happens to sit in the chats sandbox is never listed here.
+ */
 export function getAssistantChats(
-  chatsWorkspacePath: string,
+  chatsWorkspacePath = '',
   state: SessionState = requireSessionState(),
 ): Chat[] {
   return filterAssistantChats(state, chatsWorkspacePath);
 }
 
-/** All chats bound to the chats workspace (newest first). */
+/** All Chat app threads including ephemeral empty ones (newest first). */
 export function getChatsForChatsWorkspace(
-  chatsWorkspacePath: string,
+  chatsWorkspacePath = '',
   state: SessionState = requireSessionState(),
 ): Chat[] {
   return filterChatsForChatsWorkspace(state, chatsWorkspacePath);
 }
 
-/** All Email-scoped chats for the chats workspace sandbox. */
+/** Desktop threads with a committed turn or unsent draft (newest first). */
+export function getDesktopChats(state: SessionState = requireSessionState()): Chat[] {
+  return filterListedDesktopChats(state);
+}
+
+/** All Email-scoped chats. */
 export function getEmailAssistantChats(
-  chatsWorkspacePath: string,
+  _chatsWorkspacePath?: string,
   state: SessionState = requireSessionState(),
 ): Chat[] {
-  return filterEmailAssistantChats(state, chatsWorkspacePath);
+  return filterEmailAssistantChats(state);
 }
 
 /** Email history rows with a committed turn or unsent draft. */
 export function getListedEmailAssistantChats(
-  chatsWorkspacePath: string,
+  _chatsWorkspacePath?: string,
   state: SessionState = requireSessionState(),
 ): Chat[] {
-  return filterListedEmailAssistantChats(state, chatsWorkspacePath);
+  return filterListedEmailAssistantChats(state);
 }
 
 /** Persist last active chat id for a MinnowOS app. */
@@ -1284,32 +1297,11 @@ export function createEmailAssistantChatForApp(
  */
 export function activateDesktopAssistantChatForApp(desktopWorkspacePath: string): Chat {
   const state = requireSessionState();
-  const key = normalizeWorkspacePath(desktopWorkspacePath);
-  const nextId = resolveActiveAssistantChatId(
-    desktopWorkspacePath,
-    state,
-    (workspaceKey) => {
-      const fresh = createDesktopChat(workspaceKey, newChatId());
-      touchChat(fresh);
-      return fresh;
-    },
-    DESKTOP_APP_ID,
-  );
-  // Migrate legacy `lastActiveChatIdByApp.chat` entries that pointed at desktop threads.
-  if (
-    key &&
-    !getLastActiveChatIdForApp(state, DESKTOP_APP_ID) &&
-    getLastActiveChatIdForApp(state, CHAT_APP_ID)
-  ) {
-    const legacy = state.chats.find(
-      (c) =>
-        c.id === getLastActiveChatIdForApp(state, CHAT_APP_ID) &&
-        normalizeWorkspacePath(c.workspacePath ?? '') === key,
-    );
-    if (legacy) {
-      rememberActiveChatForAppInState(state, DESKTOP_APP_ID, legacy.id);
-    }
-  }
+  const nextId = resolveActiveDesktopChatId(desktopWorkspacePath, state, (workspaceKey) => {
+    const fresh = createDesktopChat(workspaceKey, newChatId());
+    touchChat(fresh);
+    return fresh;
+  });
   state.activeId = nextId;
   markSessionScalarsDirty();
   rememberActiveChatForAppInState(state, DESKTOP_APP_ID, nextId);

@@ -7,7 +7,7 @@ import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { DESKTOP_APP_ID, createDesktopChat } from '../state/session-workspace-scope';
 import {
   getActiveChat,
-  getAssistantChats,
+  getDesktopChats,
   isEphemeralEmptyChat,
   markSessionScalarsDirty,
   newChatId,
@@ -179,6 +179,7 @@ export async function createNewDesktopChat(): Promise<void> {
     const active = getActiveChat();
     if (
       isEphemeralEmptyChat(active) &&
+      active.appScope === 'desktop' &&
       normalizeWorkspacePath(active.workspacePath ?? '') === normalizeWorkspacePath(path)
     ) {
       resetComposerForEphemeralReuse();
@@ -222,12 +223,13 @@ export async function createNewDesktopChat(): Promise<void> {
   input?.focus();
 }
 
-/** Chats shown in the desktop session rail (sandbox assistants + expert threads). */
-function getDesktopRailChats(
-  desktopWorkspacePath: string,
-  state: NonNullable<typeof sessionState>,
-): Chat[] {
-  const assistant = getAssistantChats(desktopWorkspacePath, state);
+/**
+ * Chats shown in the desktop session rail (desktop threads + expert threads).
+ * Not filtered by folder — each thread carries its own, and activating one moves
+ * the desktop workspace to match.
+ */
+function getDesktopRailChats(state: NonNullable<typeof sessionState>): Chat[] {
+  const assistant = getDesktopChats(state);
   const experts = state.chats.filter(
     (c) => c.kind === 'expert' && isSidebarListedChat(c),
   );
@@ -242,19 +244,20 @@ function getDesktopRailChats(
   return merged;
 }
 
-/** Paint session rows for the desktop workspace sandbox. */
-export function renderDesktopChatRail(desktopWorkspacePath?: string | null): void {
+/**
+ * Paint desktop session rows.
+ *
+ * The workspace path argument is kept for call-site compatibility but no longer
+ * filters the list; rows come from `appScope === 'desktop'`.
+ */
+export function renderDesktopChatRail(_desktopWorkspacePath?: string | null): void {
   const list = getRailList();
   if (!list || !sessionState) return;
-
-  const path = desktopWorkspacePath ?? null;
-  // Don't clear an existing rail when path is still resolving (boot race).
-  if (!path) return;
 
   mountExpertScopeInRail(false);
   list.replaceChildren();
 
-  const chats = getDesktopRailChats(path, sessionState);
+  const chats = getDesktopRailChats(sessionState);
   const activeId = sessionState.activeId;
   for (const chat of chats) {
     appendChatRow(list, chat, activeId, {

@@ -9,12 +9,15 @@ import { isChatsWorkspacePath } from '../../src/lib/chats-workspace.ts';
 import { normalizeWorkspacePath } from '../../src/lib/normalize-workspace-path.ts';
 import {
   CHAT_APP_ID,
+  DESKTOP_APP_ID,
   EMAIL_APP_ID,
   createAssistantChat,
   createDesktopChat,
   createEmailAssistantChat,
   getAssistantChats,
   getChatsForChatsWorkspace,
+  getDesktopChats,
+  resolveActiveDesktopChatId,
   getEmailAssistantChats,
   getListedEmailAssistantChats,
   getLastActiveChatIdForApp,
@@ -57,6 +60,20 @@ function chatRow(
   };
 }
 
+/** A Chat app thread — membership comes from `appScope`, not the folder. */
+function assistantRow(
+  id: string,
+  workspacePath: string,
+  updatedAt: number,
+  overrides: Partial<Chat> = {},
+): Chat {
+  return chatRow(id, workspacePath, updatedAt, {
+    appScope: 'chat',
+    modeId: 'general',
+    ...overrides,
+  });
+}
+
 function seedState(partial: Partial<SessionState>): SessionState {
   return {
     version: 5,
@@ -70,12 +87,12 @@ function seedState(partial: Partial<SessionState>): SessionState {
 }
 
 describe('assistant vs code chat filters', () => {
-  test('getChatsForChatsWorkspace returns only chats workspace chats', () => {
+  test('getChatsForChatsWorkspace returns only Chat app threads', () => {
     const state = seedState({
       chats: [
-        chatRow(ASSISTANT_A, CHATS_WS, 300),
+        assistantRow(ASSISTANT_A, CHATS_WS, 300),
         chatRow(CODE_CHAT, CODE_WS, 200),
-        chatRow(ASSISTANT_B, CHATS_WS, 100),
+        assistantRow(ASSISTANT_B, CHATS_WS, 100),
       ],
     });
 
@@ -83,16 +100,30 @@ describe('assistant vs code chat filters', () => {
     assert.equal(assistant.length, 2);
     assert.equal(assistant[0].id, ASSISTANT_A);
     assert.equal(assistant[1].id, ASSISTANT_B);
+  });
 
-    const codeOnly = getChatsForChatsWorkspace(state, CODE_WS);
-    assert.equal(codeOnly.length, 1);
-    assert.equal(codeOnly[0].id, CODE_CHAT);
+  test('a Code chat sitting in the chats sandbox is not a Chat app thread', () => {
+    // Regression: membership was inferred by comparing workspacePath to the live
+    // chats/desktop workspace, so a Code chat whose folder happened to match was
+    // listed in the app rail (and the app's own threads went missing when the
+    // workspace moved).
+    const state = seedState({
+      chats: [
+        chatRow(CODE_CHAT, CHATS_WS, 300),
+        assistantRow(ASSISTANT_A, CODE_WS, 200),
+      ],
+    });
+
+    assert.deepEqual(
+      getChatsForChatsWorkspace(state, CHATS_WS).map((c) => c.id),
+      [ASSISTANT_A],
+    );
   });
 
   test('Chat app lists exclude Email-scoped conversations in the same sandbox', () => {
     const state = seedState({
       chats: [
-        chatRow(ASSISTANT_A, CHATS_WS, 300),
+        assistantRow(ASSISTANT_A, CHATS_WS, 300),
         chatRow(EMAIL_CHAT, CHATS_WS, 250, {
           appScope: 'email',
           modeId: 'email',
@@ -113,7 +144,7 @@ describe('assistant vs code chat filters', () => {
   test('getAssistantChats includes expert threads in the chats workspace', () => {
     const state = seedState({
       chats: [
-        chatRow(ASSISTANT_A, CHATS_WS, 300),
+        assistantRow(ASSISTANT_A, CHATS_WS, 300),
         chatRow(ASSISTANT_B, CHATS_WS, 200, { kind: 'expert' }),
       ],
     });
@@ -124,11 +155,71 @@ describe('assistant vs code chat filters', () => {
     assert.equal(visible[1].id, ASSISTANT_B);
   });
 
-  test('isAssistantChat and isChatsWorkspacePath agree on chats sandbox paths', () => {
-    const assistant = chatRow(ASSISTANT_A, CHATS_WS, 100);
-    assert.equal(isAssistantChat(assistant, CHATS_WS), true);
+  test('isAssistantChat reads app scope, not the folder', () => {
+    const assistant = assistantRow(ASSISTANT_A, CHATS_WS, 100);
+    assert.equal(isAssistantChat(assistant), true);
     assert.equal(isChatsWorkspacePath(assistant.workspacePath ?? '', CHATS_WS), true);
-    assert.equal(isAssistantChat(chatRow(CODE_CHAT, CODE_WS, 100), CHATS_WS), false);
+    // Same folder, no app scope -> a Code chat.
+    assert.equal(isAssistantChat(chatRow(CODE_CHAT, CHATS_WS, 100)), false);
+    // Chat app thread pointed at a project folder is still a Chat app thread.
+    assert.equal(isAssistantChat(assistantRow(ASSISTANT_B, CODE_WS, 100)), true);
+  });
+});
+
+describe('desktop chat scoping', () => {
+  const DESKTOP_WS = 'C:/Users/me/.minnow/workspace';
+  const PROJECT_WS = 'C:/Users/me/Projects/Business Simulator';
+
+  function desktopRow(id: string, workspacePath: string, updatedAt: number): Chat {
+    return chatRow(id, workspacePath, updatedAt, {
+      appScope: 'desktop',
+      modeId: 'desktop',
+    });
+  }
+
+  test('desktop threads are one list across folders', () => {
+    const state = seedState({
+      chats: [
+        desktopRow(ASSISTANT_A, DESKTOP_WS, 300),
+        desktopRow(ASSISTANT_B, PROJECT_WS, 200),
+        chatRow(CODE_CHAT, DESKTOP_WS, 100),
+      ],
+    });
+
+    // The Code chat sharing the desktop folder stays out; the desktop thread in a
+    // project folder stays in.
+    assert.deepEqual(
+      getDesktopChats(state).map((c) => c.id),
+      [ASSISTANT_A, ASSISTANT_B],
+    );
+  });
+
+  test('resolveActiveDesktopChatId restores a thread from another folder', () => {
+    const state = seedState({
+      chats: [
+        desktopRow(ASSISTANT_A, DESKTOP_WS, 300),
+        desktopRow(ASSISTANT_B, PROJECT_WS, 200),
+      ],
+      lastActiveChatIdByApp: { [DESKTOP_APP_ID]: ASSISTANT_B },
+    });
+
+    // Folder-independent: the caller re-points the desktop workspace to match.
+    assert.equal(
+      resolveActiveDesktopChatId(DESKTOP_WS, state, (path) =>
+        createDesktopChat(path, 'unused'),
+      ),
+      ASSISTANT_B,
+    );
+  });
+
+  test('resolveActiveDesktopChatId ignores Code chats in the desktop folder', () => {
+    const state = seedState({ chats: [chatRow(CODE_CHAT, DESKTOP_WS, 300)] });
+
+    const id = resolveActiveDesktopChatId(DESKTOP_WS, state, (path) =>
+      createDesktopChat(path, 'fresh-desktop'),
+    );
+    assert.equal(id, 'fresh-desktop');
+    assert.equal(state.chats.find((c) => c.id === id)?.appScope, 'desktop');
   });
 });
 
@@ -140,7 +231,7 @@ describe('lastActiveChatIdByApp', () => {
         activeId: ASSISTANT_A,
         sidebarCollapsed: false,
         lastActiveChatIdByApp: { [CHAT_APP_ID]: ASSISTANT_A },
-        chats: [chatRow(ASSISTANT_A, CHATS_WS, 100)],
+        chats: [assistantRow(ASSISTANT_A, CHATS_WS, 100)],
       },
       coerceChatWorkspaceFields,
       () => coerceChatWorkspaceFields(null),
@@ -151,7 +242,7 @@ describe('lastActiveChatIdByApp', () => {
   });
 
   test('rememberActiveChatForApp stores chat id per app', () => {
-    const state = seedState({ chats: [chatRow(ASSISTANT_A, CHATS_WS, 100)] });
+    const state = seedState({ chats: [assistantRow(ASSISTANT_A, CHATS_WS, 100)] });
     rememberActiveChatForApp(state, CHAT_APP_ID, ASSISTANT_A);
     assert.equal(state.lastActiveChatIdByApp?.[CHAT_APP_ID], ASSISTANT_A);
     rememberActiveChatForApp(state, CHAT_APP_ID, ASSISTANT_B);
@@ -161,8 +252,8 @@ describe('lastActiveChatIdByApp', () => {
   test('resolveActiveAssistantChatId restores remembered chat then newest assistant chat', () => {
     const state = seedState({
       chats: [
-        chatRow(ASSISTANT_A, CHATS_WS, 300),
-        chatRow(ASSISTANT_B, CHATS_WS, 200),
+        assistantRow(ASSISTANT_A, CHATS_WS, 300),
+        assistantRow(ASSISTANT_B, CHATS_WS, 200),
         chatRow(CODE_CHAT, CODE_WS, 100),
       ],
       lastActiveChatIdByApp: { [CHAT_APP_ID]: ASSISTANT_B },

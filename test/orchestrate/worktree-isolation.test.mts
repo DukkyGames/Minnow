@@ -340,6 +340,27 @@ describe('resolveChatToolWorkspaceRoot', () => {
       '/home/user/.minnow/chats',
     );
   });
+
+  test('app-scoped chats keep their folder even outside ~/.minnow', () => {
+    // Regression: the binding was gated on the literal ~/.minnow/{chats,workspace}
+    // defaults. Because the desktop workspace is user-selectable, pointing it at a
+    // real project dropped the binding and the chat's tools silently ran against
+    // the Code workspace instead.
+    const projectWs = 'C:/Users/me/Projects/Business Simulator';
+    assert.equal(
+      resolveChatToolWorkspaceRoot(
+        { workspacePath: projectWs, appScope: 'desktop' },
+        [],
+      ),
+      normalizeWorkspacePath(projectWs),
+    );
+    assert.equal(
+      resolveChatToolWorkspaceRoot({ workspacePath: projectWs, appScope: 'chat' }, []),
+      normalizeWorkspacePath(projectWs),
+    );
+    // Code chats still defer to the live top-bar workspace.
+    assert.equal(resolveChatToolWorkspaceRoot({ workspacePath: projectWs }, []), undefined);
+  });
 });
 
 describe('dev port allocation', () => {

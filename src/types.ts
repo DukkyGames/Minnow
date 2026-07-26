@@ -913,7 +913,12 @@ export interface TurnRunRecord {
 export type ChatKind = 'expert' | 'expert-lab';
 
 /** MinnowOS app-owned chat scopes that stay out of unrelated session rails. */
-export type ChatAppScope = 'email';
+/**
+ * Which MinnowOS app owns a conversation. Unset = a Code chat, which follows the
+ * live top-bar workspace. App-scoped chats own their `workspacePath` outright, so
+ * membership never depends on string-matching a mutable global workspace path.
+ */
+export type ChatAppScope = 'chat' | 'desktop' | 'email';
 
 /** Follow-up message queued while the agent turn is in progress (MIN-200). */
 export interface QueuedComposerMessage {

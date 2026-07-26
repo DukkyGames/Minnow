@@ -158,6 +158,7 @@ async function createNewAssistantChat(): Promise<void> {
     const active = getActiveChat();
     if (
       isEphemeralEmptyChat(active) &&
+      active.appScope === 'chat' &&
       normalizeWorkspacePath(active.workspacePath ?? '') === normalizeWorkspacePath(path)
     ) {
       resetComposerForEphemeralReuse();

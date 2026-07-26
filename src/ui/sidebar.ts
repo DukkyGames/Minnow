@@ -797,8 +797,10 @@ export function renderSidebar(): void {
   list.innerHTML = '';
 
   const ws = getWorkspacePath();
-  const excludeAssistantChats = (chat: { workspacePath?: string }) =>
-    !isChatsWorkspacePath(chat.workspacePath ?? '');
+  // App-scoped threads live in their own rails; `getSidebarListedChatsForWorkspace`
+  // already drops them, so this only guards legacy rows with no scope recorded.
+  const excludeAssistantChats = (chat: { workspacePath?: string; appScope?: string }) =>
+    chat.appScope == null && !isChatsWorkspacePath(chat.workspacePath ?? '');
   const workspaceChats = getSidebarListedChatsForWorkspace(ws, sessionState)
     .filter((c) => !isHiddenFromMainSidebar(c))
     .filter(excludeAssistantChats);

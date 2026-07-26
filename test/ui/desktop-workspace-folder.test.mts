@@ -94,6 +94,7 @@ describe('desktop-workspace-folder', () => {
           name: 'Sandbox chat',
           workspacePath: DESKTOP_WS,
           modeId: 'desktop',
+          appScope: 'desktop' as const,
           history: [{ role: 'user', content: 'sandbox' }],
         },
         {
@@ -102,6 +103,7 @@ describe('desktop-workspace-folder', () => {
           name: 'Project chat',
           workspacePath: PROJECT_WS,
           modeId: 'desktop',
+          appScope: 'desktop' as const,
           history: [{ role: 'user', content: 'project work' }],
         },
       ],

@@ -3,6 +3,7 @@
  */
 
 import { fetchWorkspace } from '../config/workspace-api';
+import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import {
   getCachedDesktopWorkspaceLabel,
   getCachedDesktopWorkspacePath,
@@ -66,6 +67,48 @@ export async function applyDesktopWorkspaceSwitch(
   );
   const short = info.label?.trim() || info.path.split(/[/\\]/).filter(Boolean).pop() || info.path;
   setStatus('ok', `Desktop workspace: ${short}`);
+}
+
+/**
+ * Point the desktop workspace at the active thread's folder.
+ *
+ * Desktop threads are one list spanning folders, so activating a thread created
+ * elsewhere has to move the folder with it — otherwise the transcript, the file
+ * explorer, and the workspace picker show three different roots. Unlike
+ * {@link applyDesktopWorkspaceSwitch} this never re-resolves the active chat: the
+ * caller already picked it.
+ *
+ * @returns true when the workspace moved.
+ */
+export async function alignDesktopWorkspaceToChat(chat: {
+  workspacePath?: string;
+}): Promise<boolean> {
+  const target = chat.workspacePath?.trim();
+  if (!target) return false;
+  const current = (await getDesktopWorkspacePath()) ?? '';
+  if (current && normalizeWorkspacePath(current) === normalizeWorkspacePath(target)) {
+    return false;
+  }
+
+  try {
+    const info = await setDesktopWorkspacePath(target);
+    clearCachesForWorkspace(current);
+    clearPanelCwdUserOverride();
+    syncPanelFromActiveChat({ forceFileTree: true });
+    await syncDesktopWorkspaceMounts();
+    await refreshDesktopWorkspaceDrawerPath();
+    refreshDesktopWorkspaceFolderUi();
+    const short =
+      info.label?.trim() || info.path.split(/[/\\]/).filter(Boolean).pop() || info.path;
+    setStatus('ok', `Desktop workspace: ${short}`);
+    return true;
+  } catch (err) {
+    // Folder may have been deleted or moved since the thread was created — keep the
+    // thread open on the current workspace rather than blocking activation.
+    const message = err instanceof Error ? err.message : String(err);
+    setStatus('err', `Workspace for this chat is unavailable: ${message}`);
+    return false;
+  }
 }
 
 /** Set desktop workspace by absolute path (server-validated). */

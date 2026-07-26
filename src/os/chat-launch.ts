@@ -20,6 +20,9 @@ function isProjectWorkspacePath(path: string): boolean {
 async function ensureWorkspaceForCodeChat(chatId: string): Promise<boolean> {
   const chat = sessionState?.chats.find((row) => row.id === chatId);
   const chatWorkspace = chat?.workspacePath?.trim();
+  // App-scoped threads own their folder and are opened by their own app — moving the
+  // Code workspace to follow one would drag Code onto the desktop/chat sandbox.
+  if (chat?.appScope != null) return true;
   if (!chat || !chatWorkspace || !isProjectWorkspacePath(chatWorkspace)) {
     return true;
   }

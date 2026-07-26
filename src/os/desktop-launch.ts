@@ -3,7 +3,7 @@
  * Mirrors {@link restoreCodeSessionOnForeground} in code-launch.ts.
  */
 
-import { getDesktopWorkspacePath, isDesktopWorkspacePath } from '../lib/desktop-workspace';
+import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
 import { getWorkspacePath } from '../state/workspace';
 import { isDesktopChatActive } from './desktop-state';
 
@@ -60,7 +60,7 @@ export async function restoreDesktopSessionOnForeground(): Promise<void> {
   if (!desktopPath) return;
 
   const active = getActiveChat();
-  const activeIsDesktop = isDesktopWorkspacePath(active.workspacePath ?? '', desktopPath);
+  const activeIsDesktop = active.appScope === 'desktop';
 
   if (active.kind === 'expert' || activeIsDesktop) {
     await refreshDesktopChatSurface();

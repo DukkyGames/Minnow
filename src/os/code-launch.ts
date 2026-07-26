@@ -51,7 +51,7 @@ async function refreshCodeChatSurface(): Promise<void> {
  * Desktop chat renders into `#desktopChatCol`; this restores `#chatArea` on Code open.
  */
 export async function restoreCodeSessionOnForeground(): Promise<void> {
-  const { getChatsWorkspacePath, isChatsWorkspacePath } = await import('../lib/chats-workspace');
+  const { getChatsWorkspacePath } = await import('../lib/chats-workspace');
   const {
     ensureSessionsReady,
     getActiveChat,
@@ -66,7 +66,9 @@ export async function restoreCodeSessionOnForeground(): Promise<void> {
 
   const workspacePath = getWorkspacePath();
   const active = getActiveChat();
-  const activeIsAssistant = isChatsWorkspacePath(active.workspacePath ?? '');
+  // Any app-scoped thread (Chat, Desktop, Email) — Code must not adopt one as its
+  // workspace chat just because the folders happen to line up.
+  const activeIsAssistant = active.appScope != null;
   const workspaceKey = normalizeWorkspacePath(workspacePath);
   const activeInCurrentWorkspace =
     !activeIsAssistant &&

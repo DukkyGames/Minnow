@@ -103,6 +103,7 @@ describe('restoreDesktopSessionOnForeground', () => {
           name: 'Desktop hello',
           workspacePath: DESKTOP_WS,
           modeId: 'desktop',
+          appScope: 'desktop' as const,
           history: [
             { role: 'user', content: 'Hello desktop' },
             { role: 'assistant', content: 'Hi from desktop' },
@@ -144,6 +145,7 @@ describe('restoreDesktopSessionOnForeground', () => {
           name: 'Desktop hello',
           workspacePath: DESKTOP_WS,
           modeId: 'desktop',
+          appScope: 'desktop' as const,
           history: [{ role: 'user', content: 'Hello desktop' }],
         },
       ],
