@@ -85,7 +85,8 @@ export async function handleSessionRequest(req, res, pathname) {
     return true;
   }
 
-  // Flag probe is unauthenticated so the SPA can decide before sync bootstraps.
+  // Flag probe skips the optional MINNOW_TOKEN gate below, but global auth-middleware
+  // still requires the per-boot session token. SPA uses HTML inject + withSessionToken.
   if (pathname === '/api/session/engine' && req.method === 'GET') {
     sendJson(res, 200, { enabled: isServerEngineEnabled() });
     return true;

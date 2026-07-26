@@ -83,14 +83,15 @@ active double-run **without moving logic**.
 - **Client reconcile**: subscribe to the stream; when a newer `rev` arrives and the client is **not**
   actively streaming/driving, replace `sessionState` and re-render. `src/state/sessions.ts` +
   `src/state/session-sync.ts`.
-- **Driver lease**: engine tracks `boardDriverId` + heartbeat (`POST /api/session/lease`). Only the
-  lease-holder runs `bootOrchestrateBoardResume` / `ensureAutoDriveSubscription`. Non-holders render
-  the board **read-only** ("driven on another device"). Guard points:
-  `src/chat/orchestrate/board-boot-resume.ts`, `resumeBoardExecutionAfterReload`,
-  `startBoardAutoRun`, `autoDelegateNext`.
+- **Driver lease (stopgap, later removed)**: Phase 0 temporarily tracked `boardDriverId` +
+  heartbeat via `POST /api/session/lease`. Only the lease-holder ran
+  `bootOrchestrateBoardResume` / `ensureAutoDriveSubscription`; non-holders rendered the board
+  read-only. Guard points lived in `board-boot-resume.ts`, `resumeBoardExecutionAfterReload`,
+  `startBoardAutoRun`, `autoDelegateNext`. **Removed in Phase 4** — the Session Engine is the
+  sole driver; `/api/session/lease` returns `410 LEASE_REMOVED`.
 
-Deliverable: multiple devices stay visually in sync; exactly one drives. No logic moved.
-Tests: `test/engine/session-phase0.test.mjs`.
+Deliverable (at Phase 0 ship): multiple devices stayed visually in sync; exactly one drove.
+No logic moved yet. Tests: `test/engine/session-phase0.test.mjs` (now asserts lease removal).
 
 ### Phase 1 — Engine skeleton + main-chat sends ✅ Done (MIN-359)
 
@@ -108,7 +109,8 @@ Shipped on this branch (`henri/min-354-server-session-engine`). Lives under
   Tokens via `/api/generations`; committed history via SSE.
 - **Flag** `MINNOW_SERVER_ENGINE` (later default-on in Phase 4): composer/main-chat
   send uses commands; renderer does **not** call `runChatTurn` for main chat.
-  At Phase 1 ship time flag was default **off**; Board stayed renderer + lease.
+  At Phase 1 ship time flag was default **off**; Board stayed renderer-driven (lease
+  stopgap still in place until Phase 4).
 - **Client**: [`src/state/session-commands.ts`](../../src/state/session-commands.ts),
   [`src/state/server-engine-flag.ts`](../../src/state/server-engine-flag.ts),
   [`src/chat/engine-stream-mirror.ts`](../../src/chat/engine-stream-mirror.ts).
@@ -136,12 +138,13 @@ Shipped on this branch (`henri/min-354-server-session-engine`) behind `MINNOW_SE
 - **Commands**: `board_init`, `board_start`, `board_stop`, `board_start_task`,
   `board_requeue_task`, `board_set_autonomy`, `board_run_final_test`, `board_recover_task`
   (restart / continue / move_to_new_chat / reconcile_merge), `set_model`.
-- **Flag on**: renderer skips `bootOrchestrateBoardResume` / lease board guards
+- **Flag on**: renderer skips `bootOrchestrateBoardResume` / board-driver gate
   ([`board-driver-gate.ts`](../../src/state/board-driver-gate.ts)); UI dispatches via
   [`board-command-bridge.ts`](../../src/state/board-command-bridge.ts).
   Engine main-chat loop re-adds `board_*` / `delegate_tasks` tool defs and executes them
   in-process via `executeBoardTool` + sync session rebind (kickoff `board_init` works).
-- **Flag off (emergency opt-out)**: renderer board drive restored; Phase 0 lease removed in Phase 4.
+- **Emergency opt-out** (`MINNOW_SERVER_ENGINE=0`): renderer board drive restored.
+  Opt-out does **not** revive the Phase 0 lease (removed in Phase 4).
 - **Gaps closed in Phase 3**: sub-agent controller registry moved to engine (see below).
   Remaining: concurrent `mutateEngineState` clone vs in-place board mutations can race
   mid-turn (publishLive + rebind mitigate); engine boot resume does not apply Electron
@@ -259,12 +262,15 @@ Shipped on this branch (`henri/min-354-server-session-engine`).
 
 ## 7. Testing
 
-- Reuse `test/orchestrate/board-flow-e2e.test.mts` (`driveBoardToConvergence`) against the **engine**
+- [x] Reuse `test/orchestrate/board-flow-e2e.test.mts` (`driveBoardToConvergence`) against the **engine**
   module — logic is ported, not rewritten, so the harness drives the same functions.
-- New: engine command dispatch tests; SSE snapshot/patch/replay (`sinceRev`) tests; version-guard 409
+- [x] Engine command dispatch tests; SSE snapshot/patch/replay (`sinceRev`) tests; version-guard 409
   tests; Phase 4 lease-removed assertions (`410 LEASE_REMOVED`).
-- Keep `test/headless/*` green as the loop generalizes.
-- Multi-client integration test: two SSE subscribers + concurrent commands converge to one `rev`.
+- [x] Boot smoke: `test/engine/engine-tsx-hooks.test.mjs` asserts
+  `engine-tsx-hooks.mjs` self-registers on `--import` and resolves a dummy `.css` (live boot
+  failed when hooks exported `resolve`/`load` without `register`).
+- [x] Keep `test/headless/*` green as the loop generalizes.
+- [ ] Multi-client integration test: two SSE subscribers + concurrent commands converge to one `rev`.
 
 ---
 
