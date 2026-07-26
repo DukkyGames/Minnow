@@ -7,10 +7,9 @@ import { findChatById } from './sessions';
 
 /** Bearer token for /api/session/* when MINNOW_TOKEN is set on the server. */
 function sessionAuthHeaders(): Record<string, string> {
-  const token =
-    typeof import.meta.env.VITE_MINNOW_TOKEN === 'string'
-      ? import.meta.env.VITE_MINNOW_TOKEN.trim()
-      : '';
+  // import.meta.env is Vite-injected; optional-chain for tsx/node test hosts.
+  const viteToken = import.meta.env?.VITE_MINNOW_TOKEN;
+  const token = typeof viteToken === 'string' ? viteToken.trim() : '';
   if (!token) return {};
   return { Authorization: `Bearer ${token}` };
 }

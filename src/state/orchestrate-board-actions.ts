@@ -64,12 +64,17 @@ export function setBoardChatTurnRunner(runner: BoardChatTurnRunner | null): void
   boardChatTurnRunner = runner;
 }
 
-/** Launch a board task/test/fixer/final chat turn (engine or renderer). */
+/**
+ * Launch a board task/test/fixer/final chat turn (engine or renderer).
+ * When Session Engine is on, board-host installs {@link setBoardChatTurnRunner}
+ * so this never falls through to renderer runChatTurn (no extra gate needed).
+ */
 async function launchBoardChatTurn(options: BoardChatTurnOptions): Promise<void> {
   if (boardChatTurnRunner) {
     return boardChatTurnRunner(options);
   }
   // Dynamic import keeps Node engine host from eagerly loading loop.ts UI graph.
+  // Opt-out (MINNOW_SERVER_ENGINE=0) / non-engine hosts use renderer runChatTurn.
   const { runChatTurn } = await import('../tools/loop.ts');
   return runChatTurn(options);
 }

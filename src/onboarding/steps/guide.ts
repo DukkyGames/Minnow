@@ -19,7 +19,8 @@ import {
   touchChat,
 } from '../../state/sessions';
 import type { Chat } from '../../types';
-import { runChatTurn } from '../../tools/loop';
+import { isServerEngineEnabled } from '../../state/server-engine-flag.ts';
+import { runChatTurn, sendProgrammaticChatText } from '../../tools/loop';
 import {
   handleComposerPrimaryAction,
   initComposerSteerInputListener,
@@ -71,18 +72,22 @@ function ensureGuideChat(ctx: OnboardingContext): Chat {
 function startKickoffIfNeeded(chat: Chat): void {
   if (kickoffStarted || chat.history.length > 0) return;
   kickoffStarted = true;
-  void runChatTurn({
-    chat,
-    pushUser: true,
-    rawText: KICKOFF_TEXT,
-    userText: KICKOFF_TEXT,
-    displayText: KICKOFF_TEXT,
-    historyContent: KICKOFF_TEXT,
-    skillId: null,
-    validAttachments: [],
-    shouldScheduleTitle: false,
-    suppressUserEcho: true,
-  }).catch(() => {
+  // Engine default-on: dispatch send_message (suppressUserEcho is renderer-only).
+  const kickoff = isServerEngineEnabled()
+    ? sendProgrammaticChatText(chat, KICKOFF_TEXT)
+    : runChatTurn({
+        chat,
+        pushUser: true,
+        rawText: KICKOFF_TEXT,
+        userText: KICKOFF_TEXT,
+        displayText: KICKOFF_TEXT,
+        historyContent: KICKOFF_TEXT,
+        skillId: null,
+        validAttachments: [],
+        shouldScheduleTitle: false,
+        suppressUserEcho: true,
+      });
+  void kickoff.catch(() => {
     // Surface errors through the transcript's own error rendering; allow retry.
     kickoffStarted = false;
   });
