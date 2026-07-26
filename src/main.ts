@@ -246,6 +246,9 @@ export async function initApp(): Promise<void> {
   await initPromptSystem();
   await initWorkAgentSystem();
   await loadSessionsFromStorage(isServerStorageMode() ? { force: true } : undefined);
+  const { initSessionSync, ensureBoardDriverLease } = await import('./state/session-sync');
+  initSessionSync();
+  await ensureBoardDriverLease();
   registerOrchestrateBoardShutdownHandler();
   registerSessionPersistenceShutdownHandler();
   // Issues store migrates leftover bugs/state.json / minnow-bugs-v1 on first load.

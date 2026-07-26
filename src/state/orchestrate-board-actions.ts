@@ -3,6 +3,7 @@
  */
 
 import { stopGeneration } from '../chat/stop-generation.ts';
+import { canDriveOrchestrateBoard } from './session-sync.ts';
 import { decodeModelSelectKey } from '../lib/model-select-key.ts';
 import { isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete.ts';
 import { maybeEmitOrchestratePlanComplete } from '../chat/orchestrate/plan-complete-ui.ts';
@@ -4111,6 +4112,7 @@ export async function resumeBoardExecutionAfterReload(
   group: ChatGroup,
   plannerChat: Chat,
 ): Promise<void> {
+  if (!canDriveOrchestrateBoard()) return;
   ensureStreamEndSubscription();
   ensureAutoDriveSubscription();
   const board = group.orchestrateBoard;
@@ -4198,6 +4200,7 @@ export async function recoverInterruptedMergesAfterReload(
 
 /** Begin auto/sequential execution — set running flag then kick off delegation. */
 export function startBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
+  if (!canDriveOrchestrateBoard()) return;
   const board = group.orchestrateBoard;
   if (!board || !isBoardAutoMode(group)) return;
   void clearOomPauseFromElectron();
@@ -4300,6 +4303,7 @@ export async function autoDelegateNext(
   group: ChatGroup,
   plannerChat: Chat,
 ): Promise<void> {
+  if (!canDriveOrchestrateBoard()) return;
   ensureStreamEndSubscription();
   ensureAutoDriveSubscription();
   await reconcileMergingTasks(group, plannerChat);
@@ -4330,6 +4334,7 @@ export async function autoDelegateNext(
 }
 
 function ensureAutoDriveSubscription(): void {
+  if (!canDriveOrchestrateBoard()) return;
   if (autoDriveSubscribed) return;
   autoDriveSubscribed = true;
   void import('../agents/controller/report.ts').then((mod) => {

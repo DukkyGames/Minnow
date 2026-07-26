@@ -11,6 +11,7 @@ import {
 } from '../../state/orchestrate-board-actions.ts';
 import { isBoardRunning } from '../../state/orchestrate-board-store.ts';
 import type { SessionState } from '../../types.ts';
+import { canDriveOrchestrateBoard } from '../../state/session-sync.ts';
 import {
   probeOomPauseFromElectron,
   setOomPauseActiveForBoot,
@@ -22,12 +23,16 @@ export async function bootOrchestrateBoardResume(state: SessionState): Promise<v
   setOomPauseActiveForBoot(oomPause);
 
   if (oomPause) {
-    pauseAllRunningBoardsForShutdown();
+    if (canDriveOrchestrateBoard()) {
+      pauseAllRunningBoardsForShutdown();
+    }
     for (const group of state.groups ?? []) {
       if (!group.orchestrateBoard) continue;
       const planner = getPlannerChatForGroup(group);
       if (!planner) continue;
-      await recoverInterruptedMergesAfterReload(group, planner);
+      if (canDriveOrchestrateBoard()) {
+        await recoverInterruptedMergesAfterReload(group, planner);
+      }
     }
     return;
   }
@@ -36,8 +41,11 @@ export async function bootOrchestrateBoardResume(state: SessionState): Promise<v
     if (!group.orchestrateBoard) continue;
     const planner = getPlannerChatForGroup(group);
     if (!planner) continue;
-    await recoverInterruptedMergesAfterReload(group, planner);
+    if (canDriveOrchestrateBoard()) {
+      await recoverInterruptedMergesAfterReload(group, planner);
+    }
     if (!isBoardRunning(group)) continue;
+    if (!canDriveOrchestrateBoard()) continue;
     await resumeBoardExecutionAfterReload(group, planner);
   }
 }

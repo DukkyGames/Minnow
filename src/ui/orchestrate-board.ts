@@ -2835,6 +2835,9 @@ function refreshBoardDom(
     syncBoardHeaderStatusBadge(header, headerStatus);
     syncBoardHeaderActivity(header, activity);
   }
+  void import('./orchestrate-board-remote-driver').then((m) =>
+    m.syncOrchestrateBoardRemoteDriverBanner(),
+  );
 
   const title = root.querySelector('.board-header__title');
   if (title) title.textContent = shortPlanName(planPath);

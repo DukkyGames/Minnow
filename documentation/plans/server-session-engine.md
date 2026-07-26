@@ -67,24 +67,30 @@ The driver modules are TS in `src/`. Precedent: `headless/runner.ts` already run
 
 ## 3. Phases (each independently shippable + reversible behind `MINNOW_SERVER_ENGINE` flag)
 
-### Phase 0 — State sync + single-driver lease (stopgap; ~days)
-Goal: kill passive divergence and active double-run **without moving logic**.
+### Phase 0 — State sync + single-driver lease (stopgap) ✅ Done (MIN-357)
 
-- **Broadcast**: in `writeResource('sessions', …)` (`server/config/middleware.js`), after write,
-  bump a monotonic `rev` and fan out the new state to `/api/session/stream` subscribers.
-- **State SSE endpoint**: new `GET /api/session/stream` (snapshot + `rev`, then full-state or diff on change).
-- **Version guard**: `PUT /api/config/sessions` accepts `If-Match: <rev>`; reject stale writes 409
-  → client re-pulls + reapplies its pending mutation. Prevents last-write-wins clobber.
+Shipped on `henri/min-357-phase-0-state-sync-single-driver-lease-stopgap` (`66856843`), then
+**rebased onto SQLite sessions** for MIN-354 (this branch). Goal: kill passive divergence and
+active double-run **without moving logic**.
+
+- **Broadcast**: after successful sessions **PUT** (`writeWholeSessionState` / JSON write) and
+  **PATCH** (`patchSessionState`), bump a monotonic `rev` and fan out the full state to
+  `/api/session/stream` subscribers (`server/session/publish.js`).
+- **State SSE endpoint**: `GET /api/session/stream` (snapshot + `rev`, then full-state `patch` events).
+- **Version guard**: `PUT` and `PATCH` `/api/config/sessions` accept `If-Match: <rev>` and/or
+  body `expectedRev` / `baseRev` (not schema `baseVersion`); reject stale writes **409** +
+  `X-Session-Rev` → client re-pulls / retries once.
 - **Client reconcile**: subscribe to the stream; when a newer `rev` arrives and the client is **not**
   actively streaming/driving, replace `sessionState` and re-render. `src/state/sessions.ts` +
-  a new `src/state/session-sync.ts`.
+  `src/state/session-sync.ts`.
 - **Driver lease**: engine tracks `boardDriverId` + heartbeat (`POST /api/session/lease`). Only the
   lease-holder runs `bootOrchestrateBoardResume` / `ensureAutoDriveSubscription`. Non-holders render
   the board **read-only** ("driven on another device"). Guard points:
-  `src/chat/orchestrate/board-boot-resume.ts:40`, `resumeBoardExecutionAfterReload`,
+  `src/chat/orchestrate/board-boot-resume.ts`, `resumeBoardExecutionAfterReload`,
   `startBoardAutoRun`, `autoDelegateNext`.
 
 Deliverable: multiple devices stay visually in sync; exactly one drives. No logic moved.
+Tests: `test/engine/session-phase0.test.mjs`.
 
 ### Phase 1 — Engine skeleton + main-chat sends
 - Create `server/engine/session-engine.js`: load `SessionState` at boot, own it in memory,
@@ -134,6 +140,7 @@ Deliverable: multiple devices stay visually in sync; exactly one drives. No logi
   Supports `Last-Event-ID` / `?sinceRev=` for replay-or-resnapshot.
 - `POST /api/session/lease` — claim/renew driver lease (Phase 0 only; removed in Phase 4).
 - `PUT /api/config/sessions` — add `If-Match: <rev>` optimistic concurrency (Phase 0).
+- `PATCH /api/config/sessions` — same `If-Match` / `expectedRev` / `baseRev` guard (Phase 0; SQLite adaptation).
 
 ### Commands (initial set)
 `send_message`, `stop_generation`, `steer_message`, `rename_chat`, `delete_chat`,

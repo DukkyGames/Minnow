@@ -6,10 +6,11 @@ import { setSaveTimer, saveTimer } from '../app-state';
 import {
   flushSessionsOnShutdown,
   getChatHistory,
-  getSessions,
-  getSessionSummaries,
+  getSessionsWithRev,
+  getSessionSummariesWithRev,
   patchSessions,
   putSessions,
+  SessionRevisionConflictError,
   type SessionsPatchDelta,
 } from '../config/api-client';
 import { defaultSessionState } from '../config/defaults';
@@ -131,6 +132,34 @@ function normalizeChatTodoStatus(raw: unknown): ChatTodo['status'] {
 
 /** In-memory session blob mirrored to ~/.minnow or localStorage fallback. */
 export let sessionState: SessionState | null = null;
+
+/** Monotonic server revision for optimistic concurrency (Phase 0). */
+let sessionRev = 0;
+
+/** Current session revision from the server (0 when unknown). */
+export function getSessionRev(): number {
+  return sessionRev;
+}
+
+/** Update tracked revision after a successful load/save/reconcile. */
+export function setSessionRev(rev: number): void {
+  if (Number.isFinite(rev) && rev >= 0) {
+    sessionRev = rev;
+  }
+}
+
+/**
+ * Replace in-memory session state from a remote SSE snapshot/patch.
+ * Full-state replace: mark histories loaded so lazy-history clients stay consistent.
+ */
+export function applyRemoteSessionState(raw: unknown): void {
+  sessionState = parseSessionStateFromJson(raw as RawSessionJson);
+  markAllHistoriesLoaded(sessionState.chats);
+  // Remote replace invalidates local dirty sets — next save should full-PUT.
+  clearSessionDirtySets();
+  sessionPatchDirtySetsReady = false;
+  captureDirtyTrackingShadow(sessionState);
+}
 
 /**
  * Set after a successful GET from ~/.minnow. Blocks PUT until hydration so a boot-time
@@ -309,6 +338,12 @@ export function buildSessionsPatchDelta(state: SessionState): SessionsPatchDelta
   const delta: SessionsPatchDelta = {
     baseVersion: state.version ?? SESSION_SCHEMA_VERSION,
   };
+
+  const rev = getSessionRev();
+  if (rev > 0) {
+    // Phase 0: carry expectedRev in body as well as If-Match (beacons cannot set headers).
+    delta.expectedRev = rev;
+  }
 
   if (dirtyChatIds.size > 0) {
     const byId = new Map(state.chats.map((c) => [c.id, c]));
@@ -1283,8 +1318,9 @@ export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Pr
       try {
         if (sessionsLazyHistoryEnabled) {
           // C.2: summaries first (meta + non-message children); history on demand.
-          const remote = await getSessionSummaries();
-          sessionState = sessionStateFromSummaries(remote);
+          const remote = await getSessionSummariesWithRev();
+          sessionState = sessionStateFromSummaries(remote.state);
+          setSessionRev(remote.rev);
           // Active chat is hydrated immediately so the first paint has a transcript.
           if (sessionState.activeId) {
             await ensureChatHistoryLoaded(sessionState.activeId);
@@ -1295,8 +1331,9 @@ export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Pr
           await runSessionCodeChangeBackfill(sessionState);
         } else {
           // Flag off (tests): whole-blob GET — every chat is fully loaded.
-          const remote = await getSessions();
-          sessionState = parseSessionStateFromJson(remote);
+          const remote = await getSessionsWithRev();
+          sessionState = parseSessionStateFromJson(remote.state);
+          setSessionRev(remote.rev);
           markAllHistoriesLoaded(sessionState.chats);
           await runSessionCodeChangeBackfill(sessionState);
         }
@@ -1560,6 +1597,45 @@ export type SaveSessionsOptions = {
 };
 
 /**
+ * PUT session blob with If-Match; on 409 re-pull and retry once.
+ * Throws on non-conflict failures so callers can surface status.
+ */
+async function persistSessionsPutToServer(): Promise<void> {
+  if (!sessionState) return;
+  const snapshot = sessionStateForSessionsWire(sessionState);
+  const expectedRev = getSessionRev();
+  try {
+    const newRev = await putSessions(snapshot, expectedRev > 0 ? expectedRev : undefined);
+    setSessionRev(newRev);
+  } catch (err) {
+    if (!(err instanceof SessionRevisionConflictError)) throw err;
+    const remote = await getSessionsWithRev();
+    setSessionRev(remote.rev);
+    const retryRev = await putSessions(snapshot, remote.rev > 0 ? remote.rev : undefined);
+    setSessionRev(retryRev);
+  }
+}
+
+/**
+ * PATCH with If-Match / expectedRev; on 409 refresh rev and retry the same delta once.
+ */
+async function persistSessionsPatchToServer(delta: SessionsPatchDelta): Promise<void> {
+  try {
+    const newRev = await patchSessions(delta);
+    setSessionRev(newRev);
+  } catch (err) {
+    if (!(err instanceof SessionRevisionConflictError)) throw err;
+    setSessionRev(err.rev);
+    const retryDelta: SessionsPatchDelta = {
+      ...delta,
+      expectedRev: err.rev > 0 ? err.rev : undefined,
+    };
+    const retryRev = await patchSessions(retryDelta);
+    setSessionRev(retryRev);
+  }
+}
+
+/**
  * Persist session state. In server mode (B.2):
  * - MIN-408: no network write until hydrated from ~/.minnow
  * - PATCH when `sessionsClientPatchEnabled` (default ON) and dirty sets are trusted
@@ -1614,7 +1690,7 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
 
     if (usePatch) {
       const delta = buildSessionsPatchDelta(sessionState);
-      inFlightSessionSave = patchSessions(delta)
+      inFlightSessionSave = persistSessionsPatchToServer(delta)
         .then(() => {
           clearSessionDirtySets();
           captureDirtyTrackingShadow(sessionState);
@@ -1628,7 +1704,7 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
     }
 
     // Full-PUT fallback (first save after load, verifier miss, or flag off).
-    inFlightSessionSave = putSessions(sessionStateForSessionsWire(sessionState))
+    inFlightSessionSave = persistSessionsPutToServer()
       .then(() => {
         clearSessionDirtySets();
         sessionPatchDirtySetsReady = true;

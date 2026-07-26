@@ -45,6 +45,8 @@ import {
   writeWholeSessionState,
 } from './sessions-repo.js';
 import { sessionsJsonPath } from './sessions-paths.js';
+import { notifySessionStateWritten } from '../session/publish.js';
+import { getSessionRev } from '../session/rev-store.js';
 
 /** Best-effort chmod for secret-bearing files on Unix. */
 async function chmodSecretFile(filePath) {
@@ -399,6 +401,8 @@ export async function writeResource(resource, body) {
     const validated = validateSessionState(body);
     if (useJsonSessionsStore()) {
       await writeConfigJson(key, validated);
+      // Phase 0: bump rev + fan out SSE after every sessions write (JSON path).
+      notifySessionStateWritten(validated);
       return validated;
     }
     await ensureMinnowLayout();
@@ -407,6 +411,8 @@ export async function writeResource(resource, body) {
         ? /** @type {Record<string, unknown>} */ (body).chats
         : undefined;
     writeWholeSessionState(validated, { rawChats });
+    // Phase 0: SQLite PUT also publishes so multi-device clients stay in sync.
+    notifySessionStateWritten(validated);
     return validated;
   }
   if (resource === 'tools') {
@@ -496,10 +502,11 @@ export async function writeResource(resource, body) {
 /**
  * Apply a partial sessions delta (PATCH /api/config/sessions).
  * SQLite path uses {@link patchSessionState}; JSON fallback does in-memory splice.
+ * After a successful patch, bumps Phase 0 session rev and fans out SSE (full state).
  *
  * @param {string} resource
  * @param {unknown} body
- * @returns {Promise<{ ok: true, applied: Record<string, unknown> }>}
+ * @returns {Promise<{ ok: true, applied: Record<string, unknown>, rev: number }>}
  */
 export async function patchResource(resource, body) {
   if (resource !== 'sessions') {
@@ -508,12 +515,20 @@ export async function patchResource(resource, body) {
     throw err;
   }
 
+  let result;
   if (useJsonSessionsStore()) {
-    return patchJsonSessionState(body);
+    result = await patchJsonSessionState(body);
+  } else {
+    await ensureMinnowLayout();
+    result = patchSessionState(body);
   }
 
-  await ensureMinnowLayout();
-  return patchSessionState(body);
+  // PATCH returns a delta ack — re-read the authoritative blob for SSE subscribers.
+  const state = useJsonSessionsStore()
+    ? ((await readConfigJson('sessions/state.json')) ?? defaultSessionStateJson())
+    : readWholeSessionState();
+  const rev = notifySessionStateWritten(state);
+  return { ...result, rev: rev || getSessionRev() };
 }
 
 /**

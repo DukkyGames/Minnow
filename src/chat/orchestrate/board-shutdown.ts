@@ -3,6 +3,7 @@
  */
 
 import { pauseAllRunningBoardsForShutdown } from '../../state/orchestrate-board-actions.ts';
+import { shutdownSessionSync } from '../../state/session-sync.ts';
 
 let registered = false;
 
@@ -12,5 +13,6 @@ export function registerOrchestrateBoardShutdownHandler(): void {
   registered = true;
   window.addEventListener('pagehide', () => {
     pauseAllRunningBoardsForShutdown();
+    shutdownSessionSync();
   });
 }
