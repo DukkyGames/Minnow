@@ -18,7 +18,7 @@
 - [x] **C.1** — Summaries + `ensureChatHistoryLoaded` + dev trap (flag off)
 - [x] **C.2** — FTS5 search route, delete `task-history-trim.ts`, flip flag (`sessionsLazyHistoryEnabled`)
 - [x] **Docs** — Update `context.md`, architecture/configuration guides, `server-session-engine.md`
-- [ ] **Verify** — Full test suite + e2e reload survival checks
+- [x] **Verify** — Full test suite + e2e reload survival checks
 
 ### C.2 notes (flag ON by default)
 
