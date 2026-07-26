@@ -12,6 +12,7 @@
 import { setAssistantBubbleContent } from '../markdown/renderer';
 import {
   appendIssueLinks,
+  deleteIssue,
   findIssueById,
   updateIssue,
 } from '../state/issues-store';
@@ -42,6 +43,7 @@ import {
   resolveGitLinkOpenUrl,
 } from '../chat/issues/git-actions';
 import { createCodeRefLinkButton } from './code-ref-link';
+import { appConfirm } from './app-dialog';
 import { executeTool } from '../tools/client';
 import type { IssueCard, IssueCodeRef, IssueGitLink, IssuePriority, IssueStatus, IssueType } from '../types';
 
@@ -112,6 +114,20 @@ export function closeIssueDetail(): void {
     host.innerHTML = '';
   }
   document.getElementById('issuesView')?.classList.remove('has-detail');
+}
+
+/** Delete the open issue after confirmation. */
+async function deleteIssueFromDetail(issueId: string): Promise<void> {
+  const ok = await appConfirm('Delete this issue? This cannot be undone.', {
+    confirmLabel: 'Delete',
+    title: 'Delete issue',
+  });
+  if (!ok) return;
+  if (!deleteIssue(issueId)) return;
+  closeIssueDetail();
+  const next = '#/app/issues';
+  if (window.location.hash !== next) window.location.hash = next;
+  void import('./issues-page').then((m) => m.renderIssuesPanel());
 }
 
 /** Open (or refresh) the detail slide-over for an issue id. */
@@ -222,12 +238,27 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   panel.className = 'issues-detail';
   panel.dataset.issueId = issue.id;
 
+  const sticky = document.createElement('div');
+  sticky.className = 'issues-detail__sticky';
+
   const header = document.createElement('header');
   header.className = 'issues-detail__header';
 
   const idEl = document.createElement('span');
   idEl.className = 'issues-detail__id';
   idEl.textContent = issue.id;
+
+  const headerActions = document.createElement('div');
+  headerActions.className = 'issues-detail__header-actions';
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.type = 'button';
+  deleteBtn.className = 'issues-btn issues-btn--danger issues-detail__delete';
+  deleteBtn.setAttribute('aria-label', 'Delete issue');
+  deleteBtn.textContent = 'Delete';
+  deleteBtn.addEventListener('click', () => {
+    void deleteIssueFromDetail(issue.id);
+  });
 
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
@@ -240,8 +271,9 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
     if (window.location.hash !== next) window.location.hash = next;
   });
 
-  header.append(idEl, closeBtn);
-  panel.appendChild(header);
+  headerActions.append(deleteBtn, closeBtn);
+  header.append(idEl, headerActions);
+  sticky.appendChild(header);
 
   const titleInput = document.createElement('input');
   titleInput.type = 'text';
@@ -252,7 +284,7 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
     const next = titleInput.value.trim();
     if (next && next !== issue.title) updateIssue(issue.id, { title: next });
   });
-  panel.appendChild(titleInput);
+  sticky.appendChild(titleInput);
 
   const props = document.createElement('div');
   props.className = 'issues-detail__props';
@@ -282,7 +314,7 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   });
 
   props.append(typeSel, statusSel, prioritySel);
-  panel.appendChild(props);
+  sticky.appendChild(props);
 
   if (issue.labels.length > 0 || issue.severity) {
     const labelsRow = document.createElement('div');
@@ -299,13 +331,18 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
       chip.textContent = issue.severity;
       labelsRow.appendChild(chip);
     }
-    panel.appendChild(labelsRow);
+    sticky.appendChild(labelsRow);
   }
 
-  // Workflow toolbar (Expand + Investigate / Plan / Debug / Board)
-  panel.appendChild(buildWorkflowToolbar(issue));
+  sticky.appendChild(buildWorkflowToolbar(issue));
+  panel.appendChild(sticky);
+
+  const scroll = document.createElement('div');
+  scroll.className = 'issues-detail__scroll';
 
   const descSection = section('Description');
+  const descWrap = document.createElement('div');
+  descWrap.className = 'issues-detail__desc-wrap';
   const desc = document.createElement('div');
   desc.className = 'issues-detail__markdown msg-bubble msg-bubble--md';
   if (issue.description.trim()) {
@@ -314,8 +351,9 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
     desc.className = 'issues-detail__empty';
     desc.textContent = 'No description yet.';
   }
-  descSection.body.appendChild(desc);
-  panel.appendChild(descSection.section);
+  descWrap.appendChild(desc);
+  descSection.body.appendChild(descWrap);
+  scroll.appendChild(descSection.section);
 
   // Code links
   const codeSection = section('Code links');
@@ -375,20 +413,7 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   });
   addRow.append(pasteInput, addBtn);
   codeSection.body.appendChild(addRow);
-  panel.appendChild(codeSection.section);
-
-  // Chats & runs
-  const chatsSection = section('Chats & runs');
-  const chatBits: string[] = [];
-  if (issue.chatIds?.length) chatBits.push(`${issue.chatIds.length} chat(s)`);
-  if (issue.boardChatId) chatBits.push(`board: ${issue.boardChatId.slice(0, 8)}…`);
-  if (issue.investigateRunId) chatBits.push(`run: ${issue.investigateRunId.slice(0, 8)}…`);
-  if (issue.planRunId) chatBits.push(`plan run: ${issue.planRunId.slice(0, 8)}…`);
-  const chatsEmpty = document.createElement('p');
-  chatsEmpty.className = 'issues-detail__empty';
-  chatsEmpty.textContent = chatBits.length ? chatBits.join(' · ') : 'No linked chats or runs yet.';
-  chatsSection.body.appendChild(chatsEmpty);
-  panel.appendChild(chatsSection.section);
+  scroll.appendChild(codeSection.section);
 
   // Plan
   const planSection = section('Plan');
@@ -408,28 +433,44 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
     planEl.textContent = 'No plan yet. Use Plan or Plan in background.';
     planSection.body.appendChild(planEl);
   }
-  panel.appendChild(planSection.section);
+  scroll.appendChild(planSection.section);
 
   // Git — restrained menu + commits / chips (Phase 4)
-  panel.appendChild(buildGitSection(issue));
+  scroll.appendChild(buildGitSection(issue));
 
-  // Activity (lightweight timestamps)
+  // Activity + linked chats (compact footer)
   const activitySection = section('Activity');
-  const activity = document.createElement('p');
-  activity.className = 'issues-detail__empty';
   const ws = issue.workspacePath || getWorkspacePath();
-  activity.textContent = `Created ${formatTs(issue.createdAt)} · Updated ${formatTs(issue.updatedAt)}${
-    ws ? ` · ${ws}` : ''
-  }`;
+  const activity = document.createElement('p');
+  activity.className = 'issues-detail__meta-line';
+  activity.textContent = `Created ${formatTs(issue.createdAt)} · Updated ${formatTs(issue.updatedAt)}`;
   activitySection.body.appendChild(activity);
+  if (ws) {
+    const workspace = document.createElement('p');
+    workspace.className = 'issues-detail__meta-line';
+    workspace.textContent = ws;
+    activitySection.body.appendChild(workspace);
+  }
+  const chatBits: string[] = [];
+  if (issue.chatIds?.length) chatBits.push(`${issue.chatIds.length} chat(s)`);
+  if (issue.boardChatId) chatBits.push(`board ${issue.boardChatId.slice(0, 8)}…`);
+  if (issue.investigateRunId) chatBits.push(`run ${issue.investigateRunId.slice(0, 8)}…`);
+  if (issue.planRunId) chatBits.push(`plan ${issue.planRunId.slice(0, 8)}…`);
+  if (chatBits.length) {
+    const chats = document.createElement('p');
+    chats.className = 'issues-detail__meta-line';
+    chats.textContent = chatBits.join(' · ');
+    activitySection.body.appendChild(chats);
+  }
   if (issue.notes?.trim()) {
     const notes = document.createElement('div');
     notes.className = 'issues-detail__notes';
     notes.textContent = issue.notes;
     activitySection.body.appendChild(notes);
   }
-  panel.appendChild(activitySection.section);
+  scroll.appendChild(activitySection.section);
 
+  panel.appendChild(scroll);
   host.appendChild(panel);
 }
 
@@ -714,11 +755,15 @@ function buildWorkflowToolbar(issue: IssueCard): HTMLElement {
   const busy = workflowBusyIds.has(issue.id) || expandingIds.has(issue.id);
   const workflowOk = canRunIssueWorkflow(issue);
   const activity = issueActivityChip(issue);
+
+  const primary = document.createElement('div');
+  primary.className = 'issues-detail__workflow-primary';
+
   if (activity) {
     const chip = document.createElement('span');
     chip.className = 'issues-detail__activity-chip';
     chip.textContent = activity;
-    row.appendChild(chip);
+    primary.appendChild(chip);
   }
 
   if (canExpandIssueWithAgent(issue)) {
@@ -731,8 +776,13 @@ function buildWorkflowToolbar(issue: IssueCard): HTMLElement {
     expandBtn.addEventListener('click', () => {
       void startExpand(issue.id);
     });
-    row.appendChild(expandBtn);
+    primary.appendChild(expandBtn);
   }
+
+  row.appendChild(primary);
+
+  const secondary = document.createElement('div');
+  secondary.className = 'issues-detail__workflow-secondary';
 
   // Investigate — aimed at bugs; still available for other open types.
   {
@@ -750,7 +800,7 @@ function buildWorkflowToolbar(issue: IssueCard): HTMLElement {
     btn.addEventListener('click', () => {
       void runWorkflowAction(issue.id, 'investigate');
     });
-    row.appendChild(btn);
+    secondary.appendChild(btn);
   }
 
   // Plan (interactive Code Plan mode)
@@ -765,7 +815,7 @@ function buildWorkflowToolbar(issue: IssueCard): HTMLElement {
     btn.addEventListener('click', () => {
       void runWorkflowAction(issue.id, 'plan');
     });
-    row.appendChild(btn);
+    secondary.appendChild(btn);
   }
 
   // Plan in background (bug-planner sub-agent)
@@ -780,7 +830,7 @@ function buildWorkflowToolbar(issue: IssueCard): HTMLElement {
     btn.addEventListener('click', () => {
       void runWorkflowAction(issue.id, 'plan-bg');
     });
-    row.appendChild(btn);
+    secondary.appendChild(btn);
   }
 
   // Debug chat
@@ -795,7 +845,7 @@ function buildWorkflowToolbar(issue: IssueCard): HTMLElement {
     btn.addEventListener('click', () => {
       void runWorkflowAction(issue.id, 'debug');
     });
-    row.appendChild(btn);
+    secondary.appendChild(btn);
   }
 
   // Send to board
@@ -813,9 +863,10 @@ function buildWorkflowToolbar(issue: IssueCard): HTMLElement {
     btn.addEventListener('click', () => {
       void runWorkflowAction(issue.id, 'board');
     });
-    row.appendChild(btn);
+    secondary.appendChild(btn);
   }
 
+  row.appendChild(secondary);
   return row;
 }
 

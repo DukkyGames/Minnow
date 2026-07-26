@@ -756,6 +756,40 @@ export function updateIssue(issueId: string, patch: UpdateIssuePatch): IssueCard
   return issue;
 }
 
+/** True when an issue id matches the card id or legacy bug id. */
+function issueMatchesKey(issue: IssueCard, key: string): boolean {
+  return issue.id === key || issue.legacyBugId === key;
+}
+
+/** Remove one issue by id (ISS-n or legacy bug id). Returns true when removed. */
+export function deleteIssue(issueId: string): boolean {
+  const key = issueId.trim();
+  if (!key) return false;
+  const state = requireIssuesState();
+  const idx = state.issues.findIndex((issue) => issueMatchesKey(issue, key));
+  if (idx < 0) return false;
+  state.issues.splice(idx, 1);
+  touchIssuesStore();
+  return true;
+}
+
+/** Remove multiple issues; returns the number removed. */
+export function deleteIssues(issueIds: string[]): number {
+  const keys = new Set(issueIds.map((id) => id.trim()).filter(Boolean));
+  if (keys.size === 0) return 0;
+  const state = requireIssuesState();
+  const before = state.issues.length;
+  state.issues = state.issues.filter((issue) => {
+    for (const key of keys) {
+      if (issueMatchesKey(issue, key)) return false;
+    }
+    return true;
+  });
+  const removed = before - state.issues.length;
+  if (removed > 0) touchIssuesStore();
+  return removed;
+}
+
 /** Serialize all issues for tools and UI. */
 export function getIssuesSnapshot(): IssuesState {
   const state = requireIssuesState();

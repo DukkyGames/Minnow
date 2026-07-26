@@ -13,6 +13,7 @@ import {
   addIssue,
   collectIssues,
   countOpenIssues,
+  deleteIssues,
   isIssuesStoreLoaded,
   quickCaptureIssue,
   updateIssue,
@@ -28,6 +29,7 @@ import {
   openIssueDetail,
   refreshIssueDetailIfOpen,
 } from './issues-detail';
+import { appConfirm } from './app-dialog';
 
 type IssuesViewMode = 'list' | 'board';
 
@@ -71,6 +73,10 @@ let filters: IssuesUiFilters = { ...DEFAULT_FILTERS };
 let issuesUnsub: (() => void) | null = null;
 /** Deep-link issue id from `#/app/issues/ISS-n` (detail panel lands in Phase 2). */
 let pendingIssueId: string | undefined;
+/** Multiselect: checked issue ids for bulk actions. */
+const selectedIssueIds = new Set<string>();
+/** Last list row index used for Shift-range selection. */
+let lastListSelectionIndex = -1;
 
 const ISSUE_DRAG_MIME = 'application/x-minnow-issue-id';
 
@@ -111,33 +117,170 @@ function formatUpdated(ts: number): string {
   }
 }
 
+/** Short type label for list chips (B/T/I/N). */
+function typeChipLetter(type: IssueType): string {
+  return type.slice(0, 1).toUpperCase();
+}
+
+/** Build a type badge for list rows. */
+function createTypeChip(type: IssueType): HTMLElement {
+  const chip = document.createElement('span');
+  chip.className = `issues-type-chip issues-type-chip--${type}`;
+  chip.textContent = typeChipLetter(type);
+  chip.title = type;
+  return chip;
+}
+
+/** Build a status pill for list rows. */
+function createStatusChip(status: IssueStatus): HTMLElement {
+  const chip = document.createElement('span');
+  chip.className = `issues-status-chip issues-status-chip--${status}`;
+  chip.textContent = status.replace(/_/g, ' ');
+  return chip;
+}
+
+/** Build a priority label for list rows. */
+function createPriorityChip(priority: IssuePriority): HTMLElement {
+  const chip = document.createElement('span');
+  chip.className = `issues-priority-chip issues-priority-chip--${priority}`;
+  chip.textContent = priority === 'none' ? '—' : priority;
+  return chip;
+}
+
+function syncListHeadVisibility(): void {
+  const head = document.getElementById('issuesListHead');
+  if (!head) return;
+  head.hidden = viewMode !== 'list';
+}
+
+/** Drop selection entries that are no longer visible under current filters. */
+function pruneIssueSelection(visibleIds: Set<string>): void {
+  for (const id of selectedIssueIds) {
+    if (!visibleIds.has(id)) selectedIssueIds.delete(id);
+  }
+}
+
+function syncSelectionBar(visibleCount: number): void {
+  const bar = document.getElementById('issuesSelectionBar');
+  const countEl = document.getElementById('issuesSelectionCount');
+  const selectAll = document.getElementById('issuesSelectAll') as HTMLInputElement | null;
+  const selectedCount = selectedIssueIds.size;
+  if (bar) bar.hidden = selectedCount === 0;
+  if (countEl) {
+    countEl.textContent =
+      selectedCount === 1 ? '1 issue selected' : `${selectedCount} issues selected`;
+  }
+  if (selectAll) {
+    selectAll.indeterminate = selectedCount > 0 && selectedCount < visibleCount;
+    selectAll.checked = visibleCount > 0 && selectedCount === visibleCount;
+  }
+}
+
+function setIssueChecked(issueId: string, checked: boolean): void {
+  if (checked) selectedIssueIds.add(issueId);
+  else selectedIssueIds.delete(issueId);
+}
+
+function clearIssueSelection(): void {
+  selectedIssueIds.clear();
+  lastListSelectionIndex = -1;
+}
+
+/** Create a row/card checkbox that does not open the detail panel. */
+function createIssueSelectCheckbox(
+  issue: IssueCard,
+  options?: { listIndex?: number; issues?: IssueCard[] },
+): HTMLInputElement {
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.className = 'issues-select-checkbox';
+  checkbox.checked = selectedIssueIds.has(issue.id);
+  checkbox.setAttribute('aria-label', `Select ${issue.id}`);
+  checkbox.addEventListener('click', (event) => event.stopPropagation());
+  checkbox.addEventListener('change', (event) => {
+    event.stopPropagation();
+    const listIndex = options?.listIndex;
+    const issues = options?.issues;
+    const shiftKey = (event as MouseEvent).shiftKey;
+    if (
+      shiftKey &&
+      listIndex != null &&
+      issues &&
+      lastListSelectionIndex >= 0 &&
+      lastListSelectionIndex !== listIndex
+    ) {
+      const start = Math.min(lastListSelectionIndex, listIndex);
+      const end = Math.max(lastListSelectionIndex, listIndex);
+      for (let i = start; i <= end; i += 1) {
+        setIssueChecked(issues[i].id, checkbox.checked);
+      }
+    } else {
+      setIssueChecked(issue.id, checkbox.checked);
+      if (listIndex != null) lastListSelectionIndex = listIndex;
+    }
+    renderIssuesPanel();
+  });
+  return checkbox;
+}
+
+async function confirmAndDeleteIssues(issueIds: string[]): Promise<void> {
+  const ids = [...new Set(issueIds.map((id) => id.trim()).filter(Boolean))];
+  if (ids.length === 0) return;
+  const noun = ids.length === 1 ? 'this issue' : `${ids.length} issues`;
+  const ok = await appConfirm(`Delete ${noun}? This cannot be undone.`, {
+    confirmLabel: 'Delete',
+    title: 'Delete issues',
+  });
+  if (!ok) return;
+  const openId = getSelectedIssueId();
+  deleteIssues(ids);
+  for (const id of ids) selectedIssueIds.delete(id);
+  if (openId && ids.includes(openId)) {
+    closeIssueDetail();
+    const next = '#/app/issues';
+    if (window.location.hash !== next) window.location.hash = next;
+  }
+  renderIssuesPanel();
+}
+
+/** Delete one issue from list/detail actions. */
+export async function deleteIssueFromUi(issueId: string): Promise<void> {
+  await confirmAndDeleteIssues([issueId]);
+}
+
 function renderList(mount: HTMLElement, issues: IssueCard[]): void {
   const list = document.createElement('div');
   list.className = 'issues-list';
   list.setAttribute('role', 'list');
 
-  for (const issue of issues) {
+  issues.forEach((issue, index) => {
     const row = document.createElement('div');
     row.className = 'issues-row';
     row.setAttribute('role', 'listitem');
     row.dataset.issueId = issue.id;
+    row.classList.toggle('is-checked', selectedIssueIds.has(issue.id));
+
+    const selectCell = document.createElement('label');
+    selectCell.className = 'issues-select-cell';
+    selectCell.appendChild(
+      createIssueSelectCheckbox(issue, { listIndex: index, issues }),
+    );
 
     const id = document.createElement('span');
     id.className = 'issues-row__id';
     id.textContent = issue.id;
 
-    const type = document.createElement('span');
-    type.className = 'issues-row__type';
-    type.textContent = issue.type.slice(0, 1).toUpperCase();
-    type.title = issue.type;
+    const type = createTypeChip(issue.type);
 
     const title = document.createElement('span');
     title.className = 'issues-row__title';
     title.textContent = issue.title;
 
-    const priority = document.createElement('span');
-    priority.className = `issues-row__priority issues-priority--${issue.priority}`;
-    priority.textContent = issue.priority;
+    const status = createStatusChip(issue.status);
+    status.className = `${status.className} issues-row__status`;
+
+    const priority = createPriorityChip(issue.priority);
+    priority.className = `${priority.className} issues-row__priority`;
 
     const labels = document.createElement('div');
     labels.className = 'issues-row__labels';
@@ -153,10 +296,6 @@ function renderList(mount: HTMLElement, issues: IssueCard[]): void {
       chip.textContent = issue.severity;
       labels.appendChild(chip);
     }
-
-    const status = document.createElement('span');
-    status.className = 'issues-row__status';
-    status.textContent = issue.status.replace('_', ' ');
 
     const updated = document.createElement('span');
     updated.className = 'issues-row__updated';
@@ -178,18 +317,22 @@ function renderList(mount: HTMLElement, issues: IssueCard[]): void {
       actions.appendChild(expandBtn);
     }
 
-    row.append(id, type, title, priority, labels, status, updated, actions);
-    row.addEventListener('click', () => navigateToIssueDetail(issue.id));
+    row.append(selectCell, id, type, title, status, priority, labels, updated, actions);
+    row.addEventListener('click', (event) => {
+      if ((event.target as HTMLElement).closest('.issues-select-cell')) return;
+      navigateToIssueDetail(issue.id);
+    });
     row.classList.toggle('is-selected', getSelectedIssueId() === issue.id);
     row.tabIndex = 0;
     row.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') {
+        if ((event.target as HTMLElement).closest('.issues-select-cell')) return;
         event.preventDefault();
         navigateToIssueDetail(issue.id);
       }
     });
     list.appendChild(row);
-  }
+  });
 
   mount.appendChild(list);
 }
@@ -256,10 +399,20 @@ function renderBoard(mount: HTMLElement, issues: IssueCard[]): void {
       const card = document.createElement('article');
       card.className = 'issues-card';
       card.dataset.issueId = issue.id;
+      card.classList.toggle('is-checked', selectedIssueIds.has(issue.id));
+
+      const cardHead = document.createElement('div');
+      cardHead.className = 'issues-card__head';
+
+      const selectCell = document.createElement('label');
+      selectCell.className = 'issues-select-cell issues-card__select';
+      selectCell.appendChild(createIssueSelectCheckbox(issue));
 
       const id = document.createElement('div');
       id.className = 'issues-card__id';
       id.textContent = issue.id;
+
+      cardHead.append(selectCell, id);
 
       const title = document.createElement('h4');
       title.className = 'issues-card__title';
@@ -269,7 +422,7 @@ function renderBoard(mount: HTMLElement, issues: IssueCard[]): void {
       meta.className = 'issues-card__meta';
       meta.textContent = `${issue.type} · ${issue.priority}`;
 
-      card.append(id, title, meta);
+      card.append(cardHead, title, meta);
       if (canExpandIssueWithAgent(issue)) {
         const expandBtn = document.createElement('button');
         expandBtn.type = 'button';
@@ -285,7 +438,7 @@ function renderBoard(mount: HTMLElement, issues: IssueCard[]): void {
       }
       card.classList.toggle('is-selected', getSelectedIssueId() === issue.id);
       card.addEventListener('click', (event) => {
-        if ((event.target as HTMLElement).closest('button')) return;
+        if ((event.target as HTMLElement).closest('button, .issues-select-cell')) return;
         navigateToIssueDetail(issue.id);
       });
       bindCardDrag(card, issue.id);
@@ -307,6 +460,8 @@ export function renderIssuesPanel(): void {
   if (!mount || !isIssuesStoreLoaded()) return;
 
   const issues = collectIssues(collectOptions());
+  const visibleIds = new Set(issues.map((issue) => issue.id));
+  pruneIssueSelection(visibleIds);
   mount.innerHTML = '';
 
   const empty = document.createElement('p');
@@ -324,8 +479,11 @@ export function renderIssuesPanel(): void {
 
   if (summaryEl) {
     const openAll = countOpenIssues({ scope: 'all' });
-    summaryEl.textContent = `${issues.length} shown · ${openAll} open across all workspaces`;
+    summaryEl.textContent = `${issues.length} shown · ${openAll} open`;
   }
+
+  syncListHeadVisibility();
+  syncSelectionBar(issues.length);
 
   // Deep-link / pending selection opens detail; otherwise refresh if already open.
   if (pendingIssueId) {
@@ -488,6 +646,26 @@ function bindStaticControls(): void {
     .getElementById('issuesQuickCapture')
     ?.addEventListener('keydown', onQuickCaptureKeydown as EventListener);
 
+  document.getElementById('issuesSelectAll')?.addEventListener('change', (event) => {
+    const input = event.currentTarget as HTMLInputElement;
+    const issues = collectIssues(collectOptions());
+    if (input.checked) {
+      for (const issue of issues) selectedIssueIds.add(issue.id);
+    } else {
+      clearIssueSelection();
+    }
+    renderIssuesPanel();
+  });
+
+  document.getElementById('btnIssuesDeleteSelected')?.addEventListener('click', () => {
+    void confirmAndDeleteIssues([...selectedIssueIds]);
+  });
+
+  document.getElementById('btnIssuesClearSelection')?.addEventListener('click', () => {
+    clearIssueSelection();
+    renderIssuesPanel();
+  });
+
   // Sidebar: Issues replaces All bugs.
   document.getElementById('btnAllBugs')?.addEventListener('click', () => {
     openIssuesFromSidebar();
@@ -550,6 +728,7 @@ export function closeIssues(options?: { skipNavigate?: boolean }): void {
   root.classList.remove('is-open');
   pendingIssueId = undefined;
   closeIssueDetail();
+  clearIssueSelection();
   setNewFormOpen(false);
   if (!isOsShellEnabled()) {
     if (!options?.skipNavigate && window.location.hash.startsWith('#/app/issues')) {

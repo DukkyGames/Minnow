@@ -1785,10 +1785,13 @@
 <main id="issuesView" class="issues-page" aria-label="Issues">
   <header class="issues-header">
     <div class="issues-header__brand">
-      <span id="issuesPageIcon" aria-hidden="true"></span>
-      <h1>Issues</h1>
+      <span id="issuesPageIcon" class="issues-header__icon" aria-hidden="true"></span>
+      <div class="issues-header__titles">
+        <h1>Issues</h1>
+        <p id="issuesSummary" class="issues-summary" aria-live="polite"></p>
+      </div>
     </div>
-    <div class="issues-header__toolbar">
+    <div class="issues-header__controls">
       <label class="visually-hidden" for="issuesScope">Workspace scope</label>
       <select id="issuesScope" class="issues-filter" aria-label="Workspace scope">
         <option value="current_workspace">Current workspace</option>
@@ -1798,88 +1801,114 @@
         <button type="button" id="issuesViewList" class="is-active" aria-pressed="true">List</button>
         <button type="button" id="issuesViewBoard" aria-pressed="false">Board</button>
       </div>
-      <label class="visually-hidden" for="issuesType">Type</label>
-      <select id="issuesType" class="issues-filter" aria-label="Type filter">
-        <option value="all">All types</option>
-        <option value="bug">Bug</option>
-        <option value="task">Task</option>
-        <option value="idea">Idea</option>
-        <option value="note">Note</option>
-      </select>
-      <label class="visually-hidden" for="issuesStatus">Status</label>
-      <select id="issuesStatus" class="issues-filter" aria-label="Status filter">
-        <option value="all">All statuses</option>
-        <option value="triage">Triage</option>
-        <option value="backlog">Backlog</option>
-        <option value="todo">Todo</option>
-        <option value="planned">Planned</option>
-        <option value="in_progress">In progress</option>
-        <option value="review">Review</option>
-        <option value="done">Done</option>
-        <option value="canceled">Canceled</option>
-      </select>
-      <label class="visually-hidden" for="issuesPriority">Priority</label>
-      <select id="issuesPriority" class="issues-filter" aria-label="Priority filter">
-        <option value="all">All priorities</option>
-        <option value="urgent">Urgent</option>
-        <option value="high">High</option>
-        <option value="medium">Medium</option>
-        <option value="low">Low</option>
-        <option value="none">None</option>
-      </select>
-      <label class="issues-hide-done">
-        <input type="checkbox" id="issuesHideDone" checked>
-        <span>Hide done</span>
-      </label>
-      <label class="visually-hidden" for="issuesSearch">Search issues</label>
-      <input type="search" id="issuesSearch" class="issues-search" placeholder="Search…" autocomplete="off">
-    </div>
-    <div class="issues-header__actions">
       <div class="issues-quick-capture">
         <label class="visually-hidden" for="issuesQuickCapture">Quick capture</label>
         <input
           type="text"
           id="issuesQuickCapture"
-          placeholder="Jot an idea, bug, or note…"
+          placeholder="Quick capture…"
           autocomplete="off"
         >
       </div>
       <button type="button" class="issues-btn issues-btn--primary" id="btnIssuesNew">New issue</button>
     </div>
   </header>
+  <div class="issues-filter-bar" aria-label="Issue filters">
+    <label class="visually-hidden" for="issuesType">Type</label>
+    <select id="issuesType" class="issues-filter" aria-label="Type filter">
+      <option value="all">All types</option>
+      <option value="bug">Bug</option>
+      <option value="task">Task</option>
+      <option value="idea">Idea</option>
+      <option value="note">Note</option>
+    </select>
+    <label class="visually-hidden" for="issuesStatus">Status</label>
+    <select id="issuesStatus" class="issues-filter" aria-label="Status filter">
+      <option value="all">All statuses</option>
+      <option value="triage">Triage</option>
+      <option value="backlog">Backlog</option>
+      <option value="todo">Todo</option>
+      <option value="planned">Planned</option>
+      <option value="in_progress">In progress</option>
+      <option value="review">Review</option>
+      <option value="done">Done</option>
+      <option value="canceled">Canceled</option>
+    </select>
+    <label class="visually-hidden" for="issuesPriority">Priority</label>
+    <select id="issuesPriority" class="issues-filter" aria-label="Priority filter">
+      <option value="all">All priorities</option>
+      <option value="urgent">Urgent</option>
+      <option value="high">High</option>
+      <option value="medium">Medium</option>
+      <option value="low">Low</option>
+      <option value="none">None</option>
+    </select>
+    <label class="issues-hide-done">
+      <input type="checkbox" id="issuesHideDone" checked>
+      <span>Hide done</span>
+    </label>
+    <label class="visually-hidden" for="issuesSearch">Search issues</label>
+    <input type="search" id="issuesSearch" class="issues-search" placeholder="Search issues…" autocomplete="off">
+  </div>
   <form id="issuesNewForm" class="issues-new-form" aria-label="New issue">
-    <label>
-      Title
-      <input type="text" id="issuesNewTitle" required autocomplete="off">
-    </label>
-    <label>
-      Type
-      <select id="issuesNewType">
-        <option value="task">Task</option>
-        <option value="bug">Bug</option>
-        <option value="idea">Idea</option>
-        <option value="note">Note</option>
-      </select>
-    </label>
-    <label>
-      Priority
-      <select id="issuesNewPriority">
-        <option value="none">None</option>
-        <option value="low">Low</option>
-        <option value="medium">Medium</option>
-        <option value="high">High</option>
-        <option value="urgent">Urgent</option>
-      </select>
-    </label>
-    <label>
-      Description
-      <textarea id="issuesNewDescription" rows="2" placeholder="Optional details"></textarea>
-    </label>
-    <button type="submit" class="issues-btn issues-btn--primary">Create</button>
-    <button type="button" class="issues-btn" id="btnIssuesNewCancel">Cancel</button>
+    <div class="issues-new-form__grid">
+      <label class="issues-new-form__title">
+        Title
+        <input type="text" id="issuesNewTitle" required autocomplete="off" placeholder="What needs doing?">
+      </label>
+      <label>
+        Type
+        <select id="issuesNewType">
+          <option value="task">Task</option>
+          <option value="bug">Bug</option>
+          <option value="idea">Idea</option>
+          <option value="note">Note</option>
+        </select>
+      </label>
+      <label>
+        Priority
+        <select id="issuesNewPriority">
+          <option value="none">None</option>
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+          <option value="urgent">Urgent</option>
+        </select>
+      </label>
+      <label class="issues-new-form__desc">
+        Description
+        <textarea id="issuesNewDescription" rows="2" placeholder="Optional details"></textarea>
+      </label>
+    </div>
+    <div class="issues-new-form__actions">
+      <button type="submit" class="issues-btn issues-btn--primary">Create issue</button>
+      <button type="button" class="issues-btn" id="btnIssuesNewCancel">Cancel</button>
+    </div>
   </form>
   <div class="issues-body">
-    <p id="issuesSummary" class="issues-summary" aria-live="polite"></p>
+    <div id="issuesSelectionBar" class="issues-selection-bar" hidden>
+      <span id="issuesSelectionCount" class="issues-selection-bar__count"></span>
+      <div class="issues-selection-bar__actions">
+        <button type="button" class="issues-btn issues-btn--danger" id="btnIssuesDeleteSelected">
+          Delete
+        </button>
+        <button type="button" class="issues-btn" id="btnIssuesClearSelection">Clear</button>
+      </div>
+    </div>
+    <div id="issuesListHead" class="issues-list-head" hidden>
+      <label class="issues-list-head__select issues-select-cell">
+        <span class="visually-hidden">Select all visible issues</span>
+        <input type="checkbox" id="issuesSelectAll" aria-label="Select all visible issues">
+      </label>
+      <span class="issues-list-head__id">ID</span>
+      <span class="issues-list-head__type">Type</span>
+      <span class="issues-list-head__title">Title</span>
+      <span class="issues-list-head__status">Status</span>
+      <span class="issues-list-head__priority">Priority</span>
+      <span class="issues-list-head__labels">Labels</span>
+      <span class="issues-list-head__updated">Updated</span>
+      <span class="issues-list-head__actions" aria-hidden="true"></span>
+    </div>
     <div id="issuesPanelMount" class="issues-main" role="region" aria-label="Issues"></div>
   </div>
 </main>

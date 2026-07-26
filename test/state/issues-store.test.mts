@@ -8,6 +8,8 @@ import {
   addIssue,
   bugColumnToIssueStatus,
   bugSeverityToIssuePriority,
+  deleteIssue,
+  deleteIssues,
   findIssueById,
   isBugColumn,
   isBugSeverity,
@@ -47,6 +49,18 @@ describe('issues-store', () => {
     assert.equal(updated?.status, 'in_progress');
     assert.equal(updated?.notes, 'Looking into it');
     assert.equal(findIssueById('ISS-9')?.status, 'in_progress');
+  });
+
+  test('deleteIssue and deleteIssues remove cards by id', () => {
+    addIssue({ title: 'Keep', workspacePath: '/w' }, 'ISS-1');
+    addIssue({ title: 'Drop one', workspacePath: '/w' }, 'ISS-2');
+    addIssue({ title: 'Drop two', workspacePath: '/w' }, 'ISS-3');
+    assert.equal(deleteIssue('ISS-2'), true);
+    assert.equal(findIssueById('ISS-2'), undefined);
+    assert.equal(deleteIssues(['ISS-3', 'missing']), 1);
+    assert.equal(findIssueById('ISS-1')?.title, 'Keep');
+    assert.equal(deleteIssue('ISS-1'), true);
+    assert.equal(deleteIssue('ISS-1'), false);
   });
 
   test('bug column and severity maps cover all legacy values', () => {

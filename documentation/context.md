@@ -34,7 +34,7 @@ Registry: [`src/chat/modes/registry.ts`](../src/chat/modes/registry.ts). Tool al
 
 Chat (desktop), **Code**, **Models**, **Compare**, **Bench**, **Research**, **Experts**, **Brain**, **Calendar**, **Email**, **Issues**, **Scheduler**, **Settings** — routes `#/desktop`, `#/app/{id}`, registry in [`src/os/app-registry.ts`](../src/os/app-registry.ts).
 
-**Issues** (`#/app/issues`, core) is the Linear-style tracker (list + board + detail). Legacy `#/bugs` hashes redirect via [`resolveLegacyHash`](../src/os/router.ts) — the old All-bugs overlay UI/store/pipeline was removed in MIN-261 Phase 5.
+**Issues** (`#/app/issues`, core) is the Linear-style tracker (list + board + detail). UI: split header (brand + quick capture) and filter bar; column headers on list view; type/status/priority chips; multiselect checkboxes with bulk delete; detail panel with sticky workflow header, Delete action, and scrollable body. Legacy `#/bugs` hashes redirect via [`resolveLegacyHash`](../src/os/router.ts) — the old All-bugs overlay UI/store/pipeline was removed in MIN-261 Phase 5.
 
 | Concern | Location |
 |---------|----------|
