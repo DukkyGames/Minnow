@@ -56,7 +56,9 @@ UI-only tools (e.g. `ask_question`) fail with a clear error in headless mode unl
 
 ## Tests
 
-`npm test` runs the full suite via [`test/run-all.mjs`](../../test/run-all.mjs) — it discovers every `test/**/*.test.{js,mjs,mts,ts}` file and runs the correct runner/loader per path (see [`test/test-config.mjs`](../../test/test-config.mjs)). New test files are included automatically; `npm run test:check-coverage` fails CI when a file would be orphaned. Worker parallelism defaults to `min(16, availableParallelism())`; override with `MINNOW_TEST_CONCURRENCY`.
+`npm test` runs the full suite via [`test/run-all.mjs`](../../test/run-all.mjs) — it discovers every `test/**/*.test.{js,mjs,mts,ts}` file and runs the correct runner/loader per path (see [`test/test-config.mjs`](../../test/test-config.mjs)). New test files are included automatically; `npm run test:check-coverage` fails CI when a file would be orphaned.
+
+**Memory-safe defaults (local dev):** one test file per node process, worker concurrency `1`. Paths under `test/ui/`, `test/orchestrate/`, and `test/chat/orchestrate/` also pass `--test-isolation=process` so each `test()` runs in a fresh child process (happy-dom + board UI imports otherwise OOM typical workstations). Override when you have spare RAM, e.g. `MINNOW_TEST_CONCURRENCY=8 MINNOW_TEST_BATCH_SIZE=60 npm test`. CI stays at concurrency `1` on 4-core runners unless you raise `MINNOW_TEST_CONCURRENCY`.
 
 **CI (MIN-383):** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs on pull requests and pushes to `main`: `npm ci` → `test:check-coverage` → `npx tsc --noEmit` → `npm test` on `windows-latest` and `ubuntu-latest`. Require the **`ci`** status check on `main` before merge ([`.github/BRANCH_PROTECTION.md`](../../.github/BRANCH_PROTECTION.md)).
 

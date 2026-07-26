@@ -7,8 +7,30 @@ import { availableParallelism } from 'node:os';
 
 /** @typedef {'node' | 'tsx-mocks' | 'tsx-mocks-loader' | 'node-tsx'} RunnerId */
 
-/** Full parallelism (~31 workers on a 32-core box) exhausted system RAM; cap it. */
-export const MAX_TEST_CONCURRENCY = 16;
+/** Default worker cap — parallel happy-dom / orchestrate imports OOM 64GB boxes. */
+export const MAX_TEST_CONCURRENCY = 1;
+
+/** Default files per node process — one file so the heap is freed on exit. */
+export const MAX_TEST_BATCH_SIZE = 1;
+
+/** node:test isolation for heavy paths (each `test()` in its own child process). */
+export const HEAVY_TEST_ISOLATION = 'process';
+
+/**
+ * Paths that import happy-dom + orchestrate board UI; run one file per process at
+ * concurrency 1 so parallel module graphs do not exhaust RAM.
+ */
+export const HEAVY_TEST_PATH_PREFIXES = [
+  'test/ui/',
+  'test/orchestrate/',
+  'test/chat/orchestrate/',
+];
+
+/** True when a test file should not share a node process with other heavy suites. */
+export function isHeavyTestPath(filePath) {
+  const norm = String(filePath).replace(/\\/g, '/');
+  return HEAVY_TEST_PATH_PREFIXES.some((prefix) => norm.startsWith(prefix));
+}
 
 /** Resolve node:test worker count (env override or capped availableParallelism). */
 export function resolveTestConcurrency() {
@@ -18,6 +40,16 @@ export function resolveTestConcurrency() {
     if (Number.isInteger(n) && n > 0) return n;
   }
   return Math.max(1, Math.min(MAX_TEST_CONCURRENCY, availableParallelism()));
+}
+
+/** Resolve how many test files share one node process (argv budget also applies). */
+export function resolveTestBatchSize() {
+  const raw = process.env.MINNOW_TEST_BATCH_SIZE;
+  if (raw) {
+    const n = Number(raw);
+    if (Number.isInteger(n) && n > 0) return n;
+  }
+  return MAX_TEST_BATCH_SIZE;
 }
 
 /** How each runner invokes node:test. */

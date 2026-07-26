@@ -2519,8 +2519,8 @@ export interface SendProgrammaticChatTextOptions {
    */
   shouldScheduleTitle?: boolean;
   ownsGlobalStreaming?: boolean;
-  /** Report status errors (defaults to setStatus). */
-  reportStatus?: (level: 'ok' | 'err', message: string) => void;
+  /** Report status updates (defaults to setStatus). */
+  reportStatus?: (level: 'ok' | 'err' | 'spin', message: string) => void;
 }
 
 /**

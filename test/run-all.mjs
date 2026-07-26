@@ -9,8 +9,15 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import path from 'node:path';
 import process from 'node:process';
-import { resolveTestConcurrency } from './test-config.mjs';
+import { fileURLToPath } from 'node:url';
+import {
+  HEAVY_TEST_ISOLATION,
+  isHeavyTestPath,
+  resolveTestBatchSize,
+  resolveTestConcurrency,
+} from './test-config.mjs';
 import {
   groupByRunner,
   listTestsForSuite,
@@ -49,13 +56,15 @@ function printHelp() {
   console.log(`Usage: node test/run-all.mjs [--suite <name>] [--list]
 
 Runs all discoverable test/**/*.test.{js,mjs,mts,ts} files, grouped by runner profile.
-Orphan detection: npm run test:check-coverage`);
+Orphan detection: npm run test:check-coverage
+
+Safe defaults: one file per node process, concurrency 1. Heavy UI/orchestrate paths
+also use --test-isolation=process. Override with MINNOW_TEST_BATCH_SIZE /
+MINNOW_TEST_CONCURRENCY when you have spare RAM.`);
 }
 
 /** Headroom under Windows CreateProcess's 32767-char command-line limit. */
 const ARGV_CHAR_BUDGET = 24_000;
-/** Secondary guard so a single batch does not grow without bound. */
-const MAX_FILES_PER_BATCH = 300;
 
 /** Estimate joined argv length (one space between args). */
 function estimateArgvLength(args) {
@@ -63,36 +72,70 @@ function estimateArgvLength(args) {
   return args.reduce((sum, arg) => sum + arg.length, 0) + args.length - 1;
 }
 
-/** Split files into batches that fit the argv budget and file-count cap. */
-function chunkFiles(files, runnerId) {
+/**
+ * Split files into spawn batches. Heavy paths never share a process with other files.
+ * Light paths honor resolveTestBatchSize() and the argv char budget.
+ */
+export function chunkFiles(files, runnerId, maxFilesPerBatch, concurrency) {
   const profile = RUNNERS[runnerId];
   const fixedPrefix = [
     ...profile.prefixArgs,
-    `--test-concurrency=${resolveTestConcurrency()}`,
+    `--test-concurrency=${concurrency}`,
   ];
 
   const chunks = [];
   let currentChunk = [];
 
+  const flush = () => {
+    if (currentChunk.length === 0) return;
+    chunks.push(currentChunk);
+    currentChunk = [];
+  };
+
   for (const file of files) {
+    if (isHeavyTestPath(file)) {
+      flush();
+      chunks.push([file]);
+      continue;
+    }
+
     const nextChunk = [...currentChunk, file];
     const nextLen = estimateArgvLength([...fixedPrefix, ...nextChunk]);
     const overBudget = nextLen > ARGV_CHAR_BUDGET;
-    const overCount = nextChunk.length > MAX_FILES_PER_BATCH;
+    const overCount = nextChunk.length > maxFilesPerBatch;
 
     if (currentChunk.length > 0 && (overBudget || overCount)) {
-      chunks.push(currentChunk);
+      flush();
       currentChunk = [file];
     } else {
       currentChunk = nextChunk;
     }
   }
 
-  if (currentChunk.length > 0) {
-    chunks.push(currentChunk);
-  }
-
+  flush();
   return chunks;
+}
+
+function runChunk(runnerId, chunk, concurrency, label, { testIsolation } = {}) {
+  const profile = RUNNERS[runnerId];
+  console.log(`\n▶ ${label}`);
+
+  const args = [...profile.prefixArgs];
+  if (testIsolation) {
+    args.push(`--test-isolation=${testIsolation}`);
+  }
+  args.push(`--test-concurrency=${concurrency}`, ...chunk);
+
+  const result = spawnSync(profile.command, args, {
+    stdio: 'inherit',
+    cwd: process.cwd(),
+  });
+
+  if (result.error) {
+    console.error(result.error.message);
+    return 1;
+  }
+  return result.status ?? 1;
 }
 
 function runBatch(runnerId, files) {
@@ -102,32 +145,21 @@ function runBatch(runnerId, files) {
     return 1;
   }
 
+  const concurrency = resolveTestConcurrency();
+  const batchSize = resolveTestBatchSize();
+  const chunks = chunkFiles(files, runnerId, batchSize, concurrency);
   let exitCode = 0;
-  const chunks = chunkFiles(files, runnerId);
 
   for (const [index, chunk] of chunks.entries()) {
+    const soloHeavy = chunk.length === 1 && isHeavyTestPath(chunk[0]);
     const label =
       chunks.length === 1
         ? `${runnerId} (${chunk.length} file${chunk.length === 1 ? '' : 's'})`
-        : `${runnerId} batch ${index + 1}/${chunks.length} (${chunk.length} files)`;
-    console.log(`\n▶ ${label}`);
-
-    const args = [
-      ...profile.prefixArgs,
-      `--test-concurrency=${resolveTestConcurrency()}`,
-      ...chunk,
-    ];
-    const result = spawnSync(profile.command, args, {
-      stdio: 'inherit',
-      cwd: process.cwd(),
+        : `${runnerId} batch ${index + 1}/${chunks.length} (${chunk.length} file${chunk.length === 1 ? '' : 's'})`;
+    const code = runChunk(runnerId, chunk, concurrency, label, {
+      testIsolation: soloHeavy ? HEAVY_TEST_ISOLATION : undefined,
     });
-
-    if (result.error) {
-      console.error(result.error.message);
-      exitCode = 1;
-      continue;
-    }
-    if ((result.status ?? 1) !== 0) exitCode = result.status ?? 1;
+    if (code !== 0) exitCode = code;
   }
 
   return exitCode;
@@ -188,4 +220,10 @@ function main() {
   process.exit(exitCode);
 }
 
-main();
+const isMain =
+  process.argv[1] &&
+  path.resolve(fileURLToPath(import.meta.url)) === path.resolve(process.argv[1]);
+
+if (isMain) {
+  main();
+}

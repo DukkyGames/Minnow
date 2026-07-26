@@ -4,7 +4,15 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { MAX_TEST_CONCURRENCY, resolveTestConcurrency } from './test-config.mjs';
+import {
+  HEAVY_TEST_PATH_PREFIXES,
+  MAX_TEST_CONCURRENCY,
+  MAX_TEST_BATCH_SIZE,
+  isHeavyTestPath,
+  resolveTestBatchSize,
+  resolveTestConcurrency,
+} from './test-config.mjs';
+import { chunkFiles } from './run-all.mjs';
 import {
   discoverTestFiles,
   findOrphanTests,
@@ -70,5 +78,70 @@ describe('resolveTestConcurrency', () => {
   test('never exceeds MAX_TEST_CONCURRENCY when unset', () => {
     delete process.env.MINNOW_TEST_CONCURRENCY;
     assert.ok(resolveTestConcurrency() <= MAX_TEST_CONCURRENCY);
+  });
+});
+
+describe('resolveTestBatchSize', () => {
+  const original = process.env.MINNOW_TEST_BATCH_SIZE;
+
+  test.after(() => {
+    if (original === undefined) {
+      delete process.env.MINNOW_TEST_BATCH_SIZE;
+    } else {
+      process.env.MINNOW_TEST_BATCH_SIZE = original;
+    }
+  });
+
+  test('defaults to MAX_TEST_BATCH_SIZE', () => {
+    delete process.env.MINNOW_TEST_BATCH_SIZE;
+    assert.equal(resolveTestBatchSize(), MAX_TEST_BATCH_SIZE);
+  });
+
+  test('respects valid MINNOW_TEST_BATCH_SIZE', () => {
+    process.env.MINNOW_TEST_BATCH_SIZE = '40';
+    assert.equal(resolveTestBatchSize(), 40);
+  });
+
+  test('ignores garbage values', () => {
+    delete process.env.MINNOW_TEST_BATCH_SIZE;
+    const defaultVal = resolveTestBatchSize();
+
+    process.env.MINNOW_TEST_BATCH_SIZE = 'nope';
+    assert.equal(resolveTestBatchSize(), defaultVal);
+
+    process.env.MINNOW_TEST_BATCH_SIZE = '0';
+    assert.equal(resolveTestBatchSize(), defaultVal);
+  });
+});
+
+describe('isHeavyTestPath', () => {
+  test('matches UI and orchestrate prefixes', () => {
+    for (const prefix of HEAVY_TEST_PATH_PREFIXES) {
+      assert.equal(isHeavyTestPath(`${prefix}foo.test.mjs`), true);
+    }
+    assert.equal(isHeavyTestPath('test/memory/store.test.mjs'), false);
+  });
+});
+
+describe('chunkFiles', () => {
+  test('never batches heavy paths with other files', () => {
+    const files = [
+      'test/memory/a.test.mjs',
+      'test/memory/b.test.mjs',
+      'test/ui/c.test.mjs',
+      'test/memory/d.test.mjs',
+    ];
+    const chunks = chunkFiles(files, 'tsx-mocks-loader', 60, 8);
+    assert.deepEqual(chunks, [
+      ['test/memory/a.test.mjs', 'test/memory/b.test.mjs'],
+      ['test/ui/c.test.mjs'],
+      ['test/memory/d.test.mjs'],
+    ]);
+  });
+
+  test('defaults to one file per chunk when batch size is 1', () => {
+    const files = ['test/memory/a.test.mjs', 'test/memory/b.test.mjs'];
+    const chunks = chunkFiles(files, 'tsx-mocks-loader', 1, 1);
+    assert.deepEqual(chunks, [['test/memory/a.test.mjs'], ['test/memory/b.test.mjs']]);
   });
 });

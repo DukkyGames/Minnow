@@ -27,10 +27,13 @@ const {
 const { isStreamDomVisible } = await import('../../src/chat/streaming-state.ts');
 const { disposeBoardViewForTests } = await import('../../src/ui/orchestrate-board.ts');
 
+/** @type {import('happy-dom').Window | undefined} */
+let domWindow;
+
 function setupDom() {
-  const window = new Window();
-  globalThis.document = window.document;
-  globalThis.HTMLElement = window.HTMLElement;
+  domWindow = new Window();
+  globalThis.document = domWindow.document;
+  globalThis.HTMLElement = domWindow.HTMLElement;
   const area = document.createElement('div');
   area.id = 'chatArea';
   document.body.appendChild(area);
@@ -76,6 +79,10 @@ describe('orchestrate board init loader', () => {
     disposeBoardViewForTests();
     resetOrchestrateInitSplitForTests();
     setSessionStateForTests(null);
+    if (domWindow) {
+      domWindow.close();
+      domWindow = undefined;
+    }
   });
 
   test('init stream does not mount legacy chat split', async () => {
