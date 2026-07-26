@@ -14,8 +14,14 @@
   --brain-node-active: var(--mn-accent);
   --brain-node-orphan: color-mix(in oklch, var(--mn-warning) 60%, var(--mn-fg) 40%);
   --brain-node-orphan-muted: color-mix(in oklch, var(--brain-node-orphan) 58%, var(--brain-stage-bg) 42%);
+  /* Hub ring core — punches a hole in high-degree nodes so weight reads at a glance. */
+  --brain-node-core: color-mix(in oklch, var(--brain-stage-bg) 82%, var(--mn-fg) 18%);
   --brain-edge: color-mix(in oklch, var(--mn-fg) 28%, transparent);
   --brain-edge-hi: color-mix(in oklch, var(--mn-accent) 55%, var(--mn-fg) 45%);
+  /* Inferred `similarTo` links read softer than authored wikilinks. */
+  --brain-edge-similar: color-mix(in oklch, var(--mn-fg) 18%, transparent);
+  --brain-edge-tag: color-mix(in oklch, var(--brain-node-tag) 34%, transparent);
+  --brain-grid: color-mix(in oklch, var(--mn-fg) 22%, transparent);
   --brain-glow: color-mix(in oklch, var(--mn-accent) 48%, transparent);
   --brain-inspector-w: min(600px, 48vw);
   --brain-graph-overlay-pad: 12px;
@@ -214,10 +220,35 @@
   border-bottom: 1px solid var(--mn-border);
 }
 
+/* Folder line, doubling as the node-colour key back to the canvas. */
+.brain-inspector__kind {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 5px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-subtle);
+}
+
+.brain-inspector__kind-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--brain-node-active);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mn-accent) 18%, transparent);
+}
+
 .brain-inspector__title {
   margin: 0 0 4px;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
 }
 
 .brain-inspector__path {
@@ -225,6 +256,7 @@
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 12px;
   color: var(--mn-fg-muted);
+  overflow-wrap: anywhere;
 }
 
 .brain-inspector__tag-chips {
@@ -237,6 +269,113 @@
   color: var(--mn-fg-muted);
 }
 
+/* Metric strip: the page's shape in four numbers, mono and tabular. */
+.brain-inspector__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.brain-inspector__metric {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.brain-inspector__metric-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mn-fg-subtle);
+}
+
+.brain-inspector__metric-value {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.brain-inspector__relations {
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.brain-relation-group + .brain-relation-group {
+  margin-top: 10px;
+}
+
+.brain-relation-group__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mn-fg-muted);
+}
+
+.brain-relation-group__glyph {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--mn-accent);
+}
+
+.brain-relation-group__count {
+  margin-left: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-fg-subtle);
+}
+
+.brain-relation-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.brain-relation-list li {
+  margin: 1px 0;
+}
+
+.brain-relation {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* A wikilink with no page behind it: shown, but not clickable. */
+.brain-relation[data-missing='true'] {
+  color: var(--mn-fg-subtle);
+  font-style: italic;
+  cursor: default;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .brain-relation:not(:disabled):hover {
+    background: color-mix(in srgb, var(--mn-accent) 12%, transparent);
+    color: var(--mn-fg);
+  }
+}
+
 .brain-inspector__body {
   flex: 1;
   width: 100%;
@@ -246,38 +385,8 @@
 }
 
 /* Inspector preview uses full panel width (global .brain-markdown caps at 72ch). */
-.brain-inspector__body.brain-markdown {
+.brain-inspector__markdown.brain-markdown {
   max-width: none;
-}
-
-.brain-inspector__backlinks {
-  margin: 4px 0 12px;
-}
-
-.brain-inspector__backlink-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.brain-inspector__backlink-list li {
-  margin: 2px 0;
-}
-
-.brain-inspector__backlink-list .brain-inline-link {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-  text-decoration: none;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .brain-inspector__backlink-list .brain-inline-link:hover {
-    background: color-mix(in srgb, var(--mn-fg) 5%, transparent);
-    text-decoration: underline;
-  }
 }
 
 .brain-inspector__actions {
@@ -389,25 +498,31 @@
   min-width: 140px;
 }
 
-.brain-graph-toolbar__zoom {
+/* Segmented control: one bordered shell, hairline dividers between buttons. */
+.brain-graph-seg {
+  gap: 0;
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
   overflow: hidden;
   background: var(--mn-surface-2);
 }
 
-.brain-graph-toolbar__zoom .brain-action-btn {
+.brain-graph-seg .brain-action-btn {
   border: none;
   border-radius: 0;
   background: transparent;
+  padding: 7px 11px;
+  font-size: 12px;
 }
 
-.brain-graph-toolbar__zoom .brain-action-btn + .brain-action-btn {
+.brain-graph-seg .brain-action-btn + .brain-action-btn {
   border-left: 1px solid var(--mn-border);
 }
 
-.brain-graph-toolbar__toggles {
-  flex-wrap: wrap;
+.brain-graph-seg .brain-action-btn[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--mn-accent) 16%, transparent);
+  color: var(--mn-fg);
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--mn-accent) 70%, transparent);
 }
 
 .brain-graph-toolbar__primary {
@@ -415,18 +530,34 @@
 }
 
 .brain-graph-search {
+  position: relative;
+  display: flex;
+  align-items: center;
   flex: 1;
   min-width: 0;
 }
 
+.brain-graph-search__icon {
+  position: absolute;
+  left: 9px;
+  width: 15px;
+  height: 15px;
+  stroke: var(--mn-fg-subtle);
+  fill: none;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
 .brain-graph-search input {
   width: 100%;
-  padding: 8px 10px;
+  padding: 8px 10px 8px 30px;
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
   background: var(--mn-surface-2);
   color: var(--mn-fg);
   font: inherit;
+  font-size: 13px;
 }
 
 .brain-graph-search input:focus-visible {
@@ -435,8 +566,12 @@
 }
 
 .brain-graph-stats {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mn-accent) 12%, transparent);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
   color: var(--mn-fg-muted);
   white-space: nowrap;
   flex-shrink: 0;
@@ -457,58 +592,94 @@
   text-align: center;
 }
 
-.brain-graph-tree-panel {
+/*
+ * Left rail: the page tree takes whatever height is left over and scrolls, the
+ * structure readout sits under it at its natural height. Flexbox owns this —
+ * an earlier version measured both panels in JS and could starve the tree to
+ * zero height whenever the readout grew.
+ */
+.brain-graph-sidebar {
   position: relative;
   z-index: 3;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   align-self: flex-start;
   display: flex;
   flex-direction: column;
-  width: min(220px, 28vw);
-  max-height: var(--brain-graph-tree-max-height, calc(100% - 3.5rem));
+  gap: var(--brain-graph-overlay-gap);
+  width: min(232px, 30vw);
+  max-width: calc(100% - 2 * var(--brain-graph-overlay-pad));
   min-height: 0;
-  overflow: hidden;
-  transition:
-    width 0.22s var(--brain-ease-out),
-    opacity 0.22s var(--brain-ease-out);
+  pointer-events: none;
+  transition: width 0.22s var(--brain-ease-out);
 }
 
-.brain-graph-tree-panel.is-collapsed {
-  width: 0;
-  min-width: 0;
-  padding: 0;
-  border: none;
+.brain-graph-sidebar > * {
+  pointer-events: auto;
+}
+
+/* Tree layout hides the canvas, so the rail can afford to be wider. */
+.brain-graph-stage.is-tree-layout .brain-graph-sidebar {
+  width: min(400px, 44vw);
+}
+
+.brain-graph-tree-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  /* Navigation outranks the readout: keep ~5 rows even in a short rail. */
+  min-height: 168px;
   overflow: hidden;
-  opacity: 0;
-  pointer-events: none;
+}
+
+/* Collapsed panels keep their header — the rail never loses its labels. */
+.brain-graph-tree-panel.is-collapsed {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.brain-graph-tree-panel.is-collapsed .brain-graph-tree-mount {
+  display: none;
 }
 
 .brain-graph-tree-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
   padding: 8px 10px;
   border-bottom: 1px solid var(--mn-border);
   background: var(--mn-surface-2);
 }
 
+.brain-graph-tree-panel.is-collapsed .brain-graph-tree-head {
+  border-bottom: none;
+}
+
+.brain-graph-tree-head .brain-section-subtitle {
+  margin: 0;
+}
+
 .brain-graph-tree-toggle {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
-  min-height: 32px;
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
   padding: 0;
 }
 
 .brain-graph-tree-toggle .icon-svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
+  transition: transform 0.18s var(--brain-ease-out);
+}
+
+.brain-graph-tree-panel.is-collapsed .brain-graph-tree-toggle .icon-svg {
+  transform: rotate(180deg);
 }
 
 .brain-graph-tree-mount {
-  flex: 0 1 auto;
-  height: auto;
-  max-height: var(--brain-graph-tree-scroll-max-height, 100%);
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   padding: 8px;
 }
@@ -587,43 +758,243 @@
   max-height: 320px;
 }
 
+/* Centred so it never lands under the left rail. */
 .brain-graph-hint {
   position: absolute;
-  left: var(--brain-graph-overlay-pad);
-  bottom: 52px;
-  z-index: 5;
-  max-width: 280px;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: var(--brain-graph-overlay-pad);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(460px, calc(100% - 24px));
   padding: 10px 12px;
   font-size: 12px;
   color: var(--mn-fg-muted);
   pointer-events: auto;
 }
 
+.brain-graph-hint p {
+  margin: 0;
+}
+
+.brain-graph-hint .brain-action-btn {
+  flex-shrink: 0;
+}
+
+/* ── Structure readout ────────────────────────────────────────────────────── */
+
+.brain-graph-readout {
+  flex: 0 0 auto;
+  width: 100%;
+  padding: 10px 12px 12px;
+}
+
+.brain-graph-readout__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.brain-graph-readout__head .brain-section-subtitle {
+  margin: 0;
+}
+
+.brain-graph-readout__toggle {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+}
+
+.brain-graph-readout__toggle .icon-svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.18s var(--brain-ease-out);
+}
+
+.brain-graph-readout.is-collapsed .brain-graph-readout__toggle .icon-svg {
+  transform: rotate(180deg);
+}
+
+.brain-graph-readout__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.brain-graph-readout.is-collapsed .brain-graph-readout__body {
+  display: none;
+}
+
+.brain-graph-readout.is-collapsed {
+  padding-bottom: 8px;
+}
+
+/* Instrumentation grid: uppercase label over a mono value, no card stack. */
+.brain-graph-readout__metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 10px;
+}
+
+.brain-graph-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.brain-graph-metric__label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mn-fg-subtle);
+}
+
+.brain-graph-metric__value {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: var(--mn-fg);
+}
+
+.brain-graph-metric[data-tone='warn'] .brain-graph-metric__value {
+  color: var(--mn-warning);
+}
+
+.brain-graph-hubs {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 10px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.brain-graph-hubs__title {
+  margin: 0 0 2px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mn-fg-subtle);
+}
+
+.brain-graph-hub {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px 20px;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 3px 4px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.brain-graph-hub:disabled {
+  cursor: default;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .brain-graph-hub:not(:disabled):hover {
+    background: color-mix(in srgb, var(--mn-fg) 6%, transparent);
+    color: var(--mn-fg);
+  }
+}
+
+.brain-graph-hub__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Degree bar — proportion of the top hub's connection count. */
+.brain-graph-hub__bar {
+  height: 3px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--mn-fg) 10%, transparent);
+  overflow: hidden;
+}
+
+.brain-graph-hub__bar::after {
+  content: '';
+  display: block;
+  width: var(--fill, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brain-node-page);
+}
+
+.brain-graph-hub__count {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--mn-fg-subtle);
+}
+
 .brain-graph-legend {
-  position: absolute;
-  left: var(--brain-graph-overlay-pad);
-  bottom: var(--brain-graph-overlay-pad);
-  z-index: 5;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  max-width: min(420px, calc(100% - 24px));
-  padding: 8px 10px;
-  pointer-events: auto;
+  gap: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--mn-border);
 }
 
 .brain-graph-legend__item {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 12px;
+  padding: 3px 7px;
+  border: 1px solid var(--mn-border);
+  border-radius: 999px;
+  background: transparent;
   color: var(--mn-fg-muted);
+  font: inherit;
+  font-size: 11px;
   white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.16s var(--brain-ease-out),
+    color 0.16s var(--brain-ease-out),
+    opacity 0.16s var(--brain-ease-out);
+}
+
+/* Muted classes stay listed but read as switched off. */
+.brain-graph-legend__item[aria-pressed='false'] {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .brain-graph-legend__item:hover {
+    background: color-mix(in srgb, var(--mn-fg) 6%, transparent);
+    color: var(--mn-fg);
+  }
+}
+
+.brain-graph-legend__count {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-fg-subtle);
 }
 
 .brain-graph-legend__swatch {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
   border: 1px solid color-mix(in srgb, var(--mn-fg) 12%, transparent);
@@ -637,25 +1008,16 @@
   background: var(--brain-node-tag);
 }
 
+.brain-graph-legend__swatch--symbol {
+  background: var(--brain-node-symbol);
+}
+
 .brain-graph-legend__swatch--orphan {
   background: var(--brain-node-orphan);
 }
 
 .brain-graph-legend__swatch--active {
   background: var(--brain-node-active);
-}
-
-.brain-graph-tree-only {
-  position: relative;
-  z-index: 3;
-  flex: 1 1 auto;
-  align-self: flex-start;
-  width: min(280px, 32vw);
-  max-width: calc(100% - 2 * var(--brain-graph-overlay-pad, 12px));
-  min-height: 0;
-  min-width: 0;
-  padding: 12px;
-  overflow-y: auto;
 }
 
 .brain-lint-group__head {
@@ -685,7 +1047,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .brain-inspector,
-  .brain-graph-tree-panel,
+  .brain-graph-sidebar,
   .brain-section--panel {
     animation: none;
     transition: none;
@@ -706,12 +1068,9 @@
     width: 100%;
   }
 
-  .brain-graph-tree-panel {
-    width: min(200px, 42vw);
-  }
-
-  .brain-graph-tree-only {
-    width: min(240px, 42vw);
+  .brain-graph-sidebar,
+  .brain-graph-stage.is-tree-layout .brain-graph-sidebar {
+    width: min(210px, 42vw);
   }
 
   .brain-page.is-graph-canvas-bg .brain-inspector.is-open {
@@ -752,22 +1111,18 @@
     padding: 8px;
   }
 
-  .brain-graph-tree-panel {
+  /* Narrow screens: the rail becomes a bottom sheet under the toolbar. */
+  .brain-graph-sidebar,
+  .brain-graph-stage.is-tree-layout .brain-graph-sidebar {
     margin-top: auto;
     align-self: stretch;
     width: auto;
-    max-height: min(38vh, 280px);
+    max-width: none;
     flex: 0 1 auto;
-  }
-
-  .brain-graph-tree-only {
-    align-self: stretch;
-    width: auto;
     max-height: min(52vh, 420px);
-    flex: 0 1 auto;
   }
 
-  .brain-graph-legend {
-    font-size: 11px;
+  .brain-graph-readout__metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
