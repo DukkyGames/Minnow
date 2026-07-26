@@ -15,10 +15,12 @@ import {
 import { getWorkspacePath } from '../state/workspace';
 import type { DesktopChatActivateOptions } from './desktop-state';
 import {
+  ensureChatHistoryLoaded,
   ensureSessionsReady,
   getActiveChat,
   isEphemeralEmptyChat,
   isExpertChat,
+  markSessionScalarsDirty,
   newChatId,
   rememberActiveChatForApp,
   rememberWorkspaceActiveChat,
@@ -185,12 +187,15 @@ export function syncDesktopChatSessionSwitch(
 }
 
 /** Switch the active assistant thread on the desktop surface. */
-export function activateDesktopChatSession(chatId: string): void {
+export async function activateDesktopChatSession(chatId: string): Promise<void> {
   if (!sessionState) return;
   const prevId = sessionState.activeId;
   const chat = sessionState.chats.find((c) => c.id === chatId);
   if (!chat) return;
   if (chatId === prevId) {
+    // Re-hydrate in case this chat was never loaded after a lazy boot.
+    await ensureChatHistoryLoaded(chatId);
+    if (!sessionState || sessionState.activeId !== chatId) return;
     acknowledgeChatViewed(chatId);
     renderDesktopChatRail(desktopWorkspacePath);
     renderDesktopChatMessages();
@@ -201,6 +206,10 @@ export function activateDesktopChatSession(chatId: string): void {
     return;
   }
   sessionState.activeId = chatId;
+  markSessionScalarsDirty();
+  // Lazy history: wait before paint so restart+switch does not show empty state.
+  await ensureChatHistoryLoaded(chatId);
+  if (!sessionState || sessionState.activeId !== chatId) return;
   syncDesktopChatSessionSwitch(prevId, chat);
   clearPanelCwdUserOverride();
   syncPanelFromActiveChat({ forceFileTree: true });
@@ -246,6 +255,7 @@ export async function bootstrapDesktopChat(options?: DesktopChatActivateOptions)
         const chat = state.chats.find((c) => c.id === options.chatId?.trim());
         if (chat) {
           state.activeId = chat.id;
+          markSessionScalarsDirty();
           acknowledgeChatViewed(chat.id);
         } else {
           await ensureActiveDesktopAssistantChat();
@@ -262,6 +272,10 @@ export async function bootstrapDesktopChat(options?: DesktopChatActivateOptions)
       } catch {
         /* server offline — still show shell */
       }
+    }
+    // Lazy history: hydrate the active desktop thread before the first paint.
+    if (state.activeId) {
+      await ensureChatHistoryLoaded(state.activeId);
     }
   }
 

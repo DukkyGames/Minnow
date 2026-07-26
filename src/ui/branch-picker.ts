@@ -155,7 +155,7 @@ export function attachBranchPicker(
         closeBranchMenu(menu);
         openMenu = null;
         setExpanded(false);
-        switchBranch(chat, forkHistoryIndex, run.branchId);
+        void switchBranch(chat, forkHistoryIndex, run.branchId);
       });
       menu.appendChild(item);
     }
@@ -190,7 +190,11 @@ export function attachBranchPicker(
   wrap.appendChild(pill);
 }
 
-function switchBranch(chat: Chat, forkHistoryIndex: number, branchId: string): void {
+async function switchBranch(
+  chat: Chat,
+  forkHistoryIndex: number,
+  branchId: string,
+): Promise<void> {
   const ok = activateBranch(chat, forkHistoryIndex, branchId);
   if (!ok) {
     setStatus('err', 'Could not switch branch');
@@ -201,7 +205,8 @@ function switchBranch(chat: Chat, forkHistoryIndex: number, branchId: string): v
   // Keep session activeId aligned with the chat whose branch we switched so the
   // next composer send does not land in a different (or newly created) chat.
   const prevActiveId = sessionState?.activeId;
-  if (switchActiveChat(chat.id)) {
+  const switched = await switchActiveChat(chat.id);
+  if (switched) {
     void switchComposerDraft(prevActiveId, chat);
   }
   renderChatInForegroundShell(chat);

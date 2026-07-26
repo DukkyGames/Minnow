@@ -365,17 +365,20 @@ export function mountEmailAssistantPanel(
   const switchToChat = (chat: Chat): void => {
     if (!sessionState) return;
     const previousId = sessionState.activeId;
-    activateChatById(chat.id);
-    switchComposerDraft(previousId, chat);
-    resizeComposer(input);
-    syncAskQuestionModalOnChatSwitch(previousId, chat.id);
-    notifyAskQuestionDisplayContextChanged();
-    void resumeIncompleteToolBatchOnChatSwitch(chat);
-    renderMessages();
-    void import('../../tools/stream-chat-dom').then((module) =>
-      module.remountStreamDomForChat(chat.id),
-    );
-    input.focus();
+    // Await history hydrate before painting — lazy-boot chats start empty.
+    void activateChatById(chat.id).then(() => {
+      if (!sessionState || sessionState.activeId !== chat.id) return;
+      switchComposerDraft(previousId, chat);
+      resizeComposer(input);
+      syncAskQuestionModalOnChatSwitch(previousId, chat.id);
+      notifyAskQuestionDisplayContextChanged();
+      void resumeIncompleteToolBatchOnChatSwitch(chat);
+      renderMessages();
+      void import('../../tools/stream-chat-dom').then((module) =>
+        module.remountStreamDomForChat(chat.id),
+      );
+      input.focus();
+    });
   };
 
   /** Ensure the Email-scoped session is active before any transcript operation. */

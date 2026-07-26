@@ -278,6 +278,70 @@ describe('PATCH /api/config/sessions', () => {
     assert.equal(beta.history[0].content, 'beta-msg');
   });
 
+  test('whole-blob PUT omits history for one chat and preserves its messages', async () => {
+    // Simulates C.2 first-save after lazy boot: active chat has history, others omit it.
+    const alphaId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+    const betaId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+    const alpha = makeChat(alphaId, 'Alpha kept', {
+      history: [{ role: 'user', content: 'alpha-msg' }],
+      updatedAt: 1_700_000_000_300,
+      lastMessageAt: 1_700_000_000_300,
+    });
+    const betaMeta = {
+      id: betaId,
+      name: 'Beta meta-only',
+      workspacePath: '',
+      modelId: '',
+      modeId: 'build',
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: 1_700_000_000_300,
+      lastMessageAt: 1_700_000_000_300,
+    };
+    const put = await httpRequest(
+      baseUrl,
+      'PUT',
+      '/api/config/sessions',
+      makeState([alpha, betaMeta]),
+    );
+    assert.equal(put.status, 200);
+
+    const after = (await httpRequest(baseUrl, 'GET', '/api/config/sessions')).json;
+    const beta = after.chats.find((c) => c.id === betaId);
+    assert.equal(beta.name, 'Beta meta-only');
+    assert.equal(beta.history.length, 1);
+    assert.equal(beta.history[0].content, 'beta-msg');
+    const alphaAfter = after.chats.find((c) => c.id === alphaId);
+    assert.equal(alphaAfter.history[0].content, 'alpha-msg');
+  });
+
+  test('PUT with omitted history on one chat preserves its messages', async () => {
+    const betaId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+    const before = (await httpRequest(baseUrl, 'GET', '/api/config/sessions')).json;
+    const alpha = before.chats.find((c) => c.id.startsWith('aaaa'));
+    const beta = before.chats.find((c) => c.id === betaId);
+    assert.ok(alpha?.history?.length);
+
+    const { history: _drop, ...betaMeta } = beta;
+    void _drop;
+    const putBody = {
+      ...before,
+      chats: [
+        alpha,
+        { ...betaMeta, name: 'Beta via PUT meta' },
+      ],
+    };
+
+    const put = await httpRequest(baseUrl, 'PUT', '/api/config/sessions', putBody);
+    assert.equal(put.status, 200);
+
+    const after = (await httpRequest(baseUrl, 'GET', '/api/config/sessions')).json;
+    const betaAfter = after.chats.find((c) => c.id === betaId);
+    assert.equal(betaAfter.name, 'Beta via PUT meta');
+    assert.equal(betaAfter.history.length, 1);
+    assert.equal(betaAfter.history[0].content, 'beta-msg');
+  });
+
   test('POST is a sendBeacon alias for PATCH', async () => {
     const patched = makeChat('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Alpha via POST', {
       history: [{ role: 'user', content: 'alpha-msg' }],

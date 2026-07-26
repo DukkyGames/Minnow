@@ -882,17 +882,20 @@ export function getExpertChats(expertId: string): Chat[] {
     .sort((a, b) => getChatLastMessageAt(b) - getChatLastMessageAt(a));
 }
 
-/** Set the active chat id and schedule a session save. */
-export function activateChatById(id: string): void {
+/**
+ * Set the active chat id, hydrate history, and schedule a session save.
+ * Await this (or {@link ensureChatHistoryLoaded}) before painting the transcript —
+ * lazy-boot chats start with `history: []` until the history GET lands.
+ */
+export async function activateChatById(id: string): Promise<void> {
   const state = requireSessionState();
   const chat = state.chats.find((c) => c.id === id);
   if (!chat) return;
   state.activeId = id;
   markSessionScalarsDirty();
   maybeRememberActiveChatForForegroundApp(state, chat);
-  // C.1: kick off history hydrate when switching (no-op with flag off).
-  void ensureChatHistoryLoaded(id);
   scheduleSaveSessions();
+  await ensureChatHistoryLoaded(id);
 }
 
 /** Read legacy expert selection when still present on disk (pre-v6). */
@@ -1229,12 +1232,12 @@ export interface WorkspaceChangeResult {
 
 /**
  * After the workspace folder changes: persist per-workspace active chat and switch
- * to the best chat for the new path.
+ * to the best chat for the new path. Awaits history hydrate for the new active chat.
  */
-export function onWorkspaceChanged(
+export async function onWorkspaceChanged(
   newPath: string,
   previousPath?: string,
-): WorkspaceChangeResult {
+): Promise<WorkspaceChangeResult> {
   const state = requireSessionState();
   const prevKey = normalizeWorkspacePath(previousPath ?? '');
   rememberActiveChatForWorkspaceKey(prevKey);
@@ -1246,9 +1249,9 @@ export function onWorkspaceChanged(
   state.activeId = nextId;
   markSessionScalarsDirty();
   rememberActiveChatForWorkspaceKey(normalizeWorkspacePath(newPath));
-  // C.1: hydrate the chat that becomes active after a workspace switch.
-  void ensureChatHistoryLoaded(nextId);
   scheduleSaveSessions();
+  // C.1: hydrate before callers paint — lazy-boot chats have empty history until this lands.
+  await ensureChatHistoryLoaded(nextId);
   return { activeChat: getActiveChat(), activeChanged };
 }
 
@@ -1697,8 +1700,9 @@ export function createAndActivateChat(modelId: string): Chat {
 
 /**
  * Switch active chat by id. Returns the chat when switched, or null if id is missing / already active.
+ * Awaits history hydrate so callers can paint a full transcript after the Promise settles.
  */
-export function switchActiveChat(id: string): Chat | null {
+export async function switchActiveChat(id: string): Promise<Chat | null> {
   const state = requireSessionState();
   if (id === state.activeId) return null;
   const chat = state.chats.find((c) => c.id === id);
@@ -1707,9 +1711,8 @@ export function switchActiveChat(id: string): Chat | null {
   markSessionScalarsDirty();
   rememberActiveChatForWorkspaceKey(normalizeWorkspacePath(chat.workspacePath ?? ''));
   maybeRememberActiveChatForForegroundApp(state, chat);
-  // C.1: kick off history hydrate when switching (no-op with flag off).
-  void ensureChatHistoryLoaded(id);
   scheduleSaveSessions();
+  await ensureChatHistoryLoaded(id);
   return chat;
 }
 

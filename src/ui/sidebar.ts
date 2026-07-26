@@ -28,12 +28,14 @@ import { isGoalEvaluating } from '../chat/goal/evaluating-state';
 import { syncTodoPanel } from './todo-panel';
 import {
   createEmptyChatObject,
+  ensureChatHistoryLoaded,
   formatDraftChatSidebarName,
   getActiveChat,
   getSidebarListedChatsForWorkspace,
   getUnassignedChats,
   isEphemeralEmptyChat,
   isHiddenFromMainSidebar,
+  markSessionScalarsDirty,
   onWorkspaceChanged,
   pruneEphemeralEmptyChats,
   removeChatById,
@@ -312,9 +314,13 @@ export function onModelSelectChange(): void {
 }
 
 /** Refresh main column after workspace folder changes. */
-export function applyWorkspaceScopedSession(newPath: string, previousPath?: string): void {
+export async function applyWorkspaceScopedSession(
+  newPath: string,
+  previousPath?: string,
+): Promise<void> {
   clearChatSelection();
-  const { activeChat, activeChanged } = onWorkspaceChanged(newPath, previousPath);
+  // Awaits history hydrate for the workspace's active chat before painting.
+  const { activeChat, activeChanged } = await onWorkspaceChanged(newPath, previousPath);
   if (activeChanged) {
     recordChatOpened(activeChat.id);
     syncModelSelectForActiveChat();
@@ -1109,7 +1115,7 @@ export function deleteChat(chatId: string, evt?: Event): void {
   onChatRemoved(result);
 }
 
-export function switchChat(id: string): void {
+export async function switchChat(id: string): Promise<void> {
   restoreChatColumnOnChatSelect();
   if (isOrchestrateHubMounted()) {
     teardownOrchestrateHub();
@@ -1149,6 +1155,9 @@ export function switchChat(id: string): void {
     const codeOverviewOpen = isCodeOverviewOpen();
     if (boardWasOpen || planScreenSuspendedForSameChat || codeOverviewOpen) {
       if (sameChat) {
+        // Re-hydrate in case this chat was never loaded after a lazy boot.
+        await ensureChatHistoryLoaded(id);
+        if (sessionState.activeId !== id) return;
         paintActiveChatInForegroundShell(sameChat);
         syncViewModeToggleFromActiveChat();
         syncComposerFromStreamingState();
@@ -1171,6 +1180,10 @@ export function switchChat(id: string): void {
   const chat = sessionState.chats.find((c) => c.id === id);
   if (!chat) return;
   sessionState.activeId = id;
+  markSessionScalarsDirty();
+  // Lazy history: wait before paint so restart+switch does not show an empty transcript.
+  await ensureChatHistoryLoaded(id);
+  if (!sessionState || sessionState.activeId !== id) return;
   syncAskQuestionModalOnChatSwitch(prevActiveId, id);
   notifyAskQuestionDisplayContextChanged();
   acknowledgeChatViewed(id);
