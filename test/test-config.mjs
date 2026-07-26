@@ -147,6 +147,8 @@ export const PATH_RUNNER_RULES = [
   // Both use mock.module and transitively pull in UI code that imports CSS.
   { pattern: 'test/chat/super-plan/stages.test.mts', runner: 'tsx-mocks-loader' },
   { pattern: 'test/chat/engine-stream-mirror.test.mts', runner: 'tsx-mocks-loader' },
+  // Mocks server/session/loop-loader.js so turn lifetime is deterministic.
+  { pattern: 'test/engine/session-queue-drain.test.mjs', runner: 'tsx-mocks' },
   { pattern: 'test/super-plan/controller-lifecycle.test.mts', runner: 'tsx-mocks-loader' },
   { pattern: 'test/ui/orchestrate-finish-dashboard.test.mjs', runner: 'tsx-mocks-loader' },
   { pattern: 'test/ui/settings-layout-links.test.mjs', runner: 'tsx-mocks-loader' },

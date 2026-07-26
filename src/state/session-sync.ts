@@ -8,7 +8,11 @@
  */
 
 import { streamingChatIds } from '../app-state';
-import { withSessionToken } from '../api/session-token';
+import {
+  getSessionToken,
+  refreshSessionTokenFromServer,
+  withSessionToken,
+} from '../api/session-token';
 import {
   isActiveChatEngineTurnActive,
   notifyChatStreamEnded,
@@ -40,10 +44,16 @@ export { setEngineOwnsBoardDrive };
 /** Poll while a remote patch is buffered during local stream activity. */
 const PENDING_FLUSH_MS = 2_000;
 
+/** Cap token-refresh reconnects after EventSource CLOSED (server restart). */
+const SSE_RECONNECT_MAX = 5;
+const SSE_RECONNECT_BASE_MS = 250;
+
 let syncInitialized = false;
 let eventSource: EventSource | null = null;
 let pendingFlushTimer: ReturnType<typeof setInterval> | null = null;
 let streamEndUnsub: (() => void) | null = null;
+let sseReconnectAttempts = 0;
+let sseReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Latest remote snapshot/patch deferred while this client is streaming.
@@ -175,15 +185,58 @@ function mirrorLiveSubAgentRunsFromSession(): void {
   });
 }
 
+function stopSseReconnectTimer(): void {
+  if (sseReconnectTimer) {
+    clearTimeout(sseReconnectTimer);
+    sseReconnectTimer = null;
+  }
+}
+
+/**
+ * After EventSource reaches CLOSED (common after a server restart with a stale
+ * ?token=), refresh the per-boot token like install-fetch-auth and open a new
+ * stream when it changes. Unchanged tokens bail (no reconnect loop). Successful
+ * reconnects are capped + lightly backed off so a flapping server cannot spin.
+ */
+async function handleSessionStreamError(): Promise<void> {
+  const source = eventSource;
+  if (!source || source.readyState !== EventSource.CLOSED) return;
+  if (sseReconnectAttempts >= SSE_RECONNECT_MAX) {
+    reportBackgroundError(
+      'session-sync-reconnect-cap',
+      new Error(`session SSE reconnect cap (${SSE_RECONNECT_MAX}) reached`),
+    );
+    return;
+  }
+
+  const previousToken = getSessionToken();
+  const refreshed = await refreshSessionTokenFromServer();
+  const nextToken = getSessionToken();
+  if (!refreshed || !nextToken || nextToken === previousToken) {
+    // Same token (or refresh failed) — EventSource already CLOSED; do not spin.
+    return;
+  }
+
+  sseReconnectAttempts += 1;
+  source.close();
+  eventSource = null;
+  const delay = SSE_RECONNECT_BASE_MS * 2 ** Math.min(sseReconnectAttempts - 1, 4);
+  stopSseReconnectTimer();
+  sseReconnectTimer = setTimeout(() => {
+    sseReconnectTimer = null;
+    connectSessionStream();
+  }, delay);
+}
+
 function connectSessionStream(): void {
   if (eventSource) return;
   // EventSource cannot set Authorization / X-Minnow-Token — append ?token= (session)
   // and optional ?minnowToken= when VITE_MINNOW_TOKEN mirrors server MINNOW_TOKEN.
   let streamPath = withSessionToken('/api/session/stream');
+  // import.meta.env is Vite-injected; plain Node/tsx tests may lack it.
+  const viteMinnowToken = import.meta.env?.VITE_MINNOW_TOKEN;
   const minnowToken =
-    typeof import.meta.env.VITE_MINNOW_TOKEN === 'string'
-      ? import.meta.env.VITE_MINNOW_TOKEN.trim()
-      : '';
+    typeof viteMinnowToken === 'string' ? viteMinnowToken.trim() : '';
   if (minnowToken) {
     const sep = streamPath.includes('?') ? '&' : '?';
     streamPath = `${streamPath}${sep}minnowToken=${encodeURIComponent(minnowToken)}`;
@@ -191,6 +244,8 @@ function connectSessionStream(): void {
   eventSource = new EventSource(streamPath);
 
   eventSource.addEventListener('snapshot', (ev) => {
+    // A live snapshot means the stream is healthy — reset reconnect budget.
+    sseReconnectAttempts = 0;
     try {
       const payload = JSON.parse((ev as MessageEvent).data) as {
         rev?: number;
@@ -215,7 +270,7 @@ function connectSessionStream(): void {
   });
 
   eventSource.onerror = () => {
-    /* EventSource auto-reconnects */
+    void handleSessionStreamError();
   };
 }
 
@@ -235,6 +290,7 @@ export function initSessionSync(): void {
 /** Tear down SSE on shutdown (best-effort). */
 export function shutdownSessionSync(): void {
   stopPendingFlushTimer();
+  stopSseReconnectTimer();
   if (streamEndUnsub) {
     streamEndUnsub();
     streamEndUnsub = null;
@@ -244,6 +300,7 @@ export function shutdownSessionSync(): void {
     eventSource = null;
   }
   pendingRemote = null;
+  sseReconnectAttempts = 0;
 }
 
 /** Test helper: reset module state. */

@@ -20,10 +20,10 @@ desktop builds, closes the LAN token hole, and cleans up correctness/doc drift.
 - [ ] Commit: `🔒 fix(session): loopback-gate token bootstrap and drop session CORS`
 
 ### Stage 2 — Engine correctness
-- [ ] Move composer queue drain into turn teardown (`commands.js`); skip on steer/abort
-- [ ] Stop double-writing error rows (keep `commands.js` handler only)
-- [ ] SSE reconnect with refreshed token + backoff/cap (`session-sync.ts`)
-- [ ] Tests: queue drain, single error row, SSE reconnect
+- [x] Move composer queue drain into turn teardown (`commands.js`); skip on steer/abort
+- [x] Stop double-writing error rows (keep `commands.js` handler only)
+- [x] SSE reconnect with refreshed token + backoff/cap (`session-sync.ts`)
+- [x] Tests: queue drain, single error row, SSE reconnect
 - [ ] Commit: `🐛 fix(session): queue drain, single error row, SSE token refresh`
 
 ### Stage 3 — Ship engine in packaged builds

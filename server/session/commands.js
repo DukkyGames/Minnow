@@ -248,10 +248,53 @@ async function handleSendMessage(cmd) {
       });
     })
     .finally(() => {
+      // End the turn *before* draining the queue — otherwise send_message sees
+      // isEngineTurnActive and re-enqueues the message it just shifted.
+      const aborted = controller.signal.aborted;
       endEngineTurn(chatId, controller);
+      if (!aborted) {
+        void drainQueuedMessage(chatId);
+      }
     });
 
   return { rev, accepted: true };
+}
+
+/**
+ * After a turn settles, dequeue one follow-up and start the next turn.
+ * Skips when a steer is pending (renderer precedence) or the queue is empty.
+ * Recursion is intentional: each drained turn's teardown drains the next item.
+ * @param {string} chatId
+ */
+async function drainQueuedMessage(chatId) {
+  if (isEngineTurnActive(chatId)) return;
+
+  /** @type {string | null} */
+  let text = null;
+  let skipForSteer = false;
+  await mutateEngineState((state) => {
+    const chat = findChatInState(state, chatId);
+    if (!chat) return;
+    if (typeof chat.pendingSteerMessage === 'string' && chat.pendingSteerMessage.trim()) {
+      skipForSteer = true;
+      return;
+    }
+    const queue = Array.isArray(chat.pendingMessageQueue) ? chat.pendingMessageQueue : [];
+    if (queue.length === 0) return;
+    const item = queue.shift();
+    chat.pendingMessageQueue = queue.length > 0 ? queue : undefined;
+    const next = typeof item?.text === 'string' ? item.text.trim() : '';
+    if (!next) return;
+    text = next;
+    chat.updatedAt = Date.now();
+  });
+
+  if (skipForSteer || !text) return;
+
+  // Fire-and-forget — mirrors renderer void flushPendingMessageQueue.
+  void handleSendMessage({ type: 'send_message', chatId, text }).catch((err) => {
+    console.error('[session-engine] drainQueuedMessage failed:', err);
+  });
 }
 
 /**

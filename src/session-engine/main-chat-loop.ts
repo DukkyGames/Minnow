@@ -2,8 +2,9 @@
  * DOM-less main-chat tool loop for the Session Engine (MIN-359 Phase 1).
  *
  * Generalizes headless/runner.ts patterns and adds what loop.ts has that headless
- * lacks: steer consume at tool-loop boundaries, message-queue flush, mode-switch
- * tools as state mutations, and a goal post-turn hook seam.
+ * lacks: steer consume at tool-loop boundaries, mode-switch tools as state
+ * mutations, and a goal post-turn hook seam. Composer follow-up queue drain is
+ * owned by server/session/commands.js turn teardown (after endEngineTurn).
  *
  * Shipped vs Phase 1 gaps:
  * - Multimodal attachments / VLM via turnAttachments + buildEngineApiMessages
@@ -61,8 +62,6 @@ import {
   executeCreateChatWithModeEngine,
   executeEngineModeTool,
   isEngineModeTool,
-  peekOldestQueuedMessage,
-  shiftOldestQueuedMessage,
 } from './engine-loop-helpers';
 
 /** Browser-catalog board tools that run in-process when the board host is active (MIN-360). */
@@ -115,7 +114,6 @@ export interface EngineMainChatDeps {
   baseUrl?: string;
   token?: string;
   onGoalAfterTurn?: (chat: Chat, goalDriven: boolean) => Promise<void>;
-  onFlushQueue?: (chatId: string, text: string) => Promise<void>;
 }
 
 const MODE_TOOL_NAMES = new Set([
@@ -154,13 +152,6 @@ async function defaultDeps(): Promise<EngineMainChatDeps> {
     async mutateSession(mutator) {
       await mutateEngineState((state: unknown) => {
         mutator(state);
-      });
-    },
-    async onFlushQueue(chatId, text) {
-      await applyCommand({
-        type: 'send_message',
-        chatId,
-        text,
       });
     },
     async onGoalAfterTurn(chat, goalDriven) {
@@ -628,28 +619,17 @@ export async function runEngineMainChatTurn(
     if (deps.onGoalAfterTurn) {
       await deps.onGoalAfterTurn(settled, options.goalDriven === true);
     }
-
-    const queued = peekOldestQueuedMessage(settled);
-    if (queued && deps.onFlushQueue) {
-      let text: string | null = null;
-      await deps.mutateChat(options.chatId, (c) => {
-        text = shiftOldestQueuedMessage(c);
-      });
-      if (text) await deps.onFlushQueue(options.chatId, text);
-    }
+    // Follow-up queue drain runs in commands.js after endEngineTurn — not here.
   } catch (err) {
     const isAbort =
       err instanceof Error && (err.name === 'AbortError' || options.signal.aborted);
     // Unblock any parked ask_question waiter on abort/error.
+    // Error rows are written once by the commands.js send_message catch handler.
     cancelParkedAskQuestion(options.chatId);
     await deps.mutateChat(options.chatId, (c) => {
       c.currentGenerationId = undefined;
       c.engineTurnActive = false;
       c.pendingAskQuestion = undefined;
-      if (!isAbort) {
-        const message = err instanceof Error ? err.message : String(err);
-        c.history.push({ role: 'assistant', content: `Error: ${message}` });
-      }
     });
     if (!isAbort) throw err;
   }
