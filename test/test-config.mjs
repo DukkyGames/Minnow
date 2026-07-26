@@ -25,8 +25,8 @@ export const MAX_TEST_BATCH_SIZE = 300;
 export const HEAVY_TEST_ISOLATION = 'process';
 
 /**
- * Paths that import happy-dom + orchestrate board UI; kept in their own spawn so
- * a hang there is attributable to one file rather than a 200-file batch.
+ * Paths that import happy-dom + orchestrate board UI. Batched only with other
+ * heavy paths; each file still runs in its own child via --test-isolation=process.
  */
 export const HEAVY_TEST_PATH_PREFIXES = [
   'test/ui/',

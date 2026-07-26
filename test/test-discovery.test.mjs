@@ -124,19 +124,30 @@ describe('isHeavyTestPath', () => {
 });
 
 describe('chunkFiles', () => {
-  test('never batches heavy paths with other files', () => {
+  test('never batches heavy paths with light files', () => {
     const files = [
       'test/memory/a.test.mjs',
       'test/memory/b.test.mjs',
       'test/ui/c.test.mjs',
-      'test/memory/d.test.mjs',
+      'test/ui/d.test.mjs',
+      'test/memory/e.test.mjs',
     ];
     const chunks = chunkFiles(files, 'tsx-mocks-loader', 60, 8);
     assert.deepEqual(chunks, [
       ['test/memory/a.test.mjs', 'test/memory/b.test.mjs'],
-      ['test/ui/c.test.mjs'],
-      ['test/memory/d.test.mjs'],
+      ['test/ui/c.test.mjs', 'test/ui/d.test.mjs'],
+      ['test/memory/e.test.mjs'],
     ]);
+  });
+
+  test('batches consecutive heavy paths together', () => {
+    const files = [
+      'test/ui/a.test.mjs',
+      'test/ui/b.test.mjs',
+      'test/orchestrate/c.test.mts',
+    ];
+    const chunks = chunkFiles(files, 'tsx-mocks-loader', 60, 8);
+    assert.deepEqual(chunks, [files]);
   });
 
   test('defaults to one file per chunk when batch size is 1', () => {

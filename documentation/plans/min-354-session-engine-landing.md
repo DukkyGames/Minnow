@@ -44,11 +44,21 @@ desktop builds, closes the LAN token hole, and cleans up correctness/doc drift.
 - [x] Commit: `📝 fix(session): headless runner crash, plan docs, fetch-auth retry`
 
 ### Verification
-- [ ] Stage 1: auth-middleware + session-token tests
-- [ ] Stage 2: `node test/run-all.mjs --suite engine` + new assertions
-- [ ] Stage 3: engine-bundle tests; phase suites green unedited
-- [ ] Whole tree: `npx tsc --noEmit`, `node test/run-all.mjs`
-- [ ] E2E (optional / manual): `npm run package:dir` — Session Engine ON, chat send, board AFK
+- [x] Stage 1: auth-middleware + access-policy tests (loopback allow / LAN reject / LAN+token allow)
+- [x] Stage 2: `node test/run-all.mjs --suite engine` — 38/38 (was 31) + queue-drain/error-row/SSE tests
+- [x] Stage 3: engine-bundle rebuilt from scratch (6.02 MB) and imported under plain `node`
+      (16 exports, `window` undefined); phase0–3 suites green unedited
+- [x] `npx tsc --noEmit` clean; targeted sweep of `test/{state,chat,session-engine,security,agents}` 661/661
+- [ ] Whole tree `node test/run-all.mjs` — not re-run since the landing (3 suites already fail on `main`)
+- [x] E2E: `npm run package:dir` — `app.asar` contains `server/session/engine-bundle/engine-bundle.mjs`,
+      `engine-module.js`, `engine-boot.js`, and no `src/session-engine/*.ts`
+
+### Stage 5 — Post-review follow-ups
+- [x] `engine-boot.js`: skip the boot when `describeEngineAvailability()` is unavailable, and report
+      which hosts actually came up instead of logging a flat `ON`
+- [x] `engine-module.js`: detect tsx via hook globals **or** `tsx` in `execArgv`/`NODE_OPTIONS`, and stop
+      trusting `MINNOW_TEST=1` (see below)
+- [x] Pin the board-turn error contract: `test/session-engine/board-turn-error.test.mts`
 
 ---
 
@@ -62,6 +72,27 @@ desktop builds, closes the LAN token hole, and cleans up correctness/doc drift.
 | 4 | Known-failing suites on main | Leave failing; only fix headless crash + new coverage |
 
 ---
+
+## Operational notes
+
+- **Mode selection is tsx-first.** `describeEngineAvailability()` prefers live `.ts` whenever tsx is
+  active in the process, so a stale `server/session/engine-bundle/` left over from an earlier
+  `npm run electron:build` can never shadow live sources under `npm start`, `electron:dev`, or any
+  test runner that loads tsx. Only a process with no tsx at all (packaged Electron) uses the bundle.
+  `MINNOW_ENGINE_MODULE=tsx|bundle` forces either path.
+- **`MINNOW_TEST` is not a tsx signal.** Any process can set that env var; claiming tsx without tsx
+  turns a clean bundle load into `ERR_UNKNOWN_FILE_EXTENSION`. Detection is hook globals +
+  `execArgv`/`NODE_OPTIONS`.
+- **LAN clients cannot self-heal a stale token.** `GET /api/auth/session-token` is loopback-only, so a
+  LAN device whose per-boot token expired (server restart) gets 401 on the refresh and the session SSE
+  stops reconnecting by design. Reloading the page re-injects a fresh token via `index.html`. Loopback
+  clients still recover in place.
+- **Error rows are asymmetric on purpose.** `server/session/commands.js` writes exactly one `Error:`
+  row for main-chat sends. The engine loop writes none, so board task turns reject to
+  `handleTaskChatLaunchFailure` (parity with renderer `runChatTurn`, which never wrote a row).
+  Pinned by `test/session-engine/board-turn-error.test.mts`.
+- **The queue drain runs after failed turns too**, unlike the renderer's `completedNormally` gate. It
+  terminates because the queue shrinks by one per pass; revisit only if error storms become a problem.
 
 ## Known risks
 

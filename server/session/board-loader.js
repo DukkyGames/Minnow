@@ -4,7 +4,11 @@
  * In packaged Electron: imports the pre-built engine-bundle.mjs.
  */
 
-import { loadEngineModule, resetEngineModuleForTests } from './engine-module.js';
+import {
+  loadEngineModule,
+  peekEngineModule,
+  resetEngineModuleForTests,
+} from './engine-module.js';
 
 /** Activate board host + resume autoRunning boards after server boot. */
 export async function resumeEngineBoardsOnBoot() {
@@ -14,15 +18,15 @@ export async function resumeEngineBoardsOnBoot() {
 
 /**
  * Re-bind sessionState alias after engineState replace.
- * Guard: if engine module not yet loaded, skip (rebind is best-effort).
+ *
+ * Runs on every mutateEngineState, so it must never *trigger* a load: if the
+ * engine module has not been imported yet there is no board host holding a
+ * stale alias, and forcing the import here would pay for the whole TS graph
+ * (dev) or the 6 MB bundle (packaged) on an ordinary state write.
  */
-export async function rebindEngineBoardHostSession() {
-  let mod;
-  try {
-    mod = await loadEngineModule();
-  } catch {
-    return; // engine unavailable — board host not active, nothing to rebind
-  }
+export function rebindEngineBoardHostSession() {
+  const mod = peekEngineModule();
+  if (!mod) return; // engine not loaded — no board host alias to rebind
   const fn = mod.rebindEngineBoardHostSession;
   if (typeof fn === 'function') {
     /** @type {Function} */ (fn)();

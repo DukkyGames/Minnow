@@ -59,8 +59,9 @@ Runs all discoverable test/**/*.test.{js,mjs,mts,ts} files, grouped by runner pr
 Orphan detection: npm run test:check-coverage
 
 Every runner preloads test/assert-dom-safe.mjs, which stops a failed DOM assertion
-from allocating unbounded diff buffers. Heavy UI/orchestrate paths get their own
-spawn. Tune with MINNOW_TEST_BATCH_SIZE / MINNOW_TEST_CONCURRENCY.`);
+from allocating unbounded diff buffers. Heavy UI/orchestrate paths batch together
+with --test-isolation=process (never mixed with light files). Tune with
+MINNOW_TEST_BATCH_SIZE / MINNOW_TEST_CONCURRENCY.`);
 }
 
 /** Headroom under Windows CreateProcess's 32767-char command-line limit. */
@@ -73,8 +74,9 @@ function estimateArgvLength(args) {
 }
 
 /**
- * Split files into spawn batches. Heavy paths never share a process with other files.
- * Light paths honor resolveTestBatchSize() and the argv char budget.
+ * Split files into spawn batches. Heavy paths batch together (never with light files)
+ * and run with --test-isolation=process inside node:test. Light paths honor
+ * resolveTestBatchSize() and the argv char budget.
  */
 export function chunkFiles(files, runnerId, maxFilesPerBatch, concurrency) {
   const profile = RUNNERS[runnerId];
@@ -92,11 +94,14 @@ export function chunkFiles(files, runnerId, maxFilesPerBatch, concurrency) {
     currentChunk = [];
   };
 
+  const chunkIsHeavy = (chunk) => chunk.length > 0 && isHeavyTestPath(chunk[0]);
+
   for (const file of files) {
-    if (isHeavyTestPath(file)) {
+    const heavy = isHeavyTestPath(file);
+
+    // Never mix heavy (happy-dom / orchestrate) files with light files in one spawn.
+    if (currentChunk.length > 0 && heavy !== chunkIsHeavy(currentChunk)) {
       flush();
-      chunks.push([file]);
-      continue;
     }
 
     const nextChunk = [...currentChunk, file];
@@ -151,13 +156,13 @@ function runBatch(runnerId, files) {
   let exitCode = 0;
 
   for (const [index, chunk] of chunks.entries()) {
-    const soloHeavy = chunk.length === 1 && isHeavyTestPath(chunk[0]);
+    const chunkHasHeavy = chunk.some(isHeavyTestPath);
     const label =
       chunks.length === 1
         ? `${runnerId} (${chunk.length} file${chunk.length === 1 ? '' : 's'})`
         : `${runnerId} batch ${index + 1}/${chunks.length} (${chunk.length} file${chunk.length === 1 ? '' : 's'})`;
-    const code = runChunk(runnerId, chunk, soloHeavy ? 1 : concurrency, label, {
-      testIsolation: soloHeavy ? HEAVY_TEST_ISOLATION : undefined,
+    const code = runChunk(runnerId, chunk, concurrency, label, {
+      testIsolation: chunkHasHeavy ? HEAVY_TEST_ISOLATION : undefined,
     });
     if (code !== 0) exitCode = code;
   }
