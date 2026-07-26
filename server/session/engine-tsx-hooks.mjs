@@ -2,9 +2,20 @@
  * Node ESM hooks for Session Engine tsx imports (MIN-360).
  * Stubs .css and @xterm packages without setting MINNOW_TEST
  * (test-loader.mjs sets MINNOW_TEST=1 which would suppress board launches).
+ *
+ * Must self-register on --import (same pattern as test/test-loader.mjs).
+ * Exporting resolve/load alone does not activate customization hooks.
  */
 
 import { register } from 'node:module';
+
+const LOADER_URL = import.meta.url;
+
+/** Apply hooks when preloaded via `node --import ./server/session/engine-tsx-hooks.mjs`. */
+if (!globalThis.__MINNOW_ENGINE_TSX_HOOKS_REGISTERED) {
+  globalThis.__MINNOW_ENGINE_TSX_HOOKS_REGISTERED = true;
+  register(LOADER_URL, LOADER_URL);
+}
 
 function isCssSpecifier(specifier) {
   const path = String(specifier).split('?')[0].split('#')[0];
@@ -72,12 +83,22 @@ export async function load(url, context, nextLoad) {
       source: cssStubSource(isUrlImport),
     };
   }
+  // Fallback when resolve was skipped (tsx sync path / absolute file URLs).
+  if (url.includes('@xterm/xterm')) {
+    return { format: 'module', shortCircuit: true, source: XTERM_STUB };
+  }
+  if (url.includes('@xterm/addon-fit')) {
+    return { format: 'module', shortCircuit: true, source: FIT_STUB };
+  }
+  if (url.includes('@xterm/addon-web-links')) {
+    return { format: 'module', shortCircuit: true, source: WEB_LINKS_STUB };
+  }
   return nextLoad(url, context);
 }
 
-/** Register this loader + tsx once (call from board-loader / server boot). */
+/** Register this loader + tsx once (idempotent; safe if already --import'ed). */
 export function registerEngineTsxHooks() {
-  const parent = import.meta.url;
+  const parent = LOADER_URL;
   try {
     register(parent, parent);
   } catch {
