@@ -1,0 +1,7 @@
+{
+  "name": "node-domexception",
+  "version": "2.0.2",
+  "description": "Re-export native DOMException — Minnow targets Node 20+.",
+  "main": "index.cjs",
+  "license": "MIT"
+}

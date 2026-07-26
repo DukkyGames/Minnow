@@ -1,0 +1,7 @@
+{
+  "name": "boolean",
+  "version": "3.2.0",
+  "description": "Vendored boolean parser for Minnow — upstream package is deprecated on npm.",
+  "main": "index.cjs",
+  "license": "MIT"
+}

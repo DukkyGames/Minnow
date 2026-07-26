@@ -1,0 +1,7 @@
+{
+  "name": "@babel/polyfill",
+  "version": "7.12.1",
+  "description": "No-op stub — Minnow targets Node 20+ where @babel/polyfill is unnecessary.",
+  "main": "index.cjs",
+  "license": "MIT"
+}

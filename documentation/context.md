@@ -488,7 +488,7 @@ Multi-provider registry: `~/.minnow/providers/`. UI: Models app → Providers. C
 
 Scoped suites: see `package.json` (`test:memory`, `test:brain`, `test:engine`, …).
 
-**Dependency security:** [`package.json`](../package.json) → `overrides` pins patched transitive versions (`@hono/node-server`, `brace-expansion`, `protobufjs`, `sharp`, electron-builder asar/minimatch chain, `@xenova/transformers` ONNX/sharp). After `npm install`, `npm audit` should report **0 vulnerabilities**. Avoid `npm audit fix --force` — it downgrades `@xenova/transformers` / MCP SDK and can break embeddings or pull deprecated native deps (`canvas`).
+**Dependency security:** [`package.json`](../package.json) → `overrides` pins patched transitive versions (`@hono/node-server`, `brace-expansion`, `protobufjs`, `sharp`, electron-builder asar/minimatch chain, `@xenova/transformers` ONNX/sharp). Deprecated transitive packages are replaced via `file:./scripts/npm-stubs/*` overrides (`@babel/polyfill`, `boolean`, `lodash.isequal`, `node-domexception`); `scripts/patch-deprecated-deps.mjs` (postinstall) strips the legacy `@babel/polyfill` import from `graphql-language-service-cli`. Windows dev Electron branding uses [`resedit`](https://www.npmjs.com/package/resedit) in [`scripts/brand-electron-win.mjs`](../scripts/brand-electron-win.mjs) (replaces deprecated `rcedit`). After `npm install`, `npm audit` should report **0 vulnerabilities**. Avoid `npm audit fix --force` — it downgrades `@xenova/transformers` / MCP SDK and can break embeddings or pull deprecated native deps (`canvas`). Regenerate `package-lock.json` with **npm 11.16+** (matches CI Node 24) so `file:` stub paths stay rooted at `scripts/npm-stubs/`.
 
 ---
 
