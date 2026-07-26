@@ -157,10 +157,11 @@ describe('create document tools', () => {
     );
     assert.match(pdfOut, /Created PDF unicode\/long\.pdf/);
     const pdfBytes = await fs.readFile(path.join(tempRoot, 'unicode', 'long.pdf'));
-    const pdfParseMod = await import('pdf-parse');
-    const pdfParse = pdfParseMod.default ?? pdfParseMod;
-    const parsed = await pdfParse(pdfBytes);
-    assert.ok((parsed?.numpages ?? 0) > 1, 'expected generated PDF to have multiple pages');
+    const { PDFParse } = await import('pdf-parse');
+    const parser = new PDFParse({ data: pdfBytes });
+    const parsed = await parser.getText();
+    await parser.destroy();
+    assert.ok((parsed?.total ?? 0) > 1, 'expected generated PDF to have multiple pages');
   });
 
   it('wraps a 300-character unbroken token instead of overflowing', async () => {

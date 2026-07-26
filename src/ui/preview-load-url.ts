@@ -45,7 +45,11 @@ export function workspacePreviewUrl(
   const options: WorkspacePreviewUrlOptions =
     typeof cacheBustOrOptions === 'object' && cacheBustOrOptions !== null
       ? cacheBustOrOptions
-      : { cacheBust: cacheBustOrOptions, workspaceRoot };
+      : {
+          cacheBust:
+            typeof cacheBustOrOptions === 'number' ? cacheBustOrOptions : undefined,
+          workspaceRoot,
+        };
   const normalized = normalizeWorkspacePath(relativePath);
   const encoded = normalized.split('/').map((segment) => encodeURIComponent(segment)).join('/');
   let url = `${PREVIEW_FILE_API}${encoded}`;

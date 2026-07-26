@@ -69,9 +69,9 @@ export function setFileTreeGitStatus(map: Map<string, string>): void {
 }
 
 /** Git poll timers must not block `node --test` process exit (happy-dom uses Node timers). */
-function unrefPollTimerIfSupported(timer: ReturnType<typeof setTimeout> | undefined): void {
-  if (timer !== undefined && typeof timer === 'object' && 'unref' in timer) {
-    (timer as NodeJS.Timeout).unref();
+function unrefPollTimerIfSupported(timer: ReturnType<typeof setTimeout> | null | undefined): void {
+  if (timer != null && typeof timer === 'object' && 'unref' in timer) {
+    (timer as { unref: () => void }).unref();
   }
 }
 

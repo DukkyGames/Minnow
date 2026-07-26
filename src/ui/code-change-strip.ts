@@ -157,7 +157,7 @@ function createFileRow(summary: FileChangeSummary): HTMLElement {
     expandBtn.addEventListener('click', (event) => {
       event.stopPropagation();
       if (!diffHost) return;
-      const expanded = diffHost.hidden;
+      const expanded = Boolean(diffHost.hidden);
       diffHost.hidden = !expanded;
       expandBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
       expandBtn.classList.toggle('is-expanded', expanded);

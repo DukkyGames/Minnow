@@ -102,18 +102,26 @@ function formatDocumentResult(filename, body, meta) {
  * @returns {Promise<string>}
  */
 async function extractPdf(buffer, filename) {
-  let pdfParse;
+  let PDFParse;
   try {
     const mod = await import('pdf-parse');
-    pdfParse = mod.default ?? mod;
+    PDFParse = mod.PDFParse;
+    if (typeof PDFParse !== 'function') {
+      throw new Error('PDFParse export missing');
+    }
   } catch {
     throw new Error('Internal error: pdf-parse module unavailable');
   }
 
-  const parsed = await pdfParse(buffer);
-  const text = String(parsed?.text ?? '').trim();
-  const pages = parsed?.numpages ?? '?';
-  return formatDocumentResult(filename, text, `${pages} page(s)`);
+  const parser = new PDFParse({ data: buffer });
+  try {
+    const parsed = await parser.getText();
+    const text = String(parsed?.text ?? '').trim();
+    const pages = parsed?.total ?? '?';
+    return formatDocumentResult(filename, text, `${pages} page(s)`);
+  } finally {
+    await parser.destroy();
+  }
 }
 
 /**

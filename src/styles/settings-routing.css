@@ -101,6 +101,7 @@
   word-break: break-word;
 }
 
+.settings-routing-advanced {
   margin-top: 12px;
   border-top: 1px solid var(--mn-border);
   padding-top: 8px;
