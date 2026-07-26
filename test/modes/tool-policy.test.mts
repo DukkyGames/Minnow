@@ -194,11 +194,33 @@ describe('cross-mode policy invariants', () => {
   const CALENDAR_TOOLS = TOOL_GROUP_IDS.calendar;
   const APPEARANCE_TOOLS = TOOL_GROUP_IDS.appearance;
 
-  test('bug-board tools allowed only in general, debug, and desktop', () => {
+  test('bug-board tools allowed in general, build, plan, debug, and desktop', () => {
+    const BUG_BOARD_MODES = new Set<ModeId>([
+      'general',
+      'build',
+      'plan',
+      'debug',
+      'desktop',
+    ]);
     for (const modeId of MODE_IDS) {
       for (const toolId of BUG_TOOLS) {
         const allowed = isToolAllowedForMode(modeId, toolId);
-        const expected = modeId === 'general' || modeId === 'debug' || modeId === 'desktop';
+        const expected = BUG_BOARD_MODES.has(modeId);
+        assert.equal(
+          allowed,
+          expected,
+          `${toolId} in ${modeId}: expected ${expected}`,
+        );
+      }
+    }
+  });
+
+  test('issue tools allowed in general, build, plan, debug, and desktop', () => {
+    const ISSUE_MODES = new Set<ModeId>(['general', 'build', 'plan', 'debug', 'desktop']);
+    for (const modeId of MODE_IDS) {
+      for (const toolId of TOOL_GROUP_IDS.issues) {
+        const allowed = isToolAllowedForMode(modeId, toolId);
+        const expected = ISSUE_MODES.has(modeId);
         assert.equal(
           allowed,
           expected,
@@ -260,7 +282,7 @@ describe('cross-mode policy invariants', () => {
 });
 
 describe('tool payload token reduction', () => {
-  test('build mode tool JSON payload stays below ~8,800 tokens', () => {
+  test('build mode tool JSON payload stays below ~9,800 tokens', () => {
     const allDefs = BUILT_IN_TOOLS.map((t) => t.definition);
     const allTokens = estimateToolPayloadTokens(
       allDefs.map((definition) => ({ definition })),
@@ -272,8 +294,8 @@ describe('tool payload token reduction', () => {
 
     assert.ok(allTokens > 9_000, `baseline should exceed 9k, got ${allTokens}`);
     assert.ok(
-      buildTokens >= 7_000 && buildTokens <= 8_800,
-      `build payload expected ~7k-8.8k tok, got ${buildTokens} (all=${allTokens})`,
+      buildTokens >= 7_000 && buildTokens <= 9_800,
+      `build payload expected ~7k-9.8k tok, got ${buildTokens} (all=${allTokens})`,
     );
     assert.ok(buildTokens < allTokens - 2_000, 'build should save at least 2k tokens');
   });

@@ -384,10 +384,10 @@
   display: none;
 }
 
-/* Shared list grid columns (fixed actions width keeps header/rows aligned). */
+/* Shared list grid columns (header + rows stay aligned). */
 .issues-list-head,
 .issues-row {
-  --issues-list-cols: 2rem 4.25rem 2.25rem minmax(0, 1fr) minmax(4.5rem, max-content) 4.5rem 5.5rem 4.5rem 5.75rem;
+  --issues-list-cols: 2rem 4.25rem 2.25rem minmax(0, 1fr) minmax(4.5rem, max-content) 4.5rem 5.5rem 4.5rem;
   display: grid;
   grid-template-columns: var(--issues-list-cols);
   gap: 8px 10px;
@@ -559,21 +559,6 @@
   outline-offset: -2px;
 }
 
-.issues-row__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 4px;
-  opacity: 0;
-  transition: opacity 150ms ease-out;
-}
-
-.issues-row:hover .issues-row__actions,
-.issues-row:focus-within .issues-row__actions,
-.issues-row.is-selected .issues-row__actions {
-  opacity: 1;
-}
-
-.issues-row__expand,
 .issues-card__expand {
   min-height: 28px;
   padding: 4px 8px;
@@ -1349,7 +1334,7 @@ button.issues-detail__activity-chip {
 
   .issues-list-head,
   .issues-row {
-    --issues-list-cols: 2rem 3.5rem minmax(0, 1fr) minmax(4rem, max-content) 5.75rem;
+    --issues-list-cols: 2rem 3.5rem minmax(0, 1fr) minmax(4rem, max-content);
   }
 
   .issues-list-head__type,
@@ -1378,8 +1363,7 @@ button.issues-detail__activity-chip {
   .issues-view-toggle button,
   .issues-btn,
   .issues-card,
-  .issues-detail-host,
-  .issues-row__actions {
+  .issues-detail-host {
     transition: none;
   }
 }

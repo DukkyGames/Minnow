@@ -671,23 +671,7 @@ function renderList(mount: HTMLElement, issues: IssueCard[]): void {
     updated.className = 'issues-row__updated';
     updated.textContent = formatUpdated(issue.updatedAt);
 
-    const actions = document.createElement('div');
-    actions.className = 'issues-row__actions';
-    if (canExpandIssueWithAgent(issue)) {
-      const expandBtn = document.createElement('button');
-      expandBtn.type = 'button';
-      expandBtn.className = 'issues-btn issues-row__expand';
-      expandBtn.textContent = isIssueExpanding(issue.id) ? 'Expanding…' : 'Expand';
-      expandBtn.disabled = isIssueExpanding(issue.id);
-      expandBtn.title = 'Expand with agent';
-      expandBtn.addEventListener('click', (event) => {
-        event.stopPropagation();
-        void expandIssueFromUi(issue.id).then(() => renderIssuesPanel());
-      });
-      actions.appendChild(expandBtn);
-    }
-
-    row.append(selectCell, id, type, title, status, priority, labels, updated, actions);
+    row.append(selectCell, id, type, title, status, priority, labels, updated);
     row.addEventListener('click', (event) => {
       onIssueItemClick(event, issue, issues, index);
     });
