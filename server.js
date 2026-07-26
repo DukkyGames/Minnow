@@ -205,12 +205,21 @@ async function main() {
   if (isServerEngineEnabled()) {
     const { ensureSessionEngineBooted } = await import('./server/session/engine.js');
     await ensureSessionEngineBooted();
+    // Phase 3: controller registry + watchdog once per process (before board resume).
+    const { bootEngineControllerOnStart } = await import(
+      './server/session/controller-loader.js'
+    );
+    await bootEngineControllerOnStart().catch((err) => {
+      console.error('[session-engine] controller boot failed:', err);
+    });
     // Phase 2: resume auto/AFK boards in-process (zero devices required).
     const { resumeEngineBoardsOnBoot } = await import('./server/session/board-loader.js');
     await resumeEngineBoardsOnBoot().catch((err) => {
       console.error('[session-engine] board boot resume failed:', err);
     });
-    console.log(`Session Engine: ON (MINNOW_SERVER_ENGINE) — POST /api/session/commands + board host`);
+    console.log(
+      `Session Engine: ON (MINNOW_SERVER_ENGINE) — POST /api/session/commands + board + controller host`,
+    );
   } else {
     console.log(`Session Engine: off (set MINNOW_SERVER_ENGINE=1 to enable)`);
   }

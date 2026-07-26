@@ -351,8 +351,10 @@ export function chatForSessionsWire(chat: Chat): Chat {
 
 /** Clone session state for wire I/O, stripping unloaded chat histories. */
 export function sessionStateForSessionsWire(state: SessionState): SessionState {
+  // liveSubAgentRuns is engine-ephemeral — never let a client PUT overwrite it.
+  const { liveSubAgentRuns: _live, ...rest } = state;
   return {
-    ...state,
+    ...rest,
     chats: state.chats.map(chatForSessionsWire),
   };
 }
@@ -1030,6 +1032,10 @@ export function parseSessionStateFromJson(parsed: RawSessionJson | null): Sessio
   }
   if (typeof rawSession.sidebarWidth === 'number' && Number.isFinite(rawSession.sidebarWidth)) {
     state.sidebarWidth = Math.min(520, Math.max(200, Math.round(rawSession.sidebarWidth)));
+  }
+  // Engine SSE live slice (MIN-361) — not in scalar allowlist; copy through for clients.
+  if (Array.isArray(rawSession.liveSubAgentRuns)) {
+    state.liveSubAgentRuns = rawSession.liveSubAgentRuns;
   }
   return state;
 }

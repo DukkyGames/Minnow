@@ -15,6 +15,7 @@ import {
 import { getSessionRev } from './rev-store.js';
 import { runEngineMainChatTurn } from './loop-loader.js';
 import { applyBoardCommand } from './board-loader.js';
+import { applyControllerCommand } from './controller-loader.js';
 
 /**
  * @typedef {{
@@ -55,6 +56,11 @@ const BOARD_COMMAND_TYPES = new Set([
   'set_model',
 ]);
 
+const CONTROLLER_COMMAND_TYPES = new Set([
+  'spawn_sub_agent',
+  'cancel_sub_agent',
+]);
+
 /**
  * Find a chat row by id on a SessionState-like blob.
  * @param {any} state
@@ -79,6 +85,13 @@ export async function applySessionCommand(cmd) {
     const result = await applyBoardCommand(/** @type {any} */ (cmd));
     // Board mutates sessionState in place — publish so SSE clients see the change.
     const rev = await publishLiveEngineState({ soft: false });
+    return { rev, accepted: result.accepted !== false, detail: result.detail };
+  }
+
+  if (CONTROLLER_COMMAND_TYPES.has(cmd.type)) {
+    const result = await applyControllerCommand(/** @type {any} */ (cmd));
+    // Live slice publish is coalesced from emitSubAgentRunUpdated; bump rev now too.
+    const rev = await publishLiveEngineState({ soft: true });
     return { rev, accepted: result.accepted !== false, detail: result.detail };
   }
 

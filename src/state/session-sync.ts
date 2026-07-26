@@ -159,6 +159,7 @@ function flushPendingRemote(): void {
   if (rev <= getSessionRev()) return;
   applyRemoteSessionState(state);
   setSessionRev(rev);
+  mirrorLiveSubAgentRunsFromSession();
   void refreshUiAfterRemoteSession();
 }
 
@@ -192,7 +193,15 @@ function handleRemotePayload(payload: { rev?: number; state?: unknown }): void {
 
   applyRemoteSessionState(payload.state);
   setSessionRev(rev);
+  mirrorLiveSubAgentRunsFromSession();
   void refreshUiAfterRemoteSession();
+}
+
+/** Feed UI subscribeSubAgentRuns from engine-published liveSubAgentRuns (MIN-361). */
+function mirrorLiveSubAgentRunsFromSession(): void {
+  void import('../agents/controller/client-live-mirror.ts').then((mod) => {
+    mod.mirrorRemoteLiveSubAgentRuns(sessionState);
+  });
 }
 
 async function postLease(action: 'claim' | 'renew' | 'release'): Promise<void> {

@@ -346,6 +346,40 @@ export interface PersistedSubAgentRun {
   boardTaskId?: string | null;
 }
 
+/**
+ * Compact live sub-agent row published by the Session Engine (MIN-361 Phase 3).
+ * Ephemeral — carried on SSE SessionState for multi-device status; not a durable transcript.
+ */
+export interface LiveSubAgentRunSnapshot {
+  runId: string;
+  type: string;
+  task: string;
+  status: PersistedSubAgentStatus | 'queued' | 'running';
+  lifecycle?: string;
+  parentChatId?: string | null;
+  parentTurnId?: string | null;
+  parentToolCallId?: string | null;
+  summary: string;
+  error?: string | null;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  toolTurns: number;
+  cancelled?: boolean;
+  liveNestedToolCalls?: number;
+  liveCurrentToolName?: string | null;
+  progressSeq?: number;
+  lastHeartbeatAt?: number | null;
+  lastProgressAt?: number | null;
+  attempt?: number;
+  modelId?: string;
+  providerId?: string;
+  category?: BoardCategory;
+  boardTaskId?: string | null;
+  supersededByRunId?: string | null;
+  /** Short preview for remote cards (full messages stay engine-local until settle). */
+  lastMessagePreview?: string;
+}
+
 /** Orchestrate board task lifecycle. */
 export type BoardTaskStatus =
   | 'planned'
@@ -1070,6 +1104,11 @@ export interface SessionState {
   lastActiveChatIdByApp?: Record<string, string>;
   /** Cumulative agent line stats keyed by normalized workspace path. */
   codeChangeTotalsByWorkspace?: Record<string, ChatCodeChangeTotals>;
+  /**
+   * Engine-published live sub-agent status (MIN-361). Ephemeral SSE read-model —
+   * omitted from durable disk writes / client PUTs; restored from the registry on boot.
+   */
+  liveSubAgentRuns?: LiveSubAgentRunSnapshot[];
 }
 
 /** Built-in system prompt template for the settings drawer. */

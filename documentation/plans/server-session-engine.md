@@ -142,10 +142,10 @@ Shipped on this branch (`henri/min-354-server-session-engine`) behind `MINNOW_SE
   Engine main-chat loop re-adds `board_*` / `delegate_tasks` tool defs and executes them
   in-process via `executeBoardTool` + sync session rebind (kickoff `board_init` works).
 - **Flag off**: unchanged renderer board + Phase 0 lease.
-- **Gaps / Phase 3**: full sub-agent controller registry still renderer-owned; board
-  heartbeats run in-engine for board task chats only; concurrent `mutateEngineState`
-  clone vs in-place board mutations can race mid-turn (publishLive + rebind mitigate);
-  engine boot resume does not apply Electron OOM pause throttle (renderer-only marker).
+- **Gaps closed in Phase 3**: sub-agent controller registry moved to engine (see below).
+  Remaining: concurrent `mutateEngineState` clone vs in-place board mutations can race
+  mid-turn (publishLive + rebind mitigate); engine boot resume does not apply Electron
+  OOM pause throttle (renderer-only marker).
 - **Tests**: `test/engine/session-phase2.test.mjs` (run with css stub + tsx, as in
   `tsx-loader-mocks`); existing `test/orchestrate/board-flow-e2e.test.mts` still
   targets board-actions directly (same modules the engine hosts).
@@ -153,11 +153,32 @@ Shipped on this branch (`henri/min-354-server-session-engine`) behind `MINNOW_SE
   `--import ./server/session/engine-tsx-hooks.mjs --import tsx` so board/main-chat
   `.ts` modules load under Node without setting `MINNOW_TEST`.
 
-### Phase 3 — Move the sub-agent controller into the engine
-- Relocate `src/agents/controller/*` to run in the engine process (already Node-compatible;
-  disk persistence + boot reconcile exist in `controller/persistence.ts`). De-DOM `registry.ts`
-  and `wrapper.ts` (a few `emitBoardChange` UI pokes → engine events).
-- Sub-agent live status flows to clients over the state SSE.
+### Phase 3 — Move the sub-agent controller into the engine ✅ Done (MIN-361)
+
+Shipped on this branch (`henri/min-354-server-session-engine`) behind `MINNOW_SERVER_ENGINE`
+(still default **off**).
+
+- **Controller host**: [`src/session-engine/controller-host.ts`](../../src/session-engine/controller-host.ts)
+  activates at **server** boot (`server/session/controller-loader.js`) — runs
+  `initControllerPersistence` + `startWatchdog` once per process (not per renderer).
+  Board host is activated first so `syncBoardTask*` / reports share the engine SessionState alias.
+- **De-DOM**: `wrapper.ts` visibility freeze is browser-only (`typeof document` guard; no tab-hide
+  stalls in Node). `registry.ts` was already DOM-free. `report.ts` already no-ops UI render via
+  `isDomAvailable()`. Live status no longer depends on renderer-local `emitSubAgentRunUpdated` alone.
+- **Live SSE slice**: engine rebuilds `SessionState.liveSubAgentRuns` (compact snapshots) on registry
+  updates ([`live-publish.ts`](../../src/agents/controller/live-publish.ts)) and soft-publishes via
+  Phase 0 `publishLiveEngineState`. Ephemeral — stripped from client PUTs / durable validate path;
+  preserved across engine hard writes.
+- **Commands**: `spawn_sub_agent`, `cancel_sub_agent` on `POST /api/session/commands`
+  ([`controller-commands.ts`](../../src/session-engine/controller-commands.ts)).
+- **Main-chat loop**: in-process `spawn_sub_agent` / `cancel_sub_agent` / `list_sub_agents` /
+  `get_sub_agent_status` (same pattern as board tools).
+- **Client**: when flag on, `getSubAgentRun` / `listActiveSubAgentRuns` read the SSE live slice;
+  spawn/cancel proxy to commands; `session-sync` mirrors remote live rows into
+  `subscribeSubAgentRuns` ([`client-live-mirror.ts`](../../src/agents/controller/client-live-mirror.ts)).
+- **Flag off**: unchanged renderer controller auto-boot + local registry.
+- **Tests**: `test/engine/session-phase3.test.mjs`, `test/agents/controller-host-gate.test.mts`;
+  existing `test/agents/controller-*.test.mts` + `test/sub-agents/**` keep `MINNOW_TEST=1` auto-boot.
 
 ### Phase 4 — Retire renderer driving + cleanup
 - Renderer becomes read-model + commands throughout; remove optimistic mutate-then-PUT for
@@ -191,8 +212,8 @@ Shipped on this branch (`henri/min-354-server-session-engine`) behind `MINNOW_SE
 - `src/state/session-sync.ts` (Phase 0) — client SSE subscribe + reconcile.
 - `src/state/session-commands.ts` (Phase 1) — client command dispatch helpers.
 - `src/state/server-engine-flag.ts` + `src/chat/engine-stream-mirror.ts` (Phase 1).
-- Ported into engine later: `orchestrate-board-store.ts`, `orchestrate-board-actions.ts`,
-  `agents/controller/*`.
+- Phase 2/3 ported: board store/actions via board-host; `agents/controller/*` via
+  controller-host + live-publish SSE slice.
 
 ---
 

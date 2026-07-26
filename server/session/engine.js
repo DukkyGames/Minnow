@@ -216,8 +216,18 @@ export function adoptExternalSessionWrite(state) {
   // Only adopt when no engine turn is mid-flight — otherwise the turn's next
   // mutate/commit remains authoritative and will republish.
   if (activeTurnChatIds.size > 0) return;
+  // Preserve ephemeral live sub-agent slice — clients omit it on PUT/PATCH.
+  const liveRuns =
+    engineState &&
+    typeof engineState === 'object' &&
+    Array.isArray(/** @type {any} */ (engineState).liveSubAgentRuns)
+      ? /** @type {any} */ (engineState).liveSubAgentRuns
+      : null;
   invalidateSoftFlush();
   engineState = state;
+  if (liveRuns && engineState && typeof engineState === 'object') {
+    /** @type {any} */ (engineState).liveSubAgentRuns = liveRuns;
+  }
   // Keep board host sessionState alias aligned after external writes.
   void import('./board-loader.js')
     .then((m) => m.rebindEngineBoardHostSession?.())
@@ -245,17 +255,24 @@ export async function publishLiveEngineState(opts = {}) {
       return rev;
     }
     invalidateSoftFlush();
+    // Ephemeral live runs are not in the validator allowlist — keep them across write.
+    const liveRuns = Array.isArray(/** @type {any} */ (engineState).liveSubAgentRuns)
+      ? /** @type {any} */ (engineState).liveSubAgentRuns
+      : null;
     // writeResource validates + notify + adoptExternal — keep engineState on the
     // validated blob so in-place board mutations are not stranded on a stale alias.
     const written = await writeResource('sessions', engineState);
     engineState = written;
+    if (liveRuns && engineState && typeof engineState === 'object') {
+      /** @type {any} */ (engineState).liveSubAgentRuns = liveRuns;
+    }
     try {
       const { setSessionStateForEngineHost } = await import(
         '../../src/state/sessions.ts'
       ).catch(() => ({}));
       // Dynamic TS import may fail without tsx hooks — board-loader rebind covers that.
       if (typeof setSessionStateForEngineHost === 'function') {
-        setSessionStateForEngineHost(written);
+        setSessionStateForEngineHost(engineState);
       }
     } catch {
       /* board host rebind is best-effort here */

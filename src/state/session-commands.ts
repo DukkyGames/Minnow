@@ -158,3 +158,31 @@ export async function dispatchSetModel(payload: {
   return dispatchSessionCommand({ type: 'set_model', ...payload });
 }
 
+/* ── Controller commands (MIN-361 Phase 3) ──────────────────────────────── */
+
+/** Cancel an engine-hosted sub-agent run from a thin client. */
+export async function dispatchCancelSubAgent(
+  runId: string,
+  reason = 'cancelled',
+): Promise<SessionCommandResult> {
+  return dispatchSessionCommand({ type: 'cancel_sub_agent', runId, reason });
+}
+
+/** Spawn a sub-agent into the engine-owned registry (renderer proxy path). */
+export async function dispatchSpawnSubAgent(payload: {
+  agentType: string;
+  task: string;
+  wait?: boolean;
+  parentChatId?: string | null;
+  parentTurnId?: string | null;
+  parentToolCallId?: string | null;
+  modeId?: string;
+  category?: string;
+  boardTaskId?: string;
+  providerId?: string;
+  modelId?: string;
+  timeoutMs?: number;
+}): Promise<SessionCommandResult> {
+  return dispatchSessionCommand({ type: 'spawn_sub_agent', ...payload });
+}
+

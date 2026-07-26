@@ -59,6 +59,14 @@ const BOARD_TOOL_NAMES = new Set([
   'delegate_tasks',
 ]);
 
+/** Sub-agent tools hosted by the engine controller registry (MIN-361). */
+const SUB_AGENT_TOOL_NAMES = new Set([
+  'spawn_sub_agent',
+  'cancel_sub_agent',
+  'list_sub_agents',
+  'get_sub_agent_status',
+]);
+
 export interface EngineMainChatTurnOptions {
   chatId: string;
   signal: AbortSignal;
@@ -254,6 +262,20 @@ function mergeBoardToolDefinitions(
   return next;
 }
 
+/** Expose spawn/cancel/list/status sub-agent tools (headless catalog strips them). */
+function mergeSubAgentToolDefinitions(
+  enabledTools: ReturnType<typeof getHeadlessToolDefinitions>,
+): ReturnType<typeof getHeadlessToolDefinitions> {
+  let next = enabledTools;
+  for (const tool of BUILT_IN_TOOLS) {
+    const name = tool.definition.function.name;
+    if (!SUB_AGENT_TOOL_NAMES.has(name)) continue;
+    if (next.some((t) => t.function.name === name)) continue;
+    next = [...next, tool.definition];
+  }
+  return next;
+}
+
 /**
  * Run board_* tools against the engine-hosted sessionState alias, then publish.
  * Rebinds synchronously so mutateEngineState clones cannot leave board_init on a stale blob.
@@ -283,6 +305,37 @@ async function executeEngineBoardTool(
     return { content };
   } finally {
     setBoardExecutorContext(null);
+  }
+}
+
+/**
+ * Run spawn/cancel/list/status against the engine-owned controller registry.
+ */
+async function executeEngineSubAgentTool(
+  name: string,
+  args: Record<string, unknown>,
+  chatId: string,
+  modeId: ModeId,
+  toolCallId?: string,
+): Promise<{ content: string }> {
+  const { activateEngineControllerHost } = await import('./controller-host.ts');
+  await activateEngineControllerHost();
+
+  const { executeSubAgentTool, setSubAgentExecutorContext } = await import(
+    '../tools/sub-agent-executor.ts'
+  );
+  setSubAgentExecutorContext({
+    parentChatId: chatId,
+    // Parent turn id is minted by the renderer tool loop; engine uses chat scope.
+    parentTurnId: '',
+    parentToolCallId: toolCallId,
+    modeId,
+  });
+  try {
+    const content = await executeSubAgentTool(name, args);
+    return { content };
+  } finally {
+    setSubAgentExecutorContext(null);
   }
 }
 
@@ -323,9 +376,11 @@ export async function runEngineMainChatTurn(
       : 4096;
 
   const modeId = normalizeModeId(chat.modeId) as ModeId;
-  // Mode tools + board tools (stripped from headless catalog; host runs them in-process).
-  const enabledTools = mergeBoardToolDefinitions(
-    mergeModeToolDefinitions(getHeadlessToolDefinitions(modeId)),
+  // Mode + board + sub-agent tools (stripped from headless catalog; host runs in-process).
+  const enabledTools = mergeSubAgentToolDefinitions(
+    mergeBoardToolDefinitions(
+      mergeModeToolDefinitions(getHeadlessToolDefinitions(modeId)),
+    ),
   );
 
   try {
@@ -430,6 +485,15 @@ export async function runEngineMainChatTurn(
               name,
               (args ?? {}) as Record<string, unknown>,
               options.chatId,
+            );
+          }
+          // spawn/cancel/list/status — engine-owned controller registry (MIN-361).
+          if (SUB_AGENT_TOOL_NAMES.has(name)) {
+            return executeEngineSubAgentTool(
+              name,
+              (args ?? {}) as Record<string, unknown>,
+              options.chatId,
+              modeId,
             );
           }
           return executeHeadlessTool(
