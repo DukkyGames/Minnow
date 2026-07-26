@@ -16,6 +16,8 @@ import { createSubAgentRunId } from '../agents/sub-agent-run-id';
 
 import { getActiveChat } from '../state/sessions';
 
+import { isServerEngineEnabled } from '../state/server-engine-flag';
+
 import { runChatToolBatch } from '../tools/chat-tool-batch';
 
 import type { Chat } from '../types';
@@ -110,6 +112,14 @@ export async function resumeIncompleteToolBatch(
 ): Promise<boolean> {
 
   if (typeof document === 'undefined') {
+
+    return false;
+
+  }
+
+  // Phase 4: Session Engine owns the tool loop (ask_question is unavailable there).
+  // Do not start a renderer runChatTurn that would race the engine host.
+  if (isServerEngineEnabled()) {
 
     return false;
 

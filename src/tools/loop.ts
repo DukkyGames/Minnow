@@ -2707,6 +2707,45 @@ export async function sendProgrammaticChatText(
   if (isChatTurnSetupPending(chat.id)) return;
 
   const report = options.reportStatus ?? setStatus;
+
+  // Phase 4: /loop ticks and other programmatic sends use the Session Engine by default.
+  // Skill/attachment-heavy paths that need the full renderer loop require opt-out.
+  {
+    const { isServerEngineEnabled } = await import('../state/server-engine-flag');
+    if (isServerEngineEnabled()) {
+      if (options.validAttachments && options.validAttachments.length > 0) {
+        report('err', 'Attachments require MINNOW_SERVER_ENGINE=0 until engine multimodal lands');
+        return;
+      }
+      const { dispatchSendMessage } = await import('../state/session-commands');
+      const { resolveEffectiveChatModelBinding } = await import('../ui/default-model');
+      const { readGlobalSamplerForSend } = await import('../config/sampler-meta');
+      const binding = resolveEffectiveChatModelBinding(chat);
+      const sampler = readGlobalSamplerForSend();
+      const systemPrompt = (
+        document.getElementById('systemPrompt') as HTMLTextAreaElement | null
+      )?.value?.trim();
+      try {
+        report('spin', 'Sending…');
+        await dispatchSendMessage({
+          chatId: chat.id,
+          text,
+          modelId: binding.modelId || chat.modelId,
+          providerId: binding.providerId || chat.providerId,
+          temperature: sampler.preset.temperature ?? 0.7,
+          maxTokens: sampler.maxTokens,
+          systemPrompt: systemPrompt || undefined,
+          goalDriven: options.goalDriven,
+        });
+        const { syncEngineStreamMirrors } = await import('../chat/engine-stream-mirror');
+        syncEngineStreamMirrors();
+      } catch (err) {
+        report('err', err instanceof Error ? err.message : String(err));
+      }
+      return;
+    }
+  }
+
   const rawText = text;
   const slashInput = options.slashInput ?? rawText;
   const validAttachments = options.validAttachments ?? [];

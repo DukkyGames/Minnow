@@ -141,7 +141,7 @@ Shipped on this branch (`henri/min-354-server-session-engine`) behind `MINNOW_SE
   [`board-command-bridge.ts`](../../src/state/board-command-bridge.ts).
   Engine main-chat loop re-adds `board_*` / `delegate_tasks` tool defs and executes them
   in-process via `executeBoardTool` + sync session rebind (kickoff `board_init` works).
-- **Flag off**: unchanged renderer board + Phase 0 lease.
+- **Flag off (emergency opt-out)**: renderer board drive restored; Phase 0 lease removed in Phase 4.
 - **Gaps closed in Phase 3**: sub-agent controller registry moved to engine (see below).
   Remaining: concurrent `mutateEngineState` clone vs in-place board mutations can race
   mid-turn (publishLive + rebind mitigate); engine boot resume does not apply Electron
