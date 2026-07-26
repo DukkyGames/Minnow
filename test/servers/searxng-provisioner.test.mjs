@@ -40,7 +40,9 @@ function venvPythonPath() {
 async function ensureTestVenv() {
   const venvDir = getServerVenvDir('searxng');
   await fsp.rm(venvDir, { recursive: true, force: true });
-  const systemPython = process.env.SEARXNG_TEST_PYTHON ?? 'python';
+  const systemPython =
+    process.env.SEARXNG_TEST_PYTHON ??
+    (process.platform === 'win32' ? 'python' : 'python3');
   await createVenv(systemPython, venvDir);
 }
 

@@ -12,6 +12,7 @@ import {
 import { forceCloseAskQuestionModal } from '../ui/question-cards-modal';
 import { isChatTurnInProgress } from './chat-turn-guard';
 import { enqueueSteerMessage } from './steer-message';
+import { isServerEngineEnabled } from '../state/server-engine-flag';
 
 /** Return the chat queue array (empty when unset). */
 export function getPendingMessageQueue(chat: Chat): QueuedComposerMessage[] {
@@ -102,29 +103,25 @@ export function pushQueuedMessageNow(chat: Chat, id: string): boolean {
   if (!item) return false;
 
   if (isChatTurnInProgress(chat.id) || chat.engineTurnActive) {
-    void import('../state/server-engine-flag').then(({ isServerEngineEnabled }) => {
-      if (isServerEngineEnabled()) {
-        void import('../state/session-commands').then((m) =>
-          m.dispatchSteerMessage(chat.id, item.text).catch(() => undefined),
-        );
-        return;
-      }
+    if (isServerEngineEnabled()) {
+      void import('../state/session-commands').then((m) =>
+        m.dispatchSteerMessage(chat.id, item.text).catch(() => undefined),
+      );
+    } else {
       enqueueSteerMessage(chat, item.text);
-    });
+    }
     return true;
   }
 
-  void import('../state/server-engine-flag').then(({ isServerEngineEnabled }) => {
-    if (isServerEngineEnabled()) {
-      void import('../state/session-commands').then((m) =>
-        m.dispatchSendMessage({ chatId: chat.id, text: item.text }).catch(() => undefined),
-      );
-      return;
-    }
-    void import('../tools/loop').then(({ resumeParentChatWithMessage }) =>
-      resumeParentChatWithMessage(chat, item.text),
+  if (isServerEngineEnabled()) {
+    void import('../state/session-commands').then((m) =>
+      m.dispatchSendMessage({ chatId: chat.id, text: item.text }).catch(() => undefined),
     );
-  });
+    return true;
+  }
+  void import('../tools/loop').then(({ resumeParentChatWithMessage }) =>
+    resumeParentChatWithMessage(chat, item.text),
+  );
   return true;
 }
 

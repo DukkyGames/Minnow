@@ -261,6 +261,7 @@ describe('orchestrate plan screen', () => {
     const window = new Window();
     globalThis.document = window.document;
     globalThis.HTMLElement = window.HTMLElement;
+    globalThis.localStorage = window.localStorage;
     globalThis.requestAnimationFrame = (cb: () => void) => {
       cb();
       return 0;
@@ -779,10 +780,11 @@ describe('orchestrate plan screen', () => {
     assert.equal(settled, true);
   });
 
-  test('clicking active super-plan chat in sidebar shows transcript instead of blank area', () => {
+  test('clicking active super-plan chat in sidebar shows transcript instead of blank area', async () => {
     const window = new Window();
     globalThis.document = window.document;
     globalThis.HTMLElement = window.HTMLElement;
+    globalThis.localStorage = window.localStorage;
 
     const area = mountCodeChatAreaForTests();
     document.body.appendChild(
@@ -819,6 +821,8 @@ describe('orchestrate plan screen', () => {
     assert.ok(document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID));
 
     switchChat(chat.id);
+    await Promise.resolve();
+    await Promise.resolve();
 
     assert.equal(document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID), null);
     assert.equal(isOrchestratePlanScreenSuspended(), true);

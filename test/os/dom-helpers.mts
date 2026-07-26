@@ -29,6 +29,9 @@ export function installHappyDomGlobals(
   g.document = win.document;
   g.HTMLElement = win.HTMLElement;
   g.HTMLButtonElement = win.HTMLButtonElement;
+  g.HTMLLabelElement = win.HTMLLabelElement;
+  g.HTMLSelectElement = win.HTMLSelectElement;
+  g.HTMLInputElement = win.HTMLInputElement;
   g.Document = win.Document;
   g.Node = win.Node;
   g.localStorage = win.localStorage;

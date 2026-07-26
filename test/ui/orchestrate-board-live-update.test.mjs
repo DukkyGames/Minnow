@@ -738,6 +738,19 @@ describe('orchestrate board live updates', () => {
 
   test('isolation select still works after switching to AFK', async () => {
     setupDom();
+    globalThis.window.minnow = {
+      preview: { show: async () => {}, hide: async () => {} },
+      app: { isElectron: true, platform: 'linux', openExternal: async () => {} },
+      window: {
+        minimize: async () => {},
+        maximize: async () => {},
+        close: async () => {},
+        isMaximized: async () => false,
+        onMaximizedChanged: () => () => {},
+      },
+    };
+    const { installAppDialogs } = await import('../../src/ui/app-dialog.ts');
+    installAppDialogs(globalThis.window);
     setBoardNowForTests(() => 1_700_000_000_000);
     const chat = makeOrchestrateChat();
     const group = initBoardForChat(chat, {
@@ -754,20 +767,16 @@ describe('orchestrate board live updates', () => {
     assert.ok(afkBtn);
     assert.ok(isoSelect instanceof HTMLSelectElement);
 
-    const confirmStub = () => true;
-    const priorConfirm = globalThis.window.confirm;
-    globalThis.window.confirm = confirmStub;
-    try {
-      afkBtn.click();
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      assert.equal(group.orchestrateBoard?.executionMode, 'afk');
+    afkBtn.click();
+    await Promise.resolve();
+    const confirmBtn = document.querySelector('[data-dialog-action="confirm"]');
+    confirmBtn?.click();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(group.orchestrateBoard?.executionMode, 'afk');
 
-      isoSelect.value = 'per-wave';
-      isoSelect.dispatchEvent(new window.Event('change', { bubbles: true }));
-      assert.equal(group.orchestrateBoard?.isolationMode, 'per-wave');
-    } finally {
-      globalThis.window.confirm = priorConfirm;
-    }
+    isoSelect.value = 'per-wave';
+    isoSelect.dispatchEvent(new window.Event('change', { bubbles: true }));
+    assert.equal(group.orchestrateBoard?.isolationMode, 'per-wave');
   });
 
   test('header badge shows Stopped with danger styling after user stop', () => {

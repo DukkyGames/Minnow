@@ -75,7 +75,13 @@ function viewForPresentationMode(mode: PresentationMode): OsView {
 function pickNextForeground(excludeId: string, returnApp?: AppId): string | null {
   if (returnApp) {
     const target = instances.find((i) => i.appId === returnApp && i.id !== excludeId);
-    if (target) return target.id;
+    if (target) {
+      const mode = resolveInstancePresentation(target);
+      // Honor returnToApp only for floating surfaces — not background fullscreen apps.
+      if (mode === 'window' || mode === 'sidePanel') {
+        return target.id;
+      }
+    }
   }
 
   const remaining = instances.filter((i) => i.id !== excludeId);

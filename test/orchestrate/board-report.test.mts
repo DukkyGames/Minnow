@@ -5,6 +5,7 @@
 
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
+import { Window } from 'happy-dom';
 import {
   deliverOrchestratorTaskReport,
   initOrchestratorAutoReports,
@@ -130,6 +131,8 @@ describe('board_report happy path', () => {
 
 describe('quarantine-last stall', () => {
   beforeEach(() => {
+    const win = new Window();
+    globalThis.localStorage = win.localStorage;
     resetNotificationStoreForTests();
     resetNotificationProducersForTests();
     resetOrchestratePlanCompleteUiForTests();

@@ -89,6 +89,22 @@ describe('workspace-switch-guard', () => {
     domWindow = new Window();
     globalThis.window = domWindow as unknown as Window & typeof globalThis.window;
     globalThis.document = domWindow.document;
+    globalThis.localStorage = domWindow.localStorage;
+    globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+      cb(0);
+      return 1;
+    }) as typeof requestAnimationFrame;
+    (domWindow as unknown as { minnow: unknown }).minnow = {
+      preview: { show: async () => {}, hide: async () => {} },
+      app: { isElectron: true, platform: 'linux', openExternal: async () => {} },
+      window: {
+        minimize: async () => {},
+        maximize: async () => {},
+        close: async () => {},
+        isMaximized: async () => false,
+        onMaximizedChanged: () => () => {},
+      },
+    };
     resetWorkspaceStateForTests();
     setWorkspaceFromServer({
       path: CURRENT_WS,
@@ -139,16 +155,30 @@ describe('workspace-switch-guard', () => {
 
   test('confirmAndStopBoardsForWorkspaceSwitch cancels without stopping', async () => {
     const { group } = seedRunningBoard();
-    window.confirm = () => false;
-    const allowed = await confirmAndStopBoardsForWorkspaceSwitch(OTHER_WS);
+    const { installAppDialogs } = await import('../../src/ui/app-dialog.ts');
+    installAppDialogs(globalThis.window);
+    const allowedPromise = confirmAndStopBoardsForWorkspaceSwitch(OTHER_WS);
+    await Promise.resolve();
+    const cancelBtn = domWindow.document.querySelector<HTMLButtonElement>(
+      '[data-dialog-action="cancel"]',
+    );
+    cancelBtn?.click();
+    const allowed = await allowedPromise;
     assert.equal(allowed, false);
     assert.equal(isBoardRunning(group), true);
   });
 
   test('confirmAndStopBoardsForWorkspaceSwitch stops boards when confirmed', async () => {
     const { group } = seedRunningBoard();
-    window.confirm = () => true;
-    const allowed = await confirmAndStopBoardsForWorkspaceSwitch(OTHER_WS);
+    const { installAppDialogs } = await import('../../src/ui/app-dialog.ts');
+    installAppDialogs(globalThis.window);
+    const allowedPromise = confirmAndStopBoardsForWorkspaceSwitch(OTHER_WS);
+    await Promise.resolve();
+    const confirmBtn = domWindow.document.querySelector<HTMLButtonElement>(
+      '[data-dialog-action="confirm"]',
+    );
+    confirmBtn?.click();
+    const allowed = await allowedPromise;
     assert.equal(allowed, true);
     assert.equal(isBoardRunning(group), false);
     assert.equal(group.orchestrateBoard?.userStopped, true);
