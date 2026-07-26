@@ -841,7 +841,7 @@ describe('orchestrate board live updates', () => {
     assert.ok(document.querySelector('.msg.user'));
   });
 
-  test('switchChat to same planner dismisses board DOM', () => {
+  test('switchChat to same planner dismisses board DOM', async () => {
     setupDom();
     const chat = makeOrchestrateChat();
     chat.history = [{ role: 'user', content: 'Run the plan' }];
@@ -855,14 +855,16 @@ describe('orchestrate board live updates', () => {
     renderBoardView(group);
     assert.ok(document.querySelector('.board-root'));
 
-    switchChat(chat.id);
+    // switchChat awaits lazy history before repainting; the board only leaves the
+    // DOM after that, so a bare call races the assertions below.
+    await switchChat(chat.id);
 
     assert.equal(group.viewMode, 'chat');
     assert.equal(document.querySelector('.board-root'), null);
     assert.ok(document.querySelector('.msg.user'));
   });
 
-  test('switchChat to external chat dismisses board and renders target chat', () => {
+  test('switchChat to external chat dismisses board and renders target chat', async () => {
     setupDom();
     const chat = makeOrchestrateChat();
     const external = createEmptyChatObject('');
@@ -881,7 +883,7 @@ describe('orchestrate board live updates', () => {
     renderBoardView(group);
     assert.ok(document.querySelector('.board-root'));
 
-    switchChat(external.id);
+    await switchChat(external.id);
 
     assert.equal(group.viewMode, 'chat');
     assert.equal(getActiveChat().id, external.id);
@@ -989,7 +991,7 @@ describe('orchestrate board live updates', () => {
     await waitForKanban();
     assert.ok(document.querySelector('.board-root'));
 
-    switchChat(external.id);
+    await switchChat(external.id);
 
     assert.equal(group.viewMode, 'chat');
     assert.equal(getActiveChat().id, external.id);

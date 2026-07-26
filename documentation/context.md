@@ -488,6 +488,8 @@ Multi-provider registry: `~/.minnow/providers/`. UI: Models app → Providers. C
 
 Scoped suites: see `package.json` (`test:memory`, `test:brain`, `test:engine`, …).
 
+**Dependency security:** [`package.json`](../package.json) → `overrides` pins patched transitive versions (`@hono/node-server`, `brace-expansion`, `protobufjs`, `sharp`, electron-builder asar/minimatch chain, `@xenova/transformers` ONNX/sharp). After `npm install`, `npm audit` should report **0 vulnerabilities**. Avoid `npm audit fix --force` — it downgrades `@xenova/transformers` / MCP SDK and can break embeddings or pull deprecated native deps (`canvas`).
+
 ---
 
 ## Key files

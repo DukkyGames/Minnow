@@ -7,18 +7,26 @@ import { availableParallelism } from 'node:os';
 
 /** @typedef {'node' | 'tsx-mocks' | 'tsx-mocks-loader' | 'node-tsx'} RunnerId */
 
-/** Default worker cap — parallel happy-dom / orchestrate imports OOM 64GB boxes. */
-export const MAX_TEST_CONCURRENCY = 1;
+/**
+ * Default worker cap. A heavy happy-dom + orchestrate file peaks around 300 MB,
+ * so this bounds the suite near 1.5 GB. The freeze that once forced this to 1 was
+ * never parallelism — it was node:assert diffing a DOM node (assert-dom-safe.mjs).
+ */
+export const MAX_TEST_CONCURRENCY = 4;
 
-/** Default files per node process — one file so the heap is freed on exit. */
-export const MAX_TEST_BATCH_SIZE = 1;
+/**
+ * Default files per `node --test` invocation. Batching costs no extra memory —
+ * node:test still forks one child per file — it only avoids re-paying spawn and
+ * tsx startup for all ~960 files.
+ */
+export const MAX_TEST_BATCH_SIZE = 200;
 
-/** node:test isolation for heavy paths (each `test()` in its own child process). */
+/** node:test isolation for heavy paths (one child process per file). */
 export const HEAVY_TEST_ISOLATION = 'process';
 
 /**
- * Paths that import happy-dom + orchestrate board UI; run one file per process at
- * concurrency 1 so parallel module graphs do not exhaust RAM.
+ * Paths that import happy-dom + orchestrate board UI; kept in their own spawn so
+ * a hang there is attributable to one file rather than a 200-file batch.
  */
 export const HEAVY_TEST_PATH_PREFIXES = [
   'test/ui/',
@@ -52,11 +60,23 @@ export function resolveTestBatchSize() {
   return MAX_TEST_BATCH_SIZE;
 }
 
+/**
+ * Preload applied by every runner. Stops node:assert from inspecting/diffing a
+ * happy-dom node on a failed assertion — that path allocates unbounded typed
+ * arrays synchronously and takes the whole machine down. See the module header.
+ */
+export const ASSERT_GUARD_IMPORT = ['--import', './test/assert-dom-safe.mjs'];
+
 /** How each runner invokes node:test. */
 export const RUNNERS = {
   node: {
     command: 'node',
-    prefixArgs: ['--test', '--test-force-exit', '--test-timeout=120000'],
+    prefixArgs: [
+      ...ASSERT_GUARD_IMPORT,
+      '--test',
+      '--test-force-exit',
+      '--test-timeout=120000',
+    ],
   },
   'tsx-mocks': {
     command: 'node',
@@ -64,6 +84,7 @@ export const RUNNERS = {
       '--experimental-test-module-mocks',
       '--import',
       'tsx',
+      ...ASSERT_GUARD_IMPORT,
       '--test',
       '--test-force-exit',
       '--test-timeout=120000',
@@ -80,6 +101,7 @@ export const RUNNERS = {
       'tsx',
       '--import',
       './test/test-loader.mjs',
+      ...ASSERT_GUARD_IMPORT,
       '--test',
       '--test-force-exit',
       '--test-timeout=120000',
@@ -87,7 +109,14 @@ export const RUNNERS = {
   },
   'node-tsx': {
     command: 'node',
-    prefixArgs: ['--import', 'tsx', '--test', '--test-force-exit', '--test-timeout=120000'],
+    prefixArgs: [
+      '--import',
+      'tsx',
+      ...ASSERT_GUARD_IMPORT,
+      '--test',
+      '--test-force-exit',
+      '--test-timeout=120000',
+    ],
   },
 };
 

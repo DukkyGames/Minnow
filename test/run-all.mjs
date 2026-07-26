@@ -58,9 +58,9 @@ function printHelp() {
 Runs all discoverable test/**/*.test.{js,mjs,mts,ts} files, grouped by runner profile.
 Orphan detection: npm run test:check-coverage
 
-Safe defaults: one file per node process, concurrency 1. Heavy UI/orchestrate paths
-also use --test-isolation=process. Override with MINNOW_TEST_BATCH_SIZE /
-MINNOW_TEST_CONCURRENCY when you have spare RAM.`);
+Every runner preloads test/assert-dom-safe.mjs, which stops a failed DOM assertion
+from allocating unbounded diff buffers. Heavy UI/orchestrate paths get their own
+spawn. Tune with MINNOW_TEST_BATCH_SIZE / MINNOW_TEST_CONCURRENCY.`);
 }
 
 /** Headroom under Windows CreateProcess's 32767-char command-line limit. */

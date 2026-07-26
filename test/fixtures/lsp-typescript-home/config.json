@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "createdAt": "2026-07-24T07:47:30.967Z",
+  "createdAt": "2026-07-26T16:56:06.568Z",
   "migratedFromLocalStorage": false,
   "migratedAt": null,
   "localStorageKeysMigrated": [],
@@ -212,6 +212,9 @@
     "wordWrap": false,
     "renderWhitespace": false
   },
+  "desktopShell": {
+    "closeToTray": true
+  },
   "voice": {
     "stt": {
       "enabled": true,
@@ -234,9 +237,9 @@
     }
   },
   "workspace": {
-    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-CLs4z6",
+    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-oXmtJ9",
     "recentPaths": [
-      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-CLs4z6"
+      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-oXmtJ9"
     ]
   }
 }
