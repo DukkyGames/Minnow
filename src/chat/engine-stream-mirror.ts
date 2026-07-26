@@ -109,6 +109,8 @@ export function initEngineStreamMirror(): void {
   mirrorInitialized = true;
   if (!isServerEngineEnabled()) return;
   syncEngineStreamMirrors();
+  // Also hydrate any parked ask_question from the current session snapshot.
+  void import('./engine-ask-question-mirror').then((m) => m.syncEngineAskQuestionUi());
 }
 
 /** @internal */

@@ -5,12 +5,15 @@
  * lacks: steer consume at tool-loop boundaries, message-queue flush, mode-switch
  * tools as state mutations, and a goal post-turn hook seam.
  *
- * Gaps vs full loop.ts (documented for Phase 1 honesty):
- * - No multimodal attachments / VLM content
+ * Shipped vs Phase 1 gaps:
+ * - Multimodal attachments / VLM via turnAttachments + buildEngineApiMessages
+ * - ask_question pause/resume via pendingAskQuestion SSE hint + answer_question
+ *
+ * Remaining gaps vs full loop.ts:
  * - No archive/context-budget policy, thinking budget, or synthesis rounds
  * - Goal evaluator is a simplified auto-continue (no full eval-agent tool suite)
- * - propose_mode_switch queues pendingModeId (no ask_question modal)
- * - ask_question / browser_* remain unavailable server-side (same as headless)
+ * - propose_mode_switch queues pendingModeId (no ask_question modal for handoff)
+ * - browser_* remain unavailable server-side (same as headless)
  */
 
 import {
@@ -25,7 +28,7 @@ import {
   createGeneration,
   subscribeToGeneration,
 } from '../api/generations';
-import { buildHeadlessApiMessages } from '../headless/build-messages';
+import type { Attachment } from '../attachments/types.ts';
 import {
   executeHeadlessTool,
   getHeadlessToolDefinitions,
@@ -39,7 +42,16 @@ import { ensureToolConfigReady } from '../tools/config';
 import { getActiveProvider } from '../providers/store';
 import { applySamplerToBody } from '../agents/sampler-types';
 import { BUILT_IN_TOOLS } from '../tools/definitions';
+import {
+  stringifyAskQuestionResult,
+  validateAskQuestionArgs,
+} from '../tools/ask-question-types.ts';
 import type { Chat, ChatCompletionChunk, ToolCallAccumulator } from '../types';
+import {
+  cancelParkedAskQuestion,
+  parkAskQuestion,
+} from './ask-question-bridge.ts';
+import { buildEngineApiMessages } from './build-api-messages.ts';
 import {
   consumePendingSteerEngine,
   executeCreateChatWithModeEngine,
@@ -76,6 +88,13 @@ export interface EngineMainChatTurnOptions {
   maxTokens?: number;
   systemPrompt?: string;
   goalDriven?: boolean;
+  /**
+   * In-memory attachments for this turn (VLM image_url / file rebuild).
+   * Not persisted on Chat — history already stores string placeholders.
+   */
+  turnAttachments?: Attachment[];
+  /** Original user prose for VLM rebuild (without attachment blocks). */
+  pendingUserText?: string;
   /** Override for tests — inject persistence/mutate without HTTP. */
   deps?: EngineMainChatDeps;
 }
@@ -276,6 +295,16 @@ function mergeSubAgentToolDefinitions(
   return next;
 }
 
+/** Expose ask_question — headless catalog strips it; engine parks + resumes via SSE. */
+function mergeAskQuestionToolDefinition(
+  enabledTools: ReturnType<typeof getHeadlessToolDefinitions>,
+): ReturnType<typeof getHeadlessToolDefinitions> {
+  const tool = BUILT_IN_TOOLS.find((t) => t.definition.function.name === 'ask_question');
+  if (!tool) return enabledTools;
+  if (enabledTools.some((t) => t.function.name === 'ask_question')) return enabledTools;
+  return [...enabledTools, tool.definition];
+}
+
 /**
  * Run board_* tools against the engine-hosted sessionState alias, then publish.
  * Rebinds synchronously so mutateEngineState clones cannot leave board_init on a stale blob.
@@ -376,12 +405,17 @@ export async function runEngineMainChatTurn(
       : 4096;
 
   const modeId = normalizeModeId(chat.modeId) as ModeId;
-  // Mode + board + sub-agent tools (stripped from headless catalog; host runs in-process).
-  const enabledTools = mergeSubAgentToolDefinitions(
-    mergeBoardToolDefinitions(
-      mergeModeToolDefinitions(getHeadlessToolDefinitions(modeId)),
+  // Mode + board + sub-agent + ask_question (stripped from headless catalog).
+  const enabledTools = mergeAskQuestionToolDefinition(
+    mergeSubAgentToolDefinitions(
+      mergeBoardToolDefinitions(
+        mergeModeToolDefinitions(getHeadlessToolDefinitions(modeId)),
+      ),
     ),
   );
+
+  const turnAttachments = options.turnAttachments?.filter((a) => a.kind !== 'error') ?? [];
+  const pendingUserText = options.pendingUserText ?? '';
 
   try {
     for (;;) {
@@ -397,7 +431,11 @@ export async function runEngineMainChatTurn(
       const latest = await deps.getChat(options.chatId);
       if (!latest) throw new Error(`Chat not found: ${options.chatId}`);
 
-      const messages = buildHeadlessApiMessages(latest, systemPrompt);
+      const messages = buildEngineApiMessages(latest, systemPrompt, {
+        turnAttachments,
+        modelId: sendModelId,
+        pendingUserText,
+      });
       const body = applySamplerToBody(
         {
           model: sendModelId,
@@ -453,7 +491,50 @@ export async function runEngineMainChatTurn(
       const outcomes = await runHeadlessToolBatch({
         toolCalls: turnResult.toolCalls,
         signal: options.signal,
-        execute: async (name, args) => {
+        execute: async (name, args, ctx) => {
+          if (name === 'ask_question') {
+            const parsed = validateAskQuestionArgs(args);
+            if (parsed.ok === false) {
+              return {
+                content: stringifyAskQuestionResult({
+                  status: 'error',
+                  message: parsed.error,
+                }),
+              };
+            }
+            const toolCallId = ctx.toolCallId;
+            // Soft-publish pending hint so the renderer can open the question strip.
+            await deps.mutateChat(
+              options.chatId,
+              (c) => {
+                c.pendingAskQuestion = {
+                  toolCallId,
+                  args: parsed.args,
+                  createdAt: Date.now(),
+                };
+              },
+              { soft: true },
+            );
+            try {
+              const content = await parkAskQuestion(
+                options.chatId,
+                toolCallId,
+                parsed.args,
+                options.signal,
+              );
+              return { content };
+            } finally {
+              await deps.mutateChat(
+                options.chatId,
+                (c) => {
+                  if (c.pendingAskQuestion?.toolCallId === toolCallId) {
+                    c.pendingAskQuestion = undefined;
+                  }
+                },
+                { soft: true },
+              );
+            }
+          }
           if (name === 'create_chat_with_mode') {
             if (!deps.mutateSession) {
               return { content: 'Error: session mutate unavailable' };
@@ -540,9 +621,12 @@ export async function runEngineMainChatTurn(
   } catch (err) {
     const isAbort =
       err instanceof Error && (err.name === 'AbortError' || options.signal.aborted);
+    // Unblock any parked ask_question waiter on abort/error.
+    cancelParkedAskQuestion(options.chatId);
     await deps.mutateChat(options.chatId, (c) => {
       c.currentGenerationId = undefined;
       c.engineTurnActive = false;
+      c.pendingAskQuestion = undefined;
       if (!isAbort) {
         const message = err instanceof Error ? err.message : String(err);
         c.history.push({ role: 'assistant', content: `Error: ${message}` });

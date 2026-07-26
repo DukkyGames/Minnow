@@ -31,6 +31,8 @@ import { applyControllerCommand } from './controller-loader.js';
  *   skillId?: string | null,
  *   displayText?: string,
  *   historyContent?: string,
+ *   pushUser?: boolean,
+ *   attachments?: unknown[],
  * }} SendMessageCommand
  *
  * @typedef {{ type: 'stop_generation', chatId: string }} StopGenerationCommand
@@ -39,9 +41,16 @@ import { applyControllerCommand } from './controller-loader.js';
  *
  * @typedef {{ type: 'enqueue_message', chatId: string, text: string }} EnqueueMessageCommand
  *
+ * @typedef {{
+ *   type: 'answer_question',
+ *   chatId: string,
+ *   toolCallId?: string,
+ *   result: unknown,
+ * }} AnswerQuestionCommand
+ *
  * @typedef {{ type: string, [key: string]: unknown }} BoardishCommand
  *
- * @typedef {SendMessageCommand | StopGenerationCommand | SteerMessageCommand | EnqueueMessageCommand | BoardishCommand} SessionCommand
+ * @typedef {SendMessageCommand | StopGenerationCommand | SteerMessageCommand | EnqueueMessageCommand | AnswerQuestionCommand | BoardishCommand} SessionCommand
  */
 
 const BOARD_COMMAND_TYPES = new Set([
@@ -104,6 +113,8 @@ export async function applySessionCommand(cmd) {
       return handleSteerMessage(cmd);
     case 'enqueue_message':
       return handleEnqueueMessage(cmd);
+    case 'answer_question':
+      return handleAnswerQuestion(cmd);
     default:
       throw Object.assign(new Error(`Unknown command type: ${cmd.type}`), {
         statusCode: 400,
@@ -112,20 +123,42 @@ export async function applySessionCommand(cmd) {
 }
 
 /**
+ * Normalize attachment payloads from send_message (shared with unit tests).
+ * @param {unknown} raw
+ * @returns {unknown[]}
+ */
+export function normalizeCommandAttachments(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const kind = /** @type {{ kind?: unknown, name?: unknown }} */ (item).kind;
+    const name = /** @type {{ kind?: unknown, name?: unknown }} */ (item).name;
+    if (typeof kind !== 'string' || typeof name !== 'string') continue;
+    if (kind === 'error') continue;
+    out.push(item);
+    if (out.length >= 32) break;
+  }
+  return out;
+}
+
+/**
  * @param {SendMessageCommand} cmd
  */
 async function handleSendMessage(cmd) {
   const chatId = typeof cmd.chatId === 'string' ? cmd.chatId.trim() : '';
   const text = typeof cmd.text === 'string' ? cmd.text : '';
+  const attachments = normalizeCommandAttachments(cmd.attachments);
   if (!chatId) {
     throw Object.assign(new Error('chatId is required'), { statusCode: 400 });
   }
-  if (!text.trim() && !cmd.historyContent?.trim()) {
+  if (!text.trim() && !cmd.historyContent?.trim() && attachments.length === 0) {
     throw Object.assign(new Error('text is required'), { statusCode: 400 });
   }
 
   if (isEngineTurnActive(chatId)) {
     // Follow-up while streaming → queue (parity with composer enqueue).
+    // Attachments are not accepted on follow-ups (composer already blocks them).
     return handleEnqueueMessage({ type: 'enqueue_message', chatId, text });
   }
 
@@ -135,10 +168,27 @@ async function handleSendMessage(cmd) {
     return handleEnqueueMessage({ type: 'enqueue_message', chatId, text });
   }
 
-  const historyContent =
+  // Prefer client-built historyContent; otherwise rebuild with the same helpers as loop.ts.
+  let historyContent =
     typeof cmd.historyContent === 'string' && cmd.historyContent.trim()
       ? cmd.historyContent
-      : text.trim();
+      : '';
+  if (!historyContent && attachments.length > 0) {
+    try {
+      const { buildEngineHistoryUserContent } = await import(
+        '../../src/session-engine/build-api-messages.ts'
+      );
+      historyContent = buildEngineHistoryUserContent(text, /** @type {any} */ (attachments));
+    } catch (err) {
+      console.error('[session-engine] attachment history build failed:', err);
+      historyContent = text.trim();
+    }
+  }
+  if (!historyContent) historyContent = text.trim();
+  // Fork/replay keeps the existing user row — do not append a duplicate.
+  const pushUser = cmd.pushUser !== false;
+  const pendingUserText =
+    typeof cmd.displayText === 'string' ? cmd.displayText : text;
 
   let rev;
   try {
@@ -148,7 +198,9 @@ async function handleSendMessage(cmd) {
         throw Object.assign(new Error(`Chat not found: ${chatId}`), { statusCode: 404 });
       }
       if (!Array.isArray(chat.history)) chat.history = [];
-      chat.history.push({ role: 'user', content: historyContent });
+      if (pushUser) {
+        chat.history.push({ role: 'user', content: historyContent });
+      }
       chat.updatedAt = Date.now();
       if (typeof cmd.modelId === 'string' && cmd.modelId.trim()) {
         chat.modelId = cmd.modelId.trim();
@@ -165,6 +217,7 @@ async function handleSendMessage(cmd) {
   }
 
   // Fire-and-forget tool loop — HTTP already returned 202 + rev.
+  // Attachments stay in-memory for this turn (not published on Chat — avoid huge SSE blobs).
   void runEngineMainChatTurn({
     chatId,
     signal: controller.signal,
@@ -174,6 +227,8 @@ async function handleSendMessage(cmd) {
     maxTokens: cmd.maxTokens,
     systemPrompt: cmd.systemPrompt,
     goalDriven: cmd.goalDriven === true,
+    turnAttachments: attachments,
+    pendingUserText,
   })
     .catch((err) => {
       console.error('[session-engine] send_message failed:', err);
@@ -182,6 +237,7 @@ async function handleSendMessage(cmd) {
         if (!chat) return;
         chat.engineTurnActive = false;
         chat.currentGenerationId = undefined;
+        chat.pendingAskQuestion = undefined;
         const message = err instanceof Error ? err.message : String(err);
         chat.history = Array.isArray(chat.history) ? chat.history : [];
         chat.history.push({
@@ -207,6 +263,16 @@ async function handleStopGeneration(cmd) {
     throw Object.assign(new Error('chatId is required'), { statusCode: 400 });
   }
 
+  // Cancel parked ask_question before abort so the tool batch settles cleanly.
+  try {
+    const { cancelParkedAskQuestion } = await import(
+      '../../src/session-engine/ask-question-bridge.ts'
+    );
+    cancelParkedAskQuestion(chatId);
+  } catch {
+    /* bridge module unavailable in some test harnesses */
+  }
+
   abortEngineTurn(chatId);
 
   const rev = await mutateEngineState((state) => {
@@ -214,9 +280,68 @@ async function handleStopGeneration(cmd) {
     if (!chat) return;
     chat.engineTurnActive = false;
     chat.currentGenerationId = undefined;
+    chat.pendingAskQuestion = undefined;
     if (chat.pendingSteerMessage) chat.pendingSteerMessage = undefined;
     chat.updatedAt = Date.now();
   });
+
+  return { rev, accepted: true };
+}
+
+/**
+ * Resume a parked engine ask_question with the user's answers.
+ * @param {AnswerQuestionCommand} cmd
+ */
+async function handleAnswerQuestion(cmd) {
+  const chatId = typeof cmd.chatId === 'string' ? cmd.chatId.trim() : '';
+  if (!chatId) {
+    throw Object.assign(new Error('chatId is required'), { statusCode: 400 });
+  }
+  const rawResult = cmd.result;
+  if (!rawResult || typeof rawResult !== 'object') {
+    throw Object.assign(new Error('result is required'), { statusCode: 400 });
+  }
+  const status = /** @type {{ status?: unknown }} */ (rawResult).status;
+  if (status !== 'answered' && status !== 'cancelled' && status !== 'error') {
+    throw Object.assign(new Error('result.status must be answered|cancelled|error'), {
+      statusCode: 400,
+    });
+  }
+
+  const toolCallId =
+    typeof cmd.toolCallId === 'string' && cmd.toolCallId.trim()
+      ? cmd.toolCallId.trim()
+      : undefined;
+
+  const { resolveParkedAskQuestion } = await import(
+    '../../src/session-engine/ask-question-bridge.ts'
+  );
+  const accepted = resolveParkedAskQuestion(
+    chatId,
+    /** @type {any} */ (rawResult),
+    toolCallId,
+  );
+  if (!accepted) {
+    return {
+      rev: getSessionRev(),
+      accepted: false,
+      detail: 'no_pending_question',
+    };
+  }
+
+  // Clear the SSE hint immediately (loop also clears in finally).
+  const rev = await mutateEngineState((state) => {
+    const chat = findChatInState(state, chatId);
+    if (!chat) return;
+    if (
+      !toolCallId ||
+      chat.pendingAskQuestion?.toolCallId === toolCallId ||
+      !chat.pendingAskQuestion
+    ) {
+      chat.pendingAskQuestion = undefined;
+    }
+    chat.updatedAt = Date.now();
+  }, { soft: true });
 
   return { rev, accepted: true };
 }

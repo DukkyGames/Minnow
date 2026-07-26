@@ -76,6 +76,27 @@ export interface UserMessage {
   hiddenFromTranscript?: boolean;
 }
 
+/**
+ * Soft-published SSE hint while the Session Engine is parked on `ask_question`.
+ * Renderer opens the existing question strip; `answer_question` resumes the turn.
+ */
+export interface PendingAskQuestion {
+  /** Tool call id waiting for a result. */
+  toolCallId: string;
+  /** Validated ask_question args (title + questions). */
+  args: {
+    title?: string;
+    questions: Array<{
+      id: string;
+      prompt: string;
+      options: Array<{ id: string; label: string; description?: string }>;
+      allow_multiple?: boolean;
+    }>;
+  };
+  /** Epoch ms when the engine parked. */
+  createdAt: number;
+}
+
 /** One build-agent progress item (todo_write). */
 export interface ChatTodo {
   text: string;
@@ -1028,6 +1049,11 @@ export interface Chat {
    * Soft-published over Phase 0 SSE so clients can mirror generation streams without runChatTurn.
    */
   engineTurnActive?: boolean;
+  /**
+   * Engine ask_question pause hint (MIN-354 residual). Soft-published over Phase 0 SSE so
+   * the renderer can open the existing question strip; cleared when `answer_question` resumes.
+   */
+  pendingAskQuestion?: PendingAskQuestion;
   /** Sidebar: green dot on inactive rows until the user opens this chat again. */
   unread?: boolean;
   /** Sidebar: red dot on inactive rows after a failed turn until the user opens this chat again. */

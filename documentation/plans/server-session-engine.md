@@ -117,10 +117,16 @@ Shipped on this branch (`henri/min-354-server-session-engine`). Lives under
 - **Ported**: steering (full), message queue (full), mode tools as state mutations
   (`set_chat_mode` / `create_chat_with_mode` / `propose_mode_switch` → `pendingModeId`),
   goal post-turn auto-continue seam (simplified; not full eval-agent).
-- **Gaps vs loop.ts**: attachments/VLM, archive/context budget, thinking budget,
-  ask_question modal, full goal evaluator, Reef widget.
+- **Gaps closed (residual MIN-354)**: attachments/VLM on `send_message` (history
+  placeholders + in-memory turnAttachments → `buildEngineApiMessages`); ask_question
+  pause/resume via `chat.pendingAskQuestion` SSE hint + `answer_question` command
+  (renderer opens existing strip in [`engine-ask-question-mirror.ts`](../../src/chat/engine-ask-question-mirror.ts)).
+- **Remaining gaps vs loop.ts**: archive/context budget, thinking budget, synthesis
+  rounds, full goal evaluator, Reef widget; ask_question strip auto-dismiss on remote
+  stop is best-effort (abort clears park; open modal may need user cancel).
 - **Tests**: `test/engine/session-phase1.test.mjs`,
-  `test/session-engine/loop-helpers.test.mts`.
+  `test/session-engine/loop-helpers.test.mts`,
+  `test/session-engine/attachments-ask-question.test.mts`.
 
 ### Phase 2 — Move the board scheduler into the engine ✅ Done (MIN-360)
 
@@ -213,7 +219,8 @@ Shipped on this branch (`henri/min-354-server-session-engine`).
 - `PATCH /api/config/sessions` — same `If-Match` / `expectedRev` / `baseRev` guard (Phase 0; SQLite adaptation).
 
 ### Commands (initial set)
-`send_message`, `stop_generation`, `steer_message`, `rename_chat`, `delete_chat`,
+`send_message` (optional `attachments` / `historyContent`), `stop_generation`,
+`steer_message`, `enqueue_message`, `answer_question`, `rename_chat`, `delete_chat`,
 `set_active_chat`, `set_view_mode`, `set_model`, `board_init`, `board_start`, `board_stop`,
 `board_start_task`, `board_requeue_task`, `board_set_autonomy`, `board_run_final_test`,
 `board_recover_task`.

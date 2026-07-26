@@ -226,6 +226,57 @@ describe('session engine phase 1 (MIN-359)', () => {
     assert.equal(res.status, 404);
   });
 
+  test('send_message accepts attachments and persists history placeholders', async () => {
+    const put = await httpRequest(baseUrl, 'PUT', '/api/config/sessions', defaultSessionFixture);
+    assert.equal(put.status, 200);
+    await ensureSessionEngineBooted();
+    const chatId = defaultSessionFixture.chats[0].id;
+
+    const res = await httpRequest(baseUrl, 'POST', '/api/session/commands', {
+      type: 'send_message',
+      chatId,
+      text: 'describe this',
+      historyContent: 'describe this\n\n[image: shot.png]',
+      attachments: [
+        {
+          id: 'att-1',
+          name: 'shot.png',
+          kind: 'image',
+          mimeType: 'image/png',
+          size: 8,
+          dataUrl: 'data:image/png;base64,abcd',
+        },
+      ],
+    });
+    assert.equal(res.status, 202);
+    assert.equal(res.json?.accepted, true);
+
+    // User row is committed before the async tool loop settles (or fails without a model).
+    const chat = /** @type {any} */ (getEngineSessionState())?.chats?.find((c) => c.id === chatId);
+    const lastUser = [...(chat?.history ?? [])].reverse().find((m) => m.role === 'user');
+    assert.ok(lastUser);
+    assert.match(String(lastUser.content), /\[image: shot\.png\]/);
+    // Raw attachment blobs must not land on Chat (SSE size); only history string does.
+    assert.equal(chat?.engineTurnAttachments, undefined);
+  });
+
+  test('answer_question without a parked waiter returns accepted:false', async () => {
+    const put = await httpRequest(baseUrl, 'PUT', '/api/config/sessions', defaultSessionFixture);
+    assert.equal(put.status, 200);
+    await ensureSessionEngineBooted();
+    const chatId = defaultSessionFixture.chats[0].id;
+
+    const res = await httpRequest(baseUrl, 'POST', '/api/session/commands', {
+      type: 'answer_question',
+      chatId,
+      toolCallId: 'missing',
+      result: { status: 'cancelled', answers: [] },
+    });
+    assert.equal(res.status, 202);
+    assert.equal(res.json?.accepted, false);
+    assert.equal(res.json?.detail, 'no_pending_question');
+  });
+
   test('unknown command type returns 400', async () => {
     const put = await httpRequest(baseUrl, 'PUT', '/api/config/sessions', defaultSessionFixture);
     assert.equal(put.status, 200);

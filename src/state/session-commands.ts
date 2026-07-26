@@ -3,6 +3,7 @@
  */
 
 import { withSessionToken } from '../api/session-token';
+import { findChatById } from './sessions';
 
 /** Bearer token for /api/session/* when MINNOW_TOKEN is set on the server. */
 function sessionAuthHeaders(): Record<string, string> {
@@ -32,7 +33,31 @@ export interface SendMessageCommandPayload {
   skillId?: string | null;
   displayText?: string;
   historyContent?: string;
+  /**
+   * When false, the engine starts a turn without appending a user row
+   * (fork/replay and other pushUser:false call sites). Default true.
+   */
+  pushUser?: boolean;
+  /** Serializable Attachment[] for engine multimodal / file rebuild. */
+  attachments?: unknown[];
 }
+
+/** Payload for resuming a parked engine ask_question. */
+export interface AnswerQuestionCommandPayload {
+  chatId: string;
+  toolCallId?: string;
+  result: {
+    status: 'answered' | 'cancelled' | 'error';
+    answers?: unknown[];
+    message?: string;
+  };
+}
+
+/** Default cap while waiting for an engine-owned main-chat turn to settle. */
+const ENGINE_TURN_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+const ENGINE_TURN_POLL_MS = 50;
+/** If SSE never shows busy, allow idle after this grace (coalesced patches). */
+const ENGINE_TURN_MISS_BUSY_GRACE_MS = 3000;
 
 /** POST a typed command; returns 202 `{ rev }` on success. */
 export async function dispatchSessionCommand(
@@ -69,6 +94,73 @@ export async function dispatchSendMessage(
   return dispatchSessionCommand({ type: 'send_message', ...payload });
 }
 
+/**
+ * Poll until the chat is no longer engine-busy (`engineTurnActive` / generation id).
+ * Use after `send_message` 202 when the caller must wait for turn completion
+ * (board git-setup, Super Plan stages, plan-screen phase advance).
+ */
+export async function waitForEngineTurnIdle(
+  chatId: string,
+  options: {
+    assumeStarted?: boolean;
+    timeoutMs?: number;
+    /** Override miss-busy grace (tests); default {@link ENGINE_TURN_MISS_BUSY_GRACE_MS}. */
+    missBusyGraceMs?: number;
+  } = {},
+): Promise<void> {
+  const timeoutMs = options.timeoutMs ?? ENGINE_TURN_IDLE_TIMEOUT_MS;
+  const missBusyGraceMs = options.missBusyGraceMs ?? ENGINE_TURN_MISS_BUSY_GRACE_MS;
+  const deadline = Date.now() + timeoutMs;
+  const startedAt = Date.now();
+  // Only flip true when we observe busy (or caller set optimistic busy already).
+  let sawBusy = false;
+
+  while (Date.now() < deadline) {
+    const chat = findChatById(chatId);
+    const busy = Boolean(chat?.engineTurnActive || chat?.currentGenerationId?.trim());
+    if (busy) {
+      sawBusy = true;
+    } else if (sawBusy) {
+      return;
+    } else if (options.assumeStarted && Date.now() - startedAt >= missBusyGraceMs) {
+      // Turn finished before the first busy patch (or SSE coalesced it away).
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, ENGINE_TURN_POLL_MS));
+  }
+  throw new Error(`Timed out waiting for engine turn on chat ${chatId}`);
+}
+
+/**
+ * `send_message` then wait until the engine turn settles.
+ * Wakes client stream-end listeners afterward — engine path never runs
+ * renderer `loop.ts`, so plan-screen / Super Plan hooks would otherwise stall.
+ */
+export async function dispatchSendMessageAndAwaitIdle(
+  payload: SendMessageCommandPayload,
+): Promise<SessionCommandResult> {
+  const result = await dispatchSendMessage(payload);
+  // Optimistic busy so we cannot resolve idle before the first SSE patch arrives.
+  const chat = findChatById(payload.chatId);
+  if (chat) {
+    chat.engineTurnActive = true;
+  }
+  try {
+    const { syncEngineStreamMirrors } = await import('../chat/engine-stream-mirror');
+    syncEngineStreamMirrors();
+  } catch {
+    /* mirror is best-effort during tests / early boot */
+  }
+  await waitForEngineTurnIdle(payload.chatId);
+  try {
+    const { notifyChatStreamEnded } = await import('../chat/streaming-state');
+    notifyChatStreamEnded(payload.chatId);
+  } catch {
+    /* stream-end bus unavailable in non-DOM hosts */
+  }
+  return result;
+}
+
 /** Stop an in-flight engine turn. */
 export async function dispatchStopGeneration(chatId: string): Promise<SessionCommandResult> {
   return dispatchSessionCommand({ type: 'stop_generation', chatId });
@@ -88,6 +180,13 @@ export async function dispatchEnqueueMessage(
   text: string,
 ): Promise<SessionCommandResult> {
   return dispatchSessionCommand({ type: 'enqueue_message', chatId, text });
+}
+
+/** Resume a parked engine ask_question with the user's answers. */
+export async function dispatchAnswerQuestion(
+  payload: AnswerQuestionCommandPayload,
+): Promise<SessionCommandResult> {
+  return dispatchSessionCommand({ type: 'answer_question', ...payload });
 }
 
 /* ── Board commands (MIN-360 Phase 2) ───────────────────────────────────── */

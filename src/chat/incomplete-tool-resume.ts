@@ -117,7 +117,7 @@ export async function resumeIncompleteToolBatch(
 
   }
 
-  // Phase 4: Session Engine owns the tool loop (ask_question is unavailable there).
+  // Phase 4: Session Engine owns the tool loop (ask_question parks via pendingAskQuestion).
   // Do not start a renderer runChatTurn that would race the engine host.
   if (isServerEngineEnabled()) {
 

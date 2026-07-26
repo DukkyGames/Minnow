@@ -81,6 +81,9 @@ async function refreshUiAfterRemoteSession(): Promise<void> {
     // Engine mode: subscribe to generation token streams from currentGenerationId.
     const { syncEngineStreamMirrors } = await import('../chat/engine-stream-mirror');
     syncEngineStreamMirrors();
+    // Engine ask_question pause: open the existing strip from pendingAskQuestion.
+    const { syncEngineAskQuestionUi } = await import('../chat/engine-ask-question-mirror');
+    syncEngineAskQuestionUi();
     for (const group of sessionState.groups ?? []) {
       if (group.orchestrateBoard) {
         emitBoardChange(group.id);
