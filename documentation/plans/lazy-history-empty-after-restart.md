@@ -1,5 +1,7 @@
 # Fix: chat history empty after app restart (lazy history C.2)
 
+**Linear:** [MIN-505](https://linear.app/minnowai/issue/MIN-505/chat-history-empty-after-restart-lazy-history-wipe-paint-race)
+
 ## Problem
 
 After restarting Minnow, some chats open with an **empty transcript** even though they had messages before. This is intermittent ("sometimes") because it depends on which chat was active and whether a save ran while other chats were still unloaded.
@@ -17,12 +19,14 @@ After restarting Minnow, some chats open with an **empty transcript** even thoug
 - [x] Client: `chatForSessionsWire` / `sessionStateForSessionsWire` omit `history` when `historyLoaded === false`
 - [x] Server: `patchSessionState` / `writeWholeSessionState` skip `syncMessages` when the wire object has no `history` key
 - [x] Await history hydrate before paint in `switchChat`, desktop, Chat app, workspace change, experts/email activate paths
-- [x] Tests: PATCH metadata-only + PUT omit-history preserve messages; client wire omit tests
-- [ ] Manual verify: restart → switch to a non-active chat → transcript loads; restart again → messages still present
+- [x] Keep summary `messageCount` on inflated chats; `chatHasListableContent` lists unloaded chats in desktop/Code rails
+- [x] Tests: PATCH metadata-only + PUT omit-history preserve messages; client wire omit tests; sidebar listing for unloaded
+- [ ] Manual verify: restart → desktop rail shows prior chats; switch → transcript loads; restart again → messages still present
 
 ## Todos
 
 - [x] Wire omit + server skip sync
 - [x] UI hydrate-before-paint
+- [x] Sidebar/rail listing via messageCount
 - [x] Focused automated tests
 - [ ] Confirm with reporter (active chat vs switch vs wiped forever)

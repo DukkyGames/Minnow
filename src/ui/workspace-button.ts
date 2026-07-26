@@ -67,7 +67,8 @@ export async function applyWorkspaceSwitch(info: WorkspaceInfo): Promise<void> {
   updateWorkspaceButtonLabel(info.label, info.path);
   const { teardownCodeBrainMapBeforeChatPaint } = await import('./code-brain-map');
   const closedCodeMap = teardownCodeBrainMapBeforeChatPaint();
-  applyWorkspaceScopedSession(info.path, previousPath);
+  // Await history hydrate for the workspace's active chat before any re-paint.
+  await applyWorkspaceScopedSession(info.path, previousPath);
   if (closedCodeMap) {
     const { getActiveChat } = await import('../state/sessions');
     const { renderChatFromHistory } = await import('./messages');

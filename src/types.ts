@@ -905,6 +905,11 @@ export interface Chat {
    * (whole-blob boot path, or after lazy fetch / local create).
    */
   historyLoaded?: boolean;
+  /**
+   * Denormalized server message count from summaries (C.2). Used for sidebar/rail
+   * listing while `historyLoaded === false`; not a wire persistence field.
+   */
+  messageCount?: number;
   lastStats: LastStats | null;
   modelInfo: ModelInfo;
   /** Epoch ms of last committed user/assistant/tool history entry (sidebar sort). */

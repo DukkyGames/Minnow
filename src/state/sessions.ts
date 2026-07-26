@@ -280,13 +280,20 @@ function verifyDirtyChatTracking(state: SessionState): boolean {
  */
 export function chatForSessionsWire(chat: Chat): Chat {
   if (chat.historyLoaded === false) {
-    const { history: _history, historyLoaded: _loaded, ...rest } = chat;
+    const {
+      history: _history,
+      historyLoaded: _loaded,
+      messageCount: _messageCount,
+      ...rest
+    } = chat;
     void _history;
     void _loaded;
+    void _messageCount;
     return rest as Chat;
   }
-  const { historyLoaded: _loaded, ...rest } = chat;
+  const { historyLoaded: _loaded, messageCount: _messageCount, ...rest } = chat;
   void _loaded;
+  void _messageCount;
   return rest as Chat;
 }
 
@@ -555,18 +562,22 @@ export function requireHistory(chat: Chat): Message[] {
  * Spreads cold meta_json fields + non-message children from the summary payload (C.2).
  */
 export function chatSummaryToChat(summary: ChatSummary): Chat {
-  // Drop denormalized list-only keys; keep everything else (meta + children).
+  // Drop list-only wire keys except messageCount (needed for rail listing while unloaded).
   const {
-    messageCount: _messageCount,
+    messageCount: rawMessageCount,
     lastMessagePreview: _lastMessagePreview,
     sortIndex: _sortIndex,
     historyDigest: _historyDigest,
     ...cold
   } = summary as ChatSummary & Record<string, unknown>;
-  void _messageCount;
   void _lastMessagePreview;
   void _sortIndex;
   void _historyDigest;
+
+  const messageCount =
+    typeof rawMessageCount === 'number' && Number.isFinite(rawMessageCount)
+      ? Math.max(0, Math.floor(rawMessageCount))
+      : 0;
 
   const chat: Chat = {
     ...(cold as Partial<Chat>),
@@ -576,6 +587,8 @@ export function chatSummaryToChat(summary: ChatSummary): Chat {
     modelId: summary.modelId ?? '',
     history: [],
     historyLoaded: false,
+    // Keep denormalized count so desktop/Code rails list chats before history hydrate.
+    messageCount,
     lastStats: (cold as Partial<Chat>).lastStats ?? null,
     modelInfo: (cold as Partial<Chat>).modelInfo ?? {},
     updatedAt: typeof summary.updatedAt === 'number' ? summary.updatedAt : Date.now(),
@@ -621,6 +634,7 @@ function materializeChatHistory(chat: Chat, messages: Message[]): void {
   }
   chat.history = Array.isArray(messages) ? messages : [];
   chat.historyLoaded = true;
+  chat.messageCount = chat.history.length;
 }
 
 /** Mark every chat as fully loaded (whole-blob boot / flag-off path). */

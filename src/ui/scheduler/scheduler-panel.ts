@@ -260,7 +260,7 @@ export async function renderSchedulerPanel(
         const info = await setWorkspacePath(chatWorkspace);
         setWorkspaceFromServer(info);
         await dismissBoardViewOutsideWorkspace(chatWorkspace);
-        applyWorkspaceScopedSession(chatWorkspace);
+        await applyWorkspaceScopedSession(chatWorkspace);
       } catch (err) {
         notify('err', err instanceof Error ? err.message : String(err));
         return;
@@ -269,7 +269,7 @@ export async function renderSchedulerPanel(
 
     launchApp('code');
     if (sessionState?.activeId !== chatId) {
-      switchChat(chatId);
+      await switchChat(chatId);
     }
   }
 

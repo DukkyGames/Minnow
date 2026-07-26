@@ -51,6 +51,28 @@ describe('chat sidebar listing', () => {
     assert.equal(getSidebarListedChatsForWorkspace(WS, state).length, 1);
   });
 
+  test('lazy-unloaded chats with messageCount appear in sidebar lists', () => {
+    // C.2: summaries inflate history:[] — rails must use denormalized messageCount.
+    const unloaded = createEmptyChatObject('', WS);
+    unloaded.history = [];
+    unloaded.historyLoaded = false;
+    unloaded.messageCount = 3;
+    unloaded.name = 'Prior chat';
+    assert.equal(isEphemeralEmptyChat(unloaded), false);
+    assert.equal(isSidebarListedChat(unloaded), true);
+
+    const state = stateWithChats(unloaded);
+    assert.equal(getSidebarListedChatsForWorkspace(WS, state).length, 1);
+  });
+
+  test('lazy-unloaded chats with messageCount 0 stay hidden', () => {
+    const unloadedEmpty = createEmptyChatObject('', WS);
+    unloadedEmpty.historyLoaded = false;
+    unloadedEmpty.messageCount = 0;
+    assert.equal(isEphemeralEmptyChat(unloadedEmpty), true);
+    assert.equal(isSidebarListedChat(unloadedEmpty), false);
+  });
+
   test('pruneEphemeralEmptyChats keeps the active row and listed chats', () => {
     const keep = createEmptyChatObject('', WS);
     const orphan = createEmptyChatObject('', WS);
