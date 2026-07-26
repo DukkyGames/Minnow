@@ -56,6 +56,7 @@ const CHAT_PASSTHROUGH_KEYS = new Set([
   'pendingSteerMessage',
   'pendingMessageQueue',
   'pendingModeId',
+  'engineTurnActive',
   'turnError',
 ]);
 const MAX_GOAL_CONDITION_CHARS = 4000;

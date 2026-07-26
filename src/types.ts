@@ -986,6 +986,11 @@ export interface Chat {
   todosUpdatedAt?: number;
   /** Queued mode switch from set_chat_mode during streaming (last write wins; flushed on stream end). */
   pendingModeId?: ModeId;
+  /**
+   * Server Session Engine (MIN-359): true while the engine owns an in-flight main-chat turn.
+   * Soft-published over Phase 0 SSE so clients can mirror generation streams without runChatTurn.
+   */
+  engineTurnActive?: boolean;
   /** Sidebar: green dot on inactive rows until the user opens this chat again. */
   unread?: boolean;
   /** Sidebar: red dot on inactive rows after a failed turn until the user opens this chat again. */

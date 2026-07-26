@@ -2838,7 +2838,10 @@ export async function sendMessageWithTools(
     return;
   }
   const rawTextEarly = input.value.trim();
-  if (isActiveChatStreaming()) {
+  const { isServerEngineEnabled } = await import('../state/server-engine-flag');
+  const serverEngine = isServerEngineEnabled();
+
+  if (isActiveChatStreaming() || (serverEngine && getActiveChat().engineTurnActive)) {
     if (!rawTextEarly) return;
     const pendingSteer = getPendingAttachments();
     const pendingOk = pendingSteer.filter((a) => a.kind !== 'error');
@@ -2847,6 +2850,19 @@ export async function sendMessageWithTools(
       return;
     }
     const chat = getActiveChat();
+    if (serverEngine) {
+      const { dispatchEnqueueMessage } = await import('../state/session-commands');
+      try {
+        await dispatchEnqueueMessage(chat.id, rawTextEarly);
+        clearComposerInput(input);
+        setStatus('ok', 'Follow-up queued');
+        refreshComposerStreamingAffordance();
+        syncComposerMessageQueue();
+      } catch (err) {
+        setStatus('err', err instanceof Error ? err.message : String(err));
+      }
+      return;
+    }
     if (enqueueComposerMessage(chat, rawTextEarly)) {
       clearComposerInput(input);
       setStatus('ok', 'Follow-up queued');
@@ -2986,6 +3002,38 @@ export async function sendMessageWithTools(
 
   if (!goalDispatch) {
     clearComposerInput(input);
+  }
+
+  // Phase 1: route main-chat sends through the Session Engine when flagged.
+  // Board / sub-agent paths still call runChatTurn directly (unchanged).
+  if (serverEngine) {
+    const { dispatchSendMessage } = await import('../state/session-commands');
+    const { resolveEffectiveChatModelBinding } = await import('../ui/default-model');
+    const { readGlobalSamplerForSend } = await import('../config/sampler-meta');
+    const binding = resolveEffectiveChatModelBinding(chat);
+    const sampler = readGlobalSamplerForSend();
+    const systemPrompt = (
+      document.getElementById('systemPrompt') as HTMLTextAreaElement | null
+    )?.value?.trim();
+    try {
+      setStatus('spin', 'Sending…');
+      await dispatchSendMessage({
+        chatId: chat.id,
+        text: effectiveRawText,
+        modelId: binding.modelId || chat.modelId,
+        providerId: binding.providerId || chat.providerId,
+        temperature: sampler.preset.temperature ?? 0.7,
+        maxTokens: sampler.maxTokens,
+        systemPrompt: systemPrompt || undefined,
+        goalDriven,
+      });
+      // Tokens + committed history arrive via generations SSE + Phase 0 session stream.
+      const { syncEngineStreamMirrors } = await import('../chat/engine-stream-mirror');
+      syncEngineStreamMirrors();
+    } catch (err) {
+      setStatus('err', err instanceof Error ? err.message : String(err));
+    }
+    return;
   }
 
   await sendProgrammaticChatText(chat, effectiveRawText, {

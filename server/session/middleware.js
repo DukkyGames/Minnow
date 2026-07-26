@@ -1,5 +1,5 @@
 /**
- * HTTP middleware for /api/session/* (Phase 0 state sync + driver lease).
+ * HTTP middleware for /api/session/* (Phase 0 state sync + driver lease + Phase 1 commands).
  */
 
 import { readResource } from '../config/store.js';
@@ -19,6 +19,8 @@ import {
   isSessionRequestAuthorized,
   sendSessionUnauthorized,
 } from './auth.js';
+import { isServerEngineEnabled } from './flag.js';
+import { applyCommand, ensureSessionEngineBooted } from './engine.js';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -88,6 +90,12 @@ export async function handleSessionRequest(req, res, pathname) {
     return true;
   }
 
+  // Flag probe is unauthenticated so the SPA can decide before sync bootstraps.
+  if (pathname === '/api/session/engine' && req.method === 'GET') {
+    sendJson(res, 200, { enabled: isServerEngineEnabled() });
+    return true;
+  }
+
   if (!isSessionRequestAuthorized(req)) {
     sendSessionUnauthorized(res);
     return true;
@@ -97,6 +105,25 @@ export async function handleSessionRequest(req, res, pathname) {
     if (pathname === '/api/session/stream' && req.method === 'GET') {
       const snapshot = await loadSessionSnapshot();
       addSessionStreamSubscriber(req, res, snapshot);
+      return true;
+    }
+
+    if (pathname === '/api/session/commands' && req.method === 'POST') {
+      if (!isServerEngineEnabled()) {
+        sendJson(res, 503, {
+          error: 'Server session engine is disabled',
+          code: 'ENGINE_DISABLED',
+        });
+        return true;
+      }
+      await ensureSessionEngineBooted();
+      const body = await readJsonBody(req);
+      const result = await applyCommand(body);
+      sendJson(res, 202, {
+        rev: result.rev,
+        accepted: result.accepted,
+        detail: result.detail,
+      });
       return true;
     }
 
@@ -137,8 +164,16 @@ export async function handleSessionRequest(req, res, pathname) {
     return true;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error('[session]', message);
-    sendJson(res, 500, { error: message });
+    const statusCode =
+      err &&
+      typeof err === 'object' &&
+      typeof /** @type {{ statusCode?: number }} */ (err).statusCode === 'number'
+        ? /** @type {{ statusCode: number }} */ (err).statusCode
+        : 500;
+    if (statusCode >= 500) {
+      console.error('[session]', message);
+    }
+    sendJson(res, statusCode, { error: message });
     return true;
   }
 }

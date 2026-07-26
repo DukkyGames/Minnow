@@ -201,6 +201,13 @@ async function main() {
   console.log(`Email API: ${localUrl.replace(/\/$/, '')}/api/email/ping`);
   const schedulerBaseUrl = localUrl.replace(/\/$/, '');
   setSchedulerServerBaseUrl(schedulerBaseUrl);
+  if (process.env.MINNOW_SERVER_ENGINE === '1' || process.env.MINNOW_SERVER_ENGINE === 'true') {
+    const { ensureSessionEngineBooted } = await import('./server/session/engine.js');
+    await ensureSessionEngineBooted();
+    console.log(`Session Engine: ON (MINNOW_SERVER_ENGINE) — POST /api/session/commands`);
+  } else {
+    console.log(`Session Engine: off (set MINNOW_SERVER_ENGINE=1 to enable)`);
+  }
   await startSchedulerTickLoop({ baseUrl: schedulerBaseUrl });
   startCalendarReminderLoop();
   startEmailPollLoop();

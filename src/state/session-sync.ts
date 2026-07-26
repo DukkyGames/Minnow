@@ -115,6 +115,9 @@ async function refreshUiAfterRemoteSession(): Promise<void> {
   try {
     renderSidebar();
     renderChatFromHistory(getActiveChat());
+    // Engine mode: subscribe to generation token streams from currentGenerationId.
+    const { syncEngineStreamMirrors } = await import('../chat/engine-stream-mirror');
+    syncEngineStreamMirrors();
     for (const group of sessionState.groups ?? []) {
       if (group.orchestrateBoard) {
         emitBoardChange(group.id);

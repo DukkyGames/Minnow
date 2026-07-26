@@ -92,18 +92,33 @@ active double-run **without moving logic**.
 Deliverable: multiple devices stay visually in sync; exactly one drives. No logic moved.
 Tests: `test/engine/session-phase0.test.mjs`.
 
-### Phase 1 — Engine skeleton + main-chat sends
-- Create `server/engine/session-engine.js`: load `SessionState` at boot, own it in memory,
-  expose `applyCommand(cmd)` + change events → SSE.
-- Port the **main-chat tool-loop** into the engine by generalizing `headless/runner.ts`. Add what
-  `loop.ts` has and the headless runner lacks: steering (`chat/steer-message`), message queue
-  (`chat/message-queue`), goal eval (`chat/goal/*`), mode switch + client-only tools
-  (`set_chat_mode`, `create_chat_with_mode`, `propose_mode_switch` — currently handled in
-  `src/tools/client.ts:199`).
-- New command `send_message` routes main-chat sends through the engine. Renderer stops calling
-  `runChatTurn` for main chat (behind flag); assistant tokens still stream via `/api/generations`,
-  committed history + chat metadata arrive via the state SSE.
-- Board driver stays in renderer (still leased) this phase.
+### Phase 1 — Engine skeleton + main-chat sends ✅ Done (MIN-359)
+
+Shipped on this branch (`henri/min-354-server-session-engine`). Lives under
+`server/session/` (with Phase 0) to avoid colliding with vector `server/engine/*`.
+
+- **Engine core**: [`server/session/engine.js`](../../server/session/engine.js) loads
+  SessionState at boot (sessions-repo), owns it in memory, `applyCommand(cmd)`,
+  persists + publishes via `notifySessionStateWritten` (Phase 0 SSE).
+- **Commands**: `POST /api/session/commands` → 202 `{ rev }` for `send_message`,
+  `stop_generation`, `steer_message`, `enqueue_message`. Flag probe:
+  `GET /api/session/engine` → `{ enabled }`.
+- **Main-chat loop**: [`src/session-engine/main-chat-loop.ts`](../../src/session-engine/main-chat-loop.ts)
+  (tsx-loaded) generalizes headless runner + steer/queue/mode-switch seams.
+  Tokens via `/api/generations`; committed history via SSE.
+- **Flag** `MINNOW_SERVER_ENGINE` (default **off**): composer/main-chat send uses
+  commands; renderer does **not** call `runChatTurn` for main chat. Flag off ⇒
+  `loop.ts` unchanged. Board stays renderer + lease.
+- **Client**: [`src/state/session-commands.ts`](../../src/state/session-commands.ts),
+  [`src/state/server-engine-flag.ts`](../../src/state/server-engine-flag.ts),
+  [`src/chat/engine-stream-mirror.ts`](../../src/chat/engine-stream-mirror.ts).
+- **Ported**: steering (full), message queue (full), mode tools as state mutations
+  (`set_chat_mode` / `create_chat_with_mode` / `propose_mode_switch` → `pendingModeId`),
+  goal post-turn auto-continue seam (simplified; not full eval-agent).
+- **Gaps vs loop.ts**: attachments/VLM, archive/context budget, thinking budget,
+  ask_question modal, full goal evaluator, Reef widget.
+- **Tests**: `test/engine/session-phase1.test.mjs`,
+  `test/session-engine/loop-helpers.test.mts`.
 
 ### Phase 2 — Move the board scheduler into the engine
 - Port `orchestrate-board-store.ts` (pure) and `orchestrate-board-actions.ts` into the engine.
@@ -149,13 +164,15 @@ Tests: `test/engine/session-phase0.test.mjs`.
 `board_recover_task`.
 
 ### New/changed modules
-- `server/engine/session-engine.js` (new) — engine core.
-- `server/engine/session-sse.js` (new) — subscriber set + fan-out (reuse `generations/store.js` pattern).
-- `server/engine/commands.js` (new) — command handlers.
-- `src/state/session-sync.ts` (new) — client SSE subscribe + reconcile.
-- `src/state/session-commands.ts` (new) — client command dispatch helpers.
-- Ported into engine: `orchestrate-board-store.ts`, `orchestrate-board-actions.ts`,
-  `agents/controller/*`, generalized `headless/runner.ts` loop.
+- `server/session/engine.js` (Phase 1) — engine core (not `server/engine/`; vector lives there).
+- `server/session/commands.js` (Phase 1) — command handlers.
+- `server/session/loop-loader.js` (Phase 1) — tsx-load main-chat loop.
+- `src/session-engine/main-chat-loop.ts` + `engine-loop-helpers.ts` (Phase 1).
+- `src/state/session-sync.ts` (Phase 0) — client SSE subscribe + reconcile.
+- `src/state/session-commands.ts` (Phase 1) — client command dispatch helpers.
+- `src/state/server-engine-flag.ts` + `src/chat/engine-stream-mirror.ts` (Phase 1).
+- Ported into engine later: `orchestrate-board-store.ts`, `orchestrate-board-actions.ts`,
+  `agents/controller/*`.
 
 ---
 
