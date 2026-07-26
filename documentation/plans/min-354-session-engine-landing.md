@@ -41,7 +41,7 @@ desktop builds, closes the LAN token hole, and cleans up correctness/doc drift.
 - [x] Correct `documentation/plans/server-session-engine.md` drift + dual load path
 - [x] Guard `install-fetch-auth.ts` retry for `Request` body
 - [x] Update `documentation/context.md` for bundle/boot/availability
-- [ ] Commit: `📝 fix(session): headless runner crash, plan docs, fetch-auth retry`
+- [x] Commit: `📝 fix(session): headless runner crash, plan docs, fetch-auth retry`
 
 ### Verification
 - [ ] Stage 1: auth-middleware + session-token tests
