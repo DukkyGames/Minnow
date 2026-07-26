@@ -202,6 +202,25 @@ export function augmentDevServerCommand(command, port, network, options = {}) {
 }
 
 /**
+ * Whether to merge PORT/HOST env into the child (skip bare one-shot interpreters).
+ * @param {string} command
+ */
+export function shouldApplyDevServerSpawnEnv(command) {
+  const trimmed = String(command).trim();
+  if (!trimmed) return false;
+  if (/^node\s+-e\b/i.test(trimmed)) return false;
+  return (
+    /\bvite\b/i.test(trimmed) ||
+    /\bconcurrently\b/i.test(trimmed) ||
+    /\bnpm run\b/i.test(trimmed) ||
+    /\bpnpm\b/i.test(trimmed) ||
+    /\byarn\b/i.test(trimmed) ||
+    /\bnext\b/i.test(trimmed) ||
+    /\bnuxt\b/i.test(trimmed)
+  );
+}
+
+/**
  * Environment variables merged into the dev-server child process.
  * @param {number} port — UI port for split stacks; sole port otherwise
  * @param {DevServerNetwork} network

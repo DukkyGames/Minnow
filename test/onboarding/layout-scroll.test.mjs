@@ -31,8 +31,7 @@ describe('onboarding layout scroll (MIN-453)', () => {
     )?.[0];
     assert.ok(contentRule, 'expected shared content/step rule');
     assert.match(contentRule, /overflow-y:\s*auto/);
-    assert.match(contentRule, /justify-content:\s*flex-start/);
-    assert.doesNotMatch(contentRule, /justify-content:\s*center/);
+    assert.match(contentRule, /justify-content:\s*safe center/);
   });
 
   test('welcome step keeps centered layout', () => {
@@ -40,7 +39,7 @@ describe('onboarding layout scroll (MIN-453)', () => {
       /\.mn-onboarding-step--welcome,\s*\n\.mn-onboarding\.is-welcome \.mn-onboarding__content,\s*\n\.mn-onboarding\.is-welcome \.mn-onboarding-step\s*\{[^}]+\}/s,
     )?.[0];
     assert.ok(welcomeRule, 'expected welcome content rule');
-    assert.match(welcomeRule, /justify-content:\s*center/);
+    assert.match(welcomeRule, /justify-content:\s*flex-start/);
   });
 
   test('sidebar phase list scrolls independently of brand and progress', () => {

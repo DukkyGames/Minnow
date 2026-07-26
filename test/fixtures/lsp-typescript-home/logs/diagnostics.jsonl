@@ -1,3 +1,0 @@
-{"ts":"2026-07-26T17:43:04.660Z","pid":33256,"source":"server","kind":"lsp-exit","message":"LSP server typescript exited on signal SIGTERM","extra":{"serverId":"typescript","signal":"SIGTERM","scope":"editor"}}
-{"ts":"2026-07-26T17:43:04.678Z","pid":33256,"source":"server","kind":"lsp-exit","message":"LSP server typescript exited on signal SIGTERM","extra":{"serverId":"typescript","signal":"SIGTERM","scope":"editor"}}
-{"ts":"2026-07-26T17:43:04.678Z","pid":33256,"source":"server","kind":"lsp-exit","message":"LSP server typescript exited on signal SIGTERM","extra":{"serverId":"typescript","signal":"SIGTERM","scope":"editor"}}

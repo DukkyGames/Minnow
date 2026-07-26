@@ -2,10 +2,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
-import { after, before, describe, test } from 'node:test';
+import { after, afterEach, before, describe, test } from 'node:test';
 import { ensureMinnowLayout } from '../../server/config/home.js';
 import { handleWorkspaceRequest } from '../../server/workspace/middleware.js';
 import { getWorkspaceRoot, setWorkspaceRoot } from '../../server/workspace/root.js';
+import { resetDevServerManagerForTests } from '../../server/dev-server/manager.js';
+import { probePort } from '../../server/dev-server/ports.js';
+import { resetActiveRunsForTests } from '../../server/terminal-runner.js';
 import { rmTestHome, setTestHome } from '../config/test-helpers.js';
 
 function createServer() {
@@ -46,7 +49,14 @@ function httpJson(baseUrl, pathname, method = 'GET', body) {
   });
 }
 
-describe('workspace dev-server API', () => {
+async function pickHealthPort(base = 38470) {
+  for (let port = base; port < base + 200; port += 1) {
+    if ((await probePort(port)) === 'free') return port;
+  }
+  throw new Error('No free health probe port');
+}
+
+describe('workspace dev-server API', { concurrency: 1 }, () => {
   let homeDir;
   let server;
   let baseUrl;
@@ -66,8 +76,16 @@ describe('workspace dev-server API', () => {
   });
 
   after(async () => {
+    await httpJson(baseUrl, '/api/workspace/dev-server/stop', 'POST').catch(() => undefined);
+    resetDevServerManagerForTests();
+    resetActiveRunsForTests();
     await new Promise((resolve) => server.close(resolve));
     await rmTestHome(homeDir);
+  });
+
+  afterEach(async () => {
+    await httpJson(baseUrl, '/api/workspace/dev-server/stop', 'POST').catch(() => undefined);
+    resetDevServerManagerForTests(workspaceDir);
   });
 
   test('startup reports no_guide without startup.md', async () => {
@@ -152,9 +170,14 @@ describe('workspace dev-server API', () => {
 
   test('stop while starting before health passes', async () => {
     const startupPath = path.join(workspaceDir, 'startup.md');
-    const healthPort = 38474;
+    const healthPort = await pickHealthPort();
     const healthUrl = `http://127.0.0.1:${healthPort}/`;
     const command = 'node -e "setInterval(()=>{}, 60000)"';
+
+    await httpJson(baseUrl, '/api/workspace/dev-server/settings', 'PUT', {
+      port: healthPort,
+      network: 'local',
+    });
 
     await fs.writeFile(
       startupPath,
@@ -181,7 +204,7 @@ describe('workspace dev-server API', () => {
 
   test('status poll promotes starting to running when health becomes ok', async () => {
     const startupPath = path.join(workspaceDir, 'startup.md');
-    const healthPort = 38473;
+    const healthPort = await pickHealthPort();
     const healthUrl = `http://127.0.0.1:${healthPort}/`;
     const command = 'node -e "setInterval(()=>{}, 60000)"';
 

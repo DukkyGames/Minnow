@@ -11,15 +11,11 @@ import { initAppHost } from './app-host';
 import { renderDesktop } from './desktop';
 import { initDockLauncher } from './dock-launcher';
 import { renderMenubar } from './menubar';
-import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
 import { isOsShellEnabled } from './page-bridge';
-
-const BOOT_MS = 1300;
 
 let shellCleanup: (() => void) | null = null;
 
 function ensureShellDom(): {
-  root: HTMLElement;
   menubar: HTMLElement;
   desktopLayer: HTMLElement;
   dockLayer: HTMLElement;
@@ -83,31 +79,7 @@ function ensureShellDom(): {
     stage.appendChild(dockLayer);
   }
 
-  return { root, menubar, desktopLayer, dockLayer };
-}
-
-function showBootSplash(root: HTMLElement): void {
-  const boot = document.createElement('div');
-  boot.className = 'mn-os-boot';
-  boot.setAttribute('role', 'status');
-  boot.setAttribute('aria-label', 'Starting MinnowOS');
-
-  const logo = document.createElement('div');
-  logo.className = 'mn-os-boot-logo';
-  logo.innerHTML = MINNOW_GLYPH_HEADER_HTML;
-
-  const name = document.createElement('div');
-  name.className = 'mn-os-boot-name';
-  name.textContent = 'MinnowOS';
-
-  const bar = document.createElement('div');
-  bar.className = 'mn-os-boot-bar';
-  bar.appendChild(document.createElement('span'));
-
-  boot.append(logo, name, bar);
-  root.appendChild(boot);
-
-  window.setTimeout(() => boot.remove(), BOOT_MS + 500);
+  return { menubar, desktopLayer, dockLayer };
 }
 
 /** Boot the MinnowOS shell UI (desktop, menubar, app host). */
@@ -118,8 +90,7 @@ export function initOsShell(): void {
 
   document.documentElement.classList.add('minnow-os-enabled');
 
-  const { root, menubar, desktopLayer, dockLayer } = ensureShellDom();
-  showBootSplash(root);
+  const { menubar, desktopLayer, dockLayer } = ensureShellDom();
 
   const cleanupDesktop = renderDesktop(desktopLayer);
   const cleanupDock = initDockLauncher(dockLayer);

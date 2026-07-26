@@ -19,7 +19,11 @@ import {
   toggleGroupCollapsed,
 } from '../state/chat-groups';
 import { createBoardCategoryIcon } from './board-category-icons';
-import { isChatAppForeground, shouldPaintDesktopChatSurface } from './chat-mount';
+import {
+  foregroundChatMountSelector,
+  isChatAppForeground,
+  shouldPaintDesktopChatSurface,
+} from './chat-mount';
 import { syncComposerFromStreamingState } from './composer-send';
 import { syncGoalActiveHint } from './goal-active-hint';
 import { syncLoopActiveHint } from './loop-active-hint';
@@ -33,6 +37,7 @@ import {
   getActiveChat,
   getSidebarListedChatsForWorkspace,
   getUnassignedChats,
+  isChatHistoryLoaded,
   isEphemeralEmptyChat,
   isHiddenFromMainSidebar,
   markSessionScalarsDirty,
@@ -67,6 +72,7 @@ import {
   renderChatFromHistory,
   renderStatsForChat,
   showCachedModelInfo,
+  showChatHistoryLoadingPlaceholder,
 } from './messages';
 import { appendCodeChangeTotalsSpans, updateCodeChangeStrip } from './code-change-strip';
 import { updateWorkspaceCodeChangeDisplay } from './workspace-code-change';
@@ -348,6 +354,9 @@ export async function applyWorkspaceScopedSession(
     syncWorkAgentDevFromActiveChat();
     onModelRoutingActiveChatChanged(activeChat.id);
     void import('./terminal-panel').then((m) => m.refreshTerminalHistoryForActiveChat());
+  } else {
+    // Same chat survived the switch — still repaint, the caller blanked the transcript.
+    renderChatFromHistory(activeChat);
   }
   renderSidebar();
 }
@@ -1197,6 +1206,11 @@ export async function switchChat(id: string): Promise<void> {
   sessionState.activeId = id;
   markSessionScalarsDirty();
   // Lazy history: wait before paint so restart+switch does not show an empty transcript.
+  // Blank the transcript first when the fetch is real — otherwise the chat we just left
+  // stays on screen for the round-trip and reads as the old chat coming back.
+  if (!isChatHistoryLoaded(chat)) {
+    showChatHistoryLoadingPlaceholder(foregroundChatMountSelector());
+  }
   await ensureChatHistoryLoaded(id);
   if (!sessionState || sessionState.activeId !== id) return;
   syncAskQuestionModalOnChatSwitch(prevActiveId, id);

@@ -1,4 +1,6 @@
-import { getChatAbort, setChatStopReason } from '../app-state';
+// Explicit .ts: this module is also loaded by the server engine host, where Node's
+// sync link path bypasses tsx's async resolve hooks and cannot infer the extension.
+import { getChatAbort, setChatStopReason } from '../app-state.ts';
 import type { ChatStopReason } from '../types';
 import { clearPendingSteer } from './steer-message';
 import { cancelGeneration } from '../api/generations';

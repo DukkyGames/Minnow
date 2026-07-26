@@ -20,6 +20,7 @@ import { windowManager } from './window-manager';
 import { syncSchedulerSidePanel } from './scheduler-side-panel';
 import { WINDOW_MOUNTED_APPS, runWindowTeardown } from './window-mounted-apps';
 import { mountOsMobileDrawerBackdrops } from '../ui/mobile-drawer-portal';
+import { setWallpaperAnimationsPaused } from './wallpaper';
 
 const APP_LAYER_IDS: Record<AppId, string> = {
   code: 'osAppLayer-code',
@@ -304,6 +305,33 @@ export function showAppLayer(appId: AppId): void {
   setLayerActive(layerForApp(appId), true);
 }
 
+/** Longest the incoming layer stays blank waiting for `openAppPage` before giving up. */
+const SWAP_BLANK_CAP_MS = 250;
+
+/**
+ * A layer keeps the DOM from the last time its app was foreground, while `openAppPage`
+ * repaints asynchronously — so the app-in animation would otherwise play over the
+ * previous session's content (a stale transcript flashing for a frame or two).
+ * Hide the layer's children until the repaint settles, capped so a slow open degrades
+ * to showing stale content rather than a long blank.
+ */
+function withSwapBlank(appId: AppId, repaint: Promise<void>): void {
+  const layer = layerForApp(appId);
+  if (!layer) {
+    void repaint;
+    return;
+  }
+  layer.classList.add('is-swapping');
+  let settled = false;
+  const clear = (): void => {
+    if (settled) return;
+    settled = true;
+    layer.classList.remove('is-swapping');
+  };
+  window.setTimeout(clear, SWAP_BLANK_CAP_MS);
+  void repaint.finally(clear);
+}
+
 function launchOptionsFromSnapshot(snapshot: InstanceSnapshot): LaunchOptions | undefined {
   const inst = snapshot.instances.find((i) => i.id === snapshot.foregroundId);
   if (!inst) return undefined;
@@ -445,6 +473,9 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
   stage.classList.toggle('is-in-app', blur);
   stage.classList.toggle('is-in-app-fullscreen', blur);
   stage.classList.toggle('is-immersive-app', immersive);
+  // Covered desktop keeps painting under blur — freeze the wallpaper so it does not
+  // re-raster the full-screen blur every frame while an app is foreground.
+  setWallpaperAnimationsPaused(blur);
 
   if (snapshot.view === 'desktop') {
     hideAllLayers();
@@ -508,7 +539,7 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
 
   if (appId !== lastForegroundApp) {
     showAppLayer(appId);
-    void openAppPage(appId, options);
+    withSwapBlank(appId, openAppPage(appId, options));
     lastForegroundApp = appId;
   } else if (options && (appId === 'chat' || appId === 'code' || appId === 'research')) {
     void openAppPage(appId, options);

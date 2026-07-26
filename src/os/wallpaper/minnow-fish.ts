@@ -4,6 +4,8 @@
 
 export interface MinnowFishWallpaperHandle {
   destroy: () => void;
+  /** Stop/start the rAF loop — paused while the desktop is covered by an app. */
+  setPaused: (paused: boolean) => void;
 }
 
 interface Fish {
@@ -46,7 +48,7 @@ export function mountMinnowFishWallpaper(container: HTMLElement): MinnowFishWall
 
   const ctx = canvas.getContext('2d');
   if (!ctx) {
-    return { destroy: () => canvas.remove() };
+    return { destroy: () => canvas.remove(), setPaused: () => {} };
   }
 
   const reduced = prefersReducedMotion();
@@ -55,6 +57,9 @@ export function mountMinnowFishWallpaper(container: HTMLElement): MinnowFishWall
   let raf = 0;
   let mouseX = -9999;
   let mouseY = -9999;
+  let paused = false;
+  // getComputedStyle per frame forces a style recalc 60×/s — cache and re-read on theme change.
+  let accent = readAccentColor();
 
   const fish: Fish[] = Array.from({ length: FISH_COUNT }, () => ({
     x: Math.random() * 800,
@@ -202,12 +207,27 @@ export function mountMinnowFishWallpaper(container: HTMLElement): MinnowFishWall
   }
 
   function frame(now: number): void {
-    const accent = readAccentColor();
     const timeSec = now * 0.001;
     ctx.clearRect(0, 0, width, height);
     if (!reduced) stepBoids();
     for (const f of fish) drawFish(f, accent, timeSec);
     raf = requestAnimationFrame(frame);
+  }
+
+  function start(): void {
+    if (raf || paused) return;
+    raf = requestAnimationFrame(frame);
+  }
+
+  function stop(): void {
+    if (!raf) return;
+    cancelAnimationFrame(raf);
+    raf = 0;
+  }
+
+  function onVisibility(): void {
+    if (document.hidden) stop();
+    else start();
   }
 
   function onPointerMove(ev: PointerEvent): void {
@@ -226,15 +246,28 @@ export function mountMinnowFishWallpaper(container: HTMLElement): MinnowFishWall
   resize();
   container.addEventListener('pointermove', onPointerMove, { passive: true });
   container.addEventListener('pointerleave', onPointerLeave);
-  raf = requestAnimationFrame(frame);
+  document.addEventListener('visibilitychange', onVisibility);
+  start();
 
   return {
     destroy: () => {
-      cancelAnimationFrame(raf);
+      stop();
       ro.disconnect();
       container.removeEventListener('pointermove', onPointerMove);
       container.removeEventListener('pointerleave', onPointerLeave);
+      document.removeEventListener('visibilitychange', onVisibility);
       canvas.remove();
+    },
+    setPaused: (next: boolean) => {
+      if (paused === next) return;
+      paused = next;
+      if (next) {
+        stop();
+        return;
+      }
+      // Theme may have changed while covered — refresh the cached accent on resume.
+      accent = readAccentColor();
+      start();
     },
   };
 }

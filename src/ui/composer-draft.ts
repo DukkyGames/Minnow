@@ -40,6 +40,21 @@ export function clearComposerDraftOnChat(chat: Chat): void {
   delete chat.composerDraft;
 }
 
+/** Clear textarea and persisted draft after text is committed (send, queue, or slash command). */
+export function clearComposerAfterSend(
+  chat: Chat,
+  inputEl?: HTMLTextAreaElement | null,
+): void {
+  const hadDraft = hasComposerDraft(chat);
+  clearComposerDraftOnChat(chat);
+  clearComposerInput(inputEl ?? getActiveComposerSurface().inputEl);
+  if (!hadDraft) return;
+  scheduleSaveSessions();
+  void import('./sidebar').then((m) => m.renderSidebar());
+  void import('./chat-app').then((m) => m.refreshChatAppSessionRail());
+  void import('./desktop-chat-rail').then((m) => m.refreshDesktopChatRail());
+}
+
 /** Snapshot the active composer into a chat before leaving it. */
 export function persistComposerDraftForChatId(chatId: string): boolean {
   if (!sessionState) return false;

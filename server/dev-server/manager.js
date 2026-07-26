@@ -20,6 +20,7 @@ import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
 import {
   buildDevServerSpawnEnv,
   resolveEffectiveGuide,
+  shouldApplyDevServerSpawnEnv,
 } from './effective-guide.js';
 import { PRIMARY_DEV_SERVER_ID, getDevServerDefinition, readDevServers } from './registry.js';
 import { readDevServerSettings } from './settings.js';
@@ -52,6 +53,8 @@ const byWorkspaceKey = new Map();
 const HEALTH_TIMEOUT_MS = 4_000;
 /** Max time to wait in `starting` before promoting to error when health never passes. */
 const STARTING_TIMEOUT_MS = 120_000;
+/** Grace period while spawn is in flight (runId not yet assigned). */
+const SPAWN_GRACE_MS = 10_000;
 
 /**
  * @param {string} workspaceRoot
@@ -189,6 +192,14 @@ async function getOrInitRow(root, serverId = PRIMARY_DEV_SERVER_ID) {
 async function reconcileRow(row) {
   if (!row.runId) {
     if (row.status === 'running' || row.status === 'starting') {
+      // startDevServer persists `starting` before createBackgroundRun returns a runId.
+      if (
+        row.status === 'starting' &&
+        row.startedAt &&
+        Date.now() - row.startedAt < SPAWN_GRACE_MS
+      ) {
+        return row;
+      }
       row.status = 'stopped';
       row.error = undefined;
       await saveState(row);
@@ -208,7 +219,7 @@ async function reconcileRow(row) {
 
   if (!run && row.status !== 'stopping') {
     // Background spawn can lag before the terminal registry sees the child (esp. Windows).
-    if (row.startedAt && Date.now() - row.startedAt < 2_000) {
+    if (row.startedAt && Date.now() - row.startedAt < SPAWN_GRACE_MS) {
       return row;
     }
     row.status = 'stopped';
@@ -526,6 +537,7 @@ export async function startDevServerById(
   const cwdRel = effective.cwd ?? '.';
 
   row.status = 'starting';
+  row.startedAt = Date.now();
   row.command = effective.command;
   row.healthUrl = effective.healthUrl;
   row.port = effective.port;
@@ -543,10 +555,14 @@ export async function startDevServerById(
           shell: process.platform === 'win32',
           source: 'agent',
           logSubdir: 'dev-server',
-          env: buildDevServerSpawnEnv(effective.port, effective.network, {
-            splitStack: effective.splitStack,
-            apiPort: effective.apiPort,
-          }),
+          ...(shouldApplyDevServerSpawnEnv(effective.command)
+            ? {
+                env: buildDevServerSpawnEnv(effective.port, effective.network, {
+                  splitStack: effective.splitStack,
+                  apiPort: effective.apiPort,
+                }),
+              }
+            : {}),
         });
       },
       { workspaceRoot: runRoot },
@@ -630,6 +646,14 @@ export async function stopDevServerById(
     const run = getRun(row.runId);
     if (run?.child && !run.finished) {
       killProcessTree(run.child);
+      try {
+        await Promise.race([
+          run.completion,
+          new Promise((resolve) => setTimeout(resolve, 3_000)),
+        ]);
+      } catch {
+        /* ignore completion errors */
+      }
     } else {
       cancelRun(row.runId);
     }
@@ -639,6 +663,7 @@ export async function stopDevServerById(
   row.runId = undefined;
   row.pid = null;
   row.worktreeRoot = undefined;
+  row.startedAt = undefined;
   row.error = undefined;
   await saveState(row);
 
@@ -800,8 +825,15 @@ export async function toolStopCommand(args) {
   );
 }
 
-/** Clear in-memory dev-server rows between tests (does not touch persisted config). */
-export function resetDevServerManagerForTests() {
+/**
+ * Clear in-memory dev-server rows between tests (does not touch persisted config).
+ * @param {string} [workspaceRoot] — when set, only drop rows for this workspace key
+ */
+export function resetDevServerManagerForTests(workspaceRoot) {
+  if (workspaceRoot) {
+    byWorkspaceKey.delete(workspaceKey(workspaceRoot));
+    return;
+  }
   byWorkspaceKey.clear();
 }
 

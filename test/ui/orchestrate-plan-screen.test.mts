@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
+import { installHappyDomGlobals } from '../os/dom-helpers.mts';
 import {
   ORCHESTRATE_PLAN_BANNER_ID,
   ORCHESTRATE_PLAN_SCREEN_PROMPT_ID,
@@ -30,6 +31,13 @@ import { appendStreamingAssistantRow, renderChatFromHistory } from '../../src/ui
 import { isStreamDomVisible } from '../../src/chat/streaming-state.ts';
 import { createEmptyChatObject, setSessionStateForTests } from '../../src/state/sessions.ts';
 
+/** happy-dom with localStorage, window, and rAF for plan-screen UI tests. */
+function mountPlanScreenWindow(): Window {
+  const window = new Window();
+  installHappyDomGlobals(window);
+  return window;
+}
+
 /** Test DOM matching Code chat: `.chat-viewport` > `#chatArea`. */
 function mountCodeChatAreaForTests(): HTMLElement {
   const viewport = document.createElement('div');
@@ -48,9 +56,7 @@ describe('orchestrate plan screen', () => {
   });
 
   test('mount shows prompt and suppresses stream DOM', async () => {
-    const window = new Window();
-    globalThis.document = window.document;
-    globalThis.HTMLElement = window.HTMLElement;
+    mountPlanScreenWindow();
 
     const area = document.createElement('main');
     area.id = 'chatArea';
@@ -85,9 +91,7 @@ describe('orchestrate plan screen', () => {
   });
 
   test('spec_confirm phase presents build spec preview and checkpoint actions', () => {
-    const window = new Window();
-    globalThis.document = window.document;
-    globalThis.HTMLElement = window.HTMLElement;
+    mountPlanScreenWindow();
 
     const area = mountCodeChatAreaForTests();
     document.body.appendChild(
@@ -204,9 +208,7 @@ describe('orchestrate plan screen', () => {
   });
 
   test('view chat suspends overlay and resume remounts working phase', async () => {
-    const window = new Window();
-    globalThis.document = window.document;
-    globalThis.HTMLElement = window.HTMLElement;
+    mountPlanScreenWindow();
 
     const area = mountCodeChatAreaForTests();
     document.body.appendChild(
@@ -258,9 +260,7 @@ describe('orchestrate plan screen', () => {
   });
 
   test('ask_question resolves embedded host on plan screen', async () => {
-    const window = new Window();
-    globalThis.document = window.document;
-    globalThis.HTMLElement = window.HTMLElement;
+    mountPlanScreenWindow();
     globalThis.requestAnimationFrame = (cb: () => void) => {
       cb();
       return 0;
@@ -364,9 +364,7 @@ describe('orchestrate plan screen', () => {
   });
 
   test('switching away from restored super-plan chat removes resume banner', () => {
-    const window = new Window();
-    globalThis.document = window.document;
-    globalThis.HTMLElement = window.HTMLElement;
+    mountPlanScreenWindow();
 
     mountCodeChatAreaForTests();
     document.body.appendChild(
@@ -424,9 +422,7 @@ describe('orchestrate plan screen', () => {
   });
 
   test('restore session from persisted superPlan shows resume banner after reload', () => {
-    const window = new Window();
-    globalThis.document = window.document;
-    globalThis.HTMLElement = window.HTMLElement;
+    mountPlanScreenWindow();
 
     const area = mountCodeChatAreaForTests();
     document.body.appendChild(
@@ -477,9 +473,7 @@ describe('orchestrate plan screen', () => {
   });
 
   test('restore session from cancelled superPlan shows resume banner after reload', () => {
-    const window = new Window();
-    globalThis.document = window.document;
-    globalThis.HTMLElement = window.HTMLElement;
+    mountPlanScreenWindow();
 
     const area = mountCodeChatAreaForTests();
     document.body.appendChild(
@@ -531,9 +525,7 @@ describe('orchestrate plan screen', () => {
   });
 
   test('view chat during grill questions migrates strip to composer without cancelling', async () => {
-    const window = new Window();
-    globalThis.document = window.document;
-    globalThis.HTMLElement = window.HTMLElement;
+    mountPlanScreenWindow();
     globalThis.requestAnimationFrame = (cb: () => void) => {
       cb();
       return 0;
@@ -613,9 +605,7 @@ describe('orchestrate plan screen', () => {
   });
 
   test('sidebar switch during grill questions migrates strip to composer without cancelling', async () => {
-    const window = new Window();
-    globalThis.document = window.document;
-    globalThis.HTMLElement = window.HTMLElement;
+    mountPlanScreenWindow();
     globalThis.requestAnimationFrame = (cb: () => void) => {
       cb();
       return 0;
@@ -699,9 +689,7 @@ describe('orchestrate plan screen', () => {
   });
 
   test('renderChatFromHistory for other chat preserves suspended grill questions', async () => {
-    const window = new Window();
-    globalThis.document = window.document;
-    globalThis.HTMLElement = window.HTMLElement;
+    mountPlanScreenWindow();
     globalThis.requestAnimationFrame = (cb: () => void) => {
       cb();
       return 0;
@@ -779,10 +767,8 @@ describe('orchestrate plan screen', () => {
     assert.equal(settled, true);
   });
 
-  test('clicking active super-plan chat in sidebar shows transcript instead of blank area', () => {
-    const window = new Window();
-    globalThis.document = window.document;
-    globalThis.HTMLElement = window.HTMLElement;
+  test('clicking active super-plan chat in sidebar shows transcript instead of blank area', async () => {
+    mountPlanScreenWindow();
 
     const area = mountCodeChatAreaForTests();
     document.body.appendChild(
@@ -818,7 +804,7 @@ describe('orchestrate plan screen', () => {
     });
     assert.ok(document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID));
 
-    switchChat(chat.id);
+    await switchChat(chat.id);
 
     assert.equal(document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID), null);
     assert.equal(isOrchestratePlanScreenSuspended(), true);
@@ -832,9 +818,7 @@ describe('orchestrate plan screen', () => {
   });
 
   test('skip interview button shows only while the grill stage is active', () => {
-    const window = new Window();
-    globalThis.document = window.document;
-    globalThis.HTMLElement = window.HTMLElement;
+    mountPlanScreenWindow();
 
     const area = mountCodeChatAreaForTests();
     document.body.appendChild(

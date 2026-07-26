@@ -126,6 +126,21 @@ export { resolveModelInfo, showCachedModelInfo } from '../api/models';
 /** Suppress per-bubble scroll while bulk-rendering history (renderChatFromHistory). */
 let suppressBubbleScroll = false;
 
+/**
+ * Blank the transcript while a cold chat's history is fetched (lazy history).
+ * Without this the outgoing chat's messages stay on screen for the round-trip, which
+ * reads as the previous conversation briefly reappearing after the switch.
+ */
+export function showChatHistoryLoadingPlaceholder(mount?: string | HTMLElement): void {
+  const area = resolveChatMount(mount);
+  if (!area) return;
+  if (isCodeChatMount(mount) && isMainColumnOverlaySuppressingChatDom()) return;
+  const skeleton = document.createElement('div');
+  skeleton.className = 'chat-history-loading';
+  skeleton.setAttribute('aria-busy', 'true');
+  area.replaceChildren(skeleton);
+}
+
 export function renderStatsForChat(chat: Chat): void {
   refreshMetricsStripForChat(chat);
   refreshContextUsageRing();

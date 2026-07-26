@@ -5,6 +5,8 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
+import { installHappyDomGlobals } from '../os/dom-helpers.mts';
+import { resetAppDialogForTests } from '../../src/ui/app-dialog.ts';
 import { initBoard } from '../../src/state/orchestrate-board-store.ts';
 import { isBoardRunning } from '../../src/state/orchestrate-board-store.ts';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
@@ -81,14 +83,26 @@ function seedRunningBoard(): { planner: Chat; group: ChatGroup } {
   return { planner, group };
 }
 
+async function clickAppDialogAction(action: 'cancel' | 'confirm'): Promise<void> {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const btn = document.querySelector(`[data-dialog-action="${action}"]`);
+    if (btn instanceof HTMLElement) {
+      btn.click();
+      return;
+    }
+  }
+  throw new Error(`app dialog ${action} button not found`);
+}
+
 describe('workspace-switch-guard', () => {
   let originalConfirm: typeof window.confirm;
   let domWindow: Window;
 
   beforeEach(() => {
     domWindow = new Window();
+    installHappyDomGlobals(domWindow);
     globalThis.window = domWindow as unknown as Window & typeof globalThis.window;
-    globalThis.document = domWindow.document;
     resetWorkspaceStateForTests();
     setWorkspaceFromServer({
       path: CURRENT_WS,
@@ -102,6 +116,7 @@ describe('workspace-switch-guard', () => {
     window.confirm = originalConfirm;
     setSessionStateForTests(null);
     resetWorkspaceStateForTests();
+    resetAppDialogForTests();
     domWindow.close();
   });
 
@@ -139,16 +154,18 @@ describe('workspace-switch-guard', () => {
 
   test('confirmAndStopBoardsForWorkspaceSwitch cancels without stopping', async () => {
     const { group } = seedRunningBoard();
-    window.confirm = () => false;
-    const allowed = await confirmAndStopBoardsForWorkspaceSwitch(OTHER_WS);
+    const allowedPromise = confirmAndStopBoardsForWorkspaceSwitch(OTHER_WS);
+    await clickAppDialogAction('cancel');
+    const allowed = await allowedPromise;
     assert.equal(allowed, false);
     assert.equal(isBoardRunning(group), true);
   });
 
   test('confirmAndStopBoardsForWorkspaceSwitch stops boards when confirmed', async () => {
     const { group } = seedRunningBoard();
-    window.confirm = () => true;
-    const allowed = await confirmAndStopBoardsForWorkspaceSwitch(OTHER_WS);
+    const allowedPromise = confirmAndStopBoardsForWorkspaceSwitch(OTHER_WS);
+    await clickAppDialogAction('confirm');
+    const allowed = await allowedPromise;
     assert.equal(allowed, true);
     assert.equal(isBoardRunning(group), false);
     assert.equal(group.orchestrateBoard?.userStopped, true);

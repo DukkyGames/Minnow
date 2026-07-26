@@ -11,6 +11,7 @@ import {
 } from '../state/sessions';
 import { forceCloseAskQuestionModal } from '../ui/question-cards-modal';
 import { isChatTurnInProgress } from './chat-turn-guard';
+import { isServerEngineEnabled } from '../state/server-engine-flag';
 import { enqueueSteerMessage } from './steer-message';
 
 /** Return the chat queue array (empty when unset). */
@@ -102,29 +103,25 @@ export function pushQueuedMessageNow(chat: Chat, id: string): boolean {
   if (!item) return false;
 
   if (isChatTurnInProgress(chat.id) || chat.engineTurnActive) {
-    void import('../state/server-engine-flag').then(({ isServerEngineEnabled }) => {
-      if (isServerEngineEnabled()) {
-        void import('../state/session-commands').then((m) =>
-          m.dispatchSteerMessage(chat.id, item.text).catch(() => undefined),
-        );
-        return;
-      }
+    if (isServerEngineEnabled()) {
+      void import('../state/session-commands').then((m) =>
+        m.dispatchSteerMessage(chat.id, item.text).catch(() => undefined),
+      );
+    } else {
       enqueueSteerMessage(chat, item.text);
-    });
+    }
     return true;
   }
 
-  void import('../state/server-engine-flag').then(({ isServerEngineEnabled }) => {
-    if (isServerEngineEnabled()) {
-      void import('../state/session-commands').then((m) =>
-        m.dispatchSendMessage({ chatId: chat.id, text: item.text }).catch(() => undefined),
-      );
-      return;
-    }
+  if (isServerEngineEnabled()) {
+    void import('../state/session-commands').then((m) =>
+      m.dispatchSendMessage({ chatId: chat.id, text: item.text }).catch(() => undefined),
+    );
+  } else {
     void import('../tools/loop').then(({ resumeParentChatWithMessage }) =>
       resumeParentChatWithMessage(chat, item.text),
     );
-  });
+  }
   return true;
 }
 

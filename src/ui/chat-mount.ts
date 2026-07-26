@@ -23,6 +23,16 @@ export function isChatAppForeground(): boolean {
   return document.getElementById('chatView')?.classList.contains('is-open') ?? false;
 }
 
+/**
+ * Transcript mount selector for whichever chat surface is foreground.
+ * `undefined` means the Code app default (`#chatArea`), matching renderChatFromHistory.
+ */
+export function foregroundChatMountSelector(): string | undefined {
+  if (shouldPaintDesktopChatSurface()) return '#desktopChatCol';
+  if (isChatAppForeground()) return '#chatAppMessageCol';
+  return undefined;
+}
+
 /** True when the foreground Email app currently exposes its assistant transcript. */
 export function isEmailAssistantForeground(): boolean {
   if (getForegroundAppId() !== 'email') return false;

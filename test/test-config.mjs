@@ -32,6 +32,8 @@ export const HEAVY_TEST_PATH_PREFIXES = [
   'test/ui/',
   'test/orchestrate/',
   'test/chat/orchestrate/',
+  // Dev-server manager keeps process-global run registry state.
+  'test/workspace/dev-server-',
 ];
 
 /** True when a test file should not share a node process with other heavy suites. */

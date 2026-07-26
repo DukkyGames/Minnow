@@ -79,6 +79,9 @@ const BUBBLE_CACHE = randomBubbles(16);
 const STAR_CACHE = randomStars(48);
 
 let minnowCleanup: (() => void) | null = null;
+let minnowSetPaused: ((paused: boolean) => void) | null = null;
+/** Sticky so a wallpaper remounted while covered does not start animating. */
+let wallpaperPaused = false;
 const previewMinnowCleanups = new WeakMap<HTMLElement, () => void>();
 
 function clearMinnow(container?: HTMLElement): void {
@@ -93,7 +96,19 @@ function clearMinnow(container?: HTMLElement): void {
   if (minnowCleanup) {
     minnowCleanup();
     minnowCleanup = null;
+    minnowSetPaused = null;
   }
+}
+
+/**
+ * Freeze/unfreeze the live desktop wallpaper (MIN perf): the desktop layer stays
+ * painted under `filter: blur()` behind fullscreen apps, so an animating wallpaper
+ * re-rasters the whole blur every frame. CSS wallpapers pause via
+ * `.mn-os-stage.is-in-app` (minnowos-wallpaper.css); the canvas needs this hook.
+ */
+export function setWallpaperAnimationsPaused(paused: boolean): void {
+  wallpaperPaused = paused;
+  minnowSetPaused?.(paused);
 }
 
 /** Render wallpaper into `container` (replaces existing children). */
@@ -198,6 +213,8 @@ export function renderWallpaper(
         previewMinnowCleanups.set(container, handle.destroy);
       } else {
         minnowCleanup = handle.destroy;
+        minnowSetPaused = handle.setPaused;
+        handle.setPaused(wallpaperPaused);
       }
     });
     const vignette = document.createElement('div');

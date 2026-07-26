@@ -363,6 +363,10 @@ export function launchApp(appId: AppId, options?: LaunchOptions): void {
     return;
   }
   if (appId === 'scheduler') {
+    const next = '#/app/scheduler';
+    if (window.location.hash !== next) {
+      window.location.hash = next;
+    }
     void import('./scheduler-side-panel').then((m) => m.toggleSchedulerOverlay());
     return;
   }

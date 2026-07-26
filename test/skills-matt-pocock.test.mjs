@@ -3,9 +3,11 @@
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
+import { resetMinnowHomeCache } from '../server/config/home.js';
 import { listMergedSkills } from '../server/skills/scan.js';
 import {
   applyMinnowPatchesToSkillDir,
@@ -56,10 +58,25 @@ describe('Matt Pocock Skills Library pack', () => {
   });
 
   it('listMergedSkills does not include Matt Pocock ids as builtins', async () => {
-    const skills = await listMergedSkills(PROJECT_ROOT);
-    for (const id of MATT_POCOCK_IDS) {
-      const row = skills.find((s) => s.id === id);
-      assert.equal(row, undefined, `${id} should not appear until library install`);
+    const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'minnow-matt-pocock-'));
+    const savedHome = process.env.MINNOW_HOME;
+    try {
+      process.env.MINNOW_HOME = tempHome;
+      resetMinnowHomeCache();
+
+      const skills = await listMergedSkills(PROJECT_ROOT);
+      for (const id of MATT_POCOCK_IDS) {
+        const row = skills.find((s) => s.id === id);
+        assert.equal(row, undefined, `${id} should not appear until library install`);
+      }
+    } finally {
+      if (savedHome === undefined) {
+        delete process.env.MINNOW_HOME;
+      } else {
+        process.env.MINNOW_HOME = savedHome;
+      }
+      resetMinnowHomeCache();
+      fs.rmSync(tempHome, { recursive: true, force: true });
     }
   });
 

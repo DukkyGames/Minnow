@@ -11,7 +11,7 @@ import {
   slugifyTaxonomyLabel,
   statusIdForRole,
   validateIssuesTaxonomy,
-} from '../src/issues/taxonomy.ts';
+} from '../../src/issues/taxonomy.ts';
 
 describe('issues taxonomy', () => {
   it('seeds defaults with unique roles and board columns', () => {

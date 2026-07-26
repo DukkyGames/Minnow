@@ -168,7 +168,9 @@ describe('window-mounted apps', () => {
 
   test('closing a window app does not foreground background Code', async () => {
     launchInstance('code');
-    assert.equal(getInstanceSnapshot().view, 'app');
+    const { showDesktop } = await import('../../src/os/instances.ts');
+    showDesktop();
+    assert.equal(getInstanceSnapshot().view, 'desktop');
 
     markWindowAppOpen('settings');
     launchInstance('settings');
