@@ -40,11 +40,11 @@ A high-level map of how Minnow fits together. For the exhaustive, file-by-file r
 No UI framework — direct TypeScript + DOM with CSS tokens. Boot order in [`src/main.ts`](../../src/main.ts): page bridge → OS shell → router. Key areas:
 
 - **`src/os/`** — the desktop shell: stage layers, window manager, dock, menubar, app host/registry, concierge agent + intent routing, per-app desktop integration.
-- **`src/chat/`** — chat orchestration, the five **modes** (`modes/registry.ts`), prompt composition (`prompts/`).
-- **`src/tools/`** — the tool catalog ([`definitions.ts`](../../src/tools/definitions.ts), ~88 tools), executors, permission gating, and the agent loop ([`loop.ts`](../../src/tools/loop.ts)).
+- **`src/chat/`** — chat orchestration, the nine **modes** (`modes/registry.ts`; four in the composer strip), prompt composition (`prompts/`).
+- **`src/tools/`** — the tool catalog ([`definitions.ts`](../../src/tools/definitions.ts), 111 tools; entries with an `appId` are filtered out while that app is hidden or disabled), executors, permission gating, and the agent loop ([`loop.ts`](../../src/tools/loop.ts)).
 - **`src/agents/`** — sub-agent runner/controller, work agents, sampler resolution, UI Designer.
 - **`src/api/`** — provider/model fetching, SSE parsing (`sse-parse.ts`), generations client.
-- **Feature modules** — `models/`, `compare/`, `research/`, `calendar/`, `email/`, `scheduler/`, `voice/`, `memory/`, `benchmark/`, `notifications/`, `webhooks/`, `oauth/`, `lsp/`, `mcp/`, `skills/`.
+- **Feature modules** — `models/`, `research/`, `scheduler/`, `voice/`, `memory/`, `notifications/`, `webhooks/`, `oauth/`, `lsp/`, `mcp/`, `skills/`, plus `compare/`, `benchmark/`, `calendar/`, `email/` for the release-gated apps.
 - **`src/ui/`, `src/styles/`, `src/markdown/`, `src/theme.ts`** — views, `--mn-*` CSS tokens (see [`DESIGN.md`](../../DESIGN.md)), markdown rendering, theming.
 
 ## The tool server (`server/`)

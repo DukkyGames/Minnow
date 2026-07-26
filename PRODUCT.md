@@ -8,11 +8,13 @@ product
 
 Three overlapping audiences, one growth direction:
 
-- **Solo builders and indie devs** shipping software with local agents — plans, boards, code, and git in one workspace.
-- **LM Studio and local-model hobbyists** who chat, compare models, and benchmark on their own hardware.
+- **Solo builders and indie devs** shipping software with local agents — plans, boards, code, and git in one workspace. **This is the primary audience.**
+- **LM Studio and local-model hobbyists** who chat with and manage models on their own hardware.
 - **Power users** with serious local-AI stacks: multi-model routing, sub-agents, encrypted credentials, and privacy-sensitive workflows.
 
 **Growth direction:** workspace and orchestration — from "chat beside a model" to "one shop for serious local AI work." Primary references: a calm desktop shell (MinnowOS), IDE-adjacent Code workspace, and multi-agent delivery (Orchestrator + Super Plan), not a standalone chat box or cloud dashboard.
+
+**Scope discipline:** the shipped surface is deliberately narrow — Code, Chat, Research, Models, Brain, Issues, Scheduler, Settings. Anything that is not finished stays behind a release gate rather than landing half-built in the dock. Breadth is earned one app at a time; depth in the build loop comes first.
 
 ## Product purpose
 
@@ -27,13 +29,14 @@ Three overlapping audiences, one growth direction:
 | **Super Plan** | Guided planning pipeline (interview → spec → research → draft → review → polish → final) under Plan mode; non-destructive writes to `documentation/plans/`. |
 | **Orchestrator boards** | Plan → kanban → Builder/Tester work agents → worktree isolation → merge and ship. Manual through AFK autonomy. |
 | **Brain** | Local knowledge engine — markdown wiki, semantic recall, code index (`repo_map`, symbols), memory adapter, archive policy for long threads. |
-| **Models · Research · Compare** | Hardware-fit recommendations, downloads, local serve; multi-step research library; blind A/B across 2–6 models. |
+| **Issues** | Linear-style capture and triage wired to `issue_*` tools and Debug mode — the agent files and tracks its own work. |
+| **Models · Research** | Hardware-fit recommendations, downloads, local serve, provider routing; multi-step research with a saved library. |
 
 ### Platform capabilities
 
-- **Five operating modes** — General, Build, Plan, Orchestrate, Debug (Issues workflows) — each with tuned prompts and tool policy.
-- **Agent layer** — ~88 built-in tools, sub-agents, work agents, skills (`/commands`), tool permissions (Full / Ask / Off), MCP and local plugins.
-- **MinnowOS apps** — Calendar, Email, Scheduler, Experts, Bench, Evals, and more from the dock.
+- **Four composer modes** — General, Build, Plan, Debug (Issues workflows) — plus Orchestrate from the hub and Super Plan under Plan. Each has tuned prompts and tool policy.
+- **Agent layer** — ~100 built-in tools, sub-agents, work agents, skills (`/commands`), tool permissions (Full / Ask / Off), MCP and local plugins.
+- **MinnowOS apps** — a fixed core set (Code, Chat, Research, Models, Brain, Issues, Scheduler, Settings) from the dock. No optional-app picker; unfinished apps stay release-gated off.
 - **Workspace tools** — memory synthesis, voice I/O, browser CDP automation (Electron), webhooks, semantic embeddings.
 
 **Success looks like:** users treat Minnow as the one place for local AI — plan here, build here, orchestrate delivery here, and grow knowledge in Brain — without cloud lock-in or subscription gates.
@@ -62,10 +65,12 @@ Three overlapping audiences, one growth direction:
 - Cloud-only AI tools and subscription gatekeeping as the default mental model
 - Hype-y autonomous-agent marketing language
 - Enterprise bloatware patterns (empty dashboards, vanity metrics, modal-first flows)
+- Surface sprawl — a dock full of demo-grade apps, or a feature list padded with things that half work
 
 ## Design principles
 
 1. **One shop for serious local work.** Chat, code, plans, boards, and knowledge share one shell — not a bundle of disconnected apps.
+   **Corollary:** fewer surfaces, each finished. A gated-off app beats a shipped half-app.
 2. **Free forever, local-first, open source.** AGPL-3.0-or-later; state on disk; encrypted secrets; LAN access opt-in. Strategic constraint, not a footnote.
 3. **Agent-native.** Tools, sub-agents, skills, and boards are core product — not plugins bolted onto a chat box.
 4. **Friendly solo-dev tone.** Approachable copy and community presence; capable internals without intimidating chrome.

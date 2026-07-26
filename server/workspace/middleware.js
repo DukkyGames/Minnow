@@ -36,6 +36,9 @@ import { findFreePort, killPortOwner, listListeningPorts } from '../dev-server/p
 import { readDevServerSettings, writeDevServerSettings } from '../dev-server/settings.js';
 import { getWorkspaceGitStatus } from './git-status.js';
 import { ensureBaselineGitignore } from './baseline-gitignore.js';
+import { revealInSystemExplorer } from './reveal-in-explorer.js';
+import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
+import { resolveSafePath, runWithPathAccess, runWithToolContext } from '../runtime/path-access.js';
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -136,6 +139,31 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
         return true;
       }
       sendJson(res, 200, { ok: true, created: result.created, path: result.path });
+      return true;
+    }
+
+    // Reveal a workspace file/folder in Explorer / Finder / Files (file-tree context menu).
+    if (pathname === '/api/workspace/reveal-in-explorer' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const userPath = body?.path;
+      if (typeof userPath !== 'string' || !userPath.trim()) {
+        sendJson(res, 400, { ok: false, error: 'path is required' });
+        return true;
+      }
+      const workspaceRootOverride =
+        typeof body?.workspaceRoot === 'string' && body.workspaceRoot.trim()
+          ? body.workspaceRoot.trim()
+          : undefined;
+
+      const absolutePath = workspaceRootOverride
+        ? await runWithToolContext(
+            async () => resolveSafePath(userPath.trim()),
+            { workspaceRoot: await validateAllowedWorkspaceRoot(workspaceRootOverride) },
+          )
+        : await runWithPathAccess(async () => resolveSafePath(userPath.trim()));
+
+      const result = await revealInSystemExplorer(absolutePath);
+      sendJson(res, 200, result);
       return true;
     }
 

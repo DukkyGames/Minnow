@@ -11,6 +11,8 @@ export const BENCHMARK_FIXTURE_FILE = `${BENCHMARK_FIXTURE_DIR}/fixture.txt`;
 export const BENCHMARK_FIXTURE_COPY = `${BENCHMARK_FIXTURE_DIR}/fixture-copy.txt`;
 export const BENCHMARK_FIXTURE_MOVED = `${BENCHMARK_FIXTURE_DIR}/fixture-moved.txt`;
 export const BENCHMARK_FIXTURE_SUBDIR = `${BENCHMARK_FIXTURE_DIR}/subdir`;
+/** PDF written by create_pdf, then read by read_document in the probe chain. */
+export const BENCHMARK_FIXTURE_PDF = `${BENCHMARK_FIXTURE_DIR}/fixture.pdf`;
 
 export const BENCHMARK_FIXTURE_INITIAL =
   'MINNOW_BENCH_MARKER\nalpha\nbeta\n';
@@ -32,6 +34,8 @@ const FILE_TOOL_MIDDLE_ORDER = [
   'create_pdf',
   'create_spreadsheet',
   'create_word_document',
+  // After create_* so the probe can extract text from the PDF just written.
+  'read_document',
 ] as const;
 
 /** Serial probe order: create → verify read → mutate → delete. */
@@ -135,6 +139,19 @@ const FILE_FIXTURE_OVERRIDES: Record<string, ToolFixture> = {
   move_file: {
     prompt: `Use move_file to move ${BENCHMARK_FIXTURE_COPY} to ${BENCHMARK_FIXTURE_MOVED}. Call the tool only.`,
     expectArgs: (a) => typeof a.source === 'string' && typeof a.destination === 'string',
+  },
+  create_pdf: {
+    prompt: `Use create_pdf to write ${BENCHMARK_FIXTURE_PDF} with body text containing MINNOW_BENCH_MARKER. Call the tool only.`,
+    expectArgs: (a) =>
+      typeof a.path === 'string' &&
+      a.path.includes('fixture.pdf') &&
+      typeof a.body === 'string' &&
+      String(a.body).includes('MINNOW_BENCH_MARKER'),
+  },
+  read_document: {
+    prompt: `Use read_document with path ${BENCHMARK_FIXTURE_PDF}. Call the tool only.`,
+    expectArgs: (a) => typeof a.path === 'string' && a.path.includes('fixture.pdf'),
+    verifyExec: (result) => result.includes('MINNOW_BENCH_MARKER'),
   },
   delete_path: {
     prompt: `Use delete_path to delete ${BENCHMARK_FIXTURE_FILE}. Call the tool only.`,

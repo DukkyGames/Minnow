@@ -35,7 +35,9 @@ import {
   bindFileViewerControls,
   bindFileViewerContextMenu,
   closeFileViewer,
+  getOpenViewerTabPaths,
   openFileInViewer,
+  renderViewerEmptyState,
   restoreViewerTabsFromPrefs,
 } from './file-viewer';
 import { bindFileViewerTabs } from './file-viewer-tabs';
@@ -135,6 +137,10 @@ export async function initFilePanel(): Promise<void> {
     } else if (state.viewerOpen && state.selectedPath) {
       await openFileInViewer(state.selectedPath);
     }
+  }
+  // Desktop Viewer tab (and any visible empty host) shows recent files when nothing is open.
+  if (getOpenViewerTabPaths().length === 0) {
+    renderViewerEmptyState();
   }
 
   applyFileSidebarVisuals();

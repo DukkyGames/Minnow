@@ -5,6 +5,7 @@ import { closeModelSelectMenu } from './model-select-picker';
 import { closeSubAgentDrawer } from './sub-agent-drawer';
 import { closeGoalEvalDrawer } from './goal-eval-drawer';
 import { closeBoardTimelineDrawer } from './board-timeline-drawer';
+import { showToast } from './toast';
 
 /** Legacy settings field; when #serverUrl is absent, default LM Studio port for Vite-only mode. */
 export function serverUrl(): string {
@@ -35,6 +36,43 @@ const STATUS_PILL_TARGETS: ReadonlyArray<{ dotId: string; textId: string }> = [
   { dotId: 'osStatusDot', textId: 'osStatusText' },
 ];
 
+/** Last status message — used so error clicks can copy even when the pill truncates or uses title. */
+let lastStatusState: StatusState | string = 'idle';
+let lastStatusMsg = '';
+
+const COPYABLE_CLASS = 'status-pill__text--copyable';
+
+/** Copy the current error status text to the clipboard (skips when the user is selecting text). */
+function copyStatusErrorIfIdleSelection(): void {
+  if (lastStatusState !== 'err' || !lastStatusMsg.trim()) return;
+  // Let highlight + Ctrl/Cmd+C work for partial copies without stealing the click.
+  const selected = window.getSelection()?.toString() ?? '';
+  if (selected.length > 0) return;
+
+  void navigator.clipboard.writeText(lastStatusMsg).then(
+    () => showToast('Error copied'),
+    () => showToast('Could not copy error', 'error'),
+  );
+}
+
+/** Bind one-shot click / keyboard copy handlers on status text nodes as they appear. */
+function ensureStatusCopyHandlers(): void {
+  for (const { textId } of STATUS_PILL_TARGETS) {
+    const text = document.getElementById(textId);
+    if (!text || text.dataset.statusCopyBound === '1') continue;
+    text.dataset.statusCopyBound = '1';
+    text.addEventListener('click', () => {
+      copyStatusErrorIfIdleSelection();
+    });
+    text.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      if (lastStatusState !== 'err') return;
+      ev.preventDefault();
+      copyStatusErrorIfIdleSelection();
+    });
+  }
+}
+
 function applyStatusPill(
   dot: HTMLElement,
   text: HTMLElement,
@@ -44,15 +82,33 @@ function applyStatusPill(
   dot.className = `s-dot ${state}`;
   text.textContent = msg;
   const trimmed = msg.trim();
-  if (trimmed.length > 24) {
-    text.setAttribute('title', trimmed);
+  const isErr = state === 'err';
+
+  // Errors are click-to-copy; long non-error messages keep a hover title for the full string.
+  text.classList.toggle(COPYABLE_CLASS, isErr);
+  if (isErr) {
+    text.setAttribute('role', 'button');
+    text.setAttribute('tabindex', '0');
+    const hint = trimmed ? `${trimmed} (click to copy)` : 'Click to copy error';
+    text.setAttribute('title', hint);
+    text.setAttribute('aria-label', hint);
   } else {
-    text.removeAttribute('title');
+    text.removeAttribute('role');
+    text.removeAttribute('tabindex');
+    text.removeAttribute('aria-label');
+    if (trimmed.length > 24) {
+      text.setAttribute('title', trimmed);
+    } else {
+      text.removeAttribute('title');
+    }
   }
 }
 
 /** Update status pills in the legacy topbar and OS menubar (connection, streaming, workspace). */
 export function setStatus(state: StatusState | string, msg: string): void {
+  lastStatusState = state;
+  lastStatusMsg = msg;
+  ensureStatusCopyHandlers();
   for (const { dotId, textId } of STATUS_PILL_TARGETS) {
     const dot = document.getElementById(dotId);
     const text = document.getElementById(textId);

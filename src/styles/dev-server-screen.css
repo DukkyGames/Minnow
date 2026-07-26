@@ -444,11 +444,13 @@
   font-size: 12px;
 }
 
+/* Solid surface token — avoid color-mix(in oklch, fg 3%, bg): near-achromatic
+   --mn-fg drops hue to `none` and paints cool lavender on warm themes (coral-light). */
 .dev-server-log__output-host {
   flex: 1;
   min-height: 0;
   position: relative;
-  background: color-mix(in oklch, var(--mn-fg) 3%, var(--mn-bg));
+  background: var(--mn-surface-0);
 }
 
 .dev-server-log__output {
@@ -457,9 +459,16 @@
   margin: 0;
   padding: 10px 12px;
   overflow: auto;
+  font-family: var(--mn-font-mono, 'JetBrains Mono', ui-monospace, monospace);
   font-size: 12px;
   line-height: 1.45;
   white-space: pre;
+  color: var(--mn-fg);
+  background: transparent;
+}
+
+.dev-server-log__output .stderr-line {
+  color: var(--mn-danger);
 }
 
 .dev-server-log__output--wrap {

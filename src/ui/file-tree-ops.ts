@@ -115,8 +115,13 @@ export function syncViewerAfterPathChange(
     const tabStore = await import('./file-viewer-tab-store');
     const oldNorm = normalizeTreePath(oldPath);
 
+    const recent = await import('../state/recent-viewer-files');
+    const { getFileTreeListingWorkspaceRoot } = await import('./file-tree-listing-root');
+    const workspaceRoot = getFileTreeListingWorkspaceRoot();
+
     if (operation === 'delete') {
       tabStore.closeViewerTabsUnderAncestor(oldNorm);
+      recent.pruneRecentViewerFilesUnderAncestor(oldNorm, workspaceRoot);
       if (tabStore.listViewerTabs().length === 0) {
         viewer.closeFileViewerForce();
       } else {
@@ -128,6 +133,7 @@ export function syncViewerAfterPathChange(
     if (!newPath) return;
     const newNorm = normalizeTreePath(newPath);
     tabStore.remapViewerTabsUnderAncestor(oldNorm, newNorm);
+    recent.remapRecentViewerFilesUnderAncestor(oldNorm, newNorm, workspaceRoot);
     viewer.renderActiveViewerTab();
   })();
 }

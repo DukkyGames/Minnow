@@ -19,6 +19,11 @@ describe('file viewer save helpers', () => {
     assert.equal(parseReadFileRangeBody(raw), 'alpha\nbeta');
   });
 
+  test('parseReadFileRangeBody normalizes CRLF before stripping prefixes', () => {
+    const raw = '1: alpha\r\n2: beta\r\n';
+    assert.equal(parseReadFileRangeBody(raw), 'alpha\nbeta\n');
+  });
+
   test('formatViewerPathLabel adds dirty marker', () => {
     assert.equal(formatViewerPathLabel('src/app.ts', false), 'src/app.ts');
     assert.equal(formatViewerPathLabel('src/app.ts', true), 'src/app.ts ●');

@@ -101,8 +101,10 @@ curl http://localhost:5173/api/tools/ping   # {"ok":true}
 - **Voice** — Models → Voice: download local Whisper (STT) / Qwen3-TTS, or use a provider. Local voice provisions a Python worker on demand.
 - **Memory & Brain** — Settings → Memory: enable the store and optional semantic embeddings (local or provider).
 - **MCP** — Settings → MCP: Context7 is built in; add custom servers.
-- **Email / Calendar** — connect via **IMAP** and **CalDAV** with encrypted credentials in the Email and Calendar apps.
+- **Skills Library** — Settings → Integrations → Skills Library: browse and install curated third-party `SKILL.md` packs (only 15 skills are bundled).
 - **Webhooks** — Settings → Webhooks: HMAC-signed outbound deliveries (SSRF-guarded).
+
+> The **Email** and **Calendar** apps are release-gated off in this build, so there is no IMAP/CalDAV setup step — see [apps.md](apps.md#behind-the-release-gate).
 
 ## 7. Next steps
 

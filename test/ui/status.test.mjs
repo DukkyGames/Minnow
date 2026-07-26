@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { afterEach, describe, test } from 'node:test';
+import { afterEach, describe, mock, test } from 'node:test';
 import { Window } from 'happy-dom';
 
 const { setStatus, setReadyStatus } = await import('../../src/ui/status.ts');
@@ -20,11 +20,13 @@ function setupDom() {
       <span id="osStatusText"></span>
     </div>
   `;
+  return window;
 }
 
 describe('status', () => {
   afterEach(() => {
     document.body.replaceChildren();
+    mock.restoreAll();
   });
 
   test('setStatus updates legacy topbar and OS menubar pills', () => {
@@ -42,22 +44,62 @@ describe('status', () => {
     assert.equal(osText?.textContent, 'Loading models…');
   });
 
-  test('setStatus sets title on long messages for both pills', () => {
+  test('setStatus sets title on long non-error messages for both pills', () => {
     setupDom();
-    const longMsg = 'Cannot reach one or more providers. Check Settings → Providers.';
-    setStatus('err', longMsg);
+    const longMsg = 'Loading models from every configured provider right now…';
+    setStatus('spin', longMsg);
 
     assert.equal(document.getElementById('sText')?.getAttribute('title'), longMsg);
     assert.equal(document.getElementById('osStatusText')?.getAttribute('title'), longMsg);
   });
 
-  test('setReadyStatus marks both pills ok', () => {
+  test('setStatus marks errors copyable with click-to-copy title hint', () => {
     setupDom();
+    const longMsg = 'Cannot reach one or more providers. Check Settings → Providers.';
+    setStatus('err', longMsg);
+
+    const osText = document.getElementById('osStatusText');
+    const sText = document.getElementById('sText');
+    assert.ok(osText?.classList.contains('status-pill__text--copyable'));
+    assert.ok(sText?.classList.contains('status-pill__text--copyable'));
+    assert.equal(osText?.getAttribute('role'), 'button');
+    assert.equal(osText?.getAttribute('title'), `${longMsg} (click to copy)`);
+    assert.equal(sText?.getAttribute('title'), `${longMsg} (click to copy)`);
+  });
+
+  test('clicking an error status copies the full message', async () => {
+    const win = setupDom();
+    const errMsg = 'Cannot reach one or more providers. Check Settings → Providers.';
+    let copied = '';
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (text) => {
+          copied = text;
+        },
+      },
+    });
+
+    setStatus('err', errMsg);
+    document.getElementById('osStatusText')?.dispatchEvent(new win.Event('click'));
+
+    // Clipboard write is async; yield a tick for the promise.
+    await Promise.resolve();
+    assert.equal(copied, errMsg);
+  });
+
+  test('setReadyStatus marks both pills ok and clears copyable affordance', () => {
+    setupDom();
+    setStatus('err', 'Something failed');
     setReadyStatus();
 
     assert.equal(document.getElementById('sDot')?.className, 's-dot ok');
     assert.equal(document.getElementById('osStatusDot')?.className, 's-dot ok');
     assert.equal(document.getElementById('sText')?.textContent, 'Ready');
     assert.equal(document.getElementById('osStatusText')?.textContent, 'Ready');
+    assert.equal(
+      document.getElementById('osStatusText')?.classList.contains('status-pill__text--copyable'),
+      false,
+    );
   });
 });

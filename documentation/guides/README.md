@@ -6,7 +6,7 @@ Task-oriented documentation. For the product overview see [`../README.md`](../RE
 |-------|----------------|
 | [setup.md](setup.md) | Install, prerequisites, LM Studio + providers, first run, optional models & voice. |
 | [commands.md](commands.md) | Every npm script, the headless CLI, smoke scripts, test suites, and environment variables. |
-| [apps.md](apps.md) | A tour of the MinnowOS apps (Chat, Code, Models, Compare, Bench, Research, Experts, Brain, Calendar, Email, Scheduler). |
+| [apps.md](apps.md) | A tour of the MinnowOS apps that ship (Chat, Code, Research, Models, Brain, Issues, Scheduler, Settings) — plus what is held behind the release gate. |
 | [architecture.md](architecture.md) | High-level system map: SPA, tool server, Electron shell, agent layer, storage. |
 | [configuration.md](configuration.md) | `~/.minnow` layout, `config.json`, providers, encrypted secrets, env vars. |
 | [settings-reference.md](settings-reference.md) | Full inventory of every setting (UI, config keys, tools, env vars). |

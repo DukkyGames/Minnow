@@ -29,6 +29,17 @@ describe('preview panel helpers', () => {
     );
   });
 
+  test('workspacePreviewUrl raw flag skips browser base injection for editor loads', () => {
+    assert.equal(
+      workspacePreviewUrl('index.html', { raw: true }),
+      '/api/preview/file/index.html?raw=1',
+    );
+    assert.equal(
+      workspacePreviewUrl('index.html', { cacheBust: 3, raw: true, workspaceRoot: 'C:/ws' }),
+      '/api/preview/file/index.html?v=3&workspaceRoot=C%3A%2Fws&raw=1',
+    );
+  });
+
   test('resolvePreviewLoadUrl absolutizes root-relative API paths for Electron', () => {
     const prev = globalThis.window;
     globalThis.window = { location: { origin: 'http://127.0.0.1:5173' } } as Window & typeof globalThis;

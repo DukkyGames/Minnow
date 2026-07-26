@@ -6,10 +6,10 @@ Guidance for AI coding agents (Cursor, Claude Code, etc.) working in the Minnow 
 
 Minnow is a **Vite + TypeScript SPA** plus a **Node tool server** (`server.js`) and an **Electron desktop shell** (the "MinnowOS" window). It is a local-first AI workspace for LM Studio and other OpenAI-compatible providers.
 
-- **Five operating modes** (four in the Code composer strip): General, Build, Plan (no-destructive guard), Orchestrate, Debug. Orchestrate is not in the composer picker — it opens from the sidebar hub. Modes are defined in [`src/chat/modes/registry.ts`](src/chat/modes/registry.ts); prompts in [`src/chat/prompts/modes/`](src/chat/prompts/modes/).
-- **~86 built-in tools** across web / utility / files / git / code / agents / browser / lsp ([`src/tools/definitions.ts`](src/tools/definitions.ts)). Includes `issue_*` tools for the Issues app (MIN-261).
-- **Built-in slash skills** (~15): core helpers (`git-commit`, `code-review`, `ask-user`, …), `impeccable` (default-on), `caveman`, `ui-designer`, `partymode`. **Matt Pocock pack** (19 skills) installs from **Settings → Skills Library** — see [`documentation/context.md`](documentation/context.md) § Skills.
-- **MinnowOS apps:** Chat (desktop), Code, Models, Compare, Bench, Research, Experts, Brain, Calendar, Email, **Issues**, Scheduler, Settings ([`src/os/`](src/os/)).
+- **Four composer modes** — General, Build, Plan (no-destructive guard), Debug — plus **Orchestrate** (opens from the sidebar hub, not the composer picker), **Super Plan**, **Desktop**, **Email**, and **Onboarding** as non-composer modes. Defined in [`src/chat/modes/registry.ts`](src/chat/modes/registry.ts); prompts in [`src/chat/prompts/modes/`](src/chat/prompts/modes/). Reef mode was removed (MIN-473) — do not reintroduce it.
+- **111 built-in tools** across web / utility / files / git / code / agents / browser / lsp ([`src/tools/definitions.ts`](src/tools/definitions.ts)). Includes `issue_*` tools for the Issues app (MIN-261). Entries with an `appId` (8 calendar/email tools) are filtered out while that app is release-gated or user-disabled (MIN-472), so the shipped catalog is 103.
+- **Built-in slash skills** (15): core helpers (`git-commit`, `code-review`, `ask-user`, …), `impeccable` (default-on), `caveman`, `ui-designer`, `partymode`. Third-party packs — including the **Matt Pocock pack** (19 skills) — install from **Settings → Skills Library**; nothing else is bundled. See [`documentation/context.md`](documentation/context.md) § Skills.
+- **MinnowOS apps — released:** Chat (desktop), Code, Research, Models, Brain, **Issues**, Scheduler, Settings — all `core` (not user-disableable). **Hidden** (`releaseState: 'hidden'`, MIN-471): Compare, Bench, Experts, Calendar, Email — code stays in tree but is omitted from dock, onboarding, Settings, routes, notifications, and `launch_minnow_app`. Registry: [`src/os/app-registry.ts`](src/os/app-registry.ts).
 - **Persistence** lives under `~/.minnow` when the tool server runs.
 
 The **authoritative reference** is [`documentation/context.md`](documentation/context.md) — read it before touching unfamiliar subsystems. Product overview: [`README.md`](README.md). Setup/scripts: [`documentation/getting-started.md`](documentation/getting-started.md). Guides: [`documentation/guides/`](documentation/guides/).
@@ -46,6 +46,7 @@ The **authoritative reference** is [`documentation/context.md`](documentation/co
 - **Secrets are encrypted** at rest with `~/.minnow/.key`. Deleting/rotating the key makes existing encrypted secrets unrecoverable.
 - **Path safety:** file/git tools resolve under the workspace root unless `TOOLS_ALLOW_ALL_PATHS=1`.
 - **LAN access** is opt-in (`Settings → General → Network access` or `MINNOW_NETWORK=lan`); default is loopback-only — restart after toggling.
+- **Release gating:** an app is only reachable when `releaseState: 'released'` in [`src/os/app-registry.ts`](src/os/app-registry.ts). Tests and code for hidden apps (Compare, Bench, Experts, Calendar, Email) still run — don't delete them — but nothing user-facing may assume they are visible. New or unfinished apps ship `hidden` first.
 - **Plan mode** denies mutating file edits and git writes; allows `save_file`/`make_directory` under `documentation/plans/` only (see `tool-groups.ts` + `plan-write-guard.ts`). Shell/code-exec is allowed per the mode matrix (MIN-332).
 
 ## Conventions

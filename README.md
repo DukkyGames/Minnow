@@ -1,6 +1,6 @@
 # Minnow
 
-**Your local AI workspace. One place for chat, code, orchestration, and knowledge.**
+**Your local AI workspace. Chat, code, orchestration, and knowledge — nothing else in the way.**
 
 Minnow is a free, open-source desktop workspace built around the models you already run — [LM Studio](https://lmstudio.ai/), Ollama, llama.cpp, or any OpenAI-compatible API. Chat on a calm desktop shell, open a full **Code** workspace when it is time to build, spin up **Orchestrator boards** for multi-agent delivery, and grow a **Brain** wiki that your agents can actually use.
 
@@ -17,15 +17,22 @@ Everything stays on your machine. Your keys, your chats, your files, your models
 
 ## Why Minnow
 
-Most AI tools pick one job: a chat box, a coding agent, or a note app. Minnow is built to be the **one shop** for serious local AI work.
+Most AI tools pick one job: a chat box, a coding agent, or a note app. Minnow is the **one shop** for serious local AI work — deliberately kept to a small set of surfaces that are actually finished.
 
 | Principle | What it means |
 |-----------|---------------|
 | **Local-first** | Models run where you choose. State lives under `~/.minnow` on your disk. |
 | **Privacy by design** | Encrypted secrets at rest. Nothing phones home except the providers you configure. |
 | **Open source** | Inspect it, fork it, self-host it. [AGPL-3.0-or-later](LICENSE). |
-| **Agent-native** | ~88 built-in tools, sub-agents, skills, boards, and modes — not bolted on after the fact. |
+| **Agent-native** | ~100 built-in tools, sub-agents, skills, boards, and modes — not bolted on after the fact. |
 | **Calm UX** | Instrumentation, not dashboards. Readable chat, compact metrics, task-focused chrome. |
+| **Small on purpose** | Eight apps, all finished, all always on. Half-built surfaces stay behind a release gate instead of shipping. |
+
+### What ships today
+
+Minnow's surface is **stripped back to the build loop**: the desktop shell plus seven apps — **Code**, **Chat**, **Research**, **Models**, **Brain**, **Issues**, and **Scheduler** (plus Settings). All of them are always on; there is nothing optional to configure.
+
+Experimental surfaces (Compare, Bench, Experts, Calendar, Email) still live in the repo but are **release-gated off** — they do not appear in the dock, onboarding, Settings, shortcuts, or agent tool catalogs, and the tools bound to them are hidden with them. The Reef mini-app runtime was removed entirely.
 
 ---
 
@@ -44,7 +51,7 @@ Load a model in LM Studio (or point Minnow at your provider), then open the desk
 
 ## Code workspace
 
-The **Code** app is Minnow's main product surface today — an IDE-style workspace wrapped in MinnowOS, not a separate tool.
+The **Code** app is Minnow's centre of gravity — an IDE-style workspace wrapped in MinnowOS, not a separate tool. Everything else in the product exists to feed it.
 
 <p align="center">
   <strong>📸 Code workspace image placeholder</strong><br>
@@ -59,7 +66,8 @@ The **Code** app is Minnow's main product surface today — an IDE-style workspa
 - **Integrated terminal** — xterm.js PTY tabs wired to the same workspace root as file/git tools.
 - **Git-aware** — status, graph, commits; orchestrator boards can initialize repos and merge isolated worktrees when you ship in parallel.
 - **Code map** — open Brain's symbol graph inside Code without leaving the app (repo map, find symbol, call graph).
-- **Five operating modes** — General, Build, Plan, Orchestrate, Debug (bug tracker) — each with tuned prompts and tool policy.
+- **Dev servers** — start, watch, and read logs for project dev servers from inside Code.
+- **Four composer modes** — General, Build, Plan, Debug — plus **Orchestrate** from the hub and **Super Plan** as a Plan sub-mode. Each has tuned prompts and tool policy.
 
 Open Code from the dock, pick a project folder, and the agent layer has the same filesystem, terminal, LSP, browser preview, and MCP tools you would expect from a dedicated coding agent — except it shares memory, Brain, and orchestration with the rest of Minnow.
 
@@ -128,28 +136,29 @@ Minnow ships a deep agent layer out of the box — no MCP required to be product
   <em>Suggested shot: Composer with slash-skill picker open, or Settings → Tools showing categorized toggles (files, git, web, agents, browser, LSP). Optional inset: a tool-call card in chat.</em>
 </p>
 
-### Built-in tools (~88)
+### Built-in tools (~100)
 
 OpenAI-style function calling across:
 
 - **Files & git** — read, write, search, move, commit, branch operations (workspace-scoped by default).
 - **Code & LSP** — diagnostics, symbols, repo map, `find_symbol`, `who_calls`.
 - **Web** — search (Brave, Tavily, DuckDuckGo, or local SearXNG), fetch, deep research.
-- **Agents** — spawn sub-agents, orchestrate boards (`board_*`), mode handoff, work-agent routing.
+- **Agents** — spawn sub-agents, orchestrate boards (`board_*`), issues (`issue_*`), mode handoff, work-agent routing.
 - **Browser** — CDP automation in the Electron preview panel (origin-allowlisted).
-- **Productivity** — memory, Brain wiki, calendar, email triage, scheduler hooks.
+- **Productivity** — memory, Brain wiki, scheduler hooks.
 - **Plugins** — drop-in local tools under `~/.minnow/tools/` without MCP.
 
-Per-tool permissions: **Full**, **Ask**, or **Off**. Path policy keeps file/git tools inside your workspace unless you opt out.
+Per-tool permissions: **Full**, **Ask**, or **Off**. Path policy keeps file/git tools inside your workspace unless you opt out. Tools bound to an app (calendar, mail) are hidden while that app is gated off, so the model never sees a tool it cannot use.
 
-### Built-in skills (33+)
+### Bundled skills (15) + Skills Library
 
-Invoke with `/` in the composer. Includes:
+Invoke with `/` in the composer. Bundled:
 
-- **Core** — `git-commit`, `code-review`, `ask-user`, `debug-error`, `explain-code`, `browser-automation`, …
-- **Impeccable** — UI design shape/critique/polish workflow (vendored on install).
+- **Core** — `git-commit`, `code-review`, `ask-user`, `debug-error`, `explain-code`, `docs-update`, `refactor-safe`, `security-review`, `write-tests`, `browser-automation`, `git-setup`, `ui-designer`.
+- **Impeccable** — UI design shape/critique/polish workflow (vendored on install, on by default).
 - **Caveman** — ultra-compressed replies when token budget matters.
-- **Matt Pocock pack** (19 skills) — `triage`, `implement`, `handoff`, `domain-modeling`, `diagnosing-bugs`, `setup-minnow-skills`, and more. Install from **Settings → Skills Library** (not bundled by default).
+
+Everything else is opt-in from **Settings → Integrations → Skills Library** — curated third-party `SKILL.md` packs (Matt Pocock's 19 skills, Addy Osmani, Superpowers, last30days, Browserbase) installed per-skill from pinned GitHub commits. Nothing large is bundled by default.
 
 Add your own `SKILL.md` packs under `~/.minnow/skills/`. Post-turn synthesis can propose new memories and skills into a review queue — nothing auto-saves without your OK.
 
@@ -186,18 +195,22 @@ Open Brain from the dock (`#/app/brain`) — Graph, Edit, Code, Memories, Ingest
 
 ## The rest of MinnowOS
 
-Minnow is more than Code. The desktop shell (**MinnowOS**) launches focused apps from the dock:
+The desktop shell (**MinnowOS**) launches a short list of focused apps from the dock. Every one of them is core — always installed, always on:
 
 | App | Role |
 |-----|------|
-| **Desktop chat** | Default surface — concierge composer, session rail, notifications. |
-| **Models** | Hardware fit scoring, Hugging Face downloads, local serve, provider routing. |
-| **Compare** | Blind A/B across 2–6 models with win-rate history. |
+| **Chat** | Default desktop surface — concierge composer, session rail, notifications. |
+| **Code** | The build workspace (above). |
 | **Research** | Multi-step web research, saved library, discuss panel. |
-| **Experts** | Specialist sandbox chats and Experts' Lab roster. |
-| **Calendar & Email** | Local-first productivity with agent tools (encrypted credentials). |
+| **Models** | Hardware fit scoring, Hugging Face downloads, local serve, provider routing. |
+| **Brain** | Wiki, memory, and code index (below). |
+| **Issues** | Linear-style issue tracking — list, board, quick capture, `issue_*` tools. |
 | **Scheduler** | Recurring agent jobs while Minnow is open. |
-| **Bench & Evals** | Model benchmarking and local eval harness. |
+| **Settings** | Appearance, tools, modes, skills, providers, integrations. |
+
+That is the whole surface. There is no optional-app picker to work through: onboarding shows the core line and moves on.
+
+**Behind the release gate:** Compare, Bench, Experts, Calendar, and Email still exist in the source tree but ship hidden — no dock tile, no route, no notifications, no tools. They come back one at a time, when each is genuinely done.
 
 Tour: [`documentation/guides/apps.md`](documentation/guides/apps.md).
 
@@ -245,5 +258,3 @@ Contributions welcome — issues, PRs, docs, and skills.
 | [DESIGN.md](DESIGN.md) | Visual design system |
 
 A fuller wiki is planned — guides in [`documentation/guides/`](documentation/guides/) are the home for task docs until then.
-
-<!-- test change: agent edit verification -->

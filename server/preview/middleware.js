@@ -235,16 +235,23 @@ export async function handlePreviewRequest(req, res, pathname, searchParams, dep
     const isHtml =
       contentType.startsWith('text/html') &&
       (relativePath.endsWith('.html') || relativePath.endsWith('.htm'));
+    // Editor loads pass ?raw=1 so we never inject <base> into the buffer (would
+    // false-dirty the viewer and corrupt saves). Browser preview omits raw.
+    const wantRaw =
+      searchParams?.get('raw') === '1' || searchParams?.get('raw') === 'true';
 
     if (isHtml) {
-      const host = req.headers.host ?? '127.0.0.1';
-      const proto =
-        req.headers['x-forwarded-proto'] === 'https' || req.headers.origin?.startsWith('https')
-          ? 'https'
-          : 'http';
-      const origin = typeof req.headers.origin === 'string' ? req.headers.origin : `${proto}://${host}`;
       let html = await fsp.readFile(absPath, 'utf8');
-      html = injectPreviewBaseHref(html, relativePath, origin);
+      if (!wantRaw) {
+        const host = req.headers.host ?? '127.0.0.1';
+        const proto =
+          req.headers['x-forwarded-proto'] === 'https' || req.headers.origin?.startsWith('https')
+            ? 'https'
+            : 'http';
+        const origin =
+          typeof req.headers.origin === 'string' ? req.headers.origin : `${proto}://${host}`;
+        html = injectPreviewBaseHref(html, relativePath, origin);
+      }
       res.statusCode = 200;
       res.setHeader('Content-Type', contentType);
       res.setHeader('Cache-Control', 'no-store');

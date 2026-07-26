@@ -12,9 +12,17 @@ export function parseGetFileMetadataSize(metadata: string): number | null {
   return Number.isFinite(size) ? size : null;
 }
 
-/** Fetches a workspace UTF-8 text file through GET /api/preview/file/… */
+/**
+ * Fetches a workspace UTF-8 text file through GET /api/preview/file/…?raw=1.
+ * Raw skips HTML `<base>` injection so the file viewer edits the true on-disk bytes.
+ */
 export async function readWorkspaceTextFile(path: string, workspaceRoot?: string): Promise<string> {
-  const url = resolvePreviewLoadUrl({ kind: 'workspace', path }, undefined, workspaceRoot);
+  const url = resolvePreviewLoadUrl(
+    { kind: 'workspace', path },
+    undefined,
+    workspaceRoot,
+    { raw: true },
+  );
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`Could not read file (HTTP ${res.status})`);

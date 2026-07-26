@@ -21,11 +21,26 @@ export const MAX_OPEN_VIEWER_TABS = 20;
 /** Max preview browser tabs (each Electron tab is a live Chromium renderer). */
 export const MAX_PREVIEW_TABS = 6;
 
+/** Max recent viewer files remembered per workspace (empty-state MRU). */
+export const MAX_RECENT_VIEWER_FILES = 12;
+
 /** Persisted preview tab row (source only; title/loading are runtime). */
 export interface PersistedPreviewTab {
   id: string;
   source: PreviewSource | null;
 }
+
+/** One recently opened workspace file (path is workspace-relative). */
+export interface RecentViewerFileEntry {
+  path: string;
+  openedAt: number;
+}
+
+/**
+ * Recent viewer files for one workspace root key.
+ * Key is an absolute workspace/listing root, or `__default__` when unset.
+ */
+export type RecentViewerFilesByWorkspace = Record<string, RecentViewerFileEntry[]>;
 
 /** Persisted + in-memory file explorer / viewer preferences. */
 export interface FilePanelState {
@@ -51,6 +66,11 @@ export interface FilePanelState {
   previewTabs: PersistedPreviewTab[];
   /** Active preview tab id; must be in previewTabs or null. */
   activePreviewTab: string | null;
+  /**
+   * Most-recently-opened workspace files for the viewer empty state,
+   * keyed by absolute workspace / listing root.
+   */
+  recentViewerFilesByWorkspace: RecentViewerFilesByWorkspace;
   treeRoot: string;
 }
 
@@ -68,6 +88,7 @@ export const DEFAULT_FILE_PANEL_STATE: FilePanelState = {
   activeViewerTab: null,
   previewTabs: [],
   activePreviewTab: null,
+  recentViewerFilesByWorkspace: {},
   treeRoot: '.',
 };
 
@@ -186,6 +207,49 @@ function normalizeActivePreviewTab(
   return tabs.length > 0 ? tabs[tabs.length - 1]!.id : null;
 }
 
+/** Normalize persisted recent-viewer-files map (workspace root → MRU list). */
+function normalizeRecentViewerFilesByWorkspace(raw: unknown): RecentViewerFilesByWorkspace {
+  if (!raw || typeof raw !== 'object') return {};
+  const out: RecentViewerFilesByWorkspace = {};
+  for (const [workspaceKey, entries] of Object.entries(raw as Record<string, unknown>)) {
+    const key = workspaceKey.trim();
+    if (!key || !Array.isArray(entries)) continue;
+    const seen = new Set<string>();
+    const list: RecentViewerFileEntry[] = [];
+    for (const entry of entries) {
+      if (!entry || typeof entry !== 'object') continue;
+      const row = entry as Record<string, unknown>;
+      if (typeof row.path !== 'string') continue;
+      const path = row.path
+        .trim()
+        .replace(/\\/g, '/')
+        .replace(/\/+/g, '/')
+        .replace(/^\.\//, '');
+      if (!path || path.startsWith('.minnow/attachments/') || seen.has(path)) continue;
+      const openedAt =
+        typeof row.openedAt === 'number' && Number.isFinite(row.openedAt)
+          ? row.openedAt
+          : 0;
+      seen.add(path);
+      list.push({ path, openedAt });
+      if (list.length >= MAX_RECENT_VIEWER_FILES) break;
+    }
+    if (list.length > 0) out[key] = list;
+  }
+  return out;
+}
+
+/** Deep-copy recent-files map so callers cannot mutate persisted state in place. */
+function cloneRecentViewerFilesByWorkspace(
+  map: RecentViewerFilesByWorkspace,
+): RecentViewerFilesByWorkspace {
+  const out: RecentViewerFilesByWorkspace = {};
+  for (const [key, entries] of Object.entries(map)) {
+    out[key] = entries.map((e) => ({ path: e.path, openedAt: e.openedAt }));
+  }
+  return out;
+}
+
 function normalizeFilePanelBlock(raw: unknown): FilePanelState {
   if (!raw || typeof raw !== 'object') {
     return { ...DEFAULT_FILE_PANEL_STATE };
@@ -246,6 +310,9 @@ function normalizeFilePanelBlock(raw: unknown): FilePanelState {
     activeViewerTab,
     previewTabs,
     activePreviewTab,
+    recentViewerFilesByWorkspace: normalizeRecentViewerFilesByWorkspace(
+      row.recentViewerFilesByWorkspace,
+    ),
     treeRoot: typeof row.treeRoot === 'string' && row.treeRoot.trim() ? row.treeRoot : '.',
   };
 }
@@ -279,6 +346,9 @@ export function setFilePanelState(next: FilePanelState): void {
     expandedDirs: [...next.expandedDirs],
     openViewerTabs: [...next.openViewerTabs],
     previewTabs: [...next.previewTabs],
+    recentViewerFilesByWorkspace: cloneRecentViewerFilesByWorkspace(
+      next.recentViewerFilesByWorkspace ?? {},
+    ),
   };
 }
 
@@ -305,6 +375,10 @@ export function patchFilePanelState(partial: Partial<FilePanelState>): FilePanel
         : panelState.openViewerTabs,
     previewTabs:
       partial.previewTabs !== undefined ? [...partial.previewTabs] : panelState.previewTabs,
+    recentViewerFilesByWorkspace:
+      partial.recentViewerFilesByWorkspace !== undefined
+        ? cloneRecentViewerFilesByWorkspace(partial.recentViewerFilesByWorkspace)
+        : cloneRecentViewerFilesByWorkspace(panelState.recentViewerFilesByWorkspace),
   };
   const rightPaneMode =
     partial.rightPaneMode !== undefined

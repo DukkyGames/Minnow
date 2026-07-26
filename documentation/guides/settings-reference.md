@@ -4,7 +4,7 @@ Complete inventory of Minnow settings: where they appear in the UI, what they co
 
 For storage layout and `config.json` overview, see [configuration.md](configuration.md). For the Settings page IA and search catalog, see [`src/ui/settings-catalog.ts`](../../src/ui/settings-catalog.ts) and [settings-page-rebuild-min-130.md](../plans/settings-page-rebuild-min-130.md).
 
-**Last updated:** 2026-07-03
+**Last updated:** 2026-07-25
 
 ---
 
@@ -12,11 +12,12 @@ For storage layout and `config.json` overview, see [configuration.md](configurat
 
 | Item | Count |
 |------|------:|
-| Settings sidebar categories | 6 |
-| Settings sections (areas) | 28 |
+| Settings sidebar categories | 7 |
+| Settings sections (areas) | 33 |
 | Cataloged searchable fields | ~100 |
-| Built-in tools (per-tool permissions) | 89 |
-| Composer modes | 6 |
+| Built-in tools (catalog) | 111 |
+| Built-in tools shown in a default build | 103 |
+| Composer modes | 4 |
 | Built-in experts | 6 |
 | Built-in work agents | 7 |
 | Built-in sub-agent types | 8 |
@@ -227,9 +228,11 @@ See [`src/config/voice-meta.ts`](../../src/config/voice-meta.ts) and [`src/voice
 
 Settings UI: **Agents → Rules** — grouped list with per-rule enable switches; add/edit via anchored popover ([`src/ui/settings-rules.ts`](../src/ui/settings-rules.ts), [`src/ui/settings-rules-popover.ts`](../src/ui/settings-rules-popover.ts)). Enabled rules compose into a second system message on parent chat send ([`src/config/user-rules.ts`](../src/config/user-rules.ts)). Legacy v1 `{ text }` blobs migrate automatically.
 
-### Modes (5)
+### Modes (9)
 
-`general` · `build` · `plan` · `orchestrate` · `debug`
+Composer strip: `general` · `build` · `plan` · `debug`
+
+Entered elsewhere: `orchestrate` (hub) · `super-plan` (Plan sub-menu) · `desktop` (MinnowOS chat) · `email` (assistant dock, ships with the hidden Email app) · `onboarding` (first run). `reef` was removed in MIN-473.
 
 | Per-mode | Notes |
 |----------|-------|
@@ -257,7 +260,7 @@ Persistence: `config.json` → `planning.superPlan`; client mirror in `localStor
 
 `general` · `software-engineer` · `data-analyst` · `creative-writer` · `security-reviewer` · `technical-writer`
 
-Prompt overrides in **Agents → Prompts → Experts** (`~/.minnow/prompts/experts/`). User-created experts supported. Use the **Experts** desktop app for Expert Lab.
+Prompt overrides in **Agents → Prompts → Experts** (`~/.minnow/prompts/experts/`). User-created experts supported. The **Experts** desktop app (Expert Lab) is release-gated off in this build.
 
 ### Work agents (7 built-in)
 
@@ -370,11 +373,17 @@ Preview panel automation for `browser_*` tools (Electron desktop shell only).
 | **Brain** | Search, Read page, List pages, Write page, Append log, Ingest source |
 | **LSP** | Get diagnostics, List LSP servers |
 | **Skills** | Load Impeccable context, Run Impeccable |
-| **Calendar/Email** | Manage calendar, List mail, Draft reply, Summarize inbox, Generate reply variants, Email action |
+| **Calendar/Email** *(hidden)* | Manage calendar, List mail, Search mail, Get thread, Draft reply, Summarize inbox, Generate reply variants, Email action |
+
+> Catalog entries carrying an `appId` are filtered out of both the model's tool list and this page while that app is release-gated or user-disabled (MIN-472). The eight calendar/email tools are hidden in a default build.
 
 ### Skills (`skills.json`)
 
-Per skill: enabled/disabled. Custom SKILL.md authoring. **Caveman** skill has intensity setting.
+Per skill: enabled/disabled. Custom SKILL.md authoring. **Caveman** skill has intensity setting. 15 skills are bundled; everything else installs from **Skills Library**.
+
+### Skills Library (`skills-library`)
+
+Curated third-party `SKILL.md` packs (Matt Pocock, Addy Osmani, Superpowers, last30days, Browserbase) browsed and installed per-skill from pinned GitHub commits. Installs land in `~/.minnow/skills/<id>/` with provenance in `installed-skills.json` and are enabled immediately. Offline browse falls back to the shipped indexes under `src/skills/library/index/`.
 
 ### MCP servers (`~/.minnow/mcp/`)
 
@@ -444,7 +453,7 @@ Legacy `selfHealing` tier1/tier2 in config (superseded by supervisor + autopilot
 
 ### Evals (`~/.minnow/evals/`)
 
-No Settings page. Headless task packs and runs live under `server/evals/` / `~/.minnow/evals/`. In-app model batteries use the **Bench** app (`#/app/bench`).
+No Settings page. Headless task packs and runs live under `server/evals/` / `~/.minnow/evals/`. In-app model batteries use the **Bench** app, which is release-gated off in this build.
 
 ---
 
@@ -455,8 +464,6 @@ No Settings page. Headless task packs and runs live under `server/evals/` / `~/.
 | **Chat top bar** | Provider, model, mode, expert, thinking (per chat), work agent |
 | **Chat gear drawer** | Temperature, max tokens (per session) |
 | **Brain app → Settings** | Brain synthesis, embeddings, code index (`config.brain.*`) |
-| **Calendar app → Settings** | View mode, week start, timezone, calendar CRUD, reset |
-| **Email app** | Account management |
 | **Scheduler app** | Per-job: schedule, prompt, model, enabled |
 | **Research app (run panel)** | Per-run: rounds, category, search provider, model |
 | **Welcome screen** | Workspace path, recent workspaces |

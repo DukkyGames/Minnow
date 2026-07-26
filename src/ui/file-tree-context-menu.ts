@@ -8,6 +8,7 @@ import { pasteTargetDirForPath } from './file-tree-path';
 import { isMarkdownFilePath } from './file-markdown-path';
 import { isExecutableOrchestratePlan } from '../chat/orchestrate/plan-path';
 import * as fileTreeOps from './file-tree-ops';
+import { revealPathInSystemExplorer } from './reveal-in-system-explorer';
 type FileTreeEntryKind = 'file' | 'dir';
 
 export interface FileTreeMenuContext {
@@ -56,6 +57,16 @@ export interface FilePanelContextMenuItem {
 
 type MenuItemDef = FilePanelContextMenuItem;
 
+/** Shared “open in OS explorer” item for file and folder rows. */
+function buildOpenInSystemExplorerItem(path: string, offline: boolean): MenuItemDef {
+  return {
+    label: 'Open in System Explorer',
+    disabled: offline,
+    title: offline ? 'Start with npm start to use this action' : undefined,
+    action: () => void revealPathInSystemExplorer(path),
+  };
+}
+
 function renderMenuItems(items: MenuItemDef[]): void {
   const menu = ensureMenuElement();
   menu.innerHTML = '';
@@ -101,7 +112,8 @@ function serverCrudEnabled(): boolean {
   return isFileTreeServerAvailable();
 }
 
-function buildFileMenuItems(ctx: FileTreeMenuContext): MenuItemDef[] {
+/** Build context-menu items for a file row (exported for tests). */
+export function buildFileMenuItems(ctx: FileTreeMenuContext): MenuItemDef[] {
   const hasClipboard = Boolean(getFileTreeClipboard()?.paths.length);
   const offline = !serverCrudEnabled();
   const disabled = offline;
@@ -162,6 +174,7 @@ function buildFileMenuItems(ctx: FileTreeMenuContext): MenuItemDef[] {
     ...openItems,
     ...previewItem,
     ...orchestrateItem,
+    buildOpenInSystemExplorerItem(ctx.path, offline),
     {
       label: 'Cut',
       disabled,
@@ -191,7 +204,8 @@ function buildFileMenuItems(ctx: FileTreeMenuContext): MenuItemDef[] {
   ];
 }
 
-function buildFolderMenuItems(ctx: FileTreeMenuContext): MenuItemDef[] {
+/** Build context-menu items for a folder row (exported for tests). */
+export function buildFolderMenuItems(ctx: FileTreeMenuContext): MenuItemDef[] {
   const hasClipboard = Boolean(getFileTreeClipboard()?.paths.length);
   const offline = !serverCrudEnabled();
   const disabled = offline;
@@ -208,6 +222,7 @@ function buildFolderMenuItems(ctx: FileTreeMenuContext): MenuItemDef[] {
       disabled,
       action: () => fileTreeOps.createFolderInDir(ctx.targetDir),
     },
+    buildOpenInSystemExplorerItem(ctx.path, offline),
     {
       label: 'Cut',
       disabled,
