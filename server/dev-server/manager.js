@@ -280,23 +280,30 @@ function shouldRegisterDevServerFromTool(args, guide) {
 /**
  * Build effective guide for a registry definition (or startup.md primary).
  * @param {import('./registry.js').DevServerDefinition | null} def
- * @param {{ command: string, cwd?: string, healthUrl?: string, port?: number, stop?: { command?: string } } | null} startupGuide
+ * @param {{ command: string, cwd?: string, healthUrl?: string, port?: number, apiPort?: number, stop?: { command?: string } } | null} startupGuide
  * @param {{ port: number, network: 'local' | 'lan' }} settings
+ * @param {string} workspaceRoot
  */
-function effectiveFromDefinition(def, startupGuide, settings) {
+function effectiveFromDefinition(def, startupGuide, settings, workspaceRoot) {
   if (!def && !startupGuide) return null;
   const guide = {
     command: def?.command ?? startupGuide?.command ?? '',
     cwd: def?.cwd ?? startupGuide?.cwd,
     healthUrl: def?.healthUrl ?? startupGuide?.healthUrl,
     port: def?.port ?? startupGuide?.port,
+    apiPort: startupGuide?.apiPort,
     stop: startupGuide?.stop,
   };
   if (!guide.command) return null;
-  return resolveEffectiveGuide(guide, {
-    port: def?.port ?? settings.port,
-    network: def?.network ?? settings.network,
-  });
+  const packageJsonDir = path.join(path.resolve(workspaceRoot), guide.cwd ?? '.');
+  return resolveEffectiveGuide(
+    guide,
+    {
+      port: def?.port ?? settings.port,
+      network: def?.network ?? settings.network,
+    },
+    { packageJsonDir },
+  );
 }
 
 /**
@@ -364,9 +371,10 @@ export async function getDevServerStatusById(
   const startup = await readStartupGuide(root);
   const settings = await readDevServerSettings(root);
   const def = await getDevServerDefinition(root, serverId);
-  const effective = effectiveFromDefinition(def, startup.guide, settings);
   let row = await getOrInitRow(root, serverId);
   row = await reconcileRow(row);
+  const runRoot = row.worktreeRoot ?? def?.worktreeRoot ?? root;
+  const effective = effectiveFromDefinition(def, startup.guide, settings, runRoot);
 
   const healthUrl = row.healthUrl ?? effective?.healthUrl ?? def?.healthUrl ?? startup.guide?.healthUrl;
   const healthOk = await reconcileHealth(row, healthUrl);
@@ -503,7 +511,7 @@ export async function startDevServerById(
     }
   }
 
-  const effective = effectiveFromDefinition(def, runStartup.guide, settings);
+  const effective = effectiveFromDefinition(def, runStartup.guide, settings, runRoot);
   if (!effective) {
     return { ok: false, error: 'No command configured for this server' };
   }
@@ -535,7 +543,10 @@ export async function startDevServerById(
           shell: process.platform === 'win32',
           source: 'agent',
           logSubdir: 'dev-server',
-          env: buildDevServerSpawnEnv(effective.port, effective.network),
+          env: buildDevServerSpawnEnv(effective.port, effective.network, {
+            splitStack: effective.splitStack,
+            apiPort: effective.apiPort,
+          }),
         });
       },
       { workspaceRoot: runRoot },
@@ -721,7 +732,9 @@ export async function toolStartBackgroundCommand(args) {
     if (startup.guide && shouldRegisterDevServerFromTool(args, startup.guide)) {
       const settings = await readDevServerSettings(root);
       await readDevServers(root); // seed registry
-      const effective = resolveEffectiveGuide(startup.guide, settings);
+      const effective = resolveEffectiveGuide(startup.guide, settings, {
+        packageJsonDir: path.join(root, startup.guide.cwd ?? '.'),
+      });
       const row = await getOrInitRow(root, PRIMARY_DEV_SERVER_ID);
       row.command = effective.command;
       row.healthUrl = effective.healthUrl;

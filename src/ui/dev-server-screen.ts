@@ -58,18 +58,22 @@ const ICON_AUTO =
   '<path d="M1 6V1h2v3.1C5.3 1.5 8.5 0 12 0c6.6 0 12 5.4 12 12h-2C22 6.5 17.5 2 12 2 8.8 2 5.9 3.5 4 6h4V8H3a2 2 0 0 1-2-2Zm20 10h-5v2h4c-1.9 2.5-4.8 4-8 4-5.5 0-10-4.5-10-10H0c0 6.6 5.4 12 12 12 3.5 0 6.7-1.5 9-4.1V23h2v-5a2 2 0 0 0-2-2Z" fill="currentColor"/>' +
   '</svg>';
 
-const SETUP_TASK = `Create or update startup.md at the workspace root.
+const SETUP_TASK = `Register the workspace dev server using manage_dev_servers (action=create) or by creating startup.md at the workspace root.
 
 Inspect package.json, README, and common scripts to determine how to start the local dev server.
-Write startup.md with YAML frontmatter:
+
+Preferred: manage_dev_servers with action=create — fields:
+- name (required): short label, e.g. "web" or "primary"
 - command (required): one shell line to start the dev server
 - cwd (optional): relative directory only (e.g. . or apps/web), default .
 - healthUrl (optional): HTTP URL to probe when running (e.g. http://localhost:3000/)
-- port (optional): display hint
-- stop.command (optional): shell command to stop when not using PID kill
+- port (optional): display / bind hint
+- network (optional): local or lan
 
-Keep the markdown body as human notes for future agents.
-Do not start a long-running server with execute_command (30s timeout). Use start_background_command only for a quick smoke test if needed.`;
+Alternative: write startup.md with YAML frontmatter (command, cwd, healthUrl, port, stop.command) for the primary server seeded from disk.
+
+Keep human notes in startup.md body when you use that file.
+Do not start a long-running server with execute_command (30s timeout). Use manage_dev_servers action=start or start_background_command only for a quick smoke test if needed.`;
 
 let initialized = false;
 let returnChatId: string | null = null;
