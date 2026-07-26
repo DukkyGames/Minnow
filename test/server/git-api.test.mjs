@@ -59,7 +59,9 @@ describe('git API', () => {
   let baseUrl;
 
   before(async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-git-api-'));
+    // realpath: on Windows CI os.tmpdir() is an 8.3 short path (C:\Users\RUNNER~1\…)
+    // while git reports the long form, so un-resolved paths never compare equal.
+    const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-git-api-')));
     repoDir = path.join(root, 'repo');
     plainDir = path.join(root, 'plain');
     await fs.mkdir(repoDir, { recursive: true });

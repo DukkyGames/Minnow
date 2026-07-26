@@ -29,7 +29,10 @@ describe('worktree allowlist', () => {
   let localWt;
 
   before(async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-wt-allow-'));
+    // realpath: on Windows CI os.tmpdir() is an 8.3 short path (C:\Users\RUNNER~1\…)
+    // while `git worktree list` reports the long form. normalizeWorkspacePathKey
+    // only lowercases, so the two forms never match without resolving first.
+    const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-wt-allow-')));
     repoDir = path.join(root, 'repo');
     siblingWt = path.join(root, 'sibling-wt');
     localWt = path.join(repoDir, '.worktrees', 'feature-a');
