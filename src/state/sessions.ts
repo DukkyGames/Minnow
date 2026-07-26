@@ -262,8 +262,28 @@ function isDirtyTrackingVerifierEnabled(): boolean {
   return isViteDevBuild();
 }
 
+/** Snapshot chats for dirty-tracking without reading lazy-unloaded `history`. */
+function chatSnapshotForDirtyShadow(chat: Chat): Record<string, unknown> {
+  if (chat.historyLoaded === false) {
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(chat)) {
+      if (key === 'history') continue;
+      out[key] = (chat as unknown as Record<string, unknown>)[key];
+    }
+    delete out.historyLoaded;
+    delete out.messageCount;
+    return out;
+  }
+  const { historyLoaded: _loaded, messageCount: _count, ...rest } = chat;
+  void _loaded;
+  void _count;
+  return { ...rest };
+}
+
 function captureDirtyTrackingShadow(state: SessionState | null): void {
-  dirtyTrackingShadowChatsJson = state ? JSON.stringify(state.chats) : null;
+  dirtyTrackingShadowChatsJson = state
+    ? JSON.stringify(state.chats.map(chatSnapshotForDirtyShadow))
+    : null;
 }
 
 function clearSessionDirtySets(): void {
@@ -330,7 +350,7 @@ function verifyDirtyChatTracking(state: SessionState): boolean {
   for (const chat of state.chats) {
     const prev = shadowById.get(chat.id);
     if (prev === undefined) continue; // new chats are marked via touchChat on create
-    const next = JSON.stringify(chat);
+    const next = JSON.stringify(chatSnapshotForDirtyShadow(chat));
     if (prev !== next && !dirtyChatIds.has(chat.id)) {
       missed = true;
       console.warn(
@@ -1817,6 +1837,42 @@ export async function flushScheduledSessionSave(): Promise<void> {
   if (inFlightSessionSave) {
     await inFlightSessionSave;
   }
+}
+
+/** True when the chat id was present in the last dirty-tracking baseline (server hydrate). */
+function isChatKnownToServerShadow(chatId: string): boolean {
+  if (!dirtyTrackingShadowChatsJson) return false;
+  try {
+    const shadow = JSON.parse(dirtyTrackingShadowChatsJson) as Array<{ id?: string }>;
+    if (!Array.isArray(shadow)) return false;
+    return shadow.some((row) => row?.id === chatId);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Ensure a chat row is queued for PATCH/PUT before an engine command.
+ * Covers creation paths that forgot touchChat (hero seed, rail new chat, etc.).
+ */
+export async function ensureChatPersistedBeforeEngineCommand(chatId: string): Promise<void> {
+  const id = typeof chatId === 'string' ? chatId.trim() : '';
+  if (!id) return;
+
+  const chat = findChatById(id);
+  if (chat && !isChatKnownToServerShadow(id)) {
+    touchChat(chat);
+    if (sessionState?.activeId === id) {
+      markSessionScalarsDirty();
+    }
+  } else if (chat && !dirtyChatIds.has(id)) {
+    // Chat existed at hydrate but may still be dirty from an unmarked activeId switch.
+    if (sessionState?.activeId === id && !sessionScalarsDirty) {
+      markSessionScalarsDirty();
+    }
+  }
+
+  await flushScheduledSessionSave();
 }
 
 /** Run any debounced session save immediately (unit tests only). */

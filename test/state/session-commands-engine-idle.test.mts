@@ -11,6 +11,7 @@ import {
 } from '../../src/state/session-commands.ts';
 import {
   scheduleSaveSessions,
+  sessionState,
   setSessionStateForTests,
   touchChat,
 } from '../../src/state/sessions.ts';
@@ -115,6 +116,37 @@ describe('waitForEngineTurnIdle', () => {
     touchChat(chat);
     scheduleSaveSessions();
     await dispatchSendMessage({ chatId: chat.id, text: 'hello' });
+    assert.deepEqual(order, ['patch', 'command']);
+  });
+
+  test('dispatchSendMessage upserts client-only chats before POST', async () => {
+    setStorageModeForTests('server');
+    const known = makeChat();
+    installChat(known);
+
+    const orphan = makeChat({ id: 'dddddddd-dddd-dddd-dddd-dddddddddddd' });
+    if (!sessionState) throw new Error('sessionState missing');
+    sessionState.chats.unshift(orphan);
+    sessionState.activeId = orphan.id;
+
+    const order: string[] = [];
+    globalThis.fetch = async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (url.includes('/api/config/sessions') && method === 'PATCH') {
+        order.push('patch');
+        return new Response(JSON.stringify({ rev: 2 }), { status: 200 });
+      }
+      if (url.includes('/api/session/commands') && method === 'POST') {
+        order.push('command');
+        return new Response(JSON.stringify({ rev: 3, accepted: true }), {
+          status: 202,
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    await dispatchSendMessage({ chatId: orphan.id, text: 'hello' });
     assert.deepEqual(order, ['patch', 'command']);
   });
 });

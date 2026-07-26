@@ -22,6 +22,7 @@ import {
   isExpertChat,
   markSessionScalarsDirty,
   newChatId,
+  touchChat,
   rememberActiveChatForApp,
   rememberWorkspaceActiveChat,
   scheduleSaveSessions,
@@ -167,10 +168,12 @@ function createFreshAssistantChat(
   seedNewChatComposerRunTarget(chat);
   state.chats.unshift(chat);
   state.activeId = chat.id;
+  touchChat(chat);
+  markSessionScalarsDirty();
   clearPanelCwdUserOverride();
   syncPanelFromActiveChat({ forceFileTree: true });
   rememberActiveChatForApp(DESKTOP_APP_ID, chat.id);
-  scheduleSaveSessions();
+  scheduleSaveSessions({ chatId: chat.id });
 }
 
 /**

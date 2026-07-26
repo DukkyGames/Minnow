@@ -90,10 +90,9 @@ export async function dispatchSessionCommand(
 export async function dispatchSendMessage(
   payload: SendMessageCommandPayload,
 ): Promise<SessionCommandResult> {
-  // New chats are created client-side with a debounced PATCH — flush first so the
-  // engine can find the chat row before send_message mutates history.
-  const { flushScheduledSessionSave } = await import('./sessions');
-  await flushScheduledSessionSave();
+  // New chats are often created client-side without touchChat — upsert + flush first.
+  const { ensureChatPersistedBeforeEngineCommand } = await import('./sessions');
+  await ensureChatPersistedBeforeEngineCommand(payload.chatId);
   return dispatchSessionCommand({ type: 'send_message', ...payload });
 }
 
