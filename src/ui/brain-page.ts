@@ -131,6 +131,8 @@ async function refreshUsageLine(): Promise<void> {
   const usage = await fetchBrainUsage();
   if (!usage) {
     el.classList.add('hidden');
+    el.removeAttribute('title');
+    el.removeAttribute('aria-label');
     return;
   }
 
@@ -142,11 +144,15 @@ async function refreshUsageLine(): Promise<void> {
 
   if (reads === 0 && writes === 0) {
     el.classList.add('hidden');
+    el.removeAttribute('title');
+    el.removeAttribute('aria-label');
     return;
   }
 
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
-  el.textContent = `This week: ${plural(writes, 'write')} · ${plural(reads, 'read')}`;
+  el.textContent = `${plural(writes, 'write')} · ${plural(reads, 'read')}`;
+  el.setAttribute('title', 'Brain activity this week');
+  el.setAttribute('aria-label', `This week: ${plural(writes, 'write')}, ${plural(reads, 'read')}`);
   el.classList.remove('hidden');
 }
 

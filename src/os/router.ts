@@ -16,7 +16,6 @@ import {
 import { getAppById, isAppId } from './app-registry';
 import { getAppUnavailableReason, isAppAvailable } from './app-preferences';
 import {
-  closeInstance,
   getForegroundAppId,
   getInstanceSnapshot,
   getOsView,
@@ -364,15 +363,8 @@ export function launchApp(appId: AppId, options?: LaunchOptions): void {
     return;
   }
   if (appId === 'scheduler') {
-    const snap = getInstanceSnapshot();
-    const existing = snap.instances.find((i) => i.appId === 'scheduler');
-    if (existing && snap.foregroundId === existing.id && getOsView() === 'desktop') {
-      closeInstance(existing.id);
-      if (window.location.hash.includes('scheduler')) {
-        navigateToDesktop();
-      }
-      return;
-    }
+    void import('./scheduler-side-panel').then((m) => m.toggleSchedulerOverlay());
+    return;
   }
   if (options?.settingsSection) {
     pendingSettingsSection = options.settingsSection;

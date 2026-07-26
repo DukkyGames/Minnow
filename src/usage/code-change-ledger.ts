@@ -10,6 +10,7 @@ import type {
   CodeChangeStats,
   SessionState,
   ToolResultMessage,
+  TurnRunRecord,
 } from '../types';
 
 /** Per-file rollup for the code-change strip panel. */
@@ -137,6 +138,46 @@ function pathsFromCodeChange(stats: CodeChangeStats): string[] {
   if (stats.path) return [stats.path];
   if (stats.paths?.length) return stats.paths;
   return [];
+}
+
+/** True when a persisted tool row recorded line or path mutations. */
+function toolMessageHasCodeChange(msg: ToolResultMessage): boolean {
+  const codeChange = msg.codeChange;
+  if (!codeChange) return false;
+  return (
+    codeChange.additions > 0 ||
+    codeChange.deletions > 0 ||
+    pathsFromCodeChange(codeChange).length > 0
+  );
+}
+
+/**
+ * Whether an agent turn produced file mutations (tool codeChange rows in its output span).
+ * Used to show strip Undo only when rewinding would touch the working tree.
+ */
+export function runHadCodeChanges(chat: Chat, run: TurnRunRecord): boolean {
+  const start = run.outputHistoryStart;
+  const end = run.outputHistoryEnd;
+  if (start != null && end != null && end >= start) {
+    for (let i = start; i <= end; i++) {
+      const msg = chat.history[i];
+      if (msg?.role === 'tool' && toolMessageHasCodeChange(msg as ToolResultMessage)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Fallback when output indices were not persisted (legacy sessions).
+  const fork = run.forkHistoryIndex;
+  for (let i = fork + 1; i < chat.history.length; i++) {
+    const msg = chat.history[i];
+    if (msg.role === 'user') break;
+    if (msg.role === 'tool' && toolMessageHasCodeChange(msg as ToolResultMessage)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
