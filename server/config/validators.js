@@ -2068,6 +2068,16 @@ export function mergeConfigMeta(existing, patch) {
         .../** @type {Record<string, unknown>} */ (w.devServerByPath),
       };
     }
+    if (w.devServersByPath && typeof w.devServersByPath === 'object') {
+      const prev =
+        existingWorkspace.devServersByPath && typeof existingWorkspace.devServersByPath === 'object'
+          ? /** @type {Record<string, unknown>} */ (existingWorkspace.devServersByPath)
+          : {};
+      existingWorkspace.devServersByPath = {
+        ...prev,
+        .../** @type {Record<string, unknown>} */ (w.devServersByPath),
+      };
+    }
     base.workspace = existingWorkspace;
   }
 

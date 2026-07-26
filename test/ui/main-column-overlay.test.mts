@@ -58,4 +58,24 @@ describe('main-column-overlay', () => {
     stripMainColumnOverlayClasses();
     assert.equal(isMainColumnOverlaySuppressingChatDom(), false);
   });
+
+  test('isMainColumnOverlaySuppressingChatDom is true when dev server screen root is mounted', () => {
+    setupDom();
+    stripMainColumnOverlayClasses();
+    const root = document.createElement('div');
+    root.id = 'devServerScreenRoot';
+    document.getElementById('chatArea')!.appendChild(root);
+    assert.equal(isMainColumnOverlaySuppressingChatDom(), true);
+  });
+
+  test('stripMainColumnOverlayClasses removes chat-area--dev-server', () => {
+    setupDom();
+    const area = document.getElementById('chatArea')!;
+    const main = document.getElementById('mainColumn')!;
+    area.classList.add('chat-area--dev-server');
+    main.classList.add('main-column--dev-server');
+    stripMainColumnOverlayClasses();
+    assert.equal(area.classList.contains('chat-area--dev-server'), false);
+    assert.equal(main.classList.contains('main-column--dev-server'), false);
+  });
 });

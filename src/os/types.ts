@@ -72,8 +72,8 @@ export interface LaunchOptions {
   returnToApp?: AppId;
 }
 
-/** Code app sub-routes: instrumentation home vs chat workspace. */
-export type CodeSectionId = 'overview' | 'chat';
+/** Code app sub-routes: instrumentation home, chat workspace, or Dev Servers screen. */
+export type CodeSectionId = 'overview' | 'chat' | 'dev-server';
 
 /** Parsed hash route consumed by the OS shell and page bridge. */
 export interface OsRoute {

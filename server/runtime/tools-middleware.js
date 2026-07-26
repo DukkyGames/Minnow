@@ -120,6 +120,7 @@ import {
   toolStopBackgroundCommand,
   toolStopCommand,
 } from '../dev-server/manager.js';
+import { toolManageDevServers } from '../dev-server/tool-handler.js';
 import { resolveChatContext } from '../workspace/chat-cwd.js';
 import { appendBoardLogLine } from '../orchestrate/board-log-sink.js';
 import { guardCdOutsideWorktree as _guardCdRaw } from '../tools/cwd-guard.js';
@@ -1159,6 +1160,7 @@ const SERVER_TOOL_HANDLERS = {
   stop_command: toolStopCommand,
   start_background_command: toolStartBackgroundCommand,
   stop_background_command: toolStopBackgroundCommand,
+  manage_dev_servers: toolManageDevServers,
   run_javascript: toolRunJavascript,
   run_python: toolRunPython,
   send_notification: toolSendNotification,
