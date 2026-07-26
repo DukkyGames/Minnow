@@ -6,10 +6,10 @@
 import { randomUUID } from 'node:crypto';
 import {
   abortEngineTurn,
-  beginEngineTurn,
   endEngineTurn,
   isEngineTurnActive,
   mutateEngineState,
+  tryBeginEngineTurn,
 } from './engine-api.js';
 import { getSessionRev } from './rev-store.js';
 import { runEngineMainChatTurn } from './loop-loader.js';
@@ -93,31 +93,42 @@ async function handleSendMessage(cmd) {
     return handleEnqueueMessage({ type: 'enqueue_message', chatId, text });
   }
 
+  // Claim before any await so concurrent send_message cannot double-start.
+  const controller = tryBeginEngineTurn(chatId);
+  if (!controller) {
+    return handleEnqueueMessage({ type: 'enqueue_message', chatId, text });
+  }
+
   const historyContent =
     typeof cmd.historyContent === 'string' && cmd.historyContent.trim()
       ? cmd.historyContent
       : text.trim();
 
-  const rev = await mutateEngineState((state) => {
-    const chat = findChatInState(state, chatId);
-    if (!chat) {
-      throw Object.assign(new Error(`Chat not found: ${chatId}`), { statusCode: 404 });
-    }
-    if (!Array.isArray(chat.history)) chat.history = [];
-    chat.history.push({ role: 'user', content: historyContent });
-    chat.updatedAt = Date.now();
-    if (typeof cmd.modelId === 'string' && cmd.modelId.trim()) {
-      chat.modelId = cmd.modelId.trim();
-    }
-    if (typeof cmd.providerId === 'string' && cmd.providerId.trim()) {
-      chat.providerId = cmd.providerId.trim();
-    }
-    // Mark turn in progress for remote clients (mirrors streaming affordance).
-    chat.engineTurnActive = true;
-  });
+  let rev;
+  try {
+    rev = await mutateEngineState((state) => {
+      const chat = findChatInState(state, chatId);
+      if (!chat) {
+        throw Object.assign(new Error(`Chat not found: ${chatId}`), { statusCode: 404 });
+      }
+      if (!Array.isArray(chat.history)) chat.history = [];
+      chat.history.push({ role: 'user', content: historyContent });
+      chat.updatedAt = Date.now();
+      if (typeof cmd.modelId === 'string' && cmd.modelId.trim()) {
+        chat.modelId = cmd.modelId.trim();
+      }
+      if (typeof cmd.providerId === 'string' && cmd.providerId.trim()) {
+        chat.providerId = cmd.providerId.trim();
+      }
+      // Mark turn in progress for remote clients (mirrors streaming affordance).
+      chat.engineTurnActive = true;
+    });
+  } catch (err) {
+    endEngineTurn(chatId, controller);
+    throw err;
+  }
 
   // Fire-and-forget tool loop — HTTP already returned 202 + rev.
-  const controller = beginEngineTurn(chatId);
   void runEngineMainChatTurn({
     chatId,
     signal: controller.signal,

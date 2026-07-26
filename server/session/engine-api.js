@@ -7,6 +7,7 @@
 
 export {
   abortEngineTurn,
+  adoptExternalSessionWrite,
   beginEngineTurn,
   commitEngineState,
   endEngineTurn,
@@ -16,4 +17,5 @@ export {
   isEngineTurnActive,
   mutateEngineState,
   resetSessionEngineForTests,
+  tryBeginEngineTurn,
 } from './engine.js';

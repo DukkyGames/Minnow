@@ -47,6 +47,7 @@ import {
 import { sessionsJsonPath } from './sessions-paths.js';
 import { notifySessionStateWritten } from '../session/publish.js';
 import { getSessionRev } from '../session/rev-store.js';
+import { isServerEngineEnabled } from '../session/flag.js';
 
 /** Best-effort chmod for secret-bearing files on Unix. */
 async function chmodSecretFile(filePath) {
@@ -403,6 +404,10 @@ export async function writeResource(resource, body) {
       await writeConfigJson(key, validated);
       // Phase 0: bump rev + fan out SSE after every sessions write (JSON path).
       notifySessionStateWritten(validated);
+      if (isServerEngineEnabled()) {
+        const { adoptExternalSessionWrite } = await import('../session/engine.js');
+        adoptExternalSessionWrite(validated);
+      }
       return validated;
     }
     await ensureMinnowLayout();
@@ -413,6 +418,10 @@ export async function writeResource(resource, body) {
     writeWholeSessionState(validated, { rawChats });
     // Phase 0: SQLite PUT also publishes so multi-device clients stay in sync.
     notifySessionStateWritten(validated);
+    if (isServerEngineEnabled()) {
+      const { adoptExternalSessionWrite } = await import('../session/engine.js');
+      adoptExternalSessionWrite(validated);
+    }
     return validated;
   }
   if (resource === 'tools') {
@@ -528,6 +537,10 @@ export async function patchResource(resource, body) {
     ? ((await readConfigJson('sessions/state.json')) ?? defaultSessionStateJson())
     : readWholeSessionState();
   const rev = notifySessionStateWritten(state);
+  if (isServerEngineEnabled()) {
+    const { adoptExternalSessionWrite } = await import('../session/engine.js');
+    adoptExternalSessionWrite(state);
+  }
   return { ...result, rev: rev || getSessionRev() };
 }
 

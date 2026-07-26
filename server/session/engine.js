@@ -37,8 +37,34 @@ const activeTurnChatIds = new Set();
 let flushTimer = null;
 const FLUSH_DEBOUNCE_MS = 80;
 
+/**
+ * Bumped whenever in-memory state is replaced or a hard commit starts.
+ * In-flight soft flushes bail when their captured generation is stale.
+ */
+let stateGeneration = 0;
+
+/** Serialize mutate/commit so concurrent commands cannot lose updates. */
+/** @type {Promise<unknown>} */
+let writeChain = Promise.resolve();
+
 /** @type {Promise<void> | null} */
 let bootPromise = null;
+
+/**
+ * Run exclusive engine writes one-at-a-time (mutate + hard commit).
+ * @template T
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+function withEngineWriteLock(fn) {
+  const run = writeChain.then(fn, fn);
+  // Keep the chain alive after failures so later writers still queue.
+  writeChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
 
 /**
  * Load SessionState once (SQLite via sessions-repo) and seed Phase 0 rev cache.
@@ -71,16 +97,29 @@ export function getEngineSessionState() {
   return engineState;
 }
 
+/** Cancel a pending soft flush and invalidate in-flight quiet persists. */
+function invalidateSoftFlush() {
+  if (flushTimer) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
+  stateGeneration += 1;
+}
+
 /**
  * Replace engine state and bump Phase 0 rev + SSE (also persists to disk).
  * @param {unknown} nextState
  * @returns {Promise<number>} new rev
  */
 export async function commitEngineState(nextState) {
-  engineState = nextState;
-  // writeResource validates + persists + notifySessionStateWritten (Phase 0).
-  await writeResource('sessions', nextState);
-  return getSessionRev();
+  return withEngineWriteLock(async () => {
+    // Drop any deferred soft write — hard commit is authoritative for disk.
+    invalidateSoftFlush();
+    engineState = nextState;
+    // writeResource validates + persists + notifySessionStateWritten (Phase 0).
+    await writeResource('sessions', nextState);
+    return getSessionRev();
+  });
 }
 
 /**
@@ -91,31 +130,41 @@ export async function commitEngineState(nextState) {
  * @returns {Promise<number>}
  */
 export async function mutateEngineState(mutator, opts = {}) {
-  await ensureSessionEngineBooted();
-  if (engineState == null || typeof engineState !== 'object') {
-    throw new Error('Session engine has no state');
-  }
-  // Clone so writeResource validation does not mutate mid-flight readers oddly.
-  const next = structuredClone(engineState);
-  mutator(next);
-  engineState = next;
+  return withEngineWriteLock(async () => {
+    await ensureSessionEngineBooted();
+    if (engineState == null || typeof engineState !== 'object') {
+      throw new Error('Session engine has no state');
+    }
+    // Clone so writeResource validation does not mutate mid-flight readers oddly.
+    const next = structuredClone(engineState);
+    mutator(next);
+    engineState = next;
+    stateGeneration += 1;
 
-  if (opts.soft) {
-    // Soft path: publish SSE immediately from memory, debounce disk write.
-    const rev = notifySessionStateWritten(engineState);
-    scheduleSoftFlush();
-    return rev;
-  }
+    if (opts.soft) {
+      // Soft path: publish SSE immediately from memory, debounce disk write.
+      const rev = notifySessionStateWritten(engineState);
+      scheduleSoftFlush();
+      return rev;
+    }
 
-  return commitEngineState(engineState);
+    // Inline hard persist under the same lock (avoid re-entering writeChain).
+    invalidateSoftFlush();
+    await writeResource('sessions', engineState);
+    return getSessionRev();
+  });
 }
 
 /**
  * Persist without bumping rev again (soft path already published via SSE).
+ * Skips the write when a newer mutate/commit superseded this snapshot.
  * @param {unknown} state
+ * @param {number} generation
  */
-async function persistEngineStateQuiet(state) {
+async function persistEngineStateQuiet(state, generation) {
+  if (generation !== stateGeneration || state !== engineState) return;
   const validated = validateSessionState(state);
+  if (generation !== stateGeneration || state !== engineState) return;
   if (useJsonSessionsStore()) {
     await writeConfigJson('sessions/state.json', validated);
     return;
@@ -125,11 +174,12 @@ async function persistEngineStateQuiet(state) {
 
 function scheduleSoftFlush() {
   if (flushTimer) clearTimeout(flushTimer);
+  const generation = stateGeneration;
   flushTimer = setTimeout(() => {
     flushTimer = null;
     const state = engineState;
     if (state == null) return;
-    void persistEngineStateQuiet(state).catch((err) => {
+    void persistEngineStateQuiet(state, generation).catch((err) => {
       console.error('[session-engine] soft flush failed:', err);
     });
   }, FLUSH_DEBOUNCE_MS);
@@ -137,12 +187,33 @@ function scheduleSoftFlush() {
 
 /** Flush any pending soft write immediately (tests / shutdown). */
 export async function flushEngineStateNow() {
-  if (flushTimer) {
-    clearTimeout(flushTimer);
-    flushTimer = null;
-  }
-  if (engineState == null) return getSessionRev();
-  return commitEngineState(engineState);
+  return withEngineWriteLock(async () => {
+    if (flushTimer) {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+    }
+    if (engineState == null) return getSessionRev();
+    invalidateSoftFlush();
+    await writeResource('sessions', engineState);
+    return getSessionRev();
+  });
+}
+
+/**
+ * Adopt a sessions write that bypassed the engine (client PUT/PATCH) so the
+ * in-memory engine blob stays aligned with rev-store + disk while idle.
+ * No-op when the engine is disabled or already holding the same reference.
+ * @param {unknown} state
+ */
+export function adoptExternalSessionWrite(state) {
+  if (!isServerEngineEnabled()) return;
+  if (state == null) return;
+  if (engineState === state) return;
+  // Only adopt when no engine turn is mid-flight — otherwise the turn's next
+  // mutate/commit remains authoritative and will republish.
+  if (activeTurnChatIds.size > 0) return;
+  invalidateSoftFlush();
+  engineState = state;
 }
 
 /**
@@ -154,6 +225,19 @@ export function beginEngineTurn(chatId) {
   if (existing) {
     existing.abort();
   }
+  const controller = new AbortController();
+  turnAbortByChatId.set(chatId, controller);
+  activeTurnChatIds.add(chatId);
+  return controller;
+}
+
+/**
+ * Claim a turn only when none is active (no abort of an existing turn).
+ * @param {string} chatId
+ * @returns {AbortController | null}
+ */
+export function tryBeginEngineTurn(chatId) {
+  if (activeTurnChatIds.has(chatId)) return null;
   const controller = new AbortController();
   turnAbortByChatId.set(chatId, controller);
   activeTurnChatIds.add(chatId);
@@ -217,6 +301,8 @@ export function resetSessionEngineForTests() {
     clearTimeout(flushTimer);
     flushTimer = null;
   }
+  stateGeneration = 0;
+  writeChain = Promise.resolve();
   for (const controller of turnAbortByChatId.values()) {
     try {
       controller.abort();

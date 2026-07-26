@@ -234,4 +234,67 @@ describe('session engine phase 1 (MIN-359)', () => {
     });
     assert.equal(res.status, 400);
   });
+
+  test('concurrent mutates serialize without lost updates', async () => {
+    const put = await httpRequest(baseUrl, 'PUT', '/api/config/sessions', defaultSessionFixture);
+    assert.equal(put.status, 200);
+    await ensureSessionEngineBooted();
+    const chatId = defaultSessionFixture.chats[0].id;
+    const { mutateEngineState, getEngineSessionState } = await import(
+      '../../server/session/engine.js'
+    );
+
+    await Promise.all([
+      mutateEngineState((state) => {
+        const chat = state.chats.find((c) => c.id === chatId);
+        chat.pendingSteerMessage = 'from-a';
+      }),
+      mutateEngineState((state) => {
+        const chat = state.chats.find((c) => c.id === chatId);
+        if (!Array.isArray(chat.pendingMessageQueue)) chat.pendingMessageQueue = [];
+        chat.pendingMessageQueue.push({
+          id: 'q1',
+          text: 'from-b',
+          createdAt: 1,
+        });
+      }),
+    ]);
+
+    const chat = /** @type {any} */ (getEngineSessionState())?.chats?.find((c) => c.id === chatId);
+    assert.equal(chat?.pendingSteerMessage, 'from-a');
+    assert.equal(chat?.pendingMessageQueue?.length, 1);
+    assert.equal(chat?.pendingMessageQueue?.[0]?.text, 'from-b');
+  });
+
+  test('hard commit invalidates pending soft flush', async () => {
+    const put = await httpRequest(baseUrl, 'PUT', '/api/config/sessions', defaultSessionFixture);
+    assert.equal(put.status, 200);
+    await ensureSessionEngineBooted();
+    const chatId = defaultSessionFixture.chats[0].id;
+    const {
+      mutateEngineState,
+      flushEngineStateNow,
+      getEngineSessionState,
+    } = await import('../../server/session/engine.js');
+
+    await mutateEngineState((state) => {
+      const chat = state.chats.find((c) => c.id === chatId);
+      chat.currentGenerationId = 'gen-soft';
+    }, { soft: true });
+
+    await mutateEngineState((state) => {
+      const chat = state.chats.find((c) => c.id === chatId);
+      chat.currentGenerationId = undefined;
+      chat.engineTurnActive = false;
+      chat.history.push({ role: 'assistant', content: 'final' });
+    });
+
+    // Soft debounce window — hard path must have cancelled the quiet rewrite.
+    await new Promise((r) => setTimeout(r, 120));
+    await flushEngineStateNow();
+
+    const chat = /** @type {any} */ (getEngineSessionState())?.chats?.find((c) => c.id === chatId);
+    assert.equal(chat?.currentGenerationId, undefined);
+    assert.ok(chat?.history?.some((m) => m.content === 'final'));
+  });
 });
