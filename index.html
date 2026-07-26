@@ -1192,25 +1192,26 @@
             </div>
           </div>
           <p id="brainGraphDenseNote" class="brain-muted brain-graph-dense brain-overlay-card hidden">Dense graph: showing a capped subset. Use search to focus.</p>
-          <aside id="brainGraphTreePanel" class="brain-graph-tree-panel brain-overlay-card">
-            <div class="brain-graph-tree-head">
-              <h3 class="brain-section-subtitle">Pages</h3>
-              <button type="button" class="brain-action-btn brain-graph-tree-toggle icon-btn" id="brainGraphTreeToggle" aria-expanded="true" aria-label="Collapse tree panel">
-                <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
-              </button>
-            </div>
-            <div id="brainGraphTree" class="brain-graph-tree-mount" aria-label="Page tree"></div>
-          </aside>
-          <div id="brainGraphTreeOnly" class="brain-graph-tree-only brain-overlay-card hidden" aria-label="Tree layout"></div>
-          <aside id="brainGraphLegend" class="brain-graph-readout brain-overlay-card" aria-label="Graph readout">
-            <div class="brain-graph-readout__head">
-              <h3 class="brain-section-subtitle">Structure</h3>
-              <button type="button" class="brain-action-btn brain-graph-readout__toggle icon-btn" id="brainGraphReadoutToggle" aria-expanded="true" aria-label="Collapse structure panel">
-                <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-              </button>
-            </div>
-            <div class="brain-graph-readout__body" id="brainGraphReadoutBody"></div>
-          </aside>
+          <div class="brain-graph-sidebar">
+            <aside id="brainGraphTreePanel" class="brain-graph-tree-panel brain-overlay-card">
+              <div class="brain-graph-tree-head">
+                <h3 class="brain-section-subtitle">Pages</h3>
+                <button type="button" class="brain-action-btn brain-graph-tree-toggle icon-btn" id="brainGraphTreeToggle" aria-expanded="true" aria-label="Collapse page tree">
+                  <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                </button>
+              </div>
+              <div id="brainGraphTree" class="brain-graph-tree-mount" aria-label="Page tree"></div>
+            </aside>
+            <aside id="brainGraphLegend" class="brain-graph-readout brain-overlay-card" aria-label="Graph readout">
+              <div class="brain-graph-readout__head">
+                <h3 class="brain-section-subtitle">Structure</h3>
+                <button type="button" class="brain-action-btn brain-graph-readout__toggle icon-btn" id="brainGraphReadoutToggle" aria-expanded="true" aria-label="Collapse structure panel">
+                  <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                </button>
+              </div>
+              <div class="brain-graph-readout__body" id="brainGraphReadoutBody"></div>
+            </aside>
+          </div>
           <div id="brainGraphFirstRun" class="brain-graph-hint brain-overlay-card hidden">
             <p>Hover a node to trace its relations. Click to inspect, double-click to focus the neighborhood, drag to pin. Bigger nodes have more connections.</p>
             <button type="button" class="brain-action-btn" id="brainGraphDismissHint">Got it</button>

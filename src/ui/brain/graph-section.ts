@@ -42,7 +42,7 @@ const mutedKinds = new Set<GraphEmphasisKey>();
 let bindingsDone = false;
 let firstRunHint = true;
 let overlayOffsetObserver: ResizeObserver | null = null;
-let treeLayoutObserver: ResizeObserver | null = null;
+let sidebarObserver: ResizeObserver | null = null;
 
 /** Deferred layout sync for ResizeObserver callbacks (avoids observer feedback loops). */
 const scheduleGraphLayoutSync = scheduleAnimationFrame(() => {
@@ -61,7 +61,6 @@ function syncGraphOverlayOffsets(): void {
   const below = pad + toolbar.getBoundingClientRect().height + gap;
   root.style.setProperty('--brain-graph-below-toolbar', `${Math.ceil(below)}px`);
   syncGraphViewportInsets();
-  syncGraphTreePanelSizing();
 }
 
 /**
@@ -86,49 +85,10 @@ function syncGraphViewportInsets(): void {
 
   graphApi.setViewportInsets({
     top: overlap('.brain-graph-toolbar', 'top'),
-    left: Math.max(overlap('#brainGraphTreePanel', 'left'), overlap('#brainGraphLegend', 'left')),
+    left: overlap('.brain-graph-sidebar', 'left'),
     right: overlap('#brainInspector.is-open', 'right'),
     bottom: 0,
   });
-}
-
-/** Size the tree panel to its content while preserving space for the bottom legend. */
-function syncGraphTreePanelSizing(): void {
-  const stageEl = document.getElementById('brainGraphStage');
-  const panelEl = document.getElementById('brainGraphTreePanel');
-  const treeMount = document.getElementById('brainGraphTree');
-  const legendEl = document.getElementById('brainGraphLegend');
-  if (!stageEl || !panelEl || !treeMount || !legendEl) return;
-
-  if (panelEl.classList.contains('is-collapsed')) {
-    panelEl.style.removeProperty('--brain-graph-tree-max-height');
-    panelEl.style.removeProperty('--brain-graph-tree-scroll-max-height');
-    treeMount.style.removeProperty('height');
-    return;
-  }
-
-  const stageRect = stageEl.getBoundingClientRect();
-  const panelRect = panelEl.getBoundingClientRect();
-  const legendRect = legendEl.getBoundingClientRect();
-  const styles = getComputedStyle(stageEl);
-  const overlayPad = Number.parseFloat(styles.getPropertyValue('--brain-graph-overlay-pad')) || 12;
-  const overlayGap = Number.parseFloat(styles.getPropertyValue('--brain-graph-overlay-gap')) || 10;
-
-  // Keep the panel inside the stage and reserve a gap above the legend card.
-  const legendTop = legendRect.height > 0 ? legendRect.top : stageRect.bottom - overlayPad;
-  const bottomLimit = Math.min(stageRect.bottom - overlayPad, legendTop - overlayGap);
-  const availablePanelHeight = Math.max(0, Math.floor(bottomLimit - panelRect.top));
-
-  const headEl = panelEl.querySelector('.brain-graph-tree-head') as HTMLElement | null;
-  const headHeight = headEl?.offsetHeight ?? 0;
-  const panelChromeHeight = Math.max(0, panelEl.offsetHeight - headHeight - treeMount.offsetHeight);
-  const availableTreeHeight = Math.max(0, availablePanelHeight - headHeight - panelChromeHeight);
-  const desiredTreeHeight = treeMount.scrollHeight;
-  const nextTreeHeight = Math.max(0, Math.min(desiredTreeHeight, availableTreeHeight));
-
-  panelEl.style.setProperty('--brain-graph-tree-max-height', `${availablePanelHeight}px`);
-  panelEl.style.setProperty('--brain-graph-tree-scroll-max-height', `${availableTreeHeight}px`);
-  treeMount.style.height = `${nextTreeHeight}px`;
 }
 
 function bindOverlayOffsetObserver(): void {
@@ -139,14 +99,13 @@ function bindOverlayOffsetObserver(): void {
   overlayOffsetObserver.observe(toolbar);
 }
 
-function bindTreeLayoutObserver(): void {
-  if (treeLayoutObserver) return;
-  const stageEl = document.getElementById('brainGraphStage');
-  const legendEl = document.getElementById('brainGraphLegend');
-  if (!stageEl || !legendEl) return;
-  treeLayoutObserver = new ResizeObserver(scheduleGraphLayoutSync);
-  treeLayoutObserver.observe(stageEl);
-  treeLayoutObserver.observe(legendEl);
+/** Re-measure insets when the rail changes width (tree layout, collapse). */
+function bindSidebarObserver(): void {
+  if (sidebarObserver) return;
+  const sidebar = document.querySelector('.brain-graph-sidebar');
+  if (!sidebar) return;
+  sidebarObserver = new ResizeObserver(scheduleGraphLayoutSync);
+  sidebarObserver.observe(sidebar);
 }
 
 /**
@@ -267,10 +226,12 @@ function bindGraphToolbar(): void {
   const treeToggle = document.getElementById('brainGraphTreeToggle');
   treeToggle?.addEventListener('click', () => {
     const panel = document.getElementById('brainGraphTreePanel');
-    const collapsed = panel?.classList.toggle('is-collapsed');
+    const collapsed = panel?.classList.toggle('is-collapsed') ?? false;
     treeToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-    syncGraphOverlayOffsets();
-    syncGraphTreePanelSizing();
+    treeToggle.setAttribute(
+      'aria-label',
+      collapsed ? 'Expand page tree' : 'Collapse page tree',
+    );
   });
 
   const readoutToggle = document.getElementById('brainGraphReadoutToggle');
@@ -283,7 +244,6 @@ function bindGraphToolbar(): void {
       collapsed ? 'Expand structure panel' : 'Collapse structure panel',
     );
     syncGraphViewportInsets();
-    syncGraphTreePanelSizing();
   };
   readoutToggle?.addEventListener('click', () => {
     const collapsed = !readoutPanel?.classList.contains('is-collapsed');
@@ -304,13 +264,21 @@ function bindGraphToolbar(): void {
   syncGraphOverlayOffsets();
 }
 
+/**
+ * Tree layout hides the canvas and widens the left rail; the page tree in the
+ * rail *is* the tree view, so there is only ever one tree rendered.
+ */
 function syncLayoutVisibility(): void {
   const canvasWrap = document.getElementById('brainGraphCanvasWrap');
-  const treeOnly = document.getElementById('brainGraphTreeOnly');
+  const stage = document.getElementById('brainGraphStage');
+  const treePanel = document.getElementById('brainGraphTreePanel');
   const treeMode = layoutMode === 'tree';
   canvasWrap?.classList.toggle('hidden', treeMode);
   canvasWrap?.setAttribute('aria-hidden', treeMode ? 'true' : 'false');
-  treeOnly?.classList.toggle('hidden', !treeMode);
+  stage?.classList.toggle('is-tree-layout', treeMode);
+  // A collapsed tree would leave tree layout showing nothing at all.
+  if (treeMode) treePanel?.classList.remove('is-collapsed');
+  syncGraphViewportInsets();
 }
 
 async function refreshGraphCanvas(): Promise<void> {
@@ -360,7 +328,6 @@ async function refreshGraphCanvas(): Promise<void> {
     statsEl.classList.toggle('hidden', !narrowed);
   }
   syncGraphReadout(graphApi.getStats());
-  syncGraphTreePanelSizing();
   denseEl?.classList.toggle('hidden', !data.truncated);
   syncGraphOverlayOffsets();
 
@@ -480,7 +447,6 @@ function syncGraphReadout(stats: ForceGraphStats): void {
     legend.append(btn);
   }
   body.append(legend);
-  syncGraphTreePanelSizing();
 }
 
 async function openInspector(relPath: string): Promise<void> {
@@ -547,7 +513,6 @@ function renderGraphTree(mount: HTMLElement, tree: Record<string, unknown>): voi
           const open = childList.hidden;
           childList.hidden = !open;
           folderBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-          syncGraphTreePanelSizing();
         });
         item.append(folderBtn, childList);
         parent.append(item);
@@ -557,7 +522,6 @@ function renderGraphTree(mount: HTMLElement, tree: Record<string, unknown>): voi
 
   appendNodes(list, tree);
   mount.append(list);
-  syncGraphTreePanelSizing();
 }
 
 function syncTreeSelection(): void {
@@ -584,12 +548,11 @@ export async function renderGraphSection(): Promise<void> {
   bindGraphToolbar();
 
   const treeMount = document.getElementById('brainGraphTree');
-  const treeOnlyMount = document.getElementById('brainGraphTreeOnly');
   const offlineEl = document.getElementById('brainGraphOffline');
   const emptyEl = document.getElementById('brainGraphEmpty');
   const stageEl = document.getElementById('brainGraphStage');
   if (!treeMount || !stageEl) return;
-  bindTreeLayoutObserver();
+  bindSidebarObserver();
 
   const tree = await fetchBrainTree();
   const online = tree !== null;
@@ -598,7 +561,6 @@ export async function renderGraphSection(): Promise<void> {
 
   if (!online) {
     treeMount.replaceChildren();
-    treeOnlyMount?.replaceChildren();
     graphApi?.destroy();
     graphApi = null;
     emptyEl?.classList.add('hidden');
@@ -611,7 +573,6 @@ export async function renderGraphSection(): Promise<void> {
     readShowArchivesPref(),
   ) as Record<string, unknown>;
   renderGraphTree(treeMount, treeRecord);
-  if (treeOnlyMount) renderGraphTree(treeOnlyMount, treeRecord);
 
   const hasPages = catalogPages.length > 0;
   emptyEl?.classList.toggle('hidden', hasPages);
@@ -639,7 +600,6 @@ export async function renderGraphSection(): Promise<void> {
   await refreshGraphCanvas();
   syncLayoutVisibility();
   syncGraphOverlayOffsets();
-  syncGraphTreePanelSizing();
   showFirstRunHint();
 }
 

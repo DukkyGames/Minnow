@@ -109,6 +109,56 @@ const MUTED_EMPHASIS = 0.08;
 /** A node needs this many edges before it earns a permanent label. */
 const HUB_LABEL_DEGREE = 3;
 
+/**
+ * Alpha ramp for the ambient field, as [offset, alpha] pairs.
+ *
+ * A plain two-stop gradient falls off linearly, and the kink where it hits zero
+ * shows up as a visible ring. These stops trace a smooth curve that flattens
+ * into the background instead of meeting it at an angle.
+ */
+/** Field opacity at the centre — depth cue, not a wash. */
+const FIELD_PEAK_ALPHA = 0.085;
+
+const FIELD_STOPS: ReadonlyArray<readonly [number, number]> = [
+  [0, 1],
+  [0.16, 0.79],
+  [0.32, 0.56],
+  [0.48, 0.35],
+  [0.64, 0.19],
+  [0.78, 0.087],
+  [0.9, 0.027],
+  [1, 0],
+];
+
+interface Rgb {
+  r: number;
+  g: number;
+  b: number;
+}
+
+/** Swamp accent, used only if a theme colour fails to resolve. */
+const FALLBACK_ACCENT: Rgb = { r: 158, g: 197, b: 167 };
+
+/**
+ * Flatten any CSS colour — including the `color-mix` theme tokens — to sRGB
+ * channels, by borrowing an element's computed style.
+ *
+ * Canvas gradients need a real alpha per stop, which a token string can't give.
+ */
+function resolveRgb(host: HTMLElement, value: string): Rgb {
+  const previous = host.style.color;
+  host.style.color = '';
+  host.style.color = value;
+  const computed = host.style.color ? getComputedStyle(host).color : '';
+  host.style.color = previous;
+  if (!computed.startsWith('rgb')) return FALLBACK_ACCENT;
+  const parts = computed.match(/-?[\d.]+/g);
+  if (!parts || parts.length < 3) return FALLBACK_ACCENT;
+  return { r: Number(parts[0]), g: Number(parts[1]), b: Number(parts[2]) };
+}
+
+const rgba = (c: Rgb, alpha: number): string => `rgba(${c.r}, ${c.g}, ${c.b}, ${alpha})`;
+
 /** Read Brain graph theme tokens from the document root. */
 export function readForceGraphTheme(root: HTMLElement = document.documentElement): ForceGraphTheme {
   const style = getComputedStyle(root);
@@ -140,6 +190,7 @@ export function readForceGraphTheme(root: HTMLElement = document.documentElement
     edgeTag: pick('--brain-edge-tag', edge),
     label: pick('--mn-fg', 'oklch(32% 0.02 250)'),
     labelMuted: pick('--mn-fg-muted', 'oklch(52% 0.02 250)'),
+    accent: pick('--mn-accent', '#9ec5a7'),
     glow: pick('--brain-glow', 'oklch(55% 0.12 250 / 0.35)'),
     grid: pick('--brain-grid', pick('--mn-fg-subtle', 'oklch(60% 0.02 250)')),
   };
@@ -168,6 +219,7 @@ export function createForceGraph(
   if (!ctx) throw new Error('Canvas 2d context unavailable');
 
   let theme = readForceGraphTheme();
+  let accentRgb = resolveRgb(canvas, theme.accent);
   let nodes: SimNode[] = [];
   let edges: SimEdge[] = [];
   let nodeById = new Map<string, SimNode>();
@@ -348,12 +400,13 @@ export function createForceGraph(
     ctx.fillStyle = theme.stageBg;
     ctx.fillRect(0, 0, w, h);
 
-    const radius = Math.max(w, h) * 0.75;
+    // Reaches past the far corner, so the ramp never terminates on screen.
+    const radius = Math.hypot(w, h) * 0.85;
     const field = ctx.createRadialGradient(w / 2, h * 0.45, 0, w / 2, h * 0.45, radius);
-    field.addColorStop(0, theme.glow);
-    field.addColorStop(1, 'transparent');
+    for (const [offset, alpha] of FIELD_STOPS) {
+      field.addColorStop(offset, rgba(accentRgb, alpha * FIELD_PEAK_ALPHA));
+    }
     ctx.save();
-    ctx.globalAlpha = 0.12;
     ctx.fillStyle = field;
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
@@ -842,6 +895,7 @@ export function createForceGraph(
 
   const themeObserver = new MutationObserver(() => {
     theme = readForceGraphTheme();
+    accentRgb = resolveRgb(canvas, theme.accent);
   });
   themeObserver.observe(document.documentElement, {
     attributes: true,

@@ -61,6 +61,8 @@ export interface ForceGraphTheme {
   edgeTag: string;
   label: string;
   labelMuted: string;
+  /** Raw family accent, flattened to sRGB for gradient stops. */
+  accent: string;
   glow: string;
   /** Ambient background lattice dots. */
   grid: string;
