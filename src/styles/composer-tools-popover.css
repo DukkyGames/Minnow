@@ -1,5 +1,20 @@
 /* Composer tools button + permissions popover (feature 28) */
 
+/* Popover opens above the button; escape overflow clipping on composer toolbars (MIN-503). */
+.composer-controls:has(.composer-tools-popover:not(.hidden)) {
+  overflow: visible;
+  position: relative;
+  z-index: 30;
+}
+
+.composer-controls__trail:has(.composer-tools-popover:not(.hidden)) {
+  overflow: visible;
+}
+
+.composer-tools-anchor:has(.composer-tools-popover:not(.hidden)) {
+  z-index: 10;
+}
+
 .composer-tools-anchor {
   position: relative;
   flex-shrink: 0;

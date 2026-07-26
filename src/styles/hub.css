@@ -185,6 +185,21 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
   z-index: 10;
 }
 
+/* Tools permissions popover opens above the trail — same overflow escape as context ring */
+.input-bar--hub .composer-controls:has(.composer-tools-popover:not(.hidden)) {
+  overflow: visible;
+  position: relative;
+  z-index: 30;
+}
+
+.input-bar--hub .composer-controls__trail:has(.composer-tools-popover:not(.hidden)) {
+  overflow: visible;
+}
+
+.input-bar--hub .composer-tools-anchor:has(.composer-tools-popover:not(.hidden)) {
+  z-index: 10;
+}
+
 .input-bar--hub .mode-segment-wrap--plan.is-submenu-open {
   z-index: 30;
 }
