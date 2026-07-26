@@ -352,4 +352,50 @@ describe('session engine phase 3 controller (MIN-361)', () => {
     assert.equal(res.status, 503);
     process.env.MINNOW_SERVER_ENGINE = '1';
   });
+
+  test('client PUT preserves engine liveSubAgentRuns in memory and SSE cache', async () => {
+    const { getCachedSessionState } = await import('../../server/session/rev-store.js');
+    const state = structuredClone(defaultSessionFixture);
+    const chatId = state.chats[0].id;
+    await httpRequest(baseUrl, 'PUT', '/api/config/sessions', state);
+    await ensureSessionEngineBooted();
+
+    const { bootEngineControllerOnStart } = await import(
+      '../../server/session/controller-loader.js'
+    );
+    await bootEngineControllerOnStart();
+
+    setSubAgentRunnerFactory(() => createMockSubAgentRunner({ delayMs: 5_000 }));
+
+    const spawn = await httpRequestWithHeaders(baseUrl, 'POST', '/api/session/commands', {
+      type: 'spawn_sub_agent',
+      agentType: 'explore',
+      task: 'survive client put',
+      wait: false,
+      parentChatId: chatId,
+    });
+    assert.equal(spawn.status, 202, JSON.stringify(spawn.json));
+    await flushLiveSubAgentPublishForTests();
+
+    // Client durable write omits liveSubAgentRuns (sessionStateForSessionsWire).
+    const putBody = structuredClone(defaultSessionFixture);
+    putBody.chats[0].title = 'after-put';
+    const put = await httpRequest(baseUrl, 'PUT', '/api/config/sessions', putBody);
+    assert.equal(put.status, 200, JSON.stringify(put.json));
+
+    const engineState = getEngineSessionState();
+    assert.ok(
+      (engineState.liveSubAgentRuns ?? []).some(
+        (r) => r.runId === 'run-phase3-fixed-001' && r.status === 'running',
+      ),
+      `engine wiped live slice: ${JSON.stringify(engineState.liveSubAgentRuns)}`,
+    );
+
+    const cached = getCachedSessionState();
+    assert.ok(
+      Array.isArray(cached?.liveSubAgentRuns) &&
+        cached.liveSubAgentRuns.some((r) => r.runId === 'run-phase3-fixed-001'),
+      `SSE cache missing live slice after PUT: ${JSON.stringify(cached?.liveSubAgentRuns)}`,
+    );
+  });
 });

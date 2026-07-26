@@ -177,7 +177,22 @@ export function setSessionRev(rev: number): void {
  * Full-state replace: mark histories loaded so lazy-history clients stay consistent.
  */
 export function applyRemoteSessionState(raw: unknown): void {
+  // Durable PUTs/PATCHes omit ephemeral liveSubAgentRuns. Preserve the last known
+  // slice unless the remote payload explicitly includes the field (incl. []).
+  const prevLive = sessionState?.liveSubAgentRuns;
+  const remoteOmitsLive =
+    raw != null &&
+    typeof raw === 'object' &&
+    !Object.prototype.hasOwnProperty.call(raw, 'liveSubAgentRuns');
+
   sessionState = parseSessionStateFromJson(raw as RawSessionJson);
+  if (
+    remoteOmitsLive &&
+    sessionState.liveSubAgentRuns == null &&
+    Array.isArray(prevLive)
+  ) {
+    sessionState.liveSubAgentRuns = prevLive;
+  }
   markAllHistoriesLoaded(sessionState.chats);
   // Remote replace invalidates local dirty sets — next save should full-PUT.
   clearSessionDirtySets();

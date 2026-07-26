@@ -59,15 +59,17 @@ export async function applyControllerSessionCommand(
   }
 
   if (cmd.type === 'spawn_sub_agent') {
+    // Accept camelCase + snake_case aliases from tools / remote clients.
+    const raw = cmd as Record<string, unknown>;
     const agentType =
-      typeof (cmd as { agentType?: string }).agentType === 'string'
-        ? (cmd as { agentType: string }).agentType.trim()
-        : typeof (cmd as { agent_type?: string }).agent_type === 'string'
-          ? (cmd as { agent_type: string }).agent_type.trim()
-          : typeof (cmd as { subAgentType?: string }).subAgentType === 'string'
-            ? (cmd as { subAgentType: string }).subAgentType.trim()
+      typeof raw.agentType === 'string'
+        ? raw.agentType.trim()
+        : typeof raw.agent_type === 'string'
+          ? raw.agent_type.trim()
+          : typeof raw.subAgentType === 'string'
+            ? raw.subAgentType.trim()
             : '';
-    const task = typeof cmd.task === 'string' ? cmd.task.trim() : '';
+    const task = typeof raw.task === 'string' ? raw.task.trim() : '';
     if (!agentType) {
       throw Object.assign(new Error('agentType is required'), { statusCode: 400 });
     }
@@ -75,38 +77,35 @@ export async function applyControllerSessionCommand(
       throw Object.assign(new Error('task is required'), { statusCode: 400 });
     }
 
-    const categoryRaw =
-      typeof (cmd as { category?: string }).category === 'string'
-        ? (cmd as { category: string }).category.trim()
-        : '';
+    const categoryRaw = typeof raw.category === 'string' ? raw.category.trim() : '';
     const category = BOARD_CATEGORIES.has(categoryRaw as BoardCategory)
       ? (categoryRaw as BoardCategory)
       : undefined;
 
-    const wantWait = (cmd as { wait?: boolean }).wait === true;
+    const wantWait = raw.wait === true;
     const input: SpawnSubAgentInput = {
       type: agentType,
       task,
       // Always non-blocking here — wait in-process after 202 payload is built when asked.
       wait: false,
-      parentChatId: (cmd as { parentChatId?: string | null }).parentChatId ?? null,
-      parentTurnId: (cmd as { parentTurnId?: string | null }).parentTurnId ?? null,
+      parentChatId:
+        typeof raw.parentChatId === 'string' || raw.parentChatId === null
+          ? (raw.parentChatId as string | null)
+          : null,
+      parentTurnId:
+        typeof raw.parentTurnId === 'string' || raw.parentTurnId === null
+          ? (raw.parentTurnId as string | null)
+          : null,
       parentToolCallId:
-        (cmd as { parentToolCallId?: string | null }).parentToolCallId ?? null,
-      modeId: (cmd as { modeId?: string }).modeId,
+        typeof raw.parentToolCallId === 'string' || raw.parentToolCallId === null
+          ? (raw.parentToolCallId as string | null)
+          : null,
+      modeId: typeof raw.modeId === 'string' ? raw.modeId : undefined,
       ...(category ? { category } : {}),
-      ...((cmd as { boardTaskId?: string }).boardTaskId
-        ? { boardTaskId: (cmd as { boardTaskId: string }).boardTaskId }
-        : {}),
-      ...((cmd as { providerId?: string }).providerId
-        ? { providerId: (cmd as { providerId: string }).providerId }
-        : {}),
-      ...((cmd as { modelId?: string }).modelId
-        ? { modelId: (cmd as { modelId: string }).modelId }
-        : {}),
-      ...((cmd as { timeoutMs?: number }).timeoutMs !== undefined
-        ? { timeoutMs: (cmd as { timeoutMs: number }).timeoutMs }
-        : {}),
+      ...(typeof raw.boardTaskId === 'string' ? { boardTaskId: raw.boardTaskId } : {}),
+      ...(typeof raw.providerId === 'string' ? { providerId: raw.providerId } : {}),
+      ...(typeof raw.modelId === 'string' ? { modelId: raw.modelId } : {}),
+      ...(typeof raw.timeoutMs === 'number' ? { timeoutMs: raw.timeoutMs } : {}),
     };
 
     const result = await spawnSubAgent(input);

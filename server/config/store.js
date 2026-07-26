@@ -391,6 +391,50 @@ export async function readResource(resource) {
 }
 
 /**
+ * Durable validate strips ephemeral liveSubAgentRuns. Reattach before SSE/rev-cache
+ * publish so clients do not lose the Phase 3 live slice on PUT/PATCH (MIN-361).
+ * Disk still receives the durable blob only.
+ *
+ * @param {unknown} durable
+ * @param {unknown} [bodyHint] write body that may still carry liveSubAgentRuns
+ * @returns {Promise<unknown>}
+ */
+async function withLiveSubAgentRunsForPublish(durable, bodyHint) {
+  if (!isServerEngineEnabled()) return durable;
+  if (!durable || typeof durable !== 'object') return durable;
+
+  /** @type {unknown[] | undefined} */
+  let live;
+  if (
+    bodyHint &&
+    typeof bodyHint === 'object' &&
+    Array.isArray(/** @type {Record<string, unknown>} */ (bodyHint).liveSubAgentRuns)
+  ) {
+    live = /** @type {unknown[]} */ (
+      /** @type {Record<string, unknown>} */ (bodyHint).liveSubAgentRuns
+    );
+  } else {
+    try {
+      const { getEngineSessionState } = await import('../session/engine.js');
+      const eng = getEngineSessionState();
+      if (
+        eng &&
+        typeof eng === 'object' &&
+        Array.isArray(/** @type {Record<string, unknown>} */ (eng).liveSubAgentRuns)
+      ) {
+        live = /** @type {unknown[]} */ (
+          /** @type {Record<string, unknown>} */ (eng).liveSubAgentRuns
+        );
+      }
+    } catch {
+      /* engine module unavailable in some test harnesses */
+    }
+  }
+  if (live === undefined) return durable;
+  return { .../** @type {object} */ (durable), liveSubAgentRuns: live };
+}
+
+/**
  * @param {string} resource
  * @param {unknown} body
  */
@@ -403,7 +447,8 @@ export async function writeResource(resource, body) {
     if (useJsonSessionsStore()) {
       await writeConfigJson(key, validated);
       // Phase 0: bump rev + fan out SSE after every sessions write (JSON path).
-      notifySessionStateWritten(validated);
+      const publishState = await withLiveSubAgentRunsForPublish(validated, body);
+      notifySessionStateWritten(publishState);
       if (isServerEngineEnabled()) {
         const { adoptExternalSessionWrite } = await import('../session/engine.js');
         adoptExternalSessionWrite(validated);
@@ -417,7 +462,8 @@ export async function writeResource(resource, body) {
         : undefined;
     writeWholeSessionState(validated, { rawChats });
     // Phase 0: SQLite PUT also publishes so multi-device clients stay in sync.
-    notifySessionStateWritten(validated);
+    const publishState = await withLiveSubAgentRunsForPublish(validated, body);
+    notifySessionStateWritten(publishState);
     if (isServerEngineEnabled()) {
       const { adoptExternalSessionWrite } = await import('../session/engine.js');
       adoptExternalSessionWrite(validated);
@@ -536,7 +582,9 @@ export async function patchResource(resource, body) {
   const state = useJsonSessionsStore()
     ? ((await readConfigJson('sessions/state.json')) ?? defaultSessionStateJson())
     : readWholeSessionState();
-  const rev = notifySessionStateWritten(state);
+  // Disk blob lacks liveSubAgentRuns — merge from engine before fan-out (MIN-361).
+  const publishState = await withLiveSubAgentRunsForPublish(state);
+  const rev = notifySessionStateWritten(publishState);
   if (isServerEngineEnabled()) {
     const { adoptExternalSessionWrite } = await import('../session/engine.js');
     adoptExternalSessionWrite(state);
