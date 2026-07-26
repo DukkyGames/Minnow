@@ -26,6 +26,7 @@ import {
   initSchedulerSidePanel,
   isSchedulerSidePanelOpen,
   resetSchedulerSidePanelForTests,
+  toggleSchedulerOverlay,
 } from '../../src/os/scheduler-side-panel.ts';
 import {
   resetWindowManagerForTests,
@@ -92,6 +93,8 @@ describe('scheduler markup contract', () => {
 });
 
 describe('scheduler side panel shell', () => {
+  let fetchMock: typeof fetch;
+
   beforeEach(async () => {
     const { Window } = await import('happy-dom');
     const win = new Window();
@@ -116,9 +119,24 @@ describe('scheduler side panel shell', () => {
     resetSchedulerSidePanelForTests();
     initOsRouter();
     initSchedulerSidePanel();
+    fetchMock = globalThis.fetch;
+    globalThis.fetch = async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/scheduler/jobs')) {
+        return new Response(JSON.stringify({ jobs: [] }), { status: 200 });
+      }
+      if (url.includes('/api/scheduler/runs')) {
+        return new Response(JSON.stringify({ runs: [] }), { status: 200 });
+      }
+      if (url.includes('/api/scheduler/default-workspace')) {
+        return new Response(JSON.stringify({ path: '/tmp' }), { status: 200 });
+      }
+      return fetchMock(input);
+    };
   });
 
   afterEach(() => {
+    globalThis.fetch = fetchMock;
     resetInstancesForTests();
     resetOsRouterForTests();
     resetAppHostForTests();
@@ -127,20 +145,18 @@ describe('scheduler side panel shell', () => {
     resetSchedulerSidePanelForTests();
   });
 
-  test('launchApp(scheduler) keeps desktop view with scheduler foreground', () => {
-    launchApp('scheduler');
-    syncOsRouteFromHashForTests();
+  test('launchApp(scheduler) opens side panel on desktop without leaving desktop view', async () => {
+    await toggleSchedulerOverlay();
     assert.equal(getOsView(), 'desktop');
-    assert.equal(getForegroundAppId(), 'scheduler');
+    assert.equal(isSchedulerSidePanelOpen(), true);
     assert.equal(getPresentationMode('scheduler'), 'sidePanel');
   });
 
-  test('launchApp(scheduler) toggles closed when already foreground', () => {
-    launchApp('scheduler');
-    syncOsRouteFromHashForTests();
-    assert.equal(getForegroundAppId(), 'scheduler');
-    launchApp('scheduler');
-    assert.equal(getForegroundAppId(), null);
+  test('launchApp(scheduler) toggles closed when side panel is already open', async () => {
+    await toggleSchedulerOverlay();
+    assert.equal(isSchedulerSidePanelOpen(), true);
+    await toggleSchedulerOverlay();
+    assert.equal(isSchedulerSidePanelOpen(), false);
     assert.equal(getOsView(), 'desktop');
   });
 
@@ -172,9 +188,18 @@ describe('scheduler side panel shell', () => {
     assert.equal(getOsView(), 'desktop');
   });
 
-  test('scheduler side panel stays open when opening a window app', () => {
-    launchApp('scheduler');
+  test('launchApp(scheduler) from another app keeps that app foreground', async () => {
+    launchApp('settings');
     syncOsRouteFromHashForTests();
+    assert.equal(getForegroundAppId(), 'settings');
+
+    await toggleSchedulerOverlay();
+    assert.equal(getForegroundAppId(), 'settings');
+    assert.equal(isSchedulerSidePanelOpen(), true);
+  });
+
+  test('scheduler side panel stays open when opening a window app', async () => {
+    await toggleSchedulerOverlay();
     assert.equal(isSchedulerSidePanelOpen(), true);
 
     launchApp('settings');
@@ -183,23 +208,22 @@ describe('scheduler side panel shell', () => {
     assert.equal(isSchedulerSidePanelOpen(), true);
   });
 
-  test('scheduler side panel hides when Code is foreground', () => {
-    launchApp('scheduler');
-    syncOsRouteFromHashForTests();
+  test('scheduler side panel stays open when Code is foreground', async () => {
+    await toggleSchedulerOverlay();
     assert.equal(isSchedulerSidePanelOpen(), true);
 
     launchApp('code');
     syncOsRouteFromHashForTests();
     assert.equal(getForegroundAppId(), 'code');
-    assert.equal(isSchedulerSidePanelOpen(), false);
+    assert.equal(getOsView(), 'app');
+    assert.equal(isSchedulerSidePanelOpen(), true);
   });
 
-  test('scheduler side panel closes when scheduler instance is dismissed', () => {
-    launchApp('scheduler');
-    syncOsRouteFromHashForTests();
+  test('scheduler side panel closes when scheduler instance is dismissed', async () => {
+    await toggleSchedulerOverlay();
     assert.equal(isSchedulerSidePanelOpen(), true);
 
-    launchApp('scheduler');
+    await toggleSchedulerOverlay();
     assert.equal(isSchedulerSidePanelOpen(), false);
   });
 });

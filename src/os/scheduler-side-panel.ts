@@ -5,7 +5,7 @@
 import { createAppIcon } from './icons';
 import {
   closeInstance,
-  getForegroundAppId,
+  ensureBackgroundInstance,
   getInstanceSnapshot,
   subscribeInstances,
 } from './instances';
@@ -156,10 +156,24 @@ export function closeSchedulerSidePanel(): void {
 /** Whether the scheduler side panel should stay visible for the current shell state. */
 function shouldShowSchedulerSidePanel(): boolean {
   const snap = getInstanceSnapshot();
-  const hasScheduler = snap.instances.some((i) => i.appId === 'scheduler');
-  if (!hasScheduler) return false;
-  // Fullscreen Code hides desktop chrome — tuck the scheduler rail until Code is dismissed.
-  return getForegroundAppId() !== 'code';
+  return snap.instances.some((i) => i.appId === 'scheduler');
+}
+
+/** Open or close the scheduler rail without leaving the current foreground app. */
+export async function toggleSchedulerOverlay(): Promise<void> {
+  const snap = getInstanceSnapshot();
+  const existing = snap.instances.find((i) => i.appId === 'scheduler');
+
+  if (existing && isSchedulerSidePanelOpen()) {
+    closeInstance(existing.id);
+    return;
+  }
+
+  if (!existing) {
+    ensureBackgroundInstance('scheduler');
+  }
+
+  await openSchedulerSidePanel();
 }
 
 /** Show or hide the panel based on scheduler instance + foreground app (hide only for Code). */

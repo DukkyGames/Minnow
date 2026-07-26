@@ -1,7 +1,8 @@
 /**
  * Code-change strip control: undo the last agent turn (chat rewind + file restore).
  * Lives next to #codeChangeStrip; icon from /icons/undo-alt.svg.
- * Hidden when the workspace is not a git repository — snapshots cannot be captured.
+ * Hidden when the workspace is not a git repository (no snapshots) or the undo
+ * target turn did not mutate files (chat-only rewind stays on message ⋮).
  */
 
 import {
@@ -12,8 +13,10 @@ import {
   undoBlockMessage,
 } from '../chat/undo-turn';
 import { isWorkspaceGitRepo } from '../state/git-workspace';
+import { findRunById } from '../state/runs-store';
 import { getActiveChat } from '../state/sessions';
 import { getWorkspacePath } from '../state/workspace';
+import { runHadCodeChanges } from '../usage/code-change-ledger';
 import { renderChatFromHistory, renderStatsForChat } from './messages';
 import { renderSidebar } from './sidebar';
 import { setStatus } from './status';
@@ -162,7 +165,7 @@ export function initComposerUndo(): void {
 
 /**
  * Refresh visibility / disabled state from the active chat.
- * Hidden entirely when the workspace is not a git repository.
+ * Hidden when the workspace is not a git repository or the undo target had no file edits.
  */
 export function syncComposerUndoFromActiveChat(): void {
   const btn = ensureButton();
@@ -173,19 +176,24 @@ export function syncComposerUndoFromActiveChat(): void {
     const hasGit = await workspaceHasGitRepo();
     if (gen !== syncGen) return;
 
-    // No git → no snapshots → hide the control (do not leave a dead button).
-    if (!hasGit) {
+    const chat = getActiveChat();
+    const eligibility = getUndoEligibility(chat);
+    const target = eligibility.target;
+    const run = target ? findRunById(chat, target.runId) : undefined;
+    const targetChangedFiles =
+      target && run ? runHadCodeChanges(chat, run) : false;
+
+    // No git or no file edits on the undo target → hide (chat-only undo stays on ⋮).
+    if (!hasGit || !targetChangedFiles) {
       btn.hidden = true;
       btn.disabled = true;
       btn.setAttribute('aria-disabled', 'true');
-      btn.dataset.undoReason = 'no_git';
+      btn.dataset.undoReason = !hasGit ? 'no_git' : 'no_file_changes';
       return;
     }
 
     btn.hidden = false;
 
-    const chat = getActiveChat();
-    const eligibility = getUndoEligibility(chat);
     const enabled = eligibility.ok && canUndoTurn(chat);
     btn.disabled = !enabled;
 

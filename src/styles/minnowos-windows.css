@@ -17,6 +17,11 @@
   pointer-events: none;
 }
 
+/* Scheduler rail overlays fullscreen apps (apps layer z-index 45). */
+html.is-scheduler-side-panel-open .mn-os-side-panels-layer {
+  z-index: 50;
+}
+
 .mn-os-window {
   position: absolute;
   display: flex;

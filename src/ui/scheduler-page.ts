@@ -146,10 +146,10 @@ function onHashChange(): void {
   }
 }
 
-/** Menubar shortcut — opens the Scheduler app in MinnowOS. */
+/** Menubar shortcut — opens the Scheduler side panel over the current app. */
 export function openSchedulerFromMenubar(): void {
   if (isOsShellEnabled()) {
-    void import('../os/router').then((m) => m.launchApp('scheduler'));
+    void import('../os/scheduler-side-panel').then((m) => m.toggleSchedulerOverlay());
     return;
   }
   void openScheduler();
