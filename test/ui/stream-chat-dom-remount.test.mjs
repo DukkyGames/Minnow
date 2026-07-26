@@ -10,7 +10,11 @@ const { registerStreamDomRemount, remountStreamDomForChat } = await import(
   '../../src/tools/stream-chat-dom.ts'
 );
 const { setSidebarStreamPhase } = await import('../../src/ui/chat-item-dot.ts');
-const { renderChatFromHistory } = await import('../../src/ui/messages.ts');
+const {
+  renderChatFromHistory,
+  appendStreamingAssistantRow,
+  revealAssistantProseBubble,
+} = await import('../../src/ui/messages.ts');
 const { STREAM_LABEL_GENERATING, STREAM_LABEL_THINKING } = await import(
   '../../src/ui/stream-status.ts'
 );
@@ -165,6 +169,34 @@ describe('stream-chat-dom remount', { concurrency: false }, () => {
       area?.querySelector('.stream-status__label')?.textContent,
       STREAM_LABEL_GENERATING,
     );
+  });
+
+  test('remount replaces a revealed live assistant row (no msg--awaiting-prose)', () => {
+    setupDom();
+    const streaming = createEmptyChatObject('');
+    streaming.id = 'chat-streaming';
+    streaming.history.push({ role: 'user', content: 'hi' });
+
+    setSessionStateForTests({
+      version: 2,
+      activeId: streaming.id,
+      sidebarCollapsed: false,
+      chats: [streaming],
+    });
+
+    appState.setStreaming(true, streaming.id);
+    setSidebarStreamPhase('generating', streaming.id);
+    registerStreamDomRemount(streaming.id, () => {});
+
+    const live = appendStreamingAssistantRow(streaming.id);
+    live.bubble.textContent = 'Partial reply';
+    revealAssistantProseBubble(live.wrap, live.bubble, live.streamStatus);
+
+    remountStreamDomForChat(streaming.id);
+
+    const area = document.getElementById('chatArea');
+    assert.equal(area?.querySelectorAll('.msg.assistant').length, 1);
+    assert.equal(area?.querySelectorAll('.stream-status').length, 1);
   });
 
   test('remount works for engine mirrors without streamingChatIds', async () => {

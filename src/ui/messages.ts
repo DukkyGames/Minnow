@@ -619,9 +619,14 @@ function streamingAssistantRowStub(): StreamingAssistantRow {
   };
 }
 
-/** Drop orphaned in-flight assistant shells before mounting a fresh stream row. */
+/**
+ * Drop live assistant stream shells before mounting a fresh row.
+ * Persisted history rows carry `data-history-index`; in-flight rows from
+ * appendStreamingAssistantRow / engine-stream-mirror do not. After the first
+ * prose token, `msg--awaiting-prose` is removed — remount must still clear those.
+ */
 function removeStaleLiveStreamingRows(mount: HTMLElement): void {
-  for (const row of mount.querySelectorAll('.msg.assistant.msg--awaiting-prose')) {
+  for (const row of mount.querySelectorAll('.msg.assistant:not([data-history-index])')) {
     row.remove();
   }
 }

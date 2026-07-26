@@ -230,6 +230,11 @@ describe('engine-stream-mirror mid-turn reload', { concurrency: false }, () => {
     const area = document.getElementById('chatArea');
     const bubbles = area?.querySelectorAll('.msg.assistant .msg-bubble');
     assert.ok(bubbles && bubbles.length >= 1);
+    assert.equal(
+      area?.querySelectorAll('.msg.assistant').length,
+      1,
+      'history paint + remount must not stack duplicate live assistant rows',
+    );
     const liveBubble = area?.querySelector('.msg--awaiting-prose .msg-bubble, .msg.assistant .msg-bubble');
     assert.ok(liveBubble);
     assert.match(liveBubble?.textContent ?? '', /Hello world/);
