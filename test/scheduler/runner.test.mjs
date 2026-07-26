@@ -8,6 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
+import { closeSessionsDb } from '../../server/config/sessions-db.js';
 import { writeResource } from '../../server/config/store.js';
 import { createJob, getStoredJobById } from '../../server/scheduler/store.js';
 import { listRunsForJob, runStoredJob } from '../../server/scheduler/runner.js';
@@ -24,6 +25,8 @@ describe('scheduler runner', () => {
   });
 
   after(async () => {
+    // runStoredJob → resolveJobRunModel may open sessions.db — close before rm (Windows EBUSY).
+    closeSessionsDb();
     delete process.env.MINNOW_HOME;
     resetMinnowHomeCache();
     await fs.rm(homeDir, { recursive: true, force: true });
