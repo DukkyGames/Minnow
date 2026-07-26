@@ -45,6 +45,9 @@
   line-height: 1.45;
   color: var(--mn-fg-muted);
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: min(40dvh, 18rem);
+  overflow-y: auto;
 }
 
 .app-dialog-panel__input {

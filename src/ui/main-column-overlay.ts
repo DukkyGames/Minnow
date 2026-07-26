@@ -9,6 +9,7 @@ const CHAT_AREA_OVERLAY_CLASSES = [
   'chat-area--orchestrate-hub',
   'chat-area--plan-screen',
   'chat-area--issues',
+  'chat-area--dev-server',
 ] as const;
 
 const MAIN_COLUMN_OVERLAY_CLASSES = [
@@ -16,6 +17,7 @@ const MAIN_COLUMN_OVERLAY_CLASSES = [
   'main-column--code-brain-map',
   'main-column--plan-screen',
   'main-column--issues',
+  'main-column--dev-server',
 ] as const;
 
 /** Remove overlay modifier classes from #chatArea and #mainColumn. */
@@ -43,6 +45,7 @@ export function isMainColumnOverlaySuppressingChatDom(): boolean {
   if (document.getElementById('orchestratePlanScreen')) return true;
   // Issues reparents #issuesView into #chatArea when opened from the Code sidebar.
   if (area.contains(document.getElementById('issuesView'))) return true;
+  if (document.getElementById('devServerScreenRoot')) return true;
   for (const className of CHAT_AREA_OVERLAY_CLASSES) {
     if (area.classList.contains(className)) return true;
   }

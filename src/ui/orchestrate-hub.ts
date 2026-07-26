@@ -572,6 +572,11 @@ export function renderOrchestrateHub(): void {
   if (isCodeOverviewOpen()) {
     closeCodeOverview({ skipNavigate: true, restoreChat: false });
   }
+  void import('./dev-server-screen').then((m) => {
+    if (m.isDevServerScreenOpen()) {
+      m.closeDevServerScreen({ skipNavigate: true, restoreChat: false });
+    }
+  });
   const area = document.getElementById('chatArea');
   if (!area) return;
   if (!hubReturnChatId && sessionState?.activeId) {

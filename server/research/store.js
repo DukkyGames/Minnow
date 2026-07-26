@@ -6,6 +6,10 @@ import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getMinnowHome } from '../config/home.js';
+import {
+  readActiveChatModelBinding,
+  useJsonSessionsStore,
+} from '../config/sessions-repo.js';
 import { readResource } from '../config/store.js';
 import { getActiveProviderId } from '../providers/store.js';
 import { validateProviderId } from '../providers/validate.js';
@@ -147,23 +151,40 @@ export async function resolveResearchModel(overrides = {}) {
   /** @type {{ providerId?: string; modelId?: string }} */
   let chatBinding = {};
   try {
-    const sessions = /** @type {Record<string, unknown>} */ (await readResource('sessions'));
-    const activeId = typeof sessions.activeId === 'string' ? sessions.activeId : '';
-    const chats = Array.isArray(sessions.chats) ? sessions.chats : [];
-    const chat = chats.find(
-      (c) => c && typeof c === 'object' && /** @type {{ id?: string }} */ (c).id === activeId,
-    );
-    if (chat && typeof chat === 'object') {
-      const row = /** @type {{ modelId?: string; providerId?: string }} */ (chat);
-      if (typeof row.modelId === 'string' && row.modelId.trim()) {
-        const decoded = decodeModelSelectKey(row.modelId);
+    if (!useJsonSessionsStore()) {
+      // Narrow SELECT for active chat provider/model; decode stays in this caller.
+      const binding = readActiveChatModelBinding();
+      if (binding && typeof binding.modelId === 'string' && binding.modelId.trim()) {
+        const decoded = decodeModelSelectKey(binding.modelId);
         if (decoded) {
           chatBinding = { providerId: decoded.providerId, modelId: decoded.modelId };
         } else {
           chatBinding = {
-            providerId: typeof row.providerId === 'string' ? row.providerId.trim() : '',
-            modelId: row.modelId.trim(),
+            providerId: typeof binding.providerId === 'string' ? binding.providerId.trim() : '',
+            modelId: binding.modelId.trim(),
           };
+        }
+      }
+    } else {
+      // JSON rollback: whole-blob resource read.
+      const sessions = /** @type {Record<string, unknown>} */ (await readResource('sessions'));
+      const activeId = typeof sessions.activeId === 'string' ? sessions.activeId : '';
+      const chats = Array.isArray(sessions.chats) ? sessions.chats : [];
+      const chat = chats.find(
+        (c) => c && typeof c === 'object' && /** @type {{ id?: string }} */ (c).id === activeId,
+      );
+      if (chat && typeof chat === 'object') {
+        const row = /** @type {{ modelId?: string; providerId?: string }} */ (chat);
+        if (typeof row.modelId === 'string' && row.modelId.trim()) {
+          const decoded = decodeModelSelectKey(row.modelId);
+          if (decoded) {
+            chatBinding = { providerId: decoded.providerId, modelId: decoded.modelId };
+          } else {
+            chatBinding = {
+              providerId: typeof row.providerId === 'string' ? row.providerId.trim() : '',
+              modelId: row.modelId.trim(),
+            };
+          }
         }
       }
     }

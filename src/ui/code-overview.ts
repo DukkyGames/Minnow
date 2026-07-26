@@ -345,6 +345,10 @@ async function closeCompetingMainColumnViews(): Promise<void> {
   teardownCodeBrainMapBeforeChatPaint();
   const { teardownIssuesEmbedBeforeChatPaint } = await import('./issues-page');
   teardownIssuesEmbedBeforeChatPaint();
+  const { closeDevServerScreen, isDevServerScreenOpen } = await import('./dev-server-screen');
+  if (isDevServerScreenOpen()) {
+    closeDevServerScreen({ skipNavigate: true, restoreChat: false });
+  }
   const { teardownHub } = await import('./hub');
   teardownHub();
 }

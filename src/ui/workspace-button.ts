@@ -69,7 +69,8 @@ export async function applyWorkspaceSwitch(info: WorkspaceInfo): Promise<void> {
   const closedCodeMap = teardownCodeBrainMapBeforeChatPaint();
   const { teardownIssuesEmbedBeforeChatPaint } = await import('./issues-page');
   const closedIssuesEmbed = teardownIssuesEmbedBeforeChatPaint();
-  applyWorkspaceScopedSession(info.path, previousPath);
+  // Await history hydrate for the workspace's active chat before any re-paint.
+  await applyWorkspaceScopedSession(info.path, previousPath);
   if (closedCodeMap || closedIssuesEmbed) {
     const { getActiveChat } = await import('../state/sessions');
     const { renderChatFromHistory } = await import('./messages');

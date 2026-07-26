@@ -533,7 +533,7 @@ Most features require `npm start` for full persistence.
 | `webhooks.json` | Webhook subscriptions |
 | `oauth/` | Encrypted OAuth tokens |
 | `memory/` | Memory entries + vectors |
-| `sessions/state.json` | Chats, per-chat model/mode/thinking |
+| `sessions/sessions.db` | Chats, per-chat model/mode/thinking (SQLite; lazy history + FTS search; legacy `state.json` → `.migrated`) |
 | `profiles/` | Setup profile bundles |
 | `prompts/` | Prompt overrides |
 | `evals/` | Eval packs + runs |

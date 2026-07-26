@@ -137,6 +137,7 @@
         "stop_command",
         "start_background_command",
         "stop_background_command",
+        "manage_dev_servers",
         "get_datetime",
         "read_file",
         "list_directory"

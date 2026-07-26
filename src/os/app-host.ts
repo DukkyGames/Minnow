@@ -263,11 +263,19 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
         Boolean(options?.workspacePath?.trim()) ||
         route.codeSection === 'chat';
       const overview = await import('../ui/code-overview');
+      const devServers = await import('../ui/dev-server-screen');
       if (route.codeSection === 'overview' && !wantsChat) {
+        devServers.closeDevServerScreen({ skipNavigate: true, restoreChat: false });
         await overview.openCodeOverview();
         break;
       }
+      if (route.codeSection === 'dev-server' && !wantsChat) {
+        overview.closeCodeOverview({ skipNavigate: true, restoreChat: false });
+        await devServers.openDevServerScreen();
+        break;
+      }
       overview.closeCodeOverview({ skipNavigate: true });
+      devServers.closeDevServerScreen({ skipNavigate: true, restoreChat: false });
       if (options?.chatId?.trim()) {
         const { switchToCodeChat } = await import('./chat-launch');
         await switchToCodeChat(options.chatId);

@@ -2101,6 +2101,9 @@
       <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnCodeBrainMap" aria-label="Code map" title="Code map" aria-pressed="false" aria-expanded="false">
         <img class="icon-img" src="/icons/code-brain-map.png" width="18" height="18" alt="" aria-hidden="true">
       </button>
+      <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnDevServers" aria-label="Dev servers" title="Dev servers" aria-pressed="false">
+        <img class="icon-img" src="/icons/Servers.svg" width="18" height="18" alt="" aria-hidden="true">
+      </button>
       <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnOrchestrate" aria-label="Orchestrate boards" title="Orchestrate boards" aria-pressed="false" aria-expanded="false">
         <img class="icon-img" src="/icons/Orchestrate.svg" width="18" height="18" alt="" aria-hidden="true">
       </button>
@@ -2146,18 +2149,34 @@
       <div id="codeChangePanel" class="code-change-panel" hidden aria-label="Files changed in this chat">
         <div id="codeChangePanelList" class="code-change-panel__list"></div>
       </div>
-      <button
-        type="button"
-        id="codeChangeStrip"
-        class="code-change-strip hidden"
-        aria-live="polite"
-        aria-expanded="false"
-        aria-haspopup="listbox"
-        aria-label="Code changes in this chat"
-      >
-        <span class="code-change-strip__label">Code changes</span>
-        <span id="codeChangeStripStats" class="code-change-strip__stats"></span>
-      </button>
+      <div class="code-change-strip-row">
+        <button
+          type="button"
+          id="codeChangeStrip"
+          class="code-change-strip hidden"
+          aria-live="polite"
+          aria-expanded="false"
+          aria-haspopup="listbox"
+          aria-label="Code changes in this chat"
+        >
+          <span class="code-change-strip__label">Code changes</span>
+          <span id="codeChangeStripStats" class="code-change-strip__stats"></span>
+        </button>
+        <!-- Undo last agent turn — lives with code-change chrome (MIN-409); icon: /icons/undo-alt.svg.
+             Hidden until the workspace is a git repo (snapshots require git). -->
+        <button
+          type="button"
+          id="btnCodeChangeUndo"
+          class="code-change-strip__undo"
+          aria-label="Undo last agent turn"
+          title="Undo last agent turn"
+          aria-disabled="true"
+          disabled
+          hidden
+        >
+          <span class="code-change-strip__undo-icon" aria-hidden="true"></span>
+        </button>
+      </div>
     </div>
 
     <!-- Input bar -->
@@ -2336,7 +2355,6 @@
         <div class="terminal-tab-bar" id="terminalTabBar"></div>
         <div class="terminal-header-actions">
           <button type="button" class="terminal-header-btn hidden" id="btnTerminalAgentStop">Stop command</button>
-          <button type="button" class="terminal-header-btn hidden" id="btnTerminalDevServerStop">Stop dev server</button>
           <button type="button" class="terminal-header-btn hidden" id="btnTerminalClear">Clear agent output</button>
           <button type="button" class="terminal-header-btn" id="btnTerminalCollapse" aria-label="Hide terminal">Hide</button>
         </div>
@@ -2352,9 +2370,6 @@
             </select>
           </div>
           <pre class="terminal-output terminal-agent-output" id="terminalOutput" aria-live="polite"></pre>
-        </div>
-        <div class="terminal-pane terminal-dev-server-pane hidden" id="terminalDevServerPane" role="tabpanel" aria-label="Dev server output">
-          <pre class="terminal-output terminal-dev-server-output" id="terminalDevServerOutput" aria-live="polite"></pre>
         </div>
         <div class="terminal-pane terminal-pty-pane" id="terminalPtyPane" role="tabpanel" aria-label="Interactive shell">
           <div class="terminal-xterm-host" id="terminalXtermHost"></div>

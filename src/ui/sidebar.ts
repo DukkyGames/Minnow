@@ -28,12 +28,14 @@ import { isGoalEvaluating } from '../chat/goal/evaluating-state';
 import { syncTodoPanel } from './todo-panel';
 import {
   createEmptyChatObject,
+  ensureChatHistoryLoaded,
   formatDraftChatSidebarName,
   getActiveChat,
   getSidebarListedChatsForWorkspace,
   getUnassignedChats,
   isEphemeralEmptyChat,
   isHiddenFromMainSidebar,
+  markSessionScalarsDirty,
   onWorkspaceChanged,
   pruneEphemeralEmptyChats,
   removeChatById,
@@ -75,10 +77,18 @@ import { syncComposerReasoningEffortFromActiveChat } from './composer-reasoning-
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import { syncComposerPinnedSkillFromActiveChat } from './composer-pinned-skill';
 import { syncComposerRunTargetFromActiveChat } from './composer-run-target';
+import {
+  invalidateComposerUndoGitCache,
+  syncComposerUndoFromActiveChat,
+} from './composer-undo';
 import { clearPanelCwdUserOverride, syncPanelFromActiveChat } from './git-panel';
 import { seedNewChatComposerRunTarget } from './new-chat-run-target-seed';
 import { buildDefaultPinnedSkillForNewChat } from '../skills/config';
 import { dismissCodeOverviewForNavigation, isCodeOverviewOpen } from './code-overview';
+import {
+  dismissDevServerScreenForNavigation,
+  isDevServerScreenOpen,
+} from './dev-server-screen';
 import { isBoardViewActive, syncViewModeToggleFromActiveChat } from './view-mode-toggle';
 import {
   isOrchestrateHubMounted,
@@ -312,9 +322,15 @@ export function onModelSelectChange(): void {
 }
 
 /** Refresh main column after workspace folder changes. */
-export function applyWorkspaceScopedSession(newPath: string, previousPath?: string): void {
+export async function applyWorkspaceScopedSession(
+  newPath: string,
+  previousPath?: string,
+): Promise<void> {
   clearChatSelection();
-  const { activeChat, activeChanged } = onWorkspaceChanged(newPath, previousPath);
+  // Workspace switch may enter/leave a git repo — recheck Undo visibility.
+  invalidateComposerUndoGitCache();
+  // Awaits history hydrate for the workspace's active chat before painting.
+  const { activeChat, activeChanged } = await onWorkspaceChanged(newPath, previousPath);
   if (activeChanged) {
     recordChatOpened(activeChat.id);
     syncModelSelectForActiveChat();
@@ -325,6 +341,7 @@ export function applyWorkspaceScopedSession(newPath: string, previousPath?: stri
     void syncOrchestratePlanStripFromActiveChat();
     syncComposerPinnedSkillFromActiveChat();
     syncComposerRunTargetFromActiveChat();
+    syncComposerUndoFromActiveChat();
     syncViewModeToggleFromActiveChat();
     clearPanelCwdUserOverride();
     syncPanelFromActiveChat({ forceFileTree: true });
@@ -1077,7 +1094,10 @@ function paintActiveChatInForegroundShell(chat: Chat): void {
     renderChatFromHistory(chat, '#chatAppMessageCol');
     return;
   }
-  if (dismissCodeOverviewForNavigation()) {
+  if (
+    dismissCodeOverviewForNavigation() ||
+    dismissDevServerScreenForNavigation()
+  ) {
     renderChatFromHistory(chat);
     return;
   }
@@ -1104,7 +1124,7 @@ export function deleteChat(chatId: string, evt?: Event): void {
   onChatRemoved(result);
 }
 
-export function switchChat(id: string): void {
+export async function switchChat(id: string): Promise<void> {
   restoreChatColumnOnChatSelect();
   if (isOrchestrateHubMounted()) {
     teardownOrchestrateHub();
@@ -1142,8 +1162,17 @@ export function switchChat(id: string): void {
     const planScreenSuspendedForSameChat =
       sameChat != null && isOrchestratePlanScreenSuspendedForChat(sameChat);
     const codeOverviewOpen = isCodeOverviewOpen();
-    if (boardWasOpen || planScreenSuspendedForSameChat || codeOverviewOpen) {
+    const devServerScreenOpen = isDevServerScreenOpen();
+    if (
+      boardWasOpen ||
+      planScreenSuspendedForSameChat ||
+      codeOverviewOpen ||
+      devServerScreenOpen
+    ) {
       if (sameChat) {
+        // Re-hydrate in case this chat was never loaded after a lazy boot.
+        await ensureChatHistoryLoaded(id);
+        if (sessionState.activeId !== id) return;
         paintActiveChatInForegroundShell(sameChat);
         syncViewModeToggleFromActiveChat();
         syncComposerFromStreamingState();
@@ -1166,6 +1195,10 @@ export function switchChat(id: string): void {
   const chat = sessionState.chats.find((c) => c.id === id);
   if (!chat) return;
   sessionState.activeId = id;
+  markSessionScalarsDirty();
+  // Lazy history: wait before paint so restart+switch does not show an empty transcript.
+  await ensureChatHistoryLoaded(id);
+  if (!sessionState || sessionState.activeId !== id) return;
   syncAskQuestionModalOnChatSwitch(prevActiveId, id);
   notifyAskQuestionDisplayContextChanged();
   acknowledgeChatViewed(id);
@@ -1186,6 +1219,7 @@ export function switchChat(id: string): void {
   void syncOrchestratePlanStripFromActiveChat();
   syncComposerPinnedSkillFromActiveChat();
   syncComposerRunTargetFromActiveChat();
+  syncComposerUndoFromActiveChat();
   syncViewModeToggleFromActiveChat();
   clearPanelCwdUserOverride();
   syncPanelFromActiveChat({ forceFileTree: true });
@@ -1234,6 +1268,7 @@ function syncCreateChatChrome(chatId: string): void {
   void syncOrchestratePlanStripFromActiveChat();
   syncComposerPinnedSkillFromActiveChat();
   syncComposerRunTargetFromActiveChat();
+  syncComposerUndoFromActiveChat();
   syncViewModeToggleFromActiveChat();
   syncWorkAgentDevFromActiveChat();
   onModelRoutingActiveChatChanged(chatId);

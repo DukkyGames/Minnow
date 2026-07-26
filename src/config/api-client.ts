@@ -2,7 +2,16 @@
  * HTTP client for ~/.minnow config API (npm start only).
  */
 
-import type { BugsState, IssuesState, SessionState, SystemPromptSettings } from '../types';
+import type {
+  BugsState,
+  Chat,
+  ChatGroup,
+  IssuesState,
+  Message,
+  SessionState,
+  SessionSummariesState,
+  SystemPromptSettings,
+} from '../types';
 import type { IssuesTaxonomy } from '../issues/taxonomy';
 import type { SkillConfig } from '../skills/config';
 import type { ToolConfig } from '../tools/tool-settings-types';
@@ -18,6 +27,33 @@ import {
 } from './defaults';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
+/**
+ * Fetch `keepalive` bodies are capped at 64 KiB by the Fetch spec (Chromium enforces).
+ * Larger keepalive PUTs are often a silent no-op — prefer a small PATCH beacon below this.
+ */
+export const FETCH_KEEPALIVE_MAX_BYTES = 64 * 1024;
+
+/** Prefer sendBeacon when the serialized sessions delta is under this size (margin under 64 KiB). */
+export const SESSIONS_BEACON_MAX_BYTES = 60 * 1024;
+
+/** Partial sessions write body for PATCH /api/config/sessions (and POST beacon alias). */
+export interface SessionsPatchDelta {
+  baseVersion: number;
+  chats?: Chat[];
+  deleteChatIds?: string[];
+  groups?: ChatGroup[];
+  deleteGroupIds?: string[];
+  scalars?: Record<string, unknown>;
+}
+
+/** Shutdown transport chosen from serialized body size. */
+export type SessionsShutdownTransport = 'beacon' | 'keepalive-put';
+
+/** Pick beacon vs keepalive PUT from UTF-8 body length (unit-tested). */
+export function chooseSessionsShutdownTransport(bodyByteLength: number): SessionsShutdownTransport {
+  return bodyByteLength < SESSIONS_BEACON_MAX_BYTES ? 'beacon' : 'keepalive-put';
+}
 
 export interface ConfigStatusResponse {
   ok: boolean;
@@ -71,6 +107,68 @@ export async function getSessions(): Promise<SessionState> {
  * GET /api/config/bugs — read-only migration source for Issues (MIN-261).
  * Leftover bugs/state.json is left on disk after migration.
  */
+/** GET /api/config/sessions/summaries?workspace=… — chats omit `history` (Phase C.1). */
+export async function getSessionSummaries(workspace?: string): Promise<SessionSummariesState> {
+  const params = new URLSearchParams();
+  if (workspace != null && workspace !== '') {
+    params.set('workspace', workspace);
+  }
+  const qs = params.toString();
+  const res = await fetch(`/api/config/sessions/summaries${qs ? `?${qs}` : ''}`, {
+    cache: 'no-store',
+  });
+  return parseJsonResponse<SessionSummariesState>(res);
+}
+
+/**
+ * GET /api/config/sessions/history/:chatId — full message list for one chat.
+ * Callers that compute absolute history indices must omit offset/limit.
+ */
+export async function getChatHistory(
+  chatId: string,
+  opts?: { offset?: number; limit?: number },
+): Promise<Message[]> {
+  const params = new URLSearchParams();
+  if (opts?.offset != null) params.set('offset', String(opts.offset));
+  if (opts?.limit != null) params.set('limit', String(opts.limit));
+  const qs = params.toString();
+  const path = `/api/config/sessions/history/${encodeURIComponent(chatId)}${qs ? `?${qs}` : ''}`;
+  const res = await fetch(path, { cache: 'no-store' });
+  const body = await parseJsonResponse<{ chatId: string; history: Message[] }>(res);
+  return Array.isArray(body.history) ? body.history : [];
+}
+
+/** One hit from GET /api/config/sessions/search (FTS5 / JSON fallback). */
+export interface SessionSearchHit {
+  chatId: string;
+  name: string;
+  workspacePath: string;
+  lastMessageAt?: number;
+  score: number;
+  matchedIn: 'title' | 'message';
+  role?: 'user' | 'assistant';
+  snippet: string;
+}
+
+/**
+ * GET /api/config/sessions/search?q= — server FTS over titles + message bodies (C.2).
+ */
+export async function searchSessions(
+  query: string,
+  opts?: { workspace?: string; limit?: number },
+): Promise<SessionSearchHit[]> {
+  const params = new URLSearchParams();
+  params.set('q', query);
+  if (opts?.workspace != null && opts.workspace !== '') {
+    params.set('workspace', opts.workspace);
+  }
+  if (opts?.limit != null) params.set('limit', String(opts.limit));
+  const res = await fetch(`/api/config/sessions/search?${params}`, { cache: 'no-store' });
+  const body = await parseJsonResponse<{ results: SessionSearchHit[] }>(res);
+  return Array.isArray(body.results) ? body.results : [];
+}
+
+/** GET /api/config/bugs */
 export async function getBugs(): Promise<BugsState> {
   const res = await fetch('/api/config/bugs', { cache: 'no-store' });
   return parseJsonResponse<BugsState>(res);
@@ -126,9 +224,23 @@ export async function putSessions(state: SessionState): Promise<void> {
   await parseJsonResponse<{ ok: boolean }>(res);
 }
 
+/** PATCH /api/config/sessions — partial upsert / explicit deletes. */
+export async function patchSessions(delta: SessionsPatchDelta): Promise<void> {
+  const res = await fetch('/api/config/sessions', {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(delta),
+  });
+  await parseJsonResponse<{ ok: boolean }>(res);
+}
+
 /**
- * Best-effort session save during `pagehide` / abrupt shutdown.
+ * Best-effort whole-blob session save during `pagehide` / abrupt shutdown.
  * `keepalive` lets the browser finish the request after the tab closes.
+ *
+ * Note: browsers cap keepalive bodies at {@link FETCH_KEEPALIVE_MAX_BYTES} (64 KiB).
+ * A full SessionState often exceeds that, so this path was likely a silent no-op for
+ * large blobs — prefer {@link sendSessionsPatchBeacon} when the delta fits.
  */
 export function putSessionsKeepalive(state: SessionState): void {
   try {
@@ -143,6 +255,48 @@ export function putSessionsKeepalive(state: SessionState): void {
   } catch {
     /* ignore — nothing else we can do during unload */
   }
+}
+
+/**
+ * Queue a PATCH-shaped sessions delta via `navigator.sendBeacon` (POST alias).
+ * sendBeacon cannot PATCH; the server accepts POST /api/config/sessions as PATCH.
+ * @returns true when the browser accepted the beacon (best-effort success).
+ */
+export function sendSessionsPatchBeacon(delta: SessionsPatchDelta): boolean {
+  try {
+    if (typeof navigator === 'undefined' || typeof navigator.sendBeacon !== 'function') {
+      return false;
+    }
+    const body = JSON.stringify(delta);
+    const blob = new Blob([body], { type: 'application/json' });
+    return navigator.sendBeacon('/api/config/sessions', blob);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Shutdown flush: beacon POST when the delta is small; otherwise keepalive whole-blob PUT.
+ * @returns whether the dirty sets may be cleared (beacon queued, or keepalive PUT dispatched).
+ */
+export function flushSessionsOnShutdown(
+  delta: SessionsPatchDelta | null,
+  fullState: SessionState,
+): { transport: SessionsShutdownTransport; clearedOk: boolean } {
+  if (delta) {
+    const body = JSON.stringify(delta);
+    // Prefer byteLength for UTF-8; fall back to string length in odd environments.
+    const byteLength =
+      typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(body).length : body.length;
+    const transport = chooseSessionsShutdownTransport(byteLength);
+    if (transport === 'beacon') {
+      const queued = sendSessionsPatchBeacon(delta);
+      if (queued) return { transport, clearedOk: true };
+      // Beacon rejected — fall through to keepalive PUT of the whole blob.
+    }
+  }
+  putSessionsKeepalive(fullState);
+  return { transport: 'keepalive-put', clearedOk: true };
 }
 
 /** GET /api/config/tools */

@@ -633,6 +633,7 @@ function mountDocumentHtmlPreview(
   const frame = document.createElement('iframe');
   frame.className = 'file-viewer-document-preview';
   frame.title = title;
+  frame.setAttribute('sandbox', '');
   frame.src = src;
   if (onFrameError) {
     frame.onerror = onFrameError;

@@ -80,6 +80,9 @@ async function pollArchiveReadiness(
 /**
  * Async pre-pass: bundle stale turns into Brain, collapse placeholders, inject recall.
  * Main chat only — sub-agents fall back to slide.
+ *
+ * CRITICAL: uses absolute history indices (`startIndex`/`endIndex`). Callers must
+ * load the **entire** chat history first (`ensureChatHistoryLoaded`) — never page.
  */
 export async function applyArchivePolicy(
   messages: ApiMessage[],
@@ -89,6 +92,11 @@ export async function applyArchivePolicy(
   },
 ): Promise<ArchivePreResult> {
   const { chat, agentConfig } = ctx;
+  if (chat.historyLoaded === false) {
+    throw new Error(
+      `applyArchivePolicy requires full history for ${chat.id}; await ensureChatHistoryLoaded first`,
+    );
+  }
   const config = resolveArchiveConfig(agentConfig);
   const history = chat.history ?? [];
   const contextLimit = chat.modelId

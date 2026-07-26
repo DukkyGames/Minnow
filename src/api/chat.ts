@@ -15,6 +15,7 @@ import {
   scheduleChatTitleGeneration,
 } from '../chat/titles/schedule';
 import {
+  ensureChatHistoryLoaded,
   getActiveChat,
   scheduleSaveSessions,
   recordChatMessage,
@@ -443,6 +444,8 @@ export async function sendMessage(): Promise<void> {
   const chatSignal = controller.signal;
 
   chat.modelId = binding.modelId || chat.modelId;
+  // C.1: defensive hydrate before first history mutation (no-op when lazy flag is off).
+  await ensureChatHistoryLoaded(chat.id);
   const shouldScheduleTitle = isFirstUserMessagePending(chat);
   chat.history.push({ role: 'user', content: text });
   clearComposerDraftOnChat(chat);

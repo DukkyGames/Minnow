@@ -8,7 +8,8 @@ import { getMinnowHome } from './home.js';
 /** Relative keys allowed for generic read/write in Step 02. */
 export const ALLOWED_CONFIG_FILES = new Set([
   'config.json',
-  'sessions/state.json',
+  // sessions/state.json removed in A.2 — SQLite via sessions-paths.js bypasses this allowlist.
+  // resourceToRelativeKey('sessions') still returns 'sessions/state.json' for JSON rollback.
   'tools.json',
   'search.json',
   'servers.json',

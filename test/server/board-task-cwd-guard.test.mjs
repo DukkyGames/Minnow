@@ -3,13 +3,18 @@
  *
  * Tests the pure guard logic in server/tools/cwd-guard.js and the chat-context
  * resolver in server/workspace/chat-cwd.js (injecting minimal session state).
+ * Also covers the SQLite hot path when injectedState is omitted.
  */
 
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 
+import { closeSessionsDb } from '../../server/config/sessions-db.js';
+import { writeWholeSessionState } from '../../server/config/sessions-repo.js';
+import { validateSessionState } from '../../server/config/validators.js';
 import { guardCdOutsideWorktree } from '../../server/tools/cwd-guard.js';
 import { resolveChatContext } from '../../server/workspace/chat-cwd.js';
+import { rmTestHome, setTestHome } from '../config/test-helpers.js';
 
 const CHAT_ID = '22222222-2222-2222-2222-222222222222';
 const GROUP_ID = 'grp_22222222-2222-2222-2222-222222222222';
@@ -101,6 +106,52 @@ describe('resolveChatContext', () => {
     const ctx = await resolveChatContext('unknown-id', state);
     assert.equal(ctx.worktreeRoot, undefined);
     assert.equal(ctx.groupId, undefined);
+  });
+});
+
+describe('resolveChatContext (SQLite hot path)', () => {
+  let homeDir;
+  let savedHome;
+  let savedStore;
+
+  before(() => {
+    savedHome = process.env.MINNOW_HOME;
+    savedStore = process.env.MINNOW_SESSIONS_STORE;
+    delete process.env.MINNOW_SESSIONS_STORE;
+    homeDir = setTestHome(process.env, `minnow-chat-ctx-db-${Date.now()}`);
+  });
+
+  after(() => {
+    closeSessionsDb();
+    if (savedHome === undefined) delete process.env.MINNOW_HOME;
+    else process.env.MINNOW_HOME = savedHome;
+    if (savedStore === undefined) delete process.env.MINNOW_SESSIONS_STORE;
+    else process.env.MINNOW_SESSIONS_STORE = savedStore;
+    return rmTestHome(homeDir);
+  });
+
+  it('returns worktreeRoot and groupId from SQLite without injectedState', async () => {
+    const state = validateSessionState(
+      baseState({
+        chats: [
+          {
+            id: CHAT_ID,
+            name: 'Task chat',
+            modelId: '',
+            modeId: 'build',
+            history: [],
+            updatedAt: 1,
+            worktreeRoot: WORKTREE,
+            boardGroupId: GROUP_ID,
+          },
+        ],
+      }),
+    );
+    writeWholeSessionState(state);
+
+    const ctx = await resolveChatContext(CHAT_ID);
+    assert.equal(ctx.worktreeRoot, WORKTREE);
+    assert.equal(ctx.groupId, GROUP_ID);
   });
 });
 

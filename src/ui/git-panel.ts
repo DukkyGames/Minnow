@@ -2005,6 +2005,12 @@ export async function refreshGitPanel(): Promise<void> {
 
     const status = await gitStatus(getEffectiveCwdArg());
 
+    // Undo strip visibility depends on git repo presence — refresh after status probe.
+    void import('./composer-undo').then((m) => {
+      m.invalidateComposerUndoGitCache();
+      m.syncComposerUndoFromActiveChat();
+    });
+
     if (!status.ok) {
 
       if (isMissingGitRepositoryError(status.error)) {

@@ -168,6 +168,14 @@ export function isErrorToolResult(result: ToolExecutionResult): boolean {
   return text.startsWith('Error:');
 }
 
+/** Skip cache for tools whose args embed large opaque payloads (e.g. base64 attachments). */
+function shouldBypassToolCache(name: string, args: Record<string, unknown>): boolean {
+  if (name === 'read_document' && typeof args.content === 'string' && args.content.trim()) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Normalize tool args for stable cache keys (sorted keys, trimmed strings, paths).
  */
@@ -188,6 +196,7 @@ function getPathArgKeysForTool(toolName: string): string[] {
     list_directory: ['path'],
     read_file: ['path'],
     read_file_range: ['path'],
+    read_document: ['path'],
     save_file: ['path'],
     create_pdf: ['path'],
     create_spreadsheet: ['path'],
@@ -557,6 +566,7 @@ export async function executeWithResultCache(
 ): Promise<ToolExecutionResult> {
   const policy = getCachePolicyForTool(name);
   const scopeId = getCacheScope(context);
+  const bypassCache = shouldBypassToolCache(name, args);
 
   if (!isToolCacheEnabled()) {
     const result = await inner();
@@ -564,7 +574,7 @@ export async function executeWithResultCache(
     return result;
   }
 
-  if (!policy.cacheable) {
+  if (!policy.cacheable || bypassCache) {
     const result = await inner();
     invalidateAfterTool(scopeId, name, args, result);
     return result;

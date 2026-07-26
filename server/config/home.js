@@ -458,9 +458,14 @@ export async function ensureMinnowLayout() {
     }
   }
 
+  // SQLite is the canonical sessions store (A.2). Only seed legacy state.json
+  // when MINNOW_SESSIONS_STORE=json — otherwise ensureMinnowLayout would recreate
+  // state.json after import renames it to .migrated.
   const defaults = [
     { rel: 'config.json', data: DEFAULT_META },
-    { rel: 'sessions/state.json', data: defaultSessionStateJson() },
+    ...(process.env.MINNOW_SESSIONS_STORE === 'json'
+      ? [{ rel: 'sessions/state.json', data: defaultSessionStateJson() }]
+      : []),
     { rel: 'tools.json', data: defaultToolsJson() },
     { rel: 'servers.json', data: defaultServersConfig() },
     { rel: 'skills.json', data: defaultSkillsJson() },

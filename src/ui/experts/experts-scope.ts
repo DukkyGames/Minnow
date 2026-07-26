@@ -123,7 +123,8 @@ export async function openExpertChatInShell(chat: Chat): Promise<void> {
   const { abandonExpertsHubSavedChat } = await import('./experts-hub');
   abandonExpertsHubSavedChat();
 
-  activateChatById(chat.id);
+  // Await history hydrate so expert threads opened after a lazy boot are not empty.
+  await activateChatById(chat.id);
   recordChatOpened(chat.id);
   syncModelSelectForActiveChat();
   void bootGenerationResumeForChat(chat);

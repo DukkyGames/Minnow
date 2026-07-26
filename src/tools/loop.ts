@@ -89,11 +89,13 @@ import {
 } from '../chat/main-turn-activity';
 import { getBoardGroupForChat } from '../state/chat-groups';
 import {
+  ensureChatHistoryLoaded,
   getActiveChat,
   scheduleSaveSessions,
   sessionState,
   touchChat,
   recordChatMessage,
+  requireHistory,
 } from '../state/sessions';
 import { schedulePostTurnSynthesis } from '../synthesis/client';
 import {
@@ -110,6 +112,10 @@ import {
   noteRunGeneration,
   noteRunOutputIndex,
 } from '../state/runs-store';
+import {
+  capturePostTurnSnapshot,
+  capturePreTurnSnapshot,
+} from '../chat/turn-snapshots';
 import type {
   ApiMessage,
   ApiMessageContent,
@@ -1130,6 +1136,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
   const hideUserEcho = suppressUserEcho || Boolean(superPlanStage);
 
+  // Category-3: hydrate full history before any absolute-index / mutate work (archive, push).
+  await ensureChatHistoryLoaded(chat.id);
+  requireHistory(chat);
+
   if (!beginChatTurnSetup(chat.id)) {
     return;
   }
@@ -1583,6 +1593,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         overrides: forkOverrides,
       });
       turnRunId = run.runId;
+    }
+    // MIN-409: dangling WT snapshot before tools mutate files (best-effort).
+    if (turnRunId) {
+      await capturePreTurnSnapshot(chat, turnRunId);
     }
     scheduleSaveSessions();
   }
@@ -2604,6 +2618,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         endReason: turnEndReason,
         errorMessage: turnErrorMessage,
       });
+      // MIN-409: post-turn snapshot after history suffix is known (best-effort).
+      await capturePostTurnSnapshot(chat, turnRunId);
       scheduleSaveSessions();
       if (isStreamDomVisible(chat.id) && run) {
         refreshBranchPickerAtFork(chat, run.forkHistoryIndex);

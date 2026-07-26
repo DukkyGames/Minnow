@@ -165,7 +165,9 @@ export function parseOsHash(hash: string): OsRoute {
       route.codeSection =
         seg === 'overview'
           ? 'overview'
-          : (pendingCodeSection ?? 'chat');
+          : seg === 'dev-server'
+            ? 'dev-server'
+            : (pendingCodeSection ?? 'chat');
     }
     // Prepare Issues deep-link parse for Phase 2 detail panel.
     if (route.appId === 'issues' && appMatch[2]) {
@@ -195,7 +197,9 @@ function hashForRoute(route: OsRoute): string {
   }
   if (route.appId === 'code') {
     const section = route.codeSection ?? 'chat';
-    return section === 'overview' ? '#/app/code/overview' : '#/app/code/chat';
+    if (section === 'overview') return '#/app/code/overview';
+    if (section === 'dev-server') return '#/app/code/dev-server';
+    return '#/app/code/chat';
   }
   if (route.appId === 'issues' && route.issueId) {
     return `#/app/issues/${route.issueId}`;
@@ -407,7 +411,9 @@ export function launchApp(appId: AppId, options?: LaunchOptions): void {
         : appId === 'code'
           ? codeSection === 'chat'
             ? '#/app/code/chat'
-            : '#/app/code/overview'
+            : codeSection === 'dev-server'
+              ? '#/app/code/dev-server'
+              : '#/app/code/overview'
           : `#/app/${appId}`;
   if (window.location.hash !== next) {
     pendingLaunchOptions = options;
@@ -499,6 +505,17 @@ export function navigateToCodeChat(): void {
     return;
   }
   applyRoute({ view: 'app', appId: 'code', codeSection: 'chat' });
+}
+
+/** Navigate to the Code app Dev Servers screen. */
+export function navigateToCodeDevServers(): void {
+  const next = '#/app/code/dev-server';
+  if (window.location.hash !== next) {
+    pendingCodeSection = 'dev-server';
+    window.location.hash = next;
+    return;
+  }
+  applyRoute({ view: 'app', appId: 'code', codeSection: 'dev-server' });
 }
 
 export { hashForRoute };

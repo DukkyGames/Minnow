@@ -29,11 +29,13 @@ export function jumpToChatTurn(chatId: string, turnId: string): void {
   };
 
   if (getActiveChat().id !== chatId) {
-    activateChatById(chatId);
-    void import('../ui/messages').then((m) => {
-      m.renderChatFromHistory(getActiveChat());
-      window.requestAnimationFrame(pulseRow);
-    });
+    // Await history hydrate so the jump target exists in the DOM after paint.
+    void activateChatById(chatId).then(() =>
+      import('../ui/messages').then((m) => {
+        m.renderChatFromHistory(getActiveChat());
+        window.requestAnimationFrame(pulseRow);
+      }),
+    );
     return;
   }
   pulseRow();

@@ -30,10 +30,7 @@ import {
 /** Virtual tab id for agent command output (not a PTY session). */
 export const AGENT_TAB_ID = '__minnow_agent__';
 
-/** Virtual tab id for workspace dev-server logs (not a PTY session). */
-export const DEV_SERVER_TAB_ID = '__minnow_dev_server__';
-
-export type TerminalTabKind = 'agent' | 'devServer' | 'pty';
+export type TerminalTabKind = 'agent' | 'pty';
 
 let tabBarEl: HTMLElement | null = null;
 let shellSelectEl: HTMLSelectElement | null = null;
@@ -51,18 +48,13 @@ export function isAgentTabId(tabId: string): boolean {
   return tabId === AGENT_TAB_ID;
 }
 
-export function isDevServerTabId(tabId: string): boolean {
-  return tabId === DEV_SERVER_TAB_ID;
-}
-
 function tabKindFromId(tabId: string): TerminalTabKind {
   if (isAgentTabId(tabId)) return 'agent';
-  if (isDevServerTabId(tabId)) return 'devServer';
   return 'pty';
 }
 
 function isVirtualTabId(tabId: string): boolean {
-  return isAgentTabId(tabId) || isDevServerTabId(tabId);
+  return isAgentTabId(tabId);
 }
 
 export function setTerminalTabChangeHandler(
@@ -181,25 +173,6 @@ function renderAgentTab(activeId: string | null): HTMLButtonElement {
   return btn;
 }
 
-function renderDevServerTab(activeId: string | null): HTMLButtonElement {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'terminal-tab terminal-tab--dev-server';
-  btn.setAttribute('role', 'tab');
-  btn.dataset.tabId = DEV_SERVER_TAB_ID;
-  btn.setAttribute(
-    'aria-selected',
-    activeId === DEV_SERVER_TAB_ID ? 'true' : 'false',
-  );
-  btn.tabIndex = activeId === DEV_SERVER_TAB_ID ? 0 : -1;
-  btn.textContent = 'Dev server';
-  btn.title = 'Workspace dev server logs';
-  btn.addEventListener('click', () => {
-    void switchTab(DEV_SERVER_TAB_ID);
-  });
-  return btn;
-}
-
 function renderTabBar(activeId: string | null): void {
   if (!tabBarEl) return;
   tabBarEl.innerHTML = '';
@@ -209,7 +182,6 @@ function renderTabBar(activeId: string | null): void {
   list.setAttribute('role', 'tablist');
 
   list.appendChild(renderAgentTab(activeId));
-  list.appendChild(renderDevServerTab(activeId));
 
   for (const tab of liveTabs.values()) {
     const displayTitle = resolveTabDisplayTitle(tab);
@@ -302,12 +274,6 @@ async function switchTab(tabId: string): Promise<void> {
 export async function switchToAgentTab(): Promise<void> {
   if (!tabsInitialized) return;
   await switchTab(AGENT_TAB_ID);
-}
-
-/** Switch the tab bar to the Dev server logs tab. */
-export async function switchToDevServerTab(): Promise<void> {
-  if (!tabsInitialized) return;
-  await switchTab(DEV_SERVER_TAB_ID);
 }
 
 export async function addTab(shellProfileId?: string): Promise<string> {

@@ -1081,6 +1081,79 @@ describe('orchestrate board live updates', () => {
     assert.equal(area.classList.contains('chat-area--code-overview'), false);
   });
 
+  test('switchChat to same chat dismisses dev server screen and restores chat', async () => {
+    setupDom();
+    const chat = createEmptyChatObject('');
+    chat.id = FIXED_CHAT_ID;
+    chat.modeId = 'general';
+    chat.history = [{ role: 'user', content: 'Active chat message' }];
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+      groups: [],
+    });
+
+    const area = document.getElementById('chatArea');
+    area.classList.add('chat-area--dev-server');
+    document.getElementById('mainColumn')?.classList.add('main-column--dev-server');
+    const devServerRoot = document.createElement('div');
+    devServerRoot.id = 'devServerScreenRoot';
+    area.replaceChildren(devServerRoot);
+
+    switchChat(chat.id);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(document.getElementById('devServerScreenRoot'), null);
+    assert.equal(getActiveChat().id, chat.id);
+    assert.ok(document.querySelector('.msg.user'));
+    assert.match(
+      document.querySelector('.msg.user')?.textContent ?? '',
+      /Active chat message/,
+    );
+    assert.equal(area.classList.contains('chat-area--dev-server'), false);
+  });
+
+  test('switchChat to different chat dismisses dev server screen and shows target chat', async () => {
+    setupDom();
+    const active = createEmptyChatObject('');
+    active.id = FIXED_CHAT_ID;
+    active.modeId = 'general';
+    active.history = [{ role: 'user', content: 'First chat' }];
+    const other = createEmptyChatObject('');
+    other.id = FIXED_EXTERNAL_CHAT_ID;
+    other.modeId = 'general';
+    other.history = [{ role: 'user', content: 'Second chat' }];
+    setSessionStateForTests({
+      version: 2,
+      activeId: active.id,
+      sidebarCollapsed: false,
+      chats: [active, other],
+      groups: [],
+    });
+
+    const area = document.getElementById('chatArea');
+    area.classList.add('chat-area--dev-server');
+    document.getElementById('mainColumn')?.classList.add('main-column--dev-server');
+    const devServerRoot = document.createElement('div');
+    devServerRoot.id = 'devServerScreenRoot';
+    area.replaceChildren(devServerRoot);
+
+    switchChat(other.id);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(document.getElementById('devServerScreenRoot'), null);
+    assert.equal(getActiveChat().id, other.id);
+    assert.match(
+      document.querySelector('.msg.user')?.textContent ?? '',
+      /Second chat/,
+    );
+    assert.equal(area.classList.contains('chat-area--dev-server'), false);
+  });
+
   test('openBoardGroup from code overview dismisses overview and mounts board', async () => {
     setupDom();
     await primeSubAgentConfig();

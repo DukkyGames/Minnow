@@ -8,6 +8,11 @@ import fs from 'node:fs/promises';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { getMinnowHome } from './config/home.js';
+import {
+  appendTerminalRun,
+  readTerminalHistory,
+  useJsonSessionsStore,
+} from './config/sessions-repo.js';
 import { readConfigJson, updateConfigJson } from './config/store.js';
 import { validateSessionState } from './config/validators.js';
 import {
@@ -128,6 +133,7 @@ async function appendLogFile(logPath, text) {
 }
 
 /**
+ * Persist one terminal run for a chat (SQLite narrow write; JSON rollback path kept).
  * @param {string} chatId
  * @param {TerminalRunRecord} record
  */
@@ -135,6 +141,13 @@ async function persistTerminalHistory(chatId, record) {
   if (!chatId) return;
 
   try {
+    // Default: indexed append + bounded DELETE in one transaction (sessions-repo).
+    if (!useJsonSessionsStore()) {
+      appendTerminalRun(chatId, record);
+      return;
+    }
+
+    // MINNOW_SESSIONS_STORE=json — whole-blob RMW on state.json.
     await updateConfigJson('sessions/state.json', (raw) => {
       const base = raw ?? { version: 3, chats: [] };
       let state;
@@ -783,6 +796,11 @@ export function killProcessTree(child) {
  * @returns {Promise<TerminalRunRecord[]>}
  */
 export async function getTerminalHistoryForChat(chatId) {
+  // Default: SELECT … WHERE chat_id=? ORDER BY seq (no whole-blob parse).
+  if (!useJsonSessionsStore()) {
+    return /** @type {TerminalRunRecord[]} */ (readTerminalHistory(chatId));
+  }
+
   const raw = (await readConfigJson('sessions/state.json')) ?? { version: 3, chats: [] };
   let state;
   try {

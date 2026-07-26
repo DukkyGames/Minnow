@@ -2,6 +2,10 @@
  * Synthesis settings from ~/.minnow/config.json → synthesis block.
  */
 
+import {
+  readActiveChatModelBinding,
+  useJsonSessionsStore,
+} from '../config/sessions-repo.js';
 import { readConfigJson, writeConfigJson, readResource } from '../config/store.js';
 import { normalizeSynthesisConfig } from '../config/validators.js';
 import { getActiveProviderId } from '../providers/store.js';
@@ -29,24 +33,45 @@ function decodeModelSelectKey(value) {
 }
 
 /**
- * Active chat menubar binding from sessions state (decodes composite model keys).
+ * Active chat menubar binding from sessions (decodes composite model keys).
+ * SQLite hot path uses indexed activeId + chat row lookup; decode stays here.
  * @param {string} activeProviderId
  * @returns {Promise<{ providerId: string; modelId: string }>}
  */
 async function resolveActiveChatBinding(activeProviderId) {
-  const sessions = await readResource('sessions');
-  const activeId = typeof sessions?.activeId === 'string' ? sessions.activeId : '';
-  const chats = Array.isArray(sessions?.chats) ? sessions.chats : [];
-  const activeChat = chats.find(
-    (chat) => chat && typeof chat === 'object' && chat.id === activeId,
-  );
-  if (!activeChat) {
-    return { providerId: '', modelId: '' };
+  /** @type {{ providerId: string, modelId: string }} */
+  let chatBinding = { providerId: '', modelId: '' };
+
+  if (!useJsonSessionsStore()) {
+    // Narrow SELECT: session_meta.activeId → chats.provider_id/model_id.
+    const binding = readActiveChatModelBinding();
+    if (binding) {
+      chatBinding = {
+        providerId: typeof binding.providerId === 'string' ? binding.providerId.trim() : '',
+        modelId: typeof binding.modelId === 'string' ? binding.modelId.trim() : '',
+      };
+    }
+  } else {
+    // JSON rollback: whole-blob resource read.
+    const sessions = await readResource('sessions');
+    const activeId = typeof sessions?.activeId === 'string' ? sessions.activeId : '';
+    const chats = Array.isArray(sessions?.chats) ? sessions.chats : [];
+    const activeChat = chats.find(
+      (chat) => chat && typeof chat === 'object' && chat.id === activeId,
+    );
+    if (activeChat) {
+      chatBinding = {
+        providerId:
+          typeof activeChat.providerId === 'string' ? activeChat.providerId.trim() : '',
+        modelId: typeof activeChat.modelId === 'string' ? activeChat.modelId.trim() : '',
+      };
+    }
   }
 
-  let providerId =
-    typeof activeChat.providerId === 'string' ? activeChat.providerId.trim() : '';
-  let modelId = typeof activeChat.modelId === 'string' ? activeChat.modelId.trim() : '';
+  let { providerId, modelId } = chatBinding;
+  if (!providerId && !modelId) {
+    return { providerId: '', modelId: '' };
+  }
 
   const decoded = decodeModelSelectKey(modelId);
   if (decoded) {

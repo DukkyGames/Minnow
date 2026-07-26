@@ -30,6 +30,13 @@ export interface GitOpResult {
   untracked?: GitFileEntry[];
   patch?: string;
   sha?: string;
+  /** HEAD tip when a snapshot was created/restored (MIN-409). */
+  headSha?: string;
+  treeSha?: string;
+  /** Pre-restore safety snapshot sha from snapshotRestore. */
+  safetySha?: string;
+  /** Name-status paths from snapshotDiff. */
+  files?: GitFileEntry[];
   stdout?: string;
   commits?: GitCommitEntry[];
   current?: string;
@@ -260,4 +267,37 @@ export function gitCherryPick(input: {
   cwd?: string;
 }): Promise<GitOpResult> {
   return postGit('cherryPick', input);
+}
+
+/**
+ * Capture a dangling commit of the working tree (temp index; HEAD/index untouched).
+ * MIN-409 agent undo snapshots.
+ */
+export function gitSnapshotCreate(input?: {
+  cwd?: string;
+  message?: string;
+}): Promise<GitOpResult> {
+  return postGit('snapshotCreate', input ?? {});
+}
+
+/**
+ * Restore working tree to a snapshot commit without moving HEAD.
+ * Takes a safety snapshot first and returns its sha as `safetySha`.
+ */
+export function gitSnapshotRestore(input: {
+  cwd?: string;
+  sha: string;
+}): Promise<GitOpResult> {
+  return postGit('snapshotRestore', input);
+}
+
+/**
+ * Diff two snapshot commits, or a commit vs the current working tree when `toSha` is omitted.
+ */
+export function gitSnapshotDiff(input: {
+  cwd?: string;
+  fromSha: string;
+  toSha?: string;
+}): Promise<GitOpResult> {
+  return postGit('snapshotDiff', input);
 }

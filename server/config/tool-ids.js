@@ -76,6 +76,7 @@ export const ALL_TOOL_IDS = [
   'stop_command',
   'start_background_command',
   'stop_background_command',
+  'manage_dev_servers',
   'run_javascript',
   'run_python',
   'spawn_sub_agent',

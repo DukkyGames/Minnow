@@ -3,7 +3,6 @@
  */
 
 import { EMPTY_STATE_HTML, PLACEHOLDER_CHAT_NAME } from '../constants';
-import { DEFAULT_DEV_SERVER_PORT } from '../config/startup-api';
 import { listModes } from '../chat/modes/registry';
 import { normalizeModeId } from '../chat/modes/types';
 import { modelCache } from '../api/models';
@@ -370,24 +369,12 @@ function buildHubDom(activeChat: Chat): HTMLElement {
   const strip = document.createElement('div');
   strip.className = 'hub-strip';
   strip.innerHTML = `
-    <div class="hub-strip__cell hub-strip__cell--server hub-strip__cell--stopped" id="hubDevServerCell" tabindex="0" aria-label="Dev server">
+    <div class="hub-strip__cell hub-strip__cell--server hub-strip__cell--stopped" id="hubDevServerCell" tabindex="0" role="button" aria-label="Dev servers">
       <span class="hub-strip__dot idle" id="hubDevServerDot" aria-hidden="true"></span>
       <div class="hub-strip__server-body">
-        <span class="hub-strip__label" id="hubDevServerLabel">Dev server</span>
+        <span class="hub-strip__label" id="hubDevServerLabel">Dev servers</span>
         <span class="hub-strip__meta" id="hubDevServerMeta">stopped</span>
-        <button type="button" class="hub-strip__url hidden" id="hubDevServerUrl">http://localhost:${DEFAULT_DEV_SERVER_PORT}/</button>
-        <div class="hub-dev-server-settings" id="hubDevServerSettings" aria-label="Dev server port and network">
-          <label class="hub-dev-server-settings__port">
-            <span class="hub-dev-server-settings__port-label">Port</span>
-            <input type="number" id="hubDevServerPort" class="hub-dev-server-settings__port-input" min="1" max="65535" value="${DEFAULT_DEV_SERVER_PORT}" inputmode="numeric" aria-label="Dev server port" />
-          </label>
-          <div class="hub-dev-server-settings__network" role="group" aria-label="Dev server network access">
-            <button type="button" class="hub-dev-server-settings__net-btn is-active" id="hubDevServerNetworkLocal" data-network="local">This PC</button>
-            <button type="button" class="hub-dev-server-settings__net-btn" id="hubDevServerNetworkLan" data-network="lan">Network</button>
-          </div>
-        </div>
       </div>
-      <button type="button" class="hub-strip__link hidden" id="hubDevServerConsole">Console</button>
     </div>
     <div class="hub-strip__cell">
       <span class="hub-strip__label">Lines of code</span>
