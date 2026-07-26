@@ -16,6 +16,7 @@ import {
 import {
   buildSessionsPatchDelta,
   flushPendingSessionSaveOnShutdown,
+  flushScheduledSessionSave,
   getSessionDirtyTrackingForTests,
   isSessionsHydratedFromServerForTests,
   loadSessionsFromStorage,
@@ -23,6 +24,7 @@ import {
   markGroupDirty,
   resetSessionPersistenceForTests,
   saveSessionsNow,
+  scheduleSaveSessions,
   sessionState,
   setSessionPatchDirtySetsReadyForTests,
   setSessionStateForTests,
@@ -416,6 +418,29 @@ describe('session persistence (MIN-408 + B.2)', () => {
     saveSessionsNow();
     await waitForSessionSaveForTests();
     assert.equal(method, 'PUT');
+  });
+
+  test('flushScheduledSessionSave runs debounced PATCH before returning', async () => {
+    setStorageModeForTests('server');
+    const state = defaultSessionState();
+    resetSessionPersistenceForTests();
+    setSessionStateForTests(state);
+    setSessionPatchDirtySetsReadyForTests(true);
+
+    const order: string[] = [];
+    globalThis.fetch = async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (url.includes('/api/config/sessions') && method === 'PATCH') {
+        order.push('patch');
+      }
+      return new Response(JSON.stringify({ rev: 2 }), { status: 200 });
+    };
+
+    touchChat(state.chats[0]!);
+    scheduleSaveSessions();
+    await flushScheduledSessionSave();
+    assert.deepEqual(order, ['patch']);
   });
 
   test('putSessionsKeepalive attaches catch to keepalive fetch', () => {

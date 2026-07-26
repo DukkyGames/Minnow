@@ -1799,12 +1799,30 @@ export function scheduleSaveSessions(hint?: { chatId?: string; groupId?: string 
   );
 }
 
+/** Cancel the debounced timer and start a save now (shared by flush helpers). */
+function runScheduledSessionSaveImmediately(): void {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    setSaveTimer(null);
+  }
+  saveSessionsNow();
+}
+
+/**
+ * Flush any debounced session save before engine commands that require the chat
+ * row to exist server-side (e.g. send_message on a freshly created desktop chat).
+ */
+export async function flushScheduledSessionSave(): Promise<void> {
+  runScheduledSessionSaveImmediately();
+  if (inFlightSessionSave) {
+    await inFlightSessionSave;
+  }
+}
+
 /** Run any debounced session save immediately (unit tests only). */
 export function flushScheduledSessionSaveForTests(): void {
   if (!saveTimer) return;
-  clearTimeout(saveTimer);
-  setSaveTimer(null);
-  saveSessionsNow();
+  runScheduledSessionSaveImmediately();
 }
 
 /** Flush debounced saves and persist immediately (pagehide / abrupt quit). */

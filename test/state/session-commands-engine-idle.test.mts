@@ -5,8 +5,16 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import type { Chat } from '../../src/types.ts';
-import { waitForEngineTurnIdle } from '../../src/state/session-commands.ts';
-import { setSessionStateForTests } from '../../src/state/sessions.ts';
+import {
+  dispatchSendMessage,
+  waitForEngineTurnIdle,
+} from '../../src/state/session-commands.ts';
+import {
+  scheduleSaveSessions,
+  setSessionStateForTests,
+  touchChat,
+} from '../../src/state/sessions.ts';
+import { setStorageModeForTests } from '../../src/config/storage-mode.ts';
 
 const CHAT_ID = '11111111-1111-1111-1111-111111111111';
 const STARTED = 1710000000000;
@@ -37,6 +45,9 @@ function installChat(chat: Chat): void {
 describe('waitForEngineTurnIdle', () => {
   afterEach(() => {
     setSessionStateForTests(null);
+    // @ts-expect-error test cleanup
+    delete globalThis.fetch;
+    setStorageModeForTests('localStorage');
   });
 
   test('resolves when engineTurnActive clears after being busy', async () => {
@@ -77,5 +88,33 @@ describe('waitForEngineTurnIdle', () => {
     }, 40);
     await wait;
     assert.equal(chat.currentGenerationId, undefined);
+  });
+
+  test('dispatchSendMessage flushes debounced session save before POST', async () => {
+    setStorageModeForTests('server');
+    const chat = makeChat();
+    installChat(chat);
+
+    const order: string[] = [];
+    globalThis.fetch = async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (url.includes('/api/config/sessions') && method === 'PATCH') {
+        order.push('patch');
+        return new Response(JSON.stringify({ rev: 2 }), { status: 200 });
+      }
+      if (url.includes('/api/session/commands') && method === 'POST') {
+        order.push('command');
+        return new Response(JSON.stringify({ rev: 3, accepted: true }), {
+          status: 202,
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    touchChat(chat);
+    scheduleSaveSessions();
+    await dispatchSendMessage({ chatId: chat.id, text: 'hello' });
+    assert.deepEqual(order, ['patch', 'command']);
   });
 });
