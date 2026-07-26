@@ -16,6 +16,7 @@ import {
 } from './auth.js';
 import { isServerEngineEnabled } from './flag.js';
 import { applyCommand, ensureSessionEngineBooted } from './engine.js';
+import { describeEngineAvailability } from './engine-module.js';
 
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
@@ -73,7 +74,11 @@ export async function handleSessionRequest(req, res, pathname) {
   // Flag probe skips the optional MINNOW_TOKEN gate below, but global auth-middleware
   // still requires the per-boot session token. SPA uses HTML inject + withSessionToken.
   if (pathname === '/api/session/engine' && req.method === 'GET') {
-    sendJson(res, 200, { enabled: isServerEngineEnabled() });
+    const avail = describeEngineAvailability();
+    sendJson(res, 200, {
+      enabled: isServerEngineEnabled() && avail.available,
+      engineModule: avail,
+    });
     return true;
   }
 
@@ -94,6 +99,15 @@ export async function handleSessionRequest(req, res, pathname) {
         sendJson(res, 503, {
           error: 'Server session engine is disabled',
           code: 'ENGINE_DISABLED',
+        });
+        return true;
+      }
+      const avail = describeEngineAvailability();
+      if (!avail.available) {
+        sendJson(res, 503, {
+          error: `Session Engine module unavailable: ${avail.reason}`,
+          code: 'ENGINE_UNAVAILABLE',
+          reason: avail.reason,
         });
         return true;
       }

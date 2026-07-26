@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getMinnowHome } from '../config/home.js';
 import { isServerEngineEnabled } from '../session/flag.js';
+import { describeEngineAvailability } from '../session/engine-module.js';
 
 const TOKEN_FILE_NAME = 'session-token';
 
@@ -87,8 +88,9 @@ const HEAD_MARKER = '</head>';
  * @returns {string}
  */
 export function injectSessionTokenScript(html, token) {
-  // Default-on semantics live in server/session/flag.js (single source of truth).
-  const engineOn = isServerEngineEnabled();
+  // Combine flag + availability so the SPA can skip engine UI in packaged builds
+  // where the bundle was not built (or engine flag disabled).
+  const engineOn = isServerEngineEnabled() && describeEngineAvailability().available;
   const script = `<script>window.__MINNOW_SESSION_TOKEN__=${JSON.stringify(token)};window.__MINNOW_SERVER_ENGINE__=${engineOn ? 'true' : 'false'};</script>`;
   const idx = html.indexOf(HEAD_MARKER);
   if (idx === -1) return script + html;

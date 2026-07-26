@@ -267,15 +267,10 @@ export async function publishLiveEngineState(opts = {}) {
       /** @type {any} */ (engineState).liveSubAgentRuns = liveRuns;
     }
     try {
-      const { setSessionStateForEngineHost } = await import(
-        '../../src/state/sessions.ts'
-      ).catch(() => ({}));
-      // Dynamic TS import may fail without tsx hooks — board-loader rebind covers that.
-      if (typeof setSessionStateForEngineHost === 'function') {
-        setSessionStateForEngineHost(engineState);
-      }
+      const { setEngineHostSessionState } = await import('./engine-module.js');
+      await setEngineHostSessionState(engineState);
     } catch {
-      /* board host rebind is best-effort here */
+      /* engine module unavailable — board host rebind covers this */
     }
     void import('./board-loader.js')
       .then((m) => m.rebindEngineBoardHostSession?.())

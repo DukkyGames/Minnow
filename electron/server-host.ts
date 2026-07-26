@@ -125,6 +125,14 @@ export async function startInProcessServer(): Promise<InProcessServerHandle> {
   const url = `http://127.0.0.1:${address.port}/`;
   console.log(`Minnow in-process server: ${url}`);
 
+  // Boot the Session Engine (loads the pre-built bundle in packaged Electron).
+  // Fire-and-forget so the window paint is not blocked by engine init.
+  void importServerModule<{ bootSessionEngine: (opts: { baseUrl: string }) => Promise<void> }>(
+    'runtime/engine-boot.js',
+  )
+    .then((m) => m.bootSessionEngine({ baseUrl: url.replace(/\/$/, '') }))
+    .catch((err) => console.error('[session-engine] packaged boot failed:', err));
+
   return {
     url,
     async close(): Promise<void> {

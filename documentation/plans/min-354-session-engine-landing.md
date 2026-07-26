@@ -27,13 +27,13 @@ desktop builds, closes the LAN token hole, and cleans up correctness/doc drift.
 - [ ] Commit: `🐛 fix(session): queue drain, single error row, SSE token refresh`
 
 ### Stage 3 — Ship engine in packaged builds
-- [ ] `engine-bundle-entry.ts` + `scripts/build-engine-bundle.mjs` (esbuild, no splitting)
-- [ ] `server/session/engine-module.js` with tsx → bundle → unavailable order
-- [ ] Rewrite loaders/commands/engine.js call sites; fix sessions singleton
-- [ ] `bootSessionEngine` + call from `server.js` and `electron/server-host.ts`
-- [ ] Fail loudly: engine probe, injected flag, 503 `ENGINE_UNAVAILABLE`
-- [ ] Packaging validator + `build:engine-bundle` wiring
-- [ ] Tests: `test/engine/engine-bundle.test.mjs`; phase0–3 unedited
+- [x] `engine-bundle-entry.ts` + `scripts/build-engine-bundle.mjs` (esbuild, no splitting)
+- [x] `server/session/engine-module.js` with tsx → bundle → unavailable order
+- [x] Rewrite loaders/commands/engine.js call sites; fix sessions singleton
+- [x] `bootSessionEngine` + call from `server.js` and `electron/server-host.ts`
+- [x] Fail loudly: engine probe, injected flag, 503 `ENGINE_UNAVAILABLE`
+- [x] Packaging validator + `build:engine-bundle` wiring
+- [x] Tests: `test/engine/engine-bundle.test.mjs`; phase0–3 unedited
 - [ ] Commit: `📦 feat(session): bundle Session Engine for packaged Electron`
 
 ### Stage 4 — Test and doc cleanup

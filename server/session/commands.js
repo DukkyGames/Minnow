@@ -175,10 +175,10 @@ async function handleSendMessage(cmd) {
       : '';
   if (!historyContent && attachments.length > 0) {
     try {
-      const { buildEngineHistoryUserContent } = await import(
-        '../../src/session-engine/build-api-messages.ts'
-      );
-      historyContent = buildEngineHistoryUserContent(text, /** @type {any} */ (attachments));
+      const { loadEngineModule } = await import('./engine-module.js');
+      const mod = await loadEngineModule();
+      const buildFn = /** @type {Function} */ (mod.buildEngineHistoryUserContent);
+      historyContent = buildFn(text, /** @type {any} */ (attachments));
     } catch (err) {
       console.error('[session-engine] attachment history build failed:', err);
       historyContent = text.trim();
@@ -308,12 +308,11 @@ async function handleStopGeneration(cmd) {
 
   // Cancel parked ask_question before abort so the tool batch settles cleanly.
   try {
-    const { cancelParkedAskQuestion } = await import(
-      '../../src/session-engine/ask-question-bridge.ts'
-    );
-    cancelParkedAskQuestion(chatId);
+    const { loadEngineModule } = await import('./engine-module.js');
+    const mod = await loadEngineModule();
+    /** @type {Function} */ (mod.cancelParkedAskQuestion)(chatId);
   } catch {
-    /* bridge module unavailable in some test harnesses */
+    /* engine module unavailable in some test harnesses */
   }
 
   abortEngineTurn(chatId);
@@ -356,9 +355,9 @@ async function handleAnswerQuestion(cmd) {
       ? cmd.toolCallId.trim()
       : undefined;
 
-  const { resolveParkedAskQuestion } = await import(
-    '../../src/session-engine/ask-question-bridge.ts'
-  );
+  const { loadEngineModule } = await import('./engine-module.js');
+  const mod = await loadEngineModule();
+  const { resolveParkedAskQuestion } = /** @type {any} */ (mod);
   const accepted = resolveParkedAskQuestion(
     chatId,
     /** @type {any} */ (rawResult),

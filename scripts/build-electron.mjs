@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /**
  * Compile the Electron main/preload (tsc + preload .mjs rename).
+ * Also builds the Session Engine bundle (build-engine-bundle.mjs) so packaged
+ * Electron can load the engine without tsx hooks.
  * Shared by postinstall, spawn-electron, and npm run electron:build.
  */
 
@@ -12,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tscBin = path.join(repoRoot, 'node_modules', 'typescript', 'bin', 'tsc');
 const renameScript = path.join(repoRoot, 'scripts', 'rename-preload-mjs.mjs');
+const engineBundleScript = path.join(repoRoot, 'scripts', 'build-engine-bundle.mjs');
 
 /**
  * Run tsc for electron/ and rename preload.js → preload.mjs.
@@ -40,6 +43,17 @@ export function buildElectronMain(options = {}) {
   });
   if (rename.status !== 0) {
     throw new Error(`Electron preload rename failed (exit ${rename.status ?? 'unknown'})`);
+  }
+
+  // Build the Session Engine bundle so packaged builds can load the engine
+  // without tsx hooks (no --import tsx required in production).
+  const engineBundle = spawnSync(process.execPath, [engineBundleScript], {
+    cwd: repoRoot,
+    stdio,
+    env: process.env,
+  });
+  if (engineBundle.status !== 0) {
+    throw new Error(`Engine bundle build failed (exit ${engineBundle.status ?? 'unknown'})`);
   }
 }
 

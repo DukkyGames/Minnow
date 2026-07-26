@@ -27,7 +27,6 @@ import {
   stopCalendarReminderLoop,
 } from './server/calendar/reminders.js';
 import { startEmailPollLoop, stopEmailPollLoop } from './server/email/poller.js';
-import { setSchedulerServerBaseUrl } from './server/scheduler/server-base-url.js';
 import { shutdownSchedulerRuns } from './server/scheduler/runner.js';
 import { shutdownAllServers } from './server/servers/index.js';
 import { shutdownAllModelServes } from './server/models/index.js';
@@ -202,31 +201,8 @@ async function main() {
   console.log(`Calendar API: ${localUrl.replace(/\/$/, '')}/api/calendar/ping`);
   console.log(`Email API: ${localUrl.replace(/\/$/, '')}/api/email/ping`);
   const schedulerBaseUrl = localUrl.replace(/\/$/, '');
-  setSchedulerServerBaseUrl(schedulerBaseUrl);
-  const { isServerEngineEnabled } = await import('./server/session/flag.js');
-  if (isServerEngineEnabled()) {
-    const { ensureSessionEngineBooted } = await import('./server/session/engine.js');
-    await ensureSessionEngineBooted();
-    // Phase 3: controller registry + watchdog once per process (before board resume).
-    const { bootEngineControllerOnStart } = await import(
-      './server/session/controller-loader.js'
-    );
-    await bootEngineControllerOnStart().catch((err) => {
-      console.error('[session-engine] controller boot failed:', err);
-    });
-    // Phase 2: resume auto/AFK boards in-process (zero devices required).
-    const { resumeEngineBoardsOnBoot } = await import('./server/session/board-loader.js');
-    await resumeEngineBoardsOnBoot().catch((err) => {
-      console.error('[session-engine] board boot resume failed:', err);
-    });
-    console.log(
-      `Session Engine: ON (default) — POST /api/session/commands + board + controller host`,
-    );
-  } else {
-    console.log(
-      `Session Engine: OFF (MINNOW_SERVER_ENGINE=0) — emergency renderer driving`,
-    );
-  }
+  const { bootSessionEngine } = await import('./server/runtime/engine-boot.js');
+  await bootSessionEngine({ baseUrl: schedulerBaseUrl });
   await startSchedulerTickLoop({ baseUrl: schedulerBaseUrl });
   startCalendarReminderLoop();
   startEmailPollLoop();

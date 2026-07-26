@@ -1,32 +1,21 @@
 /**
- * Lazy-load the TypeScript controller host (MIN-361 Phase 3).
- *
- * Requires the process to be started with:
- *   --import ./server/session/engine-tsx-hooks.mjs --import tsx
+ * Lazy-load the engine controller host via the unified engine-module loader.
+ * In dev/test (tsx hooks active): imports TS directly.
+ * In packaged Electron: imports the pre-built engine-bundle.mjs.
  */
 
-/** @type {typeof import('../../src/session-engine/controller-host.ts') | null} */
-let hostCached = null;
-
-/**
- * @returns {Promise<typeof import('../../src/session-engine/controller-host.ts')>}
- */
-async function loadControllerHostModule() {
-  if (hostCached) return hostCached;
-  hostCached = await import('../../src/session-engine/controller-host.ts');
-  return hostCached;
-}
+import { loadEngineModule, resetEngineModuleForTests } from './engine-module.js';
 
 /** Reconcile registry + start watchdog once at engine boot. */
 export async function bootEngineControllerOnStart() {
-  const mod = await loadControllerHostModule();
-  return mod.bootEngineControllerOnStart();
+  const mod = await loadEngineModule();
+  return /** @type {Function} */ (mod.bootEngineControllerOnStart)();
 }
 
 /** Activate host without waiting on a second boot latch (commands / spawn). */
 export async function activateEngineControllerHost() {
-  const mod = await loadControllerHostModule();
-  return mod.activateEngineControllerHost();
+  const mod = await loadEngineModule();
+  return /** @type {Function} */ (mod.activateEngineControllerHost)();
 }
 
 /**
@@ -34,15 +23,12 @@ export async function activateEngineControllerHost() {
  * @param {{ type: string, [key: string]: unknown }} cmd
  */
 export async function applyControllerCommand(cmd) {
-  const mod = await loadControllerHostModule();
-  await mod.activateEngineControllerHost();
-  const { applyControllerSessionCommand } = await import(
-    '../../src/session-engine/controller-commands.ts'
-  );
-  return applyControllerSessionCommand(cmd);
+  const mod = await loadEngineModule();
+  await /** @type {Function} */ (mod.activateEngineControllerHost)();
+  return /** @type {Function} */ (mod.applyControllerSessionCommand)(cmd);
 }
 
-/** Clear cached modules (tests). */
+/** Clear cached module (tests). */
 export function resetControllerLoaderForTests() {
-  hostCached = null;
+  resetEngineModuleForTests();
 }
