@@ -3,6 +3,9 @@ command: npm run dev
 cwd: .
 healthUrl: http://localhost:3000/
 port: 3000
+# When package.json `dev` uses concurrently (API + Vite), Minnow routes the UI port above
+# to the client script and sets PORT for the API. Override API bind with apiPort:
+# apiPort: 3001
 stop:
   command: npx kill-port 3000
 ---

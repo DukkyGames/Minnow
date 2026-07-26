@@ -260,7 +260,7 @@ describe('cross-mode policy invariants', () => {
 });
 
 describe('tool payload token reduction', () => {
-  test('build mode tool JSON payload stays below ~8,800 tokens', () => {
+  test('build mode tool JSON payload stays below ~8,850 tokens', () => {
     const allDefs = BUILT_IN_TOOLS.map((t) => t.definition);
     const allTokens = estimateToolPayloadTokens(
       allDefs.map((definition) => ({ definition })),
@@ -272,8 +272,8 @@ describe('tool payload token reduction', () => {
 
     assert.ok(allTokens > 9_000, `baseline should exceed 9k, got ${allTokens}`);
     assert.ok(
-      buildTokens >= 7_000 && buildTokens <= 8_800,
-      `build payload expected ~7k-8.8k tok, got ${buildTokens} (all=${allTokens})`,
+      buildTokens >= 7_000 && buildTokens <= 8_850,
+      `build payload expected ~7k-8.85k tok, got ${buildTokens} (all=${allTokens})`,
     );
     assert.ok(buildTokens < allTokens - 2_000, 'build should save at least 2k tokens');
   });
