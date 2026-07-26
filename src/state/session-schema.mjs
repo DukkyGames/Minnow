@@ -56,6 +56,8 @@ const CHAT_PASSTHROUGH_KEYS = new Set([
   'pendingSteerMessage',
   'pendingMessageQueue',
   'pendingModeId',
+  'engineTurnActive',
+  'pendingAskQuestion',
   'turnError',
 ]);
 const MAX_GOAL_CONDITION_CHARS = 4000;
@@ -570,6 +572,13 @@ function ensureOrchestrateBoard(raw) {
   out.executionMode = executionMode;
   if (r.autoRunning === true) out.autoRunning = true;
   if (r.pendingAfk === true) out.pendingAfk = true;
+  // Session Engine board model binding (MIN-360) — replaces #modelSelect DOM reads.
+  if (typeof r.preferredModelId === 'string' && r.preferredModelId.trim()) {
+    out.preferredModelId = r.preferredModelId.trim();
+  }
+  if (typeof r.preferredProviderId === 'string' && r.preferredProviderId.trim()) {
+    out.preferredProviderId = r.preferredProviderId.trim();
+  }
   const isolationModeRaw =
     typeof r.isolationMode === 'string' ? r.isolationMode.trim() : '';
   if (

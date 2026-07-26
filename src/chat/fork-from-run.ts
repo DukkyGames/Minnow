@@ -6,6 +6,8 @@ import { isActiveChatStreaming } from '../chat/streaming-state';
 import { clearAttachments } from '../attachments/store';
 import { parseSlashCommand } from '../skills/parse-slash';
 import { parseSkillTagFromHistory } from '../skills/history-content';
+import { isServerEngineEnabled } from '../state/server-engine-flag.ts';
+import { dispatchSendMessage } from '../state/session-commands.ts';
 import { findChatById, getActiveChat, scheduleSaveSessions, touchChat } from '../state/sessions';
 import { getActiveRun } from '../state/runs-store';
 import { runChatTurn } from '../tools/loop';
@@ -113,6 +115,38 @@ export async function forkFromUserIndex(
 
   touchChat(active);
   scheduleSaveSessions();
+
+  // Engine owns the tool loop — replay without a second user push (history already truncated).
+  // Snapshot/fork metadata is renderer-only until the engine grows fork commands.
+  if (isServerEngineEnabled()) {
+    const modelId =
+      replaySnapshot?.modelId?.trim() ||
+      overrides?.modelId?.trim() ||
+      active.modelId;
+    const providerId =
+      replaySnapshot?.providerId?.trim() ||
+      overrides?.providerId?.trim() ||
+      active.providerId;
+    try {
+      setStatus('spin', 'Sending…');
+      await dispatchSendMessage({
+        chatId: active.id,
+        text: userText || tagged.displayText,
+        historyContent: userRow.content,
+        pushUser: false,
+        modelId,
+        providerId,
+        temperature: replaySnapshot?.temperature ?? overrides?.temperature,
+        maxTokens: replaySnapshot?.maxTokens ?? overrides?.maxTokens,
+        skillId,
+      });
+      const { syncEngineStreamMirrors } = await import('./engine-stream-mirror');
+      syncEngineStreamMirrors();
+    } catch (err) {
+      setStatus('err', err instanceof Error ? err.message : String(err));
+    }
+    return;
+  }
 
   await runChatTurn({
     chat: active,

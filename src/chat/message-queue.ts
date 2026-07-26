@@ -101,13 +101,30 @@ export function pushQueuedMessageNow(chat: Chat, id: string): boolean {
   scheduleSaveSessions();
   if (!item) return false;
 
-  if (isChatTurnInProgress(chat.id)) {
-    return enqueueSteerMessage(chat, item.text);
+  if (isChatTurnInProgress(chat.id) || chat.engineTurnActive) {
+    void import('../state/server-engine-flag').then(({ isServerEngineEnabled }) => {
+      if (isServerEngineEnabled()) {
+        void import('../state/session-commands').then((m) =>
+          m.dispatchSteerMessage(chat.id, item.text).catch(() => undefined),
+        );
+        return;
+      }
+      enqueueSteerMessage(chat, item.text);
+    });
+    return true;
   }
 
-  void import('../tools/loop').then(({ resumeParentChatWithMessage }) =>
-    resumeParentChatWithMessage(chat, item.text),
-  );
+  void import('../state/server-engine-flag').then(({ isServerEngineEnabled }) => {
+    if (isServerEngineEnabled()) {
+      void import('../state/session-commands').then((m) =>
+        m.dispatchSendMessage({ chatId: chat.id, text: item.text }).catch(() => undefined),
+      );
+      return;
+    }
+    void import('../tools/loop').then(({ resumeParentChatWithMessage }) =>
+      resumeParentChatWithMessage(chat, item.text),
+    );
+  });
   return true;
 }
 

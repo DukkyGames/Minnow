@@ -55,7 +55,8 @@ The LLM does **not** move cards to `complete` in normal flow — board member ch
 | **Kickoff** | `src/ui/orchestrate-board-kickoff.ts` | Git preflight → optional `/git-setup` → `board_init` user message |
 | **Launch** | `src/ui/orchestrate-launch.ts` | `launchBoardFromPlan` — hub/plan screen entry |
 | **Groups** | `src/state/chat-groups.ts` | `ChatGroup.orchestrateBoard`, planner link, sidebar wave subgroups |
-| **Boot** | `src/chat/orchestrate/board-boot-resume.ts` | Post-reload merge recovery + auto resume |
+| **Boot (engine)** | `server/session/board-loader.js` + `src/session-engine/board-host.ts` | Server boot resume (default-on Session Engine; MIN-362) |
+| **Boot (opt-out)** | `src/chat/orchestrate/board-boot-resume.ts` | Renderer post-reload resume only when `MINNOW_SERVER_ENGINE=0` |
 | **Shutdown** | `src/chat/orchestrate/board-shutdown.ts` | `pagehide` → pause all running boards |
 | **Reports** | `src/agents/controller/report.ts` | Lifecycle messages to planner in auto mode |
 | **Self-heal** | `src/state/orchestrate-self-heal.ts` | AFK failure escalation table |

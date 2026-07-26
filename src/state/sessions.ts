@@ -6,10 +6,11 @@ import { setSaveTimer, saveTimer } from '../app-state';
 import {
   flushSessionsOnShutdown,
   getChatHistory,
-  getSessions,
-  getSessionSummaries,
+  getSessionsWithRev,
+  getSessionSummariesWithRev,
   patchSessions,
   putSessions,
+  SessionRevisionConflictError,
   type SessionsPatchDelta,
 } from '../config/api-client';
 import { defaultSessionState } from '../config/defaults';
@@ -133,6 +134,73 @@ function normalizeChatTodoStatus(raw: unknown): ChatTodo['status'] {
 export let sessionState: SessionState | null = null;
 
 /**
+ * When set, scheduleSaveSessions/saveSessionsNow publish via the Session Engine
+ * instead of client PUT/PATCH (MIN-360 board host).
+ */
+let engineHostPersistHook: (() => void) | null = null;
+
+/** Engine board host installs a persist hook; null restores normal client saves. */
+export function setEngineHostPersistHook(hook: (() => void) | null): void {
+  engineHostPersistHook = hook;
+}
+
+/**
+ * Point sessionState at the engine-owned blob (same reference — board mutates in place).
+ * Does not run client hydrate/dirty tracking resets beyond assigning the ref.
+ */
+export function setSessionStateForEngineHost(state: SessionState | null): void {
+  sessionState = state;
+  if (state) {
+    sessionsHydratedFromServer = true;
+    sessionPatchDirtySetsReady = true;
+    captureDirtyTrackingShadow(state);
+  }
+}
+
+/** Monotonic server revision for optimistic concurrency (Phase 0). */
+let sessionRev = 0;
+
+/** Current session revision from the server (0 when unknown). */
+export function getSessionRev(): number {
+  return sessionRev;
+}
+
+/** Update tracked revision after a successful load/save/reconcile. */
+export function setSessionRev(rev: number): void {
+  if (Number.isFinite(rev) && rev >= 0) {
+    sessionRev = rev;
+  }
+}
+
+/**
+ * Replace in-memory session state from a remote SSE snapshot/patch.
+ * Full-state replace: mark histories loaded so lazy-history clients stay consistent.
+ */
+export function applyRemoteSessionState(raw: unknown): void {
+  // Durable PUTs/PATCHes omit ephemeral liveSubAgentRuns. Preserve the last known
+  // slice unless the remote payload explicitly includes the field (incl. []).
+  const prevLive = sessionState?.liveSubAgentRuns;
+  const remoteOmitsLive =
+    raw != null &&
+    typeof raw === 'object' &&
+    !Object.prototype.hasOwnProperty.call(raw, 'liveSubAgentRuns');
+
+  sessionState = parseSessionStateFromJson(raw as RawSessionJson);
+  if (
+    remoteOmitsLive &&
+    sessionState.liveSubAgentRuns == null &&
+    Array.isArray(prevLive)
+  ) {
+    sessionState.liveSubAgentRuns = prevLive;
+  }
+  markAllHistoriesLoaded(sessionState.chats);
+  // Remote replace invalidates local dirty sets — next save should full-PUT.
+  clearSessionDirtySets();
+  sessionPatchDirtySetsReady = false;
+  captureDirtyTrackingShadow(sessionState);
+}
+
+/**
  * Set after a successful GET from ~/.minnow. Blocks PUT until hydration so a boot-time
  * localStorage fallback cannot clobber on-disk sessions (MIN-408).
  */
@@ -194,8 +262,28 @@ function isDirtyTrackingVerifierEnabled(): boolean {
   return isViteDevBuild();
 }
 
+/** Snapshot chats for dirty-tracking without reading lazy-unloaded `history`. */
+function chatSnapshotForDirtyShadow(chat: Chat): Record<string, unknown> {
+  if (chat.historyLoaded === false) {
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(chat)) {
+      if (key === 'history') continue;
+      out[key] = (chat as unknown as Record<string, unknown>)[key];
+    }
+    delete out.historyLoaded;
+    delete out.messageCount;
+    return out;
+  }
+  const { historyLoaded: _loaded, messageCount: _count, ...rest } = chat;
+  void _loaded;
+  void _count;
+  return { ...rest };
+}
+
 function captureDirtyTrackingShadow(state: SessionState | null): void {
-  dirtyTrackingShadowChatsJson = state ? JSON.stringify(state.chats) : null;
+  dirtyTrackingShadowChatsJson = state
+    ? JSON.stringify(state.chats.map(chatSnapshotForDirtyShadow))
+    : null;
 }
 
 function clearSessionDirtySets(): void {
@@ -262,7 +350,7 @@ function verifyDirtyChatTracking(state: SessionState): boolean {
   for (const chat of state.chats) {
     const prev = shadowById.get(chat.id);
     if (prev === undefined) continue; // new chats are marked via touchChat on create
-    const next = JSON.stringify(chat);
+    const next = JSON.stringify(chatSnapshotForDirtyShadow(chat));
     if (prev !== next && !dirtyChatIds.has(chat.id)) {
       missed = true;
       console.warn(
@@ -298,8 +386,10 @@ export function chatForSessionsWire(chat: Chat): Chat {
 
 /** Clone session state for wire I/O, stripping unloaded chat histories. */
 export function sessionStateForSessionsWire(state: SessionState): SessionState {
+  // liveSubAgentRuns is engine-ephemeral — never let a client PUT overwrite it.
+  const { liveSubAgentRuns: _live, ...rest } = state;
   return {
-    ...state,
+    ...rest,
     chats: state.chats.map(chatForSessionsWire),
   };
 }
@@ -309,6 +399,12 @@ export function buildSessionsPatchDelta(state: SessionState): SessionsPatchDelta
   const delta: SessionsPatchDelta = {
     baseVersion: state.version ?? SESSION_SCHEMA_VERSION,
   };
+
+  const rev = getSessionRev();
+  if (rev > 0) {
+    // Phase 0: carry expectedRev in body as well as If-Match (beacons cannot set headers).
+    delta.expectedRev = rev;
+  }
 
   if (dirtyChatIds.size > 0) {
     const byId = new Map(state.chats.map((c) => [c.id, c]));
@@ -972,6 +1068,10 @@ export function parseSessionStateFromJson(parsed: RawSessionJson | null): Sessio
   if (typeof rawSession.sidebarWidth === 'number' && Number.isFinite(rawSession.sidebarWidth)) {
     state.sidebarWidth = Math.min(520, Math.max(200, Math.round(rawSession.sidebarWidth)));
   }
+  // Engine SSE live slice (MIN-361) — not in scalar allowlist; copy through for clients.
+  if (Array.isArray(rawSession.liveSubAgentRuns)) {
+    state.liveSubAgentRuns = rawSession.liveSubAgentRuns;
+  }
   return state;
 }
 
@@ -1283,8 +1383,9 @@ export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Pr
       try {
         if (sessionsLazyHistoryEnabled) {
           // C.2: summaries first (meta + non-message children); history on demand.
-          const remote = await getSessionSummaries();
-          sessionState = sessionStateFromSummaries(remote);
+          const remote = await getSessionSummariesWithRev();
+          sessionState = sessionStateFromSummaries(remote.state);
+          setSessionRev(remote.rev);
           // Active chat is hydrated immediately so the first paint has a transcript.
           if (sessionState.activeId) {
             await ensureChatHistoryLoaded(sessionState.activeId);
@@ -1295,8 +1396,9 @@ export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Pr
           await runSessionCodeChangeBackfill(sessionState);
         } else {
           // Flag off (tests): whole-blob GET — every chat is fully loaded.
-          const remote = await getSessions();
-          sessionState = parseSessionStateFromJson(remote);
+          const remote = await getSessionsWithRev();
+          sessionState = parseSessionStateFromJson(remote.state);
+          setSessionRev(remote.rev);
           markAllHistoriesLoaded(sessionState.chats);
           await runSessionCodeChangeBackfill(sessionState);
         }
@@ -1560,6 +1662,45 @@ export type SaveSessionsOptions = {
 };
 
 /**
+ * PUT session blob with If-Match; on 409 re-pull and retry once.
+ * Throws on non-conflict failures so callers can surface status.
+ */
+async function persistSessionsPutToServer(): Promise<void> {
+  if (!sessionState) return;
+  const snapshot = sessionStateForSessionsWire(sessionState);
+  const expectedRev = getSessionRev();
+  try {
+    const newRev = await putSessions(snapshot, expectedRev > 0 ? expectedRev : undefined);
+    setSessionRev(newRev);
+  } catch (err) {
+    if (!(err instanceof SessionRevisionConflictError)) throw err;
+    const remote = await getSessionsWithRev();
+    setSessionRev(remote.rev);
+    const retryRev = await putSessions(snapshot, remote.rev > 0 ? remote.rev : undefined);
+    setSessionRev(retryRev);
+  }
+}
+
+/**
+ * PATCH with If-Match / expectedRev; on 409 refresh rev and retry the same delta once.
+ */
+async function persistSessionsPatchToServer(delta: SessionsPatchDelta): Promise<void> {
+  try {
+    const newRev = await patchSessions(delta);
+    setSessionRev(newRev);
+  } catch (err) {
+    if (!(err instanceof SessionRevisionConflictError)) throw err;
+    setSessionRev(err.rev);
+    const retryDelta: SessionsPatchDelta = {
+      ...delta,
+      expectedRev: err.rev > 0 ? err.rev : undefined,
+    };
+    const retryRev = await patchSessions(retryDelta);
+    setSessionRev(retryRev);
+  }
+}
+
+/**
  * Persist session state. In server mode (B.2):
  * - MIN-408: no network write until hydrated from ~/.minnow
  * - PATCH when `sessionsClientPatchEnabled` (default ON) and dirty sets are trusted
@@ -1568,6 +1709,14 @@ export type SaveSessionsOptions = {
  */
 export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResult {
   if (!sessionState) return 'ok';
+
+  // Engine board host: publish in-place engine state (no client PUT/PATCH).
+  if (engineHostPersistHook) {
+    clearSessionDirtySets();
+    captureDirtyTrackingShadow(sessionState);
+    engineHostPersistHook();
+    return 'ok';
+  }
 
   // Detect unmarked chat mutations in DEV; a miss forces full-PUT fallback.
   const verifierMiss = verifyDirtyChatTracking(sessionState);
@@ -1614,7 +1763,7 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
 
     if (usePatch) {
       const delta = buildSessionsPatchDelta(sessionState);
-      inFlightSessionSave = patchSessions(delta)
+      inFlightSessionSave = persistSessionsPatchToServer(delta)
         .then(() => {
           clearSessionDirtySets();
           captureDirtyTrackingShadow(sessionState);
@@ -1628,7 +1777,7 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
     }
 
     // Full-PUT fallback (first save after load, verifier miss, or flag off).
-    inFlightSessionSave = putSessions(sessionStateForSessionsWire(sessionState))
+    inFlightSessionSave = persistSessionsPutToServer()
       .then(() => {
         clearSessionDirtySets();
         sessionPatchDirtySetsReady = true;
@@ -1670,12 +1819,66 @@ export function scheduleSaveSessions(hint?: { chatId?: string; groupId?: string 
   );
 }
 
+/** Cancel the debounced timer and start a save now (shared by flush helpers). */
+function runScheduledSessionSaveImmediately(): void {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    setSaveTimer(null);
+  }
+  saveSessionsNow();
+}
+
+/**
+ * Flush any debounced session save before engine commands that require the chat
+ * row to exist server-side (e.g. send_message on a freshly created desktop chat).
+ */
+export async function flushScheduledSessionSave(): Promise<void> {
+  runScheduledSessionSaveImmediately();
+  if (inFlightSessionSave) {
+    await inFlightSessionSave;
+  }
+}
+
+/** True when the chat id was present in the last dirty-tracking baseline (server hydrate). */
+function isChatKnownToServerShadow(chatId: string): boolean {
+  if (!dirtyTrackingShadowChatsJson) return false;
+  try {
+    const shadow = JSON.parse(dirtyTrackingShadowChatsJson) as Array<{ id?: string }>;
+    if (!Array.isArray(shadow)) return false;
+    return shadow.some((row) => row?.id === chatId);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Ensure a chat row is queued for PATCH/PUT before an engine command.
+ * Covers creation paths that forgot touchChat (hero seed, rail new chat, etc.).
+ */
+export async function ensureChatPersistedBeforeEngineCommand(chatId: string): Promise<void> {
+  const id = typeof chatId === 'string' ? chatId.trim() : '';
+  if (!id) return;
+
+  const chat = findChatById(id);
+  if (chat && !isChatKnownToServerShadow(id)) {
+    touchChat(chat);
+    if (sessionState?.activeId === id) {
+      markSessionScalarsDirty();
+    }
+  } else if (chat && !dirtyChatIds.has(id)) {
+    // Chat existed at hydrate but may still be dirty from an unmarked activeId switch.
+    if (sessionState?.activeId === id && !sessionScalarsDirty) {
+      markSessionScalarsDirty();
+    }
+  }
+
+  await flushScheduledSessionSave();
+}
+
 /** Run any debounced session save immediately (unit tests only). */
 export function flushScheduledSessionSaveForTests(): void {
   if (!saveTimer) return;
-  clearTimeout(saveTimer);
-  setSaveTimer(null);
-  saveSessionsNow();
+  runScheduledSessionSaveImmediately();
 }
 
 /** Flush debounced saves and persist immediately (pagehide / abrupt quit). */

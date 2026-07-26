@@ -45,6 +45,9 @@ import {
   writeWholeSessionState,
 } from './sessions-repo.js';
 import { sessionsJsonPath } from './sessions-paths.js';
+import { notifySessionStateWritten } from '../session/publish.js';
+import { getSessionRev } from '../session/rev-store.js';
+import { isServerEngineEnabled } from '../session/flag.js';
 
 /** Best-effort chmod for secret-bearing files on Unix. */
 async function chmodSecretFile(filePath) {
@@ -388,6 +391,50 @@ export async function readResource(resource) {
 }
 
 /**
+ * Durable validate strips ephemeral liveSubAgentRuns. Reattach before SSE/rev-cache
+ * publish so clients do not lose the Phase 3 live slice on PUT/PATCH (MIN-361).
+ * Disk still receives the durable blob only.
+ *
+ * @param {unknown} durable
+ * @param {unknown} [bodyHint] write body that may still carry liveSubAgentRuns
+ * @returns {Promise<unknown>}
+ */
+async function withLiveSubAgentRunsForPublish(durable, bodyHint) {
+  if (!isServerEngineEnabled()) return durable;
+  if (!durable || typeof durable !== 'object') return durable;
+
+  /** @type {unknown[] | undefined} */
+  let live;
+  if (
+    bodyHint &&
+    typeof bodyHint === 'object' &&
+    Array.isArray(/** @type {Record<string, unknown>} */ (bodyHint).liveSubAgentRuns)
+  ) {
+    live = /** @type {unknown[]} */ (
+      /** @type {Record<string, unknown>} */ (bodyHint).liveSubAgentRuns
+    );
+  } else {
+    try {
+      const { getEngineSessionState } = await import('../session/engine.js');
+      const eng = getEngineSessionState();
+      if (
+        eng &&
+        typeof eng === 'object' &&
+        Array.isArray(/** @type {Record<string, unknown>} */ (eng).liveSubAgentRuns)
+      ) {
+        live = /** @type {unknown[]} */ (
+          /** @type {Record<string, unknown>} */ (eng).liveSubAgentRuns
+        );
+      }
+    } catch {
+      /* engine module unavailable in some test harnesses */
+    }
+  }
+  if (live === undefined) return durable;
+  return { .../** @type {object} */ (durable), liveSubAgentRuns: live };
+}
+
+/**
  * @param {string} resource
  * @param {unknown} body
  */
@@ -399,6 +446,13 @@ export async function writeResource(resource, body) {
     const validated = validateSessionState(body);
     if (useJsonSessionsStore()) {
       await writeConfigJson(key, validated);
+      // Phase 0: bump rev + fan out SSE after every sessions write (JSON path).
+      const publishState = await withLiveSubAgentRunsForPublish(validated, body);
+      notifySessionStateWritten(publishState);
+      if (isServerEngineEnabled()) {
+        const { adoptExternalSessionWrite } = await import('../session/engine.js');
+        adoptExternalSessionWrite(validated);
+      }
       return validated;
     }
     await ensureMinnowLayout();
@@ -407,6 +461,13 @@ export async function writeResource(resource, body) {
         ? /** @type {Record<string, unknown>} */ (body).chats
         : undefined;
     writeWholeSessionState(validated, { rawChats });
+    // Phase 0: SQLite PUT also publishes so multi-device clients stay in sync.
+    const publishState = await withLiveSubAgentRunsForPublish(validated, body);
+    notifySessionStateWritten(publishState);
+    if (isServerEngineEnabled()) {
+      const { adoptExternalSessionWrite } = await import('../session/engine.js');
+      adoptExternalSessionWrite(validated);
+    }
     return validated;
   }
   if (resource === 'tools') {
@@ -496,10 +557,11 @@ export async function writeResource(resource, body) {
 /**
  * Apply a partial sessions delta (PATCH /api/config/sessions).
  * SQLite path uses {@link patchSessionState}; JSON fallback does in-memory splice.
+ * After a successful patch, bumps Phase 0 session rev and fans out SSE (full state).
  *
  * @param {string} resource
  * @param {unknown} body
- * @returns {Promise<{ ok: true, applied: Record<string, unknown> }>}
+ * @returns {Promise<{ ok: true, applied: Record<string, unknown>, rev: number }>}
  */
 export async function patchResource(resource, body) {
   if (resource !== 'sessions') {
@@ -508,12 +570,26 @@ export async function patchResource(resource, body) {
     throw err;
   }
 
+  let result;
   if (useJsonSessionsStore()) {
-    return patchJsonSessionState(body);
+    result = await patchJsonSessionState(body);
+  } else {
+    await ensureMinnowLayout();
+    result = patchSessionState(body);
   }
 
-  await ensureMinnowLayout();
-  return patchSessionState(body);
+  // PATCH returns a delta ack — re-read the authoritative blob for SSE subscribers.
+  const state = useJsonSessionsStore()
+    ? ((await readConfigJson('sessions/state.json')) ?? defaultSessionStateJson())
+    : readWholeSessionState();
+  // Disk blob lacks liveSubAgentRuns — merge from engine before fan-out (MIN-361).
+  const publishState = await withLiveSubAgentRunsForPublish(state);
+  const rev = notifySessionStateWritten(publishState);
+  if (isServerEngineEnabled()) {
+    const { adoptExternalSessionWrite } = await import('../session/engine.js');
+    adoptExternalSessionWrite(state);
+  }
+  return { ...result, rev: rev || getSessionRev() };
 }
 
 /**

@@ -48,6 +48,7 @@ import { renderNotificationsSettingsSection } from './settings-notifications';
 import { renderNetworkAccessSettings } from './settings-network';
 import { renderFilesystemAccessSettings } from './settings-filesystem';
 import { renderAppUpdatesSettings } from './settings-updates';
+import { renderDesktopShellSettings } from './settings-desktop-shell';
 import { renderAgentPacksSettingsSection } from './settings-agent-packs';
 import { renderAutopilotSettingsSection } from './settings-autopilot';
 import { renderSkillsSettingsSection } from './settings-skills';
@@ -346,6 +347,17 @@ async function renderGeneralSection(): Promise<void> {
   );
   updates.id = 'settingsAppUpdates';
   renderAppUpdatesSettings(updates);
+
+  const desktop = appendSettingsGroup(
+    shell,
+    'Desktop app',
+    'System tray behavior and whether Minnow opens when you sign in.',
+    'general.desktop',
+    { emphasis: true },
+  );
+  desktop.id = 'settingsDesktopShell';
+  await renderDesktopShellSettings(desktop);
+  if (isAsyncSectionRenderStale('general', generation)) return;
 
   const chat = appendSettingsGroup(
     shell,

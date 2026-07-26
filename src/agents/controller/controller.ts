@@ -7,7 +7,7 @@ import { normalizeModeId } from '../../chat/modes/types';
 import { getBoardGroupForChat } from '../../state/chat-groups';
 import { appendTaskRunHistory, getBoardExecutionMode, isBoardRunning, updateTask } from '../../state/orchestrate-board-store';
 import { resolveSelfHealMaxRounds } from '../../config/autopilot-meta';
-import { findChatById } from '../../state/sessions';
+import { findChatById, sessionState } from '../../state/sessions';
 import { executeTool, getEnabledToolDefinitionsForMode } from '../../tools/client';
 import { loadSubAgentConfig } from '../sub-agent-config';
 import { buildSubAgentSystemPrompt } from '../sub-agent-prompt';
@@ -53,14 +53,18 @@ import {
   forEachRunInternals,
   getParentTurnRunIds,
   getRunInternals,
-  getSubAgentRun,
-  listActiveSubAgentRuns,
-  listSubAgentRunsForParentChat,
-  listSubAgentRunsForParentTurn,
+  getSubAgentRun as getSubAgentRunFromRegistry,
+  listActiveSubAgentRuns as listActiveSubAgentRunsFromRegistry,
+  listSubAgentRunsForParentChat as listSubAgentRunsForParentChatFromRegistry,
+  listSubAgentRunsForParentTurn as listSubAgentRunsForParentTurnFromRegistry,
   registerRun,
   scheduleRunEviction,
   trimRunMessagesOnSettle,
 } from './registry';
+import { shouldAutoStartControllerBoot, shouldReadLiveSubAgentSlice } from './host-gate';
+import {
+  liveSnapshotToSubAgentRun,
+} from './client-live-mirror';
 import {
   acquireConcurrencySlot,
   canStart,
@@ -703,6 +707,43 @@ async function spawnSubAgentInternal(
 export async function spawnSubAgent(
   input: SpawnSubAgentInput,
 ): Promise<SpawnSubAgentResult | AggregateResult> {
+  // Renderer under MINNOW_SERVER_ENGINE: mutate the engine-owned registry via commands.
+  if (shouldReadLiveSubAgentSlice()) {
+    const { dispatchSessionCommand } = await import('../../state/session-commands.ts');
+    // Prefer wait:false on the wire so the 202 returns with runId promptly; then
+    // wait locally via SSE-mirrored subscribeSubAgentRuns when the caller asked.
+    const cmdResult = await dispatchSessionCommand({
+      type: 'spawn_sub_agent',
+      agentType: input.type,
+      task: input.task,
+      wait: false,
+      parentChatId: input.parentChatId ?? null,
+      parentTurnId: input.parentTurnId ?? null,
+      parentToolCallId: input.parentToolCallId ?? null,
+      modeId: input.modeId,
+      ...(input.category ? { category: input.category } : {}),
+      ...(input.boardTaskId ? { boardTaskId: input.boardTaskId } : {}),
+      ...(input.providerId ? { providerId: input.providerId } : {}),
+      ...(input.modelId ? { modelId: input.modelId } : {}),
+      ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+    });
+    let spawned: SpawnSubAgentResult | null = null;
+    if (cmdResult.detail) {
+      try {
+        spawned = JSON.parse(cmdResult.detail) as SpawnSubAgentResult;
+      } catch {
+        /* fall through */
+      }
+    }
+    if (!spawned?.runId) {
+      throw new Error(cmdResult.detail || 'Engine spawn_sub_agent failed');
+    }
+    if (input.wait === true) {
+      return waitForSubAgent(spawned.runId);
+    }
+    return spawned;
+  }
+
   const wait = input.wait === true;
   const result = await spawnSubAgentInternal(input);
 
@@ -717,6 +758,18 @@ export function cancelSubAgent(
   runId: string,
   reason = 'cancelled',
 ): CancelSubAgentResult {
+  // Fire-and-forget engine cancel so sync UI callers keep working.
+  if (shouldReadLiveSubAgentSlice()) {
+    void import('../../state/session-commands.ts').then(({ dispatchSessionCommand }) => {
+      void dispatchSessionCommand({
+        type: 'cancel_sub_agent',
+        runId,
+        reason,
+      });
+    });
+    return { ok: true, runId, status: 'cancelled' };
+  }
+
   removeFromQueue(runId);
 
   const internals = getRunInternals(runId);
@@ -769,7 +822,50 @@ export async function restartSubAgent(
   });
 }
 
-export { getSubAgentRun, listActiveSubAgentRuns, listSubAgentRunsForParentChat, listSubAgentRunsForParentTurn };
+/** Public read — registry in-process, or SSE live slice on engine-flag clients. */
+export function getSubAgentRun(runId: string): SubAgentRun | undefined {
+  if (shouldReadLiveSubAgentSlice()) {
+    const snap = sessionState?.liveSubAgentRuns?.find((r) => r.runId === runId);
+    return snap ? liveSnapshotToSubAgentRun(snap) : undefined;
+  }
+  return getSubAgentRunFromRegistry(runId);
+}
+
+/** Runs that are still queued or executing (live slice on remote clients). */
+export function listActiveSubAgentRuns(): SubAgentRun[] {
+  if (shouldReadLiveSubAgentSlice()) {
+    return (sessionState?.liveSubAgentRuns ?? [])
+      .filter((r) => r.status === 'queued' || r.status === 'running')
+      .map(liveSnapshotToSubAgentRun);
+  }
+  return listActiveSubAgentRunsFromRegistry();
+}
+
+/** Active or settled runs for a parent user-send turn. */
+export function listSubAgentRunsForParentTurn(
+  parentTurnId: string | null | undefined,
+): SubAgentRun[] {
+  if (shouldReadLiveSubAgentSlice()) {
+    if (!parentTurnId) return [];
+    return (sessionState?.liveSubAgentRuns ?? [])
+      .filter((r) => r.parentTurnId === parentTurnId)
+      .map(liveSnapshotToSubAgentRun);
+  }
+  return listSubAgentRunsForParentTurnFromRegistry(parentTurnId);
+}
+
+/** Active or settled runs for a parent chat session. */
+export function listSubAgentRunsForParentChat(
+  parentChatId: string | null | undefined,
+): SubAgentRun[] {
+  if (shouldReadLiveSubAgentSlice()) {
+    if (!parentChatId) return [];
+    return (sessionState?.liveSubAgentRuns ?? [])
+      .filter((r) => r.parentChatId === parentChatId)
+      .map(liveSnapshotToSubAgentRun);
+  }
+  return listSubAgentRunsForParentChatFromRegistry(parentChatId);
+}
 
 /** True when a terminal cancel was issued to spawn a watchdog recovery run. */
 function isWatchdogSupersedingCancel(error: string | null | undefined): boolean {
@@ -1400,8 +1496,12 @@ function registerControllerWatchdogHandlers(): void {
 
 registerControllerWatchdogHandlers();
 
-void initControllerPersistence().then(() => {
-  startWatchdog();
-});
+// Flag-off / tests: auto-boot here. Flag-on engine: controller-host boots once.
+// Flag-on renderer: skip — engine owns persistence + watchdog (MIN-361).
+if (shouldAutoStartControllerBoot()) {
+  void initControllerPersistence().then(() => {
+    startWatchdog();
+  });
+}
 
 export { resetSubAgentOrchestrator as resetSubAgentController };

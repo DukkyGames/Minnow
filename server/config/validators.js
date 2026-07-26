@@ -1026,6 +1026,21 @@ export function normalizeSuperPlanConfig(raw, existing = {}) {
 }
 
 /**
+ * Normalize desktopShell settings (close-to-tray). Missing/invalid values default to true.
+ * @param {unknown} raw
+ * @returns {{ closeToTray: boolean }}
+ */
+export function normalizeDesktopShellConfig(raw) {
+  const base =
+    raw && typeof raw === 'object'
+      ? { .../** @type {Record<string, unknown>} */ (raw) }
+      : {};
+  return {
+    closeToTray: base.closeToTray === false ? false : true,
+  };
+}
+
+/**
  * Merge allowed fields into config.json meta.
  * @param {object} existing
  * @param {unknown} patch
@@ -1710,6 +1725,20 @@ export function mergeConfigMeta(existing, patch) {
       }
     }
     base.server = existingServer;
+  }
+
+  if (p.desktopShell && typeof p.desktopShell === 'object') {
+    const existingShell =
+      base.desktopShell && typeof base.desktopShell === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (base.desktopShell) }
+        : { closeToTray: true };
+    const d = /** @type {Record<string, unknown>} */ (p.desktopShell);
+    if (typeof d.closeToTray === 'boolean') {
+      existingShell.closeToTray = d.closeToTray;
+    }
+    base.desktopShell = normalizeDesktopShellConfig(existingShell);
+  } else if (!base.desktopShell || typeof base.desktopShell !== 'object') {
+    base.desktopShell = normalizeDesktopShellConfig(null);
   }
 
   if (p.browser && typeof p.browser === 'object') {

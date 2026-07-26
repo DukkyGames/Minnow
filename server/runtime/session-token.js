@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { getMinnowHome } from '../config/home.js';
+import { isServerEngineEnabled } from '../session/flag.js';
 
 const TOKEN_FILE_NAME = 'session-token';
 
@@ -79,12 +80,16 @@ const HEAD_MARKER = '</head>';
 /**
  * Inject the session token into a served HTML document so the browser can
  * read it same-origin; a cross-origin attacker page never sees it.
+ * Also injects MINNOW_SERVER_ENGINE (default ON; opt-out via 0/false/off/no)
+ * so the SPA can gate main-chat / board / controller without an extra round-trip.
  * @param {string} html
  * @param {string} token
  * @returns {string}
  */
 export function injectSessionTokenScript(html, token) {
-  const script = `<script>window.__MINNOW_SESSION_TOKEN__=${JSON.stringify(token)};</script>`;
+  // Default-on semantics live in server/session/flag.js (single source of truth).
+  const engineOn = isServerEngineEnabled();
+  const script = `<script>window.__MINNOW_SESSION_TOKEN__=${JSON.stringify(token)};window.__MINNOW_SERVER_ENGINE__=${engineOn ? 'true' : 'false'};</script>`;
   const idx = html.indexOf(HEAD_MARKER);
   if (idx === -1) return script + html;
   return html.slice(0, idx) + script + html.slice(idx);

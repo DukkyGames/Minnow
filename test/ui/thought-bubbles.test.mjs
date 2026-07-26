@@ -150,6 +150,30 @@ describe('ThoughtBubbleController', { concurrency: false }, () => {
 
     ctrl.endReasoningPhase();
   });
+
+  test('ensureLiveStageVisible revives thinking UI after remount to a new wrap', () => {
+    setupDom();
+    const wrap = assistantWrap();
+    const ctrl = new ThoughtBubbleController(wrap);
+    ctrl.appendReasoningDelta('Plan the reply');
+    assert.ok(wrap.querySelector('.thoughts-toggle--live'));
+
+    // History paint disconnects the old row.
+    wrap.remove();
+    const next = assistantWrap();
+    document.getElementById('chatArea')?.appendChild(next);
+    ctrl.setAssistantWrap(next);
+    assert.equal(next.querySelector('.thoughts-toggle--live'), null);
+
+    ctrl.ensureLiveStageVisible();
+    assert.ok(next.querySelector('.thoughts-toggle--live'));
+    assert.equal(
+      next.querySelector('.thoughts-toggle__label')?.textContent,
+      'Thinking…',
+    );
+
+    ctrl.endReasoningPhase();
+  });
 });
 
 describe('renderThoughtsToggle', () => {

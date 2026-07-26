@@ -64,6 +64,11 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   // not in config.json, so both keys are section-only for agent tools.
   'general.updates': section(['general']),
   'general.updates.channel': section(['general']),
+  'general.desktop': section(['general']),
+  'general.desktop.closeToTray': meta('desktopShell.closeToTray', 'boolean', {
+    refreshAreas: ['general'],
+  }),
+  'general.desktop.launchAtStartup': section(['general']),
   'general.notifications': section(['notifications']),
   'general.notifications.enabled': browser('enabled', 'boolean', { refreshAreas: ['notifications'] }),
   'general.notifications.chat': browser('chatEnabled', 'boolean', { refreshAreas: ['notifications'] }),

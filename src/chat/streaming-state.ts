@@ -1,5 +1,8 @@
 /**
  * Helpers for per-chat streaming: which chats are in-flight vs which chat is active in the UI.
+ *
+ * Stream-end / activity bus lives in session-engine/stream-bus (MIN-360) so the
+ * Session Engine board scheduler can share the same in-process events.
  */
 
 import { expertsPageOpen, streamingChatIds } from '../app-state';
@@ -13,55 +16,13 @@ import {
 } from '../ui/chat-mount';
 import { isMainColumnOverlaySuppressingChatDom } from '../ui/main-column-overlay';
 import { isBoardViewActive } from '../ui/view-mode-toggle';
-import { reportBackgroundError } from '../boot/report-background-error';
 
-type ChatStreamEndListener = (chatId: string) => void;
-const streamEndListeners = new Set<ChatStreamEndListener>();
-
-/** Register for parent stream end (e.g. sub-agent completion flush). */
-export function subscribeChatStreamEnd(listener: ChatStreamEndListener): () => void {
-  streamEndListeners.add(listener);
-  return () => {
-    streamEndListeners.delete(listener);
-  };
-}
-
-/** Notify subscribers that a chat finished streaming (call before clearing streaming flags). */
-export function notifyChatStreamEnded(chatId: string): void {
-  if (!chatId) return;
-  for (const fn of streamEndListeners) {
-    try {
-      fn(chatId);
-    } catch (err) {
-      reportBackgroundError('stream-end-listener', err);
-    }
-  }
-}
-
-type ChatStreamActivityListener = (chatId: string) => void;
-const streamActivityListeners = new Set<ChatStreamActivityListener>();
-
-/** Register for streaming deltas (prose, reasoning, tools) on any chat. */
-export function subscribeChatStreamActivity(
-  listener: ChatStreamActivityListener,
-): () => void {
-  streamActivityListeners.add(listener);
-  return () => {
-    streamActivityListeners.delete(listener);
-  };
-}
-
-/** Notify subscribers that a chat received stream/progress activity. */
-export function notifyChatStreamActivity(chatId: string): void {
-  if (!chatId) return;
-  for (const fn of streamActivityListeners) {
-    try {
-      fn(chatId);
-    } catch (err) {
-      reportBackgroundError('stream-activity-listener', err);
-    }
-  }
-}
+export {
+  subscribeChatStreamEnd,
+  notifyChatStreamEnded,
+  subscribeChatStreamActivity,
+  notifyChatStreamActivity,
+} from '../session-engine/stream-bus';
 
 /**
  * Active chat id when it is streaming; otherwise any single streaming id; else null.

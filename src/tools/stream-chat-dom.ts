@@ -32,12 +32,28 @@ export function registerStreamDomRemount(
   }
 }
 
-/** After switchChat, attach a fresh stream shell if this chat is still in-flight. */
+/**
+ * After switchChat / history paint, attach a fresh stream shell if this chat is
+ * still in-flight. Engine mirrors register a remount listener without joining
+ * `streamingChatIds` (so remote session reconcile is not blocked).
+ */
 export function remountStreamDomForChat(chatId: string): void {
-  if (!isChatStreaming(chatId) || !isStreamDomVisible(chatId)) return;
+  if (!isStreamDomVisible(chatId)) return;
+
+  const listener = remountListeners.get(chatId);
+  // Renderer tool loop: streamingChatIds. Engine path: remount listener only.
+  if (!isChatStreaming(chatId) && !listener) return;
 
   const row: StreamingAssistantRow = appendStreamingAssistantRow(chatId);
-  const listener = remountListeners.get(chatId);
+
+  // Restore phase before the listener so thought-bubble remount can hide status again.
+  const phase = getSidebarStreamPhase(chatId);
+  if (phase === 'thinking') {
+    row.streamStatus.setPhase('thinking');
+  } else if (phase === 'generating') {
+    row.streamStatus.setPhase('generating');
+  }
+
   if (listener) {
     listener({
       wrap: row.wrap,
@@ -45,13 +61,5 @@ export function remountStreamDomForChat(chatId: string): void {
       cursor: row.cursor,
       streamStatus: row.streamStatus,
     });
-  }
-
-  // Restore thinking/generating label after history re-render cleared the live row.
-  const phase = getSidebarStreamPhase(chatId);
-  if (phase === 'thinking') {
-    row.streamStatus.setPhase('thinking');
-  } else if (phase === 'generating') {
-    row.streamStatus.setPhase('generating');
   }
 }

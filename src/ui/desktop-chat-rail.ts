@@ -9,10 +9,12 @@ import {
   getActiveChat,
   getAssistantChats,
   isEphemeralEmptyChat,
+  markSessionScalarsDirty,
   newChatId,
   pruneEphemeralEmptyChats,
   rememberActiveChatForApp,
   scheduleSaveSessions,
+  touchChat,
   sessionState,
 } from '../state/sessions';
 import {
@@ -199,8 +201,10 @@ export async function createNewDesktopChat(): Promise<void> {
   sessionState.chats.unshift(chat);
   pruneEphemeralEmptyChats(sessionState, chat.id);
   sessionState.activeId = chat.id;
+  touchChat(chat);
+  markSessionScalarsDirty();
   rememberActiveChatForApp(DESKTOP_APP_ID, chat.id);
-  scheduleSaveSessions();
+  scheduleSaveSessions({ chatId: chat.id });
 
   const { isDesktopChatActive, activateDesktopChat } = await import('../os/desktop-state');
   const desktopChat = await import('../os/desktop-chat');

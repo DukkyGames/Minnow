@@ -18,6 +18,7 @@ import type { ToolConfig } from '../tools/tool-settings-types';
 import type { SearchConfig } from './search-config';
 import type { ResearchConfig } from './research-config';
 import type { UserRulesSettings } from './user-rules';
+import { withSessionToken } from '../api/session-token';
 import {
   defaultSessionState,
   defaultSystemPromptSettings,
@@ -40,6 +41,8 @@ export const SESSIONS_BEACON_MAX_BYTES = 60 * 1024;
 /** Partial sessions write body for PATCH /api/config/sessions (and POST beacon alias). */
 export interface SessionsPatchDelta {
   baseVersion: number;
+  /** Phase 0 optimistic concurrency (also sent as If-Match). Not schema version. */
+  expectedRev?: number;
   chats?: Chat[];
   deleteChatIds?: string[];
   groups?: ChatGroup[];
@@ -99,8 +102,48 @@ export async function fetchConfigStatus(): Promise<ConfigStatusResponse> {
 
 /** GET /api/config/sessions */
 export async function getSessions(): Promise<SessionState> {
+  const result = await getSessionsWithRev();
+  return result.state;
+}
+
+export interface SessionsWithRev {
+  state: SessionState;
+  rev: number;
+}
+
+/** Parse X-Session-Rev from a successful sessions response. */
+function readSessionRevHeader(res: Response): number {
+  const revHeader = res.headers.get('X-Session-Rev');
+  const rev = revHeader ? Number.parseInt(revHeader, 10) : 0;
+  return Number.isFinite(rev) ? rev : 0;
+}
+
+/** GET /api/config/sessions — includes monotonic revision (Phase 0). */
+export async function getSessionsWithRev(): Promise<SessionsWithRev> {
   const res = await fetch('/api/config/sessions', { cache: 'no-store' });
-  return parseJsonResponse<SessionState>(res);
+  const state = await parseJsonResponse<SessionState>(res);
+  return { state, rev: readSessionRevHeader(res) };
+}
+
+export class SessionRevisionConflictError extends Error {
+  readonly rev: number;
+
+  constructor(rev: number) {
+    super('Session state revision conflict');
+    this.name = 'SessionRevisionConflictError';
+    this.rev = rev;
+  }
+}
+
+/** Throw SessionRevisionConflictError when the server returns 409 on sessions write. */
+async function throwIfSessionRevConflict(res: Response): Promise<void> {
+  if (res.status !== 409) return;
+  const errBody = await res.json().catch(() => ({}));
+  const rev =
+    errBody && typeof errBody === 'object' && 'rev' in errBody
+      ? Number((errBody as { rev: unknown }).rev)
+      : readSessionRevHeader(res);
+  throw new SessionRevisionConflictError(Number.isFinite(rev) ? rev : 0);
 }
 
 /**
@@ -109,6 +152,14 @@ export async function getSessions(): Promise<SessionState> {
  */
 /** GET /api/config/sessions/summaries?workspace=… — chats omit `history` (Phase C.1). */
 export async function getSessionSummaries(workspace?: string): Promise<SessionSummariesState> {
+  const result = await getSessionSummariesWithRev(workspace);
+  return result.state;
+}
+
+/** GET summaries + Phase 0 revision header (boot path when lazy history is on). */
+export async function getSessionSummariesWithRev(
+  workspace?: string,
+): Promise<{ state: SessionSummariesState; rev: number }> {
   const params = new URLSearchParams();
   if (workspace != null && workspace !== '') {
     params.set('workspace', workspace);
@@ -117,7 +168,8 @@ export async function getSessionSummaries(workspace?: string): Promise<SessionSu
   const res = await fetch(`/api/config/sessions/summaries${qs ? `?${qs}` : ''}`, {
     cache: 'no-store',
   });
-  return parseJsonResponse<SessionSummariesState>(res);
+  const state = await parseJsonResponse<SessionSummariesState>(res);
+  return { state, rev: readSessionRevHeader(res) };
 }
 
 /**
@@ -214,24 +266,55 @@ export async function putIssuesTaxonomy(taxonomy: IssuesTaxonomy): Promise<void>
   await parseJsonResponse<{ ok: boolean }>(res);
 }
 
-/** PUT /api/config/sessions */
-export async function putSessions(state: SessionState): Promise<void> {
+/** PUT /api/config/sessions — optional If-Match rev; returns new rev. */
+export async function putSessions(state: SessionState, expectedRev?: number): Promise<number> {
+  const headers: Record<string, string> = { ...JSON_HEADERS };
+  if (expectedRev != null && Number.isFinite(expectedRev) && expectedRev > 0) {
+    headers['If-Match'] = String(expectedRev);
+  }
   const res = await fetch('/api/config/sessions', {
     method: 'PUT',
-    headers: JSON_HEADERS,
+    headers,
     body: JSON.stringify(state),
   });
-  await parseJsonResponse<{ ok: boolean }>(res);
+  await throwIfSessionRevConflict(res);
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    const message =
+      errBody && typeof errBody === 'object' && 'error' in errBody
+        ? String((errBody as { error: unknown }).error)
+        : res.statusText;
+    throw new Error(message || `Config API ${res.status}`);
+  }
+  const body = (await res.json()) as { rev?: number };
+  const rev = body.rev ?? readSessionRevHeader(res);
+  return Number.isFinite(rev) ? rev : 0;
 }
 
-/** PATCH /api/config/sessions — partial upsert / explicit deletes. */
-export async function patchSessions(delta: SessionsPatchDelta): Promise<void> {
+/** PATCH /api/config/sessions — partial upsert / explicit deletes; returns new rev. */
+export async function patchSessions(delta: SessionsPatchDelta): Promise<number> {
+  const headers: Record<string, string> = { ...JSON_HEADERS };
+  const expectedRev = delta.expectedRev;
+  if (expectedRev != null && Number.isFinite(expectedRev) && expectedRev > 0) {
+    headers['If-Match'] = String(expectedRev);
+  }
   const res = await fetch('/api/config/sessions', {
     method: 'PATCH',
-    headers: JSON_HEADERS,
+    headers,
     body: JSON.stringify(delta),
   });
-  await parseJsonResponse<{ ok: boolean }>(res);
+  await throwIfSessionRevConflict(res);
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    const message =
+      errBody && typeof errBody === 'object' && 'error' in errBody
+        ? String((errBody as { error: unknown }).error)
+        : res.statusText;
+    throw new Error(message || `Config API ${res.status}`);
+  }
+  const body = (await res.json()) as { rev?: number };
+  const rev = body.rev ?? readSessionRevHeader(res);
+  return Number.isFinite(rev) ? rev : 0;
 }
 
 /**
@@ -242,11 +325,16 @@ export async function patchSessions(delta: SessionsPatchDelta): Promise<void> {
  * A full SessionState often exceeds that, so this path was likely a silent no-op for
  * large blobs — prefer {@link sendSessionsPatchBeacon} when the delta fits.
  */
-export function putSessionsKeepalive(state: SessionState): void {
+export function putSessionsKeepalive(state: SessionState, expectedRev?: number): void {
   try {
+    const headers: Record<string, string> = { ...JSON_HEADERS };
+    // Phase 0: keepalive PUT still participates in optimistic concurrency when rev is known.
+    if (expectedRev != null && Number.isFinite(expectedRev) && expectedRev > 0) {
+      headers['If-Match'] = String(expectedRev);
+    }
     void fetch('/api/config/sessions', {
       method: 'PUT',
-      headers: JSON_HEADERS,
+      headers,
       body: JSON.stringify(state),
       keepalive: true,
     }).catch(() => {
@@ -269,7 +357,8 @@ export function sendSessionsPatchBeacon(delta: SessionsPatchDelta): boolean {
     }
     const body = JSON.stringify(delta);
     const blob = new Blob([body], { type: 'application/json' });
-    return navigator.sendBeacon('/api/config/sessions', blob);
+    // sendBeacon cannot use the fetch interceptor — append ?token= for auth-middleware.
+    return navigator.sendBeacon(withSessionToken('/api/config/sessions'), blob);
   } catch {
     return false;
   }
@@ -295,7 +384,11 @@ export function flushSessionsOnShutdown(
       // Beacon rejected — fall through to keepalive PUT of the whole blob.
     }
   }
-  putSessionsKeepalive(fullState);
+  const expectedRev =
+    delta && typeof delta.expectedRev === 'number' && delta.expectedRev > 0
+      ? delta.expectedRev
+      : undefined;
+  putSessionsKeepalive(fullState, expectedRev);
   return { transport: 'keepalive-put', clearedOk: true };
 }
 

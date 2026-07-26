@@ -48,8 +48,12 @@ Managed through Settings; edit directly only if you know the shape ([`server/con
 - **`voice`** — `audio`, `stt`, and `tts` blocks (local vs provider vs browser).
 - **`oauth.google` / `oauth.microsoft`** — BYO OAuth client id/secret (tokens stored separately under `oauth/`).
 - **`webhooks.allowLocalHttp`** — dev-only, permits `http://127.0.0.1` webhook targets.
+- **`desktopShell.closeToTray`** — when `true` (default), closing the Electron window hides to the system tray instead of quitting. Launch-at-startup is **not** stored here — it lives in the OS login item via Electron.
 
-## Providers
+## Desktop shell tray
+
+On **Windows and macOS**, the packaged Electron shell registers a system tray icon. With `desktopShell.closeToTray` enabled (default), closing the window leaves chats, agents, model serves, and the tool server running. Use **Quit Minnow** in the tray menu (or disable close-to-tray in **Settings → General → Desktop app**) for a full exit. A one-time native notification explains the tray on first hide.
+
 
 Configured in **Settings → Models → Providers**. Each provider is an OpenAI-compatible base URL plus optional API key (encrypted). Minnow probes capabilities (tool calling, constrained decoding) per provider and caches them. Defaults assume LM Studio at `http://localhost:1234`.
 

@@ -25,6 +25,15 @@ import { startInProcessServer, type InProcessServerHandle } from './server-host.
 import { loadWindowState, trackWindowState } from './window-state.js';
 import { resolveMinnowPort } from './minnow-port.js';
 import { disposeUpdater, initUpdater } from './updater.js';
+import { shouldHideMainWindowOnClose, shouldKeepAppAliveWhenAllWindowsClosed } from './close-behavior.js';
+import {
+  disposeTray,
+  getCloseToTrayEnabled,
+  initTray,
+  isExplicitQuitRequested,
+  markExplicitQuitRequested,
+  maybeShowCloseToTrayNotification,
+} from './tray.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -55,6 +64,7 @@ const devUrl = (
 let mainWindow: BrowserWindow | null = null;
 let inProcessServer: InProcessServerHandle | null = null;
 let quitInProgress = false;
+let shellInitialized = false;
 
 /** Sliding window of renderer crash timestamps for anti-reload-loop. */
 const rendererCrashTimestamps: number[] = [];
@@ -214,8 +224,31 @@ function restoreShellWindowFocus(win: BrowserWindow): void {
 }
 
 function focusMainWindow(): void {
-  if (!mainWindow) return;
+  if (!mainWindow || mainWindow.isDestroyed()) return;
   restoreShellWindowFocus(mainWindow);
+}
+
+/** Tray Quit and other explicit shutdown paths bypass hide-to-tray. */
+function requestExplicitQuit(): void {
+  markExplicitQuitRequested();
+  app.quit();
+}
+
+/** Intercept window close when close-to-tray is enabled — hide instead of destroy. */
+function wireCloseToTrayBehavior(win: BrowserWindow): void {
+  win.on('close', (event) => {
+    if (
+      !shouldHideMainWindowOnClose({
+        closeToTray: getCloseToTrayEnabled(),
+        explicitQuit: isExplicitQuitRequested() || quitInProgress,
+      })
+    ) {
+      return;
+    }
+    event.preventDefault();
+    win.hide();
+    maybeShowCloseToTrayNotification();
+  });
 }
 
 async function createMainWindow(): Promise<BrowserWindow> {
@@ -257,6 +290,7 @@ async function createMainWindow(): Promise<BrowserWindow> {
 
   trackWindowState(win);
   wireShellWindowState(win);
+  wireCloseToTrayBehavior(win);
 
   const showFallbackTimer = setTimeout(() => {
     if (!win.isDestroyed() && !win.isVisible()) {
@@ -358,14 +392,29 @@ async function resolveLoadUrl(): Promise<string> {
 }
 
 async function bootstrap(): Promise<void> {
-  app.setName('Minnow');
-  // Windows taskbar grouping / jump lists; pairs with branded electron.exe in dev (see brand-electron-win.mjs).
-  if (process.platform === 'win32') {
-    app.setAppUserModelId('org.grimmedia.minnow');
+  // Idempotent: restore an existing hidden window instead of spawning a second shell.
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    focusMainWindow();
+    return;
   }
-  configurePreviewSession(session.fromPartition('persist:minnow-preview'));
-  registerIpcHandlers();
-  initUpdater({ prepareQuitForUpdate });
+
+  if (!shellInitialized) {
+    app.setName('Minnow');
+    // Windows taskbar grouping / jump lists; pairs with branded electron.exe in dev (see brand-electron-win.mjs).
+    if (process.platform === 'win32') {
+      app.setAppUserModelId('org.grimmedia.minnow');
+    }
+    configurePreviewSession(session.fromPartition('persist:minnow-preview'));
+    registerIpcHandlers();
+    initUpdater({ prepareQuitForUpdate });
+    await initTray({
+      getMainWindow: () => mainWindow,
+      focusMainWindow,
+      requestExplicitQuit,
+      iconPath: appIconPath,
+    });
+    shellInitialized = true;
+  }
 
   mainWindow = await createMainWindow();
   const loadUrl = await resolveLoadUrl();
@@ -446,12 +495,23 @@ if (!gotSingleInstanceLock) {
   });
 
   app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
-      app.quit();
+    if (
+      shouldKeepAppAliveWhenAllWindowsClosed({
+        closeToTray: getCloseToTrayEnabled(),
+        platform: process.platform,
+        explicitQuit: isExplicitQuitRequested() || quitInProgress,
+      })
+    ) {
+      return;
     }
+    app.quit();
   });
 
   app.on('activate', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      focusMainWindow();
+      return;
+    }
     if (BrowserWindow.getAllWindows().length === 0) {
       bootstrap().catch(failBootstrap);
     } else {
@@ -464,6 +524,7 @@ if (!gotSingleInstanceLock) {
     event.preventDefault();
     quitInProgress = true;
     disposeUpdater();
+    disposeTray();
     shutdownRuntime()
       .catch((err) => {
         console.error('[electron] shutdown error:', err);

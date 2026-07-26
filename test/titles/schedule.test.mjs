@@ -17,6 +17,7 @@ import {
 import {
   resetTitleGenerationInflight,
   resetTitleScheduleContext,
+  scheduleChatTitleAfterEngineTurn,
   scheduleChatTitleGeneration,
   setGenerateChatTitleForTests,
 } from '../../src/chat/titles/schedule.ts';
@@ -193,5 +194,72 @@ describe('applyGeneratedChatTitle', () => {
     const chat = getChat();
     assert.equal(chat.name, 'Fresh title');
     assert.equal(applyGeneratedChatTitle(CHAT_ID, 'Another'), false);
+  });
+});
+
+describe('scheduleChatTitleAfterEngineTurn', () => {
+  beforeEach(() => {
+    setupDom();
+    seedSession();
+    resetTitleGenerationInflight();
+    resetTitleScheduleContext();
+    resetTitlesConfigCache();
+    setTitlesConfigForTests({
+      enabled: true,
+      modelId: '',
+      providerId: '',
+      maxTokens: 24,
+      temperature: 0.3,
+    });
+    setGenerateChatTitleForTests(null);
+  });
+
+  test('schedules title after engine turn goes idle', async () => {
+    setGenerateChatTitleForTests(async () => ({ title: 'Engine title' }));
+
+    scheduleChatTitleAfterEngineTurn(CHAT_ID, 'Hello from engine', {
+      shouldSchedule: true,
+      modelId: 'test-model',
+    });
+
+    // Helper marks the chat busy; let the idle poller observe busy, then clear.
+    assert.equal(getChat().engineTurnActive, true);
+    await new Promise((r) => setTimeout(r, 60));
+    getChat().engineTurnActive = false;
+
+    await new Promise((r) => setTimeout(r, 120));
+    await waitMicrotasks();
+
+    assert.equal(getChat().name, 'Engine title');
+  });
+
+  test('honors shouldSchedule false (onboarding / fork)', async () => {
+    let calls = 0;
+    setGenerateChatTitleForTests(async () => {
+      calls += 1;
+      return { title: 'Nope' };
+    });
+
+    scheduleChatTitleAfterEngineTurn(CHAT_ID, 'Kickoff', { shouldSchedule: false });
+    getChat().engineTurnActive = false;
+    await new Promise((r) => setTimeout(r, 80));
+
+    assert.equal(calls, 0);
+    assert.equal(getChat().name, 'New chat');
+  });
+
+  test('skips when first user message already present and shouldSchedule omitted', async () => {
+    getChat().history = [{ role: 'user', content: 'already sent' }];
+    let calls = 0;
+    setGenerateChatTitleForTests(async () => {
+      calls += 1;
+      return { title: 'Nope' };
+    });
+
+    scheduleChatTitleAfterEngineTurn(CHAT_ID, 'Second message');
+    await new Promise((r) => setTimeout(r, 80));
+
+    assert.equal(calls, 0);
+    assert.equal(getChat().name, 'New chat');
   });
 });

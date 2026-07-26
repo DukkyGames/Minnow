@@ -45,11 +45,16 @@ import {
   replacePendingAttachments,
 } from '../attachments/store';
 import type { Attachment } from '../attachments/types';
-import { codeRefHistoryBlock, isCodeRefAttachment } from '../attachments/code-ref';
-import { elementRefHistoryBlock, isElementRefAttachment } from '../attachments/element-ref';
-import { designRefHistoryBlock, isDesignRefAttachment } from '../attachments/design-ref';
+import {
+  buildHistoryUserContent,
+  buildStringUserApiContent,
+  buildVlmUserApiContent,
+} from '../attachments/api-content';
 import { linkSentAttachmentsToTurn } from '../design/annotation-store';
 import { resolveWorkspaceReferences } from '../attachments/workspace-ref';
+
+// Re-export attachment content builders for existing import sites.
+export { buildHistoryUserContent, buildVlmUserApiContent };
 import {
   extractMessageText,
   extractStreamDelta,
@@ -80,6 +85,7 @@ import {
 } from '../markdown/renderer';
 import {
   isFirstUserMessagePending,
+  scheduleChatTitleAfterEngineTurn,
   scheduleChatTitleGeneration,
 } from '../chat/titles/schedule';
 import {
@@ -366,11 +372,6 @@ interface ChatCompletionBody extends CompletionBodyWithResponseFormat {
   tool_choice?: 'auto';
 }
 
-/** History placeholder for an image attachment (persisted in UserMessage.content). */
-function imageHistoryPlaceholder(name: string): string {
-  return `[image: ${name}]`;
-}
-
 const IMAGE_PLACEHOLDER_IN_HISTORY_RE = /\[image:\s*[^\]]+\]/i;
 
 /** User row that should receive pending image_url parts (not a later steer line). */
@@ -414,183 +415,6 @@ function turnHasImageContext(chat: Chat, pending: Attachment[]): boolean {
     }
   }
   return false;
-}
-
-/** Inline file block for text/PDF content in string user messages. */
-function fileContentBlock(name: string, body: string): string {
-  const safeName = name.replace(/"/g, "'");
-  return `<file name="${safeName}">\n${body}\n</file>`;
-}
-
-/** User-visible / persisted content: text, file blocks, and image placeholders. */
-export function buildHistoryUserContent(
-  userText: string,
-  attachments: Attachment[],
-): string {
-  const parts: string[] = [];
-  const trimmed = userText.trim();
-  if (trimmed) parts.push(trimmed);
-
-  for (const att of attachments) {
-    if (att.kind === 'error') continue;
-    if (att.kind === 'image') {
-      parts.push(imageHistoryPlaceholder(att.name));
-      continue;
-    }
-    if (isCodeRefAttachment(att)) {
-      parts.push(
-        codeRefHistoryBlock(
-          att.workspacePath,
-          att.lineStart,
-          att.lineEnd,
-          att.text,
-        ),
-      );
-      continue;
-    }
-    if (isElementRefAttachment(att)) {
-      parts.push(
-        elementRefHistoryBlock({
-          selector: att.selector,
-          uid: att.uid ?? null,
-          pageUrl: att.pageUrl,
-          tagName: att.tagName,
-          classList: att.classList,
-          rect: att.rect,
-          stylesDigest: att.stylesDigest,
-          outerHtmlPreview: att.outerHtmlPreview,
-          imageName: att.croppedDataUrl ? att.name : undefined,
-          sourceMapping: att.sourceMapping,
-          accessibleName: att.accessibleName,
-          contrastRatio: att.contrastRatio,
-          domPath: att.domPath,
-          attributes: att.attributes,
-          computedStyles: att.computedStyles,
-        }),
-      );
-      if (att.croppedDataUrl) parts.push(imageHistoryPlaceholder(att.name));
-      continue;
-    }
-    if (isDesignRefAttachment(att)) {
-      parts.push(
-        designRefHistoryBlock({
-          shape: att.shape,
-          pageUrl: att.pageUrl,
-          intentText: att.intentText,
-          imageName: att.compositedDataUrl ? att.name : undefined,
-        }),
-      );
-      if (att.compositedDataUrl) parts.push(imageHistoryPlaceholder(att.name));
-      continue;
-    }
-    if ((att.kind === 'text' || att.kind === 'pdf') && att.text) {
-      parts.push(fileContentBlock(att.name, att.text));
-    }
-  }
-
-  return parts.join('\n\n');
-}
-
-/** Non-VLM API payload: one string with text, file blocks, and image placeholders. */
-function buildStringUserApiContent(
-  userText: string,
-  attachments: Attachment[],
-): string {
-  return buildHistoryUserContent(userText, attachments);
-}
-
-/** VLM API payload: text part plus image_url parts (no image placeholders in text). */
-export function buildVlmUserApiContent(
-  userText: string,
-  attachments: Attachment[],
-): ContentPart[] {
-  const textParts: string[] = [];
-  const trimmed = userText.trim();
-  if (trimmed) textParts.push(trimmed);
-
-  for (const att of attachments) {
-    if (att.kind === 'error' || att.kind === 'image') continue;
-    if (isCodeRefAttachment(att)) {
-      textParts.push(
-        codeRefHistoryBlock(
-          att.workspacePath,
-          att.lineStart,
-          att.lineEnd,
-          att.text,
-        ),
-      );
-      continue;
-    }
-    if (isElementRefAttachment(att)) {
-      textParts.push(
-        elementRefHistoryBlock({
-          selector: att.selector,
-          uid: att.uid ?? null,
-          pageUrl: att.pageUrl,
-          tagName: att.tagName,
-          classList: att.classList,
-          rect: att.rect,
-          stylesDigest: att.stylesDigest,
-          outerHtmlPreview: att.outerHtmlPreview,
-          imageName: att.croppedDataUrl ? att.name : undefined,
-          sourceMapping: att.sourceMapping,
-          accessibleName: att.accessibleName,
-          contrastRatio: att.contrastRatio,
-          domPath: att.domPath,
-          attributes: att.attributes,
-          computedStyles: att.computedStyles,
-        }),
-      );
-      continue;
-    }
-    if (isDesignRefAttachment(att)) {
-      textParts.push(
-        designRefHistoryBlock({
-          shape: att.shape,
-          pageUrl: att.pageUrl,
-          intentText: att.intentText,
-          imageName: att.compositedDataUrl ? att.name : undefined,
-        }),
-      );
-      continue;
-    }
-    if ((att.kind === 'text' || att.kind === 'pdf') && att.text) {
-      textParts.push(fileContentBlock(att.name, att.text));
-    }
-  }
-
-  const parts: ContentPart[] = [];
-  const combinedText = textParts.join('\n\n');
-  if (combinedText) {
-    parts.push({ type: 'text', text: combinedText });
-  }
-
-  for (const att of attachments) {
-    if (att.kind === 'image' && att.dataUrl) {
-      parts.push({
-        type: 'image_url',
-        image_url: { url: att.dataUrl, detail: 'auto' },
-      });
-    }
-    if (att.kind === 'elementRef' && att.croppedDataUrl) {
-      parts.push({
-        type: 'image_url',
-        image_url: { url: att.croppedDataUrl, detail: 'auto' },
-      });
-    }
-    if (att.kind === 'designRef' && att.compositedDataUrl) {
-      parts.push({
-        type: 'image_url',
-        image_url: { url: att.compositedDataUrl, detail: 'auto' },
-      });
-    }
-  }
-
-  if (parts.length === 0) {
-    parts.push({ type: 'text', text: trimmed || '' });
-  }
-
-  return parts;
 }
 
 /** Options for {@link runChatTurn} (composer send or history resend). */
@@ -2689,6 +2513,11 @@ export interface SendProgrammaticChatTextOptions {
   slashInput?: string;
   titleSeed?: string;
   deferTitleUntilTurnEnd?: boolean;
+  /**
+   * When false, skip auto-title (e.g. onboarding kickoff). Default: first user message.
+   * Used by the Session Engine path (renderer `runChatTurn` uses shouldScheduleTitle instead).
+   */
+  shouldScheduleTitle?: boolean;
   ownsGlobalStreaming?: boolean;
   /** Report status errors (defaults to setStatus). */
   reportStatus?: (level: 'ok' | 'err', message: string) => void;
@@ -2707,6 +2536,61 @@ export async function sendProgrammaticChatText(
   if (isChatTurnSetupPending(chat.id)) return;
 
   const report = options.reportStatus ?? setStatus;
+
+  // Phase 4: /loop ticks and other programmatic sends use the Session Engine by default.
+  {
+    const { isServerEngineEnabled } = await import('../state/server-engine-flag');
+    if (isServerEngineEnabled()) {
+      const attachments = (options.validAttachments ?? []).filter((a) => a.kind !== 'error');
+      const historyContent =
+        attachments.length > 0 ? buildHistoryUserContent(text, attachments) : undefined;
+      const { dispatchSendMessage } = await import('../state/session-commands');
+      const { resolveEffectiveChatModelBinding } = await import('../ui/default-model');
+      const { readGlobalSamplerForSend } = await import('../config/sampler-meta');
+      const binding = resolveEffectiveChatModelBinding(chat);
+      const sampler = readGlobalSamplerForSend();
+      const systemPrompt = (
+        document.getElementById('systemPrompt') as HTMLTextAreaElement | null
+      )?.value?.trim();
+      // Capture before send_message — SSE will append the user row and clear "first message".
+      const shouldScheduleTitle =
+        options.shouldScheduleTitle ?? isFirstUserMessagePending(chat);
+      const titleSeed =
+        options.titleSeed?.trim() ||
+        text.trim() ||
+        attachments[0]?.name ||
+        'Attachment';
+      try {
+        report('spin', 'Sending…');
+        await dispatchSendMessage({
+          chatId: chat.id,
+          text,
+          historyContent,
+          displayText: text,
+          attachments: attachments.length > 0 ? attachments : undefined,
+          modelId: binding.modelId || chat.modelId,
+          providerId: binding.providerId || chat.providerId,
+          temperature: sampler.preset.temperature ?? 0.7,
+          maxTokens: sampler.maxTokens,
+          systemPrompt: systemPrompt || undefined,
+          goalDriven: options.goalDriven,
+        });
+        if (attachments.length > 0) clearAttachments();
+        const { syncEngineStreamMirrors } = await import('../chat/engine-stream-mirror');
+        syncEngineStreamMirrors();
+        // Engine path never reaches runChatTurn's finally — schedule titles here.
+        scheduleChatTitleAfterEngineTurn(chat.id, titleSeed, {
+          shouldSchedule: shouldScheduleTitle,
+          modelId: binding.modelId || chat.modelId || undefined,
+          providerId: binding.providerId || chat.providerId || undefined,
+        });
+      } catch (err) {
+        report('err', err instanceof Error ? err.message : String(err));
+      }
+      return;
+    }
+  }
+
   const rawText = text;
   const slashInput = options.slashInput ?? rawText;
   const validAttachments = options.validAttachments ?? [];
@@ -2838,7 +2722,10 @@ export async function sendMessageWithTools(
     return;
   }
   const rawTextEarly = input.value.trim();
-  if (isActiveChatStreaming()) {
+  const { isServerEngineEnabled } = await import('../state/server-engine-flag');
+  const serverEngine = isServerEngineEnabled();
+
+  if (isActiveChatStreaming() || (serverEngine && getActiveChat().engineTurnActive)) {
     if (!rawTextEarly) return;
     const pendingSteer = getPendingAttachments();
     const pendingOk = pendingSteer.filter((a) => a.kind !== 'error');
@@ -2847,6 +2734,19 @@ export async function sendMessageWithTools(
       return;
     }
     const chat = getActiveChat();
+    if (serverEngine) {
+      const { dispatchEnqueueMessage } = await import('../state/session-commands');
+      try {
+        await dispatchEnqueueMessage(chat.id, rawTextEarly);
+        clearComposerInput(input);
+        setStatus('ok', 'Follow-up queued');
+        refreshComposerStreamingAffordance();
+        syncComposerMessageQueue();
+      } catch (err) {
+        setStatus('err', err instanceof Error ? err.message : String(err));
+      }
+      return;
+    }
     if (enqueueComposerMessage(chat, rawTextEarly)) {
       clearComposerInput(input);
       setStatus('ok', 'Follow-up queued');
@@ -2986,6 +2886,57 @@ export async function sendMessageWithTools(
 
   if (!goalDispatch) {
     clearComposerInput(input);
+  }
+
+  // Phase 4: main-chat sends go through the Session Engine by default.
+  // Emergency opt-out (MINNOW_SERVER_ENGINE=0) falls through to runChatTurn.
+  if (serverEngine) {
+    const { dispatchSendMessage } = await import('../state/session-commands');
+    const { resolveEffectiveChatModelBinding } = await import('../ui/default-model');
+    const { readGlobalSamplerForSend } = await import('../config/sampler-meta');
+    const binding = resolveEffectiveChatModelBinding(chat);
+    const sampler = readGlobalSamplerForSend();
+    const systemPrompt = (
+      document.getElementById('systemPrompt') as HTMLTextAreaElement | null
+    )?.value?.trim();
+    // Same history string format as the renderer loop (placeholders + file blocks).
+    const historyContent = buildHistoryUserContent(peekUserText || effectiveRawText, validAttachments);
+    // Capture before send_message — SSE will append the user row and clear "first message".
+    const shouldScheduleTitle = isFirstUserMessagePending(chat);
+    const titleSeed =
+      peekUserText.trim() ||
+      effectiveRawText.trim() ||
+      validAttachments[0]?.name ||
+      'Attachment';
+    try {
+      setStatus('spin', 'Sending…');
+      await dispatchSendMessage({
+        chatId: chat.id,
+        text: effectiveRawText,
+        displayText: peekUserText || effectiveRawText,
+        historyContent,
+        attachments: validAttachments.length > 0 ? validAttachments : undefined,
+        modelId: binding.modelId || chat.modelId,
+        providerId: binding.providerId || chat.providerId,
+        temperature: sampler.preset.temperature ?? 0.7,
+        maxTokens: sampler.maxTokens,
+        systemPrompt: systemPrompt || undefined,
+        goalDriven,
+      });
+      clearAttachments();
+      // Tokens + committed history arrive via generations SSE + Phase 0 session stream.
+      const { syncEngineStreamMirrors } = await import('../chat/engine-stream-mirror');
+      syncEngineStreamMirrors();
+      // Engine path never reaches runChatTurn's finally — schedule titles here.
+      scheduleChatTitleAfterEngineTurn(chat.id, titleSeed, {
+        shouldSchedule: shouldScheduleTitle,
+        modelId: binding.modelId || chat.modelId || undefined,
+        providerId: binding.providerId || chat.providerId || undefined,
+      });
+    } catch (err) {
+      setStatus('err', err instanceof Error ? err.message : String(err));
+    }
+    return;
   }
 
   await sendProgrammaticChatText(chat, effectiveRawText, {
