@@ -7,13 +7,21 @@ import { readConfigJson, writeConfigJson } from '../../server/config/store.js';
 import { mergeConfigMeta } from '../../server/config/validators.js';
 import {
   getDevServerStatus,
+  getDevServerStatusById,
   resetDevServerManagerForTests,
   startDevServer,
+  startDevServerById,
   stopDevServer,
+  stopDevServerById,
   toolStartBackgroundCommand,
   toolStopBackgroundCommand,
 } from '../../server/dev-server/manager.js';
-import { getWorkspaceRoot, setWorkspaceRoot } from '../../server/workspace/root.js';
+import { PRIMARY_DEV_SERVER_ID } from '../../server/dev-server/registry.js';
+import {
+  getWorkspaceRoot,
+  normalizeWorkspacePathKey,
+  setWorkspaceRoot,
+} from '../../server/workspace/root.js';
 import { parseStartupMarkdown } from '../../server/dev-server/parse-startup.js';
 import { rmTestHome, setTestHome } from '../config/test-helpers.js';
 
@@ -119,5 +127,53 @@ describe('dev-server manager tools', () => {
 
     const status = await getDevServerStatus(workspaceDir);
     assert.equal(status.status, 'stopped');
+  });
+
+  test('legacy flat persisted row migrates to servers.primary', async () => {
+    await clearPersistedDevServerState();
+    await fs.writeFile(
+      path.join(workspaceDir, 'startup.md'),
+      `---\ncommand: ${LONG_RUNNING_CMD}\ncwd: .\n---\n`,
+      'utf8',
+    );
+    const key = normalizeWorkspacePathKey(path.resolve(workspaceDir));
+    const meta = (await readConfigJson('config.json')) ?? {};
+    const workspace =
+      meta.workspace && typeof meta.workspace === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (meta.workspace) }
+        : {};
+    workspace.devServerByPath = {
+      [key]: {
+        status: 'stopped',
+        runId: null,
+        pid: null,
+        command: LONG_RUNNING_CMD,
+        healthUrl: null,
+        port: 3000,
+        error: null,
+        startedAt: null,
+      },
+    };
+    await writeConfigJson('config.json', mergeConfigMeta(meta, { workspace }));
+    resetDevServerManagerForTests();
+
+    const status = await getDevServerStatusById(workspaceDir, PRIMARY_DEV_SERVER_ID);
+    assert.equal(status.status, 'stopped');
+    assert.equal(status.command, LONG_RUNNING_CMD);
+
+    const started = await startDevServerById(workspaceDir, PRIMARY_DEV_SERVER_ID);
+    assert.equal(started.ok, true);
+    activeRunId = started.runId ?? null;
+    const stopped = await stopDevServerById(workspaceDir, PRIMARY_DEV_SERVER_ID);
+    assert.equal(stopped.ok, true);
+    activeRunId = null;
+
+    const after = (await readConfigJson('config.json')) ?? {};
+    const ws = after.workspace && typeof after.workspace === 'object' ? after.workspace : {};
+    const byPath = ws.devServerByPath && typeof ws.devServerByPath === 'object' ? ws.devServerByPath : {};
+    const row = byPath[key];
+    assert.ok(row && typeof row === 'object');
+    assert.ok(row.servers && typeof row.servers === 'object');
+    assert.ok(row.servers.primary);
   });
 });

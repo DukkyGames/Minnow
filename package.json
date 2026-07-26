@@ -168,6 +168,7 @@
     "wait-on": "^8.0.1"
   },
   "optionalDependencies": {
+    "@pdf-lib/fontkit": "^1.1.1",
     "docx": "^9.7.1",
     "mammoth": "^1.9.0",
     "officeparser": "^7.1.0",

@@ -28,6 +28,9 @@ export function ensureCodeWorkspaceModules(): Promise<void> {
       const { initCodeOverview } = await import('../ui/code-overview');
       initCodeOverview();
 
+      const { initDevServerScreen } = await import('../ui/dev-server-screen');
+      initDevServerScreen();
+
       const { initOrchestrateHub } = await import('../ui/orchestrate-hub');
       initOrchestrateHub();
 

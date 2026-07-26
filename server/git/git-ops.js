@@ -2,6 +2,8 @@
  * Git operations for /api/git (MIN-198). All ops accept optional `cwd` (defaults to workspace root).
  */
 
+import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 
 import { runProcess } from '../process-runner.js';
@@ -16,9 +18,16 @@ function resolveCwd(cwd) {
   return cwd && String(cwd).trim() ? String(cwd).trim() : getWorkspaceRoot();
 }
 
-/** Run git in cwd; returns runProcess result. */
-async function git(args, cwd) {
-  return runProcess('git', args, { cwd, timeout: GIT_TIMEOUT_MS });
+/**
+ * Run git in cwd; returns runProcess result.
+ * Optional `env` merges into process.env (used for temp GIT_INDEX_FILE snapshots).
+ */
+async function git(args, cwd, env) {
+  return runProcess('git', args, {
+    cwd,
+    timeout: GIT_TIMEOUT_MS,
+    ...(env && typeof env === 'object' ? { env } : {}),
+  });
 }
 
 /** Combine stdout/stderr for error messages. */
@@ -945,4 +954,213 @@ export async function cherryPick({ cwd, sha, abort, continue: cont } = {}) {
   }
 
   return { ok: true, stdout: (result.stdout ?? '').trim() };
+}
+
+/**
+ * Parse `git diff --name-status` lines into `{ status, path }` entries.
+ * Rename/copy lines use the destination path.
+ * @param {string} text
+ */
+export function parseNameStatus(text) {
+  const files = [];
+  for (const rawLine of String(text ?? '').split('\n')) {
+    const line = rawLine.trimEnd();
+    if (!line) continue;
+    const parts = line.split('\t');
+    const statusRaw = (parts[0] ?? '').trim();
+    if (!statusRaw) continue;
+    // status may be "R100" / "C100" — keep the letter for clients
+    const status = statusRaw[0] ?? statusRaw;
+    const filePath =
+      parts.length >= 3 ? String(parts[2] ?? '').trim() : String(parts[1] ?? '').trim();
+    if (!filePath) continue;
+    files.push({ status, path: filePath });
+  }
+  return files;
+}
+
+/**
+ * Create a dangling commit of the current working tree without touching HEAD
+ * or the real index (temp GIT_INDEX_FILE). Used for agent-turn undo snapshots.
+ * @param {{ cwd?: string, message?: string }} [input]
+ */
+export async function snapshotCreate({ cwd, message } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-git-snap-'));
+  const indexPath = path.join(tmpDir, 'index');
+  const env = { GIT_INDEX_FILE: indexPath };
+
+  try {
+    const headResult = await git(['rev-parse', 'HEAD'], repo.cwd);
+    const hasHead = headResult.code === 0;
+    const headSha = hasHead ? (headResult.stdout ?? '').trim() : undefined;
+    if (hasHead && !/^[0-9a-f]{40}$/i.test(headSha ?? '')) {
+      return { ok: false, error: 'Could not resolve HEAD' };
+    }
+
+    // Seed temp index from HEAD tree when the repo has commits; empty index otherwise.
+    if (hasHead) {
+      const readTree = await git(['read-tree', 'HEAD'], repo.cwd, env);
+      if (readTree.code !== 0) {
+        return { ok: false, error: processError(readTree) };
+      }
+    }
+
+    // Stage all WT changes into the temp index only (real index untouched).
+    const add = await git(['add', '-A'], repo.cwd, env);
+    if (add.code !== 0) {
+      return { ok: false, error: processError(add) };
+    }
+
+    const writeTree = await git(['write-tree'], repo.cwd, env);
+    if (writeTree.code !== 0) {
+      return { ok: false, error: processError(writeTree) };
+    }
+    const treeSha = (writeTree.stdout ?? '').trim();
+    if (!/^[0-9a-f]{40}$/i.test(treeSha)) {
+      return { ok: false, error: 'write-tree did not return a tree sha' };
+    }
+
+    const msg =
+      message && String(message).trim() ? String(message).trim() : 'minnow snapshot';
+    // commit-tree does not need the temp index — only the tree object id.
+    const commitArgs = ['commit-tree', treeSha];
+    if (hasHead && headSha) {
+      commitArgs.push('-p', headSha);
+    }
+    commitArgs.push('-m', msg);
+    const commitTree = await git(commitArgs, repo.cwd);
+    if (commitTree.code !== 0) {
+      return { ok: false, error: processError(commitTree) };
+    }
+    const sha = (commitTree.stdout ?? '').trim();
+    if (!/^[0-9a-f]{40}$/i.test(sha)) {
+      return { ok: false, error: 'commit-tree did not return a commit sha' };
+    }
+
+    return {
+      ok: true,
+      sha,
+      ...(headSha ? { headSha } : {}),
+      treeSha,
+    };
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+/**
+ * Restore working tree (+ real index) to a snapshot commit's tree without moving
+ * branch tip / HEAD. Takes a safety snapshot first so the restore is undoable.
+ * @param {{ cwd?: string, sha: string }} input
+ */
+export async function snapshotRestore({ cwd, sha } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  const target = typeof sha === 'string' ? sha.trim() : '';
+  if (!target) {
+    return { ok: false, error: 'sha is required' };
+  }
+
+  const commitParse = await git(['rev-parse', '--verify', `${target}^{commit}`], repo.cwd);
+  if (commitParse.code !== 0) {
+    return { ok: false, error: processError(commitParse) || `invalid snapshot sha: ${target}` };
+  }
+  const resolved = (commitParse.stdout ?? '').trim();
+
+  const treeParse = await git(['rev-parse', '--verify', `${resolved}^{tree}`], repo.cwd);
+  if (treeParse.code !== 0) {
+    return { ok: false, error: processError(treeParse) };
+  }
+  const treeSha = (treeParse.stdout ?? '').trim();
+
+  // Safety snapshot of current WT so this restore can be undone.
+  const safety = await snapshotCreate({
+    cwd: repo.cwd,
+    message: 'minnow undo safety',
+  });
+  if (!safety.ok) {
+    return { ok: false, error: safety.error || 'safety snapshot failed' };
+  }
+
+  const headBefore = await git(['rev-parse', 'HEAD'], repo.cwd);
+  const headBeforeSha =
+    headBefore.code === 0 ? (headBefore.stdout ?? '').trim() : undefined;
+
+  // Apply tree to real index + working tree; do not move refs/HEAD.
+  const readTree = await git(['read-tree', '--reset', '-u', treeSha], repo.cwd);
+  if (readTree.code !== 0) {
+    return { ok: false, error: processError(readTree), safetySha: safety.sha };
+  }
+
+  const clean = await git(['clean', '-fd'], repo.cwd);
+  if (clean.code !== 0) {
+    return { ok: false, error: processError(clean), safetySha: safety.sha };
+  }
+
+  const headAfter = await git(['rev-parse', 'HEAD'], repo.cwd);
+  const headAfterSha =
+    headAfter.code === 0 ? (headAfter.stdout ?? '').trim() : undefined;
+  if (headBeforeSha && headAfterSha && headBeforeSha !== headAfterSha) {
+    return {
+      ok: false,
+      error: 'HEAD moved unexpectedly during snapshot restore',
+      safetySha: safety.sha,
+    };
+  }
+
+  return {
+    ok: true,
+    sha: resolved,
+    safetySha: safety.sha,
+    ...(headAfterSha ? { headSha: headAfterSha } : {}),
+    treeSha,
+  };
+}
+
+/**
+ * List paths that differ between two snapshot commits, or between a commit and
+ * the current working tree when `toSha` is omitted.
+ * @param {{ cwd?: string, fromSha: string, toSha?: string }} input
+ */
+export async function snapshotDiff({ cwd, fromSha, toSha } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  const from = typeof fromSha === 'string' ? fromSha.trim() : '';
+  if (!from) {
+    return { ok: false, error: 'fromSha is required' };
+  }
+
+  const to = typeof toSha === 'string' ? toSha.trim() : '';
+  const args = to
+    ? ['diff', '--name-status', from, to]
+    : ['diff', '--name-status', from];
+
+  const result = await git(args, repo.cwd);
+  // git diff returns 1 when differences exist — treat 0/1 as success.
+  if (result.code !== 0 && result.code !== 1) {
+    return { ok: false, error: processError(result) };
+  }
+
+  const files = parseNameStatus(result.stdout ?? '');
+
+  // When comparing to the working tree, also list untracked paths (clean -fd removes them).
+  if (!to) {
+    const others = await git(['ls-files', '--others', '--exclude-standard'], repo.cwd);
+    if (others.code === 0) {
+      for (const raw of String(others.stdout ?? '').split('\n')) {
+        const filePath = raw.trim();
+        if (!filePath) continue;
+        if (!files.some((f) => f.path === filePath)) {
+          files.push({ status: '?', path: filePath });
+        }
+      }
+    }
+  }
+
+  return { ok: true, files };
 }

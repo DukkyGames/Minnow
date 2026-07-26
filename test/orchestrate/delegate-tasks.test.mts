@@ -24,7 +24,12 @@ import {
   executeBoardTool,
   validateDelegateTasksArgs,
 } from '../../src/tools/board-tools.ts';
-import { setBoardMaxConcurrent } from '../../src/state/orchestrate-board-actions.ts';
+import {
+  activateAfk,
+  resolveBoardMaxConcurrent,
+  setBoardExecutionMode,
+  setBoardMaxConcurrent,
+} from '../../src/state/orchestrate-board-actions.ts';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
 import {
   initBoard,
@@ -326,6 +331,44 @@ describe('sequential execution mode', () => {
   test('getBoardExecutionMode falls back to manual for unknown values', () => {
     const board = { executionMode: 'unknown' as any };
     assert.equal(getBoardExecutionMode(board as any), 'manual');
+  });
+
+  test('sequential → afk pins maxConcurrentTasks to 1 when unset', () => {
+    const { planner, group } = seedBoard('manual');
+    const board = group.orchestrateBoard!;
+    board.executionMode = 'sequential';
+    delete board.maxConcurrentTasks;
+    assert.equal(resolveBoardMaxConcurrent(board), 1);
+    activateAfk(group, planner);
+    assert.equal(board.maxConcurrentTasks, 1);
+    assert.equal(resolveBoardMaxConcurrent(board), 1);
+  });
+
+  test('sequential → afk keeps explicit maxConcurrentTasks', () => {
+    const { planner, group } = seedBoard('manual');
+    const board = group.orchestrateBoard!;
+    board.executionMode = 'sequential';
+    board.maxConcurrentTasks = 5;
+    activateAfk(group, planner);
+    assert.equal(board.maxConcurrentTasks, 5);
+    assert.equal(resolveBoardMaxConcurrent(board), 5);
+  });
+
+  test('auto → afk does not change maxConcurrentTasks', () => {
+    const { planner, group } = seedBoard('auto');
+    const board = group.orchestrateBoard!;
+    delete board.maxConcurrentTasks;
+    setBoardExecutionMode(group, 'afk', planner);
+    assert.equal(board.maxConcurrentTasks, undefined);
+  });
+
+  test('setBoardExecutionMode afk from sequential pins concurrency', () => {
+    const { planner, group } = seedBoard('manual');
+    const board = group.orchestrateBoard!;
+    board.executionMode = 'sequential';
+    delete board.maxConcurrentTasks;
+    setBoardExecutionMode(group, 'afk', planner);
+    assert.equal(board.maxConcurrentTasks, 1);
   });
 });
 

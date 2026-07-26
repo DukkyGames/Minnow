@@ -39,7 +39,7 @@
   top: 32px;
   right: 4px;
   z-index: 20;
-  min-width: 168px;
+  min-width: 176px;
   padding: 4px;
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-md, 8px);
@@ -69,6 +69,18 @@
   background: var(--mn-surface-elevated);
   color: var(--mn-fg);
   outline: none;
+}
+
+.message-actions__item:disabled,
+.message-actions__item--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  color: var(--mn-fg-muted);
+}
+
+.message-actions__item:disabled:hover,
+.message-actions__item--disabled:hover {
+  background: transparent;
 }
 
 .tool-call-msg.msg--has-actions .message-actions__trigger {

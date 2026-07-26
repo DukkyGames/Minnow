@@ -73,6 +73,7 @@ function parseFrontmatterYaml(yamlText) {
  * @property {string} [cwd]
  * @property {string} [healthUrl]
  * @property {number} [port]
+ * @property {number} [apiPort]
  * @property {{ command?: string }} [stop]
  */
 
@@ -99,6 +100,12 @@ export function coerceStartupGuide(raw) {
   } else if (typeof raw.port === 'string' && raw.port.trim()) {
     const n = Number(raw.port);
     if (Number.isFinite(n)) guide.port = n;
+  }
+  if (typeof raw.apiPort === 'number' && Number.isFinite(raw.apiPort)) {
+    guide.apiPort = raw.apiPort;
+  } else if (typeof raw.apiPort === 'string' && raw.apiPort.trim()) {
+    const n = Number(raw.apiPort);
+    if (Number.isFinite(n)) guide.apiPort = n;
   }
 
   if (raw.stop && typeof raw.stop === 'object') {

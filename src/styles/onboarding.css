@@ -788,6 +788,9 @@ html.onboarding-active .mn-os-shell {
 }
 
 .mn-onboarding-wallpaper-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 8px 12px;
   border: 1px solid var(--mn-border, var(--border));
   border-radius: var(--mn-radius-sm, 6px);
@@ -796,6 +799,40 @@ html.onboarding-active .mn-os-shell {
   cursor: pointer;
   appearance: none;
   transition: border-color 0.15s ease-out, background-color 0.15s ease-out;
+}
+
+.mn-onboarding-wallpaper-chip.is-added {
+  border-color: var(
+    --mn-success-border,
+    color-mix(in oklch, var(--mn-success, var(--success)) 35%, var(--mn-border, var(--border)))
+  );
+}
+
+.mn-onboarding-wallpaper-chip__label {
+  line-height: 1.2;
+}
+
+.mn-onboarding-wallpaper-chip__check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--mn-success-ink, var(--mn-success, var(--success)));
+  background: var(
+    --mn-success-soft,
+    color-mix(in oklch, var(--mn-success, var(--success)) 12%, transparent)
+  );
+  border: 1px solid
+    var(
+      --mn-success-border,
+      color-mix(in oklch, var(--mn-success, var(--success)) 35%, transparent)
+    );
 }
 
 .mn-onboarding-wallpaper-chip.is-selected {

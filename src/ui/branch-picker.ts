@@ -3,6 +3,7 @@
  */
 
 import { isActiveChatStreaming } from '../chat/streaming-state';
+import { confirmAndRestoreTurnSnapshot, UNDO_STATUS } from '../chat/undo-turn';
 import {
   activateBranch,
   getActiveRun,
@@ -74,7 +75,25 @@ export function refreshBranchPickerAtFork(chat: Chat, forkHistoryIndex: number):
   attachBranchPicker(wrap, chat.id, forkHistoryIndex);
 }
 
-/** Attach branch pill to a user message row when multiple branches exist. */
+/**
+ * Show the picker when there are multiple branches, or a single redoable
+ * branch while history ends at the fork user row (post-undo gap).
+ */
+function shouldAttachBranchPicker(
+  chat: Chat,
+  forkHistoryIndex: number,
+  branchCount: number,
+): boolean {
+  if (branchCount >= 2) return true;
+  if (branchCount < 1) return false;
+  // Single-branch redo: user message is the last history row (no active reply).
+  return (
+    chat.history.length === forkHistoryIndex + 1 &&
+    chat.history[forkHistoryIndex]?.role === 'user'
+  );
+}
+
+/** Attach branch pill to a user message row when branches are selectable. */
 export function attachBranchPicker(
   wrap: HTMLElement,
   chatId: string,
@@ -86,25 +105,31 @@ export function attachBranchPicker(
   if (!chat) return;
 
   const branches = listSelectableBranchesAtFork(chat, forkHistoryIndex);
-  if (branches.length < 2) return;
+  if (!shouldAttachBranchPicker(chat, forkHistoryIndex, branches.length)) return;
 
   const active = getActiveRun(chat, forkHistoryIndex);
   const sorted = [...branches].sort((a, b) => a.createdAt - b.createdAt);
-  const activeIndex = Math.max(
-    0,
-    sorted.findIndex((run) => run.branchId === active?.branchId),
-  );
+  const activeIndex = sorted.findIndex((run) => run.branchId === active?.branchId);
+  // History ends at the user row → no reply is active; offer restore, not "Branch N".
+  const historyEndsAtFork =
+    chat.history.length === forkHistoryIndex + 1 &&
+    chat.history[forkHistoryIndex]?.role === 'user';
+  const triggerLabel = historyEndsAtFork
+    ? branches.length === 1
+      ? 'Restore branch'
+      : `Restore · ${branches.length} branches`
+    : buildTriggerLabel(Math.max(0, activeIndex), branches.length);
+  const ariaLabel = historyEndsAtFork
+    ? `Restore undone reply, ${branches.length} branch${branches.length === 1 ? '' : 'es'}`
+    : `Switch reply branch, ${branches.length} alternatives`;
 
   const pill = document.createElement('button');
   pill.type = 'button';
   pill.className = 'branch-picker__trigger';
   pill.setAttribute('aria-haspopup', 'menu');
   pill.setAttribute('aria-expanded', 'false');
-  pill.setAttribute(
-    'aria-label',
-    `Switch reply branch, ${branches.length} alternatives`,
-  );
-  pill.innerHTML = `${BRANCH_CHEVRON_SVG}<span class="branch-picker__trigger-label">${buildTriggerLabel(activeIndex, branches.length)}</span>`;
+  pill.setAttribute('aria-label', ariaLabel);
+  pill.innerHTML = `${BRANCH_CHEVRON_SVG}<span class="branch-picker__trigger-label">${triggerLabel}</span>`;
 
   let openMenu: HTMLElement | null = null;
 
@@ -146,9 +171,17 @@ export function attachBranchPicker(
 
       item.append(label, meta);
 
-      if (active?.branchId === run.branchId) {
+      // Only mark current when a reply is actually materialized (not post-undo).
+      if (!historyEndsAtFork && active?.branchId === run.branchId) {
         item.classList.add('branch-picker__item--active');
         item.setAttribute('aria-current', 'true');
+      }
+      // Menu label: "Restore branch" when redoing into an empty suffix.
+      if (historyEndsAtFork) {
+        label.textContent =
+          sorted.length === 1
+            ? 'Restore branch'
+            : `Restore branch ${i + 1} of ${sorted.length}`;
       }
       item.addEventListener('click', (itemEv) => {
         itemEv.stopPropagation();
@@ -195,6 +228,14 @@ async function switchBranch(
   forkHistoryIndex: number,
   branchId: string,
 ): Promise<void> {
+  const targetRun = listSelectableBranchesAtFork(chat, forkHistoryIndex).find(
+    (r) => r.branchId === branchId,
+  );
+  // Capture before activate — after redo, history no longer ends at the fork.
+  const isRedoRestore =
+    chat.history.length === forkHistoryIndex + 1 &&
+    chat.history[forkHistoryIndex]?.role === 'user';
+
   const ok = activateBranch(chat, forkHistoryIndex, branchId);
   if (!ok) {
     setStatus('err', 'Could not switch branch');
@@ -212,5 +253,34 @@ async function switchBranch(
   renderChatInForegroundShell(chat);
   renderStatsForChat(chat);
   renderSidebar();
-  setStatus('ok', 'Branch switched');
+
+  // MIN-409: optionally restore post-turn files when redoing an undone branch.
+  // Declining the confirm still keeps the chat messages switched.
+  let filesRestored = false;
+  if (targetRun?.postTurnSnapshotSha?.trim() && targetRun.snapshotCwd?.trim()) {
+    const fileResult = await confirmAndRestoreTurnSnapshot(targetRun, 'post');
+    if (fileResult.cancelled) {
+      setStatus(
+        'ok',
+        isRedoRestore
+          ? UNDO_STATUS.branchRestoredFilesSkipped
+          : UNDO_STATUS.branchSwitchedFilesSkipped,
+      );
+      return;
+    }
+    filesRestored = fileResult.restored;
+  }
+
+  if (isRedoRestore) {
+    setStatus(
+      'ok',
+      filesRestored ? UNDO_STATUS.branchRestoredFiles : UNDO_STATUS.branchRestored,
+    );
+    return;
+  }
+
+  setStatus(
+    'ok',
+    filesRestored ? UNDO_STATUS.branchSwitchedFiles : UNDO_STATUS.branchSwitched,
+  );
 }

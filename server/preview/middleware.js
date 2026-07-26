@@ -171,6 +171,11 @@ export async function handlePreviewRequest(req, res, pathname, searchParams, dep
       res.statusCode = 200;
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Cache-Control', 'no-store');
+      res.setHeader(
+        'Content-Security-Policy',
+        "default-src 'none'; img-src data:; style-src 'unsafe-inline'",
+      );
+      res.setHeader('X-Content-Type-Options', 'nosniff');
       res.end(html);
       return true;
     } catch (err) {

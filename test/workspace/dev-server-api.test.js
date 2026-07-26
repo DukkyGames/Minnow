@@ -208,12 +208,49 @@ describe('workspace dev-server API', () => {
     await new Promise((resolve) => healthServer.listen(healthPort, '127.0.0.1', resolve));
 
     try {
-      const status = await httpJson(baseUrl, '/api/workspace/dev-server/status');
+      let status = await httpJson(baseUrl, '/api/workspace/dev-server/status');
+      // Health listen can race the first probe on Windows; poll briefly.
+      for (let i = 0; i < 8 && status.json.status !== 'running'; i += 1) {
+        await new Promise((r) => setTimeout(r, 100));
+        status = await httpJson(baseUrl, '/api/workspace/dev-server/status');
+      }
       assert.equal(status.json.status, 'running');
       assert.equal(status.json.healthOk, true);
     } finally {
       await new Promise((resolve) => healthServer.close(resolve));
       await httpJson(baseUrl, '/api/workspace/dev-server/stop', 'POST');
     }
+  });
+
+  test('GET /api/workspace/dev-servers lists seeded primary', async () => {
+    await fs.writeFile(
+      path.join(workspaceDir, 'startup.md'),
+      '---\ncommand: node -e "setInterval(()=>{}, 60000)"\ncwd: .\n---\n',
+      'utf8',
+    );
+    const { status, json } = await httpJson(baseUrl, '/api/workspace/dev-servers');
+    assert.equal(status, 200);
+    assert.ok(Array.isArray(json.servers));
+    assert.ok(json.servers.some((s) => s.id === 'primary'));
+  });
+
+  test('POST create + DELETE user server', async () => {
+    const created = await httpJson(baseUrl, '/api/workspace/dev-servers', 'POST', {
+      name: 'storybook',
+      command: 'npm run storybook',
+      port: 6006,
+    });
+    assert.equal(created.status, 201);
+    assert.equal(created.json.ok, true);
+    const id = created.json.server.id;
+    const del = await httpJson(baseUrl, `/api/workspace/dev-servers/${id}`, 'DELETE');
+    assert.equal(del.status, 200);
+    assert.equal(del.json.ok, true);
+  });
+
+  test('GET /api/workspace/ports returns ports array', async () => {
+    const { status, json } = await httpJson(baseUrl, '/api/workspace/ports');
+    assert.equal(status, 200);
+    assert.ok(Array.isArray(json.ports));
   });
 });

@@ -58,6 +58,17 @@ import {
 import { emitBoardChange } from './orchestrate-board-events.ts';
 import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, syncOrchestrateBoardTimer, updateTask, logTaskStatus, logBoardReportNudge, logBuildVerdict, logTestVerdict, logMergeResult, logWorktreeAllocated, logTaskRetry, logModeChange, logAutoStart, logAutoStop, logFinalTestStarted, logFinalTestVerdict, quarantineTaskAndDependents } from './orchestrate-board-store.ts';
 import {
+  acquirePipelineHold,
+  heldTaskIdsForOccupancy,
+  hasPipelineHold,
+  listPipelineHolds,
+  releaseAllPipelineHolds,
+  releasePipelineHold,
+  releasePipelineHoldsForTask,
+  setPipelineHoldMaxMsForTests,
+  sweepExpiredPipelineHolds,
+} from './orchestrate-pipeline-holds.ts';
+import {
   isIsolationActive,
   resolveIsolationMode,
   worktreeBranchFor,
@@ -1231,14 +1242,14 @@ function skipBackgroundBoardChatLaunch(): boolean {
   );
 }
 
-/** Phase label for a running board task slot (build / test / fix / final integration). */
-export type RunningBoardTaskPhase = 'build' | 'test' | 'fix' | 'final';
+/** Phase label for a running board task slot (build / test / fix / merge / final integration). */
+export type RunningBoardTaskPhase = 'build' | 'test' | 'fix' | 'merge' | 'final';
 
-/** One concurrency slot occupied by a streaming or launching task chat. */
+/** One concurrency slot occupied by a streaming or launching task chat, or a pipeline hold. */
 export interface RunningBoardTaskSlot {
   taskId: string;
   title: string;
-  chatId: string;
+  chatId?: string;
   phase: RunningBoardTaskPhase;
   task?: BoardTask;
   isFinalTest?: boolean;
@@ -1254,15 +1265,40 @@ function runningSlotPhaseForTask(
   return 'build';
 }
 
-/** Running task / tester / final-integration chats occupying a concurrency slot. */
+/** Running task / tester / final-integration chats plus pipeline holds occupying a slot. */
 export function countRunningTaskChats(
   board: NonNullable<ChatGroup['orchestrateBoard']>,
 ): number {
-  return listRunningBoardTaskSlots(board).length;
+  const slots = listChatRunningBoardTaskSlots(board);
+  const withChat = new Set(slots.map((s) => s.taskId));
+  let holds = 0;
+  for (const taskId of heldTaskIdsForOccupancy(board)) {
+    if (!withChat.has(taskId)) holds += 1;
+  }
+  return slots.length + holds;
 }
 
 /** Enumerate active board task chats (build, test, fixer, final integration). */
 export function listRunningBoardTaskSlots(
+  board: NonNullable<ChatGroup['orchestrateBoard']>,
+): RunningBoardTaskSlot[] {
+  const slots = listChatRunningBoardTaskSlots(board);
+  const withChatTaskIds = new Set(slots.map((s) => s.taskId));
+  for (const hold of listPipelineHolds(board)) {
+    if (withChatTaskIds.has(hold.taskId)) continue;
+    const task = board.tasks.find((t) => t.id === hold.taskId);
+    slots.push({
+      taskId: hold.taskId,
+      title: task?.title ?? hold.taskId,
+      phase: 'merge',
+      task,
+    });
+    withChatTaskIds.add(hold.taskId);
+  }
+  return slots;
+}
+
+function listChatRunningBoardTaskSlots(
   board: NonNullable<ChatGroup['orchestrateBoard']>,
 ): RunningBoardTaskSlot[] {
   const seen = new Set<string>();
@@ -1335,10 +1371,11 @@ export function isTaskChatActiveForStallCheck(chatId: string): boolean {
   return isTaskChatActive(chatId);
 }
 
-/** Running slots minus one reserved-only chat that must not block its own launch. */
+/** Running slots minus one reserved-only chat and one self-hold that must not block launch. */
 function effectiveRunningTaskCount(
   board: NonNullable<ChatGroup['orchestrateBoard']>,
   excludeReservedOnlyChatId?: string,
+  excludeHoldTaskId?: string,
 ): number {
   let count = countRunningTaskChats(board);
   const exclude = excludeReservedOnlyChatId?.trim();
@@ -1350,6 +1387,15 @@ function effectiveRunningTaskCount(
   ) {
     count = Math.max(0, count - 1);
   }
+  const excludeHold = excludeHoldTaskId?.trim();
+  if (excludeHold && hasPipelineHold(board, excludeHold)) {
+    const withChat = new Set(
+      listChatRunningBoardTaskSlots(board).map((s) => s.taskId),
+    );
+    if (!withChat.has(excludeHold)) {
+      count = Math.max(0, count - 1);
+    }
+  }
   return count;
 }
 
@@ -1360,7 +1406,7 @@ function canLaunchBoardTask(
 ): boolean {
   const exclude =
     task?.status === 'testing' ? task.testChatId?.trim() : undefined;
-  return effectiveRunningTaskCount(board, exclude) < maxConcurrent(board);
+  return effectiveRunningTaskCount(board, exclude, task?.id) < maxConcurrent(board);
 }
 
 /** Release a leaked launch reservation on a task test chat before early return. */
@@ -1734,6 +1780,7 @@ export async function recoverMergingBoardTask(
     stopGeneration(fixerId);
     releaseLaunchSlot(fixerId);
   }
+  releasePipelineHoldsForTask(board, taskId);
 
   await reconcileMergingTasks(group, plannerChat);
   emitBoardChange(group.id);
@@ -1747,51 +1794,56 @@ async function restartStallNudgeFallback(
   priorError?: string,
   stalledChatId?: string,
 ): Promise<void> {
-  const stalled = stalledChatId?.trim();
-  if (!stalled || stalled === task.chatId?.trim()) {
-    await startTask(group, task.id, plannerChat);
-    return;
-  }
-  if (
-    stalled === task.testChatId?.trim() ||
-    group.orchestrateBoard?.finalTest?.chatId?.trim() === stalled
-  ) {
-    await startTaskTesting(group, task.id, plannerChat);
-    return;
-  }
-  if (stalled === task.fixerChatId?.trim()) {
-    if (task.status === 'merging') {
-      const branch = task.worktreeBranch?.trim();
-      const board = group.orchestrateBoard;
-      if (branch && board?.integrationBranch) {
-        await startMergeConflictFixer(group, task, plannerChat, [], task.mergePreSha);
+  const hold = acquirePipelineHold(group.orchestrateBoard, task.id, 'merge');
+  try {
+    const stalled = stalledChatId?.trim();
+    if (!stalled || stalled === task.chatId?.trim()) {
+      await startTask(group, task.id, plannerChat);
+      return;
+    }
+    if (
+      stalled === task.testChatId?.trim() ||
+      group.orchestrateBoard?.finalTest?.chatId?.trim() === stalled
+    ) {
+      await startTaskTesting(group, task.id, plannerChat);
+      return;
+    }
+    if (stalled === task.fixerChatId?.trim()) {
+      if (task.status === 'merging') {
+        const branch = task.worktreeBranch?.trim();
+        const board = group.orchestrateBoard;
+        if (branch && board?.integrationBranch) {
+          await startMergeConflictFixer(group, task, plannerChat, [], task.mergePreSha);
+          return;
+        }
+        quarantineTaskAndDependents(
+          group,
+          task.id,
+          {
+            category: 'merge',
+            summary: priorError || 'Merge fixer chat missing and merge context invalid',
+            resolutionSteps: ['inspect merge state, then Requeue'],
+            at: Date.now(),
+          },
+          plannerChat,
+        );
         return;
       }
-      quarantineTaskAndDependents(
-        group,
-        task.id,
-        {
-          category: 'merge',
-          summary: priorError || 'Merge fixer chat missing and merge context invalid',
-          resolutionSteps: ['inspect merge state, then Requeue'],
-          at: Date.now(),
-        },
-        plannerChat,
-      );
-      return;
+      if (task.fixerKind === 'env') {
+        await startEnvFixer(
+          group,
+          task,
+          plannerChat,
+          task.envFixPhase ?? 'build',
+          priorError || 'Environment fixer stalled',
+        );
+        return;
+      }
     }
-    if (task.fixerKind === 'env') {
-      await startEnvFixer(
-        group,
-        task,
-        plannerChat,
-        task.envFixPhase ?? 'build',
-        priorError || 'Environment fixer stalled',
-      );
-      return;
-    }
+    await startTask(group, task.id, plannerChat);
+  } finally {
+    releasePipelineHold(hold);
   }
-  await startTask(group, task.id, plannerChat);
 }
 
 /** Run a continue nudge on an existing task chat (no original-prompt reseed). */
@@ -1992,6 +2044,12 @@ export async function stopRunningBoardSlot(
 async function drainTaskQueue(group: ChatGroup, plannerChat: Chat): Promise<void> {
   const board = group.orchestrateBoard;
   if (!board) return;
+  for (const taskId of sweepExpiredPipelineHolds(board)) {
+    reportBackgroundError(
+      'pipeline-hold-expired',
+      new Error(`Pipeline hold expired for task ${taskId}`),
+    );
+  }
   if (drainInFlightByGroupId.has(group.id)) return;
   drainInFlightByGroupId.add(group.id);
   try {
@@ -2310,6 +2368,8 @@ export async function startMergeConflictFixer(
   const board = group.orchestrateBoard;
   if (!board?.integrationBranch) return;
 
+  const hold = acquirePipelineHold(board, task.id, 'merge-fixer-start');
+  try {
   const boardId = group.id;
 
   const ensured = await ensureIntegrationWorktree({
@@ -2454,6 +2514,9 @@ export async function startMergeConflictFixer(
     releaseLaunchSlotAndDrive(group, plannerChat, fixerChat.id);
     throw err;
   }
+  } finally {
+    releasePipelineHold(hold);
+  }
 }
 
 /**
@@ -2488,6 +2551,7 @@ async function finalizeMergeFixerOnStreamEnd(
   if (task.status !== 'merging') return;
   if (fixerFinalizeInFlight.has(task.id)) return;
   fixerFinalizeInFlight.add(task.id);
+  const hold = acquirePipelineHold(group.orchestrateBoard, task.id, 'merge-fixer-finalize');
   try {
     const fresh = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
 
@@ -2706,6 +2770,7 @@ async function finalizeMergeFixerOnStreamEnd(
       makeSelfHealDeps(),
     ).catch((err) => reportBackgroundError('self-heal-fixer-terminal', err));
   } finally {
+    releasePipelineHold(hold);
     fixerFinalizeInFlight.delete(task.id);
   }
 }
@@ -2843,6 +2908,7 @@ async function finalizeEnvFixerOnStreamEnd(
   if (task.fixerKind !== 'env') return;
   if (fixerFinalizeInFlight.has(task.id)) return;
   fixerFinalizeInFlight.add(task.id);
+  const hold = acquirePipelineHold(group.orchestrateBoard, task.id, 'env-fixer-finalize');
   try {
     const fresh = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
 
@@ -2957,6 +3023,7 @@ async function finalizeEnvFixerOnStreamEnd(
   } catch (err) {
     reportBackgroundError('finalize-env-fixer', err);
   } finally {
+    releasePipelineHold(hold);
     fixerFinalizeInFlight.delete(task.id);
   }
 }
@@ -3041,7 +3108,7 @@ export async function startTask(
     return;
   }
 
-  if (countRunningTaskChats(board) >= maxConcurrent(board)) {
+  if (!canLaunchBoardTask(board, task)) {
     enqueueTask(group.id, taskId);
     return;
   }
@@ -3412,58 +3479,63 @@ export async function finalizeTaskTestingOnStreamEnd(
 
   if (outcome === 'pass') {
     updateTask(group, fresh.id, { error: undefined }, plannerChat);
-    const mergeResult = await enqueueMergeCompletedTaskWorktree(group, fresh, plannerChat);
-    if (mergeResult.outcome === 'merged' || mergeResult.outcome === 'skipped') {
-      moveTaskStatus(group, fresh.id, 'complete', plannerChat);
-    } else if (mergeResult.outcome === 'conflict') {
-      updateTask(
-        group,
-        fresh.id,
-        {
-          error: `Integration merge conflict on ${fresh.worktreeBranch ?? fresh.id}`,
-        },
-        plannerChat,
-      );
-      await startMergeConflictFixer(
-        group,
-        fresh,
-        plannerChat,
-        mergeResult.conflictedFiles,
-        mergeResult.integrationSha,
-      );
-    } else {
-      // Merge-failed (non-conflict error) → self-heal merge path.
-      const mergeSummary = mergeResult.message || 'Integration merge failed';
-      updateTask(group, fresh.id, { error: mergeSummary }, plannerChat);
-      void runSelfHeal(
-        group,
-        fresh,
-        plannerChat,
-        { phase: 'merge', category: 'merge', summary: mergeSummary },
-        makeSelfHealDeps(),
-      ).catch((err) => reportBackgroundError('self-heal-merge', err));
-      return;
-    }
+    const hold = acquirePipelineHold(group.orchestrateBoard, fresh.id, 'merge');
+    try {
+      const mergeResult = await enqueueMergeCompletedTaskWorktree(group, fresh, plannerChat);
+      if (mergeResult.outcome === 'merged' || mergeResult.outcome === 'skipped') {
+        moveTaskStatus(group, fresh.id, 'complete', plannerChat);
+      } else if (mergeResult.outcome === 'conflict') {
+        updateTask(
+          group,
+          fresh.id,
+          {
+            error: `Integration merge conflict on ${fresh.worktreeBranch ?? fresh.id}`,
+          },
+          plannerChat,
+        );
+        await startMergeConflictFixer(
+          group,
+          fresh,
+          plannerChat,
+          mergeResult.conflictedFiles,
+          mergeResult.integrationSha,
+        );
+      } else {
+        // Merge-failed (non-conflict error) → self-heal merge path.
+        const mergeSummary = mergeResult.message || 'Integration merge failed';
+        updateTask(group, fresh.id, { error: mergeSummary }, plannerChat);
+        void runSelfHeal(
+          group,
+          fresh,
+          plannerChat,
+          { phase: 'merge', category: 'merge', summary: mergeSummary },
+          makeSelfHealDeps(),
+        ).catch((err) => reportBackgroundError('self-heal-merge', err));
+        return;
+      }
 
-    const testChatId = fresh.testChatId?.trim();
-    const testChat = testChatId ? findChatById(testChatId) : null;
-    if (testChat) {
-      const { providerId, modelId } = resolvePlannerModelBinding(plannerChat);
-      const lastAssistant = [...testChat.history].reverse().find((m) => m.role === 'assistant');
-      const assistantText = lastAssistant && typeof lastAssistant.content === 'string'
-        ? lastAssistant.content
-        : '';
-      schedulePostTurnSynthesis({
-        chatId: testChat.id,
-        messages: buildSynthesisMessages(testChat),
-        roundCount: testChat.history.filter((m) => m.role === 'assistant').length,
-        toolCount: 0,
-        sourceExcerpt: buildSynthesisExcerpt(testChat),
-        assistantText,
-        force: true,
-        providerId: providerId || undefined,
-        modelId: modelId || undefined,
-      });
+      const testChatIdAfterMerge = fresh.testChatId?.trim();
+      const testChat = testChatIdAfterMerge ? findChatById(testChatIdAfterMerge) : null;
+      if (testChat) {
+        const { providerId, modelId } = resolvePlannerModelBinding(plannerChat);
+        const lastAssistant = [...testChat.history].reverse().find((m) => m.role === 'assistant');
+        const assistantText = lastAssistant && typeof lastAssistant.content === 'string'
+          ? lastAssistant.content
+          : '';
+        schedulePostTurnSynthesis({
+          chatId: testChat.id,
+          messages: buildSynthesisMessages(testChat),
+          roundCount: testChat.history.filter((m) => m.role === 'assistant').length,
+          toolCount: 0,
+          sourceExcerpt: buildSynthesisExcerpt(testChat),
+          assistantText,
+          force: true,
+          providerId: providerId || undefined,
+          modelId: modelId || undefined,
+        });
+      }
+    } finally {
+      releasePipelineHold(hold);
     }
     return;
   }
@@ -3822,6 +3894,7 @@ export async function stopTask(
     stopTaskChatSupervision(task.fixerChatId);
     stopGeneration(task.fixerChatId);
   }
+  releasePipelineHoldsForTask(group.orchestrateBoard, taskId);
   await drainTaskQueue(group, plannerChat);
 }
 
@@ -3932,6 +4005,12 @@ export function setBoardExecutionMode(
   if (!board) return;
   const prevMode = getBoardExecutionMode(board);
   board.executionMode = mode;
+  // Sequential → AFK must not silently lift the one-at-a-time cap. Sequential
+  // disables the concurrency stepper (ui/orchestrate-board.ts), so the user
+  // never had a chance to pick a value; pin it to 1 and let them raise it in AFK.
+  if (mode === 'afk' && prevMode === 'sequential' && board.maxConcurrentTasks === undefined) {
+    board.maxConcurrentTasks = 1;
+  }
   if (mode !== 'afk') delete board.pendingAfk;
   if (mode === 'manual') board.autoRunning = false;
   board.lastUpdatedAt = Date.now();
@@ -4076,6 +4155,12 @@ export async function reconcileMergingTasks(
   }
   const board = group.orchestrateBoard;
   if (!board) return;
+  for (const taskId of sweepExpiredPipelineHolds(board)) {
+    reportBackgroundError(
+      'pipeline-hold-expired',
+      new Error(`Pipeline hold expired for task ${taskId}`),
+    );
+  }
   const isFixerActive = options?.isFixerChatActive ?? isTaskChatActive;
   const pending: Promise<void>[] = [];
   for (const task of board.tasks) {
@@ -4157,6 +4242,7 @@ export function stopBoardAutoRun(
   board.lastUpdatedAt = Date.now();
   logAutoStop(group);
   taskQueueByGroupId.delete(group.id);
+  releaseAllPipelineHolds(board);
   for (const task of board.tasks) {
     if (task.chatId) {
       stopTaskChatSupervision(task.chatId);
@@ -4234,7 +4320,7 @@ export async function autoDelegateNext(
       return board.tasks.indexOf(a) - board.tasks.indexOf(b);
     });
   for (const task of ready) {
-    if (countRunningTaskChats(board) >= maxConcurrent(board)) {
+    if (!canLaunchBoardTask(board, task)) {
       enqueueTask(group.id, task.id);
       continue;
     }
@@ -4282,7 +4368,7 @@ export async function startWave(
     (t) => t.wave === waveId && t.status === 'planned',
   );
   for (const task of planned) {
-    if (countRunningTaskChats(board) >= maxConcurrent(board)) {
+    if (!canLaunchBoardTask(board, task)) {
       enqueueTask(group.id, task.id);
     } else {
       await startTask(group, task.id, plannerChat);
@@ -4365,6 +4451,29 @@ export async function drainTaskQueueForTests(
   plannerChat: Chat,
 ): Promise<void> {
   return drainTaskQueue(group, plannerChat);
+}
+
+export { setPipelineHoldMaxMsForTests };
+
+export function getPipelineHoldsForTests(
+  board: NonNullable<ChatGroup['orchestrateBoard']>,
+): ReturnType<typeof listPipelineHolds> {
+  return listPipelineHolds(board);
+}
+
+export function acquirePipelineHoldForTests(
+  board: NonNullable<ChatGroup['orchestrateBoard']>,
+  taskId: string,
+  reason: Parameters<typeof acquirePipelineHold>[2],
+): ReturnType<typeof acquirePipelineHold> {
+  return acquirePipelineHold(board, taskId, reason);
+}
+
+export function releasePipelineHoldsForTaskForTests(
+  board: NonNullable<ChatGroup['orchestrateBoard']>,
+  taskId: string,
+): number {
+  return releasePipelineHoldsForTask(board, taskId);
 }
 
 export function startTaskChatSupervisionForTests(chatId: string): void {

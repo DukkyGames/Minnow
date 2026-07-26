@@ -2433,6 +2433,32 @@
     ]
   },
   {
+    "key": "integrations.tools.permission.read_document",
+    "label": "Tool permission: read_document",
+    "description": "Permission mode for the read_document tool (off, ask, or full).",
+    "keywords": [
+      "read_document",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.read_document",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
     "key": "integrations.tools.permission.read_file_range",
     "label": "Tool permission: read_file_range",
     "description": "Permission mode for the read_file_range tool (off, ask, or full).",
@@ -3174,6 +3200,32 @@
     "storage": "resource",
     "resource": "tools",
     "path": "permissions.default.stop_background_command",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.manage_dev_servers",
+    "label": "Tool permission: manage_dev_servers",
+    "description": "Permission mode for the manage_dev_servers tool (off, ask, or full).",
+    "keywords": [
+      "manage_dev_servers",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.manage_dev_servers",
     "type": "enum",
     "allowedValues": [
       "off",

@@ -12,6 +12,8 @@ import { getCachePolicyForTool, type ToolCachePolicy } from './tool-cache-policy
 /** Minimal executeTool context for cache scoping (avoids circular import with client.ts). */
 export interface ToolCacheContext {
   chatId?: string;
+  /** Override workspace root (desktop drawer, chats sandbox, worktree listing). */
+  workspaceRoot?: string;
 }
 
 /** Workspace root reader (bound at app init to avoid importing workspace state in tests). */
@@ -166,6 +168,14 @@ export function isErrorToolResult(result: ToolExecutionResult): boolean {
   return text.startsWith('Error:');
 }
 
+/** Skip cache for tools whose args embed large opaque payloads (e.g. base64 attachments). */
+function shouldBypassToolCache(name: string, args: Record<string, unknown>): boolean {
+  if (name === 'read_document' && typeof args.content === 'string' && args.content.trim()) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Normalize tool args for stable cache keys (sorted keys, trimmed strings, paths).
  */
@@ -186,6 +196,7 @@ function getPathArgKeysForTool(toolName: string): string[] {
     list_directory: ['path'],
     read_file: ['path'],
     read_file_range: ['path'],
+    read_document: ['path'],
     save_file: ['path'],
     create_pdf: ['path'],
     create_spreadsheet: ['path'],
@@ -255,7 +266,9 @@ export function buildCacheKey(name: string, normalizedArgs: Record<string, unkno
 
 /** Scope id: normalized workspace path + chat id (or __no_chat__). */
 export function getCacheScope(context: ToolCacheContext): string {
-  const workspace = normalizeWorkspacePath(readWorkspacePathForCache());
+  const workspace = normalizeWorkspacePath(
+    context.workspaceRoot?.trim() || readWorkspacePathForCache(),
+  );
   const chat = context.chatId?.trim() || '__no_chat__';
   return `${workspace}:${chat}`;
 }
@@ -553,6 +566,7 @@ export async function executeWithResultCache(
 ): Promise<ToolExecutionResult> {
   const policy = getCachePolicyForTool(name);
   const scopeId = getCacheScope(context);
+  const bypassCache = shouldBypassToolCache(name, args);
 
   if (!isToolCacheEnabled()) {
     const result = await inner();
@@ -560,7 +574,7 @@ export async function executeWithResultCache(
     return result;
   }
 
-  if (!policy.cacheable) {
+  if (!policy.cacheable || bypassCache) {
     const result = await inner();
     invalidateAfterTool(scopeId, name, args, result);
     return result;

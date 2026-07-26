@@ -77,10 +77,18 @@ import { syncComposerReasoningEffortFromActiveChat } from './composer-reasoning-
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import { syncComposerPinnedSkillFromActiveChat } from './composer-pinned-skill';
 import { syncComposerRunTargetFromActiveChat } from './composer-run-target';
+import {
+  invalidateComposerUndoGitCache,
+  syncComposerUndoFromActiveChat,
+} from './composer-undo';
 import { clearPanelCwdUserOverride, syncPanelFromActiveChat } from './git-panel';
 import { seedNewChatComposerRunTarget } from './new-chat-run-target-seed';
 import { buildDefaultPinnedSkillForNewChat } from '../skills/config';
 import { dismissCodeOverviewForNavigation, isCodeOverviewOpen } from './code-overview';
+import {
+  dismissDevServerScreenForNavigation,
+  isDevServerScreenOpen,
+} from './dev-server-screen';
 import { isBoardViewActive, syncViewModeToggleFromActiveChat } from './view-mode-toggle';
 import {
   isOrchestrateHubMounted,
@@ -319,6 +327,8 @@ export async function applyWorkspaceScopedSession(
   previousPath?: string,
 ): Promise<void> {
   clearChatSelection();
+  // Workspace switch may enter/leave a git repo — recheck Undo visibility.
+  invalidateComposerUndoGitCache();
   // Awaits history hydrate for the workspace's active chat before painting.
   const { activeChat, activeChanged } = await onWorkspaceChanged(newPath, previousPath);
   if (activeChanged) {
@@ -331,6 +341,7 @@ export async function applyWorkspaceScopedSession(
     void syncOrchestratePlanStripFromActiveChat();
     syncComposerPinnedSkillFromActiveChat();
     syncComposerRunTargetFromActiveChat();
+    syncComposerUndoFromActiveChat();
     syncViewModeToggleFromActiveChat();
     clearPanelCwdUserOverride();
     syncPanelFromActiveChat({ forceFileTree: true });
@@ -1088,7 +1099,10 @@ function paintActiveChatInForegroundShell(chat: Chat): void {
     renderChatFromHistory(chat, '#chatAppMessageCol');
     return;
   }
-  if (dismissCodeOverviewForNavigation()) {
+  if (
+    dismissCodeOverviewForNavigation() ||
+    dismissDevServerScreenForNavigation()
+  ) {
     renderChatFromHistory(chat);
     return;
   }
@@ -1153,7 +1167,13 @@ export async function switchChat(id: string): Promise<void> {
     const planScreenSuspendedForSameChat =
       sameChat != null && isOrchestratePlanScreenSuspendedForChat(sameChat);
     const codeOverviewOpen = isCodeOverviewOpen();
-    if (boardWasOpen || planScreenSuspendedForSameChat || codeOverviewOpen) {
+    const devServerScreenOpen = isDevServerScreenOpen();
+    if (
+      boardWasOpen ||
+      planScreenSuspendedForSameChat ||
+      codeOverviewOpen ||
+      devServerScreenOpen
+    ) {
       if (sameChat) {
         // Re-hydrate in case this chat was never loaded after a lazy boot.
         await ensureChatHistoryLoaded(id);
@@ -1204,6 +1224,7 @@ export async function switchChat(id: string): Promise<void> {
   void syncOrchestratePlanStripFromActiveChat();
   syncComposerPinnedSkillFromActiveChat();
   syncComposerRunTargetFromActiveChat();
+  syncComposerUndoFromActiveChat();
   syncViewModeToggleFromActiveChat();
   clearPanelCwdUserOverride();
   syncPanelFromActiveChat({ forceFileTree: true });
@@ -1252,6 +1273,7 @@ function syncCreateChatChrome(chatId: string): void {
   void syncOrchestratePlanStripFromActiveChat();
   syncComposerPinnedSkillFromActiveChat();
   syncComposerRunTargetFromActiveChat();
+  syncComposerUndoFromActiveChat();
   syncViewModeToggleFromActiveChat();
   syncWorkAgentDevFromActiveChat();
   onModelRoutingActiveChatChanged(chatId);

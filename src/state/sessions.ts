@@ -129,7 +129,6 @@ function normalizeChatTodoStatus(raw: unknown): ChatTodo['status'] {
   return 'pending';
 }
 
-
 /** In-memory session blob mirrored to ~/.minnow or localStorage fallback. */
 export let sessionState: SessionState | null = null;
 

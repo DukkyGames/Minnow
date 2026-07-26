@@ -6,6 +6,7 @@ import {
   createProvider,
   updateProvider,
   updateProviderSecrets,
+  listProviders,
   type CreateProviderPayload,
 } from '../../providers/store';
 import type { ProviderPublic } from '../../providers/types';
@@ -19,7 +20,11 @@ import {
 } from '../provider-probe';
 import { ONBOARDING_CLOUD_PRESETS } from '../../providers/presets';
 import type { OnboardingContext, OnboardingStep, OnboardingStepActions } from '../types';
-import { recordStepProgress } from '../state-core';
+import {
+  listConfiguredOnboardingCloudPresetIds,
+  onboardingCloudProviderId,
+  recordStepProgress,
+} from '../state-core';
 
 let selectedPath: OnboardingContext['providerPath'] = null;
 let probeResults: ProviderProbeResult[] = [];
@@ -30,6 +35,9 @@ let cloudBaseUrl = 'https://openrouter.ai/api';
 let cloudApiKey = '';
 let connectionStatus: 'idle' | 'ok' | 'err' = 'idle';
 let connectionError = '';
+/** Preset chip ids the user has already tested and saved during this wizard session. */
+const configuredCloudPresets = new Set<string>();
+let cloudProviderLoadGen = 0;
 
 export const providerChoiceStep: OnboardingStep = {
   id: 'provider-choice',
@@ -211,20 +219,25 @@ export const providerCloudStep: OnboardingStep = {
 
     const presetRow = el('div', 'mn-onboarding-chip-row');
     ONBOARDING_CLOUD_PRESETS.forEach((preset) => {
-      const chip = el('button', 'mn-onboarding-wallpaper-chip', preset.label);
-      chip.type = 'button';
-      if (preset.id === cloudPreset) chip.classList.add('is-selected');
-      if (preset.authHint) chip.title = preset.authHint;
-      chip.addEventListener('click', () => {
+      const chip = createCloudPresetChip(preset, configuredCloudPresets.has(preset.id), () => {
         cloudPreset = preset.id;
         if (preset.baseUrl) cloudBaseUrl = preset.baseUrl;
-        actions.setPrimaryEnabled(false);
-        connectionStatus = 'idle';
+        connectionError = '';
+        if (configuredCloudPresets.has(preset.id)) {
+          connectionStatus = 'ok';
+          localProviderId = onboardingCloudProviderId(preset.id);
+        } else {
+          connectionStatus = 'idle';
+          actions.setPrimaryEnabled(false);
+        }
         rerenderCloud(container, ctx, actions);
       });
+      if (preset.id === cloudPreset) chip.classList.add('is-selected');
       presetRow.appendChild(chip);
     });
     container.appendChild(presetRow);
+
+    void refreshConfiguredCloudPresets(container, ctx, actions);
 
     const selectedPreset = ONBOARDING_CLOUD_PRESETS.find((preset) => preset.id === cloudPreset);
     if (selectedPreset?.authHint) {
@@ -267,7 +280,9 @@ export const providerCloudStep: OnboardingStep = {
     container.appendChild(statusRow);
 
     actions.setPrimaryLabel('Continue');
-    actions.setPrimaryEnabled(connectionStatus === 'ok');
+    actions.setPrimaryEnabled(
+      connectionStatus === 'ok' || configuredCloudPresets.has(cloudPreset),
+    );
   },
 
   async commit(ctx) {
@@ -294,6 +309,57 @@ function rerenderCloud(
   actions: OnboardingStepActions,
 ): void {
   providerCloudStep.render(container, ctx, actions);
+}
+
+/** Cloud preset chip with an optional saved-key confirmation mark. */
+function createCloudPresetChip(
+  preset: (typeof ONBOARDING_CLOUD_PRESETS)[number],
+  isConfigured: boolean,
+  onSelect: () => void,
+): HTMLButtonElement {
+  const chip = el('button', 'mn-onboarding-wallpaper-chip');
+  chip.type = 'button';
+  if (preset.authHint) chip.title = preset.authHint;
+  if (isConfigured) chip.classList.add('is-added');
+
+  const label = el('span', 'mn-onboarding-wallpaper-chip__label', preset.label);
+  chip.appendChild(label);
+
+  if (isConfigured) {
+    const check = el('span', 'mn-onboarding-wallpaper-chip__check', '✓');
+    check.setAttribute('aria-hidden', 'true');
+    chip.appendChild(check);
+    chip.setAttribute('aria-label', `${preset.label}, added`);
+  }
+
+  chip.addEventListener('click', onSelect);
+  return chip;
+}
+
+/** Merge saved onboarding cloud providers from the registry into chip state. */
+async function refreshConfiguredCloudPresets(
+  container: HTMLElement,
+  ctx: OnboardingContext,
+  actions: OnboardingStepActions,
+): Promise<void> {
+  const gen = ++cloudProviderLoadGen;
+  try {
+    const { providers } = await listProviders();
+    if (gen !== cloudProviderLoadGen) return;
+    const beforeSize = configuredCloudPresets.size;
+    for (const presetId of listConfiguredOnboardingCloudPresetIds(providers)) {
+      configuredCloudPresets.add(presetId);
+    }
+    if (configuredCloudPresets.size === beforeSize) return;
+    if (configuredCloudPresets.has(cloudPreset)) {
+      connectionStatus = 'ok';
+      localProviderId = onboardingCloudProviderId(cloudPreset);
+      actions.setPrimaryEnabled(true);
+    }
+    rerenderCloud(container, ctx, actions);
+  } catch {
+    // Offline / vite-only — chip state stays session-local.
+  }
 }
 
 /** Create provider or update when npm start already seeded the same id. */
@@ -388,7 +454,7 @@ async function testCloudConnection(
   const preset = ONBOARDING_CLOUD_PRESETS.find((p) => p.id === cloudPreset);
   const apiKind = preset?.apiKind ?? 'openai-v1';
   const paths = getDefaultPaths(apiKind);
-  const id = `onboarding-cloud-${cloudPreset}`;
+  const id = onboardingCloudProviderId(cloudPreset);
   const result = await ensureOnboardingProvider({
     id,
     label: preset?.label ?? 'Cloud',
@@ -423,6 +489,7 @@ async function testCloudConnection(
     await fetchModelsForProvider(result.provider, new AbortController().signal);
     connectionStatus = 'ok';
     localProviderId = id;
+    configuredCloudPresets.add(cloudPreset);
     actions.setPrimaryEnabled(true);
   } catch (err) {
     connectionStatus = 'err';

@@ -16,6 +16,33 @@ export function hasUserConfiguredProviderIds(providerIds: readonly string[]): bo
   return providerIds.some((id) => !ONBOARDING_SEED_PROVIDER_IDS.has(id));
 }
 
+/** Prefix for cloud providers saved during onboarding (one row per preset id). */
+export const ONBOARDING_CLOUD_PROVIDER_PREFIX = 'onboarding-cloud-';
+
+/** Stable provider id for an onboarding cloud preset chip. */
+export function onboardingCloudProviderId(presetId: string): string {
+  return `${ONBOARDING_CLOUD_PROVIDER_PREFIX}${presetId}`;
+}
+
+/** Map a saved onboarding cloud provider id back to its preset chip id. */
+export function presetIdFromOnboardingCloudProviderId(providerId: string): string | null {
+  if (!providerId.startsWith(ONBOARDING_CLOUD_PROVIDER_PREFIX)) return null;
+  return providerId.slice(ONBOARDING_CLOUD_PROVIDER_PREFIX.length);
+}
+
+/** Preset chip ids that already have an API key saved during onboarding. */
+export function listConfiguredOnboardingCloudPresetIds(
+  providers: ReadonlyArray<{ id: string; hasApiKey: boolean }>,
+): string[] {
+  const configured: string[] = [];
+  for (const provider of providers) {
+    if (!provider.hasApiKey) continue;
+    const presetId = presetIdFromOnboardingCloudProviderId(provider.id);
+    if (presetId) configured.push(presetId);
+  }
+  return configured;
+}
+
 /** True when persisted chats contain real messages (not just model binding). */
 export function hasExistingChatMessageHistory(
   chats: ReadonlyArray<{ history?: readonly unknown[] }> | undefined,
