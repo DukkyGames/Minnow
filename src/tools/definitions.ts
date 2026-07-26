@@ -1223,13 +1223,11 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         description: { type: 'string', description: 'Markdown description' },
         type: {
           type: 'string',
-          enum: ['bug', 'task', 'idea', 'note'],
-          description: 'Issue type (default task)',
+          description: 'Issue type id from Settings → Issues (default task)',
         },
         priority: {
           type: 'string',
-          enum: ['urgent', 'high', 'medium', 'low', 'none'],
-          description: 'Priority (default none)',
+          description: 'Priority id from Settings → Issues (default none)',
         },
         labels: {
           type: 'array',
@@ -1259,24 +1257,15 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         description: { type: 'string' },
         type: {
           type: 'string',
-          enum: ['bug', 'task', 'idea', 'note'],
+          description: 'Issue type id from Settings → Issues',
         },
         status: {
           type: 'string',
-          enum: [
-            'triage',
-            'backlog',
-            'todo',
-            'planned',
-            'in_progress',
-            'review',
-            'done',
-            'canceled',
-          ],
+          description: 'Status id from Settings → Issues',
         },
         priority: {
           type: 'string',
-          enum: ['urgent', 'high', 'medium', 'low', 'none'],
+          description: 'Priority id from Settings → Issues',
         },
         labels: { type: 'array', items: { type: 'string' } },
         notes: { type: 'string' },

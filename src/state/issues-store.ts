@@ -6,7 +6,21 @@
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path.ts';
 import { isServerStorageMode } from '../config/storage-mode.ts';
 import { getBugs, getIssues, putIssues } from '../config/api-client.ts';
+import {
+  defaultIssuePriorityId,
+  defaultIssueStatusId,
+  defaultIssueTypeId,
+  isClosedStatus,
+  isKnownIssuePriority,
+  isKnownIssueStatus,
+  isKnownIssueType,
+  openIssueStatusIds,
+  requireStatusIdForRole,
+  statusIdForRole,
+  type IssueStatusRole,
+} from '../issues/taxonomy.ts';
 import { emitIssuesChange } from './issues-events.ts';
+import { getIssuesTaxonomySync } from './issues-taxonomy-store.ts';
 import { getWorkspacePath } from './workspace.ts';
 import type {
   BugCard,
@@ -25,7 +39,12 @@ import type {
 const ISSUES_STORAGE_KEY = 'minnow-issues-v1';
 const BUGS_STORAGE_KEY = 'minnow-bugs-v1';
 
-/** Statuses counted as "open" for sidebar badge. */
+/** Statuses counted as "open" for sidebar badge (derived from taxonomy). */
+export function getOpenIssueStatuses(): readonly IssueStatus[] {
+  return openIssueStatusIds(getIssuesTaxonomySync());
+}
+
+/** @deprecated Use getOpenIssueStatuses() — kept for test imports. */
 export const OPEN_ISSUE_STATUSES: readonly IssueStatus[] = [
   'triage',
   'backlog',
@@ -34,25 +53,6 @@ export const OPEN_ISSUE_STATUSES: readonly IssueStatus[] = [
   'in_progress',
   'review',
 ] as const;
-
-const ISSUE_TYPES = new Set<IssueType>(['bug', 'task', 'idea', 'note']);
-const ISSUE_STATUSES = new Set<IssueStatus>([
-  'triage',
-  'backlog',
-  'todo',
-  'planned',
-  'in_progress',
-  'review',
-  'done',
-  'canceled',
-]);
-const ISSUE_PRIORITIES = new Set<IssuePriority>([
-  'urgent',
-  'high',
-  'medium',
-  'low',
-  'none',
-]);
 
 /** Legacy bug columns (bug_* aliases + migration). */
 const BUG_COLUMNS: readonly BugColumn[] = [
@@ -77,15 +77,25 @@ export function setIssuesNowForTests(fn: (() => number) | null): void {
 }
 
 export function isIssueType(value: string): value is IssueType {
-  return ISSUE_TYPES.has(value as IssueType);
+  return isKnownIssueType(getIssuesTaxonomySync(), value);
 }
 
 export function isIssueStatus(value: string): value is IssueStatus {
-  return ISSUE_STATUSES.has(value as IssueStatus);
+  return isKnownIssueStatus(getIssuesTaxonomySync(), value);
 }
 
 export function isIssuePriority(value: string): value is IssuePriority {
-  return ISSUE_PRIORITIES.has(value as IssuePriority);
+  return isKnownIssuePriority(getIssuesTaxonomySync(), value);
+}
+
+/** Resolve a workflow role to the current status id. */
+export function issueStatusForRole(role: IssueStatusRole): string | undefined {
+  return statusIdForRole(getIssuesTaxonomySync(), role);
+}
+
+/** Require a workflow role status id (throws when unassigned). */
+export function requireIssueStatusForRole(role: IssueStatusRole): string {
+  return requireStatusIdForRole(getIssuesTaxonomySync(), role);
 }
 
 /** Type guard for legacy bug_* column values. */
@@ -114,27 +124,31 @@ function requireIssuesState(): IssuesState {
   return issuesState;
 }
 
-/** Map legacy bug column → issue status. */
+/** Map legacy bug column → issue status via taxonomy roles. */
 export function bugColumnToIssueStatus(column: BugColumn): IssueStatus {
+  const taxonomy = getIssuesTaxonomySync();
   switch (column) {
     case 'reported':
-      return 'triage';
+      return statusIdForRole(taxonomy, 'triage') ?? defaultIssueStatusId(taxonomy);
     case 'investigating':
-      return 'in_progress';
+      return statusIdForRole(taxonomy, 'in_progress') ?? defaultIssueStatusId(taxonomy);
     case 'planned':
-      return 'planned';
+      return statusIdForRole(taxonomy, 'planned') ?? defaultIssueStatusId(taxonomy);
     case 'fixing':
-      return 'in_progress';
+      return statusIdForRole(taxonomy, 'in_progress') ?? defaultIssueStatusId(taxonomy);
     case 'complete':
-      return 'done';
+      return statusIdForRole(taxonomy, 'done') ?? defaultIssueStatusId(taxonomy);
     default:
-      return 'triage';
+      return defaultIssueStatusId(taxonomy);
   }
 }
 
-/** Map issue status → legacy bug column (for bug_* alias tools). */
+/** Map issue status → legacy bug column via taxonomy roles. */
 export function issueStatusToBugColumn(status: IssueStatus): BugColumn {
-  switch (status) {
+  const taxonomy = getIssuesTaxonomySync();
+  const item = taxonomy.statuses.find((s) => s.id === status);
+  const role = item?.role;
+  switch (role) {
     case 'triage':
     case 'backlog':
     case 'todo':
@@ -191,12 +205,10 @@ function ensureIssueCardShape(raw: unknown): IssueCard | null {
   const id = typeof r.id === 'string' ? r.id.trim() : '';
   const title = typeof r.title === 'string' ? r.title.trim() : '';
   if (!id || !title) return null;
-  const typeRaw = typeof r.type === 'string' ? r.type : 'task';
-  const statusRaw = typeof r.status === 'string' ? r.status : 'triage';
-  const priorityRaw = typeof r.priority === 'string' ? r.priority : 'none';
-  if (!isIssueType(typeRaw) || !isIssueStatus(statusRaw) || !isIssuePriority(priorityRaw)) {
-    return null;
-  }
+  const typeRaw = typeof r.type === 'string' ? r.type.trim() : '';
+  const statusRaw = typeof r.status === 'string' ? r.status.trim() : '';
+  const priorityRaw = typeof r.priority === 'string' ? r.priority.trim() : '';
+  if (!typeRaw || !statusRaw || !priorityRaw) return null;
   const createdAt = typeof r.createdAt === 'number' ? r.createdAt : issuesNowMs();
   const updatedAt = typeof r.updatedAt === 'number' ? r.updatedAt : createdAt;
   const workspacePath = normalizeWorkspacePath(
@@ -558,13 +570,14 @@ export function addIssue(input: AddIssueInput, issueId?: string): IssueCard {
     const state = requireIssuesState();
     state.nextId = Math.max(state.nextId, Number(seq[1]) + 1);
   }
+  const taxonomy = getIssuesTaxonomySync();
   const card: IssueCard = {
     id,
-    type: input.type ?? 'task',
+    type: input.type ?? defaultIssueTypeId(taxonomy),
     title: input.title.trim(),
     description: (input.description ?? '').trim(),
-    status: input.status ?? 'triage',
-    priority: input.priority ?? 'none',
+    status: input.status ?? defaultIssueStatusId(taxonomy),
+    priority: input.priority ?? defaultIssuePriorityId(taxonomy),
     labels: input.labels ? [...input.labels] : [],
     workspacePath,
     createdAt: nowMs,
@@ -577,16 +590,22 @@ export function addIssue(input: AddIssueInput, issueId?: string): IssueCard {
   return card;
 }
 
-/** Quick-capture helper: note in triage. */
+/** Quick-capture helper: note in triage role status. */
 export function quickCaptureIssue(title: string, workspacePath?: string): IssueCard {
+  const taxonomy = getIssuesTaxonomySync();
   return addIssue({
     title,
     description: '',
-    type: 'note',
-    status: 'triage',
-    priority: 'none',
+    type: findNoteTypeId(taxonomy),
+    status: defaultIssueStatusId(taxonomy),
+    priority: defaultIssuePriorityId(taxonomy),
     workspacePath,
   });
+}
+
+function findNoteTypeId(taxonomy: ReturnType<typeof getIssuesTaxonomySync>): IssueType {
+  if (isKnownIssueType(taxonomy, 'note')) return 'note';
+  return defaultIssueTypeId(taxonomy);
 }
 
 export type UpdateIssuePatch = {
@@ -822,7 +841,7 @@ export function collectIssues(options: CollectIssuesOptions = {}): IssueCard[] {
   for (const issue of requireIssuesState().issues) {
     const issueWorkspace = normalizeWorkspacePath(issue.workspacePath ?? '');
     if (workspaceKey !== null && issueWorkspace !== workspaceKey) continue;
-    if (hideDone && (issue.status === 'done' || issue.status === 'canceled')) continue;
+    if (hideDone && isClosedStatus(getIssuesTaxonomySync(), issue.status)) continue;
     if (statusFilter !== 'all' && issue.status !== statusFilter) continue;
     if (typeFilter !== 'all' && issue.type !== typeFilter) continue;
     if (priorityFilter !== 'all' && issue.priority !== priorityFilter) continue;
@@ -848,7 +867,7 @@ export function countOpenIssues(
       : null;
   let n = 0;
   for (const issue of requireIssuesState().issues) {
-    if (!OPEN_ISSUE_STATUSES.includes(issue.status)) continue;
+    if (!getOpenIssueStatuses().includes(issue.status)) continue;
     if (workspaceKey !== null) {
       const issueWorkspace = normalizeWorkspacePath(issue.workspacePath ?? '');
       if (issueWorkspace !== workspaceKey) continue;

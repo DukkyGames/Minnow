@@ -3,6 +3,7 @@
  */
 
 import type { BugsState, IssuesState, SessionState, SystemPromptSettings } from '../types';
+import type { IssuesTaxonomy } from '../issues/taxonomy';
 import type { SkillConfig } from '../skills/config';
 import type { ToolConfig } from '../tools/tool-settings-types';
 import type { SearchConfig } from './search-config';
@@ -91,6 +92,26 @@ export async function putIssues(state: IssuesState): Promise<void> {
     method: 'PUT',
     headers: JSON_HEADERS,
     body: JSON.stringify(state),
+  });
+  await parseJsonResponse<{ ok: boolean }>(res);
+}
+
+/**
+ * GET /api/config/issues-taxonomy
+ * Returns null when the taxonomy file has never been written (client seeds defaults).
+ */
+export async function getIssuesTaxonomy(): Promise<IssuesTaxonomy | null> {
+  const res = await fetch('/api/config/issues-taxonomy', { cache: 'no-store' });
+  if (res.status === 404) return null;
+  return parseJsonResponse<IssuesTaxonomy>(res);
+}
+
+/** PUT /api/config/issues-taxonomy */
+export async function putIssuesTaxonomy(taxonomy: IssuesTaxonomy): Promise<void> {
+  const res = await fetch('/api/config/issues-taxonomy', {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(taxonomy),
   });
   await parseJsonResponse<{ ok: boolean }>(res);
 }

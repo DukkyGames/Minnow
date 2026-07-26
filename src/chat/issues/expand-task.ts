@@ -2,10 +2,14 @@
  * Pure builders for Issues Expand with agent (MIN-261 Phase 2).
  */
 
+import { isTriageStatus } from '../../issues/taxonomy.ts';
+import { getIssuesTaxonomySync } from '../../state/issues-taxonomy-store.ts';
 import type { IssueCard } from '../../types.ts';
 
 /** Build the task envelope for the issue-writer sub-agent (pure; testable). */
 export function buildIssueExpandTask(issue: IssueCard): string {
+  const taxonomy = getIssuesTaxonomySync();
+  const triageStatusId = taxonomy.statuses.find((s) => s.role === 'triage')?.id ?? issue.status;
   const noteBody =
     issue.description?.trim() ||
     issue.notes?.trim() ||
@@ -18,7 +22,7 @@ export function buildIssueExpandTask(issue: IssueCard): string {
     `Issue id: ${issue.id}`,
     `Current title: ${issue.title}`,
     `Current type: ${issue.type}`,
-    `Status must remain: triage`,
+    `Status must remain: ${triageStatusId}`,
     '',
     'Raw note / description:',
     noteBody,
@@ -38,5 +42,5 @@ export function buildIssueExpandTask(issue: IssueCard): string {
 
 /** True when Expand with agent should be offered (triage capture). */
 export function canExpandIssueWithAgent(issue: IssueCard): boolean {
-  return issue.status === 'triage';
+  return isTriageStatus(getIssuesTaxonomySync(), issue.status);
 }

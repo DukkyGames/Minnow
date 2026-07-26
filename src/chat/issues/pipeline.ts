@@ -15,6 +15,7 @@ import {
   appendIssueLinks,
   defaultIssuePlanPath,
   findIssueById,
+  requireIssueStatusForRole,
   updateIssue,
 } from '../../state/issues-store.ts';
 import {
@@ -25,6 +26,8 @@ import {
   touchChat,
 } from '../../state/sessions.ts';
 import type { Chat, IssueCard } from '../../types.ts';
+import { isTriageStatus } from '../../issues/taxonomy.ts';
+import { getIssuesTaxonomySync } from '../../state/issues-taxonomy-store.ts';
 import { buildIssueExpandTask, canExpandIssueWithAgent } from './expand-task.ts';
 import {
   buildIssueDebugSeed,
@@ -102,10 +105,11 @@ export async function runIssueExpandWithAgent(
       return { ok: false, error: err, runId };
     }
 
-    // Ensure status stayed triage even if the model tried to move it.
+    // Ensure status stayed on triage role even if the model tried to move it.
     const latest = findIssueById(issueId);
-    if (latest && latest.status !== 'triage') {
-      updateIssue(issueId, { status: 'triage' });
+    const taxonomy = getIssuesTaxonomySync();
+    if (latest && !isTriageStatus(taxonomy, latest.status)) {
+      updateIssue(issueId, { status: requireIssueStatusForRole('triage') });
     }
 
     return { ok: true, runId };
@@ -232,7 +236,7 @@ export async function runIssueInvestigate(
   const chat = ensureIssueWorkflowChat(issue, 'Investigate');
   if (!chat) return { ok: false, error: 'Could not create investigation chat' };
 
-  updateIssue(issueId, { status: 'in_progress' });
+  updateIssue(issueId, { status: requireIssueStatusForRole('in_progress') });
   appendIssueLinks(issueId, { chatId: chat.id });
 
   try {
@@ -249,7 +253,10 @@ export async function runIssueInvestigate(
       'runId' in result && typeof result.runId === 'string' ? result.runId : null;
     if (!runId) return { ok: false, error: 'Failed to spawn debugger', chatId: chat.id };
 
-    updateIssue(issueId, { investigateRunId: runId, status: 'in_progress' });
+    updateIssue(issueId, {
+      investigateRunId: runId,
+      status: requireIssueStatusForRole('in_progress'),
+    });
 
     const settled = await waitForSubAgent(runId);
     const run = getSubAgentRun(runId);
@@ -258,7 +265,7 @@ export async function runIssueInvestigate(
 
     updateIssue(issueId, {
       notes: summary.slice(0, 4000),
-      status: 'in_progress',
+      status: requireIssueStatusForRole('in_progress'),
     });
 
     return {
@@ -289,7 +296,7 @@ export async function runIssuePlanChat(
   const seed = buildIssuePlanSeed(issue, planPath);
   const codeRefs = issueCodeRefsToLaunch(issue);
 
-  updateIssue(issueId, { planPath, status: 'planned' });
+  updateIssue(issueId, { planPath, status: requireIssueStatusForRole('planned') });
 
   try {
     const { chatId } = await launchCodeSeededChat({
@@ -337,7 +344,11 @@ export async function runIssuePlanBackground(
       'runId' in result && typeof result.runId === 'string' ? result.runId : null;
     if (!runId) return { ok: false, error: 'Failed to spawn planner' };
 
-    updateIssue(issueId, { planRunId: runId, planPath, status: 'in_progress' });
+    updateIssue(issueId, {
+      planRunId: runId,
+      planPath,
+      status: requireIssueStatusForRole('in_progress'),
+    });
 
     const settled = await waitForSubAgent(runId);
     const run = getSubAgentRun(runId);
@@ -348,7 +359,7 @@ export async function runIssuePlanBackground(
         ? `${issue.notes}\n\n---\nPlan: ${planPath}`
         : `Plan ready: ${planPath}`;
       updateIssue(issueId, {
-        status: 'planned',
+        status: requireIssueStatusForRole('planned'),
         planPath,
         notes,
       });
@@ -394,7 +405,7 @@ export async function runIssueForegroundChat(
   const seed = buildIssueForegroundModeSeed(issue, modeId);
   const codeRefs = issueCodeRefsToLaunch(issue);
 
-  updateIssue(issueId, { status: 'in_progress' });
+  updateIssue(issueId, { status: requireIssueStatusForRole('in_progress') });
 
   try {
     const { chatId } = await launchCodeSeededChat({
@@ -447,7 +458,7 @@ export async function runIssueSendToBoard(
 
     const boardChatId = sessionState?.activeId;
     updateIssue(issueId, {
-      status: 'in_progress',
+      status: requireIssueStatusForRole('in_progress'),
       ...(boardChatId ? { boardChatId } : {}),
     });
 

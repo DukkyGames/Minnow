@@ -387,7 +387,7 @@
 /* Shared list grid columns (header + rows stay aligned). */
 .issues-list-head,
 .issues-row {
-  --issues-list-cols: 2rem 4.25rem 2.25rem minmax(0, 1fr) minmax(4.5rem, max-content) 4.5rem 5.5rem 4.5rem;
+  --issues-list-cols: 4.25rem 2.25rem minmax(0, 1fr) minmax(4.5rem, max-content) 4.5rem 5.5rem 4.5rem;
   display: grid;
   grid-template-columns: var(--issues-list-cols);
   gap: 8px 10px;
@@ -423,22 +423,6 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.issues-select-cell {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 32px;
-  cursor: pointer;
-}
-
-.issues-select-checkbox {
-  width: 1rem;
-  height: 1rem;
-  margin: 0;
-  accent-color: var(--mn-accent);
-  cursor: pointer;
 }
 
 /* ---------- list header ---------- */
@@ -545,12 +529,14 @@
 
 .issues-row.is-checked,
 .issues-card.is-checked {
-  background: color-mix(in oklch, var(--mn-fg) 5%, var(--mn-bg));
+  background: color-mix(in oklch, var(--mn-accent) 10%, var(--mn-bg));
+  outline: 1px solid color-mix(in oklch, var(--mn-accent) 40%, var(--mn-border));
 }
 
 .issues-row.is-checked.is-selected,
 .issues-card.is-checked.is-selected {
-  background: color-mix(in oklch, var(--mn-accent) 12%, var(--mn-bg));
+  background: color-mix(in oklch, var(--mn-accent) 14%, var(--mn-bg));
+  outline: 1px solid color-mix(in oklch, var(--mn-accent) 50%, var(--mn-border));
 }
 
 .issues-row:focus-visible,
@@ -694,6 +680,20 @@
   opacity: 0.7;
 }
 
+.issues-status-chip.is-unknown,
+.issues-type-chip.is-unknown,
+.issues-priority-chip.is-unknown {
+  border-style: dashed;
+  color: var(--mn-warning);
+}
+
+.issues-status-chip[style*='--issues-chip-color'],
+.issues-type-chip[style*='--issues-chip-color'],
+.issues-priority-chip[style*='--issues-chip-color'] {
+  border-color: color-mix(in oklch, var(--issues-chip-color) 35%, var(--mn-border));
+  color: var(--issues-chip-color);
+}
+
 .issues-priority-chip {
   font-size: 11px;
   font-weight: 600;
@@ -781,10 +781,6 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-}
-
-.issues-card__select {
-  flex-shrink: 0;
 }
 
 .issues-card:active {
@@ -942,24 +938,17 @@
   gap: 6px;
 }
 
-/* Workflow toolbar */
+/* Workflow toolbar — primary + secondary actions on one row */
 .issues-detail__workflow {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.issues-detail__workflow-primary {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
+.issues-detail__workflow-primary,
 .issues-detail__workflow-secondary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: contents;
 }
 
 .issues-detail__workflow .issues-btn {
@@ -1345,7 +1334,7 @@ button.issues-detail__activity-chip {
 
   .issues-list-head,
   .issues-row {
-    --issues-list-cols: 2rem 3.5rem minmax(0, 1fr) minmax(4rem, max-content);
+    --issues-list-cols: 3.5rem minmax(0, 1fr) minmax(4rem, max-content);
   }
 
   .issues-list-head__type,

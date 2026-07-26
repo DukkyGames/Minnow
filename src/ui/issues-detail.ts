@@ -52,20 +52,13 @@ import {
 import { createCodeRefLinkButton } from './code-ref-link';
 import { appConfirm } from './app-dialog';
 import { executeTool } from '../tools/client';
+import {
+  sortedPriorities,
+  sortedStatuses,
+  sortedTypes,
+} from '../issues/taxonomy';
+import { getIssuesTaxonomySync } from '../state/issues-taxonomy-store';
 import type { IssueCard, IssueCodeRef, IssueGitLink, IssuePriority, IssueStatus, IssueType } from '../types';
-
-const TYPE_OPTIONS: IssueType[] = ['bug', 'task', 'idea', 'note'];
-const STATUS_OPTIONS: IssueStatus[] = [
-  'triage',
-  'backlog',
-  'todo',
-  'planned',
-  'in_progress',
-  'review',
-  'done',
-  'canceled',
-];
-const PRIORITY_OPTIONS: IssuePriority[] = ['urgent', 'high', 'medium', 'low', 'none'];
 
 /** Issue ids currently expanding via issue-writer. */
 const expandingIds = new Set<string>();
@@ -201,15 +194,23 @@ async function addCodeRefFromPaste(issueId: string, paste: string): Promise<void
 
 function fillSelect(
   select: HTMLSelectElement,
-  options: string[],
+  options: Array<{ id: string; label: string }>,
   value: string,
 ): void {
   select.innerHTML = '';
+  const seen = new Set<string>();
   for (const opt of options) {
+    seen.add(opt.id);
     const el = document.createElement('option');
-    el.value = opt;
-    el.textContent = opt.replace(/_/g, ' ');
+    el.value = opt.id;
+    el.textContent = opt.label;
     select.appendChild(el);
+  }
+  if (value && !seen.has(value)) {
+    const unknown = document.createElement('option');
+    unknown.value = value;
+    unknown.textContent = `${value} (unknown)`;
+    select.appendChild(unknown);
   }
   select.value = value;
 }
@@ -404,7 +405,8 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   const typeSel = document.createElement('select');
   typeSel.className = 'issues-filter';
   typeSel.setAttribute('aria-label', 'Type');
-  fillSelect(typeSel, TYPE_OPTIONS, issue.type);
+  const taxonomy = getIssuesTaxonomySync();
+  fillSelect(typeSel, sortedTypes(taxonomy), issue.type);
   typeSel.addEventListener('change', () => {
     updateIssue(issue.id, { type: typeSel.value as IssueType });
   });
@@ -412,7 +414,7 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   const statusSel = document.createElement('select');
   statusSel.className = 'issues-filter';
   statusSel.setAttribute('aria-label', 'Status');
-  fillSelect(statusSel, STATUS_OPTIONS, issue.status);
+  fillSelect(statusSel, sortedStatuses(taxonomy), issue.status);
   statusSel.addEventListener('change', () => {
     updateIssue(issue.id, { status: statusSel.value as IssueStatus });
   });
@@ -420,7 +422,7 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   const prioritySel = document.createElement('select');
   prioritySel.className = 'issues-filter';
   prioritySel.setAttribute('aria-label', 'Priority');
-  fillSelect(prioritySel, PRIORITY_OPTIONS, issue.priority);
+  fillSelect(prioritySel, sortedPriorities(taxonomy), issue.priority);
   prioritySel.addEventListener('change', () => {
     updateIssue(issue.id, { priority: prioritySel.value as IssuePriority });
   });

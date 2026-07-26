@@ -17,6 +17,8 @@ import {
   normalizeIssueGitLink,
   updateIssue,
 } from '../state/issues-store.ts';
+import { formatAllowedIds } from '../issues/taxonomy.ts';
+import { getIssuesTaxonomySync } from '../state/issues-taxonomy-store.ts';
 import { getWorkspacePath } from '../state/workspace.ts';
 import type { IssueCodeRef, IssueGitLink, IssuePriority, IssueStatus, IssueType } from '../types.ts';
 
@@ -38,13 +40,18 @@ export function validateIssueAddArgs(args: Record<string, unknown>): ValidateIss
   const description = typeof args.description === 'string' ? args.description.trim() : '';
   const typeRaw = typeof args.type === 'string' ? args.type.trim() : 'task';
   if (!isIssueType(typeRaw)) {
-    return { ok: false, error: 'Error: type must be bug, task, idea, or note' };
+    const taxonomy = getIssuesTaxonomySync();
+    return {
+      ok: false,
+      error: `Error: type must be one of: ${formatAllowedIds(taxonomy.types)} (configure in Settings → Issues)`,
+    };
   }
   const priorityRaw = typeof args.priority === 'string' ? args.priority.trim() : 'none';
   if (!isIssuePriority(priorityRaw)) {
+    const taxonomy = getIssuesTaxonomySync();
     return {
       ok: false,
-      error: 'Error: priority must be urgent, high, medium, low, or none',
+      error: `Error: priority must be one of: ${formatAllowedIds(taxonomy.priorities)} (configure in Settings → Issues)`,
     };
   }
   const labels = Array.isArray(args.labels)
@@ -78,25 +85,30 @@ export function validateIssueUpdateArgs(args: Record<string, unknown>): Validate
   }
   if (typeof args.type === 'string' && args.type.trim()) {
     if (!isIssueType(args.type.trim())) {
-      return { ok: false, error: 'Error: type must be bug, task, idea, or note' };
+      const taxonomy = getIssuesTaxonomySync();
+      return {
+        ok: false,
+        error: `Error: type must be one of: ${formatAllowedIds(taxonomy.types)} (configure in Settings → Issues)`,
+      };
     }
     patch.type = args.type.trim() as IssueType;
   }
   if (typeof args.status === 'string' && args.status.trim()) {
     if (!isIssueStatus(args.status.trim())) {
+      const taxonomy = getIssuesTaxonomySync();
       return {
         ok: false,
-        error:
-          'Error: status must be triage, backlog, todo, planned, in_progress, review, done, or canceled',
+        error: `Error: status must be one of: ${formatAllowedIds(taxonomy.statuses)} (configure in Settings → Issues)`,
       };
     }
     patch.status = args.status.trim() as IssueStatus;
   }
   if (typeof args.priority === 'string' && args.priority.trim()) {
     if (!isIssuePriority(args.priority.trim())) {
+      const taxonomy = getIssuesTaxonomySync();
       return {
         ok: false,
-        error: 'Error: priority must be urgent, high, medium, low, or none',
+        error: `Error: priority must be one of: ${formatAllowedIds(taxonomy.priorities)} (configure in Settings → Issues)`,
       };
     }
     patch.priority = args.priority.trim() as IssuePriority;

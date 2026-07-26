@@ -120,6 +120,15 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   'appearance.fonts': section(['appearance']),
   'appearance.customColors': section(['appearance']),
 
+  // —— Apps ——
+  'apps.issues.types': resource('issues-taxonomy', 'types', 'json', { refreshAreas: ['issues'] }),
+  'apps.issues.statuses': resource('issues-taxonomy', 'statuses', 'json', {
+    refreshAreas: ['issues'],
+  }),
+  'apps.issues.priorities': resource('issues-taxonomy', 'priorities', 'json', {
+    refreshAreas: ['issues'],
+  }),
+
   // —— Models ——
   'models.providers': section(['providers']),
   'models.providers.add': section(['providers']),

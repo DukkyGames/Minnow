@@ -4,6 +4,12 @@
  */
 
 import type { IssueCard, IssueCodeRef } from '../../types.ts';
+import {
+  isClosedStatus,
+  isInProgressStatus,
+  isReviewStatus,
+} from '../../issues/taxonomy.ts';
+import { getIssuesTaxonomySync } from '../../state/issues-taxonomy-store.ts';
 
 /** Canonical plan path for an issue id (mirrors issues-store.defaultIssuePlanPath). */
 export function issuePlanPathForId(issueId: string): string {
@@ -176,12 +182,12 @@ export function canSendIssueToBoard(issue: IssueCard): boolean {
 
 /** Investigate is aimed at bugs; still useful on other types when the user insists. */
 export function canInvestigateIssue(issue: IssueCard): boolean {
-  return issue.status !== 'canceled' && issue.status !== 'done';
+  return !isClosedStatus(getIssuesTaxonomySync(), issue.status);
 }
 
 /** True when Plan / Debug actions should be offered. */
 export function canRunIssueWorkflow(issue: IssueCard): boolean {
-  return issue.status !== 'canceled' && issue.status !== 'done';
+  return !isClosedStatus(getIssuesTaxonomySync(), issue.status);
 }
 
 /** What the workflow activity chip can open (pure; chat ids resolved at click time). */
@@ -191,16 +197,21 @@ export type IssueActivityTarget =
 
 /** Activity chip label derived from linked runs (no extra status enum). */
 export function issueActivityChip(issue: IssueCard): string | null {
-  if (issue.status === 'review') return 'In review';
-  if (issue.boardChatId && issue.status === 'in_progress') return 'On board';
+  const taxonomy = getIssuesTaxonomySync();
+  if (isReviewStatus(taxonomy, issue.status)) return 'In review';
+  if (issue.boardChatId && isInProgressStatus(taxonomy, issue.status)) return 'On board';
   // Background plan sets in_progress + planRunId until settle → planned.
-  if (issue.planRunId && issue.status === 'in_progress' && !issue.boardChatId) {
+  if (
+    issue.planRunId &&
+    isInProgressStatus(taxonomy, issue.status) &&
+    !issue.boardChatId
+  ) {
     return 'Planning…';
   }
   // Investigating until notes land (debugger settle writes notes).
   if (
     issue.investigateRunId &&
-    issue.status === 'in_progress' &&
+    isInProgressStatus(taxonomy, issue.status) &&
     !issue.notes?.trim() &&
     !issue.boardChatId
   ) {
@@ -211,15 +222,16 @@ export function issueActivityChip(issue: IssueCard): string | null {
 
 /** Resolve the activity chip to an openable target (null when the chip is display-only). */
 export function issueActivityTarget(issue: IssueCard): IssueActivityTarget | null {
-  if (issue.boardChatId && issue.status === 'in_progress') {
+  const taxonomy = getIssuesTaxonomySync();
+  if (issue.boardChatId && isInProgressStatus(taxonomy, issue.status)) {
     return { kind: 'board_chat', chatId: issue.boardChatId };
   }
-  if (issue.planRunId && issue.status === 'in_progress' && !issue.boardChatId) {
+  if (issue.planRunId && isInProgressStatus(taxonomy, issue.status) && !issue.boardChatId) {
     return { kind: 'sub_agent', runId: issue.planRunId };
   }
   if (
     issue.investigateRunId &&
-    issue.status === 'in_progress' &&
+    isInProgressStatus(taxonomy, issue.status) &&
     !issue.notes?.trim() &&
     !issue.boardChatId
   ) {

@@ -248,6 +248,9 @@ export async function initApp(): Promise<void> {
   registerOrchestrateBoardShutdownHandler();
   registerSessionPersistenceShutdownHandler();
   // Issues store migrates leftover bugs/state.json / minnow-bugs-v1 on first load.
+  // Issues taxonomy loads before issues store (guards + defaults reference catalog).
+  const { loadIssuesTaxonomyFromStorage } = await import('./state/issues-taxonomy-store.ts');
+  await loadIssuesTaxonomyFromStorage();
   const { loadIssuesFromStorage, migrateLegacyBugBoardsFromChats } = await import(
     './state/issues-store.ts'
   );

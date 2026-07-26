@@ -1,8 +1,14 @@
 /**
- * Orchestrate board completion → Issues status `review` (MIN-261 Phase 3).
+ * Orchestrate board completion → Issues status with review role (MIN-261 Phase 3).
  */
 
+import {
+  isClosedStatus,
+  isReviewStatus,
+  statusIdForRole,
+} from '../../issues/taxonomy.ts';
 import { listIssues, updateIssue } from '../../state/issues-store.ts';
+import { getIssuesTaxonomySync } from '../../state/issues-taxonomy-store.ts';
 
 /**
  * When an Orchestrate board finishes, move linked issues to review.
@@ -16,12 +22,15 @@ export function markIssuesReviewForBoardComplete(input: {
   const planPath = input.planPath?.trim().replace(/\\/g, '/');
   if (!plannerChatId && !planPath) return [];
 
+  const taxonomy = getIssuesTaxonomySync();
+  const reviewStatusId = statusIdForRole(taxonomy, 'review');
+  if (!reviewStatusId) return [];
+
   const updated: string[] = [];
   for (const issue of listIssues()) {
     if (
-      issue.status === 'done' ||
-      issue.status === 'canceled' ||
-      issue.status === 'review'
+      isClosedStatus(taxonomy, issue.status) ||
+      isReviewStatus(taxonomy, issue.status)
     ) {
       continue;
     }
@@ -30,7 +39,7 @@ export function markIssuesReviewForBoardComplete(input: {
     const issuePlan = issue.planPath?.trim().replace(/\\/g, '/');
     const matchPlan = Boolean(planPath) && Boolean(issuePlan) && issuePlan === planPath;
     if (!matchBoard && !matchPlan) continue;
-    updateIssue(issue.id, { status: 'review' });
+    updateIssue(issue.id, { status: reviewStatusId });
     updated.push(issue.id);
   }
   return updated;

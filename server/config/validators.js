@@ -729,8 +729,8 @@ export function validateBugsState(raw) {
   return { version: 1, bugs };
 }
 
-const ISSUE_TYPES = new Set(['bug', 'task', 'idea', 'note']);
-const ISSUE_STATUSES = new Set([
+const TAXONOMY_SLUG_RE = /^[a-z][a-z0-9_]*$/;
+const ISSUE_STATUS_ROLES = new Set([
   'triage',
   'backlog',
   'todo',
@@ -740,7 +740,174 @@ const ISSUE_STATUSES = new Set([
   'done',
   'canceled',
 ]);
-const ISSUE_PRIORITIES = new Set(['urgent', 'high', 'medium', 'low', 'none']);
+
+/** Seed defaults for ~/.minnow/issues/taxonomy.json (mirrors src/issues/taxonomy.ts). */
+export function defaultIssuesTaxonomy() {
+  return {
+    version: 1,
+    types: [
+      { id: 'bug', label: 'Bug', order: 0 },
+      { id: 'task', label: 'Task', order: 1 },
+      { id: 'idea', label: 'Idea', order: 2 },
+      { id: 'note', label: 'Note', order: 3 },
+    ],
+    statuses: [
+      { id: 'triage', label: 'Triage', order: 0, role: 'triage', boardVisible: true },
+      { id: 'backlog', label: 'Backlog', order: 1, role: 'backlog', boardVisible: false },
+      { id: 'todo', label: 'Todo', order: 2, role: 'todo', boardVisible: true },
+      { id: 'planned', label: 'Planned', order: 3, role: 'planned', boardVisible: true },
+      {
+        id: 'in_progress',
+        label: 'In progress',
+        order: 4,
+        role: 'in_progress',
+        boardVisible: true,
+      },
+      { id: 'review', label: 'Review', order: 5, role: 'review', boardVisible: true },
+      { id: 'done', label: 'Done', order: 6, role: 'done', isClosed: true, boardVisible: true },
+      {
+        id: 'canceled',
+        label: 'Canceled',
+        order: 7,
+        role: 'canceled',
+        isClosed: true,
+        boardVisible: false,
+      },
+    ],
+    priorities: [
+      { id: 'urgent', label: 'Urgent', order: 0 },
+      { id: 'high', label: 'High', order: 1 },
+      { id: 'medium', label: 'Medium', order: 2 },
+      { id: 'low', label: 'Low', order: 3 },
+      { id: 'none', label: 'None', order: 4 },
+    ],
+  };
+}
+
+function sortTaxonomyByOrder(items) {
+  return [...items].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+}
+
+function validateTaxonomyItemList(kind, items) {
+  const out = [];
+  const seen = new Set();
+  const errors = [];
+
+  if (!Array.isArray(items) || !items.length) {
+    throw new Error(`${kind} must include at least one item`);
+  }
+
+  for (let i = 0; i < items.length; i++) {
+    const raw = items[i];
+    if (!raw || typeof raw !== 'object') {
+      errors.push(`Invalid ${kind} entry at index ${i}`);
+      continue;
+    }
+    const id = typeof raw.id === 'string' ? raw.id.trim() : '';
+    const label = typeof raw.label === 'string' ? raw.label.trim() : '';
+    const order = typeof raw.order === 'number' && Number.isFinite(raw.order) ? raw.order : i;
+    if (!id || !TAXONOMY_SLUG_RE.test(id)) {
+      errors.push(`Id must match [a-z][a-z0-9_]* (got "${id || '(empty)'}")`);
+      continue;
+    }
+    if (seen.has(id)) {
+      errors.push(`Duplicate id "${id}"`);
+      continue;
+    }
+    if (!label) {
+      errors.push(`Label is required for "${id}"`);
+      continue;
+    }
+    seen.add(id);
+    const item = { id, label, order };
+    if (typeof raw.color === 'string' && raw.color.trim()) item.color = raw.color.trim();
+    if (kind === 'statuses') {
+      if (typeof raw.role === 'string' && raw.role.trim()) {
+        const role = raw.role.trim();
+        if (!ISSUE_STATUS_ROLES.has(role)) {
+          errors.push(`Unknown role "${role}" on status "${id}"`);
+        } else {
+          item.role = role;
+        }
+      }
+      if (raw.isClosed === true) item.isClosed = true;
+      if (raw.boardVisible === true) item.boardVisible = true;
+      if (raw.boardVisible === false) item.boardVisible = false;
+    }
+    out.push(item);
+  }
+
+  if (errors.length) throw new Error(errors.join('; '));
+  return sortTaxonomyByOrder(out);
+}
+
+function collectRemovedTaxonomyIds(previous, next) {
+  const removed = { type: [], status: [], priority: [] };
+  const prevType = new Set(previous.types.map((t) => t.id));
+  const nextType = new Set(next.types.map((t) => t.id));
+  const prevStatus = new Set(previous.statuses.map((s) => s.id));
+  const nextStatus = new Set(next.statuses.map((s) => s.id));
+  const prevPriority = new Set(previous.priorities.map((p) => p.id));
+  const nextPriority = new Set(next.priorities.map((p) => p.id));
+  for (const id of prevType) if (!nextType.has(id)) removed.type.push(id);
+  for (const id of prevStatus) if (!nextStatus.has(id)) removed.status.push(id);
+  for (const id of prevPriority) if (!nextPriority.has(id)) removed.priority.push(id);
+  return removed;
+}
+
+/**
+ * Validate ~/.minnow/issues/taxonomy.json.
+ * @param {unknown} raw
+ * @param {{ previous?: object; issues?: Array<{ type: string; status: string; priority: string }> }} [options]
+ */
+export function validateIssuesTaxonomy(raw, options = {}) {
+  if (!raw || typeof raw !== 'object') {
+    return defaultIssuesTaxonomy();
+  }
+  const row = /** @type {Record<string, unknown>} */ (raw);
+  if (row.version !== 1) {
+    throw new Error('version must be 1');
+  }
+
+  const types = validateTaxonomyItemList('types', row.types);
+  const statuses = validateTaxonomyItemList('statuses', row.statuses);
+  const priorities = validateTaxonomyItemList('priorities', row.priorities);
+
+  const roleSeen = new Map();
+  for (const status of statuses) {
+    if (!status.role) continue;
+    const prior = roleSeen.get(status.role);
+    if (prior) {
+      throw new Error(`Role "${status.role}" is already assigned to "${prior}"`);
+    }
+    roleSeen.set(status.role, status.id);
+  }
+
+  const next = { version: 1, types, statuses, priorities };
+  if (options.previous && Array.isArray(options.issues)) {
+    const removed = collectRemovedTaxonomyIds(options.previous, next);
+    for (const id of removed.type) {
+      const count = options.issues.filter((i) => i.type === id).length;
+      if (count > 0) {
+        throw new Error(`Used by ${count} issue${count === 1 ? '' : 's'} — reassign first`);
+      }
+    }
+    for (const id of removed.status) {
+      const count = options.issues.filter((i) => i.status === id).length;
+      if (count > 0) {
+        throw new Error(`Used by ${count} issue${count === 1 ? '' : 's'} — reassign first`);
+      }
+    }
+    for (const id of removed.priority) {
+      const count = options.issues.filter((i) => i.priority === id).length;
+      if (count > 0) {
+        throw new Error(`Used by ${count} issue${count === 1 ? '' : 's'} — reassign first`);
+      }
+    }
+  }
+
+  return next;
+}
 
 function ensureIssueCard(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -748,12 +915,10 @@ function ensureIssueCard(raw) {
   const id = typeof r.id === 'string' ? r.id.trim() : '';
   const title = typeof r.title === 'string' ? r.title.trim() : '';
   if (!id || !title) return null;
-  const typeRaw = typeof r.type === 'string' ? r.type : 'task';
-  const statusRaw = typeof r.status === 'string' ? r.status : 'triage';
-  const priorityRaw = typeof r.priority === 'string' ? r.priority : 'none';
-  if (!ISSUE_TYPES.has(typeRaw) || !ISSUE_STATUSES.has(statusRaw) || !ISSUE_PRIORITIES.has(priorityRaw)) {
-    return null;
-  }
+  const typeRaw = typeof r.type === 'string' ? r.type.trim() : 'task';
+  const statusRaw = typeof r.status === 'string' ? r.status.trim() : 'triage';
+  const priorityRaw = typeof r.priority === 'string' ? r.priority.trim() : 'none';
+  if (!typeRaw || !statusRaw || !priorityRaw) return null;
   const createdAt = typeof r.createdAt === 'number' ? r.createdAt : Date.now();
   const updatedAt = typeof r.updatedAt === 'number' ? r.updatedAt : createdAt;
   const labels = Array.isArray(r.labels)

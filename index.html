@@ -456,6 +456,10 @@
         <span class="settings-nav__item-label">Apps</span>
         <span class="settings-nav__count" hidden aria-hidden="true"></span>
       </button>
+      <button type="button" class="settings-nav__item" data-area-jump="issues" data-settings-nav-area="issues">
+        <span class="settings-nav__item-label">Issues</span>
+        <span class="settings-nav__count" hidden aria-hidden="true"></span>
+      </button>
     </div>
     <div class="settings-nav-group" data-settings-nav-group="appearance">
       <p class="settings-nav-group__label" data-settings-category="appearance">
@@ -600,6 +604,11 @@
       <section id="settingsSection-apps" class="settings-section settings-area settings-area--title-suppressed" data-area="apps">
         <h2>Apps</h2>
         <div id="settingsAppsBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-issues" class="settings-section settings-area settings-area--title-suppressed" data-area="issues">
+        <h2>Issues</h2>
+        <p class="settings-lead">Types, statuses, priorities, and board columns for the Issues app.</p>
+        <div id="settingsIssuesBody" class="settings-section-body"></div>
       </section>
       </div>
       <div class="settings-category" data-category="appearance">
@@ -1897,10 +1906,6 @@
     </div>
     <div class="issues-list-pane">
       <div id="issuesListHead" class="issues-list-head" hidden role="row">
-        <label class="issues-list-head__select issues-select-cell">
-          <span class="visually-hidden">Select all visible issues</span>
-          <input type="checkbox" id="issuesSelectAll" aria-label="Select all visible issues">
-        </label>
         <button type="button" class="issues-list-head__sort issues-list-head__id" data-sort-key="id" aria-sort="none">
           ID<span class="issues-list-head__sort-indicator" aria-hidden="true"></span>
         </button>

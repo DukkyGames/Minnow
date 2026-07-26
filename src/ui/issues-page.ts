@@ -24,6 +24,15 @@ import { createAppIcon } from '../os/icons';
 import { getForegroundAppId, getOsView } from '../os/instances';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
 import { navigateToDesktop } from '../os/router';
+import {
+  boardStatuses,
+  isClosedStatus,
+  sortedPriorities,
+  sortedStatuses,
+  sortedTypes,
+} from '../issues/taxonomy';
+import { subscribeIssuesTaxonomyChanges } from '../state/issues-taxonomy-events';
+import { getIssuesTaxonomySync } from '../state/issues-taxonomy-store';
 import { subscribeIssuesChanges } from '../state/issues-events';
 import {
   addIssue,
@@ -99,21 +108,78 @@ type IssuesUiFilters = {
   search: string;
 };
 
-const BOARD_STATUSES: Array<{ id: IssueStatus; label: string }> = [
-  { id: 'triage', label: 'Triage' },
-  { id: 'todo', label: 'Todo' },
-  { id: 'in_progress', label: 'In progress' },
-  { id: 'planned', label: 'Planned' },
-  { id: 'review', label: 'Review' },
-  { id: 'done', label: 'Done' },
-  { id: 'backlog', label: 'Backlog' },
-  { id: 'canceled', label: 'Canceled' },
-];
+/** Board and menu status options from the live taxonomy catalog. */
+function getBoardStatusOptions(): Array<{ id: IssueStatus; label: string }> {
+  return boardStatuses(getIssuesTaxonomySync()).map((s) => ({ id: s.id, label: s.label }));
+}
 
-/** Columns shown on the board by default (dense Linear-style). */
-const PRIMARY_BOARD_STATUSES = BOARD_STATUSES.filter((s) =>
-  ['triage', 'todo', 'in_progress', 'planned', 'review', 'done'].includes(s.id),
-);
+/** All statuses for bulk status change menus. */
+function getAllStatusOptions(): Array<{ id: IssueStatus; label: string }> {
+  return sortedStatuses(getIssuesTaxonomySync()).map((s) => ({ id: s.id, label: s.label }));
+}
+
+/** Sync filter <select> options from taxonomy (preserves current value when possible). */
+function syncIssuesFilterSelects(): void {
+  const taxonomy = getIssuesTaxonomySync();
+  const typeSel = document.getElementById('issuesType') as HTMLSelectElement | null;
+  const statusSel = document.getElementById('issuesStatus') as HTMLSelectElement | null;
+  const prioritySel = document.getElementById('issuesPriority') as HTMLSelectElement | null;
+  const newTypeSel = document.getElementById('issuesNewType') as HTMLSelectElement | null;
+  const newPrioritySel = document.getElementById('issuesNewPriority') as HTMLSelectElement | null;
+
+  const refill = (
+    select: HTMLSelectElement | null,
+    items: Array<{ id: string; label: string }>,
+    allLabel: string,
+    current: string,
+  ): void => {
+    if (!select) return;
+    const prev = select.value;
+    select.innerHTML = '';
+    const allOpt = document.createElement('option');
+    allOpt.value = 'all';
+    allOpt.textContent = allLabel;
+    select.appendChild(allOpt);
+    for (const item of items) {
+      const opt = document.createElement('option');
+      opt.value = item.id;
+      opt.textContent = item.label;
+      select.appendChild(opt);
+    }
+    if (prev && [...select.options].some((o) => o.value === prev)) {
+      select.value = prev;
+    } else if (current && [...select.options].some((o) => o.value === current)) {
+      select.value = current;
+    }
+  };
+
+  const refillRequired = (
+    select: HTMLSelectElement | null,
+    items: Array<{ id: string; label: string }>,
+    current: string,
+  ): void => {
+    if (!select) return;
+    const prev = select.value;
+    select.innerHTML = '';
+    for (const item of items) {
+      const opt = document.createElement('option');
+      opt.value = item.id;
+      opt.textContent = item.label;
+      select.appendChild(opt);
+    }
+    if (prev && [...select.options].some((o) => o.value === prev)) {
+      select.value = prev;
+    } else if (current && [...select.options].some((o) => o.value === current)) {
+      select.value = current;
+    }
+  };
+
+  refill(typeSel, sortedTypes(taxonomy), 'All types', filters.type);
+  refill(statusSel, sortedStatuses(taxonomy), 'All statuses', filters.status);
+  refill(prioritySel, sortedPriorities(taxonomy), 'All priorities', filters.priority);
+  refillRequired(newTypeSel, sortedTypes(taxonomy), 'task');
+  refillRequired(newPrioritySel, sortedPriorities(taxonomy), 'none');
+}
 
 const DEFAULT_FILTERS: IssuesUiFilters = {
   scope: 'current_workspace',
@@ -130,6 +196,7 @@ let filters: IssuesUiFilters = { ...DEFAULT_FILTERS };
 /** Active list-column sort (session-only; board view ignores this). */
 let listSort: IssuesListSort = { ...DEFAULT_ISSUES_LIST_SORT };
 let issuesUnsub: (() => void) | null = null;
+let taxonomyUnsub: (() => void) | null = null;
 /** Deep-link issue id from `#/app/issues/ISS-n` (detail panel lands in Phase 2). */
 let pendingIssueId: string | undefined;
 /** Multiselect: checked issue ids for bulk actions. */
@@ -413,26 +480,38 @@ function typeChipLetter(type: IssueType): string {
 
 /** Build a type badge for list rows. */
 function createTypeChip(type: IssueType): HTMLElement {
+  const taxonomy = getIssuesTaxonomySync();
+  const item = taxonomy.types.find((t) => t.id === type);
   const chip = document.createElement('span');
   chip.className = `issues-type-chip issues-type-chip--${type} issues-row__type`;
   chip.textContent = typeChipLetter(type);
-  chip.title = type;
+  chip.title = item?.label ?? `${type} (unknown)`;
+  if (item?.color) chip.style.setProperty('--issues-chip-color', item.color);
+  chip.classList.toggle('is-unknown', !item);
   return chip;
 }
 
 /** Build a status pill for list rows. */
 function createStatusChip(status: IssueStatus): HTMLElement {
+  const taxonomy = getIssuesTaxonomySync();
+  const item = taxonomy.statuses.find((s) => s.id === status);
   const chip = document.createElement('span');
   chip.className = `issues-status-chip issues-status-chip--${status}`;
-  chip.textContent = status.replace(/_/g, ' ');
+  chip.textContent = item?.label ?? `${status.replace(/_/g, ' ')} (unknown)`;
+  if (item?.color) chip.style.setProperty('--issues-chip-color', item.color);
+  chip.classList.toggle('is-unknown', !item);
   return chip;
 }
 
 /** Build a priority label for list rows. */
 function createPriorityChip(priority: IssuePriority): HTMLElement {
+  const taxonomy = getIssuesTaxonomySync();
+  const item = taxonomy.priorities.find((p) => p.id === priority);
   const chip = document.createElement('span');
   chip.className = `issues-priority-chip issues-priority-chip--${priority}`;
-  chip.textContent = priority === 'none' ? '—' : priority;
+  chip.textContent = item?.label ?? (priority === 'none' ? '—' : priority);
+  if (item?.color) chip.style.setProperty('--issues-chip-color', item.color);
+  chip.classList.toggle('is-unknown', !item);
   return chip;
 }
 
@@ -476,19 +555,14 @@ function pruneIssueSelection(visibleIds: Set<string>): void {
   }
 }
 
-function syncSelectionBar(visibleCount: number): void {
+function syncSelectionBar(_visibleCount: number): void {
   const bar = document.getElementById('issuesSelectionBar');
   const countEl = document.getElementById('issuesSelectionCount');
-  const selectAll = document.getElementById('issuesSelectAll') as HTMLInputElement | null;
   const selectedCount = selectedIssueIds.size;
   if (bar) bar.hidden = selectedCount === 0;
   if (countEl) {
     countEl.textContent =
       selectedCount === 1 ? '1 issue selected' : `${selectedCount} issues selected`;
-  }
-  if (selectAll) {
-    selectAll.indeterminate = selectedCount > 0 && selectedCount < visibleCount;
-    selectAll.checked = visibleCount > 0 && selectedCount === visibleCount;
   }
 }
 
@@ -506,11 +580,11 @@ type IssueSelectionInput = {
   shiftKey: boolean;
   ctrlKey: boolean;
   metaKey: boolean;
-  /** When set (checkbox), use this checked state instead of toggling. */
+  /** When set (context menu), use this checked state instead of toggling. */
   checked?: boolean;
 };
 
-/** Apply multiselect from checkbox or modifier-click on a row/card. */
+/** Apply multiselect from modifier-click or context menu on a row/card. */
 function handleIssueSelection(
   issue: IssueCard,
   orderedIssues: IssueCard[],
@@ -567,38 +641,13 @@ function buildBoardOrderedIssues(
   return ordered;
 }
 
-/** Create a row/card checkbox that does not open the detail panel. */
-function createIssueSelectCheckbox(
-  issue: IssueCard,
-  options: { orderedIssues: IssueCard[]; index: number },
-): HTMLInputElement {
-  const checkbox = document.createElement('input');
-  checkbox.type = 'checkbox';
-  checkbox.className = 'issues-select-checkbox';
-  checkbox.checked = selectedIssueIds.has(issue.id);
-  checkbox.setAttribute('aria-label', `Select ${issue.id}`);
-  checkbox.addEventListener('click', (event) => event.stopPropagation());
-  checkbox.addEventListener('change', (event) => {
-    event.stopPropagation();
-    const mouse = event as MouseEvent;
-    handleIssueSelection(issue, options.orderedIssues, options.index, {
-      shiftKey: mouse.shiftKey,
-      ctrlKey: mouse.ctrlKey,
-      metaKey: mouse.metaKey,
-      checked: checkbox.checked,
-    });
-    renderIssuesPanel();
-  });
-  return checkbox;
-}
-
 function onIssueItemClick(
   event: MouseEvent,
   issue: IssueCard,
   orderedIssues: IssueCard[],
   index: number,
 ): void {
-  if ((event.target as HTMLElement).closest('.issues-select-cell, button')) return;
+  if ((event.target as HTMLElement).closest('button')) return;
   if (!isIssueMultiSelectClick(event)) {
     navigateToIssueDetail(issue.id);
     return;
@@ -799,7 +848,7 @@ function buildIssueRowMenuItems(
     onSelect: () => {
       openIssueContextSubmenu(
         menuAnchor,
-        BOARD_STATUSES.map((status) => ({
+        getAllStatusOptions().map((status) => ({
           id: status.id,
           label: status.label,
           onSelect: () => {
@@ -892,13 +941,9 @@ function renderList(mount: HTMLElement, issues: IssueCard[]): void {
     row.className = 'issues-row';
     row.setAttribute('role', 'listitem');
     row.dataset.issueId = issue.id;
-    row.classList.toggle('is-checked', selectedIssueIds.has(issue.id));
-
-    const selectCell = document.createElement('label');
-    selectCell.className = 'issues-select-cell';
-    selectCell.appendChild(
-      createIssueSelectCheckbox(issue, { orderedIssues: issues, index }),
-    );
+    const isMultiSelected = selectedIssueIds.has(issue.id);
+    row.classList.toggle('is-checked', isMultiSelected);
+    row.setAttribute('aria-selected', isMultiSelected ? 'true' : 'false');
 
     const id = document.createElement('span');
     id.className = 'issues-row__id';
@@ -935,7 +980,7 @@ function renderList(mount: HTMLElement, issues: IssueCard[]): void {
     updated.className = 'issues-row__updated';
     updated.textContent = formatUpdated(issue.updatedAt);
 
-    row.append(selectCell, id, type, title, status, priority, labels, updated);
+    row.append(id, type, title, status, priority, labels, updated);
     row.addEventListener('click', (event) => {
       onIssueItemClick(event, issue, issues, index);
     });
@@ -943,7 +988,6 @@ function renderList(mount: HTMLElement, issues: IssueCard[]): void {
     row.tabIndex = 0;
     row.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') {
-        if ((event.target as HTMLElement).closest('.issues-select-cell')) return;
         event.preventDefault();
         navigateToIssueDetail(issue.id);
       }
@@ -995,9 +1039,10 @@ function renderBoard(mount: HTMLElement, issues: IssueCard[]): void {
   kanban.setAttribute('role', 'region');
   kanban.setAttribute('aria-label', 'Issue board');
 
+  const taxonomy = getIssuesTaxonomySync();
   const columns = filters.hideDone
-    ? PRIMARY_BOARD_STATUSES.filter((c) => c.id !== 'done' && c.id !== 'canceled')
-    : PRIMARY_BOARD_STATUSES;
+    ? getBoardStatusOptions().filter((c) => !isClosedStatus(taxonomy, c.id))
+    : getBoardStatusOptions();
   const boardOrderedIssues = buildBoardOrderedIssues(issues, columns);
 
   for (const col of columns) {
@@ -1019,25 +1064,18 @@ function renderBoard(mount: HTMLElement, issues: IssueCard[]): void {
       const card = document.createElement('article');
       card.className = 'issues-card';
       card.dataset.issueId = issue.id;
-      card.classList.toggle('is-checked', selectedIssueIds.has(issue.id));
+      const isMultiSelected = selectedIssueIds.has(issue.id);
+      card.classList.toggle('is-checked', isMultiSelected);
+      card.setAttribute('aria-selected', isMultiSelected ? 'true' : 'false');
 
       const cardHead = document.createElement('div');
       cardHead.className = 'issues-card__head';
-
-      const selectCell = document.createElement('label');
-      selectCell.className = 'issues-select-cell issues-card__select';
-      selectCell.appendChild(
-        createIssueSelectCheckbox(issue, {
-          orderedIssues: boardOrderedIssues,
-          index: boardIndex,
-        }),
-      );
 
       const id = document.createElement('div');
       id.className = 'issues-card__id';
       id.textContent = issue.id;
 
-      cardHead.append(selectCell, id);
+      cardHead.append(id);
 
       const title = document.createElement('h4');
       title.className = 'issues-card__title';
@@ -1194,10 +1232,17 @@ function onFiltersChanged(): void {
 }
 
 function ensureSubscriptions(): void {
-  if (issuesUnsub) return;
-  issuesUnsub = subscribeIssuesChanges(() => {
-    if (isIssuesPageOpen()) renderIssuesPanel();
-  });
+  if (!issuesUnsub) {
+    issuesUnsub = subscribeIssuesChanges(() => {
+      if (isIssuesPageOpen()) renderIssuesPanel();
+    });
+  }
+  if (!taxonomyUnsub) {
+    taxonomyUnsub = subscribeIssuesTaxonomyChanges(() => {
+      syncIssuesFilterSelects();
+      if (isIssuesPageOpen()) renderIssuesPanel();
+    });
+  }
 }
 
 function setNewFormOpen(open: boolean): void {
@@ -1277,17 +1322,6 @@ function bindStaticControls(): void {
     .getElementById('issuesQuickCapture')
     ?.addEventListener('keydown', onQuickCaptureKeydown as EventListener);
 
-  document.getElementById('issuesSelectAll')?.addEventListener('change', (event) => {
-    const input = event.currentTarget as HTMLInputElement;
-    const issues = collectVisibleIssues();
-    if (input.checked) {
-      for (const issue of issues) selectedIssueIds.add(issue.id);
-    } else {
-      clearIssueSelection();
-    }
-    renderIssuesPanel();
-  });
-
   document.getElementById('btnIssuesDeleteSelected')?.addEventListener('click', () => {
     void confirmAndDeleteIssues([...selectedIssueIds]);
   });
@@ -1360,9 +1394,12 @@ export async function openIssues(options?: {
   ensureSubscriptions();
   // Ensure store exists before first paint (router/deep-link may open before boot load finishes).
   if (!isIssuesStoreLoaded()) {
+    const { loadIssuesTaxonomyFromStorage } = await import('../state/issues-taxonomy-store');
+    await loadIssuesTaxonomyFromStorage();
     const { loadIssuesFromStorage } = await import('../state/issues-store');
     await loadIssuesFromStorage();
   }
+  syncIssuesFilterSelects();
   syncControlsFromState();
   try {
     renderIssuesPanel();

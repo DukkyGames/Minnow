@@ -690,11 +690,20 @@ export interface BugBoardState {
   lastUpdatedAt: number;
 }
 
-/** Issues app card kind (MIN-261). */
-export type IssueType = 'bug' | 'task' | 'idea' | 'note';
+/** Issues app card kind (MIN-261). Values come from Settings → Issues taxonomy. */
+export type IssueType = string;
 
-/** Issues workflow status (MIN-261). */
-export type IssueStatus =
+/** Issues workflow status (MIN-261). Values come from Settings → Issues taxonomy. */
+export type IssueStatus = string;
+
+/** Issues priority (MIN-261). Values come from Settings → Issues taxonomy. */
+export type IssuePriority = string;
+
+/** Well-known default type ids (seed taxonomy). */
+export type DefaultIssueType = 'bug' | 'task' | 'idea' | 'note';
+
+/** Well-known default status ids (seed taxonomy). */
+export type DefaultIssueStatus =
   | 'triage'
   | 'backlog'
   | 'todo'
@@ -704,8 +713,8 @@ export type IssueStatus =
   | 'done'
   | 'canceled';
 
-/** Issues priority (MIN-261). */
-export type IssuePriority = 'urgent' | 'high' | 'medium' | 'low' | 'none';
+/** Well-known default priority ids (seed taxonomy). */
+export type DefaultIssuePriority = 'urgent' | 'high' | 'medium' | 'low' | 'none';
 
 /** File/line link; click opens the editor at the range. */
 export interface IssueCodeRef {
