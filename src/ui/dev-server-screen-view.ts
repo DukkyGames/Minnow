@@ -39,6 +39,7 @@ export interface DevServerRowViewModel {
   uiState: DevServerRowUiState;
   command: string;
   meta: string;
+  worktreeLabel: string | null;
   openUrl: string | null;
   port: number;
   network: DevServerNetwork;
@@ -238,10 +239,24 @@ function formatElapsed(startedAt: number | null): string {
   return `${Math.floor(min / 60)}h`;
 }
 
+/** Compact worktree label for server rows (branch name or folder leaf). */
+export function formatDevServerWorktreeLabel(
+  worktreeRoot: string | null | undefined,
+  workspaceRoot: string,
+): string | null {
+  if (!worktreeRoot?.trim()) return null;
+  const normRoot = workspaceRoot.replace(/\\/g, '/').replace(/\/+$/, '');
+  const normPath = worktreeRoot.replace(/\\/g, '/').replace(/\/+$/, '');
+  if (normPath === normRoot) return 'workspace';
+  const leaf = normPath.split('/').pop() ?? normPath;
+  return leaf;
+}
+
 /** Per-row state machine for the Dev Servers screen. */
 export function deriveDevServerRowView(
   serverOnline: boolean,
   item: DevServerListItem,
+  workspaceRoot = '',
 ): DevServerRowViewModel {
   const port = item.port ?? item.def?.port ?? DEFAULT_DEV_SERVER_PORT;
   const network = item.network ?? item.def?.network ?? 'local';
@@ -280,7 +295,12 @@ export function deriveDevServerRowView(
     item.status === 'running' || item.status === 'starting'
       ? formatElapsed(item.startedAt)
       : '';
+  const worktreeLabel = formatDevServerWorktreeLabel(
+    item.worktreeRoot ?? item.def?.worktreeRoot,
+    workspaceRoot,
+  );
   const metaParts = [base.meta];
+  if (worktreeLabel) metaParts.push(worktreeLabel);
   if (elapsed) metaParts.push(elapsed);
   if (warning) metaParts.push(warning);
 
@@ -290,6 +310,7 @@ export function deriveDevServerRowView(
     uiState,
     command,
     meta: metaParts.join(' · '),
+    worktreeLabel,
     openUrl: base.openUrl,
     port,
     network,

@@ -260,6 +260,23 @@
   display: flex;
   gap: 4px;
   flex-shrink: 0;
+  align-items: center;
+}
+
+.dev-server-screen__worktree-select {
+  max-width: 160px;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-sm, 6px);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font-size: 12px;
+}
+
+.dev-server-screen__worktree-select:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 .dev-server-screen__icon-btn {

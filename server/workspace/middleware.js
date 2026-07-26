@@ -229,6 +229,8 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
           network: body?.network,
           healthUrl: typeof body?.healthUrl === 'string' ? body.healthUrl : undefined,
           autoStart: Boolean(body?.autoStart),
+          worktreeRoot:
+            typeof body?.worktreeRoot === 'string' ? body.worktreeRoot : undefined,
         });
         sendJson(res, 201, { ok: true, server: created });
       } catch (err) {
@@ -287,7 +289,12 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
           return true;
         }
         if (matched.action === 'start' && req.method === 'POST') {
-          const result = await startDevServerById(root, matched.id);
+          const body = await readJsonBody(req);
+          const worktreeRoot =
+            typeof body?.worktreeRoot === 'string' && body.worktreeRoot.trim()
+              ? body.worktreeRoot.trim()
+              : undefined;
+          const result = await startDevServerById(root, matched.id, { worktreeRoot });
           sendJson(res, result.ok ? 200 : 400, result);
           return true;
         }
@@ -297,7 +304,12 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
           return true;
         }
         if (matched.action === 'restart' && req.method === 'POST') {
-          const result = await restartDevServerById(root, matched.id);
+          const body = await readJsonBody(req);
+          const worktreeRoot =
+            typeof body?.worktreeRoot === 'string' && body.worktreeRoot.trim()
+              ? body.worktreeRoot.trim()
+              : undefined;
+          const result = await restartDevServerById(root, matched.id, { worktreeRoot });
           sendJson(res, result.ok ? 200 : 400, result);
           return true;
         }

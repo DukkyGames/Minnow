@@ -24,6 +24,7 @@ import { readStartupGuide } from './startup-guide.js';
  * @property {string} [healthUrl]
  * @property {boolean} [autoStart]
  * @property {number} [order]
+ * @property {string} [worktreeRoot] — absolute git worktree path to run from (default: Code workspace)
  * @property {DevServerSource} source
  */
 
@@ -60,6 +61,9 @@ function coerceDefinition(row) {
   if (typeof row.healthUrl === 'string' && row.healthUrl.trim()) out.healthUrl = row.healthUrl.trim();
   if (typeof row.autoStart === 'boolean') out.autoStart = row.autoStart;
   if (typeof row.order === 'number' && Number.isFinite(row.order)) out.order = Math.floor(row.order);
+  if (typeof row.worktreeRoot === 'string' && row.worktreeRoot.trim()) {
+    out.worktreeRoot = row.worktreeRoot.trim();
+  }
   return out;
 }
 
@@ -91,6 +95,7 @@ async function writeRegistry(workspaceRoot, servers) {
           network: s.network,
           autoStart: s.autoStart ?? false,
           order: s.order ?? 0,
+          worktreeRoot: s.worktreeRoot ?? null,
           source: 'startup.md',
         };
       }
@@ -104,6 +109,7 @@ async function writeRegistry(workspaceRoot, servers) {
         healthUrl: s.healthUrl ?? null,
         autoStart: s.autoStart ?? false,
         order: s.order ?? 0,
+        worktreeRoot: s.worktreeRoot ?? null,
         source: 'user',
       };
     }),
@@ -236,6 +242,10 @@ export async function createDevServer(workspaceRoot = getWorkspaceRoot(), input)
     healthUrl: typeof input.healthUrl === 'string' ? input.healthUrl.trim() : undefined,
     autoStart: Boolean(input.autoStart),
     order: typeof input.order === 'number' ? input.order : list.length,
+    worktreeRoot:
+      typeof input.worktreeRoot === 'string' && input.worktreeRoot.trim()
+        ? input.worktreeRoot.trim()
+        : undefined,
     source: 'user',
   };
   if (!created.command) throw new Error('command is required');
@@ -265,6 +275,12 @@ export async function updateDevServer(workspaceRoot, id, patch) {
       network: patch.network != null ? coerceNetwork(patch.network) : current.network,
       autoStart: typeof patch.autoStart === 'boolean' ? patch.autoStart : current.autoStart,
       order: typeof patch.order === 'number' ? patch.order : current.order,
+      worktreeRoot:
+        patch.worktreeRoot !== undefined
+          ? typeof patch.worktreeRoot === 'string' && patch.worktreeRoot.trim()
+            ? patch.worktreeRoot.trim()
+            : undefined
+          : current.worktreeRoot,
     };
   } else {
     list[idx] = {
@@ -285,6 +301,12 @@ export async function updateDevServer(workspaceRoot, id, patch) {
           : current.healthUrl,
       autoStart: typeof patch.autoStart === 'boolean' ? patch.autoStart : current.autoStart,
       order: typeof patch.order === 'number' ? patch.order : current.order,
+      worktreeRoot:
+        patch.worktreeRoot !== undefined
+          ? typeof patch.worktreeRoot === 'string' && patch.worktreeRoot.trim()
+            ? patch.worktreeRoot.trim()
+            : undefined
+          : current.worktreeRoot,
     };
   }
 

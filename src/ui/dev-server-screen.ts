@@ -36,6 +36,10 @@ import {
   labelPortAttribution,
 } from './dev-server-screen-view';
 import { stripMainColumnOverlayClasses } from './main-column-overlay';
+import { formatWorktreeOptionLabel, parseWorktreeListPorcelain } from '../lib/worktree-list-parse';
+import { listWorktrees } from '../state/worktree-service';
+import { getWorkspacePath } from '../state/workspace';
+import type { ParsedWorktree } from '../lib/worktree-list-parse';
 
 const ROOT_ID = 'devServerScreenRoot';
 const CHAT_AREA_CLASS = 'chat-area--dev-server';
@@ -78,6 +82,10 @@ let showAddForm = false;
 let portsAuto = true;
 let logsCollapsed = false;
 let portsCollapsed = false;
+/** Git worktrees available for dev-server spawn (refreshed on screen open). */
+let knownWorktrees: ParsedWorktree[] = [];
+/** Per-server worktree pick when starting (falls back to def.worktreeRoot). */
+const pendingWorktreeById = new Map<string, string>();
 
 export function isDevServerScreenOpen(): boolean {
   return Boolean(document.getElementById(ROOT_ID));
@@ -184,6 +192,74 @@ function buildShell(): HTMLElement {
   return root;
 }
 
+function normalizePathKey(p: string): string {
+  return p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+}
+
+function resolveWorktreePathForServer(item: DevServerListItem): string {
+  const ws = getWorkspacePath().trim();
+  const pending = pendingWorktreeById.get(item.id);
+  if (pending) return pending;
+  const configured = item.def?.worktreeRoot?.trim() || item.worktreeRoot?.trim();
+  if (configured) return configured;
+  return ws;
+}
+
+async function refreshWorktreeOptions(): Promise<void> {
+  const ws = getWorkspacePath().trim();
+  if (!ws) {
+    knownWorktrees = [];
+    return;
+  }
+  const list = await listWorktrees();
+  if (list.ok && list.output) {
+    knownWorktrees = parseWorktreeListPorcelain(list.output);
+    return;
+  }
+  knownWorktrees = [{ path: ws, head: '', detached: false }];
+}
+
+function buildWorktreeSelectOptions(): Array<{ value: string; label: string }> {
+  const ws = getWorkspacePath().trim();
+  if (!knownWorktrees.length && ws) {
+    return [{ value: ws, label: 'workspace' }];
+  }
+  return knownWorktrees.map((wt) => ({
+    value: wt.path,
+    label: formatWorktreeOptionLabel(wt, ws),
+  }));
+}
+
+function renderWorktreeSelect(
+  item: DevServerListItem,
+  disabled: boolean,
+): HTMLSelectElement {
+  const select = document.createElement('select');
+  select.className = 'dev-server-screen__worktree-select';
+  select.title = 'Worktree';
+  select.setAttribute('aria-label', `Worktree for ${item.name}`);
+  select.disabled = disabled;
+
+  const selected = resolveWorktreePathForServer(item);
+  const options = buildWorktreeSelectOptions();
+  for (const opt of options) {
+    const el = document.createElement('option');
+    el.value = opt.value;
+    el.textContent = opt.label;
+    if (normalizePathKey(opt.value) === normalizePathKey(selected)) {
+      el.selected = true;
+    }
+    select.appendChild(el);
+  }
+
+  select.addEventListener('click', (ev) => ev.stopPropagation());
+  select.addEventListener('change', (ev) => {
+    ev.stopPropagation();
+    pendingWorktreeById.set(item.id, select.value);
+  });
+  return select;
+}
+
 function renderServerList(): void {
   const list = document.querySelector<HTMLElement>('[data-role="server-list"]');
   if (!list) return;
@@ -202,7 +278,7 @@ function renderServerList(): void {
   }
 
   for (const item of visible) {
-    const view = deriveDevServerRowView(online, item);
+    const view = deriveDevServerRowView(online, item, getWorkspacePath());
     const row = document.createElement('div');
     row.className = 'dev-server-screen__row';
     row.classList.toggle('is-selected', item.id === selectedId);
@@ -223,9 +299,12 @@ function renderServerList(): void {
     main.querySelector('.dev-server-screen__row-cmd')!.textContent = view.command || '—';
     main.querySelector('.dev-server-screen__row-meta')!.textContent = view.meta;
 
+    const worktreeSelect = renderWorktreeSelect(item, !view.canStart && !view.canRestart);
+
     const actions = document.createElement('div');
     actions.className = 'dev-server-screen__row-actions';
     actions.append(
+      worktreeSelect,
       iconBtn('▶', 'Start', () => void onStart(item.id), !view.canStart),
       iconBtn('■', 'Stop', () => void onStop(item.id), !view.canStop),
       iconBtn('↻', 'Restart', () => void onRestart(item.id), !view.canRestart),
@@ -285,11 +364,26 @@ function renderEditForm(): void {
   const existing = editingId ? servers.find((s) => s.id === editingId) : null;
   const def = existing?.def;
   const lockedCmd = def?.source === 'startup.md';
+  const worktreeOptions = buildWorktreeSelectOptions();
+  const selectedWorktree =
+    def?.worktreeRoot?.trim() ||
+    existing?.worktreeRoot?.trim() ||
+    getWorkspacePath().trim();
+  const worktreeOptionsHtml = worktreeOptions
+    .map((opt) => {
+      const selected =
+        normalizePathKey(opt.value) === normalizePathKey(selectedWorktree) ? 'selected' : '';
+      return `<option value="${escapeAttr(opt.value)}" ${selected}>${escapeAttr(opt.label)}</option>`;
+    })
+    .join('');
 
   form.innerHTML = `
     <label>Name<input name="name" value="${escapeAttr(def?.name ?? '')}" /></label>
     <label>Command<input name="command" value="${escapeAttr(def?.command ?? existing?.command ?? '')}" ${lockedCmd ? 'disabled' : ''} /></label>
     <label>Cwd<input name="cwd" value="${escapeAttr(def?.cwd ?? '.')}" ${lockedCmd ? 'disabled' : ''} /></label>
+    <label>Worktree
+      <select name="worktreeRoot">${worktreeOptionsHtml}</select>
+    </label>
     <label>Port<input name="port" type="number" min="1" max="65535" value="${def?.port ?? existing?.port ?? DEFAULT_DEV_SERVER_PORT}" /></label>
     <label>Network
       <select name="network">
@@ -446,7 +540,14 @@ async function refreshAll(): Promise<void> {
 }
 
 async function onStart(id: string): Promise<void> {
-  await postDevServerStartById(id);
+  const item = servers.find((s) => s.id === id);
+  const ws = getWorkspacePath().trim();
+  const worktreeRoot = item ? resolveWorktreePathForServer(item) : ws;
+  const options =
+    ws && normalizePathKey(worktreeRoot) !== normalizePathKey(ws)
+      ? { worktreeRoot }
+      : undefined;
+  await postDevServerStartById(id, options);
   await refreshAll();
 }
 
@@ -456,7 +557,14 @@ async function onStop(id: string): Promise<void> {
 }
 
 async function onRestart(id: string): Promise<void> {
-  await postDevServerRestartById(id);
+  const item = servers.find((s) => s.id === id);
+  const ws = getWorkspacePath().trim();
+  const worktreeRoot = item ? resolveWorktreePathForServer(item) : ws;
+  const options =
+    ws && normalizePathKey(worktreeRoot) !== normalizePathKey(ws)
+      ? { worktreeRoot }
+      : undefined;
+  await postDevServerRestartById(id, options);
   await refreshAll();
 }
 
@@ -513,6 +621,13 @@ async function onSaveEdit(): Promise<void> {
   const autoStart = Boolean(
     form.querySelector<HTMLInputElement>('input[name="autoStart"]')?.checked,
   );
+  const worktreeSelect = form.querySelector<HTMLSelectElement>('select[name="worktreeRoot"]');
+  const worktreeRoot = worktreeSelect?.value?.trim() ?? '';
+  const ws = getWorkspacePath().trim();
+  const worktreePatch =
+    ws && worktreeRoot && normalizePathKey(worktreeRoot) !== normalizePathKey(ws)
+      ? { worktreeRoot }
+      : { worktreeRoot: '' };
   if (!name) {
     window.alert('Name is required');
     return;
@@ -527,6 +642,7 @@ async function onSaveEdit(): Promise<void> {
         network,
         healthUrl: healthUrl || undefined,
         autoStart,
+        ...worktreePatch,
       });
     } else {
       if (!command) {
@@ -541,6 +657,7 @@ async function onSaveEdit(): Promise<void> {
         network,
         healthUrl: healthUrl || undefined,
         autoStart,
+        ...worktreePatch,
       });
     }
     hideEditForm();
@@ -633,6 +750,7 @@ export async function openDevServerScreen(): Promise<void> {
   syncPortsAutoButton();
   syncRailButton();
   startPolling();
+  await refreshWorktreeOptions();
   await refreshAll();
   notifyAskQuestionDisplayContextChanged();
 }
@@ -656,6 +774,8 @@ export function closeDevServerScreen(options?: {
   logsCollapsed = false;
   portsCollapsed = false;
   portsAuto = true;
+  knownWorktrees = [];
+  pendingWorktreeById.clear();
   syncRailButton();
 
   if (!options?.skipNavigate) {

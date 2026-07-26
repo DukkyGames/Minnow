@@ -17,6 +17,8 @@ export interface DevServerDefinition {
   healthUrl?: string;
   autoStart?: boolean;
   order?: number;
+  /** Absolute git worktree path to run from (default: Code workspace). */
+  worktreeRoot?: string;
   source: DevServerSource;
 }
 
@@ -34,6 +36,8 @@ export interface DevServerListItem {
   network: DevServerNetwork | null;
   command: string | null;
   healthUrl: string | null;
+  /** Active or configured worktree root for this server. */
+  worktreeRoot?: string | null;
   error: string | null;
 }
 
@@ -99,16 +103,22 @@ export async function deleteDevServerApi(id: string): Promise<void> {
   }
 }
 
-export async function postDevServerStartById(id: string): Promise<{
+export async function postDevServerStartById(
+  id: string,
+  options?: { worktreeRoot?: string },
+): Promise<{
   ok: boolean;
   status?: DevServerLifecycleStatus;
   runId?: string;
+  worktreeRoot?: string;
   error?: string;
 }> {
   const res = await fetch(`/api/workspace/dev-servers/${encodeURIComponent(id)}/start`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: '{}',
+    body: JSON.stringify(
+      options?.worktreeRoot ? { worktreeRoot: options.worktreeRoot } : {},
+    ),
   });
   return readJson(res);
 }
@@ -125,16 +135,22 @@ export async function postDevServerStopById(id: string): Promise<{
   return readJson(res);
 }
 
-export async function postDevServerRestartById(id: string): Promise<{
+export async function postDevServerRestartById(
+  id: string,
+  options?: { worktreeRoot?: string },
+): Promise<{
   ok: boolean;
   status?: DevServerLifecycleStatus;
   runId?: string;
+  worktreeRoot?: string;
   error?: string;
 }> {
   const res = await fetch(`/api/workspace/dev-servers/${encodeURIComponent(id)}/restart`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: '{}',
+    body: JSON.stringify(
+      options?.worktreeRoot ? { worktreeRoot: options.worktreeRoot } : {},
+    ),
   });
   return readJson(res);
 }

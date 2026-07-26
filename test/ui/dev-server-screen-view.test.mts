@@ -73,6 +73,20 @@ describe('dev-server-screen-view', () => {
     assert.ok(view.warning);
   });
 
+  test('worktree label in meta', () => {
+    const view = deriveDevServerRowView(
+      true,
+      item({
+        id: 'web',
+        status: 'stopped',
+        worktreeRoot: 'C:/repo/.worktrees/feature-x',
+      }),
+      'C:/repo',
+    );
+    assert.equal(view.worktreeLabel, 'feature-x');
+    assert.match(view.meta, /feature-x/);
+  });
+
   test('hub summary counts running', () => {
     const summary = deriveHubDevServersSummary(true, [
       item({ id: 'a', status: 'running', port: 5173 }),

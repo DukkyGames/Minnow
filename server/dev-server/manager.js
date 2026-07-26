@@ -14,8 +14,9 @@ import {
   killProcessTree,
   stopActiveRun,
 } from '../terminal-runner.js';
-import { resolveSafePath } from '../runtime/path-access.js';
+import { resolveSafePath, runWithToolContext } from '../runtime/path-access.js';
 import { getWorkspaceRoot, normalizeWorkspacePathKey } from '../workspace/root.js';
+import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
 import {
   buildDevServerSpawnEnv,
   resolveEffectiveGuide,
@@ -40,6 +41,7 @@ import { probePort } from './ports.js';
  * @property {string} [command]
  * @property {string} [healthUrl]
  * @property {number} [port]
+ * @property {string} [worktreeRoot]
  * @property {string} [error]
  * @property {number} [startedAt]
  */
@@ -130,6 +132,7 @@ async function saveState(row) {
       command: r.command ?? null,
       healthUrl: r.healthUrl ?? null,
       port: r.port ?? null,
+      worktreeRoot: r.worktreeRoot ?? null,
       error: r.error ?? null,
       startedAt: r.startedAt ?? null,
     };
@@ -165,6 +168,8 @@ async function getOrInitRow(root, serverId = PRIMARY_DEV_SERVER_ID) {
     command: typeof persisted?.command === 'string' ? persisted.command : undefined,
     healthUrl: typeof persisted?.healthUrl === 'string' ? persisted.healthUrl : undefined,
     port: typeof persisted?.port === 'number' ? persisted.port : undefined,
+    worktreeRoot:
+      typeof persisted?.worktreeRoot === 'string' ? persisted.worktreeRoot : undefined,
     error: typeof persisted?.error === 'string' ? persisted.error : undefined,
     startedAt: typeof persisted?.startedAt === 'number' ? persisted.startedAt : undefined,
   };
@@ -334,6 +339,20 @@ async function reconcileHealth(row, healthUrl) {
 }
 
 /**
+ * Resolve the filesystem root used to spawn a dev server (registered worktree or workspace).
+ * @param {string} registryRoot — Code workspace (registry key)
+ * @param {{ worktreeRoot?: string } | null | undefined} def
+ * @param {string | undefined} overrideWorktreeRoot — one-off start/restart override
+ */
+async function resolveDevServerRunRoot(registryRoot, def, overrideWorktreeRoot) {
+  const candidate =
+    (typeof overrideWorktreeRoot === 'string' && overrideWorktreeRoot.trim()) ||
+    (typeof def?.worktreeRoot === 'string' && def.worktreeRoot.trim()) ||
+    registryRoot;
+  return validateAllowedWorkspaceRoot(candidate);
+}
+
+/**
  * @param {string} [workspaceRoot]
  * @param {string} [serverId]
  */
@@ -362,6 +381,7 @@ export async function getDevServerStatusById(
     id: serverId,
     def: def,
     workspacePath: root,
+    worktreeRoot: row.worktreeRoot ?? def?.worktreeRoot ?? root,
     startupExists: startup.exists,
     guide: startup.guide,
     effectiveGuide: effective,
@@ -428,6 +448,7 @@ export async function listDevServerStatuses(workspaceRoot = getWorkspaceRoot()) 
       command: st.command,
       healthUrl: st.healthUrl,
       error: st.error,
+      worktreeRoot: st.worktreeRoot,
       id: def.id,
       name: def.name,
     });
@@ -445,37 +466,49 @@ export async function getDevServerStatus(workspaceRoot = getWorkspaceRoot()) {
 /**
  * @param {string} [workspaceRoot]
  * @param {string} [serverId]
+ * @param {{ worktreeRoot?: string }} [options]
  */
 export async function startDevServerById(
   workspaceRoot = getWorkspaceRoot(),
   serverId = PRIMARY_DEV_SERVER_ID,
+  options = {},
 ) {
-  const root = path.resolve(workspaceRoot);
-  const startup = await readStartupGuide(root);
-  const settings = await readDevServerSettings(root);
-  let def = await getDevServerDefinition(root, serverId);
+  const registryRoot = path.resolve(workspaceRoot);
+  const startup = await readStartupGuide(registryRoot);
+  const settings = await readDevServerSettings(registryRoot);
+  let def = await getDevServerDefinition(registryRoot, serverId);
 
   // Ensure registry is seeded for primary when startup.md exists.
   if (!def && serverId === PRIMARY_DEV_SERVER_ID) {
-    await readDevServers(root);
-    def = await getDevServerDefinition(root, serverId);
+    await readDevServers(registryRoot);
+    def = await getDevServerDefinition(registryRoot, serverId);
   }
+
+  let runRoot;
+  try {
+    runRoot = await resolveDevServerRunRoot(registryRoot, def, options.worktreeRoot);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: message };
+  }
+
+  const runStartup = runRoot === registryRoot ? startup : await readStartupGuide(runRoot);
 
   if (!def?.command) {
-    if (!startup.exists) {
+    if (!runStartup.exists) {
       return { ok: false, error: 'startup.md not found in workspace root' };
     }
-    if (!startup.guide) {
-      return { ok: false, error: startup.parseError ?? 'Invalid startup.md' };
+    if (!runStartup.guide) {
+      return { ok: false, error: runStartup.parseError ?? 'Invalid startup.md' };
     }
   }
 
-  const effective = effectiveFromDefinition(def, startup.guide, settings);
+  const effective = effectiveFromDefinition(def, runStartup.guide, settings);
   if (!effective) {
     return { ok: false, error: 'No command configured for this server' };
   }
 
-  let row = await getOrInitRow(root, serverId);
+  let row = await getOrInitRow(registryRoot, serverId);
   row = await reconcileRow(row);
 
   if (row.status === 'running' && row.runId && getRun(row.runId) && !getRun(row.runId)?.finished) {
@@ -483,24 +516,30 @@ export async function startDevServerById(
   }
 
   const cwdRel = effective.cwd ?? '.';
-  const cwd = resolveSafePath(cwdRel, { write: false });
 
   row.status = 'starting';
   row.command = effective.command;
   row.healthUrl = effective.healthUrl;
   row.port = effective.port;
+  row.worktreeRoot = runRoot;
   row.error = undefined;
   await saveState(row);
 
   try {
-    const started = await createBackgroundRun({
-      command: effective.command,
-      cwd,
-      shell: process.platform === 'win32',
-      source: 'agent',
-      logSubdir: 'dev-server',
-      env: buildDevServerSpawnEnv(effective.port, effective.network),
-    });
+    const started = await runWithToolContext(
+      async () => {
+        const cwd = resolveSafePath(cwdRel, { write: false });
+        return createBackgroundRun({
+          command: effective.command,
+          cwd,
+          shell: process.platform === 'win32',
+          source: 'agent',
+          logSubdir: 'dev-server',
+          env: buildDevServerSpawnEnv(effective.port, effective.network),
+        });
+      },
+      { workspaceRoot: runRoot },
+    );
 
     await applyStartedRun(row, started, effective);
     return {
@@ -508,6 +547,7 @@ export async function startDevServerById(
       status: row.status,
       runId: row.runId,
       pid: row.pid,
+      worktreeRoot: runRoot,
       alreadyRunning: false,
     };
   } catch (err) {
@@ -536,10 +576,11 @@ export async function stopDevServerById(
   workspaceRoot = getWorkspaceRoot(),
   serverId = PRIMARY_DEV_SERVER_ID,
 ) {
-  const root = path.resolve(workspaceRoot);
-  const startup = await readStartupGuide(root);
-  const def = await getDevServerDefinition(root, serverId);
-  let row = await getOrInitRow(root, serverId);
+  const registryRoot = path.resolve(workspaceRoot);
+  const def = await getDevServerDefinition(registryRoot, serverId);
+  let row = await getOrInitRow(registryRoot, serverId);
+  const runRoot = row.worktreeRoot ?? def?.worktreeRoot ?? registryRoot;
+  const startup = await readStartupGuide(runRoot);
 
   const hasGuide = Boolean(def?.command || (serverId === PRIMARY_DEV_SERVER_ID && startup.guide));
 
@@ -558,11 +599,16 @@ export async function stopDevServerById(
       : undefined;
   if (stopCmd) {
     try {
-      const cwd = resolveSafePath(startup.guide?.cwd ?? def?.cwd ?? '.', { write: false });
-      await runProcess(
-        process.platform === 'win32' ? 'cmd.exe' : 'sh',
-        process.platform === 'win32' ? ['/d', '/s', '/c', stopCmd] : ['-c', stopCmd],
-        { cwd, timeout: COMMAND_TIMEOUT_MS, shell: false },
+      await runWithToolContext(
+        async () => {
+          const cwd = resolveSafePath(startup.guide?.cwd ?? def?.cwd ?? '.', { write: false });
+          await runProcess(
+            process.platform === 'win32' ? 'cmd.exe' : 'sh',
+            process.platform === 'win32' ? ['/d', '/s', '/c', stopCmd] : ['-c', stopCmd],
+            { cwd, timeout: COMMAND_TIMEOUT_MS, shell: false },
+          );
+        },
+        { workspaceRoot: runRoot },
       );
     } catch {
       /* fall through to PID kill */
@@ -581,6 +627,7 @@ export async function stopDevServerById(
   row.status = hasGuide ? 'stopped' : 'no_guide';
   row.runId = undefined;
   row.pid = null;
+  row.worktreeRoot = undefined;
   row.error = undefined;
   await saveState(row);
 
@@ -601,9 +648,10 @@ export async function stopDevServer(workspaceRoot = getWorkspaceRoot()) {
 export async function restartDevServerById(
   workspaceRoot = getWorkspaceRoot(),
   serverId = PRIMARY_DEV_SERVER_ID,
+  options = {},
 ) {
   await stopDevServerById(workspaceRoot, serverId);
-  return startDevServerById(workspaceRoot, serverId);
+  return startDevServerById(workspaceRoot, serverId, options);
 }
 
 /**
