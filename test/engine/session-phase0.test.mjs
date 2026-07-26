@@ -240,4 +240,99 @@ describe('session phase 0 (MIN-357)', () => {
     assert.equal(claimB2.status, 200);
     assert.equal(claimB2.json?.held, true);
   });
+
+  test('GET /api/session/stream sends snapshot then patch after PUT', async () => {
+    const put = await httpRequest(baseUrl, 'PUT', '/api/config/sessions', defaultSessionFixture);
+    assert.equal(put.status, 200);
+    const putRev = put.json?.rev;
+    assert.ok(typeof putRev === 'number' && putRev > 0);
+
+    const events = await new Promise((resolve, reject) => {
+      const url = new URL('/api/session/stream', baseUrl);
+      const req = http.request(url, { method: 'GET' }, (res) => {
+        assert.equal(res.statusCode, 200);
+        assert.match(String(res.headers['content-type'] ?? ''), /text\/event-stream/);
+        let buf = '';
+        /** @type {{ name: string, data: unknown }[]} */
+        const collected = [];
+        const timer = setTimeout(() => {
+          req.destroy();
+          reject(new Error('SSE timeout waiting for snapshot+patch'));
+        }, 5000);
+        res.on('data', (chunk) => {
+          buf += chunk.toString('utf8');
+          // Parse complete SSE frames (event + data + blank line).
+          for (;;) {
+            const sep = buf.indexOf('\n\n');
+            if (sep < 0) break;
+            const frame = buf.slice(0, sep);
+            buf = buf.slice(sep + 2);
+            if (frame.startsWith(':')) continue;
+            let name = 'message';
+            let data = '';
+            for (const line of frame.split('\n')) {
+              if (line.startsWith('event:')) name = line.slice(6).trim();
+              if (line.startsWith('data:')) data += line.slice(5).trim();
+            }
+            if (!data) continue;
+            try {
+              collected.push({ name, data: JSON.parse(data) });
+            } catch {
+              collected.push({ name, data });
+            }
+            if (collected.some((e) => e.name === 'snapshot') && collected.some((e) => e.name === 'patch')) {
+              clearTimeout(timer);
+              req.destroy();
+              resolve(collected);
+            }
+          }
+        });
+        res.on('error', (err) => {
+          clearTimeout(timer);
+          reject(err);
+        });
+      });
+      req.on('error', reject);
+      req.end();
+
+      // After the stream is open, mutate sessions so a patch is published.
+      setTimeout(() => {
+        void httpRequest(baseUrl, 'PUT', '/api/config/sessions', {
+          ...defaultSessionFixture,
+          chats: defaultSessionFixture.chats.map((c, i) =>
+            i === 0 ? { ...c, name: 'SSE patched chat' } : c,
+          ),
+        });
+      }, 50);
+    });
+
+    const snapshot = events.find((e) => e.name === 'snapshot');
+    const patch = events.find((e) => e.name === 'patch');
+    assert.ok(snapshot);
+    assert.ok(patch);
+    assert.ok(typeof snapshot.data?.rev === 'number');
+    assert.ok(typeof patch.data?.rev === 'number');
+    assert.ok(patch.data.rev > snapshot.data.rev);
+    assert.ok(patch.data.state?.chats?.[0]?.name === 'SSE patched chat');
+  });
+
+  test('MINNOW_TOKEN accepts Bearer and minnowToken query', async () => {
+    const prev = process.env.MINNOW_TOKEN;
+    process.env.MINNOW_TOKEN = 'phase0-secret';
+    try {
+      const denied = await httpRequest(baseUrl, 'GET', '/api/session/lease');
+      assert.equal(denied.status, 401);
+
+      const viaBearer = await httpRequestWithHeaders(baseUrl, 'GET', '/api/session/lease', null, {
+        Authorization: 'Bearer phase0-secret',
+      });
+      assert.equal(viaBearer.status, 200);
+
+      const viaQuery = await httpRequest(baseUrl, 'GET', '/api/session/lease?minnowToken=phase0-secret');
+      assert.equal(viaQuery.status, 200);
+    } finally {
+      if (prev === undefined) delete process.env.MINNOW_TOKEN;
+      else process.env.MINNOW_TOKEN = prev;
+    }
+  });
 });

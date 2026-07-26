@@ -315,7 +315,8 @@ describe('session persistence (MIN-408 + B.2)', () => {
     // @ts-expect-error test stub
     globalThis.navigator = {
       sendBeacon(url: string, data?: BodyInit | null) {
-        assert.equal(url, '/api/config/sessions');
+        // May append ?token= when a session token is injected (auth-middleware).
+        assert.match(url, /^\/api\/config\/sessions(\?|$)/);
         if (data instanceof Blob) {
           // Blob.text is async; decode via FileReader-less path for Node.
           beaconBodies.push('queued');

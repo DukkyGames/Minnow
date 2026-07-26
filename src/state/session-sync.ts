@@ -6,6 +6,7 @@
 
 import { streamingChatIds } from '../app-state';
 import { withSessionToken } from '../api/session-token';
+import { subscribeChatStreamEnd } from '../chat/streaming-state';
 import { isServerStorageMode } from '../config/storage-mode';
 import { randomUUID } from '../lib/random-id';
 import { reportBackgroundError } from '../boot/report-background-error';
@@ -23,13 +24,24 @@ import { isBoardRunning } from './orchestrate-board-store';
 
 const DRIVER_ID_KEY = 'minnow.sessionDriverId';
 const LEASE_RENEW_MS = 15_000;
+/** Poll while a remote patch is buffered during local stream/board drive. */
+const PENDING_FLUSH_MS = 2_000;
 
 let syncInitialized = false;
 let eventSource: EventSource | null = null;
 let leaseTimer: ReturnType<typeof setInterval> | null = null;
+let pendingFlushTimer: ReturnType<typeof setInterval> | null = null;
+let streamEndUnsub: (() => void) | null = null;
 
 let holdsBoardDriverLease = false;
 let remoteDriverLabel: string | null = null;
+
+/**
+ * Latest remote snapshot/patch deferred while this client is streaming or
+ * driving a local board. Must not advance sessionRev until applied — otherwise
+ * the one-shot SSE event is lost and the client stays permanently stale.
+ */
+let pendingRemote: { rev: number; state: unknown } | null = null;
 
 /** Bearer token for /api/session/* when MINNOW_TOKEN is set on the server. */
 function sessionAuthHeaders(): Record<string, string> {
@@ -117,14 +129,58 @@ async function refreshUiAfterRemoteSession(): Promise<void> {
   }
 }
 
+function stopPendingFlushTimer(): void {
+  if (!pendingFlushTimer) return;
+  clearInterval(pendingFlushTimer);
+  pendingFlushTimer = null;
+}
+
+/** Apply a buffered remote payload once local stream/board activity clears. */
+function flushPendingRemote(): void {
+  if (!pendingRemote) {
+    stopPendingFlushTimer();
+    return;
+  }
+  if (shouldSkipRemoteReconcile()) return;
+
+  const { rev, state } = pendingRemote;
+  pendingRemote = null;
+  stopPendingFlushTimer();
+
+  if (rev <= getSessionRev()) return;
+  applyRemoteSessionState(state);
+  setSessionRev(rev);
+  void refreshUiAfterRemoteSession();
+}
+
+function ensurePendingFlushTimer(): void {
+  if (pendingFlushTimer || !pendingRemote) return;
+  // Board autoRunning can clear without a stream-end event — poll until flushable.
+  pendingFlushTimer = setInterval(() => {
+    flushPendingRemote();
+  }, PENDING_FLUSH_MS);
+}
+
 function handleRemotePayload(payload: { rev?: number; state?: unknown }): void {
   const rev = typeof payload.rev === 'number' ? payload.rev : 0;
   if (rev <= getSessionRev()) return;
+  if (!payload.state) return;
+
   if (shouldSkipRemoteReconcile()) {
-    setSessionRev(rev);
+    // Buffer only — do not bump rev (SSE will not re-send this revision).
+    if (!pendingRemote || rev >= pendingRemote.rev) {
+      pendingRemote = { rev, state: payload.state };
+    }
+    ensurePendingFlushTimer();
     return;
   }
-  if (!payload.state) return;
+
+  // A live apply supersedes any older buffered remote.
+  if (pendingRemote && pendingRemote.rev <= rev) {
+    pendingRemote = null;
+    stopPendingFlushTimer();
+  }
+
   applyRemoteSessionState(payload.state);
   setSessionRev(rev);
   void refreshUiAfterRemoteSession();
@@ -183,6 +239,8 @@ function startLeaseHeartbeat(): void {
   if (leaseTimer) return;
   leaseTimer = setInterval(() => {
     void postLease('renew').then(() => {
+      // Lease/board state may have changed — try applying any buffered remote.
+      flushPendingRemote();
       void import('../ui/orchestrate-board-remote-driver').then((m) =>
         m.syncOrchestrateBoardRemoteDriverBanner(),
       );
@@ -192,8 +250,18 @@ function startLeaseHeartbeat(): void {
 
 function connectSessionStream(): void {
   if (eventSource) return;
-  // EventSource cannot set X-Minnow-Token — append ?token= like other SSE clients.
-  eventSource = new EventSource(withSessionToken('/api/session/stream'));
+  // EventSource cannot set Authorization / X-Minnow-Token — append ?token= (session)
+  // and optional ?minnowToken= when VITE_MINNOW_TOKEN mirrors server MINNOW_TOKEN.
+  let streamPath = withSessionToken('/api/session/stream');
+  const minnowToken =
+    typeof import.meta.env.VITE_MINNOW_TOKEN === 'string'
+      ? import.meta.env.VITE_MINNOW_TOKEN.trim()
+      : '';
+  if (minnowToken) {
+    const sep = streamPath.includes('?') ? '&' : '?';
+    streamPath = `${streamPath}${sep}minnowToken=${encodeURIComponent(minnowToken)}`;
+  }
+  eventSource = new EventSource(streamPath);
 
   eventSource.addEventListener('snapshot', (ev) => {
     try {
@@ -229,6 +297,10 @@ export function initSessionSync(): void {
   if (syncInitialized || !isServerStorageMode()) return;
   syncInitialized = true;
   connectSessionStream();
+  // Flush deferred remotes as soon as any local stream ends.
+  streamEndUnsub = subscribeChatStreamEnd(() => {
+    flushPendingRemote();
+  });
   void ensureBoardDriverLease().then(() => {
     startLeaseHeartbeat();
     void import('../ui/orchestrate-board-remote-driver').then((m) =>
@@ -243,10 +315,16 @@ export function shutdownSessionSync(): void {
     clearInterval(leaseTimer);
     leaseTimer = null;
   }
+  stopPendingFlushTimer();
+  if (streamEndUnsub) {
+    streamEndUnsub();
+    streamEndUnsub = null;
+  }
   if (eventSource) {
     eventSource.close();
     eventSource = null;
   }
+  pendingRemote = null;
   if (isServerStorageMode()) {
     void postLease('release');
   }
@@ -258,4 +336,5 @@ export function resetSessionSyncForTests(): void {
   syncInitialized = false;
   holdsBoardDriverLease = false;
   remoteDriverLabel = null;
+  pendingRemote = null;
 }

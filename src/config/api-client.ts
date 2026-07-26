@@ -18,6 +18,7 @@ import type { ToolConfig } from '../tools/tool-settings-types';
 import type { SearchConfig } from './search-config';
 import type { ResearchConfig } from './research-config';
 import type { UserRulesSettings } from './user-rules';
+import { withSessionToken } from '../api/session-token';
 import {
   defaultSessionState,
   defaultSystemPromptSettings,
@@ -324,11 +325,16 @@ export async function patchSessions(delta: SessionsPatchDelta): Promise<number> 
  * A full SessionState often exceeds that, so this path was likely a silent no-op for
  * large blobs — prefer {@link sendSessionsPatchBeacon} when the delta fits.
  */
-export function putSessionsKeepalive(state: SessionState): void {
+export function putSessionsKeepalive(state: SessionState, expectedRev?: number): void {
   try {
+    const headers: Record<string, string> = { ...JSON_HEADERS };
+    // Phase 0: keepalive PUT still participates in optimistic concurrency when rev is known.
+    if (expectedRev != null && Number.isFinite(expectedRev) && expectedRev > 0) {
+      headers['If-Match'] = String(expectedRev);
+    }
     void fetch('/api/config/sessions', {
       method: 'PUT',
-      headers: JSON_HEADERS,
+      headers,
       body: JSON.stringify(state),
       keepalive: true,
     }).catch(() => {
@@ -351,7 +357,8 @@ export function sendSessionsPatchBeacon(delta: SessionsPatchDelta): boolean {
     }
     const body = JSON.stringify(delta);
     const blob = new Blob([body], { type: 'application/json' });
-    return navigator.sendBeacon('/api/config/sessions', blob);
+    // sendBeacon cannot use the fetch interceptor — append ?token= for auth-middleware.
+    return navigator.sendBeacon(withSessionToken('/api/config/sessions'), blob);
   } catch {
     return false;
   }
@@ -377,7 +384,11 @@ export function flushSessionsOnShutdown(
       // Beacon rejected — fall through to keepalive PUT of the whole blob.
     }
   }
-  putSessionsKeepalive(fullState);
+  const expectedRev =
+    delta && typeof delta.expectedRev === 'number' && delta.expectedRev > 0
+      ? delta.expectedRev
+      : undefined;
+  putSessionsKeepalive(fullState, expectedRev);
   return { transport: 'keepalive-put', clearedOk: true };
 }
 
