@@ -43,6 +43,17 @@ const MAIN_COLUMN_CLASS = 'main-column--dev-server';
 const POLL_FAST_MS = 2000;
 const POLL_SLOW_MS = 10000;
 
+const ICON_REFRESH =
+  '<svg class="dev-server-screen__icon-svg" viewBox="0 0 24 24" aria-hidden="true">' +
+  '<path d="M21 12a9 9 0 1 1-2.64-6.36" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' +
+  '<path d="M21 3v6h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+  '</svg>';
+
+const ICON_AUTO =
+  '<svg class="dev-server-screen__icon-svg" viewBox="0 0 24 24" aria-hidden="true">' +
+  '<path d="M1 6V1h2v3.1C5.3 1.5 8.5 0 12 0c6.6 0 12 5.4 12 12h-2C22 6.5 17.5 2 12 2 8.8 2 5.9 3.5 4 6h4V8H3a2 2 0 0 1-2-2Zm20 10h-5v2h4c-1.9 2.5-4.8 4-8 4-5.5 0-10-4.5-10-10H0c0 6.6 5.4 12 12 12 3.5 0 6.7-1.5 9-4.1V23h2v-5a2 2 0 0 0-2-2Z" fill="currentColor"/>' +
+  '</svg>';
+
 const SETUP_TASK = `Create or update startup.md at the workspace root.
 
 Inspect package.json, README, and common scripts to determine how to start the local dev server.
@@ -65,6 +76,8 @@ let selectedId: string | null = null;
 let editingId: string | null = null;
 let showAddForm = false;
 let portsAuto = true;
+let logsCollapsed = false;
+let portsCollapsed = false;
 
 export function isDevServerScreenOpen(): boolean {
   return Boolean(document.getElementById(ROOT_ID));
@@ -121,34 +134,50 @@ function buildShell(): HTMLElement {
       </div>
     </div>
     <div class="dev-server-screen__body">
-      <section class="dev-server-screen__section" aria-label="Server list">
+      <section class="dev-server-screen__section dev-server-screen__section--servers" aria-label="Server list">
         <div class="dev-server-screen__section-head">
           <h2 class="dev-server-screen__section-title">Servers</h2>
         </div>
-        <div class="dev-server-screen__list" data-role="server-list"></div>
-        <div class="dev-server-screen__form hidden" data-role="edit-form"></div>
+        <div class="dev-server-screen__section-panel">
+          <div class="dev-server-screen__list" data-role="server-list"></div>
+          <div class="dev-server-screen__form hidden" data-role="edit-form"></div>
+        </div>
       </section>
-      <section class="dev-server-screen__section" aria-label="Logs">
+      <section class="dev-server-screen__section dev-server-screen__section--logs" data-section="logs" aria-label="Logs">
         <div class="dev-server-screen__section-head">
-          <h2 class="dev-server-screen__section-title">Logs</h2>
-          <div class="dev-server-log__tabs" data-role="log-tabs"></div>
+          <button type="button" class="dev-server-screen__section-toggle" data-action="toggle-logs" aria-expanded="true">
+            <span class="dev-server-screen__chevron" aria-hidden="true">▾</span>
+            <span class="dev-server-screen__section-title">Logs</span>
+          </button>
           <div class="dev-server-log__toolbar">
+            <div class="dev-server-log__tabs" data-role="log-tabs"></div>
             <input type="search" class="dev-server-log__filter" data-role="log-filter" placeholder="Filter…" aria-label="Filter logs" />
             <button type="button" class="dev-server-screen__btn" data-action="log-wrap" aria-pressed="true">Wrap</button>
             <button type="button" class="dev-server-screen__btn" data-action="log-clear">Clear</button>
           </div>
         </div>
-        <div class="dev-server-log__output-host" data-role="log-output"></div>
+        <div class="dev-server-screen__section-panel">
+          <div class="dev-server-log__output-host" data-role="log-output"></div>
+        </div>
       </section>
-      <section class="dev-server-screen__section" aria-label="Listening ports">
+      <section class="dev-server-screen__section dev-server-screen__section--ports" data-section="ports" aria-label="Listening ports">
         <div class="dev-server-screen__section-head">
-          <h2 class="dev-server-screen__section-title">Ports (listening)</h2>
-          <div class="dev-server-screen__actions">
-            <button type="button" class="dev-server-screen__btn" data-action="ports-refresh">Refresh</button>
-            <button type="button" class="dev-server-screen__btn" data-action="ports-auto" aria-pressed="true">Auto</button>
+          <button type="button" class="dev-server-screen__section-toggle" data-action="toggle-ports" aria-expanded="true">
+            <span class="dev-server-screen__chevron" aria-hidden="true">▾</span>
+            <span class="dev-server-screen__section-title">Ports (listening)</span>
+          </button>
+          <div class="dev-server-screen__row-actions">
+            <button type="button" class="dev-server-screen__icon-btn" data-action="ports-refresh" aria-label="Refresh ports" title="Refresh ports">
+              ${ICON_REFRESH}
+            </button>
+            <button type="button" class="dev-server-screen__icon-btn" data-action="ports-auto" aria-pressed="true" aria-label="Auto-refresh ports" title="Auto-refresh ports">
+              ${ICON_AUTO}
+            </button>
           </div>
         </div>
-        <div class="dev-server-ports__table" data-role="ports-table"></div>
+        <div class="dev-server-screen__section-panel">
+          <div class="dev-server-ports__table" data-role="ports-table"></div>
+        </div>
       </section>
     </div>
   `;
@@ -270,7 +299,10 @@ function renderEditForm(): void {
     </label>
     <label>Health URL<input name="healthUrl" value="${escapeAttr(def?.healthUrl ?? '')}" ${lockedCmd ? 'disabled' : ''} /></label>
     <div class="dev-server-screen__form-actions">
-      <label><input type="checkbox" name="autoStart" ${def?.autoStart ? 'checked' : ''} /> Auto-start</label>
+      <label class="dev-server-screen__inline-check">
+        <input type="checkbox" name="autoStart" ${def?.autoStart ? 'checked' : ''} />
+        <span>Auto-start</span>
+      </label>
       <span class="dev-server-screen__warn" data-role="port-warn" hidden></span>
       <button type="button" class="dev-server-screen__btn" data-action="use-free-port">Use next free port</button>
       <button type="button" class="dev-server-screen__btn" data-action="cancel-edit">Cancel</button>
@@ -343,6 +375,45 @@ function renderPorts(): void {
   });
 }
 
+async function refreshPorts(manual = false): Promise<void> {
+  if (!isLocalServerAvailable()) return;
+  const btn = document.querySelector<HTMLButtonElement>('[data-action="ports-refresh"]');
+  if (manual) btn?.classList.add('is-busy');
+  try {
+    ports = await fetchListeningPorts();
+    renderPorts();
+  } catch {
+    /* keep last snapshot */
+  } finally {
+    if (manual) btn?.classList.remove('is-busy');
+  }
+}
+
+function syncPortsAutoButton(): void {
+  const btn = document.querySelector<HTMLButtonElement>('[data-action="ports-auto"]');
+  if (!btn) return;
+  btn.setAttribute('aria-pressed', portsAuto ? 'true' : 'false');
+  btn.title = portsAuto ? 'Auto-refresh on (click to pause)' : 'Auto-refresh off (click to enable)';
+}
+
+function syncSectionCollapse(): void {
+  const body = document.querySelector<HTMLElement>('.dev-server-screen__body');
+  body?.classList.toggle('is-logs-collapsed', logsCollapsed);
+  body?.classList.toggle('is-ports-collapsed', portsCollapsed);
+
+  const logsSection = document.querySelector<HTMLElement>('[data-section="logs"]');
+  const portsSection = document.querySelector<HTMLElement>('[data-section="ports"]');
+  logsSection?.classList.toggle('is-collapsed', logsCollapsed);
+  portsSection?.classList.toggle('is-collapsed', portsCollapsed);
+
+  document
+    .querySelector<HTMLElement>('[data-action="toggle-logs"]')
+    ?.setAttribute('aria-expanded', logsCollapsed ? 'false' : 'true');
+  document
+    .querySelector<HTMLElement>('[data-action="toggle-ports"]')
+    ?.setAttribute('aria-expanded', portsCollapsed ? 'false' : 'true');
+}
+
 async function refreshAll(): Promise<void> {
   if (!isLocalServerAvailable()) {
     servers = [];
@@ -358,11 +429,7 @@ async function refreshAll(): Promise<void> {
     servers = [];
   }
   if (portsAuto) {
-    try {
-      ports = await fetchListeningPorts();
-    } catch {
-      ports = [];
-    }
+    await refreshPorts();
   }
   if (!selectedId && servers[0]) selectedId = servers[0].id;
   renderServerList();
@@ -497,17 +564,19 @@ function wireShellEvents(root: HTMLElement): void {
       target.setAttribute('aria-pressed', pressed ? 'true' : 'false');
       setLogWrap(pressed);
     }
-    if (action === 'ports-refresh') {
-      void fetchListeningPorts()
-        .then((rows) => {
-          ports = rows;
-          renderPorts();
-        })
-        .catch(() => undefined);
+    if (action === 'toggle-logs') {
+      logsCollapsed = !logsCollapsed;
+      syncSectionCollapse();
     }
+    if (action === 'toggle-ports') {
+      portsCollapsed = !portsCollapsed;
+      syncSectionCollapse();
+    }
+    if (action === 'ports-refresh') void refreshPorts(true);
     if (action === 'ports-auto') {
       portsAuto = !portsAuto;
-      target.setAttribute('aria-pressed', portsAuto ? 'true' : 'false');
+      syncPortsAutoButton();
+      if (portsAuto) void refreshPorts(true);
     }
     if (action === 'cancel-edit') hideEditForm();
     if (action === 'save-edit') void onSaveEdit();
@@ -560,6 +629,8 @@ export async function openDevServerScreen(): Promise<void> {
   if (tabs && output) initDevServerLogView({ tabsEl: tabs, outputEl: output });
 
   wireShellEvents(shell);
+  syncSectionCollapse();
+  syncPortsAutoButton();
   syncRailButton();
   startPolling();
   await refreshAll();
@@ -582,6 +653,9 @@ export function closeDevServerScreen(options?: {
   ports = [];
   selectedId = null;
   hideEditForm();
+  logsCollapsed = false;
+  portsCollapsed = false;
+  portsAuto = true;
   syncRailButton();
 
   if (!options?.skipNavigate) {

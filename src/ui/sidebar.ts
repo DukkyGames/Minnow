@@ -79,6 +79,10 @@ import { clearPanelCwdUserOverride, syncPanelFromActiveChat } from './git-panel'
 import { seedNewChatComposerRunTarget } from './new-chat-run-target-seed';
 import { buildDefaultPinnedSkillForNewChat } from '../skills/config';
 import { dismissCodeOverviewForNavigation, isCodeOverviewOpen } from './code-overview';
+import {
+  dismissDevServerScreenForNavigation,
+  isDevServerScreenOpen,
+} from './dev-server-screen';
 import { isBoardViewActive, syncViewModeToggleFromActiveChat } from './view-mode-toggle';
 import {
   isOrchestrateHubMounted,
@@ -1082,7 +1086,10 @@ function paintActiveChatInForegroundShell(chat: Chat): void {
     renderChatFromHistory(chat, '#chatAppMessageCol');
     return;
   }
-  if (dismissCodeOverviewForNavigation()) {
+  if (
+    dismissCodeOverviewForNavigation() ||
+    dismissDevServerScreenForNavigation()
+  ) {
     renderChatFromHistory(chat);
     return;
   }
@@ -1147,7 +1154,13 @@ export function switchChat(id: string): void {
     const planScreenSuspendedForSameChat =
       sameChat != null && isOrchestratePlanScreenSuspendedForChat(sameChat);
     const codeOverviewOpen = isCodeOverviewOpen();
-    if (boardWasOpen || planScreenSuspendedForSameChat || codeOverviewOpen) {
+    const devServerScreenOpen = isDevServerScreenOpen();
+    if (
+      boardWasOpen ||
+      planScreenSuspendedForSameChat ||
+      codeOverviewOpen ||
+      devServerScreenOpen
+    ) {
       if (sameChat) {
         paintActiveChatInForegroundShell(sameChat);
         syncViewModeToggleFromActiveChat();
