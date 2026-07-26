@@ -1,13 +1,16 @@
 /**
  * MinnowOS Issues app — list + board, filters, quick capture, detail (MIN-261).
+ * Code sidebar opens an embed in #chatArea; desktop/dock keeps the fullscreen app.
  */
 
 import '../styles/issues.css';
 
+import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
+import { canExpandIssueWithAgent } from '../chat/issues/expand-task';
 import { createAppIcon } from '../os/icons';
+import { getForegroundAppId, getOsView } from '../os/instances';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
 import { navigateToDesktop } from '../os/router';
-import { canExpandIssueWithAgent } from '../chat/issues/expand-task';
 import { subscribeIssuesChanges } from '../state/issues-events';
 import {
   addIssue,
@@ -19,8 +22,10 @@ import {
   updateIssue,
   type CollectIssuesOptions,
 } from '../state/issues-store';
+import { sessionState } from '../state/sessions';
 import { getWorkspacePath } from '../state/workspace';
 import type { IssueCard, IssuePriority, IssueStatus, IssueType } from '../types';
+import { appConfirm } from './app-dialog';
 import {
   closeIssueDetail,
   expandIssueFromUi,
@@ -29,9 +34,43 @@ import {
   openIssueDetail,
   refreshIssueDetailIfOpen,
 } from './issues-detail';
-import { appConfirm } from './app-dialog';
+import {
+  ariaSortValue,
+  cycleIssuesListSort,
+  DEFAULT_ISSUES_LIST_SORT,
+  sortIssuesForList,
+  type IssuesListSort,
+  type IssuesSortKey,
+} from './issues-list-sort';
+import { stripMainColumnOverlayClasses } from './main-column-overlay';
+
+const CHAT_AREA_ISSUES_CLASS = 'chat-area--issues';
+const MAIN_COLUMN_ISSUES_CLASS = 'main-column--issues';
+const ISSUES_EMBEDDED_CLASS = 'issues-page--embedded';
+const EMBED_BACK_BTN_ID = 'btnIssuesEmbedBack';
 
 type IssuesViewMode = 'list' | 'board';
+
+const ISSUES_SORT_KEYS = new Set<IssuesSortKey>([
+  'id',
+  'type',
+  'title',
+  'status',
+  'priority',
+  'labels',
+  'updated',
+]);
+
+/** Human labels for sort aria-label (avoid reading indicator glyphs from the button). */
+const ISSUES_SORT_LABELS: Record<IssuesSortKey, string> = {
+  id: 'ID',
+  type: 'Type',
+  title: 'Title',
+  status: 'Status',
+  priority: 'Priority',
+  labels: 'Labels',
+  updated: 'Updated',
+};
 
 type IssuesUiFilters = {
   scope: 'current_workspace' | 'all';
@@ -70,6 +109,8 @@ const DEFAULT_FILTERS: IssuesUiFilters = {
 let initialized = false;
 let viewMode: IssuesViewMode = 'list';
 let filters: IssuesUiFilters = { ...DEFAULT_FILTERS };
+/** Active list-column sort (session-only; board view ignores this). */
+let listSort: IssuesListSort = { ...DEFAULT_ISSUES_LIST_SORT };
 let issuesUnsub: (() => void) | null = null;
 /** Deep-link issue id from `#/app/issues/ISS-n` (detail panel lands in Phase 2). */
 let pendingIssueId: string | undefined;
@@ -80,8 +121,238 @@ let lastSelectionAnchorId: string | undefined;
 
 const ISSUE_DRAG_MIME = 'application/x-minnow-issue-id';
 
+/** Where #issuesView lived before it was moved into the Code #chatArea embed. */
+let issuesViewHome: { parent: HTMLElement; nextSibling: ChildNode | null } | null = null;
+/** Chat to restore when closing the Code embed. */
+let returnChatId: string | null = null;
+let embedEscapeBound = false;
+
 function getRoot(): HTMLElement | null {
   return document.getElementById('issuesView');
+}
+
+/** True when Issues is hosted inside the Code app main column. */
+export function isIssuesEmbeddedInCode(): boolean {
+  const area = document.getElementById('chatArea');
+  const root = getRoot();
+  if (!area || !root) return false;
+  return area.contains(root) && area.classList.contains(CHAT_AREA_ISSUES_CLASS);
+}
+
+/** Sidebar / Code entry should embed instead of launching the fullscreen Issues app. */
+export function shouldEmbedIssuesFromCodeSidebar(): boolean {
+  return isOsShellEnabled() && getOsView() === 'app' && getForegroundAppId() === 'code';
+}
+
+function getDefaultIssuesHome(): { parent: HTMLElement; nextSibling: ChildNode | null } | null {
+  const parent = document.getElementById('osAppsLayer');
+  if (!parent) return null;
+  return { parent, nextSibling: null };
+}
+
+/** Remember the apps-layer slot so fullscreen Issues can reclaim the view. */
+function rememberIssuesHome(root: HTMLElement): void {
+  const area = document.getElementById('chatArea');
+  if (area?.contains(root)) return;
+  const parent = root.parentElement;
+  if (!parent) return;
+  issuesViewHome = { parent, nextSibling: root.nextSibling };
+}
+
+function removeEmbeddedBackButton(): void {
+  document.getElementById(EMBED_BACK_BTN_ID)?.remove();
+}
+
+/** Inject a Back control into the Issues header while embedded in Code. */
+function ensureEmbeddedBackButton(): void {
+  if (document.getElementById(EMBED_BACK_BTN_ID)) return;
+  const brand = document.querySelector('#issuesView .issues-header__brand');
+  if (!brand) return;
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.id = EMBED_BACK_BTN_ID;
+  btn.className = 'icon-btn issues-embed-back';
+  btn.setAttribute('aria-label', 'Back to chat');
+  btn.title = 'Back to chat';
+  btn.innerHTML =
+    '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>';
+  btn.addEventListener('click', () => {
+    closeIssuesEmbeddedInCode();
+  });
+  brand.insertBefore(btn, brand.firstChild);
+}
+
+function syncIssuesSidebarButton(): void {
+  const btn = document.getElementById('btnAllBugs');
+  if (!btn) return;
+  const open = isIssuesEmbeddedInCode();
+  btn.setAttribute('aria-pressed', open ? 'true' : 'false');
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (open) btn.setAttribute('aria-current', 'page');
+  else btn.removeAttribute('aria-current');
+}
+
+function onEmbedEscape(event: KeyboardEvent): void {
+  if (event.key !== 'Escape' || !isIssuesEmbeddedInCode()) return;
+  // Detail slide-over owns Escape first when open.
+  if (document.getElementById('issuesDetailHost')) return;
+  event.preventDefault();
+  closeIssuesEmbeddedInCode();
+}
+
+function bindEmbedEscape(): void {
+  if (embedEscapeBound) return;
+  embedEscapeBound = true;
+  window.addEventListener('keydown', onEmbedEscape);
+}
+
+function unbindEmbedEscape(): void {
+  if (!embedEscapeBound) return;
+  embedEscapeBound = false;
+  window.removeEventListener('keydown', onEmbedEscape);
+}
+
+/** Move #issuesView back to the OS apps layer (or its remembered home). */
+export function restoreIssuesViewIfMounted(): void {
+  const root = getRoot();
+  if (!root) {
+    issuesViewHome = null;
+    return;
+  }
+
+  const appsLayer = document.getElementById('osAppsLayer');
+  if (appsLayer?.contains(root) && !document.getElementById('chatArea')?.contains(root)) {
+    root.classList.remove(ISSUES_EMBEDDED_CLASS);
+    removeEmbeddedBackButton();
+    issuesViewHome = null;
+    return;
+  }
+
+  const home = issuesViewHome ?? getDefaultIssuesHome();
+  if (!home) return;
+
+  const { parent, nextSibling } = home;
+  if (nextSibling && nextSibling.parentNode === parent) {
+    parent.insertBefore(root, nextSibling);
+  } else {
+    parent.appendChild(root);
+  }
+  root.classList.remove(ISSUES_EMBEDDED_CLASS);
+  removeEmbeddedBackButton();
+  issuesViewHome = null;
+}
+
+/**
+ * Restore Issues out of #chatArea before the transcript repaints.
+ * @returns true when an active Issues embed was torn down.
+ */
+export function teardownIssuesEmbedBeforeChatPaint(): boolean {
+  const area = document.getElementById('chatArea');
+  const root = getRoot();
+  const inChat = Boolean(area && root && area.contains(root));
+  const hadEmbed = isIssuesEmbeddedInCode() || inChat || Boolean(issuesViewHome);
+
+  if (inChat) {
+    restoreIssuesViewIfMounted();
+  } else {
+    // app-host may have already reparented the view — clear leftover bookkeeping.
+    issuesViewHome = null;
+    root?.classList.remove(ISSUES_EMBEDDED_CLASS);
+    removeEmbeddedBackButton();
+  }
+
+  stripMainColumnOverlayClasses();
+  returnChatId = null;
+  unbindEmbedEscape();
+  syncIssuesSidebarButton();
+  return hadEmbed;
+}
+
+async function closeCompetingMainColumnViews(): Promise<void> {
+  const orchestrate = await import('./orchestrate-hub');
+  if (orchestrate.isOrchestrateHubMounted()) orchestrate.closeOrchestrateHub();
+  const overview = await import('./code-overview');
+  if (overview.isCodeOverviewOpen()) {
+    overview.closeCodeOverview({ skipNavigate: true, restoreChat: false });
+  }
+  const { teardownCodeBrainMapBeforeChatPaint } = await import('./code-brain-map');
+  teardownCodeBrainMapBeforeChatPaint();
+  const { teardownHub } = await import('./hub');
+  teardownHub();
+}
+
+/** Mount Issues inside the Code app #chatArea (does not change the OS foreground app). */
+export async function openIssuesEmbeddedInCode(options?: { issueId?: string }): Promise<void> {
+  const root = getRoot();
+  const area = document.getElementById('chatArea');
+  if (!root || !area) return;
+
+  if (isIssuesEmbeddedInCode()) {
+    await openIssues({ issueId: options?.issueId, embedded: true });
+    return;
+  }
+
+  await closeCompetingMainColumnViews();
+
+  // Always capture the chat under the embed (app-host may have cleared DOM without us).
+  returnChatId = sessionState?.activeId ?? null;
+
+  rememberIssuesHome(root);
+  area.replaceChildren();
+  area.appendChild(root);
+  stripMainColumnOverlayClasses();
+  area.classList.add(CHAT_AREA_ISSUES_CLASS);
+  document.getElementById('mainColumn')?.classList.add(MAIN_COLUMN_ISSUES_CLASS);
+  root.classList.add(ISSUES_EMBEDDED_CLASS);
+
+  ensureEmbeddedBackButton();
+  bindEmbedEscape();
+  await openIssues({ issueId: options?.issueId, embedded: true });
+  syncIssuesSidebarButton();
+  notifyAskQuestionDisplayContextChanged();
+}
+
+/** Tear down the Code embed and optionally restore the prior chat. */
+export function closeIssuesEmbeddedInCode(options?: { restoreChat?: boolean }): void {
+  if (!isIssuesEmbeddedInCode() && !issuesViewHome) return;
+
+  const savedReturnChatId = returnChatId;
+  const root = getRoot();
+  root?.classList.remove('is-open');
+  pendingIssueId = undefined;
+  closeIssueDetail();
+  clearIssueSelection();
+  setNewFormOpen(false);
+
+  teardownIssuesEmbedBeforeChatPaint();
+
+  if (options?.restoreChat === false) {
+    notifyAskQuestionDisplayContextChanged();
+    return;
+  }
+
+  const targetId =
+    savedReturnChatId && sessionState?.chats.some((c) => c.id === savedReturnChatId)
+      ? savedReturnChatId
+      : sessionState?.activeId;
+  const chat = targetId ? sessionState?.chats.find((c) => c.id === targetId) : undefined;
+  const area = document.getElementById('chatArea');
+  if (chat) {
+    void import('./messages').then((m) => m.renderChatFromHistory(chat));
+  } else if (area) {
+    area.replaceChildren();
+  }
+  notifyAskQuestionDisplayContextChanged();
+}
+
+/** Toggle Issues embed from the Code sidebar footer button. */
+export function toggleIssuesFromSidebar(): void {
+  if (isIssuesEmbeddedInCode()) {
+    closeIssuesEmbeddedInCode();
+    return;
+  }
+  void openIssuesEmbeddedInCode();
 }
 
 function getMount(): HTMLElement | null {
@@ -151,6 +422,33 @@ function syncListHeadVisibility(): void {
   const head = document.getElementById('issuesListHead');
   if (!head) return;
   head.hidden = viewMode !== 'list';
+}
+
+/** Reflect active sort on list column headers (aria-sort + indicator class). */
+function syncListHeadSortUi(): void {
+  const head = document.getElementById('issuesListHead');
+  if (!head) return;
+  head.querySelectorAll<HTMLButtonElement>('.issues-list-head__sort[data-sort-key]').forEach((btn) => {
+    const key = btn.dataset.sortKey;
+    if (!key || !isIssuesSortKey(key)) return;
+    const aria = ariaSortValue(listSort, key);
+    btn.setAttribute('aria-sort', aria);
+    btn.classList.toggle('is-active', aria !== 'none');
+    const dirLabel =
+      aria === 'ascending' ? 'ascending' : aria === 'descending' ? 'descending' : 'unsorted';
+    btn.setAttribute('aria-label', `Sort by ${ISSUES_SORT_LABELS[key]}, ${dirLabel}`);
+  });
+}
+
+function isIssuesSortKey(value: string): value is IssuesSortKey {
+  return ISSUES_SORT_KEYS.has(value as IssuesSortKey);
+}
+
+/** Apply filters, then list-column sort (list view only). */
+function collectVisibleIssues(): IssueCard[] {
+  const issues = collectIssues(collectOptions());
+  if (viewMode !== 'list') return issues;
+  return sortIssuesForList(issues, listSort);
 }
 
 /** Drop selection entries that are no longer visible under current filters. */
@@ -310,8 +608,7 @@ async function confirmAndDeleteIssues(issueIds: string[]): Promise<void> {
   for (const id of ids) selectedIssueIds.delete(id);
   if (openId && ids.includes(openId)) {
     closeIssueDetail();
-    const next = '#/app/issues';
-    if (window.location.hash !== next) window.location.hash = next;
+    setIssuesRouteHash('#/app/issues');
   }
   renderIssuesPanel();
 }
@@ -537,7 +834,7 @@ export function renderIssuesPanel(): void {
   const summaryEl = document.getElementById('issuesSummary');
   if (!mount || !isIssuesStoreLoaded()) return;
 
-  const issues = collectIssues(collectOptions());
+  const issues = collectVisibleIssues();
   const visibleIds = new Set(issues.map((issue) => issue.id));
   pruneIssueSelection(visibleIds);
   mount.innerHTML = '';
@@ -561,6 +858,7 @@ export function renderIssuesPanel(): void {
   }
 
   syncListHeadVisibility();
+  syncListHeadSortUi();
   syncSelectionBar(issues.length);
 
   // Deep-link / pending selection opens detail; otherwise refresh if already open.
@@ -572,17 +870,22 @@ export function renderIssuesPanel(): void {
     refreshIssueDetailIfOpen();
   }
 
-  refreshIssuesSidebarBadge();
+}
+
+/**
+ * Sync the Issues deep-link hash — skipped while embedded in Code so the OS
+ * router does not foreground the fullscreen Issues app.
+ */
+export function setIssuesRouteHash(next: string): void {
+  if (isIssuesEmbeddedInCode()) return;
+  if (window.location.hash !== next) window.location.hash = next;
 }
 
 /** Navigate hash + open detail for an issue. */
 function navigateToIssueDetail(issueId: string): void {
   pendingIssueId = issueId;
   openIssueDetail(issueId);
-  const next = `#/app/issues/${issueId}`;
-  if (window.location.hash !== next) {
-    window.location.hash = next;
-  }
+  setIssuesRouteHash(`#/app/issues/${issueId}`);
   // Highlight selection without full remount when possible.
   document.querySelectorAll('.issues-row.is-selected, .issues-card.is-selected').forEach((el) => {
     el.classList.remove('is-selected');
@@ -643,7 +946,6 @@ function ensureSubscriptions(): void {
   if (issuesUnsub) return;
   issuesUnsub = subscribeIssuesChanges(() => {
     if (isIssuesPageOpen()) renderIssuesPanel();
-    else refreshIssuesSidebarBadge();
   });
 }
 
@@ -726,7 +1028,7 @@ function bindStaticControls(): void {
 
   document.getElementById('issuesSelectAll')?.addEventListener('change', (event) => {
     const input = event.currentTarget as HTMLInputElement;
-    const issues = collectIssues(collectOptions());
+    const issues = collectVisibleIssues();
     if (input.checked) {
       for (const issue of issues) selectedIssueIds.add(issue.id);
     } else {
@@ -744,7 +1046,18 @@ function bindStaticControls(): void {
     renderIssuesPanel();
   });
 
-  // Sidebar: Issues replaces All bugs.
+  // Column header clicks toggle / switch list sort.
+  document.getElementById('issuesListHead')?.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement | null;
+    const btn = target?.closest<HTMLButtonElement>('.issues-list-head__sort[data-sort-key]');
+    if (!btn) return;
+    const key = btn.dataset.sortKey;
+    if (!key || !isIssuesSortKey(key)) return;
+    listSort = cycleIssuesListSort(listSort, key);
+    renderIssuesPanel();
+  });
+
+  // Sidebar: Issues embeds in Code; desktop/dock still launch the fullscreen app.
   document.getElementById('btnAllBugs')?.addEventListener('click', () => {
     openIssuesFromSidebar();
   });
@@ -752,6 +1065,10 @@ function bindStaticControls(): void {
 
 /** Open Issues from the chat sidebar footer button. */
 export function openIssuesFromSidebar(): void {
+  if (shouldEmbedIssuesFromCodeSidebar()) {
+    toggleIssuesFromSidebar();
+    return;
+  }
   if (isOsShellEnabled()) {
     void import('../os/router').then((m) => m.launchApp('issues'));
     return;
@@ -759,14 +1076,13 @@ export function openIssuesFromSidebar(): void {
   void openIssues();
 }
 
-/** Wire listeners; safe to call on every boot for sidebar badge. */
+/** Wire listeners; safe to call on every boot. */
 export function initIssuesPage(): void {
   if (initialized) return;
   initialized = true;
   mountHeaderIcon();
   bindStaticControls();
   ensureSubscriptions();
-  refreshIssuesSidebarBadge();
   window.addEventListener('hashchange', onHashChange);
   const hash = window.location.hash;
   if (hash === '#/app/issues' || hash.startsWith('#/app/issues/')) {
@@ -774,9 +1090,18 @@ export function initIssuesPage(): void {
   }
 }
 
-export async function openIssues(options?: { issueId?: string }): Promise<void> {
+export async function openIssues(options?: {
+  issueId?: string;
+  /** When true, skip OS hash navigation (Code #chatArea embed). */
+  embedded?: boolean;
+}): Promise<void> {
   const root = getRoot();
   if (!root) return;
+
+  // Fullscreen / dock launch must reclaim the view from a Code embed first.
+  if (!options?.embedded && isIssuesEmbeddedInCode()) {
+    teardownIssuesEmbedBeforeChatPaint();
+  }
 
   pendingIssueId = options?.issueId;
   root.classList.add('is-open');
@@ -794,13 +1119,19 @@ export async function openIssues(options?: { issueId?: string }): Promise<void> 
     /* ignore render failures outside a fully booted shell */
   }
 
-  if (!isOsShellEnabled()) {
+  if (!options?.embedded && !isOsShellEnabled()) {
     const next = options?.issueId ? `#/app/issues/${options.issueId}` : '#/app/issues';
     if (window.location.hash !== next) window.location.hash = next;
   }
 }
 
 export function closeIssues(options?: { skipNavigate?: boolean }): void {
+  // Embedded in Code: return to chat without switching the OS foreground app.
+  if (isIssuesEmbeddedInCode()) {
+    closeIssuesEmbeddedInCode({ restoreChat: !options?.skipNavigate });
+    return;
+  }
+
   const root = getRoot();
   if (!root) return;
   root.classList.remove('is-open');
@@ -830,6 +1161,8 @@ export function consumePendingIssueId(): string | undefined {
 
 function onHashChange(): void {
   const hash = window.location.hash;
+  // Code embed owns its own detail panel — ignore Issues hashes while embedded.
+  if (isIssuesEmbeddedInCode()) return;
   if (hash === '#/app/issues' || hash.startsWith('#/app/issues/')) {
     const match = hash.match(/^#\/app\/issues\/([\w-]+)/);
     void openIssues({ issueId: match?.[1] });
@@ -841,16 +1174,3 @@ function onHashChange(): void {
   }
 }
 
-/** Refresh sidebar badge = open statuses for current workspace. */
-export function refreshIssuesSidebarBadge(): void {
-  if (typeof document === 'undefined' || !isIssuesStoreLoaded()) return;
-  const badge = document.getElementById('btnAllBugsCount');
-  if (!badge) return;
-  const openCurrent = countOpenIssues({
-    scope: 'current_workspace',
-    workspacePath: getWorkspacePath(),
-  });
-  badge.textContent = openCurrent > 0 ? String(openCurrent) : '';
-  badge.hidden = openCurrent === 0;
-  badge.setAttribute('aria-hidden', openCurrent === 0 ? 'true' : 'false');
-}

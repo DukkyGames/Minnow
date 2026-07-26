@@ -343,6 +343,8 @@ async function closeCompetingMainColumnViews(): Promise<void> {
   if (orchestrate.isOrchestrateHubMounted()) orchestrate.closeOrchestrateHub();
   const { teardownCodeBrainMapBeforeChatPaint } = await import('./code-brain-map');
   teardownCodeBrainMapBeforeChatPaint();
+  const { teardownIssuesEmbedBeforeChatPaint } = await import('./issues-page');
+  teardownIssuesEmbedBeforeChatPaint();
   const { teardownHub } = await import('./hub');
   teardownHub();
 }

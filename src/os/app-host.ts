@@ -122,6 +122,21 @@ function closeAllAppPages(): void {
         continue;
       }
     }
+    if (id === 'issuesView') {
+      const view = document.getElementById('issuesView');
+      const chatArea = document.getElementById('chatArea');
+      // Code sidebar embed — restore to apps layer before clearing is-open.
+      if (view && chatArea?.contains(view)) {
+        // Keep this DOM-only so app-host does not import the Issues UI module.
+        const appsLayer = document.getElementById('osAppsLayer');
+        appsLayer?.appendChild(view);
+        view.classList.remove('issues-page--embedded', 'is-open');
+        document.getElementById('btnIssuesEmbedBack')?.remove();
+        chatArea.classList.remove('chat-area--issues');
+        document.getElementById('mainColumn')?.classList.remove('main-column--issues');
+        continue;
+      }
+    }
     document.getElementById(id)?.classList.remove('is-open');
   }
 }

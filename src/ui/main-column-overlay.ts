@@ -1,6 +1,6 @@
 /**
  * Shared main-column overlay chrome — CSS classes and DOM suppression for
- * Code overview, code map, orchestrate hub, and plan screen overlays.
+ * Code overview, code map, orchestrate hub, plan screen, and Issues embeds.
  */
 
 const CHAT_AREA_OVERLAY_CLASSES = [
@@ -8,12 +8,14 @@ const CHAT_AREA_OVERLAY_CLASSES = [
   'chat-area--code-brain-map',
   'chat-area--orchestrate-hub',
   'chat-area--plan-screen',
+  'chat-area--issues',
 ] as const;
 
 const MAIN_COLUMN_OVERLAY_CLASSES = [
   'main-column--code-overview',
   'main-column--code-brain-map',
   'main-column--plan-screen',
+  'main-column--issues',
 ] as const;
 
 /** Remove overlay modifier classes from #chatArea and #mainColumn. */
@@ -39,6 +41,8 @@ export function isMainColumnOverlaySuppressingChatDom(): boolean {
   if (document.getElementById('codeBrainMapRoot')) return true;
   if (document.getElementById('orchestrateHub')) return true;
   if (document.getElementById('orchestratePlanScreen')) return true;
+  // Issues reparents #issuesView into #chatArea when opened from the Code sidebar.
+  if (area.contains(document.getElementById('issuesView'))) return true;
   for (const className of CHAT_AREA_OVERLAY_CLASSES) {
     if (area.classList.contains(className)) return true;
   }

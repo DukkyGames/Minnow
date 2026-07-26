@@ -1,0 +1,188 @@
+/**
+ * Split-button dropdown for Issues workflow — Send to chat / Send to background.
+ * Flat chrome, --mn-* tokens, accessible menu with keyboard support.
+ */
+
+export interface IssuesWorkflowMenuItem {
+  id: string;
+  label: string;
+  /** Secondary line under the mode label. */
+  hint?: string;
+  disabled?: boolean;
+  onSelect: () => void;
+}
+
+export interface IssuesWorkflowDropdownOptions {
+  label: string;
+  ariaLabel: string;
+  items: IssuesWorkflowMenuItem[];
+  disabled?: boolean;
+  /** Primary styling for the foreground control. */
+  primary?: boolean;
+}
+
+let openMenu: HTMLElement | null = null;
+let openTrigger: HTMLButtonElement | null = null;
+let outsideHandler: ((event: PointerEvent) => void) | null = null;
+let escapeHandler: ((event: KeyboardEvent) => void) | null = null;
+
+/** Close any open Issues workflow menu. */
+export function closeIssuesWorkflowMenu(): void {
+  if (outsideHandler) {
+    document.removeEventListener('pointerdown', outsideHandler, true);
+    outsideHandler = null;
+  }
+  if (escapeHandler) {
+    document.removeEventListener('keydown', escapeHandler, true);
+    escapeHandler = null;
+  }
+  openMenu?.remove();
+  openMenu = null;
+  openTrigger?.setAttribute('aria-expanded', 'false');
+  openTrigger = null;
+}
+
+function positionMenu(anchor: HTMLElement, menu: HTMLElement): void {
+  const rect = anchor.getBoundingClientRect();
+  const margin = 8;
+  const gap = 4;
+  const menuHeight = menu.offsetHeight || menu.getBoundingClientRect().height;
+  const menuWidth = menu.offsetWidth || menu.getBoundingClientRect().width;
+
+  let top = rect.bottom + gap;
+  if (top + menuHeight > window.innerHeight - margin) {
+    top = Math.max(margin, rect.top - menuHeight - gap);
+  }
+
+  let left = rect.left;
+  if (left + menuWidth > window.innerWidth - margin) {
+    left = Math.max(margin, window.innerWidth - menuWidth - margin);
+  }
+
+  menu.style.top = `${top}px`;
+  menu.style.left = `${left}px`;
+}
+
+function chevronSvg(): SVGSVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('width', '12');
+  svg.setAttribute('height', '12');
+  svg.setAttribute('viewBox', '0 0 12 12');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.classList.add('issues-workflow-menu__chevron');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', 'M3 4.5 6 7.5 9 4.5');
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke', 'currentColor');
+  path.setAttribute('stroke-width', '1.5');
+  path.setAttribute('stroke-linecap', 'round');
+  path.setAttribute('stroke-linejoin', 'round');
+  svg.appendChild(path);
+  return svg;
+}
+
+function openMenuForTrigger(
+  trigger: HTMLButtonElement,
+  items: IssuesWorkflowMenuItem[],
+): void {
+  closeIssuesWorkflowMenu();
+
+  const menu = document.createElement('div');
+  menu.className = 'issues-workflow-menu';
+  menu.setAttribute('role', 'menu');
+  menu.setAttribute('aria-label', trigger.getAttribute('aria-label') ?? 'Chat mode');
+
+  const buttons: HTMLButtonElement[] = [];
+  for (const item of items) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'issues-workflow-menu__item';
+    btn.setAttribute('role', 'menuitem');
+    btn.dataset.id = item.id;
+    btn.disabled = Boolean(item.disabled);
+
+    const label = document.createElement('span');
+    label.className = 'issues-workflow-menu__item-label';
+    label.textContent = item.label;
+    btn.appendChild(label);
+
+    if (item.hint?.trim()) {
+      const hint = document.createElement('span');
+      hint.className = 'issues-workflow-menu__item-hint';
+      hint.textContent = item.hint;
+      btn.appendChild(hint);
+    }
+
+    btn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (btn.disabled) return;
+      closeIssuesWorkflowMenu();
+      item.onSelect();
+    });
+    menu.appendChild(btn);
+    buttons.push(btn);
+  }
+
+  document.body.appendChild(menu);
+  positionMenu(trigger, menu);
+
+  openMenu = menu;
+  openTrigger = trigger;
+  trigger.setAttribute('aria-expanded', 'true');
+
+  outsideHandler = (event: PointerEvent) => {
+    const target = event.target as Node | null;
+    if (menu.contains(target) || trigger.contains(target)) return;
+    closeIssuesWorkflowMenu();
+  };
+  document.addEventListener('pointerdown', outsideHandler, true);
+
+  escapeHandler = (event: KeyboardEvent) => {
+    if (event.key !== 'Escape') return;
+    closeIssuesWorkflowMenu();
+    trigger.focus();
+  };
+  document.addEventListener('keydown', escapeHandler, true);
+
+  const firstEnabled = buttons.findIndex((btn) => !btn.disabled);
+  if (firstEnabled >= 0) buttons[firstEnabled]?.focus();
+}
+
+/**
+ * Build a split-style dropdown trigger for Issues workflow actions.
+ * Click opens the mode menu; choosing a mode runs onSelect.
+ */
+export function createIssuesWorkflowDropdown(
+  options: IssuesWorkflowDropdownOptions,
+): HTMLDivElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'issues-workflow-menu-wrap';
+
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = options.primary
+    ? 'issues-btn issues-btn--primary issues-workflow-menu__trigger'
+    : 'issues-btn issues-workflow-menu__trigger';
+  trigger.setAttribute('aria-label', options.ariaLabel);
+  trigger.setAttribute('aria-haspopup', 'menu');
+  trigger.setAttribute('aria-expanded', 'false');
+  trigger.disabled = Boolean(options.disabled);
+
+  const label = document.createElement('span');
+  label.className = 'issues-workflow-menu__label';
+  label.textContent = options.label;
+  trigger.append(label, chevronSvg());
+
+  trigger.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (trigger.disabled) return;
+    if (openTrigger === trigger && openMenu) {
+      closeIssuesWorkflowMenu();
+      return;
+    }
+    openMenuForTrigger(trigger, options.items);
+  });
+
+  wrap.appendChild(trigger);
+  return wrap;
+}

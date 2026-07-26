@@ -13,7 +13,9 @@ import { getActiveChat } from '../state/sessions';
 import { legacyOutcomeFromSummary } from '../agents/sub-agent-structured-outcome';
 import type { Chat, PersistedSubAgentRun } from '../types';
 import { getActiveChatMountElement } from './chat-mount';
+import { isHubMounted } from './hub';
 import { isMainColumnOverlaySuppressingChatDom } from './main-column-overlay';
+import { isOrchestrateHubMounted } from './orchestrate-hub';
 import { scrollBottom } from './input';
 import { initSubAgentDrawerLiveUpdates, openSubAgentDrawer } from './sub-agent-drawer';
 
@@ -21,6 +23,11 @@ import { initSubAgentDrawerLiveUpdates, openSubAgentDrawer } from './sub-agent-d
 const cards = new Map<string, HTMLElement>();
 
 let liveSubscriptionBound = false;
+
+/** Empty-chat landing pages (Vibe / Orchestrate hub) — not the transcript. */
+function isEmptyChatLandingMounted(): boolean {
+  return isHubMounted() || isOrchestrateHubMounted();
+}
 
 /** Clears the card registry when the chat DOM is rebuilt from history. */
 export function clearSubAgentCardDomRegistry(): void {
@@ -119,6 +126,8 @@ export function upsertSubAgentCardForRun(
     return null;
   }
   if (isMainColumnOverlaySuppressingChatDom()) return null;
+  // Background sub-agents still run, but cards belong in the transcript — not on hub.
+  if (isEmptyChatLandingMounted()) return null;
 
   const area = getActiveChatMountElement();
 

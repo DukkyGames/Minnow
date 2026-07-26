@@ -67,8 +67,10 @@ export async function applyWorkspaceSwitch(info: WorkspaceInfo): Promise<void> {
   updateWorkspaceButtonLabel(info.label, info.path);
   const { teardownCodeBrainMapBeforeChatPaint } = await import('./code-brain-map');
   const closedCodeMap = teardownCodeBrainMapBeforeChatPaint();
+  const { teardownIssuesEmbedBeforeChatPaint } = await import('./issues-page');
+  const closedIssuesEmbed = teardownIssuesEmbedBeforeChatPaint();
   applyWorkspaceScopedSession(info.path, previousPath);
-  if (closedCodeMap) {
+  if (closedCodeMap || closedIssuesEmbed) {
     const { getActiveChat } = await import('../state/sessions');
     const { renderChatFromHistory } = await import('./messages');
     renderChatFromHistory(getActiveChat());

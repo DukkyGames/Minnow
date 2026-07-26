@@ -389,13 +389,6 @@ async function loadBugsForMigration(): Promise<BugCard[]> {
 function touchIssuesStore(): void {
   scheduleSaveIssues();
   emitIssuesChange();
-  // Skip DOM badge refresh in headless unit tests (no document).
-  if (typeof document === 'undefined') return;
-  void import('../ui/issues-page.ts')
-    .then((m) => m.refreshIssuesSidebarBadge())
-    .catch(() => {
-      /* ignore UI load failures outside the app shell */
-    });
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;

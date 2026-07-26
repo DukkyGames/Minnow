@@ -34,7 +34,9 @@ Registry: [`src/chat/modes/registry.ts`](../src/chat/modes/registry.ts). Tool al
 
 Chat (desktop), **Code**, **Models**, **Compare**, **Bench**, **Research**, **Experts**, **Brain**, **Calendar**, **Email**, **Issues**, **Scheduler**, **Settings** — routes `#/desktop`, `#/app/{id}`, registry in [`src/os/app-registry.ts`](../src/os/app-registry.ts).
 
-**Issues** (`#/app/issues`, core) is the Linear-style tracker (list + board + detail). UI: split header (brand + quick capture) and filter bar; column headers on list view; type/status/priority chips; multiselect checkboxes with bulk delete; detail panel with sticky workflow header, Delete action, and scrollable body. Legacy `#/bugs` hashes redirect via [`resolveLegacyHash`](../src/os/router.ts) — the old All-bugs overlay UI/store/pipeline was removed in MIN-261 Phase 5.
+**Issues** (`#/app/issues`, core) is the Linear-style tracker (list + board + detail). UI: split header (brand + quick capture) and filter bar; clickable list column headers to sort (ID / Type / Title / Status / Priority / Labels / Updated — session-only, smart first-click direction; helpers in [`issues-list-sort.ts`](../src/ui/issues-list-sort.ts)); type/status/priority chips; multiselect checkboxes with bulk delete; detail panel with sticky workflow header (activity chips like **Investigating…** / **Planning…** open the linked sub-agent drawer or board chat), Delete action, click-to-edit description (markdown preview → textarea; blur or Ctrl/Cmd+Enter saves, Escape cancels), and scrollable body. Board view keeps all status lanes on one horizontal row (scroll when narrow). Legacy `#/bugs` hashes redirect via [`resolveLegacyHash`](../src/os/router.ts) — the old All-bugs overlay UI/store/pipeline was removed in MIN-261 Phase 5.
+
+**Code sidebar vs desktop:** the Code chat sidebar Issues button (`btnAllBugs`) embeds `#issuesView` into `#chatArea` inside the Code window (toggle / Back / Escape; same main-column overlay family as Code overview / Code map — see [`issues-page.ts`](../src/ui/issues-page.ts)). While embedded, issue detail opens in-place and does not rewrite the hash to `#/app/issues/ISS-n` (that would foreground the fullscreen Issues app). Dock, menubar app switcher, and `#/app/issues` still launch the fullscreen Issues app.
 
 | Concern | Location |
 |---------|----------|
@@ -42,7 +44,7 @@ Chat (desktop), **Code**, **Models**, **Compare**, **Bench**, **Research**, **Ex
 | Migration | First load with no issues file reads leftover `bugs/state.json` / `minnow-bugs-v1` (leaves bugs file on disk). `migrateLegacyBugBoardsFromChats` folds any remaining `chat.bugBoard` cards, then strips them. |
 | UI | [`src/ui/issues-page.ts`](../src/ui/issues-page.ts), detail [`issues-detail.ts`](../src/ui/issues-detail.ts), styles [`issues.css`](../src/styles/issues.css); deep link `#/app/issues/ISS-n` |
 | Tools | `issue_add` / `issue_update` / `issue_link` / `issue_get_state` ([`issue-tools.ts`](../src/tools/issue-tools.ts)). **`bug_add` / `bug_update` / `bug_get_state`** remain as thin aliases in [`bug-board-tools.ts`](../src/tools/bug-board-tools.ts) for one more release (column/severity ↔ status/priority). |
-| Workflows | Investigate / Plan / Debug / Send to board ([`src/chat/issues/pipeline.ts`](../src/chat/issues/pipeline.ts), [`workflow-seeds.ts`](../src/chat/issues/workflow-seeds.ts)); triage **Expand with agent** → shipped `issue-writer` |
+| Workflows | **Send to chat** / **Send to background** mode dropdowns (General, Build, Plan, Debug foreground; Debug + Plan background sub-agents) / **Send to board** ([`src/chat/issues/pipeline.ts`](../src/chat/issues/pipeline.ts), [`workflow-seeds.ts`](../src/chat/issues/workflow-seeds.ts), [`issues-workflow-menu.ts`](../src/ui/issues-workflow-menu.ts)); triage **Expand with agent** → shipped `issue-writer`; detail **Open plan** foregrounds Code then opens the plan in the file viewer (`openIssuePlanInEditor`) |
 | Git | Branch `issue/iss-n-<slug>`, commit grep `[ISS-n]`, PR via `gh`, GitHub URL chips ([`git-helpers.ts`](../src/chat/issues/git-helpers.ts), [`git-actions.ts`](../src/chat/issues/git-actions.ts)) |
 | Plans | `documentation/plans/issues/<id>.md`; board completion → status `review` ([`board-review.ts`](../src/chat/issues/board-review.ts)) |
 
@@ -323,7 +325,7 @@ Stage layers in `#osStage` ([`src/os/shell.ts`](../src/os/shell.ts)):
 | Side panels | Scheduler list rail |
 | Fullscreen apps | Code, Email, Settings-from-Code |
 
-Presentation modes: `fullscreen` | `window` | `desktop` | `sidePanel` ([`src/os/presentation-mode.ts`](../src/os/presentation-mode.ts)).
+Presentation modes: `fullscreen` | `window` | `desktop` | `sidePanel` ([`src/os/presentation-mode.ts`](../src/os/presentation-mode.ts)). Settings opened from Code sets `returnToApp: 'code'` (fullscreen); the Settings back control calls [`closeSettings()`](../src/ui/settings-page.ts) so it restores Code instead of falling through to the desktop. `initSettingsPage` is idempotent so duplicate binds cannot stack back handlers.
 
 **Desktop chat** is the primary chat surface (`#desktopChatCol`); legacy `#chatView` retained for deep links. **Code** reparents `#appBody` into `#osAppsLayer`. Chat transcript mount + inset overlay routing (sub-agent drawer, goal eval) live in [`src/ui/chat-mount.ts`](../src/ui/chat-mount.ts): Code → `#mainColumn`, desktop → `.mn-os-desktop-chat`, Chat app → `.chat-app-main`.
 
@@ -332,6 +334,8 @@ The Code chat sidebar header keeps its navigation controls ordered as **collapse
 Router: [`src/os/router.ts`](../src/os/router.ts). Boot: `initOsPageBridge()` → `initOsShell()` → `initOsRouter()`.
 
 **Notifications:** menubar bell inbox ([`src/os/notifications-menu.ts`](../src/os/notifications-menu.ts), [`src/notifications/`](../src/notifications/)). Sounds use **packs** under `public/sounds/packs/<packId>/` ([`src/notifications/sound-packs.ts`](../src/notifications/sound-packs.ts)): each pack maps three cues — `turn_complete`, `question`, `tool_turn` — to audio files; notification kinds resolve to a cue at playback time. Default pack **Minnow** ships `turn-complete.wav`, `question.wav`, `tool-turn.mp3`. Prefs: `minnow.notifications.soundPackId` (`default` | `none`), `minnow.notifications.soundOnActiveChat` (play cues while watching the active chat in Code without bell rows). Settings → General → Notifications.
+
+**App switcher:** in-app menubar grid icon ([`src/os/app-switcher-menu.ts`](../src/os/app-switcher-menu.ts)) opens a compact popover with **Desktop** plus the same apps as the dock (`listDockApps`). Hidden on the Desktop view (dock covers that case). Escape / outside click dismisses; opening closes other chrome popovers.
 
 **Desktop prefs** (`minnow.os.*`): wallpaper / layout via [`src/os/desktop-prefs.ts`](../src/os/desktop-prefs.ts); **disabled apps** via `minnow.os.disabledApps` ([`src/os/app-preferences.ts`](../src/os/app-preferences.ts)).
 

@@ -67,7 +67,7 @@ html.minnow-os-enabled {
   border-bottom: 1px solid var(--os-border);
   position: relative;
   z-index: 40;
-  /* Let icon focus rings / open glows paint outside the 46px bar (left cluster still clips). */
+  /* Let icon focus rings / open glows paint outside the 46px bar. */
   overflow: visible;
 }
 
@@ -81,7 +81,11 @@ html.minnow-os-enabled {
 
 .mn-os-mb-left {
   flex: 0 1 auto;
+  /* Clip long status text when the left cluster shrinks. */
   overflow: hidden;
+  /* Room for :focus-visible outlines; open state uses inset ring (see .mn-os-mb-apps). */
+  padding: 3px;
+  margin: -3px;
 }
 
 .mn-os-mb-right {
@@ -182,26 +186,11 @@ html.minnow-os-enabled {
   font-size: 15px;
 }
 
-.mn-os-mb-desktop {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  flex-shrink: 0;
-  background: var(--os-surface-2);
-  color: var(--os-text);
-  border: 1px solid var(--os-border-strong);
-  border-radius: 8px;
-  padding: 6px 11px;
-  font-size: 13px;
-  font-weight: 500;
-  transition: 0.16s var(--os-ease);
-}
-
-/* `display: flex` on buttons can override the native [hidden] rule — hide via view + attribute */
-.mn-os-menubar[data-view='desktop'] .mn-os-mb-desktop,
+/* `display: grid` / flex on buttons can override the native [hidden] rule — hide via view + attribute */
+.mn-os-menubar[data-view='desktop'] .mn-os-mb-apps,
 .mn-os-menubar[data-view='desktop'] .mn-os-mb-app-sep,
 .mn-os-menubar[data-view='desktop'] .mn-os-mb-appname,
-.mn-os-mb-desktop[hidden],
+.mn-os-mb-apps[hidden],
 .mn-os-mb-app-sep[hidden],
 .mn-os-mb-appname[hidden] {
   display: none !important;
@@ -212,9 +201,12 @@ html.minnow-os-enabled {
   display: none !important;
 }
 
-.mn-os-mb-desktop:hover {
-  background: var(--os-surface-3);
+/* Inset ring — outer box-shadow was clipped by .mn-os-mb-left overflow. */
+.mn-os-mb-apps.is-open {
+  background: var(--os-surface-2);
+  color: var(--os-text);
   border-color: var(--os-accent-glow);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--os-accent-glow) 70%, transparent);
 }
 
 .mn-os-mb-sep {
@@ -323,6 +315,107 @@ html.minnow-os-enabled {
   60% { transform: rotate(4deg); }
   72% { transform: rotate(-2deg); }
   100% { transform: rotate(0deg); }
+}
+
+/* Menubar app switcher popover (in-app quick launch) */
+.mn-os-app-switcher {
+  position: fixed;
+  z-index: 55;
+  width: min(17.5rem, calc(100vw - 1rem));
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-popover-soft);
+  color: var(--mn-fg);
+  overflow: hidden;
+}
+
+.mn-os-app-switcher.hidden {
+  display: none;
+}
+
+.mn-os-app-switcher__header {
+  padding: 10px 12px 6px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.mn-os-app-switcher__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mn-fg);
+}
+
+.mn-os-app-switcher__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 10px;
+}
+
+.mn-os-app-switcher__tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 4px 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--mn-fg-muted);
+  transition: background-color 0.14s var(--os-ease), border-color 0.14s var(--os-ease), color 0.14s var(--os-ease);
+}
+
+.mn-os-app-switcher__ico {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--os-surface-2);
+  border: 1px solid var(--os-border-strong);
+  color: var(--os-accent);
+  transition: background-color 0.14s var(--os-ease), border-color 0.14s var(--os-ease);
+}
+
+.mn-os-app-switcher__ico .minnow-glyph {
+  width: 20px;
+  height: 20px;
+}
+
+.mn-os-app-switcher__name {
+  max-width: 100%;
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mn-os-app-switcher__tile:hover {
+  color: var(--mn-fg);
+  background: var(--os-surface-2);
+}
+
+.mn-os-app-switcher__tile:hover .mn-os-app-switcher__ico {
+  background: var(--os-accent-soft);
+  border-color: var(--os-accent-glow);
+}
+
+.mn-os-app-switcher__tile.is-active {
+  color: var(--mn-fg);
+}
+
+.mn-os-app-switcher__tile.is-active .mn-os-app-switcher__ico {
+  background: var(--os-accent-soft);
+  border-color: var(--os-accent-glow);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--os-accent-glow) 65%, transparent);
+}
+
+.mn-os-app-switcher__tile:focus-visible {
+  outline: 2px solid var(--os-accent);
+  outline-offset: 1px;
 }
 
 /* OS menubar notifications popover */
@@ -876,15 +969,7 @@ html.minnow-os-enabled header.topbar.hidden {
     display: none !important;
   }
 
-  /* Icon-only desktop + app labels — text nodes collapse via font-size: 0 */
-  .mn-os-mb-desktop {
-    flex-shrink: 0;
-    padding: 6px;
-    gap: 0;
-    font-size: 0;
-    line-height: 0;
-  }
-
+  /* App title collapses to icon-only on narrow menubar */
   .mn-os-mb-appname {
     flex-shrink: 0;
     gap: 0;
@@ -983,6 +1068,11 @@ html.minnow-os-enabled header.topbar.hidden {
   animation: mn-os-bob 2s var(--os-ease) infinite;
 }
 
+.mn-os-boot-logo .minnow-glyph {
+  width: 40px;
+  height: 40px;
+}
+
 @keyframes mn-os-bob {
   50% {
     transform: translateY(-7px);
@@ -1061,10 +1151,11 @@ html.minnow-os-enabled header.topbar.hidden {
 @media (prefers-reduced-motion: reduce) {
   .mn-os-desktop-layer,
   .mn-os-app-layer,
-  .mn-os-mb-desktop,
   .mn-os-mb-icon,
   .mn-os-mb-bell,
-  .mn-os-mb-workspace-slot {
+  .mn-os-mb-workspace-slot,
+  .mn-os-app-switcher__tile,
+  .mn-os-app-switcher__ico {
     transition-duration: 0.001ms !important;
   }
 

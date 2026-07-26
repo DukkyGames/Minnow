@@ -19,6 +19,7 @@ import type { NotificationRecord } from '../notifications/types';
 import { getAppById } from './app-registry';
 import { createAppIcon, createOsIcon, type OsIconName } from './icons';
 import { closeComposerModelMenu } from '../ui/composer-model-trigger';
+import { closeAppSwitcherMenu } from './app-switcher-menu';
 import {
   registerChromePopover,
   unregisterChromePopover,
@@ -256,6 +257,7 @@ function openMenu(): void {
   const bell = anchorBell;
   if (!bell) return;
   closeComposerModelMenu();
+  closeAppSwitcherMenu();
   const panel = ensurePanel();
   syncMutedUi();
   rebuildList();

@@ -18,19 +18,27 @@ import {
 } from '../state/issues-store';
 import { parseIssueCodeRefPaste } from '../state/issue-code-ref-parse';
 import { getWorkspacePath } from '../state/workspace';
-import { canExpandIssueWithAgent } from '../chat/issues/expand-task';
+import { getMode } from '../chat/modes/registry';
+import {
+  canExpandIssueWithAgent,
+} from '../chat/issues/expand-task';
 import {
   canInvestigateIssue,
   canRunIssueWorkflow,
   canSendIssueToBoard,
   issueActivityChip,
-  runIssueDebugChat,
+  issueActivityTarget,
+  openIssueActivity,
+  runIssueBackgroundChat,
   runIssueExpandWithAgent,
-  runIssueInvestigate,
-  runIssuePlanBackground,
-  runIssuePlanChat,
+  runIssueForegroundChat,
   runIssueSendToBoard,
+  openIssuePlanInEditor,
+  ISSUE_BACKGROUND_CHAT_MODES,
+  ISSUE_FOREGROUND_CHAT_MODES,
 } from '../chat/issues/pipeline';
+import type { IssueBackgroundChatMode, IssueForegroundChatMode } from '../chat/issues/workflow-seeds';
+import { createIssuesWorkflowDropdown, closeIssuesWorkflowMenu } from './issues-workflow-menu';
 import {
   createBranchFromIssue,
   createPrFromIssue,
@@ -125,9 +133,10 @@ async function deleteIssueFromDetail(issueId: string): Promise<void> {
   if (!ok) return;
   if (!deleteIssue(issueId)) return;
   closeIssueDetail();
-  const next = '#/app/issues';
-  if (window.location.hash !== next) window.location.hash = next;
-  void import('./issues-page').then((m) => m.renderIssuesPanel());
+  void import('./issues-page').then((m) => {
+    m.setIssuesRouteHash('#/app/issues');
+    m.renderIssuesPanel();
+  });
 }
 
 /** Open (or refresh) the detail slide-over for an issue id. */
@@ -147,6 +156,7 @@ export function openIssueDetail(issueId: string): void {
 
 /** Re-render detail if the selected issue is still open. */
 export function refreshIssueDetailIfOpen(): void {
+  closeIssuesWorkflowMenu();
   if (!selectedIssueId) return;
   openIssueDetail(selectedIssueId);
 }
@@ -230,6 +240,109 @@ function section(title: string): { section: HTMLElement; body: HTMLElement } {
   return { section: sectionEl, body };
 }
 
+/** Click-to-edit description: markdown preview when idle, textarea on focus. */
+function buildDescriptionSection(issue: IssueCard): HTMLElement {
+  const descSection = section('Description');
+  const descWrap = document.createElement('div');
+  descWrap.className = 'issues-detail__desc-wrap';
+  descWrap.setAttribute('role', 'button');
+  descWrap.tabIndex = 0;
+  descWrap.setAttribute('aria-label', 'Issue description. Click to edit.');
+
+  let editing = false;
+
+  const renderDisplay = (): void => {
+    editing = false;
+    descWrap.classList.remove('is-editing');
+    descWrap.setAttribute('role', 'button');
+    descWrap.tabIndex = 0;
+    descWrap.innerHTML = '';
+
+    const current = findIssueById(issue.id)?.description ?? issue.description;
+    const desc = document.createElement('div');
+    if (current.trim()) {
+      desc.className = 'issues-detail__markdown msg-bubble msg-bubble--md';
+      setAssistantBubbleContent(desc, current);
+    } else {
+      desc.className = 'issues-detail__empty';
+      desc.textContent = 'No description yet. Click to add.';
+    }
+    descWrap.appendChild(desc);
+  };
+
+  const enterEdit = (): void => {
+    if (editing) return;
+    editing = true;
+    descWrap.classList.add('is-editing');
+    descWrap.removeAttribute('role');
+    descWrap.tabIndex = -1;
+    descWrap.innerHTML = '';
+
+    const current = findIssueById(issue.id)?.description ?? issue.description;
+    const textarea = document.createElement('textarea');
+    textarea.className = 'issues-detail__desc-input';
+    textarea.value = current;
+    textarea.setAttribute('aria-label', 'Issue description');
+    textarea.rows = 8;
+    textarea.spellcheck = true;
+
+    const commit = (): void => {
+      const next = textarea.value.trim();
+      const prev = (findIssueById(issue.id)?.description ?? issue.description).trim();
+      if (next !== prev) {
+        updateIssue(issue.id, { description: next });
+      }
+      renderDisplay();
+    };
+
+    const cancel = (): void => {
+      renderDisplay();
+    };
+
+    textarea.addEventListener('blur', () => {
+      commit();
+    });
+    textarea.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        cancel();
+        return;
+      }
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        textarea.blur();
+      }
+    });
+
+    descWrap.appendChild(textarea);
+    textarea.focus();
+    const end = textarea.value.length;
+    textarea.setSelectionRange(end, end);
+  };
+
+  const openEdit = (e?: Event): void => {
+    if (editing) return;
+    const target = e?.target;
+    if (target instanceof HTMLElement && target.closest('a, button')) return;
+    enterEdit();
+  };
+
+  descWrap.addEventListener('click', (e) => {
+    openEdit(e);
+  });
+  descWrap.addEventListener('keydown', (e) => {
+    if (editing) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      enterEdit();
+    }
+  });
+
+  renderDisplay();
+  descSection.body.appendChild(descWrap);
+  return descSection.section;
+}
+
 /** Build the detail panel DOM for one issue. */
 function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   host.innerHTML = '';
@@ -267,8 +380,8 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   closeBtn.textContent = 'Close';
   closeBtn.addEventListener('click', () => {
     closeIssueDetail();
-    const next = '#/app/issues';
-    if (window.location.hash !== next) window.location.hash = next;
+    // Embedded Code host keeps `#/app/code/...` — do not jump to fullscreen Issues.
+    void import('./issues-page').then((m) => m.setIssuesRouteHash('#/app/issues'));
   });
 
   headerActions.append(deleteBtn, closeBtn);
@@ -340,20 +453,7 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   const scroll = document.createElement('div');
   scroll.className = 'issues-detail__scroll';
 
-  const descSection = section('Description');
-  const descWrap = document.createElement('div');
-  descWrap.className = 'issues-detail__desc-wrap';
-  const desc = document.createElement('div');
-  desc.className = 'issues-detail__markdown msg-bubble msg-bubble--md';
-  if (issue.description.trim()) {
-    setAssistantBubbleContent(desc, issue.description);
-  } else {
-    desc.className = 'issues-detail__empty';
-    desc.textContent = 'No description yet.';
-  }
-  descWrap.appendChild(desc);
-  descSection.body.appendChild(descWrap);
-  scroll.appendChild(descSection.section);
+  scroll.appendChild(buildDescriptionSection(issue));
 
   // Code links
   const codeSection = section('Code links');
@@ -426,11 +526,11 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
     openPlan.className = 'issues-btn';
     openPlan.textContent = 'Open plan';
     openPlan.addEventListener('click', () => {
-      void import('./file-viewer').then((m) => m.openFileInViewer(issue.planPath!));
+      void openIssuePlanInEditor(issue.planPath!, issue.workspacePath);
     });
     planSection.body.append(planEl, openPlan);
   } else {
-    planEl.textContent = 'No plan yet. Use Plan or Plan in background.';
+    planEl.textContent = 'No plan yet. Use Send to chat or Send to background.';
     planSection.body.appendChild(planEl);
   }
   scroll.appendChild(planSection.section);
@@ -755,13 +855,31 @@ function buildWorkflowToolbar(issue: IssueCard): HTMLElement {
   const busy = workflowBusyIds.has(issue.id) || expandingIds.has(issue.id);
   const workflowOk = canRunIssueWorkflow(issue);
   const activity = issueActivityChip(issue);
+  const activityTarget = issueActivityTarget(issue);
 
   const primary = document.createElement('div');
   primary.className = 'issues-detail__workflow-primary';
 
   if (activity) {
-    const chip = document.createElement('span');
+    const chip = document.createElement(
+      activityTarget ? 'button' : 'span',
+    ) as HTMLButtonElement | HTMLSpanElement;
     chip.className = 'issues-detail__activity-chip';
+    if (activityTarget) {
+      chip.classList.add('issues-detail__activity-chip--interactive');
+      if (chip instanceof HTMLButtonElement) {
+        chip.type = 'button';
+        chip.title =
+          activityTarget.kind === 'board_chat'
+            ? 'Open board chat'
+            : 'View sub-agent chat';
+        chip.addEventListener('click', () => {
+          void openIssueActivity(issue).then((ok) => {
+            if (!ok) showIssuesToast('Could not open activity', 'error');
+          });
+        });
+      }
+    }
     chip.textContent = activity;
     primary.appendChild(chip);
   }
@@ -784,69 +902,59 @@ function buildWorkflowToolbar(issue: IssueCard): HTMLElement {
   const secondary = document.createElement('div');
   secondary.className = 'issues-detail__workflow-secondary';
 
-  // Investigate — aimed at bugs; still available for other open types.
-  {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'issues-btn';
-    const allow = workflowOk && canInvestigateIssue(issue) && !busy;
-    btn.disabled = !allow;
-    btn.textContent = 'Investigate';
-    btn.title =
-      issue.type === 'bug'
-        ? 'Spawn a debugger sub-agent and link the investigation chat'
-        : 'Spawn a debugger sub-agent (best for bugs)';
-    if (!workflowOk) btn.title = 'Issue is closed';
-    btn.addEventListener('click', () => {
-      void runWorkflowAction(issue.id, 'investigate');
-    });
-    secondary.appendChild(btn);
-  }
+  const foregroundHints: Record<IssueForegroundChatMode, string> = {
+    general: 'Triage and discuss with full tool access',
+    build: 'Implement or iterate on a fix',
+    plan: 'Interactive planning chat in Code',
+    debug: 'Reproduce and narrow root cause',
+  };
 
-  // Plan (interactive Code Plan mode)
-  {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'issues-btn';
-    btn.disabled = !workflowOk || busy;
-    btn.textContent = 'Plan';
-    btn.title = 'Open a Plan-mode chat seeded with this issue';
-    if (!workflowOk) btn.title = 'Issue is closed';
-    btn.addEventListener('click', () => {
-      void runWorkflowAction(issue.id, 'plan');
-    });
-    secondary.appendChild(btn);
-  }
+  const foregroundItems = ISSUE_FOREGROUND_CHAT_MODES.map((modeId) => ({
+    id: modeId,
+    label: getMode(modeId).label,
+    hint: foregroundHints[modeId],
+    disabled: !workflowOk || busy,
+    onSelect: () => {
+      void runWorkflowAction(issue.id, 'foreground', modeId);
+    },
+  }));
 
-  // Plan in background (bug-planner sub-agent)
-  {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'issues-btn';
-    btn.disabled = !workflowOk || busy;
-    btn.textContent = 'Plan in background';
-    btn.title = 'Write documentation/plans/issues/<id>.md via a planner sub-agent';
-    if (!workflowOk) btn.title = 'Issue is closed';
-    btn.addEventListener('click', () => {
-      void runWorkflowAction(issue.id, 'plan-bg');
-    });
-    secondary.appendChild(btn);
-  }
+  secondary.appendChild(
+    createIssuesWorkflowDropdown({
+      label: 'Send to chat',
+      ariaLabel: 'Send issue to chat — choose mode',
+      disabled: !workflowOk || busy,
+      primary: true,
+      items: foregroundItems,
+    }),
+  );
 
-  // Debug chat
-  {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'issues-btn';
-    btn.disabled = !workflowOk || busy;
-    btn.textContent = 'Debug chat';
-    btn.title = 'Open a Debug-mode chat with full issue context';
-    if (!workflowOk) btn.title = 'Issue is closed';
-    btn.addEventListener('click', () => {
-      void runWorkflowAction(issue.id, 'debug');
-    });
-    secondary.appendChild(btn);
-  }
+  const backgroundHints: Record<IssueBackgroundChatMode, string> = {
+    debug: 'Debugger sub-agent investigates unattended',
+    plan: 'Planner writes documentation/plans/issues/<id>.md',
+  };
+
+  const backgroundItems = ISSUE_BACKGROUND_CHAT_MODES.map((modeId) => ({
+    id: modeId,
+    label: getMode(modeId).label,
+    hint: backgroundHints[modeId],
+    disabled:
+      !workflowOk ||
+      busy ||
+      (modeId === 'debug' && !canInvestigateIssue(issue)),
+    onSelect: () => {
+      void runWorkflowAction(issue.id, 'background', modeId);
+    },
+  }));
+
+  secondary.appendChild(
+    createIssuesWorkflowDropdown({
+      label: 'Send to background',
+      ariaLabel: 'Send issue to background chat — choose mode',
+      disabled: !workflowOk || busy,
+      items: backgroundItems,
+    }),
+  );
 
   // Send to board
   {
@@ -858,7 +966,7 @@ function buildWorkflowToolbar(issue: IssueCard): HTMLElement {
     btn.textContent = 'Send to board';
     btn.title = hasPlan
       ? 'Launch an Orchestrate board from the issue plan'
-      : 'Save a plan first (Plan or Plan in background)';
+      : 'Save a plan first (Send to chat or Send to background in Plan mode)';
     if (!workflowOk) btn.title = 'Issue is closed';
     btn.addEventListener('click', () => {
       void runWorkflowAction(issue.id, 'board');
@@ -870,35 +978,44 @@ function buildWorkflowToolbar(issue: IssueCard): HTMLElement {
   return row;
 }
 
-type WorkflowAction = 'investigate' | 'plan' | 'plan-bg' | 'debug' | 'board';
+type WorkflowAction =
+  | { kind: 'foreground'; modeId: IssueForegroundChatMode }
+  | { kind: 'background'; modeId: IssueBackgroundChatMode }
+  | { kind: 'board' };
 
-async function runWorkflowAction(issueId: string, action: WorkflowAction): Promise<void> {
+async function runWorkflowAction(issueId: string, action: WorkflowAction['kind'], modeId?: IssueForegroundChatMode | IssueBackgroundChatMode): Promise<void> {
   if (workflowBusyIds.has(issueId)) return;
   workflowBusyIds.add(issueId);
   refreshIssueDetailIfOpen();
   try {
-    if (action === 'investigate') {
-      const result = await runIssueInvestigate(issueId);
-      if (!result.ok) showIssuesToast(result.error || 'Investigate failed', 'error');
-      else showIssuesToast('Investigation started', 'success');
+    if (action === 'foreground' && modeId) {
+      const result = await runIssueForegroundChat(issueId, modeId as IssueForegroundChatMode);
+      if (!result.ok) {
+        showIssuesToast(result.error || 'Send to chat failed', 'error');
+        return;
+      }
+      if (modeId === 'plan') {
+        showIssuesToast(
+          result.planPath ? `Plan chat · ${result.planPath}` : 'Plan chat opened',
+          'success',
+        );
+      } else {
+        showIssuesToast(`${getMode(modeId as IssueForegroundChatMode).label} chat opened`, 'success');
+      }
       return;
     }
-    if (action === 'plan') {
-      const result = await runIssuePlanChat(issueId);
-      if (!result.ok) showIssuesToast(result.error || 'Plan launch failed', 'error');
-      else showIssuesToast(result.planPath ? `Plan chat · ${result.planPath}` : 'Plan chat opened', 'success');
-      return;
-    }
-    if (action === 'plan-bg') {
-      const result = await runIssuePlanBackground(issueId);
-      if (!result.ok) showIssuesToast(result.error || 'Background plan failed', 'error');
-      else showIssuesToast(result.planPath ? `Plan: ${result.planPath}` : 'Plan ready', 'success');
-      return;
-    }
-    if (action === 'debug') {
-      const result = await runIssueDebugChat(issueId);
-      if (!result.ok) showIssuesToast(result.error || 'Debug chat failed', 'error');
-      else showIssuesToast('Debug chat opened', 'success');
+    if (action === 'background' && modeId) {
+      const bgMode = modeId as IssueBackgroundChatMode;
+      const result = await runIssueBackgroundChat(issueId, bgMode);
+      if (!result.ok) {
+        showIssuesToast(result.error || 'Send to background failed', 'error');
+        return;
+      }
+      if (bgMode === 'debug') {
+        showIssuesToast('Investigation started', 'success');
+      } else {
+        showIssuesToast(result.planPath ? `Plan: ${result.planPath}` : 'Plan ready', 'success');
+      }
       return;
     }
     const result = await runIssueSendToBoard(issueId);

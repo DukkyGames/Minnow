@@ -7,6 +7,8 @@ import { describe, test } from 'node:test';
 import {
   buildIssueContextBlock,
   buildIssueDebugSeed,
+  buildIssueForegroundModeSeed,
+  buildIssueForegroundSeed,
   buildIssueInvestigateTask,
   buildIssuePlanBackgroundTask,
   buildIssuePlanSeed,
@@ -15,7 +17,10 @@ import {
   canSendIssueToBoard,
   formatIssueCodeRefLine,
   issueActivityChip,
+  issueActivityTarget,
   issueCodeRefsToLaunch,
+  ISSUE_BACKGROUND_CHAT_MODES,
+  ISSUE_FOREGROUND_CHAT_MODES,
   issuePlanPathForId,
   resolveIssuePlanPath,
 } from '../../src/chat/issues/workflow-seeds.ts';
@@ -82,6 +87,9 @@ describe('issues workflow seeds', () => {
     const bg = buildIssuePlanBackgroundTask(makeIssue(), path);
     assert.match(bg, /Save the plan to: documentation\/plans\/issues\/ISS-42\.md/);
     assert.match(bg, /plan only/i);
+    assert.match(bg, /unattended background work/i);
+    assert.match(bg, /do not ask clarifying questions/i);
+    assert.doesNotMatch(bg, /what should we do next/i);
   });
 
   test('buildIssueDebugSeed carries full context', () => {
@@ -89,6 +97,14 @@ describe('issues workflow seeds', () => {
     assert.match(seed, /Debug this issue/);
     assert.match(seed, /Likely in appearance store/);
     assert.ok(seed.includes(buildIssueContextBlock(makeIssue()).slice(0, 40)));
+  });
+
+  test('foreground mode lists and seeds', () => {
+    assert.deepEqual(ISSUE_FOREGROUND_CHAT_MODES, ['general', 'build', 'plan', 'debug']);
+    assert.deepEqual(ISSUE_BACKGROUND_CHAT_MODES, ['debug', 'plan']);
+    assert.match(buildIssueForegroundSeed(makeIssue(), 'build'), /Build mode/);
+    assert.match(buildIssueForegroundModeSeed(makeIssue(), 'general'), /General mode/);
+    assert.match(buildIssueForegroundModeSeed(makeIssue(), 'plan'), /Plan mode/);
   });
 
   test('canSendIssueToBoard requires planPath', () => {
@@ -139,6 +155,42 @@ describe('issues workflow seeds', () => {
     );
     assert.equal(
       issueActivityChip(
+        makeIssue({
+          status: 'in_progress',
+          investigateRunId: 'run-2',
+          notes: 'done looking',
+        }),
+      ),
+      null,
+    );
+  });
+
+  test('issueActivityTarget for sub-agent and board chips', () => {
+    assert.deepEqual(
+      issueActivityTarget(
+        makeIssue({ status: 'in_progress', boardChatId: 'chat-board' }),
+      ),
+      { kind: 'board_chat', chatId: 'chat-board' },
+    );
+    assert.deepEqual(
+      issueActivityTarget(
+        makeIssue({ status: 'in_progress', planRunId: 'run-plan' }),
+      ),
+      { kind: 'sub_agent', runId: 'run-plan' },
+    );
+    assert.deepEqual(
+      issueActivityTarget(
+        makeIssue({
+          status: 'in_progress',
+          investigateRunId: 'run-inv',
+          notes: '',
+        }),
+      ),
+      { kind: 'sub_agent', runId: 'run-inv' },
+    );
+    assert.equal(issueActivityTarget(makeIssue({ status: 'review' })), null);
+    assert.equal(
+      issueActivityTarget(
         makeIssue({
           status: 'in_progress',
           investigateRunId: 'run-2',

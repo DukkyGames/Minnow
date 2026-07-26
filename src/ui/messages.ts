@@ -1,6 +1,7 @@
 import { isHubMounted, renderHub, refreshHubLiveData, teardownHub } from './hub';
 import { isOrchestrateHubMounted, teardownOrchestrateHub } from './orchestrate-hub';
 import { teardownCodeBrainMapBeforeChatPaint } from './code-brain-map';
+import { teardownIssuesEmbedBeforeChatPaint } from './issues-page';
 import {
   isMainColumnOverlaySuppressingChatDom,
   stripMainColumnOverlayClasses,
@@ -136,7 +137,7 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   const codeMount = isCodeChatMount(mount);
   const scrollAnchor = captureChatScrollAnchor();
 
-  // Code overview / code map own #chatArea — do not repaint chat or board underneath.
+  // Code overview / code map / Issues embed own #chatArea — do not repaint underneath.
   if (codeMount && isMainColumnOverlaySuppressingChatDom()) {
     return;
   }
@@ -146,6 +147,7 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   try {
   if (codeMount) {
     teardownCodeBrainMapBeforeChatPaint();
+    teardownIssuesEmbedBeforeChatPaint();
     stripMainColumnOverlayClasses();
   }
   updateCodeChangeStrip(chat);
@@ -201,7 +203,7 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   if (!chat.history.length) {
     if (codeMount) {
       renderHub(chat);
-      renderPersistedSubAgentCardsForChat(chat);
+      // Sub-agent cards mount in the transcript only (see sub-agent-cards.ts).
     } else {
       area.innerHTML = '';
       renderPersistedSubAgentCardsForChat(chat);

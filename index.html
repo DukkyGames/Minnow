@@ -383,7 +383,7 @@
 
 <main id="settingsView" class="settings-page" aria-label="Settings">
   <header class="settings-page-header">
-    <button type="button" class="icon-btn" id="btnSettingsPageBack" aria-label="Back to chat">
+    <button type="button" class="icon-btn" id="btnSettingsPageBack" aria-label="Back to Code">
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
     </button>
     <div id="settingsSearchFinderSlot" class="settings-search-finder-slot">
@@ -1896,18 +1896,32 @@
       </div>
     </div>
     <div class="issues-list-pane">
-      <div id="issuesListHead" class="issues-list-head" hidden>
+      <div id="issuesListHead" class="issues-list-head" hidden role="row">
         <label class="issues-list-head__select issues-select-cell">
           <span class="visually-hidden">Select all visible issues</span>
           <input type="checkbox" id="issuesSelectAll" aria-label="Select all visible issues">
         </label>
-        <span class="issues-list-head__id">ID</span>
-        <span class="issues-list-head__type">Type</span>
-        <span class="issues-list-head__title">Title</span>
-        <span class="issues-list-head__status">Status</span>
-        <span class="issues-list-head__priority">Priority</span>
-        <span class="issues-list-head__labels">Labels</span>
-        <span class="issues-list-head__updated">Updated</span>
+        <button type="button" class="issues-list-head__sort issues-list-head__id" data-sort-key="id" aria-sort="none">
+          ID<span class="issues-list-head__sort-indicator" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="issues-list-head__sort issues-list-head__type" data-sort-key="type" aria-sort="none">
+          Type<span class="issues-list-head__sort-indicator" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="issues-list-head__sort issues-list-head__title" data-sort-key="title" aria-sort="none">
+          Title<span class="issues-list-head__sort-indicator" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="issues-list-head__sort issues-list-head__status" data-sort-key="status" aria-sort="none">
+          Status<span class="issues-list-head__sort-indicator" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="issues-list-head__sort issues-list-head__priority" data-sort-key="priority" aria-sort="none">
+          Priority<span class="issues-list-head__sort-indicator" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="issues-list-head__sort issues-list-head__labels" data-sort-key="labels" aria-sort="none">
+          Labels<span class="issues-list-head__sort-indicator" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="issues-list-head__sort issues-list-head__updated" data-sort-key="updated" aria-sort="descending">
+          Updated<span class="issues-list-head__sort-indicator" aria-hidden="true"></span>
+        </button>
         <span class="issues-list-head__actions" aria-hidden="true"></span>
       </div>
       <div id="issuesPanelMount" class="issues-main" role="region" aria-label="Issues"></div>
@@ -2069,8 +2083,7 @@
     </div>
     <div class="chat-sidebar-footer">
       <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnAllBugs" aria-label="Issues" title="Issues">
-        <img class="icon-img" src="/icons/bugs.png" width="18" height="18" alt="" aria-hidden="true">
-        <span class="chat-all-bugs-count" id="btnAllBugsCount" hidden aria-hidden="true"></span>
+        <img class="icon-img" src="/icons/issue_tracker.svg" width="18" height="18" alt="" aria-hidden="true">
       </button>
       <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnStats" aria-label="Inference metrics" aria-expanded="false" aria-controls="statsStrip" title="Inference metrics">
         <img class="icon-img" src="/icons/stats.png" width="18" height="18" alt="" aria-hidden="true">

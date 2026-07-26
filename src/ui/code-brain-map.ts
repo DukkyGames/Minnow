@@ -151,6 +151,8 @@ async function closeCompetingMainColumnViews(): Promise<void> {
   if (overview.isCodeOverviewOpen()) {
     overview.closeCodeOverview({ skipNavigate: true, restoreChat: false });
   }
+  const { teardownIssuesEmbedBeforeChatPaint } = await import('./issues-page');
+  teardownIssuesEmbedBeforeChatPaint();
 }
 
 /** Open the Brain code section inside the Code app main column. */

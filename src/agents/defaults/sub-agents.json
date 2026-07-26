@@ -228,11 +228,15 @@
       "modelId": "",
       "maxConcurrent": 1,
       "timeoutMs": 300000,
-      "workAgentId": "planner",
+      "workAgentId": null,
       "allowedTools": null,
       "deniedTools": [
         "spawn_sub_agent",
-        "cancel_sub_agent"
+        "cancel_sub_agent",
+        "ask_question",
+        "propose_mode_switch",
+        "create_chat_with_mode",
+        "set_chat_mode"
       ],
       "systemPromptPath": null,
       "summarySchema": "minnow.sub-agent.v1",

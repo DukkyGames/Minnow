@@ -64,6 +64,8 @@ const LEGACY_AGENT_AREA_ALIASES: Partial<Record<string, SettingsSectionId>> = {
 let activeCategory: SettingsCategoryId = 'general';
 let activeArea: SettingsSectionId = 'general';
 let staticBindingsDone = false;
+/** Guards against duplicate back/hash listeners (HMR, races, or double ensureAppInitialized). */
+let pageInitialized = false;
 /** Pending area scroll after category panel opens (legacy hash or deep link). */
 let pendingScrollArea: SettingsSectionId | null = null;
 /** Pending field flash after navigation. */
@@ -402,7 +404,7 @@ export function openSettings(
   });
 }
 
-/** Close settings and return to chat or desktop. */
+/** Close settings and return to Code, the window stack, or desktop. */
 export function closeSettings(options?: { skipNavigate?: boolean }): void {
   if (!options?.skipNavigate && isOsEmbedded() && closeSettingsAndReturnToCode()) {
     return;
@@ -411,6 +413,8 @@ export function closeSettings(options?: { skipNavigate?: boolean }): void {
   const root = getSettingsRoot();
   const shell = getChatShell();
   if (!root || !shell) return;
+  // Skip desktop fallback when Settings is already closed (duplicate back handlers).
+  const wasOpen = root.classList.contains('is-open');
   root.classList.remove('is-open');
   clearSettingsPageFilter();
   if (!isOsEmbedded()) {
@@ -419,7 +423,7 @@ export function closeSettings(options?: { skipNavigate?: boolean }): void {
     if (!options?.skipNavigate && window.location.hash.startsWith('#/settings')) {
       window.location.hash = '#/';
     }
-  } else if (!options?.skipNavigate) {
+  } else if (!options?.skipNavigate && wasOpen) {
     if (!requestCloseWindowApp('settings')) {
       navigateToDesktop();
     }
@@ -460,6 +464,11 @@ function onHashChange(): void {
 
 /** Wire nav, back button, hash routing, and in-page filter hooks. */
 export function initSettingsPage(): void {
+  // Idempotent: a second bind would stack back handlers that fall through to desktop
+  // after the first handler already restored Code.
+  if (pageInitialized) return;
+  pageInitialized = true;
+
   const root = getSettingsRoot();
   if (root && isOsEmbedded()) {
     root.classList.add('settings-page--os-embedded');
@@ -477,10 +486,7 @@ export function initSettingsPage(): void {
   document
     .getElementById('btnSettingsPageBack')
     ?.addEventListener('click', () => {
-      if (requestCloseWindowApp('settings')) return;
-      if (closeSettingsAndReturnToCode()) return;
-      if (isOsEmbedded()) navigateToDesktop();
-      else closeSettings();
+      closeSettings();
     });
 
   window.addEventListener('hashchange', onHashChange);
@@ -489,6 +495,12 @@ export function initSettingsPage(): void {
   }
 
   void detectLocalServer();
+}
+
+/** Reset page init guards (tests). */
+export function resetSettingsPageForTests(): void {
+  pageInitialized = false;
+  staticBindingsDone = false;
 }
 
 /** Topbar gear opens full settings instead of drawer when available. */

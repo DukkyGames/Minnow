@@ -99,6 +99,10 @@ export function buildIssuePlanBackgroundTask(issue: IssueCard, planPath: string)
     '',
     'Use documentation/plans/issues/ structure with Context, Key Files, Waves, and todos front-matter.',
     'Do not implement the fix — plan only.',
+    '',
+    'This is unattended background work — the user is not watching this chat.',
+    'Do not ask clarifying questions, call ask_question, or propose_mode_switch.',
+    'Explore the codebase as needed, save the plan file, then stop with a one-line summary of the path.',
   ].join('\n');
 }
 
@@ -127,6 +131,39 @@ export function buildIssueDebugSeed(issue: IssueCard): string {
   ].join('\n');
 }
 
+/** Composer modes offered in Send to chat. */
+export const ISSUE_FOREGROUND_CHAT_MODES = ['general', 'build', 'plan', 'debug'] as const;
+
+export type IssueForegroundChatMode = (typeof ISSUE_FOREGROUND_CHAT_MODES)[number];
+
+/** Background sub-agent modes offered in Send to background. */
+export const ISSUE_BACKGROUND_CHAT_MODES = ['debug', 'plan'] as const;
+
+export type IssueBackgroundChatMode = (typeof ISSUE_BACKGROUND_CHAT_MODES)[number];
+
+/** Seed for General / Build foreground chats seeded from an issue. */
+export function buildIssueForegroundSeed(
+  issue: IssueCard,
+  modeId: 'general' | 'build',
+): string {
+  const lead =
+    modeId === 'build'
+      ? 'Work on this issue in Build mode.'
+      : 'Discuss and triage this issue in General mode.';
+  return [lead, '', buildIssueContextBlock(issue)].join('\n');
+}
+
+/** Map a foreground mode id to its issue seed text. */
+export function buildIssueForegroundModeSeed(
+  issue: IssueCard,
+  modeId: IssueForegroundChatMode,
+  planPath?: string,
+): string {
+  if (modeId === 'plan') return buildIssuePlanSeed(issue, planPath);
+  if (modeId === 'debug') return buildIssueDebugSeed(issue);
+  return buildIssueForegroundSeed(issue, modeId);
+}
+
 /** Resolve default plan path for an issue (existing or canonical). */
 export function resolveIssuePlanPath(issue: IssueCard): string {
   return issue.planPath?.trim() || issuePlanPathForId(issue.id);
@@ -147,6 +184,11 @@ export function canRunIssueWorkflow(issue: IssueCard): boolean {
   return issue.status !== 'canceled' && issue.status !== 'done';
 }
 
+/** What the workflow activity chip can open (pure; chat ids resolved at click time). */
+export type IssueActivityTarget =
+  | { kind: 'sub_agent'; runId: string }
+  | { kind: 'board_chat'; chatId: string };
+
 /** Activity chip label derived from linked runs (no extra status enum). */
 export function issueActivityChip(issue: IssueCard): string | null {
   if (issue.status === 'review') return 'In review';
@@ -163,6 +205,25 @@ export function issueActivityChip(issue: IssueCard): string | null {
     !issue.boardChatId
   ) {
     return 'Investigating…';
+  }
+  return null;
+}
+
+/** Resolve the activity chip to an openable target (null when the chip is display-only). */
+export function issueActivityTarget(issue: IssueCard): IssueActivityTarget | null {
+  if (issue.boardChatId && issue.status === 'in_progress') {
+    return { kind: 'board_chat', chatId: issue.boardChatId };
+  }
+  if (issue.planRunId && issue.status === 'in_progress' && !issue.boardChatId) {
+    return { kind: 'sub_agent', runId: issue.planRunId };
+  }
+  if (
+    issue.investigateRunId &&
+    issue.status === 'in_progress' &&
+    !issue.notes?.trim() &&
+    !issue.boardChatId
+  ) {
+    return { kind: 'sub_agent', runId: issue.investigateRunId };
   }
   return null;
 }

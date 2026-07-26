@@ -28,14 +28,18 @@ import type { Chat, IssueCard } from '../../types.ts';
 import { buildIssueExpandTask, canExpandIssueWithAgent } from './expand-task.ts';
 import {
   buildIssueDebugSeed,
+  buildIssueForegroundModeSeed,
   buildIssueInvestigateTask,
   buildIssuePlanBackgroundTask,
   buildIssuePlanSeed,
   canInvestigateIssue,
   canRunIssueWorkflow,
   canSendIssueToBoard,
+  issueActivityTarget,
   issueCodeRefsToLaunch,
   resolveIssuePlanPath,
+  type IssueBackgroundChatMode,
+  type IssueForegroundChatMode,
 } from './workflow-seeds.ts';
 
 export { buildIssueExpandTask, canExpandIssueWithAgent } from './expand-task.ts';
@@ -43,16 +47,21 @@ export { markIssuesReviewForBoardComplete } from './board-review.ts';
 export {
   buildIssueContextBlock,
   buildIssueDebugSeed,
+  buildIssueForegroundModeSeed,
   buildIssueInvestigateTask,
   buildIssuePlanBackgroundTask,
   buildIssuePlanSeed,
   canInvestigateIssue,
+  ISSUE_BACKGROUND_CHAT_MODES,
+  ISSUE_FOREGROUND_CHAT_MODES,
   canRunIssueWorkflow,
   canSendIssueToBoard,
   issueActivityChip,
+  issueActivityTarget,
   issueCodeRefsToLaunch,
   resolveIssuePlanPath,
 } from './workflow-seeds.ts';
+export type { IssueActivityTarget } from './workflow-seeds.ts';
 
 /**
  * Spawn issue-writer for a triage note; settle leaves status as triage.
@@ -106,6 +115,46 @@ export async function runIssueExpandWithAgent(
   }
 }
 
+/** Parent chat for a workflow sub-agent run (live registry, persisted snapshot, or last link). */
+export function resolveIssueSubAgentChatId(
+  issue: IssueCard,
+  runId: string,
+): string | null {
+  const live = getSubAgentRun(runId);
+  if (live?.parentChatId?.trim()) return live.parentChatId.trim();
+
+  for (const chatId of issue.chatIds ?? []) {
+    const id = chatId?.trim();
+    if (!id) continue;
+    const chat = findChatById(id);
+    if (chat?.subAgentRuns?.some((row) => row.runId === runId)) return id;
+  }
+
+  const last = issue.chatIds?.at(-1)?.trim();
+  return last || null;
+}
+
+/** Open the sub-agent drawer or board chat behind the workflow activity chip. */
+export async function openIssueActivity(issue: IssueCard): Promise<boolean> {
+  const target = issueActivityTarget(issue);
+  if (!target) return false;
+
+  const { switchChat } = await import('../../ui/sidebar.ts');
+
+  if (target.kind === 'board_chat') {
+    switchChat(target.chatId);
+    return true;
+  }
+
+  const chatId = resolveIssueSubAgentChatId(issue, target.runId);
+  if (!chatId) return false;
+
+  switchChat(chatId);
+  const { openSubAgentDrawer } = await import('../../ui/sub-agent-drawer.ts');
+  openSubAgentDrawer(target.runId, chatId);
+  return true;
+}
+
 /** Create or reuse a workflow chat linked on the issue (Investigate / background Plan). */
 function ensureIssueWorkflowChat(issue: IssueCard, namePrefix: string): Chat | null {
   const existingId = issue.chatIds?.length
@@ -143,7 +192,7 @@ function ensureIssueWorkflowChat(issue: IssueCard, namePrefix: string): Chat | n
 
 /** Foreground Code (no seed) then apply seeded launch; returns new chat id when created. */
 async function launchCodeSeededChat(options: {
-  modeId: 'plan' | 'debug';
+  modeId: IssueForegroundChatMode;
   seed: string;
   workspacePath?: string;
   codeRefs?: ReturnType<typeof issueCodeRefsToLaunch>;
@@ -322,20 +371,34 @@ export async function runIssuePlanBackground(
 export async function runIssueDebugChat(
   issueId: string,
 ): Promise<{ ok: boolean; error?: string; chatId?: string }> {
+  return runIssueForegroundChat(issueId, 'debug');
+}
+
+/**
+ * Foreground chat: open Code in the chosen composer mode with issue context seeded.
+ */
+export async function runIssueForegroundChat(
+  issueId: string,
+  modeId: IssueForegroundChatMode,
+): Promise<{ ok: boolean; error?: string; chatId?: string; planPath?: string }> {
   const issue = findIssueById(issueId);
   if (!issue) return { ok: false, error: 'Issue not found' };
   if (!canRunIssueWorkflow(issue)) {
     return { ok: false, error: 'Issue is closed' };
   }
 
-  const seed = buildIssueDebugSeed(issue);
+  if (modeId === 'plan') {
+    return runIssuePlanChat(issueId);
+  }
+
+  const seed = buildIssueForegroundModeSeed(issue, modeId);
   const codeRefs = issueCodeRefsToLaunch(issue);
 
   updateIssue(issueId, { status: 'in_progress' });
 
   try {
     const { chatId } = await launchCodeSeededChat({
-      modeId: 'debug',
+      modeId,
       seed,
       workspacePath: issue.workspacePath,
       codeRefs,
@@ -349,6 +412,17 @@ export async function runIssueDebugChat(
 }
 
 /**
+ * Background chat: spawn a sub-agent for the chosen mode (debugger or planner).
+ */
+export async function runIssueBackgroundChat(
+  issueId: string,
+  modeId: IssueBackgroundChatMode,
+): Promise<{ ok: boolean; error?: string; chatId?: string; planPath?: string }> {
+  if (modeId === 'debug') return runIssueInvestigate(issueId);
+  return runIssuePlanBackground(issueId);
+}
+
+/**
  * Send to board: requires planPath; launchBoardFromPlan; store boardChatId; status → in_progress.
  */
 export async function runIssueSendToBoard(
@@ -357,7 +431,7 @@ export async function runIssueSendToBoard(
   const issue = findIssueById(issueId);
   if (!issue) return { ok: false, error: 'Issue not found' };
   if (!canSendIssueToBoard(issue)) {
-    return { ok: false, error: 'Save a plan first (Plan or Plan in background)' };
+    return { ok: false, error: 'Save a plan first (Send to chat or Send to background in Plan mode)' };
   }
 
   const planPath = issue.planPath!.trim();
@@ -382,6 +456,32 @@ export async function runIssueSendToBoard(
     const message = err instanceof Error ? err.message : String(err);
     return { ok: false, error: message };
   }
+}
+
+/**
+ * Open an issue plan markdown file in the Code viewer.
+ * Foregrounds Code when Issues is fullscreen; no-op switch when already in Code (embed).
+ */
+export async function openIssuePlanInEditor(
+  planPath: string,
+  workspacePath?: string,
+): Promise<void> {
+  const path = planPath.trim();
+  if (!path) return;
+
+  const { getForegroundAppId } = await import('../../os/instances.ts');
+  if (getForegroundAppId() !== 'code') {
+    const { launchApp } = await import('../../os/router.ts');
+    launchApp('code', {
+      codeSection: 'chat',
+      workspacePath: workspacePath?.trim() || undefined,
+    });
+    // Let hash/route settle before opening the viewer tab.
+    await new Promise((r) => setTimeout(r, 0));
+  }
+
+  const { openFileInViewer } = await import('../../ui/file-viewer.ts');
+  await openFileInViewer(path);
 }
 
 /** Path helper re-export for callers that import from pipeline. */

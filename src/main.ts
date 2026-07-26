@@ -340,8 +340,6 @@ export async function initApp(): Promise<void> {
   await refreshTerminalHistoryForActiveChat();
   const { ensureBootAppsInitialized } = await import('./os/app-modules');
   await ensureBootAppsInitialized();
-  const issuesPage = await import('./ui/issues-page');
-  issuesPage.refreshIssuesSidebarBadge();
   await fetchModels();
   syncModelSelectForActiveChat();
   syncModelSelectPicker();

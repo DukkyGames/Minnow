@@ -763,7 +763,6 @@ export function renderSidebar(): void {
       renderExpertScopeHeader(expertId);
       renderExpertScopeChatList(expertId, getActiveChat().id);
     }
-    void import('./issues-page').then((m) => m.refreshIssuesSidebarBadge());
     return;
   }
 
@@ -817,7 +816,6 @@ export function renderSidebar(): void {
   appendChatListSection(list, 'Unassigned', unassigned, highlightChatId);
   syncChatItemDotsInDom();
   syncChatItemLoopIconsInDom();
-  void import('./issues-page').then((m) => m.refreshIssuesSidebarBadge());
 }
 
 function showMultiSelectContextMenu(x: number, y: number, chatIds: string[]): void {

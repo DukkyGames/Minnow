@@ -34,6 +34,7 @@ import { switchChat } from './sidebar';
 import { renderChatFromHistory } from './messages';
 import { closeCodeOverview, isCodeOverviewOpen } from './code-overview';
 import { teardownCodeBrainMapBeforeChatPaint } from './code-brain-map';
+import { teardownIssuesEmbedBeforeChatPaint } from './issues-page';
 import { stripMainColumnOverlayClasses } from './main-column-overlay';
 import { teardownHub } from './hub';
 import {
@@ -567,6 +568,7 @@ export function renderOrchestrateHub(): void {
   teardownOrchestratePlanScreen();
   teardownHub();
   teardownCodeBrainMapBeforeChatPaint();
+  teardownIssuesEmbedBeforeChatPaint();
   if (isCodeOverviewOpen()) {
     closeCodeOverview({ skipNavigate: true, restoreChat: false });
   }

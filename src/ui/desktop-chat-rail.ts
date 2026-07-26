@@ -322,6 +322,14 @@ export function wireDesktopChatRail(): void {
     });
   }
 
+  const newChatTab = document.getElementById('btnDesktopChatRailNew');
+  if (newChatTab && newChatTab.dataset.bound !== '1') {
+    newChatTab.dataset.bound = '1';
+    newChatTab.addEventListener('click', () => {
+      void createNewDesktopChat();
+    });
+  }
+
   void refreshDesktopChatRail();
 }
 
