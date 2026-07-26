@@ -124,6 +124,9 @@ async function defaultDeliverResume(
 ): Promise<void> {
   const chat = findChatById(chatId);
   if (!chat) return;
+  // Category-3: hydrate before resume mutates history (runChatTurn also awaits).
+  const { ensureChatHistoryLoaded } = await import('../state/sessions');
+  await ensureChatHistoryLoaded(chatId);
   const { resumeParentChatWithMessage } = await import('../tools/loop');
   await resumeParentChatWithMessage(chat, message, { suppressUserEcho: true });
 }

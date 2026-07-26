@@ -27,6 +27,7 @@ import {
   setSessionPatchDirtySetsReadyForTests,
   setSessionStateForTests,
   setSessionsClientPatchEnabledForTests,
+  setSessionsLazyHistoryEnabledForTests,
   touchChat,
   waitForSessionSaveForTests,
 } from '../../src/state/sessions.ts';
@@ -38,6 +39,57 @@ const GROUP_ID = 'grp_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 function restoreFetch(): void {
   // @ts-expect-error test cleanup
   delete globalThis.fetch;
+}
+
+/**
+ * Mock GET for C.2 lazy boot: summaries omit history; history/:id returns full messages.
+ * Whole-blob GET remains for flag-off tests / export paths.
+ */
+function mockSessionsGet(payload: SessionState | Record<string, unknown>): typeof fetch {
+  return async (input, init) => {
+    const url = String(input);
+    if (url.includes('/api/config/sessions') && (!init?.method || init.method === 'GET')) {
+      if (url.includes('/sessions/history/')) {
+        const chatId = decodeURIComponent(url.split('/sessions/history/')[1]?.split('?')[0] ?? '');
+        const chats = Array.isArray((payload as SessionState).chats)
+          ? (payload as SessionState).chats
+          : [];
+        const chat = chats.find((c) => c.id === chatId);
+        return new Response(JSON.stringify({ chatId, history: chat?.history ?? [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/sessions/summaries')) {
+        const chats = Array.isArray((payload as SessionState).chats)
+          ? (payload as SessionState).chats
+          : [];
+        const summaries = chats.map((chat) => {
+          const history = Array.isArray(chat.history) ? chat.history : [];
+          const last = history.length ? history[history.length - 1] : null;
+          const { history: _drop, ...rest } = chat;
+          void _drop;
+          return {
+            ...rest,
+            messageCount: history.length,
+            lastMessagePreview:
+              last && typeof last === 'object' && typeof (last as { content?: unknown }).content === 'string'
+                ? String((last as { content: string }).content).slice(0, 240)
+                : '',
+          };
+        });
+        return new Response(JSON.stringify({ ...payload, chats: summaries }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  };
 }
 
 describe('session persistence (MIN-408 + B.2)', () => {
@@ -106,22 +158,16 @@ describe('session persistence (MIN-408 + B.2)', () => {
       ],
     };
 
-    globalThis.fetch = async (input, init) => {
-      const url = String(input);
-      if (url.includes('/api/config/sessions') && (!init?.method || init.method === 'GET')) {
-        return new Response(JSON.stringify(serverPayload), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
-    };
+    globalThis.fetch = mockSessionsGet(serverPayload);
 
     await loadSessionsFromStorage({ force: true });
 
     assert.equal(sessionState?.activeId, SAVED_CHAT_ID);
     assert.equal(sessionState?.chats.length, 1);
     assert.equal(sessionState?.chats[0]?.name, 'Persisted chat');
+    // C.2 lazy boot hydrates the active chat's full history after summaries.
+    assert.equal(sessionState?.chats[0]?.historyLoaded, true);
+    assert.equal(sessionState?.chats[0]?.history[0]?.content, 'hello');
     assert.equal(isSessionsHydratedFromServerForTests(), true);
     assert.equal(getSessionDirtyTrackingForTests().sessionPatchDirtySetsReady, false);
   });
@@ -131,16 +177,7 @@ describe('session persistence (MIN-408 + B.2)', () => {
     setSessionStateForTests(defaultSessionState());
     resetSessionPersistenceForTests();
 
-    globalThis.fetch = async (input, init) => {
-      const url = String(input);
-      if (url.includes('/api/config/sessions') && (!init?.method || init.method === 'GET')) {
-        return new Response(JSON.stringify(defaultSessionState()), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
-    };
+    globalThis.fetch = mockSessionsGet(defaultSessionState());
 
     await loadSessionsFromStorage({ force: true });
     assert.equal(getSessionDirtyTrackingForTests().sessionPatchDirtySetsReady, false);
@@ -263,16 +300,7 @@ describe('session persistence (MIN-408 + B.2)', () => {
     setSessionStateForTests(defaultSessionState());
     resetSessionPersistenceForTests();
 
-    globalThis.fetch = async (input, init) => {
-      const url = String(input);
-      if (url.includes('/api/config/sessions') && (!init?.method || init.method === 'GET')) {
-        return new Response(JSON.stringify(defaultSessionState()), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
-    };
+    globalThis.fetch = mockSessionsGet(defaultSessionState());
 
     await loadSessionsFromStorage({ force: true });
     // Establish trusted dirty sets via a baseline PUT.
@@ -341,6 +369,31 @@ describe('session persistence (MIN-408 + B.2)', () => {
     flushPendingSessionSaveOnShutdown();
     assert.equal(beaconCalls, 0);
     assert.equal(keepalivePut, true);
+  });
+
+  test('lazy-history flag off still boots via whole-blob GET', async () => {
+    setStorageModeForTests('server');
+    setSessionStateForTests(defaultSessionState());
+    resetSessionPersistenceForTests();
+    setSessionsLazyHistoryEnabledForTests(false);
+
+    const paths: string[] = [];
+    globalThis.fetch = async (input, init) => {
+      const url = String(input);
+      if (url.includes('/api/config/sessions') && (!init?.method || init.method === 'GET')) {
+        paths.push(url);
+        return new Response(JSON.stringify(defaultSessionState()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    await loadSessionsFromStorage({ force: true });
+    assert.ok(paths.some((p) => p.includes('/api/config/sessions') && !p.includes('summaries')));
+    assert.ok(!paths.some((p) => p.includes('/summaries')));
+    assert.equal(sessionState?.chats.every((c) => c.historyLoaded !== false), true);
   });
 
   test('sessionsClientPatchEnabled=false forces full PUT', async () => {

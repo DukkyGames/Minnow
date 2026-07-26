@@ -132,6 +132,36 @@ export async function getChatHistory(
   return Array.isArray(body.history) ? body.history : [];
 }
 
+/** One hit from GET /api/config/sessions/search (FTS5 / JSON fallback). */
+export interface SessionSearchHit {
+  chatId: string;
+  name: string;
+  workspacePath: string;
+  lastMessageAt?: number;
+  score: number;
+  matchedIn: 'title' | 'message';
+  role?: 'user' | 'assistant';
+  snippet: string;
+}
+
+/**
+ * GET /api/config/sessions/search?q= — server FTS over titles + message bodies (C.2).
+ */
+export async function searchSessions(
+  query: string,
+  opts?: { workspace?: string; limit?: number },
+): Promise<SessionSearchHit[]> {
+  const params = new URLSearchParams();
+  params.set('q', query);
+  if (opts?.workspace != null && opts.workspace !== '') {
+    params.set('workspace', opts.workspace);
+  }
+  if (opts?.limit != null) params.set('limit', String(opts.limit));
+  const res = await fetch(`/api/config/sessions/search?${params}`, { cache: 'no-store' });
+  const body = await parseJsonResponse<{ results: SessionSearchHit[] }>(res);
+  return Array.isArray(body.results) ? body.results : [];
+}
+
 /** GET /api/config/bugs */
 export async function getBugs(): Promise<BugsState> {
   const res = await fetch('/api/config/bugs', { cache: 'no-store' });

@@ -12,11 +12,6 @@ import {
   clearOomPauseFromElectron,
 } from '../chat/orchestrate/oom-recovery.ts';
 import {
-  isTerminalBoardTaskStatus,
-  trimIdleBoardTaskChats,
-  trimTaskRelatedChats,
-} from '../chat/orchestrate/task-history-trim.ts';
-import {
   isChatStreaming,
   notifyChatStreamEnded,
   subscribeChatStreamActivity,
@@ -415,30 +410,6 @@ function recordTaskChatNudgeCallForTests(taskId: string, chatId: string): void {
 
 function recordStallSelfHealCallForTests(taskId: string): void {
   stallSelfHealCallsForTests?.push(taskId);
-}
-
-/** True when a chat id is linked to a board task row or final integration test. */
-function isBoardLinkedChatId(
-  board: NonNullable<ChatGroup['orchestrateBoard']>,
-  chatId: string,
-): boolean {
-  if (board.finalTest?.chatId?.trim() === chatId) return true;
-  return board.tasks.some(
-    (task) =>
-      task.chatId?.trim() === chatId ||
-      task.testChatId?.trim() === chatId ||
-      task.fixerChatId?.trim() === chatId,
-  );
-}
-
-/**
- * After a board task chat turn ends, collapse idle tool transcripts so concurrent
- * AFK runs do not retain full histories for every builder/tester in RAM.
- */
-function trimBoardMemoryAfterChatTurn(group: ChatGroup, endedChatId: string): void {
-  const board = group.orchestrateBoard;
-  if (!board || !isBoardLinkedChatId(board, endedChatId)) return;
-  trimIdleBoardTaskChats(board, sessionState?.activeId ?? null, findChatById);
 }
 
 function recordFixerStallStopForTests(taskId: string, chatId: string): void {
@@ -1169,7 +1140,6 @@ function ensureStreamEndSubscription(): void {
         if (finalChatId && endedChatId === finalChatId) {
           streamEndMatched = true;
           finalizeFinalTestOnStreamEnd(group, planner);
-          trimBoardMemoryAfterChatTurn(group, endedChatId);
           safeDrain(group, planner);
           continue;
         }
@@ -1178,7 +1148,6 @@ function ensureStreamEndSubscription(): void {
         if (taskByBuild) {
           streamEndMatched = true;
           finalizeBoardTaskOnStreamEnd(group, taskByBuild, planner);
-          trimBoardMemoryAfterChatTurn(group, endedChatId);
           safeDrain(group, planner);
           continue;
         }
@@ -1190,7 +1159,6 @@ function ensureStreamEndSubscription(): void {
           if (testChat) {
             teardownBoardTaskChatResources(testChat, sessionState?.groups);
           }
-          trimBoardMemoryAfterChatTurn(group, endedChatId);
           void finalizeTaskTestingOnStreamEnd(group, taskByTest, planner)
             .then(() => safeDrain(group, planner))
             .catch((err) => reportBackgroundError('finalize-task-testing', err));
@@ -1202,7 +1170,6 @@ function ensureStreamEndSubscription(): void {
           taskByFixer ?? resolveFixerTaskForStreamEnd(board, endedChatId);
         if (fixerTask) {
           streamEndMatched = true;
-          trimBoardMemoryAfterChatTurn(group, endedChatId);
           const finalize =
             fixerTask.fixerKind === 'env'
               ? finalizeEnvFixerOnStreamEnd(group, fixerTask, planner, endedChatId)
@@ -3887,17 +3854,6 @@ export function moveTaskStatus(
           return mod.deliverOrchestratorTaskReport(group, plannerChat, task, status);
         })
         .catch((err) => reportBackgroundError('deliver-task-report', err));
-    }
-  }
-  if (isTerminalBoardTaskStatus(status)) {
-    const task = group.orchestrateBoard?.tasks.find((t) => t.id === taskId);
-    if (task) {
-      trimTaskRelatedChats(task, sessionState?.activeId ?? null, findChatById);
-    }
-  } else if (status === 'testing') {
-    const task = group.orchestrateBoard?.tasks.find((t) => t.id === taskId);
-    if (task) {
-      trimTaskRelatedChats(task, sessionState?.activeId ?? null, findChatById);
     }
   }
 }

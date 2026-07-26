@@ -16,18 +16,18 @@
 - [x] **B.1** — Shared `session-schema.mjs` + dirty tracking (telemetry only)
 - [x] **B.2** — Flip to PATCH + beacon size branch
 - [x] **C.1** — Summaries + `ensureChatHistoryLoaded` + dev trap (flag off)
-- [ ] **C.2** — FTS5 search route, delete `task-history-trim.ts`, flip flag (`sessionsLazyHistoryEnabled`)
-- [ ] **Docs** — Update `context.md`, architecture/configuration guides, `server-session-engine.md`
+- [x] **C.2** — FTS5 search route, delete `task-history-trim.ts`, flip flag (`sessionsLazyHistoryEnabled`)
+- [x] **Docs** — Update `context.md`, architecture/configuration guides, `server-session-engine.md`
 - [ ] **Verify** — Full test suite + e2e reload survival checks
 
-### C.1 notes (flag OFF by default)
+### C.2 notes (flag ON by default)
 
-- Flag: `sessionsLazyHistoryEnabled` (default **false**). Test setter: `setSessionsLazyHistoryEnabledForTests`.
-- When off: boot still uses whole-blob `GET /api/config/sessions`; all chats get `historyLoaded: true`.
-- When on (tests / C.2): boot uses `GET /api/config/sessions/summaries`; `ensureChatHistoryLoaded` fetches `GET /api/config/sessions/history/:chatId`.
+- Flag: `sessionsLazyHistoryEnabled` (default **true**). Test setter: `setSessionsLazyHistoryEnabledForTests`.
+- Boot uses `GET /api/config/sessions/summaries` (meta_json + non-message children; no `history` key).
+- `ensureChatHistoryLoaded` fetches **full** `GET /api/config/sessions/history/:chatId` (never page into archive / turn-run absolute indices).
+- FTS5: `GET /api/config/sessions/search?q=` via `messages_fts`; pure scorer in `src/chat/chat-search.ts` for localStorage / JSON-store fallback.
+- Deleted `src/chat/orchestrate/task-history-trim.ts` — lazy unload replaces RAM trimming.
 - DEV trap logs on first `history` read while `historyLoaded === false` (flag on + DEV).
-- `requireHistory(chat)` exported; category-3 stubs in goal evaluate / loop ticker / orchestrator report.
-- Do **not** page history into archive / turn-run index consumers — load entire history.
 
 ## Context (summary)
 

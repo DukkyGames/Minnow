@@ -71,38 +71,6 @@ import {
   normalizeChatRow,
   normalizeGroupRow,
 } from './session-schema.mjs';
-const GENERATION_ID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-/** Normalize persisted backend generation id (invalid values are dropped). */
-function ensureCurrentGenerationId(raw: unknown): string | undefined {
-  if (typeof raw !== 'string') return undefined;
-  const id = raw.trim();
-  return GENERATION_ID_RE.test(id) ? id : undefined;
-}
-
-/**
- * Drop generation ids that cannot still be in-flight (finished assistant already saved).
- */
-export function clearStaleGenerationIdsOnLoad(chats: Chat[]): void {
-  for (const chat of chats) {
-    const id = ensureCurrentGenerationId(chat.currentGenerationId);
-    if (!id) {
-      if (chat.currentGenerationId != null) {
-        delete chat.currentGenerationId;
-      }
-      continue;
-    }
-    chat.currentGenerationId = id;
-    const last = chat.history[chat.history.length - 1];
-    if (last?.role === 'assistant') {
-      const text = typeof last.content === 'string' ? last.content.trim() : '';
-      if (text.length > 0) {
-        delete chat.currentGenerationId;
-      }
-    }
-  }
-}
 import type {
   ActiveGoalState,
   ActiveLoopState,
@@ -116,6 +84,42 @@ import type {
   SessionSummariesState,
 } from '../types';
 import { SESSION_SCHEMA_VERSION } from '../types';
+
+const GENERATION_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Normalize persisted backend generation id (invalid values are dropped). */
+function ensureCurrentGenerationId(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const id = raw.trim();
+  return GENERATION_ID_RE.test(id) ? id : undefined;
+}
+
+/**
+ * Drop generation ids that cannot still be in-flight (finished assistant already saved).
+ * Skips chats whose history is not loaded yet (lazy boot) — re-run after ensure.
+ */
+export function clearStaleGenerationIdsOnLoad(chats: Chat[]): void {
+  for (const chat of chats) {
+    const id = ensureCurrentGenerationId(chat.currentGenerationId);
+    if (!id) {
+      if (chat.currentGenerationId != null) {
+        delete chat.currentGenerationId;
+      }
+      continue;
+    }
+    chat.currentGenerationId = id;
+    // Unloaded histories are empty placeholders — do not treat that as "no assistant yet".
+    if (chat.historyLoaded === false) continue;
+    const last = chat.history[chat.history.length - 1];
+    if (last?.role === 'assistant') {
+      const text = typeof last.content === 'string' ? last.content.trim() : '';
+      if (text.length > 0) {
+        delete chat.currentGenerationId;
+      }
+    }
+  }
+}
 
 const MAX_CHAT_TODO_ITEMS = 20;
 const MAX_CHAT_TODO_TEXT_CHARS = 140;
@@ -158,10 +162,10 @@ let dirtyTrackingVerifierForced = false;
  */
 let sessionsClientPatchEnabled = true;
 /**
- * C.1 flag: when true, boot loads chat summaries and fetches history on demand.
- * Default OFF — whole-blob GET until C.2 flips this.
+ * C.2 flag: when true, boot loads chat summaries and fetches history on demand.
+ * Default ON — whole-blob GET only when explicitly flipped off in tests.
  */
-let sessionsLazyHistoryEnabled = false;
+let sessionsLazyHistoryEnabled = true;
 /**
  * False after load / verifier miss — next successful full PUT establishes a trusted baseline
  * so subsequent flushes may PATCH.
@@ -354,12 +358,12 @@ export function setSessionsClientPatchEnabledForTests(enabled: boolean): void {
   sessionsClientPatchEnabled = enabled;
 }
 
-/** Test helper: toggle C.1 lazy-history flag (`sessionsLazyHistoryEnabled`, default OFF). */
+/** Test helper: toggle C.2 lazy-history flag (`sessionsLazyHistoryEnabled`, default ON). */
 export function setSessionsLazyHistoryEnabledForTests(enabled: boolean): void {
   sessionsLazyHistoryEnabled = enabled;
 }
 
-/** Whether lazy history loading is enabled (C.1; default false until C.2). */
+/** Whether lazy history loading is enabled (C.2; default true). */
 export function isSessionsLazyHistoryEnabled(): boolean {
   return sessionsLazyHistoryEnabled;
 }
@@ -438,7 +442,7 @@ export function resetSessionPersistenceForTests(): void {
   dirtyTrackingShadowChatsJson = null;
   dirtyTrackingVerifierForced = false;
   sessionsClientPatchEnabled = true;
-  sessionsLazyHistoryEnabled = false;
+  sessionsLazyHistoryEnabled = true;
   historyTrapForcedForTests = false;
   sessionPatchDirtySetsReady = false;
   inFlightSessionSave = null;
@@ -522,33 +526,36 @@ export function requireHistory(chat: Chat): Message[] {
   return chat.history;
 }
 
-/** Inflate a {@link ChatSummary} into a Chat placeholder (empty history). */
+/**
+ * Inflate a {@link ChatSummary} into a Chat placeholder (empty history).
+ * Spreads cold meta_json fields + non-message children from the summary payload (C.2).
+ */
 export function chatSummaryToChat(summary: ChatSummary): Chat {
+  // Drop denormalized list-only keys; keep everything else (meta + children).
+  const {
+    messageCount: _messageCount,
+    lastMessagePreview: _lastMessagePreview,
+    sortIndex: _sortIndex,
+    historyDigest: _historyDigest,
+    ...cold
+  } = summary as ChatSummary & Record<string, unknown>;
+  void _messageCount;
+  void _lastMessagePreview;
+  void _sortIndex;
+  void _historyDigest;
+
   const chat: Chat = {
+    ...(cold as Partial<Chat>),
     id: summary.id,
     name: summary.name || PLACEHOLDER_CHAT_NAME,
     workspacePath: summary.workspacePath ?? '',
     modelId: summary.modelId ?? '',
     history: [],
     historyLoaded: false,
-    lastStats: null,
-    modelInfo: {},
+    lastStats: (cold as Partial<Chat>).lastStats ?? null,
+    modelInfo: (cold as Partial<Chat>).modelInfo ?? {},
     updatedAt: typeof summary.updatedAt === 'number' ? summary.updatedAt : Date.now(),
   };
-  if (summary.kind) chat.kind = summary.kind;
-  if (summary.appScope) chat.appScope = summary.appScope;
-  if (summary.expertId) chat.expertId = summary.expertId;
-  if (summary.providerId) chat.providerId = summary.providerId;
-  if (summary.modeId) chat.modeId = summary.modeId;
-  if (summary.groupId) chat.groupId = summary.groupId;
-  if (summary.boardGroupId) chat.boardGroupId = summary.boardGroupId;
-  if (summary.boardTaskId) chat.boardTaskId = summary.boardTaskId;
-  if (summary.worktreeRoot) chat.worktreeRoot = summary.worktreeRoot;
-  if (summary.gitBranch) chat.gitBranch = summary.gitBranch;
-  if (typeof summary.lastMessageAt === 'number') chat.lastMessageAt = summary.lastMessageAt;
-  if (typeof summary.lastAssistantAt === 'number') chat.lastAssistantAt = summary.lastAssistantAt;
-  if (summary.unread) chat.unread = true;
-  if (summary.turnError) chat.turnError = true;
   return chat;
 }
 
@@ -869,7 +876,7 @@ export function getExpertSelection(chat: Chat): ExpertSelection {
   if (chat.expertSelection) return chat.expertSelection;
   const expertId = chat.expertId?.trim();
   if (expertId) return { mode: 'manual', expertId };
-  return defaultExpertSelection();
+  return { mode: 'auto', expertId: null };
 }
 
 /** Upgrade v1/v2 session JSON to canonical schema v2 in memory. */
@@ -1235,16 +1242,19 @@ export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Pr
     if (isServerStorageMode()) {
       try {
         if (sessionsLazyHistoryEnabled) {
-          // C.1 flag-on: summaries first; history loads via ensureChatHistoryLoaded.
+          // C.2: summaries first (meta + non-message children); history on demand.
           const remote = await getSessionSummaries();
           sessionState = sessionStateFromSummaries(remote);
-          // Backfill needs full histories — skip until C.2 wires per-chat ensure.
           // Active chat is hydrated immediately so the first paint has a transcript.
           if (sessionState.activeId) {
             await ensureChatHistoryLoaded(sessionState.activeId);
+            const active = findChatById(sessionState.activeId);
+            if (active) clearStaleGenerationIdsOnLoad([active]);
           }
+          // Code-change backfill only for chats whose history is already loaded.
+          await runSessionCodeChangeBackfill(sessionState);
         } else {
-          // Default (flag off): whole-blob GET — every chat is fully loaded.
+          // Flag off (tests): whole-blob GET — every chat is fully loaded.
           const remote = await getSessions();
           sessionState = parseSessionStateFromJson(remote);
           markAllHistoriesLoaded(sessionState.chats);

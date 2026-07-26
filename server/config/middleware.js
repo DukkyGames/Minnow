@@ -24,6 +24,7 @@ import {
   exportSessionStateToJson,
   readChatHistory,
   readSessionSummariesState,
+  searchSessionChats,
   useJsonSessionsStore,
 } from './sessions-repo.js';
 import { getSessionsDb, readSessionMeta } from './sessions-db.js';
@@ -291,6 +292,79 @@ export async function handleConfigRequest(req, res, pathname) {
       }
 
       sendJson(res, 200, { chatId, history: readChatHistory(chatId, opts) });
+      return true;
+    }
+
+    // Phase C.2: FTS5 search over message bodies + title substring match.
+    if (pathname === '/api/config/sessions/search' && req.method === 'GET') {
+      await ensureMinnowLayout();
+      const url = new URL(req.url ?? '', 'http://localhost');
+      const q = url.searchParams.get('q') ?? '';
+      const workspace = url.searchParams.get('workspace') ?? undefined;
+      const limitRaw = url.searchParams.get('limit');
+      const limit = limitRaw != null && limitRaw !== '' ? Number(limitRaw) : 30;
+
+      if (useJsonSessionsStore()) {
+        // JSON rollback: scan in-process (client also keeps the pure scorer for localStorage).
+        const full = (await readConfigJson('sessions/state.json')) ?? (await readResource('sessions'));
+        const chats = Array.isArray(full?.chats) ? full.chats : [];
+        const tokens = String(q)
+          .toLowerCase()
+          .split(/\s+/)
+          .filter(Boolean);
+        const wsKey = workspace ? String(workspace) : '';
+        /** @type {Array<Record<string, unknown>>} */
+        const results = [];
+        for (const chat of chats) {
+          if (!chat || typeof chat !== 'object') continue;
+          if (wsKey && String(chat.workspacePath ?? '') !== wsKey) continue;
+          const name = String(chat.name ?? '');
+          const nameLower = name.toLowerCase();
+          let best = null;
+          if (tokens.length && tokens.every((t) => nameLower.includes(t))) {
+            best = {
+              chatId: chat.id,
+              name,
+              workspacePath: chat.workspacePath ?? '',
+              lastMessageAt: chat.lastMessageAt ?? 0,
+              score: 280,
+              matchedIn: 'title',
+              snippet: '',
+            };
+          }
+          const history = Array.isArray(chat.history) ? chat.history : [];
+          for (const msg of history) {
+            if (!msg || (msg.role !== 'user' && msg.role !== 'assistant')) continue;
+            const body = typeof msg.content === 'string' ? msg.content : '';
+            if (!body || !tokens.length) continue;
+            const lower = body.toLowerCase();
+            if (!tokens.every((t) => lower.includes(t))) continue;
+            const score = 140;
+            if (best && best.score >= score) continue;
+            const idx = lower.indexOf(tokens[0]);
+            const start = Math.max(0, idx - 32);
+            best = {
+              chatId: chat.id,
+              name,
+              workspacePath: chat.workspacePath ?? '',
+              lastMessageAt: chat.lastMessageAt ?? 0,
+              score,
+              matchedIn: 'message',
+              role: msg.role,
+              snippet: `${start > 0 ? '…' : ''}${body.slice(start, start + 110).trim()}${start + 110 < body.length ? '…' : ''}`,
+            };
+          }
+          if (best) results.push(best);
+        }
+        results.sort((a, b) => {
+          if (a.score !== b.score) return b.score - a.score;
+          return (b.lastMessageAt || 0) - (a.lastMessageAt || 0);
+        });
+        sendJson(res, 200, { results: results.slice(0, Math.min(100, Math.max(1, limit || 30))) });
+        return true;
+      }
+
+      sendJson(res, 200, searchSessionChats({ q, workspace, limit }));
       return true;
     }
 

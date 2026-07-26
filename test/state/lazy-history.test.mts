@@ -1,5 +1,5 @@
 /**
- * Phase C.1: ensureChatHistoryLoaded idempotency/dedupe + DEV history trap.
+ * Phase C.2: ensureChatHistoryLoaded idempotency/dedupe + DEV history trap (flag default ON).
  */
 
 import assert from 'node:assert/strict';
@@ -50,7 +50,7 @@ function makeState(chats: Chat[]): SessionState {
   };
 }
 
-describe('lazy history (C.1)', () => {
+describe('lazy history (C.2)', () => {
   afterEach(() => {
     // @ts-expect-error test cleanup
     delete globalThis.fetch;
@@ -59,12 +59,13 @@ describe('lazy history (C.1)', () => {
     setSessionStateForTests(null);
   });
 
-  test('lazy-history flag defaults OFF', () => {
-    assert.equal(isSessionsLazyHistoryEnabled(), false);
+  test('lazy-history flag defaults ON', () => {
+    assert.equal(isSessionsLazyHistoryEnabled(), true);
   });
 
   test('ensureChatHistoryLoaded is a no-op when flag is off', async () => {
     setStorageModeForTests('server');
+    setSessionsLazyHistoryEnabledForTests(false);
     const chat = makeChat(CHAT_A, { historyLoaded: false });
     setSessionStateForTests(makeState([chat]));
 
@@ -81,6 +82,7 @@ describe('lazy history (C.1)', () => {
 
   test('ensureChatHistoryLoaded is idempotent and dedupes concurrent callers', async () => {
     setStorageModeForTests('server');
+    // Default is ON; keep explicit for clarity.
     setSessionsLazyHistoryEnabledForTests(true);
 
     const chat = makeChat(CHAT_A, { historyLoaded: false, history: [] });
@@ -155,5 +157,13 @@ describe('lazy history (C.1)', () => {
     } finally {
       console.error = originalError;
     }
+  });
+
+  test('resetSessionPersistenceForTests restores flag default ON', () => {
+    setSessionsLazyHistoryEnabledForTests(false);
+    assert.equal(isSessionsLazyHistoryEnabled(), false);
+    resetSessionPersistenceForTests();
+    assert.equal(isSessionsLazyHistoryEnabled(), true);
+    void sessionState;
   });
 });

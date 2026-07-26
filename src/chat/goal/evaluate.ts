@@ -3,6 +3,7 @@
  */
 
 import {
+  ensureChatHistoryLoaded,
   getActiveGoal,
   isGoalLoopActive,
   recordChatMessage,
@@ -142,9 +143,9 @@ export function buildGoalContinuationMessage(
 }
 
 /** Persist and optionally render the achieved marker row. */
-export function recordGoalAchieved(chat: Chat, reason: string): void {
+export async function recordGoalAchieved(chat: Chat, reason: string): Promise<void> {
   const content = `Goal achieved: ${reason}`;
-  // C.2: await ensureChatHistoryLoaded(chat.id) for non-active chats when lazy flag flips on.
+  await ensureChatHistoryLoaded(chat.id);
   const history = requireHistory(chat);
   history.push({ role: 'user', content, goalAchieved: true });
   recordChatMessage(chat);
@@ -191,7 +192,7 @@ export async function maybeContinueGoalAfterTurn(chat: Chat): Promise<void> {
 
   if (result.met) {
     goal.achieved = true;
-    recordGoalAchieved(chat, result.reason);
+    await recordGoalAchieved(chat, result.reason);
     touchChat(chat);
     scheduleSaveSessions();
     syncGoalActiveHint();

@@ -810,40 +810,35 @@ export function readAllChatIds() {
 }
 
 /**
- * Map a `chats` row to a ChatSummary (column fields only — never includes `history`).
+ * Map a `chats` row + non-message children to a ChatSummary.
+ * Merges meta_json via stitchChat; never includes message bodies.
  * @param {Record<string, any>} row
+ * @param {{
+ *   terminalHistory?: Record<string, unknown>[],
+ *   runs?: unknown[],
+ *   subAgentRuns?: unknown[],
+ *   activeLoops?: unknown[],
+ * }} [children]
  */
-function chatRowToSummary(row) {
+function chatRowToSummary(row, children = {}) {
+  const stitched = stitchChat(row, {
+    messages: [],
+    terminalHistory: children.terminalHistory ?? [],
+    runs: children.runs ?? [],
+    subAgentRuns: children.subAgentRuns ?? [],
+    activeLoops: children.activeLoops ?? [],
+  });
+  // Drop empty history placeholder from the wire payload (C.1 contract).
+  const { history: _history, ...rest } = stitched;
+  void _history;
   /** @type {Record<string, unknown>} */
   const summary = {
-    id: typeof row.id === 'string' ? row.id : '',
-    name: typeof row.name === 'string' ? row.name : '',
-    workspacePath: typeof row.workspace_path === 'string' ? row.workspace_path : '',
-    modelId: typeof row.model_id === 'string' ? row.model_id : '',
-    updatedAt: typeof row.updated_at === 'number' ? row.updated_at : 0,
+    ...rest,
     messageCount: typeof row.message_count === 'number' ? row.message_count : 0,
     lastMessagePreview:
       typeof row.last_message_preview === 'string' ? row.last_message_preview : '',
   };
   if (typeof row.sort_index === 'number') summary.sortIndex = row.sort_index;
-  if (row.kind) summary.kind = row.kind;
-  if (row.app_scope) summary.appScope = row.app_scope;
-  if (row.expert_id) summary.expertId = row.expert_id;
-  if (row.provider_id) summary.providerId = row.provider_id;
-  if (row.mode_id) summary.modeId = row.mode_id;
-  if (row.group_id) summary.groupId = row.group_id;
-  if (row.board_group_id) summary.boardGroupId = row.board_group_id;
-  if (row.board_task_id) summary.boardTaskId = row.board_task_id;
-  if (row.worktree_root) summary.worktreeRoot = row.worktree_root;
-  if (row.git_branch) summary.gitBranch = row.git_branch;
-  if (typeof row.last_message_at === 'number' && row.last_message_at > 0) {
-    summary.lastMessageAt = row.last_message_at;
-  }
-  if (typeof row.last_assistant_at === 'number' && row.last_assistant_at > 0) {
-    summary.lastAssistantAt = row.last_assistant_at;
-  }
-  if (row.unread === 1) summary.unread = true;
-  if (row.turn_error === 1) summary.turnError = true;
   if (typeof row.history_digest === 'string' && row.history_digest) {
     summary.historyDigest = row.history_digest;
   }
@@ -852,11 +847,13 @@ function chatRowToSummary(row) {
 
 /**
  * List chat summaries (no message bodies) for sidebar / lazy boot.
+ * Includes meta_json + non-message children so boot mutators can run without history.
  * @param {{ workspace?: string }} [filter]  When `workspace` is set, only that path.
  * @returns {Record<string, unknown>[]}
  */
 export function readChatSummaries(filter = {}) {
   const db = getSessionsDb();
+  const stmts = getReadStmts(db);
   const workspaceRaw = typeof filter.workspace === 'string' ? filter.workspace : '';
   const workspace = normalizeWorkspacePath(workspaceRaw);
   const rows = workspace
@@ -865,8 +862,160 @@ export function readChatSummaries(filter = {}) {
           'SELECT * FROM chats WHERE workspace_path = ? ORDER BY sort_index ASC, id ASC',
         )
         .all(workspace)
-    : getReadStmts(db).chats.all();
-  return rows.map(chatRowToSummary);
+    : stmts.chats.all();
+
+  // Load non-message children in bulk (same pattern as readWholeSessionState).
+  const terminalByChat = bucketBy(stmts.terminal.all(), (r) => r.chat_id);
+  const runsByChat = bucketBy(stmts.runs.all(), (r) => r.chat_id);
+  const subAgentsByChat = bucketBy(stmts.subAgentRuns.all(), (r) => r.chat_id);
+  const loopsByChat = bucketBy(stmts.loops.all(), (r) => r.chat_id);
+
+  return rows.map((row) =>
+    chatRowToSummary(row, {
+      terminalHistory: (terminalByChat.get(row.id) ?? []).map(terminalRowToRecord),
+      runs: (runsByChat.get(row.id) ?? [])
+        .map((r) => parseJson(r.payload_json, null))
+        .filter((r) => r && typeof r === 'object'),
+      subAgentRuns: (subAgentsByChat.get(row.id) ?? [])
+        .map((r) => parseJson(r.payload_json, null))
+        .filter((r) => r && typeof r === 'object'),
+      activeLoops: (loopsByChat.get(row.id) ?? [])
+        .map((r) => parseJson(r.payload_json, null))
+        .filter((r) => r && typeof r === 'object'),
+    }),
+  );
+}
+
+/** Build an FTS5 MATCH query (AND of prefix terms), matching email cache. */
+export function toSessionsFtsQuery(raw) {
+  const terms = String(raw ?? '')
+    .split(/\s+/)
+    .map((term) => term.replace(/["*]/g, '').trim())
+    .filter(Boolean);
+  if (!terms.length) return '';
+  return terms.map((term) => `"${term}"*`).join(' AND ');
+}
+
+/**
+ * Full-text search over chat titles + message bodies (messages_fts).
+ * Title hits outrank message hits; then bm25, then recency.
+ *
+ * @param {{ q: string, workspace?: string, limit?: number }} opts
+ * @returns {{ results: Array<Record<string, unknown>> }}
+ */
+export function searchSessionChats(opts) {
+  const q = typeof opts?.q === 'string' ? opts.q.trim() : '';
+  const limitRaw = typeof opts?.limit === 'number' ? opts.limit : 30;
+  const limit = Math.min(100, Math.max(1, Math.floor(limitRaw) || 30));
+  if (!q) return { results: [] };
+
+  const db = getSessionsDb();
+  const workspaceRaw = typeof opts?.workspace === 'string' ? opts.workspace : '';
+  const workspace = normalizeWorkspacePath(workspaceRaw);
+  const ftsQuery = toSessionsFtsQuery(q);
+  const qLower = q.toLowerCase();
+  const tokens = qLower.split(/\s+/).filter(Boolean);
+
+  /** @type {Map<string, Record<string, unknown>>} */
+  const byChatId = new Map();
+
+  // Title matches (substring AND across tokens) — weight like client TITLE_WEIGHT.
+  const titleRows = workspace
+    ? db
+        .prepare(
+          `SELECT id, name, workspace_path, last_message_at, last_message_preview
+           FROM chats WHERE workspace_path = ?`,
+        )
+        .all(workspace)
+    : db
+        .prepare(
+          `SELECT id, name, workspace_path, last_message_at, last_message_preview
+           FROM chats`,
+        )
+        .all();
+
+  for (const row of titleRows) {
+    const name = typeof row.name === 'string' ? row.name : '';
+    const lower = name.toLowerCase();
+    if (!tokens.every((t) => lower.includes(t))) continue;
+    const preview =
+      typeof row.last_message_preview === 'string' ? row.last_message_preview : '';
+    byChatId.set(row.id, {
+      chatId: row.id,
+      name,
+      workspacePath: row.workspace_path ?? '',
+      lastMessageAt: typeof row.last_message_at === 'number' ? row.last_message_at : 0,
+      score: 280,
+      matchedIn: 'title',
+      snippet: preview.slice(0, 110),
+    });
+  }
+
+  // Message body matches via FTS5.
+  if (ftsQuery) {
+    const params = [ftsQuery];
+    let workspaceClause = '';
+    if (workspace) {
+      workspaceClause = 'AND c.workspace_path = ?';
+      params.push(workspace);
+    }
+    const msgRows = db
+      .prepare(
+        `SELECT f.chat_id AS chatId, f.role AS role, f.body AS body,
+                c.name AS name, c.workspace_path AS workspacePath,
+                c.last_message_at AS lastMessageAt,
+                bm25(messages_fts) AS rank
+         FROM messages_fts f
+         JOIN chats c ON c.id = f.chat_id
+         WHERE messages_fts MATCH ? ${workspaceClause}
+         ORDER BY bm25(messages_fts) ASC, c.last_message_at DESC`,
+      )
+      .all(...params);
+
+    for (const row of msgRows) {
+      const chatId = row.chatId;
+      const body = typeof row.body === 'string' ? row.body : '';
+      const firstIdx = Math.max(
+        0,
+        ...tokens.map((t) => {
+          const i = body.toLowerCase().indexOf(t);
+          return i >= 0 ? i : 0;
+        }),
+      );
+      const start = Math.max(0, firstIdx - 32);
+      const snippet = `${start > 0 ? '…' : ''}${body
+        .slice(start, start + 110)
+        .replace(/\s+/g, ' ')
+        .trim()}${start + 110 < body.length ? '…' : ''}`;
+      // bm25: lower is better; invert into a positive score band below title hits.
+      const bm25 = typeof row.rank === 'number' ? row.rank : 0;
+      const score = Math.max(1, 200 - bm25 * 10);
+      const existing = byChatId.get(chatId);
+      if (existing && existing.score >= score) continue;
+      const role =
+        row.role === 'user' || row.role === 'assistant' ? row.role : undefined;
+      byChatId.set(chatId, {
+        chatId,
+        name: row.name ?? '',
+        workspacePath: row.workspacePath ?? '',
+        lastMessageAt: typeof row.lastMessageAt === 'number' ? row.lastMessageAt : 0,
+        score,
+        matchedIn: 'message',
+        role,
+        snippet,
+      });
+    }
+  }
+
+  const results = [...byChatId.values()].sort((a, b) => {
+    if (a.score !== b.score) return /** @type {number} */ (b.score) - /** @type {number} */ (a.score);
+    return (
+      (/** @type {number} */ (b.lastMessageAt) || 0) -
+      (/** @type {number} */ (a.lastMessageAt) || 0)
+    );
+  });
+
+  return { results: results.slice(0, limit) };
 }
 
 /**

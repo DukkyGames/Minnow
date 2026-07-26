@@ -767,31 +767,12 @@ export interface QueuedComposerMessage {
 }
 
 /**
- * Sidebar / list row for a chat without message bodies (Phase C.1).
- * Every field maps to a `chats` column; `messageCount` and `lastMessagePreview`
- * are denormalized on write so list queries avoid a correlated subquery.
+ * Sidebar / boot row for a chat without message bodies (Phase C.1/C.2).
+ * Hot columns + denormalized `messageCount` / `lastMessagePreview`, plus optional
+ * cold `meta_json` fields and non-message children (runs, loops, …) for boot.
  * Do not make {@link Chat.history} optional — inflate with `history: []` + `historyLoaded: false`.
  */
-export interface ChatSummary {
-  id: string;
-  name: string;
-  kind?: ChatKind;
-  appScope?: ChatAppScope;
-  expertId?: string;
-  workspacePath: string;
-  providerId?: string;
-  modelId: string;
-  modeId?: ModeId;
-  groupId?: string;
-  boardGroupId?: string;
-  boardTaskId?: string;
-  worktreeRoot?: string;
-  gitBranch?: string;
-  updatedAt: number;
-  lastMessageAt?: number;
-  lastAssistantAt?: number;
-  unread?: boolean;
-  turnError?: boolean;
+export type ChatSummary = Omit<Chat, 'history' | 'historyLoaded' | 'lastStats' | 'modelInfo'> & {
   /** Denormalized COUNT of messages rows for this chat. */
   messageCount: number;
   /** Denormalized preview of the last message body (truncated). */
@@ -800,7 +781,9 @@ export interface ChatSummary {
   sortIndex?: number;
   /** SHA-256 digest of message row hashes (skip sync when unchanged). */
   historyDigest?: string;
-}
+  lastStats?: LastStats | null;
+  modelInfo?: ModelInfo;
+};
 
 /** Session blob from GET /api/config/sessions/summaries (chats omit `history`). */
 export interface SessionSummariesState {
