@@ -37,10 +37,10 @@ desktop builds, closes the LAN token hole, and cleans up correctness/doc drift.
 - [ ] Commit: `📦 feat(session): bundle Session Engine for packaged Electron`
 
 ### Stage 4 — Test and doc cleanup
-- [ ] Fix Windows crash in `test/headless/tool-calls-meta-node.test.mts`
-- [ ] Correct `documentation/plans/server-session-engine.md` drift + dual load path
-- [ ] Guard `install-fetch-auth.ts` retry for `Request` body
-- [ ] Update `documentation/context.md` for bundle/boot/availability
+- [x] Fix Windows crash in `test/headless/tool-calls-meta-node.test.mts`
+- [x] Correct `documentation/plans/server-session-engine.md` drift + dual load path
+- [x] Guard `install-fetch-auth.ts` retry for `Request` body
+- [x] Update `documentation/context.md` for bundle/boot/availability
 - [ ] Commit: `📝 fix(session): headless runner crash, plan docs, fetch-auth retry`
 
 ### Verification

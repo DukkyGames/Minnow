@@ -212,8 +212,8 @@ Shipped on this branch (`henri/min-354-server-session-engine`).
 
 ### Endpoints
 - `POST /api/session/commands` — `{ type, …payload }`; `202` + `{ rev }`.
-- `GET  /api/session/stream` — SSE: `event: snapshot` then `event: patch` (JSON diff) with `id: <rev>`.
-  Supports `Last-Event-ID` / `?sinceRev=` for replay-or-resnapshot.
+- `GET  /api/session/stream` — SSE: `event: snapshot` then `event: patch` with `id: <rev>`.
+  Reconnect always re-snapshots (no `Last-Event-ID` / `?sinceRev=` replay — whole state is small).
 - ~~`POST /api/session/lease`~~ — removed in Phase 4 (`410 LEASE_REMOVED`).
 - `PUT /api/config/sessions` — add `If-Match: <rev>` optimistic concurrency (Phase 0).
 - `PATCH /api/config/sessions` — same `If-Match` / `expectedRev` / `baseRev` guard (Phase 0; SQLite adaptation).
@@ -228,7 +228,9 @@ Shipped on this branch (`henri/min-354-server-session-engine`).
 ### New/changed modules
 - `server/session/engine.js` (Phase 1) — engine core (not `server/engine/`; vector lives there).
 - `server/session/commands.js` (Phase 1) — command handlers.
-- `server/session/loop-loader.js` (Phase 1) — tsx-load main-chat loop.
+- `server/session/loop-loader.js` (Phase 1) — loads main-chat loop via `engine-module.js`
+  (tsx in dev/tests; `engine-bundle.mjs` when packaged).
+- `server/session/engine-module.js` + `scripts/build-engine-bundle.mjs` — dual load path.
 - `src/session-engine/main-chat-loop.ts` + `engine-loop-helpers.ts` (Phase 1).
 - `src/state/session-sync.ts` (Phase 0) — client SSE subscribe + reconcile.
 - `src/state/session-commands.ts` (Phase 1) — client command dispatch helpers.
@@ -240,15 +242,19 @@ Shipped on this branch (`henri/min-354-server-session-engine`).
 
 ## 5. Cross-cutting concerns
 
-- **Auth**: shared bearer token (`MINNOW_TOKEN` env) required on `/api/session/*`. Endpoints are now
-  reachable from other devices; bind to LAN interface. Single-user ⇒ no per-user isolation.
-- **Reconnect/replay**: SSE carries `rev`; client resumes with `sinceRev`; engine replays diffs or
-  resnapshots. Mirrors `/api/generations` replay.
+- **Auth**: optional shared bearer (`MINNOW_TOKEN` env) on `/api/session/*` — a no-op when unset
+  (`server/session/auth.js`). Per-boot session token (auth-middleware) still gates all `/api/*`.
+  Loopback-only `GET /api/auth/session-token` bootstrap; LAN peers use the HTML-injected token.
+- **Reconnect**: SSE carries `rev`; clients re-snapshot on connect. After a server restart,
+  `session-sync` refreshes the per-boot token and opens a new EventSource (no `sinceRev` replay).
 - **Backpressure**: reuse per-subscriber write-queue + `drain` handling from `generations/store.js`.
 - **Persistence**: engine debounces flush to `~/.minnow/sessions/state.json`; boot loads + reconciles
   (controller run reconcile already exists).
-- **Electron/offline**: engine runs in-process in `server.js`, which Electron already spawns —
-  identical single-device behavior, now authoritative.
+- **Electron/offline**: **Dev** — Electron launches `server.js` (tsx + engine-tsx-hooks).
+  **Packaged** — `electron/server-host.ts` runs an in-process Connect server and boots the engine
+  via `server/runtime/engine-boot.js`, loading the pre-built `engine-bundle.mjs` (no tsx).
+  Dual load path: [`server/session/engine-module.js`](../../server/session/engine-module.js)
+  (`tsx` | `bundle` | `unavailable`).
 - **Generation ↔ history**: tokens keep flowing over `/api/generations` (unchanged); the engine emits
   the **committed** assistant/tool history over the state SSE once a turn settles.
 
@@ -261,8 +267,8 @@ Shipped on this branch (`henri/min-354-server-session-engine`).
 | Merging `loop.ts` (steering, queue, goal, mode-switch, attachments) with headless runner | Medium | Do it behind the flag with both paths live; port feature-by-feature with parity tests |
 | Client-only tools (`set_chat_mode`, `create_chat_with_mode`, `propose_mode_switch`) mutate DOM/state | Medium | Convert to engine state mutations + a UI-hint event on the SSE |
 | Stream-end/heartbeat re-homing (`streaming-state.ts`, `controller/wrapper.ts`) | Medium | These become in-process engine events once loop+board co-locate; covered by board e2e harness |
-| SSE reconnect/replay correctness | Medium | Reuse generations replay semantics; add integration tests for `sinceRev` |
-| tsx-importing `src/*.ts` into `server.js` | Low | Precedent: headless runner already runs `.ts` via tsx |
+| SSE reconnect after server restart | Medium | Token refresh + capped EventSource reconnect (session-sync); always re-snapshot |
+| tsx-importing `src/*.ts` into `server.js` | Low | Dev/tests use tsx; packaged builds load `engine-bundle.mjs` via engine-module |
 | `SessionState` shape drift between engine + client | Low | Single shared type in `src/types.ts`; no schema fork |
 
 ---
@@ -271,11 +277,14 @@ Shipped on this branch (`henri/min-354-server-session-engine`).
 
 - [x] Reuse `test/orchestrate/board-flow-e2e.test.mts` (`driveBoardToConvergence`) against the **engine**
   module — logic is ported, not rewritten, so the harness drives the same functions.
-- [x] Engine command dispatch tests; SSE snapshot/patch/replay (`sinceRev`) tests; version-guard 409
-  tests; Phase 4 lease-removed assertions (`410 LEASE_REMOVED`).
+- [x] Engine command dispatch tests; SSE snapshot/patch tests; version-guard 409 tests;
+  Phase 4 lease-removed assertions (`410 LEASE_REMOVED`). (No `sinceRev` replay — reconnect
+  re-snapshots; covered by session-sync token-refresh reconnect tests.)
 - [x] Boot smoke: `test/engine/engine-tsx-hooks.test.mjs` asserts
   `engine-tsx-hooks.mjs` self-registers on `--import` and resolves a dummy `.css` (live boot
   failed when hooks exported `resolve`/`load` without `register`).
+- [x] Packaged load path: `test/engine/engine-bundle.test.mjs` (plain Node import of bundle +
+  mode selection).
 - [x] Keep `test/headless/*` green as the loop generalizes.
 - [ ] Multi-client integration test: two SSE subscribers + concurrent commands converge to one `rev`.
 

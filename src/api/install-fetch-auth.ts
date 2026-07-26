@@ -85,6 +85,12 @@ export function installFetchAuth(): void {
       return response;
     }
 
+    // Request bodies are one-shot — rebuildAuthed from a Request after the first
+    // send can throw. Only retry string/URL inputs (the common /api/* path).
+    if (typeof input !== 'string' && !(input instanceof URL)) {
+      return response;
+    }
+
     const retry = buildAuthedRequest(input, init, retryToken);
     return nativeFetch(retry.input, retry.init);
   };

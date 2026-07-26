@@ -53,6 +53,14 @@ function withTokenHeader(init: RequestInit | undefined, token: string): RequestI
   return { ...init, headers };
 }
 
+/** Undo {@link installHeadlessFetch} / bootstrap fetch patch (tests + CLI teardown). */
+export function restoreHeadlessFetch(): void {
+  if (restoreFetch) {
+    restoreFetch();
+    restoreFetch = null;
+  }
+}
+
 /** Patch global fetch so `/api/...` hits the dev server (returns restore fn). */
 export function installHeadlessFetch(baseUrl: string, token = ''): () => void {
   if (restoreFetch) {

@@ -8,6 +8,7 @@ import { createServer, type Server } from 'node:http';
 import {
   bootstrapHeadlessNodeRuntime,
   installHeadlessFetch,
+  restoreHeadlessFetch,
 } from '../../src/headless/server-context.ts';
 import {
   loadToolCallsMeta,
@@ -18,13 +19,13 @@ import { getStorageMode, setStorageModeForTests } from '../../src/config/storage
 describe('headless tool-calls meta (Node)', () => {
   let server: Server | null = null;
   let baseUrl = '';
-  let restoreFetch: (() => void) | null = null;
   let previousStorageMode: ReturnType<typeof getStorageMode> = 'localStorage';
 
   beforeEach(async () => {
     previousStorageMode = getStorageMode();
     setStorageModeForTests('localStorage');
     resetToolCallsMetaCache();
+    restoreHeadlessFetch();
 
     server = createServer((req, res) => {
       const url = new URL(req.url ?? '/', baseUrl);
@@ -41,6 +42,8 @@ describe('headless tool-calls meta (Node)', () => {
       res.writeHead(404);
       res.end();
     });
+    // Avoid HTTP keep-alive sockets racing --test-force-exit on Windows.
+    server.keepAliveTimeout = 1;
 
     await new Promise<void>((resolve) => {
       server!.listen(0, '127.0.0.1', () => resolve());
@@ -53,25 +56,27 @@ describe('headless tool-calls meta (Node)', () => {
   });
 
   afterEach(async () => {
-    restoreFetch?.();
-    restoreFetch = null;
+    restoreHeadlessFetch();
     resetToolCallsMetaCache();
     setStorageModeForTests(previousStorageMode);
-    if (server && typeof server.closeAllConnections === 'function') {
-      server.closeAllConnections();
+
+    const active = server;
+    server = null;
+    if (!active) return;
+
+    // Match preflight.test.mts: brief settle, then drop connections before close.
+    // Prevents Windows libuv UV_HANDLE_CLOSING assert under --test-force-exit.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    if (typeof active.closeAllConnections === 'function') {
+      active.closeAllConnections();
     }
     await new Promise<void>((resolve, reject) => {
-      if (!server) {
-        resolve();
-        return;
-      }
-      server.close((err) => (err ? reject(err) : resolve()));
-      server = null;
+      active.close((err) => (err ? reject(err) : resolve()));
     });
   });
 
   it('loadToolCallsMeta fails in Node when fetch is patched but localStorage is missing', async () => {
-    restoreFetch = installHeadlessFetch(baseUrl);
+    installHeadlessFetch(baseUrl);
     await assert.rejects(
       () => loadToolCallsMeta(),
       /localStorage is not defined/,

@@ -139,6 +139,8 @@ export const PATH_RUNNER_RULES = [
   { pattern: 'test/headless/preflight.test.mts', runner: 'node-tsx' },
   // persist-chat imports server config helpers + headless TS (no CSS).
   { pattern: 'test/headless/persist-chat.test.mts', runner: 'node-tsx' },
+  // Avoid Windows libuv UV_HANDLE_CLOSING crash under tsx-mocks-loader + force-exit.
+  { pattern: 'test/headless/tool-calls-meta-node.test.mts', runner: 'node-tsx' },
   { pattern: 'test/sub-agents/scheduler-drain-reject.test.mts', runner: 'tsx-mocks' },
   { pattern: 'test/research/*.test.mts', runner: 'tsx-mocks-loader' },
   // Parity imports src/state/sessions.ts (CSS/@xterm via UI); other config tests stay on tsx-mocks.
