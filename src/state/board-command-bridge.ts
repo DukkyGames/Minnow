@@ -1,6 +1,6 @@
 /**
  * Route orchestrate board UI actions through Session Engine commands when
- * MINNOW_SERVER_ENGINE is on (MIN-360); otherwise call local board-actions.
+ * Session Engine is on by default (MIN-362); emergency opt-out calls local board-actions.
  */
 
 import { isServerEngineEnabled } from './server-engine-flag.ts';

@@ -2,8 +2,9 @@
  * Boot-time resume for orchestrate boards after page reload.
  * Mirrors generation-resume.ts for chat.currentGenerationId.
  *
- * When MINNOW_SERVER_ENGINE is on, the Session Engine resumes boards on
- * server boot — skip renderer auto-drive to avoid a second driver (MIN-360).
+ * Phase 4 (MIN-362): Session Engine is default-on and resumes boards on
+ * server boot — this renderer path is a no-op unless emergency opt-out
+ * (MINNOW_SERVER_ENGINE=0) restores legacy single-device drive.
  */
 
 import { getPlannerChatForGroup } from '../../state/chat-groups.ts';
@@ -23,7 +24,7 @@ import {
 
 /** Resume auto/sequential delegation for boards that were running before reload. */
 export async function bootOrchestrateBoardResume(state: SessionState): Promise<void> {
-  // Engine owns board resume when the flag is on (server boot path).
+  // Default path: engine owns board resume on server boot — do not double-drive.
   if (isServerEngineEnabled()) return;
 
   const oomPause = await probeOomPauseFromElectron();

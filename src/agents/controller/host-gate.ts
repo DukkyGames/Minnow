@@ -1,5 +1,5 @@
 /**
- * Tiny latch: which process owns the sub-agent controller (MIN-361 Phase 3).
+ * Tiny latch: which process owns the sub-agent controller (MIN-361 / MIN-362).
  * Kept free of sessions/UI imports so controller.ts can gate auto-boot without cycles.
  */
 
@@ -19,8 +19,8 @@ export function isEngineControllerHostActive(): boolean {
 /**
  * True when this process should auto-start persistence + watchdog at module load.
  * - Engine host: started explicitly by controller-host (not module side-effect).
- * - Renderer with MINNOW_SERVER_ENGINE: never (engine owns).
- * - Flag off / tests: keep today's renderer (or test) auto-boot.
+ * - Renderer with engine flag on (default): never (engine owns).
+ * - Emergency opt-out / tests (MINNOW_TEST=1): keep today's renderer (or test) auto-boot.
  */
 export function shouldAutoStartControllerBoot(): boolean {
   if (engineOwnsController) return false;
@@ -30,7 +30,7 @@ export function shouldAutoStartControllerBoot(): boolean {
     return false;
   }
 
-  // Node engine process with flag on: wait for controller-host boot.
+  // Node engine process with flag on (default): wait for controller-host boot.
   // Tests keep auto-boot so existing controller suites stay unchanged.
   if (
     typeof process !== 'undefined' &&
@@ -52,10 +52,12 @@ export function shouldReadLiveSubAgentSlice(): boolean {
   return false;
 }
 
+/** Mirror server/session/flag.js — default ON; opt-out via 0/false/off/no. */
 function isServerEngineEnvEnabled(): boolean {
   if (typeof process === 'undefined') return false;
   const raw = process.env.MINNOW_SERVER_ENGINE;
-  if (raw == null) return false;
+  if (raw == null || raw === '') return true;
   const v = String(raw).trim().toLowerCase();
-  return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+  if (v === '0' || v === 'false' || v === 'off' || v === 'no') return false;
+  return true;
 }

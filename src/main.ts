@@ -246,13 +246,13 @@ export async function initApp(): Promise<void> {
   await initPromptSystem();
   await initWorkAgentSystem();
   await loadSessionsFromStorage(isServerStorageMode() ? { force: true } : undefined);
-  const { initSessionSync, ensureBoardDriverLease } = await import('./state/session-sync');
+  // Phase 4: engine is default-on — probe flag, then SSE read-model (no lease).
+  const { initSessionSync } = await import('./state/session-sync');
   const { ensureServerEngineFlag } = await import('./state/server-engine-flag');
   await ensureServerEngineFlag();
   initSessionSync();
   const { initEngineStreamMirror } = await import('./chat/engine-stream-mirror');
   initEngineStreamMirror();
-  await ensureBoardDriverLease();
   registerOrchestrateBoardShutdownHandler();
   registerSessionPersistenceShutdownHandler();
   // Issues store migrates leftover bugs/state.json / minnow-bugs-v1 on first load.

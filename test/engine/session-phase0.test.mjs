@@ -1,5 +1,6 @@
 /**
- * Phase 0 session sync tests (MIN-357): version guard (PUT + PATCH) + driver lease.
+ * Phase 0 session sync tests (MIN-357) + Phase 4 lease removal (MIN-362).
+ * Version guard (PUT + PATCH) remains; driver lease endpoints are gone.
  * Adapted for SQLite sessions store (default) after the JSON→SQLite cutover.
  */
 
@@ -12,7 +13,6 @@ import {
   resetSessionRevStoreForTests,
 } from '../../server/session/rev-store.js';
 import { resetSessionSseForTests } from '../../server/session/sse.js';
-import { resetBoardDriverLeaseForTests } from '../../server/session/lease.js';
 import { closeSessionsDb } from '../../server/config/sessions-db.js';
 import {
   httpRequest,
@@ -78,7 +78,7 @@ function httpRequestWithHeaders(baseUrl, method, pathname, body, extraHeaders = 
   });
 }
 
-describe('session phase 0 (MIN-357)', () => {
+describe('session phase 0 (MIN-357) + lease removal (MIN-362)', () => {
   /** @type {string | undefined} */
   let home;
   /** @type {http.Server | undefined} */
@@ -91,7 +91,6 @@ describe('session phase 0 (MIN-357)', () => {
     defaultSessionFixture = JSON.parse(await readFixture('expected-sessions-state.json'));
     resetSessionRevStoreForTests();
     resetSessionSseForTests();
-    resetBoardDriverLeaseForTests();
     server = createPhase0TestServer();
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
     const addr = server.address();
@@ -101,12 +100,10 @@ describe('session phase 0 (MIN-357)', () => {
 
   beforeEach(() => {
     resetSessionRevStoreForTests();
-    resetBoardDriverLeaseForTests();
   });
 
   after(async () => {
     resetSessionSseForTests();
-    resetBoardDriverLeaseForTests();
     resetSessionRevStoreForTests();
     // Close SQLite before deleting the temp home (Windows EBUSY otherwise).
     closeSessionsDb();
@@ -202,43 +199,18 @@ describe('session phase 0 (MIN-357)', () => {
     assert.ok(Number.parseInt(String(revHeader), 10) > 0);
   });
 
-  test('driver lease: only one client holds claim concurrently', async () => {
-    const claimA = await httpRequest(baseUrl, 'POST', '/api/session/lease', {
+  test('Phase 4: /api/session/lease is removed (410)', async () => {
+    const get = await httpRequest(baseUrl, 'GET', '/api/session/lease');
+    assert.equal(get.status, 410);
+    assert.equal(get.json?.code, 'LEASE_REMOVED');
+
+    const post = await httpRequest(baseUrl, 'POST', '/api/session/lease', {
       driverId: 'driver-a',
       action: 'claim',
       label: 'Device A',
     });
-    assert.equal(claimA.status, 200);
-    assert.equal(claimA.json?.held, true);
-
-    const claimB = await httpRequest(baseUrl, 'POST', '/api/session/lease', {
-      driverId: 'driver-b',
-      action: 'claim',
-      label: 'Device B',
-    });
-    assert.equal(claimB.status, 200);
-    assert.equal(claimB.json?.held, false);
-    assert.equal(claimB.json?.holder?.driverId, 'driver-a');
-
-    const renewB = await httpRequest(baseUrl, 'POST', '/api/session/lease', {
-      driverId: 'driver-b',
-      action: 'renew',
-    });
-    assert.equal(renewB.status, 200);
-    assert.equal(renewB.json?.held, false);
-
-    await httpRequest(baseUrl, 'POST', '/api/session/lease', {
-      driverId: 'driver-a',
-      action: 'release',
-    });
-
-    const claimB2 = await httpRequest(baseUrl, 'POST', '/api/session/lease', {
-      driverId: 'driver-b',
-      action: 'claim',
-      label: 'Device B',
-    });
-    assert.equal(claimB2.status, 200);
-    assert.equal(claimB2.json?.held, true);
+    assert.equal(post.status, 410);
+    assert.equal(post.json?.code, 'LEASE_REMOVED');
   });
 
   test('GET /api/session/stream sends snapshot then patch after PUT', async () => {
@@ -316,19 +288,42 @@ describe('session phase 0 (MIN-357)', () => {
     assert.ok(patch.data.state?.chats?.[0]?.name === 'SSE patched chat');
   });
 
-  test('MINNOW_TOKEN accepts Bearer and minnowToken query', async () => {
+  test('MINNOW_TOKEN accepts Bearer and minnowToken query on stream', async () => {
     const prev = process.env.MINNOW_TOKEN;
     process.env.MINNOW_TOKEN = 'phase0-secret';
+
+    /** Open SSE just long enough to read status, then destroy (stream never ends). */
+    function probeStream(pathname, extraHeaders = {}) {
+      return new Promise((resolve, reject) => {
+        const url = new URL(pathname, baseUrl);
+        const req = http.request(
+          url,
+          { method: 'GET', headers: extraHeaders },
+          (res) => {
+            const status = res.statusCode;
+            req.destroy();
+            resolve({ status });
+          },
+        );
+        req.on('error', (err) => {
+          // destroy() can surface as an error after we already have status.
+          if (err?.code === 'ECONNRESET') return;
+          reject(err);
+        });
+        req.end();
+      });
+    }
+
     try {
-      const denied = await httpRequest(baseUrl, 'GET', '/api/session/lease');
+      const denied = await probeStream('/api/session/stream');
       assert.equal(denied.status, 401);
 
-      const viaBearer = await httpRequestWithHeaders(baseUrl, 'GET', '/api/session/lease', null, {
+      const viaBearer = await probeStream('/api/session/stream', {
         Authorization: 'Bearer phase0-secret',
       });
       assert.equal(viaBearer.status, 200);
 
-      const viaQuery = await httpRequest(baseUrl, 'GET', '/api/session/lease?minnowToken=phase0-secret');
+      const viaQuery = await probeStream('/api/session/stream?minnowToken=phase0-secret');
       assert.equal(viaQuery.status, 200);
     } finally {
       if (prev === undefined) delete process.env.MINNOW_TOKEN;

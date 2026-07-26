@@ -1,5 +1,6 @@
 /**
- * HTTP middleware for /api/session/* (Phase 0 state sync + driver lease + Phase 1 commands).
+ * HTTP middleware for /api/session/* (Phase 0 state sync + Phase 1+ commands).
+ * Phase 4 (MIN-362): driver lease endpoints removed — engine is sole driver.
  */
 
 import { readResource } from '../config/store.js';
@@ -9,12 +10,6 @@ import {
   seedSessionRevState,
 } from './rev-store.js';
 import { addSessionStreamSubscriber } from './sse.js';
-import {
-  claimBoardDriverLease,
-  renewBoardDriverLease,
-  releaseBoardDriverLease,
-  getBoardDriverLease,
-} from './lease.js';
 import {
   isSessionRequestAuthorized,
   sendSessionUnauthorized,
@@ -127,36 +122,12 @@ export async function handleSessionRequest(req, res, pathname) {
       return true;
     }
 
-    if (pathname === '/api/session/lease' && req.method === 'POST') {
-      const body = await readJsonBody(req);
-      const driverId = typeof body.driverId === 'string' ? body.driverId : '';
-      const action = typeof body.action === 'string' ? body.action : 'claim';
-      const label = typeof body.label === 'string' ? body.label : '';
-
-      if (!driverId.trim()) {
-        sendJson(res, 400, { error: 'driverId is required' });
-        return true;
-      }
-
-      if (action === 'renew') {
-        const result = renewBoardDriverLease(driverId);
-        sendJson(res, 200, { ...result, lease: getBoardDriverLease() });
-        return true;
-      }
-
-      if (action === 'release') {
-        releaseBoardDriverLease(driverId);
-        sendJson(res, 200, { ok: true, lease: getBoardDriverLease() });
-        return true;
-      }
-
-      const result = claimBoardDriverLease(driverId, label);
-      sendJson(res, 200, { ...result, lease: getBoardDriverLease() });
-      return true;
-    }
-
-    if (pathname === '/api/session/lease' && req.method === 'GET') {
-      sendJson(res, 200, { lease: getBoardDriverLease() });
+    // Phase 4: /api/session/lease removed — engine is sole driver by construction.
+    if (pathname === '/api/session/lease') {
+      sendJson(res, 410, {
+        error: 'Board driver lease removed; Session Engine is the sole driver',
+        code: 'LEASE_REMOVED',
+      });
       return true;
     }
 

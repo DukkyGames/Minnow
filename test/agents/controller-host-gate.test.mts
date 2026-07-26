@@ -1,5 +1,5 @@
 /**
- * MIN-361 — controller host-gate (auto-boot / live-slice read decisions).
+ * MIN-361 / MIN-362 — controller host-gate (auto-boot / live-slice read decisions).
  */
 
 import assert from 'node:assert/strict';
@@ -38,6 +38,20 @@ describe('controller host-gate', () => {
     process.env.MINNOW_SERVER_ENGINE = '1';
     delete process.env.MINNOW_TEST;
     assert.equal(shouldAutoStartControllerBoot(), false);
+  });
+
+  test('Node default-on (unset env) skips module auto-boot', () => {
+    setEngineOwnsController(false);
+    delete process.env.MINNOW_SERVER_ENGINE;
+    delete process.env.MINNOW_TEST;
+    assert.equal(shouldAutoStartControllerBoot(), false);
+  });
+
+  test('Node opt-out restores module auto-boot', () => {
+    setEngineOwnsController(false);
+    process.env.MINNOW_SERVER_ENGINE = '0';
+    delete process.env.MINNOW_TEST;
+    assert.equal(shouldAutoStartControllerBoot(), true);
   });
 
   test('tests keep auto-boot when flag on (existing controller suites)', () => {

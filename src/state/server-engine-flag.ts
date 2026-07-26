@@ -1,6 +1,7 @@
 /**
- * Client probe for MINNOW_SERVER_ENGINE (Phase 1 / MIN-359).
+ * Client probe for MINNOW_SERVER_ENGINE (Phase 4 / MIN-362).
  * Prefer the HTML-injected flag; fall back to GET /api/session/engine.
+ * Server default is ON; emergency opt-out is MINNOW_SERVER_ENGINE=0|false|off|no.
  */
 
 import { withSessionToken } from '../api/session-token';
@@ -23,7 +24,10 @@ export function readInjectedServerEngineFlag(): boolean | null {
   return null;
 }
 
-/** True when main-chat sends should go through POST /api/session/commands. */
+/**
+ * True when main-chat / board / controller should use the Session Engine.
+ * Until injection or probe resolves, returns false (safe for Vite-only / early boot).
+ */
 export function isServerEngineEnabled(): boolean {
   if (cached != null) return cached;
   const injected = readInjectedServerEngineFlag();
@@ -47,6 +51,7 @@ export async function ensureServerEngineFlag(): Promise<boolean> {
     try {
       const res = await fetch(withSessionToken('/api/session/engine'));
       if (!res.ok) {
+        // Probe failed — keep Vite-only / offline clients on the legacy path.
         cached = false;
         return false;
       }

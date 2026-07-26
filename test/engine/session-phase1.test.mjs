@@ -9,7 +9,6 @@ import { handleConfigRequest } from '../../server/config/middleware.js';
 import { handleSessionRequest } from '../../server/session/middleware.js';
 import { resetSessionRevStoreForTests } from '../../server/session/rev-store.js';
 import { resetSessionSseForTests } from '../../server/session/sse.js';
-import { resetBoardDriverLeaseForTests } from '../../server/session/lease.js';
 import {
   resetSessionEngineForTests,
   ensureSessionEngineBooted,
@@ -97,7 +96,6 @@ describe('session engine phase 1 (MIN-359)', () => {
     process.env.MINNOW_SERVER_ENGINE = '1';
     resetSessionRevStoreForTests();
     resetSessionSseForTests();
-    resetBoardDriverLeaseForTests();
     resetSessionEngineForTests();
     server = createPhase1TestServer();
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -109,13 +107,11 @@ describe('session engine phase 1 (MIN-359)', () => {
   beforeEach(() => {
     resetSessionRevStoreForTests();
     resetSessionEngineForTests();
-    resetBoardDriverLeaseForTests();
     process.env.MINNOW_SERVER_ENGINE = '1';
   });
 
   after(async () => {
     resetSessionSseForTests();
-    resetBoardDriverLeaseForTests();
     resetSessionRevStoreForTests();
     resetSessionEngineForTests();
     if (prevEngineFlag === undefined) delete process.env.MINNOW_SERVER_ENGINE;
@@ -125,10 +121,16 @@ describe('session engine phase 1 (MIN-359)', () => {
     if (home) await rmTestHome(home);
   });
 
-  test('GET /api/session/engine reports enabled flag', async () => {
+  test('GET /api/session/engine reports enabled flag (default-on + opt-out)', async () => {
     const res = await httpRequest(baseUrl, 'GET', '/api/session/engine');
     assert.equal(res.status, 200);
     assert.equal(res.json?.enabled, true);
+
+    // Phase 4: unset env ⇒ still enabled (default-on).
+    delete process.env.MINNOW_SERVER_ENGINE;
+    const unset = await httpRequest(baseUrl, 'GET', '/api/session/engine');
+    assert.equal(unset.status, 200);
+    assert.equal(unset.json?.enabled, true);
 
     process.env.MINNOW_SERVER_ENGINE = '0';
     const off = await httpRequest(baseUrl, 'GET', '/api/session/engine');

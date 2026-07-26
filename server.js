@@ -218,10 +218,12 @@ async function main() {
       console.error('[session-engine] board boot resume failed:', err);
     });
     console.log(
-      `Session Engine: ON (MINNOW_SERVER_ENGINE) — POST /api/session/commands + board + controller host`,
+      `Session Engine: ON (default) — POST /api/session/commands + board + controller host`,
     );
   } else {
-    console.log(`Session Engine: off (set MINNOW_SERVER_ENGINE=1 to enable)`);
+    console.log(
+      `Session Engine: OFF (MINNOW_SERVER_ENGINE=0) — emergency renderer driving`,
+    );
   }
   await startSchedulerTickLoop({ baseUrl: schedulerBaseUrl });
   startCalendarReminderLoop();

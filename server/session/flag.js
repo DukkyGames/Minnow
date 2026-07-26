@@ -1,15 +1,26 @@
 /**
- * Feature flag for the server-owned Session Engine (MIN-354 Phase 1 / MIN-359).
- * Default OFF — renderer loop.ts remains the main-chat driver until flipped.
+ * Feature flag for the server-owned Session Engine (MIN-354 / MIN-362 Phase 4).
+ * Default ON — chat/board/sub-agent driving runs in the engine.
+ * Emergency opt-out: MINNOW_SERVER_ENGINE=0|false|off|no.
  */
 
 /**
- * True when MINNOW_SERVER_ENGINE is explicitly enabled (1/true/yes/on).
+ * True unless MINNOW_SERVER_ENGINE is explicitly disabled (0/false/off/no).
+ * Unset / empty ⇒ enabled (default-on cutover).
  * @returns {boolean}
  */
 export function isServerEngineEnabled() {
   const raw = process.env.MINNOW_SERVER_ENGINE;
-  if (raw == null || raw === '') return false;
+  if (raw == null || raw === '') return true;
   const normalized = String(raw).trim().toLowerCase();
-  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+  if (
+    normalized === '0' ||
+    normalized === 'false' ||
+    normalized === 'off' ||
+    normalized === 'no'
+  ) {
+    return false;
+  }
+  // Any other explicit value (1/true/yes/on/…) keeps the engine on.
+  return true;
 }

@@ -9,7 +9,6 @@ import { handleConfigRequest } from '../../server/config/middleware.js';
 import { handleSessionRequest } from '../../server/session/middleware.js';
 import { resetSessionRevStoreForTests } from '../../server/session/rev-store.js';
 import { resetSessionSseForTests } from '../../server/session/sse.js';
-import { resetBoardDriverLeaseForTests } from '../../server/session/lease.js';
 import {
   resetSessionEngineForTests,
   ensureSessionEngineBooted,
@@ -179,7 +178,6 @@ describe('session engine phase 3 controller (MIN-361)', () => {
     process.env.MINNOW_SERVER_ENGINE = '1';
     resetSessionRevStoreForTests();
     resetSessionSseForTests();
-    resetBoardDriverLeaseForTests();
     resetSessionEngineForTests();
     resetBoardLoaderForTests();
     resetControllerLoaderForTests();
@@ -193,7 +191,6 @@ describe('session engine phase 3 controller (MIN-361)', () => {
   beforeEach(async () => {
     resetSessionRevStoreForTests();
     resetSessionEngineForTests();
-    resetBoardDriverLeaseForTests();
     resetBoardLoaderForTests();
     resetControllerLoaderForTests();
     resetEngineControllerHostBootForTests();
@@ -215,7 +212,6 @@ describe('session engine phase 3 controller (MIN-361)', () => {
     }
     setEngineOwnsController(false);
     resetSessionSseForTests();
-    resetBoardDriverLeaseForTests();
     resetSessionRevStoreForTests();
     resetSessionEngineForTests();
     resetBoardLoaderForTests();

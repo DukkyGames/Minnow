@@ -65,7 +65,7 @@ The driver modules are TS in `src/`. Precedent: `headless/runner.ts` already run
 
 ---
 
-## 3. Phases (each independently shippable + reversible behind `MINNOW_SERVER_ENGINE` flag)
+## 3. Phases (shipped behind `MINNOW_SERVER_ENGINE`; Phase 4 flips default-on)
 
 ### Phase 0 — State sync + single-driver lease (stopgap) ✅ Done (MIN-357)
 
@@ -106,9 +106,9 @@ Shipped on this branch (`henri/min-354-server-session-engine`). Lives under
 - **Main-chat loop**: [`src/session-engine/main-chat-loop.ts`](../../src/session-engine/main-chat-loop.ts)
   (tsx-loaded) generalizes headless runner + steer/queue/mode-switch seams.
   Tokens via `/api/generations`; committed history via SSE.
-- **Flag** `MINNOW_SERVER_ENGINE` (default **off**): composer/main-chat send uses
-  commands; renderer does **not** call `runChatTurn` for main chat. Flag off ⇒
-  `loop.ts` unchanged. Board stays renderer + lease.
+- **Flag** `MINNOW_SERVER_ENGINE` (later default-on in Phase 4): composer/main-chat
+  send uses commands; renderer does **not** call `runChatTurn` for main chat.
+  At Phase 1 ship time flag was default **off**; Board stayed renderer + lease.
 - **Client**: [`src/state/session-commands.ts`](../../src/state/session-commands.ts),
   [`src/state/server-engine-flag.ts`](../../src/state/server-engine-flag.ts),
   [`src/chat/engine-stream-mirror.ts`](../../src/chat/engine-stream-mirror.ts).
@@ -123,7 +123,7 @@ Shipped on this branch (`henri/min-354-server-session-engine`). Lives under
 ### Phase 2 — Move the board scheduler into the engine ✅ Done (MIN-360)
 
 Shipped on this branch (`henri/min-354-server-session-engine`) behind `MINNOW_SERVER_ENGINE`
-(still default **off**).
+(default **off** at Phase 2 ship time; flipped default-on in Phase 4).
 
 - **Board host**: [`src/session-engine/board-host.ts`](../../src/session-engine/board-host.ts)
   aliases engine SessionState into `sessions.ts`, installs the engine turn runner, and
@@ -156,7 +156,7 @@ Shipped on this branch (`henri/min-354-server-session-engine`) behind `MINNOW_SE
 ### Phase 3 — Move the sub-agent controller into the engine ✅ Done (MIN-361)
 
 Shipped on this branch (`henri/min-354-server-session-engine`) behind `MINNOW_SERVER_ENGINE`
-(still default **off**).
+(default **off** at Phase 3 ship time; flipped default-on in Phase 4).
 
 - **Controller host**: [`src/session-engine/controller-host.ts`](../../src/session-engine/controller-host.ts)
   activates at **server** boot (`server/session/controller-loader.js`) — runs
@@ -180,11 +180,22 @@ Shipped on this branch (`henri/min-354-server-session-engine`) behind `MINNOW_SE
 - **Tests**: `test/engine/session-phase3.test.mjs`, `test/agents/controller-host-gate.test.mts`;
   existing `test/agents/controller-*.test.mts` + `test/sub-agents/**` keep `MINNOW_TEST=1` auto-boot.
 
-### Phase 4 — Retire renderer driving + cleanup
-- Renderer becomes read-model + commands throughout; remove optimistic mutate-then-PUT for
-  chat/board state (settings-only writes may remain as commands).
-- Remove the driver lease (engine is sole driver by construction).
-- Flip `MINNOW_SERVER_ENGINE` default-on; delete legacy renderer driving paths.
+### Phase 4 — Retire renderer driving + cleanup ✅ Done (MIN-362)
+
+Shipped on this branch (`henri/min-354-server-session-engine`).
+
+- Renderer is a **read-model + command dispatcher** for chat/board/sub-agent driving
+  (composer → `POST /api/session/commands`; board UI → `board-command-bridge`;
+  spawn/cancel → controller commands). Settings / non-driver session writes may still
+  PATCH/PUT `/api/config/sessions` (not all 173 `scheduleSaveSessions` sites rewritten).
+- **Driver lease deleted**: `server/session/lease.js` gone; `/api/session/lease` returns
+  `410 LEASE_REMOVED`; client heartbeat + remote-driver banner removed.
+- **`MINNOW_SERVER_ENGINE` default ON** (`server/session/flag.js`). Fresh `npm start`
+  boots the engine with no env var. Emergency opt-out: `MINNOW_SERVER_ENGINE=0|false|off|no`
+  restores legacy renderer driving (thin dual path kept for one release cycle).
+- HTML inject + `GET /api/session/engine` reflect default-on.
+- Tests: `test/engine/session-phase0.test.mjs` (lease-removed), phase1–3 updated;
+  `test/agents/controller-host-gate.test.mts` covers default-on / opt-out.
 
 ---
 
@@ -194,7 +205,7 @@ Shipped on this branch (`henri/min-354-server-session-engine`) behind `MINNOW_SE
 - `POST /api/session/commands` — `{ type, …payload }`; `202` + `{ rev }`.
 - `GET  /api/session/stream` — SSE: `event: snapshot` then `event: patch` (JSON diff) with `id: <rev>`.
   Supports `Last-Event-ID` / `?sinceRev=` for replay-or-resnapshot.
-- `POST /api/session/lease` — claim/renew driver lease (Phase 0 only; removed in Phase 4).
+- ~~`POST /api/session/lease`~~ — removed in Phase 4 (`410 LEASE_REMOVED`).
 - `PUT /api/config/sessions` — add `If-Match: <rev>` optimistic concurrency (Phase 0).
 - `PATCH /api/config/sessions` — same `If-Match` / `expectedRev` / `baseRev` guard (Phase 0; SQLite adaptation).
 
@@ -251,7 +262,7 @@ Shipped on this branch (`henri/min-354-server-session-engine`) behind `MINNOW_SE
 - Reuse `test/orchestrate/board-flow-e2e.test.mts` (`driveBoardToConvergence`) against the **engine**
   module — logic is ported, not rewritten, so the harness drives the same functions.
 - New: engine command dispatch tests; SSE snapshot/patch/replay (`sinceRev`) tests; version-guard 409
-  tests; driver-lease exclusivity tests (Phase 0).
+  tests; Phase 4 lease-removed assertions (`410 LEASE_REMOVED`).
 - Keep `test/headless/*` green as the loop generalizes.
 - Multi-client integration test: two SSE subscribers + concurrent commands converge to one `rev`.
 
@@ -259,6 +270,6 @@ Shipped on this branch (`henri/min-354-server-session-engine`) behind `MINNOW_SE
 
 ## 8. Recommended sequencing
 
-Ship **Phase 0 first** — it delivers correct multi-device (no divergence, no double-run) with ~2
-core files + a lease, fully reversible, and unblocks daily use while Phases 1–4 land the clean
-server-owned architecture. Phases 1–4 are each shippable behind `MINNOW_SERVER_ENGINE`.
+Phases 0–4 are complete on this branch. Production default is engine-on; use
+`MINNOW_SERVER_ENGINE=0` only as an emergency rollback. Full deletion of the opt-out dual
+path can wait one release cycle after Phase 4 stabilizes.

@@ -9,7 +9,6 @@ import { handleConfigRequest } from '../../server/config/middleware.js';
 import { handleSessionRequest } from '../../server/session/middleware.js';
 import { resetSessionRevStoreForTests } from '../../server/session/rev-store.js';
 import { resetSessionSseForTests } from '../../server/session/sse.js';
-import { resetBoardDriverLeaseForTests } from '../../server/session/lease.js';
 import {
   resetSessionEngineForTests,
   ensureSessionEngineBooted,
@@ -99,7 +98,6 @@ describe('session engine phase 2 board (MIN-360)', () => {
     process.env.MINNOW_SERVER_ENGINE = '1';
     resetSessionRevStoreForTests();
     resetSessionSseForTests();
-    resetBoardDriverLeaseForTests();
     resetSessionEngineForTests();
     resetBoardLoaderForTests();
     server = createPhase2TestServer();
@@ -112,7 +110,6 @@ describe('session engine phase 2 board (MIN-360)', () => {
   beforeEach(() => {
     resetSessionRevStoreForTests();
     resetSessionEngineForTests();
-    resetBoardDriverLeaseForTests();
     resetBoardLoaderForTests();
     process.env.MINNOW_SERVER_ENGINE = '1';
   });
@@ -127,7 +124,6 @@ describe('session engine phase 2 board (MIN-360)', () => {
       /* host may not have loaded */
     }
     resetSessionSseForTests();
-    resetBoardDriverLeaseForTests();
     resetSessionRevStoreForTests();
     resetSessionEngineForTests();
     resetBoardLoaderForTests();
@@ -379,18 +375,17 @@ describe('session-engine stream-bus (MIN-360)', () => {
   });
 });
 
-describe('board-driver-gate (MIN-360)', () => {
+describe('board-driver-gate (MIN-360 / MIN-362)', () => {
   test('engine host owns drive; flag-on client does not', async () => {
     const {
       canDriveOrchestrateBoard,
       setEngineOwnsBoardDrive,
-      setBoardDriverLeaseProbe,
       setServerEngineFlagProbe,
     } = await import('../../src/state/board-driver-gate.ts');
 
     setEngineOwnsBoardDrive(false);
-    setBoardDriverLeaseProbe(null);
     setServerEngineFlagProbe(null);
+    // No flag probe ⇒ treat as opt-out / early boot (renderer may drive).
     assert.equal(canDriveOrchestrateBoard(), true);
 
     setServerEngineFlagProbe(() => true);
@@ -400,6 +395,9 @@ describe('board-driver-gate (MIN-360)', () => {
     assert.equal(canDriveOrchestrateBoard(), true);
 
     setEngineOwnsBoardDrive(false);
+    setServerEngineFlagProbe(() => false);
+    assert.equal(canDriveOrchestrateBoard(), true);
+
     setServerEngineFlagProbe(null);
   });
 });

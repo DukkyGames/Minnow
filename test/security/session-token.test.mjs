@@ -105,18 +105,32 @@ describe('timingSafeEqualToken', () => {
 });
 
 describe('injectSessionTokenScript', () => {
-  test('injects before </head>', () => {
-    const html = '<html><head><title>x</title></head><body></body></html>';
-    const out = injectSessionTokenScript(html, 'deadbeef');
-    assert.match(out, /window\.__MINNOW_SESSION_TOKEN__="deadbeef"/);
-    assert.match(out, /window\.__MINNOW_SERVER_ENGINE__=(true|false)/);
-    assert.match(out, /<\/script><\/head>/);
+  test('injects before </head> with engine default-on', () => {
+    const prev = process.env.MINNOW_SERVER_ENGINE;
+    delete process.env.MINNOW_SERVER_ENGINE;
+    try {
+      const html = '<html><head><title>x</title></head><body></body></html>';
+      const out = injectSessionTokenScript(html, 'deadbeef');
+      assert.match(out, /window\.__MINNOW_SESSION_TOKEN__="deadbeef"/);
+      assert.match(out, /window\.__MINNOW_SERVER_ENGINE__=true/);
+      assert.match(out, /<\/script><\/head>/);
+    } finally {
+      if (prev === undefined) delete process.env.MINNOW_SERVER_ENGINE;
+      else process.env.MINNOW_SERVER_ENGINE = prev;
+    }
   });
 
   test('falls back to prepending when </head> is missing', () => {
-    const html = '<body>no head here</body>';
-    const out = injectSessionTokenScript(html, 'deadbeef');
-    assert.match(out, /^<script>window\.__MINNOW_SESSION_TOKEN__="deadbeef"/);
-    assert.match(out, /window\.__MINNOW_SERVER_ENGINE__=(true|false)/);
+    const prev = process.env.MINNOW_SERVER_ENGINE;
+    process.env.MINNOW_SERVER_ENGINE = '0';
+    try {
+      const html = '<body>no head here</body>';
+      const out = injectSessionTokenScript(html, 'deadbeef');
+      assert.match(out, /^<script>window\.__MINNOW_SESSION_TOKEN__="deadbeef"/);
+      assert.match(out, /window\.__MINNOW_SERVER_ENGINE__=false/);
+    } finally {
+      if (prev === undefined) delete process.env.MINNOW_SERVER_ENGINE;
+      else process.env.MINNOW_SERVER_ENGINE = prev;
+    }
   });
 });

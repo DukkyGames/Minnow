@@ -3004,8 +3004,8 @@ export async function sendMessageWithTools(
     clearComposerInput(input);
   }
 
-  // Phase 1: route main-chat sends through the Session Engine when flagged.
-  // Board / sub-agent paths still call runChatTurn directly (unchanged).
+  // Phase 4: main-chat sends go through the Session Engine by default.
+  // Emergency opt-out (MINNOW_SERVER_ENGINE=0) falls through to runChatTurn.
   if (serverEngine) {
     const { dispatchSendMessage } = await import('../state/session-commands');
     const { resolveEffectiveChatModelBinding } = await import('../ui/default-model');
