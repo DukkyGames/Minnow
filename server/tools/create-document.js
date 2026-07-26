@@ -6,6 +6,13 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileExtension as extensionOf } from '../../src/attachments/document-extensions.mjs';
 import { getEffectiveWorkspaceRoot, resolveSafePath } from '../runtime/path-access.js';
+import {
+  drawVisualLine,
+  embedLayoutFonts,
+  formatReplacedCharacters,
+  layoutBodyText,
+  preloadPdfFonts,
+} from './pdf-layout.js';
 
 /** Max decoded document body size for PDF text (chars). */
 const MAX_PDF_BODY_CHARS = 200_000;
@@ -34,45 +41,22 @@ function isObject(value) {
 }
 
 /**
- * @param {string} text
- * @param {number} maxLen
- * @returns {string[]}
- */
-function wrapPlainText(text, maxLen) {
-  const words = String(text).split(/\s+/).filter(Boolean);
-  const lines = [];
-  let current = '';
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
-    if (next.length > maxLen && current) {
-      lines.push(current);
-      current = word;
-    } else {
-      current = next;
-    }
-  }
-  if (current) lines.push(current);
-  return lines.length > 0 ? lines : [''];
-}
-
-/**
  * @param {{ title?: string, body?: string }} input
- * @returns {Promise<Buffer>}
+ * @returns {Promise<{ buffer: Buffer, replaced: string[] }>}
  */
 async function buildPdfBuffer(input) {
   let pdfLib;
   try {
     pdfLib = await import('pdf-lib');
   } catch {
-    throw new Error(
-      'PDF creation requires the optional "pdf-lib" package. Install with: npm install pdf-lib',
-    );
+    throw new Error('Internal error: pdf-lib module unavailable');
   }
 
-  const { PDFDocument, StandardFonts } = pdfLib;
+  await preloadPdfFonts();
+
+  const { PDFDocument } = pdfLib;
   const doc = await PDFDocument.create();
-  const regular = await doc.embedFont(StandardFonts.Helvetica);
-  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const fonts = await embedLayoutFonts(doc);
 
   const margin = 50;
   const bodySize = 11;
@@ -82,11 +66,10 @@ async function buildPdfBuffer(input) {
   let page = doc.addPage();
   let { width, height } = page.getSize();
   let y = height - margin;
-  const maxLineWidth = width - margin * 2;
 
   const title = typeof input.title === 'string' ? input.title.trim() : '';
   if (title) {
-    page.drawText(title, { x: margin, y, size: titleSize, font: bold });
+    page.drawText(title, { x: margin, y, size: titleSize, font: fonts.latin });
     y -= titleSize + 12;
   }
 
@@ -95,33 +78,27 @@ async function buildPdfBuffer(input) {
     throw new Error(`body exceeds ${MAX_PDF_BODY_CHARS} character limit`);
   }
 
-  const paragraphs = body.split(/\n\n+/);
-  for (const paragraph of paragraphs) {
-    const normalized = paragraph.replace(/\r\n/g, '\n').trim();
-    if (!normalized) continue;
+  const { pages, replaced } = layoutBodyText(body, {
+    fonts,
+    fontSize: bodySize,
+    lineHeight,
+    margin,
+    pageWidth: width,
+    pageHeight: height,
+    startY: y,
+  });
 
-    for (const rawLine of normalized.split('\n')) {
-      const wrapped = wrapPlainText(rawLine, 90);
-      for (const line of wrapped) {
-        if (y < margin + lineHeight) {
-          page = doc.addPage();
-          ({ width, height } = page.getSize());
-          y = height - margin;
-        }
-        page.drawText(line, {
-          x: margin,
-          y,
-          size: bodySize,
-          font: regular,
-          maxWidth: maxLineWidth,
-        });
-        y -= lineHeight;
-      }
+  for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
+    if (pageIndex > 0) {
+      page = doc.addPage();
+      ({ width, height } = page.getSize());
     }
-    y -= lineHeight * 0.4;
+    for (const line of pages[pageIndex].lines) {
+      drawVisualLine(page, line, { x: margin, y: line.y, size: bodySize });
+    }
   }
 
-  return Buffer.from(await doc.save());
+  return { buffer: Buffer.from(await doc.save()), replaced };
 }
 
 /**
@@ -134,9 +111,7 @@ async function buildSpreadsheetBuffer(sheets) {
     const mod = await import('xlsx');
     XLSX = mod.default ?? mod;
   } catch {
-    throw new Error(
-      'Spreadsheet creation requires the optional "xlsx" package. Install with: npm install xlsx',
-    );
+    throw new Error('Internal error: xlsx module unavailable');
   }
 
   if (!Array.isArray(sheets) || sheets.length === 0) {
@@ -154,6 +129,9 @@ async function buildSpreadsheetBuffer(sheets) {
 
     let name =
       typeof sheet.name === 'string' && sheet.name.trim() ? sheet.name.trim() : `Sheet${index + 1}`;
+    // Excel forbids : \ / ? * [ ] in sheet names.
+    name = name.replace(/[:\\/?*[\]]/g, '');
+    if (!name) name = `Sheet${index + 1}`;
     name = name.slice(0, 31);
     let uniqueName = name;
     let suffix = 2;
@@ -200,9 +178,7 @@ async function buildWordBuffer(input) {
   try {
     docx = await import('docx');
   } catch {
-    throw new Error(
-      'Word document creation requires the optional "docx" package. Install with: npm install docx',
-    );
+    throw new Error('Internal error: docx module unavailable');
   }
 
   const { Document, HeadingLevel, Packer, Paragraph, TextRun } = docx;
@@ -307,12 +283,13 @@ export async function toolCreatePdf(args) {
   try {
     assertExtension(relPath, 'pdf');
     const absPath = resolveSafePath(relPath, { write: true });
-    const buffer = await buildPdfBuffer({
+    const { buffer, replaced } = await buildPdfBuffer({
       title: typeof args?.title === 'string' ? args.title : undefined,
       body: typeof args?.body === 'string' ? args.body : '',
     });
     const saved = await writeBinaryDocument(absPath, buffer);
-    return `Created PDF ${saved} (${buffer.length} bytes)`;
+    const replacedNote = formatReplacedCharacters(replaced);
+    return `Created PDF ${saved} (${buffer.length} bytes)${replacedNote}`;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (message.startsWith('Error:')) return message;

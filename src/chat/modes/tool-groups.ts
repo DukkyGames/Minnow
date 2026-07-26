@@ -19,6 +19,7 @@ export const TOOL_GROUP_IDS = {
     'list_directory',
     'read_file',
     'read_file_range',
+    'read_document',
     'find_files',
     'get_file_metadata',
     'search_in_file',

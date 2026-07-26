@@ -29,9 +29,11 @@ describe('document-extensions', () => {
   it('classifies document preview kinds', () => {
     assert.equal(isPdfFilePath('report.pdf'), true);
     assert.equal(isSpreadsheetFilePath('budget.xlsx'), true);
+    assert.equal(isSpreadsheetFilePath('data.csv'), false);
     assert.equal(isWordFilePath('memo.docx'), true);
     assert.equal(getDocumentPreviewKind('report.pdf'), 'pdf');
     assert.equal(getDocumentPreviewKind('budget.xlsx'), 'spreadsheet');
+    assert.equal(getDocumentPreviewKind('data.csv'), null);
     assert.equal(getDocumentPreviewKind('memo.docx'), 'word');
     assert.equal(getDocumentPreviewKind('notes.md'), null);
   });

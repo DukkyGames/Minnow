@@ -22,6 +22,9 @@ const TOOL_SOURCE_RESOLVERS = {
   fetch_web_content: (args) => `web:${String(args?.url ?? 'unknown').trim()}`,
   rag_web_content: (args) => `web-rag:${String(args?.url ?? 'unknown').trim()}`,
   read_document: (args) => {
+    if (typeof args?.path === 'string' && args.path.trim()) {
+      return `document:${path.basename(args.path.trim())}`;
+    }
     const name =
       typeof args?.filename === 'string' && args.filename.trim()
         ? path.basename(args.filename.trim())
