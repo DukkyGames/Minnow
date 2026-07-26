@@ -133,6 +133,11 @@ async function onTabActivated(tab: DesktopWorkspaceTab): Promise<void> {
   } else if (tab === 'viewer') {
     const { showViewerSplit } = await import('../ui/file-layout');
     showViewerSplit();
+    // Desktop Viewer tab stays visible with zero tabs — paint recent files empty state.
+    const { ensureCodeWorkspaceModules } = await import('../boot/code-workspace-modules');
+    await ensureCodeWorkspaceModules();
+    const { renderActiveViewerTab } = await import('../ui/file-viewer');
+    renderActiveViewerTab();
   } else if (tab === 'files') {
     const { ensureCodeWorkspaceModules } = await import('../boot/code-workspace-modules');
     await ensureCodeWorkspaceModules();

@@ -7,6 +7,9 @@ import {
   closeViewerTabsUnderAncestor,
   getActiveViewerTabPath,
   getOpenViewerTabPaths,
+  getViewerTab,
+  isViewerDocDirty,
+  normalizeViewerDocText,
   openViewerTab,
   removeViewerTab,
   reorderViewerTab,
@@ -14,6 +17,9 @@ import {
   restoreWorkspaceViewerTabs,
   retargetViewerTab,
   serializeWorkspaceViewerTabs,
+  rebaselineViewerTabFromEditor,
+  setActiveTabLoadState,
+  setViewerTabLoadState,
 } from '../../src/ui/file-viewer-tab-store.ts';
 
 describe('file-viewer-tab-store', () => {
@@ -97,5 +103,61 @@ describe('file-viewer-tab-store', () => {
     await openViewerTab('b.ts', { skipUnsavedGuard: true });
     reorderViewerTab('a.ts', 1);
     assert.deepEqual(getOpenViewerTabPaths(), ['b.ts', 'a.ts']);
+  });
+
+  test('normalizeViewerDocText collapses CRLF and lone CR to LF', () => {
+    assert.equal(normalizeViewerDocText('a\r\nb\r\n'), 'a\nb\n');
+    assert.equal(normalizeViewerDocText('a\rb\n'), 'a\nb\n');
+    assert.equal(normalizeViewerDocText('plain\n'), 'plain\n');
+  });
+
+  test('isViewerDocDirty ignores CRLF vs LF-only mismatch', () => {
+    assert.equal(isViewerDocDirty('a\nb\n', 'a\r\nb\r\n'), false);
+    assert.equal(isViewerDocDirty('a\nx\n', 'a\r\nb\r\n'), true);
+  });
+
+  test('openViewerTab normalizes seeded CRLF content for dirty baseline', async () => {
+    const opened = await openViewerTab('index.html', {
+      skipUnsavedGuard: true,
+      content: '<html></html>\r\n',
+    });
+    assert.ok(opened);
+    assert.equal(opened.tab.originalContent, '<html></html>\n');
+    assert.equal(opened.tab.isDirty, false);
+    assert.equal(isViewerDocDirty('<html></html>\n', opened.tab.originalContent), false);
+  });
+
+  test('setActiveTabLoadState normalizes CRLF content', async () => {
+    await openViewerTab('index.html', { skipUnsavedGuard: true });
+    setActiveTabLoadState('ready', { content: 'hello\r\nworld\r\n' });
+    const tab = getViewerTab('index.html');
+    assert.ok(tab);
+    assert.equal(tab.originalContent, 'hello\nworld\n');
+    assert.equal(tab.isDirty, false);
+  });
+
+  test('setViewerTabLoadState updates by path even when another tab is active', async () => {
+    await openViewerTab('a.html', { skipUnsavedGuard: true });
+    await openViewerTab('b.html', { skipUnsavedGuard: true });
+    assert.equal(getActiveViewerTabPath(), 'b.html');
+    setViewerTabLoadState('a.html', 'ready', { content: '<p>a</p>\r\n' });
+    const a = getViewerTab('a.html');
+    assert.ok(a);
+    assert.equal(a.loadStatus, 'ready');
+    assert.equal(a.originalContent, '<p>a</p>\n');
+    assert.equal(getViewerTab('b.html')?.loadStatus, 'loading');
+  });
+
+  test('rebaselineViewerTabFromEditor clears false dirty against CM doc', async () => {
+    await openViewerTab('index.html', {
+      skipUnsavedGuard: true,
+      content: 'hello\r\n',
+    });
+    const tab = getViewerTab('index.html');
+    assert.ok(tab);
+    tab.isDirty = true;
+    rebaselineViewerTabFromEditor('index.html', 'hello\n');
+    assert.equal(tab.originalContent, 'hello\n');
+    assert.equal(tab.isDirty, false);
   });
 });

@@ -71,20 +71,27 @@ import {
   getOpenViewerTabPaths,
   getViewerTab,
   isAnyViewerTabDirty,
+  isAttachmentViewerPath,
+  isViewerDocDirty,
   isViewerTabDirty,
   listViewerTabs,
   markActiveTabSaved,
+  normalizeViewerDocText,
   openViewerTab,
+  rebaselineViewerTabFromEditor,
   removeViewerTab,
   restoreWorkspaceViewerTabs,
   retargetViewerTab,
   setActiveTabLoadState,
+  setViewerTabLoadState,
   snapshotViewerTabEditorContent,
   type OpenViewerTabOptions,
   type ViewerTabState,
 } from './file-viewer-tab-store';
 import { refreshFileViewerTabs, registerFileViewerTabHandlers } from './file-viewer-tabs';
 import { showViewerUnsavedDialog } from './file-viewer-unsaved-dialog';
+import { renderViewerRecentFilesEmptyState } from './file-viewer-recent';
+import { recordRecentViewerFile } from '../state/recent-viewer-files';
 import { setStatus } from './status';
 
 export const LARGE_FILE_BYTES = 512_000;
@@ -124,13 +131,15 @@ function revokeActivePdfPreviewBlob(): void {
   activePdfPreviewBlobUrl = null;
 }
 
-/** Strip "N: " prefixes from read_file_range output. */
+/** Strip "N: " prefixes from read_file_range output (EOL-normalized for the editor). */
 export function parseReadFileRangeBody(raw: string): string {
-  return raw
+  return normalizeViewerDocText(raw)
     .split('\n')
     .map((line) => line.replace(/^\d+:\s?/, ''))
     .join('\n');
 }
+
+export { normalizeViewerDocText, isViewerDocDirty } from './file-viewer-tab-store';
 
 /** Path label with optional dirty marker (●). */
 export function formatViewerPathLabel(path: string, dirty: boolean): string {
@@ -274,7 +283,8 @@ function snapshotOutgoingEditorTab(): void {
   const tab = getViewerTab(editorViewPath);
   if (!tab || tab.viewMode === 'image') return;
   const text = editorView.state.doc.toString();
-  const dirty = !tab.readOnlyExcerpt && text !== tab.originalContent;
+  // Compare EOL-normalized text — CM always uses LF; disk may have been CRLF.
+  const dirty = !tab.readOnlyExcerpt && isViewerDocDirty(text, tab.originalContent);
   snapshotViewerTabEditorContent(editorViewPath, text, dirty);
 }
 
@@ -396,6 +406,8 @@ function mountEditor(tab: ViewerTabState, content: string): void {
   const generation = ++mountGeneration;
   destroyEditor();
   host.innerHTML = '';
+  // Feed CM the same LF form we store in originalContent (avoids false dirty).
+  content = normalizeViewerDocText(content);
 
   if (tab.readOnlyExcerpt) {
     const banner = document.createElement('p');
@@ -506,7 +518,7 @@ function mountEditor(tab: ViewerTabState, content: string): void {
           }
           const liveTab = getViewerTab(path);
           if (!liveTab || liveTab.readOnlyExcerpt) return;
-          const nextDirty = text !== liveTab.originalContent;
+          const nextDirty = isViewerDocDirty(text, liveTab.originalContent);
           if (nextDirty !== liveTab.isDirty) {
             snapshotViewerTabEditorContent(path, text, nextDirty);
             updateViewerChrome();
@@ -543,6 +555,11 @@ function mountEditor(tab: ViewerTabState, content: string): void {
     if (getActiveViewerTabPath() !== path || !editorMount.isConnected) return;
     editorView = new EditorView({ state, parent: editorMount });
     editorViewPath = path;
+    // Adopt CM's exact buffer as the clean baseline (avoids EOL / load mismatches).
+    const liveTab = getViewerTab(path);
+    if (liveTab && !liveTab.readOnlyExcerpt && !liveTab.isDirty) {
+      rebaselineViewerTabFromEditor(path, editorView.state.doc.toString());
+    }
     if (intentExts.length > 0) {
       mountIntentModeEditor(editorView, intentInitialEnabled);
       updateIntentToolbarChrome(intentInitialEnabled, 0);
@@ -758,38 +775,64 @@ async function loadFileContent(path: string): Promise<LoadedFileContent> {
 async function ensureActiveTabLoaded(): Promise<void> {
   const tab = getActiveViewerTab();
   if (!tab || tab.loadStatus !== 'loading' || tab.kind === 'attachment') return;
+  // Capture path up front — the user may switch tabs while this await is in flight.
+  const path = tab.path;
 
-  setViewerLoading(tab.path);
+  setViewerLoading(path);
   try {
-    if (isImageFilePath(tab.path)) {
-      setActiveTabLoadState('ready', { viewMode: 'image' });
-      renderActiveViewerTab();
+    if (isImageFilePath(path)) {
+      setViewerTabLoadState(path, 'ready', { viewMode: 'image' });
+      if (getActiveViewerTabPath() === path) renderActiveViewerTab();
       return;
     }
-    const documentKind = getDocumentPreviewKind(tab.path);
+    const documentKind = getDocumentPreviewKind(path);
     if (documentKind) {
-      setActiveTabLoadState('ready', {
+      setViewerTabLoadState(path, 'ready', {
         viewMode: documentPreviewViewMode(documentKind),
         readOnlyExcerpt: true,
         readOnlyBannerText:
           'Document preview (read-only). Use create_pdf, create_spreadsheet, or create_word_document to generate files.',
       });
-      renderActiveViewerTab();
+      if (getActiveViewerTabPath() === path) renderActiveViewerTab();
       return;
     }
-    const loaded = await loadFileContent(tab.path);
-    const viewMode = tab.viewMode === 'markdown-preview' ? 'markdown-preview' : 'editor';
-    setActiveTabLoadState('ready', {
+    const loaded = await loadFileContent(path);
+    const still = getViewerTab(path);
+    // Tab closed or a newer open restarted loading — do not stomp state.
+    if (!still || still.loadStatus !== 'loading') return;
+    const viewMode = still.viewMode === 'markdown-preview' ? 'markdown-preview' : 'editor';
+    setViewerTabLoadState(path, 'ready', {
       content: loaded.content,
       readOnlyExcerpt: loaded.readOnlyExcerpt,
       viewMode,
     });
-    renderActiveViewerTab();
+    if (getActiveViewerTabPath() === path) renderActiveViewerTab();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    setActiveTabLoadState('error', { error: message });
-    setViewerError(message || 'Could not open file');
+    const still = getViewerTab(path);
+    if (!still || still.loadStatus !== 'loading') return;
+    setViewerTabLoadState(path, 'error', { error: message });
+    if (getActiveViewerTabPath() === path) {
+      setViewerError(message || 'Could not open file');
+    }
   }
+}
+
+/** Paint the recent-files empty state when the viewer has no open tabs. */
+export function renderViewerEmptyState(): void {
+  const host = getViewerHost();
+  if (!host) return;
+  destroyEditor();
+  renderViewerRecentFilesEmptyState(host);
+  updateViewerChrome();
+}
+
+/** Remember a workspace file in the empty-state MRU (skip attachments). */
+function noteRecentViewerOpen(path: string): void {
+  if (isAttachmentViewerPath(path)) return;
+  recordRecentViewerFile(path, {
+    workspaceRoot: getFileTreeListingWorkspaceRoot(),
+  });
 }
 
 /** Mount the active tab in #fileViewerHost (editor, preview, image, loading, error). */
@@ -797,9 +840,11 @@ export function renderActiveViewerTab(): void {
   const tab = getActiveViewerTab();
   const host = getViewerHost();
   if (!tab || !host) {
-    if (host) host.innerHTML = '';
-    destroyEditor();
-    updateViewerChrome();
+    if (host) renderViewerEmptyState();
+    else {
+      destroyEditor();
+      updateViewerChrome();
+    }
     return;
   }
 
@@ -869,6 +914,8 @@ export function renderActiveViewerTab(): void {
 
 /** Confirm when leaving a dirty active editor tab (Save / Discard / Cancel). */
 export async function confirmLeaveDirtyActiveTab(): Promise<boolean> {
+  // Refresh dirty from the live CM buffer before prompting (stale flags lie).
+  snapshotOutgoingEditorTab();
   const tab = getActiveViewerTab();
   if (!tab?.isDirty) return true;
   const choice = await showViewerUnsavedDialog(
@@ -881,6 +928,10 @@ export async function confirmLeaveDirtyActiveTab(): Promise<boolean> {
 
 /** Confirm closing a dirty tab (may be inactive). */
 async function confirmCloseDirtyTab(tab: ViewerTabState): Promise<boolean> {
+  // Active tab: recompute from the editor so a false ● does not block close.
+  if (editorView && editorViewPath === tab.path) {
+    snapshotOutgoingEditorTab();
+  }
   if (!tab.isDirty) return true;
   const choice = await showViewerUnsavedDialog(
     `You have unsaved changes in "${tab.displayName}".`,
@@ -921,8 +972,7 @@ export async function closeViewerTab(path: string): Promise<void> {
 
   if (listViewerTabs().length === 0) {
     patchFilePanelState({ openViewerTabs: [], activeViewerTab: null, selectedPath: null });
-    const host = getViewerHost();
-    if (host) host.innerHTML = '';
+    renderViewerEmptyState();
     if (listPreviewTabs().length > 0) {
       const { showPreviewSplit } = await import('./file-layout');
       showPreviewSplit();
@@ -1055,7 +1105,7 @@ export async function switchMarkdownViewerToPreview(): Promise<void> {
       if (!saved) return;
     }
   }
-  const content = editorView.state.doc.toString();
+  const content = normalizeViewerDocText(editorView.state.doc.toString());
   tab.originalContent = content;
   tab.cachedEditorContent = content;
   tab.isDirty = false;
@@ -1269,6 +1319,7 @@ export async function openWorkspaceImageInViewer(relativePath: string): Promise<
     beforeActivate: snapshotOutgoingEditorTab,
   });
   if (!result) return;
+  noteRecentViewerOpen(relativePath);
   showViewerSplit();
   renderActiveViewerTab();
   renderFileTreeViaBridge();
@@ -1325,6 +1376,7 @@ export async function openFileInViewer(
       return;
     }
 
+    noteRecentViewerOpen(relativePath);
     showViewerSplit();
 
     const mounts = await import('../os/desktop-workspace-mounts');
@@ -1358,6 +1410,7 @@ export async function openFileInViewer(
     return;
   }
 
+  noteRecentViewerOpen(relativePath);
   showViewerSplit();
 
   const mounts = await import('../os/desktop-workspace-mounts');
@@ -1390,10 +1443,8 @@ export async function restoreViewerTabsFromPrefs(
 }
 
 function resetAllViewerTabs(options?: { closeSplit?: boolean }): void {
-  destroyEditor();
   clearAllViewerTabs();
-  const host = getViewerHost();
-  if (host) host.innerHTML = '';
+  renderViewerEmptyState();
   const saveBtn = getSaveButton();
   if (saveBtn) saveBtn.disabled = true;
   if (options?.closeSplit !== false) {

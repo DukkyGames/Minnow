@@ -314,6 +314,8 @@ html[data-theme$='-dark'] .icon-btn .icon-img {
 
 .status-pill #sText {
   overflow: visible;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .s-dot {

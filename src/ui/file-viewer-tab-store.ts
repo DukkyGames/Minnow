@@ -9,6 +9,19 @@ import {
 } from '../state/file-panel';
 import { basename, isAncestorPath, normalizeTreePath } from './file-tree-path';
 
+/**
+ * CodeMirror 6 stores documents with LF line breaks only. Disk/fetch may return CRLF
+ * (common on Windows). Normalize so dirty checks compare the same representation.
+ */
+export function normalizeViewerDocText(text: string): string {
+  return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
+/** True when editor buffer differs from the loaded/saved baseline (EOL-normalized). */
+export function isViewerDocDirty(editorText: string, originalContent: string): boolean {
+  return normalizeViewerDocText(editorText) !== normalizeViewerDocText(originalContent);
+}
+
 export type ViewerTabKind = 'workspace' | 'attachment';
 export type ViewerViewMode = 'editor' | 'markdown-preview' | 'image' | 'pdf' | 'spreadsheet' | 'word';
 export type ViewerLoadStatus = 'loading' | 'ready' | 'error';
@@ -190,13 +203,17 @@ export function updateActiveTabFromEditor(content: string, dirty: boolean): void
 export function markActiveTabSaved(content: string): void {
   const tab = getActiveViewerTab();
   if (!tab) return;
-  tab.originalContent = content;
-  tab.cachedEditorContent = content;
+  // Keep baseline in CM's LF form so a no-op leave does not look dirty.
+  const normalized = normalizeViewerDocText(content);
+  tab.originalContent = normalized;
+  tab.cachedEditorContent = normalized;
   tab.isDirty = false;
   emitChange();
 }
 
-export function setActiveTabLoadState(
+/** Apply load result to a specific tab (by path) so async loads cannot land on the wrong tab. */
+export function setViewerTabLoadState(
+  path: string,
   status: ViewerLoadStatus,
   payload?: {
     content?: string;
@@ -206,12 +223,13 @@ export function setActiveTabLoadState(
     error?: string;
   },
 ): void {
-  const tab = getActiveViewerTab();
+  const tab = getViewerTab(path);
   if (!tab) return;
   tab.loadStatus = status;
   if (payload?.content !== undefined) {
-    tab.originalContent = payload.content;
-    tab.cachedEditorContent = payload.content;
+    const normalized = normalizeViewerDocText(payload.content);
+    tab.originalContent = normalized;
+    tab.cachedEditorContent = normalized;
     tab.isDirty = false;
   }
   if (payload?.readOnlyExcerpt !== undefined) {
@@ -229,6 +247,37 @@ export function setActiveTabLoadState(
   emitChange();
 }
 
+export function setActiveTabLoadState(
+  status: ViewerLoadStatus,
+  payload?: {
+    content?: string;
+    readOnlyExcerpt?: boolean;
+    readOnlyBannerText?: string | null;
+    viewMode?: ViewerViewMode;
+    error?: string;
+  },
+): void {
+  const active = getActiveViewerTabPath();
+  if (!active) return;
+  setViewerTabLoadState(active, status, payload);
+}
+
+/**
+ * After CodeMirror mounts, adopt its exact doc string as the clean baseline.
+ * CM may normalize EOLs further; this prevents false dirty on the next leave.
+ */
+export function rebaselineViewerTabFromEditor(path: string, editorText: string): void {
+  const tab = getViewerTab(path);
+  if (!tab || tab.readOnlyExcerpt) return;
+  const normalized = normalizeViewerDocText(editorText);
+  tab.originalContent = normalized;
+  tab.cachedEditorContent = normalized;
+  if (tab.isDirty) {
+    tab.isDirty = false;
+    emitChange();
+  }
+}
+
 function shouldUseMarkdownPreview(path: string, asCode?: boolean): boolean {
   const lower = path.toLowerCase();
   return (lower.endsWith('.md') || lower.endsWith('.markdown')) && !asCode;
@@ -242,12 +291,15 @@ function createTabState(path: string, options?: OpenViewerTabOptions): ViewerTab
   const viewMode =
     options?.viewMode ??
     (shouldUseMarkdownPreview(path, options?.asCode) ? 'markdown-preview' : 'editor');
+  // Normalize preloaded content so CRLF attachments/restores match CM docs.
+  const seededContent =
+    options?.content !== undefined ? normalizeViewerDocText(options.content) : undefined;
   return {
     path: key,
     displayName,
     kind,
-    originalContent: options?.content ?? '',
-    cachedEditorContent: options?.content,
+    originalContent: seededContent ?? '',
+    cachedEditorContent: seededContent,
     isDirty: false,
     readOnlyExcerpt: options?.readOnlyExcerpt ?? false,
     readOnlyBannerText: options?.readOnlyBannerText ?? null,

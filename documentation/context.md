@@ -22,7 +22,7 @@ Minnow is a **local-first AI workspace**: a **Vite + TypeScript SPA**, a **Node 
 
 ### Operating modes
 
-Five composer modes: **General**, **Build**, **Plan**, **Orchestrate**, **Debug**. **Super Plan** is a Plan sub-mode. **Desktop**, **Email**, and **Onboarding** are surface-bound (not in the Code composer strip). **Orchestrate** opens from the sidebar hub.
+Four composer modes: **General**, **Build**, **Plan**, **Debug**. **Orchestrate** opens from the sidebar hub. **Super Plan** is a Plan sub-mode. **Desktop**, **Email**, and **Onboarding** are surface-bound (not in the Code composer strip). Nine total in the registry; **Reef** mode was removed in MIN-473.
 
 Registry: [`src/chat/modes/registry.ts`](../src/chat/modes/registry.ts). Tool allowlists: [`src/chat/modes/tool-groups.ts`](../src/chat/modes/tool-groups.ts). Prompts: [`src/chat/prompts/modes/`](../src/chat/prompts/modes/).
 
@@ -32,7 +32,7 @@ Registry: [`src/chat/modes/registry.ts`](../src/chat/modes/registry.ts). Tool al
 
 ### MinnowOS apps
 
-Chat (desktop), **Code**, **Models**, **Compare**, **Bench**, **Research**, **Experts**, **Brain**, **Calendar**, **Email**, **Issues**, **Scheduler**, **Settings** — routes `#/desktop`, `#/app/{id}`, registry in [`src/os/app-registry.ts`](../src/os/app-registry.ts).
+Released (all `core`): Chat (desktop), **Code**, **Research**, **Models**, **Brain**, **Issues**, **Scheduler**, **Settings**. Hidden (`releaseState: 'hidden'`, MIN-471): **Compare**, **Bench**, **Experts**, **Calendar**, **Email** — code and tests stay in tree, but they are omitted from every product surface. Routes `#/desktop`, `#/app/{id}`, registry in [`src/os/app-registry.ts`](../src/os/app-registry.ts).
 
 **Issues** (`#/app/issues`, core) is the Linear-style tracker (list + board + detail). UI: split header (brand + quick capture) and filter bar; clickable list column headers to sort (ID / Type / Title / Status / Priority / Labels / Updated — session-only, smart first-click direction; helpers in [`issues-list-sort.ts`](../src/ui/issues-list-sort.ts)); type/status/priority chips; multiselect via row highlight (Ctrl/Cmd+click, Shift+range) with bulk delete; right-click context menu on list rows and board cards (Open, copy ID, select, expand with agent, send to chat / send to background with mode submenus, change status, delete — [`issues-context-menu.ts`](../src/ui/issues-context-menu.ts)); inline label editing on list rows and in the detail sticky header (add via Enter/comma, remove via chip ×, autocomplete from workspace labels — [`issues-labels-field.ts`](../src/ui/issues-labels-field.ts)); detail panel with sticky workflow header (activity chips like **Investigating…** / **Planning…** open the linked sub-agent drawer or board chat), Delete action, click-to-edit description (markdown preview → textarea; blur or Ctrl/Cmd+Enter saves, Escape cancels), and scrollable body. Board view keeps all status lanes on one horizontal row (scroll when narrow). Legacy `#/bugs` hashes redirect via [`resolveLegacyHash`](../src/os/router.ts) — the old All-bugs overlay UI/store/pipeline was removed in MIN-261 Phase 5.
 
@@ -55,9 +55,10 @@ Renderer crash diagnostics can file Issues cards (type `bug`) when **Settings �
 
 ### Scale
 
-- **~86 built-in tools** — [`src/tools/definitions.ts`](../src/tools/definitions.ts)
-- **~33 built-in slash skills** — [`src/skills/`](../src/skills/), manifest via `npm run prebuild`
-- **Six modes** + work agents, sub-agents, orchestrator boards, Brain wiki
+- **111 built-in tools** (103 exposed in a default build; 8 are gated to the hidden Calendar/Email apps) — [`src/tools/definitions.ts`](../src/tools/definitions.ts)
+- **15 bundled slash skills** — [`src/skills/`](../src/skills/), manifest via `npm run prebuild`; everything else installs from **Skills Library**
+- **8 released apps**, all core — no optional-app picker in this build
+- **Nine modes** + work agents, sub-agents, orchestrator boards, Brain wiki
 
 ---
 
@@ -318,6 +319,8 @@ State: `Chat.orchestratePlanPath`, `ChatGroup.orchestrateBoard`, [`src/ui/orches
 
 **Board view browse root (MIN-464):** When board view is active and worktree isolation is on, the file explorer, terminal, and Source Control browse cwd follow the board **integration worktree** (not per-task chat worktrees). Chat view continues to sync browse cwd from the active chat's composer run-target. Helpers: [`resolveBoardIntegrationWorktreePath`](../src/state/worktree-isolation.ts), [`syncPanelFromActiveChat`](../src/ui/git-panel.ts).
 
+**File tree context menu — Open in System Explorer:** Right-click a file or folder in the Code file tree to open it in the OS explorer (Windows Explorer / macOS Finder / Linux Files). Files are revealed/selected in their parent folder when the platform supports it; folders open as the explorer root. Client: [`src/ui/reveal-in-system-explorer.ts`](../src/ui/reveal-in-system-explorer.ts) + [`src/ui/file-tree-context-menu.ts`](../src/ui/file-tree-context-menu.ts). Server: `POST /api/workspace/reveal-in-explorer` with `{ path, workspaceRoot? }` ([`server/workspace/reveal-in-explorer.js`](../server/workspace/reveal-in-explorer.js)); path is resolved under the workspace (or allowed worktree override) via `resolveSafePath`.
+
 **Terminal panel (MIN-500):** Bottom dock tabs are Agent (command output) + interactive PTY sessions only ([`src/ui/terminal-tabs.ts`](../src/ui/terminal-tabs.ts), [`src/ui/terminal-panel.ts`](../src/ui/terminal-panel.ts)). The former Dev Server virtual tab / log stream bridge was removed; workspace server logs move to the Dev Servers Code screen.
 **Pipeline holds (MIN-409):** Non-streaming merge/fixer phases occupy a concurrency slot via ref-counted holds in [`src/state/orchestrate-pipeline-holds.ts`](../src/state/orchestrate-pipeline-holds.ts) (WeakMap keyed by board object identity; TTL-on-read + sweep). `countRunningTaskChats` counts chat slots plus hold-only tasks; `isTaskStalledForRestart` treats held tasks as not stalled. The running-tasks strip shows a non-interactive **Merging** chip for hold-only slots. Sequential → AFK pins `maxConcurrentTasks` to 1 when unset (`setBoardExecutionMode`).
 
@@ -337,6 +340,8 @@ Stage layers in `#osStage` ([`src/os/shell.ts`](../src/os/shell.ts)):
 | Windows | Floating apps (Settings, Models, Brain, Bench, Compare, Calendar, …) |
 | Side panels | Scheduler list rail |
 | Fullscreen apps | Code, Email, Settings-from-Code |
+
+**Menubar status pill** (`#osStatusText` / legacy `#sText`, [`src/ui/status.ts`](../src/ui/status.ts)): operational Ready / loading / error feedback. Frameless Electron chrome uses `user-select: none` for window drag, but the status pill restores selectable text. Error states are click-to-copy (full message → clipboard + toast); selecting text first still allows a normal partial copy.
 
 Presentation modes: `fullscreen` | `window` | `desktop` | `sidePanel` ([`src/os/presentation-mode.ts`](../src/os/presentation-mode.ts)). Settings opened from Code sets `returnToApp: 'code'` (fullscreen); the Settings back control calls [`closeSettings()`](../src/ui/settings-page.ts) so it restores Code instead of falling through to the desktop. `initSettingsPage` is idempotent so duplicate binds cannot stack back handlers. **Scheduler** (`sidePanel`) opens as a right rail overlay via [`toggleSchedulerOverlay()`](../src/os/scheduler-side-panel.ts) from the menubar shortcut and dock — it does not steal foreground from the current app (including fullscreen Code); hash deep links from the desktop still foreground the scheduler instance.
 
@@ -361,6 +366,8 @@ Router: [`src/os/router.ts`](../src/os/router.ts). Boot: `initOsPageBridge()` �
 16 themes: `<html data-theme="{family}-{mode}">` (8 families × dark/light). **All hex/rgba only in** [`src/styles/tokens.css`](../src/styles/tokens.css); app code uses `--mn-*`.
 
 Runtime: [`src/theme.ts`](../src/theme.ts), Settings → Appearance, desktop wallpaper ([`src/os/wallpaper.ts`](../src/os/wallpaper.ts)).
+
+**`color-mix` gotcha:** Prefer `color-mix(in srgb, …)` (or a solid `--mn-surface-*` token) for fg/bg veils. Mixing near-achromatic `--mn-fg` into `--mn-bg` with `in oklch` can drop hue to `none` and paint a cool lavender wash on warm themes (e.g. coral-light). Dev Server log host uses `--mn-surface-0` for that reason.
 
 Design reference: [`DESIGN.md`](../DESIGN.md), [`documentation/design-system/`](design-system/README.md).
 
@@ -444,6 +451,14 @@ Multi-provider registry: `~/.minnow/providers/`. UI: Models app → Providers. C
 **Document read (agents):** `read_document` extracts plain text from PDF and office files. Prefer `path` (workspace-relative) for on-disk files; `content` (base64) remains for composer attachments. Output is capped (~32k chars) via `capTextOutput`; corrupt `.xlsx` / `.xls` binaries are rejected before parsing.
 
 **Document creation (agents):** `create_pdf`, `create_spreadsheet` (.xlsx), and `create_word_document` (.docx) write binary files via the tool server (`pdf-lib`, `@pdf-lib/fontkit`, `xlsx`, `docx` optional deps). PDF body text uses subsetted Noto fonts (`server/tools/pdf-layout.js` + bundled TTFs under `server/tools/fonts/`) for Latin/Cyrillic/Greek, CJK, and emoji with measured wrapping; unsupported code points become U+FFFD and are reported in the tool result. **File viewer preview:** PDFs embed via `/api/preview/file/*`; spreadsheets and Word docs render HTML via `/api/preview/document-html/*` (uses `xlsx` / `mammoth` / `officeparser` when installed). Document HTML preview sanitizes embedded fragments (`sanitizeDocumentHtml`), caps sheet/row counts, sets CSP + `nosniff` on the preview route, and loads Word/Excel previews in a bare `sandbox` iframe (no scripts / same-origin).
+
+**File viewer recent files:** When no viewer tabs are open, `#fileViewerHost` shows a recent-files empty state ([`src/ui/file-viewer-recent.ts`](../src/ui/file-viewer-recent.ts)) — especially useful on the desktop workspace **Viewer** tab, which stays mounted even with zero tabs. MRU paths are persisted in `config.json` → `filePanel.recentViewerFilesByWorkspace` (keyed by absolute workspace / listing root, max 12 per workspace) via [`src/state/recent-viewer-files.ts`](../src/state/recent-viewer-files.ts). Opens record through `openFileInViewer` / workspace image open; delete/rename prune or remap entries with the file-tree ops sync.
+
+**File viewer dirty detection:** CodeMirror 6 stores documents as LF-only. Loaded/saved baselines are normalized via `normalizeViewerDocText` / `isViewerDocDirty` in [`file-viewer-tab-store.ts`](../src/ui/file-viewer-tab-store.ts) so CRLF files (common on Windows) do not spuriously prompt “Unsaved changes” on close/tab switch. After mount, the viewer rebases `originalContent` to the live CM doc. Leave/close confirms re-snapshot from the editor before prompting. `save_file` still preserves on-disk EOL when writing.
+
+**File viewer text loads:** [`readWorkspaceTextFile`](../src/attachments/workspace-text-read.ts) fetches `GET /api/preview/file/…?raw=1` so HTML is not rewritten. Browser preview omits `raw` and still injects `<base href>` ([`server/preview/middleware.js`](../server/preview/middleware.js)) for relative assets. Async tab loads apply results by path (`setViewerTabLoadState`) so a slow read cannot land on the wrong tab.
+
+**Bench file-tool probes:** every `category: 'files'` tool must appear exactly once in `FILE_TOOL_PROBE_ORDER` ([`src/benchmark/suites/file-tool-fixtures.ts`](../src/benchmark/suites/file-tool-fixtures.ts)); `validateFileToolProbeOrder()` throws on import if a tool is missing. Probe chain is create → read → mutate → `create_pdf` / spreadsheet / Word → `read_document` → `delete_path`.
 
 ---
 

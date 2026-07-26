@@ -237,6 +237,14 @@ html.minnow-os-enabled {
 
 .mn-os-mb-status #osStatusText {
   overflow: visible;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Error status: click copies the full message (see setStatus in status.ts). */
+.mn-os-mb-status #osStatusText.status-pill__text--copyable,
+.status-pill #sText.status-pill__text--copyable {
+  cursor: copy;
 }
 
 /* Shared spinner markup from model-load-unload-button.ts */
@@ -689,6 +697,13 @@ html.is-electron-shell .mn-os-menubar--shell-frameless [contenteditable='true'],
 html.is-electron-shell .mn-os-menubar--shell-frameless .mn-os-mb-window-controls,
 html.is-electron-shell .mn-os-menubar--shell-frameless .status-pill {
   -webkit-app-region: no-drag;
+}
+
+/* Status text must stay selectable/copyable — menubar drag chrome uses user-select: none. */
+html.is-electron-shell .mn-os-menubar--shell-frameless .status-pill,
+html.is-electron-shell .mn-os-menubar--shell-frameless .status-pill #osStatusText {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 html.is-electron-shell[data-platform='darwin'] .mn-os-mb-left {

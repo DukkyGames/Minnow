@@ -877,6 +877,212 @@
   color: var(--mn-danger);
 }
 
+/* Recent files empty state (no open viewer tabs) */
+.file-viewer-recent {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 20px;
+  padding: 28px 22px 32px;
+  box-sizing: border-box;
+}
+
+.file-viewer-recent__head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 36ch;
+}
+
+.file-viewer-recent__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--mn-border);
+  color: var(--mn-fg-muted);
+  background: color-mix(in oklch, var(--mn-fg) 4%, transparent);
+}
+
+.file-viewer-recent__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: var(--mn-fg);
+  text-wrap: balance;
+}
+
+.file-viewer-recent__subtitle {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+  text-wrap: pretty;
+}
+
+.file-viewer-recent__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: min(52vh, 420px);
+  overflow: auto;
+}
+
+.file-viewer-recent__item {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  min-height: 44px;
+  border-radius: var(--radius-sm);
+  animation: file-viewer-recent-in 180ms var(--ease-out) both;
+  animation-delay: calc(var(--fv-recent-i, 0) * 28ms);
+}
+
+.file-viewer-recent__open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.file-viewer-recent__open:hover {
+  background: color-mix(in oklch, var(--mn-fg) 6%, transparent);
+  border-color: var(--mn-border);
+}
+
+.file-viewer-recent__open:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
+}
+
+.file-viewer-recent__glyph {
+  flex-shrink: 0;
+  display: flex;
+  color: var(--mn-fg-muted);
+}
+
+.file-viewer-recent__text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.file-viewer-recent__name {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-viewer-recent__meta {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--mn-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-viewer-recent__remove {
+  flex-shrink: 0;
+  width: 40px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  opacity: 0.55;
+}
+
+.file-viewer-recent__remove:hover {
+  opacity: 1;
+  color: var(--mn-fg);
+  background: color-mix(in oklch, var(--mn-fg) 6%, transparent);
+  border-color: var(--mn-border);
+}
+
+.file-viewer-recent__remove:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
+  opacity: 1;
+}
+
+.file-viewer-recent__foot {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.file-viewer-recent__clear {
+  margin: 0;
+  padding: 6px 2px;
+  border: none;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.file-viewer-recent__clear:hover {
+  color: var(--mn-fg);
+}
+
+.file-viewer-recent__clear:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+@keyframes file-viewer-recent-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .file-viewer-recent__item {
+    animation: none;
+  }
+}
+
 /* Right file sidebar */
 .file-sidebar {
   position: relative;

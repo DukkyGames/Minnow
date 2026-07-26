@@ -100,6 +100,15 @@ describe('preview middleware', () => {
     assert.match(res.headers['content-type'], /text\/html/);
     assert.match(res.body, /Hello/);
     assert.equal(res.headers['cache-control'], 'no-store');
+    // Browser preview injects <base> so relative assets resolve under the preview API.
+    assert.match(res.body, /<base\s/i);
+  });
+
+  test('GET /api/preview/file/index.html?raw=1 skips base injection for editor loads', async () => {
+    const res = await httpRequest(baseUrl, 'GET', '/api/preview/file/index.html?raw=1');
+    assert.equal(res.status, 200);
+    assert.match(res.body, /Hello/);
+    assert.doesNotMatch(res.body, /<base\s/i);
   });
 
   test('GET /api/preview/file/style.css serves CSS', async () => {

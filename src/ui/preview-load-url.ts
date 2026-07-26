@@ -17,21 +17,47 @@ function appendQueryParam(url: string, key: string, value: string): string {
   return `${url}${sep}${key}=${encodeURIComponent(value)}`;
 }
 
+export interface WorkspacePreviewUrlOptions {
+  cacheBust?: number;
+  workspaceRoot?: string;
+  /**
+   * Skip HTML `<base>` injection (file viewer / editor loads).
+   * Browser preview must leave this unset so relative assets resolve.
+   */
+  raw?: boolean;
+}
+
 /** Build preview URL for a workspace-relative path (path only; use resolvePreviewLoadUrl for absolute). */
 export function workspacePreviewUrl(
   relativePath: string,
   cacheBust?: number,
   workspaceRoot?: string,
+): string;
+export function workspacePreviewUrl(
+  relativePath: string,
+  options?: WorkspacePreviewUrlOptions,
+): string;
+export function workspacePreviewUrl(
+  relativePath: string,
+  cacheBustOrOptions?: number | WorkspacePreviewUrlOptions,
+  workspaceRoot?: string,
 ): string {
+  const options: WorkspacePreviewUrlOptions =
+    typeof cacheBustOrOptions === 'object' && cacheBustOrOptions !== null
+      ? cacheBustOrOptions
+      : { cacheBust: cacheBustOrOptions, workspaceRoot };
   const normalized = normalizeWorkspacePath(relativePath);
   const encoded = normalized.split('/').map((segment) => encodeURIComponent(segment)).join('/');
   let url = `${PREVIEW_FILE_API}${encoded}`;
-  if (cacheBust !== undefined) {
-    url = appendQueryParam(url, 'v', String(cacheBust));
+  if (options.cacheBust !== undefined) {
+    url = appendQueryParam(url, 'v', String(options.cacheBust));
   }
-  const root = workspaceRoot?.trim();
+  const root = options.workspaceRoot?.trim();
   if (root) {
     url = appendQueryParam(url, 'workspaceRoot', root);
+  }
+  if (options.raw) {
+    url = appendQueryParam(url, 'raw', '1');
   }
   return withSessionToken(url);
 }
@@ -77,8 +103,13 @@ export function resolvePreviewLoadUrl(
   source: PreviewSource,
   cacheBust?: number,
   workspaceRoot?: string,
+  options?: { raw?: boolean },
 ): string {
   if (source.kind === 'url') return resolveRootRelativeUrl(source.url);
-  const path = workspacePreviewUrl(source.path, cacheBust, workspaceRoot);
+  const path = workspacePreviewUrl(source.path, {
+    cacheBust,
+    workspaceRoot,
+    raw: options?.raw,
+  });
   return `${window.location.origin}${path}`;
 }

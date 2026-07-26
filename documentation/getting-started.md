@@ -91,7 +91,7 @@ $env:PORT=3000; npm start
 2. The desktop **is** the chat surface — type in the concierge composer, or open an app from the **dock**.
 3. Confirm your **provider** and server URL in **Settings → Models → Providers** (default LM Studio `http://localhost:1234`).
 4. Pick a **model** from the menubar model chip (refresh if the list is empty).
-5. Choose a **mode** in the composer (General / Build / Plan / Orchestrate / Debug).
+5. Choose a **mode** in the composer (General / Build / Plan / Debug — Orchestrate opens from the hub).
 6. Enable the capabilities you want under **Settings → Tools** (server tools need `npm start` and a healthy tools ping).
 
 Verify the server is healthy:
@@ -183,7 +183,8 @@ Everything persists under your Minnow home — `~/.minnow` (`%USERPROFILE%\.minn
 | `memory/` + `brain/` | Memory store, vectors, and the Brain wiki. |
 | `models/` | Downloaded model artifacts + serve runtimes. |
 | `evals/` | Eval task packs and results. |
-| `calendar/`, `email/`, `scheduler*.json` | App data (calendar DB, mail cache + encrypted accounts, scheduler jobs/runs). |
+| `scheduler*.json` | Scheduler jobs and run history. |
+| `calendar/`, `email/` | App data for the release-gated Calendar/Email apps — not created in a default build. |
 | `webhooks*.json`, `oauth/`, `voice/` | Webhook subscriptions/secrets, OAuth tokens, voice runtime + installed models. |
 
 In **Vite-only** mode (`npm run dev`), a few things fall back to browser `localStorage` (tool toggles under `minnow.tools`, a legacy session store, theme keys). Most features simply require the tool server.
@@ -279,12 +280,12 @@ Minnow/
 - [`guides/`](guides/) — task-oriented guides:
   - [`setup.md`](guides/setup.md) — full install & setup walkthrough
   - [`commands.md`](guides/commands.md) — every command, script, flag, and env var
-  - [`apps.md`](guides/apps.md) — tour of the MinnowOS apps
+  - [`apps.md`](guides/apps.md) — tour of the MinnowOS apps that ship, and what is release-gated off
   - [`architecture.md`](guides/architecture.md) — high-level system map
   - [`configuration.md`](guides/configuration.md) — `~/.minnow`, `config.json`, providers, secrets
   - [`updating.md`](guides/updating.md) — cutting a release + how auto-update reaches users
   - [`troubleshooting.md`](guides/troubleshooting.md) — common problems
-  - [`oauth-google.md`](guides/oauth-google.md) / [`oauth-microsoft.md`](guides/oauth-microsoft.md) — Email/Calendar OAuth
+  - [`oauth-google.md`](guides/oauth-google.md) / [`oauth-microsoft.md`](guides/oauth-microsoft.md) — Email/Calendar OAuth (for the release-gated apps)
 - [`PRODUCT.md`](../PRODUCT.md) — product goals and tone.
 - [`DESIGN.md`](../DESIGN.md) — visual design system and theme tokens.
 - [`AGENTS.md`](../AGENTS.md) — notes for AI coding agents working in this repo.

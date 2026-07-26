@@ -67,7 +67,8 @@ Minnow captures errors **locally only** — nothing is sent off-device.
 |---------|-----|
 | OAuth `redirect_uri_mismatch` | The redirect URI in the Google/Microsoft console must exactly match Settings → OAuth (port included). See [oauth-google.md](oauth-google.md) / [oauth-microsoft.md](oauth-microsoft.md). |
 | OAuth `access_denied` (Google) | Add your account as a **test user** on the consent screen while the app is in Testing mode. |
-| Email won't send | By design — send always requires explicit confirmation. Also: Outlook tenants often block IMAP/SMTP basic auth; prefer Graph/OAuth. |
+| Email / Calendar / Compare / Bench / Experts app missing | Expected — these are release-gated off (`releaseState: 'hidden'`). They have no dock tile, route, or tools. See [apps.md](apps.md#behind-the-release-gate). |
+| Email won't send | *(hidden app)* By design — send always requires explicit confirmation. Also: Outlook tenants often block IMAP/SMTP basic auth; prefer Graph/OAuth. |
 | Scheduler job didn't run | Jobs only run while Minnow is open (`npm start` / desktop shell). Check the run history and the job's workspace/model. |
 | Local voice fails to start | Local STT/TTS provisions a Python worker — ensure Python 3 is available, or switch to a provider-backed voice in Models → Voice. |
 

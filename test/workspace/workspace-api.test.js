@@ -343,4 +343,22 @@ describe('workspace API', () => {
     assert.equal(status, 400);
     assert.match(json.error, /parentPath is required/i);
   });
+
+  test('POST reveal-in-explorer rejects missing path', async () => {
+    const { status, json } = await httpRequest(baseUrl, 'POST', '/api/workspace/reveal-in-explorer', {
+      path: '',
+    });
+    assert.equal(status, 400);
+    assert.equal(json.ok, false);
+    assert.match(json.error, /path is required/i);
+  });
+
+  test('POST reveal-in-explorer rejects path outside workspace', async () => {
+    await setWorkspaceRoot(workspaceDir);
+    const { status, json } = await httpRequest(baseUrl, 'POST', '/api/workspace/reveal-in-explorer', {
+      path: path.join(homeDir, 'outside-file.txt'),
+    });
+    assert.equal(status, 400);
+    assert.match(String(json.error ?? ''), /outside the workspace/i);
+  });
 });
