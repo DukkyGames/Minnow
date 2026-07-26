@@ -457,7 +457,14 @@ export async function ensureMinnowLayout() {
     try {
       await fsp.access(keep);
     } catch {
-      await fsp.writeFile(keep, '', 'utf8');
+      try {
+        await fsp.writeFile(keep, '', 'utf8');
+      } catch {
+        // Best-effort marker only (keeps empty dirs in git). On Windows this can
+        // transiently ENOENT when another flow is scaffolding or removing the
+        // same home; failing the whole layout over a placeholder would abort the
+        // caller's real write.
+      }
     }
   }
 

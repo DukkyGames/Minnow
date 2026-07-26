@@ -77,6 +77,22 @@ function releaseOldestTurn() {
   release();
 }
 
+/**
+ * Poll until `predicate` holds. The drain is fire-and-forget across a turn
+ * teardown plus a session write, so a fixed sleep is a coin flip on slow CI.
+ * @param {() => boolean} predicate
+ * @param {string} what
+ * @param {number} [timeoutMs]
+ */
+async function waitFor(predicate, what, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  assert.fail(`timed out after ${timeoutMs}ms waiting for: ${what}`);
+}
+
 describe('session engine queue drain + error row', () => {
   /** @type {string | undefined} */
   let home;
@@ -151,9 +167,8 @@ describe('session engine queue drain + error row', () => {
 
     // Settle first turn — teardown must drain (not re-queue).
     releaseOldestTurn();
-    await new Promise((r) => setTimeout(r, 80));
+    await waitFor(() => turnStarts === 2, 'drain should start a second turn');
 
-    assert.equal(turnStarts, 2, 'drain should start a second turn');
     const afterDrain = /** @type {any} */ (getEngineSessionState())?.chats?.find(
       (c) => c.id === chatId,
     );
@@ -188,12 +203,20 @@ describe('session engine queue drain + error row', () => {
     assert.equal(turnStarts, 1);
 
     releaseOldestTurn();
-    await new Promise((r) => setTimeout(r, 80));
+    const errorRowsNow = () => {
+      const chat = /** @type {any} */ (getEngineSessionState())?.chats?.find(
+        (c) => c.id === chatId,
+      );
+      return (chat?.history ?? []).filter(
+        (m) => m.role === 'assistant' && String(m.content).startsWith('Error:'),
+      );
+    };
+    await waitFor(() => errorRowsNow().length > 0, 'error row written after failed turn');
+    // Settle: a duplicate row would land right after the first, so give the
+    // (removed) second writer a window to prove it is really gone.
+    await new Promise((r) => setTimeout(r, 100));
 
-    const chat = /** @type {any} */ (getEngineSessionState())?.chats?.find((c) => c.id === chatId);
-    const errorRows = (chat?.history ?? []).filter(
-      (m) => m.role === 'assistant' && String(m.content).startsWith('Error:'),
-    );
+    const errorRows = errorRowsNow();
     assert.equal(errorRows.length, 1, `expected one Error row, got ${errorRows.length}`);
     assert.match(String(errorRows[0].content), /forced turn failure/);
   });
