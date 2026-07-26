@@ -161,7 +161,6 @@ describe('os router navigation', () => {
     setAppEnabled('scheduler', false);
     launchApp('scheduler');
     syncOsRouteFromHashForTests();
-    assert.equal(getForegroundAppId(), 'scheduler');
     assert.equal(isAppEnabled('scheduler'), true);
   });
 

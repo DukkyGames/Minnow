@@ -116,6 +116,38 @@ function applyLaunchOptionsToInstance(inst: AppInstance, options?: LaunchOptions
   if (options.seed) inst.seed = options.seed;
 }
 
+/** Whether a side-panel app should open without stealing the current foreground app. */
+function shouldOpenSidePanelAsOverlay(appId: AppId, options?: LaunchOptions): boolean {
+  const mode = resolvePresentationMode(appId, options);
+  if (mode !== 'sidePanel') return false;
+  const fg = getForegroundAppId();
+  return fg !== null && fg !== appId;
+}
+
+/** Ensure an app instance exists without changing the foreground surface. */
+export function ensureBackgroundInstance(appId: AppId, options?: LaunchOptions): string {
+  const existing = instances.find((i) => i.appId === appId);
+  if (existing) {
+    if (options && Object.keys(options).length > 0) {
+      applyLaunchOptionsToInstance(existing, options);
+    }
+    emit();
+    return existing.id;
+  }
+
+  const inst: AppInstance = {
+    id: uid(),
+    appId,
+    seed: options?.seed,
+    launchOptions: options ? { ...options } : undefined,
+    unread: 0,
+    msg: '',
+  };
+  instances = [...instances, inst];
+  emit();
+  return inst.id;
+}
+
 /** Launch or foreground an app; returns the active instance id. */
 export function launchInstance(appId: AppId, options?: LaunchOptions): string {
   const existing = instances.find((i) => i.appId === appId);
@@ -128,9 +160,16 @@ export function launchInstance(appId: AppId, options?: LaunchOptions): string {
     resolvedOptions = { ...resolvedOptions, returnToApp: 'code' };
   }
 
+  const overlaySidePanel = shouldOpenSidePanelAsOverlay(appId, resolvedOptions);
+
   if (existing) {
     if (resolvedOptions && Object.keys(resolvedOptions).length > 0) {
       applyLaunchOptionsToInstance(existing, resolvedOptions);
+    }
+    if (overlaySidePanel) {
+      existing.unread = 0;
+      emit();
+      return existing.id;
     }
     const mode = resolvePresentationMode(appId, existing.launchOptions);
     foregroundId = existing.id;
@@ -154,6 +193,10 @@ export function launchInstance(appId: AppId, options?: LaunchOptions): string {
     msg: '',
   };
   instances = [...instances, inst];
+  if (overlaySidePanel) {
+    emit();
+    return inst.id;
+  }
   foregroundId = inst.id;
   view = viewForPresentationMode(mode);
   emit();

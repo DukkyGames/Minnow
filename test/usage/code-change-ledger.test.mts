@@ -16,8 +16,10 @@ import {
   recordCodeChange,
   recordWorkspaceCodeChange,
   resetCodeChangeTotals,
+  runHadCodeChanges,
   sumChatCodeChangeTotalsForWorkspace,
 } from '../../src/usage/code-change-ledger.ts';
+import type { TurnRunRecord } from '../../src/types.ts';
 
 function makeChat(): Chat {
   return {
@@ -144,6 +146,44 @@ describe('code-change-ledger', () => {
     assert.equal(summaries[1].deletions, 1);
     assert.equal(summaries[1].diffChunks.length, 1);
     assert.equal(summaries[1].diffChunks[0].lines[0].text, 'line');
+  });
+
+  test('runHadCodeChanges detects tool mutations in output span', () => {
+    const chat = makeChat();
+    chat.history = [
+      { role: 'user', content: 'edit files' },
+      {
+        role: 'tool',
+        tool_call_id: 'tc1',
+        content: 'Saved',
+        codeChange: { additions: 2, deletions: 0, path: 'src/a.ts' },
+      },
+      { role: 'assistant', content: 'done' },
+    ];
+    const run: TurnRunRecord = {
+      runId: 'run-1',
+      branchId: 'main',
+      forkHistoryIndex: 0,
+      status: 'completed',
+      createdAt: 1,
+      snapshot: {} as TurnRunRecord['snapshot'],
+      outputHistoryStart: 1,
+      outputHistoryEnd: 2,
+    };
+    assert.equal(runHadCodeChanges(chat, run), true);
+
+    const chatOnly = makeChat();
+    chatOnly.history = [
+      { role: 'user', content: 'hello' },
+      { role: 'assistant', content: 'hi there' },
+    ];
+    const chatOnlyRun: TurnRunRecord = {
+      ...run,
+      runId: 'run-2',
+      outputHistoryStart: 1,
+      outputHistoryEnd: 1,
+    };
+    assert.equal(runHadCodeChanges(chatOnly, chatOnlyRun), false);
   });
 
   test('getPerFileChangeSummary expands paths array entries', () => {

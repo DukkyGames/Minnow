@@ -133,13 +133,14 @@ function buildUsageCounter(value: number, label: string): HTMLElement {
 /**
  * Bar sparkline of total weekly Brain activity, newest bar last.
  *
- * Built as inline SVG rather than a canvas: it is a handful of rects, and it
- * inherits theme colours through `currentColor` without a redraw on theme swap.
+ * Built as inline SVG rather than a canvas: it is a handful of rects, and its
+ * fills come from stylesheet rules, so a theme swap needs no redraw.
  */
 function buildUsageSpark(weeks: Array<{ week: string; total: number }>): SVGSVGElement {
   const ns = 'http://www.w3.org/2000/svg';
   const width = weeks.length * 5 - 2;
-  const height = 14;
+  // Matches the CSS height so bars land on whole pixels inside the usage pill.
+  const height = 11;
   const svg = document.createElementNS(ns, 'svg');
   svg.setAttribute('class', 'brain-usage__spark');
   svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
@@ -178,6 +179,8 @@ async function refreshUsageLine(): Promise<void> {
   const usage = await fetchBrainUsage();
   if (!usage) {
     el.classList.add('hidden');
+    el.removeAttribute('title');
+    el.removeAttribute('aria-label');
     return;
   }
 
@@ -189,9 +192,12 @@ async function refreshUsageLine(): Promise<void> {
 
   if (reads === 0 && writes === 0) {
     el.classList.add('hidden');
+    el.removeAttribute('title');
+    el.removeAttribute('aria-label');
     return;
   }
 
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
   const history = Object.entries(usage.weeks ?? {})
     .sort(([a], [b]) => a.localeCompare(b))
     .slice(-USAGE_SPARK_WEEKS)
@@ -201,16 +207,17 @@ async function refreshUsageLine(): Promise<void> {
     }));
 
   el.replaceChildren(buildUsageCounter(writes, 'writes'), buildUsageCounter(reads, 'reads'));
-  if (history.length > 1) {
-    const spark = buildUsageSpark(history);
-    spark.setAttribute('role', 'img');
-    spark.setAttribute(
-      'aria-label',
-      `Weekly Brain activity over the last ${history.length} weeks`,
-    );
-    spark.removeAttribute('aria-hidden');
-    el.append(spark);
-  }
+  if (history.length > 1) el.append(buildUsageSpark(history));
+
+  // The pill is a live region: give it one clean sentence rather than letting a
+  // screen reader walk the counters and then every sparkline bar.
+  el.setAttribute('title', 'Brain activity this week');
+  el.setAttribute(
+    'aria-label',
+    history.length > 1
+      ? `This week: ${plural(writes, 'write')}, ${plural(reads, 'read')}. Trend over the last ${history.length} weeks.`
+      : `This week: ${plural(writes, 'write')}, ${plural(reads, 'read')}`,
+  );
   el.classList.remove('hidden');
 }
 
