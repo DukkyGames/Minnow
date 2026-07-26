@@ -5,6 +5,9 @@
 import type { WorkspaceInfo } from '../config/workspace-api';
 import { executeWorkspaceSwitch, dismissBoardViewOutsideWorkspace } from './workspace-switch-guard';
 import { patchFilePanelState } from '../state/file-panel';
+import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
+import { foregroundChatMountSelector } from './chat-mount';
+import { showChatHistoryLoadingPlaceholder } from './messages';
 import {
   getWorkspacePath,
   loadWorkspaceFromServer,
@@ -61,6 +64,11 @@ export function updateWorkspaceButtonLabel(label: string, fullPath: string): voi
  */
 export async function applyWorkspaceSwitch(info: WorkspaceInfo): Promise<void> {
   const previousPath = getWorkspacePath();
+  // The session hydrate + file-tree refresh below are round-trips. Blank the transcript
+  // now so the old workspace's chat is not left on screen for their duration.
+  if (normalizeWorkspacePath(previousPath) !== normalizeWorkspacePath(info.path)) {
+    showChatHistoryLoadingPlaceholder(foregroundChatMountSelector());
+  }
   await dismissBoardViewOutsideWorkspace(info.path);
   clearCachesForWorkspace(previousPath);
   setWorkspaceFromServer(info);

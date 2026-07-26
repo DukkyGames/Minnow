@@ -5,7 +5,6 @@
 
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { Window } from 'happy-dom';
 import {
   deliverOrchestratorTaskReport,
   initOrchestratorAutoReports,
@@ -14,7 +13,7 @@ import {
 } from '../../src/agents/controller/report.ts';
 import { setStreaming } from '../../src/app-state.ts';
 import { resetOrchestratePlanCompleteUiForTests, setOrchestratePlanCompleteWrapUpHook } from '../../src/chat/orchestrate/plan-complete-ui.ts';
-import { __testHooks, resetNotificationProducersForTests } from '../../src/notifications/producers.ts';
+import { __testHooks, initNotificationProducers, resetNotificationProducersForTests } from '../../src/notifications/producers.ts';
 import { getNotifications, resetNotificationStoreForTests } from '../../src/notifications/store.ts';
 import { requeueBoardTask } from '../../src/state/orchestrate-board-actions.ts';
 import { initBoard, quarantineTaskAndDependents, updateTask } from '../../src/state/orchestrate-board-store.ts';
@@ -131,10 +130,26 @@ describe('board_report happy path', () => {
 
 describe('quarantine-last stall', () => {
   beforeEach(() => {
-    const win = new Window();
-    globalThis.localStorage = win.localStorage;
+    const storage = new Map<string, string>();
+    globalThis.localStorage = {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        storage.set(key, value);
+      },
+      removeItem: (key: string) => {
+        storage.delete(key);
+      },
+      clear: () => {
+        storage.clear();
+      },
+      key: (index: number) => [...storage.keys()][index] ?? null,
+      get length() {
+        return storage.size;
+      },
+    } as Storage;
     resetNotificationStoreForTests();
     resetNotificationProducersForTests();
+    initNotificationProducers();
     resetOrchestratePlanCompleteUiForTests();
     setOrchestratePlanCompleteWrapUpHook(async () => {});
   });

@@ -118,15 +118,8 @@ function resolveFromAppRoot(specifier) {
  * @returns {string | undefined}
  */
 function tryResolveTsserverFromRoot(rootDir) {
-  const legacyCandidates = [
-    path.join(rootDir, 'node_modules/typescript/lib/tsserver.js'),
-    path.join(rootDir, 'node_modules/typescript-strada/lib/tsserver.js'),
-  ];
-  for (const legacy of legacyCandidates) {
-    if (fs.existsSync(legacy)) return legacy;
-  }
-  const fromClassic = tryResolveFromRoot(rootDir, 'typescript-strada/lib/tsserver.js');
-  if (fromClassic) return fromClassic;
+  const legacy = path.join(rootDir, 'node_modules/typescript/lib/tsserver.js');
+  if (fs.existsSync(legacy)) return legacy;
   return tryResolveFromRoot(rootDir, 'typescript/lib/tsserver.js');
 }
 

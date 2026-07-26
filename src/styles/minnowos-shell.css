@@ -16,7 +16,7 @@
 }
 
 /* ============================================================
-   MinnowOS — shell, menubar, stage, boot splash, transitions
+   MinnowOS — shell, menubar, stage, transitions
    ============================================================ */
 
 .mn-os {
@@ -813,6 +813,15 @@ html.is-electron-shell .mn-os-mb-window-controls .mn-os-window-btn svg {
   visibility: hidden;
 }
 
+/*
+ * Foregrounded but not yet repainted (see withSwapBlank in app-host.ts) — a layer
+ * still holds the DOM from its last session, so show the empty panel rather than
+ * animating in a stale transcript.
+ */
+.mn-os-app-layer.is-swapping > * {
+  visibility: hidden;
+}
+
 .mn-os-apps-layer .mn-os-app-layer.is-active {
   display: flex;
   flex-direction: column;
@@ -1049,84 +1058,6 @@ html.minnow-os-enabled header.topbar.hidden {
   }
 }
 
-/* ---------- boot splash ---------- */
-
-.mn-os-boot {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  background: var(--os-bg);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
-  animation: mn-os-boot-out 0.4s var(--os-ease) forwards;
-  animation-delay: 1s;
-}
-
-@keyframes mn-os-boot-out {
-  to {
-    opacity: 0;
-    visibility: hidden;
-  }
-}
-
-.mn-os-boot-logo {
-  width: 64px;
-  height: 64px;
-  border-radius: 18px;
-  display: grid;
-  place-items: center;
-  background: var(--os-accent);
-  color: var(--os-on-accent);
-  animation: mn-os-bob 2s var(--os-ease) infinite;
-}
-
-.mn-os-boot-logo .minnow-glyph {
-  width: 40px;
-  height: 40px;
-}
-
-@keyframes mn-os-bob {
-  50% {
-    transform: translateY(-7px);
-  }
-}
-
-.mn-os-boot-name {
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.mn-os-boot-bar {
-  width: 130px;
-  height: 3px;
-  border-radius: 9px;
-  background: var(--os-surface-3);
-  overflow: hidden;
-}
-
-.mn-os-boot-bar span {
-  display: block;
-  height: 100%;
-  width: 40%;
-  background: var(--os-accent);
-  border-radius: 9px;
-  animation: mn-os-load 1.1s var(--os-ease) infinite;
-}
-
-@keyframes mn-os-load {
-  0% {
-    transform: translateX(-100%);
-  }
-
-  100% {
-    transform: translateX(330%);
-  }
-}
-
 /* ---------- utilities ---------- */
 
 .mn-os-mono {
@@ -1158,8 +1089,7 @@ html.minnow-os-enabled header.topbar.hidden {
 }
 
 /* light theme menubar logo shadow tweak */
-:root[data-theme$='-light'] .mn-os-mb-logo,
-:root[data-theme$='-light'] .mn-os-boot-logo {
+:root[data-theme$='-light'] .mn-os-mb-logo {
   box-shadow: 0 4px 14px -4px var(--os-accent-glow);
 }
 
@@ -1174,9 +1104,6 @@ html.minnow-os-enabled header.topbar.hidden {
     transition-duration: 0.001ms !important;
   }
 
-  .mn-os-boot,
-  .mn-os-boot-logo,
-  .mn-os-boot-bar span,
   .mn-os-app-layer.is-active,
   .mn-os-caret {
     animation: none !important;

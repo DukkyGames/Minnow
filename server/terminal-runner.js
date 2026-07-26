@@ -869,3 +869,13 @@ export async function executeCommandBlocking({
   });
   return waitForRun(runId);
 }
+
+/** Clear in-memory run registry between tests (best-effort kill). */
+export function resetActiveRunsForTests() {
+  for (const state of activeRuns.values()) {
+    if (state.child && !state.finished) {
+      killProcessTree(state.child);
+    }
+  }
+  activeRuns.clear();
+}

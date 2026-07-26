@@ -31,8 +31,7 @@ describe('onboarding layout scroll (MIN-453)', () => {
     )?.[0];
     assert.ok(contentRule, 'expected shared content/step rule');
     assert.match(contentRule, /overflow-y:\s*auto/);
-    assert.match(contentRule, /justify-content:\s*safe\s+center/);
-    assert.match(contentRule, /overflow-y:\s*auto/);
+    assert.match(contentRule, /justify-content:\s*safe center/);
   });
 
   test('welcome step keeps centered layout', () => {

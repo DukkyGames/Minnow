@@ -3,7 +3,9 @@
  * (Formerly monolithic orchestrator.ts — MIN-140 Phase 0 split.)
  */
 
-import { normalizeModeId } from '../../chat/modes/types';
+// Explicit .ts: this module is also loaded by the server engine host, where Node's
+// sync link path bypasses tsx's async resolve hooks and cannot infer the extension.
+import { normalizeModeId } from '../../chat/modes/types.ts';
 import { getBoardGroupForChat } from '../../state/chat-groups';
 import { appendTaskRunHistory, getBoardExecutionMode, isBoardRunning, updateTask } from '../../state/orchestrate-board-store';
 import { resolveSelfHealMaxRounds } from '../../config/autopilot-meta';

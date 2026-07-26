@@ -37,6 +37,7 @@ function setupThreeToolLists() {
   globalThis.HTMLLabelElement = window.HTMLLabelElement;
   globalThis.HTMLInputElement = window.HTMLInputElement;
   globalThis.HTMLSelectElement = window.HTMLSelectElement;
+  globalThis.HTMLLabelElement = window.HTMLLabelElement;
   globalThis.Event = window.Event;
   globalThis.localStorage = window.localStorage;
 

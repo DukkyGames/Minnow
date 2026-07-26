@@ -897,3 +897,13 @@ html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-selector-tag {
   border: 1px solid var(--mn-border);
   object-fit: contain;
 }
+
+/* ─── LAZY HISTORY PLACEHOLDER ─── */
+/*
+ * Holds the transcript blank while a cold chat's history is fetched, instead of
+ * leaving the previous chat's messages on screen for the round-trip.
+ */
+.chat-history-loading {
+  flex: 1;
+  min-height: 0;
+}

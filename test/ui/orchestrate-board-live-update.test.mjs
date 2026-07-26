@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 import { installHappyDomGlobals } from '../os/dom-helpers.mts';
+import { installAppDialogs } from '../../src/ui/app-dialog.ts';
 
 const FIXED_CHAT_ID = '11111111-1111-1111-1111-111111111111';
 const FIXED_GROUP_ID = 'grp_11111111-1111-1111-1111-111111111111';
@@ -67,6 +68,7 @@ function kanbanColumnSelector(columnId) {
 function setupDom() {
   win = new Window();
   installHappyDomGlobals(win);
+  installAppDialogs(win);
   globalThis.HTMLSelectElement = win.HTMLSelectElement;
   const area = document.createElement('div');
   area.id = 'chatArea';
@@ -767,16 +769,28 @@ describe('orchestrate board live updates', () => {
     assert.ok(afkBtn);
     assert.ok(isoSelect instanceof HTMLSelectElement);
 
-    afkBtn.click();
-    await Promise.resolve();
-    const confirmBtn = document.querySelector('[data-dialog-action="confirm"]');
-    confirmBtn?.click();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    assert.equal(group.orchestrateBoard?.executionMode, 'afk');
+    try {
+      afkBtn.click();
+      let confirmed = false;
+      for (let attempt = 0; attempt < 30 && !confirmed; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        const confirmBtn = document.querySelector('[data-dialog-action="confirm"]');
+        if (confirmBtn instanceof HTMLElement) {
+          confirmBtn.click();
+          confirmed = true;
+        }
+      }
+      assert.ok(confirmed, 'expected AFK confirm dialog');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      assert.equal(group.orchestrateBoard?.executionMode, 'afk');
 
-    isoSelect.value = 'per-wave';
-    isoSelect.dispatchEvent(new window.Event('change', { bubbles: true }));
-    assert.equal(group.orchestrateBoard?.isolationMode, 'per-wave');
+      isoSelect.value = 'per-wave';
+      isoSelect.dispatchEvent(new window.Event('change', { bubbles: true }));
+      assert.equal(group.orchestrateBoard?.isolationMode, 'per-wave');
+    } finally {
+      const { resetAppDialogForTests } = await import('../../src/ui/app-dialog.ts');
+      resetAppDialogForTests();
+    }
   });
 
   test('header badge shows Stopped with danger styling after user stop', () => {

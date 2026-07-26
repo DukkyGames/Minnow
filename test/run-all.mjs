@@ -156,7 +156,7 @@ function runBatch(runnerId, files) {
       chunks.length === 1
         ? `${runnerId} (${chunk.length} file${chunk.length === 1 ? '' : 's'})`
         : `${runnerId} batch ${index + 1}/${chunks.length} (${chunk.length} file${chunk.length === 1 ? '' : 's'})`;
-    const code = runChunk(runnerId, chunk, concurrency, label, {
+    const code = runChunk(runnerId, chunk, soloHeavy ? 1 : concurrency, label, {
       testIsolation: soloHeavy ? HEAVY_TEST_ISOLATION : undefined,
     });
     if (code !== 0) exitCode = code;

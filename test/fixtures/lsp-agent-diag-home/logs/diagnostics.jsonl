@@ -1,5 +1,5 @@
-{"ts":"2026-07-26T16:55:49.107Z","pid":32240,"source":"server","kind":"lsp-exit","message":"LSP server fake exited on signal SIGTERM","extra":{"serverId":"fake","signal":"SIGTERM","scope":"agent"}}
-{"ts":"2026-07-26T16:55:49.757Z","pid":32240,"source":"server","kind":"lsp-exit","message":"LSP server fake exited on signal SIGTERM","extra":{"serverId":"fake","signal":"SIGTERM","scope":"agent"}}
-{"ts":"2026-07-26T16:55:50.175Z","pid":32240,"source":"server","kind":"lsp-exit","message":"LSP server fake exited on signal SIGTERM","extra":{"serverId":"fake","signal":"SIGTERM","scope":"agent"}}
-{"ts":"2026-07-26T16:55:50.329Z","pid":32240,"source":"server","kind":"lsp-exit","message":"LSP server fake exited on signal SIGTERM","extra":{"serverId":"fake","signal":"SIGTERM","scope":"agent"}}
-{"ts":"2026-07-26T16:55:50.329Z","pid":32240,"source":"server","kind":"lsp-exit","message":"LSP server fake exited on signal SIGTERM","extra":{"serverId":"fake","signal":"SIGTERM","scope":"editor"}}
+{"ts":"2026-07-26T18:08:53.036Z","pid":49332,"source":"server","kind":"lsp-exit","message":"LSP server fake exited on signal SIGTERM","extra":{"serverId":"fake","signal":"SIGTERM","scope":"agent"}}
+{"ts":"2026-07-26T18:08:53.733Z","pid":49332,"source":"server","kind":"lsp-exit","message":"LSP server fake exited on signal SIGTERM","extra":{"serverId":"fake","signal":"SIGTERM","scope":"agent"}}
+{"ts":"2026-07-26T18:08:54.134Z","pid":49332,"source":"server","kind":"lsp-exit","message":"LSP server fake exited on signal SIGTERM","extra":{"serverId":"fake","signal":"SIGTERM","scope":"agent"}}
+{"ts":"2026-07-26T18:08:54.321Z","pid":49332,"source":"server","kind":"lsp-exit","message":"LSP server fake exited on signal SIGTERM","extra":{"serverId":"fake","signal":"SIGTERM","scope":"editor"}}
+{"ts":"2026-07-26T18:08:54.321Z","pid":49332,"source":"server","kind":"lsp-exit","message":"LSP server fake exited on signal SIGTERM","extra":{"serverId":"fake","signal":"SIGTERM","scope":"agent"}}

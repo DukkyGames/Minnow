@@ -5,6 +5,8 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
+import { installHappyDomGlobals } from '../os/dom-helpers.mts';
+import { resetAppDialogForTests } from '../../src/ui/app-dialog.ts';
 import { initBoard } from '../../src/state/orchestrate-board-store.ts';
 import { isBoardRunning } from '../../src/state/orchestrate-board-store.ts';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
@@ -81,30 +83,26 @@ function seedRunningBoard(): { planner: Chat; group: ChatGroup } {
   return { planner, group };
 }
 
+async function clickAppDialogAction(action: 'cancel' | 'confirm'): Promise<void> {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const btn = document.querySelector(`[data-dialog-action="${action}"]`);
+    if (btn instanceof HTMLElement) {
+      btn.click();
+      return;
+    }
+  }
+  throw new Error(`app dialog ${action} button not found`);
+}
+
 describe('workspace-switch-guard', () => {
   let originalConfirm: typeof window.confirm;
   let domWindow: Window;
 
   beforeEach(() => {
     domWindow = new Window();
+    installHappyDomGlobals(domWindow);
     globalThis.window = domWindow as unknown as Window & typeof globalThis.window;
-    globalThis.document = domWindow.document;
-    globalThis.localStorage = domWindow.localStorage;
-    globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
-      cb(0);
-      return 1;
-    }) as typeof requestAnimationFrame;
-    (domWindow as unknown as { minnow: unknown }).minnow = {
-      preview: { show: async () => {}, hide: async () => {} },
-      app: { isElectron: true, platform: 'linux', openExternal: async () => {} },
-      window: {
-        minimize: async () => {},
-        maximize: async () => {},
-        close: async () => {},
-        isMaximized: async () => false,
-        onMaximizedChanged: () => () => {},
-      },
-    };
     resetWorkspaceStateForTests();
     setWorkspaceFromServer({
       path: CURRENT_WS,
@@ -118,6 +116,7 @@ describe('workspace-switch-guard', () => {
     window.confirm = originalConfirm;
     setSessionStateForTests(null);
     resetWorkspaceStateForTests();
+    resetAppDialogForTests();
     domWindow.close();
   });
 
@@ -155,14 +154,8 @@ describe('workspace-switch-guard', () => {
 
   test('confirmAndStopBoardsForWorkspaceSwitch cancels without stopping', async () => {
     const { group } = seedRunningBoard();
-    const { installAppDialogs } = await import('../../src/ui/app-dialog.ts');
-    installAppDialogs(globalThis.window);
     const allowedPromise = confirmAndStopBoardsForWorkspaceSwitch(OTHER_WS);
-    await Promise.resolve();
-    const cancelBtn = domWindow.document.querySelector<HTMLButtonElement>(
-      '[data-dialog-action="cancel"]',
-    );
-    cancelBtn?.click();
+    await clickAppDialogAction('cancel');
     const allowed = await allowedPromise;
     assert.equal(allowed, false);
     assert.equal(isBoardRunning(group), true);
@@ -170,14 +163,8 @@ describe('workspace-switch-guard', () => {
 
   test('confirmAndStopBoardsForWorkspaceSwitch stops boards when confirmed', async () => {
     const { group } = seedRunningBoard();
-    const { installAppDialogs } = await import('../../src/ui/app-dialog.ts');
-    installAppDialogs(globalThis.window);
     const allowedPromise = confirmAndStopBoardsForWorkspaceSwitch(OTHER_WS);
-    await Promise.resolve();
-    const confirmBtn = domWindow.document.querySelector<HTMLButtonElement>(
-      '[data-dialog-action="confirm"]',
-    );
-    confirmBtn?.click();
+    await clickAppDialogAction('confirm');
     const allowed = await allowedPromise;
     assert.equal(allowed, true);
     assert.equal(isBoardRunning(group), false);

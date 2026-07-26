@@ -417,7 +417,7 @@ Design reference: [`DESIGN.md`](../DESIGN.md), [`documentation/design-system/`](
 
 ## LSP, MCP, plugins
 
-**LSP:** Bundled TS/JS + on-demand language bundles; config `~/.minnow/lsp.json`, defaults `src/lsp/defaults.json`. APIs: `/api/lsp/*`. TypeScript **7** ships without `lib/tsserver.js`; Minnow keeps **`typescript-strada`** (`npm:typescript@5.8.3`) for `typescript-language-server` fallback resolution while the app depends on TS 7 for builds.
+**LSP:** Bundled TS/JS + on-demand language bundles; config `~/.minnow/lsp.json`, defaults `src/lsp/defaults.json`. APIs: `/api/lsp/*`. The app pins `typescript` to **6.x** (not 7.x) because `typescript-language-server` still requires `typescript/lib/tsserver.js`, which TypeScript 7 removed. Resolution also checks the on-disk `node_modules/typescript/lib/tsserver.js` path when package exports block `require.resolve`.
 
 **MCP:** Config under `~/.minnow/mcp/`; Context7 built-in for library docs. Tools surface as `mcp__<server>__<tool>`.
 

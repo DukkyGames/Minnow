@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
+import { installHappyDomGlobals } from '../os/dom-helpers.mts';
 
 const FIXED_CHAT_ID = '11111111-1111-1111-1111-111111111111';
 const FIXED_GROUP_ID = 'grp_11111111-1111-1111-1111-111111111111';
@@ -24,9 +25,7 @@ const { STREAM_LABEL_GENERATING } = await import('../../src/ui/stream-status.ts'
 
 function setupDom() {
   const window = new Window();
-  globalThis.window = window;
-  globalThis.document = window.document;
-  globalThis.HTMLElement = window.HTMLElement;
+  installHappyDomGlobals(window);
   const area = document.createElement('div');
   area.id = 'chatArea';
   document.body.appendChild(area);

@@ -24,10 +24,11 @@ import {
 } from '../../server/workspace/root.js';
 import { parseStartupMarkdown } from '../../server/dev-server/parse-startup.js';
 import { rmTestHome, setTestHome } from '../config/test-helpers.js';
+import { resetActiveRunsForTests } from '../../server/terminal-runner.js';
 
 const LONG_RUNNING_CMD = 'node -e "setInterval(()=>{}, 60000)"';
 
-describe('dev-server manager tools', () => {
+describe('dev-server manager tools', { concurrency: 1 }, () => {
   let homeDir;
   let workspaceDir;
   /** @type {string | null} */
@@ -36,6 +37,7 @@ describe('dev-server manager tools', () => {
   before(async () => {
     homeDir = setTestHome(process.env, 'minnow-test-dev-server-manager');
     resetDevServerManagerForTests();
+    resetActiveRunsForTests();
     await ensureMinnowLayout();
     workspaceDir = path.join(homeDir, 'dev-ws-tool');
     await fs.mkdir(workspaceDir, { recursive: true });
@@ -51,7 +53,7 @@ describe('dev-server manager tools', () => {
         : {};
     delete workspace.devServerByPath;
     await writeConfigJson('config.json', mergeConfigMeta(meta, { workspace }));
-    resetDevServerManagerForTests();
+    resetDevServerManagerForTests(workspaceDir);
   }
 
   after(async () => {
@@ -70,6 +72,7 @@ describe('dev-server manager tools', () => {
     }
     await stopDevServer(workspaceDir).catch(() => undefined);
     await clearPersistedDevServerState();
+    resetActiveRunsForTests();
   });
 
   test('startDevServer registers running state when startup.md guide matches', async () => {
@@ -155,7 +158,7 @@ describe('dev-server manager tools', () => {
       },
     };
     await writeConfigJson('config.json', mergeConfigMeta(meta, { workspace }));
-    resetDevServerManagerForTests();
+    resetDevServerManagerForTests(workspaceDir);
 
     const status = await getDevServerStatusById(workspaceDir, PRIMARY_DEV_SERVER_ID);
     assert.equal(status.status, 'stopped');

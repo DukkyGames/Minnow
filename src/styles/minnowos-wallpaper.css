@@ -146,6 +146,19 @@
   background: radial-gradient(130% 120% at 50% 40%, transparent 55%, rgba(0, 0, 0, 0.12));
 }
 
+/*
+ * Perf: the desktop layer stays painted (blurred + scaled) behind a fullscreen app.
+ * An animated wallpaper under `filter: blur()` forces a full-screen re-raster every
+ * frame, which is what stutters app / chat / workspace switches. Freeze the wallpaper
+ * while it is covered — it resumes on the way back to the desktop.
+ */
+.mn-os-stage.is-in-app .mn-os-caustic,
+.mn-os-stage.is-in-app .mn-os-bubbles span,
+.mn-os-stage.is-in-app .mn-os-stars span,
+.mn-os-stage.is-in-app .mn-os-aurora {
+  animation-play-state: paused;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .mn-os-caustic-a,
   .mn-os-caustic-b,

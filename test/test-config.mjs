@@ -8,18 +8,18 @@ import { availableParallelism } from 'node:os';
 /** @typedef {'node' | 'tsx-mocks' | 'tsx-mocks-loader' | 'node-tsx'} RunnerId */
 
 /**
- * Default worker cap. A heavy happy-dom + orchestrate file peaks around 300 MB,
- * so this bounds the suite near 1.5 GB. The freeze that once forced this to 1 was
- * never parallelism — it was node:assert diffing a DOM node (assert-dom-safe.mjs).
+ * Default worker cap. Full parallelism (~31 on a 32-core box) was safe once
+ * assert-dom-safe.mjs stopped node:assert from Myers-diffing happy-dom nodes;
+ * keep a ceiling for workstations that prefer a lower ceiling via env.
  */
-export const MAX_TEST_CONCURRENCY = 4;
+export const MAX_TEST_CONCURRENCY = 16;
 
 /**
- * Default files per `node --test` invocation. Batching costs no extra memory —
- * node:test still forks one child per file — it only avoids re-paying spawn and
- * tsx startup for all ~960 files.
+ * Secondary file-count guard per `node --test` spawn (argv budget in run-all.mjs
+ * is the primary limit). Batching only amortizes spawn/tsx startup — node:test
+ * still forks one child per file.
  */
-export const MAX_TEST_BATCH_SIZE = 200;
+export const MAX_TEST_BATCH_SIZE = 300;
 
 /** node:test isolation for heavy paths (one child process per file). */
 export const HEAVY_TEST_ISOLATION = 'process';
@@ -32,6 +32,8 @@ export const HEAVY_TEST_PATH_PREFIXES = [
   'test/ui/',
   'test/orchestrate/',
   'test/chat/orchestrate/',
+  // Dev-server manager keeps process-global run registry state.
+  'test/workspace/dev-server-',
 ];
 
 /** True when a test file should not share a node process with other heavy suites. */

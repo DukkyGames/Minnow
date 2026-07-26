@@ -72,8 +72,13 @@ function viewForPresentationMode(mode: PresentationMode): OsView {
  * Pick the next foreground after closing `excludeId`.
  * `returnApp` must be captured before the instance is removed from the store.
  */
-function pickNextForeground(excludeId: string, returnApp?: AppId): string | null {
-  if (returnApp) {
+function pickNextForeground(
+  excludeId: string,
+  returnApp?: AppId,
+  closedPresentation?: ReturnType<typeof resolveInstancePresentation>,
+): string | null {
+  // returnToApp only applies when closing a fullscreen overlay (e.g. Settings from Code).
+  if (returnApp && closedPresentation === 'fullscreen') {
     const target = instances.find((i) => i.appId === returnApp && i.id !== excludeId);
     if (target) {
       const mode = resolveInstancePresentation(target);
@@ -237,10 +242,19 @@ export function closeInstance(id: string): boolean {
   const idx = instances.findIndex((i) => i.id === id);
   if (idx < 0) return false;
   // Read returnToApp before removing — pickNextForeground cannot see the closed row.
-  const returnApp = instances[idx]?.launchOptions?.returnToApp;
+  const closing = instances[idx];
+  const returnApp = closing?.launchOptions?.returnToApp;
+  const closedPresentation = closing
+    ? resolveInstancePresentation(closing)
+    : undefined;
+  const closingOsWindow = Boolean(windowManager.findWindowByInstance(id));
   instances = instances.filter((i) => i.id !== id);
   if (foregroundId === id) {
-    foregroundId = pickNextForeground(id, returnApp);
+    foregroundId = pickNextForeground(
+      id,
+      closingOsWindow ? undefined : returnApp,
+      closedPresentation,
+    );
     if (!foregroundId) {
       view = 'desktop';
     } else {

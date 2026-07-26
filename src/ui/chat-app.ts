@@ -18,6 +18,7 @@ import {
   ensureChatHistoryLoaded,
   getActiveChat,
   getAssistantChats,
+  isChatHistoryLoaded,
   isEphemeralEmptyChat,
   markSessionScalarsDirty,
   newChatId,
@@ -42,7 +43,7 @@ import {
 } from './composer-send';
 import { handleComposerPromptHistoryKeydown } from './composer-prompt-history';
 import { handleSkillPickerKeydown, initComposerSlashPicker, isSkillPickerOpen } from './skill-picker';
-import { renderChatFromHistory } from './messages';
+import { renderChatFromHistory, showChatHistoryLoadingPlaceholder } from './messages';
 import { closeSettings } from './settings-page';
 import { ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT } from '../constants';
 import { appendChatRow } from './sidebar';
@@ -127,6 +128,11 @@ async function activateAssistantChat(chatId: string): Promise<void> {
   sessionState.activeId = chatId;
   markSessionScalarsDirty();
   // Lazy history: wait before paint so restart+switch does not show empty state.
+  // Blank first when the fetch is real — otherwise the chat we just left stays on
+  // screen for the round-trip and reads as the old chat coming back.
+  if (!isChatHistoryLoaded(chat)) {
+    showChatHistoryLoadingPlaceholder(CHAT_APP_MOUNT);
+  }
   await ensureChatHistoryLoaded(chatId);
   if (!sessionState || sessionState.activeId !== chatId) return;
   acknowledgeChatViewed(chatId);
