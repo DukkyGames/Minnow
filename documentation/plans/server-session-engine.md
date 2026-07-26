@@ -139,10 +139,13 @@ Shipped on this branch (`henri/min-354-server-session-engine`) behind `MINNOW_SE
 - **Flag on**: renderer skips `bootOrchestrateBoardResume` / lease board guards
   ([`board-driver-gate.ts`](../../src/state/board-driver-gate.ts)); UI dispatches via
   [`board-command-bridge.ts`](../../src/state/board-command-bridge.ts).
+  Engine main-chat loop re-adds `board_*` / `delegate_tasks` tool defs and executes them
+  in-process via `executeBoardTool` + sync session rebind (kickoff `board_init` works).
 - **Flag off**: unchanged renderer board + Phase 0 lease.
 - **Gaps / Phase 3**: full sub-agent controller registry still renderer-owned; board
   heartbeats run in-engine for board task chats only; concurrent `mutateEngineState`
-  clone vs in-place board mutations can race mid-turn (publishLive + rebind mitigate).
+  clone vs in-place board mutations can race mid-turn (publishLive + rebind mitigate);
+  engine boot resume does not apply Electron OOM pause throttle (renderer-only marker).
 - **Tests**: `test/engine/session-phase2.test.mjs` (run with css stub + tsx, as in
   `tsx-loader-mocks`); existing `test/orchestrate/board-flow-e2e.test.mts` still
   targets board-actions directly (same modules the engine hosts).

@@ -49,6 +49,16 @@ import {
   shiftOldestQueuedMessage,
 } from './engine-loop-helpers';
 
+/** Browser-catalog board tools that run in-process when the board host is active (MIN-360). */
+const BOARD_TOOL_NAMES = new Set([
+  'board_init',
+  'board_update_task',
+  'board_get_state',
+  'board_report',
+  'board_set_autonomy',
+  'delegate_tasks',
+]);
+
 export interface EngineMainChatTurnOptions {
   chatId: string;
   signal: AbortSignal;
@@ -230,6 +240,52 @@ function mergeModeToolDefinitions(
   return next;
 }
 
+/** Expose orchestrate board_* tools to the engine loop (headless catalog strips them). */
+function mergeBoardToolDefinitions(
+  enabledTools: ReturnType<typeof getHeadlessToolDefinitions>,
+): ReturnType<typeof getHeadlessToolDefinitions> {
+  let next = enabledTools;
+  for (const tool of BUILT_IN_TOOLS) {
+    const name = tool.definition.function.name;
+    if (!BOARD_TOOL_NAMES.has(name)) continue;
+    if (next.some((t) => t.function.name === name)) continue;
+    next = [...next, tool.definition];
+  }
+  return next;
+}
+
+/**
+ * Run board_* tools against the engine-hosted sessionState alias, then publish.
+ * Rebinds synchronously so mutateEngineState clones cannot leave board_init on a stale blob.
+ */
+async function executeEngineBoardTool(
+  name: string,
+  args: Record<string, unknown>,
+  chatId: string,
+): Promise<{ content: string }> {
+  const { activateEngineBoardHost } = await import('./board-host.ts');
+  await activateEngineBoardHost();
+  const { getEngineSessionState, publishLiveEngineState } = await import(
+    '../../server/session/engine-api.js'
+  );
+  const { setSessionStateForEngineHost } = await import('../state/sessions.ts');
+  const live = getEngineSessionState();
+  if (live) setSessionStateForEngineHost(live as import('../types').SessionState);
+
+  const { executeBoardTool, setBoardExecutorContext } = await import(
+    '../tools/board-tools.ts'
+  );
+  setBoardExecutorContext({ chatId });
+  try {
+    const content = await executeBoardTool(name, args, { chatId });
+    // Persist board mutations so SSE clients see init/update immediately.
+    await publishLiveEngineState({ soft: false });
+    return { content };
+  } finally {
+    setBoardExecutorContext(null);
+  }
+}
+
 /** Run the persistent main-chat tool loop until final prose, abort, or error. */
 export async function runEngineMainChatTurn(
   options: EngineMainChatTurnOptions,
@@ -267,7 +323,10 @@ export async function runEngineMainChatTurn(
       : 4096;
 
   const modeId = normalizeModeId(chat.modeId) as ModeId;
-  const enabledTools = mergeModeToolDefinitions(getHeadlessToolDefinitions(modeId));
+  // Mode tools + board tools (stripped from headless catalog; host runs them in-process).
+  const enabledTools = mergeBoardToolDefinitions(
+    mergeModeToolDefinitions(getHeadlessToolDefinitions(modeId)),
+  );
 
   try {
     for (;;) {
@@ -364,6 +423,14 @@ export async function runEngineMainChatTurn(
               );
             });
             return { content };
+          }
+          // board_init / board_* — in-process against engine SessionState (MIN-360).
+          if (BOARD_TOOL_NAMES.has(name)) {
+            return executeEngineBoardTool(
+              name,
+              (args ?? {}) as Record<string, unknown>,
+              options.chatId,
+            );
           }
           return executeHeadlessTool(
             name,

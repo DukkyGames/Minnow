@@ -278,6 +278,84 @@ describe('session engine phase 2 board (MIN-360)', () => {
     assert.equal(res.status, 503);
     process.env.MINNOW_SERVER_ENGINE = '1';
   });
+
+  test('board_init command creates orchestrate board on engine state', async () => {
+    const state = structuredClone(defaultSessionFixture);
+    const plannerId = state.chats[0].id;
+    state.chats[0].modeId = 'orchestrate';
+    await httpRequest(baseUrl, 'PUT', '/api/config/sessions', state);
+    await ensureSessionEngineBooted();
+
+    const res = await httpRequestWithHeaders(baseUrl, 'POST', '/api/session/commands', {
+      type: 'board_init',
+      plannerChatId: plannerId,
+      planPath: 'documentation/plans/phase2-init.md',
+      tasks: [
+        {
+          id: 'W1-A',
+          title: 'Init task',
+          wave: 'W1',
+          category: 'build',
+        },
+      ],
+      waves: [{ id: 'W1' }],
+    });
+    assert.equal(res.status, 202, JSON.stringify(res.json));
+
+    const engineState = getEngineSessionState();
+    const group = (engineState.groups ?? []).find((g) => g.orchestrateBoard);
+    assert.ok(group?.orchestrateBoard, 'expected board group after board_init');
+    assert.equal(group.orchestrateBoard.planPath, 'documentation/plans/phase2-init.md');
+    assert.equal(group.orchestrateBoard.tasks.length, 1);
+    assert.equal(group.orchestrateBoard.tasks[0].id, 'W1-A');
+  });
+
+  test('engine board host can run board_init tool in-process (kickoff path)', async () => {
+    const state = structuredClone(defaultSessionFixture);
+    const plannerId = state.chats[0].id;
+    state.chats[0].modeId = 'orchestrate';
+    await commitEngineState(state);
+    await ensureSessionEngineBooted();
+
+    const { activateEngineBoardHost, deactivateEngineBoardHost } = await import(
+      '../../src/session-engine/board-host.ts'
+    );
+    const { executeBoardTool, setBoardExecutorContext } = await import(
+      '../../src/tools/board-tools.ts'
+    );
+    const { setSessionStateForEngineHost } = await import('../../src/state/sessions.ts');
+
+    await activateEngineBoardHost();
+    setSessionStateForEngineHost(getEngineSessionState());
+    setBoardExecutorContext({ chatId: plannerId });
+    try {
+      const content = await executeBoardTool(
+        'board_init',
+        {
+          plan_path: 'documentation/plans/tool-init.md',
+          tasks: [
+            {
+              id: 'W1-B',
+              title: 'Tool init',
+              wave: 'W1',
+              category: 'build',
+            },
+          ],
+          waves: [{ id: 'W1' }],
+        },
+        { chatId: plannerId },
+      );
+      assert.ok(!content.startsWith('Error:'), content);
+      const engineState = getEngineSessionState();
+      const group = (engineState.groups ?? []).find((g) => g.orchestrateBoard);
+      assert.ok(group?.orchestrateBoard);
+      assert.equal(group.orchestrateBoard.planPath, 'documentation/plans/tool-init.md');
+      assert.equal(group.orchestrateBoard.tasks[0].id, 'W1-B');
+    } finally {
+      setBoardExecutorContext(null);
+      await deactivateEngineBoardHost();
+    }
+  });
 });
 
 describe('session-engine stream-bus (MIN-360)', () => {

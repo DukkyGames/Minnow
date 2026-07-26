@@ -7,12 +7,14 @@
  */
 
 import { setStreaming } from '../app-state.ts';
+import type { Attachment } from '../attachments/types.ts';
 import type { Chat } from '../types.ts';
 import {
   notifyChatStreamActivity,
   notifyChatStreamEnded,
 } from './stream-bus.ts';
 
+/** Options mirror RunChatTurnOptions fields the board launcher needs (MIN-360). */
 export type BoardChatTurnOptions = {
   chat: Chat;
   pushUser: boolean;
@@ -21,7 +23,7 @@ export type BoardChatTurnOptions = {
   displayText: string;
   historyContent: string;
   skillId: string | null;
-  validAttachments: unknown[];
+  validAttachments: Attachment[];
   titleSeed?: string;
   ownsGlobalStreaming?: boolean;
 };
