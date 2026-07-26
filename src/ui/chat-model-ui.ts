@@ -3,7 +3,7 @@
  * Kept separate from sidebar.ts to avoid circular imports with composer-model-trigger.
  */
 
-import { applyModelSelectValueToChat } from '../lib/model-select-key';
+import { applyModelSelectValueToChat, decodeModelSelectKey } from '../lib/model-select-key';
 import { isChatStreaming } from '../chat/streaming-state';
 import { stopGeneration } from '../chat/stop-generation';
 import {
@@ -11,6 +11,7 @@ import {
   scheduleSaveSessions,
   touchChat,
 } from '../state/sessions';
+import { boardUiSetModel } from '../state/board-command-bridge';
 import { syncComposerModelTriggers } from './composer-model-trigger';
 import { syncComposerReasoningEffortFromActiveChat } from './composer-reasoning-effort';
 import { setStatus } from './status';
@@ -36,6 +37,16 @@ export function onActiveChatModelChange(selectValue: string): void {
   applyModelSelectValueToChat(chat, raw);
   touchChat(chat);
   scheduleSaveSessions();
+  // Engine board host: also stamp preferred model on the board (MIN-360).
+  const decoded = decodeModelSelectKey(raw);
+  const modelId = decoded?.modelId ?? raw;
+  const providerId = decoded?.providerId ?? chat.providerId;
+  void boardUiSetModel({
+    chatId: chat.id,
+    groupId: chat.boardGroupId ?? chat.groupId,
+    providerId,
+    modelId,
+  });
   syncComposerModelTriggers();
   syncComposerReasoningEffortFromActiveChat();
   void import('./context-usage-ring').then((m) => m.refreshContextUsageRing());

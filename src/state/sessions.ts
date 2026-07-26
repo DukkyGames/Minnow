@@ -133,6 +133,30 @@ function normalizeChatTodoStatus(raw: unknown): ChatTodo['status'] {
 /** In-memory session blob mirrored to ~/.minnow or localStorage fallback. */
 export let sessionState: SessionState | null = null;
 
+/**
+ * When set, scheduleSaveSessions/saveSessionsNow publish via the Session Engine
+ * instead of client PUT/PATCH (MIN-360 board host).
+ */
+let engineHostPersistHook: (() => void) | null = null;
+
+/** Engine board host installs a persist hook; null restores normal client saves. */
+export function setEngineHostPersistHook(hook: (() => void) | null): void {
+  engineHostPersistHook = hook;
+}
+
+/**
+ * Point sessionState at the engine-owned blob (same reference — board mutates in place).
+ * Does not run client hydrate/dirty tracking resets beyond assigning the ref.
+ */
+export function setSessionStateForEngineHost(state: SessionState | null): void {
+  sessionState = state;
+  if (state) {
+    sessionsHydratedFromServer = true;
+    sessionPatchDirtySetsReady = true;
+    captureDirtyTrackingShadow(state);
+  }
+}
+
 /** Monotonic server revision for optimistic concurrency (Phase 0). */
 let sessionRev = 0;
 
@@ -1644,6 +1668,14 @@ async function persistSessionsPatchToServer(delta: SessionsPatchDelta): Promise<
  */
 export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResult {
   if (!sessionState) return 'ok';
+
+  // Engine board host: publish in-place engine state (no client PUT/PATCH).
+  if (engineHostPersistHook) {
+    clearSessionDirtySets();
+    captureDirtyTrackingShadow(sessionState);
+    engineHostPersistHook();
+    return 'ok';
+  }
 
   // Detect unmarked chat mutations in DEV; a miss forces full-PUT fallback.
   const verifierMiss = verifyDirtyChatTracking(sessionState);

@@ -21,6 +21,14 @@ import { emitBoardChange } from './orchestrate-board-events';
 import { renderSidebar } from '../ui/sidebar';
 import { renderChatFromHistory } from '../ui/messages';
 import { isBoardRunning } from './orchestrate-board-store';
+import {
+  canDriveOrchestrateBoard as canDriveFromGate,
+  setBoardDriverLeaseProbe,
+  setEngineOwnsBoardDrive,
+  setServerEngineFlagProbe,
+} from './board-driver-gate';
+
+export { setEngineOwnsBoardDrive };
 
 const DRIVER_ID_KEY = 'minnow.sessionDriverId';
 const LEASE_RENEW_MS = 15_000;
@@ -76,11 +84,9 @@ function deviceLeaseLabel(): string {
   return 'Browser';
 }
 
-/** True when this client may run board auto-drive / delegation. */
+/** True when this client/process may run board auto-drive / delegation. */
 export function canDriveOrchestrateBoard(): boolean {
-  if (!isServerStorageMode()) return true;
-  if (!syncInitialized) return true;
-  return holdsBoardDriverLease;
+  return canDriveFromGate();
 }
 
 /** True when another device holds the board driver lease. */
@@ -299,16 +305,28 @@ function connectSessionStream(): void {
 export function initSessionSync(): void {
   if (syncInitialized || !isServerStorageMode()) return;
   syncInitialized = true;
+  // Wire Phase 0 lease probe into the DOM-free board drive gate.
+  setBoardDriverLeaseProbe(() => {
+    if (!syncInitialized) return true;
+    return holdsBoardDriverLease;
+  });
+  void import('./server-engine-flag').then(({ isServerEngineEnabled }) => {
+    setServerEngineFlagProbe(() => isServerEngineEnabled());
+  });
   connectSessionStream();
   // Flush deferred remotes as soon as any local stream ends.
   streamEndUnsub = subscribeChatStreamEnd(() => {
     flushPendingRemote();
   });
-  void ensureBoardDriverLease().then(() => {
-    startLeaseHeartbeat();
-    void import('../ui/orchestrate-board-remote-driver').then((m) =>
-      m.syncOrchestrateBoardRemoteDriverBanner(),
-    );
+  // Flag-on: engine owns board drive — skip lease claim/renew for board guards.
+  void import('./server-engine-flag').then(({ isServerEngineEnabled }) => {
+    if (isServerEngineEnabled()) return;
+    void ensureBoardDriverLease().then(() => {
+      startLeaseHeartbeat();
+      void import('../ui/orchestrate-board-remote-driver').then((m) =>
+        m.syncOrchestrateBoardRemoteDriverBanner(),
+      );
+    });
   });
 }
 

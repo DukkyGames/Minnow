@@ -89,3 +89,72 @@ export async function dispatchEnqueueMessage(
 ): Promise<SessionCommandResult> {
   return dispatchSessionCommand({ type: 'enqueue_message', chatId, text });
 }
+
+/* ── Board commands (MIN-360 Phase 2) ───────────────────────────────────── */
+
+export async function dispatchBoardStart(groupId: string): Promise<SessionCommandResult> {
+  return dispatchSessionCommand({ type: 'board_start', groupId });
+}
+
+export async function dispatchBoardStop(
+  groupId: string,
+  reason: 'user' | 'system' = 'user',
+): Promise<SessionCommandResult> {
+  return dispatchSessionCommand({ type: 'board_stop', groupId, reason });
+}
+
+export async function dispatchBoardStartTask(
+  groupId: string,
+  taskId: string,
+): Promise<SessionCommandResult> {
+  return dispatchSessionCommand({ type: 'board_start_task', groupId, taskId });
+}
+
+export async function dispatchBoardRequeueTask(
+  groupId: string,
+  taskId: string,
+): Promise<SessionCommandResult> {
+  return dispatchSessionCommand({ type: 'board_requeue_task', groupId, taskId });
+}
+
+export async function dispatchBoardSetAutonomy(
+  groupId: string,
+  level: 'manual' | 'sequential' | 'auto' | 'afk',
+  start?: boolean,
+): Promise<SessionCommandResult> {
+  return dispatchSessionCommand({
+    type: 'board_set_autonomy',
+    groupId,
+    level,
+    ...(start != null ? { start } : {}),
+  });
+}
+
+export async function dispatchBoardRunFinalTest(
+  groupId: string,
+): Promise<SessionCommandResult> {
+  return dispatchSessionCommand({ type: 'board_run_final_test', groupId });
+}
+
+export async function dispatchBoardRecoverTask(
+  groupId: string,
+  taskId: string,
+  action: 'restart' | 'continue' | 'move_to_new_chat' | 'reconcile_merge',
+): Promise<SessionCommandResult> {
+  return dispatchSessionCommand({
+    type: 'board_recover_task',
+    groupId,
+    taskId,
+    action,
+  });
+}
+
+export async function dispatchSetModel(payload: {
+  chatId?: string;
+  groupId?: string;
+  providerId?: string;
+  modelId: string;
+}): Promise<SessionCommandResult> {
+  return dispatchSessionCommand({ type: 'set_model', ...payload });
+}
+

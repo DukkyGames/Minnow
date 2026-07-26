@@ -558,6 +558,9 @@ export interface OrchestrateBoardState {
   };
   /** Chronological diagnostic log, capped ring buffer (oldest dropped). */
   log?: BoardLogEvent[];
+  /** Preferred provider/model for task chats when planner has no binding (MIN-360). */
+  preferredProviderId?: string;
+  preferredModelId?: string;
   /** Phase-2 placeholder: provisioning lifecycle for AFK workspace setup. */
   provisionState?: 'idle' | 'provisioning' | 'ready' | 'failed';
   /** Phase-2 placeholder: content-hash signatures of provisioned artefacts. */

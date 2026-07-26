@@ -120,18 +120,35 @@ Shipped on this branch (`henri/min-354-server-session-engine`). Lives under
 - **Tests**: `test/engine/session-phase1.test.mjs`,
   `test/session-engine/loop-helpers.test.mts`.
 
-### Phase 2 — Move the board scheduler into the engine
-- Port `orchestrate-board-store.ts` (pure) and `orchestrate-board-actions.ts` into the engine.
-  Replace the one `document.getElementById('modelSelect')` read with a value carried on
-  planner/board state (set via a command when the user changes the top-bar model).
-- Re-home the event bus: `subscribeChatStreamEnd` / `src/chat/streaming-state.ts` becomes an
-  **in-process engine event** — the chat loop and the board both live in the engine, so stream-end
-  is a direct callback, not a DOM bus. Re-home heartbeat/stall supervision timers
-  (`agents/controller/wrapper.ts`) into the engine.
-- Board commands via the command API: `board_init`, `board_start`, `board_stop`, `start_task`,
-  `requeue`, `set_autonomy`, `run_final_test`, recovery actions (MIN-222).
-- Retire renderer `board-boot-resume.ts`, `ensureAutoDriveSubscription`,
-  `resumeBoardExecutionAfterReload`; the engine resumes boards on **server** boot.
+### Phase 2 — Move the board scheduler into the engine ✅ Done (MIN-360)
+
+Shipped on this branch (`henri/min-354-server-session-engine`) behind `MINNOW_SERVER_ENGINE`
+(still default **off**).
+
+- **Board host**: [`src/session-engine/board-host.ts`](../../src/session-engine/board-host.ts)
+  aliases engine SessionState into `sessions.ts`, installs the engine turn runner, and
+  resumes `autoRunning` boards on **server** boot (`server/session/board-loader.js` via tsx).
+- **Stream-end bus**: [`src/session-engine/stream-bus.ts`](../../src/session-engine/stream-bus.ts)
+  — in-process; [`streaming-state.ts`](../../src/chat/streaming-state.ts) re-exports for UI.
+  Board task turns await the Phase 1 loop then `notifyChatStreamEnded` (no DOM bus).
+- **Model binding**: board `preferredModelId` / `preferredProviderId` + planner chat fields;
+  `set_model` command; DOM `#modelSelect` only as legacy renderer fallback when preferred unset.
+- **Commands**: `board_init`, `board_start`, `board_stop`, `board_start_task`,
+  `board_requeue_task`, `board_set_autonomy`, `board_run_final_test`, `board_recover_task`
+  (restart / continue / move_to_new_chat / reconcile_merge), `set_model`.
+- **Flag on**: renderer skips `bootOrchestrateBoardResume` / lease board guards
+  ([`board-driver-gate.ts`](../../src/state/board-driver-gate.ts)); UI dispatches via
+  [`board-command-bridge.ts`](../../src/state/board-command-bridge.ts).
+- **Flag off**: unchanged renderer board + Phase 0 lease.
+- **Gaps / Phase 3**: full sub-agent controller registry still renderer-owned; board
+  heartbeats run in-engine for board task chats only; concurrent `mutateEngineState`
+  clone vs in-place board mutations can race mid-turn (publishLive + rebind mitigate).
+- **Tests**: `test/engine/session-phase2.test.mjs` (run with css stub + tsx, as in
+  `tsx-loader-mocks`); existing `test/orchestrate/board-flow-e2e.test.mts` still
+  targets board-actions directly (same modules the engine hosts).
+- **Process hooks**: `npm start` / `electron:dev` use
+  `--import ./server/session/engine-tsx-hooks.mjs --import tsx` so board/main-chat
+  `.ts` modules load under Node without setting `MINNOW_TEST`.
 
 ### Phase 3 — Move the sub-agent controller into the engine
 - Relocate `src/agents/controller/*` to run in the engine process (already Node-compatible;

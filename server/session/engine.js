@@ -140,6 +140,10 @@ export async function mutateEngineState(mutator, opts = {}) {
     mutator(next);
     engineState = next;
     stateGeneration += 1;
+    // Board host keeps a sessionState alias — rebind after replace.
+    void import('./board-loader.js')
+      .then((m) => m.rebindEngineBoardHostSession?.())
+      .catch(() => undefined);
 
     if (opts.soft) {
       // Soft path: publish SSE immediately from memory, debounce disk write.
@@ -214,6 +218,53 @@ export function adoptExternalSessionWrite(state) {
   if (activeTurnChatIds.size > 0) return;
   invalidateSoftFlush();
   engineState = state;
+  // Keep board host sessionState alias aligned after external writes.
+  void import('./board-loader.js')
+    .then((m) => m.rebindEngineBoardHostSession?.())
+    .catch(() => undefined);
+}
+
+/**
+ * Publish the live in-memory engine blob after in-place board mutations
+ * (board host aliases sessionState === engineState). Does not structuredClone
+ * before validate — writeResource validates and we adopt the returned blob so
+ * the board-host alias can be rebound to the same post-validate object.
+ * @param {{ soft?: boolean }} [opts]
+ * @returns {Promise<number>}
+ */
+export async function publishLiveEngineState(opts = {}) {
+  return withEngineWriteLock(async () => {
+    await ensureSessionEngineBooted();
+    if (engineState == null) {
+      throw new Error('Session engine has no state');
+    }
+    stateGeneration += 1;
+    if (opts.soft) {
+      const rev = notifySessionStateWritten(engineState);
+      scheduleSoftFlush();
+      return rev;
+    }
+    invalidateSoftFlush();
+    // writeResource validates + notify + adoptExternal — keep engineState on the
+    // validated blob so in-place board mutations are not stranded on a stale alias.
+    const written = await writeResource('sessions', engineState);
+    engineState = written;
+    try {
+      const { setSessionStateForEngineHost } = await import(
+        '../../src/state/sessions.ts'
+      ).catch(() => ({}));
+      // Dynamic TS import may fail without tsx hooks — board-loader rebind covers that.
+      if (typeof setSessionStateForEngineHost === 'function') {
+        setSessionStateForEngineHost(written);
+      }
+    } catch {
+      /* board host rebind is best-effort here */
+    }
+    void import('./board-loader.js')
+      .then((m) => m.rebindEngineBoardHostSession?.())
+      .catch(() => undefined);
+    return getSessionRev();
+  });
 }
 
 /**

@@ -16,6 +16,7 @@ export {
   getEngineSessionState,
   isEngineTurnActive,
   mutateEngineState,
+  publishLiveEngineState,
   resetSessionEngineForTests,
   tryBeginEngineTurn,
 } from './engine.js';

@@ -1,6 +1,6 @@
 /**
- * Typed session command handlers for the Session Engine (Phase 1).
- * Long-running send_message work continues after the 202 response.
+ * Typed session command handlers for the Session Engine (Phase 1 + Phase 2 board).
+ * Long-running send_message / board task work continues after the 202 response.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -9,10 +9,12 @@ import {
   endEngineTurn,
   isEngineTurnActive,
   mutateEngineState,
+  publishLiveEngineState,
   tryBeginEngineTurn,
 } from './engine-api.js';
 import { getSessionRev } from './rev-store.js';
 import { runEngineMainChatTurn } from './loop-loader.js';
+import { applyBoardCommand } from './board-loader.js';
 
 /**
  * @typedef {{
@@ -36,8 +38,22 @@ import { runEngineMainChatTurn } from './loop-loader.js';
  *
  * @typedef {{ type: 'enqueue_message', chatId: string, text: string }} EnqueueMessageCommand
  *
- * @typedef {SendMessageCommand | StopGenerationCommand | SteerMessageCommand | EnqueueMessageCommand} SessionCommand
+ * @typedef {{ type: string, [key: string]: unknown }} BoardishCommand
+ *
+ * @typedef {SendMessageCommand | StopGenerationCommand | SteerMessageCommand | EnqueueMessageCommand | BoardishCommand} SessionCommand
  */
+
+const BOARD_COMMAND_TYPES = new Set([
+  'board_init',
+  'board_start',
+  'board_stop',
+  'board_start_task',
+  'board_requeue_task',
+  'board_set_autonomy',
+  'board_run_final_test',
+  'board_recover_task',
+  'set_model',
+]);
 
 /**
  * Find a chat row by id on a SessionState-like blob.
@@ -57,6 +73,13 @@ export function findChatInState(state, chatId) {
 export async function applySessionCommand(cmd) {
   if (!cmd || typeof cmd !== 'object' || typeof cmd.type !== 'string') {
     throw Object.assign(new Error('Command type is required'), { statusCode: 400 });
+  }
+
+  if (BOARD_COMMAND_TYPES.has(cmd.type)) {
+    const result = await applyBoardCommand(/** @type {any} */ (cmd));
+    // Board mutates sessionState in place — publish so SSE clients see the change.
+    const rev = await publishLiveEngineState({ soft: false });
+    return { rev, accepted: result.accepted !== false, detail: result.detail };
   }
 
   switch (cmd.type) {

@@ -229,7 +229,7 @@ describe('session engine phase 1 (MIN-359)', () => {
     assert.equal(put.status, 200);
     await ensureSessionEngineBooted();
     const res = await httpRequest(baseUrl, 'POST', '/api/session/commands', {
-      type: 'board_start',
+      type: 'not_a_real_command',
       chatId: 'x',
     });
     assert.equal(res.status, 400);
