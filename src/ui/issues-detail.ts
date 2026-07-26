@@ -50,6 +50,7 @@ import {
   resolveGitLinkOpenUrl,
 } from '../chat/issues/git-actions';
 import { createCodeRefLinkButton } from './code-ref-link';
+import { createIssuesLabelsField } from './issues-labels-field';
 import { appConfirm } from './app-dialog';
 import { executeTool } from '../tools/client';
 import {
@@ -430,23 +431,16 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   props.append(typeSel, statusSel, prioritySel);
   sticky.appendChild(props);
 
-  if (issue.labels.length > 0 || issue.severity) {
-    const labelsRow = document.createElement('div');
-    labelsRow.className = 'issues-detail__labels';
-    for (const label of issue.labels) {
-      const chip = document.createElement('span');
-      chip.className = 'issues-label';
-      chip.textContent = label;
-      labelsRow.appendChild(chip);
-    }
-    if (issue.severity) {
-      const chip = document.createElement('span');
-      chip.className = 'issues-label';
-      chip.textContent = issue.severity;
-      labelsRow.appendChild(chip);
-    }
-    sticky.appendChild(labelsRow);
-  }
+  const labelsField = createIssuesLabelsField({
+    issueId: issue.id,
+    labels: issue.labels,
+    severity: issue.severity,
+    variant: 'detail',
+    onChange: (labels) => {
+      updateIssue(issue.id, { labels });
+    },
+  });
+  sticky.appendChild(labelsField);
 
   sticky.appendChild(buildWorkflowToolbar(issue));
   panel.appendChild(sticky);
@@ -912,7 +906,7 @@ function buildWorkflowToolbar(issue: IssueCard): HTMLElement {
     expandBtn.type = 'button';
     expandBtn.className = 'issues-btn issues-btn--primary';
     expandBtn.disabled = expandingIds.has(issue.id);
-    expandBtn.textContent = expandingIds.has(issue.id) ? 'Expanding…' : 'Expand with agent';
+    expandBtn.textContent = expandingIds.has(issue.id) ? 'Expanding…' : 'Expand';
     expandBtn.title = 'Flesh out this triage note with the issue-writer agent';
     expandBtn.addEventListener('click', () => {
       void startExpand(issue.id);

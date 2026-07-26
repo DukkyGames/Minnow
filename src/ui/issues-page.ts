@@ -56,6 +56,7 @@ import {
   openIssueDetail,
   refreshIssueDetailIfOpen,
 } from './issues-detail';
+import { createIssuesLabelsField, isIssuesLabelsFieldFocused } from './issues-labels-field';
 import {
   ariaSortValue,
   cycleIssuesListSort,
@@ -814,7 +815,7 @@ function buildIssueRowMenuItems(
   if (singleTarget && canExpandIssueWithAgent(issue)) {
     items.push({
       id: 'expand',
-      label: isIssueExpanding(issue.id) ? 'Expanding…' : 'Expand with agent',
+      label: isIssueExpanding(issue.id) ? 'Expanding…' : 'Expand',
       disabled: isIssueExpanding(issue.id),
       onSelect: () => void expandIssueFromUi(issue.id).then(() => renderIssuesPanel()),
     });
@@ -961,20 +962,15 @@ function renderList(mount: HTMLElement, issues: IssueCard[]): void {
     const priority = createPriorityChip(issue.priority);
     priority.className = `${priority.className} issues-row__priority`;
 
-    const labels = document.createElement('div');
-    labels.className = 'issues-row__labels';
-    for (const label of issue.labels.slice(0, 3)) {
-      const chip = document.createElement('span');
-      chip.className = 'issues-label';
-      chip.textContent = label;
-      labels.appendChild(chip);
-    }
-    if (issue.severity) {
-      const chip = document.createElement('span');
-      chip.className = 'issues-label';
-      chip.textContent = issue.severity;
-      labels.appendChild(chip);
-    }
+    const labels = createIssuesLabelsField({
+      issueId: issue.id,
+      labels: issue.labels,
+      severity: issue.severity,
+      variant: 'row',
+      onChange: (nextLabels) => {
+        updateIssue(issue.id, { labels: nextLabels });
+      },
+    });
 
     const updated = document.createElement('span');
     updated.className = 'issues-row__updated';
@@ -1092,7 +1088,7 @@ function renderBoard(mount: HTMLElement, issues: IssueCard[]): void {
         expandBtn.className = 'issues-btn issues-card__expand';
         expandBtn.textContent = isIssueExpanding(issue.id) ? '…' : 'Expand';
         expandBtn.disabled = isIssueExpanding(issue.id);
-        expandBtn.title = 'Expand with agent';
+        expandBtn.title = 'Expand';
         expandBtn.addEventListener('click', (event) => {
           event.stopPropagation();
           void expandIssueFromUi(issue.id).then(() => renderIssuesPanel());
@@ -1155,7 +1151,7 @@ export function renderIssuesPanel(): void {
     const id = pendingIssueId;
     pendingIssueId = undefined;
     openIssueDetail(id);
-  } else if (getSelectedIssueId()) {
+  } else if (getSelectedIssueId() && !isIssuesLabelsFieldFocused()) {
     refreshIssueDetailIfOpen();
   }
 

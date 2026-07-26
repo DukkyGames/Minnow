@@ -746,7 +746,18 @@ export function updateIssue(issueId: string, patch: UpdateIssuePatch): IssueCard
   if (patch.type) issue.type = patch.type;
   if (patch.status) issue.status = patch.status;
   if (patch.priority) issue.priority = patch.priority;
-  if (patch.labels) issue.labels = [...patch.labels];
+  if (patch.labels) {
+    const seen = new Set<string>();
+    issue.labels = [];
+    for (const raw of patch.labels) {
+      const label = normalizeIssueLabel(raw);
+      if (!label) continue;
+      const key = label.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      issue.labels.push(label);
+    }
+  }
   if (patch.notes !== undefined) issue.notes = patch.notes;
   if (patch.planPath !== undefined) issue.planPath = patch.planPath;
   if (patch.boardChatId !== undefined) issue.boardChatId = patch.boardChatId;
@@ -822,6 +833,31 @@ export type CollectIssuesOptions = {
   hideDone?: boolean;
   search?: string;
 };
+
+/** Trim and collapse whitespace for a single issue label. */
+export function normalizeIssueLabel(raw: string): string | null {
+  const trimmed = raw.trim().replace(/\s+/g, ' ');
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/** Unique label strings used across issues (for autocomplete), case-insensitive dedupe. */
+export function collectIssueLabelSuggestions(excludeIssueId?: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const issue of requireIssuesState().issues) {
+    if (excludeIssueId && issue.id === excludeIssueId) continue;
+    for (const label of issue.labels) {
+      const normalized = normalizeIssueLabel(label);
+      if (!normalized) continue;
+      const key = normalized.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(normalized);
+    }
+  }
+  out.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  return out;
+}
 
 /** Filter/sort issues for list + board views. */
 export function collectIssues(options: CollectIssuesOptions = {}): IssueCard[] {

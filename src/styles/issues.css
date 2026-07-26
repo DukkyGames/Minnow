@@ -603,6 +603,114 @@
   white-space: nowrap;
 }
 
+.issues-label--readonly {
+  opacity: 0.85;
+}
+
+.issues-labels-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.issues-labels-field__chips {
+  display: contents;
+}
+
+.issues-label-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 2px;
+}
+
+.issues-label-chip__text {
+  line-height: 1.2;
+}
+
+.issues-label-chip__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-subtle);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease-out, color 120ms ease-out, background 120ms ease-out;
+}
+
+.issues-label-chip:hover .issues-label-chip__remove,
+.issues-label-chip:focus-within .issues-label-chip__remove,
+.issues-labels-field:focus-within .issues-label-chip__remove {
+  opacity: 1;
+}
+
+.issues-label-chip__remove:hover {
+  color: var(--mn-danger);
+  background: color-mix(in oklch, var(--mn-danger) 12%, transparent);
+}
+
+.issues-label-chip__remove:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
+}
+
+.issues-labels-field__input {
+  flex: 1 1 4.5rem;
+  min-width: 3.5rem;
+  max-width: 100%;
+  padding: 2px 4px;
+  border: 1px dashed var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.issues-labels-field__input::placeholder {
+  color: var(--mn-fg-subtle);
+  opacity: 0.9;
+}
+
+.issues-labels-field__input:focus {
+  outline: none;
+  border-style: solid;
+  border-color: var(--mn-accent);
+  color: var(--mn-fg);
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 500;
+}
+
+.issues-labels-field--detail .issues-labels-field__input {
+  flex-basis: 6rem;
+  font-size: 11px;
+  padding: 4px 6px;
+}
+
+.issues-labels-field__more {
+  cursor: pointer;
+  background: color-mix(in oklch, var(--mn-fg) 4%, var(--mn-bg));
+}
+
+.issues-labels-field__more:hover {
+  border-color: var(--mn-accent);
+  color: var(--mn-accent);
+}
+
 .issues-type-chip {
   display: inline-flex;
   align-items: center;
@@ -1363,7 +1471,8 @@ button.issues-detail__activity-chip {
   .issues-view-toggle button,
   .issues-btn,
   .issues-card,
-  .issues-detail-host {
+  .issues-detail-host,
+  .issues-label-chip__remove {
     transition: none;
   }
 }

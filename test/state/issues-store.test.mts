@@ -8,6 +8,7 @@ import {
   addIssue,
   bugColumnToIssueStatus,
   bugSeverityToIssuePriority,
+  collectIssueLabelSuggestions,
   deleteIssue,
   deleteIssues,
   findIssueById,
@@ -16,6 +17,7 @@ import {
   migrateBugCardToIssue,
   migrateBugsToIssuesState,
   migrateLegacyBugBoardsFromChats,
+  normalizeIssueLabel,
   setIssuesNowForTests,
   setIssuesStateForTests,
   updateIssue,
@@ -154,5 +156,23 @@ describe('issues-store', () => {
     assert.equal(imported?.legacyBugId, 'bug-from-chat');
     assert.equal(imported?.priority, 'high');
     assert.equal(chat.bugBoard, undefined);
+  });
+
+  test('normalizeIssueLabel trims and collapses whitespace', () => {
+    assert.equal(normalizeIssueLabel('  foo   bar  '), 'foo bar');
+    assert.equal(normalizeIssueLabel('   '), null);
+  });
+
+  test('updateIssue deduplicates labels case-insensitively', () => {
+    addIssue({ title: 'x', workspacePath: '/w' }, 'ISS-1');
+    const updated = updateIssue('ISS-1', { labels: ['Bug', 'bug', '  Feature '] });
+    assert.deepEqual(updated?.labels, ['Bug', 'Feature']);
+  });
+
+  test('collectIssueLabelSuggestions returns unique sorted labels', () => {
+    addIssue({ title: 'a', workspacePath: '/w', labels: ['Beta', 'alpha'] }, 'ISS-1');
+    addIssue({ title: 'b', workspacePath: '/w', labels: ['ALPHA', 'gamma'] }, 'ISS-2');
+    assert.deepEqual(collectIssueLabelSuggestions(), ['alpha', 'Beta', 'gamma']);
+    assert.deepEqual(collectIssueLabelSuggestions('ISS-1'), ['alpha', 'gamma']);
   });
 });
