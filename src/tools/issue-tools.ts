@@ -1,5 +1,5 @@
 /**
- * Issues tools: issue_add, issue_update, issue_link, issue_get_state (MIN-261).
+ * Issues tools: issue_add, issue_update, issue_link, issue_get_state, issue_delete (MIN-261).
  * Not screen-gated — any chat/agent may file or update issues.
  */
 
@@ -7,6 +7,8 @@ import {
   addIssue,
   appendIssueLinks,
   collectIssues,
+  deleteIssue,
+  deleteIssues,
   getIssuesSnapshot,
   isIssuePriority,
   isIssueStatus,
@@ -119,6 +121,38 @@ export function validateIssueUpdateArgs(args: Record<string, unknown>): Validate
   }
 
   return { ok: true, issueId, patch };
+}
+
+export type ValidateIssueDeleteResult =
+  | { ok: true; issueIds: string[] }
+  | { ok: false; error: string };
+
+/** Validate issue_delete arguments (exported for tests). */
+export function validateIssueDeleteArgs(args: Record<string, unknown>): ValidateIssueDeleteResult {
+  const ids: string[] = [];
+  const single =
+    typeof args.issue_id === 'string'
+      ? args.issue_id.trim()
+      : typeof args.issueId === 'string'
+        ? args.issueId.trim()
+        : '';
+  if (single) ids.push(single);
+
+  const rawIds = args.issue_ids ?? args.issueIds;
+  if (rawIds !== undefined) {
+    if (!Array.isArray(rawIds)) {
+      return { ok: false, error: 'Error: issue_ids must be an array' };
+    }
+    for (const item of rawIds) {
+      if (typeof item === 'string' && item.trim()) ids.push(item.trim());
+    }
+  }
+
+  if (ids.length === 0) {
+    return { ok: false, error: 'Error: issue_delete requires "issue_id" or "issue_ids"' };
+  }
+
+  return { ok: true, issueIds: [...new Set(ids)] };
 }
 
 export type ValidateIssueLinkResult =
@@ -244,7 +278,7 @@ export function validateIssueLinkArgs(args: Record<string, unknown>): ValidateIs
   };
 }
 
-/** Execute issue_add / issue_update / issue_link / issue_get_state. */
+/** Execute issue_add / issue_update / issue_link / issue_get_state / issue_delete. */
 export async function executeIssueTool(
   name: string,
   args: Record<string, unknown>,
@@ -311,6 +345,24 @@ export async function executeIssueTool(
         status,
         issues,
       },
+      null,
+      2,
+    );
+  }
+
+  if (name === 'issue_delete') {
+    const validated = validateIssueDeleteArgs(args);
+    if (validated.ok === false) return validated.error;
+    if (validated.issueIds.length === 1) {
+      const issueId = validated.issueIds[0];
+      const removed = deleteIssue(issueId);
+      if (!removed) return `Error: unknown issue_id "${issueId}"`;
+      return JSON.stringify({ deleted: true, issue_id: issueId }, null, 2);
+    }
+    const removed = deleteIssues(validated.issueIds);
+    if (removed === 0) return 'Error: no matching issues found';
+    return JSON.stringify(
+      { deleted: removed, issue_ids: validated.issueIds },
       null,
       2,
     );

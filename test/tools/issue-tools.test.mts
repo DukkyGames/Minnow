@@ -9,6 +9,7 @@ import { setIssuesStateForTests } from '../../src/state/issues-store.ts';
 import {
   executeIssueTool,
   validateIssueAddArgs,
+  validateIssueDeleteArgs,
   validateIssueLinkArgs,
   validateIssueUpdateArgs,
 } from '../../src/tools/issue-tools.ts';
@@ -112,6 +113,32 @@ describe('issue-tools', () => {
     });
     const parsed = JSON.parse(again) as { codeRefs?: unknown[] };
     assert.equal(parsed.codeRefs?.length, 1);
+  });
+
+  test('issue_delete removes one or many issues', async () => {
+    await executeIssueTool('issue_add', { title: 'Keep', issue_id: 'ISS-1' });
+    await executeIssueTool('issue_add', { title: 'Drop A', issue_id: 'ISS-2' });
+    await executeIssueTool('issue_add', { title: 'Drop B', issue_id: 'ISS-3' });
+
+    const bad = validateIssueDeleteArgs({});
+    assert.equal(bad.ok, false);
+
+    const missing = await executeIssueTool('issue_delete', { issue_id: 'ISS-999' });
+    assert.match(missing, /unknown issue_id/);
+
+    const single = await executeIssueTool('issue_delete', { issue_id: 'ISS-2' });
+    assert.match(single, /"deleted": true/);
+    assert.match(single, /"issue_id": "ISS-2"/);
+
+    const bulk = await executeIssueTool('issue_delete', {
+      issue_ids: ['ISS-3', 'ISS-missing'],
+    });
+    assert.match(bulk, /"deleted": 1/);
+
+    const state = await executeIssueTool('issue_get_state', { workspace_scope: 'all' });
+    assert.match(state, /ISS-1/);
+    assert.doesNotMatch(state, /ISS-2/);
+    assert.doesNotMatch(state, /ISS-3/);
   });
 
   test('bug_* aliases work without All bugs screen', async () => {

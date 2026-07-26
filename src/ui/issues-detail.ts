@@ -25,7 +25,6 @@ import {
 import {
   canInvestigateIssue,
   canRunIssueWorkflow,
-  canSendIssueToBoard,
   issueActivityChip,
   issueActivityTarget,
   openIssueActivity,
@@ -515,12 +514,17 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   codeSection.body.appendChild(addRow);
   scroll.appendChild(codeSection.section);
 
-  // Plan
+  // Plan — Send to board lives here when a plan exists
   const planSection = section('Plan');
   const planEl = document.createElement('p');
   planEl.className = 'issues-detail__empty';
   if (issue.planPath?.trim()) {
     planEl.textContent = issue.planPath;
+    planSection.body.appendChild(planEl);
+
+    const planActions = document.createElement('div');
+    planActions.className = 'issues-detail__plan-actions';
+
     const openPlan = document.createElement('button');
     openPlan.type = 'button';
     openPlan.className = 'issues-btn';
@@ -528,7 +532,24 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
     openPlan.addEventListener('click', () => {
       void openIssuePlanInEditor(issue.planPath!, issue.workspacePath);
     });
-    planSection.body.append(planEl, openPlan);
+    planActions.appendChild(openPlan);
+
+    const workflowOk = canRunIssueWorkflow(issue);
+    const workflowBusy = workflowBusyIds.has(issue.id) || expandingIds.has(issue.id);
+    const boardBtn = document.createElement('button');
+    boardBtn.type = 'button';
+    boardBtn.className = 'issues-btn';
+    boardBtn.disabled = !workflowOk || workflowBusy;
+    boardBtn.textContent = 'Send to board';
+    boardBtn.title = workflowOk
+      ? 'Launch an Orchestrate board from the issue plan'
+      : 'Issue is closed';
+    boardBtn.addEventListener('click', () => {
+      void runWorkflowAction(issue.id, 'board');
+    });
+    planActions.appendChild(boardBtn);
+
+    planSection.body.appendChild(planActions);
   } else {
     planEl.textContent = 'No plan yet. Use Send to chat or Send to background.';
     planSection.body.appendChild(planEl);
@@ -955,24 +976,6 @@ function buildWorkflowToolbar(issue: IssueCard): HTMLElement {
       items: backgroundItems,
     }),
   );
-
-  // Send to board
-  {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'issues-btn';
-    const hasPlan = canSendIssueToBoard(issue);
-    btn.disabled = !workflowOk || busy || !hasPlan;
-    btn.textContent = 'Send to board';
-    btn.title = hasPlan
-      ? 'Launch an Orchestrate board from the issue plan'
-      : 'Save a plan first (Send to chat or Send to background in Plan mode)';
-    if (!workflowOk) btn.title = 'Issue is closed';
-    btn.addEventListener('click', () => {
-      void runWorkflowAction(issue.id, 'board');
-    });
-    secondary.appendChild(btn);
-  }
 
   row.appendChild(secondary);
   return row;

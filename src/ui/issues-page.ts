@@ -7,6 +7,19 @@ import '../styles/issues.css';
 
 import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
 import { canExpandIssueWithAgent } from '../chat/issues/expand-task';
+import {
+  canInvestigateIssue,
+  canRunIssueWorkflow,
+  ISSUE_BACKGROUND_CHAT_MODES,
+  ISSUE_FOREGROUND_CHAT_MODES,
+  runIssueBackgroundChat,
+  runIssueForegroundChat,
+} from '../chat/issues/pipeline';
+import type {
+  IssueBackgroundChatMode,
+  IssueForegroundChatMode,
+} from '../chat/issues/workflow-seeds';
+import { getMode } from '../chat/modes/registry';
 import { createAppIcon } from '../os/icons';
 import { getForegroundAppId, getOsView } from '../os/instances';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
@@ -43,6 +56,11 @@ import {
   type IssuesSortKey,
 } from './issues-list-sort';
 import { stripMainColumnOverlayClasses } from './main-column-overlay';
+import {
+  closeIssuesContextMenu,
+  openIssuesContextMenu,
+  type IssuesContextMenuItem,
+} from './issues-context-menu';
 
 const CHAT_AREA_ISSUES_CLASS = 'chat-area--issues';
 const MAIN_COLUMN_ISSUES_CLASS = 'main-column--issues';
@@ -594,6 +612,252 @@ function onIssueItemClick(
   renderIssuesPanel();
 }
 
+/** Issue ids targeted by a row/card action (selection group or single row). */
+function resolveIssueActionTargetIds(issueId: string): string[] {
+  if (selectedIssueIds.has(issueId) && selectedIssueIds.size > 1) {
+    return [...selectedIssueIds];
+  }
+  return [issueId];
+}
+
+async function copyTextToClipboard(text: string): Promise<void> {
+  if (!text.trim()) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    const { showToast } = await import('./toast');
+    showToast('Copied to clipboard');
+  } catch {
+    const { showToast } = await import('./toast');
+    showToast('Could not copy to clipboard', 'error');
+  }
+}
+
+const FOREGROUND_CHAT_HINTS: Record<IssueForegroundChatMode, string> = {
+  general: 'Triage and discuss with full tool access',
+  build: 'Implement or iterate on a fix',
+  plan: 'Interactive planning chat in Code',
+  debug: 'Reproduce and narrow root cause',
+};
+
+const BACKGROUND_CHAT_HINTS: Record<IssueBackgroundChatMode, string> = {
+  debug: 'Debugger sub-agent investigates unattended',
+  plan: 'Planner writes documentation/plans/issues/<id>.md',
+};
+
+/** Issue ids with a workflow action in flight from the list context menu. */
+const workflowBusyIds = new Set<string>();
+
+async function runIssueWorkflowFromMenu(
+  issueId: string,
+  action: 'foreground' | 'background',
+  modeId: IssueForegroundChatMode | IssueBackgroundChatMode,
+): Promise<void> {
+  if (workflowBusyIds.has(issueId)) return;
+  workflowBusyIds.add(issueId);
+  const { showToast } = await import('./toast');
+  try {
+    if (action === 'foreground') {
+      const result = await runIssueForegroundChat(issueId, modeId as IssueForegroundChatMode);
+      if (!result.ok) {
+        showToast(result.error || 'Send to chat failed', 'error');
+        return;
+      }
+      if (modeId === 'plan') {
+        showToast(
+          result.planPath ? `Plan chat · ${result.planPath}` : 'Plan chat opened',
+          'success',
+        );
+      } else {
+        showToast(`${getMode(modeId as IssueForegroundChatMode).label} chat opened`, 'success');
+      }
+      return;
+    }
+    const bgMode = modeId as IssueBackgroundChatMode;
+    const result = await runIssueBackgroundChat(issueId, bgMode);
+    if (!result.ok) {
+      showToast(result.error || 'Send to background failed', 'error');
+      return;
+    }
+    if (bgMode === 'debug') {
+      showToast('Investigation started', 'success');
+    } else {
+      showToast(result.planPath ? `Plan: ${result.planPath}` : 'Plan ready', 'success');
+    }
+  } finally {
+    workflowBusyIds.delete(issueId);
+    renderIssuesPanel();
+    refreshIssueDetailIfOpen();
+  }
+}
+
+function openIssueContextSubmenu(
+  menuAnchor: { clientX: number; clientY: number; restoreFocus: HTMLElement },
+  items: IssuesContextMenuItem[],
+  rowOffset = 0,
+): void {
+  openIssuesContextMenu({
+    clientX: menuAnchor.clientX + 180,
+    clientY: menuAnchor.clientY + rowOffset * 32,
+    restoreFocus: menuAnchor.restoreFocus,
+    items,
+  });
+}
+
+function buildForegroundChatSubmenuItems(issue: IssueCard): IssuesContextMenuItem[] {
+  const workflowOk = canRunIssueWorkflow(issue);
+  const busy = workflowBusyIds.has(issue.id);
+  return ISSUE_FOREGROUND_CHAT_MODES.map((modeId) => ({
+    id: modeId,
+    label: getMode(modeId).label,
+    hint: FOREGROUND_CHAT_HINTS[modeId],
+    disabled: !workflowOk || busy,
+    onSelect: () => void runIssueWorkflowFromMenu(issue.id, 'foreground', modeId),
+  }));
+}
+
+function buildBackgroundChatSubmenuItems(issue: IssueCard): IssuesContextMenuItem[] {
+  const workflowOk = canRunIssueWorkflow(issue);
+  const busy = workflowBusyIds.has(issue.id);
+  return ISSUE_BACKGROUND_CHAT_MODES.map((modeId) => ({
+    id: modeId,
+    label: getMode(modeId).label,
+    hint: BACKGROUND_CHAT_HINTS[modeId],
+    disabled:
+      !workflowOk ||
+      busy ||
+      (modeId === 'debug' && !canInvestigateIssue(issue)),
+    onSelect: () => void runIssueWorkflowFromMenu(issue.id, 'background', modeId),
+  }));
+}
+
+/** Build context menu items for a list row or board card. */
+function buildIssueRowMenuItems(
+  issue: IssueCard,
+  targetIds: string[],
+  menuAnchor: { clientX: number; clientY: number; restoreFocus: HTMLElement },
+): IssuesContextMenuItem[] {
+  const singleTarget = targetIds.length === 1;
+  const isChecked = selectedIssueIds.has(issue.id);
+  const workflowOk = canRunIssueWorkflow(issue);
+  const workflowBusy = workflowBusyIds.has(issue.id);
+  const items: IssuesContextMenuItem[] = [
+    {
+      id: 'open',
+      label: 'Open',
+      disabled: !singleTarget,
+      onSelect: () => navigateToIssueDetail(issue.id),
+    },
+    {
+      id: 'copy-id',
+      label: singleTarget ? 'Copy ID' : `Copy ${targetIds.length} IDs`,
+      onSelect: () => void copyTextToClipboard(targetIds.join(', ')),
+    },
+    {
+      id: 'select',
+      label: isChecked ? 'Deselect' : 'Select',
+      onSelect: () => {
+        setIssueChecked(issue.id, !isChecked);
+        renderIssuesPanel();
+      },
+    },
+  ];
+
+  if (singleTarget && canExpandIssueWithAgent(issue)) {
+    items.push({
+      id: 'expand',
+      label: isIssueExpanding(issue.id) ? 'Expanding…' : 'Expand with agent',
+      disabled: isIssueExpanding(issue.id),
+      onSelect: () => void expandIssueFromUi(issue.id).then(() => renderIssuesPanel()),
+    });
+  }
+
+  if (singleTarget) {
+    const sendToChatIndex = items.length;
+    items.push({
+      id: 'send-to-chat',
+      label: 'Send to chat',
+      disabled: !workflowOk || workflowBusy,
+      onSelect: () => {
+        openIssueContextSubmenu(menuAnchor, buildForegroundChatSubmenuItems(issue), sendToChatIndex);
+      },
+    });
+    const sendToBackgroundIndex = items.length;
+    items.push({
+      id: 'send-to-background',
+      label: 'Send to background',
+      disabled: !workflowOk || workflowBusy,
+      onSelect: () => {
+        openIssueContextSubmenu(menuAnchor, buildBackgroundChatSubmenuItems(issue), sendToBackgroundIndex);
+      },
+    });
+  }
+
+  const changeStatusIndex = items.length;
+  items.push({
+    id: 'change-status',
+    label: singleTarget ? 'Change status' : `Change status (${targetIds.length})`,
+    onSelect: () => {
+      openIssueContextSubmenu(
+        menuAnchor,
+        BOARD_STATUSES.map((status) => ({
+          id: status.id,
+          label: status.label,
+          onSelect: () => {
+            for (const id of targetIds) {
+              updateIssue(id, { status: status.id });
+            }
+            renderIssuesPanel();
+          },
+        })),
+        changeStatusIndex,
+      );
+    },
+  });
+
+  items.push({
+    id: 'delete',
+    label: singleTarget ? 'Delete' : `Delete ${targetIds.length} issues`,
+    danger: true,
+    onSelect: () => void confirmAndDeleteIssues(targetIds),
+  });
+
+  return items;
+}
+
+/** Open the row/card context menu at viewport coordinates. */
+function openIssueRowMenu(
+  issue: IssueCard,
+  clientX: number,
+  clientY: number,
+  restoreFocus: HTMLElement,
+): void {
+  const targetIds = resolveIssueActionTargetIds(issue.id);
+  const anchor = { clientX, clientY, restoreFocus };
+  openIssuesContextMenu({
+    clientX,
+    clientY,
+    restoreFocus,
+    items: buildIssueRowMenuItems(issue, targetIds, anchor),
+  });
+}
+
+function bindIssueRowContextMenu(
+  row: HTMLElement,
+  issue: IssueCard,
+): void {
+  row.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+    openIssueRowMenu(issue, event.clientX, event.clientY, row);
+  });
+  row.addEventListener('keydown', (event) => {
+    if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+      event.preventDefault();
+      const rect = row.getBoundingClientRect();
+      openIssueRowMenu(issue, rect.left + 8, rect.bottom + 4, row);
+    }
+  });
+}
+
 async function confirmAndDeleteIssues(issueIds: string[]): Promise<void> {
   const ids = [...new Set(issueIds.map((id) => id.trim()).filter(Boolean))];
   if (ids.length === 0) return;
@@ -684,6 +948,7 @@ function renderList(mount: HTMLElement, issues: IssueCard[]): void {
         navigateToIssueDetail(issue.id);
       }
     });
+    bindIssueRowContextMenu(row, issue);
     list.appendChild(row);
   });
 
@@ -800,6 +1065,7 @@ function renderBoard(mount: HTMLElement, issues: IssueCard[]): void {
       card.addEventListener('click', (event) => {
         onIssueItemClick(event, issue, boardOrderedIssues, boardIndex);
       });
+      bindIssueRowContextMenu(card, issue);
       bindCardDrag(card, issue.id);
       list.appendChild(card);
     }
@@ -821,6 +1087,7 @@ export function renderIssuesPanel(): void {
   const issues = collectVisibleIssues();
   const visibleIds = new Set(issues.map((issue) => issue.id));
   pruneIssueSelection(visibleIds);
+  closeIssuesContextMenu();
   mount.innerHTML = '';
 
   const empty = document.createElement('p');

@@ -3,7 +3,7 @@ id: debug
 kind: mode
 label: Debug
 version: 3
-description: Bug investigation — Issues app workflows and agent pipeline.
+description: Issue investigation — Issues app workflows and agent pipeline.
 profileBodies: split
 toolPolicy:
   default: allow
@@ -12,7 +12,7 @@ toolPolicy:
 <!-- MINNOW_MODE_MARKER: debug lite -->
 <!-- LITE -->
 
-**Debug / Issues.** Use sidebar **Issues** (`#/app/issues`) to file and track work — not a composer mode. Prefer `issue_*`; `bug_*` aliases still work.
+**Debug / Issues.** Use sidebar **Issues** (`#/app/issues`) to file and track work — not a composer mode. Use `issue_*` tools for all tracker operations.
 
 Statuses: **Triage** → **Todo** → **In progress** → **Planned** → **Review** → **Done**.
 
@@ -21,7 +21,7 @@ Tools:
 - `issue_update` — change status or attach notes / plan path
 - `issue_link` — code refs or git/GitHub links
 - `issue_get_state` — read the store
-- `bug_*` — legacy aliases onto the same store
+- `issue_delete` — remove one (`issue_id`) or many (`issue_ids`)
 
 UI actions on an issue: **Investigate** (debugger), **Plan** / **Plan in background** (`documentation/plans/issues/<id>.md`), **Debug**, **Send to board**.
 

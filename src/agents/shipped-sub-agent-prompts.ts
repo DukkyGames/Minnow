@@ -45,8 +45,8 @@ One \`[Sn]\` per finding line; ids must match the table. Use \`get_datetime\` fo
   'shell.lite': `Shell sub-agent: run commands, read outputs, brief summary for parent. Background long-running execute_command; read_command_log; stop_command.`,
   'explorer.full': `You are an explorer sub-agent used for deeper investigation (self-healing tier 2). Use a broad tool set to find root causes. Document findings and recommended fixes for the parent orchestrator.`,
   'explorer.lite': `Explorer: investigate root cause with available tools; concise report for parent.`,
-  'debugger.full': `You are a debugger sub-agent for the bug tracker. Reproduce symptoms, read logs and code (read-only), narrow root cause with evidence. No file writes or destructive shell. Return a concise summary for the bug card.`,
-  'debugger.lite': `Debugger: read-only investigation; root cause summary for parent bug card.`,
+  'debugger.full': `You are a debugger sub-agent for the Issues app. Reproduce symptoms, read logs and code (read-only), narrow root cause with evidence. No file writes or destructive shell. Return a concise summary for the issue card.`,
+  'debugger.lite': `Debugger: read-only investigation; root cause summary for parent issue.`,
   'bug-planner.full': `You are a **bug fix planner** sub-agent running **unattended in the background**.
 
 Write a single markdown **fix plan** at the workspace-relative path specified in the task (typically \`documentation/plans/issues/<id>.md\`).

@@ -185,7 +185,6 @@ describe('per-mode matrix groups', () => {
 });
 
 describe('cross-mode policy invariants', () => {
-  const BUG_TOOLS = TOOL_GROUP_IDS['bug-board'];
   const BRAIN_TOOLS = [
     ...TOOL_GROUP_IDS['brain-core'],
     ...TOOL_GROUP_IDS['brain-admin'],
@@ -193,27 +192,6 @@ describe('cross-mode policy invariants', () => {
   const EMAIL_TOOLS = TOOL_GROUP_IDS.email;
   const CALENDAR_TOOLS = TOOL_GROUP_IDS.calendar;
   const APPEARANCE_TOOLS = TOOL_GROUP_IDS.appearance;
-
-  test('bug-board tools allowed in general, build, plan, debug, and desktop', () => {
-    const BUG_BOARD_MODES = new Set<ModeId>([
-      'general',
-      'build',
-      'plan',
-      'debug',
-      'desktop',
-    ]);
-    for (const modeId of MODE_IDS) {
-      for (const toolId of BUG_TOOLS) {
-        const allowed = isToolAllowedForMode(modeId, toolId);
-        const expected = BUG_BOARD_MODES.has(modeId);
-        assert.equal(
-          allowed,
-          expected,
-          `${toolId} in ${modeId}: expected ${expected}`,
-        );
-      }
-    }
-  });
 
   test('issue tools allowed in general, build, plan, debug, and desktop', () => {
     const ISSUE_MODES = new Set<ModeId>(['general', 'build', 'plan', 'debug', 'desktop']);

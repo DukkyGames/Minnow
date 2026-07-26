@@ -333,7 +333,8 @@ async function executeToolInner(
     name === 'issue_add' ||
     name === 'issue_update' ||
     name === 'issue_link' ||
-    name === 'issue_get_state'
+    name === 'issue_get_state' ||
+    name === 'issue_delete'
   ) {
     const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
     if (blocked) return blocked;
