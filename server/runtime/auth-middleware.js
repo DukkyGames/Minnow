@@ -10,7 +10,7 @@
  */
 
 import { getSessionToken, timingSafeEqualToken } from './session-token.js';
-import { getNetworkAccess, isHostAllowed } from '../network/access.js';
+import { getNetworkAccess, isHostAllowed, isLoopbackClient } from '../network/access.js';
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -54,7 +54,13 @@ export function createAuthMiddleware() {
 
     // Loopback-only bootstrap: same trust model as injecting the token into index.html.
     // Lets an open SPA tab recover after a dev-server restart without a full reload.
-    if (url.pathname === '/api/auth/session-token' && req.method === 'GET') {
+    // LAN peers already receive the token via injected HTML; without this gate any
+    // device on the LAN could mint a full /api/* session in networkAccess: 'lan' mode.
+    if (
+      url.pathname === '/api/auth/session-token' &&
+      req.method === 'GET' &&
+      isLoopbackClient(req)
+    ) {
       sendJson(res, 200, { token: getSessionToken() });
       return;
     }

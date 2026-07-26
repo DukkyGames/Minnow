@@ -97,16 +97,30 @@ export function resolveViteHost(networkAccess) {
 }
 
 /**
+ * True for loopback remote addresses only. Requires a separator before a
+ * trailing 127.0.0.1 so values like `foo127.0.0.1` are not treated as loopback.
  * @param {string} address
  * @returns {boolean}
  */
-function isLoopbackAddress(address) {
+export function isLoopbackAddress(address) {
   return (
     address === '127.0.0.1' ||
     address === '::1' ||
     address === '::ffff:127.0.0.1' ||
-    address.endsWith('127.0.0.1')
+    address.endsWith(':127.0.0.1')
   );
+}
+
+/**
+ * Whether the request's TCP peer is loopback. Unlike `isClientAllowed`, this
+ * never admits private LAN addresses — used for the session-token bootstrap.
+ * @param {import('http').IncomingMessage} req
+ * @returns {boolean}
+ */
+export function isLoopbackClient(req) {
+  const addr = req.socket?.remoteAddress ?? '';
+  if (!addr) return false;
+  return isLoopbackAddress(addr);
 }
 
 /**

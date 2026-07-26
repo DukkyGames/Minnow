@@ -149,7 +149,7 @@ Browser / Electron (same origin, default :9473)
   └─ Vite SPA
 ```
 
-**Auth:** Per-boot session token in `~/.minnow/session-token`; injected as `window.__MINNOW_SESSION_TOKEN__` and sent as `X-Minnow-Token` ([`server/runtime/auth-middleware.js`](../server/runtime/auth-middleware.js)). Loopback `GET /api/auth/session-token` lets an open SPA tab recover after a dev-server restart; [`install-fetch-auth.ts`](../src/api/install-fetch-auth.ts) retries once on 401. The Session Engine calls [`executeServerTool`](../server/runtime/tools-middleware.js) in-process (no HTTP auth round-trip). No blanket CORS.
+**Auth:** Per-boot session token in `~/.minnow/session-token`; injected as `window.__MINNOW_SESSION_TOKEN__` and sent as `X-Minnow-Token` ([`server/runtime/auth-middleware.js`](../server/runtime/auth-middleware.js)). Loopback-only `GET /api/auth/session-token` ([`isLoopbackClient`](../server/network/access.js)) lets an open SPA tab recover after a dev-server restart — LAN peers must already hold the injected token (no remote bootstrap). [`install-fetch-auth.ts`](../src/api/install-fetch-auth.ts) retries once on 401. The Session Engine calls [`executeServerTool`](../server/runtime/tools-middleware.js) in-process (no HTTP auth round-trip). No blanket CORS (including `/api/session/*` SSE).
 
 **Path policy:** Default workspace-only via `resolveSafePath()` ([`server/runtime/path-access.js`](../server/runtime/path-access.js)). Full disk when `toolSecurity.filesystemAccess` is `full` (Settings → General → Filesystem access) or `TOOLS_ALLOW_ALL_PATHS=1`.
 

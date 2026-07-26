@@ -8,6 +8,8 @@ import {
   resolveNetworkAccess,
   resolveConfigNetworkAccess,
   isClientAllowed,
+  isLoopbackAddress,
+  isLoopbackClient,
   isHostAllowed,
   resetOwnLanHostnamesCache,
   initNetworkAccess,
@@ -20,6 +22,22 @@ import os from 'node:os';
 function mockReq(address) {
   return { socket: { remoteAddress: address } };
 }
+
+describe('isLoopbackAddress / isLoopbackClient', () => {
+  test('recognizes common loopback forms', () => {
+    assert.equal(isLoopbackAddress('127.0.0.1'), true);
+    assert.equal(isLoopbackAddress('::1'), true);
+    assert.equal(isLoopbackAddress('::ffff:127.0.0.1'), true);
+    assert.equal(isLoopbackClient(mockReq('127.0.0.1')), true);
+  });
+
+  test('rejects spoofy suffixes and LAN peers', () => {
+    assert.equal(isLoopbackAddress('foo127.0.0.1'), false);
+    assert.equal(isLoopbackAddress('192.168.1.10'), false);
+    assert.equal(isLoopbackClient(mockReq('192.168.1.10')), false);
+    assert.equal(isLoopbackClient({}), false);
+  });
+});
 
 describe('resolveNetworkAccess', () => {
   test('defaults to local when config is empty', () => {

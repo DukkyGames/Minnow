@@ -133,11 +133,11 @@ export function publishSessionPatch(rev, state) {
  * @param {{ rev: number, state: unknown }} snapshot
  */
 export function addSessionStreamSubscriber(req, res, snapshot) {
+  // Same-origin only — do not emit Access-Control-Allow-Origin (auth invariant).
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     Connection: 'keep-alive',
-    'Access-Control-Allow-Origin': '*',
     'X-Session-Rev': String(snapshot.rev),
   });
   res.write(': connected\n\n');

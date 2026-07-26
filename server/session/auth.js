@@ -4,7 +4,10 @@
  *
  * EventSource cannot send Authorization headers, so clients may also pass
  * the shared secret as `?minnowToken=` (distinct from `?token=` session token).
+ * When MINNOW_TOKEN is unset this gate is a no-op (per-boot session token still applies).
  */
+
+import { timingSafeEqualToken } from '../runtime/session-token.js';
 
 /**
  * @returns {boolean}
@@ -41,7 +44,7 @@ function extractMinnowToken(req) {
 export function isSessionRequestAuthorized(req) {
   if (!isSessionAuthRequired()) return true;
   const expected = process.env.MINNOW_TOKEN?.trim() ?? '';
-  return extractMinnowToken(req) === expected;
+  return timingSafeEqualToken(extractMinnowToken(req), expected);
 }
 
 /**

@@ -17,15 +17,6 @@ import {
 import { isServerEngineEnabled } from './flag.js';
 import { applyCommand, ensureSessionEngineBooted } from './engine.js';
 
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'Content-Type, Authorization, If-Match',
-  );
-}
-
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -77,13 +68,7 @@ export async function handleSessionRequest(req, res, pathname) {
     return false;
   }
 
-  setCorsHeaders(res);
-
-  if (req.method === 'OPTIONS') {
-    res.statusCode = 204;
-    res.end();
-    return true;
-  }
+  // Same-origin only — no CORS headers. OPTIONS is owned by auth-middleware.
 
   // Flag probe skips the optional MINNOW_TOKEN gate below, but global auth-middleware
   // still requires the per-boot session token. SPA uses HTML inject + withSessionToken.

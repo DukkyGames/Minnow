@@ -10,6 +10,10 @@ import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { createAuthMiddleware } from '../../server/runtime/auth-middleware.js';
 import { getSessionToken, resetSessionTokenCache } from '../../server/runtime/session-token.js';
 import { initNetworkAccess } from '../../server/network/access.js';
+import {
+  addSessionStreamSubscriber,
+  resetSessionSseForTests,
+} from '../../server/session/sse.js';
 
 let homeDir;
 
@@ -54,10 +58,16 @@ function mockRes() {
   };
 }
 
-function mockReq({ url = '/api/tools', method = 'POST', host = 'localhost:9473', token } = {}) {
+function mockReq({
+  url = '/api/tools',
+  method = 'POST',
+  host = 'localhost:9473',
+  token,
+  remoteAddress = '127.0.0.1',
+} = {}) {
   const headers = { host };
   if (token) headers['x-minnow-token'] = token;
-  return { url, method, headers };
+  return { url, method, headers, socket: { remoteAddress } };
 }
 
 function runMiddleware(mw, req, res) {
@@ -142,6 +152,46 @@ describe('createAuthMiddleware', () => {
       runMiddleware(createAuthMiddleware(), req, res);
       assert.equal(res.headers['access-control-allow-origin'], undefined);
     }
+
+    // /api/session/stream must keep the same invariant (same-origin SSE).
+    const closeHandlers = [];
+    const streamReq = {
+      ...mockReq({ url: '/api/session/stream', method: 'GET' }),
+      on(event, handler) {
+        if (event === 'close') closeHandlers.push(handler);
+        return this;
+      },
+    };
+    const streamRes = {
+      ...mockRes(),
+      writableEnded: false,
+      destroyed: false,
+      writeHead(status, headers) {
+        this.statusCode = status;
+        for (const [name, value] of Object.entries(headers ?? {})) {
+          this.headers[name.toLowerCase()] = value;
+        }
+      },
+      write() {
+        return true;
+      },
+      once() {
+        return this;
+      },
+      destroy() {
+        this.destroyed = true;
+      },
+    };
+    try {
+      addSessionStreamSubscriber(streamReq, streamRes, {
+        rev: 1,
+        state: { chats: {} },
+      });
+      assert.equal(streamRes.headers['access-control-allow-origin'], undefined);
+    } finally {
+      for (const handler of closeHandlers) handler();
+      resetSessionSseForTests();
+    }
   });
 
   test('non-/api/ paths pass straight through unauthenticated', () => {
@@ -150,17 +200,51 @@ describe('createAuthMiddleware', () => {
     assert.equal(nextCalled, true);
   });
 
-  test('GET /api/auth/session-token returns the boot token without prior auth', () => {
+  test('GET /api/auth/session-token returns the boot token for loopback without prior auth', () => {
     const token = getSessionToken();
     const res = mockRes();
     const nextCalled = runMiddleware(
       createAuthMiddleware(),
-      mockReq({ url: '/api/auth/session-token', method: 'GET' }),
+      mockReq({ url: '/api/auth/session-token', method: 'GET', remoteAddress: '127.0.0.1' }),
       res,
     );
     assert.equal(nextCalled, false);
     assert.equal(res.statusCode, 200);
     const body = JSON.parse(res.body);
     assert.equal(body.token, token);
+  });
+
+  test('GET /api/auth/session-token rejects a LAN peer without the session token', () => {
+    getSessionToken();
+    const res = mockRes();
+    const nextCalled = runMiddleware(
+      createAuthMiddleware(),
+      mockReq({
+        url: '/api/auth/session-token',
+        method: 'GET',
+        remoteAddress: '192.168.1.50',
+      }),
+      res,
+    );
+    assert.equal(nextCalled, false);
+    assert.equal(res.statusCode, 401);
+  });
+
+  test('GET /api/auth/session-token allows a LAN peer that already has the token', () => {
+    const token = getSessionToken();
+    const res = mockRes();
+    const nextCalled = runMiddleware(
+      createAuthMiddleware(),
+      mockReq({
+        url: '/api/auth/session-token',
+        method: 'GET',
+        remoteAddress: '192.168.1.50',
+        token,
+      }),
+      res,
+    );
+    // Falls through the bootstrap branch into the normal token gate, then next().
+    assert.equal(nextCalled, true);
+    assert.equal(res.ended, false);
   });
 });
