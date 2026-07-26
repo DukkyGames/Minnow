@@ -328,12 +328,43 @@ export interface MinnowUpdaterApi {
   onStatusChanged(callback: (status: MinnowUpdaterStatus) => void): () => void;
 }
 
+export interface MinnowTrayLoadedModelRow {
+  id: string;
+  label: string;
+  source: 'lm-studio' | 'minnow-serve';
+}
+
+export interface MinnowTrayStatusSnapshot {
+  runningAgentCount: number;
+  loadedLocalModels: MinnowTrayLoadedModelRow[];
+}
+
+export type MinnowTrayRendererCommand = 'new_chat' | 'open_settings' | 'unload_local_models';
+
+export interface MinnowTrayDesktopState {
+  closeToTray: boolean;
+  launchAtStartup: boolean;
+  supported: boolean;
+  unsupportedReason: 'browser' | 'linux' | null;
+}
+
+/** System tray + desktop shell controls (close-to-tray, launch-at-startup). */
+export interface MinnowTrayApi {
+  getDesktopState(): Promise<MinnowTrayDesktopState>;
+  setCloseToTray(enabled: boolean): Promise<MinnowTrayDesktopState>;
+  setLaunchAtStartup(enabled: boolean): Promise<MinnowTrayDesktopState>;
+  refreshCloseToTray(): Promise<MinnowTrayDesktopState>;
+  publishStatus(status: MinnowTrayStatusSnapshot): Promise<MinnowTrayStatusSnapshot>;
+  onCommand(callback: (command: MinnowTrayRendererCommand) => void): () => void;
+}
+
 export interface MinnowElectronBridge {
   preview: MinnowPreviewApi;
   app: MinnowAppApi;
   window?: MinnowWindowApi;
   diagnostics?: MinnowDiagnosticsApi;
   updater?: MinnowUpdaterApi;
+  tray?: MinnowTrayApi;
 }
 
 declare global {

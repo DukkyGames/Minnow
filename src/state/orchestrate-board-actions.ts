@@ -3,6 +3,7 @@
  */
 
 import { stopGeneration } from '../chat/stop-generation.ts';
+import { canDriveOrchestrateBoard } from './board-driver-gate.ts';
 import { decodeModelSelectKey } from '../lib/model-select-key.ts';
 import { isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete.ts';
 import { maybeEmitOrchestratePlanComplete } from '../chat/orchestrate/plan-complete-ui.ts';
@@ -11,14 +12,18 @@ import {
   OOM_SAFE_MAX_CONCURRENT,
   clearOomPauseFromElectron,
 } from '../chat/orchestrate/oom-recovery.ts';
+import { streamingChatIds } from '../app-state.ts';
 import {
-  isChatStreaming,
   notifyChatStreamEnded,
   subscribeChatStreamActivity,
   subscribeChatStreamEnd,
-} from '../chat/streaming-state.ts';
+} from '../session-engine/stream-bus.ts';
 import { isChatTurnSetupPending } from '../chat/chat-turn-guard.ts';
-import {
+
+/** Local streaming check — avoid importing streaming-state (UI graph) into the engine host. */
+function isChatStreaming(chatId: string): boolean {
+  return streamingChatIds.has(chatId);
+}import {
   getAutopilotMetaSync,
   resolveAutoProvisionInfra,
   resolveAfkAutoRestartStalls,
@@ -43,12 +48,36 @@ import {
   startHeartbeat,
   stopHeartbeat,
 } from '../agents/controller/wrapper.ts';
-import { runChatTurn } from '../tools/loop.ts';
 import { reportBackgroundError } from '../boot/report-background-error.ts';
 import { normalizeVerdict } from '../tools/board-tools.ts';
 import { schedulePostTurnSynthesis } from '../synthesis/client.ts';
 import { buildSynthesisMessages, buildSynthesisExcerpt } from '../synthesis/post-turn.ts';
 import type { BoardReport, BoardTask, BoardTaskStatus, Chat, ChatGroup, ChatStopReason, OrchestrateBoardState, SessionState } from '../types.ts';
+import type { BoardChatTurnOptions } from '../session-engine/board-turn-runner.ts';
+
+/** Injectable turn launcher — engine host replaces runChatTurn (MIN-360). */
+type BoardChatTurnRunner = (options: BoardChatTurnOptions) => Promise<void>;
+let boardChatTurnRunner: BoardChatTurnRunner | null = null;
+
+/** Session Engine installs its turn runner; null restores renderer runChatTurn. */
+export function setBoardChatTurnRunner(runner: BoardChatTurnRunner | null): void {
+  boardChatTurnRunner = runner;
+}
+
+/**
+ * Launch a board task/test/fixer/final chat turn (engine or renderer).
+ * When Session Engine is on, board-host installs {@link setBoardChatTurnRunner}
+ * so this never falls through to renderer runChatTurn (no extra gate needed).
+ */
+async function launchBoardChatTurn(options: BoardChatTurnOptions): Promise<void> {
+  if (boardChatTurnRunner) {
+    return boardChatTurnRunner(options);
+  }
+  // Dynamic import keeps Node engine host from eagerly loading loop.ts UI graph.
+  // Opt-out (MINNOW_SERVER_ENGINE=0) / non-engine hosts use renderer runChatTurn.
+  const { runChatTurn } = await import('../tools/loop.ts');
+  return runChatTurn(options);
+}
 import {
   assignChatToGroup,
   getBoardGroupForChat,
@@ -98,6 +127,17 @@ const MAX_MERGE_FIXER_ATTEMPTS = 2;
 export const MAX_STOP_RETRY_ATTEMPTS = 2;
 
 export { getBoardExecutionMode, isBoardAutoMode, isBoardRunning };
+
+/** Best-effort sidebar refresh — no-op in Node / engine host (SSE updates clients). */
+async function refreshSidebarIfDom(): Promise<void> {
+  if (typeof document === 'undefined') return;
+  try {
+    const { renderSidebar } = await import('../ui/sidebar.ts');
+    renderSidebar();
+  } catch (err) {
+    reportBackgroundError('board-refresh-sidebar', err);
+  }
+}
 
 /**
  * Provision infra for a task's worktree (MIN-285 Phase 2, §3).
@@ -1018,7 +1058,11 @@ function isTaskChatStreaming(chatId: string): boolean {
   );
 }
 
-/** Provider/model for a board task chat — planner binding, then top-bar model select. */
+/**
+ * Provider/model for a board task chat.
+ * Order: planner chat binding → board preferredModel (set via set_model command /
+ * top-bar) → autopilot meta. No DOM reads (MIN-360).
+ */
 function resolvePlannerModelBinding(plannerChat: Chat): {
   providerId: string;
   modelId: string;
@@ -1026,6 +1070,17 @@ function resolvePlannerModelBinding(plannerChat: Chat): {
   let providerId = plannerChat.providerId?.trim() ?? '';
   let modelId = plannerChat.modelId?.trim() ?? '';
   if (!modelId) {
+    const group = getBoardGroupForChat(plannerChat);
+    const board = group?.orchestrateBoard;
+    const prefModel = board?.preferredModelId?.trim() ?? '';
+    const prefProvider = board?.preferredProviderId?.trim() ?? '';
+    if (prefModel) {
+      providerId = providerId || prefProvider;
+      modelId = prefModel;
+    }
+  }
+  // Legacy renderer fallback: top-bar select when board preferred is unset.
+  if (!modelId && typeof document !== 'undefined') {
     const domRaw =
       (document.getElementById('modelSelect') as HTMLSelectElement | null)?.value?.trim() ??
       '';
@@ -1896,8 +1951,7 @@ export async function runTaskChatNudge(
 
   reserveLaunchSlot(taskChat.id);
   try {
-    const { renderSidebar } = await import('../ui/sidebar.ts');
-    renderSidebar();
+    await refreshSidebarIfDom();
 
     if (targetChatId === task.chatId?.trim()) {
       const worktreeRoot = await ensureTaskWorktree(group, task, plannerChat);
@@ -1914,7 +1968,7 @@ export async function runTaskChatNudge(
     refreshHeartbeatThresholds();
     startTaskChatSupervision(taskChat.id);
 
-    void runChatTurn({
+    void launchBoardChatTurn({
       chat: taskChat,
       pushUser: true,
       rawText: nudge,
@@ -2495,7 +2549,7 @@ export async function startMergeConflictFixer(
     // Part 1: Supervise the fixer chat like every other board chat starter.
     refreshHeartbeatThresholds();
     startTaskChatSupervision(fixerChat.id);
-    void runChatTurn({
+    void launchBoardChatTurn({
       chat: fixerChat,
       pushUser: true,
       rawText: seed,
@@ -2873,7 +2927,7 @@ export async function startEnvFixer(
     const seed = buildEnvFixerSeedMessage(task, phase, summary);
     refreshHeartbeatThresholds();
     startTaskChatSupervision(fixerChat.id);
-    void runChatTurn({
+    void launchBoardChatTurn({
       chat: fixerChat,
       pushUser: true,
       rawText: seed,
@@ -3148,8 +3202,7 @@ export async function startTask(
 
   reserveLaunchSlot(taskChat.id);
   try {
-    const { renderSidebar } = await import('../ui/sidebar.ts');
-    renderSidebar();
+    await refreshSidebarIfDom();
 
     // Scope this task chat's tools to an isolated worktree when board isolation is on
     // (MIN-275). Best-effort: a null result leaves the chat on the shared workspace.
@@ -3168,7 +3221,7 @@ export async function startTask(
     refreshHeartbeatThresholds();
     startTaskChatSupervision(taskChat.id);
 
-    void runChatTurn({
+    void launchBoardChatTurn({
       chat: taskChat,
       pushUser: true,
       rawText: seed,
@@ -3268,8 +3321,7 @@ export async function startTaskTesting(
 
   reserveLaunchSlot(testChat.id);
   try {
-    const { renderSidebar } = await import('../ui/sidebar.ts');
-    renderSidebar();
+    await refreshSidebarIfDom();
 
     // Tester runs against the same isolated worktree as the Builder (MIN-275).
     const freshTask = group.orchestrateBoard?.tasks.find((t) => t.id === taskId) ?? task;
@@ -3295,7 +3347,7 @@ export async function startTaskTesting(
     refreshHeartbeatThresholds();
     startTaskChatSupervision(testChat.id);
 
-    void runChatTurn({
+    void launchBoardChatTurn({
       chat: testChat,
       pushUser: true,
       rawText: seed,
@@ -3685,15 +3737,14 @@ export async function startFinalIntegrationTest(
 
   reserveLaunchSlot(finalChat.id);
   try {
-    const { renderSidebar } = await import('../ui/sidebar.ts');
-    renderSidebar();
+    await refreshSidebarIfDom();
 
     const seed = buildFinalIntegrationTestSeedMessage(group, plannerChat);
 
     refreshHeartbeatThresholds();
     startTaskChatSupervision(finalChat.id);
 
-    void runChatTurn({
+    void launchBoardChatTurn({
       chat: finalChat,
       pushUser: true,
       rawText: seed,
@@ -4111,6 +4162,7 @@ export async function resumeBoardExecutionAfterReload(
   group: ChatGroup,
   plannerChat: Chat,
 ): Promise<void> {
+  if (!canDriveOrchestrateBoard()) return;
   ensureStreamEndSubscription();
   ensureAutoDriveSubscription();
   const board = group.orchestrateBoard;
@@ -4198,6 +4250,7 @@ export async function recoverInterruptedMergesAfterReload(
 
 /** Begin auto/sequential execution — set running flag then kick off delegation. */
 export function startBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
+  if (!canDriveOrchestrateBoard()) return;
   const board = group.orchestrateBoard;
   if (!board || !isBoardAutoMode(group)) return;
   void clearOomPauseFromElectron();
@@ -4300,6 +4353,7 @@ export async function autoDelegateNext(
   group: ChatGroup,
   plannerChat: Chat,
 ): Promise<void> {
+  if (!canDriveOrchestrateBoard()) return;
   ensureStreamEndSubscription();
   ensureAutoDriveSubscription();
   await reconcileMergingTasks(group, plannerChat);
@@ -4330,6 +4384,7 @@ export async function autoDelegateNext(
 }
 
 function ensureAutoDriveSubscription(): void {
+  if (!canDriveOrchestrateBoard()) return;
   if (autoDriveSubscribed) return;
   autoDriveSubscribed = true;
   void import('../agents/controller/report.ts').then((mod) => {

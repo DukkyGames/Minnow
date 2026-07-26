@@ -21,6 +21,8 @@ import {
   startResearch,
 } from '../../research/client';
 import type { Chat } from '../../types';
+import { isServerEngineEnabled } from '../../state/server-engine-flag.ts';
+import { dispatchSendMessageAndAwaitIdle } from '../../state/session-commands.ts';
 import { detectLocalServer, executeTool } from '../../tools/client';
 import { buildHistoryUserContent, runChatTurn } from '../../tools/loop';
 import { newestRun } from '../../state/runs-store';
@@ -70,7 +72,7 @@ async function runChatTurnForStage(
   skillId: string | null,
   skillBody: string | null,
   modelOverride?: SuperPlanStageModelBinding,
-): Promise<void> {
+): Promise<'engine' | 'renderer'> {
   const savedProvider = chat.providerId;
   const savedModel = chat.modelId;
   if (modelOverride?.providerId?.trim()) {
@@ -80,6 +82,31 @@ async function runChatTurnForStage(
     chat.modelId = modelOverride.modelId.trim();
   }
   try {
+    // Engine default-on: dispatch + await idle (no renderer runChatTurn / double-drive).
+    // skillBody + superPlanStage tagging stay renderer-only until the engine ports them.
+    if (isServerEngineEnabled()) {
+      const text = skillId ? `/${skillId} ${userText}` : userText;
+      const titleSeed = chat.superPlan?.prompt?.trim() || userText;
+      const shouldScheduleTitle = isFirstUserMessagePending(chat);
+      await dispatchSendMessageAndAwaitIdle({
+        chatId: chat.id,
+        text,
+        historyContent: buildHistoryUserContent(userText, []),
+        skillId,
+        modelId: chat.modelId,
+        providerId: chat.providerId,
+      });
+      // Turn already settled — schedule immediately (no second idle wait).
+      if (shouldScheduleTitle && titleSeed.trim()) {
+        const { scheduleChatTitleGeneration } = await import('../titles/schedule');
+        scheduleChatTitleGeneration(chat.id, titleSeed, {
+          modelId: chat.modelId || undefined,
+          providerId: chat.providerId || undefined,
+        });
+      }
+      return 'engine';
+    }
+
     await detectLocalServer();
     const displayText = userText;
     const historyContent = buildHistoryUserContent(displayText, []);
@@ -98,6 +125,7 @@ async function runChatTurnForStage(
       skillBody,
       superPlanStage: stageId,
     });
+    return 'renderer';
   } finally {
     chat.providerId = savedProvider;
     chat.modelId = savedModel;
@@ -252,8 +280,16 @@ async function runGrillStage(chat: Chat): Promise<SuperPlanStageOutcome> {
   const skill = await fetchSkillById('grilling');
   const skillBody = adaptGrillingSkillForSuperPlan(skill?.body ?? null);
   const userText = buildSuperPlanGrillStageUserText(config.grillQuestionBudget, state.prompt);
-  await runChatTurnForStage(chat, 'grill', userText, 'grilling', skillBody, config.plannerModel);
-  return { kind: 'await_stream' };
+  const driver = await runChatTurnForStage(
+    chat,
+    'grill',
+    userText,
+    'grilling',
+    skillBody,
+    config.plannerModel,
+  );
+  // Engine turns do not record chat.runs — finalize here instead of await_stream.
+  return driver === 'engine' ? finalizeStreamStage(chat, 'grill') : { kind: 'await_stream' };
 }
 
 async function runSpecConfirmStage(chat: Chat): Promise<SuperPlanStageOutcome> {
@@ -267,8 +303,17 @@ async function runSpecConfirmStage(chat: Chat): Promise<SuperPlanStageOutcome> {
     '',
     `Original request: ${state.prompt}`,
   ].join('\n');
-  await runChatTurnForStage(chat, 'spec_confirm', userText, null, null, getSuperPlanConfigSync().plannerModel);
-  return { kind: 'await_stream' };
+  const driver = await runChatTurnForStage(
+    chat,
+    'spec_confirm',
+    userText,
+    null,
+    null,
+    getSuperPlanConfigSync().plannerModel,
+  );
+  return driver === 'engine'
+    ? finalizeStreamStage(chat, 'spec_confirm')
+    : { kind: 'await_stream' };
 }
 
 /** Reuse an in-flight or finished research run instead of starting a duplicate. */
@@ -358,7 +403,17 @@ async function runDraftStage(
     );
   }
   lines.push('', `Original request: ${state.prompt}`);
-  await runChatTurnForStage(chat, stageId, lines.join('\n'), null, null, config.plannerModel);
+  const driver = await runChatTurnForStage(
+    chat,
+    stageId,
+    lines.join('\n'),
+    null,
+    null,
+    config.plannerModel,
+  );
+  if (driver === 'engine') {
+    return finalizeStreamStage(chat, stageId);
+  }
   return { kind: 'await_stream' };
 }
 
@@ -502,8 +557,17 @@ async function runImpeccableStage(chat: Chat): Promise<SuperPlanStageOutcome> {
     `Refine UI-related sections of the plan at \`${planPath}\` using the injected Impeccable \`shape\` workflow.`,
     'Update the plan file in place with improved UX clarity — still no implementation code fences.',
   ].join('\n');
-  await runChatTurnForStage(chat, 'impeccable', userText, 'impeccable', skillBody, config.plannerModel);
-  return { kind: 'await_stream' };
+  const driver = await runChatTurnForStage(
+    chat,
+    'impeccable',
+    userText,
+    'impeccable',
+    skillBody,
+    config.plannerModel,
+  );
+  return driver === 'engine'
+    ? finalizeStreamStage(chat, 'impeccable')
+    : { kind: 'await_stream' };
 }
 
 async function runFinalizeStage(chat: Chat): Promise<SuperPlanStageOutcome> {
@@ -516,8 +580,17 @@ async function runFinalizeStage(chat: Chat): Promise<SuperPlanStageOutcome> {
     `Ensure \`${planPath}\` is complete: front-matter todos match tasks, verification checklist present.`,
     'Save the final plan if anything is missing. Reply briefly confirming the path.',
   ].join('\n');
-  await runChatTurnForStage(chat, 'finalize', userText, null, null, config.plannerModel);
-  return { kind: 'await_stream' };
+  const driver = await runChatTurnForStage(
+    chat,
+    'finalize',
+    userText,
+    null,
+    null,
+    config.plannerModel,
+  );
+  return driver === 'engine'
+    ? finalizeStreamStage(chat, 'finalize')
+    : { kind: 'await_stream' };
 }
 
 async function runPresentStage(chat: Chat): Promise<SuperPlanStageOutcome> {

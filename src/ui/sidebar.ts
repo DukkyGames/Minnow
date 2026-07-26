@@ -1276,6 +1276,21 @@ function syncCreateChatChrome(chatId: string): void {
 
 /** Start an LLM turn when the user message was already pushed into history. */
 async function kickoffSeededChatTurn(chat: Chat, message: string): Promise<void> {
+  const { isServerEngineEnabled } = await import('../state/server-engine-flag');
+  // Engine owns the tool loop — drop the local seed so send_message can append once.
+  if (isServerEngineEnabled()) {
+    const last = chat.history[chat.history.length - 1];
+    if (last?.role === 'user' && last.content === message) {
+      chat.history.pop();
+    }
+    const { sendProgrammaticChatText } = await import('../tools/loop');
+    await sendProgrammaticChatText(chat, message, {
+      titleSeed: message,
+      ownsGlobalStreaming: chat.id === getActiveChat().id,
+    });
+    return;
+  }
+
   const { detectLocalServer } = await import('../tools/client');
   const { buildHistoryUserContent, runChatTurn } = await import('../tools/loop');
   const { isFirstUserMessagePending } = await import('../chat/titles/schedule');

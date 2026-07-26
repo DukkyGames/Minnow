@@ -43,6 +43,71 @@
     ]
   },
   {
+    "key": "general.desktop",
+    "label": "Desktop app",
+    "description": "Keep Minnow running in the system tray after closing the window and launch at OS sign-in.",
+    "keywords": [
+      "tray",
+      "system tray",
+      "background",
+      "startup",
+      "login",
+      "close",
+      "quit",
+      "minimize"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
+    "key": "general.desktop.closeToTray",
+    "label": "Keep running after close",
+    "description": "Hide to the system tray instead of quitting when you close the window.",
+    "keywords": [
+      "tray",
+      "background",
+      "hide",
+      "minimize"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "meta",
+    "path": "desktopShell.closeToTray",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
+    "key": "general.desktop.launchAtStartup",
+    "label": "Launch at startup",
+    "description": "Open Minnow automatically when you sign in to this computer.",
+    "keywords": [
+      "login",
+      "boot",
+      "sign in",
+      "windows startup"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
     "key": "general.notifications",
     "label": "Notifications",
     "description": "Menubar bell when background chats, tasks, or jobs need attention.",

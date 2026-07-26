@@ -304,6 +304,9 @@ const DEFAULT_META = {
     wordWrap: false,
     renderWhitespace: false,
   },
+  desktopShell: {
+    closeToTray: true,
+  },
   voice: {
     stt: {
       enabled: true,

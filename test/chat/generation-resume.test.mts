@@ -6,8 +6,12 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 import type { Chat } from '../../src/types.ts';
-import { listChatsWithGenerationId } from '../../src/chat/generation-resume.ts';
+import {
+  bootGenerationResumeForChat,
+  listChatsWithGenerationId,
+} from '../../src/chat/generation-resume.ts';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
+import { setServerEngineFlagForTests } from '../../src/state/server-engine-flag.ts';
 
 const CHAT_A = '11111111-1111-1111-1111-111111111111';
 const CHAT_B = '22222222-2222-2222-2222-222222222222';
@@ -59,6 +63,20 @@ describe('bootGenerationResumeForChats ownership', () => {
       assert.ok(chat.currentGenerationId?.trim());
     }
     assert.deepEqual(owns, [true, false]);
+  });
+});
+
+describe('Phase 4 engine-on resume gate', () => {
+  afterEach(() => {
+    setServerEngineFlagForTests(null);
+  });
+
+  test('bootGenerationResumeForChat does not start runChatTurn when engine is on', async () => {
+    setServerEngineFlagForTests(true);
+    const chat = makeChat(CHAT_A, GEN_A);
+    // Must not throw or require DOM/modelSelect — engine path only mirrors.
+    await bootGenerationResumeForChat(chat, { ownsGlobalStreaming: true });
+    assert.equal(chat.currentGenerationId, GEN_A);
   });
 });
 

@@ -56,6 +56,13 @@ Open via **Settings** (`#/settings/<category>`) or legacy `#/settings/<area>`.
 | Terminal behavior | — | Info only: commands run in background |
 | Constrained tool calls | `config.toolCalls.useConstrainedDecoding` | JSON Schema on tool turns |
 
+### General → Desktop app (Electron)
+
+| Setting | Persistence | Notes |
+|---------|-------------|-------|
+| Keep Minnow running after closing the window | `config.desktopShell.closeToTray` | Default on — hide to tray instead of quit (Win/macOS) |
+| Launch Minnow at startup | Electron login item | Windows Startup Apps / macOS Login Items — not in `config.json` |
+
 ### General → Notifications
 
 | Setting | Persistence | Notes |

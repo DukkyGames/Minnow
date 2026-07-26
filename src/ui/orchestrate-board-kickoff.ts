@@ -7,8 +7,11 @@ import { formatHistoryWithSkillTag } from '../skills/parse-slash';
 import { getWorkspaceGitStatus } from '../state/git-workspace';
 import { getActiveChat } from '../state/sessions';
 import { getWorkspacePath } from '../state/workspace';
+import { isServerEngineEnabled } from '../state/server-engine-flag.ts';
+import { dispatchSendMessageAndAwaitIdle } from '../state/session-commands.ts';
 import { detectLocalServer } from '../tools/client';
 import { buildHistoryUserContent, runChatTurn } from '../tools/loop';
+import { resolveEffectiveChatModelBinding } from './default-model';
 import {
   getBoardKickoffAbortSignal,
   promptBoardGitSetup,
@@ -60,6 +63,21 @@ async function runGitSetupSkillTurn(
     const userText = GIT_SETUP_USER_TEXT[kind];
     const displayText = formatHistoryWithSkillTag(userText, GIT_SETUP_SKILL_ID);
     const historyContent = buildHistoryUserContent(displayText, []);
+    // Engine owns the tool loop — await idle so git status is re-checked after the turn.
+    // Slash text carries the skill intent until engine skill resolution lands.
+    if (isServerEngineEnabled()) {
+      const binding = resolveEffectiveChatModelBinding(chat);
+      await dispatchSendMessageAndAwaitIdle({
+        chatId: chat.id,
+        text: `/${GIT_SETUP_SKILL_ID} ${userText}`,
+        historyContent,
+        displayText,
+        skillId: GIT_SETUP_SKILL_ID,
+        modelId: binding.modelId || chat.modelId,
+        providerId: binding.providerId || chat.providerId,
+      });
+      return;
+    }
     await runChatTurn({
       chat,
       pushUser: true,

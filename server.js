@@ -201,6 +201,30 @@ async function main() {
   console.log(`Email API: ${localUrl.replace(/\/$/, '')}/api/email/ping`);
   const schedulerBaseUrl = localUrl.replace(/\/$/, '');
   setSchedulerServerBaseUrl(schedulerBaseUrl);
+  const { isServerEngineEnabled } = await import('./server/session/flag.js');
+  if (isServerEngineEnabled()) {
+    const { ensureSessionEngineBooted } = await import('./server/session/engine.js');
+    await ensureSessionEngineBooted();
+    // Phase 3: controller registry + watchdog once per process (before board resume).
+    const { bootEngineControllerOnStart } = await import(
+      './server/session/controller-loader.js'
+    );
+    await bootEngineControllerOnStart().catch((err) => {
+      console.error('[session-engine] controller boot failed:', err);
+    });
+    // Phase 2: resume auto/AFK boards in-process (zero devices required).
+    const { resumeEngineBoardsOnBoot } = await import('./server/session/board-loader.js');
+    await resumeEngineBoardsOnBoot().catch((err) => {
+      console.error('[session-engine] board boot resume failed:', err);
+    });
+    console.log(
+      `Session Engine: ON (default) — POST /api/session/commands + board + controller host`,
+    );
+  } else {
+    console.log(
+      `Session Engine: OFF (MINNOW_SERVER_ENGINE=0) — emergency renderer driving`,
+    );
+  }
   await startSchedulerTickLoop({ baseUrl: schedulerBaseUrl });
   startCalendarReminderLoop();
   startEmailPollLoop();

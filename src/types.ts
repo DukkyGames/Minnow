@@ -76,6 +76,27 @@ export interface UserMessage {
   hiddenFromTranscript?: boolean;
 }
 
+/**
+ * Soft-published SSE hint while the Session Engine is parked on `ask_question`.
+ * Renderer opens the existing question strip; `answer_question` resumes the turn.
+ */
+export interface PendingAskQuestion {
+  /** Tool call id waiting for a result. */
+  toolCallId: string;
+  /** Validated ask_question args (title + questions). */
+  args: {
+    title?: string;
+    questions: Array<{
+      id: string;
+      prompt: string;
+      options: Array<{ id: string; label: string; description?: string }>;
+      allow_multiple?: boolean;
+    }>;
+  };
+  /** Epoch ms when the engine parked. */
+  createdAt: number;
+}
+
 /** One build-agent progress item (todo_write). */
 export interface ChatTodo {
   text: string;
@@ -346,6 +367,40 @@ export interface PersistedSubAgentRun {
   boardTaskId?: string | null;
 }
 
+/**
+ * Compact live sub-agent row published by the Session Engine (MIN-361 Phase 3).
+ * Ephemeral — carried on SSE SessionState for multi-device status; not a durable transcript.
+ */
+export interface LiveSubAgentRunSnapshot {
+  runId: string;
+  type: string;
+  task: string;
+  status: PersistedSubAgentStatus | 'queued' | 'running';
+  lifecycle?: string;
+  parentChatId?: string | null;
+  parentTurnId?: string | null;
+  parentToolCallId?: string | null;
+  summary: string;
+  error?: string | null;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  toolTurns: number;
+  cancelled?: boolean;
+  liveNestedToolCalls?: number;
+  liveCurrentToolName?: string | null;
+  progressSeq?: number;
+  lastHeartbeatAt?: number | null;
+  lastProgressAt?: number | null;
+  attempt?: number;
+  modelId?: string;
+  providerId?: string;
+  category?: BoardCategory;
+  boardTaskId?: string | null;
+  supersededByRunId?: string | null;
+  /** Short preview for remote cards (full messages stay engine-local until settle). */
+  lastMessagePreview?: string;
+}
+
 /** Orchestrate board task lifecycle. */
 export type BoardTaskStatus =
   | 'planned'
@@ -558,6 +613,9 @@ export interface OrchestrateBoardState {
   };
   /** Chronological diagnostic log, capped ring buffer (oldest dropped). */
   log?: BoardLogEvent[];
+  /** Preferred provider/model for task chats when planner has no binding (MIN-360). */
+  preferredProviderId?: string;
+  preferredModelId?: string;
   /** Phase-2 placeholder: provisioning lifecycle for AFK workspace setup. */
   provisionState?: 'idle' | 'provisioning' | 'ready' | 'failed';
   /** Phase-2 placeholder: content-hash signatures of provisioned artefacts. */
@@ -986,6 +1044,16 @@ export interface Chat {
   todosUpdatedAt?: number;
   /** Queued mode switch from set_chat_mode during streaming (last write wins; flushed on stream end). */
   pendingModeId?: ModeId;
+  /**
+   * Server Session Engine (MIN-359): true while the engine owns an in-flight main-chat turn.
+   * Soft-published over Phase 0 SSE so clients can mirror generation streams without runChatTurn.
+   */
+  engineTurnActive?: boolean;
+  /**
+   * Engine ask_question pause hint (MIN-354 residual). Soft-published over Phase 0 SSE so
+   * the renderer can open the existing question strip; cleared when `answer_question` resumes.
+   */
+  pendingAskQuestion?: PendingAskQuestion;
   /** Sidebar: green dot on inactive rows until the user opens this chat again. */
   unread?: boolean;
   /** Sidebar: red dot on inactive rows after a failed turn until the user opens this chat again. */
@@ -1062,6 +1130,11 @@ export interface SessionState {
   lastActiveChatIdByApp?: Record<string, string>;
   /** Cumulative agent line stats keyed by normalized workspace path. */
   codeChangeTotalsByWorkspace?: Record<string, ChatCodeChangeTotals>;
+  /**
+   * Engine-published live sub-agent status (MIN-361). Ephemeral SSE read-model —
+   * omitted from durable disk writes / client PUTs; restored from the registry on boot.
+   */
+  liveSubAgentRuns?: LiveSubAgentRunSnapshot[];
 }
 
 /** Built-in system prompt template for the settings drawer. */

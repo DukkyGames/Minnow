@@ -52,7 +52,10 @@ const entries = new Map<string, SupervisionEntry>();
 /** Monotonic baseline; advanced when the page was hidden so hidden time is excluded. */
 let visibilityBaseline = performance.now();
 
-/** Frozen monotonic clock while `document.hidden` (display off / background tab). */
+/**
+ * Frozen monotonic clock while `document.hidden` (display off / background tab).
+ * Node / Session Engine host: no document — heartbeats use wall monotonic time only.
+ */
 let pageHiddenAtMono: number | null = null;
 
 let heartbeatConfig: HeartbeatConfig = { ...DEFAULT_HEARTBEAT_CONFIG };
@@ -80,6 +83,10 @@ function onPageVisible(): void {
   resetHeartbeatBaselines();
 }
 
+/**
+ * Bind page-visibility freeze only in a real browser document.
+ * Engine-hosted controller (MIN-361) skips this — no DOM, no tab-hide stalls.
+ */
 function ensureVisibilityListener(): void {
   if (visibilityListenerBound || typeof document === 'undefined') return;
   visibilityListenerBound = true;

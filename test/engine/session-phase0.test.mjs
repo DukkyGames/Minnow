@@ -1,0 +1,333 @@
+/**
+ * Phase 0 session sync tests (MIN-357) + Phase 4 lease removal (MIN-362).
+ * Version guard (PUT + PATCH) remains; driver lease endpoints are gone.
+ * Adapted for SQLite sessions store (default) after the JSON→SQLite cutover.
+ */
+
+import { describe, test, before, after, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
+import http from 'node:http';
+import { handleConfigRequest } from '../../server/config/middleware.js';
+import { handleSessionRequest } from '../../server/session/middleware.js';
+import {
+  resetSessionRevStoreForTests,
+} from '../../server/session/rev-store.js';
+import { resetSessionSseForTests } from '../../server/session/sse.js';
+import { closeSessionsDb } from '../../server/config/sessions-db.js';
+import {
+  httpRequest,
+  readFixture,
+  setTestHome,
+  rmTestHome,
+} from '../config/test-helpers.js';
+
+/** @type {Record<string, unknown>} */
+let defaultSessionFixture;
+
+function createPhase0TestServer() {
+  return http.createServer((req, res) => {
+    const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+    void handleSessionRequest(req, res, url.pathname).then((sessionHandled) => {
+      if (sessionHandled) return;
+      void handleConfigRequest(req, res, url.pathname).then((configHandled) => {
+        if (!configHandled) {
+          res.statusCode = 404;
+          res.end('not found');
+        }
+      });
+    });
+  });
+}
+
+function httpRequestWithHeaders(baseUrl, method, pathname, body, extraHeaders = {}) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(pathname, baseUrl);
+    const payload = body != null ? JSON.stringify(body) : undefined;
+    const req = http.request(
+      url,
+      {
+        method,
+        headers: {
+          ...(payload ? { 'Content-Type': 'application/json' } : {}),
+          ...extraHeaders,
+        },
+      },
+      (res) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          const text = Buffer.concat(chunks).toString('utf8');
+          let json = null;
+          try {
+            json = text ? JSON.parse(text) : null;
+          } catch {
+            json = text;
+          }
+          resolve({
+            status: res.statusCode,
+            json,
+            text,
+            headers: res.headers,
+          });
+        });
+      },
+    );
+    req.on('error', reject);
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
+
+describe('session phase 0 (MIN-357) + lease removal (MIN-362)', () => {
+  /** @type {string | undefined} */
+  let home;
+  /** @type {http.Server | undefined} */
+  let server;
+  /** @type {string | undefined} */
+  let baseUrl;
+
+  before(async () => {
+    home = setTestHome(process.env, 'minnow-session-phase0');
+    defaultSessionFixture = JSON.parse(await readFixture('expected-sessions-state.json'));
+    resetSessionRevStoreForTests();
+    resetSessionSseForTests();
+    server = createPhase0TestServer();
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const addr = server.address();
+    assert.ok(addr && typeof addr === 'object');
+    baseUrl = `http://127.0.0.1:${addr.port}`;
+  });
+
+  beforeEach(() => {
+    resetSessionRevStoreForTests();
+  });
+
+  after(async () => {
+    resetSessionSseForTests();
+    resetSessionRevStoreForTests();
+    // Close SQLite before deleting the temp home (Windows EBUSY otherwise).
+    closeSessionsDb();
+    await new Promise((resolve) => server?.close(resolve));
+    if (home) await rmTestHome(home);
+  });
+
+  test('PUT /api/config/sessions rejects stale If-Match with 409', async () => {
+    const put1 = await httpRequest(baseUrl, 'PUT', '/api/config/sessions', defaultSessionFixture);
+    assert.equal(put1.status, 200);
+    const rev1 = put1.json?.rev;
+    assert.ok(typeof rev1 === 'number' && rev1 > 0);
+
+    const put2 = await httpRequest(baseUrl, 'PUT', '/api/config/sessions', {
+      ...defaultSessionFixture,
+      chats: defaultSessionFixture.chats.map((c, i) =>
+        i === 0 ? { ...c, name: 'Renamed chat' } : c,
+      ),
+    });
+    assert.equal(put2.status, 200);
+    const rev2 = put2.json?.rev;
+    assert.ok(rev2 > rev1);
+
+    const stale = await httpRequestWithHeaders(
+      baseUrl,
+      'PUT',
+      '/api/config/sessions',
+      defaultSessionFixture,
+      { 'If-Match': String(rev1) },
+    );
+    assert.equal(stale.status, 409);
+    assert.equal(stale.json?.error, 'Session state revision conflict');
+    assert.ok(stale.json?.rev >= rev2);
+    assert.equal(stale.headers['x-session-rev'], String(stale.json.rev));
+  });
+
+  test('PATCH /api/config/sessions rejects stale If-Match and expectedRev with 409', async () => {
+    const put1 = await httpRequest(baseUrl, 'PUT', '/api/config/sessions', defaultSessionFixture);
+    assert.equal(put1.status, 200);
+    const rev1 = put1.json?.rev;
+    assert.ok(typeof rev1 === 'number' && rev1 > 0);
+
+    const firstChat = defaultSessionFixture.chats[0];
+    const patchOk = await httpRequestWithHeaders(
+      baseUrl,
+      'PATCH',
+      '/api/config/sessions',
+      {
+        baseVersion: defaultSessionFixture.version ?? 6,
+        expectedRev: rev1,
+        chats: [{ ...firstChat, name: 'Patched name' }],
+      },
+      { 'If-Match': String(rev1) },
+    );
+    assert.equal(patchOk.status, 200);
+    const rev2 = patchOk.json?.rev;
+    assert.ok(typeof rev2 === 'number' && rev2 > rev1);
+    assert.equal(patchOk.headers['x-session-rev'], String(rev2));
+
+    const staleHeader = await httpRequestWithHeaders(
+      baseUrl,
+      'PATCH',
+      '/api/config/sessions',
+      {
+        baseVersion: defaultSessionFixture.version ?? 6,
+        chats: [{ ...firstChat, name: 'Stale header' }],
+      },
+      { 'If-Match': String(rev1) },
+    );
+    assert.equal(staleHeader.status, 409);
+    assert.equal(staleHeader.json?.error, 'Session state revision conflict');
+
+    const staleBody = await httpRequest(
+      baseUrl,
+      'PATCH',
+      '/api/config/sessions',
+      {
+        baseVersion: defaultSessionFixture.version ?? 6,
+        expectedRev: rev1,
+        chats: [{ ...firstChat, name: 'Stale body' }],
+      },
+    );
+    assert.equal(staleBody.status, 409);
+    assert.ok(staleBody.json?.rev >= rev2);
+  });
+
+  test('GET /api/config/sessions returns X-Session-Rev after seed', async () => {
+    await httpRequest(baseUrl, 'PUT', '/api/config/sessions', defaultSessionFixture);
+    const get = await httpRequestWithHeaders(baseUrl, 'GET', '/api/config/sessions');
+    assert.equal(get.status, 200);
+    const revHeader = get.headers['x-session-rev'];
+    assert.ok(revHeader);
+    assert.ok(Number.parseInt(String(revHeader), 10) > 0);
+  });
+
+  test('Phase 4: /api/session/lease is removed (410)', async () => {
+    const get = await httpRequest(baseUrl, 'GET', '/api/session/lease');
+    assert.equal(get.status, 410);
+    assert.equal(get.json?.code, 'LEASE_REMOVED');
+
+    const post = await httpRequest(baseUrl, 'POST', '/api/session/lease', {
+      driverId: 'driver-a',
+      action: 'claim',
+      label: 'Device A',
+    });
+    assert.equal(post.status, 410);
+    assert.equal(post.json?.code, 'LEASE_REMOVED');
+  });
+
+  test('GET /api/session/stream sends snapshot then patch after PUT', async () => {
+    const put = await httpRequest(baseUrl, 'PUT', '/api/config/sessions', defaultSessionFixture);
+    assert.equal(put.status, 200);
+    const putRev = put.json?.rev;
+    assert.ok(typeof putRev === 'number' && putRev > 0);
+
+    const events = await new Promise((resolve, reject) => {
+      const url = new URL('/api/session/stream', baseUrl);
+      const req = http.request(url, { method: 'GET' }, (res) => {
+        assert.equal(res.statusCode, 200);
+        assert.match(String(res.headers['content-type'] ?? ''), /text\/event-stream/);
+        let buf = '';
+        /** @type {{ name: string, data: unknown }[]} */
+        const collected = [];
+        const timer = setTimeout(() => {
+          req.destroy();
+          reject(new Error('SSE timeout waiting for snapshot+patch'));
+        }, 5000);
+        res.on('data', (chunk) => {
+          buf += chunk.toString('utf8');
+          // Parse complete SSE frames (event + data + blank line).
+          for (;;) {
+            const sep = buf.indexOf('\n\n');
+            if (sep < 0) break;
+            const frame = buf.slice(0, sep);
+            buf = buf.slice(sep + 2);
+            if (frame.startsWith(':')) continue;
+            let name = 'message';
+            let data = '';
+            for (const line of frame.split('\n')) {
+              if (line.startsWith('event:')) name = line.slice(6).trim();
+              if (line.startsWith('data:')) data += line.slice(5).trim();
+            }
+            if (!data) continue;
+            try {
+              collected.push({ name, data: JSON.parse(data) });
+            } catch {
+              collected.push({ name, data });
+            }
+            if (collected.some((e) => e.name === 'snapshot') && collected.some((e) => e.name === 'patch')) {
+              clearTimeout(timer);
+              req.destroy();
+              resolve(collected);
+            }
+          }
+        });
+        res.on('error', (err) => {
+          clearTimeout(timer);
+          reject(err);
+        });
+      });
+      req.on('error', reject);
+      req.end();
+
+      // After the stream is open, mutate sessions so a patch is published.
+      setTimeout(() => {
+        void httpRequest(baseUrl, 'PUT', '/api/config/sessions', {
+          ...defaultSessionFixture,
+          chats: defaultSessionFixture.chats.map((c, i) =>
+            i === 0 ? { ...c, name: 'SSE patched chat' } : c,
+          ),
+        });
+      }, 50);
+    });
+
+    const snapshot = events.find((e) => e.name === 'snapshot');
+    const patch = events.find((e) => e.name === 'patch');
+    assert.ok(snapshot);
+    assert.ok(patch);
+    assert.ok(typeof snapshot.data?.rev === 'number');
+    assert.ok(typeof patch.data?.rev === 'number');
+    assert.ok(patch.data.rev > snapshot.data.rev);
+    assert.ok(patch.data.state?.chats?.[0]?.name === 'SSE patched chat');
+  });
+
+  test('MINNOW_TOKEN accepts Bearer and minnowToken query on stream', async () => {
+    const prev = process.env.MINNOW_TOKEN;
+    process.env.MINNOW_TOKEN = 'phase0-secret';
+
+    /** Open SSE just long enough to read status, then destroy (stream never ends). */
+    function probeStream(pathname, extraHeaders = {}) {
+      return new Promise((resolve, reject) => {
+        const url = new URL(pathname, baseUrl);
+        const req = http.request(
+          url,
+          { method: 'GET', headers: extraHeaders },
+          (res) => {
+            const status = res.statusCode;
+            req.destroy();
+            resolve({ status });
+          },
+        );
+        req.on('error', (err) => {
+          // destroy() can surface as an error after we already have status.
+          if (err?.code === 'ECONNRESET') return;
+          reject(err);
+        });
+        req.end();
+      });
+    }
+
+    try {
+      const denied = await probeStream('/api/session/stream');
+      assert.equal(denied.status, 401);
+
+      const viaBearer = await probeStream('/api/session/stream', {
+        Authorization: 'Bearer phase0-secret',
+      });
+      assert.equal(viaBearer.status, 200);
+
+      const viaQuery = await probeStream('/api/session/stream?minnowToken=phase0-secret');
+      assert.equal(viaQuery.status, 200);
+    } finally {
+      if (prev === undefined) delete process.env.MINNOW_TOKEN;
+      else process.env.MINNOW_TOKEN = prev;
+    }
+  });
+});

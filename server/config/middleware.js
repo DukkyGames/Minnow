@@ -29,6 +29,7 @@ import {
 } from './sessions-repo.js';
 import { getSessionsDb, readSessionMeta } from './sessions-db.js';
 import { sessionsDbPath } from './sessions-paths.js';
+import { getSessionRev, seedSessionRevState } from '../session/rev-store.js';
 
 const MAX_MIGRATE_BYTES = 10 * 1024 * 1024;
 
@@ -54,10 +55,79 @@ function readJsonBody(req) {
   });
 }
 
-function sendJson(res, status, payload) {
+function sendJson(res, status, payload, extraHeaders = {}) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
+  for (const [key, value] of Object.entries(extraHeaders)) {
+    res.setHeader(key, value);
+  }
   res.end(JSON.stringify(payload));
+}
+
+/**
+ * Resolve optimistic concurrency rev from If-Match and/or body fields.
+ * Note: `baseVersion` is the SessionState schema version — do not treat it as rev.
+ * @param {import('http').IncomingMessage} req
+ * @param {unknown} [body]
+ * @returns {number | null}
+ */
+function resolveExpectedSessionRev(req, body) {
+  const ifMatch = req.headers['if-match'];
+  if (typeof ifMatch === 'string' && ifMatch.trim()) {
+    const n = Number.parseInt(ifMatch.trim(), 10);
+    if (Number.isFinite(n)) return n;
+  }
+  if (body && typeof body === 'object') {
+    const record = /** @type {Record<string, unknown>} */ (body);
+    for (const key of ['expectedRev', 'baseRev']) {
+      const raw = record[key];
+      if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+      if (typeof raw === 'string' && raw.trim()) {
+        const n = Number.parseInt(raw.trim(), 10);
+        if (Number.isFinite(n)) return n;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Reject stale sessions writes with 409 + X-Session-Rev when a rev was supplied.
+ * @param {import('http').IncomingMessage} req
+ * @param {import('http').ServerResponse} res
+ * @param {unknown} [body]
+ * @returns {Promise<boolean>} true when a 409 response was sent
+ */
+async function rejectStaleSessionWrite(req, res, body) {
+  const expectedRev = resolveExpectedSessionRev(req, body);
+  if (expectedRev == null) return false;
+
+  if (getSessionRev() === 0) {
+    const current = await readResource('sessions');
+    seedSessionRevState(current);
+  }
+  if (getSessionRev() === expectedRev) return false;
+
+  sendJson(
+    res,
+    409,
+    {
+      error: 'Session state revision conflict',
+      rev: getSessionRev(),
+    },
+    { 'X-Session-Rev': String(getSessionRev()) },
+  );
+  return true;
+}
+
+/**
+ * Attach Phase 0 rev headers after seeding from a sessions read.
+ * @param {import('http').ServerResponse} res
+ * @param {unknown} data
+ */
+function attachSessionRevOnRead(res, data) {
+  seedSessionRevState(data);
+  res.setHeader('X-Session-Rev', String(getSessionRev()));
 }
 
 /**
@@ -255,12 +325,16 @@ export async function handleConfigRequest(req, res, pathname) {
               lastMessagePreview,
             };
           });
-        sendJson(res, 200, { ...full, chats: summaries });
+        const payload = { ...full, chats: summaries };
+        attachSessionRevOnRead(res, full);
+        sendJson(res, 200, payload);
         return true;
       }
       const url = new URL(req.url ?? '', 'http://localhost');
       const workspace = url.searchParams.get('workspace') ?? undefined;
-      sendJson(res, 200, readSessionSummariesState({ workspace }));
+      const data = readSessionSummariesState({ workspace });
+      attachSessionRevOnRead(res, data);
+      sendJson(res, 200, data);
       return true;
     }
 
@@ -393,13 +467,28 @@ export async function handleConfigRequest(req, res, pathname) {
           sendJson(res, 404, { error: 'Not found' });
           return true;
         }
+        if (resource === 'sessions') {
+          attachSessionRevOnRead(res, data);
+        }
         sendJson(res, 200, data);
         return true;
       }
 
       if (req.method === 'PUT') {
         const body = await readJsonBody(req);
+        if (resource === 'sessions' && (await rejectStaleSessionWrite(req, res, body))) {
+          return true;
+        }
         const saved = await writeResource(resource, body);
+        if (resource === 'sessions') {
+          sendJson(
+            res,
+            200,
+            { ok: true, data: saved, rev: getSessionRev() },
+            { 'X-Session-Rev': String(getSessionRev()) },
+          );
+          return true;
+        }
         sendJson(res, 200, { ok: true, data: saved });
         return true;
       }
@@ -412,8 +501,16 @@ export async function handleConfigRequest(req, res, pathname) {
           return true;
         }
         const body = await readJsonBody(req);
+        if (await rejectStaleSessionWrite(req, res, body)) {
+          return true;
+        }
         const result = await patchResource(resource, body);
-        sendJson(res, 200, result);
+        sendJson(
+          res,
+          200,
+          result,
+          { 'X-Session-Rev': String(result.rev ?? getSessionRev()) },
+        );
         return true;
       }
     }

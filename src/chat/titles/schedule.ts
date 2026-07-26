@@ -6,6 +6,7 @@ import { loadTitlesConfig } from '../../config/titles-meta';
 import { getActiveProvider } from '../../providers/store';
 import { hasMeasurableUsage } from '../../usage/pricing';
 import { recordChatCompletionUsage } from '../../usage/record-chat-usage';
+import { waitForEngineTurnIdle } from '../../state/session-commands';
 import {
   applyGeneratedChatTitle,
   findChatById,
@@ -90,6 +91,51 @@ export function scheduleChatTitleGeneration(
     releaseTitleJobInflight(chatId, controller);
     emitTitleJobEnded(chatId);
   });
+}
+
+export interface ScheduleEngineTitleOptions extends TitleScheduleContext {
+  /**
+   * When set, overrides the first-user-message check. Capture before `send_message`
+   * appends the user row via SSE (after which {@link isFirstUserMessagePending} is false).
+   */
+  shouldSchedule?: boolean;
+}
+
+/**
+ * Session Engine sends never run renderer `runChatTurn`, so titles must be scheduled here.
+ * Waits for the engine turn to settle (parity with `deferTitleUntilTurnEnd`) then fires
+ * {@link scheduleChatTitleGeneration}. Fire-and-forget — never blocks the send path.
+ */
+export function scheduleChatTitleAfterEngineTurn(
+  chatId: string,
+  seed: string,
+  options?: ScheduleEngineTitleOptions,
+): void {
+  const chat = findChatById(chatId);
+  if (!chat || !isPlaceholderChatName(chat.name)) return;
+
+  const shouldSchedule =
+    options?.shouldSchedule !== undefined
+      ? options.shouldSchedule
+      : isFirstUserMessagePending(chat);
+  if (!shouldSchedule) return;
+
+  const trimmedSeed = seed.trim();
+  if (!trimmedSeed) return;
+
+  const context: TitleScheduleContext = {
+    modelId: options?.modelId,
+    providerId: options?.providerId,
+  };
+
+  // Optimistic busy so idle wait cannot resolve before the first SSE busy patch.
+  chat.engineTurnActive = true;
+
+  void waitForEngineTurnIdle(chatId, { assumeStarted: true })
+    .catch(() => undefined)
+    .then(() => {
+      scheduleChatTitleGeneration(chatId, trimmedSeed, context);
+    });
 }
 
 function resolveTitleGenerationOptions(

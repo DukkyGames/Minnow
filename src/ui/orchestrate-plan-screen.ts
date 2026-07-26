@@ -819,6 +819,31 @@ async function startPlanningFromPrompt(
     return;
   }
 
+  // Session Engine default-on: do not start a renderer runChatTurn (double-drive).
+  // Await idle so stream-end listeners advance the plan-screen phase.
+  const { isServerEngineEnabled } = await import('../state/server-engine-flag');
+  if (isServerEngineEnabled()) {
+    const { dispatchSendMessageAndAwaitIdle } = await import('../state/session-commands');
+    const { resolveEffectiveChatModelBinding } = await import('./default-model');
+    const binding = resolveEffectiveChatModelBinding(chat);
+    const shouldScheduleTitle = isFirstUserMessagePending(chat);
+    await dispatchSendMessageAndAwaitIdle({
+      chatId: chat.id,
+      text: promptText,
+      modelId: binding.modelId || chat.modelId,
+      providerId: binding.providerId || chat.providerId,
+    });
+    // Turn already settled — schedule immediately (no second idle wait).
+    if (shouldScheduleTitle && promptText.trim()) {
+      const { scheduleChatTitleGeneration } = await import('../chat/titles/schedule');
+      scheduleChatTitleGeneration(chat.id, promptText, {
+        modelId: binding.modelId || chat.modelId || undefined,
+        providerId: binding.providerId || chat.providerId || undefined,
+      });
+    }
+    return;
+  }
+
   const rawText = promptText;
   const userText = rawText;
   const skillId = null;

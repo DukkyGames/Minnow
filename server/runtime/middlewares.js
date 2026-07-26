@@ -13,6 +13,7 @@ import { createBrowserAllowlistMiddleware } from '../browser-allowlist-middlewar
 import { createBrowserScreenshotMiddleware } from '../browser-screenshot-middleware.js';
 import { createSettingsMiddleware } from '../settings/middleware.js';
 import { createConfigMiddleware } from '../config/middleware.js';
+import { createSessionMiddleware } from '../session/middleware.js';
 import { createEvalsMiddleware } from '../evals/middleware.js';
 import { createGenerationsMiddleware } from '../generations/routes.js';
 import { createResearchMiddleware } from '../research/routes.js';
@@ -59,6 +60,7 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   connectApp.use(createAuthMiddleware());
   connectApp.use(createDiagnosticsMiddleware());
   connectApp.use(createConfigMiddleware());
+  connectApp.use(createSessionMiddleware());
   connectApp.use(createSettingsMiddleware());
   connectApp.use(createBenchmarksMiddleware());
   connectApp.use(createCompareMiddleware());

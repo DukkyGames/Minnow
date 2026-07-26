@@ -22,7 +22,7 @@ import { extractInlineThinkingFromContent } from '../api/inline-thinking';
 import { normalizeModeId } from '../chat/modes/types';
 import { isHiddenTranscriptUserMessage } from '../chat/hidden-transcript-user-messages';
 import { resolveModelInfo, showCachedModelInfo } from '../api/models';
-import { isActiveChatStreaming, isChatStreaming, isStreamDomVisible } from '../chat/streaming-state';
+import { isActiveChatStreaming, isStreamDomVisible } from '../chat/streaming-state';
 import { setAssistantBubbleContent } from '../markdown/renderer';
 import { getActiveBoardGroup } from '../state/chat-groups';
 import {
@@ -383,7 +383,9 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   renderPersistedSubAgentCardsForChat(chat);
   restoreChatScrollAnchor(scrollAnchor);
   refreshContextUsageRing();
-  if (isChatStreaming(chat.id) && isStreamDomVisible(chat.id)) {
+  // Remount live stream shells after history wipe. Engine mirrors register a
+  // remount listener without joining streamingChatIds — still call remount.
+  if (isStreamDomVisible(chat.id)) {
     // Lazy import breaks a circular dependency with stream-chat-dom.ts (appendStreamingAssistantRow).
     void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(chat.id));
   }
@@ -617,9 +619,14 @@ function streamingAssistantRowStub(): StreamingAssistantRow {
   };
 }
 
-/** Drop orphaned in-flight assistant shells before mounting a fresh stream row. */
+/**
+ * Drop live assistant stream shells before mounting a fresh row.
+ * Persisted history rows carry `data-history-index`; in-flight rows from
+ * appendStreamingAssistantRow / engine-stream-mirror do not. After the first
+ * prose token, `msg--awaiting-prose` is removed — remount must still clear those.
+ */
 function removeStaleLiveStreamingRows(mount: HTMLElement): void {
-  for (const row of mount.querySelectorAll('.msg.assistant.msg--awaiting-prose')) {
+  for (const row of mount.querySelectorAll('.msg.assistant:not([data-history-index])')) {
     row.remove();
   }
 }

@@ -1,0 +1,4 @@
+/* Dummy CSS for engine-tsx-hooks boot smoke (must resolve under --import hooks). */
+body {
+  color: inherit;
+}

@@ -1,4 +1,4 @@
-import { appAlert, appConfirm, appPrompt } from './app-dialog';
+﻿import { appAlert, appConfirm, appPrompt } from './app-dialog';
 /**
  * Orchestrate Board View: Kanban, plan panel, controls.
  */
@@ -48,35 +48,33 @@ import {
 } from '../state/chat-groups.ts';
 import { isOomPauseActive } from '../chat/orchestrate/oom-recovery.ts';
 import {
-  activateAfk,
   cancelPendingAfk,
-  continueBoardTask,
   countRunningTaskChats,
-  recoverMergingBoardTask,
   getBoardExecutionMode,
   isBoardRunning,
   isTaskChatActive,
   isTaskChatActiveForStallCheck,
   listRunningBoardTaskSlots,
   moveTaskStatus,
-  moveTaskToNewChat,
-  requeueBoardTask,
   resolveEffectiveMaxConcurrent,
-  restartBoardTask,
-  setBoardExecutionMode,
   setBoardIsolationMode,
   setBoardMaxConcurrent,
-  startBoardAutoRun,
-  startFinalIntegrationTestForPlannerChat,
-  startTask,
   startTaskTestingForPlannerChat,
   startWave,
-  stopBoardAutoRun,
   stopRunningBoardSlot,
   stopTask,
   toggleWaveCollapsed,
   type RunningBoardTaskSlot,
 } from '../state/orchestrate-board-actions.ts';
+import {
+  boardUiRecoverTask,
+  boardUiRequeueTask,
+  boardUiRunFinalTest,
+  boardUiSetAutonomy,
+  boardUiStart,
+  boardUiStartTask,
+  boardUiStop,
+} from '../state/board-command-bridge.ts';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
 import type { SubAgentStatus, RunLifecycle } from '../agents/types';
 import { deriveLifecycleFromStatus } from '../agents/types';
@@ -1065,10 +1063,10 @@ async function selectBoardExecutionModeFromUi(
 ): Promise<void> {
   if (mode === 'afk') {
     if (!await appConfirm(BOARD_AFK_CONFIRM_MESSAGE)) return;
-    activateAfk(group, plannerChat);
+    void boardUiSetAutonomy(group, plannerChat, 'afk');
     return;
   }
-  setBoardExecutionMode(group, mode, plannerChat);
+  void boardUiSetAutonomy(group, plannerChat, mode);
 }
 
 const BOARD_AFK_HINT_VISIBLE_MS = 2500;
@@ -1345,11 +1343,10 @@ function wireBoardHeaderControls(
     runBtn.textContent = running ? 'Stop' : 'Start';
     runBtn.addEventListener('click', () => {
       if (isBoardRunning(group)) {
-        stopBoardAutoRun(group, plannerChat);
+        void boardUiStop(group, plannerChat).then(() => refreshActiveBoardIfMounted());
       } else {
-        startBoardAutoRun(group, plannerChat);
+        void boardUiStart(group, plannerChat).then(() => refreshActiveBoardIfMounted());
       }
-      refreshActiveBoardIfMounted();
     });
     controls.appendChild(runBtn);
   }
@@ -1441,7 +1438,7 @@ function buildPendingAfkBanner(
   enableBtn.className = 'board-btn board-btn--compact board-btn--primary';
   enableBtn.textContent = 'Enable AFK';
   enableBtn.addEventListener('click', () => {
-    activateAfk(group, plannerChat);
+    void boardUiSetAutonomy(group, plannerChat, 'afk');
     refreshActiveBoardIfMounted();
     releaseBoardHeaderFocus();
   });
@@ -1573,7 +1570,7 @@ function buildFinalTestBanner(
       retryBtn.className = 'board-btn board-btn--compact board-btn--primary';
       retryBtn.textContent = 'Re-run final test';
       retryBtn.addEventListener('click', () => {
-        void startFinalIntegrationTestForPlannerChat(plannerChat).then(() =>
+        void boardUiRunFinalTest(group, plannerChat).then(() =>
           refreshActiveBoardIfMounted(),
         );
       });
@@ -1589,7 +1586,7 @@ function buildFinalTestBanner(
   runBtn.className = 'board-btn board-btn--compact board-btn--primary';
   runBtn.textContent = 'Run final integration test';
   runBtn.addEventListener('click', () => {
-    void startFinalIntegrationTestForPlannerChat(plannerChat).then(() =>
+    void boardUiRunFinalTest(group, plannerChat).then(() =>
       refreshActiveBoardIfMounted(),
     );
   });
@@ -1893,11 +1890,11 @@ function buildRunningTaskChip(
         createRunningTaskControlButton('restart', `Restart ${slot.taskId}`, () => {
           if (slot.isFinalTest) {
             void stopRunningBoardSlot(group, slot, plannerChat)
-              .then(() => startFinalIntegrationTestForPlannerChat(plannerChat))
+              .then(() => boardUiRunFinalTest(group, plannerChat))
               .then(() => refreshActiveBoardIfMounted());
             return;
           }
-          void restartBoardTask(group, slot.taskId, plannerChat).then(() =>
+          void boardUiRecoverTask(group, plannerChat, slot.taskId, 'restart').then(() =>
             refreshActiveBoardIfMounted(),
           );
         }),
@@ -1906,7 +1903,7 @@ function buildRunningTaskChip(
     if (!mergingSlot && runningSlotShowsContinue(board, slot)) {
       controls.appendChild(
         createRunningTaskControlButton('continue', `Continue ${slot.taskId}`, () => {
-          void continueBoardTask(group, slot.taskId, plannerChat).then(() =>
+          void boardUiRecoverTask(group, plannerChat, slot.taskId, 'continue').then(() =>
             refreshActiveBoardIfMounted(),
           );
         }),
@@ -1915,7 +1912,7 @@ function buildRunningTaskChip(
     if (!slot.isFinalTest && !mergingSlot) {
       controls.appendChild(
         createRunningTaskControlButton('move', `Move ${slot.taskId} to new chat`, () => {
-          void moveTaskToNewChat(group, slot.taskId, plannerChat).then(() =>
+          void boardUiRecoverTask(group, plannerChat, slot.taskId, 'move_to_new_chat').then(() =>
             refreshActiveBoardIfMounted(),
           );
         }),
@@ -2121,7 +2118,7 @@ function buildStatusActionButtons(
     btn.appendChild(text);
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      void requeueBoardTask(group, task.id, plannerChat).then(() => {
+      void boardUiRequeueTask(group, plannerChat, task.id).then(() => {
         refreshActiveBoardIfMounted();
       });
     });
@@ -2174,19 +2171,19 @@ function buildTaskRecoveryActions(
 
   if (task.status === 'merging') {
     addRecoveryBtn('Reconcile merge', 'forward', () => {
-      void recoverMergingBoardTask(group, task.id, plannerChat);
+      void boardUiRecoverTask(group, plannerChat, task.id, 'reconcile_merge');
     });
     return;
   }
 
   addRecoveryBtn('Restart', 'recycle', () => {
-    void restartBoardTask(group, task.id, plannerChat);
+    void boardUiRecoverTask(group, plannerChat, task.id, 'restart');
   });
   addRecoveryBtn('Continue', 'forward', () => {
-    void continueBoardTask(group, task.id, plannerChat);
+    void boardUiRecoverTask(group, plannerChat, task.id, 'continue');
   });
   addRecoveryBtn('Move to new chat', 'forward', () => {
-    void moveTaskToNewChat(group, task.id, plannerChat);
+    void boardUiRecoverTask(group, plannerChat, task.id, 'move_to_new_chat');
   });
 }
 
@@ -2498,7 +2495,7 @@ function buildTaskCard(
     startBtn.title = atCap ? `Concurrency cap (${cap}) reached` : '';
     startBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      void startTask(group, task.id, plannerChat).then(() => refreshActiveBoardIfMounted());
+      void boardUiStartTask(group, plannerChat, task.id).then(() => refreshActiveBoardIfMounted());
     });
     toolbar.appendChild(startBtn);
   }
@@ -2835,7 +2832,6 @@ function refreshBoardDom(
     syncBoardHeaderStatusBadge(header, headerStatus);
     syncBoardHeaderActivity(header, activity);
   }
-
   const title = root.querySelector('.board-header__title');
   if (title) title.textContent = shortPlanName(planPath);
 
@@ -2905,9 +2901,9 @@ function refreshBoardDom(
         }
         runBtn.addEventListener('click', () => {
           if (isBoardRunning(group)) {
-            stopBoardAutoRun(group, plannerChat);
+            void boardUiStop(group, plannerChat);
           } else {
-            startBoardAutoRun(group, plannerChat);
+            void boardUiStart(group, plannerChat);
           }
           refreshActiveBoardIfMounted();
         });

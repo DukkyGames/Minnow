@@ -65,64 +65,146 @@ The driver modules are TS in `src/`. Precedent: `headless/runner.ts` already run
 
 ---
 
-## 3. Phases (each independently shippable + reversible behind `MINNOW_SERVER_ENGINE` flag)
+## 3. Phases (shipped behind `MINNOW_SERVER_ENGINE`; Phase 4 flips default-on)
 
-### Phase 0 — State sync + single-driver lease (stopgap; ~days)
-Goal: kill passive divergence and active double-run **without moving logic**.
+### Phase 0 — State sync + single-driver lease (stopgap) ✅ Done (MIN-357)
 
-- **Broadcast**: in `writeResource('sessions', …)` (`server/config/middleware.js`), after write,
-  bump a monotonic `rev` and fan out the new state to `/api/session/stream` subscribers.
-- **State SSE endpoint**: new `GET /api/session/stream` (snapshot + `rev`, then full-state or diff on change).
-- **Version guard**: `PUT /api/config/sessions` accepts `If-Match: <rev>`; reject stale writes 409
-  → client re-pulls + reapplies its pending mutation. Prevents last-write-wins clobber.
+Shipped on `henri/min-357-phase-0-state-sync-single-driver-lease-stopgap` (`66856843`), then
+**rebased onto SQLite sessions** for MIN-354 (this branch). Goal: kill passive divergence and
+active double-run **without moving logic**.
+
+- **Broadcast**: after successful sessions **PUT** (`writeWholeSessionState` / JSON write) and
+  **PATCH** (`patchSessionState`), bump a monotonic `rev` and fan out the full state to
+  `/api/session/stream` subscribers (`server/session/publish.js`).
+- **State SSE endpoint**: `GET /api/session/stream` (snapshot + `rev`, then full-state `patch` events).
+- **Version guard**: `PUT` and `PATCH` `/api/config/sessions` accept `If-Match: <rev>` and/or
+  body `expectedRev` / `baseRev` (not schema `baseVersion`); reject stale writes **409** +
+  `X-Session-Rev` → client re-pulls / retries once.
 - **Client reconcile**: subscribe to the stream; when a newer `rev` arrives and the client is **not**
   actively streaming/driving, replace `sessionState` and re-render. `src/state/sessions.ts` +
-  a new `src/state/session-sync.ts`.
-- **Driver lease**: engine tracks `boardDriverId` + heartbeat (`POST /api/session/lease`). Only the
-  lease-holder runs `bootOrchestrateBoardResume` / `ensureAutoDriveSubscription`. Non-holders render
-  the board **read-only** ("driven on another device"). Guard points:
-  `src/chat/orchestrate/board-boot-resume.ts:40`, `resumeBoardExecutionAfterReload`,
-  `startBoardAutoRun`, `autoDelegateNext`.
+  `src/state/session-sync.ts`.
+- **Driver lease (stopgap, later removed)**: Phase 0 temporarily tracked `boardDriverId` +
+  heartbeat via `POST /api/session/lease`. Only the lease-holder ran
+  `bootOrchestrateBoardResume` / `ensureAutoDriveSubscription`; non-holders rendered the board
+  read-only. Guard points lived in `board-boot-resume.ts`, `resumeBoardExecutionAfterReload`,
+  `startBoardAutoRun`, `autoDelegateNext`. **Removed in Phase 4** — the Session Engine is the
+  sole driver; `/api/session/lease` returns `410 LEASE_REMOVED`.
 
-Deliverable: multiple devices stay visually in sync; exactly one drives. No logic moved.
+Deliverable (at Phase 0 ship): multiple devices stayed visually in sync; exactly one drove.
+No logic moved yet. Tests: `test/engine/session-phase0.test.mjs` (now asserts lease removal).
 
-### Phase 1 — Engine skeleton + main-chat sends
-- Create `server/engine/session-engine.js`: load `SessionState` at boot, own it in memory,
-  expose `applyCommand(cmd)` + change events → SSE.
-- Port the **main-chat tool-loop** into the engine by generalizing `headless/runner.ts`. Add what
-  `loop.ts` has and the headless runner lacks: steering (`chat/steer-message`), message queue
-  (`chat/message-queue`), goal eval (`chat/goal/*`), mode switch + client-only tools
-  (`set_chat_mode`, `create_chat_with_mode`, `propose_mode_switch` — currently handled in
-  `src/tools/client.ts:199`).
-- New command `send_message` routes main-chat sends through the engine. Renderer stops calling
-  `runChatTurn` for main chat (behind flag); assistant tokens still stream via `/api/generations`,
-  committed history + chat metadata arrive via the state SSE.
-- Board driver stays in renderer (still leased) this phase.
+### Phase 1 — Engine skeleton + main-chat sends ✅ Done (MIN-359)
 
-### Phase 2 — Move the board scheduler into the engine
-- Port `orchestrate-board-store.ts` (pure) and `orchestrate-board-actions.ts` into the engine.
-  Replace the one `document.getElementById('modelSelect')` read with a value carried on
-  planner/board state (set via a command when the user changes the top-bar model).
-- Re-home the event bus: `subscribeChatStreamEnd` / `src/chat/streaming-state.ts` becomes an
-  **in-process engine event** — the chat loop and the board both live in the engine, so stream-end
-  is a direct callback, not a DOM bus. Re-home heartbeat/stall supervision timers
-  (`agents/controller/wrapper.ts`) into the engine.
-- Board commands via the command API: `board_init`, `board_start`, `board_stop`, `start_task`,
-  `requeue`, `set_autonomy`, `run_final_test`, recovery actions (MIN-222).
-- Retire renderer `board-boot-resume.ts`, `ensureAutoDriveSubscription`,
-  `resumeBoardExecutionAfterReload`; the engine resumes boards on **server** boot.
+Shipped on this branch (`henri/min-354-server-session-engine`). Lives under
+`server/session/` (with Phase 0) to avoid colliding with vector `server/engine/*`.
 
-### Phase 3 — Move the sub-agent controller into the engine
-- Relocate `src/agents/controller/*` to run in the engine process (already Node-compatible;
-  disk persistence + boot reconcile exist in `controller/persistence.ts`). De-DOM `registry.ts`
-  and `wrapper.ts` (a few `emitBoardChange` UI pokes → engine events).
-- Sub-agent live status flows to clients over the state SSE.
+- **Engine core**: [`server/session/engine.js`](../../server/session/engine.js) loads
+  SessionState at boot (sessions-repo), owns it in memory, `applyCommand(cmd)`,
+  persists + publishes via `notifySessionStateWritten` (Phase 0 SSE).
+- **Commands**: `POST /api/session/commands` → 202 `{ rev }` for `send_message`,
+  `stop_generation`, `steer_message`, `enqueue_message`. Flag probe:
+  `GET /api/session/engine` → `{ enabled }`.
+- **Main-chat loop**: [`src/session-engine/main-chat-loop.ts`](../../src/session-engine/main-chat-loop.ts)
+  (tsx-loaded) generalizes headless runner + steer/queue/mode-switch seams.
+  Tokens via `/api/generations`; committed history via SSE.
+- **Flag** `MINNOW_SERVER_ENGINE` (later default-on in Phase 4): composer/main-chat
+  send uses commands; renderer does **not** call `runChatTurn` for main chat.
+  At Phase 1 ship time flag was default **off**; Board stayed renderer-driven (lease
+  stopgap still in place until Phase 4).
+- **Client**: [`src/state/session-commands.ts`](../../src/state/session-commands.ts),
+  [`src/state/server-engine-flag.ts`](../../src/state/server-engine-flag.ts),
+  [`src/chat/engine-stream-mirror.ts`](../../src/chat/engine-stream-mirror.ts).
+- **Ported**: steering (full), message queue (full), mode tools as state mutations
+  (`set_chat_mode` / `create_chat_with_mode` / `propose_mode_switch` → `pendingModeId`),
+  goal post-turn auto-continue seam (simplified; not full eval-agent).
+- **Gaps closed (residual MIN-354)**: attachments/VLM on `send_message` (history
+  placeholders + in-memory turnAttachments → `buildEngineApiMessages`); ask_question
+  pause/resume via `chat.pendingAskQuestion` SSE hint + `answer_question` command
+  (renderer opens existing strip in [`engine-ask-question-mirror.ts`](../../src/chat/engine-ask-question-mirror.ts)).
+- **Remaining gaps vs loop.ts**: archive/context budget, thinking budget, synthesis
+  rounds, full goal evaluator, Reef widget; ask_question strip auto-dismiss on remote
+  stop is best-effort (abort clears park; open modal may need user cancel).
+- **Tests**: `test/engine/session-phase1.test.mjs`,
+  `test/session-engine/loop-helpers.test.mts`,
+  `test/session-engine/attachments-ask-question.test.mts`.
 
-### Phase 4 — Retire renderer driving + cleanup
-- Renderer becomes read-model + commands throughout; remove optimistic mutate-then-PUT for
-  chat/board state (settings-only writes may remain as commands).
-- Remove the driver lease (engine is sole driver by construction).
-- Flip `MINNOW_SERVER_ENGINE` default-on; delete legacy renderer driving paths.
+### Phase 2 — Move the board scheduler into the engine ✅ Done (MIN-360)
+
+Shipped on this branch (`henri/min-354-server-session-engine`) behind `MINNOW_SERVER_ENGINE`
+(default **off** at Phase 2 ship time; flipped default-on in Phase 4).
+
+- **Board host**: [`src/session-engine/board-host.ts`](../../src/session-engine/board-host.ts)
+  aliases engine SessionState into `sessions.ts`, installs the engine turn runner, and
+  resumes `autoRunning` boards on **server** boot (`server/session/board-loader.js` via tsx).
+- **Stream-end bus**: [`src/session-engine/stream-bus.ts`](../../src/session-engine/stream-bus.ts)
+  — in-process; [`streaming-state.ts`](../../src/chat/streaming-state.ts) re-exports for UI.
+  Board task turns await the Phase 1 loop then `notifyChatStreamEnded` (no DOM bus).
+- **Model binding**: board `preferredModelId` / `preferredProviderId` + planner chat fields;
+  `set_model` command; DOM `#modelSelect` only as legacy renderer fallback when preferred unset.
+- **Commands**: `board_init`, `board_start`, `board_stop`, `board_start_task`,
+  `board_requeue_task`, `board_set_autonomy`, `board_run_final_test`, `board_recover_task`
+  (restart / continue / move_to_new_chat / reconcile_merge), `set_model`.
+- **Flag on**: renderer skips `bootOrchestrateBoardResume` / board-driver gate
+  ([`board-driver-gate.ts`](../../src/state/board-driver-gate.ts)); UI dispatches via
+  [`board-command-bridge.ts`](../../src/state/board-command-bridge.ts).
+  Engine main-chat loop re-adds `board_*` / `delegate_tasks` tool defs and executes them
+  in-process via `executeBoardTool` + sync session rebind (kickoff `board_init` works).
+- **Emergency opt-out** (`MINNOW_SERVER_ENGINE=0`): renderer board drive restored.
+  Opt-out does **not** revive the Phase 0 lease (removed in Phase 4).
+- **Gaps closed in Phase 3**: sub-agent controller registry moved to engine (see below).
+  Remaining: concurrent `mutateEngineState` clone vs in-place board mutations can race
+  mid-turn (publishLive + rebind mitigate); engine boot resume does not apply Electron
+  OOM pause throttle (renderer-only marker).
+- **Tests**: `test/engine/session-phase2.test.mjs` (run with css stub + tsx, as in
+  `tsx-loader-mocks`); existing `test/orchestrate/board-flow-e2e.test.mts` still
+  targets board-actions directly (same modules the engine hosts).
+- **Process hooks**: `npm start` / `electron:dev` use
+  `--import ./server/session/engine-tsx-hooks.mjs --import tsx` so board/main-chat
+  `.ts` modules load under Node without setting `MINNOW_TEST`.
+
+### Phase 3 — Move the sub-agent controller into the engine ✅ Done (MIN-361)
+
+Shipped on this branch (`henri/min-354-server-session-engine`) behind `MINNOW_SERVER_ENGINE`
+(default **off** at Phase 3 ship time; flipped default-on in Phase 4).
+
+- **Controller host**: [`src/session-engine/controller-host.ts`](../../src/session-engine/controller-host.ts)
+  activates at **server** boot (`server/session/controller-loader.js`) — runs
+  `initControllerPersistence` + `startWatchdog` once per process (not per renderer).
+  Board host is activated first so `syncBoardTask*` / reports share the engine SessionState alias.
+- **De-DOM**: `wrapper.ts` visibility freeze is browser-only (`typeof document` guard; no tab-hide
+  stalls in Node). `registry.ts` was already DOM-free. `report.ts` already no-ops UI render via
+  `isDomAvailable()`. Live status no longer depends on renderer-local `emitSubAgentRunUpdated` alone.
+- **Live SSE slice**: engine rebuilds `SessionState.liveSubAgentRuns` (compact snapshots) on registry
+  updates ([`live-publish.ts`](../../src/agents/controller/live-publish.ts)) and soft-publishes via
+  Phase 0 `publishLiveEngineState`. Ephemeral — stripped from client PUTs / durable validate path;
+  preserved across engine hard writes.
+- **Commands**: `spawn_sub_agent`, `cancel_sub_agent` on `POST /api/session/commands`
+  ([`controller-commands.ts`](../../src/session-engine/controller-commands.ts)).
+- **Main-chat loop**: in-process `spawn_sub_agent` / `cancel_sub_agent` / `list_sub_agents` /
+  `get_sub_agent_status` (same pattern as board tools).
+- **Client**: when flag on, `getSubAgentRun` / `listActiveSubAgentRuns` read the SSE live slice;
+  spawn/cancel proxy to commands; `session-sync` mirrors remote live rows into
+  `subscribeSubAgentRuns` ([`client-live-mirror.ts`](../../src/agents/controller/client-live-mirror.ts)).
+- **Flag off**: unchanged renderer controller auto-boot + local registry.
+- **Tests**: `test/engine/session-phase3.test.mjs`, `test/agents/controller-host-gate.test.mts`;
+  existing `test/agents/controller-*.test.mts` + `test/sub-agents/**` keep `MINNOW_TEST=1` auto-boot.
+
+### Phase 4 — Retire renderer driving + cleanup ✅ Done (MIN-362)
+
+Shipped on this branch (`henri/min-354-server-session-engine`).
+
+- Renderer is a **read-model + command dispatcher** for chat/board/sub-agent driving
+  (composer → `POST /api/session/commands`; board UI → `board-command-bridge`;
+  spawn/cancel → controller commands). Settings / non-driver session writes may still
+  PATCH/PUT `/api/config/sessions` (not all 173 `scheduleSaveSessions` sites rewritten).
+- **Driver lease deleted**: `server/session/lease.js` gone; `/api/session/lease` returns
+  `410 LEASE_REMOVED`; client heartbeat + remote-driver banner removed.
+- **`MINNOW_SERVER_ENGINE` default ON** (`server/session/flag.js`). Fresh `npm start`
+  boots the engine with no env var. Emergency opt-out: `MINNOW_SERVER_ENGINE=0|false|off|no`
+  restores legacy renderer driving (thin dual path kept for one release cycle).
+- HTML inject + `GET /api/session/engine` reflect default-on.
+- Tests: `test/engine/session-phase0.test.mjs` (lease-removed), phase1–3 updated;
+  `test/agents/controller-host-gate.test.mts` covers default-on / opt-out.
 
 ---
 
@@ -132,23 +214,27 @@ Deliverable: multiple devices stay visually in sync; exactly one drives. No logi
 - `POST /api/session/commands` — `{ type, …payload }`; `202` + `{ rev }`.
 - `GET  /api/session/stream` — SSE: `event: snapshot` then `event: patch` (JSON diff) with `id: <rev>`.
   Supports `Last-Event-ID` / `?sinceRev=` for replay-or-resnapshot.
-- `POST /api/session/lease` — claim/renew driver lease (Phase 0 only; removed in Phase 4).
+- ~~`POST /api/session/lease`~~ — removed in Phase 4 (`410 LEASE_REMOVED`).
 - `PUT /api/config/sessions` — add `If-Match: <rev>` optimistic concurrency (Phase 0).
+- `PATCH /api/config/sessions` — same `If-Match` / `expectedRev` / `baseRev` guard (Phase 0; SQLite adaptation).
 
 ### Commands (initial set)
-`send_message`, `stop_generation`, `steer_message`, `rename_chat`, `delete_chat`,
+`send_message` (optional `attachments` / `historyContent`), `stop_generation`,
+`steer_message`, `enqueue_message`, `answer_question`, `rename_chat`, `delete_chat`,
 `set_active_chat`, `set_view_mode`, `set_model`, `board_init`, `board_start`, `board_stop`,
 `board_start_task`, `board_requeue_task`, `board_set_autonomy`, `board_run_final_test`,
 `board_recover_task`.
 
 ### New/changed modules
-- `server/engine/session-engine.js` (new) — engine core.
-- `server/engine/session-sse.js` (new) — subscriber set + fan-out (reuse `generations/store.js` pattern).
-- `server/engine/commands.js` (new) — command handlers.
-- `src/state/session-sync.ts` (new) — client SSE subscribe + reconcile.
-- `src/state/session-commands.ts` (new) — client command dispatch helpers.
-- Ported into engine: `orchestrate-board-store.ts`, `orchestrate-board-actions.ts`,
-  `agents/controller/*`, generalized `headless/runner.ts` loop.
+- `server/session/engine.js` (Phase 1) — engine core (not `server/engine/`; vector lives there).
+- `server/session/commands.js` (Phase 1) — command handlers.
+- `server/session/loop-loader.js` (Phase 1) — tsx-load main-chat loop.
+- `src/session-engine/main-chat-loop.ts` + `engine-loop-helpers.ts` (Phase 1).
+- `src/state/session-sync.ts` (Phase 0) — client SSE subscribe + reconcile.
+- `src/state/session-commands.ts` (Phase 1) — client command dispatch helpers.
+- `src/state/server-engine-flag.ts` + `src/chat/engine-stream-mirror.ts` (Phase 1).
+- Phase 2/3 ported: board store/actions via board-host; `agents/controller/*` via
+  controller-host + live-publish SSE slice.
 
 ---
 
@@ -183,17 +269,20 @@ Deliverable: multiple devices stay visually in sync; exactly one drives. No logi
 
 ## 7. Testing
 
-- Reuse `test/orchestrate/board-flow-e2e.test.mts` (`driveBoardToConvergence`) against the **engine**
+- [x] Reuse `test/orchestrate/board-flow-e2e.test.mts` (`driveBoardToConvergence`) against the **engine**
   module — logic is ported, not rewritten, so the harness drives the same functions.
-- New: engine command dispatch tests; SSE snapshot/patch/replay (`sinceRev`) tests; version-guard 409
-  tests; driver-lease exclusivity tests (Phase 0).
-- Keep `test/headless/*` green as the loop generalizes.
-- Multi-client integration test: two SSE subscribers + concurrent commands converge to one `rev`.
+- [x] Engine command dispatch tests; SSE snapshot/patch/replay (`sinceRev`) tests; version-guard 409
+  tests; Phase 4 lease-removed assertions (`410 LEASE_REMOVED`).
+- [x] Boot smoke: `test/engine/engine-tsx-hooks.test.mjs` asserts
+  `engine-tsx-hooks.mjs` self-registers on `--import` and resolves a dummy `.css` (live boot
+  failed when hooks exported `resolve`/`load` without `register`).
+- [x] Keep `test/headless/*` green as the loop generalizes.
+- [ ] Multi-client integration test: two SSE subscribers + concurrent commands converge to one `rev`.
 
 ---
 
 ## 8. Recommended sequencing
 
-Ship **Phase 0 first** — it delivers correct multi-device (no divergence, no double-run) with ~2
-core files + a lease, fully reversible, and unblocks daily use while Phases 1–4 land the clean
-server-owned architecture. Phases 1–4 are each shippable behind `MINNOW_SERVER_ENGINE`.
+Phases 0–4 are complete on this branch. Production default is engine-on; use
+`MINNOW_SERVER_ENGINE=0` only as an emergency rollback. Full deletion of the opt-out dual
+path can wait one release cycle after Phase 4 stabilizes.
