@@ -208,6 +208,10 @@ import { getWorkspacePath } from './state/workspace.ts';
 import { bindWorkspacePathForToolCache } from './tools/result-cache.ts';
 import { scheduleMarkAppReady } from './boot/app-ready';
 import { installRendererDiagnostics } from './boot/diagnostics';
+import {
+  initElectronTrayBridge,
+  markElectronTrayBridgeAppReady,
+} from './electron-tray-bridge';
 import { initNotificationAudioUnlock } from './notifications/sound';
 import { initOsPageBridge, isOsShellEnabled } from './os/page-bridge';
 import { initOsRouter } from './os/router';
@@ -274,6 +278,7 @@ export async function initApp(): Promise<void> {
   initGoalEvalUi();
   initLoopStatusUi();
   initAgentActivityPanel();
+  initElectronTrayBridge();
   fillSystemPromptPresetSelect();
   await loadSystemPromptSettings();
   fillToolsSection();
@@ -410,6 +415,7 @@ export async function initApp(): Promise<void> {
   if (sidebarBackdrop) sidebarBackdrop.tabIndex = -1;
   if (fileSidebarBackdrop) fileSidebarBackdrop.tabIndex = -1;
   updateStatsExpandPreview();
+  markElectronTrayBridgeAppReady();
 }
 
 /** Start init once the document is ready (module scripts often run after `load`). */

@@ -8,6 +8,7 @@ import type { CdpPickedElement } from './preview-cdp-adapt.js';
 import type { PreviewContextMenuOpenPayload } from './preview-context-menu.js';
 import type { PreviewContextMenuRole } from './preview-context-menu-items.js';
 import type { UpdaterChannel, UpdaterStatus } from './updater-core.js';
+import type { TrayDesktopState, TrayRendererCommand, TrayStatusSnapshot } from './tray-types.js';
 
 /** Preview bounds in CSS pixels relative to the host window content area. */
 export interface PreviewBounds {
@@ -366,6 +367,27 @@ const minnowBridge = {
       ipcRenderer.invoke(channels.DIAGNOSTICS_OOM_PAUSE),
     clearOomPause: (): Promise<void> =>
       ipcRenderer.invoke(channels.DIAGNOSTICS_CLEAR_OOM_PAUSE),
+  },
+  tray: {
+    getDesktopState: (): Promise<TrayDesktopState> =>
+      ipcRenderer.invoke(channels.TRAY_GET_DESKTOP_STATE),
+    setCloseToTray: (enabled: boolean): Promise<TrayDesktopState> =>
+      ipcRenderer.invoke(channels.TRAY_SET_CLOSE_TO_TRAY, enabled),
+    setLaunchAtStartup: (enabled: boolean): Promise<TrayDesktopState> =>
+      ipcRenderer.invoke(channels.TRAY_SET_LAUNCH_AT_STARTUP, enabled),
+    refreshCloseToTray: (): Promise<TrayDesktopState> =>
+      ipcRenderer.invoke(channels.TRAY_REFRESH_CLOSE_TO_TRAY),
+    publishStatus: (status: TrayStatusSnapshot): Promise<TrayStatusSnapshot> =>
+      ipcRenderer.invoke(channels.TRAY_PUBLISH_STATUS, status),
+    onCommand: (callback: (command: TrayRendererCommand) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, command: TrayRendererCommand) => {
+        callback(command);
+      };
+      ipcRenderer.on(channels.TRAY_COMMAND, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.TRAY_COMMAND, handler);
+      };
+    },
   },
 };
 

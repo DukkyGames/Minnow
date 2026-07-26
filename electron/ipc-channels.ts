@@ -103,3 +103,16 @@ export const WINDOW_IS_MAXIMIZED = 'minnow:window:is-maximized';
 export const WINDOW_RESTORE_FOCUS = 'minnow:window:restore-focus';
 /** Main → renderer: shell window maximized state changed. */
 export const WINDOW_MAXIMIZED_CHANGED = 'minnow:window:maximized-changed';
+
+/** Renderer → main: read desktop shell state (close-to-tray + launch-at-startup). */
+export const TRAY_GET_DESKTOP_STATE = 'minnow:tray:get-desktop-state';
+/** Renderer → main: persist close-to-tray preference. */
+export const TRAY_SET_CLOSE_TO_TRAY = 'minnow:tray:set-close-to-tray';
+/** Renderer → main: set OS launch-at-startup login item. */
+export const TRAY_SET_LAUNCH_AT_STARTUP = 'minnow:tray:set-launch-at-startup';
+/** Renderer → main: publish agent/model status for the tray menu. */
+export const TRAY_PUBLISH_STATUS = 'minnow:tray:publish-status';
+/** Renderer → main: re-read close-to-tray from config.json. */
+export const TRAY_REFRESH_CLOSE_TO_TRAY = 'minnow:tray:refresh-close-to-tray';
+/** Main → renderer: tray menu action (new chat, settings, unload models). */
+export const TRAY_COMMAND = 'minnow:tray:command';

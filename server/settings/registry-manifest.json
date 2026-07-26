@@ -43,6 +43,71 @@
     ]
   },
   {
+    "key": "general.desktop",
+    "label": "Desktop app",
+    "description": "Keep Minnow running in the system tray after closing the window and launch at OS sign-in.",
+    "keywords": [
+      "tray",
+      "system tray",
+      "background",
+      "startup",
+      "login",
+      "close",
+      "quit",
+      "minimize"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
+    "key": "general.desktop.closeToTray",
+    "label": "Keep running after close",
+    "description": "Hide to the system tray instead of quitting when you close the window.",
+    "keywords": [
+      "tray",
+      "background",
+      "hide",
+      "minimize"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "meta",
+    "path": "desktopShell.closeToTray",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
+    "key": "general.desktop.launchAtStartup",
+    "label": "Launch at startup",
+    "description": "Open Minnow automatically when you sign in to this computer.",
+    "keywords": [
+      "login",
+      "boot",
+      "sign in",
+      "windows startup"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
     "key": "general.notifications",
     "label": "Notifications",
     "description": "Menubar bell when background chats, tasks, or jobs need attention.",
@@ -591,6 +656,73 @@
     "writable": false,
     "refreshAreas": [
       "apps"
+    ]
+  },
+  {
+    "key": "apps.issues.types",
+    "label": "Issue types",
+    "description": "Customize issue type labels and ids.",
+    "keywords": [
+      "issue types",
+      "bug",
+      "task",
+      "idea",
+      "taxonomy"
+    ],
+    "category": "apps",
+    "area": "issues",
+    "storage": "resource",
+    "path": "types",
+    "resource": "issues-taxonomy",
+    "type": "json",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "issues"
+    ]
+  },
+  {
+    "key": "apps.issues.statuses",
+    "label": "Issue statuses",
+    "description": "Workflow statuses, board columns, and semantic roles.",
+    "keywords": [
+      "issue statuses",
+      "workflow",
+      "board columns",
+      "triage",
+      "review"
+    ],
+    "category": "apps",
+    "area": "issues",
+    "storage": "resource",
+    "path": "statuses",
+    "resource": "issues-taxonomy",
+    "type": "json",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "issues"
+    ]
+  },
+  {
+    "key": "apps.issues.priorities",
+    "label": "Issue priorities",
+    "description": "Priority levels for issues.",
+    "keywords": [
+      "priorities",
+      "urgent",
+      "severity"
+    ],
+    "category": "apps",
+    "area": "issues",
+    "storage": "resource",
+    "path": "priorities",
+    "resource": "issues-taxonomy",
+    "type": "json",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "issues"
     ]
   },
   {
@@ -1980,6 +2112,29 @@
     "type": "string",
     "sensitivity": "normal",
     "writable": false,
+    "refreshAreas": [
+      "diagnostics"
+    ]
+  },
+  {
+    "key": "advanced.diagnostics.fileErrorsToIssues",
+    "label": "File renderer errors to Issues",
+    "description": "When enabled, uncaught renderer errors create bug cards in the Issues app (off by default).",
+    "keywords": [
+      "issues",
+      "bug",
+      "crash",
+      "auto-file",
+      "tracker",
+      "renderer"
+    ],
+    "category": "advanced",
+    "area": "diagnostics",
+    "storage": "browser",
+    "path": "fileErrorsToIssues",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
     "refreshAreas": [
       "diagnostics"
     ]
@@ -3499,11 +3654,11 @@
     ]
   },
   {
-    "key": "integrations.tools.permission.bug_add",
-    "label": "Tool permission: bug_add",
-    "description": "Permission mode for the bug_add tool (off, ask, or full).",
+    "key": "integrations.tools.permission.issue_add",
+    "label": "Tool permission: issue_add",
+    "description": "Permission mode for the issue_add tool (off, ask, or full).",
     "keywords": [
-      "bug_add",
+      "issue_add",
       "permission",
       "tools"
     ],
@@ -3511,7 +3666,7 @@
     "area": "tools",
     "storage": "resource",
     "resource": "tools",
-    "path": "permissions.default.bug_add",
+    "path": "permissions.default.issue_add",
     "type": "enum",
     "allowedValues": [
       "off",
@@ -3525,11 +3680,11 @@
     ]
   },
   {
-    "key": "integrations.tools.permission.bug_update",
-    "label": "Tool permission: bug_update",
-    "description": "Permission mode for the bug_update tool (off, ask, or full).",
+    "key": "integrations.tools.permission.issue_update",
+    "label": "Tool permission: issue_update",
+    "description": "Permission mode for the issue_update tool (off, ask, or full).",
     "keywords": [
-      "bug_update",
+      "issue_update",
       "permission",
       "tools"
     ],
@@ -3537,7 +3692,7 @@
     "area": "tools",
     "storage": "resource",
     "resource": "tools",
-    "path": "permissions.default.bug_update",
+    "path": "permissions.default.issue_update",
     "type": "enum",
     "allowedValues": [
       "off",
@@ -3551,11 +3706,11 @@
     ]
   },
   {
-    "key": "integrations.tools.permission.bug_get_state",
-    "label": "Tool permission: bug_get_state",
-    "description": "Permission mode for the bug_get_state tool (off, ask, or full).",
+    "key": "integrations.tools.permission.issue_get_state",
+    "label": "Tool permission: issue_get_state",
+    "description": "Permission mode for the issue_get_state tool (off, ask, or full).",
     "keywords": [
-      "bug_get_state",
+      "issue_get_state",
       "permission",
       "tools"
     ],
@@ -3563,7 +3718,59 @@
     "area": "tools",
     "storage": "resource",
     "resource": "tools",
-    "path": "permissions.default.bug_get_state",
+    "path": "permissions.default.issue_get_state",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.issue_link",
+    "label": "Tool permission: issue_link",
+    "description": "Permission mode for the issue_link tool (off, ask, or full).",
+    "keywords": [
+      "issue_link",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.issue_link",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.issue_delete",
+    "label": "Tool permission: issue_delete",
+    "description": "Permission mode for the issue_delete tool (off, ask, or full).",
+    "keywords": [
+      "issue_delete",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.issue_delete",
     "type": "enum",
     "allowedValues": [
       "off",

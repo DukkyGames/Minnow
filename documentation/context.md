@@ -12,7 +12,7 @@ Minnow is a **local-first AI workspace**: a **Vite + TypeScript SPA**, a **Node 
 
 | Layer | Role |
 |-------|------|
-| **Electron** (`electron/`) | Desktop window, frameless chrome, `WebContentsView` in-app browser (`browser_*`), packaged in-process server |
+| **Electron** (`electron/`) | Desktop window, frameless chrome, system tray (close-to-tray default), `WebContentsView` in-app browser (`browser_*`), packaged in-process server |
 | **SPA** (`src/`, `index.html`) | MinnowOS shell, Code workspace, chat, modes, tools loop |
 | **Tool server** (`server.js`, `server/`) | Vite dev host, `/api/*`, file/git/shell tools, generations SSE, persistence under `~/.minnow` |
 
@@ -460,6 +460,7 @@ Multi-provider registry: `~/.minnow/providers/`. UI: Models app → Providers. C
 - **Package:** `npm run package` → `release/` (NSIS on Windows).
 - **Preview browser:** requires Electron (`window.minnow.preview`); hidden in plain browser tabs.
 - **Auto-update:** GitHub Releases via `electron-updater` (packaged installs); Settings → General → App updates.
+- **System tray (close-to-tray):** Closing the main window hides Minnow to the tray by default (`config.json` → `desktopShell.closeToTray`, default `true`). Tray menu: Open, New chat, agent/model status, unload local models, Settings, launch at startup, Quit. Launch-at-startup is authoritative in Electron (`app.getLoginItemSettings()`), not duplicated in config. Modules: [`electron/tray.ts`](../electron/tray.ts), [`electron/tray-menu-template.ts`](../electron/tray-menu-template.ts), [`src/electron-tray-bridge.ts`](../src/electron-tray-bridge.ts), Settings → General → Desktop app ([`src/ui/settings-desktop-shell.ts`](../src/ui/settings-desktop-shell.ts)). Windows + macOS only; Linux keeps standard close behavior.
 - **In-app dialogs:** [`src/ui/app-dialog.ts`](../src/ui/app-dialog.ts) replaces blocking native `alert` / `confirm` / `prompt` in the Electron shell with Minnow-styled modals (`installAppDialogs()` at boot; call sites use `await appConfirm()` / `appAlert()` / `appPrompt()`). Overlay z-index `100030` keeps dialogs above shell chrome. Do not use synchronous `window.confirm()` in Electron — it cannot block on custom UI without freezing the renderer.
 
 ---
