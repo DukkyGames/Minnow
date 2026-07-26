@@ -86,6 +86,8 @@ async function runChatTurnForStage(
     // skillBody + superPlanStage tagging stay renderer-only until the engine ports them.
     if (isServerEngineEnabled()) {
       const text = skillId ? `/${skillId} ${userText}` : userText;
+      const titleSeed = chat.superPlan?.prompt?.trim() || userText;
+      const shouldScheduleTitle = isFirstUserMessagePending(chat);
       await dispatchSendMessageAndAwaitIdle({
         chatId: chat.id,
         text,
@@ -94,6 +96,14 @@ async function runChatTurnForStage(
         modelId: chat.modelId,
         providerId: chat.providerId,
       });
+      // Turn already settled — schedule immediately (no second idle wait).
+      if (shouldScheduleTitle && titleSeed.trim()) {
+        const { scheduleChatTitleGeneration } = await import('../titles/schedule');
+        scheduleChatTitleGeneration(chat.id, titleSeed, {
+          modelId: chat.modelId || undefined,
+          providerId: chat.providerId || undefined,
+        });
+      }
       return 'engine';
     }
 

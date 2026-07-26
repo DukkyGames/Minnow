@@ -166,4 +166,38 @@ describe('stream-chat-dom remount', { concurrency: false }, () => {
       STREAM_LABEL_GENERATING,
     );
   });
+
+  test('remount works for engine mirrors without streamingChatIds', async () => {
+    setupDom();
+    const chat = createEmptyChatObject('');
+    chat.id = 'chat-engine-mirror';
+    chat.history.push({ role: 'user', content: 'hi' });
+    chat.engineTurnActive = true;
+    chat.currentGenerationId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    // Engine path intentionally skips streamingChatIds.
+    assert.equal(appState.streamingChatIds.has(chat.id), false);
+    setSidebarStreamPhase('generating', chat.id);
+
+    let remounted = false;
+    registerStreamDomRemount(chat.id, () => {
+      remounted = true;
+    });
+
+    renderChatFromHistory(chat);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(remounted, 'engine remount listener must run without streamingChatIds');
+
+    const label = document
+      .getElementById('chatArea')
+      ?.querySelector('.stream-status__label');
+    assert.equal(label?.textContent, STREAM_LABEL_GENERATING);
+  });
 });

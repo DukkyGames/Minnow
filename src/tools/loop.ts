@@ -85,6 +85,7 @@ import {
 } from '../markdown/renderer';
 import {
   isFirstUserMessagePending,
+  scheduleChatTitleAfterEngineTurn,
   scheduleChatTitleGeneration,
 } from '../chat/titles/schedule';
 import {
@@ -2512,6 +2513,11 @@ export interface SendProgrammaticChatTextOptions {
   slashInput?: string;
   titleSeed?: string;
   deferTitleUntilTurnEnd?: boolean;
+  /**
+   * When false, skip auto-title (e.g. onboarding kickoff). Default: first user message.
+   * Used by the Session Engine path (renderer `runChatTurn` uses shouldScheduleTitle instead).
+   */
+  shouldScheduleTitle?: boolean;
   ownsGlobalStreaming?: boolean;
   /** Report status errors (defaults to setStatus). */
   reportStatus?: (level: 'ok' | 'err', message: string) => void;
@@ -2546,6 +2552,14 @@ export async function sendProgrammaticChatText(
       const systemPrompt = (
         document.getElementById('systemPrompt') as HTMLTextAreaElement | null
       )?.value?.trim();
+      // Capture before send_message — SSE will append the user row and clear "first message".
+      const shouldScheduleTitle =
+        options.shouldScheduleTitle ?? isFirstUserMessagePending(chat);
+      const titleSeed =
+        options.titleSeed?.trim() ||
+        text.trim() ||
+        attachments[0]?.name ||
+        'Attachment';
       try {
         report('spin', 'Sending…');
         await dispatchSendMessage({
@@ -2564,6 +2578,12 @@ export async function sendProgrammaticChatText(
         if (attachments.length > 0) clearAttachments();
         const { syncEngineStreamMirrors } = await import('../chat/engine-stream-mirror');
         syncEngineStreamMirrors();
+        // Engine path never reaches runChatTurn's finally — schedule titles here.
+        scheduleChatTitleAfterEngineTurn(chat.id, titleSeed, {
+          shouldSchedule: shouldScheduleTitle,
+          modelId: binding.modelId || chat.modelId || undefined,
+          providerId: binding.providerId || chat.providerId || undefined,
+        });
       } catch (err) {
         report('err', err instanceof Error ? err.message : String(err));
       }
@@ -2881,6 +2901,13 @@ export async function sendMessageWithTools(
     )?.value?.trim();
     // Same history string format as the renderer loop (placeholders + file blocks).
     const historyContent = buildHistoryUserContent(peekUserText || effectiveRawText, validAttachments);
+    // Capture before send_message — SSE will append the user row and clear "first message".
+    const shouldScheduleTitle = isFirstUserMessagePending(chat);
+    const titleSeed =
+      peekUserText.trim() ||
+      effectiveRawText.trim() ||
+      validAttachments[0]?.name ||
+      'Attachment';
     try {
       setStatus('spin', 'Sending…');
       await dispatchSendMessage({
@@ -2900,6 +2927,12 @@ export async function sendMessageWithTools(
       // Tokens + committed history arrive via generations SSE + Phase 0 session stream.
       const { syncEngineStreamMirrors } = await import('../chat/engine-stream-mirror');
       syncEngineStreamMirrors();
+      // Engine path never reaches runChatTurn's finally — schedule titles here.
+      scheduleChatTitleAfterEngineTurn(chat.id, titleSeed, {
+        shouldSchedule: shouldScheduleTitle,
+        modelId: binding.modelId || chat.modelId || undefined,
+        providerId: binding.providerId || chat.providerId || undefined,
+      });
     } catch (err) {
       setStatus('err', err instanceof Error ? err.message : String(err));
     }

@@ -74,7 +74,7 @@ function startKickoffIfNeeded(chat: Chat): void {
   kickoffStarted = true;
   // Engine default-on: dispatch send_message (suppressUserEcho is renderer-only).
   const kickoff = isServerEngineEnabled()
-    ? sendProgrammaticChatText(chat, KICKOFF_TEXT)
+    ? sendProgrammaticChatText(chat, KICKOFF_TEXT, { shouldScheduleTitle: false })
     : runChatTurn({
         chat,
         pushUser: true,

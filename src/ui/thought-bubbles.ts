@@ -81,6 +81,17 @@ export class ThoughtBubbleController {
     }
   }
 
+  /**
+   * After history paint remounts the assistant row, revive the live thinking
+   * panel when we already accumulated reasoning tokens.
+   */
+  ensureLiveStageVisible(): void {
+    if (this.disposed) return;
+    if (this.getSegments().length === 0) return;
+    this.ensureThinkingPanel();
+    this.syncFlowContent();
+  }
+
   /** Update the muted elapsed suffix on the live collapsed row. */
   setThinkingElapsed(ms: number | null): void {
     if (this.disposed) return;
