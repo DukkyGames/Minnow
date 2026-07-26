@@ -11,6 +11,7 @@
  *
  * Remaining gaps vs full loop.ts:
  * - No archive/context-budget policy, thinking budget, or synthesis rounds
+ * - Thinking/reasoning is captured for Chat.history (`thinking`, `thinkingDurationMs`)
  * - Goal evaluator is a simplified auto-continue (no full eval-agent tool suite)
  * - propose_mode_switch queues pendingModeId (no ask_question modal for handoff)
  * - browser_* remain unavailable server-side (same as headless)
@@ -24,6 +25,10 @@ import {
   type StreamMetaAccumulator,
 } from '../api/chat';
 import {
+  EngineReasoningCapture,
+  engineReasoningHistoryFields,
+} from './engine-reasoning-capture.ts';
+import {
   cancelGeneration,
   createGeneration,
   subscribeToGeneration,
@@ -33,10 +38,9 @@ import {
   executeHeadlessTool,
   getHeadlessToolDefinitions,
 } from '../headless/execute-tool';
-import { installHeadlessFetch, resolveHeadlessToken } from '../headless/server-context';
+import { bootstrapHeadlessNodeRuntime, resolveHeadlessToken } from '../headless/server-context';
 import { runHeadlessToolBatch } from '../tools/headless-tool-batch';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
-import { detectConfigServer } from '../config/storage-mode';
 import { detectLocalServer } from '../tools/client';
 import { ensureToolConfigReady } from '../tools/config';
 import { getActiveProvider } from '../providers/store';
@@ -195,6 +199,7 @@ async function streamEngineTurn(
   finishReason: string | undefined;
   toolCalls: ReturnType<typeof finalizeToolCalls>;
   generationId: string;
+  reasoning: ReturnType<EngineReasoningCapture['finalize']>;
 }> {
   const { generationId } = await createGeneration(providerId, body, {
     persist: true,
@@ -206,10 +211,12 @@ async function streamEngineTurn(
   let fullText = '';
   let streamMeta: StreamMetaAccumulator = {};
   let toolAcc: ToolCallAccumulator = {};
+  const reasoningCapture = new EngineReasoningCapture();
 
   function handleChunk(chunk: ChatCompletionChunk): void {
     streamMeta = mergeStreamMeta(streamMeta, chunk);
     toolAcc = mergeToolCallDelta(toolAcc, chunk);
+    reasoningCapture.onChunk(chunk);
     const delta = extractStreamDelta(chunk);
     if (delta) fullText += delta;
   }
@@ -251,6 +258,7 @@ async function streamEngineTurn(
     finishReason,
     toolCalls: finalizeToolCalls(toolAcc),
     generationId,
+    reasoning: reasoningCapture.finalize(),
   };
 }
 
@@ -375,9 +383,7 @@ export async function runEngineMainChatTurn(
   const deps = options.deps ?? (await defaultDeps());
   const baseUrl = deps.baseUrl ?? 'http://127.0.0.1:9473';
   const token = deps.token ?? resolveHeadlessToken();
-  installHeadlessFetch(baseUrl, token);
-
-  await detectConfigServer();
+  await bootstrapHeadlessNodeRuntime(baseUrl, token);
   await detectLocalServer();
   await ensureToolConfigReady();
 
@@ -468,15 +474,27 @@ export async function runEngineMainChatTurn(
         },
       );
 
+      const reasoningFields = engineReasoningHistoryFields(turnResult.reasoning);
+      const hasThinking = (reasoningFields.thinking?.length ?? 0) > 0;
+      const prose = turnResult.fullText.trim();
+
       if (turnResult.toolCalls.length === 0) {
-        await deps.mutateChat(options.chatId, (c) => {
-          c.history.push({
-            role: 'assistant',
-            content: turnResult.fullText.trim(),
+        if (prose || hasThinking) {
+          await deps.mutateChat(options.chatId, (c) => {
+            c.history.push({
+              role: 'assistant',
+              content: prose,
+              ...reasoningFields,
+            });
+            c.currentGenerationId = undefined;
+            c.engineTurnActive = false;
           });
-          c.currentGenerationId = undefined;
-          c.engineTurnActive = false;
-        });
+        } else {
+          await deps.mutateChat(options.chatId, (c) => {
+            c.currentGenerationId = undefined;
+            c.engineTurnActive = false;
+          });
+        }
         break;
       }
 
@@ -485,6 +503,7 @@ export async function runEngineMainChatTurn(
           role: 'assistant',
           content: turnResult.fullText || null,
           tool_calls: turnResult.toolCalls,
+          ...reasoningFields,
         });
       });
 

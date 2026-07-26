@@ -52,6 +52,13 @@ export function createAuthMiddleware() {
       return;
     }
 
+    // Loopback-only bootstrap: same trust model as injecting the token into index.html.
+    // Lets an open SPA tab recover after a dev-server restart without a full reload.
+    if (url.pathname === '/api/auth/session-token' && req.method === 'GET') {
+      sendJson(res, 200, { token: getSessionToken() });
+      return;
+    }
+
     const token = extractToken(req, url);
     if (!timingSafeEqualToken(token, getSessionToken())) {
       sendJson(res, 401, { error: 'Unauthorized' });

@@ -9,9 +9,9 @@ import { Window } from 'happy-dom';
 const { setSessionStateForTests, createEmptyChatObject } = await import(
   '../../src/state/sessions.ts'
 );
-const { renderHub, teardownHub, isHubMounted, HUB_ROOT_ID } = await import(
-  '../../src/ui/hub.ts'
-);
+const { renderHub, teardownHub, isHubMounted, isHubMountedForChat, HUB_ROOT_ID } =
+  await import('../../src/ui/hub.ts');
+const { renderChatFromHistory } = await import('../../src/ui/messages.ts');
 
 let domWindow: Window | null = null;
 
@@ -33,6 +33,7 @@ function setupDom(): void {
       </div>
     </div>
   `;
+  teardownHub();
 }
 
 afterEach(() => {
@@ -64,5 +65,29 @@ describe('hub teardown', () => {
       document.getElementById(HUB_ROOT_ID)?.querySelector('.hub-composer-slot .input-bar'),
       'composer stays inside hub slot after remount',
     );
+  });
+
+  test('renderChatFromHistory skips hub remount for the same empty chat', () => {
+    setupDom();
+    const chat = createEmptyChatObject('test-model');
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      chats: [chat],
+      sidebarCollapsed: false,
+    });
+
+    renderHub(chat);
+    const hubRoot = document.getElementById(HUB_ROOT_ID);
+    assert.ok(hubRoot);
+
+    const input = document.getElementById('msgInput') as HTMLTextAreaElement;
+    input.value = 'typing without losing focus';
+    input.focus();
+
+    renderChatFromHistory(chat);
+    assert.equal(document.getElementById(HUB_ROOT_ID), hubRoot, 'hub root is not replaced');
+    assert.equal(isHubMountedForChat(chat.id), true);
+    assert.equal(input.value, 'typing without losing focus');
   });
 });

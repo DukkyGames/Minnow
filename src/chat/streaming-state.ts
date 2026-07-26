@@ -6,7 +6,7 @@
  */
 
 import { expertsPageOpen, streamingChatIds } from '../app-state';
-import { getActiveChat } from '../state/sessions';
+import { findChatById, getActiveChat } from '../state/sessions';
 import { getForegroundAppId } from '../os/instances';
 import { isOrchestratePlanScreenSuppressingChatDom } from '../ui/orchestrate-plan-screen';
 import {
@@ -43,6 +43,21 @@ export function isChatStreaming(chatId: string): boolean {
 /** True when the active sidebar chat is the one currently streaming. */
 export function isActiveChatStreaming(): boolean {
   return streamingChatIds.has(getActiveChat().id);
+}
+
+/** True when the Session Engine owns an in-flight turn for this chat. */
+export function isChatEngineTurnActive(chatId: string): boolean {
+  return Boolean(findChatById(chatId)?.engineTurnActive);
+}
+
+/** True when the active chat has an engine-owned turn in flight. */
+export function isActiveChatEngineTurnActive(): boolean {
+  return isChatEngineTurnActive(getActiveChat().id);
+}
+
+/** Renderer stream or engine turn — use for composer stop/queue affordances. */
+export function isActiveChatBusy(): boolean {
+  return isActiveChatStreaming() || isActiveChatEngineTurnActive();
 }
 
 /** Concurrent streams are allowed — board cap handles orchestrate task limits. */

@@ -9,7 +9,11 @@
 
 import { streamingChatIds } from '../app-state';
 import { withSessionToken } from '../api/session-token';
-import { subscribeChatStreamEnd } from '../chat/streaming-state';
+import {
+  isActiveChatEngineTurnActive,
+  notifyChatStreamEnded,
+  subscribeChatStreamEnd,
+} from '../chat/streaming-state';
 import { isServerStorageMode } from '../config/storage-mode';
 import { reportBackgroundError } from '../boot/report-background-error';
 import {
@@ -21,7 +25,8 @@ import {
 } from './sessions';
 import { emitBoardChange } from './orchestrate-board-events';
 import { renderSidebar } from '../ui/sidebar';
-import { renderChatFromHistory } from '../ui/messages';
+import { renderChatInForegroundShell } from '../ui/messages';
+import { syncComposerFromStreamingState } from '../ui/composer-send';
 import { isBoardRunning } from './orchestrate-board-store';
 import {
   canDriveOrchestrateBoard as canDriveFromGate,
@@ -46,6 +51,8 @@ let streamEndUnsub: (() => void) | null = null;
  * event is lost and the client stays permanently stale.
  */
 let pendingRemote: { rev: number; state: unknown } | null = null;
+/** Track engine-turn edges so we can fire stream-end + composer sync when a turn settles. */
+let prevActiveEngineTurnActive = false;
 
 /** True when this client/process may run board auto-drive / delegation. */
 export function canDriveOrchestrateBoard(): boolean {
@@ -76,8 +83,16 @@ function shouldSkipRemoteReconcile(): boolean {
 async function refreshUiAfterRemoteSession(): Promise<void> {
   if (!sessionState) return;
   try {
+    const active = getActiveChat();
+    const engineTurnActive = isActiveChatEngineTurnActive();
     renderSidebar();
-    renderChatFromHistory(getActiveChat());
+    // Paint the visible transcript shell (desktop / chat app / code), not always #chatArea.
+    renderChatInForegroundShell(active);
+    if (prevActiveEngineTurnActive && !engineTurnActive) {
+      notifyChatStreamEnded(active.id);
+    }
+    prevActiveEngineTurnActive = engineTurnActive;
+    syncComposerFromStreamingState();
     // Engine mode: subscribe to generation token streams from currentGenerationId.
     const { syncEngineStreamMirrors } = await import('../chat/engine-stream-mirror');
     syncEngineStreamMirrors();
@@ -236,4 +251,5 @@ export function resetSessionSyncForTests(): void {
   shutdownSessionSync();
   syncInitialized = false;
   pendingRemote = null;
+  prevActiveEngineTurnActive = false;
 }

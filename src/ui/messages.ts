@@ -1,4 +1,10 @@
-import { isHubMounted, renderHub, refreshHubLiveData, teardownHub } from './hub';
+import {
+  isHubMounted,
+  isHubMountedForChat,
+  renderHub,
+  refreshHubLiveData,
+  teardownHub,
+} from './hub';
 import { isOrchestrateHubMounted, teardownOrchestrateHub } from './orchestrate-hub';
 import { teardownCodeBrainMapBeforeChatPaint } from './code-brain-map';
 import { teardownIssuesEmbedBeforeChatPaint } from './issues-page';
@@ -53,6 +59,7 @@ import {
   getActiveChatMountElement,
   isChatAppForeground,
   isCodeChatMount,
+  isEmailAssistantForeground,
   resolveChatMount,
   runWithChatMount,
   shouldPaintDesktopChatSurface,
@@ -217,7 +224,13 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   clearSubAgentCardDomRegistry();
   if (!chat.history.length) {
     if (codeMount) {
-      renderHub(chat);
+      // Session sync / sidebar refresh can repaint the active chat while the user
+      // is typing on the hub — refresh metrics in place instead of remounting.
+      if (isHubMountedForChat(chat.id)) {
+        refreshHubLiveData();
+      } else {
+        renderHub(chat);
+      }
       // Sub-agent cards mount in the transcript only (see sub-agent-cards.ts).
     } else {
       area.innerHTML = '';
@@ -422,6 +435,13 @@ export function renderChatInForegroundShell(chat: Chat): void {
   if (isChatAppForeground()) {
     renderChatFromHistory(chat, '#chatAppMessageCol');
     return;
+  }
+  if (isEmailAssistantForeground()) {
+    const emailCol = document.getElementById('emailAssistantMessageCol');
+    if (emailCol) {
+      renderChatFromHistory(chat, emailCol);
+      return;
+    }
   }
   renderChatFromHistory(chat);
 }

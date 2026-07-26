@@ -10,6 +10,11 @@ import connect from 'connect';
 import sirv from 'sirv';
 import { importServerModule } from './server-import.js';
 
+declare global {
+  // Set when this process hosts the tool server (Session Engine in-process tools).
+  var __MINNOW_IN_PROCESS_TOOL_HOST__: boolean | undefined;
+}
+
 /** True for GET/HEAD requests that should receive the SPA's index.html (mirrors sirv's `single: true` fallback heuristic). */
 function isHtmlNavigationRequest(req: http.IncomingMessage): boolean {
   if (req.method !== 'GET' && req.method !== 'HEAD') return false;
@@ -68,6 +73,9 @@ export async function startInProcessServer(): Promise<InProcessServerHandle> {
   ]);
 
   const connectApp = connect();
+
+  // Session Engine tool loop can invoke handlers in-process (no HTTP auth round-trip).
+  globalThis.__MINNOW_IN_PROCESS_TOOL_HOST__ = true;
 
   // Register /api/* handlers before the SPA fallback (same order as server.js + Vite).
   applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPathAccess });

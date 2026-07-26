@@ -26,6 +26,16 @@ import { activateEngineBoardHost } from './board-host.ts';
 
 let bootPromise: Promise<void> | null = null;
 
+/** Fetch + localStorage shims so config loaders work before the first engine turn. */
+async function bootstrapEngineHeadlessRuntime(): Promise<void> {
+  const { bootstrapHeadlessNodeRuntime } = await import('../headless/server-context.ts');
+  const { getSchedulerServerBaseUrl } = await import(
+    '../../server/scheduler/server-base-url.js'
+  );
+  const { getSessionToken } = await import('../../server/runtime/session-token.js');
+  await bootstrapHeadlessNodeRuntime(getSchedulerServerBaseUrl(), getSessionToken());
+}
+
 /** True when this Node process owns the sub-agent controller registry. */
 export function isEngineControllerHostActive(): boolean {
   return gateIsActive();
@@ -40,6 +50,9 @@ export async function activateEngineControllerHost(): Promise<void> {
 
   // Claim ownership before importing/starting so module auto-boot stays off.
   setEngineOwnsController(true);
+
+  // Sub-agent config/meta loaders mirror server reads to localStorage.
+  await bootstrapEngineHeadlessRuntime();
 
   // Board host provides sessionState alias for syncBoardTask* + reports.
   await activateEngineBoardHost();

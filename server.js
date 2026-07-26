@@ -167,6 +167,8 @@ async function main() {
   const boundPort = Number(new URL(localUrl).port) || PORT;
   writeDevHostState({ localUrl, port: boundPort });
   getSessionToken();
+  // Session Engine tool loop can invoke handlers in-process (no HTTP auth round-trip).
+  globalThis.__MINNOW_IN_PROCESS_TOOL_HOST__ = true;
   const networkUrls = vite.resolvedUrls?.network ?? [];
   console.log(`Minnow dev server: ${localUrl}`);
   if (networkAccess === 'lan') {

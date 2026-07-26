@@ -5,7 +5,7 @@
 import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
 import { resumeIncompleteToolBatchOnChatSwitch } from '../chat/incomplete-tool-resume';
 import { sendMessage } from '../chat/messaging';
-import { isActiveChatStreaming, subscribeChatStreamEnd } from '../chat/streaming-state';
+import { isActiveChatBusy, subscribeChatStreamEnd } from '../chat/streaming-state';
 import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
 import {
   DESKTOP_APP_ID,
@@ -138,7 +138,7 @@ export async function handleDesktopSend(prefill?: string): Promise<void> {
 
   if (!(await ensureReadyForSend())) return;
 
-  if (isActiveChatStreaming()) {
+  if (isActiveChatBusy()) {
     handleComposerPrimaryAction();
     syncDesktopComposerSendState();
     return;

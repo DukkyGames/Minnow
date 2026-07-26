@@ -21,7 +21,7 @@ import {
   maybeBlockHeadlessToolApproval,
   type HeadlessApprovalOptions,
 } from './approval';
-import { headlessApiUrl } from './server-context';
+import { headlessApiUrl, readSessionTokenFile } from './server-context';
 import { validateToolRequiredArgs } from '../tools/validate-tool-required-args';
 import { resolveWebSearchExecution } from '../tools/web-search-routing';
 import { isLocalServerAvailable } from '../tools/config';
@@ -77,23 +77,67 @@ export function getHeadlessToolDefinitions(modeId: ModeId): OpenAIFunctionDefini
   return filterToolsByMode(catalog, modeId).map((t) => t.definition);
 }
 
+declare global {
+  // Set in server.js so the Session Engine can call tool handlers in-process.
+  var __MINNOW_IN_PROCESS_TOOL_HOST__: boolean | undefined;
+}
+
+/** True when this Node process hosts the tool server (Session Engine path). */
+function isInProcessToolHost(): boolean {
+  return typeof globalThis.__MINNOW_IN_PROCESS_TOOL_HOST__ === 'boolean'
+    ? globalThis.__MINNOW_IN_PROCESS_TOOL_HOST__
+    : false;
+}
+
+async function postServerToolInProcess(
+  name: string,
+  args: Record<string, unknown>,
+): Promise<ToolExecutionResult | null> {
+  if (!isInProcessToolHost()) return null;
+  try {
+    const { executeServerTool } = await import('../../server/runtime/tools-middleware.js');
+    const out = await executeServerTool(name, args);
+    return { content: String(out.result ?? '') };
+  } catch {
+    return null;
+  }
+}
+
 async function postServerTool(
   name: string,
   args: Record<string, unknown>,
   modeId: ModeId,
 ): Promise<ToolExecutionResult> {
+  const inProcess = await postServerToolInProcess(name, args);
+  if (inProcess) return inProcess;
+
   const payload: { name: string; args: Record<string, unknown>; modeId?: string } = {
     name,
     args,
   };
   payload.modeId = modeId;
-  let response: Response;
-  try {
-    response = await fetch(headlessApiUrl('/api/tools'), {
+
+  const postOnce = async (token: string): Promise<Response> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['X-Minnow-Token'] = token;
+    return fetch(headlessApiUrl('/api/tools'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(payload),
     });
+  };
+
+  let token = readSessionTokenFile();
+  let response: Response;
+  try {
+    response = await postOnce(token);
+    if (response.status === 401) {
+      const refreshed = readSessionTokenFile();
+      if (refreshed && refreshed !== token) {
+        token = refreshed;
+        response = await postOnce(token);
+      }
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { content: `Error: failed to reach tool server (${message})` };
@@ -106,7 +150,10 @@ async function postServerTool(
     return { content: `Error: invalid tool response (HTTP ${response.status})` };
   }
   if (!response.ok) {
-    return { content: body.error ?? `Error: tool HTTP ${response.status}` };
+    const errText = body.error ?? `tool HTTP ${response.status}`;
+    return {
+      content: errText.startsWith('Error:') ? errText : `Error: ${errText}`,
+    };
   }
   return { content: body.result ?? '' };
 }

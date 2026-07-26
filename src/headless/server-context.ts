@@ -60,15 +60,32 @@ export function installHeadlessFetch(baseUrl: string, token = ''): () => void {
     restoreFetch = null;
   }
   headlessBaseUrl = normalizeBaseUrl(baseUrl);
+  let activeToken = token.trim() || readSessionTokenFile();
   const nativeFetch = globalThis.fetch.bind(globalThis);
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     if (typeof input === 'string' && input.startsWith('/api/')) {
-      return nativeFetch(headlessApiUrl(input), withTokenHeader(init, token));
+      const run = (tok: string) =>
+        nativeFetch(headlessApiUrl(input), withTokenHeader(init, tok));
+      return run(activeToken).then(async (res) => {
+        if (res.status !== 401) return res;
+        const refreshed = readSessionTokenFile();
+        if (!refreshed || refreshed === activeToken) return res;
+        activeToken = refreshed;
+        return run(activeToken);
+      });
     }
     if (input instanceof Request) {
       const url = input.url;
       if (url.startsWith('/api/')) {
-        return nativeFetch(headlessApiUrl(url), withTokenHeader(init, token));
+        const run = (tok: string) =>
+          nativeFetch(headlessApiUrl(url), withTokenHeader(init, tok));
+        return run(activeToken).then(async (res) => {
+          if (res.status !== 401) return res;
+          const refreshed = readSessionTokenFile();
+          if (!refreshed || refreshed === activeToken) return res;
+          activeToken = refreshed;
+          return run(activeToken);
+        });
       }
     }
     return nativeFetch(input, init);
@@ -78,6 +95,20 @@ export function installHeadlessFetch(baseUrl: string, token = ''): () => void {
     restoreFetch = null;
   };
   return restoreFetch;
+}
+
+/**
+ * Patch fetch + in-memory localStorage for DOM-less Node (session engine, headless CLI).
+ * Config loaders mirror server reads to localStorage; both shims are required in Node.
+ */
+export async function bootstrapHeadlessNodeRuntime(
+  baseUrl: string,
+  token?: string | null,
+): Promise<void> {
+  installHeadlessLocalStorage();
+  installHeadlessFetch(baseUrl, resolveHeadlessToken(token));
+  const { detectConfigServer } = await import('../config/storage-mode.ts');
+  await detectConfigServer();
 }
 
 /** Minimal localStorage for Node (config loaders mirror to localStorage). */

@@ -149,4 +149,18 @@ describe('createAuthMiddleware', () => {
     const nextCalled = runMiddleware(createAuthMiddleware(), mockReq({ url: '/index.html' }), res);
     assert.equal(nextCalled, true);
   });
+
+  test('GET /api/auth/session-token returns the boot token without prior auth', () => {
+    const token = getSessionToken();
+    const res = mockRes();
+    const nextCalled = runMiddleware(
+      createAuthMiddleware(),
+      mockReq({ url: '/api/auth/session-token', method: 'GET' }),
+      res,
+    );
+    assert.equal(nextCalled, false);
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.body);
+    assert.equal(body.token, token);
+  });
 });

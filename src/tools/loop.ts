@@ -2579,6 +2579,9 @@ export async function sendProgrammaticChatText(
           goalDriven: options.goalDriven,
         });
         if (attachments.length > 0) clearAttachments();
+        chat.engineTurnActive = true;
+        const { syncComposerFromStreamingState } = await import('../ui/composer-send');
+        syncComposerFromStreamingState();
         const { syncEngineStreamMirrors } = await import('../chat/engine-stream-mirror');
         syncEngineStreamMirrors();
         // Engine path never reaches runChatTurn's finally — schedule titles here.
@@ -2927,6 +2930,10 @@ export async function sendMessageWithTools(
         goalDriven,
       });
       clearAttachments();
+      // Optimistic busy until the first SSE patch (matches dispatchSendMessageAndAwaitIdle).
+      chat.engineTurnActive = true;
+      const { syncComposerFromStreamingState } = await import('../ui/composer-send');
+      syncComposerFromStreamingState();
       // Tokens + committed history arrive via generations SSE + Phase 0 session stream.
       const { syncEngineStreamMirrors } = await import('../chat/engine-stream-mirror');
       syncEngineStreamMirrors();

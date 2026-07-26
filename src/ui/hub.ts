@@ -46,6 +46,11 @@ export function isHubMounted(): boolean {
   return Boolean(document.getElementById(HUB_ROOT_ID));
 }
 
+/** True when the Vibe hub is mounted for a specific empty chat (avoids needless remounts). */
+export function isHubMountedForChat(chatId: string): boolean {
+  return isHubMounted() && hubChatId === chatId;
+}
+
 /** Keep suspended plan-screen session when empty chat would open Vibe hub. */
 function shouldPreservePlanScreenSession(chat: Chat): boolean {
   return isOrchestratePlanScreenSuspendedForChat(chat);
@@ -65,7 +70,7 @@ export function teardownHub(): void {
 function relocateComposerIntoHub(slot: HTMLElement): void {
   const bar = document.querySelector('.input-bar') as HTMLElement | null;
   if (!bar) return;
-  if (!composerRestoreParent) {
+  if (!composerRestoreParent || !composerRestoreParent.isConnected) {
     composerRestoreParent = bar.parentElement;
     composerRestoreNext = bar.nextSibling;
   }
@@ -82,6 +87,11 @@ function relocateComposerIntoHub(slot: HTMLElement): void {
 function restoreComposer(): void {
   const bar = document.querySelector('.input-bar') as HTMLElement | null;
   if (!bar || !composerRestoreParent) return;
+  if (!composerRestoreParent.isConnected) {
+    composerRestoreParent = null;
+    composerRestoreNext = null;
+    return;
+  }
   if (composerRestoreNext) {
     composerRestoreParent.insertBefore(bar, composerRestoreNext);
   } else {
@@ -94,6 +104,8 @@ function restoreComposer(): void {
   if (input) {
     input.placeholder = 'Type a message…';
   }
+  composerRestoreParent = null;
+  composerRestoreNext = null;
 }
 
 function formatCompactCount(n: number): string {
@@ -493,6 +505,14 @@ function buildHubDom(activeChat: Chat): HTMLElement {
 
 /** Paint the hub into #chatArea for an empty chat. */
 export function renderHub(chat: Chat): void {
+  const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
+  const restoreComposerFocus =
+    input != null &&
+    document.activeElement === input &&
+    (input.value.length > 0 || input.selectionStart !== input.selectionEnd);
+  const selectionStart = restoreComposerFocus ? input.selectionStart : null;
+  const selectionEnd = restoreComposerFocus ? input.selectionEnd : null;
+
   try {
     teardownOrchestrateHub();
     if (!shouldPreservePlanScreenSession(chat)) {
@@ -505,6 +525,13 @@ export function renderHub(chat: Chat): void {
     area.replaceChildren();
     area.appendChild(buildHubDom(chat));
     area.classList.add('chat-area--hub');
+
+    if (restoreComposerFocus && input.isConnected) {
+      input.focus({ preventScroll: true });
+      if (selectionStart != null && selectionEnd != null) {
+        input.setSelectionRange(selectionStart, selectionEnd);
+      }
+    }
   } catch {
     teardownHub();
     const area = document.getElementById('chatArea');

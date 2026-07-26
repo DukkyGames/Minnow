@@ -1,6 +1,6 @@
 import { streaming } from '../app-state';
 import { enqueueComposerMessage } from '../chat/message-queue';
-import { isActiveChatStreaming } from '../chat/streaming-state';
+import { isActiveChatBusy, isActiveChatStreaming } from '../chat/streaming-state';
 import { stopGeneration } from '../chat/stop-generation';
 import { getActiveChat } from '../state/sessions';
 import { clearComposerAfterSend } from './composer-draft';
@@ -42,7 +42,7 @@ export function isComposerRecoveryBlocked(): boolean {
 
 /** True when Send/Enter should run (send, steer, or stop) on the active composer. */
 export function shouldAllowComposerPrimaryAction(inputText: string): boolean {
-  return Boolean(inputText.trim()) || isActiveChatStreaming();
+  return Boolean(inputText.trim()) || isActiveChatBusy();
 }
 
 function composerInputHasText(): boolean {
@@ -139,18 +139,19 @@ export function syncDesktopComposerFishSwim(): void {
   const sendBtn = document.getElementById('desktopSendBtn');
   if (!composer) return;
 
-  const swimming = shouldPaintDesktopChatSurface() && isActiveChatStreaming();
+  const swimming = shouldPaintDesktopChatSurface() && isActiveChatBusy();
   composer.classList.toggle('is-streaming', swimming);
   sendBtn?.setAttribute('aria-busy', swimming ? 'true' : 'false');
 }
 
 /** Align send/stop button and background-stream hint with active vs streaming chat. */
 export function syncComposerFromStreamingState(): void {
-  setComposerStreamingMode(isActiveChatStreaming() ? 'streaming' : 'idle');
+  const busy = isActiveChatBusy();
+  setComposerStreamingMode(busy ? 'streaming' : 'idle');
   syncDesktopComposerFishSwim();
   syncBackgroundStreamHint();
   syncComposerMessageQueue();
-  syncComposerFollowUpPlaceholder(isActiveChatStreaming());
+  syncComposerFollowUpPlaceholder(busy);
   syncGoalActiveHint();
   syncLoopActiveHint();
   syncTodoPanel();
@@ -173,7 +174,7 @@ function submitQueueFromComposer(): void {
 
 /** Send when idle; queue follow-up when streaming with text; stop when streaming with empty input. */
 export function handleComposerPrimaryAction(): void {
-  if (isActiveChatStreaming()) {
+  if (isActiveChatBusy()) {
     if (composerInputHasText()) {
       submitQueueFromComposer();
       return;
